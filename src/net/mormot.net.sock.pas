@@ -1759,14 +1759,16 @@ type
     /// append #13#10 characters on all platforms, never #10 even on POSIX
     procedure SockSendCRLF;
     /// flush all pending data to be sent, optionally with some body content
-    // - raise ENetSock on error
-    procedure SockSendFlush(const aBody: RawByteString = '');
+    // - raise ENetSock on error, unless aNoRaise is set and it returns the error
+    function SockSendFlush(const aBody: RawByteString = '';
+      aNoRaise: boolean = false): TNetResult;
     /// send all TStream content till the end using SndLow()
     // - don't forget to call SockSendFlush before using this method
     // - will call Stream.Read() over a temporary buffer of 1MB by default
     // - Stream may be a TFileStream, THttpMultiPartStream or TNestedStreamReader
-    // - raise ENetSock on error
-    procedure SockSendStream(Stream: TStream; ChunkSize: integer = 1 shl 20);
+    // - raise ENetSock on error, unless aNoRaise is set and it returns the error
+    function SockSendStream(Stream: TStream; ChunkSize: integer = 1 shl 20;
+      aNoRaise: boolean = false): TNetResult;
     /// how many bytes could be added by SockSend() in the internal buffer
     function SockSendRemainingSize: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -5727,56 +5729,71 @@ begin
   result := Length(fSndBuf) - fSndBufLen;
 end;
 
-procedure TCrtSocket.SockSendFlush(const aBody: RawByteString);
+function TCrtSocket.SockSendFlush(const aBody: RawByteString;
+  aNoRaise: boolean): TNetResult;
 var
-  body: integer;
-  res: TNetResult;
+  bodylen: integer;
 begin
-  body := Length(aBody);
-  if (body > 0) and
-     (SockSendRemainingSize >= body) then // around 1800 bytes
+  // try to send a small bodylen with the headers
+  bodylen := Length(aBody);
+  if (bodylen > 0) and
+     (SockSendRemainingSize >= bodylen) then // around 1800 bytes
   begin
-    MoveFast(pointer(aBody)^, PByteArray(fSndBuf)[fSndBufLen], body);
-    inc(fSndBufLen, body); // append to buffer as single TCP packet
-    body := 0;
+    MoveFast(pointer(aBody)^, PByteArray(fSndBuf)[fSndBufLen], bodylen);
+    inc(fSndBufLen, bodylen); // append to buffer as single TCP packet
+    bodylen := 0;
   end;
   {$ifdef SYNCRTDEBUGLOW}
   if Assigned(OnLog) then
   begin
-    OnLog(sllCustom2, 'SockSend sock=% flush len=% body=% %', [fSock.Socket, fSndBufLen,
-      Length(aBody), LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
-    if body > 0 then
-      OnLog(sllCustom2, 'SockSend sock=% body len=% %', [fSock.Socket, body,
-        LogEscapeFull(pointer(aBody), body)], self);
+    OnLog(sllCustom2, 'SockSend sock=% flush len=% bodylen=% %',
+      [fSock.Socket, fSndBufLen, Length(aBody),
+       LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
+    if bodylen > 0 then
+      OnLog(sllCustom2, 'SockSend sock=% bodylen len=% %',
+        [fSock.Socket, bodylen, LogEscapeFull(pointer(aBody), bodylen)], self);
   end;
   {$endif SYNCRTDEBUGLOW}
+  // actually send the internal buffer (headers + maybe body)
+  result := nrOK;
   if fSndBufLen > 0 then
-    if TrySndLow(pointer(fSndBuf), fSndBufLen, @res) then
+    if TrySndLow(pointer(fSndBuf), fSndBufLen, @result) then
       fSndBufLen := 0
+    else if aNoRaise then
+      exit
     else
       raise ENetSock.CreateLastError('%s.SockSendFlush(%s) len=%d',
-        [ClassNameShort(self)^, fServer, fSndBufLen], res);
-  if body > 0 then
-    SndLow(pointer(aBody), body); // direct sending of biggest packets
+        [ClassNameShort(self)^, fServer, fSndBufLen], result);
+  // direct sending of the bodylen is needed
+  if bodylen > 0 then
+    if not TrySndLow(pointer(aBody), bodylen, @result) then
+      if not aNoRaise then
+        raise ENetSock.CreateLastError('%s.SockSendFlush(%s) bodylen=%',
+          [ClassNameShort(self)^, fServer, bodylen], result);
 end;
 
-procedure TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer);
+function TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer;
+  aNoRaise: boolean): TNetResult;
 var
   chunk: RawByteString;
   rd: integer;
   pos: Int64;
-  res: TNetResult;
 begin
+  result := nrOK;
   SetLength(chunk, ChunkSize);
   pos := 0;
   repeat
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
     if rd = 0 then
       break;
-    if not TrySndLow(pointer(chunk), rd, @res) then
-      raise ENetSock.CreateLastError(
-        '%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s', [ClassNameShort(self)^,
-        ClassNameShort(Stream)^, ChunkSize, rd, pos, fServer, fPort], res);
+    if not TrySndLow(pointer(chunk), rd, @result) then
+      if aNoRaise then
+        break
+      else
+        raise ENetSock.CreateLastError(
+          '%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s',
+          [ClassNameShort(self)^, ClassNameShort(Stream)^,
+           ChunkSize, rd, pos, fServer, fPort], result);
     inc(pos, rd);
   until false;
 end;
