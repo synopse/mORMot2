@@ -2270,6 +2270,11 @@ begin
   fSpecs.Data.GetDocVariantByPath(aRef, PDocVariantData(result), '/');
 end;
 
+function PascalNameFromRef(const ref: RawUtf8): RawUtf8;
+begin
+  result := SplitRight(ref, '/');
+end;
+
 function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
   aSchemaName: RawUtf8): TPascalType;
 var
@@ -2277,6 +2282,7 @@ var
   ref, fmt, nam: RawUtf8;
   i: integer;
   rec, rectemp: TPascalRecord;
+  items: POpenApiSchema;
   enum, props: PDocVariantData;
   enumType: TPascalEnum;
 begin
@@ -2292,7 +2298,7 @@ begin
     aSchema := GetRef(ref); // resolve from main Specs
     if aSchema = nil then
       EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
-    result := NewPascalTypeFromSchema(aSchema, SplitRight(ref, '/'));
+    result := NewPascalTypeFromSchema(aSchema, PascalNameFromRef(ref));
     if (result.CustomType <> nil) and
        (result.CustomType.fFromRef = '') then
       result.CustomType.fFromRef := ref;
@@ -2510,23 +2516,23 @@ procedure TOpenApiParser.ParsePath(
   const aPath: RawUtf8; aPathItem: POpenApiPathItem);
 var
   i: PtrInt;
-  n: RawUtf8;
+  met: RawUtf8;
   s: POpenApiOperation;
   op: TPascalOperation;
 begin
   // https://swagger.io/docs/specification/paths-and-operations
   for i := 0 to aPathItem^.Data.Count - 1 do
   begin
-    n := aPathItem^.Data.Names[i];
+    met := aPathItem^.Data.Names[i];
     // OpenAPI does not support all our TUriMethod, but its own set
-    if FindPropName(['get', 'post', 'put',
-                     'patch', 'delete', 'head', 'options', 'trace'], n) < 0 then
+    if FindPropName(['get', 'post', 'put', 'patch', 'delete',
+                     'head', 'options', 'trace'], met) < 0 then
       continue; // e.g. "parameters" may also appear here
     s := @aPathItem^.Data.Values[i];
     if (opoClientExcludeDeprecated in fOptions) and
        s^.Deprecated then
        continue;
-    op := TPascalOperation.Create(self, n, aPath, aPathItem, s);
+    op := TPascalOperation.Create(self, met, aPath, aPathItem, s);
     op.ResolveResponseTypes;
     ObjArrayAdd(fOperations, op);
   end;
@@ -2537,7 +2543,7 @@ function TOpenApiParser.GetRecord(aRecordName: RawUtf8; aSchema: POpenApiSchema;
 begin
   if NameIsReference then
     // #/definitions/NewPet -> NewPet
-    aRecordName := SplitRight(aRecordName, '/');
+    aRecordName := PascalNameFromRef(aRecordName);
   result := fRecords.GetObjectFrom(aRecordName);
   if result = nil then
     result := ParseRecordDefinition(aRecordName, aSchema);
