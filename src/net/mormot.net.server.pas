@@ -5891,13 +5891,15 @@ begin
      (fSettings = nil) or
      (Sender = nil) or
      (Params.Hash = '') or
-     not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) or
      (Url = '') or
      (OutStream = nil) then
     exit;
+  if not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) then
+    EHttpPeerCache.RaiseUtf8('%.OnDownload: unexpected %', [Params.Hasher]);
   // prepare a request frame
   l := nil;
-  log := fLog.Enter('OnDownload % %', [KBNoSpace(ExpectedFullSize), Url], self);
+  log := fLog.Enter('OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
+    Params.Hasher.GetHashName, Params.Hash, Url], self);
   if Assigned(log) then
     l := log.Instance;
   MessageInit(pcfRequest, 0, req);
