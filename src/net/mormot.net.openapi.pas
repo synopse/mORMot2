@@ -2271,14 +2271,14 @@ end;
 procedure TOpenApiParser.ParseJson(const aJson: RawUtf8);
 begin
   Clear;
-  fSpecs.Data.InitJson(aJson, JSON_FAST);
+  fSpecs.Data.InitJson(aJson, JSON_FAST + [dvoInternNames]);
   ParseSpecs;
 end;
 
 procedure TOpenApiParser.ParseFile(const aJsonFile: TFileName);
 begin
   Clear;
-  fSpecs.Data.InitJsonFromFile(aJsonFile, JSON_FAST);
+  fSpecs.Data.InitJsonFromFile(aJsonFile, JSON_FAST + [dvoInternNames]);
   ParseSpecs;
 end;
 
