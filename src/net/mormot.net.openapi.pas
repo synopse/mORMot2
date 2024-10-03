@@ -1245,13 +1245,15 @@ constructor TPascalOperation.Create(aParser: TOpenApiParser;
   aOperation: POpenApiOperation);
 var
   p, o: POpenApiParameters;
-  pn, i: integer;
+  pn, i, j, c: PtrInt;
+  n: RawUtf8;
 begin
   fParser := aParser;
   fPath := aPath;
   fPathItem := aPathItem;
   fOperation := aOperation;
   fMethod := aMethod;
+  // setup parameters
   p := fPathItem^.Parameters;
   pn := p.Count;
   o := fOperation^.Parameters;
@@ -1260,12 +1262,17 @@ begin
     fParameters[i] := TPascalParameter.Create(fParser, p^.Parameter[i]);
   for i := 0 to o.Count - 1 do
     fParameters[pn + i] := TPascalParameter.Create(fParser, o^.Parameter[i]);
-  fOperationId := fOperation^.Id;
-  if fOperationId = '' then // fallback of the poor to have something <> ''
-    fOperationId := TrimChar(fOperation^.Description, [#0 .. #31]);
-  fFunctionName := SanitizePascalName(fOperationId, {keywordcheck:}true);
-  if fOperation^.Deprecated then
-    Append(fFunctionName, '_deprecated');
+  for i := 1 to length(fParameters) - 1 do
+  begin
+    n := fParameters[i].PascalName;
+    c := 0;
+    for j := 0 to i - 1 do
+      if IdemPropNameU(fParameters[j].PascalName, n) then // dup name
+        inc(c);
+    if c <> 0 then
+      fParameters[i].fPascalName := n + UInt32ToUtf8(c + 1); // make unique
+  end;
+  // setup any request body
   fRequestBody := fOperation^.RequestBody(fParser);
   if fRequestBody <> nil then
     fRequestBodySchema := fRequestBody^.Schema(fParser);
@@ -1344,47 +1351,6 @@ begin
     if fOnErrorIndex = 0 then // new TOnJsonClientError
       fOnErrorIndex := AddRawUtf8(fParser.fErrorHandler, err) + 1;
   end;
-end;
-
-procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const;
-  const Desc: RawUtf8);
-var
-  all, line, feed: RawUtf8;
-  p: PUtf8Char;
-  i, o: PtrInt;
-begin
-  all := TrimU(Make(Args));
-  if Desc <> '' then
-    Append(all, ': ', Desc);
-  p := pointer(all);
-  repeat
-    line := GetNextLine(p, p, {trim=}true);
-    if line = '' then
-      continue;
-    o := 0;
-    while length(line) - o > 80 do // insert line feeds on huge comment
-    begin
-      i := PosEx(' ', line, o + 75);
-      if i = 0 then
-        break;
-      if feed = '' then
-        Make([LineEnd, fLineIndent, '//'], feed);
-      insert(feed, line, i);
-      o := i + length(feed);
-    end;
-    w.AddStrings([fLineIndent, '// ', line, LineEnd]);
-  until p = nil;
-end;
-
-procedure TOpenApiParser.Code(W: TTextWriter; var Line: RawUtf8;
-  const Args: array of const);
-begin
-  if length(Line) > 70 then
-  begin
-    W.AddStrings([TrimRight(Line), LineEnd]);
-    Line := fLineIndent + '  ';
-  end;
-  Append(Line, Args);
 end;
 
 procedure TPascalOperation.Documentation(W: TTextWriter);
@@ -2406,6 +2372,47 @@ begin
     end;
     result := TPascalType.CreateBuiltin(self, aSchema.BuiltInType(self), aSchema);
   end;
+end;
+
+procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const;
+  const Desc: RawUtf8);
+var
+  all, line, feed: RawUtf8;
+  p: PUtf8Char;
+  i, o: PtrInt;
+begin
+  all := TrimU(Make(Args));
+  if Desc <> '' then
+    Append(all, ': ', Desc);
+  p := pointer(all);
+  repeat
+    line := GetNextLine(p, p, {trim=}true);
+    if line = '' then
+      continue;
+    o := 0;
+    while length(line) - o > 80 do // insert line feeds on huge comment
+    begin
+      i := PosEx(' ', line, o + 75);
+      if i = 0 then
+        break;
+      if feed = '' then
+        Make([LineEnd, fLineIndent, '//'], feed);
+      insert(feed, line, i);
+      o := i + length(feed);
+    end;
+    w.AddStrings([fLineIndent, '// ', line, LineEnd]);
+  until p = nil;
+end;
+
+procedure TOpenApiParser.Code(W: TTextWriter; var Line: RawUtf8;
+  const Args: array of const);
+begin
+  if length(Line) > 70 then
+  begin
+    W.AddStrings([TrimRight(Line), LineEnd]);
+    Line := fLineIndent + '  ';
+  end;
+  Append(Line, Args);
 end;
 
 procedure TOpenApiParser.Description(W: TTextWriter; const Described: RawUtf8);
