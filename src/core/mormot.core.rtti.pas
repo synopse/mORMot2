@@ -368,6 +368,14 @@ const
     8,                                             // rfComp
     8 );                                           // rfCurr
 
+  /// the maximum supported byte size of sets - 8 bytes for ENUM_MAX = 64 items
+  // - mormot.core.rtti/json has such a limit when calling getter/setter methods
+  // via Int64/variants - even if the compiler itself is limited to 256 items
+  // - see also TRttiEnumType.SizeInStorageAsSet
+  ENUM_MAX_SIZE = SizeOf(Int64);
+  /// the maximum supported items count of sets - 64 items for ENUM_MAX_SIZE
+  ENUM_MAX = ENUM_MAX_SIZE shl 3;
+
 
 type
   PRttiKind = ^TRttiKind;
@@ -604,7 +612,9 @@ type
     function SizeInStorageAsEnum: integer;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute how many bytes (1, 2, 4, 8) this type will use to be stored as a set
-    // - if ISFPC32 conditional is defined, will execute in O(1)
+    // - mormot.core.rtti/json only supports sets up to ENUM_MAX = 64 items, to
+    // fit the 64-bit maximum size of our virtual getter/setter methods via
+    // Int64/variants - even if the compiler itself is limited to 256 items
     function SizeInStorageAsSet: integer;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// store an enumeration value from its ordinal representation
@@ -3299,7 +3309,7 @@ begin
     else if result < 64 then
       result := SizeOf(QWord)
     else
-      result := 0;
+      result := 0; // see ENUM_MAX/ENUM_MAX_SIZE hardcore limit
   end
   else
     result := 0;
@@ -3727,7 +3737,7 @@ begin
     rkWChar:
       result := ORDTYPE_SIZE[TRttiOrd(GetTypeData(@self)^.OrdType)];
     rkSet:
-      result := SetEnumSize;
+      result := SetEnumSize; // equals 0 if items count is > ENUM_MAX = 64
     rkFloat:
       result := FLOATTYPE_SIZE[TRttiFloat(GetTypeData(@self)^.FloatType)];
     rkLString,
@@ -3831,6 +3841,12 @@ begin
   FillCharFast(Cache, SizeOf(Cache), 0); // paranoid for TRttiCustom.fCache slot
   Cache.Info := @self;
   Cache.Size := RttiSize;
+  if Cache.Size = 0 then
+    if Kind = rkSet then // mormot.core.rtti/json hardcore getter/setter limit
+      ERttiException.RaiseUtf8('ComputeCache(%): sets are limited to % items',
+        [RawName, ENUM_MAX])
+    else
+      ERttiException.RaiseUtf8('ComputeCache(%): has RttiSize=0', [RawName]);
   Cache.Kind := Kind;
   Cache.VarDataVType := RTTI_TO_VARTYPE[Kind];
   Cache.RttiVarDataVType := Cache.VarDataVType;
@@ -9509,8 +9525,8 @@ begin
     RegisterType(Info[i]);
 end;
 
-function TRttiCustomList.RegisterTypeFromName(Name: PUtf8Char;
-  NameLen: PtrInt; ParserType: PRttiParserType): TRttiCustom;
+function TRttiCustomList.RegisterTypeFromName(Name: PUtf8Char; NameLen: PtrInt;
+  ParserType: PRttiParserType): TRttiCustom;
 var
   pt: TRttiParserType;
   i: PtrInt;

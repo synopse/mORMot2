@@ -8059,7 +8059,7 @@ begin
     with Ctxt.Info.Cache do
     begin
       i := EnumFind(pointer(EnumCustomText), EnumMax, Ctxt.Value, Ctxt.ValueLen);
-      if (i < 64) and
+      if (i < ENUM_MAX) and // mormot.core.rtti/json is limited to 64-bit sets
          (i >= PtrInt(EnumMin)) then
         SetBit64(V^, i);
     end;
