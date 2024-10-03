@@ -2237,6 +2237,9 @@ type
     // - also trigger OnProgress at least every second
     // - will raise an error if Read() has been called before
     function Write(const Buffer; Count: Longint): Longint; override;
+    /// overriden to support Seek(0, soBeginning) and reset the Redirected stream
+    // - mandatory for proper THttpClientSocket.SockSendStream rewind
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// update the hash of the existing Redirected stream content
     // - ready to Write() some new data after the existing
     procedure Append;
@@ -10030,6 +10033,17 @@ begin
   ReadWriteReport('Write');
 end;
 
+function TStreamRedirect.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var
+  prev: Int64;
+begin
+  prev := fPosition;
+  result := inherited Seek(Offset, Origin);
+  if result = prev then
+    exit; // nothing changed
+  ResetHash;
+  fRedirected.Seek(result, soBeginning);
+end;
 
 
 { TStreamRedirectHash32 }
@@ -10258,11 +10272,10 @@ var
 begin
   prev := fPosition;
   result := inherited Seek(Offset, Origin);
-  if prev <> result then
-  begin
-    fSource.Seek(result, soBeginning);
-    fBufferLeft := 0; // deprecate buffer content
-  end;
+  if result = prev then
+    exit; // nothing changed
+  fSource.Seek(result, soBeginning);
+  fBufferLeft := 0; // deprecate buffer content
 end;
 
 function TBufferedStreamReader.Read(var Buffer; Count: Longint): Longint;
