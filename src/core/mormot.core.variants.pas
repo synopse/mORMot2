@@ -1000,17 +1000,20 @@ type
     // !  assert(Doc.Value['name']='John');
     // !  assert(variant(Doc).name='John');
     // !end;
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init() because it could leak memory
     procedure Init(const aOptions: TDocVariantOptions = []); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store a content of some known type
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init() because it could leak memory
     procedure Init(const aOptions: TDocVariantOptions;
       aKind: TDocVariantKind); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store some document-based content
     // - use the options corresponding to the supplied TDocVariantModel
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init() because it could leak memory
     procedure Init(aModel: TDocVariantModel;
       aKind: TDocVariantKind = dvUndefined); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1027,7 +1030,8 @@ type
     // !end;
     // - see also TDocVariant.NewFast() if you want to initialize several
     // TDocVariantData variable instances at once
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitFast() because it could leak memory
     procedure InitFast(aKind: TDocVariantKind = dvUndefined); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store per-reference document-based content
@@ -1048,11 +1052,13 @@ type
     // !  Doc.AddValue('name','John');
     // !  Doc.AddValue('year',1972);
     // - this method is called e.g. by _Obj() and _ObjFast() global functions
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitObject() because it could leak memory
     procedure InitObject(const NameValuePairs: array of const;
       aOptions: TDocVariantOptions = []); overload;
     /// initialize a TDocVariantData to store document-based object content
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitObject() because it could leak memory
     procedure InitObject(const NameValuePairs: array of const;
       Model: TDocVariantModel); overload;
     /// initialize a variant instance to store some document-based array content
@@ -1076,11 +1082,13 @@ type
     // !    writeln(Doc.Value[i]);
     // !end;
     // - this method is called e.g. by _Arr() and _ArrFast() global functions
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArray() because it could leak memory
     procedure InitArray(const aItems: array of const;
       aOptions: TDocVariantOptions = []); overload;
     /// initialize a variant instance to store some document-based array content
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArray() because it could leak memory
     procedure InitArray(const aItems: array of const;
       aModel: TDocVariantModel); overload;
     /// initialize a variant instance to store some document-based array content
@@ -1088,18 +1096,25 @@ type
     // - if Items is [], the variant will be set as null
     // - will be almost immediate, since TVariantDynArray is reference-counted,
     // unless ItemsCopiedByReference is set to FALSE
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init*() because it could leak memory
     procedure InitArrayFromVariants(const aItems: TVariantDynArray;
       aOptions: TDocVariantOptions = [];
       aItemsCopiedByReference: boolean = true; aCount: integer = -1);
     /// initialize a variant array instance from an object Values[]
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init*() because it could leak memory
     procedure InitArrayFromObjectValues(const aObject: variant;
       aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
     /// initialize a variant array instance from an object Names[]
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init*() because it could leak memory
     procedure InitArrayFromObjectNames(const aObject: variant;
       aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
     /// initialize a variant instance from some 'a,b,c' CSV one-line content
     // - is by default separator tolerant, i.e. will detect ',' ';' or #9 in text
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init*() because it could leak memory
     procedure InitArrayFromCsv(const aCsv: RawUtf8;
       aOptions: TDocVariantOptions; aSeparator: AnsiChar = #0;
       aTrimItems: boolean = false; aAddVoidItems: boolean = false;
@@ -1107,6 +1122,8 @@ type
     /// initialize a variant instance from a CSV file content with header
     // - stored objects names will be retrieved from the first CSV line
     // - is by default separator tolerant, i.e. will detect ',' ';' or #9 in text
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.Init*() because it could leak memory
     procedure InitArrayFromCsvFile(const aCsv: RawUtf8;
       aOptions: TDocVariantOptions; aSeparator: AnsiChar = #0;
       aQuote: AnsiChar = #0);
@@ -1117,31 +1134,49 @@ type
     // $ new.InitArrayFrom(src, 0, 10) returns first 0..9 items of src
     // $ new.InitArrayFrom(src, 10, 20) returns items 10..29 - truncated if Count<30
     // $ new.InitArrayFrom(src, -10) returns last Count-10..Count-1 items of src
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(const aSource: TDocVariantData;
       aOptions: TDocVariantOptions; aOffset: integer = 0; aLimit: integer = 0); overload;
     /// initialize a variant instance to store some RawUtf8 array content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
       aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some 32-bit integer array content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(const aItems: TIntegerDynArray;
       aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some 64-bit integer array content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(const aItems: TInt64DynArray;
       aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some double array content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(const aItems: TDoubleDynArray;
       aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some dynamic array content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(var aItems; ArrayInfo: PRttiInfo;
       aOptions: TDocVariantOptions; ItemsCount: PInteger = nil); overload;
     /// initialize a variant instance to store some TDynArray content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFrom() because it could leak memory
     procedure InitArrayFrom(const aItems: TDynArray;
       aOptions: TDocVariantOptions = JSON_FAST_FLOAT); overload;
     /// initialize a variant instance to store RawUtf8 array content from RTTI
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromSet() because it could leak memory
     procedure InitArrayFromSet(aTypeInfo: PRttiInfo; const aSetValue;
       aOptions: TDocVariantOptions; trimmed: boolean = false); overload;
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromObjArray() because it could leak memory
     procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
       aWriterOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault];
       aCount: integer = -1);
@@ -1160,6 +1195,8 @@ type
     // $ TDocVariant InitJsonInPlace dvoIntern in 68.41ms i.e. 2.2M rows/s, 286.5 MB/s
     // $ TDocVariant FromResults exp in 31.69ms i.e. 4.9M rows/s, 618.6 MB/s
     // $ TDocVariant FromResults not exp in 24.48ms i.e. 6.4M rows/s, 352.1 MB/s
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromResults() because it could leak memory
     function InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
       aOptions: TDocVariantOptions = JSON_FAST_FLOAT): boolean; overload;
     /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
@@ -1168,6 +1205,8 @@ type
     // - will also use less memory, because all object field names will be shared
     // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
     // - a private copy of the incoming JSON buffer will be used before parsing
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromResults() because it could leak memory
     function InitArrayFromResults(const Json: RawUtf8;
       aOptions: TDocVariantOptions = JSON_FAST_FLOAT): boolean; overload;
     /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
@@ -1176,6 +1215,8 @@ type
     // - will also use less memory, because all object field names will be shared
     // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
     // - a private copy of the incoming JSON buffer will be used before parsing
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromResults() because it could leak memory
     function InitArrayFromResults(const Json: RawUtf8;
       aModel: TDocVariantModel): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1184,20 +1225,24 @@ type
     // - if aNames and aValues are [] or do have matching sizes, the variant
     // will be set as null
     // - will be almost immediate, since Names and Values are reference-counted
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromVariants() because it could leak memory
     procedure InitObjectFromVariants(const aNames: TRawUtf8DynArray;
        const aValues: TVariantDynArray; aOptions: TDocVariantOptions = []);
     /// initialize a variant instance to store a document-based object from
     // name/value arrays of RawUtf8
     // - each aItems[] is expected to be of two items, as name/value pair
     // - as returned e.g. by MsiExecuteQuery() from mormot.lib.sspi.pas
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromDual() because it could leak memory
     procedure InitObjectFromDual(const aItems: TRawUtf8DynArrayDynArray;
       aOptions: TDocVariantOptions = JSON_FAST);
     /// initialize a variant instance to store a document-based object with a
     // single property
     // - the supplied path could be 'Main.Second.Third', to create nested
     // objects, e.g. {"Main":{"Second":{"Third":value}}}
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitArrayFromPath() because it could leak memory
     procedure InitObjectFromPath(const aPath: RawUtf8; const aValue: variant;
       aOptions: TDocVariantOptions = []; aPathDelim: AnsiChar = '.');
     /// initialize a variant instance to store some document-based object content
@@ -1206,8 +1251,9 @@ type
     // make a private copy before running this method, as InitJson() does
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitJsonInPlace() because it could leak memory
     function InitJsonInPlace(Json: PUtf8Char;
       aOptions: TDocVariantOptions = []; aEndOfObject: PUtf8Char = nil): PUtf8Char;
     /// initialize a variant instance to store some document-based object content
@@ -1215,28 +1261,31 @@ type
     // - a private copy of the incoming JSON buffer will be used, then
     // it will call the other overloaded InitJsonInPlace() method
     // - this method is called e.g. by _Json() and _JsonFast() global functions
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values: set JSON_FAST_FLOAT
     // or dvoAllowDoubleValue option to support double, with potential precision loss
     // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitJson() because it could leak memory
     function InitJson(const Json: RawUtf8;
       aOptions: TDocVariantOptions = []): boolean; overload;
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
     // - use the options corresponding to the supplied TDocVariantModel
     // - a private copy of the incoming JSON buffer will be made
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values unless you set mFastFloat
     // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitJson() because it could leak memory
     function InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
     // from a file containing some JSON array or JSON object
     // - file may have been serialized using the SaveToJsonFile() method
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values: set JSON_FAST_FLOAT
     // or dvoAllowDoubleValue option to support double, with potential precision loss
     // - will assume text file with no BOM is already UTF-8 encoded
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitJsonFromFile() because it could leak memory
     function InitJsonFromFile(const FileName: TFileName;
       aOptions: TDocVariantOptions = []): boolean;
     /// ensure a document-based variant instance will have one unique options set
@@ -1249,18 +1298,21 @@ type
     // - will raise an EDocVariant if the supplied variant is not a TDocVariant
     // - you may rather use _Unique() or _UniqueFast() wrappers if you want to
     // ensure that a TDocVariant instance is unique
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitCopy() because it could leak memory
     procedure InitCopy(const SourceDocVariant: variant;
       aOptions: TDocVariantOptions);
     /// clone a document-based variant with the very same options but no data
     // - the same options will be used, without the dvArray/dvObject flags
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitClone() because it could leak memory
     procedure InitClone(const CloneFrom: TDocVariantData);
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level copy a document-based variant with the very same options and count
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - will copy Count and Names[] by reference, but Values[] only if CloneValues
-    // - returns the first item in Values[]
+    // - returns the first item in Values[], so that you could fill its values
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitFrom() because it could leak memory
     function InitFrom(const CloneFrom: TDocVariantData; CloneValues: boolean;
       MakeUnique: boolean = false): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1269,7 +1321,8 @@ type
     // - previous name InitCsv() was very misleading, because it was no CSV content
     // - the supplied content may have been generated by ToTextPairs() method
     // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitFromPairs() because it could leak memory
     procedure InitFromPairs(aPairs: PUtf8Char; aOptions: TDocVariantOptions;
       NameValueSep: AnsiChar = '='; ItemSep: AnsiChar = #10;
       DoTrim: boolean = true); overload;
@@ -1278,7 +1331,8 @@ type
     // - previous name InitCsv() was very misleading, because it was no CSV content
     // - the supplied content may have been generated by ToTextPairs() method
     // - if ItemSep = #10, then any kind of line feed (CRLF or LF) will be handled
-    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - if you call Init*() methods in a row, ensure you call Clear in-between,
+    // e.g. never call _Safe(...)^.InitFromPairs() because it could leak memory
     procedure InitFromPairs(const aPairs: RawUtf8; aOptions: TDocVariantOptions;
       NameValueSep: AnsiChar = '='; ItemSep: AnsiChar = #10;
       DoTrim: boolean = true); overload;
@@ -1295,6 +1349,9 @@ type
     // !  Doc.Clear; // to release memory before following InitObject()
     // !  Doc.InitObject(['name','John','year',1972]);
     // !end;
+    // - this is because all Init*() methods set pointer(VName) := nil and
+    // pointer(VValue) := nil which is needed from a TVarData/variant instance,
+    // but would leak memory when applied to an existing TDocVariantData
     // - will check the VType, and call ClearFast private method
     procedure Clear;
     /// delete all internal stored values
