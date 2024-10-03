@@ -3097,6 +3097,10 @@ procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
 // TLecuyer table (note that RTL's system.Random function is not thread-safe)
 function Random32: cardinal; overload;
 
+/// compute of a 32-bit random value <> 0, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
+function Random32Not0: cardinal;
+
 /// fast compute of some 31-bit random value, using the gsl_rng_taus2 generator
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function Random31: integer;
@@ -9374,6 +9378,14 @@ end;
 function Random32: cardinal;
 begin
   result := _Lecuyer.Next;
+end;
+
+function Random32Not0: cardinal;
+begin
+  with _Lecuyer do
+    repeat
+      result := Next;
+    until result <> 0;
 end;
 
 function Random31: integer;
