@@ -2393,6 +2393,8 @@ begin
         if enumType = nil then
         begin
           if nam = '' then
+            nam := aSchemaName;
+          if nam = '' then
           begin
             inc(fEnumCounter); // TEnum### seems easier
             Make(['Enum', fName, fEnumCounter], nam);
