@@ -1278,6 +1278,13 @@ begin
     fRequestBodySchema := fRequestBody^.Schema(fParser);
   if fRequestBodySchema <> nil then
     fPayloadParameterType := fParser.NewPascalTypeFromSchema(fRequestBodySchema);
+  // setup method/operation
+  fOperationId := fOperation^.Id;
+  if fOperationId = '' then // method + api as fallback to have something <> ''
+    fOperationId := aMethod + aPath;
+  fFunctionName := SanitizePascalName(fOperationId, {keywordcheck:}true);
+  if fOperation^.Deprecated then
+    Append(fFunctionName, '_deprecated');
 end;
 
 destructor TPascalOperation.Destroy;
