@@ -5549,6 +5549,7 @@ var
 /// check from the file beginning if sounds like a valid SQLite3 file
 // - returns true if a database file is encrypted or not
 // - optional retrieve the file page size from header
+// - warning: PageSize^ should be a 32-bit "integer" variable, not a PtrInt
 function IsSQLite3File(const FileName: TFileName;
   PageSize: PInteger = nil): boolean;
 

@@ -3510,6 +3510,7 @@ function NormalizeDirectoryExists(const Directory: TFileName;
 // is processed by this function (for safety)
 // - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
 // but just the files found in it
+// - warning: DeletedCount^ should be a 32-bit "integer" variable, not a PtrInt
 function DirectoryDelete(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; DeleteOnlyFilesNotDirectory: boolean = false;
   DeletedCount: PInteger = nil): boolean;
@@ -4782,10 +4783,12 @@ procedure SwitchToThread;
 procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
 /// wrapper to implement a thread-safe T*ObjArray dynamic array storage
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 function ObjArrayAdd(var aObjArray; aItem: TObject;
   var aSafe: TLightLock; aCount: PInteger = nil): PtrInt; overload;
 
 /// wrapper to implement a thread-safe pointer dynamic array storage
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 function PtrArrayDelete(var aPtrArray; aItem: pointer; var aSafe: TLightLock;
   aCount: PInteger = nil): PtrInt; overload;
 
@@ -5612,6 +5615,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - optional env is Windows only, (FPC popen does not support it), and should
 // be encoded as name=value#0 pairs
 // - you can specify a wrkdir if the path specified by cmd is not good enough
+// - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
   setresult: boolean = true; const env: TFileName = '';

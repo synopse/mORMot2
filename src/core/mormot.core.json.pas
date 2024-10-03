@@ -208,6 +208,7 @@ function GetFirstJsonToken(P: PUtf8Char): TJsonToken;
 // jtArrayStart, jtObjectStart, jtDoubleQuote or jtFirstDigit
 // - will allow comments and extended MongoDB JSON syntax unless Strict=true
 // - optionally return the number of nested items for jtArrayStart/jtObjectStart
+// - warning: DocCount^ should be a 32-bit "integer" variable, not a PtrInt
 function GetNextJsonToken(var P: PUtf8Char; strict: boolean = false;
   DocCount: PInteger = nil): TJsonToken;
 
@@ -298,6 +299,7 @@ function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char;
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
+// - warning: Len^ should be a 32-bit "integer" variable, not a PtrInt
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
   NoJsonUnescape: boolean = false): PUtf8Char;
 
@@ -315,6 +317,7 @@ procedure GetJsonPropNameShort(var P: PUtf8Char; out PropName: ShortString);
 // - as called by GetJsonFieldOrObjectOrArray() for HandleValuesAsObjectOrArray
 // - return the position of the next JSON item (with EndOfObject and optionally
 // Len^ properly set) or nil on parsing error
+// - warning: Len^ should be a 32-bit "integer" variable, not a PtrInt
 function GetJsonObjectOrArray(P: PUtf8Char;
   EndOfObject: PUtf8Char; Len: PInteger = nil): PUtf8Char;
 

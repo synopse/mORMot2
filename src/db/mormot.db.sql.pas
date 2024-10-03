@@ -763,6 +763,7 @@ type
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUtf8 column
     // (0 means BLOB kind of TEXT column)
+    // - warning: FieldSize^ should be a 32-bit "integer" variable, not a PtrInt
     function ColumnType(Col: integer; FieldSize: PInteger = nil): TSqlDBFieldType;
     /// returns TRUE if the column contains NULL, first Col is 0
     function ColumnNull(Col: integer): boolean;
@@ -2458,6 +2459,7 @@ type
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUtf8 column
     // (0 means BLOB kind of TEXT column)
+    // - warning: FieldSize^ should be a 32-bit "integer" variable, not a PtrInt
     function ColumnType(Col: integer;
       FieldSize: PInteger = nil): TSqlDBFieldType; virtual; abstract;
     /// returns TRUE if the column contains NULL, first Col is 0
@@ -3024,6 +3026,7 @@ type
     // - FieldSize can be set to store the size in chars of a ftUtf8 column
     // (0 means BLOB kind of TEXT column) - this implementation will store
     // fColumns[Col].ColumnValueDBSize if ColumnValueInlined=true
+    // - warning: FieldSize^ should be a 32-bit "integer" variable, not a PtrInt
     function ColumnType(Col: integer;
       FieldSize: PInteger = nil): TSqlDBFieldType; override;
     /// direct access to the columns description

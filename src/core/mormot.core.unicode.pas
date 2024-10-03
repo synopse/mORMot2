@@ -2313,7 +2313,8 @@ type
     /// case-insensitive search for a given TFileName in the folder
     // - returns '' if not found, or the exact file name in the POSIX folder
     // - is thread-safe and non blocking during its lookup
-    // - can optionally return MicroSec spent for actual filenames read on disk
+    // - can optionally return micro seconds spent for actual filenames read on disk
+    // - warning: aReadMs^ should be a 32-bit "integer" variable, not a PtrInt
     function Find(const aSearched: TFileName; aReadMs: PInteger = nil): TFileName;
     /// how many file entries are currently in the internal list
     function Count: PtrInt;

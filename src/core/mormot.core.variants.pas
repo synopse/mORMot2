@@ -1629,6 +1629,7 @@ type
     // - return a pointer to the value if the name has been found, and optionally
     // fill aFoundIndex^ with its index in Values[]
     // - after a SortByName(aSortedCompare), could use faster binary search
+    // - warning: aFoundIndex^ should be a 32-bit "integer" variable, not a PtrInt
     function GetVarData(const aName: RawUtf8; aSortedCompare: TUtf8Compare = nil;
       aFoundIndex: PInteger = nil): PVarData; overload;
     /// find an item in this document, and returns its value as boolean

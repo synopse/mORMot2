@@ -3432,10 +3432,10 @@ begin
     if r[length(r)] <> '/' then
       Append(r, '/');
   end;
-  // EIO        4          Mandatory, the version of the protocol.
-  // transport  websocket  Mandatory, the name of the transport.
-  // sid        <sid>      None here - direct websockets, not from HTTP polling.
-  // t          <random>   Ensure that the request is not cached by the browser.
+  // EIO        4          Mandatory, the version of the protocol
+  // transport  websocket  Mandatory, the name of the transport
+  // sid        <sid>      None here - direct websockets, not from HTTP polling
+  // t          <random>   Ensure that the request is not cached by the browser
   FormatUtf8('%?EIO=4&transport=websocket&t=%',
     [r, CardinalToHexShort(Random32Not0)], result);
   if PollingUpgradeSid <> '' then

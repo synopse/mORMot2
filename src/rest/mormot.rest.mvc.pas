@@ -305,6 +305,7 @@ type
     // optionally its session ID
     // - will call CheckAndRetrieve() then RecordSaveJson() and _JsonFast()
     // - to be called in overriden TMvcApplication.GetViewInfo method
+    // - warning: PSessionID^ should be a 32-bit "integer" variable, not a PtrInt
     function CheckAndRetrieveInfo(PRecordDataTypeInfo: PRttiInfo;
       PSessionID: PInteger = nil): variant; virtual;
     /// clear the session

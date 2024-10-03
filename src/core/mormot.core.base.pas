@@ -1893,10 +1893,12 @@ type
   TPtrArrayKind = (pakPointer, pakClass, pakClassSafe, pakInterface);
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil;
   aKind: TPtrArrayKind = pakPointer): PtrInt; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil;
   aKind: TPtrArrayKind = pakPointer); overload;
 
@@ -1990,6 +1992,7 @@ function ObjArrayNotNilCount(const aObjArray): integer;
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - do nothing if the index is out of range in the dynamic array
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
   const aContinueOnException: boolean = false; aCount: PInteger = nil); overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -2030,6 +2033,7 @@ procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
 // e.g. in the owner class destructor
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean;
   aCount: PInteger = nil); overload;
 
