@@ -2274,7 +2274,7 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
         include(ctxt.Retry, rMain);
-        RequestInternal(ctxt);
+        RequestInternal(ctxt); // retry once
       except
         on Exception do
           ctxt.Status := FatalError;

@@ -365,7 +365,7 @@ var
   LDAP_ERROR_TEXT: array[TLdapError] of RawUtf8;
 
 const
-  /// raw LDAP result codes of all TLdapError items
+  /// raw LDAP result codes (in range 0..123) of all TLdapError items
   // - use RawLdapError() or RawLdapErrorString() to decode a LDAP result code
   LDAP_RES_CODE: array[succ(low(TLdapError)) .. high(TLdapError)] of byte = (
     LDAP_RES_SUCCESS,
@@ -583,6 +583,7 @@ function LdapToDate(const Text: RawUtf8): TDateTime;
 
 type
   /// define how a TLdapAttributeType is actually stored in the LDAP raw value
+  // - allow complex binary types to be decoded / made readable
   TLdapAttributeTypeStorage = (
     atsAny,
     atsRawUtf8,
@@ -854,6 +855,17 @@ type
     aoNoDuplicateValue);
 
   /// customize TLdapResult.SearchAll/TLdapResultList.AppendTo output
+  // - roNoDCAtRoot, roObjectNameAtRoot, roObjectNameWithoutDCAtRoot,
+  // roCanonicalNameAtRoot and roCommonNameAtRoot will define how the object is
+  // inserted and named in the output hierarchy - those options are exclusive
+  // - by default, a "objectName" field is added, unless roNoObjectName is set
+  // - a "canonicalName" field could be added if roWithCanonicalName is set
+  // - atNTSecurityDescriptor recognizes known RID unless roNoSddlDomainRid is
+  //  set; it won't recognize known ldapDisplayName unless roSddlKnownUuid is set
+  // - roRawValues disable decoding of complex values (map all the following)
+  // - roRawBoolean won't generate JSON true/false but keep "TRUE"/"FALSE" string
+  // - roRawUac/roRawFlags/roRawGroupType/roRawAccountType disable decoding of
+  // of atUserAccountControl/atSystemFlags/atGoupType/atAccountType values
   TLdapResultOptions = set of (
     roNoDCAtRoot,
     roObjectNameAtRoot,
