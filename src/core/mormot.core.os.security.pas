@@ -478,7 +478,6 @@ type
   // - see [MS-DTYP] 2.4.3 ACCESS_MASK
   // - well defined set of files or keys flags are defined as TSecAccessRight
   // - other sets of rights will be identified by those individual values
-  // -
   TSecAccess = (
     samCreateChild,          // CC
     samDeleteChild,          // DC
@@ -719,7 +718,7 @@ type
     /// append this entry as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    // - could also customize UUID values, e.g. with uuid = AppendShortKnownUuid
+    // - could also customize UUID values, e.g. with uuid = @AppendShortKnownUuid
     procedure AppendAsText(var s: ShortString; var sddl: TSynTempBuffer;
       dom: PSid; uuid: TAppendShortUuid);
     /// decode a SDDL ACE textual representation into this (cleared) entry
@@ -1154,7 +1153,7 @@ function AceReplaceAnySid(const old, new: RawSidDynArray;
 { ****************** Active Directory Definitions }
 type
   /// some known Active Directory schema attributes
-  // - we embed a small list of attributes with their UUID for conveniency
+  // - we embed a small list of attributes with their ObjectID for conveniency
   // - this enumeration is sorted by ATTR_UUID[] binary order
   // - [MS-ADA3] publishes a huge list of content, which is outside the scope
   // of this unit - feel free to contribute, via some pull requests
@@ -1204,7 +1203,7 @@ type
     kaRasInformation);
 
 const
-  /// the GUID of known Active Directory schema attributes
+  /// the ObjectID of known Active Directory schema attributes
   // - this list is sorted at byte level for faster O(log(n)) binary search
   // - note that byte-level order does not follow the GUID hexa text order
   ATTR_UUID: array[TAdsKnownAttribute] of TGuid = (
@@ -1298,21 +1297,26 @@ const
     'ms-DS-Allowed-To-Act-On-Behalf-Of-Other-Identity',  // kaMsDsAllowedToActOnBehalfOfOtherIdentity
     'RAS-Information');                        // kaRasInformation
 
-/// search a known attribute from its UUID
+/// search a known AD schema attribute from its ObjectID
 // - is implemented via O(log(n)) binary search within ordered ATTR_UUID[]
+// - returns kaNull if the supplied TGuid was not found
 function UuidToKnownAttribute(const u: TGuid): TAdsKnownAttribute;
 
-/// parse a UUID as text, recognizing TAdsKnownAttribute ATTR_TXT[] values
+/// recognize the ldapDisplayName of our TAdsKnownAttribute selection
+// - use FindNonVoidRawUtf8I(ATTR_TXT[]) O(n) case-insensitive brute force search
+// - returns kaNull if the supplied text does not match any known ldapDisplayName
 function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
 
-/// append a UUID as text, recognizing TAdsKnownAttribute values
+/// append an ObjectID as TAdsKnownAttribute's ldapDisplayName, or as UUID hexa
+// - if u is a TAdsKnownAttribute, append its ATTR_TXT[] text
+// - otherwise, append regular '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
 // - can be used as TAppendShortUuid optional parameter for SDDL generation
 // functions, e.g. SecurityDescriptorToText()
 // - you can also define your own TAppendShortUuid function
 // - use fast O(log(n)) binary search in CPU L1 cache over ATTR_UUID[] items
 procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
 
-/// parse a UUID as text, recognizing UUID hexa or TAdsKnownAttribute values
+/// parse an ObjectID, recognizing TAdsKnownAttribute's ldapDisplayName or UUID hexa
 // - can be used as TShortToUuid optional parameter for SDDL parsing
 // - you can also define your own TShortToUuidfunction
 // - use O(n) case-insensitive brute force search over ATTR_TXT[] values
@@ -1775,13 +1779,13 @@ type
     /// encode this Security Descriptor into its SDDL textual representation
     // - could also generate SDDL RID placeholders, from the specified
     // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
-    // - could also customize UUID values, e.g. with uuid = AppendShortKnownUuid
+    // - could also customize UUID values, e.g. with uuid = @AppendShortKnownUuid
     function ToText(const RidDomain: RawUtf8 = '';
       uuid: TAppendShortUuid = nil): RawUtf8;
     /// append this Security Descriptor as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    // - could also customize UUID values, e.g. with uuid = AppendShortKnownUuid
+    // - could also customize UUID values, e.g. with uuid = @AppendShortKnownUuid
     procedure AppendAsText(var sddl: TSynTempBuffer; dom: PSid = nil;
       uuid: TAppendShortUuid = nil);
     /// add one new ACE to the DACL (or SACL)
@@ -1839,7 +1843,7 @@ function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 // - function is able to convert the value itself, i.e. allows @sd = @text
 // - could also generate SDDL RID placeholders, if dom binary is supplied,
 // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-// - you can customize the UUID ACE output e.g. with uuid = AppendShortKnownUuid
+// - you can customize the UUID ACE output e.g. with uuid = @AppendShortKnownUuid
 // - on Windows, see also the native CryptoApi.SecurityDescriptorToText()
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid = nil; uuid: TAppendShortUuid = nil): boolean;
@@ -2723,7 +2727,7 @@ begin
   if len < 4 then
     result := kaNull
   else
-    result := TAdsKnownAttribute(FindNonVoidRawUtf8I(
+    result := TAdsKnownAttribute(FindNonVoidRawUtf8I( // brute force search
       @ATTR_TXT[succ(kaNull)], p, len, length(ATTR_TXT) - 1) + 1);
 end;
 
@@ -2732,19 +2736,18 @@ var
   a: TAdsKnownAttribute;
 begin
   result := false;
-  if text[0] >= #4 then
-    if text[0] = #36 then
-      // decode '3F2504E0-4F89-11D3-9A0C-0305E82C3301' standard encoding
-      result := ShortToUuid(text, uuid)
-    else
-    begin
-      // case-insensitive ATTR_TXT[] text search
-      a := TextToKnownAttribute(@text[1], ord(text[0]));
-      if a = kaNull then
-        exit;
-      uuid := ATTR_UUID[a];
-      result := true;
-    end;
+  if text[0] = #36 then
+    // decode '3F2504E0-4F89-11D3-9A0C-0305E82C3301' standard encoding
+    result := ShortToUuid(text, uuid) // using the RTL or mormot.core.text
+  else
+  begin
+    // case-insensitive ATTR_TXT[] text search
+    a := TextToKnownAttribute(@text[1], ord(text[0]));
+    if a = kaNull then
+      exit;
+    uuid := ATTR_UUID[a];
+    result := true;
+  end;
 end;
 
 
