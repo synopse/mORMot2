@@ -2361,7 +2361,14 @@ begin
     begin
       result := NewPascalTypeFromSchema(items, aSchemaName);
       result.fBuiltinSchema := aSchema;
-      result.IsArray := true;
+      if result.IsEnum and
+         (TPascalEnum(result.CustomType).fChoices.Count >= ENUM_MAX) then
+      begin
+        // mormot.core.rtti/json is limited to 64 items: use TRawUtf8DynArray
+        result.Free;
+        result := TPascalType.CreateBuiltin(self, obtRawUtf8);
+      end;
+      result.SetArray(true);
     end;
   end
   else
