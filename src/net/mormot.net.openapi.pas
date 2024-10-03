@@ -1182,7 +1182,10 @@ begin
   if fName = '' then
     EOpenApi.RaiseUtf8('%.Create(name?)', [self]);
   fParser := aParser;
-  if fName[1] = '#' then // ensure type name is not too long
+  if (fName[1] = '#') or // ensure type name is not too long
+     (length(fName) > 70) or
+     // DotNet generates e.g. /schemas/System.Tupple`2[[...,...]]`
+     (PosExChar('`', fName) > 0) then
   begin
     inc(fParser.fDtoCounter); // TDto### is simple and convenient
     Make(['TDto', fParser.Name, fParser.fDtoCounter], fPascalName);
