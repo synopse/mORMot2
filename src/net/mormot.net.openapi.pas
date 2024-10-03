@@ -2338,9 +2338,16 @@ begin
   else if aSchema^.IsArray then
   begin
     // retrieve the main item type but apply the "IsArray" flag
-    result := NewPascalTypeFromSchema(aSchema^.Items, aSchemaName);
-    result.fBuiltinSchema := aSchema;
-    result.IsArray := true;
+    items := aSchema^.Items;
+    if (items = nil) or
+       (items^.Data.Count = 0) then
+      result := TPascalType.CreateBuiltin(self, obtVariant) // no definition
+    else
+    begin
+      result := NewPascalTypeFromSchema(items, aSchemaName);
+      result.fBuiltinSchema := aSchema;
+      result.IsArray := true;
+    end;
   end
   else
   begin
