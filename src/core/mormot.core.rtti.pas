@@ -7033,7 +7033,9 @@ begin
   case NameLen of
     5:
       if IdemPropNameUSameLenNotNull(Name, 'array', 5) then
-        result := ptArray;
+        result := ptArray
+      else if IdemPropNameUSameLenNotNull(Name, 'TDate', 5) then
+        result := ptDateTime;
     6:
       {$ifdef FPC}
       // TypeInfo(string)=TypeInfo(AnsiString) on FPC
