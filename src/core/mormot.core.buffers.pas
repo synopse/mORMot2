@@ -2208,6 +2208,7 @@ type
     function GetProgress: RawUtf8;
     procedure DoReport(ReComputeElapsed: boolean);
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
+    procedure ResetHash; virtual; // called e.g. from Seek(0, soBeginning)
     procedure SetExpectedSize(Value: Int64);
     procedure ReadWriteHash(const Buffer; Count: integer); virtual;
     procedure ReadWriteReport(const Caller: ShortString); virtual;
@@ -2324,6 +2325,7 @@ type
   TStreamRedirectHash32 = class(TStreamRedirect)
   protected
     fHash: cardinal;
+    procedure ResetHash; override;
   public
     function GetHash: RawUtf8; override;
   end;
@@ -9841,6 +9843,10 @@ procedure TStreamRedirect.DoHash(data: pointer; len: integer);
 begin // no associated hasher on this parent class
 end;
 
+procedure TStreamRedirect.ResetHash;
+begin // no associated hasher on this parent class
+end;
+
 procedure TStreamRedirect.SetExpectedSize(Value: Int64);
 begin
   fInfo.SetExpectedSize(Value, fPosition);
@@ -10027,6 +10033,11 @@ end;
 
 
 { TStreamRedirectHash32 }
+
+procedure TStreamRedirectHash32.ResetHash;
+begin
+  fHash := 0;
+end;
 
 function TStreamRedirectHash32.GetHash: RawUtf8;
 begin

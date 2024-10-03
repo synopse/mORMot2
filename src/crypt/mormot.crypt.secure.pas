@@ -676,6 +676,7 @@ type
   protected
     fHash: TSynHasher;
     procedure DoHash(data: pointer; len: integer); override;
+    procedure ResetHash; override;
   public
     constructor Create(aDestination: TStream; aRead: boolean = false); override;
     function GetHash: RawUtf8; override;
@@ -3792,6 +3793,11 @@ end;
 procedure TStreamRedirectSynHasher.DoHash(data: pointer; len: integer);
 begin
   fHash.Update(data, len);
+end;
+
+procedure TStreamRedirectSynHasher.ResetHash;
+begin
+  fHash.Init(GetAlgo); // called e.g. from Seek(0, soBeginning)
 end;
 
 function TStreamRedirectSynHasher.GetHash: RawUtf8;
