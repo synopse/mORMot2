@@ -12,7 +12,8 @@ unit mormot.net.ldap;
     - LDAP Protocol Definitions
     - LDAP Attributes Definitions
     - LDAP Response Storage
-    - LDAP Client Class
+    - Main TLdapClient Class
+    - Dedicated TLdapCheckMember Class
     - HTTP BASIC Authentication via LDAP or Kerberos
 
   *****************************************************************************
@@ -1245,7 +1246,7 @@ type
 
 
 
-{ **************** LDAP Client Class }
+{ **************** Main TLdapClient Class }
 
 type
   /// well-known LDAP Objects, as defined from their GUID by Microsoft
@@ -1959,6 +1960,18 @@ type
       read fResultString;
   end;
 
+const
+  /// common possible value for TLdapClient.SearchSDFlags
+  // - lsfSaclSecurityInformation is not included because it is likely to be not
+  // available for the client, and would void the atNTSecurityDescriptor field
+  lsfMain = [lsfOwnerSecurityInformation,
+             lsfGroupSecurityInformation,
+             lsfDaclSecurityInformation];
+
+
+{ **************** Dedicated TLdapCheckMember Class }
+
+type
   /// a LDAP client instance dedicated to validate user group membership
   // - properly checking group membership is a complex issue, worth its own class
   // - will maintain a connection to the LDAP server, e.g. to efficiently
@@ -2030,14 +2043,6 @@ type
     property CacheTimeoutSeconds: integer
       read fCacheTimeoutSeconds write fCacheTimeoutSeconds;
   end;
-
-const
-  /// common possible value for TLdapClient.SearchSDFlags
-  // - lsfSaclSecurityInformation is not included because it is likely to be not
-  // available for the client, and would void the atNTSecurityDescriptor field
-  lsfMain = [lsfOwnerSecurityInformation,
-             lsfGroupSecurityInformation,
-             lsfDaclSecurityInformation];
 
 
 { **************** HTTP BASIC Authentication via LDAP or Kerberos }
@@ -4460,7 +4465,7 @@ begin
 end;
 
 
-{ **************** LDAP Client Class }
+{ **************** Main TLdapClient Class }
 
 { TLdapClientSettings }
 
@@ -6327,6 +6332,7 @@ begin
 end;
 
 
+{ **************** Dedicated TLdapCheckMember Class }
 
 { TLdapCheckMember }
 

@@ -152,7 +152,8 @@ Simple LDAP Protocol Client
 - LDAP Protocol Definitions
 - LDAP Attributes Definitions
 - LDAP Response Storage
-- LDAP Client Class
+- Main `TLdapClient` Class
+- Dedicated `TLdapCheckMember` Class
 - HTTP BASIC Authentication via LDAP or Kerberos
 
 ### mormot.net.dns
