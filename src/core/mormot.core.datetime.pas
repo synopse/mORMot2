@@ -693,7 +693,7 @@ const
   /// a contemporary, but elapsed, TUnixTime second-based value
   // - corresponds to Thu, 08 Dec 2016 08:50:20 GMT
   // - may be used to check for a valid just-generated Unix timestamp value
-  // - or used to store a timestamp without any 32-bit "Year 2038" overflow
+  // - or to store a timestamp without any 32-bit "Year 2038" overflow issue
   UNIXTIME_MINIMAL = 1481187020;
 
 /// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue

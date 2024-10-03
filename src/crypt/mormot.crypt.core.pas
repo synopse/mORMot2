@@ -11354,7 +11354,7 @@ begin
           SetOutLen(inLen + SizeOf(TAesBlock))
         else
           SetOutLen((nBlock + 2) shl AesBlockShift);
-        Head.SomeSalt := Random32;
+        Head.SomeSalt := Random32Not0;
         Head.HeaderCheck := Head.Calc(Key, KeySize);
         Crypt.Encrypt(TAesBlock(Head));
         Write(@Head, SizeOf(Head));

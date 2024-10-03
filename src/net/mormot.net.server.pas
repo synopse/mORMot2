@@ -3613,7 +3613,7 @@ begin
   else
   begin
     keyfile := TemporaryFileName;
-    keypass := CardinalToHexLower(Random32);
+    keypass := CardinalToHexLower(Random32Not0);
     cert := CryptCertOpenSsl[Algo].
               Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650);
     cert.SaveToFile(certfile, cccCertOnly, '', ccfPem);
@@ -5284,7 +5284,7 @@ begin
   // setup internal processing status
   if IsNullGuid(fUuid) then
     GetComputerUuid(fUuid);
-  fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
+  fFrameSeqLow := Random31Not0; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   // setup internal cryptography
   if aSharedSecret = '' then

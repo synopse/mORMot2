@@ -11448,7 +11448,7 @@ procedure InitializeUnit;
 var
   k: TRttiKind;
 begin
-  HashSeed := Random32; // to avoid hash flooding
+  HashSeed := Random32Not0; // to avoid hash flooding
   // initialize RTTI low-level comparison functions
   RTTI_ORD_COMPARE[roSByte]  := @_BC_SByte;
   RTTI_ORD_COMPARE[roUByte]  := @_BC_UByte;

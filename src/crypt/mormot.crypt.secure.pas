@@ -5274,9 +5274,9 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
-  fTokenSeed := Random32;
+  fTokenSeed := Random32Not0;
   fSessionGenerator := abs(fTokenSeed * PPtrInt(self)^);
-  fTokenSeed := abs(fTokenSeed * Random32);
+  fTokenSeed := fTokenSeed * Random31Not0;
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;
@@ -5940,12 +5940,14 @@ procedure TBinaryCookieGenerator.Init(const Name: RawUtf8;
 begin
   CookieName := Name;
   // initial random session ID, small enough to remain 31-bit > 0
-  SessionSequence := Random32 and $07ffffff;
+  repeat
+    SessionSequence := Random32 shr 9;
+  until SessionSequence <> 0;
   SessionSequenceStart := SessionSequence;
   // temporary secret for checksum  (Lecuyer is good enough for 32-bit)
-  Secret := Random32;
+  Secret := Random32Not0;
   // temporary secret for encryption
-  CryptNonce := Random32;
+  CryptNonce := Random32Not0;
   // custom expiration
   DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   // default algorithm is caCrc32c
@@ -5989,7 +5991,7 @@ begin
         // all cookies storage should be < 4K so a single 2K cookie seems huge
         raise ECrypt.Create('TBinaryCookieGenerator: Too Big Too Fat');
     end;
-    cc.head.cryptnonce := Random32;
+    cc.head.cryptnonce := Random32Not0;
     cc.head.session    := result;
     cc.head.issued     := UnixTimeMinimalUtc;
     if TimeOutMinutes = 0 then

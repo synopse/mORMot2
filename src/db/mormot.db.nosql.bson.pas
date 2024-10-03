@@ -1960,7 +1960,9 @@ procedure InitBsonObjectIDComputeNew;
 begin
   with GlobalBsonObjectID.DefaultValues do
   begin
-    Counter := Random32 and COUNTER_MASK;
+    repeat
+      Counter := Random32 and COUNTER_MASK;
+    until Counter <> 0;
     with Executable do
       PCardinal(@MachineID)^ := crc32c(crc32c(
         0, pointer(Host), length(Host)), pointer(User), length(User));

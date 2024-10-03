@@ -552,7 +552,9 @@ begin
   w := TBufferWriter.Create(tmp{%H-});
   try
     FillCharFast(h, SizeOf(h), 0);
-    h.Xid := Random32; // truncated to 16-bit
+    repeat
+      h.Xid := Random32; // truncated to 16-bit
+    until h.XId <> 0;
     h.RecursionDesired := true;
     h.QuestionCount := 1 shl 8;
     w.Write(@h, SizeOf(h));

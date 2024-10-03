@@ -11514,7 +11514,7 @@ procedure InitializeUnit;
 var
   ptc: TRttiParserComplexType;
 begin
-  OrmHashSeed := Random32; // avoid hash flooding
+  OrmHashSeed := Random32Not0; // avoid hash flooding
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;
