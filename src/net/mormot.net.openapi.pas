@@ -2415,7 +2415,7 @@ procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const;
 var
   all, line, feed: RawUtf8;
   p: PUtf8Char;
-  i, o: PtrInt;
+  i, j, o: PtrInt;
 begin
   all := TrimU(Make(Args));
   if Desc <> '' then
@@ -2428,7 +2428,16 @@ begin
     o := 0;
     while length(line) - o > 80 do // insert line feeds on huge comment
     begin
-      i := PosEx(' ', line, o + 75);
+      i := PosEx(' ', line, o + 75);   // try to end at a space position
+      if (i = 0) or
+         (i > o + 100) then
+      begin
+        j := PosEx(',', line, o + 75); // comma may appear sooner
+        if j <> 0 then
+          if (i = 0) or
+             (j < i) then
+            i := j + 1;
+      end;
       if i = 0 then
         break;
       if feed = '' then
