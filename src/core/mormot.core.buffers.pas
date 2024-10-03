@@ -2321,7 +2321,7 @@ type
   TStreamRedirectClass = class of TStreamRedirect;
 
   /// TStreamRedirect with 32-bit THasher checksum
-  TStreamRedirectHasher = class(TStreamRedirect)
+  TStreamRedirectHash32 = class(TStreamRedirect)
   protected
     fHash: cardinal;
   public
@@ -2329,7 +2329,7 @@ type
   end;
 
   /// TStreamRedirect with crc32c 32-bit checksum
-  TStreamRedirectCrc32c = class(TStreamRedirectHasher)
+  TStreamRedirectCrc32c = class(TStreamRedirectHash32)
   protected
     procedure DoHash(data: pointer; len: integer); override;
   public
@@ -10025,9 +10025,10 @@ begin
 end;
 
 
-{ TStreamRedirectHasher }
 
-function TStreamRedirectHasher.GetHash: RawUtf8;
+{ TStreamRedirectHash32 }
+
+function TStreamRedirectHash32.GetHash: RawUtf8;
 begin
   result := CardinalToHexLower(fHash);
 end;

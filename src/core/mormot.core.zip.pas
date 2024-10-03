@@ -854,7 +854,7 @@ function UncompressString(const data: RawByteString) : RawByteString;
 
 type
   /// TStreamRedirect with crc32 32-bit checksum
-  TStreamRedirectCrc32 = class(TStreamRedirectHasher)
+  TStreamRedirectCrc32 = class(TStreamRedirectHash32)
   protected
     procedure DoHash(data: pointer; len: integer); override;
   public
