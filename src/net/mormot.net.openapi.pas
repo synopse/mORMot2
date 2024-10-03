@@ -557,6 +557,7 @@ type
     fEnumCounter, fDtoCounter: integer;
     fDtoUnitName, fClientUnitName, fClientClassName: RawUtf8;
     fOrderedRecords: TPascalRecordDynArray;
+    fEnumPrefix: TRawUtf8DynArray;
     function ParseRecordDefinition(const aDefinitionName: RawUtf8;
       aSchema: POpenApiSchema; aTemporary: boolean = false): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8; aPathItem: POpenApiPathItem);
@@ -574,6 +575,7 @@ type
     procedure Code(W: TTextWriter; var Line: RawUtf8; const Args: array of const);
     // main internal parsing function
     procedure ParseSpecs;
+    // main internal code generation methods
     procedure GenerateDtoInterface(w: TTextWriter);
     procedure GenerateDtoImplementation(w: TTextWriter);
   public
@@ -1698,24 +1700,30 @@ constructor TPascalEnum.Create(aParser: TOpenApiParser;
   const aName: RawUtf8; aSchema: POpenApiSchema);
 var
   i: PtrInt;
+  p: RawUtf8;
 begin
   fName := aName;
   inherited Create(aParser);
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0); // always prepend a first void item
-  if StartWithExact(aName, 'Enum') and
-     (aName[5 + length(fParser.Name)]  in ['1' .. '9']) then
-    // TEnumXxxxx2 = (ex2None, ex2...);
-    Make(['e', LowerCase(copy(fParser.Name, 1, 1)),
-          copy(aName, 5 + length(fParser.Name), 5)], fPrefix)
-  else
-    for i := 2 to length(fPascalName) do
-      if length(fPrefix) >= 4 then
-        break
-      else if fPascalName[i] in ['A' .. 'Z'] then
-        Append(fPrefix, fPascalName[i]);
+  for i := 2 to length(fPascalName) do
+    if length(p) >= 3 then
+      break
+    else if fPascalName[i] in ['A' .. 'Z'] then
+      Append(p, fPascalName[i]);
+  if p = '' then
+    p := 'e';
+  fPrefix := p; // TUserRole -> 'UR'
+  if FindPropName(fParser.fEnumPrefix, fPrefix) >= 0 then // 'ur' already exists
+    for i := 2 to 100 do
+    begin
+      Make([p, i], fPrefix);
+      if FindPropName(fParser.fEnumPrefix, fPrefix) < 0 then
+        break; // TUserRole -> 'ur2' unique prefix for this enum type
+    end;
   LowerCaseSelf(fPrefix); // TUserRole -> 'ur'
+  AddRawUtf8(fParser.fEnumPrefix, fPrefix);
   FormatUtf8('%_TXT', [UpperCase(copy(fPascalName, 2, 100))], fConstTextArrayName);
 end;
 
@@ -2195,6 +2203,7 @@ begin
   fSchemas := nil;
   fErrorHandler := nil;
   fOrderedRecords := nil;
+  fEnumPrefix := nil;
   fTitle := '';
   fEnumCounter := 0;
   fDtoCounter := 0;
@@ -2852,7 +2861,7 @@ begin
     w.AddStrings([
       '  public', LineEnd, LineEnd,
       '    // initialize this Client with an associated HTTP/JSON request', LineEnd,
-      '    constructor Create(const aClient: IJsonClient = nil);', LineEnd]);
+      '    constructor Create(const aClient: IJsonClient);', LineEnd]);
     // append all methods, regrouped per tag (if any)
     fLineIndent := '    ';
     bytag := GetOperationsByTag;
