@@ -1828,6 +1828,9 @@ const
   OBT_TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
     'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
     'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'string', 'RawByteString');
+  OBT_DEFAULT: array[TOpenApiBuiltInType] of RawUtf8 = (
+    'null', '', '0', '0', 'false', '', '0', '0', '0', '0',
+    '', '''''', '''''', '''''', '''''');
 
 constructor TPascalType.CreateBuiltin(aParser: TOpenApiParser;
   aBuiltInType: TOpenApiBuiltInType; aSchema: POpenApiSchema; aIsArray: boolean);
@@ -1936,7 +1939,6 @@ end;
 function TPascalType.ToDefaultParameterValue(aParam: TPascalParameter): RawUtf8;
 var
   def: PVariant;
-  t: RawUtf8;
 begin
   def := aParam.fDefault;
   if Assigned(def) and
@@ -1946,25 +1948,21 @@ begin
     if PVarData(def)^.VType = varBoolean then
       result := BOOL_UTF8[PVarData(def)^.VBoolean] // normalize
     else if VariantToUtf8(def^, result) then
-      result := QuotedStr(result);
+      result := QuotedStr(result); // single quoted pascal string
   end
   else if IsEnum then
-    result := (CustomType as TPascalEnum).Prefix + 'None'
+    if IsArray then
+      result := '[]' // set
+    else
+      result := (CustomType as TPascalEnum).Prefix + 'None' // first enum
   else if IsArray then
     result := 'nil'
   else
   begin
-    // default from type
-    t := aParam.fSchema^._Type;
-    if t = 'string' then
-      result := ''''''
-    else if (t = 'number') or
-            (t = 'integer') then
-      result := '0'
-    else if t = 'boolean' then
-      result := 'false'
-    else
-      EOpenApi.RaiseUtf8('Unsupported %.ToDefaultParameterValue(%)', [self, t]);
+    result := OBT_DEFAULT[BuiltInType];
+    if result = '' then
+      EOpenApi.RaiseUtf8('Unsupported %.ToDefaultParameterValue(%)',
+        [self, ToText(BuiltInType)^]);
   end;
 end;
 
