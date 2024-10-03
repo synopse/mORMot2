@@ -297,6 +297,7 @@ type
   TPascalCustomType = class;
   TPascalParameter = class;
   TPascalRecord = class;
+  TPascalRecordDynArray = array of TPascalRecord;
 
   /// define any Pascal type, as basic type of custom type
   TPascalType = class
@@ -389,6 +390,7 @@ type
     fRttiTextRepresentation: RawUtf8;
     fTypes: set of TOpenApiBuiltInType;
     fNeedsDummyField: boolean;
+    procedure ResolveDependencies(var all, pending: TPascalRecordDynArray);
   public
     constructor Create(aParser: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
@@ -400,7 +402,6 @@ type
     property Properties: TRawUtf8List
       read fProperties;
   end;
-  TPascalRecordDynArray = array of TPascalRecord;
 
   /// define a Pascal enumeration type
   TPascalEnum = class(TPascalCustomType)
@@ -2104,6 +2105,28 @@ begin
     end;
 end;
 
+procedure TPascalRecord.ResolveDependencies(var all, pending: TPascalRecordDynArray);
+var
+  i: PtrInt;
+  p: TPascalProperty;
+  t: TPascalType;
+begin
+  PtrArrayAdd(pending, self); // avoid infinite recursion on nested fields
+  for i := 0 to fProperties.Count - 1 do
+  begin
+    p := fProperties.ObjectPtr[i];
+    t := p.PropType;
+    if t.IsRecord and
+       (ObjArrayFind(all, t.CustomType) < 0) then
+      if ObjArrayFind(pending, t.CustomType) < 0 then
+        TPascalRecord(t.CustomType).ResolveDependencies(all, pending)
+      else
+        p.ConvertToVariant; // avoid infinite recursive definition
+  end;
+  PtrArrayAddOnce(all, self); // add eventually, if not already present
+  PtrArrayDelete(pending, self);
+end;
+
 
 { TPascalException }
 
@@ -2204,12 +2227,12 @@ begin
   fErrorHandler := nil;
   fOrderedRecords := nil;
   fEnumPrefix := nil;
-  fTitle := '';
   fEnumCounter := 0;
   fDtoCounter := 0;
   fDtoUnitName := '';
   fClientUnitName := '';
   fClientClassName := '';
+  fTitle := '';
 end;
 
 procedure TOpenApiParser.ParseSpecs;
@@ -2576,29 +2599,6 @@ begin
     result := ParseRecordDefinition(aRecordName, aSchema);
 end;
 
-procedure ResolveDependencies(r: TPascalRecord; var all, pending: TPascalRecordDynArray);
-var
-  i: PtrInt;
-  p: TPascalProperty;
-  t: TPascalType;
-begin
-  PtrArrayAdd(pending, r); // avoid infinite recursion on nested fields
-  for i := 0 to r.fProperties.Count - 1 do
-  begin
-    p := r.fProperties.ObjectPtr[i];
-    t := p.PropType;
-    if t.IsRecord and
-       (t.CustomType <> r) and
-       (ObjArrayFind(all, t.CustomType) < 0) then
-      if ObjArrayFind(pending, t.CustomType) < 0 then
-        ResolveDependencies(TPascalRecord(t.CustomType), all, pending)
-      else
-        p.ConvertToVariant; // avoid infinite recursive definition
-  end;
-  PtrArrayAddOnce(all, r); // add eventually, if not already present
-  PtrArrayDelete(pending, r);
-end;
-
 function TOpenApiParser.GetOrderedRecords: TPascalRecordDynArray;
 var
   i: PtrInt;
@@ -2608,7 +2608,9 @@ begin
   if result <> nil then
     exit;
   for i := 0 to fRecords.Count - 1 do
-    ResolveDependencies(fRecords.ObjectPtr[i], result, pending);
+    TPascalRecord(fRecords.ObjectPtr[i]).ResolveDependencies(result, pending);
+  if pending <> nil then // paranoid
+    EOpenApi.RaiseUtf8('%.GetOrderedRecords: pending=%', [self, length(pending)]);
   fOrderedRecords := result; // compute once
 end;
 
