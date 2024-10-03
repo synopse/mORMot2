@@ -2682,25 +2682,31 @@ procedure TTestCoreBase._ParseCommandArguments;
      const flags: TParseCommands = []; posix: boolean = true);
   var
     tmp: RawUtf8;
-    n, i: integer;
+    n, i: integer; // integer, not PtrInt
     a: TParseCommandsArgs;
+    p: TRawUtf8DynArray;
   begin
     if checkfailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
       exit;
-    FillcharFast(a, SizeOf(a), 255);
-    check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
-    if (flags = []) and
-       not CheckFailed(n = length(expected)) then
-    begin
-      for i := 0 to high(expected) do
-        check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
-      check(a[n] = nil);
-    end;
+    FillcharFast(a, SizeOf(a), 255); // ensure a[n]<>nil
+    Check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
+    if (flags <> []) or
+       CheckFailed(n = length(expected)) then
+      exit;
+    for i := 0 to n - 1 do
+      check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
+    Check(a[n] = nil, 'last param should be nil');
+    Check(ExtractCommandArgs(cmd, p, posix) = flags);
+    if not CheckFailed(n = length(p)) then
+      for i := 0 to n - 1 do
+        CheckEqual(p[i], expected[i]);
   end;
 
 begin
   Test('', [], [pcInvalidCommand]);
   Test('one', ['one']);
+  Test('o', ['o']);
+  Test(' o', ['o']);
   Test('one two', ['one', 'two']);
   Test('    one     two    ', ['one', 'two']);
   Test('"one" two', ['one', 'two']);

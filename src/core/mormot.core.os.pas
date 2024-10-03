@@ -5532,25 +5532,37 @@ const
   PARSECOMMAND_ERROR =
     [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
 
+  /// let ParseCommandArgs/ExtractExecutableName/ExtractCommandArgs follow the
+  // current running OS command-line expectations by default
   PARSCOMMAND_POSIX = {$ifdef OSWINDOWS} false {$else} true {$endif};
 
 /// low-level parsing of a RunCommand() execution command
-// - parse and fill argv^[0..argc^-1] with corresponding arguments, after
-// un-escaping and un-quoting if applicable, using temp^ to store the content
+// - parse and fill argv^[0 .. argc^ - 1] with corresponding arguments, after
+// un-escaping and un-quoting if applicable, using temp^ to store the content,
+// and argv^[argc^] = nil, as expected by low-level OS exec() syscall parameters
 // - if argv=nil, do only the parsing, not the argument extraction - could be
 // used for fast validation of the command line syntax
 // - you can force arguments OS flavor using the posix parameter - note that
 // Windows parsing is not consistent by itself (e.g. double quoting or
 // escaping depends on the actual executable called) so returned flags
 // should be considered as indicative only with posix=false
+// - you can check for errors with result * PARSECOMMAND_ERROR <> []
+// - warning: argc^ should be a 32-bit "integer" variable, not a PtrInt
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUtf8 = nil;
   posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
 
-/// low-level extration of the executable of a RunCommand() execution command
+/// high-level extraction of the executable of a RunCommand() execution command
 // - returns the first parameter returned by ParseCommandArgs()
 function ExtractExecutableName(const cmd: RawUtf8;
   posix: boolean = PARSCOMMAND_POSIX): RawUtf8;
+
+/// high-level extraction of all parts of a RunCommand() execution command
+// - output param[0] is the executable name, and other param[] are the
+// actual command line arguments, just like the ParamStr() RTL function
+// - param is left nil on error, with result * PARSECOMMAND_ERROR <> []
+function ExtractCommandArgs(const cmd: RawUtf8; out param: TRawUtf8DynArray;
+  posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
 
 type
   /// callback used by RunRedirect() to notify of console output at runtime
@@ -10287,6 +10299,22 @@ begin
     FastSetString(result, argv[0], StrLen(argv[0]));
 end;
 
+function ExtractCommandArgs(const cmd: RawUtf8; out param: TRawUtf8DynArray;
+  posix: boolean): TParseCommands;
+var
+  temp: RawUtf8;
+  argv: TParseCommandsArgs;
+  argc: integer;
+  i: PtrInt;
+begin
+  result := ParseCommandArgs(cmd, @argv, @argc, @temp, posix);
+  if result * PARSECOMMAND_ERROR <> [] then
+    exit; // failed
+  SetLength(param, argc);
+  for i := 0 to argc - 1 do
+    FastSetString(param[i], argv[i], StrLen(argv[i]));
+end;
+
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs;
   argc: PInteger; temp: PRawUtf8; posix: boolean): TParseCommands;
 var
@@ -10314,7 +10342,7 @@ begin
   state := [];
   n := 0;
   p := pointer(cmd);
-  repeat
+  repeat // parse the command line text, using a state machine in the loop
     c := p^;
     if d <> nil then
       d^ := c;
@@ -10328,7 +10356,7 @@ begin
             include(result, pcUnbalancedDoubleQuote);
           exclude(result, pcInvalidCommand);
           if argv <> nil then
-            argv[n] := nil;
+            argv^[n] := nil; // always end with a last argv^[] = nil
           if argc <> nil then
             argc^ := n;
           exit;
@@ -10402,12 +10430,10 @@ begin
           else if state = [] then
           begin
             if argv <> nil then
-            begin
-              argv[n] := d;
-              inc(n);
-              if n = high(argv^) then
-                exit;
-            end;
+              argv^[n] := d;
+            inc(n);
+            if n = high(argv^) then
+              exit;
             state := [sInSQ, sInArg];
             continue;
           end
@@ -10426,12 +10452,10 @@ begin
           else if state = [] then
           begin
             if argv <> nil then
-            begin
-              argv[n] := d;
-              inc(n);
-              if n = high(argv^) then
-                exit;
-            end;
+              argv^[n] := d;
+            inc(n);
+            if n = high(argv^) then
+              exit;
             state := [sInDQ, sInArg];
             continue;
           end
@@ -10479,12 +10503,10 @@ begin
     if state = [] then
     begin
       if argv <> nil then
-      begin
-        argv[n] := d;
-        inc(n);
-        if n = high(argv^) then
-          exit;
-      end;
+        argv^[n] := d;
+      inc(n);
+      if n = high(argv^) then
+        exit;
       state := [sInArg];
     end;
     if d <> nil then
