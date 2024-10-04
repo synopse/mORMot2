@@ -3827,11 +3827,13 @@ begin
     rkInterface,
     rkDynArray:
       result := SizeOf(pointer);
+    rkMethod:
+      result := SizeOf(pointer) * 2;
     {$ifdef FPC}
     rkQWord,
     {$endif FPC}
     rkInt64:
-      result := 8;
+      result := SizeOf(Int64);
     rkVariant:
       result := SizeOf(variant);
     rkArray:
@@ -3911,12 +3913,6 @@ begin
   FillCharFast(Cache, SizeOf(Cache), 0); // paranoid for TRttiCustom.fCache slot
   Cache.Info := @self;
   Cache.Size := RttiSize;
-  if Cache.Size = 0 then
-    if Kind = rkSet then // mormot.core.rtti/json hardcore getter/setter limit
-      ERttiException.RaiseUtf8('ComputeCache(%): sets are limited to % items',
-        [RawName, ENUM_MAX])
-    else
-      ERttiException.RaiseUtf8('ComputeCache(%): has RttiSize=0', [RawName]);
   Cache.Kind := Kind;
   Cache.VarDataVType := RTTI_TO_VARTYPE[Kind];
   Cache.RttiVarDataVType := Cache.VarDataVType;
