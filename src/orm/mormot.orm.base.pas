@@ -7683,7 +7683,8 @@ begin
     rkFloat:
       if Info.IsCurrency then
         result := oftCurrency
-      else if Info = TypeInfo(TDateTime) then
+      else if (Info = TypeInfo(TDateTime)) or
+              (Info = TypeInfo(TDate)) then
         result := oftDateTime
       else if Info = TypeInfo(TDateTimeMS) then
         result := oftDateTimeMS
