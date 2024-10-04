@@ -3204,11 +3204,23 @@ procedure TObjectWithCustomCreateRttiCustomSetParser(
 procedure TSynPersistentCopyObject(Dest, Source: TObject);
 
 var
-  /// let TRttiCustom to recognize the TClass of each TRttiValueClass
-  // - some class of these global variable are set in mormot.core.json
+  /// let TRttiCustom recognize the actual TClass of each TRttiValueClass
+  // - mormot.core.data list classses are set by mormot.core.json
   CLASS_RTTI: array[TRttiValueClass] of TClass = (
-    nil, TPersistent, TStrings, TList, TObjectList, Exception, TCollection, nil,
-    ESynException, TObjectWithCustomCreate, nil, nil, TObjectWithID, TSynPersistent);
+    nil,                      // vcNone
+    TPersistent,              // vcPersistent
+    TStrings,                 // vcStrings
+    TList,                    // vcList
+    TObjectList,              // vcObjectList
+    Exception,                // vcException
+    TCollection,              // vcCollection
+    ESynException,            // vcESynException
+    TObjectWithCustomCreate,  // vcObjectWithCustomCreate
+    nil,                      // vcSynList
+    nil,                      // vcSynObjectList
+    nil,                      // vcRawUtf8List
+    TObjectWithID,            // vcObjectWithID
+    TSynPersistent);          // vcSynPersistent
 
 
 implementation

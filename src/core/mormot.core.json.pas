@@ -10713,10 +10713,11 @@ begin
              // vcStrings can't be supported since TStrings.Items[] is a getter
              vcCollection:
                result := TCollection(Data).Count;
-             vcObjectList,
-             vcList:
+             vcList,
+             vcObjectList:
                result := TList(Data).Count;
-             vcSynList:
+             vcSynList,
+             vcSynObjectList:
                result := TSynList(Data).Count;
              vcRawUtf8List:
                result := TRawUtf8List(Data).Count;
@@ -10751,15 +10752,16 @@ begin
                  result := TCollection(Data).Items[Index];
                  ResultRtti := fCollectionItemRtti;
                end;
-             vcObjectList,
-             vcList:
+             vcList,
+             vcObjectList:
                if Index < PtrUInt(TList(Data).Count) then
                begin
                  result := TList(Data).List[Index];
                  if result <> nil then
                    ResultRtti := Rtti.RegisterClass(PClass(result)^);
                end;
-             vcSynList:
+             vcSynList,
+             vcSynObjectList:
                if Index < PtrUInt(TSynList(Data).Count) then
                begin
                  result := TSynList(Data).List[Index];

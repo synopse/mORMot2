@@ -5870,7 +5870,7 @@ end;
 procedure TSynValidatePattern.SetParameters(const Value: RawUtf8);
 begin
   inherited SetParameters(Value);
-  fMatch.Prepare(Value, ClassType = TSynValidatePatternI, {reuse=}true);
+  fMatch.Prepare(Value, PClass(self)^ = TSynValidatePatternI, {reuse=}true);
 end;
 
 function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUtf8;
