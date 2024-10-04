@@ -897,7 +897,6 @@ type
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
     procedure SetVariantArray(var v: TDocVariantData;
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
-    function ToAsnSeq: TAsnObject;
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType);
@@ -942,6 +941,8 @@ type
     function FindIndex(const aValue: RawByteString): PtrInt;
     /// add all attributes to a "dn: ###" entry of a ldif-content buffer
     procedure ExportToLdif(w: TTextWriter);
+    /// save all attributes into a Modifier() / TLdapClient.Modify() ASN1_SEQ
+    function ExportToAsnSeq: TAsnObject;
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
@@ -1106,6 +1107,7 @@ procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
 function InfoFilter(AccountType: TSamAccountType;
   const AccountName: RawUtf8 = ''; const DistinguishedName: RawUtf8 = '';
   const UserPrincipalName: RawUtf8 = ''; const CustomFilter: RawUtf8 = ''): RawUtf8;
+
 
 /// compute a sequence of modifications from its raw encoded attribute(s) sequence
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; overload;
@@ -3477,6 +3479,7 @@ begin
     result := FormatUtf8('(&%%)', [result, CustomFilter])
 end;
 
+
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject;
 begin
   result := Asn(ASN1_SEQ, [
@@ -3806,7 +3809,7 @@ begin
     SetNewVariant(result, options, dom, uuid);
 end;
 
-function TLdapAttribute.ToAsnSeq: TAsnObject;
+function TLdapAttribute.ExportToAsnSeq: TAsnObject;
 var
   i: PtrInt;
 begin
@@ -5860,7 +5863,7 @@ begin
      not Connected then
     exit;
   for i := 0 to Value.Count - 1 do
-    Append(query, Value.Items[i].ToAsnSeq);
+    Append(query, Value.Items[i].ExportToAsnSeq);
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
                    Asn(Obj),
                    Asn(ASN1_SEQ, query)]));
@@ -5906,7 +5909,7 @@ end;
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
   Attribute: TLdapAttribute): boolean;
 begin
-  result := Modify(Obj, [Modifier(Op, Attribute.ToAsnSeq)]);
+  result := Modify(Obj, [Modifier(Op, Attribute.ExportToAsnSeq)]);
 end;
 
 
