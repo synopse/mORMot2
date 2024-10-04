@@ -2045,6 +2045,13 @@ procedure ObjArrayObjArrayClear(var aObjArray);
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 procedure ObjArraysClear(const aObjArray: array of pointer);
 
+/// allocate DestObjArray[] to receive SourceObjArray[] items
+// - returns the number of items to copy from SourceObjArray[] to DestObjArray[]
+// - supports optional external integer counts, to use length() as capacity
+// - warning: SourceCount/DestCount should be 32-bit "integer" variable, not PtrInt
+function ObjArrayPrepareCopy(const SourceObjArray; var DestObjArray;
+  SourceCount: PInteger = nil; DestCount: PInteger = nil): PtrInt;
+
 /// low-level function calling FreeAndNil(o^) successively n times
 procedure RawObjectsClear(o: PObject; n: integer);
 
@@ -8039,6 +8046,37 @@ begin
   for i := 0 to high(aObjArray) do
     if aObjArray[i] <> nil then
       ObjArrayClear(aObjArray[i]^);
+end;
+
+function ObjArrayPrepareCopy(const SourceObjArray; var DestObjArray;
+  SourceCount, DestCount: PInteger): PtrInt;
+var
+  s: TPointerDynArray absolute SourceObjArray;
+  d: TPointerDynArray absolute DestObjArray;
+  sc, dc, dn: PtrInt;
+begin
+  sc := length(s);  // s[] capacity
+  result := sc;     // s[] length
+  if SourceCount <> nil then
+    result := SourceCount^;
+  if DestCount <> nil then
+    DestCount^ := result;
+  dc := length(d);  // d[] capacity
+  dn := dc;         // d[] length
+  if DestCount <> nil then
+    dn := DestCount^;
+  if dn <> 0 then
+    RawObjectsClear(pointer(d), dn);
+  if result = 0 then
+    d := nil // ensure d[] is void
+  else if dc < result then // we can not reuse existing d[]
+  begin
+    if dc <> 0 then
+      d := nil; // full allocate - no need to move existing pointers
+    SetLength(d, result);
+  end
+  else if DestCount = nil then
+    DynArrayFakeLength(pointer(d), result); // d[] capacity = count
 end;
 
 
