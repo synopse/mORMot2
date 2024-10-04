@@ -2255,7 +2255,7 @@ type
 
   TEnum = (e0, e1, e2, e3, e4);
 
-  TPeople2 = class(TObjectWithProps)
+  TPeople2 = class(TSynPersistent)
   private
     fFirstName: string;
     fLastName: RawUtf8;

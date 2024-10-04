@@ -55,7 +55,7 @@ begin
       SetObjectFromExecutableCommandLine(settings.Server, '', ' for HTTP/HTTPS');
       SetObjectFromExecutableCommandLine(settings.Server.Log, 'Log', ' for EnableLogging');
       {$ifdef USE_OPENSSL}
-      OpenSslDefaultPath := ParamS(['LibSsl'], 'OpenSSL libraries #path');
+      OpenSslDefaultPath := ParamS('LibSsl', 'OpenSSL libraries #path');
       if OpenSslInitialize then
         RegisterOpenSsl;
       {$endif USE_OPENSSL}

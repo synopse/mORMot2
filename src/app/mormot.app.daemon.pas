@@ -157,7 +157,7 @@ type
   // - inherit from this abstract class and override Start and Stop methods
   // - you may consider using TDDDAdministratedDaemon from dddInfraApps
   // - note if upgrading from mORMot 1: SetLog() is now done in AfterCreate
-  TSynDaemon = class(TObjectWithProps)
+  TSynDaemon = class(TSynPersistent)
   protected
     fConsoleMode: boolean;
     fWorkFolderName: TFileName;

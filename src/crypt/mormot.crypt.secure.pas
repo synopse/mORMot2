@@ -59,7 +59,7 @@ type
   // - a published property should be defined as such in inherited class:
   // ! property PasswordPropertyName: RawUtf8 read fPassword write fPassword;
   // - use the PassWordPlain property to access to its uncyphered value
-  TObjectWithPassword = class(TObjectWithProps)
+  TObjectWithPassword = class(TSynPersistent)
   protected
     fPassWord: SpiUtf8;
     fKey: cardinal;
@@ -409,7 +409,7 @@ type
   // - identifiers may be obfuscated as hexadecimal text, using both encryption
   // and digital signature
   // - all its methods are thread-safe, even during obfuscation processing
-  TSynUniqueIdentifierGenerator = class(TObjectWithProps)
+  TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
     fSafe: TLightLock;
     fUnixCreateTime: cardinal;
@@ -1402,7 +1402,7 @@ type
   // store some engine-specific context ahead of time, for faster process
   // - inherited classes would dedicated New() factory methods; this parent
   // features the internal registration feature of the known algorithms
-  TCryptAlgo = class(TObjectWithProps)
+  TCryptAlgo = class(TSynPersistent)
   protected
     fName: RawUtf8;
     // case-insensitive quick lookup of the algorithms into a TCryptAlgo instance
@@ -2544,7 +2544,7 @@ type
   end;
 
   /// abstract parent of TCryptCertList and TCryptCertCache storage classes
-  TCryptCertAbstractList = class(TObjectWithProps)
+  TCryptCertAbstractList = class(TSynPersistent)
   protected
     fList: TSynDictionary; // thread-safe RawByteString(SKID/DER)/ICryptCert
     fCryptCertClass: TCryptCertClass;

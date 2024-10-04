@@ -79,7 +79,7 @@ type
   // you would better use an external .dbg file then convert it into a .mab
   // - on FPC, you don't need to specifly the -gl compiler switch
   // - location of a source code information from its address is below 10us
-  TDebugFile = class(TObjectWithProps)
+  TDebugFile = class(TSynPersistent)
   protected
     fDebugFile: TFileName;
     fSymbol: TDebugSymbolDynArray;
@@ -1445,7 +1445,7 @@ type
   /// store simple log-related settings
   // - see also TDDDLogSettings in dddInfraSettings.pas and TSynDaemonSettings
   // in mORMotService.pas, which may be more integrated
-  TSynLogSettings = class(TObjectWithProps)
+  TSynLogSettings = class(TSynPersistent)
   protected
     fLevels: TSynLogLevels;
     fDestinationPath: TFileName;

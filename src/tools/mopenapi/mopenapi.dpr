@@ -37,7 +37,7 @@ uses
 
 type
   // use RTTI for command line options
-  TOptions = class(TObjectWithProps)
+  TOptions = class(TSynPersistent)
   protected
     fDestinationFolder: TFileName;
     fOptions: TOpenApiParserOptions;

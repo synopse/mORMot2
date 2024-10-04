@@ -544,7 +544,7 @@ type
   PXTbsCertificate = ^TXTbsCertificate;
 
   /// a X.509 signed Certificate, as defined in RFC 5280
-  TX509 = class(TObjectWithProps)
+  TX509 = class(TSynPersistent)
   public
     /// actual to-be-signed Certificate content
     Signed: TXTbsCertificate;
@@ -812,7 +812,7 @@ type
   end;
 
   /// a X.509 signed Certificate Revocation List (CRL), as defined in RFC 5280
-  TX509Crl = class(TObjectWithProps)
+  TX509Crl = class(TSynPersistent)
   protected
     fCachedDer: RawByteString;
     fSignatureValue: RawByteString;
@@ -918,7 +918,7 @@ type
   TX509CrlObjArray = array of TX509Crl;
 
   /// store several TX509Crl instances
-  TX509CrlList = class(TObjectWithProps)
+  TX509CrlList = class(TSynPersistent)
   protected
     fSafe: TRWLightLock;
     fList: TX509CrlObjArray;

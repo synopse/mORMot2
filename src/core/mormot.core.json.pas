@@ -1125,7 +1125,7 @@ type
   // internal JSON format (which is faster than a query to the SQLite3 engine)
   // - internally make use of an efficient hashing algorithm for fast response
   // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
-  TSynCache = class(TObjectWithProps)
+  TSynCache = class(TSynPersistent)
   protected
     fNameValue: TSynNameValue;
     fRamUsed: cardinal;
@@ -2404,7 +2404,7 @@ type
   // - will also release any T*ObjArray dynamic array storage of persistents,
   // previously registered via Rtti.RegisterObjArray() for Delphi 7-2009
   // - nested published classes (or T*ObjArray) don't need to inherit from
-  // TSynAutoCreateFields: they may be from any TPersistent/TObjectWithProps type
+  // TSynAutoCreateFields: they may be from any TPersistent/TSynPersistent type
   // - note that non published (e.g. public) properties won't be instantiated,
   // serialized, nor released - but may contain weak references to other classes
   // - please take care that you will not create any endless recursion: you should
@@ -2416,7 +2416,7 @@ type
   // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
   // due a giant lock introduced to manage property name fixup resolution
   // (which we won't use outside the UI) - this class is definitively faster
-  TSynAutoCreateFields = class(TObjectWithProps)
+  TSynAutoCreateFields = class(TSynPersistent)
   public
     /// this overriden constructor will instantiate all its nested
     // class or T*ObjArray published properties
@@ -10328,9 +10328,9 @@ begin
   result := TComponentClass(Rtti.ValueClass).Create(nil);
 end;
 
-function _New_ObjectWithProps(Rtti: TRttiCustom): pointer;
+function _New_SynPersistent(Rtti: TRttiCustom): pointer;
 begin
-  result := TObjectWithPropsClass(Rtti.ValueClass).Create;
+  result := TSynPersistentClass(Rtti.ValueClass).Create;
 end;
 
 function _New_SynObjectList(Rtti: TRttiCustom): pointer;
@@ -10416,8 +10416,8 @@ begin
   fNewInstance := @_New_Object; // call non-virtual TObject.Create
   c := fValueClass;
   repeat // recognized some RTL classes - any branch taken will break below
-    if c = TObjectWithProps then
-      fNewInstance := @_New_ObjectWithProps // virtual TObjectWithProps.Create
+    if c = TSynPersistent then
+      fNewInstance := @_New_SynPersistent // virtual TSynPersistent.Create
     else if c = TObjectWithRttiMethods then
     begin
       // allow any kind of customization for TObjectWithRttiMethods children
@@ -10425,7 +10425,7 @@ begin
       RttiSetParserTObjectWithRttiMethods(pointer(fValueClass), self);
       if n <> Props.Count then
         fFlags := fFlags + fProps.AdjustAfterAdded; // may have added a prop
-      fNewInstance := @_New_ObjectWithProps; // virtual TObjectWithProps.Create
+      fNewInstance := @_New_SynPersistent; // virtual TSynPersistent.Create
     end
     else if c = TInterfacedObjectWithCustomCreate then
       fNewInstance := @_New_InterfacedObjectWithCustomCreate // virtual Create
@@ -10497,9 +10497,9 @@ begin
       end;
     vcObjectWithID: // also accepts "RowID" field in JSON input
       fJsonLoad := @_JL_RttiObjectWithID;
-    vcSynPersistent:
-      if fProps.CountNonVoid = 0 then // TSynPersistent.AssignTo() if no props
-        fCopyObject := @TSynPersistentCopyObject;
+    vcClonable:
+      if fProps.CountNonVoid = 0 then // TClonable.AssignTo() if no props
+        fCopyObject := @CopyClonable;
   end;
 end;
 
@@ -11824,7 +11824,7 @@ end;
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-end; // no need to call the void inherited TObjectWithProps
+end; // no need to call the void inherited TSynPersistent
 
 destructor TSynAutoCreateFields.Destroy;
 begin

@@ -901,7 +901,7 @@ type
 
   /// store a named LDAP attribute with the list of its values
   // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
-  TLdapAttribute = class(TSynPersistent)
+  TLdapAttribute = class(TClonable)
   protected
     fList: TRawByteStringDynArray;
     fAttributeName: RawUtf8;
@@ -909,7 +909,7 @@ type
     fKnownType: TLdapAttributeType;
     fKnownTypeStorage: TLdapAttributeTypeStorage;
     fObjectSidIsDomain: boolean;
-    procedure AssignTo(Dest: TSynPersistent); override;
+    procedure AssignTo(Dest: TClonable); override;
     procedure SetVariantOne(var v: TVarData; const s: RawUtf8;
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
     procedure SetVariantArray(var v: TDocVariantData;
@@ -987,14 +987,14 @@ type
   // - will use a global TRawUtf8Interning as hashed list of names to minimize
   // memory allocation, and makes efficient lookup
   // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
-  TLdapAttributeList = class(TSynPersistent)
+  TLdapAttributeList = class(TClonable)
   protected
     fItems: TLdapAttributeDynArray;
     fCount: integer;
     fLastFound: integer;
     fKnownTypes: TLdapAttributeTypes;
     fIndexTypes: array[TLdapAttributeType] of byte; // index in fItems[] + 1
-    procedure AssignTo(Dest: TSynPersistent); override;
+    procedure AssignTo(Dest: TClonable); override;
     function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
     procedure SetAttr(AttributeType: TLdapAttributeType; const Value: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
@@ -1159,11 +1159,11 @@ function Modifier(Op: TLdapModifyOp;
 type
   /// store one LDAP result, i.e. one object name and associated attributes
   // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
-  TLdapResult = class(TSynPersistent)
+  TLdapResult = class(TClonable)
   protected
     fObjectName, fCanonicalName: RawUtf8;
     fAttributes: TLdapAttributeList;
-    procedure AssignTo(Dest: TSynPersistent); override;
+    procedure AssignTo(Dest: TClonable); override;
     procedure SetObjectName(const Value: RawUtf8);
     function GetAttr(AttributeType: TLdapAttributeType): RawUtf8;
   public
@@ -1203,12 +1203,12 @@ type
 
   /// maintain a list of LDAP result objects
   // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
-  TLdapResultList = class(TSynPersistent)
+  TLdapResultList = class(TClonable)
   protected
     fItems: TLdapResultObjArray;
     fCount: integer;
     fSearchTimeMicroSec: Int64;
-    procedure AssignTo(Dest: TSynPersistent); override;
+    procedure AssignTo(Dest: TClonable); override;
     procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
       ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
   public
@@ -1380,7 +1380,7 @@ type
     lsfSaclSecurityInformation);
 
   /// store the authentication and connection settings of a TLdapClient instance
-  TLdapClientSettings = class(TObjectWithProps)
+  TLdapClientSettings = class(TSynPersistent)
   protected
     fTargetHost: RawUtf8;
     fTargetPort: RawUtf8;
@@ -3635,7 +3635,7 @@ begin
   fCount := 0;
 end;
 
-procedure TLdapAttribute.AssignTo(Dest: TSynPersistent);
+procedure TLdapAttribute.AssignTo(Dest: TClonable);
 var
   d: TLdapAttribute absolute Dest;
 begin
@@ -3942,7 +3942,7 @@ begin
   FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
 end;
 
-procedure TLdapAttributeList.AssignTo(Dest: TSynPersistent);
+procedure TLdapAttributeList.AssignTo(Dest: TClonable);
 var
   d: TLdapAttributeList absolute Dest;
 begin
@@ -4186,7 +4186,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TLdapResult.AssignTo(Dest: TSynPersistent);
+procedure TLdapResult.AssignTo(Dest: TClonable);
 var
   d: TLdapResult absolute Dest;
 begin
@@ -4276,7 +4276,7 @@ begin
   fSearchTimeMicroSec := 0;
 end;
 
-procedure TLdapResultList.AssignTo(Dest: TSynPersistent);
+procedure TLdapResultList.AssignTo(Dest: TClonable);
 var
   d: TLdapResultList absolute Dest;
 begin

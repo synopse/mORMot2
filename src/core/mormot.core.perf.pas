@@ -277,7 +277,7 @@ type
 type
   /// able to serialize any cumulative timing as raw micro-seconds number or text
   // - "cumulative" time would add each process value, e.g. SOA methods execution
-  TSynMonitorTime = class(TObjectWithProps)
+  TSynMonitorTime = class(TSynPersistent)
   protected
     fMicroSeconds: TSynMonitorTotalMicroSec;
     function GetAsText: TShort16;
@@ -296,7 +296,7 @@ type
 
   /// able to serialize any immediate timing as raw micro-seconds number or text
   // - "immediate" size won't accumulate, i.e. may be e.g. last process time
-  TSynMonitorOneTime = class(TObjectWithProps)
+  TSynMonitorOneTime = class(TSynPersistent)
   protected
     fMicroSeconds: TSynMonitorOneMicroSec;
     function GetAsText: TShort16;
@@ -313,7 +313,7 @@ type
       read GetAsText;
   end;
 
-  TSynMonitorSizeParent = class(TObjectWithProps)
+  TSynMonitorSizeParent = class(TSynPersistent)
   protected
     fTextNoSpace: boolean;
   public
@@ -968,7 +968,7 @@ type
   end;
 
   /// value object able to gather information about the current system memory
-  TSynMonitorMemory = class(TObjectWithProps)
+  TSynMonitorMemory = class(TSynPersistent)
   protected
     FAllocatedUsed: TSynMonitorOneSize;
     FAllocatedReserved: TSynMonitorOneSize;
@@ -1042,7 +1042,7 @@ type
   end;
 
   /// value object able to gather information about a system drive
-  TSynMonitorDisk = class(TObjectWithProps)
+  TSynMonitorDisk = class(TSynPersistent)
   protected
     fName: TFileName;
     {$ifdef OSWINDOWS}

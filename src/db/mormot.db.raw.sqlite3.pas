@@ -2140,7 +2140,7 @@ type
   // you should call sqlite3.open() instead of sqlite3_open() for instance
   // - if your project refers to mormot.db.raw.sqlite3.static unit, it will
   // initialize a TSqlite3LibrayStatic instance
-  TSqlite3Library = class(TObjectWithProps)
+  TSqlite3Library = class(TSynPersistent)
   protected
     fUseInternalMM: boolean;
     fVersionNumber: cardinal;

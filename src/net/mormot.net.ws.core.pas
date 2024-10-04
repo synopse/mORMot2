@@ -277,7 +277,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsejson
   // - the TWebSocketProtocolBinary inherited class will implement
   // $ Sec-WebSocket-Protocol: synopsebin
-  TWebSocketProtocol = class(TObjectWithProps)
+  TWebSocketProtocol = class(TSynPersistent)
   protected
     fConnectionID: THttpServerConnectionID;
     fFramesInCount: integer;
@@ -733,7 +733,7 @@ type
   // - CanGetFrame/ReceiveBytes/SendBytes abstract methods should be overriden with
   // actual communication, and fState and ProcessStart/ProcessStop should be
   // updated from the actual processing thread (e.g. as in TWebCrtSocketProcess)
-  TWebSocketProcess = class(TObjectWithProps)
+  TWebSocketProcess = class(TSynPersistent)
   protected
     fProtocol: TWebSocketProtocol;
     fConnectionID: THttpServerConnectionID;
@@ -1061,7 +1061,7 @@ type
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
-  TEngineIOAbstract = class(TObjectWithProps)
+  TEngineIOAbstract = class(TSynPersistent)
   protected
     fSafe: TLightLock;
     fVersion: integer;
@@ -1097,7 +1097,7 @@ type
 
   /// abstract parent for one client side and server side Socket.IO session
   // - each session has its own namespace
-  TSocketIONamespace = class(TObjectWithProps)
+  TSocketIONamespace = class(TSynPersistent)
   protected
     fOwner: TEngineIOAbstract;
     fSid, fNameSpace: RawUtf8;

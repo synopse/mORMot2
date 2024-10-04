@@ -896,7 +896,7 @@ type
   // - to be used to emulate e.g. blocking execution from an asynchronous
   // event-driven DDD process
   // - it would also allow to re-use TEvent system resources
-  TBlockingProcessPool = class(TObjectWithProps)
+  TBlockingProcessPool = class(TSynPersistent)
   protected
     fClass: TBlockingProcessPoolItemClass;
     fPool: TSynObjectListLightLocked;

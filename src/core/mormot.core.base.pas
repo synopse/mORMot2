@@ -498,9 +498,9 @@ type
 
   /// a parent TObject class with a virtual constructor and RTTI generated
   // for its published properties
-  // - lighter than TPersistent, TObjectWithRttiMethods or TSynPersistent,
+  // - lighter than TPersistent or TObjectWithRttiMethods
   // if you just want to persist some published properties
-  TObjectWithProps = class(TObject)
+  TSynPersistent = class(TObject)
   public
     /// virtual constructor called at instance creation
     // - is declared as virtual so that inherited classes may have a root
@@ -509,9 +509,9 @@ type
     constructor Create; overload; virtual;
   end;
 
-  /// used to determine the exact class type of a TObjectWithProps
+  /// used to determine the exact class type of a TSynPersistent
   // - allow to create instances using its virtual constructor
-  TObjectWithPropsClass = class of TObjectWithProps;
+  TSynPersistentClass = class of TSynPersistent;
   {$M-}
 
 type
@@ -5362,9 +5362,9 @@ begin
 end;
 
 
-{ TObjectWithProps}
+{ TSynPersistent}
 
-constructor TObjectWithProps.Create;
+constructor TSynPersistent.Create;
 begin // do nothing by default but may be overriden
 end;
 

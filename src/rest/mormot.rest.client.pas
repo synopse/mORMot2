@@ -514,7 +514,7 @@ type
   PRestClientCallbackItem = ^TRestClientCallbackItem;
 
   /// store the references to active interface callbacks on a REST Client
-  TRestClientCallbacks = class(TObjectWithProps)
+  TRestClientCallbacks = class(TSynPersistent)
   protected
     fSafe: TLightLock; // very unlikely to have contention on client side
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator

@@ -1123,7 +1123,7 @@ type
     Damage, AttackSpeed: TRange;
   end;
 
-  TEnemy = class(TObjectWithProps)
+  TEnemy = class(TSynPersistent)
   private
     fEnabled: Boolean;
     fName: string;
@@ -1358,7 +1358,7 @@ type
   TEnumSet = set of TSimpleEnum;
 
   // validate enums and sets with setter methods
-  TSimpleExample = class(TObjectWithProps)
+  TSimpleExample = class(TSynPersistent)
   private
     fFullName: string;
     fEnumSet: TEnumSet;

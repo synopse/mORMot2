@@ -1074,7 +1074,7 @@ type
   TOnDynArraySortCompare = function(const A, B): integer of object;
 
   /// defined here as forward definition of the TRawUtf8Interning final class
-  TRawUtf8InterningAbstract = class(TObjectWithProps);
+  TRawUtf8InterningAbstract = class(TSynPersistent);
 
 const
   /// redirect to the proper SortDynArrayAnsiString/SortDynArrayAnsiStringI

@@ -173,7 +173,7 @@ type
   // reduce attack surface, and fully avoid weaknesses as described in
   // @https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries
   // and @http://tools.ietf.org/html/rfc7518#section-8.5
-  TJwtAbstract = class(TObjectWithProps)
+  TJwtAbstract = class(TSynPersistent)
   protected
     fAlgorithm: RawUtf8;
     fHeader: RawUtf8;

@@ -101,7 +101,7 @@ type
   );
 
   /// abstract parent to store information aboout one TPollAsyncSockets connection
-  TPollAsyncConnection = class(TObjectWithProps)
+  TPollAsyncConnection = class(TSynPersistent)
   protected
     /// the associated TCP connection
     // - equals nil after TPollAsyncSockets.Stop
@@ -1033,7 +1033,7 @@ type
   // - reusing the threads pool and sockets polling of an associated
   // TAsyncConnections instance (typically a THttpAsyncServer)
   // - the connections are maintained for a
-  THttpAsyncClientConnections = class(TObjectWithProps)
+  THttpAsyncClientConnections = class(TSynPersistent)
   protected
     fLock: TLightLock;
     fOwner: TAsyncConnections;
@@ -1129,7 +1129,7 @@ type
 
   /// define the caching settings of content for THttpProxyServer
   // - set the memory cache settings if used as exact THttpProxyMem class
-  THttpProxyMem = class(TObjectWithProps)
+  THttpProxyMem = class(TSynPersistent)
   protected
     fMaxSize: Int64;
     fTimeoutSec: integer;

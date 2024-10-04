@@ -1494,7 +1494,7 @@ type
   TWebServerMimeTypeDynArray = array of TWebServerMimeType;
 
   /// define the security parameters common to all Web Servers
-  TWebServerGlobal = class(TObjectWithProps)
+  TWebServerGlobal = class(TSynPersistent)
   protected
     fMimeType: TWebServerMimeTypeDynArray;
     fMimeTypeCount: integer;
@@ -1730,7 +1730,7 @@ type
 
   /// settings class as used by THttpLogger
   // - defined as a sub-class for easy definition in a main settings class
-  THttpLoggerSettings = class(TObjectWithProps)
+  THttpLoggerSettings = class(TSynPersistent)
   protected
     fFormat: RawUtf8;
     fDestFolder, fDestMainFile, fDestErrorFile: TFileName;
@@ -2257,7 +2257,7 @@ type
   // - Find() method allows to quickly retrieve any range of information for
   // a given time period and metric type
   // - supports up to 10,485,760 metrics per instance (see HTTPMETRICS_MAXCOUNT)
-  THttpMetrics = class(TObjectWithProps)
+  THttpMetrics = class(TSynPersistent)
   protected
     fSafe: TLightLock;
     fCount: integer;

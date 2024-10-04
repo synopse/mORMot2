@@ -117,7 +117,7 @@ Cross-Compiler RTTI Definitions shared by all framework units
 - Managed Types Finalization, Random or Copy
 - RTTI Value Types used for JSON Parsing
 - RTTI-based Registration for Custom JSON Parsing
-- `TObjectWithRttiMethods` `TObjectWithID` `TSynPersistent` Classes
+- `TObjectWithRttiMethods` `TObjectWithID` `TClonable` Classes
 - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
 Purpose of this unit is to avoid any direct use of `TypInfo.pas` RTL unit, which is not exactly compatible between compilers, and lacks of direct RTTI access with no memory allocation. We define pointers to RTTI record/object to access `TypeInfo()` via a set of explicit methods. Here fake record/objects are just wrappers around pointers defined in Delphi/FPC RTL's `TypInfo.pas` with the magic of inlining. We redefined all RTTI definitions as `TRtti*` types to avoid confusion with type names as published by the `TypInfo` unit.

@@ -121,7 +121,7 @@ uses
   mormot.db.core;
 
 type
-  TStat = class(TObjectWithProps)
+  TStat = class(TSynPersistent)
   private
     fCreateTable: RawUtf8;
     fNumberOfElements: integer;

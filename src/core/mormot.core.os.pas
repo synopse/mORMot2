@@ -1066,7 +1066,7 @@ type
   // - for the main executable, do not create once instance of this class, but
   // call GetExecutableVersion / SetExecutableVersion and access the Executable
   // global variable
-  TFileVersion = class(TObjectWithProps)
+  TFileVersion = class(TSynPersistent)
   protected
     fDetailed: string;
     fFileName: TFileName;
@@ -4647,7 +4647,7 @@ type
   // - only limitation is that we don't know if WaitFor is signaled or timeout,
   // but this is not a real problem in practice since most code don't need this
   // information or has already its own flag in its implementation logic
-  TSynEvent = class(TObjectWithProps)
+  TSynEvent = class(TSynPersistent)
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
     fFD: integer;     // for eventfd()
@@ -4682,7 +4682,7 @@ type
   // - consider a TLightLock field as lighter options, or a R/W lock with
   // TObjectRWLock and TObjectRWLightLock classes, or even a TObjectOSLightLock
   // - TSynLockedWithRttiMethods would add paranoid JSON persistence lock
-  TSynLocked = class(TObjectWithProps)
+  TSynLocked = class(TSynPersistent)
   protected
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
   public
@@ -4703,7 +4703,7 @@ type
 
   /// a thread-safe class with a virtual constructor and properties persistence
   // - publishes the fastest available non-reentrant Operating System lock
-  TObjectOSLightLock = class(TObjectWithProps)
+  TObjectOSLightLock = class(TSynPersistent)
   protected
     fSafe: TOSLightLock;
   public
@@ -4724,7 +4724,7 @@ type
 
   /// a thread-safe class with a virtual constructor and properties persistence
   // - publishes a non-upgradable multiple Read / exclusive Write TRWLightLock
-  TObjectRWLightLock = class(TObjectWithProps)
+  TObjectRWLightLock = class(TSynPersistent)
   protected
     fSafe: TRWLightLock;
   public
@@ -4736,7 +4736,7 @@ type
 
   /// a thread-safe class with a virtual constructor and properties persistence
   // - publishes an upgradable multiple Read / exclusive Write TRWLock
-  TObjectRWLock = class(TObjectWithProps)
+  TObjectRWLock = class(TSynPersistent)
   protected
     fSafe: TRWLock;
   public
@@ -5295,7 +5295,7 @@ type
 
   /// abstract class to let an executable implement a Windows Service
   // - do not use this class directly, but TServiceSingle
-  TService = class(TObjectWithProps)
+  TService = class(TSynPersistent)
   protected
     fServiceName: RawUtf8;
     fDisplayName: RawUtf8;

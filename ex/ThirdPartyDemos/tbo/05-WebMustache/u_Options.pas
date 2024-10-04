@@ -15,7 +15,7 @@ uses
   mormot.core.os;
 
 type
-  TServerOptions = class(TObjectWithProps)
+  TServerOptions = class(TSynPersistent)
   strict private
     FPort: RawUtf8;
     function GetPort: RawUtf8;

@@ -1444,7 +1444,7 @@ type
   THttpPeerCacheOptions = set of THttpPeerCacheOption;
 
   /// define how THttpPeerCache handles its process
-  THttpPeerCacheSettings = class(TObjectWithProps)
+  THttpPeerCacheSettings = class(TSynPersistent)
   protected
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
@@ -1753,7 +1753,7 @@ type
   end;
 
   /// one THttpPeerCache.OnDownload instance
-  THttpPeerCacheProcess = class(TObjectWithProps)
+  THttpPeerCacheProcess = class(TSynPersistent)
   protected
     fOwner: THttpPeerCache;
   public

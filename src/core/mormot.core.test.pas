@@ -80,7 +80,7 @@ type
   // if no identifier was defined
   // - sample code about how to use this test framework is available in
   // the "Sample\07 - SynTest" folder
-  TSynTest = class(TObjectWithProps)
+  TSynTest = class(TSynPersistent)
   protected
     fTests: array of TSynTestMethodInfo;
     fIdent: string;
