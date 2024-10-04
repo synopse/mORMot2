@@ -101,7 +101,7 @@ type
   );
 
   /// abstract parent to store information aboout one TPollAsyncSockets connection
-  TPollAsyncConnection = class(TObjectWithCustomCreate)
+  TPollAsyncConnection = class(TObjectWithProps)
   protected
     /// the associated TCP connection
     // - equals nil after TPollAsyncSockets.Stop

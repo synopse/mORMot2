@@ -15,7 +15,7 @@ unit mormot.core.rtti;
     - Managed Types Finalization, Random or Copy
     - RTTI Value Types used for JSON Parsing
     - RTTI-based Registration for Custom JSON Parsing
-    - TObjectWithCustomCreate TObjectWithID TSynPersistent Classes
+    - TObjectWithRttiMethods TObjectWithID TSynPersistent Classes
     - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
      Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
@@ -2219,8 +2219,8 @@ type
   // - rcfSpi identifies types containing Sensitive Personal Information
   // (e.g. a bank card number or a plain password) which should be hidden
   // - rcfHookWrite, rcfHookWriteProperty, rcfHookRead, rcfHookReadProperty for
-  // TObjectWithCustomCreate kind of class, to customize JSON serialization
-  // calling the set of TObjectWithCustomCreate protected virtual methods -
+  // TObjectWithRttiMethods kind of class, to customize JSON serialization
+  // calling the set of TObjectWithRttiMethods protected virtual methods -
   // disabled by default not to slow down the serialization process
   // - rcfHasNestedProperties is set e.g. for rkClass or rcfWithoutRtti records,
   // rcfHasNestedManagedProperties if any of the property/field is rcfIsManaged
@@ -3066,7 +3066,7 @@ type
   end;
 
 
-{ *********** TObjectWithCustomCreate TObjectWithID TSynPersistent Classes }
+{ *********** TObjectWithRttiMethods TObjectWithID TSynPersistent Classes }
 
 type
   /// abstract parent class with published properties and a virtual constructor
@@ -3075,7 +3075,7 @@ type
   // - also features some protected virtual methods for custom RTTI/JSON process
   // - for best performance, any type inheriting from this class will bypass
   // some regular steps: do not implement interfaces or use TMonitor with them!
-  TObjectWithCustomCreate = class(TObjectWithProps)
+  TObjectWithRttiMethods = class(TObjectWithProps)
   protected
     /// called by TRttiJson.SetParserType when this class is registered
     // - used e.g. to register TOrm.ID field which is not published as RTTI
@@ -3126,7 +3126,7 @@ type
     // - somewhat faster than the regular RTL implementation
     // - warning: this optimized version won't initialize the vmtIntfTable
     // for this class hierarchy: as a result, you would NOT be able to
-    // implement an interface with a TObjectWithCustomCreate descendent (but
+    // implement an interface with a TObjectWithRttiMethods descendent (but
     // you should not need to, but inherit from TInterfacedObject)
     // - warning: under FPC, it won't initialize fields management operators
     class function NewInstance: TObject; override;
@@ -3137,15 +3137,15 @@ type
   end;
   {$M-}
 
-  /// used to determine the exact class type of a TObjectWithCustomCreate
-  TObjectWithCustomCreateClass = class of TObjectWithCustomCreate;
+  /// used to determine the exact class type of a TObjectWithRttiMethods
+  TObjectWithCustomCreateClass = class of TObjectWithRttiMethods;
 
   /// root class of an object with a 64-bit ID primary key
   // - is the parent of mormot.orm.core's TOrm, but you could use it e.g. on
   // client side to avoid a dependency to all ORM process, but still have the
   // proper published fields and use it in SOA - with a single conditional over
   // your class definition to inherit either from TOrm or from TObjectWithID
-  TObjectWithID = class(TObjectWithCustomCreate)
+  TObjectWithID = class(TObjectWithRttiMethods)
   protected
     fID: TID;
     /// will register the "ID":... field value for proper JSON serialization
@@ -3167,7 +3167,7 @@ type
   // - if you just need to use published properties and RTTI, don't inherit
   // from this class, but from the lighter TObjectWithProps
   // - the Clone and CloneObjArray() methods allow fast copy of such instances
-  TSynPersistent = class(TObjectWithCustomCreate)
+  TSynPersistent = class(TObjectWithRttiMethods)
   protected
     // this default implementation will call AssignError()
     procedure AssignTo(Dest: TSynPersistent); virtual;
@@ -3215,7 +3215,7 @@ var
     Exception,                // vcException
     TCollection,              // vcCollection
     ESynException,            // vcESynException
-    TObjectWithCustomCreate,  // vcObjectWithCustomCreate
+    TObjectWithRttiMethods,  // vcObjectWithCustomCreate
     nil,                      // vcSynList
     nil,                      // vcSynObjectList
     nil,                      // vcRawUtf8List
@@ -9998,11 +9998,11 @@ begin
 end;
 
 
-{ *********** TObjectWithCustomCreate TObjectWithID TSynPersistent Classes }
+{ *********** TObjectWithRttiMethods TObjectWithID TSynPersistent Classes }
 
-{ TObjectWithCustomCreate }
+{ TObjectWithRttiMethods }
 
-class function TObjectWithCustomCreate.RttiCustom: TRttiCustom;
+class function TObjectWithRttiMethods.RttiCustom: TRttiCustom;
 begin
   // inlined Rtti.Find(ClassType): we know it is the first slot
   {$ifdef NOPATCHVMT}
@@ -10013,7 +10013,7 @@ begin
   // assert(result.InheritsFrom(TRttiCustom));
 end;
 
-class function TObjectWithCustomCreate.NewInstance: TObject;
+class function TObjectWithRttiMethods.NewInstance: TObject;
 begin
   {$ifndef NOPATCHVMT}
   // register the class to the RTTI cache
@@ -10026,41 +10026,41 @@ begin
   PPointer(result)^ := pointer(self); // store VMT
 end; // no benefit of rewriting FreeInstance/CleanupInstance
 
-class procedure TObjectWithCustomCreate.RttiCustomSetParser(Rtti: TRttiCustom);
+class procedure TObjectWithRttiMethods.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
   // do nothing by default
 end;
 
-function TObjectWithCustomCreate.RttiBeforeWriteObject(W: TTextWriter;
+function TObjectWithRttiMethods.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin
   result := false; // default JSON serialization
 end;
 
-function TObjectWithCustomCreate.RttiWritePropertyValue(W: TTextWriter;
+function TObjectWithRttiMethods.RttiWritePropertyValue(W: TTextWriter;
   Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
 begin
   result := false; // default JSON serializaiton
 end;
 
-procedure TObjectWithCustomCreate.RttiAfterWriteObject(W: TTextWriter;
+procedure TObjectWithRttiMethods.RttiAfterWriteObject(W: TTextWriter;
   Options: TTextWriterWriteObjectOptions);
 begin
   // nothing to do
 end;
 
-function TObjectWithCustomCreate.RttiBeforeReadObject(Ctxt: pointer): boolean;
+function TObjectWithRttiMethods.RttiBeforeReadObject(Ctxt: pointer): boolean;
 begin
   result := false; // default JSON unserialization
 end;
 
-function TObjectWithCustomCreate.RttiBeforeReadPropertyValue(
+function TObjectWithRttiMethods.RttiBeforeReadPropertyValue(
   Ctxt: pointer; Prop: PRttiCustomProp): boolean;
 begin
   result := false; // default JSON unserialization
 end;
 
-procedure TObjectWithCustomCreate.RttiAfterReadObject;
+procedure TObjectWithRttiMethods.RttiAfterReadObject;
 begin
   // nothing to do
 end;

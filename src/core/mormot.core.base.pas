@@ -498,7 +498,7 @@ type
 
   /// a parent TObject class with a virtual constructor and RTTI generated
   // for its published properties
-  // - lighter than TPersistent, TObjectWithCustomCreate or TSynPersistent,
+  // - lighter than TPersistent, TObjectWithRttiMethods or TSynPersistent,
   // if you just want to persist some published properties
   TObjectWithProps = class(TObject)
   public

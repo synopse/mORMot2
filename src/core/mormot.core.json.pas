@@ -5569,7 +5569,7 @@ begin
 end;
 
 type
-  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
+  TORHook = class(TObjectWithRttiMethods); // to access its protected methods
 
 procedure _JS_NonExpanded(var c: TJsonSaveContext; Data: PAnsiChar; n: integer);
 var
@@ -5599,7 +5599,7 @@ begin
         if p^.Name <> '' then
         begin
           if not (rcfHookWriteProperty in item.Flags) or
-             not TCCHook(v).RttiWritePropertyValue(c.W, p, c.Options) then
+             not TORHook(v).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, v);
           c.W.AddComma;  // no c.W.BlockAfterItem() if non-expanded
         end;
@@ -5794,7 +5794,7 @@ begin
     exit;
   end;
   if not (rcfHookWrite in nfo.Flags) or
-     not TCCHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
+     not TORHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
   begin
     // regular JSON serialization using nested fields/properties
     if not ((woDontStoreVoid in c.Options) or
@@ -5876,7 +5876,7 @@ begin
           else
             c.W.AddProp(pointer(p^.Name), length(p^.Name));
           if (noHook in flags) or
-             not TCCHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
+             not TORHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, Data);
           include(flags, isNotFirst);
         end;
@@ -5887,7 +5887,7 @@ begin
       until false;
     end;
     if rcfHookWrite in nfo.Flags then
-       TCCHook(Data).RttiAfterWriteObject(c.W, c.Options);
+       TORHook(Data).RttiAfterWriteObject(c.W, c.Options);
     if isHumanReadable in flags then
       c.W.BlockEnd('}', c.Options)
     else
@@ -8106,7 +8106,7 @@ begin
     Ctxt.Valid := false
   else if Prop^.OffsetSet >= 0 then
     if (rcfHookReadProperty in Ctxt.Info.Flags) and
-       TCCHook(Data).RttiBeforeReadPropertyValue(@Ctxt, Prop) then
+       TORHook(Data).RttiBeforeReadPropertyValue(@Ctxt, Prop) then
       // custom parsing method (e.g. TOrm nested TOrm properties)
     else
       // default fast parsing into the property/field memory
@@ -8250,7 +8250,7 @@ begin
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
       if (rcfHookRead in Ctxt.Info.Flags) and
-         TCCHook(Data).RttiBeforeReadObject(@Ctxt) then
+         TORHook(Data).RttiBeforeReadObject(@Ctxt) then
         exit;
     end
     else
@@ -8263,7 +8263,7 @@ begin
     // regular JSON unserialization using nested fields/properties
     _JL_RttiCustomProps(Data, Ctxt);
     if rcfHookRead in Ctxt.Info.Flags then
-      TCCHook(Data).RttiAfterReadObject;
+      TORHook(Data).RttiAfterReadObject;
   end;
 end;
 
@@ -8411,7 +8411,7 @@ begin
       Data^ := TRttiJson(iteminfo).fNewInstance(iteminfo);
       item := Data^; // class are accessed by reference
       if (rcfHookRead in iteminfo.Flags) and
-         TCCHook(item).RttiBeforeReadObject(@Ctxt) then
+         TORHook(item).RttiBeforeReadObject(@Ctxt) then
       begin
         inc(Data);
         if Ctxt.Valid then
@@ -8436,7 +8436,7 @@ begin
     if Ctxt.Json = nil then
         break;
     if rcfHookRead in iteminfo.Flags then
-      TCCHook(item).RttiAfterReadObject;
+      TORHook(item).RttiAfterReadObject;
     inc(PAnsiChar(Data), arrinfo.Cache.ItemSize);
   end;
   Ctxt.Valid := false;
@@ -10418,9 +10418,9 @@ begin
   repeat // recognized some RTL classes - any branch taken will break below
     if c = TObjectWithProps then
       fNewInstance := @_New_ObjectWithProps // virtual TObjectWithProps.Create
-    else if c = TObjectWithCustomCreate then
+    else if c = TObjectWithRttiMethods then
     begin
-      // allow any kind of customization for TObjectWithCustomCreate children
+      // allow any kind of customization for TObjectWithRttiMethods children
       n := Props.Count;
       TObjectWithCustomCreateRttiCustomSetParser(pointer(fValueClass), self);
       if n <> Props.Count then

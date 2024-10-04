@@ -80,7 +80,7 @@ type
   {$M-}
 
 
-  /// an abstract ancestor, for implementing a custom TInterfacedObject like class
+  /// an abstract ancestor, for implementing an abstract TInterfacedObject class
   // - by default, will do nothing: no instance would be retrieved by
   // QueryInterface unless the VirtualQueryInterface protected method is
   // overriden, and _AddRef/_Release methods would call VirtualAddRef and
@@ -377,7 +377,7 @@ type
   // basic process, and can't be easily inherited
   // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
   // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
-  TSynList = class(TObjectWithCustomCreate)
+  TSynList = class(TObjectWithRttiMethods)
   protected
     fCount: integer;
     fList: TPointerDynArray;
