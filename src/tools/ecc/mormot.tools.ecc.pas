@@ -617,9 +617,9 @@ function EccCommand(cmd: TEccCommand; const sw: ICommandLine): TEccCommandError;
   begin
     if privfile = '' then
       exit;
-    sw.Text('Corresponding TSynPersistentWithPassword.ComputePassword:', []);
+    sw.Text('Corresponding TObjectWithPassword.ComputePassword:', []);
     sw.Text(' encryption %',
-      [TSynPersistentWithPassword.ComputePassword(pass)], ccLightBlue);
+      [TObjectWithPassword.ComputePassword(pass)], ccLightBlue);
     privkey := StringToUtf8(copy(GetFileNameWithoutExt(privfile), 1, 8));
     for a := low(a) to high(a) do
       sw.Text(' % %', [ToText(a)^,
