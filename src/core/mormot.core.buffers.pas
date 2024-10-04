@@ -209,7 +209,7 @@ type
   /// abstract low-level parent class for generic compression/decompression algorithms
   // - will encapsulate the compression algorithm with crc32c hashing
   // - all Algo* abstract methods should be overriden by inherited classes
-  // - don't inherit from TSynPersistent since we don't need any of it
+  // - don't inherit from TObjectWithProps since we don't need any of it
   TAlgoCompress = class
   protected
     fAlgoID: byte;

@@ -2611,8 +2611,7 @@ type
     // - warning: supplied W instance should be a TJsonWriter
     procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); virtual;
     /// create a new TObject instance of this rkClass
-    // - not implemented here (raise an ERttiException) but in TRttiJson,
-    // so that mormot.core.rtti has no dependency to TSynPersistent and such
+    // - mormot.core.json will ensure the proper (virtual) constructor is called
     function ClassNewInstance: pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// allow low-level customization of the fNewInstance pointer
@@ -3125,8 +3124,8 @@ type
     // - somewhat faster than the regular RTL implementation
     // - warning: this optimized version won't initialize the vmtIntfTable
     // for this class hierarchy: as a result, you would NOT be able to
-    // implement an interface with a TSynPersistent descendent (but you should
-    // not need to, but inherit from TInterfacedObject)
+    // implement an interface with a TObjectWithCustomCreate descendent (but
+    // you should not need to, but inherit from TInterfacedObject)
     // - warning: under FPC, it won't initialize fields management operators
     class function NewInstance: TObject; override;
     /// very efficiently retrieve the TRttiCustom associated with this class
@@ -3162,11 +3161,10 @@ type
   TObjectWithIDClass = class of TObjectWithID;
 
   /// our own empowered TPersistent-like parent class
-  // - TPersistent has an unexpected speed overhead due a giant lock introduced
-  // to manage property name fixup resolution (which we won't use outside the UI)
-  // - this class has a virtual constructor, so is a preferred alternative
-  // to both TPersistent and TPersistentWithCustomCreate classes
-  // - features some protected methods to customize its JSON serialization
+  // - content copy is implemented via the protected AssignTo method
+  // - if you just need to use published properties and RTTI, don't inherit
+  // from this class, but from the lighter TObjectWithProps
+  // - the Clone and CloneObjArray() methods allow fast copy of such instances
   TSynPersistent = class(TObjectWithCustomCreate)
   protected
     // this default implementation will call AssignError()

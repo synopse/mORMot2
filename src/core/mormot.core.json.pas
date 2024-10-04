@@ -2398,7 +2398,7 @@ type
   // - will also release any T*ObjArray dynamic array storage of persistents,
   // previously registered via Rtti.RegisterObjArray() for Delphi 7-2009
   // - nested published classes (or T*ObjArray) don't need to inherit from
-  // TSynAutoCreateFields: they may be from any TPersistent/TSynPersistent type
+  // TSynAutoCreateFields: they may be from any TPersistent/TObjectWithProps type
   // - note that non published (e.g. public) properties won't be instantiated,
   // serialized, nor released - but may contain weak references to other classes
   // - please take care that you will not create any endless recursion: you should
@@ -11807,7 +11807,7 @@ end;
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-end; // no need to call the void inherited TSynPersistent
+end; // no need to call the void inherited TObjectWithProps
 
 destructor TSynAutoCreateFields.Destroy;
 begin

@@ -8113,7 +8113,7 @@ begin
   Rtti.JsonReader := TMethod(read);
   write := RttiJsonWrite;
   Rtti.JsonWriter := TMethod(write);
-  Rtti.CopyObject := OrmCopyObject;
+  Rtti.CopyObject := @OrmCopyObject;
 end;
 
 function TOrm.IsPropClassInstance(Prop: PRttiCustomProp): boolean;

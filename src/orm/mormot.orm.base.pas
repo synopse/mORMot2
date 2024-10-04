@@ -1905,8 +1905,7 @@ type
   POrmPropInfoRttiMany = ^TOrmPropInfoRttiMany;
 
   /// handle a read-only list of fields information for published properties
-  // - high-level cache generated from RTTI, tuned for TOrm RTTI, but may be
-  // used for any TPersistent/TSynPersistent
+  // - high-level cache generated from RTTI, especially tuned for TOrm RTTI
   TOrmPropInfoList = class
   protected
     fList: TOrmPropInfoObjArray;
