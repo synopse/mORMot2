@@ -4677,9 +4677,11 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
-  /// a persistent-agnostic alternative to TSynPersistentLock
-  // - can be used as base class when custom JSON persistence lock is not needed
-  // - consider a TRWLock field as a lighter multi read / exclusive write option
+  /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes a TSynLocker instance, and its managed critical section
+  // - consider a TLightLock field as lighter options, or a R/W lock with
+  // TObjectRWLock and TObjectRWLightLock classes
+  // - TSynPersistentLock would add paranoid JSON persistence lock
   TSynLocked = class(TObjectWithProps)
   protected
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
@@ -4691,17 +4693,41 @@ type
     /// access to the associated instance critical section
     property Safe: PSynLocker
       read fSafe;
-    /// could be used as a short-cut to Safe.Lock
+    /// could be used as a short-cut to Safe^.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe.UnLock
+    /// could be used as a short-cut to Safe^.UnLock
     procedure Unlock;
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes a non-upgradable multiple Read / exclusive Write TRWLightLock
+  TObjectRWLightLock = class(TObjectWithProps)
+  protected
+    fSafe: TRWLightLock;
+  public
+    /// access to the associated non-upgradable TRWLightLock instance
+    // - call Safe methods to protect multi-thread access on this storage
+    property Safe: TRWLightLock
+      read fSafe;
+  end;
+
+  /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes an upgradable multiple Read / exclusive Write TRWLock
+  TObjectRWLock = class(TObjectWithProps)
+  protected
+    fSafe: TRWLock;
+  public
+    /// access to the associated upgradable TRWLock instance
+    // - call Safe methods to protect multi-thread access on this storage
+    property Safe: TRWLock
+      read fSafe;
+  end;
+
 /// initialize a TSynLocker instance from heap
 // - call DoneandFreeMem to release the associated memory and OS mutex
-// - is used e.g. in TSynLocked/TSynPersistentLock to reduce class instance size
+// - as used e.g. by TSynLocked/TSynPersistentLock to reduce class instance size
 function NewSynLocker: PSynLocker;
 
 type

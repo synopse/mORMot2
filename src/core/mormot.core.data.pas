@@ -485,30 +485,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// adding light non-upgradable multiple Read / exclusive Write locking
-  // methods to a TObjectWithProps with virtual constructor
-  TObjectRWLightLock = class(TObjectWithProps)
-  protected
-    fSafe: TRWLightLock;
-  public
-    /// access to the associated non-upgradable TRWLightLock instance
-    // - call Safe methods to protect multi-thread access on this storage
-    property Safe: TRWLightLock
-      read fSafe;
-  end;
-
-  /// adding light upgradable multiple Read / exclusive Write locking methods
-  // to a TObjectWithProps with virtual constructor
-  TObjectRWLock = class(TObjectWithProps)
-  protected
-    fSafe: TRWLock;
-  public
-    /// access to the associated upgradable TRWLock instance
-    // - call Safe methods to protect multi-thread access on this storage
-    property Safe: TRWLock
-      read fSafe;
-  end;
-
   {$ifndef PUREMORMOT2}
 
   /// used for backward compatibility only with existing code
