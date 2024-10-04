@@ -675,7 +675,7 @@ var
   i, j, k: PtrInt;
   dns, clients, a: TRawUtf8DynArray;
   le: TLdapError;
-  rl: TLdapResultList;
+  rl, rl2: TLdapResultList;
   r: TLdapResult;
   at: TLdapAttributeType;
   ats: TLdapAttributeTypes;
@@ -887,9 +887,15 @@ begin
     Check(SystemFlagsFromInteger(SystemFlagsValue(sfs)) = sfs);
   end;
   // validate LDAP resultset and LDIF content
+  rl2 := nil;
   rl := TLdapResultList.Create;
   try
-    CheckEqual(rl.Dump({noTime=}true), 'results: 0'#13#10);
+    u := rl.Dump({noTime=}true);
+    CheckEqual(u, 'results: 0'#13#10);
+    rl2 := CopyObject(rl);
+    Check(rl2 <> nil);
+    Check(rl2.ClassType = TLdapResultList);
+    CheckEqual(rl2.Dump({noTime=}true), u);
     CheckEqual(rl.ExportToLdifContent,
       'version: 1'#$0A'# total number of entries: 0'#$0A);
     CheckEqual(rl.Count, 0);
@@ -918,6 +924,9 @@ begin
     CheckHash(rl.GetJson([roNoObjectName, roWithCanonicalName]), $0BCFC3BC);
     CheckHash(rl.Dump({noTime=}true), $DF59A0A9, 'hashDump');
     CheckHash(rl.ExportToLdifContent, $4A97B4B2, 'hashLdif');
+    CopyObject(rl, rl2);
+    CheckHash(rl2.Dump({noTime=}true), $DF59A0A9, 'hashDump2');
+    CheckHash(rl2.ExportToLdifContent, $4A97B4B2, 'hashLdif2');
     r.Attributes.Delete(atCommonName);
     CheckEqual(r.Attributes.Count, 2);
     v := rl.GetJson([roNoObjectName]);
@@ -931,6 +940,7 @@ begin
     CheckHash(rl.ExportToLdifContent, $31A4283C, 'hashLdif');
   finally
     rl.Free;
+    rl2.Free;
   end;
   // validate LDAP settings
   l := TLdapClientSettings.Create;
