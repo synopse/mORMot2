@@ -4907,7 +4907,7 @@ type
   // TSqlite3Library.AfterInitialization did set SQLITE_CONFIG_MULTITHREAD flag
   // - can cache last results for SELECT statements, if property UseCache is true:
   //  this can speed up most read queries, for web server or client UI e.g.
-  TSqlDataBase = class(TSynPersistentLock)
+  TSqlDataBase = class(TSynLocked)
   protected
     fDB: TSqlite3DB;
     fFileName: TFileName;

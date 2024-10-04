@@ -289,7 +289,7 @@ type
   // could define one published property of a mormot.core.interface.pas
   // TInjectableObject as IAutoLocker so that this class may be automatically
   // injected
-  // - consider inherit from high-level TSynPersistentLock or call low-level
+  // - consider inherit from high-level TSynLocked or call low-level
   // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
   TAutoLocker = class(TInterfacedObjectWithCustomCreate, IAutoLocker)
   protected
@@ -518,7 +518,7 @@ type
   {$ifndef PUREMORMOT2}
 
   /// used for backward compatibility only with existing code
-  TSynPersistentLocked = class(TSynPersistentLock);
+  TSynPersistentLocked = class(TSynLocked);
 
   {$endif PUREMORMOT2}
 

@@ -747,7 +747,7 @@ type
   // - you should inherit from this class to implement proper data persistence,
   // e.g. using TSynMonitorUsageRest for ORM-based storage
   // - SaveDB may take some time, so a TSynLocker OS lock is used, not TRWLock
-  TSynMonitorUsage = class(TSynPersistentLock)
+  TSynMonitorUsage = class(TSynLocked)
   protected
     fLog: TSynLogFamily;
     fTracked: array of TSynMonitorUsageTrack;

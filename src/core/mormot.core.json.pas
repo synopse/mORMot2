@@ -2425,7 +2425,7 @@ type
   TSynAutoCreateFieldsClass = class of TSynAutoCreateFields;
 
   /// adding locking methods to a TSynAutoCreateFields with virtual constructor
-  TSynAutoCreateFieldsLocked = class(TSynPersistentLock)
+  TSynAutoCreateFieldsLocked = class(TSynLocked)
   public
     /// initialize the object instance, its associated lock, and its nested
     // class or T*ObjArray published properties

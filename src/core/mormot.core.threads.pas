@@ -948,7 +948,7 @@ type
   /// allow parallel execution of an index-based process in a thread pool
   // - will create its own thread pool, then execute any method by spliting the
   // work over each thread, so Method execution time is expected to be fair
-  TSynParallelProcess = class(TSynPersistentLock)
+  TSynParallelProcess = class(TSynLocked)
   protected
     fThreadName: RawUtf8;
     fPool: array of TSynParallelProcessThread;

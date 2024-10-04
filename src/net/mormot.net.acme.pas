@@ -131,7 +131,7 @@ type
   // - implements the ACME V2 client (specified in RFC8555) to download
   // free domain validated certificates, mainly from Let's Encrypt
   // - see https://letsencrypt.org/how-it-works for a high-level description
-  TAcmeClient = class(TSynPersistentLock)
+  TAcmeClient = class(TSynLocked)
   protected
     fDirectoryUrl: RawUtf8;
     fContact: RawUtf8;
@@ -271,7 +271,7 @@ type
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynPersistentLock)
+  TAcmeLetsEncrypt = class(TSynLocked)
   protected
     fClient: TAcmeLetsEncryptClientObjArray;
     fKeyStoreFolder: TFileName;

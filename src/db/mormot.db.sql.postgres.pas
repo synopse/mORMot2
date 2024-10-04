@@ -356,8 +356,8 @@ type
   /// asynchronous execution engine
   // - allow to execute several statements within an PostgreSQL pipeline, and
   // return the results using asynchronous callbacks from a background thread
-  // - inherits from TSynPersistentLock so you can use Lock/UnLock
-  TSqlDBPostgresAsync = class(TSynPersistentLock)
+  // - inherits from TSynLocked so you can use Lock/UnLock
+  TSqlDBPostgresAsync = class(TSynLocked)
   protected
     fConnection: TSqlDBPostgresConnection;
     fStatements: array of TSqlDBPostgresAsyncStatement;

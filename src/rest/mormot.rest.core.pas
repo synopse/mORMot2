@@ -79,7 +79,7 @@ type
     amMainThread);
 
   /// used to store the execution parameters for a TRest instance
-  TRestAcquireExecution = class(TSynPersistentLock)
+  TRestAcquireExecution = class(TSynLocked)
   public
     /// how read or write operations will be executed
     Mode: TRestServerAcquireMode;
@@ -284,7 +284,7 @@ type
 { ************ TRestRunThreads Multi-Threading Process of a REST instance }
 
   /// access to the Multi-Threading process of a TRest instance
-  TRestRunThreads = class(TSynPersistentLock)
+  TRestRunThreads = class(TSynLocked)
   protected
     fOwner: TRest;
     fBackgroundTimer: TRestBackgroundTimer;
