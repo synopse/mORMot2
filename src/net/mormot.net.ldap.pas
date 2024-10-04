@@ -3540,9 +3540,7 @@ begin
     Append(result,
       Asn(NameValuePairs[i * 2]),                       // attribute description
       Asn(Asn(NameValuePairs[i * 2 + 1]), ASN1_SETOF)); // attribute value set
-  result := Asn(ASN1_SEQ, [
-              Asn(ord(Op), ASN1_ENUM),  // modification type as enum
-              Asn(result, ASN1_SEQ)]);  // attribute(s) sequence
+  result := Modifier(Op, Asn(result, ASN1_SEQ));
 end;
 
 
@@ -5897,13 +5895,16 @@ end;
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
   const AttrName: RawUtf8; const AttrValue: RawByteString): boolean;
 begin
-  result := Modify(Obj, [Modifier(Op, AttrName, AttrValue)]);
+  result := (AttrName <> '') and
+            Modify(Obj, [Modifier(Op, AttrName, AttrValue)]);
 end;
 
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
   const Types: array of TLdapAttributeType; const Values: array of const): boolean;
 begin
-  result := Modify(Obj, [Modifier(Op, Types, Values)]);
+  result := (length(Types) <> 0) and
+            (length(Types) = length(Values)) and
+            Modify(Obj, [Modifier(Op, Types, Values)]);
 end;
 
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
