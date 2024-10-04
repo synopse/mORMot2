@@ -4403,11 +4403,11 @@ type
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex, so that SizeOf(TSynLocker)>128
-  // - for object-level locking, see TSynPersistentLock which owns one such
+  // - for object-level locking, see TSynLocked which owns one such
   // instance, or call low-level fSafe := NewSynLocker in your constructor,
   // then fSafe^.DoneAndFreemem in your destructor
   // - RWUse property could replace the TRTLCriticalSection by a lighter TRWLock
-  // - see also TRWLock and TSynPersistentRWLock if the multiple read / exclusive
+  // - see also TRWLock and TObjectRWLock if the multiple read / exclusive
   // write lock is better (only if the locked process does not take too much time)
   {$ifdef USERECORDWITHMETHODS}
   TSynLocker = record
@@ -4677,15 +4677,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
-
-/// initialize a TSynLocker instance from heap
-// - call DoneandFreeMem to release the associated memory and OS mutex
-// - is used e.g. in TSynPersistentLock to reduce class instance size
-function NewSynLocker: PSynLocker;
-
-type
   /// a persistent-agnostic alternative to TSynPersistentLock
-  // - can be used as base class when custom JSON persistence is not needed
+  // - can be used as base class when custom JSON persistence lock is not needed
   // - consider a TRWLock field as a lighter multi read / exclusive write option
   TSynLocked = class(TObjectWithProps)
   protected
@@ -4696,11 +4689,22 @@ type
     /// finalize the instance, and its associated lock
     destructor Destroy; override;
     /// access to the associated instance critical section
-    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
     property Safe: PSynLocker
       read fSafe;
+    /// could be used as a short-cut to Safe.Lock
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
+/// initialize a TSynLocker instance from heap
+// - call DoneandFreeMem to release the associated memory and OS mutex
+// - is used e.g. in TSynLocked/TSynPersistentLock to reduce class instance size
+function NewSynLocker: PSynLocker;
+
+type
   /// a thread-safe Pierre L'Ecuyer software random generator
   // - just wrap TLecuyer with a TLighLock
   // - should not be used, unless may be slightly faster than a threadvar
@@ -9983,7 +9987,6 @@ begin
 end;
 
 
-
 { TSynLocked }
 
 constructor TSynLocked.Create;
@@ -9995,6 +9998,18 @@ destructor TSynLocked.Destroy;
 begin
   inherited Destroy;
   fSafe^.DoneAndFreeMem;
+end;
+
+procedure TSynLocked.Lock;
+begin
+  if self <> nil then
+    fSafe^.Lock;
+end;
+
+procedure TSynLocked.Unlock;
+begin
+  if self <> nil then
+    fSafe^.UnLock;
 end;
 
 
