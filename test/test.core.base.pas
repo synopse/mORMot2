@@ -216,8 +216,8 @@ type
     procedure _IdemPropName;
     /// test our internal fast TGUID process functions
     procedure _GUID;
-    /// test ParseCommandArguments() function
-    procedure _ParseCommandArguments;
+    /// test ParseCommandArgs() functions
+    procedure _ParseCommandArgs;
     /// test TExecutableCommandLine class
     procedure _TExecutableCommandLine;
     /// test IsMatch() function
@@ -2676,7 +2676,7 @@ begin
   end;
 end;
 
-procedure TTestCoreBase._ParseCommandArguments;
+procedure TTestCoreBase._ParseCommandArgs;
 
   procedure Test(const cmd: RawUtf8; const expected: array of RawUtf8;
      const flags: TParseCommands = []; posix: boolean = true);
@@ -2686,7 +2686,7 @@ procedure TTestCoreBase._ParseCommandArguments;
     a: TParseCommandsArgs;
     p: TRawUtf8DynArray;
   begin
-    if checkfailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
+    if CheckFailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
       exit;
     FillcharFast(a, SizeOf(a), 255); // ensure a[n]<>nil
     Check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
@@ -2694,7 +2694,7 @@ procedure TTestCoreBase._ParseCommandArguments;
        CheckFailed(n = length(expected)) then
       exit;
     for i := 0 to n - 1 do
-      check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
+      Check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
     Check(a[n] = nil, 'last param should be nil');
     Check(ExtractCommandArgs(cmd, p, posix) = flags);
     if not CheckFailed(n = length(p)) then

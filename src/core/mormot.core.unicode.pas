@@ -2113,7 +2113,7 @@ const
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 
 /// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
-// - if aName is void after camel-casing, will raise an EOpenApi
+// - if aName is void after camel-casing, will raise an ESynUnicode
 function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
 
 var
