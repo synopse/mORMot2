@@ -214,10 +214,10 @@ procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
 { **************** LDAP Protocol Definitions }
 
 /// convert a Distinguished Name to a Canonical Name
-// - raise an exception if the supplied DN is not a valid Distinguished Name
+// - raise ELdap if the supplied DN is invalid - unless NoRaise was set to true
 // - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
 // 'xyz.local/London/Users/User1'
-function DNToCN(const DN: RawUtf8): RawUtf8;
+function DNToCN(const DN: RawUtf8; NoRaise: boolean = false): RawUtf8;
 
 /// normalize a Distinguished Name into its standard layout
 // - trim spaces, and use CN= OU= DC= specifiers
@@ -237,7 +237,7 @@ type
   /// name / value pairs as ParseDN() resultset
   TNameValueDNs = array of TNameValueDN;
 
-/// parse a Distinguished Neme text into all its name=value parts
+/// parse a Distinguished Name text into all its name=value parts
 // - on parsing error, raise ELdap or return false if NoRaise was set to true
 function ParseDN(const DN: RawUtf8; out pairs: TNameValueDNs;
   NoRaise: boolean = false): boolean; overload;
@@ -1176,6 +1176,7 @@ type
     property ObjectName: RawUtf8
       read fObjectName write SetObjectName;
     /// return the Canonical Name of this LDAP object
+    // - raise ELdap if we were not able to parse the ObjectName as DN
     function CanonicalName: RawUtf8;
       /// find and return first attribute value with the requested type
     function Get(AttributeType: TLdapAttributeType;
@@ -1222,6 +1223,7 @@ type
     /// clear all TLdapResult objects in list
     procedure Clear;
     /// return all Items[].ObjectName as a sorted array
+    // - raise ELdap if any ObjectName cannot be parsed as a valid DN
     function ObjectNames(asCN: boolean = false;
       noSort: boolean = false): TRawUtf8DynArray;
     /// return all Items[].Attributes.Get(AttributeName)
@@ -2719,15 +2721,14 @@ begin
   end;
 end;
 
-function DNToCN(const DN: RawUtf8): RawUtf8;
+function DNToCN(const DN: RawUtf8; NoRaise: boolean): RawUtf8;
 var
   dc, ou, cn: TRawUtf8DynArray;
 begin
   result := '';
-  if DN = '' then
-    exit;
-  ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true);
-  result := DNsToCN(dc, ou, cn);
+  if (DN <> '') and
+     ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true, NoRaise) then
+    result := DNsToCN(dc, ou, cn);
 end;
 
 function NormalizeDN(const DN: RawUtf8): RawUtf8;
@@ -4250,7 +4251,7 @@ var
   i: PtrInt;
 begin
   w.AddDirect('#', ' ');
-  w.AddString(DNToCN(fObjectName));
+  w.AddString(DNToCN(fObjectName, {NoRaise=}true));
   w.AddShorter(#10'dn:');
   AddLdif(w, pointer(fObjectName), length(fObjectName));
   w.AddDirect(#10);
@@ -4411,7 +4412,7 @@ begin
     for i := 0 to Count - 1 do
     begin
       res := Items[i];
-      w.Add('%: %'#10, [i, DNToCN(res.ObjectName)]);
+      w.Add('%: %'#10, [i, DNToCN(res.ObjectName, {NoRaise=}true)]);
       w.Add('  objectName : %'#10, [res.ObjectName]);
       for j := 0 to res.Attributes.Count - 1 do
       begin
@@ -4731,7 +4732,7 @@ var
 begin
   sAMAccountName := Attributes[atSAMAccountName];
   distinguishedName := Attributes[atDistinguishedName];
-  canonicalName := DNToCN(distinguishedName);
+  canonicalName := DNToCN(distinguishedName, {NoRaise=}true);
   name := Attributes[atName];
   CN := Attributes[atCommonName];
   description := Attributes[atDescription];
@@ -5138,7 +5139,7 @@ begin
   begin
     u := One(LDAP_GUID[o]);
     Dual[{asCN=}false][o] := u;
-    Dual[{asCN=}true][o] := DNToCn(u);
+    Dual[{asCN=}true][o] := DNToCn(u, {NoRaise=}true);
   end;
 end;
 
