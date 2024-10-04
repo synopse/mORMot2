@@ -1540,25 +1540,14 @@ function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUtf8;
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
 
 type
-  {$M+}
   /// thread-safe class containing a TAes encryption/decryption engine
-  TAesLocked = class
+  TAesLocked = class(TObjectOSLightLock)
   protected
-    fSafe: TOSLightLock; // TAes is enough for cache line padding of this lock
-    fAes: TAes;
+    fAes: TAes; // TAes is enough for cache line padding of this lock
   public
-    /// initialize the instance
-    constructor Create; virtual;
-    /// finalize all used memory and resources
+    /// finalize all used memory and the TAes instance
     destructor Destroy; override;
-    /// enter the associated non-reentrant TOSLightLock
-    procedure Lock;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// leave the associated non-reentrant TOSLightLock
-    procedure UnLock;
-      {$ifdef HASINLINE} inline; {$endif}
   end;
-  {$M-}
 
   /// abstract parent for TAesPrng* classes
   // - you should never use this class, but TAesPrng, TSystemPrng or
@@ -7432,26 +7421,10 @@ end;
 
 { TAesLocked }
 
-constructor TAesLocked.Create;
-begin
-  fSafe.Init; // mandatory for TOSLightLock
-end;
-
 destructor TAesLocked.Destroy;
 begin
   inherited Destroy;
   fAes.Done; // fill AES buffer with 0 for safety
-  fSafe.Done;
-end;
-
-procedure TAesLocked.Lock;
-begin
-  fSafe.Lock;
-end;
-
-procedure TAesLocked.UnLock;
-begin
-  fSafe.UnLock;
 end;
 
 

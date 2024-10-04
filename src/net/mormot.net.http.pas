@@ -944,9 +944,8 @@ type
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
   // peers list (with a per-minute resolution)
   // - the DoRotate method should be called every second
-  THttpAcceptBan = class(TObjectWithProps)
+  THttpAcceptBan = class(TObjectOSLightLock)
   protected
-    fSafe: TOSLightLock; // almost never on contention, no R/W needed
     fCount, fLastSec: integer;
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
@@ -962,8 +961,6 @@ type
     // - maxpersecond is the maximum number of banned IPs remembered per second
     constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
       banwhiteip: cardinal = cLocalhost32); reintroduce;
-    /// finalize this storage
-    destructor Destroy; override;
     /// register an IP4 to be rejected
     function BanIP(ip4: cardinal): boolean; overload;
     /// register an IP4 to be rejected
@@ -1547,15 +1544,10 @@ type
   // - can merge several THttpAfterResponse instances via the OnContinue property
   // - OnIdle() should be called every few seconds for background process
   // - Append() match TOnHttpServerAfterResponse as real-time source of data
-  THttpAfterResponse = class(TObjectWithProps)
+  THttpAfterResponse = class(TObjectOSLightLock)
   protected
-    fSafe: TOSLightLock;
     fOnContinue: THttpAfterResponse;
   public
-    /// initialize this instance
-    constructor Create; override;
-    /// finalize this instance
-    destructor Destroy; override;
     /// to be overriden e.g. to flush the logs to disk or consolidate counters
     // - likely to be executed every few seconds from a THttpServerGeneric
     procedure OnIdle(tix64: Int64); virtual; abstract;
@@ -2162,9 +2154,8 @@ type
 
   /// abstract parent class used to persist THttpAnalyzer information into files
   // - with optional output file rotation/compression (disabled by default)
-  THttpAnalyzerPersistAbstract = class(TObjectWithProps)
+  THttpAnalyzerPersistAbstract = class(TObjectOSLightLock)
   protected
-    fSafe: TOSLightLock;
     fRotate: THttpRotater;
     fOnContinue: TOnHttpAnalyzerSave;
     fOwner: THttpAnalyzer;
@@ -2177,8 +2168,6 @@ type
     constructor Create(const aFileName: TFileName); reintroduce; virtual;
     /// initialize this persistence for a given THttpAnalyzer
     constructor CreateOwned(aOwner: THttpAnalyzer);
-    /// finalize this persistence instance
-    destructor Destroy; override;
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
     procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
     /// enable/disable optional output file rotation and compression
@@ -4729,16 +4718,10 @@ end;
 constructor THttpAcceptBan.Create(
   banseconds, maxpersecond, banwhiteip: cardinal);
 begin
+  inherited Create; // fSafe.Init
   fMax := maxpersecond;
   SetSeconds(banseconds);
   fWhiteIP := banwhiteip;
-  fSafe.Init;
-end;
-
-destructor THttpAcceptBan.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
 end;
 
 procedure THttpAcceptBan.SetMax(Value: cardinal);
@@ -4980,20 +4963,6 @@ end;
 
 
 { ******************** HTTP Server Logging/Monitoring Processors }
-
-{ THttpAfterResponse }
-
-constructor THttpAfterResponse.Create;
-begin
-  fSafe.Init;
-end;
-
-destructor THttpAfterResponse.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
-end;
-
 
 { THttpRotater }
 
@@ -6380,8 +6349,7 @@ end;
 
 constructor THttpAnalyzerPersistAbstract.Create(const aFileName: TFileName);
 begin
-  fSafe.Init;
-  inherited Create;
+  inherited Create; // fSafe.Init
   if aFileName <> '' then
     fRotate.FileName := ExpandFileName(aFileName);
   fRotate.OnRotate := OnRotate;
@@ -6396,12 +6364,6 @@ begin
   fOnContinue := aOwner.fOnSave;
   aOwner.fOnSave := OnSave;
   fOwner := aOwner;
-end;
-
-destructor THttpAnalyzerPersistAbstract.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
 end;
 
 procedure THttpAnalyzerPersistAbstract.OnSave(

@@ -3018,6 +3018,7 @@ var
 type
   /// pointer to a TRttiMap reference, for fluid-interface initialization
   PRttiMap = ^TRttiMap;
+
   /// customizable field mapping between classes and records
   // - Init/Map overloaded methods return self to allow proper fluid-calling
   // - records should have field-level extended RTTI (since Delphi 2010), or have
