@@ -15,7 +15,7 @@ unit mormot.core.rtti;
     - Managed Types Finalization, Random or Copy
     - RTTI Value Types used for JSON Parsing
     - RTTI-based Registration for Custom JSON Parsing
-    - High Level TObjectWithID and TObjectWithCustomCreate Class Types
+    - TObjectWithCustomCreate TObjectWithID TSynPersistent Classes
     - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
      Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
@@ -2461,7 +2461,8 @@ type
     vcRawUtf8List,
     vcESynException,
     vcException,
-    vcObjectWithID);
+    vcObjectWithID,
+    vcSynPersistent);
 
 
   /// allow to customize the process of a given TypeInfo/PRttiInfo
@@ -3045,13 +3046,15 @@ type
   end;
 
 
-{ *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
+{ *********** TObjectWithCustomCreate TObjectWithID TSynPersistent Classes }
 
 type
   /// abstract parent class with published properties and a virtual constructor
   // - is the parent of both TSynPersistent and TOrm classes
   // - will ensure the class type is registered to the Rtti global list
   // - also features some protected virtual methods for custom RTTI/JSON process
+  // - for best performance, any type inheriting from this class will bypass
+  // some regular steps: do not implement interfaces or use TMonitor with them!
   TObjectWithCustomCreate = class(TObjectWithProps)
   protected
     /// called by TRttiJson.SetParserType when this class is registered
@@ -3139,10 +3142,36 @@ type
   /// used to determine the exact class type of a TObjectWithID
   TObjectWithIDClass = class of TObjectWithID;
 
-/// internal wrapper to protected TObjectWithCustomCreate.RttiCustomSetParser()
-// - a local TCCHook was reported to have issues on FPC with class methods
-procedure TObjectWithCustomCreateRttiCustomSetParser(
-  O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
+  /// our own empowered TPersistent-like parent class
+  // - TPersistent has an unexpected speed overhead due a giant lock introduced
+  // to manage property name fixup resolution (which we won't use outside the UI)
+  // - this class has a virtual constructor, so is a preferred alternative
+  // to both TPersistent and TPersistentWithCustomCreate classes
+  // - features some protected methods to customize its JSON serialization
+  TSynPersistent = class(TObjectWithCustomCreate)
+  protected
+    // this default implementation will call AssignError()
+    procedure AssignTo(Dest: TSynPersistent); virtual;
+    procedure AssignError(Source: TSynPersistent);
+  public
+    /// allows to implement a TPersistent-like assignement mechanism
+    // - inherited class should override AssignTo() protected method
+    // to implement the proper assignment
+    // - could be used instead of CopyObject() instead of published properties copy
+    // - will first check than Dest is (or inherits from) this class
+    procedure Assign(Source: TSynPersistent);
+    /// create a copy of this TSynPersistent instance using Assign()
+    // - slightly faster than CopyObject(self) if AssignTo() has been overriden
+    function Clone: pointer;
+    /// create a copy of a T*ObjArray of this TSynPersistent using Assign()
+    // - will be allocated and filled by DestObjArray[] := SourceObjArray[].Clone
+    class procedure CloneObjArray(const SourceObjArray; var DestObjArray;
+      SourceCount: PInteger = nil; DestCount: PInteger = nil);
+  end;
+
+  /// used to determine the exact class type of a TSynPersistent
+  TSynPersistentClass = class of TSynPersistent;
+
 
 /// TDynArraySortCompare compatible function, sorting by TObjectWithID/TOrm.ID
 function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
@@ -3150,6 +3179,10 @@ function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
 /// TDynArrayHashOne compatible function, hashing TObjectWithID/TOrm.ID
 function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 
+// internal wrappers to publish protected methods to mormot.core.json
+procedure TObjectWithCustomCreateRttiCustomSetParser(
+  O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
+procedure TSynPersistentCopyObject(Dest, Source: TObject);
 
 
 implementation
@@ -8345,7 +8378,9 @@ begin
   else if aClass.InheritsFrom(Exception) then
     fValueRtlClass := vcException
   else if aClass.InheritsFrom(TObjectWithID) then
-    fValueRtlClass := vcObjectWithID;
+    fValueRtlClass := vcObjectWithID
+  else if aClass.InheritsFrom(TSynPersistent) then
+    fValueRtlClass := vcSynPersistent;
   // register the published properties of this class using RTTI
   fProps.InternalAddFromClass(aInfo, {includeparents=}true);
   if fValueRtlClass = vcException then
@@ -9908,7 +9943,7 @@ begin
 end;
 
 
-{ *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
+{ *********** TObjectWithCustomCreate TObjectWithID TSynPersistent Classes }
 
 { TObjectWithCustomCreate }
 
@@ -9992,6 +10027,7 @@ end;
 
 class procedure TObjectWithID.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
+  inherited RttiCustomSetParser(Rtti);
   Rtti.Props.InternalAdd(
     TypeInfo(TID), PtrInt(@TObjectWithID(nil).fID), 'ID', {first=}true);
 end;
@@ -10026,6 +10062,51 @@ end;
 function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin
   result := Hasher(0, pointer(@TObjectWithID(Elem).fID), SizeOf(TID));
+end;
+
+
+{ TSynPersistent }
+
+procedure TSynPersistent.AssignError(Source: TSynPersistent);
+begin
+  ERttiException.RaiseUtf8('Cannot assign a % to a %', [Source, self]);
+end;
+
+procedure TSynPersistent.AssignTo(Dest: TSynPersistent);
+begin
+  Dest.AssignError(self);
+end;
+
+procedure TSynPersistent.Assign(Source: TSynPersistent);
+begin
+  if (Source <> nil) and
+     (self <> nil) and
+     InheritsFrom(PClass(Source)^) then
+    Source.AssignTo(self)
+  else
+    AssignError(Source);
+end;
+
+function TSynPersistent.Clone: pointer;
+begin
+  result := TSynPersistentClass(PClass(self)^).Create; // call virtual constructor
+  AssignTo(result);
+end;
+
+class procedure TSynPersistent.CloneObjArray(
+  const SourceObjArray; var DestObjArray; SourceCount, DestCount: PInteger);
+var
+  s: TObjectDynArray absolute SourceObjArray;
+  d: TObjectDynArray absolute DestObjArray;
+  i: PtrInt;
+begin
+  for i := 0 to ObjArrayPrepareCopy(s, d, SourceCount, DestCount) - 1 do
+    d[i] := TSynPersistent(s[i]).Clone;
+end;
+
+procedure TSynPersistentCopyObject(Dest, Source: TObject);
+begin
+  TSynPersistent(Source).AssignTo(TSynPersistent(Dest));
 end;
 
 

@@ -8,7 +8,7 @@ unit mormot.core.data;
 
    Low-Level Data Processing Functions shared by all framework units
     - RTL TPersistent / TInterfacedObject with Custom Constructor
-    - TSynPersistent* TSyn*List TSynLocker classes
+    - TSynList TSynObjectList TSynLocker classes
     - TSynPersistentStore with proper Binary Serialization
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
@@ -353,33 +353,9 @@ type
 
 
 
-{ ************ TSynPersistent* TSyn*List TSynLocker classes }
+{ ************ TSynList TSynObjectList TSynLocker classes }
 
 type
-  /// our own empowered TPersistent-like parent class
-  // - TPersistent has an unexpected speed overhead due a giant lock introduced
-  // to manage property name fixup resolution (which we won't use outside the UI)
-  // - this class has a virtual constructor, so is a preferred alternative
-  // to both TPersistent and TPersistentWithCustomCreate classes
-  // - features some protected methods to customize its JSON serialization
-  // - for best performance, any type inheriting from this class will bypass
-  // some regular steps: do not implement interfaces or use TMonitor with them!
-  TSynPersistent = class(TObjectWithCustomCreate)
-  protected
-    // this default implementation will call AssignError()
-    procedure AssignTo(Dest: TSynPersistent); virtual;
-    procedure AssignError(Source: TSynPersistent);
-  public
-    /// allows to implement a TPersistent-like assignement mechanism
-    // - inherited class should override AssignTo() protected method
-    // to implement the proper assignment
-    procedure Assign(Source: TSynPersistent); virtual;
-  end;
-
-  /// used to determine the exact class type of a TSynPersistent
-  TSynPersistentClass = class of TSynPersistent;
-
-
   {$ifdef HASITERATORS}
   /// abstract pointer Enumerator
   TPointerEnumerator = record
@@ -486,7 +462,8 @@ type
   // would use a TSynLocker which does not suffer from CPU cache line conflit,
   // and is cross-compiler whereas TMonitor is Delphi-specific and buggy (at
   // least before XE5)
-  // - if you don't need TSynPersistent overhead, consider plain TSynLocked class
+  // - if you don't need TSynPersistent overhead, nor lock/unlock during JSON
+  // serialization, consider plain TSynLocked class or just a TLightLock field
   TSynPersistentLock = class(TSynPersistent)
   protected
     // TSynLocker would increase inherited fields offset -> managed PSynLocker
@@ -3367,28 +3344,7 @@ begin
 end;
 
 
-{ ************ TSynPersistent* / TSyn*List / TSynLocker classes }
-
-{ TSynPersistent }
-
-procedure TSynPersistent.AssignError(Source: TSynPersistent);
-begin
-  raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
-    [ClassNameShort(Source)^, ClassNameShort(self)^]);
-end;
-
-procedure TSynPersistent.AssignTo(Dest: TSynPersistent);
-begin
-  Dest.AssignError(Self);
-end;
-
-procedure TSynPersistent.Assign(Source: TSynPersistent);
-begin
-  if Source <> nil then
-    Source.AssignTo(Self)
-  else
-    AssignError(nil);
-end;
+{ ************ TSyn*List / TSynLocker classes }
 
 {$ifdef HASITERATORS}
 
@@ -3579,6 +3535,7 @@ end;
 class procedure TSynPersistentLock.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
   // let's call our overriden RttiBeforeWriteObject and RttiAfterWriteObject
+  inherited RttiCustomSetParser(Rtti);
   Rtti.Flags := Rtti.Flags + [rcfHookWrite];
 end;
 
