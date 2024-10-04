@@ -2604,6 +2604,9 @@ type
     procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
     /// check if this type has ClassNewInstance information
     function HasClassNewInstance: boolean;
+    /// copy one rkClass instance into another
+    // - return the destination object, optionally creating it if aTo = nil
+    function ClassCopyInstance(aFrom, aTo: TObject): pointer;
     /// reset all stored Props[] and associated flags
     procedure PropsClear;
     /// recursively search for 'one.two.three' nested properties
@@ -2700,7 +2703,8 @@ type
       read fCopy;
     /// redirect to the low-level class instance copy
     // - nil by default, to use Props.CopyProperties()
-    // - is overwritten e.g. by TOrm.RttiCustomSetParser
+    // - is overwritten e.g. to call TPersistent/TSynPersistent.Assign when no
+    // published property is defined, or by TOrm.RttiCustomSetParser
     property CopyObject: TRttiClassCopier
       read fCopyObject write fCopyObject;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
@@ -5108,6 +5112,42 @@ end;
 
 { **************** Published Class Properties and Methods RTTI }
 
+// some TRttiCustomList methods defined here for proper inlining in code below
+
+function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
+begin
+  if Info <> nil then
+  begin
+    result := FindType(Info);
+    if result = nil then
+      result := DoRegister(Info);
+  end
+  else
+    result := nil;
+end;
+
+function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
+begin
+  {$ifdef NOPATCHVMT}
+  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
+  {$else}
+  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  {$endif NOPATCHVMT}
+  if result = nil then
+    result := DoRegister(ObjectClass);
+end;
+
+function TRttiCustomList.RegisterClass(aObject: TObject): TRttiCustom;
+begin
+  {$ifdef NOPATCHVMT}
+  result := FindType(PPointer(PPAnsiChar(aObject)^ + vmtTypeInfo)^);
+  {$else}
+  result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
+  {$endif NOPATCHVMT}
+  if result = nil then
+    result := DoRegister(PClass(aObject)^);
+end;
+
 function GetRttiClass(RttiClass: TClass): PRttiClass;
 begin
   result := PRttiInfo(PPointer(PAnsiChar(RttiClass) + vmtTypeInfo)^)^.RttiClass;
@@ -6179,19 +6219,6 @@ end;
 
 
 { ************* Efficient Dynamic Arrays and Records Process }
-
-// defined here for proper inlining in code below
-function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
-begin
-  if Info <> nil then
-  begin
-    result := FindType(Info);
-    if result = nil then
-      result := DoRegister(Info);
-  end
-  else
-    result := nil;
-end;
 
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 begin
@@ -8755,6 +8782,30 @@ begin
             (@fNewInstance <> @_New_NotImplemented);
 end;
 
+function TRttiCustom.ClassCopyInstance(aFrom, aTo: TObject): pointer;
+begin // self is Rtti.RegisterClass(PClass(aFrom)^)
+  result := aTo;
+  if (self = nil) or
+     (aFrom = nil) then
+    exit;
+  if result = nil then
+    result := fNewInstance(self);
+  if (fValueRtlClass = vcCollection) and
+     (PClass(aFrom)^ = PClass(result)^)  then
+    // specific process of TCollection items
+    CopyCollection(TCollection(aFrom), result)
+  else if PClass(result)^.InheritsFrom(PClass(aFrom)^) then
+    // fast copy from RTTI properties of the common (or same) hierarchy
+    if Assigned(fCopyObject) then
+      fCopyObject(result, aFrom) // e.g. TOrm or TPersistent/TSynPersistent
+    else
+      fProps.CopyProperties(result, pointer(aFrom))
+  else
+    // no common inheritance -> lookup by property name (slower)
+    CopyPropsInternal(pointer(aFrom), result,
+      @fProps, @Rtti.RegisterClass(PClass(result)^).Props);
+end;
+
 procedure TRttiCustom.PropsClear;
 begin
   Props.InternalClear;
@@ -9602,31 +9653,9 @@ begin
   result := RegisterTypeFromName(pointer(Name), length(Name), ParserType);
 end;
 
-function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
-begin
-  {$ifdef NOPATCHVMT}
-  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
-  {$else}
-  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
-  {$endif NOPATCHVMT}
-  if result = nil then
-    result := DoRegister(ObjectClass);
-end;
-
 function TRttiCustomList.GetByClass(ObjectClass: TClass): TRttiCustom;
 begin
   result := RegisterClass(ObjectClass);
-end;
-
-function TRttiCustomList.RegisterClass(aObject: TObject): TRttiCustom;
-begin
-  {$ifdef NOPATCHVMT}
-  result := FindType(PPointer(PPAnsiChar(aObject)^ + vmtTypeInfo)^);
-  {$else}
-  result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
-  {$endif NOPATCHVMT}
-  if result = nil then
-    result := DoRegister(PClass(aObject)^);
 end;
 
 function TRttiCustomList.RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
