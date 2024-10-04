@@ -492,8 +492,8 @@ type
   end;
 
   /// adding light non-upgradable multiple Read / exclusive Write locking
-  // methods to a TSynPersistent with virtual constructor
-  TSynPersistentRWLightLock = class(TSynPersistent)
+  // methods to a TObjectWithProps with virtual constructor
+  TObjectRWLightLock = class(TObjectWithProps)
   protected
     fSafe: TRWLightLock;
   public
@@ -504,8 +504,8 @@ type
   end;
 
   /// adding light upgradable multiple Read / exclusive Write locking methods
-  // to a TSynPersistent with virtual constructor
-  TSynPersistentRWLock = class(TSynPersistent)
+  // to a TObjectWithProps with virtual constructor
+  TObjectRWLock = class(TObjectWithProps)
   protected
     fSafe: TRWLock;
   public
@@ -632,7 +632,7 @@ type
   /// abstract high-level handling of (SynLZ-)compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
   // with proper binary persistence implementation
-  TSynPersistentStore = class(TSynPersistentRWLock)
+  TSynPersistentStore = class(TObjectRWLock)
   protected
     fName: RawUtf8;
     fReader: TFastReader;
@@ -2713,7 +2713,7 @@ type
   // - if fNoDuplicate flag is defined, an internal hash table will be
   // maintained to perform IndexOf() lookups in O(1) linear way
   // - not thread-safe by default, unless fThreadSafe is set to use the TRWLock
-  TRawUtf8List = class(TSynPersistentRWLock)
+  TRawUtf8List = class(TObjectRWLock)
   protected
     fCount: PtrInt;
     fValue: TRawUtf8DynArray;

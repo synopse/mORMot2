@@ -169,7 +169,7 @@ type
   // $ 1000 URI parametrized rewrites in 117us i.e. 8.1M/s, aver. 117ns
   // $ 1000 URI static execute in 91us i.e. 10.4M/s, aver. 91ns
   // $ 1000 URI parametrized execute in 162us i.e. 5.8M/s, aver. 162ns
-  TUriRouter = class(TSynPersistentRWLightLock)
+  TUriRouter = class(TObjectRWLightLock)
   protected
     fTree: TUriRouterTree;
     fTreeOptions: TRadixTreeOptions;

@@ -853,7 +853,7 @@ type
   // - will implement a simple and efficient public-key infrastructure (PKI),
   // based on JSON objects or even plain Base64 encoded JSON strings
   // - store certificates list and revoked serials (CRL)
-  TEccCertificateChain = class(TSynPersistentRWLightLock)
+  TEccCertificateChain = class(TObjectRWLightLock)
   protected
     fItems: TEccCertificateObjArray;
     fCrl: TEccCertificateRevocationDynArray;

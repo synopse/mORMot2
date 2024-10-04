@@ -858,7 +858,7 @@ type
   // to gather low-level CPU and RAM information for the given set of processes
   // - is able to keep an history of latest sample values
   // - use Current class function to access a process-wide instance
-  TSystemUse = class(TSynPersistentRWLightLock)
+  TSystemUse = class(TObjectRWLightLock)
   protected
     fProcess: TSystemUseProcessDynArray;
     fProcesses: TDynArray;

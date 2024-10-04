@@ -569,7 +569,7 @@ type
     procedure(Protocol: TWebSocketProtocol) of object;
 
   /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentRWLightLock)
+  TWebSocketProtocolList = class(TObjectRWLightLock)
   protected
     fProtocols: array of TWebSocketProtocol;
     fOnUpgraded: TOnWebSocketProtocolUpgraded;

@@ -906,7 +906,7 @@ type
   TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
 
   /// used e.g. by TRestServer to store a list of TServicesPublishedInterfaces
-  TServicesPublishedInterfacesList = class(TSynPersistentRWLightLock)
+  TServicesPublishedInterfacesList = class(TObjectRWLightLock)
   private
     fDynArray: TDynArray;
     fDynArrayTimeoutTix: TDynArray;

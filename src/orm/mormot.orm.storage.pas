@@ -1457,7 +1457,7 @@ type
   // - inherited class should override the NewStore virtual method, e.g.
   // TRestStorageMultiDB as defined in mormot.orm.sqlite3.pas for SQlite3 storage
   // - your custom class should override NewModel to provide the proper data model
-  TRestStorageMulti = class(TSynPersistentRWLightLock)
+  TRestStorageMulti = class(TObjectRWLightLock)
   protected
     fDatabaseIDBits: byte;
     fDatabaseIDMax: TRestStorageMultiDatabaseID;
