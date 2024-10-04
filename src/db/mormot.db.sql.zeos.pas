@@ -813,8 +813,9 @@ class function TSqlDBZeosConnectionProperties.URI(aServer: TSqlDBDefinition;
   aLibraryLocationAppendExePath: boolean): RawUtf8;
 const
   /// ZDBC provider names corresponding to mormot.db.sql recognized SQL engines
-  ZEOS_PROVIDER: array[TSqlDBDefinition] of RawUtf8 = ('', '', 'oracle:',
-    'mssql:', '', 'mysql:', 'sqlite:', 'firebird:', '', 'postgresql:', '', '','mariadb:');
+  ZEOS_PROVIDER: array[TSqlDBDefinition] of RawUtf8 = (
+    '', '', 'oracle:', 'mssql:', '', 'mysql:', 'sqlite:',
+    'firebird:', '', 'postgresql:', '', '','mariadb:');
 begin
   result := URI(ZEOS_PROVIDER[aServer], aServerName, aLibraryLocation,
     aLibraryLocationAppendExePath);

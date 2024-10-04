@@ -1835,11 +1835,38 @@ end;
 
 const
   OBT_TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
-    'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
-    'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'string', 'RawByteString');
+    'variant',        // obtVariant
+    '',               // obtRecord
+    'integer',        // obtInteger
+    'Int64',          // obtInt64
+    'boolean',        // obtBoolean
+    '',               // obtEnumerationOrSet
+    'single',         // obtSingle
+    'double',         // obtDouble
+    'TDate',          // obtDate
+    'TDateTime',      // obtDateTime
+    'TGuid',          // obtGuid
+    'RawUtf8',        // obtRawUtf8
+    'SpiUtf8',        // obtSpiUtf8
+    'string',         // obtString
+    'RawByteString'); // obtRawByteString
+
   OBT_DEFAULT: array[TOpenApiBuiltInType] of RawUtf8 = (
-    'null', '', '0', '0', 'false', '', '0', '0', '0', '0',
-    '', '''''', '''''', '''''', '''''');
+    'null',           // obtVariant
+    '',               // obtRecord
+    '0',              // obtInteger
+    '0',              // obtInt64
+    'false',          // obtBoolean
+    '',               // obtEnumerationOrSet
+    '0',              // obtSingle
+    '0',              // obtDouble
+    '0',              // obtDate
+    '0',              // obtDateTime
+    '',               // obtGuid
+    '''''',           // obtRawUtf8
+    '''''',           // obtSpiUtf8
+    '''''',           // obtString
+    '''''');          // obtRawByteString
 
 constructor TPascalType.CreateBuiltin(aParser: TOpenApiParser;
   aBuiltInType: TOpenApiBuiltInType; aSchema: POpenApiSchema; aIsArray: boolean);
