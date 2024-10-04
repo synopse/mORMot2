@@ -1471,7 +1471,20 @@ procedure CopyObject(aFrom, aTo: TObject); overload;
 // CopyObject() procedure to copy its values
 // - caller should use "CopyObject(...) as TDestClass" for safety
 // - see also TRttiMap for custom mapping between classes
-function CopyObject(aFrom: TObject): TObject; overload;
+function CopyObject(aFrom: TObject): pointer; overload;
+
+/// allocate and fill DestObjArray[] from SourceObjArray[] copies
+// - i.e. new TObject instances will be allocated and copied via CopyObject(),
+// whereas DestObjArray := copy(SourceObjArray) would only copy the pointers
+// - supports optional external integer counts, to use length() as capacity
+// - warning: SourceCount/DestCount should be 32-bit "integer" variable, not PtrInt
+procedure ObjArrayCopy(const SourceObjArray; var DestObjArray;
+  SourceCount: PInteger = nil; DestCount: PInteger = nil); overload;
+
+/// allocate and fill a T*ObjArray from SourceObjArray[] items
+// - warning: SourceCount should be a 32-bit "integer" variable, not a PtrInt
+function ObjArrayCopy(const SourceObjArray;
+  SourceCount: PInteger = nil): TPointerDynArray; overload;
 
 /// copy record properties into an object instance
 // - handle properties of the same exact type, searched by name
@@ -5501,7 +5514,39 @@ begin
     Dest.Assign(Source); // will do the copy RTL-style
 end;
 
-procedure CopyInternal(f, t: pointer; rf, rt: PRttiCustomProps);
+procedure CopyObject(aFrom, aTo: TObject);
+begin
+  if (aFrom <> nil) and
+     (aTo <> nil) then
+    Rtti.RegisterClass(PClass(aFrom)^).ClassCopyInstance(aFrom, aTo);
+end;
+
+function CopyObject(aFrom: TObject): pointer;
+begin
+  if aFrom = nil then
+    result := nil
+  else
+    result := Rtti.RegisterClass(aFrom).ClassCopyInstance(aFrom, nil);
+end;
+
+procedure ObjArrayCopy(const SourceObjArray; var DestObjArray;
+  SourceCount, DestCount: PInteger);
+var
+  s: TObjectDynArray absolute SourceObjArray;
+  d: TObjectDynArray absolute DestObjArray;
+  i: PtrInt;
+begin
+  for i := 0 to ObjArrayPrepareCopy(s, d, SourceCount, DestCount) - 1 do
+    d[i] := Rtti.RegisterClass(PClass(s[i])^).ClassCopyInstance(s[i], nil);
+end;
+
+function ObjArrayCopy(const SourceObjArray; SourceCount: PInteger): TPointerDynArray;
+begin
+  result := nil;
+  ObjArrayCopy(SourceObjArray, result, SourceCount);
+end;
+
+procedure CopyPropsInternal(f, t: pointer; rf, rt: PRttiCustomProps);
 var
   pf, pt: PRttiCustomProp;
   n: integer;
@@ -5519,52 +5564,13 @@ begin
   until n = 0;
 end;
 
-procedure CopyObject(aFrom, aTo: TObject);
-var
-  cf: TRttiCustom;
-begin
-  if (aFrom = nil) or
-     (aTo = nil) then
-    exit;
-  cf := Rtti.RegisterClass(PClass(aFrom)^);
-  if (cf.ValueRtlClass = vcCollection) and
-     (PClass(aFrom)^ = PClass(aTo)^)  then
-    // specific process of TCollection items
-    CopyCollection(TCollection(aFrom), TCollection(aTo))
-  else if (cf.ValueRtlClass = vcStrings) and
-          PClass(aTo)^.InheritsFrom(TStrings) then
-    // specific process of TStrings items using RTL-style copy
-    TStrings(aTo).Assign(TStrings(aFrom))
-  else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
-    // fast copy from RTTI properties of the common (or same) hierarchy
-    if Assigned(cf.CopyObject) then
-      cf.CopyObject(aTo, aFrom) // overriden e.g. for TOrm
-    else
-      cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
-  else
-    // no common inheritance -> lookup by property name (slower)
-    CopyInternal(pointer(aFrom), pointer(aTo),
-      @cf.Props, @Rtti.RegisterClass(PClass(aTo)^).Props);
-end;
-
-function CopyObject(aFrom: TObject): TObject;
-begin
-  if aFrom = nil then
-    result := nil
-  else
-  begin
-    result := Rtti.RegisterClass(aFrom).ClassNewInstance;
-    CopyObject(aFrom, result);
-  end;
-end;
-
 procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
 begin
   if (@aFrom <> nil) and
      (aFromType <> nil) and
      (aFromType^.Kind in rkRecordTypes) and
      (aTo <> nil) then
-    CopyInternal(@aFrom, aTo, @Rtti.RegisterType(aFromType).Props,
+    CopyPropsInternal(@aFrom, aTo, @Rtti.RegisterType(aFromType).Props,
       @Rtti.RegisterClass(PClass(aTo)^).Props);
 end;
 
@@ -5574,7 +5580,7 @@ begin
      (@aTo <> nil) and
      (aToType <> nil) and
      (aToType^.Kind in rkRecordTypes) then
-    CopyInternal(aFrom, @aTo, @Rtti.RegisterClass(PClass(aFrom)^).Props,
+    CopyPropsInternal(aFrom, @aTo, @Rtti.RegisterClass(PClass(aFrom)^).Props,
       @Rtti.RegisterType(aToType).Props);
 end;
 
