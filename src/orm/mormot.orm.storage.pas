@@ -5364,7 +5364,7 @@ begin
       if fShardBatch[i] <> nil then
         if fShards[i].BatchSend(fShardBatch[i]) <> HTTP_SUCCESS then
           InternalLog('InternalBatchStop(%): %.BatchSend failed for shard #%',
-            [fStoredClass, fShards[i].ClassType, i], sllWarning);
+            [fStoredClass, PClass(fShards[i])^, i], sllWarning);
   finally
     ObjArrayClear(fShardBatch);
     StorageUnLock;

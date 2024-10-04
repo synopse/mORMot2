@@ -776,7 +776,7 @@ function TRestHttpClientSocket.InternalRequest(const url, method: RawUtf8;
   var Header, Data, DataType: RawUtf8): Int64Rec;
 begin
   fLogFamily.Add.Log(sllTrace, 'InternalRequest % calling %(%).Request',
-    [method, fSocket.ClassType, pointer(fSocket)], self);
+    [method, PClass(fSocket)^, pointer(fSocket)], self);
   result.Lo := fSocket.Request(
     url, method, KeepAliveMS, Header, RawByteString(Data), DataType, false);
   result.Hi := fSocket.Http.ServerInternalState;

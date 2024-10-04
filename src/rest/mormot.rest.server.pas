@@ -3136,7 +3136,7 @@ begin
     if not valid then
     begin
       Error('Invalid input [%] - expected %', [variant(value),
-        ClassFieldNamesAllPropsAsText(SettingsStorage.ClassType, true)]);
+        ClassFieldNamesAllPropsAsText(PClass(SettingsStorage)^, true)]);
       exit;
     end;
   end;
@@ -6365,7 +6365,7 @@ begin
   fSessions.Safe.WriteLock;
   try
     for i := 0 to high(fSessionAuthentication) do
-      if fSessionAuthentication[i].ClassType = aMethod then
+      if PClass(fSessionAuthentication[i])^ = aMethod then
       begin
         // method already there -> return existing instance
         result := fSessionAuthentication[i];
@@ -6412,7 +6412,7 @@ begin
   fSessions.Safe.WriteLock;
   try
     for i := 0 to high(fSessionAuthentication) do
-      if fSessionAuthentication[i].ClassType = aMethod then
+      if PClass(fSessionAuthentication[i])^ = aMethod then
       begin
         ObjArrayDelete(fSessionAuthentication, i);
         fHandleAuthentication := (fSessionAuthentication <> nil);
@@ -7371,7 +7371,7 @@ begin
     result := nil
   else
     result := (ServiceContainer as TServiceContainerServer).AddImplementation(
-      TInterfacedClass(aSharedImplementation.ClassType), aInterfaces, sicShared,
+      TInterfacedClass(PClass(aSharedImplementation)^), aInterfaces, sicShared,
       aSharedImplementation, aContractExpected);
 end;
 
@@ -7521,7 +7521,7 @@ begin
   if Sender = nil then
     ERestException.RaiseUtf8('%.BeginCurrentThread(nil)', [self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ''%'' ThreadCount=%',
-    [Sender.ClassType, fModel.Root, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
+    [PClass(Sender)^, fModel.Root, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
     ERestException.RaiseUtf8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
@@ -7550,7 +7550,7 @@ begin
   if Sender = nil then
     ERestException.RaiseUtf8('%.EndCurrentThread(nil)', [self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ''%'' ThreadCount=%',
-    [Sender.ClassType, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
+    [PClass(Sender)^, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
     ERestException.RaiseUtf8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
@@ -7668,7 +7668,7 @@ begin
       on E: Exception do
         if (not Assigned(OnErrorUri)) or
            OnErrorUri(ctxt, E) then
-          if E.ClassType = EInterfaceFactory then
+          if PClass(E)^ = EInterfaceFactory then
             ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)
           else
             ctxt.Error(E, '', [], HTTP_SERVERERROR);

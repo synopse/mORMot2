@@ -4313,7 +4313,7 @@ begin
     call.Code := PPointer({%H-}call.Data)^
   else if TypeInfo^.Kind in [rkDynArray, rkInterface] then
     ERttiException.RaiseUtf8('TRttiProp.GetOrdProp(%) has no getter for %',
-      [Instance.ClassType, ToText(TypeInfo^.Kind)^])
+      [Instance, ToText(TypeInfo^.Kind)^])
   else if rpc = rpcMethod then
     call.Code := TGetProc(call)
   else if rpc = rpcIndexed then
@@ -5403,14 +5403,13 @@ begin
   end;
 end;
 
-
 procedure CopyCollection(Source, Dest: TCollection);
 var
   i: integer; // Items[] uses an integer
 begin
   if (Source = nil) or
      (Dest = nil) or
-     (Source.ClassType <> Dest.ClassType) then
+     (PClass(Source)^ <> PClass(Dest)^) then
     exit;
   Dest.BeginUpdate;
   try

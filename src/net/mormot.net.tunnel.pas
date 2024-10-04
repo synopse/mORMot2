@@ -750,7 +750,7 @@ var
 begin
   if (Sender <> nil) and
      (Sender.Protocol <> nil) and
-     (Sender.Protocol.ClassType = TTunnelRelayServerProtocol) then
+     (PClass(Sender.Protocol)^ = TTunnelRelayServerProtocol) then
   case request.opcode of
     // focBinary or focContinuation/focConnectionClose
     focBinary:

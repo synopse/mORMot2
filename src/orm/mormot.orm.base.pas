@@ -4302,7 +4302,7 @@ begin
   begin
     Source := Flattened(Source);
     Dest := DestInfo.Flattened(Dest);
-    if DestInfo.ClassType = ClassType then
+    if PClass(DestInfo)^ = PClass(self)^ then
       CopySameClassProp(Source, DestInfo, Dest) // fast overriden method
     else
       GenericCopy(Source, Dest, self, DestInfo);

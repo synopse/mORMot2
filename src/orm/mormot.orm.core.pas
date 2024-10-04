@@ -8599,7 +8599,7 @@ begin
                 if result = '' then
                    // no custom message -> show a default message
                   result := format(sValidationFailed,
-                    [GetCaptionFromClass(Validate.ClassType)]);
+                    [GetCaptionFromClass(PClass(Validate)^)]);
                 exit;
               end;
             end;

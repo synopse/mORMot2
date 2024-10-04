@@ -5273,7 +5273,7 @@ begin
       SendRespToClientFailed(nil); // error downloading from local peer
   except
     on E: Exception do
-      SendRespToClientFailed(E.ClassType);
+      SendRespToClientFailed(PClass(E)^);
   end;
 end;
 
@@ -6446,7 +6446,7 @@ begin
     ChildThreadCount := 256; // not worth adding
   SetLength(fClones, ChildThreadCount);
   for i := 0 to ChildThreadCount - 1 do
-    fClones[i] := THttpApiServerClass(Self.ClassType).CreateClone(self);
+    fClones[i] := THttpApiServerClass(PClass(self)^).CreateClone(self);
 end;
 
 function THttpApiServer.GetApiVersion: RawUtf8;

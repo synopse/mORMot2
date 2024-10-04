@@ -611,8 +611,8 @@ var
 
   procedure NotifyException(E: Exception);
   begin
-    log.Log(sllWarning, 'Execute % raised %', [sn, E.ClassType], self);
-    fService.SetState(ssFailed, '% [%]', [E.ClassType, E.Message]);
+    log.Log(sllWarning, 'Execute % raised %', [sn, PClass(E)^], self);
+    fService.SetState(ssFailed, '% [%]', [E, E.Message]);
   end;
 
 begin
@@ -894,8 +894,8 @@ begin
     begin
       // any exception should continue the stopping
       log.Log(sllWarning, 'StopServices: DoStop(%) failed as %',
-        [Name, E.ClassType], self);
-      FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
+        [Name, PClass(E)^], self);
+      FormatString(' raised %: %', [E, E.Message], errmsg);
       result := false;
     end;
   end
@@ -909,8 +909,8 @@ begin
       begin
         // any exception should continue the stopping
         log.Log(sllWarning, 'StopServices: DoStop(%,%) failed as %',
-          [Name, fStop[a], E.ClassType], self);
-        FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
+          [Name, fStop[a], PClass(E)^], self);
+        FormatString(' raised %: %', [E, E.Message], errmsg);
         result := false;
       end;
     end;
@@ -996,7 +996,7 @@ begin
       DoStart(log);
     except
       on E: Exception do
-        log.Log(sllDebug, 'OnWatchFailed: DoStart raised %', [E.ClassType], self);
+        log.Log(sllDebug, 'OnWatchFailed: DoStart raised %', [PClass(E)^], self);
     end;
   end;
 end;
@@ -1530,7 +1530,7 @@ begin
             on E: Exception do
             begin
               Log.Log(sllWarning, 'Start: % when redirecting output to %',
-                [E.ClassType, lf], Sender);
+                [PClass(E)^, lf], Sender);
               ls := nil;
             end;
           end;
@@ -2005,7 +2005,7 @@ begin
       except
         on E: Exception do // any exception should continue the watching
           one.Log(sllWarning, 'WatchEverySecond: DoWatch(%,%) raised %',
-            [s.Name, s.fWatch[a], E.ClassType], self);
+            [s.Name, s.fWatch[a], PClass(E)^], self);
       end;
     tix := GetTickCount64; // may have changed during DoWatch() progress
     s.fNextWatch := tix + s.WatchDelaySec * MilliSecsPerSec;

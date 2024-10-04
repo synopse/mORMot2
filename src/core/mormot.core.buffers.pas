@@ -4496,7 +4496,7 @@ procedure TBufferWriter.CancelAll;
 begin
   fTotalFlushed := 0;
   fPos := 0;
-  if fStream.ClassType = TRawByteStringStream then
+  if PClass(fStream)^ = TRawByteStringStream then
     TRawByteStringStream(fStream).Size := 0
   else
     fStream.Seek(0, soBeginning);

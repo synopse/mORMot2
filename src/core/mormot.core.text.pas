@@ -9232,7 +9232,7 @@ end;
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
   ConsoleWrite(CRLF + 'Fatal exception ', ccLightRed, true);
-  ConsoleWrite('%', [E.ClassType], ccWhite, true);
+  ConsoleWrite('%', [E], ccWhite, true);
   ConsoleWrite(' raised with message ', ccLightRed);
   ConsoleWrite('  %', [E.Message], ccLightMagenta);
   if not WaitForEnterKey then
@@ -9532,7 +9532,7 @@ begin
       end;
     end;
     WR.AddDirect(' ');
-    if WR.ClassType = TTextWriter then
+    if PClass(WR)^ = TTextWriter then
       {$ifdef UNICODE}
       WR.AddOnSameLineW(pointer(Context.EInstance.Message), 0)
       {$else}

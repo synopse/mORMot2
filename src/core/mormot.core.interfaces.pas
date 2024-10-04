@@ -3384,7 +3384,7 @@ begin
   except
     on E: Exception do
     begin
-      C := E.ClassType;
+      C := PClass(E)^;
       if C.InheritsFrom(EInterfaceFactory) or
          (C = EAccessViolation) or
          (C = EInvalidPointer) then
@@ -5144,7 +5144,7 @@ var
   en: PInterfaceResolverListEntry;
   n: PtrInt;
 begin
-  e := PrepareAddAndWriteLock(aInterface, aImplementation.ClassType);
+  e := PrepareAddAndWriteLock(aInterface, PClass(aImplementation)^);
   try
     // here we are protected within a fSafe.WriteLock
     n := length(fEntry);

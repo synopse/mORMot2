@@ -1306,7 +1306,7 @@ begin
   if fServer <> nil then
     for s := 0 to fServer.AuthenticationSchemesCount - 1 do
     begin
-      authClass := fServer.AuthenticationSchemes[s].ClassType;
+      authClass := PClass(fServer.AuthenticationSchemes[s])^;
       if (authClass = TRestServerAuthenticationDefault) or
          (authClass = TRestServerAuthenticationNone) then
       begin

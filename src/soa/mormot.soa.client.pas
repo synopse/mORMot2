@@ -907,7 +907,7 @@ begin
   if aRest = nil then
     c := nil
   else
-    c := aRest.ClassType;
+    c := PClass(aRest)^;
   fClient.InternalLog('%.StoreNotifications(%,%) for I%',
     [ClassType, c, aLogClass, fInterfaceUri]);
 end;
@@ -926,7 +926,7 @@ begin
        (aLogClass = fSendNotificationsLogClass) then
     begin
       fClient.InternalLog('%.SendNotifications(%,%) I% twice -> ignored',
-        [ClassType, aRest.ClassType, aLogClass, fInterfaceUri], sllInfo);
+        [ClassType, PClass(aRest)^, aLogClass, fInterfaceUri], sllInfo);
       exit;
     end
     else

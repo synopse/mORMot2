@@ -1933,7 +1933,7 @@ begin
   if fCallBackUnRegisterNeeded then
   begin
     fLogClass.Add.Log(sllDebug, '%.Destroy -> Services.CallbackUnRegister(%)',
-      [fList.ClassType, fFactory.InterfaceName], self);
+      [PClass(fList)^, fFactory.InterfaceName], self);
     fRest.Services.CallBackUnRegister(IInvokable(pointer(@fVTable)));
   end;
 end;
@@ -3179,7 +3179,7 @@ begin
         except
           on E: Exception do
             fRest.InternalLog('% during AsyncBatchExecute %',
-              [E.ClassType, table], sllWarning);
+              [PClass(E)^, table], sllWarning);
         end;
     end;
   finally
