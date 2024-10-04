@@ -4680,7 +4680,7 @@ type
   /// a thread-safe class with a virtual constructor and properties persistence
   // - publishes a TSynLocker instance, and its managed critical section
   // - consider a TLightLock field as lighter options, or a R/W lock with
-  // TObjectRWLock and TObjectRWLightLock classes
+  // TObjectRWLock and TObjectRWLightLock classes, or even a TObjectOSLightLock
   // - TSynPersistentLock would add paranoid JSON persistence lock
   TSynLocked = class(TObjectWithProps)
   protected
@@ -4692,6 +4692,27 @@ type
     destructor Destroy; override;
     /// access to the associated instance critical section
     property Safe: PSynLocker
+      read fSafe;
+    /// could be used as a short-cut to Safe^.Lock
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe^.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes the fastest available non-reentrant Operating System lock
+  TObjectOSLightLock = class(TObjectWithProps)
+  protected
+    fSafe: TOSLightLock;
+  public
+    /// initialize the instance, and its associated OS lock
+    constructor Create; override;
+    /// finalize the instance, and its associated OS lock
+    destructor Destroy; override;
+    /// access to the associated non-reentrant Operating System lock instance
+    property Safe: TOSLightLock
       read fSafe;
     /// could be used as a short-cut to Safe^.Lock
     procedure Lock;
@@ -10036,6 +10057,31 @@ procedure TSynLocked.Unlock;
 begin
   if self <> nil then
     fSafe^.UnLock;
+end;
+
+
+{ TObjectOSLightLock }
+
+constructor TObjectOSLightLock.Create;
+begin
+  fSafe.Init;
+end;
+
+destructor TObjectOSLightLock.Destroy;
+begin
+  fSafe.Done;
+end;
+
+procedure TObjectOSLightLock.Lock;
+begin
+  if self <> nil then
+    fSafe.Lock;
+end;
+
+procedure TObjectOSLightLock.Unlock;
+begin
+  if self <> nil then
+    fSafe.UnLock;
 end;
 
 
