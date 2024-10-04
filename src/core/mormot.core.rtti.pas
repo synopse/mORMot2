@@ -2463,20 +2463,22 @@ type
     eeCurly,
     eeEndKeyWord);
 
-  /// the recognized raw RTL classes as identified in TRttiCustom.ValueRtlClass
+  /// some basic classes as recognized in TRttiCustom.ValueRtlClass
   TRttiValueClass = (
     vcNone,
-    vcCollection,
+    vcPersistent,
     vcStrings,
-    vcObjectList,
     vcList,
-    vcSynList,
-    vcRawUtf8List,
-    vcESynException,
+    vcObjectList,
     vcException,
+    vcCollection,
+    vcESynException,
+    vcObjectWithCustomCreate,
+    vcSynList,
+    vcSynObjectList,
+    vcRawUtf8List,
     vcObjectWithID,
     vcSynPersistent);
-
 
   /// allow to customize the process of a given TypeInfo/PRttiInfo
   // - a global list of TRttiCustom instances mapping TypeInfo() is maintained
@@ -2516,7 +2518,7 @@ type
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
     fCopyObject: TRttiClassCopier;
-    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo); virtual;
+    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo);
     // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
     function SetBinaryType(BinSize: integer): TRttiCustom;
@@ -3200,6 +3202,13 @@ function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 procedure TObjectWithCustomCreateRttiCustomSetParser(
   O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
 procedure TSynPersistentCopyObject(Dest, Source: TObject);
+
+var
+  /// let TRttiCustom to recognize the TClass of each TRttiValueClass
+  // - some class of these global variable are set in mormot.core.json
+  CLASS_RTTI: array[TRttiValueClass] of TClass = (
+    nil, TPersistent, TStrings, TList, TObjectList, Exception, TCollection, nil,
+    ESynException, TObjectWithCustomCreate, nil, nil, TObjectWithID, TSynPersistent);
 
 
 implementation
@@ -8379,10 +8388,11 @@ end;
 //  internal hash table instead, for a slower but more conservative approach]
 
 procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
-{$ifndef NOPATCHVMT}
 var
+  i: PtrInt;
+  {$ifndef NOPATCHVMT}
   vmt: PPointer;
-{$endif NOPATCHVMT}
+  {$endif NOPATCHVMT}
 begin
   fValueClass := aClass;
   // we need to register this class ASAP into RTTI list to avoid infinite calls
@@ -8397,23 +8407,18 @@ begin
     ERttiException.RaiseUtf8(
       '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
   {$endif NOPATCHVMT}
-  // identify the most known class types - see also overriden mormot.core.json
-  if aClass.InheritsFrom(TCollection) then
-    fValueRtlClass := vcCollection
-  else if aClass.InheritsFrom(TStrings) then
-    fValueRtlClass := vcStrings
-  else if aClass.InheritsFrom(TObjectList) then
-    fValueRtlClass := vcObjectList
-  else if aClass.InheritsFrom(TList) then
-    fValueRtlClass := vcList
-  else if aClass.InheritsFrom(ESynException) then
-    fValueRtlClass := vcESynException
-  else if aClass.InheritsFrom(Exception) then
-    fValueRtlClass := vcException
-  else if aClass.InheritsFrom(TObjectWithID) then
-    fValueRtlClass := vcObjectWithID
-  else if aClass.InheritsFrom(TSynPersistent) then
-    fValueRtlClass := vcSynPersistent;
+  // recognize the main classes into ValueRtlClass
+  while aClass <> TObject do
+  begin
+    i := PtrUIntScanIndex(
+      @CLASS_RTTI[succ(vcNone)], length(CLASS_RTTI) - 1, PtrUInt(aClass));
+    if i >= 0 then
+    begin
+      fValueRtlClass := TRttiValueClass(i + 1);
+      break;
+    end;
+    aClass := aClass.ClassParent;
+  end;
   // register the published properties of this class using RTTI
   fProps.InternalAddFromClass(aInfo, {includeparents=}true);
   if fValueRtlClass = vcException then
@@ -8795,10 +8800,10 @@ begin // self is Rtti.RegisterClass(PClass(aFrom)^)
      (aFrom = nil) then
     exit;
   if result = nil then
-    result := fNewInstance(self);
+    result := fNewInstance(self); // allocate a new instance
   if (fValueRtlClass = vcCollection) and
      (PClass(aFrom)^ = PClass(result)^)  then
-    // specific process of TCollection items
+    // specific process of TCollection: classes should be exact, not inherit
     CopyCollection(TCollection(aFrom), result)
   else if PClass(result)^.InheritsFrom(PClass(aFrom)^) then
     // fast copy from RTTI properties of the common (or same) hierarchy

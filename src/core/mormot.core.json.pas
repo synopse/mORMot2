@@ -1882,7 +1882,7 @@ type
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; override;
-    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo); override;
+    procedure SetParserClassType;
   public
     /// simple wrapper around TRttiJsonSave(fJsonSave)
     procedure RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
@@ -10339,6 +10339,11 @@ begin
   result := TCollectionItemClass(Rtti.ValueClass).Create(nil);
 end;
 
+function _New_Strings(Rtti: TRttiCustom): pointer;
+begin
+  result := TStringsClass(Rtti.ValueClass).Create;
+end;
+
 function _New_List(Rtti: TRttiCustom): pointer;
 begin
   result := TListClass(Rtti.ValueClass).Create;
@@ -10380,11 +10385,109 @@ begin
   result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
 end;
 
+procedure TPersistentCopyObject(Dest, Source: TObject);
+begin
+  TPersistent(Dest).Assign(TPersistent(Source)); // works e.g. for TStrings
+end;
+
+procedure TRttiJson.SetParserClassType;
+var
+  c: TClass;
+  n: integer;
+begin
+  // prepare ClassNewInstance() to call the expected (virtual) constructor
+  fNewInstance := @_New_Object; // call non-virtual TObject.Create
+  c := fValueClass;
+  repeat // recognized some RTL classes - any branch taken will break below
+    if c = TObjectWithProps then
+      fNewInstance := @_New_ObjectWithProps // virtual TObjectWithProps.Create
+    else if c = TObjectWithCustomCreate then
+    begin
+      // allow any kind of customization for TObjectWithCustomCreate children
+      n := Props.Count;
+      TObjectWithCustomCreateRttiCustomSetParser(pointer(fValueClass), self);
+      if n <> Props.Count then
+        fFlags := fFlags + fProps.AdjustAfterAdded; // may have added a prop
+      fNewInstance := @_New_ObjectWithProps; // virtual TObjectWithProps.Create
+    end
+    else if c = TInterfacedObjectWithCustomCreate then
+      fNewInstance := @_New_InterfacedObjectWithCustomCreate // virtual Create
+    else if c = TPersistentWithCustomCreate then
+      fNewInstance := @_New_PersistentWithCustomCreate // virtual Create
+    else if c = TComponent then
+      fNewInstance := @_New_Component // call TComponent.Create(nil)
+    else if c = TInterfacedCollection then
+    begin
+      fNewInstance := @_New_InterfacedCollection; // virtual Create
+      if fValueClass <> c then // don't call abstract GetClass method
+      begin
+        fCollectionItem := TInterfacedCollectionClass(fValueClass).GetClass;
+        fCollectionItemRtti := Rtti.RegisterClass(fCollectionItem);
+      end;
+    end
+    else if c = TCollectionItem then
+      fNewInstance := @_New_CollectionItem // call TCollectionItem.Create(nil)
+    else if c <> TObject then
+    begin
+      c := c.ClassParent; // continue with the parent class
+      continue;
+    end;
+    break; // we reached the root supported class
+  until false;
+  // customize the process of some known classes
+  fJsonSave := @_JS_RttiCustom;
+  fJsonLoad := @_JL_RttiCustom;
+  case fValueRtlClass of
+    vcPersistent:
+      if fProps.CountNonVoid = 0 then // use TPersistent.Assign() if no props
+        fCopyObject := @TPersistentCopyObject;
+    vcStrings:
+      begin
+        fNewInstance := @_New_Strings; // call non-virtual TStrings.Create
+        fJsonSave := @_JS_TStrings;
+        fJsonLoad := @_JL_TStrings;
+      end;
+    vcList:
+      begin
+        fNewInstance := @_New_List; // call non-virtual TList.Create
+        fJsonSave := @_JS_TList;
+      end;
+    vcObjectList:
+      begin
+        fNewInstance := @_New_ObjectList; // call non-virtual TObjectList.Create
+        fJsonSave := @_JS_TObjectList;
+        fJsonLoad := @_JL_TObjectList;
+      end;
+    vcCollection:
+      begin
+        if @fNewInstance = @_New_Object then
+          fNewInstance := @_New_Collection; // no TInterfacedCollection above
+        fJsonSave := @_JS_TCollection;
+        fJsonLoad := @_JL_TCollection;
+      end;
+    vcSynList:
+      fJsonSave := @_JS_TSynList;
+    vcSynObjectList:
+      begin
+        fNewInstance := @_New_SynObjectList; // call Create({ownobjects=}true)
+        fJsonSave := @_JS_TSynObjectList;
+        fJsonLoad := @_JL_TSynObjectList;
+      end;
+    vcRawUtf8List:
+      begin
+        fJsonSave := @_JS_TRawUtf8List;
+        fJsonLoad := @_JL_TRawUtf8List;
+      end;
+    vcObjectWithID: // also accepts "RowID" field in JSON input
+      fJsonLoad := @_JL_RttiObjectWithID;
+    vcSynPersistent:
+      if fProps.CountNonVoid = 0 then // TSynPersistent.AssignTo() if no props
+        fCopyObject := @TSynPersistentCopyObject;
+  end;
+end;
+
 function TRttiJson.SetParserType(aParser: TRttiParserType;
   aParserComplex: TRttiParserComplexType): TRttiCustom;
-var
-  C: TClass;
-  n: integer;
 begin
   // 1. set TRttiCustom properties, e.g. Name and Flags from Props[]
   inherited SetParserType(aParser, aParserComplex);
@@ -10437,102 +10540,6 @@ begin
     fCompare[false] := @_BC_Default;
   end;
   // 3. set JSON serialization depending on the actual type
-  if aParser = ptClass then
-  begin
-    // default JSON serialization of published props
-    fJsonSave := @_JS_RttiCustom;
-    fJsonLoad := @_JL_RttiCustom;
-    // prepare efficient ClassNewInstance() and recognize most parents
-    C := fValueClass;
-    repeat
-      if C = TObjectList then // any branch taken will break below
-      begin
-        fNewInstance := @_New_ObjectList;
-        fJsonSave := @_JS_TObjectList;
-        fJsonLoad := @_JL_TObjectList;
-      end
-      else if C = TInterfacedObjectWithCustomCreate then
-        fNewInstance := @_New_InterfacedObjectWithCustomCreate
-      else if C = TPersistentWithCustomCreate then
-        fNewInstance := @_New_PersistentWithCustomCreate
-      else if C = TObjectWithProps then
-        // e.g. TSynLocked
-        fNewInstance := @_New_ObjectWithProps
-      else if C = TObjectWithCustomCreate then
-      begin
-        // e.g. TSynPersistent, TOrm or TObjectWithID
-        fNewInstance := @_New_ObjectWithProps; // inherit from TObjectWithProps
-        // allow any kind of customization for TObjectWithCustomCreate children
-        n := Props.Count;
-        TObjectWithCustomCreateRttiCustomSetParser(
-          TObjectWithCustomCreateClass(fValueClass), self);
-        if n <> Props.Count then
-          fFlags := fFlags + fProps.AdjustAfterAdded; // added a prop
-      end
-      else if C = TSynObjectList then
-      begin
-        fNewInstance := @_New_SynObjectList;
-        fJsonSave := @_JS_TSynObjectList;
-        fJsonLoad := @_JL_TSynObjectList;
-      end
-      else if C = TComponent then
-        fNewInstance := @_New_Component
-      else if C = TInterfacedCollection then
-      begin
-        if fValueClass <> C then
-        begin
-          fCollectionItem := TInterfacedCollectionClass(fValueClass).GetClass;
-          fCollectionItemRtti := Rtti.RegisterClass(fCollectionItem);
-        end;
-        fNewInstance := @_New_InterfacedCollection;
-        fJsonSave := @_JS_TCollection;
-        fJsonLoad := @_JL_TCollection;
-      end
-      else if C = TCollection then
-      begin
-        fNewInstance := @_New_Collection;
-        fJsonSave := @_JS_TCollection;
-        fJsonLoad := @_JL_TCollection;
-      end
-      else if C = TCollectionItem then
-        fNewInstance := @_New_CollectionItem
-      else if C = TList then
-        fNewInstance := @_New_List
-      else if C = TObject then
-        fNewInstance := @_New_Object // fallback to plain TObject.Create
-      else
-      begin
-        // customize JSON serialization
-        if C = TSynList then
-          fJsonSave := @_JS_TSynList
-        else if C = TObjectWithID then
-          fJsonLoad := @_JL_RttiObjectWithID; // also accepts "RowID" field
-        C := C.ClassParent; // continue with the parent class
-        continue;
-      end;
-      break; // we reached the root supported class
-    until false;
-    case fValueRtlClass of
-      vcStrings:
-        begin
-          fJsonSave := @_JS_TStrings;
-          fJsonLoad := @_JL_TStrings;
-        end;
-      vcList:
-        fJsonSave := @_JS_TList;
-      vcRawUtf8List:
-        begin
-          fJsonSave := @_JS_TRawUtf8List;
-          fJsonLoad := @_JL_TRawUtf8List;
-        end;
-    end;
-  end
-  else if rcfBinary in Flags then
-  begin
-    fJsonSave := @_JS_Binary;
-    fJsonLoad := @_JL_Binary;
-  end
-  else
   case Kind of
     rkChar:
       begin
@@ -10546,7 +10553,14 @@ begin
         fJsonLoad := @_JL_WideChar;
         include(fFlags, rcfJsonString);
       end;
-  else
+    rkClass:
+      SetParserClassType; // classes have their dedicated setup method
+  else if rcfBinary in Flags then
+    begin
+      fJsonSave := @_JS_Binary;
+      fJsonLoad := @_JL_Binary;
+    end
+    else
     begin
       // default well-known serialization
       fJsonSave := PTC_JSONSAVE[aParserComplex];
@@ -10568,15 +10582,6 @@ begin
   if Assigned(fJsonReader.Code) then
     fJsonLoad := @_JL_RttiCustom;
   result := self;
-end;
-
-procedure TRttiJson.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
-begin
-  inherited SetValueClass(aClass, aInfo);
-  if aClass.InheritsFrom(TSynList) then
-    fValueRtlClass := vcSynList
-  else if aClass.InheritsFrom(TRawUtf8List) then
-    fValueRtlClass := vcRawUtf8List;
 end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;
@@ -12153,6 +12158,9 @@ begin
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   // now we can register some local type alias to be found by name or ASAP
+  CLASS_RTTI[vcSynList] := TSynList;
+  CLASS_RTTI[vcSynObjectList] := TSynObjectList;
+  CLASS_RTTI[vcRawUtf8List] := TRawUtf8List;
   Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt),
     TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
   // prepare some JSON wrappers
