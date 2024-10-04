@@ -89,7 +89,7 @@ type
   /// abstract parent class implementing a ThreadSafe (Java)Script engine
   // - use TThreadSafeManager.ThreadSafeEngine to retrieve the Engine instance
   // corresponding to the current thread, for thread-safety
-  TThreadSafeEngine = class(TSynPersistent)
+  TThreadSafeEngine = class(TObjectWithProps)
   protected
     fThreadID: TThreadID;
     fRuntime: TScriptRuntime;
@@ -205,7 +205,7 @@ type
   /// abstract parent class mananing a list of a per-Thread (Java)Script engines
   // - one TThreadSafeEngine will be maintained per thread
   // - never use this abstract class, but inherited implementations
-  TThreadSafeManager = class(TSynPersistent)
+  TThreadSafeManager = class(TObjectWithProps)
   protected
     fContentVersion: cardinal;
     fOnNewEngine: TEngineEvent;

@@ -846,7 +846,7 @@ type
 { ************ TAuthSession for In-Memory User Sessions }
 
   /// used for efficient TAuthSession.IDCardinal comparison
-  TAuthSessionParent = class(TSynPersistent)
+  TAuthSessionParent = class(TObjectWithProps)
   protected
     fID: cardinal;
   end;
@@ -1517,7 +1517,7 @@ type
   TRestRouterTree = array[mGET .. high(TUriMethod)] of TRadixTreeParams;
 
   /// efficient server-side URI routing for TRestServer
-  TRestRouter = class(TSynPersistent)
+  TRestRouter = class(TObjectWithProps)
   protected
     fTree: TRestRouterTree;
     fOwner: TRestServer;

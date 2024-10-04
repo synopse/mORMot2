@@ -944,7 +944,7 @@ type
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
   // peers list (with a per-minute resolution)
   // - the DoRotate method should be called every second
-  THttpAcceptBan = class(TSynPersistent)
+  THttpAcceptBan = class(TObjectWithProps)
   protected
     fSafe: TOSLightLock; // almost never on contention, no R/W needed
     fCount, fLastSec: integer;
@@ -1497,7 +1497,7 @@ type
   TWebServerMimeTypeDynArray = array of TWebServerMimeType;
 
   /// define the security parameters common to all Web Servers
-  TWebServerGlobal = class(TSynPersistent)
+  TWebServerGlobal = class(TObjectWithProps)
   protected
     fMimeType: TWebServerMimeTypeDynArray;
     fMimeTypeCount: integer;
@@ -1547,7 +1547,7 @@ type
   // - can merge several THttpAfterResponse instances via the OnContinue property
   // - OnIdle() should be called every few seconds for background process
   // - Append() match TOnHttpServerAfterResponse as real-time source of data
-  THttpAfterResponse = class(TSynPersistent)
+  THttpAfterResponse = class(TObjectWithProps)
   protected
     fSafe: TOSLightLock;
     fOnContinue: THttpAfterResponse;
@@ -1738,7 +1738,7 @@ type
 
   /// settings class as used by THttpLogger
   // - defined as a sub-class for easy definition in a main settings class
-  THttpLoggerSettings = class(TSynPersistent)
+  THttpLoggerSettings = class(TObjectWithProps)
   protected
     fFormat: RawUtf8;
     fDestFolder, fDestMainFile, fDestErrorFile: TFileName;
@@ -2162,7 +2162,7 @@ type
 
   /// abstract parent class used to persist THttpAnalyzer information into files
   // - with optional output file rotation/compression (disabled by default)
-  THttpAnalyzerPersistAbstract = class(TSynPersistent)
+  THttpAnalyzerPersistAbstract = class(TObjectWithProps)
   protected
     fSafe: TOSLightLock;
     fRotate: THttpRotater;
@@ -2268,7 +2268,7 @@ type
   // - Find() method allows to quickly retrieve any range of information for
   // a given time period and metric type
   // - supports up to 10,485,760 metrics per instance (see HTTPMETRICS_MAXCOUNT)
-  THttpMetrics = class(TSynPersistent)
+  THttpMetrics = class(TObjectWithProps)
   protected
     fSafe: TLightLock;
     fCount: integer;

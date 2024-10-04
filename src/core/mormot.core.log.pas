@@ -1445,7 +1445,7 @@ type
   /// store simple log-related settings
   // - see also TDDDLogSettings in dddInfraSettings.pas and TSynDaemonSettings
   // in mORMotService.pas, which may be more integrated
-  TSynLogSettings = class(TSynPersistent)
+  TSynLogSettings = class(TObjectWithProps)
   protected
     fLevels: TSynLogLevels;
     fDestinationPath: TFileName;

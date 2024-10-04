@@ -25,6 +25,8 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.datetime,
+  mormot.core.rtti,
   mormot.core.perf,
   mormot.core.log;
 
@@ -78,7 +80,7 @@ type
   // if no identifier was defined
   // - sample code about how to use this test framework is available in
   // the "Sample\07 - SynTest" folder
-  TSynTest = class(TSynPersistent)
+  TSynTest = class(TObjectWithProps)
   protected
     fTests: array of TSynTestMethodInfo;
     fIdent: string;
@@ -529,10 +531,6 @@ var
 
 
 implementation
-
-uses
-  mormot.core.rtti,
-  mormot.core.datetime;
 
 
 { ************ Unit-Testing classes and functions }

@@ -1719,7 +1719,7 @@ type
   /// handles cached HTTP connection to a remote server
   // - use in-memory cached content when HTTP_NOTMODIFIED (304) is returned
   // for an already known ETAG header value
-  THttpRequestCached = class(TSynPersistent)
+  THttpRequestCached = class(TObjectWithProps)
   protected
     fUri: TUri;
     fClient: TSimpleHttpClient;

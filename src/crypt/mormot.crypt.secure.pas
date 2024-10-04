@@ -405,7 +405,7 @@ type
   // - identifiers may be obfuscated as hexadecimal text, using both encryption
   // and digital signature
   // - all its methods are thread-safe, even during obfuscation processing
-  TSynUniqueIdentifierGenerator = class(TSynPersistent)
+  TSynUniqueIdentifierGenerator = class(TObjectWithProps)
   protected
     fSafe: TLightLock;
     fUnixCreateTime: cardinal;
@@ -1398,7 +1398,7 @@ type
   // store some engine-specific context ahead of time, for faster process
   // - inherited classes would dedicated New() factory methods; this parent
   // features the internal registration feature of the known algorithms
-  TCryptAlgo = class(TSynPersistent)
+  TCryptAlgo = class(TObjectWithProps)
   protected
     fName: RawUtf8;
     // case-insensitive quick lookup of the algorithms into a TCryptAlgo instance
@@ -2540,7 +2540,7 @@ type
   end;
 
   /// abstract parent of TCryptCertList and TCryptCertCache storage classes
-  TCryptCertAbstractList = class(TSynPersistent)
+  TCryptCertAbstractList = class(TObjectWithProps)
   protected
     fList: TSynDictionary; // thread-safe RawByteString(SKID/DER)/ICryptCert
     fCryptCertClass: TCryptCertClass;

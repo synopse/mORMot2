@@ -2410,7 +2410,7 @@ type
   // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
   // due a giant lock introduced to manage property name fixup resolution
   // (which we won't use outside the UI) - this class is definitively faster
-  TSynAutoCreateFields = class(TSynPersistent)
+  TSynAutoCreateFields = class(TObjectWithProps)
   public
     /// this overriden constructor will instantiate all its nested
     // class or T*ObjArray published properties
@@ -10289,7 +10289,7 @@ end;
 
 { ********** Custom JSON Serialization }
 
-{ TRttiJson }
+// class instance factories, calling the proper virtual constructor
 
 function _New_ObjectList(Rtti: TRttiCustom): pointer;
 begin
@@ -10348,6 +10348,8 @@ function _New_Object(Rtti: TRttiCustom): pointer;
 begin
   result := Rtti.ValueClass.Create; // non-virtual TObject.Create constructor
 end;
+
+{ TRttiJson }
 
 function _BC_RawByteString(A, B: PPUtf8Char; Info: PRttiInfo;
   out Compared: integer): PtrInt;

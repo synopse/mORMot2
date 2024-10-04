@@ -226,7 +226,7 @@ type
   // proper URI registration with administrator rights
   // - for a true AJAX server, see AccessControlAllowOrigin property and
   // consider TRestServer.NoAjaxJson := false for non-extended JSON transmission
-  TRestHttpServer = class(TSynPersistent)
+  TRestHttpServer = class(TObjectWithProps)
   protected
     fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;

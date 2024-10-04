@@ -1879,7 +1879,7 @@ end;
 
 type
   /// a class implementing ExecuteFromCommandLine()
-  TServiceClientCommandLine = class(TSynPersistent)
+  TServiceClientCommandLine = class(TObjectWithProps)
   protected
     fExe: RawUtf8;
     fOptions: TServiceClientCommandLineOptions;

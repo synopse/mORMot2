@@ -183,7 +183,7 @@ type
   // - could be used for safe data signing, and authentication
   // - in fact, Base64 published property is enough to persist this instance:
   // but consider also ToBase64/FromBase64/LoadFromStream/SaveToStream methods
-  TEccCertificate = class(TSynPersistent)
+  TEccCertificate = class(TObjectWithProps)
   protected
     fContent: TEccCertificateContent;
     fStoreOnlyPublicKey: boolean;
@@ -690,7 +690,7 @@ type
   end;
 
   /// a ECDSA secp256r1 digital signature of some content, signed by an authority
-  TEccSignatureCertified = class(TSynPersistent)
+  TEccSignatureCertified = class(TObjectWithProps)
   protected
     fCertified: TEccSignatureCertifiedContent;
     function GetAuthorityIssuer: RawUtf8;
