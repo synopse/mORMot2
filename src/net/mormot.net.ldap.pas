@@ -900,21 +900,23 @@ type
     roRawAccountType);
 
   /// store a named LDAP attribute with the list of its values
-  TLdapAttribute = class
-  private
+  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  TLdapAttribute = class(TSynPersistent)
+  protected
     fList: TRawByteStringDynArray;
     fAttributeName: RawUtf8;
     fCount: integer;
     fKnownType: TLdapAttributeType;
     fKnownTypeStorage: TLdapAttributeTypeStorage;
     fObjectSidIsDomain: boolean;
+    procedure AssignTo(Dest: TSynPersistent); override;
     procedure SetVariantOne(var v: TVarData; const s: RawUtf8;
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
     procedure SetVariantArray(var v: TDocVariantData;
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
   public
     /// initialize the attribute(s) storage
-    constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType);
+    constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType); overload;
     /// finalize the attribute(s) storage
     destructor Destroy; override;
     /// clear all the internal fields
@@ -984,13 +986,15 @@ type
   /// list one or several TLdapAttribute
   // - will use a global TRawUtf8Interning as hashed list of names to minimize
   // memory allocation, and makes efficient lookup
-  TLdapAttributeList = class(TObjectWithProps)
-  private
+  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  TLdapAttributeList = class(TSynPersistent)
+  protected
     fItems: TLdapAttributeDynArray;
     fCount: integer;
     fLastFound: integer;
     fKnownTypes: TLdapAttributeTypes;
     fIndexTypes: array[TLdapAttributeType] of byte; // index in fItems[] + 1
+    procedure AssignTo(Dest: TSynPersistent); override;
     function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
     procedure SetAttr(AttributeType: TLdapAttributeType; const Value: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
@@ -1154,15 +1158,17 @@ function Modifier(Op: TLdapModifyOp;
 
 type
   /// store one LDAP result, i.e. one object name and associated attributes
-  TLdapResult = class
-  private
+  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  TLdapResult = class(TSynPersistent)
+  protected
     fObjectName, fCanonicalName: RawUtf8;
     fAttributes: TLdapAttributeList;
+    procedure AssignTo(Dest: TSynPersistent); override;
     procedure SetObjectName(const Value: RawUtf8);
     function GetAttr(AttributeType: TLdapAttributeType): RawUtf8;
   public
     /// initialize the instance
-    constructor Create; reintroduce;
+    constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
     /// the Distinguised Name of this LDAP object
@@ -1195,11 +1201,13 @@ type
   TLdapResultObjArray = array of TLdapResult;
 
   /// maintain a list of LDAP result objects
-  TLdapResultList = class(TObject)
-  private
+  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  TLdapResultList = class(TSynPersistent)
+  protected
     fItems: TLdapResultObjArray;
-    fSearchTimeMicroSec: Int64;
     fCount: integer;
+    fSearchTimeMicroSec: Int64;
+    procedure AssignTo(Dest: TSynPersistent); override;
     procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
       ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
   public
@@ -1370,7 +1378,7 @@ type
     lsfSaclSecurityInformation);
 
   /// store the authentication and connection settings of a TLdapClient instance
-  TLdapClientSettings = class(TSynPersistent)
+  TLdapClientSettings = class(TObjectWithProps)
   protected
     fTargetHost: RawUtf8;
     fTargetPort: RawUtf8;
@@ -1468,7 +1476,7 @@ type
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
   // - is not thread-safe, but you can call Lock/UnLock to share the connection
-  TLdapClient = class(TSynPersistentLock)
+  TLdapClient = class(TSynLocked)
   protected
     fSettings: TLdapClientSettings;
     fSock: TCrtSocket;
@@ -3626,6 +3634,18 @@ begin
   fCount := 0;
 end;
 
+procedure TLdapAttribute.AssignTo(Dest: TSynPersistent);
+var
+  d: TLdapAttribute absolute Dest;
+begin
+  d.fAttributeName := fAttributeName;
+  d.fCount := fCount;
+  d.fKnownType := fKnownType;
+  d.fKnownTypeStorage := fKnownTypeStorage;
+  d.fObjectSidIsDomain := fObjectSidIsDomain;
+  d.fList := copy(fList, 0, fCount);
+end;
+
 procedure TLdapAttribute.Add(const aValue: RawByteString; Option: TLdapAddOption);
 begin
   // handle Add() options
@@ -3921,6 +3941,15 @@ begin
   FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
 end;
 
+procedure TLdapAttributeList.AssignTo(Dest: TSynPersistent);
+var
+  d: TLdapAttributeList absolute Dest;
+begin
+  d.fKnownTypes := fKnownTypes;
+  d.fIndexTypes := fIndexTypes;
+  TLdapAttribute.CloneObjArray(fItems, d.fItems, @fCount, @d.fCount);
+end;
+
 function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8): PtrInt;
 var
   existing: pointer;
@@ -4147,7 +4176,6 @@ end;
 
 constructor TLdapResult.Create;
 begin
-  inherited Create;
   fAttributes := TLdapAttributeList.Create;
 end;
 
@@ -4155,6 +4183,15 @@ destructor TLdapResult.Destroy;
 begin
   fAttributes.Free;
   inherited Destroy;
+end;
+
+procedure TLdapResult.AssignTo(Dest: TSynPersistent);
+var
+  d: TLdapResult absolute Dest;
+begin
+  d.fObjectName := fObjectName;
+  d.fCanonicalName := fCanonicalName;
+  fAttributes.AssignTo(d.fAttributes);
 end;
 
 procedure TLdapResult.SetObjectName(const Value: RawUtf8);
@@ -4236,6 +4273,14 @@ begin
   ObjArrayClear(fItems, fCount);
   fCount := 0;
   fSearchTimeMicroSec := 0;
+end;
+
+procedure TLdapResultList.AssignTo(Dest: TSynPersistent);
+var
+  d: TLdapResultList absolute Dest;
+begin
+  TLdapResult.CloneObjArray(fItems, d.fItems, @fCount, @d.fCount);
+  d.fSearchTimeMicroSec := fSearchTimeMicroSec;
 end;
 
 function TLdapResultList.ObjectNames(asCN, noSort: boolean): TRawUtf8DynArray;
