@@ -372,21 +372,18 @@ type
   end;
   {$endif HASITERATORS}
 
-  {$M+}
   /// simple and efficient TList, without any notification
   // - regular TList has an internal notification mechanism which slows down
   // basic process, and can't be easily inherited
   // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
   // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
-  TSynList = class(TObject)
+  TSynList = class(TObjectWithCustomCreate)
   protected
     fCount: integer;
     fList: TPointerDynArray;
     function Get(index: integer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
   public
-    /// virtual constructor called at instance creation
-    constructor Create; virtual;
     /// add one item to the list
     function Add(item: pointer): PtrInt; virtual;
     /// insert one item to the list at a given position
@@ -417,8 +414,10 @@ type
     property Items[index: integer]: pointer
       read Get; default;
   end;
-  {$M-}
   PSynList = ^TSynList;
+
+  /// meta-class of TSynList type
+  TSynListClass = class of TSynList;
 
   /// simple and efficient TObjectList, without any notification
   TSynObjectList = class(TSynList)
@@ -3383,12 +3382,8 @@ end;
 
 {$endif HASITERATORS}
 
-{ TSynList }
 
-constructor TSynList.Create;
-begin
-  // nothing to do
-end;
+{ TSynList }
 
 function TSynList.Add(item: pointer): PtrInt;
 begin
