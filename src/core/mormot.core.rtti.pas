@@ -2518,6 +2518,7 @@ type
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
     fCopyObject: TRttiClassCopier;
+    procedure RaiseMissingRtti;
     procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo);
     // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
@@ -7187,7 +7188,6 @@ begin
     exit; // found by name
   // fallback to the closed known type, using RTTI
   case Info^.Kind of
-    // FPC and Delphi will use a fast jmp table
   {$ifdef FPC}
     rkLStringOld,
   {$endif FPC}
@@ -7236,7 +7236,7 @@ begin
     rkWChar:
       result := ptWord;
     rkMethod:
-      result := ptPtrInt;
+      result := {$ifdef CPU64} ptHash128 {$else} ptInt64 {$endif}; // 2*pointer
     rkInterface:
       result := ptInterface;
     rkInteger:
@@ -8374,6 +8374,14 @@ end;
 
 { TRttiCustom }
 
+procedure TRttiCustom.RaiseMissingRtti;
+begin // called e.g. if fCache.Size = 0
+  if Kind = rkSet then // mormot.core.rtti/json hardcore getter/setter limit
+    ERttiException.RaiseUtf8('%: % sets are limited to % items', [self, Name, ENUM_MAX])
+  else
+    ERttiException.RaiseUtf8('%: % % has RttiSize=%', [self, ToText(Kind)^, Name, Size]);
+end;
+
 type
   EHook = class(Exception) // to access @Message private field offset
   public
@@ -8414,7 +8422,7 @@ begin
     ERttiException.RaiseUtf8(
       '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
   {$endif NOPATCHVMT}
-  // recognize the main classes into ValueRtlClass
+  // recognize the main known classes as ValueRtlClass
   while aClass <> TObject do
   begin
     i := PtrUIntScanIndex(

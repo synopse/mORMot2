@@ -5479,6 +5479,8 @@ begin
   else
   begin
     // standard serialization as unsigned integer (up to 64 items)
+    if Ctxt.Info.Size = 0  then
+      TRttiJson(Ctxt.Info).RaiseMissingRtti; // support sets up to 64-bit
     v := 0;
     MoveFast(Data^, v, Ctxt.Info.Size);
     Ctxt.W.AddQ(v);
@@ -8079,12 +8081,15 @@ var
   v: QWord;
 begin
   with Ctxt.Info.Cache do
-    if EnumCustomText = nil then
-      v := GetSetNameValue(EnumList, EnumMin, EnumMax,
-        Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json,
-        Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject)
+    if Size <> 0  then
+      if EnumCustomText = nil then
+        v := GetSetNameValue(EnumList, EnumMin, EnumMax,
+          Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json,
+          Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject)
+      else
+        FindCustomSet(Ctxt, @v)
     else
-      FindCustomSet(Ctxt, @v);
+      TRttiJson(Ctxt.Info).RaiseMissingRtti; // support sets up to v: QWord
   Ctxt.Valid := Ctxt.Json <> nil;
   MoveFast(v, Data^, Ctxt.Info.Size);
 end;
