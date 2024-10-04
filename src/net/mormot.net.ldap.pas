@@ -224,8 +224,23 @@ function DNToCN(const DN: RawUtf8): RawUtf8;
 function NormalizeDN(const DN: RawUtf8): RawUtf8;
 
 /// low-level parse a Distinguished Name text into its DC= OU= CN= parts
+// - on parsing error, raise ELdap or return false if NoRaise was set to true
 function ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
-  ValueEscapeCN: boolean = false; NoRaise: boolean = false): boolean;
+  ValueEscapeCN: boolean = false; NoRaise: boolean = false): boolean; overload;
+
+type
+  /// one name / value pair from ParseDN()
+  TNameValueDN = record
+    Name: RawUtf8;
+    Value: RawUtf8;
+  end;
+  /// name / value pairs as ParseDN() resultset
+  TNameValueDNs = array of TNameValueDN;
+
+/// parse a Distinguished Neme text into all its name=value parts
+// - on parsing error, raise ELdap or return false if NoRaise was set to true
+function ParseDN(const DN: RawUtf8; out pairs: TNameValueDNs;
+  NoRaise: boolean = false): boolean; overload;
 
 const
   // LDAP result codes
@@ -1245,7 +1260,6 @@ type
     property SearchTimeMicroSec: Int64
       read fSearchTimeMicroSec;
   end;
-
 
 
 { **************** Main TLdapClient Class }
@@ -2643,7 +2657,7 @@ begin
         exit
       else
         ELdap.RaiseUtf8('ParseDN(%): invalid Distinguished Name', [DN]);
-    if not PropNameValid(pointer(value)) then // simple alphanum is just fine
+    if not PropNameValid(pointer(value)) then // simple alphanum is always fine
     begin
       value := LdapUnescape(value); // may need some (un)escape
       if ValueEscapeCN then
@@ -2725,6 +2739,43 @@ begin
     Append(result, ',DC=', dc[i]);
   delete(result, 1, 1); // trim leading ','
 end;
+
+function ParseDN(const DN: RawUtf8; out pairs: TNameValueDNs; NoRaise: boolean): boolean;
+var
+  p: PUtf8Char;
+  n, v: RawUtf8;
+  c: integer;
+begin
+  result := false;
+  p := pointer(DN);
+  if p = nil then
+    exit;
+  c := 0;
+  repeat
+    GetNextItemTrimedEscaped(p, '=', '\', n);
+    GetNextItemTrimedEscaped(p, ',', '\', v);
+    if (n = '') or
+       (v = '') then
+      if NoRaise then
+        exit
+      else
+        ELdap.RaiseUtf8('ParseDN(%): invalid Distinguished Name', [DN]);
+    if PropNameValid(pointer(v)) then // simple alphanum is always fine
+      v := LdapUnescape(v); // may need some (un)escape
+    if c = length(pairs) then
+      SetLength(pairs, NextGrow(c));
+    with pairs[c] do
+    begin
+      Name := n;
+      Value := v;
+    end;
+    inc(c);
+  until p = nil;
+  if c <> 0 then
+    DynArrayFakeLength(pairs, c);
+  result := true;
+end;
+
 
 function RawLdapError(ErrorCode: integer): TLdapError;
 begin
