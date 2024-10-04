@@ -9,7 +9,7 @@ unit mormot.core.data;
    Low-Level Data Processing Functions shared by all framework units
     - RTL TPersistent / TInterfacedObject with Custom Constructor
     - TSynList TSynObjectList TSynLocker classes
-    - TSynPersistentStore with proper Binary Serialization
+    - TObjectStore with proper Binary Serialization
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray and TDynArrayHashed Wrappers
@@ -456,23 +456,18 @@ type
   /// meta-class of TSynObjectList type
   TSynObjectListClass = class of TSynObjectList;
 
-  /// adding locking methods to a TSynPersistent with virtual constructor
-  // - you may use this class instead of the RTL TCriticalSection, since it
-  // would use a TSynLocker which does not suffer from CPU cache line conflit,
-  // and is cross-compiler whereas TMonitor is Delphi-specific and buggy (at
-  // least before XE5)
+  /// adding locking methods to a TSynPersistent, with woPersistentLock support
   // - if you don't need TSynPersistent overhead, nor lock/unlock during JSON
   // serialization, consider plain TSynLocked class or just a TLightLock field
   TSynPersistentLock = class(TSynPersistent)
   protected
-    // TSynLocker would increase inherited fields offset -> managed PSynLocker
     fSafe: PSynLocker;
     // will lock/unlock the instance during JSON serialization of its properties
     function RttiBeforeWriteObject(W: TTextWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
     procedure RttiAfterWriteObject(W: TTextWriter;
       Options: TTextWriterWriteObjectOptions); override;
-    // set the rcfHookWrite flag to call RttiBeforeWriteObject
+    // set rcfHookWrite flag to call RttiBeforeWriteObject/RttiAfterWriteObject
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
   public
     /// initialize the instance, and its associated lock
@@ -480,13 +475,12 @@ type
     /// finalize the instance, and its associated lock
     destructor Destroy; override;
     /// access to the associated instance critical section
-    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
     property Safe: PSynLocker
       read fSafe;
-    /// could be used as a short-cut to Safe.Lock
+    /// could be used as a short-cut to Safe^.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe.UnLock
+    /// could be used as a short-cut to Safe^.UnLock
     procedure Unlock;
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -626,13 +620,13 @@ type
   end;
 
 
-{ ************ TSynPersistentStore with proper Binary Serialization }
+{ ************ TObjectStore with proper Binary Serialization }
 
 type
   /// abstract high-level handling of (SynLZ-)compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
   // with proper binary persistence implementation
-  TSynPersistentStore = class(TObjectRWLock)
+  TObjectStore = class(TObjectRWLock)
   protected
     fName: RawUtf8;
     fReader: TFastReader;
@@ -703,6 +697,10 @@ type
     property SaveToLastUncompressed: integer
       read fSaveToLastUncompressed;
   end;
+
+  {$ifndef PUREMORMOT2}
+  TSynPersistentStore = TObjectStore;
+  {$endif PUREMORMOT2}
 
 
 
@@ -3529,16 +3527,15 @@ end;
 
 class procedure TSynPersistentLock.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
-  // let's call our overriden RttiBeforeWriteObject and RttiAfterWriteObject
   inherited RttiCustomSetParser(Rtti);
-  Rtti.Flags := Rtti.Flags + [rcfHookWrite];
+  Rtti.Flags := Rtti.Flags + [rcfHookWrite]; // call our before/after methods
 end;
 
 function TSynPersistentLock.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin
   if woPersistentLock in Options then
-    fSafe.Lock;
+    fSafe^.Lock;
   result := false; // continue with default JSON serialization
 end;
 
@@ -3546,8 +3543,9 @@ procedure TSynPersistentLock.RttiAfterWriteObject(W: TTextWriter;
   Options: TTextWriterWriteObjectOptions);
 begin
   if woPersistentLock in Options then
-    fSafe.UnLock;
+    fSafe^.UnLock;
 end;
+
 
 { TInterfacedObjectLocked }
 
@@ -3703,54 +3701,54 @@ begin
 end;
 
 
-{ ************ TSynPersistentStore with proper Binary Serialization }
+{ ************ TObjectStore with proper Binary Serialization }
 
-{ TSynPersistentStore }
+{ TObjectStore }
 
-constructor TSynPersistentStore.Create(const aName: RawUtf8);
+constructor TObjectStore.Create(const aName: RawUtf8);
 begin
   inherited Create; // may have been overriden
   fName := aName;
 end;
 
-constructor TSynPersistentStore.CreateFrom(const aBuffer: RawByteString;
+constructor TObjectStore.CreateFrom(const aBuffer: RawByteString;
   aLoad: TAlgoCompressLoad);
 begin
   CreateFromBuffer(pointer(aBuffer), length(aBuffer), aLoad);
 end;
 
-constructor TSynPersistentStore.CreateFromBuffer(
+constructor TObjectStore.CreateFromBuffer(
   aBuffer: pointer; aBufferLen: integer; aLoad: TAlgoCompressLoad);
 begin
   inherited Create; // may have been overriden
   LoadFrom(aBuffer, aBufferLen, aLoad);
 end;
 
-constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName;
+constructor TObjectStore.CreateFromFile(const aFileName: TFileName;
   aLoad: TAlgoCompressLoad);
 begin
   inherited Create; // may have been overriden
   LoadFromFile(aFileName, aLoad);
 end;
 
-procedure TSynPersistentStore.LoadFromReader;
+procedure TObjectStore.LoadFromReader;
 begin
   fReader.VarUtf8(fName);
 end;
 
-procedure TSynPersistentStore.SaveToWriter(aWriter: TBufferWriter);
+procedure TObjectStore.SaveToWriter(aWriter: TBufferWriter);
 begin
   aWriter.Write(fName);
 end;
 
-procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString;
+procedure TObjectStore.LoadFrom(const aBuffer: RawByteString;
   aLoad: TAlgoCompressLoad);
 begin
   if aBuffer <> '' then
     LoadFrom(pointer(aBuffer), length(aBuffer), aLoad);
 end;
 
-procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
+procedure TObjectStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
   aLoad: TAlgoCompressLoad);
 var
   localtemp: RawByteString;
@@ -3776,7 +3774,7 @@ begin
   LoadFromReader;
 end;
 
-function TSynPersistentStore.LoadFromFile(const aFileName: TFileName;
+function TObjectStore.LoadFromFile(const aFileName: TFileName;
   aLoad: TAlgoCompressLoad): boolean;
 var
   temp: RawByteString;
@@ -3787,7 +3785,7 @@ begin
     LoadFrom(temp, aLoad);
 end;
 
-procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString;
+procedure TObjectStore.SaveTo(out aBuffer: RawByteString;
   nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress;
   BufferOffset: integer);
 var
@@ -3807,13 +3805,13 @@ begin
   end;
 end;
 
-function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
+function TObjectStore.SaveTo(nocompression: boolean; BufLen: integer;
   ForcedAlgo: TAlgoCompress; BufferOffset: integer): RawByteString;
 begin
   SaveTo(result, nocompression, BufLen, ForcedAlgo, BufferOffset);
 end;
 
-function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
+function TObjectStore.SaveToFile(const aFileName: TFileName;
   nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress): PtrUInt;
 var
   temp: RawByteString;

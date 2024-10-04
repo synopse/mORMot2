@@ -9,7 +9,7 @@ unit mormot.core.json;
    JSON functions shared by all framework units
     - Low-Level JSON Processing Functions
     - TJsonWriter class with proper JSON escaping and WriteObject() support
-    - JSON-aware TSynNameValue TSynPersistentStoreJson
+    - JSON-aware TSynNameValue TObjectStoreJson
     - JSON-aware TSynDictionary Storage
     - JSON Unserialization for any kind of Values
     - JSON Serialization Wrapper Functions
@@ -949,7 +949,7 @@ type
   end;
 
 
-{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson }
+{ ************ JSON-aware TSynNameValue TObjectStoreJson }
 
 type
   /// store one Name/Value pair, as used by TSynNameValue class
@@ -1188,7 +1188,7 @@ type
 
 type
   /// implement binary persistence and JSON serialization (not deserialization)
-  TSynPersistentStoreJson = class(TSynPersistentStore)
+  TObjectStoreJson = class(TObjectStore)
   protected
     // append "name" -> inherited should add properties to the JSON object
     procedure AddJson(W: TJsonWriter); virtual;
@@ -1197,6 +1197,9 @@ type
     function SaveToJson(reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8;
   end;
 
+  {$ifndef PUREMORMOT2}
+  TSynPersistentStoreJson = TObjectStoreJson;
+  {$endif PUREMORMOT2}
 
 
 { *********** JSON-aware TSynDictionary Storage }
@@ -8953,7 +8956,7 @@ begin
 end;
 
 
-{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson }
+{ ************ JSON-aware TSynNameValue TObjectStoreJson }
 
 { TSynNameValue }
 
@@ -9357,14 +9360,14 @@ end;
 
 
 
-{ TSynPersistentStoreJson }
+{ TObjectStoreJson }
 
-procedure TSynPersistentStoreJson.AddJson(W: TJsonWriter);
+procedure TObjectStoreJson.AddJson(W: TJsonWriter);
 begin
   W.AddPropJsonString('name', fName);
 end;
 
-function TSynPersistentStoreJson.SaveToJson(reformat: TTextWriterJsonFormat): RawUtf8;
+function TObjectStoreJson.SaveToJson(reformat: TTextWriterJsonFormat): RawUtf8;
 var
   W: TJsonWriter;
 begin

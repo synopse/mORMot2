@@ -71,9 +71,9 @@ type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
   // - uses internally a TDynArray storage, with a sliding algorithm, more
   // efficient than the FPC or Delphi TQueue, or a naive TDynArray.Add/Delete
-  // - supports TSynPersistentStore binary persistence, if needed
+  // - supports TObjectStore binary persistence, if needed
   // - this structure is also thread-safe by design
-  TSynQueue = class(TSynPersistentStore)
+  TSynQueue = class(TObjectStore)
   protected
     fValues: TDynArray;
     fValueVar: pointer;
@@ -85,7 +85,7 @@ type
     procedure InternalGrow;
     function InternalDestroying(incPopCounter: integer): boolean;
     function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
-    /// low-level TSynPersistentStore methods implementing the persistence
+    /// low-level TObjectStore methods implementing the persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
   public

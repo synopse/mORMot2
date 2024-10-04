@@ -143,7 +143,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 Low-Level Data Processing Functions shared by all framework units
 - RTL `TPersistent` / `TInterfacedObject` with Custom Constructor
 - `TSynList` `TSynObjectList` `TSynLocker` classes
-- `TSynPersistentStore` with proper Binary Serialization
+- `TObjectStore` with proper Binary Serialization
 - INI Files and In-memory Access
 - Efficient RTTI Values Binary Serialization and Comparison
 - `TDynArray` and `TDynArrayHashed` Wrappers
@@ -156,7 +156,7 @@ Low-Level Data Processing Functions shared by all framework units
 JSON functions shared by all framework units
 - Low-Level JSON Processing Functions
 - `TTextWriter` class with proper JSON escaping and `WriteObject()` support
-- JSON-aware `TSynNameValue` `TSynPersistentStoreJson`
+- JSON-aware `TSynNameValue` `TObjectStoreJson`
 - JSON-aware `TSynDictionary` Storage
 - JSON Unserialization for any kind of Values
 - JSON Serialization Wrapper Functions

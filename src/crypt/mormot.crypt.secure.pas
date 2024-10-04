@@ -268,7 +268,7 @@ type
   // - with optional binary persistence
   // - as used by TRestServer.BanIP/JwtForUnauthenticatedRequestWhiteIP
   // - see also more efficient and lower level THttpAcceptBan in mormot.net.http
-  TIPBan = class(TSynPersistentStore)
+  TIPBan = class(TObjectStore)
   protected
     fIP4: TIntegerDynArray;
     fCount: integer;
