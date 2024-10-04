@@ -691,6 +691,7 @@ var
   res: TLdapResult;
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
+  dn: TNameValueDNs;
   hasinternet: boolean;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
@@ -761,6 +762,27 @@ begin
   CheckEqual(DNToCN('dc=ad,dc=company,dc=it'), 'ad.company.it');
   CheckEqual(DNToCN('cn=foo, ou=bar'), '/bar/foo');
   CheckEqual(NormalizeDN('cn=foo, ou = bar'), 'CN=foo,OU=bar');
+  Check(ParseDn('dc=ad, dc=company, dc = it', dn));
+  CheckEqual(length(dn), 3);
+  CheckEqual(dn[0].Name, 'dc');
+  CheckEqual(dn[0].Value, 'ad');
+  CheckEqual(dn[1].Name, 'dc');
+  CheckEqual(dn[1].Value, 'company');
+  CheckEqual(dn[2].Name, 'dc');
+  CheckEqual(dn[2].Value, 'it');
+  Check(ParseDn('uid=33\,test\=dans le nom,ou=Users,ou=montaigu,dc=sermo,dc=fr', dn));
+  CheckEqual(length(dn), 5);
+  CheckEqual(dn[0].Name, 'uid');
+  CheckEqual(dn[0].Value, '33\,test\=dans le nom');
+  CheckEqual(dn[1].Name, 'ou');
+  CheckEqual(dn[1].Value, 'Users');
+  CheckEqual(dn[2].Name, 'ou');
+  CheckEqual(dn[2].Value, 'montaigu');
+  CheckEqual(dn[3].Name, 'dc');
+  CheckEqual(dn[3].Value, 'sermo');
+  CheckEqual(dn[4].Name, 'dc');
+  CheckEqual(dn[4].Value, 'fr');
+  Check(not ParseDn('dc=ad, dc=company, dc', dn, {noraise=}true));
   // validate LDAP error recognition
   Check(RawLdapError(-1) = leUnknown);
   Check(RawLdapError(LDAP_RES_TOO_LATE) = leUnknown);
