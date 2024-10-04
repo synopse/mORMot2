@@ -1484,8 +1484,8 @@ type
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check
-    // TSynPersistentLock(aValue).Safe.IsLocked before actual deletion
-    class function OnCanDeleteSynPersistentLock(
+    // TSynLockedWithRttiMethods(aValue).Safe.IsLocked before actual deletion
+    class function OnCanDeleteSynLockedWithRttiMethods(
       const aKey, aValue; aIndex: PtrInt): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check
     // TSynLocked(aValue).Safe.IsLocked before actual deletion
@@ -1523,8 +1523,8 @@ type
     property CompressAlgo: TAlgoCompress
       read fCompressAlgo write fCompressAlgo;
     /// callback to by-pass DeleteDeprecated deletion by returning false
-    // - can be assigned e.g. to OnCanDeleteSynPersistentLock if Value is a
-    // TSynPersistentLock instance, to avoid any potential access violation
+    // - can be assigned e.g. to OnCanDeleteSynLockedWithRttiMethods if Value is a
+    // TSynLockedWithRttiMethods instance, to avoid any potential access violation
     property OnCanDeleteDeprecated: TOnSynDictionaryCanDelete
       read fOnCanDelete write fOnCanDelete;
     /// can tune TSynDictionary threading process depending on your use case
@@ -10254,10 +10254,10 @@ begin
   end;
 end;
 
-class function TSynDictionary.OnCanDeleteSynPersistentLock(
+class function TSynDictionary.OnCanDeleteSynLockedWithRttiMethods(
   const aKey, aValue; aIndex: PtrInt): boolean;
 begin
-  result := not TSynPersistentLock(aValue).Safe^.IsLocked;
+  result := not TSynLockedWithRttiMethods(aValue).Safe^.IsLocked;
 end;
 
 class function TSynDictionary.OnCanDeleteSynLocked(
@@ -10422,7 +10422,7 @@ begin
     begin
       // allow any kind of customization for TObjectWithRttiMethods children
       n := Props.Count;
-      TObjectWithCustomCreateRttiCustomSetParser(pointer(fValueClass), self);
+      RttiSetParserTObjectWithRttiMethods(pointer(fValueClass), self);
       if n <> Props.Count then
         fFlags := fFlags + fProps.AdjustAfterAdded; // may have added a prop
       fNewInstance := @_New_ObjectWithProps; // virtual TObjectWithProps.Create

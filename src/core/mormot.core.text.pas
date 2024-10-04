@@ -412,8 +412,8 @@ type
   // - woDontStoreVoid will avoid serializing numeric properties equal to 0 and
   // string properties equal to '' (replace both deprecated woDontStore0 and
   // woDontStoreEmptyString flags)
-  // - woPersistentLock paranoid setting will call TSynPersistentLock.Lock/Unlock
-  // during serialization
+  // - woRttiMethodsLock paranoid setting will call TSynLockedWithRttiMethods
+  // Lock/Unlock during serialization
   TTextWriterWriteObjectOption = (
     woHumanReadable,
     woDontStoreDefault,
@@ -434,7 +434,7 @@ type
     woDontStoreInherited,
     woInt64AsHex,
     woDontStoreVoid,
-    woPersistentLock);
+    woRttiMethodsLock);
 
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;

@@ -2473,7 +2473,6 @@ type
     vcException,
     vcCollection,
     vcESynException,
-    vcObjectWithCustomCreate,
     vcSynList,
     vcSynObjectList,
     vcRawUtf8List,
@@ -3138,7 +3137,44 @@ type
   {$M-}
 
   /// used to determine the exact class type of a TObjectWithRttiMethods
-  TObjectWithCustomCreateClass = class of TObjectWithRttiMethods;
+  TObjectWithRttiMethodsClass = class of TObjectWithRttiMethods;
+
+  /// add locking methods to TObjectWithRttiMethods, with woRttiMethodsLock support
+  // - if you don't need TObjectWithRttiMethods overhead, nor lock/unlock during
+  // JSON process, consider plain the TSynLocked class or just a TLightLock field
+  TSynLockedWithRttiMethods = class(TObjectWithRttiMethods)
+  protected
+    fSafe: PSynLocker;
+    // will lock/unlock the instance during JSON serialization of its properties
+    function RttiBeforeWriteObject(W: TTextWriter;
+      var Options: TTextWriterWriteObjectOptions): boolean; override;
+    procedure RttiAfterWriteObject(W: TTextWriter;
+      Options: TTextWriterWriteObjectOptions); override;
+    // set rcfHookWrite flag to call RttiBeforeWriteObject/RttiAfterWriteObject
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
+  public
+    /// initialize the instance, and its associated lock
+    constructor Create; override;
+    /// finalize the instance, and its associated lock
+    destructor Destroy; override;
+    /// access to the associated instance critical section
+    property Safe: PSynLocker
+      read fSafe;
+    /// could be used as a short-cut to Safe^.Lock
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe^.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  {$ifndef PUREMORMOT2}
+
+  /// used for backward compatibility only with existing code
+  TSynPersistentLock = class(TSynLocked);
+  TSynPersistentLocked = class(TSynLocked);
+
+  {$endif PUREMORMOT2}
 
   /// root class of an object with a 64-bit ID primary key
   // - is the parent of mormot.orm.core's TOrm, but you could use it e.g. on
@@ -3199,8 +3235,8 @@ function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
 function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 
 // internal wrappers to publish protected methods to mormot.core.json
-procedure TObjectWithCustomCreateRttiCustomSetParser(
-  O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
+procedure RttiSetParserTObjectWithRttiMethods(
+  O: TObjectWithRttiMethodsClass; Rtti: TRttiCustom);
 procedure TSynPersistentCopyObject(Dest, Source: TObject);
 
 var
@@ -3215,7 +3251,6 @@ var
     Exception,                // vcException
     TCollection,              // vcCollection
     ESynException,            // vcESynException
-    TObjectWithRttiMethods,  // vcObjectWithCustomCreate
     nil,                      // vcSynList
     nil,                      // vcSynObjectList
     nil,                      // vcRawUtf8List
@@ -10065,8 +10100,57 @@ begin
   // nothing to do
 end;
 
-procedure TObjectWithCustomCreateRttiCustomSetParser(
-  O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
+
+{ TSynLockedWithRttiMethods }
+
+constructor TSynLockedWithRttiMethods.Create;
+begin
+  inherited Create; // may have been overriden
+  fSafe := NewSynLocker;
+end;
+
+destructor TSynLockedWithRttiMethods.Destroy;
+begin
+  inherited Destroy;
+  fSafe^.DoneAndFreeMem;
+end;
+
+procedure TSynLockedWithRttiMethods.Lock;
+begin
+  if self <> nil then
+    fSafe^.Lock;
+end;
+
+procedure TSynLockedWithRttiMethods.Unlock;
+begin
+  if self <> nil then
+    fSafe^.UnLock;
+end;
+
+class procedure TSynLockedWithRttiMethods.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  inherited RttiCustomSetParser(Rtti);
+  Rtti.Flags := Rtti.Flags + [rcfHookWrite]; // call our before/after methods
+end;
+
+function TSynLockedWithRttiMethods.RttiBeforeWriteObject(W: TTextWriter;
+  var Options: TTextWriterWriteObjectOptions): boolean;
+begin
+  if woRttiMethodsLock in Options then
+    fSafe^.Lock;
+  result := false; // continue with default JSON serialization
+end;
+
+procedure TSynLockedWithRttiMethods.RttiAfterWriteObject(W: TTextWriter;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  if woRttiMethodsLock in Options then
+    fSafe^.UnLock;
+end;
+
+
+procedure RttiSetParserTObjectWithRttiMethods(
+  O: TObjectWithRttiMethodsClass; Rtti: TRttiCustom);
 begin
   O.RttiCustomSetParser(Rtti); // to circumvent some compiler issue
 end;

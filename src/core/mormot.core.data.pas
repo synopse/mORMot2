@@ -456,42 +456,6 @@ type
   /// meta-class of TSynObjectList type
   TSynObjectListClass = class of TSynObjectList;
 
-  /// adding locking methods to a TSynPersistent, with woPersistentLock support
-  // - if you don't need TSynPersistent overhead, nor lock/unlock during JSON
-  // serialization, consider plain TSynLocked class or just a TLightLock field
-  TSynPersistentLock = class(TSynPersistent)
-  protected
-    fSafe: PSynLocker;
-    // will lock/unlock the instance during JSON serialization of its properties
-    function RttiBeforeWriteObject(W: TTextWriter;
-      var Options: TTextWriterWriteObjectOptions): boolean; override;
-    procedure RttiAfterWriteObject(W: TTextWriter;
-      Options: TTextWriterWriteObjectOptions); override;
-    // set rcfHookWrite flag to call RttiBeforeWriteObject/RttiAfterWriteObject
-    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
-  public
-    /// initialize the instance, and its associated lock
-    constructor Create; override;
-    /// finalize the instance, and its associated lock
-    destructor Destroy; override;
-    /// access to the associated instance critical section
-    property Safe: PSynLocker
-      read fSafe;
-    /// could be used as a short-cut to Safe^.Lock
-    procedure Lock;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe^.UnLock
-    procedure Unlock;
-      {$ifdef HASINLINE}inline;{$endif}
-  end;
-
-  {$ifndef PUREMORMOT2}
-
-  /// used for backward compatibility only with existing code
-  TSynPersistentLocked = class(TSynLocked);
-
-  {$endif PUREMORMOT2}
-
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
   protected
@@ -3472,54 +3436,6 @@ begin
     exit;
   result := Rtti.RegisterClass(fItemClass).ClassNewInstance;
   Add(result);
-end;
-
-
-{ TSynPersistentLock }
-
-constructor TSynPersistentLock.Create;
-begin
-  inherited Create; // may have been overriden
-  fSafe := NewSynLocker;
-end;
-
-destructor TSynPersistentLock.Destroy;
-begin
-  inherited Destroy;
-  fSafe^.DoneAndFreeMem;
-end;
-
-procedure TSynPersistentLock.Lock;
-begin
-  if self <> nil then
-    fSafe^.Lock;
-end;
-
-procedure TSynPersistentLock.Unlock;
-begin
-  if self <> nil then
-    fSafe^.UnLock;
-end;
-
-class procedure TSynPersistentLock.RttiCustomSetParser(Rtti: TRttiCustom);
-begin
-  inherited RttiCustomSetParser(Rtti);
-  Rtti.Flags := Rtti.Flags + [rcfHookWrite]; // call our before/after methods
-end;
-
-function TSynPersistentLock.RttiBeforeWriteObject(W: TTextWriter;
-  var Options: TTextWriterWriteObjectOptions): boolean;
-begin
-  if woPersistentLock in Options then
-    fSafe^.Lock;
-  result := false; // continue with default JSON serialization
-end;
-
-procedure TSynPersistentLock.RttiAfterWriteObject(W: TTextWriter;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  if woPersistentLock in Options then
-    fSafe^.UnLock;
 end;
 
 
