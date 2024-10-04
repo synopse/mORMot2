@@ -1484,6 +1484,9 @@ type
     // TSynPersistentLock(aValue).Safe.IsLocked before actual deletion
     class function OnCanDeleteSynPersistentLock(
       const aKey, aValue; aIndex: PtrInt): boolean;
+    /// can be assigned to OnCanDeleteDeprecated to check
+    // TSynLocked(aValue).Safe.IsLocked before actual deletion
+    class function OnCanDeleteSynLocked(const aKey, aValue; aIndex: PtrInt): boolean;
     {$ifndef PUREMORMOT2}
     class function OnCanDeleteSynPersistentLocked(
       const aKey, aValue; aIndex: PtrInt): boolean;
@@ -10247,6 +10250,12 @@ class function TSynDictionary.OnCanDeleteSynPersistentLock(
   const aKey, aValue; aIndex: PtrInt): boolean;
 begin
   result := not TSynPersistentLock(aValue).Safe^.IsLocked;
+end;
+
+class function TSynDictionary.OnCanDeleteSynLocked(
+  const aKey, aValue; aIndex: PtrInt): boolean;
+begin
+  result := not TSynLocked(aValue).Safe^.IsLocked;
 end;
 
 {$ifndef PUREMORMOT2}
