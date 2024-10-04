@@ -377,7 +377,7 @@ type
   // basic process, and can't be easily inherited
   // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
   // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
-  TSynList = class(TObjectWithRttiMethods)
+  TSynList = class(TObjectWithProps)
   protected
     fCount: integer;
     fList: TPointerDynArray;

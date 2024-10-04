@@ -3069,7 +3069,7 @@ type
 
 type
   /// abstract parent class with published properties and a virtual constructor
-  // - is the parent of both TClonable and TOrm classes
+  // - for instance, is the parent of TObjectWithID, TOrm or TSynMonitor classes
   // - will ensure the class type is registered to the Rtti global list
   // - also features some protected virtual methods for custom RTTI/JSON process
   // - for best performance, any type inheriting from this class will bypass
