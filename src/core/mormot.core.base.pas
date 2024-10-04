@@ -481,11 +481,12 @@ type
   PInterfaceDynArray = ^TInterfaceDynArray;
 
   TStreamClass = class of TStream;
-  TInterfacedObjectClass = class of TInterfacedObject;
+  TStringsClass = class of TStrings;
   TListClass = class of TList;
   TObjectListClass = class of TObjectList;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
+  TInterfacedObjectClass = class of TInterfacedObject;
 
   /// meta-class of all Exception class types
   ExceptionClass = class of Exception;
@@ -507,6 +508,7 @@ type
     // - is recognized by our RTTI serialization/initialization process
     constructor Create; overload; virtual;
   end;
+
   /// used to determine the exact class type of a TObjectWithProps
   // - allow to create instances using its virtual constructor
   TObjectWithPropsClass = class of TObjectWithProps;
