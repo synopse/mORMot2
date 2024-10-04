@@ -8061,14 +8061,14 @@ begin
   result := sc;     // s[] length
   if SourceCount <> nil then
     result := SourceCount^;
-  if DestCount <> nil then
-    DestCount^ := result;
   dc := length(d);  // d[] capacity
   dn := dc;         // d[] length
   if DestCount <> nil then
     dn := DestCount^;
   if dn <> 0 then
     RawObjectsClear(pointer(d), dn);
+  if DestCount <> nil then
+    DestCount^ := result;
   if result = 0 then
     d := nil // ensure d[] is void
   else if dc < result then // we can not reuse existing d[]
