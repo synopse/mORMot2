@@ -373,7 +373,7 @@ type
   // process is to be monitored
   // - this class is thread-safe for its methods, but you should call explicitly
   // non-rentrant Lock/UnLock to access its individual properties
-  TSynMonitor = class(TSynPersistent)
+  TSynMonitor = class(TObjectWithCustomCreate)
   protected
     fSafe: TOSLightLock;
     fName: RawUtf8;
