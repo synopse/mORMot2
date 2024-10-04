@@ -401,7 +401,7 @@ type
   // - by default, RawBlob properties are serialized as null, unless
   // woRawBlobAsBase64 is defined or a custom serialization is used (e.g. TOrm)
   // - if woHideSensitivePersonalInformation is set, rcfSpi types (e.g. the
-  // TSynPersistentWithPassword.Password field) will be serialized as "***"
+  // TObjectWithPassword.Password field) will be serialized as "***"
   // to prevent security issues (e.g. in log)
   // - by default, TObjectList will set the woStoreClassName for its nested
   // objects, unless woObjectListWontStoreClassName is defined

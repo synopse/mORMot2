@@ -2646,7 +2646,7 @@ type
   /// parameters supplied to publish a TRestServer via HTTP
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
   // constructor in mormot.rest.http.server.pas, and also in dddInfraSettings.pas
-  TRestHttpServerDefinition = class(TSynPersistentWithPassword)
+  TRestHttpServerDefinition = class(TObjectWithPassword)
   protected
     fBindPort: RawByteString;
     fAuthentication: TRestHttpServerRestAuthentication;
@@ -2717,7 +2717,7 @@ type
     /// if defined, this HTTP server will use WebSockets, and our secure
     // encrypted binary protocol
     // - when stored in the settings JSON file, the password will be safely
-    // encrypted as defined by TSynPersistentWithPassword
+    // encrypted as defined by TObjectWithPassword
     // - use the inherited PlainPassword property to set or read its value
     property WebSocketPassword: SpiUtf8
       read fPassWord write fPassWord;
