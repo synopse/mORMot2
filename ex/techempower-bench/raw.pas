@@ -87,7 +87,7 @@ type
   TOrmFortunes = array of TOrmFortune;
 
   // main server class
-  TRawAsyncServer = class(TSynPersistent)
+  TRawAsyncServer = class(TObjectWithProps)
   protected
     fHttpServer: THttpAsyncServer;
     fModel: TOrmModel;

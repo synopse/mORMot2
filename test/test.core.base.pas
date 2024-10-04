@@ -50,7 +50,7 @@ const
 
 type
   /// a test class, used by TTestServiceOrientedArchitecture
-  // - to test TPersistent objects used as parameters for remote service calls
+  // - also validates TPersistent objects as parameters for remote service calls
   TComplexNumber = class(TPersistent)
   private
     fReal: Double;
@@ -60,9 +60,11 @@ type
     constructor Create(aReal, aImaginary: double); reintroduce;
   published
     /// the real part of this complex number
-    property Real: Double read fReal write fReal;
+    property Real: Double
+      read fReal write fReal;
     /// the imaginary part of this complex number
-    property Imaginary: Double read fImaginary write fImaginary;
+    property Imaginary: Double
+      read fImaginary write fImaginary;
   end;
 
   TComplexNumberObjArray = array of TComplexNumber;

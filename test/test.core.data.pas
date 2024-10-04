@@ -1123,7 +1123,7 @@ type
     Damage, AttackSpeed: TRange;
   end;
 
-  TEnemy = class(TSynPersistent)
+  TEnemy = class(TObjectWithProps)
   private
     fEnabled: Boolean;
     fName: string;
@@ -1358,7 +1358,7 @@ type
   TEnumSet = set of TSimpleEnum;
 
   // validate enums and sets with setter methods
-  TSimpleExample = class(TSynPersistent)
+  TSimpleExample = class(TObjectWithProps)
   private
     fFullName: string;
     fEnumSet: TEnumSet;
@@ -6040,7 +6040,7 @@ type
   TSetMyEnum = set of TMyEnum;
   TSetMyEnumPart = set of TMyEnumPart; // validate partial sets
 
-  TComplexClass = class(TSynPersistent)
+  TComplexClass = class(TPersistent) // also validate RTL TPersistent support
   private
     csv: RawUtf8;
     function GetArray: TRawUtf8DynArray;

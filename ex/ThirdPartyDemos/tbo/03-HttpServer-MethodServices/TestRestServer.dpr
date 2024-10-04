@@ -70,7 +70,7 @@ type
     procedure GetAllFileNames(pmCtxt: TRestServerUriContext);
   end;
 
-  TTestServerMain = class(TSynPersistent)
+  TTestServerMain = class(TObjectWithProps)
   strict private
     FCustomerConfigFile: TFileName;
   private

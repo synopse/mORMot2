@@ -25,7 +25,7 @@ uses
   u_ServiceServer;
 
 type
-  TTestServerMain = class(TSynPersistent)
+  TTestServerMain = class(TObjectWithProps)
   strict private
     FCustomerConfigFile: TFileName;
   private
