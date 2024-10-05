@@ -69,23 +69,20 @@ type
   // - using this class will leverage the signature difference between Delphi
   // and FPC, among all supported platforms
   // - the class includes a RefCount integer field
-  TSynInterfacedObject = class(TObject, IUnknown)
+  TSynInterfacedObject = class(TSynPersistent, IUnknown)
   protected
     fRefCount: integer;
     // returns E_NOINTERFACE by default
     function VirtualQueryInterface(IID: PGuid; out Obj): TIntQry; virtual;
-    // always return 1 for a "non allocated" instance (0 triggers release)
+    // to be overriden -  return 1 for a "non allocated" instance (0 means release)
     function VirtualAddRef: integer;  virtual; abstract;
     function VirtualRelease: integer; virtual; abstract;
+    // IUnknown methods
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
   public
-    /// this virtual constructor will be called at instance creation
-    // - this constructor does nothing, but is declared as virtual so that
-    // inherited classes may safely override this default void implementation
-    constructor Create; virtual;
     /// the associated reference count
     property RefCount: integer
       read fRefCount write fRefCount;
@@ -3105,11 +3102,6 @@ end;
 
 
 { TSynInterfacedObject }
-
-constructor TSynInterfacedObject.Create;
-begin
-  // do-nothing virtual constructor
-end;
 
 function TSynInterfacedObject._AddRef: TIntCnt;
 begin

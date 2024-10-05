@@ -518,13 +518,6 @@ type
     // - inherited classes would have a root constructor to override
     // - is recognized by our RTTI initialization / JSON serialization process
     constructor Create; overload; virtual;
-    /// used to trigger TInterfacedObject protected reference counting methods
-    // - Release=true will call protected TInterfacedObject._Release method
-    // - Release=false will call protected TInterfacedObject._AddRef method
-    // - could be used to emulate proper reference counting of the instance
-    // via interfaces variables, but still storing plain class instances
-    // (e.g. in a global list of instances) - warning: use with extreme caution!
-    procedure RefCountUpdate(Release: boolean); virtual;
   end;
 
   /// used to determine the exact class type of a TSynPersistent
@@ -5389,21 +5382,11 @@ constructor TSynPersistent.Create;
 begin // do nothing by default but may be overriden
 end;
 
-
 { TInterfacedPersistent}
 
 constructor TInterfacedPersistent.Create;
 begin // do nothing by default but may be overriden
 end;
-
-procedure TInterfacedPersistent.RefCountUpdate(Release: boolean);
-begin
-  if Release then
-    _Release
-  else
-    _AddRef;
-end;
-
 
 
 { ************ Numbers (floats and integers) Low-level Definitions }

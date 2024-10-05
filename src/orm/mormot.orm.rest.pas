@@ -363,7 +363,6 @@ type
     procedure RetrieveAsyncListObjArray(Context: TObject; Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8 = '');
-
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const FieldsCsv: RawUtf8 = ''): TObjectList; overload;
