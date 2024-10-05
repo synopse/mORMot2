@@ -142,6 +142,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 
 Low-Level Data Processing Functions shared by all framework units
 - RTL `TPersistent` or Root Classes with Custom Constructor
+- `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - `TSynList` `TSynObjectList` `TSynLocker` classes
 - `TObjectStore` with proper Binary Serialization
 - INI Files and In-memory Access

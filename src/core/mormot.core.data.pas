@@ -8,6 +8,7 @@ unit mormot.core.data;
 
    Low-Level Data Processing Functions shared by all framework units
     - RTL TPersistent or Root Classes with Custom Constructor
+    - IAutoFree and IAutoLocker Reference-Counted Process
     - TSynList TSynObjectList TSynLocker classes
     - TObjectStore with proper Binary Serialization
     - INI Files and In-memory Access
@@ -109,6 +110,15 @@ type
   TInterfacedCollectionClass = class of TInterfacedCollection;
 
 
+{ ************ IAutoFree and IAutoLocker Reference-Counted Process }
+
+{ WARNING:
+    FPC and Delphi 10.4+ do require an explicit local variable or "with"
+    clause to keep the reference locked - previous behavior was to keep the
+    variable up to the end of the method, which is not the case any more.
+}
+
+type
   /// interface for TAutoFree to register another TObject instance
   // to an existing IAutoFree local variable
   // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
@@ -124,7 +134,8 @@ type
   // up to the end-of-method -> you should not use TAutoFree for new projects :(
   // - be aware that it won't implement a full ARC memory model, but may be
   // just used to avoid writing some try ... finally blocks on local variables
-  // - use with caution, only on well defined local scope
+  // - use with caution, only on well defined local scope, via a "with" clause
+  // or a local variable
   TAutoFree = class(TInterfacedObject, IAutoFree)
   protected
     fObject: TObject;
@@ -259,12 +270,13 @@ type
   // - you can use one instance of this to protect multi-threaded execution
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
-  // - this class inherits from TInterfacedPersistent so you
-  // could define one published property of a mormot.core.interface.pas
-  // TInjectableObject as IAutoLocker so that this class may be automatically
-  // injected
+  // - this class inherits from TInterfacedPersistent so you could define
+  // one published property of a mormot.core.interface.pas TInjectableObject as
+  // IAutoLocker so that this class may be automatically injected
   // - consider inherit from high-level TSynLocked or call low-level
   // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
+  // - use with caution, only on well defined local scope, via a "with" clause
+  // or a local variable, especially on FPC or Delphi 10.4+
   TAutoLocker = class(TInterfacedPersistent, IAutoLocker)
   protected
     fSafe: TSynLocker;
@@ -3125,6 +3137,8 @@ begin
   result := E_NOINTERFACE;
 end;
 
+
+{ ************ IAutoFree and IAutoLocker Reference-Counted Process }
 
 { TAutoFree }
 
