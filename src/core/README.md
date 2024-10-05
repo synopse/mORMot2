@@ -141,7 +141,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 ### mormot.core.data
 
 Low-Level Data Processing Functions shared by all framework units
-- RTL `TPersistent` / `TInterfacedObject` with Custom Constructor
+- RTL `TPersistent` or Root Classes with Custom Constructor
 - `TSynList` `TSynObjectList` `TSynLocker` classes
 - `TObjectStore` with proper Binary Serialization
 - INI Files and In-memory Access

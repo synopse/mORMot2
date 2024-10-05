@@ -7,7 +7,7 @@ unit mormot.core.data;
   *****************************************************************************
 
    Low-Level Data Processing Functions shared by all framework units
-    - RTL TPersistent / TInterfacedObject with Custom Constructor
+    - RTL TPersistent or Root Classes with Custom Constructor
     - TSynList TSynObjectList TSynLocker classes
     - TObjectStore with proper Binary Serialization
     - INI Files and In-memory Access
@@ -41,7 +41,7 @@ uses
   mormot.core.buffers;
 
 
-{ ************ RTL TPersistent / TInterfacedObject with Custom Constructor }
+{ ************ RTL TPersistent or Root Classes with Custom Constructor }
 
 type
     /// abstract parent class with a virtual constructor, ready to be overridden
@@ -57,28 +57,9 @@ type
     constructor Create; virtual;
   end;
 
-  {$M+}
-  /// abstract parent class with threadsafe implementation of IInterface and
-  // a virtual constructor
-  // - you can specify e.g. such a class to TRestServer.ServiceRegister() if
-  // you need an interfaced object with a virtual constructor, ready to be
-  // overridden to initialize the instance
-  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
-  public
-    /// this virtual constructor will be called at instance creation
-    // - this constructor does nothing, but is declared as virtual so that
-    // inherited classes may safely override this default void implementation
-    constructor Create; virtual;
-    /// used to mimic TInterfacedObject reference counting
-    // - Release=true will call TInterfacedObject._Release
-    // - Release=false will call TInterfacedObject._AddRef
-    // - could be used to emulate proper reference counting of the instance
-    // via interfaces variables, but still storing plain class instances
-    // (e.g. in a global list of instances) - warning: use with extreme caution!
-    procedure RefCountUpdate(Release: boolean); virtual;
-  end;
-  {$M-}
-
+  /// legacy type defined for compatibility with existing user code
+  // - TInterfacedPersistent seems a better name, consistent with TSynPersistent
+  TInterfacedObjectWithCustomCreate = TInterfacedPersistent;
 
   /// an abstract ancestor, for implementing an abstract TInterfacedObject class
   // - by default, will do nothing: no instance would be retrieved by
@@ -122,10 +103,6 @@ type
     /// this constructor will call GetClass to initialize the collection
     constructor Create; reintroduce; virtual;
   end;
-
-  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
-  // - could be used to create instances using its virtual constructor
-  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
 
   /// used to determine the exact class type of a TPersistentWithCustomCreateClass
   // - could be used to create instances using its virtual constructor
@@ -285,13 +262,13 @@ type
   // - you can use one instance of this to protect multi-threaded execution
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
-  // - this class inherits from TInterfacedObjectWithCustomCreate so you
+  // - this class inherits from TInterfacedPersistent so you
   // could define one published property of a mormot.core.interface.pas
   // TInjectableObject as IAutoLocker so that this class may be automatically
   // injected
   // - consider inherit from high-level TSynLocked or call low-level
   // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
-  TAutoLocker = class(TInterfacedObjectWithCustomCreate, IAutoLocker)
+  TAutoLocker = class(TInterfacedPersistent, IAutoLocker)
   protected
     fSafe: TSynLocker;
   public
@@ -457,7 +434,7 @@ type
   TSynObjectListClass = class of TSynObjectList;
 
   /// adding locking methods to a TInterfacedObject with virtual constructor
-  TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
+  TInterfacedObjectLocked = class(TInterfacedPersistent)
   protected
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
   public
@@ -472,7 +449,7 @@ type
   end;
 
   /// adding light locking methods to a TInterfacedObject with virtual constructor
-  TInterfacedObjectRWLocked = class(TInterfacedObjectWithCustomCreate)
+  TInterfacedObjectRWLocked = class(TInterfacedPersistent)
   protected
     fSafe: TRWLock;
   public
@@ -3109,29 +3086,13 @@ type
 implementation
 
 
-{ ************ RTL TPersistent / TInterfacedObject with Custom Constructor }
+{ ************ RTL TPersistent or Root Classes with Custom Constructor }
 
 { TPersistentWithCustomCreate }
 
 constructor TPersistentWithCustomCreate.Create;
 begin
   // nothing to do by default - overridden constructor may add custom code
-end;
-
-
-{ TInterfacedObjectWithCustomCreate }
-
-constructor TInterfacedObjectWithCustomCreate.Create;
-begin
-  // nothing to do by default - overridden constructor may add custom code
-end;
-
-procedure TInterfacedObjectWithCustomCreate.RefCountUpdate(Release: boolean);
-begin
-  if Release then
-    _Release
-  else
-    _AddRef;
 end;
 
 

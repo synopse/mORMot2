@@ -116,12 +116,7 @@ const
 { ************ TRestBackgroundTimer for Multi-Thread Process }
 
 type
-  {$M+}
-  { we expect RTTI information for the published properties of these
-    forward definitions - due to internal coupling, those classes are
-    to be defined in a single "type" statement }
   TRest = class;
-  {$M-}
 
   /// optionally called after TRest.AsyncRedirect background execution
   // - to retrieve any output result value, as JSON-encoded content
@@ -1790,8 +1785,8 @@ type
   TInterfacedObjectMulti = class;
 
   /// thread-safe implementation of IMultiCallbackRedirect
-  TInterfacedObjectMultiList = class(
-    TInterfacedObjectWithCustomCreate, IMultiCallbackRedirect)
+  TInterfacedObjectMultiList = class(TInterfacedPersistent,
+    IMultiCallbackRedirect)
   protected
     fDest: TInterfacedObjectMultiDestDynArray;
     fDests: TDynArrayLocked;

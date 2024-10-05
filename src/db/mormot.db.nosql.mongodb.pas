@@ -739,8 +739,6 @@ type
   TOnMongoConnectionReply = procedure(Request: TMongoRequest;
     const Reply: TMongoReplyCursor; var Opaque) of object;
 
-{$M+}
-
   TMongoClient = class;
   TMongoDatabase = class;
   TMongoCollection = class;
@@ -749,7 +747,7 @@ type
   // - all access will be protected by a mutex (critical section): it is thread
   // safe but you may use one TMongoClient per thread or a connection pool, for
   // better performance
-  TMongoConnection = class
+  TMongoConnection = class(TSynPersistent)
   protected
     fSafe: TOSLock;
     fLocked: cardinal;
@@ -1250,7 +1248,7 @@ type
   end;
 
   /// remote access to a MongoDB database
-  TMongoDatabase = class
+  TMongoDatabase = class(TSynPersistent)
   protected
     fClient: TMongoClient;
     fName: RawUtf8;
@@ -1339,7 +1337,7 @@ type
   end;
 
   /// remote access to a MongoDB collection
-  TMongoCollection = class
+  TMongoCollection = class(TSynPersistent)
   protected
     fDatabase: TMongoDatabase;
     fName: RawUtf8;
@@ -1884,7 +1882,6 @@ type
       read fSystemLastError;
   end;
 
-{$M-}
 
 
 /// ready-to-be displayed text of a TMongoClientWriteConcern item

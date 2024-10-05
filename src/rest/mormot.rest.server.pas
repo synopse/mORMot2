@@ -2142,7 +2142,7 @@ type
     // - this methods expects a class to be supplied, and the exact list of
     // interfaces to be registered to the server (e.g. [TypeInfo(IMyInterface)])
     // and implemented by this class
-    // - class can be any TInterfacedObject, but TInterfacedObjectWithCustomCreate
+    // - class can be any TInterfacedObject, but TInterfacedPersistent
     // can be used if you need an overridden constructor
     // - instance implementation pattern will be set by the appropriate parameter
     // - will return the first of the registered TServiceFactoryServer created

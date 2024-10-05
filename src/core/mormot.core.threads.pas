@@ -318,11 +318,11 @@ type
   end;
 
   /// allows thread-safe access to a TDocVariant document
-  // - this class inherits from TInterfacedObjectWithCustomCreate so you
+  // - this class inherits from TInterfacedPersistent so you
   // could define one published property of a mormot.core.interfaces.pas
   // TInjectableObject as ILockedDocVariant so that this class may be
   // automatically injected
-  TLockedDocVariant = class(TInterfacedObjectWithCustomCreate, ILockedDocVariant)
+  TLockedDocVariant = class(TInterfacedPersistent, ILockedDocVariant)
   protected
     fValue: TDocVariantData;
     fLock: TAutoLocker;
@@ -331,7 +331,7 @@ type
   public
     /// initialize the thread-safe document with a fast TDocVariant
     // - i.e. call Create(true) aka Create(JSON_FAST)
-    // - will be the TInterfacedObjectWithCustomCreate default constructor,
+    // - will be the TInterfacedPersistent default constructor,
     // called e.g. during IoC/DI resolution
     constructor Create; overload; override;
     /// initialize the thread-safe document storage from a given template

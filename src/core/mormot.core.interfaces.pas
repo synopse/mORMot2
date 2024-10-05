@@ -1025,7 +1025,7 @@ type
   // - any interface published property will also be automatically injected
   // - if you implement a SOA service with this class, TRestServer.Services
   // will be auto-injected via TServiceFactoryServer.CreateInstance()
-  TInjectableObject = class(TInterfacedObjectWithCustomCreate)
+  TInjectableObject = class(TInterfacedPersistent)
   protected
     fResolver: TInterfaceResolver;
     fResolverOwned: boolean;

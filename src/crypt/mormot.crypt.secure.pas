@@ -1030,7 +1030,7 @@ type
   /// abstract BASIC access authentication on server side
   // - don't use this class but e.g. TDigestAuthServerMem or TDigestAuthServerFile
   // - will implement the IBasicAuthServer process in an abstract way
-  TBasicAuthServer = class(TInterfacedObjectWithCustomCreate, IBasicAuthServer)
+  TBasicAuthServer = class(TInterfacedPersistent, IBasicAuthServer)
   protected
     fRealm, fQuotedRealm, fBasicInit: RawUtf8;
     fOnBeforeAuth, fOnAfterAuth: TOnAuthServer;
@@ -1761,7 +1761,7 @@ type
   end;
 
   /// abstract parent class to TCryptPublicKey and TCryptPrivateKey
-  TCryptAbstractKey = class(TInterfacedObjectWithCustomCreate)
+  TCryptAbstractKey = class(TInterfacedPersistent)
   protected
     fKeyAlgo: TCryptKeyAlgo;
   public

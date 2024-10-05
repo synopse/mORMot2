@@ -151,7 +151,7 @@ type
     fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
     fImplementationClassKind: (
-      ickBlank, ickWithCustomCreate, ickInjectable, ickInjectableRest,
+      ickBlank, ickPersistent, ickInjectable, ickInjectableRest,
       ickFromInjectedResolver, ickFake);
     fImplementationClassInterfaceEntry: PInterfaceEntry;
     fSharedInterface: IInterface;
@@ -178,13 +178,13 @@ type
     /// this method will create an implementation instance
     // - reference count will be set to one, in order to allow safe passing
     // of the instance into an interface, if AndIncreaseRefCount is TRUE
-    // - will handle TInterfacedObjectWithCustomCreate and TInjectableObject
+    // - will handle TInterfacedPersistent and TInjectableObject
     // as expected, if necessary
     function CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
   public
     /// initialize the service provider on the server side
     // - expect an direct server-side implementation class, which may inherit
-    // from plain TInterfacedClass, TInterfacedObjectWithCustomCreate if you
+    // from plain TInterfacedClass, TInterfacedPersistent if you
     // need an overridden constructor, or TInjectableObject to support DI/IoC
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes,
     // a time out (in seconds) can be defined (default is 30 minutes) - if the
@@ -620,8 +620,8 @@ begin
       fImplementationClassKind := ickInjectableRest
     else if fImplementationClass.InheritsFrom(TInjectableObject) then
       fImplementationClassKind := ickInjectable
-    else if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
-      fImplementationClassKind := ickWithCustomCreate;
+    else if fImplementationClass.InheritsFrom(TInterfacedPersistent) then
+      fImplementationClassKind := ickPersistent;
     fImplementationClassInterfaceEntry := fImplementationClass.
       GetInterfaceEntry(fInterface.InterfaceIID);
     if fImplementationClassInterfaceEntry = nil then
@@ -1178,9 +1178,8 @@ var
   dummyObj: pointer;
 begin
   case fImplementationClassKind of
-    ickWithCustomCreate:
-      result := TInterfacedObjectWithCustomCreateClass(
-        fImplementationClass).Create;
+    ickPersistent:
+      result := TInterfacedPersistentClass(fImplementationClass).Create;
     ickInjectable:
       result := TInjectableObjectClass(
         fImplementationClass).CreateWithResolver(fResolver, true);

@@ -1559,7 +1559,7 @@ type
   end;
 
   /// abstract parent to THttpPeerCache for its cryptographic core
-  THttpPeerCrypt = class(TInterfacedObjectWithCustomCreate)
+  THttpPeerCrypt = class(TInterfacedPersistent)
   protected
     fAesSafe: TLightLock; // topmost to ensure proper aarch64 alignment
     fClientSafe: TLightLock;

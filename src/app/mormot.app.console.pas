@@ -86,7 +86,7 @@ type
   // - is able to redirect all Text() output to an internal UTF-8 storage,
   // in addition or instead of the console (to be used e.g. from a GUI)
   // - implements ICommandLine interface
-  TCommandLine = class(TInterfacedObjectWithCustomCreate, ICommandLine)
+  TCommandLine = class(TInterfacedPersistent, ICommandLine)
   private
     fValues: TDocVariantData;
     fNoPrompt: boolean;

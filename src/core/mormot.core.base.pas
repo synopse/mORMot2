@@ -480,9 +480,9 @@ type
   TInterfaceDynArray = array of IInterface;
   PInterfaceDynArray = ^TInterfaceDynArray;
 
+  TListClass = class of TList;
   TStreamClass = class of TStream;
   TStringsClass = class of TStrings;
-  TListClass = class of TList;
   TObjectListClass = class of TObjectList;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
@@ -498,20 +498,41 @@ type
 
   /// a parent TObject class with a virtual constructor and RTTI generated
   // for its published properties
-  // - lighter than TPersistent or TObjectWithRttiMethods
-  // if you just want to persist some published properties
+  // - lighter than TPersistent, TObjectWithRttiMethods or TClonable if you just
+  // want to persist some published properties, e.g. into JSON
   TSynPersistent = class(TObject)
   public
     /// virtual constructor called at instance creation
-    // - is declared as virtual so that inherited classes may have a root
-    // constructor to override
-    // - is recognized by our RTTI serialization/initialization process
+    // - inherited classes would have a root constructor to override
+    // - is recognized by our RTTI initialization / JSON serialization process
     constructor Create; overload; virtual;
+  end;
+
+  /// a parent TInterfacedObject class with a virtual constructor and RTTI
+  // generated for its published properties and its methods
+  // - so class instances published properties could be serialized as JSON,
+  // and its methods could match IInvokable RTTI
+  TInterfacedPersistent = class(TInterfacedObject)
+  public
+    /// virtual constructor called at instance creation
+    // - inherited classes would have a root constructor to override
+    // - is recognized by our RTTI initialization / JSON serialization process
+    constructor Create; overload; virtual;
+    /// used to trigger TInterfacedObject protected reference counting methods
+    // - Release=true will call protected TInterfacedObject._Release method
+    // - Release=false will call protected TInterfacedObject._AddRef method
+    // - could be used to emulate proper reference counting of the instance
+    // via interfaces variables, but still storing plain class instances
+    // (e.g. in a global list of instances) - warning: use with extreme caution!
+    procedure RefCountUpdate(Release: boolean); virtual;
   end;
 
   /// used to determine the exact class type of a TSynPersistent
   // - allow to create instances using its virtual constructor
   TSynPersistentClass = class of TSynPersistent;
+  /// used to determine the exact class type of a TInterfacedPersistent
+  // - allow to create instances using its virtual constructor
+  TInterfacedPersistentClass = class of TInterfacedPersistent;
   {$M-}
 
 type
@@ -5366,6 +5387,21 @@ end;
 
 constructor TSynPersistent.Create;
 begin // do nothing by default but may be overriden
+end;
+
+
+{ TInterfacedPersistent}
+
+constructor TInterfacedPersistent.Create;
+begin // do nothing by default but may be overriden
+end;
+
+procedure TInterfacedPersistent.RefCountUpdate(Release: boolean);
+begin
+  if Release then
+    _Release
+  else
+    _AddRef;
 end;
 
 

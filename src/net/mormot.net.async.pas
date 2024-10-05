@@ -1032,7 +1032,6 @@ type
   /// implement HTTP async client requests
   // - reusing the threads pool and sockets polling of an associated
   // TAsyncConnections instance (typically a THttpAsyncServer)
-  // - the connections are maintained for a
   THttpAsyncClientConnections = class(TSynPersistent)
   protected
     fLock: TLightLock;

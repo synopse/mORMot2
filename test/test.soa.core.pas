@@ -400,7 +400,7 @@ type
     function GetContextSessionGroup: integer;
   end;
 
-  TServicePerThread = class(TInterfacedObjectWithCustomCreate, ITestPerThread)
+  TServicePerThread = class(TInterfacedPersistent, ITestPerThread)
   protected
     fThreadIDAtCreation: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   public

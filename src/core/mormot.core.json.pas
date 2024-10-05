@@ -2452,7 +2452,7 @@ type
   // - since the destructor will release all nested properties, you should
   // never store a reference to any of those nested instances if this owner
   // may be freed before
-  TInterfacedObjectAutoCreateFields = class(TInterfacedObjectWithCustomCreate)
+  TInterfacedObjectAutoCreateFields = class(TInterfacedPersistent)
   public
     /// this overriden constructor will instantiate all its nested
     // class or T*ObjArray published properties
@@ -10313,9 +10313,9 @@ begin
   result := TObjectListClass(Rtti.ValueClass).Create;
 end;
 
-function _New_InterfacedObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
+function _New_InterfacedPersistent(Rtti: TRttiCustom): pointer;
 begin
-  result := TInterfacedObjectWithCustomCreateClass(Rtti.ValueClass).Create;
+  result := TInterfacedPersistentClass(Rtti.ValueClass).Create;
 end;
 
 function _New_PersistentWithCustomCreate(Rtti: TRttiCustom): pointer;
@@ -10427,8 +10427,8 @@ begin
         fFlags := fFlags + fProps.AdjustAfterAdded; // may have added a prop
       fNewInstance := @_New_SynPersistent; // virtual TSynPersistent.Create
     end
-    else if c = TInterfacedObjectWithCustomCreate then
-      fNewInstance := @_New_InterfacedObjectWithCustomCreate // virtual Create
+    else if c = TInterfacedPersistent then
+      fNewInstance := @_New_InterfacedPersistent // virtual Create
     else if c = TPersistentWithCustomCreate then
       fNewInstance := @_New_PersistentWithCustomCreate // virtual Create
     else if c = TComponent then
@@ -11853,7 +11853,7 @@ end;
 constructor TInterfacedObjectAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-end; // no need to call TInterfacedObjectWithCustomCreate.Create
+end; // no need to call TInterfacedPersistent.Create
 
 destructor TInterfacedObjectAutoCreateFields.Destroy;
 begin
