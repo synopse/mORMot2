@@ -8408,7 +8408,8 @@ end;
 procedure TRttiCustom.RaiseMissingRtti;
 begin // called e.g. if fCache.Size = 0
   if Kind = rkSet then // mormot.core.rtti/json hardcore getter/setter limit
-    ERttiException.RaiseUtf8('%: % sets are limited to % items', [self, Name, ENUM_MAX])
+    ERttiException.RaiseUtf8(
+      '%: sets are limited to % items: use "array of %" instead', [self, ENUM_MAX, Name])
   else
     ERttiException.RaiseUtf8('%: % % has RttiSize=%', [self, ToText(Kind)^, Name, Size]);
 end;

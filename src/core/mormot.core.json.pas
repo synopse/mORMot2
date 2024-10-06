@@ -5412,12 +5412,20 @@ begin
 end;
 
 procedure _JS_EnumerationCustom(Data: PByte; const Ctxt: TJsonSaveContext);
+var
+  v: cardinal;
 begin
    Ctxt.W.Add('"');
    with Ctxt.Info.Cache do
-     if (Data^ >= EnumMin) and
-        (Data^ <= EnumMax) then
-       Ctxt.W.AddJsonEscape(pointer(EnumCustomText^[Data^]), {len=}0);
+   begin
+     if Size = 1 then
+       v := PByte(Data)^
+     else
+       v := PWord(Data)^;
+     if (v >= EnumMin) and
+        (v <= EnumMax) then
+       Ctxt.W.AddJsonEscape(pointer(EnumCustomText^[v]), {len=}0);
+   end;
    Ctxt.W.AddDirect('"');
 end;
 
@@ -5487,7 +5495,7 @@ begin
   end;
 end;
 
-procedure _JS_SetCustom(Data: PCardinal; const Ctxt: TJsonSaveContext);
+procedure _JS_SetCustom(Data: PInt64; const Ctxt: TJsonSaveContext);
 var
   i: cardinal;
   p: PPUtf8Char;
@@ -5501,7 +5509,7 @@ begin
       begin
         if (p^ <> nil) and
            (i >= EnumMin) and
-           GetBitPtr(Data, i) then
+           GetBit64(Data^, i) then
         begin
           Ctxt.W.AddDirect('"');
           Ctxt.W.AddJsonEscape(p^, {len=}0);
@@ -8025,8 +8033,7 @@ end;
 
 procedure _JL_Enumeration(Data: pointer; var Ctxt: TJsonParserContext);
 var
-  v: PtrInt;
-  err: integer;
+  v, err: integer;
 begin
   if Ctxt.ParseNext then
   begin
@@ -8040,8 +8047,8 @@ begin
     begin
       v := GetInteger(Ctxt.Value, err);
       if (err <> 0) or
-         (PtrUInt(v) > Ctxt.Info.Cache.EnumMax) or
-         (PtrUInt(v) < Ctxt.Info.Cache.EnumMin) then
+         (cardinal(v) > Ctxt.Info.Cache.EnumMax) or
+         (cardinal(v) < Ctxt.Info.Cache.EnumMin) then
         v := -1;
     end;
     if v < 0 then
@@ -8049,7 +8056,10 @@ begin
         v := 0
       else
         Ctxt.Valid := false;
-    MoveFast(v, Data^, Ctxt.Info.Size);
+    if Ctxt.Info.Size = 1 then
+      PByte(Data)^ := v
+    else
+      PWord(Data)^ := v;
   end;
 end;
 
@@ -11112,7 +11122,10 @@ begin
    begin
      r := Rtti.RegisterType(EnumInfo) as TRttiJson;
      r.fCache.EnumCustomText := CustomText;
-     r.fJsonSave := @_JS_EnumerationCustom;
+     if r.fCache.Size in [1, 2] then
+       r.fJsonSave := @_JS_EnumerationCustom // up to 65536 items
+     else
+       r.RaiseMissingRtti; // unsupported size - 65536 items seems fair enough
      // keep fJsonLoad := _JL_Enumeration (will also work with setters)
    end;
   if (SetInfo <> nil) and
@@ -11121,6 +11134,8 @@ begin
     r := Rtti.RegisterType(SetInfo) as TRttiJson;
     r.fCache.EnumCustomText := CustomText;
     r.fJsonSave := @_JS_SetCustom; // keep fJsonLoad := _JL_Set
+    if r.fCache.Size = 0 then
+      r.RaiseMissingRtti; // sets are supported up to 64-bit: use dynamic array
   end;
 end;
 
