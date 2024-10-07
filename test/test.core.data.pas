@@ -920,7 +920,7 @@ begin
       mustacheJson := HttpGet(
        'https://raw.githubusercontent.com/mustache/spec/' +
        'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json',
-       '', nil, false, nil, 0, {forcesocket:}true, {ignorecerterror:}true);
+       '', nil, false, nil, 0, {forcesocket:}false, {ignorecerterror:}true);
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
     RecordLoadJson(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
@@ -3235,7 +3235,7 @@ begin
   begin
     discogsJson := HttpGet(
       'https://api.discogs.com/artists/45/releases?page=1&per_page=100',
-       '', nil, false, nil, 0, {forcesocket:}true, {ignorecerterror:}true);
+       '', nil, false, nil, 0, {forcesocket:}false, {ignorecerterror:}true);
     FileFromString(discogsJson, WorkDir + discogsFileName);
   end;
   Check(IsValidJson(discogsJson), 'discogsJson');
@@ -3244,7 +3244,7 @@ begin
   begin
     zendframeworkJson := HttpGet(
       'https://api.github.com/users/zendframework/repos',
-      '', nil, false, nil, 0, {forcesocket:}true, {ignorecerterror:}true);
+      '', nil, false, nil, 0, {forcesocket:}false, {ignorecerterror:}true);
     FileFromString(zendframeworkJson, WorkDir + zendframeworkFileName);
   end;
   Check(IsValidJson(zendframeworkJson), 'zendJson');

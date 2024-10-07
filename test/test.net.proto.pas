@@ -135,7 +135,7 @@ begin
         url := 'https://raw.githubusercontent.com/OAI/' +
                  'OpenAPI-Specification/main/examples/' + url;
        JsonBufferReformat(pointer(
-        HttpGet(url, nil, false, nil, 0, {forcesock:}true, {igncerterr:}true)),
+        HttpGet(url, nil, false, nil, 0, {forcesock:}false, {igncerterr:}true)),
         pets[i]);
       if pets[i] <> '' then
         FileFromString(pets[i], fn);
