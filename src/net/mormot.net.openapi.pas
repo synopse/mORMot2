@@ -408,6 +408,7 @@ type
   private
     fPrefix, fConstTextArrayName: RawUtf8;
     fChoices: TDocVariantData;
+    fDynArrayEnum: boolean; // true if fChoices.Count > ENUM_MAX = 64
   public
     constructor Create(aParser: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
@@ -1200,16 +1201,16 @@ end;
 function TPascalCustomType.ToArrayTypeName(AsFinalType: boolean): RawUtf8;
 begin
   if AsFinalType then
-    result := FormatUtf8('%DynArray', [PascalName])
+    FormatUtf8('%DynArray', [PascalName], result)
   else
-    result := FormatUtf8('array of %', [PascalName]);
+    FormatUtf8('array of %', [PascalName], result);
 end;
 
 function TPascalCustomType.ToArrayTypeDefinition: RawUtf8;
 begin
   if fRequiresArrayDefinition then
-    result := FormatUtf8('%% = %;%', [fParser.fLineIndent,
-      ToArrayTypeName({final=}true), ToArrayTypeName(false), fParser.LineEnd])
+    FormatUtf8('%% = %;%', [fParser.fLineIndent, ToArrayTypeName({final=}true),
+      ToArrayTypeName(false), fParser.LineEnd], result)
   else
     result := '';
 end;
@@ -1710,6 +1711,7 @@ begin
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0); // always prepend a first void item
+  fDynArrayEnum := fChoices.Count > ENUM_MAX; // use dynamic array, not set
   for i := 2 to length(fPascalName) do
     if length(p) >= 3 then
       break
@@ -1765,7 +1767,8 @@ end;
 procedure TPascalEnum.ToRegisterCustom(W: TTextWriter);
 begin
   w.AddStrings(['    TypeInfo(', fPascalName, ')']);
-  if fRequiresArrayDefinition then
+  if fRequiresArrayDefinition and
+     not fDynArrayEnum then
     w.AddStrings([', TypeInfo(', ToArrayTypeName, ')'])
   else
     w.AddShorter(', nil');
@@ -1774,10 +1777,12 @@ end;
 
 function TPascalEnum.ToArrayTypeName(AsFinalType: boolean): RawUtf8;
 begin
-  if AsFinalType then
-    result := FormatUtf8('%Set', [PascalName])
+  if fDynArrayEnum then
+    result := inherited ToArrayTypeName(AsFinalType)
+  else if AsFinalType then
+    FormatUtf8('%Set', [PascalName], result)
   else
-    result := FormatUtf8('set of %', [PascalName]);
+    FormatUtf8('set of %', [PascalName], result);
 end;
 
 procedure TPascalEnum.ToConstTextArray(W: TTextWriter);
@@ -1930,6 +1935,7 @@ end;
 function TPascalType.ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
 var
   func: RawUtf8;
+  e: TPascalEnum;
 begin
   result := VarName; // default to direct value
   if IsBuiltin then
@@ -1964,10 +1970,15 @@ begin
     end
   else if IsEnum then
   begin
-    func := (fCustomType as TPascalEnum).fConstTextArrayName;
+    e := fCustomType as TPascalEnum;
+    func := e.fConstTextArrayName; // ###_TXT[]
     if IsArray then
-      FormatUtf8('GetSetNameCustom(TypeInfo(%), %, @%)',
-        [(fCustomType as TPascalEnum).PascalName, VarName, func], result)
+      if e.fDynArrayEnum then
+        FormatUtf8('GetEnumArrayNameCustom(%, %, @%)',
+          [VarName, e.fChoices.Count, func], result)
+      else
+        FormatUtf8('GetSetNameCustom(TypeInfo(%), %, @%)',
+          [e.PascalName, VarName, func], result)
     else
       FormatUtf8('%[%]', [func, VarName], result);
     exit;
@@ -1979,6 +1990,7 @@ end;
 function TPascalType.ToDefaultParameterValue(aParam: TPascalParameter): RawUtf8;
 var
   def: PVariant;
+  e: TPascalEnum;
 begin
   def := aParam.fDefault;
   if Assigned(def) and
@@ -1991,10 +2003,16 @@ begin
       result := QuotedStr(result); // single quoted pascal string
   end
   else if IsEnum then
+  begin
+    e := CustomType as TPascalEnum;
     if IsArray then
-      result := '[]' // set
+      if e.fDynArrayEnum then
+        result := 'nil' // dynamic array
+      else
+        result := '[]' // set
     else
-      result := (CustomType as TPascalEnum).Prefix + 'None' // first enum
+      result := e.Prefix + 'None'; // first enum
+  end
   else if IsArray then
     result := 'nil'
   else
@@ -2118,7 +2136,7 @@ end;
 
 function TPascalRecord.ToRttiRegisterDefinitions: RawUtf8;
 begin
-  result := FormatUtf8('TypeInfo(%), _%', [PascalName, PascalName]);
+  FormatUtf8('TypeInfo(%), _%', [PascalName, PascalName], result);
 end;
 
 procedure TPascalRecord.CopyProperties(aDest: TPascalRecord);
@@ -2415,13 +2433,6 @@ begin
     begin
       result := NewPascalTypeFromSchema(items, aSchemaName);
       result.fBuiltinSchema := aSchema;
-      if result.IsEnum and
-         (TPascalEnum(result.CustomType).fChoices.Count >= ENUM_MAX) then
-      begin
-        // mormot.core.rtti/json is limited to 64 items: use TRawUtf8DynArray
-        result.Free;
-        result := TPascalType.CreateBuiltin(self, obtRawUtf8);
-      end;
       result.SetArray(true);
     end;
   end
