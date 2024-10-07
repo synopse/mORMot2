@@ -3356,6 +3356,9 @@ type
     // - making a buffer reallocation if needed
     procedure AddShort(const s: ShortString); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// add one AnsiChar just after another Add() within trailing 16 bytes margin
+    procedure AddDirect(c: AnsiChar);
+      {$ifdef HASINLINE}inline;{$endif}
     /// finalize the Add() temporary storage, and create a RawByteString from it
     procedure Done(var Dest; CodePage: cardinal = CP_RAWBYTESTRING); overload;
   end;
@@ -11129,6 +11132,12 @@ procedure TSynTempBuffer.AddShort(const s: ShortString);
 begin
   if s[0] <> #0 then
     MoveFast(s[1], Add(ord(s[0]))^, ord(s[0]));
+end;
+
+procedure TSynTempBuffer.AddDirect(c: AnsiChar);
+begin
+  PUtf8Char(buf)[added] := c; // append directly within SYNTEMPTRAIL bytes
+  inc(added);
 end;
 
 procedure TSynTempBuffer.Done(var Dest; CodePage: cardinal);

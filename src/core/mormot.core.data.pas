@@ -2568,7 +2568,7 @@ type
     /// check if a RawUtf8 value is already stored within this class
     // - if not existing, returns nil and don't add it to the pool
     // - if existing, returns pointer(fValue[i]) of the unique stored RawUtf8
-    // - use e.g. for very fast per-pointer lookup of interned property names
+    // - used e.g. for very fast per-pointer lookup of interned property names
     function Existing(const aText: RawUtf8): pointer;
     /// return a RawUtf8 variable stored within this class from a text buffer
     // - if aText occurs for the first time, add it to the internal string pool
