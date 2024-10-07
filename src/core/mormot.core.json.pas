@@ -1885,6 +1885,8 @@ type
     fCompare: array[{CaseInsens:}boolean] of TRttiCompare; // for ValueCompare
     fIncludeReadOptions: TJsonParserOptions;
     fIncludeWriteOptions: TTextWriterWriteObjectOptions;
+    function GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt): integer;
+      {$ifdef HASINLINE}inline;{$endif}
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; override;
@@ -5419,9 +5421,9 @@ begin
    with Ctxt.Info.Cache do
    begin
      if Size = 1 then
-       v := PByte(Data)^
+       v := Data^
      else
-       v := PWord(Data)^;
+       v := PWord(Data)^; // support up to 65536 items
      if (v >= EnumMin) and
         (v <= EnumMax) then
        Ctxt.W.AddJsonEscape(pointer(EnumCustomText^[v]), {len=}0);
@@ -5429,7 +5431,7 @@ begin
    Ctxt.W.AddDirect('"');
 end;
 
-procedure _JS_Set(Data: PCardinal; const Ctxt: TJsonSaveContext);
+procedure _JS_Set(Data: PInt64; const Ctxt: TJsonSaveContext);
 var
   PS: PShortString;
   i: cardinal;
@@ -8014,23 +8016,6 @@ begin
     Data^ := GetCardinal(Ctxt.Value);
 end;
 
-function EnumFind(List: PPUtf8Char; Max: PtrInt;
-  Value: pointer; ValueLen: TStrLen): PtrInt;
-begin
-  result := 0;
-  repeat
-    if (List^ <> nil) and
-       (PStrLen(List^ - _STRLEN)^ = ValueLen) and
-       CompareMemFixed(List^, Value, ValueLen) then
-      exit;
-    if result = Max then
-      break;
-    inc(List);
-    inc(result);
-  until false;
-  result := -1;
-end;
-
 procedure _JL_Enumeration(Data: pointer; var Ctxt: TJsonParserContext);
 var
   v, err: integer;
@@ -8038,11 +8023,7 @@ begin
   if Ctxt.ParseNext then
   begin
     if Ctxt.WasString then
-      with Ctxt.Info.Cache do
-        if EnumCustomText = nil then
-          v := EnumInfo.GetEnumNameValue(Ctxt.Value, Ctxt.ValueLen)
-        else
-          v := EnumFind(pointer(EnumCustomText), EnumMax, Ctxt.Value, Ctxt.ValueLen)
+      v := TRttiJson(Ctxt.Info).GetEnumNameValue(Ctxt.Value, Ctxt.ValueLen)
     else
     begin
       v := GetInteger(Ctxt.Value, err);
@@ -8061,6 +8042,29 @@ begin
     else
       PWord(Data)^ := v;
   end;
+end;
+
+function EnumFind(List: PPUtf8Char; Max: PtrInt;
+  Value: pointer; ValueLen: TStrLen): PtrInt;
+var
+  v: PUtf8Char;
+begin
+  result := 0;
+  repeat
+    v := List^;
+    if v <> nil then
+    begin
+      if (PStrLen(v - _STRLEN)^ = ValueLen) and
+         CompareMemFixed(v, Value, ValueLen) then
+      exit;
+    end else if ValueLen = 0 then
+      exit;
+    if result = Max then
+      break;
+    inc(List);
+    inc(result);
+  until false;
+  result := -1;
 end;
 
 procedure FindCustomSet(var Ctxt: TJsonParserContext; V: PInt64);
@@ -10807,6 +10811,20 @@ begin
     end;
 end;
 
+function TRttiJson.GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt): integer;
+begin
+  if Cache.EnumCustomText <> nil then
+    result := EnumFind(pointer(Cache.EnumCustomText), Cache.EnumMax, Value, ValueLen)
+  else if ValueLen <> 0 then
+  begin
+    result := FindShortStringListExact(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
+    if result < 0 then
+      result := FindShortStringListTrimLowerCase(Cache.EnumList, Cache.EnumMax, Value, ValueLen)
+  end
+  else
+    result := -1;
+end;
+
 function StrEquA(n, str: PByte): boolean;
 var
   c: byte;
@@ -10899,7 +10917,7 @@ begin
         // check enumeration/set name against the stored value
         if Path = nil then // last path only
         begin
-          i := result.Cache.EnumInfo^.GetEnumNameValue(@n[1], ord(n[0]));
+          i := TRttiJson(result).GetEnumNameValue(@n[1], ord(n[0]));
           if i < 0 then
             break;
           // enum name match: return a boolean to stop searching
