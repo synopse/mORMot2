@@ -1063,9 +1063,13 @@ constructor TServiceFactory.Create(aOwner: TInterfaceResolver;
 begin
   inherited CreateWithResolver(aOwner, {raiseIfNotFound=}true);
   fInterface := TInterfaceFactory.Get(aInterface);
+  if fInterface = nil then // paranoid
+    EServiceException.RaiseUtf8('%.Create: no I%', [self, aInterface^.RawName]);
   fInstanceCreation := aInstanceCreation;
   fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGUID));
   fInterfaceUri := fInterface.InterfaceUri;
+  if fOrm = nil then
+    EServiceException.RaiseUtf8('%.Create: I% has no ORM', [self, fInterfaceUri]);
   if fOrm.Model.GetTableIndex(fInterfaceUri) >= 0 then
     EServiceException.RaiseUtf8('%.Create: I% routing name is ' +
       'already used by a % SQL table name', [self, fInterfaceUri, fInterfaceUri]);
