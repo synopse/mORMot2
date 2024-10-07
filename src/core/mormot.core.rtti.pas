@@ -1502,7 +1502,7 @@ function CopyObject(aFrom: TObject): pointer; overload;
 procedure ObjArrayCopy(const SourceObjArray; var DestObjArray;
   SourceCount: PInteger = nil; DestCount: PInteger = nil); overload;
 
-/// allocate and fill a T*ObjArray from SourceObjArray[] items
+/// allocate and fill a T*ObjArray from SourceObjArray[] copies
 // - warning: SourceCount should be a 32-bit "integer" variable, not a PtrInt
 function ObjArrayCopy(const SourceObjArray;
   SourceCount: PInteger = nil): TPointerDynArray; overload;
@@ -3058,12 +3058,18 @@ type
     /// copy A fields values into B
     // - A and B are either a TObject instance or a @record pointer, depending on Init()
     procedure ToB(A, B: pointer); overload;
-    /// create a new A class instance, copying field values from B
-    // - returned A is a newly allocated instance of the TClass specified to Init()
+    /// create a new A, copying field values from B
+    // - if Init(A) was a class, returned pointer is a new class instance,
+    // which should be released via Free
+    // - if Init(A) was a record, returned pointer if a heap-allocated record,
+    // which should be released via a proper Dispose()
     // - B is either a TObject instance or a @record pointer, depending on Init()
     function ToA(B: pointer): pointer; overload;
-    /// create a new B class instance, copying field values from A
-    // - A is either a TObject instance or a @record pointer, depending on Init()
+    /// create a new B, copying field values from A
+    // - if Init(B) was a class, returned pointer is a new class instance,
+    // which should be released via Free
+    // - if Init(B) was a record, returned pointer if a heap-allocated record,
+    // which should be released via a proper Dispose()
     // - returned B is a newly allocated instance of the TClass specified to Init()
     function ToB(A: pointer): pointer; overload;
   end;
@@ -9968,9 +9974,11 @@ end;
 
 function TRttiMap._Init(A, B: TRttiCustom): PRttiMap;
 begin
-  if A.Props.Count = 0 then
+  if (A.Props.Count = 0) or
+     not (A.Kind in (rkRecordTypes + [rkClass])) then
     ERttiException.RaiseUtf8('Unexpected TRttiMap.Init(A: %)', [A.Name]);
-  if B.Props.Count = 0 then
+  if (B.Props.Count = 0) or
+     not (B.Kind in (rkRecordTypes + [rkClass])) then
     ERttiException.RaiseUtf8('Unexpected TRttiMap.Init(B: %)', [B.Name]);
   aRtti := A;
   bRtti := B;
@@ -10074,13 +10082,19 @@ end;
 
 function TRttiMap.ToA(B: pointer): pointer;
 begin
-  result := aRtti.ClassNewInstance; // raise ERttiException if not a class
+  if aRtti.Kind = rkClass then
+    result := aRtti.ClassNewInstance
+  else
+    result := AllocMem(aRtti.Size);
   ToA(result, B);
 end;
 
 function TRttiMap.ToB(A: pointer): pointer;
 begin
-  result := bRtti.ClassNewInstance;
+  if bRtti.Kind = rkClass then
+    result := bRtti.ClassNewInstance
+  else
+    result := AllocMem(bRtti.Size);
   ToB(A, result);
 end;
 

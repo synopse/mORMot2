@@ -1546,11 +1546,11 @@ var
         case p.Location of
           oplQuery:
             if p.ParamType.IsArray then
-              w.AddDirect('*'); // ueStarNameIsCsv
+              w.AddDirect('*'); // ueStarNameIsCsv for UrlEncodeFull()
           // oplHeader uses natively CSV in OpenAPI default "simple" style
           oplCookie:
             w.AddShorter('Cookie: ');
-            // warning: arrays are not yet properly written in cookies
+            // warning: arrays may not be properly written in cookies
         end;
         w.AddStrings([p.Name, ''', ', p.ParamType.ToFormatUtf8Arg(p.PascalName)]);
       end;
