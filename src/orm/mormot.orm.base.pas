@@ -5455,16 +5455,12 @@ begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
   D := TOrmPropInfoRttiObject(DestInfo).GetInstance(Dest);
-  case fPropRtti.ValueRtlClass of
-    vcCollection:
-      CopyCollection(TCollection(S), TCollection(D));
-    vcStrings:
-      CopyStrings(TStrings(S), TStrings(D));
-    else
-      begin
-        D.Free; // release previous instance
-        TOrmPropInfoRttiObject(DestInfo).SetInstance(Dest, CopyObject(S));
-      end;
+  if Assigned(fPropRtti.CopyObject) then
+    fPropRtti.CopyObject(D, S) // work directly on instances (e.g. TStrings)
+  else
+  begin
+    D.Free; // release previous instance and assign a copy
+    TOrmPropInfoRttiObject(DestInfo).SetInstance(Dest, CopyObject(S));
   end;
 end;
 
