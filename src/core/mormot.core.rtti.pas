@@ -3040,23 +3040,39 @@ type
     function _Map(A, B: PtrInt): PRttiMap;
   public
     /// initialize fields mapping between two class instances
+    // - for instance:
+    // !  map.Init(TMyClassA, TMyClassB);
     function Init(A, B: TClass): PRttiMap; overload;
     /// initialize fields mapping between a class instance and a record
+    // - for instance:
+    // !  map.Init(TMyClassA, TypeInfo(TMyRecordB));
     function Init(A: TClass; B: PRttiInfo): PRttiMap; overload;
     /// initialize fields mapping between two record instances
+    // - for instance:
+    // !  map.Init(TypeInfo(TMyRecordA), TypeInfo(TMyRecordB));
     function Init(A, B: PRttiInfo): PRttiMap; overload;
     /// use RTTI field names to map the content
+    // - returns self to continue manual calls to Map() in a fluid interface
     function AutoMap: PRttiMap;
     /// map two fields by name
     // - if any field A or B name is '', this field will be ignored
+    // - returns self to continue manual calls to Map() in a fluid interface
     function Map(const A, B: RawUtf8): PRttiMap; overload;
     /// map fields by A,B pairs of names
+    // - returns self to continue manual calls to Map() in a fluid interface
     function Map(const ABPairs: array of RawUtf8): PRttiMap; overload;
     /// copy B fields values into A
-    // - A and B are either a TObject instance or a @record pointer, depending on Init()
+    // - A and B are either a TObject instance or a @record pointer, depending
+    // on Init() supplied types, for instance:
+    // !var c: TMyClass;
+    // !    r: TMyRecord;
+    // !begin
+    // !  map.Init(TMyClass, TypeInfo(TMyRecord));
+    // !  map.ToA(c, @r); // from TMyRecord to TMyClass
+    // !  map.ToB(c, @r); // from TMyClass to TMyRecord
     procedure ToA(A, B: pointer); overload;
     /// copy A fields values into B
-    // - A and B are either a TObject instance or a @record pointer, depending on Init()
+    // - A/B are either TObject instance or @record pointer, depending on Init()
     procedure ToB(A, B: pointer); overload;
     /// create a new A, copying field values from B
     // - if Init(A) was a class, returned pointer is a new class instance,
@@ -3064,6 +3080,28 @@ type
     // - if Init(A) was a record, returned pointer if a heap-allocated record,
     // which should be released via a proper Dispose()
     // - B is either a TObject instance or a @record pointer, depending on Init()
+    // - usage may be:
+    // !var c, c2: TMyClass;
+    // !    r: ^TMyRecord;
+    // !begin
+    // !  map.Init(TypeInfo(TMyRecord), TMyClass);
+    // !  c := TMyClass.Create;
+    // !  try
+    // !    r := map.ToA(c); // from TMyClass to heap-allocated TMyRecord
+    // !    try
+    // !      c2 := map.ToB(r); // from TMyRecord to a new TMyClass instance
+    // !      try
+    // !        Use(c2);
+    // !      finally
+    // !        c2.Free;
+    // !      end;
+    // !    finally
+    // !      Dispose(r);
+    // !    end;
+    // !  finally
+    // !    c.Free;
+    // !  end;
+    // !end;
     function ToA(B: pointer): pointer; overload;
     /// create a new B, copying field values from A
     // - if Init(B) was a class, returned pointer is a new class instance,
