@@ -1353,6 +1353,7 @@ type
   PLdapUser = ^TLdapUser;
 
   /// how TLdapClient.Connect try to find the LDAP server if no TargetHost is set
+  // - lccNoDiscovery overrides lccCldap/lccClosest and disable any DNS discovery
   // - default lccCldap will call CldapMyLdapController() to retrieve the
   // best possible LDAP server for this client
   // - lccClosest will make a round over the supplied addresses with a CLDAP
@@ -1361,6 +1362,7 @@ type
   // - default lccTlsFirst will try to connect as TLS on port 636 (if OpenSSL
   // is loaded)
   TLdapClientConnect = set of (
+    lccNoDiscovery,
     lccCldap,
     lccClosest,
     lccTlsFirst);
@@ -4863,33 +4865,39 @@ begin
   fResultError := leUnknown;
   fResultString := '';
   if fSettings.TargetHost = '' then
-  begin
-    // try all LDAP servers from OS list
-    if ForcedDomainName = '' then
-      ForcedDomainName := fSettings.KerberosDN; // may be pre-set
-    if lccCldap in DiscoverMode then
+    if lccNoDiscovery in DiscoverMode then
     begin
-      h := CldapGetDefaultLdapController(
-        @fSettings.fKerberosDN, @fSettings.fKerberosSpn);
-      if h <> '' then
-        AddRawUtf8(dc, h);
-    end;
-    if dc = nil then
+      fResultString := 'Connect: no TargetHost supplied';
+      exit;
+    end
+    else
     begin
-      if not (lccClosest in DiscoverMode) then
-        DelayMS := 0; // disable CldapSortHosts()
-      dc := DnsLdapControlersSorted(
-        DelayMS, {MinimalUdpCount=}0, '', false, @fSettings.fKerberosDN);
-    end;
-  end
+      // try all LDAP servers from OS list
+      if ForcedDomainName = '' then
+        ForcedDomainName := fSettings.KerberosDN; // may be pre-set
+      if lccCldap in DiscoverMode then
+      begin
+        h := CldapGetDefaultLdapController(
+          @fSettings.fKerberosDN, @fSettings.fKerberosSpn);
+        if h <> '' then
+          AddRawUtf8(dc, h);
+      end;
+      if dc = nil then
+      begin
+        if not (lccClosest in DiscoverMode) then
+          DelayMS := 0; // disable CldapSortHosts()
+        dc := DnsLdapControlersSorted(
+          DelayMS, {MinimalUdpCount=}0, '', false, @fSettings.fKerberosDN);
+      end;
+      if dc = nil then
+      begin
+        fResultString := 'Connect: no LDAP server found on this network';
+        exit;
+      end;
+    end
   else
     // try the LDAP server as specified in TLdapClient settings
     AddRawUtf8(dc, NetConcat([fSettings.TargetHost, ':', fSettings.TargetPort]));
-  if dc = nil then
-  begin
-    fResultString := 'Connect: no TargetHost supplied';
-    exit;
-  end;
   fSeq := 0;
   for i := 0 to high(dc) do
     try
