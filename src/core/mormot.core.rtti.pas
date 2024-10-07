@@ -8561,22 +8561,6 @@ begin
   end;
   // initialize processing callbacks
   fFinalize := RTTI_FINALIZE[fCache.Kind];
-  fCopy := RTTI_MANAGEDCOPY[fCache.Kind];
-  if not Assigned(fCopy) then
-    case fCache.Size of // direct copy of most sizes, including class/pointer
-      1:
-        fCopy := @_Per1Copy;
-      2:
-        fCopy := @_Per2Copy;
-      4:
-        fCopy := @_Per4Copy;
-      8:
-        fCopy := @_Per8Copy;
-      16:
-        fCopy := @_Per16Copy;
-      32:
-        fCopy := @_Per32Copy;
-    end; // ItemCopy() will fallback to MoveFast() otherwise
   pt := GuessTypeInfoToStandardParserType(aInfo, @pct);
   SetParserType(pt, pct);
 end;
@@ -8638,12 +8622,12 @@ begin
     SetParserType(ParserType, pctNone);
     exit;
   end;
-  // create fake RTTI which should be enough for our purpose
+  // create fake RTTI which should be enough for our registration purpose
   SetLength(fNoRttiInfo, length(TypeName) + 64); // all filled with zeros
   fCache.Info := pointer(fNoRttiInfo);
   fCache.Info.Kind := fCache.Kind;
   if TypeName = '' then // we need some name to search for
-    fCache.Info.RawName := BinToHexDisplayLowerShort(@self, SizeOf(pointer))
+    fCache.Info.RawName := PointerToHexShort(self)
   else
     fCache.Info.RawName := TypeName;
   case ParserType of
@@ -8658,25 +8642,12 @@ begin
   Rtti.AddToPairs(self, fCache.Info);
 end;
 
-function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
-begin
-  if Rtti = nil then
-    raise ERttiException.Create('Unexpected ClassNewInstance(nil)')
-  else if Rtti.Kind <> rkClass then
-     raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not available for %',
-       [Rtti, Rtti.Name, ToText(Rtti.Kind)^])
-  else
-    raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not implemented -> ' +
-      'please include mormot.core.json unit to register TRttiJson',
-      [Rtti, Rtti.Name]);
-end;
-
 function TRttiCustom.SetParserType(aParser: TRttiParserType;
   aParserComplex: TRttiParserComplexType): TRttiCustom;
 begin
+  // setup this TRttiParserType
   fParser := aParser;
   fParserComplex := aParserComplex;
-  fSetRandom := PT_RANDOM[aParser];
   if fCache.Info <> nil then
     ShortStringToAnsi7String(fCache.Info.Name^, fName);
   fFlags := fFlags + fProps.AdjustAfterAdded;
@@ -8685,7 +8656,24 @@ begin
     include(fFlags, rcfArrayItemManaged);
   if aParser in (ptStringTypes - [ptRawJson]) then
     include(fFlags, rcfJsonString);
-  fNewInstance := @_New_NotImplemented; // raise ERttiException by default
+  // setup the processing callbacks
+  fSetRandom := PT_RANDOM[aParser];
+  fCopy := RTTI_MANAGEDCOPY[fCache.Kind];
+  if not Assigned(fCopy) then
+    case fCache.Size of // direct copy of most sizes, including class/pointer
+      1:
+        fCopy := @_Per1Copy; // e.g. byte
+      2:
+        fCopy := @_Per2Copy; // e.g. word
+      4:
+        fCopy := @_Per4Copy; // e.g. integer/single/pointer
+      8:
+        fCopy := @_Per8Copy; // e.g. Int64/double/pointer
+      16:
+        fCopy := @_Per16Copy; // e.g. THash128/TGuid
+      32:
+        fCopy := @_Per32Copy; // e.g. THash256
+    end; // ItemCopy() will fallback to MoveFast() otherwise
   result := self;
 end;
 
@@ -9556,7 +9544,7 @@ begin
       if result <> nil then
         exit; // already registered in the background
       result := GlobalClass.Create;
-      result.FromRtti(nil);
+      result.FromRtti(nil); // just set rcfWithoutRtti flag
       result.SetValueClass(ObjectClass, nil);
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
       GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
