@@ -1645,7 +1645,13 @@ function GetSetNameArray(aTypeInfo: PRttiInfo; const value;
 // - expects CustomText in the TRttiJson.RegisterCustomEnumValues() format, e.g.
 // ! const MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('one', 'and 2');
 function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
-  CustomText: PRawUtf8Array; const SepChar: RawUtf8 = ','): RawUtf8;
+  customText: PRawUtf8Array; sepChar: AnsiChar = ','): RawUtf8;
+
+/// helper to retrieve the CSV text of all enumerates defined in a dynamic array
+// - expects CustomText in the TRttiJson.RegisterCustomEnumValues() format, e.g.
+// ! const MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('one', 'and 2');
+function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
+  customText: PRawUtf8Array; sepChar: AnsiChar = ','): RawUtf8;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
@@ -5945,22 +5951,67 @@ begin
 end;
 
 function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
-  CustomText: PRawUtf8Array; const SepChar: RawUtf8): RawUtf8;
+  customText: PRawUtf8Array; sepChar: AnsiChar): RawUtf8;
 var
   info: PRttiEnumType;
+  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
   result := '';
   info := aTypeInfo^.SetEnumType;
   if (info = nil) or
      (@value = nil) or
-     (CustomText = nil) then
+     (customText = nil) then
     exit;
+  tmp.InitOnStack;
   for i := info^.MinValue to info^.MaxValue do
     if GetBitPtr(@value, i) then
-      Append(result, CustomText^[i], SepChar);
-  if result <> '' then
-    FakeSetLength(result, length(result) - 1); // cancel last comma
+    begin
+      tmp.Add(customText^[i]);
+      tmp.AddDirect(sepChar);
+    end;
+  if tmp.added = 0 then
+    exit;
+  dec(tmp.added); // cancel last comma
+  tmp.Done(result, CP_UTF8);
+end;
+
+function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
+  customText: PRawUtf8Array; sepChar: AnsiChar): RawUtf8;
+var
+  b: TByteDynArray absolute value;
+  w: TWordDynArray absolute value;
+  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  i: PtrInt;
+begin
+  result := '';
+  if (valueLength = 0) or
+     (valueLength > 65535) or
+     (@value = nil) or
+     (b = nil) or
+     (customText = nil) then
+    exit;
+  tmp.InitOnStack;
+  if valueLength <= 256 then
+  begin
+    for i := 0 to length(b) - 1 do
+      if b[i] < valueLength then
+      begin
+        tmp.Add(customText^[b[i]]);
+        tmp.AddDirect(sepChar);
+      end;
+  end
+  else
+    for i := 0 to length(w) - 1 do
+      if w[i] < valueLength then
+      begin
+        tmp.Add(customText^[w[i]]);
+        tmp.AddDirect(sepChar);
+      end;
+  if tmp.added = 0 then
+    exit;
+  dec(tmp.added); // cancel last comma
+  tmp.Done(result, CP_UTF8);
 end;
 
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
@@ -7966,7 +8017,7 @@ begin
   inc(Dest, DestRtti^.OffsetSet);
   inc(Source, OffsetGet);
   if Value.Kind = rkClass then
-    if Assigned(Value.CopyObject) then // set e.g. by TOrm.RttiCustomSetParser
+    if Assigned(Value.CopyObject) then // e.g. for TOrm, TClonable or TStrings
       Value.CopyObject(PPointer(Dest)^, PPointer(Source)^)
     else
       Value.Props.CopyProperties(PPointer(Dest)^, PPointer(Source)^)
