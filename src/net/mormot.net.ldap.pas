@@ -3226,7 +3226,7 @@ begin
   _LdapIntern.Unique(sCanonicalName, 'canonicalName');
 end;
 
-// internal function: O(n) search 32-bit-truncated of AttrName interned pointer
+// internal function: O(n) search of AttrName 32-bit-truncated interned pointer
 function _AttributeNameType(AttrName: pointer): TLdapAttributeType;
 var
   i: PtrInt;
@@ -4965,6 +4965,7 @@ procedure TLdapClient.RetrieveRootDseInfo;
 var
   root: TLdapResult;
 begin
+  // retrieve all needed Root DSE attributes in a single call
   if not fSock.SockConnected then
     exit;
   root := SearchObject('', '*', [
