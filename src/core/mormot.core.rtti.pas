@@ -1500,10 +1500,6 @@ procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
 // - see also TRttiMap for custom mapping between class and record
 procedure ObjectToRecord(aFrom: TObject; var aTo; aToType: PRttiInfo);
 
-/// copy two TStrings instances
-// - will just call Dest.Assign(Source) in practice
-procedure CopyStrings(Source, Dest: TStrings);
-
 /// copy two TCollection instances
 // - will call CopyObject() in loop to repopulate the Dest collection,
 // which will work even if Assign() method was not overriden
@@ -2618,7 +2614,7 @@ type
     procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
     /// check if this type has ClassNewInstance information
     function HasClassNewInstance: boolean;
-    /// copy one rkClass instance into another
+    /// copy one rkClass instance into another - as used by CopyObject()
     // - return the destination object, optionally creating it if aTo = nil
     function ClassCopyInstance(aFrom, aTo: TObject): pointer;
     /// reset all stored Props[] and associated flags
@@ -5553,13 +5549,6 @@ begin
   finally
     Dest.EndUpdate;
   end;
-end;
-
-procedure CopyStrings(Source, Dest: TStrings);
-begin
-  if (Source <> nil) and
-     (Dest <> nil) then
-    Dest.Assign(Source); // will do the copy RTL-style
 end;
 
 procedure CopyObject(aFrom, aTo: TObject);
@@ -8848,18 +8837,13 @@ begin // self is Rtti.RegisterClass(PClass(aFrom)^)
     exit;
   if result = nil then
     result := fNewInstance(self); // allocate a new instance
-  if (fValueRtlClass = vcCollection) and
-     (PClass(aFrom)^ = PClass(result)^)  then
-    // specific process of TCollection: classes should be exact, not inherit
-    CopyCollection(TCollection(aFrom), result)
-  else if PClass(result)^.InheritsFrom(PClass(aFrom)^) then
+  if PClass(result)^.InheritsFrom(PClass(aFrom)^) then
     // fast copy from RTTI properties of the common (or same) hierarchy
     if Assigned(fCopyObject) then
-      fCopyObject(result, aFrom) // e.g. TOrm or TPersistent/TClonable
+      fCopyObject(result, aFrom) // e.g. TOrm or TPersistent/TClonable/TStrings
     else
       fProps.CopyProperties(result, pointer(aFrom))
-  else
-    // no common inheritance -> lookup by property name (slower)
+  else // no common inheritance -> lookup by property name (slower)
     CopyPropsInternal(pointer(aFrom), result,
       @fProps, @Rtti.RegisterClass(PClass(result)^).Props);
 end;

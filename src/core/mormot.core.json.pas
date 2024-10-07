@@ -10421,6 +10421,11 @@ begin
   TPersistent(Dest).Assign(TPersistent(Source)); // works e.g. for TStrings
 end;
 
+procedure TCollectionCopyObject(Dest, Source: TObject);
+begin
+  CopyCollection(TCollection(Source), TCollection(Dest)); // inversed order
+end;
+
 procedure TRttiJson.SetParserClassType;
 var
   c: TClass;
@@ -10475,6 +10480,7 @@ begin
     vcStrings:
       begin
         fNewInstance := @_New_Strings; // call non-virtual TStrings.Create
+        fCopyObject := @TPersistentCopyObject;
         fJsonSave := @_JS_TStrings;
         fJsonLoad := @_JL_TStrings;
       end;
@@ -10493,6 +10499,7 @@ begin
       begin
         if @fNewInstance = @_New_Object then
           fNewInstance := @_New_Collection; // no TInterfacedCollection above
+        fCopyObject := @TCollectionCopyObject;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;
       end;
