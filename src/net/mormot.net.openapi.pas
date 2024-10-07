@@ -1492,7 +1492,9 @@ begin
                      not p.fRequired) and
                     (p.fType.IsArray or
                      not (p.fType.fBuiltInType in [obtVariant, obtRecord, obtGuid]));
-      Make([_CONST[p.fType.fNoConst], p.PascalName, ': ', p.fType.ToPascalName], decl);
+      Make([_CONST[p.fType.fNoConst], p.PascalName, ': ',
+        p.fType.ToPascalName({final=}true)], decl);
+      // here p.fType.ToPascalName needs final=true for nil default value
       if hasdefault then
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, decl)
@@ -1828,9 +1830,14 @@ end;
 procedure TPascalType.SetArray(AValue: boolean);
 begin
   fIsArray := AValue;
-  if AValue and
-     Assigned(fCustomType) then
-    fCustomType.fRequiresArrayDefinition := true;
+  if AValue then
+  begin
+    fNoConst := false;
+    if Assigned(fCustomType) then
+      fCustomType.fRequiresArrayDefinition := true;
+  end
+  else
+    fNoConst := fBuiltInType in [obtInteger .. obtDateTime]
 end;
 
 const
@@ -1877,8 +1884,6 @@ begin
   if fBuiltInTypeName = '' then
     EOpenApi.RaiseUtf8('Unexpected %.CreateBuiltin(%)', [self, ToText(aBuiltInType)^]);
   fBuiltinSchema := aSchema;
-  if not aIsArray then
-    fNoConst := aBuiltInType in [obtInteger .. obtDateTime];
   SetArray(aIsArray);
 end;
 
@@ -1886,8 +1891,7 @@ constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
 begin
   fParser := aCustomType.fParser;
   fCustomType := aCustomType;
-  fNoConst := IsEnum;
-  if fNoConst then
+  if IsEnum then
     fBuiltInType := obtEnumerationOrSet
   else if IsRecord then
     fBuiltInType := obtRecord;
