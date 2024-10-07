@@ -8240,7 +8240,7 @@ begin
     if Ctxt.Info.Kind = rkClass then
     begin
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
-        PPointer(Data)^ := TRttiJson(Ctxt.Info).fNewInstance(Ctxt.Info);
+        PPointer(Data)^ := TRttiCustomNewInstance(Ctxt.Info.Cache.NewInstance)(Ctxt.Info);
       Data := PPointer(Data)^; // as expected by the callback
     end;
     TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data)
@@ -8257,7 +8257,7 @@ begin
         exit;
       end;
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
-        PPointer(Data)^ := TRttiJson(Ctxt.Info).fNewInstance(Ctxt.Info)
+        PPointer(Data)^ := TRttiCustomNewInstance(Ctxt.Info.Cache.NewInstance)(Ctxt.Info)
       else if (jpoClearValues in Ctxt.Options) and
               not (rcfClassMayBeID in Ctxt.Info.Flags) then
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
@@ -8422,7 +8422,7 @@ begin
     if iteminfo.Kind = rkClass then
     begin
       Ctxt.Info := iteminfo; // as in _JL_RttiCustom()
-      Data^ := TRttiJson(iteminfo).fNewInstance(iteminfo);
+      Data^ := TRttiCustomNewInstance(iteminfo.Cache.NewInstance)(iteminfo);
       item := Data^; // class are accessed by reference
       if (rcfHookRead in iteminfo.Flags) and
          TORHook(item).RttiBeforeReadObject(@Ctxt) then
@@ -8595,7 +8595,7 @@ begin
           Valid := false
         else
         begin
-          tmp := TRttiJson(Info).fNewInstance(Info);
+          tmp := TRttiCustomNewInstance(Info.Cache.NewInstance)(Info);
           try
             v.VAny := Prop.Prop; // JsonLoad() could reset Prop := nil
             TRttiJsonLoad(Info.JsonLoad)(@tmp, self); // JsonToObject(tmp)
@@ -10430,39 +10430,40 @@ procedure TRttiJson.SetParserClassType;
 var
   c: TClass;
   n: integer;
+  new: TRttiCustomNewInstance;
 begin
   // prepare ClassNewInstance() to call the expected (virtual) constructor
-  fNewInstance := @_New_Object; // call non-virtual TObject.Create
-  c := fValueClass;
+  new := @_New_Object; // default non-virtual TObject.Create
+  c := fCache.ValueClass;
   repeat // recognized some RTL classes - any branch taken will break below
     if c = TSynPersistent then
-      fNewInstance := @_New_SynPersistent // virtual TSynPersistent.Create
+      new := @_New_SynPersistent // virtual TSynPersistent.Create
     else if c = TObjectWithRttiMethods then
     begin
       // allow any kind of customization for TObjectWithRttiMethods children
       n := Props.Count;
-      RttiSetParserTObjectWithRttiMethods(pointer(fValueClass), self);
+      RttiSetParserTObjectWithRttiMethods(pointer(fCache.ValueClass), self);
       if n <> Props.Count then
         fFlags := fFlags + fProps.AdjustAfterAdded; // may have added a prop
-      fNewInstance := @_New_SynPersistent; // virtual TSynPersistent.Create
+      new := @_New_SynPersistent; // virtual TSynPersistent.Create
     end
     else if c = TInterfacedPersistent then
-      fNewInstance := @_New_InterfacedPersistent // virtual Create
+      new := @_New_InterfacedPersistent // virtual Create
     else if c = TPersistentWithCustomCreate then
-      fNewInstance := @_New_PersistentWithCustomCreate // virtual Create
+      new := @_New_PersistentWithCustomCreate // virtual Create
     else if c = TComponent then
-      fNewInstance := @_New_Component // call TComponent.Create(nil)
+      new := @_New_Component // call TComponent.Create(nil)
     else if c = TInterfacedCollection then
     begin
-      fNewInstance := @_New_InterfacedCollection; // virtual Create
-      if fValueClass <> c then // don't call abstract GetClass method
+      new := @_New_InterfacedCollection; // virtual Create
+      if fCache.ValueClass <> c then // don't call abstract GetClass method
       begin
-        fCollectionItem := TInterfacedCollectionClass(fValueClass).GetClass;
+        fCollectionItem := TInterfacedCollectionClass(fCache.ValueClass).GetClass;
         fCollectionItemRtti := Rtti.RegisterClass(fCollectionItem);
       end;
     end
     else if c = TCollectionItem then
-      fNewInstance := @_New_CollectionItem // call TCollectionItem.Create(nil)
+      new := @_New_CollectionItem // call TCollectionItem.Create(nil)
     else if c <> TObject then
     begin
       c := c.ClassParent; // continue with the parent class
@@ -10473,32 +10474,32 @@ begin
   // customize the process of some known classes
   fJsonSave := @_JS_RttiCustom;
   fJsonLoad := @_JL_RttiCustom;
-  case fValueRtlClass of
+  case fCache.ValueRtlClass of
     vcPersistent:
       if fProps.CountNonVoid = 0 then // use TPersistent.Assign() if no props
         fCopyObject := @TPersistentCopyObject;
     vcStrings:
       begin
-        fNewInstance := @_New_Strings; // call non-virtual TStrings.Create
+        new := @_New_Strings; // call non-virtual TStrings.Create
         fCopyObject := @TPersistentCopyObject;
         fJsonSave := @_JS_TStrings;
         fJsonLoad := @_JL_TStrings;
       end;
     vcList:
       begin
-        fNewInstance := @_New_List; // call non-virtual TList.Create
+        new := @_New_List; // call non-virtual TList.Create
         fJsonSave := @_JS_TList;
       end;
     vcObjectList:
       begin
-        fNewInstance := @_New_ObjectList; // call non-virtual TObjectList.Create
+        new := @_New_ObjectList; // call non-virtual TObjectList.Create
         fJsonSave := @_JS_TObjectList;
         fJsonLoad := @_JL_TObjectList;
       end;
     vcCollection:
       begin
-        if @fNewInstance = @_New_Object then
-          fNewInstance := @_New_Collection; // no TInterfacedCollection above
+        if @new = @_New_Object then
+          new := @_New_Collection; // no TInterfacedCollection above
         fCopyObject := @TCollectionCopyObject;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;
@@ -10507,7 +10508,7 @@ begin
       fJsonSave := @_JS_TSynList;
     vcSynObjectList:
       begin
-        fNewInstance := @_New_SynObjectList; // call Create({ownobjects=}true)
+        new := @_New_SynObjectList; // call Create({ownobjects=}true)
         fJsonSave := @_JS_TSynObjectList;
         fJsonLoad := @_JL_TSynObjectList;
       end;
@@ -10524,6 +10525,7 @@ begin
       if fProps.CountNonVoid = 0 then // TClonable.AssignTo() if no props
         fCopyObject := @CopyClonable;
   end;
+  fCache.NewInstance := @new;
 end;
 
 function TRttiJson.SetParserType(aParser: TRttiParserType;
@@ -10626,7 +10628,7 @@ end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;
 begin
-  result := fNewInstance(self);
+  result := TRttiCustomNewInstance(fCache.NewInstance)(self);
   TRttiJsonLoad(fJsonLoad)(@result, Context);
   if not Context.Valid then
     FreeAndNil(result);
@@ -11796,9 +11798,9 @@ begin
   // create all published class (or IDocList/IDocDict) fields
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
   repeat
-    with p^^ do
+    with p^^ do // NewInterface() offset = NewInstance() offset for rkInterface
       PPointer(PAnsiChar(ObjectInstance) + OffsetGet)^ :=
-        TRttiJson(Value).fNewInstance(Value); // class or interface
+        TRttiCustomNewInstance(Value.Cache.NewInstance)(Value);
     inc(p);
     dec(n);
   until n = 0;
@@ -11938,7 +11940,7 @@ begin
      InterfaceInfo^.InterfaceImplements(ISerializable) then
     ent := GetInterfaceEntry(InterfaceInfo^.InterfaceGuid^); // resolve TGuid
   if (ent = nil) or
-     not InterfaceEntryIsStandard(ent) then
+     not InterfaceEntryIsStandard(ent) then // paranoid
     ERttiException.RaiseUtf8('Unexpected %.RegisterToRtti(%)',
       [self, InterfaceInfo^.Name^]);
   result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
@@ -11947,7 +11949,7 @@ begin
   TOnRttiJsonRead(result.fJsonReader) := JL;
   TOnRttiJsonWrite(result.fJsonWriter) := JS;
   result.SetParserType(result.Parser, result.ParserComplex); // needed
-  result.fNewInstance := @_New_ISerializable;
+  result.fCache.NewInterface := @_New_ISerializable;
   TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
 end;
 

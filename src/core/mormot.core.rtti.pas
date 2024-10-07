@@ -699,6 +699,22 @@ type
   /// as returned by TRttiInfo.RecordAllFields
   TRttiRecordAllFields = array of TRttiRecordAllField;
 
+  /// some basic classes as recognized in TRttiCustom.ValueRtlClass
+  TRttiValueClass = (
+    vcNone,
+    vcPersistent,
+    vcStrings,
+    vcList,
+    vcObjectList,
+    vcException,
+    vcCollection,
+    vcESynException,
+    vcSynList,
+    vcSynObjectList,
+    vcRawUtf8List,
+    vcObjectWithID,
+    vcClonable);
+
   /// quick identification of some RTTI value types
   TRttiCacheFlag = (
     rcfQWord,
@@ -758,14 +774,19 @@ type
       rkDynArray,
       rkArray: (
         ItemInfoManaged: PRttiInfo; // = nil for unmanaged types
-        ItemInfoRaw: PRttiInfo;   // from RTTI, likely <> nil for unmanaged types
+        ItemInfoRaw: PRttiInfo; // from RTTI, may be <> nil for unmanaged types
         ItemSize: integer;
-        ItemCount: integer;    // rkArray only
+        ItemCount: integer;     // rkArray only
+        ObjArrayClass: TClass;  // rkDynArray only
       );
       rkClass: (
+        NewInstance: pointer; // TRttiCustomNewInstance - set by mormot.core.json
+        ValueClass: TClass; // = Info.RttiClass.RttiClass
+        ValueRtlClass: TRttiValueClass;
         SerializableInterface: pointer; // = TRttiCustom of the rkInterface
       );
       rkInterface: (
+        NewInterface: pointer; // same offset than rkClass NewInstance
         InterfaceGuid: PGuid;
         SerializableClass: TClass; // = TInterfacedSerializable
         SerializableInterfaceEntryOffset: integer; // resolve once
@@ -2459,22 +2480,6 @@ type
     eeCurly,
     eeEndKeyWord);
 
-  /// some basic classes as recognized in TRttiCustom.ValueRtlClass
-  TRttiValueClass = (
-    vcNone,
-    vcPersistent,
-    vcStrings,
-    vcList,
-    vcObjectList,
-    vcException,
-    vcCollection,
-    vcESynException,
-    vcSynList,
-    vcSynObjectList,
-    vcRawUtf8List,
-    vcObjectWithID,
-    vcClonable);
-
   /// allow to customize the process of a given TypeInfo/PRttiInfo
   // - a global list of TRttiCustom instances mapping TypeInfo() is maintained
   // in Rtti: TRttiCustomList
@@ -2484,7 +2489,6 @@ type
     fCache: TRttiCache;
     fParser: TRttiParserType;                 // 8-bit
     fParserComplex: TRttiParserComplexType;   // 8-bit
-    fValueRtlClass: TRttiValueClass;          // 8-bit
     fFlags: TRttiCustomFlags;                 // 32-bit
     fPrivateSlot: pointer;
     fArrayRtti: TRttiCustom;
@@ -2500,7 +2504,6 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
-    fNewInstance: TRttiCustomNewInstance; // mormot.core.json implemented
     fAutoCreateInstances, // some lists made by RegisterAutoCreateFieldsClass
     fAutoDestroyClasses,
     fAutoCreateObjArrays,
@@ -2508,8 +2511,6 @@ type
     fPrivateSlots: TObjectDynArray;
     fNoRttiInfo: TByteDynArray; // used by NoRttiSetAndRegister()
     // used to customize the class process
-    fValueClass: TClass;
-    fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
     fCopyObject: TRttiClassCopier;
@@ -2606,13 +2607,14 @@ type
     // - implemented in TRttiJson for proper knowledge of complex types
     // - warning: supplied W instance should be a TJsonWriter
     procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); virtual;
-    /// create a new TObject instance of this rkClass
+    /// create a new TObject instance of this rkClass or rkInterface
     // - mormot.core.json will ensure the proper (virtual) constructor is called
+    // - may return nil if self is nil or this type is not a rkClass or rkInterface
     function ClassNewInstance: pointer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// allow low-level customization of the fNewInstance pointer
+    /// allow low-level customization of the Cache.NewInstance pointer for rkClass/rkInterface
     procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
-    /// check if this type has ClassNewInstance information
+    /// check if this type has ClassNewInstance information for rkClass
     function HasClassNewInstance: boolean;
     /// copy one rkClass instance into another - as used by CopyObject()
     // - return the destination object, optionally creating it if aTo = nil
@@ -2686,17 +2688,17 @@ type
       read fCache.BinarySize;
     /// store the class of this type, i.e. contains Cache.Info.RttiClass.RttiClass
     property ValueClass: TClass
-      read fValueClass;
+      read fCache.ValueClass;
     /// identify most common RTL inherited classes for special handling
     // - recognize TCollection TStrings TObjectList TList parents
     // - TRttiValueClass enumerate is faster than InheritsFrom() call
     property ValueRtlClass: TRttiValueClass
-      read fValueRtlClass;
+      read fCache.ValueRtlClass;
     /// store the class of a T*ObjArray dynamic array
     // - shortcut to ArrayRtti.Info.RttiClass.RttiClass
     // - used when rcfObjArray is defined in Flags
     property ObjArrayClass: TClass
-      read fObjArrayClass;
+      read fCache.ObjArrayClass;
     /// store the Item class for a given TCollection
     // - as previously registered by Rtti.RegisterCollection()
     property CollectionItem: TCollectionItemClass
@@ -3925,6 +3927,18 @@ begin
   end;
 end;
 
+function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
+begin
+  if Rtti = nil then
+    raise ERttiException.Create('Unexpected ClassNewInstance(nil)')
+  else if Rtti.Kind <> rkClass then
+     raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not available for %',
+       [Rtti, Rtti.Name, ToText(Rtti.Kind)^])
+  else
+    raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not implemented -> ' +
+      'please include mormot.core.json unit to register TRttiJson',
+      [Rtti, Rtti.Name]);
+end;
 
 var
   /// conversion table from TRttiKind to TRttiVarData.VType
@@ -4032,8 +4046,16 @@ begin
         Cache.CodePage := AnsiStringCodePage; // use TypeInfo() on old Delphi
         Cache.Engine := TSynAnsiConvert.Engine(Cache.CodePage);
       end;
+    rkClass:
+      begin
+        Cache.NewInstance := @_New_NotImplemented; // raise ERttiException
+        Cache.ValueClass := RttiClass^.RttiClass;
+      end;
     rkInterface:
-      Cache.InterfaceGuid := InterfaceGuid;
+      begin
+        Cache.NewInterface := @_New_NotImplemented; // at NewInstance offset
+        Cache.InterfaceGuid := InterfaceGuid;
+      end;
   end;
 end;
 
@@ -8430,7 +8452,7 @@ var
   vmt: PPointer;
   {$endif NOPATCHVMT}
 begin
-  fValueClass := aClass;
+  fCache.ValueClass := aClass;
   // we need to register this class ASAP into RTTI list to avoid infinite calls
   {$ifdef NOPATCHVMT}
   Rtti.fHashTable[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
@@ -8450,14 +8472,14 @@ begin
       @CLASS_RTTI[succ(vcNone)], length(CLASS_RTTI) - 1, PtrUInt(aClass));
     if i >= 0 then
     begin
-      fValueRtlClass := TRttiValueClass(i + 1);
+      fCache.ValueRtlClass := TRttiValueClass(i + 1);
       break;
     end;
     aClass := aClass.ClassParent;
   end;
   // register the published properties of this class using RTTI
   fProps.InternalAddFromClass(aInfo, {includeparents=}true);
-  if fValueRtlClass = vcException then
+  if fCache.ValueRtlClass = vcException then
     // manual registration of the Exception.Message property
     fProps.InternalAdd(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
 end;
@@ -8481,7 +8503,7 @@ begin
     include(fFlags, rcfIsManaged);
   case fCache.Kind of
     rkClass:
-      SetValueClass(aInfo.RttiClass.RttiClass, aInfo);
+      SetValueClass(fCache.ValueClass, aInfo);
     {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
       fProps.SetFromRecordExtendedRtti(aInfo); // only for Delphi 2010+
@@ -8506,7 +8528,7 @@ begin
           begin
             // no need to call RegisterObjArray() on FPC and Delphi 2010+ :)
             include(fFlags, rcfObjArray);
-            fObjArrayClass := item.RttiClass^.RttiClass;
+            fCache.ObjArrayClass := item.RttiClass^.RttiClass;
           end;
         end;
         fArrayRtti := Rtti.RegisterType(item);
@@ -8815,18 +8837,23 @@ end;
 
 function TRttiCustom.ClassNewInstance: pointer;
 begin
-  result := fNewInstance(self);
+  if fCache.Kind = rkClass then
+    result := TRttiCustomNewInstance(fCache.NewInstance)(self)
+  else
+    result := nil;
 end;
 
 procedure TRttiCustom.SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
 begin
-  fNewInstance := FactoryMethod;
+  if fCache.Kind = rkClass then
+    fCache.NewInstance := pointer(@FactoryMethod);
 end;
 
 function TRttiCustom.HasClassNewInstance: boolean;
-begin
+begin // NewInstance is at NewInterface offset: works for rkClass + rkInterface
   result := (self <> nil) and
-            (@fNewInstance <> @_New_NotImplemented);
+            (fCache.Kind in [rkClass, rkInterface]) and
+            (fCache.NewInstance <> @_New_NotImplemented);
 end;
 
 function TRttiCustom.ClassCopyInstance(aFrom, aTo: TObject): pointer;
@@ -8836,7 +8863,7 @@ begin // self is Rtti.RegisterClass(PClass(aFrom)^)
      (aFrom = nil) then
     exit;
   if result = nil then
-    result := fNewInstance(self); // allocate a new instance
+    result := TRttiCustomNewInstance(fCache.NewInstance)(self); // allocate new
   if PClass(result)^.InheritsFrom(PClass(aFrom)^) then
     // fast copy from RTTI properties of the common (or same) hierarchy
     if Assigned(fCopyObject) then
@@ -8905,7 +8932,7 @@ begin
      (fCache.ItemSize = SizeOf(pointer)) and
      (fCache.ItemInfoManaged = nil) then
   begin
-    fObjArrayClass := Item;
+    fCache.ObjArrayClass := Item;
     if Item = nil then
     begin
       // unregister
@@ -9226,13 +9253,15 @@ begin
 end;
 
 function TRttiCustom.ComputeFakeObjArrayRtti(aItemClass: TClass): TBytes;
+var
+  r: TRttiCustom absolute result;
 begin
   if Kind <> rkDynArray then
     ERttiException.RaiseUtf8('ComputeFakeArrayRtti %?', [Name]);
   SetLength(result, InstanceSize);
   MoveFast(pointer(self)^, pointer(result)^, InstanceSize);  // weak copy
-  TRttiCustom(pointer(result)).fObjArrayClass := aItemClass; // overwrite class
-  TRttiCustom(pointer(result)).fArrayRtti := Rtti.RegisterClass(aItemClass);
+  r.fCache.ObjArrayClass := aItemClass; // overwrite
+  r.fArrayRtti := Rtti.RegisterClass(aItemClass);
 end; // no need to set other fields like Name
 
 
@@ -9571,7 +9600,7 @@ begin
           rkInterface:
             if (p^.OffsetGet >= 0) and
                (p^.OffsetSet >= 0) then
-              if p^.Value.HasClassNewInstance then
+              if p^.Value.HasClassNewInstance then // ISerializable
                 PtrArrayAdd(result.fAutoCreateInstances, p)
               else
                 PtrArrayAdd(result.fAutoResolveInterfaces, p);
