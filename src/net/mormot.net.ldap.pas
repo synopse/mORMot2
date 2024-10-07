@@ -900,7 +900,7 @@ type
     roRawAccountType);
 
   /// store a named LDAP attribute with the list of its values
-  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapAttribute = class(TClonable)
   protected
     fList: TRawByteStringDynArray;
@@ -986,7 +986,7 @@ type
   /// list one or several TLdapAttribute
   // - will use a global TRawUtf8Interning as hashed list of names to minimize
   // memory allocation, and makes efficient lookup
-  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapAttributeList = class(TClonable)
   protected
     fItems: TLdapAttributeDynArray;
@@ -1158,7 +1158,7 @@ function Modifier(Op: TLdapModifyOp;
 
 type
   /// store one LDAP result, i.e. one object name and associated attributes
-  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapResult = class(TClonable)
   protected
     fObjectName, fCanonicalName: RawUtf8;
@@ -1202,7 +1202,7 @@ type
   TLdapResultObjArray = array of TLdapResult;
 
   /// maintain a list of LDAP result objects
-  // - AssignTo() has been overriden, so Assign, Clone and CloneObjArray do work
+  // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapResultList = class(TClonable)
   protected
     fItems: TLdapResultObjArray;
