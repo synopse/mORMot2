@@ -1019,7 +1019,7 @@ type
   /// remote access to a MongoDB server
   // - a single server can have several active connections, if some secondary
   // hosts were defined
-  TMongoClient = class
+  TMongoClient = class(TSynPersistent)
   protected
     fConnectionString: RawUtf8;
     fDatabases: TRawUtf8List;
