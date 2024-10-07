@@ -10513,6 +10513,8 @@ begin
       end;
     vcRawUtf8List:
       begin
+        if fProps.CountNonVoid = 0 then
+          fCopyObject := @CopyRawUtf8List;
         fJsonSave := @_JS_TRawUtf8List;
         fJsonLoad := @_JL_TRawUtf8List;
       end;

@@ -2942,6 +2942,9 @@ type
 
 {$endif PUREMORMOT2}
 
+/// copy two TRawUtf8List instances
+procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
+
 /// sort a dynamic array of PUtf8Char items, via an external array of indexes
 // - you can use FastFindIndexedPUtf8Char() for fast O(log(n)) binary search
 procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
@@ -5615,6 +5618,12 @@ begin
     if fThreadSafe in fFlags then
       fSafe.WriteUnLock;
   end;
+end;
+
+procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
+begin
+  Dest.Clear;
+  Dest.AddRawUtf8List(Source);
 end;
 
 
