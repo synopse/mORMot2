@@ -2500,9 +2500,9 @@ type
     // used internally for proper ISerializable instances serialization
     class function SerializableInterface: TRttiCustom;
       {$ifdef HASINLINE} inline; {$endif}
-    class procedure JS(W: TJsonWriter; data: pointer;
+    class procedure JsonWriter(W: TJsonWriter; data: pointer;
       options: TTextWriterWriteObjectOptions);
-    class procedure JL(var context: TJsonParserContext; data: pointer);
+    class procedure JsonReader(var context: TJsonParserContext; data: pointer);
   public
     /// factory of one class implementing a ISerializable interface
     // - this abstract method must be overriden
@@ -11910,12 +11910,16 @@ end;
 
 class function TInterfacedSerializable.SerializableInterface: TRttiCustom;
 begin
-  result := Rtti.FindClass(self).Cache.SerializableInterface;
+  result := Rtti.FindClass(self);
+  if result <> nil then
+    result := result.Cache.SerializableInterface;
 end;
 
 class function TInterfacedSerializable.Guid: PGuid;
 begin
-  result := SerializableInterface.Cache.InterfaceGuid;
+  result := pointer(SerializableInterface);
+  if result <> nil then
+    result := TRttiCustom(result).Cache.InterfaceGuid;
 end;
 
 function _New_ISerializable(Rtti: TRttiCustom): pointer;
@@ -11946,8 +11950,8 @@ begin
   result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
   result.fCache.SerializableClass := self;
   result.fCache.SerializableInterfaceEntryOffset := ent^.IOffset; // get once
-  TOnRttiJsonRead(result.fJsonReader) := JL;
-  TOnRttiJsonWrite(result.fJsonWriter) := JS;
+  TOnRttiJsonRead(result.fJsonReader) := JsonReader;
+  TOnRttiJsonWrite(result.fJsonWriter) := JsonWriter;
   result.SetParserType(result.Parser, result.ParserComplex); // needed
   result.fCache.NewInterface := @_New_ISerializable;
   TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
@@ -11967,7 +11971,7 @@ begin
   end;
 end;
 
-class procedure TInterfacedSerializable.JS(W: TJsonWriter; data: pointer;
+class procedure TInterfacedSerializable.JsonWriter(W: TJsonWriter; data: pointer;
   options: TTextWriterWriteObjectOptions);
 begin
   data := PPointer(data)^;
@@ -11977,8 +11981,8 @@ begin
     ISerializable(data).ToJson(W, options);
 end;
 
-class procedure TInterfacedSerializable.JL(var context: TJsonParserContext;
-  data: pointer);
+class procedure TInterfacedSerializable.JsonReader(
+  var context: TJsonParserContext; data: pointer);
 var
   o: TInterfacedSerializable;
   i: ^ISerializable absolute data;
