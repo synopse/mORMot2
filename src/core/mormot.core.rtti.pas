@@ -15,6 +15,7 @@ unit mormot.core.rtti;
     - Managed Types Finalization, Random or Copy
     - RTTI Value Types used for JSON Parsing
     - RTTI-based Registration for Custom JSON Parsing
+    - TRttiMap Field Mapping (e.g. for DTO/Domain Objects)
     - TObjectWithRttiMethods TObjectWithID TClonable Classes
     - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
@@ -3025,6 +3026,10 @@ var
 
   /// direct lookup to the TRttiCustom of TRttiParserComplexType values
   PTC_RTTI: array[TRttiParserComplexType] of TRttiCustom;
+
+
+
+{ ************************ TRttiMap Field Mapping (e.g. DTO/Domain Objects) }
 
 type
   /// pointer to a TRttiMap reference, for fluid-interface initialization
@@ -10019,6 +10024,8 @@ begin
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
 end;
 
+
+{ ************************ TRttiMap Field Mapping (e.g. DTO/Domain Objects) }
 
 { TRttiMap }
 

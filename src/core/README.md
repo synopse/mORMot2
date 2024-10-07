@@ -117,6 +117,7 @@ Cross-Compiler RTTI Definitions shared by all framework units
 - Managed Types Finalization, Random or Copy
 - RTTI Value Types used for JSON Parsing
 - RTTI-based Registration for Custom JSON Parsing
+- `TRttiMap` Field Mapping (e.g. DTO/Domain Objects)
 - `TObjectWithRttiMethods` `TObjectWithID` `TClonable` Classes
 - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
