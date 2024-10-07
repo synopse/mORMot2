@@ -589,7 +589,7 @@ type
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// get the enumeration names corresponding to a set value as CSV
     function GetSetName(const value; trimmed: boolean = false;
-      const sep: RawUtf8 = ','): RawUtf8;
+      sep: AnsiChar = ','): RawUtf8;
     /// get the enumeration names corresponding to a set value as a RawUtf8 rray
     procedure GetSetNameArray(const value; var res: TRawUtf8DynArray;
       trimmed: boolean = false);
@@ -3598,32 +3598,39 @@ begin
 end;
 
 function TRttiEnumType.GetSetName(const value; trimmed: boolean;
-  const sep: RawUtf8): RawUtf8;
+  sep: AnsiChar): RawUtf8;
 var
   j: PtrInt;
   PS, v: PShortString;
-  tmp: shortstring;
+  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  tmp2: shortstring;
 begin
   result := '';
   if (@self = nil) or
      (@value = nil) then
     exit;
+  tmp.InitOnStack;
   PS := NameList;
   for j := MinValue to MaxValue do
   begin
     if GetBitPtr(@value, j) then
     begin
-      v := @tmp;
       if trimmed then
-        TrimLeftLowerCaseToShort(PS, tmp)
+      begin
+        TrimLeftLowerCaseToShort(PS, tmp2);
+        v := @tmp2;
+      end
       else
         v := PS;
-      Append(result, [v^, sep]);
+      tmp.AddShort(v^);
+      tmp.AddDirect(sep);
     end;
     inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
-  if result <> '' then
-    FakeLength(result, length(result) - length(sep)); // trim last separator
+  if tmp.added = 0 then
+    exit;
+  dec(tmp.added); // cancel last comma
+  tmp.Done(result, CP_UTF8);
 end;
 
 procedure TRttiEnumType.GetSetNameArray(const value; var res: TRawUtf8DynArray;
