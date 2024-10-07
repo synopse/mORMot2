@@ -3357,7 +3357,10 @@ type
     procedure AddShort(const s: ShortString); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// add one AnsiChar just after another Add() within trailing 16 bytes margin
-    procedure AddDirect(c: AnsiChar);
+    procedure AddDirect(c: AnsiChar); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// add two AnsiChar just after another Add() within trailing 16 bytes margin
+    procedure AddDirect(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// finalize the Add() temporary storage, and create a RawByteString from it
     procedure Done(var Dest; CodePage: cardinal = CP_RAWBYTESTRING); overload;
@@ -8079,12 +8082,12 @@ var
   d: TPointerDynArray absolute DestObjArray;
   sc, dc, dn: PtrInt;
 begin
-  sc := length(s);  // s[] capacity
-  result := sc;     // s[] length
+  sc := length(s);  // sc = s[] capacity
+  result := sc;     // result = s[] length
   if SourceCount <> nil then
     result := SourceCount^;
-  dc := length(d);  // d[] capacity
-  dn := dc;         // d[] length
+  dc := length(d);  // dc = d[] capacity
+  dn := dc;         // dn = d[] length
   if DestCount <> nil then
     dn := DestCount^;
   if dn <> 0 then
@@ -11136,8 +11139,14 @@ end;
 
 procedure TSynTempBuffer.AddDirect(c: AnsiChar);
 begin
-  PUtf8Char(buf)[added] := c; // append directly within SYNTEMPTRAIL bytes
-  inc(added);
+  PUtf8Char(buf)[added] := c;
+  inc(added); // append directly within SYNTEMPTRAIL bytes
+end;
+
+procedure TSynTempBuffer.AddDirect(const c1, c2: AnsiChar);
+begin
+  PWord(PUtf8Char(buf) + added)^ := ord(c1) + ord(c2) shl 8;
+  inc(added, 2); // append directly within SYNTEMPTRAIL bytes
 end;
 
 procedure TSynTempBuffer.Done(var Dest; CodePage: cardinal);
