@@ -4742,35 +4742,28 @@ var
   a: PtrInt;
   name, value: RawUtf8;
   p: PVarRec;
-  w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TSynTempBuffer;
 begin
-  w := nil;
-  try
-    p := @NameValuePairs[0];
-    for a := 0 to high(NameValuePairs) shr 1 do
-    begin
-      VarRecToUtf8(p^, name);
-      inc(p);
-      VarRecToUtf8(p^, value);
-      if (name = '') or
-         (value = '') then
-        continue;
-      // append name='X-MyHeader'/value='5' as 'X-MyHeader: 5'#13#10
-      if w = nil then
-        w := DefaultJsonWriter.CreateOwnedStream(tmp);
-      w.AddString(name);
-      if PosExChar(':', name) = 0 then // if name is e.g. 'Cookie: id='
-        w.AddDirect(':', ' ');
-      w.AddString(value); // OpenAPI "simple" style is just a CSV
-      w.AddCR; // CR+LF
-      inc(p);
-    end;
-    if w <> nil then
-      w.SetText(OutHeaders);
-  finally
-    w.Free;
+  tmp.InitOnStack;
+  p := @NameValuePairs[0];
+  for a := 0 to high(NameValuePairs) shr 1 do
+  begin
+    VarRecToUtf8(p^, name);
+    inc(p);
+    VarRecToUtf8(p^, value);
+    if (name = '') or
+       (value = '') then
+      continue;
+    // append name='X-MyHeader'/value='5' as 'X-MyHeader: 5'#13#10
+    tmp.Add(name);
+    if PosExChar(':', name) = 0 then // if name is e.g. 'Cookie: id='
+      tmp.AddDirect(':', ' ');
+    tmp.Add(value);; // OpenAPI "simple" style is just a CSV
+    tmp.AddDirect(#13, #10); // use CR+LF in HTTP headers
+    inc(p);
   end;
+  if tmp.added <> 0 then
+    tmp.Done(OutHeaders, CP_UTF8);
 end;
 
 function HeadersEncode(const NameValuePairs: array of const): RawUtf8;
