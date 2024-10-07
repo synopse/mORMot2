@@ -3189,26 +3189,22 @@ type
   TObjectWithIDClass = class of TObjectWithID;
 
   /// our own empowered TPersistent-like parent class with assignment
-  // - content copy is implemented via the protected AssignTo method
+  // - inherited class should override AssignTo() protected abstract method
   // - if you just need to use published properties and RTTI, don't inherit
   // from this class, but from the lighter TSynPersistent
   // - the Clone and CloneObjArray() methods allow fast copy of such instances
   TClonable = class(TSynPersistent)
   protected
-    // this default implementation will call AssignError()
-    procedure AssignTo(Dest: TClonable); virtual;
-    procedure AssignError(Source: TClonable);
+    procedure AssignTo(Dest: TClonable); virtual; abstract; // to be overriden
   public
     /// allows to implement a TPersistent-like assignement mechanism
-    // - inherited class should override AssignTo() protected method
-    // to implement the proper assignment
-    // - could be used instead of CopyObject() instead of published properties copy
+    // - could be used instead of CopyObject() which copy published properties
     // - will first check than Dest is (or inherits from) this class
     procedure Assign(Source: TClonable);
     /// create a copy of this TClonable instance using Assign()
-    // - slightly faster than CopyObject(self) if AssignTo() has been overriden
+    // - slightly faster than CopyObject(self)
     function Clone: pointer;
-    /// create a copy of a T*ObjArray of this TClonable using Assign()
+    /// create a copy of a T*ObjArray of this TClonable using Clone()
     // - will be allocated and filled by DestObjArray[] := SourceObjArray[].Clone
     class procedure CloneObjArray(const SourceObjArray; var DestObjArray;
       SourceCount: PInteger = nil; DestCount: PInteger = nil);
@@ -10216,24 +10212,13 @@ end;
 
 { TClonable }
 
-procedure TClonable.AssignError(Source: TClonable);
-begin
-  ERttiException.RaiseUtf8('Cannot assign a % to a %', [Source, self]);
-end;
-
-procedure TClonable.AssignTo(Dest: TClonable);
-begin
-  Dest.AssignError(self);
-end;
-
 procedure TClonable.Assign(Source: TClonable);
 begin
-  if (Source <> nil) and
-     (self <> nil) and
-     InheritsFrom(PClass(Source)^) then
-    Source.AssignTo(self)
-  else
-    AssignError(Source);
+  if (self = nil) or
+     (Source = nil) or
+     not InheritsFrom(PClass(Source)^) then
+    ERttiException.RaiseUtf8('Unexpected %.Assign(%)', [self, Source]);
+  Source.AssignTo(self);
 end;
 
 function TClonable.Clone: pointer;
