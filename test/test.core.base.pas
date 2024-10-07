@@ -2469,8 +2469,8 @@ begin
   Check(r.Enum = e4);
   // TPeople2 <--> TPeopleR class/record custom fields mapping with TRttiMap
   m.Init(TPeople2, TypeInfo(TPeopleR)).Map([
-    'firstName', 'lastname',   // inverted
-    'lastname', 'firstName',
+    'firstName',   'lastname', // inverted
+    'lastname',    'firstName',
     'YearOfBirth', 'Unused']); // moved
   RecordZero(@r, TypeInfo(TPeopleR));
   CheckEqual(r.FirstName, '');
@@ -2484,7 +2484,7 @@ begin
   CheckEqual(r.Unused, o2.YearOfBirth);
   Check(r.Enum = e0);
   // TOrmPeople <--> TRecordPeople class/record fields mapping with TRttiMap
-  m.Init(TypeInfo(TOrmPeople), TypeInfo(TRecordPeople)).AutoMap;
+  m.Init(TOrmPeople, TypeInfo(TRecordPeople)).AutoMap;
   CheckEqual(p.FirstName, 'toto');
   CheckEqual(p.LastName, 'titi');
   CheckEqual(p.YearOfBirth, o1.YearOfBirth);

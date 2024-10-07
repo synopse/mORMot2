@@ -2352,8 +2352,13 @@ type
       CaseInsensitive: boolean): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level copy of two properties values
+    // - managed or simple (e.g. integer) properties call Value.ValueCopy()
+    // - if the property is a class, will copy the properties or call Assign()
+    // as expected on an existing Dest instance
     procedure CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
     /// low-level initialization of one property value
+    // - if the property is a class, all nested properties will be cleared,
+    // optionally calling Free on all instances
     procedure ClearValue(Data: pointer; FreeAndNilNestedObjects: boolean);
     /// append the field value as JSON with proper getter method call
     // - wrap GetRttiVarData() + AddVariant() over a temp TRttiVarData
@@ -2559,7 +2564,9 @@ type
     procedure ValueFinalizeAndClear(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// efficiently copy of a stored value of this type
-    // - same behavior as Dest := Source for all types
+    // - same behavior as Dest := Source for all types, i.e. managed types will
+    // be handled as expected, but rkClass will be copied by reference, just
+    // like e.g. any ordinal value
     procedure ValueCopy(Dest, Source: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the Value is 0 / nil / '' / null
@@ -3028,6 +3035,8 @@ type
   // - records should have field-level extended RTTI (since Delphi 2010), or have
   // been properly defined with Rtti.RegisterFromText() on FPC or oldest Delphi
   // - allow RTTI or custom mapping, e.g. with Data Transfer Objects (DTO)
+  // - ToA() / ToB() methods are thread-safe by design: once Init() and Map()
+  // have been made, you can safely share a single TRttiMap between threads
   {$ifdef USERECORDWITHMETHODS}
   TRttiMap = record
   {$else}
@@ -3052,7 +3061,8 @@ type
     // !  map.Init(TypeInfo(TMyRecordA), TypeInfo(TMyRecordB));
     function Init(A, B: PRttiInfo): PRttiMap; overload;
     /// use RTTI field names to map the content
-    // - returns self to continue manual calls to Map() in a fluid interface
+    // - returns self to continue manual calls to Map() in a fluid interface,
+    // e.g. to tune the default mapping made by this method
     function AutoMap: PRttiMap;
     /// map two fields by name
     // - if any field A or B name is '', this field will be ignored
@@ -3061,20 +3071,20 @@ type
     /// map fields by A,B pairs of names
     // - returns self to continue manual calls to Map() in a fluid interface
     function Map(const ABPairs: array of RawUtf8): PRttiMap; overload;
-    /// copy B fields values into A
+    /// thread-safe copy B fields values into A
     // - A and B are either a TObject instance or a @record pointer, depending
     // on Init() supplied types, for instance:
     // !var c: TMyClass;
     // !    r: TMyRecord;
     // !begin
-    // !  map.Init(TMyClass, TypeInfo(TMyRecord));
+    // !  map.Init(TMyClass, TypeInfo(TMyRecord)).AutoMap;
     // !  map.ToA(c, @r); // from TMyRecord to TMyClass
     // !  map.ToB(c, @r); // from TMyClass to TMyRecord
     procedure ToA(A, B: pointer); overload;
-    /// copy A fields values into B
+    /// thread-safe copy A fields values into B
     // - A/B are either TObject instance or @record pointer, depending on Init()
     procedure ToB(A, B: pointer); overload;
-    /// create a new A, copying field values from B
+    /// thread-safe create a new A, copying field values from B
     // - if Init(A) was a class, returned pointer is a new class instance,
     // which should be released via Free
     // - if Init(A) was a record, returned pointer if a heap-allocated record,
@@ -3084,11 +3094,13 @@ type
     // !var c, c2: TMyClass;
     // !    r: ^TMyRecord;
     // !begin
-    // !  map.Init(TypeInfo(TMyRecord), TMyClass);
+    // !  map.Init(TypeInfo(TMyRecord), TMyClass).AutoMap;
     // !  c := TMyClass.Create;
     // !  try
+    // !    Fill(c);
     // !    r := map.ToA(c); // from TMyClass to heap-allocated TMyRecord
     // !    try
+    // !      WorkOn(r^);
     // !      c2 := map.ToB(r); // from TMyRecord to a new TMyClass instance
     // !      try
     // !        Use(c2);
@@ -3103,7 +3115,7 @@ type
     // !  end;
     // !end;
     function ToA(B: pointer): pointer; overload;
-    /// create a new B, copying field values from A
+    /// thread-safe create a new B, copying field values from A
     // - if Init(B) was a class, returned pointer is a new class instance,
     // which should be released via Free
     // - if Init(B) was a record, returned pointer if a heap-allocated record,
@@ -7076,7 +7088,7 @@ end;
 
 function _InterfaceCopy(Dest, Source: PInterface; Info: PRttiInfo): PtrInt;
 begin
-  Dest^ := Source^;
+  Dest^ := Source^; // fast by-reference assignment
   result := SizeOf(Source^);
 end;
 
@@ -7087,7 +7099,7 @@ var
   f: PRttiRecordField;
   cop: PRttiCopiers;
 begin
-  Info^.RecordManagedFields(fields);
+  Info^.RecordManagedFields(fields); // handle nested managed fields
   f := fields.Fields;
   cop := @RTTI_MANAGEDCOPY;
   offset := 0;
@@ -9021,14 +9033,14 @@ begin
     fCache.ObjArrayClass := Item;
     if Item = nil then
     begin
-      // unregister
+      // unregister this dynamic array type to behave as a "weak" pointer array
       exclude(fFlags, rcfObjArray);
       fArrayRtti := nil;
       fFinalize := @_DynArrayClear;
     end
     else
     begin
-      // register
+      // register this T*ObjArray type to own its class instances
       include(fFlags, rcfObjArray);
       fArrayRtti := Rtti.RegisterClass(Item); // will call _ObjClear()
       fFinalize := @_ObjArrayClear; // calls RawObjectsClear()
