@@ -6799,7 +6799,7 @@ begin
         if (HRESULT(GetLastError) <> NTE_BAD_KEYSET) or
            not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
              PROV_RSA_AES, CRYPT_NEWKEYSET) then
-          raise ESynCrypto.CreateLastOSError('in AcquireContext', []);
+          ESynCrypto.RaiseLastOSError('in AcquireContext', []);
     end;
   end;
 end;
@@ -6847,11 +6847,11 @@ begin
   end;
   if not CryptoApi.ImportKey(CryptoApiAesProvider, @fKeyHeader,
      SizeOf(fKeyHeader) + fKeySizeBytes, nil, 0, fKeyCryptoApi) then
-    raise ESynCrypto.CreateLastOSError('in CryptImportKey for %', [self]);
+    ESynCrypto.RaiseLastOSError('in CryptImportKey for %', [self]);
   if not CryptoApi.SetKeyParam(fKeyCryptoApi, KP_IV, @fIV, 0) then
-    raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_IV) for %', [self]);
+    ESynCrypto.RaiseLastOSError('in CryptSetKeyParam(KP_IV) for %', [self]);
   if not CryptoApi.SetKeyParam(fKeyCryptoApi, KP_MODE, @fInternalMode, 0) then
-    raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_MODE,%) for %',
+    ESynCrypto.RaiseLastOSError('in CryptSetKeyParam(KP_MODE,%) for %',
        [fInternalMode, self]);
   if BufOut <> BufIn then
     MoveFast(BufIn^, BufOut^, Count);
@@ -6859,10 +6859,10 @@ begin
   if DoEncrypt then
   begin
     if not CryptoApi.Encrypt(fKeyCryptoApi, nil, false, 0, BufOut, n, Count) then
-      raise ESynCrypto.CreateLastOSError('in Encrypt() for %', [self]);
+      ESynCrypto.RaiseLastOSError('in Encrypt() for %', [self]);
   end
   else if not CryptoApi.Decrypt(fKeyCryptoApi, nil, false, 0, BufOut, n) then
-    raise ESynCrypto.CreateLastOSError('in Decrypt() for %', [self]);
+    ESynCrypto.RaiseLastOSError('in Decrypt() for %', [self]);
   dec(Count, n);
   if Count > 0 then // remaining bytes will be XORed with the supplied IV
     XorMemory(@PByteArray(BufOut)[n], @PByteArray(BufIn)[n], @fIV, Count);

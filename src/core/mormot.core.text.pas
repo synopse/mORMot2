@@ -2024,8 +2024,8 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    constructor CreateLastOSError(const Format: RawUtf8; const Args: array of const;
-      const Trailer: ShortString = 'OSError');
+    class procedure RaiseLastOSError(const Format: RawUtf8;
+      const Args: array of const; const Trailer: ShortString = 'OSError');
     /// a wrapper function around raise CreateUtf8()
     // - generated executable code could be slightly shorter
     class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const); overload;
@@ -9483,7 +9483,7 @@ begin
   CreateAfterSetMessageUtf8;
 end;
 
-constructor ESynException.CreateLastOSError(const Format: RawUtf8;
+class procedure ESynException.RaiseLastOSError(const Format: RawUtf8;
   const Args: array of const; const Trailer: ShortString);
 var
   error: integer;
@@ -9492,7 +9492,7 @@ begin
   error := GetLastError;
   FormatUtf8('% 0x% [%] %', [Trailer, CardinalToHexShort(error),
     StringReplaceAll(GetErrorText(error), '%', '#'), Format], fmt);
-  CreateUtf8(fmt, Args);
+  raise CreateUtf8(fmt, Args);
 end;
 
 class procedure ESynException.RaiseUtf8(const Format: RawUtf8;
