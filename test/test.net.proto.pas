@@ -669,6 +669,7 @@ end;
 procedure TNetworkProtocols.DNSAndLDAP;
 var
   ip, u, v, sid: RawUtf8;
+  o: TAsnObject;
   c: cardinal;
   withntp: boolean;
   guid: TGuid;
@@ -821,6 +822,64 @@ begin
   Check(not LdapSafe('abc)'));
   Check(not LdapSafe('*'));
   Check(not LdapSafe('()'));
+  // validate LDAP filter text parsing
+  // against https://ldap.com/ldapv3-wire-protocol-reference-search reference
+  CheckEqual(RawLdapTranslateFilter('', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('', {noraise=}false), '');
+  o := RawLdapTranslateFilter('(attr=toto)');
+  CheckHash(o, $E2C7F47C);
+  o := RawLdapTranslateFilter('&(attr=toto)');
+  CheckHash(o, $7B08F48C);
+  o := RawLdapTranslateFilter('(&(attr1=a)(attr2=b)(attr3=c)(attr4=d))');
+  CheckHash(o, $1AAB9884);
+  o := RawLdapTranslateFilter('&(attr1=a)(attr2=b)(attr3=c)(attr4=d)');
+  CheckHash(o, $1AAB9884);
+  o := RawLdapTranslateFilter('(& ( attr1=a) (attr2=b) (attr3=c) (attr4=d))');
+  CheckHash(o, $1AAB9884);
+  o := RawLdapTranslateFilter('( & (attr1=a)(attr2=b)(attr3=c)(attr4=d) )');
+  CheckHash(o, $1AAB9884);
+  o := RawLdapTranslateFilter('(&(attr1=a)(&(attr2=b)(&(attr3=c)(attr4=d))))');
+  CheckHash(o, $B1BB5EE1);
+  o := RawLdapTranslateFilter('(&(givenName=John)(sn=Doe))');
+  CheckHash(o, $372C9EF2);
+  o := RawLdapTranslateFilter('(&)');
+  CheckHash(o, $00A000A0);
+  o := RawLdapTranslateFilter('(|(givenName=John)(givenName=Jonathan))');
+  CheckHash(o, $A9670687);
+  o := RawLdapTranslateFilter('(!(givenName=John))');
+  CheckHash(o, $231C39EF);
+  o := RawLdapTranslateFilter('(|)');
+  CheckHash(o, $00A100A1);
+  o := RawLdapTranslateFilter('*');
+  CheckHash(o, $01AD0187);
+  o := RawLdapTranslateFilter('(*)');
+  CheckHash(o, $01AD0187);
+  o := RawLdapTranslateFilter('(uid:=jdoe)');
+  CheckHash(o, $C93ADF87);
+  o := RawLdapTranslateFilter('(:caseIgnoreMatch:=foo)');
+  CheckHash(o, $4F000E3E);
+  o := RawLdapTranslateFilter('(uid:dn:caseIgnoreMatch:=jdoe)');
+  CheckHash(o, $921D9031);
+  o := RawLdapTranslateFilter('(cn=abc*)');
+  CheckHash(o, $E8897DEA);
+  o := RawLdapTranslateFilter('(cn=*lmn*)');
+  CheckHash(o, $F5897DF6);
+  o := RawLdapTranslateFilter('(cn=*xyz)');
+  CheckHash(o, $019B7E03);
+  o := RawLdapTranslateFilter('(cn=abc*def*lmn*uvw*xyz)');
+  CheckHash(o, $9BA95FBA);
+  //writeln(AsnDump(o));
+  CheckEqual(RawLdapTranslateFilter('(givenName=John', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('(!(givenName=John)', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('!', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('&', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('|', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('! ', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('& ', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('| ', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('!( )', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('&()', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('| ( )', {noraise=}true), '');
   // validate LDAP attributes definitions
   for at := low(at) to high(at) do
   begin
