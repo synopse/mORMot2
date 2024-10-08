@@ -9856,7 +9856,7 @@ begin
           w.Add('''');
         end;
       end;
-      w.AddCR;
+      w.AddShorter(CRLF); // adapted to the current console output
     end;
     w.SetText(result);
   finally
