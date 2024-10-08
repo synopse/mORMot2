@@ -8113,33 +8113,25 @@ begin
   result := true;
 end;
 
-procedure BufToTempUtf8(Buf: PUtf8Char; var Res: TTempUtf8);
+procedure PrepareTempUtf8(var Res: TTempUtf8; Len: PtrInt);
 begin // Res.Len has been set by caller
-  if Res.Len > SizeOf(Res.Temp) then
-  begin
-    FastSetString(RawUtf8(Res.TempRawUtf8), Buf, Res.Len); // new RawUtf8
-    Res.Text := Res.TempRawUtf8;
-  end
-  else
-  begin
-    {$ifdef CPUX86}
-    MoveFast(Buf^, Res.Temp, Res.Len);    // avoid slow "rep movsd" on FPC i386
-    {$else}
-    THash192(Res.Temp) := PHash192(Buf)^; // faster than MoveByOne/MoveFast
-    {$endif CPUX86}
-    Res.Text := @Res.Temp; // no RawUtf8 memory allocation
-  end;
+  Res.Len := Len;
+  Res.Text := @Res.Temp;
+  if Len <= SizeOf(Res.Temp) then // no memory allocation needed
+    exit;
+  FastSetString(RawUtf8(Res.TempRawUtf8), Len); // new RawUtf8
+  Res.Text := Res.TempRawUtf8;
 end;
 
 procedure DoubleToTempUtf8(V: double; var Res: TTempUtf8);
 var
   tmp: shortstring;
 begin
-  Res.Len := DoubleToShort(@tmp, V);
-  BufToTempUtf8(@tmp[1], Res);
+  PrepareTempUtf8(Res, DoubleToShort(@tmp, V));
+  MoveFast(tmp[1], Res.Text^, ord(tmp[0]));
 end;
 
-procedure WideToTempUtf8(WideChar: PWideChar; WideCharCount: integer;
+procedure WideToTempUtf8(WideChar: PWideChar; WideCharCount: PtrUInt;
   var Res: TTempUtf8);
 var
   tmp: TSynTempBuffer;
@@ -8150,12 +8142,20 @@ begin
     Res.Text := nil;
     Res.Len := 0;
   end
+  else if IsAnsiCompatibleW(WideChar, WideCharCount) then // very common case
+  begin
+    PrepareTempUtf8(Res, WideCharCount);
+    repeat
+      dec(WideCharCount);
+      Res.Text[WideCharCount] := AnsiChar(ord(WideChar[WideCharCount]));
+    until WideCharCount = 0;
+  end
   else
   begin
     tmp.Init(WideCharCount * 3);
-    Res.Len := RawUnicodeToUtf8(tmp.buf, tmp.len + 1,
-      WideChar, WideCharCount, [ccfNoTrailingZero]);
-    BufToTempUtf8(tmp.buf, Res);
+    PrepareTempUtf8(Res, RawUnicodeToUtf8(tmp.buf, tmp.len + 1,
+      WideChar, WideCharCount, [ccfNoTrailingZero]));
+    MoveFast(tmp.buf^, Res.Text^, Res.Len);
     tmp.Done;
   end;
 end;
