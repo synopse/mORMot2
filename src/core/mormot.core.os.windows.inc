@@ -603,10 +603,10 @@ begin
   end;
   // first try if there is an English message version of this error code
   len := FormatMessageW(flags, src, Code, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
-  if len = 0 then
+  if len <= 0 then
     // typically ERROR_RESOURCE_LANG_NOT_FOUND or ERROR_MUI_FILE_NOT_FOUND
     len := FormatMessageW(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
-  if (len = 0) and
+  if (len <= 0) and
      (src <> nil) then
   begin
     // fallback to the system error message if this module as no such code
