@@ -6176,10 +6176,8 @@ fin:  log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
       // any nested exception should never be propagated to the OS caller
     end;
   finally
-    {$ifndef NOEXCEPTIONINTERCEPT}
     if log <> nil then
       log.fExceptionIgnoreThreadVar^ := log.fExceptionIgnoredBackup;
-    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
