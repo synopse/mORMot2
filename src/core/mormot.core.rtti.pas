@@ -2724,7 +2724,11 @@ type
     // - assignment is usually protected by the Rtti.RegisterSafe
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
-    /// redirect to the low-level value copy - use rather ValueCopy()
+    /// redirect to the low-level value copy - used to bypass ValueCopy()
+    // - if nil, you should use MoveFast(), as ValueCopy() does
+    // - is set for managed types (e.g. strings), or most simple types stored as
+    // 2, 4, 8, 16, 32 or 64 bytes - rkClass will be copied by reference, just
+    // like e.g. any ordinal value
     property Copy: TRttiCopier
       read fCopy;
     /// redirect to the low-level class instance copy

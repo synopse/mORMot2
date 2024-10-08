@@ -7068,8 +7068,8 @@ var
 begin
   nfo := fInfo.ArrayRtti;
   if (nfo <> nil) and // inlined nfo.ValueCopy() to avoid MoveFast() twice
-     Assigned(nfo.Copy) then
-    nfo.Copy(Dest, Source, nfo.Info) // also for T*ObjArray
+     Assigned(nfo.Copy) then // managed or 2/4/8..32 bytes move (also T*ObjArray)
+    nfo.Copy(Dest, Source, nfo.Info)
   else
     MoveFast(Source^, Dest^, fInfo.Cache.ItemSize);
 end;
