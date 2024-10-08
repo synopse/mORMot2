@@ -11510,9 +11510,10 @@ begin
   humanread := woHumanReadable in Options;
   if humanread and
      (woHumanReadableEnumSetAsComment in Options) then
+    // JsonReformat() erases comments - use plain woHumanReadable only
     humanread := false
   else
-    // JsonReformat() erases comments
+    // JsonBufferReformatToFile() below will do the actual (re)formatting
     exclude(Options, woHumanReadable);
   json := ObjectToJson(Value, Options);
   if humanread then
@@ -11563,9 +11564,9 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
   if (TypeInfo = nil) or
-     not (TypeInfo.Kind in rkRecordTypes) then
+     not (TypeInfo^.Kind in rkRecordTypes) then
     EJsonException.RaiseUtf8('RecordLoadJson: % is not a record',
-      [TypeInfo.Name]);
+      [TypeInfo^.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
     @Rec, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
     CustomVariantOptions, nil, Interning);
@@ -11592,9 +11593,9 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
   if (TypeInfo = nil) or
-     (TypeInfo.Kind <> rkDynArray) then
+     (TypeInfo^.Kind <> rkDynArray) then
     EJsonException.RaiseUtf8('DynArrayLoadJson: % is not a dynamic array',
-      [TypeInfo.Name]);
+      [TypeInfo^.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
     @Value, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
     CustomVariantOptions, nil, Interning);

@@ -712,7 +712,7 @@ type
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
     procedure AddNoJsonEscapeString(const s: string);
     /// append some unicode chars to the buffer
-    // - WideCharCount is the unicode chars count, not the byte size; if it is
+    // - WideCharCount is the UTF-16 chars count, not the byte size; if it is
     // 0, then it will convert until an ending #0 (fastest way)
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
