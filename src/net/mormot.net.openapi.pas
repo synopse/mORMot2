@@ -2166,6 +2166,7 @@ begin
     p := fProperties.ObjectPtr[i];
     t := p.PropType;
     if t.IsRecord and
+       (t.CustomType <> self) and // ParseRecordDefinition() handled it
        (ObjArrayFind(all, t.CustomType) < 0) then
       if ObjArrayFind(pending, t.CustomType) < 0 then
         TPascalRecord(t.CustomType).ResolveDependencies(all, pending)
@@ -2590,9 +2591,10 @@ begin
       begin
         n := v^.Names[j];
         p := TPascalProperty.CreateFromSchema(self, n, @v^.Values[j]);
-        if p.PropType.CustomType = result then // nested definition
+        if p.PropType.CustomType = result then // most obvious nested definition
           // e.g. TGroup = record Another: TGroup; ...
           //   or TGroup = record Groups: array of TGroup; ...
+          // TPascalRecord.ResolveDependencies will detect deeper recursion levels
           if (opoGenerateOldDelphiCompatible in fOptions) or
              not p.PropType.IsArray then
             p.ConvertToVariant; // fallback to TDocVariant/JSON
