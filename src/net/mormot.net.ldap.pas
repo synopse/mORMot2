@@ -516,12 +516,13 @@ function RawLdapError(ErrorCode: integer): TLdapError;
 
 /// translate a LDAP_RES_* integer result code into some human-readable text
 // - searching for the ErrorCode within LDAP_RES_CODE[] values
-// - see LDAP_ERROR_TEXT[RawLdapError(] if you only need the error text
+// - use LDAP_ERROR_TEXT[RawLdapError()] if you only need the error text
 function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
 
 /// encode a LDAP search filter text into an ASN.1 binary
 // - as used by CldapBroadcast() and TLdapClient.Search()
-function RawLdapTranslateFilter(const Filter: RawUtf8): TAsnObject;
+function RawLdapTranslateFilter(const Filter: RawUtf8;
+  NoRaise: boolean = false): TAsnObject;
 
 /// encode the ASN.1 binary for a LDAP_ASN1_SEARCH_REQUEST
 // - as used by TLdapClient.Search and CldapGetDomainInfo/CldapBroadcast/CldapSortHosts
@@ -2189,129 +2190,6 @@ implementation
 // enable low-level debugging of the LDAP transmitted frames on the console
 
 
-{****** Support procedures and functions }
-
-function SeparateRight(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
-var
-  x: PtrInt;
-begin
-  x := PosExChar(Delimiter, Value);
-  if x = 0 then
-    result := Value
-  else
-    result := copy(Value, x + 1, length(Value) - x);
-end;
-
-function SeparateRightU(const Value, Delimiter: RawUtf8): RawUtf8;
-var
-  x: PtrInt;
-begin
-  x := mormot.core.base.PosEx(Delimiter, Value);
-  if x = 0 then
-    result := Value
-  else
-    result := copy(Value, x + length(Delimiter), MaxInt); // no TrimCopy()
-end;
-
-function GetBetween(PairBegin, PairEnd: AnsiChar; const Value: RawUtf8): RawUtf8;
-var
-  n, len, x: PtrInt;
-  s: RawUtf8;
-begin
-  n := length(Value);
-  if (n = 2) and
-     (Value[1] = PairBegin) and
-     (Value[2] = PairEnd) then
-  begin
-    result := ''; // nothing in-between
-    exit;
-  end;
-  if n < 2 then
-  begin
-    result := Value;
-    exit;
-  end;
-  s := SeparateRight(Value, PairBegin);
-  if s = Value then
-  begin
-    result := Value;
-    exit;
-  end;
-  n := PosExChar(PairEnd, s);
-  if n = 0 then
-    ELdap.RaiseUtf8('Missing ending parenthesis in %', [Value]);
-  len := length(s);
-  x := 1;
-  for n := 1 to len do
-  begin
-    if s[n] = PairBegin then
-      inc(x)
-    else if s[n] = PairEnd then
-    begin
-      dec(x);
-      if x <= 0 then
-      begin
-        len := n - 1;
-        break;
-      end;
-    end;
-  end;
-  result := copy(s, 1, len);
-end;
-
-function TrimSPLeft(const S: RawUtf8): RawUtf8;
-var
-  i, l: PtrInt;
-begin
-  result := '';
-  if S = '' then
-    exit;
-  l := length(S);
-  i := 1;
-  while (i <= l) and
-        (S[i] = ' ') do
-    inc(i);
-  result := copy(S, i, Maxint);
-end;
-
-function TrimSPRight(const S: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
-begin
-  result := '';
-  if S = '' then
-    exit;
-  i := length(S);
-  while (i > 0) and
-        (S[i] = ' ') do
-    dec(i);
-  result := copy(S, 1, i);
-end;
-
-function TrimSP(const S: RawUtf8): RawUtf8;
-begin
-  result := TrimSPRight(TrimSPLeft(s));
-end;
-
-function FetchBin(var Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
-var
-  s: RawUtf8;
-begin
-  result := GetFirstCsvItem(Value, Delimiter);
-  s := SeparateRight(Value, Delimiter);
-  if s = Value then
-    Value := ''
-  else
-    Value := s;
-end;
-
-function Fetch(var Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
-begin
-  result := TrimSP(FetchBin(Value, Delimiter));
-  Value := TrimSP(Value);
-end;
-
-
 { **************** CLDAP Client Functions }
 
 const
@@ -2806,149 +2684,215 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
 
-function RawLdapTranslateFilter(const Filter: RawUtf8): TAsnObject;
+function RawLdapTranslateFilter(const Filter: RawUtf8; NoRaise: boolean): TAsnObject;
 var
-  x: integer;
-  c: Ansichar;
-  dn: boolean;
-  s, t, l, r, attr, rule: RawUtf8;
-begin
-  if Filter = '*' then
+  i, len: PtrInt;
+  ok, dn: boolean;
+  s, expr, l, r, rule: RawUtf8;
+
+  procedure RaiseError;
   begin
-    result := Asn('*', ASN1_CTX7);
-    exit;
+    ELdap.RaiseUtf8('Invalid Expression: %', [Filter]);
   end;
+
+  function GetNextRecursiveExpr: boolean;
+  var
+    p, i, len, parent: PtrInt;
+  begin
+    // extract the next (..(..(..)..)..) expression
+    result := false;
+    parent := 1;
+    len := length(s);
+    p := PosExChar('(', s);
+    if (p <> 0) and
+       (len > 2) then
+      for i := p + 1 to len do
+        case s[i] of
+          '(':
+            inc(parent);
+          ')':
+            begin
+              dec(parent);
+              if parent <> 0 then
+                continue;
+              // return the whole expression and the trimmed s
+              Expr := copy(s, p, i - p + 1);
+              p := i;
+              while (p <= len) and
+                    (s[p] = ' ') do
+                inc(p);
+              delete(s, 1, p);
+              Expr := RawLdapTranslateFilter(Expr, NoRaise); // recursive call
+              result := Expr <> '';
+              break;
+            end;
+        end;
+    if (not result) and
+       (not NoRaise) then
+      RaiseError;
+  end;
+
+  function TrimL: boolean;
+  begin
+    result := false;
+    dec(len);
+    if len = 0 then
+      if NoRaise then
+        exit
+      else
+        RaiseError;
+    FakeLength(l, len);
+    result := true;
+  end;
+
+  procedure Fetch(asn: integer);
+  begin
+    if i > 1 then
+    begin
+      TrimCopy(r, 1, i - 1, s);
+      AsnAdd(result, UnescapeHex(s), asn);
+    end;
+    delete(r, 1, i);
+    i := PosExChar('*', r);
+  end;
+
+begin
   result := '';
-  if Filter = '' then
-    exit;
-  s := Filter;
-  if Filter[1] = '(' then
-    for x := length(Filter) downto 2 do
-      if Filter[x] = ')' then
-      begin
-        s := copy(Filter, 2, x - 2); // get value between (...)
-        break;
-      end;
+  s := TrimU(Filter);
   if s = '' then
     exit;
-  case s[1] of
-    '!':
-      // NOT rule (recursive call)
-      result := Asn(RawLdapTranslateFilter(GetBetween('(', ')', s)), ASN1_CTC2);
-    '&':
-      // and rule (recursive call)
+  if s[1] = '(' then
+  begin
+    ok := false;
+    for i := length(s) downto 2 do
+      if s[i] = ')' then
       begin
-        repeat
-          t := GetBetween('(', ')', s);
-          s := SeparateRightU(s, t);
-          if s <> '' then
-            if s[1] = ')' then
-              System.Delete(s, 1, 1);
-          AsnAdd(result, RawLdapTranslateFilter(t));
-        until s = '';
+        ok := true;
+        TrimCopy(s, 2, i - 2, s); // trim main parenthesis
+        break;
+      end;
+  end;
+  if (s = '') or
+     not ok then
+    if NoRaise then
+      exit
+    else
+      RaiseError;
+  if PWord(s)^ = ord('*') then
+    // Present Filter Type
+    result := Asn('*', ASN1_CTX7)
+  else
+  case s[1] of
+    '&':
+      // AND Filter Type (recursive call)
+      begin
+        if Filter <> '(&)' then // RFC 4526 absolute true filter
+          repeat
+            if not GetNextRecursiveExpr then
+              exit;
+            AsnAdd(result, expr);
+          until s = '';
         result := Asn(result, ASN1_CTC0);
       end;
     '|':
-      // or rule (recursive call)
+      // OR Filter Type (recursive call)
       begin
-        repeat
-          t := GetBetween('(', ')', s);
-          s := SeparateRightU(s, t);
-          if s <> '' then
-            if s[1] = ')' then
-              System.Delete(s, 1, 1);
-          AsnAdd(result, RawLdapTranslateFilter(t));
-        until s = '';
+        if Filter <> '(|)' then // RFC 4526 absolute false filter
+          repeat
+            if not GetNextRecursiveExpr then
+              exit;
+            AsnAdd(result, expr);
+          until s = '';
         result := Asn(result, ASN1_CTC1);
       end;
+    '!':
+      // NOT Filter Type (recursive call)
+      if GetNextRecursiveExpr then
+        result := Asn(expr, ASN1_CTC2);
     else
       begin
-        l := TrimU(GetFirstCsvItem(s, '='));
-        r := SeparateRight(s, '=');
-        if l <> '' then
-        begin
-          c := l[length(l)];
-          case c of
-            ':':
-              // Extensible match
+        // extract the (l=r) pair
+        i := PosExChar('=', s);
+        TrimCopy(s, 1, i - 1, l);
+        r := copy(s, i + 1, 500); // no trim
+        len := length(l);
+        if len = 0 then
+          if NoRaise then
+            exit
+          else
+            RaiseError;
+        case l[len] of
+          ':':
+            // (l:=r) extensibleMatch Filter Type
+            if TrimL then
+            begin
+              // e.g. '(uid:dn:caseIgnoreMatch:=jdoe)'
+              dn := false;
+              repeat
+                i := mormot.core.base.PosEx(':dn', l);
+                if i = 0 then
+                  break;
+                dn := true;
+                delete(l, i, 3);
+              until false;
+              i := PosExChar(':', l);
+              if i <> 0 then
               begin
-                SetLength(l, length(l) - 1);
-                attr := '';
-                rule := '';
-                dn := false;
-                if mormot.core.base.PosEx(':dn', l) > 0 then
-                begin
-                  dn := true;
-                  l := StringReplaceAll(l, ':dn', '');
-                end;
-                attr := TrimU(GetFirstCsvItem(l, ':'));
-                rule := TrimU(SeparateRight(l, ':'));
-                if rule = l then
-                  rule := '';
+                TrimCopy(l, i + 1, 500, rule);
+                TrimCopy(l, 1, i - 1, l); // l = attribute description
                 if rule <> '' then
                   result := Asn(rule, ASN1_CTX1);
-                if attr <> '' then
-                  AsnAdd(result, attr, ASN1_CTX2);
-                AsnAdd(result, UnescapeHex(r), ASN1_CTX3);
-                if dn then // default is FALSE
-                  AsnAdd(result, RawByteString(#$01#$ff), ASN1_CTX4);
-                result := Asn(result, ASN1_CTC9);
               end;
-            '~':
-              // Approx match
-              begin
-                SetLength(l, length(l) - 1);
-                result := Asn(ASN1_CTC8, [
-                  Asn(l),
-                  Asn(UnescapeHex(r))]);
-              end;
-            '>':
-              // Greater or equal match
-              begin
-                SetLength(l, length(l) - 1);
-                result := Asn(ASN1_CTC5, [
-                   Asn(l),
-                   Asn(UnescapeHex(r))]);
-              end;
-            '<':
-              // Less or equal match
-              begin
-                SetLength(l, length(l) - 1);
-                result := Asn(ASN1_CTC6, [
-                   Asn(l),
-                   Asn(UnescapeHex(r))]);
-              end;
+              if l <> '' then
+                AsnAdd(result, l, ASN1_CTX2);
+              AsnAdd(result, UnescapeHex(r), ASN1_CTX3);
+              if dn then // dnAttributes flag - default is FALSE
+                AsnAdd(result, RawByteString(#$01#$ff), ASN1_CTX4);
+              result := Asn(result, ASN1_CTC9);
+            end;
+          '~':
+            // (l~=r) approximateMatch Filter Type
+            if TrimL then
+              result := Asn(ASN1_CTC8, [
+                Asn(l),
+                Asn(UnescapeHex(r))]);
+          '>':
+            // (l>=r) greaterOrEqual Filter Type
+            if TrimL then
+              result := Asn(ASN1_CTC5, [
+                 Asn(l),
+                 Asn(UnescapeHex(r))]);
+          '<':
+            // (l<=r) lessOrEqual Filter Type
+            if TrimL then
+              result := Asn(ASN1_CTC6, [
+                 Asn(l),
+                 Asn(UnescapeHex(r))]);
+        else
+          if r = '*' then
+            // (l=*) present Filter Type
+            result := Asn(l, ASN1_CTX7)
           else
-            // present
-            if r = '*' then
-              result := Asn(l, ASN1_CTX7)
+          begin
+            i := PosExChar('*', r);
+            if i = 0 then
+              // (l=r) equalityMatch Filter Type
+              result := Asn(ASN1_CTC3, [
+                 Asn(l),
+                 Asn(UnescapeHex(r))])
             else
-              if PosExChar('*', r) > 0 then
-              // substrings
-              begin
-                s := Fetch(r, '*');
-                if s <> '' then
-                  result := Asn(UnescapeHex(s), ASN1_CTX0);
-                while r <> '' do
-                begin
-                  if PosExChar('*', r) <= 0 then
-                    break;
-                  s := Fetch(r, '*');
-                  AsnAdd(result, UnescapeHex(s), ASN1_CTX1);
-                end;
-                if r <> '' then
-                  AsnAdd(result, UnescapeHex(r), ASN1_CTX2);
-                result := Asn(ASN1_CTC4, [
-                   Asn(l),
-                   Asn(ASN1_SEQ, [result])]);
-              end
-              else
-              begin
-                // Equality match
-                result := Asn(ASN1_CTC3, [
-                   Asn(l),
-                   Asn(UnescapeHex(r))]);
-              end;
+            begin
+              // (l=r*r*) substrings Filter Type
+              if i > 1 then
+                Fetch(ASN1_CTX0);
+              while i <> 0 do
+                Fetch(ASN1_CTX1);
+              if r <> '' then
+                AsnAdd(result, UnescapeHex(r), ASN1_CTX2);
+              result := Asn(ASN1_CTC4, [
+                 Asn(l),
+                 Asn(ASN1_SEQ, [result])]);
+            end;
           end;
         end;
       end;
