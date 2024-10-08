@@ -7346,7 +7346,7 @@ begin
         AddW(pointer(VPWideChar), StrLenW(VPWideChar), Escape);
       vtAnsiString:
         if VAnsiString <> nil then // expect RawUtf8
-          Add(VAnsiString, length(RawUtf8(VAnsiString)), Escape);
+          Add(VAnsiString, PStrLen(PAnsiChar(VAnsiString) - _STRLEN)^, Escape);
       vtWideString:
         if VWideString <> nil then
           AddW(VWideString, length(WideString(VWideString)), Escape);
