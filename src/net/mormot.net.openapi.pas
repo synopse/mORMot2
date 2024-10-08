@@ -2981,7 +2981,7 @@ begin
     end;
     // finalize the class definition and start the implementation section
     w.AddStrings([LineEnd,
-      '    // access to the associated HTTP/JSON request', LineEnd,
+      '    // access to the associated HTTP/JSON client instance', LineEnd,
       '    property JsonClient: IJsonClient', LineEnd,
       '      read fClient write fClient;', LineEnd,
       '  end;', LineEnd,
@@ -3002,6 +3002,7 @@ begin
       'constructor ', fClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
       'begin', LineEnd,
       '  fClient := aClient;', LineEnd,
+      '  fClient.Options := [jcoParseTolerant, jcoHttpErrorRaise];', LineEnd,
       '  fClient.UrlEncoder :=', LineEnd,
       '    [ueEncodeNames, ueSkipVoidString, ueSkipVoidValue, ueStarNameIsCsv];', LineEnd,
       'end;', LineEnd, LineEnd]);
