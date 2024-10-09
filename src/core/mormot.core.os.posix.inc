@@ -417,12 +417,14 @@ end;
 
 const
   // for CompareStringW()
-  LOCALE_USER_DEFAULT = $400;
+  LOCALE_USER_DEFAULT = $400; // ignored in practice
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
+  U_FOLD_CASE_DEFAULT = 0;
+  U_COMPARE_CODE_POINT_ORDER = $8000;
 
 function CompareStringRTL(A, B: PWideChar; AL, BL, flags: integer): integer;
 var
-  U1, U2: UnicodeString; // allocate two temporary strings
+  U1, U2: UnicodeString; // allocate two temporary strings :(
 begin
   // cwstring as fallback, using iconv on systems where ICU is not available
   SetString(U1, A, AL);
@@ -433,8 +435,6 @@ end;
 
 function CompareStringW(locale, flags: DWORD;
   A: PWideChar; AL: integer; B: PWideChar; BL: integer): PtrInt;
-const
-  CODE_POINT_ORDER = $8000;
 var
   err: SizeInt;
 begin
@@ -443,13 +443,13 @@ begin
   if BL < 0 then
     BL := StrLenW(B);
   err := 0;
-  if icu.IsAvailable then
+  if icu.IsAvailable then // use the standard ICU library available on this system
     if flags and NORM_IGNORECASE <> 0 then
-      result := icu.u_strCaseCompare(A, AL, B, BL, CODE_POINT_ORDER, err)
+      result := icu.u_strCaseCompare(A, AL, B, BL, U_COMPARE_CODE_POINT_ORDER, err)
     else
-      result := icu.u_strCompare(A, AL, B, BL, true)
+      result := icu.u_strCompare(A, AL, B, BL, {codepointorder=}true)
   else
-    result := CompareStringRTL(A, B, AL, BL, flags);
+    result := CompareStringRTL(A, B, AL, BL, flags); // RTL fallback
   inc(result, 2); // caller would make -2 to get regular -1/0/1 comparison values
 end;
 
