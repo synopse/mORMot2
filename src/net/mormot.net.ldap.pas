@@ -2831,9 +2831,14 @@ begin
       begin
         // extract the (attr=value) pair
         i := PosExChar('=', text);
+        if i = 0 then
+          if NoRaise then
+            exit
+          else
+            RaiseError;
         TrimCopy(text, 1, i, attr);
-        value := copy(text, i + 1, 500); // no trim
         attrlen := length(attr);
+        value := copy(text, i + 1, 500); // no value trim
         if TrimAttr then
           case attr[attrlen] of
             '>':
