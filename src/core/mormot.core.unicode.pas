@@ -1819,6 +1819,11 @@ function Split(const Str, SepStr: RawUtf8; var LeftStr: RawUtf8;
 function Split(const Str: RawUtf8; const SepStr: array of RawUtf8;
   const DestPtr: array of PRawUtf8): PtrInt; overload;
 
+/// try to split a RawUtf8 into its two trimmed parts
+// - return true and extract trimmed Left / Right values separated by Sep character
+// - return false and keep Left / Right untouched if Sep if not found
+function TrimSplit(const Str: RawUtf8; var Left, Right: RawUtf8; Sep: AnsiChar): boolean;
+
 /// returns the last occurrence of the given SepChar separated context
 // - e.g. SplitRight('01/2/34','/')='34'
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
@@ -7757,6 +7762,19 @@ begin
   for i := result to high(DestPtr) do
     if DestPtr[i] <> nil then
       FastAssignNew(DestPtr[i]^);
+end;
+
+function TrimSplit(const Str: RawUtf8; var Left, Right: RawUtf8; Sep: AnsiChar): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  i := PosExChar(Sep, Str);
+  if i = 0 then
+    exit;
+  TrimCopy(Str, i + 1, maxInt, Right);
+  TrimCopy(Str, 1, i - 1, Left); // Left is likely to be Str
+  result := true;
 end;
 
 function IsVoid(const text: RawUtf8): boolean;
