@@ -1459,8 +1459,8 @@ var
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
 /// case-sensitive comparison function using the Operating System, as TUtf8Compare
-// - "direct" StrComp() would follow UCS4 CodePoint order, which may not be the
-// same as the "human" expected order, especially on Windows
+// - "direct" StrComp() would follow UTF-8 byte order, i.e. UCS4 CodePoint order,
+// which may not be the same as the "human" expected order, especially on Windows
 // - use OS and compiler specific Unicode_CompareString() API so may not be
 // consistent between computers and platforms, as StrComp() is
 // - will make a temporary conversion on stack, of up to 1023 UTF-16 code units
@@ -6286,14 +6286,14 @@ var // use temporary UTF-16 conversion on stack
 begin // here P1<>nil and P2<>nil
   w1 := Utf8ToWideChar(@t1, p1, high(t1), StrLen(P1)) shr 1;
   w2 := Utf8ToWideChar(@t2, p2, high(t2), StrLen(P2)) shr 1;
-  result := Unicode_CompareString(@t1, @t2, w1, w2, IgnoreCase) - 2; // call OS
+  result := Unicode_CompareString(@t1, @t2, w1, w2, IgnoreCase) - 2; // OS API
   if (result = 0) and
      ((w1 >= high(t1) - 2) or // t1[]/t2[] buffer overflow of identical content?
       (w2 >= high(t2) - 2)) then // fallback to natural/byte order if too big
     if IgnoreCase then
-      result := StrIComp(P1, P2)
+      result := StrIComp(P1, P2) // support at least A-Z ASCII case
     else
-      result := StrComp(P1, P2);
+      result := StrComp(P1, P2); // binary collation
 end;
 
 function Utf8CompareOS(P1, P2: PUtf8Char): PtrInt;

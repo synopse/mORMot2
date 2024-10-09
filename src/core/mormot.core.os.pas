@@ -2928,7 +2928,7 @@ function Unicode_CodePage: integer;
 // - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
 // with a temporary variable - you would need to include cwstring unit
 // - in practice, is seldom called, unless our proprietary WIN32CASE collation
-// is used in mormot.db.raw.sqlite3, or you use Utf8CompareOS/Utf8CompareIOS
+// is used in mormot.db.raw.sqlite3, or via Utf8CompareOS() or Utf8CompareIOS()
 // functions from mormot.core.unicode
 // - consider Utf8ILCompReference() from mormot.core.unicode.pas for an
 // operating-system-independent Unicode 10.0 comparison function

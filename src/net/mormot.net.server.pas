@@ -5471,8 +5471,9 @@ begin
         if not late then
           inc(fResponses);
     end
-  else if fOwner.fInstable <> nil then // RejectInstablePeersMin
-    fOwner.fInstable.BanIP(remote.IP4);
+  else // not ok = this UDP packet is invalid
+    if fOwner.fInstable <> nil then // RejectInstablePeersMin
+      fOwner.fInstable.BanIP(remote.IP4);
 end;
 
 function THttpPeerCacheThread.Broadcast(const aReq: THttpPeerCacheMessage;
@@ -5955,14 +5956,15 @@ begin
     try
       SetLength(resp, 1); // create a "fake" response to reuse this connection
       resp[0] := req;
-      FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
+      FillZero(resp[0].Uuid);
+      // OnRequest() returns HTTP_NOCONTENT (204) - and not 404 - if not found
       result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
       begin
         Params.SetStep(wgsAlternateLastPeer, [fClient.Server]);
         exit; // successful direct downloading from last peer
       end;
-      result := 0; // may be HTTP_NOCONTENT if not found on this peer
+      result := 0; // may be HTTP_NOCONTENT (204) if not found on this peer
     finally
       fClientSafe.UnLock;
     end;
