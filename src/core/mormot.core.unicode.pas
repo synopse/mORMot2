@@ -10250,7 +10250,7 @@ end;
 
 function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 var
-  c2: PtrInt;
+  c2: PtrUInt;
   extra, i: integer;
   {$ifdef CPUX86NOTPIC}
   tab: TUnicodeUpperTable absolute UU;
@@ -10352,9 +10352,9 @@ begin
             until i = extra;
             inc(u2, extra);
             dec(c2, utf8.Extra[extra].offset);
-            if PtrUInt(c2) <= UU_MAX then
+            if c2 <= UU_MAX then
               c2 := tab.Ucs4Upper(c2);
-            dec(result, c2);
+            dec(result, PtrInt(c2));
             if result <> 0 then
               // found unmatching codepoint
               exit;
@@ -10386,9 +10386,9 @@ end;
 
 function StrPosIReference(U: PUtf8Char; const Up: RawUcs4): PUtf8Char;
 var
-  c, extra, i: PtrInt;
+  c, extra, i: PtrUInt;
   u0, u2: PUtf8Char;
-  up2: PInteger;
+  up2: PUcs4CodePoint;
   {$ifdef CPUX86NOTPIC}
   tab: TUnicodeUpperTable absolute UU;
   utf8: TUtf8Table absolute UTF8_TABLE;
@@ -10433,7 +10433,7 @@ nxt:u0 := U;
       until i = extra;
       inc(U, extra);
       dec(c, utf8.Extra[extra].offset);
-      if PtrUInt(c) <= UU_MAX then
+      if c <= UU_MAX then
         c := tab.Ucs4Upper(c);
       if c <> Up[0] then
         continue;
@@ -10471,7 +10471,7 @@ nxt:u0 := U;
         until i = extra;
         inc(u2, extra);
         dec(c, utf8.Extra[extra].offset);
-        if PtrUInt(c) <= UU_MAX then
+        if c <= UU_MAX then
           c := tab.Ucs4Upper(c);
         if c <> up2^ then
           goto nxt;
