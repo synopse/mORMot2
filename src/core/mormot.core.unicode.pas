@@ -2383,6 +2383,25 @@ function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 // - has a branchless optimized process of 7-bit ASCII charset [a..z] -> [A..Z]
 function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 
+/// compare two UCS4 strings
+function Ucs4Compare(const a, b: RawUcs4): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compare two UCS4 buffers
+function Ucs4Comp(a, b: PUcs4CodePoint): integer;
+
+/// convert some UTF-8 buffer content into UCS4
+procedure Utf8ToRawUcs4(u: PUtf8Char; L: PtrInt; out ucs4: RawUcs4); overload;
+
+/// convert some UTF-8 string content into UCS4
+function Utf8ToRawUcs4(const S: RawUtf8): RawUcs4; overload;
+
+/// convert some UCS4 buffer into UTF-8 string
+procedure RawUcs4ToUtf8(u4: PUcs4CodePoint; L: PtrInt; out u: RawUtf8); overload;
+
+/// convert some UCS4 into UTF-8 string
+function RawUcs4ToUtf8(const ucs4: RawUcs4): RawUtf8; overload;
+
 /// UpperCase conversion of UTF-8 into UCS4 using our Unicode 10.0 tables
 // - won't call the Operating System, so is consistent on all platforms,
 // whereas UpperCaseUnicode() may vary depending on each library implementation
@@ -7941,7 +7960,7 @@ begin
       break;
     AddInteger(pos, posCount, found);
   until false;
-  FastSetString(result, Length(S) + (newlen - oldlen) * posCount);
+  FastSetString(result, Length(S) + (newlen - oldlen) * posCount); // alloc once
   last := 1;
   src := pointer(S);
   dst := pointer(result);
@@ -7964,7 +7983,7 @@ end;
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8;
   Lookup: PNormTable): RawUtf8;
 var
-  found: PtrInt;
+  first: PtrInt;
 begin
   if (S = '') or
      (OldPattern = '') or
@@ -7974,14 +7993,14 @@ begin
   begin
     if (Lookup = nil) and
        (length(OldPattern) = 1) then
-      found := ByteScanIndex(pointer(S), {%H-}PStrLen(PtrUInt(S) - _STRLEN)^,
+      first := ByteScanIndex(pointer(S), {%H-}PStrLen(PtrUInt(S) - _STRLEN)^,
         byte(OldPattern[1])) + 1
     else
-      found := PosExI(OldPattern, S, 1, Lookup); // handle Lookup=nil
-    if found = 0 then
+      first := PosExI(OldPattern, S, 1, Lookup); // handle Lookup=nil
+    if first = 0 then
       result := S
     else
-      result := StringReplaceAllProcess(S, OldPattern, NewPattern, found, Lookup);
+      result := StringReplaceAllProcess(S, OldPattern, NewPattern, first, Lookup);
   end;
 end;
 
@@ -10155,16 +10174,90 @@ begin
   tmp.Done(Utf8UpperReference(pointer(S), tmp.buf, len), result);
 end;
 
+function Ucs4Comp(a, b: PUcs4CodePoint): integer;
+var
+  c: Ucs4CodePoint;
+begin
+  result := 0;
+  if a <> b then
+    if a <> nil then
+      if b <> nil then
+      begin
+        repeat
+          c := a^;
+          if c <> b^ then
+            break
+          else if c = 0 then
+            exit; // a = b
+          inc(a);
+          inc(b);
+        until false;
+        result := CompareCardinal(c, b^);
+      end
+      else
+        inc(result) // b = ''
+    else
+      dec(result);  // a = ''
+end;
+
+function Ucs4Compare(const a, b: RawUcs4): integer;
+begin
+  result := Ucs4Comp(pointer(a), pointer(b));
+end;
+
+procedure Utf8ToRawUcs4(u: PUtf8Char; L: PtrInt; out ucs4: RawUcs4);
+var
+  p: PUcs4CodePoint;
+begin
+  if (u = nil) or
+     (L <= 0) then
+    exit;
+  SetLength(ucs4, L + 1); // + 1 for an ending 0
+  inc(L, PtrUInt(u));
+  p := pointer(ucs4);
+  repeat
+    p^ := NextUtf8Ucs4(u); // allow conversion of #0 within the input
+    inc(p);
+  until PtrUInt(u) >= PtrUInt(L);
+  p^ := 0; // always end with a 0
+  DynArrayFakeLength(ucs4, (PAnsiChar(p) - pointer(ucs4)) shr 2); // no realloc
+end;
+
+function Utf8ToRawUcs4(const S: RawUtf8): RawUcs4;
+begin
+  Utf8ToRawUcs4(pointer(S), length(S), result);
+end;
+
+procedure RawUcs4ToUtf8(u4: PUcs4CodePoint; L: PtrInt; out u: RawUtf8);
+var
+  p: PUtf8Char;
+begin
+  if (u4 = nil) or
+     (L <= 0) then
+    exit;
+  FastSetString(u, L * 6); // prepare for the worse (paranoid)
+  p := pointer(u);
+  repeat
+    inc(p, Ucs4ToUtf8(u4^, p));
+    inc(u4);
+    dec(L);
+  until L = 0;
+  FakeLength(u, p - pointer(u)); // no realloc
+end;
+
+function RawUcs4ToUtf8(const ucs4: RawUcs4): RawUtf8;
+begin
+  RawUcs4ToUtf8(pointer(ucs4), length(ucs4), result);
+end;
+
 function UpperCaseUcs4Reference(const S: RawUtf8): RawUcs4;
 var
   c, n: PtrUInt;
   p: PUtf8Char;
 begin
+  result := nil;
   if S = '' then
-  begin
-    result := nil;
     exit;
-  end;
   SetLength(result, length(S) + 1);
   p := pointer(S);
   n := 0;
@@ -10498,8 +10591,6 @@ nxt:u0 := U;
     until false;
   until false;
 end;
-
-
 
 
 const
