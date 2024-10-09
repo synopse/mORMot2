@@ -5876,7 +5876,7 @@ const
     HTTP_HTTPVERSIONNONSUPPORTED,
     511,
     HTTP_CLIENTERROR,
-    513);
+    513); // 'Invalid Request' - should be last as fallback
 
 function StatusCodeToText(Code: cardinal): PRawUtf8;
 var
@@ -5905,7 +5905,7 @@ end;
 function StatusCodeToShort(Code: cardinal): TShort47;
 begin
   if Code > 599 then
-    Code := 999; // ensure stay in TShort47
+    Code := 999; // ensure stay in TShort47 and standard HTTP 3-digits range
   result[0] := #0;
   AppendShortCardinal(Code, result);
   AppendShortChar(' ', @result);

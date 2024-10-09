@@ -5887,9 +5887,22 @@ var
   local: TFileStreamEx;
   i: PtrInt;
   tix: cardinal;
+  outStreamInitialPos: Int64;
   alone: boolean;
   log: ISynLog;
   l: TSynLog;
+
+  function ResetOutStreamPosition: boolean;
+  begin
+    // not moved (e.g. first request, or connection issue) returns true
+    result := OutStream.Position = outStreamInitialPos;
+    if not result then
+      // TStreamRedirect requires full rewind for full content re-hash
+      if outStreamInitialPos = 0 then
+        result := OutStream.Seek(0, soBeginning) = 0; // will call ReHash
+      // TODO: fix range support - TStreamRedirect.Seek() Rehash after Append()
+  end;
+
 begin
   result := 0;
   // validate WGet caller context
@@ -5902,6 +5915,7 @@ begin
     exit;
   if not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) then
     EHttpPeerCache.RaiseUtf8('%.OnDownload: unexpected %', [Params.Hasher]);
+  outStreamInitialPos := OutStream.Position;
   // prepare a request frame
   l := nil;
   log := fLog.Enter('OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
@@ -6002,6 +6016,8 @@ begin
   end;
   Params.SetStep(wgsAlternateGet, [IP4ToShort(@resp[0].IP4)]);
   // make the peer HTTP/HTTPS request corresponding to this response
+  if not ResetOutStreamPosition then
+    exit; // partial download would fail the hash anyway
   fClientSafe.Lock;
   try
     result := LocalPeerRequest(req, resp[0], u, OutStream, {aRetry=}false);
@@ -6017,6 +6033,8 @@ begin
        not fInstable.IsBanned(resp[i].IP4) then
     if fClientSafe.TryLock then
     try
+      if not ResetOutStreamPosition then
+        exit; // partial download would fail the hash anyway
       Params.SetStep(wgsAlternateGetNext, [IP4ToShort(@resp[i].IP4)]);
       result := LocalPeerRequest(req, resp[i], u, OutStream, {aRetry=}false);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then

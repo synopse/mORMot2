@@ -629,7 +629,8 @@ type
   /// convenient multi-algorithm hashing wrapper
   // - as used e.g. by HashFile/HashFull functions
   // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance
+  // thread-safe reuse of one initialized instance: copying the record content
+  // will copy the actual hashing state
   {$ifdef USERECORDWITHMETHODS}
   TSynHasher = record
   {$else}
