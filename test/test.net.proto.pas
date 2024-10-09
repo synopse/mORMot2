@@ -843,7 +843,7 @@ begin
   o := RawLdapTranslateFilter('(&(givenName=John)(sn=Doe))');
   CheckHash(o, $372C9EF2);
   o := RawLdapTranslateFilter('(&)');
-  CheckHash(o, $00A000A0);
+  CheckHash(o, $00A000A0, 'absolute true');
   o := RawLdapTranslateFilter('(|(givenName=John)(givenName=Jonathan))');
   CheckHash(o, $A9670687);
   o := RawLdapTranslateFilter('|(givenName=John)(givenName=Jonathan)');
@@ -851,17 +851,19 @@ begin
   o := RawLdapTranslateFilter('(!(givenName=John))');
   CheckHash(o, $231C39EF);
   o := RawLdapTranslateFilter('(|)');
-  CheckHash(o, $00A100A1);
+  CheckHash(o, $00A100A1, 'absolute false');
   o := RawLdapTranslateFilter('*');
-  CheckHash(o, $01AD0187);
+  CheckHash(o, $01AD0187, 'present1');
   o := RawLdapTranslateFilter('(*)');
-  CheckHash(o, $01AD0187);
+  CheckHash(o, $01AD0187, 'present2');
   o := RawLdapTranslateFilter('(uid:=jdoe)');
   CheckHash(o, $C93ADF87);
   o := RawLdapTranslateFilter('(:caseIgnoreMatch:=foo)');
   CheckHash(o, $4F000E3E);
   o := RawLdapTranslateFilter('(uid:dn:caseIgnoreMatch:=jdoe)');
   CheckHash(o, $921D9031);
+  o := RawLdapTranslateFilter('(cn=*)');
+  CheckHash(o, $6B6D0287, 'present3');
   o := RawLdapTranslateFilter('(cn=abc*)');
   CheckHash(o, $E8897DEA);
   o := RawLdapTranslateFilter('(cn=*lmn*)');
@@ -895,6 +897,8 @@ begin
   CheckEqual(RawLdapTranslateFilter('!( )', {noraise=}true), '');
   CheckEqual(RawLdapTranslateFilter('&()', {noraise=}true), '');
   CheckEqual(RawLdapTranslateFilter('| ( )', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('(toto)', {noraise=}true), '');
+  CheckEqual(RawLdapTranslateFilter('x', {noraise=}true), '');
   // validate LDAP attributes definitions
   for at := low(at) to high(at) do
   begin
