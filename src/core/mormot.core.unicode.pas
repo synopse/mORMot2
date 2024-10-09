@@ -1454,7 +1454,7 @@ var
   /// a quick wrapper to StrComp or StrIComp comparison functions
   StrCompByCase: array[{CaseInsensitive=}boolean] of TUtf8Compare;
 
-/// comparison function first by Int64 value, then by text, for TUtf8Compare
+/// comparison function first by Int64 value, then by text, as TUtf8Compare
 // - so plain numbers will appear first, then case-sensitive text values
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
@@ -3009,7 +3009,7 @@ quit:
   result := PtrUInt(dest) - PtrUInt(begd); // dest-begd returns bytes length
 nosource:
   if not NoTrailingZero then
-    dest^ := #0; // always append a WideChar(0) to the end of the buffer
+    dest^ := #0; // append a WideChar(0) to the end of the buffer
 end;
 
 function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;

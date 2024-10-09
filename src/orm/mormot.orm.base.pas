@@ -2184,7 +2184,7 @@ type
     // Delphi compiler revision, to ensure fastest native Unicode process available
     function GetSynUnicode(Row, Field: PtrInt): SynUnicode;
     /// fill a unicode buffer with a particular field value
-    // - return number of wide characters written in Dest^
+    // - return number of WideChar (i.e. bytes div 2) written in Dest^
     function GetWP(Row, Field: PtrInt; Dest: PWideChar; MaxDestChars: cardinal): integer;
     {$ifndef PUREMORMOT2}
     /// read-only access to a particular field value, as UTF-16 Unicode text
@@ -3786,12 +3786,7 @@ begin
   end;
   SetInt64(P1, V1{%H-});
   SetInt64(P2, V2{%H-});
-  if V1 < V2 then
-    result := -1
-  else if V1 = V2 then
-    result := 0
-  else
-    result := +1;
+  result := CompareInt64(V1, V2);
 end;
 
 function Utf8CompareDouble(P1, P2: PUtf8Char): PtrInt;

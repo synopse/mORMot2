@@ -4458,13 +4458,13 @@ end;
 
 const
   FROM_VAROP: array[opcmpeq .. opcmpge, TVarCompareResult] of boolean = (
-    (false,  true,   false), // opcmpeq
-    (true,   false,  true),  // opcmpne
-    (true,   false,  false), // opcmplt
-    (true,   true,   false), // opcmple
-    (false,  false,  true),  // opcmpgt
-    (false,  true,   true)); // opcmpge
-    // crLessThan crEqual crGreaterThan
+     // crLessThan crEqual crGreaterThan
+         (false,    true,    false), // opcmpeq
+         (true,     false,   true),  // opcmpne
+         (true,     false,   false), // opcmplt
+         (true,     true,    false), // opcmple
+         (false,    false,   true),  // opcmpgt
+         (false,    true,    true)); // opcmpge
 
 function TSynInvokeableVariantType.CompareOp(const Left, Right: TVarData;
   const Operation: TVarOp): boolean;
