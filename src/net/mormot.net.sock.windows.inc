@@ -1987,12 +1987,13 @@ procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS: boolean;
   dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
+  if SChannelEnableTls13 and // should be explicitly enabled
+     ((OSVersion in [wEleven, wEleven_64]) or
+      (OSVersion >= wServer2022_64)) then
   // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
   // Enabling TLS 1.3 on earlier versions of Windows is possible through the
   // registry, but is explictly documented as unsafe by Microsoft.
   // https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
-  if (OSVersion in [wEleven, wEleven_64]) or
-     (OSVersion >= wServer2022_64) then
   begin
     // require new SCH_CREDENTIALS structure in order to enable TLS 1.3
     cred.New.dwVersion := SCH_CREDENTIALS_VERSION;
@@ -2001,7 +2002,7 @@ begin
       dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
       cred.New.cTlsParameters := 1;
       cred.New.pTlsParameters := @cred.Tls;
-      cred.Tls.grbitDisabledProtocols := cardinal(not SP_PROT_TLS_SAFE);
+      cred.Tls.grbitDisabledProtocols := not cardinal(SP_PROT_TLS_SAFE);
     end;
     cred.New.dwFlags := dwFlags;
     if paServCred <> nil then

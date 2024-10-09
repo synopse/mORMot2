@@ -1000,8 +1000,14 @@ var
 
 
 {$ifdef OSWINDOWS}
+var
+  /// try to enable TLS 1.3 over SChannel on Windows 11 or Windows Server 2022+
+  // - this flag does nothing on older versions of Windows
+  // - by default, it is disabled because our wrapper was reported to be
+  // unstable on some Windows builds :(
+  SChannelEnableTls13: boolean = false;
+
 /// SChannel TLS layer communication factory - as expected by this unit
-// - TLS 1.3 will be available since Windows 11
 // - can be used at runtime to override another implementation e.g.
 // @NewOpenSslNetTls from mormot.lib.openssl11 by executing:
 // ! @NewNetTls := @NewSChannelNetTls;
