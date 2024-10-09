@@ -265,6 +265,7 @@ type
     wgsAlternateLastPeer,
     wgsAlternateBroadcast,
     wgsAlternateGet,
+    wgsAlternateGetNext,
     wgsAlternateSuccess,
     wgsAlternateFailed,
     wgsAlternateReset,

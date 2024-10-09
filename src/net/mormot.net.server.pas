@@ -1422,6 +1422,8 @@ type
   // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
   // making any broadcast - to be used if the files are likely to come in batch;
   // can be forced by TWGetAlternateOptions from a given WGet() call
+  // - pcoTryAllPeers will try up to the best 10 braodcast responses, before
+  // falling back to the main server
   // - pcoBroadcastNotAlone will disable broadcasting for up to one second if
   // no response at all was received within BroadcastTimeoutMS delay
   // - pcoNoServer disable the local UDP/HTTP servers and acts as a pure client
@@ -1434,6 +1436,7 @@ type
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
     pcoTryLastPeer,
+    pcoTryAllPeers,
     pcoBroadcastNotAlone,
     pcoNoServer,
     pcoNoBanIP,
@@ -1562,7 +1565,7 @@ type
   THttpPeerCrypt = class(TInterfacedPersistent)
   protected
     fAesSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fClientSafe: TLightLock;
+    fClientSafe: TLightLock; // paranoid - only if unproperly used
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
@@ -1583,7 +1586,7 @@ type
       out aMsg: THttpPeerCacheMessage): boolean;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
-    function SendRespToClient(const aRequest: THttpPeerCacheMessage;
+    function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
       aOutStream: TStreamRedirect; aRetry: boolean): integer;
   public
@@ -5219,20 +5222,20 @@ begin
             (aMsg.Kind = pcfBearer);
 end;
 
-function THttpPeerCrypt.SendRespToClient(const aRequest: THttpPeerCacheMessage;
+function THttpPeerCrypt.LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
   var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
   aOutStream: TStreamRedirect; aRetry: boolean): integer;
 var
   tls: boolean;
   head, ip: RawUtf8;
 
-  procedure SendRespToClientFailed(E: TClass);
+  procedure LocalPeerRequestFailed(E: TClass);
   begin
     fLog.Add.Log(sllWarning, 'OnDownload: request %:% % failed as % %',
-      [ip, fPort, aUrl, result, E], self);
-    if (fInstable <> nil) and // RejectInstablePeersMin
+      [ip, fPort, aUrl, StatusCodeToShort(result), E], self);
+    if (fInstable <> nil) and // add to RejectInstablePeersMin list
        not aRetry then        // not from partial request before broadcast
-      fInstable.BanIP(aResp.IP4);
+      fInstable.BanIP(aResp.IP4); // this peer may have a HTTP firewall issue
     FreeAndNil(fClient);
     fClientIP4 := 0;
     result := 0; // will fallback to regular GET on the main repository
@@ -5246,10 +5249,11 @@ begin
     fLog.Add.Log(sllDebug, 'OnDownload: request %:% %', [ip, fPort, aUrl], self);
     aResp.Kind := pcfBearer; // authorize OnBeforeBody with response message
     head := AuthorizationBearer(BinToBase64uri(MessageEncode(aResp)));
-    // ensure we have the expected HTTP/HTTPS connection on the right peer
+    // ensure we have the right peer
     if (fClient <> nil) and
        (fClientIP4 <> aResp.IP4) then
       FreeAndNil(fClient);
+    // ensure we have the expected HTTP/HTTPS connection
     if fClient = nil then
     begin
       tls := pcoSelfSignedHttps in fSettings.Options;
@@ -5270,10 +5274,10 @@ begin
     if result in HTTP_GET_OK then
       fClientIP4 := aResp.IP4 // success or not found (HTTP_NOCONTENT)
     else
-      SendRespToClientFailed(nil); // error downloading from local peer
+      LocalPeerRequestFailed(nil); // error downloading from local peer
   except
     on E: Exception do
-      SendRespToClientFailed(PClass(E)^);
+      LocalPeerRequestFailed(PClass(E)^);
   end;
 end;
 
@@ -5881,6 +5885,7 @@ var
   fn: TFileName;
   u: RawUtf8;
   local: TFileStreamEx;
+  i: PtrInt;
   tix: cardinal;
   alone: boolean;
   log: ISynLog;
@@ -5958,7 +5963,7 @@ begin
       resp[0] := req;
       FillZero(resp[0].Uuid);
       // OnRequest() returns HTTP_NOCONTENT (204) - and not 404 - if not found
-      result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
+      result := LocalPeerRequest(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
       begin
         Params.SetStep(wgsAlternateLastPeer, [fClient.Server]);
@@ -5987,7 +5992,7 @@ begin
     exit; // no match
   end;
   fBroadcastTix := 0; // resp<>nil -> broadcasting seems fine
-  // select the best response
+  // select the best responses
   if length(resp) <> 1 then
   begin
     if length(resp) > 10 then
@@ -5996,13 +6001,29 @@ begin
       Sort(SortMessagePerPriority);
   end;
   Params.SetStep(wgsAlternateGet, [IP4ToShort(@resp[0].IP4)]);
-  // make the HTTP/HTTPS request corresponding to this response
+  // make the peer HTTP/HTTPS request corresponding to this response
   fClientSafe.Lock;
   try
-    result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}false);
+    result := LocalPeerRequest(req, resp[0], u, OutStream, {aRetry=}false);
   finally
     fClientSafe.UnLock;
   end;
+  if (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) or
+     not (pcoTryAllPeers in fSettings.Options) then
+    exit;
+  // try up to the best 10 peers of our broadcast response
+  for i := 1 to high(resp) do
+    if (fInstable = nil) or
+       not fInstable.IsBanned(resp[i].IP4) then
+    if fClientSafe.TryLock then
+    try
+      Params.SetStep(wgsAlternateGetNext, [IP4ToShort(@resp[i].IP4)]);
+      result := LocalPeerRequest(req, resp[i], u, OutStream, {aRetry=}false);
+      if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+        exit;
+    finally
+      fClientSafe.UnLock;
+    end;
 end;
 
 function THttpPeerCache.Ping: THttpPeerCacheMessageDynArray;
