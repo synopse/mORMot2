@@ -2059,7 +2059,9 @@ begin
       fFlags := ISC_REQ_FLAGS;
       if Context.IgnoreCertificateErrors then
         // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
-        fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
+        fFlags := fFlags or
+          ISC_REQ_MANUAL_CRED_VALIDATION or // no WinVerifyTrust() call
+          ISC_REQ_USE_SUPPLIED_CREDS; // send no client certificate to the server
       // initiate a ClientHello TLS message and a new fCtxt
       HandshakeBufInit(buf);
       res := InitializeSecurityContextW(
