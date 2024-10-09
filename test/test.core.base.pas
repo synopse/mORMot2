@@ -5549,14 +5549,20 @@ begin
     Check(IsWinAnsi(pointer(Unic), length(Unic) shr 1) = WA);
     Check(IsWinAnsiU(pointer(U)) = WA);
     Up := mormot.core.unicode.UpperCase(U);
-    Check(mormot.core.unicode.UpperCase(mormot.core.unicode.LowerCase(U)) = Up);
-    Check(Utf8IComp(pointer(U), pointer(U)) = 0);
-    Check(Utf8IComp(pointer(U), pointer(Up)) = 0);
-    Check(Utf8ILComp(pointer(U), pointer(U), length(U), length(U)) = 0);
-    Check(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
-    Check(Utf8ICompReference(pointer(U), pointer(U)) = 0);
-    Check(Utf8ILCompReference(pointer(U), pointer(U), length(U), length(U)) = 0);
-
+    CheckEqual(mormot.core.unicode.UpperCase(mormot.core.unicode.LowerCase(U)), Up);
+    CheckEqual(Utf8IComp(pointer(U), pointer(U)), 0);
+    CheckEqual(Utf8IComp(pointer(U), pointer(Up)), 0);
+    CheckEqual(Utf8ILComp(pointer(U), pointer(U), length(U), length(U)), 0);
+    CheckEqual(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)), 0);
+    CheckEqual(Utf8ICompReference(pointer(U), pointer(U)), 0);
+    CheckEqual(Utf8ILCompReference(pointer(U), pointer(U), length(U), length(U)), 0);
+    CheckEqual(Utf8CompareOS(pointer(U), pointer(U)), 0);
+    CheckEqual(CompareInteger(Utf8CompareOS(pointer(U), pointer(Up)), 0),
+              -CompareInteger(Utf8CompareOS(pointer(Up), pointer(U)), 0));
+    CheckEqual(CompareInteger(Utf8CompareIOS(pointer(U), pointer(Up)), 0),
+              -CompareInteger(Utf8CompareIOS(pointer(Up), pointer(U)), 0));
+    CheckEqual(Utf8CompareIOS(pointer(U), pointer(U)), 0);
+    CheckEqual(Utf8CompareIOS(pointer(U), pointer(Up)), 0);
     //for j := 1 to 5000 do
     try
       //W := WinAnsiString(RandomString(len));
@@ -5587,10 +5593,8 @@ begin
       end;
     except
       on E: Exception do
-        CheckUtf8(false, '% for %[%]%', [E.ClassType, length(U),
-          EscapeToShort(U), length(up4)]);
+        CheckUtf8(false, '% for %[%]%', [E, length(U), EscapeToShort(U), length(up4)]);
     end;
-
     CheckEqual(LowerCase(U), LowerCaseAscii7(U));
     L := Length(U);
     SetString(Up, nil, L);
