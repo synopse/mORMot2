@@ -5563,8 +5563,13 @@ begin
       //U := WinAnsiToUtf8(W);
       //check(IsValidUtf8(U), 'IsValidUtf8U');
       //Up := mormot.core.unicode.UpperCase(U);
+      up4 := Utf8ToRawUcs4(U);
+      CheckEqual(RawUcs4ToUtf8(up4), U);
+      Up2 := UpperCaseReference(U);
       up4 := UpperCaseUcs4Reference(U);
-      CheckEqual(StrPosIReference(pointer(U), Up4), pointer(U));
+      CheckEqual(RawUcs4ToUtf8(up4), Up2);
+      CheckEqual(Ucs4Compare(Utf8ToRawUcs4(Up2), up4), 0);
+      CheckEqual(StrPosIReference(pointer(U), up4), pointer(U));
       if U <> '' then
       begin
         Up2 := 'abcDE G' + U;
