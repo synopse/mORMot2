@@ -2037,7 +2037,7 @@ var
   nfo: TWinCertInfo;
   res, f, trial: cardinal;
 begin
-  // prepare execution context
+  // method called once to attach the socket from the client side
   fSocket := Socket;
   fServerAddressW := SynUnicode(ServerAddress);
   SetLength(fData, TLSRECMAXSIZE);
@@ -2045,6 +2045,7 @@ begin
   trial := 0;
   while true do
     try
+      // prepare execution context
       if Context.IgnoreCertificateErrors then
         f := SCH_CRED_MANUAL_CRED_VALIDATION or
              SCH_CRED_NO_DEFAULT_CREDS
@@ -2115,6 +2116,7 @@ var
   prov: HCRYPTPROV;
   freeprov: BOOL;
 begin
+  // method called once the socket has been bound on server side
   if Context.CertificateFile = '' then
     // Load certificate and private key from Windows certificate store
     fAcceptCertStore := CertOpenSystemStoreW(nil, 'MY')
@@ -2138,8 +2140,7 @@ begin
     if pass <> '' then
       FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
     if fAcceptCertStore = nil then
-      ESChannelRaiseLastError('PFXImportCertStoreSEC_E_CERT_UNKNOWN',
-        SEC_E_CERT_UNKNOWN);
+      ESChannelRaiseLastError('AfterBind: PFXImportCertStore', SEC_E_CERT_UNKNOWN);
   end;
   // find first certificate in store with private key
   fAcceptCert := nil;
