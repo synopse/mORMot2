@@ -2767,17 +2767,16 @@ begin
     for i := length(s) downto 2 do
       if s[i] = ')' then
       begin
-        ok := true;
         TrimCopy(s, 2, i - 2, s); // trim main parenthesis
+        ok := s <> '';
         break;
       end;
+    if not ok then
+      if NoRaise then
+        exit
+      else
+        RaiseError;
   end;
-  if (s = '') or
-     not ok then
-    if NoRaise then
-      exit
-    else
-      RaiseError;
   if PWord(s)^ = ord('*') then
     // Present Filter Type
     result := Asn('*', ASN1_CTX7)
