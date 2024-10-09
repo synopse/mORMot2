@@ -519,13 +519,16 @@ function RawLdapError(ErrorCode: integer): TLdapError;
 // - use LDAP_ERROR_TEXT[RawLdapError()] if you only need the error text
 function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
 
-/// encode a LDAP search filter text into an ASN.1 binary
-// - as used by CldapBroadcast() and TLdapClient.Search()
+/// encode a LDAP search filter text into its ASN.1 binary representation
+// - as used by CLDAP raw functions and TLdapClient.Search()
+// - in respect to the standard, this function allows no outter parenthesis,
+// e.g. allows 'accountBalance<=1234' or '&(attr1=a)(attr2=b)'
+// - on parsing error raise ELdap or return '' if NoRaise is true
 function RawLdapTranslateFilter(const Filter: RawUtf8;
   NoRaise: boolean = false): TAsnObject;
 
 /// encode the ASN.1 binary for a LDAP_ASN1_SEARCH_REQUEST
-// - as used by TLdapClient.Search and CldapGetDomainInfo/CldapBroadcast/CldapSortHosts
+// - as used by CLDAP raw functions and TLdapClient.Search()
 function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
   Filter: RawUtf8; const Attributes: array of RawUtf8;
   Scope: TLdapSearchScope = lssBaseObject; Aliases: TLdapSearchAliases = lsaAlways;
@@ -533,7 +536,7 @@ function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
 
 /// decode the ASN.1 binary of a LDAP_ASN1_SEARCH_ENTRY
 // - and lookup by name the returned attributes as RawUtf8 variables
-// - as used by CldapBroadcast()
+// - as used by CLDAP raw functions but not by TLdapClient.Search()
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
   const Attributes: array of RawUtf8; const Values: array of PRawUtf8): boolean;
 
@@ -2363,8 +2366,14 @@ begin
       begin
         FastSetRawByteString(response, @tmp, len);
         if RawLdapSearchParse(response, id,
-          ['dnsHostName', 'defaultNamingContext', 'ldapServiceName', 'vendorName'],
-          [@v.HostName, @v.NamingContext, @v.ServiceName, @v.VendorName]) then
+          ['dnsHostName',
+           'defaultNamingContext',
+           'ldapServiceName',
+           'vendorName'],
+          [@v.HostName,
+           @v.NamingContext,
+           @v.ServiceName,
+           @v.VendorName]) then
         begin
           QueryPerformanceMicroSeconds(stop);
           v.TimeMicroSec := stop - start;
@@ -2686,9 +2695,10 @@ end;
 
 function RawLdapTranslateFilter(const Filter: RawUtf8; NoRaise: boolean): TAsnObject;
 var
-  i, len: PtrInt;
+  text, attr, value, rule: RawUtf8;
+  expr: TAsnObject;
+  i, attrlen: PtrInt;
   ok, dn: boolean;
-  s, expr, l, r, rule: RawUtf8;
 
   procedure RaiseError;
   begin
@@ -2699,15 +2709,15 @@ var
   var
     p, i, len, parent: PtrInt;
   begin
-    // extract the next (..(..(..)..)..) expression
+    // extract the next (..(..(..)..)..) expression from text into expr
     result := false;
     parent := 1;
-    len := length(s);
-    p := PosExChar('(', s);
+    len := length(text);
+    p := PosExChar('(', text);
     if (p <> 0) and
        (len > 2) then
       for i := p + 1 to len do
-        case s[i] of
+        case text[i] of
           '(':
             inc(parent);
           ')':
@@ -2715,15 +2725,16 @@ var
               dec(parent);
               if parent <> 0 then
                 continue;
-              // return the whole expression and the trimmed s
-              Expr := copy(s, p, i - p + 1);
+              // return the whole expression and the trimmed text
+              inc(p); // excluding parenthesis
+              rule := copy(text, p, i - p);
               p := i;
               while (p <= len) and
-                    (s[p] = ' ') do
+                    (text[p] = ' ') do
                 inc(p);
-              delete(s, 1, p);
-              Expr := RawLdapTranslateFilter(Expr, NoRaise); // recursive call
-              result := Expr <> '';
+              delete(text, 1, p);
+              expr := RawLdapTranslateFilter(rule, NoRaise); // recursive call
+              result := expr <> '';
               break;
             end;
         end;
@@ -2732,43 +2743,51 @@ var
       RaiseError;
   end;
 
-  function TrimL: boolean;
+  function TrimAttr: boolean;
   begin
     result := false;
-    dec(len);
-    if len = 0 then
+    dec(attrlen);
+    if attrlen = 0 then
       if NoRaise then
         exit
       else
         RaiseError;
-    FakeLength(l, len);
+    FakeLength(attr, attrlen);
     result := true;
   end;
 
-  procedure Fetch(asn: integer);
+  procedure ParseOperator(ctc: integer);
+  begin
+    if TrimAttr then
+      result := Asn(ctc, [
+        Asn(attr),
+        Asn(UnescapeHex(value))]);
+  end;
+
+  procedure SubFetch(asn: integer);
   begin
     if i > 1 then
     begin
-      TrimCopy(r, 1, i - 1, s);
-      AsnAdd(result, UnescapeHex(s), asn);
+      TrimCopy(value, 1, i - 1, text);
+      AsnAdd(expr, UnescapeHex(text), asn);
     end;
-    delete(r, 1, i);
-    i := PosExChar('*', r);
+    delete(value, 1, i);
+    i := PosExChar('*', value);
   end;
 
 begin
   result := '';
-  s := TrimU(Filter);
-  if s = '' then
+  text := TrimU(Filter);
+  if text = '' then
     exit;
-  if s[1] = '(' then
+  if text[1] = '(' then
   begin
     ok := false;
-    for i := length(s) downto 2 do
-      if s[i] = ')' then
+    for i := length(text) downto 2 do
+      if text[i] = ')' then
       begin
-        TrimCopy(s, 2, i - 2, s); // trim main parenthesis
-        ok := s <> '';
+        TrimCopy(text, 2, i - 2, text); // trim main parenthesis
+        ok := text <> '';
         break;
       end;
     if not ok then
@@ -2777,11 +2796,11 @@ begin
       else
         RaiseError;
   end;
-  if PWord(s)^ = ord('*') then
+  if PWord(text)^ = ord('*') then
     // Present Filter Type
     result := Asn('*', ASN1_CTX7)
   else
-  case s[1] of
+  case text[1] of
     '&':
       // AND Filter Type (recursive call)
       begin
@@ -2790,7 +2809,7 @@ begin
             if not GetNextRecursiveExpr then
               exit;
             AsnAdd(result, expr);
-          until s = '';
+          until text = '';
         result := Asn(result, ASN1_CTC0);
       end;
     '|':
@@ -2801,7 +2820,7 @@ begin
             if not GetNextRecursiveExpr then
               exit;
             AsnAdd(result, expr);
-          until s = '';
+          until text = '';
         result := Asn(result, ASN1_CTC1);
       end;
     '!':
@@ -2810,90 +2829,72 @@ begin
         result := Asn(expr, ASN1_CTC2);
     else
       begin
-        // extract the (l=r) pair
-        i := PosExChar('=', s);
-        TrimCopy(s, 1, i - 1, l);
-        r := copy(s, i + 1, 500); // no trim
-        len := length(l);
-        if len = 0 then
-          if NoRaise then
-            exit
-          else
-            RaiseError;
-        case l[len] of
-          ':':
-            // (l:=r) extensibleMatch Filter Type
-            if TrimL then
-            begin
-              // e.g. '(uid:dn:caseIgnoreMatch:=jdoe)'
-              dn := false;
-              repeat
-                i := mormot.core.base.PosEx(':dn', l);
-                if i = 0 then
-                  break;
-                dn := true;
-                delete(l, i, 3);
-              until false;
-              i := PosExChar(':', l);
-              if i <> 0 then
+        // extract the (attr=value) pair
+        i := PosExChar('=', text);
+        TrimCopy(text, 1, i, attr);
+        value := copy(text, i + 1, 500); // no trim
+        attrlen := length(attr);
+        if TrimAttr then
+          case attr[attrlen] of
+            '>':
+              // (attr>=value) greaterOrEqual Filter Type
+              ParseOperator(ASN1_CTC5);
+            '<':
+              // (attr<=value) lessOrEqual Filter Type
+              ParseOperator(ASN1_CTC6);
+            '~':
+              // (attr~=value) approximateMatch Filter Type
+              ParseOperator(ASN1_CTC8);
+            ':':
+              // (attr:=value) extensibleMatch Filter Type
+              if TrimAttr then
               begin
-                TrimCopy(l, i + 1, 500, rule);
-                TrimCopy(l, 1, i - 1, l); // l = attribute description
-                if rule <> '' then
-                  result := Asn(rule, ASN1_CTX1);
+                // e.g. '(uid:dn:caseIgnoreMatch:=jdoe)'
+                dn := false;
+                repeat
+                  i := mormot.core.base.PosEx(':dn', attr);
+                  if i = 0 then
+                    break;
+                  dn := true;
+                  delete(attr, i, 3);
+                until false;
+                if TrimSplit(attr, attr, rule, ':') then
+                  if rule <> '' then
+                    expr := Asn(rule, ASN1_CTX1);
+                if attr <> '' then
+                  AsnAdd(expr, attr, ASN1_CTX2);
+                AsnAdd(expr, UnescapeHex(value), ASN1_CTX3);
+                if dn then // dnAttributes flag - default is FALSE
+                  AsnAdd(expr, RawByteString(#$01#$ff), ASN1_CTX4);
+                result := Asn(expr, ASN1_CTC9);
               end;
-              if l <> '' then
-                AsnAdd(result, l, ASN1_CTX2);
-              AsnAdd(result, UnescapeHex(r), ASN1_CTX3);
-              if dn then // dnAttributes flag - default is FALSE
-                AsnAdd(result, RawByteString(#$01#$ff), ASN1_CTX4);
-              result := Asn(result, ASN1_CTC9);
-            end;
-          '~':
-            // (l~=r) approximateMatch Filter Type
-            if TrimL then
-              result := Asn(ASN1_CTC8, [
-                Asn(l),
-                Asn(UnescapeHex(r))]);
-          '>':
-            // (l>=r) greaterOrEqual Filter Type
-            if TrimL then
-              result := Asn(ASN1_CTC5, [
-                 Asn(l),
-                 Asn(UnescapeHex(r))]);
-          '<':
-            // (l<=r) lessOrEqual Filter Type
-            if TrimL then
-              result := Asn(ASN1_CTC6, [
-                 Asn(l),
-                 Asn(UnescapeHex(r))]);
-        else
-          if r = '*' then
-            // (l=*) present Filter Type
-            result := Asn(l, ASN1_CTX7)
           else
-          begin
-            i := PosExChar('*', r);
-            if i = 0 then
-              // (l=r) equalityMatch Filter Type
-              result := Asn(ASN1_CTC3, [
-                 Asn(l),
-                 Asn(UnescapeHex(r))])
+            if value = '*' then
+              // (attr=*) present Filter Type
+              result := Asn(attr, ASN1_CTX7)
             else
             begin
-              // (l=r*r*) substrings Filter Type
-              if i > 1 then
-                Fetch(ASN1_CTX0);
-              while i <> 0 do
-                Fetch(ASN1_CTX1);
-              if r <> '' then
-                AsnAdd(result, UnescapeHex(r), ASN1_CTX2);
-              result := Asn(ASN1_CTC4, [
-                 Asn(l),
-                 Asn(ASN1_SEQ, [result])]);
+              i := PosExChar('*', value);
+              if i = 0 then
+                // (attr=value) equalityMatch Filter Type
+                result := Asn(ASN1_CTC3, [
+                   Asn(attr),
+                   Asn(UnescapeHex(value))])
+              else
+              begin
+                // (attr=value*value*) substrings Filter Type
+                if i > 1 then
+                  SubFetch(ASN1_CTX0);
+                while i <> 0 do
+                  SubFetch(ASN1_CTX1);
+                if value <> '' then
+                  AsnAdd(expr, UnescapeHex(value), ASN1_CTX2);
+                result := Asn(ASN1_CTC4, [
+                   Asn(attr),
+                   Asn(ASN1_SEQ, [expr])]);
+              end;
             end;
           end;
-        end;
       end;
   end;
 end;
@@ -2903,13 +2904,13 @@ function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
   Scope: TLdapSearchScope; Aliases: TLdapSearchAliases;
   Sizelimit, TimeLimit: integer): TAsnObject;
 var
-  filt: RawUtf8;
+  encodedfilter: RawUtf8;
 begin
   if Filter = '' then
     Filter := '(objectclass=*)';
-  filt := RawLdapTranslateFilter(Filter);
-  if filt = '' then
-    filt := Asn('', ASN1_NULL);
+  encodedfilter := RawLdapTranslateFilter(Filter);
+  if encodedfilter = '' then
+    encodedfilter := Asn('', ASN1_NULL);
   result := Asn(LDAP_ASN1_SEARCH_REQUEST, [
               Asn(BaseDN),
               Asn(ord(Scope),   ASN1_ENUM),
@@ -2917,7 +2918,7 @@ begin
               Asn(Sizelimit),
               Asn(TimeLimit),
               ASN1_BOOLEAN_VALUE[TypesOnly],
-              filt,
+              encodedfilter,
               Asn(ASN1_SEQ, [AsnArr(Attributes)])]);
 end;
 
@@ -2953,7 +2954,7 @@ begin
           result := true; // at least one attribute = success
         end;
       end;
-      i := {%H-}setend; // if several ASN1_OCTSTR are stored - but return first
+      i := {%H-}setend; // if several ASN1_OCTSTR are stored - return only first
     end;
 end;
 
