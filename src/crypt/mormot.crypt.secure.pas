@@ -9201,13 +9201,13 @@ var
 begin
   if Len <= $7f then
   begin
-    dest^ := Len;
+    dest^ := Len; // most simple case
     result := 1;
     exit;
   end;
   n := 0;
   repeat
-    tmp[n] := byte(Len);
+    tmp[n] := byte(Len); // prepare big endian storage
     inc(n);
     Len := Len shr 8;
   until Len = 0;

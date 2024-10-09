@@ -1458,6 +1458,22 @@ var
 // - so plain numbers will appear first, then case-sensitive text values
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
+/// case-sensitive comparison function using the Operating System, as TUtf8Compare
+// - "direct" StrComp() would follow UCS4 CodePoint order, which may not be the
+// same as the "human" expected order, especially on Windows
+// - use OS and compiler specific Unicode_CompareString() API so may not be
+// consistent between computers and platforms, as StrComp() is
+// - will make a temporary conversion on stack, of up to 1023 UTF-16 code units
+// - warning: potentially much slower than mORMot-native alternatives
+function Utf8CompareOS(P1, P2: PUtf8Char): PtrInt;
+
+/// case-insensitive comparison function using the Operating System, as TUtf8Compare
+// - use OS and compiler specific Unicode_CompareString() API so may not be
+// consistent between computers and platforms, as Utf8ICompReference() is
+// - will make a temporary conversion on stack, of up to 1023 UTF-16 code units
+// - warning: potentially much slower than mORMot-native alternatives
+function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
+
 /// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
 // - will return '?' if the UCS4 CodePoint is higher than #255: so use this function
@@ -6261,6 +6277,49 @@ begin
     result := CompareInt64(v1, v2)
   else
     result := StrComp(Str1, Str2);
+end;
+
+function _Utf8CompareOS(P1, P2: PUtf8Char; IgnoreCase: boolean): PtrInt;
+var // use temporary UTF-16 conversion on stack
+  w1, w2: PtrInt;
+  t1, t2: array[0 .. 1023] of WideChar; // convert+compare up to 1023 widechars
+begin // here P1<>nil and P2<>nil
+  w1 := Utf8ToWideChar(@t1, p1, high(t1), StrLen(P1)) shr 1;
+  w2 := Utf8ToWideChar(@t2, p2, high(t2), StrLen(P2)) shr 1;
+  result := Unicode_CompareString(@t1, @t2, w1, w2, IgnoreCase) - 2; // call OS
+  if (result = 0) and
+     ((w1 >= high(t1) - 2) or // t1[]/t2[] buffer overflow of identical content?
+      (w2 >= high(t2) - 2)) then // fallback to natural/byte order if too big
+    if IgnoreCase then
+      result := StrIComp(P1, P2)
+    else
+      result := StrComp(P1, P2);
+end;
+
+function Utf8CompareOS(P1, P2: PUtf8Char): PtrInt;
+begin
+  result := 0;
+  if P1 <> P2 then
+    if P1 <> nil then
+      if P2 <> nil then
+        result := _Utf8CompareOS(P1, P2, {ignorecase=}false)
+      else
+        inc(result) // P2=''
+    else
+      dec(result);  // P1=''
+end;
+
+function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
+begin
+  result := 0;
+  if P1 <> P2 then
+    if P1 <> nil then
+      if P2 <> nil then
+        result := _Utf8CompareOS(P1, P2, {ignorecase=}true)
+      else
+        inc(result) // P2=''
+    else
+      dec(result);  // P1=''
 end;
 
 function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
