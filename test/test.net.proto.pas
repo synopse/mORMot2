@@ -846,6 +846,8 @@ begin
   CheckHash(o, $00A000A0);
   o := RawLdapTranslateFilter('(|(givenName=John)(givenName=Jonathan))');
   CheckHash(o, $A9670687);
+  o := RawLdapTranslateFilter('|(givenName=John)(givenName=Jonathan)');
+  CheckHash(o, $A9670687);
   o := RawLdapTranslateFilter('(!(givenName=John))');
   CheckHash(o, $231C39EF);
   o := RawLdapTranslateFilter('(|)');
@@ -868,6 +870,19 @@ begin
   CheckHash(o, $019B7E03);
   o := RawLdapTranslateFilter('(cn=abc*def*lmn*uvw*xyz)');
   CheckHash(o, $9BA95FBA);
+  o := RawLdapTranslateFilter('(createTimestamp>=20170102030405.678Z)');
+  CheckHash(o, $D4CECB30);
+  o := RawLdapTranslateFilter('(accountBalance<=1234)');
+  CheckHash(o, $075CEC71);
+  o := RawLdapTranslateFilter('accountBalance<=1234');
+  CheckHash(o, $075CEC71);
+  o := RawLdapTranslateFilter('(givenName~=John)');
+  CheckHash(o, $7C293651);
+  o := RawLdapTranslateFilter('(&(|(cn=Jon)(sn=Brion)(!(cn=Alex))))');
+  CheckHash(o, $ADF30CEA);
+  o := RawLdapTranslateFilter('&(objectCategory=person)(objectClass=user)' +
+    '(useraccountcontrol:1.2.840.113556.1.4.803:=16)');
+  CheckHash(o, $82EE2554);
   //writeln(AsnDump(o));
   CheckEqual(RawLdapTranslateFilter('(givenName=John', {noraise=}true), '');
   CheckEqual(RawLdapTranslateFilter('(!(givenName=John)', {noraise=}true), '');
