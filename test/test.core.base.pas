@@ -7803,6 +7803,14 @@ begin
   end;
 end;
 
+type
+  TSDKey = record
+    i: integer;
+    u: TGuid;
+    j: integer;
+  end;
+  TSDKeys = array of TSDKey;
+
 {  TSynDictionary perf numbers on increasing integers or random guid strings
    with FPC 3.2.0 on x86_64 with our fpcx64mm - which is our main server target
 
@@ -8057,6 +8065,7 @@ var
   s, k, key, val: RawUtf8;
   i, n: integer;
   exists: boolean;
+  sdk: TSDKey;
 begin
   {$ifdef HASGENERICS}
   dict := TSynDictionary.New<RawUtf8, RawUtf8>(True);
@@ -8151,6 +8160,26 @@ begin
         end;
       end;
     end;
+  finally
+    dict.Free;
+  end;
+  // keys with no standard RTTI: fallback to binary hash/compare
+  v := 10;
+  dict := TSynDictionary.Create(TypeInfo(TSDKeys), TypeInfo(tvalues));
+  try
+    CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
+    FillCharFast(sdk, SizeOf(sdk), 0);
+    Check(not dict.FindAndCopy(sdk, v));
+    Check(dict.Add(sdk, v) = 0);
+    v := 1;
+    Check(v = 1);
+    Check(dict.FindAndCopy(sdk, v));
+    Check(v = 10);
+    sdk.j := 1;
+    Check(not dict.FindAndCopy(sdk, v));
+    CheckEqual(dict.Count, 1);
+    Check(dict.Capacity > 0);
   finally
     dict.Free;
   end;
