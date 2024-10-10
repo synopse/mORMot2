@@ -580,11 +580,12 @@ type
   /// stack parameters to ease TIKeyValue<TKey, TValue> creation
   TNewKeyValueContext = record
     Options: TKeyValueOptions;
+    KeySpecific: TRttiParserType;
+    Timeout: cardinal;
     KeyArrayTypeInfo,
     KeyItemTypeInfo: PRttiInfo;
     ValueArrayTypeInfo,
     ValueItemTypeInfo: PRttiInfo;
-    Timeout: cardinal;
     Compress: TAlgoCompress;
     Hasher: THasher;
   end;
@@ -796,7 +797,7 @@ type
   public
     /// generate a new IList<T> instance for most simple types
     // - use this factory method instead of plain TIList<T>.Create
-    // so that the types will be specifialized and compiled once in this unit
+    // so that the types will be specialized and compiled once in this unit
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
     // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
@@ -816,10 +817,10 @@ type
       aDynArrayTypeInfo: PRttiInfo = nil; aSortAs: TRttiParserType = ptNone): IList<T>;
         static; {$ifdef FPC} inline; {$endif}
     /// generate a new IKeyValue<TKey, TValue> instance
-    // - use this factory method instead of TIKeyValue<>.Create
-    // so that simple types will be specifialized and compiled once in this unit
+    // - use this factory method instead of NewPlainKeyValue<TKey, TValue>
+    // so that simple types will be specialized and compiled once in this unit
     // - you can set an optional timeout period, in seconds - you should call
-    // DeleteDeprecated periodically to search for deprecated items
+    // DeleteDeprecated periodically to search and delete for deprecated items
     // - you can provide specific TypeInfo() if TArray<TKey/TValue> is not enough
     // - by default, this instance won't be thread-safe unless the kvoThreadSafe
     // option is forced, so that process is protected with a TSynLocker mutex
@@ -830,16 +831,18 @@ type
     class function NewKeyValue<TKey, TValue>(aOptions: TKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
-      aHasher: THasher = nil): IKeyValue<TKey, TValue>;
+      aHasher: THasher = nil; aKeySpecific: TRttiParserType = ptNone): IKeyValue<TKey, TValue>;
         static; {$ifdef FPC} inline; {$endif}
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TIKeyValue<TKey, TValue>
     // - to be called for complex types (e.g. record, array or hash) when
     // NewKeyValue<TKey, TValue> fails and triggers EIKeyValue
+    // - won't be able to reuse specialized IKeyValue<> between types and type
+    // definitions, so resulting executable size may be slightly bigger
     class function NewPlainKeyValue<TKey, TValue>(aOptions: TKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
-      aHasher: THasher = nil): IKeyValue<TKey, TValue>;
+      aHasher: THasher = nil; aKeySpecific: TRttiParserType = ptNone): IKeyValue<TKey, TValue>;
         static; {$ifdef FPC} inline; {$endif}
   end;
 
@@ -1335,7 +1338,7 @@ begin
   fData := TSynDictionary.Create(
     aContext.KeyArrayTypeInfo, aContext.ValueArrayTypeInfo,
     kvoKeyCaseInsensitive in fOptions, aContext.Timeout, aContext.Compress,
-    aContext.Hasher);
+    aContext.Hasher, aContext.KeySpecific);
   if not (kvoThreadSafe in fOptions) then
     fData.ThreadUse := uNoLock // not thread-safe by default
   else if not (kvoThreadCriticalSection in fOptions) then
@@ -2403,7 +2406,7 @@ end;
 class function Collections.NewKeyValue<TKey, TValue>(aOptions: TKeyValueOptions;
   aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress;
   aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo: PRttiInfo;
-  aHasher: THasher): IKeyValue<TKey, TValue>;
+  aHasher: THasher; aKeySpecific: TRttiParserType): IKeyValue<TKey, TValue>;
 var
   ctx: TNewKeyValueContext;
 begin
@@ -2420,6 +2423,7 @@ begin
   ctx.ValueItemTypeInfo := TypeInfo(TValue);
   ctx.Timeout := aTimeOutSeconds;
   ctx.Compress := aCompressAlgo;
+  ctx.KeySpecific := aKeySpecific;
   ctx.Hasher := aHasher;
   {$ifdef SPECIALIZE_ENABLED}
   // IsManagedType() GetTypeKind() SizeOf() intrinsics to compile efficiently
@@ -2492,7 +2496,7 @@ class function Collections.NewPlainKeyValue<TKey, TValue>(
   aOptions: TKeyValueOptions; aTimeoutSeconds: cardinal;
   aCompressAlgo: TAlgoCompress;
   aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo: PRttiInfo;
-  aHasher: THasher): IKeyValue<TKey, TValue>;
+  aHasher: THasher; aKeySpecific: TRttiParserType): IKeyValue<TKey, TValue>;
 var
   ctx: TNewKeyValueContext;
 begin
@@ -2510,6 +2514,7 @@ begin
   ctx.Timeout := aTimeOutSeconds;
   ctx.Compress := aCompressAlgo;
   ctx.Hasher := aHasher;
+  ctx.KeySpecific := aKeySpecific;
   result := TIKeyValue<TKey, TValue>.Create(ctx);
 end;
 
