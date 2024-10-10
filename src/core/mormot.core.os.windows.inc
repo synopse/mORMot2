@@ -520,13 +520,6 @@ begin
         result := 'MORE_DATA';
       ERROR_NO_SYSTEM_RESOURCES:
         result := 'NO_SYSTEM_RESOURCES';
-      // most common WinHttp API errors
-      ERROR_WINHTTP_CANNOT_CONNECT:
-        result := 'WINHTTP_CANNOT_CONNECT';
-      ERROR_WINHTTP_TIMEOUT:
-        result := 'WINHTTP_TIMEOUT';
-      ERROR_WINHTTP_INVALID_SERVER_RESPONSE:
-        result := 'WINHTTP_INVALID_SERVER_RESPONSE';
       // main Windows Socket API (WSA) errors
       10014:
         result := 'WSAEFAULT';
@@ -550,6 +543,17 @@ begin
         result := 'WSAECONNREFUSED';
       11003:
         result := 'WSATRY_AGAIN';
+      // most common WinHttp API errors (in range 12000...12152)
+      ERROR_WINHTTP_TIMEOUT:
+        result := 'WINHTTP_TIMEOUT';
+      ERROR_WINHTTP_OPERATION_CANCELLED:
+        result := 'WINHTTP_OPERATION_CANCELLED';
+      ERROR_WINHTTP_CANNOT_CONNECT:
+        result := 'WINHTTP_CANNOT_CONNECT';
+      ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED:
+        result := 'WINHTTP_CLIENT_AUTH_CERT_NEEDED';
+      ERROR_WINHTTP_INVALID_SERVER_RESPONSE:
+        result := 'WINHTTP_INVALID_SERVER_RESPONSE';
       // some security-related HRESULT errors
       $80092010:
         result := 'CRYPT_E_REVOKED';

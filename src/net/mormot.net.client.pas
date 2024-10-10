@@ -3800,7 +3800,10 @@ end;
 function TWinHttp.InternalQueryDataAvailable: cardinal;
 begin
   if not WinHttpApi.QueryDataAvailable(fRequest, result) then
-    EWinHttp.RaiseFromLastError;
+    if GetLastError = ERROR_WINHTTP_OPERATION_CANCELLED then
+      result := 0 // connection may be closed by the server e.g. on 30x redirect
+    else
+      EWinHttp.RaiseFromLastError;
 end;
 
 function TWinHttp.InternalReadData(var Data: RawByteString;
