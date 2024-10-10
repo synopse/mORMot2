@@ -1617,7 +1617,7 @@ type
     fResp: THttpPeerCacheMessageDynArray;
     fRespCount: integer;
     fCurrentSeq: cardinal;
-    fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
+    fBroadcastEvent: TSynEvent;   // e.g. for pcoUseFirstResponse
     fBroadcastAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize Broadcast()
     fBroadcastIpPort: RawUtf8;
@@ -1626,7 +1626,7 @@ type
     procedure OnShutdown; override; // = Destroy
     function Broadcast(const aReq: THttpPeerCacheMessage;
       out aAlone: boolean): THttpPeerCacheMessageDynArray;
-    procedure AddResponse(const aMessage: THttpPeerCacheMessage);
+    function AddResponseAndDone(const aMessage: THttpPeerCacheMessage): boolean;
     function GetResponses(aSeq: cardinal): THttpPeerCacheMessageDynArray;
   public
     /// initialize the background UDP server thread
@@ -5350,8 +5350,7 @@ begin
   fOwner := Owner;
   fBroadcastAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
   fBroadcastIpPort := fBroadcastAddr.IPWithPort;
-  if pcoUseFirstResponse in fOwner.Settings.Options then
-    fBroadcastEvent := TSynEvent.Create;
+  fBroadcastEvent := TSynEvent.Create;
   // POSIX requires to bind to the broadcast address to receive brodcasted frames
   inherited Create(fOwner.fLog,
     fOwner.fMac.{$ifdef OSPOSIX}Broadcast{$else}IP{$endif}, // OS-specific
@@ -5361,7 +5360,7 @@ end;
 destructor THttpPeerCacheThread.Destroy;
 begin
   inherited Destroy;
-  FreeAndNil(fBroadcastEvent);
+  fBroadcastEvent.Free;
   fBroadcastSafe.Done;
 end;
 
@@ -5468,8 +5467,7 @@ begin
         if not late then
         begin
           inc(fResponses);
-          AddResponse(fMsg);
-          if fBroadcastEvent <> nil then // pcoUseFirstResponse
+          if AddResponseAndDone(fMsg) then
           begin
             fCurrentSeq := 0;            // ignore next responses
             fBroadcastEvent.SetEvent;    // notify MessageBroadcast
@@ -5501,8 +5499,7 @@ begin
   fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
     // setup this broadcasting sequence
-    if fBroadcastEvent <> nil then
-      fBroadcastEvent.ResetEvent; // pcoUseFirstResponse
+    fBroadcastEvent.ResetEvent;
     fCurrentSeq := aReq.Seq; // ignore any other responses
     fResponses := 0;         // reset counter for this fCurrentSeq (not late)
     // broadcast request over the UDP sub-net of the selected network interface
@@ -5521,10 +5518,7 @@ begin
       sock.Close;
     end;
     // wait for the (first) response(s)
-    if fBroadcastEvent <> nil then
-      fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS) // first
-    else
-      SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
+    fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS);
     result := GetResponses(aReq.Seq);
   finally
     fCurrentSeq := 0; // ignore any late responses
@@ -5537,8 +5531,8 @@ begin
      MicroSecToString(stop - start)], self);
 end;
 
-procedure THttpPeerCacheThread.AddResponse(
-  const aMessage: THttpPeerCacheMessage);
+function THttpPeerCacheThread.AddResponseAndDone(
+  const aMessage: THttpPeerCacheMessage): boolean;
 begin
   if fRespCount < fOwner.Settings.BroadcastMaxResponses then
   begin
@@ -5552,6 +5546,8 @@ begin
       fRespSafe.UnLock;
     end;
   end;
+  result := (pcoUseFirstResponse in fOwner.Settings.Options) or
+            (fRespCount >= fOwner.Settings.BroadcastMaxResponses);
 end;
 
 function THttpPeerCacheThread.GetResponses(
