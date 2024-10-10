@@ -2190,10 +2190,10 @@ var
   sz, res: cardinal;
 begin
   result := false;
-  sz := tmp.Init;
+  sz := tmp.Init shr 1; // size in WideChar
   res := MsiRecordGetStringW(hRecord, index, tmp.buf, sz);
   if res = ERROR_MORE_DATA then // unlikely > 4KB: requires temp allocation
-    res := MsiRecordGetStringW(hRecord, index, tmp.Init(sz), sz);
+    res := MsiRecordGetStringW(hRecord, index, tmp.Init(sz shl 1), sz);
   if res = NO_ERROR then
   begin
     Win32PWideCharToUtf8(tmp.buf, sz, str);
