@@ -1265,7 +1265,8 @@ type
   public
     /// initialize the dictionary storage, specifying dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
-    // would store the keys within this TSynDictionary instance
+    // would store the keys within this TSynDictionary instance using aHasher
+    // and optional aKeySpecific first field definition
     // - aValueTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynDictionary instance
     // - by default, string keys would be searched following exact case, unless
@@ -1274,7 +1275,8 @@ type
     // DeleteDeprecated periodically to search for deprecated items
     constructor Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
       aKeyCaseInsensitive: boolean = false; aTimeoutSeconds: cardinal = 0;
-      aCompressAlgo: TAlgoCompress = nil; aHasher: THasher = nil); reintroduce; virtual;
+      aCompressAlgo: TAlgoCompress = nil; aHasher: THasher = nil;
+      aKeySpecific: TRttiParserType = ptNone); reintroduce; virtual;
     {$ifdef HASGENERICS}
     /// initialize the dictionary storage, specifying keys/values as generic types
     // - just a convenient wrapper around TSynDictionary.Create()
@@ -1282,7 +1284,7 @@ type
     // generics-based code where TKey/TValue are propagated to all methods
     class function New<TKey, TValue>(aKeyCaseInsensitive: boolean = false;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
-      aHasher: THasher = nil): TSynDictionary;
+      aHasher: THasher = nil; aKeySpecific: TRttiParserType = ptNone): TSynDictionary;
         static; {$ifdef FPC} inline; {$endif}
     {$endif HASGENERICS}
     /// finalize the storage
@@ -9511,7 +9513,7 @@ end;
 
 constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
-  aCompressAlgo: TAlgoCompress; aHasher: THasher);
+  aCompressAlgo: TAlgoCompress; aHasher: THasher; aKeySpecific: TRttiParserType);
 begin
   inherited Create;
   fSafe.Padding[DIC_KEYCOUNT].VType   := varInteger;  // Keys.Count
@@ -9522,8 +9524,8 @@ begin
   fSafe.Padding[DIC_TIMESEC].VType    := varInteger;  // Timeouts Seconds
   fSafe.Padding[DIC_TIMETIX].VType    := varInteger;  // GetTickCount64 shr 10
   fSafe.PaddingUsedCount := DIC_TIMETIX + 1;          // manual registration
-  fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, aHasher,
-    @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive);
+  fKeys.InitSpecific(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, aKeySpecific,
+    @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive, aHasher);
   fValues.Init(aValueTypeInfo, fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fValues.Compare := DynArraySortOne(fValues.Info.ArrayFirstField, aKeyCaseInsensitive);
@@ -9538,10 +9540,10 @@ end;
 {$ifdef HASGENERICS}
 class function TSynDictionary.New<TKey, TValue>(aKeyCaseInsensitive: boolean;
   aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress;
-  aHasher: THasher): TSynDictionary;
+  aHasher: THasher; aKeySpecific: TRttiParserType): TSynDictionary;
 begin
   result := TSynDictionary.Create(TypeInfo(TArray<TKey>), TypeInfo(TArray<TValue>),
-    aKeyCaseInsensitive, aTimeoutSeconds, aCompressAlgo, aHasher);
+    aKeyCaseInsensitive, aTimeoutSeconds, aCompressAlgo, aHasher, aKeySpecific);
 end;
 {$endif HASGENERICS}
 
