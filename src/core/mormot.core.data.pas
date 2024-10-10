@@ -9304,16 +9304,24 @@ procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne
   aCaseInsensitive: boolean);
 begin
   fDynArray := aDynArray;
-  if not (Assigned(aHashItem) or
-          Assigned(aEventHash)) then
-    aHashItem := PT_HASH[aCaseInsensitive, aDynArray^.Info.ArrayFirstFieldSort];
   fHashItem := aHashItem;
   fEventHash := aEventHash;
-  if not (Assigned(aCompare) or
-          Assigned(aEventCompare)) then
-    aCompare := PT_SORT[aCaseInsensitive, aDynArray^.Info.ArrayFirstFieldSort];
+  if not (Assigned(fHashItem) or
+          Assigned(fEventHash)) then
+  begin
+    fHashItem := PT_HASH[aCaseInsensitive, fDynArray^.Info.ArrayFirstFieldSort];
+    if not Assigned(fHashItem) then // fallback to binary hash if not enough RTTI
+      fEventHash := fDynArray^.Info.ValueFullHash;
+  end;
   fCompare := aCompare;
   fEventCompare := aEventCompare;
+  if not (Assigned(fCompare) or
+          Assigned(fEventCompare)) then
+  begin
+    fCompare := PT_SORT[aCaseInsensitive, fDynArray^.Info.ArrayFirstFieldSort];
+    if not Assigned(fCompare) then // fallback
+      fEventCompare := fDynArray^.Info.ValueFullCompare;
+  end;
   HashTableInit(aHasher);
 end;
 
@@ -9323,10 +9331,14 @@ begin
   fDynArray := aDynArray;
   if aKind in [ptNone, ptEnumeration, ptSet] then
     aKind := fDynArray^.Info.ArrayFirstFieldSort; // use RTTI if not enough
-  fHashItem := PT_HASH[aCaseInsensitive, aKind];
   fEventHash := nil;
-  fCompare := PT_SORT[aCaseInsensitive, aKind];
+  fHashItem := PT_HASH[aCaseInsensitive, aKind];
+  if not Assigned(fHashItem) then // fallback
+    fEventHash := fDynArray^.Info.ValueFullHash;
   fEventCompare := nil;
+  fCompare := PT_SORT[aCaseInsensitive, aKind];
+  if not Assigned(fCompare) then // fallback
+    fEventCompare := fDynArray^.Info.ValueFullCompare;
   HashTableInit(aHasher);
 end;
 
