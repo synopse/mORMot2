@@ -73,10 +73,11 @@ begin
   p.tcpTimeoutSec := 10;
   logfolder := StringToUtf8(Executable.ProgramFilePath);
   p.peerSecret := 'secret';
-  p.PeerSettings.Options := [pcoVerboseLog, pcoTryLastPeer];
+  p.PeerSettings.Options := [pcoVerboseLog, pcoTryLastPeer, pcoTryAllPeers];
   p.PeerSettings.CacheTempPath := p.CacheFolder + 'temp';
   p.PeerSettings.CachePermPath := p.CacheFolder + 'perm';
   p.PeerSettings.LimitMBPerSec := 0; // no limit by default
+  p.PeerSettings.BroadcastTimeoutMS := 1000; // 1 second delay seems fine
   if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
     p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
   // define main processing switches
