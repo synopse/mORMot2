@@ -9970,7 +9970,7 @@ begin
     TypeInfo(TSecAceFlags), TypeInfo(TSecAccessMask), TypeInfo(TSecControls),
     TypeInfo(TSecurityDescriptorInfos)]);
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams), _TSynSignerParams);
-  TRttiJson.RegisterCustomSerializers([
+  TRttiJson.RegisterCustomSerializerFunctions([
     TypeInfo(RawSid),                @_JL_RawSid, @_JS_RawSid,
     TypeInfo(RawSecurityDescriptor), @_JL_SD,     @_JS_SD,
     TypeInfo(TSecAccessMask),        @_JL_Mask,   @_JS_Mask]);

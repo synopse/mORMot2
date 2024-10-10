@@ -1948,13 +1948,14 @@ type
     class function RegisterCustomSerializer(Info: PRttiInfo;
       const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
     /// register some custom functions for JSON serialization of a given type
-    // - more simple than TOnRttiJsonRead and TOnRttiJsonWrite event callbacks
-    class function RegisterCustomSerializers(Info: PRttiInfo;
-      Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson; overload;
+    // - TRttiJsonLoad / TRttiJsonSave functions may be more simple than
+    // TOnRttiJsonRead and TOnRttiJsonWrite event callbacks
+    class function RegisterCustomSerializerFunction(Info: PRttiInfo;
+      Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson;
     /// register some custom functions for JSON serialization of several types
     // - expects the parameters as PRttiInfo / TRttiJsonLoad / TRttiJsonSave trios
-    class procedure RegisterCustomSerializers(
-      const InfoReaderWriterTrios: array of pointer); overload;
+    class procedure RegisterCustomSerializerFunctions(
+      const InfoReaderWriterTrios: array of pointer);
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText() or RegisterCustomEnumValues()
     class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJson;
@@ -11078,7 +11079,7 @@ begin
     result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
-class function TRttiJson.RegisterCustomSerializers(Info: PRttiInfo;
+class function TRttiJson.RegisterCustomSerializerFunction(Info: PRttiInfo;
   Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson;
 begin
   result := Rtti.RegisterType(Info) as TRttiJson;
@@ -11086,7 +11087,7 @@ begin
   result.fJsonSave := @Writer;
 end;
 
-class procedure TRttiJson.RegisterCustomSerializers(
+class procedure TRttiJson.RegisterCustomSerializerFunctions(
   const InfoReaderWriterTrios: array of pointer);
 var
   i, n: PtrUInt;
@@ -11095,7 +11096,7 @@ begin
   if (n <> 0) and
      (n mod 3 = 0) then
     for i := 0 to (n div 3) - 1 do
-      RegisterCustomSerializers(InfoReaderWriterTrios[i * 3],
+      RegisterCustomSerializerFunction(InfoReaderWriterTrios[i * 3],
         InfoReaderWriterTrios[i * 3 + 1], InfoReaderWriterTrios[i * 3 + 2]);
 end;
 
