@@ -5905,11 +5905,14 @@ end;
 
 function StatusCodeToShort(Code: cardinal): TShort47;
 begin
-  if Code > 999 then
-    Code := 999; // ensure stay in TShort47 and standard HTTP 3-digits range
   result[0] := #0;
-  AppendShortCardinal(Code, result);
-  AppendShortChar(' ', @result);
+  if Code <> HTTP_CLIENTERROR then // hide the number of the beast
+  begin
+    if Code > 999 then
+      Code := 999; // ensure stay in TShort47 within standard HTTP 3-digits range
+    AppendShortCardinal(Code, result);
+    AppendShortChar(' ', @result);
+  end;
   AppendShortAnsi7String(StatusCodeToText(Code)^, result);
 end;
 

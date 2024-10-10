@@ -3646,7 +3646,7 @@ begin
   begin
     RespStatus := GetCardinal(P + 9);
     result := (RespStatus >= 200) and
-              (RespStatus <= 599);
+              (RespStatus <= 599); // the HTTP standard requires 3 digits
   end
   else
     result := false;

@@ -2374,14 +2374,11 @@ begin
       if IdemPChar(cmd, 'HTTP/1.') and
          (cmd[7] in ['0', '1']) then
       begin
-        // get http numeric status code (200,404...) from 'HTTP/1.x ######'
+        // get http numeric status code (200,404...) from 'HTTP/1.x ###'
         ctxt.Status := GetCardinal(cmd + 9);
         if (ctxt.Status < 200) or
-           (ctxt.Status > 599) then
-        begin
-          ctxt.Status := HTTP_CLIENTERROR;
-          exit;
-        end;
+           (ctxt.Status > 599) then // the HTTP standard requires three digits
+          exit; // abort but returns the received number (may be 0)
       end
       else
       begin
