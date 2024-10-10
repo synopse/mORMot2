@@ -27,8 +27,8 @@ interface
 uses
   sysutils,
   classes,
-  Windows,
-  WinINet,
+  windows,
+  wininet,
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,

@@ -42,7 +42,7 @@ uses
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}  // as set in mormot.defines.inc
-  WinINet,
+  wininet,
   mormot.lib.winhttp,
   {$ifdef FORCE_OPENSSL}
   mormot.lib.openssl11, // bypass SChannel for a given project
@@ -3766,24 +3766,13 @@ function TWinHttp.InternalGetInfo(Info: cardinal): RawUtf8;
 var
   dwSize, dwIndex: cardinal;
   tmp: TSynTempBuffer;
-  i: integer;
 begin
   result := '';
-  dwSize := 0;
+  dwSize := SizeOf(tmp); // in bytes
   dwIndex := 0;
-  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, nil, dwSize, dwIndex) and
-     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
-  begin
-    tmp.Init(dwSize);
-    if WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
-    begin
-      dwSize := dwSize shr 1;
-      SetLength(result, dwSize);
-      for i := 0 to dwSize - 1 do // fast ANSI 7-bit conversion
-        PByteArray(result)^[i] := PWordArray(tmp.buf)^[i];
-    end;
-    tmp.Done;
-  end;
+  if WinHttpApi.QueryHeaders(fRequest, Info, nil, @tmp, dwSize, dwIndex) then
+    // ERROR_INSUFFICIENT_BUFFER should not happen with a 4KB buffer
+    Win32PWideCharToUtf8(@tmp, dwSize shr 1, result);
 end;
 
 function TWinHttp.InternalGetInfo32(Info: cardinal): cardinal;
@@ -3956,17 +3945,14 @@ end;
 function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;
 var
   dwSize, dwIndex: cardinal;
+  tmp: TSynTempBuffer;
 begin
   result := '';
-  dwSize := 0;
+  dwSize := SizeOf(tmp); // in bytes
   dwIndex := 0;
-  if not HttpQueryInfoA(fRequest, Info, nil, dwSize, dwIndex) and
-     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
-  begin
-    SetLength(result, dwSize - 1);
-    if not HttpQueryInfoA(fRequest, Info, pointer(result), dwSize, dwIndex) then
-      result := '';
-  end;
+  if HttpQueryInfoW(fRequest, Info, @tmp, dwSize, dwIndex) then
+    // ERROR_INSUFFICIENT_BUFFER should not happen with a 4KB buffer
+    Win32PWideCharToUtf8(@tmp, dwSize shr 1, result);
 end;
 
 function TWinINet.InternalGetInfo32(Info: cardinal): cardinal;
