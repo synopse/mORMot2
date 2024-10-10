@@ -1453,8 +1453,8 @@ type
     fInterfaceFilter: TMacAddressFilter;
     fOptions: THttpPeerCacheOptions;
     fLimitMBPerSec, fLimitClientCount,
-    fBroadcastTimeoutMS, fBroadcastMaxResponses, fHttpTimeoutMS,
-    fRejectInstablePeersMin,
+    fBroadcastTimeoutMS, fBroadcastMaxResponses, fTryAllPeersCount,
+    fHttpTimeoutMS, fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName: RawUtf8;
@@ -1518,6 +1518,10 @@ type
     // - default is 24
     property BroadcastMaxResponses: integer
       read fBroadcastMaxResponses write fBroadcastMaxResponses;
+    /// how many of the best responses should pcoTryAllPeers also try
+    // - default is 10
+    property TryAllPeersCount: integer
+      read fTryAllPeersCount write fTryAllPeersCount;
     /// the socket level timeout for HTTP requests
     // - default to low 500 ms because should be local
     property HttpTimeoutMS: integer
@@ -5333,6 +5337,7 @@ begin
   fCachePermMinBytes := 2048;
   fBroadcastTimeoutMS := 10;
   fBroadcastMaxResponses := 24;
+  fTryAllPeersCount := 10;
   fHttpTimeoutMS := 500;
 end;
 
@@ -6008,14 +6013,10 @@ begin
   fBroadcastTix := 0; // resp<>nil -> broadcasting seems fine
   // select the best responses
   if length(resp) <> 1 then
-  begin
-    if length(resp) > 10 then
-      DynArrayFakeLength(resp, 10); // sort the first 10 responses received
     DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).
       Sort(SortMessagePerPriority);
-  end;
+  // HTTP/HTTPS request over the best peer corresponding to this response
   Params.SetStep(wgsAlternateGet, [IP4ToShort(@resp[0].IP4)]);
-  // make the peer HTTP/HTTPS request corresponding to this response
   if not ResetOutStreamPosition then
     exit; // partial download would fail the hash anyway
   fClientSafe.Lock;
@@ -6029,9 +6030,9 @@ begin
      not ((pcoTryAllPeers in fSettings.Options) or
           (waoTryAllPeers in Params.AlternateOptions)) then
     exit;
-  // try up to the best 10 peers of our broadcast response
-  for i := 1 to high(resp) do
-    if not fInstable.IsBanned(resp[i].IP4) then
+  // try up to the best TryAllPeersCount peers of our broadcast response
+  for i := 1 to MinPtrInt(length(resp), fSettings.TryAllPeersCount) do
+    if not fInstable.IsBanned(resp[i].IP4) then // banned in-between (unlikely)
       if fClientSafe.TryLock then
       try
         Params.SetStep(wgsAlternateGetNext, [IP4ToShort(@resp[i].IP4)]);
