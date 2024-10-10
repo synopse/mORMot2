@@ -11,6 +11,7 @@ unit mormot.net.acme;
     - ACME client implementation
     - Let's Encrypt TLS / HTTPS Encryption Certificates Support
     - HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
+    - HTTP/HTTPS Fully Featured Multi-Host Web Server
 
   *****************************************************************************
 
@@ -39,6 +40,7 @@ uses
   mormot.core.json,
   mormot.core.log,
   mormot.core.threads,
+  mormot.core.search,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.lib.openssl11, // for per-domain-name PSSL_CTX certificates
@@ -396,6 +398,9 @@ type
   end;
 
 
+{ **************** HTTP/HTTPS Fully Featured Multi-Host Web Server }
+
+
 implementation
 
 
@@ -421,9 +426,7 @@ begin
   // the server includes a Replay-Nonce header field in every response
   fNonce := FindIniNameValue(pointer(fHeaders), 'REPLAY-NONCE: ');
   // validate the response
-  if (fStatus <> HTTP_SUCCESS) and
-     (fStatus <> HTTP_CREATED) and
-     (fStatus <> HTTP_NOCONTENT) then
+  if not (fStatus in [HTTP_SUCCESS, HTTP_CREATED, HTTP_NOCONTENT]) then
   begin
     err := JsonDecode(pointer(fBody), 'detail', nil, {handlejsonobjarr=} false);
     if err = '' then
@@ -1416,10 +1419,15 @@ begin
   CheckCertificatesBackground; // launch a dedicated background thread
 end;
 
+
+{ **************** HTTP/HTTPS Fully Featured Multi-Host Web Server }
+
+
 {$else}
 
 implementation
 
 {$endif USE_OPENSSL}
+
 
 end.

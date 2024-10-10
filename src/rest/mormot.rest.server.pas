@@ -2572,7 +2572,7 @@ function IsCurrentNonce(Ctxt: TRestServerUriContext;
 
 /// this function can be exported from a DLL to remotely access to a TRestServer
 // - use TRestServer.ExportServerGlobalLibraryRequest to assign a server to this function
-// - return the HTTP status, e.g. 501 HTTP_CLIENTERROR if no
+// - return the HTTP status, e.g. HTTP_CLIENTERROR if no
 // TRestServer.ExportServerGlobalLibraryRequest has been assigned yet
 // - once used, memory for Resp and Head should be released with
 // LibraryRequestFree() returned function
