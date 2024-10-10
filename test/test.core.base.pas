@@ -8164,12 +8164,12 @@ begin
     dict.Free;
   end;
   // keys with no standard RTTI: fallback to binary hash/compare
+  FillCharFast(sdk, SizeOf(sdk), 0);
   v := 10;
   dict := TSynDictionary.Create(TypeInfo(TSDKeys), TypeInfo(tvalues));
   try
     CheckEqual(dict.Count, 0);
     CheckEqual(dict.Capacity, 0);
-    FillCharFast(sdk, SizeOf(sdk), 0);
     Check(not dict.FindAndCopy(sdk, v));
     Check(dict.Add(sdk, v) = 0);
     v := 1;
@@ -8178,8 +8178,24 @@ begin
     Check(v = 10);
     sdk.j := 1;
     Check(not dict.FindAndCopy(sdk, v));
+    sdk.j := 0;
     CheckEqual(dict.Count, 1);
     Check(dict.Capacity > 0);
+  finally
+    dict.Free;
+  end;
+  dict := TSynDictionary.Create(TypeInfo(TSDKeys), TypeInfo(tvalues), false,
+    0, nil, nil, ptInteger);
+  try
+    Check(not dict.FindAndCopy(sdk, v));
+    Check(dict.Add(sdk, v) = 0);
+    v := 1;
+    Check(dict.FindAndCopy(sdk, v));
+    Check(v = 10);
+    v := 1;
+    sdk.j := 1;
+    Check(dict.FindAndCopy(sdk, v), 'ptInteger=search i only');
+    Check(v = 10);
   finally
     dict.Free;
   end;
