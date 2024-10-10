@@ -3843,9 +3843,28 @@ var
   timer: TPrecisionTimer;
 begin
   n := 512;
+  CheckEqual(MinPtrInt(1, n), 1);
+  CheckEqual(MaxPtrInt(1, n), n);
+  CheckEqual(MinPtrUInt(1, n), 1);
+  CheckEqual(MaxPtrUInt(1, n), n);
   SetLength(i8, n);
   for i := 0 to n - 1 do
+  begin
     i8[i] := i;
+    CheckEqual(MinPtrInt(i, i), i);
+    CheckEqual(MaxPtrInt(i, i), i);
+    CheckEqual(MinPtrUInt(i, i), i);
+    CheckEqual(MaxPtrUInt(i, i), i);
+    CheckEqual(MinPtrInt(i, n), i);
+    CheckEqual(MaxPtrInt(i, n), n);
+    CheckEqual(MinPtrUInt(i, n), i);
+    CheckEqual(MaxPtrUInt(i, n), n);
+    CheckEqual(MinPtrInt(i, i + 1), i);
+    CheckEqual(MaxPtrInt(i, i - 1), i);
+    CheckEqual(MinPtrUInt(i, i + 1), i);
+    if i > 0 then
+      CheckEqual(MaxPtrUInt(i, i - 1), i);
+  end;
   CheckEqual(ByteScanIndex(pointer(i8), 100, 100), -1);
   CheckEqual(ByteScanIndex(pointer(i8), 101, 100), 100);
   CheckEqual(ByteScanIndex(@i8[1], 100, 0), -1, 'aligned read');

@@ -1530,6 +1530,22 @@ function ComparePointer(const A, B: pointer): integer;
 function CompareQWord(const A, B: QWord): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns the smallest of two PtrInt values
+function MinPtrInt(const A, B: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns the biggest of two PtrInt values
+function MaxPtrInt(const A, B: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns the smallest of two PtrUInt values
+function MinPtrUInt(const A, B: PtrUInt): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns the biggest of two PtrUInt values
+function MaxPtrUInt(const A, B: PtrUInt): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast search of an unsigned integer item in a 32-bit integer array
 // - Count is the number of cardinal entries in P^
 // - returns P where P^=Value
@@ -6479,6 +6495,34 @@ begin
 end;
 
 {$endif FPC_OR_UNICODE}
+
+function MinPtrInt(const A, B: PtrInt): PtrInt;
+begin
+  result := A;
+  if B < A then
+    result := B;
+end;
+
+function MaxPtrInt(const A, B: PtrInt): PtrInt;
+begin
+  result := A;
+  if B > A then
+    result := B;
+end;
+
+function MinPtrUInt(const A, B: PtrUInt): PtrUInt;
+begin
+  result := A;
+  if B < A then
+    result := B;
+end;
+
+function MaxPtrUInt(const A, B: PtrUInt): PtrUInt;
+begin
+  result := A;
+  if B > A then
+    result := B;
+end;
 
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 begin
