@@ -202,6 +202,7 @@ const
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
   /// a fake response code, generated for client side panic failure/exception
+  // - for it is the number of a man
   HTTP_CLIENTERROR = 666;
   /// a fake response code, used by THttpServerRequest.SetAsyncResponse
   // - for internal THttpAsyncServer asynchronous process
@@ -5827,7 +5828,7 @@ const
    'Gateway Timeout',                   // HTTP_GATEWAYTIMEOUT
    'HTTP Version Not Supported',        // HTTP_HTTPVERSIONNONSUPPORTED
    'Network Authentication Required',   // 511
-   'Client side Exception',             // HTTP_CLIENTERROR = 666
+   'Client Side Connection Error',      // HTTP_CLIENTERROR = 666
    'Invalid Request');                  // 513 - should be last as fallback
 
 
@@ -5883,7 +5884,7 @@ var
   i: PtrInt;
 begin
   if Code <> 200 then // optimistic approach :)
-    if (Code < 513) and
+    if (Code <= HTTP_CLIENTERROR) and  // 100..666
        (Code >= 100) then
     begin
       i := WordScanIndex(@HTTP_CODE, length(HTTP_CODE), Code); // may use SSE2
@@ -5904,7 +5905,7 @@ end;
 
 function StatusCodeToShort(Code: cardinal): TShort47;
 begin
-  if Code > 599 then
+  if Code > 999 then
     Code := 999; // ensure stay in TShort47 and standard HTTP 3-digits range
   result[0] := #0;
   AppendShortCardinal(Code, result);
