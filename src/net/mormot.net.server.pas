@@ -6026,18 +6026,18 @@ begin
   end;
   if (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) or
      not ResetOutStreamPosition or // rewind OutStream for main server fallback
-     not (pcoTryAllPeers in fSettings.Options) then
+     not ((pcoTryAllPeers in fSettings.Options) or
+          (waoTryAllPeers in Params.AlternateOptions)) then
     exit;
   // try up to the best 10 peers of our broadcast response
   for i := 1 to high(resp) do
     if not fInstable.IsBanned(resp[i].IP4) then
       if fClientSafe.TryLock then
       try
-        if not ResetOutStreamPosition then
-          exit; // partial download would fail the hash anyway
         Params.SetStep(wgsAlternateGetNext, [IP4ToShort(@resp[i].IP4)]);
         result := LocalPeerRequest(req, resp[i], u, OutStream, {aRetry=}false);
-        if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+        if (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) or
+           not ResetOutStreamPosition then
           exit;
       finally
         fClientSafe.UnLock;

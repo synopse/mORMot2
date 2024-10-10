@@ -234,14 +234,15 @@ type
   // - waoNoHeadFirst will call OnDownload() first then fallback to GET so
   // may be preferred e.g. if the main server has a huge latency
   // - waoNoMinimalSize should let OnDownload() accept even the smallest files
-  // - waoTryLastPeer/waoBroadcastNotAlone will force homonymous
-  // pcoTryLastPeer/pcoBroadcastNotAlone THttpPeerCacheOption
+  // - waoTryLastPeer/waoTryAllPeers/waoBroadcastNotAlone will force homonymous
+  // pcoTryLastPeer/pcoTryAllPeers/pcoBroadcastNotAlone THttpPeerCacheOption
   // - waoNoProgressiveDownloading will disable pcfResponsePartial requests
   TWGetAlternateOption = (
     waoPermanentCache,
     waoNoHeadFirst,
     waoNoMinimalSize,
     waoTryLastPeer,
+    waoTryAllPeers,
     waoBroadcastNotAlone,
     waoNoProgressiveDownloading);
 
