@@ -2590,6 +2590,12 @@ type
     /// fill a value from random - including strings and nested types
     procedure ValueRandom(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
+    /// TOnDynArrayHashOne callback used as fallback for unsupported items
+    // - here DefaultHasher() is always used over Size bytes
+    function ValueFullHash(const Elem): cardinal;
+    /// TOnDynArraySortCompare callback used as fallback for unsupported items
+    // - simple per-byte comparison over Size bytes
+    function ValueFullCompare(const A, B): integer;
     /// how many iterations could be done one a given value
     // - returns -1 if the value is not iterable, or length(DynArray) or
     // TRawUtf8List.Count or TList.Count or TSynList.Count
@@ -8883,6 +8889,16 @@ end;
 procedure TRttiCustom.ValueRandom(Data: pointer);
 begin
   fSetRandom(Data, self); // handle most simple kind of values from RTTI
+end;
+
+function TRttiCustom.ValueFullHash(const Elem): cardinal;
+begin
+  result := DefaultHasher(PtrUInt(self), @Elem, fCache.ItemSize);
+end;
+
+function TRttiCustom.ValueFullCompare(const A, B): integer;
+begin
+  result := MemCmp(@A, @B, fCache.ItemSize); // use SSE2 asm on Intel/AMD
 end;
 
 function TRttiCustom.ValueIterateCount(Data: pointer): integer;
