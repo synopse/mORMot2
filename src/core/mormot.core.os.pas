@@ -3433,7 +3433,11 @@ function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean = false): boolean;
 
 /// create a File from a memory buffer content
-function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
+function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName;
+  FlushOnDisk: boolean = false): boolean;
+
+/// fill a memory buffer from a file content
+function BufferFromFile(const FileName: TFileName; Buf: pointer; Len: PtrInt): boolean;
 
 /// create or append a string content to a File
 // - can optionally rotate the file to a FileName+'.bak'  over a specific size
@@ -6704,19 +6708,19 @@ var
   chunk, read: PtrInt;
 begin
   result := false;
-  if Size > 0 then
-    repeat
-      chunk := Size;
-      {$ifdef OSWINDOWS}
-      if chunk > 16 shl 20 then
-        chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
-      {$endif OSWINDOWS}
-      read := FileRead(F, Buffer^, chunk);
-      if read <= 0 then
-        exit; // error reading Size bytes
-      inc(PByte(Buffer), read);
-      dec(Size, read);
-    until Size = 0;
+  while Size > 0 do
+  begin
+    chunk := Size;
+    {$ifdef OSWINDOWS}
+    if chunk > 16 shl 20 then
+      chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
+    {$endif OSWINDOWS}
+    read := FileRead(F, Buffer^, chunk);
+    if read <= 0 then
+      exit; // error reading Size bytes
+    inc(PByte(Buffer), read);
+    dec(Size, read);
+  end;
   result := true;
 end;
 
@@ -6848,25 +6852,12 @@ end;
 
 function FileFromString(const Content: RawByteString;
   const FileName: TFileName; FlushOnDisk: boolean): boolean;
-var
-  h: THandle;
 begin
-  result := false;
-  h := FileCreate(FileName);
-  if not ValidHandle(h) then
-    exit;
-  if not FileWriteAll(h, pointer(Content), length(Content)) then
-  begin
-    FileClose(h); // abort on write error
-    exit;
-  end;
-  if FlushOnDisk then
-    FlushFileBuffers(h);
-  FileClose(h);
-  result := true;
+  result := FileFromBuffer(pointer(Content), length(Content), FileName, FlushOnDisk);
 end;
 
-function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
+function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName;
+  FlushOnDisk: boolean): boolean;
 var
   h: THandle;
 begin
@@ -6875,6 +6866,21 @@ begin
   if not ValidHandle(h) then
     exit;
   result := FileWriteAll(h, Buf, Len);
+  if result and
+     FlushOnDisk then
+    FlushFileBuffers(h);
+  FileClose(h);
+end;
+
+function BufferFromFile(const FileName: TFileName; Buf: pointer; Len: PtrInt): boolean;
+var
+  h: THandle;
+begin
+  result := false;
+  h := FileOpen(FileName, fmOpenReadShared);
+  if not ValidHandle(h) then
+    exit;
+  result := FileReadAll(h, Buf, Len);
   FileClose(h);
 end;
 
