@@ -217,11 +217,12 @@ const
   Z_BUF_ERROR     = -5;
   Z_VERSION_ERROR = -6;
 
-  Z_DEFAULT_COMPRESSION = -1; // documented to match Z_USUAL_COMPRESSION (6)
+  // compression levels
   Z_NO_COMPRESSION      = 0;
   Z_BEST_SPEED          = 1;
   Z_USUAL_COMPRESSION   = 6;
-  Z_BEST_COMPRESSION    = 9;
+  Z_BEST_COMPRESSION    = {$ifdef LIBDEFLATESTATIC} 12 {$else} 9 {$endif};
+  Z_DEFAULT_COMPRESSION = -1; // documented to match Z_USUAL_COMPRESSION (6)
 
   Z_FILTERED         = 1;
   Z_HUFFMAN_ONLY     = 2;
@@ -794,8 +795,8 @@ end;
 
 function TZLib.CompressInit(CompressionLevel: integer; ZlibFormat: boolean): boolean;
 begin
-  if CompressionLevel > 9 then
-    CompressionLevel := 9; // libdeflate allows additional 10,11,12 level
+  if CompressionLevel > Z_BEST_COMPRESSION then
+    CompressionLevel := Z_BEST_COMPRESSION; // libdeflate is up to 12
   result := deflateInit2_(
     Stream, CompressionLevel, Z_DEFLATED, Z_MAX_BITS[ZLibFormat],
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, SizeOf(Stream)) >= 0;
@@ -1043,7 +1044,7 @@ var
 begin
   z.Init(src, dst, srcLen, dstLen);
   if CompressionLevel > 9 then
-    CompressionLevel := 9; // levels 10,11,12 are implemented by libdeflate
+    CompressionLevel := 9;
   if z.CompressInit(CompressionLevel, ZlibFormat) then
     try
       z.Check(z.Compress(Z_FINISH), [Z_STREAM_END, Z_OK], 'CompressMem');
