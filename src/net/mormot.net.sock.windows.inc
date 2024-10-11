@@ -2002,7 +2002,7 @@ begin
       dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
       cred.New.cTlsParameters := 1;
       cred.New.pTlsParameters := @cred.Tls;
-      cred.Tls.grbitDisabledProtocols := not cardinal(SP_PROT_TLS_SAFE);
+      cred.Tls.grbitDisabledProtocols := SP_PROT_TLS_UNSAFE;
     end;
     cred.New.dwFlags := dwFlags;
     if paServCred <> nil then
