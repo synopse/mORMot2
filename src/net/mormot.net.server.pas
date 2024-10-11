@@ -5194,11 +5194,11 @@ function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
     MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
     if aMsg.Kind in PCF_RESPONSE then
       if (aMsg.Seq < fFrameSeqLow) or
-         (aMsg.Seq > cardinal(fFrameSeq)) then
+         (aMsg.Seq > cardinal(fFrameSeq)) then // compare with local sequence
         exit;
     result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
               (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
-              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo)));
+              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))); // antifuzzing
   end;
 
 begin
@@ -5304,8 +5304,8 @@ begin
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
-      [GuidToShort(fUuid), key.b[0], CardinalToHexShort(fFrameSeq)], self);
-      // log includes safe 8-bit fingerprint
+      [GuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
+      // log includes safe 16-bit fingerprint
   FillZero(key.b);
 end;
 

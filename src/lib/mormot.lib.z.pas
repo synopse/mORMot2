@@ -221,18 +221,18 @@ const
   Z_VERSION_ERROR = -6;
 
   // compression levels
+  Z_DEFAULT_COMPRESSION = -1; // documented to match Z_USUAL_COMPRESSION (6)
   Z_NO_COMPRESSION      = 0;
   Z_BEST_SPEED          = 1;
   Z_USUAL_COMPRESSION   = 6;
   Z_BEST_COMPRESSION    = {$ifdef LIBDEFLATESTATIC} 12 {$else} 9 {$endif};
-  Z_DEFAULT_COMPRESSION = -1; // documented to match Z_USUAL_COMPRESSION (6)
 
   // compression strategies/algorithms
+  Z_DEFAULT_STRATEGY = 0;
   Z_FILTERED         = 1;
   Z_HUFFMAN_ONLY     = 2;
   Z_RLE              = 3;
   Z_FIXED            = 4;
-  Z_DEFAULT_STRATEGY = 0;
 
   // compression encoding
   Z_BINARY  = 0;
