@@ -446,7 +446,8 @@ begin
   // unsupported yet - see fpc_shortstr_enum_intern() in sstrings.inc
   result := @NULL_STR;
   {$else}
-  Info := @Info[ord(Info[1]) + (2 + 13)]; // jump NameLen + EnumBaseType
+  // quickly jump over Kind + NameLen + Name + EnumBaseType
+  Info := @Info[ord(Info[1]) + (2 + 9 + SizeOf(pointer))];
   if Value > 0 then
     repeat
       Info := @Info[ord(Info^) + 1]; // next shortstring
