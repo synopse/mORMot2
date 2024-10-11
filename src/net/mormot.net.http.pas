@@ -6959,10 +6959,10 @@ begin
   RecordZero(@Info, TypeInfo(THttpMetricsHeader));
   result := false;
   // read (and decompress if needed) the first file chunk
-  f := FileOpen(FileName, fmOpenReadShared);
+  f := FileOpen(FileName, fmOpenReadShared); // BufferFromFile() is not possible
   if not ValidHandle(f) then
     exit;
-  len := FileRead(f, tmp, SizeOf(tmp));
+  len := FileRead(f, tmp, SizeOf(tmp)); // len may be < SizeOf(tmp)
   FileClose(f);
   mlen := ord(HTTPMETRICS_MAGIC[0]);
   if len <= mlen then

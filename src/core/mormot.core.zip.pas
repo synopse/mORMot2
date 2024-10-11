@@ -3837,18 +3837,10 @@ end;
 class function TAlgoGZ.FileIsCompressed(
   const Name: TFileName; Magic: cardinal): boolean;
 var
-  f: THandle;
-  l: integer;
   h: array[0..4] of cardinal; // .gz file should be at least 20 bytes long
 begin
-  result := false;
-  f := FileOpen(Name, fmOpenReadShared);
-  if not ValidHandle(f) then
-    exit;
-  l := FileRead(f, h, SizeOf(h));
-  result := (l = SizeOf(h)) and
-            (h[0] and $ffffff = GZHEAD[0]); // only check the .gz magic
-  FileClose(f);
+  result := BufferFromFile(Name, @h, SizeOf(h)) and
+            (h[0] and $ffffff = GZ_MAGIC); // only check the .gz magic
 end;
 
 function TAlgoGZ.FileCompress(const Source, Dest: TFileName; Magic: cardinal;

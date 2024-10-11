@@ -954,16 +954,10 @@ end;
 
 function FileIsExecutable(const FileName: TFileName): boolean;
 var
-  h: THandle;
   header: word;
 begin
-  result := false;
-  h := FileOpen(FileName, fmOpenReadShared);
-  if not ValidHandle(h) then
-    exit;
-  result := (FileRead(h, header, 2) = 2) and
+  result := BufferFromFile(FileName, @header, SizeOf(header)) and
             (header = $5A4D); // DOS Magic Number
-  FileClose(h);
 end;
 
 function GetModuleHandleExA(dwFlags: cardinal; lpModuleName: pointer;

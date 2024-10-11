@@ -5882,17 +5882,9 @@ end;
 class function TAlgoCompress.FileIsCompressed(const Name: TFileName;
   Magic: cardinal): boolean;
 var
-  f: THandle;
-  l: integer;
   h: TAlgoCompressHead;
 begin
-  result := false;
-  f := FileOpen(Name, fmOpenReadShared);
-  if not ValidHandle(f) then
-    exit;
-  l := FileRead(f, h, SizeOf(h));
-  FileClose(f);
-  result := (l = SizeOf(h)) and
+  result := BufferFromFile(Name, @h, SizeOf(h)) and
             (h.Magic = Magic); // only check the magic of first chunk header
 end;
 
