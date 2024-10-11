@@ -906,9 +906,13 @@ implementation
 { ************ TSynZipCompressor Stream Class }
 
 const
+  // number of bytes of the .gz file format header
   GZHEAD_SIZE = 10;
+
+  // default simple .gz header file, with no flag enable and no timestamp
+  // the .gz file ends with the crc32c and the uncompressed size of the content
   GZHEAD: array[0..2] of cardinal = (
-    $088B1F, 0, 0);
+    GZ_MAGIC, 0, 0);
 
 {$ifdef LIBDEFLATESTATIC}
 var
@@ -941,20 +945,16 @@ end;
 
 function TSynZipStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
-  if not fInitialized then
-    result := 0
-  else if (Offset = 0) and
-          (Origin in [soCurrent, soEnd]) then
+  result := 0;
+  if fInitialized then
+    if (Offset = 0) and
+       (Origin in [soCurrent, soEnd]) then
     // for TStream.Position/GetSize on Delphi
     result := fSizeIn
-  else
-  begin
-    result := 0;
-    if (Offset <> 0) or
-       (Origin <> soBeginning) or
-       (fSizeIn <> 0) then
-      ESynZip.RaiseUtf8('Unexpected %.Seek', [self]);
-  end;
+  else if (Offset <> 0) or
+          (Origin <> soBeginning) or
+          (fSizeIn <> 0) then
+    ESynZip.RaiseUtf8('Unexpected %.Seek', [self]);
 end;
 
 function TSynZipStream.{%H-}Read(var Buffer; Count: Longint): Longint;
@@ -973,7 +973,7 @@ begin
   fDestStream := outStream;
   fFormat := Format;
   if fFormat = szcfGZ then
-    fDestStream.WriteBuffer(GZHEAD, GZHEAD_SIZE);
+    fDestStream.WriteBuffer(GZHEAD, GZHEAD_SIZE); // default simple .gz header
   Z.Init(nil, 0, outStream, nil, nil, 0, 256 shl 10); // use 256KB buffers
   fInitialized := Z.CompressInit(CompressionLevel, fFormat = szcfZip);
 end;
@@ -986,6 +986,8 @@ begin
 end;
 
 destructor TSynZipCompressor.Destroy;
+var
+  trailer: array[0..1] of cardinal;
 begin
   if fInitialized then
   begin
@@ -993,9 +995,10 @@ begin
       Flush;
       if fFormat = szcfGZ then
       begin
-        // .gz format expected a trailing header
-        fDestStream.WriteBuffer(fCrc, 4); // CRC of the uncompressed data
-        fDestStream.WriteBuffer(Z.Stream.total_in, 4); // truncated to 32-bit
+        // .gz format expects 2 x 32-bit of uncompressed data trailing information
+        trailer[0] := fCrc;              // CRC
+        trailer[1] := Z.Stream.total_in; // Size (truncated to 32-bit)
+        fDestStream.WriteBuffer(trailer, SizeOf(trailer));
       end;
     except
       // ignore any exception e.g. when zip was aborted
@@ -1146,7 +1149,7 @@ begin
   fcomment := nil;
   if (gz = nil) or
      (gzLen <= 18) or
-     (PCardinal(gz)^ and $ffffff <> GZHEAD[0]) then
+     (PCardinal(gz)^ and $ffffff <> GZ_MAGIC) then
     exit; // .gz file as header + compressed + crc32 + len32 format
   flags := TGZFlags(gz[3]);
   unixmodtime := PCardinal(gz + 4)^;
@@ -3784,7 +3787,7 @@ begin
   if (PlainLen < CompSizeTrigger) or
      (CheckCompressed and
       IsContentCompressed(Plain, PlainLen)) then
-    result := 0; // .gz format but with store compression algorithm
+    result := Z_NO_COMPRESSION; // already compressed: use .gz format but stored
 end;
 
 function TAlgoGZ.Compress(Plain: PAnsiChar; PlainLen,
