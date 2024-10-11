@@ -860,15 +860,14 @@ begin
     FileTimeToDosDateTime(lft, LongRec(result).Hi, LongRec(result).Lo);
 end;
 
-function FileAgeToWindowsTime(const FileName: TFileName): integer;
+function FileAgeToWindowsTime(F: THandle): integer;
 var
-  fa: WIN32_FILE_ATTRIBUTE_DATA;
+  wt: FILETIME;
 begin
   result := 0;
-  if (FileName <> '') and
-     GetFileAttributesInternal(FileName, fa) and
-     ({%H-}fa.dwFileAttributes and faDirectory = 0) then
-    result := FileTimeToDosTime(fa.ftLastWriteTime);
+  if ValidHandle(F) and
+     GetFileTime(F, nil, nil, @wt) then
+    result := FileTimeToDosTime(wt);
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;

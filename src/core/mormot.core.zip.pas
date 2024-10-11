@@ -1891,9 +1891,8 @@ begin
   result^.h32.fileInfo.zzipMethod := method;
   result^.h32.fileInfo.zcrc32 := crc32;
   if fileage = 0 then
-    result^.h32.fileInfo.zlastMod := DateTimeToWindowsFileTime(Now)
-  else
-    result^.h32.fileInfo.zlastMod := fileage;
+    fileage := DateTimeToWindowsFileTime(Now); // current local timestamp
+  result^.h32.fileInfo.zlastMod := fileage;
 end;
 
 function TZipWrite.WriteHeader(const zipName: TFileName): PtrInt;
@@ -2061,7 +2060,7 @@ begin
     try
       // retrieve file size and date
       todo := FileSize(f);
-      age := FileAgeToWindowsTime(aFileName);
+      age := FileAgeToWindowsTime(f); // stored in 32-bit DOS format
       // check if the file should be stored or use libdeflate
       met := Z_DEFLATED;
       if (CompressLevel < 0) or

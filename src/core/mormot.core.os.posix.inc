@@ -1227,9 +1227,9 @@ begin
   result := F.{%H-}Time; // raw POSIX FileDate is already in UTC seconds
 end;
 
-function FileAgeToWindowsTime(const FileName: TFileName): integer;
+function FileAgeToWindowsTime(F: THandle): integer;
 begin
-  result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));
+  result := DateTimeToWindowsFileTime(FileDateToDateTime(FileHandleToUnixTimeUtc(F)));
 end;
 
 function FileIsWritable(const FileName: TFileName): boolean;

@@ -3155,7 +3155,7 @@ function FileAgeToUnixTimeUtc(const FileName: TFileName;
 /// get the date and time of one file into a Windows File 32-bit TimeStamp
 // - this cross-system function is used e.g. by mormot.core.zip which expects
 // Windows TimeStamps in its headers
-function FileAgeToWindowsTime(const FileName: TFileName): integer;
+function FileAgeToWindowsTime(F: THandle): integer;
 
 /// copy the date of one file to another
 // - FileSetDate(THandle, Age) is not implemented on POSIX: filename is needed
@@ -6368,12 +6368,13 @@ function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 var
   yy, mm, dd, h, m, s, ms: word;
 begin
+  result := 0;
+  if DateTime = 0 then
+    exit;
   DecodeDate(DateTime, yy, mm, dd);
   DecodeTime(DateTime, h, m, s, ms);
-  if (yy < 1980) or
-     (yy > 2099) then // hard limit is 2108, but WinAPI up to 2099/12/31
-    result := 0
-  else
+  if (yy >= 1980) and
+     (yy <= 2099) then // hard limit is 2108, but WinAPI up to 2099/12/31
     result := (s shr 1) or (m shl 5) or (h shl 11) or
       cardinal((dd shl 16) or (mm shl 21) or (cardinal(yy - 1980) shl 25));
 end;
