@@ -2208,6 +2208,7 @@ type
     function GetProgress: RawUtf8;
     procedure DoReport(ReComputeElapsed: boolean);
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
+    procedure AfterAppend; virtual;
     procedure ResetHash; virtual; // called e.g. from Seek(0, soBeginning)
     procedure SetExpectedSize(Value: Int64);
     procedure ReadWriteHash(const Buffer; Count: integer); virtual;
@@ -2327,7 +2328,8 @@ type
   /// TStreamRedirect with 32-bit THasher checksum
   TStreamRedirectHash32 = class(TStreamRedirect)
   protected
-    fHash: cardinal;
+    fHash, fHashAppend: cardinal;
+    procedure AfterAppend; override;
     procedure ResetHash; override;
   public
     function GetHash: RawUtf8; override;
@@ -9846,6 +9848,10 @@ procedure TStreamRedirect.DoHash(data: pointer; len: integer);
 begin // no associated hasher on this parent class
 end;
 
+procedure TStreamRedirect.AfterAppend;
+begin // no associated hasher on this parent class
+end;
+
 procedure TStreamRedirect.ResetHash;
 begin // no associated hasher on this parent class
 end;
@@ -9930,6 +9936,7 @@ begin
            (fInfo.CurrentSize <> read) then
           DoReport(true);
     until false;
+    AfterAppend; // save current hasher state for ResetHash
   end;
 end;
 
@@ -10048,9 +10055,14 @@ end;
 
 { TStreamRedirectHash32 }
 
+procedure TStreamRedirectHash32.AfterAppend;
+begin
+  fHashAppend := fHash; // save for ResetHash
+end;
+
 procedure TStreamRedirectHash32.ResetHash;
 begin
-  fHash := 0;
+  fHash := fHashAppend; // restore after e.g. Seek(0, soBeginning)
 end;
 
 function TStreamRedirectHash32.GetHash: RawUtf8;

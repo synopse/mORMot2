@@ -679,8 +679,9 @@ type
   // - do not use this abstract class but inherited with overloaded GetAlgo
   TStreamRedirectSynHasher = class(TStreamRedirect)
   protected
-    fHash: TSynHasher;
+    fHash, fHashAppend: TSynHasher;
     procedure DoHash(data: pointer; len: integer); override;
+    procedure AfterAppend; override;
     procedure ResetHash; override;
   public
     constructor Create(aDestination: TStream; aRead: boolean = false); override;
@@ -3793,6 +3794,12 @@ constructor TStreamRedirectSynHasher.Create(aDestination: TStream; aRead: boolea
 begin
   inherited Create(aDestination, aRead);
   fHash.Init(GetAlgo);
+  fHashAppend := fHash; // save initial state for ResetHash
+end;
+
+procedure TStreamRedirectSynHasher.AfterAppend;
+begin
+  fHashAppend := fHash; // save appended state for ResetHash
 end;
 
 procedure TStreamRedirectSynHasher.DoHash(data: pointer; len: integer);
@@ -3802,7 +3809,7 @@ end;
 
 procedure TStreamRedirectSynHasher.ResetHash;
 begin
-  fHash.Init(GetAlgo); // called e.g. from Seek(0, soBeginning)
+  fHash := fHashAppend; // restore after e.g. Seek(0, soBeginning)
 end;
 
 function TStreamRedirectSynHasher.GetHash: RawUtf8;
