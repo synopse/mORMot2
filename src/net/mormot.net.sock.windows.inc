@@ -1719,7 +1719,7 @@ begin
     begin
       e := GetLastError;
       fOnLog(sllDebug, 'PrepareNext(%%) error % %',
-        [IOCP_EVENT[event], pointer(o^.socket), e, WinErrorConstant(e)], self);
+        [IOCP_EVENT[event], pointer(o^.socket), e, WinErrorConstant(e)^], self);
     end;
 end;
 

@@ -2889,8 +2889,11 @@ function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 
 /// return the best known ERROR_* system error message constant texts
 // - without the 'ERROR_' prefix
-// - as used by WinErrorText()
-function WinErrorConstant(Code: cardinal): PUtf8Char;
+// - as used by WinErrorText() and some low-level Windows API wrappers
+function WinErrorConstant(Code: cardinal): PShortString;
+
+/// minimal GetEnumName() for Delphi + FPC on base enum type with no Min/Max
+function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
 
 /// raise an EOSException from the last system error using WinErrorText()
 // - if Code is kept to its default 0, GetLastError is called

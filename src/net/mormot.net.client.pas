@@ -3893,9 +3893,9 @@ begin
       EWinINet.RaiseFromLastError;
   end
   else
-  // blocking send with no callback
-  if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
-    EWinINet.RaiseFromLastError;
+    // blocking send with no callback
+    if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
+      EWinINet.RaiseFromLastError;
 end;
 
 function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;

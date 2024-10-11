@@ -5408,16 +5408,16 @@ end;
 procedure TSynLog.AddErrorMessage(Error: cardinal);
 {$ifdef OSWINDOWS}
 var
-  msg: PUtf8Char;
+  msg: PShortString;
 {$endif OSWINDOWS}
 begin
   fWriter.AddDirect(' ', '"');
   {$ifdef OSWINDOWS}
   msg := WinErrorConstant(Error);
-  if msg <> nil then
+  if msg^[0] <> #0 then
   begin
     fWriter.AddShorter('ERROR_');
-    fWriter.Add(msg, twNone);
+    fWriter.AddShort(msg^);
   end
   else
   {$endif OSWINDOWS}
