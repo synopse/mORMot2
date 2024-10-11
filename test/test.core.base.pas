@@ -2831,6 +2831,17 @@ begin
     c.Free;
   end;
   {$ifdef OSWINDOWS}
+  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
+  Check(WinErrorConstant(ERROR_OPERATION_ABORTED)^ = 'OPERATION_ABORTED', 'wecb');
+  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
+  Check(WinErrorConstant(ERROR_MORE_DATA)^ = 'MORE_DATA', 'wecd');
+  Check(WinErrorConstant(ERROR_ACCESS_DENIED)^ = 'ACCESS_DENIED', 'wece');
+  Check(WinErrorConstant(ERROR_WINHTTP_TIMEOUT)^ = 'WINHTTP_TIMEOUT', 'wecf');
+  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecg');
+  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
+  Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
+  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));
   Check(IsSystemFolder('c:\Program files (x86)'));
