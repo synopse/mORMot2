@@ -6094,10 +6094,8 @@ begin
   begin
     fInstableTix := tix;
     if fInstable.Count <> 0 then
-    begin
-      fInstable.DoRotate;
-      fLog.Add.Log(sllTrace, 'OnIdle: %', [fInstable], self);
-    end;
+      if fInstable.DoRotate <> 0 then
+        fLog.Add.Log(sllTrace, 'OnIdle: %', [fInstable], self);
   end;
   // handle temporary cache folder deprecation
   if (fSettings.CacheTempMaxMin <= 0) or
