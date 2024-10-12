@@ -2841,6 +2841,9 @@ begin
   Check(WinErrorConstant($800b010d)^ = '', 'wech');
   Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
   Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
+  Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
+    'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
   CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));

@@ -441,12 +441,13 @@ const
 
 function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
 begin
-  // minimal version with no EnumBaseType nor Value min/max check
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  // unsupported yet - see fpc_shortstr_enum_intern() in sstrings.inc
+  // minimal version with no Kind, EnumBaseType nor Value min/max check
   result := @NULL_STR;
-  {$else}
-  // quickly jump over Kind + NameLen + Name + EnumBaseType
+  // no arm32 need on Windows - see fpc_shortstr_enum_intern() in sstrings.inc
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  if Value < 0 then
+    exit;
+  // quickly jump over Kind + NameLen + Name + Min + Max + EnumBaseType
   Info := @Info[ord(Info[1]) + (2 + 9 + SizeOf(pointer))];
   if Value > 0 then
     repeat
@@ -459,8 +460,7 @@ end;
 
 type
   // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
-  TWinErrorKnown = (
-    // 0..39
+  TWinError0 = ( // 0..39
     SUCCESS, INVALID_FUNCTION, FILE_NOT_FOUND, PATH_NOT_FOUND,
     TOO_MANY_OPEN_FILES, ACCESS_DENIED, INVALID_HANDLE, ARENA_TRASHED,
     NOT_ENOUGH_MEMORY, INVALID_BLOCK, BAD_ENVIRONMENT, BAD_FORMAT,
@@ -470,27 +470,27 @@ type
     NOT_DOS_DISK, SECTOR_NOT_FOUND, OUT_OF_PAPER, WRITE_FAULT,
     READ_FAULT, GEN_FAILURE, SHARING_VIOLATION, LOCK_VIOLATION,
     WRONG_DISK, FAIL_I35, SHARING_BUFFER_EXCEEDED, FAIL_I37, HANDLE_EOF,
-    HANDLE_DISK_FULL,
-    // 50..55
+    HANDLE_DISK_FULL);
+  TWinError50 = ( // 50..55
     NOT_SUPPORTED, REM_NOT_LIST, DUP_NAME, BAD_NETPATH,
-    NETWORK_BUSY, DEV_NOT_EXIST,
-    // 80..89
-    FILE_EXISTS, FAIL_I81, CANNOT_MAKE, FAIL_I24, OUT_OF_STRUCTURES,
+    NETWORK_BUSY, DEV_NOT_EXIST);
+  TWinError80 = ( // 80..89
+    FILE_EXISTS, FAIL_I81, CANNOT_MAKE, FAIL_I83, OUT_OF_STRUCTURES,
     ALREADY_ASSIGNED, INVALID_PASSWORD, INVALID_PARAMETER,
-    NET_WRITE_FAULT, NO_PROC_SLOTS,
-    // 108..129
+    NET_WRITE_FAULT, NO_PROC_SLOTS);
+  TWinError108 = ( // 108..129
     DRIVE_LOCKED, BROKEN_PIPE, OPEN_FAILED, BUFFER_OVERFLOW,
     DISK_FULL, NO_MORE_SEARCH_HANDLES, INVALID_TARGET_HANDLE, FAIL_I115,
     FAIL_I116, INVALID_CATEGORY, INVALID_VERIFY_SWITCH, BAD_DRIVER_LEVEL,
     CALL_NOT_IMPLEMENTED, SEM_TIMEOUT, INSUFFICIENT_BUFFER,
     INVALID_NAME, INVALID_LEVEL, NO_VOLUME_LABEL, MOD_NOT_FOUND,
-    PROC_NOT_FOUND, WAIT_NO_CHILDREN, CHILD_NOT_COMPLETE,
-    // 995..1013
+    PROC_NOT_FOUND, WAIT_NO_CHILDREN, CHILD_NOT_COMPLETE);
+  TWinError995 = ( // 995..1013
     OPERATION_ABORTED, IO_INCOMPLETE, IO_PENDING, NOACCESS, SWAPERROR,
     FAIL_I1000, STACK_OVERFLOW, INVALID_MESSAGE, CAN_NOT_COMPLETE,
     INVALID_FLAGS, UNRECOGNIZED_VOLUME, FILE_INVALID, FULLSCREEN_MODE,
-    NO_TOKEN, BADDB, BADKEY, CANTOPEN, CANTREAD, CANTWRITE,
-    // 1051..1079
+    NO_TOKEN, BADDB, BADKEY, CANTOPEN, CANTREAD, CANTWRITE);
+  TWinError1051 = ( // 1051..1079
     DEPENDENT_SERVICES_RUNNING, INVALID_SERVICE_CONTROL,
     SERVICE_REQUEST_TIMEOUT, SERVICE_NO_THREAD, SERVICE_DATABASE_LOCKED,
     SERVICE_ALREADY_RUNNING, INVALID_SERVICE_ACCOUNT, SERVICE_IS_DISABLED,
@@ -501,8 +501,8 @@ type
     SERVICE_START_HANG, INVALID_SERVICE_LOCK, SERVICE_MARKED_FOR_DELETE,
     SERVICE_EXISTS, ALREADY_RUNNING_LKG, SERVICE_DEPENDENCY_DELETED,
     BOOT_ALREADY_ACCEPTED, SERVICE_NEVER_STARTED, DUPLICATE_SERVICE_NAME,
-    DIFFERENT_SERVICE_ACCOUNT,
-    // 1200..1246
+    DIFFERENT_SERVICE_ACCOUNT);
+  TWinError1200 = ( // 1200..1246
     BAD_DEVICE, CONNECTION_UNAVAIL, DEVICE_ALREADY_REMEMBERED,
     NO_NET_OR_BAD_PATH, BAD_PROVIDER, CANNOT_OPEN_PROFILE, BAD_PROFILE,
     NOT_CONTAINER, EXTENDED_ERROR, INVALID_GROUPNAME, INVALID_COMPUTERNAME,
@@ -517,18 +517,20 @@ type
     CONNECTION_ABORTED, RETRY, CONNECTION_COUNT_LIMIT,
     LOGIN_TIME_RESTRICTION, LOGIN_WKSTA_RESTRICTION, INCORRECT_ADDRESS,
     ALREADY_REGISTERED, SERVICE_NOT_FOUND, NOT_AUTHENTICATED,
-    NOT_LOGGED_ON, _CONTINUE,
+    NOT_LOGGED_ON, _CONTINUE);
+  TWinErrorOne = (
     // searched in WINERR_ONE[] constants
-    ALREADY_EXISTS, MORE_DATA, NO_SYSTEM_RESOURCES, WSAEFAULT, WSAEINVAL,
-    WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK, WSAECONNABORTED, WSAECONNRESET,
-    WSAENOBUFS, WSAETIMEDOUT, WSAECONNREFUSED, WSATRY_AGAIN,
+    ALREADY_EXISTS, MORE_DATA, NO_SYSTEM_RESOURCES,
+    WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK,
+    WSAECONNABORTED, WSAECONNRESET, WSAENOBUFS, WSAETIMEDOUT, WSAECONNREFUSED,
+    WSATRY_AGAIN,
     WINHTTP_TIMEOUT, WINHTTP_OPERATION_CANCELLED, WINHTTP_CANNOT_CONNECT,
     WINHTTP_CLIENT_AUTH_CERT_NEEDED, WINHTTP_INVALID_SERVER_RESPONSE,
     CRYPT_E_REVOKED, CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE,
     TRUST_E_BAD_DIGEST, TRUST_E_NOSIGNATURE, CERT_E_EXPIRED, CERT_E_CHAINING,
     CERT_E_REVOKED);
 const
-  WINERR_ONE: array[ALREADY_EXISTS .. high(TWinErrorKnown)] of cardinal = (
+  WINERR_ONE: array[TWinErrorOne] of cardinal = (
     ERROR_ALREADY_EXISTS, ERROR_MORE_DATA, ERROR_NO_SYSTEM_RESOURCES,
     // main Windows Socket API (WSA) errors
     10014, 10022, 10024, 10035, 10038, 10053, 10054, 10055, 10060, 10061, 11003,
@@ -542,32 +544,25 @@ const
 
 function WinErrorConstant(Code: cardinal): PShortString;
 begin
-  case Code of
-    0 .. 39:
-      inc(Code, ord(SUCCESS));
-    50 .. 55:
-      inc(Code, cardinal(ord(NOT_SUPPORTED) - 50));
-    80 .. 89:
-      inc(Code, cardinal(ord(FILE_EXISTS) - 80));
-    108 .. 129:
-      inc(Code, cardinal(ord(DRIVE_LOCKED) - 108));
-    995 .. 1013:
-      inc(Code, cardinal(ord(OPERATION_ABORTED) - 995));
-    1051 .. 1079:
-      inc(Code, cardinal(ord(DEPENDENT_SERVICES_RUNNING) - 1051));
-    1200 .. 1246:
-      inc(Code, cardinal(ord(BAD_DEVICE) - 1200));
+  case Code of // split into TWinError* types (faster and easier to maintain)
+    0 .. ord(high(TWinError0)):
+      result := WinGetEnumName(TypeInfo(TWinError0), Code);
+    50 .. 50 + ord(high(TWinError50)):
+      result := WinGetEnumName(TypeInfo(TWinError50), Code - 50);
+    80 .. 80 + ord(high(TWinError80)):
+      result := WinGetEnumName(TypeInfo(TWinError80), Code - 80);
+    108 .. 108 + ord(high(TWinError108)):
+      result := WinGetEnumName(TypeInfo(TWinError108), Code - 108);
+    995 .. 995 + ord(high(TWinError995)):
+      result := WinGetEnumName(TypeInfo(TWinError995), Code - 995);
+    1051 .. 1051 + ord(high(TWinError1051)):
+      result := WinGetEnumName(TypeInfo(TWinError1051), Code - 1051);
+    1200 .. 1200 + ord(high(TWinError1200)):
+      result := WinGetEnumName(TypeInfo(TWinError1200), Code - 1200);
   else
-    begin
-      result := @NULL_STR;
-      Code := IntegerScanIndex(@WINERR_ONE, length(WINERR_ONE), Code) + 1;
-      if Code <> 0 then
-        inc(Code, ord(pred(ALREADY_EXISTS)))
-      else
-        exit;
-    end;
+    result := WinGetEnumName(TypeInfo(TWinErrorOne),
+      IntegerScanIndex(@WINERR_ONE, length(WINERR_ONE), Code));
   end;
-  result := WinGetEnumName(TypeInfo(TWinErrorKnown), Code);
 end;
 
 function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
