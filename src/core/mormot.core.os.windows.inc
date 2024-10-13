@@ -443,7 +443,7 @@ function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
 begin
   // minimal version with no Kind, EnumBaseType nor Value min/max check
   result := @NULL_STR;
-  // no arm32 need on Windows - see fpc_shortstr_enum_intern() in sstrings.inc
+  // no Windows arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   if Value < 0 then
     exit;
@@ -518,8 +518,8 @@ type
     LOGIN_TIME_RESTRICTION, LOGIN_WKSTA_RESTRICTION, INCORRECT_ADDRESS,
     ALREADY_REGISTERED, SERVICE_NOT_FOUND, NOT_AUTHENTICATED,
     NOT_LOGGED_ON, _CONTINUE);
+  // searched in WINERR_ONE[] constants
   TWinErrorOne = (
-    // searched in WINERR_ONE[] constants
     ALREADY_EXISTS, MORE_DATA, NO_SYSTEM_RESOURCES,
     WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK,
     WSAECONNABORTED, WSAECONNRESET, WSAENOBUFS, WSAETIMEDOUT, WSAECONNREFUSED,

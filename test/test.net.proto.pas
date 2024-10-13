@@ -107,6 +107,7 @@ begin
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 2'), 2);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'one'), 1);
   CheckEqual(FindCustomEnum(MYENUM2TXT, ''), 0);
+  CheckEqual(FindCustomEnum(MYENUM2TXT, 'and'), 0);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 3'), 0);
   for i := 1 to high(RESERVED_KEYWORDS) do
     CheckUtf8(StrComp(pointer(RESERVED_KEYWORDS[i - 1]),
