@@ -152,7 +152,7 @@ end;
 
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 begin
-  result := Unicode_ToUtf8(pointer(u), length(u), d); // call the RTL
+  result := Unicode_FromUtf8(pointer(u), length(u), d); // call the RTL
 end;
 
 const

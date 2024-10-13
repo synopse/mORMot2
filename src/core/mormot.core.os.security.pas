@@ -4250,7 +4250,7 @@ function TAceTextTree.RawAppendBinary(var bin: TSynTempBuffer;
          l := node.Length - l;
        end;
     end;
-    w := Unicode_ToUtf8(p, l, tmpw);
+    w := Unicode_FromUtf8(p, l, tmpw);
     if w = nil then
       Error := atpInvalidUnicode // invalid UTF-8 input
     else

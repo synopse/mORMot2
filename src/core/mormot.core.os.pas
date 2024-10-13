@@ -2980,7 +2980,7 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 // - returns dest.buf as PWideChar result, and dest.len as length in WideChars
 // - caller should always call Dest.Done to release any (unlikely) allocated memory
-function Unicode_ToUtf8(Text: PUtf8Char; TextLen: PtrInt;
+function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
 
 /// returns a system-wide current monotonic timestamp as milliseconds
@@ -3934,7 +3934,7 @@ procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8); overload;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-// - just a wrapper around Unicode_ToUtf8() over a temporary buffer
+// - just a wrapper around Unicode_FromUtf8() over a temporary buffer
 // - caller should always call d.Done to release any (unlikely) allocated memory
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 
@@ -6334,7 +6334,7 @@ begin
       Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
 
-function Unicode_ToUtf8(Text: PUtf8Char; TextLen: PtrInt;
+function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
 var
   i: PtrInt;
