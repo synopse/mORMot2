@@ -2096,7 +2096,7 @@ procedure FreeAndNilSafe(var aObj);
 /// same as aInterface := nil but ignoring any exception
 procedure InterfaceNilSafe(var aInterface);
 
-/// same as aInterface := nil but ignoring any exception
+/// same as several aInterface := nil but ignoring any exception
 procedure InterfacesNilSafe(const aInterfaces: array of pointer);
 
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage

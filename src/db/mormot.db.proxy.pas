@@ -302,7 +302,7 @@ type
     fDataRowNullSize: cardinal;
     fDataCurrentRowNullLen: cardinal;
     fDataCurrentRowNull: TByteDynArray;
-    fDataCurrentRowValues: array of pointer;
+    fDataCurrentRowValues: TPointerDynArray;
     fDataCurrentRowValuesStart: pointer;
     fDataCurrentRowValuesSize: cardinal;
     // per-row column type (SQLite3 only) e.g. select coalesce(column,0) from ..

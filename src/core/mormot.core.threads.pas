@@ -1158,7 +1158,7 @@ type
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
-    fPendingContext: array of pointer;
+    fPendingContext: TPointerDynArray;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;

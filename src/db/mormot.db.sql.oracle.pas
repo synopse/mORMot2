@@ -215,7 +215,7 @@ type
     fRowFetchedCurrent: cardinal;
     fRowFetchedEnded: boolean;
     fRowBuffer: TByteDynArray;
-    fBoundCursor: array of pointer;
+    fBoundCursor: TPointerDynArray;
     fInternalBufferSize: cardinal;
     // warning: shall be 32 bits aligned!
     fTimeElapsed: TPrecisionTimer;
