@@ -3455,7 +3455,7 @@ begin
   {$endif HASFASTTRYFINALLY}
     if fPendingContextCount > 0 then
     begin
-      result := fPendingContext[0];
+      result := fPendingContext[0]; // FIFO queue
       dec(fPendingContextCount);
       MoveFast(fPendingContext[1], fPendingContext[0],
         fPendingContextCount * SizeOf(pointer));
@@ -3528,34 +3528,36 @@ begin
   try
     fThreadNumber := InterlockedIncrement(fOwner.fRunningThreads);
     NotifyThreadStart(self);
+    {$ifdef USE_WINIOCP}
+    // main loop, waiting for the next task(s) to process from IOCP
+    ctxt := nil;
     repeat
-      {$ifdef USE_WINIOCP}
-      if IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
+      if not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
            ctxt, INFINITE) then // blocking during normal process
-      begin
-        if ctxt <> nil then // ctxt=nil from TSynThreadPool.Destroy
-          InterlockedDecrement(fOwner.fPendingContextCount);
-      end
-      else if fOwner.NeedStopOnIOError then
-        break;
+        if fOwner.NeedStopOnIOError then
+          break;
       if fOwner.fTerminated then
-      begin
-        while ctxt <> nil do // release all pending tasks at shutdown
-        begin
-          try
-            fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
-          except
-          end;
-          if not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
-                   ctxt, {ms=}1) then // non blocking
-            break;
-          InterlockedDecrement(fOwner.fPendingContextCount);
-        end;
         break;
-      end;
+      if ctxt = nil then
+        continue;
+      DoTask(ctxt);
+      InterlockedDecrement(fOwner.fPendingContextCount);
+      ctxt := nil;
+    until fOwner.fTerminated or
+          Terminated;
+    // this thread is finished: pending tasks cleanup
+    repeat
       if ctxt <> nil then
-        DoTask(ctxt);
-      {$else}
+        try
+          fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
+          InterlockedDecrement(fOwner.fPendingContextCount);
+        except
+        end;
+    until (not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, ctxt, {ms=}1)) or
+          (ctxt = nil);
+    {$else}
+    // main loop, waiting for the next task(s) notified from this thread event
+    repeat
       fEvent.WaitForEver;
       if fOwner.fTerminated then
         break;
@@ -3569,12 +3571,13 @@ begin
           ctxt := fOwner.PopPendingContext; // unqueue any pending context
         until ctxt = nil;
         fOwner.fSafe.Lock;
-        fProcessingContext := nil; // indicates this thread is now available
+        fProcessingContext := nil; // indicates this thread event is available
         fOwner.fSafe.UnLock;
       end;
-     {$endif USE_WINIOCP}
     until fOwner.fTerminated or
           Terminated;
+    // TaskAbort(fPendingContext[]) is done in fOwner's TSynThreadPool.Destroy
+    {$endif USE_WINIOCP}
   finally
     LockedDec32(@fOwner.fRunningThreads);
   end;
