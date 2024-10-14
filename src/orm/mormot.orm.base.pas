@@ -11135,11 +11135,11 @@ begin
           P2 := PosChar(P, ',');
         end;
     else
-      exit;
+      exit; // unknown function name
     end;
     if P2 <> nil then
     begin
-      SetString(tmp, PAnsiChar(P), P2 - P);
+      SetString(tmp, PAnsiChar(P), P2 - P); // extract NAME from func(NAME)
       tmp[ord(tmp[0]) + 1] := #0;
       result := IsFieldName(@tmp[1]);
     end;

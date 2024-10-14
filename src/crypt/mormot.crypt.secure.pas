@@ -9340,7 +9340,7 @@ begin
   for i := 0 to high(Content) do
     inc(len, length(Content[i]));
   al := AsnEncLen(len, @tmp);
-  SetString(result, nil, 1 + al + len);
+  FastNewRawByteString(result, al + len + 1);
   p := pointer(result);
   p^ := AsnType;         // type
   inc(p);
