@@ -3301,7 +3301,7 @@ begin
   try
     {$ifdef USE_WINIOCP}
     // notify the threads we are shutting down
-    for i := 0 to fWorkThreadCount - 1 do
+    for i := 0 to fWorkThreadCount * 2  do
       IocpPostQueuedStatus(fRequestQueue, 0, nil, {ctxt=}nil);
       // TaskAbort() is done in Execute when fTerminated = true
     {$else}
