@@ -401,9 +401,7 @@ type
 { ************ Background Thread Processing }
 
 type
-  {$M+}
-  TSynBackgroundThreadAbstract = class;
-  TSynBackgroundThreadEvent = class;
+  {$M+} // published properties RTTI (TThread parent class did not enable it)
 
   /// abstract parent of all TThread inherited classes
   // - to leverage cross-compiler and cross-version RTL differences
@@ -432,6 +430,9 @@ type
     property Terminated;
   end;
   {$M-}
+
+  TSynBackgroundThreadAbstract = class;
+  TSynBackgroundThreadEvent = class;
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
   // during remote blocking process in a background thread
@@ -996,7 +997,7 @@ type
 { ************ Server Process Oriented Thread Pool }
 
 type
-  {$M+}
+  {$M+} // published properties RTTI even when parent class did not enable it
 
   /// a simple TThread with a "Terminate" event run in the thread context
   // - the TThread.OnTerminate event is run within Synchronize() so did not
@@ -1152,12 +1153,12 @@ type
     fContentionCount: cardinal;
     fName: RawUtf8;
     fTerminated: boolean;
+    fPendingContextCount: integer;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
     fPendingContext: array of pointer;
-    fPendingContextCount: integer;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
@@ -1240,11 +1241,13 @@ type
     // - use this property and ContentionTime to compute the average contention time
     property ContentionCount: cardinal
       read fContentionCount;
-    {$ifndef USE_WINIOCP}
     /// how many input tasks are currently waiting to be affected to threads
     property PendingContextCount: integer
+      {$ifdef USE_WINIOCP}
+      read fPendingContextCount;
+      {$else}
       read GetPendingContextCount;
-    {$endif USE_WINIOCP}
+      {$endif USE_WINIOCP}
   end;
 
   {$M-}
@@ -3299,7 +3302,7 @@ begin
     {$ifdef USE_WINIOCP}
     // notify the threads we are shutting down
     for i := 0 to fWorkThreadCount - 1 do
-      IocpPostQueuedStatus(fRequestQueue, 0, nil, nil);
+      IocpPostQueuedStatus(fRequestQueue, 0, nil, {ctxt=}nil);
       // TaskAbort() is done in Execute when fTerminated = true
     {$else}
     // notify the threads we are shutting down using the event
@@ -3334,6 +3337,8 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   begin
     // IOCP has its own queue
     result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
+    if result then
+      InterlockedIncrement(fPendingContextCount);
   end;
 
 {$else}
@@ -3525,9 +3530,13 @@ begin
     NotifyThreadStart(self);
     repeat
       {$ifdef USE_WINIOCP}
-      if (not IocpGetQueuedStatus(
-             fOwner.fRequestQueue, dum1, dum2, ctxt, INFINITE) and
-          fOwner.NeedStopOnIOError) then
+      if IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
+           ctxt, INFINITE) then // blocking during normal process
+      begin
+        if ctxt <> nil then // ctxt=nil from TSynThreadPool.Destroy
+          InterlockedDecrement(fOwner.fPendingContextCount);
+      end
+      else if fOwner.NeedStopOnIOError then
         break;
       if fOwner.fTerminated then
       begin
@@ -3537,9 +3546,10 @@ begin
             fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
           except
           end;
-          if not IocpGetQueuedStatus(
-                fOwner.fRequestQueue, dum1, dum2, ctxt, 1) then
+          if not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
+                   ctxt, {ms=}1) then // non blocking
             break;
+          InterlockedDecrement(fOwner.fPendingContextCount);
         end;
         break;
       end;
