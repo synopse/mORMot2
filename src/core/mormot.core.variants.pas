@@ -78,7 +78,7 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 /// same as Dest := Source, but copying by value
 // - will unreference any varByRef content
 // - will convert any string value into RawUtf8 (varString) for consistency,
-// unless NoForceRawUtf8 is true
+// unless NoForceRawUtf8 is true (e.g. from dvoValueDoNotNormalizeAsRawUtf8)
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
   NoForceRawUtf8: boolean = false);
 
@@ -3787,6 +3787,7 @@ begin
       break;
     s := s^.VPointer; // retrieve original value
   until false;
+  d.VAny := nil; // to avoid GPF with strings below
   case vt of
     varEmpty..varDate,
     varBoolean,
@@ -3798,65 +3799,59 @@ begin
     varString:
       begin
         d.VType := varString;
-        d.VAny := nil;
         RawByteString(d.VAny) := RawByteString(s^.VAny); // assign
       end;
     varStringByRef:
       begin
         d.VType := varString;
-        d.VAny := nil;
         RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // deref + assign
       end;
     {$ifdef HASVARUSTRING}
-    varUString,
-    varUStringByRef,
-    {$endif HASVARUSTRING}
-    varOleStr,
-    varOleStrByRef:
+    varUString:
+      if NoForceRawUtf8 then
       begin
-        d.VAny := nil;
-        if NoForceRawUtf8 then // typically with dvoValueDoNotNormalizeAsRawUtf8
-          case vt of
-            {$ifdef HASVARUSTRING}
-            varUString:
-              begin
-                d.VType := varUString;
-                UnicodeString(d.VAny) := UnicodeString(s^.VAny); // assign
-              end;
-            varUStringByRef:
-              begin
-                d.VType := varUString;
-                UnicodeString(d.VAny) := PUnicodeString(s^.VAny)^; // deref assign
-              end;
-            {$endif HASVARUSTRING}
-            varOleStr:
-              begin
-                d.VType := varOleStr;
-                WideString(d.VAny) := WideString(s^.VAny); // copy
-              end;
-        else // varOleStrByRef:
-          begin
-            d.VType := varOleStr;
-            WideString(d.VAny) := PWideString(s^.VAny)^; // deref copy
-          end;
-        end
+        d.VType := varUString;
+        UnicodeString(d.VAny) := UnicodeString(s^.VAny); // assign
+      end
       else
       begin
-        d.VType := varString; // convert to RawUtf8 to ease most common process
-        case vt of
-          {$ifdef HASVARUSTRING}
-          varUString:
-            RawUnicodeToUtf8(s^.VAny, length(UnicodeString(s^.VAny)), RawUtf8(d.VAny));
-          varUStringByRef:
-            RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PUnicodeString(s^.VAny)^), RawUtf8(d.VAny));
-          {$endif HASVARUSTRING}
-          varOleStr:
-            RawUnicodeToUtf8(s^.VAny, length(WideString(s^.VAny)), RawUtf8(d.VAny));
-        else // varOleStrByRef:
-          RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PWideString(s^.VAny)^), RawUtf8(d.VAny));
-        end;
+        d.VType := varString;
+        RawUnicodeToUtf8(s^.VAny, length(UnicodeString(s^.VAny)), RawUtf8(d.VAny));
       end;
-    end;
+    varUStringByRef:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varUString;
+        UnicodeString(d.VAny) := PUnicodeString(s^.VAny)^; // deref + assign
+      end
+      else
+      begin
+        d.VType := varString;
+        RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PUnicodeString(s^.VAny)^), RawUtf8(d.VAny));
+      end;
+    {$endif HASVARUSTRING}
+    varOleStr:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varSynUnicode; // store as UnicodeString if possible
+        FastSynUnicode(SynUnicode(d.VAny), s^.VAny, length(WideString(s^.VAny)));
+      end
+      else
+      begin
+        d.VType := varString;
+        RawUnicodeToUtf8(s^.VAny, length(WideString(s^.VAny)), RawUtf8(d.VAny));
+      end;
+    varOleStrByRef:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varSynUnicode;
+        FastSynUnicode(SynUnicode(d.VAny), PPointer(s^.VAny)^, length(PWideString(s^.VAny)^));
+      end
+      else
+      begin
+        d.VType := varString;
+        RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PWideString(s^.VAny)^), RawUtf8(d.VAny));
+      end;
   else // note: varVariant should not happen here
     if DocVariantType.FindSynVariantType(vt, ct) then
       ct.CopyByValue(d.Data, s^) // needed e.g. for TBsonVariant
