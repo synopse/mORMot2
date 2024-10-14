@@ -2253,7 +2253,6 @@ var
   pending: TCrtSocketPending;
   bodystream: TStream;
   loerr: integer;
-  checkrecv: boolean;
   dat: RawByteString;
   start: Int64;
 begin
@@ -2305,8 +2304,8 @@ begin
         begin
           // the server interrupted the upload by sending something (e.g. 413)
           if Assigned(OnLog) then
-             OnLog(sllTrace, 'RequestInternal: response during SockSendStream',
-               [], self);
+             OnLog(sllTrace, 'RequestInternal: response during SockSendStream %',
+               [ctxt.InStream], self);
           include(Http.HeaderFlags, hfConnectionClose); // socket state is wrong
         end;
       end;
