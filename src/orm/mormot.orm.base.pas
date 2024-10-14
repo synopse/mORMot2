@@ -728,7 +728,7 @@ function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
   DB: TSqlDBDefinition; MultiInsertRowCount: integer = 1): RawUtf8;
 
 /// low-level function used to convert a JSON Value into a variant,
-// according to the property type
+// according to the ORM property type
 // - for oftObject, oftVariant, oftBlobDynArray and oftUtf8Custom, the
 // JSON buffer may be an array or an object, so createValueTempCopy can
 // create a temporary copy before parsing it in-place, to preserve the buffer
@@ -3532,9 +3532,6 @@ end;
   {$WARNINGS ON}
 {$endif ISDELPHI20062007}
 
-procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
-  fieldType: TOrmFieldType; var result: TVarData; createValueTempCopy: boolean;
-  typeInfo: PRttiInfo; options: TDocVariantOptions);
 const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
@@ -3568,6 +3565,10 @@ const
     varDate,      // oftDateTimeMS
     varInt64,     // oftUnixTime
     varInt64);    // oftUnixMSTime
+
+procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
+  fieldType: TOrmFieldType; var result: TVarData; createValueTempCopy: boolean;
+  typeInfo: PRttiInfo; options: TDocVariantOptions);
 
   procedure Complex;
   var
@@ -3613,6 +3614,7 @@ begin
         if err <> 0 then
         begin
           result.VType := varString;
+          result.VAny := nil; // avoid GPF, since result.VDouble has been set
           FastSetString(RawUtf8(result.VAny), Value, ValueLen);
         end;
       end;

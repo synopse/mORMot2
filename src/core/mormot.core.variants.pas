@@ -319,6 +319,7 @@ type
     // - caller should have ensured that it is of the exact custom type
     function IsVoid(const V: TVarData): boolean; virtual;
     /// override this abstract method for actual getter by name implementation
+    // - Dest is likely to be assigned as varVariantByRef for performance
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
     /// override this abstract method for actual setter by name implementation
@@ -796,6 +797,7 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     /// overriden method for actual getter by name implementation
+    // - Dest is likely to be assigned as varVariantByRef for performance
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
     /// overriden method for actual setter by name implementation
@@ -7333,7 +7335,7 @@ begin
   if Has(dvoInternValues) then
     DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
   else
-    RawUtf8ToVariant(aValue, VValue[result]);
+    RawUtf8ToVariant(aValue, VValue[result]); // always RawUtf8
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
@@ -8104,7 +8106,7 @@ begin
       begin
         if length(result) = n then
           SetLength(result, NextGrow(n));
-        SetVariantByValue(PVariant(v)^, result[n], {noforceutf8=}false);
+        SetVariantByValue(PVariant(v)^, result[n], {noforceutf8=}true);
         inc(n);
       end;
   if n <> 0 then
@@ -8496,7 +8498,7 @@ begin
      not GetObjectProp(aName, v{%H-}, nil) then
     result := aDefault
   else
-    SetVariantByValue(v^, result, {noforceutf8=}false);
+    SetVariantByValue(v^, result, {noforceutf8=}true);
 end;
 
 function TDocVariantData.GetValueOrNull(const aName: RawUtf8): variant;
@@ -8507,7 +8509,7 @@ begin
      not GetObjectProp(aName, v{%H-}, nil) then
     SetVariantNull(result{%H-})
   else
-    SetVariantByValue(v^, result, {noforceutf8=}false);
+    SetVariantByValue(v^, result, {noforceutf8=}true);
 end;
 
 function TDocVariantData.GetValueOrEmpty(const aName: RawUtf8): variant;
@@ -8518,7 +8520,7 @@ begin
      not GetObjectProp(aName, v{%H-}, nil) then
     VarClear(result{%H-})
   else
-    SetVariantByValue(v^, result, {noforceutf8=}false);
+    SetVariantByValue(v^, result, {noforceutf8=}true);
 end;
 
 function TDocVariantData.GetAsBoolean(const aName: RawUtf8; out aValue: boolean;
@@ -8793,7 +8795,7 @@ var
 begin
   v := GetPVariantByPath(aNameOrPath, '.');
   if v <> nil then
-    SetVariantByValue(v^, result, {noforceutf8=}false)
+    SetVariantByValue(v^, result, {noforceutf8=}true)
   else
     InternalNotFound(result, pointer(aNameOrPath));
 end;

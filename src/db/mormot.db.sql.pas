@@ -3436,7 +3436,7 @@ begin
   ndx := smt.ColumnIndex(col);
   result := ndx >= 0;
   if ndx >= 0 then
-    smt.ColumnToVariant(ndx, Variant(Dest));
+    smt.ColumnToVariant(ndx, Variant(Dest)); // text may be set as varSynUnicode
 end;
 
 

@@ -645,7 +645,7 @@ type
   // any previous value for the name "AB"
   // - dvoReturnNullForUnknownProperty will be used when retrieving any value
   // from its name (for dvObject kind of instance), or index (for dvArray or
-  // dvObject kind of instance)
+  // dvObject kind of instance), when the value is not found
   // - by default, internal values will be copied by-value from one variant
   // instance to another, to ensure proper safety - but it may be too slow:
   // if you set dvoValueCopiedByReference, the internal

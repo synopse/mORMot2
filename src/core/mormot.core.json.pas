@@ -10694,7 +10694,7 @@ begin
     {$endif HASVARUSTRING}
     varVariant:
       // rkVariant
-      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}false);
+      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}true);
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
