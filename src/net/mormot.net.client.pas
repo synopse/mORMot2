@@ -4658,8 +4658,8 @@ end;
 
 { TJsonClient }
 
-constructor TJsonClient.Create(const aServerAddress: RawUtf8;
-  const aBaseUri: RawUtf8; aKeepAlive: integer);
+constructor TJsonClient.Create(const aServerAddress, aBaseUri: RawUtf8;
+  aKeepAlive: integer);
 begin
   inherited Create;
   if not fServerUri.From(aServerAddress) then
@@ -4728,8 +4728,9 @@ end;
 procedure TJsonClient.RawRequest(const Method, Action,
   InType, InBody, InHeaders: RawUtf8; var Response: TJsonResponse);
 var
-  t, b, h: RawUtf8;
+  a, t, b, h: RawUtf8;
 begin
+  // prepare input paramteters
   h := fInHeaders; // pre-computed from Cookies and DefaultHeaders properties
   if InHeaders <> '' then
     AppendLine(h, [InHeaders]);
@@ -4741,11 +4742,15 @@ begin
     if t = '' then
       t := JSON_CONTENT_TYPE_VAR;
   end;
+  a := Action;
+  while (a <> '') and
+        (a[1] = '/') do
+    delete(a, 1, 1); // avoid dual 'base//action' URI
   Response.Init;
   Response.Method := Method;
   fSafe.Lock; // blocking thread-safe HTTP request
   try
-    fServerUri.Address := fBaseUri + Action;
+    fServerUri.Address := fBaseUri + a;
     Response.Url := fServerUri.Root; // excluding ?parameters=...
     fHttp.Request(fServerUri, Method, h, b, t, fKeepAlive);
     Response.Status := fHttp.Status;
