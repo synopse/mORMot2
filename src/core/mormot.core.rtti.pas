@@ -6890,7 +6890,7 @@ var
   W: PWordArray;
 begin
   SharedRandom.FillShort31(tmp);
-  SetString(V^, PWideChar(nil), ord(tmp[0]));
+  FastSynUnicode(V^, nil, ord(tmp[0]));
   W := pointer(V^);
   for i := 1 to ord(tmp[0]) do
     W[i - 1] := cardinal(PByteArray(@tmp)[i]);

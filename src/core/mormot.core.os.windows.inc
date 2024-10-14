@@ -434,7 +434,7 @@ end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8
 // on Delphi (aligned to 4 bytes), but not on FPC (aligned to 16 bytes)
-// -> the smallest is to use an enumeration and minimum local RTTI support
+// -> use an enumeration and minimum RTTI support
 
 const
   NULL_STR: string[1] = '';
@@ -669,7 +669,7 @@ begin
   size := ExpandEnvironmentStrings(pointer(aStr), nil, 0);
   if size > 0 then
   begin
-    // Read expanded string into result string
+    // Read expanded string into result string (calling the A or W API)
     SetString(result, nil, size - 1);
     ExpandEnvironmentStrings(pointer(aStr), pointer(result), size);
   end
@@ -4844,7 +4844,7 @@ begin
     p := e;
     while p^ <> #0 do
       inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-    SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+    FastSynUnicode(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
     FreeEnvironmentStringsW(e);
   end;
   EnvironmentCacheLock.UnLock;

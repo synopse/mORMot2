@@ -6179,7 +6179,7 @@ begin
             else
               FastSetRawByteString(RawByteString(VAny), V.VBlob, V.VBlobLen);
         end;
-      ftUtf8: // as varSynUnicode
+      ftUtf8: // VType is varSynUnicode
         begin
           VAny := nil; // avoid GPF below
           if V.VText <> nil then

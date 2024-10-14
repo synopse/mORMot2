@@ -427,8 +427,8 @@ var
   U1, U2: UnicodeString; // allocate two temporary strings :(
 begin
   // cwstring as fallback, using iconv on systems where ICU is not available
-  SetString(U1, A, AL);
-  SetString(U2, B, BL);
+  FastSynUnicode(U1, A, AL);
+  FastSynUnicode(U2, B, BL);
   result := widestringmanager.CompareUnicodeStringProc(
     U1, U2, TCompareOptions(flags));
 end;

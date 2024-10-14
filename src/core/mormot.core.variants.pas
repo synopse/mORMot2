@@ -3979,9 +3979,9 @@ begin
     varUStringByRef:
       result := PUnicodeString(vd.VAny)^;
     varOleStr:
-      SetString(result, PWideChar(vd.VAny), length(WideString(vd.VAny)));
+      FastSynUnicode(result, vd.VAny, length(WideString(vd.VAny)));
     varOleStrByRef:
-      SetString(result, PPWideChar(vd.VAny)^, length(PWideString(vd.VAny)^));
+      FastSynUnicode(result, PPointer(vd.VAny)^, length(PWideString(vd.VAny)^));
     {$endif UNICODE}
   else
     begin

@@ -3571,7 +3571,7 @@ begin
   else
   begin
     u := AnsiBufferToUnicode(tmp.Init(SourceChars * 2), Source, SourceChars);
-    SetString(result, PWideChar(tmp.buf), (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
+    FastSynUnicode(result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
     tmp.Done;
   end;
 end;
@@ -3587,7 +3587,7 @@ begin
   begin
     tmp.Init(length(Source) * 2); // max dest size in bytes
     u := AnsiBufferToUnicode(tmp.buf, pointer(Source), length(Source));
-    SetString(result, PWideChar(tmp.buf), (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
+    FastSynUnicode(result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
     tmp.Done;
   end;
 end;
@@ -4589,7 +4589,7 @@ begin
       bomNone:
         result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
       bomUnicode:
-        SetString(result, PWideChar(buf), len shr 1);
+        FastSynUnicode(result, buf, len shr 1);
       bomUtf8:
         Utf8ToSynUnicode(buf, len, result);
     end;
@@ -4610,7 +4610,7 @@ begin
       bomNone:
         result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
       bomUnicode:
-        SetString(result, PWideChar(buf), len shr 1);
+        FastSynUnicode(result, buf, len shr 1);
       bomUtf8:
         Utf8DecodeToString(buf, len, result);
     end;
@@ -4831,7 +4831,7 @@ end;
 
 function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode;
 begin
-  SetString(result, PWideChar(pointer(Unicode)), Length(Unicode) shr 1);
+  FastSynUnicode(result, pointer(Unicode), Length(Unicode) shr 1);
 end;
 
 function RawUnicodeToWinAnsi(const Unicode: RawUnicode): WinAnsiString;
@@ -4848,7 +4848,7 @@ end;
 
 function RawUnicodeToSynUnicode(WideChar: PWideChar; WideCharCount: integer): SynUnicode;
 begin
-  SetString(result, WideChar, WideCharCount);
+  FastSynUnicode(result, WideChar, WideCharCount);
 end;
 
 procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: integer);
@@ -4967,7 +4967,7 @@ function Ansi7ToString(const Text: RawByteString): string;
 var
   i: PtrInt;
 begin
-  SetString(result, nil, Length(Text));
+  FastSynUnicode(result, nil, Length(Text));
   for i := 0 to Length(Text) - 1 do
     PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7-bit Ansi
 end;
@@ -4981,7 +4981,7 @@ procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string);
 var
   i: PtrInt;
 begin
-  SetString(result, nil, Len);
+  FastSynUnicode(result, nil, Len);
   for i := 0 to Len - 1 do
     PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7-bit Ansi
 end;
@@ -4990,7 +4990,7 @@ function StringToAnsi7(const Text: string): RawByteString;
 var
   i: PtrInt;
 begin
-  SetString(result, nil, Length(Text));
+  FastSetString(RawUtf8(result), nil, Length(Text));
   for i := 0 to Length(Text) - 1 do
     PByteArray(result)[i] := PWordArray(Text)[i]; // no conversion for 7-bit Ansi
 end;
@@ -5054,7 +5054,7 @@ end;
 function RawUnicodeToString(const U: RawUnicode): string;
 begin
   // uses StrLenW() and not length(U) to handle case when was used as buffer
-  SetString(result, PWideChar(pointer(U)), StrLenW(pointer(U)));
+  FastSynUnicode(result, pointer(U), StrLenW(pointer(U)));
 end;
 
 {$endif PUREMORMOT2}
@@ -5071,12 +5071,12 @@ end;
 
 function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
-  SetString(result, P, L);
+  FastSynUnicode(result, P, L);
 end;
 
 procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
-  SetString(result, P, L);
+  FastSynUnicode(result, P, L);
 end;
 
 function SynUnicodeToString(const U: SynUnicode): string;
@@ -5281,7 +5281,7 @@ begin
   else
   begin
     tmp.Init(L * 3); // maximum posible unicode size (if all <#128)
-    SetString(result, PWideChar(tmp.buf), Utf8ToWideChar(tmp.buf, P, L) shr 1);
+    FastSynUnicode(result, tmp.buf, Utf8ToWideChar(tmp.buf, P, L) shr 1);
     tmp.Done;
   end;
 end;
@@ -5298,7 +5298,7 @@ end;
 
 function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): UnicodeString;
 begin
-  SetString(result, nil, WinAnsiLen);
+  FastSynUnicode(result, nil, WinAnsiLen);
   WinAnsiConvert.AnsiBufferToUnicode(pointer(result), WinAnsi, WinAnsiLen);
 end;
 
@@ -5333,7 +5333,7 @@ end;
 
 function WinAnsiToSynUnicode(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): SynUnicode;
 begin
-  SetString(result, nil, WinAnsiLen);
+  FastSynUnicode(result, nil, WinAnsiLen);
   WinAnsiConvert.AnsiBufferToUnicode(pointer(result), WinAnsi, WinAnsiLen);
 end;
 
@@ -5497,9 +5497,8 @@ var
   n: PtrInt;
 begin
   n := Utf8DecodeToUnicode(Text, Len, tmp);
-  SetString(result, PWideChar(tmp.buf), n);
-  if n <> 0 then
-    tmp.Done;
+  FastSynUnicode(result, tmp.buf, n);
+  tmp.Done;
 end;
 
 function Utf8DecodeToUnicode(const Text: RawUtf8; var temp: TSynTempBuffer): PtrInt;
@@ -5519,7 +5518,7 @@ begin
   else
   begin
     temp.Init(Len * 3); // maximum posible unicode size (if all <#128)
-    result := Utf8ToWideChar(temp.buf, Text, Len) shr 1;
+    result := Utf8ToWideChar(temp.buf, Text, Len) shr 1; // as WideChar count
   end;
 end;
 
