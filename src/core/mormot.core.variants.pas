@@ -77,8 +77,10 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 
 /// same as Dest := Source, but copying by value
 // - will unreference any varByRef content
-// - will convert any string value into RawUtf8 (varString) for consistency
-procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
+// - will convert any string value into RawUtf8 (varString) for consistency,
+// unless NoForceRawUtf8 is true
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
+  NoForceRawUtf8: boolean = false);
 
 /// same as FillChar(Value^,SizeOf(TVarData),0)
 // - so can be used for TVarData or Variant
@@ -3766,7 +3768,8 @@ begin
   end;
 end;
 
-procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
+  NoForceRawUtf8: boolean);
 var
   s: PVarData;
   d: TSynVarData absolute Dest;
@@ -3788,7 +3791,7 @@ begin
     varShortInt..varWord64:
       begin
         d.VType := vt;
-        d.VInt64 := s^.VInt64; // copy up to 64-bit of value
+        d.VInt64 := s^.VInt64; // fast copy up to 64-bit of value
       end;
     varString:
       begin
@@ -3800,7 +3803,7 @@ begin
       begin
         d.VType := varString;
         d.VAny := nil;
-        RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // assign
+        RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // deref + assign
       end;
     {$ifdef HASVARUSTRING}
     varUString,
@@ -3809,10 +3812,49 @@ begin
     varOleStr,
     varOleStrByRef:
       begin
-        d.VType := varString;
         d.VAny := nil;
-        VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // normalize as RawUtf8
+        if NoForceRawUtf8 then // typically with dvoValueDoNotNormalizeAsRawUtf8
+          case vt of
+            {$ifdef HASVARUSTRING}
+            varUString:
+              begin
+                d.VType := varUString;
+                UnicodeString(d.VAny) := UnicodeString(s^.VAny); // assign
+              end;
+            varUStringByRef:
+              begin
+                d.VType := varUString;
+                UnicodeString(d.VAny) := PUnicodeString(s^.VAny)^; // deref assign
+              end;
+            {$endif HASVARUSTRING}
+            varOleStr:
+              begin
+                d.VType := varOleStr;
+                WideString(d.VAny) := WideString(s^.VAny); // copy
+              end;
+        else // varOleStrByRef:
+          begin
+            d.VType := varOleStr;
+            WideString(d.VAny) := PWideString(s^.VAny)^; // deref copy
+          end;
+        end
+      else
+      begin
+        d.VType := varString; // convert to RawUtf8 to ease most common process
+        case vt of
+          {$ifdef HASVARUSTRING}
+          varUString:
+            RawUnicodeToUtf8(s^.VAny, length(UnicodeString(s^.VAny)), RawUtf8(d.VAny));
+          varUStringByRef:
+            RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PUnicodeString(s^.VAny)^), RawUtf8(d.VAny));
+          {$endif HASVARUSTRING}
+          varOleStr:
+            RawUnicodeToUtf8(s^.VAny, length(WideString(s^.VAny)), RawUtf8(d.VAny));
+        else // varOleStrByRef:
+          RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PWideString(s^.VAny)^), RawUtf8(d.VAny));
+        end;
       end;
+    end;
   else // note: varVariant should not happen here
     if DocVariantType.FindSynVariantType(vt, ct) then
       ct.CopyByValue(d.Data, s^) // needed e.g. for TBsonVariant
