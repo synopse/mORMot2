@@ -3547,14 +3547,14 @@ begin
           Terminated;
     // this thread is finished: pending tasks cleanup
     repeat
-      if ctxt <> nil then
-        try
-          fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
-          InterlockedDecrement(fOwner.fPendingContextCount);
-        except
-        end;
-    until (not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, ctxt, {ms=}1)) or
-          (ctxt = nil);
+      if ctxt = nil then
+        break;
+      try
+        fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
+        InterlockedDecrement(fOwner.fPendingContextCount);
+      except
+      end;
+    until not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, ctxt, {ms=}1);
     {$else}
     // main loop, waiting for the next task(s) notified from this thread event
     repeat
