@@ -1773,8 +1773,10 @@ type
     // - will call Stream.Read() over a temporary buffer of 1MB by default
     // - Stream may be a TFileStream, THttpMultiPartStream or TNestedStreamReader
     // - raise ENetSock on error, unless aNoRaise is set and it returns the error
+    // - if aCheckRecv is true, will check SockReceivePending() between each
+    // chunk, and return nrRetry if the server did respond (e.g. a 413 error)
     function SockSendStream(Stream: TStream; ChunkSize: integer = 1 shl 20;
-      aNoRaise: boolean = false): TNetResult;
+      aNoRaise: boolean = false; aCheckRecv: boolean = false): TNetResult;
     /// how many bytes could be added by SockSend() in the internal buffer
     function SockSendRemainingSize: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -5779,7 +5781,7 @@ begin
 end;
 
 function TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer;
-  aNoRaise: boolean): TNetResult;
+  aNoRaise, aCheckRecv: boolean): TNetResult;
 var
   chunk: RawByteString;
   rd: integer;
@@ -5791,7 +5793,7 @@ begin
   repeat
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
     if rd = 0 then
-      break;
+      break; // reached the end of the stream
     if not TrySndLow(pointer(chunk), rd, @result) then
       if aNoRaise then
         break
@@ -5801,6 +5803,13 @@ begin
           [ClassNameShort(self)^, ClassNameShort(Stream)^,
            ChunkSize, rd, pos, fServer, fPort], result);
     inc(pos, rd);
+    if aCheckRecv and
+       (SockReceivePending({timeout=}0) in [cspDataAvailable,
+          cspDataAvailableOnClosedSocket]) then
+    begin
+      result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
+      break;
+    end;
   until false;
 end;
 
