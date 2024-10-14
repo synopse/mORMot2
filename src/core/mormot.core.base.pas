@@ -800,6 +800,10 @@ procedure FastSetString(var s: RawUtf8; len: PtrInt); overload;
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
+/// equivalence to SetString(s,pwidechar,len) function but from a raw pointer
+procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
+  {$ifndef HASVARUSTRING} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
 /// equivalence to SetString(s,nil,len) function to allocate a new RawByteString
 // - faster especially under FPC
 procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
@@ -4901,6 +4905,35 @@ begin
   else
     FastAssignNewNotVoid(s, r);
 end;
+
+{$ifdef HASVARUSTRING}
+procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
+var
+  rec: PStrRec; // same header than AnsiString, but with elemSize=2
+begin
+  if pointer(s) <> nil then
+    s := ''; // as regular SetString()
+  if len <= 0 then
+    exit;
+  len := len * 2; // from WideChar count to bytes
+  GetMem(pointer(s), len + (_STRRECSIZE + 4));
+  rec := pointer(s);
+  rec^.codePage := CP_UTF16;
+  rec^.elemSize := 2;
+  rec^.refCnt := 1;
+  rec^.length := len shr 1; // length as WideChar count
+  inc(rec);
+  pointer(s) := rec;
+  PCardinal(PAnsiChar(rec) + len)^ := 0; // ends with two WideChar #0
+  if p <> nil then
+    MoveFast(p^, rec^, len);
+end;
+{$else}
+procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
+begin
+  SetString(s, PWideChar(p), len); // use RTL for slow WideString
+end;
+{$endif HASVARUSTRING}
 
 procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
   len: PtrUInt; out aligned: pointer; alignment: PtrUInt);
@@ -12309,8 +12342,7 @@ begin
 end;
 
 function SortDynArrayUnicodeString(const A, B): integer;
-begin
-  // works for both tkWString and tkUString
+begin // works for both tkWString and tkUString
   result := StrCompW(PWideChar(A), PWideChar(B));
 end;
 
