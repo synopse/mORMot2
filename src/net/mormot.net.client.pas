@@ -2253,6 +2253,7 @@ var
   pending: TCrtSocketPending;
   bodystream: TStream;
   loerr: integer;
+  checkrecv: boolean;
   dat: RawByteString;
   start: Int64;
 begin
@@ -2299,7 +2300,15 @@ begin
       begin
         // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
         ctxt.InStream.Seek(0, soBeginning);
-        SockSendStream(ctxt.InStream);
+        if SockSendStream(ctxt.InStream, 1 shl 20,
+             {noraise=}false, {checkrecv=}true) = nrRetry then
+        begin
+          // the server interrupted the upload by sending something (e.g. 413)
+          if Assigned(OnLog) then
+             OnLog(sllTrace, 'RequestInternal: response during SockSendStream',
+               [], self);
+          include(Http.HeaderFlags, hfConnectionClose); // socket state is wrong
+        end;
       end;
       // wait and retrieve HTTP command line response
       pending := SockReceivePending(Timeout, @loerr); // select/poll
