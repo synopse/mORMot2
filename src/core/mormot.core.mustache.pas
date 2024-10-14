@@ -676,8 +676,8 @@ begin
   end
   else
   begin
-    GetVarDataFromContext(-1, ValueName, tmp); // get TVarData content
-    SetVariantByValue(variant(tmp), result);   // assign/copy value
+    GetVarDataFromContext(-1, ValueName, tmp);      // get TVarData content
+    SetVariantByValue(variant(tmp), result, false); // assign/copy value
   end;
 end;
 

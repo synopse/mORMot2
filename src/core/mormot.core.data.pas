@@ -653,6 +653,8 @@ type
   // to avoid memory allocations, BUT it may break internal process if you change
   // some values in place (since VValue/VName and VCount won't match) - as such,
   // if you set this option, ensure that you use the content as read-only
+  // - by default, any string value will be stored as RawUtf8 varString, with
+  // conversion if needed, unless dvoValueDoNotNormalizeAsRawUtf8 is defined
   // - any registered custom types may have an extended JSON syntax (e.g.
   // TBsonVariant does for MongoDB types), and will be searched during JSON
   // parsing, unless dvoJsonParseDoNotTryCustomVariants is set (slightly faster)
@@ -687,6 +689,7 @@ type
     dvoCheckForDuplicatedNames,
     dvoReturnNullForUnknownProperty,
     dvoValueCopiedByReference,
+    dvoValueDoNotNormalizeAsRawUtf8,
     dvoJsonParseDoNotTryCustomVariants,
     dvoJsonParseDoNotGuessCount,
     dvoJsonObjectParseWithinString,

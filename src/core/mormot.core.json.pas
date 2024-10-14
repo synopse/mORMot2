@@ -9348,6 +9348,7 @@ var
   i, ndx: PtrInt;
   v: variant;
   intvalues: TRawUtf8Interning;
+  forcenoutf8: boolean;
 begin
   if dv.VarType <> DocVariantVType then
     TDocVariant.New(DocVariant, JSON_NAMEVALUE[ExtendedJson]);
@@ -9357,6 +9358,7 @@ begin
     intvalues := DocVariantType.InternValues
   else
     intvalues := nil;
+  forcenoutf8 := dvoValueDoNotNormalizeAsRawUtf8 in dv.Options;
   result := 0; // returns number of changed values
   for i := 0 to Count - 1 do
     if List[i].Name <> '' then
@@ -9373,7 +9375,7 @@ begin
         continue; // value not changed -> skip
       if ChangedProps <> nil then
         PDocVariantData(ChangedProps)^.AddValue(List[i].Name, v);
-      SetVariantByValue(v, dv.Values[ndx]);
+      SetVariantByValue(v, dv.Values[ndx], forcenoutf8);
       if intvalues <> nil then
         intvalues.UniqueVariant(dv.Values[ndx]);
       inc(result);
@@ -10692,7 +10694,7 @@ begin
     {$endif HASVARUSTRING}
     varVariant:
       // rkVariant
-      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^);
+      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}false);
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
