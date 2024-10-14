@@ -1488,7 +1488,7 @@ function ToUtf8(const V: TVarData): RawUtf8; overload;
 // - empty and null variants will be stored as 'null' text - as expected by JSON
 // - custom variant types (e.g. TDocVariant) will be stored as JSON
 procedure VariantToUtf8(const V: Variant; var result: RawUtf8;
-   var wasString: boolean); overload;
+  var wasString: boolean); overload;
 
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJson() instead if you need a conversion to JSON with
@@ -7756,6 +7756,11 @@ begin
         begin
           wasString := true;
           RawUnicodeToUtf8(VAny, length(UnicodeString(VAny)), result);
+        end;
+      varUStringByRef:
+        begin
+          wasString := true;
+          RawUnicodeToUtf8(PPointer(VAny)^, length(PUnicodeString(VAny)^), result);
         end;
       {$endif HASVARUSTRING}
       varOleStr:
