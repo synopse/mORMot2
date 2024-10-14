@@ -3963,25 +3963,23 @@ end;
 
 procedure VariantToString(const V: Variant; var result: string);
 var
+  vd: TVarData absolute V;
   wasString: boolean;
   tmp: RawUtf8;
-  vt: cardinal;
 begin
-  vt := TVarData(V).VType;
-  case vt of
+  case vd.VType of
     varEmpty,
     varNull:
       result := ''; // default VariantToUtf8(null)='null'
     {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
-    varOleStr:
-      SetString(result, PWideChar(TVarData(V).VAny), length(WideString(TVarData(V).VAny)));
     varUString:
-      result := UnicodeString(TVarData(V).VAny);
+      result := UnicodeString(vd.VAny);
     varUStringByRef:
-      result := PUnicodeString(TVarData(V).VAny)^;
+      result := PUnicodeString(vd.VAny)^;
+    varOleStr:
+      SetString(result, PWideChar(vd.VAny), length(WideString(vd.VAny)));
     varOleStrByRef:
-      SetString(result, PPWideChar(TVarData(V).VAny)^,
-        length(PWideString(TVarData(V).VAny)^));
+      SetString(result, PPWideChar(vd.VAny)^, length(PWideString(vd.VAny)^));
     {$endif UNICODE}
   else
     begin
