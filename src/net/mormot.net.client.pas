@@ -169,7 +169,7 @@ type
       Password: SpiUtf8;
       Token: SpiUtf8;
     end;
-    /// how many times THttpClientSocket should redirect 30x responses
+    /// how many times THttpClientSocket/TWinHttp should redirect 30x responses
     RedirectMax: integer;
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
@@ -939,6 +939,11 @@ type
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent
       write fExtendedOptions.UserAgent;
+    /// how many 3xx status code redirections are allowed
+    // - default is 0 - i.e. no redirection
+    // - implemented for TWinHttp only
+    property RedirectMax: integer
+      read fExtendedOptions.RedirectMax write fExtendedOptions.RedirectMax;
     /// internal structure used to store extended options
     // - will be replicated by TLS.IgnoreCertificateErrors and Auth* properties
     property ExtendedOptions: THttpRequestExtendedOptions
@@ -3708,6 +3713,11 @@ begin
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       EWinHttp.RaiseFromLastError;
+  if fExtendedOptions.RedirectMax > 0 then
+    if WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_REDIRECT_POLICY,
+         @REDIRECT_POLICY_ALWAYS, SizeOf(cardinal)) then
+      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_MAX_HTTP_AUTOMATIC_REDIRECTS,
+        @fExtendedOptions.RedirectMax, SizeOf(cardinal)); // ignore errors
   L := length(aData);
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
