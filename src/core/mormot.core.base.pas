@@ -784,6 +784,9 @@ function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
 // 265, 331, 413, 516, 645, 806, 1007, 1258, 1572, ...
 function NextGrow(capacity: integer): integer;
 
+/// compute the next power-of-two of a 32-bit number
+function NextPowerOfTwo(number: cardinal): cardinal;
+
 /// equivalence to SetString(s,pansichar,len) function but from a raw pointer
 // - so works with both PAnsiChar and PUtf8Char input buffer (or even PByteArray)
 // - faster especially under FPC
@@ -4676,6 +4679,16 @@ begin
     inc(result, result shr 3) // increase by 12.5% up to 128MB
   else
     inc(result, 16 shl 20);   // increase by 16MB chunks
+end;
+
+function NextPowerOfTwo(number: cardinal): cardinal;
+begin // O(1) branchless algorithm for 32-bit values
+  result := number - cardinal(number <> 0);
+  result := result or (result shr 1);
+  result := result or (result shr 2);
+  result := result or (result shr 4);
+  result := result or (result shr 8);
+  result := (result or (result shr 16)) + 1;
 end;
 
 {$ifndef FPC_ASMX64}

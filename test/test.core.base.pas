@@ -3856,6 +3856,23 @@ var
   i, n: PtrInt;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(NextPowerOfTwo(0), 1);
+  CheckEqual(NextPowerOfTwo(1), 1);
+  CheckEqual(NextPowerOfTwo(2), 2);
+  CheckEqual(NextPowerOfTwo(3), 4);
+  CheckEqual(NextPowerOfTwo(4), 4);
+  for i := 5 to 8 do
+    CheckEqual(NextPowerOfTwo(i), 8);
+  for i := 9 to 16 do
+    CheckEqual(NextPowerOfTwo(i), 16);
+  for i := 17 to 32 do
+    CheckEqual(NextPowerOfTwo(i), 32);
+  for i := 1025 to 2048 do
+    CheckEqual(NextPowerOfTwo(i), 2048);
+  for i := 65537 to 131072 do
+    CheckEqual(NextPowerOfTwo(i), 131072);
+  for i := 33554433 to 67108864 do // 33 millions tests in a few ms :)
+    Check(NextPowerOfTwo(i) = 67108864);
   n := 512;
   CheckEqual(MinPtrInt(1, n), 1);
   CheckEqual(MaxPtrInt(1, n), n);
