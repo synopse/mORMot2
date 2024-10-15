@@ -4944,7 +4944,7 @@ var
   PB: PByte;
   q: RawUtf8;
   Unic: RawByteString;
-  WA: Boolean;
+  WA, HasValidUtf8Avx2: Boolean;
   rb1, rb2, rb3: RawByteString;
 const
   ROWIDS: array[0..17] of PUtf8Char = ('id', 'ID', 'iD', 'rowid', 'ROWid',
@@ -5540,7 +5540,14 @@ begin
       len120 := Utf8TruncatedLength(P, 120)
     else
       len120 := 0;
-    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtF8');
+    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer');
+    {$ifdef ASMX64AVXNOCONST}
+    HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
+    if HasValidUtf8Avx2 then
+      Check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas');
+    {$else}
+    HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
+    {$endif ASMX64AVXNOCONST}
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
@@ -5560,8 +5567,12 @@ begin
         P[len120] := #0; // no need to go any further
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // always invalidate the UTF-8 content
         check(not IsValidUtf8Buffer(P, len120), 'IsValidUtf8 up100');
+        if HasValidUtf8Avx2 then
+          check(not IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas up100');
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // restore
         check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8 restored');
+        if HasValidUtf8Avx2 then
+          check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas restored');
         P[len120] := bak;
       end;
     end;
