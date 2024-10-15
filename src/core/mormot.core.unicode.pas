@@ -3057,20 +3057,14 @@ end;
 function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean;
 var
   c: byte;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TAnsiCharToByte absolute UTF8_TABLE.Lookup;
-  {$else}
   utf8: PAnsiCharToByte;
-  {$endif CPUX86NOTPIC}
 label
   done;
 begin
   inc(PtrUInt(len), PtrUInt(source) - 4);
   if source = nil then
     goto done;
-  {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE.Lookup;
-  {$endif CPUX86NOTPIC}
   repeat
     if PtrUInt(source) <= PtrUInt(len) then
     begin
