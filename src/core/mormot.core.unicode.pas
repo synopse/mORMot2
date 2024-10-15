@@ -92,7 +92,8 @@ const
   UTF16_LOSURROGATE_MAX = $dfff;
   UTF16_SURROGATE_OFFSET = $d7c0;
 
-  /// replace any incoming character whose value is unrepresentable in Unicode
+  /// replace any incoming UCS-4 which is unrepresentable as a single WideChar
+  // - i.e. which would need a UTF-16 surrogates pair for proper encoding
   // - set e.g. by GetUtf8WideChar(), Utf8UpperReference() or
   // RawUnicodeToUtf8() when ccfReplacementCharacterForUnmatchedSurrogate is set
   // - encoded as $ef $bf $bd bytes in UTF-8
@@ -115,17 +116,17 @@ function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
 function GetUtf8WideChar(P: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the UCS4 CodePoint stored in P^ (decode UTF-8 if necessary)
+/// get the UCS-4 CodePoint stored in P^ (decode UTF-8 if necessary)
 function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// UTF-8 encode one UTF-16 encoded UCS4 CodePoint into Dest
+/// UTF-8 encode one UTF-16 encoded UCS-4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - Source will contain the next UTF-16 character
 // - this method DOES properly handle UTF-16 surrogate pairs
 function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 
-/// UTF-8 encode one UCS4 CodePoint into Dest
+/// UTF-8 encode one UCS-4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - this method DOES properly handle UTF-16 surrogate pairs
 function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
@@ -194,7 +195,7 @@ function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
 procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
-// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
+// - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - faster than System.Utf8ToUnicode with dest=nil
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 
@@ -237,7 +238,7 @@ function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean; overloa
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
-// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
+// - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - returns FALSE if text was not truncated, TRUE otherwise
 function Utf8TruncateToUnicodeLength(var text: RawUtf8; maxUtf16: integer): boolean;
 
@@ -264,7 +265,7 @@ function Utf8TruncatedLength(text: PAnsiChar;
   textlen, maxBytes: PtrUInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
-// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
+// - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - end the parsing at first #13 or #10 character
 function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
 
@@ -1459,7 +1460,7 @@ var
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
 /// case-sensitive comparison function using the Operating System, as TUtf8Compare
-// - "direct" StrComp() would follow UTF-8 byte order, i.e. UCS4 CodePoint order,
+// - "direct" StrComp() would follow UTF-8 byte order, i.e. UCS-4 CodePoint order,
 // which may not be the same as the "human" expected order, especially on Windows
 // - use OS and compiler specific Unicode_CompareString() API so may not be
 // consistent between computers and platforms, as StrComp() is
@@ -1474,9 +1475,9 @@ function Utf8CompareOS(P1, P2: PUtf8Char): PtrInt;
 // - warning: potentially much slower than mORMot-native alternatives
 function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
 
-/// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
+/// retrieve the next UCS-4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
-// - will return '?' if the UCS4 CodePoint is higher than #255: so use this function
+// - will return '?' if the UCS-4 CodePoint is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUtf8 function)
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
@@ -2399,26 +2400,26 @@ function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 // - has a branchless optimized process of 7-bit ASCII charset [a..z] -> [A..Z]
 function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 
-/// compare two UCS4 strings
+/// compare two UCS-4 strings
 function Ucs4Compare(const a, b: RawUcs4): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compare two UCS4 buffers
+/// compare two UCS-4 buffers
 function Ucs4Comp(a, b: PUcs4CodePoint): integer;
 
-/// convert some UTF-8 buffer content into UCS4
+/// convert some UTF-8 buffer content into UCS-4
 procedure Utf8ToRawUcs4(u: PUtf8Char; L: PtrInt; out ucs4: RawUcs4); overload;
 
-/// convert some UTF-8 string content into UCS4
+/// convert some UTF-8 string content into UCS-4
 function Utf8ToRawUcs4(const S: RawUtf8): RawUcs4; overload;
 
-/// convert some UCS4 buffer into UTF-8 string
+/// convert some UCS-4 buffer into UTF-8 string
 procedure RawUcs4ToUtf8(u4: PUcs4CodePoint; L: PtrInt; out u: RawUtf8); overload;
 
-/// convert some UCS4 into UTF-8 string
+/// convert some UCS-4 into UTF-8 string
 function RawUcs4ToUtf8(const ucs4: RawUcs4): RawUtf8; overload;
 
-/// UpperCase conversion of UTF-8 into UCS4 using our Unicode 10.0 tables
+/// UpperCase conversion of UTF-8 into UCS-4 using our Unicode 10.0 tables
 // - won't call the Operating System, so is consistent on all platforms,
 // whereas UpperCaseUnicode() may vary depending on each library implementation
 function UpperCaseUcs4Reference(const S: RawUtf8): RawUcs4;
@@ -2449,7 +2450,7 @@ begin
   inc(U);
   x := Lookup[c];
   if x = UTF8_INVALID then
-    exit;
+    exit; // returns 0 as invalid leading byte (allow full UTF-8/UCS-4 range)
   i := 0;
   repeat
     v := byte(U[i]);

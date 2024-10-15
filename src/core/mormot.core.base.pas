@@ -271,13 +271,13 @@ type
   PRawUnicode = ^RawUnicode;
   {$endif PUREMORMOT2}
 
-  /// store one 32-bit UCS4 CodePoint (with a better naming than UCS4 "Char")
+  /// store one 32-bit UCS-4 CodePoint (with a better naming than UCS-4 "Char")
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
   Ucs4CodePoint = cardinal;
-  /// pointer to one 32-bit UCS4 CodePoint
+  /// pointer to one 32-bit UCS-4 CodePoint
   PUcs4CodePoint = ^Ucs4CodePoint;
 
-  /// low-level storage of UCS4 CodePoints, stored as 32-bit integers
+  /// low-level storage of UCS-4 CodePoints, stored as 32-bit integers
   RawUcs4 = array of Ucs4CodePoint;
 
   {$ifdef CPU64}
