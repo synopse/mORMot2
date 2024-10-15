@@ -2562,7 +2562,7 @@ type
   public
     /// initialize the storage and its internal hash pools
     // - aHashTables is the pool size, and should be a power of two <= 512
-    // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
+    // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512) - rounded up if not an exact power
     constructor Create(aHashTables: integer = 4); reintroduce;
     /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
@@ -4612,21 +4612,16 @@ end;
 
 constructor TRawUtf8Interning.Create(aHashTables: integer);
 var
-  p: integer;
   i: PtrInt;
 begin
   inherited Create; // may have been overriden
-  for p := 0 to 9 do
-    if aHashTables = 1 shl p then
-    begin
-      SetLength(fPool, aHashTables);
-      fPoolLast := aHashTables - 1;
-      for i := 0 to fPoolLast do
-        fPool[i].Init;
-      exit;
-    end;
-  ESynException.RaiseUtf8('%.Create(%) not allowed: ' +
-    'should be a power of 2 <= 512', [self, aHashTables]);
+  if aHashTables > 512 then
+    ESynException.RaiseUtf8('%.Create(%) failed as > 512', [self, aHashTables]);
+  aHashTables := NextPowerOfTwo(aHashTables);
+  SetLength(fPool, aHashTables);
+  fPoolLast := aHashTables - 1;
+  for i := 0 to fPoolLast do
+    fPool[i].Init;
 end;
 
 procedure TRawUtf8Interning.Clear;

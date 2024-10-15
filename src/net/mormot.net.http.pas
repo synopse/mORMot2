@@ -957,7 +957,7 @@ type
     procedure SetIP;
   public
     /// initialize the thread-safe storage process
-    // - banseconds should be a power-of-two <= 128
+    // - banseconds should be <= 128, and will be rounded up to a power-of-two
     // - maxpersecond is the maximum number of banned IPs remembered per second
     constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
       banwhiteip: cardinal = cLocalhost32); reintroduce;
@@ -990,7 +990,7 @@ type
     property WhiteIP: cardinal
       read fWhiteIP write fWhiteIP;
     /// how many seconds a banned IP4 should be rejected
-    // - should be a power of two, up to 128, with a default of 4 - the closed
+    // - should be a power of two <= 128, with a default of 4 - the closed
     // power of two is selected if the Value is not an exact match
     // - if set, any previous banned IP will be flushed
     property Seconds: cardinal
@@ -4737,16 +4737,15 @@ begin
 end;
 
 procedure THttpAcceptBan.SetSeconds(Value: cardinal);
-var
-  v: cardinal;
 begin
-  v := 128; // don't consume too much memory: max is 128 slots for 128 seconds
-  while (Value < v) and
-        (v > 1) do
-    v := v shr 1; // find closest power of two in 1..128 range
+  if Value >= 128 then
+    // don't consume too much memory: max is 128 slots for 128 seconds
+    Value := 128
+  else
+    Value := NextPowerOfTwo(Value); // closest power of two in 1..128 range
   fSafe.Lock;
   try
-    fSeconds := v;
+    fSeconds := Value;
     SetIP;
   finally
     fSafe.UnLock;
