@@ -2067,9 +2067,6 @@ function StatusCodeToErrorMsg(Code: integer): RawUtf8;
 { **************** Hexadecimal Text And Binary Conversion }
 
 type
-  /// type of a lookup table used for fast XML/HTML conversion
-  TAnsiCharToByte = array[AnsiChar] of byte;
-  PAnsiCharToByte = ^TAnsiCharToByte;
   /// type of a lookup table used for fast two-digit chars conversion
   TAnsiCharToWord = array[AnsiChar] of word;
   PAnsiCharToWord = ^TAnsiCharToWord;

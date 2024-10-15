@@ -202,8 +202,12 @@ function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
+// - follows RFC 3629 requirements, i.e. up to 4-bytes UTF-8 sequences, to
+// stay within U+0000..U+10FFFF UTF-16 accessible range with surrogates
 var
   IsValidUtf8Buffer: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
+
+function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean; // test only
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
@@ -1150,6 +1154,10 @@ type
   TNormTableByte = packed array[byte] of byte;
   /// pointer to a lookup table used for fast case conversion
   PNormTableByte = ^TNormTableByte;
+
+  /// type of a lookup table used for fast XML/HTML conversion or UTF-8 lookup
+  TAnsiCharToByte = array[AnsiChar] of byte;
+  PAnsiCharToByte = ^TAnsiCharToByte;
 
 var
   /// lookup table used for fast case conversion to uppercase
@@ -3029,30 +3037,30 @@ nosource:
     dest^ := #0; // append a WideChar(0) to the end of the buffer
 end;
 
-function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;
+function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean;
 var
   c: byte;
   {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
+  utf8: TAnsiCharToByte absolute UTF8_TABLE.Lookup;
   {$else}
-  utf8: PUtf8Table;
+  utf8: PAnsiCharToByte;
   {$endif CPUX86NOTPIC}
 label
   done;
 begin
-  inc(PtrUInt(sourcelen), PtrUInt(source) - 4);
+  inc(PtrUInt(len), PtrUInt(source) - 4);
   if source = nil then
     goto done;
   {$ifndef CPUX86NOTPIC}
-  utf8 := @UTF8_TABLE;
+  utf8 := @UTF8_TABLE.Lookup;
   {$endif CPUX86NOTPIC}
   repeat
-    if PtrUInt(source) <= PtrUInt(sourcelen) then
+    if PtrUInt(source) <= PtrUInt(len) then
     begin
-      if utf8.Lookup[ord(source[0])] = UTF8_ASCII then
-        if utf8.Lookup[ord(source[1])] = UTF8_ASCII then
-          if utf8.Lookup[ord(source[2])] = UTF8_ASCII then
-            if utf8.Lookup[ord(source[3])] = UTF8_ASCII then
+      if utf8[source[0]] = UTF8_ASCII then
+        if utf8[source[1]] = UTF8_ASCII then
+          if utf8[source[2]] = UTF8_ASCII then
+            if utf8[source[3]] = UTF8_ASCII then
             begin
               inc(source, 4); // optimized for JSON-like content
               continue;
@@ -3064,25 +3072,29 @@ begin
         else
           inc(source);
     end
-    else if PtrUInt(source) >= PtrUInt(sourcelen) + 4 then
+    else if PtrUInt(source) >= PtrUInt(len) + 4 then
       break;
-    c := utf8.Lookup[ord(source^)];
+    c := utf8[source^]; // number of expected extra bytes
     inc(source);
     if c = UTF8_ASCII then
-      continue
-    else if c >= UTF8_INVALID then
-      // UTF8_INVALID=6, UTF8_ZERO=7 means unexpected end of input
-      break;
-    // c = extras -> check valid UTF-8 content
+      continue // last 1..3 chars
+    else if c > UTF8_MAXUTF16 then // RFC 3629 requirements as IsValidUtf8Avx2()
+      if c = UTF8_ZERO then
+        break // end of input - may be unexpected if not at source[len]
+      else
+      begin
+        source := nil; // force result = false if does not follows RFC 3629
+        break;
+      end;
     repeat
       if byte(source^) and $c0 <> $80 then
         goto done;
-      inc(source);
+      inc(source); // length check is done below - may read after source[len]
       dec(c);
     until c = 0;
   until false;
 done:
-  result := PtrUInt(source) = PtrUInt(sourcelen) + 4;
+  result := PtrUInt(source) = PtrUInt(len) + 4;
 end;
 
 function IsValidUtf8(source: PUtf8Char): boolean;
