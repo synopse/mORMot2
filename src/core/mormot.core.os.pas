@@ -2978,7 +2978,7 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-// - returns dest.buf as PWideChar result, and dest.len as length in WideChars
+// - returns dest.buf as result, and dest.len as length in WideChar (not bytes)
 // - caller should always call Dest.Done to release any (unlikely) allocated memory
 function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
@@ -6354,7 +6354,7 @@ begin
     result[Dest.len] := #0; // Text[TextLen] may not be #0
   end
   else // use the RTL to perform the UTF-8 to UTF-16 conversion
-  begin
+  begin                                     // + SYNTEMPTRAIL included
     Dest.len := Utf8ToUnicode(result, Dest.Len + 16, pointer(Text), TextLen);
     if Dest.len <= 0 then
       Dest.len := 0

@@ -531,6 +531,7 @@ type
     CERT_E_REVOKED);
 const
   WINERR_ONE: array[TWinErrorOne] of cardinal = (
+    // sparse system errors (183, 234, 1450)
     ERROR_ALREADY_EXISTS, ERROR_MORE_DATA, ERROR_NO_SYSTEM_RESOURCES,
     // main Windows Socket API (WSA) errors
     10014, 10022, 10024, 10035, 10038, 10053, 10054, 10055, 10060, 10061, 11003,
