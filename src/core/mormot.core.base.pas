@@ -726,11 +726,11 @@ function ToByte(value: cardinal): cardinal; inline;
 {$endif CPUARM}
 
 const
-  /// used to mark the end of ASCIIZ buffer, or return a void ShortString
+  /// used to point and return a void ASCIIZ buffer or ShortString
   NULCHAR: AnsiChar = #0;
 
-  /// a TGuid containing '{00000000-0000-0000-0000-00000000000}'
-  GUID_NULL: TGuid = ({%H-});
+  /// a TGuid containing all zero bytes
+  GUID_NULL: TGuid = '{00000000-0000-0000-0000-000000000000}';
 
   NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
   FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
@@ -756,7 +756,7 @@ function IsEqualGuid(guid1, guid2: PGuid): boolean; overload;
 // - returns -1 if no item matched
 function IsEqualGuidArray(const guid: TGuid; const guids: array of TGuid): integer;
 
-/// check if a TGuid value contains only 0 bytes
+/// check if a TGuid value contains only zero bytes, i.e. GUID_NULL
 // - this version is faster than the one supplied by SysUtils
 function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): boolean;
   {$ifdef HASINLINE}inline;{$endif}
