@@ -5872,7 +5872,7 @@ begin
     if (Magic = trailer^.Magic) and
        (trailer^.HeaderRelativeOffset < Len) and
        (PAlgoCompressHead(P + Len - trailer^.HeaderRelativeOffset)^.Magic = Magic) then
-      // trim existing content
+      // compute actual content size from first header to last trailer
       result := Len - trailer^.HeaderRelativeOffset
     else
       result := Len;
@@ -5885,7 +5885,7 @@ var
   h: TAlgoCompressHead;
 begin
   result := BufferFromFile(Name, @h, SizeOf(h)) and
-            (h.Magic = Magic); // only check the magic of first chunk header
+            (h{%H-}.Magic = Magic); // only check first chunk header magic
 end;
 
 function TAlgoCompress.FileCompress(const Source, Dest: TFileName; Magic: cardinal;
