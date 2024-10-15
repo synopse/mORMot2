@@ -1537,19 +1537,19 @@ function ComparePointer(const A, B: pointer): integer;
 function CompareQWord(const A, B: QWord): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns the smallest of two PtrInt values
+/// returns the smallest of two PtrInt signed values
 function MinPtrInt(const A, B: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns the biggest of two PtrInt values
+/// returns the biggest of two PtrInt signed values
 function MaxPtrInt(const A, B: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns the smallest of two PtrUInt values
+/// returns the smallest of two PtrUInt unsigned values
 function MinPtrUInt(const A, B: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns the biggest of two PtrUInt values
+/// returns the biggest of two PtrUInt unsigned values
 function MaxPtrUInt(const A, B: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 

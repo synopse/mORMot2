@@ -990,9 +990,8 @@ type
     property WhiteIP: cardinal
       read fWhiteIP write fWhiteIP;
     /// how many seconds a banned IP4 should be rejected
-    // - should be a power of two <= 128, with a default of 4 - the closed
-    // power of two is selected if the Value is not an exact match
-    // - if set, any previous banned IP will be flushed
+    // - will set the closest power of two <= 128, with a default of 4
+    // - when set, any previous banned IP will be flushed
     property Seconds: cardinal
       read fSeconds write SetSeconds;
     /// how many IP can be banned per second
@@ -4738,14 +4737,10 @@ end;
 
 procedure THttpAcceptBan.SetSeconds(Value: cardinal);
 begin
-  if Value >= 128 then
-    // don't consume too much memory: max is 128 slots for 128 seconds
-    Value := 128
-  else
-    Value := NextPowerOfTwo(Value); // closest power of two in 1..128 range
+  Value := NextPowerOfTwo(MinPtrUInt(Value, 128));
   fSafe.Lock;
   try
-    fSeconds := Value;
+    fSeconds := Value; // use closest power of two in 1..128 range
     SetIP;
   finally
     fSafe.UnLock;
