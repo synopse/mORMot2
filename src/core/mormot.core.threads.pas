@@ -1168,6 +1168,7 @@ type
     /// process to be executed after notification
     procedure Task(aCaller: TSynThreadPoolWorkThread;
       aContext: pointer); virtual; abstract;
+    /// finalize a queue item on Terminate - e.g. call Free/Dispose on aContext
     procedure TaskAbort(aContext: pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads
@@ -3520,7 +3521,7 @@ procedure TSynThreadPoolWorkThread.Execute;
 var
   ctxt: pointer;
   {$ifdef USE_WINIOCP}
-  dum1: cardinal;
+  dum1: cardinal; // those variables are not used by our queue
   dum2: pointer;
   {$endif USE_WINIOCP}
 begin
@@ -3548,12 +3549,12 @@ begin
     // this thread is finished: pending tasks cleanup
     repeat
       if ctxt = nil then
-        break;
+        break; // reached the TSynThreadPool.Destroy "nil" events in the queue
       try
         fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
-        InterlockedDecrement(fOwner.fPendingContextCount);
       except
       end;
+      InterlockedDecrement(fOwner.fPendingContextCount); // always dec
     until not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, ctxt, {ms=}1);
     {$else}
     // main loop, waiting for the next task(s) notified from this thread event
