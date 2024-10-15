@@ -479,7 +479,7 @@ type
     fOnBeforeRequest: TOnHttpServerRequest;
     fOnAfterRequest: TOnHttpServerRequest;
     fOnAfterResponse: TOnHttpServerAfterResponse;
-    fMaximumAllowedContentLength: cardinal;
+    fMaximumAllowedContentLength: Int64;
     fCurrentConnectionID: integer;  // 31-bit NextConnectionID sequence
     /// set by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
@@ -504,7 +504,7 @@ type
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); virtual;
-    procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
+    procedure SetMaximumAllowedContentLength(aMax: Int64); virtual;
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); virtual;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); virtual;
     function GetHttpQueueLength: cardinal; virtual; abstract;
@@ -655,7 +655,7 @@ type
     // - default to 0, meaning any input size is allowed
     // - returns HTTP_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
     // header overflow the supplied number of bytes
-    property MaximumAllowedContentLength: cardinal
+    property MaximumAllowedContentLength: Int64
       read fMaximumAllowedContentLength write SetMaximumAllowedContentLength;
     /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
     // - see also NginxSendFileFrom() method
@@ -1839,7 +1839,7 @@ type
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); override;
-    procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
+    procedure SetMaximumAllowedContentLength(aMax: Int64); override;
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); override;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
     procedure SetLoggingServiceName(const aName: RawUtf8);
@@ -3423,7 +3423,7 @@ begin
     result := 0;
 end;
 
-procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
+procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: Int64);
 begin
   fMaximumAllowedContentLength := aMax;
 end;
@@ -6931,8 +6931,8 @@ begin
               SetQWord(V, V + RawValueLength, incontlen);
             end;
             if (incontlen > 0) and
-               (MaximumAllowedContentLength > 0) and
-               (incontlen > MaximumAllowedContentLength) then
+               (fMaximumAllowedContentLength > 0) and
+               (incontlen > QWord(fMaximumAllowedContentLength)) then
             begin
               SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
               continue;
@@ -7384,7 +7384,7 @@ begin
     fClones[i].SetOnAfterResponse(aEvent);
 end;
 
-procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
+procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: Int64);
 var
   i: PtrInt;
 begin
