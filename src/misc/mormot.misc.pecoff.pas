@@ -790,10 +790,9 @@ begin
     FastSetString(result, @Name8, StrLen(@Name8));
 end;
 
-
 function DWordAlign(Offset, Base: cardinal): cardinal;
 begin
-  result := ((Offset + Base + 3) and $FFFFFFFC) - (Base and $FFFFFFFC);
+  result := ((Offset + Base + 3) and $fffffffc) - (Base and $fffffffc);
 end;
 
 

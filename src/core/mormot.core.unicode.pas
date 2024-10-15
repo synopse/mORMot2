@@ -2524,23 +2524,23 @@ begin
   end
   else if ucs4 <= $7ff then
   begin
-    Dest[0] := AnsiChar($C0 or (ucs4 shr 6));
-    Dest[1] := AnsiChar($80 or (ucs4 and $3F));
+    Dest[0] := AnsiChar($c0 or (ucs4 shr 6));
+    Dest[1] := AnsiChar($80 or (ucs4 and $3f));
     result := 2;
   end
   else if ucs4 <= $ffff then
   begin
-    Dest[0] := AnsiChar($E0 or (ucs4 shr 12));
-    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3F));
-    Dest[2] := AnsiChar($80 or (ucs4 and $3F));
+    Dest[0] := AnsiChar($e0 or (ucs4 shr 12));
+    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3f));
+    Dest[2] := AnsiChar($80 or (ucs4 and $3f));
     result := 3;
   end
   else
   begin
-    // here ucs4 > $ffff
-    if ucs4 <= $1FFFFF then
+    // here ucs4 > $ffff (very unlikely)
+    if ucs4 <= $1fffff then
       result := 4
-    else if ucs4 <= $3FFFFFF then
+    else if ucs4 <= $3ffffff then
       result := 5
     else
       result := 6;
@@ -2561,26 +2561,26 @@ begin
   c := Source^;
   inc(Source);
   case c of
-    0..$7f:
+    0 .. $7f:
       begin
         Dest^ := AnsiChar(c);
         result := 1;
         exit;
       end;
-    UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+    UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
       begin
         c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
               (Source^ xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
-    UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+    UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
       begin
         c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
               (c xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
   end;
-  // now c is the UTF-32/UCS4 code point
+  // now c is the UTF-32/UCS-4 code point
   result := Ucs4ToUtf8(c, Dest);
 end;
 
@@ -2620,15 +2620,15 @@ begin
         inc(Dest, 2);
       until (Source > tail) or
             (PtrInt(PtrUInt(Dest)) >= DestLen);
-    // generic loop, handling one UCS4 CodePoint per iteration
+    // generic loop, handling one UCS-4 CodePoint per iteration
     if (PtrInt(PtrUInt(Dest)) < DestLen) and
        (PtrInt(PtrUInt(Source)) < SourceLen) then
       repeat
-      // inlined Utf16CharToUtf8() with bufferoverlow check and $FFFD on unmatch
+      // inlined Utf16CharToUtf8() with bufferoverlow check and $fffd on unmatch
         c := cardinal(Source^);
         inc(Source);
         case c of
-          0..$7f:
+          0 .. $7f:
             begin
               Dest^ := AnsiChar(c);
               inc(Dest);
@@ -2638,7 +2638,7 @@ begin
               else
                 break;
             end;
-          UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+          UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
             if (PtrInt(PtrUInt(Source)) >= SourceLen) or
                ((cardinal(Source^) < UTF16_LOSURROGATE_MIN) or
                 (cardinal(Source^) > UTF16_LOSURROGATE_MAX)) then
@@ -2646,8 +2646,8 @@ begin
 unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                  not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
                 break;
-              PWord(Dest)^ := $BFEF; // UTF-8 UNICODE_REPLACEMENT_CHARACTER
-              Dest[2] := AnsiChar($BD);
+              PWord(Dest)^ := $bfef; // UTF-8 UNICODE_REPLACEMENT_CHARACTER
+              Dest[2] := AnsiChar($bd);
               inc(Dest, 3);
               if (PtrInt(PtrUInt(Dest)) < DestLen) and
                  (PtrInt(PtrUInt(Source)) < SourceLen) then
@@ -2661,7 +2661,7 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                    (cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
               inc(Source);
             end;
-          UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+          UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
             if (PtrInt(PtrUInt(Source)) >= SourceLen) or
                ((cardinal(Source^) < UTF16_HISURROGATE_MIN) or
                 (cardinal(Source^) > UTF16_HISURROGATE_MAX)) then
@@ -2672,14 +2672,14 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                    (c xor UTF16_LOSURROGATE_MIN);
               inc(Source);
             end;
-        end; // now c is the UTF-32/UCS4 code point
+        end; // now c is the UTF-32/UCS-4 code point
         if c <= $7ff then
           i := 2
         else if c <= $ffff then
           i := 3
-        else if c <= $1FFFFF then
+        else if c <= $1fffff then
           i := 4
-        else if c <= $3FFFFFF then
+        else if c <= $3ffffff then
           i := 5
         else
           i := 6;
@@ -2784,7 +2784,7 @@ begin
       begin
         extra := utf8.Lookup[c];
         if extra = UTF8_INVALID then
-          break;
+          break; // invalid leading byte (allow full UTF-8/UCS-4 range)
         i := extra;
         repeat
           if byte(source^) and $c0 <> $80 then
@@ -2892,8 +2892,8 @@ begin
     dec(c, $10000); // store as UTF-16 surrogates
     if PtrUInt(@dest[2]) >= PtrUInt(endDest) then
       break;
-    PWordArray(dest)[0] := (c shr 10) or UTF16_HISURROGATE_MIN;
-    PWordArray(dest)[1] := (c and $3FF) or UTF16_LOSURROGATE_MIN;
+    PWordArray(dest)[0] := (c shr 10)   or UTF16_HISURROGATE_MIN;
+    PWordArray(dest)[1] := (c and $3ff) or UTF16_LOSURROGATE_MIN;
     inc(dest, 2);
     if source >= endSource then
       break;
@@ -2945,7 +2945,7 @@ begin
       if c and $80808080 <> 0 then
         goto by1; // break on first non ASCII quad
 by4:  inc(source, 4);
-      PCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
+      PCardinal(dest)^ := (c shl 8 or (c and $ff)) and $00ff00ff;
       c := c shr 16;
       PCardinal(dest + 2)^ := (c shl 8 or c) and $00ff00ff;
       inc(dest, 4);
@@ -3008,8 +3008,8 @@ by1:  c := byte(source^);
           break;
       end;
       dec(c, $10000); // store as UTF-16 surrogates
-      PWordArray(dest)[0] := (c shr 10) or UTF16_HISURROGATE_MIN;
-      PWordArray(dest)[1] := (c and $3FF) or UTF16_LOSURROGATE_MIN;
+      PWordArray(dest)[0] := (c shr 10)   or UTF16_HISURROGATE_MIN;
+      PWordArray(dest)[1] := (c and $3ff) or UTF16_LOSURROGATE_MIN;
       inc(dest, 2);
       if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
          (source <= endSourceBy4) then
@@ -3295,13 +3295,13 @@ begin
     exit;
   result := maxBytes;
   if (result = 0) or
-     (text[result] <= #$7f) then
+     (ord(text[result]) <= $7f) then
     exit; 
   while (result > 0) and
         (ord(text[result]) and $c0 = $80) do
     dec(result);
   if (result > 0) and
-     (text[result] > #$7f) then
+     (ord(text[result]) > $7f) then
     dec(result);
 end;
 
@@ -3315,7 +3315,7 @@ begin
         (ord(text[result]) and $c0 = $80) do
     dec(result);
   if (result > 0) and
-     (text[result] > #$7f) then
+     (ord(text[result]) > $7f) then
     dec(result);
 end;
 
@@ -3468,7 +3468,7 @@ begin
         break; // break on first non ASCII quad
       dec(SourceChars, 4);
       inc(Source, 4);
-      PCardinal(Dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
+      PCardinal(Dest)^ := (c shl 8 or (c and $ff)) and $00ff00ff;
       c := c shr 16;
       PCardinal(Dest + 2)^ := (c shl 8 or c) and $00ff00ff;
       inc(Dest, 4);
@@ -3922,7 +3922,7 @@ by4:    inc(Source, 4);
       repeat
 by1:    c := byte(Source^);
         inc(Source);
-        if c <= $7F then
+        if c <= $7f then
         begin
           Dest^ := AnsiChar(c); // 0..127 don't need any translation
           Inc(Dest);
@@ -3945,9 +3945,9 @@ by1:    c := byte(Source^);
           c := fAnsiToWide[c]; // convert FixedAnsi char into Unicode char
           if c > $7ff then
           begin
-            Dest[0] := AnsiChar($E0 or (c shr 12));
-            Dest[1] := AnsiChar($80 or ((c shr 6) and $3F));
-            Dest[2] := AnsiChar($80 or (c and $3F));
+            Dest[0] := AnsiChar($e0 or (c shr 12));
+            Dest[1] := AnsiChar($80 or ((c shr 6) and $3f));
+            Dest[2] := AnsiChar($80 or (c and $3f));
             Inc(Dest, 3);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source <= srcEndBy4) then
@@ -3964,8 +3964,8 @@ by1:    c := byte(Source^);
           end
           else
           begin
-            Dest[0] := AnsiChar($C0 or (c shr 6));
-            Dest[1] := AnsiChar($80 or (c and $3F));
+            Dest[0] := AnsiChar($c0 or (c shr 6));
+            Dest[1] := AnsiChar($80 or (c and $3f));
             Inc(Dest, 2);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source < srcEndBy4) then
@@ -4526,9 +4526,9 @@ begin
           dec(BufferSize, 2);
           result := bomUnicode; // UTF-16 LE
         end;
-      $BBEF:
+      $bbef:
         if (BufferSize >= 3) and
-           (PByteArray(Buffer)[2] = $BF) then
+           (PByteArray(Buffer)[2] = $bf) then
         begin
           inc(PByte(Buffer), 3);
           dec(BufferSize, 3);
@@ -10668,43 +10668,43 @@ const
 
   // 1KB compressed buffer which renders into our 20,016 bytes UU[] array
   UU_: array[byte] of cardinal = (
-    $040019FD, $FF5A6024, $00855A00, $FFFFFFE0, $5A5201F0, $02E700E8, $FFE0AA5A,
-    $E0045A4B, $5A790BFF, $045A0007, $A045A1FF, $DB1878BA, $01A82B01, $0145A000,
-    $1DA45008, $041E5A80, $401DA450, $5A8F185A, $FFFFFED4, $590B5AC3, $0C5A84A4,
-    $5314A453, $610008A4, $A4520F5A, $82F5A1A3, $F1EBB5AB, $5A44DDF7, $52105A84,
-    $5A845AA4, $5A4A5AC4, $5A385AC6, $11A45217, $10ABA500, $45A00200, $4F5A4401,
-    $0000B15A, $A05A4F04, $5A830145, $C65A0018, $5EBAA05A, $20245AC0, $85A1A452,
-    $5BB55700, $00002A3F, $065A2A3F, $5B04A453, $1F055A40, $A11C02A1, $02A11E02,
-    $3200012E, $45A10001, $C2000133, $3645A10C, $45A10001, $4F000135, $00550690,
-    $000E5AA5, $A54B0CC2, $013165A1, $2845A100, $440000A5, $012FAC02, $00012D00,
-    $F70A5144, $41000029, $000A5AA5, $2AC4A16B, $45A10D22, $2B0291FD, $85A10001,
-    $1C00022A, $A129E700, $000226A5, $0D930008, $512A000C, $BB0D920A, $05270001,
-    $0001B900, $0644145A, $25000107, $00280002, $120A5115, $F1F552A5, $54009C55,
-    $A453AF5A, $5AC45A44, $0082000C, $5A208400, $FFDA00BB, $AD6EFFFF, $09DB15D5,
-    $F045A100, $01E13201, $1201F000, $C10001C0, $45A10005, $C70001C2, $C5A10001,
-    $CA0001D1, $01F80001, $A045A100, $01AA33BA, $0001B000, $D0000007, $001EFBFB,
-    $A2FFFF8C, $0002A0AB, $85A15A83, $E0D0BAA2, $01F00BFF, $2E01F012, $04F004F2,
-    $3645A02A, $240D45A0, $5A44A459, $847E5A40, $115A405A, $400002F1, $45A0115A,
-    $CC5A400D, $1FD000C4, $01255507, $8202F000, $55F1F555, $00C955F4, $700001F8,
-    $85A10200, $FFFFE792, $9C018193, $859E0181, $01819D01, $DB0181A4, $89C20181,
-    $00C5F558, $3C90F1E4, $E5A18A04, $E5A10EE6, $5A40BAA2, $CC5A40CC, $01C50014,
-    $A045B100, $45AAFFBA, $00000008, $5A070080, $04800023, $80002B5A, $80000604,
-    $00000635, $BC2F5A0E, $00F75B6D, $D875A108, $050A30A7, $014A0009, $5604A200,
-    $056A0001, $42000164, $00018006, $01700802, $7E070200, $A17E0001, $070080B5,
-    $80080001, $00022635, $35860002, $C4304825, $810975A1, $01E3DBB5, $090010A5,
-    $8004335A, $80053B5A, $5A07000F, $F1CA0137, $E4006C55, $84A501FF, $0001F000,
-    $8E2A00F0, $5AEDC05B, $55F15B04, $002F55F4, $900001E6, $F5525201, $87FFD019,
-    $5A1202F0, $000C5A84, $FFFFD5D5, $AA02A1D8, $1845A545, $5A84A453, $40A45328,
-    $5A40CC5A, $FB5FC736, $445804BF, $305B045A, $01C1A000, $A182C5E0, $B1C5E245,
-    $F4C5E345, $A4504E55, $A4504C77, $1E55F441, $C417A450, $405A445A, $588A9C5A,
-    $5A405A84, $045B0406, $C05A445B, $592C2A5A, $C6F021A4, $6E55F49B, $01FC6000,
-    $300070A5, $60FFFF68, $0970FF7C, $F1F55219, $FFE00655, $35F55257, $0001D800,
-    $528A0270, $2255F1F5, $527F7FD0, $F20011F5, $00063B03, $B603F000, $E035F552,
-    $01F057FF, $09F55206, $0001DE00, $5A720210, $020100F1, $0403075A, $0503045A,
-    $0C5A0706, $F15A0803, $00000012, $03120103, $08675104, $5A0B0A09, $5A0D0C1B,
-    $0F0E0C11, $1211100C, $140C0C13, $0C055A15, $00005A16, $0C0E0000, $5A191817,
-    $1B1A0C31, $065A1D1C, $5A1F1E0C, $5A200C26, $22210C09, $230C0F5A, $0000175A,
-    $240C0000, $250C205A, $000C0D5A, $00000000);
+    $040019fd, $ff5a6024, $00855a00, $ffffffe0, $5a5201f0, $02e700e8, $ffe0aa5a,
+    $e0045a4b, $5a790bff, $045a0007, $a045a1ff, $db1878ba, $01a82b01, $0145a000,
+    $1da45008, $041e5a80, $401da450, $5a8f185a, $fffffed4, $590b5ac3, $0c5a84a4,
+    $5314a453, $610008a4, $a4520f5a, $82f5a1a3, $f1ebb5ab, $5a44ddf7, $52105a84,
+    $5a845aa4, $5a4a5ac4, $5a385ac6, $11a45217, $10aba500, $45a00200, $4f5a4401,
+    $0000b15a, $a05a4f04, $5a830145, $c65a0018, $5ebaa05a, $20245ac0, $85a1a452,
+    $5bb55700, $00002a3f, $065a2a3f, $5b04a453, $1f055a40, $a11c02a1, $02a11e02,
+    $3200012e, $45a10001, $c2000133, $3645a10c, $45a10001, $4f000135, $00550690,
+    $000e5aa5, $a54b0cc2, $013165a1, $2845a100, $440000a5, $012fac02, $00012d00,
+    $f70a5144, $41000029, $000a5aa5, $2ac4a16b, $45a10d22, $2b0291fd, $85a10001,
+    $1c00022a, $a129e700, $000226a5, $0d930008, $512a000c, $bb0d920a, $05270001,
+    $0001b900, $0644145a, $25000107, $00280002, $120a5115, $f1f552a5, $54009c55,
+    $a453af5a, $5ac45a44, $0082000c, $5a208400, $ffda00bb, $ad6effff, $09db15d5,
+    $f045a100, $01e13201, $1201f000, $c10001c0, $45a10005, $c70001c2, $c5a10001,
+    $ca0001d1, $01f80001, $a045a100, $01aa33ba, $0001b000, $d0000007, $001efbfb,
+    $a2ffff8c, $0002a0ab, $85a15a83, $e0d0baa2, $01f00bff, $2e01f012, $04f004f2,
+    $3645a02a, $240d45a0, $5a44a459, $847e5a40, $115a405a, $400002f1, $45a0115a,
+    $cc5a400d, $1fd000c4, $01255507, $8202f000, $55f1f555, $00c955f4, $700001f8,
+    $85a10200, $ffffe792, $9c018193, $859e0181, $01819d01, $db0181a4, $89c20181,
+    $00c5f558, $3c90f1e4, $e5a18a04, $e5a10ee6, $5a40baa2, $cc5a40cc, $01c50014,
+    $a045b100, $45aaffba, $00000008, $5a070080, $04800023, $80002b5a, $80000604,
+    $00000635, $bc2f5a0e, $00f75b6d, $d875a108, $050a30a7, $014a0009, $5604a200,
+    $056a0001, $42000164, $00018006, $01700802, $7e070200, $a17e0001, $070080b5,
+    $80080001, $00022635, $35860002, $c4304825, $810975a1, $01e3dbb5, $090010a5,
+    $8004335a, $80053b5a, $5a07000f, $f1ca0137, $e4006c55, $84a501ff, $0001f000,
+    $8e2a00f0, $5aedc05b, $55f15b04, $002f55f4, $900001e6, $f5525201, $87ffd019,
+    $5a1202f0, $000c5a84, $ffffd5d5, $aa02a1d8, $1845a545, $5a84a453, $40a45328,
+    $5a40cc5a, $fb5fc736, $445804bf, $305b045a, $01c1a000, $a182c5e0, $b1c5e245,
+    $f4c5e345, $a4504e55, $a4504c77, $1e55f441, $c417a450, $405a445a, $588a9c5a,
+    $5a405a84, $045b0406, $c05a445b, $592c2a5a, $c6f021a4, $6e55f49b, $01fc6000,
+    $300070a5, $60ffff68, $0970ff7c, $f1f55219, $ffe00655, $35f55257, $0001d800,
+    $528a0270, $2255f1f5, $527f7fd0, $f20011f5, $00063b03, $b603f000, $e035f552,
+    $01f057ff, $09f55206, $0001de00, $5a720210, $020100f1, $0403075a, $0503045a,
+    $0c5a0706, $f15a0803, $00000012, $03120103, $08675104, $5a0b0a09, $5a0d0c1b,
+    $0f0e0c11, $1211100c, $140c0c13, $0c055a15, $00005a16, $0c0e0000, $5a191817,
+    $1b1a0c31, $065a1d1c, $5a1f1e0c, $5a200c26, $22210c09, $230c0f5a, $0000175a,
+    $240c0000, $250c205a, $000c0d5a, $00000000);
 
 procedure InitializeUU;
 var

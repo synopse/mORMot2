@@ -468,12 +468,12 @@ type
 const
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
 
-  SP_PROT_TLS1_0_SERVER = $040;
-  SP_PROT_TLS1_0_CLIENT = $080;
-  SP_PROT_TLS1_1_SERVER = $100;
-  SP_PROT_TLS1_1_CLIENT = $200;
-  SP_PROT_TLS1_2_SERVER = $400;  // first SP_PROT_TLS_SAFE protocol
-  SP_PROT_TLS1_2_CLIENT = $800;
+  SP_PROT_TLS1_0_SERVER = $0040;
+  SP_PROT_TLS1_0_CLIENT = $0080;
+  SP_PROT_TLS1_1_SERVER = $0100;
+  SP_PROT_TLS1_1_CLIENT = $0200;
+  SP_PROT_TLS1_2_SERVER = $0400; // first SP_PROT_TLS_SAFE protocol
+  SP_PROT_TLS1_2_CLIENT = $0800;
   SP_PROT_TLS1_3_SERVER = $1000; // Windows 11 or Windows Server 2022 ;)
   SP_PROT_TLS1_3_CLIENT = $2000;
   // SSL 2/3 protocols ($04,$08,$10,$20) are just not defined at all
