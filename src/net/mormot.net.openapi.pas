@@ -1963,7 +1963,7 @@ begin
       obtDateTime:
         func := 'DateTimeToIso8601(%, true)';
       obtGuid:
-        func := 'ToUtf8(%)';
+        func := 'NotNullGuidToUtf8(%)'; // GUID_NULL = '' to ignore param
       obtRawByteString:
         func := 'mormot.core.buffers.BinToBase64(%)';
       obtString:
