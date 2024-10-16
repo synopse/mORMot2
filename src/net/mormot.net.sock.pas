@@ -1766,6 +1766,8 @@ type
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
+    /// append headers content, normalizing #13#10 in the content and at ending
+    procedure SockSendHeaders(P: PUtf8Char);
     /// append #13#10 characters on all platforms, never #10 even on POSIX
     procedure SockSendCRLF;
     /// flush all pending data to be sent, optionally with some body content
@@ -5744,6 +5746,25 @@ begin
     SockSend(pointer(Line), Length(Line));
   if not NoCrLf then
     SockSendCRLF;
+end;
+
+procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);
+var
+  S: PUtf8Char;
+begin
+  if P <> nil then
+    repeat
+      S := P;
+      while P^ >= ' ' do  // go to end of header line
+        inc(P);
+      SockSend(S, P - S); // append line content
+      SockSendCRLF;       // normalize line end
+      while P^ < ' ' do
+        if P^ = #0 then
+          exit            // end of input
+        else
+          inc(P);         // ignore any control char, e.g. #10 or #13
+    until false;
 end;
 
 function TCrtSocket.SockSendRemainingSize: integer;
