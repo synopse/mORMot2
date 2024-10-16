@@ -5829,7 +5829,15 @@ begin
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
     if rd = 0 then
       break; // reached the end of the stream
-    if not TrySndLow(pointer(chunk), rd, @result) then
+    TrySndLow(pointer(chunk), rd, @result); // error if result <> nrOk
+    if aCheckRecv and  // always check for any response, e.g. on closed connection
+       (fSecure = nil) and  // TLS fSecure.ReceivePending is not reliable
+       (fSock.HasData > 0) then
+    begin
+      result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
+      break;
+    end;
+    if result <> nrOk then
       if aNoRaise then
         break
       else
@@ -5838,12 +5846,6 @@ begin
           [ClassNameShort(self)^, ClassNameShort(Stream)^,
            ChunkSize, rd, pos, fServer, fPort], result);
     inc(pos, rd);
-    if aCheckRecv and
-       (SockReceiveHasData > 0) then // SockReceivePending() is not enough
-    begin
-      result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
-      break;
-    end;
   until false;
 end;
 
@@ -5904,7 +5906,9 @@ begin
     if Assigned(fSecure) then
       result := fSecure.ReceivePending // data available in the TLS buffers
     else
-      result := fSock.HasData; // data available on the socket itself
+      result := fSock.HasData // data available on the socket itself
+  else
+    result := 0;
 end;
 
 function TCrtSocket.SockReceiveString: RawByteString;
@@ -6141,7 +6145,7 @@ begin
   if fAborted then
     res := nrClosed;
   if NetResult <> nil then
-    NetResult^ := res;
+    NetResult^ := res; // always return a TNetResult
   result := (res = nrOK);
 end;
 
