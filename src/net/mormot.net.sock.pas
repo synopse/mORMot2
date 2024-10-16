@@ -5831,7 +5831,8 @@ begin
       break; // reached the end of the stream
     TrySndLow(pointer(chunk), rd, @result); // error if result <> nrOk
     if aCheckRecv and  // always check for any response, e.g. on closed connection
-       (Sock.HasData > 0) then // check at socket level, not TLS
+       (fSecure = nil) and  // TLS fSecure.ReceivePending is not reliable
+       (fSock.HasData > 0) then
     begin
       result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
       break;
