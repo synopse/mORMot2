@@ -625,6 +625,14 @@
 (********************** Shared Conditionals **********************)
 
 // -----------
+// -- mORMot specific conditionals
+
+  {$define MORMOT_TRUNK} // this is not a "stable" release point
+
+  {$define MORMOT22}  // defined since mORMot 2.2 trunk
+  {.$define MORMOT23} // defined since mORMot 2.3 stable
+
+// -----------
 // -- about pascal code expectations
 // DO NOT CHANGE ANYTHING BELOW: our code REQUIRES those values to work properly
 
