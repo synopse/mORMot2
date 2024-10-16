@@ -5829,11 +5829,9 @@ begin
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
     if rd = 0 then
       break; // reached the end of the stream
-    if not TrySndLow(pointer(chunk), rd, @result) then
-      if result = nrOk then
-        result := nrUnknownError;
+    TrySndLow(pointer(chunk), rd, @result); // error if result <> nrOk
     if aCheckRecv and  // always check for any response, e.g. on closed connection
-       (SockReceiveHasData > 0) then // SockReceivePending() is not enough
+       (Sock.HasData > 0) then // check at socket level, not TLS
     begin
       result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
       break;
@@ -6146,7 +6144,7 @@ begin
   if fAborted then
     res := nrClosed;
   if NetResult <> nil then
-    NetResult^ := res;
+    NetResult^ := res; // always return TNetResult
   result := (res = nrOK);
 end;
 
