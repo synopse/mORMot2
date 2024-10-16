@@ -669,17 +669,12 @@ begin
      not Assigned(PQ.socket) then
     result := nil
   else
-    result := pointer(PtrUInt(PQ.socket(fPGConn)));
+    result := pointer(PtrUInt(PQ.socket(fPGConn))); // transtype to our wrapper
 end;
 
 function TSqlDBPostgresConnection.SocketHasData: boolean;
-var
-  pending: integer;
 begin
-  result := (self <> nil) and
-            Assigned(PQ.socket) and
-            (TNetSocket(PtrUInt(PQ.socket(fPGConn))).RecvPending(pending) = nrOK) and
-            (pending > 0);
+  result := Socket.HasData > 0;
 end;
 
 

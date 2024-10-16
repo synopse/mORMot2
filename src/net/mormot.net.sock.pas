@@ -312,6 +312,10 @@ type
       loerr: system.PInteger = nil): TNetEvents;
     /// compute how many bytes are actually pending in the receiving queue
     function RecvPending(out pending: integer): TNetResult;
+    /// return how many pending bytes are in the receiving queue
+    // - returns 0 if no data is available, or if the connection is broken: call
+    // RecvPending() to check for the actual state of the connection
+    function HasData: integer;
     /// wrapper around WaitFor / RecvPending / Recv methods for a given time
     function RecvWait(ms: integer; out data: RawByteString;
       terminated: PTerminated = nil): TNetResult;
@@ -1762,6 +1766,8 @@ type
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
+    /// append headers content, normalizing #13#10 in the content and at ending
+    procedure SockSendHeaders(P: PUtf8Char);
     /// append #13#10 characters on all platforms, never #10 even on POSIX
     procedure SockSendCRLF;
     /// flush all pending data to be sent, optionally with some body content
@@ -1797,6 +1803,10 @@ type
     // actual wait may be a less than TimeOutMS if < 16 (select bug/feature)
     function SockReceivePending(TimeOutMS: integer;
       loerr: system.PInteger = nil): TCrtSocketPending;
+    /// return how many pending bytes are in the receiving socket or INetTls queue
+    // - returns 0 if no data is available, or if the connection is broken: call
+    // SockReceivePending() to check for the actual state of the connection
+    function SockReceiveHasData: integer;
     /// returns the socket input stream as a string
     // - returns up to 64KB from the OS or TLS buffers within TimeOut
     function SockReceiveString: RawByteString;
@@ -3004,6 +3014,12 @@ begin
     result := nrNoSocket
   else
     result := NetCheck(ioctlsocket(TSocket(@self), FIONREAD, @pending));
+end;
+
+function TNetSocketWrap.HasData: integer;
+begin
+  if RecvPending(result) <> nrOk then
+    result := 0;
 end;
 
 function TNetSocketWrap.RecvWait(ms: integer;
@@ -5732,6 +5748,25 @@ begin
     SockSendCRLF;
 end;
 
+procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);
+var
+  S: PUtf8Char;
+begin
+  if P <> nil then
+    repeat
+      S := P;
+      while P^ >= ' ' do  // go to end of header line
+        inc(P);
+      SockSend(S, P - S); // append line content
+      SockSendCRLF;       // normalize line end
+      while P^ < ' ' do
+        if P^ = #0 then
+          exit            // end of input
+        else
+          inc(P);         // ignore any control char, e.g. #10 or #13
+    until false;
+end;
+
 function TCrtSocket.SockSendRemainingSize: integer;
 begin
   result := Length(fSndBuf) - fSndBufLen;
@@ -5804,8 +5839,7 @@ begin
            ChunkSize, rd, pos, fServer, fPort], result);
     inc(pos, rd);
     if aCheckRecv and
-       (SockReceivePending({timeout=}0) in [cspDataAvailable,
-          cspDataAvailableOnClosedSocket]) then
+       (SockReceiveHasData > 0) then // SockReceivePending() is not enough
     begin
       result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
       break;
@@ -5862,6 +5896,15 @@ begin
     result := cspSocketClosed
   else
     result := cspNoData;
+end;
+
+function TCrtSocket.SockReceiveHasData: integer;
+begin
+  if SockIsDefined then
+    if Assigned(fSecure) then
+      result := fSecure.ReceivePending // data available in the TLS buffers
+    else
+      result := fSock.HasData; // data available on the socket itself
 end;
 
 function TCrtSocket.SockReceiveString: RawByteString;
