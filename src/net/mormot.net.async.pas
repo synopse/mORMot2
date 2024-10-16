@@ -123,8 +123,8 @@ type
     // - uses its own reentrant implementation, faster/lighter than TOSLock
     fRW: array[boolean] of record
       Lock: PtrUInt;
-      ThreadID: TThreadID;
-      RentrantCount: integer;
+      ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
+      ReentrantCount: TThreadID; // fake integer, but aligned to ThreadID field
     end;
     /// low-level TLS context
     fSecure: INetTls;
@@ -1474,16 +1474,16 @@ begin
     if Lock <> 0 then
       if ThreadID = tid then
       begin
-        inc(RentrantCount);
+        inc(PInteger(@ReentrantCount)^); // counter stored as TThreadID field
         result := true;
       end
       else
         exit
-    else if LockedExc(Lock, 1, 0) then
+    else if LockedExc(Lock, 1, 0) then // this thread we acquired this lock
     begin
       include(fFlags, fWasActive);
       ThreadID := tid;
-      RentrantCount := 1;
+      ReentrantCount := TThreadID(1); // reset reentrant counter
       result := true;
     end;
 end;
@@ -1493,8 +1493,8 @@ begin
   if self <> nil then
     with fRW[writer and fLockMax] do
     begin
-      dec(RentrantCount);
-      if RentrantCount <> 0 then
+      dec(PInteger(@ReentrantCount)^); // counter stored as TThreadID field
+      if ReentrantCount <> TThreadID(0) then
         exit;
       Lock := 0;
       ThreadID := TThreadID(0);
@@ -1638,7 +1638,8 @@ begin
        (TPollAsyncConnection(tag).fHandle <> 0) and
        // another atpReadPending thread may currently own this connection
        // (occurs if PollForPendingEvents was called in between)
-       (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0) then
+       (TPollAsyncConnection(tag).fRW[{write=}false].
+          ReentrantCount = TThreadID(0)) then
     begin
       exclude(TPollAsyncConnection(tag).fFlags, fReadPending);
       result := true;
@@ -1743,13 +1744,15 @@ begin
       {$ifdef USE_WINIOCP}
       fDebugLog.Add.Log(sllDebug, 'Stop(%) sock=% handle=% r=% w=%',
         [caller, pointer(sock), connection.Handle,
-         connection.fRW[false].RentrantCount,
-         connection.fRW[true].RentrantCount], self);
+         PInteger(@connection.fRW[false].ReentrantCount)^,
+         PInteger(@connection.fRW[true].ReentrantCount)^], self);
       {$else}
       fDebugLog.Add.Log(sllDebug, 'Stop(%) sock=% handle=% r=%% w=%%',
         [caller, pointer(sock), connection.Handle,
-         connection.fRW[false].RentrantCount, _SUB[fSubRead in connection.fFlags],
-         connection.fRW[true].RentrantCount, _SUB[fSubWrite in connection.fFlags]],
+         PInteger(@connection.fRW[false].ReentrantCount)^,
+         _SUB[fSubRead in connection.fFlags],
+         PInteger(@connection.fRW[true].ReentrantCount)^,
+         _SUB[fSubWrite in connection.fFlags]],
          self);
       {$endif USE_WINIOCP}
     if sock <> nil then
