@@ -312,6 +312,10 @@ type
       loerr: system.PInteger = nil): TNetEvents;
     /// compute how many bytes are actually pending in the receiving queue
     function RecvPending(out pending: integer): TNetResult;
+    /// return how many pending bytes are in the receiving queue
+    // - returns 0 if no data is available, or if the connection is broken: call
+    // RecvPending() to check for the actual state of the connection
+    function HasData: integer;
     /// wrapper around WaitFor / RecvPending / Recv methods for a given time
     function RecvWait(ms: integer; out data: RawByteString;
       terminated: PTerminated = nil): TNetResult;
@@ -1797,6 +1801,10 @@ type
     // actual wait may be a less than TimeOutMS if < 16 (select bug/feature)
     function SockReceivePending(TimeOutMS: integer;
       loerr: system.PInteger = nil): TCrtSocketPending;
+    /// return how many pending bytes are in the receiving socket or INetTls queue
+    // - returns 0 if no data is available, or if the connection is broken: call
+    // SockReceivePending() to check for the actual state of the connection
+    function SockReceiveHasData: integer;
     /// returns the socket input stream as a string
     // - returns up to 64KB from the OS or TLS buffers within TimeOut
     function SockReceiveString: RawByteString;
@@ -3004,6 +3012,12 @@ begin
     result := nrNoSocket
   else
     result := NetCheck(ioctlsocket(TSocket(@self), FIONREAD, @pending));
+end;
+
+function TNetSocketWrap.HasData: integer;
+begin
+  if RecvPending(result) <> nrOk then
+    result := 0;
 end;
 
 function TNetSocketWrap.RecvWait(ms: integer;
@@ -5862,6 +5876,15 @@ begin
     result := cspSocketClosed
   else
     result := cspNoData;
+end;
+
+function TCrtSocket.SockReceiveHasData: integer;
+begin
+  if SockIsDefined then
+    if Assigned(fSecure) then
+      result := fSecure.ReceivePending // data available in the TLS buffers
+    else
+      result := fSock.HasData; // data available on the socket itself
 end;
 
 function TCrtSocket.SockReceiveString: RawByteString;
