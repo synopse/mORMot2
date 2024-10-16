@@ -1479,7 +1479,7 @@ begin
       end
       else
         exit
-    else if LockedExc(Lock, 1, 0) then // this thread we acquired this lock
+    else if LockedExc(Lock, 1, 0) then // this thread just acquired the lock
     begin
       include(fFlags, fWasActive);
       ThreadID := tid;
