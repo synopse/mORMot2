@@ -5839,8 +5839,7 @@ begin
            ChunkSize, rd, pos, fServer, fPort], result);
     inc(pos, rd);
     if aCheckRecv and
-       (SockReceivePending({timeout=}0) in [cspDataAvailable,
-          cspDataAvailableOnClosedSocket]) then
+       (SockReceiveHasData > 0) then // SockReceivePending() is not enough
     begin
       result := nrRetry; // received e.g. 413 HTTP_PAYLOADTOOLARGE
       break;
