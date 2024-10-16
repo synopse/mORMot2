@@ -381,6 +381,32 @@ begin
   result := abs(x);
 end;
 
+function strchr(p: PAnsiChar; chr: AnsiChar): PAnsiChar; cdecl;
+begin // needed since 3.46.1
+  result := nil;
+  if p <> nil then
+    while p^ <> chr do
+      if p^ = #0 then
+        exit // not found
+      else
+        inc(p);
+  result := p;
+end;
+
+function memchr(p: pointer; chr: byte; n: PtrInt): PAnsiChar; cdecl;
+var
+  i: PtrInt;
+begin // needed since 3.46.1
+  result := p;
+  if p = nil then
+    exit;
+  i := ByteScanIndex(p, n, chr); // use SSE2
+  if i >= 0 then
+    inc(result, i)
+  else
+    result := nil; // not found
+end;
+
 {$endif CPU32}
 
 {$endif OSWINDOWS}
