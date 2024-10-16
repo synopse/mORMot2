@@ -1619,7 +1619,7 @@ type
     fCurrentSeq: cardinal;
     fBroadcastEvent: TSynEvent;   // e.g. for pcoUseFirstResponse
     fBroadcastAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
-    fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize Broadcast()
+    fBroadcastSafe: TOSLightLock; // non-reentrant, to serialize Broadcast()
     fBroadcastIpPort: RawUtf8;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;

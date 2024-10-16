@@ -1716,13 +1716,17 @@ function GetComputerUuid(disable: TGetComputerUuid = []): RawUtf8; overload;
 {$ifdef OSWINDOWS}
 
 type
-  TThreadID     = DWORD;
+  // publish basic WinAPI types to avoid including "Windows" in our uses clause
   TMessage      = Messages.TMessage;
   HWND          = Windows.HWND;
   BOOL          = Windows.BOOL;
   LARGE_INTEGER = Windows.LARGE_INTEGER;
   TFileTime     = Windows.FILETIME;
   PFileTime     = ^TFileTime;
+
+  /// Windows handle for a Thread - for cross-platform/cross-compiler clarity
+  // - note that on POSIX TThreadID is a pointer and not a 32-bit file handle
+  TThreadID = DWORD;
 
   /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
@@ -4069,9 +4073,9 @@ procedure RedirectCode(Func, RedirectFunc: pointer);
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
 type
-  /// a lightweight exclusive non-rentrant lock, stored in a PtrUInt value
+  /// a lightweight exclusive non-reentrant lock, stored in a PtrUInt value
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
-  // - warning: methods are non rentrant, i.e. calling Lock twice in a raw would
+  // - warning: methods are non reentrant, i.e. calling Lock twice in a raw would
   // deadlock: use TRWLock or TSynLocker/TOSLock for reentrant methods
   // - several lightlocks, each protecting a few variables (e.g. a list), may
   // be more efficient than a more global TOSLock/TRWLock
@@ -4097,18 +4101,18 @@ type
     // - does nothing - just for compatibility with TOSLock
     procedure Done;
       {$ifdef HASINLINE} inline; {$endif}
-    /// enter an exclusive non-rentrant lock
+    /// enter an exclusive non-reentrant lock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// try to enter an exclusive non-rentrant lock
+    /// try to enter an exclusive non-reentrant lock
     // - if returned true, caller should eventually call UnLock()
     // - could also be used to thread-safely acquire a shared resource
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// check if the non-rentrant lock has been acquired
+    /// check if the non-reentrant lock has been acquired
     function IsLocked: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// leave an exclusive non-rentrant lock
+    /// leave an exclusive non-reentrant lock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -4153,18 +4157,18 @@ type
     /// leave a non-upgradable multiple reads lock
     procedure ReadUnLock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// enter a non-rentrant non-upgradable exclusive write lock
+    /// enter a non-reentrant non-upgradable exclusive write lock
     // - warning: nested WriteLock call after a ReadLock or another WriteLock
     // would deadlock
     procedure WriteLock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// try to enter a non-rentrant non-upgradable exclusive write lock
+    /// try to enter a non-reentrant non-upgradable exclusive write lock
     // - if returned true, caller should eventually call WriteUnLock
     // - warning: nested TryWriteLock call after a ReadLock or another WriteLock
     // would deadlock
     function TryWriteLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// leave a non-rentrant non-upgradable exclusive write lock
+    /// leave a non-reentrant non-upgradable exclusive write lock
     procedure WriteUnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -4247,7 +4251,7 @@ type
     // - the write lock is exclusive
     // - calling WriteLock within a ReadWriteLock is allowed and won't block
     // - but calling WriteLock within a ReadOnlyLock would deaadlock
-    // - this method is rentrant from a single thread
+    // - this method is reentrant from a single thread
     // - typical usage is the following:
     // ! rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
     // ! try
@@ -4268,10 +4272,10 @@ type
   end;
   PRWLock = ^TRWLock;
 
-  /// the standard rentrant lock supplied by the Operating System
+  /// the standard reentrant lock supplied by the Operating System
   // - maps TRTLCriticalSection, i.e. calls Win32 API or pthreads library
   // - don't forget to call Init and Done to properly initialize the structure
-  // - if you do require a non-rentrant/recursive lock, consider TOSLightLock
+  // - if you do require a non-reentrant/recursive lock, consider TOSLightLock
   // - same signature as TLightLock/TOSLightLock, usable as compile time alternatives
   {$ifdef USERECORDWITHMETHODS}
   TOSLock = record
@@ -4299,7 +4303,7 @@ type
       {$ifdef FPC} inline; {$endif}
   end;
 
-  /// the fastest non-rentrant lock supplied by the Operating System
+  /// the fastest non-reentrant lock supplied by the Operating System
   // - calls Slim Reader/Writer (SRW) Win32 API in exclusive mode or directly
   // the pthread_mutex_*() library calls in non-recursive/fast mode on Linux
   // - on XP, where SRW are not available, fallback to a TLightLock
@@ -4308,7 +4312,7 @@ type
   // - to protect a very small code section of a few CPU cycles with no Init/Done
   // needed, and a lower footprint, you may consider our TLightLock
   // - same signature as TOSLock/TLightLock, usable as compile time alternatives
-  // - warning: non-rentrant, i.e. nested Lock calls would block, as TLightLock
+  // - warning: non-reentrant, i.e. nested Lock calls would block, as TLightLock
   // - no TryLock is defined on Windows, because TryAcquireSRWLockExclusive()
   // raised some unexpected EExternalException C000026 NT_STATUS_RESOURCE_NOT_OWNED
   // ("Attempt to release mutex not owned by caller") during testing

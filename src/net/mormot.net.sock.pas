@@ -3637,7 +3637,7 @@ begin
     result := Text[WithoutName];
     ok := (result <> '') or
           (Tix = now);
-    Safe.UnLock; // TLightLock is not rentrant
+    Safe.UnLock; // TLightLock is not reentrant
     if ok then
       exit;
     addr := GetMacAddresses(UpAndDown); // will call Safe.Lock/UnLock
