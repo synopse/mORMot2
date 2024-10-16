@@ -6,7 +6,7 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.44.2 engine with optional AES encryption
+    Statically linked SQLite3 3.46.1 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
@@ -94,7 +94,7 @@ const
   /// the exact version expected by the current state of this unit
   // - an error message is generated via DisplayFatalError() if the statically
   // linked sqlite3.o(bj) does not match this expected value
-  EXPECTED_SQLITE3_VERSION = '3.44.2';
+  EXPECTED_SQLITE3_VERSION = '3.46.1';
 
   /// the github release tag associated with this EXPECTED_SQLITE3_VERSION
   // - to be used if you don't want the latest version of sqlite3, but the very
