@@ -2464,11 +2464,11 @@ procedure ReadBarrier; {$ifndef CPUINTEL} inline; {$endif}
 {$endif ISDELPHI}
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
-{$ifdef CPUINTEL}
+{$if defined(CPUINTEL) or defined(ISDELPHI)}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$else}
 procedure mul64x64(constref left, right: QWord; out product: THash128Rec); inline;
-{$endif CPUINTEL}
+{$ifend defined(CPUINTEL) or defined(ISDELPHI)}
 
 
 { ************ Low-level Functions Manipulating Bits }
@@ -2824,7 +2824,7 @@ procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
   {$ifndef CPUINTEL} inline; {$endif}
 
 {$ifdef ISDELPHI}
-
+{$ifdef CPUX86}
 /// return the position of the leftmost set bit in a 32-bit value
 // - returns 255 if c equals 0
 // - this function is an intrinsic on FPC
@@ -2834,7 +2834,7 @@ function BSRdword(c: cardinal): cardinal;
 // - returns 255 if q equals 0
 // - this function is an intrinsic on FPC
 function BSRqword(const q: Qword): cardinal;
-
+{$endif CPUX86}
 {$endif ISDELPHI}
 
 {$ifdef ASMINTEL}
@@ -2887,8 +2887,8 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 
 // fallback to RTL versions on non-INTEL or PIC platforms by default
 // and mormot.core.os.posix.inc redirects them to libc memset/memmove
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) {$ifdef FPC} = FillChar {$endif};
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) {$ifdef FPC} = Move {$endif};
 
 {$endif ASMINTEL}
 
@@ -4373,6 +4373,10 @@ uses
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
   {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
+{$else}
+   {$ifndef MSWINDOWS}
+   Uses mormot.core.posix.delphi;
+   {$endif}
 {$endif FPC}
 
 
@@ -6715,6 +6719,8 @@ begin
   high := len - 1;
 end;
 
+{$endif FPC}
+
 procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlined
 var
   Y100: cardinal;
@@ -6724,7 +6730,7 @@ begin
   res.M := Y {%H-}- Y100 * 100; // avoid div twice
 end;
 
-{$endif FPC}
+
 
 function AddInteger(var Values: TIntegerDynArray; Value: integer; NoDuplicates: boolean): boolean;
 var
@@ -10036,7 +10042,7 @@ begin
   {$endif CPU64}
 end;
 
-procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
+procedure mul64x64({$ifdef FPC} constref {$else} const {$endif} left, right: QWord; out product: THash128Rec);
 var
   l: TQWordRec absolute left;
   r: TQWordRec absolute right;
@@ -10238,6 +10244,39 @@ const
   AT_HWCAP  = 16;
   AT_HWCAP2 = 26;
 
+
+{$ifdef _ISDELPHI_dummy}
+procedure TestCpuFeatures;
+Type PCharArray = array[0..2] of Pchar;
+     PPCharArray = ^PCharArray;
+var
+  p: PPChar;
+  pHelp: PPCharArray;
+  caps: TArmHwCaps;
+begin
+  // C library function getauxval() is not always available -> use system.envp
+  caps := [];
+  try
+    p := system.envp;
+    while p^ <> nil do
+      inc(p);
+    inc(p); // auxv is located after the last textual environment variable
+    pHelp:= PPCharArray(p);
+    repeat
+      if PtrUInt(pHelp^[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
+        PCardinalArray(@caps)[0] := PtrUInt(pHelp^[1])
+      else if PtrUInt(pHelp^[0]) = AT_HWCAP2 then
+        PCardinalArray(@caps)[1] := PtrUInt(pHelp^[1]);
+      p := @(pHelp^[2]);
+      pHelp:= PPCharArray(p);
+    until pHelp^[0] = nil;
+  except
+    // may happen on some untested Operating System
+    caps := []; // is likely to be invalid
+  end;
+  CpuFeatures := caps;
+end;
+{$else}
 procedure TestCpuFeatures;
 var
   p: PPChar;
@@ -10263,7 +10302,7 @@ begin
   end;
   CpuFeatures := caps;
 end;
-
+{$endif}
 {$else}
 
 procedure TestCpuFeatures;
@@ -12684,6 +12723,12 @@ procedure InitializeUnit;
 begin
   assert(ord(high(TSynLogLevel)) = 31);
   assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
+  {$ifndef ASMINTEL}
+     {$ifndef  FPC}
+     FillcharFast:= DefaultFillCharFast;
+     MoveFast:= DefaultMoveFast;
+     {$endif}
+  {$endif}
   // initialize internal constants
   crc32tabInit(2197175160, crc32ctab); // crc32c() reversed polynom
   crc32tabInit(3988292384, crc32tab);  // crc32() = zlib's reversed polynom

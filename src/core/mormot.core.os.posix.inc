@@ -5,6 +5,7 @@
    POSIX API calls for FPC, as used by mormot.core.os.pas
 }
 
+{$ifndef ISDELPHI}
 uses
   baseunix,
   unix,
@@ -29,10 +30,27 @@ uses
   termio,
   dl,
   initc; // we statically link the libc for some raw calls
+{$else}
+uses
+  Posix.dlfcn,
+//  Posix.UniStd,
+//  Posix.Stdio,
+  Posix.Time,
+  Posix.SysTime
+//  Posix.Errno,
+//  Posix.SysStat,
+//  Posix.SysMman,
+//  Posix.SysUtsname
+;
+{$endif}
 
-{$ifdef UNICODE}
-  'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
-{$endif UNICODE}
+{$ifndef ISDELPHI}
+  {$ifdef UNICODE}
+    'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
+  {$endif UNICODE}
+{$else}
+   {$MESSAGE WARN 'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char - this may not be 100% save for DELPHI!'}
+{$endif}
 
 
 // define some raw text functions, to avoid linking mormot.core.text
@@ -173,12 +191,20 @@ end;
 
 procedure LibraryClose(Lib: TLibHandle);
 begin
+  {$ifndef ISDELPHI}
   dlclose(pointer(Lib));
+  {$else}
+  dlclose(Lib);
+  {$endif}
 end;
 
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
 begin
+  {$ifndef ISDELPHI}
   result := dlsym(pointer(Lib), ProcName);
+  {$else}
+  result := dlsym(Lib, ProcName);
+  {$endif}
 end;
 
 function LibraryError: string;
@@ -191,6 +217,7 @@ end;
 
 procedure TIcuLibrary.Done;
 begin
+  {$ifndef ISDELPHI}
   if icui18n <> nil then
     dlclose(icui18n);
   if icu <> nil then
@@ -200,6 +227,17 @@ begin
   icu := nil;
   icudata := nil;
   icui18n := nil;
+  {$else}
+  if icui18n <> 0 then
+    dlclose(icui18n);
+  if icu <> 0 then
+    dlclose(icu);
+  if icudata <> 0 then
+    dlclose(icudata);
+  icu := 0;
+  icudata := 0;
+  icui18n := 0;
+  {$endif}
   @ucnv_open := nil;
 end;
 
@@ -211,6 +249,7 @@ begin
 end;
 
 function IsWideStringManagerProperlyInstalled: boolean;
+{$ifndef ISDELPHI}
 const
   u: WideChar = #$2020; // should convert to dagger glyph #134 in CP 1252
 var
@@ -225,6 +264,11 @@ begin
     result := false;
   end;
 end;
+{$else}
+begin
+  result:= true;
+end;
+{$endif}
 
 procedure TIcuLibrary.DoLoad(const LibName: TFileName; Version: string);
 const
@@ -272,49 +316,49 @@ begin
     Loaded := true;
     if LibName <> '' then
     begin
-      icu := dlopen(pointer(LibName), RTLD_LAZY);
-      if icu = nil then
+      icu := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}(LibName), RTLD_LAZY);
+      if icu = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
         exit;
     end
     else
     begin
       {$ifdef OSDARWIN}
       // Mach OS has its own ICU set of libraries
-      icu := dlopen('libicuuc.dylib', RTLD_LAZY);
-      if icu <> nil then
-        icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
+      icu := dlopen({$ifdef ISDELPHI}MarshaledAString({$endif}'libicuuc.dylib'{$ifdef ISDELPHI}){$endif}, RTLD_LAZY);
+      if icu <> {$ifdef ISDELPHI} 0 {$else} nil {$endif}  then
+        icui18n := dlopen({$ifdef ISDELPHI}MarshaledAString({$endif}'libicui18n.dylib'{$ifdef ISDELPHI}){$endif}, RTLD_LAZY);
       {$else}
       // libicudata should be loaded first because other two depend on it
-      icudata := dlopen('libicudata.so', RTLD_LAZY);
+      icudata := dlopen({$ifdef ISDELPHI}MarshaledAString({$endif}'libicudata.so'{$ifdef ISDELPHI}){$endif}, RTLD_LAZY);
       {$ifndef OSANDROID}
-      if icudata = nil then
+      if icudata = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
       begin
         // there is no link to the library -> try e.g. 'libicudata.so.67'
         if Version <> '' then
-          icudata := dlopen(pointer('libicudata.so.' + Version), RTLD_LAZY);
-        if icudata = nil then
+          icudata := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicudata.so.' + Version), RTLD_LAZY);
+        if icudata = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
           for i := ICU_MAX downto ICU_MIN do
           begin
             str(i, v);
-            icudata := dlopen(pointer('libicudata.so.' + v), RTLD_LAZY);
-            if icudata <> nil then
+            icudata := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicudata.so.' + v), RTLD_LAZY);
+            if icudata <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
             begin
               Version := v;
               break;
             end;
           end;
-        if icudata <> nil then
+        if icudata <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
           so := '.' + Version;
       end;
       {$endif OSANDROID}
-      if icudata <> nil then
+      if icudata <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
       begin
-        icu := dlopen(pointer('libicuuc.so' + so), RTLD_LAZY);
-        if icu <> nil then
-          icui18n := dlopen(pointer('libicui18n.so' + so), RTLD_LAZY);
+        icu := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicuuc.so' + so), RTLD_LAZY);
+        if icu <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
+          icui18n := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicui18n.so' + so), RTLD_LAZY);
       end;
       {$endif OSDARWIN}
-      if icui18n = nil then
+      if icui18n = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
       begin
         // we did not find any ICU installed -> ensure iconv/RTL fallback is ok
         if not IsWideStringManagerProperlyInstalled then
@@ -326,14 +370,14 @@ begin
     end;
     // ICU append a version prefix to all its functions e.g. ucnv_open_66
     if (Version <> '') and
-       (dlsym(icu, pointer('ucnv_open_' + Version)) <> nil) then
+       (dlsym(icu, {$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('ucnv_open_' + Version)) <> nil) then
       vers := '_' + Version // matched the explicit version
     else
     begin
       {$ifdef OSANDROID}
       for i := high(ICU_VER) downto 1 do
       begin
-        if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
+        if dlsym(icu, {$ifdef ISDELPHI}MarshaledAString{$else} pointer {$endif}(NAMES[0] + ICU_VER[i])) <> nil then
         begin
           vers := ICU_VER[i];
           break;
@@ -345,7 +389,7 @@ begin
         for i := ICU_MAX downto ICU_MIN do
         begin
           str(i, v);
-          if dlsym(icu, pointer('ucnv_open_' + v)) <> nil then
+          if dlsym(icu, {$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('ucnv_open_' + v)) <> nil then
           begin
             vers := '_' + v;
             break;
@@ -355,7 +399,7 @@ begin
     P := @@ucnv_open;
     for i := 0 to high(NAMES) do
     begin
-      P[i] := dlsym(icu, pointer(NAMES[i] + vers));
+      P[i] := dlsym(icu, {$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}(NAMES[i] + vers));
       if P[i] = nil then
       begin
         @ucnv_open := nil;
@@ -429,8 +473,15 @@ begin
   // cwstring as fallback, using iconv on systems where ICU is not available
   SetString(U1, A, AL);
   SetString(U2, B, BL);
+  {$ifndef ISDELPHI}
   result := widestringmanager.CompareUnicodeStringProc(
     U1, U2, TCompareOptions(flags));
+  {$else}
+  if flags and NORM_IGNORECASE <> 0 then
+     result:= CompareText(U1, U2)
+  else
+     result:= CompareStr(U1, U2);
+  {$endif}
 end;
 
 function CompareStringW(locale, flags: DWORD;
@@ -457,9 +508,20 @@ function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
   AL, WL: PtrInt): PtrInt;
 var
   tmp: UnicodeString;
+  {$ifdef ISDELPHI}
+  Source: TBytes;
+  Dest: TBytes;
+  {$endif}
 begin
+  {$ifndef ISDELPHI}
   // cwstring as fallback, using iconv on systems where ICU is not available
   widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
+  {$else}
+  SetLength(Source, AL);
+  Move(A^, Source[0], AL);
+  Dest:= TEncoding.Convert(TMBCSEncoding.Create(CodePage), TEncoding.Unicode, Source);
+  tmp:= TEncoding.Unicode.GetString(Dest);
+  {$endif}
   result := length(tmp);
   if result > WL then
     result := WL;
@@ -493,9 +555,26 @@ function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
   WL, AL: PtrInt): PtrInt;
 var
   tmp: RawByteString;
+  {$ifdef ISDELPHI}
+  Source: TBytes;
+  Dest: TBytes;
+  encodingWithCP: TEncoding;
+  {$endif}
 begin
+  {$ifndef ISDELPHI}
   // cwstring as fallback, using iconv on systems where ICU is not available
   widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
+  {$else}
+  SetLength(Source, AL * SizeOf(WideChar));
+  Move(A^, Source[0], AL * SizeOf(WideChar));
+  encodingWithCP:= TMBCSEncoding.Create(CodePage);
+  try
+    Dest:= TEncoding.Convert(TEncoding.Unicode, encodingWithCP, Source);
+    tmp:= encodingWithCP.GetString(Dest);
+  finally
+    FreeAndNil(encodingWithCP);
+    end;
+  {$endif}
   result := length(tmp);
   if result > AL then
     result := AL;
@@ -763,24 +842,24 @@ function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_getres';
 
 {$else}
+  {$ifndef ISDELPHI}
+  const
+    CLOCK_REALTIME         = 0;
+    CLOCK_MONOTONIC        = 1;
+    CLOCK_REALTIME_COARSE  = 5; // see http://lwn.net/Articles/347811
+    CLOCK_MONOTONIC_COARSE = 6;
+    CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
 
-const
-  CLOCK_REALTIME         = 0;
-  CLOCK_MONOTONIC        = 1;
-  CLOCK_REALTIME_COARSE  = 5; // see http://lwn.net/Articles/347811
-  CLOCK_MONOTONIC_COARSE = 6;
-  CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
+  // libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
+  // is compiled without FPC_USE_LIBC defined and do a syscall each time
+  //   GetTickCount64 fpc    2 494 563 op/sec
+  //   GetTickCount64 libc 119 919 893 op/sec
+  function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
+    cdecl external clib name 'clock_gettime'; // LIBC_SUFFIX fails on CentOS 7
 
-// libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
-// is compiled without FPC_USE_LIBC defined and do a syscall each time
-//   GetTickCount64 fpc    2 494 563 op/sec
-//   GetTickCount64 libc 119 919 893 op/sec
-function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
-  cdecl external clib name 'clock_gettime'; // LIBC_SUFFIX fails on CentOS 7
-
-function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl external clib name 'gettimeofday' + LIBC_SUFFIX;
-
+  function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+    cdecl external clib name 'gettimeofday' + LIBC_SUFFIX;
+  {$endif ISDELPHI}
 {$endif OSBSD}
 
 var
@@ -817,7 +896,7 @@ end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
-  r : TTimeSpec;
+  r : {$ifdef ISDELPHI} timespec {$else} TTimeSpec {$endif ISDELPHI} ;
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @r);
   // convert from nanoseconds into microseconds
@@ -876,7 +955,11 @@ var
 begin
   u.tv_sec := utctime;
   u.tv_usec := 0;
+  {$ifdef ISDELPHI}
+  result := settimeofday(@u, nil) = 0;
+  {$else}
   result := fpsettimeofday(@u, nil) = 0;
+  {$endif ISDELPHI}
 end;
 
 function UnixMSTimeUtcFast: TUnixMSTime;

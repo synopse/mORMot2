@@ -400,6 +400,8 @@
     // FPC SEH is not fully efficient and generate some additional code/calls
   {$ifend}
 
+  {$define HASRTLCRITICALSECTION}
+
   // note: you may remove all unexpexted hints by setting in your project options
   // -vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
 
@@ -418,17 +420,77 @@
     {$WARN 6060 off} // case statement does not handle all possible cases
   {$endif ISFPC33}
 
-
 {$else FPC}
 
 (********************** Delphi Conditionals **********************)
 
   {$ifndef MSWINDOWS}
-  'Kylix or Delphi for MacOS/Linux/Mobile are unsupported'
-  '-> we recommend using FPC for POSIX platforms'
-  {$endif MSWINDOWS}
+//  'Kylix or Delphi for MacOS/Linux/Mobile are unsupported'
+//  '-> we recommend using FPC for POSIX platforms'
 
-  {$define OSWINDOWS}
+    {$define OSPOSIX} // a POSIX/BSD system
+    {$define DELPHIPOSIX}
+    {$ifdef BSD}
+      // conditionals for Darwin and BSD family like OpenBSD/FreeBSD
+      {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD + OSDARWIN
+      {$ifdef DARWIN}
+        {$define OSDARWIN}
+        {$define DELPHIDARWIN}
+        {$ifdef CPUINTEL}
+          {$define FPC_PIC}     // may have not be defined in compiler options
+        {$endif CPUINTEL}
+        {$define NOPATCHRTL}    // don't mess with asm stuff
+        {$define DISABLE_SSE42} // circumvent clang asm bugs
+      {$else}
+        {$define OSBSD}         // OSX has some non-standard API calls
+        {$define DELPHIBSD}
+        {$ifdef OPENBSD}
+          {$define OSOPENBSD}   // OSBDS = OSOPENBSD + OSFREEBSD
+          {$ifdef CPUX86}
+            {$define FPC_PIC}
+          {$endif CPUX86}
+        {$endif OPENBSD}
+        {$ifdef FREEBSD}
+          {$define OSFREEBSD}
+        {$endif FREEBSD}
+      {$endif DARWIN}
+    {$else}
+      {$ifdef LINUX}
+        // conditionals for Linux
+        {$define OSLINUX}       // e.g. to disable epoll API
+        {$define DELPHILINUX}
+        {$define OSLINUXANDROID}
+        {$ifdef CPUX64}
+          {$define OSLINUXINTEL}
+          {$define OSLINUXX64}
+        {$endif CPUX64}
+        {$ifdef CPUX86}
+          {$define OSLINUXINTEL}
+          {$define OSLINUXX86}
+        {$endif CPUX86}
+      {$else}
+        {$ifdef ANDROID}
+          // conditionals for Android
+          {$define OSANDROID}
+          {$define DELPHIANDROID}
+          {$define OSLINUXANDROID}
+          {$define NOPATCHRTL}  // don't mess with asm stuff
+          {$ifdef CPUX86}
+            {$define FPC_PIC}
+          {$endif CPUX86}
+          {$ifdef CPUAARCH64}
+            {$define OSANDROIDARM64}
+          {$endif CPUAARCH64}
+        {$else}
+        'Unsupported Operating System - yet'
+        {$endif ANDROID}
+      {$endif LINUX}
+    {$endif BSD}
+    {$POINTERMATH ON}
+  {$else}
+    {$define OSWINDOWS}
+    {$define HASRTLCRITICALSECTION}
+  {$endif MSWINDOWS}
 
   {$ifndef CONDITIONALEXPRESSIONS}
   'Delphi 2-5 are not supported'
@@ -454,8 +516,12 @@
   {$endif}
 
   {$define ISDELPHI}
-  {$define CPUINTEL}          // Delphi only for Intel by now
-  {$define ASMINTEL}          // either ASMX86 or ASMX64
+
+  {$if defined(CPUX86) or defined(CPUX64)}
+    {$define CPUINTEL}          // Delphi only for Intel by now
+    {$define ASMINTEL}          // either ASMX86 or ASMX64
+  {$ifend}
+
   {$undef FPC_X64MM}          // FPC only unit
   {$ifdef CPUX64}
     {$undef CPU32}
@@ -465,13 +531,17 @@
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() slower in Delphi Win64
     {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii() - not Delphi Win32
   {$else CPUX64}
-    {$define CPU32}           // Delphi compiler for 32 bit CPU
-    {$undef CPU64}
-    {$define CPU32DELPHI}
-    {$define CPUX86}          // for compatibility with older versions of Delphi
-    {$define ASMX86}          // supports asm with globals
-    {$define CPUX86NOTPIC}    // use "absolute" instead of local register
-    {$define TSYNEXTENDED80}  // only 32-bit has a true x87 extended type
+    {$ifdef CPUARM}
+       {$define CPUARM3264}
+    {$else}
+      {$define CPU32}           // Delphi compiler for 32 bit CPU
+      {$undef CPU64}
+      {$define CPU32DELPHI}
+      {$define CPUX86}          // for compatibility with older versions of Delphi
+      {$define ASMX86}          // supports asm with globals
+      {$define CPUX86NOTPIC}    // use "absolute" instead of local register
+      {$define TSYNEXTENDED80}  // only 32-bit has a true x87 extended type
+    {$endif}
   {$endif CPUX64}
 
   {$define DELPHI_OR_FPC_OLDRTTI}

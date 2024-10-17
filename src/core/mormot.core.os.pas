@@ -33,6 +33,10 @@ uses
   {$ifdef OSWINDOWS}
   Windows, // needed here e.g. for redefinition/redirection of standard types
   Messages,
+  {$ELSE}
+     {$ifdef ISDELPHI}
+     mormot.core.posix.delphi,
+     {$endif ISDELPHI}
   {$endif OSWINDOWS}
   classes,
   contnrs,
@@ -2454,7 +2458,11 @@ type
   // Unicode_InPlaceUpper and Unicode_InPlaceLower function from this unit
   TIcuLibrary = packed object
   protected
+    {$if defined(ISDELPHI) and defined(POSIX)}
+    icu, icudata, icui18n: NativeUInt;
+    {$else}
     icu, icudata, icui18n: pointer;
+    {$ifend}
     Loaded: boolean;
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
@@ -2707,6 +2715,14 @@ type
   /// system-specific structure holding a non-recursive mutex
   TOSLightMutex = TRTLCriticalSection;
 
+{$ifdef ISDELPHI}
+  /// defined as in FPC RTL, to avoid dependency to Windows.pas unit
+  // - note that on POSIX, a THandle is a 32-bit integer, but library or
+  // resource handles are likely to map pointers, i.e. up to a 64-bit integer
+  TLibHandle = THandle;
+{$endif ISDELPHI}
+
+
 {$ifdef OSLINUX}
   {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
@@ -2773,7 +2789,9 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 {$ifdef OSPOSIX}
 
 {$ifndef OSLINUX} // try to stabilize MacOS/BSD pthreads API calls
-  {$define NODIRECTTHREADMANAGER}
+  {$ifndef ISDELPHI}
+     {$define NODIRECTTHREADMANAGER}
+  {$endif ISDELPHI}
 {$endif OSLINUX}
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
