@@ -3511,6 +3511,15 @@ begin
   for i := 1 to ITER do
     Check(IsValidUtf8(PUtf8Char(pointer(people))));
   NotifyTestSpeed('IsValidUtf8(PUtf8Char)', 0, len, @timer, ONLYLOG);
+  {$ifdef ASMX64AVXNOCONST}
+  if cpuHaswell in X64CpuFeatures then
+  begin
+    timer.Start;
+    for i := 1 to ITER do
+      Check(IsValidUtf8Pas(pointer(people), length(people)));
+    NotifyTestSpeed('IsValidUtf8Pas(RawUtf8)', 0, len, @timer, ONLYLOG);
+  end;
+  {$endif ASMX64AVXNOCONST}
   timer.Start;
   for i := 1 to ITER do
     Check(IsValidJson(people));

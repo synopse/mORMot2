@@ -616,7 +616,7 @@ const
   OCI_DURATION_BEGIN_                     = 10;
   OCI_DURATION_CALLOUT_                   = OCI_DURATION_BEGIN_ + 4;
 
-  OCI_DURATION_INVALID: OCIDuration       = $FFFF;                   // Invalid duration
+  OCI_DURATION_INVALID: OCIDuration       = $ffff;                   // Invalid duration
   OCI_DURATION_BEGIN: OCIDuration         = OCI_DURATION_BEGIN_;     // beginning sequence of duration
   OCI_DURATION_NULL: OCIDuration          = OCI_DURATION_BEGIN_ - 1; // null duration
   OCI_DURATION_DEFAULT: OCIDuration       = OCI_DURATION_BEGIN_ - 2; // default

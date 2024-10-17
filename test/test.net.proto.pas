@@ -107,6 +107,7 @@ begin
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 2'), 2);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'one'), 1);
   CheckEqual(FindCustomEnum(MYENUM2TXT, ''), 0);
+  CheckEqual(FindCustomEnum(MYENUM2TXT, 'and'), 0);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 3'), 0);
   for i := 1 to high(RESERVED_KEYWORDS) do
     CheckUtf8(StrComp(pointer(RESERVED_KEYWORDS[i - 1]),
@@ -1381,10 +1382,12 @@ end;
 
 type
   THttpPeerCacheHook = class(THttpPeerCache); // to test protected methods
+  THttpPeerCryptHook = class(THttpPeerCrypt);
 
 procedure TNetworkProtocols._THttpPeerCache;
 var
   hpc: THttpPeerCacheHook;
+  hpc2: THttpPeerCryptHook; // another instance to validate remote decoding
   hps: THttpPeerCacheSettings;
   msg, msg2: THttpPeerCacheMessage;
   i, n, alter: integer;
@@ -1401,41 +1404,48 @@ begin
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret');
       try
-        timer.Start;
-        hpc.MessageInit(pcfBearer, 0, msg);
-        msg.Hash.Algo := hfSHA256;
-        n := 1000;
-        for i := 1 to n do
-        begin
-          msg.Size := i;
-          msg.Hash.Hash.i0 := i;
-          tmp := hpc.MessageEncode(msg);
-          Check(tmp <> '');
-          Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
-          CheckEqual(msg2.Size, i);
+        hpc2 := THttpPeerCryptHook.Create('secret');
+        try
+          hpc2.fSettings := hps;
+          hpc2.AfterSettings;
+          hpc.MessageInit(pcfBearer, 0, msg);
+          msg.Hash.Algo := hfSHA256;
+          timer.Start;
+          n := 1000;
+          for i := 1 to n do
+          begin
+            msg.Size := i;
+            msg.Hash.Hash.i0 := i;
+            tmp := hpc.MessageEncode(msg);
+            Check(tmp <> '');
+            Check(hpc2.MessageDecode(pointer(tmp), length(tmp), msg2), 'hpc2');
+            CheckEqual(msg2.Size, i);
+            Check(CompareMem(@msg, @msg2, SizeOf(msg)));
+          end;
+          NotifyTestSpeed('messages', n * 2, n * 2 * SizeOf(msg), @timer);
+          Check(ToText(msg) = ToText(msg2));
+          timer.Start;
+          n := 10000;
+          for i := 1 to n do
+          begin
+            alter := Random32(length(tmp));
+            inc(PByteArray(tmp)[alter]); // should be detected at crc level
+            Check(not hpc2.MessageDecode(pointer(tmp), length(tmp), msg2), 'alt');
+            dec(PByteArray(tmp)[alter]); // restore
+          end;
+          NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
+          Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2), 'hpc');
           Check(CompareMem(@msg, @msg2, SizeOf(msg)));
+          for i := 1 to 10 do
+            Check(hpc.Ping = nil);
+        finally
+          hpc2.Free;
         end;
-        NotifyTestSpeed('messages', n * 2, n * 2 * SizeOf(msg), @timer);
-        Check(ToText(msg) = ToText(msg2));
-        timer.Start;
-        n := 10000;
-        for i := 1 to n do
-        begin
-          alter := Random32(length(tmp));
-          inc(PByteArray(tmp)[alter]); // should be detected at crc level
-          Check(not hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
-          dec(PByteArray(tmp)[alter]);
-        end;
-        NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
-        Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
-        Check(CompareMem(@msg, @msg2, SizeOf(msg)));
-        for i := 1 to 10 do
-          Check(hpc.Ping = nil);
       finally
         hpc.Free;
       end;
     except
-      // exception here is likely to be port 8089 already used -> continue
+      // exception here is likely to be port 8099 already used -> continue
     end;
   finally
     hps.Free;

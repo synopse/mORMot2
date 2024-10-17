@@ -89,7 +89,7 @@ const
   GSS_C_MECH_CODE = 2;
 
   // Expiration time of 2^32-1 seconds means infinite lifetime
-  GSS_C_INDEFINITE = $FFFFFFFF;
+  GSS_C_INDEFINITE = $ffffffff;
 
   GSS_C_BOTH      = 0;
   GSS_C_INITIATE  = 1;

@@ -951,13 +951,13 @@ type
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
     function IsBannedRaw(ip4: cardinal): boolean;
-    procedure DoRotateRaw;
+    function DoRotateRaw: integer;
     procedure SetMax(Value: cardinal);
     procedure SetSeconds(Value: cardinal);
     procedure SetIP;
   public
     /// initialize the thread-safe storage process
-    // - banseconds should be a power-of-two <= 128
+    // - banseconds should be <= 128, and will be rounded up to a power-of-two
     // - maxpersecond is the maximum number of banned IPs remembered per second
     constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
       banwhiteip: cardinal = cLocalhost32); reintroduce;
@@ -982,16 +982,16 @@ type
     // - implemented via a round-robin list of per-second banned IPs
     // - if you call it at another pace (e.g. every minute), then the list
     // Time-To-Live will follow this unit of time instead of seconds
-    procedure DoRotate;
+    // - returns the number of freed bans
+    function DoRotate: integer;
       {$ifdef HASINLINE} inline; {$endif}
     /// a 32-bit IP4 which should never be banned
     // - is set to cLocalhost32, i.e. 127.0.0.1, by default
     property WhiteIP: cardinal
       read fWhiteIP write fWhiteIP;
     /// how many seconds a banned IP4 should be rejected
-    // - should be a power of two, up to 128, with a default of 4 - the closed
-    // power of two is selected if the Value is not an exact match
-    // - if set, any previous banned IP will be flushed
+    // - will set the closest power of two <= 128, with a default of 4
+    // - when set, any previous banned IP will be flushed
     property Seconds: cardinal
       read fSeconds write SetSeconds;
     /// how many IP can be banned per second
@@ -4736,16 +4736,11 @@ begin
 end;
 
 procedure THttpAcceptBan.SetSeconds(Value: cardinal);
-var
-  v: cardinal;
 begin
-  v := 128; // don't consume too much memory
-  while (Value < v) and
-        (v > 1) do
-    v := v shr 1; // find closest power of two
+  Value := NextPowerOfTwo(MinPtrUInt(Value, 128));
   fSafe.Lock;
   try
-    fSeconds := v;
+    fSeconds := Value; // use closest power of two in 1..128 range
     SetIP;
   finally
     fSafe.UnLock;
@@ -4888,28 +4883,31 @@ begin
             BanIP(ip4)
 end;
 
-procedure THttpAcceptBan.DoRotate;
+function THttpAcceptBan.DoRotate: integer;
 begin
   if (self <> nil) and
      (fCount <> 0) then
-    DoRotateRaw;
+    result := DoRotateRaw
+  else
+    result := 0;
 end;
 
-procedure THttpAcceptBan.DoRotateRaw;
+function THttpAcceptBan.DoRotateRaw: integer;
 var
   n: PtrInt;
   p: PCardinal;
 begin
+  result := 0;
   fSafe.Lock; // very quick O(1) process
   try
     if fCount <> 0 then
     begin
-      n := fSeconds - 1;         // power of two bitmask
-      n := (fLastSec + 1) and n; // per-second round robin
-      fLastSec := n;
+      n := (fLastSec + 1) and (fSeconds - 1); // per-second round robin
+      fLastSec := n; // the oldest slot becomes the current (no memory move)
       p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
-      dec(fCount, p^);
-      p^ := 0;         // the oldest slot becomes the current (no memory move)
+      result := p^;
+      p^ := 0; // void the current slot
+      dec(fCount, result);
     end;
   finally
     fSafe.UnLock;

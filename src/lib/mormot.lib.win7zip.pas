@@ -2218,7 +2218,7 @@ begin
   fExtractCallback := callback;
   try
     E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
-      nil, $FFFFFFFF, ord(Assigned(callback)), self as IArchiveExtractCallback));
+      nil, $ffffffff, ord(Assigned(callback)), self as IArchiveExtractCallback));
   finally
     fExtractCallback := nil;
   end;
@@ -2231,7 +2231,7 @@ begin
   fExtractPathNoSubFolder := nosubfolder;
   try
     E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
-      nil, $FFFFFFFF, 0, self as IArchiveExtractCallback));
+      nil, $ffffffff, 0, self as IArchiveExtractCallback));
   finally
     fExtractPath := '';
   end;

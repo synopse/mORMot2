@@ -302,7 +302,7 @@ type
     fDataRowNullSize: cardinal;
     fDataCurrentRowNullLen: cardinal;
     fDataCurrentRowNull: TByteDynArray;
-    fDataCurrentRowValues: array of pointer;
+    fDataCurrentRowValues: TPointerDynArray;
     fDataCurrentRowValuesStart: pointer;
     fDataCurrentRowValuesSize: cardinal;
     // per-row column type (SQLite3 only) e.g. select coalesce(column,0) from ..
@@ -329,8 +329,10 @@ type
     // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
+    // - a ftBlob field will be returned directly as 8-bit string
     function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column text value as RTL string of the current Row, first Col is 0
+    // - a ftBlob field will be returned as base-64 encoded text
     function ColumnString(Col: integer): string; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
@@ -1651,7 +1653,7 @@ begin
     ftBlob,
     ftUtf8:
       with FromVarBlob(data) do
-        FastSetString(result, Ptr, len);
+        FastSetString(result, Ptr, len); // blob will be returned directly
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnUtf8()', [self]);
   end;
@@ -1677,7 +1679,7 @@ begin
         Utf8DecodeToString(PUtf8Char(Ptr), len, result);
     ftBlob:
       with FromVarBlob(data) do
-        SetString(result, Ptr, len shr 1);
+        result := {$ifdef UNICODE}Ansi7ToString{$endif}(BinToBase64(Ptr, len));
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnString()', [self]);
   end;

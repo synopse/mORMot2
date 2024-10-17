@@ -119,9 +119,9 @@ type
 
 const
   INADDR_ANY       = $00000000;
-  INADDR_LOOPBACK  = $7F000001;
-  INADDR_BROADCAST = $FFFFFFFF;
-  INADDR_NONE      = $FFFFFFFF;
+  INADDR_LOOPBACK  = $7f000001;
+  INADDR_BROADCAST = $ffffffff;
+  INADDR_NONE      = $ffffffff;
   ADDR_ANY	   = INADDR_ANY;
   INVALID_SOCKET   = TSocket(NOT(0));
   SOCKET_ERROR	   = -1;
@@ -178,9 +178,9 @@ const
   // Other NT-specific options
   SO_OPENTYPE              = $7008;
   SO_MAXDG                 = $7009;
-  SO_MAXPATHDG             = $700A;
-  SO_UPDATE_ACCEPT_CONTEXT = $700B;
-  SO_CONNECT_TIME          = $700C;
+  SO_MAXPATHDG             = $700a;
+  SO_UPDATE_ACCEPT_CONTEXT = $700b;
+  SO_CONNECT_TIME          = $700c;
 
   SOMAXCONN       = $7fffffff;
 
@@ -1719,7 +1719,7 @@ begin
     begin
       e := GetLastError;
       fOnLog(sllDebug, 'PrepareNext(%%) error % %',
-        [IOCP_EVENT[event], pointer(o^.socket), e, WinErrorConstant(e)], self);
+        [IOCP_EVENT[event], pointer(o^.socket), e, WinErrorConstant(e)^], self);
     end;
 end;
 
@@ -2002,7 +2002,7 @@ begin
       dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
       cred.New.cTlsParameters := 1;
       cred.New.pTlsParameters := @cred.Tls;
-      cred.Tls.grbitDisabledProtocols := not cardinal(SP_PROT_TLS_SAFE);
+      cred.Tls.grbitDisabledProtocols := SP_PROT_TLS_UNSAFE;
     end;
     cred.New.dwFlags := dwFlags;
     if paServCred <> nil then

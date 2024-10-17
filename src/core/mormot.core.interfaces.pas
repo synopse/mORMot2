@@ -542,7 +542,7 @@ type
     fDocVariantOptions: TDocVariantOptions;
     fJsonParserOptions: TJsonParserOptions;
     {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
-    fFakeVTable: array of pointer;
+    fFakeVTable: TPointerDynArray;
     {$endif CPUX86}
     fMethodIndexCallbackReleased: integer;
     fMethodIndexCurrentFrameCallback: integer;
@@ -4615,7 +4615,7 @@ end;
 
 var
   // reuse the very same JITted stubs for all interfaces
-  _FAKEVMT: array of pointer;
+  _FAKEVMT: TPointerDynArray;
 
 // JIT MAX_METHOD_COUNT VMT stubs for every method of any interface
 // - internal function protected by VmtSafe.Lock

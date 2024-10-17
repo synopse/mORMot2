@@ -479,7 +479,7 @@ type
     fOnBeforeRequest: TOnHttpServerRequest;
     fOnAfterRequest: TOnHttpServerRequest;
     fOnAfterResponse: TOnHttpServerAfterResponse;
-    fMaximumAllowedContentLength: cardinal;
+    fMaximumAllowedContentLength: Int64;
     fCurrentConnectionID: integer;  // 31-bit NextConnectionID sequence
     /// set by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
@@ -504,7 +504,7 @@ type
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); virtual;
-    procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
+    procedure SetMaximumAllowedContentLength(aMax: Int64); virtual;
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); virtual;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); virtual;
     function GetHttpQueueLength: cardinal; virtual; abstract;
@@ -655,7 +655,7 @@ type
     // - default to 0, meaning any input size is allowed
     // - returns HTTP_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
     // header overflow the supplied number of bytes
-    property MaximumAllowedContentLength: cardinal
+    property MaximumAllowedContentLength: Int64
       read fMaximumAllowedContentLength write SetMaximumAllowedContentLength;
     /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
     // - see also NginxSendFileFrom() method
@@ -1619,7 +1619,7 @@ type
     fCurrentSeq: cardinal;
     fBroadcastEvent: TSynEvent;   // e.g. for pcoUseFirstResponse
     fBroadcastAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
-    fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize Broadcast()
+    fBroadcastSafe: TOSLightLock; // non-reentrant, to serialize Broadcast()
     fBroadcastIpPort: RawUtf8;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;
@@ -1839,7 +1839,7 @@ type
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); override;
-    procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
+    procedure SetMaximumAllowedContentLength(aMax: Int64); override;
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); override;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
     procedure SetLoggingServiceName(const aName: RawUtf8);
@@ -3423,7 +3423,7 @@ begin
     result := 0;
 end;
 
-procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
+procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: Int64);
 begin
   fMaximumAllowedContentLength := aMax;
 end;
@@ -3444,156 +3444,156 @@ end;
 const
   // was generated from InitNetTlsContextSelfSignedServer commented lines
   PRIVKEY_PFX: array[0..2400] of byte = (
-    $30, $82, $09, $5D, $02, $01, $03, $30, $82, $09, $27, $06, $09, $2A, $86, $48,
-    $86, $F7, $0D, $01, $07, $01, $A0, $82, $09, $18, $04, $82, $09, $14, $30, $82,
-    $09, $10, $30, $82, $03, $C7, $06, $09, $2A, $86, $48, $86, $F7, $0D, $01, $07,
-    $06, $A0, $82, $03, $B8, $30, $82, $03, $B4, $02, $01, $00, $30, $82, $03, $AD,
-    $06, $09, $2A, $86, $48, $86, $F7, $0D, $01, $07, $01, $30, $1C, $06, $0A, $2A,
-    $86, $48, $86, $F7, $0D, $01, $0C, $01, $06, $30, $0E, $04, $08, $D4, $F9, $E6,
-    $DE, $12, $70, $DD, $EE, $02, $02, $08, $00, $80, $82, $03, $80, $3A, $91, $73,
-    $2F, $46, $F9, $49, $00, $B6, $90, $5B, $59, $8F, $37, $6F, $19, $6F, $85, $EF,
-    $01, $97, $1D, $CD, $A6, $C5, $04, $DF, $0A, $0F, $87, $28, $59, $80, $9A, $88,
-    $5F, $7F, $8B, $B2, $97, $A5, $13, $6E, $3E, $AB, $04, $B2, $5F, $62, $12, $0B,
-    $30, $A5, $A7, $CC, $54, $9A, $8A, $6B, $6B, $8A, $7F, $0C, $CD, $AF, $BB, $EA,
-    $78, $A5, $7F, $11, $85, $13, $6F, $DB, $61, $40, $D2, $26, $7C, $EB, $99, $A2,
-    $6F, $1B, $A4, $71, $77, $44, $7A, $10, $EC, $02, $3D, $26, $48, $72, $77, $10,
-    $07, $9E, $FE, $75, $20, $7A, $3B, $F2, $D8, $74, $74, $E8, $5C, $FF, $12, $DF,
-    $6C, $ED, $54, $C1, $76, $29, $D7, $2D, $DD, $FA, $3A, $32, $26, $7D, $F0, $31,
-    $CF, $2D, $06, $37, $83, $9B, $39, $92, $2B, $78, $1D, $17, $1A, $D3, $4B, $24,
-    $70, $00, $9F, $66, $8D, $3D, $BE, $05, $E3, $63, $7C, $2E, $58, $F7, $DB, $6D,
-    $4F, $3E, $36, $CF, $0B, $C5, $5F, $B1, $AE, $6D, $E2, $61, $63, $12, $4C, $99,
-    $24, $3E, $C9, $CF, $B9, $97, $20, $4A, $55, $41, $35, $F1, $6C, $43, $9F, $67,
-    $63, $DA, $14, $31, $57, $D2, $13, $B2, $AB, $59, $6B, $30, $D7, $1D, $2C, $54,
-    $ED, $73, $0C, $2D, $AA, $F9, $11, $13, $64, $88, $56, $D8, $B6, $16, $F9, $E7,
-    $9C, $03, $DA, $87, $2F, $7B, $4B, $C2, $EE, $1B, $2C, $53, $06, $74, $D2, $11,
-    $7F, $81, $31, $E8, $EE, $84, $40, $27, $1C, $18, $FA, $66, $02, $B1, $67, $42,
-    $4A, $B9, $4D, $8B, $96, $95, $6B, $AB, $1A, $48, $47, $44, $0E, $63, $2C, $26,
-    $27, $7C, $C1, $C8, $7C, $74, $B8, $1C, $F5, $9D, $6F, $09, $0F, $27, $F0, $B0,
-    $46, $68, $0C, $99, $03, $80, $E5, $81, $2B, $74, $E6, $B4, $02, $12, $AD, $EF,
-    $A8, $E6, $BE, $36, $BF, $24, $2B, $AB, $B5, $4D, $33, $7D, $CD, $A0, $DB, $6D,
-    $19, $68, $C9, $00, $DB, $A3, $D7, $02, $A8, $8A, $FB, $2F, $71, $4A, $A7, $82,
-    $06, $CD, $BC, $E3, $88, $12, $CA, $35, $66, $66, $36, $CF, $2D, $E9, $97, $F8,
-    $C1, $03, $48, $9C, $7A, $F4, $5F, $F5, $BC, $FD, $67, $62, $90, $19, $25, $62,
-    $03, $B2, $B1, $AE, $27, $FF, $A0, $D5, $47, $0E, $A1, $21, $29, $C8, $A5, $19,
-    $D3, $D5, $F1, $0C, $51, $5B, $4A, $DB, $FB, $D8, $A6, $49, $DB, $3A, $8E, $9D,
-    $64, $BE, $24, $01, $80, $F0, $35, $4E, $DA, $83, $5A, $DB, $83, $D7, $7C, $01,
-    $1B, $5C, $8F, $B3, $D7, $B7, $49, $9F, $AF, $C7, $29, $87, $4D, $73, $EF, $D0,
-    $D7, $BE, $BF, $C2, $09, $60, $BB, $FC, $5B, $64, $24, $04, $E6, $09, $9A, $19,
-    $68, $61, $9C, $DA, $62, $5E, $A4, $8A, $38, $5D, $DE, $BD, $4F, $BF, $78, $04,
-    $6D, $CE, $9A, $E2, $E4, $E7, $93, $A1, $E9, $CA, $F1, $3D, $9B, $E5, $14, $C8,
-    $98, $FB, $29, $B0, $1F, $01, $48, $40, $80, $67, $2B, $F2, $30, $21, $1E, $A9,
-    $4A, $B4, $8C, $BE, $DD, $9B, $3E, $2D, $82, $37, $63, $51, $24, $17, $AC, $9A,
-    $49, $BD, $AF, $DF, $2C, $CE, $BC, $D5, $A9, $43, $1F, $7A, $9A, $BF, $7B, $5A,
-    $3E, $F3, $12, $55, $67, $7D, $97, $9B, $B6, $35, $4F, $D4, $97, $DF, $2C, $D9,
-    $40, $32, $1B, $92, $8E, $25, $6E, $F0, $7A, $48, $41, $2B, $9F, $55, $7E, $D2,
-    $E5, $58, $85, $BA, $73, $51, $5C, $3F, $95, $18, $F6, $9B, $6A, $8D, $85, $25,
-    $A2, $5E, $F0, $4F, $F7, $96, $51, $CA, $AC, $FF, $C9, $CC, $96, $4F, $C6, $B0,
-    $63, $60, $C1, $50, $9A, $5B, $0D, $CA, $8F, $19, $CC, $87, $89, $6A, $31, $0F,
-    $10, $DF, $C8, $26, $64, $09, $2E, $59, $94, $22, $24, $E7, $5B, $59, $EB, $86,
-    $F9, $99, $EE, $39, $28, $14, $0C, $A7, $C4, $1F, $B5, $69, $93, $C1, $CC, $DC,
-    $14, $35, $DE, $A8, $EA, $14, $6F, $C0, $D3, $13, $98, $2A, $A9, $55, $D6, $B6,
-    $D4, $84, $0C, $92, $B2, $64, $28, $B5, $0F, $89, $A4, $F2, $7F, $3B, $3C, $35,
-    $5D, $0B, $4A, $42, $6B, $CF, $B4, $70, $78, $B3, $5E, $3E, $3D, $6E, $86, $29,
-    $5F, $F0, $27, $9A, $31, $A5, $6F, $94, $AB, $22, $8D, $E7, $FB, $21, $72, $DA,
-    $5A, $CF, $7B, $6A, $23, $F7, $6C, $05, $6D, $E1, $17, $24, $36, $7C, $3F, $56,
-    $A7, $F4, $96, $8D, $B1, $9E, $D1, $90, $F0, $9D, $F8, $32, $4B, $24, $B5, $5B,
-    $30, $B6, $B1, $3E, $9D, $D0, $FC, $56, $19, $41, $0A, $90, $CB, $E2, $BF, $E4,
-    $55, $D1, $F1, $14, $AF, $90, $B2, $13, $4E, $16, $2A, $1B, $43, $D9, $34, $14,
-    $17, $C8, $8A, $FE, $1C, $A0, $66, $40, $5E, $6B, $9F, $EE, $15, $BF, $90, $D7,
-    $6D, $87, $E2, $03, $10, $2A, $FF, $18, $E5, $A1, $DA, $00, $9B, $B7, $E6, $1E,
-    $3C, $5C, $8A, $36, $1E, $33, $E9, $4D, $89, $DA, $6C, $49, $2F, $0D, $7B, $54,
-    $68, $30, $B3, $AC, $AF, $5F, $6F, $FF, $CB, $EE, $D7, $21, $28, $73, $7D, $32,
-    $32, $D5, $C2, $74, $08, $C3, $01, $7E, $80, $C1, $F4, $CB, $AC, $91, $05, $5D,
-    $B3, $D2, $B6, $95, $D4, $D0, $19, $B8, $25, $46, $D2, $EA, $17, $3A, $BF, $D3,
-    $FF, $DC, $A1, $85, $A8, $56, $01, $1C, $24, $55, $BB, $2D, $6D, $7A, $07, $AC,
-    $C3, $1A, $DC, $93, $97, $60, $9B, $6F, $AA, $4C, $2E, $61, $86, $30, $82, $05,
-    $41, $06, $09, $2A, $86, $48, $86, $F7, $0D, $01, $07, $01, $A0, $82, $05, $32,
-    $04, $82, $05, $2E, $30, $82, $05, $2A, $30, $82, $05, $26, $06, $0B, $2A, $86,
-    $48, $86, $F7, $0D, $01, $0C, $0A, $01, $02, $A0, $82, $04, $EE, $30, $82, $04,
-    $EA, $30, $1C, $06, $0A, $2A, $86, $48, $86, $F7, $0D, $01, $0C, $01, $03, $30,
-    $0E, $04, $08, $04, $E0, $0A, $B0, $D6, $79, $A5, $44, $02, $02, $08, $00, $04,
-    $82, $04, $C8, $7F, $48, $8D, $D1, $AB, $5E, $A1, $D8, $D0, $63, $62, $6A, $D2,
-    $AF, $DD, $20, $DE, $91, $4D, $9A, $2F, $78, $20, $0C, $84, $A2, $C9, $38, $69,
-    $FE, $8A, $AA, $8E, $B6, $3E, $4E, $D7, $CA, $F4, $2E, $6B, $D6, $9D, $C0, $3B,
-    $5A, $4E, $7B, $89, $B8, $86, $38, $29, $87, $08, $A4, $B0, $2A, $ED, $CA, $13,
-    $B2, $FE, $15, $3E, $87, $BD, $1D, $AD, $43, $1F, $62, $93, $C1, $B8, $9F, $93,
-    $46, $74, $B3, $F4, $34, $D3, $9C, $97, $E1, $38, $09, $4C, $F4, $19, $35, $81,
-    $34, $27, $93, $C7, $B3, $FA, $AF, $58, $46, $73, $CC, $56, $91, $9F, $C8, $DC,
-    $6B, $04, $AF, $F1, $67, $65, $3D, $2C, $8E, $D1, $CC, $AC, $B7, $94, $41, $EA,
-    $56, $C4, $45, $ED, $C9, $2C, $BB, $C1, $0F, $05, $06, $73, $03, $33, $D1, $C2,
-    $BC, $34, $B2, $D5, $EA, $78, $5A, $22, $CA, $C3, $B4, $31, $43, $47, $92, $E8,
-    $B4, $21, $F2, $70, $0E, $B5, $1B, $9A, $07, $86, $45, $66, $8F, $DD, $90, $2E,
-    $9B, $AF, $9F, $D4, $04, $42, $EC, $07, $78, $C8, $66, $0F, $19, $AE, $64, $F6,
-    $99, $11, $6C, $71, $DB, $58, $F2, $CE, $13, $29, $FF, $C2, $4A, $C7, $4A, $02,
-    $D8, $28, $F7, $54, $DC, $A8, $FB, $30, $DF, $53, $98, $85, $6D, $3C, $CF, $16,
-    $93, $B9, $8B, $F5, $39, $80, $CD, $84, $36, $0A, $0F, $2F, $A2, $9E, $CB, $9B,
-    $83, $F0, $49, $C5, $34, $B9, $4B, $1D, $5A, $46, $56, $8F, $A8, $05, $E0, $4C,
-    $51, $41, $A4, $6B, $07, $38, $AF, $F4, $43, $81, $8D, $7D, $54, $DD, $85, $DA,
-    $39, $2B, $0E, $EF, $44, $90, $E8, $99, $67, $65, $32, $5B, $F1, $CA, $1F, $CD,
-    $58, $2D, $B3, $1E, $10, $4F, $B5, $6E, $23, $A0, $26, $D3, $22, $A7, $D9, $BD,
-    $CC, $E6, $25, $52, $FE, $00, $70, $B3, $A8, $E6, $BE, $42, $AE, $09, $7A, $AD,
-    $46, $EC, $03, $A5, $12, $D4, $07, $23, $A7, $9E, $7E, $42, $00, $48, $13, $96,
-    $E5, $3B, $55, $13, $2B, $A6, $E6, $6C, $9A, $25, $E0, $53, $27, $B5, $E7, $5F,
-    $2B, $96, $B3, $7C, $77, $A9, $D7, $F7, $14, $C7, $A8, $E1, $19, $0F, $5C, $88,
-    $E4, $F2, $1C, $AD, $71, $E8, $8F, $B2, $F6, $88, $B9, $2A, $57, $63, $EF, $B5,
-    $D7, $CA, $7C, $95, $14, $5E, $9D, $21, $6C, $6F, $87, $37, $88, $B5, $5E, $F1,
-    $8E, $0C, $33, $4B, $32, $A5, $AD, $3C, $B8, $E1, $BC, $1C, $74, $C2, $36, $D4,
-    $14, $37, $96, $1F, $3D, $93, $EF, $23, $5A, $59, $B5, $13, $CD, $34, $C7, $D6,
-    $78, $F5, $DE, $1B, $38, $EC, $70, $D3, $9E, $D4, $08, $EF, $B7, $9C, $34, $14,
-    $12, $9A, $7D, $D0, $7A, $09, $74, $16, $5F, $0E, $88, $CF, $F4, $D7, $F7, $30,
-    $97, $D7, $D2, $18, $FF, $C7, $62, $8D, $37, $D0, $77, $66, $FD, $B3, $EE, $86,
-    $D9, $1B, $9E, $7C, $D0, $D5, $B8, $D7, $F1, $3C, $57, $BE, $51, $07, $A5, $25,
-    $37, $E4, $73, $5E, $60, $B7, $98, $99, $6A, $C1, $F0, $35, $FF, $F6, $D7, $12,
-    $44, $7B, $1E, $70, $BF, $32, $E2, $49, $58, $78, $41, $22, $EE, $B5, $99, $2B,
-    $08, $C6, $A3, $E2, $C6, $65, $06, $8E, $D1, $FB, $CB, $2D, $D9, $0B, $92, $D2,
-    $05, $AB, $91, $EA, $43, $62, $16, $B3, $4B, $73, $7A, $BD, $C5, $41, $A0, $2D,
-    $6D, $28, $44, $A2, $93, $62, $2E, $67, $6B, $4A, $A0, $AB, $5E, $20, $A2, $F3,
-    $00, $56, $B4, $A8, $E8, $A3, $DA, $08, $99, $83, $C2, $AD, $8A, $7F, $85, $70,
-    $3E, $CE, $2F, $39, $06, $77, $A8, $77, $3E, $BF, $E5, $C8, $38, $DC, $68, $28,
-    $35, $49, $C8, $A8, $E3, $FD, $9D, $05, $DC, $70, $4C, $A2, $0D, $2C, $44, $37,
-    $F4, $F3, $B8, $0A, $99, $3C, $97, $10, $92, $77, $58, $B2, $E3, $00, $A2, $0E,
-    $34, $AF, $5F, $C6, $1D, $22, $DD, $34, $57, $DC, $5B, $F1, $F1, $6E, $03, $12,
-    $C2, $6C, $AD, $75, $03, $BF, $CD, $7A, $CD, $52, $0A, $75, $A1, $31, $B5, $19,
-    $DF, $52, $09, $3B, $94, $76, $EE, $1A, $5A, $A8, $8D, $3B, $EE, $B7, $86, $C6,
-    $65, $C7, $E8, $0B, $3C, $B9, $EE, $7D, $80, $22, $89, $3D, $F8, $6C, $9E, $4F,
-    $6E, $C8, $F8, $3A, $54, $76, $B5, $89, $6B, $05, $A5, $C9, $68, $68, $0B, $33,
-    $E5, $55, $E8, $B2, $F9, $39, $DC, $C8, $0A, $13, $94, $01, $D2, $A1, $0A, $42,
-    $F5, $37, $A4, $18, $C9, $97, $BB, $A4, $93, $4C, $49, $BB, $FB, $B0, $F5, $4E,
-    $C5, $D3, $3B, $BD, $A0, $37, $10, $9F, $8F, $E7, $BB, $8A, $6D, $FE, $C3, $6C,
-    $36, $A6, $3D, $C6, $ED, $D0, $7D, $68, $37, $11, $22, $16, $82, $AB, $C4, $02,
-    $EC, $EB, $A0, $7D, $0E, $22, $79, $CE, $6A, $39, $45, $31, $5C, $99, $75, $C3,
-    $6A, $B9, $A1, $00, $2D, $4D, $4D, $F5, $AC, $CC, $1E, $0D, $36, $A7, $36, $40,
-    $53, $6C, $A8, $6C, $B0, $F8, $27, $30, $68, $AE, $06, $39, $A5, $89, $86, $CC,
-    $BB, $B0, $CA, $43, $62, $1D, $71, $6A, $30, $62, $B9, $BC, $DC, $8A, $D1, $23,
-    $04, $6F, $35, $4B, $6F, $81, $B8, $31, $91, $26, $83, $28, $E6, $2E, $D3, $84,
-    $FB, $53, $F9, $6F, $B0, $0E, $37, $E1, $CE, $4D, $6F, $35, $14, $37, $4B, $EE,
-    $31, $46, $EE, $85, $DF, $04, $0D, $3D, $F0, $AC, $D2, $B7, $EF, $AE, $87, $7A,
-    $A8, $C0, $9F, $98, $4E, $E9, $C0, $A6, $7C, $E9, $FF, $D7, $76, $72, $82, $CA,
-    $89, $FB, $94, $9C, $67, $7A, $47, $47, $5C, $2C, $17, $61, $96, $15, $D6, $26,
-    $BB, $0F, $EF, $F0, $C7, $23, $BA, $39, $8A, $08, $B5, $F3, $68, $DE, $54, $80,
-    $15, $A3, $43, $A5, $DA, $0B, $60, $FE, $F9, $BF, $54, $FE, $21, $34, $08, $AB,
-    $0D, $59, $A8, $DC, $8E, $7B, $54, $46, $4D, $F7, $B6, $AC, $DF, $1D, $6F, $50,
-    $9C, $3C, $17, $5D, $19, $4C, $48, $21, $D2, $5B, $F0, $6F, $A7, $2B, $D4, $B0,
-    $87, $FD, $42, $D0, $87, $D3, $BE, $7A, $01, $61, $16, $8A, $A3, $BC, $83, $1D,
-    $BB, $6A, $FB, $51, $EB, $6B, $37, $F9, $1E, $E8, $FF, $0A, $4F, $46, $14, $1C,
-    $04, $EE, $CD, $8D, $4A, $33, $CD, $8D, $4F, $0B, $24, $2C, $E1, $25, $48, $42,
-    $A2, $EB, $04, $F4, $7E, $30, $62, $AE, $CC, $20, $1A, $A6, $38, $5C, $D5, $F3,
-    $27, $07, $81, $75, $9C, $F4, $D0, $87, $79, $6F, $0A, $28, $3D, $A5, $22, $B8,
-    $EC, $C7, $B3, $C0, $F5, $DE, $77, $6C, $7F, $C3, $01, $1E, $FA, $88, $83, $BB,
-    $D0, $9C, $29, $82, $11, $DB, $D0, $99, $C7, $D8, $E0, $2F, $E0, $22, $22, $0D,
-    $2A, $E7, $29, $64, $B3, $72, $A2, $08, $5A, $FA, $08, $86, $D4, $E5, $FE, $05,
-    $08, $64, $CC, $C3, $53, $7F, $9A, $2E, $93, $21, $C2, $FA, $16, $37, $3E, $28,
-    $CF, $CA, $57, $DA, $BB, $15, $1A, $C6, $41, $39, $BE, $D7, $F9, $9E, $78, $1B,
-    $83, $A7, $6D, $1E, $22, $BE, $49, $7F, $64, $41, $5D, $A8, $11, $40, $D7, $AD,
-    $43, $F6, $C3, $9E, $7E, $3A, $95, $2D, $27, $04, $80, $95, $02, $60, $A6, $A6,
-    $55, $25, $BD, $64, $E2, $D0, $99, $B5, $D9, $4B, $42, $F5, $69, $CE, $9A, $FE,
-    $26, $D1, $C4, $9E, $29, $3D, $AF, $85, $2F, $8E, $E0, $0A, $69, $F2, $69, $EE,
-    $66, $C2, $F7, $AB, $81, $BC, $82, $01, $22, $B6, $45, $31, $25, $30, $23, $06,
-    $09, $2A, $86, $48, $86, $F7, $0D, $01, $09, $15, $31, $16, $04, $14, $11, $9C,
-    $AB, $D1, $44, $93, $91, $54, $3C, $52, $A0, $66, $4C, $A5, $99, $DB, $42, $62,
-    $D2, $43, $30, $2D, $30, $21, $30, $09, $06, $05, $2B, $0E, $03, $02, $1A, $05,
-    $00, $04, $14, $E0, $D8, $41, $1F, $76, $85, $94, $B5, $64, $2D, $FD, $59, $27,
-    $CE, $EA, $3B, $B1, $E2, $25, $11, $04, $08, $01, $3E, $2B, $1B, $94, $CF, $41,
+    $30, $82, $09, $5d, $02, $01, $03, $30, $82, $09, $27, $06, $09, $2a, $86, $48,
+    $86, $f7, $0d, $01, $07, $01, $a0, $82, $09, $18, $04, $82, $09, $14, $30, $82,
+    $09, $10, $30, $82, $03, $c7, $06, $09, $2a, $86, $48, $86, $f7, $0d, $01, $07,
+    $06, $a0, $82, $03, $b8, $30, $82, $03, $b4, $02, $01, $00, $30, $82, $03, $ad,
+    $06, $09, $2a, $86, $48, $86, $f7, $0d, $01, $07, $01, $30, $1c, $06, $0a, $2a,
+    $86, $48, $86, $f7, $0d, $01, $0c, $01, $06, $30, $0e, $04, $08, $d4, $f9, $e6,
+    $de, $12, $70, $dd, $ee, $02, $02, $08, $00, $80, $82, $03, $80, $3a, $91, $73,
+    $2f, $46, $f9, $49, $00, $b6, $90, $5b, $59, $8f, $37, $6f, $19, $6f, $85, $ef,
+    $01, $97, $1d, $cd, $a6, $c5, $04, $df, $0a, $0f, $87, $28, $59, $80, $9a, $88,
+    $5f, $7f, $8b, $b2, $97, $a5, $13, $6e, $3e, $ab, $04, $b2, $5f, $62, $12, $0b,
+    $30, $a5, $a7, $cc, $54, $9a, $8a, $6b, $6b, $8a, $7f, $0c, $cd, $af, $bb, $ea,
+    $78, $a5, $7f, $11, $85, $13, $6f, $db, $61, $40, $d2, $26, $7c, $eb, $99, $a2,
+    $6f, $1b, $a4, $71, $77, $44, $7a, $10, $ec, $02, $3d, $26, $48, $72, $77, $10,
+    $07, $9e, $fe, $75, $20, $7a, $3b, $f2, $d8, $74, $74, $e8, $5c, $ff, $12, $df,
+    $6c, $ed, $54, $c1, $76, $29, $d7, $2d, $dd, $fa, $3a, $32, $26, $7d, $f0, $31,
+    $cf, $2d, $06, $37, $83, $9b, $39, $92, $2b, $78, $1d, $17, $1a, $d3, $4b, $24,
+    $70, $00, $9f, $66, $8d, $3d, $be, $05, $e3, $63, $7c, $2e, $58, $f7, $db, $6d,
+    $4f, $3e, $36, $cf, $0b, $c5, $5f, $b1, $ae, $6d, $e2, $61, $63, $12, $4c, $99,
+    $24, $3e, $c9, $cf, $b9, $97, $20, $4a, $55, $41, $35, $f1, $6c, $43, $9f, $67,
+    $63, $da, $14, $31, $57, $d2, $13, $b2, $ab, $59, $6b, $30, $d7, $1d, $2c, $54,
+    $ed, $73, $0c, $2d, $aa, $f9, $11, $13, $64, $88, $56, $d8, $b6, $16, $f9, $e7,
+    $9c, $03, $da, $87, $2f, $7b, $4b, $c2, $ee, $1b, $2c, $53, $06, $74, $d2, $11,
+    $7f, $81, $31, $e8, $ee, $84, $40, $27, $1c, $18, $fa, $66, $02, $b1, $67, $42,
+    $4a, $b9, $4d, $8b, $96, $95, $6b, $ab, $1a, $48, $47, $44, $0e, $63, $2c, $26,
+    $27, $7c, $c1, $c8, $7c, $74, $b8, $1c, $f5, $9d, $6f, $09, $0f, $27, $f0, $b0,
+    $46, $68, $0c, $99, $03, $80, $e5, $81, $2b, $74, $e6, $b4, $02, $12, $ad, $ef,
+    $a8, $e6, $be, $36, $bf, $24, $2b, $ab, $b5, $4d, $33, $7d, $cd, $a0, $db, $6d,
+    $19, $68, $c9, $00, $db, $a3, $d7, $02, $a8, $8a, $fb, $2f, $71, $4a, $a7, $82,
+    $06, $cd, $bc, $e3, $88, $12, $ca, $35, $66, $66, $36, $cf, $2d, $e9, $97, $f8,
+    $c1, $03, $48, $9c, $7a, $f4, $5f, $f5, $bc, $fd, $67, $62, $90, $19, $25, $62,
+    $03, $b2, $b1, $ae, $27, $ff, $a0, $d5, $47, $0e, $a1, $21, $29, $c8, $a5, $19,
+    $d3, $d5, $f1, $0c, $51, $5b, $4a, $db, $fb, $d8, $a6, $49, $db, $3a, $8e, $9d,
+    $64, $be, $24, $01, $80, $f0, $35, $4e, $da, $83, $5a, $db, $83, $d7, $7c, $01,
+    $1b, $5c, $8f, $b3, $d7, $b7, $49, $9f, $af, $c7, $29, $87, $4d, $73, $ef, $d0,
+    $d7, $be, $bf, $c2, $09, $60, $bb, $fc, $5b, $64, $24, $04, $e6, $09, $9a, $19,
+    $68, $61, $9c, $da, $62, $5e, $a4, $8a, $38, $5d, $de, $bd, $4f, $bf, $78, $04,
+    $6d, $ce, $9a, $e2, $e4, $e7, $93, $a1, $e9, $ca, $f1, $3d, $9b, $e5, $14, $c8,
+    $98, $fb, $29, $b0, $1f, $01, $48, $40, $80, $67, $2b, $f2, $30, $21, $1e, $a9,
+    $4a, $b4, $8c, $be, $dd, $9b, $3e, $2d, $82, $37, $63, $51, $24, $17, $ac, $9a,
+    $49, $bd, $af, $df, $2c, $ce, $bc, $d5, $a9, $43, $1f, $7a, $9a, $bf, $7b, $5a,
+    $3e, $f3, $12, $55, $67, $7d, $97, $9b, $b6, $35, $4f, $d4, $97, $df, $2c, $d9,
+    $40, $32, $1b, $92, $8e, $25, $6e, $f0, $7a, $48, $41, $2b, $9f, $55, $7e, $d2,
+    $e5, $58, $85, $ba, $73, $51, $5c, $3f, $95, $18, $f6, $9b, $6a, $8d, $85, $25,
+    $a2, $5e, $f0, $4f, $f7, $96, $51, $ca, $ac, $ff, $c9, $cc, $96, $4f, $c6, $b0,
+    $63, $60, $c1, $50, $9a, $5b, $0d, $ca, $8f, $19, $cc, $87, $89, $6a, $31, $0f,
+    $10, $df, $c8, $26, $64, $09, $2e, $59, $94, $22, $24, $e7, $5b, $59, $eb, $86,
+    $f9, $99, $ee, $39, $28, $14, $0c, $a7, $c4, $1f, $b5, $69, $93, $c1, $cc, $dc,
+    $14, $35, $de, $a8, $ea, $14, $6f, $c0, $d3, $13, $98, $2a, $a9, $55, $d6, $b6,
+    $d4, $84, $0c, $92, $b2, $64, $28, $b5, $0f, $89, $a4, $f2, $7f, $3b, $3c, $35,
+    $5d, $0b, $4a, $42, $6b, $cf, $b4, $70, $78, $b3, $5e, $3e, $3d, $6e, $86, $29,
+    $5f, $f0, $27, $9a, $31, $a5, $6f, $94, $ab, $22, $8d, $e7, $fb, $21, $72, $da,
+    $5a, $cf, $7b, $6a, $23, $f7, $6c, $05, $6d, $e1, $17, $24, $36, $7c, $3f, $56,
+    $a7, $f4, $96, $8d, $b1, $9e, $d1, $90, $f0, $9d, $f8, $32, $4b, $24, $b5, $5b,
+    $30, $b6, $b1, $3e, $9d, $d0, $fc, $56, $19, $41, $0a, $90, $cb, $e2, $bf, $e4,
+    $55, $d1, $f1, $14, $af, $90, $b2, $13, $4e, $16, $2a, $1b, $43, $d9, $34, $14,
+    $17, $c8, $8a, $fe, $1c, $a0, $66, $40, $5e, $6b, $9f, $ee, $15, $bf, $90, $d7,
+    $6d, $87, $e2, $03, $10, $2a, $ff, $18, $e5, $a1, $da, $00, $9b, $b7, $e6, $1e,
+    $3c, $5c, $8a, $36, $1e, $33, $e9, $4d, $89, $da, $6c, $49, $2f, $0d, $7b, $54,
+    $68, $30, $b3, $ac, $af, $5f, $6f, $ff, $cb, $ee, $d7, $21, $28, $73, $7d, $32,
+    $32, $d5, $c2, $74, $08, $c3, $01, $7e, $80, $c1, $f4, $cb, $ac, $91, $05, $5d,
+    $b3, $d2, $b6, $95, $d4, $d0, $19, $b8, $25, $46, $d2, $ea, $17, $3a, $bf, $d3,
+    $ff, $dc, $a1, $85, $a8, $56, $01, $1c, $24, $55, $bb, $2d, $6d, $7a, $07, $ac,
+    $c3, $1a, $dc, $93, $97, $60, $9b, $6f, $aa, $4c, $2e, $61, $86, $30, $82, $05,
+    $41, $06, $09, $2a, $86, $48, $86, $f7, $0d, $01, $07, $01, $a0, $82, $05, $32,
+    $04, $82, $05, $2e, $30, $82, $05, $2a, $30, $82, $05, $26, $06, $0b, $2a, $86,
+    $48, $86, $f7, $0d, $01, $0c, $0a, $01, $02, $a0, $82, $04, $ee, $30, $82, $04,
+    $ea, $30, $1c, $06, $0a, $2a, $86, $48, $86, $f7, $0d, $01, $0c, $01, $03, $30,
+    $0e, $04, $08, $04, $e0, $0a, $b0, $d6, $79, $a5, $44, $02, $02, $08, $00, $04,
+    $82, $04, $c8, $7f, $48, $8d, $d1, $ab, $5e, $a1, $d8, $d0, $63, $62, $6a, $d2,
+    $af, $dd, $20, $de, $91, $4d, $9a, $2f, $78, $20, $0c, $84, $a2, $c9, $38, $69,
+    $fe, $8a, $aa, $8e, $b6, $3e, $4e, $d7, $ca, $f4, $2e, $6b, $d6, $9d, $c0, $3b,
+    $5a, $4e, $7b, $89, $b8, $86, $38, $29, $87, $08, $a4, $b0, $2a, $ed, $ca, $13,
+    $b2, $fe, $15, $3e, $87, $bd, $1d, $ad, $43, $1f, $62, $93, $c1, $b8, $9f, $93,
+    $46, $74, $b3, $f4, $34, $d3, $9c, $97, $e1, $38, $09, $4c, $f4, $19, $35, $81,
+    $34, $27, $93, $c7, $b3, $fa, $af, $58, $46, $73, $cc, $56, $91, $9f, $c8, $dc,
+    $6b, $04, $af, $f1, $67, $65, $3d, $2c, $8e, $d1, $cc, $ac, $b7, $94, $41, $ea,
+    $56, $c4, $45, $ed, $c9, $2c, $bb, $c1, $0f, $05, $06, $73, $03, $33, $d1, $c2,
+    $bc, $34, $b2, $d5, $ea, $78, $5a, $22, $ca, $c3, $b4, $31, $43, $47, $92, $e8,
+    $b4, $21, $f2, $70, $0e, $b5, $1b, $9a, $07, $86, $45, $66, $8f, $dd, $90, $2e,
+    $9b, $af, $9f, $d4, $04, $42, $ec, $07, $78, $c8, $66, $0f, $19, $ae, $64, $f6,
+    $99, $11, $6c, $71, $db, $58, $f2, $ce, $13, $29, $ff, $c2, $4a, $c7, $4a, $02,
+    $d8, $28, $f7, $54, $dc, $a8, $fb, $30, $df, $53, $98, $85, $6d, $3c, $cf, $16,
+    $93, $b9, $8b, $f5, $39, $80, $cd, $84, $36, $0a, $0f, $2f, $a2, $9e, $cb, $9b,
+    $83, $f0, $49, $c5, $34, $b9, $4b, $1d, $5a, $46, $56, $8f, $a8, $05, $e0, $4c,
+    $51, $41, $a4, $6b, $07, $38, $af, $f4, $43, $81, $8d, $7d, $54, $dd, $85, $da,
+    $39, $2b, $0e, $ef, $44, $90, $e8, $99, $67, $65, $32, $5b, $f1, $ca, $1f, $cd,
+    $58, $2d, $b3, $1e, $10, $4f, $b5, $6e, $23, $a0, $26, $d3, $22, $a7, $d9, $bd,
+    $cc, $e6, $25, $52, $fe, $00, $70, $b3, $a8, $e6, $be, $42, $ae, $09, $7a, $ad,
+    $46, $ec, $03, $a5, $12, $d4, $07, $23, $a7, $9e, $7e, $42, $00, $48, $13, $96,
+    $e5, $3b, $55, $13, $2b, $a6, $e6, $6c, $9a, $25, $e0, $53, $27, $b5, $e7, $5f,
+    $2b, $96, $b3, $7c, $77, $a9, $d7, $f7, $14, $c7, $a8, $e1, $19, $0f, $5c, $88,
+    $e4, $f2, $1c, $ad, $71, $e8, $8f, $b2, $f6, $88, $b9, $2a, $57, $63, $ef, $b5,
+    $d7, $ca, $7c, $95, $14, $5e, $9d, $21, $6c, $6f, $87, $37, $88, $b5, $5e, $f1,
+    $8e, $0c, $33, $4b, $32, $a5, $ad, $3c, $b8, $e1, $bc, $1c, $74, $c2, $36, $d4,
+    $14, $37, $96, $1f, $3d, $93, $ef, $23, $5a, $59, $b5, $13, $cd, $34, $c7, $d6,
+    $78, $f5, $de, $1b, $38, $ec, $70, $d3, $9e, $d4, $08, $ef, $b7, $9c, $34, $14,
+    $12, $9a, $7d, $d0, $7a, $09, $74, $16, $5f, $0e, $88, $cf, $f4, $d7, $f7, $30,
+    $97, $d7, $d2, $18, $ff, $c7, $62, $8d, $37, $d0, $77, $66, $fd, $b3, $ee, $86,
+    $d9, $1b, $9e, $7c, $d0, $d5, $b8, $d7, $f1, $3c, $57, $be, $51, $07, $a5, $25,
+    $37, $e4, $73, $5e, $60, $b7, $98, $99, $6a, $c1, $f0, $35, $ff, $f6, $d7, $12,
+    $44, $7b, $1e, $70, $bf, $32, $e2, $49, $58, $78, $41, $22, $ee, $b5, $99, $2b,
+    $08, $c6, $a3, $e2, $c6, $65, $06, $8e, $d1, $fb, $cb, $2d, $d9, $0b, $92, $d2,
+    $05, $ab, $91, $ea, $43, $62, $16, $b3, $4b, $73, $7a, $bd, $c5, $41, $a0, $2d,
+    $6d, $28, $44, $a2, $93, $62, $2e, $67, $6b, $4a, $a0, $ab, $5e, $20, $a2, $f3,
+    $00, $56, $b4, $a8, $e8, $a3, $da, $08, $99, $83, $c2, $ad, $8a, $7f, $85, $70,
+    $3e, $ce, $2f, $39, $06, $77, $a8, $77, $3e, $bf, $e5, $c8, $38, $dc, $68, $28,
+    $35, $49, $c8, $a8, $e3, $fd, $9d, $05, $dc, $70, $4c, $a2, $0d, $2c, $44, $37,
+    $f4, $f3, $b8, $0a, $99, $3c, $97, $10, $92, $77, $58, $b2, $e3, $00, $a2, $0e,
+    $34, $af, $5f, $c6, $1d, $22, $dd, $34, $57, $dc, $5b, $f1, $f1, $6e, $03, $12,
+    $c2, $6c, $ad, $75, $03, $bf, $cd, $7a, $cd, $52, $0a, $75, $a1, $31, $b5, $19,
+    $df, $52, $09, $3b, $94, $76, $ee, $1a, $5a, $a8, $8d, $3b, $ee, $b7, $86, $c6,
+    $65, $c7, $e8, $0b, $3c, $b9, $ee, $7d, $80, $22, $89, $3d, $f8, $6c, $9e, $4f,
+    $6e, $c8, $f8, $3a, $54, $76, $b5, $89, $6b, $05, $a5, $c9, $68, $68, $0b, $33,
+    $e5, $55, $e8, $b2, $f9, $39, $dc, $c8, $0a, $13, $94, $01, $d2, $a1, $0a, $42,
+    $f5, $37, $a4, $18, $c9, $97, $bb, $a4, $93, $4c, $49, $bb, $fb, $b0, $f5, $4e,
+    $c5, $d3, $3b, $bd, $a0, $37, $10, $9f, $8f, $e7, $bb, $8a, $6d, $fe, $c3, $6c,
+    $36, $a6, $3d, $c6, $ed, $d0, $7d, $68, $37, $11, $22, $16, $82, $ab, $c4, $02,
+    $ec, $eb, $a0, $7d, $0e, $22, $79, $ce, $6a, $39, $45, $31, $5c, $99, $75, $c3,
+    $6a, $b9, $a1, $00, $2d, $4d, $4d, $f5, $ac, $cc, $1e, $0d, $36, $a7, $36, $40,
+    $53, $6c, $a8, $6c, $b0, $f8, $27, $30, $68, $ae, $06, $39, $a5, $89, $86, $cc,
+    $bb, $b0, $ca, $43, $62, $1d, $71, $6a, $30, $62, $b9, $bc, $dc, $8a, $d1, $23,
+    $04, $6f, $35, $4b, $6f, $81, $b8, $31, $91, $26, $83, $28, $e6, $2e, $d3, $84,
+    $fb, $53, $f9, $6f, $b0, $0e, $37, $e1, $ce, $4d, $6f, $35, $14, $37, $4b, $ee,
+    $31, $46, $ee, $85, $df, $04, $0d, $3d, $f0, $ac, $d2, $b7, $ef, $ae, $87, $7a,
+    $a8, $c0, $9f, $98, $4e, $e9, $c0, $a6, $7c, $e9, $ff, $d7, $76, $72, $82, $ca,
+    $89, $fb, $94, $9c, $67, $7a, $47, $47, $5c, $2c, $17, $61, $96, $15, $d6, $26,
+    $bb, $0f, $ef, $f0, $c7, $23, $ba, $39, $8a, $08, $b5, $f3, $68, $de, $54, $80,
+    $15, $a3, $43, $a5, $da, $0b, $60, $fe, $f9, $bf, $54, $fe, $21, $34, $08, $ab,
+    $0d, $59, $a8, $dc, $8e, $7b, $54, $46, $4d, $f7, $b6, $ac, $df, $1d, $6f, $50,
+    $9c, $3c, $17, $5d, $19, $4c, $48, $21, $d2, $5b, $f0, $6f, $a7, $2b, $d4, $b0,
+    $87, $fd, $42, $d0, $87, $d3, $be, $7a, $01, $61, $16, $8a, $a3, $bc, $83, $1d,
+    $bb, $6a, $fb, $51, $eb, $6b, $37, $f9, $1e, $e8, $ff, $0a, $4f, $46, $14, $1c,
+    $04, $ee, $cd, $8d, $4a, $33, $cd, $8d, $4f, $0b, $24, $2c, $e1, $25, $48, $42,
+    $a2, $eb, $04, $f4, $7e, $30, $62, $ae, $cc, $20, $1a, $a6, $38, $5c, $d5, $f3,
+    $27, $07, $81, $75, $9c, $f4, $d0, $87, $79, $6f, $0a, $28, $3d, $a5, $22, $b8,
+    $ec, $c7, $b3, $c0, $f5, $de, $77, $6c, $7f, $c3, $01, $1e, $fa, $88, $83, $bb,
+    $d0, $9c, $29, $82, $11, $db, $d0, $99, $c7, $d8, $e0, $2f, $e0, $22, $22, $0d,
+    $2a, $e7, $29, $64, $b3, $72, $a2, $08, $5a, $fa, $08, $86, $d4, $e5, $fe, $05,
+    $08, $64, $cc, $c3, $53, $7f, $9a, $2e, $93, $21, $c2, $fa, $16, $37, $3e, $28,
+    $cf, $ca, $57, $da, $bb, $15, $1a, $c6, $41, $39, $be, $d7, $f9, $9e, $78, $1b,
+    $83, $a7, $6d, $1e, $22, $be, $49, $7f, $64, $41, $5d, $a8, $11, $40, $d7, $ad,
+    $43, $f6, $c3, $9e, $7e, $3a, $95, $2d, $27, $04, $80, $95, $02, $60, $a6, $a6,
+    $55, $25, $bd, $64, $e2, $d0, $99, $b5, $d9, $4b, $42, $f5, $69, $ce, $9a, $fe,
+    $26, $d1, $c4, $9e, $29, $3d, $af, $85, $2f, $8e, $e0, $0a, $69, $f2, $69, $ee,
+    $66, $c2, $f7, $ab, $81, $bc, $82, $01, $22, $b6, $45, $31, $25, $30, $23, $06,
+    $09, $2a, $86, $48, $86, $f7, $0d, $01, $09, $15, $31, $16, $04, $14, $11, $9c,
+    $ab, $d1, $44, $93, $91, $54, $3c, $52, $a0, $66, $4c, $a5, $99, $db, $42, $62,
+    $d2, $43, $30, $2d, $30, $21, $30, $09, $06, $05, $2b, $0e, $03, $02, $1a, $05,
+    $00, $04, $14, $e0, $d8, $41, $1f, $76, $85, $94, $b5, $64, $2d, $fd, $59, $27,
+    $ce, $ea, $3b, $b1, $e2, $25, $11, $04, $08, $01, $3e, $2b, $1b, $94, $cf, $41,
     $11);
 
 function PrivKeyCertPfx: RawByteString;
@@ -3943,14 +3943,14 @@ begin
       cod := fRoute.Process(Ctxt);
       if cod <> 0 then
       begin
-        Ctxt.RespStatus := cod;
         if (Ctxt.OutContent = '') and
-           (Ctxt.RespStatus <> HTTP_ASYNCRESPONSE) and
-           not StatusCodeIsSuccess(Ctxt.RespStatus) then
+           (cod <> HTTP_ASYNCRESPONSE) and
+           not StatusCodeIsSuccess(cod) then
         begin
           Ctxt.fErrorMessage := 'Wrong route';
           IncStat(grRejected);
         end;
+        Ctxt.RespStatus := cod;
         result := true; // a callback was executed
         exit;
       end;
@@ -4563,16 +4563,21 @@ end;
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
+  res: THttpServerSocketGetRequestResult;
 begin
-  // process this THttpServerSocket in the thread pool
+  // process this THttpServerSocket request in the thread pool
   freeme := true;
   try
-    if hsoEnableTls in fServer.Options then
-      DoTlsAfter(cstaAccept); // slow TLS handshake done in this sub-thread
-    freeme := TaskProcessBody(aCaller,
-      GetRequest({withbody=}false, fServer.HeaderRetrieveAbortTix));
+    // (slow) TLS handshake is done in this sub-thread
+    if (hsoEnableTls in fServer.Options) and
+       (fSecure = nil) then
+      DoTlsAfter(cstaAccept);
+    // get and validate the headers of this first request
+    res := GetRequest({withbody=}false, fServer.HeaderRetrieveAbortTix);
+    // process any auth steps, then body in this thread or in a fThreadRespClass
+    freeme := TaskProcessBody(aCaller, res);
   finally
-    if freeme then
+    if freeme then // false if kept-alive in a fThreadRespClass thread
       Free;
   end;
 end;
@@ -5194,11 +5199,11 @@ function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
     MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
     if aMsg.Kind in PCF_RESPONSE then
       if (aMsg.Seq < fFrameSeqLow) or
-         (aMsg.Seq > cardinal(fFrameSeq)) then
+         (aMsg.Seq > cardinal(fFrameSeq)) then // compare with local sequence
         exit;
     result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
               (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
-              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo)));
+              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))); // antifuzzing
   end;
 
 begin
@@ -5304,8 +5309,8 @@ begin
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
-      [GuidToShort(fUuid), key.b[0], CardinalToHexShort(fFrameSeq)], self);
-      // log includes safe 8-bit fingerprint
+      [GuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
+      // log includes safe 16-bit fingerprint
   FillZero(key.b);
 end;
 
@@ -5641,10 +5646,10 @@ begin
         [fTempFilesPath, KB(avail), KB(existing)], self);
     if avail <> 0 then
     begin
-      avail := (avail + existing) shr 2; // allow up to 25% of the folder capacity
+      avail := (avail + existing) shr 2;
       if fTempFilesMaxSize > avail then
       begin
-        fTempFilesMaxSize := avail;
+        fTempFilesMaxSize := avail; // allow up to 25% of the folder capacity
         if Assigned(log) then
           log.Log(sllDebug, 'Create: use CacheTempMax=%', [KB(avail)], self);
       end;
@@ -6094,10 +6099,8 @@ begin
   begin
     fInstableTix := tix;
     if fInstable.Count <> 0 then
-    begin
-      fInstable.DoRotate;
-      fLog.Add.Log(sllTrace, 'OnIdle: %', [fInstable], self);
-    end;
+      if fInstable.DoRotate <> 0 then
+        fLog.Add.Log(sllTrace, 'OnIdle: %', [fInstable], self);
   end;
   // handle temporary cache folder deprecation
   if (fSettings.CacheTempMaxMin <= 0) or
@@ -6933,8 +6936,8 @@ begin
               SetQWord(V, V + RawValueLength, incontlen);
             end;
             if (incontlen > 0) and
-               (MaximumAllowedContentLength > 0) and
-               (incontlen > MaximumAllowedContentLength) then
+               (fMaximumAllowedContentLength > 0) and
+               (incontlen > QWord(fMaximumAllowedContentLength)) then
             begin
               SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
               continue;
@@ -7386,7 +7389,7 @@ begin
     fClones[i].SetOnAfterResponse(aEvent);
 end;
 
-procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
+procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: Int64);
 var
   i: PtrInt;
 begin

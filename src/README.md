@@ -58,5 +58,5 @@ Note that the `PUREMORMOT2` conditional can be defined for your project, to disa
 
 To clean the design and enhance source maintainibility, some units have associated `*.inc` source files:
 - To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls in `mormot.core.os.pas`;
-- To regroupe Compiler-specific code - e.g. `mormot.core.rtti.fpc.inc` to include FPC RTTI in `mormot.core.rtti.pas`;
+- To regroup Compiler-specific code - e.g. `mormot.core.rtti.fpc.inc` to include FPC RTTI in `mormot.core.rtti.pas`;
 - To regroup CPU-specific (asm) code - e.g. `mormot.crypt.core.asmx64.inc` to include `x86_64` assembly in `mormot.crypt.core.pas`.

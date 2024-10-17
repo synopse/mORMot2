@@ -6,7 +6,7 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.44.2 engine with optional AES encryption
+    Statically linked SQLite3 3.46.1 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
@@ -94,15 +94,15 @@ const
   /// the exact version expected by the current state of this unit
   // - an error message is generated via DisplayFatalError() if the statically
   // linked sqlite3.o(bj) does not match this expected value
-  EXPECTED_SQLITE3_VERSION = '3.44.2';
+  EXPECTED_SQLITE3_VERSION = '3.46.1';
 
   /// the github release tag associated with this EXPECTED_SQLITE3_VERSION
   // - to be used if you don't want the latest version of sqlite3, but the very
   // same binaries expected by this unit, in one of its previous version
   // - you could download the static for this exact mORMot source revision e.g. as
-  // https://github.com/synopse/mORMot2/releases/download/2.2.stable/mormot2static.7z
-  // https://github.com/synopse/mORMot2/releases/download/2.2.stable/mormot2static.tgz
-  EXPECTED_RELEASE_TAG = '2.2.stable';
+  // https://github.com/synopse/mORMot2/releases/download/2.3.stable/mormot2static.7z
+  // https://github.com/synopse/mORMot2/releases/download/2.3.stable/mormot2static.tgz
+  EXPECTED_RELEASE_TAG = '2.3.stable';
 
   /// where to download the latest available static binaries, including SQLite3
   {$ifdef OSWINDOWS}
@@ -379,6 +379,32 @@ end;
 function fabs(x: double): double; cdecl; // needed since 3.44.2
 begin
   result := abs(x);
+end;
+
+function strchr(p: PAnsiChar; chr: AnsiChar): PAnsiChar; cdecl;
+begin // needed since 3.46.1
+  result := nil;
+  if p <> nil then
+    while p^ <> chr do
+      if p^ = #0 then
+        exit // not found
+      else
+        inc(p);
+  result := p;
+end;
+
+function memchr(p: pointer; chr: byte; n: PtrInt): PAnsiChar; cdecl;
+var
+  i: PtrInt;
+begin // needed since 3.46.1
+  result := p;
+  if p = nil then
+    exit;
+  i := ByteScanIndex(p, n, chr); // use SSE2
+  if i >= 0 then
+    inc(result, i)
+  else
+    result := nil; // not found
 end;
 
 {$endif CPU32}

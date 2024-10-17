@@ -297,7 +297,7 @@ begin
     begin
       len := i * 3;
       s := RandomAnsi7(len);
-      SetString(d, nil, len);
+      FastNewRawByteString(d, len);
       rc4 := ref;
       rc4.EncryptBuffer(pointer(s), pointer(d), len); // encrypt
       rc4 := ref;

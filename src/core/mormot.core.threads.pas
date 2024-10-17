@@ -401,9 +401,7 @@ type
 { ************ Background Thread Processing }
 
 type
-  {$M+}
-  TSynBackgroundThreadAbstract = class;
-  TSynBackgroundThreadEvent = class;
+  {$M+} // published properties RTTI (TThread parent class did not enable it)
 
   /// abstract parent of all TThread inherited classes
   // - to leverage cross-compiler and cross-version RTL differences
@@ -432,6 +430,9 @@ type
     property Terminated;
   end;
   {$M-}
+
+  TSynBackgroundThreadAbstract = class;
+  TSynBackgroundThreadEvent = class;
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
   // during remote blocking process in a background thread
@@ -996,7 +997,7 @@ type
 { ************ Server Process Oriented Thread Pool }
 
 type
-  {$M+}
+  {$M+} // published properties RTTI even when parent class did not enable it
 
   /// a simple TThread with a "Terminate" event run in the thread context
   // - the TThread.OnTerminate event is run within Synchronize() so did not
@@ -1152,12 +1153,12 @@ type
     fContentionCount: cardinal;
     fName: RawUtf8;
     fTerminated: boolean;
+    fPendingContextCount: integer;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
-    fPendingContext: array of pointer;
-    fPendingContextCount: integer;
+    fPendingContext: TPointerDynArray;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
@@ -1167,6 +1168,7 @@ type
     /// process to be executed after notification
     procedure Task(aCaller: TSynThreadPoolWorkThread;
       aContext: pointer); virtual; abstract;
+    /// finalize a queue item on Terminate - e.g. call Free/Dispose on aContext
     procedure TaskAbort(aContext: pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads
@@ -1240,11 +1242,13 @@ type
     // - use this property and ContentionTime to compute the average contention time
     property ContentionCount: cardinal
       read fContentionCount;
-    {$ifndef USE_WINIOCP}
     /// how many input tasks are currently waiting to be affected to threads
     property PendingContextCount: integer
+      {$ifdef USE_WINIOCP}
+      read fPendingContextCount;
+      {$else}
       read GetPendingContextCount;
-    {$endif USE_WINIOCP}
+      {$endif USE_WINIOCP}
   end;
 
   {$M-}
@@ -3298,8 +3302,8 @@ begin
   try
     {$ifdef USE_WINIOCP}
     // notify the threads we are shutting down
-    for i := 0 to fWorkThreadCount - 1 do
-      IocpPostQueuedStatus(fRequestQueue, 0, nil, nil);
+    for i := 0 to fWorkThreadCount * 2  do
+      IocpPostQueuedStatus(fRequestQueue, 0, nil, {ctxt=}nil);
       // TaskAbort() is done in Execute when fTerminated = true
     {$else}
     // notify the threads we are shutting down using the event
@@ -3334,6 +3338,8 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   begin
     // IOCP has its own queue
     result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
+    if result then
+      InterlockedIncrement(fPendingContextCount);
   end;
 
 {$else}
@@ -3450,7 +3456,7 @@ begin
   {$endif HASFASTTRYFINALLY}
     if fPendingContextCount > 0 then
     begin
-      result := fPendingContext[0];
+      result := fPendingContext[0]; // FIFO queue
       dec(fPendingContextCount);
       MoveFast(fPendingContext[1], fPendingContext[0],
         fPendingContextCount * SizeOf(pointer));
@@ -3515,7 +3521,7 @@ procedure TSynThreadPoolWorkThread.Execute;
 var
   ctxt: pointer;
   {$ifdef USE_WINIOCP}
-  dum1: cardinal;
+  dum1: cardinal; // those variables are not used by our queue
   dum2: pointer;
   {$endif USE_WINIOCP}
 begin
@@ -3523,29 +3529,36 @@ begin
   try
     fThreadNumber := InterlockedIncrement(fOwner.fRunningThreads);
     NotifyThreadStart(self);
+    {$ifdef USE_WINIOCP}
+    // main loop, waiting for the next task(s) to process from IOCP
+    ctxt := nil;
     repeat
-      {$ifdef USE_WINIOCP}
-      if (not IocpGetQueuedStatus(
-             fOwner.fRequestQueue, dum1, dum2, ctxt, INFINITE) and
-          fOwner.NeedStopOnIOError) then
-        break;
+      if not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
+           ctxt, INFINITE) then // blocking during normal process
+        if fOwner.NeedStopOnIOError then
+          break;
       if fOwner.fTerminated then
-      begin
-        while ctxt <> nil do // release all pending tasks at shutdown
-        begin
-          try
-            fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
-          except
-          end;
-          if not IocpGetQueuedStatus(
-                fOwner.fRequestQueue, dum1, dum2, ctxt, 1) then
-            break;
-        end;
         break;
+      if ctxt = nil then
+        continue;
+      DoTask(ctxt);
+      InterlockedDecrement(fOwner.fPendingContextCount);
+      ctxt := nil;
+    until fOwner.fTerminated or
+          Terminated;
+    // this thread is finished: pending tasks cleanup
+    repeat
+      if ctxt = nil then
+        break; // reached the TSynThreadPool.Destroy "nil" events in the queue
+      try
+        fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
+      except
       end;
-      if ctxt <> nil then
-        DoTask(ctxt);
-      {$else}
+      InterlockedDecrement(fOwner.fPendingContextCount); // always dec
+    until not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, ctxt, {ms=}1);
+    {$else}
+    // main loop, waiting for the next task(s) notified from this thread event
+    repeat
       fEvent.WaitForEver;
       if fOwner.fTerminated then
         break;
@@ -3559,12 +3572,13 @@ begin
           ctxt := fOwner.PopPendingContext; // unqueue any pending context
         until ctxt = nil;
         fOwner.fSafe.Lock;
-        fProcessingContext := nil; // indicates this thread is now available
+        fProcessingContext := nil; // indicates this thread event is available
         fOwner.fSafe.UnLock;
       end;
-     {$endif USE_WINIOCP}
     until fOwner.fTerminated or
           Terminated;
+    // TaskAbort(fPendingContext[]) is done in fOwner's TSynThreadPool.Destroy
+    {$endif USE_WINIOCP}
   finally
     LockedDec32(@fOwner.fRunningThreads);
   end;

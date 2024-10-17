@@ -2036,7 +2036,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         lea     r9, qword ptr [rip + @rhotates_right + 60H]
         lea     rax, qword ptr [rip + @iotas]
         lea     rdi, qword ptr [A + 60H]
-        mov     ecx, 24
+        mov     ecx, 24 // cKeccakNumberOfRounds
         vzeroupper
         //vpbroadcastq ymm0, qword ptr [rdi - 60H]
         db $C4, $E2, $7D, $59, $47, $A0

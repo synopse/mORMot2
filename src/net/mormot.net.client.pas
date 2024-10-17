@@ -169,7 +169,7 @@ type
       Password: SpiUtf8;
       Token: SpiUtf8;
     end;
-    /// how many times THttpClientSocket should redirect 30x responses
+    /// how many times THttpClientSocket/TWinHttp should redirect 30x responses
     RedirectMax: integer;
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
@@ -939,6 +939,11 @@ type
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent
       write fExtendedOptions.UserAgent;
+    /// how many 3xx status code redirections are allowed
+    // - default is 0 - i.e. no redirection
+    // - implemented for TWinHttp only
+    property RedirectMax: integer
+      read fExtendedOptions.RedirectMax write fExtendedOptions.RedirectMax;
     /// internal structure used to store extended options
     // - will be replicated by TLS.IgnoreCertificateErrors and Auth* properties
     property ExtendedOptions: THttpRequestExtendedOptions
@@ -2289,9 +2294,9 @@ begin
           not IsHead(ctxt.Method)) then
         CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
       if ctxt.Header <> '' then
-        SockSend(ctxt.Header);
+        SockSendHeaders(pointer(ctxt.Header)); // normalizing CRLF
       if Http.CompressAcceptEncoding <> '' then
-        SockSend(Http.CompressAcceptEncoding);
+        SockSendHeaders(pointer(Http.CompressAcceptEncoding));
       SockSendCRLF;
       // flush headers and Data/InStream body
       SockSendFlush(dat);
@@ -2299,7 +2304,15 @@ begin
       begin
         // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
         ctxt.InStream.Seek(0, soBeginning);
-        SockSendStream(ctxt.InStream);
+        if SockSendStream(ctxt.InStream, 1 shl 20,
+             {noraise=}false, {checkrecv=}true) = nrRetry then
+        begin
+          // the server interrupted the upload by sending something (e.g. 413)
+          if Assigned(OnLog) then
+             OnLog(sllTrace, 'RequestInternal: response during SockSendStream %',
+               [ctxt.InStream], self);
+          include(Http.HeaderFlags, hfConnectionClose); // socket state is wrong
+        end;
       end;
       // wait and retrieve HTTP command line response
       pending := SockReceivePending(Timeout, @loerr); // select/poll
@@ -3698,8 +3711,13 @@ begin
   if fHttps and
      IgnoreTlsCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
-       @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
+       @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) then
       EWinHttp.RaiseFromLastError;
+  if fExtendedOptions.RedirectMax > 0 then
+    if WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_REDIRECT_POLICY,
+         @REDIRECT_POLICY_ALWAYS, SizeOf(cardinal)) then
+      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_MAX_HTTP_AUTOMATIC_REDIRECTS,
+        @fExtendedOptions.RedirectMax, SizeOf(cardinal)); // ignore errors
   L := length(aData);
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
@@ -3708,7 +3726,7 @@ begin
      (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
      IgnoreTlsCertificateErrors and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
-       @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) and
+       @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
        pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT), 0) and
      _SendRequest(L) and
@@ -3893,9 +3911,9 @@ begin
       EWinINet.RaiseFromLastError;
   end
   else
-  // blocking send with no callback
-  if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
-    EWinINet.RaiseFromLastError;
+    // blocking send with no callback
+    if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
+      EWinINet.RaiseFromLastError;
 end;
 
 function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;
@@ -4658,8 +4676,8 @@ end;
 
 { TJsonClient }
 
-constructor TJsonClient.Create(const aServerAddress: RawUtf8;
-  const aBaseUri: RawUtf8; aKeepAlive: integer);
+constructor TJsonClient.Create(const aServerAddress, aBaseUri: RawUtf8;
+  aKeepAlive: integer);
 begin
   inherited Create;
   if not fServerUri.From(aServerAddress) then
@@ -4728,8 +4746,9 @@ end;
 procedure TJsonClient.RawRequest(const Method, Action,
   InType, InBody, InHeaders: RawUtf8; var Response: TJsonResponse);
 var
-  t, b, h: RawUtf8;
+  a, t, b, h: RawUtf8;
 begin
+  // prepare input paramteters
   h := fInHeaders; // pre-computed from Cookies and DefaultHeaders properties
   if InHeaders <> '' then
     AppendLine(h, [InHeaders]);
@@ -4741,11 +4760,15 @@ begin
     if t = '' then
       t := JSON_CONTENT_TYPE_VAR;
   end;
+  a := Action;
+  while (a <> '') and
+        (a[1] = '/') do
+    delete(a, 1, 1); // avoid dual 'base//action' URI
   Response.Init;
   Response.Method := Method;
   fSafe.Lock; // blocking thread-safe HTTP request
   try
-    fServerUri.Address := fBaseUri + Action;
+    fServerUri.Address := fBaseUri + a;
     Response.Url := fServerUri.Root; // excluding ?parameters=...
     fHttp.Request(fServerUri, Method, h, b, t, fKeepAlive);
     Response.Status := fHttp.Status;
@@ -5016,7 +5039,7 @@ begin
         'Content-Type: text/plain; charset=', TextCharSet, #13#10 +
         'Content-Transfer-Encoding: 8bit']);
     if head <> '' then
-      sock.SockSend(head);
+      sock.SockSendHeaders(pointer(head));
     sock.SockSendCRLF; // end of headers
     sock.SockSend(Text);
     Exec('.', '25');

@@ -77,8 +77,10 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 
 /// same as Dest := Source, but copying by value
 // - will unreference any varByRef content
-// - will convert any string value into RawUtf8 (varString) for consistency
-procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
+// - will convert any string value into RawUtf8 (varString) for consistency,
+// unless NoForceRawUtf8 is true (e.g. from dvoValueDoNotNormalizeAsRawUtf8)
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
+  NoForceRawUtf8: boolean = false);
 
 /// same as FillChar(Value^,SizeOf(TVarData),0)
 // - so can be used for TVarData or Variant
@@ -317,6 +319,7 @@ type
     // - caller should have ensured that it is of the exact custom type
     function IsVoid(const V: TVarData): boolean; virtual;
     /// override this abstract method for actual getter by name implementation
+    // - Dest is likely to be assigned as varVariantByRef for performance
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
     /// override this abstract method for actual setter by name implementation
@@ -794,6 +797,7 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     /// overriden method for actual getter by name implementation
+    // - Dest is likely to be assigned as varVariantByRef for performance
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
     /// overriden method for actual setter by name implementation
@@ -3647,8 +3651,8 @@ end;
 function TDocVariantData.InternalSetValue(
   aIndex: PtrInt; const aValue: variant): PVariant;
 begin
-  result := @VValue[aIndex];
-  SetVariantByValue(aValue, result^); // caller ensured that aIndex is OK
+  result := @VValue[aIndex]; // caller ensured that aIndex is OK
+  SetVariantByValue(aValue, result^, Has(dvoValueDoNotNormalizeAsRawUtf8));
   if Has(dvoInternValues) then
     DocVariantType.InternValues.UniqueVariant(result^);
 end;
@@ -3766,7 +3770,8 @@ begin
   end;
 end;
 
-procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
+  NoForceRawUtf8: boolean);
 var
   s: PVarData;
   d: TSynVarData absolute Dest;
@@ -3782,36 +3787,70 @@ begin
       break;
     s := s^.VPointer; // retrieve original value
   until false;
+  d.VAny := nil; // to avoid GPF with strings below
   case vt of
     varEmpty..varDate,
     varBoolean,
     varShortInt..varWord64:
       begin
         d.VType := vt;
-        d.VInt64 := s^.VInt64; // copy up to 64-bit of value
+        d.VInt64 := s^.VInt64; // fast copy up to 64-bit of value
       end;
     varString:
       begin
         d.VType := varString;
-        d.VAny := nil;
         RawByteString(d.VAny) := RawByteString(s^.VAny); // assign
       end;
     varStringByRef:
       begin
         d.VType := varString;
-        d.VAny := nil;
-        RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // assign
+        RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // deref + assign
       end;
     {$ifdef HASVARUSTRING}
-    varUString,
-    varUStringByRef,
-    {$endif HASVARUSTRING}
-    varOleStr,
-    varOleStrByRef:
+    varUString:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varUString;
+        UnicodeString(d.VAny) := UnicodeString(s^.VAny); // assign
+      end
+      else
       begin
         d.VType := varString;
-        d.VAny := nil;
-        VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // normalize as RawUtf8
+        RawUnicodeToUtf8(s^.VAny, length(UnicodeString(s^.VAny)), RawUtf8(d.VAny));
+      end;
+    varUStringByRef:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varUString;
+        UnicodeString(d.VAny) := PUnicodeString(s^.VAny)^; // deref + assign
+      end
+      else
+      begin
+        d.VType := varString;
+        RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PUnicodeString(s^.VAny)^), RawUtf8(d.VAny));
+      end;
+    {$endif HASVARUSTRING}
+    varOleStr:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varSynUnicode; // store as UnicodeString if possible
+        FastSynUnicode(SynUnicode(d.VAny), s^.VAny, length(WideString(s^.VAny)));
+      end
+      else
+      begin
+        d.VType := varString;
+        RawUnicodeToUtf8(s^.VAny, length(WideString(s^.VAny)), RawUtf8(d.VAny));
+      end;
+    varOleStrByRef:
+      if NoForceRawUtf8 then
+      begin
+        d.VType := varSynUnicode;
+        FastSynUnicode(SynUnicode(d.VAny), PPointer(s^.VAny)^, length(PWideString(s^.VAny)^));
+      end
+      else
+      begin
+        d.VType := varString;
+        RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PWideString(s^.VAny)^), RawUtf8(d.VAny));
       end;
   else // note: varVariant should not happen here
     if DocVariantType.FindSynVariantType(vt, ct) then
@@ -3921,25 +3960,23 @@ end;
 
 procedure VariantToString(const V: Variant; var result: string);
 var
+  vd: TVarData absolute V;
   wasString: boolean;
   tmp: RawUtf8;
-  vt: cardinal;
 begin
-  vt := TVarData(V).VType;
-  case vt of
+  case vd.VType of
     varEmpty,
     varNull:
       result := ''; // default VariantToUtf8(null)='null'
     {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
-    varOleStr:
-      SetString(result, PWideChar(TVarData(V).VAny), length(WideString(TVarData(V).VAny)));
     varUString:
-      result := UnicodeString(TVarData(V).VAny);
+      result := UnicodeString(vd.VAny);
     varUStringByRef:
-      result := PUnicodeString(TVarData(V).VAny)^;
+      result := PUnicodeString(vd.VAny)^;
+    varOleStr:
+      FastSynUnicode(result, vd.VAny, length(WideString(vd.VAny)));
     varOleStrByRef:
-      SetString(result, PPWideChar(TVarData(V).VAny)^,
-        length(PWideString(TVarData(V).VAny)^));
+      FastSynUnicode(result, PPointer(vd.VAny)^, length(PWideString(vd.VAny)^));
     {$endif UNICODE}
   else
     begin
@@ -5888,7 +5925,7 @@ begin
      (aValue.VType <> vtVariant) then
     VarRecToVariant(aValue, v^)
   else
-    SetVariantByValue(aValue.VVariant^, v^);
+    SetVariantByValue(aValue.VVariant^, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
   if Has(dvoInternValues) then
     InternalUniqueValueAt(aIndex);
 end;
@@ -7143,7 +7180,7 @@ begin
   if aValueOwned then
     v^ := aValue
   else
-    SetVariantByValue(aValue, v^);
+    SetVariantByValue(aValue, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
   if Has(dvoInternValues) then
     InternalUniqueValue(v);
 end;
@@ -7293,7 +7330,7 @@ begin
   if Has(dvoInternValues) then
     DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
   else
-    RawUtf8ToVariant(aValue, VValue[result]);
+    RawUtf8ToVariant(aValue, VValue[result]); // always RawUtf8
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
@@ -7403,7 +7440,7 @@ var
   v: PVarData;
   tmp: variant;
 begin
-  SetVariantByValue(aValue, tmp); // ensure text is RawUtf8
+  SetVariantByValue(aValue, tmp, {noforceutf8=}false); // ensure text is RawUtf8
   v := @VValue[StartIndex];
   for result := StartIndex to VCount - 1 do
     if FastVarDataComp(v, @tmp, CaseInsensitive) = 0 then
@@ -7421,7 +7458,7 @@ var
   tmp: variant;
 begin
   result := 0; // returns the number of occurences of this value
-  SetVariantByValue(aValue, tmp); // ensure text is RawUtf8
+  SetVariantByValue(aValue, tmp, {noforceutf8=}false); // ensure text is RawUtf8
   v := @VValue[StartIndex];
   for ndx := StartIndex to VCount - 1 do
   begin
@@ -8064,7 +8101,7 @@ begin
       begin
         if length(result) = n then
           SetLength(result, NextGrow(n));
-        SetVariantByValue(PVariant(v)^, result[n]);
+        SetVariantByValue(PVariant(v)^, result[n], {noforceutf8=}true);
         inc(n);
       end;
   if n <> 0 then
@@ -8456,7 +8493,7 @@ begin
      not GetObjectProp(aName, v{%H-}, nil) then
     result := aDefault
   else
-    SetVariantByValue(v^, result);
+    SetVariantByValue(v^, result, {noforceutf8=}true);
 end;
 
 function TDocVariantData.GetValueOrNull(const aName: RawUtf8): variant;
@@ -8467,7 +8504,7 @@ begin
      not GetObjectProp(aName, v{%H-}, nil) then
     SetVariantNull(result{%H-})
   else
-    SetVariantByValue(v^, result);
+    SetVariantByValue(v^, result, {noforceutf8=}true);
 end;
 
 function TDocVariantData.GetValueOrEmpty(const aName: RawUtf8): variant;
@@ -8478,7 +8515,7 @@ begin
      not GetObjectProp(aName, v{%H-}, nil) then
     VarClear(result{%H-})
   else
-    SetVariantByValue(v^, result);
+    SetVariantByValue(v^, result, {noforceutf8=}true);
 end;
 
 function TDocVariantData.GetAsBoolean(const aName: RawUtf8; out aValue: boolean;
@@ -8753,7 +8790,7 @@ var
 begin
   v := GetPVariantByPath(aNameOrPath, '.');
   if v <> nil then
-    SetVariantByValue(v^, result)
+    SetVariantByValue(v^, result, {noforceutf8=}true)
   else
     InternalNotFound(result, pointer(aNameOrPath));
 end;
@@ -9301,7 +9338,7 @@ end;
 
 function TDocVariantData.GetStringByName(const aName: RawUtf8): string;
 begin
-  result := VariantToString(GetPVariantByName(aName)^);
+  VariantToString(GetPVariantByName(aName)^, result);
 end;
 
 function TDocVariantData.GetWideByName(const aName: RawUtf8): SynUnicode;
@@ -9322,8 +9359,16 @@ end;
 
 procedure TDocVariantData.SetStringByName(const aName: RawUtf8;
   const aValue: string);
+var
+  v: PVariant;
 begin
-  StringToVariant(aValue, GetOrAddPVariantByName(aName)^);
+  v := GetOrAddPVariantByName(aName);
+  {$ifdef UNICODE}
+  if Has(dvoValueDoNotNormalizeAsRawUtf8) then
+    v^ := aValue // direct store string=UnicodeString
+  else
+  {$endif UNICODE}
+    StringToVariant(aValue, v^); // normalize as RawUtf8 in storage
 end;
 
 procedure TDocVariantData.SetWideByName(const aName: RawUtf8;
@@ -11155,7 +11200,7 @@ var
   v: PVariant;
 begin
   v := ValueAt(position);
-  SetVariantByValue(value, v^); // may convert to RawUtf8/varString
+  SetVariantByValue(value, v^, fValue^.Has(dvoValueDoNotNormalizeAsRawUtf8));
   if (PVarData(v)^.VType = varString) and
      fValue^.Has(dvoInternValues) then
     InternalUniqueValue(v);

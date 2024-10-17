@@ -53,7 +53,7 @@ ApprovedBy=
 ; Revision* multiple revision Table: ignored values are taken from current, older below
 RevisionDescription=Current Version
 RevisionDate=
-Revision=2.2
+Revision=2.3
 ; [DILayout] list the global DI outline (lines beginning with : are titles)
 ; [DI-*] details all items
 DefaultPreparedBy=Arnaud Bouchez
@@ -112,7 +112,7 @@ This document is intended to describe the Design Input Product Specifications.
 : Project Concept
 :  Purpose and Scope
 This document focuses on the {\i mORMot 2} library.
-The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.2 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
+The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.3 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
 :  Concept Statement
 It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the {\i Delphi} programing environment.
 Latest versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the {\i Delphi} compiler as well, with a more open architecture.
@@ -168,7 +168,7 @@ Purpose=List {\i Failure Modes and Effects Analysis} (FMEA)
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -235,7 +235,7 @@ Purpose=Interpret design inputs and specify software design features
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -295,7 +295,7 @@ Purpose=Perform a risk assessment of the SWRS implementation
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -463,7 +463,7 @@ SourceFile=mormot2tests.dpr;mormot.*.pas
 ; mormot.*.pas will find all official mORMot units in all IncludePath folders :)
 SourceIgnoreSymbol=select,check,open,connect,send,sqlite3,mORMot,JavaScript,cypher,execute,cache
 SourceIgnoreSymbolByUnit=SynCrossPlatformJSON,SynCrossPlatformREST,SynCrossPlatformSpecific,SynCrossPlatformTests
-Version=2.2
+Version=2.3
 TitleOffset=0
 DisplayName=mORMot2
 
@@ -480,7 +480,7 @@ Purpose=Summarize the software DI implementation for QA review
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -521,7 +521,7 @@ Purpose=Define the testing required for the updates to the mORMot Framework soft
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -581,7 +581,7 @@ Purpose=Describe all Test protocols with specific pass/fail criteria
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -666,7 +666,7 @@ ItemName=SCRS
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -701,7 +701,7 @@ Purpose=Present all software modifications introduced in the current release
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.2
+Revision=2.3
 RevisionDate=
 RevisionDescription=Initial version
 ; Revision* multiple revision Table: ignored values are taken from current

@@ -645,7 +645,7 @@ type
   // any previous value for the name "AB"
   // - dvoReturnNullForUnknownProperty will be used when retrieving any value
   // from its name (for dvObject kind of instance), or index (for dvArray or
-  // dvObject kind of instance)
+  // dvObject kind of instance), when the value is not found
   // - by default, internal values will be copied by-value from one variant
   // instance to another, to ensure proper safety - but it may be too slow:
   // if you set dvoValueCopiedByReference, the internal
@@ -653,6 +653,8 @@ type
   // to avoid memory allocations, BUT it may break internal process if you change
   // some values in place (since VValue/VName and VCount won't match) - as such,
   // if you set this option, ensure that you use the content as read-only
+  // - by default, any string value will be stored as RawUtf8 varString, with
+  // conversion if needed, unless dvoValueDoNotNormalizeAsRawUtf8 is defined
   // - any registered custom types may have an extended JSON syntax (e.g.
   // TBsonVariant does for MongoDB types), and will be searched during JSON
   // parsing, unless dvoJsonParseDoNotTryCustomVariants is set (slightly faster)
@@ -687,6 +689,7 @@ type
     dvoCheckForDuplicatedNames,
     dvoReturnNullForUnknownProperty,
     dvoValueCopiedByReference,
+    dvoValueDoNotNormalizeAsRawUtf8,
     dvoJsonParseDoNotTryCustomVariants,
     dvoJsonParseDoNotGuessCount,
     dvoJsonObjectParseWithinString,
@@ -2559,7 +2562,7 @@ type
   public
     /// initialize the storage and its internal hash pools
     // - aHashTables is the pool size, and should be a power of two <= 512
-    // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
+    // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512) - rounded up if not an exact power
     constructor Create(aHashTables: integer = 4); reintroduce;
     /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
@@ -4609,21 +4612,16 @@ end;
 
 constructor TRawUtf8Interning.Create(aHashTables: integer);
 var
-  p: integer;
   i: PtrInt;
 begin
   inherited Create; // may have been overriden
-  for p := 0 to 9 do
-    if aHashTables = 1 shl p then
-    begin
-      SetLength(fPool, aHashTables);
-      fPoolLast := aHashTables - 1;
-      for i := 0 to fPoolLast do
-        fPool[i].Init;
-      exit;
-    end;
-  ESynException.RaiseUtf8('%.Create(%) not allowed: ' +
-    'should be a power of 2 <= 512', [self, aHashTables]);
+  if aHashTables > 512 then
+    ESynException.RaiseUtf8('%.Create(%) failed as > 512', [self, aHashTables]);
+  aHashTables := NextPowerOfTwo(aHashTables);
+  SetLength(fPool, aHashTables);
+  fPoolLast := aHashTables - 1;
+  for i := 0 to fPoolLast do
+    fPool[i].Init;
 end;
 
 procedure TRawUtf8Interning.Clear;
@@ -5693,14 +5691,14 @@ end;
 
 function _BS_UString(Data: PUnicodeString; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 begin
-  Dest.WriteVar(pointer(Data^), length(Data^) * 2);
+  Dest.WriteVar(pointer(Data^), length(Data^) * 2); // length is stored in bytes
   result := SizeOf(pointer);
 end;
 
 function _BL_UString(Data: PUnicodeString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 begin
   with Source.VarBlob do
-    SetString(Data^, PWideChar(Ptr), Len shr 1); // length in bytes was stored
+    FastSynUnicode(Data^, Ptr, Len shr 1); // length was stored in bytes
   result := SizeOf(pointer);
 end;
 
@@ -6329,7 +6327,7 @@ begin
     vt := VARIANT_SIZE[vt];
     if vt <> 0 then
       if vt = 255 then
-        with Source.VarBlob do // valOleStr
+        with Source.VarBlob do // varOleStr (=8)
           SetString(WideString(Data^.vAny), PWideChar(Ptr), Len shr 1)
       else
         Source.Copy(@Data^.VInt64, vt); // simple types
@@ -6340,7 +6338,7 @@ begin
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
     with Source.VarBlob do
-      SetString(UnicodeString(Data^.vAny), PWideChar(Ptr), Len shr 1)
+      FastSynUnicode(UnicodeString(Data^.vAny), Ptr, Len shr 1)
   {$endif HASVARUSTRING}
   else if Assigned(BinaryVariantLoadAsJson) then
     _BL_VariantComplex(pointer(Data), Source)

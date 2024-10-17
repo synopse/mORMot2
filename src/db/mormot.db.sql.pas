@@ -3436,7 +3436,7 @@ begin
   ndx := smt.ColumnIndex(col);
   result := ndx >= 0;
   if ndx >= 0 then
-    smt.ColumnToVariant(ndx, Variant(Dest));
+    smt.ColumnToVariant(ndx, Variant(Dest)); // text may be set as varSynUnicode
 end;
 
 
@@ -6179,7 +6179,7 @@ begin
             else
               FastSetRawByteString(RawByteString(VAny), V.VBlob, V.VBlobLen);
         end;
-      ftUtf8: // as varSynUnicode
+      ftUtf8: // VType is varSynUnicode
         begin
           VAny := nil; // avoid GPF below
           if V.VText <> nil then

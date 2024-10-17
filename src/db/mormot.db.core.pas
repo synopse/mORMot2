@@ -361,7 +361,7 @@ type
   /// thread-safe sequence used to internally store TLastError message
   TLastErrorID = integer;
 
-  /// allow to manage an Error messages list from IDs
+  /// allow to manage an Error messages list from IDs - typically per thread
   // - used e.g. with a TLastErrorID threadvar for SetDbError/GetDbError
   // since we can't create any string/RawUtf8 threadvar
   {$ifdef USERECORDWITHMETHODS}
@@ -384,6 +384,10 @@ type
     function NewMsg(const text: RawUtf8): TLastErrorID;
     /// get the UTF-8 message associated to a given ID
     function GetMsg(id: TLastErrorID; out text: RawUtf8): boolean;
+    /// modify the number of items stored in Seq[] and Msg[]
+    // - by default, NewMsg() will allocate space for up to 256 errors
+    // - supplied max value will be rounded up to the next power of two <= 1024
+    procedure SetCapacity(max: integer);
   end;
 
 /// set an error message for the current thread
@@ -1913,6 +1917,15 @@ end;
 
 { TLastError }
 
+procedure TLastError.SetCapacity(max: integer);
+begin
+  max := NextPowerOfTwo(MinPtrUInt(max, 1024));
+  SetLength(Seq, max);
+  SetLength(Msg, max);
+  CurrentIndex := 0;
+  CurrentID := 0;
+end;
+
 function TLastError.NewMsg(const text: RawUtf8): TLastErrorID;
 var
   i: PtrInt;
@@ -1925,20 +1938,15 @@ begin
   Safe.Lock;
   try
     if Seq = nil then
-    begin // first time this slot is used
-      SetLength(Seq, 256);
-      SetLength(Msg, 256);
-    end;
+      SetCapacity(256); // first time this slot is used
     inc(CurrentID);
     if CurrentID < 0 then
       CurrentID := 1; // paranoid check after 2^31 messages :)
-    i := CurrentIndex + 1;
-    if i = length(Seq) then
-      i := 0;
+    i := (CurrentIndex + 1) and pred(length(Seq)); // length() is a power of two
+    CurrentIndex := i;
     result := CurrentID;
     Seq[i] := result;
     Msg[i] := text;
-    CurrentIndex := i;
   finally
     Safe.UnLock;
   end;

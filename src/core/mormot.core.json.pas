@@ -2739,9 +2739,9 @@ begin
       D^ := '?' // the first \u#### expects a following \u#### surrogate
   else
   begin
-    D[0] := AnsiChar($E0 or (c shr 12));
-    D[1] := AnsiChar($80 or ((c shr 6) and $3F));
-    D[2] := AnsiChar($80 or (c and $3F));
+    D[0] := AnsiChar($e0 or (c shr 12));
+    D[1] := AnsiChar($80 or ((c shr 6) and $3f));
+    D[2] := AnsiChar($80 or (c and $3f));
     inc(D,2);
   end;
   inc(D);
@@ -3507,9 +3507,9 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
                   c := #2
                 else if c4 <= $ffff then
                   c := #3
-                else if c4 <= $1FFFFF then
+                else if c4 <= $1fffff then
                   c := #4
-                else if c4 <= $3FFFFFF then
+                else if c4 <= $3ffffff then
                   c := #5
                 else
                   c := #6;
@@ -3531,9 +3531,9 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
               end;
           else
             begin
-              D[0] := AnsiChar($E0 or (c4 shr 12));
-              D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
-              D[2] := AnsiChar($80 or (c4 and $3F));
+              D[0] := AnsiChar($e0 or (c4 shr 12));
+              D[1] := AnsiChar($80 or ((c4 shr 6) and $3f));
+              D[2] := AnsiChar($80 or (c4 and $3f));
               inc(D, 3);
             end;
           end;
@@ -6158,7 +6158,7 @@ begin
             FlushToStream;
           c := byte(Source^);
           inc(Source);
-          if c > $7F then
+          if c > $7f then
              break;
           if c = 0 then
             exit;
@@ -6174,7 +6174,7 @@ begin
             FlushToStream;
           c := byte(Source^);
           inc(Source);
-          if c > $7F then
+          if c > $7f then
              break;
           if c = 0 then
             exit;
@@ -6203,7 +6203,7 @@ begin
           FlushToStream;
         c := byte(Source^);
         inc(Source);
-        if c > $7F then
+        if c > $7f then
            break;
         if c = 0 then
           exit;
@@ -6221,15 +6221,15 @@ begin
     c := AnsiToWide[c]; // convert FixedAnsi char into Unicode char
     if c > $7ff then
     begin
-      B[1] := AnsiChar($E0 or (c shr 12));
-      B[2] := AnsiChar($80 or ((c shr 6) and $3F));
-      B[3] := AnsiChar($80 or (c and $3F));
+      B[1] := AnsiChar($e0 or (c shr 12));
+      B[2] := AnsiChar($80 or ((c shr 6) and $3f));
+      B[3] := AnsiChar($80 or (c and $3f));
       inc(B, 3);
     end
     else
     begin
-      B[1] := AnsiChar($C0 or (c shr 6));
-      B[2] := AnsiChar($80 or (c and $3F));
+      B[1] := AnsiChar($c0 or (c shr 6));
+      B[2] := AnsiChar($80 or (c and $3f));
       inc(B, 2);
     end;
     dec(SourceChars);
@@ -7248,8 +7248,8 @@ nxt:if Len = 0 then
     else
     begin
       dec(c, $10000); // store as UTF-16 surrogates
-      Utf16ToJsonUnicodeEscape(B, (c shr 10) or UTF16_HISURROGATE_MIN, tab);
-      Utf16ToJsonUnicodeEscape(B, (c and $3FF) or UTF16_LOSURROGATE_MIN, tab);
+      Utf16ToJsonUnicodeEscape(B, (c shr 10)   or UTF16_HISURROGATE_MIN, tab);
+      Utf16ToJsonUnicodeEscape(B, (c and $3ff) or UTF16_LOSURROGATE_MIN, tab);
     end;
     if P^ > #127 then
       goto nxt;
@@ -9348,6 +9348,7 @@ var
   i, ndx: PtrInt;
   v: variant;
   intvalues: TRawUtf8Interning;
+  forcenoutf8: boolean;
 begin
   if dv.VarType <> DocVariantVType then
     TDocVariant.New(DocVariant, JSON_NAMEVALUE[ExtendedJson]);
@@ -9357,6 +9358,7 @@ begin
     intvalues := DocVariantType.InternValues
   else
     intvalues := nil;
+  forcenoutf8 := dvoValueDoNotNormalizeAsRawUtf8 in dv.Options;
   result := 0; // returns number of changed values
   for i := 0 to Count - 1 do
     if List[i].Name <> '' then
@@ -9373,7 +9375,7 @@ begin
         continue; // value not changed -> skip
       if ChangedProps <> nil then
         PDocVariantData(ChangedProps)^.AddValue(List[i].Name, v);
-      SetVariantByValue(v, dv.Values[ndx]);
+      SetVariantByValue(v, dv.Values[ndx], forcenoutf8);
       if intvalues <> nil then
         intvalues.UniqueVariant(dv.Values[ndx]);
       inc(result);
@@ -10692,7 +10694,7 @@ begin
     {$endif HASVARUSTRING}
     varVariant:
       // rkVariant
-      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^);
+      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}true);
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin

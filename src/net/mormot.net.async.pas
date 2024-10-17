@@ -120,11 +120,11 @@ type
     /// the current (reusable) write data buffer of this connection
     fWr: TRawByteStringBuffer;
     /// TryLock/Unlock R/W thread acquisition
-    // - uses its own rentrant implementation, faster/lighter than TOSLock
+    // - uses its own reentrant implementation, faster/lighter than TOSLock
     fRW: array[boolean] of record
       Lock: PtrUInt;
-      ThreadID: TThreadID;
-      RentrantCount: integer;
+      ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
+      ReentrantCount: TThreadID; // fake integer, but aligned to ThreadID field
     end;
     /// low-level TLS context
     fSecure: INetTls;
@@ -1474,16 +1474,16 @@ begin
     if Lock <> 0 then
       if ThreadID = tid then
       begin
-        inc(RentrantCount);
+        inc(PInteger(@ReentrantCount)^); // counter stored as TThreadID field
         result := true;
       end
       else
         exit
-    else if LockedExc(Lock, 1, 0) then
+    else if LockedExc(Lock, 1, 0) then // this thread just acquired the lock
     begin
       include(fFlags, fWasActive);
       ThreadID := tid;
-      RentrantCount := 1;
+      ReentrantCount := TThreadID(1); // reset reentrant counter
       result := true;
     end;
 end;
@@ -1493,8 +1493,8 @@ begin
   if self <> nil then
     with fRW[writer and fLockMax] do
     begin
-      dec(RentrantCount);
-      if RentrantCount <> 0 then
+      dec(PInteger(@ReentrantCount)^); // counter stored as TThreadID field
+      if ReentrantCount <> TThreadID(0) then
         exit;
       Lock := 0;
       ThreadID := TThreadID(0);
@@ -1638,7 +1638,8 @@ begin
        (TPollAsyncConnection(tag).fHandle <> 0) and
        // another atpReadPending thread may currently own this connection
        // (occurs if PollForPendingEvents was called in between)
-       (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0) then
+       (TPollAsyncConnection(tag).fRW[{write=}false].
+          ReentrantCount = TThreadID(0)) then
     begin
       exclude(TPollAsyncConnection(tag).fFlags, fReadPending);
       result := true;
@@ -1741,16 +1742,18 @@ begin
     sock := connection.fSocket;
     if fDebugLog <> nil then
       {$ifdef USE_WINIOCP}
-      DoLog('Stop(%) sock=% handle=% r=% w=%',
+      fDebugLog.Add.Log(sllDebug, 'Stop(%) sock=% handle=% r=% w=%',
         [caller, pointer(sock), connection.Handle,
-         connection.fRW[false].RentrantCount,
-         connection.fRW[true].RentrantCount], sllDebug);
+         PInteger(@connection.fRW[false].ReentrantCount)^,
+         PInteger(@connection.fRW[true].ReentrantCount)^], self);
       {$else}
-      DoLog('Stop(%) sock=% handle=% r=%% w=%%',
+      fDebugLog.Add.Log(sllDebug, 'Stop(%) sock=% handle=% r=%% w=%%',
         [caller, pointer(sock), connection.Handle,
-         connection.fRW[false].RentrantCount, _SUB[fSubRead in connection.fFlags],
-         connection.fRW[true].RentrantCount, _SUB[fSubWrite in connection.fFlags]],
-         sllDebug);
+         PInteger(@connection.fRW[false].ReentrantCount)^,
+         _SUB[fSubRead in connection.fFlags],
+         PInteger(@connection.fRW[true].ReentrantCount)^,
+         _SUB[fSubWrite in connection.fFlags]],
+         self);
       {$endif USE_WINIOCP}
     if sock <> nil then
     begin
@@ -1766,7 +1769,7 @@ begin
       // unsubscribe and close the socket
       {$ifdef USE_WINIOCP}
       if connection.fIocp <> nil then
-        fIocp.Unsubscribe(connection.fIocp)
+        fIocp.Unsubscribe(connection.fIocp) // with wioUnsubscribeShutdownSocket
       {$else}
       if fSubWrite in connection.fFlags then
         // write first because of fRead.UnsubscribeShouldShutdownSocket=true
@@ -2012,9 +2015,9 @@ begin
      end;
   {$endif USE_WINIOCP}
   if fDebugLog <> nil then
-    DoLog('Subscribe(%,%)=% % handle=%',
+    fDebugLog.Add.Log(sllDebug, 'Subscribe(%,%)=% % handle=%',
       [pointer(connection.fSocket), POLL_SOCKET_EVENT[sub], BOOL_STR[result],
-       caller, connection.Handle], sllDebug);
+       caller, connection.Handle], self);
 end;
 
 procedure TPollAsyncSockets.CloseConnection(
@@ -2116,10 +2119,10 @@ begin
           else
             wf[0] := #0;
           if fDebugLog <> nil then
-            DoLog('ProcessRead recv(%)=% len=% %in %',
+            fDebugLog.Add.Log(LOG_TRACEWARNING[not (res in [nrOk, nrRetry, nrClosed])],
+              'ProcessRead recv(%)=% len=% %in %',
               [pointer(connection.Socket), ToText(res)^, recved, wf,
-               MicroSecFrom(start)],
-              LOG_TRACEWARNING[not (res in [nrOk, nrRetry, nrClosed])]);
+               MicroSecFrom(start)], self);
           if connection.fSocket = nil then
             exit; // Stop() called
           if res = nrRetry then
@@ -2243,13 +2246,13 @@ begin
         dec(w, buflen); // buflen = remaining data to send
         inc(sent, w);   // beforewrite = actually sent by RawWrite()
         if fDebugLog <> nil then
-          DoLog('ProcessWrite RawWrite(%)=% sent=% remain=% in % pw=%',
+          fDebugLog.Add.Log(sllTrace, 'ProcessWrite RawWrite(%)=% sent=% remain=% in % pw=%',
             [pointer(connection.fSocket), w, sent, buflen,
-             MicroSecFrom(start), fProcessingWrite]);
+             MicroSecFrom(start), fProcessingWrite], self);
       end
       else if fDebugLog <> nil then
-        DoLog('ProcessWrite sent(%)=% pw=%',
-          [pointer(connection.fSocket), sent, fProcessingWrite]);
+        fDebugLog.Add.Log(sllTrace, 'ProcessWrite sent(%)=% pw=%',
+          [pointer(connection.fSocket), sent, fProcessingWrite], self);
       connection.fWr.Remove(sent); // is very likely to just set fWr.Len := 0
       if connection.fWr.Len = 0 then
         // no more data in output buffer - AfterWrite may refill connection.fWr
@@ -2265,8 +2268,8 @@ begin
         fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
         exclude(connection.fFlags, fSubWrite);
         if fDebugLog <> nil then
-          DoLog('ProcessWrite Unsubscribe(sock=%,handle=%)=%',
-           [pointer(connection.fSocket), connection.Handle]);
+          fDebugLog.Add.Log(sllTrace, 'ProcessWrite Unsubscribe(sock=%,handle=%)=%',
+           [pointer(connection.fSocket), connection.Handle], self);
       end;
       {$endif USE_WINIOCP}
     finally
@@ -2303,8 +2306,8 @@ begin
       soClose:
         begin
           if fDebugLog <> nil then
-            DoLog('% % closed by AfterWrite handle=%',
-              [caller, pointer(connection.fSocket), connection.Handle]);
+            fDebugLog.Add.Log(sllTrace, '% % closed by AfterWrite handle=%',
+              [caller, pointer(connection.fSocket), connection.Handle], self);
           connection.fWr.Clear;
         end;
       soWaitWrite:

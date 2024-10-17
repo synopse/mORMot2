@@ -269,56 +269,56 @@ var
   // - first array is for the background, second is for the text (black/white)
   // - is defined as var and not const to allow customization at runtime
   LOG_LEVEL_COLORS: array[boolean, TSynLogLevel] of integer = (
-   ($FFFFFF,    // sllNone
-    $DCC0C0,    // sllInfo
-    $DCDCDC,    // sllDebug
-    $C0C0C0,    // sllTrace
-    $8080C0,    // sllWarning
-    $8080FF,    // sllError
-    $C0DCC0,    // sllEnter
-    $DCDCC0,    // sllLeave
-    $C0C0F0,    // sllLastError
-    $C080FF,    // sllException
-    $C080F0,    // sllExceptionOS
-    $C080C0,    // sllMemory
-    $C080C0,    // sllStackTrace
-    $4040FF,    // sllFail
-    $B08080,    // sllSQL
-    $B0B080,    // sllCache
-    $8080DC,    // sllResult
-    $80DC80,    // sllDB
-    $DC8080,    // sllHTTP
-    $DCFF00,    // sllClient
-    $DCD000,    // sllServer
-    $DCDC80,    // sllServiceCall
-    $DC80DC,    // sllServiceReturn
-    $DCDCDC,    // sllUserAuth
-    $D0D0D0,    // sllCustom1
-    $D0D0DC,    // sllCustom2
-    $D0D0C0,    // sllCustom3
-    $D0D0E0,    // sllCustom4
-    $20E0D0,    // sllNewRun
-    $8080FF,    // sllDDDError
-    $DCCDCD,    // sllDDDInfo
-    $C0C0C0),   // sllMonitoring
+   ($ffffff,    // sllNone
+    $dcc0c0,    // sllInfo
+    $dcdcdc,    // sllDebug
+    $c0c0c0,    // sllTrace
+    $8080c0,    // sllWarning
+    $8080ff,    // sllError
+    $c0dcc0,    // sllEnter
+    $dcdcc0,    // sllLeave
+    $c0c0f0,    // sllLastError
+    $c080ff,    // sllException
+    $c080f0,    // sllExceptionOS
+    $c080c0,    // sllMemory
+    $c080c0,    // sllStackTrace
+    $4040ff,    // sllFail
+    $b08080,    // sllSQL
+    $b0b080,    // sllCache
+    $8080dc,    // sllResult
+    $80dc80,    // sllDB
+    $dc8080,    // sllHTTP
+    $dcff00,    // sllClient
+    $dcd000,    // sllServer
+    $dcdc80,    // sllServiceCall
+    $dc80dc,    // sllServiceReturn
+    $dcdcdc,    // sllUserAuth
+    $d0d0d0,    // sllCustom1
+    $d0d0dc,    // sllCustom2
+    $d0d0c0,    // sllCustom3
+    $d0d0e0,    // sllCustom4
+    $20e0d0,    // sllNewRun
+    $8080ff,    // sllDDDError
+    $dccdcd,    // sllDDDInfo
+    $c0c0c0),   // sllMonitoring
     // black/white text corresponding to each colored background:
    ($000000,    // sllNone
     $000000,    // sllInfo
     $000000,    // sllDebug
     $000000,    // sllTrace
     $000000,    // sllWarning
-    $FFFFFF,    // sllError
+    $ffffff,    // sllError
     $000000,    // sllEnter
     $000000,    // sllLeave
-    $FFFFFF,    // sllLastError
-    $FFFFFF,    // sllException
-    $FFFFFF,    // sllExceptionOS
+    $ffffff,    // sllLastError
+    $ffffff,    // sllException
+    $ffffff,    // sllExceptionOS
     $000000,    // sllMemory
     $000000,    // sllStackTrace
-    $FFFFFF,    // sllFail
-    $FFFFFF,    // sllSQL
+    $ffffff,    // sllFail
+    $ffffff,    // sllSQL
     $000000,    // sllCache
-    $FFFFFF,    // sllResult
+    $ffffff,    // sllResult
     $000000,    // sllDB
     $000000,    // sllHTTP
     $000000,    // sllClient
@@ -331,7 +331,7 @@ var
     $000000,    // sllCustom3
     $000000,    // sllCustom4
     $000000,    // sllNewRun
-    $FFFFFF,    // sllDDDError
+    $ffffff,    // sllDDDError
     $000000,    // sllDDDInfo
     $000000));  // sllMonitoring
 
@@ -1286,7 +1286,7 @@ type
     function LastQueryPerformanceMicroSeconds: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     /// allow to temporary disable remote logging
-    // - will enter the GlobalThreadLock - and is NOT rentrant
+    // - will enter the GlobalThreadLock - and is NOT reentrant
     // - to be used within a try ... finally section:
     // ! log.DisableRemoteLog(true);
     // ! try
@@ -5408,16 +5408,16 @@ end;
 procedure TSynLog.AddErrorMessage(Error: cardinal);
 {$ifdef OSWINDOWS}
 var
-  msg: PUtf8Char;
+  msg: PShortString;
 {$endif OSWINDOWS}
 begin
   fWriter.AddDirect(' ', '"');
   {$ifdef OSWINDOWS}
   msg := WinErrorConstant(Error);
-  if msg <> nil then
+  if msg^[0] <> #0 then
   begin
     fWriter.AddShorter('ERROR_');
-    fWriter.Add(msg, twNone);
+    fWriter.AddShort(msg^);
   end
   else
   {$endif OSWINDOWS}

@@ -389,7 +389,7 @@ type
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
     fRttiTextRepresentation: RawUtf8;
     fTypes: set of TOpenApiBuiltInType;
-    fNeedsDummyField: boolean;
+    fNeedsDummyField, fIsVoidVariant: boolean;
     procedure ResolveDependencies(var all, pending: TPascalRecordDynArray);
   public
     constructor Create(aParser: TOpenApiParser; const SchemaName: RawUtf8;
@@ -1907,7 +1907,8 @@ begin
   if Assigned(CustomType) then
   begin
     result := CustomType.PascalName;
-    if not IsArray then
+    if (result = 'variant') or
+       not IsArray then
       exit;
     if AsFinalType and NoRecordArrayTypes and IsRecord then
       AsFinalType := false;
@@ -1916,7 +1917,8 @@ begin
   else
   begin
     result := fBuiltInTypeName;
-    if not IsArray then
+    if (fBuiltInType = obtVariant) or // emit "array of variant" as "variant"
+       not IsArray then
       exit;
     if AsFinalType then
     begin
@@ -1961,7 +1963,7 @@ begin
       obtDateTime:
         func := 'DateTimeToIso8601(%, true)';
       obtGuid:
-        func := 'ToUtf8(%)';
+        func := 'NotNullGuidToUtf8(%)'; // GUID_NULL = '' to ignore param
       obtRawByteString:
         func := 'mormot.core.buffers.BinToBase64(%)';
       obtString:
@@ -2048,12 +2050,8 @@ var
   p: TPascalProperty;
   s: POpenApiSchema;
 begin
-  if fProperties.Count = 0 then
-  begin
-    // this is no fixed record, but maybe a "oneOf" or "anyOf" object
-    fPascalName := 'variant';
+  if fIsVoidVariant then
     exit;
-  end;
   if (fFromRef <> '') and
      (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
     fParser.Comment(w, ['from ', fFromRef]);
@@ -2106,11 +2104,9 @@ var
   p: TPascalProperty;
   line, name: RawUtf8;
 begin
-  if fProperties.Count = 0 then
-    // this is no real record
-    fPascalName := 'variant';
   result := fRttiTextRepresentation;
-  if result <> '' then
+  if (result <> '') or
+     fIsVoidVariant then
     exit;
   FormatUtf8('_% = ''', [PascalName], line);
   for i := 0 to fProperties.Count - 1 do
@@ -2602,8 +2598,15 @@ begin
         result.fProperties.AddObject(n, p, {raise=}false, {free=}nil, {replace=}true);
       end;
   end;
-  result.fNeedsDummyField := (opoGenerateOldDelphiCompatible in fOptions) and
-                             (result.fTypes - [obtInteger .. obtGuid] = []);
+  if result.fProperties.Count = 0 then
+  begin
+    // this is no fixed record, but maybe a "oneOf" or "anyOf" object
+    result.fIsVoidVariant := true;
+    result.fPascalName := 'variant';
+  end
+  else
+    result.fNeedsDummyField := (opoGenerateOldDelphiCompatible in fOptions) and
+                               (result.fTypes - [obtInteger .. obtGuid] = []);
 end;
 
 procedure TOpenApiParser.ParsePath(

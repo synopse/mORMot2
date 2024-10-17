@@ -35,28 +35,52 @@ uses
 
 // some constants used for UTF-8 conversion, including surrogates
 type
-  // see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
+  /// define a lookup table for efficient UTF-8 processing
+  // - supports the full original UTF-8 range, even if only the U+0000..U+10FFFF
+  // range (the UTF-16 accessible range) is defined since RFC 3629 (Nov 2003)
+  // - see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
   {$ifdef USERECORDWITHMETHODS}
   TUtf8Table = record
   {$else}
   TUtf8Table = object
   {$endif USERECORDWITHMETHODS}
   public
-    Lookup: array[byte] of byte;
-    Extra: array[0..6] of record
+    /// allow GetHighUtf8Ucs4() to validate and decode an UTF-8 sequence
+    Extra: array[0..5] of record
       offset, minimum: cardinal;
     end;
+    /// the first UTF-8 byte depending on its target length (extra + 1)
     FirstByte: array[2..6] of byte;
-    /// retrieve a >127 UCS4 CodePoint from UTF-8
+    /// the number of extra bytes in addition to the first UTF-8 byte
+    // - since RFC 3629, only values within the 0..3 range should appear, i.e.
+    // up to UTF8_MAXUTF16 within the UTF-16 surrogates range
+    Lookup: array[byte] of byte;
+    /// retrieve a >127 UCS-4 CodePoint from an UTF-8 sequence
     function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
   end;
   PUtf8Table = ^TUtf8Table;
 
 const
-  UTF8_ASCII = 0;
-  UTF8_INVALID = 6;
-  UTF8_ZERO = 7;
+  /// TUtf8Table.Lookup[] value for a 7-bit ASCII character
+  UTF8_ASCII    = 0;
+  /// maximum TUtf8Table.Lookup[] value within UTF-16 accessible range
+  UTF8_MAXUTF16 = 3;
+  /// impossible TUtf8Table.Lookup[] value
+  UTF8_INVALID  = 6;
+  /// special encoding of ending #0 in TUtf8Table.Lookup[]
+  UTF8_ZERO     = 7;
+
+  /// constant lookup table for efficient UTF-8 processing
   UTF8_TABLE: TUtf8Table = (
+    Extra: (
+      (offset: $00000000;  minimum: $00010000),  // 0: 0000 0000 - 0000 007F
+      (offset: $00003080;  minimum: $00000080),  // 1: 0000 0080 - 0000 07FF
+      (offset: $000e2080;  minimum: $00000800),  // 2: 0000 0800 - 0000 FFFF
+      (offset: $03c82080;  minimum: $00010000),  // 3: 0001 0000 - 0010 FFFF
+      (offset: $fa082080;  minimum: $00200000),  // 4: outside UTF-16 range
+      (offset: $82082080;  minimum: $04000000)); // 5: outside UTF-16 range
+    FirstByte: (
+      $c0, $e0, $f0, $f8, $fc);
     Lookup: (
       7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -73,26 +97,20 @@ const
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
       2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-      3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6);
-    Extra: (
-      (offset: $00000000;  minimum: $00010000),
-      (offset: $00003080;  minimum: $00000080),
-      (offset: $000e2080;  minimum: $00000800),
-      (offset: $03c82080;  minimum: $00010000),
-      (offset: $fa082080;  minimum: $00200000),
-      (offset: $82082080;  minimum: $04000000),
-      (offset: $00000000;  minimum: $04000000));
-    FirstByte: (
-      $c0, $e0, $f0, $f8, $fc));
+      3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6)
+    );
 
-  UTF8_EXTRA_SURROGATE = 3;
-  UTF16_HISURROGATE_MIN = $d800;
-  UTF16_HISURROGATE_MAX = $dbff;
-  UTF16_LOSURROGATE_MIN = $dc00;
-  UTF16_LOSURROGATE_MAX = $dfff;
+  UTF8_NEED_UTF16_SURROGATES = 3; // 4 UTF-8 bytes trigger surrogates in UTF-16
+  UTF8_EXTRA1_OFFSET = $00003080; // = UTF8_TABLE.Extra[1].offset for $0..$7ff
+
+  UTF16_HISURROGATE_MIN  = $d800;
+  UTF16_HISURROGATE_MAX  = $dbff;
+  UTF16_LOSURROGATE_MIN  = $dc00;
+  UTF16_LOSURROGATE_MAX  = $dfff;
   UTF16_SURROGATE_OFFSET = $d7c0;
 
-  /// replace any incoming character whose value is unrepresentable in Unicode
+  /// replace any incoming UCS-4 which is unrepresentable as a single WideChar
+  // - i.e. which would need a UTF-16 surrogates pair for proper encoding
   // - set e.g. by GetUtf8WideChar(), Utf8UpperReference() or
   // RawUnicodeToUtf8() when ccfReplacementCharacterForUnmatchedSurrogate is set
   // - encoded as $ef $bf $bd bytes in UTF-8
@@ -115,17 +133,17 @@ function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
 function GetUtf8WideChar(P: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the UCS4 CodePoint stored in P^ (decode UTF-8 if necessary)
+/// get the UCS-4 CodePoint stored in P^ (decode UTF-8 if necessary)
 function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// UTF-8 encode one UTF-16 encoded UCS4 CodePoint into Dest
+/// UTF-8 encode one UTF-16 encoded UCS-4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - Source will contain the next UTF-16 character
 // - this method DOES properly handle UTF-16 surrogate pairs
 function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 
-/// UTF-8 encode one UCS4 CodePoint into Dest
+/// UTF-8 encode one UCS-4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - this method DOES properly handle UTF-16 surrogate pairs
 function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
@@ -194,15 +212,19 @@ function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
 procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
-// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
+// - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - faster than System.Utf8ToUnicode with dest=nil
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
+// - follows RFC 3629 requirements, i.e. up to 4-bytes UTF-8 sequences, to
+// stay within U+0000..U+10FFFF UTF-16 accessible range with surrogates
 var
   IsValidUtf8Buffer: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
+
+function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean; // test only
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
@@ -237,7 +259,7 @@ function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean; overloa
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
-// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
+// - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - returns FALSE if text was not truncated, TRUE otherwise
 function Utf8TruncateToUnicodeLength(var text: RawUtf8; maxUtf16: integer): boolean;
 
@@ -264,7 +286,7 @@ function Utf8TruncatedLength(text: PAnsiChar;
   textlen, maxBytes: PtrUInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
-// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
+// - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - end the parsing at first #13 or #10 character
 function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
 
@@ -1150,6 +1172,10 @@ type
   /// pointer to a lookup table used for fast case conversion
   PNormTableByte = ^TNormTableByte;
 
+  /// type of a lookup table used for fast XML/HTML conversion or UTF-8 lookup
+  TAnsiCharToByte = array[AnsiChar] of byte;
+  PAnsiCharToByte = ^TAnsiCharToByte;
+
 var
   /// lookup table used for fast case conversion to uppercase
   // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. accents)
@@ -1459,7 +1485,7 @@ var
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
 /// case-sensitive comparison function using the Operating System, as TUtf8Compare
-// - "direct" StrComp() would follow UTF-8 byte order, i.e. UCS4 CodePoint order,
+// - "direct" StrComp() would follow UTF-8 byte order, i.e. UCS-4 CodePoint order,
 // which may not be the same as the "human" expected order, especially on Windows
 // - use OS and compiler specific Unicode_CompareString() API so may not be
 // consistent between computers and platforms, as StrComp() is
@@ -1474,9 +1500,9 @@ function Utf8CompareOS(P1, P2: PUtf8Char): PtrInt;
 // - warning: potentially much slower than mORMot-native alternatives
 function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
 
-/// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
+/// retrieve the next UCS-4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
-// - will return '?' if the UCS4 CodePoint is higher than #255: so use this function
+// - will return '?' if the UCS-4 CodePoint is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUtf8 function)
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
@@ -2399,26 +2425,26 @@ function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 // - has a branchless optimized process of 7-bit ASCII charset [a..z] -> [A..Z]
 function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 
-/// compare two UCS4 strings
+/// compare two UCS-4 strings
 function Ucs4Compare(const a, b: RawUcs4): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compare two UCS4 buffers
+/// compare two UCS-4 buffers
 function Ucs4Comp(a, b: PUcs4CodePoint): integer;
 
-/// convert some UTF-8 buffer content into UCS4
+/// convert some UTF-8 buffer content into UCS-4
 procedure Utf8ToRawUcs4(u: PUtf8Char; L: PtrInt; out ucs4: RawUcs4); overload;
 
-/// convert some UTF-8 string content into UCS4
+/// convert some UTF-8 string content into UCS-4
 function Utf8ToRawUcs4(const S: RawUtf8): RawUcs4; overload;
 
-/// convert some UCS4 buffer into UTF-8 string
+/// convert some UCS-4 buffer into UTF-8 string
 procedure RawUcs4ToUtf8(u4: PUcs4CodePoint; L: PtrInt; out u: RawUtf8); overload;
 
-/// convert some UCS4 into UTF-8 string
+/// convert some UCS-4 into UTF-8 string
 function RawUcs4ToUtf8(const ucs4: RawUcs4): RawUtf8; overload;
 
-/// UpperCase conversion of UTF-8 into UCS4 using our Unicode 10.0 tables
+/// UpperCase conversion of UTF-8 into UCS-4 using our Unicode 10.0 tables
 // - won't call the Operating System, so is consistent on all platforms,
 // whereas UpperCaseUnicode() may vary depending on each library implementation
 function UpperCaseUcs4Reference(const S: RawUtf8): RawUcs4;
@@ -2449,7 +2475,7 @@ begin
   inc(U);
   x := Lookup[c];
   if x = UTF8_INVALID then
-    exit;
+    exit; // returns 0 as invalid leading byte (allow full UTF-8/UCS-4 range)
   i := 0;
   repeat
     v := byte(U[i]);
@@ -2501,7 +2527,7 @@ begin
       if result and $20 = 0 then
       begin
         // fast $0..$7ff process
-        result := (result shl 6) + byte(P[1]) - $3080;
+        result := (result shl 6) + byte(P[1]) - UTF8_EXTRA1_OFFSET;
         inc(P, 2);
       end
       else
@@ -2523,23 +2549,23 @@ begin
   end
   else if ucs4 <= $7ff then
   begin
-    Dest[0] := AnsiChar($C0 or (ucs4 shr 6));
-    Dest[1] := AnsiChar($80 or (ucs4 and $3F));
+    Dest[0] := AnsiChar($c0 or (ucs4 shr 6));
+    Dest[1] := AnsiChar($80 or (ucs4 and $3f));
     result := 2;
   end
   else if ucs4 <= $ffff then
   begin
-    Dest[0] := AnsiChar($E0 or (ucs4 shr 12));
-    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3F));
-    Dest[2] := AnsiChar($80 or (ucs4 and $3F));
+    Dest[0] := AnsiChar($e0 or (ucs4 shr 12));
+    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3f));
+    Dest[2] := AnsiChar($80 or (ucs4 and $3f));
     result := 3;
   end
   else
   begin
-    // here ucs4 > $ffff
-    if ucs4 <= $1FFFFF then
+    // here ucs4 > $ffff (very unlikely)
+    if ucs4 <= $1fffff then
       result := 4
-    else if ucs4 <= $3FFFFFF then
+    else if ucs4 <= $3ffffff then
       result := 5
     else
       result := 6;
@@ -2560,26 +2586,26 @@ begin
   c := Source^;
   inc(Source);
   case c of
-    0..$7f:
+    0 .. $7f:
       begin
         Dest^ := AnsiChar(c);
         result := 1;
         exit;
       end;
-    UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+    UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
       begin
         c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
               (Source^ xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
-    UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+    UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
       begin
         c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
               (c xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
   end;
-  // now c is the UTF-32/UCS4 code point
+  // now c is the UTF-32/UCS-4 code point
   result := Ucs4ToUtf8(c, Dest);
 end;
 
@@ -2619,15 +2645,15 @@ begin
         inc(Dest, 2);
       until (Source > tail) or
             (PtrInt(PtrUInt(Dest)) >= DestLen);
-    // generic loop, handling one UCS4 CodePoint per iteration
+    // generic loop, handling one UCS-4 CodePoint per iteration
     if (PtrInt(PtrUInt(Dest)) < DestLen) and
        (PtrInt(PtrUInt(Source)) < SourceLen) then
       repeat
-      // inlined Utf16CharToUtf8() with bufferoverlow check and $FFFD on unmatch
+      // inlined Utf16CharToUtf8() with bufferoverlow check and $fffd on unmatch
         c := cardinal(Source^);
         inc(Source);
         case c of
-          0..$7f:
+          0 .. $7f:
             begin
               Dest^ := AnsiChar(c);
               inc(Dest);
@@ -2637,7 +2663,7 @@ begin
               else
                 break;
             end;
-          UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+          UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
             if (PtrInt(PtrUInt(Source)) >= SourceLen) or
                ((cardinal(Source^) < UTF16_LOSURROGATE_MIN) or
                 (cardinal(Source^) > UTF16_LOSURROGATE_MAX)) then
@@ -2645,8 +2671,8 @@ begin
 unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                  not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
                 break;
-              PWord(Dest)^ := $BFEF; // UTF-8 UNICODE_REPLACEMENT_CHARACTER
-              Dest[2] := AnsiChar($BD);
+              PWord(Dest)^ := $bfef; // UTF-8 UNICODE_REPLACEMENT_CHARACTER
+              Dest[2] := AnsiChar($bd);
               inc(Dest, 3);
               if (PtrInt(PtrUInt(Dest)) < DestLen) and
                  (PtrInt(PtrUInt(Source)) < SourceLen) then
@@ -2660,7 +2686,7 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                    (cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
               inc(Source);
             end;
-          UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+          UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
             if (PtrInt(PtrUInt(Source)) >= SourceLen) or
                ((cardinal(Source^) < UTF16_HISURROGATE_MIN) or
                 (cardinal(Source^) > UTF16_HISURROGATE_MAX)) then
@@ -2671,14 +2697,14 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                    (c xor UTF16_LOSURROGATE_MIN);
               inc(Source);
             end;
-        end; // now c is the UTF-32/UCS4 code point
+        end; // now c is the UTF-32/UCS-4 code point
         if c <= $7ff then
           i := 2
         else if c <= $ffff then
           i := 3
-        else if c <= $1FFFFF then
+        else if c <= $1fffff then
           i := 4
-        else if c <= $3FFFFFF then
+        else if c <= $3ffffff then
           i := 5
         else
           i := 6;
@@ -2783,7 +2809,7 @@ begin
       begin
         extra := utf8.Lookup[c];
         if extra = UTF8_INVALID then
-          break;
+          break; // invalid leading byte (allow full UTF-8/UCS-4 range)
         i := extra;
         repeat
           if byte(source^) and $c0 <> $80 then
@@ -2860,7 +2886,7 @@ begin
         break;
     end;
     extra := utf8.Lookup[c];
-    if (extra = UTF8_INVALID) or
+    if (extra > UTF8_MAXUTF16) or // could not be encoded as UTF-16 surrogates
        (source + extra > endSource) then
       break;
     i := 0;
@@ -2891,8 +2917,8 @@ begin
     dec(c, $10000); // store as UTF-16 surrogates
     if PtrUInt(@dest[2]) >= PtrUInt(endDest) then
       break;
-    PWordArray(dest)[0] := (c shr 10) or UTF16_HISURROGATE_MIN;
-    PWordArray(dest)[1] := (c and $3FF) or UTF16_LOSURROGATE_MIN;
+    PWordArray(dest)[0] := (c shr 10)   or UTF16_HISURROGATE_MIN;
+    PWordArray(dest)[1] := (c and $3ff) or UTF16_LOSURROGATE_MIN;
     inc(dest, 2);
     if source >= endSource then
       break;
@@ -2944,7 +2970,7 @@ begin
       if c and $80808080 <> 0 then
         goto by1; // break on first non ASCII quad
 by4:  inc(source, 4);
-      PCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
+      PCardinal(dest)^ := (c shl 8 or (c and $ff)) and $00ff00ff;
       c := c shr 16;
       PCardinal(dest + 2)^ := (c shl 8 or c) and $00ff00ff;
       inc(dest, 4);
@@ -2972,7 +2998,7 @@ by1:  c := byte(source^);
           break;
       end;
       extra := utf8.Lookup[c];
-      if (extra = UTF8_INVALID) or
+      if (extra > UTF8_MAXUTF16) or // over UTF-16 accessible range
          (source + extra > endSource) then
         break;
       i := 0;
@@ -2989,7 +3015,7 @@ by1:  c := byte(source^);
         if c < minimum then
           break; // invalid input content
       end;
-      if c <= $ffff then
+      if c <= $ffff then // no surrogates needed
       begin
         PWord(dest)^ := c;
         inc(dest);
@@ -3007,8 +3033,8 @@ by1:  c := byte(source^);
           break;
       end;
       dec(c, $10000); // store as UTF-16 surrogates
-      PWordArray(dest)[0] := (c shr 10) or UTF16_HISURROGATE_MIN;
-      PWordArray(dest)[1] := (c and $3FF) or UTF16_LOSURROGATE_MIN;
+      PWordArray(dest)[0] := (c shr 10)   or UTF16_HISURROGATE_MIN;
+      PWordArray(dest)[1] := (c and $3ff) or UTF16_LOSURROGATE_MIN;
       inc(dest, 2);
       if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
          (source <= endSourceBy4) then
@@ -3028,30 +3054,24 @@ nosource:
     dest^ := #0; // append a WideChar(0) to the end of the buffer
 end;
 
-function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;
+function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean;
 var
   c: byte;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
-  {$else}
-  utf8: PUtf8Table;
-  {$endif CPUX86NOTPIC}
+  utf8: PAnsiCharToByte;
 label
   done;
 begin
-  inc(PtrUInt(sourcelen), PtrUInt(source) - 4);
+  inc(PtrUInt(len), PtrUInt(source) - 4);
   if source = nil then
     goto done;
-  {$ifndef CPUX86NOTPIC}
-  utf8 := @UTF8_TABLE;
-  {$endif CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE.Lookup;
   repeat
-    if PtrUInt(source) <= PtrUInt(sourcelen) then
+    if PtrUInt(source) <= PtrUInt(len) then
     begin
-      if utf8.Lookup[ord(source[0])] = UTF8_ASCII then
-        if utf8.Lookup[ord(source[1])] = UTF8_ASCII then
-          if utf8.Lookup[ord(source[2])] = UTF8_ASCII then
-            if utf8.Lookup[ord(source[3])] = UTF8_ASCII then
+      if utf8[source[0]] = UTF8_ASCII then
+        if utf8[source[1]] = UTF8_ASCII then
+          if utf8[source[2]] = UTF8_ASCII then
+            if utf8[source[3]] = UTF8_ASCII then
             begin
               inc(source, 4); // optimized for JSON-like content
               continue;
@@ -3063,25 +3083,29 @@ begin
         else
           inc(source);
     end
-    else if PtrUInt(source) >= PtrUInt(sourcelen) + 4 then
+    else if PtrUInt(source) >= PtrUInt(len) + 4 then
       break;
-    c := utf8.Lookup[ord(source^)];
+    c := utf8[source^]; // number of expected extra bytes
     inc(source);
     if c = UTF8_ASCII then
-      continue
-    else if c >= UTF8_INVALID then
-      // UTF8_INVALID=6, UTF8_ZERO=7 means unexpected end of input
-      break;
-    // c = extras -> check valid UTF-8 content
+      continue // last 1..3 chars
+    else if c > UTF8_MAXUTF16 then // RFC 3629 requirements as IsValidUtf8Avx2()
+      if c = UTF8_ZERO then
+        break // end of input - may be unexpected if not at source[len]
+      else
+      begin
+        source := nil; // force result = false if does not follows RFC 3629
+        break;
+      end;
     repeat
       if byte(source^) and $c0 <> $80 then
         goto done;
-      inc(source);
+      inc(source); // length check is done below - may read after source[len]
       dec(c);
     until c = 0;
   until false;
 done:
-  result := PtrUInt(source) = PtrUInt(sourcelen) + 4;
+  result := PtrUInt(source) = PtrUInt(len) + 4;
 end;
 
 function IsValidUtf8(source: PUtf8Char): boolean;
@@ -3129,7 +3153,7 @@ begin
         else
          continue;
       c := utf8.Lookup[c];
-      if c = UTF8_INVALID then
+      if c > UTF8_MAXUTF16 then // follow RFC 3629 expectations
         exit;
       // check valid UTF-8 content
       repeat
@@ -3163,11 +3187,11 @@ begin
     c := byte(source[s]);
     inc(s);
     if c < 32 then
-      exit // disallow #0..#31 control char
+      exit // disallow #0..#31 control char within len
     else if c > $7f then
     begin
       c := utf8.Lookup[c];
-      if c = UTF8_INVALID then
+      if c > UTF8_MAXUTF16 then // follow RFC 3629 expectations
         exit;
       // check valid UTF-8 content
       repeat
@@ -3196,21 +3220,19 @@ begin
   result := 0;
   if source <> nil then
     repeat
-      c := utf8.Lookup[byte(source^)];
+      c := utf8.Lookup[byte(source^)]; // c = number of extra bytes
       inc(source);
       if c = UTF8_ASCII then
         inc(result)
-      else if c = UTF8_ZERO then
-        break
-      else if c = UTF8_INVALID then
-        exit
+      else if c > UTF8_MAXUTF16 then
+        exit // UTF8_ZERO or outside of UTF-16 accessible range
       else
       begin
-        inc(result, 1 + ord(c >= UTF8_EXTRA_SURROGATE));
+        inc(result, 1 + ord(c = UTF8_NEED_UTF16_SURROGATES));
         // check valid UTF-8 content
         repeat
           if byte(source^) and $c0 <> $80 then
-            exit;
+            exit; // stop at invalid UTF-8 input
           inc(source);
           dec(c);
         until c = 0;
@@ -3248,12 +3270,11 @@ trunc:  SetLength(text, source - pointer(text));
         result := true;
         exit;
       end
-      else if (c = UTF8_ZERO) or
-              (c = UTF8_INVALID) then
-        break
+      else if c > UTF8_MAXUTF16 then
+        break // UTF8_ZERO or outside of UTF-16 accessible range
       else
       begin
-        dec(maxUtf16, 1 + ord(c >= UTF8_EXTRA_SURROGATE));
+        dec(maxUtf16, 1 + ord(c = UTF8_NEED_UTF16_SURROGATES));
         if maxUtf16 < 0 then
           goto trunc; // not enough place for this UTF-8 codepoint
         // check valid UTF-8 content
@@ -3294,13 +3315,13 @@ begin
     exit;
   result := maxBytes;
   if (result = 0) or
-     (text[result] <= #$7f) then
+     (ord(text[result]) <= $7f) then
     exit; 
   while (result > 0) and
         (ord(text[result]) and $c0 = $80) do
     dec(result);
   if (result > 0) and
-     (text[result] > #$7f) then
+     (ord(text[result]) > $7f) then
     dec(result);
 end;
 
@@ -3314,7 +3335,7 @@ begin
         (ord(text[result]) and $c0 = $80) do
     dec(result);
   if (result > 0) and
-     (text[result] > #$7f) then
+     (ord(text[result]) > $7f) then
     dec(result);
 end;
 
@@ -3343,9 +3364,9 @@ begin
       else
       begin
         c := utf8.Lookup[c];
-        if c = UTF8_INVALID then
-          exit; // invalid leading byte
-        inc(result, 1 + ord(c >= UTF8_EXTRA_SURROGATE));
+        if c > UTF8_MAXUTF16 then
+          exit; // invalid leading byte for conversion to UTF-16
+        inc(result, 1 + ord(c = UTF8_NEED_UTF16_SURROGATES));
         inc(source, c); // a bit less safe, but faster
       end;
     until false;
@@ -3467,7 +3488,7 @@ begin
         break; // break on first non ASCII quad
       dec(SourceChars, 4);
       inc(Source, 4);
-      PCardinal(Dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
+      PCardinal(Dest)^ := (c shl 8 or (c and $ff)) and $00ff00ff;
       c := c shr 16;
       PCardinal(Dest + 2)^ := (c shl 8 or c) and $00ff00ff;
       inc(Dest, 4);
@@ -3571,7 +3592,7 @@ begin
   else
   begin
     u := AnsiBufferToUnicode(tmp.Init(SourceChars * 2), Source, SourceChars);
-    SetString(result, PWideChar(tmp.buf), (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
+    FastSynUnicode(result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
     tmp.Done;
   end;
 end;
@@ -3587,7 +3608,7 @@ begin
   begin
     tmp.Init(length(Source) * 2); // max dest size in bytes
     u := AnsiBufferToUnicode(tmp.buf, pointer(Source), length(Source));
-    SetString(result, PWideChar(tmp.buf), (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
+    FastSynUnicode(result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
     tmp.Done;
   end;
 end;
@@ -3921,7 +3942,7 @@ by4:    inc(Source, 4);
       repeat
 by1:    c := byte(Source^);
         inc(Source);
-        if c <= $7F then
+        if c <= $7f then
         begin
           Dest^ := AnsiChar(c); // 0..127 don't need any translation
           Inc(Dest);
@@ -3944,9 +3965,9 @@ by1:    c := byte(Source^);
           c := fAnsiToWide[c]; // convert FixedAnsi char into Unicode char
           if c > $7ff then
           begin
-            Dest[0] := AnsiChar($E0 or (c shr 12));
-            Dest[1] := AnsiChar($80 or ((c shr 6) and $3F));
-            Dest[2] := AnsiChar($80 or (c and $3F));
+            Dest[0] := AnsiChar($e0 or (c shr 12));
+            Dest[1] := AnsiChar($80 or ((c shr 6) and $3f));
+            Dest[2] := AnsiChar($80 or (c and $3f));
             Inc(Dest, 3);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source <= srcEndBy4) then
@@ -3963,8 +3984,8 @@ by1:    c := byte(Source^);
           end
           else
           begin
-            Dest[0] := AnsiChar($C0 or (c shr 6));
-            Dest[1] := AnsiChar($80 or (c and $3F));
+            Dest[0] := AnsiChar($c0 or (c shr 6));
+            Dest[1] := AnsiChar($80 or (c and $3f));
             Inc(Dest, 2);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source < srcEndBy4) then
@@ -4139,14 +4160,13 @@ begin
       inc(Utf8Text);
       if extra = UTF8_ASCII then
         continue
-      else if extra = UTF8_ZERO then
-        break
-      else if extra = UTF8_INVALID then
-        exit
+      else if extra > UTF8_MAXUTF16 then
+        if extra = UTF8_ZERO then
+          break // end of input
+        else
+          exit // invalid
       else
       begin
-        if utf8.Extra[extra].minimum > $ffff then
-          exit;
         n := extra;
         c := ord(Utf8Text[-1]);
         repeat
@@ -4168,7 +4188,7 @@ end;
 function TSynAnsiFixedWidth.IsValidAnsiU8Bit(Utf8Text: PUtf8Char): boolean;
 var
   extra: byte;
-  c, n: cardinal;
+  c: cardinal;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -4185,24 +4205,19 @@ begin
       inc(Utf8Text);
       if extra = UTF8_ASCII then
         continue
-      else if extra = UTF8_ZERO then
-        break
-      else if extra = UTF8_INVALID then
-        exit
+      else if extra > 1 then
+        if extra = UTF8_ZERO then
+          break // end of input
+        else
+          exit // invalid
       else
-      begin
-        if utf8.Extra[extra].minimum > $ffff then
-          exit;
-        n := extra;
+      begin // here extra = 1 for 00000080 - 000007FF range
         c := ord(Utf8Text[-1]);
-        repeat
-          if byte(Utf8Text^) and $c0 <> $80 then
-            exit; // invalid UTF-8 content
-          c := (c shl 6) + byte(Utf8Text^);
-          inc(Utf8Text);
-          dec(n)
-        until n = 0;
-        dec(c, utf8.Extra[extra].offset);
+        if byte(Utf8Text^) and $c0 <> $80 then
+          exit; // invalid UTF-8 content
+        c := (c shl 6) + byte(Utf8Text^);
+        inc(Utf8Text);
+        dec(c, UTF8_EXTRA1_OFFSET);
         if (c > 255) or
            (fAnsiToWide[c] > 255) then
           exit; // not 8-bit char (like "tm" or such) is marked invalid
@@ -4315,7 +4330,7 @@ by1:  c := byte(Source^);
       else
       begin
         extra := utf8.Lookup[c];
-        if (extra = UTF8_INVALID) or
+        if (extra > UTF8_MAXUTF16) or
            (Source + extra > srcEnd) then
           break;
         i := extra;
@@ -4525,9 +4540,9 @@ begin
           dec(BufferSize, 2);
           result := bomUnicode; // UTF-16 LE
         end;
-      $BBEF:
+      $bbef:
         if (BufferSize >= 3) and
-           (PByteArray(Buffer)[2] = $BF) then
+           (PByteArray(Buffer)[2] = $bf) then
         begin
           inc(PByte(Buffer), 3);
           dec(BufferSize, 3);
@@ -4589,7 +4604,7 @@ begin
       bomNone:
         result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
       bomUnicode:
-        SetString(result, PWideChar(buf), len shr 1);
+        FastSynUnicode(result, buf, len shr 1);
       bomUtf8:
         Utf8ToSynUnicode(buf, len, result);
     end;
@@ -4610,7 +4625,7 @@ begin
       bomNone:
         result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
       bomUnicode:
-        SetString(result, PWideChar(buf), len shr 1);
+        FastSynUnicode(result, buf, len shr 1);
       bomUtf8:
         Utf8DecodeToString(buf, len, result);
     end;
@@ -4831,7 +4846,7 @@ end;
 
 function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode;
 begin
-  SetString(result, PWideChar(pointer(Unicode)), Length(Unicode) shr 1);
+  FastSynUnicode(result, pointer(Unicode), Length(Unicode) shr 1);
 end;
 
 function RawUnicodeToWinAnsi(const Unicode: RawUnicode): WinAnsiString;
@@ -4848,7 +4863,7 @@ end;
 
 function RawUnicodeToSynUnicode(WideChar: PWideChar; WideCharCount: integer): SynUnicode;
 begin
-  SetString(result, WideChar, WideCharCount);
+  FastSynUnicode(result, WideChar, WideCharCount);
 end;
 
 procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: integer);
@@ -4967,7 +4982,7 @@ function Ansi7ToString(const Text: RawByteString): string;
 var
   i: PtrInt;
 begin
-  SetString(result, nil, Length(Text));
+  FastSynUnicode(result, nil, Length(Text));
   for i := 0 to Length(Text) - 1 do
     PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7-bit Ansi
 end;
@@ -4981,7 +4996,7 @@ procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string);
 var
   i: PtrInt;
 begin
-  SetString(result, nil, Len);
+  FastSynUnicode(result, nil, Len);
   for i := 0 to Len - 1 do
     PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7-bit Ansi
 end;
@@ -4990,7 +5005,7 @@ function StringToAnsi7(const Text: string): RawByteString;
 var
   i: PtrInt;
 begin
-  SetString(result, nil, Length(Text));
+  FastSetString(RawUtf8(result), nil, Length(Text));
   for i := 0 to Length(Text) - 1 do
     PByteArray(result)[i] := PWordArray(Text)[i]; // no conversion for 7-bit Ansi
 end;
@@ -5054,7 +5069,7 @@ end;
 function RawUnicodeToString(const U: RawUnicode): string;
 begin
   // uses StrLenW() and not length(U) to handle case when was used as buffer
-  SetString(result, PWideChar(pointer(U)), StrLenW(pointer(U)));
+  FastSynUnicode(result, pointer(U), StrLenW(pointer(U)));
 end;
 
 {$endif PUREMORMOT2}
@@ -5071,12 +5086,12 @@ end;
 
 function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
-  SetString(result, P, L);
+  FastSynUnicode(result, P, L);
 end;
 
 procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
-  SetString(result, P, L);
+  FastSynUnicode(result, P, L);
 end;
 
 function SynUnicodeToString(const U: SynUnicode): string;
@@ -5281,7 +5296,7 @@ begin
   else
   begin
     tmp.Init(L * 3); // maximum posible unicode size (if all <#128)
-    SetString(result, PWideChar(tmp.buf), Utf8ToWideChar(tmp.buf, P, L) shr 1);
+    FastSynUnicode(result, tmp.buf, Utf8ToWideChar(tmp.buf, P, L) shr 1);
     tmp.Done;
   end;
 end;
@@ -5298,7 +5313,7 @@ end;
 
 function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): UnicodeString;
 begin
-  SetString(result, nil, WinAnsiLen);
+  FastSynUnicode(result, nil, WinAnsiLen);
   WinAnsiConvert.AnsiBufferToUnicode(pointer(result), WinAnsi, WinAnsiLen);
 end;
 
@@ -5333,7 +5348,7 @@ end;
 
 function WinAnsiToSynUnicode(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): SynUnicode;
 begin
-  SetString(result, nil, WinAnsiLen);
+  FastSynUnicode(result, nil, WinAnsiLen);
   WinAnsiConvert.AnsiBufferToUnicode(pointer(result), WinAnsi, WinAnsiLen);
 end;
 
@@ -5497,9 +5512,8 @@ var
   n: PtrInt;
 begin
   n := Utf8DecodeToUnicode(Text, Len, tmp);
-  SetString(result, PWideChar(tmp.buf), n);
-  if n <> 0 then
-    tmp.Done;
+  FastSynUnicode(result, tmp.buf, n);
+  tmp.Done;
 end;
 
 function Utf8DecodeToUnicode(const Text: RawUtf8; var temp: TSynTempBuffer): PtrInt;
@@ -5519,7 +5533,7 @@ begin
   else
   begin
     temp.Init(Len * 3); // maximum posible unicode size (if all <#128)
-    result := Utf8ToWideChar(temp.buf, Text, Len) shr 1;
+    result := Utf8ToWideChar(temp.buf, Text, Len) shr 1; // as WideChar count
   end;
 end;
 
@@ -6587,7 +6601,7 @@ begin
     begin
       extra := utf8.Lookup[c];
       if extra = UTF8_INVALID then
-        exit; // invalid leading byte
+        exit; // invalid leading byte (allow full UTF-8/UCS-4 range)
       i := 0;
       repeat
         if byte(P[i]) and $c0 <> $80 then
@@ -6688,7 +6702,7 @@ c2low:          if c2 = 0 then
           begin
             if result and $20 = 0 then // fast $0..$7ff process
             begin
-              result := (result shl 6) + byte(u1[1]) - $3080;
+              result := (result shl 6) + byte(u1[1]) - UTF8_EXTRA1_OFFSET;
               inc(u1, 2);
             end
             else
@@ -6700,7 +6714,7 @@ c2low:          if c2 = 0 then
             goto c2low
           else if c2 and $20 = 0 then // fast $0..$7ff process
           begin
-            c2 := (c2 shl 6) + byte(u2[1]) - $3080;
+            c2 := (c2 shl 6) + byte(u2[1]) - UTF8_EXTRA1_OFFSET;
             inc(u2, 2);
           end
           else
@@ -6781,8 +6795,7 @@ begin
             // Win-1252 case insensitive comparison
             extra := utf8.Lookup[result];
             if extra = UTF8_INVALID then
-              // invalid leading byte
-              goto neg;
+              goto neg; // invalid leading byte (allow full UTF-8/UCS-4 range)
             dec(L1, extra);
             if integer(L1) < 0 then
               goto neg;
@@ -6812,7 +6825,7 @@ begin
           begin
             extra := utf8.Lookup[c2];
             if extra = UTF8_INVALID then
-              goto pos;
+              goto pos; // invalid leading byte (allow full UTF-8/UCS-4 range)
             dec(L2, extra);
             if integer(L2) < 0 then
               goto pos;
@@ -7001,7 +7014,7 @@ begin
       else if c and $20 = 0 then
       begin
         // fast direct process of $0..$7ff codepoints including accents
-        c := ((c shl 6) + byte(U^)) - $3080;
+        c := ((c shl 6) + byte(U^)) - UTF8_EXTRA1_OFFSET;
         inc(U);
         if c <= 255 then
         begin
@@ -7017,7 +7030,7 @@ begin
       begin
         c := utf8.Lookup[c];
         if c = UTF8_INVALID then
-          exit
+          exit // invalid leading byte (allow full UTF-8/UCS-4 range)
         else
           // just ignore surrogates for soundex
           inc(U, c);
@@ -7042,7 +7055,7 @@ begin
       end
       else if c and $20 = 0 then
       begin
-        c := ((c shl 6) + byte(U^)) - $3080;
+        c := ((c shl 6) + byte(U^)) - UTF8_EXTRA1_OFFSET;
         inc(U);
         if (c > 255) or
            (PAnsiChar(@NormToUpper)[c] <> UpperValue^) then
@@ -7052,7 +7065,7 @@ begin
       begin
         c := utf8.Lookup[c];
         if c = UTF8_INVALID then
-          exit
+          exit // invalid leading byte (allow full UTF-8/UCS-4 range)
         else
           inc(U, c);
         break;
@@ -7169,7 +7182,7 @@ by4:    inc(Source, 4);
         Dest[3] := up[ToByte(c shr 24)];
         inc(Dest, 4);
       until Source > srcEndBy4;
-    // generic loop, handling one UCS4 CodePoint per iteration
+    // generic loop, handling one UCS-4 CodePoint per iteration
     if Source < srcEnd then
       repeat
 by1:    c := byte(Source^);
@@ -7194,7 +7207,7 @@ set1:     inc(Dest);
         else
         begin
           extra := utf8.Lookup[c];
-          if (extra = UTF8_INVALID) or
+          if (extra = UTF8_INVALID) or // allow full UTF-8/UCS-4 range
              (Source + extra > srcEnd) then
             break;
           i := 0;
@@ -10106,7 +10119,7 @@ begin
         end
       else if c and $20 = 0 then
       begin
-        c := (c shl 6) + byte(S[1]) - $3080; // fast process $0..$7ff
+        c := (c shl 6) + byte(S[1]) - UTF8_EXTRA1_OFFSET; // process $0..$7ff
         inc(S, 2);
       end
       else
@@ -10170,7 +10183,7 @@ by4:    i := byte(S[0]);
         inc(S, 4);
         inc(D, 4);
       until S > endSBy4;
-    // generic loop, handling one UCS4 CodePoint per iteration
+    // generic loop, handling one UCS-4 CodePoint per iteration
     if S < PUtf8Char(SLen) then
       repeat
 by1:    c := byte(S^);
@@ -10194,7 +10207,7 @@ by1:    c := byte(S^);
         else
         begin
           extra := utf8.Lookup[c];
-          if (extra = UTF8_INVALID) or
+          if (extra = UTF8_INVALID) or // allow full UTF-8/UCS-4 range
              (S + extra > PUtf8Char(SLen)) then
             break;
           i := 0;
@@ -10387,7 +10400,7 @@ c2low:          if c2 = 0 then
             // fast Unicode 10.0 uppercase conversion
             if result and $20 = 0 then // $0..$7ff common case
             begin
-              result := (result shl 6) + byte(u1[1]) - $3080;
+              result := (result shl 6) + byte(u1[1]) - UTF8_EXTRA1_OFFSET;
               inc(u1, 2);
             end
             else
@@ -10399,7 +10412,7 @@ c2low:          if c2 = 0 then
             goto c2low
           else if c2 and $20 = 0 then // $0..$7ff common case
           begin
-            c2 := (c2 shl 6) + byte(u2[1]) - $3080;
+            c2 := (c2 shl 6) + byte(u2[1]) - UTF8_EXTRA1_OFFSET;
             inc(u2, 2);
           end
           else
@@ -10479,8 +10492,7 @@ begin
             // fast Unicode 10.0 uppercase conversion
             extra := utf8.Lookup[result];
             if extra = UTF8_INVALID then
-              // invalid leading byte
-              goto neg;
+              goto neg; // invalid leading byte (allow full UTF-8/UCS-4 range)
             dec(L1, extra);
             if L1 < 0 then
               goto neg;
@@ -10510,7 +10522,7 @@ begin
           begin
             extra := utf8.Lookup[c2];
             if extra = UTF8_INVALID then
-              goto pos;
+              goto pos; // invalid leading byte (allow full UTF-8/UCS-4 range)
             dec(L2, extra);
             if L2 < 0 then
               goto pos;
@@ -10594,7 +10606,7 @@ nxt:u0 := U;
     begin
       extra := utf8.Lookup[c];
       if extra = UTF8_INVALID then
-        exit;
+        exit; // invalid leading byte (allow full UTF-8/UCS-4 range)
       i := 0;
       repeat
         c := c shl 6;
@@ -10608,7 +10620,7 @@ nxt:u0 := U;
       if c <> Up[0] then
         continue;
     end;
-    // if we reached here, U^ and Up^ first UCS4 CodePoint do match
+    // if we reached here, U^ and Up^ first UCS-4 CodePoint do match
     u2 := U;
     up2 := @Up[1];
     repeat
@@ -10632,7 +10644,7 @@ nxt:u0 := U;
       begin
         extra := utf8.Lookup[c];
         if extra = UTF8_INVALID then
-          exit; // invalid input
+          exit; // invalid leading byte (allow full UTF-8/UCS-4 range)
         i := 0;
         repeat
           c := c shl 6;
@@ -10668,43 +10680,43 @@ const
 
   // 1KB compressed buffer which renders into our 20,016 bytes UU[] array
   UU_: array[byte] of cardinal = (
-    $040019FD, $FF5A6024, $00855A00, $FFFFFFE0, $5A5201F0, $02E700E8, $FFE0AA5A,
-    $E0045A4B, $5A790BFF, $045A0007, $A045A1FF, $DB1878BA, $01A82B01, $0145A000,
-    $1DA45008, $041E5A80, $401DA450, $5A8F185A, $FFFFFED4, $590B5AC3, $0C5A84A4,
-    $5314A453, $610008A4, $A4520F5A, $82F5A1A3, $F1EBB5AB, $5A44DDF7, $52105A84,
-    $5A845AA4, $5A4A5AC4, $5A385AC6, $11A45217, $10ABA500, $45A00200, $4F5A4401,
-    $0000B15A, $A05A4F04, $5A830145, $C65A0018, $5EBAA05A, $20245AC0, $85A1A452,
-    $5BB55700, $00002A3F, $065A2A3F, $5B04A453, $1F055A40, $A11C02A1, $02A11E02,
-    $3200012E, $45A10001, $C2000133, $3645A10C, $45A10001, $4F000135, $00550690,
-    $000E5AA5, $A54B0CC2, $013165A1, $2845A100, $440000A5, $012FAC02, $00012D00,
-    $F70A5144, $41000029, $000A5AA5, $2AC4A16B, $45A10D22, $2B0291FD, $85A10001,
-    $1C00022A, $A129E700, $000226A5, $0D930008, $512A000C, $BB0D920A, $05270001,
-    $0001B900, $0644145A, $25000107, $00280002, $120A5115, $F1F552A5, $54009C55,
-    $A453AF5A, $5AC45A44, $0082000C, $5A208400, $FFDA00BB, $AD6EFFFF, $09DB15D5,
-    $F045A100, $01E13201, $1201F000, $C10001C0, $45A10005, $C70001C2, $C5A10001,
-    $CA0001D1, $01F80001, $A045A100, $01AA33BA, $0001B000, $D0000007, $001EFBFB,
-    $A2FFFF8C, $0002A0AB, $85A15A83, $E0D0BAA2, $01F00BFF, $2E01F012, $04F004F2,
-    $3645A02A, $240D45A0, $5A44A459, $847E5A40, $115A405A, $400002F1, $45A0115A,
-    $CC5A400D, $1FD000C4, $01255507, $8202F000, $55F1F555, $00C955F4, $700001F8,
-    $85A10200, $FFFFE792, $9C018193, $859E0181, $01819D01, $DB0181A4, $89C20181,
-    $00C5F558, $3C90F1E4, $E5A18A04, $E5A10EE6, $5A40BAA2, $CC5A40CC, $01C50014,
-    $A045B100, $45AAFFBA, $00000008, $5A070080, $04800023, $80002B5A, $80000604,
-    $00000635, $BC2F5A0E, $00F75B6D, $D875A108, $050A30A7, $014A0009, $5604A200,
-    $056A0001, $42000164, $00018006, $01700802, $7E070200, $A17E0001, $070080B5,
-    $80080001, $00022635, $35860002, $C4304825, $810975A1, $01E3DBB5, $090010A5,
-    $8004335A, $80053B5A, $5A07000F, $F1CA0137, $E4006C55, $84A501FF, $0001F000,
-    $8E2A00F0, $5AEDC05B, $55F15B04, $002F55F4, $900001E6, $F5525201, $87FFD019,
-    $5A1202F0, $000C5A84, $FFFFD5D5, $AA02A1D8, $1845A545, $5A84A453, $40A45328,
-    $5A40CC5A, $FB5FC736, $445804BF, $305B045A, $01C1A000, $A182C5E0, $B1C5E245,
-    $F4C5E345, $A4504E55, $A4504C77, $1E55F441, $C417A450, $405A445A, $588A9C5A,
-    $5A405A84, $045B0406, $C05A445B, $592C2A5A, $C6F021A4, $6E55F49B, $01FC6000,
-    $300070A5, $60FFFF68, $0970FF7C, $F1F55219, $FFE00655, $35F55257, $0001D800,
-    $528A0270, $2255F1F5, $527F7FD0, $F20011F5, $00063B03, $B603F000, $E035F552,
-    $01F057FF, $09F55206, $0001DE00, $5A720210, $020100F1, $0403075A, $0503045A,
-    $0C5A0706, $F15A0803, $00000012, $03120103, $08675104, $5A0B0A09, $5A0D0C1B,
-    $0F0E0C11, $1211100C, $140C0C13, $0C055A15, $00005A16, $0C0E0000, $5A191817,
-    $1B1A0C31, $065A1D1C, $5A1F1E0C, $5A200C26, $22210C09, $230C0F5A, $0000175A,
-    $240C0000, $250C205A, $000C0D5A, $00000000);
+    $040019fd, $ff5a6024, $00855a00, $ffffffe0, $5a5201f0, $02e700e8, $ffe0aa5a,
+    $e0045a4b, $5a790bff, $045a0007, $a045a1ff, $db1878ba, $01a82b01, $0145a000,
+    $1da45008, $041e5a80, $401da450, $5a8f185a, $fffffed4, $590b5ac3, $0c5a84a4,
+    $5314a453, $610008a4, $a4520f5a, $82f5a1a3, $f1ebb5ab, $5a44ddf7, $52105a84,
+    $5a845aa4, $5a4a5ac4, $5a385ac6, $11a45217, $10aba500, $45a00200, $4f5a4401,
+    $0000b15a, $a05a4f04, $5a830145, $c65a0018, $5ebaa05a, $20245ac0, $85a1a452,
+    $5bb55700, $00002a3f, $065a2a3f, $5b04a453, $1f055a40, $a11c02a1, $02a11e02,
+    $3200012e, $45a10001, $c2000133, $3645a10c, $45a10001, $4f000135, $00550690,
+    $000e5aa5, $a54b0cc2, $013165a1, $2845a100, $440000a5, $012fac02, $00012d00,
+    $f70a5144, $41000029, $000a5aa5, $2ac4a16b, $45a10d22, $2b0291fd, $85a10001,
+    $1c00022a, $a129e700, $000226a5, $0d930008, $512a000c, $bb0d920a, $05270001,
+    $0001b900, $0644145a, $25000107, $00280002, $120a5115, $f1f552a5, $54009c55,
+    $a453af5a, $5ac45a44, $0082000c, $5a208400, $ffda00bb, $ad6effff, $09db15d5,
+    $f045a100, $01e13201, $1201f000, $c10001c0, $45a10005, $c70001c2, $c5a10001,
+    $ca0001d1, $01f80001, $a045a100, $01aa33ba, $0001b000, $d0000007, $001efbfb,
+    $a2ffff8c, $0002a0ab, $85a15a83, $e0d0baa2, $01f00bff, $2e01f012, $04f004f2,
+    $3645a02a, $240d45a0, $5a44a459, $847e5a40, $115a405a, $400002f1, $45a0115a,
+    $cc5a400d, $1fd000c4, $01255507, $8202f000, $55f1f555, $00c955f4, $700001f8,
+    $85a10200, $ffffe792, $9c018193, $859e0181, $01819d01, $db0181a4, $89c20181,
+    $00c5f558, $3c90f1e4, $e5a18a04, $e5a10ee6, $5a40baa2, $cc5a40cc, $01c50014,
+    $a045b100, $45aaffba, $00000008, $5a070080, $04800023, $80002b5a, $80000604,
+    $00000635, $bc2f5a0e, $00f75b6d, $d875a108, $050a30a7, $014a0009, $5604a200,
+    $056a0001, $42000164, $00018006, $01700802, $7e070200, $a17e0001, $070080b5,
+    $80080001, $00022635, $35860002, $c4304825, $810975a1, $01e3dbb5, $090010a5,
+    $8004335a, $80053b5a, $5a07000f, $f1ca0137, $e4006c55, $84a501ff, $0001f000,
+    $8e2a00f0, $5aedc05b, $55f15b04, $002f55f4, $900001e6, $f5525201, $87ffd019,
+    $5a1202f0, $000c5a84, $ffffd5d5, $aa02a1d8, $1845a545, $5a84a453, $40a45328,
+    $5a40cc5a, $fb5fc736, $445804bf, $305b045a, $01c1a000, $a182c5e0, $b1c5e245,
+    $f4c5e345, $a4504e55, $a4504c77, $1e55f441, $c417a450, $405a445a, $588a9c5a,
+    $5a405a84, $045b0406, $c05a445b, $592c2a5a, $c6f021a4, $6e55f49b, $01fc6000,
+    $300070a5, $60ffff68, $0970ff7c, $f1f55219, $ffe00655, $35f55257, $0001d800,
+    $528a0270, $2255f1f5, $527f7fd0, $f20011f5, $00063b03, $b603f000, $e035f552,
+    $01f057ff, $09f55206, $0001de00, $5a720210, $020100f1, $0403075a, $0503045a,
+    $0c5a0706, $f15a0803, $00000012, $03120103, $08675104, $5a0b0a09, $5a0d0c1b,
+    $0f0e0c11, $1211100c, $140c0c13, $0c055a15, $00005a16, $0c0e0000, $5a191817,
+    $1b1a0c31, $065a1d1c, $5a1f1e0c, $5a200c26, $22210c09, $230c0f5a, $0000175a,
+    $240c0000, $250c205a, $000c0d5a, $00000000);
 
 procedure InitializeUU;
 var

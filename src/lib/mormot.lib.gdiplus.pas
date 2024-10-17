@@ -1298,7 +1298,7 @@ function ColorRefToARGB(rgb: COLORREF): cardinal;
 begin
   if integer(rgb) < 0 then
     rgb := GetSysColor(rgb and $ff);
-  result := (rgb shr 16) or (rgb and $ff00) or (rgb and $ff) shl 16 or $FF000000;
+  result := (rgb shr 16) or (rgb and $ff00) or (rgb and $ff) shl 16 or $ff000000;
 end;
 
 procedure Points16To32(PW: PWordArray; var temp: TSynTempBuffer; n: integer);

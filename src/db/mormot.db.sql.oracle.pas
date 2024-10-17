@@ -215,7 +215,7 @@ type
     fRowFetchedCurrent: cardinal;
     fRowFetchedEnded: boolean;
     fRowBuffer: TByteDynArray;
-    fBoundCursor: array of pointer;
+    fBoundCursor: TPointerDynArray;
     fInternalBufferSize: cardinal;
     // warning: shall be 32 bits aligned!
     fTimeElapsed: TPrecisionTimer;
@@ -1105,7 +1105,7 @@ begin
           VDate := POracleDate(V)^.ToDateTime
         else // direct retrieval
           IntervalTextToDateTimeVar(V, VDate); // from SQLT_INTERVAL_* text
-      ftUtf8: // as varSynUnicode
+      ftUtf8: // VType is varSynUnicode
         begin
           // see TSqlDBStatement.ColumnToVariant() for reference
           VAny := nil;

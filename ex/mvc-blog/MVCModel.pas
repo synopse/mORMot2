@@ -464,7 +464,7 @@ begin
   if Text = nil then
     fText := P
   else
-    SetString(fText, PAnsiChar(P), Text - P);
+    FastSetString(fText, P, Text - P);
   SetLength(fJsonData, fFieldCount * (fRowCount + 1));
   fData := pointer(fJsonData);
   for f := 0 to fFieldCount - 1 do

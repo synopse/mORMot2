@@ -1486,14 +1486,14 @@ begin
   while (i > 0) and
         (ord(S[i]) <= 32) do
     dec(i);
-  SetString(result, PWideChar(pointer(S)), i);
+  FastSynUnicode(result, pointer(S), i);
 end;
 
 function LowerCaseU(const S: SynUnicode): SynUnicode;
 var
   i: PtrInt;
 begin
-  SetString(result, PWideChar(pointer(S)), length(S));
+  FastSynUnicode(result, pointer(S), length(S));
   for i := 0 to length(S) - 1 do
     if PWordArray(result)[i] in [ord('A')..ord('Z')] then
       dec(PWordArray(result)[i], 32);
@@ -1688,7 +1688,7 @@ begin
     S := P;
     while (S^ <> #0) and (S^ <> ',') do
       inc(S);
-    SetString(result, P, S - P);
+    FastSynUnicode(result, P, S - P);
     if S^ <> #0 then
       P := S + 1
     else
@@ -3612,7 +3612,7 @@ begin
       Start := P;
       while not (ord(P^) in [0, 10, 13]) do
         inc(P);
-      SetString(tmpStr, Start, P - Start);
+      FastSynUnicode(tmpStr, Start, P - Start);
       if not fInHeaderOrFooter then
         fCanvasText := fCanvasText + SynUnicodeToString(tmpStr) + #13#10;
       PrintFormattedLine(tmpStr, FORMAT_DEFAULT, '', '', withNewLine);

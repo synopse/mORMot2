@@ -2831,6 +2831,20 @@ begin
     c.Free;
   end;
   {$ifdef OSWINDOWS}
+  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
+  Check(WinErrorConstant(ERROR_OPERATION_ABORTED)^ = 'OPERATION_ABORTED', 'wecb');
+  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
+  Check(WinErrorConstant(ERROR_MORE_DATA)^ = 'MORE_DATA', 'wecd');
+  Check(WinErrorConstant(ERROR_ACCESS_DENIED)^ = 'ACCESS_DENIED', 'wece');
+  Check(WinErrorConstant(ERROR_WINHTTP_TIMEOUT)^ = 'WINHTTP_TIMEOUT', 'wecf');
+  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecg');
+  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
+  Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
+  Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
+    'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
+  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));
   Check(IsSystemFolder('c:\Program files (x86)'));
@@ -3842,6 +3856,23 @@ var
   i, n: PtrInt;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(NextPowerOfTwo(0), 1);
+  CheckEqual(NextPowerOfTwo(1), 1);
+  CheckEqual(NextPowerOfTwo(2), 2);
+  CheckEqual(NextPowerOfTwo(3), 4);
+  CheckEqual(NextPowerOfTwo(4), 4);
+  for i := 5 to 8 do
+    CheckEqual(NextPowerOfTwo(i), 8);
+  for i := 9 to 16 do
+    CheckEqual(NextPowerOfTwo(i), 16);
+  for i := 17 to 32 do
+    CheckEqual(NextPowerOfTwo(i), 32);
+  for i := 1025 to 2048 do
+    CheckEqual(NextPowerOfTwo(i), 2048);
+  for i := 65537 to 131072 do
+    CheckEqual(NextPowerOfTwo(i), 131072);
+  for i := 33554433 to 67108864 do // 33 millions tests in a few ms :)
+    Check(NextPowerOfTwo(i) = 67108864);
   n := 512;
   CheckEqual(MinPtrInt(1, n), 1);
   CheckEqual(MaxPtrInt(1, n), n);
@@ -4913,7 +4944,7 @@ var
   PB: PByte;
   q: RawUtf8;
   Unic: RawByteString;
-  WA: Boolean;
+  WA, HasValidUtf8Avx2: Boolean;
   rb1, rb2, rb3: RawByteString;
 const
   ROWIDS: array[0..17] of PUtf8Char = ('id', 'ID', 'iD', 'rowid', 'ROWid',
@@ -5509,7 +5540,14 @@ begin
       len120 := Utf8TruncatedLength(P, 120)
     else
       len120 := 0;
-    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtF8');
+    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer');
+    {$ifdef ASMX64AVXNOCONST}
+    HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
+    if HasValidUtf8Avx2 then
+      Check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas');
+    {$else}
+    HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
+    {$endif ASMX64AVXNOCONST}
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
@@ -5529,8 +5567,12 @@ begin
         P[len120] := #0; // no need to go any further
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // always invalidate the UTF-8 content
         check(not IsValidUtf8Buffer(P, len120), 'IsValidUtf8 up100');
+        if HasValidUtf8Avx2 then
+          check(not IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas up100');
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // restore
         check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8 restored');
+        if HasValidUtf8Avx2 then
+          check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas restored');
         P[len120] := bak;
       end;
     end;

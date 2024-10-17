@@ -103,7 +103,7 @@ Please submit pull requests for non-validated versions.
     - and download and extract latest https://synopse.info/files/mormot2static.tgz or https://synopse.info/files/mormot2static.7z into `c:\github\mORMot2\static`.
   - or as direct download of a given release (e.g. for a build script):
     - Download a *Source code (zip)* release from https://github.com/synopse/mORMot2/releases and extract it e.g. into `d:\mormot2`,
-    - and extract its associated `mormot2static.tgz` or `mormot2static.7z` file content into `d:\mormot2\static`.
+    - and download and extract its associated `mormot2static.tgz` or `mormot2static.7z` file content into `d:\mormot2\static`.
 2. Setup your favorite IDE: 
   - On Lazarus:
     - Just open and compile the [`/packages/lazarus/mormot2.lpk`](packages/lazarus/mormot2.lpk) package;
@@ -120,7 +120,7 @@ Please submit pull requests for non-validated versions.
 
 For safety, the SHA-256 checksums of the current version of the downloaded binary files, as published in our https://synopse.info/files server, are available in [this repository `static/dev.sha256` file](static/dev.sha256).
 
-## Coming From Version 2
+## Coming From Version 1.18
 
 ### Why Rewrite a Working Solution?
 

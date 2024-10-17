@@ -372,7 +372,7 @@ type
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
   // - this class is thread-safe for its methods, but you should call explicitly
-  // non-rentrant Lock/UnLock to access its individual properties
+  // non-reentrant Lock/UnLock to access its individual properties
   TSynMonitor = class(TObjectWithRttiMethods)
   protected
     fSafe: TOSLightLock;

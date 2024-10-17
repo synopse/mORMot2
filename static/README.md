@@ -6,7 +6,7 @@ This folder should contain all raw binary files needed for FPC and Delphi static
 
 Please download latest https://synopse.info/files/mormot2static.7z and extract its content to this `/static` sub-folder of the mORMot 2 repository. As an alternative, consider download a matching release from https://github.com/synopse/mORMot2/releases
 
-Usually, static files are in synch with [SQlite3 releases](https://www.sqlite.org/chronology.html), perhaps with some days of delay, to ensure the *SQlite3* release is actually stabilized (it is usual to have build releases following a major SQLite3 release, when some bugs are discovered and fixed in the wild).
+Usually, static files are in synch with [SQlite3 releases](https://www.sqlite.org/chronology.html), perhaps within some weeks of delay, to ensure the *SQlite3* release is actually stabilized (it is usual to have build releases following a major SQLite3 release, when some bugs are discovered and fixed in the wild).
 
 Anyway, https://github.com/synopse/mORMot2/releases will maintain a list of official *mORMot 2* releases, including the associated static binaries.
 
