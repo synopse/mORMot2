@@ -393,6 +393,8 @@ begin // needed since 3.46.1
   result := p;
 end;
 
+{$endif CPU32}
+
 function memchr(p: pointer; chr: byte; n: PtrInt): PAnsiChar; cdecl;
 var
   i: PtrInt;
@@ -407,7 +409,6 @@ begin // needed since 3.46.1
     result := nil; // not found
 end;
 
-{$endif CPU32}
 
 {$endif OSWINDOWS}
 
