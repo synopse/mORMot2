@@ -2001,7 +2001,7 @@ begin
       fake := pointer(fFakeCallbacks.List);
       for i := 1 to fFakeCallbacks.Count do
       begin
-        if (fake^ <> nil) and (fake^.fLowLevelConnectionID = aConnectionID) and
+        if (fake^.fLowLevelConnectionID = aConnectionID) and
            not fake^.fReleasedOnClientSide then
           RemoveFakeCallback(fake^, ctxt);
         inc(fake);
