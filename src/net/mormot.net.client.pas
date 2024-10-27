@@ -1363,6 +1363,9 @@ type
   /// simple wrapper around THttpClientSocket/THttpRequest instances
   // - this class will reuse the previous connection if possible, and select the
   // best connection class available on this platform for a given URI
+
+  { TSimpleHttpClient }
+
   TSimpleHttpClient = class(THttpClientAbstract)
   protected
     fHttp: THttpClientSocket;
@@ -1373,7 +1376,8 @@ type
   public
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
-    constructor Create(aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
+    constructor Create(const aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET;
+        aCreateTimoutMS: integer = 0; aIgnoreCertificateErrors: boolean = false); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
     /// low-level entry point of this instance, using an TUri as input
@@ -4295,9 +4299,12 @@ end;
 
 { TSimpleHttpClient }
 
-constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
+constructor TSimpleHttpClient.Create(const aOnlyUseClientSocket: boolean;
+  aCreateTimoutMS: integer; aIgnoreCertificateErrors: boolean);
 begin
   fConnectOptions.RedirectMax := 4; // seems fair enough
+  fConnectOptions.CreateTimeoutMS := aCreateTimoutMS;
+  TLS^.IgnoreCertificateErrors := aIgnoreCertificateErrors;
   {$ifdef USEHTTPREQUEST}
   fOnlyUseClientSocket := aOnlyUseClientSocket or
                           not MainHttpClass.IsAvailable;
