@@ -907,7 +907,7 @@ begin
   R := tmp.InitRandom(CharCount);
   FastSetString(RawUtf8(result), CharCount);
   for i := 0 to CharCount - 1 do
-    PByteArray(result)[i] := 32 + R[i] mod 94;
+    PByteArray(result)[i] := 32 + R[i] mod 95; // may include tilde #$7e char
   tmp.Done;
 end;
 
