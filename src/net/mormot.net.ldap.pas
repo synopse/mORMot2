@@ -2196,7 +2196,7 @@ implementation
 { **************** CLDAP Client Functions }
 
 const
-  NTVER: RawByteString = '\06\00\00\00';
+  NTVER: RawUtf8 = '\06\00\00\00';
 
 function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
   const DomainName, LdapServerAddress, LdapServerPort: RawUtf8): boolean;

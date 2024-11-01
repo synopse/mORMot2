@@ -6145,7 +6145,7 @@ begin
   if fAborted then
     res := nrClosed;
   if NetResult <> nil then
-    NetResult^ := res; // always return TNetResult
+    NetResult^ := res; // always return a TNetResult
   result := (res = nrOK);
 end;
 
