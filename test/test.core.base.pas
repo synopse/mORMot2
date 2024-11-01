@@ -5623,7 +5623,8 @@ begin
     CheckEqual(CompareInteger(Utf8CompareIOS(pointer(U), pointer(Up)), 0),
               -CompareInteger(Utf8CompareIOS(pointer(Up), pointer(U)), 0));
     CheckEqual(Utf8CompareIOS(pointer(U), pointer(U)), 0);
-    CheckEqual(Utf8CompareIOS(pointer(U), pointer(Up)), 0);
+    if Unicode_CodePage = CP_WINANSI then
+      CheckEqual(Utf8CompareIOS(pointer(U), pointer(Up)), 0);
     //for j := 1 to 5000 do
     try
       //W := WinAnsiString(RandomString(len));

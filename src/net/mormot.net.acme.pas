@@ -1096,7 +1096,7 @@ begin
   cc := Cert(fAlgo);
   if cc = nil then
     exit;
-  expired := NowUtc - fRenewBeforeEndDays;
+  expired := NowUtc + fRenewBeforeEndDays;
   fSafe.Lock;
   try
     for i := 0 to length(fClient) - 1 do
