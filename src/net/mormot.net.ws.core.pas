@@ -973,6 +973,7 @@ type
   /// simple chatting protocol, allowing to receive and send WebSocket frames
   // - you can use this protocol to implement simple asynchronous communication
   // with events expecting no answers, e.g. from or as AJAX applications
+  // - as used e.g. by sample ex/rest-websockets/restws_simpleechoserver.dpr
   // - see TWebSocketProtocolRest for bi-directional events expecting answers,
   // as between mORMot client and server
   TWebSocketProtocolChat = class(TWebSocketProtocol)
@@ -992,6 +993,7 @@ type
     function SendFrame(Sender: TWebSocketProcess;
        const Frame: TWebSocketFrame): boolean;
     /// allows to send a JSON message over the wire to a specified connection
+    // - a temporary copy of the Json content will be made for safety
     function SendFrameJson(Sender: TWebSocketProcess;
        const Json: RawUtf8): boolean;
     /// you can assign an event to this property to be notified of incoming messages
@@ -3408,7 +3410,7 @@ begin
   frame.opcode := focText;
   frame.content := [];
   frame.tix := 0;
-  frame.payload := Json;
+  FastSetRawByteString(frame.payload, pointer(Json), length(Json)); // temp copy
   result := Sender.SendFrame(frame)
 end;
 

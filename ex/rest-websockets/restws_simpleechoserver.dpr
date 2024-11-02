@@ -40,11 +40,12 @@ begin
     focBinary: 
       begin
         write('Echoing ', length(Frame.payload), ' bytes');
-        SendFrame(Sender,Frame);
+        SendFrame(Sender, Frame); // echo back the same frame
+        // a real protocol would use e.g. SendFrameJson() here
       end;
   end;
   TextColor(ccCyan);
-  writeln(' from ', Sender.Protocol.RemoteIP, '/', PtrInt(Sender.Protocol.URI));
+  writeln(' from ', Sender.Protocol.RemoteIP, '/', Sender.Protocol.ConnectionID);
 end;
 
 procedure Run;                   
