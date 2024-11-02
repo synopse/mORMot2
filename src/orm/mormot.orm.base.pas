@@ -3570,18 +3570,28 @@ procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
   fieldType: TOrmFieldType; var result: TVarData; createValueTempCopy: boolean;
   typeInfo: PRttiInfo; options: TDocVariantOptions);
 
-  procedure Complex;
+  procedure ComplexValueNotNil;
   var
     tmp: TSynTempBuffer;
     da: RawJson;
     info: TGetJsonField;
   begin
+    if (fieldType in [oftVariant, oftNullable]) and
+       not (GotoNextNotSpace(Value)^ in ['[', '{']) then
+    begin
+      if not GetVariantFromNotStringJson(Value, result, dvoAllowDoubleValue in Options) then
+      begin // was not number or null/false/true -> store as text
+        result.VType := varString;
+        result.VAny := nil;
+        FastSetString(RawUtf8(result.VAny), Value, ValueLen);
+      end;
+      exit; // we got the value as variant
+    end;
     tmp.buf := nil;
     try
       if (fieldType = oftBlobDynArray) and
          (typeInfo <> nil) and
-         (Value <> nil) and
-         (Value^ <> '[') and
+         (GotoNextNotSpace(Value)^ <> '[') and
          Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
       begin
         da := DynArrayBlobSaveJson(typeInfo, tmp.buf, tmp.len);
@@ -3615,7 +3625,7 @@ begin
         begin
           result.VType := varString;
           result.VAny := nil; // avoid GPF, since result.VDouble has been set
-          FastSetString(RawUtf8(result.VAny), Value, ValueLen);
+          FastSetString(RawUtf8(result.VAny), Value, ValueLen); // store as text
         end;
       end;
     oftDateTime,
@@ -3639,7 +3649,8 @@ begin
     oftUnixMSTime:
       SetInt64(Value, result.VInt64);
     oftAnsiText,
-    oftUtf8Text:
+    oftUtf8Text,
+    oftUtf8Custom:
       FastSetString(RawUtf8(result.VAny), Value, ValueLen);
     oftBlobCustom,
     oftBlob:
@@ -3647,9 +3658,9 @@ begin
     oftVariant,
     oftNullable,
     oftBlobDynArray,
-    oftObject,
-    oftUtf8Custom:
-      Complex;
+    oftObject:
+      if Value <> nil then
+        ComplexValueNotNil;
   end;
 end;
 
@@ -4221,7 +4232,7 @@ var
 begin
   GetValueVar(Instance, true, temp, nil);
   ValueVarToVariant(pointer(temp), Length(temp), fOrmFieldTypeStored,
-    TVarData(Dest), false, nil);
+    TVarData(Dest), {createTempCopy=}false, nil);
 end;
 
 procedure TOrmPropInfo.SetVariant(Instance: TObject; const Source: Variant);
@@ -4558,7 +4569,7 @@ var
 begin
   GetValueVar(Instance, true, temp, nil);
   ValueVarToVariant(pointer(temp), length(temp), fOrmFieldTypeStored,
-    TVarData(Dest), false, fPropInfo^.TypeInfo);
+    TVarData(Dest), {createTempCopy=}false, fPropInfo^.TypeInfo);
 end;
 
 
@@ -8122,8 +8133,8 @@ begin
               exit;
             end;
         end;
-      ValueVarToVariant(V, GetResultsLen(row, V), ContentType, TVarData(value), true,
-        ContentTypeInfo, options);
+      ValueVarToVariant(V, GetResultsLen(row, V), ContentType, TVarData(value),
+        {createTempCopy=}true, ContentTypeInfo, options);
     end;
 end;
 
@@ -10160,7 +10171,8 @@ begin
   begin
     aType := FieldType(Field, info);
     U := Get(Row, Field, ULen);
-    ValueVarToVariant(U, ULen, aType, TVarData(result), true, info.ContentTypeInfo);
+    ValueVarToVariant(U, ULen, aType, TVarData(result),
+      {createTempCopy=}true, info.ContentTypeInfo);
   end;
 end;
 
