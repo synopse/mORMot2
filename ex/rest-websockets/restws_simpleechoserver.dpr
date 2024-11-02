@@ -1,17 +1,22 @@
 /// simple Echo server using WebSockets
-program restws_SimpleEchoServer;
+program restws_simpleechoserver;
+
+{$I mormot.defines.inc}
+
+{$ifdef OSWINDOWS}
+  {$APPTYPE CONSOLE}
+{$endif OSWINDOWS}
 
 uses
-  SysUtils,
+  {$I mormot.uses.inc} // use FastMM4 on older versions of Delphi
+  sysutils,
+  mormot.core.base,
+  mormot.core.os,
+  mormot.core.text,
+  mormot.core.rtti,
   mormot.net.server,
   mormot.net.ws.core,
-  mormot.net.ws.server,
-  mormot.core.os,
-  mormot.core.Text,
-  mormot.core.base,
-  mormot.core.rtti;
-
-{$APPTYPE CONSOLE}
+  mormot.net.ws.server;
 
 type
   TWebSocketProtocolEcho = class(TWebSocketProtocolChat)
@@ -19,38 +24,42 @@ type
     procedure EchoFrame(Sender: TWebSocketProcess; const Frame: TWebSocketFrame);
   end;
 
+{$I-} // for write/writeln below
+
 procedure TWebSocketProtocolEcho.EchoFrame(Sender: TWebSocketProcess; const Frame: TWebSocketFrame);
 begin
   TextColor(ccLightMagenta);
-  write(GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(Frame.opcode))^,' - ');
+  write(GetEnumName(TypeInfo(TWebSocketFrameOpCode), ord(Frame.opcode))^, ' - ');
   TextColor(ccWhite);
   case Frame.opcode of
-  focContinuation:
-    write('Connected');
-  focConnectionClose:
-    write('Disconnected');
-  focText,focBinary: begin
-    write('Echoing ',length(Frame.payload),' bytes');
-    SendFrame(Sender,Frame);
-    end;
+    focContinuation:
+      write('Connected');
+    focConnectionClose:
+      write('Disconnected');
+    focText,
+    focBinary: 
+      begin
+        write('Echoing ', length(Frame.payload), ' bytes');
+        SendFrame(Sender,Frame);
+      end;
   end;
   TextColor(ccCyan);
-  writeln(' from ',Sender.Protocol.RemoteIP,'/',PtrInt(Sender.Protocol.URI));
+  writeln(' from ', Sender.Protocol.RemoteIP, '/', PtrInt(Sender.Protocol.URI));
 end;
 
 procedure Run;                   
 var Server: TWebSocketServer;
     protocol: TWebSocketProtocolEcho;
 begin
-  Server := TWebSocketServer.Create('8888',nil,nil,'test');
+  Server := TWebSocketServer.Create('8888', nil, nil, 'test');
   try
-    protocol := TWebSocketProtocolEcho.Create('meow','');
+    protocol := TWebSocketProtocolEcho.Create('meow', '');
     protocol.OnIncomingFrame := protocol.EchoFrame;
     Server.WebSocketProtocols.Add(protocol);
     TextColor(ccLightGreen);
     writeln('WebSockets Chat Server running on localhost:8888'#13#10);
     TextColor(ccWhite);
-    writeln('Please load Project31SimpleEchoServer.html in your browser'#13#10);
+    writeln('Please load restws_simpleechoserver.html in your browser'#13#10);
     TextColor(ccLightGray);
     writeln('Press [Enter] to quit'#13#10);
     TextColor(ccCyan);
