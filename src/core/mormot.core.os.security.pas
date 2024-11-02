@@ -3252,17 +3252,17 @@ var
 begin
   result := sctPadding; // unknown
   s := p;
-  case s^ of
-    #0:
+  case ord(s^) of // use ord() to circumvent Delphi XE2 compiler issue
+    0:
       result := sctInternalFinal;
-    '-', '0' .. '9':
+    ord('-'), ord('0') .. ord('9'):
       begin
         repeat
           inc(s);
         until not (s^ in ['0' .. '9']);
         result := sctInt64;
       end;
-    '"':
+    ord('"'):
       begin
         repeat
           inc(s);
@@ -3272,14 +3272,14 @@ begin
         inc(s);
         result := sctUnicode;
       end;
-    '#':
+    ord('#'):
       begin
         repeat
           inc(s);
         until not (s^ in ['#', '0' .. '9', 'A' .. 'Z', 'a' .. 'z']);
         result := sctOctetString;
       end;
-    '{':
+    ord('{'):
        begin
          repeat
            inc(s);
@@ -3289,14 +3289,14 @@ begin
          inc(s);
          result := sctComposite;
        end;
-    '=':
+    ord('='):
       begin
         if s[1] <> '=' then
           exit;
         inc(s, 2);
         result := sctEqual;
       end;
-    '!':
+    ord('!'):
       if s[1] = '=' then
       begin
         inc(s, 2);
@@ -3307,7 +3307,7 @@ begin
         inc(s);
         result := sctNot;
       end;
-    '<':
+    ord('<'):
       if s[1] = '=' then
       begin
         inc(s, 2);
@@ -3318,7 +3318,7 @@ begin
         inc(s);
         result := sctLessThan;
       end;
-    '>':
+    ord('>'):
       if s[1] = '=' then
       begin
         inc(s, 2);
@@ -3329,9 +3329,9 @@ begin
         inc(s);
         result := sctGreaterThan;
       end;
-    'A' .. 'Z',
-    'a' .. 'z',
-    #$80 .. #$ff:
+    ord('A') .. ord('Z'),
+    ord('a') .. ord('z'),
+    $80 .. $ff: // allow any UTF-8 identifier without any decoding
       begin
         result := sctLocalAttribute;
         repeat
@@ -3360,21 +3360,21 @@ begin
             end;
         end;
       end;
-    '&':
+    ord('&'):
       begin
         if s[1] <> '&' then
           exit;
         inc(s, 2);
         result := sctAnd;
       end;
-    '|':
+    ord('|'):
       begin
         if s[1] <> '|' then
           exit;
         inc(s, 2);
         result := sctOr;
       end;
-    '@':
+    ord('@'):
       begin
         repeat
           inc(s);
@@ -3397,12 +3397,12 @@ begin
           exit; // no attribute name
       end;
     // for internal SDDL text parsing use only
-    '(':
+    ord('('):
       begin
         inc(s);
         result := sctInternalParenthOpen;
       end;
-    ')':
+    ord(')'):
       begin
         inc(s);
         result := sctInternalParenthClose;
