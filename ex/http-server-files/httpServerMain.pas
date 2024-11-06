@@ -67,7 +67,7 @@ begin
     end;
     // load local *.json files with URI
     if (settingsfolder <> '') and
-       (FindFirst(settingsfolder + '*.json', faAnyFile - faDirectory, F) = 0) then
+       (FindFirst(IncludeTrailingPathDelimiter(settingsfolder) + '*.json', faAnyFile - faDirectory, F) = 0) then
     begin
       repeat
         if SearchRecValidFile(F) then
