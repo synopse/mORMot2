@@ -108,7 +108,8 @@ type
     urmPut,
     urmDelete,
     urmOptions,
-    urmHead);
+    urmHead,
+    urmPatch);
 
   /// the HTTP methods supported by TUriRouter
   TUriRouterMethods = set of TUriRouterMethod;
@@ -214,6 +215,10 @@ type
     // - e.g. Route.Put('/domodify', '/root/myservice/update', urmPost);
     procedure Put(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPut); overload;
+    /// just a wrapper around Rewrite(urmPatch, aFrom, aToMethod, aTo)
+    // - e.g. Route.Patch('/domodify', '/root/myservice/update', urmPost);
+    procedure Patch(const aFrom, aTo: RawUtf8;
+      aToMethod: TUriRouterMethod = urmPut); overload;
     /// just a wrapper around Rewrite(urmDelete, aFrom, aToMethod, aTo)
     // - e.g. Route.Delete('/doremove', '/root/myservice/delete', urmPost);
     procedure Delete(const aFrom, aTo: RawUtf8;
@@ -245,6 +250,9 @@ type
       aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmPut], aUri, aExecute) registration method
     procedure Put(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
+    /// just a wrapper around Run([urmPatch], aUri, aExecute) registration method
+    procedure Patch(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
       aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmDelete], aUri, aExecute) registration method
     procedure Delete(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
@@ -295,6 +303,9 @@ type
     /// how many PUT rules have been registered
     property Puts: integer
       read fEntries[urmPut];
+    /// how many PATCH rules have been registered
+    property Patchs: integer
+      read fEntries[urmPatch];
     /// how many DELETE rules have been registered
     property Deletes: integer
       read fEntries[urmDelete];
@@ -315,7 +326,8 @@ const
     'PUT',     // urmPut
     'DELETE',  // urmDelete
     'OPTIONS', // urmOptions
-    'HEAD');   // urmHead
+    'HEAD',    // urmHead
+    'PATCH');  // urmPatch
 
 /// quickly recognize most HTTP text methods into a TUriRouterMethod enumeration
 // - may replace cascaded IsGet() IsPut() IsPost() IsDelete() function calls
@@ -2478,6 +2490,8 @@ begin
       Method := urmPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Method := urmPut;
+    ord('P') + ord('A') shl 8 + ord('T') shl 16 + ord('C') shl 24:
+      Method := urmPatch;
     ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
       Method := urmHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
@@ -2764,6 +2778,11 @@ begin
   Rewrite(urmPut, aFrom, aToMethod, aTo);
 end;
 
+procedure TUriRouter.Patch(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmPatch, aFrom, aToMethod, aTo);
+end;
+
 procedure TUriRouter.Delete(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
 begin
   Rewrite(urmDelete, aFrom, aToMethod, aTo);
@@ -2796,6 +2815,12 @@ procedure TUriRouter.Put(const aUri: RawUtf8;
   const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
   Run([urmPut], aUri, aExecute, aExecuteOpaque);
+end;
+
+procedure TUriRouter.Patch(const aUri: RawUtf8;
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
+begin
+  Run([urmPatch], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Delete(const aUri: RawUtf8;
