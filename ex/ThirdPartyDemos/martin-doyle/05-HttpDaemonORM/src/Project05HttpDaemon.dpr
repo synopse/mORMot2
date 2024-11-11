@@ -24,8 +24,7 @@ type
 
   TSampleDaemon = class(TSynDaemon)
   protected
-    FHttpServer: TRestHttpServer;
-    FServer: TSampleServer;
+    FRunning: boolean;
   public
     constructor Create(aSettingsClass: TSynDaemonSettingsClass; const
         aWorkFolder, aSettingsFolder, aLogFolder: TFileName; const
@@ -72,11 +71,14 @@ begin
   HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE,4 );
   HttpServer.AccessControlAllowOrigin := '*';
   SQLite3Log.Add.Log(sllInfo, 'HttpServer started at Port: ' + HttpPort);
+  FRunning := True;
 end;
 
 procedure TSampleDaemon.Stop;
 begin
   SQLite3Log.Enter(self);
+  if not FRunning then
+    Exit;
   try
     try
       HttpServer.Free;
@@ -93,6 +95,7 @@ begin
     end;
   Model.Free;
   end;
+  FRunning := false;
 end;
 
 begin
@@ -107,5 +110,5 @@ begin
   finally
     SQLite3Log.Add.Log(sllInfo, 'Daemon shut down');
   end;
-
+  SampleDaemon.Free;
 end.
