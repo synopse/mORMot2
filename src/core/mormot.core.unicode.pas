@@ -2218,7 +2218,7 @@ procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: TRawUtf8DynArray
 procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
   const Value: TRawUtf8DynArray); overload;
 
-/// true if both TRawUtf8DynArray are the same
+/// true if both TRawUtf8DynArray are the same, in the very same order
 // - comparison is case-sensitive
 function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean; overload;
 

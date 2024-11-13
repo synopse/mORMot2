@@ -2047,12 +2047,16 @@ type
     function BeforeAuth(Sender: TObject; const User: RawUtf8): boolean;
     /// remove any previously allowed groups
     procedure AllowGroupClear;
-    /// register the sAMAccountName of the allowed group(s)
+    /// register the sAMAccountName of additional allowed group(s)
     procedure AllowGroupAN(const GroupAN: TRawUtf8DynArray); overload;
-    /// register the sAMAccountName of the allowed group(s) as CSV
+    /// register the sAMAccountName of additional allowed group(s) as CSV
     procedure AllowGroupAN(const GroupANCsv: RawUtf8); overload;
-    /// register the distinguishedName of the allowed group(s)
+    /// register the distinguishedName of additional allowed group(s)
     procedure AllowGroupDN(const GroupDN: TRawUtf8DynArray);
+    /// register all allowed group(s) at once
+    // - same as AllowGroupClear + AllowGroupAN() + AllowGroupDN()
+    // - do nothing if the supplied groups are already the one used
+    procedure AllowGroups(const GroupAN, GroupDN: TRawUtf8DynArray);
     /// allow to customize the BaseDN parameter used for GetUserDN()
     property UserBaseDN: RawUtf8
       read fUserBaseDN write fUserBaseDN;
@@ -2074,6 +2078,9 @@ type
     // - default valucache timeout is 300 seconds, i.e. 5 minutes
     property CacheTimeoutSeconds: integer
       read fCacheTimeoutSeconds write fCacheTimeoutSeconds;
+    /// access to the AllowGroupAN() and AllowGroupDN() primaryGroupID attributes
+    property GroupID: TIntegerDynArray
+      read fGroupID;
   end;
 
 
@@ -6553,6 +6560,8 @@ var
   i: PtrInt;
   pid: cardinal;
 begin
+  if GroupAN = nil then
+    exit;
   fSafe.Lock;
   try
     for i := 0 to high(GroupAN) do
@@ -6581,6 +6590,8 @@ var
   i: PtrInt;
   pid: cardinal;
 begin
+  if GroupDN = nil then
+    exit;
   fSafe.Lock;
   try
     for i := 0 to high(GroupDN) do
@@ -6590,6 +6601,22 @@ begin
         AddInteger(fGroupID, pid, {nodup=}true);
       AddRawUtf8(fGroupDN, GroupDN[i], {nodup=}true, {casesens=}true);
     end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TLdapCheckMember.AllowGroups(const GroupAN, GroupDN: TRawUtf8DynArray);
+begin
+  fSafe.Lock;
+  try
+    if RawUtf8DynArrayEquals(GroupAN, fGroupAN) and
+       RawUtf8DynArrayEquals(GroupDN, fGroupDN) then // nothing to change
+      exit;
+    // need to register the new groups
+    AllowGroupClear;
+    AllowGroupAN(GroupAN);
+    AllowGroupDN(GroupDN);
   finally
     fSafe.UnLock;
   end;
