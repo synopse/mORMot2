@@ -4939,7 +4939,7 @@ var
   str: string;
   up4: RawUcs4;
   U, U2, res, Up, Up2, json, json1, json2, s1, s2, s3: RawUtf8;
-  arr: TRawUtf8DynArray;
+  arr, arr2: TRawUtf8DynArray;
   P: PUtf8Char;
   PB: PByte;
   q: RawUtf8;
@@ -5276,9 +5276,38 @@ begin
   for i := length(res) + 1 downto 1 do
     Check(StrLenSafe(Pointer(@res[i])) = length(res) - i + 1);
   CsvToRawUtf8DynArray(pointer(res), arr);
+  CheckEqual(length(arr), 3);
   Check(arr[0] = 'one');
   Check(arr[1] = 'two');
   Check(arr[2] = 'three');
+  arr2 := arr; // pointer
+  Check(RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals');
+  Check(RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains');
+  Check(RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame1');
+  Check(RawUtf8DynArraySame(arr, arr2, {insens=}false), 'RawUtf8DynArraySame1i');
+  arr2 := copy(arr);
+  CheckEqual(length(arr2), 3);
+  Check(RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals2');
+  Check(RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains2');
+  Check(RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame2');
+  Check(RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame2i');
+  SetLength(arr, 2);
+  Check(not RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals3');
+  Check(RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains3a');
+  Check(not RawUtf8DynArrayContains(arr2, arr), 'RawUtf8DynArrayContains3b');
+  Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame3');
+  Check(not RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame3i');
+  arr := CsvToRawUtf8DynArray('two,three,one');
+  Check(not RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals4');
+  Check(RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains4');
+  Check(RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame4');
+  Check(RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame4i');
+  arr := CsvToRawUtf8DynArray('two,ONE,three');
+  Check(not RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals4');
+  Check(not RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains4');
+  Check(RawUtf8DynArrayContains(arr, arr2, {insens=}true), 'RawUtf8DynArrayContains4i');
+  Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame4');
+  Check(RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame4i');
   Finalize(arr);
   CsvToRawUtf8DynArray(res, ',', '', arr);
   Check(arr[0] = 'one');
