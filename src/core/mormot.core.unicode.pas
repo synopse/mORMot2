@@ -9157,7 +9157,8 @@ function RawUtf8DynArraySame(const A, B: TRawUtf8DynArray;
   CaseInsensitive: boolean): boolean;
 begin
   result := (length(A) = length(B)) and
-            RawUtf8DynArrayContains(A, B, CaseInsensitive);
+            RawUtf8DynArrayContains(A, B, CaseInsensitive) and
+            RawUtf8DynArrayContains(B, A, CaseInsensitive);
 end;
 
 function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
