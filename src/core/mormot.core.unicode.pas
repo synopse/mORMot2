@@ -2228,6 +2228,15 @@ function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean; overload;
 function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray;
   Count: integer): boolean; overload;
 
+/// true if all TRawUtf8DynArray items in A are in B (i.e. if A is included in B)
+function RawUtf8DynArrayContains(const A, B: TRawUtf8DynArray;
+  CaseInsensitive: boolean = false): boolean;
+
+/// true if both TRawUtf8DynArray are the same, in any order
+// - i.e. if all items in A are in B and all items in B are in A
+function RawUtf8DynArraySame(const A, B: TRawUtf8DynArray;
+  CaseInsensitive: boolean = false): boolean;
+
 /// add the Value to Values[] string array
 function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
 
@@ -9107,7 +9116,9 @@ function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean;
 var
   n, i: PtrInt;
 begin
-  result := false;
+  result := (A = B);
+  if result then
+    exit; // same pointer
   n := length(A);
   if n <> length(B) then
     exit;
@@ -9122,10 +9133,31 @@ var
   i: PtrInt;
 begin
   result := false;
-  for i := 0 to Count - 1 do
-    if A[i] <> B[i] then
-      exit;
+  if A <> B then // same pointer
+    for i := 0 to Count - 1 do
+      if A[i] <> B[i] then
+        exit;
   result := true;
+end;
+
+function RawUtf8DynArrayContains(const A, B: TRawUtf8DynArray;
+  CaseInsensitive: boolean): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if A <> B then
+    for i := 0 to length(A) - 1 do
+      if FindRawUtf8(B, A[i], not CaseInsensitive) < 0 then
+        exit; // one missing item is enough to fail
+  result := true;
+end;
+
+function RawUtf8DynArraySame(const A, B: TRawUtf8DynArray;
+  CaseInsensitive: boolean): boolean;
+begin
+  result := (length(A) = length(B)) and
+            RawUtf8DynArrayContains(A, B, CaseInsensitive);
 end;
 
 function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
