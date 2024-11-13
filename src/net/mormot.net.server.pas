@@ -216,9 +216,9 @@ type
     procedure Put(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPut); overload;
     /// just a wrapper around Rewrite(urmPatch, aFrom, aToMethod, aTo)
-    // - e.g. Route.Patch('/domodify', '/root/myservice/update', urmPost);
+    // - e.g. Route.Patch('/domodify', '/root/myservice/update', urmPatch);
     procedure Patch(const aFrom, aTo: RawUtf8;
-      aToMethod: TUriRouterMethod = urmPut); overload;
+      aToMethod: TUriRouterMethod = urmPatch); overload;
     /// just a wrapper around Rewrite(urmDelete, aFrom, aToMethod, aTo)
     // - e.g. Route.Delete('/doremove', '/root/myservice/delete', urmPost);
     procedure Delete(const aFrom, aTo: RawUtf8;

@@ -2858,7 +2858,7 @@ type
   // - memory size matches an TAesBlock on purpose, for direct encryption
   // - TAesFull uses unsafe direct AES-ECB chain mode, so is considered deprecated
   {$ifdef USERECORDWITHMETHODS}
-   TAesFullHeader = record
+  TAesFullHeader = record
   {$else}
   TAesFullHeader = object
   {$endif USERECORDWITHMETHODS}
