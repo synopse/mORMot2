@@ -6610,8 +6610,8 @@ procedure TLdapCheckMember.AllowGroups(const GroupAN, GroupDN: TRawUtf8DynArray)
 begin
   fSafe.Lock;
   try
-    if RawUtf8DynArrayEquals(GroupAN, fGroupAN) and
-       RawUtf8DynArrayEquals(GroupDN, fGroupDN) then // nothing to change
+    if RawUtf8DynArraySame(GroupAN, fGroupAN, {caseinsens=}true) and
+       RawUtf8DynArraySame(GroupDN, fGroupDN) then // nothing to change
       exit;
     // need to register the new groups
     AllowGroupClear;
