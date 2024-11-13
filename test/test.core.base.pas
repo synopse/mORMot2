@@ -5308,6 +5308,12 @@ begin
   Check(RawUtf8DynArrayContains(arr, arr2, {insens=}true), 'RawUtf8DynArrayContains4i');
   Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame4');
   Check(RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame4i');
+  arr := CsvToRawUtf8DynArray('two,one,one');
+  Check(not RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals5');
+  Check(RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains5');
+  Check(RawUtf8DynArrayContains(arr, arr2, {insens=}true), 'RawUtf8DynArrayContains5i');
+  Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame5');
+  Check(not RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame5i');
   Finalize(arr);
   CsvToRawUtf8DynArray(res, ',', '', arr);
   Check(arr[0] = 'one');
