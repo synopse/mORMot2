@@ -766,6 +766,9 @@ const
   ATS_READABLE = [atsRawUtf8 .. atsIntegerAccountType];
   /// the LDAP raw values stored as integer
   ATS_INTEGER = [atsInteger .. atsIntegerAccountType];
+  /// the LDAP raw values stored as raw binary
+  // - always base-64 encoded in LDIF output
+  ATS_BINARY = [atsSid, atsGuid, atsSecurityDescriptor];
 
 /// recognize our common Attribute Types from their standard NAME text
 // - allow to use e.g. AttrTypeStorage[AttributeNameType(AttrName)]
@@ -3877,7 +3880,8 @@ begin
   begin
     w.AddString(fAttributeName); // is either OID or plain alphanum
     w.AddDirect(':');
-    AddLdif(w, pointer(fList[i]), length(fList[i]));
+    AddLdif(w, pointer(fList[i]), length(fList[i]),
+      {forcebase64:} fKnownTypeStorage in ATS_BINARY);
     w.AddDirect(#10);
   end;
 end;
