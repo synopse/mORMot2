@@ -210,8 +210,9 @@ function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 // also to dn/rdn values
 function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean;
 
-/// append the supplied buffer as specified by RFC 2849
-procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
+/// append the supplied buffer value as specified by RFC 2849
+procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: PtrInt;
+  forcebase64: boolean = false);
 
 
 { **************** LDAP Protocol Definitions }
@@ -2527,18 +2528,19 @@ begin
   result := true;
 end;
 
-procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
+procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: PtrInt; forcebase64: boolean);
 begin
-  if IsLdifSafe(p, l) then
-  begin
-    w.AddDirect(' ');
-    w.AddNoJsonEscape(p, l);
-  end
-  else
+  if forcebase64 or
+     not IsLdifSafe(p, l) then
   begin
     // UTF-8 or binary content is just stored as name:: <base64>
     w.AddDirect(':', ' ');
-    w.WrBase64(pointer(p), l, {withmagic=}false);
+    w.WrBase64(pointer(p), l, {withmagic=}false); // line feeds are optionals
+  end
+  else
+  begin
+    w.AddDirect(' ');
+    w.AddNoJsonEscape(p, l);
   end;
 end;
 
