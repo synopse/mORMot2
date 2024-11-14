@@ -204,8 +204,11 @@ function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 
 { **************** LDIF Data Interchange Format }
 
-/// check if the supplied buffer requires base-64 encoding as for RFC 2849
-function IsLdifSafe(p: PUtf8Char; l: integer): boolean;
+/// check if the supplied buffer requires base-64 encoding as RFC 2849 value
+// - i.e. if p[0..l-1] contains SAFE-STRING = [SAFE-INIT-CHAR *SAFE-CHAR]
+// - note that https://www.rfc-editor.org/errata/eid3646 states it applied to
+// also to dn/rdn values
+function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean;
 
 /// append the supplied buffer as specified by RFC 2849
 procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
@@ -2500,24 +2503,26 @@ end;
 
 { **************** LDIF Data Interchange Format }
 
-function IsLdifSafe(p: PUtf8Char; l: integer): boolean; // RFC 2849
+// we follow https://www.rfc-editor.org/rfc/rfc2849 specs
+
+function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean; // RFC 2849
 begin
-  if p <> nil then
+  if (p <> nil) and
+     (l > 0) then
   begin
     result := false;
-    if p^ in [#0 .. ' ', ':', '<', #128 .. #255] then // SAFE-INIT-CHAR
-      exit;
-    inc(p);
+    if p^ in [#0, #10, #13, ' ', ':', '<', #128 .. #255] then
+      exit; // SAFE-INIT-CHAR: <= 127, not NUL, LF, CR, SPACE, COLON, LESS-THAN
     dec(l);
+    if p[l] = ' ' then
+      exit; // "should not end with a space" RFC 2849 point 8)
     if l <> 0 then
       repeat
-        if p^ in [#0, #10, #13, #128 .. #255] then    // SAFE-CHAR
-          exit;
         inc(p);
+        if p^ in [#0, #10, #13, #128 .. #255] then
+          exit; // SAFE-CHAR: <= 127 not NUL, LF, CR
         dec(l);
       until l = 0;
-    if p[-1] = ' ' then
-      exit; // "should not end with a space" RFC 2849 point 8)
   end;
   result := true;
 end;
