@@ -4690,18 +4690,24 @@ var
   c: TPollAsyncConnection;
   locked: boolean;
 begin
-  // verify if not in unexpected state, to avoid
+  // verify in expected execution context
   if IsDangling or
      (Sender <> fRequest) or
-     (fClosed in fFlags) or
-     (fHttp.State <> hrsWaitAsyncProcessing) or
-     not (rfAsynchronous in fHttp.ResponseFlags) then
+     (fClosed in fFlags) then
     exit;
   // respond within a lock, since may be interrupted before final state is set
-  locked := WaitLock({wr=}false, 10);
+  locked := WaitLock({wr=}false, {ms=}100);
   try
     if not locked then // read lock should always be available
       fOwner.DoLog(sllWarning, 'AsyncResponse read lock failed', [], self);
+    // verify if not in unexpected state, to avoid race conditions
+    if (fHttp.State <> hrsWaitAsyncProcessing) or
+       not (rfAsynchronous in fHttp.ResponseFlags) then
+    begin
+      fOwner.DoLog(sllWarning, 'AsyncResponse in invalid state=% flags=%',
+        [ToText(fHttp.State)^, byte(fHttp.ResponseFlags)], self);
+      exit;
+    end;
     // finalize and send the response back to the client
     if hfConnectionClose in fHttp.HeaderFlags then
       res := soClose
