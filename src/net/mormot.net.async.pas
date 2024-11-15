@@ -4687,20 +4687,20 @@ procedure THttpAsyncServerConnection.AsyncResponse(
   Sender: THttpServerRequestAbstract; RespStatus: integer);
 var
   res: TPollAsyncSocketOnReadWrite;
-  c: TPollAsyncConnection;
+  c: TPollAsyncConnection; // CloseConnection() requires a var parameter
   locked: boolean;
 begin
-  // verify in expected execution context
+  // verify most obvious execution context
   if IsDangling or
      (Sender <> fRequest) or
      (fClosed in fFlags) then
     exit;
-  // respond within a lock, since may be interrupted before final state is set
+  // respond within read lock, since may be interrupted before final state is set
   locked := WaitLock({wr=}false, {ms=}100);
   try
     if not locked then // read lock should always be available
       fOwner.DoLog(sllWarning, 'AsyncResponse read lock failed', [], self);
-    // verify if not in unexpected state, to avoid race conditions
+    // verify expected connection state, to avoid race condition
     if (fHttp.State <> hrsWaitAsyncProcessing) or
        not (rfAsynchronous in fHttp.ResponseFlags) then
     begin
