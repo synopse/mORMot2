@@ -658,6 +658,7 @@
 
 {$ifdef CPUINTEL}
   {$ifdef OSWINDOWS}
+    {$define OSWINTEL}
     {$ifdef CPUX64}
       {$define WIN64ABI}    // for asm on x86_64
       {$define OSWINDOWS64} // Win64
@@ -673,16 +674,24 @@
       {$define THREADID32}  // TThreadID = PtrUInt/pointer on pthread
     {$endif CPUX64}
   {$endif OSPOSIX}
-  {$define CPUINTELARM}
 {$else}
   {$undef HASAESNI}         // AES-NI is an Intel-specific feature
-  {$ifdef CPUARM3264}
-    {$define CPUINTELARM}
-  {$endif CPUARM3264}
-  {$ifdef CPU32}
-    {$define THREADID32}    // TThreadID = PtrUInt/pointer on pthread
-  {$endif CPU32}
+  {$ifdef OSWINDOWS}
+    {$ifdef CPUAARCH64}
+      {$define OSWINARM}    // aarch64-win64
+    {$endif CPUAARCH64}
+    {$define THREADID32}    // TThreadID = 32-bit DWORD on win64-aarch64
+  {$endif OSWINDOWS}
+  {$ifdef OSPOSIX}
+    {$ifdef CPU32}
+      {$define THREADID32}  // TThreadID = integer/pointer on 32-bit pthread
+    {$endif CPU32}
+  {$endif OSPOSIX}
+  {$define CPUINTELARM}
 {$endif CPUINTEL}
+{$ifdef CPUARM3264}
+  {$define CPUINTELARM}
+{$endif CPUARM3264}
 
 {$ifdef CPU32}
   {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
