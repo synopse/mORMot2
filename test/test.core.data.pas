@@ -4580,6 +4580,21 @@ begin
   CheckEqual(json, '{"Any":{"List":[1,2,3],"Dict":{"a":4}},' +
     '"Name":"doe","List":["zero"],"Info":["zero"]}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
+  // validate some user-reported issues
+  {$ifdef HASIMPLICITOPERATOR}
+  l := DocList('[{"id":"f7518487-6e95-4c90-8438-a6b48d6a8b5f",' +
+     '"name":"user","phones":[{"type":"mobile","number":"123-456-789"}]}]');
+  for d in l do
+  begin
+    l2 := d.L['phones'];
+    for d2 in l2 do
+      CheckEqual(d2.U['number'], '123-456-789');
+    {$ifndef FPC} // FPC has a bug and seems to release d.L['phones'] too early
+    for d2 in d.L['phones'] do
+      CheckEqual(d2.U['number'], '123-456-789');
+    {$endif FPC}
+  end;
+  {$endif HASIMPLICITOPERATOR}
 end;
 
 procedure TTestCoreProcess._TDecimal128;
