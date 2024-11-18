@@ -113,7 +113,7 @@ type
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    /// used e.g. for IOCP or to mark AddGC()
+    /// used internally e.g. for IOCP or to mark AddGC()
     fInternalFlags: set of (ifWriteWait, ifInGC);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
@@ -983,6 +983,7 @@ type
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fConnectionID: THttpServerConnectionID; // may be <> fHandle behind nginx
     fAfterResponseStart: Int64;
+    fAsyncConnectionID32: cardinal; // 32-bit truncated fConnectionID
     fAuthRejectSec: cardinal;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -1450,7 +1451,8 @@ end;
 function TPollAsyncConnection.IsDangling: boolean;
 begin
   result := (self = nil) or
-            (fHandle = 0);
+            (fHandle = 0) or
+            not InheritsFrom(TPollAsyncConnection); // detect reused mem block
 end;
 
 function TPollAsyncConnection.IsClosed: boolean;
@@ -4691,22 +4693,30 @@ var
   locked: boolean;
 begin
   // verify most obvious execution context
-  if IsDangling or
-     (Sender <> fRequest) or
-     (Sender.ConnectionID <> fRequest.ConnectionID) or // ABBA problem
-     (fClosed in fFlags) then
-    exit;
-  // respond within read lock, since may be interrupted before final state is set
+  try
+    if IsDangling or
+       (Sender <> fRequest) or
+       (fClosed in fFlags) then
+      exit;
+  except
+    on E: Exception do
+    begin
+      fOwner.DoLog(sllWarning, 'AsyncResponse failed as %', [E], self);
+      exit;
+    end;
+  end;
+  // respond within read lock, since may be interrupted before state is set
   locked := WaitLock({wr=}false, {ms=}100);
   try
-    if not locked then // read lock should always be available
-      fOwner.DoLog(sllWarning, 'AsyncResponse read lock failed', [], self);
     // verify expected connection state, to avoid race condition
-    if (fHttp.State <> hrsWaitAsyncProcessing) or
-       not (rfAsynchronous in fHttp.ResponseFlags) then
+    if (not locked) or
+       (fAsyncConnectionID32 <> cardinal(Sender.ConnectionID)) or // detect ABBA
+       (fHttp.State <> hrsWaitAsyncProcessing) or
+       not (rfAsynchronous in fHttp.ResponseFlags) then // paranoid
     begin
-      fOwner.DoLog(sllWarning, 'AsyncResponse in invalid state=% flags=%',
-        [ToText(fHttp.State)^, byte(fHttp.ResponseFlags)], self);
+      fOwner.DoLog(sllWarning, 'AsyncResponse failed lock=% state=% flags=% %=%',
+        [BOOL_STR[locked], ToText(fHttp.State)^, byte(fHttp.ResponseFlags),
+         integer(fAsyncConnectionID32), integer(Sender.ConnectionID)], self);
       exit;
     end;
     // finalize and send the response back to the client
@@ -4718,11 +4728,10 @@ begin
     if DoResponse(res) = soClose then
     begin
       if acoVerboseLog in fOwner.fOptions then
-        fOwner.DoLog(sllTrace, 'AsyncResponse close locked=%', [locked], self);
-      if locked then
-        UnLockFinal({wr=}false);
+        fOwner.DoLog(sllTrace, 'AsyncResponse close', [], self);
       locked := false;
-      c := self;
+      UnLockFinal({wr=}false);
+      c := self; // need a local var
       fServer.fAsync.fClients.CloseConnection(c, 'AsyncResponse');
     end;
   finally
@@ -4768,6 +4777,7 @@ begin
     if fRequest.RespStatus = HTTP_ASYNCRESPONSE then
     begin
       // delayed response using fRequest.OnAsyncResponse callback
+      fAsyncConnectionID32 := cardinal(fConnectionID); // to detect ABBA problem
       include(fHttp.ResponseFlags, rfAsynchronous);
       fHttp.State := hrsWaitAsyncProcessing;
       exit; // self.AsyncResponse will be called later
