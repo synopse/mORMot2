@@ -3400,14 +3400,8 @@ begin
   result := GetEnumName(TypeInfo(TOrmVirtualKind), ord(vk));
 end;
 
-
-
-{$ifdef ISDELPHI20062007}
-  {$WARNINGS OFF} // circumvent Delphi 2007 false positive warning
-{$endif ISDELPHI20062007}
-
 const
-  PG_FT: array[TSqlDBFieldType] of string[9] = (
+  PG_FT: array[TSqlDBFieldType] of string[9] = ( // UNNEST(?::###[]) field type
     'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
 
 function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
@@ -3519,18 +3513,13 @@ begin
           end;
         end;
     else
-      EJsonObjectDecoder.RaiseUtf8('Unexpected EncodeAsSqlPrepared(%)',
-        [ord(Occasion)]);
+      EJsonObjectDecoder.RaiseUtf8('EncodeAsSqlPrepared(%)', [ToText(Occasion)^]);
     end;
     W.SetText(result);
   finally
     W.Free;
   end;
 end;
-
-{$ifdef ISDELPHI20062007}
-  {$WARNINGS ON}
-{$endif ISDELPHI20062007}
 
 const
   /// map our available types for any SQL field property into variant values
