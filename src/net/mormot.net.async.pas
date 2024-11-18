@@ -4693,6 +4693,7 @@ begin
   // verify most obvious execution context
   if IsDangling or
      (Sender <> fRequest) or
+     (Sender.ConnectionID <> fRequest.ConnectionID) or // ABBA problem
      (fClosed in fFlags) then
     exit;
   // respond within read lock, since may be interrupted before final state is set
