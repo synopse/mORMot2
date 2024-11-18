@@ -3792,6 +3792,8 @@ begin
   end;
 end;
 
+{$ifdef CPUINTEL}
+
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
   forward; // implemented later in mormot.core.os.pas
 
@@ -3834,6 +3836,15 @@ begin
   info.data := ReadSystemMemory(addr, info.Length);
   result := info.data <> '';
 end;
+
+{$else} // TODO: try aarch64-win64 SMBios support
+
+function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
+begin
+  result := false;
+end;
+
+{$endif CPUINTEL}
 
 procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
