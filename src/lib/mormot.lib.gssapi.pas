@@ -509,7 +509,9 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from previous successful call to ServerSspiAuth
-// - aUserName contains authenticated user name
+// - aUserName contains authenticated user name, as 'NETBIOSNAME\username' pattern,
+// following ServerDomainMapRegister() mapping, or 'REALM.TLD\username` if
+// global ServerDomainMapUseRealm was forced to true
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
 
@@ -551,6 +553,15 @@ const
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '@';
 
+var
+  /// ServerSspiAuthUser() won't return NT4-style NetBIOS name but the realm
+  // - the GSS API only returns the realm (mydomain.tld) whereas Windows SSPI
+  // returns the NetBIOS name (e.g. MYDOMAIN)
+  // - default false will try to guess the NetBIOS name, or use
+  // ServerDomainRegister()
+  // - forcing this flag to true will let ServerSspiAuthUser() return the realm,
+  // i.e. 'MYDOMAIN.TLD\username'
+  ServerDomainMapUseRealm: boolean = false;
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
 // - to use the same value for TAuthUser.LogonName on all platforms, user name
@@ -561,7 +572,8 @@ const
 // - you can change domain name conversion by registering names at server startup,
 // e.g. ServerDomainMapRegister('CORP.ABC.COM', 'ABCCORP') change conversion for
 // previous example to 'ABCCORP\user1'
-// - used only if automatic conversion (truncate on first dot) does it wrong
+// - used only if automatic conversion (truncate on first dot) does it wrong,
+// and if ServerDomainMapUseRealm flag has not been forced to true
 // - this method is thread-safe
 procedure ServerDomainMapRegister(const aOld, aNew: RawUtf8);
 
@@ -1108,7 +1120,7 @@ begin
   if DomainStart <> nil then
   begin
     DomainStart^ := #0;
-    Inc(DomainStart);
+    inc(DomainStart);
     if ServerDomainMap <> nil then
     begin
       DomainLen := StrLen(DomainStart);
@@ -1118,7 +1130,7 @@ begin
           with ServerDomainMap[i] do
             if IdemPropNameU(Old, DomainStart, DomainLen) then
             begin
-              Domain := New;
+              Domain := New; // = '' after ServerDomainMapUnRegister()
               break;
             end;
       finally
@@ -1127,20 +1139,23 @@ begin
     end;
     if {%H-}Domain = '' then
     begin
-      DomainEnd := PosChar(DomainStart, '.');
-      if DomainEnd <> nil then
-        repeat // e.g. 'user@AD.MYCOMP.TLD' -> 'MYCOMP'
-          DomainNext := PosChar(DomainEnd + 1, '.');
-          if DomainNext = nil then
-            break; // we found the last '.TLD'
-          DomainStart := DomainEnd + 1;
-          DomainEnd := DomainNext;
-        until false;
-      if DomainEnd <> nil then
-        DomainEnd^ := #0;
-      Domain := DomainStart;
+      if not ServerDomainMapUseRealm then // keep 'AD.MYDOMAIN.TLD' if true
+      begin
+        DomainEnd := PosChar(DomainStart, '.');
+        if DomainEnd <> nil then
+          repeat // e.g. 'user@AD.MYDOMAIN.TLD' -> 'MYDOMAIN'
+            DomainNext := PosChar(DomainEnd + 1, '.');
+            if DomainNext = nil then
+              break; // we found the last '.TLD'
+            DomainStart := DomainEnd + 1;
+            DomainEnd := DomainNext;
+          until false;
+        if DomainEnd <> nil then
+          DomainEnd^ := #0; // truncate to 'MYDOMAIN'
+      end;
+      Domain := DomainStart; // 'MYDOMAIN' or 'AD.MYDOMAIN.TLD'
     end;
-    User := P;
+    User := P; // 'username'
     aUserName := Domain + '\' + User;
   end
   else
