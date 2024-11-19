@@ -674,24 +674,22 @@
       {$define THREADID32}  // TThreadID = PtrUInt/pointer on pthread
     {$endif CPUX64}
   {$endif OSPOSIX}
+  {$define CPUINTELARM}
 {$else}
-  {$undef HASAESNI}         // AES-NI is an Intel-specific feature
   {$ifdef OSWINDOWS}
     {$ifdef CPUAARCH64}
-      {$define OSWINARM}    // aarch64-win64
+      {$define OSWINARM}    // Windows for ARM 64
     {$endif CPUAARCH64}
     {$define THREADID32}    // TThreadID = 32-bit DWORD on win64-aarch64
   {$endif OSWINDOWS}
-  {$ifdef OSPOSIX}
-    {$ifdef CPU32}
-      {$define THREADID32}  // TThreadID = integer/pointer on 32-bit pthread
-    {$endif CPU32}
-  {$endif OSPOSIX}
-  {$define CPUINTELARM}
+  {$undef HASAESNI}         // AES-NI is an Intel-specific feature
+  {$ifdef CPUARM3264}
+    {$define CPUINTELARM}
+  {$endif CPUARM3264}
+  {$ifdef CPU32}
+    {$define THREADID32}    // TThreadID = PtrUInt/pointer on pthread
+  {$endif CPU32}
 {$endif CPUINTEL}
-{$ifdef CPUARM3264}
-  {$define CPUINTELARM}
-{$endif CPUARM3264}
 
 {$ifdef CPU32}
   {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
@@ -728,15 +726,22 @@
     {$endif CPUAARCH64}
   {$endif OSLINUX}
   {$ifdef OSWINDOWS}
-    {$undef LIZARD_EXTERNALONLY}    // static liblizard.a
-    {$ifdef CPUX86}
-      {$define LIBDEFLATESTATIC}
-      {$define LIBQUICKJSSTATIC}
-    {$endif CPUX86}
-    {$ifdef CPUX64}
-      {.$define LIBDEFLATESTATIC}   // Win64 + FPC 3.2 = internal error 200603061
-      {$define LIBQUICKJSSTATIC}
-    {$endif CPUX64}
+    {$ifdef CPUINTEL}
+      {$undef LIZARD_EXTERNALONLY}    // static liblizard.a
+      {$ifdef CPUX86}
+        {$define LIBDEFLATESTATIC}
+        {$define LIBQUICKJSSTATIC}
+      {$endif CPUX86}
+      {$ifdef CPUX64}
+        {.$define LIBDEFLATESTATIC}   // Win64 + FPC 3.2 = internal error 200603061
+        {$define LIBQUICKJSSTATIC}
+      {$endif CPUX64}
+    {$else}
+      {$define NOSQLITE3STATIC} // no static SQLite3 yet on aarch64-win64
+      {$undef LIBDEFLATESTATIC}
+      {$define NOLIBDEFLATESTATIC}
+      {$undef LIBQUICKJSSTATIC}
+    {$endif CPUINTEL}
   {$endif OSWINDOWS}
   {$ifdef CPUARM3264}
     {$ifdef OSDARWIN}               // unsupported arch (e.g. Aarch64-Darwin)
