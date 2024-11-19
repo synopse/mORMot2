@@ -184,11 +184,15 @@ uses
 {$ifdef FPC}  // FPC expects .o linking
 
   {$ifdef OSWINDOWS}
-    {$ifdef CPU64}
-      {$L ..\..\static\x86_64-win64\sqlite3.o}
+    {$ifdef CPUINTEL}
+      {$ifdef CPU64}
+        {$L ..\..\static\x86_64-win64\sqlite3.o}
+      {$else}
+        {$L ..\..\static\i386-win32\sqlite3.o}
+      {$endif CPU64}
     {$else}
-      {$L ..\..\static\i386-win32\sqlite3.o}
-    {$endif CPU64}
+      'unsupported yet'
+    {$endif CPUINTEL}
   {$endif OSWINDOWS}
 
   {$ifdef OSDARWIN}
