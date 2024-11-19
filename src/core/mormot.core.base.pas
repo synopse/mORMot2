@@ -10313,10 +10313,31 @@ end;
 
 {$else}
 
+{$ifdef OSWINDOWS} // use WinAPI on aarch64-win64
+
+function IsProcessorFeaturePresent(ProcessorFeature: cardinal): boolean;
+  stdcall; external 'kernel32';
+
+const
+  PF_ARM_V8_CRYPTO_INSTRUCTIONS_AVAILABLE = 30;
+  PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE  = 31;
+
+procedure TestCpuFeatures;
+begin
+  if IsProcessorFeaturePresent(PF_ARM_V8_CRYPTO_INSTRUCTIONS_AVAILABLE) then
+    CpuFeatures := CpuFeatures + [ahcAES, ahcSHA1, ahcSHA2];
+  if IsProcessorFeaturePresent(PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE) then
+    include(CpuFeatures, ahcCRC32);
+end;
+
+{$else}
+
 procedure TestCpuFeatures;
 begin
   // perhaps system.envp would work somewhat, but the HWCAP items don't match
 end;
+
+{$endif OSWINDOWS}
 
 {$endif OSLINUXANDROID}
 
