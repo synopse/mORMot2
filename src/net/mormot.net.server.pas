@@ -591,6 +591,24 @@ type
     // - warning: this void implementation will raise an EHttpServer exception -
     // inherited classes should override it, e.g. as in TWebSocketServerRest
     function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal; virtual;
+    /// send an asynchronous response to the client, when a slow process (e.g.
+    // DB request) has been executed
+    // - warning: this void implementation will raise an EHttpServer exception -
+    // inherited classes should override it, e.g. as in THttpAsyncServer
+    procedure AsyncResponse(Connection: TConnectionAsyncHandle;
+      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS); virtual;
+    /// send an asynchronous (JSON by default) response to the client
+    procedure AsyncResponseFmt(Connection: TConnectionAsyncHandle;
+      const ContentFmt: RawUtf8; const Args: array of const;
+      const ContentType: RawUtf8 = JSON_CONTENT_TYPE;
+      Status: cardinal = HTTP_SUCCESS);
+    /// send an asynchronous RTTI-serialized JSON response to the client
+    procedure AsyncResponseJson(Connection: TConnectionAsyncHandle;
+      Value: pointer; TypeInfo: PRttiInfo; Status: cardinal = HTTP_SUCCESS);
+    /// send an asynchronous text error response to the client
+    procedure AsyncResponseError(Connection: TConnectionAsyncHandle;
+      const Message: RawUtf8; Status: cardinal = HTTP_SERVERERROR);
+
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlz) protocols
@@ -3344,6 +3362,38 @@ function THttpServerGeneric.{%H-}Callback(Ctxt: THttpServerRequest;
 begin
   raise EHttpServer.CreateUtf8('%.Callback is not implemented: try to use ' +
     'another communication protocol, e.g. WebSockets', [self]);
+end;
+
+procedure THttpServerGeneric.AsyncResponse(Connection: TConnectionAsyncHandle;
+  const Content, ContentType: RawUtf8; Status: cardinal);
+begin
+  EHttpServer.RaiseUtf8('%.AsyncResponse is not implemented: try to use ' +
+    'another server class, e.g. THttpAsyncServer', [self]);
+end;
+
+procedure THttpServerGeneric.AsyncResponseFmt(Connection: TConnectionAsyncHandle;
+  const ContentFmt: RawUtf8; const Args: array of const;
+  const ContentType: RawUtf8; Status: cardinal);
+var
+  json: RawUtf8;
+begin
+  FormatUtf8(ContentFmt, Args, json);
+  AsyncResponse(Connection, json, ContentType, Status);
+end;
+
+procedure THttpServerGeneric.AsyncResponseJson(Connection: TConnectionAsyncHandle;
+  Value: pointer; TypeInfo: PRttiInfo; Status: cardinal);
+var
+  json: RawUtf8;
+begin
+  SaveJson(Value, TypeInfo, [], json);
+  AsyncResponse(Connection, json, JSON_CONTENT_TYPE_VAR, Status);
+end;
+
+procedure THttpServerGeneric.AsyncResponseError(
+  Connection: TConnectionAsyncHandle; const Message: RawUtf8; Status: cardinal);
+begin
+  AsyncResponse(Connection, Message, TEXT_CONTENT_TYPE, Status);
 end;
 
 procedure THttpServerGeneric.ParseRemoteIPConnID(const Headers: RawUtf8;
