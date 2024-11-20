@@ -2597,7 +2597,7 @@ begin
   case c of
     0 .. $7f:
       begin
-        Dest^ := AnsiChar(c);
+        Dest^ := AnsiChar(c); // most obvious case
         result := 1;
         exit;
       end;

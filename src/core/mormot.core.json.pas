@@ -11354,7 +11354,7 @@ end;
 
 function SaveJson(const Value; TypeInfo: PRttiInfo): RawUtf8;
 begin
-  SaveJson(Value, TypeInfo, [], Result, []);
+  SaveJson(Value, TypeInfo, [], result, []);
 end;
 
 function SaveJson(const Value; const TypeName: RawUtf8;

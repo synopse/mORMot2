@@ -4763,7 +4763,7 @@ begin
         else
           break;
       end;
-      inc(B, Utf16CharToUtf8(B + 1, WideChar));
+      inc(B, Utf16CharToUtf8(B + 1, WideChar)); // handle UTF-16 surrogates
       if PtrUInt(WideChar) < PEnd then
         continue
       else

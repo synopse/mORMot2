@@ -944,7 +944,7 @@ begin
   if VarIsEmptyOrNull(v^) then
     exit
   else if OnlyCheckNull then
-    result := @fTemp64
+    result := @fTemp64 // something not nil, but clearly incorrect
   else
     case col^.FieldType of
       mormot.db.core.ftInt64:

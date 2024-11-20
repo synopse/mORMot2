@@ -305,9 +305,12 @@ procedure VariantToSqlVar(const Input: variant; var temp: RawByteString;
 procedure VariantToInlineValue(const V: Variant; var result: RawUtf8);
 
 /// guess the correct TSqlDBFieldType from a raw variant type
+// - map most TVarData.VType into ftInt64/ftDouble/ftDate/ftCurrency/ftUnknown
 function VariantVTypeToSqlDBFieldType(VType: cardinal): TSqlDBFieldType;
 
 /// guess the correct TSqlDBFieldType from a variant value
+// - in addition to VariantVTypeToSqlDBFieldType(), will recognize a ftBlob
+// from a JSON_BASE64_MAGIC value prefix
 function VariantTypeToSqlDBFieldType(const V: Variant): TSqlDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 
