@@ -351,10 +351,14 @@ type
   THttpServerGeneric = class;
   {$M-}
 
-  /// event signature for THttpServerRequest.AsyncResponse callback
-  TOnHttpServerRequestAsyncResponse =
-    procedure(Sender: THttpServerRequestAbstract;
-      RespStatus: integer = HTTP_SUCCESS) of object;
+  /// 32-bit sequence value used to identify one asynchronous connection
+  // - will start from 1, and increase during the server live-time
+  // - THttpServerConnectionID may be retrieved from nginx reverse proxy
+  // - used e.g. for Server.AsyncResponse() delayed call with HTTP_ASYNCRESPONSE
+  TConnectionAsyncHandle = type integer;
+
+  /// a dynamic array of TConnectionAsyncHandle identifiers
+  TConnectionAsyncHandleDynArray = array of TConnectionAsyncHandle;
 
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
@@ -362,8 +366,8 @@ type
   THttpServerRequest = class(THttpServerRequestAbstract)
   protected
     fServer: THttpServerGeneric;
+    fConnectionAsyncHandle: TConnectionAsyncHandle;
     fErrorMessage: string;
-    fOnAsyncResponse: TOnHttpServerRequestAsyncResponse;
     fTempWriter: TJsonWriter; // reused between SetOutJson() calls
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
@@ -373,11 +377,14 @@ type
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+      aConnectionAsyncHandle: TConnectionAsyncHandle;
       aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
     /// could be called before Prepare() to reuse an existing instance
-    procedure Recycle(aConnectionID: THttpServerConnectionID;
-      aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
+    procedure Recycle(
+      aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+      aConnectionAsyncHandle: TConnectionAsyncHandle;
+      aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque);
     /// finalize this execution context
     destructor Destroy; override;
@@ -400,15 +407,10 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// an additional custom parameter, as provided to TUriRouter.Setup
     function RouteOpaque: pointer; override;
-    /// notify the server that it should wait for the OnAsyncResponse callback
-    // - would raise an EHttpServer exception if OnAsyncResponse is not set
-    // - returns HTTP_ASYNCRESPONSE (777) internal code as recognized e.g. by
-    // THttpAsyncServer
-    function SetAsyncResponse: integer;
-    /// a callback used for asynchronous response to the client
-    // - only implemented by the THttpAsyncServer by now
-    property OnAsyncResponse: TOnHttpServerRequestAsyncResponse
-      read fOnAsyncResponse write fOnAsyncResponse;
+    /// return the low-level internal handle for Server.AsyncResponse() delayed call
+    // - to be used in conjunction with a HTTP_ASYNCRESPONSE internal status code
+    // - raise an EHttpServer exception if async responses are not available
+    function AsyncHandle: TConnectionAsyncHandle;
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
@@ -578,8 +580,8 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously, but with a given Ctxt instance for each)
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
-    /// server can send a request back to the client, when the connection has
-    // been upgraded e.g. to WebSockets
+    /// send a request back to the client, if the connection has been upgraded
+    // e.g. to WebSockets
     // - InURL/InMethod/InContent properties are input parameters
     // (InContentType is ignored)
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -2941,6 +2943,7 @@ end;
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+  aConnectionAsyncHandle: TConnectionAsyncHandle;
   aConnectionFlags: THttpServerRequestFlags;
   aConnectionOpaque: PHttpServerConnectionOpaque);
 begin
@@ -2948,15 +2951,18 @@ begin
   fServer := aServer;
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
+  fConnectionAsyncHandle := aConnectionAsyncHandle;
   fConnectionFlags := aConnectionFlags;
   fConnectionOpaque := aConnectionOpaque;
 end;
 
 procedure THttpServerRequest.Recycle(aConnectionID: THttpServerConnectionID;
-  aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
+  aConnectionThread: TSynThread; aConnectionAsyncHandle: TConnectionAsyncHandle;
+  aConnectionFlags: THttpServerRequestFlags;
   aConnectionOpaque: PHttpServerConnectionOpaque);
 begin
   fConnectionID := aConnectionID;
+  fConnectionAsyncHandle := aConnectionAsyncHandle;
   fConnectionThread := aConnectionThread;
   fConnectionFlags := aConnectionFlags;
   fConnectionOpaque := aConnectionOpaque;
@@ -3105,7 +3111,7 @@ begin
            (PCardinal(P + 12)^ or $20202020 =
              ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
            (P[16] = ':') then
-          // custom CONTENT-ENCODING: don't compress
+          // custom CONTENT-ENCODING: disable any late compression
           integer(Context.CompressAcceptHeader) := 0;
         h^.Append(P, len);
         h^.AppendCRLF; // normalize CR/LF endings
@@ -3167,12 +3173,11 @@ begin
     result := TUriTreeNode(result).Data.ExecuteOpaque;
 end;
 
-function THttpServerRequest.SetAsyncResponse: integer;
+function THttpServerRequest.AsyncHandle: TConnectionAsyncHandle;
 begin
-  if not Assigned(fOnAsyncResponse) then
-    EHttpServer.RaiseUtf8(
-      '%.SetAsyncResponse with no OnAsyncResponse callback', [self]);
-  result := HTTP_ASYNCRESPONSE;
+  result := fConnectionAsyncHandle;
+  if result = 0 then
+    EHttpServer.RaiseUtf8('% has no async response support', [fServer]);
 end;
 
 {$ifdef USEWININET}
@@ -4487,7 +4492,7 @@ begin
   // compute and send back the response
   if Assigned(fOnAfterResponse) then
     QueryPerformanceMicroSeconds(started);
-  req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
+  req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread, 0,
     ClientSock.fRequestFlags, ClientSock.GetConnectionOpaque);
   try
     // compute the response
@@ -6880,7 +6885,7 @@ begin
     logdata := pointer(fLogDataStorage);
     if global_verbs[hvOPTIONS] = '' then
       global_verbs := VERB_TEXT;
-    ctxt := THttpServerRequest.Create(self, 0, self, [], nil);
+    ctxt := THttpServerRequest.Create(self, 0, self, 0, [], nil);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
     ctxt.fServer := self;
@@ -6900,7 +6905,7 @@ begin
             // parse method and main headers as ctxt.Prepare() does
             bytessent := 0;
             ctxt.fHttpApiRequest := req;
-            ctxt.Recycle(req^.ConnectionID, self,
+            ctxt.Recycle(req^.ConnectionID, self, {asynchandle=}0,
               HTTP_TLS_FLAGS[req^.pSslInfo <> nil] +
               // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
               HTTP_10_FLAGS[(req^.Version.MajorVersion = 1) and

@@ -295,7 +295,7 @@ begin
   RequestProcess := ws.fOnCallbackRequestProcess;
   if Assigned(RequestProcess) then
     result := THttpServerRequest.Create(
-      nil, 0, fOwnerThread, ws.fProcess.Protocol.ConnectionFlags, nil)
+      nil, 0, fOwnerThread, 0, ws.fProcess.Protocol.ConnectionFlags, nil)
   else
     result := nil;
 end;
@@ -426,7 +426,7 @@ begin
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
       Ctxt := THttpServerRequest.Create(nil, fProcess.Protocol.ConnectionID,
-        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags,
+        fProcess.fOwnerThread, 0, fProcess.Protocol.ConnectionFlags,
         fProcess.Protocol.ConnectionOpaque);
       try
         body := Data;

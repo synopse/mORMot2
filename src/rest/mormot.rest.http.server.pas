@@ -1447,7 +1447,7 @@ begin
     begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, [], nil);
+      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, 0, [], nil);
       try
         FormatUtf8('%/%/%',
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);

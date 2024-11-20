@@ -111,7 +111,7 @@ type
     // maintain a thread-safe list to minimize ProcessIdleTix time
     fOutgoingSafe: TLightLock; // atomic fOutgoingHandle[] access
     fOutgoingCount: integer;
-    fOutgoingHandle: TPollAsyncConnectionHandleDynArray;
+    fOutgoingHandle: TConnectionAsyncHandleDynArray; // = array of integer
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
     procedure ProcessIdleTixSendFrames;
     // overriden to send pending frames
@@ -405,7 +405,7 @@ end;
 procedure TWebSocketAsyncConnections.ProcessIdleTixSendFrames;
 var
   i, conn, valid, sent, invalid, unknown: PtrInt;
-  pending: TPollAsyncConnectionHandleDynArray; // keep fOutgoingSafe lock short
+  pending: TConnectionAsyncHandleDynArray; // keep fOutgoingSafe lock short
   c: TAsyncConnection;
   start, elapsed: Int64;
 begin
@@ -483,7 +483,7 @@ function TWebSocketAsyncProcess.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
 begin
   result := THttpServerRequest.Create(
-    fConnection.fServer, fProtocol.ConnectionID, nil, 
+    fConnection.fServer, fProtocol.ConnectionID, nil,  {asynchandle=}0,
     fProtocol.ConnectionFlags + HTTP_TLS_FLAGS[Assigned(fConnection.fSecure)],
     fProtocol.ConnectionOpaque);
   RequestProcess :=  fConnection.fServer.Request;

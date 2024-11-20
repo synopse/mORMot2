@@ -57,13 +57,6 @@ type
   TPollAsyncSockets = class;
   {$M-}
 
-  /// 32-bit integer value used to identify an asynchronous connection
-  // - will start from 1, and increase during the TAsyncConnections live-time
-  TPollAsyncConnectionHandle = type integer;
-
-  /// a dynamic array of TPollAsyncConnectionHandle identifiers
-  TPollAsyncConnectionHandleDynArray = array of TPollAsyncConnectionHandle;
-
   /// define the TPollAsyncSockets.OnRead/AfterWrite method result
   // - soContinue should continue reading/writing content from/to the socket
   // - soDone should unsubscribe for the current read/write phase, but should
@@ -108,7 +101,7 @@ type
     fSocket: TNetSocket;
     /// the associated 32-bit sequence number
     // - equals 0 after TPollAsyncSockets.Stop
-    fHandle: TPollAsyncConnectionHandle;
+    fHandle: TConnectionAsyncHandle;
     /// false for a single lock (default), true to separate read/write locks
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
@@ -213,7 +206,7 @@ type
       read fSecure;
   published
     /// read-only access to the handle number associated with this connection
-    property Handle: TPollAsyncConnectionHandle
+    property Handle: TConnectionAsyncHandle
       read fHandle;
   end;
 
@@ -421,7 +414,7 @@ type
 
   /// abstract class to store one TAsyncConnections connection
   // - may implement e.g. WebSockets frames, or IoT binary protocol
-  // - each connection will be identified by a TPollAsyncConnectionHandle integer
+  // - each connection will be identified by a TConnectionAsyncHandle integer
   // - idea is to minimize the resources used per connection, and allow full
   // customization of the process by overriding the OnRead virtual method (and,
   // if needed, AfterCreate/AfterWrite/BeforeDestroy/OnLastOperationIdle)
@@ -676,21 +669,21 @@ type
     // - returns nil if the handle was not found
     // - returns the maching instance, and caller should release the lock as:
     // ! try ... finally UnLock(aLock); end;
-    function ConnectionFindAndLock(aHandle: TPollAsyncConnectionHandle;
+    function ConnectionFindAndLock(aHandle: TConnectionAsyncHandle;
       aLock: TRWLockContext; aIndex: PInteger = nil): TAsyncConnection;
     /// high-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search
     // - this method won't keep the main Lock, but this class will ensure that
     // the returned pointer will last for at least 100ms until Free is called
-    function ConnectionFind(aHandle: TPollAsyncConnectionHandle): TAsyncConnection;
+    function ConnectionFind(aHandle: TConnectionAsyncHandle): TAsyncConnection;
     /// low-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search, since handles are increasing
     // - caller should have called Lock before this method is done
-    function LockedConnectionSearch(aHandle: TPollAsyncConnectionHandle): TAsyncConnection;
+    function LockedConnectionSearch(aHandle: TConnectionAsyncHandle): TAsyncConnection;
     /// remove an handle from the internal list, and close its connection
     // - raise an exception if acoNoConnectionTrack option was defined
     // - could be executed e.g. from a TAsyncConnection.OnRead method
-    function ConnectionRemove(aHandle: TPollAsyncConnectionHandle): boolean;
+    function ConnectionRemove(aHandle: TConnectionAsyncHandle): boolean;
     /// call ConnectionRemove unless acoNoConnectionTrack is set
     procedure EndConnection(connection: TAsyncConnection);
     /// add some data to the asynchronous output buffer of a given connection
@@ -3290,7 +3283,7 @@ begin
 end;
 
 function TAsyncConnections.ConnectionFindAndLock(
-  aHandle: TPollAsyncConnectionHandle; aLock: TRWLockContext;
+  aHandle: TConnectionAsyncHandle; aLock: TRWLockContext;
   aIndex: PInteger): TAsyncConnection;
 var
   i: PtrInt;
@@ -3341,7 +3334,7 @@ begin
 end;
 
 function TAsyncConnections.LockedConnectionSearch(
-  aHandle: TPollAsyncConnectionHandle): TAsyncConnection;
+  aHandle: TConnectionAsyncHandle): TAsyncConnection;
 var
   i, n: PtrInt;
 begin
@@ -3364,7 +3357,7 @@ begin
 end;
 
 function TAsyncConnections.ConnectionFind(
-  aHandle: TPollAsyncConnectionHandle): TAsyncConnection;
+  aHandle: TConnectionAsyncHandle): TAsyncConnection;
 begin
   result := nil;
   if (self = nil) or
@@ -3387,7 +3380,7 @@ begin
 end;
 
 function TAsyncConnections.ConnectionRemove(
-  aHandle: TPollAsyncConnectionHandle): boolean;
+  aHandle: TConnectionAsyncHandle): boolean;
 var
   i: integer; // integer, not PtrInt for ConnectionFindAndLock(@i)
   conn: TAsyncConnection;
@@ -4761,14 +4754,12 @@ begin
     QueryPerformanceMicroSeconds(fAfterResponseStart);
   result := soClose;
   if fRequest = nil then
-  begin
     // created once, if not rejected by OnBeforeBody
-    fRequest := fServer.fRequestClass.Create(
-      fServer, fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
-    fRequest.OnAsyncResponse := AsyncResponse;
-  end
+    fRequest := fServer.fRequestClass.Create(fServer,
+      fConnectionID, fReadThread, fHandle, fRequestFlags, GetConnectionOpaque)
   else
-    fRequest.Recycle(fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
+    fRequest.Recycle(
+      fConnectionID, fReadThread, fHandle, fRequestFlags, GetConnectionOpaque);
   fRequest.Prepare(fHttp, fRemoteIP, fServer.fAuthorize);
   // let the associated THttpAsyncServer execute the request
   if fServer.DoRequest(fRequest) then
@@ -4776,11 +4767,10 @@ begin
     result := soContinue;
     if fRequest.RespStatus = HTTP_ASYNCRESPONSE then
     begin
-      // delayed response using fRequest.OnAsyncResponse callback
-      fAsyncConnectionID32 := cardinal(fConnectionID); // to detect ABBA problem
+      // delayed response using fServer.AsyncResponse()
       include(fHttp.ResponseFlags, rfAsynchronous);
       fHttp.State := hrsWaitAsyncProcessing;
-      exit; // self.AsyncResponse will be called later
+      exit;
     end
   end;
   // handle HTTP/1.1 keep alive timeout
@@ -5054,7 +5044,7 @@ begin
   begin
     T.FromNowUtc;
     T.ToHttpDateShort(tmp, 'GMT'#13#10, 'Date: ');
-    fHttpDateNowUtc := tmp; // (almost) atomic set
+    fHttpDateNowUtc := tmp; // (almost) atomic set within CPU L1 cache line
   end;
   // ensure log file(s) are flushed/consolidated if needed
   if fLogger <> nil then
