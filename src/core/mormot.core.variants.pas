@@ -1856,14 +1856,20 @@ type
     /// deprecated method which redirects to Update()
     procedure AddOrUpdateNameValuesToObject(const NameValuePairs: array of const);
     {$endif PUREMORMOT2}
-    /// merge some TDocVariantData dvObject properties to a TDocVariantData dvObject
-    // - data is supplied two by two, as Name,Value pairs
+    /// replace some TDocVariantData dvObject properties from another dvObject
     // - caller should ensure that both variants have Kind=dvObject, otherwise
     // it won't do anything
-    // - any existing Name would be updated with the new Value, unless
+    // - any existing name would be replaced with the new Value, unless
     // OnlyAddMissing is set to TRUE, in which case existing values would remain
+    // - will search also in any first nested object if RecursiveUpdate is TRUE
     procedure AddOrUpdateObject(const NewValues: variant;
       OnlyAddMissing: boolean = false; RecursiveUpdate: boolean = false);
+    /// merge some TDocVariantData dvObject properties from another dvObject
+    // - caller should ensure that both variants have Kind=dvObject, otherwise
+    // it won't do anything
+    // - any existing property name would be added or merged with the new value
+    // - AddOrUpdateObject() would replace existing properties values as a whole
+    procedure MergeObject(const NewValues: variant; aPathDelim: AnsiChar = #0);
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -5994,7 +6000,7 @@ begin
 end;
 
 procedure TDocVariantData.AddOrUpdateObject(const NewValues: variant;
-  OnlyAddMissing: boolean; RecursiveUpdate: boolean);
+  OnlyAddMissing, RecursiveUpdate: boolean);
 var
   n, idx: PtrInt;
   new: PDocVariantData;
@@ -6012,6 +6018,19 @@ begin
         TDocVariantData(Values[idx]).AddOrUpdateObject(
           new^.Values[n], OnlyAddMissing, true);
     end;
+end;
+
+procedure TDocVariantData.MergeObject(const NewValues: variant; aPathDelim: AnsiChar);
+var
+  n: PtrInt;
+  new: PDocVariantData;
+begin
+  new := _Safe(NewValues);
+  if not IsArray and
+     not new^.IsArray then
+    for n := 0 to new^.Count - 1 do
+      SetValueByPath(new^.names[n], new^.Values[n],
+        {create=}true, aPathDelim, {merge=}true);
 end;
 
 procedure TDocVariantData.InitArray(const aItems: array of const;
@@ -8306,19 +8325,19 @@ begin
   if c <> nil then
     while true do
       if (c^ = #0) or
-         (c^ = aPathDelim) then
+         (c^ = aPathDelim) then // aPathDelim = #0 e.g. from Merge()
         break
       else
         inc(c);
   aLen := c - aCsv;
   if (aLen <> 0) and
      (VCount <> 0) then
-    if VName <> nil then
+    if VName <> nil then // search dvoObject property name
     begin
       result := FindNonVoid[IsCaseSensitive](pointer(VName), aCsv, aLen, VCount);
       exit;
     end
-    else if aCsv^ in ['0' .. '9'] then
+    else if aCsv^ in ['0' .. '9'] then // path is index for dvoArray
     begin
       result := GetCardinal(aCsv, c);
       if PtrUInt(result) < PtrUInt(VCount) then // array index integer as text
@@ -8348,7 +8367,7 @@ begin
   if Has(dvoReturnNullForUnknownProperty) then
     result := @DocVariantDataFake
   else
-    raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+    raise EDocVariant.CreateUtf8('[%] property not found', [aName]); // no RaiseUtf8
 end;
 
 function TDocVariantData.InternalNotFound(aIndex: integer): PDocVariantData;
@@ -8968,10 +8987,11 @@ begin
     exit;
   csv := pointer(aPath);
   v := @self;
+  // work with aPathDelim = #0 e.g. from Merge()
   repeat
     ndx := v^.InternalNextPath(csv, aPathDelim, namelen);
     if csv[namelen] = #0 then
-      break; // we reached the last item of the path, which is the value to set
+      break; // reached the last item of the path, which is the value to set
     if ndx < 0 then
       if aCreateIfNotExisting then
       begin
