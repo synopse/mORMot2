@@ -3455,6 +3455,13 @@ type
     procedure Update(const keyvalues: array of const); overload;
     /// updates (or inserts) the specified key/value pairs of another IDocDict
     procedure Update(const source: IDocDict; addonlymissing: boolean = false); overload;
+    /// merge the specified key/value pair into this IDocDict
+    // - Update() replaces the existing value at key, so a full object property
+    // - this method will complete any existing object property
+    procedure Merge(const key: RawUtf8; const value: variant); overload;
+    /// merge a specified IDocDict fields into this instance
+    // - this method will complete any existing object property
+    procedure Merge(const source: IDocDict); overload;
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(const key: RawUtf8): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
@@ -10631,6 +10638,8 @@ type
     procedure Update(const key: RawUtf8; const value: variant); overload;
     procedure Update(const keyvalues: array of const); overload;
     procedure Update(const source: IDocDict; addonlymissing: boolean); overload;
+    procedure Merge(const key: RawUtf8; const value: variant); overload;
+    procedure Merge(const source: IDocDict); overload;
     function ValueAt(const key: RawUtf8): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
     function GetV(const key: RawUtf8): TDocValue;
@@ -12091,6 +12100,18 @@ procedure TDocDict.Update(const source: IDocDict; addonlymissing: boolean);
 begin
   if source <> nil then
     fValue^.AddOrUpdateFrom(PVariant(source.Value)^, addonlymissing);
+end;
+
+procedure TDocDict.Merge(const key: RawUtf8; const value: variant);
+begin // SetValueByPath() work with fPathDelim=#0
+  if fValue^.SetValueByPath(key, value, {create=}true, fPathDelim, {merge=}true) <> nil then
+    fSorted := nil;
+end;
+
+procedure TDocDict.Merge(const source: IDocDict);
+begin // MergeObject() work with fPathDelim=#0
+  if source <> nil then
+    fValue^.MergeObject(PVariant(source.Value)^, fPathDelim);
 end;
 
 {$ifdef HASIMPLICITOPERATOR}
