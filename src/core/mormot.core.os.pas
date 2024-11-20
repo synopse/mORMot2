@@ -9099,7 +9099,7 @@ begin
   if s = nil then
     exit;
   sEnd := @s[length(raw.Data)];
-  FillCharFast(lines, SizeOf(lines), 0);
+  FillCharFast(lines, SizeOf(lines), ord(sbiUndefined));
   repeat
     if (s[0] = 127) or // type (127=EOT)
        (s[1] < 4) or   // length
