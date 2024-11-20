@@ -3792,8 +3792,6 @@ begin
   end;
 end;
 
-{$ifdef CPUINTEL}
-
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
   forward; // implemented later in mormot.core.os.pas
 
@@ -3810,7 +3808,7 @@ var
   addr: PtrUInt;
   get: function(sig, id: DWord; buf: pointer; siz: DWord): PtrUInt; stdcall;
 begin
-  // first try to use Vista+ API which supports EFI
+  // first try to use Vista+ API which supports EFI (even on aarch64-win64!)
   get := GetProcAddress(GetModuleHandle(kernel32), 'GetSystemFirmwareTable');
   if Assigned(get) then
   begin
@@ -3827,6 +3825,7 @@ begin
   end;
   // on XP, read directly from physical memory via ntdll.dll low-level API
   result := false;
+  {$ifdef CPUINTEL} // don't even try on aarch64-win64
   tmp := ReadSystemMemory(SMB_START, SMB_STOP - SMB_START);
   if tmp = '' then
     exit;
@@ -3835,16 +3834,8 @@ begin
     exit;
   info.data := ReadSystemMemory(addr, info.Length);
   result := info.data <> '';
+  {$endif CPUINTEL}
 end;
-
-{$else} // TODO: try aarch64-win64 SMBios support
-
-function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
-begin
-  result := false;
-end;
-
-{$endif CPUINTEL}
 
 procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
@@ -5437,7 +5428,8 @@ begin
     insert(WindowsDisplayVersion + ' ', OSVersionText, PosExChar('(', OSVersionText));
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
-  if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\CentralProcessor\0', true) then
+  if reg.ReadOpen(wrLocalMachine,
+       'Hardware\Description\System\CentralProcessor\0', {closefirst=}true) then
   begin
     cpu := reg.ReadString('ProcessorNameString');
     if cpu = '' then

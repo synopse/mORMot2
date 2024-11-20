@@ -8801,7 +8801,7 @@ begin
   end;
 end;
 
-{$ifdef CPUINTEL} // don't mess with raw SMBIOS encoding outside of Intel/AMD
+// SMBIOS can be available outside of Intel/AMD - e.g. on aarch64-win64
 
 // from DSP0134 3.6.0 System Management BIOS (SMBIOS) Reference Specification
 const
@@ -8915,8 +8915,6 @@ begin
     inc(PHash128(p)); // search on 16-byte (paragraph) boundaries
   until PtrUInt(p) >= PtrUInt(pend);
 end;
-
-{$endif CPUINTEL}
 
 procedure ComputeGetSmbios;
 begin
