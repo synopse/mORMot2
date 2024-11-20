@@ -82,6 +82,8 @@ type
     // result should point to Int64,Double,Blob,Utf8 data (if ResultLen<>nil)
     function GetRowFieldData(Field: TField; RowIndex: integer;
       out ResultLen: integer; OnlyCheckNull: boolean): pointer; virtual; abstract;
+    function GetRowFieldVarData(Field: TField; RowIndex: integer;
+      out Value: TVarData): boolean; virtual; // returns true for VarClear(Value)
     // search for a field value, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUtf8;
       const aLookupValue: variant; aOptions: TLocateOptions): integer; virtual;
@@ -552,6 +554,61 @@ function TVirtualDataSet.SearchForField(const aLookupFieldName: RawUtf8;
   const aLookupValue: variant; aOptions: TLocateOptions): integer;
 begin
   result := 0; // nothing found
+end;
+
+function TVirtualDataSet.GetRowFieldVarData(Field: TField; RowIndex: integer;
+  out Value: TVarData): boolean;
+var
+  p: pointer;
+  plen, vt: integer;
+begin
+  vt := varNull;
+  result := false; // returns true if caller needs to call VarClearProc(Value)
+  p := GetRowFieldData(Field, RowIndex, plen, {onlychecknull=}false);
+  if p <> nil then
+    case Field.DataType of // follow GetFieldData() pattern
+      ftBoolean:
+        begin
+          vt := varBoolean;
+          Value.VInteger := PByte(p)^;
+        end;
+      ftInteger:
+        begin
+          vt := varInteger;
+          Value.VInteger := PInteger(p)^;
+        end;
+      ftLargeint:
+        begin
+          vt := varInt64;
+          Value.VInt64 := PInt64(p)^;
+        end;
+      ftFloat,
+      ftCurrency:
+        begin
+          vt := varDouble;
+          Value.VInt64 := PInt64(p)^;
+        end;
+      ftDate,
+      ftTime,
+      ftDateTime:
+        if PInt64(p)^ <> 0 then // handle 30/12/1899 date as NULL
+        begin
+          vt := varDate;
+          Value.VInt64 := PInt64(p)^;
+        end;
+      ftString,
+      ftWideString:
+        begin
+          vt := varString;
+          Value.VAny := nil;  // avoid GPF below
+          result := plen > 0; // true if VarClearProc() needed
+          if result then
+            FastSetString(RawUtf8(Value.VAny), p, plen);
+        end;
+    else // e.g. ftBlob,ftMemo,ftWideMemo
+      vt := varEmpty;
+    end;
+  Value.VType := vt;
 end;
 
 function TVirtualDataSet.Locate(const KeyFields: string;
