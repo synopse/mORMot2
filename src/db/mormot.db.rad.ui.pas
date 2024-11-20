@@ -122,7 +122,8 @@ type
       NativeFormat: boolean): boolean; override;
     {$endif UNICODE}
     /// searching a dataset for a specified record and making it the active record
-    // - will call SearchForField protected virtual method for actual lookup
+    // - will call SearchForField protected virtual method for one field lookup,
+    // or manual CompareField/GetRowFieldData search
     function Locate(const KeyFields: string; const KeyValues: variant;
       Options: TLocateOptions): boolean; override;
   published
@@ -629,7 +630,7 @@ end;
 function TVirtualDataSet.Locate(const KeyFields: string;
   const KeyValues: variant; Options: TLocateOptions): boolean;
 var
-  i, l, h, found: integer;
+  l, h, r, f, n: integer;
   fields: TDatasetGetFieldList;
 begin
   CheckActive;
@@ -642,38 +643,45 @@ begin
         GetFieldList(fields, KeyFields);
         l := VarArrayLowBound(KeyValues, 1);
         h := VarArrayHighBound(KeyValues, 1);
-        if (fields.Count = 1) and
-           (l < h) then
-        begin
-          found := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
-          if found > 0 then
+        if l < h then
+          if fields.Count = 1 then
           begin
-            RecNo := found;
-            exit;
-          end;
-        end
-        else
-          for i := 0 to fields.Count - 1 do
-          begin
-            found := SearchForField(
-              StringToUtf8(TField(fields[i]).FieldName),
-              KeyValues[l + i], Options);
-            if found > 0 then
+            // one KeyFields lookup using dedicated (virtual) method
+            r := SearchForField(StringToUtf8(KeyFields), KeyValues[l], Options);
+            if r > 0 then
             begin
-              RecNo := found;
+              RecNo := r;
               exit;
             end;
-          end;
+          end
+          else
+            // brute force search of several KeyFields
+            for r := 0 to GetRecordCount - 1 do
+            begin
+              n := 0;
+              for f := 0 to fields.Count - 1 do
+                if CompareField(fields[f], r, KeyValues[l + f], Options) = 0 then
+                  inc(n)
+                else
+                  break;
+              if (n > 1) and
+                 (n = fields.Count) then // found all matching fields
+              begin
+                RecNo := r;
+                exit;
+              end;
+            end;
       finally
         fields.Free;
       end;
     end
     else
     begin
-      found := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
-      if found > 0 then
+      // one KeyFields lookup using dedicated (virtual) method
+      r := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
+      if r > 0 then
       begin
-        RecNo := found;
+        RecNo := r;
         exit;
       end;
     end;
@@ -874,7 +882,7 @@ begin
             if j >= fValuesCount then
               break
             else
-              // ensure objects are consistent
+              // ensure objects are consistent and no float valule appears
               with _Safe(fValues[j], dvObject)^ do
                 if (ndx < Length(Names)) and
                    PropNameEquals(Names[ndx], col^.Name) and
@@ -1007,11 +1015,10 @@ begin
       if (cardinal(f) >= cardinal(v^.Count)) or
          not PropNameEquals(aLookupFieldName, v^.Names[f]) then
         f := v^.GetValueIndex(aLookupFieldName);
-      if (f >= 0) and
-         (SortDynArrayVariantComp(
-           TVarData(v^.Values[f]), TVarData(aLookupValue),
-           loCaseInsensitive in aOptions) = 0) then
-        exit;
+      if f >= 0 then
+        if SortDynArrayVariantComp(TVarData(v^.Values[f]), TVarData(aLookupValue),
+           loCaseInsensitive in aOptions) = 0 then
+          exit;
     end;
   result := 0;
 end;
