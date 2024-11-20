@@ -87,6 +87,9 @@ type
     // search for a field value, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUtf8;
       const aLookupValue: variant; aOptions: TLocateOptions): integer; virtual;
+    // compare a field value, calling GetRowFieldVarData()
+    function CompareField(Field: TField; RowIndex: integer;
+      const Value: variant; Options: TLocateOptions): integer; virtual;
     // used to serialize TBcdVariant as JSON
     class procedure BcdWrite(const aWriter: TTextWriter; const aValue);
   public
@@ -609,6 +612,18 @@ begin
       vt := varEmpty;
     end;
   Value.VType := vt;
+end;
+
+function TVirtualDataSet.CompareField(Field: TField; RowIndex: integer;
+  const Value: variant; Options: TLocateOptions): integer;
+var
+  v: TVarData;
+  needsclear: boolean;
+begin
+  needsclear := GetRowFieldVarData(Field, RowIndex, v);
+  result := SortDynArrayVariantComp(v, TVarData(Value), loCaseInsensitive in Options);
+  if needsclear then
+    VarClearProc(v);
 end;
 
 function TVirtualDataSet.Locate(const KeyFields: string;
