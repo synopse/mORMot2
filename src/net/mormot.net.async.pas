@@ -43,6 +43,7 @@ uses
   mormot.core.json,
   mormot.core.perf,
   mormot.core.zip,
+  mormot.crypt.core,
   mormot.crypt.secure,
   mormot.net.sock,
   mormot.net.http,
@@ -976,7 +977,6 @@ type
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fConnectionID: THttpServerConnectionID; // may be <> fHandle behind nginx
     fAfterResponseStart: Int64;
-    fAsyncConnectionID32: cardinal; // 32-bit truncated fConnectionID
     fAuthRejectSec: cardinal;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -996,8 +996,6 @@ type
     function DoRequest: TPollAsyncSocketOnReadWrite;
     function DoResponse(res: TPollAsyncSocketOnReadWrite): TPollAsyncSocketOnReadWrite;
     procedure DoAfterResponse;
-    procedure AsyncResponse(Sender: THttpServerRequestAbstract;
-      RespStatus: integer);
   public
     /// reuse this instance for a new incoming connection
     procedure Recycle(const aRemoteIP: TNetAddr); override;
@@ -1089,6 +1087,9 @@ type
       ProcessOptions: THttpServerOptions = []); override;
     /// finalize the HTTP Server
     destructor Destroy; override;
+    /// send an asynchronous response to the client, e.g. after slow DB process
+    procedure AsyncResponse(Connection: TConnectionAsyncHandle;
+      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS); override;
     /// access async connections to any remote HTTP server
     // - will reuse the threads pool and sockets polling of this instance
     function Clients: THttpAsyncClientConnections;
@@ -4678,61 +4679,6 @@ begin
     result := soContinue;
 end;
 
-procedure THttpAsyncServerConnection.AsyncResponse(
-  Sender: THttpServerRequestAbstract; RespStatus: integer);
-var
-  res: TPollAsyncSocketOnReadWrite;
-  c: TPollAsyncConnection; // CloseConnection() requires a var parameter
-  locked: boolean;
-begin
-  // verify most obvious execution context
-  try
-    if IsDangling or
-       (Sender <> fRequest) or
-       (fClosed in fFlags) then
-      exit;
-  except
-    on E: Exception do
-    begin
-      fOwner.DoLog(sllWarning, 'AsyncResponse failed as %', [E], self);
-      exit;
-    end;
-  end;
-  // respond within read lock, since may be interrupted before state is set
-  locked := WaitLock({wr=}false, {ms=}100);
-  try
-    // verify expected connection state, to avoid race condition
-    if (not locked) or
-       (fAsyncConnectionID32 <> cardinal(Sender.ConnectionID)) or // detect ABBA
-       (fHttp.State <> hrsWaitAsyncProcessing) or
-       not (rfAsynchronous in fHttp.ResponseFlags) then // paranoid
-    begin
-      fOwner.DoLog(sllWarning, 'AsyncResponse failed lock=% state=% flags=% %=%',
-        [BOOL_STR[locked], ToText(fHttp.State)^, byte(fHttp.ResponseFlags),
-         integer(fAsyncConnectionID32), integer(Sender.ConnectionID)], self);
-      exit;
-    end;
-    // finalize and send the response back to the client
-    if hfConnectionClose in fHttp.HeaderFlags then
-      res := soClose
-    else
-      res := soContinue;
-    fRequest.RespStatus := RespStatus;
-    if DoResponse(res) = soClose then
-    begin
-      if acoVerboseLog in fOwner.fOptions then
-        fOwner.DoLog(sllTrace, 'AsyncResponse close', [], self);
-      locked := false;
-      UnLockFinal({wr=}false);
-      c := self; // need a local var
-      fServer.fAsync.fClients.CloseConnection(c, 'AsyncResponse');
-    end;
-  finally
-    if locked then
-      UnLock({wr=}false);
-  end;
-end;
-
 function THttpAsyncServerConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 begin
   // check the status
@@ -5002,6 +4948,55 @@ begin
     fInterning := nil;
   end;
   FreeAndNil(fExecuteEvent);
+end;
+
+procedure THttpAsyncServer.AsyncResponse(Connection: TConnectionAsyncHandle;
+  const Content, ContentType: RawUtf8; Status: cardinal);
+var
+  c: THttpAsyncServerConnection;
+  locked: boolean;
+  res: TPollAsyncSocketOnReadWrite;
+begin
+  // thread-safe locate the connection using O(log(n)) binary search
+  c := pointer(fAsync.ConnectionFind(Connection));
+  if c = nil then
+  begin
+    if acoVerboseLog in fAsync.fOptions then
+      fAsync.DoLog(sllTrace, 'late AsyncResponse on closed #%', [Connection], self);
+    exit;
+  end;
+  // process within the read lock, since may respond before state is set
+  locked := c.WaitLock({wr=}false, {ms=}100);
+  try
+    // verify expected connection state, to avoid race condition
+    if (not locked) or
+       (c.fHttp.State <> hrsWaitAsyncProcessing) or
+       not (rfAsynchronous in c.fHttp.ResponseFlags) then // paranoid
+    begin
+      fAsync.DoLog(sllWarning, 'AsyncResponse(%) failed lock=% state=%',
+        [Connection, BOOL_STR[locked], ToText(c.fHttp.State)^], self);
+      exit;
+    end;
+    // finalize and send the response back to the client
+    c.fRequest.RespStatus := Status;
+    c.fRequest.OutContent := Content;
+    c.fRequest.OutContentType := ContentType;
+    if hfConnectionClose in c.fHttp.HeaderFlags then
+      res := soClose
+    else
+      res := soContinue;
+    if c.DoResponse(res) = soClose then
+    begin
+      if acoVerboseLog in fAsync.fOptions then
+        fAsync.DoLog(sllTrace, 'final AsyncResponse: closing #%', [Connection], self);
+      locked := false;
+      c.UnLockFinal({wr=}false);
+      fAsync.fClients.CloseConnection(TPollAsyncConnection(c), 'AsyncResponse');
+    end;
+  finally
+    if locked then
+      c.UnLock({wr=}false);
+  end;
 end;
 
 function THttpAsyncServer.Clients: THttpAsyncClientConnections;
