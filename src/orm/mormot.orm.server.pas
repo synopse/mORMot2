@@ -873,6 +873,7 @@ begin
     result := 0
   else if (cardinal(length(fRecordVersionMax)) <= cardinal(aTableIndex)) or
           (fRecordVersionMax[aTableIndex] = 0) then
+    // need to initialize fRecordVersionMax[] and/or access the DB
     result := InternalRecordVersionMaxFromExisting(aTableIndex, {next=}false)
   else
     result := fRecordVersionMax[aTableIndex];
@@ -899,8 +900,9 @@ begin
   log := fRest.LogClass.Enter('RecordVersionSynchronizeSlave %', [Table], self);
   t := fModel.GetTableIndexExisting(Table);
   result := -1; // error
-  if (t > PtrUInt(length(fRecordVersionMax))) or
+  if (PtrUInt(length(fRecordVersionMax)) <= t) or
      (fRecordVersionMax[t] = 0) then
+    // need to initialize fRecordVersionMax[] and/or access the DB
     InternalRecordVersionMaxFromExisting(t, {next=}false);
   repeat
     batch := RecordVersionSynchronizeSlaveToBatch(Table, Master,
