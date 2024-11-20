@@ -535,7 +535,7 @@ begin
   finally
     tree.Free;
   end;
-  ctxt := THttpServerRequest.Create(nil, 0, nil, [], nil);
+  ctxt := THttpServerRequest.Create(nil, 0, nil, 0, [], nil);
   router := TUriRouter.Create(TUriTreeNode);
   try
     Call('/plaintext', '', '', false, -1, 0);
