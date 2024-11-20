@@ -280,14 +280,14 @@ type
 
   /// event signature for TSqlDBPostgresAsyncStatement.ExecuteAsync() callback
   // - implementation should retrieve the data from Statement.Column*(), then
-  // process it using the opaque Context
+  // process it using the opaque Context - typically a TConnectionAsyncHandle
   // - is called with Statement = nil on any DB fatal error
   TOnSqlDBPostgresAsyncEvent = procedure(
-    Statement: TSqlDBPostgresAsyncStatement; Context: TObject) of object;
+    Statement: TSqlDBPostgresAsyncStatement; Context: PtrInt) of object;
 
   TSqlDBPostgresAsyncTask = record
     Statement: TSqlDBPostgresAsyncStatement;
-    Context: TObject;
+    Context: PtrInt;
     OnFinished: TOnSqlDBPostgresAsyncEvent;
     Options: TSqlDBPostgresAsyncStatementOptions;
   end;
@@ -309,18 +309,25 @@ type
     // !   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL) do
     // !   try
     // !     Bind(1, ComputeRandomWorld);
-    // !     ExecuteAsync(ctxt, OnAsyncDb);
+    // !     ExecuteAsync(ctxt.AsyncHandle, OnAsyncDb);
     // !   finally
     // !     UnLock;
     // !   end;
-    // !   result := ctxt.SetAsyncResponse;
+    // !   result := HTTP_ASYNCRESPONSE;
     // ! end;
-    procedure ExecuteAsync(Context: TObject;
+    // !
+    // ! procedure TRawAsyncServer.OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement;
+    // !   Context: PtrInt);
+    // ! begin
+    // !   fHttpServer.AsyncResponseFmt(Context, '{"id":%,"randomNumber":%}',
+    // !     [Statement.ColumnInt(0), Statement.ColumnInt(1)]);
+    // ! end;
+    procedure ExecuteAsync(Context: PtrInt;
       const OnFinished: TOnSqlDBPostgresAsyncEvent;
       ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
     /// ExecutePrepared-like method for asynchronous process
     // - just wrap ExecuteAsync + UnLock
-    procedure ExecuteAsyncNoParam(Context: TObject;
+    procedure ExecuteAsyncNoParam(Context: PtrInt;
       const OnFinished: TOnSqlDBPostgresAsyncEvent;
       ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
     /// could be used as a short-cut to Owner.Safe.Lock
@@ -1325,7 +1332,7 @@ end;
 
 { TSqlDBPostgresAsyncStatement }
 
-procedure TSqlDBPostgresAsyncStatement.ExecuteAsync(Context: TObject;
+procedure TSqlDBPostgresAsyncStatement.ExecuteAsync(Context: PtrInt;
   const OnFinished: TOnSqlDBPostgresAsyncEvent;
   ForcedOptions: PSqlDBPostgresAsyncStatementOptions);
 var
@@ -1357,7 +1364,7 @@ begin
   end;
 end;
 
-procedure TSqlDBPostgresAsyncStatement.ExecuteAsyncNoParam(Context: TObject;
+procedure TSqlDBPostgresAsyncStatement.ExecuteAsyncNoParam(Context: PtrInt;
   const OnFinished: TOnSqlDBPostgresAsyncEvent;
   ForcedOptions: PSqlDBPostgresAsyncStatementOptions);
 begin
