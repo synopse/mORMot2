@@ -100,12 +100,12 @@ type
     procedure GenerateDB;
     {$else}
     fDbPool: TSqlDBPostgresConnectionProperties;
-    procedure OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
-    procedure OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
+    procedure OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement; Context: PtrInt);
+    procedure OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement; Context: PtrInt);
     {$endif USE_SQLITE3}
     // pipelined reading as used by /rawqueries and /rawupdates
     function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
-    function ComputeRawFortunes(stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
+    function ComputeRawFortunes(stmt: TSqlDBStatement): RawUtf8;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions;
       pin2Core: integer); reintroduce;
@@ -369,8 +369,7 @@ begin
   result := StrComp(pointer(TFortune(A).message), pointer(TFortune(B).message));
 end;
 
-function TRawAsyncServer.ComputeRawFortunes(
-  stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
+function TRawAsyncServer.ComputeRawFortunes(stmt: TSqlDBStatement): RawUtf8;
 var
   list: TFortunes;
   arr: TDynArray;
@@ -378,7 +377,7 @@ var
   f: ^TFortune;
   mus: TSynMustacheContextData;
 begin
-  result := HTTP_BADREQUEST;
+  result := '';
   {$ifndef USE_SQLITE3}
   if stmt = nil then
   {$endif USE_SQLITE3}
@@ -398,9 +397,7 @@ begin
   mus := stmt.Connection.GetThreadOwned(TSynMustacheContextData);
   if mus = nil then
     mus := stmt.Connection.SetThreadOwned(fTemplate.NewMustacheContextData);
-  ctxt.OutContent := mus.RenderArray(arr);
-  ctxt.OutContentType := HTML_CONTENT_TYPE;
-  result := HTTP_SUCCESS;
+  result := mus.RenderArray(arr);
 end;
 
 // following methods implement the server endpoints
@@ -574,7 +571,9 @@ begin
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(FORTUNES_SQL, true, true);
   stmt.ExecutePrepared;
-  result := ComputeRawFortunes(stmt.Instance, ctxt);
+  ctxt.OutContent := ComputeRawFortunes(stmt.Instance);
+  ctxt.OutContentType := HTML_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
 end;
 
 var
@@ -666,47 +665,43 @@ begin
   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT) do
   try
     Bind(1, ComputeRandomWorld(Lecuyer));
-    ExecuteAsync(ctxt, OnAsyncDb);
+    ExecuteAsync(ctxt.AsyncHandle, OnAsyncDb);
   finally
     UnLock;
   end;
-  result := ctxt.SetAsyncResponse;
+  result := HTTP_ASYNCRESPONSE;
 end;
 
 procedure TRawAsyncServer.OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement;
-  Context: TObject);
-var
-  ctxt: THttpServerRequest absolute Context;
+  Context: PtrInt);
 begin
   if (Statement = nil) or
      not Statement.Step then
-    ctxt.ErrorMessage := 'asyncdb failed'
+    fHttpServer.AsyncResponseError(Context, 'asyncdb failed')
   else
-    ctxt.SetOutJson('{"id":%,"randomNumber":%}',
+    fHttpServer.AsyncResponseFmt(Context, '{"id":%,"randomNumber":%}',
       [Statement.ColumnInt(0), Statement.ColumnInt(1)]);
-  ctxt.OnAsyncResponse(ctxt);
 end;
 
 function TRawAsyncServer.asyncfortunes(ctxt: THttpServerRequest): cardinal;
 begin
   fDbPool.Async.PrepareLocked(FORTUNES_SQL, {res=}true, ASYNC_OPT).
-    ExecuteAsyncNoParam(ctxt, OnAsyncFortunes);
-  result := ctxt.SetAsyncResponse;
+    ExecuteAsyncNoParam(ctxt.AsyncHandle, OnAsyncFortunes);
+  result := HTTP_ASYNCRESPONSE;
 end;
 
 procedure TRawAsyncServer.OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement;
-  Context: TObject);
-var
-  ctxt: THttpServerRequest absolute Context;
+  Context: PtrInt);
 begin
-  ctxt.OnAsyncResponse(ctxt, ComputeRawFortunes(Statement, ctxt));
+  fHttpServer.AsyncResponse(Context, ComputeRawFortunes(Statement), HTML_CONTENT_TYPE);
 end;
 
 type
   // simple state machine used for /asyncqueries and /asyncupdates
   TAsyncWorld = class
   public
-    request: THttpServerRequest;
+    http: THttpAsyncServer;
+    connection: TConnectionAsyncHandle;
     res: TWorlds;
     count, current: integer;
     update: TSqlDBPostgresAsyncStatement; // prepared before any callback
@@ -714,8 +709,8 @@ type
     function Queries(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
     function Updates(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
     procedure DoUpdates;
-    procedure OnQueries(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
-    procedure OnRes({%H-}Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
+    procedure OnQueries(Statement: TSqlDBPostgresAsyncStatement; Context: PtrInt);
+    procedure OnRes({%H-}Statement: TSqlDBPostgresAsyncStatement; Context: PtrInt);
   end;
 
 function TRawAsyncServer.asyncqueries(ctxt: THttpServerRequest): cardinal;
@@ -738,7 +733,8 @@ var
   gen: PLecuyer;
   select: TSqlDBPostgresAsyncStatement;
 begin
-  request := ctxt;
+  http := server.fHttpServer;
+  connection := ctxt.AsyncHandle;
   if async = nil then
     async := server.fDbPool.Async;
   if count = 0 then
@@ -753,22 +749,22 @@ begin
     dec(n);
     if n = 0 then // last item should include asoForceConnectionFlush (if set)
       opt := ASYNC_OPT;
-    select.ExecuteAsync(ctxt, OnQueries, @opt);
+    select.ExecuteAsync(connection, OnQueries, @opt);
   until n = 0;
   select.UnLock;
-  result := ctxt.SetAsyncResponse;
+  result := HTTP_ASYNCRESPONSE;
 end;
 
 function TAsyncWorld.Updates(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 begin
   async := server.fDbPool.Async;
   count := getQueriesParamValue(ctxt);
-  update := async.Prepare(WORLD_UPDATE_SQLN, false, ASYNC_OPT);
-  result := Queries(server, ctxt);
+  update := async.Prepare(WORLD_UPDATE_SQLN, false, ASYNC_OPT); // to trigger DoUpdates
+  result := Queries(server, ctxt); // will set http and connection fields
 end;
 
 procedure TAsyncWorld.OnQueries(Statement: TSqlDBPostgresAsyncStatement;
-  Context: TObject);
+  Context: PtrInt);
 begin
   if (Statement <> nil) and
      Statement.Step then
@@ -801,14 +797,13 @@ begin
   for i := 0 to count - 1 do
     params[i] := res[i].randomNumber;
   update.BindArrayInt32(2, params);
-  update.ExecuteAsync(request, OnRes);
+  update.ExecuteAsync(connection, OnRes);
 end;
 
 procedure TAsyncWorld.OnRes(Statement: TSqlDBPostgresAsyncStatement;
-  Context: TObject);
+  Context: PtrInt);
 begin
-  request.SetOutJson(@res, TypeInfo(TWorlds));
-  request.OnAsyncResponse(Context as THttpServerRequest);
+  http.AsyncResponseJson(Context, @res, TypeInfo(TWorlds));
   Free; // we don't need this state machine any more
 end;
 
