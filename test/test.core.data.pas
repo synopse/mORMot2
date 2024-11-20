@@ -4010,7 +4010,7 @@ procedure TTestCoreProcess._IDocAny;
 var
   l, l2, l3: IDocList;
   i, n, num: integer;
-  d, d2: IDocDict;
+  d, d2, d3: IDocDict;
   darr: IDocDictDynArray;
   json, key: RawUtf8;
   one: variant;
@@ -4517,6 +4517,28 @@ begin
   Check(d <> nil);
   CheckEqual(d.Len, 2);
   CheckEqual(d.ToJson(jsonEscapeUnicode), '{"a":3,"b":4}');
+  d := DocDict('{name:"Mustermann",address:{city:"Musterstadt",street:"Lindenallee"}}');
+  d3 := d.Copy;
+  d2 := DocDict('{"surname": "Max", "address": { "postal_code": "12345" } }');
+  d.Update(d2);
+  CheckEqual(d.Json,
+    '{"name":"Mustermann","address":{"postal_code":"12345"},"surname":"Max"}');
+  d := d3.Copy;
+  d.Update(d2, {onlymissing=}true);
+  CheckEqual(d.Json, '{"name":"Mustermann","address":{"city":"Musterstadt",' +
+    '"street":"Lindenallee"},"surname":"Max"}');
+  one := _Json('{postal_code:"12345"}');
+  d := d3.Copy;
+  d.Update('address', one);
+  CheckEqual(d.Json, '{"name":"Mustermann","address":{"postal_code":"12345"}}');
+  d := d3.Copy;
+  d.Merge('address', one);
+  CheckEqual(d.Json, '{"name":"Mustermann","address":' +
+    '{"city":"Musterstadt","street":"Lindenallee","postal_code":"12345"}}');
+  d := d3.Copy;
+  d.Merge(d2);
+  CheckEqual(d.Json, '{"name":"Mustermann","address":{"city":"Musterstadt",' +
+    '"street":"Lindenallee","postal_code":"12345"},"surname":"Max"}');
   // validate IDocList/IDocDict as published properties
   any := TDocAnyTest.Create;
   try
