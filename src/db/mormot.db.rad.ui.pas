@@ -82,12 +82,10 @@ type
     // result should point to Int64,Double,Blob,Utf8 data (if ResultLen<>nil)
     function GetRowFieldData(Field: TField; RowIndex: integer;
       out ResultLen: integer; OnlyCheckNull: boolean): pointer; virtual; abstract;
-    function GetRowFieldVarData(Field: TField; RowIndex: integer;
-      out Value: TVarData): boolean; virtual; // returns true for VarClear(Value)
     // search for a field value, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUtf8;
       const aLookupValue: variant; aOptions: TLocateOptions): integer; virtual;
-    // compare a field value, calling GetRowFieldVarData()
+    // compare a field value, calling GetFieldVarData()
     function CompareField(Field: TField; RowIndex: integer;
       const Value: variant; Options: TLocateOptions): integer; virtual;
     // used to serialize TBcdVariant as JSON
@@ -101,7 +99,7 @@ type
     /// get BLOB column data for a given row (may not the active row)
     // - handle ftBlob,ftMemo,ftWideMemo via GetRowFieldData()
     function GetBlobStream(Field: TField; RowIndex: integer): TStream;
-    /// get column data for the current active row
+    /// get column value for the current active row as DB.pas data buffer
     // - handle ftBoolean,ftInteger,ftLargeint,ftFloat,ftCurrency,ftDate,ftTime,
     // ftDateTime,ftString,ftWideString kind of fields via GetRowFieldData()
     {$ifdef ISDELPHIXE3}
@@ -113,17 +111,22 @@ type
     function GetFieldData(Field: TField; Buffer: TValueBuffer): boolean; override;
     {$endif ISDELPHIXE4}
     {$else}
-    // Delphi 2009..XE2 signature
+    // Delphi 2009..XE2 and FPC signature
     function GetFieldData(Field: TField; Buffer: pointer): boolean; override;
     {$endif ISDELPHIXE3}
     {$ifndef UNICODE}
-    // all Delphi versions signature
+    // all non-Unicode Delphi/FPC versions signature
     function GetFieldData(Field: TField; Buffer: pointer;
       NativeFormat: boolean): boolean; override;
     {$endif UNICODE}
+    /// get column value for a row index as TVarData
+    // - returns Value as varEmpty if Field or RawIndex are incorrect
+    // - returns true if the caller needs to call VarClearProc(Value)
+    function GetFieldVarData(Field: TField; RowIndex: integer;
+      out Value: TVarData): boolean; virtual;
     /// searching a dataset for a specified record and making it the active record
     // - will call SearchForField protected virtual method for one field lookup,
-    // or manual CompareField/GetRowFieldData search
+    // or manual CompareField/GetFieldData search
     function Locate(const KeyFields: string; const KeyValues: variant;
       Options: TLocateOptions): boolean; override;
   published
@@ -560,7 +563,7 @@ begin
   result := 0; // nothing found
 end;
 
-function TVirtualDataSet.GetRowFieldVarData(Field: TField; RowIndex: integer;
+function TVirtualDataSet.GetFieldVarData(Field: TField; RowIndex: integer;
   out Value: TVarData): boolean;
 var
   p: pointer;
@@ -621,7 +624,7 @@ var
   v: TVarData;
   needsclear: boolean;
 begin
-  needsclear := GetRowFieldVarData(Field, RowIndex, v);
+  needsclear := GetFieldVarData(Field, RowIndex, v);
   result := SortDynArrayVariantComp(v, TVarData(Value), loCaseInsensitive in Options);
   if needsclear then
     VarClearProc(v);
