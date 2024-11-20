@@ -643,7 +643,7 @@ begin
         GetFieldList(fields, KeyFields);
         l := VarArrayLowBound(KeyValues, 1);
         h := VarArrayHighBound(KeyValues, 1);
-        if l < h then
+        if l + (fields.Count - 1) = h then // KeyFields and KeyValues do match
           if fields.Count = 1 then
           begin
             // one KeyFields lookup using dedicated (virtual) method
@@ -655,7 +655,7 @@ begin
             end;
           end
           else
-            // brute force search of several KeyFields
+            // brute force search of several KeyFields/KeyValues
             for r := 0 to GetRecordCount - 1 do
             begin
               n := 0;
