@@ -1353,54 +1353,52 @@ begin
      (fResStatus <> PGRES_TUPLES_OK) or
      (fCurrentRow < 0) then
     ESqlDBPostgres.RaiseUtf8('Unexpected %.ColumnToJson', [self]);
+  P := PQ.GetValue(fRes, fCurrentRow, Col);
+  if ((P = nil) or (PUtf8Char(P)^ = #0)) and
+     (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
+    W.AddNull
+  else
   with fColumns[Col] do
   begin
-    P := PQ.GetValue(fRes, fCurrentRow, Col);
-    if (PUtf8Char(P)^ = #0) and
-       (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
-      W.AddNull
+    case ColumnType of
+      ftNull:
+        W.AddNull;
+      ftInt64,
+      ftDouble,
+      ftCurrency:
+        if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+          W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
+        else
+          // note: StrLen slightly faster than PQ.GetLength for small content
+          W.AddShort(P, StrLen(P));
+      ftUtf8:
+        if (ColumnAttr = JSONOID) or
+           (ColumnAttr = JSONBOID) then
+          W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
+        else
+        begin
+          W.Add('"');
+          W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
+          W.AddDirect('"');
+        end;
+      ftDate:
+        begin
+          W.Add('"');
+          if (StrLen(P) > 10) and
+             (PAnsiChar(P)[10] = ' ') then
+            PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
+          W.AddJsonEscape(P, 0);
+          W.AddDirect('"');
+        end;
+      ftBlob:
+        if fForceBlobAsNull then
+          W.AddNull
+        else
+          W.WrBase64(P, BlobInPlaceDecode(P,
+            PQ.GetLength(fRes, fCurrentRow, Col)), {withmagic=}true);
     else
-    begin
-      case ColumnType of
-        ftNull:
-          W.AddNull;
-        ftInt64,
-        ftDouble,
-        ftCurrency:
-          if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
-            W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
-          else
-            // note: StrLen slightly faster than PQ.GetLength for small content
-            W.AddShort(P, StrLen(P));
-        ftUtf8:
-          if (ColumnAttr = JSONOID) or
-             (ColumnAttr = JSONBOID) then
-            W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
-          else
-          begin
-            W.Add('"');
-            W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
-            W.AddDirect('"');
-          end;
-        ftDate:
-          begin
-            W.Add('"');
-            if (StrLen(P) > 10) and
-               (PAnsiChar(P)[10] = ' ') then
-              PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
-            W.AddJsonEscape(P);
-            W.AddDirect('"');
-          end;
-        ftBlob:
-          if fForceBlobAsNull then
-            W.AddNull
-          else
-            W.WrBase64(P, BlobInPlaceDecode(P,
-              PQ.GetLength(fRes, fCurrentRow, Col)), {withmagic=}true);
-      else
-        ESqlDBPostgres.RaiseUtf8('%.ColumnToJson: ColumnType=%?',
-          [self, ord(ColumnType)]);
-      end;
+      ESqlDBPostgres.RaiseUtf8('%.ColumnToJson: ColumnType=%?',
+        [self, ord(ColumnType)]);
     end;
   end;
 end;
