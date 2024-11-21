@@ -470,9 +470,10 @@ type
     // - a ftUtf8 content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
     // since Delphi 2009: you may not loose any data during charset conversion
-    // - a ftBlob content will be mapped into a TBlobData AnsiString variant
-    function ColumnToVariant(
-      Col: integer; var Value: Variant): TSqlDBFieldType; override;
+    // set ForceUtf8 = true to generate a RawUtf8 as varString
+    // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
+    function ColumnToVariant(Col: integer; var Value: Variant;
+      ForceUtf8: boolean = false): TSqlDBFieldType; override;
 
     /// just map the original Collection into a TSqlDBOleDBConnection class
     property OleDBConnection: TSqlDBOleDBConnection
@@ -1046,10 +1047,11 @@ begin
 end;
 
 function TSqlDBOleDBStatement.ColumnToVariant(
-  Col: integer; var Value: Variant): TSqlDBFieldType;
+  Col: integer; var Value: Variant; ForceUtf8: boolean): TSqlDBFieldType;
 var
   C: PSqlDBColumnProperty;
   V: PColumnValue;
+  P: pointer;
 begin
   // dedicated version to avoid as much memory allocation than possible
   V := GetCol(Col, C);
@@ -1067,18 +1069,26 @@ begin
       ftCurrency,
       ftDate:
         VInt64 := V^.Int64; // copy 64 bit content
-      ftUtf8: // VType is varSynUnicode
+      ftUtf8: // VType is varSynUnicode unless ForceUtf8 is set
         begin
+          P := ColPtr(C, V);
           VAny := nil;
-          {$ifndef UNICODE}
-          if not Connection.Properties.VariantStringAsWideString then
+          if ForceUtf8 or
+             (P = nil) or
+             (V^.Length = 0) then
           begin
             VType := varString;
-            RawUnicodeToString(ColPtr(C, V), V^.Length shr 1, AnsiString(VAny));
+            RawUnicodeToUtf8(P, V^.Length shr 1, RawUtf8(VAny));
           end
-          else
+          {$ifndef UNICODE}
+          else if not Connection.Properties.VariantStringAsWideString then
+          begin
+            VType := varString;
+            RawUnicodeToString(P, V^.Length shr 1, AnsiString(VAny));
+          end
           {$endif UNICODE}
-            FastSynUnicode(SynUnicode(VAny), ColPtr(C, V), V^.Length shr 1);
+          else
+            FastSynUnicode(SynUnicode(VAny), P, V^.Length shr 1);
         end;
       ftBlob: // as varString
         if fForceBlobAsNull then
