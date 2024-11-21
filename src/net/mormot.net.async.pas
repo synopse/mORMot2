@@ -4966,14 +4966,15 @@ begin
     exit;
   end;
   // process within the read lock, since may respond before state is set
-  locked := c.WaitLock({wr=}false, {ms=}100);
+  locked := c.WaitLock({wr=}false, {ms=}40);
   try
     // verify expected connection state, to avoid race condition
     if (not locked) or
+       (c.fHandle <> Connection) or
        (c.fHttp.State <> hrsWaitAsyncProcessing) or
        not (rfAsynchronous in c.fHttp.ResponseFlags) then // paranoid
     begin
-      fAsync.DoLog(sllWarning, 'AsyncResponse(%) failed lock=% state=%',
+      fAsync.DoLog(sllWarning, 'AsyncResponse(#%) failed lock=% state=%',
         [Connection, BOOL_STR[locked], ToText(c.fHttp.State)^], self);
       exit;
     end;
