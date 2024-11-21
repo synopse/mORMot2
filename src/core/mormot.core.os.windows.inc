@@ -1110,11 +1110,11 @@ begin
 end;
 
 const
+  FILE_WRITE_ATTRIBUTES = $0100; // not defined on oldest Delphi
   FILE_ACCESS: array[fmOpenRead .. fmOpenReadWrite {0..2}] of DWord = (
     GENERIC_READ,                                            // fmOpenRead
     GENERIC_WRITE,                                           // fmOpenWrite
     GENERIC_READ or GENERIC_WRITE or FILE_WRITE_ATTRIBUTES); // fmOpenReadWrite
-  FILE_WRITE_ATTRIBUTES = $0100; // not defined on oldest Delphi
 
 // W32() will support length > MAX_PATH even if aFileName is UnicodeString
 function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
