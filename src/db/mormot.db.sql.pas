@@ -6357,8 +6357,9 @@ function TSqlDBStatement.ColumnToTypedValue(Col: integer;
   DestType: TSqlDBFieldType; var Dest): TSqlDBFieldType;
 var
   Temp: Variant; // rely on a temporary variant value for the conversion
+  wasString: boolean;
 begin
-  result := ColumnToVariant(Col, Temp);
+  result := ColumnToVariant(Col, Temp, {forceUtf8=}true);
   case DestType of
     ftInt64:
       Int64(Dest) := Temp;
@@ -6369,7 +6370,7 @@ begin
     ftDate:
       TDateTime(Dest) := Temp;
     ftUtf8:
-      VariantToUtf8(Temp, RawUtf8(Dest));
+      VariantToUtf8(Temp, RawUtf8(Dest), wasString);
     ftBlob:
       VariantToRawByteString(Temp, RawByteString(Dest));
   else
@@ -7132,7 +7133,7 @@ begin
   for F := 0 to n - 1 do
   begin
     names[F] := ColumnName(F);
-    ColumnToVariant(F, values[F]);
+    ColumnToVariant(F, values[F], {forceutf8=}true);
   end;
   TDocVariantData(aDocument).InitObjectFromVariants(names, values, aOptions);
 end;
