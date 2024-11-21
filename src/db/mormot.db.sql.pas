@@ -6769,10 +6769,10 @@ var
   proto: TDocVariantData; // object prototype with reused VName[]
 begin
   VarClear(result);
-  r.InitFast(dvArray);
+  r.Init(JSON_FAST_FLOAT, dvArray);
   fieldcount := ColumnCount;
   // initialize the object prototype with the column names
-  proto.InitFast(dvObject);
+  proto.Init(JSON_FAST_FLOAT, dvObject);
   proto.Capacity := fieldcount;
   dec(fieldcount);
   for f := 0 to fieldcount do
