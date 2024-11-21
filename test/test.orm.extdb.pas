@@ -638,9 +638,10 @@ var
     procedure DoTests;
     var
       res: ISqlDBRows;
-      id, lastid, n, n1: integer;
+      id, lastid, i, n, n1: integer;
       IDs: TIntegerDynArray;
-      Row, RowDoc: variant;
+      Row, RowDoc, all: variant;
+      r, v: PDocVariantData;
 
       procedure DoInsert;
       var
@@ -691,14 +692,24 @@ var
       if res.Step({rewind=}true) then
         repeat
           Check(Row.ID > 0);
-          Check(Row.YearOfDeath = 1519);
+          CheckEqual(Row.YearOfDeath, 1519);
           res.RowDocVariant(RowDoc);
-          Check(RowDoc.ID = Row.ID);
-          Check(_Safe(RowDoc)^.i['YearOfDeath'] = 1519);
+          CheckEqual(RowDoc.ID, Row.ID);
+          CheckEqual(_Safe(RowDoc)^.I['YearOfDeath'], 1519);
           inc(n);
         until not res.Step;
-      res.ReleaseRows;
+      Check(res <> nil);
       Check(n = n1);
+      Check(res.Step({first=}true), 'rewind');
+      all := res.FetchAllToDocVariantArray; // makes ReleaseRows
+      r := _Safe(all);
+      CheckEqual(r^.Count, n);
+      for i := 0 to r^.Count - 1 do
+      begin
+        v := _Safe(r^.Values[i]);
+        Check(v^.I['id'] > 0);
+        CheckEqual(v^.I['YearOfDeath'], 1519);
+      end;
       SetLength(IDs, 50);
       FillIncreasing(pointer(IDs), 50000, length(IDs));
       proxy.ThreadSafeConnection.StartTransaction;
