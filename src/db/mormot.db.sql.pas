@@ -877,7 +877,7 @@ type
     // - this Variant will point to the corresponding TSqlDBStatement instance,
     // so it's not necessary to retrieve its value for each row; but once the
     // associated ISqlDBRows instance is released, you won't be able to access
-    // its data - use RowDocVariant instead
+    // its data - use RowDocVariant/FetchAllToDocVariantArray instead
     // - typical use is:
     // ! var Row: Variant;
     // ! (...)
@@ -891,6 +891,7 @@ type
     function RowData: Variant;
     /// create a TDocVariant custom variant containing all columns values
     // - will create a "fast" TDocVariant object instance with all fields
+    // - see also FetchAllToDocVariantArray() method
     procedure RowDocVariant(out aDocument: variant;
       aOptions: TDocVariantOptions = JSON_FAST);
     /// return the associated statement instance
@@ -933,6 +934,10 @@ type
     // - generates the format expected by TSqlDBProxyStatement
     function FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal = 0;
       DataRowPosition: PCardinalDynArray = nil): cardinal;
+    /// append all rows content as a new TDocVariant dvArray
+    // - save all content directly from the result buffers, with no temporary JSON
+    // - you can specify a LIMIT for the data extent (default 0 meaning all data)
+    function FetchAllToDocVariantArray(MaxRowCount: cardinal = 0): variant;
   end;
 
   /// generic interface to bind to prepared SQL query
@@ -2574,6 +2579,7 @@ type
     function RowData: Variant; virtual;
     /// create a TDocVariant custom variant containing all columns values
     // - will create a "fast" TDocVariant object instance with all fields
+    // - see also FetchAllToDocVariantArray() method
     procedure RowDocVariant(out aDocument: variant;
       aOptions: TDocVariantOptions = JSON_FAST); virtual;
     /// return a special CURSOR Column content as a mormot.db.sql result set
@@ -2658,6 +2664,10 @@ type
     // - follows the format expected by TSqlDBProxyStatement
     procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSqlDBFieldTypeDynArray); virtual;
+    /// append all rows content as a new TDocVariant dvArray
+    // - save all content directly from the result buffers, with no temporary JSON
+    // - you can specify a LIMIT for the data extent (default 0 meaning all data)
+    function FetchAllToDocVariantArray(MaxRowCount: cardinal = 0): variant; virtual;
     /// low-level access to the Timer used for last DB operation
     property SqlLogTimer: TPrecisionTimer
       read fSqlLogTimer;
@@ -6748,6 +6758,41 @@ begin
   finally
     W.Free;
   end;
+end;
+
+function TSqlDBStatement.FetchAllToDocVariantArray(MaxRowCount: cardinal): variant;
+var
+  r: TDocVariantData absolute result;
+  f, fieldcount: PtrInt;
+  rowcount: cardinal;
+  v: PVariant;
+  proto: TDocVariantData; // object prototype with reused VName[]
+begin
+  VarClear(result);
+  r.InitFast(dvArray);
+  fieldcount := ColumnCount;
+  // initialize the object prototype with the column names
+  proto.InitFast(dvObject);
+  proto.Capacity := fieldcount;
+  dec(fieldcount);
+  for f := 0 to fieldcount do
+    proto.AddValue(ColumnName(f), null);
+  // save all data rows
+  rowcount := 0;
+  if (currentRow = 1) or
+     Step then // Step may already be done (e.g. TQuery.Open)
+    repeat
+      v := PDocVariantData(r.NewItem)^.InitFrom(proto, {values=}false);
+      for f := 0 to fieldcount do
+      begin
+        ColumnToVariant(f, v^, {forceUtf8=}true);
+        inc(v);
+      end;
+      inc(rowcount);
+    until ((MaxRowCount > 0) and
+           (rowcount >= MaxRowCount)) or
+          not Step;
+  ReleaseRows;
 end;
 
 procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean;
