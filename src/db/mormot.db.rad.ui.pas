@@ -567,55 +567,55 @@ function TVirtualDataSet.GetFieldVarData(Field: TField; RowIndex: integer;
   out Value: TVarData): boolean;
 var
   p: pointer;
-  plen, vt: integer;
+  plen: integer;
+  v: TSynVarData absolute Value;
 begin
-  vt := varNull;
   result := false; // returns true if caller needs to call VarClearProc(Value)
+  v.VType := varNull;
   p := GetRowFieldData(Field, RowIndex, plen, {onlychecknull=}false);
   if p <> nil then
     case Field.DataType of // follow GetFieldData() pattern
       ftBoolean:
         begin
-          vt := varBoolean;
-          Value.VInteger := PByte(p)^;
+          v.VType := varBoolean;
+          v.VInteger := PByte(p)^;
         end;
       ftInteger:
         begin
-          vt := varInteger;
-          Value.VInteger := PInteger(p)^;
+          v.VType := varInteger;
+          v.VInteger := PInteger(p)^;
         end;
       ftLargeint:
         begin
-          vt := varInt64;
-          Value.VInt64 := PInt64(p)^;
+          v.VType := varInt64;
+          v.VInt64 := PInt64(p)^;
         end;
       ftFloat,
       ftCurrency:
         begin
-          vt := varDouble;
-          Value.VInt64 := PInt64(p)^;
+          v.VType := varDouble;
+          v.VInt64 := PInt64(p)^;
         end;
       ftDate,
       ftTime,
       ftDateTime:
         if PInt64(p)^ <> 0 then // handle 30/12/1899 date as NULL
         begin
-          vt := varDate;
-          Value.VInt64 := PInt64(p)^;
+          v.VType := varDate;
+          v.VInt64 := PInt64(p)^;
         end;
       ftString,
       ftWideString:
         begin
-          vt := varString;
-          Value.VAny := nil;  // avoid GPF below
+          v.VType := varString;
+          v.VAny := nil;  // avoid GPF below
           result := plen > 0; // true if VarClearProc() needed
           if result then
-            FastSetString(RawUtf8(Value.VAny), p, plen);
+            FastSetString(RawUtf8(v.VAny), p, plen);
         end;
     else // e.g. ftBlob,ftMemo,ftWideMemo
-      vt := varEmpty;
+      v.VType := varEmpty;
     end;
-  Value.VType := vt;
 end;
 
 function TVirtualDataSet.CompareField(Field: TField; RowIndex: integer;
