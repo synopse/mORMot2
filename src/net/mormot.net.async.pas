@@ -4966,7 +4966,7 @@ begin
     exit;
   end;
   // process within the read lock, since may respond before state is set
-  locked := c.WaitLock({wr=}false, {ms=}40);
+  locked := c.WaitLock({wr=}false, {ms=}40); // < KeepConnectionInstanceMS=100
   try
     // verify expected connection state, to avoid race condition
     if (not locked) or

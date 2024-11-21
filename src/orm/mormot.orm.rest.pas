@@ -1521,7 +1521,7 @@ var
   T: TOrmTable;
   v: variant;
 begin
-  TVarData(v).VType := varNull;
+  TSynVarData(v).VType := varNull;
   if (self <> nil) and
      (Table <> nil) then
   begin
