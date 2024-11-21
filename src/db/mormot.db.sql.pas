@@ -810,9 +810,11 @@ type
     // - this default implementation will call Column*() method above
     // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-    // since Delphi 2009: you may not loose any data during charset conversion
+    // since Delphi 2009: you may not loose any data during charset conversion;
+    // set ForceUtf8 = true to generate a RawUtf8 as varString
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
-    function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; overload;
+    function ColumnToVariant(Col: integer; var Value: Variant;
+      ForceUtf8: boolean = false): TSqlDBFieldType;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from stored procedures
@@ -2158,7 +2160,7 @@ type
     // - optional MaxCharCount will truncate the text to a given number of chars
     procedure AddParamValueAsText(Param: integer; Dest: TJsonWriter;
       MaxCharCount: integer); virtual;
-    /// return a Column as a variant
+    /// return a Column as a variant - for ISqlDBRows.Column[] default property
     function GetColumnVariant(const ColName: RawUtf8): Variant;
     /// return the associated statement instance for a ISqlDBRows interface
     function Instance: TSqlDBStatement;
@@ -2508,12 +2510,14 @@ type
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnVariant(Col: integer): Variant; overload;
     /// return a Column as a variant, first Col is 0
-    // - this default implementation will call Column*() method above
+    // - this default implementation will call efficient ColumnToSqlVar() method
     // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
     // since Delphi 2009: you may not loose any data during charset conversion
+    // set ForceUtf8 = true to generate a RawUtf8 as varString
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
-    function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; virtual;
+    function ColumnToVariant(Col: integer; var Value: Variant;
+      ForceUtf8: boolean = false): TSqlDBFieldType; virtual;
     /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // ftUtf8/ftBlob values
@@ -6144,11 +6148,11 @@ end;
 
 function TSqlDBStatement.ColumnVariant(Col: integer): Variant;
 begin
-  ColumnToVariant(Col, result);
+  ColumnToVariant(Col, result); // may be SynUnicode
 end;
 
 function TSqlDBStatement.ColumnToVariant(Col: integer;
-  var Value: Variant): TSqlDBFieldType;
+  var Value: Variant; ForceUtf8: boolean): TSqlDBFieldType;
 var
   tmp: RawByteString;
   V: TSqlVar;
@@ -6182,7 +6186,22 @@ begin
       ftUtf8: // VType is varSynUnicode
         begin
           VAny := nil; // avoid GPF below
-          if V.VText <> nil then
+          if V.VText = nil then
+            // avoid obscure "Invalid variant type" in FPC
+            VType := varString
+          else if ForceUtf8 then
+          begin
+            VType := varString;
+            if V.VText = pointer(tmp) then
+            begin
+              FakeCodePage(tmp, CP_UTF8);
+              VAny := pointer(tmp); // direct assign with no refcount
+              pointer(tmp) := nil;
+            end
+            else
+              FastSetString(RawUtf8(VAny), V.VText, StrLen(V.VText));
+          end
+          else
           begin
             if V.VText = pointer(tmp) then
               V.VBlobLen := length(tmp)
@@ -6203,10 +6222,7 @@ begin
             else
             {$endif UNICODE}
               Utf8ToSynUnicode(V.VText, V.VBlobLen, SynUnicode(VAny));
-          end
-          else
-            // avoid obscure "Invalid variant type" in FPC
-            VType := varString;
+          end;
         end;
     else
       ESqlDBException.RaiseUtf8(
