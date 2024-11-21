@@ -1899,6 +1899,8 @@ type
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
+    /// low-level adding of one value to this document, handled as array
+    function NewItem: PVariant;
     /// add one object document to this document
     // - if the document is an array, keep aName=''
     // - if the document is an object, set the new object property as aName
@@ -4256,7 +4258,7 @@ end;
 
 const
   _CMP2SORT: array[0..18] of TDynArraySortCompare = (
-    nil,                         // 0
+    nil,                         // 0 would call VariantCompSimple()
     SortDynArrayEmptyNull,       // 1
     SortDynArraySmallInt,        // 2
     SortDynArrayInteger,         // 3
@@ -4346,7 +4348,7 @@ begin
           (at <> varOleStr) and
           (bt < varString) and
           (bt <> varOleStr) then
-    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
+    result := VariantCompSimple(PVariant(A)^, PVariant(B)^) // ordinal/float
   else if (at < varFirstCustom) and
           (bt < varFirstCustom) then
     result := VariantCompAsText(A, B, caseInsensitive) // RawUtf8 convert
@@ -7370,6 +7372,12 @@ begin
     if Has(dvoInternValues) then
       InternalUniqueValueAt(added);
   end;
+end;
+
+function TDocVariantData.NewItem: PVariant;
+begin
+  result := pointer(PtrUInt(InternalAdd('')));
+  result := @VValue[PtrUInt(result)]; // in two steps for FPC
 end;
 
 procedure TDocVariantData.AddObject(const aNameValuePairs: array of const;
