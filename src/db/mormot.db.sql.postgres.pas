@@ -1270,8 +1270,8 @@ begin
     BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));
 end;
 
-function TSqlDBPostgresStatement.ColumnToVariant(Col: integer; var Value: Variant;
-  ForceUtf8: boolean): TSqlDBFieldType;
+function TSqlDBPostgresStatement.ColumnToVariant(
+  Col: integer; var Value: Variant; ForceUtf8: boolean): TSqlDBFieldType;
 var
   c: PSqlDBColumnProperty;
   P: pointer;
@@ -1319,7 +1319,7 @@ begin
         L := PQ.GetLength(fRes, fCurrentRow, Col);
         if (P = nil) or
            (L = 0) then
-          v.VType := varString
+          v.VType := varString // avoid obscure "Invalid variant type" in FPC
         else if ForceUtf8 then
         begin
           v.VType := varString;

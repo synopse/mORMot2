@@ -801,17 +801,16 @@ type
     /// append a Column as a JSON value, first Col is 0
     procedure ColumnToJson(Col: integer; W: TJsonWriter);
     /// return a Column as a variant
-    // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
-    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftUtf8 TEXT content will return a varUString on Delphi/FPC or an AnsiString
+    // varString on Delphi 7-2007 (Connection.Properties.VariantStringAsWideString=true
+    // could return a varOleStr) unless ForceUtf8=true would return a RawUtf8 varString
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
-    function ColumnVariant(Col: integer): Variant; overload;
+    function ColumnVariant(Col: integer; ForceUtf8: boolean = false): Variant; overload;
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call Column*() method above
-    // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
-    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-    // since Delphi 2009: you may not loose any data during charset conversion;
-    // set ForceUtf8 = true to generate a RawUtf8 as varString
+    // - a ftUtf8 TEXT content will return a varUString on Delphi/FPC or an AnsiString
+    // varString on Delphi 7-2007 (Connection.Properties.VariantStringAsWideString=true
+    // could return a varOleStr) unless ForceUtf8=true would return a RawUtf8 varString
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant;
       ForceUtf8: boolean = false): TSqlDBFieldType;
@@ -846,7 +845,10 @@ type
     /// write a blob Column into the Stream parameter
     procedure ColumnBlobFromStream(const ColName: RawUtf8; Stream: TStream); overload;
     /// return a Column as a variant, from a supplied column name
-    function ColumnVariant(const ColName: RawUtf8): Variant; overload;
+    // - a ftUtf8 TEXT content will return a varUString on Delphi/FPC or an AnsiString
+    // varString on Delphi 7-2007 (Connection.Properties.VariantStringAsWideString=true
+    // could return a varOleStr) unless ForceUtf8=true would return a RawUtf8 varString
+    function ColumnVariant(const ColName: RawUtf8; ForceUtf8: boolean = false): Variant; overload;
     /// return a Column as a variant, from a supplied column name
     // - since a property getter can't be an overloaded method, we define one
     // for the Column[] property
@@ -870,6 +872,10 @@ type
     // - of course, using a variant and a column name will be a bit slower than
     // direct access via the Column*() dedicated methods, but resulting code
     // is fast in practice
+    // - a ftUtf8 TEXT content will return a varUString on Delphi/FPC or an AnsiString
+    // varString on Delphi 7-2007 (Connection.Properties.VariantStringAsWideString=true
+    // could return a varOleStr) - use ColumnVariant/ColumnToVariant with ForceUtf8=true
+    // if you want to return a RawUtf8 varString on all platforms
     property Column[const ColName: RawUtf8]: Variant
       read GetColumnVariant; default;
     /// create a TSqlDBRowVariantType able to access any field content via late binding
@@ -1917,8 +1923,8 @@ type
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
-    // - by default, the conversion to Variant will create an AnsiString kind
-    // of variant: for pre-Unicode Delphi, avoiding WideString/OleStr content
+    // - by default, the conversion to Variant will create an AnsiString
+    // varString: for pre-Unicode Delphi, avoiding WideString/OleStr content
     // will speed up the process a lot, if you are sure that the current
     // charset matches the expected one (which is very likely)
     // - set this property to TRUE so that the conversion to Variant will
@@ -1927,9 +1933,11 @@ type
     // potential data loss
     // - starting with Delphi 2009, the TEXT content will be stored as an
     // UnicodeString in the variant, so this property is not necessary
-    // - the Variant conversion is mostly used for the TQuery wrapper, or for
+    // - this Variant conversion is mostly used for the TQuery wrapper, or for
     // the ISqlDBRows.Column[] property or ISqlDBRows.ColumnVariant() method;
     // this won't affect other Column*() methods, or JSON production
+    // - if you want a RawUtf8 varString (as used e.g. within TDocVariantData),
+    // use ISqlDBStatement.ColumnVariant/ColumnToVariant() with ForceUtf8=true
     property VariantStringAsWideString: boolean
       read fVariantWideString write fVariantWideString;
     {$endif UNICODE}
@@ -2509,17 +2517,16 @@ type
     procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload; virtual;
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
-    // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
-    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftUtf8 TEXT content will return a varUString on Delphi/FPC or an AnsiString
+    // varString on Delphi 7-2007 (Connection.Properties.VariantStringAsWideString=true
+    // could return a varOleStr) unless ForceUtf8=true would return a RawUtf8 varString
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
-    function ColumnVariant(Col: integer): Variant; overload;
+    function ColumnVariant(Col: integer; ForceUtf8: boolean = false): Variant; overload;
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call efficient ColumnToSqlVar() method
-    // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
-    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-    // since Delphi 2009: you may not loose any data during charset conversion
-    // set ForceUtf8 = true to generate a RawUtf8 as varString
+    // - a ftUtf8 TEXT content will return a varUString on Delphi/FPC or an AnsiString
+    // varString on Delphi 7-2007 (Connection.Properties.VariantStringAsWideString=true
+    // could return a varOleStr) unless ForceUtf8=true would return a RawUtf8 varString
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant;
       ForceUtf8: boolean = false): TSqlDBFieldType; virtual;
@@ -2561,7 +2568,7 @@ type
     // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
     procedure ColumnBlobFromStream(const ColName: RawUtf8; Stream: TStream); overload;
     /// return a Column as a variant, from a supplied column name
-    function ColumnVariant(const ColName: RawUtf8): Variant; overload;
+    function ColumnVariant(const ColName: RawUtf8; ForceUtf8: boolean = false): Variant; overload;
     /// create a TSqlDBRowVariantType able to access any field content via late binding
     // - i.e. you can use Data.Name to access the 'Name' column of the current row
     // - this Variant will point to the corresponding TSqlDBStatement instance,
@@ -6156,9 +6163,9 @@ begin
     '%.ColumnBlobFromStream not implemented', [self]);
 end;
 
-function TSqlDBStatement.ColumnVariant(Col: integer): Variant;
+function TSqlDBStatement.ColumnVariant(Col: integer; ForceUtf8: boolean): Variant;
 begin
-  ColumnToVariant(Col, result); // may be SynUnicode
+  ColumnToVariant(Col, result, ForceUtf8); // may be SynUnicode
 end;
 
 function TSqlDBStatement.ColumnToVariant(Col: integer;
@@ -6197,8 +6204,7 @@ begin
         begin
           VAny := nil; // avoid GPF below
           if V.VText = nil then
-            // avoid obscure "Invalid variant type" in FPC
-            VType := varString
+            VType := varString // avoid obscure "Invalid variant type" in FPC
           else if ForceUtf8 then
           begin
             VType := varString;
@@ -6222,8 +6228,9 @@ begin
                not fConnection.Properties.VariantStringAsWideString then
             begin
               VType := varString;
-              if (Unicode_CodePage = CP_UTF8) and
-                 (V.VText = pointer(tmp)) then
+              if (V.VText = pointer(tmp)) and
+                 ((Unicode_CodePage = CP_UTF8) or
+                  IsAnsiCompatible(tmp)) then
                 RawByteString(VAny) := tmp
               else
                 CurrentAnsiConvert.Utf8BufferToAnsi(
@@ -6883,14 +6890,15 @@ begin
   result := ColumnUtf8(ColumnIndex(ColName));
 end;
 
-function TSqlDBStatement.ColumnVariant(const ColName: RawUtf8): Variant;
+function TSqlDBStatement.ColumnVariant(
+  const ColName: RawUtf8; ForceUtf8: boolean): Variant;
 begin
-  ColumnToVariant(ColumnIndex(ColName), result);
+  ColumnToVariant(ColumnIndex(ColName), result, ForceUtf8);
 end;
 
 function TSqlDBStatement.GetColumnVariant(const ColName: RawUtf8): Variant;
 begin
-  ColumnToVariant(ColumnIndex(ColName), result);
+  ColumnToVariant(ColumnIndex(ColName), result, {forceUtf8=}false);
 end;
 
 function TSqlDBStatement.ColumnCursor(const ColName: RawUtf8): ISqlDBRows;
