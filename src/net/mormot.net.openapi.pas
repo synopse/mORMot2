@@ -222,6 +222,7 @@ type
     function Parameters: POpenApiParameters;
     function RequestBody(Parser: TOpenApiParser): POpenApiRequestBody;
     function Responses: PDocVariantData;
+    function ProducesJson: boolean;
     property Response[aStatusCode: integer]: POpenApiResponse
       read GetResponseForStatusCode;
   end;
@@ -904,7 +905,7 @@ begin
       if result = nil then
       begin
         n := c.Names[i];
-        if IsContentTypeJson(pointer(n)) or
+        if IsContentTypeJsonU(n) or
            (n = '*/*') or
            IdemPropNameU(n, 'application/jwt') then // exists in the wild :(
           if _SafeObject(c.Values[i], o) then
@@ -1095,6 +1096,20 @@ end;
 function TOpenApiOperation.Responses: PDocVariantData;
 begin
   result := Data.O['responses'];
+end;
+
+function TOpenApiOperation.ProducesJson: boolean;
+var
+  produces: PDocVariantData;
+  i: PtrInt;
+begin
+  // OpenAPI v2 only: https://swagger.io/docs/specification/v2_0/describing-responses
+  result := true;
+  if Data.GetAsArray('produces', produces) then
+    for i := 0 to produces^.Count - 1 do
+      if IsContentTypeJsonU(VariantToUtf8(produces^.Values[i])) then
+        exit;
+  result := false;
 end;
 
 function TOpenApiOperation.Summary: RawUtf8;
@@ -1326,7 +1341,11 @@ begin
       begin
         fSuccessResponseCode := code;
         if schema <> nil then
-          fSuccessResponseType := fParser.NewPascalTypeFromSchema(schema);
+          fSuccessResponseType := fParser.NewPascalTypeFromSchema(schema)
+        else if (fParser.Version = oav2) and
+                fOperation.ProducesJson then
+          // no schema, but OpenAPI v2 "produces" -> JSON body as TDocVariant
+          fSuccessResponseType := TPascalType.CreateBuiltin(fParser, obtVariant);
       end;
     end
     else if Assigned(schema) and
