@@ -1885,9 +1885,6 @@ begin
   end;
 end;
 
-const
-  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
-
 type
   TProcessMemoryCounters = record
     cb: DWord;
@@ -2896,6 +2893,22 @@ begin
     if not CompareMemFixed(Old, New, Size) then
       raise Exception.Create('PatchCode?');
   end;
+end;
+
+
+function StubMemoryAlloc: pointer;
+begin
+  result := VirtualAlloc(nil, STUB_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+end;
+
+procedure StubMemoryFree(stub: pointer);
+begin
+  VirtualFree(stub, 0, MEM_RELEASE);
+end;
+
+procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
+begin
+  // nothing to be done on Windows: PAGE_EXECUTE_READWRITE always work
 end;
 
 

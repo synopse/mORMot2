@@ -1533,6 +1533,7 @@ begin
     fpmunmap(fBuf, fBufSize);
 end;
 
+
 procedure SleepHiRes(ms: cardinal);
 var
   timeout: TTimespec;
@@ -3093,11 +3094,8 @@ begin
     end;
 end;
 
-const
-  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
-  // on most platforms, Compute_FAKEVMT is run once with all JITted stubs
-  // on i386, it needs ArgsSizeInStack adjustement, but only 24 bytes per method
-
+// on most platforms, Compute_FAKEVMT is run once with all JITted stubs
+// on i386, it needs ArgsSizeInStack adjustement, but only 24 bytes per method
 {$ifdef CPUARM}
 
 var
@@ -3157,6 +3155,49 @@ begin
 end;
 
 {$endif CPUARM}
+
+var
+  StubMemoryExecXorWrite: boolean = false; // W and X are exclusive on some OS
+
+function StubMemoryAlloc: pointer;
+begin
+  if not StubMemoryExecXorWrite then
+    result := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
+  if (result = MAP_FAILED) or
+     StubMemoryExecXorWrite then
+  begin
+    // i.e. on OpenBSD or OSX M1, we can not have W and X protection
+    result := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
+    if result <> MAP_FAILED then
+      StubMemoryExecXorWrite := true;
+  end;
+  if result = MAP_FAILED then
+    result := nil;
+end;
+
+procedure StubMemoryFree(stub: pointer);
+begin
+  fpmunmap(stub, STUB_SIZE);
+end;
+
+procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
+var
+  aligned: pointer;
+  flags: cardinal;
+begin
+  if not StubMemoryExecXorWrite then
+    // nothing to be done on this platform
+    exit;
+  // toggle execution permission of memory to be able to write into memory
+  aligned := pointer(
+    (PtrUInt(Reserved) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  if Exec then
+    flags := PROT_READ OR PROT_EXEC
+  else
+    flags := PROT_READ or PROT_WRITE;
+  if SynMProtect(aligned, SystemInfo.dwPageSize shl 1, flags) < 0 then
+     raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
+end;
 
 
 { ****************** Unix Daemon and Windows Service Support }
