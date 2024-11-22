@@ -1494,6 +1494,9 @@ type
     /// check if the client is actually connected to the server
     // - return '' on success, or a text error (typically an Exception.Message)
     function Connected: string;
+    /// set Http.Options^.Auth.Token/Scheme with a given wraBearer token
+    // - will disable authentication if Token = ''
+    procedure SetBearer(const Token: SpiUtf8);
     /// Request execution, with no JSON parsing using RTTI
     procedure Request(const Method, Action: RawUtf8;
       const CustomError: TOnJsonClientError = nil); overload;
@@ -1589,6 +1592,7 @@ type
     function GetDefaultHeaders: RawUtf8; virtual; abstract;
     procedure SetDefaultHeaders(const Value: RawUtf8); virtual; abstract;
     function Http: IHttpClient; virtual; abstract;
+    procedure SetBearer(const Token: SpiUtf8); virtual;
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
@@ -4527,6 +4531,23 @@ end;
 procedure TJsonClientAbstract.SetUrlEncoder(Value: TUrlEncoder);
 begin
   fUrlEncoder := Value;
+end;
+
+procedure TJsonClientAbstract.SetBearer(const Token: SpiUtf8);
+var
+  h: IHttpClient;
+  o: PHttpRequestExtendedOptions;
+begin
+  h := Http;
+  if not Assigned(h) then
+    exit;
+  o := h.Options;
+  if not Assigned(o) then
+    exit;
+  o^.Auth.Scheme := wraBearer;
+  if Token = '' then
+    o^.Auth.Scheme := wraNone; // disable any previous token
+  o^.Auth.Token := Token;
 end;
 
 const
