@@ -1763,6 +1763,8 @@ type
     function GetItemByProp(const aPropName, aPropValue: RawUtf8;
       aPropValueCaseSensitive: boolean; var Dest: variant;
       DestByRef: boolean = false): boolean;
+    /// return one dvArray value as RawUtf8, from its index
+    function GetItemAsText(aIndex: integer): RawUtf8;
     /// retrieve a reference to a dvObject in the dvArray, from a property value
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item will be copied into Dest, on match
@@ -8896,6 +8898,15 @@ begin
     exit;
   RetrieveValueOrRaiseException(ndx, Dest, DestByRef);
   result := true;
+end;
+
+function TDocVariantData.GetItemAsText(aIndex: integer): RawUtf8;
+begin
+  result := '';
+  if cardinal(aIndex) < cardinal(VCount) then
+    VariantToUtf8(VValue[aIndex], result)
+  else
+    InternalNotFound(aIndex);
 end;
 
 function TDocVariantData.GetDocVariantByProp(
