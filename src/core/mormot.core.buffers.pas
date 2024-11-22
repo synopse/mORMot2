@@ -1859,6 +1859,10 @@ function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
 /// recognize e.g. 'application/json' or 'application/vnd.api+json'
 function IsContentTypeJson(ContentType: PUtf8Char): boolean;
 
+/// recognize e.g. 'application/json' or 'application/vnd.api+json'
+function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// fast guess of the size, in pixels, of a JPEG memory buffer
 // - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
 // - returns TRUE if the buffer is likely to be a JPEG picture, and set the
@@ -9059,6 +9063,11 @@ function IsContentTypeJson(ContentType: PUtf8Char): boolean;
 begin
   result := IdemPChar(ContentType, pointer(_CONTENT[2])) and
             (PtrUInt(IdemPPChar(ContentType + 12, @_CONTENT_APP)) <= 2);
+end;
+
+function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
+begin
+  result := IsContentTypeJson(pointer(ContentType));
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
