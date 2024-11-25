@@ -26,6 +26,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.data,
   mormot.core.log,
   mormot.core.threads,
@@ -198,6 +199,8 @@ type
     fNameSpace: TSocketIONamespaceClients;
     function GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
       {$ifdef HASINLINE} inline; {$endif}
+    // in-place-decode one Engine.IO OPEN payload on client side
+    procedure AfterOpen(OpenPayload: PUtf8Char);
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls Open() then SioUpgrade() for the Socket.IO protocol
@@ -636,6 +639,22 @@ begin
   ObjArrayClear(fNameSpace);
   fClient.Free;
   inherited Destroy;
+end;
+
+procedure TSocketsIOClient.AfterOpen(OpenPayload: PUtf8Char);
+var
+  V: array[0..4] of TValuePUtf8Char;
+begin
+  JsonDecode(OpenPayload,
+    ['sid', 'upgrades', 'pingInterval', 'pingTimeout', 'maxPayload'], @V);
+  if V[0].Text = nil then
+    EEngineIO.RaiseUtf8('%.Create: missing "sid" in %', [self, OpenPayload]);
+  V[0].ToUtf8(fEngineSid);
+  if V[1].Text <> nil then
+    EEngineIO.RaiseUtf8('%.Create: unsupported "upgrades" in %', [self, OpenPayload]);
+  fPingInterval := V[2].ToCardinal(fPingInterval);
+  fPingTimeout  := V[3].ToCardinal(fPingTimeout);
+  fMaxPayload   := V[4].ToCardinal;
 end;
 
 function TSocketsIOClient.GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
