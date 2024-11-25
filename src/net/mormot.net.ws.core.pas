@@ -1059,7 +1059,11 @@ type
   PSocketIOPacket = ^TSocketIOPacket;
 
   /// define a Socket.IO message content
+  {$ifdef USERECORDWITHMETHODS}
+  TSocketIOMessage = record
+  {$else}
   TSocketIOMessage = object
+  {$endif USERECORDWITHMETHODS}
     NameSpaceLen: PtrInt;
     NameSpace: PUtf8Char;
     DataLen: PtrInt;
@@ -1070,7 +1074,12 @@ type
     /// decode a Socket.IO raw packet into its message fields
     // - returns true on success, false if the input PayLoad is incorrect
     function Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
-      PayLoadBinary: boolean): boolean;
+      PayLoadBinary: boolean): boolean; overload;
+    /// decode a Socket.IO raw text packet into its message fields
+    // - mainly used for testing purposes
+    function Init(const PayLoad: RawUtf8): boolean; overload;
+    /// quickly check if the NameSpace does match
+    function NameSpaceIs(const Name: RawUtf8): boolean;
   end;
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
@@ -3587,8 +3596,9 @@ begin
   PacketType := TSocketIOPacket(PByte(PayLoad)^ - ord('0'));
   if byte(PacketType) > byte(high(PacketType)) then
     exit;
-  ID := 0;
   NameSpaceLen := 1;
+  NameSpace := pointer(DefaultNameSpace);
+  ID := 0;
   inc(PayLoad);
   dec(PayLoadLen);
   if PayLoadLen <> 0 then
@@ -3605,9 +3615,7 @@ begin
         inc(PayLoad);
         dec(PayLoadLen);
       end;
-    end
-    else
-      NameSpace := pointer(DefaultNameSpace);
+    end;
   end;
   while (PayLoadLen <> 0) and
         (PayLoad^ in ['0'..'9']) do
@@ -3622,6 +3630,17 @@ begin
   DataLen := PayLoadLen;
   DataBinary := PayLoadBinary;
   result := true;
+end;
+
+function TSocketIOMessage.Init(const PayLoad: RawUtf8): boolean;
+begin
+  result := Init(pointer(PayLoad), length(PayLoad), {binary=}false);
+end;
+
+function TSocketIOMessage.NameSpaceIs(const Name: RawUtf8): boolean;
+begin
+  result := (length(Name) = NameSpaceLen) and
+            CompareMemFast(pointer(Name), NameSpace, NameSpaceLen);
 end;
 
 
