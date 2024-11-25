@@ -232,6 +232,16 @@ type
       read fClient;
   end;
 
+  TWebSocketSocketIOClientProtocol = class(TWebSocketSocketIOProtocol)
+  protected
+    fClient: TSocketsIOClient;
+    procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
+      PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); override;
+    // this is the main entry point for incoming Socket.IO messages
+    procedure SocketPacketReceived(Sender: TWebSocketProcess;
+      const Message: TSocketIOMessage); override;
+  end;
+
 
 implementation
 
@@ -595,6 +605,7 @@ end;
 
 { ******************** Socket.IO / Engine.IO Client Protocol over WebSockets }
 
+
 { TSocketsIOClient }
 
 class function TSocketsIOClient.SioOpen(const aHost, aPort: RawUtf8;
@@ -604,8 +615,8 @@ var
   c: THttpClientWebSockets;
 begin
   c := THttpClientWebSockets.WebSocketsConnect(aHost, aPort,
-    nil, aLog, aLogContext, SocketIOHandshakeUri(aRoot),
-    aCustomHeaders, aTls, aTLSContext);
+    TWebSocketSocketIOClientProtocol.Create('Socket.IO', ''), aLog, aLogContext,
+    SocketIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
   if c = nil then
     result := nil
   else
@@ -632,6 +643,7 @@ begin
     ESocketIO.RaiseUtf8('Unexpected %.Create with no WebSockets', [self]);
   inherited Create;
   fClient := aClient;
+  (fClient.WebSockets.Protocol as TWebSocketSocketIOClientProtocol).fClient := self;
 end;
 
 destructor TSocketsIOClient.Destroy;
@@ -679,6 +691,33 @@ begin
 
 end;
 
+
+{ TWebSocketEngineIOClientProtocol }
+
+procedure TWebSocketSocketIOClientProtocol.EnginePacketReceived(
+  Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
+  PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean);
+var
+  msg: TSocketIOMessage;
+begin
+  if fClient = nil then
+    ESocketIO.RaiseUtf8('Unexpected %.EnginePacketReceived', [self]);
+  case PacketType of
+    eioOpen:
+      fClient.AfterOpen(PayLoad);
+    eioMessage:
+      if msg.Init(PayLoad, PayLoadLen, PayLoadBinary) then
+        SocketPacketReceived(Sender, msg)
+      else
+        ESocketIO.RaiseUtf8('%.EnginePacketReceived: invalid Payload', [self]);
+  end;
+end;
+
+procedure TWebSocketSocketIOClientProtocol.SocketPacketReceived(
+  Sender: TWebSocketProcess; const Message: TSocketIOMessage);
+begin
+
+end;
 
 
 end.
