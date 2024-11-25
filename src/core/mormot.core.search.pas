@@ -75,11 +75,13 @@ type
   // - ffoExcludesDir won't include the path in TFindFiles.Name
   // - ffoSubFolder will search within nested folders
   // - ffoIncludeFolder will add the nested folders
+  // - ffoIncludeHiddenFiles will add any hidden file (on Windows)
   TFindFilesOption = (
     ffoSortByName,
     ffoExcludesDir,
     ffoSubFolder,
-    ffoIncludeFolder);
+    ffoIncludeFolder,
+    ffoIncludeHiddenFiles);
   /// the optional features of FindFiles()
   TFindFilesOptions = set of TFindFilesOption;
 
@@ -1672,7 +1674,7 @@ var
     if FindFirst(name, faAnyfile, F) = 0 then
     begin
       repeat
-        if (SearchRecValidFile(F) and
+        if (SearchRecValidFile(F, ffoIncludeHiddenFiles in Options) and
             ((IgnoreFileName = '') or
              (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0))) or
            ((ffoIncludeFolder in Options) and
