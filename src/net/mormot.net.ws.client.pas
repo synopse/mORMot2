@@ -640,7 +640,8 @@ end;
 
 function TSocketsIOClient.GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
 begin
-  result := SocketIOGetNameSpace(pointer(fNameSpace), length(fNameSpace), aNameSpace);
+  result := SocketIOGetNameSpace(pointer(fNameSpace), length(fNameSpace),
+    pointer(aNameSpace), length(aNameSpace)) as TSocketIONamespaceClient;
 end;
 
 function TSocketsIOClient.NameSpaces: TRawUtf8DynArray;

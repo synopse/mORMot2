@@ -1182,9 +1182,9 @@ type
       read fOpened;
   end;
 
-/// case insensitive search within an array of TSocketIONamespace
+/// efficient case-sensitive search within an array of TSocketIONamespace
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
-  const name: RawUtf8): pointer;
+  name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 
 /// retrieve the NameSpace properties of an array of TSocketIONamespace
 function SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer): TRawUtf8DynArray;
@@ -3542,12 +3542,14 @@ end;
 
 
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
-  const name: RawUtf8): pointer;
+  name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 begin
-  if one <> nil then
+  if (one <> nil) and
+     (namelen > 0) then
     repeat
       result := one^;
-      if TSocketIONamespace(result).NameSpace = name then
+      if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
+         CompareMemFast(name, pointer(result.NameSpace), namelen) then
         exit; // O(n) brute force search is fast enough
       inc(one);
       dec(count);
