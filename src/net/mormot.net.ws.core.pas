@@ -1058,6 +1058,20 @@ type
     sioBinaryAck);
   PSocketIOPacket = ^TSocketIOPacket;
 
+  /// define a Socket.IO message content
+  TSocketIOMessage = object
+    NameSpaceLen: PtrInt;
+    NameSpace: PUtf8Char;
+    DataLen: PtrInt;
+    Data: PUtf8Char;
+    ID: cardinal;
+    PacketType: TSocketIOPacket;
+    DataBinary: boolean;
+    /// decode a Socket.IO raw packet into its message fields
+    // - returns true on success, false if the input PayLoad is incorrect
+    function Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
+      PayLoadBinary: boolean): boolean;
+  end;
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
@@ -1069,8 +1083,13 @@ function SocketIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
 /// event names 'connect', 'message' and 'disconnect' are reserved
 function SocketIOReserved(const event: RawUtf8): boolean;
 
+function ToText(p: TEngineIOPacket): PShortString; overload;
+function ToText(p: TSocketIOPacket): PShortString; overload;
+
 
 type
+  /// exception class raised during Engine.IO process
+  EEngineIO = class(ESynException);
   /// exception class raised during Socket.IO process
   ESocketIO = class(ESynException);
 
@@ -3445,6 +3464,16 @@ end;
 
 // reference: https://sockjs.com/docs/v4/socket-io-protocol/
 
+function ToText(p: TEngineIOPacket): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TEngineIOPacket), ord(p));
+end;
+
+function ToText(p: TSocketIOPacket): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSocketIOPacket), ord(p));
+end;
+
 function SocketIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
 var
   r: RawUtf8;
@@ -3519,6 +3548,57 @@ begin
     dec(count);
   until count = 0;
 end;
+
+
+{ TSocketIOMessage }
+
+function TSocketIOMessage.Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
+  PayLoadBinary: boolean): boolean;
+begin
+  result := false;
+  if (PayLoad = nil) or
+     (PayLoadLen = 0) then
+    exit;
+  PacketType := TSocketIOPacket(PByte(PayLoad)^ - ord('0'));
+  if byte(PacketType) > byte(high(PacketType)) then
+    exit;
+  ID := 0;
+  NameSpaceLen := 1;
+  inc(PayLoad);
+  dec(PayLoadLen);
+  if PayLoadLen <> 0 then
+  begin
+    if PayLoad^ = '/' then
+    begin
+      NameSpace := PayLoad;
+      while not (PayLoad[NameSpaceLen] in [#0, ',']) do
+        inc(NameSpacelen);
+      inc(PayLoad, NameSpacelen);
+      dec(PayLoadLen, NameSpacelen);
+      if PayLoad^ = ',' then
+      begin
+        inc(PayLoad);
+        dec(PayLoadLen);
+      end;
+    end
+    else
+      NameSpace := pointer(DefaultNameSpace);
+  end;
+  while (PayLoadLen <> 0) and
+        (PayLoad^ in ['0'..'9']) do
+  begin
+    ID := (ID * 10) + (ord(PayLoad^) - ord('0'));
+    inc(PayLoad);
+    dec(PayLoadLen);
+  end;
+  if PayLoadLen = 0 then
+    PayLoad := nil;
+  Data := PayLoad;
+  DataLen := PayLoadLen;
+  DataBinary := PayLoadBinary;
+  result := true;
+end;
+
 
 
 initialization
