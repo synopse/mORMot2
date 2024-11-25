@@ -7667,7 +7667,7 @@ var
     if FindFirst(DirName + Mask, faAnyfile - faDirectory, F) = 0 then
     begin
       repeat
-        if SearchRecValidFile(F) and
+        if SearchRecValidFile(F, {includehidden=}true) and
            (F.Size < 65535) then // certificate files are expected to be < 64KB
           AddRawUtf8(result, n, AddFromFile(DirName + F.Name));
       until FindNext(F) <> 0;
