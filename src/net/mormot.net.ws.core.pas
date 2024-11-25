@@ -1078,8 +1078,10 @@ type
     /// decode a Socket.IO raw text packet into its message fields
     // - mainly used for testing purposes
     function Init(const PayLoad: RawUtf8): boolean; overload;
-    /// quickly check if the NameSpace does match
+    /// quickly check if the NameSpace value does match
     function NameSpaceIs(const Name: RawUtf8): boolean;
+    /// quickly check if the Data content does match
+    function DataIs(const Content: RawUtf8): boolean;
   end;
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
@@ -3640,7 +3642,15 @@ end;
 function TSocketIOMessage.NameSpaceIs(const Name: RawUtf8): boolean;
 begin
   result := (length(Name) = NameSpaceLen) and
-            CompareMemFast(pointer(Name), NameSpace, NameSpaceLen);
+            ((NameSpaceLen = 0) or
+             CompareMemFast(pointer(Name), NameSpace, NameSpaceLen));
+end;
+
+function TSocketIOMessage.DataIs(const Content: RawUtf8): boolean;
+begin
+  result := (length(Content) = DataLen) and
+            ((DataLen = 0) or
+             CompareMemFast(pointer(Content), Data, DataLen));
 end;
 
 
