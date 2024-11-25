@@ -7515,9 +7515,6 @@ var
   CurrentFakeStubBuffer: TFakeStubBuffer;
   CurrentFakeStubBuffers: array of TFakeStubBuffer;
   CurrentFakeStubBufferLock: TLightLock;
-  {$ifdef UNIX}
-  MemoryProtection: boolean = false; // set to true if PROT_EXEC seems to fail
-  {$endif UNIX}
 
 constructor TFakeStubBuffer.Create;
 begin

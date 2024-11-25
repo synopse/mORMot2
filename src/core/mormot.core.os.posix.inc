@@ -3161,10 +3161,10 @@ var
 
 function StubMemoryAlloc: pointer;
 begin
+  result := MAP_FAILED;
   if not StubMemoryExecXorWrite then
     result := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
-  if (result = MAP_FAILED) or
-     StubMemoryExecXorWrite then
+  if result = MAP_FAILED then
   begin
     // i.e. on OpenBSD or OSX M1, we can not have W and X protection
     result := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
