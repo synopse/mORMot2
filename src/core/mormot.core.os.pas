@@ -6438,7 +6438,7 @@ begin
   if FindFirst(dir + Mask, faAnyFile, sr) <> 0 then
     exit;
   repeat
-   if SearchRecValidFile(sr) then
+   if SearchRecValidFile(sr, {includehidden=}true) then
      inc(result, sr.Size)
    else if Recursive and
            SearchRecValidFolder(sr) then
