@@ -721,8 +721,16 @@ begin
 end;
 
 const
-  faInvalidFile = faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-};
+  faInvalidFile: array[boolean] of cardinal = (
+    faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-},
+    faDirectory + faVolumeID{%H-} + faSysFile{%H-});
   faDirectoryMask = faDirectory + faHidden{%H-};
+
+function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean): boolean;
+begin
+  result := (F.Name <> '') and
+            (cardinal(F.Attr) and faInvalidFile[IncludeHidden] = 0);
+end;
 
 function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
 begin

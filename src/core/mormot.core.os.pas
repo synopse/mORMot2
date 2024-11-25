@@ -3315,8 +3315,9 @@ function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
 
 /// check if a FindFirst/FindNext found instance is actually a file
-function SearchRecValidFile(const F: TSearchRec): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+// - on Windows, hidden files are ignored by default unless IncludeHidden is true
+function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean = false): boolean;
+  {$ifdef FPC}inline;{$endif}
 
 /// check if a FindFirst/FindNext found instance is actually a folder
 function SearchRecValidFolder(const F: TSearchRec): boolean;
@@ -6575,12 +6576,6 @@ end;
 function SearchRecToDateTimeUtc(const F: TSearchRec): TDateTime;
 begin
   result := SearchRecToUnixTimeUtc(F) / Int64(SecsPerDay) + Int64(UnixDelta);
-end;
-
-function SearchRecValidFile(const F: TSearchRec): boolean;
-begin
-  result := (F.Name <> '') and
-            (F.Attr and faInvalidFile = 0);
 end;
 
 function SearchRecValidFolder(const F: TSearchRec): boolean;
