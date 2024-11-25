@@ -1562,7 +1562,7 @@ type
       read GetUrlEncoder write SetUrlEncoder;
   end;
 
-  /// abstract thread-safe generic JSON client class
+  /// abstract thread-safe generic JSON client class, implementing IJsonClient
   // - will implement all JSON and RTTI featured methods, without any actual
   // HTTP connection, which is abstracted to Connected and RawRequest() methods
   TJsonClientAbstract = class(TInterfacedObjectLocked, IJsonClient)
@@ -1640,7 +1640,7 @@ type
       read fOnLog write fOnLog;
   end;
 
-  /// thread-safe generic JSON client class over HTTP
+  /// thread-safe generic JSON client class over HTTP, implementing IJsonClient
   TJsonClient = class(TJsonClientAbstract)
   protected
     fHttp: IHttpClient;
