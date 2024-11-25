@@ -1158,6 +1158,29 @@ type
   end;
   PSocketIONamespace = ^TSocketIONamespace;
 
+  /// abstract parent for client or server Engine.IO protocol over WebSockets frames
+  // - Engine.IO is the low-level connection/heartbeat protocol on which the
+  // Socket.IO bidirectional multiplexed communication protocol is built
+  // - this abstract class will redirect all incoming frames to FrameReceived(),
+  // send an eioPong when an eioPing is received
+  TWebSocketEngineIOProtocol = class(TWebSocketProtocol)
+  protected
+    fOpened: boolean;
+    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
+      var Request: TWebSocketFrame; const Info: RawUtf8); override;
+    procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
+      PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); virtual; abstract;
+  public
+    /// allows to send a message over the wire to a specified connection
+    // - Sender identify the connection, typically from FrameReceived() method
+    function SendPacket(Sender: TWebSocketProcess;
+      const PayLoad: RawByteString; PayLoadBinary: boolean;
+      PacketType: TEngineIOPacket =  eioMessage): boolean;
+    /// true when Engine.IO messages can be processed
+    // - i.e. after OPEN (eioOpen) and before CLOSE (eioClose)
+    property Opened: boolean
+      read fOpened;
+  end;
 
 /// case insensitive search within an array of TSocketIONamespace
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
@@ -3598,6 +3621,75 @@ begin
   DataBinary := PayLoadBinary;
   result := true;
 end;
+
+
+{ TWebSocketEngineIOProtocol }
+
+procedure TWebSocketEngineIOProtocol.ProcessIncomingFrame(
+  Sender: TWebSocketProcess; var Request: TWebSocketFrame; const Info: RawUtf8);
+var
+  p: TEngineIOPacket;
+begin
+  // focText/focBinary or focContinuation/focConnectionClose
+  if not (Request.opcode in [focText, focBinary]) then
+    exit;
+  if Request.payload = '' then
+    EEngineIO.RaiseUtf8('%.ProcessIncomingFrame with no Payload', [self]);
+  p := TEngineIOPacket(PByte(Request.payload)^ - ord('0'));
+  case p of
+    eioOpen:
+      if fOpened then
+        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: OPEN twice', [self])
+      else
+        fOpened := true;
+    eioClose:
+      if fOpened then
+        fOpened := false
+      else
+        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
+    eioPing:
+      SendPacket(Sender, '', false, eioPong);
+    eioPong:
+      ; // process depends on the client or server side
+    eioMessage:
+      if not fOpened then
+        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: missing OPEN', [self]);
+  else // eioUpgrade, eioNoop
+    EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected % (%)',
+      [self, ToText(p)^, Request.payload[1]])
+  end;
+  // call virtual method for proper process of this incoming Engine.IO packet
+  EnginePacketReceived(Sender, p, @PByteArray(Request.payload)[1],
+    length(Request.payload) - 1, (Request.opcode = focBinary));
+end;
+
+function TWebSocketEngineIOProtocol.SendPacket(Sender: TWebSocketProcess;
+  const PayLoad: RawByteString; PayLoadBinary: boolean;
+  PacketType: TEngineIOPacket): boolean;
+var
+  L: PtrInt;
+  tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
+begin
+  result := false;
+  if (self = nil) or
+     (Sender = nil) or
+     (Sender.State <> wpsRun)  then
+    exit;
+  // create Engine.IO packet within this WebSocket frame
+  if PayLoadBinary then
+    tmp.opcode := focBinary
+  else
+    tmp.opcode := focText;
+  tmp.content := [];
+  tmp.tix := 0;
+  L := length(PayLoad);
+  FastSetRawByteString(tmp.payload, nil, L + 1);
+  PByteArray(tmp.payload)[0] := ord(PacketType) + ord('0');
+  if L <> 0 then
+    MoveFast(pointer(PayLoad)^, PByteArray(tmp.payload)[1], L);
+  result := Sender.SendFrame(tmp);
+end;
+
 
 
 
