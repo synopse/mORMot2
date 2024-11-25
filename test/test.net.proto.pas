@@ -30,6 +30,7 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.net.async,
+  mormot.net.ws.core,
   mormot.net.openapi,
   mormot.net.ldap,
   mormot.net.dns,
@@ -64,6 +65,8 @@ type
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
+    /// Engine.IO and Socket.IO regression tests
+    procedure _SocketIO;
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
     /// validate TUriTree high-level structure
@@ -84,6 +87,68 @@ type
 
 
 implementation
+
+procedure TNetworkProtocols._SocketIO;
+var
+  m: TSocketIOMessage;
+begin
+  // validate low-level Socket.IO message decoder
+  Check(not m.Init(''));
+  Check(not m.Init('z'));
+  Check(m.Init('0'));
+  Check(m.PacketType = sioOpen);
+  Check(m.NameSpaceIs('/'));
+  CheckEqual(m.Data, nil);
+  Check(m.DataIs(''));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('0/test,{}'));
+  Check(m.PacketType = sioOpen);
+  Check(m.NameSpaceIs('/test'));
+  Check(m.DataIs('{}'));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('1'));
+  Check(m.PacketType = sioDisconnect);
+  Check(m.NameSpaceIs('/'));
+  CheckEqual(m.Data, nil);
+  Check(m.DataIs(''));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('1/admin,'));
+  Check(m.PacketType = sioDisconnect);
+  Check(m.NameSpaceIs('/admin'));
+  CheckEqual(m.Data, nil);
+  Check(m.DataIs(''));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('0/admin,{"sid":"oSO0OpakMV_3jnilAAAA"}'));
+  Check(m.PacketType = sioOpen);
+  Check(m.NameSpaceIs('/admin'));
+  Check(m.DataIs('{"sid":"oSO0OpakMV_3jnilAAAA"}'));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('4{"message":"Not authorized"}'));
+  Check(m.PacketType = sioConnectError);
+  Check(m.NameSpaceIs('/'));
+  Check(m.DataIs('{"message":"Not authorized"}'));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('2["foo"]'));
+  Check(m.PacketType = sioEvent);
+  Check(m.NameSpaceIs('/'));
+  Check(m.DataIs('["foo"]'));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('2/admin,["bar"]'));
+  Check(m.PacketType = sioEvent);
+  Check(m.NameSpaceIs('/admin'));
+  Check(m.DataIs('["bar"]'));
+  CheckEqual(m.ID, 0);
+  Check(m.Init('212["foo"]'));
+  Check(m.PacketType = sioEvent);
+  Check(m.NameSpaceIs('/'));
+  Check(m.DataIs('["foo"]'));
+  CheckEqual(m.ID, 12);
+  Check(m.Init('3/admin,13["bar"]'));
+  Check(m.PacketType = sioAck);
+  Check(m.NameSpaceIs('/admin'));
+  Check(m.DataIs('["bar"]'));
+  CheckEqual(m.ID, 13);
+end;
 
 type
    TMyEnum = (eNone, e1, e2);
