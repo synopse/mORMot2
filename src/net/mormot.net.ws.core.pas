@@ -1182,12 +1182,23 @@ type
       read fOpened;
   end;
 
+  /// abstract parent for client or server Socket.IO protocol over WebSockets frames
+  TWebSocketSocketIOProtocol = class(TWebSocketEngineIOProtocol)
+  protected
+    // this is the main entry point for incoming Socket.IO messages
+    procedure SocketPacketReceived(Sender: TWebSocketProcess;
+      const Message: TSocketIOMessage); virtual; abstract;
+  end;
+
 /// efficient case-sensitive search within an array of TSocketIONamespace
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
   name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 
 /// retrieve the NameSpace properties of an array of TSocketIONamespace
 function SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer): TRawUtf8DynArray;
+
+const
+  DefaultNameSpace: RawUtf8 = '/';
 
 
 implementation
@@ -3530,17 +3541,6 @@ begin
 end;
 
 
-{ TEngineIOSessionsAbstract }
-
-constructor TEngineIOAbstract.Create;
-begin
-  inherited Create;
-  fVersion := 4;
-  fPingTimeout := 20000;
-  fPingInterval := 25000;
-end;
-
-
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
   name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 begin
@@ -3622,6 +3622,18 @@ begin
   DataLen := PayLoadLen;
   DataBinary := PayLoadBinary;
   result := true;
+end;
+
+
+{ TEngineIOSessionsAbstract }
+
+constructor TEngineIOAbstract.Create;
+begin
+  // server-side initialization with default values
+  inherited Create;
+  fVersion := 4;
+  fPingTimeout := 20000;
+  fPingInterval := 25000;
 end;
 
 
