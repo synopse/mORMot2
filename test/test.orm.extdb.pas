@@ -692,9 +692,9 @@ var
       if res.Step({rewind=}true) then
         repeat
           Check(Row.ID > 0);
-          CheckEqual(Row.YearOfDeath, 1519);
+          Check(Row.YearOfDeath = 1519);
           res.RowDocVariant(RowDoc);
-          CheckEqual(RowDoc.ID, Row.ID);
+          Check(RowDoc.ID = Row.ID);
           CheckEqual(_Safe(RowDoc)^.I['YearOfDeath'], 1519);
           inc(n);
         until not res.Step;

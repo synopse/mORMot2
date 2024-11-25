@@ -3622,7 +3622,7 @@ begin
   while (PayLoadLen <> 0) and
         (PayLoad^ in ['0'..'9']) do
   begin
-    ID := (ID * 10) + (ord(PayLoad^) - ord('0'));
+    ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
     inc(PayLoad);
     dec(PayLoadLen);
   end;
