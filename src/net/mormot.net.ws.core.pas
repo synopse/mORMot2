@@ -82,7 +82,7 @@ type
   /// stores a WebSockets frame
   // - see @http://tools.ietf.org/html/rfc6455 for reference
   TWebSocketFrame = record
-    /// the interpretation of the frame data
+    /// the content of the frame data, typically focText or focBinary
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
@@ -316,7 +316,8 @@ type
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName, aUri: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual; abstract;
+    // - by default, will return nil, as expected for Client-side only
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual;
     /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
     function GetSubprotocols: RawUtf8; virtual;
     /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
@@ -985,7 +986,7 @@ type
     /// initialize the chat protocol with an incoming frame callback
     constructor Create(const aName, aUri: RawUtf8;
        const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
-    /// compute a new instance of the WebSockets protocol, with same parameters
+    /// compute a new instance of this WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
     /// allows to send a message over the wire to a specified connection
     // - a temporary copy of the Frame content will be made for safety
@@ -1000,7 +1001,6 @@ type
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
       read fOnIncomingFrame write fOnIncomingFrame;
   end;
-
 
 var
   /// if set, will log all WebSockets raw information
@@ -1276,6 +1276,11 @@ begin
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];
+end;
+
+function TWebSocketProtocol.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
+begin
+  result := nil; // no clone needed for a client-side protocol
 end;
 
 procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8;

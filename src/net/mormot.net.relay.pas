@@ -221,8 +221,6 @@ type
     // - the protocol is relayed from TRelayClientProtocol.ProcessIncomingFrame
     constructor Create(aOwner: TPrivateRelay;
       const aProtocolName: RawUtf8); reintroduce;
-    /// used server-side for any new connection
-    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
 
@@ -734,12 +732,6 @@ constructor TSynopseClientProtocol.Create(aOwner: TPrivateRelay;
 begin
   fOwner := aOwner;
   inherited Create(aProtocolName, '');
-end;
-
-function TSynopseClientProtocol.Clone(
-  const aClientUri: RawUtf8): TWebSocketProtocol;
-begin
-  result := nil; // not used on this client-side only protocol
 end;
 
 procedure TSynopseClientProtocol.ProcessIncomingFrame(Sender: TWebSocketProcess;
