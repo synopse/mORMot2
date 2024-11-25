@@ -297,7 +297,7 @@ type
     fEncryption: IProtocol;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); virtual; abstract;
+      var Request: TWebSocketFrame; const Info: RawUtf8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
     procedure AfterGetFrame(var frame: TWebSocketFrame); virtual;
@@ -420,7 +420,7 @@ type
     fSequencing: boolean;
     fSequence: integer;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-       var request: TWebSocketFrame; const info: RawUtf8); override;
+       var Request: TWebSocketFrame; const Info: RawUtf8); override;
     procedure FrameCompress(const Head: RawUtf8; const Values: array of const;
       const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
         virtual; abstract;
@@ -501,7 +501,7 @@ type
       var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrames(Sender: TWebSocketProcess; P, PMax: PByte);
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); override;
+      var Request: TWebSocketFrame; const Info: RawUtf8); override;
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
   public
@@ -981,7 +981,7 @@ type
   protected
     fOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); override;
+      var Request: TWebSocketFrame; const Info: RawUtf8); override;
   public
     /// initialize the chat protocol with an incoming frame callback
     constructor Create(const aName, aUri: RawUtf8;
@@ -1024,6 +1024,11 @@ var
 type
   /// define the Engine.IO available packet types
   // - defined in their numeric order, so ord() would give the proper ID number
+  // - eioOpen (0) is used during the handshake
+  // - eioClose (1) indicates that a transport can be closed
+  // - eioPing (2) and eioPong (3) implement a heartbeat mechanism
+  // - eioMessage (4) sends a payload to the other side
+  // - eioUpgrade (5) and eioNoop (6) are used during the upgrade process
   TEngineIOPacket = (
    eioOpen,
    eioClose,
@@ -1032,10 +1037,17 @@ type
    eioMessage,
    eioUpgrade,
    eioNoop);
+  PEngineIOPacket = ^TEngineIOPacket;
 
   /// define the Socket.IO available packet types
   // - defined in their numeric order, so ord() would give the proper ID number
   // - such packets are likely to be nested in a eioMessage frame
+  // - sioOpen (0) and sioConnectError (4) are used during connection to a namespace
+  // - sioDisconnect (1) is used when disconnecting from a namespace
+  // - sioEvent (2) is used to send data to the other side
+  // - sioAck (3) is used to acknowledge an event
+  // - sioBinaryEvent (5) is used to send binary data to the other side
+  // - sioBinaryAck (6) is used to acknowledge an event with a binary response
   TSocketIOPacket = (
     sioOpen,
     sioDisconnect,
@@ -1044,6 +1056,7 @@ type
     sioConnectError,
     sioBinaryEvent,
     sioBinaryAck);
+  PSocketIOPacket = ^TSocketIOPacket;
 
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
@@ -1063,6 +1076,9 @@ type
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
+  // - properties do contain the values of a typical connection response like
+  // ${"sid":"dwy_mNoFzsrMlhINAAAA","upgrades":[],"pingTimeout":20000,"pingInterval":25000}
+  // - since we only implement WebSocket, "upgrades" is expected to be always void
   TEngineIOAbstract = class(TSynPersistent)
   protected
     fSafe: TLightLock;
@@ -1071,28 +1087,33 @@ type
     fPingInterval, fPingTimeout, fMaxPayload: integer;
     fNameSpaces: TRawUtf8DynArray;
   public
-    /// initialize this class instance with some default values
+    /// initialize this class instance with some default values on server side
     constructor Create; override;
   published
     /// the associated Engine.IO Session ID
-    // - as computed on the server side, and received on client side
+    // - as computed on the server side, and received on client side as "sid"
+    // - is typically a base-64 encoded binary like 'dwy_mNoFzsrMlhINAAAA'
     property EngineSid: RawUtf8
       read fEngineSid;
-    /// the protocol version used by this class, as used for EIO=? parmeter
+    /// the protocol version used by this class, as used for EIO=? parameter
     // - is currently fixed to 4
     property Version: integer
       read fVersion;
-    /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
-    // - ping packets are now sent by the server, since protocol v4
-    // - default value is 20000, i.e. 20 seconds
-    property PingInterval: integer
-      read fPingInterval write fPingInterval;
     /// the ping timeout, used in Engine.IO heartbeat mechanism (in milliseconds)
-    // - default value is 25000, i.e. 25 seconds
+    // - ping packets are now sent by the server, since protocol v4
+    // - as computed on the server side, and received on client side as "pingTimeout"
+    // - default value is 20000, i.e. 20 seconds
     property PingTimeout: integer
       read fPingTimeout write fPingTimeout;
+    /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
+    // - ping packets are now sent by the server, since protocol v4
+    // - as computed on the server side, and received on client side as "pingInterval"
+    // - default value is 25000, i.e. 25 seconds
+    property PingInterval: integer
+      read fPingInterval write fPingInterval;
     /// optional number of bytes per chunk, used in Engine.IO payloads mechanism
-    // - default value is 0, meaning no
+    // - as computed on the server side, and received on client side as "maxPayload"
+    // - default value is 0, meaning no limitation is requested
     property MaxPayload: integer
       read fMaxPayload write fMaxPayload;
   end;
@@ -1109,10 +1130,10 @@ type
       read fOwner;
   published
     /// the associated Socket.IO Session ID, as computed on the server side
-    // - default namespace is '/'
     property Sid: RawUtf8
       read fSid;
-    /// the associated Socket.IO Session ID, as computed on the server side
+    /// the associated namespace, as established between client and server
+    // - default namespace is '/'
     property NameSpace: RawUtf8
       read fNameSpace;
   end;
@@ -1571,7 +1592,7 @@ end;
 { TWebSocketProtocolRest }
 
 procedure TWebSocketProtocolRest.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame; const info: RawUtf8);
+  var Request: TWebSocketFrame; const Info: RawUtf8);
 var
   Ctxt: THttpServerRequestAbstract;
   onRequest: TOnHttpServerRequest;
@@ -1580,25 +1601,25 @@ var
   answer: TWebSocketFrame;
   head: RawUtf8;
 begin
-  if not (request.opcode in [focText, focBinary]) then
+  if not (Request.opcode in [focText, focBinary]) then
     exit; // ignore e.g. from ProcessStart/ProcessStop
-  if FrameData(request, 'r', @head) <> nil then
+  if FrameData(Request, 'r', @head) <> nil then
   try
-    // regular HTTP-like request from client
+    // regular HTTP-like Request from client
     Ctxt := Sender.ComputeContext(onRequest);
     try
-      // prepare the HTTP request from input frame
+      // prepare the HTTP Request from input frame
       if (Ctxt = nil) or
          (not Assigned(onRequest)) then
         EWebSockets.RaiseUtf8('%.ProcessOne: onRequest=nil', [self]);
       if (head = '') or
-         not FrameToInput(request, noAnswer, Ctxt) then
+         not FrameToInput(Request, noAnswer, Ctxt) then
         EWebSockets.RaiseUtf8('%.ProcessOne: invalid frame', [self]);
-      request.payload := ''; // release memory ASAP
+      Request.payload := ''; // release memory ASAP
       if fUpgradeBearerToken <> '' then
         Ctxt.AuthBearer := fUpgradeBearerToken; // re-pass the HTTP bearer
-      if info <> '' then
-        Ctxt.AddInHeader(info);  // include JUMBO_INFO[] custom header
+      if Info <> '' then
+        Ctxt.AddInHeader(Info);  // include JUMBO_INFO[] custom header
       // compute the HTTP answer from the main HTTP server
       status := onRequest(Ctxt);
       if noAnswer or
@@ -1616,14 +1637,14 @@ begin
       FormatString('% [%]', [E, E.Message], fLastError);
   end
   else if (Sender.fIncoming.AnswerToIgnore > 0) and
-          (FrameData(request, 'answer') <> nil) then
+          (FrameData(Request, 'answer') <> nil) then
   begin
     Sender.fIncoming.AnswerToIgnore(-1);
-    Sender.Log(request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
+    Sender.Log(Request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
   end
   else
     // e.g. async 'answer' to store in the internal incoming frames list
-    Sender.fIncoming.Push(request, 0);
+    Sender.fIncoming.Push(Request, 0);
 end;
 
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequestAbstract;
@@ -2195,15 +2216,15 @@ begin
 end;
 
 procedure TWebSocketProtocolBinary.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
+  Sender: TWebSocketProcess; var Request: TWebSocketFrame; const Info: RawUtf8);
 var
   P, PMax: PByte;
 begin
-  P := FrameData(request, 'frames', nil, @PMax);
+  P := FrameData(Request, 'frames', nil, @PMax);
   if P <> nil then
     ProcessIncomingFrames(Sender, P, PMax)
   else
-    inherited ProcessIncomingFrame(Sender, request, info);
+    inherited ProcessIncomingFrame(Sender, Request, Info);
 end;
 
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;
@@ -3375,11 +3396,11 @@ begin
 end;
 
 procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame; const info: RawUtf8);
+  var Request: TWebSocketFrame; const Info: RawUtf8);
 begin
   if Assigned(OnInComingFrame) then
   try
-    OnIncomingFrame(Sender, request);
+    OnIncomingFrame(Sender, Request);
   except
     // ignore any exception in the callback
   end;
