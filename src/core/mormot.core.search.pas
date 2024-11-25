@@ -116,15 +116,17 @@ procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
 
 
 type
-  /// one optional feature of SynchFolders()
+  /// one optional feature of SynchFolders() and CopyFolder()
   // - process recursively nested folders if sfoSubFolder is included
   // - use file content instead of file date check if sfoByContent is included
   // - display synched file name on console if sfoWriteFileNameToConsole is included
+  // - sfoIncludeHiddenFiles will synchronize also hidden files (on Windows)
   TSynchFoldersOption = (
     sfoSubFolder,
     sfoByContent,
-    sfoWriteFileNameToConsole);
-  /// the optional features of SynchFolders()
+    sfoWriteFileNameToConsole,
+    sfoIncludeHiddenFiles);
+  /// the optional features of SynchFolders() and CopyFolder()
   TSynchFoldersOptions = set of TSynchFoldersOption;
 
 /// ensure all files in Dest folder(s) do match the one in Reference
@@ -1819,7 +1821,7 @@ begin
      (FindFirst(dst + FILES_ALL, faAnyFile, fdst) = 0) then
   begin
     repeat
-      if SearchRecValidFile(fdst) then
+      if SearchRecValidFile(fdst, sfoIncludeHiddenFiles in Options) then
       begin
         reffn := ref + fdst.Name;
         if not FileInfoByName(reffn, refsize, reftime) then
@@ -1869,7 +1871,7 @@ begin
   repeat
     reffn := src + sr.Name;
     dstfn := dst + sr.Name;
-    if SearchRecValidFile(sr) then
+    if SearchRecValidFile(sr, sfoIncludeHiddenFiles in Options) then
     begin
       if FileInfoByName(dstfn, dsize, dtime) and // fast single syscall
          (sr.Size = dsize) then
