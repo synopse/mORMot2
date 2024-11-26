@@ -1068,9 +1068,10 @@ type
     NameSpace: PUtf8Char;
     DataLen: PtrInt;
     Data: PUtf8Char;
-    ID: cardinal;
     PacketType: TSocketIOPacket;
     DataBinary: boolean;
+    ID: cardinal;
+    BinaryAttachment: cardinal;
     /// decode a Socket.IO raw packet into its message fields
     // - returns true on success, false if the input PayLoad is incorrect
     function Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
@@ -3590,6 +3591,8 @@ end;
 
 function TSocketIOMessage.Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
   PayLoadBinary: boolean): boolean;
+var
+  v: PtrUInt;
 begin
   result := false;
   if (PayLoad = nil) or
@@ -3601,17 +3604,41 @@ begin
   NameSpaceLen := 1;
   NameSpace := pointer(DefaultNameSpace);
   ID := 0;
+  BinaryAttachment := 0;
   inc(PayLoad);
   dec(PayLoadLen);
   if PayLoadLen <> 0 then
   begin
-    if PayLoad^ = '/' then
+    if PayLoad^ in ['1' ..'9'] then
+    begin
+      v := 0;
+      repeat
+        v := (v * 10) + PtrUInt(ord(PayLoad^) - ord('0'));
+        inc(PayLoad);
+        dec(PayLoadLen);
+      until (PayLoadLen = 0) or
+            not (PayLoad^ in ['0'..'9']);
+      if PayLoad^ = '-' then
+      begin
+        BinaryAttachment := v;
+        inc(PayLoad);
+        dec(PayLoadLen);
+      end
+      else
+        ID := v;
+    end;
+    if (PayLoadLen <> 0) and
+       (PayLoad^ = '/') then
     begin
       NameSpace := PayLoad;
-      while not (PayLoad[NameSpaceLen] in [#0, ',']) do
-        inc(NameSpacelen);
-      inc(PayLoad, NameSpacelen);
-      dec(PayLoadLen, NameSpacelen);
+      while not (PayLoad^ in [#0, ',']) do
+      begin
+        inc(PayLoad);
+        dec(PayLoadLen);
+        if PayLoadLen = 0 then
+          break;
+      end;
+      NameSpacelen := PayLoad - NameSpace;
       if PayLoad^ = ',' then
       begin
         inc(PayLoad);
@@ -3619,13 +3646,14 @@ begin
       end;
     end;
   end;
-  while (PayLoadLen <> 0) and
-        (PayLoad^ in ['0'..'9']) do
-  begin
-    ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
-    inc(PayLoad);
-    dec(PayLoadLen);
-  end;
+  if ID = 0 then
+    while (PayLoadLen <> 0) and
+          (PayLoad^ in ['0'..'9']) do
+    begin
+      ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
+      inc(PayLoad);
+      dec(PayLoadLen);
+    end;
   if PayLoadLen = 0 then
     PayLoad := nil;
   Data := PayLoad;
