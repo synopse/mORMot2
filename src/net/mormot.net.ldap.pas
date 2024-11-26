@@ -3654,7 +3654,8 @@ end;
 
 procedure TLdapAttribute.AfterAdd;
 begin
-  if fList <> nil then
+  if (fList <> nil) and
+     (fCount <> 0) then
     DynArrayFakeLength(fList, fCount);
 end;
 
@@ -4335,7 +4336,8 @@ end;
 
 procedure TLdapResultList.AfterAdd;
 begin
-  if fItems <> nil then
+  if (fItems <> nil) and
+     (fCount <> 0) then
     DynArrayFakeLength(fItems, fCount);
 end;
 
