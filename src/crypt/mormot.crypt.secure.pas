@@ -7677,7 +7677,7 @@ var
        (FindFirst(DirName + '*', faDirectory, F) = 0) then
     begin
       repeat
-        if SearchRecValidFolder(F) then
+        if SearchRecValidFolder(F, {includehidden=}true) then
           SearchFolder(IncludeTrailingPathDelimiter(DirName + F.Name));
       until FindNext(F) <> 0;
       FindClose(F);

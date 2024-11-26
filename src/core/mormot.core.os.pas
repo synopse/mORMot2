@@ -1177,7 +1177,8 @@ type
     clkOption,
     clkParam);
 
-  /// implements command-line arguments parsing e.g. for TExecutable.Command
+  /// implements command-line arguments parsing
+  // - in practice, is accessible via the Executable.Command global instance
   // - call Arg() Options() and Get/Param() to define and retrieve the flags
   // from their names and supply some description text, then call
   // DetectUnknown and/or FullDescription to interact with the user
@@ -1309,7 +1310,7 @@ type
     // - the parameter <name> would be extracted from any #word in the
     // description text,
     // - for instance:
-    // ! with Executable.Command do // you may better use a local variable
+    // ! with Executable.Command do // or use a local variable
     // ! begin
     // !   ExeDescription := 'An executable to test mORMot Execute.Command';
     // !   verbose := Option('&verbose', 'generate verbose output');
