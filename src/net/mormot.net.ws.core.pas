@@ -3631,29 +3631,28 @@ begin
        (PayLoad^ = '/') then
     begin
       NameSpace := PayLoad;
-      while not (PayLoad^ in [#0, ',']) do
-      begin
+      repeat
         inc(PayLoad);
         dec(PayLoadLen);
-        if PayLoadLen = 0 then
-          break;
-      end;
+      until (PayLoadLen = 0) or
+            (PayLoad^ = ',');
       NameSpacelen := PayLoad - NameSpace;
-      if PayLoad^ = ',' then
+      if (PayLoadLen <> 0) and
+         (PayLoad^ = ',') then
       begin
         inc(PayLoad);
         dec(PayLoadLen);
       end;
     end;
+    if ID = 0 then
+      while (PayLoadLen <> 0) and
+            (PayLoad^ in ['0'..'9']) do
+      begin
+        ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
+        inc(PayLoad);
+        dec(PayLoadLen);
+      end;
   end;
-  if ID = 0 then
-    while (PayLoadLen <> 0) and
-          (PayLoad^ in ['0'..'9']) do
-    begin
-      ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
-      inc(PayLoad);
-      dec(PayLoadLen);
-    end;
   if PayLoadLen = 0 then
     PayLoad := nil;
   Data := PayLoad;
