@@ -1119,6 +1119,8 @@ type
     /// open and extract file information from the executable FileName
     // - note that resource extraction is not available on POSIX, unless the
     // FPCUSEVERSIONINFO conditional has been specified in the project options
+    // - for the main executable, don't call from Executable.Version, but just
+    // run GetExecutableVersion global procedure instead
     function RetrieveInformationFromFileName: boolean;
     /// retrieve the version as a 32-bit integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
