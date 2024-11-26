@@ -3320,11 +3320,9 @@ function SearchRecToWindowsTime(const F: TSearchRec): integer;
 /// check if a FindFirst/FindNext found instance is actually a file
 // - on Windows, hidden files are ignored by default unless IncludeHidden is true
 function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean = false): boolean;
-  {$ifdef FPC}inline;{$endif}
 
 /// check if a FindFirst/FindNext found instance is actually a folder
 function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean = false): boolean;
-  {$ifdef FPC}inline;{$endif}
 
 type
   /// FPC TFileStream miss a Create(aHandle) constructor like Delphi
@@ -6580,6 +6578,29 @@ function SearchRecToDateTimeUtc(const F: TSearchRec): TDateTime;
 begin
   result := SearchRecToUnixTimeUtc(F) / Int64(SecsPerDay) + Int64(UnixDelta);
 end;
+
+const
+  // faHidden is supported by the FPC RTL on POSIX, by checking an initial '.'
+  faInvalid = faDirectory + {$ifdef OSWINDOWS} faVolumeID{%H-} + {$endif} faSysFile{%H-};
+
+function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean): boolean;
+begin
+  result := (F.Name <> '') and
+            (F.Attr and faInvalid = 0) and
+            (IncludeHidden or
+             (F.Attr and faHidden{%H-} = 0));
+end;
+
+function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean): boolean;
+begin
+  result := (F.Attr and faDirectory <> 0) and
+            (IncludeHidden or
+             (F.Attr and faHidden{%H-} = 0)) and
+            (F.Name <> '') and
+            (F.Name <> '.') and
+            (F.Name <> '..');
+end;
+
 
 
 { TFileStreamFromHandle }

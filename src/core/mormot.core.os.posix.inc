@@ -1137,24 +1137,6 @@ var
 
 {$endif NOEXCEPTIONINTERCEPT}
 
-const
-  faInvalidFile   = faDirectory;
-  faDirectoryMask = faDirectory;
-
-function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean): boolean;
-begin // IncludeHidden is just ignored on POSIX
-  result := (F.Name <> '') and
-            (cardinal(F.Attr) and faInvalidFile = 0);
-end;
-
-function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean): boolean;
-begin
-  result := (F.Attr and faDirectoryMask = faDirectory) and
-            (F.Name <> '') and
-            (F.Name <> '.') and
-            (F.Name <> '..');
-end;
-
 function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
 begin
   if FileDate <= 0 then
