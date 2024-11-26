@@ -882,6 +882,8 @@ type
     aoNoDuplicateValue);
 
   /// customize TLdapResult.SearchAll/TLdapResultList.AppendTo output
+  // - roTypesOnly will set "TypeOnly=true" for all Search() calls
+  // - roSortByName will sort the TDocVariant resultset by its (nested) fields
   // - roNoDCAtRoot, roObjectNameAtRoot, roObjectNameWithoutDCAtRoot,
   // roCanonicalNameAtRoot and roCommonNameAtRoot will define how the object is
   // inserted and named in the output hierarchy - those options are exclusive
@@ -894,6 +896,8 @@ type
   // - roRawUac/roRawFlags/roRawGroupType/roRawAccountType disable decoding of
   // of atUserAccountControl/atSystemFlags/atGoupType/atAccountType values
   TLdapResultOptions = set of (
+    roTypesOnly,
+    roSortByName,
     roNoDCAtRoot,
     roObjectNameAtRoot,
     roObjectNameWithoutDCAtRoot,
@@ -1716,10 +1720,10 @@ type
     // - attributes would be added as ObjectAttributeField (e.g. '_attr') fields,
     // unless ObjectAttributeField is '', and no attribute will be added, or
     // ObjectAttributeField is '*', and attributes are written as no sub-field
-    function SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
+    function SearchAll(const BaseDN: RawUtf8;
       const Filter: RawUtf8; const Attributes: array of RawUtf8;
       Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '_attr';
-      MaxCount: integer = 0; SortByName: boolean = true): variant; overload;
+      MaxCount: integer = 0): variant; overload;
     /// retrieve all entries that match a given set of criteria
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function Search(const Attributes: TLdapAttributeTypes;
@@ -1754,8 +1758,7 @@ type
     function SearchAll(const Attributes: TLdapAttributeTypes;
       const Filter: RawUtf8; Options: TLdapResultOptions;
       const ObjectAttributeField: RawUtf8 = '_attr';
-      const BaseDN: RawUtf8 = ''; MaxCount: integer = 0;
-      SortByName: boolean = true; TypesOnly: boolean = false): variant; overload;
+      const BaseDN: RawUtf8 = ''; MaxCount: integer = 0): variant; overload;
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
 
@@ -5837,10 +5840,10 @@ begin
     result := SearchObject(ObjectDN, Filter, AttrTypeName[Attribute], Scope);
 end;
 
-function TLdapClient.SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
+function TLdapClient.SearchAll(const BaseDN: RawUtf8;
   const Filter: RawUtf8; const Attributes: array of RawUtf8;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
-  MaxCount: integer; SortByName: boolean): variant;
+  MaxCount: integer): variant;
 var
   n: integer;
 begin
@@ -5849,7 +5852,7 @@ begin
   n := 0;
   SearchCookie := '';
   repeat
-    if not Search(BaseDN, TypesOnly, Filter, Attributes) then
+    if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
       break;
     SearchResult.AppendTo(TDocVariantData(result), Options, ObjectAttributeField);
     inc(n, SearchResult.Count);
@@ -5857,7 +5860,7 @@ begin
         ((MaxCount > 0) and
          (n > MaxCount));
   SearchCookie := '';
-  if SortByName then
+  if roSortByName in Options then
     TDocVariantData(result).SortByName(nil, {reverse=}false, {nested=}true);
 end;
 
@@ -5896,10 +5899,10 @@ end;
 function TLdapClient.SearchAll(const Attributes: TLdapAttributeTypes;
   const Filter: RawUtf8; Options: TLdapResultOptions;
   const ObjectAttributeField, BaseDN: RawUtf8;
-  MaxCount: integer; SortByName, TypesOnly: boolean): variant;
+  MaxCount: integer): variant;
 begin
-  result := SearchAll(DefaultDN(BaseDN), TypesOnly, Filter, ToText(Attributes),
-              Options, ObjectAttributeField, MaxCount, SortByName);
+  result := SearchAll(DefaultDN(BaseDN), Filter, ToText(Attributes),
+              Options, ObjectAttributeField, MaxCount);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-compare
