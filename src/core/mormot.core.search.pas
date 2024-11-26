@@ -1692,7 +1692,7 @@ var
       FindClose(F);
     end;
     if (ffoSubFolder in Options) and
-       (FindFirst(fold + '*', faDirectory, F) = 0) then
+       (FindFirstDirectory(fold + '*', ffoIncludeHiddenFiles in Options, F) = 0) then
     begin
       // recursive SearchFolder() call for nested directories
       repeat
@@ -1891,7 +1891,7 @@ begin
     begin
       nested := CopyFolder(reffn, dstfn, Options);
       if nested < 0 then
-        result := nested
+        result := nested // propagate error
       else
         inc(result, nested);
     end;

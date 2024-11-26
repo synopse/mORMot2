@@ -7674,7 +7674,7 @@ var
       FindClose(F);
     end;
     if Recursive and
-       (FindFirst(DirName + '*', faDirectory, F) = 0) then
+       (FindFirstDirectory(DirName + '*', {includehidden=}true, F) = 0) then
     begin
       repeat
         if SearchRecValidFolder(F, {includehidden=}true) then

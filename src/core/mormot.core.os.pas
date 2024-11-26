@@ -3324,6 +3324,10 @@ function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean = false)
 /// check if a FindFirst/FindNext found instance is actually a folder
 function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean = false): boolean;
 
+/// just a wrapper around FindFirst() with proper faHidden support
+function FindFirstDirectory(const Path: TFileName; IncludeHidden: boolean;
+    out F: TSearchRec): integer;
+
 type
   /// FPC TFileStream miss a Create(aHandle) constructor like Delphi
   TFileStreamFromHandle = class(THandleStream)
@@ -6601,6 +6605,14 @@ begin
             (F.Name <> '..');
 end;
 
+function FindFirstDirectory(const Path: TFileName; IncludeHidden: boolean;
+  out F: TSearchRec): integer;
+begin
+  result := faDirectory;
+  if IncludeHidden then
+    result := result or faHidden{%H-};
+  result := FindFirst(Path, result, F);
+end;
 
 
 { TFileStreamFromHandle }
