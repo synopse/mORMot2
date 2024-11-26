@@ -1147,6 +1147,14 @@ begin // IncludeHidden is just ignored on POSIX
             (cardinal(F.Attr) and faInvalidFile = 0);
 end;
 
+function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean): boolean;
+begin
+  result := (F.Attr and faDirectoryMask = faDirectory) and
+            (F.Name <> '') and
+            (F.Name <> '.') and
+            (F.Name <> '..');
+end;
+
 function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
 begin
   if FileDate <= 0 then

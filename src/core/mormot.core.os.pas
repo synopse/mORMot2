@@ -3320,8 +3320,8 @@ function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean = false)
   {$ifdef FPC}inline;{$endif}
 
 /// check if a FindFirst/FindNext found instance is actually a folder
-function SearchRecValidFolder(const F: TSearchRec): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean = false): boolean;
+  {$ifdef FPC}inline;{$endif}
 
 type
   /// FPC TFileStream miss a Create(aHandle) constructor like Delphi
@@ -6441,7 +6441,7 @@ begin
    if SearchRecValidFile(sr, {includehidden=}true) then
      inc(result, sr.Size)
    else if Recursive and
-           SearchRecValidFolder(sr) then
+           SearchRecValidFolder(sr, {includehidden=}true) then
      inc(result, DirectorySize(dir + sr.Name, true));
   until FindNext(sr) <> 0;
   FindClose(sr);
@@ -6578,13 +6578,6 @@ begin
   result := SearchRecToUnixTimeUtc(F) / Int64(SecsPerDay) + Int64(UnixDelta);
 end;
 
-function SearchRecValidFolder(const F: TSearchRec): boolean;
-begin
-  result := (F.Attr and faDirectoryMask = faDirectory) and
-            (F.Name <> '') and
-            (F.Name <> '.') and
-            (F.Name <> '..');
-end;
 
 { TFileStreamFromHandle }
 
