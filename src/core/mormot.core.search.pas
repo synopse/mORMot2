@@ -1680,7 +1680,7 @@ var
             ((IgnoreFileName = '') or
              (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0))) or
            ((ffoIncludeFolder in Options) and
-            SearchRecValidFolder(F)) then
+            SearchRecValidFolder(F, ffoIncludeHiddenFiles in Options)) then
         begin
           if ffoExcludesDir in Options then
             ff.FromSearchRec(folder, F)
@@ -1696,7 +1696,7 @@ var
     begin
       // recursive SearchFolder() call for nested directories
       repeat
-        if SearchRecValidFolder(F) and
+        if SearchRecValidFolder(F, ffoIncludeHiddenFiles in Options) and
            ((IgnoreFileName = '') or
             (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
           SearchFolder(IncludeTrailingPathDelimiter(folder + F.Name));
@@ -1844,7 +1844,7 @@ begin
           ConsoleWriteRaw(['synched ', dstfn]);
       end
       else if (sfoSubFolder in Options) and
-              SearchRecValidFolder(fdst) then
+              SearchRecValidFolder(fdst, sfoIncludeHiddenFiles in Options) then
         inc(result, SynchFolders(ref + fdst.Name, dst + fdst.Name, Options));
     until FindNext(fdst) <> 0;
     FindClose(fdst);
@@ -1885,7 +1885,7 @@ begin
       if not CopyFile(reffn, dstfn, {failsifexists=}false) then
         result := -1;
     end
-    else if not SearchRecValidFolder(sr) then
+    else if not SearchRecValidFolder(sr, sfoIncludeHiddenFiles in Options) then
       continue
     else if sfoSubFolder in Options then
     begin
