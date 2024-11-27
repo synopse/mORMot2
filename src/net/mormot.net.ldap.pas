@@ -941,11 +941,13 @@ type
       Option: TLdapAddOption = aoAlways); overload;
     /// include a new formatted text value to this list
     procedure AddFmt(const aValueFmt: RawUtf8; const aValueArgs: array of const;
-      Option: TLdapAddOption = aoAlways); 
+      Option: TLdapAddOption = aoAlways);
     /// ensure Count = length(fItems) to allow proper "for res in Items do"
     // - is called e.g. by TLdapClient.Search after all its Add()
     procedure AfterAdd;
       {$ifdef HASINLINE} inline; {$endif}
+    /// include new values to this list from another instance
+    procedure AddFrom(Another: TLdapAttribute);
     /// retrieve a value as human-readable text
     // - wraps AttributeValueMakeReadable() and the known storage type
     function GetReadable(index: PtrInt = 0): RawUtf8; overload;
@@ -3667,6 +3669,18 @@ begin
   if (fList <> nil) and
      (fCount <> 0) then
     DynArrayFakeLength(fList, fCount);
+end;
+
+procedure TLdapAttribute.AddFrom(Another: TLdapAttribute);
+var
+  i: PtrInt;
+begin
+  if (Another = nil) or
+     (Another.Count = 0) then
+    exit;
+  SetLength(fList, fCount + Another.Count); // like AfterAdd
+  for i := 0 to Another.Count - 1 do
+    fList[fCount + i] := Another.fList[i];
 end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
