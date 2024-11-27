@@ -4596,10 +4596,10 @@ end;
 
 procedure TLdapResultList.MergePagedAttributes(Source: TLdapResultList);
 var
-  r, a, p, f: PtrInt;
+  r, a, p: PtrInt;
   main: RawUtf8;
   res, er: TLdapResult;
-  att, ea: TLdapAttribute;
+  att, em, ea: TLdapAttribute;
 begin
   // see https://evetsleep.github.io/activedirectory/2016/08/06/PagingMembers.html
   for r := 0 to Source.Count - 1 do
@@ -4614,10 +4614,10 @@ begin
       p := PosEx(';range=', att.AttributeName);
       if p = 0 then
         continue;
-      main := copy(att.AttributeName, 1, p - 1); // trim ';range=...'
-      f := res.Attributes.FindIndex(main);
-      if (f < 0) or
-         (res.Attributes.Items[f].Count <> 0) then
+      main := copy(att.AttributeName, 1, p - 1); // trim ';range=...' into ###
+      em := res.Attributes.Find(main);
+      if (em = nil) or
+         (em.Count <> 0) then
         continue; // was a regular '###;range=...' request, not a paged attribute
       // create or update any existing partial results
       ea := nil;
@@ -4628,8 +4628,8 @@ begin
         ea := er.Attributes.Find(main);
       if ea = nil then
         ea := er.Attributes.Add(main);
-      ea.AddFrom(att); // att values are now in self
-      res.Attributes.Delete(a); // never include 'member;range=0-1499' directly
+      ea.AddFrom(att); // att values are now in self ###
+      res.Attributes.Delete(a); // never include '###;range=0-1499' directly
     end;
   end;
 end;
