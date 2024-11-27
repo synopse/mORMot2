@@ -775,13 +775,13 @@ var
   c: cardinal;
   withntp: boolean;
   guid: TGuid;
-  i, j, k: PtrInt;
+  i, j, k, n: PtrInt;
   dns, clients, a: TRawUtf8DynArray;
   le: TLdapError;
   rl, rl2: TLdapResultList;
   r: TLdapResult;
   at: TLdapAttributeType;
-  ats: TLdapAttributeTypes;
+  ats, ats2: TLdapAttributeTypes;
   sat: TSamAccountType;
   gt: TGroupType;
   gts: TGroupTypes;
@@ -1040,6 +1040,8 @@ begin
   CheckEqual(RawLdapTranslateFilter('(toto)', {noraise=}true), '');
   CheckEqual(RawLdapTranslateFilter('x', {noraise=}true), '');
   // validate LDAP attributes definitions
+  n := 0;
+  ats2 := [];
   for at := low(at) to high(at) do
   begin
     CheckEqual(ToText(at), AttrTypeName[at]);
@@ -1052,6 +1054,12 @@ begin
     begin
       CheckEqual(length(a), 1);
       CheckEqual(a[0], ToText(at));
+      include(ats2, at);
+      inc(n);
+      a := ToText(ats2);
+      CheckEqual(length(a), n);
+      for i := 0 to n - 1 do
+        CheckEqual(a[i], ToText(TLdapAttributeType(i + 1)));
     end;
   end;
   for i := low(AttrTypeNameAlt) to high(AttrTypeNameAlt) do
