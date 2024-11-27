@@ -1015,6 +1015,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
+    procedure AfterModify;
   public
     /// initialize the attribute list with some type/value pairs
     constructor Create(const Types: array of TLdapAttributeType;
@@ -1055,7 +1056,9 @@ type
     function GetByName(const AttributeName: RawUtf8): RawUtf8; 
     /// remove one TLdapAttribute object from the list
     procedure Delete(AttributeType: TLdapAttributeType); overload;
-    /// find and return attribute index with the requested attribute type
+     /// remove one TLdapAttribute object from the list
+    procedure Delete(Index: integer); overload;
+   /// find and return attribute index with the requested attribute type
     // - returns -1 if not found
     // - faster than overloaded FindIndex(AttributeName)
     function FindIndex(AttributeType: TLdapAttributeType): PtrInt; overload;
@@ -1715,8 +1718,8 @@ type
     function SearchObject(const ObjectDN, Filter, Attribute: RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapAttribute; overload;
     /// retrieve all pages of entries into a TDocVariant instance
-    // - will contain the nested results as an object, generated from then
-    // CN of the returned object names
+    // - will contain the nested results as an object, generated from the
+    // returned object canonical names
     // - attributes would be added as ObjectAttributeField (e.g. '_attr') fields,
     // unless ObjectAttributeField is '', and no attribute will be added, or
     // ObjectAttributeField is '*', and attributes are written as no sub-field
@@ -3912,7 +3915,7 @@ begin
   fCount := 0;
   fLastFound := 0;
   fKnownTypes := [];
-  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
+  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0); // store index+1
 end;
 
 procedure TLdapAttributeList.AssignTo(Dest: TClonable);
@@ -4092,12 +4095,39 @@ end;
 
 procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
 begin
-  PtrArrayDelete(fItems, FindIndex(AttributeName), @fCount, pakClass);
+  Delete(FindIndex(AttributeName));
 end;
 
 procedure TLdapAttributeList.Delete(AttributeType: TLdapAttributeType);
 begin
-  PtrArrayDelete(fItems, FindIndex(AttributeType), @fCount, pakClass);
+  Delete(FindIndex(AttributeType));
+end;
+
+procedure TLdapAttributeList.Delete(Index: integer);
+begin
+  if cardinal(Index) >= cardinal(fCount) then
+    exit;
+  PtrArrayDelete(fItems, Index, @fCount, pakClass);
+  AfterModify;
+end;
+
+procedure TLdapAttributeList.AfterModify;
+var
+  i: integer;
+  a: ^TLdapAttribute;
+  at: TLdapAttributeType;
+begin
+  fKnownTypes := [];
+  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
+  a := pointer(fItems);
+  for i := 1 to MinPtrInt(fCount, 255) do // brute force is fast enough
+  begin
+    at := a^.KnownType;
+    include(fKnownTypes, at);
+    if at <> atUndefined then
+      fIndexTypes[at] := i; // store index + 1
+    inc(a);
+  end;
 end;
 
 procedure TLdapAttributeList.SetAttr(
