@@ -1186,6 +1186,9 @@ type
     procedure AssignTo(Dest: TClonable); override;
     procedure SetObjectName(const Value: RawUtf8);
     function GetAttr(AttributeType: TLdapAttributeType): RawUtf8;
+    function AppendToLocate(var Dvo: TDocVariantData;
+      var last: PDocVariantData; var lastdc: TRawUtf8DynArray;
+      Options: TLdapResultOptions): PDocVariantData;
   public
     /// initialize the instance
     constructor Create; override;
@@ -4275,6 +4278,48 @@ begin
   end;
 end;
 
+function TLdapResult.AppendToLocate(var Dvo: TDocVariantData;
+  var last: PDocVariantData; var lastdc: TRawUtf8DynArray;
+  Options: TLdapResultOptions): PDocVariantData;
+var
+  dc, ou, cn: TRawUtf8DynArray;
+  j: PtrInt;
+begin
+  result := @Dvo;
+  if (roObjectNameAtRoot in Options) or
+     not ParseDN(fObjectName, dc, ou, cn, {esc=}false, {noraise=}true) then
+  begin
+    result := result^.O_[fObjectName];
+    exit;
+  end;
+  if [roWithCanonicalName, roCanonicalNameAtRoot] * Options <> [] then
+    if fCanonicalName = '' then
+      fCanonicalName := DNsToCN(dc, ou, cn); // compute know from parsed DN
+  if roObjectNameWithoutDCAtRoot in Options then
+    result := result^.O_[DNsToCN(nil, ou, cn)]
+  else if roCanonicalNameAtRoot in Options then
+    result := result^.O_[fCanonicalName]
+  else if roCommonNameAtRoot in Options then
+    result := result^.O_[RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true)]
+  else
+  begin
+    if dc <> nil then
+      if not (roNoDCAtRoot in Options) then
+        if RawUtf8DynArrayEquals(dc, lastdc) then
+          result := last // no need to re-check this DC path
+        else
+        begin
+          result := result^.O_[RawUtf8ArrayToCsv(dc, '.')];
+          lastdc := dc;
+          last := result;
+        end;
+    for j := high(ou) downto 0 do
+      result := result^.O_[ou[j]];
+    for j := high(cn) downto 0 do
+      result := result^.O_[cn[j]];
+  end;
+end;
+
 procedure TLdapResult.ExportToLdif(w: TTextWriter);
 var
   i: PtrInt;
@@ -4493,17 +4538,9 @@ var
   attr: ^TLdapAttribute;
   dom: PSid;
   uuid: TAppendShortUuid;
-  dc, ou, cn, lastdc: TRawUtf8DynArray;
+  lastdc: TRawUtf8DynArray;
   a: TDocVariantData;
   v, last: PDocVariantData;
-
-  function ComputeCanonicalName: RawUtf8;
-  begin
-    if res.fCanonicalName = '' then
-      res.fCanonicalName := DNsToCN(dc, ou, cn);
-    result := res.fCanonicalName;
-  end;
-
 begin
   if ord(roNoDCAtRoot in Options) +
      ord(roObjectNameAtRoot in Options) +
@@ -4526,36 +4563,7 @@ begin
     res := Items[i];
     if res.ObjectName = '' then
       continue; // malformed data - a primary key is required
-    v := @Dvo;
-    if (roObjectNameAtRoot in Options) or
-       not ParseDN(res.ObjectName, dc, ou, cn, {esc=}false, {noraise=}true) then
-      v := v^.O_[res.ObjectName]
-    else
-    begin
-      if roObjectNameWithoutDCAtRoot in Options then
-        v := v^.O_[DNsToCN(nil, ou, cn)]
-      else if roCanonicalNameAtRoot in Options then
-        v := v^.O_[ComputeCanonicalName]
-      else if roCommonNameAtRoot in Options then
-        v := v^.O_[RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true)]
-      else
-      begin
-        if dc <> nil then
-          if not (roNoDCAtRoot in Options) then
-            if RawUtf8DynArrayEquals(dc, lastdc) then
-              v := last // no need to check the path
-            else
-            begin
-              v := v^.O_[RawUtf8ArrayToCsv(dc, '.')];
-              lastdc := dc;
-              last := v;
-            end;
-        for j := high(ou) downto 0 do
-          v := v^.O_[ou[j]];
-        for j := high(cn) downto 0 do
-          v := v^.O_[cn[j]];
-      end;
-    end;
+    v := res.AppendToLocate(Dvo, last, lastdc, Options);
     if ObjectAttributeField = '' then
       continue; // no attribute
     a.Init(mNameValue, dvObject);
@@ -4573,7 +4581,7 @@ begin
     if roWithCanonicalName in Options then
     begin
       a.Names[k] := sCanonicalName;
-      RawUtf8ToVariant(ComputeCanonicalName, a.Values[k]);
+      RawUtf8ToVariant(res.CanonicalName, a.Values[k]);
       inc(k);
     end;
     dom := nil;
