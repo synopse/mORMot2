@@ -3292,16 +3292,23 @@ function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray;
 var
   n: PtrInt;
   t: TLdapAttributeType;
+  r: PRawUtf8;
 begin
+  result := nil;
   exclude(Attributes, atUndefined);
   n := GetBitsCount(Attributes, {bits=}SizeOf(Attributes) shl 3);
+  if n = 0 then
+    exit;
   SetLength(result, n);
-  n := 0;
+  r := pointer(result);
   for t := succ(atUndefined) to high(t) do
-    if GetBitPtr(@Attributes, ord(t)) then
+    if t in Attributes then
     begin
-      result[n] := AttrTypeName[t];
-      inc(n);
+      r^ := AttrTypeName[t];
+      dec(n);
+      if n = 0 then
+        break;
+      inc(r);
     end;
 end;
 
