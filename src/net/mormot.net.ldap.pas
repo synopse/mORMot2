@@ -1231,6 +1231,7 @@ type
     procedure AssignTo(Dest: TClonable); override;
     procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
       ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
+    procedure MergePagedAttributes(Source: TLdapResultList);
   public
     /// finalize the list
     destructor Destroy; override;
@@ -4590,6 +4591,46 @@ begin
     else
       v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
     a.Clear; // mandatory to prepare the next a.Init in this loop
+  end;
+end;
+
+procedure TLdapResultList.MergePagedAttributes(Source: TLdapResultList);
+var
+  r, a, p, f: PtrInt;
+  main: RawUtf8;
+  res, er: TLdapResult;
+  att, ea: TLdapAttribute;
+begin
+  // see https://evetsleep.github.io/activedirectory/2016/08/06/PagingMembers.html
+  for r := 0 to Source.Count - 1 do
+  begin
+    res := Source.Items[r];
+    for a := res.Attributes.Count - 1 downto 0 do // Delete(a) may happen below
+    begin
+      // check if is a '###;range=...' paged attribute
+      att := res.Attributes.Items[a];
+      if att.KnownType <> atUndefined then // '###;range=...' is never detected
+        continue;
+      p := PosEx(';range=', att.AttributeName);
+      if p = 0 then
+        continue;
+      main := copy(att.AttributeName, 1, p - 1); // trim ';range=...'
+      f := res.Attributes.FindIndex(main);
+      if (f < 0) or
+         (res.Attributes.Items[f].Count <> 0) then
+        continue; // was a regular '###;range=...' request, not a paged attribute
+      // create or update any existing partial results
+      ea := nil;
+      er := Find(res.ObjectName);
+      if er = nil then
+        er := Add(res.ObjectName)
+      else
+        ea := er.Attributes.Find(main);
+      if ea = nil then
+        ea := er.Attributes.Add(main);
+      ea.AddFrom(att); // att values are now in self
+      res.Attributes.Delete(a); // never include 'member;range=0-1499' directly
+    end;
   end;
 end;
 
