@@ -1235,7 +1235,11 @@ type
     /// finalize the list
     destructor Destroy; override;
     /// create and add new TLdapResult object to the list
-    function Add: TLdapResult;
+    function Add: TLdapResult; overload;
+    /// create and add new TLdapResult object with its name to the list
+    function Add(const ObjectName: RawUtf8): TLdapResult; overload;
+    /// search an existing TLdapResult object within the list
+    function Find(const ObjectName: RawUtf8): TLdapResult;
     /// ensure Count = length(fItems) to allow proper "for res in Items do"
     // - is called e.g. by TLdapClient.Search after all its Add()
     procedure AfterAdd;
@@ -4396,6 +4400,25 @@ function TLdapResultList.Add: TLdapResult;
 begin
   result := TLdapResult.Create;
   ObjArrayAddCount(fItems, result, fCount);
+end;
+
+function TLdapResultList.Add(const ObjectName: RawUtf8): TLdapResult;
+begin
+  result := Add;
+  result.fObjectName := ObjectName; // already normalized
+end;
+
+function TLdapResultList.Find(const ObjectName: RawUtf8): TLdapResult;
+var
+  i: PtrInt;
+begin
+  for i := 0 to fCount - 1 do
+  begin
+    result := fItems[i];
+    if result.ObjectName = ObjectName then
+      exit;
+  end;
+  result := nil;
 end;
 
 function TLdapResultList.ExportToLdifContent: RawUtf8;
