@@ -319,7 +319,6 @@ const
     'SHA512 with secp521r1 ECDSA' ,   // xsaSha512Ecc512
     'SHA512 with Ed25519 ECDSA');     // xsaSha512EdDSA
 
-
   /// internal lookup table from X.509 Public Key Algorithm as text
   XKA_TXT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
     '',                    // xkaNone

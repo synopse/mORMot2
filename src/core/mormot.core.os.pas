@@ -3417,7 +3417,7 @@ function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
 /// read a File content into a string
 // - content can be binary or text
 // - returns '' if file was not found or any read error occurred
-// - wil use GetFileSize() API by default, unless HasNoSize is defined,
+// - will use FileSize() API by default, unless HasNoSize is defined,
 // and read will be done using a buffer (required e.g. for POSIX char files)
 // - uses RawByteString for byte storage, whatever the codepage is
 function StringFromFile(const FileName: TFileName;
