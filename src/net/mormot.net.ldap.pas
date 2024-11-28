@@ -1048,10 +1048,12 @@ type
     procedure Delete(const AttributeName: RawUtf8); overload;
     /// find and return attribute index with the requested name
     // - returns -1 if not found
-    function FindIndex(const AttributeName: RawUtf8): PtrInt; overload;
+    function FindIndex(const AttributeName: RawUtf8;
+      IgnoreRange: boolean = false): PtrInt; overload;
     /// find and return attribute with the requested name
     // - returns nil if not found
-    function Find(const AttributeName: RawUtf8): TLdapAttribute; overload;
+    function Find(const AttributeName: RawUtf8;
+      IgnoreRange: boolean = false): TLdapAttribute; overload;
     /// find and return first attribute value with requested name
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
@@ -3958,45 +3960,56 @@ begin
   TLdapAttribute.CloneObjArray(fItems, d.fItems, @fCount, @d.fCount);
 end;
 
-function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8): PtrInt;
+function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8;
+  IgnoreRange: boolean): PtrInt;
 var
   existing: pointer;
 begin
   if (self <> nil) and
      (fItems <> nil) then
-  begin
-    result := fCount - 1;
-    if result = 0 then // very common case for single attribute lookup
+    if IgnoreRange then // match 'AttributeName;range=1500-2999'
     begin
-      if fItems[0].AttributeName = AttributeName then
+      for result := 0 to fCount - 1 do
+        if StartWithExact(fItems[result].AttributeName, AttributeName) and
+           (fItems[result].AttributeName[length(AttributeName) + 1] = ';') then
+          exit;
+    end
+    else // extat name match, using fast interned string pointer comparison
+    begin
+      result := fCount - 1;
+      if result = 0 then // very common case for single attribute lookup
+      begin
+        if fItems[0].AttributeName = AttributeName then
+          exit;
+      end
+      else if (fLastFound <= result) and
+              (fItems[fLastFound].AttributeName = AttributeName) then
+      begin
+        result := fLastFound; // match last Find()
         exit;
-    end
-    else if (fLastFound <= result) and
-            (fItems[fLastFound].AttributeName = AttributeName) then
-    begin
-      result := fLastFound; // match last Find()
-      exit;
-    end
-    else
-    begin
-      existing := _LdapIntern.Existing(AttributeName); // fast pointer search
-      if existing <> nil then // no need to search if we know it won't be there
-        for result := 0 to result do
-          if pointer(fItems[result].AttributeName) = existing then
-            exit;
+      end
+      else
+      begin
+        existing := _LdapIntern.Existing(AttributeName);
+        if existing <> nil then // no need to search if we know it won't be there
+          for result := 0 to result do
+            if pointer(fItems[result].AttributeName) = existing then
+              exit;
+      end;
     end;
-  end;
   result := -1;
 end;
 
-function TLdapAttributeList.Find(const AttributeName: RawUtf8): TLdapAttribute;
+function TLdapAttributeList.Find(const AttributeName: RawUtf8;
+  IgnoreRange: boolean): TLdapAttribute;
 var
   i: PtrInt;
 begin
-  i := FindIndex(AttributeName);
+  i := FindIndex(AttributeName, IgnoreRange);
   if i >= 0 then
   begin
-    fLastFound := i;
+    if not IgnoreRange then
+      fLastFound := i;
     result := fItems[i];
   end
   else
