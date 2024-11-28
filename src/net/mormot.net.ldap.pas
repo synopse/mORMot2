@@ -1333,10 +1333,9 @@ type
     lkoUsers,
     lkoManagedServiceAccounts);
 
-  /// the resultset of TLdapClient.GetWellKnownObjects()
+  /// the resultset of TLdapClient.GetWellKnownObject()
   TLdapKnownCommonNames = array [TLdapKnownObject] of RawUtf8;
   PLdapKnownCommonNames = ^TLdapKnownCommonNames;
-  TLdapKnownCommonNamesDual = array[boolean] of TLdapKnownCommonNames;
 
   /// high-level information of a User or Group object in the LDAP database
   TLdapObject = object
@@ -1536,7 +1535,7 @@ type
     fReferals: TRawUtf8List;
     fBound: boolean;
     fResultError: TLdapError;
-    fFlags: set of (fSecContextEncrypt, fWellKnownObjectsCached);
+    fFlags: set of (fSecContextEncrypt, fRetrievedDefaultDNInfo);
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
     fSearchSDFlags: TLdapSearchSDFlags;
@@ -1555,7 +1554,7 @@ type
     fFullResult: TAsnObject;
     fTlsContext: TNetTlsContext;
     fSockBufferPos: integer;
-    fWellKnownObjects: TLdapKnownCommonNamesDual;
+    fWellKnownObjects: TLdapKnownCommonNames;
     // protocol methods
     function GetTlsContext: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1568,8 +1567,6 @@ type
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     // internal wrapper methods
-    function RetrieveWellKnownObjects(const DN: RawUtf8;
-      out Dual: TLdapKnownCommonNamesDual): boolean;
     procedure GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
       out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
@@ -1578,6 +1575,7 @@ type
       Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8); overload;
     procedure SearchMissingAttributes; overload;
     procedure RetrieveRootDseInfo;
+    procedure RetrieveDefaultDNInfo;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1654,9 +1652,10 @@ type
     // - note that SambaAD/OpenLDAP seems to not publish anything under the
     // 'supportedExtension' attribute, as it should
     function SupportsExt(const ExtensionName: RawUtf8): boolean;
-    /// retrieve al well known object DN or CN as a single convenient record
-    // - use an internal cache for fast retrieval
-    function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
+    /// retrieve a well known object DN or CN text value for the DefaultDN
+    // - use an internal cache for faster retrieval
+    function WellKnownObject(WellKnown: TLdapKnownObject;
+      AsCN: boolean = false): RawUtf8;
 
     { binding methods }
 
@@ -5278,72 +5277,64 @@ const
   // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
   //   5a00c890-6be5-4575-93c4-8bf8be0ca8d8
   LDAP_GUID: array [TLdapKnownObject] of RawUtf8 = (
-    'AA312825768811D1ADED00C04FD8D5CD',
-    '18E2EA80684F11D2B9AA00C04F79F805',
-    'A361B2FFFFD211D1AA4B00C04FD7D83A',
-    '22B70C67D56E4EFB91E9300FCA3DC1AA',
-    '2FBAC1870ADE11D297C400C04FD8D5CD',
-    'AB8153B7768811D1ADED00C04FD8D5CD',
-    'F4BE92A4C777485E878E9421D53087DB',
-    '6227F0AF1FC2410D8E3BB10615BB5B0F',
-    '09460C08AE1E4A4EA0F64AEE7DAA1E5A',
-    'AB1D30F3768811D1ADED00C04FD8D5CD',
-    'A9D1CA15768811D1ADED00C04FD8D5CD',
-    '1EB93889E40C45DF9F0C64D23BBB6237');
+    'AA312825768811D1ADED00C04FD8D5CD',  // lkoComputers
+    '18E2EA80684F11D2B9AA00C04F79F805',  // lkoDeletedObjects
+    'A361B2FFFFD211D1AA4B00C04FD7D83A',  // lkoDomainControllers
+    '22B70C67D56E4EFB91E9300FCA3DC1AA',  // lkoForeignSecurityPrincipals
+    '2FBAC1870ADE11D297C400C04FD8D5CD',  // lkoInfrastructure
+    'AB8153B7768811D1ADED00C04FD8D5CD',  // lkoLostAndFound
+    'F4BE92A4C777485E878E9421D53087DB',  // lkoMicrosoftProgramData
+    '6227F0AF1FC2410D8E3BB10615BB5B0F',  // lkoNtdsQuotas
+    '09460C08AE1E4A4EA0F64AEE7DAA1E5A',  // lkoProgramData
+    'AB1D30F3768811D1ADED00C04FD8D5CD',  // lkoSystems
+    'A9D1CA15768811D1ADED00C04FD8D5CD',  // lkoUsers
+    '1EB93889E40C45DF9F0C64D23BBB6237'); // lkoManagedServiceAccounts
 
-function TLdapClient.RetrieveWellKnownObjects(const DN: RawUtf8;
-  out Dual: TLdapKnownCommonNamesDual): boolean;
+procedure TLdapClient.RetrieveDefaultDNInfo;
 var
   tmp: TRawUtf8DynArray;
   o: TLdapKnownObject;
-  u: RawUtf8;
   i: PtrInt;
-
-  function One(const guid: RawUtf8): RawUtf8;
-  var
-    i: PtrInt;
-    p: PUtf8Char;
-  begin
-    for i := 0 to high(tmp) do
-    begin
-      p := pointer(tmp[i]);
-      if (p <> nil) and
-         NetStartWith(p + 5, pointer(guid)) then
-        begin
-          result := copy(tmp[i], Length(guid) + 7, MaxInt);
-          tmp[i] := ''; // no need to search this one any more
-          exit;
-        end;
-    end;
-    result := '';
-  end;
-
+  p: PUtf8Char;
+  res: TLdapResult;
 begin
-  result := false;
-  if not Connected or
-     (DN= '') then
+  include(fFlags, fRetrievedDefaultDNInfo);
+  if not Connected then
     exit;
-  tmp := SearchObject(DN, '', 'wellKnownObjects').GetAllReadable;
+  res := SearchObject(DefaultDN, '',
+    ['wellKnownObjects', 'otherWellKnownObjects']);
+  if res = nil then
+    exit;
+  tmp := res.Find('wellKnownObjects').GetAllReadable;
+  AddRawUtf8(tmp, res.Find('otherWellKnownObjects').GetAllReadable);
   if tmp = nil then
     exit;
-  result := true;
   for i := 0 to high(tmp) do
     if not NetStartWith(pointer(tmp[i]), 'B:32:') then
       tmp[i] := '';
   for o := low(o) to high(o) do
-  begin
-    u := One(LDAP_GUID[o]);
-    Dual[{asCN=}false][o] := u;
-    Dual[{asCN=}true][o] := DNToCn(u, {NoRaise=}true);
-  end;
+    for i := 0 to high(tmp) do
+    begin
+      p := pointer(tmp[i]);
+      if (p <> nil) and
+         NetStartWith(p + 5, pointer(LDAP_GUID[o])) then
+        begin
+          system.delete(tmp[i], 1, 38);
+          fWellKnownObjects[o] := tmp[i];
+          tmp[i] := ''; // no need to search this one any more
+          break;
+        end;
+    end;
 end;
 
-function TLdapClient.WellKnownObjects(AsCN: boolean): PLdapKnownCommonNames;
+function TLdapClient.WellKnownObject(WellKnown: TLdapKnownObject;
+  AsCN: boolean): RawUtf8;
 begin
-  if not (fWellKnownObjectsCached in fFlags) then
-    if RetrieveWellKnownObjects(DefaultDN, fWellKnownObjects) then
-      include(fFlags, fWellKnownObjectsCached);
-  result := @fWellKnownObjects[AsCN];
+  if not (fRetrievedDefaultDNInfo in fFlags) then
+    RetrieveDefaultDNInfo;
+  result := fWellKnownObjects[WellKnown];
+  if AsCN then
+    result := DNToCn(result, {NoRaise=}true);
 end;
 
 
