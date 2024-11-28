@@ -884,6 +884,8 @@ type
   /// customize TLdapResult.SearchAll/TLdapResultList.AppendTo output
   // - roTypesOnly will set "TypeOnly=true" for all Search() calls
   // - roSortByName will sort the TDocVariant resultset by its (nested) fields
+  // - roAutoRange would detect "member;range=0-1499" paged members and populate
+  // the "member" results with successive calls
   // - roNoDCAtRoot, roObjectNameAtRoot, roObjectNameWithoutDCAtRoot,
   // roCanonicalNameAtRoot and roCommonNameAtRoot will define how the object is
   // inserted and named in the output hierarchy - those options are exclusive
@@ -898,6 +900,7 @@ type
   TLdapResultOptions = set of (
     roTypesOnly,
     roSortByName,
+    roAutoRange,
     roNoDCAtRoot,
     roObjectNameAtRoot,
     roObjectNameWithoutDCAtRoot,
@@ -6083,22 +6086,45 @@ function TLdapClient.SearchAll(const BaseDN: RawUtf8;
   MaxCount: integer): variant;
 var
   n: integer;
+  res: TDocVariantData absolute result;
+  range: TLdapResultList;
 begin
+  // setup resultset
   VarClear(result);
-  TDocVariantData(result).Init(mNameValue, dvObject); // case sensitive names
+  res.Init(mNameValue, dvObject); // case sensitive names
   n := 0;
-  SearchCookie := '';
-  repeat
-    if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
-      break;
-    SearchResult.AppendTo(TDocVariantData(result), Options, ObjectAttributeField);
-    inc(n, SearchResult.Count);
-  until (SearchCookie = '') or
-        ((MaxCount > 0) and
-         (n > MaxCount));
-  SearchCookie := '';
-  if roSortByName in Options then
-    TDocVariantData(result).SortByName(nil, {reverse=}false, {nested=}true);
+  // check for "paging attributes" auto-range results
+  range := nil;
+  if (roAutoRange in Options) and
+     (ObjectAttributeField <> '') and
+     not (roTypesOnly in Options) then
+    range := TLdapResultList.Create;
+  try
+    // make all paginated results
+    SearchCookie := '';
+    repeat
+      if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
+        break;
+      if range <> nil then
+        range.MergePagedAttributes(SearchResult);
+      SearchResult.AppendTo(res, Options, ObjectAttributeField);
+      inc(n, SearchResult.Count);
+    until (SearchCookie = '') or
+          ((MaxCount > 0) and
+           (n > MaxCount));
+  finally
+    SearchCookie := '';
+    // additional requests to fill any "paging attributes" auto-range results
+    if range <> nil then
+      try
+        SearchMissingAttributes(range, res, Options, ObjectAttributeField);
+      finally
+        range.Free;
+      end;
+    // eventually sort by field names (if specified)
+    if roSortByName in Options then
+      res.SortByName(nil, {reverse=}false, {nested=}true);
+  end;
 end;
 
 function TLdapClient.Search(const Attributes: TLdapAttributeTypes;
