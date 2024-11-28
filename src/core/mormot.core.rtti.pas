@@ -592,8 +592,9 @@ type
     function GetSetName(const value; trimmed: boolean = false;
       sep: AnsiChar = ','): RawUtf8;
     /// get the enumeration names corresponding to a set value as a RawUtf8 rray
+    // - optionally return the corresponding ordinal values in a TIntegerDynArray
     procedure GetSetNameArray(const value; var res: TRawUtf8DynArray;
-      trimmed: boolean = false);
+      trimmed: boolean = false; resOrd: PIntegerDynArray = nil);
     /// get the enumeration names corresponding to a set value as JSON array
     function GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
@@ -1639,8 +1640,9 @@ function GetSetName(aTypeInfo: PRttiInfo; const value;
   trimmed: boolean = false): RawUtf8;
 
 /// retrieve the text of all enumerate items defined in a set as dynamic array
+// - optionally return the corresponding ordinal values in a TIntegerDynArray
 function GetSetNameArray(aTypeInfo: PRttiInfo; const value;
-  trimmed: boolean = false): TRawUtf8DynArray;
+  trimmed: boolean = false; resOrd: PIntegerDynArray = nil): TRawUtf8DynArray;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 // - expects CustomText in the TRttiJson.RegisterCustomEnumValues() format, e.g.
@@ -3711,13 +3713,16 @@ begin
 end;
 
 procedure TRttiEnumType.GetSetNameArray(const value; var res: TRawUtf8DynArray;
-  trimmed: boolean);
+  trimmed: boolean; resOrd: PIntegerDynArray);
 var
   n, j: PtrInt;
   PS: PShortString;
   d: PRawUtf8;
+  o: PInteger;
 begin
   res := nil;
+  if resOrd <> nil then
+    resOrd^ := nil;
   if (@self = nil) or
      (@value = nil) then
     exit;
@@ -3725,6 +3730,12 @@ begin
   if n = 0 then
     exit;
   SetLength(res, n);
+  o := nil;
+  if resOrd <> nil then
+  begin
+    SetLength(resOrd^, n);
+    o := pointer(resOrd^);
+  end;
   d := pointer(res);
   PS := NameList;
   for j := MinValue to MaxValue do
@@ -3735,6 +3746,11 @@ begin
         TrimLeftLowerCaseShort(PS, d^)
       else
         FastSetString(d^, @PS^[1], PByte(PS)^);
+      if o <> nil then
+      begin
+        o^ := j;
+        inc(o);
+      end;
       dec(n);
       if n = 0 then
         exit;
@@ -6016,9 +6032,9 @@ begin
 end;
 
 function GetSetNameArray(aTypeInfo: PRttiInfo; const value;
-  trimmed: boolean): TRawUtf8DynArray;
+  trimmed: boolean; resOrd: PIntegerDynArray): TRawUtf8DynArray;
 begin
-  aTypeInfo^.SetEnumType^.EnumBaseType.GetSetNameArray(value, result, trimmed);
+  aTypeInfo^.SetEnumType^.EnumBaseType.GetSetNameArray(value, result, trimmed, resOrd);
 end;
 
 function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
