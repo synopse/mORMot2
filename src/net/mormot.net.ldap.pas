@@ -597,6 +597,7 @@ function LdapUnescape(const Text: RawUtf8): RawUtf8;
 function LdapEscapeCN(const Text: RawUtf8): RawUtf8;
 
 /// encode a "unicodePwd" binary value from a UTF-8 password
+// - for extensive/paranoid anti-forensic measure, call FillZero() on the result
 function LdapUnicodePwd(const aPassword: SpiUtf8): RawByteString;
 
 /// decode a LDAP attribute date/time value into a pascal TDateTime
@@ -1725,6 +1726,10 @@ type
     /// finalize "member;range=0-1499" paging attribute detection into self
     // - this method will ask for all remaining paged attributes, and
     // consolidate all values into the main SearchResult
+    // - could be used e.g. as
+    // ! SearchRangeBegin;
+    // ! Search(DefaultDN, false, InfoFilter(satGroup), []);
+    // ! SearchRangeEnd; // any paginated attributes will be retrieved here
     procedure SearchRangeEnd; overload;
     /// finalize "member;range=0-1499" paging attribute detection as variant
     // - this method will ask for all remaining paged attributes, and
@@ -3565,7 +3570,6 @@ begin
     result := FormatUtf8('(&%%)', [result, CustomFilter])
 end;
 
-
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject;
 begin
   result := Asn(ASN1_SEQ, [
@@ -4178,8 +4182,12 @@ begin
 end;
 
 function TLdapAttributeList.AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
+var
+  encoded: RawByteString;
 begin
-  result := Add(atUnicodePwd, LdapUnicodePwd(aPassword));
+  encoded := LdapUnicodePwd(aPassword);
+  result := Add(atUnicodePwd, encoded);
+  FillZero(encoded);
 end;
 
 procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
