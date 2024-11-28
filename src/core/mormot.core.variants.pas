@@ -11790,7 +11790,7 @@ end;
 function TDocDict.GetL(const key: RawUtf8): IDocList;
 begin
   result := TDocList.CreateByRef(
-    _Safe(GetExistingValueAt(key, 'B')^, dvArray));
+    _Safe(GetExistingValueAt(key, 'L')^, dvArray));
 end;
 
 function TDocDict.GetS(const key: RawUtf8): string;
