@@ -1566,6 +1566,9 @@ type
     procedure GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
       out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
+    procedure SearchMissingAttributes(Ranges: TLdapResultList;
+      var Result: TDocVariantData; Options: TLdapResultOptions;
+      const ObjectAttributeField: RawUtf8);
     procedure RetrieveRootDseInfo;
   public
     /// initialize this LDAP client instance
@@ -6015,6 +6018,63 @@ begin
     result := nil
   else
     result := SearchObject(ObjectDN, Filter, AttrTypeName[Attribute], Scope);
+end;
+
+procedure TLdapClient.SearchMissingAttributes(
+  Ranges: TLdapResultList; var Result: TDocVariantData;
+  Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8);
+var
+  r, a, pagesize: PtrInt;
+  res: TLdapResult;
+  att, new: TLdapAttribute;
+  bak: TLdapSearchScope;
+  atts: RawUtf8;
+  lastdc: TRawUtf8DynArray;
+  v, last: PDocVariantData;
+begin
+  if (ObjectAttributeField = '') or
+     (Ranges.Count = 0) then
+    exit;
+  Ranges.fSearchTimeMicroSec := fSearchResult.fSearchTimeMicroSec;
+  bak := fSearchScope;
+  try
+    fSearchScope := lssBaseObject;
+    for r := 0 to Ranges.Count - 1 do
+    begin
+      res := Ranges.Items[r];
+      for a := 0 to res.Attributes.Count - 1 do
+      begin
+        // request '###;range=...' paged attribute values
+        att := res.Attributes.Items[a];
+        pagesize := att.Count;
+        if pagesize = 0 then
+          continue;
+        repeat
+          FormatUtf8('%;range=%-%', [att.AttributeName,
+            att.Count, att.Count + pagesize - 1], atts);
+          if not Search(res.ObjectName, false, '(objectClass=*)', atts) then
+            break;
+          inc(Ranges.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
+          new := fSearchResult.Find(res.ObjectName).
+                               Find(att.AttributeName, {range=}true);
+          if new = nil then
+            break;
+          att.AddFrom(new);
+        until new.AttributeName[length(new.AttributeName)] = '*';
+        // merge with existing TDocVariant resultset
+        last := nil;
+        v := res.AppendToLocate(Result, last, lastdc, Options);
+        if ObjectAttributeField <> '*' then
+          v := v^.O_[ObjectAttributeField];
+        v := v^.A_[att.AttributeName];
+        v^.Clear;
+        att.SetNewVariant(PVariant(v)^, Options, nil, nil);
+      end;
+    end;
+  finally
+    fSearchScope := bak;
+    fSearchResult.fSearchTimeMicroSec := Ranges.fSearchTimeMicroSec;
+  end;
 end;
 
 function TLdapClient.SearchAll(const BaseDN: RawUtf8;
