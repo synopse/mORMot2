@@ -1206,6 +1206,11 @@ type
       /// find and return first attribute value with the requested type
     function Get(AttributeType: TLdapAttributeType;
       out Value: RawUtf8): boolean;
+    /// search an existing TLdapAttribute within the list
+    function Find(const AttributeName: RawUtf8;
+      IgnoreRange: boolean = false): TLdapAttribute;
+    /// search an TLdapAttribute with the requested name or add if none
+    function FindOrAdd(const AttributeName: RawUtf8): TLdapAttribute;
     /// direct raw access to the internal list of attributes
     property Attributes: TLdapAttributeList
       read fAttributes;
@@ -4268,6 +4273,25 @@ begin
   if a <> nil then
     a.GetReadable(0, Value);
   result := a <> nil;
+end;
+
+function TLdapResult.Find(const AttributeName: RawUtf8;
+  IgnoreRange: boolean): TLdapAttribute;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := Attributes.Find(AttributeName, IgnoreRange);
+end;
+
+function TLdapResult.FindOrAdd(const AttributeName: RawUtf8): TLdapAttribute;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  result := Attributes.Find(AttributeName);
+  if result = nil then
+    result := Attributes.Add(AttributeName);
 end;
 
 function TLdapResult.CopyObjectSid(out objectSid: RawUtf8): boolean;
