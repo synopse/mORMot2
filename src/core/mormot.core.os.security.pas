@@ -2369,10 +2369,10 @@ begin
       sid.SubAuthority[0] := 32;
       if wks <> wksBuiltinDomain then
       begin
-        sid.SubAuthorityCount := 2;
+        sid.SubAuthorityCount := 2; // S-1-5-32-###
         if wks <= wksBuiltinDcomUsers then
           sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinAdministrators) - 544)
-        else if wks <= wksBuiltinDeviceOwners then // S-1-5-32-583
+        else if wks <= wksBuiltinDeviceOwners then
           sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinIUsers) - 568)
         else if wks <= wksCapabilityContacts then
         begin // S-1-15-3-1

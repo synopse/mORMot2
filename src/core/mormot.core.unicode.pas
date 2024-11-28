@@ -1319,12 +1319,10 @@ function IdemPropNameU(const P1, P2: RawUtf8): boolean; overload;
 // - if p is nil, will return FALSE
 // - if up is nil, will return TRUE
 function IdemPChar(p: PUtf8Char; up: PAnsiChar): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is the same as up^
 // - this overloaded function accept the uppercase lookup buffer as parameter
 function IdemPChar(p: PUtf8Char; up: PAnsiChar; table: PNormTable): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is the same as up^, ignoring white spaces
 // - ignore case - up^ must be already Upper
@@ -1366,7 +1364,6 @@ function IdemPCharArrayBy2(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt
 // it will be slower than the IdemPChar() function above, but will handle
 // WinAnsi accentuated characters (e.g. 'e' acute will be matched as 'E')
 function IdemPCharU(p, up: PUtf8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is same as up^
 // - ignore case - up^ must be already Upper
@@ -5911,7 +5908,7 @@ begin
             (PtrUInt(upTextStart) <> 0) and
             (PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ >=
               PStrLen(PAnsiChar(pointer(upTextStart)) - _STRLEN)^) and
-            IdemPChar(pointer(text), pointer(upTextStart));
+            IdemPCharAnsi(@NormToUpperAnsi7, pointer(text), pointer(upTextStart));
 end;
 
 function EndWith(const text, upTextEnd: RawUtf8): boolean;
@@ -5920,7 +5917,8 @@ var
 begin
   o := length(text) - length(upTextEnd);
   result := (o >= 0) and
-            IdemPChar(PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
+            (text <> '') and
+    IdemPCharAnsi(@NormToUpperAnsi7, PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
 end;
 
 function EndWithArray(const text: RawUtf8; const upArray: array of RawUtf8): integer;
@@ -8448,11 +8446,12 @@ end;
 
 function IdemPCharAndGetNextLine(var source: PUtf8Char; searchUp: PAnsiChar): boolean;
 begin
-  if source = nil then
+  if (source = nil) or
+     (searchUp = nil) then
     result := false
   else
   begin
-    result := IdemPChar(source, searchUp);
+    result := IdemPCharAnsi(@NormToUpperAnsi7, source, searchUp);
     source := GotoNextLine(source);
   end;
 end;
