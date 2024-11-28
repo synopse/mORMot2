@@ -626,7 +626,7 @@ type
     atsUnicodePwd);
 
   /// common Attribute Types, as stored in TLdapAttribute.AttributeName
-  // - so that the most useful types could be specified as convenient enumerate
+  // - so that the most useful types could be specified as convenient enumerates
   // - allow complex binary types (like SID/GUID/FileTime) to be recognized and
   // properly decoded / made readable
   TLdapAttributeType = (
@@ -689,13 +689,13 @@ type
   TLdapAttributeTypes = set of TLdapAttributeType;
 
 var
-  /// the standard NAME of our common Attribute Types
+  /// the standard "lDAPDisplayName" of our common Attribute Types
   // - these value will be interned and recognized internally as raw pointer()
   // - e.g. AttrTypeName[atOrganizationUnitName] = 'ou'
   // - by design, atUndefined would return ''
   AttrTypeName: array[TLdapAttributeType] of RawUtf8;
 
-  /// alternate standard NAME of our common Attribute Types
+  /// alternate "lDAPDisplayName" of our common Attribute Types
   // - e.g. AttrTypeNameAlt[6] = 'organizationName' and
   // AttrTypeNameAlt[6] = atOrganizationUnitName
   // - defined for unit testing purpose only
@@ -706,6 +706,65 @@ const
   AttrTypeAltType: array[0 .. high(AttrTypeNameAlt)] of TLdapAttributeType = (
     atCommonName, atSurName, atCountryName, atLocalityName, atStateName,
     atStreetAddress, atOrganizationName, atOrganizationUnitName, atGivenName);
+
+  /// the standard RDN of our common Attribute Types
+  // - as retrieved from an actual AD instance catalog
+  // - see AttrTypeName[] for the corresponding standard "lDAPDisplayName"
+  AttrTypeCommonName: array[TLdapAttributeType] of RawUtf8 = (
+    '',                         // atUndefined
+    'Obj-Dist-Name',            // atDistinguishedName
+    'Object-Class',             // atObjectClass
+    'Object-Category',          // atObjectCategory
+    'Alias',                    // atAlias
+    'RDN',                      // atName
+    'Common-Name',              // atCommonName
+    'Surname',                  // atSurName
+    'GivenName',                // atGivenName
+    'Display-Name',             // atDisplayName
+    'User-Principal-Name',      // atUserPrincipalName
+    'User-Account-Control',     // atUserAccountControl
+    'System-Flags',             // atSystemFlags
+    'SAM-Account-Name',         // atSAMAccountName
+    'SAM-Account-Type',         // atSAMAccountType
+    'Admin-Count',              // atAdminCount
+    'Description',              // atDescription
+    'Generation-Qualifier',     // atGenerationQualifier
+    'Initials',                 // atInitials
+    'Organization-Name',        // atOrganizationName
+    'Organizational-Unit-Name', // atOrganizationUnitName
+    'E-mail-Addresses',         // atMail
+    'Is-Member-Of-DL',          // atMemberOf
+    'Country-Name',             // atCountryName
+    'Locality-Name',            // atLocalityName
+    'State-Or-Province-Name',   // atStateName
+    'Street-Address',           // atStreetAddress
+    'Telephone-Number',         // atTelephoneNumber
+    'Title',                    // atTitle
+    'Serial-Number',            // atSerialNumber
+    'Member',                   // atMember
+    'Owner',                    // atOwner
+    'Group-Type',               // atGroupType
+    'Primary-Group-ID',         // atPrimaryGroupID
+    'NT-Security-Descriptor',   // atNTSecurityDescriptor
+    'Object-Sid',               // atObjectSid
+    'Object-Guid',              // atObjectGuid
+    'Logon-Count',              // atLogonCount
+    'Bad-Pwd-Count',            // atBadPwdCount
+    'DNS-Host-Name',            // atDnsHostName
+    'Account-Expires',          // atAccountExpires
+    'Bad-Password-Time',        // atBadPasswordTime
+    'Last-Logon',               // atLastLogon
+    'Last-Logon-Timestamp',     // atLastLogonTimestamp
+    'Last-Logoff',              // atLastLogoff
+    'Lockout-Time',             // atLockoutTime
+    'Pwd-Last-Set',             // atPwdLastSet
+    'McsAdmPwdExpirationTime',  // atMcsAdmPwdExpirationTime
+    'When-Created',             // atWhenCreated
+    'When-Changed',             // atWhenChanged
+    'Operating-System',         // atOperatingSystem
+    'Operating-System-Version', // atOperatingSystemVersion
+    'Service-Principal-Name',   // atServicePrincipalName
+    'Unicode-Pwd');             // atUnicodePwd
 
   /// how all TLdapAttributeType are actually stored in the LDAP raw value
   AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
