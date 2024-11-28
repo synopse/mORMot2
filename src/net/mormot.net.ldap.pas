@@ -893,12 +893,13 @@ type
   // inserted and named in the output hierarchy - those options are exclusive
   // - by default, a "objectName" field is added, unless roNoObjectName is set
   // - a "canonicalName" field could be added if roWithCanonicalName is set
+  // - roAllValuesAsArray will force all values to be returned as arrays
   // - atNTSecurityDescriptor recognizes known RID unless roNoSddlDomainRid is
   //  set; it won't recognize known ldapDisplayName unless roSddlKnownUuid is set
   // - roRawValues disable decoding of complex values (map all the following)
   // - roRawBoolean won't generate JSON true/false but keep "TRUE"/"FALSE" string
   // - roRawUac/roRawFlags/roRawGroupType/roRawAccountType disable decoding of
-  // of atUserAccountControl/atSystemFlags/atGoupType/atAccountType values
+  // of atUserAccountControl/atSystemFlags/atGroupType/atAccountType values
   TLdapResultOptions = set of (
     roTypesOnly,
     roSortByName,
@@ -910,6 +911,7 @@ type
     roCommonNameAtRoot,
     roNoObjectName,
     roWithCanonicalName,
+    roAllValuesAsArray,
     roNoSddlDomainRid,
     roSddlKnownUuid,
     roRawValues,
@@ -3926,7 +3928,8 @@ end;
 procedure TLdapAttribute.SetNewVariant(var v: variant;
   options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
 begin
-  if fCount = 1 then
+  if (fCount = 1) and
+     not (roAllValuesAsArray in options) then
     SetVariantOne(TVarData(v), fList[0], options, dom, uuid)
   else if fKnownTypeStorage = atsRawUtf8 then
     TDocVariantData(v).InitArrayFrom(TRawUtf8DynArray(fList), JSON_FAST, fCount)
