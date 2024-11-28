@@ -1521,22 +1521,22 @@ type
   protected
     fSettings: TLdapClientSettings;
     fSock: TCrtSocket;
+    fVersion: integer;
     fSeq: integer;
+    fResponseCode: integer;
     fResultCode: integer;
     fResultString: RawUtf8;
-    fResponseCode: integer;
-    fResultError: TLdapError;
     fResponseDN: RawUtf8;
     fReferals: TRawUtf8List;
-    fVersion: integer;
     fBound: boolean;
+    fResultError: TLdapError;
     fFlags: set of (fSecContextEncrypt, fWellKnownObjectsCached);
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
+    fSearchSDFlags: TLdapSearchSDFlags;
     fSearchSizeLimit: integer;
     fSearchTimeLimit: integer;
     fSearchPageSize: integer;
-    fSearchSDFlags: TLdapSearchSDFlags;
     fSearchCookie: RawUtf8;
     fSearchResult: TLdapResultList;
     fDefaultDN, fRootDN, fConfigDN, fVendorName, fServiceName: RawUtf8;
