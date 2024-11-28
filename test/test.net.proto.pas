@@ -1289,7 +1289,7 @@ begin
               end;
             Check(one.NetbiosDN <> '', 'NetbiosDN');
             Check(one.ConfigDN <> '', 'ConfigDN');
-            Check(one.Search(one.WellKnownObjects[lkoUsers], {typesonly=}false,
+            Check(one.Search(one.WellKnownObject(lkoUsers), {typesonly=}false,
                   '(cn=users)', ['*']), 'Search');
             Check(one.SearchResult.Count <> 0, 'SeachResult');
             AddConsole('%% = % search=%', [one.Settings.TargetHost, txt,
