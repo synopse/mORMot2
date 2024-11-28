@@ -1244,7 +1244,7 @@ type
     procedure AssignTo(Dest: TClonable); override;
     procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
       ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
-    procedure MergePagedAttributes(Source: TLdapResultList);
+    procedure ExtractPagedAttributes(Source: TLdapResultList);
   public
     /// finalize the list
     destructor Destroy; override;
@@ -1544,6 +1544,7 @@ type
     fSearchPageSize: integer;
     fSearchCookie: RawUtf8;
     fSearchResult: TLdapResultList;
+    fSearchRange: TLdapResultList;
     fDefaultDN, fRootDN, fConfigDN, fVendorName, fServiceName: RawUtf8;
     fNetbiosDN: RawUtf8;
     fMechanisms, fControls, fExtensions, fNamingContexts: TRawUtf8DynArray;
@@ -1571,9 +1572,10 @@ type
     procedure GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
       out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
-    procedure SearchMissingAttributes(Ranges: TLdapResultList;
-      var Result: TDocVariantData; Options: TLdapResultOptions;
-      const ObjectAttributeField: RawUtf8);
+    function SearchMissing(const ObjectName: RawUtf8; Attribute: TLdapAttribute): integer;
+    procedure SearchMissingAttributes(var Result: TDocVariantData;
+      Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8); overload;
+    procedure SearchMissingAttributes; overload;
     procedure RetrieveRootDseInfo;
   public
     /// initialize this LDAP client instance
@@ -1714,6 +1716,22 @@ type
     /// finalize paging for the searches
     // - is just a wrapper to reset SearchPageSize and the SearchCookie
     procedure SearchEnd;
+    /// enable "member;range=0-1499" paging attribute detecting for the searches
+    // - should finally call one of the SearchRangeEnd overloaded methods
+    // - since Search() may have its own paging, we need to defer paging
+    // attributes retrieval after the main request, via eventual SearchRangeEnd
+    // - as used e.g. by SearchAll() with the roAutoRange option
+    procedure SearchRangeBegin;
+    /// finalize "member;range=0-1499" paging attribute detection into self
+    // - this method will ask for all remaining paged attributes, and
+    // consolidate all values into the main SearchResult
+    procedure SearchRangeEnd; overload;
+    /// finalize "member;range=0-1499" paging attribute detection as variant
+    // - this method will ask for all remaining paged attributes, and
+    // consolidate all values into the supplied TDocVariantData
+    // - as used e.g. by SearchAll() with the roAutoRange option
+    procedure SearchRangeEnd(var Result: TDocVariantData;
+      Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8); overload;
     /// retrieve all entries that match a given set of criteria
     // - will generate as many requests/responses as needed to retrieve all
     // the information into the SearchResult property
@@ -4674,7 +4692,7 @@ begin
   end;
 end;
 
-procedure TLdapResultList.MergePagedAttributes(Source: TLdapResultList);
+procedure TLdapResultList.ExtractPagedAttributes(Source: TLdapResultList);
 var
   r, a, p: PtrInt;
   main: RawUtf8;
@@ -5975,6 +5993,9 @@ begin
     end;
   fSearchResult.AfterAdd; // allow "for res in ldap.SearchResult.Items do"
   result := fResultCode = LDAP_RES_SUCCESS;
+  if result and
+     (fSearchRange <> nil) then
+    fSearchRange.ExtractPagedAttributes(fSearchResult);
   QueryPerformanceMicroSeconds(stop);
   fSearchResult.fSearchTimeMicroSec := stop - start;
 end;
@@ -6030,47 +6051,57 @@ begin
     result := SearchObject(ObjectDN, Filter, AttrTypeName[Attribute], Scope);
 end;
 
-procedure TLdapClient.SearchMissingAttributes(
-  Ranges: TLdapResultList; var Result: TDocVariantData;
+function TLdapClient.SearchMissing(const ObjectName: RawUtf8; Attribute: TLdapAttribute): integer;
+var
+  atts: RawUtf8;
+  new: TLdapAttribute;
+begin
+  // request '###;range=...' paged attribute values
+  result := Attribute.Count; // returns the page size
+  if result = 0 then
+    exit;
+  repeat
+    FormatUtf8('%;range=%-%', [Attribute.AttributeName,
+      Attribute.Count, Attribute.Count + result - 1], atts);
+    if not Search(ObjectName, false, '(objectClass=*)', atts) then
+      break;
+    inc(fSearchRange.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
+    new := fSearchResult.Find(ObjectName).
+                         Find(Attribute.AttributeName, {range=}true);
+    if new = nil then
+      break;
+    Attribute.AddFrom(new);
+  until new.AttributeName[length(new.AttributeName)] = '*';
+end;
+
+procedure TLdapClient.SearchMissingAttributes(var Result: TDocVariantData;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8);
 var
-  r, a, pagesize: PtrInt;
+  r, a: PtrInt;
   res: TLdapResult;
-  att, new: TLdapAttribute;
+  att: TLdapAttribute;
   bak: TLdapSearchScope;
-  atts: RawUtf8;
   lastdc: TRawUtf8DynArray;
   v, last: PDocVariantData;
 begin
+  // consolidate into TDocVariantData
   if (ObjectAttributeField = '') or
-     (Ranges.Count = 0) then
+     (fSearchRange = nil) or
+     (fSearchRange.Count = 0) then
     exit;
-  Ranges.fSearchTimeMicroSec := fSearchResult.fSearchTimeMicroSec;
+  fSearchRange.fSearchTimeMicroSec := fSearchResult.fSearchTimeMicroSec;
   bak := fSearchScope;
   try
     fSearchScope := lssBaseObject;
-    for r := 0 to Ranges.Count - 1 do
+    for r := 0 to fSearchRange.Count - 1 do
     begin
-      res := Ranges.Items[r];
+      res := fSearchRange.Items[r];
       for a := 0 to res.Attributes.Count - 1 do
       begin
         // request '###;range=...' paged attribute values
         att := res.Attributes.Items[a];
-        pagesize := att.Count;
-        if pagesize = 0 then
+        if SearchMissing(res.ObjectName, att) = 0 then
           continue;
-        repeat
-          FormatUtf8('%;range=%-%', [att.AttributeName,
-            att.Count, att.Count + pagesize - 1], atts);
-          if not Search(res.ObjectName, false, '(objectClass=*)', atts) then
-            break;
-          inc(Ranges.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
-          new := fSearchResult.Find(res.ObjectName).
-                               Find(att.AttributeName, {range=}true);
-          if new = nil then
-            break;
-          att.AddFrom(new);
-        until new.AttributeName[length(new.AttributeName)] = '*';
         // merge with existing TDocVariant resultset
         last := nil;
         v := res.AppendToLocate(Result, last, lastdc, Options);
@@ -6083,7 +6114,72 @@ begin
     end;
   finally
     fSearchScope := bak;
-    fSearchResult.fSearchTimeMicroSec := Ranges.fSearchTimeMicroSec;
+    fSearchResult.fSearchTimeMicroSec := fSearchRange.fSearchTimeMicroSec;
+  end;
+end;
+
+procedure TLdapClient.SearchMissingAttributes;
+var
+  r, a: PtrInt;
+  res: TLdapResult;
+  att: TLdapAttribute;
+  bak: TLdapSearchScope;
+  all: TLdapResultList;
+begin
+  if (fSearchRange = nil) or
+     (fSearchRange.Count = 0) then
+    exit;
+  all := fSearchResult; // consolidate into self
+  fSearchRange.fSearchTimeMicroSec := all.fSearchTimeMicroSec;
+  fSearchResult := TLdapResultList.Create; // use a new temporary instance
+  bak := fSearchScope;
+  try
+    fSearchScope := lssBaseObject;
+    for r := 0 to fSearchRange.Count - 1 do
+    begin
+      res := fSearchRange.Items[r];
+      for a := 0 to res.Attributes.Count - 1 do
+      begin
+        att := res.Attributes.Items[a];
+        if SearchMissing(res.ObjectName, att) <> 0 then
+          all.FindOrAdd(res.ObjectName, att.AttributeName).AddFrom(att);
+      end;
+    end;
+  finally
+    fSearchScope := bak;
+    all.fSearchTimeMicroSec := fSearchRange.fSearchTimeMicroSec;
+    fSearchResult.Free;
+    fSearchResult := all; // back to consolidated results
+  end;
+end;
+
+procedure TLdapClient.SearchRangeBegin;
+begin
+  if fSearchRange <> nil then
+    ELdap.RaiseUtf8('%.SearchRangeBegin: missing SearchRangeEnd', [self]);
+  fSearchRange := TLdapResultList.Create;
+end;
+
+procedure TLdapClient.SearchRangeEnd;
+begin
+  if fSearchRange = nil then
+    ELdap.RaiseUtf8('%.SearchRangeEnd: missing SearchRangeBegin', [self]);
+  try
+    SearchMissingAttributes; // consolidate into self
+  finally
+    FreeAndNil(fSearchRange);
+  end;
+end;
+
+procedure TLdapClient.SearchRangeEnd(var Result: TDocVariantData;
+  Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8);
+begin
+  if fSearchRange = nil then
+    ELdap.RaiseUtf8('%.SearchRangeEnd: missing SearchRangeBegin', [self]);
+  try
+    SearchMissingAttributes(Result, Options, ObjectAttributeField);
+  finally
+    FreeAndNil(fSearchRange);
   end;
 end;
 
@@ -6094,40 +6190,32 @@ function TLdapClient.SearchAll(const BaseDN: RawUtf8;
 var
   n: integer;
   res: TDocVariantData absolute result;
-  range: TLdapResultList;
 begin
   // setup resultset
   VarClear(result);
   res.Init(mNameValue, dvObject); // case sensitive names
   n := 0;
   // check for "paging attributes" auto-range results
-  range := nil;
   if (roAutoRange in Options) and
      (ObjectAttributeField <> '') and
      not (roTypesOnly in Options) then
-    range := TLdapResultList.Create;
+    SearchRangeBegin;
   try
-    // make all paginated results
+    // retrieve all result pages
     SearchCookie := '';
     repeat
       if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
         break;
-      if range <> nil then
-        range.MergePagedAttributes(SearchResult);
-      SearchResult.AppendTo(res, Options, ObjectAttributeField);
-      inc(n, SearchResult.Count);
+      fSearchResult.AppendTo(res, Options, ObjectAttributeField);
+      inc(n, fSearchResult.Count);
     until (SearchCookie = '') or
           ((MaxCount > 0) and
            (n > MaxCount));
   finally
     SearchCookie := '';
     // additional requests to fill any "paging attributes" auto-range results
-    if range <> nil then
-      try
-        SearchMissingAttributes(range, res, Options, ObjectAttributeField);
-      finally
-        range.Free;
-      end;
+    if fSearchRange <> nil then
+      SearchRangeEnd(res, Options, ObjectAttributeField); // as TDocVariant
     // eventually sort by field names (if specified)
     if roSortByName in Options then
       res.SortByName(nil, {reverse=}false, {nested=}true);
