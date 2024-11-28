@@ -5908,7 +5908,8 @@ begin
             (PtrUInt(upTextStart) <> 0) and
             (PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ >=
               PStrLen(PAnsiChar(pointer(upTextStart)) - _STRLEN)^) and
-            IdemPCharAnsi(@NormToUpperAnsi7, pointer(text), pointer(upTextStart));
+            IdemPCharAnsi({$ifndef CPUX86NOTPIC}@{$endif}NormToUpperAnsi7,
+              pointer(text), pointer(upTextStart));
 end;
 
 function EndWith(const text, upTextEnd: RawUtf8): boolean;
@@ -5918,7 +5919,8 @@ begin
   o := length(text) - length(upTextEnd);
   result := (o >= 0) and
             (text <> '') and
-    IdemPCharAnsi(@NormToUpperAnsi7, PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
+            IdemPCharAnsi({$ifndef CPUX86NOTPIC}@{$endif}NormToUpperAnsi7,
+              PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
 end;
 
 function EndWithArray(const text: RawUtf8; const upArray: array of RawUtf8): integer;
@@ -8451,7 +8453,8 @@ begin
     result := false
   else
   begin
-    result := IdemPCharAnsi(@NormToUpperAnsi7, source, searchUp);
+    result := IdemPCharAnsi({$ifndef CPUX86NOTPIC}@{$endif}NormToUpperAnsi7,
+                source, searchUp);
     source := GotoNextLine(source);
   end;
 end;
