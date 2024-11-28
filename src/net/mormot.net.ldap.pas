@@ -1251,6 +1251,8 @@ type
     function Add(const ObjectName: RawUtf8): TLdapResult; overload;
     /// search an existing TLdapResult object within the list
     function Find(const ObjectName: RawUtf8): TLdapResult;
+    /// search an existing TLdapResult object within the list or add if none
+    function FindOrAdd(const ObjectName: RawUtf8): TLdapResult;
     /// ensure Count = length(fItems) to allow proper "for res in Items do"
     // - is called e.g. by TLdapClient.Search after all its Add()
     procedure AfterAdd;
@@ -3690,7 +3692,8 @@ procedure TLdapAttribute.AddFrom(Another: TLdapAttribute);
 var
   i, n: PtrInt;
 begin
-  if (Another = nil) or
+  if (self = nil) or
+     (Another = nil) or
      (Another.Count = 0) then
     exit;
   n := fCount;
@@ -4497,13 +4500,21 @@ function TLdapResultList.Find(const ObjectName: RawUtf8): TLdapResult;
 var
   i: PtrInt;
 begin
-  for i := 0 to fCount - 1 do
-  begin
-    result := fItems[i];
-    if result.ObjectName = ObjectName then
-      exit;
-  end;
+  if self <> nil then
+    for i := 0 to fCount - 1 do
+    begin
+      result := fItems[i];
+      if result.ObjectName = ObjectName then
+        exit;
+    end;
   result := nil;
+end;
+
+function TLdapResultList.FindOrAdd(const ObjectName: RawUtf8): TLdapResult;
+begin
+  result := Find(ObjectName);
+  if result = nil then
+    result := Add(ObjectName);
 end;
 
 function TLdapResultList.ExportToLdifContent: RawUtf8;
