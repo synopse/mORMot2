@@ -4665,8 +4665,8 @@ procedure TLdapResultList.MergePagedAttributes(Source: TLdapResultList);
 var
   r, a, p: PtrInt;
   main: RawUtf8;
-  res, er: TLdapResult;
-  att, em, ea: TLdapAttribute;
+  res: TLdapResult;
+  att, attmain: TLdapAttribute;
 begin
   // see https://evetsleep.github.io/activedirectory/2016/08/06/PagingMembers.html
   for r := 0 to Source.Count - 1 do
@@ -4678,24 +4678,17 @@ begin
       att := res.Attributes.Items[a];
       if att.KnownType <> atUndefined then // '###;range=...' is never detected
         continue;
-      p := PosEx(';range=', att.AttributeName);
-      if p = 0 then
+      p := PosExChar(';', att.AttributeName);
+      if (p = 0) or
+         not IdemPChar(PUtf8Char(pointer(att.AttributeName)) + p, 'RANGE=') then
         continue;
       main := copy(att.AttributeName, 1, p - 1); // trim ';range=...' into ###
-      em := res.Attributes.Find(main);
-      if (em = nil) or
-         (em.Count <> 0) then
+      attmain := res.Attributes.Find(main);
+      if (attmain = nil) or
+         (attmain.Count <> 0) then
         continue; // was a regular '###;range=...' request, not a paged attribute
       // create or update any existing partial results
-      ea := nil;
-      er := Find(res.ObjectName);
-      if er = nil then
-        er := Add(res.ObjectName)
-      else
-        ea := er.Attributes.Find(main);
-      if ea = nil then
-        ea := er.Attributes.Add(main);
-      ea.AddFrom(att); // att values are now in self ###
+      FindOrAdd(res.ObjectName).FindOrAdd(main).AddFrom(att);
       res.Attributes.Delete(a); // never include '###;range=0-1499' directly
     end;
   end;
