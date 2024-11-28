@@ -1552,6 +1552,7 @@ type
     fBoundUser: RawUtf8;
     fSockBuffer: RawByteString;
     fFullResult: TAsnObject;
+    fDomainSid: RawSid;
     fTlsContext: TNetTlsContext;
     fSockBufferPos: integer;
     fWellKnownObjects: TLdapKnownCommonNames;
@@ -1656,6 +1657,9 @@ type
     // - use an internal cache for faster retrieval
     function WellKnownObject(WellKnown: TLdapKnownObject;
       AsCN: boolean = false): RawUtf8;
+    /// retrieve the raw binary domain SID for the DefaultDN
+    // - use an internal cache for fast retrieval
+    function DomainSid: RawSid;
 
     { binding methods }
 
@@ -5302,9 +5306,13 @@ begin
   if not Connected then
     exit;
   res := SearchObject(DefaultDN, '',
-    ['wellKnownObjects', 'otherWellKnownObjects']);
+    ['wellKnownObjects', 'otherWellKnownObjects', 'objectSid']);
   if res = nil then
     exit;
+  fDomainSid := res.Attributes.Find(atObjectSid).GetRaw;
+  if not IsValidRawSid(fDomainSid) or
+     not SidIsDomain(pointer(fDomainSid)) then
+    fDomainSid := '';
   tmp := res.Find('wellKnownObjects').GetAllReadable;
   AddRawUtf8(tmp, res.Find('otherWellKnownObjects').GetAllReadable);
   if tmp = nil then
@@ -5335,6 +5343,13 @@ begin
   result := fWellKnownObjects[WellKnown];
   if AsCN then
     result := DNToCn(result, {NoRaise=}true);
+end;
+
+function TLdapClient.DomainSid: RawSid;
+begin
+  if not (fRetrievedDefaultDNInfo in fFlags) then
+    RetrieveDefaultDNInfo;
+  result := fDomainSid;
 end;
 
 
