@@ -831,6 +831,23 @@ const
   // - always base-64 encoded in LDIF output
   ATS_BINARY = [atsSid, atsGuid, atsSecurityDescriptor];
 
+  /// the LDAP attributes which are expected to have a single value
+  // - i.e. have been defined with isSingleValued = TRUE in the AD Catalog
+  // - atUndefined is part of this set, so that less common values will follow
+  // the storage number
+  ATS_SINGLEVALUE = [
+    atUndefined,
+    atDistinguishedName, atObjectCategory, atName, atCommonName,
+    atSurName, atDisplayName, atUserPrincipalName, atUserAccountControl,
+    atSystemFlags, atSAMAccountName, atSAMAccountType, atAdminCount,
+    atGenerationQualifier, atInitials, atMail, atCountryName, atLocalityName,
+    atStateName, atStreetAddress, atTelephoneNumber, atTitle, atOwner,
+    atGroupType, atPrimaryGroupID, atNTSecurityDescriptor, atObjectSid,
+    atObjectGuid, atLogonCount, atBadPwdCount, atDnsHostName, atAccountExpires,
+    atBadPasswordTime, atLastLogon, atLastLogonTimestamp, atLastLogoff,
+    atLockoutTime, atPwdLastSet, atWhenCreated, atWhenChanged,
+    atOperatingSystem, atOperatingSystemVersion, atUnicodePwd];
+
 /// recognize our common Attribute Types from their standard NAME text
 // - allow to use e.g. AttrTypeStorage[AttributeNameType(AttrName)]
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
@@ -952,7 +969,8 @@ type
   // inserted and named in the output hierarchy - those options are exclusive
   // - by default, a "objectName" field is added, unless roNoObjectName is set
   // - a "canonicalName" field could be added if roWithCanonicalName is set
-  // - roAllValuesAsArray will force all values to be returned as arrays
+  // - roAllValuesAsArray will force all values to be returned as arrays, and
+  // roKnownValuesAsArray detect ATS_SINGLEVALUE and store anything else as array
   // - atNTSecurityDescriptor recognizes known RID unless roNoSddlDomainRid is
   //  set; it won't recognize known ldapDisplayName unless roSddlKnownUuid is set
   // - roRawValues disable decoding of complex values (map all the following)
@@ -971,6 +989,7 @@ type
     roNoObjectName,
     roWithCanonicalName,
     roAllValuesAsArray,
+    roKnownValuesAsArray,
     roNoSddlDomainRid,
     roSddlKnownUuid,
     roRawValues,
@@ -3987,13 +4006,16 @@ end;
 procedure TLdapAttribute.SetNewVariant(var v: variant;
   options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
 begin
-  if (fCount = 1) and
-     not (roAllValuesAsArray in options) then
-    SetVariantOne(TVarData(v), fList[0], options, dom, uuid)
-  else if fKnownTypeStorage = atsRawUtf8 then
-    TDocVariantData(v).InitArrayFrom(TRawUtf8DynArray(fList), JSON_FAST, fCount)
+  if (fCount <> 1) or
+     (roAllValuesAsArray in options) or
+     ((roKnownValuesAsArray in options) and
+      not (fKnownType in ATS_SINGLEVALUE)) then
+    if fKnownTypeStorage = atsRawUtf8 then
+      TDocVariantData(v).InitArrayFrom(TRawUtf8DynArray(fList), JSON_FAST, fCount)
+    else
+      SetVariantArray(TDocVariantData(v), options, dom, uuid)
   else
-    SetVariantArray(TDocVariantData(v), options, dom, uuid);
+    SetVariantOne(TVarData(v), fList[0], options, dom, uuid);
 end;
 
 function TLdapAttribute.GetVariant(options: TLdapResultOptions;
