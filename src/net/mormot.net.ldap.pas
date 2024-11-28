@@ -3863,6 +3863,15 @@ begin
     AttributeValueMakeReadable(RawUtf8(v.VAny), fKnownTypeStorage, dom, uuid);
 end;
 
+function KnownUuid(Options: TLdapResultOptions): TAppendShortUuid;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if roSddlKnownUuid in Options then
+    result := @AppendShortKnownUuid // recognize TAdsKnownAttribute
+  else
+    result := @AppendShortUuid;
+end;
+
 procedure TLdapAttribute.SetVariantArray(var v: TDocVariantData;
   options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
 var
@@ -3870,6 +3879,8 @@ var
 begin // avoid implit try..finally in TLdapAttribute.GetVariant
   v.InitFast(fCount, dvArray);
   v.SetCount(fCount);
+  if @uuid = nil then
+    uuid := KnownUuid(options); // if not pre-resolved
   for i := 0 to fCount - 1 do
     SetVariantOne(PVarData(@v.Values[i])^, fList[i], options, dom, uuid);
 end;
@@ -4589,8 +4600,8 @@ var
   dom: PSid;
   uuid: TAppendShortUuid;
   lastdc: TRawUtf8DynArray;
-  a: TDocVariantData;
   v, last: PDocVariantData;
+  a: TDocVariantData;
 begin
   if ord(roNoDCAtRoot in Options) +
      ord(roObjectNameAtRoot in Options) +
@@ -4604,9 +4615,7 @@ begin
      (Options * [roRawBoolean .. roRawAccountType] <> []) then
     ELdap.RaiseUtf8('%.AppendTo: roRawValues and other roRaw* options ' +
       'are exclusive', [self]);
-  uuid := @AppendShortUuid;
-  if (roSddlKnownUuid in Options) then
-    uuid := @AppendShortKnownUuid; // recognize TAdsKnownAttribute
+  uuid := KnownUuid(Options);
   last := nil;
   for i := 0 to Count - 1 do
   begin
