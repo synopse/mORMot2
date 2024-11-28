@@ -2858,7 +2858,7 @@ type
   // - memory size matches an TAesBlock on purpose, for direct encryption
   // - TAesFull uses unsafe direct AES-ECB chain mode, so is considered deprecated
   {$ifdef USERECORDWITHMETHODS}
-   TAesFullHeader = record
+  TAesFullHeader = record
   {$else}
   TAesFullHeader = object
   {$endif USERECORDWITHMETHODS}
@@ -7789,24 +7789,24 @@ begin
   alreadyseeding := fSeeding;
   fSeeding := true;
   fSafe.UnLock;
-  if not alreadyseeding then
+  if alreadyseeding then
+    exit; // only a single (first) thread would do the entropy seeding
+  try
+    entropy := GetEntropy(128, fSeedEntropySource); // 128=HmacSha512 block size
+    Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
+    fSafe.Lock;
     try
-      // 128 bytes is the HmacSha512 key block size
-      entropy := GetEntropy(128, fSeedEntropySource);
-      Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
-      fSafe.Lock;
-      try
-        fAes.EncryptInit(key.Lo, fAesKeySize);
-        DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
-        fBytesSinceSeed := 0;
-      finally
-        fSafe.UnLock;
-      end;
-    finally
-      FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
-      FillZero(entropy);
+      fAes.EncryptInit(key.Lo, fAesKeySize);
+      DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
+      fBytesSinceSeed := 0;
       fSeeding := false;
+    finally
+      fSafe.UnLock;
     end;
+  finally
+    FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
+    FillZero(entropy);
+  end;
 end;
 
 procedure TAesPrng.FillRandom(out Block: TAesBlock);
