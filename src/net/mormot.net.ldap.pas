@@ -1102,8 +1102,8 @@ type
     property Attr[AttributeType: TLdapAttributeType]: RawUtf8
       read Get write SetAttr; default;
     /// access to the internal list of TLdapAttribute objects
-    // - note that length(Items) may be <> Count for this class, if AfterAdd has not
-    // been called, so you should NOT use an enumerate "for a in list.Items do" loop
+    // - note that length(Items) may be <> Count for this class, so you should
+    // NEVER use an enumerate "for a in list.Items do" loop
     property Items: TLdapAttributeDynArray
       read fItems;
     /// number of TLdapAttribute objects in this list
@@ -1255,7 +1255,9 @@ type
     /// search an existing TLdapResult object within the list
     function Find(const ObjectName: RawUtf8): TLdapResult;
     /// search an existing TLdapResult object within the list or add if none
-    function FindOrAdd(const ObjectName: RawUtf8): TLdapResult;
+    function FindOrAdd(const ObjectName: RawUtf8): TLdapResult; overload;
+    /// search an existing TLdapAttribute within the list or add if none
+    function FindOrAdd(const ObjectName, AttributeName: RawUtf8): TLdapAttribute; overload;
     /// ensure Count = length(fItems) to allow proper "for res in Items do"
     // - is called e.g. by TLdapClient.Search after all its Add()
     procedure AfterAdd;
@@ -4534,6 +4536,11 @@ begin
     result := Add(ObjectName);
 end;
 
+function TLdapResultList.FindOrAdd(const ObjectName, AttributeName: RawUtf8): TLdapAttribute;
+begin
+  result := FindOrAdd(ObjectName).FindOrAdd(AttributeName);
+end;
+
 function TLdapResultList.ExportToLdifContent: RawUtf8;
 var
   tmp: TTextWriterStackBuffer;
@@ -4694,7 +4701,7 @@ begin
          (attmain.Count <> 0) then
         continue; // was a regular '###;range=...' request, not a paged attribute
       // create or update any existing partial results
-      FindOrAdd(res.ObjectName).FindOrAdd(main).AddFrom(att);
+      FindOrAdd(res.ObjectName, main).AddFrom(att);
       res.Attributes.Delete(a); // never include '###;range=0-1499' directly
     end;
   end;
