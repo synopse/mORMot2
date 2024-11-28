@@ -331,6 +331,7 @@ const
 
 type
   /// high level LDAP result codes
+  // - as returned e.g. by TLdapClient.ResultError property
   // - use RawLdapError() and RawLdapErrorString() to decode a LDAP result code
   // or LDAP_RES_CODE[] and LDAP_ERROR_TEXT[] to their integer/text value
   TLdapError = (
@@ -1716,7 +1717,7 @@ type
     // - you can then loop calling Search() until it returns an empty result,
     // and eventually SearchEnd when done with this query
     // - is just a wrapper to set SearchPageSize
-    procedure SearchBegin(PageSize: integer = 100);
+    procedure SearchBegin(PageSize: integer = 1000);
     /// finalize paging for the searches
     // - is just a wrapper to reset SearchPageSize and the SearchCookie
     procedure SearchEnd;
@@ -1747,6 +1748,10 @@ type
     // and process the SearchResult several times, until SearchCookie is ''
     // - by default, all attributes would be retrieved, unless a specific set
     // of Attributes is supplied; if you want no attribute, use ['']
+    // - return true on success (ResultError = leSuccess)
+    // - may return false with ResultError = leSizeLimitExceeded for too many
+    // results: use SearchPageSize or SearchBegin/SearchEnd to enable paging,
+    // or switch to the SearchAll() method
     function Search(const BaseDN: RawUtf8; TypesOnly: boolean;
       const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean; overload;
     /// retrieve all entries that match a given set of criteria
@@ -5882,8 +5887,8 @@ end;
 
 procedure TLdapClient.SearchBegin(PageSize: integer);
 begin
-  SearchCookie := '';
-  SearchPageSize := PageSize;
+  fSearchCookie := '';
+  fSearchPageSize := PageSize;
 end;
 
 procedure TLdapClient.SearchEnd;
@@ -6204,7 +6209,7 @@ function TLdapClient.SearchAll(const BaseDN: RawUtf8;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
   MaxCount: integer): variant;
 var
-  n: integer;
+  n, bakpagesize: integer;
   res: TDocVariantData absolute result;
 begin
   // setup resultset
@@ -6216,9 +6221,10 @@ begin
      (ObjectAttributeField <> '') and
      not (roTypesOnly in Options) then
     SearchRangeBegin;
+  bakpagesize := fSearchPageSize;
+  SearchBegin(1000); // force pagination for the loop below
   try
     // retrieve all result pages
-    SearchCookie := '';
     repeat
       if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
         break;
@@ -6228,7 +6234,7 @@ begin
           ((MaxCount > 0) and
            (n > MaxCount));
   finally
-    SearchCookie := '';
+    SearchBegin(bakpagesize); // = SearchEnd + restore previous SearchPageSize
     // additional requests to fill any "paging attributes" auto-range results
     if fSearchRange <> nil then
       SearchRangeEnd(res, Options, ObjectAttributeField); // as TDocVariant
