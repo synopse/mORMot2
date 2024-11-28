@@ -3681,14 +3681,16 @@ end;
 
 procedure TLdapAttribute.AddFrom(Another: TLdapAttribute);
 var
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   if (Another = nil) or
      (Another.Count = 0) then
     exit;
-  SetLength(fList, fCount + Another.Count); // like AfterAdd
+  n := fCount;
+  inc(fCount, Another.Count);
+  SetLength(fList, fCount); // like AfterAdd
   for i := 0 to Another.Count - 1 do
-    fList[fCount + i] := Another.fList[i];
+    fList[n + i] := Another.fList[i];
 end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
