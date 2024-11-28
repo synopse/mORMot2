@@ -434,7 +434,7 @@ end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8
 // on Delphi (aligned to 4 bytes), but not on FPC (aligned to 16 bytes)
-// -> use an enumeration and minimum RTTI support
+// -> use an enumeration and minimal RTTI support
 
 const
   NULL_STR: string[1] = '';
@@ -521,14 +521,13 @@ type
   // searched in WINERR_ONE[] constants
   TWinErrorOne = (
     ALREADY_EXISTS, MORE_DATA, NO_SYSTEM_RESOURCES,
-    WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK,
-    WSAECONNABORTED, WSAECONNRESET, WSAENOBUFS, WSAETIMEDOUT, WSAECONNREFUSED,
-    WSATRY_AGAIN,
+    WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK, WSAECONNABORTED,
+    WSAECONNRESET, WSAENOBUFS, WSAETIMEDOUT, WSAECONNREFUSED, WSATRY_AGAIN,
     WINHTTP_TIMEOUT, WINHTTP_OPERATION_CANCELLED, WINHTTP_CANNOT_CONNECT,
     WINHTTP_CLIENT_AUTH_CERT_NEEDED, WINHTTP_INVALID_SERVER_RESPONSE,
-    CRYPT_E_REVOKED, CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE,
-    TRUST_E_BAD_DIGEST, TRUST_E_NOSIGNATURE, CERT_E_EXPIRED, CERT_E_CHAINING,
-    CERT_E_REVOKED);
+    CRYPT_E_BAD_ENCODE, CRYPT_E_SELF_SIGNED, CRYPT_E_BAD_MSG, CRYPT_E_REVOKED,
+    CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE, TRUST_E_BAD_DIGEST,
+    TRUST_E_NOSIGNATURE, CERT_E_EXPIRED, CERT_E_CHAINING, CERT_E_REVOKED);
 const
   WINERR_ONE: array[TWinErrorOne] of cardinal = (
     // sparse system errors (183, 234, 1450)
@@ -540,8 +539,8 @@ const
     ERROR_WINHTTP_CANNOT_CONNECT, ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED,
     ERROR_WINHTTP_INVALID_SERVER_RESPONSE,
     // some security-related HRESULT errors
-    $80092010, $80092012, $80092013, $80096010, $800b0100, $800b0101,
-    $800b010a, $800b010c);
+    $80092002, $80092007, $8009200d, $80092010, $80092012, $80092013, $80096010,
+    $800b0100, $800b0101, $800b010a, $800b010c);
 
 function WinErrorConstant(Code: cardinal): PShortString;
 begin
@@ -1087,11 +1086,11 @@ end;
 function FileShare(aMode: integer): DWord;
 begin
   case (aMode and $f0) of
-    fmShareRead:       // = fmShareDenyWrite
+    fmShareRead:       // fmShareDenyWrite
       result := FILE_SHARE_READ;
-    fmShareWrite:      // = fmShareDenyRead
+    fmShareWrite:      // fmShareDenyRead
       result := FILE_SHARE_WRITE;
-    fmShareReadWrite:  // = fmShareDenyNone
+    fmShareReadWrite:  // fmShareDenyNone
       result := FILE_SHARE_READ or FILE_SHARE_WRITE;
   else
     result := 0;
@@ -1112,21 +1111,20 @@ end;
 
 const
   FILE_WRITE_ATTRIBUTES = $0100; // not defined on oldest Delphi
+  FILE_ACCESS: array[fmOpenRead .. fmOpenReadWrite {0..2}] of DWord = (
+    GENERIC_READ,                                            // fmOpenRead
+    GENERIC_WRITE,                                           // fmOpenWrite
+    GENERIC_READ or GENERIC_WRITE or FILE_WRITE_ATTRIBUTES); // fmOpenReadWrite
 
 // W32() will support length > MAX_PATH even if aFileName is UnicodeString
 function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
-const
-  ACCESS: array[0..2] of DWord = (
-    GENERIC_READ,   // fmOpenRead  = $0000
-    GENERIC_WRITE,  // fmOpenWrite = $0001
-    GENERIC_READ or GENERIC_WRITE or FILE_WRITE_ATTRIBUTES); // fmOpenReadWrite
 var
   tmp: TW32Temp;
 begin
   if aFileName = '' then
     result := 0
   else
-   result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3],
+   result := CreateFileW(W32(aFileName, tmp), FILE_ACCESS[aMode and 3],
       FileShare(aMode), nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 end;
 
@@ -5426,7 +5424,8 @@ begin
     insert(WindowsDisplayVersion + ' ', OSVersionText, PosExChar('(', OSVersionText));
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
-  if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\CentralProcessor\0', true) then
+  if reg.ReadOpen(wrLocalMachine,
+       'Hardware\Description\System\CentralProcessor\0', {closefirst=}true) then
   begin
     cpu := reg.ReadString('ProcessorNameString');
     if cpu = '' then
