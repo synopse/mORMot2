@@ -6085,7 +6085,9 @@ begin
     if new = nil then
       break;
     Attribute.AddFrom(new);
-  until new.AttributeName[length(new.AttributeName)] = '*';
+    if new.AttributeName[length(new.AttributeName)] = '*' then
+      break; // don't put in "until" to circumvent Delphi compiler bug
+  until false;
 end;
 
 procedure TLdapClient.SearchMissingAttributes(var Result: TDocVariantData;
