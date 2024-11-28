@@ -1044,7 +1044,9 @@ type
     function GetByName(const AttributeName: RawUtf8): RawUtf8; 
     /// remove one TLdapAttribute object from the list
     procedure Delete(AttributeType: TLdapAttributeType); overload;
-    /// find and return attribute index with the requested attribute type
+     /// remove one TLdapAttribute object from the list
+    procedure Delete(Index: integer); overload;
+   /// find and return attribute index with the requested attribute type
     // - returns -1 if not found
     // - faster than overloaded FindIndex(AttributeName)
     function FindIndex(AttributeType: TLdapAttributeType): PtrInt; overload;
@@ -3634,7 +3636,8 @@ end;
 
 procedure TLdapAttribute.AfterAdd;
 begin
-  if fList <> nil then
+  if (fList <> nil) and
+     (fCount <> 0) then
     DynArrayFakeLength(fList, fCount);
 end;
 
@@ -3890,7 +3893,7 @@ begin
   fCount := 0;
   fLastFound := 0;
   fKnownTypes := [];
-  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
+  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0); // store index+1
 end;
 
 procedure TLdapAttributeList.AssignTo(Dest: TClonable);
@@ -4070,12 +4073,39 @@ end;
 
 procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
 begin
-  PtrArrayDelete(fItems, FindIndex(AttributeName), @fCount, pakClass);
+  Delete(FindIndex(AttributeName));
 end;
 
 procedure TLdapAttributeList.Delete(AttributeType: TLdapAttributeType);
 begin
-  PtrArrayDelete(fItems, FindIndex(AttributeType), @fCount, pakClass);
+  Delete(FindIndex(AttributeType));
+end;
+
+procedure TLdapAttributeList.Delete(Index: integer);
+begin
+  if cardinal(Index) >= cardinal(fCount) then
+    exit;
+  PtrArrayDelete(fItems, Index, @fCount, pakClass);
+  AfterModify;
+end;
+
+procedure TLdapAttributeList.AfterModify;
+var
+  i: integer;
+  a: ^TLdapAttribute;
+  at: TLdapAttributeType;
+begin
+  fKnownTypes := [];
+  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
+  a := pointer(fItems);
+  for i := 1 to MinPtrInt(fCount, 255) do // brute force is fast enough
+  begin
+    at := a^.KnownType;
+    include(fKnownTypes, at);
+    if at <> atUndefined then
+      fIndexTypes[at] := i; // store index + 1
+    inc(a);
+  end;
 end;
 
 procedure TLdapAttributeList.SetAttr(
@@ -4314,7 +4344,8 @@ end;
 
 procedure TLdapResultList.AfterAdd;
 begin
-  if fItems <> nil then
+  if (fItems <> nil) and
+     (fCount <> 0) then
     DynArrayFakeLength(fItems, fCount);
 end;
 
