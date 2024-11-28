@@ -1861,9 +1861,10 @@ type
     // - attributes would be added as ObjectAttributeField (e.g. '_attr') fields,
     // unless ObjectAttributeField is '', and no attribute will be added, or
     // ObjectAttributeField is '*', and attributes are written as no sub-field
+    // (which is the default behavior)
     function SearchAll(const BaseDN: RawUtf8;
       const Filter: RawUtf8; const Attributes: array of RawUtf8;
-      Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '_attr';
+      Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '*';
       MaxCount: integer = 0): variant; overload;
     /// retrieve all entries that match a given set of criteria
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
@@ -1897,8 +1898,8 @@ type
     /// retrieve all pages of entries into a TDocVariant instance
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function SearchAll(const Attributes: TLdapAttributeTypes;
-      const Filter: RawUtf8; Options: TLdapResultOptions;
-      const ObjectAttributeField: RawUtf8 = '_attr';
+      const Filter: RawUtf8; Options: TLdapResultOptions = [];
+      const ObjectAttributeField: RawUtf8 = '*';
       const BaseDN: RawUtf8 = ''; MaxCount: integer = 0): variant; overload;
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
