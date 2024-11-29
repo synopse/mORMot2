@@ -711,60 +711,60 @@ const
   // - as retrieved from an actual AD instance catalog
   // - see AttrTypeName[] for the corresponding standard "lDAPDisplayName"
   AttrTypeCommonName: array[TLdapAttributeType] of RawUtf8 = (
-    '',                         // atUndefined
-    'Obj-Dist-Name',            // atDistinguishedName
-    'Object-Class',             // atObjectClass
-    'Object-Category',          // atObjectCategory
-    'Alias',                    // atAlias
-    'RDN',                      // atName
-    'Common-Name',              // atCommonName
-    'Surname',                  // atSurName
-    'GivenName',                // atGivenName
-    'Display-Name',             // atDisplayName
-    'User-Principal-Name',      // atUserPrincipalName
-    'User-Account-Control',     // atUserAccountControl
-    'System-Flags',             // atSystemFlags
-    'SAM-Account-Name',         // atSAMAccountName
-    'SAM-Account-Type',         // atSAMAccountType
-    'Admin-Count',              // atAdminCount
-    'Description',              // atDescription
-    'Generation-Qualifier',     // atGenerationQualifier
-    'Initials',                 // atInitials
-    'Organization-Name',        // atOrganizationName
-    'Organizational-Unit-Name', // atOrganizationUnitName
-    'E-mail-Addresses',         // atMail
-    'Is-Member-Of-DL',          // atMemberOf
-    'Country-Name',             // atCountryName
-    'Locality-Name',            // atLocalityName
-    'State-Or-Province-Name',   // atStateName
-    'Street-Address',           // atStreetAddress
-    'Telephone-Number',         // atTelephoneNumber
-    'Title',                    // atTitle
-    'Serial-Number',            // atSerialNumber
-    'Member',                   // atMember
-    'Owner',                    // atOwner
-    'Group-Type',               // atGroupType
-    'Primary-Group-ID',         // atPrimaryGroupID
-    'NT-Security-Descriptor',   // atNTSecurityDescriptor
-    'Object-Sid',               // atObjectSid
-    'Object-Guid',              // atObjectGuid
-    'Logon-Count',              // atLogonCount
-    'Bad-Pwd-Count',            // atBadPwdCount
-    'DNS-Host-Name',            // atDnsHostName
-    'Account-Expires',          // atAccountExpires
-    'Bad-Password-Time',        // atBadPasswordTime
-    'Last-Logon',               // atLastLogon
-    'Last-Logon-Timestamp',     // atLastLogonTimestamp
-    'Last-Logoff',              // atLastLogoff
-    'Lockout-Time',             // atLockoutTime
-    'Pwd-Last-Set',             // atPwdLastSet
-    'McsAdmPwdExpirationTime',  // atMcsAdmPwdExpirationTime
-    'When-Created',             // atWhenCreated
-    'When-Changed',             // atWhenChanged
-    'Operating-System',         // atOperatingSystem
-    'Operating-System-Version', // atOperatingSystemVersion
-    'Service-Principal-Name',   // atServicePrincipalName
-    'Unicode-Pwd');             // atUnicodePwd
+    '',                            // atUndefined
+    'Obj-Dist-Name',               // atDistinguishedName
+    'Object-Class',                // atObjectClass
+    'Object-Category',             // atObjectCategory
+    'Alias',                       // atAlias
+    'RDN',                         // atName
+    'Common-Name',                 // atCommonName
+    'Surname',                     // atSurName
+    'Given-Name',                   // atGivenName
+    'Display-Name',                // atDisplayName
+    'User-Principal-Name',         // atUserPrincipalName
+    'User-Account-Control',        // atUserAccountControl
+    'System-Flags',                // atSystemFlags
+    'SAM-Account-Name',            // atSAMAccountName
+    'SAM-Account-Type',            // atSAMAccountType
+    'Admin-Count',                 // atAdminCount
+    'Description',                 // atDescription
+    'Generation-Qualifier',        // atGenerationQualifier
+    'Initials',                    // atInitials
+    'Organization-Name',           // atOrganizationName
+    'Organizational-Unit-Name',    // atOrganizationUnitName
+    'E-mail-Addresses',            // atMail
+    'Is-Member-Of-DL',             // atMemberOf
+    'Country-Name',                // atCountryName
+    'Locality-Name',               // atLocalityName
+    'State-Or-Province-Name',      // atStateName
+    'Street-Address',              // atStreetAddress
+    'Telephone-Number',            // atTelephoneNumber
+    'Title',                       // atTitle
+    'Serial-Number',               // atSerialNumber
+    'Member',                      // atMember
+    'Owner',                       // atOwner
+    'Group-Type',                  // atGroupType
+    'Primary-Group-ID',            // atPrimaryGroupID
+    'NT-Security-Descriptor',      // atNTSecurityDescriptor
+    'Object-Sid',                  // atObjectSid
+    'Object-Guid',                 // atObjectGuid
+    'Logon-Count',                 // atLogonCount
+    'Bad-Pwd-Count',               // atBadPwdCount
+    'DNS-Host-Name',               // atDnsHostName
+    'Account-Expires',             // atAccountExpires
+    'Bad-Password-Time',           // atBadPasswordTime
+    'Last-Logon',                  // atLastLogon
+    'Last-Logon-Timestamp',        // atLastLogonTimestamp
+    'Last-Logoff',                 // atLastLogoff
+    'Lockout-Time',                // atLockoutTime
+    'Pwd-Last-Set',                // atPwdLastSet
+    'ms-Mcs-AdmPwdExpirationTime', // atMcsAdmPwdExpirationTime
+    'When-Created',                // atWhenCreated
+    'When-Changed',                // atWhenChanged
+    'Operating-System',            // atOperatingSystem
+    'Operating-System-Version',    // atOperatingSystemVersion
+    'Service-Principal-Name',      // atServicePrincipalName
+    'Unicode-Pwd');                // atUnicodePwd
 
   /// how all TLdapAttributeType are actually stored in the LDAP raw value
   AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
@@ -834,7 +834,7 @@ const
   /// the LDAP attributes which are expected to have a single value
   // - i.e. have been defined with isSingleValued = TRUE in the AD Catalog
   // - atUndefined is part of this set, so that less common values will follow
-  // the storage number
+  // the actual storage number for roKnownValuesAsArray in SearchAll()
   ATS_SINGLEVALUE = [
     atUndefined,
     atDistinguishedName, atObjectCategory, atName, atCommonName,
@@ -886,6 +886,10 @@ type
     gtAppBasic,
     gtAppQuery,
     gtSecurity);
+
+  /// define TLdapUser.GroupType decoded flags
+  // - use GroupTypesFromInteger() GroupTypesFromText() and GroupTypesValue()
+  // functions to encode/decode such values
   TGroupTypes = set of TGroupType;
 
   /// the decoded fields of TLdapUser.userAccountControl
@@ -914,9 +918,15 @@ type
     uacKerberosTrustedToDelegate,         // 1000000 = 16777216
     uacKerberosNoPac,                     // 2000000 = 33554432
     uacPartialSecretsRodc);               // 4000000 = 67108864
+
+  /// define TLdapUser.userAccountControl decoded flags
+  // - use UserAccountControlsFromInteger() UserAccountControlsFromText() and
+  // UserAccountControlsValue() functions to encode/decode such values
   TUserAccountControls = set of TUserAccountControl;
 
   /// known sAMAccountType values
+  // - use SamAccountTypeFromInteger() SamAccountTypeFromText() and
+  // SamAccountTypeValue() functions to encode/decode such values
   TSamAccountType = (
     satUnknown,
     satGroup,
@@ -943,6 +953,10 @@ type
     sfConfigAllowMove,            // 2000000
     sfConfigAllowRename,          // 4000000
     sfConfigAllowDelete);         // 8000000
+
+  /// define systemFlags decoded flags
+  // - use SystemFlagsFromInteger() SystemFlagsFromText() and
+  // SystemFlagsValue() functions to encode/decode such values
   TSystemFlags = set of TSystemFlag;
 
   /// customize the TLdapAttributeList.Add(name, value) process
@@ -1203,23 +1217,29 @@ function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 /// convert a TSamAccountType as integer value stored in a LDAP atSAMAccountType entry
 function SamAccountTypeValue(sat: TSamAccountType): integer;
 
-/// recognize the integer value stored in a LDAP atGroupType entry
+/// recognize the text integer value stored in a LDAP atGroupType entry
 function GroupTypesFromText(const value: RawUtf8): TGroupTypes;
+
+/// recognize the integer value stored in a LDAP atGroupType entry
 function GroupTypesFromInteger(value: integer): TGroupTypes;
 
 /// compute the integer value stored in a LDAP atGroupType entry
 function GroupTypesValue(gt: TGroupTypes): integer;
 
-/// recognize the integer value stored in a LDAP atUserAccountControl entry
+/// recognize the text integer value stored in a LDAP atUserAccountControl entry
 function UserAccountControlsFromText(const value: RawUtf8): TUserAccountControls;
+
+/// recognize the integer value stored in a LDAP atUserAccountControl entry
 function UserAccountControlsFromInteger(value: integer): TUserAccountControls;
 
 /// compute the integer value stored in a LDAP atUserAccountControl entry
 function UserAccountControlsValue(uac: TUserAccountControls): integer;
 
+/// recognize the text integer value stored in a LDAP atSystemFlags entry
+function SystemFlagsFromText(const value: RawUtf8): TSystemFlags;
+
 /// recognize the integer value stored in a LDAP atSystemFlags entry
 function SystemFlagsFromInteger(value: integer): TSystemFlags;
-function SystemFlagsFromText(const value: RawUtf8): TSystemFlags;
 
 /// compute the integer value stored in a LDAP atSystemFlags entry
 function SystemFlagsValue(sf: TSystemFlags): integer;
@@ -1241,11 +1261,13 @@ function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; ov
 /// compute a sequence of modifications of a given attribute and its raw value
 // - as used by TLdapClient.Modify(Obj, Op, AttrType, AttrValue)
 // - the AttrValue should be properly encoded, as expected by the LDAP server
+// - you can associate several Modifier() entries in a single TLdapClient.Modify
 function Modifier(Op: TLdapModifyOp; AttrType: TLdapAttributeType;
   const AttrValue: RawByteString): TAsnObject; overload;
 
 /// compute a sequence of modifications of a given attribute and its raw value
 // - the AttrValue should be properly encoded, as expected by the LDAP server
+// - you can associate several Modifier() entries in a single TLdapClient.Modify
 function Modifier(Op: TLdapModifyOp; const AttrName: RawUtf8;
   const AttrValue: RawByteString): TAsnObject; overload;
 
@@ -1294,7 +1316,7 @@ type
     /// search an existing TLdapAttribute within the list
     function Find(const AttributeName: RawUtf8;
       IgnoreRange: boolean = false): TLdapAttribute;
-    /// search an TLdapAttribute with the requested name or add if none
+    /// search an TLdapAttribute with the requested name or add one if none
     function FindOrAdd(const AttributeName: RawUtf8): TLdapAttribute;
     /// direct raw access to the internal list of attributes
     property Attributes: TLdapAttributeList
@@ -1314,6 +1336,7 @@ type
     /// add a "dn: ###" entry to a ldif-content buffer
     procedure ExportToLdif(w: TTextWriter);
   end;
+  /// just a dynamic array of TLdapResult instances
   TLdapResultObjArray = array of TLdapResult;
 
   /// maintain a list of LDAP result objects
