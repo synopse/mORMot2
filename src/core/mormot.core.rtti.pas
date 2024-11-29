@@ -4427,7 +4427,7 @@ begin
   if k in rkOrdinalTypes then
     if VariantToInt64(Value, v) then
       SetInt64Value(Instance, v)
-    else if (k = rkEnumeration) and
+    else if (k in rkEnumerationTypes) and
             VariantToText(Value, u) and
             SetValueText(Instance, u) then
       // value found from GetEnumNameValue()
@@ -4482,7 +4482,7 @@ begin
       SetInt64Value(Instance, v)
     else if Value = '' then
       exit
-    else if k = rkEnumeration then // enumertate field from text
+    else if k in rkEnumerationTypes then // enumerate field from text
     begin
       v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
       if v < 0 then
@@ -5961,7 +5961,7 @@ end;
 
 function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
 begin
-  with aTypeInfo^.EnumBaseType^ do
+  with aTypeInfo^.BaseType^ do
   begin
     List := NameList;
     result := MaxValue;
@@ -5984,7 +5984,7 @@ var
   p: PShortString;
   i: PtrInt;
 begin
-  info := aTypeInfo^.EnumBaseType;
+  info := aTypeInfo^.BaseType; // works for rkEnumeration and rkSet
   if info <> nil then
   begin
     p := info^.NameList;
@@ -6004,7 +6004,7 @@ var
   p: PShortString;
   i: PtrInt;
 begin
-  info := aTypeInfo^.EnumBaseType;
+  info := aTypeInfo^.BaseType; // works for rkEnumeration and rkSet
   if info <> nil then
   begin
     p := info^.NameList;
@@ -6021,40 +6021,40 @@ end;
 
 function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray;
 begin
-  aTypeInfo^.EnumBaseType^.GetEnumNameAll(result{%H-}, {trim=}true);
+  aTypeInfo^.BaseType^.GetEnumNameAll(result{%H-}, {trim=}true);
 end;
 
 function GetEnumNameAll(aTypeInfo: PRttiInfo;
   TrimLeftLowerCase: boolean; resOrd: PIntegerDynArray): TRawUtf8DynArray;
 begin
-  aTypeInfo^.EnumBaseType^.GetEnumNameAll(result, TrimLeftLowerCase, resOrd);
+  aTypeInfo^.BaseType^.GetEnumNameAll(result, TrimLeftLowerCase, resOrd);
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt; AlsoTrimLowerCase: boolean): integer;
 begin
-  result := aTypeInfo^.EnumBaseType^.
+  result := aTypeInfo^.BaseType^.
     GetEnumNameValue(aValue, aValueLen, AlsoTrimLowerCase);
 end;
 
 function GetEnumNameValueTrimmed(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt): integer;
 begin
-  result := aTypeInfo^.EnumBaseType^.
+  result := aTypeInfo^.BaseType^.
     GetEnumNameValueTrimmed(aValue, aValueLen, {casesensitive=}false);
 end;
 
 function GetEnumNameValueTrimmedExact(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt): integer;
 begin
-  result := aTypeInfo^.EnumBaseType^.
+  result := aTypeInfo^.BaseType^.
     GetEnumNameValueTrimmed(aValue, aValueLen, {casesensitive=}true);
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
   AlsoTrimLowerCase: boolean): integer;
 begin
-  result := aTypeInfo^.EnumBaseType^.
+  result := aTypeInfo^.BaseType^.
     GetEnumNameValue(pointer(aValue), length(aValue), AlsoTrimLowerCase);
 end;
 
@@ -6082,7 +6082,7 @@ var
   i: PtrInt;
 begin
   result := '';
-  info := aTypeInfo^.SetEnumType;
+  info := aTypeInfo^.BaseType;
   if (info = nil) or
      (@value = nil) or
      (customText = nil) then
@@ -6146,11 +6146,11 @@ var
   i: PtrInt;
 begin
   result := '';
-  info := aTypeInfo^.SetEnumType;
+  info := aTypeInfo^.BaseType;
   if (info = nil) or
      (@value = nil) then
     exit;
-  PS := info^.EnumBaseType.NameList;
+  PS := info^.EnumBaseType.NameList; // EnumBaseType for partial sets
   for i := info^.MinValue to info^.MaxValue do
   begin
     if GetBitPtr(@value, i) then
@@ -6198,7 +6198,6 @@ var
 begin
   result := 0;
   if (aTypeInfo <> nil) and
-     (aTypeInfo^.Kind = rkSet) and
      (aTypeInfo^.SetEnumType(names, min, max) <> nil) and
      (Csv <> nil) then
   repeat
