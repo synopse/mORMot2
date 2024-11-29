@@ -882,6 +882,8 @@ type
     /// for rkSet: in how many bytes this type is stored
     function SetEnumSize: PtrInt;
       {$ifdef HASSAFEINLINE} inline; {$endif}
+    /// returns the base enum type of an rkEnumeration or a rkSet
+    function BaseType: PRttiEnumType;
     /// compute in how many bytes this type is stored
     // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
     function RttiSize: PtrInt;
@@ -3577,6 +3579,8 @@ begin
   if resOrd <> nil then
     resOrd^ := nil;
   Finalize(result);
+  if @self = nil then
+    exit;
   min := MinValue;
   n := MaxValue - min + 1;
   SetLength(result, n);
@@ -3603,34 +3607,35 @@ var
   uncamel: ShortString;
   temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
-  try
-    AddString(Prefix);
-    V := NameList;
-    for i := MinValue to MaxValue do
-    begin
-      if quotedValues then
-        AddDirect('"');
-      if unCamelCased then
+  if @self <> nil then
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddString(Prefix);
+      V := NameList;
+      for i := MinValue to MaxValue do
       begin
-        TrimLeftLowerCaseToShort(V, uncamel);
-        AddShort(uncamel);
-      end
-      else if trimedValues then
-        AddTrimLeftLowerCase(V)
-      else
-        AddShort(V^);
-      if quotedValues then
-        AddDirect('"');
-      AddComma;
-      inc(PByte(V), length(V^) + 1);
+        if quotedValues then
+          AddDirect('"');
+        if unCamelCased then
+        begin
+          TrimLeftLowerCaseToShort(V, uncamel);
+          AddShort(uncamel);
+        end
+        else if trimedValues then
+          AddTrimLeftLowerCase(V)
+        else
+          AddShort(V^);
+        if quotedValues then
+          AddDirect('"');
+        AddComma;
+        inc(PByte(V), length(V^) + 1);
+      end;
+      CancelLastComma;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
     end;
-    CancelLastComma;
-    AddString(Suffix);
-    SetText(result);
-  finally
-    Free;
-  end;
 end;
 
 procedure TRttiEnumType.GetEnumNameTrimedAll(var result: RawUtf8;
@@ -3658,7 +3663,8 @@ end;
 function TRttiEnumType.GetEnumNameValue(Value: PUtf8Char; ValueLen: integer;
   AlsoTrimLowerCase: boolean): integer;
 begin
-  if (Value <> nil) and
+  if (@self <> nil) and
+     (Value <> nil) and
      (ValueLen > 0) and
      (MinValue = 0) then
   begin
@@ -3674,7 +3680,8 @@ end;
 function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: integer;
   CaseSensitive: boolean): integer;
 begin
-  if (Value <> nil) and
+  if (@self <> nil) and
+     (Value <> nil) and
      (ValueLen > 0) and
      (MinValue = 0) then
     if CaseSensitive then
@@ -3915,6 +3922,20 @@ begin
   result := TRttiFloat(GetTypeData(@self)^.FloatType);
 end;
 
+function TRttiInfo.BaseType: PRttiEnumType;
+begin
+  result := pointer(GetTypeData(@self));
+  case Kind of
+    {$ifdef FPC} rkBool, {$endif FPC}
+    rkEnumeration:
+      result := result^.EnumBaseType;
+    rkSet:
+      result := result^.SetBaseType;
+  else
+    result := nil;
+  end;
+end;
+
 function TRttiInfo.SetEnumSize: PtrInt;
 begin
   // PTypeData(@self)^.SetSize on ISFPC32 fails fails from base enum type
@@ -4110,18 +4131,14 @@ begin
           Cache.RttiVarDataVType := varSingle;
         end;
       end;
-    rkEnumeration,
+    rkEnumeration, // no FPC rkBool here
     rkSet:
       begin
         Cache.VarDataVType := varInt64; // no varAny for regular variants
-        if Kind = rkEnumeration then
-          enum := Cache.Info.EnumBaseType
-        else
-          enum := Cache.Info.SetEnumType;
+        enum := BaseType; // works for rkEnumeration and rkSet
         Cache.EnumMin := enum.MinValue;
-        Cache.EnumMax := enum.MaxValue;
-        // EnumBaseType^ is required for partial sets on Delphi
-        enum := enum.EnumBaseType;
+        Cache.EnumMax := enum.MaxValue;       
+        enum := enum.EnumBaseType; // EnumBaseType for partial sets on Delphi
         Cache.EnumInfo := enum;
         Cache.EnumList := enum.NameList;
       end;

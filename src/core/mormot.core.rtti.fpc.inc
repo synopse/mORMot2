@@ -173,7 +173,7 @@ function TRttiInfo.EnumBaseType: PRttiEnumType; // moved here for proper inlinin
 begin
   result := pointer(GetTypeData(@self));
   if Kind <> rkBool then
-    result := result^.EnumBaseType;
+    result := result^.EnumBaseType; // not sure why
 end;
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
