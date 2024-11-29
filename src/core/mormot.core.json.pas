@@ -11119,7 +11119,7 @@ begin
   result := Rtti.RegisterType(Info) as TRttiJson;
   result.fJsonWriter.Code := nil; // force reset of the JSON serialization
   result.fJsonReader.Code := nil;
-  if result.Kind in (rkEnumerationTypes + [rkSet]) then
+  if result.Kind in [rkEnumeration, rkSet] then
     result.fCache.EnumCustomText := nil;
   if result.Kind <> rkDynArray then // Reader/Writer are for items, not array
     result.SetParserType(result.Parser, result.ParserComplex); // set default
@@ -11152,7 +11152,7 @@ begin
   if CustomText = nil then
     exit;
   if (EnumInfo <> nil) and
-     (EnumInfo^.Kind in rkEnumerationTypes) then
+     (EnumInfo^.Kind = rkEnumeration) then // rkBool is out of scope
    begin
      r := Rtti.RegisterType(EnumInfo) as TRttiJson;
      r.fCache.EnumCustomText := CustomText;

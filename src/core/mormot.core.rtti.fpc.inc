@@ -173,7 +173,8 @@ function TRttiInfo.EnumBaseType: PRttiEnumType; // moved here for proper inlinin
 begin
   result := pointer(GetTypeData(@self));
   if Kind <> rkBool then
-    result := result^.EnumBaseType; // not sure why
+    // rkBool is an ordinal with Min/Max but without BaseType/NameList
+    result := result^.EnumBaseType;
 end;
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
@@ -496,6 +497,7 @@ end;
 function TRttiInfo.IsBoolean: boolean;
 begin
   result := (Kind = rkBool);
+  // boolean is not a rkEnumeration on FPC, and has no BaseType/NameList items
 end;
 
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;

@@ -327,9 +327,6 @@ const
   /// maps integer and floating point types in TRttiKind RTTI enumerates
   rkNumberTypes = rkOrdinalTypes + [ rkFloat ];
 
-  /// maps enumeration types in TRttiKind RTTI
-  rkEnumerationTypes = [rkEnumeration {$ifdef FPC}, rkBool {$endif}];
-
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
   // - includes 32-bit ordinals and pointers
   rkGetOrdPropTypes = rkHasRttiOrdTypes + rkComplexTypes;
@@ -3926,7 +3923,6 @@ function TRttiInfo.BaseType: PRttiEnumType;
 begin
   result := pointer(GetTypeData(@self));
   case Kind of
-    {$ifdef FPC} rkBool, {$endif FPC}
     rkEnumeration:
       result := result^.EnumBaseType;
     rkSet:
@@ -4131,13 +4127,13 @@ begin
           Cache.RttiVarDataVType := varSingle;
         end;
       end;
-    rkEnumeration, // no FPC rkBool here
+    rkEnumeration,  // no FPC rkBool because has no BaseType/NameList
     rkSet:
       begin
         Cache.VarDataVType := varInt64; // no varAny for regular variants
         enum := BaseType; // works for rkEnumeration and rkSet
         Cache.EnumMin := enum.MinValue;
-        Cache.EnumMax := enum.MaxValue;       
+        Cache.EnumMax := enum.MaxValue;
         enum := enum.EnumBaseType; // EnumBaseType for partial sets on Delphi
         Cache.EnumInfo := enum;
         Cache.EnumList := enum.NameList;
@@ -4425,9 +4421,9 @@ begin
     exit;
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
-    if VariantToInt64(Value, v) then
+    if VariantToInt64(Value, v) then // include FPC rkBool
       SetInt64Value(Instance, v)
-    else if (k in rkEnumerationTypes) and
+    else if (k = rkEnumeration) and
             VariantToText(Value, u) and
             SetValueText(Instance, u) then
       // value found from GetEnumNameValue()
@@ -4477,12 +4473,12 @@ begin
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
     if ToInt64(Value, v) or // ordinal field from number
-       (TypeInfo^.IsBoolean and
+       (TypeInfo^.IsBoolean and  // also FPC rkBool
         GetInt64Bool(pointer(Value), v)) then // boolean from true/false/yes/no
       SetInt64Value(Instance, v)
     else if Value = '' then
       exit
-    else if k in rkEnumerationTypes then // enumerate field from text
+    else if k = rkEnumeration then // enumerate field from text
     begin
       v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
       if v < 0 then
