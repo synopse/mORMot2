@@ -4292,7 +4292,7 @@ begin
         else if v <> #0 then
           if (p^.OffsetSet <= 0) or // has a setter?
              (rcfBoolean in p^.Value.Cache.Flags) or // simple value?
-             (p^.Value.Kind in (rkGetIntegerPropTypes + [rkEnumeration, rkFloat])) then
+             (p^.Value.Kind in (rkIntegerPropTypes + [rkEnumeration, rkFloat])) then
           begin
             if p^.Prop^.SetValueText(Instance, v) then // RTTI conversion
               result := true;

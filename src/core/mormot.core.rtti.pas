@@ -328,16 +328,15 @@ const
   rkNumberTypes = rkOrdinalTypes + [ rkFloat ];
 
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
-  // - includes 32-bit ordinals and pointers
-  rkGetOrdPropTypes = rkHasRttiOrdTypes + rkComplexTypes;
+  // - includes ordinals and class pointers, but no managed types
+  rkOrdPropTypes = rkHasRttiOrdTypes + [rkClass];
 
   /// maps ordinal values which expect TRttiProp.GetInt64Prop/SetInt64Prop
-  // - includes 64-bit ordinals
-  rkGetInt64PropTypes =
-     [rkInt64 {$ifdef FPC} , rkQWord {$endif} ];
+  // - i.e. pure 64-bit ordinals
+  rkInt64PropTypes = [rkInt64 {$ifdef FPC} , rkQWord {$endif} ];
 
   /// maps value which are integer or Int64/QWord, but not ordinal char/enum/set
-  rkGetIntegerPropTypes = rkGetInt64PropTypes + [rkInteger];
+  rkIntegerPropTypes = rkInt64PropTypes + [rkInteger];
 
   /// maps records or dynamic arrays
   rkRecordOrDynArrayTypes = rkRecordTypes + [rkDynArray];
@@ -3954,7 +3953,7 @@ end;
 function TRttiInfo.RttiSize: PtrInt;
 begin
   case Kind of
-    {$ifdef FPC}
+    {$ifdef FPC} // = Kind in rkHasRttiOrdTypes
     rkBool,
     rkUChar,
     {$endif FPC}
@@ -4102,9 +4101,9 @@ begin
   end;
   if Kind in rkNumberTypes then
     include(Cache.Flags, rcfIsNumber);
-  if Kind in rkGetOrdPropTypes then
+  if Kind in rkOrdPropTypes then
     include(Cache.Flags, rcfGetOrdProp)
-  else if Kind in rkGetInt64PropTypes then
+  else if Kind in rkInt64PropTypes then
     include(Cache.Flags, rcfGetInt64Prop);
   case Kind of
     rkFloat:
@@ -5050,13 +5049,7 @@ function TRttiProp.GetOrdValue(Instance: TObject): Int64;
 begin
   if (Instance <> nil) and
      (@self <> nil) and
-     (TypeInfo^.Kind in [rkInteger,
-                         rkEnumeration,
-                         rkSet,
-                         {$ifdef FPC}
-                         rkBool,
-                         {$endif FPC}
-                         rkClass]) then
+     (TypeInfo^.Kind in rkOrdPropTypes) then
     result := GetOrdProp(Instance)
   else
     result := -1;
@@ -5066,25 +5059,12 @@ function TRttiProp.GetInt64Value(Instance: TObject): Int64;
 begin
   if (Instance <> nil) and
      (@self <> nil) then
-    case TypeInfo^.Kind of
-      rkInteger,
-      rkEnumeration,
-      {$ifdef FPC}
-      rkBool,
-      {$endif FPC}
-      rkSet,
-      rkChar,
-      rkWChar,
-      rkClass:
-        result := GetOrdProp(Instance);
-      {$ifdef FPC}
-      rkQWord,
-      {$endif FPC}
-      rkInt64:
-        result := GetInt64Prop(Instance);
+    if TypeInfo^.Kind in rkOrdPropTypes then
+      result := GetOrdProp(Instance)
+    else if TypeInfo^.Kind in rkInt64PropTypes then
+      result := GetInt64Prop(Instance)
     else
-      result := 0;
-    end
+      result := 0
   else
     result := 0;
 end;
@@ -5137,8 +5117,7 @@ procedure TRttiProp.SetOrdValue(Instance: TObject; Value: PtrInt);
 begin
   if (Instance <> nil) and
      (@self <> nil) and
-     (TypeInfo^.Kind in [rkInteger, rkEnumeration, rkSet,
-                         {$ifdef FPC} rkBool, {$endif} rkClass]) then
+     (TypeInfo^.Kind in rkOrdPropTypes) then
     SetOrdProp(Instance, Value);
 end;
 
@@ -5146,23 +5125,10 @@ procedure TRttiProp.SetInt64Value(Instance: TObject; Value: Int64);
 begin
   if (Instance <> nil) and
      (@self <> nil) then
-    case TypeInfo^.Kind of
-      rkInteger,
-      rkEnumeration,
-      {$ifdef FPC}
-      rkBool,
-      {$endif FPC}
-      rkSet,
-      rkChar,
-      rkWChar,
-      rkClass:
-        SetOrdProp(Instance, Value);
-      {$ifdef FPC}
-      rkQWord,
-      {$endif FPC}
-      rkInt64:
-        SetInt64Prop(Instance, Value);
-    end;
+    if TypeInfo^.Kind in rkOrdPropTypes then
+      SetOrdProp(Instance, Value)
+    else if TypeInfo^.Kind in rkInt64PropTypes then
+      SetInt64Prop(Instance, Value);
 end;
 
 {$ifdef HASVARUSTRING}
