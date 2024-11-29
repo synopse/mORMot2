@@ -6178,16 +6178,17 @@ begin
     result := SearchObject(ObjectDN, Filter, AttrTypeName[Attribute], Scope);
 end;
 
-function TLdapClient.SearchMissing(const ObjectName: RawUtf8; Attribute: TLdapAttribute): integer;
+function TLdapClient.SearchMissing(const ObjectName: RawUtf8;
+  Attribute: TLdapAttribute): integer;
 var
   atts: RawUtf8;
   new: TLdapAttribute;
 begin
-  // request '###;range=...' paged attribute values
   result := Attribute.Count; // returns the page size
   if result = 0 then
     exit;
   repeat
+    // request '###;range=...' paged attribute values
     FormatUtf8('%;range=%-%', [Attribute.AttributeName,
       Attribute.Count, Attribute.Count + result - 1], atts);
     if not Search(ObjectName, false, '(objectClass=*)', atts) then
