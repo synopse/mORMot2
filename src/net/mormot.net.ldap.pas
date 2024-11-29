@@ -6725,16 +6725,25 @@ var
   attrs: TLdapAttributeTypes;
 begin
   RecordZero(@Info, TypeInfo(TLdapGroup));
+  result := false;
+  if (AccountName = '') and
+     (DistinguishedName = '') then
+    exit;
   attrs := LDAPGROUP_ATTR + CustomTypes;
   if WithMember then
     include(attrs, atMember);
   attr := ToText(attrs);
   AddRawUtf8(attr, CustomAttributes);
-  result := ((AccountName <> '') or
-             (DistinguishedName <> '')) and
-            Search(DefaultDN(BaseDN), false, InfoFilter(
-              satGroup, AccountName, DistinguishedName), attr) and
-            (SearchResult.Count = 1);
+  if WithMember then
+    SearchRangeBegin; // support 'member;range=0..1499' pagined attributes
+  try
+    result := Search(DefaultDN(BaseDN), false, InfoFilter(
+                satGroup, AccountName, DistinguishedName), attr) and
+              (SearchResult.Count = 1);
+  finally
+    if WithMember then
+      SearchRangeEnd;
+  end;
   if result then
     Info.Fill(SearchResult.Items[0].Attributes, WithMember,
       CustomAttributes, CustomTypes);
