@@ -1520,7 +1520,7 @@ procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
 function VariantCompAsText(A, B: PVarData; caseInsensitive: boolean): integer;
 
 var
-  /// save a variant value into a JSON content
+  /// serialize a variant value into a JSON content
   // - is implemented by mormot.core.json.pas and mormot.core.variants.pas:
   // will raise an exception if none of these units is included in the project
   // - follows the TTextWriter.AddVariant() and VariantLoadJson() format
@@ -1537,10 +1537,10 @@ var
     var result: RawUtf8);
 
   /// unserialize a JSON content into a variant
-  // - is properly implemented by mormot.core.json.pas: if this unit is not
-  // included in the project, this function is nil
+  // - properly implemented by JsonToAnyVariant() in mormot.core.variants.pas :
+  // if this unit is not included in the project, this function is nil
   // - used by mormot.core.data.pas RTTI_BINARYLOAD[tkVariant]() for complex types
-  BinaryVariantLoadAsJson: procedure(var Value: variant; Json: PUtf8Char;
+  _VariantLoadJson: procedure(var Value: variant; Json: PUtf8Char;
     TryCustomVariant: pointer);
 
   /// write a TDateTime into strict ISO-8601 date and/or time text

@@ -1387,7 +1387,7 @@ type
     // - the full DN will be used as path, according to the options
     // - attributes would be included as ObjectAttributeField (e.g. '_attr')
     // fields (including the "objectName" value), unless ObjectAttributeField
-    // is '', and no attribute will be set; if ObjectAttributeField is '*' no
+    // is '', and no attribute will be set; if ObjectAttributeField is '*', no
     // sub-field will be generated, and attributes will be written directly
     // - as called by TLdapResultList.GetVariant and TLdapClient.SearchAll
     procedure AppendTo(var Dvo: TDocVariantData; Options: TLdapResultOptions;

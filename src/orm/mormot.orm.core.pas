@@ -7123,7 +7123,7 @@ begin
 end;
 
 const
-  ID_STR: array[boolean] of string[15] = (
+  ID_STR: array[{owoLowCaseID=}boolean] of string[15] = (
     '"ID_str":"', '"idStr":"');
 
 procedure TOrm.GetJsonValues(W: TOrmWriter);

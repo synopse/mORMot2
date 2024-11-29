@@ -6275,7 +6275,7 @@ var
 begin
   Source.VarBlob(temp); // load into a private copy for in-place JSON parsing
   try
-    BinaryVariantLoadAsJson(Data^, temp.buf, Source.CustomVariants);
+    _VariantLoadJson(Data^, temp.buf, Source.CustomVariants);
   finally
     temp.Done;
   end;
@@ -6340,10 +6340,10 @@ begin
     with Source.VarBlob do
       FastSynUnicode(UnicodeString(Data^.vAny), Ptr, Len shr 1)
   {$endif HASVARUSTRING}
-  else if Assigned(BinaryVariantLoadAsJson) then
-    _BL_VariantComplex(pointer(Data), Source)
+  else if Assigned(_VariantLoadJson) then
+    _BL_VariantComplex(pointer(Data), Source) // redirect to _VariantLoadJson()
   else
-    Source.ErrorData('RTTI_BINARYLOAD[tkVariant] missing mormot.core.json.pas', []);
+    Source.ErrorData('RTTI_BINARYLOAD[tkVariant] missing mormot.core.variants', []);
   result := SizeOf(Data^);
 end;
 

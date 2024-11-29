@@ -10313,7 +10313,7 @@ begin
   end;
 end;
 
-procedure _BinaryVariantLoadAsJson(var Value: variant; Json: PUtf8Char;
+procedure __VariantLoadJson(var Value: variant; Json: PUtf8Char;
   TryCustomVariant: pointer);
 var
   info: TGetJsonField;
@@ -12310,9 +12310,9 @@ begin
   JSON_NAMEVALUEINTERN := PDocVariantOptionsBool(@JSON_[mNameValueIntern])^;
   JSON_OPTIONS := PDocVariantOptionsBool(@JSON_[mDefault])^;
   // redirect to the feature complete variant wrapper functions
-  BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;
   _VariantSaveJson := @__VariantSaveJson;
+  _VariantLoadJson := @__VariantLoadJson;
   SortDynArrayVariantComp := pointer(@FastVarDataComp);
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do
