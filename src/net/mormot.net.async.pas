@@ -1538,7 +1538,7 @@ var
   endtix: Int64;
   ms: integer;
 begin
-  result := (@self <> nil) and
+  result := (self <> nil) and
             (fSocket <> nil);
   if not result then
     exit; // socket closed
