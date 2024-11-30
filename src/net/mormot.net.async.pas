@@ -5003,30 +5003,25 @@ end;
 procedure THttpAsyncServer.AsyncResponse(Connection: TConnectionAsyncHandle;
   const Content, ContentType: RawUtf8; Status: cardinal);
 var
-  c: THttpAsyncServerConnection;
   locked: boolean;
+  c: THttpAsyncServerConnection;
   res: TPollAsyncSocketOnReadWrite;
 begin
   // thread-safe locate the connection using O(log(n)) binary search
-  c := pointer(fAsync.ConnectionFind(Connection));
-  if c = nil then
-  begin
-    if acoVerboseLog in fAsync.fOptions then
-      fAsync.DoLog(sllTrace, 'late AsyncResponse on closed #%', [Connection], self);
-    exit;
-  end;
+  locked := true;
+  c := pointer(fAsync.ConnectionFindAndWaitLock(
+    {handle=}Connection, {wr=}false, {ms=}40));
+  if c <> nil then
   // process within the read lock, since may respond before state is set
-  locked := c.WaitLock({wr=}false, {ms=}40); // < KeepConnectionInstanceMS=100
   try
     // verify expected connection state, to avoid race condition
-    if (not locked) or
-       (c.fHandle <> Connection) or
+    if (c.fHandle <> Connection) or
        (c.fHttp.State <> hrsWaitAsyncProcessing) or
        not (rfAsynchronous in c.fHttp.ResponseFlags) then // paranoid
     begin
-      fAsync.DoLog(sllWarning, 'AsyncResponse(#%) failed lock=% state=%',
-        [Connection, BOOL_STR[locked], ToText(c.fHttp.State)^], self);
-      exit;
+      fAsync.DoLog(sllWarning, 'AsyncResponse(#%) failed state=%',
+        [Connection, ToText(c.fHttp.State)^], self);
+      exit; // will call c.UnLock()
     end;
     // finalize and send the response back to the client
     c.fRequest.RespStatus := Status;
@@ -5041,13 +5036,15 @@ begin
       if acoVerboseLog in fAsync.fOptions then
         fAsync.DoLog(sllTrace, 'final AsyncResponse: closing #%', [Connection], self);
       locked := false;
-      c.UnLockFinal({wr=}false);
+      c.UnLockFinal({wr=}false); // unlock before close
       fAsync.fClients.CloseConnection(TPollAsyncConnection(c), 'AsyncResponse');
     end;
   finally
     if locked then
       c.UnLock({wr=}false);
-  end;
+  end
+  else if acoVerboseLog in fAsync.fOptions then
+    fAsync.DoLog(sllTrace, 'late AsyncResponse on closed #%', [Connection], self);
 end;
 
 function THttpAsyncServer.Clients: THttpAsyncClientConnections;
