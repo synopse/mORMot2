@@ -668,7 +668,7 @@ type
     // - could be executed e.g. from a TAsyncConnection.OnRead method
     // - raise an exception if acoNoConnectionTrack option was defined
     // - returns nil if the handle was not found
-    // - returns the maching instance, and caller should release the lock as:
+    // - returns the maching instance, and caller should release the main lock as:
     // ! try ... finally UnLock(aLock); end;
     function ConnectionFindAndLock(aHandle: TConnectionAsyncHandle;
       aLock: TRWLockContext; aIndex: PInteger = nil): TAsyncConnection;
@@ -677,6 +677,12 @@ type
     // - this method won't keep the main Lock, but this class will ensure that
     // the returned pointer will last for at least 100ms until Free is called
     function ConnectionFind(aHandle: TConnectionAsyncHandle): TAsyncConnection;
+    /// high-level access to a connection instance, from its handle
+    // - use efficient O(log(n)) binary search
+    // - will also thread-safely attempt to acquire one of the connection's lock
+    // - returns nil if the handle was not found and acquired within WaitTimeoutMS
+    function ConnectionFindAndWaitLock(aHandle: TConnectionAsyncHandle;
+      LockWriter: boolean; WaitTimeoutMS: cardinal): TAsyncConnection;
     /// low-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search, since handles are increasing
     // - caller should have called Lock before this method is done
@@ -3377,6 +3383,50 @@ begin
   finally
   {$endif HASFASTTRYFINALLY}
     fConnectionLock.ReadOnlyUnLock;
+  end;
+end;
+
+function TAsyncConnections.ConnectionFindAndWaitLock(aHandle: TConnectionAsyncHandle;
+  LockWriter: boolean; WaitTimeoutMS: cardinal): TAsyncConnection;
+var
+  endtix, tix: Int64;
+  ms: integer;
+begin
+  result := nil;
+  if (self = nil) or
+     (aHandle <= 0) or
+     (acoNoConnectionTrack in fOptions) then
+    exit;
+  ms := 0;
+  endtix := 0;
+  while not Terminated do
+  begin
+    fConnectionLock.ReadOnlyLock;
+    try
+      result := LockedConnectionSearch(aHandle); // O(log(n)) binary search
+      if result = nil then
+        exit; // too late, or invalid handle
+      if result.TryLock(LockWriter) then
+        if not result.IsClosed then
+          exit // open connection sub-locked within main ReadOnlyLock
+        else
+        begin
+          result.UnLock(LockWriter);
+          result := nil; // too late
+          exit;
+        end;
+    finally
+      fConnectionLock.ReadOnlyUnLock;
+    end;
+    // impossible to lock this connection: retry ASAP (same algo than WaitLock)
+    result := nil;
+    tix := GetTickCount64;
+    if endtix = 0 then
+      endtix := tix + WaitTimeoutMS // never wait forever
+    else if tix >= endtix then
+      exit;
+    SleepHiRes(ms);
+    ms := ms xor 1; // 0,1,0,1,0,1...
   end;
 end;
 
