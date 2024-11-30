@@ -2785,8 +2785,8 @@ begin
     else
     begin
       if c.fLastOperation > lastms then
-        // need to reset time flag after 42 days (32-bit unlikely overflow)
-        c.fLastOperation := lastms;
+        // need to reset time flag every 49.7 days (32-bit unlikely overflow)
+        c.fLastOperation := lastms; // will wait twice fKeepConnectionInstanceMS
       gen.Items[result] := c; // keep
       inc(result);
     end;
