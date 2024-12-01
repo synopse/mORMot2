@@ -2324,7 +2324,7 @@ var
     fn: RawUtf8;
     withsub: boolean;
   begin
-    dir := FpOpendir(root + subpath); // much faster alternative to FindFirst()
+    dir := FpOpendir(root + subpath); // faster alternative to FindFirst()
     if dir = nil then
       exit;
     sublen := length(subpath);
