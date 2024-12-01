@@ -5310,6 +5310,7 @@ end;
 
 constructor THttpProxyServer.Create(aSettings: THttpProxyServerSettings);
 begin
+  inherited Create; // call TSynAutoCreateFields
   fLog := TSynLog;
   if aSettings = nil then
   begin
