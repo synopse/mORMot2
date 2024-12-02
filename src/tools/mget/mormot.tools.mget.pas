@@ -203,7 +203,7 @@ begin
     if Log <> nil then
       fClient.OnLog := Log.DoLog;
     fClient.TLS.IgnoreCertificateErrors := TlsIgnoreErrors;
-    fClient.TLS.CertificateFile := TlsCertFile;
+    fClient.TLS.CertificateFile := StringToUtf8(TlsCertFile);
     fClient.OpenBind(uri.Server, uri.Port, {bind=}false, uri.Https);
   end;
   result := fClient.WGet(uri.Address, DestFile, wget);
