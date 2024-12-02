@@ -1246,7 +1246,29 @@ function SystemFlagsFromInteger(value: integer): TSystemFlags;
 function SystemFlagsValue(sf: TSystemFlags): integer;
 
 function ToText(sat: TSamAccountType): PShortString; overload;
-procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
+procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8); overload;
+
+type
+  /// some well-known reusable filters, used e.g. by ObjectFilter()
+  // - depending on the kind of object, a complex combination of objectClass or
+  // sAMAccountType is needed
+  // - in the future, we are likely to add some new filters - feedback is welcome
+  // - but
+  TObjectFilter = (
+    ofNone,
+    ofAll,
+    ofUsers,
+    ofGroups,
+    ofContacts,
+    ofComputers,
+    ofOrganizationalUnits,
+    ofContainers,
+    ofBuiltInContainers,
+    ofDomain,
+    ofTrustedDomain,
+    ofGroupPolicies,
+    ofServiceConnectionPoints,
+    ofExpirableUsers);
 
 /// compute a TLdapClient.Search filter for a given account type
 // - specify the entry by AccountName, DistinguishedName or UserPrincipalName
@@ -1255,6 +1277,8 @@ function InfoFilter(AccountType: TSamAccountType;
   const AccountName: RawUtf8 = ''; const DistinguishedName: RawUtf8 = '';
   const UserPrincipalName: RawUtf8 = ''; const CustomFilter: RawUtf8 = ''): RawUtf8;
 
+function ToText(oft: TObjectFilter): PShortString; overload;
+procedure ToTextTrimmed(oft: TObjectFilter; var text: RawUtf8); overload;
 
 /// compute a sequence of modifications from its raw encoded attribute(s) sequence
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; overload;
@@ -3496,7 +3520,7 @@ const
     $20000000,  // satAlias
     $20000001,  // satNonSecurityAlias
     $30000000,  // satUserAccount    = 805306368
-    $30000001,  // satMachineAccount = 805306369 = objectCategory=computer
+    $30000001,  // satMachineAccount = 805306369
     $30000002,  // satTrustAccount
     $40000000,  // satAppBasicGroup
     $40000001); // satAppQueryGroup
@@ -3680,7 +3704,45 @@ begin
   TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSamAccountType), ord(sat)), text);
 end;
 
-var
+function ToText(oft: TObjectFilter): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TObjectFilter), ord(oft));
+end;
+
+procedure ToTextTrimmed(oft: TObjectFilter; var text: RawUtf8);
+begin
+  TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TObjectFilter), ord(oft)), text);
+end;
+
+const
+  // those filters are expected to be part of a &()()() block
+  // https://learn.microsoft.com/en-us/archive/technet-wiki/5392.active-directory-ldap-syntax-filters
+  OBJECT_FILTER: array[TObjectFilter] of RawUtf8 = (
+   '',                                                 // ofNone
+   '(objectClass=*)',                                  // ofAll
+   '(sAMAccountType=805306368)',                       // ofUsers
+   '(objectCategory=group)',                           // ofGroups
+   '(objectClass=contact)',                            // ofContacts
+   '(objectCategory=computer)',                        // ofComputers
+   '(objectCategory=organizationalUnit)',              // ofOrganizationalUnits
+   '(objectCategory=container)',                       // ofContainers
+   '(objectCategory=builtinDomain)',                   // ofBuiltInContainers
+   '(objectCategory=domain)',                          // ofDomain
+   '(objectClass=trustedDomain)',                      // ofTrustedDomain
+   '(objectCategory=groupPolicyContainer)',            // ofGroupPolicies
+   '(objectClass=serviceConnectionPoint)',             // ofServiceConnectionPoints
+   '(sAMAccountType=805306368)(accountExpires>=1)' +
+     '(accountExpires<=9223372036854775806)');         // ofExpirableUsers
+
+  USER_FILTER     = [ofUsers, ofExpirableUsers];
+  GROUP_FILTER    = [ofGroups];
+  COMPUTER_FILTER = [ofComputers];
+
+  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
+  AND_FLAG = ':1.2.840.113556.1.4.803:';
+  NESTED_FLAG: array[boolean] of RawUtf8 = (
+    '', ':1.2.840.113556.1.4.1941:');
+
   // traditionally, computer sAMAccountName ends with $
   MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
 
@@ -6597,12 +6659,6 @@ const
     atLastLogon,
     atUserAccountControl,
     atPrimaryGroupID];
-
-const
-  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
-  AND_FLAG = ':1.2.840.113556.1.4.803:';
-  NESTED_FLAG: array[boolean] of RawUtf8 = (
-    '', ':1.2.840.113556.1.4.1941:');
 
 procedure TLdapClient.GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
   const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
