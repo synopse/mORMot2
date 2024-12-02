@@ -1503,6 +1503,8 @@ type
     function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
     /// check if a connection need to be re-established to follow this URI
     function Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
+    /// check if a connection need to be re-established to follow this URI
+    function SameUri(const aUri: RawUtf8): boolean;
     /// compute the whole normalized URI
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: RawUtf8;
@@ -4961,6 +4963,15 @@ begin
   result := (aHttps = Https) and
             PropNameEquals(aServer, Server) and
             (GetCardinal(pointer(aPort)) = PortInt);
+end;
+
+function TUri.SameUri(const aUri: RawUtf8): boolean;
+var
+  u: TUri;
+begin
+  result := u.From(aUri) and
+            PropNameEquals(u.Scheme, Scheme) and
+            u.Same(Server, Port, Https);
 end;
 
 function TUri.URI: RawUtf8;
