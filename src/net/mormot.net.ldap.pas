@@ -1702,7 +1702,7 @@ type
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     // internal wrapper methods
-    procedure GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
+    procedure GetAllValues(Filter: TObjectFilter; Uac, unUac: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
       out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
     function SearchMissing(const ObjectName: RawUtf8; Attribute: TLdapAttribute): integer;
@@ -6688,42 +6688,27 @@ const
     atUserAccountControl,
     atPrimaryGroupID];
 
-procedure TLdapClient.GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
+procedure TLdapClient.GetAllValues(Filter: TObjectFilter; Uac, unUac: integer;
   const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
   out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
 var
-  f, filter, uacname: RawUtf8;
+  f, uacname: RawUtf8;
   bakpagesize: integer;
 begin
-  case AT of
-    satGroup,
-    satNonSecurityGroup:
-      uacname := 'groupType';
-    satUserAccount,
-    satAlias,
-    satMachineAccount,
-    satTrustAccount:
-      uacname := 'userAccountControl';
+  if Filter in GROUP_FILTER then
+    uacname := 'groupType'
   else
-    ELdap.RaiseUtf8('Unexpected %.GetByAccountType(%)', [self, ToText(AT)^]);
-  end;
-  unUac := unUac and (not Uac); // FilterUac has precedence over FilterUnUac
-  f := CustomFilter;
-  if Uac <> 0 then
-    f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Uac, f]);
-  if unUac <> 0 then
-    f := FormatUtf8('(!(%%=%))%', [uacname, AND_FLAG, unUac, f]);
+    uacname := 'userAccountControl'; // users and computers
+  UacFilterInteger(uacname, Uac, UnUac, f);
   if Match <> '' then // allow * wildchar in Match - but escape others
     f := FormatUtf8('%(%=%)',
       [f, AttrTypeName[Attribute], LdapEscape(Match, {keep*=}true)]);
-  FormatUtf8('(sAMAccountType=%)', [AT_VALUE[AT]], filter);
-  if f <> '' then
-    filter := FormatUtf8('(&%%)', [filter, f]);
+  f := FormatUtf8('(&%%%)', [OBJECT_FILTER[Filter], f, CustomFilter]);
   bakpagesize := fSearchPageSize;
   SearchBegin(1000); // force pagination for the loop below
   try
     repeat
-      if Search([Attribute], filter, BaseDN) and
+      if Search([Attribute], f, BaseDN) and
          (SearchResult.Count > 0) then
         AddRawUtf8(Res, SearchResult.ObjectAttributes(Attribute, ObjectNames));
     until SearchCookie = '';
@@ -6736,7 +6721,7 @@ function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
-  GetByAccountType(satMachineAccount,
+  GetAllValues(ofComputers,
     UserAccountControlsValue(FilterUac), UserAccountControlsValue(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
@@ -6824,7 +6809,7 @@ function TLdapClient.GetGroups(FilterUac, UnFilterUac: TGroupTypes;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
-  GetByAccountType(satGroup,
+  GetAllValues(ofGroups,
     GroupTypesValue(FilterUac), GroupTypesValue(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
@@ -6833,7 +6818,7 @@ function TLdapClient.GetUsers(FilterUac, UnFilterUac: TUserAccountControls;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
-  GetByAccountType(satUserAccount,
+  GetAllValues(ofUsers,
     UserAccountControlsValue(FilterUac), UserAccountControlsValue(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
