@@ -1272,8 +1272,7 @@ type
 
 /// compute a TLdapClient.Search filter for a given account type
 // - specify the entry by AccountName, DistinguishedName or UserPrincipalName
-// - and also per sAMAccountType and a custom filter
-function InfoFilter(AccountType: TSamAccountType;
+function ObjectFilter(Filter: TObjectFilter;
   const AccountName: RawUtf8 = ''; const DistinguishedName: RawUtf8 = '';
   const UserPrincipalName: RawUtf8 = ''; const CustomFilter: RawUtf8 = ''): RawUtf8;
 
@@ -3752,14 +3751,15 @@ const
   // traditionally, computer sAMAccountName ends with $
   MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
 
-function InfoFilter(AccountType: TSamAccountType; const AccountName,
+function ObjectFilter(Filter: TObjectFilter; const AccountName,
   DistinguishedName, UserPrincipalName, CustomFilter: RawUtf8): RawUtf8;
 begin
+  // put AccountName/DistinguishedName/UserPrincipalName into result
   result := '';
   if AccountName <> '' then
     FormatUtf8('(sAMAccountName=%%)',
       [LdapEscapeName(AccountName),
-       MACHINE_CHAR[(AccountType = satMachineAccount) and
+       MACHINE_CHAR[(Filter in COMPUTER_FILTER) and
                     (AccountName[length(AccountName)] <> '$')]], result);
   if DistinguishedName <> '' then
     result := FormatUtf8('%(distinguishedName=%)',
@@ -3771,11 +3771,10 @@ begin
      ord(DistinguishedName <> '') +
      ord(UserPrincipalName <> '') > 1 then
     result := FormatUtf8('(|%)', [result]); // "or" between identifiers
-  if AccountType <> satUnknown then
-    result := FormatUtf8('(&(sAMAccountType=%)%%)',
-      [AT_VALUE[AccountType], result, CustomFilter])
-  else if CustomFilter <> '' then
-    result := FormatUtf8('(&%%)', [result, CustomFilter])
+  // compute global filter text
+  if (Filter <> ofNone) or
+     (CustomFilter <> '') then
+    result := FormatUtf8('(&%%%)', [OBJECT_FILTER[Filter], result, CustomFilter]);
 end;
 
 procedure UacFilterInteger(const UacName: RawUtf8; Uac, unUac: integer;
@@ -6754,8 +6753,8 @@ begin
   AddRawUtf8(attr, CustomAttributes);
   result := ((AccountName <> '') or
              (DistinguishedName <> '')) and
-            Search(DefaultDN(BaseDN), false, InfoFilter(
-              satMachineAccount, AccountName, DistinguishedName), attr) and
+            Search(DefaultDN(BaseDN), false, ObjectFilter(
+              ofComputers, AccountName, DistinguishedName), attr) and
             (SearchResult.Count = 1);
   if result then
     Info.Fill(SearchResult.Items[0].Attributes,
@@ -6861,8 +6860,8 @@ begin
   if WithMember then
     SearchRangeBegin; // support 'member;range=0..1499' pagined attributes
   try
-    result := Search(DefaultDN(BaseDN), false, InfoFilter(
-                satGroup, AccountName, DistinguishedName), attr) and
+    result := Search(DefaultDN(BaseDN), false, ObjectFilter(
+                ofGroups, AccountName, DistinguishedName), attr) and
               (SearchResult.Count = 1);
   finally
     if WithMember then
@@ -6877,8 +6876,8 @@ function TLdapClient.GetGroupDN(
   const AccountName, BaseDN, CustomFilter: RawUtf8): RawUtf8;
 begin
   if (AccountName <> '') and
-     Search([atDistinguishedName],
-       InfoFilter(satGroup, AccountName, '', '', CustomFilter)) and
+     Search([atDistinguishedName], ObjectFilter(
+       ofGroups, AccountName, '', '', CustomFilter), BaseDN) and
      (SearchResult.Count = 1) then
     result := SearchResult.Items[0][atDistinguishedName]
   else
@@ -6894,8 +6893,8 @@ begin
   result := false;
   if ((AccountName <> '') or
       (DistinguishedName <> '')) and
-     Search([atObjectSid], InfoFilter(
-       satGroup, AccountName, DistinguishedName, '', CustomFilter)) and
+     Search([atObjectSid], ObjectFilter(
+       ofGroups, AccountName, DistinguishedName, '', CustomFilter), BaseDN) and
      (SearchResult.Count = 1) then
   begin
     last := SplitRight(SearchResult.Items[0][atObjectSid], '-');
@@ -6922,7 +6921,7 @@ begin
   result := ((AccountName <> '') or
              (DistinguishedName <> '') or
              (UserPrincipalName <> '')) and
-            Search(DefaultDN(BaseDN), false, InfoFilter(satUserAccount,
+            Search(DefaultDN(BaseDN), false, ObjectFilter(ofUsers,
               AccountName, DistinguishedName, UserPrincipalName), attr) and
             (SearchResult.Count = 1);
   if result then
@@ -6936,9 +6935,8 @@ function TLdapClient.GetUserDN(
 begin
   if ((AccountName <> '') or
       (UserPrincipalName <> '')) and
-     Search([atDistinguishedName, atPrimaryGroupID, atObjectSid],
-       InfoFilter(satUserAccount,
-         AccountName, '', UserPrincipalName, CustomFilter)) and
+     Search([atDistinguishedName, atPrimaryGroupID, atObjectSid], ObjectFilter(
+       ofUsers, AccountName, '', UserPrincipalName, CustomFilter)) and
      (SearchResult.Count = 1) then
     with SearchResult.Items[0].Attributes do
     begin
