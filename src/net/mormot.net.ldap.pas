@@ -895,29 +895,30 @@ type
   /// the decoded fields of TLdapUser.userAccountControl
   // - https://learn.microsoft.com/en-us/windows/win32/adschema/a-useraccountcontrol
   TUserAccountControl = (
-    uacScript,                            //       1
-    uacAccountDisable,                    //       2
-    uacHomeDirRequired,                   //       8
-    uacLockedOut,                         //      10 = 16
-    uacPasswordNotRequired,               //      20 = 32
-    uacPasswordCannotChange,              //      40 = 64
-    uacPasswordUnencrypted,               //      80 = 128
-    uacTempDuplicateAccount,              //     100 = 256
-    uacNormalAccount,                     //     200 = 512
-    uacInterDomainTrusted,                //     800 = 2048
-    uacWorkstationTrusted,                //    1000 = 4096
-    uacServerTrusted,                     //    2000 = 8192
-    uacPasswordDoNotExpire,               //   10000 = 65536
-    uacLogonAccount,                      //   20000 = 131072
-    uacSmartcardRequired,                 //   40000 = 262144
-    uacKerberosTrustedForDelegation,      //   80000 = 524288
-    uacKerberosNotDelegated,              //  100000 = 1048576
-    uacKerberosDesOnly,                   //  200000 = 2097152
-    uacKerberosRequirePreAuth,            //  400000 = 4194304
-    uacPasswordExpired,                   //  800000 = 8388608
-    uacKerberosTrustedToDelegate,         // 1000000 = 16777216
-    uacKerberosNoPac,                     // 2000000 = 33554432
-    uacPartialSecretsRodc);               // 4000000 = 67108864
+    uacScript,                            //        1
+    uacAccountDisable,                    //        2
+    uacHomeDirRequired,                   //        8
+    uacLockedOut,                         //       10 = 16
+    uacPasswordNotRequired,               //       20 = 32
+    uacPasswordCannotChange,              //       40 = 64
+    uacPasswordUnencrypted,               //       80 = 128
+    uacTempDuplicateAccount,              //      100 = 256
+    uacNormalAccount,                     //      200 = 512
+    uacInterDomainTrusted,                //      800 = 2048
+    uacWorkstationTrusted,                //     1000 = 4096
+    uacServerTrusted,                     //     2000 = 8192
+    uacPasswordDoNotExpire,               //    10000 = 65536
+    uacLogonAccount,                      //    20000 = 131072
+    uacSmartcardRequired,                 //    40000 = 262144
+    uacKerberosTrustedForDelegation,      //    80000 = 524288
+    uacKerberosNotDelegated,              //   100000 = 1048576
+    uacKerberosDesOnly,                   //   200000 = 2097152
+    uacKerberosRequirePreAuth,            //   400000 = 4194304
+    uacPasswordExpired,                   //   800000 = 8388608
+    uacKerberosTrustedToDelegate,         // 01000000 = 16777216
+    uacKerberosNoPac,                     // 02000000 = 33554432
+    uacPartialSecretsRodc,                // 04000000 = 67108864
+    uacUserUseAesKeys);                   // 80000000
 
   /// define TLdapUser.userAccountControl decoded flags
   // - use UserAccountControlsFromInteger() UserAccountControlsFromText() and
@@ -3510,11 +3511,11 @@ const
     32,                  // gtAppQuery
     integer($80000000)); // gtSecurity
 
-  // see https://ldapwiki.com/wiki/Wiki.jsp?page=userAccountControl
+  // see https://ldapwiki.com/wiki/Wiki.jsp?page=User-Account-Control%20Attribute%20Values
   UAC_VALUE: array[TUserAccountControl] of integer = (
     1, 2, 8, 16, 32, 64, 128, 256, 512, 2048, 4096, 8192, 65536,
     131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216,
-    33554432, 67108864);
+    33554432, 67108864, integer($80000000));
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=X-SYSTEMFLAGS
   SF_VALUE: array[TSystemFlag] of integer = (
