@@ -942,18 +942,18 @@ type
 
   /// known systemFlags values
   TSystemFlag = (
-    sfAttrNotReplicated,          // 1
-    sfAttrReqPartialSetMember,    // 2
-    sfAttrIsConstructed,          // 4
-    sfAttrIsOperational,          // 8
+    sfAttrNotReplicated,          // 01
+    sfAttrReqPartialSetMember,    // 02
+    sfAttrIsConstructed,          // 04
+    sfAttrIsOperational,          // 08
     sfSchemaBaseObject,           // 10
     sfAttrIsRdn,                  // 20
-    sfDomainDisallowMove,         // 400000
-    sfDomainDisallowRename,       // 800000
-    sfConfigAllowLimitedMove,     // 1000000
-    sfConfigAllowMove,            // 2000000
-    sfConfigAllowRename,          // 4000000
-    sfConfigAllowDelete);         // 8000000
+    sfDomainDisallowMove,         // 04000000
+    sfDomainDisallowRename,       // 08000000
+    sfConfigAllowLimitedMove,     // 10000000
+    sfConfigAllowMove,            // 20000000
+    sfConfigAllowRename,          // 40000000
+    sfConfigDisallowDelete);      // 80000000
 
   /// define systemFlags decoded flags
   // - use SystemFlagsFromInteger() SystemFlagsFromText() and
@@ -3519,7 +3519,18 @@ const
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=X-SYSTEMFLAGS
   SF_VALUE: array[TSystemFlag] of integer = (
-    1, 2, 4, 8, 16, 32, 64, 4194304, 8388608, 16777216, 33554432, 67108864);
+    1,                   // sfAttrNotReplicated
+    2,                   // sfAttrReqPartialSetMember
+    4,                   // sfAttrIsConstructed
+    8,                   // sfAttrIsOperational
+    16,                  // sfSchemaBaseObject
+    32,                  // sfAttrIsRdn
+    $04000000,           // sfDomainDisallowMove
+    $08000000,           // sfDomainDisallowRename
+    $10000000,           // sfConfigAllowLimitedMove
+    $20000000,           // sfConfigAllowMove
+    $40000000,           // sfConfigAllowRename
+    integer($80000000)); // sfConfigDisallowDelete
 
 function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 begin
