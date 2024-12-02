@@ -984,6 +984,10 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
 /// purge all output fields for a TNetTlsContext instance for proper reuse
 procedure ResetNetTlsContext(var TLS: TNetTlsContext);
 
+/// compare the main fields of twoTNetTlsContext instances
+// - won't compare the callbacks
+function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
+
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
@@ -3874,6 +3878,20 @@ begin
   FastAssignNew(TLS.PeerSubject);
   FastAssignNew(TLS.PeerInfo);
   FastAssignNew(TLS.LastError);
+end;
+
+function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
+begin
+  result := (tls1.Enabled = tls2.Enabled) and
+            ((not tls1.Enabled) or
+             ((tls1.IgnoreCertificateErrors = tls2.IgnoreCertificateErrors) and
+              (tls1.CertificateFile         = tls2.CertificateFile) and
+              (tls1.CACertificatesFile      = tls2.CACertificatesFile) and
+              (tls1.CertificateRaw          = tls2.CertificateRaw) and
+              (tls1.PrivateKeyFile          = tls2.PrivateKeyFile) and
+              (tls1.PrivatePassword         = tls2.PrivatePassword) and
+              (tls1.PrivateKeyRaw           = tls2.PrivateKeyRaw) and
+              (tls1.HostNamesCsv            = tls2.HostNamesCsv)));
 end;
 
 
