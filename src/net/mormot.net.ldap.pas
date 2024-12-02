@@ -1688,6 +1688,8 @@ type
     fFullResult: TAsnObject;
     fDomainSid: RawSid;
     fTlsContext: TNetTlsContext;
+    fSearchBeginBak: TIntegerDynArray; // SearchPageSize (recursive) backup
+    fSearchBeginCount: integer; // usually = only 0..1
     fSockBufferPos: integer;
     fWellKnownObjects: TLdapKnownCommonNames;
     // protocol methods
@@ -1849,23 +1851,24 @@ type
     /// enable paging for the searches
     // - you can then loop calling Search() until it returns an empty result,
     // and eventually SearchEnd when done with this query
-    // - is just a wrapper to set SearchPageSize
+    // - is just a wrapper to set SearchPageSize, with a backup of the current
+    // value (allowing nested calls)
     procedure SearchBegin(PageSize: integer = 1000);
     /// finalize paging for the searches
     // - is just a wrapper to reset SearchPageSize and the SearchCookie
     procedure SearchEnd;
-    /// enable "member;range=0-1499" paging attribute detecting for the searches
+    /// enable "###;range=0-1499" paging attribute detecting for the searches
     // - should finally call one of the SearchRangeEnd overloaded methods
     // - since Search() may have its own paging, we need to defer paging
     // attributes retrieval after the main request, via eventual SearchRangeEnd
     // - as used e.g. by SearchAll() with the roAutoRange option
     procedure SearchRangeBegin;
-    /// finalize "member;range=0-1499" paging attribute detection into self
+    /// finalize "###;range=0-1499" paging attribute detection into self
     // - this method will ask for all remaining paged attributes, and
     // consolidate all values into the main SearchResult
-    // - could be used e.g. as
+    // - could be used e.g. to search all groups with pagined "member" as
     // ! SearchRangeBegin;
-    // ! Search(DefaultDN, false, InfoFilter(satGroup), []);
+    // ! Search(DefaultDN, false, ObjectFilter(ofGroups), []);
     // ! SearchRangeEnd; // any paginated attributes will be retrieved here
     procedure SearchRangeEnd; overload;
     /// finalize "member;range=0-1499" paging attribute detection as variant
@@ -6114,12 +6117,17 @@ end;
 procedure TLdapClient.SearchBegin(PageSize: integer);
 begin
   fSearchCookie := '';
+  AddInteger(fSearchBeginBak, fSearchBeginCount, fSearchPageSize);
   fSearchPageSize := PageSize;
 end;
 
 procedure TLdapClient.SearchEnd;
 begin
-  SearchBegin(0);
+  if fSearchBeginCount = 0 then
+    ELdap.RaiseUtf8('Unexpected %.SearchEnd with no SearchBegin', [self]);
+  fSearchCookie := '';
+  dec(fSearchBeginCount);
+  fSearchPageSize := fSearchBeginBak[fSearchBeginCount]; // restore
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
@@ -6436,7 +6444,7 @@ function TLdapClient.SearchAll(const BaseDN: RawUtf8;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
   MaxCount: integer): variant;
 var
-  n, bakpagesize: integer;
+  n: integer;
   res: TDocVariantData absolute result;
 begin
   // setup resultset
@@ -6448,7 +6456,6 @@ begin
      (ObjectAttributeField <> '') and
      not (roTypesOnly in Options) then
     SearchRangeBegin;
-  bakpagesize := fSearchPageSize;
   SearchBegin(1000); // force pagination for the loop below
   try
     // retrieve all result pages
@@ -6461,7 +6468,7 @@ begin
           ((MaxCount > 0) and
            (n > MaxCount));
   finally
-    SearchBegin(bakpagesize); // = SearchEnd + restore previous SearchPageSize
+    SearchEnd;
     // additional requests to fill any "paging attributes" auto-range results
     if fSearchRange <> nil then
       SearchRangeEnd(res, Options, ObjectAttributeField); // as TDocVariant
@@ -6693,7 +6700,6 @@ procedure TLdapClient.GetAllValues(Filter: TObjectFilter; Uac, unUac: integer;
   out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
 var
   f, uacname: RawUtf8;
-  bakpagesize: integer;
 begin
   if Filter in GROUP_FILTER then
     uacname := 'groupType'
@@ -6704,7 +6710,6 @@ begin
     f := FormatUtf8('%(%=%)',
       [f, AttrTypeName[Attribute], LdapEscape(Match, {keep*=}true)]);
   f := FormatUtf8('(&%%%)', [OBJECT_FILTER[Filter], f, CustomFilter]);
-  bakpagesize := fSearchPageSize;
   SearchBegin(1000); // force pagination for the loop below
   try
     repeat
@@ -6713,7 +6718,7 @@ begin
         AddRawUtf8(Res, SearchResult.ObjectAttributes(Attribute, ObjectNames));
     until SearchCookie = '';
   finally
-    SearchBegin(bakpagesize); // = SearchEnd + restore previous SearchPageSize
+    SearchEnd;
   end;
 end;
 
