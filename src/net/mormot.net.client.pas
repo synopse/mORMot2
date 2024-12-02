@@ -499,6 +499,11 @@ type
     // - as used e.g. by TSimpleHttpClient
     constructor OpenOptions(const aUri: TUri;
       var aOptions: THttpRequestExtendedOptions);
+    /// compare TUri and its options with the actual connection
+    // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
+    // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
+    function SameOpenOptions(const aUri: TUri;
+      const aOptions: THttpRequestExtendedOptions): boolean; virtual;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
@@ -613,6 +618,10 @@ type
     /// the effective 'Location:' URI after 3xx redirection(s) of Request()
     property Redirected: RawUtf8
       read fRedirected;
+    /// optional Authentication Scheme
+    // - may still be wraNone if OnAuthorize has been manually set
+    property AuthScheme: THttpRequestAuthentication
+      read fExtendedOptions.Auth.Scheme;
     /// optional Authorization: Bearer header value
     property AuthBearer: SpiUtf8
       read fExtendedOptions.Auth.Token write SetAuthBearer;
@@ -2227,6 +2236,22 @@ begin
   // actually connect to the server (inlined TCrtSock.Open)
   OpenBind(aUri.Server, aUri.Port, {bind=}false, aUri.Https, aUri.Layer);
   aOptions.TLS := TLS; // copy back Peer information after connection
+end;
+
+function THttpClientSocket.SameOpenOptions(const aUri: TUri;
+  const aOptions: THttpRequestExtendedOptions): boolean;
+var
+  tun: TUri;
+begin
+  result := IdemPChar(pointer(aUri.Scheme), 'HTTP') and
+            aUri.Same(Server, Port, TLS.Enabled) and
+            SameNetTlsContext(TLS, aOptions.TLS) and
+            fExtendedOptions.SameAuth(@aOptions.Auth);
+  if result then
+    if tun.From(aOptions.Proxy) then
+      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
+    else
+      result := (Tunnel.Server = '');
 end;
 
 procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
