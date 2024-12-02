@@ -2320,18 +2320,24 @@ end;
 function TNetAddr.SetFromIP4(const address: RawUtf8;
   noNewSocketIP4Lookup: boolean): boolean;
 begin
-  result := false;
+  // allow to bind to any IPv6 address
+  if address = c6AnyHost then // ::
+  begin
+    PSockAddrIn6(@Addr)^.sin6_family := AF_INET6; // keep all sin6_addr[] = 0
+    result := true;
+    exit;
+  end;
   // caller did set addr4.sin_port and other fields to 0
+  result := false;
   with PSockAddr(@Addr)^ do
     if (address = cLocalhost) or
-       (address = c6Localhost) or
+       (address = c6Localhost) or // ::1
        PropNameEquals(address, 'localhost') then
       PCardinal(@sin_addr)^ := cLocalhost32 // 127.0.0.1
     else if (address = cBroadcast) or
             (address = c6Broadcast) then
       PCardinal(@sin_addr)^ := cardinal(-1) // 255.255.255.255
-    else if (address = cAnyHost) or
-            (address = c6AnyHost) then
+    else if address = cAnyHost then
       // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
     else if NetIsIP4(pointer(address), @sin_addr) or
             GetKnownHost(address, PCardinal(@sin_addr)^) or
