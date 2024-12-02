@@ -139,6 +139,9 @@ type
     wraNegotiate,
     wraBearer);
 
+  /// pointer to some extended options for HTTP clients
+  PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
+
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
   // the actual mormot.net.http's THttpRequest implementation class
@@ -188,9 +191,9 @@ type
     procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8);
     /// setup web authentication using a given Bearer in the request headers
     procedure AuthorizeBearer(const Value: SpiUtf8);
+    /// compare the Auth fields, depending on their scheme
+    function SameAuth(Another: PHttpRequestExtendedOptions): boolean;
   end;
-  /// pointer to some extended options for HTTP clients
-  PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
@@ -3192,6 +3195,22 @@ begin
     Auth.Scheme := wraBearer;
 end;
 
+function THttpRequestExtendedOptions.SameAuth(
+  Another: PHttpRequestExtendedOptions): boolean;
+begin
+  result := (Another <> nil) and
+            (Auth.Scheme = Another^.Auth.Scheme);
+  if result then
+    case Auth.Scheme of
+      wraBasic,
+      wraDigest,
+      wraNegotiate:
+        result := (Auth.UserName = Another^.Auth.UserName) and
+                  (Auth.Password = Another^.Auth.Password);
+      wraBearer:
+        result := (Auth.Token = Another^.Auth.Token);
+    end;
+end;
 
 function ToText(wra: THttpRequestAuthentication): PShortString;
 begin
