@@ -3490,8 +3490,8 @@ const
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=SAMAccountType
   AT_VALUE: array[TSamAccountType] of cardinal = (
     $00000000,  // satUnknown
-    $10000000,  // satGroup          = 268435456
-    $10000002,  // satNonSecurityGroup
+    $10000000,  // satGroup            = 268435456
+    $10000001,  // satNonSecurityGroup = 268435457
     $20000000,  // satAlias
     $20000001,  // satNonSecurityAlias
     $30000000,  // satUserAccount    = 805306368
@@ -3502,7 +3502,13 @@ const
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=GroupType
   GT_VALUE: array[TGroupType] of integer = (
-    1, 2, 4, 8, 16, 32, integer($80000000));
+    1,                   // gtBuiltIn
+    2,                   // gtGlobal
+    4,                   // gtDomainLocal
+    8,                   // gtUniversal
+    16,                  // gtAppBasic
+    32,                  // gtAppQuery
+    integer($80000000)); // gtSecurity
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=userAccountControl
   UAC_VALUE: array[TUserAccountControl] of integer = (
