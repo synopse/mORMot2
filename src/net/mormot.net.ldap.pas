@@ -1280,10 +1280,10 @@ function ToText(oft: TObjectFilter): PShortString; overload;
 procedure ToTextTrimmed(oft: TObjectFilter; var text: RawUtf8); overload;
 
 /// compute a custom filter according to (un)expected TUserAccountControls values
-function UacFilter(Uac, unUac: TUserAccountControls): RawUtf8; overload;
+function UacFilter(Uac, unUac: TUserAccountControls): RawUtf8;
 
 /// compute a custom filter according to (un)expected TGroupTypes values
-function UacFilter(Uac, unUac: TGroupTypes): RawUtf8; overload;
+function GtFilter(Gt, unGt: TGroupTypes): RawUtf8;
 
 /// compute a sequence of modifications from its raw encoded attribute(s) sequence
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; overload;
@@ -1704,7 +1704,7 @@ type
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     // internal wrapper methods
-    procedure GetAllValues(Filter: TObjectFilter; Uac, unUac: integer;
+    procedure GetAllValues(Filter: TObjectFilter; Flags, noFlags: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
       out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
     function SearchMissing(const ObjectName: RawUtf8; Attribute: TLdapAttribute): integer;
@@ -3780,26 +3780,26 @@ begin
     result := FormatUtf8('(&%%%)', [OBJECT_FILTER[Filter], result, CustomFilter]);
 end;
 
-procedure UacFilterInteger(const UacName: RawUtf8; Uac, unUac: integer;
+procedure FlagsFilterInteger(const FlagsName: RawUtf8; Flags, noFlags: integer;
   out Filter: RawUtf8);
 begin
-  unUac := unUac and (not Uac); // UAC has precedence over un-UAC
-  if Uac <> 0 then
-    FormatUtf8('(%%=%)', [UacName, AND_FLAG, Uac], Filter);
-  if unUac <> 0 then
-    Filter := FormatUtf8('(!(%%=%))%', [UacName, AND_FLAG, unUac, Filter]);
+  noFlags := noFlags and (not Flags); // Flags has precedence over un-Flags
+  if Flags <> 0 then
+    FormatUtf8('(%%=%)', [FlagsName, AND_FLAG, Flags], Filter);
+  if noFlags <> 0 then
+    Filter := FormatUtf8('(!(%%=%))%', [FlagsName, AND_FLAG, noFlags, Filter]);
 end;
 
 function UacFilter(Uac, unUac: TUserAccountControls): RawUtf8;
 begin
-  UacFilterInteger('userAccountControl',
+  FlagsFilterInteger('userAccountControl',
     UserAccountControlsValue(Uac), UserAccountControlsValue(unUac), result);
 end;
 
-function UacFilter(Uac, unUac: TGroupTypes): RawUtf8;
+function GtFilter(Gt, unGt: TGroupTypes): RawUtf8;
 begin
-  UacFilterInteger('groupType',
-    GroupTypesValue(Uac), GroupTypesValue(unUac), result);
+  FlagsFilterInteger('groupType',
+    GroupTypesValue(Gt), GroupTypesValue(unGt), result);
 end;
 
 
@@ -6472,10 +6472,10 @@ begin
     // additional requests to fill any "paging attributes" auto-range results
     if fSearchRange <> nil then
       SearchRangeEnd(res, Options, ObjectAttributeField); // as TDocVariant
-    // eventually sort by field names (if specified)
-    if roSortByName in Options then
-      res.SortByName(nil, {reverse=}false, {nested=}true);
   end;
+  // eventually sort by field names (if specified)
+  if roSortByName in Options then
+    res.SortByName(nil, {reverse=}false, {nested=}true);
 end;
 
 function TLdapClient.Search(const Attributes: TLdapAttributeTypes;
@@ -6695,17 +6695,17 @@ const
     atUserAccountControl,
     atPrimaryGroupID];
 
-procedure TLdapClient.GetAllValues(Filter: TObjectFilter; Uac, unUac: integer;
+procedure TLdapClient.GetAllValues(Filter: TObjectFilter; Flags, noFlags: integer;
   const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
   out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
 var
-  f, uacname: RawUtf8;
+  f, flagsName: RawUtf8;
 begin
   if Filter in GROUP_FILTER then
-    uacname := 'groupType'
+    flagsName := 'groupType'
   else
-    uacname := 'userAccountControl'; // users and computers
-  UacFilterInteger(uacname, Uac, UnUac, f);
+    flagsName := 'userAccountControl'; // users and computers
+  FlagsFilterInteger(flagsName, Flags, noFlags, f);
   if Match <> '' then // allow * wildchar in Match - but escape others
     f := FormatUtf8('%(%=%)',
       [f, AttrTypeName[Attribute], LdapEscape(Match, {keep*=}true)]);
