@@ -6990,8 +6990,8 @@ begin
     exit; // we need at least one valid name to compare to
   if n > 1 then
     filter := FormatUtf8('(|%)', [filter]); // OR operator
-  filter := FormatUtf8('(&(sAMAccountType=%)%%(member%=%))',
-    [AT_VALUE[satGroup], filter, CustomFilter, NESTED_FLAG[Nested], user]);
+  filter := FormatUtf8('(&%%%(member%=%))',
+    [OBJECT_FILTER[ofGroups], filter, CustomFilter, NESTED_FLAG[Nested], user]);
   if Search([atSAMAccountName], filter) and
      (SearchResult.Count > 0) then
   begin
