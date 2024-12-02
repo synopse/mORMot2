@@ -3574,9 +3574,10 @@ var
   g: TGroupType;
 begin
   result := 0;
-  for g := low(g) to high(g) do
-    if g in gt then
-      result := result or GT_VALUE[g];
+  if gt <> [] then
+    for g := low(g) to high(g) do
+      if g in gt then
+        result := result or GT_VALUE[g];
 end;
 
 function UserAccountControlsFromInteger(value: integer): TUserAccountControls;
@@ -3612,9 +3613,10 @@ var
   u: TUserAccountControl;
 begin
   result := 0;
-  for u := low(u) to high(u) do
-    if u in uac then
-      result := result or UAC_VALUE[u];
+  if uac <> [] then
+    for u := low(u) to high(u) do
+      if u in uac then
+        result := result or UAC_VALUE[u];
 end;
 
 function SystemFlagsFromInteger(value: integer): TSystemFlags;
@@ -3650,9 +3652,10 @@ var
   f: TSystemFlag;
 begin
   result := 0;
-  for f := low(f) to high(f) do
-    if f in sf then
-      result := result or SF_VALUE[f];
+  if sf <> [] then
+    for f := low(f) to high(f) do
+      if f in sf then
+        result := result or SF_VALUE[f];
 end;
 
 function ToText(sat: TSamAccountType): PShortString;
@@ -6134,7 +6137,7 @@ begin
   fSearchResult.AfterAdd; // allow "for res in ldap.SearchResult.Items do"
   result := fResultCode = LDAP_RES_SUCCESS;
   if result and
-     (fSearchRange <> nil) then
+     (fSearchRange <> nil) then // within SearchRangeBegin .. SearchRangeEnd
     fSearchRange.ExtractPagedAttributes(fSearchResult);
   QueryPerformanceMicroSeconds(stop);
   fSearchResult.fSearchTimeMicroSec := stop - start;
@@ -6597,7 +6600,8 @@ var
   bakpagesize: integer;
 begin
   case AT of
-    satGroup:
+    satGroup,
+    satNonSecurityGroup:
       uacname := 'groupType';
     satUserAccount,
     satAlias,
