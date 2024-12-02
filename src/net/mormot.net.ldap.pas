@@ -6588,6 +6588,7 @@ procedure TLdapClient.GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
   out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
 var
   f, filter, uacname: RawUtf8;
+  bakpagesize: integer;
 begin
   case AT of
     satGroup:
@@ -6612,9 +6613,17 @@ begin
   FormatUtf8('(sAMAccountType=%)', [AT_VALUE[AT]], filter);
   if f <> '' then
     filter := FormatUtf8('(&%%)', [filter, f]);
-  if Search([Attribute], filter, BaseDN) and
-     (SearchResult.Count > 0) then
-    Res := SearchResult.ObjectAttributes(Attribute, ObjectNames);
+  bakpagesize := fSearchPageSize;
+  SearchBegin(1000); // force pagination for the loop below
+  try
+    repeat
+      if Search([Attribute], filter, BaseDN) and
+         (SearchResult.Count > 0) then
+        AddRawUtf8(Res, SearchResult.ObjectAttributes(Attribute, ObjectNames));
+    until SearchCookie = '';
+  finally
+    SearchBegin(bakpagesize); // = SearchEnd + restore previous SearchPageSize
+  end;
 end;
 
 function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
