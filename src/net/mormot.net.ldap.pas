@@ -1280,6 +1280,12 @@ function InfoFilter(AccountType: TSamAccountType;
 function ToText(oft: TObjectFilter): PShortString; overload;
 procedure ToTextTrimmed(oft: TObjectFilter; var text: RawUtf8); overload;
 
+/// compute a custom filter according to (un)expected TUserAccountControls values
+function UacFilter(Uac, unUac: TUserAccountControls): RawUtf8; overload;
+
+/// compute a custom filter according to (un)expected TGroupTypes values
+function UacFilter(Uac, unUac: TGroupTypes): RawUtf8; overload;
+
 /// compute a sequence of modifications from its raw encoded attribute(s) sequence
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; overload;
 
@@ -3771,6 +3777,29 @@ begin
   else if CustomFilter <> '' then
     result := FormatUtf8('(&%%)', [result, CustomFilter])
 end;
+
+procedure UacFilterInteger(const UacName: RawUtf8; Uac, unUac: integer;
+  out Filter: RawUtf8);
+begin
+  unUac := unUac and (not Uac); // UAC has precedence over un-UAC
+  if Uac <> 0 then
+    FormatUtf8('(%%=%)', [UacName, AND_FLAG, Uac], Filter);
+  if unUac <> 0 then
+    Filter := FormatUtf8('(!(%%=%))%', [UacName, AND_FLAG, unUac, Filter]);
+end;
+
+function UacFilter(Uac, unUac: TUserAccountControls): RawUtf8;
+begin
+  UacFilterInteger('userAccountControl',
+    UserAccountControlsValue(Uac), UserAccountControlsValue(unUac), result);
+end;
+
+function UacFilter(Uac, unUac: TGroupTypes): RawUtf8;
+begin
+  UacFilterInteger('groupType',
+    GroupTypesValue(Uac), GroupTypesValue(unUac), result);
+end;
+
 
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject;
 begin
