@@ -1852,9 +1852,9 @@ type
     // - by default, all attributes would be retrieved, unless a specific set
     // of Attributes is supplied; if you want no attribute, use ['']
     // - return true on success (ResultError = leSuccess)
-    // - may return false with ResultError = leSizeLimitExceeded for too many
-    // results: use SearchPageSize or SearchBegin/SearchEnd to enable paging,
-    // or switch to the SearchAll() method
+    // - may return false and ResultError = leSizeLimitExceeded if too many
+    // items were found: in this case, the first page is available in SearchResult
+    // but you should enable pagination and use SearchBegin/SearchEnd or SearchAll
     function Search(const BaseDN: RawUtf8; TypesOnly: boolean;
       const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean; overload;
     /// retrieve all entries that match a given set of criteria
@@ -1879,6 +1879,7 @@ type
     function SearchObject(const ObjectDN, Filter, Attribute: RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapAttribute; overload;
     /// retrieve all pages of entries into a TDocVariant instance
+    // - won't suffer from leSizeLimitExceeded since calls SearchBegin/SearchEnd
     // - will contain the nested results as an object, generated from the
     // returned object canonical names
     // - attributes would be added as ObjectAttributeField (e.g. '_attr') fields,
@@ -1890,11 +1891,17 @@ type
       Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '*';
       MaxCount: integer = 0): variant; overload;
     /// retrieve all entries that match a given set of criteria
+    // - may return false and ResultError = leSizeLimitExceeded if too many
+    // items were found: in this case, the first page is available in SearchResult
+    // but you should enable pagination and use SearchBegin/SearchEnd or SearchAll
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function Search(const Attributes: TLdapAttributeTypes;
       const Filter: RawUtf8 = ''; const BaseDN: RawUtf8 = '';
       TypesOnly: boolean = false): boolean; overload;
     /// retrieve all entries that match a given set of criteria
+    // - may return false and ResultError = leSizeLimitExceeded if too many
+    // items were found: in this case, the first page is available in SearchResult
+    // but you should enable pagination and use SearchBegin/SearchEnd or SearchAll
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function SearchFmt(const Attributes: TLdapAttributeTypes;
       const FilterFmt: RawUtf8; const FilterArgs: array of const;
@@ -1919,6 +1926,7 @@ type
       const ObjectDN, Filter: RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapAttribute; overload;
     /// retrieve all pages of entries into a TDocVariant instance
+    // - won't suffer from leSizeLimitExceeded since calls SearchBegin/SearchEnd
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function SearchAll(const Attributes: TLdapAttributeTypes;
       const Filter: RawUtf8; Options: TLdapResultOptions = [];
@@ -2123,8 +2131,7 @@ type
     // - use an empty string for the first search request
     // - if not empty, you should call Search() again for the next page until it
     // is eventually empty
-    // - you can force to an empty string to reset the pagination or for a new
-    // Search()
+    // - force an empty string to reset the pagination or for a new Search()
     // - you may rather call SearchBegin/SearchEnd or SearchAll wrapper functions
     property SearchCookie: RawUtf8
       read fSearchCookie write fSearchCookie;
