@@ -1676,6 +1676,7 @@ type
     fSearchSizeLimit: integer;
     fSearchTimeLimit: integer;
     fSearchPageSize: integer;
+    fSearchPageCount: integer;
     fSearchCookie: RawUtf8;
     fSearchResult: TLdapResultList;
     fSearchRange: TLdapResultList;
@@ -2168,6 +2169,9 @@ type
     // - you may rather call SearchBegin/SearchEnd or SearchAll wrapper functions
     property SearchCookie: RawUtf8
       read fSearchCookie write fSearchCookie;
+    /// how many objects have been returned during last SearchBegin/SearchEnd
+    property SearchPageCount: integer
+      read fSearchPageCount;
     /// the optional security flags to include in the response
     // - default [] means no atNTSecurityDescriptor
     // - you can set e.g. lsfMain to retrieve main Security Descriptor fields
@@ -6119,6 +6123,7 @@ begin
   fSearchCookie := '';
   AddInteger(fSearchBeginBak, fSearchBeginCount, fSearchPageSize);
   fSearchPageSize := PageSize;
+  fSearchPageCount := 0;
 end;
 
 procedure TLdapClient.SearchEnd;
@@ -6250,6 +6255,8 @@ begin
      (fSearchRange <> nil) then // within SearchRangeBegin .. SearchRangeEnd
     fSearchRange.ExtractPagedAttributes(fSearchResult);
   QueryPerformanceMicroSeconds(stop);
+  if fSearchBeginCount <> 0 then
+    inc(fSearchPageCount, fSearchResult.Count);
   fSearchResult.fSearchTimeMicroSec := stop - start;
 end;
 
