@@ -2021,7 +2021,7 @@ type
 // - is also able to handle FileName with length > MAX_PATH, up to 2048 chars
 // - all the low-level file functions of this unit (e.g. FileCreate or FileOpen)
 // will use this function to support file names longer than MAX_PATH
-function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean = false): PWideChar;
 
 type
   HCRYPTPROV = pointer;

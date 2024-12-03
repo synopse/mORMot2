@@ -8,94 +8,74 @@
 
 { ****************** Unicode, Time, File process }
 
-// W32() gets a PWideChar buffer from a TFileName using TW32Temp static buffer
-// W32Copy() forces a temporary copy - as used by GetFileVersionInfo()
+procedure ExtendedPathName(Name: PWideChar; Len: PtrInt; var Temp: TW32Temp);
+var
+  fp: PWideChar;
+begin
+  Len := Len * 2 + 2; // in bytes, +2 to include ending #0
+  if Len <= MAX_PATH * 2 then
+  begin
+    MoveFast(Name^, Temp[0], Len); // we can use the supplied UTF-16 file name
+    exit;
+  end;
+  // need to switch to extended-length path
+  Temp[0] := #0;
+  if Len > SizeOf(Temp) - 8 then
+    exit; // avoid buffer overflow
+  Temp[0] := '\';
+  Temp[1] := '\';
+  Temp[2] := '?';
+  Temp[3] := '\';
+  if ((ord(Name[0]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
+      (Name[1] = ':')) or
+     (GetFullPathNameW(Name, high(Temp) - 4, @Temp[4], fp) = 0) then
+    MoveFast(Name^, Temp[4], Len);
+end;
 
 {$ifdef UNICODE}
 
-function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean): PWideChar;
 var
   len: PtrInt;
 begin
-  len := length(FileName) * 2 + 2; // +2 to include ending #0
-  if len > SizeOf(Temp) then
-    Temp[0] := #0 // avoid buffer overflow
-  else
-    MoveFast(pointer(FileName)^, Temp, len);
+  result := pointer(FileName);
+  len := length(FileName);
+  if (len = 0) or
+     ((len < MAX_PATH) and
+      not DoCopy) then
+    exit; // most common case could direclty use FileName[] UTF-16 content
+  ExtendedPathName(pointer(FileName), len, Temp);
   result := @Temp;
-end;
-
-// UnicodeString may need to be converted to extended-length path
-function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
-var
-  U: pointer; // hold a UnicodeString but with no try..finally
-begin
-  if (length(FileName) > MAX_PATH) and
-     (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
-     (FileName[2] = ':') then
-  begin
-    // convert to extended-length path
-    U := nil;
-    TFileName(U) := '\\?\' + FileName;
-    // move to TW32Temp stack buffer
-    result := W32Copy(TFileName(U), Temp);
-    // release temp memory and return the generated static buffer
-    TFileName(U) := '';
-  end
-  else
-    // no conversion nor allocation needed
-    result := pointer(FileName);
 end;
 
 {$else}
 
-// AnsiString is converted to UTF-16, potentially with extended-length path
 procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
 var
-  U: SynUnicode;
-  len: PtrInt;
+  u: SynUnicode;
 begin
-  // identical to FPC RTL, which converts to UnicodeString before Wide API call 
-  U := SynUnicode(FileName); // let the RTL + OS do the conversion
-  // switch to extended-length path if needed, allowing up to 32,767 widechars
-  len := length(U);
-  if (len > MAX_PATH) and
-     (FileName[1] in ['A'..'Z', 'a'..'z']) and
-     (FileName[2] = ':') then
-    U := '\\?\' + U;
-  // move to TW32Temp stack buffer
-  len := length(U) * 2 + 2;  // +2 to include ending #0
-  if len > SizeOf(Temp) then
-    Temp[0] := #0 // avoid buffer overflow (rejected by Windows anyway)
-  else
-    MoveFast(pointer(U)^, Temp, len);
+  u := SynUnicode(FileName); // convert with RTL + OS
+  ExtendedPathName(pointer(u), length(u), Temp);
 end;
 
-function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean): PWideChar;
 var
   i, len: PtrInt;
 begin
+  result := nil;
+  if FileName = '' then
+    exit;
   len := length(FileName);
-  if len = 0 then
-    result := nil
+  if (len < MAX_PATH) and
+     IsAnsiCompatible(pointer(FileName), len) then
+    // most common cases do not need any Unicode conversion
+    for i := 0 to len do // include #0 terminator
+      PWordArray(@Temp)[i] := PByteArray(FileName)[i]
   else
-  begin
-    if (len < MAX_PATH) and
-       IsAnsiCompatible(pointer(FileName), len) then
-      // most common cases do not need any Unicode conversion
-      for i := 0 to len do // include #0 terminator
-        PWordArray(@Temp)[i] := PByteArray(FileName)[i]
-    else
-      // use a temporary SynUnicode variable for complex UTF-16 conversion
-      // or if MAX_PATH is reached and \\?\ prefix is needed for extended length
-      W32Convert(FileName, Temp);
-    result := @Temp;
-  end;
-end;
-
-function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
-begin
-  result := W32(FileName, Temp); // from AnsiString: name is always copied
+    // use a temporary SynUnicode variable for complex UTF-16 conversion
+    // or if MAX_PATH is reached and \\?\ prefix is needed for extended-length
+    W32Convert(FileName, Temp);
+  result := @Temp;
 end;
 
 {$endif UNICODE}
@@ -2723,12 +2703,12 @@ begin
     exit;
   // GetFileVersionInfo() modifies the filename parameter data while parsing
   // -> copy the FileName into local tmp buffer to create a writable copy
-  siz := GetFileVersionInfoSizeW(W32Copy(fFileName, tmp), siz2);
+  siz := GetFileVersionInfoSizeW(W32(fFileName, tmp, {copy=}true), siz2);
   if siz > 0 then
   begin
     GetMem(pt, siz);
     try
-      if GetFileVersionInfoW(W32Copy(fFileName, tmp), 0, siz, pt) then
+      if GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pt) then
       begin
         VerQueryValueW(pt, '\', pointer(nfo), siz2);
         with nfo^ do
