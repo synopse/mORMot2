@@ -3121,7 +3121,7 @@ begin
             RaiseError;
         TrimCopy(text, 1, i, attr);
         attrlen := length(attr);
-        value := copy(text, i + 1, 500); // no value trim
+        value := copy(text, i + 1, 2047); // no value trim
         if TrimAttr then
           case attr[attrlen] of
             '>':
@@ -6477,7 +6477,6 @@ var
   dom: PSid;
 begin
   // setup context and resultset
-  result := false;
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID
