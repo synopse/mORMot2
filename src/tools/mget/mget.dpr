@@ -99,12 +99,10 @@ begin
      'disable auto-resume of interrupted partial download');
   p.Cache := c.Option('&cache', 'enable local Cache in --cachePath');
   p.Peer := c.Option('&peer', 'enable peer Cache process - see --peer* params');
-  p.TlsCertFile := c.ParamS('&tlsCert', 'optional client Certificate #filename');
   logfolder := c.ParamS('logFolder',
      '#folder to be used for --log output', logfolder);
   p.CacheFolder := c.ParamS('cachePath',
      '#folder to be used for local (not peer) --cache', p.CacheFolder);
-  p.TlsIgnoreErrors  := c.Option('&weakTls', 'ignore TLS certificate errors');
   if c.Option('&log', 'enable logging in --logFolder') then
     p.Log := TSynLog;
   if c.Option('&debug', 'raw debugging on the console') then
@@ -112,6 +110,16 @@ begin
     p.Log := TSynLog; // force logging even if -l was not specified
     p.Log.Family.EchoToConsole := LOG_VERBOSE; // - [sllTrace];
   end;
+  p.Options.TLS.IgnoreCertificateErrors :=
+    c.Option('tls&Weak', 'ignore TLS certificate errors');
+  p.Options.TLS.CertificateFile  :=
+    c.Param('&tlsCert', 'optional client TLS Certificate #filename');
+  p.Options.TLS.CACertificatesFile  :=
+    c.Param('tlsCA', 'optional client TLS Certificates Authority #filename');
+  p.Options.TLS.PrivateKeyFile :=
+    c.Param('tlsPrivKey', 'optional client TLS Private Key #filename');
+  p.Options.TLS.PrivatePassword :=
+    c.Param('tlsPrivPwd', 'optional client TLS Private Key #password');
   if c.Option(['?', 'help'], 'display this message') then
     result := gpHelp
   else if (result = gpWithUrl) and
