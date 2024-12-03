@@ -1614,7 +1614,7 @@ type
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
-    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
+    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4, fLastNetworkTix: cardinal;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fLog: TSynLogClass;
     fPort, fIpPort: RawUtf8;
@@ -1641,6 +1641,9 @@ type
     constructor Create(const aSharedSecret: RawByteString); reintroduce;
     /// finalize this class instance
     destructor Destroy; override;
+    /// check if the network interface defined in Settings did actually change
+    // - you may want to recreate a peer-cache to track the new network layout
+    function NetworkInterfaceChanged: boolean;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -5399,6 +5402,31 @@ begin
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
   inherited Destroy;
+end;
+
+function THttpPeerCrypt.NetworkInterfaceChanged: boolean;
+var
+  newmac: TMacAddress;
+  err: RawUtf8;
+  tix: cardinal;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  tix := GetTickCount64 shr 10; // calling OS API every second is good enough
+  if tix = fLastNetworkTix then
+    exit;
+  fLastNetworkTix := tix;
+  MacIPAddressFlush; // flush mormot.net.sock cache
+  err := fSettings.GuessInterface(newmac);
+  result := (err = '') and
+            ((fMac.Name <> newmac.Name) or
+             (fMac.IP <> newmac.IP) or
+             (fMac.Broadcast <> newmac.Broadcast) or
+             (fMac.NetMask <> newmac.NetMask));
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'NetworkInterfaceChanged=% [% % % %] %',
+      [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
 end;
 
 
