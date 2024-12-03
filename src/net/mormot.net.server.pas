@@ -1498,6 +1498,11 @@ type
     // CacheTempMinBytes=CachePermMinBytes=2048,
     // BroadcastTimeoutMS=10 HttpTimeoutMS=500 and BroadcastMaxResponses=24
     constructor Create; override;
+    /// retrieve the network interface fulfilling these settings
+    // - network layout may change in real time: this method allows to renew
+    // the peer cache instance when a better interface is available
+    // - returns '' on success, or an error message
+    function GuessInterface(out Mac: TMacAddress): RawUtf8; virtual;
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
@@ -5170,21 +5175,15 @@ end;
 { THttpPeerCrypt }
 
 procedure THttpPeerCrypt.AfterSettings;
+var
+  err: RawUtf8;
 begin
   if fSettings = nil then
     EHttpPeerCache.RaiseUtf8('%.AfterSettings(nil)', [self]);
   fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
-  if fSettings.InterfaceName <> '' then
-  begin
-    if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
-      // allow to pickup "down" interfaces if name is explicit
-      EHttpPeerCache.RaiseUtf8(
-        '%.Create: impossible to find the [%] network interface',
-        [self, fSettings.InterfaceName]);
-  end
-  else if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
-    EHttpPeerCache.RaiseUtf8(
-      '%.Create: impossible to find a local network interface', [self]);
+  err := fSettings.GuessInterface(fMac);
+  if err <> '' then
+    EHttpPeerCache.RaiseUtf8('%.Create: %', [self, err]);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
@@ -5422,6 +5421,20 @@ begin
   fBroadcastMaxResponses := 24;
   fTryAllPeersCount := 10;
   fHttpTimeoutMS := 500;
+end;
+
+function THttpPeerCacheSettings.GuessInterface(out Mac: TMacAddress): RawUtf8;
+begin
+  result := '';
+  if fInterfaceName <> '' then
+  begin
+    if not GetMainMacAddress(Mac, fInterfaceName, {UpAndDown=}true) then
+      // allow to pickup "down" interfaces if name is explicit
+      result := FormatUtf8('impossible to find the [%] network interface',
+        [fInterfaceName]);
+  end
+  else if not GetMainMacAddress(Mac, [mafLocalOnly, mafRequireBroadcast]) then
+    result := 'impossible to find a local network interface';
 end;
 
 
