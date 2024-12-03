@@ -22,6 +22,7 @@ begin
   Temp[0] := #0;
   if Len > SizeOf(Temp) - 8 then
     exit; // avoid buffer overflow
+  // append the full path name to the \\?\ prefix
   Temp[0] := '\';
   Temp[1] := '\';
   Temp[2] := '?';

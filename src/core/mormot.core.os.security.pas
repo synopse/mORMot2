@@ -1741,12 +1741,16 @@ type
       success: boolean): PSecAce;
   public
     /// the owner security identifier (SID)
+    // - typically a User or Group able to modify the resource's descriptor
     Owner: RawSid;
     /// the primary group SID
+    // - not used in practice on Windows - may be populated for POSIX systems
     Group: RawSid;
     /// discretionary access control list
+    // - defines what access a SID is given
     Dacl: TSecAcl;
     /// system access control list
+    // - defines the rules for generating audit events when resource is accessed
     Sacl: TSecAcl;
     /// control flags of this Security Descriptor
     Flags: TSecControls;
