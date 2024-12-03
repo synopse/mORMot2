@@ -163,7 +163,7 @@ type
     // - otherwise, will use this value as explicit proxy server name
     // - used only during initial connection
     Proxy: RawUtf8;
-    /// the timeout to be used for the whole connection, as set in Create()
+    /// the timeout to be used for the whole connection, as supplied to Create()
     CreateTimeoutMS: integer;
     /// allow HTTP/HTTPS authentication to take place at server request
     Auth: record
@@ -305,6 +305,7 @@ type
     /// optional callback if TFileStreamEx.Create(FileName, Mode) is not good enough
     OnStreamCreate: TOnStreamCreate;
     /// optional callback event raised during WGet() process
+    // - if OutSteps: TWGetSteps field is not enough
     // - alternative for business logic tracking: the OnProgress callback is
     // more about human interaction in GUI or console
     OnStep: TOnWGetStep;
@@ -351,8 +352,7 @@ type
     // each packet, whereas this property is about the global time elapsed
     // during the whole download process
     TimeOutSec: integer;
-    /// when WGet() has been called, contains all the steps involed during the
-    // process
+    /// when WGet() has been called, contains all the steps involved
     OutSteps: TWGetSteps;
     /// initialize the default parameters - reset all fields to 0 / nil / ''
     procedure Clear;
