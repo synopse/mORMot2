@@ -1966,6 +1966,12 @@ type
       const Filter: RawUtf8; const Attributes: array of RawUtf8;
       Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '*';
       MaxCount: integer = 0): variant; overload;
+    /// retrieve all pages of entries into an existing TDocVariant instance
+    // - as used by overloaded SearchAll() functions
+    function SearchAll(out Dest: TDocVariantData; const BaseDN: RawUtf8;
+      const Filter: RawUtf8; const Attributes: array of RawUtf8;
+      Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '*';
+      MaxCount: integer = 0): boolean; overload;
     /// retrieve all entries that match a given set of criteria
     // - may return false and ResultError = leSizeLimitExceeded if too many
     // items were found: in this case, the first page is available in SearchResult
@@ -2008,6 +2014,12 @@ type
       const Filter: RawUtf8; Options: TLdapResultOptions = [];
       const ObjectAttributeField: RawUtf8 = '*';
       const BaseDN: RawUtf8 = ''; MaxCount: integer = 0): variant; overload;
+    /// retrieve all pages of entries into an existing TDocVariant instance
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchAll(out Dest: TDocVariantData;
+      const Attributes: TLdapAttributeTypes; const Filter: RawUtf8;
+      Options: TLdapResultOptions = []; const ObjectAttributeField: RawUtf8 = '*';
+      const BaseDN: RawUtf8 = ''; MaxCount: integer = 0): boolean; overload;
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
 
@@ -6456,21 +6468,20 @@ begin
   end;
 end;
 
-function TLdapClient.SearchAll(const BaseDN: RawUtf8;
+function TLdapClient.SearchAll(out Dest: TDocVariantData; const BaseDN: RawUtf8;
   const Filter: RawUtf8; const Attributes: array of RawUtf8;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
-  MaxCount: integer): variant;
+  MaxCount: integer): boolean;
 var
   n: integer;
-  res: TDocVariantData absolute result;
   dom: PSid;
 begin
   // setup context and resultset
+  result := false;
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID
-  VarClear(result);
-  res.Init(mNameValue, dvObject); // case sensitive names
+  Dest.Init(mNameValue, dvObject); // case sensitive names
   n := 0;
   // check for "paging attributes" auto-range results
   if (roAutoRange in Options) and
@@ -6483,20 +6494,31 @@ begin
     repeat
       if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
         break;
-      fSearchResult.AppendTo(res, Options, ObjectAttributeField, dom);
+      fSearchResult.AppendTo(Dest, Options, ObjectAttributeField, dom);
       inc(n, fSearchResult.Count);
     until (SearchCookie = '') or
           ((MaxCount > 0) and
            (n > MaxCount));
+    result := fResultCode = LDAP_RES_SUCCESS;
   finally
     SearchEnd;
     // additional requests to fill any "paging attributes" auto-range results
     if fSearchRange <> nil then
-      SearchRangeEnd(res, Options, ObjectAttributeField); // as TDocVariant
+      SearchRangeEnd(Dest, Options, ObjectAttributeField); // as TDocVariant
   end;
   // eventually sort by field names (if specified)
   if roSortByName in Options then
-    res.SortByName(nil, {reverse=}false, {nested=}true);
+    Dest.SortByName(nil, {reverse=}false, {nested=}true);
+end;
+
+function TLdapClient.SearchAll(const BaseDN: RawUtf8;
+  const Filter: RawUtf8; const Attributes: array of RawUtf8;
+  Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
+  MaxCount: integer): variant;
+begin
+  VarClear(result);
+  SearchAll(TDocVariantData(result), BaseDN, Filter, Attributes, Options,
+    ObjectAttributeField, MaxCount);
 end;
 
 function TLdapClient.Search(const Attributes: TLdapAttributeTypes;
@@ -6536,7 +6558,17 @@ function TLdapClient.SearchAll(const Attributes: TLdapAttributeTypes;
   const ObjectAttributeField, BaseDN: RawUtf8;
   MaxCount: integer): variant;
 begin
-  result := SearchAll(DefaultDN(BaseDN), Filter, ToText(Attributes),
+  VarClear(result);
+  SearchAll(TDocVariantData(result), Attributes, Filter, Options,
+    ObjectAttributeField, BaseDN, MaxCount);
+end;
+
+function TLdapClient.SearchAll(out Dest: TDocVariantData;
+  const Attributes: TLdapAttributeTypes; const Filter: RawUtf8;
+  Options: TLdapResultOptions; const ObjectAttributeField, BaseDN: RawUtf8;
+  MaxCount: integer): boolean;
+begin
+  result := SearchAll(Dest, DefaultDN(BaseDN), Filter, ToText(Attributes),
               Options, ObjectAttributeField, MaxCount);
 end;
 
