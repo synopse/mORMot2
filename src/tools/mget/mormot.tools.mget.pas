@@ -59,7 +59,7 @@ type
     procedure SetTcpTimeoutSec(Seconds: integer);
   public
     // input parameters (e.g. from command line) for the MGet process
-    Silent, NoResume, Cache, Peer: boolean;
+    Silent, NoResume, Cache, Peer, LogSteps: boolean;
     CacheFolder, DestFile: TFileName;
     Options: THttpRequestExtendedOptions;
     Log: TSynLogClass;
@@ -207,6 +207,9 @@ begin
                          (algo <> gphAutoDetect);
   if Assigned(fOnProgress) then
     wget.OnProgress := fOnProgress;
+  if LogSteps and
+     (Log <> nil) then
+    wget.LogSteps := Log.DoLog;
   if algo <> gphAutoDetect then
   begin
     wget.Hasher := HASH_STREAMREDIRECT[HASH_ALGO[algo]];
