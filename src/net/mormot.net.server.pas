@@ -1489,7 +1489,7 @@ type
     fHttpTimeoutMS, fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
-    fInterfaceName: RawUtf8;
+    fInterfaceName, fUuid: RawUtf8;
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
@@ -1595,6 +1595,10 @@ type
     // - default is 2048 bytes, i.e. 2KB, which is just two network MTU trips
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
+    /// allow to customize the UUID used to identify this node
+    // - instead of the default GetComputerUuid() from SMBios
+    property Uuid: RawUtf8
+      read fUuid write fUuid;
   end;
 
   /// abstract parent to THttpPeerCache for its cryptographic core
@@ -1719,8 +1723,7 @@ type
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
       aHttpServerThreadCount: integer = 2;
-      aLogClass: TSynLogClass = nil;
-      const aUuid: RawUtf8 = ''); reintroduce;
+      aLogClass: TSynLogClass = nil); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -1767,11 +1770,6 @@ type
     /// the network interface used for UDP and TCP process
     property Mac: TMacAddress
       read fMac;
-    /// the UUID used to identify this node
-    // - is filled by GetComputerUuid() from SMBios by default
-    // - could be customized if necessary after Create()
-    property Uuid: TGuid
-      read fUuid write fUuid;
   published
     /// define how this instance handles its process
     property Settings: THttpPeerCacheSettings
@@ -5685,8 +5683,7 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer;
-  aLogClass: TSynLogClass; const aUuid: RawUtf8);
+  aHttpServerThreadCount: integer; aLogClass: TSynLogClass);
 var
   log: ISynLog;
   avail, existing: Int64;
@@ -5697,9 +5694,10 @@ begin
   log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
-  if (aUuid <> '') and
-     not RawUtf8ToGuid(aUuid, fUuid) then // allow UUID customization
-    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, aUuid]);
+  if (fSettings <> nil) and
+     (fSettings.Uuid <> '') and // allow UUID customization
+     not RawUtf8ToGuid(fSettings.Uuid, fUuid) then
+    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, fSettings.Uuid]);
   inherited Create(aSharedSecret);
   // setup the processing options
   if aSettings = nil then
