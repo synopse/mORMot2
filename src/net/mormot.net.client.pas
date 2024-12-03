@@ -354,6 +354,8 @@ type
     TimeOutSec: integer;
     /// when WGet() has been called, contains all the steps involved
     OutSteps: TWGetSteps;
+    /// to optionally log all SetStep() content during process
+    LogSteps: TSynLogProc;
     /// initialize the default parameters - reset all fields to 0 / nil / ''
     procedure Clear;
     /// method used internally during process to notify Steps and OnStep()
@@ -2057,10 +2059,19 @@ end;
 
 procedure THttpClientSocketWGet.SetStep(
   Step: TWGetStep; const Context: array of const);
+var
+  txt: RawUtf8;
 begin
   include(OutSteps, Step);
-  if Assigned(OnStep) then
-    OnStep(Step, Make(Context));
+  if Assigned(OnStep) or
+     Assigned(LogSteps) then
+  begin
+    txt := Make(Context);
+    if Assigned(OnStep) then
+      OnStep(Step, txt);
+    if Assigned(LogSteps) then
+      LogSteps(sllCustom1, 'WGet %: %', [ToText(Step)^, txt]);
+  end;
 end;
 
 
