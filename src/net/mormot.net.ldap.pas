@@ -1421,7 +1421,7 @@ type
     // sub-field will be generated, and attributes will be written directly
     // - as called by TLdapResultList.GetVariant and TLdapClient.SearchAll
     procedure AppendTo(var Dvo: TDocVariantData; Options: TLdapResultOptions;
-      const ObjectAttributeField: RawUtf8);
+      const ObjectAttributeField: RawUtf8; Dom: PSid = nil);
     /// export all results as a TDocVariant object variant
     function GetVariant(Options: TLdapResultOptions = [];
       const ObjectAttributeField: RawUtf8 = '*'): variant;
@@ -4872,12 +4872,11 @@ begin
 end;
 
 procedure TLdapResultList.AppendTo(var Dvo: TDocVariantData;
-  Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8);
+  Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8; Dom: PSid);
 var
   i, j, k: PtrInt;
   res: TLdapResult;
   attr: ^TLdapAttribute;
-  dom: PSid;
   uuid: TAppendShortUuid;
   lastdc: TRawUtf8DynArray;
   v, last: PDocVariantData;
@@ -4923,14 +4922,15 @@ begin
       RawUtf8ToVariant(res.CanonicalName, a.Values[k]);
       inc(k);
     end;
-    dom := nil;
-    if not(roNoSddlDomainRid in Options) then
-      dom := res.Attributes.Domain; // recognize known RID in this context
+    if roNoSddlDomainRid in Options then
+      Dom := nil // don't recognize known RID in this context
+    else if Dom = nil then // if not specified e.g. from TLdapClient.DomainSid
+      Dom := res.Attributes.Domain; // guess RID from atObjectSid
     attr := pointer(res.Attributes.Items);
     for j := k to k + res.Attributes.Count - 1 do
     begin
       a.Names[j] := attr^.AttributeName; // use TRawUtf8Interning
-      attr^.SetNewVariant(a.Values[j], Options, dom, uuid);
+      attr^.SetNewVariant(a.Values[j], Options, Dom, uuid);
       inc(attr);
     end;
     if ObjectAttributeField = '*' then
@@ -6453,8 +6453,12 @@ function TLdapClient.SearchAll(const BaseDN: RawUtf8;
 var
   n: integer;
   res: TDocVariantData absolute result;
+  dom: PSid;
 begin
-  // setup resultset
+  // setup context and resultset
+  dom := nil;
+  if not (roNoSddlDomainRid in Options) then
+    dom := pointer(DomainSid); // RID resolution from cached Domain SID
   VarClear(result);
   res.Init(mNameValue, dvObject); // case sensitive names
   n := 0;
@@ -6469,7 +6473,7 @@ begin
     repeat
       if not Search(BaseDN, roTypesOnly in Options, Filter, Attributes) then
         break;
-      fSearchResult.AppendTo(res, Options, ObjectAttributeField);
+      fSearchResult.AppendTo(res, Options, ObjectAttributeField, dom);
       inc(n, fSearchResult.Count);
     until (SearchCookie = '') or
           ((MaxCount > 0) and
