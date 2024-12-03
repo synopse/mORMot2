@@ -109,6 +109,7 @@ begin
   begin
     p.Log := TSynLog; // force logging even if -l was not specified
     p.Log.Family.EchoToConsole := LOG_VERBOSE; // - [sllTrace];
+    p.LogSteps := true;
   end;
   p.Options.TLS.IgnoreCertificateErrors :=
     c.Option('tls&Weak', 'ignore TLS certificate errors');
