@@ -604,6 +604,15 @@ function LdapUnicodePwd(const aPassword: SpiUtf8): RawByteString;
 /// decode a LDAP attribute date/time value into a pascal TDateTime
 function LdapToDate(const Text: RawUtf8): TDateTime;
 
+const
+  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
+  AND_FLAG = ':1.2.840.113556.1.4.803:';
+  NESTED_FLAG: array[boolean] of RawUtf8 = (
+    '', ':1.2.840.113556.1.4.1941:');
+
+  // traditionally, computer sAMAccountName ends with $
+  MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
+
 
 { **************** LDAP Attributes Definitions }
 
@@ -1253,7 +1262,8 @@ type
   // - depending on the kind of object, a complex combination of objectClass or
   // sAMAccountType is needed
   // - in the future, we are likely to add some new filters - feedback is welcome
-  // - but
+  // - note that UserAccountControls/GroupType additional search criterias are
+  // already handled by UacFilter() and GtFilter() so won't appear in this list
   TObjectFilter = (
     ofNone,
     ofAll,
@@ -1270,6 +1280,35 @@ type
     ofServiceConnectionPoints,
     ofExpirableUsers);
 
+const
+  /// main Object LDAP query strings used by ObjectFilter()
+  // - those filters are expected to be part of a &()()() block
+  // - reference is hard to find, but we followed official MS documentation at
+  // https://learn.microsoft.com/en-us/archive/technet-wiki/5392.active-directory-ldap-syntax-filters
+  OBJECT_FILTER: array[TObjectFilter] of RawUtf8 = (
+   '',                                              // ofNone
+   '(objectClass=*)',                               // ofAll
+   '(sAMAccountType=805306368)',                    // ofUsers
+   '(objectCategory=group)',                        // ofGroups
+   '(objectClass=contact)',                         // ofContacts
+   '(objectCategory=computer)',                     // ofComputers
+   '(objectCategory=organizationalUnit)',           // ofOrganizationalUnits
+   '(objectCategory=container)',                    // ofContainers
+   '(objectCategory=builtinDomain)',                // ofBuiltInContainers
+   '(objectCategory=domain)',                       // ofDomain
+   '(objectClass=trustedDomain)',                   // ofTrustedDomain
+   '(objectCategory=groupPolicyContainer)',         // ofGroupPolicies
+   '(objectClass=serviceConnectionPoint)',          // ofServiceConnectionPoints
+   '(sAMAccountType=805306368)(accountExpires>=1)' +
+     '(accountExpires<=9223372036854775806)');      // ofExpirableUsers
+
+  /// TObjectFilter search criterias returning Users
+  USER_FILTER     = [ofUsers, ofExpirableUsers];
+  /// TObjectFilter search criterias returning Groups
+  GROUP_FILTER    = [ofGroups];
+  /// TObjectFilter search criterias returning Computers
+  COMPUTER_FILTER = [ofComputers];
+
 /// compute a TLdapClient.Search filter for a given account type
 // - specify the entry by AccountName, DistinguishedName or UserPrincipalName
 function ObjectFilter(Filter: TObjectFilter;
@@ -1279,11 +1318,14 @@ function ObjectFilter(Filter: TObjectFilter;
 function ToText(oft: TObjectFilter): PShortString; overload;
 procedure ToTextTrimmed(oft: TObjectFilter; var text: RawUtf8); overload;
 
-/// compute a custom filter according to (un)expected TUserAccountControls values
+/// compute a custom filter according to included/excluded TUserAccountControls
+// - typically used as CustomFilter parameter to ObjectFilter()
 function UacFilter(Uac, unUac: TUserAccountControls): RawUtf8;
 
-/// compute a custom filter according to (un)expected TGroupTypes values
+/// compute a custom filter according to included/excluded TGroupTypes
+// - typically used as CustomFilter parameter to ObjectFilter()
 function GtFilter(Gt, unGt: TGroupTypes): RawUtf8;
+
 
 /// compute a sequence of modifications from its raw encoded attribute(s) sequence
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; overload;
@@ -2176,7 +2218,7 @@ type
     // - default [] means no atNTSecurityDescriptor
     // - you can set e.g. lsfMain to retrieve main Security Descriptor fields
     // - if not [], append a LDAP_SERVER_SD_FLAGS_OID control to each Search(),
-    // so that atNTSecurityDescriptor will contain the specified flags
+    // so that atNTSecurityDescriptor will contain the specified flags content
     property SearchSDFlags: TLdapSearchSDFlags
       read fSearchSDFlags write fSearchSDFlags;
     /// result of the search command
@@ -3725,38 +3767,6 @@ procedure ToTextTrimmed(oft: TObjectFilter; var text: RawUtf8);
 begin
   TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TObjectFilter), ord(oft)), text);
 end;
-
-const
-  // those filters are expected to be part of a &()()() block
-  // https://learn.microsoft.com/en-us/archive/technet-wiki/5392.active-directory-ldap-syntax-filters
-  OBJECT_FILTER: array[TObjectFilter] of RawUtf8 = (
-   '',                                                 // ofNone
-   '(objectClass=*)',                                  // ofAll
-   '(sAMAccountType=805306368)',                       // ofUsers
-   '(objectCategory=group)',                           // ofGroups
-   '(objectClass=contact)',                            // ofContacts
-   '(objectCategory=computer)',                        // ofComputers
-   '(objectCategory=organizationalUnit)',              // ofOrganizationalUnits
-   '(objectCategory=container)',                       // ofContainers
-   '(objectCategory=builtinDomain)',                   // ofBuiltInContainers
-   '(objectCategory=domain)',                          // ofDomain
-   '(objectClass=trustedDomain)',                      // ofTrustedDomain
-   '(objectCategory=groupPolicyContainer)',            // ofGroupPolicies
-   '(objectClass=serviceConnectionPoint)',             // ofServiceConnectionPoints
-   '(sAMAccountType=805306368)(accountExpires>=1)' +
-     '(accountExpires<=9223372036854775806)');         // ofExpirableUsers
-
-  USER_FILTER     = [ofUsers, ofExpirableUsers];
-  GROUP_FILTER    = [ofGroups];
-  COMPUTER_FILTER = [ofComputers];
-
-  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
-  AND_FLAG = ':1.2.840.113556.1.4.803:';
-  NESTED_FLAG: array[boolean] of RawUtf8 = (
-    '', ':1.2.840.113556.1.4.1941:');
-
-  // traditionally, computer sAMAccountName ends with $
-  MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
 
 function ObjectFilter(Filter: TObjectFilter; const AccountName,
   DistinguishedName, UserPrincipalName, CustomFilter: RawUtf8): RawUtf8;
