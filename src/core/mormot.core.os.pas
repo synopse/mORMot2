@@ -3947,6 +3947,9 @@ procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8); overload;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
+
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 // - just a wrapper around Unicode_FromUtf8() over a temporary buffer
 // - caller should always call d.Done to release any (unlikely) allocated memory
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;

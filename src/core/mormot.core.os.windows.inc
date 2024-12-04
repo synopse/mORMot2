@@ -115,10 +115,41 @@ begin
   tmp.Done;
 end;
 
-procedure DoWin32PWideCharToFileName(P: PWideChar; var fn: TFileName);
+{$ifdef UNICODE}
+procedure Win32PWideCharToFileName(P: PWideChar; var fn: TFileName);
 begin
-  fn := TFileName(SynUnicode(P)); // let the RTL do the conversion (if needed)
+  SetString(fn, P, StrLenW(P)); // TFileName is UnicodeString
 end;
+{$else}
+
+procedure Win32PWideCharToFileNameConv(P: PWideChar; L: PtrInt; var fn: TFileName);
+var
+  u: SynUnicode;
+begin
+  SetString(u, P, l);
+  fn := TFileName(u); // let the RTL do the conversion
+end;
+
+procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
+var
+  l, i: PtrInt;
+begin
+  l := StrLenW(P);
+  if IsAnsiCompatibleW(P, l) then // most common case
+  begin
+    SetString(fn, nil, l);
+    for i := 0 to l - 1 do
+      PByteArray(fn)[i] := PWordArray(P)[i]; // fast direct conversion
+  end
+  {$ifdef FPC}
+  else if DefaultRTLFileSystemCodePage = CP_UTF8 then // happens with Lazarus
+    DoWin32PWideCharToUtf8(P, l, RawUtf8(fn))
+  {$endif FPC}
+  else
+    Win32PWideCharToFileNameConv(P, l, fn);
+end;
+
+{$endif UNICODE}
 
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
@@ -708,7 +739,7 @@ begin
   if DelayedProc(PathCreateFromUrlW, shlwapiDll, 'shlwapi.dll',
        'PathCreateFromUrlW') and
      (PathCreateFromUrlW(u.buf, @fn, len, 0) = S_OK) then
-    DoWin32PWideCharToFileName(fn, result);
+    Win32PWideCharToFileName(fn, result);
   u.Done;
 end;
 
@@ -960,7 +991,7 @@ begin
            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) then
     exit;
   GetModuleFileNameW(hm, tmp, SizeOf(tmp));
-  DoWin32PWideCharToFileName(tmp, result);
+  Win32PWideCharToFileName(tmp, result);
 end;
 
 function FileIsWritable(const FileName: TFileName): boolean;
@@ -2835,7 +2866,7 @@ begin
       begin
         // typically 'C:\Users\<user>\AppData\Local\Temp'
         if GetTempPathW(MAX_PATH, @tmp) <> 0 then // first try Windows API
-          DoWin32PWideCharToFileName(tmp, result);
+          Win32PWideCharToFileName(tmp, result);
         if result = '' then
           result := GetEnvironmentVariable(_ENV[spTemp]); // fallback
       end;
@@ -2845,7 +2876,7 @@ begin
          'SHGetFolderPathW') and
        (SHGetFolderPathW(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
       // retrieved from official CSIDL
-      DoWin32PWideCharToFileName(tmp, result)
+      Win32PWideCharToFileName(tmp, result)
     else
     begin
       // fallback to environment variables (very unlikely)
