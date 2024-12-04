@@ -628,28 +628,29 @@ type
   // CentralAccessPoliciesList structure
   TSecAceType = (
     satUnknown,
-    satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
-    satAccessDenied,                  // D  1  ACCESS_DENIED_ACE_TYPE
-    satAudit,                         // AU 2  SYSTEM_AUDIT_ACE_TYPE
-    satAlarm,                         // AL 3  SYSTEM_ALARM_ACE_TYPE
-    satCompoundAllowed,               //    4  ACCESS_ALLOWED_COMPOUND_ACE_TYPE
-    satObjectAccessAllowed,           // OA 5  ACCESS_ALLOWED_OBJECT_ACE_TYPE
-    satObjectAccessDenied,            // OD 6  ACCESS_DENIED_OBJECT_ACE_TYPE
-    satObjectAudit,                   // OU 7  SYSTEM_AUDIT_OBJECT_ACE_TYPE
-    satObjectAlarm,                   // OL 8  SYSTEM_ALARM_OBJECT_ACE_TYPE
-    satCallbackAccessAllowed,         // XA 9  ACCESS_ALLOWED_CALLBACK_ACE_TYPE
-    satCallbackAccessDenied,          // XD 10 ACCESS_DENIED_CALLBACK_ACE_TYPE
-    satCallbackObjectAccessAllowed,   // ZA 11 ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackObjectAccessDenied,    //    12 ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackAudit,                 // XU 13 SYSTEM_AUDIT_CALLBACK_ACE_TYPE
-    satCallbackAlarm,                 //    14 SYSTEM_ALARM_CALLBACK_ACE_TYPE
-    satCallbackObjectAudit,           //    15 SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackObjectAlarm,           //    16 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
-    satMandatoryLabel,                // ML 17 SYSTEM_MANDATORY_LABEL_ACE_TYPE
-    satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
-    satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
-    satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
-    satAccessFilter);                 // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
+    satAccessAllowed,                 // A  0  0x00 ACCESS_ALLOWED_ACE_TYPE
+    satAccessDenied,                  // D  1  0x01 ACCESS_DENIED_ACE_TYPE
+    satAudit,                         // AU 2  0x02 SYSTEM_AUDIT_ACE_TYPE
+    satAlarm,                         // AL 3  0x03 SYSTEM_ALARM_ACE_TYPE
+    satCompoundAllowed,               //    4  0x04 ACCESS_ALLOWED_COMPOUND_ACE_TYPE
+    satObjectAccessAllowed,           // OA 5  0x05 ACCESS_ALLOWED_OBJECT_ACE_TYPE
+    satObjectAccessDenied,            // OD 6  0x06 ACCESS_DENIED_OBJECT_ACE_TYPE
+    satObjectAudit,                   // OU 7  0x07 SYSTEM_AUDIT_OBJECT_ACE_TYPE
+    satObjectAlarm,                   // OL 8  0x08 SYSTEM_ALARM_OBJECT_ACE_TYPE
+    satCallbackAccessAllowed,         // XA 9  0x09 ACCESS_ALLOWED_CALLBACK_ACE_TYPE
+    satCallbackAccessDenied,          // XD 10 0x0a ACCESS_DENIED_CALLBACK_ACE_TYPE
+    satCallbackObjectAccessAllowed,   // ZA 11 0x0b ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAccessDenied,    //    12 0x0c ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackAudit,                 // XU 13 0x0d SYSTEM_AUDIT_CALLBACK_ACE_TYPE
+    satCallbackAlarm,                 //    14 0x0e SYSTEM_ALARM_CALLBACK_ACE_TYPE
+    satCallbackObjectAudit,           //    15 0x0f SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAlarm,           //    16 0x10 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
+    satMandatoryLabel,                // ML 17 0x11 SYSTEM_MANDATORY_LABEL_ACE_TYPE
+    satResourceAttribute,             // RA 18 0x12 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
+    satScoppedPolicy,                 // SP 19 0x13 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
+    satProcessTrustLabel,             // TL 20 0x14 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
+    satAccessFilter);                 // FL 21 0x15 SYSTEM_ACCESS_FILTER_ACE_TYPE
+  TSecAceTypes = set of TSecAceType;
 
   /// define one TSecurityDescriptor Dacl[] or Sacl[] access control list (ACL)
   TSecAceScope = (
@@ -815,6 +816,7 @@ const
   safAuditFlags = [
     safSuccessfulAccess,
     safFailedAccess];
+
 
 /// compute a self-relative binary of a given ACL array
 // - as stored within a TSecurityDescriptor instance, and accepted by
@@ -2635,11 +2637,21 @@ begin
   result := true;
 end;
 
+const
+  // TRawAcl.AclRevision should be ACL_REVISION, unless the ACL contains an
+  // object-specific ACE, in which case this value must be ACL_REVISION_DS.
+  // All ACEs in an ACL must be at the same revision level.
+  ACL_REVISION    = 2;
+  ACL_REVISION_DS = 4;
+  // see https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-acl
+  satRevisionNew = satObject + satConditional + [satMandatoryLabel];
+
 function SecAclToBin(p: PAnsiChar; const acl: TSecAcl): PtrInt;
 var
   hdr: PRawAcl;
   a: ^TSecAce;
   i, len: PtrInt;
+  types: TSecAceTypes;
 begin
   result := 0;
   if acl = nil then
@@ -2648,9 +2660,11 @@ begin
   result := SizeOf(hdr^);
   if hdr <> nil then // need to write ACL header
     inc(p, result);
+  types := [];
   a := pointer(acl);
   for i := 1 to length(acl) do
   begin
+    include(types, a^.AceType);
     len := a^.ToBinary(p);
     inc(result, len);
     if hdr <> nil then
@@ -2659,7 +2673,10 @@ begin
   end;
   if hdr = nil then
     exit;
-  hdr^.AclRevision := 2;
+  if types * satRevisionNew <> [] then
+    hdr^.AclRevision := ACL_REVISION_DS
+  else
+    hdr^.AclRevision := ACL_REVISION; // up to Win2K
   hdr^.Sbz1 := 0;
   hdr^.AceCount := length(acl);
   hdr^.Sbz2 := 0;
