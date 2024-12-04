@@ -65,6 +65,8 @@ type
     Log: TSynLogClass;
     /// initialize this instance with the default values
     constructor Create; override;
+    /// finalize this instance
+    destructor Destroy; override;
     /// could be run once input parameters are set, before Execute() is called
     // - will launch THttpPeerCache background process, for instance
     // - do nothing if already already called
@@ -253,6 +255,8 @@ destructor TMGetProcess.Destroy;
 begin
   inherited Destroy;
   fClient.Free;
+  FillZero(fPeerSecret);
+  FillZero(fPeerSecretHexa);
 end;
 
 procedure TMGetProcess.ToConsole(const Fmt: RawUtf8;
