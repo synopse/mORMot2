@@ -59,7 +59,7 @@ type
     procedure SetTcpTimeoutSec(Seconds: integer);
   public
     // input parameters (e.g. from command line) for the MGet process
-    Silent, NoResume, Cache, Peer, LogSteps: boolean;
+    Silent, NoResume, Cache, Peer, LogSteps, TrackNetwork: boolean;
     CacheFolder, DestFile: TFileName;
     Options: THttpRequestExtendedOptions;
     Log: TSynLogClass;
@@ -68,15 +68,18 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// could be run once input parameters are set, before Execute() is called
-    // - will launch THttpPeerCache background process, for instance
-    // - do nothing if already already called
-    procedure Start;
+    // - will launch THttpPeerCache background process, and re-create it if
+    // the network layout did change (if TrackNetwork is true)
+    // - do nothing if Peer is false, or if the THttpPeerCache instance is fine
+    procedure StartPeerCache;
     /// this is the main processing method
     function Execute(const Url: RawUtf8): TFileName;
-    /// finalize this instance
-    destructor Destroy; override;
     /// write some message to the console, if Silent flag is false
     procedure ToConsole(const Fmt: RawUtf8; const Args: array of const);
+    /// access to the associated THttpPeerCache instance
+    // - a single peer-cache run in the background between Execute() calls
+    property PeerCache: IWGetAlternate
+      read fPeerCache;
     /// optional callback event called during download process
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
@@ -155,23 +158,37 @@ begin
   Options.RedirectMax := 5;
 end;
 
-procedure TMGetProcess.Start;
+procedure TMGetProcess.StartPeerCache;
+var
+  l: ISynLog;
 begin
-  if Peer and
-     (fPeerCache = nil) then // reuse THttpPeerCache instance between calls
-    with Log.Enter(self, 'Start: THttpPeerCache') do
+  if not Peer then
+    exit;
+  // first check if the network interface changed
+  if fPeerCache <> nil then
+    if fPeerCache.NetworkInterfaceChanged then
     begin
-      if (fPeerSecret = '') and
-         (fPeerSecretHexa <> '') then
-        fPeerSecret := HexToBin(fPeerSecretHexa);
-      try
-        fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
-          nil, 2, self.Log);
-        // by now, THttpAsyncServer is incompatible with rfProgressiveStatic
-      except
-        Peer := false; // disable --peer if something is wrong
-      end;
+      l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
+      fPeerCache := nil; // force re-create just below
     end;
+  // (re)create the peer-cache background process if necessary
+  if fPeerCache = nil then
+  begin
+    l := Log.Enter(self, 'StartPeerCache: THttpPeerCache.Create');
+    if (fPeerSecret = '') and
+       (fPeerSecretHexa <> '') then
+      fPeerSecret := HexToBin(fPeerSecretHexa);
+    try
+      fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
+        nil, 2, self.Log);
+      // THttpAsyncServer could also be tried with rfProgressiveStatic
+    except
+      // don't disable Peer: we would try on next Execute()
+      on E: Exception do
+        if Assigned(l) then
+          l.Log(sllTrace, 'StartPeerCache: raised %', [E]);
+    end;
+  end;
 end;
 
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
@@ -184,7 +201,8 @@ var
 begin
   // prepare the process
   l := Log.Enter('Execute %', [Url], self);
-  Start; // start e.g. background THttpPeerCache process
+  // (re)start background THttpPeerCache process if needed
+  StartPeerCache;
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
   if not Split(Url, '@', h, u) or
      (GuessAlgo(h) = gphAutoDetect) or
