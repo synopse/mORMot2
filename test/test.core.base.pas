@@ -6980,7 +6980,7 @@ begin
   CheckEqual(sd.Dacl[0].SidText, dom + '-512');
   CheckEqual(sd.Dacl[0].SidText(pointer(domsid)), 'DA');
   CheckEqual(sd.Dacl[0].MaskText, 'FA');
-  Check(sd.Dacl[0].SidText('DU', pointer(domsid)));
+  Check(sd.Dacl[0].SidParse('DU', pointer(domsid)));
   CheckEqual(sd.Dacl[0].SidText, dom + '-513');
   CheckEqual(sd.Dacl[0].SidText(pointer(domsid)), 'DU');
   dom2 := 'S-1-5-21-237846769-6124905683-148753929';

@@ -736,13 +736,13 @@ type
     function Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
       dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
     /// get the associated SID, as SDDL text, optionally with a RID domain
-    function SidText(dom: PSid = nil): RawUtf8; overload;
-    /// set the associated SID, as SDDL text, optionally with a RID domain
-    function SidText(const sidSddl: RawUtf8; dom: PSid = nil): boolean; overload;
+    function SidText(dom: PSid = nil): RawUtf8;
+    /// set the associated SID, parsed from SDDL text, optionally with a RID domain
+    function SidParse(const sidSddl: RawUtf8; dom: PSid = nil): boolean;
     /// get the associated access mask, as SDDL text format
-    function MaskText: RawUtf8; overload;
-    /// set the associated access mask, as SDDL text format
-    function MaskText(const maskSddl: RawUtf8): boolean; overload;
+    function MaskText: RawUtf8;
+    /// set the associated access mask, parsed from its SDDL text format
+    function MaskParse(const maskSddl: RawUtf8): boolean;
     /// get the associated Object Type, as UUID text format
     // - to customize the output format set e.g. uuid = @AppendShortKnownUuid
     function ObjectText(uuid: TAppendShortUuid = nil): RawUtf8;
@@ -752,10 +752,10 @@ type
     /// get the associated flags, as SDDL text format
     function FlagsText: RawUtf8;
     /// get the ACE conditional expression, as stored in Opaque binary
-    function ConditionalExpression(dom: PSid = nil): RawUtf8; overload;
+    function ConditionalExpression(dom: PSid = nil): RawUtf8;
     /// parse a ACE conditional expression, and assign it to the Opaque binary
-    function ConditionalExpression(const condExp: RawUtf8;
-      dom: PSid = nil): TAceTextParse; overload;
+    function ConditionalExpressionParse(const condExp: RawUtf8;
+      dom: PSid = nil): TAceTextParse;
     /// replace all nested RID from one domain to another
     // - also within any ACE conditional expression
     function ReplaceDomainRaw(old, new: PSid; maxRid: cardinal): integer;
@@ -3486,11 +3486,11 @@ var
   s: ShortString;
 begin
   s[0] := #0;
-  SddlAppendSid(s, pointer(sid), dom);
+  SddlAppendSid(s, pointer(Sid), dom);
   ShortStringToAnsi7String(s, result);
 end;
 
-function TSecAce.SidText(const sidSddl: RawUtf8; dom: PSid): boolean;
+function TSecAce.SidParse(const sidSddl: RawUtf8; dom: PSid): boolean;
 var
   p: PUtf8Char;
 begin
@@ -3507,7 +3507,7 @@ begin
   ShortStringToAnsi7String(s, result);
 end;
 
-function TSecAce.MaskText(const maskSddl: RawUtf8): boolean;
+function TSecAce.MaskParse(const maskSddl: RawUtf8): boolean;
 var
   p: PUtf8Char;
 begin
@@ -3547,7 +3547,7 @@ begin
   tmp.Done(result, CP_UTF8);
 end;
 
-function TSecAce.ConditionalExpression(
+function TSecAce.ConditionalExpressionParse(
   const condExp: RawUtf8; dom: PSid): TAceTextParse;
 var
   p: PUtf8Char;
@@ -3578,9 +3578,9 @@ begin
   Clear;
   result := false;
   if (sat = satUnknown) or
-     not SidText(sidSddl, dom) or
-     not MaskText(maskSddl) or
-     (ConditionalExpression(condExp) <> atpSuccess) then
+     not SidParse(sidSddl, dom) or
+     not MaskParse(maskSddl) or
+     (ConditionalExpressionParse(condExp) <> atpSuccess) then
     exit;
   AceType := sat;
   RawType := ord(sat) + 1;
