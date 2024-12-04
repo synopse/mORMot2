@@ -895,29 +895,30 @@ type
   /// the decoded fields of TLdapUser.userAccountControl
   // - https://learn.microsoft.com/en-us/windows/win32/adschema/a-useraccountcontrol
   TUserAccountControl = (
-    uacScript,                            //       1
-    uacAccountDisable,                    //       2
-    uacHomeDirRequired,                   //       8
-    uacLockedOut,                         //      10 = 16
-    uacPasswordNotRequired,               //      20 = 32
-    uacPasswordCannotChange,              //      40 = 64
-    uacPasswordUnencrypted,               //      80 = 128
-    uacTempDuplicateAccount,              //     100 = 256
-    uacNormalAccount,                     //     200 = 512
-    uacInterDomainTrusted,                //     800 = 2048
-    uacWorkstationTrusted,                //    1000 = 4096
-    uacServerTrusted,                     //    2000 = 8192
-    uacPasswordDoNotExpire,               //   10000 = 65536
-    uacLogonAccount,                      //   20000 = 131072
-    uacSmartcardRequired,                 //   40000 = 262144
-    uacKerberosTrustedForDelegation,      //   80000 = 524288
-    uacKerberosNotDelegated,              //  100000 = 1048576
-    uacKerberosDesOnly,                   //  200000 = 2097152
-    uacKerberosRequirePreAuth,            //  400000 = 4194304
-    uacPasswordExpired,                   //  800000 = 8388608
-    uacKerberosTrustedToDelegate,         // 1000000 = 16777216
-    uacKerberosNoPac,                     // 2000000 = 33554432
-    uacPartialSecretsRodc);               // 4000000 = 67108864
+    uacScript,                            //        1
+    uacAccountDisable,                    //        2
+    uacHomeDirRequired,                   //        8
+    uacLockedOut,                         //       10 = 16
+    uacPasswordNotRequired,               //       20 = 32
+    uacPasswordCannotChange,              //       40 = 64
+    uacPasswordUnencrypted,               //       80 = 128
+    uacTempDuplicateAccount,              //      100 = 256
+    uacNormalAccount,                     //      200 = 512
+    uacInterDomainTrusted,                //      800 = 2048
+    uacWorkstationTrusted,                //     1000 = 4096
+    uacServerTrusted,                     //     2000 = 8192
+    uacPasswordDoNotExpire,               //    10000 = 65536
+    uacLogonAccount,                      //    20000 = 131072
+    uacSmartcardRequired,                 //    40000 = 262144
+    uacKerberosTrustedForDelegation,      //    80000 = 524288
+    uacKerberosNotDelegated,              //   100000 = 1048576
+    uacKerberosDesOnly,                   //   200000 = 2097152
+    uacKerberosRequirePreAuth,            //   400000 = 4194304
+    uacPasswordExpired,                   //   800000 = 8388608
+    uacKerberosTrustedToDelegate,         // 01000000 = 16777216
+    uacKerberosNoPac,                     // 02000000 = 33554432
+    uacPartialSecretsRodc,                // 04000000 = 67108864
+    uacUserUseAesKeys);                   // 80000000
 
   /// define TLdapUser.userAccountControl decoded flags
   // - use UserAccountControlsFromInteger() UserAccountControlsFromText() and
@@ -941,18 +942,18 @@ type
 
   /// known systemFlags values
   TSystemFlag = (
-    sfAttrNotReplicated,          // 1
-    sfAttrReqPartialSetMember,    // 2
-    sfAttrIsConstructed,          // 4
-    sfAttrIsOperational,          // 8
+    sfAttrNotReplicated,          // 01
+    sfAttrReqPartialSetMember,    // 02
+    sfAttrIsConstructed,          // 04
+    sfAttrIsOperational,          // 08
     sfSchemaBaseObject,           // 10
     sfAttrIsRdn,                  // 20
-    sfDomainDisallowMove,         // 400000
-    sfDomainDisallowRename,       // 800000
-    sfConfigAllowLimitedMove,     // 1000000
-    sfConfigAllowMove,            // 2000000
-    sfConfigAllowRename,          // 4000000
-    sfConfigAllowDelete);         // 8000000
+    sfDomainDisallowMove,         // 04000000
+    sfDomainDisallowRename,       // 08000000
+    sfConfigAllowLimitedMove,     // 10000000
+    sfConfigAllowMove,            // 20000000
+    sfConfigAllowRename,          // 40000000
+    sfConfigDisallowDelete);      // 80000000
 
   /// define systemFlags decoded flags
   // - use SystemFlagsFromInteger() SystemFlagsFromText() and
@@ -3483,29 +3484,46 @@ const
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=SAMAccountType
   AT_VALUE: array[TSamAccountType] of cardinal = (
     $00000000,  // satUnknown
-    $10000000,  // satGroup          = 268435456
-    $10000002,  // satNonSecurityGroup
+    $10000000,  // satGroup            = 268435456
+    $10000001,  // satNonSecurityGroup = 268435457
     $20000000,  // satAlias
     $20000001,  // satNonSecurityAlias
     $30000000,  // satUserAccount    = 805306368
-    $30000001,  // satMachineAccount = 805306369 = objectCategory=computer
+    $30000001,  // satMachineAccount = 805306369
     $30000002,  // satTrustAccount
     $40000000,  // satAppBasicGroup
     $40000001); // satAppQueryGroup
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=GroupType
   GT_VALUE: array[TGroupType] of integer = (
-    1, 2, 4, 8, 16, 32, integer($80000000));
+    1,                   // gtBuiltIn
+    2,                   // gtGlobal
+    4,                   // gtDomainLocal
+    8,                   // gtUniversal
+    16,                  // gtAppBasic
+    32,                  // gtAppQuery
+    integer($80000000)); // gtSecurity
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=userAccountControl
   UAC_VALUE: array[TUserAccountControl] of integer = (
     1, 2, 8, 16, 32, 64, 128, 256, 512, 2048, 4096, 8192, 65536,
     131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216,
-    33554432, 67108864);
+    33554432, 67108864, integer($80000000));
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=X-SYSTEMFLAGS
   SF_VALUE: array[TSystemFlag] of integer = (
-    1, 2, 4, 8, 16, 32, 64, 4194304, 8388608, 16777216, 33554432, 67108864);
+    1,                   // sfAttrNotReplicated
+    2,                   // sfAttrReqPartialSetMember
+    4,                   // sfAttrIsConstructed
+    8,                   // sfAttrIsOperational
+    16,                  // sfSchemaBaseObject
+    32,                  // sfAttrIsRdn
+    $04000000,           // sfDomainDisallowMove
+    $08000000,           // sfDomainDisallowRename
+    $10000000,           // sfConfigAllowLimitedMove
+    $20000000,           // sfConfigAllowMove
+    $40000000,           // sfConfigAllowRename
+    integer($80000000)); // sfConfigDisallowDelete
 
 function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 begin
@@ -3656,6 +3674,27 @@ var
   // traditionally, computer sAMAccountName ends with $
   MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
 
+// https://learn.microsoft.com/en-us/archive/technet-wiki/5392.active-directory-ldap-syntax-filters
+function SatFilter(sat: TSamAccountType): RawUtf8;
+begin
+  case sat of
+    satGroup,
+    satNonSecurityGroup,
+    satAppBasicGroup,
+    satAppQueryGroup:
+      result := '(objectCategory=group)';
+    satAlias,
+    satNonSecurityAlias,
+    satUserAccount:
+      result := '(sAMAccountType=805306368)';
+    satMachineAccount,
+    satTrustAccount:
+      result := '(objectCategory=computer)';
+  else
+    result := '';
+  end;
+end;
+
 function InfoFilter(AccountType: TSamAccountType; const AccountName,
   DistinguishedName, UserPrincipalName, CustomFilter: RawUtf8): RawUtf8;
 begin
@@ -3676,8 +3715,7 @@ begin
      ord(UserPrincipalName <> '') > 1 then
     result := FormatUtf8('(|%)', [result]); // "or" between identifiers
   if AccountType <> satUnknown then
-    result := FormatUtf8('(&(sAMAccountType=%)%%)',
-      [AT_VALUE[AccountType], result, CustomFilter])
+    result := FormatUtf8('(&%%%)', [SatFilter(AccountType), result, CustomFilter])
   else if CustomFilter <> '' then
     result := FormatUtf8('(&%%)', [result, CustomFilter])
 end;
@@ -6602,7 +6640,7 @@ begin
   if Match <> '' then // allow * wildchar in Match - but escape others
     f := FormatUtf8('%(%=%)',
       [f, AttrTypeName[Attribute], LdapEscape(Match, {keep*=}true)]);
-  FormatUtf8('(sAMAccountType=%)', [AT_VALUE[AT]], filter);
+  filter := SatFilter(AT);
   if f <> '' then
     filter := FormatUtf8('(&%%)', [filter, f]);
   if Search([Attribute], filter, BaseDN) and
@@ -6869,8 +6907,8 @@ begin
     exit; // we need at least one valid name to compare to
   if n > 1 then
     filter := FormatUtf8('(|%)', [filter]); // OR operator
-  filter := FormatUtf8('(&(sAMAccountType=%)%%(member%=%))',
-    [AT_VALUE[satGroup], filter, CustomFilter, NESTED_FLAG[Nested], user]);
+  filter := FormatUtf8('(&(objectCategory=group)%%(member%=%))',
+    [filter, CustomFilter, NESTED_FLAG[Nested], user]);
   if Search([atSAMAccountName], filter) and
      (SearchResult.Count > 0) then
   begin
