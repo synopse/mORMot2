@@ -187,7 +187,8 @@ begin
       // don't disable Peer: we would try on next Execute()
       on E: Exception do
         if Assigned(l) then
-          l.Log(sllTrace, 'StartPeerCache: raised %', [E]);
+          l.Log(sllTrace,
+            'StartPeerCache raised %: will retry next time', [E.ClassType]);
     end;
   end;
 end;

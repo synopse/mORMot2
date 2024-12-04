@@ -1832,7 +1832,7 @@ type
     // - each and every old/new SID lengths should match for in-place replacement
     // of the Opaque binary content
     function ReplaceSid(const OldSid, NewSid: array of RawUtf8): integer; overload;
-    /// change all occurrences of one or several given SID value(s)
+    /// change all occurrences of one or several given SID raw value(s)
     function ReplaceSidRaw(const OldSid, NewSid: RawSidDynArray): integer; overload;
   end;
 
@@ -2299,7 +2299,7 @@ begin
     if CompareMem(pointer(OldSid[i]), @Sid, SidLen) then
     {$endif CPUX64}
     begin
-      MoveFast(pointer(NewSid[i])^, Sid, SidLen); // overwrite
+      MoveFast(pointer(NewSid[i])^, Sid, SidLen); // in-place overwrite
       result := 1;
       exit;
     end;
@@ -2640,7 +2640,6 @@ end;
 const
   // TRawAcl.AclRevision should be ACL_REVISION, unless the ACL contains an
   // object-specific ACE, in which case this value must be ACL_REVISION_DS.
-  // All ACEs in an ACL must be at the same revision level.
   ACL_REVISION    = 2;
   ACL_REVISION_DS = 4;
   // see https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-acl
@@ -2676,7 +2675,7 @@ begin
   if types * satRevisionNew <> [] then
     hdr^.AclRevision := ACL_REVISION_DS
   else
-    hdr^.AclRevision := ACL_REVISION; // up to Win2K
+    hdr^.AclRevision := ACL_REVISION; // Win2K-compatible basic ACEs
   hdr^.Sbz1 := 0;
   hdr^.AceCount := length(acl);
   hdr^.Sbz2 := 0;

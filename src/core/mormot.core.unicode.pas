@@ -2933,7 +2933,7 @@ Quit:
   result := PtrUInt(dest) - PtrUInt(begd); // dest-begd return byte length
 NoSource:
   if not NoTrailingZero then
-    dest^ := #0; // always append a WideChar(0) to the end of the buffer
+    dest^ := #0; // append a WideChar(0) to the end of the buffer
 end;
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt;

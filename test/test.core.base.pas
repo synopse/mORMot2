@@ -6904,7 +6904,8 @@ begin
     Check(CryptoApi.SecurityDescriptorToText(pointer(saved), u), 'winapi3');
     CheckEqual(u, SD_TXT[i], 'winapi4');
     {$endif OSWINDOWS}
-    if i in [1, 2, 8] then // serialization offsets seem not consistent
+    if i in [1, 2, 8] then
+      // serialization offsets are not consistent between XP or later
       Check(saved = bin, 'ToBinary');
     // TSecurityDescriptor load from SDDL into another instance
     Check(sd2.FromText('') = atpMissingExpression);

@@ -1869,7 +1869,7 @@ type
     function Close: boolean;
     /// low-level call of LDAP v3 extended operations
     // - e.g. StartTLS, cancel, transactions, user password change
-    // - called e.g. by ModifyUserPassword()
+    // - called e.g. by ExtModifyUserPassword()
     function Extended(const Oid: RawUtf8; const Value: TAsnObject;
       RespName: PRawUtf8; RespValue: PAsnObject): boolean;
     /// retrieves the current authorization identity for the client connection
@@ -7058,13 +7058,11 @@ begin
     exit;
   if Transmission <> lctEncrypted then
     ELdap.RaiseUtf8('%.ModifyUserPassword requires encryption', [self]);
-  if BoundUser = '' then
-    ELdap.RaiseUtf8('%.ModifyUserPassword cannot be anonymous', [self]);
   try
     new := LdapUnicodePwd(NewPassword);
     if OldPassword <> '' then
     begin
-      // normal users must specify old and new password
+      // normal users must specify old and new passwords
       old := LdapUnicodePwd(OldPassword);
       result := Modify(UserDN, [
                   Modifier(lmoDelete, atUnicodePwd, old),
