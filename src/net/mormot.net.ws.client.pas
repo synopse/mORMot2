@@ -496,7 +496,7 @@ function THttpClientWebSockets.WebSocketsUpgrade(
 var
   key: TAESBlock;
   bin1, bin2: RawByteString;
-  extin, extout, prot: RawUtf8;
+  extin, extout, expectedprot, supportedprot: RawUtf8;
   extins: TRawUtf8DynArray;
   cmd: RawUtf8;
   digest1, digest2: TSha1Digest;
@@ -529,8 +529,11 @@ begin
                 'Connection: Upgrade'#13#10 +
                 'Upgrade: websocket'#13#10 +
                 'Sec-WebSocket-Key: ', bin1, #13#10 +
-                'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
                 'Sec-WebSocket-Version: 13']);
+      expectedprot := aProtocol.GetSubprotocols;
+      if expectedprot <> '' then
+        // this header may be omitted, e.g. by TWebSocketEngineIOProtocol
+        SockSend(['Sec-WebSocket-Protocol: ', expectedprot]);
       if aProtocol.ProcessHandshake(nil, extout, nil) and
          (extout <> '') then
         SockSend(['Sec-WebSocket-Extensions: ', extout]); // e.g. TEcdheProtocol
@@ -548,14 +551,20 @@ begin
           result := 'No server response';
         exit; // return the unexpected command line as error message
       end;
-      prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not (hfConnectionUpgrade in Http.HeaderFlags) or
          (Http.ContentLength > 0) or
-         not PropNameEquals(Http.Upgrade, 'websocket') or
-         not aProtocol.SetSubprotocol(prot) then
+         not PropNameEquals(Http.Upgrade, 'websocket') then
         exit;
-      aProtocol.Name := prot;
+      result := 'Invalid HTTP Upgrade Sub-Protocol';
+      supportedprot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
+      if supportedprot <> '' then // this header may be omitted
+        if aProtocol.SetSubprotocol(supportedprot) then
+          aProtocol.Name := supportedprot
+        else
+          exit // unsupported sub-protocol
+      else if PosExChar(',', expectedprot) <> 0 then
+        exit; // requires to select one given sub-protocol
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1, digest1);
       bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');

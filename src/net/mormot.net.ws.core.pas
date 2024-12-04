@@ -2329,16 +2329,14 @@ end;
 
 function TWebSocketProtocolBinary.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
 begin
+  result := false;
   case FindPropName(['synopsebin', 'synopsebinary'], aProtocolName) of
     0:
       fSequencing := true;
     1:
       fSequencing := false;
   else
-    begin
-      result := false;
-      exit;
-    end;
+    exit;
   end;
   result := true;
 end;
@@ -2571,6 +2569,7 @@ var
   Digest: TSha1Digest;
 begin
   // validate WebSockets protocol upgrade request
+  Protocol := nil;
   result := HTTP_BADREQUEST;
   if not IsGet(Http.CommandMethod) or
      not PropNameEquals(Http.Upgrade, 'websocket') then
