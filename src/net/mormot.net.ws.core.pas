@@ -1189,6 +1189,9 @@ type
     procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
       PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); virtual; abstract;
   public
+    // overriden to return '' i.e. recognize by URI, not "Sec-WebSocket-Protocol:"
+    function GetSubprotocols: RawUtf8; override;
+    function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
     /// allows to send a message over the wire to a specified connection
     // - Sender identify the connection, typically from FrameReceived() method
     function SendPacket(Sender: TWebSocketProcess;
@@ -3699,6 +3702,16 @@ end;
 
 
 { TWebSocketEngineIOProtocol }
+
+function TWebSocketEngineIOProtocol.GetSubprotocols: RawUtf8;
+begin
+  result := ''; // no "Sec-WebSocket-Protocol:" header
+end;
+
+function TWebSocketEngineIOProtocol.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
+begin
+  result := false; // should never be called
+end;
 
 procedure TWebSocketEngineIOProtocol.ProcessIncomingFrame(
   Sender: TWebSocketProcess; var Request: TWebSocketFrame; const Info: RawUtf8);
