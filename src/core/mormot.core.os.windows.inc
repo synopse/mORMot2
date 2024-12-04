@@ -8,6 +8,18 @@
 
 { ****************** Unicode, Time, File process }
 
+procedure DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Len * 3);
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3 + 16, P, Len); // use RTL if complex
+  if Len > 0 then
+    dec(Len); // UnicodeToUtf8() result includes the null terminator
+  FastSetString(res, tmp.buf, Len);
+  tmp.Done;
+end;
+
 function IsExtendedPathName(Name: PWideChar): boolean;
 begin
   result := (Name <> nil) and
@@ -60,6 +72,11 @@ begin
   result := @Temp;
 end;
 
+procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
+begin
+  SetString(fn, P, StrLenW(P)); // TFileName is UnicodeString
+end;
+
 {$else}
 
 procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
@@ -90,38 +107,6 @@ begin
   result := @Temp;
 end;
 
-{$endif UNICODE}
-
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
-begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
-end;
-
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload;
-begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
-end;
-
-procedure DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
-var
-  tmp: TSynTempBuffer;
-begin
-  tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3 + 16, P, Len); // use RTL if complex
-  if Len > 0 then
-    dec(Len); // UnicodeToUtf8() result includes the null terminator
-  FastSetString(res, tmp.buf, Len);
-  tmp.Done;
-end;
-
-{$ifdef UNICODE}
-procedure Win32PWideCharToFileName(P: PWideChar; var fn: TFileName);
-begin
-  SetString(fn, P, StrLenW(P)); // TFileName is UnicodeString
-end;
-{$else}
-
 procedure Win32PWideCharToFileNameConv(P: PWideChar; L: PtrInt; var fn: TFileName);
 var
   u: SynUnicode;
@@ -150,6 +135,17 @@ begin
 end;
 
 {$endif UNICODE}
+
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
 
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
