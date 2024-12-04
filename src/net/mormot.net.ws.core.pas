@@ -318,9 +318,14 @@ type
     /// compute a new instance of the WebSockets protocol, with same parameters
     // - by default, will return nil, as expected for Client-side only
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual;
-    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    /// the sub-protocols supported by this client (not used on server side)
+    // - as transmitted in the 'Sec-WebSocket-Protocol:' header during upgrade
+    // - returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    // - some protocols have no sub-protocol, so would return '' here
     function GetSubprotocols: RawUtf8; virtual;
-    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
+    /// recognize a supported sub-protocol (on both client and server sides)
+    // - should return true on success, i.e. if aProtocolName has been recognized
+    // - check against Name by default, but could be e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; virtual;
     /// create the internal Encryption: IProtocol according to the supplied key
     // - any asymmetric algorithm needs to know its side, i.e. client or server
@@ -535,9 +540,9 @@ type
         reintroduce; overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
-    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    /// overriden to return 'synopsebin, synopsebinary' sub-protocols
     function GetSubprotocols: RawUtf8; override;
-    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
+    /// recognize our 'synopsebin, synopsebinary' sub-protocols
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
   published
     /// how compression / encryption is implemented during the transmission
@@ -984,6 +989,7 @@ type
       var Request: TWebSocketFrame; const Info: RawUtf8); override;
   public
     /// initialize the chat protocol with an incoming frame callback
+    // - if you need no "Sec-WebSocket-Protocol:" header, specify aName = ''
     constructor Create(const aName, aUri: RawUtf8;
        const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
     /// compute a new instance of this WebSockets protocol, with same parameters

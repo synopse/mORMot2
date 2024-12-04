@@ -1027,7 +1027,8 @@ type
   PRawAceOperand = ^TRawAceOperand;
 
   /// define one node in the TAceBinaryTree.Nodes
-  // - here pointers are just 8-bit indexes to the main TAceBinaryTree.Nodes[]
+  // - here pointers are just 8-bit indexes to the main TAceBinaryTree.Nodes[],
+  // and 255 means no operand
   TAceBinaryTreeNode = packed record
     /// position of this node in the input binary or text
     Position: word;

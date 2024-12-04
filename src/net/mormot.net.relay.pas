@@ -158,7 +158,8 @@ type
   TPrivateRelay = class;
 
   /// regular mORMot client to Public Relay connection using
-  // synopsejson/synopsebin/synopsebinary protocols
+  // synopsejson/synopsebin/synopsebinary sub-protocols
+  // - will behave like a regular mORMot server from the client point of view
   // - any incoming frame will be encapsulated with the connection ID, then
   // relayed to the Private Relay node using TRelayServerProtocol
   TSynopseServerProtocol = class(TWebSocketProtocol)
@@ -168,6 +169,7 @@ type
       var Frame: TWebSocketFrame; const info: RawUtf8); override;
   public
     // implements mormot.net.ws.core's TWebSocketProtocolRest variants
+    // to behave like a regular mORMot server from the client point of view
     function GetSubprotocols: RawUtf8; override;
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
   public
