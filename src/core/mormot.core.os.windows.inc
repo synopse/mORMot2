@@ -8,12 +8,23 @@
 
 { ****************** Unicode, Time, File process }
 
+function IsExtendedPathName(Name: PWideChar): boolean;
+begin
+  result := (Name <> nil) and
+            (Name[0] = '\') and
+            (Name[1] = '\') and
+            (Name[2] = '?') and
+            (Name[3] = '\');
+end;
+
 procedure ExtendedPathName(Name: PWideChar; Len: PtrInt; var Temp: TW32Temp);
 var
   fp: PWideChar;
 begin
   Len := Len * 2 + 2; // in bytes, +2 to include ending #0
-  if Len <= MAX_PATH * 2 then
+  if (Len <= MAX_PATH * 2) or
+     ((Len <= SizeOf(Temp) - 8) and
+      IsExtendedPathName(Name)) then
   begin
     MoveFast(Name^, Temp[0], Len); // we can use the supplied UTF-16 file name
     exit;
