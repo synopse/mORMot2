@@ -20,6 +20,8 @@ program mget;
       (see the actual command supplied by "mget /help" response)
 }
 
+// ./mget --prompt --peer --debug --limitBandwidthMB 10 --hashValue 4544b35fd0526b1107c8058ea6be8a05087d1160ed46f0e1d3b3c5155f68ba7a "http://ictuswin.com/trans/Father%20Brown%20S01/Father Brown S01E04 -  The Man in the Tree 720P x264 RB58.mp4"
+
 {$I ..\..\mormot.defines.inc}
 
 {$ifdef OSWINDOWS}
@@ -121,6 +123,8 @@ begin
     c.Param('tlsPrivKey', 'optional client TLS Private Key #filename');
   p.Options.TLS.PrivatePassword :=
     c.Param('tlsPrivPwd', 'optional client TLS Private Key #password');
+  p.TrackNetwork := c.Option(
+    'peerInterfaceTrack', 'track network interface changes for peer Cache');
   if c.Option(['?', 'help'], 'display this message') then
     result := gpHelp
   else if (result = gpWithUrl) and
@@ -196,7 +200,7 @@ begin
           p.Execute(url);
         gpPromptMode:
           begin
-            p.Start; // launch background THttpPeerCache e.g.
+            p.StartPeerCache; // launch background THttpPeerCache
             repeat
               if url = '' then
               begin
