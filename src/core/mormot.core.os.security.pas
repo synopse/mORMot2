@@ -1319,6 +1319,12 @@ function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
 // - use fast O(log(n)) binary search in CPU L1 cache over ATTR_UUID[] items
 procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
 
+/// convert an ObjectID as UTF-8 text
+// - used e.g. by TSecAce.ObjectText and TSecAce.InheritedText
+// - to customize the output format set e.g. uuid = @AppendShortKnownUuid
+procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
+  var Text: RawUtf8);
+
 /// parse an ObjectID, recognizing TAdsKnownAttribute's ldapDisplayName or UUID hexa
 // - can be used as TShortToUuid optional parameter for SDDL parsing
 // - you can also define your own TShortToUuidfunction
@@ -2741,6 +2747,18 @@ begin
     AppendShortUuid(u, s) // append as regular UUID hexadecimal text
   else
     AppendShortAnsi7String(ATTR_TXT[a], s); // append the ldapDisplayName
+end;
+
+procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
+  var Text: RawUtf8);
+var
+  s: ShortString;
+begin
+  s[0] := #0;
+  if not Assigned(@uuid) then
+    uuid := @AppendShortUuid; // default append as UUID hexadecimal text
+  uuid(guid, s);
+  ShortStringToAnsi7String(s, Text);
 end;
 
 function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
@@ -4688,7 +4706,7 @@ begin
   end;
   sddl.AddShort(tmp);
   if not Assigned(@uuid) then
-    uuid := @AppendShortUuid; // default append as UUID standard text
+    uuid := @AppendShortUuid; // default append as UUID hexadecimal text
   AclToText(sddl, dom, uuid, sasDacl);
   AclToText(sddl, dom, uuid, sasSacl);
 end;
