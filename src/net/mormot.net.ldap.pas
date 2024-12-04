@@ -2159,6 +2159,12 @@ type
     function GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
       const GroupAN, GroupDN: array of RawUtf8; Nested: boolean = true;
       const BaseDN: RawUtf8 = ''; GroupsAN: PRawUtf8DynArray = nil): boolean; overload;
+    /// change a user's password using regular Modify() method
+    // - raise ELdap if the connection is anonymous or not encrypted
+    // - non-void UserDN is typically 'uid=jdoe,ou=People,dc=example,dc=com'
+    // - OldPassword is mandatory for normal users, but admins can leave it to ''
+    function ModifyUserPassword(const UserDN: RawUtf8;
+      const OldPassword, NewPassword: SpiUtf8): boolean;
     /// change a user's password using RFC 3062 extension
     // - raise ELdap if the connection is anonymous or not encrypted
     // - non-void UserDN is typically 'uid=jdoe,ou=People,dc=example,dc=com'
@@ -7042,6 +7048,38 @@ begin
   end;
 end;
 
+function TLdapClient.ModifyUserPassword(const UserDN: RawUtf8;
+  const OldPassword, NewPassword: SpiUtf8): boolean;
+var
+  old, new: SpiUtf8;
+begin
+  result := false;
+  if UserDN = '' then
+    exit;
+  if Transmission <> lctEncrypted then
+    ELdap.RaiseUtf8('%.ModifyUserPassword requires encryption', [self]);
+  if BoundUser = '' then
+    ELdap.RaiseUtf8('%.ModifyUserPassword cannot be anonymous', [self]);
+  try
+    new := LdapUnicodePwd(NewPassword);
+    if OldPassword <> '' then
+    begin
+      // normal users must specify old and new password
+      old := LdapUnicodePwd(OldPassword);
+      result := Modify(UserDN, [
+                  Modifier(lmoDelete, atUnicodePwd, old),
+                  Modifier(lmoAdd,    atUnicodePwd, new)]);
+    end
+    else
+      // admin users can reset password without sending the old one
+      result := Modify(UserDN, [
+                  Modifier(lmoReplace, atUnicodePwd, new)]);
+  finally
+    FillZero(old); // anti-forensic
+    FillZero(new);
+  end;
+end;
+
 function TLdapClient.ExtModifyUserPassword(const UserDN: RawUtf8;
   const OldPassword, NewPassword: SpiUtf8): SpiUtf8;
 var
@@ -7055,9 +7093,9 @@ begin
   if UserDN = '' then
     exit;
   if Transmission <> lctEncrypted then
-    ELdap.RaiseUtf8('%.ModifyUserPassword requires encryption', [self]);
+    ELdap.RaiseUtf8('%.ExtModifyUserPassword requires encryption', [self]);
   if BoundUser = '' then
-    ELdap.RaiseUtf8('%.ModifyUserPassword cannot be anonymous', [self]);
+    ELdap.RaiseUtf8('%.ExtModifyUserPassword cannot be anonymous', [self]);
   req := Asn(UserDN, ASN1_CTX0);
   if OldPassword <> '' then
     Append(req, Asn(OldPassword, ASN1_CTX1));
