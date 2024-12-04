@@ -409,6 +409,9 @@ type
     /// notify the alternate download implementation that OnDownloading() failed
     // - e.g. THttpPeerCache will abort publishing this partial file
     procedure OnDownloadingFailed(OnDownloadingID: THttpPartialID);
+    /// check if the network interface defined in Settings did actually change
+    // - you may want to recreate the alternate downloading instance
+    function NetworkInterfaceChanged: boolean;
   end;
 
   /// internal low-level execution context for THttpClientSocket.Request
