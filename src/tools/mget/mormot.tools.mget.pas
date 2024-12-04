@@ -166,7 +166,8 @@ begin
     exit;
   // first check if the network interface changed
   if fPeerCache <> nil then
-    if fPeerCache.NetworkInterfaceChanged then
+    if TrackNetwork and
+       fPeerCache.NetworkInterfaceChanged then
     begin
       l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
       fPeerCache := nil; // force re-create just below
