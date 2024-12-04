@@ -4500,18 +4500,7 @@ begin
   hdr^.Revision := 1;
   hdr^.Control := Flags + [scSelfRelative];
   inc(PRawSD(p));
-  if Owner <> '' then
-  begin
-    hdr^.Owner := p - pointer(result);
-    MoveFast(pointer(Owner)^, p^, length(Owner));
-    inc(p, length(Owner));
-  end;
-  if Group <> '' then
-  begin
-    hdr^.Group := p - pointer(result);
-    MoveFast(pointer(Group)^, p^, length(Group));
-    inc(p, length(Group));
-  end;
+  // regular layout seems to be header + SACL + DACL + Owner + Group
   if Sacl <> nil then
   begin
     include(hdr^.Control, scSaclPresent);
@@ -4523,6 +4512,18 @@ begin
     include(hdr^.Control, scDaclPresent);
     hdr^.Dacl := p - pointer(result);
     inc(p, SecAclToBin(p, Dacl));
+  end;
+  if Owner <> '' then
+  begin
+    hdr^.Owner := p - pointer(result);
+    MoveFast(pointer(Owner)^, p^, length(Owner));
+    inc(p, length(Owner));
+  end;
+  if Group <> '' then
+  begin
+    hdr^.Group := p - pointer(result);
+    MoveFast(pointer(Group)^, p^, length(Group));
+    inc(p, length(Group));
   end;
   if p - pointer(result) <> length(result) then
     raise EOSSecurity.Create('TSecurityDescriptor.ToBinary'); // paranoid
