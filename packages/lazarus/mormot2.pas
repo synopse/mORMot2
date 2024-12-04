@@ -41,7 +41,7 @@ uses
   mormot.core.os.mac, mormot.app.agl, mormot.misc.pecoff, mormot.lib.pkcs11, 
   mormot.net.ldap, mormot.core.fpclibcmm, mormot.net.dns, mormot.lib.win7zip,
   mormot.crypt.rsa, mormot.crypt.x509, mormot.crypt.pkcs11, mormot.net.openapi,
-  mormot.core.os.security;
+  mormot.core.os.security, mormot.tools.mget;
 
 implementation
 
