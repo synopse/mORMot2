@@ -2422,6 +2422,12 @@ function RenameFile(const OldName, NewName: TFileName): boolean;
 function FileSetTime(const FileName: TFileName;
   const Created, Accessed, Written: Int64): boolean;
 
+/// defined here to call the GetFullPathNameW() Windows API
+// - this function may convert to extended-length path if needed
+// - instead of the "manual" file name expansion of the FPC RTL
+// - also for consistency with Delphi on Windows
+function ExpandFileName(const FileName: TFileName): TFileName;
+
 {$else}
 
 /// faster cross-platform alternative to sysutils homonymous function

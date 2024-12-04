@@ -1256,6 +1256,30 @@ begin
     end;
 end;
 
+function ExpandFileName(const FileName: TFileName): TFileName;
+var
+  w, fp: PWideChar;
+  t1, t2: TW32Temp;
+begin
+  result := FileName;
+  if (FileName = '') or
+     ((FileName[2] = ':') and 
+      (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
+      (Pos('..', FileName) = 0)) then
+    exit; // it seems to be already expanded 
+  w := W32(FileName, t1); // may convert to extended-length path
+  if w = nil then
+    exit;
+  if not (((w[1] = ':') and
+           (ord(w[0]) in [ord('A')..ord('Z'), ord('a')..ord('z')])) or
+          IsExtendedPathName(w)) then
+    if GetFullPathNameW(w, high(t2), @t2, fp) = 0 then
+      exit
+    else
+      w := @t2; // full expanded file name from Windows API
+  Win32PWideCharToFileName(w, result);
+end;
+
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 var
   s, t: TW32Temp;
