@@ -743,6 +743,14 @@ type
     function MaskText: RawUtf8; overload;
     /// set the associated access mask, as SDDL text format
     function MaskText(const maskSddl: RawUtf8): boolean; overload;
+    /// get the associated Object Type, as UUID text format
+    // - to customize the output format set e.g. uuid = @AppendShortKnownUuid
+    function ObjectText(uuid: TAppendShortUuid = nil): RawUtf8;
+    /// get the associated Inherited Object Type, as UUID text format
+    // - to customize the output format set e.g. uuid = @AppendShortKnownUuid
+    function InheritedText(uuid: TAppendShortUuid = nil): RawUtf8;
+    /// get the associated flags, as SDDL text format
+    function FlagsText: RawUtf8;
     /// get the ACE conditional expression, as stored in Opaque binary
     function ConditionalExpression(dom: PSid = nil): RawUtf8; overload;
     /// parse a ACE conditional expression, and assign it to the Opaque binary
@@ -3505,6 +3513,29 @@ var
 begin
   p := pointer(maskSddl);
   result := SddlNextMask(p, Mask);
+end;
+
+function TSecAce.ObjectText(uuid: TAppendShortUuid): RawUtf8;
+begin
+  ObjectUuidToText(ObjectType, uuid, result);
+end;
+
+function TSecAce.InheritedText(uuid: TAppendShortUuid): RawUtf8;
+begin
+  ObjectUuidToText(InheritedObjectType, uuid, result);
+end;
+
+function TSecAce.FlagsText: RawUtf8;
+var
+  f: TSecAceFlag;
+  s: ShortString;
+begin
+  s[0] := #0;
+  if Flags <> [] then
+    for f := low(f) to high(f) do
+      if f in Flags then
+        AppendShort(SAF_SDDL[f], s);
+  ShortStringToAnsi7String(s, result);
 end;
 
 function TSecAce.ConditionalExpression(dom: PSid): RawUtf8;
