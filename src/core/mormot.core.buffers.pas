@@ -2226,9 +2226,17 @@ type
     /// release the associated Redirected stream
     destructor Destroy; override;
     /// can be used as TOnStreamProgress callback writing into the console
+    // - will append the current state in the console last line
     class procedure ProgressStreamToConsole(Sender: TStreamRedirect);
     /// can be used as TOnInfoProgress callback writing into the console
+    // - will append the current state in the console last line
     class procedure ProgressInfoToConsole(Sender: TObject; Info: PProgressInfo);
+    /// can be used as TOnStreamProgress callback writing into the console
+    // - will append the current state in the console with a line feed
+    class procedure ProgressStreamToConsoleLn(Sender: TStreamRedirect);
+    /// can be used as TOnInfoProgress callback writing into the console
+    // - will append the current state in the console with a line feed
+    class procedure ProgressInfoToConsoleLn(Sender: TObject; Info: PProgressInfo);
     /// notify a TOnStreamProgress callback that a process ended
     // - create a fake TStreamRedirect and call Ended with the supplied info
     class procedure NotifyEnded(
@@ -9799,17 +9807,31 @@ var
   eraseline: ShortString;
   msg: RawUtf8;
 begin
-  eraseline[0] := AnsiChar(Info.ConsoleLen + 2);
-  eraseline[1] := #13;
-  FillCharFast(eraseline[2], ord(eraseline[0]) - 2, 32);
-  eraseline[ord(eraseline[0])] := #13;
-  system.write(eraseline);
-  msg := Info.GetProgress;
+  msg := Info^.GetProgress;
   if length(msg) > 250 then
     FakeLength(msg, 250); // paranoid overflow check
-  Info.ConsoleLen := length(msg); // to properly erase previous line
+  // properly erase previous line
+  eraseline[0] := AnsiChar(Info^.ConsoleLen + 2);
+  eraseline[1] := #13;
+  FillCharFast(eraseline[2], Info^.ConsoleLen, 32);
+  eraseline[ord(eraseline[0])] := #13;
+  Info^.ConsoleLen := length(msg);
   Prepend(msg, [eraseline]);
-  ConsoleWrite(msg, ccLightGray, {nolf=}true, {nocolor=}true);
+  // output to console in a single syscall
+  ConsoleWriteRaw(msg, {nolf=}true);
+end;
+
+class procedure TStreamRedirect.ProgressStreamToConsoleLn(Sender: TStreamRedirect);
+begin
+  if (Sender <> nil) and
+     Sender.InheritsFrom(TStreamRedirect) then
+    ProgressInfoToConsoleLn(Sender, @Sender.fInfo);
+end;
+
+class procedure TStreamRedirect.ProgressInfoToConsoleLn(
+  Sender: TObject; Info: PProgressInfo);
+begin
+  ConsoleWriteRaw(Info^.GetProgress);
 end;
 
 class procedure TStreamRedirect.NotifyEnded(
