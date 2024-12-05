@@ -2025,8 +2025,12 @@ end;
 procedure TPollAsyncSockets.CloseConnection(
   var connection: TPollAsyncConnection; const caller: shortstring);
 begin
-  if not connection.IsDangling then
   try
+    if connection.IsDangling then
+    begin
+      connection := nil; // wrong reference
+      exit;
+    end;
     if not (fClosed in connection.fFlags) then
       // if not already done in UnlockAndCloseConnection
       connection.OnClose; // called before slot/socket closing
