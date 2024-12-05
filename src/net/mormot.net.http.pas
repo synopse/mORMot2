@@ -358,8 +358,7 @@ type
   private
     fContentLeft: Int64;
     fContentPos: PByte;
-    fContentEncoding, fCommandUriInstance, fLastHost: RawUtf8;
-    fCommandUriInstanceLen: PtrInt;
+    fContentEncoding, fLastHost: RawUtf8;
     fProgressiveTix: cardinal;
     fProgressiveID: THttpPartialID;
     fProgressiveNewStreamFileName: TFileName;
@@ -3721,20 +3720,7 @@ begin
       hrsGetCommand:
         if ProcessParseLine(st) then
         begin
-          if Interning = nil then
-            FastSetString(CommandUri, st.Line, st.LineLen)
-          else
-          begin
-            // no real interning, but CommandUriInstance buffer reuse
-            if st.LineLen > fCommandUriInstanceLen then
-            begin
-              fCommandUriInstanceLen := st.LineLen + 256;
-              FastSetString(fCommandUriInstance, nil, fCommandUriInstanceLen);
-            end;
-            CommandUri := fCommandUriInstance; // COW memory buffer reuse
-            MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
-            FakeLength(CommandUri, st.LineLen);
-          end;
+          FastSetString(CommandUri, st.Line, st.LineLen);
           State := hrsGetHeaders;
         end
         else
