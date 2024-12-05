@@ -3164,6 +3164,8 @@ begin
   ContentStream := nil;
   ServerInternalState := 0;
   CompressContentEncoding := -1;
+  if fContentEncoding <> '' then
+    FastAssignNew(fContentEncoding);
   integer(CompressAcceptHeader) := 0;
   fProgressiveID := 0;
   fProgressiveTix := 0;
