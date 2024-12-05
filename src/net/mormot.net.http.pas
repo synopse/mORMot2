@@ -2654,12 +2654,10 @@ begin
     ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
 end;
 
-const
-  _HEAD32 = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
-
 function IsHead(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ = _HEAD32;
+  result := PCardinal(method)^ =
+              ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 end;
 
 function IsUrlFavIcon(P: PUtf8Char): boolean;
@@ -3576,6 +3574,8 @@ end;
 
 var
   _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
+const
+  _HEAD32 = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 
 function THttpRequestContext.ParseCommand: boolean;
 var
