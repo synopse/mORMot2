@@ -525,8 +525,8 @@ type
     /// convert Extension[x] from CSV to an array of RawUtf8
     function ExtensionArray(x: TXExtension): TRawUtf8DynArray;
     /// check a date/time coherency with NotBefore/NotAfter
+    // - a grace period of CERT_DEPRECATION_THRESHOLD (half a day) is applied
     function IsValidDate(timeutc: TDateTime = 0): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary

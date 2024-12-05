@@ -2060,6 +2060,7 @@ type
     function GetNotAfter: TDateTime;
     /// check GetNotBefore/GetNotAfter validity
     // - validate against current UTC date/time if none is specified
+    // - a grace period of CERT_DEPRECATION_THRESHOLD (half a day) is applied
     function IsValidDate(date: TDateTime = 0): boolean;
     /// returns true e.g. after TCryptCertAlgo.New but before Generate()
     function IsVoid: boolean;
@@ -2729,9 +2730,6 @@ type
 
 
 const
-  /// allow half a day margin when checking a Certificate date validity
-  CERT_DEPRECATION_THRESHOLD = 0.5;
-
   /// our units generate RSA keypairs with 2048-bit by default
   // - anything lower than 2048-bit is unsafe and should not be used
   // - 2048-bit is today's norm, creating 112-bit of security
