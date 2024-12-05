@@ -8832,19 +8832,22 @@ type
   end;
   PSmbEntryPoint64 = ^TSmbEntryPoint64;
 
-function GetRawSmbios32(p: PSmbEntryPoint32; var info: TRawSmbiosInfo): PtrUInt;
+function SmbiosChecksum(p: pointer; l: PtrInt): PtrUInt;
 var
   cs: byte;
   i: PtrInt;
 begin
   cs := 0;
-  for i := 0 to p^.Length - 1 do
+  for i := 0 to l - 1 do
     inc(cs, PByteArray(p)[i]);
-  if cs <> 0 then
-  begin
-    result := 0; // invalid checksum
+  result := ord(cs = 0); // returns 0 if failed
+end;
+
+function GetRawSmbios32(p: PSmbEntryPoint32; var info: TRawSmbiosInfo): PtrUInt;
+begin
+  result := SmbiosChecksum(p, p^.Length);
+  if result = 0 then
     exit;
-  end;
   result := p^.StructAddr;
   info.SmbMajorVersion := p^.MajVers;
   info.SmbMinorVersion := p^.MinVers;
@@ -8853,18 +8856,10 @@ begin
 end;
 
 function GetRawSmbios64(p: PSmbEntryPoint64; var info: TRawSmbiosInfo): PtrUInt;
-var
-  cs: byte;
-  i: PtrInt;
 begin
-  cs := 0;
-  for i := 0 to p^.Length - 1 do
-    inc(cs, PByteArray(p)[i]);
-  if cs <> 0 then
-  begin
-    result := 0;
+  result := SmbiosChecksum(p, p^.Length);
+  if result = 0 then
     exit;
-  end;
   result := p^.StructAddr;
   info.SmbMajorVersion := p^.MajVers;
   info.SmbMinorVersion := p^.MinVers;
@@ -8892,7 +8887,7 @@ begin
         exit;
     end
     else if (p^.Anchor = SMB_ANCHOR4) and
-            (p^.Checksum = SMB_ANCHOR5) then
+            (PSmbEntryPoint64(p)^.Anch5 = SMB_ANCHOR5) then
     begin
       result := GetRawSmbios64(pointer(p), info);
       if result <> 0 then
