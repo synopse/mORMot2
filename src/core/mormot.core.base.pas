@@ -955,8 +955,12 @@ procedure AppendShort(const src: ShortString; var dest: ShortString);
 /// simple concatenation of an ANSI-7 AnsiString into a shorstring
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
 
+/// simple concatenation of a text buffer into a RawUtf8
+procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
+
 /// simple concatenation of a ShortString text into a RawUtf8
 procedure AppendShortToUtf8(const src: ShortString; var dest: RawUtf8);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(C: TClass): PShortString; overload;
@@ -5142,15 +5146,20 @@ begin
   AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest);
 end;
 
-procedure AppendShortToUtf8(const src: ShortString; var dest: RawUtf8);
+procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
 var
   n: PtrInt;
 begin
-  if src[0] = #0 then
+  if srclen = 0 then
     exit;
   n := length(dest);
-  SetLength(dest, n + ord(src[0]));
-  MoveFast(src[1], PByteArray(dest)[n], ord(src[0]));
+  SetLength(dest, n + srclen);
+  MoveFast(src^, PByteArray(dest)[n], srclen);
+end;
+
+procedure AppendShortToUtf8(const src: ShortString; var dest: RawUtf8);
+begin
+  AppendBufferToUtf8(@src[1], ord(src[0]), dest);
 end;
 
 function ClassNameShort(C: TClass): PShortString;
