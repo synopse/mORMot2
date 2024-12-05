@@ -1260,15 +1260,14 @@ begin
   result := FileName;
   if (FileName = '') or
      ((FileName[2] = ':') and 
+      (length(FileName) < MAX_PATH) and
       (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
       (Pos('..', FileName) = 0)) then
     exit; // it seems to be already expanded 
-  w := W32(FileName, t1); // may convert to extended-length path
+  w := W32(FileName, t1);
   if w = nil then
     exit;
-  if not (((w[1] = ':') and
-           (ord(w[0]) in [ord('A')..ord('Z'), ord('a')..ord('z')])) or
-          IsExtendedPathName(w)) then
+  if not IsExtendedPathName(w) then // W32() may have converted to extended-length
     if GetFullPathNameW(w, high(t2), @t2, fp) = 0 then
       exit
     else
