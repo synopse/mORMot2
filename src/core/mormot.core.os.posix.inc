@@ -1833,7 +1833,6 @@ end;
 
 procedure AllocConsole;
 begin
-  StdOut := StdOutputHandle;
 end;
 
 function HasConsole: boolean;
@@ -1891,6 +1890,7 @@ var
   s: RawUtf8;
 begin
   // pre-compute the whole chars to be sent to the console
+  NoColor := NoColor or (not StdOutIsTTY);
   if NoColor and
      NoLineFeed then
     s := Text // no memory allocation needed
@@ -3975,8 +3975,9 @@ var
   {$endif OSBSDDARWIN}
 begin
   // retrieve Kernel and Hardware information
+  StdOut := StdOutputHandle;
   StdOutIsTTY := not IsDebuggerPresent and
-                 (IsATTY(StdOutputHandle) = 1) and
+                 (IsATTY(StdOut) = 1) and
                  IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
