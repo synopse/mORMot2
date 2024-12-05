@@ -2270,6 +2270,10 @@ type
     // - this TStream instance will be owned by the TStreamRedirect
     property Redirected: TStream
       read fRedirected write fRedirected;
+    /// low-level access to the progression information data structure
+    // - don't use this but other specific properties like ExpectedSize or Percent
+    property Info: TProgressInfo
+      read fInfo;
     /// you can specify a number of bytes for the final Redirected size
     // - will be used for the callback progress - could be left to 0 for Write()
     // if size is unknown
