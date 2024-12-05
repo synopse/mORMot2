@@ -2654,10 +2654,12 @@ begin
     ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
 end;
 
+const
+  _HEAD32 = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+
 function IsHead(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+  result := PCardinal(method)^ = _HEAD32;
 end;
 
 function IsUrlFavIcon(P: PUtf8Char): boolean;
@@ -3145,7 +3147,7 @@ begin
     ContentStream.Free; // ensure no leak on (reused) broken connection
   ResponseFlags := [];
   Options := [];
-  FastAssignNew(Headers);
+  FastAssignNew(Headers); // note: too soon for CommandUri
   FastAssignNew(ContentType);
   if Upgrade <> '' then
     FastAssignNew(Upgrade);
@@ -3598,9 +3600,9 @@ begin
         CommandMethod := _POSTVAR;
         inc(P, 5);
       end;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+    _HEAD32:
       begin
-        CommandMethod := _HEADVAR; // allow quick 'HEAD' search per pointer
+        CommandMethod := _HEADVAR;
         inc(P, 5);
       end;
   else
@@ -3629,9 +3631,12 @@ begin
     else
       inc(P);
   L := P - B;
-  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
-  FakeLength(CommandUri, L);
   result := ParseHttp(P + 1); // parse HTTP/1.x just after P^ = ' '
+  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
+  if L = 0 then
+    FastAssignNew(CommandUri) // paranoid (malformatted content)
+  else
+    FakeLength(CommandUri, L);
 end;
 
 function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
@@ -3720,7 +3725,7 @@ begin
       hrsGetCommand:
         if ProcessParseLine(st) then
         begin
-          FastSetString(CommandUri, st.Line, st.LineLen);
+          FastSetString(CommandUri, st.Line, st.LineLen); // never interned
           State := hrsGetHeaders;
         end
         else
@@ -3865,7 +3870,7 @@ begin
   if fContentEncoding <> '' then
     AppendLine(Headers, ['Content-Encoding: ', fContentEncoding]);
   // compute response body
-  if (pointer(CommandMethod) = pointer(_HEADVAR)) or
+  if (PCardinal(CommandMethod)^ = _HEAD32) or
      (ContentLength = 0) then
     exit;
   if aOutStream <> nil then
@@ -3957,7 +3962,7 @@ begin
   end;
   // try to send both headers and body in a single socket syscall
   Process.Reset;
-  if pointer(CommandMethod) = pointer(_HEADVAR) then
+  if PCardinal(CommandMethod)^ = _HEAD32 then
     // return only the headers
     State := hrsResponseDone
   else
@@ -4036,7 +4041,7 @@ begin
   if not (rfContentStreamNeedFree in ResponseFlags) then
     exit;
   FreeAndNilSafe(ContentStream);
-  Exclude(ResponseFlags, rfContentStreamNeedFree);
+  exclude(ResponseFlags, rfContentStreamNeedFree);
 end;
 
 function THttpRequestContext.ContentFromFile(
@@ -4052,7 +4057,7 @@ begin
   // try if there is an already-compressed .gz file to send away
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
-     (pointer(CommandMethod) <> pointer(_HEADVAR)) and
+     (PCardinal(CommandMethod)^ <> _HEAD32) and
      not (rfWantRange in ResponseFlags) then
   begin
     gz := FileName + '.gz';
@@ -4085,7 +4090,7 @@ begin
   result := HTTP_SUCCESS;
   include(ResponseFlags, rfAcceptRange);
   if (ContentLength < HttpContentFromFileSizeInMemory) and
-     (pointer(CommandMethod) <> pointer(_HEADVAR)) then
+     (PCardinal(CommandMethod)^ <> _HEAD32) then
   begin
     // smallest files (up to few MB) are sent from temp memory (maybe compressed)
     FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
@@ -6025,7 +6030,7 @@ begin
       Scope := hasPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Scope := hasPut;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+    _HEAD32:
       Scope := hasHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
       Scope := hasDelete;
@@ -7258,12 +7263,12 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
-  GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
+  GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
 
 finalization
 

@@ -11480,7 +11480,7 @@ begin
 end;
 
 const
-  APPEND_OVERLOAD = 24; // for AppendCRLF or IndexByte() read overflow
+  APPEND_OVERLOAD = 24; // for Append(AnsiChar), AppendCRLF or IndexByte()
 
 procedure TRawByteStringBuffer.RawAppend(P: pointer; PLen: PtrInt);
 var
