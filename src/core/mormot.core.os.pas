@@ -1578,6 +1578,11 @@ var
   CreateDummyCertificate: function(const Stuff, CertName: RawUtf8;
     Marker: cardinal): RawByteString;
 
+var
+  /// allow half a day margin when checking a Certificate date validity
+  // - this global setting is used as default for all our units
+  CERT_DEPRECATION_THRESHOLD: TDateTime = 0.5;
+
 type
   /// the raw SMBIOS information as filled by GetRawSmbios
   // - first 4 bytes are $010003ff on POSIX if read from /var/tmp/.synopse.smb

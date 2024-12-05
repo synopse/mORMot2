@@ -1793,6 +1793,9 @@ type
     function NotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
     function NotAfter: TDateTime;
+    /// check a date/time coherency with NotBefore/NotAfter
+    // - a grace period of CERT_DEPRECATION_THRESHOLD (half a day) is applied
+    function IsValidDate(TimeUtc: TDateTime = 0): boolean;
     /// returns the hexadecimal SHA-1 digest of the whole certificate
     // - you can set e.g. md = EVP_sha256 to retrieve the SHA-256 digest
     function FingerPrint(md: PEVP_MD = nil): RawUtf8;
@@ -9760,6 +9763,20 @@ begin
     result := 0
   else
     result := X509_getm_notAfter(@self).ToDateTime;
+end;
+
+function X509.IsValidDate(TimeUtc: TDateTime): boolean;
+var
+  na, nb: TDateTime;
+begin
+  na := NotAfter; // 0 if ASN1_TIME_to_tm() not supported by old OpenSSL
+  nb := NotBefore;
+  if TimeUtc = 0 then
+    TimeUtc := NowUtc;
+  result := ((na = 0) or
+             (TimeUtc < na + CERT_DEPRECATION_THRESHOLD)) and
+            ((nb = 0) or
+             (TimeUtc + CERT_DEPRECATION_THRESHOLD > nb));
 end;
 
 function X509.FingerPrint(md: PEVP_MD): RawUtf8;
