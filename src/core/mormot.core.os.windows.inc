@@ -2585,7 +2585,7 @@ begin
 end;
 
 var
-  ConsoleCriticalSection: TOSLock;
+  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock 
 
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
@@ -3811,12 +3811,11 @@ function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
   store: HCERTSTORE;
   ctx: PCCERT_CONTEXT;
-  resultlen, certlen: DWord;
+  certlen: DWord;
   tmp: TSynTempBuffer;
 begin
   // call the Windows API to retrieve the System certificates
   result := '';
-  resultlen := 0;
   store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
   try
     ctx := CertEnumCertificatesInStore(store, nil);
@@ -3829,11 +3828,7 @@ begin
       tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
       if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
           CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
-      begin
-        SetLength(result, resultlen + certlen);
-        MoveFast(tmp.buf^, PByteArray(result)[resultlen], certlen);
-        inc(resultlen, certlen);
-      end;
+         AppendBufferToUtf8(tmp.buf, certlen, result);
       tmp.Done;
       ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
     end;

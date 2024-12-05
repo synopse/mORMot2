@@ -3921,10 +3921,12 @@ procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
 /// write some text to the console using the current color
 // - similar to writeln() but redirect to ConsoleWrite(NoColor=true)
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// append a line feed to the console
 // - similar to writeln but redirect to ConsoleWrite() with proper thread safety
 procedure ConsoleWriteLn;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// will wait for the ENTER key to be pressed, with all needed waiting process
 // - on the main thread, will call Synchronize() for proper work e.g. with
@@ -6787,7 +6789,7 @@ function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteS
 var
   h: THandle;
   size: Int64;
-  read, pos: PtrInt;
+  read: PtrInt;
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
@@ -6797,17 +6799,12 @@ begin
   if not ValidHandle(h) then
     exit;
   if HasNoSize then
-  begin
-    pos := 0;
     repeat
       read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
       if read <= 0 then
         break;
-      SetLength(result, pos + read); // in-place resize
-      MoveFast(tmp, PByteArray(result)^[pos], read);
-      inc(pos, read);
-    until false;
-  end
+      AppendBufferToUtf8(@tmp, read, RawUtf8(result)); // in-place resize
+    until false
   else
   begin
     size := FileSize(h);

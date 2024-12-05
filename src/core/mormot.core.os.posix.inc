@@ -141,17 +141,6 @@ begin
   FastSetString(result, S, P - S);
 end;
 
-procedure RawUtf8Append(var s: RawUtf8; p: PUtf8Char; l: PtrInt);
-var
-  n: PtrInt;
-begin
-  if l = 0 then
-    exit;
-  n := length(s);
-  SetLength(s, n + l);
-  MoveFast(p^, PByteArray(s)[n], l);
-end;
-
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
 begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
@@ -1853,7 +1842,8 @@ begin
 end;
 
 var
-  TextAttr: integer = 255; // always change the color at startup
+  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
+  TextAttr: integer = -1; // always change the color at startup
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
 const
@@ -1875,7 +1865,7 @@ var
   c: TShort8;
 begin
   TextColorCmd(Color, c);
-  RawUtf8Append(s, @c[1], ord(c[0]));
+  AppendShortToUtf8(c, s);
 end;
 
 procedure TextColor(Color: TConsoleColor);
@@ -1883,19 +1873,17 @@ var
   c: TShort8;
 begin
   TextColorCmd(Color, c);
-  if c[0] <> #0 then
-    fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
+  if c[0] = #0 then
+    exit;
+  ConsoleCriticalSection.Lock;
+  fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
+  ConsoleCriticalSection.UnLock;
 end;
 
 procedure TextBackground(Color: TConsoleColor);
 begin
   // not implemented yet - but not much needed either
 end;
-
-var
-  ConsoleCriticalSection: TOSLock;
-const
-  PosixLineFeed: AnsiChar = #10;
 
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
@@ -1910,9 +1898,9 @@ begin
   begin
     if not NoColor then
       TextColorAppend(Color, s);
-    RawUtf8Append(s, pointer(Text), length(Text));
+    AppendBufferToUtf8(pointer(Text), length(Text), s);
     if not NoLineFeed then
-      RawUtf8Append(s, @PosixLineFeed, 1);
+      AppendShortToUtf8(#10, s);
     if not NoColor then
       TextColorAppend(ccLightGray, s);
   end;
