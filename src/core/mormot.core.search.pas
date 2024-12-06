@@ -692,7 +692,7 @@ type
     // corresponding to the expected false positive ratio
     // - you can specify a custom hash function if you find that the default
     // crc32c() has too many collisions: but SaveTo/LoadFrom will be tied to it;
-    // see e.g. CryptCrc32(caMd5/caSha1) from mormot.crypt.secure
+    // see e.g. CryptCrc32(caMd5/caSha1/caSha256) from mormot.crypt.secure
     constructor Create(aSize: integer; aFalsePositivePercent: double = 1;
       aHasher: THasher = nil); reintroduce; overload;
     /// initialize the internal bits storage from a SaveTo() binary buffer

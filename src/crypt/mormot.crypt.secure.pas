@@ -774,7 +774,7 @@ const
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
 // - caSha1/caSha256 have cryptographic level, with good performance on latest
-// SHA-NI CPUs, but digest truncation to 32-bit doesn't make it secure
+// SHA-NI CPUs, but digest truncation to 32-bit won't make it secure any more
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
 function ToText(algo: TSignAlgo): PShortString; overload;
