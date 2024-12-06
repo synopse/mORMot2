@@ -2745,18 +2745,16 @@ var
   st: TSYSTEMTIME;
   tmp: TW32Temp;
 
-  function ReadResourceByName(const From: RawUtf8): RawUtf8;
+  procedure ReadResourceByName(const From: RawUtf8; out Res: RawUtf8);
   var
     str: pointer;
     sz: DWord;
     u: SynUnicode;
   begin
-    u := Utf8Decode('\StringFileInfo\' + lngnfo + '\' + From);
-    VerQueryValueW(pt, pointer(u), str, sz);
-    if sz > 0 then
-      Win32PWideCharToUtf8(str, result)
-    else
-      result := '';
+    u := Utf8Decode(lngnfo + From);
+    if VerQueryValueW(pt, pointer(u), str, sz) and
+       (sz > 0) then
+      Win32PWideCharToUtf8(str, Res);
   end;
 
 begin
@@ -2772,36 +2770,36 @@ begin
     try
       if GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pt) then
       begin
-        VerQueryValueW(pt, '\', pointer(nfo), siz2);
-        with nfo^ do
-        begin
-          SetVersion({major=}   dwFileVersionMS shr 16,
-                     {minor=}   word(dwFileVersionMS),
-                     {release=} dwFileVersionLS shr 16,
-                     {build=}   word(dwFileVersionLS));
-          if (dwFileDateLS <> 0) and
-             (dwFileDateMS <> 0) then
+        if VerQueryValueW(pt, '\', pointer(nfo), siz2) then
+          with nfo^ do
           begin
-            ft.dwLowDateTime := dwFileDateLS; // built date from version nfo
-            ft.dwHighDateTime := dwFileDateMS;
-            FileTimeToSystemTime(ft, st);
-            fBuildDateTime := EncodeDate(
-              st.wYear, st.wMonth, st.wDay);
+            SetVersion({major=}   dwFileVersionMS shr 16,
+                       {minor=}   dwFileVersionMS and 65535,
+                       {release=} dwFileVersionLS shr 16,
+                       {build=}   dwFileVersionLS and 65535);
+            if (dwFileDateLS <> 0) and
+               (dwFileDateMS <> 0) then
+            begin
+              ft.dwLowDateTime := dwFileDateLS; // built date from version nfo
+              ft.dwHighDateTime := dwFileDateMS;
+              FileTimeToSystemTime(ft, st);
+              fBuildDateTime := EncodeDate(
+                st.wYear, st.wMonth, st.wDay);
+            end;
           end;
-        end;
-        VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2);
-        if siz2 >= 4 then
+        if VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2) and
+           (siz2 >= 4) then
         begin
-          _fmt('%4.4x%4.4x', [trans^[0], trans^[1]], lngnfo);
-          CompanyName      := ReadResourceByName('CompanyName');
-          FileDescription  := ReadResourceByName('FileDescription');
-          FileVersion      := ReadResourceByName('FileVersion');
-          InternalName     := ReadResourceByName('InternalName');
-          LegalCopyright   := ReadResourceByName('LegalCopyright');
-          OriginalFilename := ReadResourceByName('OriginalFilename');
-          ProductName      := ReadResourceByName('ProductName');
-          ProductVersion   := ReadResourceByName('ProductVersion');
-          Comments         := ReadResourceByName('Comments');
+          _fmt('\StringFileInfo\%4.4x%4.4x\', [trans^[0], trans^[1]], lngnfo);
+          ReadResourceByName('CompanyName', CompanyName);
+          ReadResourceByName('FileDescription', FileDescription);
+          ReadResourceByName('FileVersion', FileVersion);
+          ReadResourceByName('InternalName', InternalName);
+          ReadResourceByName('LegalCopyright', LegalCopyright);
+          ReadResourceByName('OriginalFilename',OriginalFilename);
+          ReadResourceByName('ProductName', ProductName);
+          ReadResourceByName('ProductVersion', ProductVersion);
+          ReadResourceByName('Comments', Comments);
         end;
         result := true;
       end;
