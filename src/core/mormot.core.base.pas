@@ -2628,13 +2628,12 @@ type
    { extended features CPUID EAX=7,ECX=1 into EAX, EDX }
    cfSHA512, cfSM3, cfSM4, cfRAOINT, cfAVXVNNI, cfAVX512BF16, cfLASS,
    cfCMPCCXADD, cfAPMEL, cf_a9, cfFZLREPM, cfFSREPS, cfFSREPC, cf_a13, cf_a14,
-   cf_a15, cf_a16, cfFRED, cfLKGS, cfWRMSRNS, cf_a20, cfAMXFP16, cfHRESET,
-   cfAVXIFMA, cf_a24, cf_a25, cfLAM, cfMSRLIST, cf_a28, cf_a29, cf_a30, cf_a31,
+   cf_a15, cf_a16, cfFRED, cfLKGS, cfWRMSRNS, cfNMISRC, cfAMXFP16, cfHRESET,
+   cfAVXIFMA, cf_a24, cf_a25, cfLAM, cfMSRLIST, cf_a28, cf_a29, cfINVDDIS, cfMOVRS,
    cf__d0, cf_d1, cf_d2, cf_d3, cfAVXVNN8, cfAVXNECVT, cf__d6, cf__d7, cfAMXCPLX,
-   cf_d9, cfAVXVNNI16, cf_d11, cf__d12, cf_d13, cfPREFETCHI, cf_d15, cf_d16,
-   cfUIRETUIF, cfCETSSS, cfAVX10, cf__d20, cf_APXF, cf_d22, cf_d23, cf_d24,
+   cf_d9, cfAVXVNNI16, cf_d11, cf__d12, cfUTMR, cfPREFETCHI, cfUSERMSR, cf_d16,
+   cfUIRETUIF, cfCETSSS, cfAVX10, cf__d20, cf_APXF, cf_d22, cfMWAIT, cf_d24,
    cf_d25, cf_d26, cf_d27, cf_d28, cf_d29, cf_d30, cf_d31);
-
 
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
