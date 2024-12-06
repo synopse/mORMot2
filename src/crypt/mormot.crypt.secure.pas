@@ -746,8 +746,8 @@ type
   // - ccaAdler32 requires mormot.lib.z.pas to be included
   // - caDefault may be AesNiHash32(), therefore not persistable between
   // executions, since is randomly seeded at process startup
-  // - some cryptographic-level hashes are truncated to 32-bit - caSha1 could
-  // leverage Intel SHA HW opcodes to achieve pretty good performance
+  // - some cryptographic-level hashes are truncated to 32-bit - caSha1/caSha256
+  // could leverage Intel SHA HW opcodes to achieve good enough performance
   TCrc32Algo = (
     caCrc32c,
     caCrc32,
@@ -756,7 +756,8 @@ type
     caFnv32,
     caDefault,
     caMd5,
-    caSha1);
+    caSha1,
+    caSha256);
 
 const
   /// convert a THashAlgo into a TStreamRedirectSynHasher class
@@ -772,7 +773,8 @@ const
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
-// - caSha1 has cryptographic level, with high performance on latest SHA-NI CPUs
+// - caSha1/caSha256 have cryptographic level, with good performance on latest
+// SHA-NI CPUs, but digest truncation to 32-bit doesn't make it secure
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
 function ToText(algo: TSignAlgo): PShortString; overload;
@@ -1361,8 +1363,8 @@ type
     /// private random secret, used for encryption of the cookie content
     Crypt: array[byte] of byte;
     /// initialize ephemeral temporary cookie generation
-    // - default crc32c is fast and secure enough on most platforms, but you
-    // may consider caDefault or caSha1 on recent SHA-NI Intel/AMD servers
+    // - default crc32c is fast and secure enough on most platforms, but you may
+    // consider caDefault or caSha1/caSha256 on recent SHA-NI Intel/AMD servers
     procedure Init(const Name: RawUtf8 = 'mORMot';
       DefaultSessionTimeOutMinutes: cardinal = 0;
       SignAlgo: TCrc32Algo = caCrc32c);
@@ -3901,6 +3903,19 @@ begin
   result := dig.c[0] xor dig.c[1] xor dig.c[2] xor dig.c[3] xor dig.c[4];
 end;
 
+function sha256hash32(crc: cardinal; buffer: pointer; len: cardinal): cardinal;
+var
+  sha: TSha256;
+  dig: THash256Rec;
+begin
+  sha.Init;
+  sha.Update(@crc, SizeOf(crc));
+  sha.Update(buffer, len);
+  sha.Final(dig.b); // dig.c[0] would have been enough anyway with a crypto hash
+  result := dig.c[0] xor dig.c[1] xor dig.c[2] xor dig.c[3] xor
+            dig.c[4] xor dig.c[5] xor dig.c[6] xor dig.c[7];
+end;
+
 function CryptCrc32(algo: TCrc32Algo): THasher;
 begin
   case algo of
@@ -3919,7 +3934,9 @@ begin
     caMd5:
       result := @md5hash32;
     caSha1:
-      result := @sha1hash32; // may use Intel SHA HW opcodes
+      result := @sha1hash32;   // may use Intel SHA HW opcodes
+    caSha256:
+      result := @sha256hash32; // may use Intel SHA HW opcodes
   else
     result := nil;
   end;
@@ -6489,7 +6506,7 @@ type
 const
   /// CSV text of TCrc32Algo items
   CrcAlgosText: PUtf8Char =
-    'crc32,crc32c,xxhash32,adler32,fnv32,default32,md5-32,sha1-32';
+    'crc32,crc32c,xxhash32,adler32,fnv32,default32,md5-32,sha1-32,sha256-32';
 
 constructor TCryptCrc32Internal.Create(const name: RawUtf8);
 begin
