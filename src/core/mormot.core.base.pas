@@ -3228,6 +3228,10 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 // to system-retrieved randomness from mormot.core.os.pas' XorOSEntropy()
 procedure XorEntropy(var e: THash512Rec);
 
+/// convert the endianness of a given unsigned 16-bit integer into BigEndian
+function bswap16(a: cardinal): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
   {$ifndef CPUINTEL}inline;{$endif}
@@ -9381,6 +9385,11 @@ begin
   e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
   crc128c(@e, SizeOf(e), _EntropyGlobal.b); // simple diffusion to move forward
+end;
+
+function bswap16(a: cardinal): cardinal; // inlining is good enough
+begin
+  result := ((a and 255) shl 8) or (a shr 8);
 end;
 
 procedure MoveSwap(dst, src: PByte; n: PtrInt);
