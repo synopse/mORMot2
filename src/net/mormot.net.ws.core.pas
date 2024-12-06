@@ -1314,7 +1314,7 @@ begin
   else if len < 65536 then
   begin
     hdr.len8 := FRAME_LEN_2BYTES or MaskSentFrames;
-    hdr.len32 := swap(word(len)); // FPC requires explicit word() cast
+    hdr.len32 := bswap16(len);
     hdrlen := 4; // opcode+len8+len32.low
   end
   else
@@ -3329,7 +3329,7 @@ begin
   begin
     if not HasBytes(@hdr, 4) then // first+len8+len32.low
       exit;
-    hdr.len32 := swap(word(hdr.len32)); // FPC expects explicit word() cast
+    hdr.len32 := bswap16(hdr.len32);
   end
   else if hdr.len8 = FRAME_LEN_8BYTES then
   begin

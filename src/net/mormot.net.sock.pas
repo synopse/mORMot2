@@ -2453,7 +2453,7 @@ function TNetAddr.Port: TNetPort;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
-      result := htons(sin_port)
+      result := bswap16(sin_port)
     else
       result := 0;
 end;
@@ -2464,7 +2464,7 @@ begin
     if (sa_family in [AF_INET, AF_INET6]) and
        (p <= 65535) then // p may equal 0 to set ephemeral port
     begin
-      sin_port := htons(p);
+      sin_port := bswap16(p);
       result := nrOk;
     end
     else

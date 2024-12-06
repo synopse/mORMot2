@@ -1206,7 +1206,7 @@ begin
     if one[1] <> #$82 then
       EStuffExe.RaiseUtf8('Wrong fixme in %', [MainFile])
     else
-      PWord(one + 2)^ := swap(word(PtrInt(swap(PWord(one + 2)^)) + added));
+      PWord(one + 2)^ := bswap16(PtrInt(bswap16(PWord(one + 2)^)) + added);
     inc(fixme);
     dec(n);
   until n = 0;

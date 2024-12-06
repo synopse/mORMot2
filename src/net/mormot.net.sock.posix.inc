@@ -451,7 +451,7 @@ begin
     exit;
   end;
   // check supplied IP port
-  addr4.sin_port := htons(GetCardinal(pointer(addrport)));
+  addr4.sin_port := bswap16(GetCardinal(pointer(addrport)));
   if (addr4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;

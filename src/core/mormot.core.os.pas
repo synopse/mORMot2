@@ -9067,8 +9067,8 @@ begin
       (raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206)) then
   begin
     uid.D1 := bswap32(uid.D1);
-    uid.D2 := swap(uid.D2);
-    uid.D3 := swap(uid.D3);
+    uid.D2 := bswap16(uid.D2);
+    uid.D3 := bswap16(uid.D3);
   end;
   UuidToText(uid, dest);
 end;

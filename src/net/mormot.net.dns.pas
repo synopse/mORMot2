@@ -488,7 +488,7 @@ end;
 
 function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
 begin
-  result := swap(PWord(@p[pos])^);
+  result := bswap16(PWord(@p[pos])^);
   inc(pos, 2);
 end;
 
@@ -536,7 +536,7 @@ begin
       // Priority / Weight / Port / QName
       if Len > 6 then
         if DnsParseString(Answer, Pos + 6, Text) <> 0 then
-          Text := Text + ':' + UInt32ToUtf8(swap(PWordArray(p)[2])); // :port
+          Text := Text + ':' + UInt32ToUtf8(bswap16(PWordArray(p)[2])); // :port
   end;
 end;
 
@@ -568,8 +568,8 @@ begin
       w.Write(@one[1], ord(one[0]));
     end;
     w.Write1(0); // final #0
-    w.Write2BigEndian(ord(RR));
-    w.Write2BigEndian(QClass);
+    w.Write2(bswap16(ord(RR)));
+    w.Write2(bswap16(QClass));
     result := w.FlushTo;
   finally
     w.Free;
@@ -662,7 +662,7 @@ begin
       len := length(Request);
       if len > SizeOf(tmp) - 2 then
         exit; // paranoid
-      PWordArray(@tmp)[0] := swap(word(len)); // not found in RFCs, but mandatory
+      PWordArray(@tmp)[0] := bswap16(len); // not found in RFCs, but mandatory
       MoveFast(pointer(Request)^, PWordArray(@tmp)[1], len);
       if sock.SendAll(@tmp, len + 2) <> nrOk then
         exit;
@@ -675,7 +675,7 @@ begin
         NoTcpSafe.UnLock;
         exit;
       end;
-      len := swap(lenw);
+      len := bswap16(lenw);
       if len <= length(Request) then
         exit;
       FastNewRawByteString(answer, len);
@@ -756,10 +756,10 @@ begin
     exit;
   // we received a valid response from a DNS
   Res.Header := PDnsHeader(Res.RawAnswer)^;
-  Res.Header.QuestionCount := swap(Res.Header.QuestionCount);
-  Res.Header.AnswerCount := swap(Res.Header.AnswerCount);
-  Res.Header.NameServerCount := swap(Res.Header.NameServerCount);
-  Res.Header.AdditionalCount := swap(Res.Header.AdditionalCount);
+  Res.Header.QuestionCount := bswap16(Res.Header.QuestionCount);
+  Res.Header.AnswerCount := bswap16(Res.Header.AnswerCount);
+  Res.Header.NameServerCount := bswap16(Res.Header.NameServerCount);
+  Res.Header.AdditionalCount := bswap16(Res.Header.AdditionalCount);
   pos := length(request); // jump Header + Question = point to records
   if Res.Header.AnswerCount <> 0 then
   begin

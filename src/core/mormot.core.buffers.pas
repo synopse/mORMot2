@@ -898,9 +898,6 @@ type
     /// append 2 bytes of data at the current position
     procedure Write2(Data: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append 2 bytes of data, encoded as BigEndian,  at the current position
-    procedure Write2BigEndian(Data: cardinal);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer);
       {$ifdef HASINLINE}inline;{$endif}
@@ -3614,7 +3611,7 @@ function TFastReader.Next2BigEndian: cardinal;
 begin
   if P + 1 >= Last then
     ErrorOverflow;
-  result := swap(PWord(P)^);
+  result := bswap16(PWord(P)^);
   inc(P, 2);
 end;
 
@@ -4581,11 +4578,6 @@ begin
     InternalFlush;
   PWord(@fBuffer^[fPos])^ := Data;
   inc(fPos, SizeOf(Word));
-end;
-
-procedure TBufferWriter.Write2BigEndian(Data: cardinal);
-begin
-  Write2(swap(word(Data)));
 end;
 
 procedure TBufferWriter.Write4(Data: integer);
@@ -9103,8 +9095,8 @@ begin
     case ord(jpeg^) of
       $c0..$c3, $c5..$c7, $c9..$cb, $cd..$cf: // SOF
         begin
-          Height := swap(PWord(jpeg + 4)^);
-          Width  := swap(PWord(jpeg + 6)^);
+          Height := bswap16(PWord(jpeg + 4)^);
+          Width  := bswap16(PWord(jpeg + 6)^);
           Bits   := PByte(jpeg + 8)^ * 8;
           result := (Height > 0) and
                     (Height < 20000) and
@@ -9119,7 +9111,7 @@ begin
       $ff: // padding
         ;
     else
-      inc(jpeg, swap(PWord(jpeg + 1)^) + 1);
+      inc(jpeg, bswap16(PWord(jpeg + 1)^) + 1);
     end;
   end;
 end;

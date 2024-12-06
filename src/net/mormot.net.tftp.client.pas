@@ -306,7 +306,7 @@ implementation
 
 function ToOpcode(const frame: TTftpFrame): TTftpOpcode;
 begin
-  result := TTftpOpcode(Swap(frame.Opcode));
+  result := TTftpOpcode(bswap16(frame.Opcode));
   if result > high(TTftpOpCode) then
     result := toUndefined;
 end;
@@ -337,7 +337,7 @@ begin
     AppendShortCardinal(frame.Opcode, result);
     exit;
   end;
-  seq := swap(frame.Sequence);
+  seq := bswap16(frame.Sequence);
   case c of
     toRrq,
     toWrq,
@@ -531,7 +531,7 @@ begin
       //       +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
       // OACK |   6   |  opt1  | 0 | value1 | 0 |  optN  | 0 | valueN | 0 |
       //      +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
-      Frame^.Opcode := swap(word(TFTP_OACK));
+      Frame^.Opcode := bswap16(TFTP_OACK);
   end
   else
     // RFC 1350 regular response
@@ -568,7 +568,7 @@ begin
      (op <> OpDataAck) or
      (FileStream = nil) then
     exit;
-  Frame^.Sequence := swap(Frame^.Sequence);
+  Frame^.Sequence := bswap16(Frame^.Sequence);
   CurrentSize := // compute position from seq to allow retry from other side
     (LastReceivedSequenceHi + Frame^.Sequence) * BlockSize;
   case op of
@@ -643,8 +643,8 @@ begin
   //        ------------------
   //  ACK  | 04    |  seq    |
   //       ------------------
-  Frame^.Opcode := swap(word(TFTP_ACK));
-  Frame^.Sequence := swap(LastReceivedSequence);
+  Frame^.Opcode := bswap16(TFTP_ACK);
+  Frame^.Sequence := bswap16(LastReceivedSequence);
   FrameLen := SizeOf(Frame^.Opcode) + SizeOf(Frame^.Sequence);
 end;
 
@@ -657,8 +657,8 @@ begin
   inc(LastReceivedSequence);
   if LastReceivedSequence = 0 then
     inc(LastReceivedSequenceHi, 1 shl 16); // handle 16-bit sequence overflow
-  Frame^.Opcode := swap(word(TFTP_DAT));
-  Frame^.Sequence := swap(LastReceivedSequence);
+  Frame^.Opcode := bswap16(TFTP_DAT);
+  Frame^.Sequence := bswap16(LastReceivedSequence);
   if CurrentSize <> FileStream.Position then
     FileStream.Seek(Int64(CurrentSize), soBeginning);
   FrameLen := FileStream.Read(Frame^.Data,  BlockSize);
@@ -686,7 +686,7 @@ begin
   //    >-------+---+---~~---+---+
   //   <  optN  | 0 | valueN | 0 |
   //   >-------+---+---~~---+---+
-  Frame^.Opcode := swap(word(ord(OpCode)));
+  Frame^.Opcode := bswap16(ord(OpCode));
   FrameLen := SizeOf(Frame^.OpCode);
   AppendTextToFrame(FileName);
   AppendTextToFrame('octet');
@@ -703,11 +703,11 @@ begin
   //        -----------------------------------------
   // ERROR | 05    |  ErrorCode |   ErrMsg   |   0  |
   //       -----------------------------------------
-  Frame^.Opcode := swap(word(TFTP_ERR));
+  Frame^.Opcode := bswap16(TFTP_ERR);
   if err > teLast then
     Frame^.ErrorCode := 0
   else
-    Frame^.ErrorCode := swap(word(ord(err)));
+    Frame^.ErrorCode := bswap16(ord(err));
   FrameLen := SizeOf(Frame^.Opcode) + SizeOf(Frame^.ErrorCode);
   if msg <> '' then
     AppendTextToFrame(msg)
