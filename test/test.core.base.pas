@@ -3895,7 +3895,13 @@ begin
     CheckEqual(MinPtrUInt(i, i + 1), i);
     if i > 0 then
       CheckEqual(MaxPtrUInt(i, i - 1), i);
+    CheckEqual(bswap16(bswap16(i)), i);
+    CheckEqual(bswap32(bswap32(i)), i);
+    CheckEqual(bswap64(bswap64(i)), i);
   end;
+  CheckEqual(bswap16($0001), $0100, 'bswap16');
+  CheckEqual(bswap32($00010203), $03020100, 'bswap32');
+  CheckEqual(Int64(bswap64($0001020304050607)), $0706050403020100, 'bswap64');
   CheckEqual(ByteScanIndex(pointer(i8), 100, 100), -1);
   CheckEqual(ByteScanIndex(pointer(i8), 101, 100), 100);
   CheckEqual(ByteScanIndex(@i8[1], 100, 0), -1, 'aligned read');
