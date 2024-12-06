@@ -708,13 +708,13 @@ var
   // - e.g. AttrTypeNameAlt[6] = 'organizationName' and
   // AttrTypeNameAlt[6] = atOrganizationUnitName
   // - defined for unit testing purpose only
-  AttrTypeNameAlt: array[0 .. 8] of RawUtf8;
+  AttrTypeNameAlt: array[0 .. 7] of RawUtf8;
 
 const
   // AttrTypeNameAlt[] types - defined for unit testing purpose only
   AttrTypeAltType: array[0 .. high(AttrTypeNameAlt)] of TLdapAttributeType = (
     atCommonName, atSurName, atCountryName, atLocalityName, atStateName,
-    atStreetAddress, atOrganizationName, atOrganizationUnitName, atGivenName);
+    atStreetAddress, atOrganizationName, atOrganizationUnitName);
 
   /// the standard RDN of our common Attribute Types
   // - as retrieved from an actual AD instance catalog
@@ -728,7 +728,7 @@ const
     'RDN',                         // atName
     'Common-Name',                 // atCommonName
     'Surname',                     // atSurName
-    'Given-Name',                   // atGivenName
+    'Given-Name',                  // atGivenName
     'Display-Name',                // atDisplayName
     'User-Principal-Name',         // atUserPrincipalName
     'User-Account-Control',        // atUserAccountControl
@@ -3353,7 +3353,7 @@ const
     'name',                        // atName
     'cn',                          // atCommonName
     'sn',                          // atSurName
-    'gn',                          // atGivenName
+    'givenName',                   // atGivenName
     'displayName',                 // atDisplayName
     'userPrincipalName',           // atUserPrincipalName
     'userAccountControl',          // atUserAccountControl
@@ -3409,8 +3409,7 @@ const
     'stateOrProvinceName',         // st
     'streetAddress',               // street
     'organizationName',            // o
-    'organizationalUnitName',      // ou
-    'givenName');                  // gn
+    'organizationalUnitName');     // ou
 
 var
   _LdapIntern: TRawUtf8Interning;
