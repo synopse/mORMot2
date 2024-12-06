@@ -2404,6 +2404,11 @@ asm
         mov     edi, cpueax
         mov     ebx, cpuecx
         mov     esi, Registers
+        xor     eax, eax
+        mov     TIntelRegisters(esi).&eax, eax
+        mov     TIntelRegisters(esi).&ebx, eax
+        mov     TIntelRegisters(esi).&ecx, eax
+        mov     TIntelRegisters(esi).&edx, eax
         pushfd
         pop     eax
         mov     edx, eax
