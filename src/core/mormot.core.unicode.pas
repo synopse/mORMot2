@@ -411,8 +411,8 @@ type
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no #0 terminator is appended to the buffer
-    function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
-      SourceChars: cardinal): PAnsiChar; overload; virtual;
+    function Utf8BufferToAnsi(Dest: PAnsiChar;
+      Source: PUtf8Char; SourceChars: cardinal): PAnsiChar; overload; virtual;
     /// convert any UTF-8 encoded buffer into Ansi Text
     // - internally calls Utf8BufferToAnsi virtual method
     function Utf8BufferToAnsi(Source: PUtf8Char;
@@ -420,8 +420,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// convert any UTF-8 encoded buffer into Ansi Text
     // - internally calls Utf8BufferToAnsi virtual method
-    procedure Utf8BufferToAnsi(Source: PUtf8Char;
-      SourceChars: cardinal; var result: RawByteString); overload; virtual;
+    procedure Utf8BufferToAnsi(Source: PUtf8Char; SourceChars: cardinal;
+      var result: RawByteString); overload; virtual;
     /// convert any UTF-8 encoded String into Ansi Text
     // - internally calls Utf8BufferToAnsi virtual method
     function Utf8ToAnsi(const u: RawUtf8): RawByteString; virtual;
@@ -5136,7 +5136,7 @@ function Ansi7ToString(const Text: RawByteString): string;
 begin
   result := Text; // if we are SURE this text is 7-bit Ansi -> direct assign
   {$ifdef FPC} // if Text is CP_RAWBYTESTRING then FPC won't handle it properly
-  SetCodePage(RawByteString(result), DefaultSystemCodePage, false);
+  SetCodePage(RawByteString(result), Unicode_CodePage, false);
   {$endif FPC} // no FakeCodePage() since Text may be read-only
 end;
 
@@ -10848,12 +10848,11 @@ begin
   SortDynArrayAnsiStringByCase[true] := @SortDynArrayAnsiStringI;
   IdemPropNameUSameLen[false] := @IdemPropNameUSameLenNotNull;
   IdemPropNameUSameLen[true] := @mormot.core.base.CompareMem;
-
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
-  CurrentAnsiConvert   := NewEngine(Unicode_CodePage);
   WinAnsiConvert       := NewEngine(CP_WINANSI) as TSynAnsiFixedWidth;
   Utf8AnsiConvert      := NewEngine(CP_UTF8) as TSynAnsiUtf8;
+  CurrentAnsiConvert   := NewEngine(Unicode_CodePage);
   RawByteStringConvert := NewEngine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;

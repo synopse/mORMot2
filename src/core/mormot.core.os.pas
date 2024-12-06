@@ -10627,6 +10627,7 @@ var
   m: TUriMethod;
 begin
   {$ifdef ISFPC27}
+  // we force UTF-8 everywhere on FPC for consistency with Lazarus
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
