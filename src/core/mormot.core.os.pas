@@ -3005,7 +3005,7 @@ function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
 // redirected to a custom wrapper function for older Windows versions (XP)
 // to avoid the 32-bit overflow/wrapping issue of GetTickCount
 // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
-// handle properly 49 days wrapping under XP -> always use this safe version
+// handle properly 49.7 days wrapping under XP -> always use this safe version
 // - warning: FPC's SysUtils.GetTickCount64 may call fpgettimeofday() e.g.
 // on Darwin, which is not monotonic -> always use this more coherent version
 // - on POSIX, will call (via vDSO) the very fast CLOCK_MONOTONIC_COARSE if

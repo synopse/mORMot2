@@ -1351,10 +1351,10 @@ begin
   // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
   t32 := Windows.GetTickCount; // we only have the 32-bit counter on XP
   p := @LastTickXP;
-  inc(p^.H, ord(t32 < p^.L)); // wrap-up overflow after 49 days
+  inc(p^.H, ord(t32 < p^.L)); // wrap-up overflow after 49.7 days
   p^.L := t32;
   result := p^.V;
-end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
+end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
 procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
 begin

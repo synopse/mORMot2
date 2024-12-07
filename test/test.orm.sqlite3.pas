@@ -849,7 +849,7 @@ type
   private
     fInts: TIntegerDynArray;
     fCurrency: TCurrencyDynArray;
-  {$ifdef PUBLISHRECORD}
+  {$ifdef PUBLISHRECORD} // Delphi XE5+ has RTTI for published records
     fRec: TFTSMatchInfo;
   {$endif PUBLISHRECORD}
     fFileVersion: TFVs;
@@ -894,7 +894,7 @@ type
     fPeopleID: TID;
     fPeople: TOrmPeopleID;
     fPeopleCascade: TOrmPeopleToBeDeletedID;
-    {$ifdef PUBLISHRECORD}
+    {$ifdef PUBLISHRECORD} // Delphi XE5+ has RTTI for published records
     fGUidXE6: TGuid;
     {$endif PUBLISHRECORD}
     class procedure InternalRegisterCustomProperties(Props: TOrmProperties); override;
