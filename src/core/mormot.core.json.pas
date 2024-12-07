@@ -5569,12 +5569,15 @@ begin
   if (woHideSensitivePersonalInformation in c.Options) and
      (rcfSpi in p^.Value.Flags) then
     c.W.AddShorter('"***"')
-  else if p^.OffsetGet >= 0 then
+  else if p^.OffsetGet >= 0 then // avoid GPF
   begin
     // direct value write (record field or plain class property)
     c.Info := p^.Value;
     c.Prop := p;
-    TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
+    if c.Info.JsonSave <> nil then
+      TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
+    else
+      c.W.AddNull;
   end
   else
     // need to call a getter method
