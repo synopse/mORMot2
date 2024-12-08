@@ -92,14 +92,11 @@ procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 
 type
   /// a string buffer, used by InternalBcdToBuffer to store its output text
-  TBcdBuffer = array[0..66] of AnsiChar;
+  TBcdBuffer = array[0..71] of AnsiChar;
 
 /// convert a TBcd value as text to the output buffer
-// - buffer is to be TBcdBuffer, i.e. a static array[0..66] of AnsiChar
 // - returns the resulting text start in PBeg, and the length as function result
-// - does not handle negative sign and 0 value - see AddBcd() function use case
-// - very optimized for speed
-function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
+function BcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
   var PBeg: PAnsiChar): integer;
 
 /// convert a TBcd value into a currency
@@ -107,16 +104,13 @@ function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
 function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 
 /// convert a TBcd value into a RawUtf8 text
-// - will call fast InternalBcdToBuffer function
 procedure BcdToUtf8(const AValue: TBcd; var result: RawUtf8); overload;
 
 /// convert a TBcd value into a RawUtf8 text
-// - will call fast InternalBcdToBuffer function
 function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
 /// convert a TBcd value into a RTL string text
-// - will call fast InternalBcdToBuffer function
 function BcdToString(const AValue: TBcd): string;
 
 
@@ -286,7 +280,7 @@ implementation
 
 { ************ Database-Aware BCD Values Support }
 
-function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
+function BcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
   var PBeg: PAnsiChar): integer;
 var
   i, decpos: integer;
@@ -297,7 +291,7 @@ begin
   if AValue.Precision = 0 then
     exit;
   decpos := AValue.Precision - (AValue.SignSpecialPlaces and $3F);
-  P := @ADest;
+  P := @ADest[1];
   frac := @AValue.Fraction;
   // convert TBcd digits into text
   for i := 0 to AValue.Precision - 1 do
@@ -328,7 +322,7 @@ begin
     repeat
       dec(P)
     until (P^ <> ord('0')) or
-          (P = @ADest);
+          (P = @ADest[1]);
     PEnd := pointer(P);
     if PEnd^ <> '.' then
       inc(PEnd);
@@ -337,10 +331,22 @@ begin
     PEnd := pointer(P);
   PEnd^ := #0; // make dest buffer #0 terminated
   // remove leading 0
-  PBeg := @ADest;
+  PBeg := @ADest[1];
   while (PBeg[0] = '0') and
         (PBeg[1] in ['0'..'9']) do
     inc(PBeg);
+  // handle specific cases: 0 or <0
+  if PEnd = PBeg then
+  begin
+    PBeg^ := '0';
+    inc(PBeg);
+  end
+  else if AValue.SignSpecialPlaces and $80 = $80 then
+  begin
+    dec(PBeg);
+    PBeg^ := '-';
+  end;
+  PEnd^ := #0; // make ASCIIZ
   result := PEnd - PBeg;
 end;
 
@@ -350,32 +356,17 @@ var
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  if len <= 0 then
-    WR.Add('0')
-  else
-  begin
-    if AValue.SignSpecialPlaces and $80 = $80 then
-      WR.Add('-');
-    WR.AddNoJsonEscape(PBeg, len);
-  end;
+  len := BcdToBuffer(AValue, tmp, PBeg);
+  WR.AddNoJsonEscape(PBeg, len);
 end;
 
 function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 var
-  len: PtrInt;
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  if len <= 0 then
-    Curr := 0
-  else
-  begin
-    PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
-    if AValue.SignSpecialPlaces and $80 = $80 then
-      Curr := -Curr;
-  end;
+  BcdToBuffer(AValue, tmp, PBeg);
+  PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
   result := true;
 end;
 
@@ -385,7 +376,7 @@ var
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
+  len := BcdToBuffer(AValue, tmp, PBeg);
   FastSetString(result, PBeg, len);
 end;
 
@@ -400,7 +391,7 @@ var
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
+  len := BcdToBuffer(AValue, tmp, PBeg);
   Ansi7ToString(PWinAnsiChar(PBeg), len, result);
 end;
 
@@ -409,7 +400,7 @@ end;
 { ************ mormot.db.sql Abstract Connection for DB.pas TDataSet }
 
 const
-  IsTLargeIntField = 1;
+  IsTLargeIntField   = 1;
   IsTWideStringField = 2;
 
 

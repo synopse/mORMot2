@@ -148,13 +148,13 @@ procedure bswap256(s, d: PIntegerArray);
 function Hash128ToExt(P: PHash128Rec): TSynExtended;
  {$ifdef FPC} inline; {$endif} { Delphi has troubles inlining floats results }
 
-/// low-level function able to derivate a 0..1 64-bit floating-point from 128-bit of data
+/// low-level function able to derivate a [0..1) 64-bit floating-point from 128-bit of data
 // - used e.g. by TAesPrng.RandomDouble
 // - only the higher part of P^ will be used for derivation thanks to AES input
 function Hash128ToDouble(P: PHash128Rec): double;
  {$ifdef FPC} inline; {$endif}
 
-/// low-level function able to derivate a 0..1 32-bit floating-point from 128-bit of data
+/// low-level function able to derivate a [0..1) 32-bit floating-point from 128-bit of data
 // - only the lower part of P^ will be used for derivation thanks to AES input
 function Hash128ToSingle(P: PHash128Rec): single;
  {$ifdef FPC} inline; {$endif}
