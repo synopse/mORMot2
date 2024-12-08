@@ -87,11 +87,11 @@ type
 {************ Database-Aware BCD Values Support }
 
 /// append a TBcd value as text to the output buffer
-// - very optimized for speed
+// - emit a JSON-compatible floting point number text, with DecimalSeparator='.'
 procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 
 type
-  /// a string buffer, used by InternalBcdToBuffer to store its output text
+  /// a string buffer, used by BcdToBuffer to store its output text
   TBcdBuffer = array[0..71] of AnsiChar;
 
 /// convert a TBcd value as text to the output buffer
@@ -111,6 +111,7 @@ function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
 /// convert a TBcd value into a RTL string text
+// - RTL BCDToStr() is slower, and not consistent between Delphi and FPC
 function BcdToString(const AValue: TBcd): string;
 
 
@@ -455,7 +456,7 @@ begin
   if f.IsNull then
     result := 0
   else if f.DataType in [ftBCD, ftFMTBcd] then
-    BCDToCurr(f.AsBCD, result)
+    BcdToCurr(f.AsBCD, result) // direct conversion with exact decimals
   else
     result := f.AsCurrency;
 end;
@@ -489,14 +490,14 @@ begin
     else if TField(ColumnAttr).DataType = ftBoolean then
       result := ord(TField(ColumnAttr).AsBoolean)
     else
-  {$ifdef UNICODE}
+      {$ifdef UNICODE}
       result := TField(ColumnAttr).AsLargeInt;
-  {$else}
+      {$else}
       if ColumnValueDBType = IsTLargeIntField then
         result := TLargeintField(ColumnAttr).AsLargeInt
       else
         result := TField(ColumnAttr).AsInteger;
-  {$endif UNICODE}
+      {$endif UNICODE}
 end;
 
 function TSqlDBDatasetStatementAbstract.ColumnNull(Col: integer): boolean;
