@@ -4445,7 +4445,11 @@ begin
   Check(UInt32ToUtf8(1599638299) = '1599638299');
   Check(Int32ToUtf8(-1599638299) = '-1599638299');
   Check(Int64ToUtf8(-1271083787498396012) = '-1271083787498396012');
-  {$ifdef FPC} // Delphi doesn't handle correctly such huge constants
+  Check(ToDouble('18446744073709551488', d), '18446744073709551488');
+  CheckSame(d, 1.8446744074e+19, 1e+10);
+  {$ifdef FPC} // Delphi doesn't handle consistently such huge constants
+  CheckDoubleToShort(d, '1.8446744073709552E19');
+  CheckDoubleToShortSame(d);
   CheckDoubleToShort(1234567890123456789, '1.2345678901234568E18');
   CheckDoubleToShortSame(1234567890123456789);
   {$endif FPC}
