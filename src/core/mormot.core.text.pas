@@ -6290,11 +6290,6 @@ end;
 
 {$endif UNICODE}
 
-{$ifndef EXTENDEDTOSHORT_USESTR}
-var // standard FormatSettings (US)
-  SettingsUS: TFormatSettings;
-{$endif EXTENDEDTOSHORT_USESTR}
-
 // used ExtendedToShortNoExp / DoubleToShortNoExp from str/DoubleToAscii output
 function FloatStringNoExp(S: PAnsiChar; Precision: PtrInt): PtrInt;
 var
@@ -6471,6 +6466,14 @@ end;
 
 {$else not EXTENDEDTOSHORT_USESTR}
 
+const
+  /// RTL TFormatSettings closest to the JSON expectations
+  // - used only as fallback for ExtendedToShort() without EXTENDEDTOSHORT_USESTR
+  JsonFormatSettings: TFormatSettings = (
+    ThousandSeparator: #0;
+    DecimalSeparator: '.';
+  {%H-});
+
 function ExtendedToShort(S: PShortString; Value: TSynExtended; Precision: integer): integer;
 {$ifdef UNICODE}
 var
@@ -6478,7 +6481,7 @@ var
 {$endif UNICODE}
 begin
   // use ffGeneral: see https://synopse.info/forum/viewtopic.php?pid=442#p442
-  result := FloatToText(PChar(@S^[1]), Value, fvExtended, ffGeneral, Precision, 0, SettingsUS);
+  result := FloatToText(PChar(@S^[1]), Value, fvExtended, ffGeneral, Precision, 0, JsonFormatSettings);
   {$ifdef UNICODE} // FloatToText(PWideChar) is faster than FloatToText(PAnsiChar)
   for i := 1 to result do
     PByteArray(S)[i] := PWordArray(PtrInt(S) - 1)[i];
@@ -10611,14 +10614,6 @@ begin
     TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
     TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
-  {$ifndef EXTENDEDTOSHORT_USESTR}
-  {$ifdef ISDELPHIXE}
-  SettingsUS := TFormatSettings.Create(ENGLISH_LANGID);
-  {$else}
-  GetLocaleFormatSettings(ENGLISH_LANGID, SettingsUS);
-  {$endif ISDELPHIXE}
-  SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
-  {$endif EXTENDEDTOSHORT_USESTR}
   {$ifdef DOUBLETOSHORT_USEGRISU}
   MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));
   for i := 0 to 199 do

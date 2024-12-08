@@ -3187,6 +3187,7 @@ function Random32(max: cardinal): cardinal; overload;
 
 /// fast compute of a 64-bit random floating point, using the gsl_rng_taus2 generator
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
+// - returns a random value in range [0..1)
 function RandomDouble: double;
 
 /// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
