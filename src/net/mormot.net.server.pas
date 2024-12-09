@@ -45,6 +45,8 @@ uses
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
+  mormot.lib.sspi,   // void unit on POSIX
+  mormot.lib.gssapi, // void unit on Windows
   mormot.net.client,
   mormot.crypt.core,
   mormot.crypt.secure;
@@ -888,6 +890,7 @@ type
     fRequestFlags: THttpServerRequestFlags;
     fAuthSec: cardinal;
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
+    fResponseHeader: RawUtf8;
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
@@ -1062,7 +1065,7 @@ type
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
     function SetRejectInCommandUri(var Http: THttpRequestContext;
-      Opaque: Int64; Status: integer): boolean;
+      Opaque: Int64; Status: integer): boolean; // true for grWwwAuthenticate
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
   public
@@ -1131,7 +1134,8 @@ type
     // - otherwise TLS is initialized at first incoming connection, which
     // could be too late in case of invalid Sock.TLS parameters
     procedure InitializeTlsAfterBind;
-    /// remove any previous SetAuthorizeBasic/SetAuthorizeDigest registration
+    /// remove any previous authorization, i.e. any previous SetAuthorizeBasic /
+    // SetAuthorizeDigest / SetAuthorizeKerberos call
     procedure SetAuthorizeNone;
     /// allow optional BASIC authentication for some URIs via a callback
     // - if OnBeforeBody returns 401, the OnBasicAuth callback will be executed
@@ -1151,7 +1155,11 @@ type
     // - the supplied Digester will be owned by this instance - typical
     // use is with a TDigestAuthServerFile
     procedure SetAuthorizeDigest(const Digest: IDigestAuthServer);
-    /// set after a call to SetAuthDigest/SetAuthBasic
+    /// allow optional NEGOTIATE authentication for some URIs via Kerberos
+    // - will use mormot.lib.sspi or mormot.lib.gssapi
+    // - if OnBeforeBody returns 401, Kerberos will be used to authenticate
+    procedure SetAuthorizeNegotiate;
+    /// set after a call to SetAuthDigest/SetAuthBasic/SetAuthorizeNegotiate
     property Authorize: THttpServerRequestAuthentication
       read fAuthorize;
     /// set after a call to SetAuthDigest/SetAuthBasic
@@ -4200,6 +4208,15 @@ begin
     fAuthorizeBasicRealm);
 end;
 
+procedure THttpServerSocketGeneric.SetAuthorizeNegotiate;
+begin
+  SetAuthorizeNone;
+  if not InitializeDomainAuth then
+    EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: no % available',
+      [self, SECPKGNAMEAPI]);
+   fAuthorize := hraNegotiate;
+end;
+
 function THttpServerSocketGeneric.AuthorizeServerMem: TDigestAuthServerMem;
 begin
   result := nil;
@@ -4223,50 +4240,82 @@ begin
     hraDigest:
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
+    hraNegotiate:
+      result := 'WWW-Authenticate: Negotiate'; // with no NTLM support
   end;
 end;
 
 function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
   Opaque: Int64): TAuthServerResult;
 var
-  auth: PUtf8Char;
+  auth, authend: PUtf8Char;
   user, pass, url: RawUtf8;
+  bin, bout: RawByteString;
+  ctx: TSecContext;
 begin
   // parse the 'Authorization: basic/digest/negotiate <magic>' header
-  result := asrRejected;
-  auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
-  if auth = nil then
-    exit;
-  case fAuthorize of
-    hraBasic:
-      if IdemPChar(auth, 'BASIC ') and
-         BasicServerAuth(auth + 6, user, pass) then
-        try
-          if Assigned(fAuthorizeBasic) then
-            if fAuthorizeBasic(self, user, pass) then
-              result := asrMatch
-            else
-              result := asrIncorrectPassword
-          else if Assigned(fAuthorizerBasic) then
-            result := fAuthorizerBasic.CheckCredential(user, pass);
-        finally
-          FillZero(pass);
+  try
+    result := asrRejected;
+    auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
+    if auth = nil then
+      exit;
+    case fAuthorize of
+      hraBasic:
+        if IdemPChar(auth, 'BASIC ') and
+           BasicServerAuth(auth + 6, user, pass) then
+          try
+            if Assigned(fAuthorizeBasic) then
+              if fAuthorizeBasic(self, user, pass) then
+                result := asrMatch
+              else
+                result := asrIncorrectPassword
+            else if Assigned(fAuthorizerBasic) then
+              result := fAuthorizerBasic.CheckCredential(user, pass);
+          finally
+            FillZero(pass);
+          end;
+      hraDigest:
+        if (fAuthorizerDigest <> nil) and
+           IdemPChar(auth, 'DIGEST ') then
+        begin
+          result := fAuthorizerDigest.DigestAuth(
+             auth + 7, Http.CommandMethod, Opaque, 0, user, url);
+          if (result = asrMatch) and
+             (url <> Http.CommandUri) then
+            result := asrRejected;
         end;
-    hraDigest:
-      if (fAuthorizerDigest <> nil) and
-         IdemPChar(auth, 'DIGEST ') then
-      begin
-        result := fAuthorizerDigest.DigestAuth(
-           auth + 7, Http.CommandMethod, Opaque, 0, user, url);
-        if (result = asrMatch) and
-           (url <> http.CommandUri) then
-          result := asrRejected;
-      end;
-  else
-    exit;
-  end;
-  if result = asrMatch then
-    Http.BearerToken := user; // as expected by end-user code
+      hraNegotiate:
+        // simple implementation assuming a two-way Negotiate/Kerberos handshake
+        // - see TRestServerAuthenticationSspi.Auth() for NTLM / three-way
+        if IdemPChar(auth, 'NEGOTIATE ') then
+        begin
+          inc(auth, 10); // parse 'Authorization: Negotiate <base64 encoding>'
+          authend := PosChar(auth, #13);
+          if (authend = nil) or
+             not Base64ToBin(PAnsiChar(auth), authend - auth, bin) or
+             IdemPChar(pointer(bin), 'NTLM') then // two-way Kerberos only
+            exit;
+          InvalidateSecContext(ctx);
+          try
+            if ServerSspiAuth(ctx, bin, bout) then
+            begin
+              ServerSspiAuthUser(ctx, user);
+              Http.ResponseHeaders := 'WWW-Authenticate: Negotiate ' +
+                mormot.core.buffers.BinToBase64(bout) + #13#10;
+              result := asrMatch;
+            end;
+          finally
+            FreeSecContext(ctx);
+          end;
+        end
+    else
+      exit;
+    end;
+    if result = asrMatch then
+      Http.BearerToken := user; // see THttpServerRequestAbstract.Prepare
+  except
+    result := asrRejected; // any processing error should silently fail the auth
+  end
 end;
 
 function THttpServerSocketGeneric.SetRejectInCommandUri(
