@@ -1462,7 +1462,8 @@ type
   // - pcoNoBanIP disable the 4 seconds IP banishment mechanism at HTTP level;
   // set RejectInstablePeersMin = 0 to disable banishment at UDP level
   // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
-  // (warning: this option should be set on all peers, clients and servers)
+  // (warning: this option should be set on all peers, clients and servers) -
+  // as an alternative, you could set THttpPeerCache.ServerTls/ClientTls props
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
@@ -1622,6 +1623,7 @@ type
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
     fUuid: TGuid;
+    fServerTls, fClientTls: TNetTlsContext;
     procedure AfterSettings; virtual;
     function CurrentConnections: integer; virtual;
     procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
@@ -1644,6 +1646,16 @@ type
     /// check if the network interface defined in Settings did actually change
     // - you may want to recreate a peer-cache to track the new network layout
     function NetworkInterfaceChanged: boolean;
+    /// optional TLS options for the peer HTTPS server
+    // - e.g. to set a custom certificate for this peer
+    // - when ServerTls.Enabled is set, ClientTls.Enabled and other params should match
+    property ServerTls: TNetTlsContext
+      read fServerTls write fServerTls;
+    /// optional TLS options for the peer HTTPS client
+    // - e.g. set ClientTls.OnPeerValidate to verify a peer ServerTls certificate
+    // - when ClientTls.Enabled is set, ServerTls.Enabled and other params should match
+    property ClientTls: TNetTlsContext
+      read fClientTls write fClientTls;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -5345,9 +5357,14 @@ begin
     // ensure we have the expected HTTP/HTTPS connection
     if fClient = nil then
     begin
-      tls := pcoSelfSignedHttps in fSettings.Options;
       fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
-      fClient.TLS.IgnoreCertificateErrors := tls; // self-signed
+      tls := fClientTls.Enabled or
+             (pcoSelfSignedHttps in fSettings.Options);
+      if tls then
+        if fClientTls.Enabled then
+          fClient.TLS := fClientTls
+        else
+          fClient.TLS.IgnoreCertificateErrors := true; // self-signed
       fClient.OpenBind(ip, fPort, {bind=}false, tls);
       fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
       fClient.OnLog := fLog.DoLog;
@@ -5806,6 +5823,10 @@ procedure THttpPeerCache.StartHttpServer(
 var
   opt: THttpServerOptions;
 begin
+  if fClientTls.Enabled <> fServerTls.Enabled then
+    EHttpPeerCache.RaiseUtf8(
+      '%.StartHttpServer: inconsistent ClientTls=% ServerTls=%',
+      [self, fClientTls.Enabled, fServerTls.Enabled]);
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // classic per-thread client is good enough
   opt := [hsoNoXPoweredHeader, hsoThreadSmooting];
@@ -5813,7 +5834,8 @@ begin
     include(opt, hsoBan40xIP);
   if fVerboseLog then
     include(opt, hsoLogVerbose);
-  if pcoSelfSignedHttps in fSettings.Options then
+  if fServerTls.Enabled or
+     (pcoSelfSignedHttps in fSettings.Options) then
     include(opt, hsoEnableTls);
   fHttpServer := aHttpServerClass.Create(aIP, nil,
     fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
@@ -5825,7 +5847,12 @@ begin
       fPartials.OnLog := fLog.DoLog;
     THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
     // actually start and wait for the local HTTP server to be available
-    if pcoSelfSignedHttps in fSettings.Options then
+    if fServerTls.Enabled then
+    begin
+      fLog.Add.Log(sllTrace, 'StartHttpServer: HTTPS from ServerTls', self);
+      THttpServerSocketGeneric(fHttpServer).WaitStarted(10, @fServerTls);
+    end
+    else if pcoSelfSignedHttps in fSettings.Options then
     begin
       fLog.Add.Log(sllTrace, 'StartHttpServer: self-signed HTTPS', self);
       THttpServerSocketGeneric(fHttpServer).WaitStartedHttps(10);
