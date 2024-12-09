@@ -3833,7 +3833,7 @@ begin
   fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create;
   fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[AlgoXka]);
   if fX509.Signed.SubjectPublicKey = '' then
-    RaiseErrorGenerate('GeneratePrivateKey failed');
+    RaiseError('GeneratePrivateKey(%) failed', [ToText(AlgoXka)^]);
   fX509.Signed.SubjectPublicKeyAlgorithm := AlgoXka;
   fX509.Signed.SubjectPublicKeyBits :=
     X509PubKeyBits(fX509.Signed.SubjectPublicKey);
