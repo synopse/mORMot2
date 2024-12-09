@@ -3235,7 +3235,7 @@ end;
 function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
 begin
-  buf.Init; // stack-allocated buffer (always enough)
+  buf.Init; // stack-allocated buffer (enough in most cases)
   result := 0; // error
   if (tok = INVALID_HANDLE_VALUE) or
      (tok = 0) or
@@ -3247,7 +3247,7 @@ begin
     exit;
   end;
   buf.Done;
-  buf.Init(result); // we need a bigger buffer
+  buf.Init(result); // we need a bigger buffer (unlikely)
   if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
     result := 0;
 end;

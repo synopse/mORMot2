@@ -4213,6 +4213,7 @@ end;
 
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
 begin
+  // return the expected 'WWW-Authenticate: ####' header content
   result := '';
   case fAuthorize of
     hraBasic:
@@ -4229,6 +4230,7 @@ var
   auth: PUtf8Char;
   user, pass, url: RawUtf8;
 begin
+  // parse the 'Authorization: basic/digest/negotiate <magic>' header
   result := asrRejected;
   auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
   if auth = nil then

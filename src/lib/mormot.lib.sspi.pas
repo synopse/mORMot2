@@ -801,7 +801,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
 /// high-level cross-platform initialization function
-// - as called e.g. by mormot.rest.client/server.pas or mormot.net.client/ldap
+// - e.g. by mormot.rest.client/server.pas or mormot.net.client/ldap/server
 function InitializeDomainAuth: boolean;
 
 
@@ -839,6 +839,7 @@ var
   // - can be set to TRUE to use the deprecated and unsafe NTLM protocol instead
   // - use case: SPNs not configured properly in domain
   // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
+  // - note that mormot.lib.gssapi does not tupport NTLM
   SspiForceNtlmClient: boolean = false;
 
 
@@ -1958,7 +1959,7 @@ begin
   if (DomainAuthMode = damUndefined) or
      (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
     SetDomainAuthMode;
-  // SSPI comes from standard secur32.dll so is always available
+  // SSPI is linked from standard secur32.dll so is always available
   result := true;
 end;
 

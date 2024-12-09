@@ -2999,7 +2999,7 @@ function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast retrieve the position of a given character in a #0 ended buffer
-// - will use fast SSE2 asm on i386 and x86_64
+// - will use fast SSE2 asm on x86_64
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char; overload;
   {$ifndef CPUX64}{$ifdef FPC}inline;{$endif}{$endif}
 

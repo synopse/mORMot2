@@ -586,6 +586,7 @@ procedure ServerDomainMapUnRegisterAll;
 /// high-level cross-platform initialization function
 // - as called e.g. by mormot.rest.client/server.pas
 // - in this unit, will just call LoadGssApi('')
+// - you can set GssLib_Custom global variable to load a specific .so library
 function InitializeDomainAuth: boolean;
 
 

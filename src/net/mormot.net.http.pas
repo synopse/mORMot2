@@ -4479,7 +4479,7 @@ begin
   fHost := aHttp.Host;
   if hsrAuthorized in fConnectionFlags then
   begin
-    // reflect the current valid "authorization:" header
+    // reflect the current valid "www-authenticate:" header
     fAuthenticationStatus := aAuthorize;
     fAuthenticatedUser := aHttp.BearerToken; // set by fServer.Authorization()
   end

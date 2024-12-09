@@ -7426,6 +7426,7 @@ begin
       if aFullUserName <> nil then
         ServerSspiAuthUser(server, aFullUserName^);
       {$ifdef OSWINDOWS}
+      // on Windows, ensure this user is part of AllowGroupBySid()
       if (fGroupSid = nil) or
          ServerSspiAuthGroup(server, fGroupSid) then
       {$endif OSWINDOWS}
