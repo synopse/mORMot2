@@ -44,6 +44,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.lib.sspi,   // for WinCertDecode() - void unit on POSIX
   mormot.crypt.core;
 
 
@@ -3621,8 +3622,6 @@ function SecurityDescriptorFromJson(const Json: RawUtf8;
 
 implementation
 
-uses
-  mormot.lib.sspi; // for WinCertDecode() - void unit on non-Windows
 
 
 { **************** High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers }

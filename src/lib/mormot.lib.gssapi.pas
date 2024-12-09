@@ -424,7 +424,7 @@ type
 
 /// Sets aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID, aTick64: Int64);
+  aConnectionID: Int64 = 0; aTick64: Int64 = 0);
 
 /// Free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);

@@ -3055,7 +3055,7 @@ begin
     exit;
   unauthstatus := Context.status; // either 401 or 407
   bak := Context.header;
-  InvalidateSecContext(sc, 0, 0);
+  InvalidateSecContext(sc);
   try
     repeat
       FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));

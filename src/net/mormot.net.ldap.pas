@@ -5957,7 +5957,7 @@ begin
   t := SendAndReceive(req1);
   if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
     exit;
-  InvalidateSecContext(fSecContext, 0, 0);
+  InvalidateSecContext(fSecContext);
   try
     repeat
       ParseInput;
@@ -7416,8 +7416,8 @@ var
   datain, dataout: RawByteString;
 begin
   result := false;
-  InvalidateSecContext(client, 0, 0);
-  InvalidateSecContext(server, 0, 0);
+  InvalidateSecContext(client);
+  InvalidateSecContext(server);
   try
     try
       while ClientSspiAuthWithPassword(
