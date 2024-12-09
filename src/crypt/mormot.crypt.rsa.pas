@@ -459,6 +459,14 @@ function CompareBI(A, B: HalfUInt): integer;
 { **************** RSA Low-Level Cryptography Functions }
 
 type
+  /// the TRsa.Generate method result
+  TRsaGenerateResult = (
+    rgrSuccess,
+    rgrIncorrectParams,
+    rgrTimeout,
+    rgrRandomGeneratorFailure,
+    rgrWeakBitsMayRetry);
+
   /// store a RSA public key
   // - with DER (therefore PEM) serialization support
   // - e.g. as decoded from an X509 certificate
@@ -566,7 +574,7 @@ type
     function Generate(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
       Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
       Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
-      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): boolean;
+      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): TRsaGenerateResult;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -712,6 +720,8 @@ type
 // - following RSASSA-PKCS1-v1_5 signature scheme RFC 8017 #9.2 steps 1 and 2
 // - as used by TRsa.Sign() method and expected by CKM_RSA_PKCS signature
 function RsaSignHashToDer(Hash: PHash512; HashAlgo: THashAlgo): TAsnObject;
+
+function ToText(res: TRsaGenerateResult): PShortString; overload;
 
 
 { *********** Registration of our RSA Engine to the TCryptAsym Factory }
@@ -2182,6 +2192,11 @@ begin
             ]);
 end;
 
+function ToText(res: TRsaGenerateResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TRsaGenerateResult), ord(res));
+end;
+
 
 
 { TRsaPublicKey }
@@ -2407,14 +2422,14 @@ const
 // see https://www.di-mgt.com.au/rsa_alg.html as reference
 
 function TRsa.Generate(Bits: integer; Extend: TBigIntSimplePrime;
-  Iterations, TimeOutMS: integer): boolean;
+  Iterations, TimeOutMS: integer): TRsaGenerateResult;
 var
   _e, _p, _q, _d, _h, _tmp: PBigInt;
   comp: integer;
   endtix: Int64;
 begin
-  result := false;
   // ensure we can actually generate such a RSA key
+  result := rgrIncorrectParams;
   if HasPublicKey or
      HasPrivateKey or
      ((Bits <> 512) and    // broken with average CPU power
@@ -2439,6 +2454,7 @@ begin
     // compute two p and q random primes
     repeat
       // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      result := rgrTimeout;
       repeat
         if not _p.FillPrime(Extend, Iterations, endtix) then
           exit; // timed out
@@ -2447,6 +2463,7 @@ begin
         if not _q.FillPrime(Extend, Iterations, endtix) then
           exit;
       until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+      result := rgrRandomGeneratorFailure;
       comp := _p.Compare(_q);
       if comp = 0 then
         exit // random generator is clearly wrong if p=q
@@ -2473,7 +2490,7 @@ begin
       // FIPS 186-4 B.3.1 criterion 3: ensure enough bits in d
       comp := _d.BitCount;
       if comp > (Bits + 1) shr 1 then
-        break;
+        break; // enough bits
       _d.Release;
     until false;
     // setup the RSA keys parameters with ChineseRemainderTheorem constants
@@ -2489,7 +2506,9 @@ begin
     SetModulo(fP, rmP);
     SetModulo(fQ, rmQ);
     dec(Bits, fM.BitCount);
-    result := (Bits = 0) or (Bits = 1); // allow e.g. pq=1023 for 1024-bit
+    result := rgrWeakBitsMayRetry; // not final error - see TRsa.GenerateNew()
+    if Bits in [0, 1] then // allow e.g. pq=1023 for 1024-bit
+      result := rgrSuccess;
   finally
     // finalize local variables if were not assigned
     _q.Release;
