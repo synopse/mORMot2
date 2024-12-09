@@ -549,6 +549,14 @@ type
   public
     /// initialize the RSA key context
     constructor Create; override;
+    /// initialize and generate a new RSA key context
+    // - this is the main factory to generate a new RSA keypair
+    // - will call Create and Generate() with proper retry on rgrWeakBitsMayRetry
+    // - returns nil on generation error (with a silent exception)
+    class function GenerateNew(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
+      Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
+      Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
+      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): TRsa;
     /// finalize the RSA key context
     destructor Destroy; override;
     /// check if M and E fields are set
@@ -571,6 +579,8 @@ type
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
     // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
+    // - hint: consider using the TRsa.GenerateNew factory , which would properly
+    // handle rgrWeakBitsMayRetry result
     function Generate(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
       Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
       Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
@@ -3262,10 +3272,9 @@ var
 begin
   if privpwd <> '' then
     ECrypt.RaiseUtf8('%.GenerateDer: unsupported privpwd', [self]);
-  rsa := fRsaClass.Create;
+  rsa := fRsaClass.GenerateNew;
+  if rsa <> nil then
   try
-    if not rsa.Generate then
-      exit; // timed out
     pub := rsa.SavePublicKeyDer;
     priv := rsa.SavePrivateKeyDer;
   finally
@@ -3442,9 +3451,10 @@ begin
     if fRsa = nil then
     begin
       fKeyAlgo := CAA_CKA[Algorithm];
-      fRsa := CKA_TO_RSA[fKeyAlgo].Create;
-      if fRsa.Generate(RSA_DEFAULT_GENERATION_BITS) then
-        result := fRsa.SavePublicKey.ToSubjectPublicKey;
+      fRsa := CKA_TO_RSA[fKeyAlgo].GenerateNew(RSA_DEFAULT_GENERATION_BITS);
+      if fRsa = nil then
+        exit;
+      result := fRsa.SavePublicKey.ToSubjectPublicKey;
     end;
 end;
 
