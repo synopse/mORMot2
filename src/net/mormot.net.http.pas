@@ -415,6 +415,10 @@ type
     // - if hsrAuthorized is set, THttpServerSocketGeneric.Authorization() will
     // put the authenticated User name in this field
     BearerToken: RawUtf8;
+    /// custom server-generated headers, to be added to the request headers
+    // - set e.g. with hsrAuthorized and hraNegotiate authentication scheme as
+    // already formatted 'WWW-Authenticate: xxxxxxxxx'#13#10 header
+    ResponseHeaders: RawUtf8;
     /// decoded 'Range: bytes=..' start value - default is 0
     // - e.g. 1024 for 'Range: bytes=1024-1025'
     // - equals -1 in case on unsupported multipart range requests
@@ -3151,6 +3155,8 @@ begin
     FastAssignNew(Upgrade);
   if BearerToken <> '' then
     FastAssignNew(BearerToken);
+  if ResponseHeaders <> '' then
+    FastAssignNew(ResponseHeaders);
   if UserAgent <> '' then
     FastAssignNew(UserAgent);
   if Referer <> '' then
