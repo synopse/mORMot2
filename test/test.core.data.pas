@@ -7,6 +7,14 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+// if defined, uses fmtbcd and include TTestCoreProcess._TBcd
+{.$define TEST_DBRAD}
+
+{$ifdef FPC}
+  {$define TEST_DBRAD} // assume we have this unit on FPC
+{$endif FPC}
+
+
 // if defined, TTestCoreProcess.JSONBenchmark will include some other libraries
 
 // on my Laptop, parsing the 1MB People.json expanded array on Win32:
@@ -97,6 +105,10 @@ uses
   mormot.net.sock,
   mormot.db.core,
   mormot.db.nosql.bson,
+  {$ifdef TEST_DBRAD}
+  fmtbcd,
+  mormot.db.rad,
+  {$endif TEST_DBRAD}
   mormot.orm.base,
   mormot.orm.core,
   mormot.rest.client,
@@ -138,6 +150,10 @@ type
     procedure _TDocVariant;
     /// IDocList / IDocDict wrappers
     procedure _IDocAny;
+    {$ifdef TEST_DBRAD}
+    /// our TBcd wrapper functions
+    procedure _TBcd;
+    {$endif TEST_DBRAD}
     /// low-level TDecimal128 decimal value process (as used in BSON)
     procedure _TDecimal128;
     /// BSON process (using TDocVariant)
@@ -4618,6 +4634,67 @@ begin
   end;
   {$endif HASIMPLICITOPERATOR}
 end;
+
+{$ifdef TEST_DBRAD}
+procedure TTestCoreProcess._TBcd;
+var
+  i, l: PtrInt;
+  u, u2: RawUtf8;
+  b, b2: TBcd;
+
+  procedure CheckOne(const msg: RawUtf8);
+  begin
+    Check(u <> '', 'void');
+    Check(TryUtf8ToBcd(u, b));
+    BcdToUtf8(b, u2);
+    Check(u2 <> '');
+    CheckEqual(u, u2, msg);
+  end;
+
+begin
+  Check(not TryUtf8ToBcd('', b));
+  Check(not TryUtf8ToBcd(' ', b));
+  Check(not TryUtf8ToBcd('a', b));
+  Check(not TryUtf8ToBcd('a ', b));
+  u := '1059.4631';
+  CheckOne(u);
+  {$ifndef HASNOSTATICRTTI}
+  u2 := RecordSaveJson(b, TypeInfo(TBcd));
+  CheckEqual(u2, QuotedStrJson(u));
+  FillCharFast(b2, SizeOf(b2), 0);
+  Check(not CompareMem(@b, @b2, SizeOf(b)));
+  Check(RecordLoadJson(b2, u2, TypeInfo(TBcd)));
+  Check(CompareMem(@b, @b2, SizeOf(b)));
+  {$endif HASNOSTATICRTTI}
+  for i := -1000 to 1000 do
+  begin
+    Int32ToUtf8(i, u);
+    CheckOne('-1000...+1000');
+    Int64ToUtf8(Int64(Random64), u);
+    CheckOne('64-bit signed content');
+    if (u[1] <> '-') and
+       (i <> 0) then
+    begin
+      u := u + u + u;
+      CheckOne('54-57 digits integer');
+      insert('.', u, Random32(30) + 2);
+      l := length(u);
+      while u[l] = '0' do
+      begin
+        dec(l);
+        FakeLength(u, l);
+      end;
+      CheckOne('54-57 digits floating point');
+    end;
+    DoubleToStr(RandomDouble * i, u);
+    CheckOne('fixed decimals floating point number');
+    Check(TryUtf8ToBcd(' ' + u + ' ', b2), 'with spaces');
+    BcdToUtf8(b2, u2);
+    Check(u2 <> '');
+    CheckEqual(u, u2, 'with spaces');
+  end;
+end;
+{$endif TEST_DBRAD}
 
 procedure TTestCoreProcess._TDecimal128;
 
