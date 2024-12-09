@@ -86,6 +86,8 @@ type
 
 {************ Database-Aware BCD Values Support }
 
+// note: this unit will also register TBcd to be serialized as JSON "string"
+
 type
   /// a string buffer, used by BcdToBuffer to store its output text
   TBcdBuffer = array[0..71] of AnsiChar;
@@ -496,6 +498,22 @@ end;
 function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
 begin
   result := TryUtf8ToBcd({$ifdef UNICODE}StringToAnsi7{$endif}(Text), Bcd);
+end;
+
+// store TBcd as JSON "string" to keep the precision
+
+procedure _JS_BCD(Data: PBcd; const Ctxt: TJsonSaveContext);
+begin
+  Ctxt.W.Add('"');
+  AddBcd(Ctxt.W, Data^);
+  Ctxt.W.AddDirect('"');
+end;
+
+procedure _JL_BCD(Data: PBcd; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    Ctxt.Valid := Ctxt.WasString and
+                  TryBufferToBcd(Ctxt.Value, Ctxt.ValueLen, Data^);
 end;
 
 
@@ -1044,6 +1062,30 @@ begin
       [self, fPreparedParamsCount, fQueryParams.Count, aSQL]);
 end;
 
+
+{$ifdef HASNOSTATICRTTI} // for Delphi 7/2007: use fake TypeInfo()
+type
+  TFakeTypeInfo = packed record
+    Kind: TRttiKind;
+    Name4: string[4];
+    RecSize: cardinal;
+    ManagedCount: integer;
+  end;
+const
+  _TBCD: TFakeTypeInfo = (
+    Kind: rkRecord;
+    Name4: 'TBCD';
+    RecSize: SizeOf(TBcd);
+    ManagedCount: 0);
+{$endif HASNOSTATICRTTI}
+
+initialization
+  TRttiJson.RegisterCustomSerializerFunction(
+    {$ifdef HASNOSTATICRTTI}
+    @_TBCD, @_JL_BCD, @_JS_BCD);
+    {$else}
+    TypeInfo(TBcd), @_JL_BCD, @_JS_BCD);
+    {$endif HASNOSTATICRTTI}
 
 end.
 
