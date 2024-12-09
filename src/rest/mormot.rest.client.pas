@@ -1614,7 +1614,7 @@ var
 begin
   InitializeDomainAuth; // setup mormot.lib.sspi/gssapi unit depending on the OS
   result := '';
-  InvalidateSecContext(SecCtx, 0);
+  InvalidateSecContext(SecCtx, 0, 0);
   WithPassword := User.LogonName <> '';
   Sender.fSession.Data := '';
   try

@@ -577,7 +577,7 @@ type
 
 /// set aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64);
+  aConnectionID, aTick64: Int64);
 
 /// free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -1282,14 +1282,14 @@ end;
 
 
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64);
+  aConnectionID, aTick64: Int64);
 begin
   aSecContext.ID := aConnectionID;
   aSecContext.CredHandle.dwLower := -1;
   aSecContext.CredHandle.dwUpper := -1;
   aSecContext.CtxHandle.dwLower := -1;
   aSecContext.CtxHandle.dwUpper := -1;
-  aSecContext.CreatedTick64 := 0;
+  aSecContext.CreatedTick64 := aTick64;
 end;
 
 procedure FreeSecurityContext(var handle: TSecHandle);
@@ -1715,7 +1715,6 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    aSecContext.CreatedTick64 := mormot.core.os.GetTickCount64;
     if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
         nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
@@ -1836,7 +1835,6 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    aSecContext.CreatedTick64 := mormot.core.os.GetTickCount64;
     if (aInData <> '') and
        (PCardinal(aInData)^ or $20202020 =
         ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24) then

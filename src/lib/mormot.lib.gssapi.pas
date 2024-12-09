@@ -329,8 +329,7 @@ type
     fMinorStatus: cardinal;
   public
     /// initialize an gssapi library exception with the proper error message
-    constructor Create(aMajorStatus, aMinorStatus: cardinal;
-      const aPrefix: RawUtf8);
+    constructor Create(aMajor, aMinor: cardinal; const aPrefix: RawUtf8);
   published
     /// associated GSS_C_GSS_CODE state value
     property MajorStatus: cardinal
@@ -425,7 +424,7 @@ type
 
 /// Sets aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64);
+  aConnectionID, aTick64: Int64);
 
 /// Free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -753,32 +752,30 @@ begin
         (MsgCtx = 0);
 end;
 
-constructor EGssApi.Create(aMajorStatus, aMinorStatus: cardinal;
-  const aPrefix: RawUtf8);
+constructor EGssApi.Create(aMajor, aMinor: cardinal; const aPrefix: RawUtf8);
 var
   Msg: RawUtf8;
 begin
   Msg := aPrefix;
-  GetDisplayStatus(Msg, aMajorStatus, GSS_C_GSS_CODE);
-  if (aMinorStatus <> 0) and
-     (aMinorStatus <> 100001) then
-    GetDisplayStatus(Msg, aMinorStatus, GSS_C_MECH_CODE);
-//writeln('ERROR: ', Msg);
+  GetDisplayStatus(Msg, aMajor, GSS_C_GSS_CODE);
+  if (aMinor <> 0) and
+     (aMinor <> 100001) then
+    GetDisplayStatus(Msg, aMinor, GSS_C_MECH_CODE);
   inherited Create(Utf8ToString(Msg));
-  fMajorStatus := AMajorStatus;
-  fMinorStatus := AMinorStatus;
+  fMajorStatus := aMajor;
+  fMinorStatus := aMinor;
 end;
 
 
 { ****************** Middle-Level GSSAPI Wrappers }
 
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64);
+  aConnectionID, aTick64: Int64);
 begin
   aSecContext.ID := aConnectionID;
   aSecContext.CredHandle := nil;
   aSecContext.CtxHandle := nil;
-  aSecContext.CreatedTick64 := 0;
+  aSecContext.CreatedTick64 := aTick64;
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -942,7 +939,6 @@ begin
   if aSecContext.CredHandle = nil then
   begin
     // first call: create the needed context for the current user
-    aSecContext.CreatedTick64 := GetTickCount64();
     MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE,
       m, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GccCheck(MajStatus, MinStatus,
@@ -977,7 +973,6 @@ begin
   begin
     // first call: create the needed context for those credentials
     UserName := nil;
-    aSecContext.CreatedTick64 := GetTickCount64;
     u := aUserName;
     Split(u, '@', n, p);
     if p = '' then
@@ -1023,12 +1018,11 @@ var
   CtxAttr: cardinal;
 begin
   RequireGssApi;
-  if aSecContext.CredHandle = nil then
+  if aSecContext.CredHandle = nil then // initial call
   begin
-    aSecContext.CreatedTick64 := GetTickCount64;
-    if IdemPChar(pointer(aInData), 'NTLMSSP') then
-      raise EGssApi.CreateFmt(
-        'NTLM authentication not supported by GSSAPI library', []);
+    if IdemPChar(pointer(aInData), 'NTLM') then
+      raise ENotSupportedException.Create(
+        'NTLM authentication not supported by the GSSAPI library');
     MajStatus := GssApi.gss_acquire_cred(
       MinStatus, nil, GSS_C_INDEFINITE, nil, GSS_C_ACCEPT,
       aSecContext.CredHandle, nil, nil);
