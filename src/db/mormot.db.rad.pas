@@ -86,10 +86,6 @@ type
 
 {************ Database-Aware BCD Values Support }
 
-/// append a TBcd value as text to the output buffer
-// - emit a JSON-compatible floting point number text, with DecimalSeparator='.'
-procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
-
 type
   /// a string buffer, used by BcdToBuffer to store its output text
   TBcdBuffer = array[0..71] of AnsiChar;
@@ -114,6 +110,21 @@ function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
 // - RTL BCDToStr() is slower, and not consistent between Delphi and FPC
 function BcdToString(const AValue: TBcd): string;
 
+/// append a TBcd value as text to the output buffer
+// - emit a JSON-compatible floating point number text, with DecimalSeparator='.'
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
+
+/// convert a text buffer into its matching TBcd value
+// - supports BcdToBuffer() layout, but not the '123e-10' scientific notation
+// - recognize a JSON-compatible floting point number, with DecimalSeparator='.'
+function TryBufferToBcd(P: PUtf8Char; Len: PtrInt; out Bcd: TBcd): boolean;
+
+/// convert a text RawUtf8 into its matching TBcd value
+function TryUtf8ToBcd(const Text: RawUtf8; out Bcd: TBcd): boolean;
+
+/// convert a text string into its matching TBcd value
+// - RTL TryStrToBCD() is slower, and not consistent between Delphi and FPC
+function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
 
 
 { ************ mormot.db.sql Abstract Connection for DB.pas TDataSet }
@@ -394,6 +405,97 @@ var
 begin
   len := BcdToBuffer(AValue, tmp, PBeg);
   Ansi7ToString(PWinAnsiChar(PBeg), len, result);
+end;
+
+function TryBufferToBcd(P: PUtf8Char; Len: PtrInt; out Bcd: TBcd): boolean;
+var
+  PEnd: PUtf8Char;
+  neg: boolean;
+  posDec, pos: integer;
+  b: PByte;
+  c: cardinal;
+begin
+  result := false;
+  FillCharFast(Bcd, SizeOf(Bcd), 0);
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  PEnd := P + Len;
+  while (P < PEnd) and
+        (P^ in [#1 .. ' ']) do
+    inc(P);
+  neg := P^ = '-';
+  if neg or
+     (P^ = '+') then
+    inc(P);
+  pos := 0;
+  posDec := -1;
+  while (PEnd > P) and
+        (PEnd[-1] in [#1 .. ' '])  do
+    dec(PEnd);
+  if P = PEnd then
+    exit;
+  while P < PEnd do
+  begin
+    c := PByte(P)^ - Ord('0');
+    if c > 9 then
+      if P^ = '.' then
+      begin
+        if posDec >= 0 then
+          exit
+        else if pos = 0 then
+          inc(pos)
+        else if (pos = 1) and
+                (P[-1] = '0') then
+          dec(pos);
+        posDec := pos;
+        while (PEnd > P) and
+              (PEnd[-1] = '0') do
+          dec(PEnd);
+        inc(P);
+        continue;
+      end
+      else
+        exit
+    else if pos < SizeOf(Bcd.Fraction) * 2 then
+    begin
+      b := @Bcd.Fraction[pos shr 1];
+      if pos and 1 = 0 then
+        b^ := c shl 4
+      else
+        b^ := b^ or c;
+      inc(pos);
+    end
+    else if posDec < 0 then
+      exit;
+    inc(P);
+  end;
+  if pos = 0 then
+  begin
+    Bcd.Precision := 10;
+    Bcd.SignSpecialPlaces := 2;
+  end
+  else if pos > MaxFMTBcdFractionSize then
+    exit
+  else
+  begin
+    Bcd.Precision := pos;
+    if posDec >= 0 then
+      Bcd.SignSpecialPlaces := pos - posDec;
+    if neg then
+      Bcd.SignSpecialPlaces := Bcd.SignSpecialPlaces or $80;
+  end;
+  result := true;
+end;
+
+function TryUtf8ToBcd(const Text: RawUtf8; out Bcd: TBcd): boolean;
+begin
+  result := TryBufferToBcd(pointer(Text), length(Text), Bcd);
+end;
+
+function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
+begin
+  result := TryUtf8ToBcd({$ifdef UNICODE}StringToAnsi7{$endif}(Text), Bcd);
 end;
 
 
