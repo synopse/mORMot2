@@ -2415,6 +2415,33 @@ begin
             (RsaPublicKey.M.Compare(M) = 0);
 end;
 
+class function TRsa.GenerateNew(Bits: integer; Extend: TBigIntSimplePrime;
+  Iterations, TimeOutMS: integer): TRsa;
+var
+  res: TRsaGenerateResult;
+begin
+  result := Create;
+  try
+    res := result.Generate(Bits, Extend, Iterations, TimeOutMS);
+    case res of
+      rgrSuccess:
+        exit;
+      rgrWeakBitsMayRetry: // retry once with new instance
+        begin
+          result.Free;
+          result := Create;
+          res := result.Generate(Bits, Extend, Iterations, TimeOutMS);
+          if res = rgrSuccess then
+            exit;
+        end;
+    end;
+    // silent but explicit exception on generation failure
+    ERsaException.RaiseUtf8('%.GenerateNew failed as %', [self, ToText(res)^]);
+  except
+    FreeAndNil(result); // error occurred during keypair generation
+  end;
+end;
+
 const
   // we force exponent = 65537 - FIPS 5.4 (e)
   BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
