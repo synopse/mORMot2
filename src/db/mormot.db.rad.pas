@@ -495,10 +495,27 @@ begin
   result := TryBufferToBcd(pointer(Text), length(Text), Bcd);
 end;
 
+{$ifdef UNICODE}
+function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
+var
+  tmp: array[byte] of byte; // no memory allocation needed
+  i, L: PtrInt;
+begin
+  result := false;
+  L := length(Text);
+  if (L = 0) or
+     (L >= high(tmp)) then
+    exit;
+  for i := 0 to L do // include trailing #0
+    tmp[i] := PWordArray(Text)[i];
+  result := TryBufferToBcd(PUtf8Char(@tmp), L, Bcd);
+end;
+{$else}
 function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
 begin
-  result := TryUtf8ToBcd({$ifdef UNICODE}StringToAnsi7{$endif}(Text), Bcd);
+  result := TryUtf8ToBcd(Text, Bcd);
 end;
+{$endif UNICODE}
 
 // store TBcd as JSON "string" to keep the precision
 
