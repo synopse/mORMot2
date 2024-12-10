@@ -61,6 +61,10 @@ type
     // could be overriden to change the behavior of this class
     procedure PeerCacheStarted; virtual;
     procedure PeerCacheStopping; virtual;
+    procedure BeforeClientConnect(var Uri: TUri); virtual;
+    procedure AfterClientConnect; virtual;
+    procedure BeforeClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet); virtual;
+    procedure AfterClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet); virtual;
   public
     // input parameters (e.g. from command line) for the MGet process
     Silent, NoResume, Cache, Peer, LogSteps, TrackNetwork: boolean;
@@ -226,6 +230,26 @@ begin
   // do nothing
 end;
 
+procedure TMGetProcess.BeforeClientConnect(var Uri: TUri);
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.AfterClientConnect;
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.BeforeClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet);
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.AfterClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet);
+begin
+  // do nothing
+end;
+
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
 var
   wget: THttpClientSocketWGet;
@@ -295,11 +319,15 @@ begin
       FreeAndNil(fClient);
   if fClient = nil then  // if we can't reuse the existing connection
   begin
+    BeforeClientConnect(uri);
     fClient := THttpClientSocket.OpenOptions(uri, Options);
     if Log <> nil then
       fClient.OnLog := Log.DoLog;
+    AfterClientConnect;
   end;
+  BeforeClientGet(uri, wget);
   result := fClient.WGet(uri.Address, DestFile, wget);
+  AfterClientGet(uri, wget);
   fOutSteps := wget.OutSteps;
   if Assigned(l) then
     l.Log(sllTrace, 'Execute: WGet=% [%]',
