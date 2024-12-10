@@ -2573,10 +2573,9 @@ type
     procedure SetPropsFromText(var P: PUtf8Char;
       ExpectedEnd: TRttiCustomFromTextExpectedEnd; NoRegister: boolean);
     // initialize from fProps, with no associated RTTI - and calls DoRegister()
-    // - will create a "fake" rkRecord/rkDynArray PRttiInfo (TypeName may be '')
+    // - creates a "fake" rkRecord/rkDynArray/rkArray PRttiInfo (TypeName may be '')
     procedure NoRttiSetAndRegister(ParserType: TRttiParserType;
-      const TypeName: RawUtf8; DynArrayElemType: TRttiCustom = nil;
-      NoRegister: boolean = false);
+      const TypeName: RawUtf8; NoRegister: boolean = false);
     // called by ValueFinalize() for dynamic array defined from text
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
     /// initialize this Value process for Parser and Parser Complex kinds
@@ -8758,7 +8757,9 @@ begin
 end;
 
 procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRttiParserType;
-  const TypeName: RawUtf8; DynArrayElemType: TRttiCustom; NoRegister: boolean);
+  const TypeName: RawUtf8; NoRegister: boolean);
+var
+  def: PTypeData;
 begin
   if (fNoRttiInfo <> nil) or
      not (rcfWithoutRtti in fFlags) then
@@ -8769,22 +8770,35 @@ begin
     ptRecord:
       begin
         fCache.Kind := rkRecord;
-        fCache.Size := Props.Size; // as computed by caller
+        if fProps.Size = 0 then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptRecord)?', [self]);
+        fCache.Size := fProps.Size;
       end;
     ptDynArray:
       begin
         fCache.Kind := rkDynArray;
         fCache.Size := SizeOf(pointer);
-        fArrayRtti := DynArrayElemType;
-        fCache.ItemInfoRaw := DynArrayElemType.Info;
-        if (DynArrayElemType.Info <> nil) and
-           DynArrayElemType.Info.IsManaged then
-          fCache.ItemInfoManaged := DynArrayElemType.Info; // as regular dynarray RTTI
-        fCache.ItemSize := DynArrayElemType.Size;
+        if fArrayRtti = nil then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptDynArray)?', [self]);
+        fCache.ItemInfoRaw := fArrayRtti.Info;
+        if (fArrayRtti.Info <> nil) and
+           fArrayRtti.Info.IsManaged then
+          fCache.ItemInfoManaged := fArrayRtti.Info; // as regular dynarray RTTI
+        fCache.ItemSize := fArrayRtti.Size;
+      end;
+    ptArray:
+      begin
+        fCache.Kind := rkArray;
+        if fCache.Size = 0 then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptArray)?', [self]);
+        fCache.ItemSize := fCache.Size;
+        fCache.ItemCount := 1;
       end;
     ptClass:
       begin
         fCache.Kind := rkClass;
+        if fCache.ValueClass = nil then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptClass)?', [self]);
         fCache.Size := SizeOf(pointer);
       end;
   else
@@ -8797,7 +8811,7 @@ begin
     SetParserType(ParserType, pctNone);
     exit;
   end;
-  // create fake RTTI which should be enough for our registration purpose
+  // create minimal fake RTTI - good enough for our internal usage
   SetLength(fNoRttiInfo, length(TypeName) + 64); // all filled with zeros
   fCache.Info := pointer(fNoRttiInfo);
   fCache.Info.Kind := fCache.Kind;
@@ -8805,11 +8819,19 @@ begin
     fCache.Info.RawName := PointerToHexShort(self)
   else
     fCache.Info.RawName := TypeName;
-  case ParserType of
+  def := GetTypeData(fCache.Info);
+  case ParserType of // minimal RTTI field(s)
     ptRecord:
-      PRecordInfo(GetTypeData(fCache.Info))^.RecSize := fCache.Size;
+      PRecordInfo(def)^.RecSize := fCache.Size;
     ptDynArray:
-      GetTypeData(fCache.Info)^.elSize := fCache.ItemSize;
+      def^.elSize := fCache.ItemSize;
+    ptArray:
+      begin
+        PArrayInfo(def)^.Size := fCache.Size;
+        PArrayInfo(def)^.ElCount := fCache.ItemCount;
+      end;
+    ptClass:
+      def^.ClassType := fCache.ValueClass;
   end;
   // initialize process
   SetParserType(ParserType, pctNone);
@@ -9308,8 +9330,8 @@ begin
         ERttiException.RaiseUtf8('Unexpected nested % %', [c, ToText(pt)^]);
       nested := Rtti.GlobalClass.Create;
       nested.FromRtti(nil);
-      nested.SetPropsFromText(P, ee, NoRegister);
-      nested.NoRttiSetAndRegister(ptRecord, '', nil, NoRegister);
+      nested.SetPropsFromText(P, ee, NoRegister); // before NoRttiSetAndRegister()
+      nested.NoRttiSetAndRegister(ptRecord, '', NoRegister);
       if NoRegister then
         ObjArrayAdd(fOwnedRtti, nested);
       if pt = ptRecord then
@@ -9326,7 +9348,8 @@ begin
         ERttiException.RaiseUtf8('Unexpected array % %', [c, ToText(pt)^]);
       c := Rtti.GlobalClass.Create;
       c.FromRtti(nil);
-      c.NoRttiSetAndRegister(ptDynArray, typname, ac, NoRegister);
+      c.fArrayRtti := ac; // before NoRttiSetAndRegister()
+      c.NoRttiSetAndRegister(ptDynArray, typname, NoRegister);
       if NoRegister then
         ObjArrayAdd(fOwnedRtti, c);
     end;
@@ -9730,9 +9753,8 @@ begin
         exit; // already registered in the background
       result := GlobalClass.Create;
       result.FromRtti(nil); // just set rcfWithoutRtti flag
-      result.SetValueClass(ObjectClass, nil);
+      result.SetValueClass(ObjectClass, nil); // before NoRttiSetAndRegister()
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
-      GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
     finally
       RegisterSafe.UnLock;
     end;
