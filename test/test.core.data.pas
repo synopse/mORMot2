@@ -4658,7 +4658,7 @@ begin
   Check(not TryUtf8ToBcd('a ', b));
   u := '1059.4631';
   CheckOne(u);
-  {$ifndef HASNOSTATICRTTI}
+  {$ifndef HASNOSTATICRTTI} // need to be able to use TypeInfo(TBcd)
   // mORMot 2 new "1059.4631" format
   u2 := RecordSaveJson(b, TypeInfo(TBcd));
   CheckEqual(u2, QuotedStrJson(u));
@@ -4668,8 +4668,8 @@ begin
   Check(CompareMem(@b, @b2, SizeOf(b)));
   FillCharFast(b2, SizeOf(b2), 0);
   // mORMot 1 serialization with Delphi extended RTTI
-  u2 := '{"Precision":1,"SignSpecialPlaces":0,' +
-    '"Fraction":"5000000000000000000000000000000000000000000000000000000000000000"}';
+  u2 := '{"Precision":1,"SignSpecialPlaces":0,"Fraction":' +
+    '"5000000000000000000000000000000000000000000000000000000000000000"}';
   Check(RecordLoadJson(b2, u2, TypeInfo(TBcd)));
   BcdToUtf8(b2, u2);
   CheckEqual(u2, '5');
