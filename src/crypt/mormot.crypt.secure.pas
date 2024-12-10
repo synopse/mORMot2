@@ -836,8 +836,8 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 const
-  /// map the size in bytes of any THashAlgo digest
-  HASH_SIZE: array[THashAlgo] of integer = (
+  /// map the size in bytes (16..64) of any THashAlgo digest
+  HASH_SIZE: array[THashAlgo] of byte = (
     SizeOf(TMd5Digest),    // hfMD5
     SizeOf(TSHA1Digest),   // hfSHA1
     SizeOf(TSHA256Digest), // hfSHA256
