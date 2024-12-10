@@ -58,6 +58,9 @@ type
     fPeerCache: IWGetAlternate;
     function GetTcpTimeoutSec: integer;
     procedure SetTcpTimeoutSec(Seconds: integer);
+    // could be overriden to change the behavior of this class
+    procedure PeerCacheStarted; virtual;
+    procedure PeerCacheStopping; virtual;
   public
     // input parameters (e.g. from command line) for the MGet process
     Silent, NoResume, Cache, Peer, LogSteps, TrackNetwork: boolean;
@@ -166,6 +169,16 @@ begin
   Options.RedirectMax := 5;
 end;
 
+destructor TMGetProcess.Destroy;
+begin
+  inherited Destroy;
+  fClient.Free;
+  FillZero(fPeerSecret);
+  FillZero(fPeerSecretHexa);
+  if fPeerCache <> nil then
+    PeerCacheStopping;
+end;
+
 procedure TMGetProcess.StartPeerCache;
 var
   l: ISynLog;
@@ -178,6 +191,7 @@ begin
        fPeerCache.NetworkInterfaceChanged then
     begin
       l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
+      PeerCacheStopping;
       fPeerCache := nil; // force re-create just below
     end;
   // (re)create the peer-cache background process if necessary
@@ -191,6 +205,7 @@ begin
       fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
         nil, 2, self.Log, @ServerTls, @ClientTls);
       // THttpAsyncServer could also be tried with rfProgressiveStatic
+      PeerCacheStarted; // may be overriden
     except
       // don't disable Peer: we would try on next Execute()
       on E: Exception do
@@ -199,6 +214,16 @@ begin
             'StartPeerCache raised %: will retry next time', [E.ClassType]);
     end;
   end;
+end;
+
+procedure TMGetProcess.PeerCacheStarted;
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.PeerCacheStopping;
+begin
+  // do nothing
 end;
 
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
@@ -279,14 +304,6 @@ begin
   if Assigned(l) then
     l.Log(sllTrace, 'Execute: WGet=% [%]',
       [result, GetSetName(TypeInfo(TWGetSteps), fOutSteps, {trim=}true)], self);
-end;
-
-destructor TMGetProcess.Destroy;
-begin
-  inherited Destroy;
-  fClient.Free;
-  FillZero(fPeerSecret);
-  FillZero(fPeerSecretHexa);
 end;
 
 procedure TMGetProcess.ToConsole(const Fmt: RawUtf8;
