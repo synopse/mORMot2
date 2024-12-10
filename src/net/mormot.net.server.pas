@@ -1648,7 +1648,8 @@ type
     /// initialize the cryptography of this peer-to-peer node instance
     // - warning: inherited class should also call AfterSettings once
     // fSettings is defined
-    constructor Create(const aSharedSecret: RawByteString); reintroduce;
+    constructor Create(const aSharedSecret: RawByteString;
+      aServerTls, aClientTls: PNetTlsContext); reintroduce;
     /// finalize this class instance
     destructor Destroy; override;
     /// check if the network interface defined in Settings did actually change
@@ -1750,8 +1751,8 @@ type
     constructor Create(aSettings: THttpPeerCacheSettings;
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
-      aHttpServerThreadCount: integer = 2;
-      aLogClass: TSynLogClass = nil); reintroduce;
+      aHttpServerThreadCount: integer = 2; aLogClass: TSynLogClass = nil;
+      aServerTls: PNetTlsContext = nil; aClientTls: PNetTlsContext = nil); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -5440,7 +5441,8 @@ begin
   end;
 end;
 
-constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString);
+constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString;
+  aServerTls, aClientTls: PNetTlsContext);
 var
   key: THash256Rec;
 begin
@@ -5458,10 +5460,14 @@ begin
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
   if Assigned(fLog) then
+    // log includes safe 16-bit key.w[0] fingerprint
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
       [GuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
-      // log includes safe 16-bit fingerprint
   FillZero(key.b);
+  if aServerTls <> nil then
+    fServerTls := aServerTls^;
+  if aClientTls <> nil then
+    fClientTls := aClientTls^;
 end;
 
 destructor THttpPeerCrypt.Destroy;
@@ -5794,7 +5800,8 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer; aLogClass: TSynLogClass);
+  aHttpServerThreadCount: integer; aLogClass: TSynLogClass;
+  aServerTls, aClientTls: PNetTlsContext);
 var
   log: ISynLog;
   avail, existing: Int64;
@@ -5809,7 +5816,7 @@ begin
      (fSettings.Uuid <> '') and // allow UUID customization
      not RawUtf8ToGuid(fSettings.Uuid, fUuid) then
     EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, fSettings.Uuid]);
-  inherited Create(aSharedSecret);
+  inherited Create(aSharedSecret, aServerTls, aClientTls);
   // setup the processing options
   if aSettings = nil then
   begin
