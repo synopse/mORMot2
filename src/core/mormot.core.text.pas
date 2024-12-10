@@ -859,10 +859,12 @@ type
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
-    procedure AddBinToHex(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean = false);
+    procedure AddBinToHex(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean = false;
+      QuotedChar: AnsiChar = #0);
     /// append some binary data as hexadecimal text conversion
     // - append its minimal chars, i.e. excluding last bytes containing 0
-    procedure AddBinToHexMinChars(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean = false);
+    procedure AddBinToHexMinChars(Bin: pointer; BinBytes: PtrInt;
+      LowerHex: boolean = false; QuotedChar: AnsiChar = #0);
     /// fast conversion from binary data into hexa chars, ready to be displayed
     // - using this function with Bin^ as an integer value will serialize it
     // in big-endian order (most-significant byte first), as used by humans
@@ -5258,7 +5260,8 @@ begin
   AddBinToHexDisplayLower(@P, DisplayMinChars(@P, SizeOf(P)), QuotedChar);
 end;
 
-procedure TTextWriter.AddBinToHex(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean);
+procedure TTextWriter.AddBinToHex(Bin: pointer; BinBytes: PtrInt;
+  LowerHex: boolean; QuotedChar: AnsiChar);
 var
   chunk: PtrInt;
 begin
@@ -5267,6 +5270,11 @@ begin
   if B >= BEnd then
     FlushToStream;
   inc(B);
+  if QuotedChar <> #0 then
+  begin
+    B^ := QuotedChar;
+    inc(B);
+  end;
   repeat
     // guess biggest size to be added into buf^ at once
     chunk := (BEnd - B) shr 1; // div 2 -> two hexa chars per byte
@@ -5286,14 +5294,17 @@ begin
     WriteToStream(fTempBuf, B - fTempBuf);
     B := fTempBuf;
   until false;
-  dec(B); // allow CancelLastChar
+  if QuotedChar <> #0 then
+    B^ := QuotedChar
+  else
+    dec(B); // allow CancelLastChar
 end;
 
 procedure TTextWriter.AddBinToHexMinChars(Bin: pointer; BinBytes: PtrInt;
-  LowerHex: boolean);
+  LowerHex: boolean; QuotedChar: AnsiChar);
 begin
   if BinBytes > 0 then
-    AddBinToHex(Bin, DisplayMinChars(Bin, BinBytes), LowerHex);
+    AddBinToHex(Bin, DisplayMinChars(Bin, BinBytes), LowerHex, QuotedChar);
 end;
 
 procedure TTextWriter.AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt;
