@@ -63,6 +63,7 @@ type
     CacheFolder, DestFile: TFileName;
     Options: THttpRequestExtendedOptions;
     Log: TSynLogClass;
+    ServerTls, ClientTls: TNetTlsContext;
     /// initialize this instance with the default values
     constructor Create; override;
     /// finalize this instance
@@ -181,7 +182,7 @@ begin
       fPeerSecret := HexToBin(fPeerSecretHexa);
     try
       fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
-        nil, 2, self.Log);
+        nil, 2, self.Log, @ServerTls, @ClientTls);
       // THttpAsyncServer could also be tried with rfProgressiveStatic
     except
       // don't disable Peer: we would try on next Execute()
