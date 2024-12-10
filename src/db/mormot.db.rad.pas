@@ -527,10 +527,28 @@ begin
 end;
 
 procedure _JL_BCD(Data: PBcd; var Ctxt: TJsonParserContext);
+var
+  V: array[0..2] of TValuePUtf8Char;
 begin
-  if Ctxt.ParseNext then
-    Ctxt.Valid := Ctxt.WasString and
-                  TryBufferToBcd(Ctxt.Value, Ctxt.ValueLen, Data^);
+  if Ctxt.ParseNextAny then
+    if Ctxt.WasString then
+      // mORMot 2 new "1.0594631" format
+      Ctxt.Valid := TryBufferToBcd(Ctxt.Value, Ctxt.ValueLen, Data^)
+    else
+    begin
+      // mORMot 1 serialization with Delphi extended RTTI
+      JsonDecode(Ctxt.Value,
+        ['Precision', 'SignSpecialPlaces', 'Fraction'], @V);
+      Ctxt.Valid := (V[0].Len <> 0) and
+                    (V[1].Len <> 0) and
+                    (V[2].Len = SizeOf(Data^.Fraction) * 2) and
+                    mormot.core.text.HexToBin(PAnsiChar(V[2].Text),
+                      @Data^.Fraction, SizeOf(Data^.Fraction));
+      if not Ctxt.Valid then
+        exit;
+      Data^.Precision := V[0].ToCardinal;
+      Data^.SignSpecialPlaces := V[1].ToCardinal;
+    end;
 end;
 
 

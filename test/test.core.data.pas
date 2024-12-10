@@ -4659,12 +4659,20 @@ begin
   u := '1059.4631';
   CheckOne(u);
   {$ifndef HASNOSTATICRTTI}
+  // mORMot 2 new "1059.4631" format
   u2 := RecordSaveJson(b, TypeInfo(TBcd));
   CheckEqual(u2, QuotedStrJson(u));
   FillCharFast(b2, SizeOf(b2), 0);
   Check(not CompareMem(@b, @b2, SizeOf(b)));
   Check(RecordLoadJson(b2, u2, TypeInfo(TBcd)));
   Check(CompareMem(@b, @b2, SizeOf(b)));
+  FillCharFast(b2, SizeOf(b2), 0);
+  // mORMot 1 serialization with Delphi extended RTTI
+  u2 := '{"Precision":1,"SignSpecialPlaces":0,' +
+    '"Fraction":"5000000000000000000000000000000000000000000000000000000000000000"}';
+  Check(RecordLoadJson(b2, u2, TypeInfo(TBcd)));
+  BcdToUtf8(b2, u2);
+  CheckEqual(u2, '5');
   {$endif HASNOSTATICRTTI}
   for i := -1000 to 1000 do
   begin
