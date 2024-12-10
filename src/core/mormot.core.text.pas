@@ -563,9 +563,11 @@ type
     {$endif PUREMORMOT2}
 
     /// write pending data, then retrieve the whole text as a UTF-8 string
+    // - call CancelAll to reuse this instance after this method (or FlushFinal)
     function Text: RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// write pending data, then retrieve the whole text as a UTF-8 string
+    // - call CancelAll to reuse this instance after this method (or FlushFinal)
     procedure SetText(var result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
@@ -583,6 +585,7 @@ type
     // FlushFinal at the end of the process, just before using the resulting Stream
     // - if you don't call FlushToStream or FlushFinal, some pending characters
     // may not be copied to the Stream: you should call it before using the Stream
+    // - call CancelAll to reuse this instance after this method - or SetText()
     procedure FlushFinal;
       {$ifdef HASINLINE}inline;{$endif}
 
@@ -989,6 +992,7 @@ type
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
+    // - mandatory call after FlushFinal or Text/SetText() to reuse this instance
     procedure CancelAll;
     /// same as CancelAll, and also reset the CustomOptions
     procedure CancelAllAsNew;
