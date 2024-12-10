@@ -50,7 +50,8 @@ end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 type
-  PRecordInfo = PTypeData; // oldest Delphi PTypeData doesn't have RecordSize
+  PRecordInfo = PTypeData;
+  PArrayInfo = ^TArrayTypeData;
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin

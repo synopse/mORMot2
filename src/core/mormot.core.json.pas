@@ -5533,6 +5533,12 @@ var
   jsonsave: TRttiJsonSave;
   c: TJsonSaveContext;
 begin
+  if Ctxt.Info.ArrayRtti = nil then
+  begin
+    // as in mORMot 1: static array with no RTTI at all as a hexadecimal string
+    Ctxt.W.AddBinToHex(Data,  Ctxt.Info.Size, {lower=}true, {quote=}'"');
+    exit;
+  end;
   {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
   c.W.BlockBegin('[', c.Options);
   jsonsave := c.Info.JsonSave; // e.g. PT_JSONSAVE/PTC_JSONSAVE
@@ -8327,6 +8333,16 @@ var
   n: integer;
   arrinfo: TRttiCustom;
 begin
+  if Ctxt.Info.ArrayRtti = nil then
+  begin
+    // as in mORMot 1: static array with no RTTI at all as a hexadecimal string
+    Ctxt.Valid := Ctxt.ParseNext and
+                  Ctxt.WasString and
+                  (Ctxt.ValueLen = Ctxt.Info.Size * 2) and
+                  mormot.core.text.HexToBin(
+                    PAnsiChar(Ctxt.Value), PByte(Data), Ctxt.Info.Size);
+    exit;
+  end;
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit;

@@ -903,9 +903,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkRecordTypes: retrieve enhanced RTTI information about all fields
     // of this record, for JSON serialization without text definition
-    // - this information is currently only available since Delphi 2010
-    // - if any field has no RTTI (e.g. a static array of unmanaged type), then
-    // it will ignore this uncomplete, therefore non-useful RTTI
+    // - currently only available since Delphi 2010 and FPC trunk
+    // - Delphi limitation may return TypeInfo=nil about sub-fields without RTTI
+    // (e.g. a static array of unmanaged type) - does not affect FPC trunk
     // - in practice, it may be a good habit to always define the records used
     // within the SOA (e.g. as DTOs) calling RegisterFromText, and don't rely on
     // this RTTI, since it will be more cross-platform, and more customizable
@@ -1320,7 +1320,7 @@ type
   /// rkArray RTTI fields
   // - published here for proper Delphi inlining
   TArrayInfo = packed record
-    ArraySize: integer;
+    Size: integer;
     ElCount: integer;
     ArrayType: PPRttiInfo;
     DimCount: byte;
@@ -2489,8 +2489,8 @@ type
     procedure InternalAddFromClass(ClassInfo: PRttiInfo; IncludeParents: boolean);
     /// prepare List[result].Name from TRttiCustom.SetPropsFromText
     function FromTextPrepare(const PropName: RawUtf8): integer;
-    /// register the properties specified from extended RTTI (Delphi 2010+ only)
-    // - do nothing on FPC or Delphi 2009 and older
+    /// register the properties specified from extended RTTI
+    // - do nothing on not FPC trunk or before Delphi 2010
     procedure SetFromRecordExtendedRtti(RecordInfo: PRttiInfo);
     /// called once List[] and Size have been defined
     // - compute the Managed[] internal list and return the matching flags
@@ -3002,7 +3002,7 @@ type
     // !   end;
     // ! end;
     // - call this method with RttiDefinition='' to return back to the default
-    // serialization, i.e. binary + Base64 or Delphi 2010+ extended RTTI
+    // serialization, i.e. binary + Base64 or Delphi 2010 / FPC trunk extended RTTI
     // - RTTI textual information shall be supplied as text, with the
     // same format as any pascal record:
     // ! 'A,B,C: integer; D: RawUtf8; E: record E1,E2: double;'
@@ -3085,8 +3085,9 @@ type
 
   /// customizable field mapping between classes and records
   // - Init/Map overloaded methods return self to allow proper fluid-calling
-  // - records should have field-level extended RTTI (since Delphi 2010), or have
-  // been properly defined with Rtti.RegisterFromText() on FPC or oldest Delphi
+  // - records should have field-level extended RTTI (since Delphi 2010 / FPC
+  // trunk), or have been properly defined with Rtti.RegisterFromText() on
+  // oldest Delphi or FPC
   // - allow RTTI or custom mapping, e.g. with Data Transfer Objects (DTO)
   // - ToA() / ToB() methods are thread-safe by design: once Init() and Map()
   // have been made, you can safely share a single TRttiMap between threads
@@ -8453,7 +8454,8 @@ var
   dummy: PtrInt;
   all: TRttiRecordAllFields;
   f: PRttiRecordAllField;
-  i: PtrInt;
+  p: PRttiCustomProp;
+  i, siz: PtrInt;
 begin
   if (RecordInfo = nil) or
      not (RecordInfo^.Kind in rkRecordTypes) then
@@ -8466,19 +8468,39 @@ begin
   Count := length(all);
   SetLength(List, Count);
   f := pointer(all);
-  for i := 0 to Count - 1 do
-    with List[i] do
+  p := pointer(List);
+  for i := 1 to Count do
+  begin
+    if f^.TypeInfo = nil then // may happen on Delphi (but not on FPC)
     begin
-      Value := Rtti.RegisterType(f^.TypeInfo);
-      inc(Size, Value.Size);
-      OffsetGet := f^.Offset;
-      OffsetSet := f^.Offset;
-      Name := ToUtf8(f^.Name^);
-      fOrigName := Name;
-      OrdinalDefault := NO_DEFAULT;
-      Stored := rpsTrue;
-      inc(f);
-    end;
+      // guess field size (as mORMot 1 did)
+      if i = Count then
+        siz := RecordInfo^.RecordSize // size = diff from whole end
+      else
+      begin
+        inc(f);
+        siz := f^.Offset; // size = diff from next prop
+        dec(f);
+      end;
+      dec(siz, f^.Offset);
+      // create a fake typeinfo
+      p^.Value := Rtti.GlobalClass.Create;
+      p^.Value.FromRtti(nil);
+      p^.Value.fCache.Size := siz; // before NoRttiSetAndRegister()
+      p^.Value.NoRttiSetAndRegister(ptArray, '');
+    end
+    else
+      p^.Value := Rtti.RegisterType(f^.TypeInfo);
+    inc(Size, p^.Value.Size);
+    p^.OffsetGet := f^.Offset;
+    p^.OffsetSet := f^.Offset;
+    p^.Name := ToUtf8(f^.Name^);
+    p^.fOrigName := p^.Name;
+    p^.OrdinalDefault := NO_DEFAULT;
+    p^.Stored := rpsTrue;
+    inc(f);
+    inc(p);
+  end;
 end;
 
 procedure TRttiCustomProps.FinalizeManaged(Data: PAnsiChar);
