@@ -307,7 +307,7 @@ type
     /// optional callback event raised during WGet() process
     // - if OutSteps: TWGetSteps field is not enough
     // - alternative for business logic tracking: the OnProgress callback is
-    // more about human interaction in GUI or console
+    // more about periodic human interaction in GUI or console
     OnStep: TOnWGetStep;
     /// optional callback to allow an alternate download method
     // - can be used for a local peer-to-peer download cache via THttpPeerCache

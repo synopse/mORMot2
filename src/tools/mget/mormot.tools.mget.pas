@@ -53,6 +53,7 @@ type
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
     fOnProgress: TOnStreamProgress;
+    fOnStep: TOnWGetStep;
     fOutSteps: TWGetSteps;
     fPeerCache: IWGetAlternate;
     function GetTcpTimeoutSec: integer;
@@ -84,6 +85,12 @@ type
     /// optional callback event called during download process
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
+    /// optional callback event raised during WGet() process
+    // - if OutSteps: TWGetSteps field and LogSteps boolean flag are not enough
+    // - alternative for business logic tracking: the OnProgress callback is
+    // more about periodic human interaction in GUI or console
+    property OnStep: TOnWGetStep
+      read fOnStep write fOnStep;
     /// after Execute(), contains a set of all processed steps
     property OutSteps: TWGetSteps
       read fOutSteps;
@@ -230,10 +237,12 @@ begin
   wget.HashFromServer := (h = '') and
                          (algo <> gphAutoDetect);
   if Assigned(fOnProgress) then
-    wget.OnProgress := fOnProgress;
+    wget.OnProgress := fOnProgress; // periodic human friendly state change
+  if Assigned(fOnStep) then
+    wget.OnStep := fOnStep;         // logical state change
   if LogSteps and
      (Log <> nil) then
-    wget.LogSteps := Log.DoLog;
+    wget.LogSteps := Log.DoLog; // may be in complement to OnStep
   if algo <> gphAutoDetect then
   begin
     wget.Hasher := HASH_STREAMREDIRECT[HASH_ALGO[algo]];
