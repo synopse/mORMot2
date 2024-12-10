@@ -684,7 +684,7 @@ type
   end;
 
   /// enhanced RTTI of a record/object type definition
-  // - as returned by TRttiInfo.RecordAllFields on Delphi 2010+
+  // - as returned by TRttiInfo.RecordAllFields on Delphi 2010 or FPC trunk
   TRttiRecordAllField = record
     /// the field RTTI definition
     TypeInfo: PRttiInfo;
@@ -1328,6 +1328,38 @@ type
   end;
   /// rkArray RTTI fields  published here for proper Delphi inlining
   PArrayInfo = ^TArrayInfo;
+
+  {$ifdef HASNOSTATICRTTI}
+  /// enough Delphi 7/2007 RTTI fields to mimic TRttiInfo.RecordManagedFields
+  TFakeTypeInfo = packed record
+    Kind: TTypeKind;
+    case integer of
+      4: (
+        Name4: string[4];
+        RecSize4: cardinal;
+        ManagedCount4: integer);
+      5: (
+        Name5: string[5];
+        RecSize5: cardinal;
+        ManagedCount5: integer);
+      6: (
+        Name6: string[6];
+        RecSize6: cardinal;
+        ManagedCount6: integer);
+      7: (
+        Name7: string[7];
+        RecSize7: cardinal;
+        ManagedCount7: integer);
+      8: (
+        Name8: string[8];
+        RecSize8: cardinal;
+        ManagedCount8: integer);
+      9: (
+        Name9: string[9];
+        RecSize9: cardinal;
+        ManagedCount9: integer);
+  end;
+  {$endif HASNOSTATICRTTI}
 
 {$endif ISDELPHI}
 

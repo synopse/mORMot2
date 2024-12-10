@@ -1098,20 +1098,13 @@ begin
 end;
 
 
-{$ifdef HASNOSTATICRTTI} // for Delphi 7/2007: use fake TypeInfo()
-type
-  TFakeTypeInfo = packed record
-    Kind: TRttiKind;
-    Name4: string[4];
-    RecSize: cardinal;
-    ManagedCount: integer;
-  end;
+{$ifdef HASNOSTATICRTTI} // for Delphi 7/2007: mimics TypeInfo()
 const
   _TBCD: TFakeTypeInfo = (
     Kind: rkRecord;
     Name4: 'TBCD';
-    RecSize: SizeOf(TBcd);
-    ManagedCount: 0);
+    RecSize4: SizeOf(TBcd);
+    ManagedCount4: 0);
 {$endif HASNOSTATICRTTI}
 
 initialization

@@ -605,25 +605,6 @@ type
 
 /// fake TTypeInfo RTTI used for TGuid/THash128... on Delphi 7/2007
 {$ifdef HASNOSTATICRTTI}
-                       
-type
-  // enough Delphi RTTI for TRttiInfo.RecordManagedFields
-  TFakeTypeInfo = packed record
-    Kind: TTypeKind;
-    case integer of
-      5: (
-        Name5: string[5];
-        RecSize5: cardinal;
-        ManagedCount5: integer);
-      8: (
-        Name8: string[8];
-        RecSize8: cardinal;
-        ManagedCount8: integer);
-      9: (
-        Name9: string[9];
-        RecSize9: cardinal;
-        ManagedCount9: integer);
-  end;
 const
   _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGuid]
     Kind: tkRecord;
@@ -654,7 +635,6 @@ const
     Name9: 'PUtf8Char';
     RecSize9: SizeOf(pointer);
     ManagedCount9: 0);
-
 {$endif HASNOSTATICRTTI}
 
 
