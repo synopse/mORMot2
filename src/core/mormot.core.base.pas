@@ -2507,6 +2507,12 @@ function GetBitPtr(Bits: pointer; aIndex: PtrInt): boolean;
 procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// set a particular bit into a bit array, if it has not be already set
+// - SetBit() can't be inlined, whereas this pointer-oriented function can
+// - return true if aIndex bit has been set for the first time
+function TrySetBitPtr(Bits: pointer; aIndex: cardinal): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// unset/clear a particular bit into a bit array
 // - UnSetBit() can't be inlined, whereas this pointer-oriented function can
 procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
@@ -8618,6 +8624,19 @@ procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
 begin
   PIntegerArray(Bits)[aIndex shr 5] :=
     PIntegerArray(Bits)[aIndex shr 5] or (1 shl (aIndex and 31));
+end;
+
+function TrySetBitPtr(Bits: pointer; aIndex: cardinal): boolean;
+begin
+  Bits := @PCardinalArray(Bits)[aIndex shr 5];
+  aIndex := 1 shl (aIndex and 31);
+  if PCardinal(Bits)^ and aIndex = 0 then
+  begin
+    PCardinal(Bits)^ := PCardinal(Bits)^ or aIndex; // set
+    result := true;     // first time seen
+  end
+  else
+    result := false; // already seen
 end;
 
 procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
