@@ -490,9 +490,10 @@ const
 /// parse a CSV buffer into a TDynArray of records using its RTTI fields
 // - TypeInfo should have proper fields description, e.g. from Delphi 2010
 // extended RTTI or mormot.core.rtti.pas' Rtti.RegisterFromText()
-// - first CSV line has headers matching the needed case-insensitive field names
+// - first CSV line is expected to be an header, matching of the record field names
+// (case-insensitive), not necessary in the same exact order than in the record;
+// any unknown header name within the RTTI fields will just be ignored
 // - following CSV lines will be read and parsed into the dynamic array records
-// - any unknown header name within the RTTI fields will be ignored
 // - you can optionally intern all RawUtf8 values to reduce memory consumption
 function TDynArrayLoadCsv(var Value: TDynArray; Csv: PUtf8Char;
   Intern: TRawUtf8Interning = nil): boolean;

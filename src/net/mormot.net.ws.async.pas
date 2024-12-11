@@ -302,7 +302,7 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
     if result <> HTTP_SUCCESS then
       exit;
     fHttp.State := hrsUpgraded;
-    fLockMax := true; // WebSockets separate receiving and sending
+    include(fInternalFlags, ifSeparateWLock); // WebSockets separate receive/send
     // send back WS upgrade 101 response
     if fOwner.WriteString(self, resp, {timeout=}1000) then
     begin

@@ -103,23 +103,18 @@ type
     /// the associated 32-bit sequence number
     // - equals 0 after TPollAsyncSockets.Stop
     fHandle: TConnectionAsyncHandle;
-    /// false for a single lock (default), true to separate read/write locks
-    fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    /// used internally e.g. for IOCP or to mark AddGC()
-    fInternalFlags: set of (ifWriteWait, ifInGC);
+    /// used internally e.g. for fRW[] or IOCP or to mark AddGC()
+    fInternalFlags: set of (ifWriteWait, ifInGC, ifSeparateWLock);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
     fWr: TRawByteStringBuffer;
-    /// TryLock/Unlock R/W thread acquisition
-    // - uses its own reentrant implementation, faster/lighter than TOSLock
-    fRW: array[boolean] of record
-      Lock: PtrUInt;
-      ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
-      ReentrantCount: TThreadID; // fake integer, but aligned to ThreadID field
-    end;
+    /// re-entrant TryLock/Unlock R/W thread acquisition
+    // - by default, a single lock is used for all connection access, but
+    // ifSeparateWLock may be set to separate Recv() and Send()
+    fRWSafe: array[0..1] of TMultiLightLock;
     /// low-level TLS context
     fSecure: INetTls;
     /// the thread currently set by ProcessRead - maybe nil e.g. on write
@@ -168,6 +163,9 @@ type
     procedure OnClose; virtual;
     /// called by ReleaseMemoryOnIdle within the read lock: clean fRd here
     function ReleaseReadMemoryOnIdle: PtrInt; virtual;
+    // return one of fRWSafe[] locks
+    function Lock(writer: boolean): PMultiLightLock;
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// finalize the instance
     destructor Destroy; override;
@@ -188,10 +186,6 @@ type
     function WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
     /// release exclusive R/W access to this connection
     procedure UnLock(writer: boolean);
-      {$ifdef HASINLINE} inline; {$endif}
-    /// release all R/W nested locks
-    // - used when the connection is closed and inactive
-    procedure UnLockFinal(writer: boolean);
       {$ifdef HASINLINE} inline; {$endif}
     /// called after TAsyncConnections.LastOperationReleaseMemorySeconds
     function ReleaseMemoryOnIdle: PtrInt;
@@ -1463,49 +1457,27 @@ begin
             (fClosed in fFlags);
 end;
 
-function TPollAsyncConnection.TryLock(writer: boolean): boolean;
-var
-  tid: TThreadID;
+function TPollAsyncConnection.Lock(writer: boolean): PMultiLightLock;
 begin
-  result := false;
-  if (self = nil) or
-     (fSocket = nil) then
-    exit;
-  tid := GetCurrentThreadId;
-  with fRW[writer and fLockMax] do
-    if Lock <> 0 then
-      if ThreadID = tid then
-      begin
-        inc(PInteger(@ReentrantCount)^); // counter stored as TThreadID field
-        result := true;
-      end
-      else
-        exit
-    else if LockedExc(Lock, 1, 0) then // this thread just acquired the lock
-    begin
-      include(fFlags, fWasActive);
-      ThreadID := tid;
-      ReentrantCount := TThreadID(1); // reset reentrant counter
-      result := true;
-    end;
+  result := @fRWSafe[0];
+  if writer and
+     (ifSeparateWLock in fInternalFlags) then
+    result := @fRWSafe[1]
+end;
+
+function TPollAsyncConnection.TryLock(writer: boolean): boolean;
+begin
+  result := (self <> nil) and
+            (fSocket <> nil) and
+            Lock(writer).TryLock;
+  if result then
+    include(fFlags, fWasActive);
 end;
 
 procedure TPollAsyncConnection.UnLock(writer: boolean);
 begin
   if self <> nil then
-    with fRW[writer and fLockMax] do
-    begin
-      dec(PInteger(@ReentrantCount)^); // counter stored as TThreadID field
-      if ReentrantCount <> TThreadID(0) then
-        exit;
-      Lock := 0;
-      ThreadID := TThreadID(0);
-    end;
-end;
-
-procedure TPollAsyncConnection.UnLockFinal(writer: boolean);
-begin
-  fRW[writer and fLockMax].Lock:= 0;
+    Lock(writer).UnLock;
 end;
 
 procedure TPollAsyncConnection.OnClose;
@@ -1640,8 +1612,7 @@ begin
        (TPollAsyncConnection(tag).fHandle <> 0) and
        // another atpReadPending thread may currently own this connection
        // (occurs if PollForPendingEvents was called in between)
-       (TPollAsyncConnection(tag).fRW[{write=}false].
-          ReentrantCount = TThreadID(0)) then
+       (not TPollAsyncConnection(tag).fRWSafe[0].IsLocked) then
     begin
       exclude(TPollAsyncConnection(tag).fFlags, fReadPending);
       result := true;
@@ -1746,16 +1717,12 @@ begin
       {$ifdef USE_WINIOCP}
       fDebugLog.Add.Log(sllDebug, 'Stop(%) sock=% handle=% r=% w=%',
         [caller, pointer(sock), connection.Handle,
-         PInteger(@connection.fRW[false].ReentrantCount)^,
-         PInteger(@connection.fRW[true].ReentrantCount)^], self);
+         connection.fRWSafe[0].IsLocked, connection.fRWSafe[1].IsLocked], self);
       {$else}
       fDebugLog.Add.Log(sllDebug, 'Stop(%) sock=% handle=% r=%% w=%%',
         [caller, pointer(sock), connection.Handle,
-         PInteger(@connection.fRW[false].ReentrantCount)^,
-         _SUB[fSubRead in connection.fFlags],
-         PInteger(@connection.fRW[true].ReentrantCount)^,
-         _SUB[fSubWrite in connection.fFlags]],
-         self);
+         connection.fRWSafe[0].IsLocked, _SUB[fSubRead in connection.fFlags],
+         connection.fRWSafe[1].IsLocked, _SUB[fSubWrite in connection.fFlags]], self);
       {$endif USE_WINIOCP}
     if sock <> nil then
     begin
@@ -1969,7 +1936,7 @@ begin
     DoLog('UnlockSlotAndCloseConnection: % on handle=%',
       [caller, connection.Handle]);}
   // first unlock (if needed)
-  c.UnLockFinal(writer);
+  c.Init;
   // optional process - e.g. TWebSocketAsyncConnection = focConnectionClose
   c.OnClose; // called before slot/socket closing - set fClosed flag
   // Stop() will try to acquire this lock -> notify no need to wait
@@ -2394,12 +2361,12 @@ end;
 
 procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
-  fLockMax := false;
   fFlags := [fFromGC, fWasActive];
   fInternalFlags := [];
   fRd.Reset;
   fWr.Reset;
-  FillCharFast(fRW, SizeOf(fRW), 0);
+  fRWSafe[0].Init;
+  fRWSafe[1].Init;
   fSecure := nil;
   fLastOperation := 0;
   {$ifdef USE_WINIOCP}
@@ -5040,7 +5007,7 @@ begin
       if acoVerboseLog in fAsync.fOptions then
         fAsync.DoLog(sllTrace, 'final AsyncResponse: closing #%', [Connection], self);
       locked := false;
-      c.UnLockFinal({wr=}false); // unlock before close
+      c.Init; // unlock before close
       fAsync.fClients.CloseConnection(TPollAsyncConnection(c), 'AsyncResponse');
     end;
   finally
