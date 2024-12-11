@@ -1936,7 +1936,8 @@ begin
     DoLog('UnlockSlotAndCloseConnection: % on handle=%',
       [caller, connection.Handle]);}
   // first unlock (if needed)
-  c.Init;
+  c.fRWSafe[0].Init;
+  c.fRWSafe[1].Init;
   // optional process - e.g. TWebSocketAsyncConnection = focConnectionClose
   c.OnClose; // called before slot/socket closing - set fClosed flag
   // Stop() will try to acquire this lock -> notify no need to wait
@@ -5007,7 +5008,8 @@ begin
       if acoVerboseLog in fAsync.fOptions then
         fAsync.DoLog(sllTrace, 'final AsyncResponse: closing #%', [Connection], self);
       locked := false;
-      c.Init; // unlock before close
+      c.fRWSafe[0].Init; // unlock before close
+      c.fRWSafe[1].Init;
       fAsync.fClients.CloseConnection(TPollAsyncConnection(c), 'AsyncResponse');
     end;
   finally
