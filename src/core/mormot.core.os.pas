@@ -4102,11 +4102,11 @@ type
   /// a lightweight exclusive non-reentrant lock, stored in a PtrUInt value
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: methods are non reentrant, i.e. calling Lock twice in a raw would
-  // deadlock: use TRWLock or TSynLocker/TOSLock for reentrant methods
+  // deadlock: see reentrant TMultiLightLock or TRWLock or TSynLocker/TOSLock
   // - several lightlocks, each protecting a few variables (e.g. a list), may
   // be more efficient than a more global TOSLock/TRWLock
-  // - our light locks are expected to be kept a very small amount of time (some
-  // CPU cycles): use TOSLightLock if the lock may block too long
+  // - our light locks are expected to be kept a very small amount of time (a
+  // few CPU cycles): use TOSLightLock if the lock may block too long
   // - TryLock/UnLock can be used to thread-safely acquire a shared resource
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
   {$ifdef USERECORDWITHMETHODS}
@@ -4116,13 +4116,11 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     Flags: PtrUInt;
-    // low-level function called by the Lock method when inlined
-    procedure LockSpin;
+    procedure LockSpin; // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
     // - e.g. not needed if TLightLock is defined as a class field
     procedure Init;
-      {$ifdef HASINLINE} inline; {$endif}
     /// could be called to finalize the instance as a TOSLock
     // - does nothing - just for compatibility with TOSLock
     procedure Done;
@@ -4142,6 +4140,49 @@ type
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
+  PLightLock = ^TLightLock;
+
+  /// a lightweight exclusive reentrant lock
+  // - methods are reentrant, i.e. calling Lock twice in a raw would not deadlock
+  // - our light locks are expected to be kept a very small amount of time (a
+  // few CPU cycles): use TSynLocker or TOSLock if the lock may block too long
+  // - TryLock/UnLock can be used to thread-safely acquire a shared resource,
+  // in a re-entrant way
+  {$ifdef USERECORDWITHMETHODS}
+  TMultiLightLock = record
+  {$else}
+  TMultiLightLock = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    Flags: PtrUInt;
+    ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
+    ReentrantCount: cardinal;
+    procedure LockSpin; // called by the Lock method when inlined
+  public
+    /// to be called if the instance has not been filled with 0
+    // - e.g. not needed if TMultiLightLock is defined as a class field
+    procedure Init;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// could be called to finalize the instance as a TOSLock
+    // - does nothing - just for compatibility with TOSLock
+    procedure Done;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// enter an exclusive reentrant lock
+    procedure Lock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// try to enter an exclusive reentrant lock
+    // - if returned true, caller should eventually call UnLock()
+    // - could also be used to thread-safely acquire a shared resource
+    function TryLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// check if the reentrant lock has been acquired
+    function IsLocked: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave an exclusive reentrant lock
+    procedure UnLock;
+      {$ifdef CPUINTEL}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  end;
+  PMultiLightLock = ^TMultiLightLock;
 
   /// a lightweight multiple Reads / exclusive Write non-upgradable lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
@@ -4149,8 +4190,8 @@ type
   // WriteLock within a ReadLock, or within another WriteLock, would deadlock
   // - consider TRWLock if you need an upgradable lock - but for mostly reads,
   // TRWLightLock.ReadLock/ReadUnLock/WriteLock pattern is faster than upgrading
-  // - our light locks are expected to be kept a very small amount of time (some
-  // CPU cycles): use TSynLocker or TOSLock if the lock may block too long
+  // - our light locks are expected to be kept a very small amount of time (a
+  // few CPU cycles): use TSynLocker or TOSLock if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
   // be more efficient than a more global TOSLock/TRWLock
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
@@ -4198,15 +4239,15 @@ type
     procedure WriteUnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
+  PRWLightLock = ^TRWLightLock;
 
-type
   /// how TRWLock.Lock and TRWLock.UnLock high-level wrapper methods are called
   TRWLockContext = (
     cReadOnly,
     cReadWrite,
     cWrite);
 
-  /// a lightweight multiple Reads / exclusive Write reentrant lock
+  /// a lightweight multiple Reads / exclusive Write reentrant and upgradable lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - our light locks are expected to be kept a very small amount of time (some
   // CPU cycles): use TSynLocker or TOSLock if the lock may block too long
@@ -4328,6 +4369,7 @@ type
     procedure UnLock;
       {$ifdef FPC} inline; {$endif}
   end;
+  POSLock = ^TOSLock;
 
   /// the fastest non-reentrant lock supplied by the Operating System
   // - calls Slim Reader/Writer (SRW) Win32 API in exclusive mode or directly
@@ -4370,6 +4412,7 @@ type
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
+  POSLightLock = ^TOSLightLock;
 
   /// points to one data entry in TLockedList
   PLockedListOne = ^TLockedListOne;
@@ -4422,8 +4465,8 @@ type
     property Size: integer
       read fSize;
   end;
+  PLockedList = ^TLockedList;
 
-type
   /// how TSynLocker handles its thread processing
   // - by default, uSharedLock will use the main TRTLCriticalSection
   // - you may set uRWLock and call overloaded RWLock/RWUnLock() to use our
@@ -9265,6 +9308,76 @@ begin
 end;
 
 procedure TLightLock.LockSpin;
+var
+  spin: PtrUInt;
+begin
+  spin := SPIN_COUNT;
+  repeat
+    spin := DoSpin(spin);
+  until TryLock;
+end;
+
+
+{ TMultiLightLock }
+
+procedure TMultiLightLock.Init;
+begin
+  Flags := 0;
+  ThreadID := TThreadID(0);
+  ReentrantCount := 0;
+end;
+
+procedure TMultiLightLock.Done;
+begin // just for compatibility with TOSLock
+end;
+
+procedure TMultiLightLock.Lock;
+begin
+  if not TryLock then
+    LockSpin;
+end;
+
+procedure TMultiLightLock.UnLock;
+begin
+  dec(ReentrantCount);
+  if ReentrantCount <> 0 then
+    exit;
+  {$ifdef CPUINTEL}
+  Flags := 0;
+  {$else}
+  LockedExc(Flags, 0, 1); // ARM can be weak-ordered
+  // https://preshing.com/20121019/this-is-why-they-call-it-a-weakly-ordered-cpu
+  {$endif CPUINTEL}
+  ThreadID := TThreadID(0);
+end;
+
+function TMultiLightLock.TryLock: boolean;
+var
+  tid: TThreadID;
+begin
+  result := false;
+  tid := GetCurrentThreadId;
+  if Flags <> 0 then // is locked
+    if ThreadID <> tid then // locked by another thread
+      exit
+    else
+      inc(ReentrantCount)   // locked by this thread - make it reentrant
+  else if LockedExc(Flags, 1, 0) then // atomic acquisition
+  begin
+    ThreadID := tid;
+    ReentrantCount := TThreadID(1);    // acquired this lock
+  end
+  else
+    exit; // impossible to acquire this lock
+  result := true;
+end;
+
+function TMultiLightLock.IsLocked: boolean;
+begin
+  result := Flags <> 0;
+end;
+
+procedure TMultiLightLock.LockSpin;
 var
   spin: PtrUInt;
 begin
