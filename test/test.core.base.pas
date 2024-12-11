@@ -8695,8 +8695,9 @@ begin
     for i := SIZ + 1 to SIZ + SIZ shr 5 do
       if b.MayExist(@i, SizeOf(i)) then
         inc(n);
-    falsepositive := (n * 100) / (SIZ shr 5);
-    CheckLogTime(falsepositive < 1, 'falsepositive=%', [falsepositive]);
+    falsepositive := (n * 100) / (SIZ shr 5); // always 0.704 for crc32c
+    // 0.9 with crc, 0.7-1.3 with AesNiHash32 depending on its seed
+    CheckLogTime(falsepositive < 1.5, 'falsepositive=%', [falsepositive]);
     b.Reset;
     CheckLogTime(b.Inserted = 0, 'b.Reset', []);
     for i := 1 to SIZ do

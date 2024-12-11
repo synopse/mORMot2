@@ -4315,8 +4315,9 @@ begin
     h2 := fHasher(h1, aValue, aValueLen);
   fSafe.WriteLock;
   try
-    for h := 0 to fHashFunctions - 1 do
+    for h := 1 to fHashFunctions do
     begin
+      // set all hash bits of this value
       SetBitPtr(pointer(fStore), h1 mod fBits);
       inc(h1, h2);
     end;
@@ -4334,7 +4335,7 @@ end;
 function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
 var
   h: integer;
-  h1, h2: cardinal; // https://goo.gl/Pls5wi
+  h1, h2: cardinal; // adding h2 is enough and safe - see https://goo.gl/Pls5wi
 begin
   result := false;
   if (self = nil) or
@@ -4348,14 +4349,17 @@ begin
     h2 := fHasher(h1, aValue, aValueLen);
   fSafe.ReadOnlyLock; // allow concurrent reads
   try
-    for h := 0 to fHashFunctions - 1 do
+    for h := 1 to fHashFunctions do
       if GetBitPtr(pointer(fStore), h1 mod fBits) then
+        // next hash: all bits should be 1
         inc(h1, h2)
       else
+        // if any of the bits is 0, the value is definitely not in the set
         exit;
   finally
     fSafe.ReadOnlyUnLock;
   end;
+  // if all are 1, then either the value is in the set, or it is a false positive
   result := true;
 end;
 

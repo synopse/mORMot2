@@ -5535,7 +5535,7 @@ var
 begin
   if Ctxt.Info.ArrayRtti = nil then
   begin
-    // as in mORMot 1: static array with no RTTI at all as a hexadecimal string
+    // as in mORMot 1: static array with no RTTI at all, as a hexadecimal string
     Ctxt.W.AddBinToHex(Data,  Ctxt.Info.Size, {lower=}true, {quote=}'"');
     exit;
   end;
