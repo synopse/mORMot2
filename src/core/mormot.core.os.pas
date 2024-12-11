@@ -4121,6 +4121,7 @@ type
     /// to be called if the instance has not been filled with 0
     // - e.g. not needed if TLightLock is defined as a class field
     procedure Init;
+      {$ifdef HASINLINE} inline; {$endif}
     /// could be called to finalize the instance as a TOSLock
     // - does nothing - just for compatibility with TOSLock
     procedure Done;
@@ -9357,7 +9358,7 @@ var
 begin
   result := false;
   tid := GetCurrentThreadId;
-  if Flags <> 0 then // is locked
+  if Flags <> 0 then        // is locked
     if ThreadID <> tid then // locked by another thread
       exit
     else
@@ -9365,7 +9366,7 @@ begin
   else if LockedExc(Flags, 1, 0) then // atomic acquisition
   begin
     ThreadID := tid;
-    ReentrantCount := TThreadID(1);    // acquired this lock
+    ReentrantCount := TThreadID(1); // acquired this lock
   end
   else
     exit; // impossible to acquire this lock
