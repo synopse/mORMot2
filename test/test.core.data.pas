@@ -1134,7 +1134,7 @@ type
     property Enum: TSynBackgroundThreadProcessStep
       read fEnum write fEnum default flagIdle;
     property Sets: TSynBackgroundThreadProcessSteps
-      read fSets write fSets default[];
+      read fSets write fSets default [];
   end;
 
   TRange = record

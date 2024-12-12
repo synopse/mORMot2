@@ -6903,7 +6903,7 @@ begin
     dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags)
   else
     dst := fAes.DecryptPkcs7(src, fIVAtBeg in fFlags);
-  result := dst <> nil;
+  result := {%H-}dst <> nil;
 end;
 
 procedure TCryptAesCipher.RawProcess(src, dst: pointer; srclen, dstlen: PtrInt);
@@ -8932,7 +8932,7 @@ begin
            result := key // just privateKey, without optional constructed fields
          else if (vt = ASN1_CTC0) and  // [0] ECparameters (optional)
                  (AsnNext(pos, seq, @oid) = ASN1_OBJID) and
-                 (oid = CKA_OID[cka]) then
+                 {%H-}(oid = CKA_OID[cka]) then
          begin
            result := key;
            if (rfcpub <> nil) and       // [1] publicKey (optional)
@@ -9459,7 +9459,7 @@ end;
 function AsnTime(dt: TDateTime): TAsnObject;
 var
   t: TSynSystemTime;
-begin
+{%H-}begin
   if dt = 0 then
   begin
     result := Asn(ASN1_GENTIME, ['99991231235959Z']);
