@@ -9356,21 +9356,23 @@ function TMultiLightLock.TryLock: boolean;
 var
   tid: TThreadID;
 begin
-  result := false;
   tid := GetCurrentThreadId;
-  if Flags <> 0 then        // is locked
-    if ThreadID <> tid then // locked by another thread
-      exit
+  if Flags = 0 then            // is not locked
+    if LockedExc(Flags, 1, 0) then // atomic acquisition
+    begin
+      ThreadID := tid;
+      ReentrantCount := 1;
+      result := true;          // acquired this lock
+    end
     else
-      inc(ReentrantCount)   // locked by this thread - make it reentrant
-  else if LockedExc(Flags, 1, 0) then // atomic acquisition
-  begin
-    ThreadID := tid;
-    ReentrantCount := TThreadID(1); // acquired this lock
-  end
+      result := false          // impossible to acquire this lock
+  else if ThreadID <> tid then // locked by another thread
+    result := false
   else
-    exit; // impossible to acquire this lock
-  result := true;
+  begin
+    inc(ReentrantCount);       // locked by this thread - make it reentrant
+    result := true;
+  end;
 end;
 
 function TMultiLightLock.IsLocked: boolean;
