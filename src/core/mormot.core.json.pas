@@ -10731,7 +10731,7 @@ begin
        FastAssignNew(tmp);
      end;
   end;
-  result := Cache.ItemSize;
+  result := Cache.Size;
 end;
 
 procedure TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;

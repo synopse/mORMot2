@@ -2622,17 +2622,17 @@ type
     // but in TRttiJson, so that it will use mormot.core.variants process
     // - complex values can be returned as TDocVariant after JSON conversion,
     // using e.g. @JSON_[mFast] as optional Options parameter
-    // - returns the size of the Data in bytes, i.e. Cache.ItemSize
+    // - returns the size of the Data in bytes, i.e. Cache.Size
     function ValueToVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil): PtrInt; virtual;
     /// fill a value from random - including strings and nested types
     procedure ValueRandom(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// TOnDynArrayHashOne callback used as fallback for unsupported items
-    // - here DefaultHasher() is always used over Size bytes
+    // - here DefaultHasher() is always used over Cache.ItemSize bytes
     function ValueFullHash(const Elem): cardinal;
     /// TOnDynArraySortCompare callback used as fallback for unsupported items
-    // - simple per-byte comparison over Size bytes
+    // - simple per-byte comparison over Cache.ItemSize bytes
     function ValueFullCompare(const A, B): integer;
     /// how many iterations could be done one a given value
     // - returns -1 if the value is not iterable, or length(DynArray) or
@@ -4183,7 +4183,7 @@ begin
           Cache.ItemInfoManaged := Cache.ItemInfoRaw; // nil if unmanaged
         if (cnt = 0) or
            (siz mod cnt <> 0) then
-          ERttiException.RaiseUtf8('ComputeCache(%): array siz=% cnt=%',
+          ERttiException.RaiseUtf8('ComputeCache(%): rkArray siz=% cnt=%',
             [RawName, siz, cnt]);
         Cache.ItemSize := siz div cnt;
         Cache.ItemCount := cnt;
