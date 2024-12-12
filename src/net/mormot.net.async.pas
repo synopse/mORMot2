@@ -163,6 +163,7 @@ type
     procedure OnClose; virtual;
     /// called by ReleaseMemoryOnIdle within the read lock: clean fRd here
     function ReleaseReadMemoryOnIdle: PtrInt; virtual;
+    function ReleaseWriteMemoryOnIdle: PtrInt; virtual;
     // return one of fRWSafe[] locks
     function GetSafe(writer: boolean): PMultiLightLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1469,11 +1470,15 @@ end;
 
 function TPollAsyncConnection.TryLock(writer: boolean): boolean;
 begin
-  result := (self <> nil) and
-            (fSocket <> nil) and
-            GetSafe(writer).TryLock;
-  if result then
+  if (self <> nil) and
+     (fSocket <> nil) and
+     GetSafe(writer).TryLock then
+  begin
     include(fFlags, fWasActive);
+    result := true;
+  end
+  else
+    result := false;
 end;
 
 procedure TPollAsyncConnection.UnLock(writer: boolean);
@@ -1489,8 +1494,16 @@ end;
 
 function TPollAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
 begin
+  // caller made fRWSafe[0].TryLock
   result := fRd.Capacity; // returns number of bytes released
   fRd.Clear; // fBuffer := ''
+end;
+
+function TPollAsyncConnection.ReleaseWriteMemoryOnIdle: PtrInt;
+begin
+  // caller made fRWSafe[0/1].TryLock
+  result := fWr.Capacity;
+  fWr.Clear;
 end;
 
 function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
@@ -1498,19 +1511,20 @@ begin
   // called now and then to reduce temp memory consumption on Idle connections
   result := 0;
   if (fRd.Buffer <> nil) and
-     TryLock({wr=}false) then
+     fRWSafe[0].TryLock then // direct call to leave fWasActive flag untouched
   begin
     inc(result, ReleaseReadMemoryOnIdle);
-    UnLock(false);
+    if (fWr.Buffer <> nil) and
+       not (ifSeparateWLock in fInternalFlags) then
+      inc(result, ReleaseWriteMemoryOnIdle); // do it within the same lock
+    fRWSafe[0].UnLock;
   end;
   if (fWr.Buffer <> nil) and
-     TryLock({wr=}true) then
+     fRWSafe[1].TryLock then
   begin
-    inc(result, fWr.Capacity);
-    fWr.Clear;
-    UnLock({wr=}true);
+    ReleaseWriteMemoryOnIdle;
+    fRWSafe[1].UnLock;
   end;
-  exclude(fFlags, fWasActive); // TryLock() was with no true activity here
 end;
 
 function TPollAsyncConnection.WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
