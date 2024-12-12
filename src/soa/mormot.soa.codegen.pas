@@ -370,7 +370,7 @@ type
     wString,
     wRawJson,
     wBlob,
-    wGUID,
+    wGuid,
     wCustomAnswer,
     wRecord,
     wArray,
@@ -470,7 +470,7 @@ const
     SWI64, SWI64, SWI64, SWI64, SWI64, SWD64, SWD32, SWD64,
     '{"type":"string","format":"date-time"}', // wDateTime
     '{"type":"string"}', '{"type":"string"}', '{"type":"object"}', //FIXME! //wRawJson
-    '{"type":"string","format":"binary"}', '{"type":"string"}', //wBlob,wGUID
+    '{"type":"string","format":"binary"}', '{"type":"string"}', //wBlob,wGuid
     '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
     '', SWI64, '', '' //wObject, wORM, wInterface, wRecordVersion
     ));
@@ -526,7 +526,7 @@ const
     wRawUtf8,  //  ptSynUnicode
     wDateTime, //  ptDateTime
     wDateTime, //  ptDateTimeMS
-    wGUID,     //  ptGuid
+    wGuid,     //  ptGuid
     wBlob,     //  ptHash128
     wBlob,     //  ptHash256
     wBlob,     //  ptHash512
@@ -778,7 +778,7 @@ begin
   end;
   if (typ = wRecord) and
      PropNameEquals(typName, 'TGUID') then
-    typ := wGUID
+    typ := wGuid
   else if (typ = wRecord) and
           PropNameEquals(typName, 'TServiceCustomAnswer') then
     typ := wCustomAnswer;
@@ -858,7 +858,7 @@ begin
         if self <> nil then
           RegisterType(fSets);
       end;
-    wGUID:
+    wGuid:
       _ObjAddProps(['toVariant',   'GuidToVariant',
                     'fromVariant', 'VariantToGuid'], result);
     wCustomAnswer:

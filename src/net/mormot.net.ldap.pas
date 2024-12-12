@@ -1522,7 +1522,7 @@ type
   public
     sAMAccountName, distinguishedName, canonicalName: RawUtf8;
     name, CN, description: RawUtf8;
-    objectSid, objectGUID: RawUtf8;
+    objectSid, objectGuid: RawUtf8;
     whenCreated, whenChanged: TDateTime;
     customNames: TRawUtf8DynArray;
     customValues: TRawUtf8DynArray;

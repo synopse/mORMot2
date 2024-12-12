@@ -792,7 +792,7 @@ begin
     stTimestamp:
       result := ftDate;
     {$ifdef ZEOS72UP}
-    stGUID,
+    stGuid,
     {$endif ZEOS72UP}
     stString,
     stUnicodeString,

@@ -644,7 +644,8 @@ type
     ifDispInterface,
     ifDispatch
     {$ifdef FPC} ,
-    ifHasStrGUID {$endif});
+    ifHasStrGuid
+    {$endif FPC});
 
   /// define the set of interface abilities
   TRttiIntfFlags = set of TRttiIntfFlag;

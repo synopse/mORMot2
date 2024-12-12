@@ -5297,7 +5297,7 @@ begin
   Ctxt.AddDateTime(Data, {withms=}true);
 end;
 
-procedure _JS_GUID(Data: PGUID; const Ctxt: TJsonSaveContext);
+procedure _JS_Guid(Data: PGuid; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add(Data, '"');
 end;
@@ -5714,7 +5714,7 @@ const
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJson, @_JS_RawUtf8, nil, @_JS_Single,
     {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_Ansi {$endif},
-    @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_GUID, @_JS_Hash,
+    @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_Guid, @_JS_Hash,
     @_JS_Hash, @_JS_Hash, nil, @_JS_TimeLog, @_JS_Unicode, @_JS_UnixTime,
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,
     @_JS_Enumeration, @_JS_Set, nil, @_JS_DynArray, @_JS_Interface,
@@ -7925,7 +7925,7 @@ begin
       Data^ := GetExtended(Ctxt.Value); // was propbably stored as double
 end;
 
-procedure _JL_GUID(Data: PGuid; var Ctxt: TJsonParserContext);
+procedure _JL_Guid(Data: PGuid; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if (Ctxt.ValueLen = 0) or
@@ -8835,7 +8835,7 @@ var
     @_JL_Double, @_JL_Extended, @_JL_Int64, @_JL_Integer, @_JL_QWord,
     @_JL_RawByteString, @_JL_RawJson, @_JL_RawUtf8, nil,
     @_JL_Single, @_JL_String, @_JL_SynUnicode, @_JL_DateTime, @_JL_DateTime,
-    @_JL_GUID, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_Int64, @_JL_TimeLog,
+    @_JL_Guid, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_Int64, @_JL_TimeLog,
     @_JL_UnicodeString, @_JL_UnixTime, @_JL_UnixMSTime, @_JL_Variant,
     @_JL_WideString, @_JL_WinAnsi, @_JL_Word, @_JL_Enumeration, @_JL_Set,
     nil, @_JL_DynArray, @_JL_Interface, @_JL_PUtf8Char, nil);

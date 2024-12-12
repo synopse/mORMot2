@@ -1788,10 +1788,10 @@ type
     // field within a nil object, e.g for
     // !  class TMainObject = class(TOrm)
     // !    (...)
-    // !    fGUID: TGuid;
+    // !    fGuid: TGuid;
     // !  public
     // !    (...)
-    // !    property GUID: TGuid read fGUID write fGUID;
+    // !    property Guid: TGuid read fGuid write fGuid;
     // !  end;
     // you will have to register it via a call to
     // TOrmProperties.RegisterCustomPropertyFromTypeName()
@@ -3165,7 +3165,7 @@ type
     // !  Props: TOrmProperties);
     // !begin
     // !  Props.RegisterCustomPropertyFromTypeName(self, 'TGUID', 'GUID',
-    // !    @TOrmMyRecord(nil).fGUID, [aIsUnique], 38);
+    // !    @TOrmMyRecord(nil).fGuid, [aIsUnique], 38);
     // !end;
     procedure RegisterCustomPropertyFromTypeName(aTable: TClass;
       const aTypeName, aName: RawUtf8; aPropertyPointer: pointer;
