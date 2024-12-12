@@ -1563,7 +1563,7 @@ var
   d: curl_lock_data;
 begin
   result := csrOK;
-  if (curl = nil) or
+  if {$ifndef LIBCURLSTATIC}(curl = nil) or{$endif}
      (curl.globalShare = nil) then
     exit; // already disabled
   result := curl.share_cleanup(curl.globalShare);
