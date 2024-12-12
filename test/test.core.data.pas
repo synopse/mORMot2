@@ -5594,8 +5594,16 @@ var
   vd: double;
   vs: single;
   lTable: TOrmTableJson;
-  lRefreshed: Boolean;
+  lRefreshed: boolean;
+  uu: TRawUtf8DynArray;
 begin
+  uu := CsvToRawUtf8DynArray('0,1,2,3');
+  a.InitArrayFrom(uu, TypeInfo(TRawUtf8DynArray), JSON_FAST);
+  CheckEqual(a.Count, 4);
+  CheckEqual(a.ToJson, '["0","1","2","3"]');
+  for i := 0 to a.Count - 1 do
+    CheckEqual(GetInteger(pointer(a.GetItemAsText(i))), i);
+  a.Clear;
   a.Init;
   a.AddObject(['source', 'source0', // not same order as in for loop below
                'id',     0,
