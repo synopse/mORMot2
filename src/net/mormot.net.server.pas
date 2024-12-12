@@ -3415,7 +3415,7 @@ procedure THttpServerGeneric.AsyncResponseJson(Connection: TConnectionAsyncHandl
 var
   json: RawUtf8;
 begin
-  SaveJson(Value, TypeInfo, [], json);
+  SaveJson(Value^, TypeInfo, [], json);
   AsyncResponse(Connection, json, JSON_CONTENT_TYPE_VAR, Status);
 end;
 
