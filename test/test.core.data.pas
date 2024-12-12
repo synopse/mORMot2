@@ -288,6 +288,7 @@ type
     fColl: TCollTests;
     fTCollTest: TCollTest;
     fStr: TStringList;
+    function GetColl: TCollTests;
     procedure SetColl(const Value: TCollTests); // validate Setter
   public
     constructor Create;
@@ -296,7 +297,7 @@ type
     property One: TCollTest
       read fTCollTest write fTCollTest;
     property Coll: TCollTests
-      read fColl write SetColl;
+      read GetColl write SetColl;
     property Str: TStringList
       read fStr write fStr;
   end;
@@ -1108,6 +1109,11 @@ begin
   fTCollTest.Free;
   fStr.Free;
   inherited;
+end;
+
+function TCollTst.GetColl: TCollTests;
+begin
+  result := fColl;
 end;
 
 procedure TCollTst.SetColl(const Value: TCollTests);
