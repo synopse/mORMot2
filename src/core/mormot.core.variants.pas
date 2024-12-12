@@ -1765,6 +1765,8 @@ type
       DestByRef: boolean = false): boolean;
     /// return one dvArray value as RawUtf8, from its index
     function GetItemAsText(aIndex: integer): RawUtf8;
+    /// return one dvArray value as 64-bit integer, from its index
+    function GetItemAsInt(aIndex: integer): Int64;
     /// retrieve a reference to a dvObject in the dvArray, from a property value
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item will be copied into Dest, on match
@@ -1891,8 +1893,7 @@ type
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
-    function AddItemFromText(const aValue: RawUtf8;
-      aIndex: integer = -1): integer;
+    function AddItemFromText(const aValue: RawUtf8; aIndex: integer = -1): integer;
     /// add a RawUtf8 value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can specify an optional index in the array where to insert
@@ -8907,6 +8908,13 @@ begin
     VariantToUtf8(VValue[aIndex], result)
   else
     InternalNotFound(aIndex);
+end;
+
+function TDocVariantData.GetItemAsInt(aIndex: integer): Int64;
+begin
+  if (cardinal(aIndex) >= cardinal(VCount)) or
+     not VariantToInt64(VValue[aIndex], result) then
+    result := PtrInt(InternalNotFound(aIndex));
 end;
 
 function TDocVariantData.GetDocVariantByProp(
