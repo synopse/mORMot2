@@ -375,6 +375,22 @@ begin
   CheckEqual(CamelCase('Variable: Name'), 'VariableName');
   CheckEqual(CamelCase('VARIABLE NAME'), 'VARIABLENAME');
   CheckEqual(CamelCase('VariableName'), 'VariableName');
+  CheckEqual(LowerCamelCase(''), '');
+  CheckEqual(LowerCamelCase('a'), 'a');
+  CheckEqual(LowerCamelCase('A'), 'a');
+  CheckEqual(LowerCamelCase('abc'), 'abc');
+  CheckEqual(LowerCamelCase('Abc'), 'abc');
+  CheckEqual(LowerCamelCase('AbcDef'), 'abcDef');
+  CheckEqual(LowerCamelCase('Abc_Def'), 'abcDef');
+  CheckEqual(LowerCamelCase('AbcDef_'), 'abcDef');
+  CheckEqual(LowerCamelCase('Abc__Def'), 'abcDef');
+  CheckEqual(LowerCamelCase('AbcDef__'), 'abcDef');
+  CheckEqual(LowerCamelCase('Abc__Def__'), 'abcDef');
+  CheckEqual(LowerCamelCase('variable name'), 'variableName');
+  CheckEqual(LowerCamelCase('Variable Name'), 'variableName');
+  CheckEqual(LowerCamelCase('Variable: Name'), 'variableName');
+  CheckEqual(LowerCamelCase('VARIABLE NAME'), 'variablename');
+  CheckEqual(LowerCamelCase('VariableName'), 'variableName');
   CheckEqual(SnakeCase(''), '');
   CheckEqual(SnakeCase('a'), 'a');
   CheckEqual(SnakeCase('A'), 'a');
@@ -5688,6 +5704,7 @@ begin
     Check(IsWinAnsi(pointer(Unic), length(Unic) shr 1) = WA);
     Check(IsWinAnsiU(pointer(U)) = WA);
     Up := mormot.core.unicode.UpperCase(U);
+    Check(IsUpper(Up));
     CheckEqual(mormot.core.unicode.UpperCase(mormot.core.unicode.LowerCase(U)), Up);
     CheckEqual(Utf8IComp(pointer(U), pointer(U)), 0);
     CheckEqual(Utf8IComp(pointer(U), pointer(Up)), 0);
@@ -5735,7 +5752,9 @@ begin
       on E: Exception do
         CheckUtf8(false, '% for %[%]%', [E, length(U), EscapeToShort(U), length(up4)]);
     end;
-    CheckEqual(LowerCase(U), LowerCaseAscii7(U));
+    U2 := LowerCase(U);
+    Check(IsLower(U2));
+    CheckEqual(U2, LowerCaseAscii7(U));
     L := Length(U);
     SetString(Up, nil, L);
     SetString(Up2, PAnsiChar(pointer(U)), L);
