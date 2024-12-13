@@ -5872,6 +5872,7 @@ begin
   Check(UnQuoteSqlStringVar('"one "" two', U) = nil);
   Check(not IsValidEmail(''));
   Check(IsValidEmail('test@synopse.info'));
+  Check(not IsValidEmail('test @synopse.info'));
   Check(not IsValidEmail('test@ synopse.info'));
   Check(not IsValidEmail('test@synopse'));
   Check(IsValidEmail('test_two@blog.synopse.info'));

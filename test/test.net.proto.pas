@@ -1303,7 +1303,7 @@ begin
               if res.CopyObjectSid(sid) then
                 Check(sid <> '');
               FillZero(guid);
-              Check(res.CopyObjectGUID(guid), 'objectGUID');
+              Check(res.CopyObjectGuid(guid), 'objectGUID');
               Check(not IsNullGuid(guid));
               CheckEqual(res.CanonicalName, DNToCN(res.ObjectName));
               Check(IdemPropNameU(res.Attributes[atCommonName], 'users'), 'cn');
