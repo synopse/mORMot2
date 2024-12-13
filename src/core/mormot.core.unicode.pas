@@ -2145,6 +2145,19 @@ procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
 function CamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  /// character categories e.g. for ASCII-7 identifier parsing
+  TCharKind = (
+    ckOther, ckLowerAlpha, ckUpperAlpha, ckDigit, ckUnderscore, ckPoint);
+  /// efficient text-to-character lookup table for identifier parsing
+  TCharKinds = array[AnsiChar] of TCharKind;
+  /// pointer to a text-to-character lookup table for identifier parsing
+  PCharKinds = ^TCharKinds;
+
+var
+  /// text-to-character lookup table for ASCII-7 identifier parsing
+  IDENT_CHARS: TCharKinds;
+
 const
   // published for unit testing (e.g. if properly sorted)
   RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
@@ -10807,6 +10820,7 @@ procedure InitializeUnit;
 var
   i: PtrInt;
   c: AnsiChar;
+  ck: TCharKind;
 begin
   // decompress 1KB static in the exe into 20KB UU[] array for Unicode Uppercase
   {$ifdef UU_COMPRESSED}
@@ -10850,6 +10864,21 @@ begin
       include(TEXT_CHARS[c], tcCtrlNotLF);
     if c in [#1..' ', ';'] then
       include(TEXT_CHARS[c], tcCtrlNot0Comma);
+    case c of
+      'a'..'z':
+        ck := ckLowerAlpha;
+      'A'..'Z':
+        ck := ckUpperAlpha;
+      '0'..'9':
+        ck := ckDigit;
+      '_':
+        ck := ckUnderscore;
+      '.', ',', ';':
+        ck := ckPoint;
+    else
+      ck := ckOther;
+    end;
+    IDENT_CHARS[c] := ck;
   end;
   // setup sorting functions redirection
   StrCompByCase[false] := @StrComp;
