@@ -2126,14 +2126,23 @@ function UnCamelCase(D, P: PUtf8Char): integer; overload;
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
+// - will convert up to the first 256 AnsiChar of the buffer
 procedure CamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
 
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
+// - will convert up to the first 256 AnsiChar of text
 procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a string into an human-friendly CamelCase identifier (as in Pascal)
+// - replacing spaces or punctuations by an uppercase character
+// - as such, it is not the reverse function to UnCamelCase()
+// - will convert up to the first 256 AnsiChar of text
+function CamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 const
@@ -8952,6 +8961,11 @@ end;
 procedure CamelCase(const text: RawUtf8; var s: RawUtf8; const isWord: TSynByteSet);
 begin
   CamelCase(pointer(text), length(text), s, isWord);
+end;
+
+function CamelCase(const text: RawUtf8): RawUtf8; overload;
+begin
+  CamelCase(pointer(text), length(text), result);
 end;
 
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
