@@ -375,6 +375,21 @@ begin
   CheckEqual(CamelCase('Variable: Name'), 'VariableName');
   CheckEqual(CamelCase('VARIABLE NAME'), 'VARIABLENAME');
   CheckEqual(CamelCase('VariableName'), 'VariableName');
+  CheckEqual(SnakeCase(''), '');
+  CheckEqual(SnakeCase('a'), 'a');
+  CheckEqual(SnakeCase('A'), 'a');
+  CheckEqual(SnakeCase('abc'), 'abc');
+  CheckEqual(SnakeCase('Abc'), 'abc');
+  CheckEqual(SnakeCase('AbcDef'), 'abc_def');
+  CheckEqual(SnakeCase('Abc_Def'), 'abc_def');
+  CheckEqual(SnakeCase('AbcDef_'), 'abc_def_');
+  CheckEqual(SnakeCase('Abc__Def'), 'abc_def');
+  CheckEqual(SnakeCase('AbcDef__'), 'abc_def_');
+  CheckEqual(SnakeCase('Abc__Def__'), 'abc_def_');
+  CheckEqual(SnakeCase('variable name'), 'variable_name');
+  CheckEqual(SnakeCase('Variable Name'), 'variable_name');
+  CheckEqual(SnakeCase('VARIABLE NAME'), 'variable_name');
+  CheckEqual(SnakeCase('VariableName'), 'variable_name');
 end;
 
 function GetBitsCount64(const Bits; Count: PtrInt): PtrInt;
