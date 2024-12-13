@@ -1644,6 +1644,7 @@ type
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
       aOutStream: TStreamRedirect; aRetry: boolean): integer;
+    function GetUuidText: RawUtf8;
   public
     /// initialize the cryptography of this peer-to-peer node instance
     // - warning: inherited class should also call AfterSettings once
@@ -1665,6 +1666,25 @@ type
     // - when ClientTls.Enabled is set, ServerTls.Enabled and other params should match
     property ClientTls: TNetTlsContext
       read fClientTls write fClientTls;
+    /// the network interface used for UDP and TCP process
+    // - the main fields are published below as Network* properties
+    property Mac: TMacAddress
+      read fMac;
+  published
+    /// define how this instance handles its process
+    property Settings: THttpPeerCacheSettings
+      read fSettings;
+    /// which network interface is used for UDP and TCP process
+    property NetworkInterface: RawUtf8
+      read fMac.Name;
+    /// the local IP address used for UDP and TCP process
+    property NetworkIP: RawUtf8
+      read fMac.IP;
+    /// the IP used for UDP and TCP process broadcast
+    property NetworkBroadcast: RawUtf8
+      read fMac.Broadcast;
+    property Uuid: RawUtf8
+      read GetUuidText;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -1796,19 +1816,7 @@ type
     // actually reading and purging the CacheTempPath folder every minute
     // - could call Instable.DoRotate every minute to refresh IP banishments
     procedure OnIdle(tix64: Int64);
-    /// the network interface used for UDP and TCP process
-    property Mac: TMacAddress
-      read fMac;
   published
-    /// define how this instance handles its process
-    property Settings: THttpPeerCacheSettings
-      read fSettings;
-    /// which network interface is used for UDP and TCP process
-    property NetworkInterface: RawUtf8
-      read fMac.Name;
-    /// the IP used for UDP and TCP process broadcast
-    property NetworkBroadcast: RawUtf8
-      read fMac.Broadcast;
     /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
       read fHttpServer;
@@ -5265,6 +5273,11 @@ begin
   end;
   fLog.Add.Log(sllDebug, 'Create: network="%" as % (broadcast=%) %',
     [fMac.Name, fIpPort, fMac.Broadcast, fMac.Address], self);
+end;
+
+function THttpPeerCrypt.GetUuidText: RawUtf8;
+begin
+  ToUtf8(fUuid, result);
 end;
 
 function THttpPeerCrypt.CurrentConnections: integer;
