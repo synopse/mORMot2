@@ -5751,7 +5751,7 @@ begin
       {$else} // old Delphi can't use Ctxt.Info.Cache.CodePage 
       Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
       {$endif HASCODEPAGE}
-    {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
+    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       _JS_Unicode(@Data^.VAny, Ctxt);
   else
     begin
@@ -5778,7 +5778,8 @@ var
   p: PRttiCustomProp;
   t: TClass;
   n: integer;
-  flags: set of (isNotFirst, noStored, noDefault, noHook, noVoid, isHumanReadable);
+  flags: set of ( // will be a register on x86_64 to make the main loop fast
+    isNotFirst, noStored, noDefault, noHook, noVoid, isHumanReadable);
   c: TJsonSaveContext; // dedicated context used for fields/properties
 begin
   c.W := Ctxt.W;
@@ -6615,8 +6616,7 @@ begin
       AddVariant(PVariant(v^.VPointer)^, Escape, WriteOptions);
     varStringByRef:
       AddText(PRawByteString(v^.VAny)^, Escape);
-    {$ifdef HASVARUSTRING} varUStringByRef, {$endif}
-    varOleStrByRef:
+    varOleStrByRef {$ifdef HASVARUSTRING}, varUStringByRef{$endif}:
       AddTextW(PPointer(v^.VAny)^, Escape)
   else
     begin
@@ -7137,39 +7137,57 @@ begin
     case VType of
       vtPointer:
         AddNull;
-      vtString,
-      vtAnsiString,
-      {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
-      vtPChar,
-      vtChar,
-      vtWideChar,
-      vtWideString,
+      vtString:
+        begin
+          Add('"');
+          if (VString <> nil) and
+             (VString^[0] <> #0) then
+            AddJsonEscape(@VString^[1], ord(VString^[0]));
+          AddDirect('"');
+        end;
+      vtAnsiString:
+        begin
+          Add('"');
+          AddJsonEscape(VAnsiString);
+          AddDirect('"');
+        end;
+      {$ifdef HASVARUSTRING}
+      vtUnicodeString:
+        begin
+          Add('"');
+          AddJsonEscapeW(pointer(UnicodeString(VUnicodeString)),
+                          length(UnicodeString(VUnicodeString)));
+          AddDirect('"');
+        end;
+      {$endif HASVARUSTRING}
+      vtPChar:
+        begin
+          Add('"');
+          AddJsonEscape(VPChar);
+          AddDirect('"');
+        end;
+      vtChar:
+        begin
+          Add('"');
+          AddJsonEscape(@VChar, 1);
+          AddDirect('"');
+        end;
+      vtWideChar:
+        begin
+          Add('"');
+          AddJsonEscapeW(@VWideChar, 1);
+          AddDirect('"');
+        end;
+      vtWideString:
+        begin
+          Add('"');
+          AddJsonEscapeW(VWideString);
+          AddDirect('"');
+        end;
       vtClass:
         begin
           Add('"');
-          case VType of
-            vtString:
-              if (VString <> nil) and
-                 (VString^[0] <> #0) then
-                AddJsonEscape(@VString^[1], ord(VString^[0]));
-            vtAnsiString:
-              AddJsonEscape(VAnsiString);
-            {$ifdef HASVARUSTRING}
-            vtUnicodeString:
-              AddJsonEscapeW(pointer(UnicodeString(VUnicodeString)),
-                              length(UnicodeString(VUnicodeString)));
-            {$endif HASVARUSTRING}
-            vtPChar:
-              AddJsonEscape(VPChar);
-            vtChar:
-              AddJsonEscape(@VChar, 1);
-            vtWideChar:
-              AddJsonEscapeW(@VWideChar, 1);
-            vtWideString:
-              AddJsonEscapeW(VWideString);
-            vtClass:
-              AddClassName(VClass);
-          end;
+          AddClassName(VClass);
           AddDirect('"');
         end;
       vtBoolean:
