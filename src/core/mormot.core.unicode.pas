@@ -1724,6 +1724,17 @@ procedure LowerCaseCopy(Text: PUtf8Char; Len: PtrInt; var Dest: RawUtf8);
 procedure LowerCaseSelf(var S: RawUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// check if a text variable content matches a given case conversion table
+function IsCase(const S: RawUtf8; Table: PNormTable): boolean;
+
+/// check if a text variable content is fully in upper case ('A' .. 'Z')
+function IsUpper(const S: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// check if a text variable content is fully in lower case ('a' .. 'z')
+function IsLower(const S: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// accurate conversion of the supplied UTF-8 content into the corresponding
 // upper-case Unicode characters
 // - will use the available API (e.g. Win32 or ICU), so may not be consistent on
@@ -7497,6 +7508,27 @@ end;
 procedure LowerCaseSelf(var S: RawUtf8);
 begin
   CaseSelf(S, @NormToLowerAnsi7);
+end;
+
+function IsCase(const S: RawUtf8; Table: PNormTable): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  for i := 1 to length(S) do
+    if Table[S[i]] <> S[i] then
+      exit;
+  result := true;
+end;
+
+function IsUpper(const S: RawUtf8): boolean;
+begin
+  result := IsCase(S, @NormToUpperAnsi7);
+end;
+
+function IsLower(const S: RawUtf8): boolean;
+begin
+  result := IsCase(S, @NormToLowerAnsi7);
 end;
 
 function PosExIPas(Sub, P: PUtf8Char; Offset: PtrUInt; Lookup: PNormTable): PtrInt;
