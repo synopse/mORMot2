@@ -5870,9 +5870,21 @@ begin
   Check(U = 'one ');
   Check(UnQuoteSqlStringVar('"one two', U) = nil);
   Check(UnQuoteSqlStringVar('"one "" two', U) = nil);
+  Check(not IsValidEmail(''));
   Check(IsValidEmail('test@synopse.info'));
   Check(not IsValidEmail('test@ synopse.info'));
+  Check(not IsValidEmail('test@synopse'));
   Check(IsValidEmail('test_two@blog.synopse.info'));
+  Check(IsValidEmail('test++two@blog.synopse.info'));
+  Check(IsValidEmail('"test"@synopse.info'));
+  Check(not IsValidEmail('"test"ed@synopse.info'));
+  Check(not IsValidEmail('"test@synopse.info'));
+  Check(IsValidEmail('John.Doe@synopse.info'));
+  Check(not IsValidEmail('John..Doe@synopse.info'));
+  Check(IsValidEmail('"John Doe"@synopse.info'));
+  Check(IsValidEmail('"John  Doe"@synopse.info'));
+  Check(IsValidEmail('"John.Doe"@synopse.info'));
+  Check(IsValidEmail('"John..Doe"@synopse.info'));
   Check(IsValidIP4Address('192.168.1.1'));
   Check(IsValidIP4Address('192.168.001.001'));
   Check(not IsValidIP4Address('192.158.1. 1'));
@@ -7367,7 +7379,7 @@ type
         V := RandomUtf8(i);
         Old := V;
         Process(0, V);
-        Check(V = Proc(Old));
+        CheckEqual(V, Proc(Old));
       end;
     finally
       Free;
@@ -7399,12 +7411,12 @@ procedure TTestCoreBase._TSynValidate;
       for i := 0 to 100 do
       begin
         V := RandomUtf8(i);
-        Check(Utf8ToUnicodeLength(pointer(V)) = i, 'Unicode glyph=Ansi char=i');
+        CheckEqual(Utf8ToUnicodeLength(pointer(V)), i, 'Unicode glyph=Ansi char=i');
         Msg := '';
         ok := (i >= aMin) and
               (i <= aMax);
         Check(valid.Process(0, V, Msg) = ok, Msg);
-        Check(Msg = '' = ok, Msg);
+        Check((Msg = '') = ok, Msg);
       end;
     finally
       valid.Free;
