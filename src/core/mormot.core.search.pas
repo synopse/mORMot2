@@ -1414,7 +1414,12 @@ function IsValidIP4Address(P: PUtf8Char): boolean;
 
 /// return TRUE if the supplied content is a valid email address
 // - follows RFC 822, to validate local-part@domain email format
-function IsValidEmail(P: PUtf8Char): boolean;
+function IsValidEmail(P: PUtf8Char): boolean; overload;
+
+/// return TRUE if the supplied content is a valid email address
+// - follows RFC 822, to validate local-part@domain email format
+function IsValidEmail(const email: RawUtf8): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ***************** Cross-Platform TSynTimeZone Time Zones }
@@ -5572,6 +5577,11 @@ begin
      (V <= 255) and
      (P[-1] <> '.') then
     result := true;
+end;
+
+function IsValidEmail(const email: RawUtf8): boolean;
+begin
+  result := IsValidEmail(pointer(email));
 end;
 
 function IsValidEmail(P: PUtf8Char): boolean;
