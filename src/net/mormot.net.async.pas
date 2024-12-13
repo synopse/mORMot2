@@ -1470,9 +1470,8 @@ end;
 
 function TPollAsyncConnection.TryLock(writer: boolean): boolean;
 begin
-  if (self <> nil) and
-     (fSocket <> nil) and
-     GetSafe(writer).TryLock then
+  if (fSocket <> nil) and
+     GetSafe(writer)^.TryLock then
   begin
     include(fFlags, fWasActive);
     result := true;
