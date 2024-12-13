@@ -2158,6 +2158,14 @@ var
   /// text-to-character lookup table for ASCII-7 identifier parsing
   IDENT_CHARS: TCharKinds;
 
+/// convert a text buffer into a snake_case identifier (as in Python)
+// - will convert up to the first 256 AnsiChar of the buffer
+procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
+
+/// convert a string into a snake_case identifier (as in Python)
+// - will convert up to the first 256 AnsiChar of text
+function SnakeCase(const text: RawUtf8): RawUtf8; overload;
+
 const
   // published for unit testing (e.g. if properly sorted)
   RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
@@ -8981,6 +8989,60 @@ begin
   CamelCase(pointer(text), length(text), result);
 end;
 
+type // SnakeCase() state machine
+  TSnakeCase = set of (scDigit, scUp, scLow, sc_, scNext_);
+var
+  SNAKE_CHARS: array[AnsiChar] of TSnakeCase;
+
+procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8);
+var
+  tmp: array[byte] of AnsiChar;
+  d: PAnsiChar;
+  flags, last: TSnakeCase;
+begin
+  if len > SizeOf(tmp) then
+    len := SizeOf(tmp);
+  flags := [];
+  d := @tmp;
+  while len <> 0 do
+  begin
+    last := flags;
+    flags := SNAKE_CHARS[P^];
+    if flags * [scDigit, scUp, scLow, sc_] = [] then
+      include(flags, scNext_)
+    else
+    begin
+      if (d <> @tmp) and
+         not (sc_ in last) and
+         ((scNext_ in last) or
+          ((scUp in flags) and ((scLow in last) or (scDigit in last)) or
+          ((scLow in flags) and (scDigit in last)) or
+          ((scDigit in flags) and not (scDigit in last)) or
+          ((scUp in flags) and (not (scLow in last)) and (len > 0) and
+           (P[1] in ['a' .. 'z'])))) then
+      begin
+        d^ := '_';
+        inc(d);
+        include(flags, sc_);
+      end;
+      if not ((sc_ in last) and (sc_ in flags)) then
+      begin
+        d^ := NormToLowerAnsi7[P^];
+        inc(d);
+      end;
+      exclude(flags, scNext_);
+    end;
+    inc(P);
+    dec(len);
+  end;
+  FastSetString(s, @tmp, d - PAnsiChar(@tmp));
+end;
+
+function SnakeCase(const text: RawUtf8): RawUtf8;
+begin
+  SnakeCase(pointer(text), length(text), result);
+end;
+
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 var
   up: array[byte] of AnsiChar;
@@ -10821,6 +10883,7 @@ var
   i: PtrInt;
   c: AnsiChar;
   ck: TCharKind;
+  sc: TSnakeCase;
 begin
   // decompress 1KB static in the exe into 20KB UU[] array for Unicode Uppercase
   {$ifdef UU_COMPRESSED}
@@ -10879,6 +10942,19 @@ begin
       ck := ckOther;
     end;
     IDENT_CHARS[c] := ck;
+    case c of
+      '0' .. '9':
+        sc := [scDigit];
+      'A' .. 'Z':
+        sc := [scUp];
+      'a' .. 'z':
+        sc := [scLow];
+      '_':
+        sc := [sc_];
+    else
+      sc := [];
+    end;
+    SNAKE_CHARS[c] := sc;
   end;
   // setup sorting functions redirection
   StrCompByCase[false] := @StrComp;
