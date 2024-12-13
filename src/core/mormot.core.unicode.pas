@@ -2156,6 +2156,10 @@ procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
 function CamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a string into an human-friendly lowerCamelCase identifier (as in Java)
+// - just like CamelCase() but with the first letter forced in lowercase
+function LowerCamelCase(const text: RawUtf8): RawUtf8; overload;
+
 type
   /// character categories e.g. for ASCII-7 identifier parsing
   TCharKind = (
@@ -9019,6 +9023,16 @@ end;
 function CamelCase(const text: RawUtf8): RawUtf8; overload;
 begin
   CamelCase(pointer(text), length(text), result);
+end;
+
+function LowerCamelCase(const text: RawUtf8): RawUtf8;
+begin
+  CamelCase(pointer(text), length(text), result);
+  if result <> '' then
+    if IsUpper(result) then
+      LowerCaseSelf(result)
+    else
+      PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
 end;
 
 type // SnakeCase() state machine

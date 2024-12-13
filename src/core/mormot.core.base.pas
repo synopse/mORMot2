@@ -3883,11 +3883,11 @@ const
 
 var
   /// a slightly faster alternative to Variants.Null function
-  Null: variant absolute NullVarData;
+  Null:     variant absolute NullVarData;
   /// a slightly faster alternative to false constant when assigned to a variant
   VarFalse: variant absolute FalseVarData;
   /// a slightly faster alternative to true constant when assigned to a variant
-  VarTrue: variant absolute TrueVarData;
+  VarTrue:  variant absolute TrueVarData;
 
 {$ifdef HASINLINE}
 /// overloaded function which can be properly inlined to clear a variant
