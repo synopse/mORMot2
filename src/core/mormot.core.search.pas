@@ -1035,7 +1035,8 @@ type
     constructor Create(const aParameters: RawUtf8 = ''); overload; virtual;
     /// initialize the filter or validation instance
     /// - this overloaded constructor will allow to easily set the parameters
-    constructor CreateUtf8(const Format: RawUtf8; const Args, Params: array of const); overload;
+    constructor CreateUtf8(const Format: RawUtf8;
+      const Args, Params: array of const); overload;
     /// the optional associated parameters, supplied as JSON-encoded
     property Parameters: RawUtf8
       read fParameters write SetParameters;
@@ -1057,8 +1058,8 @@ type
     // generic error message from clas name ('"Validate email" rule failed'
     // for TSynValidateEmail class e.g.)
     // - if the validation passed, will return TRUE
-    function Process(aFieldIndex: integer; const Value: RawUtf8; var ErrorMsg: string): boolean;
-      virtual; abstract;
+    function Process(aFieldIndex: integer; const Value: RawUtf8;
+      var ErrorMsg: string): boolean; virtual; abstract;
   end;
 
   /// points to a TSynValidate variable
@@ -1098,7 +1099,8 @@ type
   public
     /// perform the Email Address validation action to the specified value
     // - call IsValidEmail() function and check for the supplied TLD
-    function Process(aFieldIndex: integer; const Value: RawUtf8; var ErrorMsg: string): boolean; override;
+    function Process(aFieldIndex: integer; const Value: RawUtf8;
+      var ErrorMsg: string): boolean; override;
     /// allow any TLD to be allowed, even if not a generic TLD (.com,.net ...)
     // - this may be mandatory since already over 1,300 new gTLD names or
     // "strings" could become available in the next few years: there is a

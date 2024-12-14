@@ -9357,7 +9357,7 @@ var
   tid: TThreadID;
 begin
   tid := GetCurrentThreadId;
-  if Flags = 0 then            // is not locked
+  if Flags = 0 then                // is not locked
     if LockedExc(Flags, 1, 0) then // atomic acquisition
     begin
       ThreadID := tid;
