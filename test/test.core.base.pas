@@ -7370,7 +7370,7 @@ type
 
   procedure Test(Filter: TSynFilterClass; Proc: TFilterProcess);
   var
-    V, Old: RawUtf8;
+    V, Old, New: RawUtf8;
     i: integer;
   begin
     with Filter.Create do
@@ -7379,8 +7379,12 @@ type
       begin
         V := RandomUtf8(i);
         Old := V;
+        New := Proc(Old);
         Process(0, V);
-        CheckEqual(V, Proc(Old));
+        CheckEqual(V, New);
+        V := Old;
+        Filter.Execute('', V);
+        CheckEqual(V, New);
       end;
     finally
       Free;
@@ -7417,6 +7421,8 @@ procedure TTestCoreBase._TSynValidate;
         ok := (i >= aMin) and
               (i <= aMax);
         Check(valid.Process(0, V, Msg) = ok, Msg);
+        Check((Msg = '') = ok, Msg);
+        Msg := TSynValidateText.Execute(Params, V);
         Check((Msg = '') = ok, Msg);
       end;
     finally

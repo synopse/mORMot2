@@ -5756,6 +5756,7 @@ class function TSynValidate.Execute(const aParameters, aValue: RawUtf8): string;
 var
   v: TSynValidate;
 begin
+  result := '';
   v := Create(aParameters);        // instantiate
   try
     v.Process(-1, aValue, result); // apply validation rules
