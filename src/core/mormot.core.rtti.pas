@@ -2372,6 +2372,11 @@ type
     // using e.g. @JSON_[mFastFloat] as optional Options parameter
     procedure GetValueVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil);
+    /// retrieve any field value as text
+    // - will convert ordinal or float into propert text
+    // - also implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
+    // - calling Prop^.GetValueText() to support enumerates and sets
+    function GetValueText(Data: pointer): RawUtf8;
     /// set a field value to a given variant content
     // - use a temporary text conversion for a record field (Prop=nil)
     // - Source is eventually cleared via VarClearProc()
@@ -7789,6 +7794,17 @@ begin
       FastDynArrayClear(@a, Value.ArrayRtti.Info);
     end;
   end;
+end;
+
+function TRttiCustomProp.GetValueText(Data: pointer): RawUtf8;
+begin
+  if (Prop = nil) or
+     (OffsetSet >= 0) then
+    // direct fill value in memory (classes and records)
+    Value.ValueGetText(PAnsiChar(Data) + OffsetSet, result)
+  else
+    // need a class property getter
+    result := Prop.GetValueText(Data);
 end;
 
 procedure TRttiCustomProp.SetValueVariant(Data: pointer; var Source: TVarData);
