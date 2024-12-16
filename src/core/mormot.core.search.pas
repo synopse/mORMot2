@@ -1421,6 +1421,57 @@ const
   sValidationFieldVoid = 'An unique key field must not be void';
   sValidationFieldDuplicate = 'Value already used for this unique key field';
 
+type
+  /// exception class raised by TRttiFilter
+  ERttiFilter = class(ESynException);
+
+  /// register and apply TSynFilter and TSynValidate to a class or record
+  // - could be used in conjuction with TRttiMap for client-side DTO validation
+  TRttiFilter = class(TSynPersistent)
+  protected
+    fRtti: TRttiCustom;
+    fRules: TSynFilterOrValidateObjArrayArray; // follows fRtti.Props.List[]
+    fCount: integer;
+    procedure DoApply(aData: pointer; aClass: TSynFilterOrValidateClass;
+      aErrMsg: PString);
+  public
+    /// initialize a list of TSynFilter and TSynValidate to apply to a class
+    constructor Create(aClass: TClass); reintroduce; overload;
+    /// initialize a list of TSynFilter and TSynValidate to apply to a record
+    constructor Create(aRtti: PRttiInfo); reintroduce; overload;
+    /// finalize this instance and all its stored rules
+    destructor Destroy; override;
+    /// delete all stored rules
+    procedure Clear;
+    /// register some rules to this instance
+    // - raise ERttiFilter if the supplied aRtti/aFieldName do not match
+    procedure Add(const aFieldName: RawUtf8; const aRules: array of TSynFilterOrValidate);
+    /// apply all registered TSynFilter rules to a class instance or record pointer
+    procedure Filter(aData: pointer);
+    /// apply all registered TSynValidate rules to a class instance or record pointer
+    // - returns '' on success, or an error message on validation failure
+    function Validate(aData: pointer): string;
+    /// apply all registered TSynFilter or TSynValidate rules to a class instance
+    // or record pointer
+    // - returns '' on success, or an error message on validation failure
+    function Apply(aData: pointer): string;
+    /// apply all registered TSynFilter or TSynValidate rules to a class instance
+    // or record pointer and raise ERttiFilter on broken TSynValidate
+    procedure ApplyOrRaise(aData: pointer);
+    /// retrieve the registered TSynFilter or TSynValidate rules of a given field
+    function GetRules(const aFieldName: RawUtf8): TSynFilterOrValidateObjArray;
+  published
+    /// low-level access to the associated RTTI information of this class/record
+    property Rtti: TRttiCustom
+      read fRtti;
+    /// low-level access to the associated TSynFilter / TSynValidate rules
+    property Rules: TSynFilterOrValidateObjArrayArray
+      read fRules;
+    /// total number of rules stored in this instance
+    property Count: integer
+      read fCount;
+  end;
+
 
 /// return TRUE if the supplied content is a valid IP v4 address
 function IsValidIP4Address(P: PUtf8Char): boolean;
@@ -6176,6 +6227,117 @@ begin
   inherited SetParameters(value);
 end;
 
+
+{ TRttiFilter }
+
+constructor TRttiFilter.Create(aClass: TClass);
+begin
+  fRtti := mormot.core.rtti.Rtti.RegisterClass(aClass);
+  if fRtti = nil then
+    ERttiFilter.RaiseUtf8('Unexpected %.Create(aClass=%)', [self, aClass]);
+  SetLength(fRules, fRtti.Props.Count);
+end;
+
+constructor TRttiFilter.Create(aRtti: PRttiInfo);
+begin
+  fRtti := mormot.core.rtti.Rtti.RegisterType(aRtti);
+  if fRtti = nil then
+    ERttiFilter.RaiseUtf8('Unexpected %.Create(aRtti=%)', [self, aRtti]);
+  SetLength(fRules, fRtti.Props.Count);
+end;
+
+destructor TRttiFilter.Destroy;
+begin
+  inherited Destroy;
+  Clear;
+end;
+
+procedure TRttiFilter.Clear;
+begin
+  ObjArrayObjArrayClear(fRules);
+  fCount := 0;
+end;
+
+function TRttiFilter.GetRules(const aFieldName: RawUtf8): TSynFilterOrValidateObjArray;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  i := fRtti.Props.FindIndex(aFieldName);
+  if i >= 0 then
+    result := fRules[i];
+end;
+
+procedure TRttiFilter.Add(
+  const aFieldName: RawUtf8; const aRules: array of TSynFilterOrValidate);
+var
+  i, r: PtrInt;
+begin
+  i := fRtti.Props.FindIndex(aFieldName);
+  if i < 0 then
+    ERttiFilter.RaiseUtf8('Invalid %.Add(%)', [self, aFieldName]);
+  for r := 0 to high(aRules) do
+    if aRules[r] <> nil then
+    begin
+      PtrArrayAdd(fRules[i], aRules[r]);
+      inc(fCount);
+    end;
+end;
+
+procedure TRttiFilter.DoApply(aData: pointer; aClass: TSynFilterOrValidateClass;
+  aErrMsg: PString);
+var
+  f, r, n: PtrInt;
+  o: ^TSynFilterOrValidateObjArray;
+  p: PRttiCustomProp;
+begin
+  if (self = nil) or
+     (aData = nil) or
+     (fCount = 0) then
+    exit;
+  n := fCount;
+  o := pointer(fRules);
+  p := pointer(fRtti.Props.List); // fRules[] follows fRtti.Props.List[]
+  for r := 1 to length(fRules) do
+  begin
+    for f := 0 to length(o^) - 1 do
+    begin
+      if (aClass = nil) or
+         o^[f].InheritsFrom(aClass) then
+        if not o^[f].DoApply(aData, p, aErrMsg) then
+          exit; // stop at first failing TSynValidate rule
+      dec(n);
+      if n = 0 then
+        exit; // no more rules to process
+    end;
+    inc(o);
+    inc(p);
+  end;
+end;
+
+procedure TRttiFilter.Filter(aData: pointer);
+begin
+  DoApply(aData, TSynFilter, nil);
+end;
+
+function TRttiFilter.Validate(aData: pointer): string;
+begin
+  result := '';
+  DoApply(aData, TSynValidate, @result);
+end;
+
+function TRttiFilter.Apply(aData: pointer): string;
+begin
+  result := '';
+  DoApply(aData, nil, @result);
+end;
+
+procedure TRttiFilter.ApplyOrRaise(aData: pointer);
+begin
+  DoApply(aData, nil, nil); // ErrMsg=nil will trigger ERttiFilter on error
+end;
 
 
 { ***************** Cross-Platform TSynTimeZone Time Zones }
