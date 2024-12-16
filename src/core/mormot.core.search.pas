@@ -5770,13 +5770,13 @@ end;
 function TSynFilter.DoApply(Data: pointer; Prop: PRttiCustomProp;
   ErrMsg: PString): boolean;
 var
-  v, v2: RawUtf8;
+  v, vref: RawUtf8;
 begin
-  v := Prop^.GetValueText(Data);
-  v2 := v;
-  Process(-1, v2);
-  if v2 <> v then
-    Prop^.SetValueText(Data, v2);
+  v := Prop^.GetValueText(Data); // works for both classes or records
+  vref := v;
+  Process(-1, v);
+  if v <> vref then
+    Prop^.SetValueText(Data, v);
   result := true; // a filter always return true to continue the process
 end;
 
@@ -5862,8 +5862,8 @@ end;
 
 { TSynValidateIPAddress }
 
-function TSynValidateIPAddress.Process(aFieldIndex: integer; const value:
-  RawUtf8; var ErrorMsg: string): boolean;
+function TSynValidateIPAddress.Process(aFieldIndex: integer;
+  const value: RawUtf8; var ErrorMsg: string): boolean;
 begin
   result := IsValidIP4Address(pointer(value));
   if not result then
@@ -5876,7 +5876,7 @@ end;
 function TSynValidateEmail.Process(aFieldIndex: integer; const value: RawUtf8;
   var ErrorMsg: string): boolean;
 var
-  TLD, DOM: RawUtf8;
+  tld, dom: RawUtf8;
   i: integer;
 const
   TopLevelTLD: array[0..20] of PUtf8Char = (
@@ -5887,26 +5887,26 @@ const
 begin
   if IsValidEmail(pointer(value)) then
     repeat
-      DOM := lowercase(copy(value, PosExChar('@', value) + 1, 100));
-      if length(DOM) > 63 then
+      dom := lowercase(copy(value, PosExChar('@', value) + 1, 100));
+      if length(dom) > 63 then
         break; // exceeded 63-character limit of a DNS name
       if (ForbiddenDomains <> '') and
-         CsvContains(ForbiddenDomains, DOM) then
+         CsvContains(ForbiddenDomains, dom) then
         break;
       i := length(value);
       while (i > 0) and
             (value[i] <> '.') do
         dec(i);
-      TLD := lowercase(copy(value, i + 1, 100));
+      tld := lowercase(copy(value, i + 1, 100));
       if (AllowedTLD <> '') and
-         not CsvContains(AllowedTLD, TLD) then
+         not CsvContains(AllowedTLD, tld) then
         break;
       if (ForbiddenTLD <> '') and
-         CsvContains(ForbiddenTLD, TLD) then
+         CsvContains(ForbiddenTLD, tld) then
         break;
       if not fAnyTLD then
-        if FastFindPUtf8CharSorted(@TopLevelTLD, high(TopLevelTLD), pointer(TLD)) < 0 then
-          if length(TLD) <> 2 then
+        if FastFindPUtf8CharSorted(@TopLevelTLD, high(TopLevelTLD), pointer(tld)) < 0 then
+          if length(tld) <> 2 then
             break; // assume a two chars string is a ISO 3166-1 alpha-2 code
       result := true;
       exit;
@@ -5975,8 +5975,8 @@ begin
   result := Format(sInvalidTextLengthMin, [min, Character01n(min)]);
 end;
 
-function TSynValidateNonVoidText.Process(aFieldIndex: integer; const value:
-  RawUtf8; var ErrorMsg: string): boolean;
+function TSynValidateNonVoidText.Process(aFieldIndex: integer;
+  const value: RawUtf8; var ErrorMsg: string): boolean;
 begin
   if value = '' then
   begin
@@ -6110,7 +6110,7 @@ const
     maxInt); //  MaxSpaceCount
 begin
   if (MinLength = 0) and
-     (MaxLength = 0) then  // if not previously set
+     (MaxLength = 0) then  // if not previously set e.g. by TSynValidatePassWord
     fProps := DEFAULT;
   inherited SetParameters(value);
   if value = '' then
@@ -6136,9 +6136,10 @@ begin
       'MaxSpaceCount',
       'Utf8Length'], @V);
     for i := 0 to high(fProps) do
-      fProps[i] := V[i].ToCardinal(fProps[i]);
-    with V[high(V)] do
-      fUtf8Length := ToBoolean;
+      if V[i].Len <> 0 then // override default if supplied
+        fProps[i] := V[i].ToCardinal;
+    if V[high(V)].Len <> 0 then
+      fUtf8Length := V[high(V)].ToBoolean;
   finally
     tmp.Done;
   end;
@@ -6171,7 +6172,7 @@ begin
   fProps := DEFAULT;
   fUtf8Length := false;
   // read custom parameters
-  inherited;
+  inherited SetParameters(value);
 end;
 
 
