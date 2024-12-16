@@ -1995,6 +1995,13 @@ type
     /// set all field indexes corresponding to the supplied field names
     // - returns the matching fields set
     function FieldIndexByNames(const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
+    /// set all field indexes corresponding to the supplied CSV field names
+    // - returns true on success, false if any field name is not existing
+    function FieldIndexFromCsv(const aFieldsCsv: RawUtf8;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
+    /// set all field indexes corresponding to the supplied CSV field names
+    // - returns the matching fields set
+    function FieldIndexFromCsv(const aFieldsCsv: RawUtf8): TFieldIndexDynArray; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// compute the CSV field names text from a set of bits
     function ToCsv(const Bits: TFieldBits): RawUtf8;
@@ -2980,6 +2987,14 @@ type
     procedure CsvFromFieldBits(const Prefix: array of const;
       const Bits: TFieldBits; const BitsSuffix: ShortString;
       const Suffix: array of const; out Result: RawUtf8);
+    function FieldIndexDynArrayFromRawUtf8(const aFields: array of RawUtf8;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
+    function FieldIndexDynArrayFromRawUtf8(
+      const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
+    function FieldIndexDynArrayFromCsv(const aFieldsCsv: RawUtf8;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
+    function FieldIndexDynArrayFromCsv(
+      const aFieldsCsv: RawUtf8): TFieldIndexDynArray; overload;
     {$endif PUREMORMOT2}
     /// set all bits corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
@@ -3017,22 +3032,6 @@ type
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldBitsFromBlobField(aBlobField: PRttiProp;
       var Bits: TFieldBits): boolean;
-    /// set all field indexes corresponding to the supplied field names
-    // - returns TRUE on success, FALSE if any field name is not existing
-    function FieldIndexDynArrayFromRawUtf8(const aFields: array of RawUtf8;
-      var Indexes: TFieldIndexDynArray): boolean; overload;
-    /// set all field indexes corresponding to the supplied field names
-    // - returns the matching fields set
-    function FieldIndexDynArrayFromRawUtf8(
-      const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
-    /// set all field indexes corresponding to the supplied CSV field names
-    // - returns TRUE on success, FALSE if any field name is not existing
-    function FieldIndexDynArrayFromCsv(const aFieldsCsv: RawUtf8;
-      var Indexes: TFieldIndexDynArray): boolean; overload;
-    /// set all field indexes corresponding to the supplied CSV field names
-    // - returns the matching fields set
-    function FieldIndexDynArrayFromCsv(
-      const aFieldsCsv: RawUtf8): TFieldIndexDynArray; overload;
     /// set all field indexes corresponding to the supplied BLOB field type information
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldIndexDynArrayFromBlobField(aBlobField: PRttiProp;
@@ -7702,6 +7701,36 @@ begin
     result := nil;
 end;
 
+function TOrmPropInfoList.FieldIndexFromCsv(const aFieldsCsv: RawUtf8;
+  var Indexes: TFieldIndexDynArray): boolean;
+var
+  ndx: integer;
+  P: PUtf8Char;
+  n: ShortString;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  P := pointer(aFieldsCsv);
+  while P <> nil do
+  begin
+    GetNextItemShortString(P, @n); // n ends with #0
+    if n[0] = #0 then
+      exit;
+    ndx := IndexByNameU(@n[1]);
+    if ndx < 0 then
+      exit; // invalid field name
+    AddFieldIndex(Indexes, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropInfoList.FieldIndexFromCsv(const aFieldsCsv: RawUtf8): TFieldIndexDynArray;
+begin
+  if not FieldIndexFromCsv(aFieldsCsv, result) then
+    result := nil;
+end;
+
 function TOrmPropInfoList.ToCsv(const Bits: TFieldBits): RawUtf8;
 var
   len, l, f: PtrInt;
@@ -11513,63 +11542,37 @@ procedure TOrmPropertiesAbstract.CsvFromFieldBits(const Prefix: array of const;
 begin
   Fields.ToCsvText(Prefix, Bits, BitsSuffix, Suffix, Result);
 end;
-{$endif PUREMORMOT2}
 
 function TOrmPropertiesAbstract.FieldIndexDynArrayFromRawUtf8(
   const aFields: array of RawUtf8; var Indexes: TFieldIndexDynArray): boolean;
-var
-  f, ndx: PtrInt;
 begin
-  result := false;
-  if self = nil then
-    exit;
-  for f := 0 to high(aFields) do
-  begin
-    ndx := Fields.IndexByNameU(pointer(aFields[f]));
-    if ndx < 0 then
-      exit; // invalid field name
-    AddFieldIndex(Indexes, ndx);
-  end;
-  result := true;
+  result := (self <> nil) and
+            Fields.FieldIndexByNames(aFields, Indexes);
 end;
 
 function TOrmPropertiesAbstract.FieldIndexDynArrayFromRawUtf8(
   const aFields: array of RawUtf8): TFieldIndexDynArray;
 begin
-  if not FieldIndexDynArrayFromRawUtf8(aFields, result) then
+  if (self = nil) or
+     not Fields.FieldIndexByNames(aFields, result) then
     result := nil;
 end;
 
 function TOrmPropertiesAbstract.FieldIndexDynArrayFromCsv(
   const aFieldsCsv: RawUtf8; var Indexes: TFieldIndexDynArray): boolean;
-var
-  ndx: integer;
-  P: PUtf8Char;
-  n: ShortString;
 begin
-  result := false;
-  if self = nil then
-    exit;
-  P := pointer(aFieldsCsv);
-  while P <> nil do
-  begin
-    GetNextItemShortString(P, @n); // n ends with #0
-    if n[0] = #0 then
-      exit;
-    ndx := Fields.IndexByNameU(@n[1]);
-    if ndx < 0 then
-      exit; // invalid field name
-    AddFieldIndex(Indexes, ndx);
-  end;
-  result := true;
+  result := (self <> nil) and
+            Fields.FieldIndexFromCsv(aFieldsCsv, Indexes);
 end;
 
 function TOrmPropertiesAbstract.FieldIndexDynArrayFromCsv(
   const aFieldsCsv: RawUtf8): TFieldIndexDynArray;
 begin
-  if not FieldIndexDynArrayFromCsv(aFieldsCsv, result) then
+  if (self = nil) or
+     not Fields.FieldIndexFromCsv(aFieldsCsv, result) then
     result := nil;
 end;
+{$endif PUREMORMOT2}
 
 function TOrmPropertiesAbstract.FieldIndexDynArrayFromBlobField(
   aBlobField: PRttiProp; var Indexes: TFieldIndexDynArray): boolean;
@@ -11592,15 +11595,12 @@ function TOrmPropertiesAbstract.AppendFieldName(FieldIndex: integer;
 begin
   result := false; // success
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
-    if ForceNoRowID then
-      Text := Text + ID_TXT
-    else
-      Text := Text + ROWID_TXT
+    AppendStr(Text, ID_SHORT[ForceNoRowID])
   else if (self = nil) or
           (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
     result := true
   else
-    Text := Text + Fields.List[FieldIndex].Name;
+    Append(Text, Fields.List[FieldIndex].Name);
 end;
 
 function TOrmPropertiesAbstract.MainFieldName(ReturnFirstIfNoUnique: boolean): RawUtf8;
