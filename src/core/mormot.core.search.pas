@@ -1443,9 +1443,15 @@ type
     destructor Destroy; override;
     /// delete all stored rules
     procedure Clear;
-    /// register some rules to this instance
-    // - raise ERttiFilter if the supplied aRtti/aFieldName do not match
-    procedure Add(const aFieldName: RawUtf8; const aRules: array of TSynFilterOrValidate);
+    /// register some rules instances to this list
+    // - raise ERttiFilter if aFieldName does not match the main Rtti class/record
+    procedure Add(const aFieldName: RawUtf8;
+      const aRules: array of TSynFilterOrValidate);
+    /// register some class rules to this list
+    // - will call aRules[].Create then Add() - and own - the instances
+    // - raise ERttiFilter if aFieldName does not match the main Rtti class/record
+    procedure AddClass(const aFieldName: RawUtf8;
+      const aRules: array of TSynFilterOrValidateClass);
     /// apply all registered TSynFilter rules to a class instance or record pointer
     procedure Filter(aData: pointer);
     /// apply all registered TSynValidate rules to a class instance or record pointer
@@ -6270,8 +6276,8 @@ begin
     result := fRules[i];
 end;
 
-procedure TRttiFilter.Add(
-  const aFieldName: RawUtf8; const aRules: array of TSynFilterOrValidate);
+procedure TRttiFilter.Add(const aFieldName: RawUtf8;
+  const aRules: array of TSynFilterOrValidate);
 var
   i, r: PtrInt;
 begin
@@ -6282,6 +6288,22 @@ begin
     if aRules[r] <> nil then
     begin
       PtrArrayAdd(fRules[i], aRules[r]);
+      inc(fCount);
+    end;
+end;
+
+procedure TRttiFilter.AddClass(const aFieldName: RawUtf8;
+  const aRules: array of TSynFilterOrValidateClass);
+var
+  i, r: PtrInt;
+begin
+  i := fRtti.Props.FindIndex(aFieldName);
+  if i < 0 then
+    ERttiFilter.RaiseUtf8('Invalid %.Add(%)', [self, aFieldName]);
+  for r := 0 to high(aRules) do
+    if aRules[r] <> nil then
+    begin
+      PtrArrayAdd(fRules[i], aRules[r].Create); // new with default params
       inc(fCount);
     end;
 end;
