@@ -164,9 +164,6 @@ type
     /// called by ReleaseMemoryOnIdle within the read lock: clean fRd here
     function ReleaseReadMemoryOnIdle: PtrInt; virtual;
     function ReleaseWriteMemoryOnIdle: PtrInt; virtual;
-    // return one of fRWSafe[] locks
-    function GetSafe(writer: boolean): PMultiLightLock;
-      {$ifdef HASINLINE} inline; {$endif}
   public
     /// finalize the instance
     destructor Destroy; override;
@@ -1460,18 +1457,10 @@ begin
             (fClosed in fFlags);
 end;
 
-function TPollAsyncConnection.GetSafe(writer: boolean): PMultiLightLock;
-begin
-  result := @fRWSafe[0];
-  if writer and
-     (ifSeparateWLock in fInternalFlags) then
-    result := @fRWSafe[1]
-end;
-
 function TPollAsyncConnection.TryLock(writer: boolean): boolean;
 begin
   if (fSocket <> nil) and
-     GetSafe(writer)^.TryLock then
+     fRWSafe[ord(writer and (ifSeparateWLock in fInternalFlags))].TryLock then
   begin
     include(fFlags, fWasActive);
     result := true;
@@ -1483,7 +1472,7 @@ end;
 procedure TPollAsyncConnection.UnLock(writer: boolean);
 begin
   if self <> nil then
-    GetSafe(writer).UnLock;
+    fRWSafe[ord(writer and (ifSeparateWLock in fInternalFlags))].UnLock;
 end;
 
 procedure TPollAsyncConnection.OnClose;
