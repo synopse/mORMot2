@@ -902,6 +902,7 @@ type
   TOrmPropInfoAttributes = set of TOrmPropInfoAttribute;
 
   /// allow a quick detection of some particular TOrmPropInfo classes
+  // - typically used for efficient search of some kind of integer values
   // - picInt32 match TOrmPropInfoRttiInt32
   // - picInt64 match TOrmPropInfoRttiInt64
   TOrmPropInfoClassType = (
@@ -1976,6 +1977,17 @@ type
     // - won't identify 'ID' / 'RowID' field names, just List[].
     // - raise an EOrmException if not found in the internal list
     function IndexByNameUnflattenedOrExcept(const aName: RawUtf8): PtrInt;
+    /// set all bits corresponding to the supplied field names
+    // - won't identify 'ID' / 'RowID' field names, just List[].
+    // - returns true if all aNames[] have been found and set into aBits
+    function ByNames(const aNames: array of PUtf8Char; out aBits: TFieldBits): boolean;
+    /// set all bits corresponding to the supplied class types
+    // - returns the number of bits set, i.e. the number of matching classes
+    function ByClass(const aClasses: array of TClass;
+      out aBits: TFieldBits; aInherit: boolean = false): integer;
+    /// set all bits corresponding to the supplied RTTI types
+    // - returns the number of bits set, i.e. the number of matching types
+    function ByTypes(const aTypes: array of PRttiInfo; out aBits: TFieldBits): integer;
     /// fill a TRawUtf8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
@@ -7580,6 +7592,67 @@ begin
     '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %', [self, aName, fTable]);
 end;
 
+function TOrmPropInfoList.ByNames(const aNames: array of PUtf8Char;
+  out aBits: TFieldBits): boolean;
+var
+  f, ndx: PtrInt;
+begin
+  FillZero(aBits);
+  result := false;
+  for f := 0 to high(aNames) do
+  begin
+    ndx := IndexByNameU(aNames[f]); // O(log(n)) fast binary search
+    if ndx < 0 then
+      exit; // invalid field name
+    FieldBitSet(aBits, ndx);
+  end;
+  result := true; // all aFields[] were found and set in aBits
+end;
+
+function TOrmPropInfoList.ByClass(const aClasses: array of TClass;
+  out aBits: TFieldBits; aInherit: boolean): integer;
+var
+  f, c: PtrInt;
+  o: TClass;
+begin
+  result := 0;
+  FillZero(aBits);
+  for f := 0 to Count - 1 do
+    if List[f].OrmFieldType = oftObject then
+    begin
+      o := TOrmPropInfoRttiObject(List[f]).ObjectClass;
+      for c := 0 to high(aClasses) do
+        if (aInherit and o.InheritsFrom(aClasses[c])) or
+           ((not aInherit) and (o = aClasses[c])) then
+        begin
+          FieldBitSet(aBits, f);
+          inc(result);
+          break;
+        end;
+    end;
+end;
+
+function TOrmPropInfoList.ByTypes(const aTypes: array of PRttiInfo;
+  out aBits: TFieldBits): integer;
+var
+  f, t: PtrInt;
+  r: PRttiInfo;
+begin
+  result := 0;
+  FillZero(aBits);
+  for f := 0 to Count - 1 do
+    if List[f].InheritsFrom(TOrmPropInfoRtti) then
+    begin
+      r := TOrmPropInfoRtti(List[f]).PropType;
+      for t := 0 to high(aTypes) do
+        if aTypes[t] = r then
+        begin
+          FieldBitSet(aBits, f);
+          inc(result);
+          break;
+        end;
+    end;
+end;
 
 function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
 var
@@ -11265,21 +11338,9 @@ end;
 
 function TOrmPropertiesAbstract.FieldBitsFrom(
   const aFields: array of PUtf8Char; var Bits: TFieldBits): boolean;
-var
-  f, ndx: PtrInt;
 begin
-  FillZero(Bits);
-  result := false;
-  if self = nil then
-    exit;
-  for f := 0 to high(aFields) do
-  begin
-    ndx := Fields.IndexByNameU(aFields[f]);
-    if ndx < 0 then
-      exit; // invalid field name
-    FieldBitSet(Bits, ndx);
-  end;
-  result := true;
+  result := (self <> nil) and
+            Fields.ByNames(aFields, Bits);
 end;
 
 function TOrmPropertiesAbstract.FieldBitsFrom(
