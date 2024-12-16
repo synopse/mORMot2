@@ -1092,7 +1092,7 @@ var
   {$endif CPUX86NOTPIC}
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
-  unaligned(result) := 0;
+  PInt64(@result)^ := 0;
   if P = nil then
     exit;
   if L = 0 then

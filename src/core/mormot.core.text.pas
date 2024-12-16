@@ -1562,6 +1562,9 @@ var
   // - used by TRttiProp.SetValue() for TDateTime properties with a getter
   _Iso8601ToDateTime: function(const iso: RawByteString): TDateTime;
 
+/// wrap ToDouble(Text, V) and _Iso8601ToDateTime(Text)
+function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
+
 
 type
   /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
@@ -7911,6 +7914,21 @@ begin
   result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
   FastAssignNew(au);
   FastAssignNew(bu);
+end;
+
+function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
+begin
+  result := true;
+  if Text = '' then
+    PInt64(@V)^ := 0
+  else if not ToDouble(Text, V) then
+    if Assigned(_Iso8601ToDateTime) then
+    begin
+      V := _Iso8601ToDateTime(Text);
+      result := V <> 0;
+    end
+    else
+      result := false;
 end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;

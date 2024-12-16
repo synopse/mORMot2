@@ -4524,20 +4524,10 @@ begin
   else if k in rkStringTypes then
     SetAsString(Instance, Value)
   else if k = rkFloat then
-  begin
-    if not ToDouble(Value, f) then
-      if Value = '' then
-        f := 0
-      else if Assigned(_Iso8601ToDateTime) then
-      begin
-        f := _Iso8601ToDateTime(Value);
-        if f = 0 then
-          exit; // not a date
-      end
-      else
-        exit;
-    SetFloatProp(Instance, f);
-  end
+    if AnyTextToDouble(Value, f) then // also tries _Iso8601ToDateTime()
+      SetFloatProp(Instance, f)
+    else
+      exit
   else if k = rkVariant then
     SetVariantProp(Instance, Value) // store as text
   else
