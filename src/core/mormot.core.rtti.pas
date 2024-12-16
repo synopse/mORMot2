@@ -4470,19 +4470,8 @@ begin
       exit
   else if k = rkFloat then
   begin
-    if not VariantToDouble(Value, f) then
-      if Assigned(_Iso8601ToDateTime) and // may be a TDateTime
-         VariantToText(Value, u) then
-        if u = '' then
-          f := 0
-        else
-        begin
-          f := _Iso8601ToDateTime(u);
-          if f = 0 then
-            exit; // not a date
-        end
-      else
-        exit;
+    if not AnyVariantToDouble(Value, f) then // also tries _Iso8601ToDateTime()
+      exit;
     SetFloatProp(Instance, f);
   end
   else if k = rkVariant then

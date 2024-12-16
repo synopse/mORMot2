@@ -1565,6 +1565,8 @@ var
 /// wrap ToDouble(Text, V) and _Iso8601ToDateTime(Text)
 function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
 
+/// wrap VariantToDouble(Value, V) and _Iso8601ToDateTime(VariantToText(Value))
+function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 
 type
   /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
@@ -7929,6 +7931,29 @@ begin
     end
     else
       result := false;
+end;
+
+function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
+var
+  u: pointer;
+begin
+  u := nil;
+  result := VariantToDouble(Value, V);
+  if not result then
+    if Assigned(_Iso8601ToDateTime) and // may be a TDateTime
+       VarIsString(Value) and
+       VariantToText(Value, RawUtf8(u)) then
+    begin
+      V := 0;
+      if u <> nil then
+      begin
+        V := _Iso8601ToDateTime(RawUtf8(u));
+        FastAssignNew(u);
+        if V = 0 then
+          exit; // not a date
+      end;
+      result := true;
+    end;
 end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
