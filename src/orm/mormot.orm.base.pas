@@ -1988,6 +1988,14 @@ type
     /// set all bits corresponding to the supplied RTTI types
     // - returns the number of bits set, i.e. the number of matching types
     function ByTypes(const aTypes: array of PRttiInfo; out aBits: TFieldBits): integer;
+    /// set all field indexes corresponding to the supplied field names
+    // - returns true on success, false if any field name is not existing
+    function FieldIndexByNames(const aFields: array of RawUtf8;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
+    /// set all field indexes corresponding to the supplied field names
+    // - returns the matching fields set
+    function FieldIndexByNames(const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// compute the CSV field names text from a set of bits
     function ToCsv(const Bits: TFieldBits): RawUtf8; overload;
     /// compute the CSV field names text from a set of bits with optional prefix/suffix
@@ -7668,6 +7676,30 @@ begin
           break;
         end;
     end;
+end;
+
+function TOrmPropInfoList.FieldIndexByNames(const aFields: array of RawUtf8;
+  var Indexes: TFieldIndexDynArray): boolean;
+var
+  f, ndx: PtrInt;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  for f := 0 to high(aFields) do
+  begin
+    ndx := IndexByNameU(pointer(aFields[f]));
+    if ndx < 0 then
+      exit; // invalid field name
+    AddFieldIndex(Indexes, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropInfoList.FieldIndexByNames(const aFields: array of RawUtf8): TFieldIndexDynArray;
+begin
+  if not FieldIndexByNames(aFields, result) then
+    result := nil;
 end;
 
 function TOrmPropInfoList.ToCsv(const Bits: TFieldBits): RawUtf8;
