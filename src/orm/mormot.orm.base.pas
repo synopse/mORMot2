@@ -2978,10 +2978,22 @@ type
     // - returns the matching fields set
     function FieldBitsFromCsv(const aFieldsCsv: RawUtf8): TFieldBits; overload;
     /// set all simple bits corresponding to the simple fields, excluding some
+    // fields specified as their CSV name
     // - could be a convenient alternative to FieldBitsFromCsv() if only some
     // fields are to be excluded
     // - returns the matching fields set
     function FieldBitsFromExcludingCsv(const aFieldsCsv: RawUtf8;
+      aOccasion: TOrmOccasion = ooSelect): TFieldBits;
+    /// set all simple bits corresponding to the simple fields, excluding some
+    // fields of the specified class types
+    // - will exclude by default exact class types, unless aInherit is defined
+    // - returns the matching fields set
+    function FieldBitsFromExcludingClass(const aClasses: array of TClass;
+      aOccasion: TOrmOccasion = ooSelect; aInherit: boolean = false): TFieldBits;
+    /// set all simple bits corresponding to the simple fields, excluding some
+    // fields of the specified RTTI types
+    // - returns the matching fields set
+    function FieldBitsFromExcludingTypes(const aTypes: array of PRttiInfo;
       aOccasion: TOrmOccasion = ooSelect): TFieldBits;
     /// set all bits corresponding to the supplied BLOB field type information
     // - returns TRUE on success, FALSE if blob field is not recognized
@@ -11333,6 +11345,26 @@ var
 begin
   result := SimpleFieldsBits[aOccasion];
   if FieldBitsFromCsv(aFieldsCsv, excluded) then
+    result := result - excluded;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromExcludingClass(
+  const aClasses: array of TClass; aOccasion: TOrmOccasion; aInherit: boolean): TFieldBits;
+var
+  excluded: TFieldBits;
+begin
+  result := SimpleFieldsBits[aOccasion];
+  if Fields.ByClass(aClasses, excluded, aInherit) <> 0 then
+    result := result - excluded;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromExcludingTypes(
+  const aTypes: array of PRttiInfo; aOccasion: TOrmOccasion): TFieldBits;
+var
+  excluded: TFieldBits;
+begin
+  result := SimpleFieldsBits[aOccasion];
+  if Fields.ByTypes(aTypes, excluded) <> 0 then
     result := result - excluded;
 end;
 
