@@ -1046,7 +1046,7 @@ type
 
   /// will define a validation to be applied to a Record (typically a TOrm)
   // field content
-  // - a typical usage is to validate an email or IP address e.g.
+  // - a typical usage is e.g. to validate an email or IP address
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynValidate = class(TSynFilterOrValidate)
   protected
@@ -1065,6 +1065,9 @@ type
     // - if the validation passed, will return TRUE
     function Process(aFieldIndex: integer; const Value: RawUtf8;
       var ErrorMsg: string): boolean; virtual; abstract;
+    /// instantiate a TSynValidate instance of this class, and apply it to the value
+    // - returns '' if aValue does match the requirements, or an error message
+    class function Execute(const aParameters, aValue: RawUtf8): string;
   end;
 
   /// points to a TSynValidate variable
@@ -1316,6 +1319,8 @@ type
     // - the value is converted into UTF-8 text, as expected by
     // TPropInfo.GetValue / TPropInfo.SetValue e.g.
     procedure Process(aFieldIndex: integer; var Value: RawUtf8); virtual; abstract;
+    /// instantiate a TSynValidate instance of this class, and apply it to the value
+    class procedure Execute(const aParameters: RawUtf8; var aValue: RawUtf8);
   end;
 
   /// class-reference type (metaclass) for a TSynFilter or a TSynValidate
@@ -5743,8 +5748,20 @@ begin
   result := Process(-1, Prop^.GetValueText(Data), err);
   if ErrMsg <> nil then
     ErrMsg^ := err
-  else if err <> '' then
+  else if not result then
     ERttiFilter.RaiseUtf8('% failed: %', [self, err]);
+end;
+
+class function TSynValidate.Execute(const aParameters, aValue: RawUtf8): string;
+var
+  v: TSynValidate;
+begin
+  v := Create(aParameters);        // instantiate
+  try
+    v.Process(-1, aValue, result); // apply validation rules
+  finally
+    v.Free;
+  end;
 end;
 
 
@@ -5761,6 +5778,18 @@ begin
   if v2 <> v then
     Prop^.SetValueText(Data, v2);
   result := true; // a filter always return true to continue the process
+end;
+
+class procedure TSynFilter.Execute(const aParameters: RawUtf8; var aValue: RawUtf8);
+var
+  v: TSynFilter;
+begin
+  v := Create(aParameters); // instantiate
+  try
+    v.Process(-1, aValue);  // apply filtering rules
+  finally
+    v.Free;
+  end;
 end;
 
 
