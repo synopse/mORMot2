@@ -35,6 +35,24 @@ uses
   Messages,
   {$ELSE}
      {$ifdef ISDELPHI}
+     posix.dlfcn, // first posix units, some inline overwrites in mormot.core.posix.delphi for adapation of fpc conventions
+     posix.Utime,
+     posix.Errno,
+     Posix.SysMman,
+     Posix.StrOpts,
+     Posix.UniStd,
+     Posix.fcntl,
+     Posix.Stdio,
+     Posix.Time,
+     Posix.SysTime,
+     Posix.SysStat,
+     Posix.Dirent,
+     Posix.Sched,
+     POsix.SysTypes,
+     Posix.Signal,
+     Posix.SysUtsname,
+     System.DateUtils,
+     System.TimeSpan,
      mormot.core.posix.delphi,
      {$endif ISDELPHI}
   {$endif OSWINDOWS}
@@ -2425,6 +2443,11 @@ function FileSetTime(const FileName: TFileName;
   const Created, Accessed, Written: Int64): boolean;
 
 {$else}
+{$ifdef ISDELPHI}
+const
+  ENGLISH_LANGID = 'en-US';
+{$endif ISDELPHI}
+
 
 /// faster cross-platform alternative to sysutils homonymous function
 // - will directly use fpstat() so is slightly faster than default FPC RTL
@@ -2797,6 +2820,11 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
      {$define NODIRECTTHREADMANAGER}
   {$endif ISDELPHI}
 {$endif OSLINUX}
+{ $ifdef POSIX}
+  { $ifdef ISDELPHI}
+     { $define NODIRECTTHREADMANAGER}
+  { $endif ISDELPHI}
+{ $endif POSIX}
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
 function GetCurrentThreadId: TThreadID; inline;
@@ -7530,9 +7558,9 @@ var
   CurrentFakeStubBuffer: TFakeStubBuffer;
   CurrentFakeStubBuffers: array of TFakeStubBuffer;
   CurrentFakeStubBufferLock: TLightLock;
-  {$ifdef UNIX}
+  {$ifndef OSWINDOWS} // ANDROID?
   MemoryProtection: boolean = false; // set to true if PROT_EXEC seems to fail
-  {$endif UNIX}
+  {$endif OSWINDOWS}
 
 constructor TFakeStubBuffer.Create;
 begin

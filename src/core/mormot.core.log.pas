@@ -1,4 +1,4 @@
-/// Framework Core Logging
+﻿/// Framework Core Logging
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.log;
@@ -33,7 +33,13 @@ uses
   mormot.core.json,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.datetime;
+  mormot.core.datetime
+  {$ifdef ISDELPHI}
+  {$ifdef POSIX}
+  , Mormot.core.posix.delphi
+  {$endif POSIX}
+  {$endif ISDELPHI}
+  ;
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -1043,11 +1049,11 @@ type
     fWriterClass: TBaseWriterClass;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGuid; out obj): TIntQry;
-      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$if defined(OSWINDOWS) or defined(ISDELPHI)}stdcall{$else}cdecl{$ifend};
     function _AddRef: TIntCnt;
-      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$if defined(OSWINDOWS) or defined(ISDELPHI)}stdcall{$else}cdecl{$ifend};
     function _Release: TIntCnt;
-      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$if defined(OSWINDOWS) or defined(ISDELPHI)}stdcall{$else}cdecl{$ifend};
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -3654,6 +3660,7 @@ end;
 {$else}
 function RetrieveMemoryManagerInfo: RawUtf8;
 begin
+  {$ifdef OSWINDOWS}
   // standard Delphi memory manager
   with GetHeapStatus do
     if TotalAddrSpace <> 0 then
@@ -3664,6 +3671,9 @@ begin
          KBNoSpace(TotalFree), KBNoSpace(FreeSmall), KBNoSpace(FreeBig),
          KBNoSpace(Unused), KBNoSpace(Overhead)], result)
     else
+  {$else OSWINDOWS}
+  // Todo: Get Heap Infos
+  {$endif OSWINDOWS}
       result := '';
 end;
 {$endif FPC}
@@ -4757,11 +4767,19 @@ end;
 
 {$ifdef ISDELPHI}
   {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-  {$ifdef CPU64}
-    {$define USERTLCAPTURESTACKBACKTRACE}
-  {$else}
-    {$define USEASMX86STACKBACKTRACE}
-  {$endif CPU64}
+  {$ifndef CPUARM}
+    {$ifdef CPU64}
+      {$ifdef OSWINDOWS}
+        {$define USERTLCAPTURESTACKBACKTRACE}
+      {$endif OSWINDOWS}
+    {$else}
+      {$define USEASMX86STACKBACKTRACE}
+    {$endif CPU64}
+  {$else CPUARM}   // Windows On ARM?
+    {$ifdef OSWINDOWS}
+      {$define USERTLCAPTURESTACKBACKTRACE}
+    {$endif OSWINDOWS}
+  {$endif CPUARM}
 {$endif ISDELPHI}
 
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char;
@@ -5224,6 +5242,7 @@ begin
     Add.LogInternalText(Level, Msg, nil, maxInt);
     {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
     if IsDebuggerPresent then
+      {$ifdef OSWINDOWS}
       {$ifdef CPU64DELPHI}
       DebugBreak;
       {$else}
@@ -5231,6 +5250,8 @@ begin
         int  3
       end;
       {$endif CPU64DELPHI}
+      {$endif OSWINDOWS}
+      ;
     {$else not ISDELPHI}
     ConsoleWrite('%  ', [Msg], LOG_CONSOLE_COLORS[Level], {noLF=}true);
     {$endif ISDELPHI}
@@ -5891,7 +5912,7 @@ end;
 
 procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
 
-{$ifdef CPU64}
+{$if defined(CPU64) or defined(CPUARM)}
 
   procedure AddStackManual(Stack: PPtrUInt);
   begin
@@ -5900,7 +5921,7 @@ procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
 
 {$else}
 
-  procedure AddStackManual(Stack: PPtrUInt); 
+  procedure AddStackManual(Stack: PPtrUInt);
 
     function CheckAsmX86(xret: PtrUInt): boolean; // naive detection
     var
@@ -5964,7 +5985,7 @@ procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
     end;
   end;
 
-{$endif CPU64}
+{$ifend defined(CPU64) or defined(CPUARM)}
 
 var
   n, i, logged: integer;

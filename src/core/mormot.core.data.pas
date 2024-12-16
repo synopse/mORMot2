@@ -80,9 +80,9 @@ type
     function VirtualRelease: integer; virtual; abstract;
     // IUnknown methods
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGuid; out Obj): TIntQry; {$if defined(OSWINDOWS) or defined(ISDELPHI)}stdcall{$else}cdecl{$ifend};
+    function _AddRef: TIntCnt;       {$if defined(OSWINDOWS) or defined(ISDELPHI)}stdcall{$else}cdecl{$ifend};
+    function _Release: TIntCnt;      {$if defined(OSWINDOWS) or defined(ISDELPHI)}stdcall{$else}cdecl{$ifend};
   public
     /// the associated reference count
     property RefCount: integer
@@ -3100,6 +3100,11 @@ type
 
 
 implementation
+{$ifdef ISDELPHI}
+{$ifdef POSIX}
+Uses Mormot.core.posix.delphi;
+{$endif POSIX}
+{$endif ISDELPHI}
 
 
 { ************ RTL TPersistent or Root Classes with Custom Constructor }

@@ -32,15 +32,8 @@ uses
   initc; // we statically link the libc for some raw calls
 {$else}
 uses
-  Posix.dlfcn,
-//  Posix.UniStd,
-//  Posix.Stdio,
-  Posix.Time,
-  Posix.SysTime
-//  Posix.Errno,
-//  Posix.SysStat,
-//  Posix.SysMman,
-//  Posix.SysUtsname
+  System.IOUtils,
+  System.SyncObjs
 ;
 {$endif}
 
@@ -123,7 +116,7 @@ begin
   res := '';
 end;
 
-function GetNextCardinal(var P: PAnsiChar): PtrUInt;
+function GetNextCardinal(var P: PUtf8Char): PtrUInt; {$ifdef ISDELPHI} overload; {$endif ISDELPHI}
 var
   c: cardinal;
 begin
@@ -142,9 +135,19 @@ begin
   until false;
 end;
 
-function GetNextItem(var P: PAnsiChar): RawUtf8;
+{$ifdef ISDELPHI}
+function GetNextCardinal(var P: PAnsiChar): PtrUInt; overload;
+var asUTF8: PUTF8Char;
+begin
+  asUTF8:= PUTF8Char(P);
+  result:= GetNextCardinal(asUTF8);
+  P:= PAnsiChar(asUTF8);
+end;
+{$endif ISDELPHI}
+
+function GetNextItem(var P: PUtf8Char): RawUtf8; {$ifdef ISDELPHI} overload; {$endif ISDELPHI}
 var
-  S: PAnsiChar;
+  S: PUtf8Char;
 begin
   result := '';
   while P^ <= ' ' do
@@ -158,6 +161,16 @@ begin
   until P^ <= ' ';
   FastSetString(result, S, P - S);
 end;
+
+{$ifdef ISDELPHI}
+function GetNextItem(var P: PAnsiChar): RawUtf8; overload;
+var asUTF8: PUTF8Char;
+begin
+  asUTF8:= PUTF8Char(P);
+  result:= GetNextItem(asUTF8);
+  P:= PAnsiChar(asUTF8);
+end;
+{$endif ISDELPHI}
 
 procedure RawUtf8Append(var s: RawUtf8; p: PUtf8Char; l: PtrInt);
 var
@@ -191,11 +204,7 @@ end;
 
 procedure LibraryClose(Lib: TLibHandle);
 begin
-  {$ifndef ISDELPHI}
   dlclose(pointer(Lib));
-  {$else}
-  dlclose(Lib);
-  {$endif}
 end;
 
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
@@ -308,6 +317,15 @@ var
   {$endif OSDARWIN}
   v, vers: string;
   data: PAnsiChar;
+  {$ifdef ISDELPHI}
+  M: TMarshaller;
+  {$endif ISDELPHI}
+
+{$ifdef ISDELPHI}
+const dlopenFailedResult = 0;
+{$else}
+const dlopenFailedResult: Pointer = nil;
+{$endif ISDELPHI}
 begin
   GlobalLock;
   try
@@ -316,49 +334,63 @@ begin
     Loaded := true;
     if LibName <> '' then
     begin
-      icu := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}(LibName), RTLD_LAZY);
-      if icu = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
+      {$ifdef ISDELPHI}
+      icu := dlopen(M.AsAnsi(LibName, CP_UTF8).ToPointer, RTLD_LAZY);
+      {$else}
+      icu := dlopen(pointer(LibName), RTLD_LAZY);
+      {$endif ISDELPHI}
+      if icu = dlopenFailedResult then
         exit;
     end
     else
     begin
       {$ifdef OSDARWIN}
       // Mach OS has its own ICU set of libraries
-      icu := dlopen({$ifdef ISDELPHI}MarshaledAString({$endif}'libicuuc.dylib'{$ifdef ISDELPHI}){$endif}, RTLD_LAZY);
-      if icu <> {$ifdef ISDELPHI} 0 {$else} nil {$endif}  then
-        icui18n := dlopen({$ifdef ISDELPHI}MarshaledAString({$endif}'libicui18n.dylib'{$ifdef ISDELPHI}){$endif}, RTLD_LAZY);
+        {$ifdef ISDELPHI}
+        icu := dlopen(M.AsAnsi('libicuuc.dylib', CP_UTF8).ToPointer, RTLD_LAZY);
+        if icu <> dlopenFailedResult then
+          icui18n := dlopen(M.AsAnsi('libicui18n.dylib', CP_UTF8).ToPointer, RTLD_LAZY);
+        {$else}
+        icu := dlopen('libicuuc.dylib', RTLD_LAZY);
+        if icu <> dlopenFailedResult then
+          icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
+        {$endif ISDELPHI}
       {$else}
       // libicudata should be loaded first because other two depend on it
-      icudata := dlopen({$ifdef ISDELPHI}MarshaledAString({$endif}'libicudata.so'{$ifdef ISDELPHI}){$endif}, RTLD_LAZY);
-      {$ifndef OSANDROID}
-      if icudata = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
-      begin
-        // there is no link to the library -> try e.g. 'libicudata.so.67'
-        if Version <> '' then
-          icudata := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicudata.so.' + Version), RTLD_LAZY);
-        if icudata = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
-          for i := ICU_MAX downto ICU_MIN do
-          begin
-            str(i, v);
-            icudata := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicudata.so.' + v), RTLD_LAZY);
-            if icudata <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
+        {$ifdef ISDELPHI}
+        icudata := dlopen(M.AsAnsi('libicudata.so', CP_UTF8).ToPointer, RTLD_LAZY);
+        {$else}
+        icudata := dlopen('libicudata.so', RTLD_LAZY);
+        {$endif ISDELPHI}
+        {$ifndef OSANDROID}
+        if icudata = dlopenFailedResult then
+        begin
+          // there is no link to the library -> try e.g. 'libicudata.so.67'
+          if Version <> '' then
+            icudata := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicudata.so.' + Version), RTLD_LAZY);
+          if icudata = dlopenFailedResult then
+            for i := ICU_MAX downto ICU_MIN do
             begin
-              Version := v;
-              break;
+              str(i, v);
+              icudata := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicudata.so.' + v), RTLD_LAZY);
+              if icudata <> dlopenFailedResult then
+              begin
+                Version := v;
+                break;
+              end;
             end;
-          end;
-        if icudata <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
-          so := '.' + Version;
-      end;
-      {$endif OSANDROID}
-      if icudata <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
-      begin
-        icu := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicuuc.so' + so), RTLD_LAZY);
-        if icu <> {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
-          icui18n := dlopen({$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('libicui18n.so' + so), RTLD_LAZY);
-      end;
+          if icudata <> dlopenFailedResult then
+            so := '.' + Version;
+        end;
+        {$endif OSANDROID}
+        if icudata <> dlopenFailedResult then
+        begin
+          icu := dlopen(pointer('libicuuc.so' + so), RTLD_LAZY);
+          if icu <> dlopenFailedResult then
+            icui18n := dlopen(pointer('libicui18n.so' + so), RTLD_LAZY);
+        end;
       {$endif OSDARWIN}
-      if icui18n = {$ifdef ISDELPHI} 0 {$else} nil {$endif} then
+      if icui18n = dlopenFailedResult then
       begin
         // we did not find any ICU installed -> ensure iconv/RTL fallback is ok
         if not IsWideStringManagerProperlyInstalled then
@@ -370,14 +402,14 @@ begin
     end;
     // ICU append a version prefix to all its functions e.g. ucnv_open_66
     if (Version <> '') and
-       (dlsym(icu, {$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('ucnv_open_' + Version)) <> nil) then
+       (dlsym(icu, pointer('ucnv_open_' + Version)) <> nil) then
       vers := '_' + Version // matched the explicit version
     else
     begin
       {$ifdef OSANDROID}
       for i := high(ICU_VER) downto 1 do
       begin
-        if dlsym(icu, {$ifdef ISDELPHI}MarshaledAString{$else} pointer {$endif}(NAMES[0] + ICU_VER[i])) <> nil then
+        if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
         begin
           vers := ICU_VER[i];
           break;
@@ -389,7 +421,7 @@ begin
         for i := ICU_MAX downto ICU_MIN do
         begin
           str(i, v);
-          if dlsym(icu, {$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}('ucnv_open_' + v)) <> nil then
+          if dlsym(icu, pointer('ucnv_open_' + v)) <> nil then
           begin
             vers := '_' + v;
             break;
@@ -399,7 +431,7 @@ begin
     P := @@ucnv_open;
     for i := 0 to high(NAMES) do
     begin
-      P[i] := dlsym(icu, {$ifdef ISDELPHI}MarshaledAString {$else} pointer {$endif}(NAMES[i] + vers));
+      P[i] := dlsym(icu, pointer(NAMES[i] + vers));
       if P[i] = nil then
       begin
         @ucnv_open := nil;
@@ -842,7 +874,6 @@ function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_getres';
 
 {$else}
-  {$ifndef ISDELPHI}
   const
     CLOCK_REALTIME         = 0;
     CLOCK_MONOTONIC        = 1;
@@ -850,6 +881,7 @@ function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
     CLOCK_MONOTONIC_COARSE = 6;
     CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
 
+  {$ifndef ISDELPHI}
   // libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
   // is compiled without FPC_USE_LIBC defined and do a syscall each time
   //   GetTickCount64 fpc    2 494 563 op/sec
@@ -1214,9 +1246,11 @@ end;
 var
   _RawLogException: TOnRawLogException;
 
+{$ifndef ISDELPHI}
 // FPC: intercept via the RaiseProc global variable
 {$define WITH_RAISEPROC}
 // RaiseProc redirection is implemented in main mormot.core.os.pas
+{$endif ISDELPHI}
 
 {$endif NOEXCEPTIONINTERCEPT}
 
@@ -1375,11 +1409,11 @@ procedure StatTimeMS(const st: TStat; out time: TUnixMSTime); inline;
 begin
   time := QWord(st.st_mtime) * MilliSecsPerSec + // no local conversion needed
           // include milliseconds information
-          {$ifdef OSLINUXANDROID}
+          {$if defined(OSLINUXANDROID) and not defined(ISDELPHI)}
           st.st_mtime_nsec div NanoSecsPerMilliSec;
           {$else}
           st.st_mtimensec div NanoSecsPerMilliSec;
-          {$endif OSLINUXANDROID}
+          {$ifend OSLINUXANDROID}
 end;
 
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
@@ -1416,7 +1450,8 @@ end;
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
   LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
 var
-  mtime, atime, ctime: Int64;
+  mtime: TUnixMSTime;
+  atime, ctime: Int64;
   lp: TStat;
   r: integer;
 begin
@@ -2221,7 +2256,7 @@ end;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
-  files: TRawUtf8DynArray;
+  files: {$IFDEF ISDELPHI} TRawByteStringDynArray {$else} TRawUtf8DynArray {$endif};
   f: PtrInt;
 begin
   // see https://go.dev/src/crypto/x509/root_unix.go as reference
@@ -2424,13 +2459,13 @@ var
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
         DT_REG:
           if Assigned(OnFile) and
-             not OnFile(OnFileOpaque, ent^.d_name, entlen) then
+             not OnFile(OnFileOpaque, {$ifdef ISDELPHI}@{$endif}ent^.d_name, entlen) then
             continue // e.g. no MatchAnyP()
           else
             withsub := not ExcludesDir;
         DT_DIR:
           if Recursive and
-             (ent^.d_name[0] <> '.') then
+             ({$ifdef ISDELPHI}AnsiChar({$endif}ent^.d_name[0]{$ifdef ISDELPHI}){$endif} <> '.') then
             withsub := true // DoFolder(fn) requires full nested path
           else
             continue;
@@ -2719,7 +2754,7 @@ begin
     if e = nil then
       break;
     if (e.d_type in [DT_UNKNOWN, DT_DIR]) and
-       (e.d_name[0] in ['1'..'9']) then
+       (AnsiChar(e.d_name[0]) in ['1'..'9']) then
     begin
       pid := GetCardinal(@e.d_name[0]);
       if (pid <> 0) and
@@ -2800,7 +2835,7 @@ end;
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
   proc: RawUtf8;
-  P: PUtf8Char;
+  P: {$ifdef ISDELPHI} PAnsiChar {$else} PUtf8Char {$endif ISDELPHI};
 begin
   result := false;
   FillCharFast(info, SizeOf(info), 0);
@@ -2997,7 +3032,7 @@ end;
 
 function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
 var
-  P: PUtf8Char;
+  P: {$ifdef ISDELPHI} PAnsiChar {$else} PUtf8Char {$endif ISDELPHI};
   U, K, I, S: cardinal;
 begin
   // see http://www.linuxhowtos.org/System/procstat.htm
@@ -3065,7 +3100,7 @@ end;
 function GetDiskPartitions: TDiskPartitions;
 var
   mounts, fs, mnt, typ: RawUtf8;
-  p: PUtf8Char;
+  p:  PUtf8Char;
   fn: TFileName;
   n: integer;
   av, fr, tot: QWord;
@@ -3125,8 +3160,10 @@ end;
 {$endif OSBSDDARWIN}
 
 {$ifdef USEMPROTECT}
+{$ifndef ISDELPHI}
 function mprotect(Addr: pointer; Len: size_t; Prot: integer): integer;
   cdecl external clib name 'mprotect';
+{$endif ISDELPHI}
 {$endif USEMPROTECT}
 
 function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
@@ -3465,7 +3502,11 @@ begin
   Close(output);
   AssignFile(output, '/dev/null');
   ReWrite(output);
+  {$ifdef ISDELPHI}
+  Close(ErrOutput);
+  {$else}
   Close(stderr);
+  {$endif ISDELPHI}
 end;
 
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
@@ -3537,6 +3578,11 @@ end;
 
 function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TFileName;
   options: TRunOptions): integer;
+{$ifdef ISDELPHI}
+begin
+  result:= 0;
+end;
+{$else}
 var
   pid: TPID;
   e: array[0..511] of PAnsiChar; // max 512 environment variables
@@ -3551,7 +3597,13 @@ begin
   pid := FpFork;
   {$ifend}
   {$else}
-  'only FPC is supported yet';
+  {$ifdef ISDELPHI}
+    {_$ifndef ANDROID  ???}
+    pid := FpFork;
+    {_$endif ANDROID}
+  {$else}
+   'only FPC/DELPHI is supported yet';
+  {$endif ISDELPHI}
   {$endif FPC}
   if pid < 0 then
   begin
@@ -3612,6 +3664,7 @@ begin
     // fork success (don't wait for the child process to fail)
     result := 0;
 end;
+{$endif ISDELPHI}
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2, arg3, arg4, arg5, env: TFileName;
@@ -3641,7 +3694,7 @@ begin
     parsed^ := err;
   if err = [] then
     // no need to spawn the shell for simple commands
-    result := RunInternal(a, waitfor, env, options)
+    result := RunInternal({$ifdef ISDELPHI} PPAnsiChar(@a) {$else} a {$endif ISDELPHI}, waitfor, env, options)
   else if err * PARSECOMMAND_ERROR <> [] then
     // no system call for clearly invalid command line
     result := -ESysEPERM
@@ -3659,6 +3712,12 @@ end;
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal;
   setresult: boolean; const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
+{$ifdef ISDELPHI}
+  begin
+    result:= '';
+  end;
+  {$Message WARN 'Run commands in Delphi not supported yet!'}
+{$else}
 var
   // notes: - FPC popen() allows access to the pid whereas clib popen() won't
   //        - env and options params are not supported by popen() so are ignored
@@ -3766,6 +3825,7 @@ begin
     else
       exitcode^ := res;
 end;
+{$endif ISDELPHI}
 
 
 { ****************** Gather Operating System Information }
@@ -3951,7 +4011,11 @@ end;
 function ParseLine(P: PUtf8Char): PUtf8Char;
 begin
   if P <> nil then
-    P := strscan(P, ':');
+     {$ifdef ISDELPHI}
+     P := PUtf8Char(strscan(PAnsiChar(P), ':'));
+     {$else}
+     P := strscan(P, ':');
+     {$endif ISDELPHI}
   result := P;
   if P = nil then
     exit;
@@ -4002,7 +4066,9 @@ var
   modname, beg: PUtf8Char;
   uts: UtsName;
   {$ifndef NODIRECTTHREADMANAGER}
+  {$ifndef ISDELPHI}
   tm: TThreadManager;
+  {$endif ISDELPHI}
   {$endif NODIRECTTHREADMANAGER}
   {$ifndef OSDARWIN}
   {$ifdef CPUARM3264}
@@ -4179,9 +4245,9 @@ begin
       cache := ParseLine(beg)
     {$ifdef CPUARM3264}
     else if IdemPChar(beg, 'CPU IMPLEMENTER') then
-      ParseHex32Add(beg, aci)
+      ParseHex32Add({$ifdef ISDELPHI} PAnsiChar(beg) {$else} beg {$endif ISDELPHI}, aci)
     else if IdemPChar(beg, 'CPU PART') then
-      ParseHex32Add(beg, act)
+      ParseHex32Add({$ifdef ISDELPHI} PAnsiChar(beg) {$else} beg {$endif ISDELPHI}, act)
     {$endif CPUARM3264}
     else if IdemPChar(beg, 'PHYSICAL ID') then
     begin
@@ -4278,12 +4344,14 @@ begin
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifndef NODIRECTTHREADMANAGER}
+   {$ifndef ISDELPHI}
   // for inlined RTL calls (avoid one level of redirection)
   GetThreadManager(tm);
   @GetCurrentThreadId      := @tm.GetCurrentThreadId;
   @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
   @EnterCriticalSection    := @tm.EnterCriticalSection;
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
+  {$endif ISDELPHI}
   {$endif NODIRECTTHREADMANAGER}
   {$ifdef OSDARWIN}
   OSVersionText := ToText(OSVersion32) + ' (' + OSVersionText + ')';

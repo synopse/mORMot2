@@ -64,10 +64,20 @@ uses
   Posix.Base,
   Posix.SysTypes,
   Posix.Sched,
+  Posix.SysStat,
+  Posix.Time,
+  Posix.Utime,
+  Posix.Unistd,
+  Posix.Errno,
+  Posix.Dlfcn,
+  Posix.SysMman,
+  Posix.Dirent,
+  Posix.Signal,
+  Posix.SysUtsname,
   {$ifndef HASRTLCRITICALSECTION}
   SyncObjs,
   {$endif}
-  SysUtils;
+  System.SysUtils;
 
 (*
 // Windows Consts
@@ -80,7 +90,19 @@ const NOERROR = 0;
 const fmShareDenyRead = fmShareDenyNone;
 
 type
+     cChar = byte;
+     cUChar = byte;
      cInt = int32;
+     cUInt = longword;
+     cShort = smallint;
+     cUShort = word;
+     {$ifdef cpu64}
+     cLong = int64;
+     cULong = UInt64;
+     {$else}
+     cLong = longint;
+     cULong = Cardinal;
+     {$endif cpu64}
      TOff = int32;
      PWord = ^Word;
      PDWord = ^DWord;
@@ -90,7 +112,10 @@ type
 (*     ULONGLONG = UInt64;
      UInt = UInt32;  *)
      DWORD = Cardinal;
+     QWord = UInt64;
      SizeInt = integer;
+     TSize = size_t;
+     TSSize = size_t;
 
 {$ifndef HASRTLCRITICALSECTION}
 Type TRTLCriticalSection = TCriticalSection;
@@ -101,10 +126,19 @@ procedure InitCriticalSection(var cs : TRTLCriticalSection); inline;
 
 /// compatibility function, wrapping Win32 API mutex finalization
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
+procedure DoneCriticalSection(var cs : TRTLCriticalSection); inline;
 
 procedure EnterCriticalSection(const cs: TRTLCriticalSection); inline;
 procedure LeaveCriticalSection(const cs: TRTLCriticalSection); inline;
-{$endif}
+{$endif HASRTLCRITICALSECTION}
+
+{$ifndef HASRTLEVENT}
+function RTLEventCreate: Pointer; inline;
+procedure RTLEventDestroy(anEvent: Pointer); inline;
+procedure RTLEventSetEvent(anEvent: Pointer); inline;
+procedure RTLEventResetEvent(anEvent: Pointer); inline;
+function RTLEventWaitFor(anEvent: Pointer; aTimeoutMS: Cardinal = INFINITE): TWaitResult;
+{$endif HASRTLEVENT}
 
 type
   PSystemTime = ^TSystemTime;
@@ -117,7 +151,10 @@ type
     Minute: Word;
     Second: Word;
     Millisecond: Word;
-  end;
+  end;
+
+  TTimeSpec = timespec;
+
 
 
 (*
@@ -193,10 +230,10 @@ function GetUnixMSUTC: Int64;
 // - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
 
 // procedure GetNowUTCSystem(out result: TSystemTime);
-
+*)
 /// return POSIX - gethostname
 function GetHostName: AnsiString;
-*)
+
 var
   /// will contain the current Linux kernel revision, as one 24-bit integer
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
@@ -414,32 +451,282 @@ function InterlockedExchangeAdd(var aValue: Pointer; addValue: Pointer): Pointer
 function IndexByte(Const buf; len: SizeInt; b:byte): SizeInt;
 function Indexword(Const buf; len: SizeInt; b: word): SizeInt;
 
-function SwapEndian(const aQWord: UInt64): UInt64;
+function SwapEndian(const AValue: SmallInt): SmallInt; inline; overload;
+function SwapEndian(const AValue: Word): Word; inline; overload;
+function SwapEndian(const AValue: LongWord): LongWord; inline; overload;
+function SwapEndian(const AValue: LongInt): LongInt; inline; overload;
+function SwapEndian(const AValue: Int64): Int64; inline; overload;
+function SwapEndian(const AValue: QWord): QWord; inline; overload;
 
 procedure DefaultFillcharFast(var Dest; count: PtrInt; Value: byte);
 procedure DefaultMoveFast(const Source; var Dest; Count: PtrInt);
 
-function TZSeconds: integer;
+function TZSeconds: integer; inline;
+function GetLocalTimeOffset: integer; inline;
 
+//const RTLD_LAZY = posix.dlfcn.RTLD_LAZY;
+//
+//type dl_info = posix.dlfcn.dl_info;
+//     Pdl_info = ^dl_info;
+
+function dlopen(aFilename: pointer; aMode: Integer): THandle; inline;
+function dlclose(aLib: pointer): integer; inline; overload;
+function dlclose(aLib: NativeUInt): integer; inline; overload;
+function dlsym(aLib: Pointer; aProcName: Pointer): Pointer; inline; overload;
+function dlsym(aLib: NativeUInt; aProcName: Pointer): Pointer; inline; overload;
+function dlsym(aLib: NativeUInt; aProcName: string): Pointer; inline; overload;
+function dlerror: string; inline;
+function dladdr(aAddress: Pointer; aDLInfo: Pdl_info): integer; inline;
+
+
+const
+  StdInputHandle = STDIN_FILENO; //         = 0;
+  StdOutputHandle = STDOUT_FILENO; //        = 1;
+  StdErrorHandle = STDERR_FILENO; //        = 2;
+
+type TStat = _stat;
+     TUTimBuf = utimbuf;
+     PUTimBuf = ^TUTimBuf;
+     TIOCtlRequest = DWord;
+
+function fpStat(AFileName: Pointer; var AStatBuffer: TStat): integer; inline;
+function fpFStat(AFileHandle: THandle; var AStatBuffer: TStat): integer; inline;
+function FpUtime(AFileName: Pointer; ATimBuf: PUTimBuf): integer; inline;
+function FpS_ISDIR(AAttributes: integer): boolean; inline;
+function fpS_ISLNK(AAttributes: integer): boolean; inline;
+function fpaccess(AFileName: Pointer; AMode: integer): integer; inline;
+function fpchmod(AFileName: Pointer; AMode: integer): integer; inline; overload;
+function fpchmod(AFileName: TFileName; AMode: integer): integer; inline; overload;
+function FpLSeek(AFileHandle: THandle; const Offset: Int64; Origin: cardinal): Int64; inline;
+function FpSymlink(AFileName: Pointer; ATarget: Pointer): integer; inline;
+
+function FpOpen(AFileName: Pointer; Flags: Integer): integer; inline; overload;
+function FpOpen(AFileName: Pointer; Flags: Integer; Mode: mode_t): integer; inline; overload;
+function FpOpen(const AFileName: TFilename; Flags: Integer): integer; inline; overload;
+function FpOpen(const AFileName: TFilename; Flags: Integer; Mode: mode_t): integer; inline; overload;
+function fpClose(aHandle: integer): integer; inline;
+function FpFtruncate(aHandle: THandle; aPos: Int64): integer; inline;
+function FpFsync(aHandle: THandle): Integer; inline;
+function FpRead(fd: cint; buf: PAnsiChar; nbytes: TSize): TSSize; inline; overload;
+function FpRead(fd: cint; var buf: AnsiChar; nbytes: TSize): TSSize; inline; overload;
+function FpRead(fd: cint; var buf; nbytes: TSize): TSSize; inline; overload;
+function FpWrite(fd: cint; buf: PAnsiChar; nbytes: TSize): TSSize; inline;
+function FpOpendir(aDirname: TFilename): pdir; inline;
+function FpClosedir(dirp: pdir): cint; inline; overload;
+function FpClosedir(var dir: Dir): cint; inline; overload;
+function FpReaddir(var dirp: Dir) : pDirent; inline;
+function FpReadLink(name: PChar; linkname: PAnsiChar; maxlen: size_t): cint; inline; overload;
+function FpReadLink(const ALinkName: RawByteString): RawByteString; overload;
+function FpChdir(path: pointer): cint; inline;
+
+const
+  FIONREAD        = $541B;
+  TIOCINQ         = FIONREAD;
+
+//{$ifdef cpuaarch64}
+//{ from Linux 4.0, include/uapi/asm-generic/ioctls.h }
+//
+//  { For Terminal handling }
+//  FIONREAD        = $541B;
+//  TIOCINQ         = FIONREAD;
+//{$endif cpuaarch64}
+//
+//{$ifdef cpui386}
+//  { For Terminal handling }
+//  FIONREAD        = $541B;
+//  TIOCINQ         = FIONREAD;
+//{$endif cpui386}
+//
+//{$ifdef cpux86_64}
+//  FIONREAD =    $541B;
+//  TIOCINQ =             FIONREAD;
+//{$endif cpux86_64}
+//
+//{$ifdef cpuarm}
+//  { For Terminal handling }
+//  FIONREAD        = $541B;
+//  TIOCINQ         = FIONREAD;
+//{$endif cpuarm}
+
+
+function FpIOCtl(Handle: cint; Ndx: TIOCtlRequest; Data: Pointer): cint; inline;
+
+function fpgeterrno: integer; inline;
+procedure fpseterrno(err: integer); inline;
+
+// Poll missing in Delphi RTL
+const
+  POLLIN      = $0001;
+  POLLPRI     = $0002;
+  POLLOUT     = $0004;
+  POLLERR     = $0008;
+  POLLHUP     = $0010;
+  POLLNVAL    = $0020;
+
+type
+  pollfd = record
+    fd: cint;
+    events: cshort;
+    revents: cshort;
+  end;
+  tpollfd = pollfd;
+  ppollfd = ^pollfd;
+
+// int poll(struct pollfd* _Nullable __fds, nfds_t __count, int __timeout_ms);
+Function  FpPoll(fds: ppollfd; nfds: cuint; timeout: clong): cint; cdecl; external libc name 'poll';
+
+const
+     ESysEACCES = EACCES;
+     ESysEFAULT = EFAULT;
+     ESysE2BIG = E2BIG;
+     ESysEPERM = EPERM;
+     ESysESRCH = ESRCH;
+
+Function StrError(err: cint): string;
+
+
+function fpmmap(addr: pointer; len: size_t; prot: cint; flags: cint; fd: cint; ofs: off_t): pointer; inline;
+function fpmunmap(addr: pointer; len: size_t): cint; inline;
+
+procedure ThreadSwitch; inline; {give time to other threads}
+function  FPnanosleep  (const rqtp: ptimespec; rmtp: ptimespec): cint; inline;
+
+// is missing in Delphi RTL
+const
+  RLIMIT_CPU = 0;       { CPU time in ms  }
+  RLIMIT_FSIZE = 1;     { Maximum filesize  }
+  RLIMIT_DATA = 2;      { max data size  }
+  RLIMIT_STACK = 3;     { max stack size  }
+  RLIMIT_CORE = 4;      { max core file size  }
+  RLIMIT_RSS = 5;       { max resident set size  }
+  RLIMIT_NPROC = 6;     { max number of processes  }
+  RLIMIT_NOFILE = 7;    { max number of open files  }
+  RLIMIT_MEMLOCK = 8;   { max locked-in-memory address space  }
+  RLIMIT_AS = 9;        { address space limit(?)  }
+  RLIMIT_LOCKS = 10;    { maximum file locks held  }
+
+type
+  rlim_t = DWord;
+  PRLimit = ^TRLimit;
+  TRlimit = record
+    rlim_cur : rlim_t;
+    rlim_max : rlim_t;
+  end;
+
+function FpGetRLimit(resource: cInt; rlim: PRLimit): cInt; cdecl; external libc name 'getrlimit';
+function FpSetRLimit(resource: cInt; rlim: PRLimit): cInt; cdecl; external libc name 'setrlimit';
+
+type
+   TPid = Pid_t;
+
+function FpGetppid: TPid; inline;
+
+//Is missing in Delphi RTL
+type
+  TSysInfo = record
+    uptime: clong;                     //* Seconds since boot */
+    loads: array[0..2] of culong;      //* 1, 5, and 15 minute load averages */
+    totalram: culong;                  //* Total usable main memory size */
+    freeram: culong;                   //* Available memory size */
+    sharedram: culong;                 //* Amount of shared memory */
+    bufferram: culong;                 //* Memory used by buffers */
+    totalswap: culong;                 //* Total swap space size */
+    freeswap: culong;                  //* swap space still available */
+    procs: cushort;                    //* Number of current processes */
+    pad: cushort;                      //* explicit padding for m68k */
+    totalhigh: culong;                 //* Total high memory size */
+    freehigh: culong;                  //* Available high memory size */
+    mem_unit: cuint;                   //* Memory unit size in bytes */
+{$ifndef cpu64}
+    { the upper bound of the array below is negative for 64 bit cpus }
+    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  //* Padding: libc5 uses this.. */
+{$endif cpu64}
+  end;
+  PSysInfo = ^TSysInfo;
+
+function Sysinfo(Info: PSysinfo): cInt; cdecl; external libc name 'sysinfo';
+
+type
+    TStatfs = record
+                _type,
+                bsize: LongWord;
+                blocks,
+                bfree,
+                bavail,
+                files,
+                ffree,
+                fsid,
+                namelen,
+                frsize,
+                flags: UInt64;
+                spare: packed array[0..4-1] of UInt64;
+              end;
+     PStatfs = ^TStatfs;
+
+function fpStatFS(const aDriveFolderOrFile: TFileName; aFS: PStatfs): integer;
+
+type
+    PSigInfo = Psiginfo_t;
+    PSigContext = PSigContext_t;
+
+  {$IFDEF CPU64BITS}
+  sigaction_t = record // Renamed symbol, not in header file.
+    sa_flags: Int32;   { Special flags.  }
+    sa_handler: TSignalHandler;
+//    _u: record { Pointer to a signal-catching function }
+//      case Integer of
+//        0: (sa_handler: TSignalHandler);
+//        1: (sa_sigaction: TSigActionHandler);
+//    end;
+    sa_mask: sigset_t;   { Additional set of signals to be blocked.  }
+    sa_restorer: TRestoreHandler; { Restore handler.  }
+  end;
+  {$ELSE CPU64BITS}
+  sigaction_t = record // Renamed symbol, not in header file.
+     sa_handler: TSignalHandler;
+//    _u: record { Pointer to a signal-catching function }
+//      case Integer of
+//        0: (sa_handler: TSignalHandler);
+//        1: (sa_sigaction: TSigActionHandler);
+//    end;
+    sa_mask: sigset_t;   { Additional set of signals to be blocked.  }
+    sa_flags: Int32;   { Special flags.  }
+    sa_restorer: TRestoreHandler; { Restore handler.  }
+  end;
+  {$ENDIF CPU64BITS}
+
+
+  SigactionRec = sigaction_t;
+  pSigActionRec = ^SigActionRec;
+
+function FpSigaction (sig: cInt; act: pSigActionRec; oact: pSigActionRec): cint; inline;
+
+type TUid = uid_t;
+     TGid = gid_t;
+     PGid = ^TGid;
+     TMode = mode_t;
+
+function FpKill(pid: TPid; sig: cInt): cInt; inline;
+function FpUmask(cmask: TMode): TMode; inline;
+function FpFork: TPid; inline;
+function FpSetsid: TPid; inline;
+function FpGetpid: pid_t; inline;
+
+const clib = libc;
+
+function __system_property_get(name: PAnsiChar; value: PAnsiChar): longint; cdecl; external libc name '__system_property_get';
+
+function GetSystemProperty(Name: PAnsiChar): shortstring; inline;
+function FpUname(var name: utsname): cint; inline;
 
 implementation
 
 uses
-//  Unix,
-  {$ifdef BSD}
-  sysctl,
-  {$else}
-//  Linux,
-//  SysCall,
-  {$endif BSD}
-//  dl,
-  Posix.UniStd,
   Posix.Stdio,
-  Posix.Time,
-  Posix.Errno,
-  Posix.SysStat,
-  Posix.SysMman,
-  Posix.SysUtsname,
+  Posix.fcntl,
+  Posix.StrOpts,
+  System.TimeSpan,
+  System.IOUtils,
   DateUtils,
   Classes;
 
@@ -459,6 +746,11 @@ begin
   FreeAndNil(cs);
 end;
 
+procedure DoneCriticalSection(var cs : TRTLCriticalSection);
+begin
+  FreeAndNil(cs);
+end;
+
 procedure EnterCriticalSection(const cs: TRTLCriticalSection);
 begin
   cs.Enter;
@@ -469,6 +761,34 @@ begin
   cs.Leave;
 end;
 {$endif}
+
+
+{$ifndef HASRTLEVENT}
+function RTLEventCreate: Pointer;
+begin
+  result:= TEvent.Create(nil, false, false, '');
+end;
+
+procedure RTLEventDestroy(anEvent: Pointer);
+begin
+  TEvent(anEvent).Free;
+end;
+
+procedure RTLEventSetEvent(anEvent: Pointer);
+begin
+  TEvent(anEvent).SetEvent;
+end;
+
+procedure RTLEventResetEvent(anEvent: Pointer);
+begin
+  TEvent(anEvent).ResetEvent;
+end;
+
+function RTLEventWaitFor(anEvent: Pointer; aTimeoutMS: Cardinal = INFINITE): TWaitResult;
+begin
+  result:= TEvent(anEvent).WaitFor(aTimeoutMS);
+end;
+{$endif HASRTLEVENT}
 
 (*
 //function UnixKeyPending: boolean;
@@ -1237,7 +1557,7 @@ begin
 end;
 
 {$endif LINUXNOTBSD}
-
+*)
 function GetHostName: AnsiString;
 var i: integer;
 begin
@@ -1255,7 +1575,7 @@ begin
      result:= '';
 end;
 
-
+(*
 function getCurrentThreadID: NativeUInt;
 begin
   result:= TThread.CurrentThread.ThreadID;
@@ -1343,7 +1663,8 @@ begin
         inc(psrc);
         end;
   result:= -1;
-end;
+end;
+
 function Indexword(Const buf; len: SizeInt; b: word): SizeInt;
 var psrc, pend: pword;
 begin
@@ -1365,15 +1686,68 @@ begin
         inc(psrc);
         end;
   result:=-1;
-end;
-function SwapEndian(const aQWord: UInt64): UInt64;
+end;
+
+//function SwapEndian(const aQWord: UInt64): UInt64;
+//begin
+//  Result:= ((aQWord shl 8) and $FF00FF00FF00FF00) or
+//           ((aQWord shr 8) and $00FF00FF00FF00FF);
+//  Result:= ((aQWord shl 16) and $FFFF0000FFFF0000) or
+//           ((aQWord shr 16) and $0000FFFF0000FFFF);
+//  Result:= (aQWord shl 32) or ((aQWord shr 32));
+//end;
+
+// From FPC rtl/arm/arm.inc - but it is generic - I think
+{ SwapEndian(<16 Bit>) being inlined is faster than using assembler }
+function SwapEndian(const AValue: SmallInt): SmallInt;
+  begin
+    { the extra Word type cast is necessary because the "AValue shr 8" }
+    { is turned into "longint(AValue) shr 8", so if AValue < 0 then    }
+    { the sign bits from the upper 16 bits are shifted in rather than  }
+    { zeroes.                                                          }
+    Result := SmallInt(((Word(AValue) shr 8) or (Word(AValue) shl 8)) and $ffff);
+  end;
+
+
+function SwapEndian(const AValue: Word): Word;
+  begin
+    Result := ((AValue shr 8) or (AValue shl 8)) and $ffff;
+  end;
+
+
+function RorDWord(Const AValue : DWord;const Dist : Byte): DWord; inline;
+  begin
+    Result:=(AValue shr (Dist and 31)) or (AValue shl (32-(Dist and 31)));
+  end;
+{
+  These used to be an assembler-function, but with newer improvements to the compiler this
+  generates a perfect 4 cycle code sequence and can be inlined.
+}
+function SwapEndian(const AValue: LongWord): LongWord;
+var
+  Temp: LongWord;
 begin
-  Result:= ((aQWord shl 8) and $FF00FF00FF00FF00) or
-           ((aQWord shr 8) and $00FF00FF00FF00FF);
-  Result:= ((aQWord shl 16) and $FFFF0000FFFF0000) or
-           ((aQWord shr 16) and $0000FFFF0000FFFF);
-  Result:= (aQWord shl 32) or ((aQWord shr 32));
-end;
+  Temp  := AValue xor rordword(AValue,16);
+  Temp  := Temp and $FF00FFFF;
+  Result:= (Temp shr 8) xor rordword(AValue,8);
+end;
+
+function SwapEndian(const AValue: LongInt): LongInt;
+begin
+  Result:=LongInt(SwapEndian(DWord(AValue)));
+end;
+
+function SwapEndian(const AValue: Int64): Int64;
+begin
+  Result:=(SwapEndian(longword(lo(AValue))) shl 32) or
+          (SwapEndian(longword(hi(AValue))));
+end;
+
+function SwapEndian(const AValue: QWord): QWord;
+begin
+  Result:=QWord(SwapEndian(Int64(AValue)));
+end;
+
 procedure DefaultFillcharFast(var Dest; count: PtrInt; Value: byte);
 begin
   FillChar(Dest, Count, Value);
@@ -1389,6 +1763,487 @@ begin
   result:= round(TTimeZone.Local.UtcOffset.TotalSeconds);
 end;
 
+function GetLocalTimeOffset: integer;
+begin
+  result:= TZSeconds div 60;
+end;
+
+function fpStat(AFileName: Pointer; var AStatBuffer: TStat): integer;
+var
+  LFileName: Pointer;
+  M: TMarshaller;
+begin
+  LFileName := M.AsAnsi(TFileName(aFileName), CP_UTF8).ToPointer;
+  result := stat(LFileName, AStatBuffer);
+end;
+
+function fpFStat(AFileHandle: THandle; var AStatBuffer: TStat): integer;
+begin
+  result := fstat(AFileHandle, AStatBuffer);
+end;
+
+function FpS_ISDIR(AAttributes: integer): boolean;
+begin
+  result:= TFileAttribute.faDirectory in TFile.IntegerToFileAttributes(AAttributes);
+end;
+
+function FpS_ISLNK(AAttributes: integer): boolean;
+begin
+  result:= TFileAttribute.faSymLink in TFile.IntegerToFileAttributes(AAttributes);
+end;
+
+function FpUtime(AFileName: Pointer; ATimBuf: PUTimBuf): integer;
+var
+  LFileName: Pointer;
+  M: TMarshaller;
+begin
+  LFileName := M.AsAnsi(TFileName(aFileName), CP_UTF8).ToPointer;
+  result := utime(LFileName, ATimBuf^);
+end;
+
+function fpaccess(AFileName: Pointer; AMode: integer): integer;
+var
+  LFileName: Pointer;
+  M: TMarshaller;
+begin
+  LFileName := M.AsAnsi(TFileName(aFileName), CP_UTF8).ToPointer;
+  result := access(LFileName, AMode);
+end;
+
+
+function fpchmod(AFileName: TFileName; AMode: integer): integer;
+var
+  LFileName: Pointer;
+  M: TMarshaller;
+begin
+  LFileName := M.AsAnsi(aFileName, CP_UTF8).ToPointer;
+  result := chmod(LFileName, AMode);
+end;
+
+function fpchmod(AFileName: Pointer; AMode: integer): integer;
+begin
+  result := fpchmod(TFilename(AFileName), AMode);
+end;
+
+function FPLSeek(AFileHandle: THandle; const Offset: Int64; Origin: cardinal): Int64;
+begin
+  result:= FileSeek(AFileHandle, offset, Origin); // From sysutils - handles 64 Bit per overload - handles Android special
+end;
+
+function fpsymlink(AFileName: Pointer; ATarget: Pointer): integer;
+var
+  LFileName: Pointer;
+  LTarget: Pointer;
+  M: TMarshaller;
+begin
+  LFileName:= M.AsAnsi(TFileName(AFileName), CP_UTF8).ToPointer;
+  LTarget:= M.AsAnsi(TFileName(ATarget), CP_UTF8).ToPointer;
+  result:= symlink(LFileName, LTarget);
+end;
+
+function fpOpen(AFileName: Pointer; Flags: Integer): integer;
+var
+  M: TMarshaller;
+begin
+  result:= Posix.fcntl.Open(M.AsAnsi(TFileName(AFileName), CP_UTF8).ToPointer, Flags);
+end;
+
+function fpOpen(AFileName: Pointer; Flags: Integer; Mode: mode_t): integer;
+var
+  M: TMarshaller;
+begin
+  result:= Posix.fcntl.Open(M.AsAnsi(TFileName(AFileName), CP_UTF8).ToPointer, Flags, Mode);
+end;
+
+function fpOpen(const AFileName: TFilename; Flags: Integer): integer;
+var
+  M: TMarshaller;
+begin
+  result:= Posix.fcntl.Open(M.AsAnsi(AFileName, CP_UTF8).ToPointer, Flags);
+end;
+
+function fpOpen(const AFileName: TFilename; Flags: Integer; Mode: mode_t): integer;
+var
+  M: TMarshaller;
+begin
+  result:= Posix.fcntl.Open(M.AsAnsi(AFileName, CP_UTF8).ToPointer, Flags, Mode);
+end;
+
+function fpClose(aHandle: integer): integer;
+begin
+  result:= __close(aHandle);
+end;
+
+function FpFtruncate(aHandle: THandle; aPos: Int64): integer;
+begin
+  result:= ftruncate(aHandle, aPOS);
+end;
+
+function FpFsync(aHandle: THandle): Integer;
+begin
+  result:= fsync(aHandle);
+end;
+
+function FpRead(fd: cint; buf: PAnsiChar; nbytes: TSize): TSSize;
+begin
+  result:= __read(fd, buf, nbytes);
+end;
+
+function FpRead(fd: cint; var buf: AnsiChar; nbytes: TSize): TSSize;
+begin
+  result:= __read(fd, @buf, 1);
+end;
+
+function FpRead(fd: cint; var buf; nbytes: TSize): TSSize;
+begin
+  result:= __read(fd, @buf, nbytes);
+end;
+
+function FpWrite(fd: cint; buf: PAnsiChar; nbytes: TSize): TSSize;
+begin
+  result:= __write(fd, buf, nbytes);
+end;
+
+function FpIOCtl(Handle: cint; Ndx: TIOCtlRequest; Data: Pointer): cint;
+begin
+  FpIOCtl:= IOCtl(Handle, Ndx, Data);
+end;
+
+function Fpopendir(aDirname: TFilename): pdir;
+var M: TMarshaller;
+begin
+  result:= opendir(M.AsAnsi(aDirname).toPointer);
+end;
+
+function Fpclosedir(dirp: pdir): cint;
+begin
+  result:= closedir(dirp);
+end;
+
+function Fpclosedir(var dir: Dir): cint;
+begin
+  result:= closedir(@dir);
+end;
+
+function FpReaddir(var dirp: Dir) : pDirent;
+begin
+   result:= readdir(@dirp);
+end;
+
+Function FpReadLink(name: PChar; linkname: PAnsiChar; maxlen: size_t): cint;
+var M: TMarshaller;
+begin
+  result:= ReadLink(M.AsAnsi(name).toPointer, linkName, maxlen);
+end;
+
+Function fpReadLink(const ALinkName: RawByteString): RawByteString;
+{
+  Read a link (where it points to)
+}
+var
+//  SystemFileName : RawByteString;
+  len: cint;
+  resultAnsi: RawByteString;
+begin
+  SetLength(resultAnsi, MAX_PATH);
+  // SystemFileName:= ToSingleByteFileSystemEncodedFileName(Name);
+  len:= fpReadLink(pchar(ALinkName), PAnsiChar(resultAnsi), MAX_PATH);
+  if len > 0 then
+     begin
+     SetLength(resultAnsi, len);
+//     setlength(result, MAX_PATH);
+//     Utf8ToUnicode(result[1], MAX_PATH, resultAnsi, len);
+     Result:= resultAnsi;
+     end
+  else
+     Result:='';
+end;
+
+function FpChdir(path: pointer): cint;
+var
+  M: TMarshaller;
+begin
+  result:= __chdir(M.AsAnsi(TFileName(path), CP_UTF8).ToPointer);
+end;
+
+
+function fpgeterrno: integer;
+begin
+  result:= errno;
+end;
+
+procedure fpseterrno(err: integer);
+begin
+  __error^:=err;
+end;
+
+const
+  sys_errn=125;
+  sys_errlist:array[0..sys_errn-1] of pchar = (
+        'Success',                              { 0 }
+        'Operation not permitted',              { EPERM }
+        'No such file or directory',            { ENOENT }
+        'No such process',                      { ESRCH }
+        'Interrupted system call',              { EINTR }
+        'I/O error',                            { EIO }
+        'No such device or address',            { ENXIO }
+        'Arg list too long',                    { E2BIG }
+        'Exec format error',                    { ENOEXEC }
+        'Bad file number',                      { EBADF }
+        'No child processes',                   { ECHILD }
+        'Try again',                            { EAGAIN }
+        'Out of memory',                        { ENOMEM }
+        'Permission denied',                    { EACCES }
+        'Bad address',                          { EFAULT }
+        'Block device required',                { ENOTBLK }
+        'Device or resource busy',              { EBUSY }
+        'File exists',                          { EEXIST }
+        'Cross-device link',                    { EXDEV }
+        'No such device',                       { ENODEV }
+        'Not a directory',                      { ENOTDIR }
+        'Is a directory',                       { EISDIR }
+        'Invalid argument',                     { EINVAL }
+        'File table overflow',                  { ENFILE }
+        'Too many open files',                  { EMFILE }
+        'Not a typewriter',                     { ENOTTY }
+        'Text (code segment) file busy',        { ETXTBSY  Text file busy.  The new process was
+                                                    a pure procedure (shared text) file which was
+                                                    open for writing by another process, or file
+                                                    which was open for writing by another process,
+                                                    or while the pure procedure file was being
+                                                    executed an open(2) call requested write access
+                                                    requested write access.}
+        'File too large',                       { EFBIG }
+        'No space left on device',              { ENOSPC }
+        'Illegal seek',                         { ESPIPE }
+        'Read-only file system',                { EROFS }
+        'Too many links',                       { EMLINK }
+        'Broken pipe',                          { EPIPE }
+        'Math argument out of domain of func',  { EDOM }
+        'Math result not representable',        { ERANGE }
+        'Resource deadlock would occur',        { EDEADLK }
+        'File name too long',                   { ENAMETOOLONG }
+        'No record locks available',            { ENOLCK }
+        'Function not implemented',             { ENOSYS }
+        'Directory not empty',                  { ENOTEMPTY }
+        'Too many symbolic links encountered',  { ELOOP }
+        'Operation would block',                { EWOULDBLOCK }
+        'No message of desired type',           { ENOMSG }
+        'Identifier removed',                   { EIDRM }
+        'Channel number out of range',          { ECHRNG }
+        'Level 2 not synchronized',             { EL2NSYNC }
+        'Level 3 halted',                       { EL3HLT }
+        'Level 3 reset',                        { EL3RST }
+        'Link number out of range',             { ELNRNG }
+        'Protocol driver not attached',         { EUNATCH }
+        'No CSI structure available',           { ENOCSI }
+        'Level 2 halted',                       { EL2HLT }
+        'Invalid exchange',                     { EBADE }
+        'Invalid request descriptor',           { EBADR }
+        'Exchange full',                        { EXFULL }
+        'No anode',                             { ENOANO }
+        'Invalid request code',                 { EBADRQC }
+        'Invalid slot',                         { EBADSLT }
+        'File locking deadlock error',          { EDEADLOCK }
+        'Bad font file format',                 { EBFONT }
+        'Device not a stream',                  { ENOSTR }
+        'No data available',                    { ENODATA }
+        'Timer expired',                        { ETIME }
+        'Out of streams resources',             { ENOSR }
+        'Machine is not on the network',        { ENONET }
+        'Package not installed',                { ENOPKG }
+        'Object is remote',                     { EREMOTE }
+        'Link has been severed',                { ENOLINK }
+        'Advertise error',                      { EADV }
+        'Srmount error',                        { ESRMNT }
+        'Communication error on send',          { ECOMM }
+        'Protocol error',                       { EPROTO }
+        'Multihop attempted',                   { EMULTIHOP }
+        'RFS specific error',                   { EDOTDOT }
+        'Not a data message',                   { EBADMSG }
+        'Value too large for defined data type',        { EOVERFLOW }
+        'Name not unique on network',           { ENOTUNIQ }
+        'File descriptor in bad state',         { EBADFD }
+        'Remote address changed',               { EREMCHG }
+        'Can not access a needed shared library',       { ELIBACC }
+        'Accessing a corrupted shared library',         { ELIBBAD }
+        '.lib section in a.out corrupted',      { ELIBSCN }
+        'Attempting to link in too many shared libraries',      { ELIBMAX }
+        'Cannot exec a shared library directly',        { ELIBEXEC }
+        'Illegal byte sequence',                { EILSEQ }
+        'Interrupted system call should be restarted',  { ERESTART }
+        'Streams pipe error',                   { ESTRPIPE }
+        'Too many users',                       { EUSERS }
+        'Socket operation on non-socket',       { ENOTSOCK }
+        'Destination address required',         { EDESTADDRREQ }
+        'Message too long',                     { EMSGSIZE }
+        'Protocol wrong type for socket',       { EPROTOTYPE }
+        'Protocol not available',               { ENOPROTOOPT }
+        'Protocol not supported',               { EPROTONOSUPPORT }
+        'Socket type not supported',            { ESOCKTNOSUPPORT }
+        'Operation not supported on transport endpoint',        { EOPNOTSUPP }
+        'Protocol family not supported',        { EPFNOSUPPORT }
+        'Address family not supported by protocol',     { EAFNOSUPPORT }
+        'Address already in use',               { EADDRINUSE }
+        'Cannot assign requested address',      { EADDRNOTAVAIL }
+        'Network is down',                      { ENETDOWN }
+        'Network is unreachable',               { ENETUNREACH }
+        'Network dropped connection because of reset',  { ENETRESET }
+        'Software caused connection abort',     { ECONNABORTED }
+        'Connection reset by peer',             { ECONNRESET }
+        'No buffer space available',            { ENOBUFS }
+        'Transport endpoint is already connected',      { EISCONN }
+        'Transport endpoint is not connected',  { ENOTCONN }
+        'Cannot send after transport endpoint shutdown',        { ESHUTDOWN }
+        'Too many references: cannot splice',   { ETOOMANYREFS }
+        'Connection timed out',                 { ETIMEDOUT }
+        'Connection refused',                   { ECONNREFUSED }
+        'Host is down',                         { EHOSTDOWN }
+        'No route to host',                     { EHOSTUNREACH }
+        'Operation already in progress',        { EALREADY }
+        'Operation now in progress',            { EINPROGRESS }
+        'Stale NFS file handle',                { ESTALE }
+        'Structure needs cleaning',             { EUCLEAN }
+        'Not a XENIX named type file',          { ENOTNAM }
+        'No XENIX semaphores available',        { ENAVAIL }
+        'Is a named type file',                 { EISNAM }
+        'Remote I/O error',                     { EREMOTEIO }
+        'Quota exceeded',                       { EDQUOT }
+        'No medium found',                      { ENOMEDIUM }
+        'Wrong medium type');                   { EMEDIUMTYPE }
+
+Function StrError(err:cint):string;
+var s : string[12];
+begin
+  if (err<0) or (err>=sys_errn) then
+   begin
+     str(err,s);
+     StrError:= 'Unknown Error ('+s+')';
+   end
+  else
+   StrError:= StrPas(Sys_ErrList[err]);
+end;
+
+
+function dlopen(aFilename: pointer; aMode: Integer): THandle;
+var M: TMarshaller;
+begin
+  result:= posix.dlfcn.dlopen(M.AsAnsi(TFileName(aFilename), CP_UTF8).ToPointer, aMode);
+end;
+
+function dlclose(aLib: pointer): integer;
+begin
+ result:= posix.dlfcn.dlclose(NativeUInt(aLib));
+end;
+
+function dlclose(aLib: NativeUInt): integer;
+begin
+ result:= posix.dlfcn.dlclose(aLib);
+end;
+
+function dlsym(aLib: Pointer; aProcName: Pointer): Pointer;
+var M: TMarshaller;
+begin
+  result:= posix.dlfcn.dlsym(NativeUInt(aLIB), M.AsAnsi(string(aProcName), CP_UTF8).ToPointer);
+end;
+
+function dlsym(aLib: NativeUInt; aProcName: Pointer): Pointer;
+var M: TMarshaller;
+begin
+  result:= posix.dlfcn.dlsym(aLIB, M.AsAnsi(string(aProcName), CP_UTF8).ToPointer);
+end;
+
+function dlsym(aLib: NativeUInt; aProcName: string): Pointer;
+var M: TMarshaller;
+begin
+  result:= posix.dlfcn.dlsym(aLIB, M.AsAnsi(aProcName, CP_UTF8).ToPointer);
+end;
+
+function dlerror: string;
+begin
+  result:= posix.dlfcn.dlerror;
+end;
+
+function dladdr(aAddress: Pointer; aDLInfo: Pdl_info): integer;
+begin
+  result:= posix.dlfcn.dladdr(UIntPtr(aAddress), aDLInfo^);
+end;
+
+function fpmmap(addr: pointer; len: size_t; prot: cint; flags: cint; fd: cint; ofs: off_t): pointer;
+begin
+  result:= posix.SysMman.mmap(addr, len, prot, flags, fd, ofs);
+end;
+
+function fpmunmap(addr: pointer; len: size_t): cint;
+begin
+  result:= posix.SysMman.munmap(addr, len);
+end;
+
+procedure ThreadSwitch;  {give time to other threads}
+begin
+  sched_yield;
+end;
+
+function  FPnanosleep(const rqtp: ptimespec; rmtp: ptimespec): cint;
+begin
+   result:= nanosleep(rqtp^, rmtp);
+end;
+
+function FpGetppid;
+begin
+  result:= Getppid;
+end;
+
+function _statfs(__file: MarshaledAString; var __buf: TStatfs): Integer; cdecl; external libc name 'statfs';
+
+function fpStatFS(const aDriveFolderOrFile: TFileName; aFS: PStatfs): integer;
+var M: TMarshaller;
+begin
+  result:= _statfs(M.AsAnsi(aDriveFolderOrFile, CP_UTF8).ToPointer, aFS^);
+end;
+
+function FpSigaction (sig: cInt; act: pSigActionRec; oact: pSigActionRec): cint;
+begin
+  result:= sigaction(sig, pSigAction_t(act), pSigAction_t(oact));
+end;
+
+function FpKill(pid: TPid; sig: cInt): cInt;
+begin
+  result:= kill(pid, sig);
+end;
+
+function FpUmask(cmask: TMode): TMode;
+begin
+  result:= umask(cmask);
+end;
+
+function FpFork: TPid;
+begin
+  result:= fork;
+end;
+
+function FpSetsid: TPid;
+begin
+  result:= setsid;
+end;
+
+function FpGetpid: pid_t;
+begin
+  result:= getpid;
+end;
+
+function GetSystemProperty(Name: PAnsiChar): shortstring;
+begin
+  SetLength(Result, __system_property_get(Name, @Result[1]));
+end;
+
+function FpUname(var name: utsname): cint;
+begin
+  result:= uname(name);
+end;
+
+
+
 initialization
   GetKernelRevision;
   {$ifdef USE_EXTERNALLIBAPI}
@@ -1399,5 +2254,6 @@ initialization
 finalization
   ExternalLibraries.Done;
 {$endif}
+
 
 end.
