@@ -9028,31 +9028,29 @@ var
   f: double;
 begin
   result := true;
-  case Cache.Kind of
-    rkLString:
-      PRawUtf8(Data)^ := Text;
-    rkWString:
-      Utf8ToWideString(pointer(Text), length(Text), PWideString(Data)^);
-    {$ifdef HASVARUSTRING}
-    rkUString:
-      Utf8DecodeToUnicodeString(pointer(Text), length(Text), PUnicodeString(Data)^);
-    {$endif HASVARUSTRING}
-    rkFloat:
-      if ToDouble(Text, f) then
+  if rcfHasRttiOrd in Cache.Flags then
+    if ToInt64(Text, v) then
+      RTTI_TO_ORD[Cache.RttiOrd](Data, v)
+    else
+      result := false
+  else if rcfGetInt64Prop in Cache.Flags then
+    result := ToInt64(Text, PInt64(Data)^)
+  else case Parser of
+    ptCurrency:
+      PInt64(Data)^ := StrToCurr64(pointer(Text)); // no temp Double conversion
+    ptRawUtf8:
+      PRawUtf8(Data)^ := Text; // very common case
+    ptGuid:
+      if Text = '' then
+        FillZero(PHash128(@result)^)
+      else
+        result := RawUtf8ToGuid(Text, PGuid(Data)^);
+    else if Cache.Kind = rkFloat then
+      if AnyTextToDouble(Text, f) then // also tries _Iso8601ToDateTime()
         RTTI_TO_FLOAT[Cache.RttiFloat](Data, f)
       else
-        result := false;
-    rkVariant:
-      RawUtf8ToVariant(Text, PVariant(Data)^);
-  else
-    if rcfHasRttiOrd in Cache.Flags then
-      if ToInt64(Text, v) then
-        RTTI_TO_ORD[Cache.RttiOrd](Data, v)
-      else
         result := false
-    else if rcfGetInt64Prop in Cache.Flags then
-      result := ToInt64(Text, PInt64(Data)^)
-    else
+    else if not RttiKindFromUtf8(Cache.Kind, Data, Text) then
       result := false;
   end;
 end;
