@@ -1660,6 +1660,7 @@ type
     /// find an item in this document, and returns its value as floating point
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
+    // (trying _Iso8601ToDateTime() if needed)
     // - after a SortByName(aSortedCompare), could use faster binary search
     // - consider using D[] property if you want simple read/write typed access
     function GetAsDouble(const aName: RawUtf8; out aValue: double;
@@ -2276,6 +2277,7 @@ type
     /// direct access to a dvObject floating-point stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
+    // - reading D['prop'] may try _Iso8601ToDateTime() and return a TDateTime
     // - use GetAsDouble if you want to check the availability of the field
     // - D['prop'] := 1.23 would add a new property, or overwrite an existing
     property D[const aName: RawUtf8]: Double
@@ -3417,6 +3419,7 @@ type
     function Get(const key: RawUtf8; var value: Int64): boolean; overload;
     /// access one element in the dictionary, as floating-point double
     // - if the key does not exist or can not be converted, returns false
+    // - Get('prop', value) may try _Iso8601ToDateTime() and return a TDateTime
     function Get(const key: RawUtf8; var value: double): boolean; overload;
     /// access one element in the dictionary, fixed precision currency
     // - if the key does not exist or can not be converted, returns false
@@ -3510,6 +3513,7 @@ type
     property I[const key: RawUtf8]: Int64
       read GetI write SetI;
     /// access one element in the dictionary from its key, as floating-point double
+    // - reading F['prop'] may try _Iso8601ToDateTime() and return a TDateTime
     property F[const key: RawUtf8]: double
       read GetF write SetF;
     /// access one element in the dictionary from its key, as fixed precision currency
@@ -8600,7 +8604,7 @@ begin
   if found = nil then
     result := false
   else
-    result := VariantToDouble(PVariant(found)^, aValue);
+    result := AnyVariantToDouble(PVariant(found)^, aValue);
 end;
 
 function TDocVariantData.GetAsRawUtf8(const aName: RawUtf8; out aValue: RawUtf8;
@@ -9445,7 +9449,7 @@ end;
 
 function TDocVariantData.GetDoubleByName(const aName: RawUtf8): Double;
 begin
-  if not VariantToDouble(GetPVariantByName(aName)^, result) then
+  if not AnyVariantToDouble(GetPVariantByName(aName)^, result) then
     result := 0;
 end;
 
@@ -11825,7 +11829,7 @@ var
   v: PVariant;
 begin
   v := GetExistingValueAt(key, 'F');
-  if not VariantToDouble(v^, result) then
+  if not AnyVariantToDouble(v^, result) then
     EDocDict.Error('F', key, v^);
 end;
 
@@ -12000,7 +12004,7 @@ var
   v: PVariant;
 begin
   result := GetValueAt(key, v) and
-            VariantToDouble(v^, value);
+            AnyVariantToDouble(v^, value);
 end;
 
 function TDocDict.Get(const key: RawUtf8; var value: currency): boolean;
