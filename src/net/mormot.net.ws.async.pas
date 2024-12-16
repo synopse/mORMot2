@@ -111,7 +111,7 @@ type
     // maintain a thread-safe list to minimize ProcessIdleTix time
     fOutgoingSafe: TLightLock; // atomic fOutgoingHandle[] access
     fOutgoingCount: integer;
-    fOutgoingHandle: TPollAsyncConnectionHandleDynArray;
+    fOutgoingHandle: TConnectionAsyncHandleDynArray; // = array of integer
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
     procedure ProcessIdleTixSendFrames;
     // overriden to send pending frames
@@ -302,7 +302,7 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
     if result <> HTTP_SUCCESS then
       exit;
     fHttp.State := hrsUpgraded;
-    fLockMax := true; // WebSockets separate receiving and sending
+    include(fInternalFlags, ifSeparateWLock); // WebSockets separate receive/send
     // send back WS upgrade 101 response
     if fOwner.WriteString(self, resp, {timeout=}1000) then
     begin
@@ -405,7 +405,7 @@ end;
 procedure TWebSocketAsyncConnections.ProcessIdleTixSendFrames;
 var
   i, conn, valid, sent, invalid, unknown: PtrInt;
-  pending: TPollAsyncConnectionHandleDynArray; // keep fOutgoingSafe lock short
+  pending: TConnectionAsyncHandleDynArray; // keep fOutgoingSafe lock short
   c: TAsyncConnection;
   start, elapsed: Int64;
 begin
@@ -483,7 +483,7 @@ function TWebSocketAsyncProcess.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
 begin
   result := THttpServerRequest.Create(
-    fConnection.fServer, fProtocol.ConnectionID, nil, 
+    fConnection.fServer, fProtocol.ConnectionID, nil,  {asynchandle=}0,
     fProtocol.ConnectionFlags + HTTP_TLS_FLAGS[Assigned(fConnection.fSecure)],
     fProtocol.ConnectionOpaque);
   RequestProcess :=  fConnection.fServer.Request;

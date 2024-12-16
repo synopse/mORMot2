@@ -148,13 +148,13 @@ procedure bswap256(s, d: PIntegerArray);
 function Hash128ToExt(P: PHash128Rec): TSynExtended;
  {$ifdef FPC} inline; {$endif} { Delphi has troubles inlining floats results }
 
-/// low-level function able to derivate a 0..1 64-bit floating-point from 128-bit of data
+/// low-level function able to derivate a [0..1) 64-bit floating-point from 128-bit of data
 // - used e.g. by TAesPrng.RandomDouble
 // - only the higher part of P^ will be used for derivation thanks to AES input
 function Hash128ToDouble(P: PHash128Rec): double;
  {$ifdef FPC} inline; {$endif}
 
-/// low-level function able to derivate a 0..1 32-bit floating-point from 128-bit of data
+/// low-level function able to derivate a [0..1) 32-bit floating-point from 128-bit of data
 // - only the lower part of P^ will be used for derivation thanks to AES input
 function Hash128ToSingle(P: PHash128Rec): single;
  {$ifdef FPC} inline; {$endif}
@@ -2858,7 +2858,7 @@ type
   // - memory size matches an TAesBlock on purpose, for direct encryption
   // - TAesFull uses unsafe direct AES-ECB chain mode, so is considered deprecated
   {$ifdef USERECORDWITHMETHODS}
-   TAesFullHeader = record
+  TAesFullHeader = record
   {$else}
   TAesFullHeader = object
   {$endif USERECORDWITHMETHODS}
@@ -7789,24 +7789,24 @@ begin
   alreadyseeding := fSeeding;
   fSeeding := true;
   fSafe.UnLock;
-  if not alreadyseeding then
+  if alreadyseeding then
+    exit; // only a single (first) thread would do the entropy seeding
+  try
+    entropy := GetEntropy(128, fSeedEntropySource); // 128=HmacSha512 block size
+    Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
+    fSafe.Lock;
     try
-      // 128 bytes is the HmacSha512 key block size
-      entropy := GetEntropy(128, fSeedEntropySource);
-      Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
-      fSafe.Lock;
-      try
-        fAes.EncryptInit(key.Lo, fAesKeySize);
-        DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
-        fBytesSinceSeed := 0;
-      finally
-        fSafe.UnLock;
-      end;
-    finally
-      FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
-      FillZero(entropy);
+      fAes.EncryptInit(key.Lo, fAesKeySize);
+      DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
+      fBytesSinceSeed := 0;
       fSeeding := false;
+    finally
+      fSafe.UnLock;
     end;
+  finally
+    FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
+    FillZero(entropy);
+  end;
 end;
 
 procedure TAesPrng.FillRandom(out Block: TAesBlock);

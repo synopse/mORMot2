@@ -898,9 +898,6 @@ type
     /// append 2 bytes of data at the current position
     procedure Write2(Data: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append 2 bytes of data, encoded as BigEndian,  at the current position
-    procedure Write2BigEndian(Data: cardinal);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer);
       {$ifdef HASINLINE}inline;{$endif}
@@ -1859,6 +1856,10 @@ function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
 /// recognize e.g. 'application/json' or 'application/vnd.api+json'
 function IsContentTypeJson(ContentType: PUtf8Char): boolean;
 
+/// recognize e.g. 'application/json' or 'application/vnd.api+json'
+function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// fast guess of the size, in pixels, of a JPEG memory buffer
 // - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
 // - returns TRUE if the buffer is likely to be a JPEG picture, and set the
@@ -2222,9 +2223,17 @@ type
     /// release the associated Redirected stream
     destructor Destroy; override;
     /// can be used as TOnStreamProgress callback writing into the console
+    // - will append the current state in the console last line
     class procedure ProgressStreamToConsole(Sender: TStreamRedirect);
     /// can be used as TOnInfoProgress callback writing into the console
+    // - will append the current state in the console last line
     class procedure ProgressInfoToConsole(Sender: TObject; Info: PProgressInfo);
+    /// can be used as TOnStreamProgress callback writing into the console
+    // - will append the current state in the console with a line feed
+    class procedure ProgressStreamToConsoleLn(Sender: TStreamRedirect);
+    /// can be used as TOnInfoProgress callback writing into the console
+    // - will append the current state in the console with a line feed
+    class procedure ProgressInfoToConsoleLn(Sender: TObject; Info: PProgressInfo);
     /// notify a TOnStreamProgress callback that a process ended
     // - create a fake TStreamRedirect and call Ended with the supplied info
     class procedure NotifyEnded(
@@ -2266,6 +2275,10 @@ type
     // - this TStream instance will be owned by the TStreamRedirect
     property Redirected: TStream
       read fRedirected write fRedirected;
+    /// low-level access to the progression information data structure
+    // - don't use this but other specific properties like ExpectedSize or Percent
+    property Info: TProgressInfo
+      read fInfo;
     /// you can specify a number of bytes for the final Redirected size
     // - will be used for the callback progress - could be left to 0 for Write()
     // if size is unknown
@@ -3598,7 +3611,7 @@ function TFastReader.Next2BigEndian: cardinal;
 begin
   if P + 1 >= Last then
     ErrorOverflow;
-  result := swap(PWord(P)^);
+  result := bswap16(PWord(P)^);
   inc(P, 2);
 end;
 
@@ -4565,11 +4578,6 @@ begin
     InternalFlush;
   PWord(@fBuffer^[fPos])^ := Data;
   inc(fPos, SizeOf(Word));
-end;
-
-procedure TBufferWriter.Write2BigEndian(Data: cardinal);
-begin
-  Write2(swap(word(Data)));
 end;
 
 procedure TBufferWriter.Write4(Data: integer);
@@ -9061,6 +9069,11 @@ begin
             (PtrUInt(IdemPPChar(ContentType + 12, @_CONTENT_APP)) <= 2);
 end;
 
+function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
+begin
+  result := IsContentTypeJson(pointer(ContentType));
+end;
+
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
   out Height, Width, Bits: integer): boolean;
 var
@@ -9082,8 +9095,8 @@ begin
     case ord(jpeg^) of
       $c0..$c3, $c5..$c7, $c9..$cb, $cd..$cf: // SOF
         begin
-          Height := swap(PWord(jpeg + 4)^);
-          Width  := swap(PWord(jpeg + 6)^);
+          Height := bswap16(PWord(jpeg + 4)^);
+          Width  := bswap16(PWord(jpeg + 6)^);
           Bits   := PByte(jpeg + 8)^ * 8;
           result := (Height > 0) and
                     (Height < 20000) and
@@ -9098,7 +9111,7 @@ begin
       $ff: // padding
         ;
     else
-      inc(jpeg, swap(PWord(jpeg + 1)^) + 1);
+      inc(jpeg, bswap16(PWord(jpeg + 1)^) + 1);
     end;
   end;
 end;
@@ -9786,17 +9799,31 @@ var
   eraseline: ShortString;
   msg: RawUtf8;
 begin
-  eraseline[0] := AnsiChar(Info.ConsoleLen + 2);
-  eraseline[1] := #13;
-  FillCharFast(eraseline[2], ord(eraseline[0]) - 2, 32);
-  eraseline[ord(eraseline[0])] := #13;
-  system.write(eraseline);
-  msg := Info.GetProgress;
+  msg := Info^.GetProgress;
   if length(msg) > 250 then
     FakeLength(msg, 250); // paranoid overflow check
-  Info.ConsoleLen := length(msg); // to properly erase previous line
+  // properly erase previous line
+  eraseline[0] := AnsiChar(Info^.ConsoleLen + 2);
+  eraseline[1] := #13;
+  FillCharFast(eraseline[2], Info^.ConsoleLen, 32);
+  eraseline[ord(eraseline[0])] := #13;
+  Info^.ConsoleLen := length(msg);
   Prepend(msg, [eraseline]);
-  ConsoleWrite(msg, ccLightGray, {nolf=}true, {nocolor=}true);
+  // output to console in a single syscall
+  ConsoleWriteRaw(msg, {nolf=}true);
+end;
+
+class procedure TStreamRedirect.ProgressStreamToConsoleLn(Sender: TStreamRedirect);
+begin
+  if (Sender <> nil) and
+     Sender.InheritsFrom(TStreamRedirect) then
+    ProgressInfoToConsoleLn(Sender, @Sender.fInfo);
+end;
+
+class procedure TStreamRedirect.ProgressInfoToConsoleLn(
+  Sender: TObject; Info: PProgressInfo);
+begin
+  ConsoleWriteRaw(Info^.GetProgress);
 end;
 
 class procedure TStreamRedirect.NotifyEnded(
@@ -11445,7 +11472,7 @@ begin
 end;
 
 const
-  APPEND_OVERLOAD = 24; // for AppendCRLF or IndexByte() read overflow
+  APPEND_OVERLOAD = 24; // for Append(AnsiChar), AppendCRLF or IndexByte()
 
 procedure TRawByteStringBuffer.RawAppend(P: pointer; PLen: PtrInt);
 var

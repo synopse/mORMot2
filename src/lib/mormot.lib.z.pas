@@ -30,7 +30,11 @@ interface
   // select best known choice if not overriden for the whole project
   {$ifdef FPC}
     {$ifdef OSWINDOWS}
-      {$define ZLIBSTATIC} // FPC Win32 Win64: we supply our static .o
+      {$ifdef CPUINTEL}
+        {$define ZLIBSTATIC} // FPC Win32 Win64: we supply our static .o
+      {$else}
+        {$define ZLIBPAS}    // aarch64-win64: no static yet
+      {$endif CPUINTEL}
     {$else}
       {$ifdef OSANDROID}
         {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)

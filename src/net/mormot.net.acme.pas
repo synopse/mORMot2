@@ -1050,17 +1050,20 @@ begin
     if FindFirst(fKeyStoreFolder + '*.json', faAnyFile, f) = 0 then
     begin
       repeat
-         if SearchRecValidFile(f) then
+         if SearchRecValidFile(f, {includehidden=}true) then
            try
              fn := fKeyStoreFolder + GetFileNameWithoutExt(f.Name);
              ObjArrayAdd(fClient, TAcmeLetsEncryptClient.Create(self, fn));
              if Assigned(log) then
                log.Log(sllDebug, 'LoadFromKeyStoreFolder: added %', [fn], self);
            except
-             RenameFile(fn, fn + '.invalid'); // don't try it again
-             if Assigned(log) then
-               log.Log(sllWarning,
-                 'LoadFromKeyStoreFolder: renamed as %.invalid', [fn], self);
+             on E: Exception do
+             begin
+               RenameFile(fn, fn + '.invalid'); // don't try it again
+               if Assigned(log) then
+                 log.Log(sllWarning, 'LoadFromKeyStoreFolder: renamed as ' +
+                   '%.invalid after %', [fn, E.ClassType], self);
+             end;
            end;
       until FindNext(f) <> 0;
       FindClose(f);
@@ -1096,7 +1099,7 @@ begin
   cc := Cert(fAlgo);
   if cc = nil then
     exit;
-  expired := NowUtc - fRenewBeforeEndDays;
+  expired := NowUtc + fRenewBeforeEndDays;
   fSafe.Lock;
   try
     for i := 0 to length(fClient) - 1 do

@@ -3791,11 +3791,13 @@ begin
   // validate RSA key generation
   for i := 1 to 1 do
   begin
-    c := TRsa.Create;
+    c := nil;
     try
       timer.Start;
-      check(c.Generate, 'TimeOut'); // with RSA_DEFAULT_GENERATION_* values
+      c := TRsa.GenerateNew; // with RSA_DEFAULT_GENERATION_* values
       NotifyTestSpeed('RS256 generate', -1, 0, @timer);
+      if CheckFailed(c <> nil, 'TimeOut') then
+        break;
       CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
       CheckEqual(c.ModulusLen, 256);
       CheckEqual(c.E^.ToText, '65537');

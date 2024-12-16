@@ -459,6 +459,14 @@ function CompareBI(A, B: HalfUInt): integer;
 { **************** RSA Low-Level Cryptography Functions }
 
 type
+  /// the TRsa.Generate method result
+  TRsaGenerateResult = (
+    rgrSuccess,
+    rgrIncorrectParams,
+    rgrTimeout,
+    rgrRandomGeneratorFailure,
+    rgrWeakBitsMayRetry);
+
   /// store a RSA public key
   // - with DER (therefore PEM) serialization support
   // - e.g. as decoded from an X509 certificate
@@ -541,6 +549,14 @@ type
   public
     /// initialize the RSA key context
     constructor Create; override;
+    /// initialize and generate a new RSA key context
+    // - this is the main factory to generate a new RSA keypair
+    // - will call Create and Generate() with proper retry on rgrWeakBitsMayRetry
+    // - returns nil on generation error (with a silent exception)
+    class function GenerateNew(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
+      Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
+      Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
+      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): TRsa;
     /// finalize the RSA key context
     destructor Destroy; override;
     /// check if M and E fields are set
@@ -563,10 +579,12 @@ type
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
     // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
+    // - hint: consider using the TRsa.GenerateNew factory , which would properly
+    // handle rgrWeakBitsMayRetry result
     function Generate(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
       Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
       Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
-      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): boolean;
+      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): TRsaGenerateResult;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -712,6 +730,8 @@ type
 // - following RSASSA-PKCS1-v1_5 signature scheme RFC 8017 #9.2 steps 1 and 2
 // - as used by TRsa.Sign() method and expected by CKM_RSA_PKCS signature
 function RsaSignHashToDer(Hash: PHash512; HashAlgo: THashAlgo): TAsnObject;
+
+function ToText(res: TRsaGenerateResult): PShortString; overload;
 
 
 { *********** Registration of our RSA Engine to the TCryptAsym Factory }
@@ -2182,6 +2202,11 @@ begin
             ]);
 end;
 
+function ToText(res: TRsaGenerateResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TRsaGenerateResult), ord(res));
+end;
+
 
 
 { TRsaPublicKey }
@@ -2400,6 +2425,33 @@ begin
             (RsaPublicKey.M.Compare(M) = 0);
 end;
 
+class function TRsa.GenerateNew(Bits: integer; Extend: TBigIntSimplePrime;
+  Iterations, TimeOutMS: integer): TRsa;
+var
+  res: TRsaGenerateResult;
+begin
+  result := Create;
+  try
+    res := result.Generate(Bits, Extend, Iterations, TimeOutMS);
+    case res of
+      rgrSuccess:
+        exit;
+      rgrWeakBitsMayRetry: // retry once with new instance
+        begin
+          result.Free;
+          result := Create;
+          res := result.Generate(Bits, Extend, Iterations, TimeOutMS);
+          if res = rgrSuccess then
+            exit;
+        end;
+    end;
+    // silent but explicit exception on generation failure
+    ERsaException.RaiseUtf8('%.GenerateNew failed as %', [self, ToText(res)^]);
+  except
+    FreeAndNil(result); // error occurred during keypair generation
+  end;
+end;
+
 const
   // we force exponent = 65537 - FIPS 5.4 (e)
   BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
@@ -2407,14 +2459,14 @@ const
 // see https://www.di-mgt.com.au/rsa_alg.html as reference
 
 function TRsa.Generate(Bits: integer; Extend: TBigIntSimplePrime;
-  Iterations, TimeOutMS: integer): boolean;
+  Iterations, TimeOutMS: integer): TRsaGenerateResult;
 var
   _e, _p, _q, _d, _h, _tmp: PBigInt;
   comp: integer;
   endtix: Int64;
 begin
-  result := false;
   // ensure we can actually generate such a RSA key
+  result := rgrIncorrectParams;
   if HasPublicKey or
      HasPrivateKey or
      ((Bits <> 512) and    // broken with average CPU power
@@ -2439,6 +2491,7 @@ begin
     // compute two p and q random primes
     repeat
       // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      result := rgrTimeout;
       repeat
         if not _p.FillPrime(Extend, Iterations, endtix) then
           exit; // timed out
@@ -2447,6 +2500,7 @@ begin
         if not _q.FillPrime(Extend, Iterations, endtix) then
           exit;
       until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+      result := rgrRandomGeneratorFailure;
       comp := _p.Compare(_q);
       if comp = 0 then
         exit // random generator is clearly wrong if p=q
@@ -2473,7 +2527,7 @@ begin
       // FIPS 186-4 B.3.1 criterion 3: ensure enough bits in d
       comp := _d.BitCount;
       if comp > (Bits + 1) shr 1 then
-        break;
+        break; // enough bits
       _d.Release;
     until false;
     // setup the RSA keys parameters with ChineseRemainderTheorem constants
@@ -2489,7 +2543,9 @@ begin
     SetModulo(fP, rmP);
     SetModulo(fQ, rmQ);
     dec(Bits, fM.BitCount);
-    result := (Bits = 0) or (Bits = 1); // allow e.g. pq=1023 for 1024-bit
+    result := rgrWeakBitsMayRetry; // not final error - see TRsa.GenerateNew()
+    if Bits in [0, 1] then // allow e.g. pq=1023 for 1024-bit
+      result := rgrSuccess;
   finally
     // finalize local variables if were not assigned
     _q.Release;
@@ -3216,10 +3272,9 @@ var
 begin
   if privpwd <> '' then
     ECrypt.RaiseUtf8('%.GenerateDer: unsupported privpwd', [self]);
-  rsa := fRsaClass.Create;
+  rsa := fRsaClass.GenerateNew;
+  if rsa <> nil then
   try
-    if not rsa.Generate then
-      exit; // timed out
     pub := rsa.SavePublicKeyDer;
     priv := rsa.SavePrivateKeyDer;
   finally
@@ -3396,9 +3451,10 @@ begin
     if fRsa = nil then
     begin
       fKeyAlgo := CAA_CKA[Algorithm];
-      fRsa := CKA_TO_RSA[fKeyAlgo].Create;
-      if fRsa.Generate(RSA_DEFAULT_GENERATION_BITS) then
-        result := fRsa.SavePublicKey.ToSubjectPublicKey;
+      fRsa := CKA_TO_RSA[fKeyAlgo].GenerateNew(RSA_DEFAULT_GENERATION_BITS);
+      if fRsa = nil then
+        exit;
+      result := fRsa.SavePublicKey.ToSubjectPublicKey;
     end;
 end;
 

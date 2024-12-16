@@ -753,8 +753,8 @@ end;
   hash=ms is the time needed to hash input (not impacted by adjusting algorithm)
   -> TDynArray.Delete move() now takes more time than the HashTable update :)
   1. naive loop
-    for i := 0 to HashTableSize-1 do
-      if HashTable[i]>aArrayIndex then
+    for i := 0 to HashTableSize - 1 do
+      if HashTable[i] > aArrayIndex then
         dec(HashTable[i]);
     3 #257  adjust=7.95ms 191.7MB/s hash=8us
     23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
@@ -764,7 +764,7 @@ end;
   3. SSE2 simd assembly makes about 3x improvement
     3 #257  adjust=290us 5.1GB hash=8us
     23 #195075  adjust=201.53ms 11.3GB/s hash=2.44ms
-  4. AVX2 simd assembly gives some additional 40% (on my iCore3 cpu)
+  4. AVX2 simd assembly gives some additional 40% (on my Core i3 cpu)
     3 #257  adjust=262us 5.6GB hash=8us
     23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
 }

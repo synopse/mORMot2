@@ -82,7 +82,7 @@ type
   /// stores a WebSockets frame
   // - see @http://tools.ietf.org/html/rfc6455 for reference
   TWebSocketFrame = record
-    /// the interpretation of the frame data
+    /// the content of the frame data, typically focText or focBinary
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
@@ -297,7 +297,7 @@ type
     fEncryption: IProtocol;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); virtual; abstract;
+      var Request: TWebSocketFrame; const Info: RawUtf8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
     procedure AfterGetFrame(var frame: TWebSocketFrame); virtual;
@@ -316,10 +316,16 @@ type
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName, aUri: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual; abstract;
-    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    // - by default, will return nil, as expected for Client-side only
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual;
+    /// the sub-protocols supported by this client (not used on server side)
+    // - as transmitted in the 'Sec-WebSocket-Protocol:' header during upgrade
+    // - returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    // - some protocols have no sub-protocol, so would return '' here
     function GetSubprotocols: RawUtf8; virtual;
-    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
+    /// recognize a supported sub-protocol (on both client and server sides)
+    // - should return true on success, i.e. if aProtocolName has been recognized
+    // - check against Name by default, but could be e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; virtual;
     /// create the internal Encryption: IProtocol according to the supplied key
     // - any asymmetric algorithm needs to know its side, i.e. client or server
@@ -419,7 +425,7 @@ type
     fSequencing: boolean;
     fSequence: integer;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-       var request: TWebSocketFrame; const info: RawUtf8); override;
+       var Request: TWebSocketFrame; const Info: RawUtf8); override;
     procedure FrameCompress(const Head: RawUtf8; const Values: array of const;
       const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
         virtual; abstract;
@@ -500,7 +506,7 @@ type
       var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrames(Sender: TWebSocketProcess; P, PMax: PByte);
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); override;
+      var Request: TWebSocketFrame; const Info: RawUtf8); override;
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
   public
@@ -534,9 +540,9 @@ type
         reintroduce; overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
-    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    /// overriden to return 'synopsebin, synopsebinary' sub-protocols
     function GetSubprotocols: RawUtf8; override;
-    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
+    /// recognize our 'synopsebin, synopsebinary' sub-protocols
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
   published
     /// how compression / encryption is implemented during the transmission
@@ -973,18 +979,20 @@ type
   /// simple chatting protocol, allowing to receive and send WebSocket frames
   // - you can use this protocol to implement simple asynchronous communication
   // with events expecting no answers, e.g. from or as AJAX applications
+  // - as used e.g. by sample ex/rest-websockets/restws_simpleechoserver.dpr
   // - see TWebSocketProtocolRest for bi-directional events expecting answers,
   // as between mORMot client and server
   TWebSocketProtocolChat = class(TWebSocketProtocol)
   protected
     fOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); override;
+      var Request: TWebSocketFrame; const Info: RawUtf8); override;
   public
     /// initialize the chat protocol with an incoming frame callback
+    // - if you need no "Sec-WebSocket-Protocol:" header, specify aName = ''
     constructor Create(const aName, aUri: RawUtf8;
        const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
-    /// compute a new instance of the WebSockets protocol, with same parameters
+    /// compute a new instance of this WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
     /// allows to send a message over the wire to a specified connection
     // - a temporary copy of the Frame content will be made for safety
@@ -992,13 +1000,13 @@ type
     function SendFrame(Sender: TWebSocketProcess;
        const Frame: TWebSocketFrame): boolean;
     /// allows to send a JSON message over the wire to a specified connection
+    // - a temporary copy of the Json content will be made for safety
     function SendFrameJson(Sender: TWebSocketProcess;
        const Json: RawUtf8): boolean;
     /// you can assign an event to this property to be notified of incoming messages
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
       read fOnIncomingFrame write fOnIncomingFrame;
   end;
-
 
 var
   /// if set, will log all WebSockets raw information
@@ -1022,6 +1030,11 @@ var
 type
   /// define the Engine.IO available packet types
   // - defined in their numeric order, so ord() would give the proper ID number
+  // - eioOpen (0) is used during the handshake
+  // - eioClose (1) indicates that a transport can be closed
+  // - eioPing (2) and eioPong (3) implement a heartbeat mechanism
+  // - eioMessage (4) sends a payload to the other side
+  // - eioUpgrade (5) and eioNoop (6) are used during the upgrade process
   TEngineIOPacket = (
    eioOpen,
    eioClose,
@@ -1030,10 +1043,17 @@ type
    eioMessage,
    eioUpgrade,
    eioNoop);
+  PEngineIOPacket = ^TEngineIOPacket;
 
   /// define the Socket.IO available packet types
   // - defined in their numeric order, so ord() would give the proper ID number
   // - such packets are likely to be nested in a eioMessage frame
+  // - sioOpen (0) and sioConnectError (4) are used during connection to a namespace
+  // - sioDisconnect (1) is used when disconnecting from a namespace
+  // - sioEvent (2) is used to send data to the other side
+  // - sioAck (3) is used to acknowledge an event
+  // - sioBinaryEvent (5) is used to send binary data to the other side
+  // - sioBinaryAck (6) is used to acknowledge an event with a binary response
   TSocketIOPacket = (
     sioOpen,
     sioDisconnect,
@@ -1042,7 +1062,34 @@ type
     sioConnectError,
     sioBinaryEvent,
     sioBinaryAck);
+  PSocketIOPacket = ^TSocketIOPacket;
 
+  /// define a Socket.IO message content
+  {$ifdef USERECORDWITHMETHODS}
+  TSocketIOMessage = record
+  {$else}
+  TSocketIOMessage = object
+  {$endif USERECORDWITHMETHODS}
+    NameSpaceLen: PtrInt;
+    NameSpace: PUtf8Char;
+    DataLen: PtrInt;
+    Data: PUtf8Char;
+    PacketType: TSocketIOPacket;
+    DataBinary: boolean;
+    ID: cardinal;
+    BinaryAttachment: cardinal;
+    /// decode a Socket.IO raw packet into its message fields
+    // - returns true on success, false if the input PayLoad is incorrect
+    function Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
+      PayLoadBinary: boolean): boolean; overload;
+    /// decode a Socket.IO raw text packet into its message fields
+    // - mainly used for testing purposes
+    function Init(const PayLoad: RawUtf8): boolean; overload;
+    /// quickly check if the NameSpace value does match
+    function NameSpaceIs(const Name: RawUtf8): boolean;
+    /// quickly check if the Data content does match
+    function DataIs(const Content: RawUtf8): boolean;
+  end;
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
@@ -1054,13 +1101,21 @@ function SocketIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
 /// event names 'connect', 'message' and 'disconnect' are reserved
 function SocketIOReserved(const event: RawUtf8): boolean;
 
+function ToText(p: TEngineIOPacket): PShortString; overload;
+function ToText(p: TSocketIOPacket): PShortString; overload;
+
 
 type
+  /// exception class raised during Engine.IO process
+  EEngineIO = class(ESynException);
   /// exception class raised during Socket.IO process
   ESocketIO = class(ESynException);
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
+  // - properties do contain the values of a typical connection response like
+  // ${"sid":"dwy_mNoFzsrMlhINAAAA","upgrades":[],"pingTimeout":20000,"pingInterval":25000}
+  // - since we only implement WebSocket, "upgrades" is expected to be always void
   TEngineIOAbstract = class(TSynPersistent)
   protected
     fSafe: TLightLock;
@@ -1069,28 +1124,33 @@ type
     fPingInterval, fPingTimeout, fMaxPayload: integer;
     fNameSpaces: TRawUtf8DynArray;
   public
-    /// initialize this class instance with some default values
+    /// initialize this class instance with some default values on server side
     constructor Create; override;
   published
     /// the associated Engine.IO Session ID
-    // - as computed on the server side, and received on client side
+    // - as computed on the server side, and received on client side as "sid"
+    // - is typically a base-64 encoded binary like 'dwy_mNoFzsrMlhINAAAA'
     property EngineSid: RawUtf8
       read fEngineSid;
-    /// the protocol version used by this class, as used for EIO=? parmeter
+    /// the protocol version used by this class, as used for EIO=? parameter
     // - is currently fixed to 4
     property Version: integer
       read fVersion;
-    /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
-    // - ping packets are now sent by the server, since protocol v4
-    // - default value is 20000, i.e. 20 seconds
-    property PingInterval: integer
-      read fPingInterval write fPingInterval;
     /// the ping timeout, used in Engine.IO heartbeat mechanism (in milliseconds)
-    // - default value is 25000, i.e. 25 seconds
+    // - ping packets are now sent by the server, since protocol v4
+    // - as computed on the server side, and received on client side as "pingTimeout"
+    // - default value is 20000, i.e. 20 seconds
     property PingTimeout: integer
       read fPingTimeout write fPingTimeout;
+    /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
+    // - ping packets are now sent by the server, since protocol v4
+    // - as computed on the server side, and received on client side as "pingInterval"
+    // - default value is 25000, i.e. 25 seconds
+    property PingInterval: integer
+      read fPingInterval write fPingInterval;
     /// optional number of bytes per chunk, used in Engine.IO payloads mechanism
-    // - default value is 0, meaning no
+    // - as computed on the server side, and received on client side as "maxPayload"
+    // - default value is 0, meaning no limitation is requested
     property MaxPayload: integer
       read fMaxPayload write fMaxPayload;
   end;
@@ -1107,22 +1167,59 @@ type
       read fOwner;
   published
     /// the associated Socket.IO Session ID, as computed on the server side
-    // - default namespace is '/'
     property Sid: RawUtf8
       read fSid;
-    /// the associated Socket.IO Session ID, as computed on the server side
+    /// the associated namespace, as established between client and server
+    // - default namespace is '/'
     property NameSpace: RawUtf8
       read fNameSpace;
   end;
   PSocketIONamespace = ^TSocketIONamespace;
 
+  /// abstract parent for client or server Engine.IO protocol over WebSockets frames
+  // - Engine.IO is the low-level connection/heartbeat protocol on which the
+  // Socket.IO bidirectional multiplexed communication protocol is built
+  // - this abstract class will redirect all incoming frames to FrameReceived(),
+  // send an eioPong when an eioPing is received
+  TWebSocketEngineIOProtocol = class(TWebSocketProtocol)
+  protected
+    fOpened: boolean;
+    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
+      var Request: TWebSocketFrame; const Info: RawUtf8); override;
+    procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
+      PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); virtual; abstract;
+  public
+    // overriden to return '' i.e. recognize by URI, not "Sec-WebSocket-Protocol:"
+    function GetSubprotocols: RawUtf8; override;
+    function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
+    /// allows to send a message over the wire to a specified connection
+    // - Sender identify the connection, typically from FrameReceived() method
+    function SendPacket(Sender: TWebSocketProcess;
+      const PayLoad: RawByteString; PayLoadBinary: boolean;
+      PacketType: TEngineIOPacket =  eioMessage): boolean;
+    /// true when Engine.IO messages can be processed
+    // - i.e. after OPEN (eioOpen) and before CLOSE (eioClose)
+    property Opened: boolean
+      read fOpened;
+  end;
 
-/// case insensitive search within an array of TSocketIONamespace
+  /// abstract parent for client or server Socket.IO protocol over WebSockets frames
+  TWebSocketSocketIOProtocol = class(TWebSocketEngineIOProtocol)
+  protected
+    // this is the main entry point for incoming Socket.IO messages
+    procedure SocketPacketReceived(Sender: TWebSocketProcess;
+      const Message: TSocketIOMessage); virtual; abstract;
+  end;
+
+/// efficient case-sensitive search within an array of TSocketIONamespace
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
-  const name: RawUtf8): pointer;
+  name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 
 /// retrieve the NameSpace properties of an array of TSocketIONamespace
 function SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer): TRawUtf8DynArray;
+
+const
+  DefaultNameSpace: RawUtf8 = '/';
 
 
 implementation
@@ -1217,7 +1314,7 @@ begin
   else if len < 65536 then
   begin
     hdr.len8 := FRAME_LEN_2BYTES or MaskSentFrames;
-    hdr.len32 := swap(word(len)); // FPC requires explicit word() cast
+    hdr.len32 := bswap16(len);
     hdrlen := 4; // opcode+len8+len32.low
   end
   else
@@ -1274,6 +1371,11 @@ begin
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];
+end;
+
+function TWebSocketProtocol.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
+begin
+  result := nil; // no clone needed for a client-side protocol
 end;
 
 procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8;
@@ -1564,7 +1666,7 @@ end;
 { TWebSocketProtocolRest }
 
 procedure TWebSocketProtocolRest.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame; const info: RawUtf8);
+  var Request: TWebSocketFrame; const Info: RawUtf8);
 var
   Ctxt: THttpServerRequestAbstract;
   onRequest: TOnHttpServerRequest;
@@ -1573,25 +1675,25 @@ var
   answer: TWebSocketFrame;
   head: RawUtf8;
 begin
-  if not (request.opcode in [focText, focBinary]) then
+  if not (Request.opcode in [focText, focBinary]) then
     exit; // ignore e.g. from ProcessStart/ProcessStop
-  if FrameData(request, 'r', @head) <> nil then
+  if FrameData(Request, 'r', @head) <> nil then
   try
-    // regular HTTP-like request from client
+    // regular HTTP-like Request from client
     Ctxt := Sender.ComputeContext(onRequest);
     try
-      // prepare the HTTP request from input frame
+      // prepare the HTTP Request from input frame
       if (Ctxt = nil) or
          (not Assigned(onRequest)) then
         EWebSockets.RaiseUtf8('%.ProcessOne: onRequest=nil', [self]);
       if (head = '') or
-         not FrameToInput(request, noAnswer, Ctxt) then
+         not FrameToInput(Request, noAnswer, Ctxt) then
         EWebSockets.RaiseUtf8('%.ProcessOne: invalid frame', [self]);
-      request.payload := ''; // release memory ASAP
+      Request.payload := ''; // release memory ASAP
       if fUpgradeBearerToken <> '' then
         Ctxt.AuthBearer := fUpgradeBearerToken; // re-pass the HTTP bearer
-      if info <> '' then
-        Ctxt.AddInHeader(info);  // include JUMBO_INFO[] custom header
+      if Info <> '' then
+        Ctxt.AddInHeader(Info);  // include JUMBO_INFO[] custom header
       // compute the HTTP answer from the main HTTP server
       status := onRequest(Ctxt);
       if noAnswer or
@@ -1609,14 +1711,14 @@ begin
       FormatString('% [%]', [E, E.Message], fLastError);
   end
   else if (Sender.fIncoming.AnswerToIgnore > 0) and
-          (FrameData(request, 'answer') <> nil) then
+          (FrameData(Request, 'answer') <> nil) then
   begin
     Sender.fIncoming.AnswerToIgnore(-1);
-    Sender.Log(request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
+    Sender.Log(Request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
   end
   else
     // e.g. async 'answer' to store in the internal incoming frames list
-    Sender.fIncoming.Push(request, 0);
+    Sender.fIncoming.Push(Request, 0);
 end;
 
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequestAbstract;
@@ -2188,15 +2290,15 @@ begin
 end;
 
 procedure TWebSocketProtocolBinary.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
+  Sender: TWebSocketProcess; var Request: TWebSocketFrame; const Info: RawUtf8);
 var
   P, PMax: PByte;
 begin
-  P := FrameData(request, 'frames', nil, @PMax);
+  P := FrameData(Request, 'frames', nil, @PMax);
   if P <> nil then
     ProcessIncomingFrames(Sender, P, PMax)
   else
-    inherited ProcessIncomingFrame(Sender, request, info);
+    inherited ProcessIncomingFrame(Sender, Request, Info);
 end;
 
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;
@@ -2230,16 +2332,14 @@ end;
 
 function TWebSocketProtocolBinary.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
 begin
+  result := false;
   case FindPropName(['synopsebin', 'synopsebinary'], aProtocolName) of
     0:
       fSequencing := true;
     1:
       fSequencing := false;
   else
-    begin
-      result := false;
-      exit;
-    end;
+    exit;
   end;
   result := true;
 end;
@@ -2472,6 +2572,7 @@ var
   Digest: TSha1Digest;
 begin
   // validate WebSockets protocol upgrade request
+  Protocol := nil;
   result := HTTP_BADREQUEST;
   if not IsGet(Http.CommandMethod) or
      not PropNameEquals(Http.Upgrade, 'websocket') then
@@ -3228,7 +3329,7 @@ begin
   begin
     if not HasBytes(@hdr, 4) then // first+len8+len32.low
       exit;
-    hdr.len32 := swap(word(hdr.len32)); // FPC expects explicit word() cast
+    hdr.len32 := bswap16(hdr.len32);
   end
   else if hdr.len8 = FRAME_LEN_8BYTES then
   begin
@@ -3368,11 +3469,11 @@ begin
 end;
 
 procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame; const info: RawUtf8);
+  var Request: TWebSocketFrame; const Info: RawUtf8);
 begin
   if Assigned(OnInComingFrame) then
   try
-    OnIncomingFrame(Sender, request);
+    OnIncomingFrame(Sender, Request);
   except
     // ignore any exception in the callback
   end;
@@ -3408,7 +3509,7 @@ begin
   frame.opcode := focText;
   frame.content := [];
   frame.tix := 0;
-  frame.payload := Json;
+  FastSetRawByteString(frame.payload, pointer(Json), length(Json)); // temp copy
   result := Sender.SendFrame(frame)
 end;
 
@@ -3416,6 +3517,16 @@ end;
 { ****************** Socket.IO / Engine.IO Raw Protocols }
 
 // reference: https://sockjs.com/docs/v4/socket-io-protocol/
+
+function ToText(p: TEngineIOPacket): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TEngineIOPacket), ord(p));
+end;
+
+function ToText(p: TSocketIOPacket): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSocketIOPacket), ord(p));
+end;
 
 function SocketIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
 var
@@ -3450,24 +3561,15 @@ begin
 end;
 
 
-{ TEngineIOSessionsAbstract }
-
-constructor TEngineIOAbstract.Create;
-begin
-  inherited Create;
-  fVersion := 4;
-  fPingTimeout := 20000;
-  fPingInterval := 25000;
-end;
-
-
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
-  const name: RawUtf8): pointer;
+  name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 begin
-  if one <> nil then
+  if (one <> nil) and
+     (namelen > 0) then
     repeat
       result := one^;
-      if TSocketIONamespace(result).NameSpace = name then
+      if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
+         CompareMemFast(name, pointer(result.NameSpace), namelen) then
         exit; // O(n) brute force search is fast enough
       inc(one);
       dec(count);
@@ -3491,6 +3593,192 @@ begin
     dec(count);
   until count = 0;
 end;
+
+
+{ TSocketIOMessage }
+
+function TSocketIOMessage.Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
+  PayLoadBinary: boolean): boolean;
+var
+  v: PtrUInt;
+begin
+  result := false;
+  if (PayLoad = nil) or
+     (PayLoadLen = 0) then
+    exit;
+  PacketType := TSocketIOPacket(PByte(PayLoad)^ - ord('0'));
+  if byte(PacketType) > byte(high(PacketType)) then
+    exit;
+  NameSpaceLen := 1;
+  NameSpace := pointer(DefaultNameSpace);
+  ID := 0;
+  BinaryAttachment := 0;
+  inc(PayLoad);
+  dec(PayLoadLen);
+  if PayLoadLen <> 0 then
+  begin
+    if PayLoad^ in ['1' ..'9'] then
+    begin
+      v := 0;
+      repeat
+        v := (v * 10) + PtrUInt(ord(PayLoad^) - ord('0'));
+        inc(PayLoad);
+        dec(PayLoadLen);
+      until (PayLoadLen = 0) or
+            not (PayLoad^ in ['0'..'9']);
+      if PayLoad^ = '-' then
+      begin
+        BinaryAttachment := v;
+        inc(PayLoad);
+        dec(PayLoadLen);
+      end
+      else
+        ID := v;
+    end;
+    if (PayLoadLen <> 0) and
+       (PayLoad^ = '/') then
+    begin
+      NameSpace := PayLoad;
+      repeat
+        inc(PayLoad);
+        dec(PayLoadLen);
+      until (PayLoadLen = 0) or
+            (PayLoad^ = ',');
+      NameSpacelen := PayLoad - NameSpace;
+      if (PayLoadLen <> 0) and
+         (PayLoad^ = ',') then
+      begin
+        inc(PayLoad);
+        dec(PayLoadLen);
+      end;
+    end;
+    if ID = 0 then
+      while (PayLoadLen <> 0) and
+            (PayLoad^ in ['0'..'9']) do
+      begin
+        ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
+        inc(PayLoad);
+        dec(PayLoadLen);
+      end;
+  end;
+  if PayLoadLen = 0 then
+    PayLoad := nil;
+  Data := PayLoad;
+  DataLen := PayLoadLen;
+  DataBinary := PayLoadBinary;
+  result := true;
+end;
+
+function TSocketIOMessage.Init(const PayLoad: RawUtf8): boolean;
+begin
+  result := Init(pointer(PayLoad), length(PayLoad), {binary=}false);
+end;
+
+function TSocketIOMessage.NameSpaceIs(const Name: RawUtf8): boolean;
+begin
+  result := (length(Name) = NameSpaceLen) and
+            ((NameSpaceLen = 0) or
+             CompareMemFast(pointer(Name), NameSpace, NameSpaceLen));
+end;
+
+function TSocketIOMessage.DataIs(const Content: RawUtf8): boolean;
+begin
+  result := (length(Content) = DataLen) and
+            ((DataLen = 0) or
+             CompareMemFast(pointer(Content), Data, DataLen));
+end;
+
+
+{ TEngineIOSessionsAbstract }
+
+constructor TEngineIOAbstract.Create;
+begin
+  // server-side initialization with default values
+  inherited Create;
+  fVersion := 4;
+  fPingTimeout := 20000;
+  fPingInterval := 25000;
+end;
+
+
+{ TWebSocketEngineIOProtocol }
+
+function TWebSocketEngineIOProtocol.GetSubprotocols: RawUtf8;
+begin
+  result := ''; // no "Sec-WebSocket-Protocol:" header
+end;
+
+function TWebSocketEngineIOProtocol.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
+begin
+  result := false; // should never be called
+end;
+
+procedure TWebSocketEngineIOProtocol.ProcessIncomingFrame(
+  Sender: TWebSocketProcess; var Request: TWebSocketFrame; const Info: RawUtf8);
+var
+  p: TEngineIOPacket;
+begin
+  // focText/focBinary or focContinuation/focConnectionClose
+  if not (Request.opcode in [focText, focBinary]) then
+    exit;
+  if Request.payload = '' then
+    EEngineIO.RaiseUtf8('%.ProcessIncomingFrame with no Payload', [self]);
+  p := TEngineIOPacket(PByte(Request.payload)^ - ord('0'));
+  case p of
+    eioOpen:
+      if fOpened then
+        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: OPEN twice', [self])
+      else
+        fOpened := true;
+    eioClose:
+      if fOpened then
+        fOpened := false
+      else
+        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
+    eioPing:
+      SendPacket(Sender, '', false, eioPong);
+    eioPong:
+      ; // process depends on the client or server side
+    eioMessage:
+      if not fOpened then
+        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: missing OPEN', [self]);
+  else // eioUpgrade, eioNoop
+    EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected % (%)',
+      [self, ToText(p)^, Request.payload[1]])
+  end;
+  // call virtual method for proper process of this incoming Engine.IO packet
+  EnginePacketReceived(Sender, p, @PByteArray(Request.payload)[1],
+    length(Request.payload) - 1, (Request.opcode = focBinary));
+end;
+
+function TWebSocketEngineIOProtocol.SendPacket(Sender: TWebSocketProcess;
+  const PayLoad: RawByteString; PayLoadBinary: boolean;
+  PacketType: TEngineIOPacket): boolean;
+var
+  L: PtrInt;
+  tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
+begin
+  result := false;
+  if (self = nil) or
+     (Sender = nil) or
+     (Sender.State <> wpsRun)  then
+    exit;
+  // create Engine.IO packet within this WebSocket frame
+  if PayLoadBinary then
+    tmp.opcode := focBinary
+  else
+    tmp.opcode := focText;
+  tmp.content := [];
+  tmp.tix := 0;
+  L := length(PayLoad);
+  FastSetRawByteString(tmp.payload, nil, L + 1);
+  PByteArray(tmp.payload)[0] := ord(PacketType) + ord('0');
+  if L <> 0 then
+    MoveFast(pointer(PayLoad)^, PByteArray(tmp.payload)[1], L);
+  result := Sender.SendFrame(tmp);
+end;
+
+
 
 
 initialization

@@ -628,28 +628,29 @@ type
   // CentralAccessPoliciesList structure
   TSecAceType = (
     satUnknown,
-    satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
-    satAccessDenied,                  // D  1  ACCESS_DENIED_ACE_TYPE
-    satAudit,                         // AU 2  SYSTEM_AUDIT_ACE_TYPE
-    satAlarm,                         // AL 3  SYSTEM_ALARM_ACE_TYPE
-    satCompoundAllowed,               //    4  ACCESS_ALLOWED_COMPOUND_ACE_TYPE
-    satObjectAccessAllowed,           // OA 5  ACCESS_ALLOWED_OBJECT_ACE_TYPE
-    satObjectAccessDenied,            // OD 6  ACCESS_DENIED_OBJECT_ACE_TYPE
-    satObjectAudit,                   // OU 7  SYSTEM_AUDIT_OBJECT_ACE_TYPE
-    satObjectAlarm,                   // OL 8  SYSTEM_ALARM_OBJECT_ACE_TYPE
-    satCallbackAccessAllowed,         // XA 9  ACCESS_ALLOWED_CALLBACK_ACE_TYPE
-    satCallbackAccessDenied,          // XD 10 ACCESS_DENIED_CALLBACK_ACE_TYPE
-    satCallbackObjectAccessAllowed,   // ZA 11 ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackObjectAccessDenied,    //    12 ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackAudit,                 // XU 13 SYSTEM_AUDIT_CALLBACK_ACE_TYPE
-    satCallbackAlarm,                 //    14 SYSTEM_ALARM_CALLBACK_ACE_TYPE
-    satCallbackObjectAudit,           //    15 SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackObjectAlarm,           //    16 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
-    satMandatoryLabel,                // ML 17 SYSTEM_MANDATORY_LABEL_ACE_TYPE
-    satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
-    satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
-    satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
-    satAccessFilter);                 // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
+    satAccessAllowed,                 // A  0  0x00 ACCESS_ALLOWED_ACE_TYPE
+    satAccessDenied,                  // D  1  0x01 ACCESS_DENIED_ACE_TYPE
+    satAudit,                         // AU 2  0x02 SYSTEM_AUDIT_ACE_TYPE
+    satAlarm,                         // AL 3  0x03 SYSTEM_ALARM_ACE_TYPE
+    satCompoundAllowed,               //    4  0x04 ACCESS_ALLOWED_COMPOUND_ACE_TYPE
+    satObjectAccessAllowed,           // OA 5  0x05 ACCESS_ALLOWED_OBJECT_ACE_TYPE
+    satObjectAccessDenied,            // OD 6  0x06 ACCESS_DENIED_OBJECT_ACE_TYPE
+    satObjectAudit,                   // OU 7  0x07 SYSTEM_AUDIT_OBJECT_ACE_TYPE
+    satObjectAlarm,                   // OL 8  0x08 SYSTEM_ALARM_OBJECT_ACE_TYPE
+    satCallbackAccessAllowed,         // XA 9  0x09 ACCESS_ALLOWED_CALLBACK_ACE_TYPE
+    satCallbackAccessDenied,          // XD 10 0x0a ACCESS_DENIED_CALLBACK_ACE_TYPE
+    satCallbackObjectAccessAllowed,   // ZA 11 0x0b ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAccessDenied,    //    12 0x0c ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackAudit,                 // XU 13 0x0d SYSTEM_AUDIT_CALLBACK_ACE_TYPE
+    satCallbackAlarm,                 //    14 0x0e SYSTEM_ALARM_CALLBACK_ACE_TYPE
+    satCallbackObjectAudit,           //    15 0x0f SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAlarm,           //    16 0x10 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
+    satMandatoryLabel,                // ML 17 0x11 SYSTEM_MANDATORY_LABEL_ACE_TYPE
+    satResourceAttribute,             // RA 18 0x12 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
+    satScoppedPolicy,                 // SP 19 0x13 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
+    satProcessTrustLabel,             // TL 20 0x14 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
+    satAccessFilter);                 // FL 21 0x15 SYSTEM_ACCESS_FILTER_ACE_TYPE
+  TSecAceTypes = set of TSecAceType;
 
   /// define one TSecurityDescriptor Dacl[] or Sacl[] access control list (ACL)
   TSecAceScope = (
@@ -735,18 +736,26 @@ type
     function Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
       dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
     /// get the associated SID, as SDDL text, optionally with a RID domain
-    function SidText(dom: PSid = nil): RawUtf8; overload;
-    /// set the associated SID, as SDDL text, optionally with a RID domain
-    function SidText(const sidSddl: RawUtf8; dom: PSid = nil): boolean; overload;
+    function SidText(dom: PSid = nil): RawUtf8;
+    /// set the associated SID, parsed from SDDL text, optionally with a RID domain
+    function SidParse(const sidSddl: RawUtf8; dom: PSid = nil): boolean;
     /// get the associated access mask, as SDDL text format
-    function MaskText: RawUtf8; overload;
-    /// set the associated access mask, as SDDL text format
-    function MaskText(const maskSddl: RawUtf8): boolean; overload;
+    function MaskText: RawUtf8;
+    /// set the associated access mask, parsed from its SDDL text format
+    function MaskParse(const maskSddl: RawUtf8): boolean;
+    /// get the associated Object Type, as UUID text format
+    // - to customize the output format set e.g. uuid = @AppendShortKnownUuid
+    function ObjectText(uuid: TAppendShortUuid = nil): RawUtf8;
+    /// get the associated Inherited Object Type, as UUID text format
+    // - to customize the output format set e.g. uuid = @AppendShortKnownUuid
+    function InheritedText(uuid: TAppendShortUuid = nil): RawUtf8;
+    /// get the associated flags, as SDDL text format
+    function FlagsText: RawUtf8;
     /// get the ACE conditional expression, as stored in Opaque binary
-    function ConditionalExpression(dom: PSid = nil): RawUtf8; overload;
+    function ConditionalExpression(dom: PSid = nil): RawUtf8;
     /// parse a ACE conditional expression, and assign it to the Opaque binary
-    function ConditionalExpression(const condExp: RawUtf8;
-      dom: PSid = nil): TAceTextParse; overload;
+    function ConditionalExpressionParse(const condExp: RawUtf8;
+      dom: PSid = nil): TAceTextParse;
     /// replace all nested RID from one domain to another
     // - also within any ACE conditional expression
     function ReplaceDomainRaw(old, new: PSid; maxRid: cardinal): integer;
@@ -815,6 +824,7 @@ const
   safAuditFlags = [
     safSuccessfulAccess,
     safFailedAccess];
+
 
 /// compute a self-relative binary of a given ACL array
 // - as stored within a TSecurityDescriptor instance, and accepted by
@@ -1025,7 +1035,8 @@ type
   PRawAceOperand = ^TRawAceOperand;
 
   /// define one node in the TAceBinaryTree.Nodes
-  // - here pointers are just 8-bit indexes to the main TAceBinaryTree.Nodes[]
+  // - here pointers are just 8-bit indexes to the main TAceBinaryTree.Nodes[],
+  // and 255 means no operand
   TAceBinaryTreeNode = packed record
     /// position of this node in the input binary or text
     Position: word;
@@ -1315,6 +1326,12 @@ function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
 // - you can also define your own TAppendShortUuid function
 // - use fast O(log(n)) binary search in CPU L1 cache over ATTR_UUID[] items
 procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
+
+/// convert an ObjectID as UTF-8 text
+// - used e.g. by TSecAce.ObjectText and TSecAce.InheritedText
+// - to customize the output format set e.g. uuid = @AppendShortKnownUuid
+procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
+  var Text: RawUtf8);
 
 /// parse an ObjectID, recognizing TAdsKnownAttribute's ldapDisplayName or UUID hexa
 // - can be used as TShortToUuid optional parameter for SDDL parsing
@@ -1741,12 +1758,16 @@ type
       success: boolean): PSecAce;
   public
     /// the owner security identifier (SID)
+    // - typically a User or Group able to modify the resource's descriptor
     Owner: RawSid;
     /// the primary group SID
+    // - not used in practice on Windows - may be populated for POSIX systems
     Group: RawSid;
     /// discretionary access control list
+    // - defines what access a SID is given
     Dacl: TSecAcl;
     /// system access control list
+    // - defines the rules for generating audit events when resource is accessed
     Sacl: TSecAcl;
     /// control flags of this Security Descriptor
     Flags: TSecControls;
@@ -1826,7 +1847,7 @@ type
     // - each and every old/new SID lengths should match for in-place replacement
     // of the Opaque binary content
     function ReplaceSid(const OldSid, NewSid: array of RawUtf8): integer; overload;
-    /// change all occurrences of one or several given SID value(s)
+    /// change all occurrences of one or several given SID raw value(s)
     function ReplaceSidRaw(const OldSid, NewSid: RawSidDynArray): integer; overload;
   end;
 
@@ -2293,7 +2314,7 @@ begin
     if CompareMem(pointer(OldSid[i]), @Sid, SidLen) then
     {$endif CPUX64}
     begin
-      MoveFast(pointer(NewSid[i])^, Sid, SidLen); // overwrite
+      MoveFast(pointer(NewSid[i])^, Sid, SidLen); // in-place overwrite
       result := 1;
       exit;
     end;
@@ -2369,10 +2390,10 @@ begin
       sid.SubAuthority[0] := 32;
       if wks <> wksBuiltinDomain then
       begin
-        sid.SubAuthorityCount := 2;
+        sid.SubAuthorityCount := 2; // S-1-5-32-###
         if wks <= wksBuiltinDcomUsers then
           sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinAdministrators) - 544)
-        else if wks <= wksBuiltinDeviceOwners then // S-1-5-32-583
+        else if wks <= wksBuiltinDeviceOwners then
           sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinIUsers) - 568)
         else if wks <= wksCapabilityContacts then
         begin // S-1-15-3-1
@@ -2631,11 +2652,20 @@ begin
   result := true;
 end;
 
+const
+  // TRawAcl.AclRevision should be ACL_REVISION, unless the ACL contains an
+  // object-specific ACE, in which case this value must be ACL_REVISION_DS.
+  ACL_REVISION    = 2;
+  ACL_REVISION_DS = 4;
+  // see https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-acl
+  satRevisionNew = satObject + satConditional + [satMandatoryLabel];
+
 function SecAclToBin(p: PAnsiChar; const acl: TSecAcl): PtrInt;
 var
   hdr: PRawAcl;
   a: ^TSecAce;
   i, len: PtrInt;
+  types: TSecAceTypes;
 begin
   result := 0;
   if acl = nil then
@@ -2644,9 +2674,11 @@ begin
   result := SizeOf(hdr^);
   if hdr <> nil then // need to write ACL header
     inc(p, result);
+  types := [];
   a := pointer(acl);
   for i := 1 to length(acl) do
   begin
+    include(types, a^.AceType);
     len := a^.ToBinary(p);
     inc(result, len);
     if hdr <> nil then
@@ -2655,7 +2687,10 @@ begin
   end;
   if hdr = nil then
     exit;
-  hdr^.AclRevision := 2;
+  if types * satRevisionNew <> [] then
+    hdr^.AclRevision := ACL_REVISION_DS
+  else
+    hdr^.AclRevision := ACL_REVISION; // Win2K-compatible basic ACEs
   hdr^.Sbz1 := 0;
   hdr^.AceCount := length(acl);
   hdr^.Sbz2 := 0;
@@ -2720,6 +2755,18 @@ begin
     AppendShortUuid(u, s) // append as regular UUID hexadecimal text
   else
     AppendShortAnsi7String(ATTR_TXT[a], s); // append the ldapDisplayName
+end;
+
+procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
+  var Text: RawUtf8);
+var
+  s: ShortString;
+begin
+  s[0] := #0;
+  if not Assigned(@uuid) then
+    uuid := @AppendShortUuid; // default append as UUID hexadecimal text
+  uuid(guid, s);
+  ShortStringToAnsi7String(s, Text);
 end;
 
 function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
@@ -3252,17 +3299,17 @@ var
 begin
   result := sctPadding; // unknown
   s := p;
-  case s^ of
-    #0:
+  case ord(s^) of // use ord() to circumvent Delphi XE2 compiler issue
+    0:
       result := sctInternalFinal;
-    '-', '0' .. '9':
+    ord('-'), ord('0') .. ord('9'):
       begin
         repeat
           inc(s);
         until not (s^ in ['0' .. '9']);
         result := sctInt64;
       end;
-    '"':
+    ord('"'):
       begin
         repeat
           inc(s);
@@ -3272,14 +3319,14 @@ begin
         inc(s);
         result := sctUnicode;
       end;
-    '#':
+    ord('#'):
       begin
         repeat
           inc(s);
         until not (s^ in ['#', '0' .. '9', 'A' .. 'Z', 'a' .. 'z']);
         result := sctOctetString;
       end;
-    '{':
+    ord('{'):
        begin
          repeat
            inc(s);
@@ -3289,14 +3336,14 @@ begin
          inc(s);
          result := sctComposite;
        end;
-    '=':
+    ord('='):
       begin
         if s[1] <> '=' then
           exit;
         inc(s, 2);
         result := sctEqual;
       end;
-    '!':
+    ord('!'):
       if s[1] = '=' then
       begin
         inc(s, 2);
@@ -3307,7 +3354,7 @@ begin
         inc(s);
         result := sctNot;
       end;
-    '<':
+    ord('<'):
       if s[1] = '=' then
       begin
         inc(s, 2);
@@ -3318,7 +3365,7 @@ begin
         inc(s);
         result := sctLessThan;
       end;
-    '>':
+    ord('>'):
       if s[1] = '=' then
       begin
         inc(s, 2);
@@ -3329,9 +3376,9 @@ begin
         inc(s);
         result := sctGreaterThan;
       end;
-    'A' .. 'Z',
-    'a' .. 'z',
-    #$80 .. #$ff:
+    ord('A') .. ord('Z'),
+    ord('a') .. ord('z'),
+    $80 .. $ff: // allow any UTF-8 identifier without any decoding
       begin
         result := sctLocalAttribute;
         repeat
@@ -3360,21 +3407,21 @@ begin
             end;
         end;
       end;
-    '&':
+    ord('&'):
       begin
         if s[1] <> '&' then
           exit;
         inc(s, 2);
         result := sctAnd;
       end;
-    '|':
+    ord('|'):
       begin
         if s[1] <> '|' then
           exit;
         inc(s, 2);
         result := sctOr;
       end;
-    '@':
+    ord('@'):
       begin
         repeat
           inc(s);
@@ -3397,12 +3444,12 @@ begin
           exit; // no attribute name
       end;
     // for internal SDDL text parsing use only
-    '(':
+    ord('('):
       begin
         inc(s);
         result := sctInternalParenthOpen;
       end;
-    ')':
+    ord(')'):
       begin
         inc(s);
         result := sctInternalParenthClose;
@@ -3439,11 +3486,11 @@ var
   s: ShortString;
 begin
   s[0] := #0;
-  SddlAppendSid(s, pointer(sid), dom);
+  SddlAppendSid(s, pointer(Sid), dom);
   ShortStringToAnsi7String(s, result);
 end;
 
-function TSecAce.SidText(const sidSddl: RawUtf8; dom: PSid): boolean;
+function TSecAce.SidParse(const sidSddl: RawUtf8; dom: PSid): boolean;
 var
   p: PUtf8Char;
 begin
@@ -3460,12 +3507,35 @@ begin
   ShortStringToAnsi7String(s, result);
 end;
 
-function TSecAce.MaskText(const maskSddl: RawUtf8): boolean;
+function TSecAce.MaskParse(const maskSddl: RawUtf8): boolean;
 var
   p: PUtf8Char;
 begin
   p := pointer(maskSddl);
   result := SddlNextMask(p, Mask);
+end;
+
+function TSecAce.ObjectText(uuid: TAppendShortUuid): RawUtf8;
+begin
+  ObjectUuidToText(ObjectType, uuid, result);
+end;
+
+function TSecAce.InheritedText(uuid: TAppendShortUuid): RawUtf8;
+begin
+  ObjectUuidToText(InheritedObjectType, uuid, result);
+end;
+
+function TSecAce.FlagsText: RawUtf8;
+var
+  f: TSecAceFlag;
+  s: ShortString;
+begin
+  s[0] := #0;
+  if Flags <> [] then
+    for f := low(f) to high(f) do
+      if f in Flags then
+        AppendShort(SAF_SDDL[f], s);
+  ShortStringToAnsi7String(s, result);
 end;
 
 function TSecAce.ConditionalExpression(dom: PSid): RawUtf8;
@@ -3477,7 +3547,7 @@ begin
   tmp.Done(result, CP_UTF8);
 end;
 
-function TSecAce.ConditionalExpression(
+function TSecAce.ConditionalExpressionParse(
   const condExp: RawUtf8; dom: PSid): TAceTextParse;
 var
   p: PUtf8Char;
@@ -3508,9 +3578,9 @@ begin
   Clear;
   result := false;
   if (sat = satUnknown) or
-     not SidText(sidSddl, dom) or
-     not MaskText(maskSddl) or
-     (ConditionalExpression(condExp) <> atpSuccess) then
+     not SidParse(sidSddl, dom) or
+     not MaskParse(maskSddl) or
+     (ConditionalExpressionParse(condExp) <> atpSuccess) then
     exit;
   AceType := sat;
   RawType := ord(sat) + 1;
@@ -4479,18 +4549,7 @@ begin
   hdr^.Revision := 1;
   hdr^.Control := Flags + [scSelfRelative];
   inc(PRawSD(p));
-  if Owner <> '' then
-  begin
-    hdr^.Owner := p - pointer(result);
-    MoveFast(pointer(Owner)^, p^, length(Owner));
-    inc(p, length(Owner));
-  end;
-  if Group <> '' then
-  begin
-    hdr^.Group := p - pointer(result);
-    MoveFast(pointer(Group)^, p^, length(Group));
-    inc(p, length(Group));
-  end;
+  // regular layout seems to be header + SACL + DACL + Owner + Group
   if Sacl <> nil then
   begin
     include(hdr^.Control, scSaclPresent);
@@ -4502,6 +4561,18 @@ begin
     include(hdr^.Control, scDaclPresent);
     hdr^.Dacl := p - pointer(result);
     inc(p, SecAclToBin(p, Dacl));
+  end;
+  if Owner <> '' then
+  begin
+    hdr^.Owner := p - pointer(result);
+    MoveFast(pointer(Owner)^, p^, length(Owner));
+    inc(p, length(Owner));
+  end;
+  if Group <> '' then
+  begin
+    hdr^.Group := p - pointer(result);
+    MoveFast(pointer(Group)^, p^, length(Group));
+    inc(p, length(Group));
   end;
   if p - pointer(result) <> length(result) then
     raise EOSSecurity.Create('TSecurityDescriptor.ToBinary'); // paranoid
@@ -4666,7 +4737,7 @@ begin
   end;
   sddl.AddShort(tmp);
   if not Assigned(@uuid) then
-    uuid := @AppendShortUuid; // default append as UUID standard text
+    uuid := @AppendShortUuid; // default append as UUID hexadecimal text
   AclToText(sddl, dom, uuid, sasDacl);
   AclToText(sddl, dom, uuid, sasSacl);
 end;

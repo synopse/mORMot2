@@ -50,7 +50,8 @@ end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 type
-  PRecordInfo = PTypeData; // oldest Delphi PTypeData doesn't have RecordSize
+  PRecordInfo = PTypeData;
+  PArrayInfo = ^TArrayTypeData;
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
@@ -173,6 +174,7 @@ function TRttiInfo.EnumBaseType: PRttiEnumType; // moved here for proper inlinin
 begin
   result := pointer(GetTypeData(@self));
   if Kind <> rkBool then
+    // rkBool is an ordinal with Min/Max but without BaseType/NameList
     result := result^.EnumBaseType;
 end;
 
@@ -496,6 +498,7 @@ end;
 function TRttiInfo.IsBoolean: boolean;
 begin
   result := (Kind = rkBool);
+  // boolean is not a rkEnumeration on FPC, and has no BaseType/NameList items
 end;
 
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
@@ -950,7 +953,7 @@ var
   new: pointer;
 begin
   if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
-    cp := DefaultSystemCodePage;
+    cp := Unicode_CodePage;
   new := FastNewString(len, cp);
   if buf <> nil then
     MoveFast(buf^, new^, len);
@@ -1212,7 +1215,7 @@ begin
   {$ifdef FPC_HAS_CPSTRING}
   RedirectCode(@fpc_setstring_ansistr, @_setstring_ansistr_pansichar);
   // Delphi/Windows is never natively UTF-8, but FPC+Lazarus is very likely :)
-  if DefaultSystemCodePage = CP_UTF8 then
+  if Unicode_CodePage = CP_UTF8 then
   begin
     // dedicated UTF-8 concatenation RTL function replacements
     RedirectCode(@fpc_ansistr_concat, @_ansistr_concat_utf8);

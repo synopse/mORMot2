@@ -85,6 +85,9 @@ type
     // search for a field value, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUtf8;
       const aLookupValue: variant; aOptions: TLocateOptions): integer; virtual;
+    // compare a field value, calling GetFieldVarData()
+    function CompareField(Field: TField; RowIndex: integer;
+      const Value: variant; Options: TLocateOptions): integer; virtual;
     // used to serialize TBcdVariant as JSON
     class procedure BcdWrite(const aWriter: TTextWriter; const aValue);
   public
@@ -96,7 +99,7 @@ type
     /// get BLOB column data for a given row (may not the active row)
     // - handle ftBlob,ftMemo,ftWideMemo via GetRowFieldData()
     function GetBlobStream(Field: TField; RowIndex: integer): TStream;
-    /// get column data for the current active row
+    /// get column value for the current active row as DB.pas data buffer
     // - handle ftBoolean,ftInteger,ftLargeint,ftFloat,ftCurrency,ftDate,ftTime,
     // ftDateTime,ftString,ftWideString kind of fields via GetRowFieldData()
     {$ifdef ISDELPHIXE3}
@@ -108,16 +111,22 @@ type
     function GetFieldData(Field: TField; Buffer: TValueBuffer): boolean; override;
     {$endif ISDELPHIXE4}
     {$else}
-    // Delphi 2009..XE2 signature
+    // Delphi 2009..XE2 and FPC signature
     function GetFieldData(Field: TField; Buffer: pointer): boolean; override;
     {$endif ISDELPHIXE3}
     {$ifndef UNICODE}
-    // all Delphi versions signature
+    // all non-Unicode Delphi/FPC versions signature
     function GetFieldData(Field: TField; Buffer: pointer;
       NativeFormat: boolean): boolean; override;
     {$endif UNICODE}
+    /// get column value for a row index as TVarData
+    // - returns Value as varEmpty if Field or RawIndex are incorrect
+    // - returns true if the caller needs to call VarClearProc(Value)
+    function GetFieldVarData(Field: TField; RowIndex: integer;
+      out Value: TVarData): boolean; virtual;
     /// searching a dataset for a specified record and making it the active record
-    // - will call SearchForField protected virtual method for actual lookup
+    // - will call SearchForField protected virtual method for one field lookup,
+    // or manual CompareField/GetFieldData search
     function Locate(const KeyFields: string; const KeyValues: variant;
       Options: TLocateOptions): boolean; override;
   published
@@ -554,10 +563,77 @@ begin
   result := 0; // nothing found
 end;
 
+function TVirtualDataSet.GetFieldVarData(Field: TField; RowIndex: integer;
+  out Value: TVarData): boolean;
+var
+  p: pointer;
+  plen: integer;
+  v: TSynVarData absolute Value;
+begin
+  result := false; // returns true if caller needs to call VarClearProc(Value)
+  v.VType := varNull;
+  p := GetRowFieldData(Field, RowIndex, plen, {onlychecknull=}false);
+  if p <> nil then
+    case Field.DataType of // follow GetFieldData() pattern
+      ftBoolean:
+        begin
+          v.VType := varBoolean;
+          v.VInteger := PByte(p)^;
+        end;
+      ftInteger:
+        begin
+          v.VType := varInteger;
+          v.VInteger := PInteger(p)^;
+        end;
+      ftLargeint:
+        begin
+          v.VType := varInt64;
+          v.VInt64 := PInt64(p)^;
+        end;
+      ftFloat,
+      ftCurrency:
+        begin
+          v.VType := varDouble;
+          v.VInt64 := PInt64(p)^;
+        end;
+      ftDate,
+      ftTime,
+      ftDateTime:
+        if PInt64(p)^ <> 0 then // handle 30/12/1899 date as NULL
+        begin
+          v.VType := varDate;
+          v.VInt64 := PInt64(p)^;
+        end;
+      ftString,
+      ftWideString:
+        begin
+          v.VType := varString;
+          v.VAny := nil;  // avoid GPF below
+          result := plen > 0; // true if VarClearProc() needed
+          if result then
+            FastSetString(RawUtf8(v.VAny), p, plen);
+        end;
+    else // e.g. ftBlob,ftMemo,ftWideMemo
+      v.VType := varEmpty;
+    end;
+end;
+
+function TVirtualDataSet.CompareField(Field: TField; RowIndex: integer;
+  const Value: variant; Options: TLocateOptions): integer;
+var
+  v: TVarData;
+  needsclear: boolean;
+begin
+  needsclear := GetFieldVarData(Field, RowIndex, v);
+  result := SortDynArrayVariantComp(v, TVarData(Value), loCaseInsensitive in Options);
+  if needsclear then
+    VarClearProc(v);
+end;
+
 function TVirtualDataSet.Locate(const KeyFields: string;
   const KeyValues: variant; Options: TLocateOptions): boolean;
 var
-  i, l, h, found: integer;
+  l, h, r, f, n: integer;
   fields: TDatasetGetFieldList;
 begin
   CheckActive;
@@ -570,38 +646,45 @@ begin
         GetFieldList(fields, KeyFields);
         l := VarArrayLowBound(KeyValues, 1);
         h := VarArrayHighBound(KeyValues, 1);
-        if (fields.Count = 1) and
-           (l < h) then
-        begin
-          found := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
-          if found > 0 then
+        if l + (fields.Count - 1) = h then // KeyFields and KeyValues do match
+          if fields.Count = 1 then
           begin
-            RecNo := found;
-            exit;
-          end;
-        end
-        else
-          for i := 0 to fields.Count - 1 do
-          begin
-            found := SearchForField(
-              StringToUtf8(TField(fields[i]).FieldName),
-              KeyValues[l + i], Options);
-            if found > 0 then
+            // one KeyFields lookup using dedicated (virtual) method
+            r := SearchForField(StringToUtf8(KeyFields), KeyValues[l], Options);
+            if r > 0 then
             begin
-              RecNo := found;
+              RecNo := r;
               exit;
             end;
-          end;
+          end
+          else
+            // brute force search of several KeyFields/KeyValues
+            for r := 0 to GetRecordCount - 1 do
+            begin
+              n := 0;
+              for f := 0 to fields.Count - 1 do
+                if CompareField(fields[f], r, KeyValues[l + f], Options) = 0 then
+                  inc(n)
+                else
+                  break;
+              if (n > 1) and
+                 (n = fields.Count) then // found all matching fields
+              begin
+                RecNo := r;
+                exit;
+              end;
+            end;
       finally
         fields.Free;
       end;
     end
     else
     begin
-      found := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
-      if found > 0 then
+      // one KeyFields lookup using dedicated (virtual) method
+      r := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
+      if r > 0 then
       begin
-        RecNo := found;
+        RecNo := r;
         exit;
       end;
     end;
@@ -802,7 +885,7 @@ begin
             if j >= fValuesCount then
               break
             else
-              // ensure objects are consistent
+              // ensure objects are consistent and no float valule appears
               with _Safe(fValues[j], dvObject)^ do
                 if (ndx < Length(Names)) and
                    PropNameEquals(Names[ndx], col^.Name) and
@@ -861,7 +944,7 @@ begin
   if VarIsEmptyOrNull(v^) then
     exit
   else if OnlyCheckNull then
-    result := @fTemp64
+    result := @fTemp64 // something not nil, but clearly incorrect
   else
     case col^.FieldType of
       mormot.db.core.ftInt64:
@@ -935,11 +1018,10 @@ begin
       if (cardinal(f) >= cardinal(v^.Count)) or
          not PropNameEquals(aLookupFieldName, v^.Names[f]) then
         f := v^.GetValueIndex(aLookupFieldName);
-      if (f >= 0) and
-         (SortDynArrayVariantComp(
-           TVarData(v^.Values[f]), TVarData(aLookupValue),
-           loCaseInsensitive in aOptions) = 0) then
-        exit;
+      if f >= 0 then
+        if SortDynArrayVariantComp(TVarData(v^.Values[f]), TVarData(aLookupValue),
+           loCaseInsensitive in aOptions) = 0 then
+          exit;
     end;
   result := 0;
 end;

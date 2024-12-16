@@ -1270,7 +1270,8 @@ type
   TRestServerAuthenticationSspi = class(TRestServerAuthenticationSignedUri)
   protected
     /// Windows built-in authentication
-    // - holds information between calls to ServerSspiAuth()
+    // - holds information between calls to ServerSspiAuth() for NTLM
+    // - such an array seems not needed with Kerberos two-way handshake
     // - access to this array is made thread-safe thanks to Safe.Lock/Unlock
     fSspiAuthContext: TSecContextDynArray;
     fSspiAuthContexts: TDynArray;
@@ -5531,6 +5532,10 @@ end;
 // about Browser support and SPNEGO handshake via HTTP headers, see e.g.
 // https://learn.microsoft.com/en-us/previous-versions/ms995330(v=msdn.10)
 
+// note that Negotiate/Kerberos is two-way, and NTLM three-way so we need to
+// maintain a list of pending contexts in fSspiAuthContext[] for NTLM only
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-sip/96a33a84-36cb-41dc-a630-f0c42820ec16
+
 function TRestServerAuthenticationSspi.Auth(Ctxt: TRestServerUriContext): boolean;
 var
   i, ndx: PtrInt;
@@ -5591,7 +5596,7 @@ begin
         exit;
       end;
       ndx := fSspiAuthContexts.New; // add a new entry to fSspiAuthContext[]
-      InvalidateSecContext(fSspiAuthContext[ndx], connectionID);
+      InvalidateSecContext(fSspiAuthContext[ndx], connectionID, Ctxt.TickCount64);
     end;
     // call SSPI provider
     if ServerSspiAuth(fSspiAuthContext[ndx], Base64ToBin(indataenc), outdata) then

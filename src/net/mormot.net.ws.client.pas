@@ -26,6 +26,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.data,
   mormot.core.log,
   mormot.core.threads,
@@ -198,6 +199,8 @@ type
     fNameSpace: TSocketIONamespaceClients;
     function GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
       {$ifdef HASINLINE} inline; {$endif}
+    // in-place-decode one Engine.IO OPEN payload on client side
+    procedure AfterOpen(OpenPayload: PUtf8Char);
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls Open() then SioUpgrade() for the Socket.IO protocol
@@ -227,6 +230,16 @@ type
     /// raw access to the associated WebSockets connection
     property Client: THttpClientWebSockets
       read fClient;
+  end;
+
+  TWebSocketSocketIOClientProtocol = class(TWebSocketSocketIOProtocol)
+  protected
+    fClient: TSocketsIOClient;
+    procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
+      PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); override;
+    // this is the main entry point for incoming Socket.IO messages
+    procedure SocketPacketReceived(Sender: TWebSocketProcess;
+      const Message: TSocketIOMessage); override;
   end;
 
 
@@ -295,7 +308,7 @@ begin
   RequestProcess := ws.fOnCallbackRequestProcess;
   if Assigned(RequestProcess) then
     result := THttpServerRequest.Create(
-      nil, 0, fOwnerThread, ws.fProcess.Protocol.ConnectionFlags, nil)
+      nil, 0, fOwnerThread, 0, ws.fProcess.Protocol.ConnectionFlags, nil)
   else
     result := nil;
 end;
@@ -426,7 +439,7 @@ begin
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
       Ctxt := THttpServerRequest.Create(nil, fProcess.Protocol.ConnectionID,
-        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags,
+        fProcess.fOwnerThread, 0, fProcess.Protocol.ConnectionFlags,
         fProcess.Protocol.ConnectionOpaque);
       try
         body := Data;
@@ -483,7 +496,7 @@ function THttpClientWebSockets.WebSocketsUpgrade(
 var
   key: TAESBlock;
   bin1, bin2: RawByteString;
-  extin, extout, prot: RawUtf8;
+  extin, extout, expectedprot, supportedprot: RawUtf8;
   extins: TRawUtf8DynArray;
   cmd: RawUtf8;
   digest1, digest2: TSha1Digest;
@@ -516,8 +529,11 @@ begin
                 'Connection: Upgrade'#13#10 +
                 'Upgrade: websocket'#13#10 +
                 'Sec-WebSocket-Key: ', bin1, #13#10 +
-                'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
                 'Sec-WebSocket-Version: 13']);
+      expectedprot := aProtocol.GetSubprotocols;
+      if expectedprot <> '' then
+        // this header may be omitted, e.g. by TWebSocketEngineIOProtocol
+        SockSend(['Sec-WebSocket-Protocol: ', expectedprot]);
       if aProtocol.ProcessHandshake(nil, extout, nil) and
          (extout <> '') then
         SockSend(['Sec-WebSocket-Extensions: ', extout]); // e.g. TEcdheProtocol
@@ -535,14 +551,20 @@ begin
           result := 'No server response';
         exit; // return the unexpected command line as error message
       end;
-      prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not (hfConnectionUpgrade in Http.HeaderFlags) or
          (Http.ContentLength > 0) or
-         not PropNameEquals(Http.Upgrade, 'websocket') or
-         not aProtocol.SetSubprotocol(prot) then
+         not PropNameEquals(Http.Upgrade, 'websocket') then
         exit;
-      aProtocol.Name := prot;
+      result := 'Invalid HTTP Upgrade Sub-Protocol';
+      supportedprot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
+      if supportedprot <> '' then // this header may be omitted
+        if aProtocol.SetSubprotocol(supportedprot) then
+          aProtocol.Name := supportedprot
+        else
+          exit // unsupported sub-protocol
+      else if PosExChar(',', expectedprot) <> 0 then
+        exit; // requires to select one given sub-protocol
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1, digest1);
       bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
@@ -592,6 +614,7 @@ end;
 
 { ******************** Socket.IO / Engine.IO Client Protocol over WebSockets }
 
+
 { TSocketsIOClient }
 
 class function TSocketsIOClient.SioOpen(const aHost, aPort: RawUtf8;
@@ -601,8 +624,8 @@ var
   c: THttpClientWebSockets;
 begin
   c := THttpClientWebSockets.WebSocketsConnect(aHost, aPort,
-    nil, aLog, aLogContext, SocketIOHandshakeUri(aRoot),
-    aCustomHeaders, aTls, aTLSContext);
+    TWebSocketSocketIOClientProtocol.Create('Socket.IO', ''), aLog, aLogContext,
+    SocketIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
   if c = nil then
     result := nil
   else
@@ -629,6 +652,7 @@ begin
     ESocketIO.RaiseUtf8('Unexpected %.Create with no WebSockets', [self]);
   inherited Create;
   fClient := aClient;
+  (fClient.WebSockets.Protocol as TWebSocketSocketIOClientProtocol).fClient := self;
 end;
 
 destructor TSocketsIOClient.Destroy;
@@ -638,9 +662,26 @@ begin
   inherited Destroy;
 end;
 
+procedure TSocketsIOClient.AfterOpen(OpenPayload: PUtf8Char);
+var
+  V: array[0..4] of TValuePUtf8Char;
+begin
+  JsonDecode(OpenPayload,
+    ['sid', 'upgrades', 'pingInterval', 'pingTimeout', 'maxPayload'], @V);
+  if V[0].Text = nil then
+    EEngineIO.RaiseUtf8('%.Create: missing "sid" in %', [self, OpenPayload]);
+  V[0].ToUtf8(fEngineSid);
+  if V[1].Text <> nil then
+    EEngineIO.RaiseUtf8('%.Create: unsupported "upgrades" in %', [self, OpenPayload]);
+  fPingInterval := V[2].ToCardinal(fPingInterval);
+  fPingTimeout  := V[3].ToCardinal(fPingTimeout);
+  fMaxPayload   := V[4].ToCardinal;
+end;
+
 function TSocketsIOClient.GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
 begin
-  result := SocketIOGetNameSpace(pointer(fNameSpace), length(fNameSpace), aNameSpace);
+  result := SocketIOGetNameSpace(pointer(fNameSpace), length(fNameSpace),
+    pointer(aNameSpace), length(aNameSpace)) as TSocketIONamespaceClient;
 end;
 
 function TSocketsIOClient.NameSpaces: TRawUtf8DynArray;
@@ -659,6 +700,33 @@ begin
 
 end;
 
+
+{ TWebSocketEngineIOClientProtocol }
+
+procedure TWebSocketSocketIOClientProtocol.EnginePacketReceived(
+  Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
+  PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean);
+var
+  msg: TSocketIOMessage;
+begin
+  if fClient = nil then
+    ESocketIO.RaiseUtf8('Unexpected %.EnginePacketReceived', [self]);
+  case PacketType of
+    eioOpen:
+      fClient.AfterOpen(PayLoad);
+    eioMessage:
+      if msg.Init(PayLoad, PayLoadLen, PayLoadBinary) then
+        SocketPacketReceived(Sender, msg)
+      else
+        ESocketIO.RaiseUtf8('%.EnginePacketReceived: invalid Payload', [self]);
+  end;
+end;
+
+procedure TWebSocketSocketIOClientProtocol.SocketPacketReceived(
+  Sender: TWebSocketProcess; const Message: TSocketIOMessage);
+begin
+
+end;
 
 
 end.

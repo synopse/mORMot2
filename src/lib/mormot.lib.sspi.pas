@@ -577,7 +577,7 @@ type
 
 /// set aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64);
+  aConnectionID: Int64 = 0; aTick64: Int64 = 0);
 
 /// free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -801,7 +801,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
 /// high-level cross-platform initialization function
-// - as called e.g. by mormot.rest.client/server.pas or mormot.net.client/ldap
+// - e.g. by mormot.rest.client/server.pas or mormot.net.client/ldap/server
 function InitializeDomainAuth: boolean;
 
 
@@ -839,6 +839,7 @@ var
   // - can be set to TRUE to use the deprecated and unsafe NTLM protocol instead
   // - use case: SPNs not configured properly in domain
   // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
+  // - note that mormot.lib.gssapi does not tupport NTLM
   SspiForceNtlmClient: boolean = false;
 
 
@@ -1282,14 +1283,14 @@ end;
 
 
 procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64);
+  aConnectionID, aTick64: Int64);
 begin
   aSecContext.ID := aConnectionID;
   aSecContext.CredHandle.dwLower := -1;
   aSecContext.CredHandle.dwUpper := -1;
   aSecContext.CtxHandle.dwLower := -1;
   aSecContext.CtxHandle.dwUpper := -1;
-  aSecContext.CreatedTick64 := 0;
+  aSecContext.CreatedTick64 := aTick64;
 end;
 
 procedure FreeSecurityContext(var handle: TSecHandle);
@@ -1715,7 +1716,6 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    aSecContext.CreatedTick64 := mormot.core.os.GetTickCount64;
     if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
         nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
@@ -1836,7 +1836,6 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    aSecContext.CreatedTick64 := mormot.core.os.GetTickCount64;
     if (aInData <> '') and
        (PCardinal(aInData)^ or $20202020 =
         ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24) then
@@ -1960,7 +1959,7 @@ begin
   if (DomainAuthMode = damUndefined) or
      (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
     SetDomainAuthMode;
-  // SSPI comes from standard secur32.dll so is always available
+  // SSPI is linked from standard secur32.dll so is always available
   result := true;
 end;
 

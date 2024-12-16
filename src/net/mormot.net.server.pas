@@ -45,6 +45,8 @@ uses
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
+  mormot.lib.sspi,   // void unit on POSIX
+  mormot.lib.gssapi, // void unit on Windows
   mormot.net.client,
   mormot.crypt.core,
   mormot.crypt.secure;
@@ -108,7 +110,8 @@ type
     urmPut,
     urmDelete,
     urmOptions,
-    urmHead);
+    urmHead,
+    urmPatch);
 
   /// the HTTP methods supported by TUriRouter
   TUriRouterMethods = set of TUriRouterMethod;
@@ -214,6 +217,10 @@ type
     // - e.g. Route.Put('/domodify', '/root/myservice/update', urmPost);
     procedure Put(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPut); overload;
+    /// just a wrapper around Rewrite(urmPatch, aFrom, aToMethod, aTo)
+    // - e.g. Route.Patch('/domodify', '/root/myservice/update', urmPatch);
+    procedure Patch(const aFrom, aTo: RawUtf8;
+      aToMethod: TUriRouterMethod = urmPatch); overload;
     /// just a wrapper around Rewrite(urmDelete, aFrom, aToMethod, aTo)
     // - e.g. Route.Delete('/doremove', '/root/myservice/delete', urmPost);
     procedure Delete(const aFrom, aTo: RawUtf8;
@@ -245,6 +252,9 @@ type
       aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmPut], aUri, aExecute) registration method
     procedure Put(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
+    /// just a wrapper around Run([urmPatch], aUri, aExecute) registration method
+    procedure Patch(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
       aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmDelete], aUri, aExecute) registration method
     procedure Delete(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
@@ -295,6 +305,9 @@ type
     /// how many PUT rules have been registered
     property Puts: integer
       read fEntries[urmPut];
+    /// how many PATCH rules have been registered
+    property Patchs: integer
+      read fEntries[urmPatch];
     /// how many DELETE rules have been registered
     property Deletes: integer
       read fEntries[urmDelete];
@@ -315,7 +328,8 @@ const
     'PUT',     // urmPut
     'DELETE',  // urmDelete
     'OPTIONS', // urmOptions
-    'HEAD');   // urmHead
+    'HEAD',    // urmHead
+    'PATCH');  // urmPatch
 
 /// quickly recognize most HTTP text methods into a TUriRouterMethod enumeration
 // - may replace cascaded IsGet() IsPut() IsPost() IsDelete() function calls
@@ -339,10 +353,14 @@ type
   THttpServerGeneric = class;
   {$M-}
 
-  /// event signature for THttpServerRequest.AsyncResponse callback
-  TOnHttpServerRequestAsyncResponse =
-    procedure(Sender: THttpServerRequestAbstract;
-      RespStatus: integer = HTTP_SUCCESS) of object;
+  /// 32-bit sequence value used to identify one asynchronous connection
+  // - will start from 1, and increase during the server live-time
+  // - THttpServerConnectionID may be retrieved from nginx reverse proxy
+  // - used e.g. for Server.AsyncResponse() delayed call with HTTP_ASYNCRESPONSE
+  TConnectionAsyncHandle = type integer;
+
+  /// a dynamic array of TConnectionAsyncHandle identifiers
+  TConnectionAsyncHandleDynArray = array of TConnectionAsyncHandle;
 
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
@@ -350,8 +368,8 @@ type
   THttpServerRequest = class(THttpServerRequestAbstract)
   protected
     fServer: THttpServerGeneric;
+    fConnectionAsyncHandle: TConnectionAsyncHandle;
     fErrorMessage: string;
-    fOnAsyncResponse: TOnHttpServerRequestAsyncResponse;
     fTempWriter: TJsonWriter; // reused between SetOutJson() calls
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
@@ -361,11 +379,14 @@ type
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+      aConnectionAsyncHandle: TConnectionAsyncHandle;
       aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
     /// could be called before Prepare() to reuse an existing instance
-    procedure Recycle(aConnectionID: THttpServerConnectionID;
-      aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
+    procedure Recycle(
+      aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+      aConnectionAsyncHandle: TConnectionAsyncHandle;
+      aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque);
     /// finalize this execution context
     destructor Destroy; override;
@@ -388,15 +409,10 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// an additional custom parameter, as provided to TUriRouter.Setup
     function RouteOpaque: pointer; override;
-    /// notify the server that it should wait for the OnAsyncResponse callback
-    // - would raise an EHttpServer exception if OnAsyncResponse is not set
-    // - returns HTTP_ASYNCRESPONSE (777) internal code as recognized e.g. by
-    // THttpAsyncServer
-    function SetAsyncResponse: integer;
-    /// a callback used for asynchronous response to the client
-    // - only implemented by the THttpAsyncServer by now
-    property OnAsyncResponse: TOnHttpServerRequestAsyncResponse
-      read fOnAsyncResponse write fOnAsyncResponse;
+    /// return the low-level internal handle for Server.AsyncResponse() delayed call
+    // - to be used in conjunction with a HTTP_ASYNCRESPONSE internal status code
+    // - raise an EHttpServer exception if async responses are not available
+    function AsyncHandle: TConnectionAsyncHandle;
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
@@ -566,8 +582,8 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously, but with a given Ctxt instance for each)
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
-    /// server can send a request back to the client, when the connection has
-    // been upgraded e.g. to WebSockets
+    /// send a request back to the client, if the connection has been upgraded
+    // e.g. to WebSockets
     // - InURL/InMethod/InContent properties are input parameters
     // (InContentType is ignored)
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -577,6 +593,24 @@ type
     // - warning: this void implementation will raise an EHttpServer exception -
     // inherited classes should override it, e.g. as in TWebSocketServerRest
     function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal; virtual;
+    /// send an asynchronous response to the client, when a slow process (e.g.
+    // DB request) has been executed
+    // - warning: this void implementation will raise an EHttpServer exception -
+    // inherited classes should override it, e.g. as in THttpAsyncServer
+    procedure AsyncResponse(Connection: TConnectionAsyncHandle;
+      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS); virtual;
+    /// send an asynchronous (JSON by default) response to the client
+    procedure AsyncResponseFmt(Connection: TConnectionAsyncHandle;
+      const ContentFmt: RawUtf8; const Args: array of const;
+      const ContentType: RawUtf8 = JSON_CONTENT_TYPE;
+      Status: cardinal = HTTP_SUCCESS);
+    /// send an asynchronous RTTI-serialized JSON response to the client
+    procedure AsyncResponseJson(Connection: TConnectionAsyncHandle;
+      Value: pointer; TypeInfo: PRttiInfo; Status: cardinal = HTTP_SUCCESS);
+    /// send an asynchronous text error response to the client
+    procedure AsyncResponseError(Connection: TConnectionAsyncHandle;
+      const Message: RawUtf8; Status: cardinal = HTTP_SERVERERROR);
+
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlz) protocols
@@ -856,6 +890,7 @@ type
     fRequestFlags: THttpServerRequestFlags;
     fAuthSec: cardinal;
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
+    fResponseHeader: RawUtf8;
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
@@ -1030,7 +1065,7 @@ type
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
     function SetRejectInCommandUri(var Http: THttpRequestContext;
-      Opaque: Int64; Status: integer): boolean;
+      Opaque: Int64; Status: integer): boolean; // true for grWwwAuthenticate
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
   public
@@ -1099,7 +1134,8 @@ type
     // - otherwise TLS is initialized at first incoming connection, which
     // could be too late in case of invalid Sock.TLS parameters
     procedure InitializeTlsAfterBind;
-    /// remove any previous SetAuthorizeBasic/SetAuthorizeDigest registration
+    /// remove any previous authorization, i.e. any previous SetAuthorizeBasic /
+    // SetAuthorizeDigest / SetAuthorizeKerberos call
     procedure SetAuthorizeNone;
     /// allow optional BASIC authentication for some URIs via a callback
     // - if OnBeforeBody returns 401, the OnBasicAuth callback will be executed
@@ -1119,7 +1155,11 @@ type
     // - the supplied Digester will be owned by this instance - typical
     // use is with a TDigestAuthServerFile
     procedure SetAuthorizeDigest(const Digest: IDigestAuthServer);
-    /// set after a call to SetAuthDigest/SetAuthBasic
+    /// allow optional NEGOTIATE authentication for some URIs via Kerberos
+    // - will use mormot.lib.sspi or mormot.lib.gssapi
+    // - if OnBeforeBody returns 401, Kerberos will be used to authenticate
+    procedure SetAuthorizeNegotiate;
+    /// set after a call to SetAuthDigest/SetAuthBasic/SetAuthorizeNegotiate
     property Authorize: THttpServerRequestAuthentication
       read fAuthorize;
     /// set after a call to SetAuthDigest/SetAuthBasic
@@ -1430,7 +1470,8 @@ type
   // - pcoNoBanIP disable the 4 seconds IP banishment mechanism at HTTP level;
   // set RejectInstablePeersMin = 0 to disable banishment at UDP level
   // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
-  // (warning: this option should be set on all peers, clients and servers)
+  // (warning: this option should be set on all peers, clients and servers) -
+  // as an alternative, you could set THttpPeerCache.ServerTls/ClientTls props
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
@@ -1457,7 +1498,7 @@ type
     fHttpTimeoutMS, fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
-    fInterfaceName: RawUtf8;
+    fInterfaceName, fUuid: RawUtf8;
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
@@ -1466,6 +1507,11 @@ type
     // CacheTempMinBytes=CachePermMinBytes=2048,
     // BroadcastTimeoutMS=10 HttpTimeoutMS=500 and BroadcastMaxResponses=24
     constructor Create; override;
+    /// retrieve the network interface fulfilling these settings
+    // - network layout may change in real time: this method allows to renew
+    // the peer cache instance when a better interface is available
+    // - returns '' on success, or an error message
+    function GuessInterface(out Mac: TMacAddress): RawUtf8; virtual;
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
@@ -1563,6 +1609,10 @@ type
     // - default is 2048 bytes, i.e. 2KB, which is just two network MTU trips
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
+    /// allow to customize the UUID used to identify this node
+    // - instead of the default GetComputerUuid() from SMBios
+    property Uuid: RawUtf8
+      read fUuid write fUuid;
   end;
 
   /// abstract parent to THttpPeerCache for its cryptographic core
@@ -1573,7 +1623,7 @@ type
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
-    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
+    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4, fLastNetworkTix: cardinal;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fLog: TSynLogClass;
     fPort, fIpPort: RawUtf8;
@@ -1581,6 +1631,7 @@ type
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
     fUuid: TGuid;
+    fServerTls, fClientTls: TNetTlsContext;
     procedure AfterSettings; virtual;
     function CurrentConnections: integer; virtual;
     procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
@@ -1593,13 +1644,47 @@ type
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
       aOutStream: TStreamRedirect; aRetry: boolean): integer;
+    function GetUuidText: RawUtf8;
   public
     /// initialize the cryptography of this peer-to-peer node instance
     // - warning: inherited class should also call AfterSettings once
     // fSettings is defined
-    constructor Create(const aSharedSecret: RawByteString); reintroduce;
+    constructor Create(const aSharedSecret: RawByteString;
+      aServerTls, aClientTls: PNetTlsContext); reintroduce;
     /// finalize this class instance
     destructor Destroy; override;
+    /// check if the network interface defined in Settings did actually change
+    // - you may want to recreate a peer-cache to track the new network layout
+    function NetworkInterfaceChanged: boolean;
+    /// optional TLS options for the peer HTTPS server
+    // - e.g. to set a custom certificate for this peer
+    // - when ServerTls.Enabled is set, ClientTls.Enabled and other params should match
+    property ServerTls: TNetTlsContext
+      read fServerTls write fServerTls;
+    /// optional TLS options for the peer HTTPS client
+    // - e.g. set ClientTls.OnPeerValidate to verify a peer ServerTls certificate
+    // - when ClientTls.Enabled is set, ServerTls.Enabled and other params should match
+    property ClientTls: TNetTlsContext
+      read fClientTls write fClientTls;
+    /// the network interface used for UDP and TCP process
+    // - the main fields are published below as Network* properties
+    property Mac: TMacAddress
+      read fMac;
+  published
+    /// define how this instance handles its process
+    property Settings: THttpPeerCacheSettings
+      read fSettings;
+    /// which network interface is used for UDP and TCP process
+    property NetworkInterface: RawUtf8
+      read fMac.Name;
+    /// the local IP address used for UDP and TCP process
+    property NetworkIP: RawUtf8
+      read fMac.IP;
+    /// the IP used for UDP and TCP process broadcast
+    property NetworkBroadcast: RawUtf8
+      read fMac.Broadcast;
+    property Uuid: RawUtf8
+      read GetUuidText;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -1686,9 +1771,8 @@ type
     constructor Create(aSettings: THttpPeerCacheSettings;
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
-      aHttpServerThreadCount: integer = 2;
-      aLogClass: TSynLogClass = nil;
-      const aUuid: RawUtf8 = ''); reintroduce;
+      aHttpServerThreadCount: integer = 2; aLogClass: TSynLogClass = nil;
+      aServerTls: PNetTlsContext = nil; aClientTls: PNetTlsContext = nil); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -1732,24 +1816,7 @@ type
     // actually reading and purging the CacheTempPath folder every minute
     // - could call Instable.DoRotate every minute to refresh IP banishments
     procedure OnIdle(tix64: Int64);
-    /// the network interface used for UDP and TCP process
-    property Mac: TMacAddress
-      read fMac;
-    /// the UUID used to identify this node
-    // - is filled by GetComputerUuid() from SMBios by default
-    // - could be customized if necessary after Create()
-    property Uuid: TGuid
-      read fUuid write fUuid;
   published
-    /// define how this instance handles its process
-    property Settings: THttpPeerCacheSettings
-      read fSettings;
-    /// which network interface is used for UDP and TCP process
-    property NetworkInterface: RawUtf8
-      read fMac.Name;
-    /// the IP used for UDP and TCP process broadcast
-    property NetworkBroadcast: RawUtf8
-      read fMac.Broadcast;
     /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
       read fHttpServer;
@@ -2478,6 +2545,8 @@ begin
       Method := urmPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Method := urmPut;
+    ord('P') + ord('A') shl 8 + ord('T') shl 16 + ord('C') shl 24:
+      Method := urmPatch;
     ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
       Method := urmHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
@@ -2764,6 +2833,11 @@ begin
   Rewrite(urmPut, aFrom, aToMethod, aTo);
 end;
 
+procedure TUriRouter.Patch(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmPatch, aFrom, aToMethod, aTo);
+end;
+
 procedure TUriRouter.Delete(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
 begin
   Rewrite(urmDelete, aFrom, aToMethod, aTo);
@@ -2796,6 +2870,12 @@ procedure TUriRouter.Put(const aUri: RawUtf8;
   const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
   Run([urmPut], aUri, aExecute, aExecuteOpaque);
+end;
+
+procedure TUriRouter.Patch(const aUri: RawUtf8;
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
+begin
+  Run([urmPatch], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Delete(const aUri: RawUtf8;
@@ -2916,6 +2996,7 @@ end;
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+  aConnectionAsyncHandle: TConnectionAsyncHandle;
   aConnectionFlags: THttpServerRequestFlags;
   aConnectionOpaque: PHttpServerConnectionOpaque);
 begin
@@ -2923,15 +3004,18 @@ begin
   fServer := aServer;
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
+  fConnectionAsyncHandle := aConnectionAsyncHandle;
   fConnectionFlags := aConnectionFlags;
   fConnectionOpaque := aConnectionOpaque;
 end;
 
 procedure THttpServerRequest.Recycle(aConnectionID: THttpServerConnectionID;
-  aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
+  aConnectionThread: TSynThread; aConnectionAsyncHandle: TConnectionAsyncHandle;
+  aConnectionFlags: THttpServerRequestFlags;
   aConnectionOpaque: PHttpServerConnectionOpaque);
 begin
   fConnectionID := aConnectionID;
+  fConnectionAsyncHandle := aConnectionAsyncHandle;
   fConnectionThread := aConnectionThread;
   fConnectionFlags := aConnectionFlags;
   fConnectionOpaque := aConnectionOpaque;
@@ -3080,7 +3164,7 @@ begin
            (PCardinal(P + 12)^ or $20202020 =
              ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
            (P[16] = ':') then
-          // custom CONTENT-ENCODING: don't compress
+          // custom CONTENT-ENCODING: disable any late compression
           integer(Context.CompressAcceptHeader) := 0;
         h^.Append(P, len);
         h^.AppendCRLF; // normalize CR/LF endings
@@ -3090,6 +3174,8 @@ begin
         inc(P);
     until P^ = #0;
   end;
+  if Context.ResponseHeaders <> '' then // e.g. 'WWW-Authenticate: #####'#13#10
+    h^.Append(Context.ResponseHeaders);
   // generic headers
   h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
   if hsoIncludeDateHeader in fServer.Options then
@@ -3142,12 +3228,11 @@ begin
     result := TUriTreeNode(result).Data.ExecuteOpaque;
 end;
 
-function THttpServerRequest.SetAsyncResponse: integer;
+function THttpServerRequest.AsyncHandle: TConnectionAsyncHandle;
 begin
-  if not Assigned(fOnAsyncResponse) then
-    EHttpServer.RaiseUtf8(
-      '%.SetAsyncResponse with no OnAsyncResponse callback', [self]);
-  result := HTTP_ASYNCRESPONSE;
+  result := fConnectionAsyncHandle;
+  if result = 0 then
+    EHttpServer.RaiseUtf8('% has no async response support', [fServer]);
 end;
 
 {$ifdef USEWININET}
@@ -3314,6 +3399,38 @@ function THttpServerGeneric.{%H-}Callback(Ctxt: THttpServerRequest;
 begin
   raise EHttpServer.CreateUtf8('%.Callback is not implemented: try to use ' +
     'another communication protocol, e.g. WebSockets', [self]);
+end;
+
+procedure THttpServerGeneric.AsyncResponse(Connection: TConnectionAsyncHandle;
+  const Content, ContentType: RawUtf8; Status: cardinal);
+begin
+  EHttpServer.RaiseUtf8('%.AsyncResponse is not implemented: try to use ' +
+    'another server class, e.g. THttpAsyncServer', [self]);
+end;
+
+procedure THttpServerGeneric.AsyncResponseFmt(Connection: TConnectionAsyncHandle;
+  const ContentFmt: RawUtf8; const Args: array of const;
+  const ContentType: RawUtf8; Status: cardinal);
+var
+  json: RawUtf8;
+begin
+  FormatUtf8(ContentFmt, Args, json);
+  AsyncResponse(Connection, json, ContentType, Status);
+end;
+
+procedure THttpServerGeneric.AsyncResponseJson(Connection: TConnectionAsyncHandle;
+  Value: pointer; TypeInfo: PRttiInfo; Status: cardinal);
+var
+  json: RawUtf8;
+begin
+  SaveJson(Value^, TypeInfo, [], json);
+  AsyncResponse(Connection, json, JSON_CONTENT_TYPE_VAR, Status);
+end;
+
+procedure THttpServerGeneric.AsyncResponseError(
+  Connection: TConnectionAsyncHandle; const Message: RawUtf8; Status: cardinal);
+begin
+  AsyncResponse(Connection, Message, TEXT_CONTENT_TYPE, Status);
 end;
 
 procedure THttpServerGeneric.ParseRemoteIPConnID(const Headers: RawUtf8;
@@ -4100,6 +4217,15 @@ begin
     fAuthorizeBasicRealm);
 end;
 
+procedure THttpServerSocketGeneric.SetAuthorizeNegotiate;
+begin
+  SetAuthorizeNone;
+  if not InitializeDomainAuth then
+    EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: no % available',
+      [self, SECPKGNAMEAPI]);
+   fAuthorize := hraNegotiate;
+end;
+
 function THttpServerSocketGeneric.AuthorizeServerMem: TDigestAuthServerMem;
 begin
   result := nil;
@@ -4115,6 +4241,7 @@ end;
 
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
 begin
+  // return the expected 'WWW-Authenticate: ####' header content
   result := '';
   case fAuthorize of
     hraBasic:
@@ -4122,49 +4249,82 @@ begin
     hraDigest:
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
+    hraNegotiate:
+      result := 'WWW-Authenticate: Negotiate'; // with no NTLM support
   end;
 end;
 
 function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
   Opaque: Int64): TAuthServerResult;
 var
-  auth: PUtf8Char;
+  auth, authend: PUtf8Char;
   user, pass, url: RawUtf8;
+  bin, bout: RawByteString;
+  ctx: TSecContext;
 begin
-  result := asrRejected;
-  auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
-  if auth = nil then
-    exit;
-  case fAuthorize of
-    hraBasic:
-      if IdemPChar(auth, 'BASIC ') and
-         BasicServerAuth(auth + 6, user, pass) then
-        try
-          if Assigned(fAuthorizeBasic) then
-            if fAuthorizeBasic(self, user, pass) then
-              result := asrMatch
-            else
-              result := asrIncorrectPassword
-          else if Assigned(fAuthorizerBasic) then
-            result := fAuthorizerBasic.CheckCredential(user, pass);
-        finally
-          FillZero(pass);
+  // parse the 'Authorization: basic/digest/negotiate <magic>' header
+  try
+    result := asrRejected;
+    auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
+    if auth = nil then
+      exit;
+    case fAuthorize of
+      hraBasic:
+        if IdemPChar(auth, 'BASIC ') and
+           BasicServerAuth(auth + 6, user, pass) then
+          try
+            if Assigned(fAuthorizeBasic) then
+              if fAuthorizeBasic(self, user, pass) then
+                result := asrMatch
+              else
+                result := asrIncorrectPassword
+            else if Assigned(fAuthorizerBasic) then
+              result := fAuthorizerBasic.CheckCredential(user, pass);
+          finally
+            FillZero(pass);
+          end;
+      hraDigest:
+        if (fAuthorizerDigest <> nil) and
+           IdemPChar(auth, 'DIGEST ') then
+        begin
+          result := fAuthorizerDigest.DigestAuth(
+             auth + 7, Http.CommandMethod, Opaque, 0, user, url);
+          if (result = asrMatch) and
+             (url <> Http.CommandUri) then
+            result := asrRejected;
         end;
-    hraDigest:
-      if (fAuthorizerDigest <> nil) and
-         IdemPChar(auth, 'DIGEST ') then
-      begin
-        result := fAuthorizerDigest.DigestAuth(
-           auth + 7, Http.CommandMethod, Opaque, 0, user, url);
-        if (result = asrMatch) and
-           (url <> http.CommandUri) then
-          result := asrRejected;
-      end;
-  else
-    exit;
-  end;
-  if result = asrMatch then
-    Http.BearerToken := user; // as expected by end-user code
+      hraNegotiate:
+        // simple implementation assuming a two-way Negotiate/Kerberos handshake
+        // - see TRestServerAuthenticationSspi.Auth() for NTLM / three-way
+        if IdemPChar(auth, 'NEGOTIATE ') then
+        begin
+          inc(auth, 10); // parse 'Authorization: Negotiate <base64 encoding>'
+          authend := PosChar(auth, #13);
+          if (authend = nil) or
+             not Base64ToBin(PAnsiChar(auth), authend - auth, bin) or
+             IdemPChar(pointer(bin), 'NTLM') then // two-way Kerberos only
+            exit;
+          InvalidateSecContext(ctx);
+          try
+            if ServerSspiAuth(ctx, bin, bout) then
+            begin
+              ServerSspiAuthUser(ctx, user);
+              Http.ResponseHeaders := 'WWW-Authenticate: Negotiate ' +
+                mormot.core.buffers.BinToBase64(bout) + #13#10;
+              result := asrMatch;
+            end;
+          finally
+            FreeSecContext(ctx);
+          end;
+        end
+    else
+      exit;
+    end;
+    if result = asrMatch then
+      Http.BearerToken := user; // see THttpServerRequestAbstract.Prepare
+  except
+    result := asrRejected; // any processing error should silently fail the auth
+  end
 end;
 
 function THttpServerSocketGeneric.SetRejectInCommandUri(
@@ -4462,7 +4622,7 @@ begin
   // compute and send back the response
   if Assigned(fOnAfterResponse) then
     QueryPerformanceMicroSeconds(started);
-  req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
+  req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread, 0,
     ClientSock.fRequestFlags, ClientSock.GetConnectionOpaque);
   try
     // compute the response
@@ -5092,21 +5252,15 @@ end;
 { THttpPeerCrypt }
 
 procedure THttpPeerCrypt.AfterSettings;
+var
+  err: RawUtf8;
 begin
   if fSettings = nil then
     EHttpPeerCache.RaiseUtf8('%.AfterSettings(nil)', [self]);
   fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
-  if fSettings.InterfaceName <> '' then
-  begin
-    if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
-      // allow to pickup "down" interfaces if name is explicit
-      EHttpPeerCache.RaiseUtf8(
-        '%.Create: impossible to find the [%] network interface',
-        [self, fSettings.InterfaceName]);
-  end
-  else if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
-    EHttpPeerCache.RaiseUtf8(
-      '%.Create: impossible to find a local network interface', [self]);
+  err := fSettings.GuessInterface(fMac);
+  if err <> '' then
+    EHttpPeerCache.RaiseUtf8('%.Create: %', [self, err]);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
@@ -5119,6 +5273,11 @@ begin
   end;
   fLog.Add.Log(sllDebug, 'Create: network="%" as % (broadcast=%) %',
     [fMac.Name, fIpPort, fMac.Broadcast, fMac.Address], self);
+end;
+
+function THttpPeerCrypt.GetUuidText: RawUtf8;
+begin
+  ToUtf8(fUuid, result);
 end;
 
 function THttpPeerCrypt.CurrentConnections: integer;
@@ -5265,9 +5424,14 @@ begin
     // ensure we have the expected HTTP/HTTPS connection
     if fClient = nil then
     begin
-      tls := pcoSelfSignedHttps in fSettings.Options;
       fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
-      fClient.TLS.IgnoreCertificateErrors := tls; // self-signed
+      tls := fClientTls.Enabled or
+             (pcoSelfSignedHttps in fSettings.Options);
+      if tls then
+        if fClientTls.Enabled then
+          fClient.TLS := fClientTls
+        else
+          fClient.TLS.IgnoreCertificateErrors := true; // self-signed
       fClient.OpenBind(ip, fPort, {bind=}false, tls);
       fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
       fClient.OnLog := fLog.DoLog;
@@ -5290,7 +5454,8 @@ begin
   end;
 end;
 
-constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString);
+constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString;
+  aServerTls, aClientTls: PNetTlsContext);
 var
   key: THash256Rec;
 begin
@@ -5308,10 +5473,14 @@ begin
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
   if Assigned(fLog) then
+    // log includes safe 16-bit key.w[0] fingerprint
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
       [GuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
-      // log includes safe 16-bit fingerprint
   FillZero(key.b);
+  if aServerTls <> nil then
+    fServerTls := aServerTls^;
+  if aClientTls <> nil then
+    fClientTls := aClientTls^;
 end;
 
 destructor THttpPeerCrypt.Destroy;
@@ -5322,6 +5491,31 @@ begin
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
   inherited Destroy;
+end;
+
+function THttpPeerCrypt.NetworkInterfaceChanged: boolean;
+var
+  newmac: TMacAddress;
+  err: RawUtf8;
+  tix: cardinal;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  tix := GetTickCount64 shr 10; // calling OS API every second is good enough
+  if tix = fLastNetworkTix then
+    exit;
+  fLastNetworkTix := tix;
+  MacIPAddressFlush; // flush mormot.net.sock cache
+  err := fSettings.GuessInterface(newmac);
+  result := (err = '') and
+            ((fMac.Name <> newmac.Name) or
+             (fMac.IP <> newmac.IP) or
+             (fMac.Broadcast <> newmac.Broadcast) or
+             (fMac.NetMask <> newmac.NetMask));
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'NetworkInterfaceChanged=% [% % % %] %',
+      [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
 end;
 
 
@@ -5344,6 +5538,20 @@ begin
   fBroadcastMaxResponses := 24;
   fTryAllPeersCount := 10;
   fHttpTimeoutMS := 500;
+end;
+
+function THttpPeerCacheSettings.GuessInterface(out Mac: TMacAddress): RawUtf8;
+begin
+  result := '';
+  if fInterfaceName <> '' then
+  begin
+    if not GetMainMacAddress(Mac, fInterfaceName, {UpAndDown=}true) then
+      // allow to pickup "down" interfaces if name is explicit
+      result := FormatUtf8('impossible to find the [%] network interface',
+        [fInterfaceName]);
+  end
+  else if not GetMainMacAddress(Mac, [mafLocalOnly, mafRequireBroadcast]) then
+    result := 'impossible to find a local network interface';
 end;
 
 
@@ -5605,8 +5813,8 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer;
-  aLogClass: TSynLogClass; const aUuid: RawUtf8);
+  aHttpServerThreadCount: integer; aLogClass: TSynLogClass;
+  aServerTls, aClientTls: PNetTlsContext);
 var
   log: ISynLog;
   avail, existing: Int64;
@@ -5617,10 +5825,11 @@ begin
   log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
-  if (aUuid <> '') and
-     not RawUtf8ToGuid(aUuid, fUuid) then // allow UUID customization
-    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, aUuid]);
-  inherited Create(aSharedSecret);
+  if (fSettings <> nil) and
+     (fSettings.Uuid <> '') and // allow UUID customization
+     not RawUtf8ToGuid(fSettings.Uuid, fUuid) then
+    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, fSettings.Uuid]);
+  inherited Create(aSharedSecret, aServerTls, aClientTls);
   // setup the processing options
   if aSettings = nil then
   begin
@@ -5687,6 +5896,10 @@ procedure THttpPeerCache.StartHttpServer(
 var
   opt: THttpServerOptions;
 begin
+  if fClientTls.Enabled <> fServerTls.Enabled then
+    EHttpPeerCache.RaiseUtf8(
+      '%.StartHttpServer: inconsistent ClientTls=% ServerTls=%',
+      [self, fClientTls.Enabled, fServerTls.Enabled]);
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // classic per-thread client is good enough
   opt := [hsoNoXPoweredHeader, hsoThreadSmooting];
@@ -5694,7 +5907,8 @@ begin
     include(opt, hsoBan40xIP);
   if fVerboseLog then
     include(opt, hsoLogVerbose);
-  if pcoSelfSignedHttps in fSettings.Options then
+  if fServerTls.Enabled or
+     (pcoSelfSignedHttps in fSettings.Options) then
     include(opt, hsoEnableTls);
   fHttpServer := aHttpServerClass.Create(aIP, nil,
     fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
@@ -5706,7 +5920,12 @@ begin
       fPartials.OnLog := fLog.DoLog;
     THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
     // actually start and wait for the local HTTP server to be available
-    if pcoSelfSignedHttps in fSettings.Options then
+    if fServerTls.Enabled then
+    begin
+      fLog.Add.Log(sllTrace, 'StartHttpServer: HTTPS from ServerTls', self);
+      THttpServerSocketGeneric(fHttpServer).WaitStarted(10, @fServerTls);
+    end
+    else if pcoSelfSignedHttps in fSettings.Options then
     begin
       fLog.Add.Log(sllTrace, 'StartHttpServer: self-signed HTTPS', self);
       THttpServerSocketGeneric(fHttpServer).WaitStartedHttps(10);
@@ -6855,7 +7074,7 @@ begin
     logdata := pointer(fLogDataStorage);
     if global_verbs[hvOPTIONS] = '' then
       global_verbs := VERB_TEXT;
-    ctxt := THttpServerRequest.Create(self, 0, self, [], nil);
+    ctxt := THttpServerRequest.Create(self, 0, self, 0, [], nil);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
     ctxt.fServer := self;
@@ -6875,7 +7094,7 @@ begin
             // parse method and main headers as ctxt.Prepare() does
             bytessent := 0;
             ctxt.fHttpApiRequest := req;
-            ctxt.Recycle(req^.ConnectionID, self,
+            ctxt.Recycle(req^.ConnectionID, self, {asynchandle=}0,
               HTTP_TLS_FLAGS[req^.pSslInfo <> nil] +
               // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
               HTTP_10_FLAGS[(req^.Version.MajorVersion = 1) and

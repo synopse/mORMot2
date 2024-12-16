@@ -358,8 +358,7 @@ type
   private
     fContentLeft: Int64;
     fContentPos: PByte;
-    fContentEncoding, fCommandUriInstance, fLastHost: RawUtf8;
-    fCommandUriInstanceLen: PtrInt;
+    fContentEncoding, fLastHost: RawUtf8;
     fProgressiveTix: cardinal;
     fProgressiveID: THttpPartialID;
     fProgressiveNewStreamFileName: TFileName;
@@ -416,6 +415,10 @@ type
     // - if hsrAuthorized is set, THttpServerSocketGeneric.Authorization() will
     // put the authenticated User name in this field
     BearerToken: RawUtf8;
+    /// custom server-generated headers, to be added to the request headers
+    // - set e.g. with hsrAuthorized and hraNegotiate authentication scheme as
+    // already formatted 'WWW-Authenticate: xxxxxxxxx'#13#10 header
+    ResponseHeaders: RawUtf8;
     /// decoded 'Range: bytes=..' start value - default is 0
     // - e.g. 1024 for 'Range: bytes=1024-1025'
     // - equals -1 in case on unsupported multipart range requests
@@ -2658,7 +2661,7 @@ end;
 function IsHead(const method: RawUtf8): boolean;
 begin
   result := PCardinal(method)^ =
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+              ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 end;
 
 function IsUrlFavIcon(P: PUtf8Char): boolean;
@@ -3146,12 +3149,14 @@ begin
     ContentStream.Free; // ensure no leak on (reused) broken connection
   ResponseFlags := [];
   Options := [];
-  FastAssignNew(Headers);
+  FastAssignNew(Headers); // note: too soon for CommandUri
   FastAssignNew(ContentType);
   if Upgrade <> '' then
     FastAssignNew(Upgrade);
   if BearerToken <> '' then
     FastAssignNew(BearerToken);
+  if ResponseHeaders <> '' then
+    FastAssignNew(ResponseHeaders);
   if UserAgent <> '' then
     FastAssignNew(UserAgent);
   if Referer <> '' then
@@ -3164,6 +3169,8 @@ begin
   ContentStream := nil;
   ServerInternalState := 0;
   CompressContentEncoding := -1;
+  if fContentEncoding <> '' then
+    FastAssignNew(fContentEncoding);
   integer(CompressAcceptHeader) := 0;
   fProgressiveID := 0;
   fProgressiveTix := 0;
@@ -3573,6 +3580,8 @@ end;
 
 var
   _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
+const
+  _HEAD32 = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 
 function THttpRequestContext.ParseCommand: boolean;
 var
@@ -3597,9 +3606,9 @@ begin
         CommandMethod := _POSTVAR;
         inc(P, 5);
       end;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+    _HEAD32:
       begin
-        CommandMethod := _HEADVAR; // allow quick 'HEAD' search per pointer
+        CommandMethod := _HEADVAR;
         inc(P, 5);
       end;
   else
@@ -3628,9 +3637,12 @@ begin
     else
       inc(P);
   L := P - B;
-  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
-  FakeLength(CommandUri, L);
   result := ParseHttp(P + 1); // parse HTTP/1.x just after P^ = ' '
+  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
+  if L = 0 then
+    FastAssignNew(CommandUri) // paranoid (malformatted content)
+  else
+    FakeLength(CommandUri, L);
 end;
 
 function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
@@ -3719,20 +3731,7 @@ begin
       hrsGetCommand:
         if ProcessParseLine(st) then
         begin
-          if Interning = nil then
-            FastSetString(CommandUri, st.Line, st.LineLen)
-          else
-          begin
-            // no real interning, but CommandUriInstance buffer reuse
-            if st.LineLen > fCommandUriInstanceLen then
-            begin
-              fCommandUriInstanceLen := st.LineLen + 256;
-              FastSetString(fCommandUriInstance, nil, fCommandUriInstanceLen);
-            end;
-            CommandUri := fCommandUriInstance; // COW memory buffer reuse
-            MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
-            FakeLength(CommandUri, st.LineLen);
-          end;
+          FastSetString(CommandUri, st.Line, st.LineLen); // never interned
           State := hrsGetHeaders;
         end
         else
@@ -3877,7 +3876,7 @@ begin
   if fContentEncoding <> '' then
     AppendLine(Headers, ['Content-Encoding: ', fContentEncoding]);
   // compute response body
-  if (pointer(CommandMethod) = pointer(_HEADVAR)) or
+  if (PCardinal(CommandMethod)^ = _HEAD32) or
      (ContentLength = 0) then
     exit;
   if aOutStream <> nil then
@@ -3969,7 +3968,7 @@ begin
   end;
   // try to send both headers and body in a single socket syscall
   Process.Reset;
-  if pointer(CommandMethod) = pointer(_HEADVAR) then
+  if PCardinal(CommandMethod)^ = _HEAD32 then
     // return only the headers
     State := hrsResponseDone
   else
@@ -4048,7 +4047,7 @@ begin
   if not (rfContentStreamNeedFree in ResponseFlags) then
     exit;
   FreeAndNilSafe(ContentStream);
-  Exclude(ResponseFlags, rfContentStreamNeedFree);
+  exclude(ResponseFlags, rfContentStreamNeedFree);
 end;
 
 function THttpRequestContext.ContentFromFile(
@@ -4064,7 +4063,7 @@ begin
   // try if there is an already-compressed .gz file to send away
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
-     (pointer(CommandMethod) <> pointer(_HEADVAR)) and
+     (PCardinal(CommandMethod)^ <> _HEAD32) and
      not (rfWantRange in ResponseFlags) then
   begin
     gz := FileName + '.gz';
@@ -4097,7 +4096,7 @@ begin
   result := HTTP_SUCCESS;
   include(ResponseFlags, rfAcceptRange);
   if (ContentLength < HttpContentFromFileSizeInMemory) and
-     (pointer(CommandMethod) <> pointer(_HEADVAR)) then
+     (PCardinal(CommandMethod)^ <> _HEAD32) then
   begin
     // smallest files (up to few MB) are sent from temp memory (maybe compressed)
     FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
@@ -4486,7 +4485,7 @@ begin
   fHost := aHttp.Host;
   if hsrAuthorized in fConnectionFlags then
   begin
-    // reflect the current valid "authorization:" header
+    // reflect the current valid "www-authenticate:" header
     fAuthenticationStatus := aAuthorize;
     fAuthenticatedUser := aHttp.BearerToken; // set by fServer.Authorization()
   end
@@ -6037,7 +6036,7 @@ begin
       Scope := hasPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Scope := hasPut;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+    _HEAD32:
       Scope := hasHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
       Scope := hasDelete;
@@ -7270,12 +7269,12 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
-  GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
+  GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
 
 finalization
 

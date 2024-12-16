@@ -386,6 +386,8 @@ type
     class procedure MatchI(const Value: variant; out Result: variant);
     class procedure Lower(const Value: variant; out Result: variant);
     class procedure Upper(const Value: variant; out Result: variant);
+    class procedure CamelCase(const Value: variant; out Result: variant);
+    class procedure SnakeCase(const Value: variant; out Result: variant);
     class procedure EnumTrim(const Value: variant; out Result: variant);
     class procedure EnumTrimRight(const Value: variant; out Result: variant);
     class procedure PowerOfTwo(const Value: variant; out Result: variant);
@@ -459,12 +461,12 @@ type
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JsonQuote, JsonQuoteUri, ToJson, EnumTrim, EnumTrimRight,
-    // Lower / Upper (Unicode ready), PowerOfTwo, Equals (expecting two parameters),
-    // NewGuid, ExtractFileName, HumanBytes (calling KB function), Sub (as
-    // {{Sub AString,12,3}}), MarkdownToHtml, SimpleToHtml (Markdown with no
-    // HTML pass-through), WikiToHtml (callining TJsonWriter.AddHtmlEscapeWiki),
-    // Match / MatchI (as {{Match AString,startwith*}}), and Values / Keys (over
-    // a data object)
+    // Lower / Upper (Unicode ready), CamelCase / SnakeCase, PowerOfTwo, Equals
+    // (expecting two parameters), NewGuid, ExtractFileName, HumanBytes (calling
+    // KB function), Sub (as {{Sub AString,12,3}}), MarkdownToHtml, SimpleToHtml
+    // (Markdown with no HTML pass-through), WikiToHtml (calling
+    // TJsonWriter.AddHtmlEscapeWiki), Match / MatchI (as {{Match AString,startwith*}}),
+    // and Values / Keys (over a data object)
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -2059,7 +2061,9 @@ begin
       'Match',
       'MatchI',
       'Lower',
-      'Upper'],
+      'Upper',
+      'CamelCase',
+      'SnakeCase'],
      [DateTimeToText,
       DateToText,
       DateFmt,
@@ -2085,7 +2089,9 @@ begin
       Match,
       MatchI,
       Lower,
-      Upper]);
+      Upper,
+      CamelCase,
+      SnakeCase]);
   result := HelpersStandardList;
 end;
 
@@ -2450,6 +2456,23 @@ begin
     RawUtf8ToVariant(UpperCaseUnicode(u), Result);
 end;
 
+class procedure TSynMustache.CamelCase(const Value: variant;
+  out Result: variant);
+var
+  u: RawUtf8;
+begin
+  if VariantToText(Value, u) then
+    RawUtf8ToVariant(LowerCamelCase(u), Result);
+end;
+
+class procedure TSynMustache.SnakeCase(const Value: variant;
+  out Result: variant);
+var
+  u: RawUtf8;
+begin
+  if VariantToText(Value, u) then
+    RawUtf8ToVariant(mormot.core.unicode.SnakeCase(u), Result);
+end;
 
 
 end.

@@ -24,8 +24,7 @@ type
 
   TSampleDaemon = class(TSynDaemon)
   protected
-    FHttpServer: TRestHttpServer;
-    FServer: TSampleServer;
+    FRunning: boolean;
   public
     constructor Create(aSettingsClass: TSynDaemonSettingsClass; const
         aWorkFolder, aSettingsFolder, aLogFolder: TFileName; const
@@ -37,11 +36,13 @@ type
 
 
 var
+  // warning:  production code should not use those global variables but embedd them to TSampleDaemon
   LogFamily: TSynLogFamily;
   Model: TOrmModel;
   SampleServer: TSampleServer;
   HttpServer: TRestHttpServer;
   SampleDaemon: TSampleDaemon;
+
 {
 ******************************** TSampleDaemonSettings *********************************
 }
@@ -69,30 +70,33 @@ begin
   SampleServer.DB.Synchronous := smOff;
   SampleServer.DB.LockingMode := lmExclusive;
   SampleServer.Server.CreateMissingTables;
-  HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE,4 );
+  HttpServer := TRestHttpServer.Create(HttpPort, [SampleServer], '+', HTTP_DEFAULT_MODE, 4);
   HttpServer.AccessControlAllowOrigin := '*';
   SQLite3Log.Add.Log(sllInfo, 'HttpServer started at Port: ' + HttpPort);
+  FRunning := True;
 end;
 
 procedure TSampleDaemon.Stop;
 begin
-  SQLite3Log.Enter(self);
-  try
-    try
-      HttpServer.Free;
-      SQLite3Log.Add.Log(sllInfo, 'HttpServer stopped');
-    except
-      SQLite3Log.Add.Log(sllWarning, 'Error shutting down HttpServer');
-    end;
-  finally
-    try
-      SampleServer.Free;
-      SQLite3Log.Add.Log(sllInfo, 'Sample Server stopped');
-    except
-      SQLite3Log.Add.Log(sllWarning, 'Error shutting down Sample Server');
-    end;
-  Model.Free;
-  end;
+  if FRunning then
+   with SQLite3Log.Enter(self) do
+   try
+     try
+       HttpServer.Free;
+       SQLite3Log.Add.Log(sllInfo, 'HttpServer stopped');
+     except
+       SQLite3Log.Add.Log(sllWarning, 'Error shutting down HttpServer');
+     end;
+   finally
+     try
+       SampleServer.Free;
+       SQLite3Log.Add.Log(sllInfo, 'Sample Server stopped');
+     except
+       SQLite3Log.Add.Log(sllWarning, 'Error shutting down Sample Server');
+     end;
+     Model.Free;
+     FRunning := false;
+   end;
 end;
 
 begin
@@ -104,8 +108,8 @@ begin
   SQLite3Log.Add.Log(sllInfo, 'Daemon started, listening on port '  + HttpPort);
   try
     SampleDaemon.CommandLine;
-  finally
     SQLite3Log.Add.Log(sllInfo, 'Daemon shut down');
+  finally
+    SampleDaemon.Free;
   end;
-
 end.

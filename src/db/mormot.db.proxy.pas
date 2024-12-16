@@ -1861,7 +1861,7 @@ begin
     for result := 1 to fDataRowCount do
       if GotoRow(result - 1) then
       begin
-        ColumnToVariant(Col, v); // fast enough for client-side lookup
+        ColumnToVariant(Col, v, {forceutf8=}true); // fast enough on client-side
         if SortDynArrayVariantComp(
              TVarData(v), TVarData(Value), CaseInsensitive) = 0 then
           exit;

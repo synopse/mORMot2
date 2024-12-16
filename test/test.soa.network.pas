@@ -277,8 +277,8 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     noAnswer1, noAnswer2: boolean;
     i: integer;
   begin
-    C1 := THttpServerRequest.Create(nil, 0, nil, [], nil);
-    C2 := THttpServerRequest.Create(nil, 0, nil, [], nil);
+    C1 := THttpServerRequest.Create(nil, 0, nil, 0, [], nil);
+    C2 := THttpServerRequest.Create(nil, 0, nil, 0, [], nil);
     P2 := protocol.Clone('');
     try
       for i := 1 to 100 do

@@ -3393,7 +3393,7 @@ var
   i: PtrInt;
 begin
   for i := 0 to PLen - 1 do
-    P^[i] := swap(P^[i]);
+    P^[i] := bswap16(P^[i]);
 end;
 
 function GetTtfData(aDC: HDC; aTableName: PAnsiChar; var Ref: TWordDynArray): pointer;
@@ -6207,7 +6207,7 @@ begin
   inc(PTtfTableDirectory(e));
   n := 0;
   if SubSetSize > SizeOf(PTtfTableDirectory) then
-    for i := 1 to swap(PTtfTableDirectory(SubSetData)^.numTables) do
+    for i := 1 to bswap16(PTtfTableDirectory(SubSetData)^.numTables) do
     begin
       if IntegerScanIndex(@TTF_SUBSET, length(TTF_SUBSET), e^.tag) >= 0 then
       begin
@@ -6225,11 +6225,11 @@ begin
   // update the main directory
   dir := pointer(ttf);
   dir^.sfntVersion := PTtfTableDirectory(SubSetData)^.sfntVersion;
-  dir^.numTables := swap(word(n));
+  dir^.numTables := bswap16(n);
   //len := HighBit(n); // always 8 when n in 8..15
-  //dir^.searchRange := swap(len * 16);
-  //dir^.entrySelector := swap(Floor(log2(len))); // requires the Math unit
-  //dir^.rangeShift := swap((integer(n) - len) * 16);
+  //dir^.searchRange := bswap16(len * 16);
+  //dir^.entrySelector := bswap16(Floor(log2(len))); // requires the Math unit
+  //dir^.rangeShift := bswap16((integer(n) - len) * 16);
   dir^.searchRange := 32768; // pre-computed values for n in 8..15
   dir^.entrySelector := 768;
   dir^.rangeShift := 8192;

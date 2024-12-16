@@ -4004,6 +4004,28 @@ begin
   result := true;
 end;
 
+const
+  // use a constant array to circumvent aarch64-win64 FPC bug
+  CKA_DEFAULT: array[0 .. 17] of CK_ATTRIBUTE_TYPE = (
+    CKA_CLASS,
+    CKA_LABEL,
+    CKA_APPLICATION,
+    CKA_UNIQUE_ID,
+    CKA_START_DATE,
+    CKA_END_DATE,
+    CKA_ID,
+    CKA_SERIAL_NUMBER,
+    CKA_ISSUER,
+    CKA_SUBJECT,
+    CKA_OWNER,
+    CKA_URL,
+    CKA_CERTIFICATE_TYPE,
+    CKA_KEY_TYPE,
+    CKA_KEY_GEN_MECHANISM,
+    CKA_MODULUS_BITS,
+    CKA_EC_POINT,
+    CKA_VALUE_LEN);
+
 function TPkcs11.GetObjects(Filter: PCK_ATTRIBUTES;
   Handles: PCK_OBJECT_HANDLE_DYNARRAY;
   Values: PRawByteStringDynArray): TPkcs11ObjectDynArray;
@@ -4024,11 +4046,7 @@ begin
     u := fC.FindObjectsInit(fSession, pointer(Filter^.Attrs), Filter^.Count);
   Check(u, 'FindObjectsInit');
   arr.Clear;
-  arr.Add([CKA_CLASS, CKA_LABEL, CKA_APPLICATION, CKA_UNIQUE_ID,
-           CKA_START_DATE, CKA_END_DATE, CKA_ID, CKA_SERIAL_NUMBER,
-           CKA_ISSUER, CKA_SUBJECT, CKA_OWNER, CKA_URL, CKA_CERTIFICATE_TYPE,
-           CKA_KEY_TYPE, CKA_KEY_GEN_MECHANISM, CKA_MODULUS_BITS,
-           CKA_EC_POINT, CKA_VALUE_LEN]);
+  arr.Add(CKA_DEFAULT);
   for s := low(POS2CKA) to high(POS2CKA) do
     arr.Add(POS2CKA[s]);
   if Values <> nil then

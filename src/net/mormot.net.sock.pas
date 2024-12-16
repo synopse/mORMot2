@@ -984,6 +984,10 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
 /// purge all output fields for a TNetTlsContext instance for proper reuse
 procedure ResetNetTlsContext(var TLS: TNetTlsContext);
 
+/// compare the main fields of twoTNetTlsContext instances
+// - won't compare the callbacks
+function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
+
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
@@ -1497,6 +1501,10 @@ type
     // - recognize 'https://user:password@server:port/address' authentication
     // - returns TRUE is at least the Server has been extracted, FALSE on error
     function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+    /// check if a connection need to be re-established to follow this URI
+    function Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
+    /// check if a connection need to be re-established to follow this URI
+    function SameUri(const aUri: RawUtf8): boolean;
     /// compute the whole normalized URI
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: RawUtf8;
@@ -2312,18 +2320,24 @@ end;
 function TNetAddr.SetFromIP4(const address: RawUtf8;
   noNewSocketIP4Lookup: boolean): boolean;
 begin
-  result := false;
+  // allow to bind to any IPv6 address
+  if address = c6AnyHost then // ::
+  begin
+    PSockAddrIn6(@Addr)^.sin6_family := AF_INET6; // keep all sin6_addr[] = 0
+    result := true;
+    exit;
+  end;
   // caller did set addr4.sin_port and other fields to 0
+  result := false;
   with PSockAddr(@Addr)^ do
     if (address = cLocalhost) or
-       (address = c6Localhost) or
+       (address = c6Localhost) or // ::1
        PropNameEquals(address, 'localhost') then
       PCardinal(@sin_addr)^ := cLocalhost32 // 127.0.0.1
     else if (address = cBroadcast) or
             (address = c6Broadcast) then
       PCardinal(@sin_addr)^ := cardinal(-1) // 255.255.255.255
-    else if (address = cAnyHost) or
-            (address = c6AnyHost) then
+    else if address = cAnyHost then
       // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
     else if NetIsIP4(pointer(address), @sin_addr) or
             GetKnownHost(address, PCardinal(@sin_addr)^) or
@@ -2439,7 +2453,7 @@ function TNetAddr.Port: TNetPort;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
-      result := htons(sin_port)
+      result := bswap16(sin_port)
     else
       result := 0;
 end;
@@ -2450,7 +2464,7 @@ begin
     if (sa_family in [AF_INET, AF_INET6]) and
        (p <= 65535) then // p may equal 0 to set ephemeral port
     begin
-      sin_port := htons(p);
+      sin_port := bswap16(p);
       result := nrOk;
     end
     else
@@ -3876,6 +3890,20 @@ begin
   FastAssignNew(TLS.LastError);
 end;
 
+function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
+begin
+  result := (tls1.Enabled = tls2.Enabled) and
+            ((not tls1.Enabled) or
+             ((tls1.IgnoreCertificateErrors = tls2.IgnoreCertificateErrors) and
+              (tls1.CertificateFile         = tls2.CertificateFile) and
+              (tls1.CACertificatesFile      = tls2.CACertificatesFile) and
+              (tls1.CertificateRaw          = tls2.CertificateRaw) and
+              (tls1.PrivateKeyFile          = tls2.PrivateKeyFile) and
+              (tls1.PrivatePassword         = tls2.PrivatePassword) and
+              (tls1.PrivateKeyRaw           = tls2.PrivateKeyRaw) and
+              (tls1.HostNamesCsv            = tls2.HostNamesCsv)));
+end;
+
 
 { ******************** Efficient Multiple Sockets Polling }
 
@@ -4934,6 +4962,22 @@ begin
   end;
   if Server <> '' then
     result := true;
+end;
+
+function TUri.Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
+begin
+  result := (aHttps = Https) and
+            PropNameEquals(aServer, Server) and
+            (GetCardinal(pointer(aPort)) = PortInt);
+end;
+
+function TUri.SameUri(const aUri: RawUtf8): boolean;
+var
+  u: TUri;
+begin
+  result := u.From(aUri) and
+            PropNameEquals(u.Scheme, Scheme) and
+            u.Same(Server, Port, Https);
 end;
 
 function TUri.URI: RawUtf8;
@@ -6145,7 +6189,7 @@ begin
   if fAborted then
     res := nrClosed;
   if NetResult <> nil then
-    NetResult^ := res; // always return TNetResult
+    NetResult^ := res; // always return a TNetResult
   result := (res = nrOK);
 end;
 

@@ -1643,7 +1643,7 @@ begin
     if fServer.Services <> nil then
       with fServer.Services as TServiceContainerServer do
         if fFakeCallbacks <> nil then
-          FakeCallbackRemove(self);
+          FakeCallbackRemove(self); // remove from weak fFakeCallbacks.List[]
   end;
   inherited Destroy;
 end;
@@ -1714,10 +1714,10 @@ end;
 
 destructor TServiceContainerServer.Destroy;
 var
-  i: integer;
+  i: PtrInt;
   call: TRestUriParams;
   ctxt: TRestServerUriContext;
-  fake: ^TInterfacedObjectFakeServer;
+  fake: TInterfacedObjectFakeServer;
 begin
   if (fFakeCallbacks <> nil) and
      (fFakeCallbacks.Count <> 0) then
@@ -1726,15 +1726,14 @@ begin
     ctxt := TRestServerUriContext.Create;
     try
       ctxt.Prepare(fRestServer, call);
-      fake := pointer(fFakeCallbacks.List);
-      for i := 1 to fFakeCallbacks.Count do
+      for i := fFakeCallbacks.Count - 1 downto 0 do // backward for safety
       begin
+        fake := fFakeCallbacks.List[i];
         // prevent GPF in TInterfacedObjectFakeServer.Destroy
-        fake^.fServer := nil;
+        fake.fServer := nil;
         // notify as to be released (paranoid)
-        if not fake^.fReleasedOnClientSide then
-          RemoveFakeCallback(fake^, ctxt);
-        inc(fake);
+        if not fake.fReleasedOnClientSide then
+          RemoveFakeCallback(fake, ctxt);
       end;
     finally
       ctxt.Free;
@@ -1875,6 +1874,7 @@ var
   connectionID: TRestConnectionID;
   fake: TInterfacedObjectFakeServer;
 begin
+  // method called by TInterfacedObjectFakeServer.Destroy
   if (self = nil) or
      (fFakeCallbacks = nil) or
      (fFakeCallbacks.Count = 0) then
@@ -1985,8 +1985,8 @@ procedure TServiceContainerServer.RemoveFakeCallbackOnConnectionClose(
 var
   call: TRestUriParams;
   ctxt: TRestServerUriContext;
-  fake: ^TInterfacedObjectFakeServer;
-  i: integer;
+  fake: TInterfacedObjectFakeServer;
+  i: PtrInt;
 begin
   if (self = nil) or
      (fFakeCallbacks = nil) or
@@ -1998,13 +1998,12 @@ begin
     ctxt.Prepare(fRestServer, call);
     fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
     try
-      fake := pointer(fFakeCallbacks.List);
-      for i := 1 to fFakeCallbacks.Count do
+      for i := fFakeCallbacks.Count - 1 downto 0 do // backward for safety
       begin
-        if (fake^.fLowLevelConnectionID = aConnectionID) and
-           not fake^.fReleasedOnClientSide then
-          RemoveFakeCallback(fake^, ctxt);
-        inc(fake);
+        fake := fFakeCallbacks.List[i];
+        if (fake.fLowLevelConnectionID = aConnectionID) and
+           not fake.fReleasedOnClientSide then
+          RemoveFakeCallback(fake, ctxt);
       end;
     finally
       fFakeCallbacks.Safe.WriteUnLock;

@@ -75,11 +75,13 @@ type
   // - ffoExcludesDir won't include the path in TFindFiles.Name
   // - ffoSubFolder will search within nested folders
   // - ffoIncludeFolder will add the nested folders
+  // - ffoIncludeHiddenFiles will add any hidden file (on Windows)
   TFindFilesOption = (
     ffoSortByName,
     ffoExcludesDir,
     ffoSubFolder,
-    ffoIncludeFolder);
+    ffoIncludeFolder,
+    ffoIncludeHiddenFiles);
   /// the optional features of FindFiles()
   TFindFilesOptions = set of TFindFilesOption;
 
@@ -114,15 +116,17 @@ procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
 
 
 type
-  /// one optional feature of SynchFolders()
+  /// one optional feature of SynchFolders() and CopyFolder()
   // - process recursively nested folders if sfoSubFolder is included
   // - use file content instead of file date check if sfoByContent is included
   // - display synched file name on console if sfoWriteFileNameToConsole is included
+  // - sfoIncludeHiddenFiles will synchronize also hidden files (on Windows)
   TSynchFoldersOption = (
     sfoSubFolder,
     sfoByContent,
-    sfoWriteFileNameToConsole);
-  /// the optional features of SynchFolders()
+    sfoWriteFileNameToConsole,
+    sfoIncludeHiddenFiles);
+  /// the optional features of SynchFolders() and CopyFolder()
   TSynchFoldersOptions = set of TSynchFoldersOption;
 
 /// ensure all files in Dest folder(s) do match the one in Reference
@@ -486,9 +490,10 @@ const
 /// parse a CSV buffer into a TDynArray of records using its RTTI fields
 // - TypeInfo should have proper fields description, e.g. from Delphi 2010
 // extended RTTI or mormot.core.rtti.pas' Rtti.RegisterFromText()
-// - first CSV line has headers matching the needed case-insensitive field names
+// - first CSV line is expected to be an header, matching of the record field names
+// (case-insensitive), not necessary in the same exact order than in the record;
+// any unknown header name within the RTTI fields will just be ignored
 // - following CSV lines will be read and parsed into the dynamic array records
-// - any unknown header name within the RTTI fields will be ignored
 // - you can optionally intern all RawUtf8 values to reduce memory consumption
 function TDynArrayLoadCsv(var Value: TDynArray; Csv: PUtf8Char;
   Intern: TRawUtf8Interning = nil): boolean;
@@ -688,7 +693,7 @@ type
     // corresponding to the expected false positive ratio
     // - you can specify a custom hash function if you find that the default
     // crc32c() has too many collisions: but SaveTo/LoadFrom will be tied to it;
-    // see e.g. CryptCrc32(caMd5/caSha1) from mormot.crypt.secure
+    // see e.g. CryptCrc32(caMd5/caSha1/caSha256) from mormot.crypt.secure
     constructor Create(aSize: integer; aFalsePositivePercent: double = 1;
       aHasher: THasher = nil); reintroduce; overload;
     /// initialize the internal bits storage from a SaveTo() binary buffer
@@ -1030,7 +1035,8 @@ type
     constructor Create(const aParameters: RawUtf8 = ''); overload; virtual;
     /// initialize the filter or validation instance
     /// - this overloaded constructor will allow to easily set the parameters
-    constructor CreateUtf8(const Format: RawUtf8; const Args, Params: array of const); overload;
+    constructor CreateUtf8(const Format: RawUtf8;
+      const Args, Params: array of const); overload;
     /// the optional associated parameters, supplied as JSON-encoded
     property Parameters: RawUtf8
       read fParameters write SetParameters;
@@ -1052,8 +1058,8 @@ type
     // generic error message from clas name ('"Validate email" rule failed'
     // for TSynValidateEmail class e.g.)
     // - if the validation passed, will return TRUE
-    function Process(aFieldIndex: integer; const Value: RawUtf8; var ErrorMsg: string): boolean;
-      virtual; abstract;
+    function Process(aFieldIndex: integer; const Value: RawUtf8;
+      var ErrorMsg: string): boolean; virtual; abstract;
   end;
 
   /// points to a TSynValidate variable
@@ -1093,7 +1099,8 @@ type
   public
     /// perform the Email Address validation action to the specified value
     // - call IsValidEmail() function and check for the supplied TLD
-    function Process(aFieldIndex: integer; const Value: RawUtf8; var ErrorMsg: string): boolean; override;
+    function Process(aFieldIndex: integer; const Value: RawUtf8;
+      var ErrorMsg: string): boolean; override;
     /// allow any TLD to be allowed, even if not a generic TLD (.com,.net ...)
     // - this may be mandatory since already over 1,300 new gTLD names or
     // "strings" could become available in the next few years: there is a
@@ -1409,7 +1416,12 @@ function IsValidIP4Address(P: PUtf8Char): boolean;
 
 /// return TRUE if the supplied content is a valid email address
 // - follows RFC 822, to validate local-part@domain email format
-function IsValidEmail(P: PUtf8Char): boolean;
+function IsValidEmail(P: PUtf8Char): boolean; overload;
+
+/// return TRUE if the supplied content is a valid email address
+// - follows RFC 822, to validate local-part@domain email format
+function IsValidEmail(const email: RawUtf8): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ***************** Cross-Platform TSynTimeZone Time Zones }
@@ -1672,11 +1684,11 @@ var
     if FindFirst(name, faAnyfile, F) = 0 then
     begin
       repeat
-        if (SearchRecValidFile(F) and
+        if (SearchRecValidFile(F, ffoIncludeHiddenFiles in Options) and
             ((IgnoreFileName = '') or
              (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0))) or
            ((ffoIncludeFolder in Options) and
-            SearchRecValidFolder(F)) then
+            SearchRecValidFolder(F, ffoIncludeHiddenFiles in Options)) then
         begin
           if ffoExcludesDir in Options then
             ff.FromSearchRec(folder, F)
@@ -1688,11 +1700,11 @@ var
       FindClose(F);
     end;
     if (ffoSubFolder in Options) and
-       (FindFirst(fold + '*', faDirectory, F) = 0) then
+       (FindFirstDirectory(fold + '*', ffoIncludeHiddenFiles in Options, F) = 0) then
     begin
       // recursive SearchFolder() call for nested directories
       repeat
-        if SearchRecValidFolder(F) and
+        if SearchRecValidFolder(F, ffoIncludeHiddenFiles in Options) and
            ((IgnoreFileName = '') or
             (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
           SearchFolder(IncludeTrailingPathDelimiter(folder + F.Name));
@@ -1817,7 +1829,7 @@ begin
      (FindFirst(dst + FILES_ALL, faAnyFile, fdst) = 0) then
   begin
     repeat
-      if SearchRecValidFile(fdst) then
+      if SearchRecValidFile(fdst, sfoIncludeHiddenFiles in Options) then
       begin
         reffn := ref + fdst.Name;
         if not FileInfoByName(reffn, refsize, reftime) then
@@ -1840,7 +1852,7 @@ begin
           ConsoleWriteRaw(['synched ', dstfn]);
       end
       else if (sfoSubFolder in Options) and
-              SearchRecValidFolder(fdst) then
+              SearchRecValidFolder(fdst, sfoIncludeHiddenFiles in Options) then
         inc(result, SynchFolders(ref + fdst.Name, dst + fdst.Name, Options));
     until FindNext(fdst) <> 0;
     FindClose(fdst);
@@ -1867,7 +1879,7 @@ begin
   repeat
     reffn := src + sr.Name;
     dstfn := dst + sr.Name;
-    if SearchRecValidFile(sr) then
+    if SearchRecValidFile(sr, sfoIncludeHiddenFiles in Options) then
     begin
       if FileInfoByName(dstfn, dsize, dtime) and // fast single syscall
          (sr.Size = dsize) then
@@ -1881,13 +1893,13 @@ begin
       if not CopyFile(reffn, dstfn, {failsifexists=}false) then
         result := -1;
     end
-    else if not SearchRecValidFolder(sr) then
+    else if not SearchRecValidFolder(sr, sfoIncludeHiddenFiles in Options) then
       continue
     else if sfoSubFolder in Options then
     begin
       nested := CopyFolder(reffn, dstfn, Options);
       if nested < 0 then
-        result := nested
+        result := nested // propagate error
       else
         inc(result, nested);
     end;
@@ -4311,8 +4323,9 @@ begin
     h2 := fHasher(h1, aValue, aValueLen);
   fSafe.WriteLock;
   try
-    for h := 0 to fHashFunctions - 1 do
+    for h := 1 to fHashFunctions do
     begin
+      // set all hash bits of this value
       SetBitPtr(pointer(fStore), h1 mod fBits);
       inc(h1, h2);
     end;
@@ -4330,7 +4343,7 @@ end;
 function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
 var
   h: integer;
-  h1, h2: cardinal; // https://goo.gl/Pls5wi
+  h1, h2: cardinal; // adding h2 is enough and safe - see https://goo.gl/Pls5wi
 begin
   result := false;
   if (self = nil) or
@@ -4344,14 +4357,17 @@ begin
     h2 := fHasher(h1, aValue, aValueLen);
   fSafe.ReadOnlyLock; // allow concurrent reads
   try
-    for h := 0 to fHashFunctions - 1 do
+    for h := 1 to fHashFunctions do
       if GetBitPtr(pointer(fStore), h1 mod fBits) then
+        // next hash: all bits should be 1
         inc(h1, h2)
       else
+        // if any of the bits is 0, the value is definitely not in the set
         exit;
   finally
     fSafe.ReadOnlyUnLock;
   end;
+  // if all are 1, then either the value is in the set, or it is a false positive
   result := true;
 end;
 
@@ -5565,118 +5581,108 @@ begin
     result := true;
 end;
 
+function IsValidEmail(const email: RawUtf8): boolean;
+begin
+  result := IsValidEmail(pointer(email));
+end;
+
 function IsValidEmail(P: PUtf8Char): boolean;
 // Initial Author: Ernesto D'Spirito - UTF-8 version by AB
 // http://www.howtodothings.com/computers/a1169-validating-email-addresses-in-delphi.html
 const
-  // Valid characters in an "atom"
-  atom_chars: TSynAnsicharSet = [#33..#255] -
+  atom: TSynAnsicharSet = [#33..#255] -
     ['(', ')', '<', '>', '@', ',', ';', ':', '\', '/', '"', '.', '[', ']', #127];
-  // Valid characters in a "quoted-string"
-  quoted_string_chars: TSynAnsicharSet =
-    [#0..#255] - ['"', #13, '\'];
-  // Valid characters in a subdomain
-  letters_digits: TSynAnsicharSet =
-    ['0'..'9', 'A'..'Z', 'a'..'z'];
-type
-  States = (
-    STATE_BEGIN,
-    STATE_ATOM,
-    STATE_QTEXT,
-    STATE_QCHAR,
-    STATE_QUOTE,
-    STATE_LOCAL_PERIOD,
-    STATE_EXPECTING_SUBDOMAIN,
-    STATE_SUBDOMAIN,
-    STATE_HYPHEN);
+  subdomain = ['0'..'9', 'A'..'Z', 'a'..'z'];
 var
-  State: States;
   subdomains: integer;
   c: AnsiChar;
+  s: (sBegin, sAtom, sQText, sQChar, sQuote,
+      sLocalPeriod, sExpectSubdomain, sSubDomain, sHyphen);
   ch: PtrInt;
 begin
-  State := STATE_BEGIN;
+  s := sBegin;
   subdomains := 1;
   if P <> nil then
     repeat
-      ch := ord(P^);
-      if ch and $80 = 0 then
-        inc(P)
-      else
+      c := P^;
+      if c = #0 then
+        break
+      else if c > #$7f then
+      begin
         ch := UTF8_TABLE.GetHighUtf8Ucs4(P);
-      if (ch <= 255) and
-         (WinAnsiConvert.AnsiToWide[ch] <= 255) then
-        // convert into WinAnsi char
-        c := AnsiChar(ch)
+        if (ch <= 255) and
+           (WinAnsiConvert.AnsiToWide[ch] <= 255) then
+          // convert into WinAnsi char
+          c := AnsiChar(ch)
+        else
+          // invalid char
+          c := #127;
+      end
       else
-        // invalid char
-        c := #127;
-      case State of
-        STATE_BEGIN:
-          if c in atom_chars then
-            State := STATE_ATOM
+        inc(P);
+      case s of
+        sBegin:
+          if c in atom then
+            s := sAtom
           else if c = '"' then
-            State := STATE_QTEXT
+            s := sQText
           else
             break;
-        STATE_ATOM:
+        sAtom:
           if c = '@' then
-            State := STATE_EXPECTING_SUBDOMAIN
+            s := sExpectSubdomain
           else if c = '.' then
-            State := STATE_LOCAL_PERIOD
-          else if not (c in atom_chars) then
+            s := sLocalPeriod
+          else if not (c in atom) then
             break;
-        STATE_QTEXT:
-          if c = '\' then
-            State := STATE_QCHAR
-          else if c = '"' then
-            State := STATE_QUOTE
-          else if not (c in quoted_string_chars) then
-            break;
-        STATE_QCHAR:
-          State := STATE_QTEXT;
-        STATE_QUOTE:
+        sQText:
+          case c of
+            '\':
+              s := sQChar;
+            '"':
+              s := sQuote;
+            #13:
+             break;
+          end;
+        sQChar:
+          s := sQText;
+        sQuote:
           if c = '@' then
-            State := STATE_EXPECTING_SUBDOMAIN
+            s := sExpectSubdomain
           else if c = '.' then
-            State := STATE_LOCAL_PERIOD
+            s := sLocalPeriod
           else
             break;
-        STATE_LOCAL_PERIOD:
-          if c in atom_chars then
-            State := STATE_ATOM
+        sLocalPeriod:
+          if c in atom then
+            s := sAtom
           else if c = '"' then
-            State := STATE_QTEXT
+            s := sQText
           else
             break;
-        STATE_EXPECTING_SUBDOMAIN:
-          if c in letters_digits then
-            State := STATE_SUBDOMAIN
+        sExpectSubdomain:
+          if c in subdomain then
+            s := sSubDomain
           else
             break;
-        STATE_SUBDOMAIN:
+        sSubDomain:
           if c = '.' then
           begin
             inc(subdomains);
-            State := STATE_EXPECTING_SUBDOMAIN
+            s := sExpectSubdomain
           end
           else if c = '-' then
-            State := STATE_HYPHEN
-          else if not (c in letters_digits) then
+            s := sHyphen
+          else if not (c in subdomain) then
             break;
-        STATE_HYPHEN:
-          if c in letters_digits then
-            State := STATE_SUBDOMAIN
+        sHyphen:
+          if c in subdomain then
+            s := sSubDomain
           else if c <> '-' then
             break;
       end;
-      if P^ = #0 then
-      begin
-        P := nil;
-        break;
-      end;
     until false;
-  result := (State = STATE_SUBDOMAIN) and
+  result := (s = sSubDomain) and
             (subdomains >= 2);
 end;
 

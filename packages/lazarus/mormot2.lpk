@@ -8,7 +8,7 @@
       <SearchPaths>
         <IncludeFiles Value="../../src;../../src/core;../../src/net"/>
         <Libraries Value="../../static/$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script;../../src/misc"/>
+        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script;../../src/misc;../../src/tools/mget"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
         <SrcPath Value="../../src"/>
       </SearchPaths>
@@ -509,6 +509,10 @@
         <Filename Value="../../src/core/mormot.core.os.security.pas"/>
         <UnitName Value="mormot.core.os.security"/>
       </Item115>
+      <Item116>
+        <Filename Value="../../src/tools/mget/mormot.tools.mget.pas"/>
+        <UnitName Value="mormot.tools.mget"/>
+      </Item116>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>

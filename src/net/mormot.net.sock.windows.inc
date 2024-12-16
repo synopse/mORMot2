@@ -399,11 +399,6 @@ const
     AF_INET6,
     0);
 
-function htons(port: cardinal): cardinal; {$ifdef HASINLINE} inline; {$endif}
-begin
-  result := swap(word(port)); // port should be 16-bit word
-end;
-
 
 { ******** WinSock2 API calls }
 
@@ -578,7 +573,7 @@ begin
   if (p = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
-  PSockAddr(@Addr)^.sin_port := htons(p);
+  PSockAddr(@Addr)^.sin_port := bswap16(p);
   // first check most simple IPv4 resolution (maybe using mormot.net.dns)
   if SetFromIP4(address, false) or
      // fallback to OS getaddrinfo() resolution, first try as IP4, then IP6
@@ -1114,7 +1109,7 @@ begin
             end
             else
               r := r^.Next;
-          Speed := p^.TransmitLinkSpeed div 1000; // stored as Mbits/s
+          Speed := p^.TransmitLinkSpeed shr 20; // stored as Mbits/s
           if p^.ReceiveLinkSpeed < Speed then
             Speed := p^.ReceiveLinkSpeed; // unlikely
           if p^.Dhcpv4Server.lpSockaddr <> nil then

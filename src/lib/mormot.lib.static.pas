@@ -79,9 +79,9 @@ function libc_strcspn(str, reject: PUtf8Char): integer; cdecl;
 function libc_strcat(dest: PAnsiChar; src: PAnsiChar): PAnsiChar; cdecl;
 function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
 function libc_strspn(p1, p2: PAnsiChar): PAnsiChar; cdecl;
-function libc_strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
+function libc_strncmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
 function libc_memchr(s: pointer; c: integer; n: PtrInt): pointer; cdecl;
-function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
+function libc_memcmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
 function libc_strchr(s: pointer; c: integer): pointer; cdecl;
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
 function libc_fileno(f: pointer): integer; cdecl;
@@ -120,7 +120,9 @@ function umoddi3(num, den: uint64): uint64; cdecl;
 function divdi3(num, den: int64): int64; cdecl;
 function udivdi3(num, den: uint64): uint64; cdecl;
 function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
+{$ifdef CPUINTEL}
 procedure __chkstk_ms;
+{$endif CPUINTEL}
 
 {$ifdef CPUX64}
 
@@ -254,7 +256,7 @@ begin
   FreeMem(P);
 end;
 
-function pas_realloc(P: pointer; Size: integer): pointer; cdecl;
+function pas_realloc(P: pointer; Size: PtrInt): pointer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_realloc'; {$endif}
 begin
   ReallocMem(P, Size);
@@ -309,11 +311,11 @@ function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcpy';
 function libc_strspn(p1, p2: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strspn';
-function libc_strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
+function libc_strncmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
   external _CLIB name 'strncmp';
 function libc_memchr(s: pointer; c: integer; n: PtrInt): pointer; cdecl;
   external _CLIB name 'memchr';
-function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
+function libc_memcmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
   external _CLIB name 'memcmp';
 function libc_strchr(s: pointer; c: integer): pointer; cdecl;
   external _CLIB name 'strchr';
@@ -499,7 +501,7 @@ begin
   FreeMem(P);
 end;
 
-function realloc(P: pointer; Size: integer): pointer; cdecl;
+function realloc(P: pointer; Size: PtrInt): pointer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'realloc'; {$endif}
 begin
   result := P;
@@ -578,6 +580,8 @@ begin
   raise ELibStatic.Create('Unexpected exit() call');
 end;
 
+{$ifdef CPUINTEL}
+
 procedure printf; assembler; 
  {$ifdef FPC} nostackframe; public name _PREFIX + 'printf'; {$else} export; {$endif}
 asm
@@ -601,6 +605,10 @@ procedure _vsnprintf; assembler;
 asm
   jmp libc_vsnprintf
 end;
+
+{$else}
+
+{$endif CPUINTEL}
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strcspn'; {$else} export; {$endif}
@@ -632,7 +640,7 @@ begin
   result := libc_strtod(value, endPtr);
 end;
 
-function strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
+function strncmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strncmp'; {$endif}
 begin
   result := libc_strncmp(p1, p2, Size);
@@ -650,7 +658,7 @@ begin
   result := libc_memchr(s, c, n);
 end;
 
-function memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
+function memcmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'memcmp'; {$endif}
 begin
  result := libc_memcmp(p1, p2, Size);

@@ -370,7 +370,7 @@ type
     wString,
     wRawJson,
     wBlob,
-    wGUID,
+    wGuid,
     wCustomAnswer,
     wRecord,
     wArray,
@@ -470,7 +470,7 @@ const
     SWI64, SWI64, SWI64, SWI64, SWI64, SWD64, SWD32, SWD64,
     '{"type":"string","format":"date-time"}', // wDateTime
     '{"type":"string"}', '{"type":"string"}', '{"type":"object"}', //FIXME! //wRawJson
-    '{"type":"string","format":"binary"}', '{"type":"string"}', //wBlob,wGUID
+    '{"type":"string","format":"binary"}', '{"type":"string"}', //wBlob,wGuid
     '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
     '', SWI64, '', '' //wObject, wORM, wInterface, wRecordVersion
     ));
@@ -526,7 +526,7 @@ const
     wRawUtf8,  //  ptSynUnicode
     wDateTime, //  ptDateTime
     wDateTime, //  ptDateTimeMS
-    wGUID,     //  ptGuid
+    wGuid,     //  ptGuid
     wBlob,     //  ptHash128
     wBlob,     //  ptHash256
     wBlob,     //  ptHash512
@@ -717,8 +717,10 @@ var
       wRecord:
         if rtti.Props.Count <> 0 then
           info := _ObjFast([
-            'name',   typName,
-            'fields', ContextNestedProperties(rtti, parentName)]);
+            'name',      typName,
+            'camelName', LowerCamelCase(typName),
+            'snakeName', SnakeCase(typName),
+            'fields',    ContextNestedProperties(rtti, parentName)]);
       wArray:
         begin
           if rtti.ObjArrayClass <> nil then
@@ -742,9 +744,12 @@ var
           end;
           // can be used to create static array (dynamic arrays have ItemCount=0)
           //  array{{#staticMaxIndex}}[0..{{staticMaxIndex}}]{{/staticMaxIndex}} of
+          _ObjAddProps([
+            'name',      typName,
+            'camelName', LowerCamelCase(typName),
+            'snakeName', SnakeCase(typName)], info);
           if rtti.Cache.ItemCount > 0 then
             _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount-1);
-          _Safe(info)^.AddValue('name', typName);
         end;
     end;
     if not VarIsEmptyOrNull(info) then
@@ -778,7 +783,7 @@ begin
   end;
   if (typ = wRecord) and
      PropNameEquals(typName, 'TGUID') then
-    typ := wGUID
+    typ := wGuid
   else if (typ = wRecord) and
           PropNameEquals(typName, 'TServiceCustomAnswer') then
     typ := wCustomAnswer;
@@ -858,7 +863,7 @@ begin
         if self <> nil then
           RegisterType(fSets);
       end;
-    wGUID:
+    wGuid:
       _ObjAddProps(['toVariant',   'GuidToVariant',
                     'fromVariant', 'VariantToGuid'], result);
     wCustomAnswer:
@@ -961,6 +966,8 @@ begin
       kind := CROSSPLATFORM_KIND[nfo.OrmFieldType];
       _ObjAddProps(['index',        f + 1,
                     'name',         nfo.Name,
+                    'camelName',    LowerCamelCase(nfo.Name),
+                    'snakeName',    SnakeCase(nfo.Name),
                     'sql',          ord(nfo.OrmFieldType),
                     'sqlName',      nfo.OrmFieldTypeName^,
                     'typeKind',     ord(kind),
@@ -1007,6 +1014,8 @@ begin
           'interfaceUri',         InterfaceUri,
           'interfaceMangledUri',  InterfaceMangledUri,
           'interfaceName',        InterfaceFactory.InterfaceTypeInfo^.RawName,
+          'camelName',            LowerCamelCase(InterfaceFactory.InterfaceUri),
+          'snakeName',            SnakeCase(InterfaceFactory.InterfaceUri),
           'GUID',                 GuidToRawUtf8(InterfaceFactory.InterfaceIID),
           'contractExpected',     UnQuoteSqlString(ContractExpected),
           'instanceCreation',     ord(InstanceCreation),
@@ -1072,6 +1081,7 @@ const
 var
   a, r: PtrInt;
   arg: variant;
+  n: RawUtf8;
 begin
   TDocVariant.NewFast(result);
   r := 0;
@@ -1080,12 +1090,15 @@ begin
     with meth.Args[a] do
     begin
       arg := ContextFromRtti(TYPES_SOA[ValueType], ArgRtti);
+      ShortStringToAnsi7String(ParamName^, n);
       _ObjAddProps([
-        'argName',  ParamName^,
-        'argType',  ArgTypeName^,
-        'dir',      ord(ValueDirection),
-        'dirName',  DIRTODELPHI[ValueDirection],
-        'dirNoOut', DIRTOSMS[ValueDirection]], arg);
+        'argName',   n,
+        'camelName', LowerCamelCase(n),
+        'snakeName', SnakeCase(n),
+        'argType',   ArgTypeName^,
+        'dir',       ord(ValueDirection),
+        'dirName',   DIRTODELPHI[ValueDirection],
+        'dirNoOut',  DIRTOSMS[ValueDirection]], arg);
       if ValueDirection in [imdConst, imdVar] then
         _ObjAddProp('dirInput', true, arg);
       if ValueDirection <> imdConst then
@@ -1127,6 +1140,8 @@ begin
   begin
     result := _ObjFast([
       'methodName',      uri,
+      'camelName',       LowerCamelCase(uri),
+      'snakeName',       SnakeCase(uri),
       'methodIndex',     ExecutionMethodIndex,
       'verb',            VERB_DELPHI[ArgsResultIndex >= 0],
       'args',            ContextArgsFromMethod(meth),
@@ -1210,6 +1225,8 @@ begin
   result := ContextFromRtti(wUnknown, prop.Value, '', fullName);
   _ObjAddProps([
     'propName',     prop.Name,
+    'camelName',    LowerCamelCase(prop.Name),
+    'snakeName',    SnakeCase(prop.Name),
     'fullPropName', fullName], result);
   if level > 0 then
     _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);

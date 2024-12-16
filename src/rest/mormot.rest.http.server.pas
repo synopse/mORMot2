@@ -1393,18 +1393,26 @@ begin
       [self, ToText(fUse)^]);
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
     aWSURI, aWSEncryptionKey, aWSAjax, aWSBinaryOptions);
-  if Assigned(aOnWSUpgraded) or
-     Assigned(aOnWSClosed) then
     if fHttpServer is TWebSocketAsyncServer then
     begin
-      TWebSocketAsyncServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
-      TWebSocketAsyncServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
+      if Assigned(aOnWSUpgraded) or
+         Assigned(aOnWSClosed) then
+      begin
+        TWebSocketAsyncServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
+        TWebSocketAsyncServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
+      end;
+      // Ensure that the OnWSClose is called regardless of whether the client
+      // connection is disconnected normally or abnormally
       TWebSocketAsyncServer(fHttpServer).OnWebSocketDisconnect := OnWSAsyncClose;
     end
     else if fHttpServer is TWebSocketServer then
     begin
-      TWebSocketServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
-      TWebSocketServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
+      if Assigned(aOnWSUpgraded) or
+         Assigned(aOnWSClosed) then
+      begin
+        TWebSocketServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
+        TWebSocketServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
+      end;
       TWebSocketServer(fHttpServer).OnWebSocketDisconnect := OnWSSocketClose;
     end;
 end;
@@ -1439,7 +1447,7 @@ begin
     begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, [], nil);
+      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, 0, [], nil);
       try
         FormatUtf8('%/%/%',
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);

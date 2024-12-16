@@ -256,6 +256,9 @@ type
     function ColumnPUtf8(Col: integer): PUtf8Char; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
+    /// return a Column as a variant, first Col is 0
+    function ColumnToVariant(Col: integer; var Value: Variant;
+      ForceUtf8: boolean = false): TSqlDBFieldType; override;
     /// return one column value into JSON content
     procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
     /// how many parameters founded during prepare stage
@@ -280,14 +283,14 @@ type
 
   /// event signature for TSqlDBPostgresAsyncStatement.ExecuteAsync() callback
   // - implementation should retrieve the data from Statement.Column*(), then
-  // process it using the opaque Context
+  // process it using the opaque Context - typically a TConnectionAsyncHandle
   // - is called with Statement = nil on any DB fatal error
   TOnSqlDBPostgresAsyncEvent = procedure(
-    Statement: TSqlDBPostgresAsyncStatement; Context: TObject) of object;
+    Statement: TSqlDBPostgresAsyncStatement; Context: PtrInt) of object;
 
   TSqlDBPostgresAsyncTask = record
     Statement: TSqlDBPostgresAsyncStatement;
-    Context: TObject;
+    Context: PtrInt;
     OnFinished: TOnSqlDBPostgresAsyncEvent;
     Options: TSqlDBPostgresAsyncStatementOptions;
   end;
@@ -309,18 +312,25 @@ type
     // !   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL) do
     // !   try
     // !     Bind(1, ComputeRandomWorld);
-    // !     ExecuteAsync(ctxt, OnAsyncDb);
+    // !     ExecuteAsync(ctxt.AsyncHandle, OnAsyncDb);
     // !   finally
     // !     UnLock;
     // !   end;
-    // !   result := ctxt.SetAsyncResponse;
+    // !   result := HTTP_ASYNCRESPONSE;
     // ! end;
-    procedure ExecuteAsync(Context: TObject;
+    // !
+    // ! procedure TRawAsyncServer.OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement;
+    // !   Context: PtrInt);
+    // ! begin
+    // !   fHttpServer.AsyncResponseFmt(Context, '{"id":%,"randomNumber":%}',
+    // !     [Statement.ColumnInt(0), Statement.ColumnInt(1)]);
+    // ! end;
+    procedure ExecuteAsync(Context: PtrInt;
       const OnFinished: TOnSqlDBPostgresAsyncEvent;
       ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
     /// ExecutePrepared-like method for asynchronous process
     // - just wrap ExecuteAsync + UnLock
-    procedure ExecuteAsyncNoParam(Context: TObject;
+    procedure ExecuteAsyncNoParam(Context: PtrInt;
       const OnFinished: TOnSqlDBPostgresAsyncEvent;
       ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
     /// could be used as a short-cut to Owner.Safe.Lock
@@ -1260,6 +1270,81 @@ begin
     BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));
 end;
 
+function TSqlDBPostgresStatement.ColumnToVariant(
+  Col: integer; var Value: Variant; ForceUtf8: boolean): TSqlDBFieldType;
+var
+  c: PSqlDBColumnProperty;
+  P: pointer;
+  L: PtrInt;
+  NoDecimal: boolean;
+  v: TSynVarData absolute Value;
+begin
+  if v.VType <> 0 then
+    VarClearProc(v.Data);
+  CheckColAndRowset(Col);
+  c := @fColumns[Col];
+  result := c^.ColumnType;
+  P := PQ.GetValue(fRes, fCurrentRow, Col);
+  if ((P = nil) or (PUtf8Char(P)^ = #0)) and
+     (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
+    result := ftNull;
+  v.VType := MAP_FIELDTYPE2VARTYPE[result];
+  v.VAny := nil; // avoid GPF below
+  case result of
+    ftNull:
+      ;
+    ftInt64:
+      if c^.ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+      begin
+        v.VType := varBoolean;
+        v.VInteger := ord((P <> nil) and (PUtf8Char(P)^ = 't'))
+      end
+      else
+        SetInt64(P, v.VInt64);
+    ftDouble:
+      v.VDouble := GetExtended(P);
+    ftDate:
+      Iso8601ToDateTimePUtf8CharVar(P, StrLen(P), v.VDate);
+    ftCurrency:
+      begin
+        v.VInt64 := StrToCurr64(P, @NoDecimal);
+        if NoDecimal then
+        begin
+          v.VType := varInt64;
+          result := ftInt64;
+        end;
+      end;
+    ftUtf8:
+      begin
+        L := PQ.GetLength(fRes, fCurrentRow, Col);
+        if (P = nil) or
+           (L = 0) then
+          v.VType := varString // avoid obscure "Invalid variant type" in FPC
+        else if ForceUtf8 then
+        begin
+          v.VType := varString;
+          FastSetString(RawUtf8(v.VAny), P, L);
+        end
+        {$ifndef UNICODE}
+        else if (fConnection <> nil) and
+             not fConnection.Properties.VariantStringAsWideString then
+        begin
+          v.VType := varString;
+          CurrentAnsiConvert.Utf8BufferToAnsi(P, L, RawByteString(v.VAny));
+        end
+        {$endif UNICODE}
+        else
+          Utf8ToSynUnicode(P, L, SynUnicode(v.VAny));
+      end;
+    ftBlob:
+      if fForceBlobAsNull then
+        v.VType := varNull
+      else
+        FastSetRawByteString(RawByteString(v.VAny), P,
+          BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));
+  end;
+end;
+
 procedure TSqlDBPostgresStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   P: pointer;
@@ -1268,54 +1353,52 @@ begin
      (fResStatus <> PGRES_TUPLES_OK) or
      (fCurrentRow < 0) then
     ESqlDBPostgres.RaiseUtf8('Unexpected %.ColumnToJson', [self]);
+  P := PQ.GetValue(fRes, fCurrentRow, Col);
+  if ((P = nil) or (PUtf8Char(P)^ = #0)) and
+     (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
+    W.AddNull
+  else
   with fColumns[Col] do
   begin
-    P := PQ.GetValue(fRes, fCurrentRow, Col);
-    if (PUtf8Char(P)^ = #0) and
-       (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
-      W.AddNull
+    case ColumnType of
+      ftNull:
+        W.AddNull;
+      ftInt64,
+      ftDouble,
+      ftCurrency:
+        if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+          W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
+        else
+          // note: StrLen slightly faster than PQ.GetLength for small content
+          W.AddShort(P, StrLen(P));
+      ftUtf8:
+        if (ColumnAttr = JSONOID) or
+           (ColumnAttr = JSONBOID) then
+          W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
+        else
+        begin
+          W.Add('"');
+          W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
+          W.AddDirect('"');
+        end;
+      ftDate:
+        begin
+          W.Add('"');
+          if (StrLen(P) > 10) and
+             (PAnsiChar(P)[10] = ' ') then
+            PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
+          W.AddJsonEscape(P, 0);
+          W.AddDirect('"');
+        end;
+      ftBlob:
+        if fForceBlobAsNull then
+          W.AddNull
+        else
+          W.WrBase64(P, BlobInPlaceDecode(P,
+            PQ.GetLength(fRes, fCurrentRow, Col)), {withmagic=}true);
     else
-    begin
-      case ColumnType of
-        ftNull:
-          W.AddNull;
-        ftInt64,
-        ftDouble,
-        ftCurrency:
-          if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
-            W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
-          else
-            // note: StrLen slightly faster than PQ.GetLength for small content
-            W.AddShort(P, StrLen(P));
-        ftUtf8:
-          if (ColumnAttr = JSONOID) or
-             (ColumnAttr = JSONBOID) then
-            W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
-          else
-          begin
-            W.Add('"');
-            W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
-            W.AddDirect('"');
-          end;
-        ftDate:
-          begin
-            W.Add('"');
-            if (StrLen(P) > 10) and
-               (PAnsiChar(P)[10] = ' ') then
-              PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
-            W.AddJsonEscape(P);
-            W.AddDirect('"');
-          end;
-        ftBlob:
-          if fForceBlobAsNull then
-            W.AddNull
-          else
-            W.WrBase64(P, BlobInPlaceDecode(P,
-              PQ.GetLength(fRes, fCurrentRow, Col)), {withmagic=}true);
-      else
-        ESqlDBPostgres.RaiseUtf8('%.ColumnToJson: ColumnType=%?',
-          [self, ord(ColumnType)]);
-      end;
+      ESqlDBPostgres.RaiseUtf8('%.ColumnToJson: ColumnType=%?',
+        [self, ord(ColumnType)]);
     end;
   end;
 end;
@@ -1325,7 +1408,7 @@ end;
 
 { TSqlDBPostgresAsyncStatement }
 
-procedure TSqlDBPostgresAsyncStatement.ExecuteAsync(Context: TObject;
+procedure TSqlDBPostgresAsyncStatement.ExecuteAsync(Context: PtrInt;
   const OnFinished: TOnSqlDBPostgresAsyncEvent;
   ForcedOptions: PSqlDBPostgresAsyncStatementOptions);
 var
@@ -1357,7 +1440,7 @@ begin
   end;
 end;
 
-procedure TSqlDBPostgresAsyncStatement.ExecuteAsyncNoParam(Context: TObject;
+procedure TSqlDBPostgresAsyncStatement.ExecuteAsyncNoParam(Context: PtrInt;
   const OnFinished: TOnSqlDBPostgresAsyncEvent;
   ForcedOptions: PSqlDBPostgresAsyncStatementOptions);
 begin

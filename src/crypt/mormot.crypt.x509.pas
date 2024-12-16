@@ -319,7 +319,6 @@ const
     'SHA512 with secp521r1 ECDSA' ,   // xsaSha512Ecc512
     'SHA512 with Ed25519 ECDSA');     // xsaSha512EdDSA
 
-
   /// internal lookup table from X.509 Public Key Algorithm as text
   XKA_TXT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
     '',                    // xkaNone
@@ -526,8 +525,8 @@ type
     /// convert Extension[x] from CSV to an array of RawUtf8
     function ExtensionArray(x: TXExtension): TRawUtf8DynArray;
     /// check a date/time coherency with NotBefore/NotAfter
+    // - a grace period of CERT_DEPRECATION_THRESHOLD (half a day) is applied
     function IsValidDate(timeutc: TDateTime = 0): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -3834,7 +3833,7 @@ begin
   fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create;
   fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[AlgoXka]);
   if fX509.Signed.SubjectPublicKey = '' then
-    RaiseErrorGenerate('GeneratePrivateKey failed');
+    RaiseError('GeneratePrivateKey(%) failed', [ToText(AlgoXka)^]);
   fX509.Signed.SubjectPublicKeyAlgorithm := AlgoXka;
   fX509.Signed.SubjectPublicKeyBits :=
     X509PubKeyBits(fX509.Signed.SubjectPublicKey);

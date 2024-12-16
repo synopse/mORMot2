@@ -5297,7 +5297,7 @@ begin
   Ctxt.AddDateTime(Data, {withms=}true);
 end;
 
-procedure _JS_GUID(Data: PGUID; const Ctxt: TJsonSaveContext);
+procedure _JS_Guid(Data: PGuid; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add(Data, '"');
 end;
@@ -5533,6 +5533,12 @@ var
   jsonsave: TRttiJsonSave;
   c: TJsonSaveContext;
 begin
+  if Ctxt.Info.ArrayRtti = nil then
+  begin
+    // as in mORMot 1: static array with no RTTI at all, as a hexadecimal string
+    Ctxt.W.AddBinToHex(Data,  Ctxt.Info.Size, {lower=}true, {quote=}'"');
+    exit;
+  end;
   {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
   c.W.BlockBegin('[', c.Options);
   jsonsave := c.Info.JsonSave; // e.g. PT_JSONSAVE/PTC_JSONSAVE
@@ -5569,12 +5575,15 @@ begin
   if (woHideSensitivePersonalInformation in c.Options) and
      (rcfSpi in p^.Value.Flags) then
     c.W.AddShorter('"***"')
-  else if p^.OffsetGet >= 0 then
+  else if p^.OffsetGet >= 0 then // avoid GPF
   begin
     // direct value write (record field or plain class property)
     c.Info := p^.Value;
     c.Prop := p;
-    TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
+    if c.Info.JsonSave <> nil then
+      TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
+    else
+      c.W.AddNull;
   end
   else
     // need to call a getter method
@@ -5705,7 +5714,7 @@ const
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJson, @_JS_RawUtf8, nil, @_JS_Single,
     {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_Ansi {$endif},
-    @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_GUID, @_JS_Hash,
+    @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_Guid, @_JS_Hash,
     @_JS_Hash, @_JS_Hash, nil, @_JS_TimeLog, @_JS_Unicode, @_JS_UnixTime,
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,
     @_JS_Enumeration, @_JS_Set, nil, @_JS_DynArray, @_JS_Interface,
@@ -5742,7 +5751,7 @@ begin
       {$else} // old Delphi can't use Ctxt.Info.Cache.CodePage 
       Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
       {$endif HASCODEPAGE}
-    {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
+    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       _JS_Unicode(@Data^.VAny, Ctxt);
   else
     begin
@@ -5769,7 +5778,8 @@ var
   p: PRttiCustomProp;
   t: TClass;
   n: integer;
-  flags: set of (isNotFirst, noStored, noDefault, noHook, noVoid, isHumanReadable);
+  flags: set of ( // will be a register on x86_64 to make the main loop fast
+    isNotFirst, noStored, noDefault, noHook, noVoid, isHumanReadable);
   c: TJsonSaveContext; // dedicated context used for fields/properties
 begin
   c.W := Ctxt.W;
@@ -6606,8 +6616,7 @@ begin
       AddVariant(PVariant(v^.VPointer)^, Escape, WriteOptions);
     varStringByRef:
       AddText(PRawByteString(v^.VAny)^, Escape);
-    {$ifdef HASVARUSTRING} varUStringByRef, {$endif}
-    varOleStrByRef:
+    varOleStrByRef {$ifdef HASVARUSTRING}, varUStringByRef{$endif}:
       AddTextW(PPointer(v^.VAny)^, Escape)
   else
     begin
@@ -7128,39 +7137,57 @@ begin
     case VType of
       vtPointer:
         AddNull;
-      vtString,
-      vtAnsiString,
-      {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
-      vtPChar,
-      vtChar,
-      vtWideChar,
-      vtWideString,
+      vtString:
+        begin
+          Add('"');
+          if (VString <> nil) and
+             (VString^[0] <> #0) then
+            AddJsonEscape(@VString^[1], ord(VString^[0]));
+          AddDirect('"');
+        end;
+      vtAnsiString:
+        begin
+          Add('"');
+          AddJsonEscape(VAnsiString);
+          AddDirect('"');
+        end;
+      {$ifdef HASVARUSTRING}
+      vtUnicodeString:
+        begin
+          Add('"');
+          AddJsonEscapeW(pointer(UnicodeString(VUnicodeString)),
+                          length(UnicodeString(VUnicodeString)));
+          AddDirect('"');
+        end;
+      {$endif HASVARUSTRING}
+      vtPChar:
+        begin
+          Add('"');
+          AddJsonEscape(VPChar);
+          AddDirect('"');
+        end;
+      vtChar:
+        begin
+          Add('"');
+          AddJsonEscape(@VChar, 1);
+          AddDirect('"');
+        end;
+      vtWideChar:
+        begin
+          Add('"');
+          AddJsonEscapeW(@VWideChar, 1);
+          AddDirect('"');
+        end;
+      vtWideString:
+        begin
+          Add('"');
+          AddJsonEscapeW(VWideString);
+          AddDirect('"');
+        end;
       vtClass:
         begin
           Add('"');
-          case VType of
-            vtString:
-              if (VString <> nil) and
-                 (VString^[0] <> #0) then
-                AddJsonEscape(@VString^[1], ord(VString^[0]));
-            vtAnsiString:
-              AddJsonEscape(VAnsiString);
-            {$ifdef HASVARUSTRING}
-            vtUnicodeString:
-              AddJsonEscapeW(pointer(UnicodeString(VUnicodeString)),
-                              length(UnicodeString(VUnicodeString)));
-            {$endif HASVARUSTRING}
-            vtPChar:
-              AddJsonEscape(VPChar);
-            vtChar:
-              AddJsonEscape(@VChar, 1);
-            vtWideChar:
-              AddJsonEscapeW(@VWideChar, 1);
-            vtWideString:
-              AddJsonEscapeW(VWideString);
-            vtClass:
-              AddClassName(VClass);
-          end;
+          AddClassName(VClass);
           AddDirect('"');
         end;
       vtBoolean:
@@ -7916,7 +7943,7 @@ begin
       Data^ := GetExtended(Ctxt.Value); // was propbably stored as double
 end;
 
-procedure _JL_GUID(Data: PGuid; var Ctxt: TJsonParserContext);
+procedure _JL_Guid(Data: PGuid; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if (Ctxt.ValueLen = 0) or
@@ -8324,6 +8351,16 @@ var
   n: integer;
   arrinfo: TRttiCustom;
 begin
+  if Ctxt.Info.ArrayRtti = nil then
+  begin
+    // as in mORMot 1: static array with no RTTI at all as a hexadecimal string
+    Ctxt.Valid := Ctxt.ParseNext and
+                  Ctxt.WasString and
+                  (Ctxt.ValueLen = Ctxt.Info.Size * 2) and
+                  mormot.core.text.HexToBin(
+                    PAnsiChar(Ctxt.Value), PByte(Data), Ctxt.Info.Size);
+    exit;
+  end;
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit;
@@ -8816,7 +8853,7 @@ var
     @_JL_Double, @_JL_Extended, @_JL_Int64, @_JL_Integer, @_JL_QWord,
     @_JL_RawByteString, @_JL_RawJson, @_JL_RawUtf8, nil,
     @_JL_Single, @_JL_String, @_JL_SynUnicode, @_JL_DateTime, @_JL_DateTime,
-    @_JL_GUID, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_Int64, @_JL_TimeLog,
+    @_JL_Guid, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_Int64, @_JL_TimeLog,
     @_JL_UnicodeString, @_JL_UnixTime, @_JL_UnixMSTime, @_JL_Variant,
     @_JL_WideString, @_JL_WinAnsi, @_JL_Word, @_JL_Enumeration, @_JL_Set,
     nil, @_JL_DynArray, @_JL_Interface, @_JL_PUtf8Char, nil);
@@ -10712,7 +10749,7 @@ begin
        FastAssignNew(tmp);
      end;
   end;
-  result := Cache.ItemSize;
+  result := Cache.Size;
 end;
 
 procedure TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;
@@ -11119,7 +11156,7 @@ begin
   result := Rtti.RegisterType(Info) as TRttiJson;
   result.fJsonWriter.Code := nil; // force reset of the JSON serialization
   result.fJsonReader.Code := nil;
-  if result.Kind in (rkEnumerationTypes + [rkSet]) then
+  if result.Kind in [rkEnumeration, rkSet] then
     result.fCache.EnumCustomText := nil;
   if result.Kind <> rkDynArray then // Reader/Writer are for items, not array
     result.SetParserType(result.Parser, result.ParserComplex); // set default
@@ -11152,7 +11189,7 @@ begin
   if CustomText = nil then
     exit;
   if (EnumInfo <> nil) and
-     (EnumInfo^.Kind in rkEnumerationTypes) then
+     (EnumInfo^.Kind = rkEnumeration) then // rkBool is out of scope
    begin
      r := Rtti.RegisterType(EnumInfo) as TRttiJson;
      r.fCache.EnumCustomText := CustomText;
@@ -11354,7 +11391,7 @@ end;
 
 function SaveJson(const Value; TypeInfo: PRttiInfo): RawUtf8;
 begin
-  SaveJson(Value, TypeInfo, [], Result, []);
+  SaveJson(Value, TypeInfo, [], result, []);
 end;
 
 function SaveJson(const Value; const TypeName: RawUtf8;

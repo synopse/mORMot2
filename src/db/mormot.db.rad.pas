@@ -86,20 +86,15 @@ type
 
 {************ Database-Aware BCD Values Support }
 
-/// append a TBcd value as text to the output buffer
-// - very optimized for speed
-procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
+// note: this unit will also register TBcd to be serialized as JSON "string"
 
 type
-  /// a string buffer, used by InternalBcdToBuffer to store its output text
-  TBcdBuffer = array[0..66] of AnsiChar;
+  /// a string buffer, used by BcdToBuffer to store its output text
+  TBcdBuffer = array[0..71] of AnsiChar;
 
 /// convert a TBcd value as text to the output buffer
-// - buffer is to be TBcdBuffer, i.e. a static array[0..66] of AnsiChar
 // - returns the resulting text start in PBeg, and the length as function result
-// - does not handle negative sign and 0 value - see AddBcd() function use case
-// - very optimized for speed
-function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
+function BcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
   var PBeg: PAnsiChar): integer;
 
 /// convert a TBcd value into a currency
@@ -107,18 +102,31 @@ function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
 function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 
 /// convert a TBcd value into a RawUtf8 text
-// - will call fast InternalBcdToBuffer function
 procedure BcdToUtf8(const AValue: TBcd; var result: RawUtf8); overload;
 
 /// convert a TBcd value into a RawUtf8 text
-// - will call fast InternalBcdToBuffer function
 function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
 /// convert a TBcd value into a RTL string text
-// - will call fast InternalBcdToBuffer function
+// - RTL BCDToStr() is slower, and not consistent between Delphi and FPC
 function BcdToString(const AValue: TBcd): string;
 
+/// append a TBcd value as text to the output buffer
+// - emit a JSON-compatible floating point number text, with DecimalSeparator='.'
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
+
+/// convert a text buffer into its matching TBcd value
+// - supports BcdToBuffer() layout, but not the '123e-10' scientific notation
+// - recognize a JSON-compatible floting point number, with DecimalSeparator='.'
+function TryBufferToBcd(P: PUtf8Char; Len: PtrInt; out Bcd: TBcd): boolean;
+
+/// convert a text RawUtf8 into its matching TBcd value
+function TryUtf8ToBcd(const Text: RawUtf8; out Bcd: TBcd): boolean;
+
+/// convert a text string into its matching TBcd value
+// - RTL TryStrToBCD() is slower, and not consistent between Delphi and FPC
+function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
 
 
 { ************ mormot.db.sql Abstract Connection for DB.pas TDataSet }
@@ -286,7 +294,7 @@ implementation
 
 { ************ Database-Aware BCD Values Support }
 
-function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
+function BcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
   var PBeg: PAnsiChar): integer;
 var
   i, decpos: integer;
@@ -297,7 +305,7 @@ begin
   if AValue.Precision = 0 then
     exit;
   decpos := AValue.Precision - (AValue.SignSpecialPlaces and $3F);
-  P := @ADest;
+  P := @ADest[1];
   frac := @AValue.Fraction;
   // convert TBcd digits into text
   for i := 0 to AValue.Precision - 1 do
@@ -328,7 +336,7 @@ begin
     repeat
       dec(P)
     until (P^ <> ord('0')) or
-          (P = @ADest);
+          (P = @ADest[1]);
     PEnd := pointer(P);
     if PEnd^ <> '.' then
       inc(PEnd);
@@ -337,10 +345,22 @@ begin
     PEnd := pointer(P);
   PEnd^ := #0; // make dest buffer #0 terminated
   // remove leading 0
-  PBeg := @ADest;
+  PBeg := @ADest[1];
   while (PBeg[0] = '0') and
         (PBeg[1] in ['0'..'9']) do
     inc(PBeg);
+  // handle specific cases: 0 or <0
+  if PEnd = PBeg then
+  begin
+    PBeg^ := '0';
+    inc(PBeg);
+  end
+  else if AValue.SignSpecialPlaces and $80 = $80 then
+  begin
+    dec(PBeg);
+    PBeg^ := '-';
+  end;
+  PEnd^ := #0; // make ASCIIZ
   result := PEnd - PBeg;
 end;
 
@@ -350,32 +370,17 @@ var
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  if len <= 0 then
-    WR.Add('0')
-  else
-  begin
-    if AValue.SignSpecialPlaces and $80 = $80 then
-      WR.Add('-');
-    WR.AddNoJsonEscape(PBeg, len);
-  end;
+  len := BcdToBuffer(AValue, tmp, PBeg);
+  WR.AddNoJsonEscape(PBeg, len);
 end;
 
 function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 var
-  len: PtrInt;
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  if len <= 0 then
-    Curr := 0
-  else
-  begin
-    PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
-    if AValue.SignSpecialPlaces and $80 = $80 then
-      Curr := -Curr;
-  end;
+  BcdToBuffer(AValue, tmp, PBeg);
+  PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
   result := true;
 end;
 
@@ -385,7 +390,7 @@ var
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
+  len := BcdToBuffer(AValue, tmp, PBeg);
   FastSetString(result, PBeg, len);
 end;
 
@@ -400,8 +405,150 @@ var
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
+  len := BcdToBuffer(AValue, tmp, PBeg);
   Ansi7ToString(PWinAnsiChar(PBeg), len, result);
+end;
+
+function TryBufferToBcd(P: PUtf8Char; Len: PtrInt; out Bcd: TBcd): boolean;
+var
+  PEnd: PUtf8Char;
+  neg: boolean;
+  posDec, pos: integer;
+  b: PByte;
+  c: cardinal;
+begin
+  result := false;
+  FillCharFast(Bcd, SizeOf(Bcd), 0);
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  PEnd := P + Len;
+  while (P < PEnd) and
+        (P^ in [#1 .. ' ']) do
+    inc(P);
+  neg := P^ = '-';
+  if neg or
+     (P^ = '+') then
+    inc(P);
+  pos := 0;
+  posDec := -1;
+  while (PEnd > P) and
+        (PEnd[-1] in [#1 .. ' '])  do
+    dec(PEnd);
+  if P = PEnd then
+    exit;
+  while P < PEnd do
+  begin
+    c := PByte(P)^ - Ord('0');
+    if c > 9 then
+      if P^ = '.' then
+      begin
+        if posDec >= 0 then
+          exit
+        else if pos = 0 then
+          inc(pos)
+        else if (pos = 1) and
+                (P[-1] = '0') then
+          dec(pos);
+        posDec := pos;
+        while (PEnd > P) and
+              (PEnd[-1] = '0') do
+          dec(PEnd);
+        inc(P);
+        continue;
+      end
+      else
+        exit
+    else if pos < SizeOf(Bcd.Fraction) * 2 then
+    begin
+      b := @Bcd.Fraction[pos shr 1];
+      if pos and 1 = 0 then
+        b^ := c shl 4
+      else
+        b^ := b^ or c;
+      inc(pos);
+    end
+    else if posDec < 0 then
+      exit;
+    inc(P);
+  end;
+  if pos = 0 then
+  begin
+    Bcd.Precision := 10;
+    Bcd.SignSpecialPlaces := 2;
+  end
+  else if pos > MaxFMTBcdFractionSize then
+    exit
+  else
+  begin
+    Bcd.Precision := pos;
+    if posDec >= 0 then
+      Bcd.SignSpecialPlaces := pos - posDec;
+    if neg then
+      Bcd.SignSpecialPlaces := Bcd.SignSpecialPlaces or $80;
+  end;
+  result := true;
+end;
+
+function TryUtf8ToBcd(const Text: RawUtf8; out Bcd: TBcd): boolean;
+begin
+  result := TryBufferToBcd(pointer(Text), length(Text), Bcd);
+end;
+
+{$ifdef UNICODE}
+function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
+var
+  tmp: array[byte] of byte; // no memory allocation needed
+  i, L: PtrInt;
+begin
+  result := false;
+  L := length(Text);
+  if (L = 0) or
+     (L >= high(tmp)) then
+    exit;
+  for i := 0 to L do // include trailing #0
+    tmp[i] := PWordArray(Text)[i];
+  result := TryBufferToBcd(PUtf8Char(@tmp), L, Bcd);
+end;
+{$else}
+function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
+begin
+  result := TryUtf8ToBcd(Text, Bcd);
+end;
+{$endif UNICODE}
+
+// store TBcd as JSON "string" to keep the precision
+
+procedure _JS_BCD(Data: PBcd; const Ctxt: TJsonSaveContext);
+begin
+  Ctxt.W.Add('"');
+  AddBcd(Ctxt.W, Data^);
+  Ctxt.W.AddDirect('"');
+end;
+
+procedure _JL_BCD(Data: PBcd; var Ctxt: TJsonParserContext);
+var
+  V: array[0..2] of TValuePUtf8Char;
+begin
+  if Ctxt.ParseNextAny then
+    if Ctxt.WasString then
+      // mORMot 2 new "1.0594631" format
+      Ctxt.Valid := TryBufferToBcd(Ctxt.Value, Ctxt.ValueLen, Data^)
+    else
+    begin
+      // mORMot 1 serialization with Delphi extended RTTI
+      JsonDecode(Ctxt.Value,
+        ['Precision', 'SignSpecialPlaces', 'Fraction'], @V);
+      Ctxt.Valid := (V[0].Len <> 0) and
+                    (V[1].Len <> 0) and
+                    (V[2].Len = SizeOf(Data^.Fraction) * 2) and
+                    mormot.core.text.HexToBin(PAnsiChar(V[2].Text),
+                      @Data^.Fraction, SizeOf(Data^.Fraction));
+      if not Ctxt.Valid then
+        exit;
+      Data^.Precision := V[0].ToCardinal;
+      Data^.SignSpecialPlaces := V[1].ToCardinal;
+    end;
 end;
 
 
@@ -409,7 +556,7 @@ end;
 { ************ mormot.db.sql Abstract Connection for DB.pas TDataSet }
 
 const
-  IsTLargeIntField = 1;
+  IsTLargeIntField   = 1;
   IsTWideStringField = 2;
 
 
@@ -464,7 +611,7 @@ begin
   if f.IsNull then
     result := 0
   else if f.DataType in [ftBCD, ftFMTBcd] then
-    BCDToCurr(f.AsBCD, result)
+    BcdToCurr(f.AsBCD, result) // direct conversion with exact decimals
   else
     result := f.AsCurrency;
 end;
@@ -498,14 +645,14 @@ begin
     else if TField(ColumnAttr).DataType = ftBoolean then
       result := ord(TField(ColumnAttr).AsBoolean)
     else
-  {$ifdef UNICODE}
+      {$ifdef UNICODE}
       result := TField(ColumnAttr).AsLargeInt;
-  {$else}
+      {$else}
       if ColumnValueDBType = IsTLargeIntField then
         result := TLargeintField(ColumnAttr).AsLargeInt
       else
         result := TField(ColumnAttr).AsInteger;
-  {$endif UNICODE}
+      {$endif UNICODE}
 end;
 
 function TSqlDBDatasetStatementAbstract.ColumnNull(Col: integer): boolean;
@@ -950,6 +1097,23 @@ begin
       [self, fPreparedParamsCount, fQueryParams.Count, aSQL]);
 end;
 
+
+{$ifdef HASNOSTATICRTTI} // for Delphi 7/2007: mimics TypeInfo()
+const
+  _TBCD: TFakeTypeInfo = (
+    Kind: rkRecord;
+    Name4: 'TBCD';
+    RecSize4: SizeOf(TBcd);
+    ManagedCount4: 0);
+{$endif HASNOSTATICRTTI}
+
+initialization
+  TRttiJson.RegisterCustomSerializerFunction(
+    {$ifdef HASNOSTATICRTTI}
+    @_TBCD, @_JL_BCD, @_JS_BCD);
+    {$else}
+    TypeInfo(TBcd), @_JL_BCD, @_JS_BCD);
+    {$endif HASNOSTATICRTTI}
 
 end.
 

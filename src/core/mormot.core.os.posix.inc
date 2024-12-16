@@ -172,17 +172,6 @@ begin
 end;
 {$endif ISDELPHI}
 
-procedure RawUtf8Append(var s: RawUtf8; p: PUtf8Char; l: PtrInt);
-var
-  n: PtrInt;
-begin
-  if l = 0 then
-    exit;
-  n := length(s);
-  SetLength(s, n + l);
-  MoveFast(p^, PByteArray(s)[n], l);
-end;
-
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
 begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
@@ -1254,10 +1243,6 @@ var
 
 {$endif NOEXCEPTIONINTERCEPT}
 
-const
-  faInvalidFile   = faDirectory;
-  faDirectoryMask = faDirectory;
-
 function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
 begin
   if FileDate <= 0 then
@@ -1651,6 +1636,7 @@ begin
     fpmunmap(fBuf, fBufSize);
 end;
 
+
 procedure SleepHiRes(ms: cardinal);
 var
   timeout: TTimespec;
@@ -1965,7 +1951,6 @@ end;
 
 procedure AllocConsole;
 begin
-  StdOut := StdOutputHandle;
 end;
 
 function HasConsole: boolean;
@@ -1974,7 +1959,8 @@ begin
 end;
 
 var
-  TextAttr: integer = 255; // always change the color at startup
+  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
+  TextAttr: integer = -1; // always change the color at startup
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
 const
@@ -1996,7 +1982,7 @@ var
   c: TShort8;
 begin
   TextColorCmd(Color, c);
-  RawUtf8Append(s, @c[1], ord(c[0]));
+  AppendShortToUtf8(c, s);
 end;
 
 procedure TextColor(Color: TConsoleColor);
@@ -2004,8 +1990,11 @@ var
   c: TShort8;
 begin
   TextColorCmd(Color, c);
-  if c[0] <> #0 then
+  if c[0] = #0 then
+    exit;
+  ConsoleCriticalSection.Lock;
     fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
+  ConsoleCriticalSection.UnLock;
 end;
 
 procedure TextBackground(Color: TConsoleColor);
@@ -2013,17 +2002,13 @@ begin
   // not implemented yet - but not much needed either
 end;
 
-var
-  ConsoleCriticalSection: TOSLock;
-const
-  PosixLineFeed: AnsiChar = #10;
-
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 var
   s: RawUtf8;
 begin
   // pre-compute the whole chars to be sent to the console
+  NoColor := NoColor or (not StdOutIsTTY);
   if NoColor and
      NoLineFeed then
     s := Text // no memory allocation needed
@@ -2031,9 +2016,9 @@ begin
   begin
     if not NoColor then
       TextColorAppend(Color, s);
-    RawUtf8Append(s, pointer(Text), length(Text));
+    AppendBufferToUtf8(pointer(Text), length(Text), s);
     if not NoLineFeed then
-      RawUtf8Append(s, @PosixLineFeed, 1);
+      AppendShortToUtf8(#10, s);
     if not NoColor then
       TextColorAppend(ccLightGray, s);
   end;
@@ -2445,7 +2430,7 @@ var
     fn: RawUtf8;
     withsub: boolean;
   begin
-    dir := FpOpendir(root + subpath); // much faster alternative to FindFirst()
+    dir := FpOpendir(root + subpath); // faster alternative to FindFirst()
     if dir = nil then
       exit;
     sublen := length(subpath);
@@ -3213,11 +3198,8 @@ begin
     end;
 end;
 
-const
-  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
-  // on most platforms, Compute_FAKEVMT is run once with all JITted stubs
-  // on i386, it needs ArgsSizeInStack adjustement, but only 24 bytes per method
-
+// on most platforms, Compute_FAKEVMT is run once with all JITted stubs
+// on i386, it needs ArgsSizeInStack adjustement, but only 24 bytes per method
 {$ifdef CPUARM}
 
 var
@@ -3277,6 +3259,49 @@ begin
 end;
 
 {$endif CPUARM}
+
+var
+  StubMemoryExecXorWrite: boolean = false; // W and X are exclusive on some OS
+
+function StubMemoryAlloc: pointer;
+begin
+  result := MAP_FAILED;
+  if not StubMemoryExecXorWrite then
+    result := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
+  if result = MAP_FAILED then
+  begin
+    // i.e. on OpenBSD or OSX M1, we can not have W and X protection
+    result := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
+    if result <> MAP_FAILED then
+      StubMemoryExecXorWrite := true;
+  end;
+  if result = MAP_FAILED then
+    result := nil;
+end;
+
+procedure StubMemoryFree(stub: pointer);
+begin
+  fpmunmap(stub, STUB_SIZE);
+end;
+
+procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
+var
+  aligned: pointer;
+  flags: cardinal;
+begin
+  if not StubMemoryExecXorWrite then
+    // nothing to be done on this platform
+    exit;
+  // toggle execution permission of memory to be able to write into memory
+  aligned := pointer(
+    (PtrUInt(Reserved) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  if Exec then
+    flags := PROT_READ OR PROT_EXEC
+  else
+    flags := PROT_READ or PROT_WRITE;
+  if SynMProtect(aligned, SystemInfo.dwPageSize shl 1, flags) < 0 then
+     raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
+end;
 
 
 { ****************** Unix Daemon and Windows Service Support }
@@ -4099,8 +4124,9 @@ var
   {$endif OSBSDDARWIN}
 begin
   // retrieve Kernel and Hardware information
+  StdOut := StdOutputHandle;
   StdOutIsTTY := not IsDebuggerPresent and
-                 (IsATTY(StdOutputHandle) = 1) and
+                 (IsATTY(StdOut) = 1) and
                  IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
