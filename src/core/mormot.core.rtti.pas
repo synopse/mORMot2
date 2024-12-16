@@ -2672,10 +2672,12 @@ type
     // - handle most kind of fields, e.g. converting from text into ordinal or floats
     function ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
     /// get a property value as text value
-    // - handle most kind of fields, e.g. converting from text into ordinal or floats
+    // - handle most kind of fields, e.g. converting ordinal or floats into text
+    // - can optionally apply HTML content escape
     procedure ValueGetText(Data: pointer; out Text: RawUtf8; HtmlEscape: boolean = false);
     /// serialize a value into (HTML) text
     // - implemented in TRttiJson for proper knowledge of complex types
+    // - can optionally apply HTML content escape
     // - warning: supplied W instance should be a TJsonWriter
     procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); virtual;
     /// create a new TObject instance of this rkClass or rkInterface
@@ -5263,10 +5265,10 @@ begin
     rkLString:
       Value := PRawUtf8(Data)^;
     rkWString:
-      RawUnicodeToUtf8(Data, length(PWideString(Data)^), Value);
+      RawUnicodeToUtf8(PPointer(Data)^, length(PWideString(Data)^), Value);
     {$ifdef HASVARUSTRING}
     rkUString:
-      RawUnicodeToUtf8(Data, length(PUnicodeString(Data)^), Value);
+      RawUnicodeToUtf8(PPointer(Data)^, length(PUnicodeString(Data)^), Value);
     {$endif HASVARUSTRING}
     rkVariant:
       VariantToUtf8(PVariant(Data)^, Value);
@@ -7800,7 +7802,7 @@ function TRttiCustomProp.GetValueText(Data: pointer): RawUtf8;
 begin
   if (Prop = nil) or
      (OffsetSet >= 0) then
-    // direct fill value in memory (classes and records)
+    // direct retrieve value from memory (classes and records)
     Value.ValueGetText(PAnsiChar(Data) + OffsetSet, result)
   else
     // need a class property getter
