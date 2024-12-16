@@ -955,7 +955,7 @@ begin
   try // with hash table
     for i := 1 to MAX do
     begin
-      Rec := TSynFilterOrValidate.Create;
+      Rec := TSynFilterLowerCase.Create; // any TSynPersistent would have done
       Rec.Parameters := Int32ToUtf8(i);
       CheckEqual(L.AddObject(Rec.Parameters, Rec), i - 1);
       CheckEqual(L.IndexOf(Rec.Parameters), i - 1);
