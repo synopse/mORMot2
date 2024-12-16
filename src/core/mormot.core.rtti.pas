@@ -2381,7 +2381,7 @@ type
     /// set a field value from its UTF-8 text
     // - will convert the Text into proper ordinal or float if needed
     // - also implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
-    // - use Prop^.SetValueText() if you want to support enumerates and sets
+    // - calling Prop^.SetValueText() to support enumerates and sets
     function SetValueText(Data: pointer; const Text: RawUtf8): boolean;
     /// check if the Value equals the default property set in source code
     // - caller should have checked that PropDefault <> NO_DEFAULT
@@ -2666,6 +2666,9 @@ type
     /// set a property value from a text value
     // - handle most kind of fields, e.g. converting from text into ordinal or floats
     function ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
+    /// get a property value as text value
+    // - handle most kind of fields, e.g. converting from text into ordinal or floats
+    procedure ValueGetText(Data: pointer; out Text: RawUtf8; HtmlEscape: boolean = false);
     /// serialize a value into (HTML) text
     // - implemented in TRttiJson for proper knowledge of complex types
     // - warning: supplied W instance should be a TJsonWriter
@@ -9052,6 +9055,42 @@ begin
     else
       result := false;
   end;
+end;
+
+procedure TRttiCustom.ValueGetText(Data: pointer; out Text: RawUtf8; HtmlEscape: boolean);
+var
+  temp: TTextWriterStackBuffer;
+  w: TTextWriter;
+begin
+  if (self <> nil) and
+     (Data <> nil) then
+    if rcfHasRttiOrd in Cache.Flags then
+      Int64ToUtf8(RTTI_FROM_ORD[Cache.RttiOrd](Data), Text)
+    else if rcfGetInt64Prop in Cache.Flags then
+      Int64ToUtf8(PInt64(Data)^, Text)
+    else
+      case Parser of
+        ptDouble,
+        ptDateTime,
+        ptDateTimeMS:
+          DoubleToStr(PDouble(Data)^, Text);
+        ptCurrency:
+          Curr64ToStr(PInt64(Data)^, Text);
+        ptGuid:
+          if not IsNullGuid(PGuid(Data)^) then
+            ToUtf8(PGuid(Data)^, Text);
+      else if HtmlEscape or
+              not RttiKindToUtf8(Cache.Kind, Data, Text) then
+        begin
+          w := DefaultJsonWriter.CreateOwnedStream(temp);
+          try
+            ValueWriteText(Data, w, HtmlEscape); // from TRttiJson
+            w.SetText(Text);
+          finally
+            w.Free;
+          end;
+        end;
+      end;
 end;
 
 procedure TRttiCustom.ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean);
