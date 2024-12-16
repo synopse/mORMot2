@@ -1802,6 +1802,9 @@ procedure Append(var Text: RawUtf8; Added: AnsiChar); overload;
 /// append one text buffer to a RawUtf8 variable with no code page conversion
 procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt); overload;
 
+/// append one short string to a RawUtf8 variable with no code page conversion
+procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
+
 /// append some text items to a RawByteString variable
 procedure Append(var Text: RawByteString; const Args: array of const); overload;
 
@@ -9069,6 +9072,12 @@ procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt);
 begin
   if (Added <> nil) and (AddedLen > 0) then
     _App1(Text, Added, AddedLen, 0);
+end;
+
+procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
+begin
+  if Added[0] <> #0 then
+    _App1(Text, @Added[1], ord(Added[0]), 0);
 end;
 
 procedure Append(var Text: RawByteString; const Added: RawByteString);
