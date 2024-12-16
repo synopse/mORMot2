@@ -1431,7 +1431,7 @@ var
             else
               name := fStoredClassRecordProps.Fields.List[Field - 1].Name;
             if SubField <> '' then // 'field.subfield1.subfield2'
-              name := name + SubField;
+              Append(name, SubField);
             if FunctionName <> '' then
               if FunctionKnown = funcDistinct then
               begin

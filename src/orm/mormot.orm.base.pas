@@ -1997,11 +1997,11 @@ type
     function FieldIndexByNames(const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// compute the CSV field names text from a set of bits
-    function ToCsv(const Bits: TFieldBits): RawUtf8; overload;
+    function ToCsv(const Bits: TFieldBits): RawUtf8;
     /// compute the CSV field names text from a set of bits with optional prefix/suffix
-    procedure ToCsv(const Prefix: array of const;
+    procedure ToCsvText(const Prefix: array of const;
       const Bits: TFieldBits; const BitsSuffix: ShortString;
-      const Suffix: array of const; out Result: RawUtf8); overload;
+      const Suffix: array of const; out Result: RawUtf8);
     /// fill a TRawUtf8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
@@ -7732,7 +7732,7 @@ begin
     end;
 end;
 
-procedure TOrmPropInfoList.ToCsv(const Prefix: array of const;
+procedure TOrmPropInfoList.ToCsvText(const Prefix: array of const;
   const Bits: TFieldBits; const BitsSuffix: ShortString;
   const Suffix: array of const; out Result: RawUtf8);
 var
@@ -11511,7 +11511,7 @@ procedure TOrmPropertiesAbstract.CsvFromFieldBits(const Prefix: array of const;
   const Bits: TFieldBits; const BitsSuffix: ShortString;
   const Suffix: array of const; out Result: RawUtf8);
 begin
-  Fields.ToCsv(Prefix, Bits, BitsSuffix, Suffix, Result);
+  Fields.ToCsvText(Prefix, Bits, BitsSuffix, Suffix, Result);
 end;
 {$endif PUREMORMOT2}
 

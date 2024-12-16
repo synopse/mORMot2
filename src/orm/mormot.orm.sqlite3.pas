@@ -2770,7 +2770,7 @@ begin
   begin
     b^.SimpleFields := Fields;
     b^.UpdateFieldsCount := FieldBitCount(Fields, Props.Fields.Count) + 1;
-    Props.Fields.ToCsv(['update ', Props.SqlTableName, ' set '],
+    Props.Fields.ToCsvText(['update ', Props.SqlTableName, ' set '],
       Fields, '=?', [' where RowID=?'], b^.UpdateSql);
   end;
   DB.DB.LockAndFlushCache;
