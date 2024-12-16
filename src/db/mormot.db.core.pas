@@ -351,10 +351,12 @@ const
     'RawUtf8',    // ftUtf8
     'RawBlob');   // ftBlob
 
+  /// return either 'ID' or RowID'
+  ID_SHORT: array[{RowID=}boolean] of string[7] = ('ID', 'RowID');
+
 var
   /// contains 'ID' as UTF-8 text with positive RefCnt (avoid const realloc)
   ID_TXT: RawUtf8;
-
   /// contains 'RowID' as UTF-8 text with positive RefCnt (avoid const realloc)
   ROWID_TXT: RawUtf8;
 
@@ -3754,6 +3756,7 @@ var
   info: TGetJsonField;
   F: PtrInt;
   FieldIsRowID: boolean;
+  id: PShortString;
 begin
   FieldCount := 0;
   DecodedRowID := 0;
@@ -3767,16 +3770,9 @@ begin
     if RowID > 0 then
     begin
       // insert explicit RowID as first parameter
-      if ReplaceRowIDWithID then
-      begin
-        FieldNames[0] := pointer(ID_TXT);
-        FieldNamesL[0] := 2;
-      end
-      else
-      begin
-        FieldNames[0] := pointer(ROWID_TXT);
-        FieldNamesL[0] := 5;
-      end;
+      id := @ID_SHORT[not ReplaceRowIDWithID];
+      FieldNames[0] := @id^[1];
+      FieldNamesL[0] := ord(id^[0]);
       Int64ToUtf8(RowID, FieldValues[0]);
       FieldTypeApproximation[0] := ftaNumber;
       FieldCount := 1;
@@ -4207,7 +4203,7 @@ procedure InitializeUnit;
 var
   i, j: PtrInt;
 begin
-  ID_TXT := 'ID'; // avoid reallocation
+  ID_TXT    := 'ID'; // avoid reallocation on Delphi
   ROWID_TXT := 'RowID';
   for j := 1 to high(MAX_SQLFIELDS_INDEX) do
   begin
