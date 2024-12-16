@@ -960,10 +960,6 @@ type
     function AnsiStringCodePageStored: integer;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     {$endif HASCODEPAGE}
-    /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar
-    // values as RawUtf8, from a pointer to its memory storage
-    // - makes heap allocations and encoding conversion, so may be slow
-    procedure StringToUtf8(Data: pointer; var Value: RawUtf8);
     /// for rkClass: get the class type information
     function RttiClass: PRttiClass;
       {$ifdef HASSAFEINLINE}inline;{$endif}
@@ -1245,6 +1241,14 @@ const
 
 /// retrieve the text name of one TRttiKind enumerate
 function ToText(k: TRttiKind): PShortString; overload;
+
+/// converts a string/variant memory buffer into its text representation
+// - process Kind as rkChar,rkWChar,rkSString,rkLString,rkWString,rkUString,rkVariant
+function RttiKindToUtf8(Kind: TRttiKind; Data: pointer; var Value: RawUtf8): boolean;
+
+/// converts a text content into string/variant memory buffer
+// - process Kind as rkChar,rkWChar,rkSString,rkLString,rkWString,rkUString,rkVariant
+function RttiKindFromUtf8(Kind: TRttiKind; Data: pointer; const Text: RawUtf8): boolean;
 
 var
   /// convert an ordinal value from its (signed) pointer-sized integer representation
@@ -4257,28 +4261,6 @@ end;
 
 {$endif HASCODEPAGE}
 
-procedure TRttiInfo.StringToUtf8(Data: pointer; var Value: RawUtf8);
-begin
-  case Kind of
-    rkChar:
-      FastSetString(Value, Data, {ansicharcount=}1);
-    rkWChar:
-      RawUnicodeToUtf8(Data, {widecharcount=}1, Value);
-    rkSString:
-      ShortStringToAnsi7String(PShortString(Data)^, Value);
-    rkLString:
-      Value := PRawUtf8(Data)^;
-    rkWString:
-      RawUnicodeToUtf8(Data, length(PWideString(Data)^), Value);
-    {$ifdef HASVARUSTRING}
-    rkUString:
-      RawUnicodeToUtf8(Data, length(PUnicodeString(Data)^), Value);
-    {$endif HASVARUSTRING}
-  else
-    Value := '';
-  end;
-end;
-
 function TRttiInfo.InterfaceGuid: PGuid;
 begin
   if (@self = nil) or
@@ -5261,6 +5243,59 @@ begin
     {$endif HASVARUSTRING}
   else
     result := false; // unsupported type
+  end;
+end;
+
+function RttiKindToUtf8(Kind: TRttiKind; Data: pointer; var Value: RawUtf8): boolean;
+begin
+  result := true;
+  case Kind of
+    rkChar:
+      FastSetString(Value, Data, {ansicharcount=}1);
+    rkWChar:
+      RawUnicodeToUtf8(Data, {widecharcount=}1, Value);
+    rkSString:
+      ShortStringToAnsi7String(PShortString(Data)^, Value);
+    rkLString:
+      Value := PRawUtf8(Data)^;
+    rkWString:
+      RawUnicodeToUtf8(Data, length(PWideString(Data)^), Value);
+    {$ifdef HASVARUSTRING}
+    rkUString:
+      RawUnicodeToUtf8(Data, length(PUnicodeString(Data)^), Value);
+    {$endif HASVARUSTRING}
+    rkVariant:
+      VariantToUtf8(PVariant(Data)^, Value);
+  else
+    result := false;
+  end;
+end;
+
+function RttiKindFromUtf8(Kind: TRttiKind; Data: pointer; const Text: RawUtf8): boolean;
+begin
+  result := true;
+  case Kind of
+    rkChar:
+      if Text = '' then
+        PAnsiChar(Data)^ := #0
+      else
+        PAnsiChar(Data)^ := Text[1];
+    rkWChar:
+      PWord(Data)^ := GetUtf8WideChar(pointer(Text));
+    rkSString:
+      Ansi7StringToShortString(Text, PShortString(Data)^);
+    rkLString:
+      PRawUtf8(Data)^ := Text;
+    rkWString:
+      Utf8ToWideString(pointer(Text), length(Text), PWideString(Data)^);
+    {$ifdef HASVARUSTRING}
+    rkUString:
+      Utf8DecodeToUnicodeString(pointer(Text), length(Text), PUnicodeString(Data)^);
+    {$endif HASVARUSTRING}
+    rkVariant:
+      RawUtf8ToVariant(Text, PVariant(Data)^);
+  else
+    result := false;
   end;
 end;
 
@@ -7930,7 +7965,7 @@ begin
         rvd^.VType := varString;
         rvd^.NeedsClear := true;
         rvd^.Data.VAny := nil; // avoid GPF
-        Value.Info.StringToUtf8(Data, RawUtf8(rvd^.Data.VAny));
+        RttiKindToUtf8(Value.Info.Kind, Data, RawUtf8(rvd^.Data.VAny));
       end;
   else
     // varString, varVariant, varOleStr, varUString are returned by reference

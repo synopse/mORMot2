@@ -10737,7 +10737,7 @@ begin
       begin
         TSynVarData(Dest).VType := varString;
         Dest.VAny := nil; // avoid GPF
-        Info.StringToUtf8(Data, RawUtf8(Dest.VAny));
+        RttiKindToUtf8(Info.Kind, Data, RawUtf8(Dest.VAny));
       end;
    else
      begin
