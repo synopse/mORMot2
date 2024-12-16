@@ -1924,7 +1924,7 @@ procedure TMongoRequest.BsonWriteParam(const paramDoc: variant);
 begin
   if TVarData(paramDoc).VType = varVariantByRef then
     BsonWriteParam(PVariant(TVarData(paramDoc).VPointer)^)
-  else if VarIsStr(paramDoc) then
+  else if VarIsString(paramDoc) then
     BsonWriteProjection(VariantToUtf8(paramDoc))
   else 
     BsonWriteDoc(paramDoc); // TBsonVariant or TDocVariant
@@ -2245,7 +2245,7 @@ begin
   fNumberToReturn := ToReturn;
   // follow TMongoMsgHeader
   inherited Create(Database, Collection); // write TMongoWireHeader
-  if VarIsStr(Command) then
+  if VarIsString(Command) then
     fCommand := BsonVariant([Command, 1]) // as expected by hello command e.g.
   else
     fCommand := Command;
@@ -3218,7 +3218,7 @@ begin
   // since OP_MSG mqfSlaveOk was replaced by Global Command Argument
   // https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst
   if (c.ReadPreference in [rpPrimaryPreferred, rpNearest]) and
-     not VarIsStr(_command) then
+     not VarIsString(_command) then
     BsonVariantType.AddItem(_command,
       ['$readPreference', BsonVariant(['mode', 'primaryPreferred'])]);
   result := TMongoMsg.Create(c, db, aCollectionName, _command, flags, 1);
@@ -4312,7 +4312,7 @@ begin
     else
       cmd.AddValue('filter', Criteria);
   if not VarIsEmptyOrNull(Projection) then
-    if VarIsStr(Projection) then
+    if VarIsString(Projection) then
       EMongoException.RaiseUtf8('%.DoFind: unsupported string', [self])
     else
       cmd.AddValue('projection', Projection);

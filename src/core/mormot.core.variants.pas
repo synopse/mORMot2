@@ -10682,7 +10682,7 @@ type
 
 function TDocValue.IsString: boolean;
 begin
-  result := VarIsStr(V^);
+  result := VarIsString(V^);
 end;
 
 function TDocValue.Kind: TDocVariantKind;

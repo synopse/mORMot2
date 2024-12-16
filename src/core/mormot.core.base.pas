@@ -3932,6 +3932,9 @@ function VarDataFromVariant(const Value: variant): PVarData;
 function VarIsEmptyOrNull(const V: Variant): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// same as VarIsStr() but handling varVariantByRef weak references
+function VarIsString(const V: Variant): boolean;
+
 /// same as VarIsEmpty(PVariant(V)^) or VarIsNull(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
@@ -11999,6 +12002,18 @@ begin
   with VarDataFromVariant(V)^ do
     result := (cardinal(VType) <= varNull) or
               (cardinal(VType) = varNull or varByRef);
+end;
+
+function VarIsString(const V: Variant): boolean;
+begin
+  with VarDataFromVariant(V)^ do
+    case cardinal(VType) of
+      {$ifdef HASVARUSTRING} varUString, varUStringByRef, {$endif}
+      varString, varOleStr, varStringByRef, varOleStrByRef:
+     result := true;
+    else
+      result := false;
+    end;
 end;
 
 function SetVariantUnRefSimpleValue(const Source: variant;
