@@ -2352,7 +2352,7 @@ var
   p: TRecordPeople;
   m: TRttiMap;
   fo, fr: TRttiFilter;
-  err: string;
+  err, err2: string;
 begin
   CheckEqual(lic.CustomerName, '');
   FillZeroRtti(TypeInfo(TLicenseData), lic);
@@ -2545,49 +2545,57 @@ begin
   CheckEqual(o1.LastName, 'titi');
   CheckEqual(p.YearOfBirth, o1.YearOfBirth);
   CheckEqual(p.YearOfDeath, o1.YearOfDeath);
-  // TRttiFilter validation
+  // TRttiFilter validation with a class instance
   fo := TRttiFilter.Create(o1.ClassType);
+  try
+    CheckEqual(fo.Count, 0);
+    fo.Filter(nil);
+    fo.Filter(o1);
+    CheckEqual(fo.Count, 0);
+    Check(fo.Validate(nil) = '');
+    Check(fo.Validate(o1) = '');
+    fo.Add('firstname', [TSynValidateNonVoidText.Create]);
+    CheckEqual(fo.Count, 1);
+    err := '???';
+    err := fo.Validate(nil);
+    Check(err = '', err);
+    CheckEqual(o1.FirstName, 'toto');
+    Check(fo.Validate(o1) = '');
+    o1.FirstName := '';
+    Check(fo.Validate(nil) = '');
+    err2 := fo.Validate(o1);
+    Check(err2 = 'Expect at least 1 character', err2);
+  finally
+    fo.Free;
+  end;
+  // TRttiFilter validation with a record
   fr := TRttiFilter.Create(TypeInfo(TRecordPeople));
-  CheckEqual(fo.Count, 0);
-  CheckEqual(fr.Count, 0);
-  fo.Filter(nil);
-  fo.Filter(o1);
-  fr.Filter(@p);
-  CheckEqual(fo.Count, 0);
-  CheckEqual(fr.Count, 0);
-  Check(fo.Validate(nil) = '');
-  Check(fo.Validate(o1) = '');
-  Check(fr.Validate(@p) = '');
-  fo.Add('firstname', [TSynValidateNonVoidText.Create]);
-  CheckEqual(fo.Count, 1);
-  CheckEqual(fr.Count, 0);
-  err := '???';
-  err := fo.Validate(nil);
-  Check(err = '', err);
-  CheckEqual(o1.FirstName, 'toto');
-  Check(fo.Validate(o1) = '');
-  o1.FirstName := '';
-  Check(fo.Validate(nil) = '');
-  err := fo.Validate(o1);
-  Check(err <> '', err);
-  fr.Add('firstName', [TSynFilterUpperCase.Create, TSynValidateNonVoidText.Create]);
-  CheckEqual(p.FirstName, 'toto');
-  Check(fr.Validate(@p) = '');
-  CheckEqual(p.FirstName, 'toto');
-  Check(fr.Apply(@p) = '');
-  CheckEqual(p.FirstName, 'TOTO');
-  p.FirstName := '';
-  err := fr.Validate(@p);
-  Check(err <> '', err);
-  err := fr.Apply(@p);
-  Check(err <> '', err);
-  fr.Clear;
-  Check(fr.Validate(@p) = '');
-  CheckEqual(p.FirstName, '');
-  Check(fr.Apply(@p) = '');
-  CheckEqual(p.FirstName, '');
-  fr.Free;
-  fo.Free;
+  try
+    CheckEqual(fr.Count, 0);
+    fr.Filter(@p);
+    Check(fr.Validate(@p) = '');
+    fr.AddClass('firstName', [TSynFilterUpperCase, TSynValidateNonVoidText]);
+    CheckEqual(fr.Count, 2);
+    CheckEqual(p.FirstName, 'toto');
+    Check(fr.Validate(@p) = '');
+    CheckEqual(p.FirstName, 'toto');
+    Check(fr.Apply(@p) = '');
+    CheckEqual(p.FirstName, 'TOTO');
+    p.FirstName := '';
+    err := fr.Validate(@p);
+    Check(err = err2, err);
+    err := fr.Apply(@p);
+    Check(err = err2, err);
+    CheckEqual(fr.Count, 2);
+    fr.Clear;
+    CheckEqual(fr.Count, 0);
+    Check(fr.Validate(@p) = '');
+    CheckEqual(p.FirstName, '');
+    Check(fr.Apply(@p) = '');
+    CheckEqual(p.FirstName, '');
+  finally
+    fr.Free;
+  end;
   o1.Free;
   o2.Free;
 end;
