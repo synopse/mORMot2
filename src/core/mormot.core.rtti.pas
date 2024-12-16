@@ -5198,7 +5198,6 @@ end;
 function TRttiProp.SetAsString(Instance: TObject; const Value: RawUtf8): boolean;
 var
   v: PtrInt;
-  P: PUtf8Char;
   u: pointer; // to avoid a global hidden try..finally
 begin
   result := true;
@@ -5211,10 +5210,7 @@ begin
         else if TypeInfo^.Kind = rkChar then
           v := ord(Value[1])
         else
-        begin
-          P := pointer(Value);
-          v := NextUtf8Ucs4(P);
-        end;
+          v := GetUtf8WideChar(pointer(Value));
         SetOrdProp(Instance, v);
       end;
     rkLString:
