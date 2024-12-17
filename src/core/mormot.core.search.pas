@@ -6258,12 +6258,13 @@ end;
 destructor TRttiFilter.Destroy;
 begin
   inherited Destroy;
-  Clear;
+  ObjArrayObjArrayClear(fRules);
 end;
 
 procedure TRttiFilter.Clear;
 begin
   ObjArrayObjArrayClear(fRules);
+  SetLength(fRules, fRtti.Props.Count);
   fCount := 0;
 end;
 
