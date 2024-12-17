@@ -8303,21 +8303,16 @@ begin
 end;
 
 procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
-var
-  a: TInterfaceDynArray absolute aInterfaceArray;
-  n: PtrInt;
 begin
-  if PtrUIntScanExists(pointer(aInterfaceArray),
+  if not PtrUIntScanExists(pointer(aInterfaceArray),
       length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem)) then
-    exit;
-  n := length(a);
-  SetLength(a, n + 1);
-  a[n] := aItem;
+    InterfaceArrayAdd(aInterfaceArray, aItem);
 end;
 
 function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrInt;
 begin
-  result := PtrUIntScanIndex(pointer(aInterfaceArray), length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem));
+  result := PtrUIntScanIndex(pointer(aInterfaceArray),
+    length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem));
 end;
 
 procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt);
