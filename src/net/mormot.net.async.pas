@@ -1530,7 +1530,7 @@ begin
     // we acquired the Connection for this direction, or we don't want to wait
     exit;
   // loop to wait for the lock release
-  endtix := GetTickCount64 + timeoutMS; // never wait forever
+  endtix := mormot.core.os.GetTickCount64 + timeoutMS; // never wait forever
   ms := 0;
   repeat
     SleepHiRes(ms);
@@ -1546,7 +1546,7 @@ begin
         UnLock(writer);
       break; // acquired or socket closed
     end;
-  until GetTickCount64 >= endtix;
+  until mormot.core.os.GetTickCount64 >= endtix;
 end;
 
 function TPollAsyncConnection.Send(buf: pointer; var len: integer): TNetResult;
@@ -1803,10 +1803,10 @@ begin
      ((fProcessingRead = 0) and
       (fProcessingWrite = 0)) then
     exit;
-  start := GetTickCount64;
+  start := mormot.core.os.GetTickCount64;
   repeat
     SleepHiRes(1);
-    elapsed := GetTickCount64 - start;
+    elapsed := mormot.core.os.GetTickCount64 - start;
   until ((fProcessingRead = 0) and
          (fProcessingWrite = 0)) or
          (elapsed > waitforMS);
@@ -3396,7 +3396,7 @@ begin
     end;
     // impossible to lock this connection: retry ASAP (same algo than WaitLock)
     result := nil;
-    tix := GetTickCount64;
+    tix := mormot.core.os.GetTickCount64;
     if endtix = 0 then
       endtix := tix + WaitTimeoutMS // never wait forever
     else if tix >= endtix then
@@ -4435,12 +4435,12 @@ begin
   // possible race condition of ProcessWrite() in a background thread
   // - when the client is making a lot of requests on the loopback (i.e. only
   // tests, not production) - should not appear with normal network latency
-  endtix := GetTickCount64 + 50; // on Windows, Sleep() may return too quick
+  endtix := mormot.core.os.GetTickCount64 + 50; // on Windows Sleep() maybe too quick
   repeat
     fOwner.DoLog(sllWarning, 'OnRead(%): wait for background W', [Socket], self);
     SleepHiRes(5); // may wait any time < 16ms
   until (fHttp.State <> hrsSendBody) or
-        (GetTickCount64 > endtix);
+        (mormot.core.os.GetTickCount64 > endtix);
 end;
 
 function THttpAsyncServerConnection.OnRead: TPollAsyncSocketOnReadWrite;
@@ -5210,7 +5210,7 @@ begin
      fForce.Check(fForceCsv, uri, PathCaseInsensitive) then
     include(result, pckForce);
   if (fIgnoreCsv <> '') and
-     fIgnore.CHeck(fIgnoreCsv, uri, PathCaseInsensitive) then
+     fIgnore.Check(fIgnoreCsv, uri, PathCaseInsensitive) then
     include(result, pckIgnore);
 end;
 

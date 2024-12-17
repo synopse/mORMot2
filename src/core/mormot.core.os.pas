@@ -3500,6 +3500,7 @@ function ExtractExtU(const FileName: RawUtf8; WithoutDot: boolean = false): RawU
 
 /// extract an extension from a file name like ExtractFileExt function
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
+// - don't allocate anything, but return a pointer to the extension within FileName
 function ExtractExtP(const FileName: RawUtf8; WithoutDot: boolean = false): PUtf8Char;
   {$ifdef HASINLINE} inline; {$endif}
 
