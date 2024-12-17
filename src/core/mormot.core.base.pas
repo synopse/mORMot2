@@ -1958,6 +1958,9 @@ procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil;
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to count all nil items in a pointer dynamic array storage
+function PtrArrayNotNilCount(const aPtrArray): integer;
+
 
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -8018,6 +8021,16 @@ begin
   result := PtrUIntScanIndex(pointer(a), length(a), PtrUInt(aItem));
 end;
 
+function PtrArrayNotNilCount(const aPtrArray): integer;
+var
+  i: PtrInt;
+  a: TPointerDynArray absolute aPtrArray;
+begin
+  result := 0;
+  for i := 0 to length(a) - 1 do
+    inc(result, ord(a[i] <> nil));
+end;
+
 
 { wrapper functions to T*ObjArr types }
 
@@ -8075,13 +8088,8 @@ begin
 end;
 
 function ObjArrayNotNilCount(const aObjArray): integer;
-var
-  i: PtrInt;
-  a: TObjectDynArray absolute aObjArray;
 begin
-  result := 0;
-  for i := 0 to length(a) - 1 do
-    inc(result, ord(a[i] <> nil));
+  result := PtrArrayNotNilCount(aObjArray);
 end;
 
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
