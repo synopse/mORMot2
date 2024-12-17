@@ -2599,6 +2599,16 @@ begin
     CheckEqual(p.FirstName, '');
     Check(fr.Apply(@p) = '');
     CheckEqual(p.FirstName, '');
+    fr.AddClass('firstName', [TSynFilterLowerCase, TSynValidateNonVoidText]);
+    fr.AddClass('lastNAME', [TSynValidateNonVoidText]);
+    err := fr.Apply(@p);
+    Check(err = err2, err);
+    p.FirstName := 'TOTO';
+    Check(fr.Apply(@p) = '');
+    CheckEqual(p.FirstName, 'toto');
+    p.LastName := '';
+    err := fr.Apply(@p);
+    Check(err = 'LastName: Expect at least 1 character', err);
   finally
     fr.Free;
   end;
