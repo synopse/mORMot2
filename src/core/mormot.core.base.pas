@@ -6960,14 +6960,14 @@ begin
     result := AddInt64(Values, Value);
 end;
 
-procedure MakeUniqueArray(old: PDynArrayRec; ItemSizeShl: TDALen);
+procedure UnmanagedDynArrayUnique(old: PDynArrayRec; ItemSize: TDALen);
 var
   new: PDynArrayRec;
   n: PtrInt;
 begin
   dec(old);
   dec(old^.refCnt);
-  n := (old^.length shl ItemSizeShl) + SizeOf(new^);
+  n := (old^.length * ItemSize) + SizeOf(new^);
   new := AllocMem(n);
   MoveFast(old^, new^, n); // copy header + all ordinal values
   new^.refCnt := 1;
@@ -6984,7 +6984,7 @@ begin
   if n > Index then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      MakeUniqueArray(pointer(Values), {shl=}1);
+      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Word));
   end;
   SetLength(Values, n);
@@ -7001,7 +7001,7 @@ begin
   if n > Index then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      MakeUniqueArray(pointer(Values), {shl=}2);
+      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(integer));
   end;
   SetLength(Values, n);
@@ -7018,7 +7018,7 @@ begin
   if n > 0 then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      MakeUniqueArray(pointer(Values), {shl=}2);
+      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(integer));
   end;
   dec(ValuesCount);
@@ -7035,7 +7035,7 @@ begin
   if n > Index then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      MakeUniqueArray(pointer(Values), {shl=}3);
+      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Int64));
   end;
   SetLength(Values, n);
@@ -7052,7 +7052,7 @@ begin
   if n > 0 then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      MakeUniqueArray(pointer(Values), {shl=}3);
+      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(Int64));
   end;
   dec(ValuesCount);
