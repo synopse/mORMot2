@@ -2043,6 +2043,7 @@ function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt;
 /// wrapper to count all not nil items in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 function ObjArrayNotNilCount(const aObjArray): integer;
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -2063,7 +2064,7 @@ function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt; overload;
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
 function ObjArrayDelete(var aObjArray; var aCount: integer; aItem: TObject): PtrInt; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 /// wrapper to release all items stored in a T*ObjArray dynamic array
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -2135,18 +2136,18 @@ procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
 // - return -1 if the item is not found in the dynamic array, or the index of
 // the matching entry otherwise
 function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
 function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - do nothing if the item is not found in the dynamic array
 procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 
 { ************ Low-level Types Mapping Binary Structures }
