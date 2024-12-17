@@ -189,8 +189,8 @@ type
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
   published
-    /// test the new RecordCopy() using our fast RTTI
-    procedure _RecordCopy;
+    /// test RecordCopy(), TRttiMap and TRttiFilter
+    procedure _Records;
     /// test the TSynList class
     procedure _TSynList;
     /// test the TRawUtf8List class
@@ -2341,7 +2341,7 @@ begin
   fEnum := Value;
 end;
 
-procedure TTestCoreBase._RecordCopy;
+procedure TTestCoreBase._Records;
 var
   A, B, C: TR;
   i, j: PtrInt;
@@ -2354,12 +2354,15 @@ var
   fo, fr: TRttiFilter;
   err, err2: string;
 begin
+  // FillZeroRtti()
   CheckEqual(lic.CustomerName, '');
+  lic.CustomerName := 'Toto';
   FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
   lic.CustomerName := '1234';
   FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
+  // validate RecordCopy()
   FillCharFast(A, SizeOf(A), 0);
   FillCharFast(B, SizeOf(B), 0);
   FillCharFast(C, SizeOf(C), 0);
@@ -2600,15 +2603,22 @@ begin
     Check(fr.Apply(@p) = '');
     CheckEqual(p.FirstName, '');
     fr.AddClass('firstName', [TSynFilterLowerCase, TSynValidateNonVoidText]);
+    CheckEqual(fr.Count, 2);
     fr.AddClass('lastNAME', [TSynValidateNonVoidText]);
+    CheckEqual(fr.Count, 3);
     err := fr.Apply(@p);
     Check(err = err2, err);
     p.FirstName := 'TOTO';
+    Check(fr.Validate(@p) = '');
+    CheckEqual(p.FirstName, 'TOTO');
     Check(fr.Apply(@p) = '');
     CheckEqual(p.FirstName, 'toto');
     p.LastName := '';
     err := fr.Apply(@p);
     Check(err = 'LastName: Expect at least 1 character', err);
+    p.FirstName := '';
+    err := fr.Apply(@p);
+    Check(err = err2, err);
   finally
     fr.Free;
   end;
