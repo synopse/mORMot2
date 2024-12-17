@@ -1950,6 +1950,7 @@ function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil;
   aKind: TPtrArrayKind = pakPointer): PtrInt; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
+// - this function won't ensure aPtrArray is unique - i.e. it expects RefCnt=1
 // - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil;
   aKind: TPtrArrayKind = pakPointer); overload;
@@ -6960,7 +6961,7 @@ begin
     result := AddInt64(Values, Value);
 end;
 
-procedure UnmanagedDynArrayUnique(old: PDynArrayRec; ItemSize: TDALen);
+procedure UnmanagedDynArrayUnique(var old: PDynArrayRec; ItemSize: TDALen);
 var
   new: PDynArrayRec;
   n: PtrInt;
@@ -6971,6 +6972,8 @@ begin
   new := AllocMem(n);
   MoveFast(old^, new^, n); // copy header + all ordinal values
   new^.refCnt := 1;
+  inc(new);
+  old := new; // replace
 end;
 
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
@@ -6984,7 +6987,7 @@ begin
   if n > Index then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
+      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Word));
   end;
   SetLength(Values, n);
@@ -7001,7 +7004,7 @@ begin
   if n > Index then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
+      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(integer));
   end;
   SetLength(Values, n);
@@ -7018,7 +7021,7 @@ begin
   if n > 0 then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
+      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(integer));
   end;
   dec(ValuesCount);
@@ -7035,7 +7038,7 @@ begin
   if n > Index then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
+      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Int64));
   end;
   SetLength(Values, n);
@@ -7052,7 +7055,7 @@ begin
   if n > 0 then
   begin
     if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(pointer(Values), SizeOf(Values[0]));
+      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(Int64));
   end;
   dec(ValuesCount);
@@ -7965,6 +7968,7 @@ procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger;
   aKind: TPtrArrayKind);
 var
   a: TPointerDynArray absolute aPtrArray;
+  v: PPointerArray;
   n: PtrInt;
 begin
   if aCount = nil then
@@ -7973,22 +7977,23 @@ begin
     n := aCount^;
   if PtrUInt(aIndex) >= PtrUInt(n) then
     exit; // out of range
+  v := @a[aIndex];
   case aKind of
     pakPointer:
       ; // nothing to release (faster if explicit)
     pakClass:
-      TObject(a[aIndex]).Free;
+      TObject(v^[0]).Free;
     pakClassSafe:
-      FreeAndNilSafe(a[aIndex]);
+      FreeAndNilSafe(v^[0]);
     pakInterface:
-      PInterface(@a[aIndex])^ := nil;
+      IInterface(v^[0])._Release;
   end;
   dec(n);
   if n > aIndex then
-    MoveFast(a[aIndex + 1], a[aIndex], (n - aIndex) * SizeOf(pointer));
+    MoveFast(v^[1], v^[0], (n - aIndex) * SizeOf(pointer));
   a[n] := nil; // better safe than sorry
   if aCount = nil then
-    if n and 127 <> 0 then // call ReallocMem() once every 128 deletions
+    if (n and 127 <> 0) then // call ReallocMem() once every 128 deletions
       DynArrayFakeLength(pointer(a), n)
     else
       SetLength(a, n) // ReallocMem() or finalize if n = 0
