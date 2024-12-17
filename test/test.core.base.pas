@@ -2434,144 +2434,150 @@ begin
   // TPeople2 <--> TOrmPeople class mapping
   o1 := TOrmPeople.Create;
   o2 := TPeople2.Create;
-  o1.FirstName := 'toto';
-  o1.LastName := 'titi';
-  o1.YearOfBirth := 1926;
-  o1.YearOfDeath := 2010;
-  CopyObject(o1, o2);
-  CheckEqual(o1.FirstName, 'toto');
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o1.LastName, 'titi');
-  CheckEqual(o1.LastName, o2.LastName);
-  CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
-  // TRecordPeople <--> TOrmPeople record/class mapping
-  p.YearOfBirth := -1;
-  CheckEqual(p.YearOfBirth, -1);
-  RecordZero(@p, TypeInfo(TRecordPeople));
-  CheckEqual(p.FirstName, '');
-  CheckEqual(p.LastName, '');
-  CheckEqual(p.YearOfBirth, 0);
-  CheckEqual(p.YearOfDeath, 0);
-  ObjectToRecord(o2, p, TypeInfo(TRecordPeople));
-  CheckEqual(p.FirstName, 'toto');
-  CheckEqual(p.LastName, 'titi');
-  CheckEqual(p.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(p.YearOfDeath, o2.YearOfDeath);
-  o2.Enum := e1;
-  ClearObject(o2);
-  Check(o2.FirstName = '');
-  CheckEqual(o2.LastName, '');
-  CheckEqual(o2.YearOfBirth, 0);
-  CheckEqual(o2.YearOfDeath, 0);
-  Check(o2.Enum = e0);
-  RecordToObject(p, o2, TypeInfo(TRecordPeople));
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o2.LastName, 'titi');
-  CheckEqual(o2.YearOfBirth, p.YearOfBirth);
-  CheckEqual(o2.YearOfDeath, p.YearOfDeath);
-  // TPeopleR <--> TOrmPeople record/class mapping
-  o2.Enum := e4;
-  {$ifndef HASEXTRECORDRTTI} // oldest Delphi or FPC
-  Rtti.RegisterType(TypeInfo(TEnum));
-  Rtti.RegisterFromText(TypeInfo(TPeopleR),
-    'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
-  {$endif HASEXTRECORDRTTI}
-  r.YearOfBirth := -1;
-  CheckEqual(r.YearOfBirth, -1);
-  RecordZero(@r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, '');
-  CheckEqual(r.LastName, '');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e0);
-  ObjectToRecord(o2, r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, 'toto');
-  CheckEqual(r.LastName, 'titi');
-  CheckEqual(r.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e4);
-  ClearObject(o2);
-  Check(o2.FirstName = '');
-  CheckEqual(o2.LastName, '');
-  CheckEqual(o2.YearOfBirth, 0);
-  CheckEqual(o2.YearOfDeath, 0);
-  Check(o2.Enum = e0);
-  RecordToObject(r, o2, TypeInfo(TPeopleR));
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o2.LastName, 'titi');
-  CheckEqual(o2.YearOfBirth, r.YearOfBirth);
-  CheckEqual(o2.YearOfDeath, 0);
-  Check(o2.Enum = e4);
-  // TPeople2 <--> TPeopleR class/record mapping with TRttiMap
-  m.Init(TPeople2, TypeInfo(TPeopleR)).AutoMap;
-  RecordZero(@r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, '');
-  CheckEqual(r.LastName, '');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e0);
-  m.ToB(o2, @r); // from class to DTO
-  CheckEqual(r.FirstName, 'toto');
-  CheckEqual(r.LastName, 'titi');
-  CheckEqual(r.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e4);
-  // TPeople2 <--> TPeopleR class/record custom fields mapping with TRttiMap
-  m.Init(TPeople2, TypeInfo(TPeopleR)).Map([
-    'firstName',   'lastname', // inverted
-    'lastname',    'firstName',
-    'YearOfBirth', 'Unused']); // moved
-  RecordZero(@r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, '');
-  CheckEqual(r.LastName, '');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, 0);
-  m.ToB(o2, @r); // from class to DTO
-  CheckEqual(r.LastName, 'toto');
-  CheckEqual(r.FirstName, 'titi');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, o2.YearOfBirth);
-  Check(r.Enum = e0);
-  // TOrmPeople <--> TRecordPeople class/record fields mapping with TRttiMap
-  m.Init(TOrmPeople, TypeInfo(TRecordPeople)).AutoMap;
-  CheckEqual(p.FirstName, 'toto');
-  CheckEqual(p.LastName, 'titi');
-  CheckEqual(p.YearOfBirth, o1.YearOfBirth);
-  CheckEqual(p.YearOfDeath, o1.YearOfDeath);
-  o1.Free;
-  o1 := m.ToA(@p); // from DTO to class
-  CheckEqual(o1.FirstName, 'toto');
-  CheckEqual(o1.LastName, 'titi');
-  CheckEqual(p.YearOfBirth, o1.YearOfBirth);
-  CheckEqual(p.YearOfDeath, o1.YearOfDeath);
-  // TRttiFilter validation with a class instance
-  fo := TRttiFilter.Create(o1.ClassType);
   try
-    CheckEqual(fo.Count, 0);
-    fo.Filter(nil);
-    fo.Filter(o1);
-    CheckEqual(fo.Count, 0);
-    Check(fo.Validate(nil) = '');
-    Check(fo.Validate(o1) = '');
-    fo.Add('firstname', [TSynValidateNonVoidText.Create]);
-    CheckEqual(fo.Count, 1);
-    err := '???';
-    err := fo.Validate(nil);
-    Check(err = '', err);
+    o1.FirstName := 'toto';
+    o1.LastName := 'titi';
+    o1.YearOfBirth := 1926;
+    o1.YearOfDeath := 2010;
+    CopyObject(o1, o2);
     CheckEqual(o1.FirstName, 'toto');
-    Check(fo.Validate(o1) = '');
-    o1.FirstName := '';
-    Check(fo.Validate(nil) = '');
-    err2 := fo.Validate(o1);
-    Check(err2 = 'Expect at least 1 character', err2);
+    Check(o2.FirstName = 'toto');
+    CheckEqual(o1.LastName, 'titi');
+    CheckEqual(o1.LastName, o2.LastName);
+    CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
+    // TRecordPeople <--> TOrmPeople record/class mapping
+    p.YearOfBirth := -1;
+    CheckEqual(p.YearOfBirth, -1);
+    RecordZero(@p, TypeInfo(TRecordPeople));
+    CheckEqual(p.FirstName, '');
+    CheckEqual(p.LastName, '');
+    CheckEqual(p.YearOfBirth, 0);
+    CheckEqual(p.YearOfDeath, 0);
+    ObjectToRecord(o2, p, TypeInfo(TRecordPeople));
+    CheckEqual(p.FirstName, 'toto');
+    CheckEqual(p.LastName, 'titi');
+    CheckEqual(p.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(p.YearOfDeath, o2.YearOfDeath);
+    o2.Enum := e1;
+    ClearObject(o2);
+    Check(o2.FirstName = '');
+    CheckEqual(o2.LastName, '');
+    CheckEqual(o2.YearOfBirth, 0);
+    CheckEqual(o2.YearOfDeath, 0);
+    Check(o2.Enum = e0);
+    RecordToObject(p, o2, TypeInfo(TRecordPeople));
+    Check(o2.FirstName = 'toto');
+    CheckEqual(o2.LastName, 'titi');
+    CheckEqual(o2.YearOfBirth, p.YearOfBirth);
+    CheckEqual(o2.YearOfDeath, p.YearOfDeath);
+    // TPeopleR <--> TOrmPeople record/class mapping
+    o2.Enum := e4;
+    {$ifndef HASEXTRECORDRTTI} // oldest Delphi or FPC
+    Rtti.RegisterType(TypeInfo(TEnum));
+    Rtti.RegisterFromText(TypeInfo(TPeopleR),
+      'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
+    {$endif HASEXTRECORDRTTI}
+    r.YearOfBirth := -1;
+    CheckEqual(r.YearOfBirth, -1);
+    RecordZero(@r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, '');
+    CheckEqual(r.LastName, '');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e0);
+    ObjectToRecord(o2, r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, 'toto');
+    CheckEqual(r.LastName, 'titi');
+    CheckEqual(r.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e4);
+    ClearObject(o2);
+    Check(o2.FirstName = '');
+    CheckEqual(o2.LastName, '');
+    CheckEqual(o2.YearOfBirth, 0);
+    CheckEqual(o2.YearOfDeath, 0);
+    Check(o2.Enum = e0);
+    RecordToObject(r, o2, TypeInfo(TPeopleR));
+    Check(o2.FirstName = 'toto');
+    CheckEqual(o2.LastName, 'titi');
+    CheckEqual(o2.YearOfBirth, r.YearOfBirth);
+    CheckEqual(o2.YearOfDeath, 0);
+    Check(o2.Enum = e4);
+    // TPeople2 <--> TPeopleR class/record mapping with TRttiMap
+    m.Init(TPeople2, TypeInfo(TPeopleR)).AutoMap;
+    RecordZero(@r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, '');
+    CheckEqual(r.LastName, '');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e0);
+    m.ToB(o2, @r); // from class to DTO
+    CheckEqual(r.FirstName, 'toto');
+    CheckEqual(r.LastName, 'titi');
+    CheckEqual(r.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e4);
+    // TPeople2 <--> TPeopleR class/record custom fields mapping with TRttiMap
+    m.Init(TPeople2, TypeInfo(TPeopleR)).Map([
+      'firstName',   'lastname', // inverted
+      'lastname',    'firstName',
+      'YearOfBirth', 'Unused']); // moved
+    RecordZero(@r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, '');
+    CheckEqual(r.LastName, '');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, 0);
+    m.ToB(o2, @r); // from class to DTO
+    CheckEqual(r.LastName, 'toto');
+    CheckEqual(r.FirstName, 'titi');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, o2.YearOfBirth);
+    Check(r.Enum = e0);
+    // TOrmPeople <--> TRecordPeople class/record fields mapping with TRttiMap
+    m.Init(TOrmPeople, TypeInfo(TRecordPeople)).AutoMap;
+    CheckEqual(p.FirstName, 'toto');
+    CheckEqual(p.LastName, 'titi');
+    CheckEqual(p.YearOfBirth, o1.YearOfBirth);
+    CheckEqual(p.YearOfDeath, o1.YearOfDeath);
+    o1.Free;
+    o1 := m.ToA(@p); // from DTO to class
+    CheckEqual(o1.FirstName, 'toto');
+    CheckEqual(o1.LastName, 'titi');
+    CheckEqual(p.YearOfBirth, o1.YearOfBirth);
+    CheckEqual(p.YearOfDeath, o1.YearOfDeath);
+    // TRttiFilter validation with o1 TOrmPeople instance
+    fo := TRttiFilter.Create(o1.ClassType);
+    try
+      CheckEqual(fo.Count, 0);
+      fo.Filter(nil);
+      fo.Filter(o1);
+      CheckEqual(fo.Count, 0);
+      Check(fo.Validate(nil) = '');
+      Check(fo.Validate(o1) = '');
+      fo.Add('firstname', [TSynValidateNonVoidText.Create]);
+      CheckEqual(fo.Count, 1);
+      err := '???';
+      err := fo.Validate(nil);
+      Check(err = '', err);
+      CheckEqual(o1.FirstName, 'toto');
+      Check(fo.Validate(o1) = '');
+      o1.FirstName := '';
+      Check(fo.Validate(nil) = '');
+      err2 := fo.Validate(o1);
+      Check(err2 = 'FirstName: Expect at least 1 character', err2);
+    finally
+      fo.Free;
+    end;
   finally
-    fo.Free;
+    o1.Free;
+    o2.Free;
   end;
-  // TRttiFilter validation with a record
+  // TRttiFilter validation with p record
   fr := TRttiFilter.Create(TypeInfo(TRecordPeople));
   try
     CheckEqual(fr.Count, 0);
+    fr.Filter(nil);
     fr.Filter(@p);
     Check(fr.Validate(@p) = '');
     fr.AddClass('firstName', [TSynFilterUpperCase, TSynValidateNonVoidText]);
@@ -2596,8 +2602,6 @@ begin
   finally
     fr.Free;
   end;
-  o1.Free;
-  o2.Free;
 end;
 
 procedure TTestCoreBase._TSynList;
