@@ -5547,7 +5547,7 @@ begin
      one.fReject.Check(one.RejectCsv, uri, PathCaseInsensitive) then
     exit;
   // delete any deprecated cached content
-  tix := GetTickCount64;
+  tix := fServer.Async.LastOperationSec * 1000; // 1 second resolution is enough
   one.fMemCached.DeleteDeprecated(tix);
   one.fHashCached.DeleteDeprecated(tix);
   // actual request processing
@@ -5564,7 +5564,7 @@ begin
             exit;
           fn := FormatString('%%', [one.fLocalFolder, name]);
           result := Ctxt.SetOutFile(fn, one.IfModifiedSince, '',
-            one.CacheControlMaxAgeSec, @siz);
+            one.CacheControlMaxAgeSec, @siz); // will be streamed from file
           case result of
             HTTP_SUCCESS:
               if Assigned(one.fMemCached) then
@@ -5580,7 +5580,7 @@ begin
                       cached := StringFromFile(fn);
                       one.fMemCached.Add(name, cached);
                     end;
-                    Ctxt.ExtractOutContentType;
+                    Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
                     Ctxt.OutContent := cached;
                   end;
               end;
