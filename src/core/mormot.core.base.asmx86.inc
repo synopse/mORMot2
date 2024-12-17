@@ -2345,17 +2345,29 @@ asm
         rdtsc
 end;
 
+{$ifdef ISDELPHI}
+procedure FastStringAddRef(str: pointer); // will call compilerproc on FPC
+asm
+        test    str, str
+        jz      @z
+        cmp     dword ptr [str - _STRCNT], 0 // = longint on Delphi 32-bit
+        jl      @z
+   lock inc     dword ptr [str - _STRCNT]
+@z:
+end;
+{$endif ISDELPHI}
+
 function StrCntDecFree(var refcnt: TStrCnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-   lock dec dword ptr [refcnt]  // =longint on Delphi and FPC 32-bit
+   lock dec dword ptr [refcnt]  // = longint on Delphi and FPC 32-bit
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
 function DACntDecFree(var refcnt: TDACnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-   lock dec dword ptr [refcnt]  // =longint on Delphi and FPC 32-bit
+   lock dec dword ptr [refcnt]  // = longint on Delphi and FPC 32-bit
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 

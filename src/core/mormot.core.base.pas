@@ -711,7 +711,7 @@ const
 procedure DynArrayFakeLength(arr: pointer; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// low-level deletion of one dynmaic array item
+/// low-level deletion of one dynamic array item
 // - Last=high(Values) should be > 0 - caller should set Values := nil for Last<=0
 // - caller should have made Finalize(Values[Index]) before calling
 // - used e.g. by TSecurityDescriptor.Delete()
@@ -1930,6 +1930,12 @@ function PtrArrayAddOnce(var aPtrArray; aItem: pointer): PtrInt; overload;
 function PtrArrayAddOnce(var aPtrArray; aItem: pointer;
   var aPtrArrayCount: integer): PtrInt; overload;
 
+/// wrapper to add all items from one array of pointer dynamic array into another
+function PtrArrayAddFrom(var aDestArray; const aSourceArray): PtrInt; overload;
+
+/// wrapper to add new items from one array of pointer dynamic array into another
+function PtrArrayAddOnceFrom(var aDestArray; const aSourceArray): PtrInt; overload;
+
 /// wrapper to insert an item to a array of pointer dynamic array storage
 function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
   var aPtrArrayCount: integer): PtrInt; overload;
@@ -2803,6 +2809,13 @@ procedure LockedDec32(int32: PInteger); inline;
 procedure LockedInc64(int64: PInt64); inline;
 
 {$endif CPUINTEL}
+
+/// low-level string reference counter increment (do nothing if constant)
+procedure FastStringAddRef(str: pointer);
+
+/// low-level string reference counter decrement (do nothing if constant)
+procedure FastStringDecRef(str: pointer);
+  {$ifdef HASINLINE} {$ifdef ISDELPHI} inline; {$endif} {$endif}
 
 /// low-level string reference counter unprocess
 // - caller should have tested that refcnt>=0
@@ -6783,6 +6796,10 @@ end;
 
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
 
+// redirect to FPC compilerproc - maybe patched by mormot.core.rtti.fpc.inc
+procedure FastStringAddRef(str: pointer); external name 'FPC_ANSISTR_INCR_REF';
+procedure FastStringDecRef(str: pointer); external name 'FPC_ANSISTR_DECR_REF';
+
 function TDynArrayRec.GetLength: TDALen;
 begin
   result := high + 1;
@@ -6800,6 +6817,18 @@ begin
   Y100 := Y div 100; // FPC will use fast reciprocal
   res.D := Y100;
   res.M := Y {%H-}- Y100 * 100; // avoid div twice
+end;
+
+{$else}
+
+procedure FastStringDecRef(str: pointer);
+begin
+  if str = nil then
+    exit;
+  dec(PStrRec(str));
+  if (PStrRec(str)^.refCnt >= 0) and
+     StrCntDecFree(PStrRec(str)^.refCnt) then
+    Freemem(str); // works for both rkLString + rkUString
 end;
 
 {$endif FPC}
@@ -7877,6 +7906,39 @@ begin
     result := PtrArrayAdd(aPtrArray, aItem, aPtrArrayCount);
 end;
 
+function PtrArrayAddFrom(var aDestArray; const aSourceArray): PtrInt; overload;
+var
+  n: PtrInt;
+  s: TPointerDynArray absolute aSourceArray;
+  d: TPointerDynArray absolute aDestArray;
+begin
+  result := length(d);
+  n := length(s);
+  SetLength(d, result + n);
+  MoveFast(s[0], d[result], n * SizeOf(pointer));
+  inc(result, n);
+end;
+
+function PtrArrayAddOnceFrom(var aDestArray; const aSourceArray): PtrInt;
+var
+  n, i: PtrInt;
+  s: TPointerDynArray absolute aSourceArray;
+  d: TPointerDynArray absolute aDestArray;
+begin
+  result := length(d);
+  n := length(s);
+  if n = 0 then
+    exit;
+  SetLength(d, result + n);
+  for i := 0 to n - 1 do
+    if not PtrUIntScanExists(pointer(d), result, PtrUInt(s[i])) then
+    begin
+      d[result] := s[i];
+      inc(result);
+    end;
+  SetLength(d, result);
+end;
+
 function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
   var aPtrArrayCount: integer): PtrInt;
 var
@@ -7970,16 +8032,8 @@ begin
 end;
 
 function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
-var
-  n: PtrInt;
-  s: TObjectDynArray absolute aSourceObjArray;
-  d: TObjectDynArray absolute aDestObjArray;
 begin
-  result := length(d);
-  n := length(s);
-  SetLength(d, result + n);
-  MoveFast(s[0], d[result], n * SizeOf(pointer));
-  inc(result, n);
+  result := PtrArrayAddFrom(aDestObjArray, aSourceObjArray);
 end;
 
 function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
@@ -8000,23 +8054,8 @@ begin
 end;
 
 function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
-var
-  n, i: PtrInt;
-  s: TObjectDynArray absolute aSourceObjArray;
-  d: TObjectDynArray absolute aDestObjArray;
 begin
-  result := length(d);
-  n := length(s);
-  if n = 0 then
-    exit;
-  SetLength(d, result + n);
-  for i := 0 to n - 1 do
-    if not PtrUIntScanExists(pointer(d), result, PtrUInt(s[i])) then
-    begin
-      d[result] := s[i];
-      inc(result);
-    end;
-  SetLength(d, result);
+  result := PtrArrayAddOnceFrom(aDestObjArray, aSourceObjArray);
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
@@ -10185,26 +10224,6 @@ begin
   result := SynLZdecompress1pas(src, size, dst);
 end;
 
-function StrCntDecFree(var refcnt: TStrCnt): boolean;
-begin
-  // fallback to RTL asm e.g. for ARM
-  {$ifdef STRCNT32}
-  result := InterLockedDecrement(refcnt) <= 0;
-  {$else}
-  result := InterLockedDecrement64(refcnt) <= 0;
-  {$endif STRCNT32}
-end; // we don't check for ismultithread global
-
-function DACntDecFree(var refcnt: TDACnt): boolean;
-begin
-  // fallback to RTL asm e.g. for ARM
-  {$ifdef DACNT32}
-  result := InterLockedDecrement(refcnt) <= 0;
-  {$else}
-  result := InterLockedDecrement64(refcnt) <= 0;
-  {$endif DACNT32}
-end;
-
 procedure LockedInc32(int32: PInteger);
 begin
   InterlockedIncrement(int32^);
@@ -10224,6 +10243,26 @@ begin
     if InterlockedIncrement(Lo) = 0 then
       InterlockedIncrement(Hi); // collission is highly unprobable
   {$endif FPC_64}
+end;
+
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+begin
+  // fallback to RTL asm e.g. for ARM
+  {$ifdef STRCNT32}
+  result := InterLockedDecrement(refcnt) <= 0;
+  {$else}
+  result := InterLockedDecrement64(refcnt) <= 0;
+  {$endif STRCNT32}
+end; // we don't check for ismultithread global
+
+function DACntDecFree(var refcnt: TDACnt): boolean;
+begin
+  // fallback to RTL asm e.g. for ARM
+  {$ifdef DACNT32}
+  result := InterLockedDecrement(refcnt) <= 0;
+  {$else}
+  result := InterLockedDecrement64(refcnt) <= 0;
+  {$endif DACNT32}
 end;
 
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;

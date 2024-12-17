@@ -743,6 +743,25 @@ asm
 @z:
 end;
 
+{$else} // Delphi specific functions:
+
+procedure FastStringAddRef(str: pointer); // will call compilerproc on FPC
+asm
+        .noframe
+        test    str, str
+        jz      @z
+        {$ifdef STRCNT32}
+        cmp     dword ptr [str - _STRCNT], 0
+        jl      @z
+   lock inc     dword ptr [str - _STRCNT]
+        {$else}
+        cmp     qword ptr [str - _STRCNT], 0
+        jl      @z
+   lock inc     qword ptr [str - _STRCNT]
+        {$endif STRCNT32}
+@z:
+end;
+
 {$endif FPC}
 
 {
