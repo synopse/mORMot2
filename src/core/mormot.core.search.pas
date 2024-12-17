@@ -5803,10 +5803,12 @@ var
   err: string;
 begin
   result := Process(-1, Prop^.GetValueText(Data), err);
+  if not result then
+    err := FormatString('%: %', [Prop^.Name, err]);
   if ErrMsg <> nil then
     ErrMsg^ := err
   else if not result then
-    ERttiFilter.RaiseUtf8('% failed: %', [self, err]);
+    ERttiFilter.RaiseUtf8('% failed on %', [self, err]);
 end;
 
 class function TSynValidate.Execute(const aParameters, aValue: RawUtf8): string;
