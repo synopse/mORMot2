@@ -1459,8 +1459,9 @@ type
     function Validate(aData: pointer): string;
     /// apply all registered TSynFilter or TSynValidate rules to a class instance
     // or record pointer
+    // - can optionally specify which parent class are to be executed
     // - returns '' on success, or an error message on validation failure
-    function Apply(aData: pointer): string;
+    function Apply(aData: pointer; aClass: TSynFilterOrValidateClass = nil): string;
     /// apply all registered TSynFilter or TSynValidate rules to a class instance
     // or record pointer and raise ERttiFilter on broken TSynValidate
     procedure ApplyOrRaise(aData: pointer);
@@ -6348,14 +6349,13 @@ end;
 
 function TRttiFilter.Validate(aData: pointer): string;
 begin
-  result := '';
-  DoApply(aData, TSynValidate, @result);
+  result := Apply(aData, TSynValidate);
 end;
 
-function TRttiFilter.Apply(aData: pointer): string;
+function TRttiFilter.Apply(aData: pointer; aClass: TSynFilterOrValidateClass): string;
 begin
   result := '';
-  DoApply(aData, nil, @result);
+  DoApply(aData, aClass, @result);
 end;
 
 procedure TRttiFilter.ApplyOrRaise(aData: pointer);
