@@ -5607,6 +5607,9 @@ var
   lRefreshed: boolean;
   uu: TRawUtf8DynArray;
 begin
+  Check(pointer(uu) = nil);
+  a.InitArrayFrom(uu, JSON_FAST); // ensure no GPF
+  CheckEqual(a.Count, 0);
   uu := CsvToRawUtf8DynArray('0,1,2,3');
   a.InitArrayFrom(uu, TypeInfo(TRawUtf8DynArray), JSON_FAST);
   CheckEqual(a.Count, 4);
