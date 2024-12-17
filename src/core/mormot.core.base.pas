@@ -3843,8 +3843,8 @@ const
   varOleClsid = 72;
 
   varVariantByRef = varVariant or varByRef;
-  varStringByRef  = varString or varByRef;
-  varOleStrByRef  = varOleStr or varByRef;
+  varStringByRef  = varString  or varByRef;
+  varOleStrByRef  = varOleStr  or varByRef;
 
   /// this variant type will map the current SynUnicode type
   // - depending on the compiler version
@@ -11993,23 +11993,20 @@ end;
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;
 begin
   with VarDataFromVariant(PVariant(VarData)^)^ do
-    result := (cardinal(VType) <= varNull) or
-              (cardinal(VType) = varNull or varByRef);
+    result := (cardinal(VType) and cardinal(not varByRef)) <= varNull;
 end;
 
 function VarIsEmptyOrNull(const V: Variant): boolean;
 begin
   with VarDataFromVariant(V)^ do
-    result := (cardinal(VType) <= varNull) or
-              (cardinal(VType) = varNull or varByRef);
+    result := (cardinal(VType) and cardinal(not varByRef)) <= varNull;
 end;
 
 function VarIsString(const V: Variant): boolean;
 begin
   with VarDataFromVariant(V)^ do
-    case cardinal(VType) of
-      {$ifdef HASVARUSTRING} varUString, varUStringByRef, {$endif}
-      varString, varOleStr, varStringByRef, varOleStrByRef:
+    case cardinal(VType) and cardinal(not varByRef) of
+      {$ifdef HASVARUSTRING} varUString, {$endif} varString, varOleStr:
      result := true;
     else
       result := false;
@@ -12025,7 +12022,7 @@ begin
   typ := TVarData(Source).VType;
   if typ and varByRef = 0 then
     exit;
-  typ := typ and not varByRef;
+  typ := typ and cardinal(not varByRef);
   case typ of
     varVariant:
       if integer(PVarData(TVarData(Source).VPointer)^.VType) in VTYPE_SIMPLE then
@@ -12050,9 +12047,9 @@ var
   typ: cardinal;
 begin
   typ := V^.VType;
-  if typ and varByRef <> 0 then
+  if typ and cardinal(varByRef) <> 0 then
   begin
-    typ := typ and not varByRef;
+    typ := typ and cardinal(not varByRef);
     if typ in VTYPE_SIMPLE then
     begin
       PCardinal(@tmp)^ := typ;
