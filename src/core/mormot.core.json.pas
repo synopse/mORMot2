@@ -2548,29 +2548,33 @@ type
   PInterfacedSerializable = ^TInterfacedSerializable;
 
   {$M+}
+  /// abstract ISerializable class parent with serialization of its published
+  // class fields using regular RTTI
+  // - you could inherit this class, associated with an interface inheriting
+  // from ISerializable (and propably with a method returning self to access the
+  // properties), then call once the RegisterToRtti() class function
+  TSerializablePersistent = class(TInterfacedSerializable)
+  public
+    /// raw JSON serialization of the published properties of this instance
+    procedure ToJson(W: TJsonWriter; options: TTextWriterWriteObjectOptions); override;
+    /// raw JSON unserialization into the published properties of this instance
+    procedure FromJson(var context: TJsonParserContext); override;
+  end;
+  {$M-}
+
   /// abstract ISerializable class parent with auto-create published fields
-  // - you should inherit this class, associated with an interface inheriting
+  // - you could inherit this class, associated with an interface inheriting
   // from ISerializable (and propably with a method returning self to access the
   // properties), then call once the RegisterToRtti() class function
   // - could be used e.g. to implement a DDD/KDD Aggregate object with both
   // ref-counted data and methods, ready to be serialized over SOA
-  TInterfacedSerializableAutoCreateFields = class(TInterfacedSerializable)
-  protected
-    fRttiJson: TRttiJson;
+  TInterfacedSerializableAutoCreateFields = class(TSerializablePersistent)
   public
     /// instantiate all nested  class or T*ObjArray published properties
     constructor Create(options: PDocVariantOptions = nil); override;
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
-    /// raw JSON serialization of the published properties of this instance
-    procedure ToJson(W: TJsonWriter; options: TTextWriterWriteObjectOptions); override;
-    /// raw JSON unserialization into the published properties of this instance
-    procedure FromJson(var context: TJsonParserContext); override;
-    /// low-level access to the RTTI information associated with this class
-    property RttiJson: TRttiJson
-      read fRttiJson;
   end;
-  {$M-}
 
   /// abstract TCollectionItem class, which will instantiate all its nested class
   // published properties, then release them (and any T*ObjArray) when freed
@@ -12094,40 +12098,43 @@ begin
 end;
 
 
-{ TInterfacedSerializableAutoCreateFields }
+{ TSerializablePersistent }
 
-constructor TInterfacedSerializableAutoCreateFields.Create(
-  options: PDocVariantOptions);
-begin
-  fRttiJson := AutoCreateFields(self);
-end;
-
-destructor TInterfacedSerializableAutoCreateFields.Destroy;
-begin
-  AutoDestroyFields(self, fRttiJson);
-  inherited Destroy;
-end;
-
-procedure TInterfacedSerializableAutoCreateFields.ToJson(W: TJsonWriter;
+procedure TSerializablePersistent.ToJson(W: TJsonWriter;
   options: TTextWriterWriteObjectOptions);
 var
   ctx: TJsonSaveContext;
 begin
   ctx.W := W;
-  ctx.Info := fRttiJson;
-  ctx.Options := options + fRttiJson.IncludeWriteOptions;
+  ctx.Info := Rtti.FindClass(PClass(self)^);
+  ctx.Options := options + TRttiJson(ctx.Info).IncludeWriteOptions;
   _JS_RttiCustom(@self, ctx); // all done via known RTTI
 end;
 
-procedure TInterfacedSerializableAutoCreateFields.FromJson(
+procedure TSerializablePersistent.FromJson(
   var context: TJsonParserContext);
 var
   bak: TRttiCustom;
 begin
   bak := context.Info;
-  context.Info := fRttiJson; // from interface RTTI to class RTTI
+  context.Info := Rtti.FindClass(PClass(self)^);
   _JL_RttiCustom(@self, context);
   context.Info := bak;
+end;
+
+
+{ TInterfacedSerializableAutoCreateFields }
+
+constructor TInterfacedSerializableAutoCreateFields.Create(
+  options: PDocVariantOptions);
+begin
+  AutoCreateFields(self);
+end;
+
+destructor TInterfacedSerializableAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
 end;
 
 
