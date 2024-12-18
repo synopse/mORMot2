@@ -6976,6 +6976,19 @@ begin
   old := new; // replace
 end;
 
+procedure UnmanagedDynArrayDelete(var v; Count, Index, ItemSize: PtrUInt);
+var
+  p: PAnsiChar;
+begin
+  dec(Count, Index);
+  if Count = 0 then
+    exit; // no data to move
+  if PDACnt(PAnsiChar(v) - _DACNT)^ > 1 then
+    UnmanagedDynArrayUnique(PDynArrayRec(v), ItemSize);
+  p := PAnsiChar(v) + Index * ItemSize;
+  MoveFast(p[ItemSize], p[0], Count * ItemSize);
+end;
+
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 var
   n: PtrInt;
@@ -6984,12 +6997,7 @@ begin
   if PtrUInt(Index) >= PtrUInt(n) then
     exit; // wrong Index
   dec(n);
-  if n > Index then
-  begin
-    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
-    MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Word));
-  end;
+  UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
   SetLength(Values, n);
 end;
 
@@ -7001,12 +7009,7 @@ begin
   if PtrUInt(Index) >= PtrUInt(n) then
     exit; // wrong Index
   dec(n);
-  if n > Index then
-  begin
-    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
-    MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(integer));
-  end;
+  UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
   SetLength(Values, n);
 end;
 
@@ -7017,14 +7020,9 @@ begin
   n := ValuesCount;
   if PtrUInt(Index) >= PtrUInt(n) then
     exit; // wrong Index
-  dec(n, Index + 1);
-  if n > 0 then
-  begin
-    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
-    MoveFast(Values[Index + 1], Values[Index], n * SizeOf(integer));
-  end;
-  dec(ValuesCount);
+  dec(n);
+  ValuesCount := n;
+  UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
 end;
 
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt);
@@ -7035,12 +7033,7 @@ begin
   if PtrUInt(Index) >= PtrUInt(n) then
     exit; // wrong Index
   dec(n);
-  if n > Index then
-  begin
-    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
-    MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Int64));
-  end;
+  UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
   SetLength(Values, n);
 end;
 
@@ -7051,14 +7044,9 @@ begin
   n := ValuesCount;
   if PtrUInt(Index) >= PtrUInt(n) then
     exit; // wrong Index
-  dec(n, Index + 1);
-  if n > 0 then
-  begin
-    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-      UnmanagedDynArrayUnique(PDynArrayRec(Values), SizeOf(Values[0]));
-    MoveFast(Values[Index + 1], Values[Index], n * SizeOf(Int64));
-  end;
-  dec(ValuesCount);
+  dec(n);
+  ValuesCount := n;
+  UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
 end;
 
 procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
