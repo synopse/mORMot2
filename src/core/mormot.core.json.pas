@@ -12015,10 +12015,10 @@ begin
   end;
 end;
 
-class procedure TInterfacedSerializable.JsonWriter(W: TJsonWriter; data: pointer;
-  options: TTextWriterWriteObjectOptions);
+class procedure TInterfacedSerializable.JsonWriter(W: TJsonWriter;
+  data: pointer; options: TTextWriterWriteObjectOptions);
 begin
-  data := PPointer(data)^;
+  data := PPointer(data)^; // rkInterface is not dereferenced (only rkClass)
   if data = nil then
     W.AddNull // avoid GPF if ISerializable = nil
   else
@@ -12095,9 +12095,13 @@ end;
 
 procedure TInterfacedSerializableAutoCreateFields.FromJson(
   var context: TJsonParserContext);
+var
+  bak: TRttiCustom;
 begin
+  bak := context.Info;
   context.Info := fRttiJson; // from interface RTTI to class RTTI
   _JL_RttiCustom(@self, context);
+  context.Info := bak;
 end;
 
 
