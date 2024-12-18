@@ -3274,6 +3274,12 @@ asm
 end;
 {$endif HASINLINE}
 
+procedure FakeCallRaise(Fake: TInterfacedObjectFakeRaw; MethodIndex: PtrUInt);
+begin
+  EInterfaceFactory.RaiseUtf8('%.FakeCall(%) failed: out of range %',
+    [Fake, Fake.fFactory.fInterfaceName, MethodIndex]);
+end;
+
 function TInterfacedObjectFakeRaw.FakeCall(stack: PFakeCallStack): Int64;
 var
   me: TInterfacedObjectFakeRaw; // self may be broken by compiler optimizations
@@ -3288,12 +3294,11 @@ begin
   // setup context
   ctxt.Stack := stack;
   if stack.MethodIndex >= PtrUInt(me.fFactory.MethodsCount) then
-    EInterfaceFactory.RaiseUtf8('%.FakeCall(%) failed: out of range %',
-      [me, me.fFactory.fInterfaceName, stack.MethodIndex]);
+    FakeCallRaise(me, stack.MethodIndex);
   ctxt.Method := @me.fFactory.fMethods[stack.MethodIndex];
   ctxt.ResultType := imvNone;
   ctxt.Result := @result;
-  // call execution virtual method
+  // call main execution virtual method
   result := 0;
   me.FakeCallInternalProcess(ctxt);
   // handle float result if needed (ordinals are already stored in result)
