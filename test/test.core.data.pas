@@ -4038,10 +4038,11 @@ var
   i, n, num: integer;
   d, d2, d3: IDocDict;
   darr: IDocDictDynArray;
-  json, key: RawUtf8;
+  json, json2, json3, key: RawUtf8;
   one: variant;
   any: TDocAnyTest;
-  dt: IDocTest;
+  dt, dt2: IDocTest;
+  ds: array of IDocTest;
   {$ifdef HASIMPLICITOPERATOR}
   f: TDocDictFields;
   v: TDocValue;
@@ -4605,6 +4606,7 @@ begin
   Check(dt = nil);
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), 'null');
   Check(LoadJson(dt, '{name:"abc",list:[1,2,3],info:123}', TypeInfo(IDocTest)));
+  dt2 := dt;
   Check(dt <> nil);
   Check(dt.Data.Any <> nil);
   CheckEqual(dt.Data.Any.List.Json, '[]');
@@ -4613,6 +4615,7 @@ begin
   CheckEqual(dt.Data.List.Json, '[1,2,3]');
   Check(dt.Data.Info = 123);
   json := dt.Json;
+  json2 := json;
   CheckEqual(json,
     '{"Any":{"List":[],"Dict":{}},"Name":"abc","List":[1,2,3],"Info":123}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
@@ -4628,6 +4631,28 @@ begin
   CheckEqual(json, '{"Any":{"List":[1,2,3],"Dict":{"a":4}},' +
     '"Name":"doe","List":["zero"],"Info":["zero"]}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
+  // validate InterfaceArray*() wrapper functions
+  Check(ds = nil);
+  CheckEqual(length(ds), 0);
+  InterfaceArrayAdd(ds, dt);
+  CheckEqual(length(ds), 1);
+  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json + ']');
+  InterfaceArrayAdd(ds, dt2);
+  CheckEqual(length(ds), 2);
+  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json + ',' +  json2 + ']');
+  InterfaceArrayAdd(ds, dt);
+  CheckEqual(length(ds), 3);
+  json3 := '[' + json + ',' +  json2 + ',' + json + ']';
+  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), json3);
+  InterfaceArrayDelete(ds, 0);
+  CheckEqual(length(ds), 2);
+  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json2 + ',' + json + ']');
+  InterfaceArrayDelete(ds, 1);
+  CheckEqual(length(ds), 1);
+  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json2 + ']');
+  InterfaceArrayDelete(ds, 0);
+  CheckEqual(length(ds), 0);
+  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[]');
   // validate some user-reported issues
   {$ifdef HASIMPLICITOPERATOR}
   l := DocList('[{"id":"f7518487-6e95-4c90-8438-a6b48d6a8b5f",' +
