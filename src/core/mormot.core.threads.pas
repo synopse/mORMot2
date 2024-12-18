@@ -1152,8 +1152,8 @@ type
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fName: RawUtf8;
-    fTerminated: boolean;
     fPendingContextCount: integer;
+    fTerminated: boolean;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
