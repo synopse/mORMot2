@@ -2508,6 +2508,9 @@ type
     class procedure JsonWriter(W: TJsonWriter; data: pointer;
       options: TTextWriterWriteObjectOptions);
     class procedure JsonReader(var context: TJsonParserContext; data: pointer);
+    class procedure JsonWriterClass(W: TJsonWriter; data: pointer;
+      options: TTextWriterWriteObjectOptions);
+    class procedure JsonReaderClass(var context: TJsonParserContext; data: pointer);
   public
     /// factory of one class implementing a ISerializable interface
     // - this abstract method must be overriden
@@ -11982,6 +11985,7 @@ class function TInterfacedSerializable.RegisterToRtti(
   InterfaceInfo: PRttiInfo): TRttiJson;
 var
   ent: PInterfaceEntry;
+  obj: TRttiJson;
 begin
   ent := nil;
   if (self <> nil) and
@@ -11994,11 +11998,17 @@ begin
   result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
   result.fCache.SerializableClass := self;
   result.fCache.SerializableInterfaceEntryOffset := ent^.IOffset; // get once
-  TOnRttiJsonRead(result.fJsonReader) := JsonReader;
+  TOnRttiJsonRead(result.fJsonReader)  := JsonReader;
   TOnRttiJsonWrite(result.fJsonWriter) := JsonWriter;
   result.SetParserType(result.Parser, result.ParserComplex); // needed
   result.fCache.NewInterface := @_New_ISerializable;
-  TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
+  obj := Rtti.RegisterClass(self) as TRttiJson;
+  obj.fCache.SerializableInterface := result;
+  if not InheritsFrom(TInterfacedSerializableAutoCreateFields) then // not RTTI
+  begin
+    TOnRttiJsonRead(obj.fJsonReader)  := JsonReaderClass;
+    TOnRttiJsonWrite(obj.fJsonWriter) := JsonWriterClass;
+  end;
 end;
 
 procedure TInterfacedSerializable.SetJson(const value: RawUtf8);
@@ -12018,7 +12028,7 @@ end;
 class procedure TInterfacedSerializable.JsonWriter(W: TJsonWriter;
   data: pointer; options: TTextWriterWriteObjectOptions);
 begin
-  data := PPointer(data)^; // rkInterface is not dereferenced (only rkClass)
+  data := PPointer(data)^; // rkInterface is not de-referenced (only rkClass)
   if data = nil then
     W.AddNull // avoid GPF if ISerializable = nil
   else
@@ -12039,6 +12049,22 @@ begin
     PPointer(data)^ := o;
   end;
   i^.FromJson(context)
+end;
+
+class procedure TInterfacedSerializable.JsonWriterClass(W: TJsonWriter;
+  data: pointer; options: TTextWriterWriteObjectOptions);
+begin
+  if data = nil then // data is already de-referenced for rkClass
+    W.AddNull // avoid GPF if ISerializable = nil
+  else
+    TInterfacedSerializable(data).ToJson(W, options);
+end;
+
+class procedure TInterfacedSerializable.JsonReaderClass(
+  var context: TJsonParserContext; data: pointer);
+begin
+  if data <> nil then // should already be allocated for rkClass
+    TInterfacedSerializable(data).FromJson(context)
 end;
 
 function TInterfacedSerializable.GetJson: RawUtf8;
