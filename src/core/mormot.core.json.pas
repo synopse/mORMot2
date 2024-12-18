@@ -2494,9 +2494,9 @@ type
   /// a dynamic array of ISerializable instances
   ISerializables = array of ISerializable;
 
-  {$M+}
   /// abstract class parent with ISerializable methods for JSON serialization
-  // - you need to override Create, ToJson and FromJson abstract methods
+  // - you need to override Create, ToJson and FromJson abstract methods, so is
+  // not compiled with {$M+} because published RTTI are just ignored
   TInterfacedSerializable = class(TInterfacedObject, ISerializable)
   protected
     // methods used as getter/setter for the Json property
@@ -2539,12 +2539,12 @@ type
     property Json: RawUtf8
       read GetJson write SetJson;
   end;
-  {$M-}
   /// meta-class of the TInterfacedSerializable type
   TInterfacedSerializableClass = class of TInterfacedSerializable;
   /// points to a TInterfacedSerializable class instance
   PInterfacedSerializable = ^TInterfacedSerializable;
 
+  {$M+}
   /// abstract ISerializable class parent with auto-create published fields
   // - you should inherit this class, associated with an interface inheriting
   // from ISerializable (and propably with a method returning self to access the
@@ -2567,6 +2567,7 @@ type
     property RttiJson: TRttiJson
       read fRttiJson;
   end;
+  {$M-}
 
   /// abstract TCollectionItem class, which will instantiate all its nested class
   // published properties, then release them (and any T*ObjArray) when freed
@@ -5356,7 +5357,8 @@ end;
 procedure _JS_Interface(Data: PInterface; const Ctxt: TJsonSaveContext);
 begin
   // plain interfaces can be saved/serialized as their own object instance,
-  // but not restored/unserialized in _JL_Interface()
+  // but not restored/unserialized in _JL_Interface() - use ISerializable
+  // for proper JSON unserialization of an interface instance
   if Data^ <> nil then
     Ctxt.W.WriteObject(ObjectFromInterface(Data^))
   else
@@ -8607,7 +8609,8 @@ end;
 procedure _JL_Interface(Data: PInterface; var Ctxt: TJsonParserContext);
 begin
   // _JS_Interface() may have serialized the object instance properties, but we
-  // can't unserialize it since we don't know which class to create
+  // can't unserialize it since we don't know which class to create: use
+  // exact ISerializable inherited type to allow proper unserialization
   Ctxt.Valid := Ctxt.ParseNull;
   Data^ := nil;
 end;
