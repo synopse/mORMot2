@@ -9744,7 +9744,7 @@ begin
     SetLength(Values, n);
 end;
 
-procedure MakeUniqueArray(var Values: TRawUtf8DynArray);
+procedure MakeUniqueRawUtf8DynArray(var Values: TRawUtf8DynArray);
 begin
   Values := copy(Values); // sub-proc to avoid try..finally
 end;
@@ -9760,7 +9760,7 @@ begin
   begin
     dec(n);
     if PDACnt(PAnsiChar(pointer(Values)) - _DACNT)^ > 1 then
-      MakeUniqueArray(Values);
+      MakeUniqueRawUtf8DynArray(Values);
     Values[Index] := ''; // avoid GPF
     if n > Index then
     begin
@@ -9786,7 +9786,7 @@ begin
     dec(n);
     ValuesCount := n;
     if PDACnt(PAnsiChar(pointer(Values)) - _DACNT)^ > 1 then
-      MakeUniqueArray(Values);
+      MakeUniqueRawUtf8DynArray(Values);
     Values[Index] := ''; // avoid GPF
     dec(n, Index);
     if n > 0 then

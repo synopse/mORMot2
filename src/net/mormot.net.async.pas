@@ -5547,7 +5547,7 @@ begin
      one.fReject.Check(one.RejectCsv, uri, PathCaseInsensitive) then
     exit;
   // delete any deprecated cached content
-  tix := fServer.Async.LastOperationSec * 1000; // 1 second resolution is enough
+  tix := Int64(fServer.Async.LastOperationSec) * 1000; // = GetTickCount64
   one.fMemCached.DeleteDeprecated(tix);
   one.fHashCached.DeleteDeprecated(tix);
   // actual request processing

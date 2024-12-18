@@ -3213,9 +3213,9 @@ function TUriMatch.Check(const csv: RawUtf8;
 begin
   if Init.TryLock then // thread-safe init once from supplied csv
     DoInit(pointer(csv), caseinsensitive);
-  result := ((Names <> nil) and
+  result := ((Names <> nil) and // check 'file.ext' pattern
              MatchAnyP(pointer(Names), uri.Name.Text, uri.Name.Len)) or
-            ((Paths <> nil) and
+            ((Paths <> nil) and // check 'path/to/file.ext' pattern
              MatchAnyP(pointer(Paths), uri.Path.Text, uri.Path.Len));
 end;
 

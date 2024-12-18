@@ -2131,13 +2131,14 @@ type
     ResultType: TInterfaceMethodValueType; // type of value stored into result
     ServiceCustomAnswerPoint: PServiceCustomAnswer;
     Value: array[0..MAX_METHOD_ARGS - 1] of pointer;
-    I64s:  array[0..MAX_METHOD_ARGS - 1] of Int64;
+    I64s:  array[0..MAX_METHOD_ARGS - 1] of Int64; // to store register results
   end;
 
 type
   {$M+}
   /// abstract class handling a generic interface implementation class
-  // - implements a simple cross-CPU JIT engine to redirect to FakeCall
+  // - implements a simple cross-CPU JIT engine to redirect to FakeCall to
+  // its FakeCallInternalProcess() virtual method
   // - note: inheriting from TSynInterfacedObject is not feasible
   TInterfacedObjectFakeRaw = class(TInterfacedObject)
   protected
@@ -4536,7 +4537,7 @@ asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         lea     rdx, sxmm0 // TFakeCallStack address as 2nd parameter
         {$endif OSPOSIX}
         call    TInterfacedObjectFakeRaw.FakeCall
-        // FakeCall should set Int64 result in method result,
+        // FakeCall should set rax: Int64 in method result,
         // and float in aCall.FPRegs["XMM0"]
         movsd   xmm0, qword ptr sxmm0 // movsd for zero extension
 end;
@@ -4581,7 +4582,7 @@ begin
           inc(P);                 // push {MethodIndex}
           P^ := $e2895251;
           inc(P);                 // push ecx; push edx; mov edx, esp
-          {$ifdef OSPOSIX} // align stack by 16 bytes
+          {$ifdef OSPOSIX}        // align stack by 16 bytes
           P^ := $e8505050;        // push eax; push eax; push eax (align stack)
           inc(P);                 // call FakeCall
           {$else}
@@ -4594,7 +4595,7 @@ begin
           inc(PByte(P), 3);       // overlap c2=ret to avoid GPF
           P^ := (fMethods[i].ArgsSizeInStack shl 8) or $900000c2;
           inc(P);
-          {$ifdef OSPOSIX} // align code by 4 bytes
+          {$ifdef OSPOSIX}        // align code by 4 bytes
           inc(PByte(P));
           {$endif OSPOSIX}
         end;
