@@ -7098,9 +7098,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortInteger(ID, L, j);
         L := i;
@@ -7155,9 +7154,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortInteger(ID, CoValues, L, j);
         L := i;
@@ -7204,9 +7202,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortWord(ID, L, j);
         L := i;
@@ -7260,9 +7257,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortInt64(ID, L, j);
         L := i;
@@ -7316,9 +7312,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortQWord(ID, L, j);
         L := i;
@@ -7361,9 +7356,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortDouble(ID, L, j);
         L := i;
@@ -7420,9 +7414,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           QuickSortInt64(ID, CoValues, L, j);
         L := i;

@@ -7399,9 +7399,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           QuickSortByName(L, J);
         L := I;
@@ -9630,9 +9629,8 @@ begin
         else
           break;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         P := i; // i,j will be overriden during Sort() call -> protect
         if L < j then
           Sort(L, j);
@@ -9832,9 +9830,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           Sort(L, j);
         L := i;

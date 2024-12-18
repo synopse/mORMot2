@@ -7068,9 +7068,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           LogProcSortInternal(L, J);
         L := I;

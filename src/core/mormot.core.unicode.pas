@@ -9658,9 +9658,8 @@ begin
           dec(j);
         end;
       until i > j;
-      if j - L < R - i then
+      if j - L < R - i then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < j then
           Sort(Values, L, j);
         L := i;

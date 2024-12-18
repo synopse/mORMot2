@@ -8059,9 +8059,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           QuickSort(L, J);
         L := I;
@@ -8110,9 +8109,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           QuickSortEvent(L, J);
         L := I;
@@ -8161,9 +8159,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           QuickSortEventReverse(L, J);
         L := I;
@@ -8209,9 +8206,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           QuickSortIndexed(L, J);
         L := I;
@@ -8259,9 +8255,8 @@ begin
           dec(J);
         end;
       until I > J;
-      if J - L < R - I then
+      if J - L < R - I then // use recursion only for smaller range
       begin
-        // use recursion only for smaller range
         if L < J then
           QuickSortPtr(L, J, Compare, V);
         L := I;
