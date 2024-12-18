@@ -3740,14 +3740,6 @@ type
   TDiskPartitions = array of TDiskPartition;
 
 
-{$ifdef CPUARM}
-var
-  /// internal wrapper address for ReserveExecutableMemory()
-  // - set to @TInterfacedObjectFake.ArmFakeStub by mormot.core.interfaces.pas
-  ArmFakeStubAddr: pointer;
-{$endif CPUARM}
-
-
 const
   // 16*4KB (4KB = memory granularity) for ReserveExecutableMemory()
   STUB_SIZE = 65536;
@@ -3758,13 +3750,16 @@ const
 // - this function maintain an internal list of 64KB memory pages for efficiency
 // - memory blocks can not be released (don't try to use fremeem on them) and
 // will be returned to the system at process finalization
-function ReserveExecutableMemory(size: cardinal): pointer;
+// - caller needs to eventually call ReserveExecutableMemoryPageAccess()
+// - raise EOSException if the memory allocation failed at OS level
+function ReserveExecutableMemory(size: cardinal
+  {$ifdef CPUARM} ; ArmFakeStubAddr: pointer {$endif}): pointer;
 
 /// to be called after ReserveExecutableMemory() when you want to actually write
 // the memory blocks
 // - affect the mapping flags of the first memory page (4KB) of the Reserved
 // buffer, so its size should be < 4KB
-// - do nothing on Windows and Linux, but may be needed on OpenBSD
+// - do nothing on Windows and Linux, but may be needed on OpenBSD / OSX
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 
 /// check if the supplied pointer is actually pointing to some memory page
@@ -7619,13 +7614,17 @@ begin
   inc(StubUsed, size);
 end;
 
-function ReserveExecutableMemory(size: cardinal): pointer;
+function ReserveExecutableMemory(size: cardinal
+  {$ifdef CPUARM} ; ArmFakeStubAddr: pointer {$endif}): pointer;
 begin
   if size > STUB_SIZE then
     raise EOSException.CreateFmt('ReserveExecutableMemory(size=%d>%d)',
       [size, STUB_SIZE]);
   CurrentFakeStubBufferLock.Lock;
   try
+    {$ifdef CPUARM}
+    StubCallFakeStubAddr := ArmFakeStubAddr; // for StubCallAllocMem()
+    {$endif CPUARM}
     if (CurrentFakeStubBuffer = nil) or
        (CurrentFakeStubBuffer.StubUsed + size > STUB_SIZE) then
       CurrentFakeStubBuffer := TFakeStubBuffer.Create;

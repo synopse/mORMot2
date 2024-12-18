@@ -4613,7 +4613,8 @@ var
 begin
   // reserve executable memory for JIT (aligned to 8 bytes)
   P := ReserveExecutableMemory(MAX_METHOD_COUNT * VMTSTUBSIZE
-    {$ifdef CPUAARCH64} + ($120 shr 2) {$endif CPUAARCH64});
+    {$ifdef CPUAARCH64} + ($120 shr 2) {$endif CPUAARCH64}
+    {$ifdef CPUARM}, @TInterfacedObjectFakeRaw.ArmFakeStub {$endif CPUARM});
   // populate _FAKEVMT[] with JITted stubs
   SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
   // set IInterface RESERVED_VTABLE_SLOTS required methods
@@ -4646,9 +4647,11 @@ begin
     P^ := ($e3a0c0 shl 8) + cardinal(i);
     inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
     {$endif ASMORIG}
-    stub := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) -
-             PtrUInt(P)) shr 2) - 2;
     // branch ArmFakeStub (24bit relative, word aligned)
+    stub := ((PtrUInt(@TInterfacedObjectFakeRaw.ArmFakeStub) -
+             PtrUInt(P)) shr 2) - 2;
+    if stub and $ff000000 <> 0 then // paranoid check
+      EInterfaceFactory.RaiseUtf8('Compute_FakeVMT=%', [CardinalToHexShort(stub)]);
     P^ := ($ea shl 24) + (stub and $00ffffff);
     inc(P);
     P^ := $e320f000;

@@ -3084,6 +3084,7 @@ end;
 
 var
   StubCallAllocMemLastStart: PtrUInt; // avoid unneeded fpmmap() calls
+  StubCallFakeStubAddr: pointer;      // = ArmFakeStubAddr parameter
 
 function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
 const
@@ -3093,7 +3094,7 @@ const
 var
   start, stop, stub, dist: PtrUInt;
 begin
-  stub := PtrUInt(ArmFakeStubAddr); // = @TInterfacedObjectFake.ArmFakeStub
+  stub := PtrUInt(StubCallFakeStubAddr); // = @TInterfacedObjectFake.ArmFakeStub
   if StubCallAllocMemLastStart <> 0 then
     start := StubCallAllocMemLastStart
   else
@@ -3150,7 +3151,7 @@ begin
     result := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
   if result = MAP_FAILED then
   begin
-    // i.e. on OpenBSD or OSX M1, we can not have W and X protection
+    // i.e. on OpenBSD or OSX aarch64, we can not have W and X protection
     result := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
     if result <> MAP_FAILED then
       StubMemoryExecXorWrite := true;
