@@ -23,6 +23,7 @@ uses
   mormot.core.test,
   mormot.core.perf,
   mormot.core.threads,
+  mormot.core.search,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.net.sock,
@@ -69,6 +70,8 @@ type
     procedure _SocketIO;
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
+    /// validate THttpProxyCache process
+    procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -1598,6 +1601,64 @@ begin
     hps.Free;
   end;
 end;
+
+procedure TNetworkProtocols._THttpProxyCache;
+
+  procedure TryOne(const force, ignore: RawUtf8;
+    const v: array of RawUtf8; const k: array of THttpProxyCacheKind);
+  var
+    m: THttpProxyMem;
+    n: TUriMatchName;
+    i: PtrInt;
+    r: THttpProxyCacheKind;
+  begin
+    m := THttpProxyMem.Create;
+    try
+      m.ForceCsv := force;
+      m.IgnoreCsv := ignore;
+      for i := 0 to high(v) do
+      begin
+        n.Path.Text := pointer(v[i]);
+        n.Path.Len := length(v[i]);
+        n.ParsePath;
+        r := [];
+        if i <= high(k) then
+          r := k[i];
+        Check(m.FromUri(n) = r);
+      end;
+    finally
+      m.Free;
+    end;
+  end;
+
+begin
+  TryOne('', '', ['', 'p', 'p/2', '/2'], []);
+  TryOne('*', '', ['', 'p', 'p/2', '/2'], [[], [pckForce], [pckForce], [pckForce]]);
+  TryOne('*2', '', ['', 'p', 'p/2', '/2'], [[], [], [pckForce], [pckForce]]);
+  TryOne('p*', '', ['', 'p', 'p/2', '/2'], [[], [pckForce]]);
+  TryOne('*', '', ['', 'pas', 'pas/12', '/12'], [[], [pckForce], [pckForce], [pckForce]]);
+  TryOne('*2', '', ['', 'pas', 'pas/12', '/12'], [[], [], [pckForce], [pckForce]]);
+  TryOne('p*', '', ['', 'pas', 'pas/12', '/12'], [[], [pckForce]]);
+  TryOne('', '*', ['', 'p', 'p/2', '/2'], [[], [pckIgnore], [pckIgnore], [pckIgnore]]);
+  TryOne('', '*2', ['', 'p', 'p/2', '/2'], [[], [], [pckIgnore], [pckIgnore]]);
+  TryOne('', 'p*', ['', 'p', 'p/2', '/2'], [[], [pckIgnore]]);
+  TryOne('', '*', ['', 'pas', 'pas/12', '/12'], [[], [pckIgnore], [pckIgnore], [pckIgnore]]);
+  TryOne('', '*2', ['', 'pas', 'pas/12', '/12'], [[], [], [pckIgnore], [pckIgnore]]);
+  TryOne('', 'p*', ['', 'pas', 'pas/12', '/12'], [[], [pckIgnore]]);
+  TryOne('*', '*', ['', 'p', 'p/2', '/2'], [[],
+    [pckForce, pckIgnore], [pckForce, pckIgnore], [pckForce, pckIgnore]]);
+  TryOne('*2', '*2', ['', 'p', 'p/2', '/2'],
+    [[], [], [pckForce, pckIgnore], [pckForce, pckIgnore]]);
+  TryOne('p*', 'p*', ['', 'p', 'p/2', '/2'],
+    [[], [pckForce, pckIgnore]]);
+  TryOne('*', '*', ['', 'pas', 'pas/12', '/12'],
+    [[], [pckForce, pckIgnore], [pckForce, pckIgnore], [pckForce, pckIgnore]]);
+  TryOne('*2', '*2', ['', 'pas', 'pas/12', '/12'],
+    [[], [], [pckForce, pckIgnore], [pckForce, pckIgnore]]);
+  TryOne('p*', 'p*', ['', 'pas', 'pas/12', '/12'],
+    [[], [pckForce, pckIgnore]]);
+end;
+
 
 end.
 

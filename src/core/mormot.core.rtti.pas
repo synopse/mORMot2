@@ -6514,7 +6514,7 @@ function ObjectFromInterface(const aValue: IInterface): TObject;
 begin
   result := nil;
   if aValue <> nil then
-    with PObjectFromInterfaceStub(PPointer(PPointer(aValue)^)^)^ do
+    with PObjectFromInterfaceStub(PPPointer(aValue)^^)^ do
       case Stub of
         // check first asm opcodes of VMT[0] entry, i.e. QueryInterface()
         $04244483:
