@@ -2491,6 +2491,8 @@ type
     property Json: RawUtf8
       read GetJson write SetJson;
   end;
+  /// a dynamic array of ISerializable instances
+  ISerializables = array of ISerializable;
 
   {$M+}
   /// abstract class parent with ISerializable methods for JSON serialization
@@ -5353,13 +5355,11 @@ end;
 
 procedure _JS_Interface(Data: PInterface; const Ctxt: TJsonSaveContext);
 begin
-  {$ifdef HASINTERFACEASTOBJECT}
-  // interfaces can be saved/serialized as their own object instance,
+  // plain interfaces can be saved/serialized as their own object instance,
   // but not restored/unserialized in _JL_Interface()
   if Data^ <> nil then
-    Ctxt.W.WriteObject(Data^ as TObject)
+    Ctxt.W.WriteObject(ObjectFromInterface(Data^))
   else
-  {$endif HASINTERFACEASTOBJECT}
     Ctxt.W.AddNull;
 end;
 
@@ -11417,11 +11417,9 @@ begin
      (Value <> nil) then
   try
     nfo := Rtti.RegisterTypeFromName(TypeName); // from Rtti.Register*() functions
-    {$ifdef HASINTERFACEASTOBJECT} // we target FPC/Lazarus anyway
     if (nfo = nil) and
        (TypeName[1] = 'I') then // guess class instance from interface variable
       nfo := Rtti.RegisterClass(PInterface(Value)^ as TObject);
-    {$endif HASINTERFACEASTOBJECT}
     if (nfo = nil) and
        (TypeName[1] = 'T') then
     begin

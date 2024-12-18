@@ -8615,7 +8615,7 @@ none:       result := '';
         else
           goto none;
       {$else}
-        PointerToHex(VInterface,result);
+        PointerToHex(VInterface, result);
       {$endif HASINTERFACEASTOBJECT}
       vtVariant:
         VariantToUtf8(VVariant^, result, isString);
