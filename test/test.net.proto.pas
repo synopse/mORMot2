@@ -773,7 +773,7 @@ end;
 
 procedure TNetworkProtocols.DNSAndLDAP;
 var
-  ip, u, v, sid: RawUtf8;
+  ip, rev, u, v, sid: RawUtf8;
   o: TAsnObject;
   c: cardinal;
   withntp: boolean;
@@ -808,7 +808,6 @@ begin
   if hasinternet then
   begin
     utc1 := GetSntpTime(ntp);
-    //writeln(DateTimeMSToString(utc), ' = ', DateTimeMSToString(NowUtc));
     if utc1 <> 0 then
     begin
       utc2 := NowUtc;
@@ -850,10 +849,23 @@ begin
   if hasinternet then
   begin
     ip := DnsLookup('synopse.info');
-    CheckEqual(ip, '62.210.254.173', 'dns1');
+    if ip = '' then
+    begin
+      Sleep(10); // some DNS servers may fail at first: wait a little
+      ip := DnsLookup('synopse.info');
+    end;
+    rev := '62.210.254.173';
+    CheckEqual(ip, rev, 'dns1');
     ip := DnsLookup('blog.synopse.info');
-    CheckEqual(ip, '62.210.254.173', 'dns2');
-    CheckEqual(DnsReverseLookup(ip), '62-210-254-173.rev.poneytelecom.eu', 'rev');
+    CheckEqual(ip, rev, 'dns2');
+    rev := '62-210-254-173.rev.poneytelecom.eu';
+    if DnsReverseLookup(ip) <> rev then
+    begin
+      Sleep(10); // wait a little
+      CheckEqual(DnsReverseLookup(ip), rev, 'rev');
+    end
+    else
+      inc(fAssertions);
   end;
   // validate LDAP distinguished name conversion (no client)
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
