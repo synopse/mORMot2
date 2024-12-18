@@ -4009,6 +4009,8 @@ type
     ['{C9AB0B6F-0418-4CE8-914A-F75521F36E33}']
     function Data: TDocTest;
   end;
+  IDocTests = array of IDocTest;
+
   TDocTest = class(TInterfacedSerializableAutoCreateFields, IDocTest)
   protected
     fAny: TDocAnyTest;
@@ -4042,7 +4044,7 @@ var
   one: variant;
   any: TDocAnyTest;
   dt, dt2: IDocTest;
-  ds: array of IDocTest;
+  dts: IDocTests;
   {$ifdef HASIMPLICITOPERATOR}
   f: TDocDictFields;
   v: TDocValue;
@@ -4384,9 +4386,17 @@ begin
     CheckEqual(d.I['b'], i + 20, 'darr10');
     if d.Get('b', num) then
       checkEqual(num, i + 20, 'darr11');
+    CheckEqual(SaveJson(d, TypeInfo(IDocDict)), d.Json);
+    CheckEqual(SaveJson(d, TypeInfo(ISerializable)), d.Json);
   end;
   l2 := DocListFrom(darr);
-  CheckEqual(l2.Json, '[{"a":0,"b":20},{"a":1,"b":21},{"a":2,"b":22}]');
+  json2 := '[{"a":0,"b":20},{"a":1,"b":21},{"a":2,"b":22}]';
+  CheckEqual(l2.Json, json2);
+  darr := nil;
+  Check(LoadJson(darr, json2, TypeInfo(IDocDicts)), 'enough RTTI');
+  CheckEqual(length(darr), 3);
+  CheckEqual(SaveJson(darr, TypeInfo(IDocDicts)), json2);
+  CheckEqual(SaveJson(darr, TypeInfo(ISerializables)), json2);
   d := l2.D[1];
   d.PathDelim := '.';
   d.U['c'] := 'C';
@@ -4619,6 +4629,7 @@ begin
   CheckEqual(json,
     '{"Any":{"List":[],"Dict":{}},"Name":"abc","List":[1,2,3],"Info":123}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
+  CheckEqual(SaveJson(dt, TypeInfo(ISerializable)), json);
   TDocTest.NewInterface(dt);
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)),
     '{"Any":{"List":[],"Dict":{}},"Name":"","List":[],"Info":null}');
@@ -4631,28 +4642,57 @@ begin
   CheckEqual(json, '{"Any":{"List":[1,2,3],"Dict":{"a":4}},' +
     '"Name":"doe","List":["zero"],"Info":["zero"]}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
-  // validate InterfaceArray*() wrapper functions
-  Check(ds = nil);
-  CheckEqual(length(ds), 0);
-  InterfaceArrayAdd(ds, dt);
-  CheckEqual(length(ds), 1);
-  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json + ']');
-  InterfaceArrayAdd(ds, dt2);
-  CheckEqual(length(ds), 2);
-  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json + ',' +  json2 + ']');
-  InterfaceArrayAdd(ds, dt);
-  CheckEqual(length(ds), 3);
+  // validate InterfaceArray*() wrapper functions with plain ISerializables
+  Check(dts = nil);
+  CheckEqual(length(dts), 0);
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json + ']');
+  InterfaceArrayAdd(dts, dt2);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json + ',' +  json2 + ']');
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 3);
   json3 := '[' + json + ',' +  json2 + ',' + json + ']';
-  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), json3);
-  InterfaceArrayDelete(ds, 0);
-  CheckEqual(length(ds), 2);
-  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json2 + ',' + json + ']');
-  InterfaceArrayDelete(ds, 1);
-  CheckEqual(length(ds), 1);
-  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[' + json2 + ']');
-  InterfaceArrayDelete(ds, 0);
-  CheckEqual(length(ds), 0);
-  CheckEqual(SaveJson(ds, TypeInfo(ISerializables)), '[]');
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), json3);
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json2 + ',' + json + ']');
+  InterfaceArrayDelete(dts, 1);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json2 + ']');
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 0);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[]');
+  Check(dts = nil);
+  Check(not LoadJson(dts, json3, TypeInfo(ISerializables)), 'not enough RTTI');
+  CheckEqual(length(dts), 0);
+  // validate InterfaceArray*() and JSON serialization with IDocTests
+  Check(dts = nil);
+  CheckEqual(length(dts), 0);
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json + ']');
+  InterfaceArrayAdd(dts, dt2);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json + ',' +  json2 + ']');
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 3);
+  json3 := '[' + json + ',' +  json2 + ',' + json + ']';
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), json3);
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json2 + ',' + json + ']');
+  InterfaceArrayDelete(dts, 1);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json2 + ']');
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 0);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[]');
+  Check(dts = nil);
+  Check(LoadJson(dts, json3, TypeInfo(IDocTests)), 'enough RTTI');
+  CheckEqual(length(dts), 3);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), json3);
   // validate some user-reported issues
   {$ifdef HASIMPLICITOPERATOR}
   l := DocList('[{"id":"f7518487-6e95-4c90-8438-a6b48d6a8b5f",' +
