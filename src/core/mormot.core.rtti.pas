@@ -9889,23 +9889,23 @@ var
   info: PRttiInfo;
 begin
   info := PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^;
-  if info <> nil then
-    result := DoRegister(info)
-  else
+  if info <> nil then // always available on FPC and Delphi 2010+
   begin
-    // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
-    RegisterSafe.Lock;
-    try
-      result := FindClass(ObjectClass); // search again (for thread safety)
-      if result <> nil then
-        exit; // already registered in the background
-      result := GlobalClass.Create;
-      result.FromRtti(nil); // just set rcfWithoutRtti flag
-      result.SetValueClass(ObjectClass, nil); // before NoRttiSetAndRegister()
-      result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
-    finally
-      RegisterSafe.UnLock;
-    end;
+    result := DoRegister(info);
+    exit;
+  end;
+  // generate fake RTTI for classes without {$M+} on Delphi 7/2007
+  RegisterSafe.Lock;
+  try
+    result := FindClass(ObjectClass); // search again (for thread safety)
+    if result <> nil then
+      exit; // already registered in the background
+    result := GlobalClass.Create;
+    result.FromRtti(nil); // just set rcfWithoutRtti flag
+    result.SetValueClass(ObjectClass, nil); // before NoRttiSetAndRegister()
+    result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
+  finally
+    RegisterSafe.UnLock;
   end;
 end;
 
