@@ -699,9 +699,7 @@ end;
 
 {$endif ASMX64}
 
-{$ifdef CPUX64ASM} /// proper compilation on FPC and Delphi XE7+
-
-{$ifdef FPC}
+{$ifdef FPC} // FPC-specific functions with raw RTL access
 
 procedure fpc_freemem; external name 'FPC_FREEMEM'; // access to RTL from asm
 
@@ -743,7 +741,7 @@ asm
 @z:
 end;
 
-{$else} // Delphi specific functions:
+{$else} // Delphi specific function
 
 procedure FastStringAddRef(str: pointer); // will call compilerproc on FPC
 asm
@@ -763,6 +761,9 @@ asm
 end;
 
 {$endif FPC}
+
+// following functions using AVX2 asm on FPC and Delphi XE7+
+{$ifdef CPUX64ASM}
 
 {
   Some numbers, with CITIES_MAX=200000, deleting 1/128 entries
@@ -1549,7 +1550,7 @@ end;
 
 {$endif ASMX64AVXNOCONST}
 
-{$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
+{$endif CPUX64ASM} // AVX2 asm is invalid prior to Delphi XE7 (to be refined)
 
 
 // functions below are always available, even on DARWIN
