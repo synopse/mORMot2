@@ -3391,20 +3391,18 @@ procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TRawUtf8DynArray; CsvSep: AnsiChar);
 var
   match: TMatchDynArray;
-  m, n, i: PtrInt;
+  n, i: PtrInt;
 begin
   if SetMatchs(CsvPattern, CaseInsensitive, match, CsvSep) = 0 then
     exit;
   n := 0;
   for i := 0 to high(Values) do
-    for m := 0 to high(match) do
-      if match[m].Match(Values[i]) then
-      begin
-        if i <> n then
-          Values[n] := Values[i];
-        inc(n);
-        break;
-      end;
+    if MatchAnyP(pointer(match), pointer(Values[i]), length(Values[i])) then
+    begin
+      if i <> n then
+        Values[n] := Values[i];
+      inc(n);
+    end;
   if n <> length(Values) then
     SetLength(Values, n);
 end;
