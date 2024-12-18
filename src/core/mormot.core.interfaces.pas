@@ -2134,7 +2134,6 @@ type
     I64s:  array[0..MAX_METHOD_ARGS - 1] of Int64;
   end;
 
-
 type
   {$M+}
   /// abstract class handling a generic interface implementation class
@@ -3177,11 +3176,25 @@ end;
 
 { TInterfacedObjectFakeRaw }
 
+{$ifndef HASINTERFACEASTOBJECT} // for Delphi 7/2007
+function _FakeObjectFromInterface(Stub: cardinal; Ptr: pointer): TObject;
+begin
+  result := nil;
+  // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
+  if Stub = PCardinal(@TInterfacedObjectFakeRaw.FakeQueryInterface)^ then
+    result := TInterfacedObjectFakeRaw(Ptr).SelfFromInterface;
+end;
+{$endif HASINTERFACEASTOBJECT}
+
 constructor TInterfacedObjectFakeRaw.Create(aFactory: TInterfaceFactory);
 begin
   inherited Create;
   fFactory := aFactory;
   fVTable := fFactory.GetMethodsVirtualTable;
+  {$ifndef HASINTERFACEASTOBJECT} // Delphi 7/2007 specific code
+  if not Assigned(@FakeObjectFromInterface) then
+    FakeObjectFromInterface := @_FakeObjectFromInterface; // to recognize it
+  {$endif HASINTERFACEASTOBJECT}
 end;
 
 procedure TInterfacedObjectFakeRaw.FakeCallRaiseError(
@@ -3250,7 +3263,7 @@ end;
 function TInterfacedObjectFakeRaw.SelfFromInterface: TInterfacedObjectFakeRaw;
 begin
   // obfucated but very efficient once inlined
-  result := pointer(PAnsiChar(self) - PAnsiChar(@TInterfacedObjectFake(nil).fVTable));
+  result := pointer(PAnsiChar(self) - PAnsiChar(@TInterfacedObjectFakeRaw(nil).fVTable));
 end;
 {$else}
 function TInterfacedObjectFakeRaw.SelfFromInterface: TInterfacedObjectFakeRaw;
@@ -4522,7 +4535,7 @@ asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         {$endif ISDELPHI}
         lea     rdx, sxmm0 // TFakeCallStack address as 2nd parameter
         {$endif OSPOSIX}
-        call    TInterfacedObjectFake.FakeCall
+        call    TInterfacedObjectFakeRaw.FakeCall
         // FakeCall should set Int64 result in method result,
         // and float in aCall.FPRegs["XMM0"]
         movsd   xmm0, qword ptr sxmm0 // movsd for zero extension
@@ -4552,9 +4565,9 @@ begin
     begin
       SetLength(fFakeVTable, MethodsCount + RESERVED_VTABLE_SLOTS);
       // set IInterface required methods
-      fFakeVTable[0] := @TInterfacedObjectFake.FakeQueryInterface;
-      fFakeVTable[1] := @TInterfacedObjectFake.Fake_AddRef;
-      fFakeVTable[2] := @TInterfacedObjectFake.Fake_Release;
+      fFakeVTable[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+      fFakeVTable[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+      fFakeVTable[2] := @TInterfacedObjectFakeRaw.Fake_Release;
       // set JITted VMT stubs for each method of this interface
       if MethodsCount <> 0 then
       begin
@@ -4575,7 +4588,7 @@ begin
           PByte(P)^ := $e8;
           inc(PByte(P));          // call FakeCall
           {$endif OSPOSIX}
-          P^ := PtrUInt(@TInterfacedObjectFake.FakeCall) - PtrUInt(P) - 4;
+          P^ := PtrUInt(@TInterfacedObjectFakeRaw.FakeCall) - PtrUInt(P) - 4;
           inc(P);
           P^ := $c25dec89;        // mov esp, ebp; pop ebp; ret {StackSize}
           inc(PByte(P), 3);       // overlap c2=ret to avoid GPF
@@ -4618,9 +4631,9 @@ begin
   // populate _FAKEVMT[] with JITted stubs
   SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
   // set IInterface RESERVED_VTABLE_SLOTS required methods
-  _FAKEVMT[0] := @TInterfacedObjectFake.FakeQueryInterface;
-  _FAKEVMT[1] := @TInterfacedObjectFake.Fake_AddRef;
-  _FAKEVMT[2] := @TInterfacedObjectFake.Fake_Release;
+  _FAKEVMT[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+  _FAKEVMT[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+  _FAKEVMT[2] := @TInterfacedObjectFakeRaw.Fake_Release;
   // JIT all potential custom method stubs
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
@@ -4664,7 +4677,7 @@ begin
     inc(P);  // mov r16 ,{MethodIndex}
     // we are using a register branch here
     // fill register x10 with address
-    stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
+    stub := PtrUInt(@TInterfacedObjectFakeRaw.AArch64FakeStub);
     tmp := (stub shr 0) and $ffff;
     P^ := ($d280 shl 16) + (tmp shl 5) + $0a;
     inc(P);
@@ -4825,15 +4838,6 @@ begin
   end;
 end;
 
-{$ifndef HASINTERFACEASTOBJECT} // for Delphi 7/2007
-function _FakeObjectFromInterface(Stub: cardinal; Ptr: pointer): TObject;
-begin
-  result := nil;
-  // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
-  if Stub = PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then
-    result := TInterfacedObjectFake(Ptr).SelfFromInterface;
-end;
-{$endif HASINTERFACEASTOBJECT}
 
 function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   aGuid: TGuid): ShortString;
@@ -7317,7 +7321,7 @@ begin
   if Instance = nil then
     exit;
   // efficient detection of a TInterfacedObjectFake to bypass JSON marshalling
-  if PCardinal(PPointer(PPointer(Instance)^)^)^ =
+  if PCardinal(PPPointer(Instance)^^)^ =
        PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then
   begin
     fake := TInterfacedObjectFake(Instance).SelfFromInterface as TInterfacedObjectFake;
@@ -7734,12 +7738,6 @@ end;
 
 procedure InitializeUnit;
 begin
-  {$ifdef CPUARM}
-  ArmFakeStubAddr := @TInterfacedObjectFake.ArmFakeStub;
-  {$endif CPUARM}
-  {$ifndef HASINTERFACEASTOBJECT} // Delphi 7/2007 specific code
-  FakeObjectFromInterface := @_FakeObjectFromInterface;
-  {$endif HASINTERFACEASTOBJECT}
   GlobalInterfaceResolver :=
     RegisterGlobalShutdownRelease(TInterfaceResolverList.Create);
   GlobalInterfaceResolver.Add(TypeInfo(IAutoLocker), TAutoLocker);
