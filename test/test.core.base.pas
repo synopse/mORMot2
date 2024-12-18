@@ -3900,14 +3900,14 @@ procedure TTestCoreBase.Integers;
   var
     o, n: TIntegerDynArray;
   begin
-    CsvToIntegerDynArray(Pointer(old), o);
-    CsvToIntegerDynArray(Pointer(new), n);
+    CsvToIntegerDynArray(pointer(old), o);
+    CsvToIntegerDynArray(pointer(new), n);
     fAdd := '';
     fDel := '';
     NotifySortedIntegerChanges(pointer(o), pointer(n), length(o), length(n),
       intadd, intdel, self);
-    Check(fAdd = added, 'added');
-    Check(fDel = deleted, 'deleted');
+    CheckEqual(fAdd, added, 'added');
+    CheckEqual(fDel, deleted, 'deleted');
   end;
 
   procedure includes(const values, includes, excludes, included, excluded: RawUtf8);
@@ -3976,7 +3976,7 @@ procedure TTestCoreBase.Integers;
 var
   i8: TByteDynArray;
   i16: TWordDynArray;
-  i32: TIntegerDynArray;
+  i32, i32_: TIntegerDynArray;
   i64: TInt64DynArray;
   i, n: PtrInt;
   timer: TPrecisionTimer;
@@ -4050,40 +4050,51 @@ begin
   CheckEqual(IntegerScanIndex(@i32[1], 100, 0), -1, 'aligned read');
   CheckEqual(IntegerScanIndex(@i32[1], 100, 1), 0, 'unaligned read');
   for i := 0 to n - 1 do
-    Check(IntegerScanIndex(pointer(i32), n, i) = i);
+    CheckEqual(IntegerScanIndex(pointer(i32), n, i), i);
   i32 := nil;
   DeduplicateInteger(i32);
-  check(i32 = nil);
+  CheckEqual(i32, nil);
   SetLength(i32, 2);
   i32[0] := 1;
   QuickSortInteger(i32);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
   DeduplicateInteger(i32);
-  check(length(i32) = 2);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
+  CheckEqual(length(i32), 2);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
   i32[0] := 1;
   DeduplicateInteger(i32);
-  check(length(i32) = 1);
-  check(i32[0] = 1);
+  CheckEqual(length(i32), 1);
+  CheckEqual(i32[0], 1);
   SetLength(i32, 6);
   i32[4] := 1;
   i32[5] := 2;
   DeduplicateInteger(i32); // (1, 0, 0, 0, 1, 2)
-  check(length(i32) = 3);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
-  check(i32[2] = 2);
+  CheckEqual(length(i32), 3);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
+  CheckEqual(i32[2], 2);
   SetLength(i32, 6);
   i32[4] := 3;
   i32[5] := 3;
   DeduplicateInteger(i32); // (0, 1, 2, 0, 3, 3)
-  check(length(i32) = 4);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
-  check(i32[2] = 2);
-  check(i32[3] = 3);
+  CheckEqual(length(i32), 4);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
+  CheckEqual(i32[2], 2);
+  CheckEqual(i32[3], 3);
+  i32_ := i32;
+  DeleteInteger(i32_, 2);
+  CheckEqual(length(i32), 4, 'unique');
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
+  CheckEqual(i32[2], 2);
+  CheckEqual(i32[3], 3);
+  CheckEqual(length(i32_), 3, 'copied');
+  CheckEqual(i32_[0], 0);
+  CheckEqual(i32_[1], 1);
+  CheckEqual(i32_[2], 3);
   for n := 1 to 1000 do
   begin
     SetLength(i32, n);
@@ -4091,11 +4102,11 @@ begin
       i32[i] := i and 15;
     DeduplicateInteger(i32);
     if n < 16 then
-      check(Length(i32) = n)
+      CheckEqual(Length(i32), n)
     else
-      check(Length(i32) = 16);
+      CheckEqual(Length(i32), 16);
     for i := 0 to high(i32) do
-      check(i32[i] = i);
+      CheckEqual(i32[i], i);
   end;
   changes('', '', '', '');
   changes('1', '1', '', '');
