@@ -3132,7 +3132,9 @@ type
   end;
 
   /// a dynamic array of IDocDict instances
-  IDocDictDynArray = array of IDocDict;
+  IDocDicts = array of IDocDict;
+  /// a dynamic array of IDocList instances
+  IDocLists = array of IDocList;
 
   /// a List, used to store multiple values
   // - implemented via an internal TDocVariantData dvArray
@@ -3227,7 +3229,7 @@ type
     /// returns all IDocDict kind of elements of this IDocList
     // - the list should consist e.g. of a JSON array of JSON objects
     // - will just ignore any element of the IDocList which is not a IDocDict
-    function ObjectsDictDynArray: IDocDictDynArray;
+    function ObjectsDicts: IDocDicts;
     /// removes the element at the specified position, and returns it
     // - raise an EDocList on invalid supplied position
     function Pop(position: integer = -1): variant;
@@ -3563,7 +3565,7 @@ function DocList(const values: array of const;
 function DocListFrom(const v: variant): IDocList; overload;
 
 /// create a self-owned IDocList from a dynamic array of IDocDict values
-function DocListFrom(const dictarray: IDocDictDynArray): IDocList; overload;
+function DocListFrom(const dictarray: IDocDicts): IDocList; overload;
 
 /// create a IDocList as weak reference to a TDocVariantData dvArray
 function DocList(const dv: TDocVariantData): IDocList; overload;
@@ -3592,7 +3594,7 @@ function DocDict(const json: RawUtf8;
 // - any element of the JSON array which is not a JSON object will be ignored
 function DocDictDynArray(const json: RawUtf8;
   model: TDocVariantModel = mFastFloat;
-  jsonfromresults: boolean = false): IDocDictDynArray;
+  jsonfromresults: boolean = false): IDocDicts;
 
 /// create a self-owned IDocDict from a set of key,value pairs
 function DocDict(const keyvalues: array of const;
@@ -10569,7 +10571,7 @@ type
     function Exists(const value: RawUtf8; caseinsensitive: boolean): boolean; overload;
     function Insert(position: integer; const value: variant): integer; overload;
     function Insert(position: integer; const value: RawUtf8): integer; overload;
-    function ObjectsDictDynArray: IDocDictDynArray;
+    function ObjectsDicts: IDocDicts;
     function Pop(position: integer): variant;
     function PopItem(out value: variant; position: integer): boolean; overload;
     function PopItem(out value: IDocDict; position: integer): boolean; overload;
@@ -10953,7 +10955,7 @@ begin
   result := d;
 end;
 
-function DocListFrom(const dictarray: IDocDictDynArray): IDocList;
+function DocListFrom(const dictarray: IDocDicts): IDocList;
 var
   i: PtrInt;
 begin
@@ -10980,7 +10982,7 @@ begin
 end;
 
 function DocDictDynArray(const json: RawUtf8;
-  model: TDocVariantModel; jsonfromresults: boolean): IDocDictDynArray;
+  model: TDocVariantModel; jsonfromresults: boolean): IDocDicts;
 var
   main: TDocVariantData;
   n, i: PtrInt;
@@ -11486,7 +11488,7 @@ begin
   result := fValue^.AddItemText(value, position);
 end;
 
-function TDocList.ObjectsDictDynArray: IDocDictDynArray;
+function TDocList.ObjectsDicts: IDocDicts;
 var
   n, i: PtrInt;
   p: PVariant;

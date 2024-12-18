@@ -4037,7 +4037,7 @@ var
   l, l2, l3: IDocList;
   i, n, num: integer;
   d, d2, d3: IDocDict;
-  darr: IDocDictDynArray;
+  darr: IDocDicts;
   json, json2, json3, key: RawUtf8;
   one: variant;
   any: TDocAnyTest;
@@ -4321,7 +4321,7 @@ begin
   l2 := DocList('[{b:1},{b:2},{b:3}]');
   CheckEqual(d.Json, '{"a":2,"b":4}');
   CheckEqual(l2.len, 3);
-  darr := l2.ObjectsDictDynArray;
+  darr := l2.ObjectsDicts;
   CheckEqual(length(darr), 3, 'darr');
   n := 0;
   for i := 0 to high(darr) do
