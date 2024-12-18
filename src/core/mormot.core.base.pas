@@ -1942,7 +1942,8 @@ function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
 
 type
   /// used by PtrArrayDelete() to finalize an item
-  TPtrArrayKind = (pakPointer, pakClass, pakClassSafe, pakInterface);
+  TPtrArrayKind = (
+    pakPointer, pakClass, pakClassSafe, pakInterface, pakInterfaceSafe);
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
 // - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
@@ -2147,7 +2148,8 @@ function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrIn
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - do nothing if the item is not found in the dynamic array
-procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt); overload;
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt;
+  const aContinueOnException: boolean = false; aCount: PInteger = nil); overload;
   {$ifdef HASSAFEINLINE}inline;{$endif}
 
 
@@ -7968,6 +7970,8 @@ begin
       FreeAndNilSafe(v^[0]);
     pakInterface:
       IInterface(v^[0])._Release;
+    pakInterfaceSafe:
+      InterfaceNilSafe(v^[0]);
   end;
   dec(n);
   if n > aIndex then
@@ -8301,9 +8305,16 @@ begin
     length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem));
 end;
 
-procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt);
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt;
+  const aContinueOnException: boolean; aCount: PInteger);
+var
+  pak: TPtrArrayKind;
 begin
-  PtrArrayDelete(aInterfaceArray, aItemIndex, nil, pakInterface);
+  if aContinueOnException then
+    pak := pakInterfaceSafe
+  else
+    pak := pakInterface;
+  PtrArrayDelete(aInterfaceArray, aItemIndex, aCount, pak);
 end;
 
 function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt;
