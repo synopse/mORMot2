@@ -1404,7 +1404,7 @@ begin
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret');
       try
-        hpc2 := THttpPeerCryptHook.Create('secret');
+        hpc2 := THttpPeerCryptHook.Create('secret', nil, nil);
         try
           hpc2.fSettings := hps;
           hpc2.AfterSettings;

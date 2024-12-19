@@ -51,6 +51,7 @@ uses
   mormot.crypt.x509,
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
+  mormot.tools.mget        in '..\src\tools\mget\mormot.tools.mget.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',

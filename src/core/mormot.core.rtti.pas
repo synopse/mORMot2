@@ -2568,8 +2568,7 @@ type
     // initialize from fProps, with no associated RTTI - and calls DoRegister()
     // - will create a "fake" rkRecord/rkDynArray PRttiInfo (TypeName may be '')
     procedure NoRttiSetAndRegister(ParserType: TRttiParserType;
-      const TypeName: RawUtf8; DynArrayElemType: TRttiCustom = nil;
-      NoRegister: boolean = false);
+      const TypeName: RawUtf8; NoRegister: boolean = false);
     // called by ValueFinalize() for dynamic array defined from text
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
     /// initialize this Value process for Parser and Parser Complex kinds

@@ -905,7 +905,7 @@ begin
       if result = nil then
       begin
         n := c.Names[i];
-        if IsContentTypeJsonU(n) or
+        if IsContentTypeJson(pointer(n)) or
            (n = '*/*') or
            IdemPropNameU(n, 'application/jwt') then // exists in the wild :(
           if _SafeObject(c.Values[i], o) then
@@ -1107,7 +1107,7 @@ begin
   result := true;
   if Data.GetAsArray('produces', produces) then
     for i := 0 to produces^.Count - 1 do
-      if IsContentTypeJsonU(VariantToUtf8(produces^.Values[i])) then
+      if IsContentTypeJson(pointer(VariantToUtf8(produces^.Values[i]))) then
         exit;
   result := false;
 end;

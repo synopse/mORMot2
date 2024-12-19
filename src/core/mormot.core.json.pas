@@ -5539,7 +5539,9 @@ begin
   if Ctxt.Info.ArrayRtti = nil then
   begin
     // as in mORMot 1: static array with no RTTI at all, as a hexadecimal string
-    Ctxt.W.AddBinToHex(Data,  Ctxt.Info.Size, {lower=}true, {quote=}'"');
+    Ctxt.W.AddComma;
+    Ctxt.W.AddBinToHex(Data,  Ctxt.Info.Size, {lower=}true);
+    Ctxt.W.AddComma;
     exit;
   end;
   {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
@@ -11985,7 +11987,7 @@ begin
   result.fCache.NewInterface := @_New_ISerializable;
   obj := Rtti.RegisterClass(self) as TRttiJson;
   obj.fCache.SerializableInterface := result;
-  if not InheritsFrom(TSerializablePersistent) then
+  if not InheritsFrom(TInterfacedSerializableAutoCreateFields) then
   begin // no RTTI to serialize published properties
     TOnRttiJsonRead(obj.fJsonReader)  := JsonReaderClass;
     TOnRttiJsonWrite(obj.fJsonWriter) := JsonWriterClass;

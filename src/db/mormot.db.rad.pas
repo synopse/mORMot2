@@ -110,6 +110,9 @@ function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
 // - RTL BCDToStr() is slower, and not consistent between Delphi and FPC
 function BcdToString(const AValue: TBcd): string;
 
+/// append a TBcd value as text to the output buffer
+// - emit a JSON-compatible floating point number text, with DecimalSeparator='.'
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 
 
 { ************ mormot.db.sql Abstract Connection for DB.pas TDataSet }
