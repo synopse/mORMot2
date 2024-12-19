@@ -139,6 +139,9 @@ type
     wraNegotiate,
     wraBearer);
 
+  /// pointer to some extended options for HTTP clients
+  PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
+
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
   // the actual mormot.net.http's THttpRequest implementation class
@@ -160,7 +163,7 @@ type
     // - otherwise, will use this value as explicit proxy server name
     // - used only during initial connection
     Proxy: RawUtf8;
-    /// the timeout to be used for the whole connection, as set in Create()
+    /// the timeout to be used for the whole connection, as supplied to Create()
     CreateTimeoutMS: integer;
     /// allow HTTP/HTTPS authentication to take place at server request
     Auth: record
@@ -188,9 +191,9 @@ type
     procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8);
     /// setup web authentication using a given Bearer in the request headers
     procedure AuthorizeBearer(const Value: SpiUtf8);
+    /// compare the Auth fields, depending on their scheme
+    function SameAuth(Another: PHttpRequestExtendedOptions): boolean;
   end;
-  /// pointer to some extended options for HTTP clients
-  PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
@@ -302,8 +305,9 @@ type
     /// optional callback if TFileStreamEx.Create(FileName, Mode) is not good enough
     OnStreamCreate: TOnStreamCreate;
     /// optional callback event raised during WGet() process
+    // - if OutSteps: TWGetSteps field is not enough
     // - alternative for business logic tracking: the OnProgress callback is
-    // more about human interaction in GUI or console
+    // more about periodic human interaction in GUI or console
     OnStep: TOnWGetStep;
     /// optional callback to allow an alternate download method
     // - can be used for a local peer-to-peer download cache via THttpPeerCache
@@ -348,9 +352,10 @@ type
     // each packet, whereas this property is about the global time elapsed
     // during the whole download process
     TimeOutSec: integer;
-    /// when WGet() has been called, contains all the steps involed during the
-    // process
+    /// when WGet() has been called, contains all the steps involved
     OutSteps: TWGetSteps;
+    /// to optionally log all SetStep() content during process
+    LogSteps: TSynLogProc;
     /// initialize the default parameters - reset all fields to 0 / nil / ''
     procedure Clear;
     /// method used internally during process to notify Steps and OnStep()
@@ -404,6 +409,9 @@ type
     /// notify the alternate download implementation that OnDownloading() failed
     // - e.g. THttpPeerCache will abort publishing this partial file
     procedure OnDownloadingFailed(OnDownloadingID: THttpPartialID);
+    /// check if the network interface defined in Settings did actually change
+    // - you may want to recreate the alternate downloading instance
+    function NetworkInterfaceChanged: boolean;
   end;
 
   /// internal low-level execution context for THttpClientSocket.Request
@@ -496,6 +504,11 @@ type
     // - as used e.g. by TSimpleHttpClient
     constructor OpenOptions(const aUri: TUri;
       var aOptions: THttpRequestExtendedOptions);
+    /// compare TUri and its options with the actual connection
+    // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
+    // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
+    function SameOpenOptions(const aUri: TUri;
+      const aOptions: THttpRequestExtendedOptions): boolean; virtual;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
@@ -610,6 +623,10 @@ type
     /// the effective 'Location:' URI after 3xx redirection(s) of Request()
     property Redirected: RawUtf8
       read fRedirected;
+    /// optional Authentication Scheme
+    // - may still be wraNone if OnAuthorize has been manually set
+    property AuthScheme: THttpRequestAuthentication
+      read fExtendedOptions.Auth.Scheme;
     /// optional Authorization: Bearer header value
     property AuthBearer: SpiUtf8
       read fExtendedOptions.Auth.Token write SetAuthBearer;
@@ -1494,6 +1511,9 @@ type
     /// check if the client is actually connected to the server
     // - return '' on success, or a text error (typically an Exception.Message)
     function Connected: string;
+    /// set Http.Options^.Auth.Token/Scheme with a given wraBearer token
+    // - will disable authentication if Token = ''
+    procedure SetBearer(const Token: SpiUtf8);
     /// Request execution, with no JSON parsing using RTTI
     procedure Request(const Method, Action: RawUtf8;
       const CustomError: TOnJsonClientError = nil); overload;
@@ -1559,7 +1579,7 @@ type
       read GetUrlEncoder write SetUrlEncoder;
   end;
 
-  /// abstract thread-safe generic JSON client class
+  /// abstract thread-safe generic JSON client class, implementing IJsonClient
   // - will implement all JSON and RTTI featured methods, without any actual
   // HTTP connection, which is abstracted to Connected and RawRequest() methods
   TJsonClientAbstract = class(TInterfacedObjectLocked, IJsonClient)
@@ -1589,6 +1609,7 @@ type
     function GetDefaultHeaders: RawUtf8; virtual; abstract;
     procedure SetDefaultHeaders(const Value: RawUtf8); virtual; abstract;
     function Http: IHttpClient; virtual; abstract;
+    procedure SetBearer(const Token: SpiUtf8); virtual;
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
@@ -1636,7 +1657,7 @@ type
       read fOnLog write fOnLog;
   end;
 
-  /// thread-safe generic JSON client class over HTTP
+  /// thread-safe generic JSON client class over HTTP, implementing IJsonClient
   TJsonClient = class(TJsonClientAbstract)
   protected
     fHttp: IHttpClient;
@@ -2041,10 +2062,19 @@ end;
 
 procedure THttpClientSocketWGet.SetStep(
   Step: TWGetStep; const Context: array of const);
+var
+  txt: RawUtf8;
 begin
   include(OutSteps, Step);
-  if Assigned(OnStep) then
-    OnStep(Step, Make(Context));
+  if Assigned(OnStep) or
+     Assigned(LogSteps) then
+  begin
+    txt := Make(Context);
+    if Assigned(OnStep) then
+      OnStep(Step, txt);
+    if Assigned(LogSteps) then
+      LogSteps(sllCustom1, 'WGet %: %', [ToText(Step)^, txt]);
+  end;
 end;
 
 
@@ -2220,6 +2250,22 @@ begin
   // actually connect to the server (inlined TCrtSock.Open)
   OpenBind(aUri.Server, aUri.Port, {bind=}false, aUri.Https, aUri.Layer);
   aOptions.TLS := TLS; // copy back Peer information after connection
+end;
+
+function THttpClientSocket.SameOpenOptions(const aUri: TUri;
+  const aOptions: THttpRequestExtendedOptions): boolean;
+var
+  tun: TUri;
+begin
+  result := IdemPChar(pointer(aUri.Scheme), 'HTTP') and
+            aUri.Same(Server, Port, TLS.Enabled) and
+            SameNetTlsContext(TLS, aOptions.TLS) and
+            fExtendedOptions.SameAuth(@aOptions.Auth);
+  if result then
+    if tun.From(aOptions.Proxy) then
+      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
+    else
+      result := (Tunnel.Server = '');
 end;
 
 procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
@@ -3188,6 +3234,22 @@ begin
     Auth.Scheme := wraBearer;
 end;
 
+function THttpRequestExtendedOptions.SameAuth(
+  Another: PHttpRequestExtendedOptions): boolean;
+begin
+  result := (Another <> nil) and
+            (Auth.Scheme = Another^.Auth.Scheme);
+  if result then
+    case Auth.Scheme of
+      wraBasic,
+      wraDigest,
+      wraNegotiate:
+        result := (Auth.UserName = Another^.Auth.UserName) and
+                  (Auth.Password = Another^.Auth.Password);
+      wraBearer:
+        result := (Auth.Token = Another^.Auth.Token);
+    end;
+end;
 
 function ToText(wra: THttpRequestAuthentication): PShortString;
 begin
@@ -4527,6 +4589,23 @@ end;
 procedure TJsonClientAbstract.SetUrlEncoder(Value: TUrlEncoder);
 begin
   fUrlEncoder := Value;
+end;
+
+procedure TJsonClientAbstract.SetBearer(const Token: SpiUtf8);
+var
+  h: IHttpClient;
+  o: PHttpRequestExtendedOptions;
+begin
+  h := Http;
+  if not Assigned(h) then
+    exit;
+  o := h.Options;
+  if not Assigned(o) then
+    exit;
+  o^.Auth.Scheme := wraBearer;
+  if Token = '' then
+    o^.Auth.Scheme := wraNone; // disable any previous token
+  o^.Auth.Token := Token;
 end;
 
 const
