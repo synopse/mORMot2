@@ -3459,7 +3459,8 @@ end;
      jsontools in 51.41ms, 38.1 MB/s
      SuperObject in 187.79ms, 10.4 MB/s
 
-  - Test is to parse our 1 MB People.json array of 8227 TOrmPeople objects.
+  - Test is to parse our 1 MB People.json array of 8227 TOrmPeople objects,
+    so jpoDynArrayGuessCount is actually slightly slower.
   - IsValidUtf8() has very efficient AVX2 asm on FPC + x86_64.
   - TDocVariant dvoInternNames will recognize and intern the nested object
     field names, so memory consumption is likely to be reduced and unfragmented.
@@ -3594,6 +3595,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant', c, len, @timer, ONLYLOG);
+  // TDocVariant in 726.51ms i.e. 2.1M/s, 269.8 MB/s (Core i5 13400 FPC x86_64)
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3602,6 +3604,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant no guess', c, len, @timer, ONLYLOG);
+  // TDocVariant no guess in 691.16ms i.e. 2.2M/s, 283.6 MB/s
   CheckEqual(DocVariantType.InternNames.Count, interned, 'no intern');
   DocVariantType.InternNames.Clean;
   timer.Start;
@@ -3612,6 +3615,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant dvoIntern', c, len, @timer, ONLYLOG);
+  // TDocVariant dvoIntern in 695.79ms i.e. 2.2M/s, 281.8 MB/s
   CheckEqual(DocVariantType.InternNames.Count - interned, 6, 'intern');
   CheckEqual(DocVariantType.InternNames.Clean, 6, 'clean');
   CheckEqual(DocVariantType.InternNames.Count, interned, 'cleaned');
@@ -3626,6 +3630,7 @@ begin
       Check(lennexp < length(people), 'notexpanded');
     end;
     NotifyTestSpeed('TOrmTableJson save', c, lennexp * ITER, @timer, ONLYLOG);
+    // TOrmTableJson save in 104.15ms i.e. 15M/s, 828.1 MB/s
   finally
     table.Free;
   end;
@@ -3640,6 +3645,7 @@ begin
     end;
   end;
   NotifyTestSpeed('TOrmTableJson exp', c, len, @timer, ONLYLOG);
+  // TOrmTableJson exp in 164.82ms i.e. 9.5M/s, 1.1 GB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3651,6 +3657,7 @@ begin
     end;
   end;
   NotifyTestSpeed('TOrmTableJson not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // TOrmTableJson not exp in 89.90ms i.e. 17.4M/s, 0.9 GB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3659,6 +3666,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant FromResults exp', c, len, @timer, ONLYLOG);
+  // TDocVariant FromResults exp in 311.52ms i.e. 5M/s, 629.4 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3667,6 +3675,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant FromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // TDocVariant FromResults not exp in 242.29ms i.e. 6.4M/s, 355.9 MB/s
   Check(dv.InitArrayFromResults(people));
   CheckEqual(peoplehash, Hash32(dv.ToJson));
   dv.Clear; // to reuse dv
@@ -3676,19 +3685,28 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
-    // default serialization (with ID=0) TOrmPeopleObjArray in 79.14ms, 247.6 MB/s
     Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray)));
-    Check(length(rec) = count);
+    CheckEqual(length(rec), count);
   end;
-  NotifyTestSpeed('DynArrayLoadJson exp', c, len, @timer, ONLYLOG);
+  NotifyTestSpeed('DynArrayLoadJson exp no guess', c, len, @timer, ONLYLOG);
+  // DynArrayLoadJson exp no guess in 303.41ms i.e. 5.1M/s, 646.2 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
-    // default serialization (with ID=0) TOrmPeopleObjArray in 79.14ms, 247.6 MB/s
+    Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray),
+      {opt=}nil, {tolerant=}true, {int=}nil, {guess=}true));
+    CheckEqual(length(rec), count);
+  end;
+  NotifyTestSpeed('DynArrayLoadJson exp guess', c, len, @timer, ONLYLOG);
+  // DynArrayLoadJson exp guess in 313.06ms i.e. 5M/s, 626.3 MB/s
+  timer.Start;
+  for i := 1 to ITER do
+  begin
     Check(DynArrayLoadJson(rec, notexpanded, TypeInfo(TRecordPeopleDynArray)));
-    Check(length(rec) = count);
+    CheckEqual(length(rec), count);
   end;
   NotifyTestSpeed('DynArrayLoadJson non exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // DynArrayLoadJson non exp in 221.33ms i.e. 7M/s, 389.6 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3698,6 +3716,7 @@ begin
     ObjArrayClear(objarr);
   end;
   NotifyTestSpeed('TOrmPeopleObjArray exp', c, len, @timer, ONLYLOG);
+  // TOrmPeopleObjArray exp in 421.65ms i.e. 3.7M/s, 465 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3706,6 +3725,7 @@ begin
     ObjArrayClear(objarr);
   end;
   NotifyTestSpeed('TOrmPeopleObjArray non exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // TOrmPeopleObjArray non exp in 266.61ms i.e. 5.8M/s, 323.5 MB/s
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower
@@ -3720,6 +3740,7 @@ begin
       end;
   end;
   NotifyTestSpeed('fpjson', c div 10, len div 10, @timer, ONLYLOG);
+  // fpjson in 385.54ms i.e. 416.7K/s, 50.8 MB/s
   {$endif JSONBENCHMARK_FPJSON}
   {$ifdef JSONBENCHMARK_JSONTOOLS}
   timer.Start;

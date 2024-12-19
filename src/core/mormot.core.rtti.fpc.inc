@@ -355,12 +355,12 @@ end;
 
 
 const
+  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
+  UTF8_NAME: string[7] = 'RawUtf8';
   // FPC RTTI names integer type as "longint"
   INTEGER_NAME:  string[7] = 'Integer';
   // FPC RTTI names cardinal type as "longword"
   CARDINAL_NAME: string[8] = 'Cardinal';
-  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
-  UTF8_NAME: string[7] = 'RawUtf8';
 
 function TRttiInfo.Name: PShortString;
 begin
