@@ -48,26 +48,59 @@ type
     fPeerSettings: THttpPeerCacheSettings;
     fHashAlgo: TMGetProcessHash;
     fPeerRequest: TWGetAlternateOptions;
-    fLimitBandwidthMB, fWholeRequestTimeoutSec, fTcpTimeoutSec: integer;
+    fLimitBandwidthMB, fWholeRequestTimeoutSec: integer;
     fHeader, fHashValue: RawUtf8;
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
+    fOnProgress: TOnStreamProgress;
+    fOnStep: TOnWGetStep;
+    fOutSteps: TWGetSteps;
     fPeerCache: IWGetAlternate;
+    function GetTcpTimeoutSec: integer;
+    procedure SetTcpTimeoutSec(Seconds: integer);
+    // could be overriden to change the behavior of this class
+    procedure PeerCacheStarted; virtual;
+    procedure PeerCacheStopping; virtual;
+    procedure BeforeClientConnect(var Uri: TUri); virtual;
+    procedure AfterClientConnect; virtual;
+    procedure BeforeClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet); virtual;
+    procedure AfterClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet); virtual;
   public
     // input parameters (e.g. from command line) for the MGet process
-    Silent, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
-    CacheFolder, TlsCertFile, DestFile: TFileName;
+    Silent, NoResume, Cache, Peer, LogSteps, TrackNetwork: boolean;
+    CacheFolder, DestFile: TFileName;
+    Options: THttpRequestExtendedOptions;
     Log: TSynLogClass;
-    /// could be run once input parameters are set, before Execute() is called
-    // - will launch THttpPeerCache background process, for instance
-    // - do nothing if already already called
-    procedure Start;
-    /// this is the main processing method
-    function Execute(const Url: RawUtf8): TFileName;
+    ServerTls, ClientTls: TNetTlsContext;
+    /// initialize this instance with the default values
+    constructor Create; override;
     /// finalize this instance
     destructor Destroy; override;
+    /// could be run once input parameters are set, before Execute() is called
+    // - will launch THttpPeerCache background process, and re-create it if
+    // the network layout did change (if TrackNetwork is true)
+    // - do nothing if Peer is false, or if the THttpPeerCache instance is fine
+    procedure StartPeerCache;
+    /// this is the main processing method
+    function Execute(const Url: RawUtf8): TFileName;
     /// write some message to the console, if Silent flag is false
     procedure ToConsole(const Fmt: RawUtf8; const Args: array of const);
+    /// access to the associated THttpPeerCache instance
+    // - a single peer-cache run in the background between Execute() calls
+    property PeerCache: IWGetAlternate
+      read fPeerCache;
+    /// optional callback event called during download process
+    property OnProgress: TOnStreamProgress
+      read fOnProgress write fOnProgress;
+    /// optional callback event raised during WGet() process
+    // - if OutSteps: TWGetSteps field and LogSteps boolean flag are not enough
+    // - alternative for business logic tracking: the OnProgress callback is
+    // more about periodic human interaction in GUI or console
+    property OnStep: TOnWGetStep
+      read fOnStep write fOnStep;
+    /// after Execute(), contains a set of all processed steps
+    property OutSteps: TWGetSteps
+      read fOutSteps;
   published
     /// the settings used if Peer is true
     property PeerSettings: THttpPeerCacheSettings
@@ -75,6 +108,10 @@ type
     // following properties will be published as command line switches
     property customHttpHeader: RawUtf8
       read fHeader write fHeader;
+    property proxyUri: RawUtf8
+      read Options.Proxy write Options.Proxy;
+    property redirectMax: integer
+      read Options.RedirectMax write Options.RedirectMax;
     property hashAlgo: TMGetProcessHash
       read fHashAlgo write fHashAlgo;
     property hashValue: RawUtf8
@@ -82,7 +119,7 @@ type
     property limitBandwidthMB: integer
       read fLimitBandwidthMB write fLimitBandwidthMB;
     property tcpTimeoutSec: integer
-      read fTcpTimeoutSec write fTcpTimeoutSec;
+      read GetTcpTimeoutSec write SetTcpTimeoutSec;
     property wholeRequestTimeoutSec: integer
       read fWholeRequestTimeoutSec write fWholeRequestTimeoutSec;
     property peerSecret: SpiUtf8
@@ -120,22 +157,97 @@ end;
 
 { TMGetProcess }
 
-procedure TMGetProcess.Start;
+function TMGetProcess.GetTcpTimeoutSec: integer;
 begin
-  if Peer and
-     (fPeerCache = nil) then // reuse THttpPeerCache instance between calls
-    with Log.Enter(self, 'Start: THttpPeerCache') do
+  result := Options.CreateTimeoutMS * 1000;
+end;
+
+procedure TMGetProcess.SetTcpTimeoutSec(Seconds: integer);
+begin
+  Options.CreateTimeoutMS := Seconds div 1000;
+end;
+
+constructor TMGetProcess.Create;
+begin
+  inherited Create;
+  Options.RedirectMax := 5;
+end;
+
+destructor TMGetProcess.Destroy;
+begin
+  inherited Destroy;
+  fClient.Free;
+  FillZero(fPeerSecret);
+  FillZero(fPeerSecretHexa);
+  if fPeerCache <> nil then
+    PeerCacheStopping;
+end;
+
+procedure TMGetProcess.StartPeerCache;
+var
+  l: ISynLog;
+begin
+  if not Peer then
+    exit;
+  // first check if the network interface changed
+  if fPeerCache <> nil then
+    if TrackNetwork and
+       fPeerCache.NetworkInterfaceChanged then
     begin
-      if (fPeerSecret = '') and
-         (fPeerSecretHexa <> '') then
-        fPeerSecret := HexToBin(fPeerSecretHexa);
-      try
-        fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
-        // by now, THttpAsyncServer is incompatible with rfProgressiveStatic
-      except
-        Peer := false; // disable --peer if something is wrong
-      end;
+      l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
+      PeerCacheStopping;
+      fPeerCache := nil; // force re-create just below
     end;
+  // (re)create the peer-cache background process if necessary
+  if fPeerCache = nil then
+  begin
+    l := Log.Enter(self, 'StartPeerCache: THttpPeerCache.Create');
+    if (fPeerSecret = '') and
+       (fPeerSecretHexa <> '') then
+      fPeerSecret := HexToBin(fPeerSecretHexa);
+    try
+      fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
+        nil, 2, self.Log, @ServerTls, @ClientTls);
+      // THttpAsyncServer could also be tried with rfProgressiveStatic
+      PeerCacheStarted; // may be overriden
+    except
+      // don't disable Peer: we would try on next Execute()
+      on E: Exception do
+        if Assigned(l) then
+          l.Log(sllTrace,
+            'StartPeerCache raised %: will retry next time', [E.ClassType]);
+    end;
+  end;
+end;
+
+procedure TMGetProcess.PeerCacheStarted;
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.PeerCacheStopping;
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.BeforeClientConnect(var Uri: TUri);
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.AfterClientConnect;
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.BeforeClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet);
+begin
+  // do nothing
+end;
+
+procedure TMGetProcess.AfterClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet);
+begin
+  // do nothing
 end;
 
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
@@ -148,7 +260,8 @@ var
 begin
   // prepare the process
   l := Log.Enter('Execute %', [Url], self);
-  Start; // start e.g. background THttpPeerCache process
+  // (re)start background THttpPeerCache process if needed
+  StartPeerCache;
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
   if not Split(Url, '@', h, u) or
      (GuessAlgo(h) = gphAutoDetect) or
@@ -165,18 +278,27 @@ begin
     else if Peer then
       algo := gphSha256;
   // set the WGet additional parameters
+  fOutSteps := [];
   wget.Clear;
   wget.KeepAlive := 30000;
   wget.Resume := not NoResume;
   wget.Header := fHeader;
   wget.HashFromServer := (h = '') and
                          (algo <> gphAutoDetect);
+  if Assigned(fOnProgress) then
+    wget.OnProgress := fOnProgress; // periodic human friendly state change
+  if Assigned(fOnStep) then
+    wget.OnStep := fOnStep;         // logical state change
+  if LogSteps and
+     (Log <> nil) then
+    wget.LogSteps := Log.DoLog; // may be in complement to OnStep
   if algo <> gphAutoDetect then
   begin
     wget.Hasher := HASH_STREAMREDIRECT[HASH_ALGO[algo]];
     wget.Hash := h;
     if not Silent then
-      wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
+      if not Assigned(wget.OnProgress) then
+        wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
   end;
   wget.LimitBandwidth := fLimitBandwidthMB shl 20;
   wget.TimeOutSec := fWholeRequestTimeoutSec;
@@ -193,28 +315,23 @@ begin
   if not uri.From(u) then
     exit;
   if fClient <> nil then
-    if (fClient.TLS.Enabled <> uri.Https) or
-       (fClient.Server <> uri.Server) or
-       (fClient.Port <> uri.Port) then // need a new connection
+    if not fClient.SameOpenOptions(uri, Options) then // need a new connection
       FreeAndNil(fClient);
-  if fClient = nil then  // try to reuse an existing connection
+  if fClient = nil then  // if we can't reuse the existing connection
   begin
-    fClient := THttpClientSocket.Create(fTcpTimeoutSec * 1000);
+    BeforeClientConnect(uri);
+    fClient := THttpClientSocket.OpenOptions(uri, Options);
     if Log <> nil then
       fClient.OnLog := Log.DoLog;
-    fClient.TLS.IgnoreCertificateErrors := TlsIgnoreErrors;
-    fClient.TLS.CertificateFile := TlsCertFile;
-    fClient.OpenBind(uri.Server, uri.Port, {bind=}false, uri.Https);
+    AfterClientConnect;
   end;
+  BeforeClientGet(uri, wget);
   result := fClient.WGet(uri.Address, DestFile, wget);
+  AfterClientGet(uri, wget);
+  fOutSteps := wget.OutSteps;
   if Assigned(l) then
-    l.Log(sllTrace, 'Execute: WGet=%', [result], self);
-end;
-
-destructor TMGetProcess.Destroy;
-begin
-  inherited Destroy;
-  fClient.Free;
+    l.Log(sllTrace, 'Execute: WGet=% [%]',
+      [result, GetSetName(TypeInfo(TWGetSteps), fOutSteps, {trim=}true)], self);
 end;
 
 procedure TMGetProcess.ToConsole(const Fmt: RawUtf8;
