@@ -2364,12 +2364,12 @@ function JsonToXML(const Json: RawUtf8; const Header: RawUtf8 = XMLUTF8_HEADER;
 /// should be called by T*AutoCreateFields constructors
 // - will also register this class type, if needed, so RegisterClass() is
 // redundant to this method
-function AutoCreateFields(ObjectInstance: TObject): TRttiJson;
+procedure AutoCreateFields(ObjectInstance: TObject);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// should be called by T*AutoCreateFields destructors
 // - constructor should have called AutoCreateFields()
-procedure AutoDestroyFields(ObjectInstance: TObject; Info: TRttiJson = nil);
+procedure AutoDestroyFields(ObjectInstance: TObject);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// internal function called by AutoCreateFields() when inlined
@@ -11829,21 +11829,20 @@ begin // sub procedure for smaller code generation in AutoCreateFields/Create
   result := Rtti.RegisterAutoCreateFieldsClass(PClass(ObjectInstance)^) as TRttiJson;
 end;
 
-function AutoCreateFields(ObjectInstance: TObject): TRttiJson;
+procedure AutoCreateFields(ObjectInstance: TObject);
 var
-  n: integer;
   p: PPRttiCustomProp;
+  n: integer;
 begin
-  // inlined Rtti.RegisterClass()
   {$ifdef NOPATCHVMT}
-  result := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
+  p := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
   {$else}
-  result := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  p := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^; // = FindClass()
   {$endif NOPATCHVMT}
-  if (result = nil) or
-     not (rcfAutoCreateFields in result.Flags) then
-    result := DoRegisterAutoCreateFields(ObjectInstance);
-  p := pointer(result.fAutoCreateInstances);
+  if (p = nil) or
+     not (rcfAutoCreateFields in TRttiJson(p).Flags) then
+    p := pointer(DoRegisterAutoCreateFields(ObjectInstance));
+  p := pointer(TRttiJson(p).fAutoCreateInstances);
   if p = nil then
     exit;
   // create all published class (or IDocList/IDocDict) fields
@@ -11857,43 +11856,40 @@ begin
   until n = 0;
 end;
 
-procedure AutoDestroyFields(ObjectInstance: TObject; Info: TRttiJson);
+procedure AutoDestroyFields(ObjectInstance: TObject);
 var
-  n: integer;
+  r: TRttiJson;
   p: PPRttiCustomProp;
-  arr: pointer;
-  o: TObject;
+  v: pointer;
+  n: integer;
 begin
-  if Info = nil then
-    {$ifdef NOPATCHVMT}
-    Info := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
-    {$else}
-    Info := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
-    {$endif NOPATCHVMT}
+  {$ifdef NOPATCHVMT}
+  r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
+  {$else}
+  r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  {$endif NOPATCHVMT}
   // free all published class fields
-  p := pointer(Info.fAutoDestroyClasses);
+  p := pointer(r.fAutoDestroyClasses);
   if p <> nil then
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
     repeat
-      o := PObject(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
-      if o <> nil then
-        // inlined o.Free
-        o.Destroy;
+      v := PObject(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
+      if v <> nil then // inlined v.Free
+        TObject(v).Destroy;
       inc(p);
       dec(n);
     until n = 0;
   end;
   // release all published T*ObjArray fields
-  p := pointer(Info.fAutoCreateObjArrays);
+  p := pointer(r.fAutoCreateObjArrays);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
-    arr := PPointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
-    if arr <> nil then
-      // inlined ObjArrayClear()
-      RawObjectsClear(arr, PDALen(PAnsiChar(arr) - _DALEN)^ + _DAOFF);
+    v := PPointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
+    if v <> nil then // inlined ObjArrayClear()
+      RawObjectsClear(v, PDALen(PAnsiChar(v) - _DALEN)^ + _DAOFF);
     inc(p);
     dec(n);
   until n = 0;
