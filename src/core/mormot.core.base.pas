@@ -4646,7 +4646,7 @@ begin
   if NoDuplicates then
   begin
     result := Hash128Index(pointer(guids), length(guids), @guid);
-    if result>=0 then
+    if result >= 0 then
       exit;
   end;
   result := length(guids);
