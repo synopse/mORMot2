@@ -6156,12 +6156,6 @@ function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
 begin
   if aCount < 0 then
     aCount := length(TByteDynArray(aItems));
-  if aCount = 0 then
-  begin
-    TSynVarData(aDest).VType := varNull;
-    result := nil;
-    exit;
-  end;
   {%H-}aDest.Init(aOptions, dvArray);
   aDest.VCount := aCount;
   SetLength(aDest.VValue, aCount);

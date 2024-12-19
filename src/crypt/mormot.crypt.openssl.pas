@@ -2770,8 +2770,6 @@ end;
 
 function CanVerify(auth: PX509; usage: TX509Usage; selfsigned: boolean;
   IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
-var
-  na, nb: TDateTime;
 begin
   if auth = nil then
     result := cvUnknownAuthority
@@ -2783,14 +2781,7 @@ begin
     result := cvValidSigned;
     if cvDeprecatedAuthority in IgnoreError then
       exit;
-    if TimeUtc = 0 then
-      TimeUtc := NowUtc;
-    na := auth.NotAfter; // 0 if ASN1_TIME_to_tm() not supported by old OpenSSL
-    nb := auth.NotBefore;
-    if ((na <> 0) and
-        (TimeUtc > na + CERT_DEPRECATION_THRESHOLD)) or
-       ((nb <> 0) and
-        (TimeUtc + CERT_DEPRECATION_THRESHOLD < nb)) then
+    if not auth^.IsValidDate(TimeUtc) then
       result := cvDeprecatedAuthority;
   end;
 end;

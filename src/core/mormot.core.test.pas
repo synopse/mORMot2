@@ -356,13 +356,13 @@ type
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
   protected
-    /// any number not null assigned to this field will display a "../sec" stat
     fTestCaseClass: array of TSynTestCaseClass;
     fAssertions: integer;
     fAssertionsFailed: integer;
+    fSafe: TSynLocker;
+    /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
     fCurrentMethodInfo: PSynTestMethodInfo;
-    fSafe: TSynLocker;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
     fNotifyProgressLineLen: integer;
@@ -907,7 +907,7 @@ begin
   R := tmp.InitRandom(CharCount);
   FastSetString(RawUtf8(result), CharCount);
   for i := 0 to CharCount - 1 do
-    PByteArray(result)[i] := 32 + R[i] mod 94;
+    PByteArray(result)[i] := 32 + R[i] mod 95; // may include tilde #$7e char
   tmp.Done;
 end;
 
