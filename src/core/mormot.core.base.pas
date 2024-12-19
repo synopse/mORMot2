@@ -828,7 +828,7 @@ procedure FastAssignNew(var d; s: pointer = nil);
 /// internal function to assign any constant or ref-counted AnsiString/RawUtf8
 // - caller should have tested that pointer(d) <> nil
 procedure FastAssignNewNotVoid(var d; s: pointer); overload;
-  {$ifndef FPC_CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifndef FPC_CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// internal function used by FastSetString/FastSetStringCP
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
@@ -4738,7 +4738,7 @@ begin // O(1) branchless algorithm for 32-bit values
   result := (result or (result shr 16)) + 1;
 end;
 
-{$ifndef FPC_ASMX64}
+{$ifndef FPC_CPUX64} // dedicated asm on x86_64 only
 
 procedure FastAssignNew(var d; s: pointer);
 var
@@ -4766,7 +4766,7 @@ begin
     FreeMem(sr);
 end;
 
-{$endif FPC_ASMX64}
+{$endif FPC_CPUX64}
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
 var
