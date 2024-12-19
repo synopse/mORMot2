@@ -434,8 +434,9 @@ type
 function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 var
   info: ^TRecordEnhancedTypeData;
+  r: PRttiRecordAllField;
   p: PRecordTypeField;
-  f: PtrInt;
+  f: integer;
 begin
   result := nil; // don't reallocate previous answer
   info := pointer(GetTypeData(@self));
@@ -444,24 +445,18 @@ begin
   inc(PByte(info), info^.NumOps * SizeOf(pointer));
   SetLength(result, info^.AllCount);
   p := @info^.AllFields[0];
-  for f := 0 to info^.AllCount - 1 do
-    begin
-      with result[f] do
-      begin
-        TypeInfo := pointer(p^.Field.TypeRef);
-        if TypeInfo = nil then
-        begin
-          // this field has no RTTI -> we can't trust it for serialization
-          result := nil;
-          exit;
-        end;
-        TypeInfo := PPointer(TypeInfo)^;
-        Offset := p^.Field.FldOffset;
-        Name := @p^.Name;
-      end;
-      p := pointer(PtrInt(@p^.Name[1]) + ord(p^.Name[0]));
-      inc(PByte(p), PWord(p)^); // jump attributes
-    end;
+  r := pointer(result);
+  for f := 1 to info^.AllCount do
+  begin
+    r^.TypeInfo := pointer(p^.Field.TypeRef);
+    if r^.TypeInfo <> nil then // may be nil e.g. for static arrays
+      r^.TypeInfo := PPointer(r^.TypeInfo)^;
+    r^.Offset := p^.Field.FldOffset;
+    r^.Name := @p^.Name;
+    inc(r);
+    p := pointer(PtrInt(@p^.Name[1]) + ord(p^.Name[0]));
+    inc(PByte(p), PWord(p)^); // jump attributes
+  end;
 end;
 
 {$else}
@@ -545,7 +540,7 @@ begin
   // nfo^.DimCount=1 is not tested explicitly -> assume single dimension array
   nfo := pointer(GetTypeData(@self));
   aDataCount := nfo^.ElCount;
-  aDataSize := nfo^.ArraySize;
+  aDataSize := nfo^.Size;
   result := pointer(nfo^.ArrayType);
   if result <> nil then
     result := PPointer(result)^;
@@ -553,7 +548,7 @@ end;
 
 function TRttiInfo.ArraySize: PtrInt;
 begin
-  result := PArrayInfo(GetTypeData(@self))^.ArraySize;
+  result := PArrayInfo(GetTypeData(@self))^.Size;
 end;
 
 function GetPublishedMethods(Instance: TObject;
@@ -605,25 +600,6 @@ type
 
 /// fake TTypeInfo RTTI used for TGuid/THash128... on Delphi 7/2007
 {$ifdef HASNOSTATICRTTI}
-                       
-type
-  // enough Delphi RTTI for TRttiInfo.RecordManagedFields
-  TFakeTypeInfo = packed record
-    Kind: TTypeKind;
-    case integer of
-      5: (
-        Name5: string[5];
-        RecSize5: cardinal;
-        ManagedCount5: integer);
-      8: (
-        Name8: string[8];
-        RecSize8: cardinal;
-        ManagedCount8: integer);
-      9: (
-        Name9: string[9];
-        RecSize9: cardinal;
-        ManagedCount9: integer);
-  end;
 const
   _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGuid]
     Kind: tkRecord;
@@ -654,7 +630,6 @@ const
     Name9: 'PUtf8Char';
     RecSize9: SizeOf(pointer);
     ManagedCount9: 0);
-
 {$endif HASNOSTATICRTTI}
 
 

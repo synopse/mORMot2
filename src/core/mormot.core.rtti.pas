@@ -1320,7 +1320,7 @@ type
   /// rkArray RTTI fields
   // - published here for proper Delphi inlining
   TArrayInfo = packed record
-    ArraySize: integer;
+    Size: integer;
     ElCount: integer;
     ArrayType: PPRttiInfo;
     DimCount: byte;
@@ -1328,6 +1328,38 @@ type
   end;
   /// rkArray RTTI fields  published here for proper Delphi inlining
   PArrayInfo = ^TArrayInfo;
+
+  {$ifdef HASNOSTATICRTTI}
+  /// enough Delphi 7/2007 RTTI fields to mimic TRttiInfo.RecordManagedFields
+  TFakeTypeInfo = packed record
+    Kind: TTypeKind;
+    case integer of
+      4: (
+        Name4: string[4];
+        RecSize4: cardinal;
+        ManagedCount4: integer);
+      5: (
+        Name5: string[5];
+        RecSize5: cardinal;
+        ManagedCount5: integer);
+      6: (
+        Name6: string[6];
+        RecSize6: cardinal;
+        ManagedCount6: integer);
+      7: (
+        Name7: string[7];
+        RecSize7: cardinal;
+        ManagedCount7: integer);
+      8: (
+        Name8: string[8];
+        RecSize8: cardinal;
+        ManagedCount8: integer);
+      9: (
+        Name9: string[9];
+        RecSize9: cardinal;
+        ManagedCount9: integer);
+  end;
+  {$endif HASNOSTATICRTTI}
 
 {$endif ISDELPHI}
 
@@ -8408,7 +8440,8 @@ var
   dummy: PtrInt;
   all: TRttiRecordAllFields;
   f: PRttiRecordAllField;
-  i: PtrInt;
+  p: PRttiCustomProp;
+  i, siz: PtrInt;
 begin
   if (RecordInfo = nil) or
      not (RecordInfo^.Kind in rkRecordTypes) then
@@ -8421,19 +8454,39 @@ begin
   Count := length(all);
   SetLength(List, Count);
   f := pointer(all);
-  for i := 0 to Count - 1 do
-    with List[i] do
+  p := pointer(List);
+  for i := 1 to Count do
+  begin
+    if f^.TypeInfo = nil then // may happen on Delphi (but not on FPC)
     begin
-      Value := Rtti.RegisterType(f^.TypeInfo);
-      inc(Size, Value.Size);
-      OffsetGet := f^.Offset;
-      OffsetSet := f^.Offset;
-      Name := ToUtf8(f^.Name^);
-      fOrigName := Name;
-      OrdinalDefault := NO_DEFAULT;
-      Stored := rpsTrue;
-      inc(f);
-    end;
+      // guess field size (as mORMot 1 did)
+      if i = Count then
+        siz := RecordInfo^.RecordSize // size = diff from whole end
+      else
+      begin
+        inc(f);
+        siz := f^.Offset; // size = diff from next prop
+        dec(f);
+      end;
+      dec(siz, f^.Offset);
+      // create a fake typeinfo
+      p^.Value := Rtti.GlobalClass.Create;
+      p^.Value.FromRtti(nil);
+      p^.Value.fCache.Size := siz; // before NoRttiSetAndRegister()
+      p^.Value.NoRttiSetAndRegister(ptArray, '');
+    end
+    else
+      p^.Value := Rtti.RegisterType(f^.TypeInfo);
+    inc(Size, p^.Value.Size);
+    p^.OffsetGet := f^.Offset;
+    p^.OffsetSet := f^.Offset;
+    p^.Name := ToUtf8(f^.Name^);
+    p^.fOrigName := p^.Name;
+    p^.OrdinalDefault := NO_DEFAULT;
+    p^.Stored := rpsTrue;
+    inc(f);
+    inc(p);
+  end;
 end;
 
 procedure TRttiCustomProps.FinalizeManaged(Data: PAnsiChar);
@@ -8712,7 +8765,9 @@ begin
 end;
 
 procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRttiParserType;
-  const TypeName: RawUtf8; DynArrayElemType: TRttiCustom; NoRegister: boolean);
+  const TypeName: RawUtf8; NoRegister: boolean);
+var
+  def: PTypeData;
 begin
   if (fNoRttiInfo <> nil) or
      not (rcfWithoutRtti in fFlags) then
@@ -8723,22 +8778,35 @@ begin
     ptRecord:
       begin
         fCache.Kind := rkRecord;
-        fCache.Size := Props.Size; // as computed by caller
+        if fProps.Size = 0 then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptRecord)?', [self]);
+        fCache.Size := fProps.Size;
       end;
     ptDynArray:
       begin
         fCache.Kind := rkDynArray;
         fCache.Size := SizeOf(pointer);
-        fArrayRtti := DynArrayElemType;
-        fCache.ItemInfoRaw := DynArrayElemType.Info;
-        if (DynArrayElemType.Info <> nil) and
-           DynArrayElemType.Info.IsManaged then
-          fCache.ItemInfoManaged := DynArrayElemType.Info; // as regular dynarray RTTI
-        fCache.ItemSize := DynArrayElemType.Size;
+        if fArrayRtti = nil then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptDynArray)?', [self]);
+        fCache.ItemInfoRaw := fArrayRtti.Info;
+        if (fArrayRtti.Info <> nil) and
+           fArrayRtti.Info.IsManaged then
+          fCache.ItemInfoManaged := fArrayRtti.Info; // as regular dynarray RTTI
+        fCache.ItemSize := fArrayRtti.Size;
+      end;
+    ptArray:
+      begin
+        fCache.Kind := rkArray;
+        if fCache.Size = 0 then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptArray)?', [self]);
+        fCache.ItemSize := fCache.Size;
+        fCache.ItemCount := 1;
       end;
     ptClass:
       begin
         fCache.Kind := rkClass;
+        if fCache.ValueClass = nil then // should have been set by caller
+          ERttiException.RaiseUtf8('%.NoRttiSetAndRegister(ptClass)?', [self]);
         fCache.Size := SizeOf(pointer);
       end;
   else
@@ -8751,7 +8819,7 @@ begin
     SetParserType(ParserType, pctNone);
     exit;
   end;
-  // create fake RTTI which should be enough for our registration purpose
+  // create minimal fake RTTI - good enough for our internal usage
   SetLength(fNoRttiInfo, length(TypeName) + 64); // all filled with zeros
   fCache.Info := pointer(fNoRttiInfo);
   fCache.Info.Kind := fCache.Kind;
@@ -8759,11 +8827,19 @@ begin
     fCache.Info.RawName := PointerToHexShort(self)
   else
     fCache.Info.RawName := TypeName;
-  case ParserType of
+  def := GetTypeData(fCache.Info);
+  case ParserType of // minimal RTTI field(s)
     ptRecord:
-      PRecordInfo(GetTypeData(fCache.Info))^.RecSize := fCache.Size;
+      PRecordInfo(def)^.RecSize := fCache.Size;
     ptDynArray:
-      GetTypeData(fCache.Info)^.elSize := fCache.ItemSize;
+      def^.elSize := fCache.ItemSize;
+    ptArray:
+      begin
+        PArrayInfo(def)^.Size := fCache.Size;
+        PArrayInfo(def)^.ElCount := fCache.ItemCount;
+      end;
+    ptClass:
+      def^.ClassType := fCache.ValueClass;
   end;
   // initialize process
   SetParserType(ParserType, pctNone);
@@ -9262,8 +9338,8 @@ begin
         ERttiException.RaiseUtf8('Unexpected nested % %', [c, ToText(pt)^]);
       nested := Rtti.GlobalClass.Create;
       nested.FromRtti(nil);
-      nested.SetPropsFromText(P, ee, NoRegister);
-      nested.NoRttiSetAndRegister(ptRecord, '', nil, NoRegister);
+      nested.SetPropsFromText(P, ee, NoRegister); // before NoRttiSetAndRegister()
+      nested.NoRttiSetAndRegister(ptRecord, '', NoRegister);
       if NoRegister then
         ObjArrayAdd(fOwnedRtti, nested);
       if pt = ptRecord then
@@ -9280,7 +9356,8 @@ begin
         ERttiException.RaiseUtf8('Unexpected array % %', [c, ToText(pt)^]);
       c := Rtti.GlobalClass.Create;
       c.FromRtti(nil);
-      c.NoRttiSetAndRegister(ptDynArray, typname, ac, NoRegister);
+      c.fArrayRtti := ac; // before NoRttiSetAndRegister()
+      c.NoRttiSetAndRegister(ptDynArray, typname, NoRegister);
       if NoRegister then
         ObjArrayAdd(fOwnedRtti, c);
     end;
@@ -9672,24 +9749,23 @@ var
   info: PRttiInfo;
 begin
   info := PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^;
-  if info <> nil then
-    result := DoRegister(info)
-  else
+  if info <> nil then // always available on FPC and Delphi 2010+
   begin
-    // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
-    RegisterSafe.Lock;
-    try
-      result := FindClass(ObjectClass); // search again (for thread safety)
-      if result <> nil then
-        exit; // already registered in the background
-      result := GlobalClass.Create;
-      result.FromRtti(nil); // just set rcfWithoutRtti flag
-      result.SetValueClass(ObjectClass, nil);
-      result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
-      GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
-    finally
-      RegisterSafe.UnLock;
-    end;
+    result := DoRegister(info);
+    exit;
+  end;
+  // generate fake RTTI for classes without {$M+} on Delphi 7/2007
+  RegisterSafe.Lock;
+  try
+    result := FindClass(ObjectClass); // search again (for thread safety)
+    if result <> nil then
+      exit; // already registered in the background
+    result := GlobalClass.Create;
+    result.FromRtti(nil); // just set rcfWithoutRtti flag
+    result.SetValueClass(ObjectClass, nil); // before NoRttiSetAndRegister()
+    result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
+  finally
+    RegisterSafe.UnLock;
   end;
 end;
 

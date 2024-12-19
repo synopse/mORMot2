@@ -50,7 +50,8 @@ end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 type
-  PRecordInfo = PTypeData; // oldest Delphi PTypeData doesn't have RecordSize
+  PRecordInfo = PTypeData;
+  PArrayInfo = ^TArrayTypeData;
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
@@ -173,6 +174,7 @@ function TRttiInfo.EnumBaseType: PRttiEnumType; // moved here for proper inlinin
 begin
   result := pointer(GetTypeData(@self));
   if Kind <> rkBool then
+    // rkBool is an ordinal with Min/Max but without BaseType/NameList
     result := result^.EnumBaseType;
 end;
 
@@ -353,12 +355,12 @@ end;
 
 
 const
+  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
+  UTF8_NAME: string[7] = 'RawUtf8';
   // FPC RTTI names integer type as "longint"
   INTEGER_NAME:  string[7] = 'Integer';
   // FPC RTTI names cardinal type as "longword"
   CARDINAL_NAME: string[8] = 'Cardinal';
-  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
-  UTF8_NAME: string[7] = 'RawUtf8';
 
 function TRttiInfo.Name: PShortString;
 begin
@@ -496,6 +498,7 @@ end;
 function TRttiInfo.IsBoolean: boolean;
 begin
   result := (Kind = rkBool);
+  // boolean is not a rkEnumeration on FPC, and has no BaseType/NameList items
 end;
 
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
