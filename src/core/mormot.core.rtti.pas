@@ -801,7 +801,7 @@ type
   /// main entry-point wrapper to access RTTI for a given pascal type
   // - as returned by the TypeInfo() low-level compiler function
   // - other RTTI objects can be computed from a pointer to this structure
-  // - user types defined as an alias don't have this type information:
+  // - by desgin, user types defined as an alias don't have its own TypeInfo():
   // ! type
   // !   TNewType = TOldType;
   // here TypeInfo(TNewType) = TypeInfo(TOldType)
@@ -6804,8 +6804,7 @@ begin
   Dest^ := result;
 end;
 
-procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
-  SourceExtCount: PInteger);
+procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo; SourceExtCount: PInteger);
 var
   n, siz: PtrInt;
   nfo: PRttiInfo;
@@ -6851,14 +6850,14 @@ begin
     DynArrayEnsureUnique(@Value, TypeInfo(TIntegerDynArray));
 end;
 
-procedure EnsureUnique(var Value: TRawUtf8DynArray); overload;
+procedure EnsureUnique(var Value: TRawUtf8DynArray);
 begin
   if (Value <> nil) and
      (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
     DynArrayEnsureUnique(@Value, TypeInfo(TRawUtf8DynArray));
 end;
 
-procedure EnsureUnique(var Value: TVariantDynArray); overload;
+procedure EnsureUnique(var Value: TVariantDynArray);
 begin
   if (Value <> nil) and
      (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
@@ -9176,7 +9175,7 @@ end;
 
 function TRttiCustom.ClassNewInstance: pointer;
 begin
-  if fCache.Kind = rkClass then
+  if fCache.Kind = rkClass then // would work also for rkInterface
     result := TRttiCustomNewInstance(fCache.NewInstance)(self)
   else
     result := nil;

@@ -10489,7 +10489,7 @@ const
     'Failed',
     'Error');
 
-function ToText(st: TServiceState): PShortString; overload;
+function ToText(st: TServiceState): PShortString;
 begin
   result := @_SERVICESTATE[st];
 end;

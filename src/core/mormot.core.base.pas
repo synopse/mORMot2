@@ -4894,7 +4894,7 @@ begin
     FakeLength(s, len);
 end;
 
-procedure FakeSetLength(var s: RawByteString; len: PtrInt); overload;
+procedure FakeSetLength(var s: RawByteString; len: PtrInt);
 begin
   if len <= 0 then
     FastAssignNew(s)
@@ -7896,7 +7896,7 @@ begin
     result := PtrArrayAdd(aPtrArray, aItem, aPtrArrayCount);
 end;
 
-function PtrArrayAddFrom(var aDestArray; const aSourceArray): PtrInt; overload;
+function PtrArrayAddFrom(var aDestArray; const aSourceArray): PtrInt;
 var
   n: PtrInt;
   s: TPointerDynArray absolute aSourceArray;
