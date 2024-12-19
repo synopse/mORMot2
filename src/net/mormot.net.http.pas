@@ -358,8 +358,7 @@ type
   private
     fContentLeft: Int64;
     fContentPos: PByte;
-    fContentEncoding, fCommandUriInstance, fLastHost: RawUtf8;
-    fCommandUriInstanceLen: PtrInt;
+    fContentEncoding, fLastHost: RawUtf8;
     fProgressiveTix: cardinal;
     fProgressiveID: THttpPartialID;
     fProgressiveNewStreamFileName: TFileName;
@@ -3146,7 +3145,7 @@ begin
     ContentStream.Free; // ensure no leak on (reused) broken connection
   ResponseFlags := [];
   Options := [];
-  FastAssignNew(Headers);
+  FastAssignNew(Headers); // note: too soon for CommandUri
   FastAssignNew(ContentType);
   if Upgrade <> '' then
     FastAssignNew(Upgrade);
@@ -3164,6 +3163,8 @@ begin
   ContentStream := nil;
   ServerInternalState := 0;
   CompressContentEncoding := -1;
+  if fContentEncoding <> '' then
+    FastAssignNew(fContentEncoding);
   integer(CompressAcceptHeader) := 0;
   fProgressiveID := 0;
   fProgressiveTix := 0;
@@ -3628,9 +3629,12 @@ begin
     else
       inc(P);
   L := P - B;
-  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
-  FakeLength(CommandUri, L);
   result := ParseHttp(P + 1); // parse HTTP/1.x just after P^ = ' '
+  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
+  if L = 0 then
+    FastAssignNew(CommandUri) // paranoid (malformatted content)
+  else
+    FakeLength(CommandUri, L);
 end;
 
 function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
@@ -3719,20 +3723,7 @@ begin
       hrsGetCommand:
         if ProcessParseLine(st) then
         begin
-          if Interning = nil then
-            FastSetString(CommandUri, st.Line, st.LineLen)
-          else
-          begin
-            // no real interning, but CommandUriInstance buffer reuse
-            if st.LineLen > fCommandUriInstanceLen then
-            begin
-              fCommandUriInstanceLen := st.LineLen + 256;
-              FastSetString(fCommandUriInstance, nil, fCommandUriInstanceLen);
-            end;
-            CommandUri := fCommandUriInstance; // COW memory buffer reuse
-            MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
-            FakeLength(CommandUri, st.LineLen);
-          end;
+          FastSetString(CommandUri, st.Line, st.LineLen); // never interned
           State := hrsGetHeaders;
         end
         else
