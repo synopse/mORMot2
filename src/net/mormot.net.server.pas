@@ -1457,7 +1457,7 @@ type
     fHttpTimeoutMS, fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
-    fInterfaceName: RawUtf8;
+    fInterfaceName, fUuid: RawUtf8;
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
@@ -1466,6 +1466,11 @@ type
     // CacheTempMinBytes=CachePermMinBytes=2048,
     // BroadcastTimeoutMS=10 HttpTimeoutMS=500 and BroadcastMaxResponses=24
     constructor Create; override;
+    /// retrieve the network interface fulfilling these settings
+    // - network layout may change in real time: this method allows to renew
+    // the peer cache instance when a better interface is available
+    // - returns '' on success, or an error message
+    function GuessInterface(out Mac: TMacAddress): RawUtf8; virtual;
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
@@ -1563,6 +1568,10 @@ type
     // - default is 2048 bytes, i.e. 2KB, which is just two network MTU trips
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
+    /// allow to customize the UUID used to identify this node
+    // - instead of the default GetComputerUuid() from SMBios
+    property Uuid: RawUtf8
+      read fUuid write fUuid;
   end;
 
   /// abstract parent to THttpPeerCache for its cryptographic core
@@ -1573,7 +1582,7 @@ type
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
-    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
+    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4, fLastNetworkTix: cardinal;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fLog: TSynLogClass;
     fPort, fIpPort: RawUtf8;
@@ -1581,6 +1590,7 @@ type
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
     fUuid: TGuid;
+    fServerTls, fClientTls: TNetTlsContext;
     procedure AfterSettings; virtual;
     function CurrentConnections: integer; virtual;
     procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
@@ -1593,13 +1603,47 @@ type
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
       aOutStream: TStreamRedirect; aRetry: boolean): integer;
+    function GetUuidText: RawUtf8;
   public
     /// initialize the cryptography of this peer-to-peer node instance
     // - warning: inherited class should also call AfterSettings once
     // fSettings is defined
-    constructor Create(const aSharedSecret: RawByteString); reintroduce;
+    constructor Create(const aSharedSecret: RawByteString;
+      aServerTls, aClientTls: PNetTlsContext); reintroduce;
     /// finalize this class instance
     destructor Destroy; override;
+    /// check if the network interface defined in Settings did actually change
+    // - you may want to recreate a peer-cache to track the new network layout
+    function NetworkInterfaceChanged: boolean;
+    /// optional TLS options for the peer HTTPS server
+    // - e.g. to set a custom certificate for this peer
+    // - when ServerTls.Enabled is set, ClientTls.Enabled and other params should match
+    property ServerTls: TNetTlsContext
+      read fServerTls write fServerTls;
+    /// optional TLS options for the peer HTTPS client
+    // - e.g. set ClientTls.OnPeerValidate to verify a peer ServerTls certificate
+    // - when ClientTls.Enabled is set, ServerTls.Enabled and other params should match
+    property ClientTls: TNetTlsContext
+      read fClientTls write fClientTls;
+    /// the network interface used for UDP and TCP process
+    // - the main fields are published below as Network* properties
+    property Mac: TMacAddress
+      read fMac;
+  published
+    /// define how this instance handles its process
+    property Settings: THttpPeerCacheSettings
+      read fSettings;
+    /// which network interface is used for UDP and TCP process
+    property NetworkInterface: RawUtf8
+      read fMac.Name;
+    /// the local IP address used for UDP and TCP process
+    property NetworkIP: RawUtf8
+      read fMac.IP;
+    /// the IP used for UDP and TCP process broadcast
+    property NetworkBroadcast: RawUtf8
+      read fMac.Broadcast;
+    property Uuid: RawUtf8
+      read GetUuidText;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -1686,9 +1730,8 @@ type
     constructor Create(aSettings: THttpPeerCacheSettings;
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
-      aHttpServerThreadCount: integer = 2;
-      aLogClass: TSynLogClass = nil;
-      const aUuid: RawUtf8 = ''); reintroduce;
+      aHttpServerThreadCount: integer = 2; aLogClass: TSynLogClass = nil;
+      aServerTls: PNetTlsContext = nil; aClientTls: PNetTlsContext = nil); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -1732,24 +1775,7 @@ type
     // actually reading and purging the CacheTempPath folder every minute
     // - could call Instable.DoRotate every minute to refresh IP banishments
     procedure OnIdle(tix64: Int64);
-    /// the network interface used for UDP and TCP process
-    property Mac: TMacAddress
-      read fMac;
-    /// the UUID used to identify this node
-    // - is filled by GetComputerUuid() from SMBios by default
-    // - could be customized if necessary after Create()
-    property Uuid: TGuid
-      read fUuid write fUuid;
   published
-    /// define how this instance handles its process
-    property Settings: THttpPeerCacheSettings
-      read fSettings;
-    /// which network interface is used for UDP and TCP process
-    property NetworkInterface: RawUtf8
-      read fMac.Name;
-    /// the IP used for UDP and TCP process broadcast
-    property NetworkBroadcast: RawUtf8
-      read fMac.Broadcast;
     /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
       read fHttpServer;
@@ -5092,21 +5118,15 @@ end;
 { THttpPeerCrypt }
 
 procedure THttpPeerCrypt.AfterSettings;
+var
+  err: RawUtf8;
 begin
   if fSettings = nil then
     EHttpPeerCache.RaiseUtf8('%.AfterSettings(nil)', [self]);
   fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
-  if fSettings.InterfaceName <> '' then
-  begin
-    if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
-      // allow to pickup "down" interfaces if name is explicit
-      EHttpPeerCache.RaiseUtf8(
-        '%.Create: impossible to find the [%] network interface',
-        [self, fSettings.InterfaceName]);
-  end
-  else if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
-    EHttpPeerCache.RaiseUtf8(
-      '%.Create: impossible to find a local network interface', [self]);
+  err := fSettings.GuessInterface(fMac);
+  if err <> '' then
+    EHttpPeerCache.RaiseUtf8('%.Create: %', [self, err]);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
@@ -5119,6 +5139,11 @@ begin
   end;
   fLog.Add.Log(sllDebug, 'Create: network="%" as % (broadcast=%) %',
     [fMac.Name, fIpPort, fMac.Broadcast, fMac.Address], self);
+end;
+
+function THttpPeerCrypt.GetUuidText: RawUtf8;
+begin
+  ToUtf8(fUuid, result);
 end;
 
 function THttpPeerCrypt.CurrentConnections: integer;
@@ -5265,9 +5290,14 @@ begin
     // ensure we have the expected HTTP/HTTPS connection
     if fClient = nil then
     begin
-      tls := pcoSelfSignedHttps in fSettings.Options;
       fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
-      fClient.TLS.IgnoreCertificateErrors := tls; // self-signed
+      tls := fClientTls.Enabled or
+             (pcoSelfSignedHttps in fSettings.Options);
+      if tls then
+        if fClientTls.Enabled then
+          fClient.TLS := fClientTls
+        else
+          fClient.TLS.IgnoreCertificateErrors := true; // self-signed
       fClient.OpenBind(ip, fPort, {bind=}false, tls);
       fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
       fClient.OnLog := fLog.DoLog;
@@ -5290,7 +5320,8 @@ begin
   end;
 end;
 
-constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString);
+constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString;
+  aServerTls, aClientTls: PNetTlsContext);
 var
   key: THash256Rec;
 begin
@@ -5308,10 +5339,14 @@ begin
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
   if Assigned(fLog) then
+    // log includes safe 16-bit key.w[0] fingerprint
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
       [GuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
-      // log includes safe 16-bit fingerprint
   FillZero(key.b);
+  if aServerTls <> nil then
+    fServerTls := aServerTls^;
+  if aClientTls <> nil then
+    fClientTls := aClientTls^;
 end;
 
 destructor THttpPeerCrypt.Destroy;
@@ -5322,6 +5357,31 @@ begin
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
   inherited Destroy;
+end;
+
+function THttpPeerCrypt.NetworkInterfaceChanged: boolean;
+var
+  newmac: TMacAddress;
+  err: RawUtf8;
+  tix: cardinal;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  tix := GetTickCount64 shr 10; // calling OS API every second is good enough
+  if tix = fLastNetworkTix then
+    exit;
+  fLastNetworkTix := tix;
+  MacIPAddressFlush; // flush mormot.net.sock cache
+  err := fSettings.GuessInterface(newmac);
+  result := (err = '') and
+            ((fMac.Name <> newmac.Name) or
+             (fMac.IP <> newmac.IP) or
+             (fMac.Broadcast <> newmac.Broadcast) or
+             (fMac.NetMask <> newmac.NetMask));
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'NetworkInterfaceChanged=% [% % % %] %',
+      [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
 end;
 
 
@@ -5344,6 +5404,20 @@ begin
   fBroadcastMaxResponses := 24;
   fTryAllPeersCount := 10;
   fHttpTimeoutMS := 500;
+end;
+
+function THttpPeerCacheSettings.GuessInterface(out Mac: TMacAddress): RawUtf8;
+begin
+  result := '';
+  if fInterfaceName <> '' then
+  begin
+    if not GetMainMacAddress(Mac, fInterfaceName, {UpAndDown=}true) then
+      // allow to pickup "down" interfaces if name is explicit
+      result := FormatUtf8('impossible to find the [%] network interface',
+        [fInterfaceName]);
+  end
+  else if not GetMainMacAddress(Mac, [mafLocalOnly, mafRequireBroadcast]) then
+    result := 'impossible to find a local network interface';
 end;
 
 
@@ -5605,8 +5679,8 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer;
-  aLogClass: TSynLogClass; const aUuid: RawUtf8);
+  aHttpServerThreadCount: integer; aLogClass: TSynLogClass;
+  aServerTls, aClientTls: PNetTlsContext);
 var
   log: ISynLog;
   avail, existing: Int64;
@@ -5617,10 +5691,11 @@ begin
   log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
-  if (aUuid <> '') and
-     not RawUtf8ToGuid(aUuid, fUuid) then // allow UUID customization
-    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, aUuid]);
-  inherited Create(aSharedSecret);
+  if (fSettings <> nil) and
+     (fSettings.Uuid <> '') and // allow UUID customization
+     not RawUtf8ToGuid(fSettings.Uuid, fUuid) then
+    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, fSettings.Uuid]);
+  inherited Create(aSharedSecret, aServerTls, aClientTls);
   // setup the processing options
   if aSettings = nil then
   begin
@@ -5687,6 +5762,10 @@ procedure THttpPeerCache.StartHttpServer(
 var
   opt: THttpServerOptions;
 begin
+  if fClientTls.Enabled <> fServerTls.Enabled then
+    EHttpPeerCache.RaiseUtf8(
+      '%.StartHttpServer: inconsistent ClientTls=% ServerTls=%',
+      [self, fClientTls.Enabled, fServerTls.Enabled]);
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // classic per-thread client is good enough
   opt := [hsoNoXPoweredHeader, hsoThreadSmooting];
@@ -5694,7 +5773,8 @@ begin
     include(opt, hsoBan40xIP);
   if fVerboseLog then
     include(opt, hsoLogVerbose);
-  if pcoSelfSignedHttps in fSettings.Options then
+  if fServerTls.Enabled or
+     (pcoSelfSignedHttps in fSettings.Options) then
     include(opt, hsoEnableTls);
   fHttpServer := aHttpServerClass.Create(aIP, nil,
     fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
@@ -5706,7 +5786,12 @@ begin
       fPartials.OnLog := fLog.DoLog;
     THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
     // actually start and wait for the local HTTP server to be available
-    if pcoSelfSignedHttps in fSettings.Options then
+    if fServerTls.Enabled then
+    begin
+      fLog.Add.Log(sllTrace, 'StartHttpServer: HTTPS from ServerTls', self);
+      THttpServerSocketGeneric(fHttpServer).WaitStarted(10, @fServerTls);
+    end
+    else if pcoSelfSignedHttps in fSettings.Options then
     begin
       fLog.Add.Log(sllTrace, 'StartHttpServer: self-signed HTTPS', self);
       THttpServerSocketGeneric(fHttpServer).WaitStartedHttps(10);
