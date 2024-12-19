@@ -7910,12 +7910,16 @@ begin
           Bind(i, VInt64^);
         {$ifdef FPC}
         vtQWord:
-          Bind(i, VQWord^);
+          Bind(i, VQWord^); // SQLite3 may misinterpret huge numbers as negative
         {$endif FPC}
         vtCurrency:
           Bind(i, CurrencyToDouble(VCurrency));
         vtExtended:
           Bind(i, VExtended^);
+        {$ifdef UNICODE}
+        vtUnicodeString:
+          BindS(i, string(VUnicodeString)); // optimize Delphi string constants
+        {$endif UNICODE}
       else
         begin
           VarRecToUtf8(Params[i], tmp);

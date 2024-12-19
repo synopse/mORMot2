@@ -184,11 +184,15 @@ uses
 {$ifdef FPC}  // FPC expects .o linking
 
   {$ifdef OSWINDOWS}
-    {$ifdef CPU64}
-      {$L ..\..\static\x86_64-win64\sqlite3.o}
+    {$ifdef CPUINTEL}
+      {$ifdef CPU64}
+        {$L ..\..\static\x86_64-win64\sqlite3.o}
+      {$else}
+        {$L ..\..\static\i386-win32\sqlite3.o}
+      {$endif CPU64}
     {$else}
-      {$L ..\..\static\i386-win32\sqlite3.o}
-    {$endif CPU64}
+      'unsupported yet'
+    {$endif CPUINTEL}
   {$endif OSWINDOWS}
 
   {$ifdef OSDARWIN}
@@ -272,7 +276,7 @@ uses
 // - FPC will use explicit public name exports from mormot.lib.static
 // but Delphi requires the exports to be defined in this very same unit
 
-function malloc(size: cardinal): pointer; cdecl;
+function malloc(size: PtrInt): pointer; cdecl;
 begin
   GetMem(result, size);
 end;
@@ -282,7 +286,7 @@ begin
   FreeMem(P);
 end;
 
-function realloc(P: pointer; Size: integer): pointer; cdecl;
+function realloc(P: pointer; Size: PtrInt): pointer; cdecl;
 begin
   ReallocMem(P, Size);
   result := P;
@@ -472,12 +476,12 @@ begin
     end;
 end;
 
-function memcmp(p1, p2: pByte; Size: integer): integer; cdecl;
+function memcmp(p1, p2: pByte; Size: PtrInt): integer; cdecl;
 begin
   result := libc_memcmp(p1, p2, Size);
 end;
 
-function strncmp(p1, p2: PByte; Size: integer): integer; cdecl;  
+function strncmp(p1, p2: PByte; Size: PtrInt): integer; cdecl;
 begin
   result := libc_strncmp(p1, p2, Size);
 end;
