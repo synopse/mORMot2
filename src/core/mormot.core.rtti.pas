@@ -1337,7 +1337,7 @@ type
   {$ifdef HASNOSTATICRTTI}
   /// enough Delphi 7/2007 RTTI fields to mimic TRttiInfo.RecordManagedFields
   TFakeTypeInfo = packed record
-    Kind: TTypeKind;
+    Kind: TRttiKind;
     case integer of
       4: (
         Name4: string[4];

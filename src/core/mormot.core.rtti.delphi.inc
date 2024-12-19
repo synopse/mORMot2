@@ -602,31 +602,31 @@ type
 {$ifdef HASNOSTATICRTTI}
 const
   _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGuid]
-    Kind: tkRecord;
+    Kind: rkRecord;
     Name5: 'TGUID';
     RecSize5: SizeOf(TGUID);
     ManagedCount5: 0);
 
   _THASH128: TFakeTypeInfo = ( // stored in PT_INFO[ptHash128]
-    Kind: tkRecord; // note: is a tkArray when HASNOSTATICRTTI
+    Kind: rkRecord; // note: is a tkArray when HASNOSTATICRTTI
     Name8: 'THash128';
     RecSize8: SizeOf(THash128);
     ManagedCount8: 0);
 
   _THASH256: TFakeTypeInfo = ( // stored in PT_INFO[ptHash256]
-    Kind: tkRecord;
+    Kind: rkRecord;
     Name8: 'THash256';
     RecSize8: SizeOf(THash256);
     ManagedCount8: 0);
 
   _THASH512: TFakeTypeInfo = ( // stored in PT_INFO[ptHash512]
-    Kind: tkRecord;
+    Kind: rkRecord;
     Name8: 'THash512';
     RecSize8: SizeOf(THash512);
     ManagedCount8: 0);
 
   _PUTF8CHAR: TFakeTypeInfo = ( // stored in PT_INFO[ptPUtf8Char]
-    Kind: tkRecord;  // don't mess with ordinals - just a record with a pointer
+    Kind: rkRecord;  // don't mess with ordinals - just a record with a pointer
     Name9: 'PUtf8Char';
     RecSize9: SizeOf(pointer);
     ManagedCount9: 0);
