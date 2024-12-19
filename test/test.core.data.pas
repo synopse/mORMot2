@@ -4011,7 +4011,7 @@ type
   end;
   IDocTests = array of IDocTest;
 
-  TDocTest = class(TInterfacedSerializableAutoCreateFields, IDocTest)
+  TDocTest = class(TSerializableAutoCreateFields, IDocTest)
   protected
     fAny: TDocAnyTest;
     fName: RawUtf8;
@@ -4610,7 +4610,7 @@ begin
   finally
     any.Free;
   end;
-  // validate TInterfacedSerializableAutoCreateFields
+  // validate TSerializableAutoCreateFields
   TDocTest.RegisterToRtti(TypeInfo(IDocTest));
   Check(IsEqualGuid(TDocTest.Guid^, IDocTest));
   Check(dt = nil);

@@ -2470,7 +2470,7 @@ type
 
   /// abstract interface parent with common methods for JSON serialization
   // - to implement this, you can inherit from TInterfacedSerializable
-  // or TInterfacedSerializableAutoCreateFields
+  // or TSerializableAutoCreateFields
   ISerializable = interface
     ['{EA7F298D-06D7-4ADF-9F75-6598B75338B3}']
     // methods used as getter/setter for the Json property
@@ -2497,6 +2497,9 @@ type
   /// abstract class parent with ISerializable methods for JSON serialization
   // - you need to override Create, ToJson and FromJson abstract methods, so is
   // not compiled with {$M+} because published RTTI are just ignored
+  // - you could inherit this class (or any of its descendants), associated with
+  // a ISerializable interface (and propably with a method returning self to
+  // access the properties), then call once the RegisterToRtti() class function
   TInterfacedSerializable = class(TInterfacedObject, ISerializable)
   protected
     // methods used as getter/setter for the Json property
@@ -2568,7 +2571,7 @@ type
   // properties), then call once the RegisterToRtti() class function
   // - could be used e.g. to implement a DDD/KDD Aggregate object with both
   // ref-counted data and methods, ready to be serialized over SOA
-  TInterfacedSerializableAutoCreateFields = class(TSerializablePersistent)
+  TSerializableAutoCreateFields = class(TSerializablePersistent)
   public
     /// instantiate all nested  class or T*ObjArray published properties
     constructor Create(options: PDocVariantOptions = nil); override;
@@ -12004,8 +12007,8 @@ begin
   result.fCache.NewInterface := @_New_ISerializable;
   obj := Rtti.RegisterClass(self) as TRttiJson;
   obj.fCache.SerializableInterface := result;
-  if not InheritsFrom(TInterfacedSerializableAutoCreateFields) then // not RTTI
-  begin
+  if not InheritsFrom(TSerializablePersistent) then
+  begin // no RTTI to serialize published properties
     TOnRttiJsonRead(obj.fJsonReader)  := JsonReaderClass;
     TOnRttiJsonWrite(obj.fJsonWriter) := JsonWriterClass;
   end;
@@ -12042,7 +12045,7 @@ var
   i: ^ISerializable absolute data;
 begin
   if not Assigned(i^) then
-  begin // inlined Create + GetInterface()
+  begin // inlined Create + GetInterface() as in _New_ISerializable()
     o := Create(context.CustomVariant);
     o.fRefCount := 1;
     inc(PByte(o), context.Info.Cache.SerializableInterfaceEntryOffset);
@@ -12114,20 +12117,19 @@ var
 begin
   bak := context.Info;
   context.Info := Rtti.FindClass(PClass(self)^);
-  _JL_RttiCustom(@self, context);
+  _JL_RttiCustom(@self, context); // all done via known RTTI
   context.Info := bak;
 end;
 
 
-{ TInterfacedSerializableAutoCreateFields }
+{ TSerializableAutoCreateFields }
 
-constructor TInterfacedSerializableAutoCreateFields.Create(
-  options: PDocVariantOptions);
+constructor TSerializableAutoCreateFields.Create(options: PDocVariantOptions);
 begin
   AutoCreateFields(self);
 end;
 
-destructor TInterfacedSerializableAutoCreateFields.Destroy;
+destructor TSerializableAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
