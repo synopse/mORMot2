@@ -4667,11 +4667,9 @@ begin
     inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
     {$endif ASMORIG}
     // branch ArmFakeStub (24bit relative, word aligned)
-    stub := ((PtrUInt(@TInterfacedObjectFakeRaw.ArmFakeStub) -
-             PtrUInt(P)) shr 2) - 2;
-    if stub and $ff000000 <> 0 then // paranoid check
-      EInterfaceFactory.RaiseUtf8('Compute_FakeVMT=%', [CardinalToHexShort(stub)]);
-    P^ := ($ea shl 24) + (stub and $00ffffff);
+    stub :=
+      ((PtrUInt(@TInterfacedObjectFakeRaw.ArmFakeStub) - PtrUInt(P)) shr 2) - 2;
+    P^ := ($ea shl 24) + (stub and $00ffffff); // note: stub may be < 0
     inc(P);
     P^ := $e320f000;
     inc(P);
