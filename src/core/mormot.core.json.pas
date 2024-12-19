@@ -2506,6 +2506,9 @@ type
     class procedure JsonWriter(W: TJsonWriter; data: pointer;
       options: TTextWriterWriteObjectOptions);
     class procedure JsonReader(var context: TJsonParserContext; data: pointer);
+    class procedure JsonWriterClass(W: TJsonWriter; data: pointer;
+      options: TTextWriterWriteObjectOptions);
+    class procedure JsonReaderClass(var context: TJsonParserContext; data: pointer);
   public
     /// factory of one class implementing a ISerializable interface
     // - this abstract method must be overriden
@@ -5533,6 +5536,12 @@ var
   jsonsave: TRttiJsonSave;
   c: TJsonSaveContext;
 begin
+  if Ctxt.Info.ArrayRtti = nil then
+  begin
+    // as in mORMot 1: static array with no RTTI at all, as a hexadecimal string
+    Ctxt.W.AddBinToHex(Data,  Ctxt.Info.Size, {lower=}true, {quote=}'"');
+    exit;
+  end;
   {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
   c.W.BlockBegin('[', c.Options);
   jsonsave := c.Info.JsonSave; // e.g. PT_JSONSAVE/PTC_JSONSAVE
@@ -5574,7 +5583,10 @@ begin
     // direct value write (record field or plain class property)
     c.Info := p^.Value;
     c.Prop := p;
-    TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
+    if c.Info.JsonSave <> nil then
+      TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
+    else
+      c.W.AddNull;
   end
   else
     // need to call a getter method
@@ -8324,6 +8336,16 @@ var
   n: integer;
   arrinfo: TRttiCustom;
 begin
+  if Ctxt.Info.ArrayRtti = nil then
+  begin
+    // as in mORMot 1: static array with no RTTI at all as a hexadecimal string
+    Ctxt.Valid := Ctxt.ParseNext and
+                  Ctxt.WasString and
+                  (Ctxt.ValueLen = Ctxt.Info.Size * 2) and
+                  mormot.core.text.HexToBin(
+                    PAnsiChar(Ctxt.Value), PByte(Data), Ctxt.Info.Size);
+    exit;
+  end;
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit;
@@ -11944,6 +11966,7 @@ class function TInterfacedSerializable.RegisterToRtti(
   InterfaceInfo: PRttiInfo): TRttiJson;
 var
   ent: PInterfaceEntry;
+  obj: TRttiJson;
 begin
   ent := nil;
   if (self <> nil) and
@@ -11956,11 +11979,17 @@ begin
   result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
   result.fCache.SerializableClass := self;
   result.fCache.SerializableInterfaceEntryOffset := ent^.IOffset; // get once
-  TOnRttiJsonRead(result.fJsonReader) := JsonReader;
+  TOnRttiJsonRead(result.fJsonReader)  := JsonReader;
   TOnRttiJsonWrite(result.fJsonWriter) := JsonWriter;
   result.SetParserType(result.Parser, result.ParserComplex); // needed
   result.fCache.NewInterface := @_New_ISerializable;
-  TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
+  obj := Rtti.RegisterClass(self) as TRttiJson;
+  obj.fCache.SerializableInterface := result;
+  if not InheritsFrom(TSerializablePersistent) then
+  begin // no RTTI to serialize published properties
+    TOnRttiJsonRead(obj.fJsonReader)  := JsonReaderClass;
+    TOnRttiJsonWrite(obj.fJsonWriter) := JsonWriterClass;
+  end;
 end;
 
 procedure TInterfacedSerializable.SetJson(const value: RawUtf8);
@@ -12001,6 +12030,22 @@ begin
     PPointer(data)^ := o;
   end;
   i^.FromJson(context)
+end;
+
+class procedure TInterfacedSerializable.JsonWriterClass(W: TJsonWriter;
+  data: pointer; options: TTextWriterWriteObjectOptions);
+begin
+  if data = nil then // data is already de-referenced for rkClass
+    W.AddNull // avoid GPF if ISerializable = nil
+  else
+    TInterfacedSerializable(data).ToJson(W, options);
+end;
+
+class procedure TInterfacedSerializable.JsonReaderClass(
+  var context: TJsonParserContext; data: pointer);
+begin
+  if data <> nil then // should already be allocated for rkClass
+    TInterfacedSerializable(data).FromJson(context)
 end;
 
 function TInterfacedSerializable.GetJson: RawUtf8;
