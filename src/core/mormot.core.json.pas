@@ -1707,6 +1707,8 @@ type
   // is set which will leave the instance untouched
   // - values will be left untouched before parsing, unless jpoClearValues
   // is defined, to void existing record fields or class published properties
+  // - jpoDynArrayGuessCount will enable JSON array capacity 64KB prefetch, so
+  // may be faster in some cases, and use less memory
   TJsonParserOption = (
     jpoIgnoreUnknownProperty,
     jpoIgnoreStringType,
@@ -1719,7 +1721,8 @@ type
     jpoAllowDouble,
     jpoObjectListClassNameGlobalFindClass,
     jpoNullDontReleaseObjectInstance,
-    jpoClearValues);
+    jpoClearValues,
+    jpoDynArrayGuessCount);
 
   /// set of options for JsonParser() parsing process
   TJsonParserOptions = set of TJsonParserOption;
@@ -8570,8 +8573,10 @@ begin
           load := @_JL_RttiCustomProps; // somewhat faster direct record load
       end;
     end;
-    // initial guess of the JSON array count - will browse up to 64KB of input
-    cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + JSON_PREFETCH));
+    // initial guess of the JSON array count
+    cap := 8; // guess is disabled by default (favor small documents)
+    if jpoDynArrayGuessCount in Ctxt.Options then // browse up to 64KB of input
+      cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + JSON_PREFETCH));
     if (cap = 0) or
        (not Assigned(load)) then
     begin
