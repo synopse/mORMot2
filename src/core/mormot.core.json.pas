@@ -1914,7 +1914,7 @@ type
     // using e.g. @JSON_[mFast] as optional Options parameter
     function ValueToVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil): PtrInt; override;
-    /// unserialize some JSON input into Data^
+    /// unserialize some JSON input into Data^ - warning: Json is modified in-place
     // - as used by LoadJson() and similar high-level functions
     procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
@@ -11635,29 +11635,28 @@ begin
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions, Interning);
 end;
 
-procedure EnsureRecord(TypeInfo: PRttiInfo);
+function EnsureRecord(TypeInfo: PRttiInfo; Tolerant: boolean): TJsonParserOptions;
 begin
   if (TypeInfo = nil) or
      not (TypeInfo^.Kind in rkRecordTypes) then
     EJsonException.RaiseUtf8('RecordLoadJson: % is not a record', [TypeInfo^.Name^]);
+  result := JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant];
 end;
 
 function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
-  EnsureRecord(TypeInfo);
-  result := LoadJsonInPlace(Rec, Json, TypeInfo, EndOfObject, CustomVariantOptions,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], Interning);
+  result := LoadJsonInPlace(Rec, Json, TypeInfo, EndOfObject,
+    CustomVariantOptions, EnsureRecord(TypeInfo, Tolerant), Interning);
 end;
 
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8Interning): boolean;
 begin
-  EnsureRecord(TypeInfo);
   result := LoadJson(Rec, Json, TypeInfo,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions, Interning);
+    EnsureRecord(TypeInfo, Tolerant), CustomVariantOptions, Interning);
 end;
 
 function EnsureDynArray(TypeInfo: PRttiInfo; Tolerant, GuessCount: boolean): TJsonParserOptions;
