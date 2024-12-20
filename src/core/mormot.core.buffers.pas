@@ -11568,9 +11568,8 @@ end;
 procedure TRawByteStringBuffer.Reserve(MaxSize: PtrInt);
 begin
   fLen := 0;
-  inc(MaxSize, APPEND_OVERLOAD);
-  if MaxSize > length(fBuffer) then
-    RawRealloc(MaxSize);
+  if length(fBuffer) < MaxSize then
+    FastSetString(fBuffer, MaxSize); // make new buffer from scratch
 end;
 
 procedure TRawByteStringBuffer.Reserve(const WorkingBuffer: RawByteString);
