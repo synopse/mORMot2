@@ -969,9 +969,8 @@ type
   protected
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
-    fPipelineEnabled: boolean;
-    fPipelinedWrite: boolean;
     fRequestFlags: THttpServerRequestFlags;
+    fPipelineState: set of (pEnabled, pWrite);
     fRespStatus: cardinal;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
@@ -985,7 +984,7 @@ type
     procedure BeforeProcessRead; override;
     // redirect to fHttp.ProcessRead()
     function OnRead: TPollAsyncSocketOnReadWrite; override;
-    // DoRequest gathered all output in fWR buffer to be sent at once
+    // DoRequest gathered all output in fWr buffer to be sent at once
     function FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
     // redirect to fHttp.ProcessWrite()
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
@@ -4360,7 +4359,7 @@ begin
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.fServerKeepAliveTimeOutSec;
     if hsoEnablePipelining in fServer.Options then
-      fPipelineEnabled := true;
+      fPipelineState := [pEnabled];
   end;
   HttpInit;
   // inherited AfterCreate; // void parent method
@@ -4371,9 +4370,12 @@ begin
   inherited Recycle(aRemoteIP);
   fHttp.Reset;
   if fServer <> nil then
+  begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.fServerKeepAliveTimeOutSec;
+    fPipelineState := fPipelineState * [pEnabled];
+  end;
 end;
 
 function THttpAsyncServerConnection.GetConnectionOpaque: PHttpServerConnectionOpaque;
@@ -4410,18 +4412,18 @@ var
   PLen: integer; // should be exact integer, not PtrInt
 begin
   result := soContinue;
-  fPipelinedWrite := false;
-  PLen := fWR.Len;
+  exclude(fPipelineState, pWrite);
+  PLen := fWr.Len;
   if PLen = 0 then
     exit;
-  P := fWR.Buffer;
+  P := fWr.Buffer;
   if not fOwner.fSockets.RawWrite(self, P, PLen) or
      (PLen <> 0) then // PLen<>0 if OS sending buffer is full
   begin
     fOwner.DoLog(sllWarning, 'OnRead: pipelined send error', [], self);
     result := soClose;
   end;
-  fWR.Reset;
+  fWr.Reset; // we could reuse the buffer
 end;
 
 procedure THttpAsyncServerConnection.BeforeProcessRead;
@@ -4465,16 +4467,14 @@ begin
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
-    fPipelinedWrite := false;
     while fHttp.ProcessRead(st, {returnOnStateChange=}false) do
     begin
       // detect pipelined GET input
-      if fPipelineEnabled and
-         (st.Len <> 0) and // there are still data in the input read buffer
-         (not fPipelinedWrite) and
+      if (st.Len <> 0) and // there are still data in the input read buffer
+         (fPipelineState = [pEnabled]) and // no pWrite yet
          (fKeepAliveSec > 0) and
          not (hfConnectionClose in fHttp.HeaderFlags) then
-        fPipelinedWrite := true; // DoRequest will gather output in fWR
+        include(fPipelineState, pWrite); // DoRequest will gather output in fWr
       // handle main steps change
       case fHttp.State of
         hrsGetBodyChunkedHexFirst,
@@ -4492,9 +4492,10 @@ begin
           result := soClose;
         end;
       end;
-      if fPipelinedWrite then
+      if pWrite in fPipelineState then
       begin
-        if fWR.Len > 128 shl 10 then // flush more than 128KB of pending output
+        if fWr.Len > 128 shl 10 then
+          // flush when got more than 128KB of pending output
           if FlushPipelinedWrite <> soContinue then
             result := soClose;
         if (result <> soContinue) or
@@ -4506,7 +4507,8 @@ begin
         break; // rejected, authenticated, async or upgraded
       previous := fHttp.State;
     end;
-    if fPipelinedWrite then
+    // no more available input
+    if pWrite in fPipelineState then // time to flush the pipelined responses
        if FlushPipelinedWrite <> soContinue then
          result := soClose;
     if fHttp.State = hrsGetHeaders then
@@ -4779,7 +4781,7 @@ begin
     fServer.fAsync.fSockets.fSendBufferSize);
   // SetupResponse() set fHttp.State as hrsSendBody or hrsResponseDone
   fRespStatus := fRequest.RespStatus;
-  if fPipelinedWrite then
+  if pWrite in fPipelineState then
     // we are in HTTP pipelined mode: input stream had several requests
     if fHttp.State <> hrsResponseDone then
     begin
@@ -4792,10 +4794,10 @@ begin
     end
     else
     begin
-      fWr.Append(output.Buffer, output.Len); // append to the fWR output buffer
+      fWr.Append(output.Buffer, output.Len);
       result := AfterWrite; // be ready for the next pipelined request
     end
-  else
+  else // regular non-pipelined mode
     // now try socket send() with headers (and small body if hrsResponseDone)
     if fHttp.State = hrsResponseDone then
     begin
