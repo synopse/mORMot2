@@ -719,9 +719,9 @@ type
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
-    /// append some Ansi text as UTF-8 chars to the buffer
+    /// append some Ansi text of a specific CodePage as UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
-    procedure AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal); overload;
+    procedure AddNoJsonEscapeCP(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
     /// append some UTF-8 content to the buffer, with no JSON escape
     // - if supplied json is '', will write 'null' so that valid JSON is written
     // - redirect to AddNoJsonEscape() otherwise
@@ -4673,7 +4673,7 @@ begin
   tmp.Done;
 end;
 
-procedure TTextWriter.AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
+procedure TTextWriter.AddNoJsonEscapeCP(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
 var
   B: PAnsiChar;
 begin
@@ -4729,8 +4729,7 @@ begin
     {$ifdef UNICODE}
     AddNoJsonEscapeW(pointer(s), 0);
     {$else}
-    AddNoJsonEscape(pointer(s), length(s),
-      Unicode_CodePage); // =CurrentAnsiConvert.CodePage
+    AddNoJsonEscapeCP(pointer(s), length(s), Unicode_CodePage);
     {$endif UNICODE}
 end;
 
