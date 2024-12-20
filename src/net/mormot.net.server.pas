@@ -396,14 +396,16 @@ type
     /// just a wrapper around fErrorMessage := FormatString()
     procedure SetErrorMessage(const Fmt: RawUtf8; const Args: array of const);
     /// serialize a given value as JSON into OutContent and OutContentType fields
-    procedure SetOutJson(Value: pointer; TypeInfo: PRttiInfo); overload;
+    // - this function returns HTTP_SUCCESS
+    function SetOutJson(Value: pointer; TypeInfo: PRttiInfo): cardinal; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// serialize a given TObject as JSON into OutContent and OutContentType fields
-    procedure SetOutJson(Value: TObject); overload;
+    // - this function returns HTTP_SUCCESS
+    function SetOutJson(Value: TObject): cardinal; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// low-level initialization of the associated TJsonWriter instance
     // - will reset and reuse an TJsonWriter associated to this execution context
-    // - as called by SetOutJson() oveloaded methods using RTTI
+    // - as called by SetOutJson() overloaded methods using RTTI
     // - a local TTextWriterStackBuffer should be provided as temporary buffer
     function TempJsonWriter(var temp: TTextWriterStackBuffer): TJsonWriter;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2298,7 +2300,7 @@ type
     fOnServiceMessage: TThreadMethod;
     procedure SetOnWSThreadTerminate(const Value: TOnNotifyThread);
     function GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
-    function getProtocolsCount: integer;
+    function GetProtocolsCount: integer;
     procedure SetOnWSThreadStart(const Value: TOnNotifyThread);
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -2345,7 +2347,7 @@ type
       read GetProtocol;
     /// access to the associated endpoints count
     property ProtocolsCount: integer
-      read getProtocolsCount;
+      read GetProtocolsCount;
     /// event called when the processing thread starts
     property OnWSThreadStart: TOnNotifyThread
       read FOnWSThreadStart write SetOnWSThreadStart;
@@ -3040,6 +3042,7 @@ end;
 destructor THttpServerRequest.Destroy;
 begin
   fTempWriter.Free;
+  // inherited Destroy; is void
 end;
 
 const
@@ -3204,22 +3207,24 @@ begin
   result := fTempWriter;
 end;
 
-procedure THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo);
+function THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo): cardinal;
 var
   temp: TTextWriterStackBuffer;
 begin
   TempJsonWriter(temp).AddTypedJson(Value, TypeInfo, []);
   fTempWriter.SetText(RawUtf8(fOutContent));
   fOutContentType := JSON_CONTENT_TYPE_VAR;
+  result := HTTP_SUCCESS;
 end;
 
-procedure THttpServerRequest.SetOutJson(Value: TObject);
+function THttpServerRequest.SetOutJson(Value: TObject): cardinal;
 var
   temp: TTextWriterStackBuffer;
 begin
   TempJsonWriter(temp).WriteObject(Value, []);
   fTempWriter.SetText(RawUtf8(fOutContent));
   fOutContentType := JSON_CONTENT_TYPE_VAR;
+  result := HTTP_SUCCESS;
 end;
 
 function THttpServerRequest.RouteOpaque: pointer;
@@ -8351,7 +8356,7 @@ begin
     result := nil;
 end;
 
-function THttpApiWebSocketServer.getProtocolsCount: integer;
+function THttpApiWebSocketServer.GetProtocolsCount: integer;
 begin
   if self = nil then
     result := 0
@@ -8359,14 +8364,14 @@ begin
     result := Length(fRegisteredProtocols^);
 end;
 
-function THttpApiWebSocketServer.getSendResponseFlags(Ctxt: THttpServerRequest): integer;
+function THttpApiWebSocketServer.GetSendResponseFlags(Ctxt: THttpServerRequest): integer;
 begin
   if (PHTTP_REQUEST(Ctxt.HttpApiRequest)^.UrlContext = WEB_SOCKET_URL_CONTEXT) and
      (fLastConnection <> nil) then
     result := HTTP_SEND_RESPONSE_FLAG_OPAQUE or
       HTTP_SEND_RESPONSE_FLAG_MORE_DATA or HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA
   else
-    result := inherited getSendResponseFlags(Ctxt);
+    result := inherited GetSendResponseFlags(Ctxt);
 end;
 
 function THttpApiWebSocketServer.UpgradeToWebSocket(

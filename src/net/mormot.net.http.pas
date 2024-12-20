@@ -854,13 +854,15 @@ type
     // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
     function UrlParam(const UpperName: RawUtf8; out Value: Int64): boolean; overload;
     /// set the OutContent and OutContentType fields with the supplied JSON
-    procedure SetOutJson(const Json: RawUtf8); overload;
+    function SetOutJson(const Json: RawUtf8): cardinal; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// set the OutContent and OutContentType fields with the supplied JSON
-    procedure SetOutJson(const Fmt: RawUtf8; const Args: array of const); overload;
+    // - this function returns HTTP_SUCCESS
+    function SetOutJson(const Fmt: RawUtf8; const Args: array of const): cardinal; overload;
     /// set the OutContent and OutContentType fields with the supplied text
-    procedure SetOutText(const Fmt: RawUtf8; const Args: array of const;
-      const ContentType: RawUtf8 = TEXT_CONTENT_TYPE);
+    // - this function returns HTTP_SUCCESS
+    function SetOutText(const Fmt: RawUtf8; const Args: array of const;
+      const ContentType: RawUtf8 = TEXT_CONTENT_TYPE): cardinal;
     /// set the OutContent and OutContentType fields to return a specific file
     // - returning status 200 with the STATICFILE_CONTENT_TYPE constant marker
     // - Handle304NotModified = TRUE will check the file age and size and return
@@ -869,13 +871,13 @@ type
     // - can optionally return FileSize^ (0 if not found, -1 if is a folder)
     function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0;
-      FileSize: PInt64 = nil): integer;
+      FileSize: PInt64 = nil): cardinal;
     /// set the OutContent and OutContentType fields to return a specific file
     // - returning status 200 with the supplied Content (and optional ContentType)
     // - Handle304NotModified = TRUE will check the supplied content and return
     // status HTTP_NOTMODIFIED (304) if it did not change
     function SetOutContent(const Content: RawByteString; Handle304NotModified: boolean;
-      const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0): integer;
+      const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0): cardinal;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -4641,29 +4643,32 @@ begin
   result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
 end;
 
-procedure THttpServerRequestAbstract.SetOutJson(const Json: RawUtf8);
+function THttpServerRequestAbstract.SetOutJson(const Json: RawUtf8): cardinal;
 begin
   fOutContent := Json;
   fOutContentType := JSON_CONTENT_TYPE_VAR;
+  result := HTTP_SUCCESS;
 end;
 
-procedure THttpServerRequestAbstract.SetOutJson(const Fmt: RawUtf8;
-  const Args: array of const);
+function THttpServerRequestAbstract.SetOutJson(const Fmt: RawUtf8;
+  const Args: array of const): cardinal;
 begin
   FormatUtf8(Fmt, Args, RawUtf8(fOutContent));
   fOutContentType := JSON_CONTENT_TYPE_VAR;
+  result := HTTP_SUCCESS;
 end;
 
-procedure THttpServerRequestAbstract.SetOutText(
-  const Fmt: RawUtf8; const Args: array of const; const ContentType: RawUtf8);
+function THttpServerRequestAbstract.SetOutText(
+  const Fmt: RawUtf8; const Args: array of const; const ContentType: RawUtf8): cardinal;
 begin
   FormatUtf8(Fmt, Args, RawUtf8(fOutContent));
   fOutContentType := ContentType;
+  result := HTTP_SUCCESS;
 end;
 
 function THttpServerRequestAbstract.SetOutFile(const FileName: TFileName;
   Handle304NotModified: boolean; const ContentType: RawUtf8;
-  CacheControlMaxAgeSec: integer; FileSize: PInt64): integer;
+  CacheControlMaxAgeSec: integer; FileSize: PInt64): cardinal;
 var
   fs: Int64;
   ts: TUnixMSTime;
@@ -4696,7 +4701,7 @@ end;
 
 function THttpServerRequestAbstract.SetOutContent(const Content: RawByteString;
   Handle304NotModified: boolean; const ContentType: RawUtf8;
-  CacheControlMaxAgeSec: integer): integer;
+  CacheControlMaxAgeSec: integer): cardinal;
 begin
   if CacheControlMaxAgeSec <> 0 then
     AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
