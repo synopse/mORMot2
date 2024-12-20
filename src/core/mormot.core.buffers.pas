@@ -10840,7 +10840,7 @@ begin
                 W.AddShort('<img alt="');
                 W.AddHtmlEscape(B2, P2 - B2, hfWithinAttributes);
                 W.AddShorter('" src="');
-                W.AddShort(B, P - B);
+                W.AddNoJsonEscape(B, P - B);
                 W.AddShorter('">');
                 inc(P);
                 continue;
@@ -11467,7 +11467,7 @@ begin
   else
   begin
     inc(needed, needed shr 3 + 2048); // generous overhead on resize
-    SetLength(fBuffer, needed); // realloc = move existing data
+    SetLength(fBuffer, needed);       // realloc = move existing data
   end;
 end;
 

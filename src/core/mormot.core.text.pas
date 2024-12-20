@@ -494,8 +494,7 @@ type
     fInitialStreamPosition: PtrUInt;
     fTotalFileSize: PtrUInt;
     fHumanReadableLevel: integer;
-    // internal temporary buffer
-    fTempBufSize: integer;
+    fTempBufSize: integer; // internal temporary buffer
     fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
     fCustomOptions: TTextWriterOptions;

@@ -3978,7 +3978,7 @@ begin
     try
       for i := 0 to FieldCount - 1 do
       begin
-        AddShort(FieldNames[i], FieldNamesL[i]);
+        AddShort(FieldNames[i], FieldNamesL[i]); // FieldNamesL[] are bytes
         AddComma;
       end;
       CancelLastComma;

@@ -5149,7 +5149,7 @@ procedure AddNameValueJson(w: TJsonWriter; nam: PPUtf8Char; val: PVariant;
 begin
   if checkExtendedPropName and
      JsonPropNameValid(nam^) then
-    w.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
+    w.AddNoJsonEscape(nam^, PStrLen(nam^ - _STRLEN)^)
   else
   begin
     w.AddDirect('"');
