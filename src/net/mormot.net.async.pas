@@ -4778,11 +4778,6 @@ begin
     fServer.fAsync.fSockets.fSendBufferSize);
   // SetupResponse() set fHttp.State as hrsSendBody or hrsResponseDone
   fRespStatus := fRequest.RespStatus;
-  // release memory of all COW fields ASAP if HTTP header was interned
-  if fHttp.Interning = nil then
-    FreeAndNil(fRequest) // more efficient to create a new instance
-  else
-    fRequest.CleanupInstance; // let all headers have refcount=1
   if fPipelinedWrite then
     // we are in HTTP pipelined mode: input stream had several requests
     if fHttp.State <> hrsResponseDone then
