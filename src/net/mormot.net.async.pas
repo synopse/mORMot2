@@ -210,7 +210,7 @@ type
   // generational garbage collector of TAsyncConnection instances
   TPollAsyncConnections = record
     Safe: TLightLock;
-    Count: integer;
+    Count: integer; // should be integer, not PtrInt
     Items: array of TPollAsyncConnection;
   end;
   PPollAsyncConnections = ^TPollAsyncConnections;
@@ -980,6 +980,7 @@ type
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;
+      {$ifdef HASINLINE} inline; {$endif}
     // overriden to wait for background Write to finish
     procedure BeforeProcessRead; override;
     // redirect to fHttp.ProcessRead()
@@ -1097,8 +1098,8 @@ type
       read fRequestClass write fRequestClass;
   published
     /// initial capacity of internal per-connection Headers buffer
-    // - 2 KB by default is within the mormot.core.fpcx64mm SMALL blocks limit
-    // so will use up to 3 locks before contention
+    // - the 2KB default is within the mormot.core.fpcx64mm SMALL blocks limit
+    // so will try up to 3 locks before contention
     property HeadersDefaultBufferSize: integer
       read fHeadersDefaultBufferSize write fHeadersDefaultBufferSize;
     /// maximum allowed size in bytes of incoming headers
@@ -1857,7 +1858,7 @@ end;
 
 function TPollAsyncSockets.Write(connection: TPollAsyncConnection;
   data: pointer; datalen: integer; timeout: integer): boolean;
-var
+var // warning: datalen parameter should be defined as integer, not PtrInt
   P: PByte;
   previous: integer;
   res: TPollAsyncSocketOnReadWrite;
@@ -2109,7 +2110,9 @@ begin
             UnlockAndCloseConnection(false, connection, ToText(res)^);
             exit;
           end;
-          connection.fRd.Append(@temp, recved); // to reuse fRd.Buffer
+          if recved < 1024 then
+            connection.fRd.Reserve(1024); // minimal reusable fRd.Buffer
+          connection.fRd.Append(@temp, recved);
           inc(added, recved);
         until recved < SizeOf(temp);
         // process the received data by calling connection.OnRead
@@ -2170,7 +2173,7 @@ procedure TPollAsyncSockets.ProcessWrite(
 var
   connection: TPollAsyncConnection;
   buf: PByte;
-  buflen, w: integer;
+  buflen, w: integer; // warning: buflen should be integer, not PtrInt
   res: TPollAsyncSocketOnReadWrite;
   start: Int64;
 begin
@@ -3516,13 +3519,14 @@ begin
         exclude(c.fFlags, fWasActive);
         c.fLastOperation := sec;
       end
-      else
+      else // inactive connection
       begin
-        // inactive connection: check if some events should be triggerred
-        // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
+        // check if some working memory could be released
         if (gc <> 0) and
            (c.fLastOperation < gc) then
           inc(gced, c.ReleaseMemoryOnIdle); // quick non virtual method
+        // check if some events should be triggerred
+        // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
         if (allowed <> 0) and
            (c.fLastOperation < allowed) then
           ObjArrayAddCount(idle, c, idles); // calls below, outside the lock
@@ -3539,7 +3543,7 @@ begin
     try
       c := idle[i];
       if c.OnLastOperationIdle(sec) then
-        inc(notified); // e.g. TWebSocketAsyncConnection ping was sent
+        inc(notified); // e.g. a TWebSocketAsyncConnection ping was sent
       if Terminated then
         break;
     except
@@ -4050,10 +4054,10 @@ end;
 
 function THttpAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
 begin
+  // caller made fRWSafe[0].TryLock
   result := inherited ReleaseReadMemoryOnIdle + // clean fRd memory
-            fHttp.Head.Capacity + fHttp.Process.Capacity;
-  inc(result, fHttp.Head.Clear);
-  inc(result, fHttp.Process.Clear);
+            fHttp.Head.Clear +
+            fHttp.Process.Clear;
 end;
 
 procedure THttpAsyncConnection.OnAfterWriteSubscribe;
@@ -4149,7 +4153,7 @@ end;
 function THttpAsyncClientConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
 var
   data: PByte;
-  datalen: integer;
+  datalen: integer; // warning: datalen should be defined as integer, not PtrInt
 begin
   repeat // just to avoid a goto
     result := soClose; // e.g. unexpected state
@@ -4173,6 +4177,7 @@ begin
               break; // e.g. TLS handshake failure
             end;
           // compute the request command and headers
+          fHttp.Head.Reset;
           fHttp.Head.Append([
             fHttp.CommandMethod, ' /', fHttp.CommandUri, ' HTTP/1.1'#13#10 +
             'Host: ', fHttp.Host, #13#10 +
@@ -4346,21 +4351,26 @@ end;
 
 { THttpAsyncServerConnection }
 
+procedure THttpAsyncServerConnection.HttpInit;
+begin
+  fHttp.ProcessInit; // ready to process a new HTTP request
+  fHeadersSec := 0;
+  fBytesRecv := 0; // reset stats
+  fBytesSend := 0;
+end;
+
 procedure THttpAsyncServerConnection.AfterCreate;
 begin
   fServer := (fOwner as THttpAsyncConnections).fAsyncServer;
-  if fServer <> nil then
-  begin
-    fHttp.Interning := fServer.fInterning;
-    fHttp.Compress := fServer.fCompress;
-    fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
-    fHttp.Options := fServer.fDefaultRequestOptions;
-    if fServer.fServerKeepAliveTimeOutSec <> 0 then
-      fKeepAliveSec := fServer.Async.fLastOperationSec +
-                       fServer.fServerKeepAliveTimeOutSec;
-    if hsoEnablePipelining in fServer.Options then
-      fPipelineState := [pEnabled];
-  end;
+  fHttp.Interning := fServer.fInterning;
+  fHttp.Compress := fServer.fCompress;
+  fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
+  fHttp.Options := fServer.fDefaultRequestOptions;
+  if fServer.fServerKeepAliveTimeOutSec <> 0 then
+    fKeepAliveSec := fServer.Async.fLastOperationSec +
+                     fServer.fServerKeepAliveTimeOutSec;
+  if hsoEnablePipelining in fServer.Options then
+    fPipelineState := [pEnabled];
   HttpInit;
   // inherited AfterCreate; // void parent method
 end;
@@ -4397,19 +4407,10 @@ begin
   // inherited BeforeDestroy; // void parent method
 end;
 
-procedure THttpAsyncServerConnection.HttpInit;
-begin
-  fHttp.ProcessInit; // ready to process this HTTP request
-  fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // reusable 2KB buffer
-  fHeadersSec := 0;
-  fBytesRecv := 0; // reset stats
-  fBytesSend := 0;
-end;
-
 function THttpAsyncServerConnection.FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
 var
   P: PByte;
-  PLen: integer; // should be exact integer, not PtrInt
+  PLen: integer; // warning: PLen should be defined as integer, not PtrInt
 begin
   result := soContinue;
   exclude(fPipelineState, pWrite);
@@ -4464,6 +4465,8 @@ begin
     previous := fHttp.State;
     // use the HTTP state machine to asynchronously parse fRd input
     result := soContinue;
+    if fHttp.Head.Buffer = nil then
+     fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // preallocate once
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
@@ -4772,7 +4775,7 @@ function THttpAsyncServerConnection.DoResponse(
   res: TPollAsyncSocketOnReadWrite): TPollAsyncSocketOnReadWrite;
 var
   output: PRawByteStringBuffer;
-  sent: integer;
+  sent: integer; // warning: sent should be defined as integer, not PtrInt
   p: PByte;
 begin
   result := res;

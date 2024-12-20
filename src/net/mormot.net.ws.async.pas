@@ -282,7 +282,7 @@ begin
   // it is time to notify the other end that we are still alive
   fProcess.SendPing; // Write will change fWasActive, then fLastOperation
   // warning: Write calls ConnectionDelete() so fConnectionLock on socket error
-  result := true; // notify TAsyncConnections.IdleEverySecond
+  result := true; // notify TAsyncConnections.IdleEverySecond for logging
 end;
 
 function TWebSocketAsyncConnection.DecodeHeaders: integer;
@@ -389,7 +389,7 @@ constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
 begin
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
     aLog, aOptions, aThreadPoolCount);
-  fLastOperationIdleSeconds := 5; // 5 secs is good enough for ping/pong
+  fLastOperationIdleSeconds := 5;   // 5 secs is good enough for ping/pong
   fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
 end;
 
