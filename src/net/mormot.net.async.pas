@@ -1505,7 +1505,8 @@ begin
       inc(result, ReleaseWriteMemoryOnIdle); // do it within the same lock
     fRWSafe[0].UnLock;
   end;
-  if (fWr.Buffer <> nil) and
+  if (ifSeparateWLock in fInternalFlags) and
+     (fWr.Buffer <> nil) and
      fRWSafe[1].TryLock then
   begin
     inc(result, ReleaseWriteMemoryOnIdle);
