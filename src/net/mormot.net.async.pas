@@ -1483,15 +1483,13 @@ end;
 function TPollAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
 begin
   // caller made fRWSafe[0].TryLock
-  result := fRd.Capacity; // returns number of bytes released
-  fRd.Clear; // fBuffer := ''
+  result := fRd.Clear; // returns number of bytes released
 end;
 
 function TPollAsyncConnection.ReleaseWriteMemoryOnIdle: PtrInt;
 begin
   // caller made fRWSafe[0/1].TryLock
-  result := fWr.Capacity;
-  fWr.Clear;
+  result := fWr.Clear;
 end;
 
 function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
@@ -1510,7 +1508,7 @@ begin
   if (fWr.Buffer <> nil) and
      fRWSafe[1].TryLock then
   begin
-    ReleaseWriteMemoryOnIdle;
+    inc(result, ReleaseWriteMemoryOnIdle);
     fRWSafe[1].UnLock;
   end;
 end;
@@ -4054,8 +4052,8 @@ function THttpAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
 begin
   result := inherited ReleaseReadMemoryOnIdle + // clean fRd memory
             fHttp.Head.Capacity + fHttp.Process.Capacity;
-  fHttp.Head.Clear;
-  fHttp.Process.Clear;
+  inc(result, fHttp.Head.Clear);
+  inc(result, fHttp.Process.Clear);
 end;
 
 procedure THttpAsyncConnection.OnAfterWriteSubscribe;

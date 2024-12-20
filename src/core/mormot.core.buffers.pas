@@ -2778,7 +2778,8 @@ type
     procedure Reset;
       {$ifdef HASINLINE}inline;{$endif}
     /// release/free the internal Buffer storage
-    procedure Clear;
+    // - returns the released memory bytes, i.e. former Capacity before clearing
+    function Clear: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// a convenient wrapper to pointer(fBuffer) for direct Buffer/Len use
     function Buffer: pointer;
@@ -11444,10 +11445,12 @@ begin
   fLen := 0;
 end;
 
-procedure TRawByteStringBuffer.Clear;
+function TRawByteStringBuffer.Clear: PtrInt;
 begin
   fLen := 0;
-  FastAssignNew(fBuffer);
+  result := length(fBuffer);
+  if result <> 0 then
+    FastAssignNew(fBuffer);
 end;
 
 function TRawByteStringBuffer.Buffer: pointer;
