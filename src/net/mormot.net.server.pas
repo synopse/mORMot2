@@ -3098,12 +3098,13 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
 
   procedure ProcessErrorMessage;
   begin
+    HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere);
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
       '<h1>% Server Error %</h1><hr>' +
       '<p>HTTP %</p><p>%</p><small>%</small></body></html>',
       [fServer.ServerName, fRespStatus, StatusCodeToShort(fRespStatus),
-       HtmlEscapeString(fErrorMessage), XPOWEREDVALUE],
+       fOutContentType, XPOWEREDVALUE],
       RawUtf8(fOutContent));
     fOutCustomHeaders := '';
     fOutContentType := 'text/html; charset=utf-8'; // create message to display
@@ -3119,12 +3120,12 @@ begin
   // process content
   Context.ContentLength := 0; // needed by ProcessStaticFile
   Context.ContentLastModified := 0;
-  if (OutContentType <> '') and
-     (OutContentType[1] = '!') then
-    if OutContentType = NORESPONSE_CONTENT_TYPE then
-      OutContentType := '' // true HTTP always expects a response
-    else if (OutContent <> '') and
-            (OutContentType = STATICFILE_CONTENT_TYPE) then
+  if (fOutContentType <> '') and
+     (fOutContentType[1] = '!') then
+    if fOutContentType = NORESPONSE_CONTENT_TYPE then
+      fOutContentType := '' // true HTTP always expects a response
+    else if (fOutContent <> '') and
+            (fOutContentType = STATICFILE_CONTENT_TYPE) then
       ProcessStaticFile;
   if fErrorMessage <> '' then
     ProcessErrorMessage;
@@ -3180,9 +3181,9 @@ begin
   h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
   if hsoIncludeDateHeader in fServer.Options then
     fServer.AppendHttpDate(h^);
-  Context.Content := OutContent;
-  Context.ContentType := OutContentType;
-  OutContent := ''; // dec RefCnt to release body memory ASAP
+  Context.Content := fOutContent;
+  Context.ContentType := fOutContentType;
+  fOutContent := ''; // dec RefCnt to release body memory ASAP
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // set State
   // now TAsyncConnectionsSockets.Write(result) should be called
 end;
@@ -3379,7 +3380,8 @@ end;
 function THttpServerGeneric.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
   if (self = nil) or
-     fShutdownInProgress then
+     fShutdownInProgress or
+     not Assigned(OnRequest) then
     result := HTTP_NOTFOUND
   else
   begin
@@ -3387,10 +3389,7 @@ begin
        Ctxt.ConnectionThread.InheritsFrom(TSynThread) and
        (not Assigned(TSynThread(Ctxt.ConnectionThread).StartNotified)) then
       NotifyThreadStart(TSynThread(Ctxt.ConnectionThread));
-    if Assigned(OnRequest) then
-      result := OnRequest(Ctxt)
-    else
-      result := HTTP_NOTFOUND;
+    result := OnRequest(Ctxt);
   end;
 end;
 
