@@ -11185,28 +11185,33 @@ begin
       exit; // the parameter is not in the expected format for Ctxt
   end;
   // if we reached here, the URI do match up to now
-  if (P^ = #0) or (P^ = '?') then
-  begin
-    if (P^ = '?') and (Ctxt <> nil) then
-      LookupParam(Ctxt, P, -1); // store the inlined parameters position in Ctxt
-    result := self; // exact match found for this entry (excluding URI params)
-    exit;
-  end;
-  ch := pointer(Child);
-  if ch = nil then
-    exit;
-  n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
-  repeat
-    if (ch^.Names <> nil) or
-       (ch^.Chars[1] = t^[P^]) then // recursive call only if worth it
-    begin
-      result := ch^.Lookup(P, Ctxt);
-      if result <> nil then
-        exit; // match found in children
+  result := self;
+  case P^ of
+    #0:
+      ; // exact match found for this entry (without params)
+    '?':
+      if Ctxt <> nil then // store the inlined parameters position in Ctxt
+        LookupParam(Ctxt, P, -1);
+  else
+    begin // search remaining URI chars in children nodes
+      result := nil;
+      ch := pointer(Child);
+      if ch = nil then
+        exit;
+      n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+      repeat
+        if (ch^.Names <> nil) or
+           (ch^.Chars[1] = t^[P^]) then // recursive call only if worth it
+        begin
+          result := ch^.Lookup(P, Ctxt);
+          if result <> nil then
+            exit; // match found in children
+        end;
+        inc(ch);
+        dec(n);
+      until n = 0;
     end;
-    inc(ch);
-    dec(n);
-  until n = 0;
+  end;
 end;
 
 
