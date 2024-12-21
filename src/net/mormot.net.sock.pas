@@ -4227,11 +4227,12 @@ begin
     begin
       p := pointer(new.Events);
       n := new.Count;
-      repeat
-        SetPending(ResToTag(p^)); // O(1) flag set in TPollConnectionSockets
-        inc(p);
-        dec(n);
-      until n = 0;
+      if n <> 0 then
+        repeat
+          SetPending(ResToTag(p^)); // O(1) flag set in TPollConnectionSockets
+          inc(p);
+          dec(n);
+        until n = 0;
     end;
     exit;
   end;
@@ -4246,8 +4247,8 @@ begin
   end;
   result := 0; // returns number of new events to process
   // remove any duplicate: PollForPendingEvents() called before GetOnePending()
-  p := pointer(new.Events);
   n := new.Count;
+  p := pointer(new.Events);
   cap := length(fPending.Events);
   repeat
     if (byte(ResToEvents(p^)) <> 0) and // DeleteOnePending() may set 0

@@ -79,8 +79,7 @@ type
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
   // - fInList indicates that ConnectionAdd() did register the connection
   // - fReadPending states that there is a pending event for this connection
-  // - fFromGC is set when the connection has been recycled from the GC list
-  // - note: better keep it as 8 items to fit in a byte (faster access)
+  // - note: better keep it up to 8 items to fit in a byte (faster access)
   TPollAsyncConnectionFlags = set of (
     fWasActive,
     fClosed,
@@ -90,8 +89,7 @@ type
     fSubWrite,
     {$endif USE_WINIOCP}
     fInList,
-    fReadPending,
-    fFromGC
+    fReadPending
   );
 
   /// abstract parent to store information about one TPollAsyncSockets connection
@@ -106,7 +104,7 @@ type
     /// low-level flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
     /// used internally e.g. for fRW[] or IOCP or to mark AddGC()
-    fInternalFlags: set of (ifWriteWait, ifInGC, ifSeparateWLock);
+    fInternalFlags: set of (ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
@@ -128,7 +126,7 @@ type
     {$endif USE_WINIOCP}
     /// called when the instance is connected to a poll, after Create or Recycle
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
-    // - overriding this method is cheaper than its plain Create destructor
+    // - overriding this method is cheaper than its plain Create constructor
     // - default implementation does nothing
     procedure AfterCreate; virtual;
     /// called when the instance is about to be deleted from a poll
@@ -165,6 +163,9 @@ type
     function ReleaseReadMemoryOnIdle: PtrInt; virtual;
     function ReleaseWriteMemoryOnIdle: PtrInt; virtual;
   public
+    /// inherited classes should never call it, but reintroduce their own Create
+    // and override AfterCreate if needed
+    constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
     /// quick check if this instance seems still active, i.e. its Handle <> 0
@@ -1391,6 +1392,11 @@ implementation
 
 { TPollAsyncConnection }
 
+constructor TPollAsyncConnection.Create;
+begin
+  EAsyncConnections.RaiseUtf8('Unexpected %.Create: use AfterCreate', [self]);
+end;
+
 destructor TPollAsyncConnection.Destroy;
 begin
   // note: our light locks do not need any specific release
@@ -2018,7 +2024,8 @@ function TPollAsyncSockets.ProcessRead(Sender: TSynThread;
   const notif: TPollSocketResult): boolean;
 var
   connection: TPollAsyncConnection;
-  recved, added, retryms: integer;
+  recved: integer; // should be integer
+  added, retryms: integer;
   pse: TPollSocketEvents;
   res: TNetResult;
   start: Int64;
@@ -2359,7 +2366,7 @@ constructor TAsyncConnection.Create(aOwner: TAsyncConnections;
   const aRemoteIP: TNetAddr);
 begin
   fOwner := aOwner;
-  inherited Create;
+  // inherited Create; use AfterCreate instead
   fFlags := [fWasActive]; // by definition
   fRemoteIP4 := aRemoteIP.IP4;
   aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
@@ -2367,8 +2374,8 @@ end;
 
 procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
-  fFlags := [fFromGC, fWasActive];
-  fInternalFlags := [];
+  fFlags := [fWasActive];
+  fInternalFlags := [ifFromGC];
   fRd.Reset;
   fWr.Reset;
   fRWSafe[0].Init;
@@ -2830,8 +2837,8 @@ begin
     finally
       fGC1.Safe.UnLock;
     end;
-    // wait 2 seconds until no pending event is in queue and free instances
-    n2 := OneGC(fGC2, tofree, fLastOperationMS, 2000);
+    // wait 10 seconds until no pending event is in queue and free instances
+    n2 := OneGC(fGC2, tofree, fLastOperationMS, 10000);
   finally
     fGC2.Safe.UnLock;
   end;
@@ -3071,6 +3078,8 @@ end;
 
 function TAsyncConnections.ConnectionCreate(aSocket: TNetSocket;
   const aRemoteIp: TNetAddr; out aConnection: TAsyncConnection): boolean;
+var
+  pool: PPollAsyncConnections;
 begin
   // you can override this class then call ConnectionNew
   if Terminated then
@@ -3078,17 +3087,17 @@ begin
   else
   begin
     aConnection := nil;
-    with fGC2 do // recycle 2nd gen instances e.g. for short-living HTTP/1.0
-      if (Count > 0) and
-         Safe.TryLock then
+    pool := @fGC2; // recycle 2nd gen instances e.g. for short-living HTTP/1.0
+    if (pool^.Count > 0) and
+       pool^.Safe.TryLock then
+    begin
+      if pool^.Count > 0 then
       begin
-        if Count > 0 then
-        begin
-          dec(Count);
-          aConnection := pointer(Items[Count]);
-        end;
-        Safe.UnLock;
+        dec(pool^.Count);
+        aConnection := pool^.Items[pool^.Count] as TAsyncConnection;
       end;
+      pool^.Safe.UnLock;
+    end;
     if aConnection = nil then
       aConnection := fConnectionClass.Create(self, aRemoteIp)
     else
@@ -3124,7 +3133,7 @@ begin
   if acoVerboseLog in fOptions then
     DoLog(sllTrace, 'ConnectionNew % sock=% count=% gc=%',
       [aConnection, pointer(aSocket), fConnectionCount,
-       fFromGC in aConnection.fFlags], self);
+       ifFromGC in aConnection.fInternalFlags], self);
   result := true; // indicates aSocket owned by the pool
 end;
 
@@ -3620,7 +3629,7 @@ begin
     // initial accept() will be directly redirected to atpReadPending threads
     // with no initial fRead.SubScribe() to speed up e.g. HTTP/1.0
     fSockets.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead],
-      {aSearchExisting=} false{fFromGC in Sender.fFlags});
+      {aSearchExisting=} false{ifFromGC in Sender.fInternalFlags});
     ThreadPollingWakeup(1);
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end
@@ -3684,7 +3693,7 @@ end;
 procedure TAsyncServer.Shutdown;
 var
   i: PtrInt;
-  len: integer;
+  len: integer; // should be integer
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
   ev: TNetEvents;
   host, port: RawUtf8;
@@ -3801,7 +3810,7 @@ var
   connection: TAsyncConnection;
   start: Int64;
   bytes: cardinal;
-  len: integer;
+  len: integer; // should be integer
   sin: TNetAddr;
 begin
   // Accept() incoming connections
@@ -4642,7 +4651,7 @@ end;
 function THttpAsyncServerConnection.DoReject(
   status: integer): TPollAsyncSocketOnReadWrite;
 var
-  len: integer;
+  len: integer; // should not be PtrInt
 begin
   if fServer.SetRejectInCommandUri(fHttp, fConnectionID, status) then
     result := soContinue
