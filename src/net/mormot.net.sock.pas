@@ -4250,23 +4250,24 @@ begin
   n := new.Count;
   p := pointer(new.Events);
   cap := length(fPending.Events);
-  repeat
-    if (byte(ResToEvents(p^)) <> 0) and // DeleteOnePending() may set 0
-       not EnsurePending(ResToTag(p^)) then // O(1) in TPollConnectionSockets
-    begin
-      // new event to process
-      if len >= cap then
+  if n <> 0 then
+    repeat
+      if (byte(ResToEvents(p^)) <> 0) and // DeleteOnePending() may set 0
+         not EnsurePending(ResToTag(p^)) then // O(1) in TPollConnectionSockets
       begin
-        cap := NextGrow(len + new.Count);
-        SetLength(fPending.Events, cap); // seldom needed
+        // new event to process
+        if len >= cap then
+        begin
+          cap := NextGrow(len + new.Count);
+          SetLength(fPending.Events, cap); // seldom needed
+        end;
+        fPending.Events[len] := p^;
+        inc(len);
+        inc(result);
       end;
-      fPending.Events[len] := p^;
-      inc(len);
-      inc(result);
-    end;
-    inc(p);
-    dec(n);
-  until n = 0;
+      inc(p);
+      dec(n);
+    until n = 0;
   fPending.Count := len;
 end;
 
