@@ -851,7 +851,7 @@ begin
     ip := DnsLookup('synopse.info');
     if ip = '' then
     begin
-      Sleep(10); // some DNS servers may fail at first: wait a little
+      Sleep(200); // some DNS servers may fail at first: wait a little
       ip := DnsLookup('synopse.info');
     end;
     rev := '62.210.254.173';
@@ -861,7 +861,7 @@ begin
     rev := '62-210-254-173.rev.poneytelecom.eu';
     if DnsReverseLookup(ip) <> rev then
     begin
-      Sleep(10); // wait a little
+      Sleep(200); // wait a little
       CheckEqual(DnsReverseLookup(ip), rev, 'rev');
     end
     else
