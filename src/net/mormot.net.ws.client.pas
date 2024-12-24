@@ -209,8 +209,10 @@ type
     procedure AfterOpen(OpenPayload: PUtf8Char);
     // handle server response after namespace connection request
     procedure AfterNamespaceConnect(const ConnectResponse: TSocketIOMessage);
+    procedure OnEvent(const Message: TSocketIOMessage);
+    procedure OnCallback(const Message: TSocketIOMessage);
     // helper to serialize sio packets
-    function SendPacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8 = ''; aPayload: RawUtf8 = ''): Boolean;
+    function SendPacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8 = ''; aPayload: RawUtf8 = ''; ackId: Integer = 0): Boolean;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls Open() then SioUpgrade() for the Socket.IO protocol
@@ -239,6 +241,8 @@ type
     function Connect(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
     /// leaves to a given Socket.IO namespace
     procedure Disconnect(const aNameSpace: RawUtf8);
+
+    function Emit(const EventName: RawUtf8; const data: RawUtf8 = ''; const aNameSpace: RawUtf8 = ''): TSocketIONamespaceClient;
     /// raw access to the associated WebSockets connection
     property Client: THttpClientWebSockets
       read fClient;
@@ -262,6 +266,8 @@ type
 
 implementation
 
+uses
+  mormot.core.variants;
 
 { ******************** TWebSocketProcessClient Processing Class }
 
@@ -731,19 +737,38 @@ begin
   ObjArrayAdd(fNameSpace, aNamespace) ;
 end;
 
-function TSocketsIOClient.SendPacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8; aPayload: RawUtf8): Boolean;
+procedure TSocketsIOClient.OnEvent(const Message: TSocketIOMessage);
+var
+  Data: TDocVariantData;
+  EventName: RawUtf8;
+begin
+  Data.InitJson(Message.Data, JSON_FAST);
+  EventName := RawUtf8(Data.Value[0]);
+  WriteLn('Event request ', EventName);
+end;
+
+procedure TSocketsIOClient.OnCallback(const Message: TSocketIOMessage);
+var
+  Data: TDocVariantData;
+begin
+  Data.InitJson(Message.Data, JSON_FAST);
+  WriteLn('Event callback ', Message.ID, ': ',  Data.ToJson);
+end;
+
+function TSocketsIOClient.SendPacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8; aPayload: RawUtf8; ackId: Integer
+  ): Boolean;
 var
   Packet: RawByteString;
 begin
   Packet := IntToStr(Ord(aOperation));
   if (aNameSpace <> '') and (aNameSpace <> '/') then
     Packet := Packet + aNameSpace + ',';
-  // TODO: ID ?
+  if ackId > 0 then
+    Packet := Packet + IntToStr(ackId);
   if aPayload <> '' then
     Packet := Packet + aPayload;
   Protocol.SendPacket(Client.WebSockets, Packet, False, eioMessage);
 end;
-
 
 function TSocketsIOClient.GetProtocol: TWebSocketSocketIOClientProtocol;
 begin
@@ -787,6 +812,17 @@ begin
   ObjArrayDelete(fNameSpace, aInstance);
 end;
 
+function TSocketsIOClient.Emit(const EventName: RawUtf8; const data: RawUtf8; const aNameSpace: RawUtf8
+  ): TSocketIONamespaceClient;
+var
+  PayLoad: RawUtf8;
+begin
+  PayLoad := '["' + EventName + '"';
+  if data <> '' then
+    PayLoad := PayLoad + ',' + data;
+  PayLoad := PayLoad + ']';
+  SendPacket(sioEvent, aNameSpace, PayLoad);
+end;
 
 { TWebSocketEngineIOClientProtocol }
 
@@ -817,6 +853,10 @@ begin
   case Message.PacketType of
     mormot.net.ws.core.sioOpen:
       fClient.AfterNamespaceConnect(Message);
+    sioEvent:
+      fClient.OnEvent(Message);
+    sioAck:
+      fClient.OnCallback(Message);
     else
       ESocketIO.RaiseUtf8('%.SocketPacketReceived: not supported packet type: %', [self, Message.PacketType]);
   end;
