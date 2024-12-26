@@ -189,11 +189,11 @@ type
   TWebSocketSocketIOClientProtocol = class;
   TSocketsIOClient = class;
 
-  TSocketIONamespaceClient = class(TSocketIONamespace)
+  TSocketIORemoteNamespaceClient = class(TSocketIORemoteNamespace)
   public
-    class function FromConnectMessage(const Message: TSocketIOMessage; aOwner: TSocketsIOClient): TSocketIONamespaceClient;
+    class function FromConnectMessage(const Message: TSocketIOMessage; aOwner: TSocketsIOClient): TSocketIORemoteNamespaceClient;
   end;
-  TSocketIONamespaceClients = array of TSocketIONamespaceClient;
+  TSocketIORemoteNamespaceClients = array of TSocketIORemoteNamespaceClient;
 
   /// a HTTP/HTTPS client, able to upgrade to Socket.IO over WebSockets
   // - no polling mode is supported by this class
@@ -202,18 +202,19 @@ type
     function GetProtocol: TWebSocketSocketIOClientProtocol;
   protected
     fClient: THttpClientWebSockets;
-    fNameSpace: TSocketIONamespaceClients;
+    fRemoteNameSpace: TSocketIORemoteNamespaceClients;
+    fLocalNamespaces: TSocketIOLocalNamespaces;
     fConnectionEvent: TSynEvent;
-    function GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
+    function GetRemoteNameSpace(const aNameSpace: RawUtf8): TSocketIORemoteNamespaceClient;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetLocalNameSpace(const aNameSpace: RawUtf8; FallbackOnDefault: Boolean = False): TSocketIOLocalNamespace;
       {$ifdef HASINLINE} inline; {$endif}
     // in-place-decode one Engine.IO OPEN payload on client side
     procedure AfterOpen(OpenPayload: PUtf8Char);
     // handle server response after namespace connection request
     procedure AfterNamespaceConnect(const ConnectResponse: TSocketIOMessage);
-    procedure OnEvent(const Message: TSocketIOMessage);
+    procedure OnEvent(const aMessage: TSocketIOMessage);
     procedure OnCallback(const Message: TSocketIOMessage);
-    // helper to serialize sio packets
-    procedure SendPacket(aPacket: RawByteString); override;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls Open() then SioUpgrade() for the Socket.IO protocol
@@ -237,13 +238,16 @@ type
     destructor Destroy; override;
     /// return the array of connected namespaces as text
     function NameSpaces: TRawUtf8DynArray;
+    /// Register an event handler class associated with a namespace
+    procedure AddLocalNamespace(aNamespaceClass: TSocketIOLocalNamespaceClass; aNamespace: RawUtf8 = '/');
     /// access to a given Socket.IO namespace
     // - makes a connect if needed
-    function Connect(const aNameSpace: RawUtf8; WaitTimeoutMS: Cardinal = 2000): TSocketIONamespaceClient;
-    /// leaves to a given Socket.IO namespace
+    function Connect(const aNameSpace: RawUtf8; WaitTimeoutMS: Cardinal = 2000): TSocketIORemoteNamespaceClient;
+    /// disconnect from a given Socket.IO namespace
     procedure Disconnect(const aNameSpace: RawUtf8);
-
+    /// sends an event to a given namespace with an optional callback
     function Emit(const EventName: RawUtf8; const data: RawUtf8 = ''; const aNameSpace: RawUtf8 = ''; aCallback: TSioCallbackFunction = nil): TSioAckID;
+    procedure SendPacket(aPacket: RawByteString); override;
     /// raw access to the associated WebSockets connection
     property Client: THttpClientWebSockets
       read fClient;
@@ -637,10 +641,10 @@ end;
 { ******************** Socket.IO / Engine.IO Client Protocol over WebSockets }
 
 
-{ TSocketIONamespaceClient }
+{ TSocketIORemoteNamespaceClient }
 
-class function TSocketIONamespaceClient.FromConnectMessage(const Message: TSocketIOMessage; aOwner: TSocketsIOClient
-  ): TSocketIONamespaceClient;
+class function TSocketIORemoteNamespaceClient.FromConnectMessage(const Message: TSocketIOMessage; aOwner: TSocketsIOClient
+  ): TSocketIORemoteNamespaceClient;
 var
   V: array[0..1] of TValuePUtf8Char;
 begin
@@ -648,7 +652,7 @@ begin
   if V[0].Text = nil then
     EEngineIO.RaiseUtf8('%.Create: missing "sid" in %', [aOwner, Message.Data]);
 
-  Result := TSocketIONamespaceClient.Create;
+  Result := TSocketIORemoteNamespaceClient.Create;
   Result.fNameSpace := Copy(Message.NameSpace, 1, Message.NameSpaceLen);
   if Result.fNameSpace = '' then
     Result.fNameSpace := '/';
@@ -711,7 +715,8 @@ end;
 
 destructor TSocketsIOClient.Destroy;
 begin
-  ObjArrayClear(fNameSpace);
+  ObjArrayClear(fRemoteNameSpace);
+  ObjArrayClear(fLocalNamespaces);
   fClient.Free;
   if Assigned(fConnectionEvent) then
     fConnectionEvent.Free;
@@ -736,12 +741,12 @@ end;
 
 procedure TSocketsIOClient.AfterNamespaceConnect(const ConnectResponse: TSocketIOMessage);
 var
-  aNameSpace: TSocketIONamespaceClient;
+  aNameSpace: TSocketIORemoteNamespaceClient;
 begin
   if ConnectResponse.PacketType = sioConnect then
   begin
-    aNameSpace := TSocketIONamespaceClient.FromConnectMessage(ConnectResponse, Self);
-    ObjArrayAdd(fNameSpace, aNamespace);
+    aNameSpace := TSocketIORemoteNamespaceClient.FromConnectMessage(ConnectResponse, Self);
+    ObjArrayAdd(fRemoteNameSpace, aNamespace);
   end;
 
   if Assigned(fConnectionEvent) then
@@ -750,22 +755,21 @@ begin
     ESocketIO.RaiseUtf8('Error connecting to namespace "%": %', [ConnectResponse.NameSpace, ConnectResponse.Data]);
 end;
 
-procedure TSocketsIOClient.OnEvent(const Message: TSocketIOMessage);
+procedure TSocketsIOClient.OnEvent(const aMessage: TSocketIOMessage);
 var
-  Data: TDocVariantData;
-  EventName: RawUtf8;
+  ns: TSocketIOLocalNamespace;
 begin
-  Data.InitJson(Message.Data, JSON_FAST);
-  EventName := RawUtf8(Data.Value[0]);
-  WriteLn('Event request ', EventName);
+  ns := GetLocalNameSpace(aMessage.NameSpace, True);
+  if not Assigned(ns) then
+    ESocketIO.RaiseUtf8('Received event request on non existing namespace %', [aMessage.NameSpace]);
+  ns.HandleEvent(aMessage);
 end;
 
 procedure TSocketsIOClient.OnCallback(const Message: TSocketIOMessage);
 var
-  Data: TDocVariantData;
-  ns: TSocketIONamespaceClient;
+  ns: TSocketIORemoteNamespaceClient;
 begin
-  ns := GetNameSpace(Message.NameSpace);
+  ns := GetRemoteNameSpace(Message.NameSpace);
   if not Assigned(ns) then
     ESocketIO.RaiseUtf8('Received acknowledgment message from disconnected namespace %', [Message.NameSpace]);
   ns.Acknowledge(Message);
@@ -776,6 +780,14 @@ begin
   Protocol.SendPacket(Client.WebSockets, aPacket, False, eioMessage);
 end;
 
+procedure TSocketsIOClient.AddLocalNamespace(aNamespaceClass: TSocketIOLocalNamespaceClass; aNamespace: RawUtf8);
+var
+  aNs: TSocketIOLocalNamespace;
+begin
+  aNs := aNamespaceClass.Create(self, aNamespace);
+  ObjArrayAdd(fLocalNamespaces, aNs);
+end;
+
 function TSocketsIOClient.GetProtocol: TWebSocketSocketIOClientProtocol;
 begin
   Result := nil;
@@ -783,27 +795,41 @@ begin
     Result := (Client.WebSockets.Protocol as TWebSocketSocketIOClientProtocol);
 end;
 
-function TSocketsIOClient.GetNameSpace(const aNameSpace: RawUtf8): TSocketIONamespaceClient;
+function TSocketsIOClient.GetRemoteNameSpace(const aNameSpace: RawUtf8): TSocketIORemoteNamespaceClient;
 var
   ns: RawUtf8;
 begin
   ns := aNameSpace;
   if aNameSpace = '' then
     ns := '/';
-  result := SocketIOGetNameSpace(pointer(fNameSpace), length(fNameSpace),
-    pointer(ns), length(ns)) as TSocketIONamespaceClient;
+  result := SocketIOGetNameSpace(pointer(fRemoteNameSpace), length(fRemoteNameSpace),
+    pointer(ns), length(ns)) as TSocketIORemoteNamespaceClient;
+end;
+
+function TSocketsIOClient.GetLocalNameSpace(const aNameSpace: RawUtf8; FallbackOnDefault: Boolean): TSocketIOLocalNamespace;
+var
+  ns: RawUtf8;
+begin
+  ns := aNameSpace;
+  if aNameSpace = '' then
+    ns := '/';
+  result := SocketIOGetNameSpace(pointer(fLocalNamespaces), length(fLocalNamespaces),
+    pointer(ns), length(ns)) as TSocketIOLocalNamespace;
+  // Fallback on default namespace
+  if FallbackOnDefault and not Assigned(result) then
+    result := GetLocalNameSpace('*', False);
 end;
 
 function TSocketsIOClient.NameSpaces: TRawUtf8DynArray;
 begin
   if fNameSpaces = nil then
-    fNameSpaces := SocketIOGetNameSpaces(pointer(fNameSpace), length(fNameSpace));
+    fNameSpaces := SocketIOGetNameSpaces(pointer(fRemoteNameSpace), length(fRemoteNameSpace));
   result := fNameSpaces;
 end;
 
-function TSocketsIOClient.Connect(const aNameSpace: RawUtf8; WaitTimeoutMS: Cardinal): TSocketIONamespaceClient;
+function TSocketsIOClient.Connect(const aNameSpace: RawUtf8; WaitTimeoutMS: Cardinal): TSocketIORemoteNamespaceClient;
 begin
-  result := GetNameSpace(aNameSpace);
+  result := GetRemoteNameSpace(aNameSpace);
   if result <> nil then
     exit;
   fNameSpaces := nil; // to be reallocated on need
@@ -817,28 +843,28 @@ begin
   if WaitTimeoutMS = 0 then
     Exit;
   fConnectionEvent.WaitFor(WaitTimeoutMS);
-  if not Assigned(GetNameSpace(aNameSpace)) then
+  if not Assigned(GetRemoteNameSpace(aNameSpace)) then
     ESocketIO.RaiseUtf8('Failed to connect to "%" namespace after %ms', [aNameSpace, WaitTimeoutMS]);
 end;
 
 procedure TSocketsIOClient.Disconnect(const aNameSpace: RawUtf8);
 var
-  aInstance: TSocketIONamespaceClient;
+  aInstance: TSocketIORemoteNamespaceClient;
 begin
-  aInstance := GetNameSpace(aNameSpace);
+  aInstance := GetRemoteNameSpace(aNameSpace);
   if aInstance = nil then
     exit;
   fNameSpaces := nil; // to be reallocated on need
   SendPacket(EncodePacket(sioDisconnect, aNameSpace));
-  ObjArrayDelete(fNameSpace, aInstance);
+  ObjArrayDelete(fRemoteNameSpace, aInstance);
 end;
 
 function TSocketsIOClient.Emit(const EventName: RawUtf8; const data: RawUtf8; const aNameSpace: RawUtf8;
   aCallback: TSioCallbackFunction): TSioAckID;
 var
-  Ns: TSocketIONamespaceClient;
+  Ns: TSocketIORemoteNamespaceClient;
 begin
-  Ns := GetNameSpace(aNameSpace);
+  Ns := GetRemoteNameSpace(aNameSpace);
   if not Assigned(Ns) then
     ESocketIO.RaiseUtf8('Sending event to namespace "%" not connected: %', [aNameSpace, EventName]);
   Result := Ns.Emit(EventName, data, aCallback);

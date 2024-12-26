@@ -1122,6 +1122,8 @@ type
     Callback: TSioCallbackFunction;
   end;
   TSioCallbacks = array of TSioCallback;
+  /// Event handler callback
+  TSioEventHandlerCallback = procedure(const data: RawByteString) of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
@@ -1171,12 +1173,30 @@ type
       read fMaxPayload write fMaxPayload;
   end;
 
-  /// abstract parent for one client side and server side Socket.IO session
+  /// abstract parent for local and remote socketio namespaces
   // - each session has its own namespace
   TSocketIONamespace = class(TSynPersistent)
   protected
     fOwner: TEngineIOAbstract;
-    fSid, fNameSpace: RawUtf8;
+    fNameSpace: RawUtf8;
+  public
+    /// access to the associates Engine.IO main connection
+    property Owner: TEngineIOAbstract
+      read fOwner;
+  published
+    /// the associated namespace, as established between client and server
+    // - default namespace is '/'
+    property NameSpace: RawUtf8
+      read fNameSpace;
+  end;
+  PSocketIONamespace = ^TSocketIONamespace;
+
+  /// abstract parent class for remote namespace object
+  // - emit events to remote namespace (ie client->server or server->client)
+  // - dispatch received sioAck to effective handler
+  TSocketIORemoteNamespace = class(TSocketIONamespace)
+  protected
+    fSid: RawUtf8;
     fAckIdCursor: TSioAckID;
     fCallbacks: TSioCallbacks;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
@@ -1188,19 +1208,40 @@ type
     /// handle an acknowledge message and call the associated callback
     // will raise an ESocketIO if the packet is invalid or no callback can be find
     procedure Acknowledge(const aMessage: TSocketIOMessage);
-    /// access to the associates Engine.IO main connection
-    property Owner: TEngineIOAbstract
-      read fOwner;
   published
     /// the associated Socket.IO Session ID, as computed on the server side
     property Sid: RawUtf8
       read fSid;
-    /// the associated namespace, as established between client and server
-    // - default namespace is '/'
-    property NameSpace: RawUtf8
-      read fNameSpace;
   end;
-  PSocketIONamespace = ^TSocketIONamespace;
+  PSocketIORemoteNamespace = ^TSocketIORemoteNamespace;
+
+  TEventHandler = record
+    /// the method name
+    Name: RawUtf8;
+    /// the event which will be executed for this method
+    CallBack: TSioEventHandlerCallback;
+  end;
+  PEventHandler = ^TEventHandler;
+  TLocalNamespaceEventHandlers = array of TEventHandler;
+
+  /// abstract parent class for local namespace object
+  // - map namespace event to their handlers
+  // - dispatch received sioEvent to effective handler
+  TSocketIOLocalNamespace = class(TSocketIONamespace)
+  protected
+    fHandler: TLocalNamespaceEventHandlers;
+    fHandlers: TDynArrayHashed;
+    /// implement this in the inheriting namespaces class to register the events    procedure RegisterHandlers; virtual;
+  public
+    constructor Create(aOwner: TEngineIOAbstract; aNamespace: RawUtf8 = '/');
+    /// register an event with an associated callback
+    procedure RegisterEvent(aEventName: RawUtf8; aCallback: TSioEventHandlerCallback);
+    /// dispatch an event message to the appropriate handler
+    procedure HandleEvent(const aMessage: TSocketIOMessage);
+  end;
+  PSocketIOLocalNamespace = ^TSocketIOLocalNamespace;
+  TSocketIOLocalNamespaces = array of TSocketIOLocalNamespace;
+  TSocketIOLocalNamespaceClass = class of TSocketIOLocalNamespace;
 
   /// abstract parent for client or server Engine.IO protocol over WebSockets frames
   // - Engine.IO is the low-level connection/heartbeat protocol on which the
@@ -1250,6 +1291,8 @@ const
 
 implementation
 
+uses
+  mormot.core.variants;
 
 { ******************** WebSockets Frames Definitions }
 
@@ -1324,7 +1367,49 @@ begin
     frame.content := [];
 end;
 
-function TSocketIONamespace.GenerateAckId(aCallback: TSioCallbackFunction): TSioAckID;
+procedure TSocketIOLocalNamespace.RegisterHandlers;
+begin
+end;
+
+constructor TSocketIOLocalNamespace.Create(aOwner: TEngineIOAbstract; aNamespace: RawUtf8);
+begin
+  fOwner := aOwner;
+  fNameSpace := aNamespace;
+  fHandlers.InitSpecific(TypeInfo(TLocalNamespaceEventHandlers), fHandler, ptRawUtf8, nil, false);
+  RegisterHandlers;
+end;
+
+procedure TSocketIOLocalNamespace.RegisterEvent(aEventName: RawUtf8; aCallback: TSioEventHandlerCallback);
+begin
+  with PEventHandler(fHandlers.AddUniqueName(aEventName, 'Duplicated event name %', [aEventName]))^ do
+    CallBack := aCallback;
+end;
+
+procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
+var
+  CbIndex: Cardinal;
+  cb: TSioCallback;
+  EventName: RawUtf8;
+  DataDV: TDocVariantData;
+  handlerIdx: PtrInt;
+begin
+  if (NameSpace <> '*') and (aMessage.NameSpace <> NameSpace) then
+    ESocketIO.RaiseUtf8('Message namespace "%" mismatch TSocketIOLocalNamespace.HandleEvent "%"', [aMessage.NameSpace, Self.NameSpace]);
+  if aMessage.PacketType <> sioEvent then
+    ESocketIO.RaiseUtf8('Message is not an valid event message', []);
+  if not (DataDV.InitJson(aMessage.Data, JSON_FAST) and DataDV.IsArray)then
+    ESocketIO.RaiseUtf8('Message is not a valid JSON array', []);
+  // Read event name and search for associated handler
+  EventName := DataDV.Value[0];
+  handlerIdx := fHandlers.FindHashed(EventName);
+  if handlerIdx = -1 then
+    ESocketIO.RaiseUtf8('Handler for event % not found', [EventName]);
+  // Call the handler
+  DataDV.Delete(0);
+  fHandler[handlerIdx].CallBack(DataDV.ToJson);
+end;
+
+function TSocketIORemoteNamespace.GenerateAckId(aCallback: TSioCallbackFunction): TSioAckID;
 begin
   Inc(fAckIdCursor);
   SetLength(fCallbacks, Length(fCallbacks) + 1);
@@ -1333,7 +1418,7 @@ begin
   Result := fAckIdCursor;
 end;
 
-function TSocketIONamespace.Emit(EventName: RawUtf8; const data: RawByteString; aCallback: TSioCallbackFunction): TSioAckID;
+function TSocketIORemoteNamespace.Emit(EventName: RawUtf8; const data: RawByteString; aCallback: TSioCallbackFunction): TSioAckID;
 var
   PayLoad, aPacket: RawByteString;
 begin
@@ -1348,13 +1433,13 @@ begin
   Owner.SendPacket(aPacket);
 end;
 
-procedure TSocketIONamespace.Acknowledge(const aMessage: TSocketIOMessage);
+procedure TSocketIORemoteNamespace.Acknowledge(const aMessage: TSocketIOMessage);
 var
   CbIndex: Cardinal;
   cb: TSioCallback;
 begin
   if aMessage.NameSpace <> NameSpace then
-    ESocketIO.RaiseUtf8('Message namespace "%" mismatch TSocketIONamespace.NameSpace "%"', [aMessage.NameSpace, Self.NameSpace]);
+    ESocketIO.RaiseUtf8('Message namespace "%" mismatch TSocketIORemoteNamespace.NameSpace "%"', [aMessage.NameSpace, Self.NameSpace]);
   if (aMessage.PacketType <> sioAck) or (aMessage.ID = SIO_NO_ACK) then
     ESocketIO.RaiseUtf8('Message is not an valid acknowledgment message', []);
   CbIndex := 0;
