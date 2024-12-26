@@ -1048,14 +1048,14 @@ type
   /// define the Socket.IO available packet types
   // - defined in their numeric order, so ord() would give the proper ID number
   // - such packets are likely to be nested in a eioMessage frame
-  // - sioOpen (0) and sioConnectError (4) are used during connection to a namespace
+  // - sioConnect (0) and sioConnectError (4) are used during connection to a namespace
   // - sioDisconnect (1) is used when disconnecting from a namespace
   // - sioEvent (2) is used to send data to the other side
   // - sioAck (3) is used to acknowledge an event
   // - sioBinaryEvent (5) is used to send binary data to the other side
   // - sioBinaryAck (6) is used to acknowledge an event with a binary response
   TSocketIOPacket = (
-    sioOpen,
+    sioConnect,
     sioDisconnect,
     sioEvent,
     sioAck,
@@ -1091,6 +1091,9 @@ type
     function DataIs(const Content: RawUtf8): boolean;
   end;
 
+  /// Type used for sio event acknowledgment id
+  TSioAckID = Cardinal;
+
 /// compute the URI for a WebSocket-only Engine.IO upgrade
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
 // followed with a eioOpen response frame
@@ -1104,12 +1107,21 @@ function SocketIOReserved(const event: RawUtf8): boolean;
 function ToText(p: TEngineIOPacket): PShortString; overload;
 function ToText(p: TSocketIOPacket): PShortString; overload;
 
+const
+  SIO_NO_ACK: TSioAckID = 0;
 
 type
   /// exception class raised during Engine.IO process
   EEngineIO = class(ESynException);
   /// exception class raised during Socket.IO process
   ESocketIO = class(ESynException);
+  /// Acknowledgment callback
+  TSioCallbackFunction = procedure(const TSocketIOMessage) of object;
+  TSioCallback = record
+    Ack: TSioAckID;
+    Callback: TSioCallbackFunction;
+  end;
+  TSioCallbacks = array of TSioCallback;
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
@@ -1126,6 +1138,10 @@ type
   public
     /// initialize this class instance with some default values on server side
     constructor Create; override;
+    /// Encode a SocketIO packet
+    function EncodePacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8 = ''; aPayload: RawByteString = ''; ackId: TSioAckID = 0): RawByteString;
+    /// Send an encoded sio packet
+    procedure SendPacket(aPacket: RawByteString); virtual; abstract;
   published
     /// the associated Engine.IO Session ID
     // - as computed on the server side, and received on client side as "sid"
@@ -1161,7 +1177,17 @@ type
   protected
     fOwner: TEngineIOAbstract;
     fSid, fNameSpace: RawUtf8;
+    fAckIdCursor: TSioAckID;
+    fCallbacks: TSioCallbacks;
+    /// Generate a new event acknowledgment ID, incrementing the internal cursor
+    function GenerateAckId(aCallback: TSioCallbackFunction): TSioAckID;
   public
+    /// emit an event to Self.NameSpace, with an optional callback
+    // - Returns the packet ID if aCallback is assigned, SIO_NO_ACK otherwise
+    function Emit(EventName: RawUtf8; const data: RawByteString = ''; aCallback: TSioCallbackFunction = nil): TSioAckID;
+    /// handle an acknowledge message and call the associated callback
+    // will raise an ESocketIO if the packet is invalid or no callback can be find
+    procedure Acknowledge(const aMessage: TSocketIOMessage);
     /// access to the associates Engine.IO main connection
     property Owner: TEngineIOAbstract
       read fOwner;
@@ -1296,6 +1322,52 @@ begin
     frame.content := [fopAlreadyCompressed]
   else
     frame.content := [];
+end;
+
+function TSocketIONamespace.GenerateAckId(aCallback: TSioCallbackFunction): TSioAckID;
+begin
+  Inc(fAckIdCursor);
+  SetLength(fCallbacks, Length(fCallbacks) + 1);
+  fCallbacks[Length(fCallbacks) - 1].Ack := fAckIdCursor;
+  fCallbacks[Length(fCallbacks) - 1].Callback := aCallback;
+  Result := fAckIdCursor;
+end;
+
+function TSocketIONamespace.Emit(EventName: RawUtf8; const data: RawByteString; aCallback: TSioCallbackFunction): TSioAckID;
+var
+  PayLoad, aPacket: RawByteString;
+begin
+  Result := SIO_NO_ACK;
+  if Assigned(aCallback) then
+    Result := GenerateAckId(aCallback);
+  PayLoad := '["' + EventName + '"';
+  if data <> '' then
+    PayLoad := PayLoad + ',' + data;
+  PayLoad := PayLoad + ']';
+  aPacket := Owner.EncodePacket(sioEvent, NameSpace, PayLoad, Result);
+  Owner.SendPacket(aPacket);
+end;
+
+procedure TSocketIONamespace.Acknowledge(const aMessage: TSocketIOMessage);
+var
+  CbIndex: Cardinal;
+  cb: TSioCallback;
+begin
+  if aMessage.NameSpace <> NameSpace then
+    ESocketIO.RaiseUtf8('Message namespace "%" mismatch TSocketIONamespace.NameSpace "%"', [aMessage.NameSpace, Self.NameSpace]);
+  if (aMessage.PacketType <> sioAck) or (aMessage.ID = SIO_NO_ACK) then
+    ESocketIO.RaiseUtf8('Message is not an valid acknowledgment message', []);
+  CbIndex := 0;
+  while (CbIndex < Length(fCallbacks)) and (fCallbacks[CbIndex].Ack <> aMessage.ID) do
+    Inc(CbIndex);
+  if CbIndex = Length(fCallbacks) then
+    ESocketIO.RaiseUtf8('Callback for message ID % not found (may already have been consumed)', [aMessage.ID]);
+  // Call the registered callback and remove it from the callback list
+  try
+    fCallbacks[CbIndex].Callback(aMessage);
+  finally
+    DynArrayDelete(TypeInfo(fCallbacks), fCallbacks, CbIndex);
+  end;
 end;
 
 
@@ -3700,6 +3772,17 @@ begin
   fPingInterval := 25000;
 end;
 
+function TEngineIOAbstract.EncodePacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8; aPayload: RawByteString; ackId: TSioAckID
+  ): RawByteString;
+begin
+  Result := IntToStr(Ord(aOperation));
+  if (aNameSpace <> '') and (aNameSpace <> '/') then
+    Append(Result, aNamespace, ',');
+  if ackId <> SIO_NO_ACK then
+    Append(Result, IntToStr(ackId));
+  if aPayload <> '' then
+    Append(Result, aPayload);
+end;
 
 { TWebSocketEngineIOProtocol }
 

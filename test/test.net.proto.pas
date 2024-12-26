@@ -99,14 +99,14 @@ begin
   Check(not m.Init(''));
   Check(not m.Init('z'));
   Check(m.Init('0'));
-  Check(m.PacketType = sioOpen);
+  Check(m.PacketType = sioConnect);
   Check(m.NameSpaceIs('/'));
   CheckEqual(m.Data, nil);
   Check(m.DataIs(''));
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 0);
   Check(m.Init('0/test,{}'));
-  Check(m.PacketType = sioOpen);
+  Check(m.PacketType = sioConnect);
   Check(m.NameSpaceIs('/test'));
   Check(m.DataIs('{}'));
   CheckEqual(m.ID, 0);
@@ -128,7 +128,7 @@ begin
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 0);
   Check(m.Init('0/admin,{"sid":"oSO0OpakMV_3jnilAAAA"}'));
-  Check(m.PacketType = sioOpen);
+  Check(m.PacketType = sioConnect);
   Check(m.NameSpaceIs('/admin'));
   Check(m.DataIs('{"sid":"oSO0OpakMV_3jnilAAAA"}'));
   CheckEqual(m.ID, 0);
