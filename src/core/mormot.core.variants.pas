@@ -5665,6 +5665,19 @@ function DocVariantToObject(var doc: TDocVariantData; obj: TObject;
 var
   p: PtrInt;
   prop: PRttiCustomProp;
+  dv: PDocVariantData;
+
+  procedure DoComplex;
+  var
+    json: RawUtf8;
+    valid: boolean;
+  begin
+    json := dv^.ToJson;
+    if (json <> '') and
+       (json <> 'null')  then
+      PropertyFromJson(prop, obj, pointer(json), valid, JSONPARSER_TOLERANTOPTIONS);
+  end;
+
 begin
   if doc.IsObject and
      (doc.Count > 0) and
@@ -5676,7 +5689,10 @@ begin
     begin
       prop := objRtti.Props.Find(doc.Names[p]);
       if prop <> nil then
-        prop^.Prop.SetValue(obj, doc.Values[p]);
+        if not prop^.Prop.SetValue(obj, doc.Values[p]) then
+          if (prop^.Value.Kind = rkClass) and
+             _Safe(doc.Values[p], dv) then
+            DoComplex;
     end;
     result := true;
   end
