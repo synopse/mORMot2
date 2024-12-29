@@ -3888,9 +3888,9 @@ const
   {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values
-  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64,
-    {$ifdef OSWINDOWS} varOleInt, varOleUInt, varOlePAnsiChar, varOlePWideChar,
-      varOleFileTime, {$endif OSWINDOWS} varUnknown];
+  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varUnknown..varWord64
+    {$ifdef OSWINDOWS} , varOleInt, varOleUInt, varOlePAnsiChar, varOlePWideChar,
+      varOleFileTime {$endif OSWINDOWS}];
   /// those TVarData.VType values are meant to be number values and need no escape
   VTYPE_NUMERIC = [varSmallInt .. varDouble, varCurrency, varBoolean .. varOleUInt];
   /// bitmask used by our inlined VarClear() to avoid unneeded VarClearProc()
@@ -12065,7 +12065,7 @@ begin
   typ := typ and cardinal(not varByRef);
   case typ of
     varVariant:
-      if integer(PVarData(TVarData(Source).VPointer)^.VType) in VTYPE_SIMPLE then
+      if cardinal(PVarData(TVarData(Source).VPointer)^.VType) in VTYPE_SIMPLE then
       begin
         Dest := PVarData(TVarData(Source).VPointer)^;
         result := true;

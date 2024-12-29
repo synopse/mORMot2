@@ -9812,8 +9812,8 @@ var
   i: PtrInt;
 begin
   for i := 0 to fPaddingUsedCount - 1 do
-    if Padding[i].VType and VTYPE_STATIC <> 0 then
-      VarClearProc(Padding[i].Data);
+    if not (cardinal(Padding[i].VType) in VTYPE_SIMPLE) then
+      VarClearProc(Padding[i].Data); // don't include varUnknown = SetPointer
   DeleteCriticalSection(fSection);
   fInitialized := false;
 end;
