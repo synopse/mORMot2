@@ -2037,8 +2037,9 @@ begin
   Check(ACities.Count = Length(Province.Cities));
   Check(ACities.Count = 10001);
   TestCities;
+  count := 7;
   ACities.Init(TypeInfo(TCityDynArray), Province.Cities, @count);
-  ACities.Clear;
+  CheckEqual(count, 0);
   for i := 0 to 100000 do
   begin
     City.Name := IntToString(i);
@@ -2046,7 +2047,8 @@ begin
     City.Longitude := i * 6.13;
     Check(ACities.Add(City) = i);
   end;
-  Check(ACities.Count = count);
+  CheckEqual(count, 100001);
+  CheckEqual(ACities.Count, count);
   TestCities;
 end;
 
@@ -8498,20 +8500,24 @@ begin
   SetDict;
   try
     CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
   finally
     dict.Free;
   end;
   SetDict;
   try
     CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
     dict.Capacity := 64;
     CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 64);
   finally
     dict.Free;
   end;
   SetDict;
   try
     CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
     key := 'Foobar';
     val := 'lol';
     dict.AddOrUpdate(key, val);
