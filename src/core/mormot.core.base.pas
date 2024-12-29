@@ -3888,7 +3888,7 @@ const
   {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values
-  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varUnknown..varWord64
+  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64
     {$ifdef OSWINDOWS} , varOleInt, varOleUInt, varOlePAnsiChar, varOlePWideChar,
       varOleFileTime {$endif OSWINDOWS}];
   /// those TVarData.VType values are meant to be number values and need no escape
@@ -4434,7 +4434,7 @@ uses
 
 procedure VarClearAndSetType(var v: variant; vtype: integer);
 begin
-  if TSynVarData(v).VType and VTYPE_STATIC <> 0 then
+  if (TSynVarData(v).VType and VTYPE_STATIC) <> 0 then
     VarClearProc(TVarData(v));
   TSynVarData(v).VType := vtype;
 end;
@@ -4442,7 +4442,7 @@ end;
 {$ifdef HASINLINE}
 procedure VarClear(var v: variant); // defined here for proper inlining
 begin
-  if TSynVarData(v).VType and VTYPE_STATIC <> 0 then
+  if (TSynVarData(v).VType and VTYPE_STATIC) <> 0 then
     VarClearProc(TVarData(v))
   else
     TSynVarData(v).VType := 0;

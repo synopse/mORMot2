@@ -2789,14 +2789,14 @@ var
   // type will be mapped as varUnknown - and will be changed into
   // BsonVariantType.VarType
   BSON_ELEMENTTYPES: array[TBsonElementType] of word = (
-    //betEOF, betFloat, betString, betDoc, betArray, betBinary,
+    //betEOF, betFloat,  betString, betDoc,     betArray,   betBinary,
     varEmpty, varDouble, varString, varUnknown, varUnknown, varUnknown,
     //betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
-    varEmpty, varUnknown, varBoolean, varDate,
+    varEmpty, varUnknown,                  varBoolean, varDate,
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
-    varNull, varUnknown, varUnknown, varUnknown, varUnknown,
+    varNull, varUnknown, varUnknown,         varUnknown, varUnknown,
     //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
-    varUnknown, varInteger, varUnknown, varInt64, varUnknown);
+    varUnknown,   varInteger, varUnknown, varInt64, varUnknown);
 
 function TBsonElement.ToVariant(DocArrayConversion: TBsonDocArrayConversion): variant;
 begin
@@ -2848,7 +2848,7 @@ begin
   // betNull, betDeprecatedUndefined, betMinKey or betMaxKey has no data
   end;
   res.VType := BSON_ELEMENTTYPES[Kind];
-  if res.VType = varUnknown then
+  if res.VType = varUnknown then // no exact equivalency to a standard variant
   begin
     resBSON.VType := BsonVariantType.VarType;
     resBSON.VKind := Kind;

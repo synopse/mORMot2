@@ -4552,7 +4552,7 @@ begin
     v.VType := 0;
     GetVariantProp(Instance, variant(v), {byref=}true);
     VariantToUtf8(variant(v), result);
-    if v.VType and VTYPE_STATIC <> 0 then
+    if (v.VType and VTYPE_STATIC) <> 0 then
       VarClearProc(v.Data);
   end;
 end;
@@ -7974,7 +7974,7 @@ begin
       varEmpty,
       varNull:
         result := true;
-      varUnknown,
+      varUnknown, // rkChar, rkWChar, rkSString as VAny: RawUtf8
       varString,
       varOleStr
       {$ifdef HASVARUSTRING}, varUString {$endif}:

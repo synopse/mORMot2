@@ -4661,7 +4661,7 @@ type
     /// safe locked access to a pointer/TObject value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked, LockedBool, LockedInt64 and LockedUtf8 array properties
-    // - pointers will be stored internally as a varUnknown variant
+    // - pointers will be stored internally as a varAny variant
     // - returns nil if the Index is out of range, or does not store a pointer
     // - allow concurrent thread reading if RWUse was set to uRWLock
     property LockedPointer[Index: integer]: pointer
@@ -4689,7 +4689,7 @@ type
     /// safe locked in-place exchange of a pointer/TObject value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked and LockedUtf8 array properties
-    // - pointers will be stored internally as a varUnknown variant
+    // - pointers will be stored internally as a varAny variant
     // - returns the previous stored value, nil if the Index is out of range,
     // or does not store a pointer
     function LockedPointerExchange(Index: integer; Value: pointer): pointer;
@@ -9812,8 +9812,8 @@ var
   i: PtrInt;
 begin
   for i := 0 to fPaddingUsedCount - 1 do
-    if not (cardinal(Padding[i].VType) in VTYPE_SIMPLE) then
-      VarClearProc(Padding[i].Data); // don't include varUnknown = SetPointer
+    if (Padding[i].VType and VTYPE_STATIC) <> 0 then
+      VarClearProc(Padding[i].Data); // won't include varAny = SetPointer
   DeleteCriticalSection(fSection);
   fInitialized := false;
 end;
@@ -10036,8 +10036,8 @@ begin
   {$endif HASFASTTRYFINALLY}
     RWLock(cReadOnly);
     with Padding[Index].Data do
-      if VType = varUnknown then
-        result := VUnknown;
+      if VType = varAny then
+        result := VAny;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -10054,7 +10054,7 @@ begin
         fPaddingUsedCount := Index + 1;
       with Padding[Index] do
       begin
-        VarClearAndSetType(variant(Data), varUnknown);
+        VarClearAndSetType(variant(Data), varAny);
         VAny := Value;
       end;
     finally
@@ -10141,13 +10141,13 @@ begin
       with Padding[Index] do
       begin
         if Index < fPaddingUsedCount then
-          if VType = varUnknown then
+          if VType = varAny then
             result := VAny
           else
             VarClearProc(Data)
         else
           fPaddingUsedCount := Index + 1;
-        VType := varUnknown;
+        VType := varAny;
         VAny := Value;
       end;
     finally
