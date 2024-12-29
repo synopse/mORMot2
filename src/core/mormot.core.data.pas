@@ -8734,10 +8734,11 @@ begin
   arrayptr := PPtrInt(arrayptr)^;
   if extcount <> 0 then
   begin
-    // fCountP^ as external capacity
+    // fCountP^ as external length
     oldlen := PInteger(extcount)^;
     delta := aCount - oldlen;
-    if delta = 0 then
+    if (delta = 0) and
+       (aCount <> 0) then
       exit;
     PInteger(extcount)^ := aCount; // store new length
     if arrayptr <> 0 then
