@@ -9585,9 +9585,9 @@ constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
 begin
   inherited Create;
   fSafe.Padding[DIC_KEYCOUNT].VType   := varInteger;  // Keys.Count
-  fSafe.Padding[DIC_KEY].VType        := varUnknown;  // Key.Value
+  fSafe.Padding[DIC_KEY].VType        := varNull;     // Key.Value
   fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count
-  fSafe.Padding[DIC_VALUE].VType      := varUnknown;  // Values.Value
+  fSafe.Padding[DIC_VALUE].VType      := varNull;     // Values.Value
   fSafe.Padding[DIC_TIMECOUNT].VType  := varInteger;  // Timeouts.Count
   fSafe.Padding[DIC_TIMESEC].VType    := varInteger;  // Timeouts Seconds
   fSafe.Padding[DIC_TIMETIX].VType    := varInteger;  // GetTickCount64 shr 10
