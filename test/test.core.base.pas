@@ -8479,6 +8479,15 @@ var
     end;
   end;
 
+  procedure SetDict;
+  begin
+    {$ifdef HASGENERICS}
+    dict := TSynDictionary.New<RawUtf8, RawUtf8>(True);
+    {$else}
+    dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
+    {$endif HASGENERICS}
+  end;
+
 var
   v: tvalue;
   s, k, key, val: RawUtf8;
@@ -8486,15 +8495,27 @@ var
   exists: boolean;
   sdk: TSDKey;
 begin
-  {$ifdef HASGENERICS}
-  dict := TSynDictionary.New<RawUtf8, RawUtf8>(True);
-  {$else}
-  dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
-  {$endif HASGENERICS}
+  SetDict;
   try
+    CheckEqual(dict.Count, 0);
+  finally
+    dict.Free;
+  end;
+  SetDict;
+  try
+    CheckEqual(dict.Count, 0);
+    dict.Capacity := 64;
+    CheckEqual(dict.Count, 0);
+  finally
+    dict.Free;
+  end;
+  SetDict;
+  try
+    CheckEqual(dict.Count, 0);
     key := 'Foobar';
     val := 'lol';
     dict.AddOrUpdate(key, val);
+    CheckEqual(dict.Count, 1);
     s := dict.SaveToJson;
     CheckEqual(s, '{"Foobar":"lol"}');
     key := 'foobar';
@@ -8502,6 +8523,7 @@ begin
     dict.AddOrUpdate(key, val);
     s := dict.SaveToJson;
     CheckEqual(s, '{"Foobar":"xxx"}');
+    CheckEqual(dict.Count, 1);
     key := 'FooBar';
     dict.FindAndCopy(key, val, False);
     CheckEqual(val, 'xxx');
