@@ -2778,13 +2778,13 @@ function Rdtsc: Int64;
 
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function, i.e.
-// returns I + 1, and store I + 1 within I in an atomic/tread-safe way
+// returns I + 1, and store I + 1 within I in an atomic/thread-safe way
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedIncrement(var I: integer): integer;
 
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function, i.e.
-// returns I - 1, and store I - 1 within I in an atomic/tread-safe way
+// returns I - 1, and store I - 1 within I in an atomic/thread-safe way
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedDecrement(var I: integer): integer;
 
@@ -3431,6 +3431,8 @@ type
     /// add two AnsiChar just after another Add() within trailing 16 bytes margin
     procedure AddDirect(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// append an unsigned number as text to the internal buffer
+    procedure AddU(v: PtrUInt);
     /// finalize the Add() temporary storage, and create a RawByteString from it
     procedure Done(var Dest; CodePage: cardinal = CP_RAWBYTESTRING); overload;
   end;
@@ -11378,6 +11380,15 @@ procedure TSynTempBuffer.AddDirect(const c1, c2: AnsiChar);
 begin
   PWord(PUtf8Char(buf) + added)^ := ord(c1) + ord(c2) shl 8;
   inc(added, 2); // append directly within SYNTEMPTRAIL bytes
+end;
+
+procedure TSynTempBuffer.AddU(v: PtrUint);
+var
+  tmp: array[0..23] of AnsiChar;
+  P: PAnsiChar;
+begin
+  P := StrUInt32(@tmp[23], v);
+  Add(P, @tmp[23] - P);
 end;
 
 procedure TSynTempBuffer.Done(var Dest; CodePage: cardinal);

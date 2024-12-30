@@ -239,7 +239,8 @@ type
     /// return the array of connected namespaces as text
     function NameSpaces: TRawUtf8DynArray;
     /// Register an event handler class associated with a namespace
-    procedure AddLocalNamespace(aNamespaceClass: TSocketIOLocalNamespaceClass; aNamespace: RawUtf8 = '/');
+    procedure AddLocalNamespace(aNamespaceClass: TSocketIOLocalNamespaceClass;
+                aNamespace: RawUtf8 = '/');
     /// access to a given Socket.IO namespace
     // - makes a connect if needed
     function Connect(const aNameSpace: RawUtf8; WaitTimeoutMS: Cardinal = 2000): TSocketIORemoteNamespaceClient;
@@ -264,15 +265,11 @@ type
     // this is the main entry point for incoming Socket.IO messages
     procedure SocketPacketReceived(Sender: TWebSocketProcess;
       const Message: TSocketIOMessage); override;
-
-    function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; override;
   end;
 
 
 implementation
 
-uses
-  mormot.core.variants;
 
 { ******************** TWebSocketProcessClient Processing Class }
 
@@ -280,6 +277,8 @@ function ToText(st: TWebSocketProcessClientThreadState): PShortString;
 begin
   result := GetEnumName(TypeInfo(TWebSocketProcessClientThreadState), ord(st));
 end;
+
+
 { TWebSocketProcessClient }
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
@@ -642,16 +641,15 @@ end;
 
 
 { TSocketIORemoteNamespaceClient }
-
-class function TSocketIORemoteNamespaceClient.FromConnectMessage(const Message: TSocketIOMessage; aOwner: TSocketsIOClient
-  ): TSocketIORemoteNamespaceClient;
+fixme
+class function TSocketIORemoteNamespaceClient.FromConnectMessage(
+  const Message: TSocketIOMessage; aOwner: TSocketsIOClient): TSocketIORemoteNamespaceClient;
 var
   V: array[0..1] of TValuePUtf8Char;
 begin
   JsonDecode(Message.Data, ['sid'], @V);
   if V[0].Text = nil then
     EEngineIO.RaiseUtf8('%.Create: missing "sid" in %', [aOwner, Message.Data]);
-
   Result := TSocketIORemoteNamespaceClient.Create;
   Result.fNameSpace := Copy(Message.NameSpace, 1, Message.NameSpaceLen);
   if Result.fNameSpace = '' then
@@ -870,6 +868,7 @@ begin
   Result := Ns.Emit(EventName, data, aCallback);
 end;
 
+
 { TWebSocketEngineIOClientProtocol }
 
 procedure TWebSocketSocketIOClientProtocol.EnginePacketReceived(
@@ -900,7 +899,7 @@ begin
     sioConnect:
       fClient.AfterNamespaceConnect(Message);
     sioConnectError:
-      fClient.AfterNamespaceConnect(Message);
+      fClient.AfterNamespaceConnect(Message); wtf?
     sioEvent:
       fClient.OnEvent(Message);
     sioAck:
@@ -908,11 +907,6 @@ begin
     else
       ESocketIO.RaiseUtf8('%.SocketPacketReceived: not supported packet type: %', [self, Message.PacketType]);
   end;
-end;
-
-function TWebSocketSocketIOClientProtocol.ProcessHandshakeUri(const aClientUri: RawUtf8): boolean;
-begin
-  Result:=inherited ProcessHandshakeUri(aClientUri);
 end;
 
 

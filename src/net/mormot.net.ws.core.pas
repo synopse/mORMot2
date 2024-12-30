@@ -29,6 +29,8 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.variants,
+  mormot.core.datetime,
   mormot.core.data,
   mormot.core.log,
   mormot.core.threads,
@@ -1091,8 +1093,8 @@ type
     function DataIs(const Content: RawUtf8): boolean;
   end;
 
-  /// Type used for sio event acknowledgment id
-  TSioAckID = Cardinal;
+  /// Socket.IO sequence used for event acknowledgment
+  TSioAckID = cardinal;
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
@@ -1108,21 +1110,24 @@ function ToText(p: TEngineIOPacket): PShortString; overload;
 function ToText(p: TSocketIOPacket): PShortString; overload;
 
 const
-  SIO_NO_ACK: TSioAckID = 0;
+  /// constant used if no TSioAckID is necessary
+  SIO_NO_ACK = 0;
 
 type
   /// exception class raised during Engine.IO process
   EEngineIO = class(ESynException);
   /// exception class raised during Socket.IO process
   ESocketIO = class(ESynException);
-  /// Acknowledgment callback
-  TSioCallbackFunction = procedure(const TSocketIOMessage) of object;
+
+  /// Socket.IO process Acknowledgment callback
+  TSioCallbackFunction = procedure(const TSocketIOMessage fixme) of object;
   TSioCallback = record
     Ack: TSioAckID;
     Callback: TSioCallbackFunction;
   end;
   TSioCallbacks = array of TSioCallback;
-  /// Event handler callback
+
+  /// Socket.IO process Event handler callback
   TSioEventHandlerCallback = procedure(const data: RawByteString) of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
@@ -1141,6 +1146,7 @@ type
     /// initialize this class instance with some default values on server side
     constructor Create; override;
     /// Encode a SocketIO packet
+notrherightplace?
     function EncodePacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8 = ''; aPayload: RawByteString = ''; ackId: TSioAckID = 0): RawByteString;
     /// Send an encoded sio packet
     procedure SendPacket(aPacket: RawByteString); virtual; abstract;
@@ -1174,7 +1180,7 @@ type
   end;
 
   /// abstract parent for local and remote socketio namespaces
-  // - each session has its own namespace
+  // - each session (sid) has its own namespace
   TSocketIONamespace = class(TSynPersistent)
   protected
     fOwner: TEngineIOAbstract;
@@ -1231,7 +1237,8 @@ type
   protected
     fHandler: TLocalNamespaceEventHandlers;
     fHandlers: TDynArrayHashed;
-    /// implement this in the inheriting namespaces class to register the events    procedure RegisterHandlers; virtual;
+    /// implement this in the inheriting namespaces class to register the events
+    procedure RegisterHandlers; virtual;
   public
     constructor Create(aOwner: TEngineIOAbstract; aNamespace: RawUtf8 = '/');
     /// register an event with an associated callback
@@ -1291,8 +1298,6 @@ const
 
 implementation
 
-uses
-  mormot.core.variants;
 
 { ******************** WebSockets Frames Definitions }
 
@@ -3857,9 +3862,10 @@ begin
   fPingInterval := 25000;
 end;
 
-function TEngineIOAbstract.EncodePacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8; aPayload: RawByteString; ackId: TSioAckID
-  ): RawByteString;
-begin
+function TEngineIOAbstract.EncodePacket(
+  aOperation: TSocketIOPacket; aNamespace: RawUtf8; aPayload: RawByteString;
+ ackId: TSioAckID): RawByteString;
+begin fixme
   Result := IntToStr(Ord(aOperation));
   if (aNameSpace <> '') and (aNameSpace <> '/') then
     Append(Result, aNamespace, ',');
