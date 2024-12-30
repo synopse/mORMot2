@@ -9810,10 +9810,15 @@ end;
 procedure TSynLocker.Done;
 var
   i: PtrInt;
+  v: PSynVarData;
 begin
-  for i := 0 to fPaddingUsedCount - 1 do
-    if (Padding[i].VType and VTYPE_STATIC) <> 0 then
-      VarClearProc(Padding[i].Data); // won't include varAny = SetPointer
+  v := @Padding[0];
+  for i := 1 to fPaddingUsedCount do
+  begin
+    if (v^.VType and VTYPE_STATIC) <> 0 then
+      VarClearProc(v^.Data); // won't include varAny = SetPointer
+    inc(v);
+  end;
   DeleteCriticalSection(fSection);
   fInitialized := false;
 end;
