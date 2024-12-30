@@ -1153,15 +1153,19 @@ type
   ESocketIO = class(ESynException);
 
   /// Socket.IO process Acknowledgment callback
-  TSioCallbackFunction = procedure(const TSocketIOMessage fixme) of object;
+  TSioCallbackFunction = procedure(const Message: TSocketIOMessage) of object;
+
+  /// internal slot for one Socket.IO process Acknowledgment callback
   TSioCallback = record
     Ack: TSioAckID;
     Callback: TSioCallbackFunction;
   end;
-  TSioCallbacks = array of TSioCallback;
+  PSioCallback = ^TSioCallback;
 
   /// Socket.IO process Event handler callback
-  TSioEventHandlerCallback = procedure(const data: RawByteString) of object;
+  // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
+  TSioEventHandlerCallback = procedure(const EventName: RawUtf8;
+    const Data: TDocVariantData) of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
@@ -1171,19 +1175,14 @@ type
   TEngineIOAbstract = class(TSynPersistent)
   protected
     fSafe: TLightLock;
+    fWebSockets: TWebCrtSocketProcess;
     fVersion: integer;
     fEngineSid: RawUtf8;
     fPingInterval, fPingTimeout, fMaxPayload: integer;
     fNameSpaces: TRawUtf8DynArray;
-  public
-    /// initialize this class instance with some default values on server side
-    constructor Create; override;
-    /// Encode a SocketIO packet
-notrherightplace?
-    function EncodePacket(aOperation: TSocketIOPacket; aNamespace: RawUtf8 = ''; aPayload: RawByteString = ''; ackId: TSioAckID = 0): RawByteString;
-    /// Send an encoded sio packet
-    procedure SendPacket(aPacket: RawByteString); virtual; abstract;
   published
+    /// initialize this instance with its default values
+    constructor Create; override;
     /// the associated Engine.IO Session ID
     // - as computed on the server side, and received on client side as "sid"
     // - is typically a base-64 encoded binary like 'dwy_mNoFzsrMlhINAAAA'
@@ -1219,6 +1218,9 @@ notrherightplace?
     fOwner: TEngineIOAbstract;
     fNameSpace: RawUtf8;
   public
+    /// encode and send a SocketIO packet
+    procedure SendPacket(aOperation: TSocketIOPacket; const aNamespace: RawUtf8 = '';
+      aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = 0);
     /// access to the associates Engine.IO main connection
     property Owner: TEngineIOAbstract
       read fOwner;
@@ -1237,15 +1239,20 @@ notrherightplace?
   protected
     fSid: RawUtf8;
     fAckIdCursor: TSioAckID;
-    fCallbacks: TSioCallbacks;
+    fCallbacks: array of TSioCallback;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
-    function GenerateAckId(aCallback: TSioCallbackFunction): TSioAckID;
+    function GenerateAckId(const aCallback: TSioCallbackFunction): TSioAckID;
   public
+    /// initialize this instance
+    constructor Create(aOwner: TEngineIOAbstract;
+      const aNameSpace, aSid: RawUtf8); reintroduce; virtual;
     /// emit an event to Self.NameSpace, with an optional callback
-    // - Returns the packet ID if aCallback is assigned, SIO_NO_ACK otherwise
-    function Emit(EventName: RawUtf8; const data: RawByteString = ''; aCallback: TSioCallbackFunction = nil): TSioAckID;
+    // - returns the packet ID if aCallback is assigned, SIO_NO_ACK otherwise
+    // - aDataArray is an optional JSON array of values, without any [ ] chars
+    function SendEvent(const aEventName: RawUtf8; const aDataArray: RawUtf8 = '';
+      const aCallback: TSioCallbackFunction = nil): TSioAckID;
     /// handle an acknowledge message and call the associated callback
-    // will raise an ESocketIO if the packet is invalid or no callback can be find
+    // - will raise an ESocketIO if the packet is invalid or ID was not found
     procedure Acknowledge(const aMessage: TSocketIOMessage);
   published
     /// the associated Socket.IO Session ID, as computed on the server side
@@ -1254,6 +1261,7 @@ notrherightplace?
   end;
   PSocketIORemoteNamespace = ^TSocketIORemoteNamespace;
 
+  /// a local Socket.IO namespace definition
   TEventHandler = record
     /// the method name
     Name: RawUtf8;
@@ -1270,17 +1278,22 @@ notrherightplace?
   protected
     fHandler: TLocalNamespaceEventHandlers;
     fHandlers: TDynArrayHashed;
-    /// implement this in the inheriting namespaces class to register the events
+    // you can override this in inheriting namespaces class to register the events
     procedure RegisterHandlers; virtual;
   public
-    constructor Create(aOwner: TEngineIOAbstract; aNamespace: RawUtf8 = '/');
+    /// initialize this instance
+    constructor Create(aOwner: TEngineIOAbstract;
+      const aNamespace: RawUtf8 = '/'); reintroduce;
     /// register an event with an associated callback
-    procedure RegisterEvent(aEventName: RawUtf8; aCallback: TSioEventHandlerCallback);
+    procedure RegisterEvent(const aEventName: RawUtf8;
+      const aCallback: TSioEventHandlerCallback);
     /// dispatch an event message to the appropriate handler
     procedure HandleEvent(const aMessage: TSocketIOMessage);
   end;
   PSocketIOLocalNamespace = ^TSocketIOLocalNamespace;
   TSocketIOLocalNamespaces = array of TSocketIOLocalNamespace;
+
+  /// meta-class of the TSocketIOLocalNamespace hierarchy
   TSocketIOLocalNamespaceClass = class of TSocketIOLocalNamespace;
 
   /// abstract parent for client or server Engine.IO protocol over WebSockets frames
@@ -1302,7 +1315,7 @@ notrherightplace?
     /// allows to send a message over the wire to a specified connection
     // - Sender identify the connection, typically from FrameReceived() method
     function SendPacket(Sender: TWebSocketProcess;
-      const PayLoad: RawByteString; PayLoadBinary: boolean;
+      Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
       PacketType: TEngineIOPacket =  eioMessage): boolean;
     /// true when Engine.IO messages can be processed
     // - i.e. after OPEN (eioOpen) and before CLOSE (eioClose)
@@ -1313,20 +1326,18 @@ notrherightplace?
   /// abstract parent for client or server Socket.IO protocol over WebSockets frames
   TWebSocketSocketIOProtocol = class(TWebSocketEngineIOProtocol)
   protected
-    // this is the main entry point for incoming Socket.IO messages
-    procedure SocketPacketReceived(Sender: TWebSocketProcess;
-      const Message: TSocketIOMessage); virtual; abstract;
+    // this is the (abstract) main entry point for incoming Socket.IO messages
+    procedure SocketPacketReceived(const Message: TSocketIOMessage); virtual; abstract;
   end;
 
 /// efficient case-sensitive search within an array of TSocketIONamespace
+// - if name = '' (i.e. namelen is 0), will search for '/'
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
   name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
 
 /// retrieve the NameSpace properties of an array of TSocketIONamespace
-function SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer): TRawUtf8DynArray;
-
-const
-  DefaultNameSpace: RawUtf8 = '/';
+procedure SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer;
+  out Dest: TRawUtf8DynArray);
 
 
 implementation
@@ -1404,95 +1415,6 @@ begin
   else
     frame.content := [];
 end;
-
-procedure TSocketIOLocalNamespace.RegisterHandlers;
-begin
-end;
-
-constructor TSocketIOLocalNamespace.Create(aOwner: TEngineIOAbstract; aNamespace: RawUtf8);
-begin
-  fOwner := aOwner;
-  fNameSpace := aNamespace;
-  fHandlers.InitSpecific(TypeInfo(TLocalNamespaceEventHandlers), fHandler, ptRawUtf8, nil, false);
-  RegisterHandlers;
-end;
-
-procedure TSocketIOLocalNamespace.RegisterEvent(aEventName: RawUtf8; aCallback: TSioEventHandlerCallback);
-begin
-  with PEventHandler(fHandlers.AddUniqueName(aEventName, 'Duplicated event name %', [aEventName]))^ do
-    CallBack := aCallback;
-end;
-
-procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
-var
-  CbIndex: Cardinal;
-  cb: TSioCallback;
-  EventName: RawUtf8;
-  DataDV: TDocVariantData;
-  handlerIdx: PtrInt;
-begin
-  if (NameSpace <> '*') and (aMessage.NameSpace <> NameSpace) then
-    ESocketIO.RaiseUtf8('Message namespace "%" mismatch TSocketIOLocalNamespace.HandleEvent "%"', [aMessage.NameSpace, Self.NameSpace]);
-  if aMessage.PacketType <> sioEvent then
-    ESocketIO.RaiseUtf8('Message is not an valid event message', []);
-  if not (DataDV.InitJson(aMessage.Data, JSON_FAST) and DataDV.IsArray)then
-    ESocketIO.RaiseUtf8('Message is not a valid JSON array', []);
-  // Read event name and search for associated handler
-  EventName := DataDV.Value[0];
-  handlerIdx := fHandlers.FindHashed(EventName);
-  if handlerIdx = -1 then
-    ESocketIO.RaiseUtf8('Handler for event % not found', [EventName]);
-  // Call the handler
-  DataDV.Delete(0);
-  fHandler[handlerIdx].CallBack(DataDV.ToJson);
-end;
-
-function TSocketIORemoteNamespace.GenerateAckId(aCallback: TSioCallbackFunction): TSioAckID;
-begin
-  Inc(fAckIdCursor);
-  SetLength(fCallbacks, Length(fCallbacks) + 1);
-  fCallbacks[Length(fCallbacks) - 1].Ack := fAckIdCursor;
-  fCallbacks[Length(fCallbacks) - 1].Callback := aCallback;
-  Result := fAckIdCursor;
-end;
-
-function TSocketIORemoteNamespace.Emit(EventName: RawUtf8; const data: RawByteString; aCallback: TSioCallbackFunction): TSioAckID;
-var
-  PayLoad, aPacket: RawByteString;
-begin
-  Result := SIO_NO_ACK;
-  if Assigned(aCallback) then
-    Result := GenerateAckId(aCallback);
-  PayLoad := '["' + EventName + '"';
-  if data <> '' then
-    PayLoad := PayLoad + ',' + data;
-  PayLoad := PayLoad + ']';
-  aPacket := Owner.EncodePacket(sioEvent, NameSpace, PayLoad, Result);
-  Owner.SendPacket(aPacket);
-end;
-
-procedure TSocketIORemoteNamespace.Acknowledge(const aMessage: TSocketIOMessage);
-var
-  CbIndex: Cardinal;
-  cb: TSioCallback;
-begin
-  if aMessage.NameSpace <> NameSpace then
-    ESocketIO.RaiseUtf8('Message namespace "%" mismatch TSocketIORemoteNamespace.NameSpace "%"', [aMessage.NameSpace, Self.NameSpace]);
-  if (aMessage.PacketType <> sioAck) or (aMessage.ID = SIO_NO_ACK) then
-    ESocketIO.RaiseUtf8('Message is not an valid acknowledgment message', []);
-  CbIndex := 0;
-  while (CbIndex < Length(fCallbacks)) and (fCallbacks[CbIndex].Ack <> aMessage.ID) do
-    Inc(CbIndex);
-  if CbIndex = Length(fCallbacks) then
-    ESocketIO.RaiseUtf8('Callback for message ID % not found (may already have been consumed)', [aMessage.ID]);
-  // Call the registered callback and remove it from the callback list
-  try
-    fCallbacks[CbIndex].Callback(aMessage);
-  finally
-    DynArrayDelete(TypeInfo(fCallbacks), fCallbacks, CbIndex);
-  end;
-end;
-
 
 { TWebSocketFrameEncoder }
 
@@ -2171,7 +2093,7 @@ var
   enc: array of TWebSocketFrameEncoder;
   i, len: PtrInt;
   P: PAnsiChar;
-  tmp: TSynTempBuffer; // to avoid most memory allocation
+  tmp: TSynTempBuffer; // to avoid most memory allocations
 begin
   if (FramesCount = 0) or
      (Owner = nil) then
@@ -3713,6 +3635,10 @@ end;
 
 // reference: https://sockjs.com/docs/v4/socket-io-protocol/
 
+const
+  /// the default Socket.IO remote name space if none ('') is supplied
+  DefaultSocketIONameSpace: RawUtf8 = '/';
+
 function ToText(p: TEngineIOPacket): PShortString;
 begin
   result := GetEnumName(TypeInfo(TEngineIOPacket), ord(p));
@@ -3755,32 +3681,39 @@ begin
             (event = 'disconnect'); // case sensitive
 end;
 
-
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
   name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
-begin
-  if (one <> nil) and
-     (namelen > 0) then
-    repeat
-      result := one^;
-      if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
-         CompareMemFast(name, pointer(result.NameSpace), namelen) then
-        exit; // O(n) brute force search is fast enough
-      inc(one);
-      dec(count);
-    until count = 0;
+begin // O(n) brute force search is fast enough
+  if one <> nil then
+    if namelen = 0 then // name = '' will search for '/' = DefaultSocketIONameSpace
+      repeat
+        result := one^;
+        if result.NameSpace = '/' then
+          exit;
+        inc(one);
+        dec(count);
+      until count = 0
+    else
+      repeat
+        result := one^;
+        if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
+           CompareMemFast(name, pointer(result.NameSpace), namelen) then
+          exit;
+        inc(one);
+        dec(count);
+      until count = 0;
   result := nil;
 end;
 
-function SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer): TRawUtf8DynArray;
+procedure SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer;
+  out Dest: TRawUtf8DynArray);
 var
   p: PRawUtf8;
 begin
-  result := nil;
   if one = nil then
     exit;
-  SetLength(result, count);
-  p := pointer(result);
+  SetLength(Dest , count);
+  p := pointer(Dest);
   repeat
     p^ := one^.NameSpace;
     inc(one);
@@ -3905,6 +3838,191 @@ begin
 end;
 
 
+{ TSocketIONamespace }
+
+procedure TSocketIONamespace.SendPacket(aOperation: TSocketIOPacket;
+  const aNamespace: RawUtf8; aPayload: pointer; aPayloadLen: PtrInt;
+  ackId: TSioAckID);
+var
+  tmp: TSynTempBuffer;
+begin
+  if (self = nil) or
+     (fOwner = nil) or
+     (fOwner.fWebSockets = nil) then
+    ESocketIO.RaiseUtf8('Unexpected %.SendPacket', [self]);
+  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
+  try
+    tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
+    if (aNameSpace <> '') and
+       (aNameSpace <> '/') then
+    begin
+      tmp.Add(aNameSpace);
+      tmp.AddDirect(',');
+    end;
+    if ackId <> SIO_NO_ACK then
+      tmp.AddU(ackID);
+    if aPayloadLen <> 0 then
+      tmp.Add(aPayload, aPayloadLen);
+    (fOwner.fWebSockets.Protocol as TWebSocketEngineIOProtocol).SendPacket(
+      fOwner.fWebSockets, tmp.buf, tmp.added, {binary=}false);
+  finally
+    tmp.Done;
+  end;
+end;
+
+
+{ TSocketIOLocalNamespace }
+
+constructor TSocketIOLocalNamespace.Create(aOwner: TEngineIOAbstract;
+  const aNamespace: RawUtf8);
+begin
+  inherited Create;
+  fOwner := aOwner;
+  fNameSpace := aNamespace;
+  fHandlers.InitSpecific(
+    TypeInfo(TLocalNamespaceEventHandlers), fHandler, ptRawUtf8, nil, false);
+  RegisterHandlers;
+end;
+
+procedure TSocketIOLocalNamespace.RegisterHandlers;
+begin
+end;
+
+procedure TSocketIOLocalNamespace.RegisterEvent(const aEventName: RawUtf8;
+  const aCallback: TSioEventHandlerCallback);
+begin
+  with PEventHandler(fHandlers.AddUniqueName(
+         aEventName, 'Duplicated event name %', [aEventName]))^ do
+    CallBack := aCallback;
+end;
+
+procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
+var
+  ndx: PtrInt;
+  event: RawUtf8;
+  data: TDocVariantData;
+begin
+  // validate input context
+  if (fNameSpace <> '*') and
+     not aMessage.NameSpaceIs(fNameSpace) then
+    ESocketIO.RaiseUtf8('%.HandleEvent: unexpected namespace ([%]<>[%])',
+      [self, aMessage.NameSpaceShort, fNameSpace]);
+  if aMessage.PacketType <> sioEvent then
+    ESocketIO.RaiseUtf8('%.HandleEvent: unexpected % message for namespace %',
+      [self, ToText(aMessage.PacketType)^, fNameSpace]);
+  // decode the input JSON array
+  if not aMessage.DataGet(data) or
+     not data.IsArray or
+     (data.Count = 0) then
+    ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
+  // retrieve event name and search for associated handler
+  VariantToUtf8(data.Values[0], event);
+  ndx := fHandlers.FindHashed(event);
+  if ndx < 0 then
+    ESocketIO.RaiseUtf8('%.HandleEvent: unknown event % for namespace %',
+      [event, fNameSpace]);
+  // call the handler
+  data.Delete(0); // trim the event name from the data array
+  fHandler[ndx].CallBack(event, data);
+end;
+
+
+{ TSocketIORemoteNamespace }
+
+constructor TSocketIORemoteNamespace.Create(aOwner: TEngineIOAbstract;
+  const aNameSpace, aSid: RawUtf8);
+begin
+  inherited Create;
+  fOwner := aOwner;
+  if fNameSpace = '' then
+    fNameSpace := DefaultSocketIONameSpace
+  else
+    fNameSpace := aNameSpace;
+  fSid := aSid;
+end;
+
+function SioCallbackSearch(cb: PSioCallback; n: integer; id: TSioAckID): PSioCallback;
+begin
+  result := cb;
+  if result <> nil then
+    repeat
+      if result^.Ack = id then // fast CPU L1 cache brute force search
+        exit;
+      inc(result);
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
+
+function TSocketIORemoteNamespace.GenerateAckId(
+  const aCallback: TSioCallbackFunction): TSioAckID;
+var
+  cb: PSioCallback;
+  n: PtrInt;
+begin
+  result := InterlockedIncrement(fAckIdCursor);
+  n := Length(fCallbacks);
+  cb := SioCallbackSearch(pointer(fCallbacks), n, SIO_NO_ACK); // search any void
+  if cb = nil then
+  begin
+    SetLength(fCallbacks, NextGrow(n)); // no void slot: allocate some new ones
+    cb := @fCallbacks[n];
+  end;
+  cb^.Ack := result;
+  cb^.Callback := aCallback;
+  result := result;
+end;
+
+function TSocketIORemoteNamespace.SendEvent(const aEventName, aDataArray: RawUtf8;
+  const aCallback: TSioCallbackFunction): TSioAckID;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := SIO_NO_ACK;
+  if Assigned(aCallback) then
+    result := GenerateAckId(aCallback);
+  tmp.Init(length(aEventName) + length(aDataArray) + 8); // pre-allocate
+  try
+    tmp.AddDirect('[', '"');
+    tmp.Add(aEventName);
+    tmp.AddDirect('"');
+    if aDataArray <> '' then
+    begin
+      tmp.AddDirect(',');
+      tmp.Add(aDataArray);
+    end;
+    tmp.AddDirect(']');
+    SendPacket(sioEvent, fNameSpace, tmp.buf, tmp.added, result);
+  finally
+    tmp.Done;
+  end;
+end;
+
+procedure TSocketIORemoteNamespace.Acknowledge(const aMessage: TSocketIOMessage);
+var
+  cb: PSioCallback;
+begin
+  // validate message
+  if not aMessage.NameSpaceIs(fNameSpace) then
+    ESocketIO.RaiseUtf8('%.Acknowledge: unexpected namespace ([%]<>[%])',
+      [self, aMessage.NameSpaceShort, fNameSpace]);
+  if (aMessage.PacketType <> sioAck) or
+     (aMessage.ID = SIO_NO_ACK) then
+    ESocketIO.RaiseUtf8('%.Acknowledge: message %#% is not an valid ' +
+      'acknowledgment message for namespace %',
+      [self, ToText(aMessage.PacketType)^, aMessage.ID, fNameSpace]);
+  // search for the registered callback
+  cb := SioCallbackSearch(pointer(fCallbacks), length(fCallbacks), aMessage.ID);
+  if cb = nil then
+    ESocketIO.RaiseUtf8('%.Acknowledge: callback for message ID % not found ' +
+      '(may already have been consumed) for namespace %',
+        [self, aMessage.ID, fNameSpace]);
+  // call the registered callback and remove it from the callback list
+  cb^.Callback(aMessage);
+  cb^.Ack := SIO_NO_ACK; // void slot (to be set once the callback is done)
+end;
+
+
 { TEngineIOSessionsAbstract }
 
 constructor TEngineIOAbstract.Create;
@@ -3916,18 +4034,6 @@ begin
   fPingInterval := 25000;
 end;
 
-function TEngineIOAbstract.EncodePacket(
-  aOperation: TSocketIOPacket; aNamespace: RawUtf8; aPayload: RawByteString;
- ackId: TSioAckID): RawByteString;
-begin fixme
-  Result := IntToStr(Ord(aOperation));
-  if (aNameSpace <> '') and (aNameSpace <> '/') then
-    Append(Result, aNamespace, ',');
-  if ackId <> SIO_NO_ACK then
-    Append(Result, IntToStr(ackId));
-  if aPayload <> '' then
-    Append(Result, aPayload);
-end;
 
 { TWebSocketEngineIOProtocol }
 
@@ -3964,7 +4070,7 @@ begin
       else
         EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
     eioPing:
-      SendPacket(Sender, '', false, eioPong);
+      SendPacket(Sender, nil, 0, {binary=}false, eioPong);
     eioPong:
       ; // process depends on the client or server side
     eioMessage:
@@ -3980,10 +4086,9 @@ begin
 end;
 
 function TWebSocketEngineIOProtocol.SendPacket(Sender: TWebSocketProcess;
-  const PayLoad: RawByteString; PayLoadBinary: boolean;
+  Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
   PacketType: TEngineIOPacket): boolean;
 var
-  L: PtrInt;
   tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
 begin
   result := false;
@@ -3998,11 +4103,10 @@ begin
     tmp.opcode := focText;
   tmp.content := [];
   tmp.tix := 0;
-  L := length(PayLoad);
-  FastSetRawByteString(tmp.payload, nil, L + 1);
+  FastSetRawByteString(tmp.payload, nil, PayloadLen + 1);
   PByteArray(tmp.payload)[0] := ord(PacketType) + ord('0');
-  if L <> 0 then
-    MoveFast(pointer(PayLoad)^, PByteArray(tmp.payload)[1], L);
+  if PayloadLen <> 0 then
+    MoveFast(PayLoad^, PByteArray(tmp.payload)[1], PayloadLen);
   result := Sender.SendFrame(tmp);
 end;
 
