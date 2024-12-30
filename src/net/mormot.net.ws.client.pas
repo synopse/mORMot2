@@ -217,7 +217,7 @@ type
     // handle server response after namespace connection request
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
     procedure OnEvent(const aMessage: TSocketIOMessage);
-    procedure OnCallback(const Message: TSocketIOMessage);
+    procedure OnAck(const Message: TSocketIOMessage);
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls Open() then SioUpgrade() for the Socket.IO protocol
@@ -248,9 +248,10 @@ type
       WaitTimeoutMS: cardinal = 2000): TSocketIORemoteNamespace;
     /// disconnect from a given Socket.IO namespace
     procedure Disconnect(const NameSpace: RawUtf8);
-    /// sends an event to a given namespace with an optional callback
+    /// sends an event to a given remote namespace
+    // - with an optional acknowledgment callback
     function Emit(const EventName: RawUtf8; const Data: RawUtf8 = '';
-      const NameSpace: RawUtf8 = ''; const Callback: TSioCallbackFunction = nil): TSioAckID;
+      const NameSpace: RawUtf8 = ''; const OnAck: TOnSioAck = nil): TSioAckID;
     /// raw access to the associated WebSockets connection
     // - warning: all Request() method are forbidden on this upgraded connection
     property Client: THttpClientWebSockets

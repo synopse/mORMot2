@@ -1153,18 +1153,18 @@ type
   ESocketIO = class(ESynException);
 
   /// Socket.IO process Acknowledgment callback
-  TSioCallbackFunction = procedure(const Message: TSocketIOMessage) of object;
+  TOnSioAck = procedure(const Message: TSocketIOMessage) of object;
 
   /// internal slot for one Socket.IO process Acknowledgment callback
   TSioCallback = record
     Ack: TSioAckID;
-    Callback: TSioCallbackFunction;
+    Callback: TOnSioAck;
   end;
   PSioCallback = ^TSioCallback;
 
-  /// Socket.IO process Event handler callback
+  /// Socket.IO process Event handler callback signature
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
-  TSioEventHandlerCallback = procedure(const EventName: RawUtf8;
+  TOnSioEvent = procedure(const EventName: RawUtf8;
     const Data: TDocVariantData) of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
@@ -1241,16 +1241,19 @@ type
     fAckIdCursor: TSioAckID;
     fCallbacks: array of TSioCallback;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
-    function GenerateAckId(const aCallback: TSioCallbackFunction): TSioAckID;
+    function GenerateAckId(const aOnAck: TOnSioAck): TSioAckID;
   public
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
       const aNameSpace, aSid: RawUtf8); reintroduce; virtual;
+    /// initialize a new instance from an incoming connection message
+    constructor CreateFromConnectMessage(const aMessage: TSocketIOMessage;
+      aOwner: TEngineIOAbstract);
     /// emit an event to Self.NameSpace, with an optional callback
     // - returns the packet ID if aCallback is assigned, SIO_NO_ACK otherwise
     // - aDataArray is an optional JSON array of values, without any [ ] chars
     function SendEvent(const aEventName: RawUtf8; const aDataArray: RawUtf8 = '';
-      const aCallback: TSioCallbackFunction = nil): TSioAckID;
+      const aOnAck: TOnSioAck = nil): TSioAckID;
     /// handle an acknowledge message and call the associated callback
     // - will raise an ESocketIO if the packet is invalid or ID was not found
     procedure Acknowledge(const aMessage: TSocketIOMessage);
@@ -1264,10 +1267,10 @@ type
 
   /// a local Socket.IO namespace definition
   TEventHandler = record
-    /// the method name
+    /// the event name
     Name: RawUtf8;
-    /// the event which will be executed for this method
-    CallBack: TSioEventHandlerCallback;
+    /// the event callback which will be executed for this event name
+    OnEvent: TOnSioEvent;
   end;
   PEventHandler = ^TEventHandler;
   TLocalNamespaceEventHandlers = array of TEventHandler;
@@ -1286,8 +1289,9 @@ type
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
     /// register an event with an associated callback
-    procedure RegisterEvent(const aEventName: RawUtf8;
-      const aCallback: TSioEventHandlerCallback);
+    // - returns self to be used as a fluid interface, e.g. from
+    function RegisterEvent(const aEventName: RawUtf8;
+      const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
     /// dispatch an event message to the appropriate handler
     procedure HandleEvent(const aMessage: TSocketIOMessage);
   end;
@@ -3885,12 +3889,12 @@ procedure TSocketIOLocalNamespace.RegisterHandlers;
 begin
 end;
 
-procedure TSocketIOLocalNamespace.RegisterEvent(const aEventName: RawUtf8;
-  const aCallback: TSioEventHandlerCallback);
+function TSocketIOLocalNamespace.RegisterEvent(const aEventName: RawUtf8;
+  const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
 begin
-  with PEventHandler(fHandlers.AddUniqueName(
-         aEventName, 'Duplicated event name %', [aEventName]))^ do
-    CallBack := aCallback;
+  PEventHandler(fHandlers.AddUniqueName(aEventName,
+     'Duplicated event name %', [aEventName]))^.OnEvent := aCallback;
+  result := self;
 end;
 
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
@@ -3920,7 +3924,9 @@ begin
       [event, fNameSpace]);
   // call the handler
   data.Delete(0); // trim the event name from the data array
-  fHandler[ndx].CallBack(event, data);
+  with fHandler[ndx] do
+    if Assigned(OnEvent) then
+      OnEvent(event, data);
 end;
 
 
@@ -3938,6 +3944,19 @@ begin
   fSid := aSid;
 end;
 
+constructor TSocketIORemoteNamespace.CreateFromConnectMessage(
+  const aMessage: TSocketIOMessage; aOwner: TEngineIOAbstract);
+var
+  data: TDocVariantData;
+  sid, namespace: RawUtf8;
+begin
+  if not aMessage.DataGet(data) or
+     not data.GetAsRawUtf8('sid', sid) then
+    EEngineIO.RaiseUtf8('%.Create: missing "sid" in message', [aOwner]);
+  aMessage.NameSpaceGet(namespace);
+  Create(aOwner, namespace, sid);
+end;
+
 function SioCallbackSearch(cb: PSioCallback; n: integer; id: TSioAckID): PSioCallback;
 begin
   result := cb;
@@ -3952,7 +3971,7 @@ begin
 end;
 
 function TSocketIORemoteNamespace.GenerateAckId(
-  const aCallback: TSioCallbackFunction): TSioAckID;
+  const aOnAck: TOnSioAck): TSioAckID;
 var
   cb: PSioCallback;
   n: PtrInt;
@@ -3966,18 +3985,18 @@ begin
     cb := @fCallbacks[n];
   end;
   cb^.Ack := result;
-  cb^.Callback := aCallback;
+  cb^.Callback := aOnAck;
   result := result;
 end;
 
 function TSocketIORemoteNamespace.SendEvent(const aEventName, aDataArray: RawUtf8;
-  const aCallback: TSioCallbackFunction): TSioAckID;
+  const aOnAck: TOnSioAck): TSioAckID;
 var
   tmp: TSynTempBuffer;
 begin
   result := SIO_NO_ACK;
-  if Assigned(aCallback) then
-    result := GenerateAckId(aCallback);
+  if Assigned(aOnack) then
+    result := GenerateAckId(aOnAck);
   tmp.Init(length(aEventName) + length(aDataArray) + 8); // pre-allocate
   try
     tmp.AddDirect('[', '"');
