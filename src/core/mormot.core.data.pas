@@ -2108,7 +2108,7 @@ type
       const ExceptionArgs: array of const;
       aNewIndex: PPtrInt = nil): pointer; overload;
     /// ensure a given element name is unique, then add it to the array
-    // - just a wrapper to AddUniqueName(aName,'',[],aNewIndex)
+    // - just a wrapper to AddUniqueName(aName, '', [], aNewIndex)
     function AddUniqueName(const aName: RawUtf8;
       aNewIndex: PPtrInt = nil): pointer; overload;
     /// search for a given element name, make it unique, and add it to the array

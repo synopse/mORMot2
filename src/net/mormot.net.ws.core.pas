@@ -1219,7 +1219,7 @@ type
     fNameSpace: RawUtf8;
   public
     /// encode and send a SocketIO packet
-    procedure SendPacket(aOperation: TSocketIOPacket; const aNamespace: RawUtf8 = '';
+    procedure SendSocketPacket(aOperation: TSocketIOPacket; const aNamespace: RawUtf8 = '';
       aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = 0);
     /// access to the associates Engine.IO main connection
     property Owner: TEngineIOAbstract
@@ -1260,6 +1260,7 @@ type
       read fSid;
   end;
   PSocketIORemoteNamespace = ^TSocketIORemoteNamespace;
+  TSocketIORemoteNamespaces = array of TSocketIORemoteNamespace;
 
   /// a local Socket.IO namespace definition
   TEventHandler = record
@@ -1278,7 +1279,7 @@ type
   protected
     fHandler: TLocalNamespaceEventHandlers;
     fHandlers: TDynArrayHashed;
-    // you can override this in inheriting namespaces class to register the events
+    // called by Create: override to register some events
     procedure RegisterHandlers; virtual;
   public
     /// initialize this instance
@@ -1312,9 +1313,9 @@ type
     // overriden to return '' i.e. recognize by URI, not "Sec-WebSocket-Protocol:"
     function GetSubprotocols: RawUtf8; override;
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
-    /// allows to send a message over the wire to a specified connection
-    // - Sender identify the connection, typically from FrameReceived() method
-    function SendPacket(Sender: TWebSocketProcess;
+    /// allows to send a Engine.IO message over the wire to a specified connection
+    // - Sender identifies the connection, typically from FrameReceived() method
+    function SendEnginePacket(Sender: TWebSocketProcess;
       Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
       PacketType: TEngineIOPacket =  eioMessage): boolean;
     /// true when Engine.IO messages can be processed
@@ -3683,25 +3684,21 @@ end;
 
 function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
   name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
-begin // O(n) brute force search is fast enough
+begin
+  if namelen = 0 then // name = '' will search for '/' = DefaultSocketIONameSpace
+  begin
+    name := pointer(DefaultSocketIONameSpace);
+    namelen := length(DefaultSocketIONameSpace);
+  end;
   if one <> nil then
-    if namelen = 0 then // name = '' will search for '/' = DefaultSocketIONameSpace
-      repeat
-        result := one^;
-        if result.NameSpace = '/' then
-          exit;
-        inc(one);
-        dec(count);
-      until count = 0
-    else
-      repeat
-        result := one^;
-        if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
-           CompareMemFast(name, pointer(result.NameSpace), namelen) then
-          exit;
-        inc(one);
-        dec(count);
-      until count = 0;
+    repeat // O(n) brute force search is fast enough
+      result := one^;
+      if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
+         CompareMemFast(name, pointer(result.NameSpace), namelen) then
+        exit;
+      inc(one);
+      dec(count);
+    until count = 0;
   result := nil;
 end;
 
@@ -3840,7 +3837,7 @@ end;
 
 { TSocketIONamespace }
 
-procedure TSocketIONamespace.SendPacket(aOperation: TSocketIOPacket;
+procedure TSocketIONamespace.SendSocketPacket(aOperation: TSocketIOPacket;
   const aNamespace: RawUtf8; aPayload: pointer; aPayloadLen: PtrInt;
   ackId: TSioAckID);
 var
@@ -3863,7 +3860,7 @@ begin
       tmp.AddU(ackID);
     if aPayloadLen <> 0 then
       tmp.Add(aPayload, aPayloadLen);
-    (fOwner.fWebSockets.Protocol as TWebSocketEngineIOProtocol).SendPacket(
+    (fOwner.fWebSockets.Protocol as TWebSocketEngineIOProtocol).SendEnginePacket(
       fOwner.fWebSockets, tmp.buf, tmp.added, {binary=}false);
   finally
     tmp.Done;
@@ -3992,7 +3989,7 @@ begin
       tmp.Add(aDataArray);
     end;
     tmp.AddDirect(']');
-    SendPacket(sioEvent, fNameSpace, tmp.buf, tmp.added, result);
+    SendSocketPacket(sioEvent, fNameSpace, tmp.buf, tmp.added, result);
   finally
     tmp.Done;
   end;
@@ -4070,9 +4067,9 @@ begin
       else
         EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
     eioPing:
-      SendPacket(Sender, nil, 0, {binary=}false, eioPong);
+      SendEnginePacket(Sender, nil, 0, {binary=}false, eioPong);
     eioPong:
-      ; // process depends on the client or server side
+      ; // process depends on the client or server side (mostly do nothing)
     eioMessage:
       if not fOpened then
         EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: missing OPEN', [self]);
@@ -4085,7 +4082,7 @@ begin
     length(Request.payload) - 1, (Request.opcode = focBinary));
 end;
 
-function TWebSocketEngineIOProtocol.SendPacket(Sender: TWebSocketProcess;
+function TWebSocketEngineIOProtocol.SendEnginePacket(Sender: TWebSocketProcess;
   Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
   PacketType: TEngineIOPacket): boolean;
 var
@@ -4097,10 +4094,9 @@ begin
      (Sender.State <> wpsRun)  then
     exit;
   // create Engine.IO packet within this WebSocket frame
+  tmp.opcode := focText;
   if PayLoadBinary then
-    tmp.opcode := focBinary
-  else
-    tmp.opcode := focText;
+    tmp.opcode := focBinary;
   tmp.content := [];
   tmp.tix := 0;
   FastSetRawByteString(tmp.payload, nil, PayloadLen + 1);
