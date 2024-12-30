@@ -1066,35 +1066,68 @@ type
     sioBinaryAck);
   PSocketIOPacket = ^TSocketIOPacket;
 
-  /// define a Socket.IO message content
+  /// Socket.IO sequence used for event acknowledgment
+  TSioAckID = integer;
+
+  /// define a raw decoded Socket.IO message content
   {$ifdef USERECORDWITHMETHODS}
   TSocketIOMessage = record
   {$else}
   TSocketIOMessage = object
   {$endif USERECORDWITHMETHODS}
-    NameSpaceLen: PtrInt;
-    NameSpace: PUtf8Char;
-    DataLen: PtrInt;
-    Data: PUtf8Char;
-    PacketType: TSocketIOPacket;
-    DataBinary: boolean;
-    ID: cardinal;
-    BinaryAttachment: cardinal;
-    /// decode a Socket.IO raw packet into its message fields
-    // - returns true on success, false if the input PayLoad is incorrect
-    function Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
-      PayLoadBinary: boolean): boolean; overload;
+  private
+    fSender: TWebSocketProcess;
+    fNameSpace: pointer;
+    fNameSpaceLen: PtrInt;
+    fData: PUtf8Char;
+    fDataLen: PtrInt;
+    fPacketType: TSocketIOPacket;
+    fDataBinary: boolean;
+    fID: TSioAckID;
+    fBinaryAttachment: cardinal;
+  public
     /// decode a Socket.IO raw text packet into its message fields
     // - mainly used for testing purposes
-    function Init(const PayLoad: RawUtf8): boolean; overload;
-    /// quickly check if the NameSpace value does match
+    function Init(const PayLoad: RawUtf8): boolean;
+    /// decode a Socket.IO raw packet into its message fields
+    // - returns true on success, false if the input PayLoad is incorrect
+    function InitBuffer(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
+      PayLoadBinary: boolean; Process: TWebSocketProcess): boolean;
+    /// quickly check if the NameSpace value does match (case sensitive)
     function NameSpaceIs(const Name: RawUtf8): boolean;
-    /// quickly check if the Data content does match
+    /// retrieve the NameSpace value as a new RawUtf8
+    procedure NameSpaceGet(out Dest: RawUtf8);
+    /// retrieve the NameSpace value as a shortstring (used e.g. for RaiseESockIO)
+    function NameSpaceShort: shortstring;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// quickly check if the Data content does match (mainly used for testing)
     function DataIs(const Content: RawUtf8): boolean;
+    /// decode the Data content JSON payload into a TDocVariant
+    // - warning: the Data/DataLen buffer will be decoded in-place, so modified
+    function DataGet(out Dest: TDocVariantData): boolean;
+    /// raise a ESockIO exception with the specified text context
+    procedure RaiseESockIO(const ctx: RawUtf8);
+    /// low-level kind of Socket.IO packet of this message
+    property PacketType: TSocketIOPacket
+      read fPacketType;
+    /// optional low-level Socket.IO acknowledge ID of this message
+    property ID: TSioAckID
+      read fID;
+    /// optional low-level Socket.IO binary attachement ID of this message
+    property BinaryAttachment: cardinal
+      read fBinaryAttachment;
+    /// access to the internal NameSpace text buffer - for internal use
+    // - call NameSpaceIs() and NameSpaceGet() functions instead
+    // - warning: this buffer is NOT #0 ended but follows NameSpaceLen
+    property NameSpace: pointer
+      read fNameSpace;
+    /// access to the internal NameSpace text buffer length - for internal use
+    property NameSpaceLen: PtrInt
+      read fNameSpaceLen;
+    /// low-level access to the WebSockets instance specified to InitBuffer
+    property Sender: TWebSocketProcess
+      read fSender;
   end;
-
-  /// Socket.IO sequence used for event acknowledgment
-  TSioAckID = cardinal;
 
 /// compute the URI for a WebSocket-only Engine.IO upgrade
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
@@ -3759,8 +3792,8 @@ end;
 
 { TSocketIOMessage }
 
-function TSocketIOMessage.Init(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
-  PayLoadBinary: boolean): boolean;
+function TSocketIOMessage.InitBuffer(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
+  PayLoadBinary: boolean; Process: TWebSocketProcess): boolean;
 var
   v: PtrUInt;
 begin
@@ -3768,13 +3801,14 @@ begin
   if (PayLoad = nil) or
      (PayLoadLen = 0) then
     exit;
-  PacketType := TSocketIOPacket(PByte(PayLoad)^ - ord('0'));
-  if byte(PacketType) > byte(high(PacketType)) then
+  fPacketType := TSocketIOPacket(PByte(PayLoad)^ - ord('0'));
+  if byte(fPacketType) > byte(high(fPacketType)) then
     exit;
-  NameSpaceLen := 1;
-  NameSpace := pointer(DefaultNameSpace);
-  ID := 0;
-  BinaryAttachment := 0;
+  fSender := Process;
+  fNameSpaceLen := 1; // '/' by default (if not specified)
+  fNameSpace := pointer(DefaultSocketIONameSpace);
+  fID := 0;
+  fBinaryAttachment := 0;
   inc(PayLoad);
   dec(PayLoadLen);
   if PayLoadLen <> 0 then
@@ -3790,23 +3824,23 @@ begin
             not (PayLoad^ in ['0'..'9']);
       if PayLoad^ = '-' then
       begin
-        BinaryAttachment := v;
+        fBinaryAttachment := v;
         inc(PayLoad);
         dec(PayLoadLen);
       end
       else
-        ID := v;
+        fID := v;
     end;
     if (PayLoadLen <> 0) and
        (PayLoad^ = '/') then
     begin
-      NameSpace := PayLoad;
+      fNameSpace := PayLoad;
       repeat
         inc(PayLoad);
         dec(PayLoadLen);
       until (PayLoadLen = 0) or
             (PayLoad^ = ',');
-      NameSpacelen := PayLoad - NameSpace;
+      fNameSpacelen := PayLoad - fNameSpace;
       if (PayLoadLen <> 0) and
          (PayLoad^ = ',') then
       begin
@@ -3814,40 +3848,60 @@ begin
         dec(PayLoadLen);
       end;
     end;
-    if ID = 0 then
+    if fID = 0 then
       while (PayLoadLen <> 0) and
             (PayLoad^ in ['0'..'9']) do
       begin
-        ID := (ID * 10) + cardinal(ord(PayLoad^) - ord('0'));
+        fID := (fID * 10) + (ord(PayLoad^) - ord('0'));
         inc(PayLoad);
         dec(PayLoadLen);
       end;
   end;
   if PayLoadLen = 0 then
     PayLoad := nil;
-  Data := PayLoad;
-  DataLen := PayLoadLen;
-  DataBinary := PayLoadBinary;
+  fData := PayLoad;
+  fDataLen := PayLoadLen;
+  fDataBinary := PayLoadBinary;
   result := true;
 end;
 
 function TSocketIOMessage.Init(const PayLoad: RawUtf8): boolean;
 begin
-  result := Init(pointer(PayLoad), length(PayLoad), {binary=}false);
+  result := InitBuffer(pointer(PayLoad), length(PayLoad), {binary=}false, nil);
 end;
 
 function TSocketIOMessage.NameSpaceIs(const Name: RawUtf8): boolean;
 begin
-  result := (length(Name) = NameSpaceLen) and
-            ((NameSpaceLen = 0) or
-             CompareMemFast(pointer(Name), NameSpace, NameSpaceLen));
+  result := (length(Name) = fNameSpaceLen) and
+            ((fNameSpaceLen = 0) or
+             CompareMemFast(pointer(Name), fNameSpace, fNameSpaceLen));
+end;
+
+procedure TSocketIOMessage.NameSpaceGet(out Dest: RawUtf8);
+begin
+  FastSetString(Dest, fNameSpace, fNameSpaceLen);
+end;
+
+function TSocketIOMessage.NameSpaceShort: shortstring;
+begin
+  SetString(result, PAnsiChar(fNameSpace), fNameSpaceLen);
 end;
 
 function TSocketIOMessage.DataIs(const Content: RawUtf8): boolean;
 begin
-  result := (length(Content) = DataLen) and
-            ((DataLen = 0) or
-             CompareMemFast(pointer(Content), Data, DataLen));
+  result := (length(Content) = fDataLen) and
+            ((fDataLen = 0) or
+             CompareMemFast(pointer(Content), fData, fDataLen));
+end;
+
+function TSocketIOMessage.DataGet(out Dest: TDocVariantData): boolean;
+begin
+  result := Dest.InitJsonInPlace(fData, JSON_FAST_EXTENDED) <> nil;
+end;
+
+procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
+begin
+  ESocketIO.RaiseUtf8('% NameSpace=% Data=%', [ctx, NameSpaceShort, fData]);
 end;
 
 
