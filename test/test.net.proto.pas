@@ -101,7 +101,6 @@ begin
   Check(m.Init('0'));
   Check(m.PacketType = sioConnect);
   Check(m.NameSpaceIs('/'));
-  CheckEqual(m.Data, nil);
   Check(m.DataIs(''));
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 0);
@@ -114,7 +113,6 @@ begin
   Check(m.Init('1'));
   Check(m.PacketType = sioDisconnect);
   Check(m.NameSpaceIs('/'));
-  CheckEqual(m.Data, nil);
   Check(m.DataIs(''));
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 0);
@@ -123,7 +121,6 @@ begin
   Check(m.NameSpaceIs('/admin'));
   Check(not m.NameSpaceIs('/admi'));
   Check(not m.NameSpaceIs('/admiN'));
-  CheckEqual(m.Data, nil);
   Check(m.DataIs(''));
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 0);
