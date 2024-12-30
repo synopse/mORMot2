@@ -1166,6 +1166,10 @@ type
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
   TOnSioEvent = procedure(const EventName: RawUtf8;
     const Data: TDocVariantData) of object;
+  /// Socket.IO process published methods handler signature
+  // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
+  // - required signature of TSocketIOLocalNamespace.RegisterPublishedMethods()
+  TOnSioMethod = procedure(const Data: TDocVariantData) of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
@@ -1271,6 +1275,8 @@ type
     Name: RawUtf8;
     /// the event callback which will be executed for this event name
     OnEvent: TOnSioEvent;
+    /// the published method which will be executed for this event name
+    OnMethod: TOnSioMethod;
   end;
   PEventHandler = ^TEventHandler;
   TLocalNamespaceEventHandlers = array of TEventHandler;
@@ -1292,6 +1298,11 @@ type
     // - returns self to be used as a fluid interface, e.g. from
     function RegisterEvent(const aEventName: RawUtf8;
       const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
+    /// register all published methods of a class as event handlers
+    // - published method names are case-sensitive Socket.IO event names
+    // - the methods should follow the TOnSioMethod exact signature, i.e.
+    // ! procedure eventname(const Data: TDocVariantData);
+    procedure RegisterPublishedMethods(aInstance: TObject);
     /// dispatch an event message to the appropriate handler
     procedure HandleEvent(const aMessage: TSocketIOMessage);
   end;
@@ -3897,6 +3908,17 @@ begin
   result := self;
 end;
 
+procedure TSocketIOLocalNamespace.RegisterPublishedMethods(aInstance: TObject);
+var
+  met: TPublishedMethodInfoDynArray;
+  m: PtrInt;
+begin
+  for m := 0 to GetPublishedMethods(aInstance, met) - 1 do
+    PEventHandler(fHandlers.AddUniqueName(met[m].Name,
+       'Duplicated event name % on %', [met[m].Name, aInstance]))^.
+      OnMethod := TOnSioMethod(met[m].Method);
+end;
+
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
 var
   ndx: PtrInt;
@@ -3926,7 +3948,9 @@ begin
   data.Delete(0); // trim the event name from the data array
   with fHandler[ndx] do
     if Assigned(OnEvent) then
-      OnEvent(event, data);
+      OnEvent(event, data)
+    else if Assigned(OnMethod) then
+      OnMethod(data);
 end;
 
 
