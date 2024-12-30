@@ -1183,7 +1183,6 @@ type
     fVersion: integer;
     fEngineSid: RawUtf8;
     fPingInterval, fPingTimeout, fMaxPayload: integer;
-    fNameSpaces: TRawUtf8DynArray;
   published
     /// initialize this instance with its default values
     constructor Create; override;
@@ -1288,7 +1287,7 @@ type
   protected
     fHandler: TLocalNamespaceEventHandlers;
     fHandlers: TDynArrayHashed;
-    // called by Create: override to register some events
+    // called by Create: can override this method to register some events
     procedure RegisterHandlers; virtual;
   public
     /// initialize this instance
@@ -3898,6 +3897,7 @@ end;
 
 procedure TSocketIOLocalNamespace.RegisterHandlers;
 begin
+  // nothing to register by default
 end;
 
 function TSocketIOLocalNamespace.RegisterEvent(const aEventName: RawUtf8;
