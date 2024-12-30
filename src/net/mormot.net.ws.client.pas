@@ -190,12 +190,17 @@ type
   TSocketsIOClient = class;
   TWebSocketSocketIOClientProtocol = class;
 
-  TSocketIORemoteNamespaceClient = class(TSocketIORemoteNamespace)
-  public
-    class function FromConnectMessage(const aMessage: TSocketIOMessage;
-      aOwner: TSocketsIOClient): TSocketIORemoteNamespaceClient;
-  end;
-  TSocketIORemoteNamespaceClients = array of TSocketIORemoteNamespaceClient;
+  /// allow to customize TSocketsIOClient process
+  // - sciIgnoreUnknownEvent won't raise an ESocketIO when an unregistered event
+  // is received
+  // - sciIgnoreUnknownAck won't raise an ESocketIO on an expected sioAck message
+  // - sciEmitAutoConnect will let Emit() call Connect() if needed
+  TSocketsIOClientOption = (
+    sciIgnoreUnknownEvent,
+    sciIgnoreUnknownAck,
+    sciEmitAutoConnect);
+  /// options to customize TSocketsIOClient process
+  TSocketsIOClientOptions = set of TSocketsIOClientOption;
 
   /// a HTTP/HTTPS client, upgraded to Socket.IO over WebSockets
   // - no polling mode is supported by this class
@@ -206,6 +211,7 @@ type
     fRemote: TSocketIORemoteNamespaces;
     fLocal: TSocketIOLocalNamespaces;
     fConnectionEvent: TSynEvent;
+    fOptions: TSocketsIOClientOptions;
     function GetProtocol: TWebSocketSocketIOClientProtocol;
     function GetRemoteNameSpace(NameSpace: PUtf8Char; NameSpaceLen: PtrInt): pointer;
       {$ifdef HASINLINE} inline; {$endif}
@@ -252,6 +258,9 @@ type
     // - with an optional acknowledgment callback
     function Emit(const EventName: RawUtf8; const Data: RawUtf8 = '';
       const NameSpace: RawUtf8 = ''; const OnAck: TOnSioAck = nil): TSioAckID;
+    /// refine the TSocketsIOClient process
+    property Options: TSocketsIOClientOptions
+      read fOptions write fOptions;
     /// raw access to the associated WebSockets connection
     // - warning: all Request() method are forbidden on this upgraded connection
     property Client: THttpClientWebSockets
@@ -730,17 +739,23 @@ var
 begin
   ns := GetLocalNameSpace(aMessage.NameSpace, aMessage.NameSpaceLen, true);
   if not Assigned(ns) then
-    aMessage.RaiseESockIO('Unknown namespace');
+    if sciIgnoreUnknownEvent in fOptions then
+      exit
+    else
+      aMessage.RaiseESockIO('Unknown namespace');
   ns.HandleEvent(aMessage);
 end;
 
-procedure TSocketsIOClient.OnCallback(const Message: TSocketIOMessage);
+procedure TSocketsIOClient.OnAck(const Message: TSocketIOMessage);
 var
-  ns: TSocketIORemoteNamespaceClient;
+  ns: TSocketIORemoteNamespace;
 begin
   ns := GetRemoteNameSpace(Message.NameSpace, Message.NameSpaceLen);
   if not Assigned(ns) then
-    Message.RaiseESockIO('ACK on disconnected namespace');
+    if sciIgnoreUnknownAck in fOptions then
+      exit
+    else
+      Message.RaiseESockIO('ACK on disconnected namespace');
   ns.Acknowledge(Message);
 end;
 
