@@ -1294,7 +1294,8 @@ type
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
     /// register an event with an associated callback
-    // - returns self to be used as a fluid interface, e.g. from
+    // - returns self to be used as a fluid interface, e.g.
+    // from TSocketsIOClient.Local()
     function RegisterEvent(const aEventName: RawUtf8;
       const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
     /// register all published methods of a class as event handlers
@@ -1303,7 +1304,7 @@ type
     // ! procedure eventname(const Data: TDocVariantData);
     procedure RegisterPublishedMethods(aInstance: TObject);
     /// dispatch an event message to the appropriate handler
-    procedure HandleEvent(const aMessage: TSocketIOMessage);
+    procedure HandleEvent(const aMessage: TSocketIOMessage); virtual;
   end;
   PSocketIOLocalNamespace = ^TSocketIOLocalNamespace;
   TSocketIOLocalNamespaces = array of TSocketIOLocalNamespace;
@@ -3924,6 +3925,7 @@ var
   ndx: PtrInt;
   event: RawUtf8;
   data: TDocVariantData;
+  d: PDocVariantData;
 begin
   // validate input context
   if (fNameSpace <> '*') and
@@ -3946,11 +3948,15 @@ begin
       [event, fNameSpace]);
   // call the handler
   data.Delete(0); // trim the event name from the data array
+  d := @data;
+  if (d^.Count = 1) and
+     _Safe(d^.Values[0])^.IsObject then
+    d := _Safe(d^.Values[0]); // return a single object as root (common case)
   with fHandler[ndx] do
     if Assigned(OnEvent) then
-      OnEvent(event, data)
+      OnEvent(event, d^)
     else if Assigned(OnMethod) then
-      OnMethod(data);
+      OnMethod(d^);
 end;
 
 
