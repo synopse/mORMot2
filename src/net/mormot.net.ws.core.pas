@@ -3840,8 +3840,8 @@ begin
 end;
 
 function TSocketIOMessage.DataGet(out Dest: TDocVariantData): boolean;
-begin
-  result := Dest.InitJsonInPlace(fData, JSON_FAST_EXTENDED) <> nil;
+begin // JSON_[mNameValue] to include dvoNameCaseSensitive
+  result := Dest.InitJsonInPlace(fData, JSON_[mNameValue]) <> nil;
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
