@@ -7065,6 +7065,8 @@ procedure TDynArray.ItemCopy(Source, Dest: pointer);
 var
   nfo: TRttiCustom;
 begin
+  if Source = Dest then
+    exit;
   nfo := fInfo.ArrayRtti;
   if (nfo <> nil) and // inlined nfo.ValueCopy() to avoid MoveFast() twice
      Assigned(nfo.Copy) then // managed or 2/4/8..32 bytes move (also T*ObjArray)
@@ -7329,19 +7331,19 @@ function TDynArray.ItemMoveTo(index: PtrInt; Dest: pointer): boolean;
 var
   p: pointer;
 begin
+  result := false;
   p := ItemPtr(index);
   if (p = nil) or
      (Dest = nil) then
-  begin
-    result := false;
     exit;
-  end;
+  result := true;
+  if p = Dest then
+    exit;
   if (fInfo.ArrayRtti <> nil) and
      not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
   MoveFast(p^, Dest^, fInfo.Cache.ItemSize);
   FillCharFast(p^, fInfo.Cache.ItemSize, 0);
-  result := true;
 end;
 
 procedure TDynArray.ItemCopyFrom(Source: pointer; index: PtrInt;
@@ -7350,12 +7352,12 @@ var
   p: pointer;
 begin
   p := ItemPtr(index);
-  if p <> nil then
-  begin
-    if ClearBeforeCopy then // safer if Source is a copy of p^
-      ItemClear(p);
-    ItemCopy(Source, p);
-  end;
+  if (p = nil) or
+     (p = Source) then
+    exit;
+  if ClearBeforeCopy then // safer if Source is a copy of p^
+    ItemClear(p);
+  ItemCopy(Source, p);
 end;
 
 {$ifdef CPU64}
