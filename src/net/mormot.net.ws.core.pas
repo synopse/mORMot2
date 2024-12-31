@@ -1103,8 +1103,10 @@ type
     /// quickly check if the Data content does match (mainly used for testing)
     function DataIs(const Content: RawUtf8): boolean;
     /// decode the Data content JSON payload into a TDocVariant
+    // - can optionally override the default JSON_SOCKETIO options
     // - warning: the Data/DataLen buffer will be decoded in-place, so modified
-    function DataGet(out Dest: TDocVariantData): boolean;
+    function DataGet(out Dest: TDocVariantData;
+      Options: PDocVariantOptions = nil): boolean;
     /// raise a ESockIO exception with the specified text context
     procedure RaiseESockIO(const ctx: RawUtf8);
     /// low-level kind of Socket.IO packet of this message
@@ -1141,6 +1143,14 @@ function SocketIOReserved(const event: RawUtf8): boolean;
 
 function ToText(p: TEngineIOPacket): PShortString; overload;
 function ToText(p: TSocketIOPacket): PShortString; overload;
+
+var
+  /// define how TSocketIOMessage.DataGet() returns its TDocVariant value
+  // - equals JSON_[mNameValue] by default to include dvoNameCaseSensitive
+  JSON_SOCKETIO: TDocVariantOptions =
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoNameCaseSensitive];
 
 const
   /// constant used if no TSioAckID is necessary
@@ -3839,9 +3849,12 @@ begin
              CompareMemFast(pointer(Content), fData, fDataLen));
 end;
 
-function TSocketIOMessage.DataGet(out Dest: TDocVariantData): boolean;
-begin // JSON_[mNameValue] to include dvoNameCaseSensitive
-  result := Dest.InitJsonInPlace(fData, JSON_[mNameValue]) <> nil;
+function TSocketIOMessage.DataGet(out Dest: TDocVariantData;
+  Options: PDocVariantOptions): boolean;
+begin
+  if Options = nil then
+    Options := @JSON_SOCKETIO;
+  result := Dest.InitJsonInPlace(fData, Options^) <> nil;
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
