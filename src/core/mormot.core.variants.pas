@@ -516,12 +516,16 @@ var
   /// TDocVariant options to be used for case-sensitive TSynNameValue-like
   // storage, with optional extended JSON syntax serialization
   // - consider using JSON_FAST_EXTENDED for case-insensitive objects
+  // - JSON_NAMEVALUE[false] equals JSON_[mNameValue]
+  // - JSON_NAMEVALUE[true] equals JSON_[mNameValueExtended]
   JSON_NAMEVALUE: TDocVariantOptionsBool;
 
   /// TDocVariant options to be used for case-sensitive TSynNameValue-like
   // storage, RawUtf8 interning and optional extended JSON syntax serialization
   // - consider using JSON_FAST_EXTENDED for case-insensitive objects,
   // or JSON_NAMEVALUE[] if you don't expect names and values interning
+  // - JSON_NAMEVALUEINTERN[false] equals JSON_[mNameValueIntern]
+  // - JSON_NAMEVALUEINTERN[true] equals JSON_[mNameValueInternExtended]
   JSON_NAMEVALUEINTERN: TDocVariantOptionsBool;
 
   // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default

@@ -1300,7 +1300,7 @@ type
       const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
     /// register all published methods of a class as event handlers
     // - published method names are case-sensitive Socket.IO event names
-    // - the methods should follow the TOnSioMethod exact signature, i.e.
+    // - the methods should follow the TOnSioMethod exact signature, e.g.
     // ! procedure eventname(const Data: TDocVariantData);
     procedure RegisterPublishedMethods(aInstance: TObject);
     /// dispatch an event message to the appropriate handler
