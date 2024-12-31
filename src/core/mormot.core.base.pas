@@ -11384,11 +11384,11 @@ end;
 
 procedure TSynTempBuffer.AddU(v: PtrUint);
 var
-  tmp: array[0..23] of AnsiChar;
+  t: array[0..23] of AnsiChar;
   P: PAnsiChar;
 begin
-  P := StrUInt32(@tmp[23], v);
-  Add(P, @tmp[23] - P);
+  P := StrUInt32(@t[23], v);
+  Add(P, @t[23] - P);
 end;
 
 procedure TSynTempBuffer.Done(var Dest; CodePage: cardinal);
