@@ -547,33 +547,33 @@ function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
-  type
-    TMethodInfo = packed record
-      Name: PShortString;
-      Addr: pointer;
-    end;
   var
-    Table: PIntegerArray;
-    M: ^TMethodInfo;
-    i: integer;
+    info: PVmtMethodTable;
+    m: PVmtMethodEntry;
+    r: ^TPublishedMethodInfo;
+    n: integer;
   begin
     if C = nil then
       exit;
     AddParentsFirst(GetClassParent(C)); // put children methods afterwards
-    Table := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
-    if Table = nil then
+    info := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
+    if info = nil then
       exit;
-    SetLength(Methods, result + Table^[0]);
-    M := @Table^[1];
-    for i := 1 to Table^[0] do  // Table^[0] = methods count
-      with Methods[result] do
-      begin
-        ShortStringToAnsi7String(M^.Name^, Name);
-        Method.Data := Instance;
-        Method.Code := M^.Addr;
-        inc(M);
-        inc(result);
-      end;
+    n := info^.Count;
+    if n = 0 then
+      exit; // paranoid
+    SetLength(Methods, result + n);
+    r := @Methods[result];
+    inc(result, n);
+    m := info^.Entry[0];
+    repeat
+      ShortStringToAnsi7String(m^.Name^, r^.Name);
+      r^.Method.Data := Instance;
+      r^.Method.Code := m^.CodeAddress;
+      inc(m);
+      inc(r);
+      dec(n);
+    until n = 0;
   end;
 
 begin
