@@ -1236,9 +1236,6 @@ type
     fOwner: TEngineIOAbstract;
     fNameSpace: RawUtf8;
   public
-    /// encode and send a SocketIO packet
-    procedure SendSocketPacket(aOperation: TSocketIOPacket; const aNamespace: RawUtf8 = '';
-      aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = 0);
     /// access to the associates Engine.IO main connection
     property Owner: TEngineIOAbstract
       read fOwner;
@@ -3897,39 +3894,6 @@ begin
 end;
 
 
-{ TSocketIONamespace }
-
-procedure TSocketIONamespace.SendSocketPacket(aOperation: TSocketIOPacket;
-  const aNamespace: RawUtf8; aPayload: pointer; aPayloadLen: PtrInt;
-  ackId: TSioAckID);
-var
-  tmp: TSynTempBuffer;
-begin
-  if (self = nil) or
-     (fOwner = nil) or
-     (fOwner.fWebSockets = nil) then
-    ESocketIO.RaiseUtf8('Unexpected %.SendPacket', [self]);
-  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
-  try
-    tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
-    if (aNameSpace <> '') and
-       (aNameSpace <> '/') then
-    begin
-      tmp.Add(aNameSpace);
-      tmp.AddDirect(',');
-    end;
-    if ackId <> SIO_NO_ACK then
-      tmp.AddU(ackID);
-    if aPayloadLen <> 0 then
-      tmp.Add(aPayload, aPayloadLen);
-    (fOwner.fWebSockets.Protocol as TWebSocketEngineIOProtocol).SendEnginePacket(
-      fOwner.fWebSockets, tmp.buf, tmp.added, {binary=}false);
-  finally
-    tmp.Done;
-  end;
-end;
-
-
 { TSocketIOLocalNamespace }
 
 constructor TSocketIOLocalNamespace.Create(aOwner: TEngineIOAbstract;
@@ -4085,7 +4049,8 @@ begin
       tmp.Add(aDataArray);
     end;
     tmp.AddDirect(']');
-    SendSocketPacket(sioEvent, fNameSpace, tmp.buf, tmp.added, result);
+    SocketIOSendPacket(fOwner.fWebSockets,
+      sioEvent, fNameSpace, tmp.buf, tmp.added, result);
   finally
     tmp.Done;
   end;

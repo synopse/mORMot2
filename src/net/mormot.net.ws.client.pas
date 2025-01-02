@@ -775,6 +775,7 @@ end;
 
 procedure TSocketsIOClient.AfterNamespaceConnect(const Response: TSocketIOMessage);
 begin
+  fRemoteNames := nil; // to be reallocated on need
   if Response.PacketType = sioConnect then
     ObjArrayAdd(fRemotes,
       TSocketIORemoteNamespace.CreateFromConnectMessage(Response, self));
@@ -858,14 +859,15 @@ begin
   result := GetRemote(NameSpace);
   if result <> nil then
     exit; // already connected
-  fRemoteNames := nil; // to be reallocated on need
+  if fWebSockets = nil then
+    ESocketIO.RaiseUtf8('Unexpected %.Connect with no WS connection', [self]);
   fConnectionEventWait := WaitTimeoutMS > 0;
   if fConnectionEventWait then
     if Assigned(fConnectionEvent) then
       fConnectionEvent.ResetEvent
     else
       fConnectionEvent := TSynEvent.Create;
-  result.SendSocketPacket(sioConnect, NameSpace);
+  SocketIOSendPacket(fWebSockets, sioConnect, NameSpace);
   if WaitTimeoutMS = 0 then
     exit;
   fConnectionEvent.WaitFor(WaitTimeoutMS);
@@ -882,7 +884,7 @@ begin
   if ns = nil then
     exit;
   fRemoteNames := nil; // to be reallocated on need
-  ns.SendSocketPacket(sioDisconnect, NameSpace);
+  SocketIOSendPacket(fWebSockets, sioDisconnect, NameSpace);
   ObjArrayDelete(fRemotes, ns);
 end;
 
