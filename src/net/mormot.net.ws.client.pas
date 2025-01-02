@@ -204,7 +204,7 @@ type
 
   /// a HTTP/HTTPS client, upgraded to Socket.IO over WebSockets
   // - no polling mode is supported by this class
-  // - use SioOpen() factories to connect to a Socket.IO server
+  // - use Open() class factories to connect to a Socket.IO server
   TSocketsIOClient = class(TEngineIOAbstract)
   protected
     fClient: THttpClientWebSockets;
@@ -256,10 +256,11 @@ type
     function Local(const NameSpace: RawUtf8 = '/';
       DoNotAddIfNone: boolean = false): TSocketIOLocalNamespace;
     /// register an event with an associated callback for a local namespace
-    procedure LocalEvent(const NameSpace, EventName: RawUtf8; const Callback: TOnSioEvent);
+    procedure LocalEvent(const NameSpace, EventName: RawUtf8;
+      const Callback: TOnSocketIOEvent);
     /// register all published methods of a class as local namespace handlers
     // - published method names are case-sensitive Socket.IO event names
-    // - the methods should follow the TOnSioMethod exact signature, i.e.
+    // - the methods should follow the TOnSocketIOMethod exact signature, i.e.
     // ! procedure eventname(const Data: TDocVariantData);
     procedure LocalPublishedMethods(const Namespace: RawUtf8; Instance: TObject);
     /// access to a given Socket.IO namespace
@@ -271,7 +272,7 @@ type
     /// sends an event to a given remote namespace
     // - with an optional acknowledgment callback
     function Emit(const EventName: RawUtf8; const Data: RawUtf8 = '';
-      const NameSpace: RawUtf8 = ''; const OnAck: TOnSioAck = nil): TSioAckID;
+      const NameSpace: RawUtf8 = ''; const OnAck: TOnSocketIOAck = nil): TSocketIOAckID;
     /// refine the TSocketsIOClient process
     property Options: TSocketsIOClientOptions
       read fOptions write fOptions;
@@ -826,7 +827,7 @@ begin
 end;
 
 procedure TSocketsIOClient.LocalEvent(
-  const NameSpace, EventName: RawUtf8; const Callback: TOnSioEvent);
+  const NameSpace, EventName: RawUtf8; const Callback: TOnSocketIOEvent);
 begin
   if Assigned(Callback) then
     Local(NameSpace).RegisterEvent(EventName, Callback);
@@ -889,7 +890,7 @@ begin
 end;
 
 function TSocketsIOClient.Emit(const EventName, Data, NameSpace: RawUtf8;
-  const OnAck: TOnSioAck): TSioAckID;
+  const OnAck: TOnSocketIOAck): TSocketIOAckID;
 var
   ns: TSocketIORemoteNamespace;
 begin

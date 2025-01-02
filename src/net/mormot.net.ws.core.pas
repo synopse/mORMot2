@@ -1067,7 +1067,7 @@ type
   PSocketIOPacket = ^TSocketIOPacket;
 
   /// Socket.IO sequence used for event acknowledgment
-  TSioAckID = integer;
+  TSocketIOAckID = integer;
 
   /// define a raw decoded Socket.IO message content
   {$ifdef USERECORDWITHMETHODS}
@@ -1083,7 +1083,7 @@ type
     fDataLen: PtrInt;
     fPacketType: TSocketIOPacket;
     fDataBinary: boolean;
-    fID: TSioAckID;
+    fID: TSocketIOAckID;
     fBinaryAttachment: cardinal;
   public
     /// decode a Socket.IO raw text packet into its message fields
@@ -1113,7 +1113,7 @@ type
     property PacketType: TSocketIOPacket
       read fPacketType;
     /// optional low-level Socket.IO acknowledge ID of this message
-    property ID: TSioAckID
+    property ID: TSocketIOAckID
       read fID;
     /// optional low-level Socket.IO binary attachement ID of this message
     property BinaryAttachment: cardinal
@@ -1132,7 +1132,7 @@ type
   end;
 
 const
-  /// constant used if no TSioAckID is necessary
+  /// constant used if no TSocketIOAckID is necessary
   SIO_NO_ACK = 0;
 
 function ToText(p: TEngineIOPacket): PShortString; overload;
@@ -1153,23 +1153,23 @@ type
   ESocketIO = class(ESynException);
 
   /// Socket.IO process Acknowledgment callback
-  TOnSioAck = procedure(const Message: TSocketIOMessage) of object;
+  TOnSocketIOAck = procedure(const Message: TSocketIOMessage) of object;
 
   /// internal slot for one Socket.IO process Acknowledgment callback
-  TSioCallback = record
-    Ack: TSioAckID;
-    Callback: TOnSioAck;
+  TSocketIOCallback = record
+    Ack: TSocketIOAckID;
+    Callback: TOnSocketIOAck;
   end;
-  PSioCallback = ^TSioCallback;
+  PSocketIOCallback = ^TSocketIOCallback;
 
   /// Socket.IO process Event handler callback signature
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
-  TOnSioEvent = procedure(const EventName: RawUtf8;
+  TOnSocketIOEvent = procedure(const EventName: RawUtf8;
     const Data: TDocVariantData) of object;
   /// Socket.IO process published methods handler signature
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
   // - required signature of TSocketIOLocalNamespace.RegisterPublishedMethods()
-  TOnSioMethod = procedure(const Data: TDocVariantData) of object;
+  TOnSocketIOMethod = procedure(const Data: TDocVariantData) of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
@@ -1238,10 +1238,10 @@ type
   TSocketIORemoteNamespace = class(TSocketIONamespace)
   protected
     fSid: RawUtf8;
-    fAckIdCursor: TSioAckID;
-    fCallbacks: array of TSioCallback;
+    fAckIdCursor: TSocketIOAckID;
+    fCallbacks: array of TSocketIOCallback;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
-    function GenerateAckId(const aOnAck: TOnSioAck): TSioAckID;
+    function GenerateAckId(const aOnAck: TOnSocketIOAck): TSocketIOAckID;
   public
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
@@ -1253,7 +1253,7 @@ type
     // - returns the packet ID if aCallback is assigned, SIO_NO_ACK otherwise
     // - aDataArray is an optional JSON array of values, without any [ ] chars
     function SendEvent(const aEventName: RawUtf8; const aDataArray: RawUtf8 = '';
-      const aOnAck: TOnSioAck = nil): TSioAckID;
+      const aOnAck: TOnSocketIOAck = nil): TSocketIOAckID;
     /// handle an acknowledge message and call the associated callback
     // - will raise an ESocketIO if the packet is invalid or ID was not found
     procedure Acknowledge(const aMessage: TSocketIOMessage);
@@ -1270,9 +1270,9 @@ type
     /// the event name
     Name: RawUtf8;
     /// the event callback which will be executed for this event name
-    OnEvent: TOnSioEvent;
+    OnEvent: TOnSocketIOEvent;
     /// the published method which will be executed for this event name
-    OnMethod: TOnSioMethod;
+    OnMethod: TOnSocketIOMethod;
   end;
   PEventHandler = ^TEventHandler;
   TLocalNamespaceEventHandlers = array of TEventHandler;
@@ -1294,10 +1294,10 @@ type
     // - returns self to be used as a fluid interface, e.g.
     // from TSocketsIOClient.Local()
     function RegisterEvent(const aEventName: RawUtf8;
-      const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
+      const aCallback: TOnSocketIOEvent): TSocketIOLocalNamespace;
     /// register all published methods of a class as event handlers
     // - published method names are case-sensitive Socket.IO event names
-    // - the methods should follow the TOnSioMethod exact signature, e.g.
+    // - the methods should follow the TOnSocketIOMethod exact signature, e.g.
     // ! procedure eventname(const Data: TDocVariantData);
     procedure RegisterPublishedMethods(aInstance: TObject);
     /// dispatch an event message to the appropriate handler
@@ -1358,7 +1358,8 @@ function SocketIOReserved(const event: RawUtf8): boolean;
 /// encode and send a Socket.IO packet to a given WebSockets connection
 procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
   aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
-  aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = SIO_NO_ACK);
+  aPayload: pointer = nil; aPayloadLen: PtrInt = 0;
+  ackId: TSocketIOAckID = SIO_NO_ACK);
 
 /// efficient case-sensitive search within an array of TSocketIONamespace
 // - if name = '' (i.e. namelen is 0), will search for '/'
@@ -3818,7 +3819,7 @@ begin
 end;
 
 function TSocketIOLocalNamespace.RegisterEvent(const aEventName: RawUtf8;
-  const aCallback: TOnSioEvent): TSocketIOLocalNamespace;
+  const aCallback: TOnSocketIOEvent): TSocketIOLocalNamespace;
 begin
   PEventHandler(fHandlers.AddUniqueName(aEventName,
      'Duplicated event name %', [aEventName]))^.OnEvent := aCallback;
@@ -3833,7 +3834,7 @@ begin
   for m := 0 to GetPublishedMethods(aInstance, met) - 1 do
     PEventHandler(fHandlers.AddUniqueName(met[m].Name,
        'Duplicated event name % on %', [met[m].Name, aInstance]))^.
-      OnMethod := TOnSioMethod(met[m].Method);
+      OnMethod := TOnSocketIOMethod(met[m].Method);
 end;
 
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
@@ -3903,7 +3904,8 @@ begin
   Create(aOwner, namespace, sid);
 end;
 
-function SioCallbackSearch(cb: PSioCallback; n: integer; id: TSioAckID): PSioCallback;
+function SocketIOCallbackSearch(cb: PSocketIOCallback; n: integer;
+  id: TSocketIOAckID): PSocketIOCallback;
 begin
   result := cb;
   if result <> nil then
@@ -3917,14 +3919,14 @@ begin
 end;
 
 function TSocketIORemoteNamespace.GenerateAckId(
-  const aOnAck: TOnSioAck): TSioAckID;
+  const aOnAck: TOnSocketIOAck): TSocketIOAckID;
 var
-  cb: PSioCallback;
+  cb: PSocketIOCallback;
   n: PtrInt;
 begin
   result := InterlockedIncrement(fAckIdCursor);
   n := Length(fCallbacks);
-  cb := SioCallbackSearch(pointer(fCallbacks), n, SIO_NO_ACK); // search any void
+  cb := SocketIOCallbackSearch(pointer(fCallbacks), n, SIO_NO_ACK); // search any void
   if cb = nil then
   begin
     SetLength(fCallbacks, NextGrow(n)); // no void slot: allocate some new ones
@@ -3936,7 +3938,7 @@ begin
 end;
 
 function TSocketIORemoteNamespace.SendEvent(const aEventName, aDataArray: RawUtf8;
-  const aOnAck: TOnSioAck): TSioAckID;
+  const aOnAck: TOnSocketIOAck): TSocketIOAckID;
 var
   tmp: TSynTempBuffer;
 begin
@@ -3963,7 +3965,7 @@ end;
 
 procedure TSocketIORemoteNamespace.Acknowledge(const aMessage: TSocketIOMessage);
 var
-  cb: PSioCallback;
+  cb: PSocketIOCallback;
 begin
   // validate message
   if not aMessage.NameSpaceIs(fNameSpace) then
@@ -3975,7 +3977,7 @@ begin
       'acknowledgment message for namespace %',
       [self, ToText(aMessage.PacketType)^, aMessage.ID, fNameSpace]);
   // search for the registered callback
-  cb := SioCallbackSearch(pointer(fCallbacks), length(fCallbacks), aMessage.ID);
+  cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aMessage.ID);
   if cb = nil then
     ESocketIO.RaiseUtf8('%.Acknowledge: callback for message ID % not found ' +
       '(may already have been consumed) for namespace %',
@@ -4144,7 +4146,7 @@ end;
 
 procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
   aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
-  aPayload: pointer; aPayloadLen: PtrInt; ackId: TSioAckID);
+  aPayload: pointer; aPayloadLen: PtrInt; ackId: TSocketIOAckID);
 var
   tmp: TSynTempBuffer;
 begin
