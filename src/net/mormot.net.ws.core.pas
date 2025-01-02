@@ -1178,11 +1178,9 @@ type
   // - since we only implement WebSocket, "upgrades" is expected to be always void
   TEngineIOAbstract = class(TSynPersistent)
   protected
-    fSafe: TLightLock;
     fWebSockets: TWebCrtSocketProcess;
-    fVersion: integer;
     fEngineSid: RawUtf8;
-    fPingInterval, fPingTimeout, fMaxPayload: integer;
+    fPingInterval, fPingTimeout, fMaxPayload, fVersion: integer;
   published
     /// initialize this instance with its default values
     constructor Create; override;
