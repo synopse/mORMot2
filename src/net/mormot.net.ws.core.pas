@@ -1345,7 +1345,7 @@ type
 function EngineIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
   const PollingUpgradeSid: RawUtf8 = ''): RawUtf8;
 
-/// allows to send a Engine.IO message over the wire to a specified connection
+/// encode and send an Engine.IO message over the wire to a specified connection
 // - Sender identifies the connection, typically from FrameReceived() method
 function EngineIOSendPacket(Sender: TWebSocketProcess;
   Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
@@ -3884,7 +3884,7 @@ constructor TSocketIORemoteNamespace.Create(aOwner: TEngineIOAbstract;
 begin
   inherited Create;
   fOwner := aOwner;
-  if fNameSpace = '' then
+  if aNameSpace = '' then
     fNameSpace := DefaultSocketIONameSpace
   else
     fNameSpace := aNameSpace;
