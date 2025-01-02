@@ -245,16 +245,17 @@ type
     class function Open(const aHost, aPort: RawUtf8;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
-      aTls: boolean = false; aTLSContext: PNetTlsContext = nil): TSocketsIOClient; overload;
+      aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
-    // - with error interception and optional logging, returning nil on error
+    // - with error interception and optional logging, returning nil on error,
+    // or a new TSocketsIOClient instance on success
     // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
     // - if no root UI is supplied, default /socket.io/ will be used
     class function Open(const aUri: RawUtf8;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = '';
-      aTls: boolean = false; aTLSContext: PNetTlsContext = nil): TSocketsIOClient; overload;
+      aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
     /// return the array of connected remote namespaces as text
@@ -694,7 +695,7 @@ end;
 
 class function TSocketsIOClient.Open(const aHost, aPort: RawUtf8;
   aLog: TSynLogClass; const aLogContext, aRoot, aCustomHeaders: RawUtf8;
-  aTls: boolean; aTLSContext: PNetTlsContext): TSocketsIOClient;
+  aTls: boolean; aTLSContext: PNetTlsContext): pointer;
 var
   c: THttpClientWebSockets;
   proto: TWebSocketSocketIOClientProtocol;
@@ -712,14 +713,14 @@ begin
   end
   else
   begin
-    proto.fClient.fClient := c;
+    proto.fClient.SetClient(c);
     result := proto.fClient;
   end;
 end;
 
 class function TSocketsIOClient.Open(const aUri: RawUtf8;
   aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8;
-  aTls: boolean; aTLSContext: PNetTlsContext): TSocketsIOClient;
+  aTls: boolean; aTLSContext: PNetTlsContext): pointer;
 var
   uri: TUri;
 begin
@@ -728,6 +729,12 @@ begin
       aCustomHeaders, aTls, aTLSContext)
   else
     result := nil;
+end;
+
+procedure TSocketsIOClient.SetClient(aClient: THttpClientWebSockets);
+begin
+  fClient := aClient;
+  fWebSockets := aClient.WebSockets;
 end;
 
 destructor TSocketsIOClient.Destroy;
