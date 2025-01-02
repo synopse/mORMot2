@@ -1325,11 +1325,6 @@ type
     // overriden to return '' i.e. recognize by URI, not "Sec-WebSocket-Protocol:"
     function GetSubprotocols: RawUtf8; override;
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
-    /// allows to send a Engine.IO message over the wire to a specified connection
-    // - Sender identifies the connection, typically from FrameReceived() method
-    function SendEnginePacket(Sender: TWebSocketProcess;
-      Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
-      PacketType: TEngineIOPacket =  eioMessage): boolean;
     /// true when Engine.IO messages can be processed
     // - i.e. after OPEN (eioOpen) and before CLOSE (eioClose)
     property Opened: boolean
@@ -1347,13 +1342,20 @@ type
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
 // followed with a eioOpen response frame
 // - PollingUpgradeSid can be used from an upgrade on a long-polling connection
-function SocketIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
+function EngineIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
   const PollingUpgradeSid: RawUtf8 = ''): RawUtf8;
 
-/// event names 'connect', 'message' and 'disconnect' are reserved
+/// allows to send a Engine.IO message over the wire to a specified connection
+// - Sender identifies the connection, typically from FrameReceived() method
+function EngineIOSendPacket(Sender: TWebSocketProcess;
+  Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
+  PacketType: TEngineIOPacket = eioMessage): boolean;
+
+
+/// Socket.IO event names 'connect', 'message' and 'disconnect' are reserved
 function SocketIOReserved(const event: RawUtf8): boolean;
 
-/// encode and send a SocketIO packet to a given WebSockets connection
+/// encode and send a Socket.IO packet to a given WebSockets connection
 procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
   aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
   aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = SIO_NO_ACK);
@@ -4031,7 +4033,7 @@ begin
       else
         EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
     eioPing:
-      SendEnginePacket(Sender, nil, 0, {binary=}false, eioPong);
+      EngineIOSendPacket(Sender, nil, 0, {binary=}false, eioPong);
     eioPong:
       ; // process depends on the client or server side (mostly do nothing)
     eioMessage:
@@ -4046,32 +4048,8 @@ begin
     length(Request.payload) - 1, (Request.opcode = focBinary));
 end;
 
-function TWebSocketEngineIOProtocol.SendEnginePacket(Sender: TWebSocketProcess;
-  Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
-  PacketType: TEngineIOPacket): boolean;
-var
-  tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
-begin
-  result := false;
-  if (self = nil) or
-     (Sender = nil) or
-     (Sender.State <> wpsRun)  then
-    exit;
-  // create Engine.IO packet within this WebSocket frame
-  tmp.opcode := focText;
-  if PayLoadBinary then
-    tmp.opcode := focBinary;
-  tmp.content := [];
-  tmp.tix := 0;
-  FastSetRawByteString(tmp.payload, nil, PayloadLen + 1);
-  PByteArray(tmp.payload)[0] := ord(PacketType) + ord('0');
-  if PayloadLen <> 0 then
-    MoveFast(PayLoad^, PByteArray(tmp.payload)[1], PayloadLen);
-  result := Sender.SendFrame(tmp);
-end;
 
-
-function SocketIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
+function EngineIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
 var
   r: RawUtf8;
 begin
@@ -4095,6 +4073,30 @@ begin
   if PollingUpgradeSid <> '' then
     Append(result, '&sid=', PollingUpgradeSid);
 end;
+
+function EngineIOSendPacket(Sender: TWebSocketProcess;
+  Payload: pointer; PayloadLen: PtrInt; PayLoadBinary: boolean;
+  PacketType: TEngineIOPacket): boolean;
+var
+  tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
+begin
+  result := false;
+  if (Sender = nil) or
+     (Sender.State <> wpsRun)  then
+    exit;
+  // create Engine.IO packet within this WebSocket frame
+  tmp.opcode := focText;
+  if PayLoadBinary then
+    tmp.opcode := focBinary;
+  tmp.content := [];
+  tmp.tix := 0;
+  FastSetRawByteString(tmp.payload, nil, PayloadLen + 1);
+  PByteArray(tmp.payload)[0] := ord(PacketType) + ord('0');
+  if PayloadLen <> 0 then
+    MoveFast(PayLoad^, PByteArray(tmp.payload)[1], PayloadLen);
+  result := Sender.SendFrame(tmp);
+end;
+
 
 function SocketIOReserved(const event: RawUtf8): boolean;
 begin
@@ -4162,8 +4164,7 @@ begin
       tmp.AddU(ackID);
     if aPayloadLen <> 0 then
       tmp.Add(aPayload, aPayloadLen);
-    (aWebSockets.Protocol as TWebSocketEngineIOProtocol).SendEnginePacket(
-      aWebSockets, tmp.buf, tmp.added, {binary=}false);
+    EngineIOSendPacket(aWebSockets, tmp.buf, tmp.added, {binary=}false);
   finally
     tmp.Done;
   end;
