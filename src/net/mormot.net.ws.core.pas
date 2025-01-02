@@ -1131,6 +1131,10 @@ type
       read fSender;
   end;
 
+const
+  /// constant used if no TSioAckID is necessary
+  SIO_NO_ACK = 0;
+
 /// compute the URI for a WebSocket-only Engine.IO upgrade
 // - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
 // followed with a eioOpen response frame
@@ -1140,6 +1144,11 @@ function SocketIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
 
 /// event names 'connect', 'message' and 'disconnect' are reserved
 function SocketIOReserved(const event: RawUtf8): boolean;
+
+/// encode and send a SocketIO packet to a given WebSockets connection
+procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
+  aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
+  aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = SIO_NO_ACK);
 
 function ToText(p: TEngineIOPacket): PShortString; overload;
 function ToText(p: TSocketIOPacket): PShortString; overload;
@@ -1151,10 +1160,6 @@ var
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoNameCaseSensitive];
-
-const
-  /// constant used if no TSioAckID is necessary
-  SIO_NO_ACK = 0;
 
 type
   /// exception class raised during Engine.IO process
@@ -3743,6 +3748,35 @@ begin
     dec(count);
   until count = 0;
 end;
+
+procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
+  aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
+  aPayload: pointer; aPayloadLen: PtrInt; ackId: TSioAckID);
+var
+  tmp: TSynTempBuffer;
+begin
+  if aWebSockets = nil then
+    ESocketIO.RaiseUtf8('Unexpected SendSocketPacket(nil)', []);
+  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
+  try
+    tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
+    if (aNameSpace <> '') and
+       (aNameSpace <> '/') then
+    begin
+      tmp.Add(aNameSpace);
+      tmp.AddDirect(',');
+    end;
+    if ackId <> SIO_NO_ACK then
+      tmp.AddU(ackID);
+    if aPayloadLen <> 0 then
+      tmp.Add(aPayload, aPayloadLen);
+    (aWebSockets.Protocol as TWebSocketEngineIOProtocol).SendEnginePacket(
+      aWebSockets, tmp.buf, tmp.added, {binary=}false);
+  finally
+    tmp.Done;
+  end;
+end;
+
 
 
 { TSocketIOMessage }
