@@ -1135,21 +1135,6 @@ const
   /// constant used if no TSioAckID is necessary
   SIO_NO_ACK = 0;
 
-/// compute the URI for a WebSocket-only Engine.IO upgrade
-// - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
-// followed with a eioOpen response frame
-// - PollingUpgradeSid can be used from an upgrade on a long-polling connection
-function SocketIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
-  const PollingUpgradeSid: RawUtf8 = ''): RawUtf8;
-
-/// event names 'connect', 'message' and 'disconnect' are reserved
-function SocketIOReserved(const event: RawUtf8): boolean;
-
-/// encode and send a SocketIO packet to a given WebSockets connection
-procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
-  aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
-  aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = SIO_NO_ACK);
-
 function ToText(p: TEngineIOPacket): PShortString; overload;
 function ToText(p: TSocketIOPacket): PShortString; overload;
 
@@ -1357,6 +1342,21 @@ type
     // this is the (abstract) main entry point for incoming Socket.IO messages
     procedure SocketPacketReceived(const Message: TSocketIOMessage); virtual; abstract;
   end;
+
+/// compute the URI for a WebSocket-only Engine.IO upgrade
+// - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
+// followed with a eioOpen response frame
+// - PollingUpgradeSid can be used from an upgrade on a long-polling connection
+function SocketIOHandshakeUri(const Root: RawUtf8 = '/socket.io/';
+  const PollingUpgradeSid: RawUtf8 = ''): RawUtf8;
+
+/// event names 'connect', 'message' and 'disconnect' are reserved
+function SocketIOReserved(const event: RawUtf8): boolean;
+
+/// encode and send a SocketIO packet to a given WebSockets connection
+procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
+  aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
+  aPayload: pointer = nil; aPayloadLen: PtrInt = 0; ackId: TSioAckID = SIO_NO_ACK);
 
 /// efficient case-sensitive search within an array of TSocketIONamespace
 // - if name = '' (i.e. namelen is 0), will search for '/'
@@ -3677,103 +3677,6 @@ begin
   result := GetEnumName(TypeInfo(TSocketIOPacket), ord(p));
 end;
 
-function SocketIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
-var
-  r: RawUtf8;
-begin
-  r := Root;
-  if r = '' then
-    r := '/socket.io/'
-  else
-  begin
-    // normalize root
-    if r[1] <> '/' then
-      insert('/', r, 1);
-    if r[length(r)] <> '/' then
-      Append(r, '/');
-  end;
-  // EIO        4          Mandatory, the version of the protocol
-  // transport  websocket  Mandatory, the name of the transport
-  // sid        <sid>      None here - direct websockets, not from HTTP polling
-  // t          <random>   Ensure that the request is not cached by the browser
-  FormatUtf8('%?EIO=4&transport=websocket&t=%',
-    [r, CardinalToHexShort(Random32Not0)], result);
-  if PollingUpgradeSid <> '' then
-    Append(result, '&sid=', PollingUpgradeSid);
-end;
-
-function SocketIOReserved(const event: RawUtf8): boolean;
-begin
-  result := (event = 'connect') or
-            (event = 'message') or
-            (event = 'disconnect'); // case sensitive
-end;
-
-function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
-  name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
-begin
-  if namelen = 0 then // name = '' will search for '/' = DefaultSocketIONameSpace
-  begin
-    name := pointer(DefaultSocketIONameSpace);
-    namelen := length(DefaultSocketIONameSpace);
-  end;
-  if one <> nil then
-    repeat // O(n) brute force search is fast enough
-      result := one^;
-      if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
-         CompareMemFast(name, pointer(result.NameSpace), namelen) then
-        exit;
-      inc(one);
-      dec(count);
-    until count = 0;
-  result := nil;
-end;
-
-procedure SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer;
-  out Dest: TRawUtf8DynArray);
-var
-  p: PRawUtf8;
-begin
-  if one = nil then
-    exit;
-  SetLength(Dest , count);
-  p := pointer(Dest);
-  repeat
-    p^ := one^.NameSpace;
-    inc(one);
-    inc(p);
-    dec(count);
-  until count = 0;
-end;
-
-procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
-  aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
-  aPayload: pointer; aPayloadLen: PtrInt; ackId: TSioAckID);
-var
-  tmp: TSynTempBuffer;
-begin
-  if aWebSockets = nil then
-    ESocketIO.RaiseUtf8('Unexpected SendSocketPacket(nil)', []);
-  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
-  try
-    tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
-    if (aNameSpace <> '') and
-       (aNameSpace <> '/') then
-    begin
-      tmp.Add(aNameSpace);
-      tmp.AddDirect(',');
-    end;
-    if ackId <> SIO_NO_ACK then
-      tmp.AddU(ackID);
-    if aPayloadLen <> 0 then
-      tmp.Add(aPayload, aPayloadLen);
-    (aWebSockets.Protocol as TWebSocketEngineIOProtocol).SendEnginePacket(
-      aWebSockets, tmp.buf, tmp.added, {binary=}false);
-  finally
-    tmp.Done;
-  end;
-end;
-
 
 
 { TSocketIOMessage }
@@ -4167,6 +4070,104 @@ begin
   result := Sender.SendFrame(tmp);
 end;
 
+
+function SocketIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
+var
+  r: RawUtf8;
+begin
+  r := Root;
+  if r = '' then
+    r := '/socket.io/'
+  else
+  begin
+    // normalize root
+    if r[1] <> '/' then
+      insert('/', r, 1);
+    if r[length(r)] <> '/' then
+      Append(r, '/');
+  end;
+  // EIO        4          Mandatory, the version of the protocol
+  // transport  websocket  Mandatory, the name of the transport
+  // sid        <sid>      None here - direct websockets, not from HTTP polling
+  // t          <random>   Ensure that the request is not cached by the browser
+  FormatUtf8('%?EIO=4&transport=websocket&t=%',
+    [r, CardinalToHexShort(Random32Not0)], result);
+  if PollingUpgradeSid <> '' then
+    Append(result, '&sid=', PollingUpgradeSid);
+end;
+
+function SocketIOReserved(const event: RawUtf8): boolean;
+begin
+  result := (event = 'connect') or
+            (event = 'message') or
+            (event = 'disconnect'); // case sensitive
+end;
+
+function SocketIOGetNameSpace(one: PSocketIONamespace; count: integer;
+  name: PUtf8Char; namelen: TStrLen): TSocketIONamespace;
+begin
+  if namelen = 0 then // name = '' will search for '/' = DefaultSocketIONameSpace
+  begin
+    name := pointer(DefaultSocketIONameSpace);
+    namelen := length(DefaultSocketIONameSpace);
+  end;
+  if one <> nil then
+    repeat // O(n) brute force search is fast enough
+      result := one^;
+      if (PStrLen(PAnsiChar(pointer(result.NameSpace)) - _STRLEN)^ = namelen) and
+         CompareMemFast(name, pointer(result.NameSpace), namelen) then
+        exit;
+      inc(one);
+      dec(count);
+    until count = 0;
+  result := nil;
+end;
+
+procedure SocketIOGetNameSpaces(one: PSocketIONamespace; count: integer;
+  out Dest: TRawUtf8DynArray);
+var
+  p: PRawUtf8;
+begin
+  if one = nil then
+    exit;
+  SetLength(Dest , count);
+  p := pointer(Dest);
+  repeat
+    p^ := one^.NameSpace;
+    inc(one);
+    inc(p);
+    dec(count);
+  until count = 0;
+end;
+
+procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
+  aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
+  aPayload: pointer; aPayloadLen: PtrInt; ackId: TSioAckID);
+var
+  tmp: TSynTempBuffer;
+begin
+  if (aWebSockets = nil) or
+     not aWebSockets.Protocol.InheritsFrom(TWebSocketEngineIOProtocol) then
+    ESocketIO.RaiseUtf8('Unexpected SendSocketPacket(%)', [aWebSockets]);
+  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
+  try
+    tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
+    if (aNameSpace <> '') and
+       (aNameSpace <> '/') then
+    begin
+      tmp.Add(aNameSpace);
+      tmp.AddDirect(',');
+    end;
+    if ackId <> SIO_NO_ACK then
+      tmp.AddU(ackID);
+    if aPayloadLen <> 0 then
+      tmp.Add(aPayload, aPayloadLen);
+    (aWebSockets.Protocol as TWebSocketEngineIOProtocol).SendEnginePacket(
+      aWebSockets, tmp.buf, tmp.added, {binary=}false);
+  finally
+    tmp.Done;
+  end;
+end;
 
 
 
