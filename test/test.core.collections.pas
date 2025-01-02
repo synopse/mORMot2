@@ -67,7 +67,7 @@ const
   ONLYLOG = true; // set to FALSE for verbose benchmarking console output
 var
   cop: TArray<T>;
-  i, j: T;
+  i: T;
   n: integer;
   v: PVariantArray;
   p: ^T;
