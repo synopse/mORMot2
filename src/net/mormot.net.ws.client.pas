@@ -231,18 +231,18 @@ type
     procedure OnAck(const Message: TSocketIOMessage);
   public
     /// low-level client WebSockets connection factory for host and port
-    // - calls Open() then SioUpgrade() for the Socket.IO protocol
+    // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
     // - with error interception and optional logging, returning nil on error
-    class function SioOpen(const aHost, aPort: RawUtf8;
+    class function Open(const aHost, aPort: RawUtf8;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): TSocketsIOClient; overload;
     /// low-level client WebSockets connection factory for host and port
-    // - calls Open() then SioUpgrade() for the Socket.IO protocol
+    // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
     // - with error interception and optional logging, returning nil on error
     // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
     // - if no root UI is supplied, default /socket.io/ will be used
-    class function SioOpen(const aUri: RawUtf8;
+    class function Open(const aUri: RawUtf8;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): TSocketsIOClient; overload;
@@ -673,7 +673,7 @@ end;
 
 { TSocketsIOClient }
 
-class function TSocketsIOClient.SioOpen(const aHost, aPort: RawUtf8;
+class function TSocketsIOClient.Open(const aHost, aPort: RawUtf8;
   aLog: TSynLogClass; const aLogContext, aRoot, aCustomHeaders: RawUtf8;
   aTls: boolean; aTLSContext: PNetTlsContext): TSocketsIOClient;
 var
@@ -684,7 +684,7 @@ begin
   proto.fClient := TSocketsIOClient.Create;
   c := THttpClientWebSockets.WebSocketsConnect(
     aHost, aPort, proto, aLog, aLogContext,
-    SocketIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
+    EngineIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
   if c = nil then
   begin
     proto.fClient.Free;
@@ -698,14 +698,14 @@ begin
   end;
 end;
 
-class function TSocketsIOClient.SioOpen(const aUri: RawUtf8;
+class function TSocketsIOClient.Open(const aUri: RawUtf8;
   aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8;
   aTls: boolean; aTLSContext: PNetTlsContext): TSocketsIOClient;
 var
   uri: TUri;
 begin
   if uri.From(aUri) then // detect both https:// and wss:// schemes
-    result := SioOpen(uri.Server, uri.Port, aLog, aLogContext, uri.Address,
+    result := Open(uri.Server, uri.Port, aLog, aLogContext, uri.Address,
       aCustomHeaders, aTls, aTLSContext)
   else
     result := nil;
