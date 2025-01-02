@@ -202,6 +202,11 @@ type
   /// options to customize TSocketsIOClient process
   TSocketsIOClientOptions = set of TSocketsIOClientOption;
 
+  TSocketsIOWaitEventPacket = (
+    wepNone,
+    wepConnect,
+    wepEmit);
+
   /// a HTTP/HTTPS client, upgraded to Socket.IO over WebSockets
   // - no polling mode is supported by this class
   // - use Open() class factories to connect to a Socket.IO server
@@ -210,11 +215,14 @@ type
     fClient: THttpClientWebSockets;
     fRemotes: TSocketIORemoteNamespaces;
     fLocals: TSocketIOLocalNamespaces;
-    fConnectionEvent: TSynEvent;
-    fConnectionEventWait: boolean;
+    fWaitEvent: TSynEvent;
     fOptions: TSocketsIOClientOptions;
+    fWaitEventPrepared: TSocketsIOWaitEventPacket;
     fRemoteNames, fLocalNames: TRawUtf8DynArray;
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
+    procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
+    procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
+    procedure SetClient(aClient: THttpClientWebSockets); virtual;
     function GetProtocol: TWebSocketSocketIOClientProtocol;
     function GetRemote(NameSpace: PUtf8Char; NameSpaceLen: PtrInt): pointer; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -232,7 +240,8 @@ type
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
-    // - with error interception and optional logging, returning nil on error
+    // - with error interception and optional logging, returning nil on error,
+    // or a new TSocketsIOClient instance on success
     class function Open(const aHost, aPort: RawUtf8;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
@@ -270,7 +279,7 @@ type
     /// disconnect from a given Socket.IO namespace
     procedure Disconnect(const NameSpace: RawUtf8);
     /// sends an event to a given remote namespace
-    // - with an optional acknowledgment callback
+    // - with an optional asynchronous acknowledgment callback
     function Emit(const EventName: RawUtf8; const Data: RawUtf8 = '';
       const NameSpace: RawUtf8 = ''; const OnAck: TOnSocketIOAck = nil): TSocketIOAckID;
     /// refine the TSocketsIOClient process
@@ -299,6 +308,9 @@ type
     // this is the main entry point for incoming Socket.IO messages
     procedure SocketPacketReceived(const Message: TSocketIOMessage); override;
   end;
+
+
+function ToText(wep: TSocketsIOWaitEventPacket): PShortString; overload;
 
 
 implementation
@@ -672,6 +684,12 @@ end;
 
 { ******************** Socket.IO / Engine.IO Client Protocol over WebSockets }
 
+function ToText(wep: TSocketsIOWaitEventPacket): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSocketsIOWaitEventPacket), ord(wep));
+end;
+
+
 { TSocketsIOClient }
 
 class function TSocketsIOClient.Open(const aHost, aPort: RawUtf8;
@@ -717,7 +735,7 @@ begin
   ObjArrayClear(fRemotes);
   ObjArrayClear(fLocals);
   fClient.Free;
-  fConnectionEvent.Free;
+  fWaitEvent.Free;
   inherited Destroy;
 end;
 
@@ -780,9 +798,7 @@ begin
   if Response.PacketType = sioConnect then
     ObjArrayAdd(fRemotes,
       TSocketIORemoteNamespace.CreateFromConnectMessage(Response, self));
-  if fConnectionEventWait and
-     Assigned(fConnectionEvent) then
-    fConnectionEvent.SetEvent; // notify any waiting acknowledgement
+  WaitEventDone(wepConnect); // notify any waiting acknowledgement
   if Response.PacketType = sioConnectError then
     Response.RaiseESockIO('Connect() failed with');
 end;
@@ -854,6 +870,26 @@ begin
   result := fLocalNames;
 end;
 
+procedure TSocketsIOClient.WaitEventDone(Event: TSocketsIOWaitEventPacket);
+begin
+  if fWaitEventPrepared <> Event then
+    exit;
+  fWaitEvent.SetEvent;
+  fWaitEventPrepared := wepNone;
+end;
+
+procedure TSocketsIOClient.WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
+begin
+  if fWaitEventPrepared <> wepNone then
+    ESocketIO.RaiseUtf8('%.WaitEventPrepare(%) with pending %',
+      [self, ToText(Event)^, ToText(fWaitEventPrepared)^]);
+  fWaitEventPrepared := Event;
+  if Assigned(fWaitEvent) then
+    fWaitEvent.ResetEvent
+  else
+    fWaitEvent := TSynEvent.Create;
+end;
+
 function TSocketsIOClient.Connect(const NameSpace, Data: RawUtf8;
   WaitTimeoutMS: cardinal): TSocketIORemoteNamespace;
 begin
@@ -862,17 +898,13 @@ begin
     exit; // already connected to this name space
   if fWebSockets = nil then
     ESocketIO.RaiseUtf8('Unexpected %.Connect with no WS connection', [self]);
-  fConnectionEventWait := WaitTimeoutMS > 0;
-  if fConnectionEventWait then
-    if Assigned(fConnectionEvent) then
-      fConnectionEvent.ResetEvent
-    else
-      fConnectionEvent := TSynEvent.Create;
+  if WaitTimeoutMS > 0 then
+    WaitEventPrepare(wepConnect);
   SocketIOSendPacket(fWebSockets, sioConnect, NameSpace, pointer(Data), length(Data));
   if WaitTimeoutMS = 0 then
     exit;
-  fConnectionEvent.WaitFor(WaitTimeoutMS);
-  fConnectionEventWait := false;
+  fWaitEvent.WaitFor(WaitTimeoutMS);
+  fWaitEventPrepared := wepNone;
   if GetRemote(NameSpace) = nil then
     ESocketIO.RaiseUtf8('%.Connect(%,%) failed', [NameSpace, WaitTimeoutMS]);
 end;
@@ -895,7 +927,7 @@ var
   ns: TSocketIORemoteNamespace;
 begin
   if sciEmitAutoConnect in fOptions then
-    ns := Connect(NameSpace) // do nothing if already connected
+    ns := Connect(NameSpace) // no call needed if already connected
   else
     ns := GetRemote(NameSpace);
   if ns = nil then

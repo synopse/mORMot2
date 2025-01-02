@@ -1158,7 +1158,7 @@ type
   /// internal slot for one Socket.IO process Acknowledgment callback
   TSocketIOCallback = record
     Ack: TSocketIOAckID;
-    Callback: TOnSocketIOAck;
+    OnAck: TOnSocketIOAck;
   end;
   PSocketIOCallback = ^TSocketIOCallback;
 
@@ -3933,7 +3933,7 @@ begin
     cb := @fCallbacks[n];
   end;
   cb^.Ack := result;
-  cb^.Callback := aOnAck;
+  cb^.OnAck := aOnAck;
   result := result;
 end;
 
@@ -3983,8 +3983,8 @@ begin
       '(may already have been consumed) for namespace %',
         [self, aMessage.ID, fNameSpace]);
   // call the registered callback and remove it from the callback list
-  cb^.Callback(aMessage);
-  cb^.Ack := SIO_NO_ACK; // void slot (to be set once the callback is done)
+  cb^.OnAck(aMessage);
+  cb^.Ack := SIO_NO_ACK; // void slot (to be reused once the callback is done)
 end;
 
 
