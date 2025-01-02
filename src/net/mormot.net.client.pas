@@ -3804,19 +3804,22 @@ var
   tmp: TSynTempBuffer;
 begin
   result := '';
-  dwSize := tmp.Init; // first try with stack buffer (in bytes)
   dwIndex := 0;
-  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
-  begin
-    if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-      exit;
-    tmp.Init(dwSize); // need more space (very unlikely)
-    dwIndex := 0;
+  dwSize := tmp.Init; // first try with stack buffer (in bytes)
+  try
     if not WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
-      exit;
+    begin
+      if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+        exit;
+      dwIndex := 0;
+      tmp.Init(dwSize); // need more space (seldom needed)
+      if not WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
+        exit;
+    end;
+    Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
+  finally
+    tmp.Done;
   end;
-  Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
-  tmp.Done;
 end;
 
 function TWinHttp.InternalGetInfo32(Info: cardinal): cardinal;
