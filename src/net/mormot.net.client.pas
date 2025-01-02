@@ -3995,11 +3995,22 @@ var
   tmp: TSynTempBuffer;
 begin
   result := '';
-  dwSize := SizeOf(tmp); // in bytes
   dwIndex := 0;
-  if HttpQueryInfoW(fRequest, Info, @tmp, dwSize, dwIndex) then
-    // ERROR_INSUFFICIENT_BUFFER should not happen with a 4KB buffer
-    Win32PWideCharToUtf8(@tmp, dwSize shr 1, result);
+  dwSize := tmp.Init; // first try with stack buffer (in bytes)
+  try
+    if HttpQueryInfoW(fRequest, Info, tmp.buf, dwSize, dwIndex) then
+    begin
+      if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+        exit;
+      dwIndex := 0;
+      tmp.Init(dwSize); // need more space (seldom needed)
+      if not HttpQueryInfoW(fRequest, Info, tmp.buf, dwSize, dwIndex) then
+        exit;
+    end;
+    Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TWinINet.InternalGetInfo32(Info: cardinal): cardinal;
