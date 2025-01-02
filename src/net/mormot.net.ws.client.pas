@@ -264,7 +264,7 @@ type
     procedure LocalPublishedMethods(const Namespace: RawUtf8; Instance: TObject);
     /// access to a given Socket.IO namespace
     // - sends a connect message if needed (for first-time registration)
-    function Connect(const NameSpace: RawUtf8;
+    function Connect(const NameSpace: RawUtf8; const Data: RawUtf8 = '';
       WaitTimeoutMS: cardinal = 2000): TSocketIORemoteNamespace;
     /// disconnect from a given Socket.IO namespace
     procedure Disconnect(const NameSpace: RawUtf8);
@@ -853,12 +853,12 @@ begin
   result := fLocalNames;
 end;
 
-function TSocketsIOClient.Connect(const NameSpace: RawUtf8;
+function TSocketsIOClient.Connect(const NameSpace, Data: RawUtf8;
   WaitTimeoutMS: cardinal): TSocketIORemoteNamespace;
 begin
   result := GetRemote(NameSpace);
   if result <> nil then
-    exit; // already connected
+    exit; // already connected to this name space
   if fWebSockets = nil then
     ESocketIO.RaiseUtf8('Unexpected %.Connect with no WS connection', [self]);
   fConnectionEventWait := WaitTimeoutMS > 0;
@@ -867,7 +867,7 @@ begin
       fConnectionEvent.ResetEvent
     else
       fConnectionEvent := TSynEvent.Create;
-  SocketIOSendPacket(fWebSockets, sioConnect, NameSpace);
+  SocketIOSendPacket(fWebSockets, sioConnect, NameSpace, pointer(Data), length(Data));
   if WaitTimeoutMS = 0 then
     exit;
   fConnectionEvent.WaitFor(WaitTimeoutMS);
