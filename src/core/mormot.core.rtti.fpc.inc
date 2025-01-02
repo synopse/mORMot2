@@ -548,7 +548,7 @@ function GetPublishedMethods(Instance: TObject;
 
   procedure AddParentsFirst(C: TClass);
   var
-    info: PVmtMethodTable;
+    info: PIntegerArray; // PVmtMethodTable is wrong (GPF on aarch64-linux) :(
     m: PVmtMethodEntry;
     r: ^TPublishedMethodInfo;
     n: integer;
@@ -558,20 +558,20 @@ function GetPublishedMethods(Instance: TObject;
     AddParentsFirst(GetClassParent(C)); // put children methods afterwards
     info := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
     if info = nil then
-      exit;
-    n := info^.Count;
+      exit; // no published method for this class level
+    n := info[0];
     if n = 0 then
       exit; // paranoid
     SetLength(Methods, result + n);
     r := @Methods[result];
     inc(result, n);
-    m := info^.Entry[0];
+    m := @info[1];
     repeat
       ShortStringToAnsi7String(m^.Name^, r^.Name);
       r^.Method.Data := Instance;
       r^.Method.Code := m^.CodeAddress;
-      inc(m);
       inc(r);
+      inc(m);
       dec(n);
     until n = 0;
   end;
