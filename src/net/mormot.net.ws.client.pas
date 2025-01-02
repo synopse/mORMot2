@@ -220,10 +220,13 @@ type
     fWaitEvent: TSynEvent;
     fOptions: TSocketsIOClientOptions;
     fWaitEventPrepared: TSocketsIOWaitEventPacket;
+    fWaitEventAckID: TSocketIOAckID;
+    fWaitEventData: PDocVariantData;
     fRemoteNames, fLocalNames: TRawUtf8DynArray;
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
     procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
+    procedure WaitEventAck(const Message: TSocketIOMessage);
     function GetRemote(NameSpace: PUtf8Char; NameSpaceLen: PtrInt): pointer; overload;
       {$ifdef HASINLINE} inline; {$endif}
     function GetLocal(NameSpace: PUtf8Char; NameSpaceLen: PtrInt;
@@ -285,7 +288,13 @@ type
     /// sends an event to a given remote namespace
     // - with an optional asynchronous acknowledgment callback
     function Emit(const EventName: RawUtf8; const Data: RawUtf8 = '';
-      const NameSpace: RawUtf8 = ''; const OnAck: TOnSocketIOAck = nil): TSocketIOAckID;
+      const NameSpace: RawUtf8 = ''; const OnAck: TOnSocketIOAck = nil): TSocketIOAckID; overload;
+    /// sends an event to a given remote namespace and wait for its answer
+    // - the acknowledged callback JSON array is parsed and used to initialize
+    // a TDocVariant array with its content in a synchronous/blocking way
+    function Emit(out Dest: TDocVariantData; const EventName: RawUtf8;
+      const Data: RawUtf8 = ''; const NameSpace: RawUtf8 = '';
+      WaitTimeoutMS: cardinal = 2000): boolean; overload;
     /// refine the TSocketsIOClient process
     property Options: TSocketsIOClientOptions
       read fOptions write fOptions;
@@ -926,6 +935,42 @@ begin
     ESocketIO.RaiseUtf8('Unexpected %.Emit(%,%)', [self, EventName, NameSpace]);
   result := ns.SendEvent(EventName, data, OnAck);
 end;
+
+procedure TSocketsIOClient.WaitEventAck(const Message: TSocketIOMessage);
+var
+  dest: PDocVariantData;
+begin
+  if (fWaitEventPrepared <> wepEmit) or
+     (Message.ID <> fWaitEventAckID) then
+    exit;
+  dest := fWaitEventData;
+  if dest <> nil then
+    Message.DataGet(dest^);
+  WaitEventDone(wepEmit);
+  fWaitEventAckID := SIO_NO_ACK;
+end;
+
+function TSocketsIOClient.Emit(out Dest: TDocVariantData;
+  const EventName, Data, NameSpace: RawUtf8; WaitTimeoutMS: cardinal): boolean;
+begin
+  Dest.InitFast;
+  if WaitTimeoutMS > 0 then
+  begin
+    WaitEventPrepare(wepEmit);
+    fWaitEventData := @Dest;
+  end;
+  fWaitEventAckID := Emit(EventName, Data, Namespace, WaitEventAck);
+  result := fWaitEventAckID <> SIO_NO_ACK;
+  if (WaitTimeoutMS = 0) or
+     not result then
+    exit;
+  fWaitEvent.WaitFor(WaitTimeoutMS);
+  fWaitEventData := nil;
+  fWaitEventPrepared := wepNone;
+  result := fWaitEventAckID = SIO_NO_ACK;
+  fWaitEventAckID := SIO_NO_ACK
+end;
+
 
 
 { TWebSocketEngineIOClientProtocol }
