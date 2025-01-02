@@ -210,9 +210,11 @@ type
   /// a HTTP/HTTPS client, upgraded to Socket.IO over WebSockets
   // - no polling mode is supported by this class
   // - use Open() class factories to connect to a Socket.IO server
+  // - warning: this class is not thread-safe, and should be used from a single
+  // thread, e.g. the main thread of the application, or protected via a Lock
   TSocketsIOClient = class(TEngineIOAbstract)
   protected
-    fClient: THttpClientWebSockets;
+    fOwnedClient: THttpClientWebSockets;
     fRemotes: TSocketIORemoteNamespaces;
     fLocals: TSocketIOLocalNamespaces;
     fWaitEvent: TSynEvent;
@@ -222,8 +224,6 @@ type
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
     procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
-    procedure SetClient(aClient: THttpClientWebSockets); virtual;
-    function GetProtocol: TWebSocketSocketIOClientProtocol;
     function GetRemote(NameSpace: PUtf8Char; NameSpaceLen: PtrInt): pointer; overload;
       {$ifdef HASINLINE} inline; {$endif}
     function GetLocal(NameSpace: PUtf8Char; NameSpaceLen: PtrInt;
@@ -256,6 +256,9 @@ type
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
+    /// initialize this instance with its default values
+    // - you should NOT call this constructor, but the Open() factory methods
+    constructor Create(aClient: THttpClientWebSockets); reintroduce;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
     /// return the array of connected remote namespaces as text
@@ -286,13 +289,10 @@ type
     /// refine the TSocketsIOClient process
     property Options: TSocketsIOClientOptions
       read fOptions write fOptions;
-    /// raw access to the associated WebSockets connection
+    /// raw access to the owned associated WebSockets connection
     // - warning: all Request() method are forbidden on this upgraded connection
-    property Client: THttpClientWebSockets
-      read fClient;
-    /// raw access to the associated WebSockets protocol
-    property Protocol: TWebSocketSocketIOClientProtocol
-      read GetProtocol;
+    property OwnedClient: THttpClientWebSockets
+      read fOwnedClient;
     /// raw access to the associated remote name spaces
     property Remotes: TSocketIORemoteNamespaces
       read fRemotes;
@@ -700,22 +700,15 @@ var
   c: THttpClientWebSockets;
   proto: TWebSocketSocketIOClientProtocol;
 begin
+  result := nil;
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
-  proto.fClient := TSocketsIOClient.Create;
   c := THttpClientWebSockets.WebSocketsConnect(
     aHost, aPort, proto, aLog, aLogContext,
     EngineIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
-  if c = nil then
-  begin
-    proto.fClient.Free;
-    proto.Free;
-    result := nil;
-  end
-  else
-  begin
-    proto.fClient.SetClient(c);
-    result := proto.fClient;
-  end;
+  if c = nil then // WebSocketsConnect() did already make proto.Free
+    exit;
+  proto.fClient := TSocketsIOClient.Create(c);
+  result := proto.fClient;
 end;
 
 class function TSocketsIOClient.Open(const aUri: RawUtf8;
@@ -731,9 +724,10 @@ begin
     result := nil;
 end;
 
-procedure TSocketsIOClient.SetClient(aClient: THttpClientWebSockets);
+constructor TSocketsIOClient.Create(aClient: THttpClientWebSockets);
 begin
-  fClient := aClient;
+  inherited Create;
+  fOwnedClient := aClient;
   fWebSockets := aClient.WebSockets;
 end;
 
@@ -741,18 +735,9 @@ destructor TSocketsIOClient.Destroy;
 begin
   ObjArrayClear(fRemotes);
   ObjArrayClear(fLocals);
-  fClient.Free;
+  fOwnedClient.Free;
   fWaitEvent.Free;
   inherited Destroy;
-end;
-
-function TSocketsIOClient.GetProtocol: TWebSocketSocketIOClientProtocol;
-begin
-  result := nil;
-  if (self <> nil) and
-     (Client <> nil) and
-     (Client.WebSockets <> nil) then
-    result := Client.WebSockets.Protocol as TWebSocketSocketIOClientProtocol;
 end;
 
 function TSocketsIOClient.GetRemote(NameSpace: PUtf8Char;
@@ -951,6 +936,9 @@ procedure TWebSocketSocketIOClientProtocol.EnginePacketReceived(
 var
   msg: TSocketIOMessage;
 begin
+  if (fClient = nil) and
+     (PacketType = eioOpen) then
+    SleepHiRes(10); // may be during client initialization phase
   if fClient = nil then
     ESocketIO.RaiseUtf8('Unexpected %.EnginePacketReceived', [self]);
   case PacketType of
