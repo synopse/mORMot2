@@ -3998,7 +3998,7 @@ begin
   dwIndex := 0;
   dwSize := tmp.Init; // first try with stack buffer (in bytes)
   try
-    if HttpQueryInfoW(fRequest, Info, tmp.buf, dwSize, dwIndex) then
+    if not HttpQueryInfoW(fRequest, Info, tmp.buf, dwSize, dwIndex) then
     begin
       if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
         exit;
