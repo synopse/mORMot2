@@ -238,8 +238,8 @@ type
     procedure AfterOpen(OpenPayload: PUtf8Char);
     // handle server response after namespace connection request
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
-    procedure OnEvent(const aMessage: TSocketIOMessage);
-    procedure OnAck(const Message: TSocketIOMessage);
+    procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
+    procedure OnAck(const Message: TSocketIOMessage); virtual;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -276,9 +276,11 @@ type
       const Callback: TOnSocketIOEvent);
     /// register all published methods of a class as local namespace handlers
     // - published method names are case-sensitive Socket.IO event names
+    // - if no Instance is supplied, will register self published methods
     // - the methods should follow the TOnSocketIOMethod exact signature, i.e.
-    // ! procedure eventname(const Data: TDocVariantData);
-    procedure LocalPublishedMethods(const Namespace: RawUtf8; Instance: TObject);
+    // ! function eventname(const Data: TDocVariantData): RawJson;
+    procedure LocalPublishedMethods(const Namespace: RawUtf8;
+      Instance: TObject = nil);
     /// access to a given Socket.IO namespace
     // - sends a connect message if needed (for first-time registration)
     function Connect(const NameSpace: RawUtf8; const Data: RawUtf8 = '';
@@ -854,8 +856,9 @@ end;
 procedure TSocketsIOClient.LocalPublishedMethods(
   const Namespace: RawUtf8; Instance: TObject);
 begin
-  if Instance <> nil then
-    Local(NameSpace).RegisterPublishedMethods(Instance);
+  if Instance = nil then
+    Instance := self;
+  Local(NameSpace).RegisterPublishedMethods(Instance);
 end;
 
 function TSocketsIOClient.RemoteNames: TRawUtf8DynArray;
