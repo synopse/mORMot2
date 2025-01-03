@@ -8439,9 +8439,8 @@ begin
         Res.Text := @V.VString^[1];
         Res.Len := ord(V.VString^[0]);
       end;
-    vtAnsiString:
+    vtAnsiString: // expect UTF-8 content
       begin
-        // expect UTF-8 content
         Res.Text := pointer(V.VAnsiString);
         Res.Len := length(RawUtf8(V.VAnsiString));
       end;
@@ -8451,9 +8450,8 @@ begin
     {$endif HASVARUSTRING}
     vtWideString:
       WideToTempUtf8(V.VPWideChar, length(WideString(V.VWideString)), Res);
-    vtPChar:
+    vtPChar: // expect UTF-8 content
       begin
-        // expect UTF-8 content
         Res.Text := V.VPointer;
         Res.Len := mormot.core.base.StrLen(V.VPointer);
       end;
