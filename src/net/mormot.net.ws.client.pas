@@ -738,6 +738,7 @@ begin
   inherited Create;
   fOwnedClient := aClient;
   fWebSockets := aClient.WebSockets;
+  fOptions := [sciEmitAutoConnect]; // least astonishment principle
 end;
 
 destructor TSocketsIOClient.Destroy;
