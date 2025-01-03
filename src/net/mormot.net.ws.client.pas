@@ -906,7 +906,8 @@ begin
     exit;
   fWaitEvent.WaitFor(WaitTimeoutMS);
   fWaitEventPrepared := wepNone;
-  if GetRemote(NameSpace) = nil then
+  result := GetRemote(NameSpace);
+  if result = nil then
     ESocketIO.RaiseUtf8('%.Connect(%,%) failed', [NameSpace, WaitTimeoutMS]);
 end;
 
