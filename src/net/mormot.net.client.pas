@@ -2412,10 +2412,11 @@ begin
         include(Http.HeaderFlags, hfConnectionClose);
       // retrieve Body content (if any)
       if (ctxt.Status >= HTTP_SUCCESS) and
-         (ctxt.Status <> HTTP_NOCONTENT) and
-         (ctxt.Status <> HTTP_NOTMODIFIED) and
+         // HEAD/OPTIONS or status 100..109,204,304 -> no body (RFC 2616 #4.3)
+         ((Http.ContentLength <> 0) or // server bug of 204,304 with body
+          ((ctxt.Status <> HTTP_NOCONTENT) and
+           (ctxt.Status <> HTTP_NOTMODIFIED))) and
          not HttpMethodWithNoBody(ctxt.Method) then
-         // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
       begin
         // specific TStreamRedirect expectations
         bodystream := ctxt.OutStream;
