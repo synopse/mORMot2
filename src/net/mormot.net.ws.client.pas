@@ -716,7 +716,7 @@ begin
     EngineIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
   if c = nil then // WebSocketsConnect() did already make proto.Free
     exit;
-  proto.fClient := TSocketsIOClient.Create(c);
+  proto.fClient := Create(c);
   result := proto.fClient;
 end;
 

@@ -4657,7 +4657,7 @@ begin
     j := pointer(Rtti.RegisterType(ResInfo));
   if (j <> nil) and
      not (jcoResultNoClear in fOptions) then
-    j.ValueFinalizeAndClear(Res); // clear result before request or parsing
+    j.ValueFinalizeAndClear(Res); // void result before request or parsing
   try
     RawRequest(Method, Action, '', b, Headers, r); // blocking thread-safe request
   except
@@ -4674,7 +4674,7 @@ begin
   if Assigned(fOnAfter) then
     fOnAfter(self, r);
   if CheckRequestError(r, CustomError) or // HTTP status error
-     (j = nil) then          // no response JSON to parse
+     (j = nil) then                       // no JSON response to parse
     exit;
   u := pointer(r.Content); // parse in-place the returned body
   j.ValueLoadJson(Res, u, nil,

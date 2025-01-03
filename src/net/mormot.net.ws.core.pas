@@ -1185,7 +1185,7 @@ type
     fWebSockets: TWebCrtSocketProcess;
     fEngineSid: RawUtf8;
     fPingInterval, fPingTimeout, fMaxPayload, fVersion: integer;
-  published
+  public
     /// initialize this instance with its default values
     constructor Create; override;
     /// the associated Engine.IO Session ID
