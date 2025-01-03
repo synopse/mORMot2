@@ -1235,7 +1235,7 @@ type
   TOnInterfaceStubExecuteParamsJson = class(TOnInterfaceStubExecuteParamsAbstract)
   public
     /// a method to return an array of values into result
-    // - just a wrapper around JsonEncodeArrayOfConst([...])
+    // - just a wrapper around JsonEncodeArray([...])
     // - can be used as such:
     // !  procedure TFooTestCase.ExecuteBar(var Ctxt: TOnInterfaceStubExecuteParamsJson);
     // !  begin // Ctxt.Params := '[i]' -> Ctxt.result := '[i+1,42]'
@@ -5951,8 +5951,8 @@ function TInterfaceStub.Executes(const aMethodName: RawUtf8;
   const aParams: array of const; const aEvent: TOnInterfaceStubExecuteJson;
   const aEventParams: RawUtf8): TInterfaceStub;
 begin
-  result := Executes(aMethodName, JsonEncodeArrayOfConst(aParams, true),
-    aEvent, aEventParams);
+  result := Executes(aMethodName,
+              JsonEncodeArray(aParams, true), aEvent, aEventParams);
 end;
 
 function TInterfaceStub.Executes(const aMethodName, aParams: RawUtf8;
@@ -5975,8 +5975,8 @@ function TInterfaceStub.Executes(const aMethodName: RawUtf8;
   const aParams: array of const; const aEvent: TOnInterfaceStubExecuteVariant;
   const aEventParams: RawUtf8): TInterfaceStub;
 begin
-  result := Executes(aMethodName, JsonEncodeArrayOfConst(aParams, true),
-    aEvent, aEventParams);
+  result := Executes(aMethodName,
+              JsonEncodeArray(aParams, true), aEvent, aEventParams);
 end;
 
 function TInterfaceStub.Executes(const aEvent: TOnInterfaceStubExecuteVariant;
@@ -6048,8 +6048,8 @@ function TInterfaceStub.ExpectsCount(const aMethodName: RawUtf8;
   const aParams: array of const; aOperator: TInterfaceStubRuleOperator;
   aValue: cardinal): TInterfaceStub;
 begin
-  result := ExpectsCount(aMethodName, JsonEncodeArrayOfConst(aParams, true),
-    aOperator, aValue);
+  result := ExpectsCount(aMethodName,
+              JsonEncodeArray(aParams, true), aOperator, aValue);
 end;
 
 function TInterfaceStub.ExpectsTrace(aValue: cardinal): TInterfaceStub;
@@ -6078,7 +6078,7 @@ end;
 function TInterfaceStub.ExpectsTrace(const aMethodName: RawUtf8;
   const aParams: array of const; aValue: cardinal): TInterfaceStub;
 begin
-  result := ExpectsTrace(aMethodName, JsonEncodeArrayOfConst(aParams, true), aValue);
+  result := ExpectsTrace(aMethodName, JsonEncodeArray(aParams, true), aValue);
 end;
 
 function TInterfaceStub.ExpectsTrace(const aValue: RawUtf8): TInterfaceStub;
@@ -6119,7 +6119,7 @@ end;
 function TInterfaceStub.Fails(const aMethodName: RawUtf8;
   const aParams: array of const; const aErrorMsg: RawUtf8): TInterfaceStub;
 begin
-  result := Fails(aMethodName, JsonEncodeArrayOfConst(aParams, true), aErrorMsg);
+  result := Fails(aMethodName, JsonEncodeArray(aParams, true), aErrorMsg);
 end;
 
 function TInterfaceStub.Raises(const aMethodName, aParams: RawUtf8;
@@ -6134,8 +6134,8 @@ function TInterfaceStub.Raises(const aMethodName: RawUtf8;
   const aParams: array of const; aException: ExceptClass;
   const aMessage: string): TInterfaceStub;
 begin
-  result := Raises(aMethodName, JsonEncodeArrayOfConst(aParams, true),
-    aException, aMessage);
+  result := Raises(aMethodName,
+              JsonEncodeArray(aParams, true), aException, aMessage);
 end;
 
 function TInterfaceStub.Raises(const aMethodName: RawUtf8;
@@ -6155,8 +6155,8 @@ end;
 function TInterfaceStub.Returns(const aMethodName: RawUtf8;
   const aParams, aExpectedResults: array of const): TInterfaceStub;
 begin
-  result := Returns(aMethodName, JsonEncodeArrayOfConst(aParams, true),
-    JsonEncodeArrayOfConst(aExpectedResults, true));
+  result := Returns(aMethodName, JsonEncodeArray(aParams, true),
+              JsonEncodeArray(aExpectedResults, true));
 end;
 
 function TInterfaceStub.Returns(const aMethodName,
@@ -6168,7 +6168,7 @@ end;
 function TInterfaceStub.Returns(const aMethodName: RawUtf8;
   const aExpectedResults: array of const): TInterfaceStub;
 begin
-  result := Returns(aMethodName, '', JsonEncodeArrayOfConst(aExpectedResults, true));
+  result := Returns(aMethodName, '', JsonEncodeArray(aExpectedResults, true));
 end;
 
 function TInterfaceStub.Invoke(const aMethod: TInterfaceMethod;
@@ -6433,13 +6433,13 @@ procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
   const aParams: array of const; aOperator: TInterfaceStubRuleOperator;
   aCount: cardinal);
 begin
-  Verify(aMethodName, JsonEncodeArrayOfConst(aParams, true), aOperator, aCount);
+  Verify(aMethodName, JsonEncodeArray(aParams, true), aOperator, aCount);
 end;
 
 procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
   const aParams: array of const; const aTrace: RawUtf8);
 begin
-  Verify(aMethodName, JsonEncodeArrayOfConst(aParams, true), aTrace);
+  Verify(aMethodName, JsonEncodeArray(aParams, true), aTrace);
 end;
 
 procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;

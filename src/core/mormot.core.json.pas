@@ -2054,15 +2054,15 @@ function JsonEncodeArrayDouble(
 // - if WithoutBraces is TRUE, no [ ] will be generated
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
-function JsonEncodeArrayOfConst(const Values: array of const;
-  WithoutBraces: boolean = false): RawUtf8; overload;
+function JsonEncodeArray(const Values: array of const;
+  WithoutBraces: boolean = false): RawUtf8;
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 procedure JsonEncodeArrayOfConst(const Values: array of const;
-  WithoutBraces: boolean; var result: RawUtf8); overload;
+  WithoutBraces: boolean; var result: RawUtf8);
 
 /// encode as JSON {"name":value} object, from a potential SQL quoted value
 // - will unquote the SQLValue using TJsonWriter.AddQuotedStringAsJson()
@@ -11344,7 +11344,7 @@ begin
   end;
 end;
 
-function JsonEncodeArrayOfConst(const Values: array of const;
+function JsonEncodeArray(const Values: array of const;
   WithoutBraces: boolean): RawUtf8;
 begin
   JsonEncodeArrayOfConst(Values, WithoutBraces, result);
@@ -11370,7 +11370,7 @@ begin
         AddDirect(']');
       SetText(result);
     finally
-      Free
+      Free;
     end;
 end;
 
