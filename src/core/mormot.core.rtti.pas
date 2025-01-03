@@ -2050,7 +2050,7 @@ const
   /// map a PtrUInt type to the TRttiParserType set
   ptPtrUInt = {$ifdef CPU64} ptQWord {$else} ptCardinal {$endif};
 
-  /// which TRttiParserType are not simple types
+  /// which TRttiParserType are not simple/straigthforward types
   // - ptTimeLog and ptOrm are complex, since more than one TypeInfo() may
   // map to their TRttiParserType - see also TRttiParserComplexType
   ptComplexTypes =
@@ -7752,7 +7752,7 @@ end;
 procedure TRttiCustom.ValueFinalizeAndClear(Data: pointer);
 begin
   ValueFinalize(Data);
-  if not (rcfIsManaged in fFlags) then // managed fields are already set to nil
+  if not (fCache.Kind in rkPerReference) then // fields not already set to nil
     FillCharFast(Data^, fCache.Size, 0);
 end;
 
