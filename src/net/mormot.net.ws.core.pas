@@ -1164,12 +1164,16 @@ type
 
   /// Socket.IO process Event handler callback signature
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
-  TOnSocketIOEvent = procedure(const EventName: RawUtf8;
-    const Data: TDocVariantData) of object;
+  // - if the result is not '', it is expected to be JSON array acknowledgment
+  // payload, e.g. from JsonEncodeArray([])
+  TOnSocketIOEvent = function(const EventName: RawUtf8;
+    const Data: TDocVariantData): RawJson of object;
   /// Socket.IO process published methods handler signature
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
   // - required signature of TSocketIOLocalNamespace.RegisterPublishedMethods()
-  TOnSocketIOMethod = procedure(const Data: TDocVariantData) of object;
+  // - if the result is not '', it is expected to be JSON array acknowledgment
+  // payload, e.g. from JsonEncodeArray([])
+  TOnSocketIOMethod = function(const Data: TDocVariantData): RawJson of object;
 
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
@@ -1296,7 +1300,7 @@ type
     /// register all published methods of a class as event handlers
     // - published method names are case-sensitive Socket.IO event names
     // - the methods should follow the TOnSocketIOMethod exact signature, e.g.
-    // ! procedure eventname(const Data: TDocVariantData);
+    // ! function eventname(const Data: TDocVariantData): RawJson;
     procedure RegisterPublishedMethods(aInstance: TObject);
     /// dispatch an event message to the appropriate handler
     procedure HandleEvent(const aMessage: TSocketIOMessage); virtual;
@@ -3838,7 +3842,7 @@ end;
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
 var
   ndx: PtrInt;
-  event: RawUtf8;
+  event, ack: RawUtf8;
   data: TDocVariantData;
   d: PDocVariantData;
 begin
@@ -3869,9 +3873,14 @@ begin
     d := _Safe(d^.Values[0]); // return a single object as root (common case)
   with fHandler[ndx] do
     if Assigned(OnEvent) then
-      OnEvent(event, d^)
+      ack := OnEvent(event, d^)
     else if Assigned(OnMethod) then
-      OnMethod(d^);
+      ack := OnMethod(d^);
+  // optionally call back the server with an ACK payload
+  if (ack <> '') and
+     (aMessage.ID <> SIO_NO_ACK) then
+    SocketIOSendPacket(fOwner.fWebSockets, sioAck, fNameSpace,
+      pointer(ack), length(ack), aMessage.ID);
 end;
 
 
@@ -3904,11 +3913,11 @@ end;
 
 function SocketIOCallbackSearch(cb: PSocketIOCallback; n: integer;
   id: TSocketIOAckID): PSocketIOCallback;
-begin
+begin // fast O(n) CPU cache brute force search - only a few pending ACK anyway
   result := cb;
   if result <> nil then
     repeat
-      if result^.Ack = id then // fast CPU L1 cache brute force search
+      if result^.Ack = id then
         exit;
       inc(result);
       dec(n);
@@ -3982,7 +3991,7 @@ begin
         [self, aMessage.ID, fNameSpace]);
   // call the registered callback and remove it from the callback list
   cb^.OnAck(aMessage);
-  cb^.Ack := SIO_NO_ACK; // void slot (to be reused once the callback is done)
+  cb^.Ack := SIO_NO_ACK; // O(1) void the slot - to be reused for the next ack
 end;
 
 

@@ -900,7 +900,7 @@ begin
     exit; // already connected to this name space
   if fWebSockets = nil then
     ESocketIO.RaiseUtf8('Unexpected %.Connect with no WS connection', [self]);
-  if WaitTimeoutMS > 0 then
+  if WaitTimeoutMS <> 0 then
     WaitEventPrepare(wepConnect);
   SocketIOSendPacket(fWebSockets, sioConnect, NameSpace, pointer(Data), length(Data));
   if WaitTimeoutMS = 0 then
@@ -956,7 +956,7 @@ function TSocketsIOClient.Emit(out Dest: TDocVariantData;
   const EventName, Data, NameSpace: RawUtf8; WaitTimeoutMS: cardinal): boolean;
 begin
   Dest.InitFast;
-  if WaitTimeoutMS > 0 then
+  if WaitTimeoutMS <> 0 then
   begin
     WaitEventPrepare(wepEmit);
     fWaitEventData := @Dest;
