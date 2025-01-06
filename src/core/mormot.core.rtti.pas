@@ -7581,7 +7581,7 @@ begin
         rfSingle:
           result := ptSingle;
         rfDouble:
-          // PT_INFO[ptDateTime/ptDateTimeMS] have been found above
+          // TDateTime/TDateTimeMS/TDate have been found above
           result := ptDouble;
         rfCurr:
           result := ptCurrency;
