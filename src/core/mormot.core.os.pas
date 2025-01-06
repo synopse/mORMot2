@@ -4161,7 +4161,7 @@ type
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
     /// could be called to finalize the instance as a TOSLock
-    // - does nothing - just for compatibility with TOSLock
+    // - will make any further TryLock fail - also for compatibility with TOSLock
     procedure Done;
       {$ifdef HASINLINE} inline; {$endif}
     /// enter an exclusive reentrant lock
@@ -9329,7 +9329,9 @@ begin
 end;
 
 procedure TMultiLightLock.Done;
-begin // just for compatibility with TOSLock
+begin
+  Flags := PtrUInt(-1);
+  ThreadID := TThreadID(0); // invalid combination to let TryLock fail
 end;
 
 procedure TMultiLightLock.Lock;
