@@ -2134,7 +2134,7 @@ begin
           {$endif USE_WINIOCP}
           begin
             if fDebugLog <> nil then
-              DoLog('ProcessRead: Subscribe failed % %', [connection, fRead]);
+              DoLog('ProcessRead: Subscribe failed %', [connection]);
             CloseConnection(connection, 'ProcessRead Subscribe failure');
           end;
           connection.UnLock({writer=}false); // eventual lock release
