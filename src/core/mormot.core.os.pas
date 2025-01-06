@@ -4172,6 +4172,10 @@ type
     // - could also be used to thread-safely acquire a shared resource
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// acquire this lock for the current thread, ignore any previous state
+    // - could be done to safely acquire and finalize a resource
+    // - this method is reentrant: you can call Lock/UnLock on this thread
+    procedure ForceLock;
     /// check if the reentrant lock has been acquired
     function IsLocked: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -9375,6 +9379,13 @@ begin
     inc(ReentrantCount);       // locked by this thread - make it reentrant
     result := true;
   end;
+end;
+
+procedure TMultiLightLock.ForceLock;
+begin
+  Flags := PtrUInt(-1); // forced acquisition, whatever the current state is
+  ThreadID := GetCurrentThreadId;
+  ReentrantCount := MaxInt; // make this method reentrant
 end;
 
 function TMultiLightLock.IsLocked: boolean;
