@@ -6308,6 +6308,9 @@ end;
 
 {$ifdef HASEXTRECORDRTTI} // Delphi 2010+ enhanced RTTI
 type
+  TTest = packed record
+    d: TDate;
+  end;
   TCat = packed record
     Name: RawUtf8
   end;
@@ -6340,6 +6343,7 @@ var
   v: variant;
   {$ifdef HASEXTRECORDRTTI}
   r: TRttiCustom;
+  d: TTest;
   {$endif HASEXTRECORDRTTI}
 begin
   {$ifdef HASEXTRECORDRTTI}
@@ -6350,6 +6354,10 @@ begin
   checkEqual(r.Props.List[1].Name, 'CatNested');
   checkEqual(r.Props.List[2].Name, 'Cats');
   checkEqual(r.Props.List[3].Name, 'CatsNested');
+  u := '{D:"2025-01-01"}';
+  d.d := 0;
+  Check(RecordLoadJson(d, u, TypeInfo(TTest)));
+  check(d.d <> 0);
   {$endif HASEXTRECORDRTTI}
   // CSV to set
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
