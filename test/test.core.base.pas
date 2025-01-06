@@ -2790,7 +2790,7 @@ begin
   // oldest Delphi can't compile TypeInfo(TGuid) -> use PT_INFO[ptGuid]
   s := RecordSaveJson(g, PT_INFO[ptGuid]);
   FillCharFast(g2, SizeOf(g2), 0);
-  Check(RecordLoadJson(g2, pointer(s), PT_INFO[ptGuid]) <> nil);
+  Check(RecordLoadJsonInPlace(g2, pointer(s), PT_INFO[ptGuid]) <> nil);
   Check(IsEqualGuid(g2, g));
   FillCharFast(h, SizeOf(h), 1);
   for pt := ptGuid to ptHash512 do
@@ -8999,7 +8999,7 @@ begin
     tmp := DynArraySaveJson(arr, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     ObjArrayClear(arr);
     CheckEqual(length(arr), 0);
-    DynArrayLoadJson(arr, pointer(tmp), TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    DynArrayLoadJsonInPlace(arr, pointer(tmp), TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     CheckEqual(length(arr), MAX + 1);
     for i := 0 to MAX do
     begin

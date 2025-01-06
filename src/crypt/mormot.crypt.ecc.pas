@@ -4258,7 +4258,7 @@ begin
   tmp.Init(json);
   try
     result :=
-      (DynArrayLoadJson(values, tmp.buf, TypeInfo(TRawUtf8DynArray)) <> nil) and
+      (DynArrayLoadJsonInPlace(values, tmp.buf, TypeInfo(TRawUtf8DynArray)) <> nil) and
       LoadFromArray(values);
   finally
     tmp.Done;

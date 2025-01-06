@@ -1957,7 +1957,7 @@ begin
   if P^ = '[' then
     // when transmitted as [params] in a _contract_ HTTP body content
     inc(P);
-  if (RecordLoadJson(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
+  if (RecordLoadJsonInPlace(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
      (nfo.PublicUri.Address = '') then
     // invalid supplied JSON content
     exit;

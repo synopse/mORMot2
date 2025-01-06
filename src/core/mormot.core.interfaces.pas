@@ -2837,7 +2837,7 @@ begin
         DocVariantType.ToJson(@Value, json);
         SetLength(rec, ArgRtti.Size);
         try
-          RecordLoadJson(rec[0], pointer(json), ArgRtti.Info);
+          RecordLoadJsonInPlace(rec[0], pointer(json), ArgRtti.Info);
           json := SaveJson(rec[0], ArgRtti.Info, {EnumSetsAsText=}true);
           _Json(json, Value, JSON_FAST);
         finally

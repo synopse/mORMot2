@@ -2795,7 +2795,7 @@ var
   json: RawUtf8;
 begin
   result := (CallBackGet('stat', ['findservice', aServiceName], json) = HTTP_SUCCESS) and
-    (DynArrayLoadJson(URI, pointer({%H-}json), TypeInfo(TRestServerUriDynArray)) <> nil);
+    (DynArrayLoadJsonInPlace(URI, pointer({%H-}json), TypeInfo(TRestServerUriDynArray)) <> nil);
 end;
 
 function TRestClientUri.ServiceRetrieveAssociated(const aInterface: TGuid;

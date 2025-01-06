@@ -944,7 +944,7 @@ begin
        '', nil, false, nil, 0, {forcesocket:}false, {ignorecerterror:}true);
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
-    RecordLoadJson(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
+    RecordLoadJsonInPlace(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
     Check(length(mus.tests) > 5, 'mustacheJson load');
     for i := 0 to high(mus.tests) do
       with mus.Tests[i] do
@@ -1653,7 +1653,7 @@ var
     FillCharFast(git2, SizeOf(git2), 0);
     U := zendframeworkJson; // need unique string for procedure re-entrance
     check(IsValidJson(U));
-    Check(DynArrayLoadJson(
+    Check(DynArrayLoadJsonInPlace(
       git, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonGitHubs)) <> nil);
     U := DynArraySaveJson(git, TypeInfo(TTestCustomJsonGitHubs));
     check(IsValidJson(U));
@@ -1699,7 +1699,7 @@ var
         check(JsonReformat(s, jsonCompact) =
           FormatUtf8('{"login":"%","id":%}', [owner.login, owner.id]));
       end;
-    Check(DynArrayLoadJson(
+    Check(DynArrayLoadJsonInPlace(
       git2, pointer(U), TypeInfo(TTestCustomJsonGitHubs)) <> nil);
     if not CheckFailed(length(git) = Length(git2)) then
       for i := 0 to high(git) do
@@ -1719,7 +1719,7 @@ var
     Check(IsValidJson(U));
     RecordZero(@Trans, TypeInfo(TTestCustomJson2));
     Check(length(Trans.Transactions) = 0);
-    RecordLoadJson(Trans, UniqueRawUtf8(U), TypeInfo(TTestCustomJson2));
+    RecordLoadJsonInPlace(Trans, UniqueRawUtf8(U), TypeInfo(TTestCustomJson2));
     Check(length(Trans.Transactions) = 1);
     Check(Trans.Transactions[0].TRTYPE = 'INCOME');
     Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
@@ -1840,7 +1840,7 @@ var
     JR2.D := '**';
     JR2.F := 1;
     JR := JR2;
-    RecordLoadJson(JR2, pointer(U), TypeInfo(TTestCustomJsonRecord));
+    RecordLoadJsonInPlace(JR2, pointer(U), TypeInfo(TTestCustomJsonRecord));
     Check(JR2.A = 0);
     Check(JR2.D = '');
     Check(JR2.F = 0);
@@ -1854,7 +1854,7 @@ var
     JA2.D := '**';
     SetLength(JA2.E, 2);
     JA2.F := 1;
-    RecordLoadJson(JA2, pointer(J), TypeInfo(TTestCustomJsonArray));
+    RecordLoadJsonInPlace(JA2, pointer(J), TypeInfo(TTestCustomJsonArray));
     Check(JA2.A = 0);
     Check(JA2.D = '');
     check(Length(JA2.E) = 0);
@@ -1879,12 +1879,12 @@ var
     X := JsonToXML(J, '');
     Check(X =
       '<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
-    RecordLoadJson(JA, pointer(J), TypeInfo(TTestCustomJsonArray));
+    RecordLoadJsonInPlace(JA, pointer(J), TypeInfo(TTestCustomJsonArray));
     Check(RecordSave(JA, TypeInfo(TTestCustomJsonArray)) = RecordSave(JA2,
       TypeInfo(TTestCustomJsonArray)));
     J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
     check(IsValidJson(J));
-    RecordLoadJson(JA, UniqueRawUtf8(J), TypeInfo(TTestCustomJsonArray));
+    RecordLoadJsonInPlace(JA, UniqueRawUtf8(J), TypeInfo(TTestCustomJsonArray));
     U := RecordSaveJson(JA, TypeInfo(TTestCustomJsonArray));
     Check(length(JA.E) = 1);
     CheckEqual(U, '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
@@ -1920,7 +1920,7 @@ var
     J := DynArraySaveJson(AA, TypeInfo(TRawUtf8DynArrayDynArray));
     check(IsValidJson(J));
     Finalize(AB);
-    Check(DynArrayLoadJson(
+    Check(DynArrayLoadJsonInPlace(
       AB, pointer(J), TypeInfo(TRawUtf8DynArrayDynArray)) <> nil);
     Check(length(AA) = length(AB));
     for i := 0 to high(AA) do
@@ -1953,7 +1953,7 @@ var
     check(IsValidJson(U));
     J := RecordSaveJson(agg, TypeInfo(TAggregate));
     CheckEqual(J, U);
-    RecordLoadJson(agg2, UniqueRawUtf8(U), TypeInfo(TAggregate));
+    RecordLoadJsonInPlace(agg2, UniqueRawUtf8(U), TypeInfo(TAggregate));
     J := RecordSaveJson(agg2, TypeInfo(TAggregate));
     CheckHash(J, $E3AC9C44);
     check(IsValidJson(J));
@@ -2008,7 +2008,7 @@ var
     U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",' +
       '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
     J := U;
-    Check(RecordLoadJson(JAS, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArraySimple)) <> nil);
+    Check(RecordLoadJsonInPlace(JAS, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArraySimple)) <> nil);
     Check(JAS.A = 1);
     Check(JAS.B = 2);
     Check(length(JAS.C) = 2);
@@ -2033,7 +2033,7 @@ var
     assert(DocVariantType <> nil);
     U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
     check(IsValidJson(U));
-    RecordLoadJson(JAV, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArrayVariant));
+    RecordLoadJsonInPlace(JAV, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArrayVariant));
     Check(JAV.A = 1);
     Check(JAV.B = 2);
     if not CheckFailed(length(JAV.C) = 4) then
@@ -2219,14 +2219,14 @@ var
     check(IsValidJson(U));
     U := '{"ID":210,"Timestamp512":2200,"Json":"test2"}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
+    RecordLoadJsonInPlace(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
     Check(Cache.ID = 210);
     Check(Cache.Timestamp512 = 2200);
     Check(Cache.Json = 'test2');
     Check(Cache.Tag = 12);
     U := '{ID:220,Json:"test3",Timestamp512:2300}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
+    RecordLoadJsonInPlace(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
     Check(Cache.ID = 220);
     Check(Cache.Timestamp512 = 2300);
     Check(Cache.Json = 'test3');
@@ -2241,7 +2241,7 @@ var
     U := RecordSaveJson(nav, TypeInfo(TConsultaNav));
     J := RecordSaveJson(nav2, TypeInfo(TConsultaNav));
     Check(U <> J);
-    RecordLoadJson(nav2, UniqueRawUtf8(U), TypeInfo(TConsultaNav));
+    RecordLoadJsonInPlace(nav2, UniqueRawUtf8(U), TypeInfo(TConsultaNav));
     Check(nav2.MaxRows = 0);
     check(not nav2.EOF);
     J := RecordSaveJson(nav2, TypeInfo(TConsultaNav));
@@ -2255,7 +2255,7 @@ var
       '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
     Finalize(nrtti2);
     FillCharFast(nrtti2, SizeOf(nrtti2), 0);
-    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
+    Check(RecordLoadJsonInPlace(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     nrtti.Number := 1;
@@ -2276,12 +2276,12 @@ var
       '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
     Finalize(nrtti2);
     FillCharFast(nrtti2, SizeOf(nrtti2), 0);
-    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
+    Check(RecordLoadJsonInPlace(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     U :=
       '{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
-    RecordLoadJson(book, UniqueRawUtf8(U), TypeInfo(TBookRecord));
+    RecordLoadJsonInPlace(book, UniqueRawUtf8(U), TypeInfo(TBookRecord));
     check(book.name = 'Book the First');
     check(book.author.first_name = 'Bob');
     Check(book.author.last_name = 'White');
@@ -3213,7 +3213,7 @@ begin
   U := '{"B":0,"C":0,"A":10,"D":"**","E":{"E1":0,"E2":20}}';
   JR2.A := 100;
   JR2.F := 10;
-  RecordLoadJson(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
+  RecordLoadJsonInPlace(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
   Check(JR2.A = 10);
   Check(JR2.D = '**');
   Check(JR2.E.E2 = 20);
@@ -3221,7 +3221,7 @@ begin
   TRttiJson(Parser).IncludeReadOptions := JSONPARSER_TOLERANTOPTIONS;
   U := '{ "A" : 1 , "B" : 2 , "C" : 3 , "D" : "A" , "tobeignored":null,"E": '#13#10 +
        '{ "E1" : 4, "E2" : 5 } , "tbi" : { "b" : 0 } }';
-  RecordLoadJson(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
+  RecordLoadJsonInPlace(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
   Check(JR2.A = 1);
   Check(JR2.D = 'A');
   Check(JR2.E.E1 = 4);
@@ -3237,7 +3237,7 @@ begin
     '{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
   Finalize(JA);
   FillCharFast(JA, SizeOf(JA), 0);
-  RecordLoadJson(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
+  RecordLoadJsonInPlace(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
   Check(JA.A = 100);
   Check(JA.D = '');
   U := RecordSaveJson(JA, TypeInfo(TTestCustomJsonArrayWithoutF));
@@ -3251,7 +3251,7 @@ begin
   Check(length(JA.E) = 2);
   Finalize(JA);
   FillCharFast(JA, SizeOf(JA), 0);
-  RecordLoadJson(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
+  RecordLoadJsonInPlace(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
   Check(length(JA.E) = 2);
   Check(JA.D = '1234');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayWithoutF), '');
@@ -3323,7 +3323,7 @@ begin
   Check(JsonReformat(JsonReformat(discogsJson, jsonHumanReadable), jsonCompact) = U);
   Check(JsonReformat(JsonReformat(discogsJson, jsonUnquotedPropName), jsonCompact) = U);
   Check(JsonReformat(JsonReformat(U, jsonUnquotedPropName), jsonCompact) = U);
-  RecordLoadJson(Disco, pointer(discogsJson), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, pointer(discogsJson), TypeInfo(TTestCustomDiscogs));
   Check(length(Disco.releases) <= Disco.pagination.items);
   for i := 0 to high(Disco.Releases) do
     Check(Disco.Releases[i].id > 0);
@@ -3338,14 +3338,14 @@ begin
   Check(IsValidUtf8(U)); 
   FileFromString(U, WorkDir + 'discoExtractNonExp.json');
   FillCharFast(Disco2, SizeOf(Disco), 0);
-  RecordLoadJson(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
   Check(RecordEquals(Disco, Disco2, TypeInfo(TTestCustomDiscogs)), 'disco2');
   Finalize(Disco2);
   Finalize(Disco);
   FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
   Check(IsValidJson(U));
-  RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 1);
   Check(Disco.pagination.page = 0);
   if not CheckFailed(length(Disco.releases) = 1) then
@@ -3357,7 +3357,7 @@ begin
   FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{},"releases":[{"Id":10},{"TITle":"blabla"}]}';
   Check(IsValidJson(U));
-  RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 0);
   Check(Disco.pagination.page = 0);
   if not CheckFailed(length(Disco.releases) = 2) then
@@ -3369,7 +3369,7 @@ begin
   end;
   U := '{"pagination":{"page":1},"releases":[{"title":"abc","id":2}]}';
   Check(IsValidJson(U));
-  RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 0);
   Check(Disco.pagination.page = 1);
   if not CheckFailed(length(Disco.releases) = 1) then
@@ -6305,7 +6305,6 @@ procedure TComplexClass.SetArray(const AValue: TRawUtf8DynArray);
 begin
   csv := RawUtf8ArrayToCsv(AValue);
 end;
-
 
 {$ifdef HASEXTRECORDRTTI} // Delphi 2010+ enhanced RTTI
 type

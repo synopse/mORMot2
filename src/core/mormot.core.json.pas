@@ -2208,7 +2208,7 @@ function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
   ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions = nil;
   Interning: TRawUtf8Interning = nil): boolean; overload;
 
-/// fill a record content from a JSON serialization as saved by
+/// fill a record content from a JSON serialization buffer as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
 // - will use default Base64 encoding over RecordSave() binary - or custom
 // JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
@@ -2216,10 +2216,10 @@ function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy if you need to access it later or if the string comes from
-// a constant (refcount=-1) - see e.g. the overloaded RecordLoadJson()
-function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
+// a constant (refcount=-1) - see e.g. RecordLoadJson() method instead
+function RecordLoadJsonInPlace(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char;
 
 /// fill a record content from a JSON serialization as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -2227,7 +2227,7 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // so is safe with a read/only or shared string - but slightly slower
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean;
 
 /// fill a dynamic array content from a JSON serialization as saved by
 // TJsonWriter.AddDynArrayJson with or without twoNonExpandedArrays layout
@@ -2242,10 +2242,10 @@ function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
 // - some numbers on a Core i5-13500, extracted from our regression tests:
 // $ DynArrayLoadJson exp in 32.86ms i.e. 4.7M rows/s, 596.5 MB/s
 // $ DynArrayLoadJson non exp in 22.46ms i.e. 6.9M rows/s, 383.7 MB/s
-function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
+function DynArrayLoadJsonInPlace(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
   Tolerant: boolean = true; Interning: TRawUtf8Interning = nil;
-  GuessCount: boolean = false): PUtf8Char; overload;
+  GuessCount: boolean = false): PUtf8Char;
 
 /// fill a dynamic array content from a JSON serialization as saved by
 // TJsonWriter.AddDynArrayJson, which won't be modified
@@ -2254,7 +2254,7 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 function DynArrayLoadJson(var Value; const Json: RawUtf8;
   TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions = nil;
   Tolerant: boolean = true; Interning: TRawUtf8Interning = nil;
-  GuessCount: boolean = false): boolean; overload;
+  GuessCount: boolean = false): boolean;
 
 /// read an object properties, as saved by ObjectToJson function
 // - ObjectInstance must be an existing TObject instance
@@ -11635,46 +11635,45 @@ begin
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions, Interning);
 end;
 
-function EnsureRecord(TypeInfo: PRttiInfo; Tolerant: boolean): TJsonParserOptions;
-begin
-  if (TypeInfo = nil) or
-     not (TypeInfo^.Kind in rkRecordTypes) then
-    EJsonException.RaiseUtf8('RecordLoadJson: % is not a record', [TypeInfo^.Name^]);
-  result := JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant];
-end;
-
-function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
+function RecordLoadJsonInPlace(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
+  if (TypeInfo = nil) or
+     not (TypeInfo^.Kind in rkRecordTypes) then
+    EJsonException.RaiseUtf8('RecordLoadJsonInPlace: % is no record', [TypeInfo^.Name^]);
   result := LoadJsonInPlace(Rec, Json, TypeInfo, EndOfObject,
-    CustomVariantOptions, EnsureRecord(TypeInfo, Tolerant), Interning);
+    CustomVariantOptions, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], Interning);
 end;
 
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8Interning): boolean;
 begin
+  if (TypeInfo = nil) or
+     not (TypeInfo^.Kind in rkRecordTypes) then
+    EJsonException.RaiseUtf8('RecordLoadJson: % is no record', [TypeInfo^.Name^]);
   result := LoadJson(Rec, Json, TypeInfo,
-    EnsureRecord(TypeInfo, Tolerant), CustomVariantOptions, Interning);
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions, Interning);
 end;
 
-function EnsureDynArray(TypeInfo: PRttiInfo; Tolerant, GuessCount: boolean): TJsonParserOptions;
+function EnsureDynArray(const Ctxt: shortstring;
+  TypeInfo: PRttiInfo; Tolerant, GuessCount: boolean): TJsonParserOptions;
 begin
   if (TypeInfo = nil) or
      (TypeInfo^.Kind <> rkDynArray) then
-    EJsonException.RaiseUtf8('DynArrayLoadJson: % is no dynamic array', [TypeInfo^.Name^]);
+    EJsonException.RaiseUtf8('DynArrayLoadJson%: % is no dynamic array', [Ctxt, TypeInfo^.Name^]);
   result := JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant];
   if GuessCount then
     include(result, jpoDynArrayGuessCount);
 end;
 
-function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
+function DynArrayLoadJsonInPlace(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean; Interning: TRawUtf8Interning; GuessCount: boolean): PUtf8Char;
 begin
-  result := LoadJsonInPlace(Value, Json, TypeInfo, EndOfObject,
-    CustomVariantOptions, EnsureDynArray(TypeInfo, Tolerant, GuessCount), Interning);
+  result := LoadJsonInPlace(Value, Json, TypeInfo, EndOfObject, CustomVariantOptions,
+    EnsureDynArray('InPlace', TypeInfo, Tolerant, GuessCount), Interning);
 end;
 
 function DynArrayLoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
@@ -11682,7 +11681,7 @@ function DynArrayLoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
   Interning: TRawUtf8Interning; GuessCount: boolean): boolean;
 begin
   result := LoadJson(Value, Json, TypeInfo,
-    EnsureDynArray(TypeInfo, Tolerant, GuessCount), CustomVariantOptions, Interning);
+    EnsureDynArray('', TypeInfo, Tolerant, GuessCount), CustomVariantOptions, Interning);
 end;
 
 function JsonToObject(var ObjectInstance; From: PUtf8Char; out Valid: boolean;

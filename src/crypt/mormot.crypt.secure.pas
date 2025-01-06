@@ -4252,7 +4252,7 @@ begin
   begin
     tmp.Init(aParamsJson, aParamsJsonLen);
     try
-      if (RecordLoadJson(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
+      if (RecordLoadJsonInPlace(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
          (ord(k.algo) > ord(high(k.algo))) or
          (k.secret = '') or
          (k.salt = '') then
