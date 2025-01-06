@@ -431,6 +431,7 @@ type
     /// will contain the data retrieved from the server, after all ParseHeader
     Content: RawByteString;
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader
+    // - equals -1 if there is no such header during ParseHeader
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: Int64;
     /// known GMT timestamp of output content, may be reported as 'Last-Modified:'
@@ -3166,7 +3167,7 @@ begin
   RangeOffset := 0;
   RangeLength := -1;
   FastAssignNew(Content);
-  ContentLength := -1;
+  ContentLength := -1; // -1 = no Content-Length: header
   ContentLastModified := 0;
   ContentStream := nil;
   ServerInternalState := 0;
@@ -3681,7 +3682,7 @@ end;
 procedure THttpRequestContext.ProcessInit;
 begin
   RangeLength := -1;
-  ContentLength := -1;
+  ContentLength := -1; // not yet parsed
   CompressContentEncoding := -1;
   State := hrsGetCommand;
 end;
@@ -3748,7 +3749,7 @@ begin
             if hfTransferChunked in HeaderFlags then
               // process chunked body
               State := hrsGetBodyChunkedHexFirst
-            else if ContentLength > 0 then
+            else if ContentLength > 0 then // -1 = no Content-Length: header
               // regular process with explicit content-length
               State := hrsGetBodyContentLength
               // note: old HTTP/1.0 format with no Content-Length is unsupported
@@ -3866,7 +3867,7 @@ begin
     aStatus := HTTP_NOCONTENT;
   result := aStatus;
   // compute response headers
-  AppendLine(Headers, ['Content-Length: ', ContentLength]);
+  AppendLine(Headers, ['Content-Length: ', ContentLength]); // should always be
   if ContentLastModified <> 0 then
     AppendLine(Headers, ['Last-Modified: ',
       UnixMSTimeUtcToHttpDate(ContentLastModified)]);

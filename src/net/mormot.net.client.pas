@@ -2416,7 +2416,7 @@ begin
          ((Http.ContentLength <> 0) or // server bug of 204,304 with body
           ((ctxt.Status <> HTTP_NOCONTENT) and
            (ctxt.Status <> HTTP_NOTMODIFIED))) and
-         not HttpMethodWithNoBody(ctxt.Method) then
+         not HttpMethodWithNoBody(ctxt.Method) then // HEAD/OPTIONS
       begin
         // specific TStreamRedirect expectations
         bodystream := ctxt.OutStream;
