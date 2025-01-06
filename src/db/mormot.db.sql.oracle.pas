@@ -1685,7 +1685,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                           {$ifdef FPC_64}
                           // in case of FPC+CPU64 TSqlDBParam.VData is a RawByteString and
                           // length is stored as SizeInt = Int64 (not int32) -> patch
-                          // (no patch needed for Delphi, in which len is always longint)
+                          // (no patch needed for Delphi, in which len is always 32-bit)
                           if Length(VData) > MaxInt then
                             ESqlDBOracle.RaiseUtf8('%.ExecutePrepared: % ' +
                               'blob length exceeds max size for parameter #%',

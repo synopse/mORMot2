@@ -566,8 +566,8 @@ type
   TGuidShortString = string[38];
 
   /// cross-compiler type used for string length
-  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
-  TStrLen = {$ifdef FPC} SizeInt {$else} longint {$endif};
+  // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit integer even on CPU64
+  TStrLen = {$ifdef FPC} SizeInt {$else} integer {$endif};
   /// pointer to cross-compiler type used for string length
   PStrLen = ^TStrLen;
   
@@ -584,12 +584,12 @@ type
   PStrCnt = ^TStrCnt;
 
   /// cross-compiler type used for dynarray reference counter
-  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
+  // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit even on CPU64
   TDACnt = {$ifdef DACNT32} integer {$else} SizeInt {$endif};
   /// pointer to cross-compiler type used for dynarray reference counter
   PDACnt = ^TDACnt;
 
-  /// cross-compiler return type of IUnknown._AddRef/_Release methods
+  /// cross-compiler return exact type of IUnknown._AddRef/_Release methods
   // - used to reduce the $ifdef when implementing interfaces in Delphi and FPC
   TIntCnt = {$ifdef FPC} longint {$else} integer {$endif};
   /// cross-compiler return type of IUnknown.QueryInterface method
@@ -610,7 +610,7 @@ type
         {$endif CPU64}
         {$endif STRCNT32}
         {$endif HASCODEPAGE}
-        refCnt: TStrCnt; // =SizeInt on older FPC, =longint since FPC 3.4
+        refCnt: TStrCnt; // =SizeInt on older FPC, =integer since FPC 3.4
         length: TStrLen;
       );
     {$ifdef HASCODEPAGE}
@@ -644,9 +644,9 @@ type
     elemSize: Word;
   {$endif HASCODEPAGE}
     /// string reference count (basic garbage memory mechanism)
-    refCnt: TStrCnt; // 32-bit longint with Delphi
+    refCnt: TStrCnt; // 32-bit integer with Delphi
     /// equals length(s) - i.e. size in AnsiChar/WideChar, not bytes
-    length: TStrLen; // 32-bit longint with Delphi
+    length: TStrLen; // 32-bit integer with Delphi
   end;
 
   /// map the Delphi/FPC dynamic array header (stored before each instance)
@@ -656,7 +656,7 @@ type
     _Padding: cardinal;
     {$endif}
     /// dynamic array reference count (basic garbage memory mechanism)
-    refCnt: TDACnt; // 32-bit longint with Delphi
+    refCnt: TDACnt; // 32-bit integer with Delphi
     /// length in element count
     // - size in bytes = length*ElemSize
     length: TDALen; // PtrInt/NativeInt

@@ -394,7 +394,7 @@ begin
     else
       result := @UTF8_NAME // instead of 'UTF8String'
   else
-    result := @NULCHAR;
+    result := @NULCHAR;    // instead of a GPF
 end;
 
 function TRttiInfo.RecordSize: PtrInt;

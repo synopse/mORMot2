@@ -2463,7 +2463,7 @@ type
   protected
     // we use TWordDynArray for auto garbage collection and generic handling
     // - since the Ttf file is big endian, we swap all words at loading, to
-    // be used directly by the Intel x86 code; integer (longint) values
+    // be used directly by the Intel x86 code; integer (32-bit) values
     // must take care of this byte swapping
     fcmap, fhead, fhhea, fhmtx: TWordDynArray;
   public

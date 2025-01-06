@@ -378,7 +378,7 @@ begin
     else
       result := @INTEGER_NAME    // instead of 'longint'
   else
-    result := @NULCHAR;
+    result := @NULCHAR;          // instead of a GPF
 end;
 
 function TRttiInfo.RecordSize: PtrInt;
