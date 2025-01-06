@@ -2189,7 +2189,7 @@ type
     // - we define a pointer to the record and not directly a record property
     // to allow direct modification of any property of the record
     // - by default, IgnoreCertificateErrors is set to true by Create - you can
-    // change these default settings, for instance as such:
+    // e.g. change this default behavior (for additional safety) as such:
     // ! TlsContext^.IgnoreCertificateErrors := false;
     property TlsContext: PNetTlsContext
       read GetTlsContext;
@@ -5431,17 +5431,17 @@ begin
     'supportedExtension',
     'vendorName',
     'ldapServiceName']);
-  fRootDN := root.Attributes.GetByName('rootDomainNamingContext');
-  fDefaultDN := root.Attributes.GetByName('defaultNamingContext');
+  fRootDN         := root.Attributes.GetByName('rootDomainNamingContext');
+  fDefaultDN      := root.Attributes.GetByName('defaultNamingContext');
   fNamingContexts := root.Attributes.Find('namingContexts').GetAllReadable;
-  fConfigDN := root.Attributes.GetByName('configurationNamingContext');
-  fMechanisms := root.Attributes.Find('supportedSASLMechanisms').GetAllReadable;
-  fControls := root.Attributes.Find('supportedControl').GetAllReadable;
+  fConfigDN       := root.Attributes.GetByName('configurationNamingContext');
+  fMechanisms     := root.Attributes.Find('supportedSASLMechanisms').GetAllReadable;
+  fControls       := root.Attributes.Find('supportedControl').GetAllReadable;
   DeduplicateRawUtf8(fControls);
-  fExtensions := root.Attributes.Find('supportedExtension').GetAllReadable;
+  fExtensions     := root.Attributes.Find('supportedExtension').GetAllReadable;
   DeduplicateRawUtf8(fExtensions);
-  fVendorName := root.Attributes.GetByName('vendorName');
-  fServiceName := root.Attributes.GetByName('ldapServiceName');
+  fVendorName     := root.Attributes.GetByName('vendorName');
+  fServiceName    := root.Attributes.GetByName('ldapServiceName');
 end;
 
 function TLdapClient.RootDN: RawUtf8;
