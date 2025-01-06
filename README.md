@@ -1,10 +1,10 @@
 # Synopse *mORMot 2* Framework
 
-*An Open Source Client-Server ORM/SOA/MVC framework in modern Object Pascal*
+*An Open Source Client-Server ToolBox aka ORM/SOA/MVC framework in modern Object Pascal*
 
 ![Happy mORMot](doc/happymormot.png)
 
-(c) 2008-2024 Synopse Informatique - Arnaud Bouchez
+(c) 2008-2025 Synopse Informatique - Arnaud Bouchez
 
 https://synopse.info  - http://mORMot.net
 
@@ -35,20 +35,22 @@ If you find it worth using, please consider [sponsoring mORMot 2 dev](https://gi
 
 ### mORMot What?
 
-Synopse *mORMot 2* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 12 Athenes and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot 2* is the ultimate Open Source ToolBox for modern Object Pascal. It is a fully featured Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 12.2 Athenes and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
 
 ![mORMot map](doc/IamLost.png)
 
 The main features of *mORMot* are therefore:
 
  - An optimized cross-compiler and cross-platform JSON/UTF-8 and RTTI kernel;
+ - Complete and efficient Cryptography primitives (hashes, encryption, asymetric keys, X.509, OpenSSL);
+ - A fully features Client/Server network layer (e.g. HTTP/S, WebSockets, OpenAPI/Swagger, async servers, LDAP, DNS, ACME);
  - Direct SQL and NoSQL database access (e.g. SQLite3, PostgreSQL, Oracle, MSSQL, OleDB, ODBC, MongoDB);
  - ORM/ODM: objects persistence on almost any database (SQL or NoSQL);
  - SOA: organize your business logic into REST services defined as `interface`;
  - Convention-over-configuration REST/JSON router, locally or over HTTP/HTTPS/WebSockets;
  - Clients: consume your data or services from any platform, via ORM/SOA APIs;
  - Web MVC: publish your ORM/SOA process as responsive Web Applications;
- - A lot of other reusable bricks (e.g. Unicode, cryptography, network, threads, dictionaries, logging, binary serialization, variants, generics, cross-platform...).
+ - A lot of other reusable bricks (e.g. Unicode, network, threads, dictionaries, logging, binary serialization, variants, generics, cross-platform, pdf generation...).
 
 Emphasizing speed and versatility, *mORMot* leverages the advantages of modern object pascal native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It can be used:
 
@@ -87,7 +89,7 @@ See [the full licensing terms](LICENCE.md).
 
 The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up;
-- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4 and 11.1.
+- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1 and 12.2.
 
 Note that [FPC 3.2.2 has a regression with variant late binding](https://gitlab.com/freepascal.org/fpc/source/-/issues/39438) - use FPC 3.2.2 fixes branch instead.
 
