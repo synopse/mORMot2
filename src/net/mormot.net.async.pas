@@ -1988,13 +1988,18 @@ begin
     // check for wrong reference (paranoid)
     if c.IsDangling then
       exit;
-    // acquisition of connection's read+write locks for this thread
-    c.fRWSafe[0].Lock; // reentrant wait & acquire (safer than ForceLock)
-    c.fRWSafe[1].Lock;
+    // final acquisition of connection's read+write locks for this thread
+    if (not c.WaitLock({writer=}false, 1000)) or
+       ((ifSeparateWLock in c.fInternalFlags) and
+        (not c.WaitLock({writer=}true, 1000))) then
+    begin
+      c.fRWSafe[0].ForceLock; // locks should be available within 1000 ms
+      c.fRWSafe[1].ForceLock
+    end;
     // call OnClose virtual method once
     if not (fClosed in c.fFlags) then
       // before slot/socket closing: needed for TWebSocketAsyncConnection
-      c.OnClose;
+      c.OnClose; // set fClosed flag
     // set socket := nil and async unsubscribe for next PollForPendingEvents()
     Stop(c, caller);
     // now safe to perform fOwner.ConnectionDelete() for async instance GC
@@ -4997,7 +5002,7 @@ begin
       fAsync.fSockets.CloseConnection(TPollAsyncConnection(c), 'AsyncResponse');
     end;
   finally
-    c.UnLock({LockWrite=}false); // CloseConnection set c := nil
+    c.UnLock({LockWrite=}false); // unless CloseConnection set c := nil
   end
   else if acoVerboseLog in fAsync.fOptions then
     fAsync.DoLog(sllTrace, 'late AsyncResponse on closed #%', [Connection], self);
