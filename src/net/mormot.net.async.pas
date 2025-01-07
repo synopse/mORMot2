@@ -1916,7 +1916,7 @@ begin
       connection.UnLock({writer=}true)
     else
       // sending or subscription error -> abort
-      CloseConnection(connection, 'Write() finished');
+      CloseConnection(connection, 'Write() failure');
     LockedDec32(@fProcessingWrite);
   end
   else
@@ -2122,7 +2122,7 @@ begin
         else
           result := false; // retry later
         // ensure this connection will be tracked for next recv()
-        if not connection.IsClosed then // CloseConnection() set connection:=nil
+        if connection <> nil then // CloseConnection() set connection := nil
         begin
           {$ifdef USE_WINIOCP}
           // IOCP requires per-notification subscription
@@ -3377,14 +3377,7 @@ begin
       if result = nil then
         exit; // too late, or invalid handle
       if result.TryLock(LockWriter) then
-        if not result.IsClosed then
-          exit // open connection sub-locked within main ReadOnlyLock
-        else
-        begin
-          result.UnLock(LockWriter);
-          result := nil; // too late
-          exit;
-        end;
+        exit; // found and locked within main ReadOnlyLock
     finally
       fConnectionLock.ReadOnlyUnLock;
     end;
@@ -4971,18 +4964,16 @@ end;
 procedure THttpAsyncServer.AsyncResponse(Connection: TConnectionAsyncHandle;
   const Content, ContentType: RawUtf8; Status: cardinal);
 var
-  locked: boolean;
   c: THttpAsyncServerConnection;
   res: TPollAsyncSocketOnReadWrite;
 begin
   // thread-safe locate the connection using O(log(n)) binary search
-  locked := true;
   c := pointer(fAsync.ConnectionFindAndWaitLock(
-    {handle=}Connection, {wr=}false, {ms=}40));
+    {handle=}Connection, {LockWrite=}false, {ms=}40));
   if c <> nil then
   // process within the read lock, since may respond before state is set
   try
-    // verify expected connection state, to avoid race condition
+    // verify expected connection state, to avoid ABBA race condition
     if (c.fHandle <> Connection) or
        (c.fHttp.State <> hrsWaitAsyncProcessing) or
        not (rfAsynchronous in c.fHttp.ResponseFlags) then // paranoid
@@ -5003,12 +4994,10 @@ begin
     begin
       if acoVerboseLog in fAsync.fOptions then
         fAsync.DoLog(sllTrace, 'final AsyncResponse: closing #%', [Connection], self);
-      locked := false;
       fAsync.fSockets.CloseConnection(TPollAsyncConnection(c), 'AsyncResponse');
     end;
   finally
-    if locked then
-      c.UnLock({wr=}false);
+    c.UnLock({LockWrite=}false); // CloseConnection set c := nil
   end
   else if acoVerboseLog in fAsync.fOptions then
     fAsync.DoLog(sllTrace, 'late AsyncResponse on closed #%', [Connection], self);
