@@ -1988,9 +1988,9 @@ begin
     // check for wrong reference (paranoid)
     if c.IsDangling then
       exit;
-    // (forced) acquisition of connection's read+write locks for this thread
-    c.fRWSafe[0].ForceLock;
-    c.fRWSafe[1].ForceLock;
+    // acquisition of connection's read+write locks for this thread
+    c.fRWSafe[0].Lock; // reentrant wait & acquire (safer than ForceLock)
+    c.fRWSafe[1].Lock;
     // call OnClose virtual method once
     if not (fClosed in c.fFlags) then
       // before slot/socket closing: needed for TWebSocketAsyncConnection
