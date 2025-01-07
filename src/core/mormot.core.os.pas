@@ -1734,6 +1734,8 @@ type
   /// Windows handle for a Thread - for cross-platform/cross-compiler clarity
   // - note that on POSIX TThreadID is a pointer and not a 32-bit file handle
   TThreadID = DWORD;
+  /// a TThreadID-sized unsigned integer, to ease TThreadID alignment
+  TThreadIDInt = cardinal;
 
   /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
@@ -2788,6 +2790,10 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 {$ifdef OSPOSIX}
+
+type
+  /// a TThreadID-sized unsigned integer, to ease TThreadID alignment
+  TThreadIDInt = PtrUInt;
 
 {$ifndef OSLINUX} // try to stabilize MacOS/BSD pthreads API calls
   {$define NODIRECTTHREADMANAGER}
@@ -4153,7 +4159,7 @@ type
   private
     Flags: PtrUInt;
     ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
-    ReentrantCount: cardinal;
+    ReentrantCount: TThreadIDInt;
     procedure LockSpin; // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
