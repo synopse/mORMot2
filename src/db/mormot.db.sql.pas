@@ -766,7 +766,7 @@ type
     // - warning: FieldSize^ should be a 32-bit "integer" variable, not a PtrInt
     function ColumnType(Col: integer; FieldSize: PInteger = nil): TSqlDBFieldType;
     /// returns TRUE if the column contains NULL, first Col is 0
-    function ColumnNull(Col: integer): boolean;
+    function ColumnNull(Col: integer): boolean; overload;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -822,6 +822,8 @@ type
     // - see also BoundCursor() if you want to access a CURSOR out parameter
     function ColumnCursor(Col: integer): ISqlDBRows; overload;
 
+    /// returns TRUE if the column contains NULL, from a supplied column name
+    function ColumnNull(const ColName: RawUtf8): boolean; overload;
     /// return a Column integer value of the current Row, from a supplied column name
     function ColumnInt(const ColName: RawUtf8): Int64; overload;
     /// return a Column floating point value of the current Row, from a supplied column name
@@ -2478,7 +2480,7 @@ type
     function ColumnType(Col: integer;
       FieldSize: PInteger = nil): TSqlDBFieldType; virtual; abstract;
     /// returns TRUE if the column contains NULL, first Col is 0
-    function ColumnNull(Col: integer): boolean; virtual; abstract;
+    function ColumnNull(Col: integer): boolean; overload; virtual; abstract;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload; virtual; abstract;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -2542,6 +2544,8 @@ type
     // one giving access to the data rows
     // - this default method will raise an exception about unexpected behavior
     function ColumnCursor(Col: integer): ISqlDBRows; overload; virtual;
+    /// returns TRUE if the column contains NULL, from a supplied column name
+    function ColumnNull(const ColName: RawUtf8): boolean; overload;
     /// return a Column integer value of the current Row, from a supplied column name
     function ColumnInt(const ColName: RawUtf8): Int64; overload;
     /// return a Column floating point value of the current Row, from a supplied column name
@@ -6878,6 +6882,11 @@ end;
 function TSqlDBStatement.ColumnDouble(const ColName: RawUtf8): double;
 begin
   result := ColumnDouble(ColumnIndex(ColName));
+end;
+
+function TSqlDBStatement.ColumnNull(const ColName: RawUtf8): boolean;
+begin
+  result := ColumnNull(ColumnIndex(ColName));
 end;
 
 function TSqlDBStatement.ColumnInt(const ColName: RawUtf8): Int64;
