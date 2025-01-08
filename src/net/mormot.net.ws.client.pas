@@ -57,7 +57,6 @@ type
   /// implements WebSockets process as used on client side
   TWebSocketProcessClient = class(TWebCrtSocketProcess)
   protected
-    fClientThread: TWebSocketProcessClientThread;
     fConnectionID: THttpServerConnectionID;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
@@ -357,7 +356,7 @@ begin
   inherited Create(aSender, aProtocol, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fConnectionID := aConnectionID;
-  fClientThread := TWebSocketProcessClientThread.Create(self);
+  TWebSocketProcessClientThread.Create(self);
   endtix := GetTickCount64 + 5000;
   repeat // wait for TWebSocketProcess.ProcessLoop to initiate
     SleepHiRes(0);
@@ -368,23 +367,24 @@ end;
 
 destructor TWebSocketProcessClient.Destroy;
 var
+  t: TWebSocketProcessClientThread;
   tix: Int64;
   {%H-}log: ISynLog;
 begin
-  log := WebSocketLog.Enter('Destroy: ThreadState=%',
-    [ToText(fClientThread.fThreadState)^], self);
+  t := fOwnerThread as TWebSocketProcessClientThread;
+  log := WebSocketLog.Enter('Destroy: ThreadState=%', [ToText(t.fThreadState)^], self);
   try
     // focConnectionClose would be handled in this thread -> close client thread
-    fClientThread.Terminate;
+    t.Terminate;
     tix := GetTickCount64 + 7000; // never wait forever
-    while (fClientThread.fThreadState = sRun) and
+    while (t.fThreadState = sRun) and
           (GetTickCount64 < tix) do
       SleepHiRes(1);
-    fClientThread.fProcess := nil;
+    t.fProcess := nil;
   finally
     // SendPendingOutgoingFrames + SendFrame/GetFrame(focConnectionClose)
     inherited Destroy;
-    fClientThread.Free;
+    t.Free;
   end;
 end;
 
@@ -409,7 +409,7 @@ constructor TWebSocketProcessClientThread.Create(aProcess: TWebSocketProcessClie
 begin
   fProcess := aProcess;
   fProcess.fOwnerThread := self;
-  inherited Create({suspended=}false);
+  inherited Create({suspended=}false); // eventually launch the thread
 end;
 
 procedure TWebSocketProcessClientThread.Execute;
@@ -513,23 +513,24 @@ function THttpClientWebSockets.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
+  t: TWebSocketProcessClientThread;
   Ctxt: THttpServerRequest;
   block: TWebSocketProcessNotifyCallback;
   body, resthead: RawUtf8;
 begin
   if fProcess <> nil then
   begin
-    if fProcess.fClientThread.fThreadState = sCreate then
+    t := fProcess.fOwnerThread as TWebSocketProcessClientThread;
+    if t.fThreadState = sCreate then
       sleep(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
-    if fProcess.fClientThread.fThreadState <> sRun then
+    if t.fThreadState <> sRun then
       // WebSockets closed by server side: notify client-side error
       result := HTTP_CLIENTERROR
     else
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
       Ctxt := THttpServerRequest.Create(nil, fProcess.Protocol.ConnectionID,
-        fProcess.fOwnerThread, 0, fProcess.Protocol.ConnectionFlags,
-        fProcess.Protocol.ConnectionOpaque);
+        t, 0, fProcess.Protocol.ConnectionFlags, fProcess.Protocol.ConnectionOpaque);
       try
         body := Data;
         if InStream <> nil then
@@ -990,6 +991,8 @@ end;
 
 procedure TWebSocketSocketIOClientProtocol.AfterUpgrade(aProcess: TWebSocketProcess);
 begin
+  if fClient <> nil then // may exist from a previous connection
+    exit;
   // need a Socket.IO handler ASAP to handle any incoming frame
   fClient := fClientClass.Create(aProcess as TWebCrtSocketProcess);
 end;
