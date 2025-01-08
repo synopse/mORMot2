@@ -261,7 +261,7 @@ type
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
     /// initialize this instance with its default values
     // - you should NOT call this constructor, but the Open() factory methods
-    constructor Create(aClient: THttpClientWebSockets); reintroduce;
+    constructor Create(aProcess: TWebCrtSocketProcess); reintroduce;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
     /// return the array of connected remote namespaces as text
@@ -312,13 +312,20 @@ type
       read fLocals;
   end;
 
+  TSocketsIOClientClass = class of TSocketsIOClient;
+
   TWebSocketSocketIOClientProtocol = class(TWebSocketSocketIOProtocol)
   protected
-    fClient: TSocketsIOClient; // weak reference
+    fClient: TSocketsIOClient; // weak reference, created by AfterUpgrade
+    fClientClass: TSocketsIOClientClass;
+    procedure AfterUpgrade(aProcess: TWebSocketProcess); override;
     procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
       PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); override;
     // this is the main entry point for incoming Socket.IO messages
     procedure SocketPacketReceived(const Message: TSocketIOMessage); override;
+  public
+    /// finalize this instance
+    destructor Destroy; override;
   end;
 
 
@@ -713,13 +720,15 @@ var
 begin
   result := nil;
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
+  proto.fClientClass := self; // for TWebSocketProtocol.AfterUpgrade
   c := THttpClientWebSockets.WebSocketsConnect(
-    aHost, aPort, proto, aLog, aLogContext,
-    EngineIOHandshakeUri(aRoot), aCustomHeaders, aTls, aTLSContext);
-  if c = nil then // WebSocketsConnect() did already make proto.Free
-    exit;
-  proto.fClient := Create(c);
+    aHost, aPort, proto, aLog, aLogContext, EngineIOHandshakeUri(aRoot),
+    aCustomHeaders, aTls, aTLSContext);
+  if c = nil then
+    exit; // WebSocketsConnect() made proto.Free on Open() failure
   result := proto.fClient;
+  TSocketsIOClient(result).fOwnedClient := c; 
+  proto.fClientClass := nil; // indicate is owned
 end;
 
 class function TSocketsIOClient.Open(const aUri: RawUtf8;
@@ -735,11 +744,10 @@ begin
     result := nil;
 end;
 
-constructor TSocketsIOClient.Create(aClient: THttpClientWebSockets);
+constructor TSocketsIOClient.Create(aProcess: TWebCrtSocketProcess);
 begin
   inherited Create;
-  fOwnedClient := aClient;
-  fWebSockets := aClient.WebSockets;
+  fWebSockets := aProcess;
   fOptions := [sciEmitAutoConnect]; // least astonishment principle
 end;
 
@@ -980,15 +988,25 @@ end;
 
 { TWebSocketEngineIOClientProtocol }
 
+procedure TWebSocketSocketIOClientProtocol.AfterUpgrade(aProcess: TWebSocketProcess);
+begin
+  // need a Socket.IO handler ASAP to handle any incoming frame
+  fClient := fClientClass.Create(aProcess as TWebCrtSocketProcess);
+end;
+
+destructor TWebSocketSocketIOClientProtocol.Destroy;
+begin
+  inherited Destroy;
+  if fClientClass <> nil then
+    fClient.Free; // may happen during handshake issue
+end;
+
 procedure TWebSocketSocketIOClientProtocol.EnginePacketReceived(
   Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
   PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean);
 var
   msg: TSocketIOMessage;
 begin
-  if (fClient = nil) and
-     (PacketType = eioOpen) then
-    SleepHiRes(10); // may be during client initialization phase
   if fClient = nil then
     ESocketIO.RaiseUtf8('Unexpected %.EnginePacketReceived', [self]);
   case PacketType of
@@ -1021,7 +1039,6 @@ begin
       [self, ToText(Message.PacketType)^]);
   end;
 end;
-
 
 end.
 
