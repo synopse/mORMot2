@@ -297,6 +297,7 @@ type
     fUri: RawUtf8;
     fLastError: string;
     fEncryption: IProtocol;
+    procedure AfterUpgrade(aProcess: TWebSocketProcess); virtual;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var Request: TWebSocketFrame; const Info: RawUtf8); virtual; abstract;
@@ -1526,6 +1527,11 @@ end;
 function TWebSocketProtocol.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := nil; // no clone needed for a client-side protocol
+end;
+
+procedure TWebSocketProtocol.AfterUpgrade(aProcess: TWebSocketProcess);
+begin
+  // see e.g. TWebSocketSocketIOClientProtocol.AfterUpgrade override
 end;
 
 procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8;
@@ -2862,6 +2868,7 @@ begin
   inherited Create; // may have been overriden
   fProcessName := aProcessName;
   fProtocol := aProtocol;
+  fProtocol.AfterUpgrade(self); // e.g. for TWebSocketSocketIOClientProtocol
   fConnectionID := aProtocol.ConnectionID;
   fOwnerThread := aOwnerThread;
   fSettings := aSettings;
