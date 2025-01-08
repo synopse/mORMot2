@@ -4073,7 +4073,7 @@ begin
     h := FileOpen(gz, fmOpenRead or fmShareRead);
     if ValidHandle(h) then
     begin
-      ContentStream := TFileStreamEx.CreateFromHandle(gz, h);
+      ContentStream := TFileStreamEx.CreateFromHandle(h, gz);
       include(ResponseFlags, rfContentStreamNeedFree);
       ContentLength := FileSize(h);
       fContentEncoding := 'gzip';
@@ -4113,7 +4113,7 @@ begin
     exit;
   end;
   // stream existing big file by chunks (also used for HEAD or Range)
-  ContentStream := TFileStreamEx.CreateFromHandle(FileName, h);
+  ContentStream := TFileStreamEx.CreateFromHandle(h, FileName);
   include(ResponseFlags, rfContentStreamNeedFree);
 end;
 

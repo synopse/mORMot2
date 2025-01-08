@@ -1767,7 +1767,7 @@ type
     // (return the first value of the multi-list) - use ReadData to retrieve
     // all REG_MULTI_SZ values as one blob
     // - we don't use string here since it would induce a dependency to
-    // mormot.core.unicode
+    // mormot.core.unicode and UTF-8 is needed on Delphi 7/2007
     function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUtf8;
     /// read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
@@ -3369,7 +3369,7 @@ type
     // - Mode is typically fmCreate / fmOpenReadShared
     constructor Create(const aFileName: TFileName; Mode: cardinal);
     /// can use this class from a low-level file OS handle
-    constructor CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
+    constructor CreateFromHandle(aHandle: THandle; const aFileName: TFileName);
     /// open for writing or create a non-existing file from its name
     // - use fmCreate if aFileName does not exists, or fmOpenWrite otherwise
     constructor CreateWrite(const aFileName: TFileName);
@@ -6705,10 +6705,10 @@ begin
     h := FileCreate(aFileName, Mode and (not fmCreate))
   else
     h := FileOpen(aFileName, Mode);
-  CreateFromHandle(aFileName, h);
+  CreateFromHandle(h, aFileName);
 end;
 
-constructor TFileStreamEx.CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
+constructor TFileStreamEx.CreateFromHandle(aHandle: THandle; const aFileName: TFileName);
 begin
   if not ValidHandle(aHandle) then
     raise EOSException.CreateFmt('%s.Create(%s) failed as %s',
@@ -6724,7 +6724,7 @@ begin
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
   if not ValidHandle(h) then // we may need to create the file
     h := FileCreate(aFileName, fmShareRead);
-  CreateFromHandle(aFileName, h);
+  CreateFromHandle(h, aFileName);
 end;
 
 
@@ -6772,7 +6772,7 @@ begin
           break;
       end;
     end;
-  CreateFromHandle(aFileName, h);
+  CreateFromHandle(h, aFileName);
 end;
 
 function TFileStreamNoWriteError.Write(const Buffer; Count: Longint): Longint;

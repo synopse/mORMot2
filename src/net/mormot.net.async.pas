@@ -4282,7 +4282,7 @@ begin
         exit;
       end;
       aConnection.fHttp.ContentStream :=
-        TFileStreamEx.CreateFromHandle(aDestFileName, h);
+        TFileStreamEx.CreateFromHandle(h, aDestFileName);
       include(aConnection.fHttp.ResponseFlags, rfContentStreamNeedFree);
     end;
     aConnection.fHttp.CommandMethod := aMethod;

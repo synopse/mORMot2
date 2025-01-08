@@ -3077,7 +3077,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
         h := FileOpen(fn, fmOpenReadShared);
         if ValidHandle(h) then
         begin
-          Context.ContentStream := TFileStreamEx.CreateFromHandle(fn, h);
+          Context.ContentStream := TFileStreamEx.CreateFromHandle(h, fn);
           Context.ResponseFlags := Context.ResponseFlags +
             [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
           FileInfoByHandle(h, nil, nil, @Context.ContentLastModified, nil);

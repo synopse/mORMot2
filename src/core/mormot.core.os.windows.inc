@@ -3040,7 +3040,7 @@ function TWinRegistry.ReadMax(const entry: SynUnicode;
 var
   tmp: RawByteString;
 begin
-  tmp := ReadData(entry); // we need to read the whole entry
+  tmp := ReadData(entry); // we need to read the whole entry or the API fails
   result := length(tmp);
   if result = 0 then
     exit;
@@ -5373,7 +5373,7 @@ begin
       5:
         case dwMinorVersion of
           0:
-            Vers := w2000;
+            Vers := w2000; // should not happen, but maybe with API translation
           1:
             Vers := wXP;
           2:
