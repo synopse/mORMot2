@@ -521,8 +521,8 @@ begin
     error := result.WebSocketsUpgrade(
       aUri, '', false, [], aProtocol, aCustomHeaders);
     if error <> '' then
-      FreeAndNil(result);
-    if Assigned(aLog) then
+      FreeAndNil(result)
+    else if Assigned(aLog) then
       result.OnLog := aLog.DoLog;
   except
     on E: Exception do
