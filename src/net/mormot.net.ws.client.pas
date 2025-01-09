@@ -216,7 +216,7 @@ type
 
   /// a HTTP/HTTPS client, upgraded to Socket.IO over WebSockets
   // - no polling mode is supported by this class
-  // - use Open() class factories to connect to a Socket.IO server
+  // - use Open() class factories to connect to a Socket.IO server and not Create
   // - warning: this class is not thread-safe, and should be used from a single
   // thread, e.g. the main thread of the application, or protected via a Lock
   TSocketsIOClient = class(TEngineIOAbstract)
@@ -252,6 +252,7 @@ type
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
     // - with error interception and optional logging, returning nil on error,
     // or a new TSocketsIOClient instance on success
+    // - never call the Create constructor, but one of the Open() factory methods
     class function Open(const aHost, aPort: RawUtf8;
       aOptions: TSocketsIOClientOptions = [sciEmitAutoConnect];
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
@@ -263,14 +264,12 @@ type
     // or a new TSocketsIOClient instance on success
     // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
     // - if no root UI is supplied, default /socket.io/ will be used
+    // - never call the Create constructor, but one of the Open() factory methods
     class function Open(const aUri: RawUtf8;
       aOptions: TSocketsIOClientOptions = [sciEmitAutoConnect];
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
-    /// initialize this instance with its default values
-    // - you should NOT call this constructor, but the Open() factory methods
-    constructor Create(aProcess: TWebCrtSocketProcess); reintroduce;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
     /// return the array of connected remote namespaces as text
@@ -783,13 +782,6 @@ begin
       uri.Address, aCustomHeaders, aTls, aTLSContext)
   else
     result := nil;
-end;
-
-constructor TSocketsIOClient.Create(aProcess: TWebCrtSocketProcess);
-begin
-  inherited Create;
-  fWebSockets := aProcess;
-  fOptions := [sciEmitAutoConnect]; // least astonishment principle
 end;
 
 destructor TSocketsIOClient.Destroy;
