@@ -58,6 +58,7 @@ type
   TWebSocketProcessClient = class(TWebCrtSocketProcess)
   protected
     fConnectionID: THttpServerConnectionID;
+    fOnReconnect: TNotifyEvent;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
   public
@@ -413,26 +414,56 @@ begin
 end;
 
 procedure TWebSocketProcessClientThread.Execute;
+var
+  log: TSynLog;
+  retry: string;
+  waitms: integer;
 begin
   try
     fThreadState := sRun;
     if fProcess <> nil then // may happen when debugging under FPC (alf)
       SetCurrentThreadName(
         '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
-    WebSocketLog.Add.Log(
-      sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
-    if not Terminated and
-       (fProcess <> nil) then
-      fProcess.ProcessLoop;
-    WebSocketLog.Add.Log(
-      sllDebug, 'Execute: after ProcessLoop %', [fProcess], self);
-    if (fProcess <> nil) and
-       (fProcess.Socket <> nil) and
-       fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
-      with THttpClientWebSockets(fProcess.Socket) do
-        if Assigned(OnWebSocketsClosed) then
-          OnWebSocketsClosed(self);
-  except // ignore any exception in the thread
+    repeat
+      log := WebSocketLog.Add;
+      log.Log(sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
+      if not Terminated and
+         (fProcess <> nil) then
+        fProcess.ProcessLoop;
+      log.Log(sllDebug, 'Execute: after ProcessLoop % (%)',
+        [fProcess, ToText(fProcess.fState)^], self);
+      if (fProcess <> nil) and
+         (fProcess.Socket <> nil) and
+         fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
+        with THttpClientWebSockets(fProcess.Socket) do
+          if Assigned(OnWebSocketsClosed) then
+            OnWebSocketsClosed(self);
+      if Terminated or
+         (fProcess.Socket = nil) or
+         not Assigned(fProcess.fOnReconnect) then
+        break;
+      waitms := 0;
+      repeat
+        if waitms < 60000 then // retry at least every minute
+          inc(waitms, 50 + Random32(waitms));
+        SleepHiRes(waitms);
+        if Terminated then
+          break;
+        log.Log(sllDebug,
+          'Execute: try reconnect % after %ms', [fProcess, waitms], self);
+        retry := fProcess.Socket.ReOpen;
+        if (retry = '') and
+           not Terminated then
+        begin
+          fProcess.fOnReconnect(fProcess); // may redo any registration
+          break;
+        end;
+        fProcess.fOnReconnect(nil); // notify not reestablished this time
+        log.Log(sllDebug, 'Execute: reconnect failed [%]', [retry], self);
+      until Terminated;
+    until Terminated;
+  except
+    // ignore any exception in the thread, but end this unsafe client
   end;
   fThreadState := sFinished; // safely set final state
   if (fProcess <> nil) and
