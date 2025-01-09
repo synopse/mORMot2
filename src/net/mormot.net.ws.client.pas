@@ -251,7 +251,6 @@ type
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
     procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
     procedure OnAck(const Message: TSocketIOMessage); virtual;
-    function OnReconnect(Process: TWebSocketProcessClient): string;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -644,6 +643,9 @@ var
   digest1, digest2: TSha1Digest;
 begin
   try
+    result := 'Not Connected';
+    if not SockConnected then
+      exit;
     if fProcess <> nil then
     begin
       result := 'Already upgraded to WebSockets';
@@ -698,6 +700,13 @@ begin
          (Http.ContentLength > 0) or
          not PropNameEquals(Http.Upgrade, 'websocket') then
         exit;
+      result := 'Invalid HTTP Upgrade Accept Challenge';
+      ComputeChallenge(bin1, digest1);
+      bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
+      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), SizeOf(digest2)) or
+         not IsEqual(digest1, digest2) then
+        exit;
+      // optionally handle sub-protocols and extensions
       result := 'Invalid HTTP Upgrade Sub-Protocol';
       supportedprot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       if supportedprot <> '' then // this header may be omitted
@@ -707,12 +716,6 @@ begin
           exit // unsupported sub-protocol
       else if PosExChar(',', expectedprot) <> 0 then
         exit; // requires to select one given sub-protocol
-      result := 'Invalid HTTP Upgrade Accept Challenge';
-      ComputeChallenge(bin1, digest1);
-      bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
-      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), SizeOf(digest2)) or
-         not IsEqual(digest1, digest2) then
-        exit;
       if extout <> '' then
       begin
         // process protocol extension (e.g. TEcdheProtocol handshake)
@@ -732,6 +735,7 @@ begin
       end
       else
         aProtocol.RemoteIP := Server;
+      // initialize the TWebSocketProcess
       result := ''; // no error message = success
       fProcess := TWebSocketProcessClient.Create(self,
         GetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID'))),
