@@ -162,7 +162,8 @@ type
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
-      aProtocol: TWebSocketProtocol = nil; const aCustomHeaders: RawUtf8 = ''): RawUtf8;
+      aProtocol: TWebSocketProtocol = nil; const aCustomHeaders: RawUtf8 = '';
+      aReconnect: boolean = false): RawUtf8;
     /// allow to customize the WebSockets processing
     // - those parameters are accessed by reference to the existing connections
     // so you should better not modify them once the client is upgraded
@@ -197,20 +198,27 @@ function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
 { ******************** Socket.IO / Engine.IO Client Protocol over WebSockets }
 
 type
-  TSocketsIOClient = class;
-  TWebSocketSocketIOClientProtocol = class;
-
   /// allow to customize TSocketsIOClient process
   // - sciIgnoreUnknownEvent won't raise an ESocketIO when an unregistered event
   // is received
   // - sciIgnoreUnknownAck won't raise an ESocketIO on an expected sioAck message
   // - sciEmitAutoConnect will let Emit() call Connect() if needed
+  // - sciAutoReconnect will track any lost connection, and retry to reconnect
+  // to the server, eventually re-registering any pre-registered event
   TSocketsIOClientOption = (
     sciIgnoreUnknownEvent,
     sciIgnoreUnknownAck,
-    sciEmitAutoConnect);
+    sciEmitAutoConnect,
+    sciAutoReconnect);
   /// options to customize TSocketsIOClient process
   TSocketsIOClientOptions = set of TSocketsIOClientOption;
+
+const
+  SCI_DEFAULT = [sciEmitAutoConnect, sciAutoReconnect];
+
+type
+  TSocketsIOClient = class;
+  TWebSocketSocketIOClientProtocol = class;
 
   TSocketsIOWaitEventPacket = (
     wepNone,
@@ -251,6 +259,7 @@ type
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
     procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
     procedure OnAck(const Message: TSocketIOMessage); virtual;
+    function OnReconnect(Process: TWebSocketProcessClient): string;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -258,7 +267,7 @@ type
     // or a new TSocketsIOClient instance on success
     // - never call the Create constructor, but one of the Open() factory methods
     class function Open(const aHost, aPort: RawUtf8;
-      aOptions: TSocketsIOClientOptions = [sciEmitAutoConnect];
+      aOptions: TSocketsIOClientOptions = SCI_DEFAULT;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
@@ -269,10 +278,9 @@ type
     // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
     // - if no root UI is supplied, default /socket.io/ will be used
     // - never call the Create constructor, but one of the Open() factory methods
-    class function Open(const aUri: RawUtf8;
-      aOptions: TSocketsIOClientOptions = [sciEmitAutoConnect];
-      aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
-      const aCustomHeaders: RawUtf8 = '';
+    class function Open(const aUri: RawUtf8; aLog: TSynLogClass = nil;
+      aOptions: TSocketsIOClientOptions = SCI_DEFAULT;
+      const aLogContext: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
@@ -633,29 +641,32 @@ function THttpClientWebSockets.WebSocketsUpgrade(
   const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
   aWebSocketsAjax: boolean;
   aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions;
-  aProtocol: TWebSocketProtocol; const aCustomHeaders: RawUtf8): RawUtf8;
+  aProtocol: TWebSocketProtocol; const aCustomHeaders: RawUtf8;
+  aReconnect: boolean): RawUtf8;
 var
   key: TAESBlock;
   bin1, bin2: RawByteString;
   extin, extout, expectedprot, supportedprot: RawUtf8;
   extins: TRawUtf8DynArray;
   cmd: RawUtf8;
+  id: Int64;
   digest1, digest2: TSha1Digest;
 begin
   try
     result := 'Not Connected';
     if not SockConnected then
       exit;
-    if fProcess <> nil then
-    begin
-      result := 'Already upgraded to WebSockets';
-      if PropNameEquals(fProcess.Protocol.Uri, aWebSocketsURI) then
-        result := result + ' on this URI'
-      else
-        result := FormatUtf8('% with URI=[%] but requested [%]',
-          [result, fProcess.Protocol.Uri, aWebSocketsURI]);
-      exit;
-    end;
+    if not aReconnect then
+      if fProcess <> nil then
+      begin
+        result := 'Already upgraded to WebSockets';
+        if PropNameEquals(fProcess.Protocol.Uri, aWebSocketsURI) then
+          result := result + ' on this URI'
+        else
+          result := FormatUtf8('% with URI=[%] but requested [%]',
+            [result, fProcess.Protocol.Uri, aWebSocketsURI]);
+        exit;
+      end;
     try
       // setup the new protocol instance
       if aProtocol = nil then
@@ -737,9 +748,11 @@ begin
         aProtocol.RemoteIP := Server;
       // initialize the TWebSocketProcess
       result := ''; // no error message = success
-      fProcess := TWebSocketProcessClient.Create(self,
-        GetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID'))),
-        aProtocol, fProcessName);
+      SetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID')), id);
+      if fProcess = nil then
+        fProcess := TWebSocketProcessClient.Create(self, id, aProtocol, fProcessName)
+      else
+        fProcess.fConnectionID := id; // from reconnect
       aProtocol := nil; // protocol instance is owned by fProcess now
     except
       on E: Exception do
@@ -749,7 +762,8 @@ begin
       end;
     end;
   finally
-    aProtocol.Free;
+    if not aReconnect then
+      aProtocol.Free;
   end;
 end;
 
@@ -787,6 +801,8 @@ begin
   if c = nil then
     exit; // WebSocketsConnect() made proto.Free on Open() failure
   proto.fClient.fOwnedClient := c;
+  if sciAutoReconnect in aOptions then
+    c.fProcess.OnReconnect := OnReconnect;
   result := proto.fClient;
 end;
 
@@ -891,6 +907,54 @@ begin
     else
       Message.RaiseESockIO('ACK on disconnected namespace');
   ns.Acknowledge(Message);
+end;
+
+function TSocketsIOClient.OnReconnect(Process: TWebSocketProcessClient): string;
+var
+  i: PtrInt;
+  rem: TSocketIORemoteNamespaces;
+  loc: TSocketIOLocalNamespaces;
+  r: PSocketIORemoteNamespace;
+  l: PSocketIOLocalNamespace;
+begin
+  result := '';
+  if Process <> nil then // just reconnected
+  try
+    // upgrade the new connection to WebSockets
+    result := string(fOwnedClient.WebSocketsUpgrade(fHandshakeUri, '', false, [],
+      fOwnedClient.fProcess.Protocol, fHandshakeHeaders, {reconnect=}true));
+    if result <> '' then
+      exit;
+    // re-Connect() to all remote name spaces
+    rem := fRemotes;
+    fRemotes := nil;
+    r := pointer(rem);
+    for i := 1 to length(rem) do
+    begin
+      Connect(r^.NameSpace, r^.HandshakeData);
+      inc(r);
+    end;
+    // re-Register*() all local events
+    loc := fLocals;
+    fLocals := nil;
+    l := pointer(loc);
+    for i := 1 to length(loc) do
+    begin
+      Local(l^.NameSpace).RegisterFrom(l^);
+      inc(l);
+    end;
+  except
+    on E: Exception do
+    begin
+      if rem <> nil then
+        ExchgPointer(@fRemotes, @rem); // restore initial callbacks on error
+      if loc <> nil then
+        ExchgPointer(@fLocals, @loc);
+      result := E.Message;
+    end;
+  end;
+  ObjArrayClear(rem);
+  ObjArrayClear(loc);
 end;
 
 function TSocketsIOClient.Local(const Namespace: RawUtf8;
