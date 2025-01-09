@@ -6982,7 +6982,7 @@ begin
   if ((AccountName <> '') or
       (UserPrincipalName <> '')) and
      Search([atDistinguishedName, atPrimaryGroupID, atObjectSid], ObjectFilter(
-       ofUsers, AccountName, '', UserPrincipalName, CustomFilter)) and
+       ofUsers, AccountName, '', UserPrincipalName, CustomFilter), BaseDN) and
      (SearchResult.Count = 1) then
     with SearchResult.Items[0].Attributes do
     begin
@@ -7000,7 +7000,7 @@ function TLdapClient.GetIsMemberOf(
   const UserDN, GroupAN, GroupDN, CustomFilter: RawUtf8;
   Nested: boolean; const BaseDN: RawUtf8): boolean;
 begin
-  result := GetIsMemberOf(UserDN, CustomFilter, [GroupAN], [GroupDN], Nested);
+  result := GetIsMemberOf(UserDN, CustomFilter, [GroupAN], [GroupDN], Nested, BaseDN);
 end;
 
 function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
@@ -7038,7 +7038,7 @@ begin
     filter := FormatUtf8('(|%)', [filter]); // OR operator
   filter := FormatUtf8('(&%%%(member%=%))',
     [OBJECT_FILTER[ofGroups], filter, CustomFilter, NESTED_FLAG[Nested], user]);
-  if Search([atSAMAccountName], filter) and
+  if Search([atSAMAccountName], filter, BaseDN) and
      (SearchResult.Count > 0) then
   begin
     if GroupsAN <> nil then
