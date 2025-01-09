@@ -68,6 +68,13 @@ type
       aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
+    /// if defined, the background thread will try to reconnect after any
+    // server disconnection
+    // - called if the socket is not reestablished, with Sender = nil
+    // - called when is reestablished, with Sender as TWebSocketProcessClient,
+    // e.g. to perform any needed registration
+    property OnReconnect: TNotifyEvent
+      read fOnReconnect write fOnReconnect;
   published
     /// the server-side connection ID, as returned during 101 connection
     // upgrade in 'Sec-WebSocket-Connection-ID' response header
@@ -549,49 +556,50 @@ var
   block: TWebSocketProcessNotifyCallback;
   body, resthead: RawUtf8;
 begin
-  if fProcess <> nil then
+  if fProcess = nil then
   begin
-    t := fProcess.fOwnerThread as TWebSocketProcessClientThread;
-    if t.fThreadState = sCreate then
-      sleep(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
-    if t.fThreadState <> sRun then
-      // WebSockets closed by server side: notify client-side error
-      result := HTTP_CLIENTERROR
-    else
-    begin
-      // send the REST request over WebSockets - both ends use NotifyCallback()
-      Ctxt := THttpServerRequest.Create(nil, fProcess.Protocol.ConnectionID,
-        t, 0, fProcess.Protocol.ConnectionFlags, fProcess.Protocol.ConnectionOpaque);
-      try
-        body := Data;
-        if InStream <> nil then
-          body := body + StreamToRawByteString(InStream);
-        Ctxt.PrepareDirect(url, method, header, body, DataType, '');
-        FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
-        if resthead = 'NonBlocking' then
-          block := wscNonBlockWithoutAnswer
-        else
-          block := wscBlockWithAnswer;
-        result := fProcess.NotifyCallback(Ctxt, block);
-        if IdemPChar(pointer(Ctxt.OutContentType), JSON_CONTENT_TYPE_UPPER) then
-          HeaderSetText(Ctxt.OutCustomHeaders)
-        else
-          HeaderSetText(Ctxt.OutCustomHeaders, Ctxt.OutContentType);
-        Http.ContentLength := length(Ctxt.OutContent);
-        if OutStream <> nil then
-          OutStream.WriteBuffer(pointer(Ctxt.OutContent)^, Http.ContentLength)
-        else
-          Http.Content := Ctxt.OutContent;
-        Http.ContentType := Ctxt.OutContentType;
-      finally
-        Ctxt.Free;
-      end;
-    end;
-  end
-  else
     // standard HTTP/1.1 REST request (before WebSocketsUpgrade call)
     result := inherited Request(url, method, KeepAlive, header, Data, DataType,
       retry, InStream, OutStream);
+    exit;
+  end;
+  // WebSocketsUpgrade() did succeed: use the upgraded connection
+  t := fProcess.fOwnerThread as TWebSocketProcessClientThread;
+  if t.fThreadState = sCreate then
+    sleep(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
+  if (t.fThreadState <> sRun) or // WebSockets closed by server side
+     not fProcess.Protocol.InheritsFrom(TWebSocketProtocolRest) then
+  begin
+    result := HTTP_CLIENTERROR; // notify client-side error
+    exit;
+  end;
+  // send the REST request over WebSockets - both ends use NotifyCallback()
+  Ctxt := THttpServerRequest.Create(nil, fProcess.Protocol.ConnectionID,
+    t, 0, fProcess.Protocol.ConnectionFlags, fProcess.Protocol.ConnectionOpaque);
+  try
+    body := Data;
+    if InStream <> nil then
+      body := body + StreamToRawByteString(InStream);
+    Ctxt.PrepareDirect(url, method, header, body, DataType, '');
+    FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
+    if resthead = 'NonBlocking' then
+      block := wscNonBlockWithoutAnswer
+    else
+      block := wscBlockWithAnswer;
+    result := fProcess.NotifyCallback(Ctxt, block);
+    if IdemPChar(pointer(Ctxt.OutContentType), JSON_CONTENT_TYPE_UPPER) then
+      HeaderSetText(Ctxt.OutCustomHeaders)
+    else
+      HeaderSetText(Ctxt.OutCustomHeaders, Ctxt.OutContentType);
+    Http.ContentLength := length(Ctxt.OutContent);
+    if OutStream <> nil then
+      OutStream.WriteBuffer(pointer(Ctxt.OutContent)^, Http.ContentLength)
+    else
+      Http.Content := Ctxt.OutContent;
+    Http.ContentType := Ctxt.OutContentType;
+  finally
+    Ctxt.Free;
+  end;
 end;
 
 procedure THttpClientWebSockets.SetReceiveTimeout(aReceiveTimeout: integer);
