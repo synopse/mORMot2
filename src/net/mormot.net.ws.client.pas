@@ -253,6 +253,7 @@ type
     // - with error interception and optional logging, returning nil on error,
     // or a new TSocketsIOClient instance on success
     class function Open(const aHost, aPort: RawUtf8;
+      aOptions: TSocketsIOClientOptions = [sciEmitAutoConnect];
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
@@ -263,6 +264,7 @@ type
     // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
     // - if no root UI is supplied, default /socket.io/ will be used
     class function Open(const aUri: RawUtf8;
+      aOptions: TSocketsIOClientOptions = [sciEmitAutoConnect];
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
@@ -323,8 +325,7 @@ type
 
   TWebSocketSocketIOClientProtocol = class(TWebSocketSocketIOProtocol)
   protected
-    fClient: TSocketsIOClient; // weak reference, created by AfterUpgrade
-    fClientClass: TSocketsIOClientClass;
+    fClient: TSocketsIOClient; // weak reference (owned by TSocketsIOClient)
     procedure AfterUpgrade(aProcess: TWebSocketProcess); override;
     procedure EnginePacketReceived(Sender: TWebSocketProcess; PacketType: TEngineIOPacket;
       PayLoad: PUtf8Char; PayLoadLen: PtrInt; PayLoadBinary: boolean); override;
@@ -752,34 +753,34 @@ end;
 { TSocketsIOClient }
 
 class function TSocketsIOClient.Open(const aHost, aPort: RawUtf8;
-  aLog: TSynLogClass; const aLogContext, aRoot, aCustomHeaders: RawUtf8;
-  aTls: boolean; aTLSContext: PNetTlsContext): pointer;
+  aOptions: TSocketsIOClientOptions; aLog: TSynLogClass; const aLogContext,
+  aRoot, aCustomHeaders: RawUtf8; aTls: boolean; aTLSContext: PNetTlsContext): pointer;
 var
   c: THttpClientWebSockets;
   proto: TWebSocketSocketIOClientProtocol;
 begin
   result := nil;
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
-  proto.fClientClass := self; // for TWebSocketProtocol.AfterUpgrade
+  proto.fClient := Create;
+  proto.fClient.fOptions := aOptions;
   c := THttpClientWebSockets.WebSocketsConnect(
     aHost, aPort, proto, aLog, aLogContext, EngineIOHandshakeUri(aRoot),
     aCustomHeaders, aTls, aTLSContext);
   if c = nil then
     exit; // WebSocketsConnect() made proto.Free on Open() failure
+  proto.fClient.fOwnedClient := c;
   result := proto.fClient;
-  TSocketsIOClient(result).fOwnedClient := c; 
-  proto.fClientClass := nil; // indicate is owned
 end;
 
 class function TSocketsIOClient.Open(const aUri: RawUtf8;
-  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8;
-  aTls: boolean; aTLSContext: PNetTlsContext): pointer;
+  aOptions: TSocketsIOClientOptions; aLog: TSynLogClass; const aLogContext,
+  aCustomHeaders: RawUtf8; aTls: boolean; aTLSContext: PNetTlsContext): pointer;
 var
   uri: TUri;
 begin
   if uri.From(aUri) then // detect both https:// and wss:// schemes
-    result := Open(uri.Server, uri.Port, aLog, aLogContext, uri.Address,
-      aCustomHeaders, aTls, aTLSContext)
+    result := Open(uri.Server, uri.Port, aOptions, aLog, aLogContext,
+      uri.Address, aCustomHeaders, aTls, aTLSContext)
   else
     result := nil;
 end;
@@ -1030,16 +1031,14 @@ end;
 
 procedure TWebSocketSocketIOClientProtocol.AfterUpgrade(aProcess: TWebSocketProcess);
 begin
-  if fClient <> nil then // may exist from a previous connection
-    exit;
   // need a Socket.IO handler ASAP to handle any incoming frame
-  fClient := fClientClass.Create(aProcess as TWebCrtSocketProcess);
+  fClient.fWebSockets := aProcess as TWebCrtSocketProcess;
 end;
 
 destructor TWebSocketSocketIOClientProtocol.Destroy;
 begin
   inherited Destroy;
-  if fClientClass <> nil then
+  if fClient.fWebSockets = nil then // not yet owned
     fClient.Free; // may happen during handshake issue
 end;
 
