@@ -9987,16 +9987,21 @@ const
 procedure InitializeUnit;
 begin
   // register proper JSON serialization of security related types
-  Rtti.RegisterTypes([TypeInfo(TSignAlgo), TypeInfo(TSecAceType),
-    TypeInfo(TSecAceFlags), TypeInfo(TSecAccessMask), TypeInfo(TSecControls),
+  Rtti.RegisterTypes([
+    TypeInfo(TSignAlgo),
+    TypeInfo(TSecAceType),
+    TypeInfo(TSecAceFlags),
+    TypeInfo(TSecAccessMask),
+    TypeInfo(TSecControls),
     TypeInfo(TSecurityDescriptorInfos)]);
-  Rtti.RegisterFromText(TypeInfo(TSynSignerParams), _TSynSignerParams);
   TRttiJson.RegisterCustomSerializerFunctions([
     TypeInfo(RawSid),                @_JL_RawSid, @_JS_RawSid,
     TypeInfo(RawSecurityDescriptor), @_JL_SD,     @_JS_SD,
     TypeInfo(TSecAccessMask),        @_JL_Mask,   @_JS_Mask]);
-  Rtti.RegisterFromText(TypeInfo(TSecAcl), _TSecAce);
-  Rtti.RegisterFromText(TypeInfo(TSecurityDescriptor), _TSecurityDescriptor);
+  Rtti.RegisterFromText([
+    TypeInfo(TSynSignerParams),    _TSynSignerParams,
+    TypeInfo(TSecAcl),             _TSecAce,
+    TypeInfo(TSecurityDescriptor), _TSecurityDescriptor]);
   // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
   {$ifdef OSWINDOWS}
   X509Parse := @WinX509Parse; // use mormot.lib.sspi.pas WinCertDecode()
