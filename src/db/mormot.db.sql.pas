@@ -4798,7 +4798,7 @@ const
     'DECFLOAT',
     'CURR',
     'DECIMAL',  // warning: see COL_DECIMAL above in synch with this item
-    'NUMERIC',
+    'NUMERIC',  // warning: see COL_NUMERIC above in synch with this item
     'BLOB SUB_TYPE 1',
     'BLOB',
     'DATE',
