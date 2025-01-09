@@ -50,15 +50,21 @@ uses
 type
   {$M+}
   THttpClientWebSockets = class;
-
+  TWebSocketProcessClient = class;
   TWebSocketProcessClientThread = class;
   {$M-}
+
+  /// TWebSocketProcessClient.OnReconnect callback definition
+  // - is called with aProcess=nil if the socket was not reestablished
+  // - otherwise, aProcess could be used to perform any needed registration
+  // - should return '' to continue, or an error message to wait and retry
+  TOnWebSocketReconnect = function(aProcess: TWebSocketProcessClient): string of object;
 
   /// implements WebSockets process as used on client side
   TWebSocketProcessClient = class(TWebCrtSocketProcess)
   protected
     fConnectionID: THttpServerConnectionID;
-    fOnReconnect: TNotifyEvent;
+    fOnReconnect: TOnWebSocketReconnect;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
   public
@@ -69,11 +75,8 @@ type
     /// finalize the process
     destructor Destroy; override;
     /// if defined, the background thread will try to reconnect after any
-    // server disconnection
-    // - called if the socket is not reestablished, with Sender = nil
-    // - called when is reestablished, with Sender as TWebSocketProcessClient,
-    // e.g. to perform any needed registration
-    property OnReconnect: TNotifyEvent
+    // server disconnection and call this callback
+    property OnReconnect: TOnWebSocketReconnect
       read fOnReconnect write fOnReconnect;
   published
     /// the server-side connection ID, as returned during 101 connection
@@ -248,6 +251,7 @@ type
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
     procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
     procedure OnAck(const Message: TSocketIOMessage); virtual;
+    function OnReconnect(Process: TWebSocketProcessClient): string;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -434,6 +438,7 @@ begin
       SetCurrentThreadName(
         '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
     repeat
+      // main processing loop
       log := WebSocketLog.Add;
       log.Log(sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
       if not Terminated and
@@ -451,24 +456,30 @@ begin
          (fProcess.Socket = nil) or
          not Assigned(fProcess.fOnReconnect) then
         break;
+      // try to auto-reconnect to the server
       waitms := 0;
       repeat
-        if waitms < 60000 then // retry at least every minute
-          inc(waitms, 50 + Random32(waitms));
-        SleepHiRes(waitms);
-        if Terminated then
+        if waitms < 30000 then // at least half a minute, with random increases
+          inc(waitms, 200 + Random32(waitms shr 1));
+        if SleepOrTerminated(waitms) then
           break;
         log.Log(sllDebug,
           'Execute: try reconnect % after %ms', [fProcess, waitms], self);
         retry := fProcess.Socket.ReOpen;
-        if (retry = '') and
-           not Terminated then
-        begin
-          fProcess.fOnReconnect(fProcess); // may redo any registration
+        if Terminated then
           break;
-        end;
-        fProcess.fOnReconnect(nil); // notify not reestablished this time
-        log.Log(sllDebug, 'Execute: reconnect failed [%]', [retry], self);
+        if retry = '' then
+        begin
+          log.Log(sllTrace, 'Execute: call OnReconnect', self);
+          retry := fProcess.fOnReconnect(fProcess);
+          if retry = '' then
+            break // successfully reconnected (and re-registered)
+          else
+            fProcess.Socket.Close;
+        end
+        else
+          fProcess.fOnReconnect(nil); // notify socket re-open failure
+        log.Log(sllTrace, 'Execute: reconnect failed [%]', [retry], self);
       until Terminated;
     until Terminated;
   except
