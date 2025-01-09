@@ -1240,7 +1240,7 @@ type
   // - dispatch received sioAck to effective handler
   TSocketIORemoteNamespace = class(TSocketIONamespace)
   protected
-    fSid: RawUtf8;
+    fSid, fHandshakeData: RawUtf8;
     fAckIdCursor: TSocketIOAckID;
     fCallbacks: array of TSocketIOCallback;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
@@ -1248,10 +1248,10 @@ type
   public
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
-      const aNameSpace, aSid: RawUtf8); reintroduce; virtual;
+      const aNameSpace, aSid, aHandshakeData: RawUtf8); reintroduce; virtual;
     /// initialize a new instance from an incoming connection message
     constructor CreateFromConnectMessage(const aMessage: TSocketIOMessage;
-      aOwner: TEngineIOAbstract);
+      const aHandshakeData: RawUtf8; aOwner: TEngineIOAbstract);
     /// emit an event to Self.NameSpace, with an optional callback
     // - returns the packet ID if aCallback is assigned, SIO_NO_ACK otherwise
     // - aDataArray is an optional JSON array of values, without any [ ] chars
@@ -1260,6 +1260,9 @@ type
     /// handle an acknowledge message and call the associated callback
     // - will raise an ESocketIO if the packet is invalid or ID was not found
     procedure Acknowledge(const aMessage: TSocketIOMessage);
+    /// low-level associated JSON array data supplied to Connect()
+    property HandshakeData: RawUtf8
+      read fHandshakeData write fHandshakeData;
   published
     /// the associated Socket.IO Session ID, as computed on the server side
     property Sid: RawUtf8
@@ -1270,7 +1273,7 @@ type
 
   /// a local Socket.IO namespace definition
   TEventHandler = record
-    /// the event name
+    /// the event name (should be the first field for TDynArrayHashed)
     Name: RawUtf8;
     /// the event callback which will be executed for this event name
     OnEvent: TOnSocketIOEvent;
@@ -3894,7 +3897,7 @@ end;
 { TSocketIORemoteNamespace }
 
 constructor TSocketIORemoteNamespace.Create(aOwner: TEngineIOAbstract;
-  const aNameSpace, aSid: RawUtf8);
+  const aNameSpace, aSid, aHandshakeData: RawUtf8);
 begin
   inherited Create;
   fOwner := aOwner;
@@ -3903,10 +3906,11 @@ begin
   else
     fNameSpace := aNameSpace;
   fSid := aSid;
+  fHandshakeData := aHandshakeData;
 end;
 
 constructor TSocketIORemoteNamespace.CreateFromConnectMessage(
-  const aMessage: TSocketIOMessage; aOwner: TEngineIOAbstract);
+  const aMessage: TSocketIOMessage; const aHandshakeData: RawUtf8; aOwner: TEngineIOAbstract);
 var
   data: TDocVariantData;
   sid, namespace: RawUtf8;
@@ -3915,7 +3919,7 @@ begin
      not data.GetAsRawUtf8('sid', sid) then
     EEngineIO.RaiseUtf8('%.Create: missing "sid" in message', [aOwner]);
   aMessage.NameSpaceGet(namespace);
-  Create(aOwner, namespace, sid);
+  Create(aOwner, namespace, sid, aHandshakeData);
 end;
 
 function SocketIOCallbackSearch(cb: PSocketIOCallback; n: integer;

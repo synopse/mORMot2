@@ -230,6 +230,7 @@ type
     fWaitEventAckID: TSocketIOAckID;
     fWaitEventData: PDocVariantData;
     fRemoteNames, fLocalNames: TRawUtf8DynArray;
+    fWaitEventParam, fHandshakeUri, fHandshakeHeaders: RawUtf8;
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
     procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
@@ -291,6 +292,7 @@ type
       Instance: TObject = nil);
     /// access to a given Socket.IO namespace
     // - sends a connect message if needed (for first-time registration)
+    // - with an optional Data JSON array
     function Connect(const NameSpace: RawUtf8; const Data: RawUtf8 = '';
       WaitTimeoutMS: cardinal = 2000): TSocketIORemoteNamespace;
     /// disconnect from a given Socket.IO namespace
@@ -762,8 +764,10 @@ begin
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
   proto.fClient := Create;
   proto.fClient.fOptions := aOptions;
+  proto.fClient.fHandshakeUri := EngineIOHandshakeUri(aRoot);
+  proto.fClient.fHandshakeHeaders := aCustomHeaders;
   c := THttpClientWebSockets.WebSocketsConnect(
-    aHost, aPort, proto, aLog, aLogContext, EngineIOHandshakeUri(aRoot),
+    aHost, aPort, proto, aLog, aLogContext, proto.fClient.fHandshakeUri,
     aCustomHeaders, aTls, aTLSContext);
   if c = nil then
     exit; // WebSocketsConnect() made proto.Free on Open() failure
@@ -772,7 +776,7 @@ begin
 end;
 
 class function TSocketsIOClient.Open(const aUri: RawUtf8;
-  aOptions: TSocketsIOClientOptions; aLog: TSynLogClass; const aLogContext,
+  aLog: TSynLogClass; aOptions: TSocketsIOClientOptions; const aLogContext,
   aCustomHeaders: RawUtf8; aTls: boolean; aTLSContext: PNetTlsContext): pointer;
 var
   uri: TUri;
@@ -841,8 +845,8 @@ procedure TSocketsIOClient.AfterNamespaceConnect(const Response: TSocketIOMessag
 begin
   fRemoteNames := nil; // to be reallocated on need
   if Response.PacketType = sioConnect then
-    ObjArrayAdd(fRemotes,
-      TSocketIORemoteNamespace.CreateFromConnectMessage(Response, self));
+    ObjArrayAdd(fRemotes, TSocketIORemoteNamespace.CreateFromConnectMessage(
+                            Response, fWaitEventParam, self));
   WaitEventDone(wepConnect); // notify any waiting acknowledgement
   if Response.PacketType = sioConnectError then
     Response.RaiseESockIO('Connect() failed with');
@@ -946,6 +950,7 @@ begin
     ESocketIO.RaiseUtf8('Unexpected %.Connect with no WS connection', [self]);
   if WaitTimeoutMS <> 0 then
     WaitEventPrepare(wepConnect);
+  fWaitEventParam := Data;
   SocketIOSendPacket(fWebSockets, sioConnect, NameSpace, pointer(Data), length(Data));
   if WaitTimeoutMS = 0 then
     exit;
