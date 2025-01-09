@@ -1306,6 +1306,9 @@ type
     // - the methods should follow the TOnSocketIOMethod exact signature, e.g.
     // ! function eventname(const Data: TDocVariantData): RawJson;
     procedure RegisterPublishedMethods(aInstance: TObject);
+    /// register all handlers of another local namespace
+    // - as used by TSocketsIOClient.OnReconnect()
+    procedure RegisterFrom(aAnother: TSocketIOLocalNamespace);
     /// dispatch an event message to the appropriate handler
     procedure HandleEvent(const aMessage: TSocketIOMessage); virtual;
   end;
@@ -3847,6 +3850,21 @@ begin
     PEventHandler(fHandlers.AddUniqueName(met[m].Name,
        'Duplicated event name % on %', [met[m].Name, aInstance]))^.
       OnMethod := TOnSocketIOMethod(met[m].Method);
+end;
+
+procedure TSocketIOLocalNamespace.RegisterFrom(aAnother: TSocketIOLocalNamespace);
+var
+  i: integer;
+  s: PEventHandler;
+begin
+  if aAnother = nil then
+    exit;
+  s := pointer(aAnother.fHandler);
+  for i := 1 to length(aAnother.fHandler) do
+  begin
+    PEventHandler(fHandlers.AddUniqueName(s^.Name))^ := s^;
+    inc(s);
+  end;
 end;
 
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
