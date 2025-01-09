@@ -1698,6 +1698,10 @@ type
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
       aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false);
+    /// a wrapper around Close + OpenBind() with the current settings
+    // - could be used to reestablish a broken or closed connection
+    // - return '' on success, or an error message on failure
+    function ReOpen(aTimeout: cardinal = 10000): string;
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -5326,6 +5330,18 @@ begin
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       pointer(fSock.Socket), TLS.CipherName], self);
+end;
+
+function TCrtSocket.ReOpen(aTimeout: cardinal): string;
+begin
+  try
+    Close;
+    OpenBind(fServer, fPort, fWasBind, TLS.Enabled);
+    result := ''; // success
+  except
+    on E: Exception do
+      result := E.Message;
+  end;
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
