@@ -1701,7 +1701,8 @@ type
     /// a wrapper around Close + OpenBind() with the current settings
     // - could be used to reestablish a broken or closed connection
     // - return '' on success, or an error message on failure
-    function ReOpen(aTimeout: cardinal = 10000): string;
+    // - could be overriden to customize the process
+    function ReOpen(aTimeout: cardinal = 10000): string; virtual;
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -5337,7 +5338,10 @@ begin
   try
     Close;
     OpenBind(fServer, fPort, fWasBind, TLS.Enabled);
-    result := ''; // success
+    if SockConnected then
+      result := '' // success
+    else
+      result := 'Not connected';
   except
     on E: Exception do
       result := E.Message;
