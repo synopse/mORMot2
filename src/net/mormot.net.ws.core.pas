@@ -1290,6 +1290,16 @@ type
   PEventHandler = ^TEventHandler;
   TLocalNamespaceEventHandlers = array of TEventHandler;
 
+  /// options to tune globally TSocketIOLocalNamespace behavior
+  // - snoIgnoreUnknownEvent will let HandleEvent() raise no exception and
+  // ignore if the received event name is unknown
+  // - snoIgnoreIncorrectData will let HandleEvent raise no exception and
+  // ignore if the received message has unexpected/incorrect associated JSON
+  TSocketIOLocalNamespaceOption = (
+    snoIgnoreUnknownEvent,
+    snoIgnoreIncorrectData);
+  TSocketIOLocalNamespaceOptions = set of TSocketIOLocalNamespaceOption;
+
   /// abstract parent class for local namespace object
   // - map namespace event to their handlers
   // - dispatch received sioEvent to effective handler
@@ -1297,6 +1307,7 @@ type
   protected
     fHandler: TLocalNamespaceEventHandlers;
     fHandlers: TDynArrayHashed;
+    fOptions: TSocketIOLocalNamespaceOptions;
     // called by Create: can override this method to register some events
     procedure RegisterHandlers; virtual;
   public
@@ -1321,6 +1332,9 @@ type
     /// raw access to the internal events list
     property Handler: TLocalNamespaceEventHandlers
       read fHandler;
+    /// customize the process on this local namespace
+    property Options: TSocketIOLocalNamespaceOptions
+      read fOptions write fOptions;
   end;
   PSocketIOLocalNamespace = ^TSocketIOLocalNamespace;
   TSocketIOLocalNamespaces = array of TSocketIOLocalNamespace;
@@ -3908,7 +3922,7 @@ var
   data: TDocVariantData;
   d: PDocVariantData;
 begin
-  // validate input context
+  // validate input context (paranoid checks)
   if (fNameSpace <> '*') and
      not aMessage.NameSpaceIs(fNameSpace) then
     ESocketIO.RaiseUtf8('%.HandleEvent: unexpected namespace ([%]<>[%])',
@@ -3920,13 +3934,18 @@ begin
   if not aMessage.DataGet(data) or
      not data.IsArray or
      (data.Count = 0) then
-    ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
-  // retrieve event name and search for associated handler
+    if snoIgnoreIncorrectData in fOptions then
+      exit // ignore in silence
+    else
+      ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
   VariantToUtf8(data.Values[0], event);
   ndx := fHandlers.FindHashed(event);
-  if ndx < 0 then
-    ESocketIO.RaiseUtf8('%.HandleEvent: unknown event % for namespace %',
-      [event, fNameSpace]);
+    if aIgnoreUnknownEvent or
+       (snoIgnoreUnknownEvent in fOptions) then
+      exit // ignore in silence
+    else
+      ESocketIO.RaiseUtf8('%.HandleEvent: unknown event % for namespace %',
+        [event, fNameSpace]);
   // call the handler
   data.Delete(0); // trim the event name from the data array
   d := @data;
@@ -4043,7 +4062,7 @@ begin
       [self, aMessage.NameSpaceShort, fNameSpace]);
   if (aMessage.PacketType <> sioAck) or
      (aMessage.ID = SIO_NO_ACK) then
-    ESocketIO.RaiseUtf8('%.Acknowledge: message %#% is not an valid ' +
+    ESocketIO.RaiseUtf8('%.Acknowledge: message %#% is not a valid ' +
       'acknowledgment message for namespace %',
       [self, ToText(aMessage.PacketType)^, aMessage.ID, fNameSpace]);
   // search for the registered callback
