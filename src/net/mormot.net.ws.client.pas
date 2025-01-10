@@ -452,24 +452,22 @@ var
   retry: string;
   waitms, maxwaitms: integer;
 begin
-  maxwaitms := 10000 + Random(5000);
+  if fProcess <> nil then
   try
     fThreadState := sRun;
-    if fProcess <> nil then // may happen when debugging under FPC (alf)
-      SetCurrentThreadName(
-        '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
+    maxwaitms := 10000 + Random32(5000); // wait up to 10-15 seconds pace
+    SetCurrentThreadName(
+      '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
     repeat
       // main processing loop
       log := WebSocketLog.Add;
       log.Log(sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
-      if not Terminated and
-         (fProcess <> nil) then
+      if not Terminated then
         fProcess.ProcessLoop;
       log.Log(sllDebug, 'Execute: after ProcessLoop % (%)',
         [fProcess, ToText(fProcess.fState)^], self);
       // this connection is finished
-      if (fProcess <> nil) and
-         (fProcess.Socket <> nil) and
+      if (fProcess.Socket <> nil) and
          fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
         with THttpClientWebSockets(fProcess.Socket) do
           if Assigned(OnWebSocketsClosed) then
@@ -481,7 +479,7 @@ begin
       // try to auto-reconnect to the server
       waitms := 0;
       repeat
-        if waitms < maxwaitms then // up to 15 seconds, with random increases
+        if waitms < maxwaitms then // wait with random increases
           inc(waitms, Random32(200));
         if SleepOrTerminated(waitms) then
           break;

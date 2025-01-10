@@ -491,7 +491,7 @@ begin
               for i := 1 to 100 do
               begin
                 R.ClearProperties;
-                Check(Client.Retrieve(res[Random(n)], R));
+                Check(Client.Retrieve(res[Random32(n)], R));
                 Check(R.ID <> 0);
                 Check(res[R.YearOfBirth] = R.ID);
               end;

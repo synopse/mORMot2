@@ -1721,7 +1721,7 @@ begin
     begin
       L := length(b64);
       Check(not IsBase64(pointer(b64), L - 1));
-      b64[Random(L) + 1] := '&';
+      b64[Random32(L) + 1] := '&';
       Check(not IsBase64(pointer(b64), L));
     end;
     b64 := BinToBase64uri(tmp);

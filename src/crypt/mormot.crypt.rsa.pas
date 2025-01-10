@@ -1555,7 +1555,7 @@ begin
   RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
   repeat
-    // xor the original trusted sources with our CSPRNG
+    // xor the original trusted sources with our CSPRNG until we get enough
     TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
     if GetBitsCount(Value^, n * HALF_BITS) < n * (HALF_BITS div 3) then
     begin

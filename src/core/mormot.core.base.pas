@@ -11281,8 +11281,7 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  Init(RandomLen);
-  RandomBytes(buf, RandomLen);
+  RandomBytes(Init(RandomLen), RandomLen);
   result := buf;
 end;
 
