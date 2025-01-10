@@ -390,8 +390,6 @@ end;
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
   aConnectionID: THttpServerConnectionID; aProtocol: TWebSocketProtocol;
   const aProcessName: RawUtf8);
-var
-  endtix: Int64;
 begin
   // https://tools.ietf.org/html/rfc6455#section-10.3
   // client-to-server masking is mandatory (but not from server to client)
@@ -400,12 +398,8 @@ begin
   inherited Create(aSender, aProtocol, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   TWebSocketProcessClientThread.Create(self);
-  endtix := GetTickCount64 + 5000;
-  repeat // wait for TWebSocketProcess.ProcessLoop to initiate
-    SleepHiRes(0);
-  until fProcessEnded or
-        (fState <> wpsCreate) or
-        (GetTickCount64 > endtix);
+  // wait for TWebSocketProcess.ProcessLoop to initiate
+  WaitThreadStarted;
 end;
 
 destructor TWebSocketProcessClient.Destroy;
@@ -459,8 +453,9 @@ procedure TWebSocketProcessClientThread.Execute;
 var
   log: TSynLog;
   retry: string;
-  waitms: integer;
+  waitms, maxwaitms: integer;
 begin
+  maxwaitms := 10000 + Random(5000);
   try
     fThreadState := sRun;
     if fProcess <> nil then // may happen when debugging under FPC (alf)
@@ -489,7 +484,7 @@ begin
       // try to auto-reconnect to the server
       waitms := 0;
       repeat
-        if waitms < 30000 then // at least half a minute, with random increases
+        if waitms < maxwaitms then // up to 15 seconds, with random increases
           inc(waitms, Random32(200));
         if SleepOrTerminated(waitms) then
           break;
@@ -998,11 +993,7 @@ end;
 procedure TWebSocketReconnectClientThread.DoExecute;
 begin
   // let the main ProcessLoop be reached
-  repeat
-    Sleep(10);
-    if Terminated then
-      exit;
-  until fClient.fOwnedClient.fProcess.State <> wpsCreate;
+  fClient.fOwnedClient.fProcess.WaitThreadStarted;
   // re-Connect() and re-Register*() all previous notifications
   fClient.RegisterAgainAfterReconnect;
 end;
