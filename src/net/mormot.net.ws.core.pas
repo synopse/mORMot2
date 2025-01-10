@@ -1155,6 +1155,8 @@ var
      dvoNameCaseSensitive];
 
 type
+  TSocketIOLocalNamespace = class;
+
   /// exception class raised during Engine.IO process
   EEngineIO = class(ESynException);
   /// exception class raised during Socket.IO process
@@ -1311,6 +1313,10 @@ type
     // called by Create: can override this method to register some events
     procedure RegisterHandlers; virtual;
   public
+    /// global callback triggerred when any event message is received and
+    // decoded for this name space
+    OnEventReceived: procedure(Sender: TSocketIOLocalNamespace;
+      const EventName: RawUtf8; var Data: TDocVariantData) of object;
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
