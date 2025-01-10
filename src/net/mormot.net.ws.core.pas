@@ -785,6 +785,7 @@ type
     procedure Log(const frame: TWebSocketFrame; const aMethodName: ShortString;
       aEvent: TSynLogLevel = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: integer;
+    procedure WaitThreadStarted;
     function HiResDelay(var start: Int64): Int64;
   public
     /// initialize the WebSockets process on a given connection
@@ -1317,6 +1318,9 @@ type
     procedure RegisterFrom(aAnother: TSocketIOLocalNamespace);
     /// dispatch an event message to the appropriate handler
     procedure HandleEvent(const aMessage: TSocketIOMessage); virtual;
+    /// raw access to the internal events list
+    property Handler: TLocalNamespaceEventHandlers
+      read fHandler;
   end;
   PSocketIOLocalNamespace = ^TSocketIOLocalNamespace;
   TSocketIOLocalNamespaces = array of TSocketIOLocalNamespace;
@@ -3179,6 +3183,18 @@ begin
   except // don't be optimistic: abort and close connection
     fState := wpsClose;
   end;
+end;
+
+procedure TWebSocketProcess.WaitThreadStarted;
+var
+  endtix: Int64;
+begin
+  endtix := GetTickCount64 + 5000;
+  repeat
+    SleepHiRes(0);
+  until fProcessEnded or
+        (fState <> wpsCreate) or
+        (GetTickCount64 > endtix);
 end;
 
 function TWebSocketProcess.HiResDelay(var start: Int64): Int64;
