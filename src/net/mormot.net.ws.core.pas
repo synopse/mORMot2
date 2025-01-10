@@ -321,6 +321,9 @@ type
     /// compute a new instance of the WebSockets protocol, with same parameters
     // - by default, will return nil, as expected for Client-side only
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual;
+    /// reuse an existing protocol instance on a new connection
+    // - called e.g. by THttpClientWebSockets.WebSocketsUpgrade(aReconnect=true)
+    procedure Reset; virtual;
     /// the sub-protocols supported by this client (not used on server side)
     // - as transmitted in the 'Sec-WebSocket-Protocol:' header during upgrade
     // - returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
@@ -1531,6 +1534,10 @@ begin
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];
+end;
+
+procedure TWebSocketProtocol.Reset;
+begin
 end;
 
 function TWebSocketProtocol.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
@@ -2971,6 +2978,7 @@ begin
   fConnectionID := 0;
   fState := wpsCreate;
   fProcessEnded := false;
+  fProtocol.Reset;
 end;
 
 procedure TWebSocketProcess.ProcessStart;
