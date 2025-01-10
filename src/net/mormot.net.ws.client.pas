@@ -241,7 +241,7 @@ type
     fWaitEventAckID: TSocketIOAckID;
     fWaitEventData: PDocVariantData;
     fRemoteNames, fLocalNames: TRawUtf8DynArray;
-    fWaitEventParam, fHandshakeUri, fHandshakeHeaders: RawUtf8;
+    fWaitEventParam: RawUtf8;
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
     procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
@@ -259,8 +259,9 @@ type
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
     procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
     procedure OnAck(const Message: TSocketIOMessage); virtual;
-    function OnReconnect(Process: TWebSocketProcessClient): string;
-    procedure RegisterAgainAfterReconnect;
+    // you can override those methods e.g. to refresh any auth token
+    function OnReconnect(Process: TWebSocketProcessClient): string; virtual;
+    procedure RegisterAgainAfterReconnect; virtual;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -758,6 +759,8 @@ begin
         fProcess := TWebSocketProcessClient.Create(self, id, aProtocol, fProcessName)
       else
         fProcess.Reset(id); // from aReconnect
+      aProtocol.UpgradeUri := aWebSocketsURI;
+      aProtocol.UpgradeBearerToken := aCustomHeaders;
       aProtocol := nil; // protocol instance is owned by fProcess now
     except
       on E: Exception do
@@ -798,10 +801,8 @@ begin
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
   proto.fClient := Create;
   proto.fClient.fOptions := aOptions;
-  proto.fClient.fHandshakeUri := EngineIOHandshakeUri(aRoot);
-  proto.fClient.fHandshakeHeaders := aCustomHeaders;
   c := THttpClientWebSockets.WebSocketsConnect(
-    aHost, aPort, proto, aLog, aLogContext, proto.fClient.fHandshakeUri,
+    aHost, aPort, proto, aLog, aLogContext, EngineIOHandshakeUri(aRoot),
     aCustomHeaders, aTls, aTLSContext);
   if c = nil then
     exit; // WebSocketsConnect() made proto.Free on Open() failure
@@ -986,9 +987,10 @@ begin
   if (Process <> nil) and                   // was a reconnection failure
      (Process = fOwnedClient.fProcess) then // paranoid
   try
-    // upgrade the new connection to WebSockets
-    result := string(fOwnedClient.WebSocketsUpgrade(fHandshakeUri, '',
-      {ajax=}false, [], Process.Protocol, fHandshakeHeaders, {reconnect=}true));
+    // upgrade the new connection to WebSockets with the previous parameters
+    result := string(fOwnedClient.WebSocketsUpgrade(
+      Process.Protocol.UpgradeUri, '', {ajax=}false, [],
+      Process.Protocol, Process.Protocol.UpgradeBearerToken, {reconnect=}true));
     if result = '' then
       // all the registration should take place in another thread
       TWebSocketReconnectClientThread.Create(self);

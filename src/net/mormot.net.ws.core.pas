@@ -396,7 +396,7 @@ type
       read fUpgradeUri write fUpgradeUri;
     /// the "Bearer" HTTP header value on which this protocol has been upgraded
     property UpgradeBearerToken: RawUtf8
-      read fUpgradeBearerToken;
+      read fUpgradeBearerToken write fUpgradeBearerToken;
     /// the last error message, during frame processing
     property LastError: string
       read fLastError;
