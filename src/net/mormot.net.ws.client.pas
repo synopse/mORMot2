@@ -374,9 +374,9 @@ begin
   // https://tools.ietf.org/html/rfc6455#section-10.3
   // client-to-server masking is mandatory (but not from server to client)
   fMaskSentFrames := FRAME_LEN_MASK;
+  fConnectionID := aConnectionID;
   inherited Create(aSender, aProtocol, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
-  fConnectionID := aConnectionID;
   TWebSocketProcessClientThread.Create(self);
   endtix := GetTickCount64 + 5000;
   repeat // wait for TWebSocketProcess.ProcessLoop to initiate
@@ -467,11 +467,11 @@ begin
       waitms := 0;
       repeat
         if waitms < 30000 then // at least half a minute, with random increases
-          inc(waitms, 200 + Random32(waitms shr 1));
+          inc(waitms, Random32(200));
         if SleepOrTerminated(waitms) then
           break;
         log.Log(sllDebug,
-          'Execute: try reconnect % after %ms', [fProcess, waitms], self);
+          'Execute: try reconnect after %ms', [waitms], self);
         retry := fProcess.Socket.ReOpen;
         if Terminated then
           break;
@@ -752,7 +752,7 @@ begin
       if fProcess = nil then
         fProcess := TWebSocketProcessClient.Create(self, id, aProtocol, fProcessName)
       else
-        fProcess.fConnectionID := id; // from reconnect
+        fProcess.Reset(id); // from aReconnect
       aProtocol := nil; // protocol instance is owned by fProcess now
     except
       on E: Exception do
@@ -802,7 +802,7 @@ begin
     exit; // WebSocketsConnect() made proto.Free on Open() failure
   proto.fClient.fOwnedClient := c;
   if sciAutoReconnect in aOptions then
-    c.fProcess.OnReconnect := OnReconnect;
+    c.fProcess.OnReconnect := proto.fClient.OnReconnect;
   result := proto.fClient;
 end;
 
@@ -918,11 +918,13 @@ var
   l: PSocketIOLocalNamespace;
 begin
   result := '';
-  if Process <> nil then // just reconnected
+  if (Process = nil) or                      // was a reconnection failure
+     (Process <> fOwnedClient.fProcess) then // paranoid
+    exit;
   try
     // upgrade the new connection to WebSockets
-    result := string(fOwnedClient.WebSocketsUpgrade(fHandshakeUri, '', false, [],
-      fOwnedClient.fProcess.Protocol, fHandshakeHeaders, {reconnect=}true));
+    result := string(fOwnedClient.WebSocketsUpgrade(fHandshakeUri, '',
+      {ajax=}false, [], Process.Protocol, fHandshakeHeaders, {reconnect=}true));
     if result <> '' then
       exit;
     // re-Connect() to all remote name spaces
@@ -1037,7 +1039,7 @@ begin
   fWaitEventPrepared := wepNone;
   result := GetRemote(NameSpace);
   if result = nil then
-    ESocketIO.RaiseUtf8('%.Connect(%,%) failed', [NameSpace, WaitTimeoutMS]);
+    ESocketIO.RaiseUtf8('%.Connect(%,%) failed', [self, NameSpace, WaitTimeoutMS]);
 end;
 
 procedure TSocketsIOClient.Disconnect(const NameSpace: RawUtf8);
