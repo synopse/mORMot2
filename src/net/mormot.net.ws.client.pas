@@ -237,6 +237,7 @@ type
     fLocals: TSocketIOLocalNamespaces;
     fWaitEvent: TSynEvent;
     fOptions: TSocketsIOClientOptions;
+    fDefaultWaitTimeoutSec: cardinal;
     fWaitEventPrepared: TSocketsIOWaitEventPacket;
     fWaitEventAckID: TSocketIOAckID;
     fWaitEventData: PDocVariantData;
@@ -307,7 +308,7 @@ type
     // - sends a connect message if needed (for first-time registration)
     // - with an optional Data JSON array
     function Connect(const NameSpace: RawUtf8; const Data: RawUtf8 = '';
-      WaitTimeoutMS: cardinal = 2000): TSocketIORemoteNamespace;
+      WaitTimeoutMS: integer = 0): TSocketIORemoteNamespace;
     /// disconnect from a given Socket.IO namespace
     procedure Disconnect(const NameSpace: RawUtf8);
     /// sends an event to a given remote namespace
@@ -319,10 +320,14 @@ type
     // a TDocVariant array with its content in a synchronous/blocking way
     function Emit(out Dest: TDocVariantData; const EventName: RawUtf8;
       const Data: RawUtf8 = ''; const NameSpace: RawUtf8 = '';
-      WaitTimeoutMS: cardinal = 2000): boolean; overload;
+      WaitTimeoutMS: integer = 0): boolean; overload;
     /// refine the TSocketsIOClient process
     property Options: TSocketsIOClientOptions
       read fOptions write fOptions;
+    /// how many seconds blocking Connect() and Emit() should wait for its ACK
+    // - default is 2 seconds
+    property DefaultWaitTimeoutSec: cardinal
+      read fDefaultWaitTimeoutSec write fDefaultWaitTimeoutSec;
     /// raw access to the owned associated WebSockets connection
     // - warning: all Request() method are forbidden on this upgraded connection
     property OwnedClient: THttpClientWebSockets
@@ -800,6 +805,7 @@ begin
   result := nil;
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
   proto.fClient := Create;
+  proto.fClient.fDefaultWaitTimeoutSec := 2;
   proto.fClient.fOptions := aOptions;
   c := THttpClientWebSockets.WebSocketsConnect(
     aHost, aPort, proto, aLog, aLogContext, EngineIOHandshakeUri(aRoot),
@@ -1063,18 +1069,20 @@ begin
 end;
 
 function TSocketsIOClient.Connect(const NameSpace, Data: RawUtf8;
-  WaitTimeoutMS: cardinal): TSocketIORemoteNamespace;
+  WaitTimeoutMS: integer): TSocketIORemoteNamespace;
 begin
   result := GetRemote(NameSpace);
   if result <> nil then
     exit; // already connected to this name space
   if fWebSockets = nil then
     ESocketIO.RaiseUtf8('Unexpected %.Connect with no WS connection', [self]);
-  if WaitTimeoutMS <> 0 then
+  if WaitTimeOutMS = 0 then
+    WaitTimeoutMS := fDefaultWaitTimeoutSec shl 10;
+  if WaitTimeoutMS > 0 then
     WaitEventPrepare(wepConnect);
   fWaitEventParam := Data;
   SocketIOSendPacket(fWebSockets, sioConnect, NameSpace, pointer(Data), length(Data));
-  if WaitTimeoutMS = 0 then
+  if WaitTimeoutMS <= 0 then
     exit;
   fWaitEvent.WaitFor(WaitTimeoutMS);
   fWaitEventPrepared := wepNone;
@@ -1124,17 +1132,19 @@ begin
 end;
 
 function TSocketsIOClient.Emit(out Dest: TDocVariantData;
-  const EventName, Data, NameSpace: RawUtf8; WaitTimeoutMS: cardinal): boolean;
+  const EventName, Data, NameSpace: RawUtf8; WaitTimeoutMS: integer): boolean;
 begin
   Dest.InitFast;
-  if WaitTimeoutMS <> 0 then
+  if WaitTimeOutMS = 0 then
+    WaitTimeoutMS := fDefaultWaitTimeoutSec shl 10;
+  if WaitTimeoutMS > 0 then
   begin
     WaitEventPrepare(wepEmit);
     fWaitEventData := @Dest;
   end;
   fWaitEventAckID := Emit(EventName, Data, Namespace, WaitEventAck);
   result := fWaitEventAckID <> SIO_NO_ACK;
-  if (WaitTimeoutMS = 0) or
+  if (WaitTimeoutMS <= 0) or
      not result then
     exit;
   fWaitEvent.WaitFor(WaitTimeoutMS);
