@@ -260,6 +260,7 @@ type
     procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
     procedure OnAck(const Message: TSocketIOMessage); virtual;
     function OnReconnect(Process: TWebSocketProcessClient): string;
+    procedure RegisterAgainAfterReconnect;
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -346,6 +347,9 @@ type
   public
     /// finalize this instance
     destructor Destroy; override;
+    /// reuse an existing protocol instance on a new connection
+    // - called e.g. by THttpClientWebSockets.WebSocketsUpgrade(aReconnect=true)
+    procedure Reset; override;
   end;
 
 
@@ -453,6 +457,7 @@ begin
         fProcess.ProcessLoop;
       log.Log(sllDebug, 'Execute: after ProcessLoop % (%)',
         [fProcess, ToText(fProcess.fState)^], self);
+      // this connection is finished
       if (fProcess <> nil) and
          (fProcess.Socket <> nil) and
          fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
@@ -909,7 +914,7 @@ begin
   ns.Acknowledge(Message);
 end;
 
-function TSocketsIOClient.OnReconnect(Process: TWebSocketProcessClient): string;
+procedure TSocketsIOClient.RegisterAgainAfterReconnect;
 var
   i: PtrInt;
   rem: TSocketIORemoteNamespaces;
@@ -917,16 +922,7 @@ var
   r: PSocketIORemoteNamespace;
   l: PSocketIOLocalNamespace;
 begin
-  result := '';
-  if (Process = nil) or                      // was a reconnection failure
-     (Process <> fOwnedClient.fProcess) then // paranoid
-    exit;
   try
-    // upgrade the new connection to WebSockets
-    result := string(fOwnedClient.WebSocketsUpgrade(fHandshakeUri, '',
-      {ajax=}false, [], Process.Protocol, fHandshakeHeaders, {reconnect=}true));
-    if result <> '' then
-      exit;
     // re-Connect() to all remote name spaces
     rem := fRemotes;
     fRemotes := nil;
@@ -946,17 +942,60 @@ begin
       inc(l);
     end;
   except
-    on E: Exception do
-    begin
-      if rem <> nil then
-        ExchgPointer(@fRemotes, @rem); // restore initial callbacks on error
-      if loc <> nil then
-        ExchgPointer(@fLocals, @loc);
-      result := E.Message;
-    end;
+    if rem <> nil then
+      ExchgPointer(@fRemotes, @rem); // restore callbacks on error
+    if loc <> nil then
+      ExchgPointer(@fLocals, @loc);
   end;
+  // remove unneeded registration
   ObjArrayClear(rem);
   ObjArrayClear(loc);
+end;
+
+type
+  TWebSocketReconnectClientThread = class(TLoggedThread)
+  protected
+    fClient: TSocketsIOClient;
+    procedure DoExecute; override;
+  public
+    constructor Create(aClient: TSocketsIOClient); reintroduce;
+  end;
+
+constructor TWebSocketReconnectClientThread.Create(aClient: TSocketsIOClient);
+begin
+  fClient := aClient;
+  FreeOnTerminate := true;
+  inherited Create({suspended=}false, TSynLog, 'Reconnect');
+end;
+
+procedure TWebSocketReconnectClientThread.DoExecute;
+begin
+  // let the main ProcessLoop be reached
+  repeat
+    Sleep(10);
+    if Terminated then
+      exit;
+  until fClient.fOwnedClient.fProcess.State <> wpsCreate;
+  // re-Connect() and re-Register*() all previous notifications
+  fClient.RegisterAgainAfterReconnect;
+end;
+
+function TSocketsIOClient.OnReconnect(Process: TWebSocketProcessClient): string;
+begin
+  result := '';
+  if (Process <> nil) and                   // was a reconnection failure
+     (Process = fOwnedClient.fProcess) then // paranoid
+  try
+    // upgrade the new connection to WebSockets
+    result := string(fOwnedClient.WebSocketsUpgrade(fHandshakeUri, '',
+      {ajax=}false, [], Process.Protocol, fHandshakeHeaders, {reconnect=}true));
+    if result = '' then
+      // all the registration should take place in another thread
+      TWebSocketReconnectClientThread.Create(self);
+  except
+    on E: Exception do
+      result := E.Message;
+  end;
 end;
 
 function TSocketsIOClient.Local(const Namespace: RawUtf8;
@@ -1111,6 +1150,12 @@ procedure TWebSocketSocketIOClientProtocol.AfterUpgrade(aProcess: TWebSocketProc
 begin
   // need a Socket.IO handler ASAP to handle any incoming frame
   fClient.fWebSockets := aProcess as TWebCrtSocketProcess;
+end;
+
+procedure TWebSocketSocketIOClientProtocol.Reset;
+begin
+  inherited Reset;
+  fOpened := false;
 end;
 
 destructor TWebSocketSocketIOClientProtocol.Destroy;
