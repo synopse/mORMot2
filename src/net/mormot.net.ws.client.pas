@@ -907,7 +907,7 @@ begin
       exit
     else
       aMessage.RaiseESockIO('Unknown namespace');
-  ns.HandleEvent(aMessage);
+  ns.HandleEvent(aMessage, (sciIgnoreUnknownEvent in fOptions));
 end;
 
 procedure TSocketsIOClient.OnAck(const Message: TSocketIOMessage);

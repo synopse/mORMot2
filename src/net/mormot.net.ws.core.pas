@@ -1334,7 +1334,8 @@ type
     // - as used by TSocketsIOClient.OnReconnect()
     procedure RegisterFrom(aAnother: TSocketIOLocalNamespace);
     /// dispatch an event message to the appropriate handler
-    procedure HandleEvent(const aMessage: TSocketIOMessage); virtual;
+    procedure HandleEvent(const aMessage: TSocketIOMessage;
+      aIgnoreUnknownEvent: boolean); virtual;
     /// raw access to the internal events list
     property Handler: TLocalNamespaceEventHandlers
       read fHandler;
@@ -3921,7 +3922,8 @@ begin
   end;
 end;
 
-procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage);
+procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage;
+  aIgnoreUnknownEvent: boolean);
 var
   ndx: PtrInt;
   event, ack: RawUtf8;
@@ -3956,7 +3958,8 @@ begin
   // retrieve event name and search for associated handler
   ndx := fHandlers.FindHashed(event);
   if ndx < 0 then
-    if snoIgnoreUnknownEvent in fOptions then
+    if aIgnoreUnknownEvent or
+       (snoIgnoreUnknownEvent in fOptions) then
       exit // ignore in silence
     else
       ESocketIO.RaiseUtf8('%.HandleEvent: unknown event % for namespace %',
