@@ -225,6 +225,8 @@ type
     wepConnect,
     wepEmit);
 
+  TOnSocketsIOClient = procedure(Sender: TSocketsIOClient) of object;
+
   /// a HTTP/HTTPS client, upgraded to Socket.IO over WebSockets
   // - no polling mode is supported by this class
   // - use Open() class factories to connect to a Socket.IO server and not Create
@@ -263,8 +265,19 @@ type
     function OnReconnect(Process: TWebSocketProcessClient): string; virtual;
     procedure RegisterAgainAfterReconnect; virtual;
   public
+    /// callback called just after WebSocketsUpgrade()'s server response
+    OnAfterOpen: TOnSocketsIOClient;
+    /// callback called when Connect() did receive a successfull response
+    // - is also triggered during automated re-connection
+    OnNamespaceConnected: procedure(Sender: TSocketsIOClient;
+      NameSpace: TSocketIORemoteNamespace) of object;
+    /// callback called when an event has been received
+    // - should return false to process the event as usual (i.e. from registration)
+    // - could return true if this event requires no further processing
+    OnReceivedEvent: function(Sender: TSocketsIOClient;
+      const Message: TSocketIOMessage): boolean of object;
     /// callback called each time a re-connection attempt failed
-    OnLostConnection: procedure(Sender: TSocketsIOClient) of object;
+    OnLostConnection: TOnSocketsIOClient;
     /// callback called during re-connection, just before WebSocketsUpgrade()
     // - to change e.g. Protocol.UpgradeUri/UpgradeBearerToken
     OnBeforeReconnectUpgrade: procedure (Sender: TSocketsIOClient;
@@ -884,14 +897,23 @@ begin
   fPingInterval := V[2].ToCardinal(fPingInterval);
   fPingTimeout  := V[3].ToCardinal(fPingTimeout);
   fMaxPayload   := V[4].ToCardinal;
+  if Assigned(OnAfterOpen) then
+    OnAfterOpen(self);
 end;
 
 procedure TSocketsIOClient.AfterNamespaceConnect(const Response: TSocketIOMessage);
+var
+  ns: TSocketIORemoteNamespace;
 begin
   fRemoteNames := nil; // to be reallocated on need
   if Response.PacketType = sioConnect then
-    ObjArrayAdd(fRemotes, TSocketIORemoteNamespace.CreateFromConnectMessage(
-                            Response, fWaitEventParam, self));
+  begin
+    ns := TSocketIORemoteNamespace.CreateFromConnectMessage(
+      Response, fWaitEventParam, self);
+    ObjArrayAdd(fRemotes, ns);
+    if Assigned(OnNamespaceConnected) then
+      OnNamespaceConnected(self, ns);
+  end;
   WaitEventDone(wepConnect); // notify any waiting acknowledgement
   if Response.PacketType = sioConnectError then
     Response.RaiseESockIO('Connect() failed with');
@@ -901,6 +923,9 @@ procedure TSocketsIOClient.OnEvent(const aMessage: TSocketIOMessage);
 var
   ns: TSocketIOLocalNamespace;
 begin
+  if Assigned(OnReceivedEvent) and
+     OnReceivedEvent(self, aMessage) then
+    exit; // no further processing
   ns := GetLocal(aMessage.NameSpace, aMessage.NameSpaceLen, {fallback=}true);
   if not Assigned(ns) then
     if sciIgnoreUnknownEvent in fOptions then
