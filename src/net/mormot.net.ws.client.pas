@@ -260,10 +260,22 @@ type
     procedure AfterNamespaceConnect(const Response: TSocketIOMessage);
     procedure OnEvent(const aMessage: TSocketIOMessage); virtual;
     procedure OnAck(const Message: TSocketIOMessage); virtual;
-    // you can override those methods e.g. to refresh any auth token
     function OnReconnect(Process: TWebSocketProcessClient): string; virtual;
     procedure RegisterAgainAfterReconnect; virtual;
   public
+    /// callback called each time a re-connection attempt failed
+    OnLostConnection: procedure(Sender: TSocketsIOClient) of object;
+    /// callback called during re-connection, just before WebSocketsUpgrade()
+    // - to change e.g. Protocol.UpgradeUri/UpgradeBearerToken
+    OnBeforeReconnectUpgrade: procedure (Sender: TSocketsIOClient;
+      Protocol: TWebSocketSocketIOClientProtocol) of object;
+    /// callback called during re-connection, just before Connect()
+    // - to change e.g. Connection.HandhsakeData with a refreshed token
+    OnBeforeReconnectConnect: procedure (Sender: TSocketsIOClient;
+      var Connection: TSocketIORemoteNamespace) of object;
+    /// callback called during re-connection, just before Register*()
+    OnBeforeReconnectRegister: procedure (Sender: TSocketsIOClient;
+      var Connection: TSocketIOLocalNamespace) of object;
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
     // - with error interception and optional logging, returning nil on error,
@@ -936,6 +948,10 @@ begin
     r := pointer(rem);
     for i := 1 to length(rem) do
     begin
+      // optional user callback
+      if Assigned(OnBeforeReconnectConnect) then
+        OnBeforeReconnectConnect(self, r^);
+      // actual re-connection to this namespace
       Connect(r^.NameSpace, r^.HandshakeData);
       inc(r);
     end;
@@ -945,6 +961,10 @@ begin
     l := pointer(loc);
     for i := 1 to length(loc) do
     begin
+      // optional user callback
+      if Assigned(OnBeforeReconnectRegister) then
+        OnBeforeReconnectRegister(self, l^);
+      // actual re-registration of all previous events on this namespace
       Local(l^.NameSpace).RegisterFrom(l^);
       inc(l);
     end;
@@ -990,9 +1010,19 @@ end;
 function TSocketsIOClient.OnReconnect(Process: TWebSocketProcessClient): string;
 begin
   result := '';
-  if (Process <> nil) and                   // was a reconnection failure
-     (Process = fOwnedClient.fProcess) then // paranoid
+  if Process = nil then // was a reconnection failure
+  begin
+    // optional user callback
+    if Assigned(OnLostConnection) then
+      OnLostConnection(self);
+    exit;
+  end;
+  if Process = fOwnedClient.fProcess then // paranoid
   try
+    // optional user callback
+    if Assigned(OnBeforeReconnectUpgrade) then
+      OnBeforeReconnectUpgrade(
+        self, Process.Protocol as TWebSocketSocketIOClientProtocol);
     // upgrade the new connection to WebSockets with the previous parameters
     result := string(fOwnedClient.WebSocketsUpgrade(
       Process.Protocol.UpgradeUri, '', {ajax=}false, [],
