@@ -1174,8 +1174,8 @@ type
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
   // - if the result is not '', it is expected to be JSON array acknowledgment
   // payload, e.g. from JsonEncodeArray([])
-  TOnSocketIOEvent = function(const EventName: RawUtf8;
-    const Data: TDocVariantData): RawJson of object;
+  TOnSocketIOEvent = function(Sender: TSocketIOLocalNamespace;
+    const EventName: RawUtf8; const Data: TDocVariantData): RawJson of object;
   /// Socket.IO process published methods handler signature
   // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
   // - required signature of TSocketIOLocalNamespace.RegisterPublishedMethods()
@@ -3939,22 +3939,26 @@ begin
     else
       ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
   VariantToUtf8(data.Values[0], event);
-  ndx := fHandlers.FindHashed(event);
-    if aIgnoreUnknownEvent or
-       (snoIgnoreUnknownEvent in fOptions) then
-      exit // ignore in silence
-    else
-      ESocketIO.RaiseUtf8('%.HandleEvent: unknown event % for namespace %',
-        [event, fNameSpace]);
-  // call the handler
   data.Delete(0); // trim the event name from the data array
   d := @data;
   if (d^.Count = 1) and
      _Safe(d^.Values[0])^.IsObject then
     d := _Safe(d^.Values[0]); // return a single object as root (common case)
+  // optional callback
+  if Assigned(OnEventReceived) then
+    OnEventReceived(self, event, d^);
+  // retrieve event name and search for associated handler
+  ndx := fHandlers.FindHashed(event);
+  if ndx < 0 then
+    if snoIgnoreUnknownEvent in fOptions then
+      exit // ignore in silence
+    else
+      ESocketIO.RaiseUtf8('%.HandleEvent: unknown event % for namespace %',
+        [event, fNameSpace]);
+  // call the handler
   with fHandler[ndx] do
     if Assigned(OnEvent) then
-      ack := OnEvent(event, d^)
+      ack := OnEvent(self, event, d^)
     else if Assigned(OnMethod) then
       ack := OnMethod(d^);
   // optionally call back the server with an ACK payload
