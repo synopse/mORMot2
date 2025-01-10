@@ -204,7 +204,7 @@ type
   // - sciIgnoreUnknownAck won't raise an ESocketIO on an expected sioAck message
   // - sciEmitAutoConnect will let Emit() call Connect() if needed
   // - sciAutoReconnect will track any lost connection, and retry to reconnect
-  // to the server, eventually re-registering any pre-registered event
+  // to the server, eventually re-registering any pre-connected namespaces
   TSocketsIOClientOption = (
     sciIgnoreUnknownEvent,
     sciIgnoreUnknownAck,
@@ -273,9 +273,6 @@ type
     // - to change e.g. Connection.HandhsakeData with a refreshed token
     OnBeforeReconnectConnect: procedure (Sender: TSocketsIOClient;
       var Connection: TSocketIORemoteNamespace) of object;
-    /// callback called during re-connection, just before Register*()
-    OnBeforeReconnectRegister: procedure (Sender: TSocketsIOClient;
-      var Connection: TSocketIOLocalNamespace) of object;
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
     // - with error interception and optional logging, returning nil on error,
@@ -347,7 +344,7 @@ type
     /// raw access to the associated remote name spaces
     property Remotes: TSocketIORemoteNamespaces
       read fRemotes;
-    /// raw access to the associated local name spaces
+    /// raw access to the associated local name spaces and its events
     property Locals: TSocketIOLocalNamespaces
       read fLocals;
   end;
@@ -498,7 +495,7 @@ begin
           log.Log(sllTrace, 'Execute: call OnReconnect', self);
           retry := fProcess.fOnReconnect(fProcess);
           if retry = '' then
-            break // successfully reconnected (and re-registered)
+            break // successfully reconnected (and also on remote namespaces)
           else
             fProcess.Socket.Close;
         end
@@ -932,9 +929,7 @@ procedure TSocketsIOClient.RegisterAgainAfterReconnect;
 var
   i: PtrInt;
   rem: TSocketIORemoteNamespaces;
-  loc: TSocketIOLocalNamespaces;
   r: PSocketIORemoteNamespace;
-  l: PSocketIOLocalNamespace;
 begin
   try
     // re-Connect() to all remote name spaces
@@ -950,28 +945,12 @@ begin
       Connect(r^.NameSpace, r^.HandshakeData);
       inc(r);
     end;
-    // re-Register*() all local events
-    loc := fLocals;
-    fLocals := nil;
-    l := pointer(loc);
-    for i := 1 to length(loc) do
-    begin
-      // optional user callback
-      if Assigned(OnBeforeReconnectRegister) then
-        OnBeforeReconnectRegister(self, l^);
-      // actual re-registration of all previous events on this namespace
-      Local(l^.NameSpace).RegisterFrom(l^);
-      inc(l);
-    end;
   except
     if rem <> nil then
       ExchgPointer(@fRemotes, @rem); // restore callbacks on error
-    if loc <> nil then
-      ExchgPointer(@fLocals, @loc);
   end;
   // remove unneeded registration
   ObjArrayClear(rem);
-  ObjArrayClear(loc);
 end;
 
 type
@@ -994,7 +973,7 @@ procedure TWebSocketReconnectClientThread.DoExecute;
 begin
   // let the main ProcessLoop be reached
   fClient.fOwnedClient.fProcess.WaitThreadStarted;
-  // re-Connect() and re-Register*() all previous notifications
+  // re-Connect() to all previous remote namespaces
   fClient.RegisterAgainAfterReconnect;
 end;
 
