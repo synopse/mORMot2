@@ -794,6 +794,9 @@ type
     // - if needed, will notify the other end with a focConnectionClose frame
     // - will release the TWebSocketProtocol associated instance
     destructor Destroy; override;
+    /// reuse an existing process instance on a new connection
+    // - called e.g. by THttpClientWebSockets.WebSocketsUpgrade(aReconnect=true)
+    procedure Reset(aConnectionID: THttpServerConnectionID); virtual;
     /// abstract low-level method to retrieve pending input data
     // - should return the number of bytes (<=count) received and written to P
     // - is defined separated to allow multi-thread pooling
@@ -2874,7 +2877,6 @@ begin
   inherited Create; // may have been overriden
   fProcessName := aProcessName;
   fProtocol := aProtocol;
-  fProtocol.AfterUpgrade(self); // e.g. for TWebSocketSocketIOClientProtocol
   fConnectionID := aProtocol.ConnectionID;
   fOwnerThread := aOwnerThread;
   fSettings := aSettings;
@@ -2882,6 +2884,7 @@ begin
   fOutgoing := TWebSocketFrameList.Create(0);
   InitializeCriticalSection(fSafeIn);
   InitializeCriticalSection(fSafeOut);
+  fProtocol.AfterUpgrade(self); // e.g. for TWebSocketSocketIOClientProtocol
 end;
 
 procedure TWebSocketProcess.Shutdown(waitForPong: boolean);
@@ -2961,6 +2964,13 @@ begin
   DeleteCriticalSection(fSafeIn); // to be done lately to avoid GPF
   DeleteCriticalSection(fSafeOut);
   inherited Destroy;
+end;
+
+procedure TWebSocketProcess.Reset(aConnectionID: THttpServerConnectionID);
+begin
+  fConnectionID := 0;
+  fState := wpsCreate;
+  fProcessEnded := false;
 end;
 
 procedure TWebSocketProcess.ProcessStart;
