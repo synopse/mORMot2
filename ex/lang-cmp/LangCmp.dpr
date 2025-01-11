@@ -20,6 +20,7 @@ program LangCmp;
 
 {$ifdef OSWINDOWS}
   {$APPTYPE CONSOLE}
+  {$R ..\..\src\mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 {$ifdef FPC_CPUX64}

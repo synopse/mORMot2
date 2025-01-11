@@ -7,7 +7,7 @@ program PerfTestConsole;
 
 {$ifdef OSWINDOWS}
   {$apptype console}
-  {../../src/$R mormot.win.default.manifest.res}
+  {$R ..\..\src\mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 uses

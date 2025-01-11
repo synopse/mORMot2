@@ -5,6 +5,7 @@ program MongoDBTests;
 
 {$ifdef OSWINDOWS}
   {$APPTYPE CONSOLE}
+  {$R ..\..\src\mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 {
