@@ -696,7 +696,7 @@ const
   // - or to store a timestamp without any 32-bit "Year 2038" overflow issue
   UNIXTIME_MINIMAL = 1481187020;
   /// a contemporary, but elapsed, TUnixTimeMS millisecond-based value
-  UNIXTIMEMS_MINIMAL = UNIXTIME_MINIMAL * MSecsPerSec;
+  UNIXTIMEMS_MINIMAL = QWord(UNIXTIME_MINIMAL) * MSecsPerSec;
 
 /// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue
 function UnixTimeMinimalUtc: cardinal;
