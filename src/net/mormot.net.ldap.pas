@@ -2356,6 +2356,8 @@ type
       read fGroupNested write fGroupNested;
     /// after how many seconds the internal cache should be flushed
     // - default valucache timeout is 300 seconds, i.e. 5 minutes
+    // - you can disable the cache by setting 0 here, e.g. if this instance is
+    // calling Authorize() just once
     property CacheTimeoutSeconds: integer
       read fCacheTimeoutSeconds write fCacheTimeoutSeconds;
     /// access to the AllowGroupAN() and AllowGroupDN() primaryGroupID attributes
@@ -7231,20 +7233,21 @@ begin
         end;
       end;
       // actualize the internal cache
-      if result then
-      begin
-        if fromcachendx < 0 then
+      if fCacheTimeoutSeconds <> 0 then
+        if result then
         begin
-          fromcachendx := AddRawUtf8(fCacheOK, fCacheOKCount, User);
-          if length(fCacheOKGroupsAN) <> length(fCacheOK) then
-            SetLength(fCacheOKGroupsAN, length(fCacheOK)); // grow capacity
-        end;
-        fCacheOKGroupsAN[fromcachendx] := groups;
-        if GroupsAN <> nil then
-          GroupsAN^ := groups;
-      end
-      else
-        AddRawUtf8(fCacheKO, fCacheKOCount, User)
+          if fromcachendx < 0 then
+          begin
+            fromcachendx := AddRawUtf8(fCacheOK, fCacheOKCount, User);
+            if length(fCacheOKGroupsAN) <> length(fCacheOK) then
+              SetLength(fCacheOKGroupsAN, length(fCacheOK)); // grow capacity
+          end;
+          fCacheOKGroupsAN[fromcachendx] := groups;
+          if GroupsAN <> nil then
+            GroupsAN^ := groups;
+        end
+        else
+          AddRawUtf8(fCacheKO, fCacheKOCount, User)
     finally
       fSafe.UnLock;
     end;
