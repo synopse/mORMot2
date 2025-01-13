@@ -695,6 +695,8 @@ const
   // - may be used to check for a valid just-generated Unix timestamp value
   // - or to store a timestamp without any 32-bit "Year 2038" overflow issue
   UNIXTIME_MINIMAL = 1481187020;
+  /// a contemporary, but elapsed, TUnixTimeMS millisecond-based value
+  UNIXTIMEMS_MINIMAL = UNIXTIME_MINIMAL * MSecsPerSec;
 
 /// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue
 function UnixTimeMinimalUtc: cardinal;
@@ -771,6 +773,11 @@ function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
 // - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
 function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
   FirstTimeChar: AnsiChar = 'T'): RawUtf8;
+
+/// convert some text encoded as TUnixTime/TUnixMSTime 64-bit integer value or
+// double/COM floating point value into a TDateTime
+// - a used e.g. by _JL_DateTime from mormot.core.json to unserialize TDateTime
+procedure UnixTimeOrDoubleToDateTime(P: PUtf8Char; Len: PtrInt; var V: TDateTime);
 
 
 { ************ TTimeLog efficient 64-bit custom date/time encoding }
@@ -3031,6 +3038,24 @@ begin
   else
     result := DateTimeMSToString(UnixMSTime / MilliSecsPerDay + UnixDateDelta,
                                  Expanded, FirstTimeChar, TZD);
+end;
+
+procedure UnixTimeOrDoubleToDateTime(P: PUtf8Char; Len: PtrInt; var V: TDateTime);
+var
+  u64: QWord;
+begin
+  if ByteScanIndex(pointer(P), Len, ord('.')) >= 0 then
+    V := GetExtended(P) // obviously a floating point / COM double value
+  else
+  begin
+    SetQWord(P, u64);
+    if u64 > UNIXTIMEMS_MINIMAL then
+      V := UnixMSTimeToDateTime(u64) // likely to have millisecond resolution
+    else if u64 > UNIXTIME_MINIMAL then
+      V := UnixTimeToDateTime(u64)   // likely to have second resolution
+    else
+      V := u64; // likely to have day resolution, i.e. TDate
+  end;
 end;
 
 
