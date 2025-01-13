@@ -7975,7 +7975,7 @@ begin
     if (Ctxt.ValueLen = 0) or
        (Ctxt.Value = nil) then  // "" or null fill TGuid with zeros
       FillZero(Data^)
-    else
+    else // no Ctxt.WasString check: 30250400408911039000030508203301 is a GUID
       Ctxt.Valid := RawUtf8ToGuid(Ctxt.Value, Ctxt.ValueLen, Data^);
 end;
 

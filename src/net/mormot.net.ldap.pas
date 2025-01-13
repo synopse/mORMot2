@@ -2139,7 +2139,8 @@ type
     // likely to not be part of the "member" array of the (e.g. domain) group
     function GetUserDN(const AccountName, UserPrincipalName: RawUtf8;
       const BaseDN: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
-      PrimaryGroupID: PCardinal = nil; ObjectSid: PRawUtf8 = nil): RawUtf8;
+      PrimaryGroupID: PCardinal = nil; ObjectSid: PRawUtf8 = nil;
+      ObjectKind: TObjectFilter = ofUsers): RawUtf8;
     /// check if a User is registered as part of a group or its nested groups
     // - the UserDN could be retrieved from a GetUserDN() call
     // - the group is identified by sAMAccountName or distinguishedName
@@ -6977,12 +6978,12 @@ end;
 
 function TLdapClient.GetUserDN(
   const AccountName, UserPrincipalName, BaseDN, CustomFilter: RawUtf8;
-  PrimaryGroupID: PCardinal; ObjectSid: PRawUtf8): RawUtf8;
+  PrimaryGroupID: PCardinal; ObjectSid: PRawUtf8; ObjectKind: TObjectFilter): RawUtf8;
 begin
   if ((AccountName <> '') or
       (UserPrincipalName <> '')) and
      Search([atDistinguishedName, atPrimaryGroupID, atObjectSid], ObjectFilter(
-       ofUsers, AccountName, '', UserPrincipalName, CustomFilter), BaseDN) and
+       ObjectKind, AccountName, '', UserPrincipalName, CustomFilter), BaseDN) and
      (SearchResult.Count = 1) then
     with SearchResult.Items[0].Attributes do
     begin
