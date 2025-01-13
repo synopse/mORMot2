@@ -2306,6 +2306,7 @@ type
     fCacheOKCount, fCacheKOCount: integer;
     fCacheTimeoutTix: Int64;
     fGroupNested: boolean;
+    fSearchFilter: TObjectFilter;
     procedure CacheClear(tix: Int64);
   public
     /// initialize this inherited LDAP client instance
@@ -2360,6 +2361,9 @@ type
     /// access to the AllowGroupAN() and AllowGroupDN() primaryGroupID attributes
     property GroupID: TIntegerDynArray
       read fGroupID;
+    /// this class will search for ofUsers by default, but you may change it here
+    property SearchFilter: TObjectFilter
+      read fSearchFilter write fSearchFilter;
   end;
 
 
@@ -7125,6 +7129,7 @@ end;
 constructor TLdapCheckMember.Create;
 begin
   inherited Create;
+  fSearchFilter := ofUsers;
   fGroupNested := true;
   fCacheTimeoutSeconds := 300; // 5 minutes
 end;
@@ -7148,7 +7153,7 @@ function TLdapCheckMember.Authorize(const User: RawUtf8;
   GroupsAN: PRawUtf8DynArray): boolean;
 var
   tix: Int64;
-  userpid: cardinal;
+  pid: cardinal;
   fromcachendx, primaryidndx: PtrInt;
   userdn: RawUtf8;
   groups: TRawUtf8DynArray;
@@ -7203,13 +7208,15 @@ begin
         else
           exit; // too soon to retry
       // call the LDAP server to actually check user membership
-      userdn := GetUserDN(User, User, fUserBaseDN, fUserCustomFilter, @userpid);
+      pid := 0;
+      userdn := GetUserDN(
+        User, User, fUserBaseDN, fUserCustomFilter, @pid, nil, fSearchFilter);
       if userdn <> '' then
       begin
-        if userpid = 0 then
+        if pid = 0 then
           primaryidndx := -1
         else
-          primaryidndx := IntegerScanIndex(pointer(fGroupID), length(fGroupID), userpid);
+          primaryidndx := IntegerScanIndex(pointer(fGroupID), length(fGroupID), pid);
         if primaryidndx >= 0 then
           result := true;
         if (fromcachendx >= 0) or
