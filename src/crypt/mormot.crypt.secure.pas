@@ -1435,7 +1435,7 @@ type
       read fName;
   end;
 
-  /// interface as implemented e.g. by TCryptHash
+  /// interface as implemented e.g. by TCryptHash and resolved by Hash() factory
   ICryptHash = interface
     /// iterative process of a memory buffer
     function Update(buf: pointer; buflen: PtrInt): ICryptHash; overload;
@@ -1468,7 +1468,7 @@ type
   end;
   {$M-}
 
-  /// randomness generator parent class, as resolved by Rnd()
+  /// randomness generator parent class, as resolved by Rnd() factory function
   TCryptRandom = class(TCryptAlgo)
   public
     /// retrieve some random bytes into a buffer
@@ -1499,7 +1499,7 @@ type
     function Final: RawUtf8; overload;
   end;
 
-  /// hashing parent class, as resolved by Hasher()
+  /// hashing parent class, as resolved by Hasher() factory function
   // - this class is to ensure a content as not been tempered: use Signer()
   // to compute a digital signature from a given secret
   TCryptHasher = class(TCryptAlgo)
@@ -1520,7 +1520,7 @@ type
     function HashAlgo(out hasher: THashAlgo): boolean; virtual;
   end;
 
-  /// signing parent class, as resolved by Signer()
+  /// signing parent class, as resolved by Signer() factory function
   // - in respect to TCryptHasher, requires a secret key to be supplied
   // for safe HMAC content signature
   TCryptSigner = class(TCryptAlgo)
@@ -1542,6 +1542,7 @@ type
   end;
 
   /// interface as implemented e.g. by TCryptCipher from TCryptCipherAlgo.New
+  // - as resolved by Cipher() Encrypt() or Decrypt() factory functions
   ICryptCipher = interface
     /// quickly generate a cipher with the same algorithm, direction and key
     function Clone: ICryptCipher;
@@ -1568,7 +1569,7 @@ type
     function RawFinal(var gmac: TAesBlock): boolean;
   end;
 
-  /// symmetric encryption class, as resolved by CipherAlgo()
+  /// symmetric encryption class, as resolved by CipherAlgo() factory function
   TCryptCipherAlgo = class(TCryptAlgo)
   public
     /// check if this algorithm is of AEAD kind, i.e. can cipher and authenticate
