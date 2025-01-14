@@ -876,6 +876,10 @@ procedure FakeCodePage(var s: RawByteString; cp: cardinal);
 procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// internal function which assign src to dest and set src to '' with no RefCnt
+procedure FastAssign(var dest, src: RawUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
+
 {$ifdef HASCODEPAGE}
 /// retrieve the code page of a non void string
 // - caller should have ensure that s <> ''
@@ -4853,6 +4857,12 @@ begin
   pointer(src) := nil; // was assigned with no ref-counting involved
 end;
 {$endif HASCODEPAGE}
+
+procedure FastAssign(var dest, src: RawUtf8);
+begin
+  FastAssignNew(dest, pointer(src));
+  pointer(src) := nil; // was assigned with no ref-counting involved
+end;
 
 function GetRefCount(const s: RawByteString): PtrInt;
 begin
