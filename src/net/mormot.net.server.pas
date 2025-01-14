@@ -3022,16 +3022,16 @@ begin
   fConnectionFlags := aConnectionFlags;
   fConnectionOpaque := aConnectionOpaque;
   // reset fields as Create() does
-  fHost := '';
-  fAuthBearer := '';
-  fUserAgent := '';
+  FastAssignNew(fHost);
+  FastAssignNew(fAuthBearer);
+  FastAssignNew(fUserAgent);
   fRespStatus := 0;
   fOutContent := '';
-  fOutContentType := '';
-  fOutCustomHeaders := '';
+  FastAssignNew(fOutContentType);
+  FastAssignNew(fOutCustomHeaders);
   fAuthenticationStatus := hraNone;
   fInternalFlags := [];
-  fAuthenticatedUser := '';
+  FastAssignNew(fAuthenticatedUser);
   fErrorMessage := '';
   fUrlParamPos := nil;
   fRouteNode := nil;
