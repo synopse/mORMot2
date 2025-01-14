@@ -607,7 +607,7 @@ type
     /// implement generational garbage collector of TAsyncConnection instances
     // - we define two generations: the first has a TTL of KeepConnectionInstanceMS
     // (100ms) and are used to avoid GPF or confusion on still active connections;
-    // the second has a TTL of 2 seconds and will be used by ConnectionCreate to
+    // the second has a TTL of 10 seconds and will be used by ConnectionCreate to
     // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
     fGC1, fGC2: TPollAsyncConnections;
     fOnIdle: array of TOnPollSocketsIdle;
@@ -2831,11 +2831,10 @@ begin
   end;
   if n1 + n2 + tofree.Count = 0 then
     exit;
-  // np := fSockets.fRead.DeleteSeveralPending(pointer(gc), ngc); always 0
-  // actually release the connection instances
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
       [n1, n2, tofree.Count, fSockets.Count], self);
+  // actually release the deprecated connection instances
   if tofree.Count > 0 then
     FreeGC(tofree);
 end;
@@ -3074,20 +3073,23 @@ begin
   else
   begin
     aConnection := nil;
-    pool := @fGC2; // recycle 2nd gen instances e.g. for short-living HTTP/1.0
+    // first try to recycle 2nd gen instances e.g. for short-living HTTP/1.0
+    pool := @fGC2;
     if (pool^.Count > 0) and
        pool^.Safe.TryLock then
     begin
       if pool^.Count > 0 then
       begin
         dec(pool^.Count);
-        aConnection := pool^.Items[pool^.Count] as TAsyncConnection;
+        aConnection := TAsyncConnection(pool^.Items[pool^.Count]);
       end;
       pool^.Safe.UnLock;
     end;
     if aConnection = nil then
+      // need to allocate and initialize a new instance
       aConnection := fConnectionClass.Create(self, aRemoteIp)
     else
+      // reuse the existing instance of a closed connection
       aConnection.Recycle(aRemoteIP);
     result := ConnectionNew(aSocket, aConnection, {add=}false);
   end;
