@@ -3185,7 +3185,7 @@ end;
 procedure TRestServerUriContext.ExecuteCallback(var Ctxt: TJsonParserContext;
   ParamInterfaceInfo: TRttiJson; out Obj);
 var
-  fakeid: PtrInt;
+  fakeid: PtrInt; // not integer: may be a pointer/IInvokable in disguise
 begin
   if not Assigned(Server.OnNotifyCallback) then
     EServiceException.RaiseUtf8('% does not implement callbacks for %',
@@ -3200,7 +3200,7 @@ begin
     pointer(Obj) := pointer(fakeid); // special call Obj = IInvokable(fakeid)
     exit;
   end;
-  // let TServiceContainerServer
+  // let TServiceContainerServer resolve this
   (Server.Services as TServiceContainerServer).GetFakeCallback(
     self, ParamInterfaceInfo.Info, fakeid, Obj);
 end;

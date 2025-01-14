@@ -2032,7 +2032,8 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
   const
     IN_OUT: array[boolean] of RawUtf8 = ('OUT', ' IN');
   var
-    arg, i: integer;
+    arg: integer;  // should be integer for ArgNextInput/ArgNextOutput below
+    i: PtrInt;
     line, typ: RawUtf8;
   begin
     ToConsole('%', [IN_OUT[input]], ccDarkGray, {nolinefeed=}true);

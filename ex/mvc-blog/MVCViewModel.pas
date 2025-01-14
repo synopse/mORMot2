@@ -300,7 +300,7 @@ begin
         200, '.', 'https://synopse.info');
       article.Tags := nil;
       for t := 1 to Random32(6) do
-        article.TagsAddOrdered(tags[random(length(tags))], fTagsLookup);
+        article.TagsAddOrdered(tags[Random32(length(tags))], fTagsLookup);
       batch.Add(article, true);
     end;
     if RestModel.Orm.BatchSend(batch, articles) = HTTP_SUCCESS then
@@ -311,7 +311,7 @@ begin
       batch.Reset(TOrmComment, 20000);
       for n := 1 to FAKEDATA_ARTICLESCOUNT * 2 do
       begin
-        comment.Article := CastID(articles[random(length(articles))]);
+        comment.Article := CastID(articles[Random32(length(articles))]);
         comment.Title := TSynTestCase.RandomTextParagraph(5, ' ');
         comment.Content :=
           TSynTestCase.RandomTextParagraph(30, '.', 'http://mormot.net');
