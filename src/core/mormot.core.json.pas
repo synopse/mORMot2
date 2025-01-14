@@ -7983,7 +7983,7 @@ procedure _JL_Hash(Data: PByte; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     Ctxt.Valid := (Ctxt.ValueLen = Ctxt.Info.Size * 2) and
-      HexDisplayToBin(PAnsiChar(Ctxt.Value), Data, Ctxt.Info.Size);
+                  HexDisplayToBin(PAnsiChar(Ctxt.Value), Data, Ctxt.Info.Size);
 end;
 
 procedure _JL_Binary(Data: PByte; var Ctxt: TJsonParserContext);

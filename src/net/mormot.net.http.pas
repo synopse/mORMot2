@@ -782,7 +782,7 @@ type
     fRouteNode: TRadixTreeNodeParams; // is a TUriTreeNode
     fRouteName: pointer; // TRawUtf8DynArray set by TUriTreeNode.LookupParam
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
-    fHttp: PHttpRequestContext; // as supplied to Prepare()
+    fHttp: PHttpRequestContext; // as supplied to Prepare() - seldom used
     function GetRouteValuePosLen(const Name: RawUtf8;
       var Value: TValuePUtf8Char): boolean;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
@@ -794,7 +794,7 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - won't reset other parameters: should come after a plain Create or
     // an explicit THttpServerRequest.Recycle()
-    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8;
+    procedure Prepare(var aHttp: THttpRequestContext; const aRemoteIP: RawUtf8;
       aAuthorize: THttpServerRequestAuthentication);
     /// prepare an incoming request from explicit values
     // - could be used for non-HTTP execution, e.g. from a WebSockets link
@@ -4476,25 +4476,25 @@ end;
 
 { THttpServerRequestAbstract }
 
-procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
+procedure THttpServerRequestAbstract.Prepare(var aHttp: THttpRequestContext;
   const aRemoteIP: RawUtf8; aAuthorize: THttpServerRequestAuthentication);
 begin
   fRemoteIP := aRemoteIP;
   fHttp := @aHttp;
-  fUrl := aHttp.CommandUri;
+  FastAssign(fUrl, aHttp.CommandUri);
   fMethod := aHttp.CommandMethod;
-  fInHeaders := aHttp.Headers;
-  fInContentType := aHttp.ContentType;
-  fHost := aHttp.Host;
+  FastAssign(fInHeaders, aHttp.Headers);
+  FastAssign(fInContentType, aHttp.ContentType);
+  FastAssign(fHost, aHttp.Host);
   if hsrAuthorized in fConnectionFlags then
   begin
     // reflect the current valid "www-authenticate:" header
     fAuthenticationStatus := aAuthorize;
-    fAuthenticatedUser := aHttp.BearerToken; // set by fServer.Authorization()
+    FastAssign(fAuthenticatedUser, aHttp.BearerToken); // set by fServer.Authorization()
   end
   else
-    fAuthBearer := aHttp.BearerToken;
-  fUserAgent := aHttp.UserAgent;
+    FastAssign(fAuthBearer, aHttp.BearerToken);
+  FastAssign(fUserAgent, aHttp.UserAgent);
   fInContent := aHttp.Content;
 end;
 
