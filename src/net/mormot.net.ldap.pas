@@ -558,8 +558,7 @@ const
     [#0 .. #31, '(', ')', '&', '|', '=', '!', '>', '<', '~', '/', '\']);
 
   /// the chars to escape for LdapEscapeCN()
-  LDAP_CN: TSynAnsicharSet = (
-    ['.', '/', '\']);
+  LDAP_CN: TSynAnsicharSet = ['.', '/', '\'];
 
 /// escape the ( ) & | = ! > < ~ * / \ characters as expected by LDAP filters
 // - you can let * untouched if KeepWildChar is set
@@ -7018,8 +7017,9 @@ var
   i, n: PtrInt;
 begin
   result := false;
-  if not LdapEscapeName(UserDN, user) then
+  if not LdapIsValidDistinguishedName(UserDN) then
     exit;
+  user := EscapeHex(UserDN, '\'); // RawLdapTranslateFilter() does UnEscapeHex()
   n := 0;
   for i := 0 to high(GroupAN) do
     if GroupAN[i] <> '' then
