@@ -9757,7 +9757,7 @@ var
   max: PtrUInt;
 begin
   max := length(events);
-  if PtrUInt(Index) < max then
+  if PtrUInt(Index) >= max then
     exit;
   dec(max);
   if max = 0 then
