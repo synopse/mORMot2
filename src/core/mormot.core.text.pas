@@ -5826,18 +5826,24 @@ end;
 
 function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
   const toescape: TSynAnsicharSet; escape: AnsiChar): PUtf8Char;
+var
+  c: AnsiChar;
+  hex: PByteToWord; // better code generation on x86_64 and arm
 begin
+  hex := @TwoDigitsHexWB;
   result := dest;
   if srclen > 0 then
     repeat
-      if src^ in toescape then
+      c := src^;
+      if c in toescape then
       begin
         result^ := escape;
-        result := pointer(ByteToHex(pointer(result + 1), ord(src^)));
+        PWord(result + 1)^ := hex[ord(c)];
+        inc(result, 3);
       end
       else
       begin
-        result^ := src^;
+        result^ := c;
         inc(result);
       end;
       inc(src);
@@ -5850,6 +5856,11 @@ function EscapeHex(const src: RawUtf8;
 var
   l: PtrInt;
 begin
+  if not NeedsEscape(pointer(src), toescape) then
+  begin
+    result := src; // obvious
+    exit;
+  end;
   l := length(src);
   if l <> 0 then
   begin
