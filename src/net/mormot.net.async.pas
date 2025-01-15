@@ -2284,8 +2284,8 @@ begin
           connection.fWr.Clear;
         end;
       soWaitWrite:
-        with fWaitingWrite do
-          ObjArrayAdd(Items, connection, Safe, @Count);
+        ObjArrayAdd(fWaitingWrite.Items, connection,
+          fWaitingWrite.Safe, @fWaitingWrite.Count);
     end;
   except
     connection.fWr.Clear;
@@ -2333,8 +2333,8 @@ begin
           connection.UnLock({writer=}true);
       end
       else // retry if locked (unlikely)
-        with fWaitingWrite do
-          ObjArrayAdd(Items, connection, Safe, @Count);
+        ObjArrayAdd(fWaitingWrite.Items, connection,
+          fWaitingWrite.Safe, @fWaitingWrite.Count);
   end;
 end;
 
@@ -2734,8 +2734,7 @@ begin
   with fSockets.fWaitingWrite do
     if Count <> 0 then
       PtrArrayDelete(Items, aConnection, Safe, @Count);
-  with fGC1 do // add to 1st generation
-    ObjArrayAdd(Items, aConnection, Safe, @Count);
+  ObjArrayAdd(fGC1.Items, aConnection, fGC1.Safe, @fGC1.Count); // to 1st gen
 end;
 
 function OneGC(var gen, dst: TPollAsyncConnections; lastms, oldms: cardinal): PtrInt;
