@@ -1093,6 +1093,9 @@ function NeedsXmlEscape(text: PUtf8Char): boolean;
 // - just a wrapper around TTextWriter.AddXmlEscape() process
 function XmlEscape(const text: RawUtf8): RawUtf8;
 
+/// quickly identify if any character appears in an UTF-8 string
+function NeedsEscape(text: PUtf8Char; const toescape: TSynAnsicharSet): boolean;
+
 /// escape as \xx hexadecimal some chars from a set into a pre-allocated buffer
 // - dest^ should have at least srclen * 3 bytes, for \## trios
 function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
@@ -5800,6 +5803,24 @@ begin
         break     // no escape needed
       else
         exit;     // needs XML escape
+  result := false;
+end;
+
+function NeedsEscape(text: PUtf8Char; const toescape: TSynAnsicharSet): boolean;
+var
+  c: AnsiChar;
+begin
+  result := true;
+  if text <> nil then
+    repeat
+      c := text^;
+      if c = #0 then
+        break
+      else if c in toescape then
+        exit
+      else
+        inc(text);
+    until false;
   result := false;
 end;
 
