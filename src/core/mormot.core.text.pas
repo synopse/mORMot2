@@ -1099,12 +1099,21 @@ function NeedsEscape(text: PUtf8Char; const toescape: TSynAnsicharSet): boolean;
 /// escape as \xx hexadecimal some chars from a set into a pre-allocated buffer
 // - dest^ should have at least srclen * 3 bytes, for \## trios
 function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
-  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): PUtf8Char;
+  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): PUtf8Char; overload;
+
+/// escape as \xx hexadecimal one char into a pre-allocated buffer
+// - dest^ should have at least srclen * 3 bytes, for \## trios
+function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
+  toescape, escape: AnsiChar): PUtf8Char; overload;
 
 /// escape as \xx hexadecimal some chars from a set into a new RawUtf8 string
 // - as used e.g. by LdapEscape()
 function EscapeHex(const src: RawUtf8;
-  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8;
+  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8; overload;
+
+/// escape as \xx hexadecimal one char into a new RawUtf8 string
+function EscapeHex(const src: RawUtf8;
+  toescape: AnsiChar; escape: AnsiChar = '\'): RawUtf8; overload;
 
 /// un-escape \xx or \c encoded chars from a pre-allocated buffer
 // - any CR/LF after \ will also be ignored
@@ -5869,6 +5878,48 @@ begin
       toescape, escape) - pointer(result);
   end;
   FakeSetLength(result, l); // return in-place with no realloc
+end;
+
+function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
+  toescape, escape: AnsiChar): PUtf8Char;
+var
+  c: AnsiChar;
+  hex: PByteToWord; // better code generation on x86_64 and arm
+begin
+  hex := @TwoDigitsHexWB;
+  result := dest;
+  if srclen > 0 then
+    repeat
+      c := src^;
+      if c = toescape then
+      begin
+        result^ := escape;
+        PWord(result + 1)^ := hex[ord(c)];
+        inc(result, 3);
+      end
+      else
+      begin
+        result^ := c;
+        inc(result);
+      end;
+      inc(src);
+      dec(srclen);
+    until srclen = 0;
+end;
+
+function EscapeHex(const src: RawUtf8; toescape, escape: AnsiChar): RawUtf8;
+var
+  l: PtrInt;
+begin
+  if PosExChar(toescape, src) = 0 then
+  begin
+    result := src; // obvious
+    exit;
+  end;
+  l := length(src);
+  FastSetString(result, l * 3); // allocate maximum size
+  FakeSetLength(result, EscapeHexBuffer(pointer(src), pointer(result), l,
+    toescape, escape) - pointer(result));
 end;
 
 function UnescapeHexBuffer(src, dest: PUtf8Char; escape: AnsiChar): PUtf8Char;
