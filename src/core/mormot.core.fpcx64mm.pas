@@ -1816,7 +1816,7 @@ asm
         bsf     ecx, ecx
         lea     rcx, [rcx + r9 * 8]
         // Set rdi = @bin, rsi = free block
-        lea     rsi, [rcx * 8] // SizeOf(TMediumBlockBin) = 16
+        lea     rsi, [rcx * 8] // SizeOf(TMediumBlockInfo.Bins[]) = 16
         lea     rdi, [r10 + TMediumBlockInfo.Bins + rsi * 2]
         mov     rsi, TMediumFreeBlock[rdi].NextFreeBlock
         // Remove the first block from the linked list (LIFO)
@@ -1830,12 +1830,10 @@ asm
         // r9 = bin group number * 4, rcx = bin number, rdi = @bin, rsi = free block
         // Flag this bin (and the group if needed) as empty
         mov     edx,  - 2
-        mov     r11d, [r10 + TMediumBlockInfo.BinGroupBitmap]
         rol     edx, cl
-        btr     r11d, eax // btr reg,reg is faster than btr [mem],reg
         and     [r10 + TMediumBlockInfo.BinBitmaps + r9], edx
         jnz     @MediumBinNotEmpty
-        mov     [r10 + TMediumBlockInfo.BinGroupBitmap], r11d
+        btr     [r10 + TMediumBlockInfo.BinGroupBitmap], eax
 @MediumBinNotEmpty:
         // rsi = free block, rbx = block type
         // Get the size of the available medium block in edi
@@ -2041,14 +2039,12 @@ asm
         cmp     rdi, rax
         jne     @MediumBinNotEmptyForMedium
         // edx=bingroupnumber, ecx=binnumber, rdi=@bin, rsi=freeblock, ebx=blocksize
-        // Flag this bin and group as empty
+        // Flag this bin (and the group if needed) as empty
         mov     eax,  - 2
-        mov     r11d, [r10 + TMediumBlockInfo.BinGroupBitmap]
         rol     eax, cl
-        btr     r11d, edx // btr reg,reg is faster than btr [mem],reg
         and     [r10 + TMediumBlockInfo.BinBitmaps + rdx * 4], eax
         jnz     @MediumBinNotEmptyForMedium
-        mov     [r10 + TMediumBlockInfo.BinGroupBitmap], r11d
+        btr     [r10 + TMediumBlockInfo.BinGroupBitmap], edx
 @MediumBinNotEmptyForMedium:
         // rsi = free block, ebx = block size
         // Get rdi = size of the available medium block, rdx = second split size
