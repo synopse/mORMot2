@@ -5241,11 +5241,11 @@ end;
 procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 var
-  max: PtrUInt;
+  max: PtrInt;
 begin
-  max := PtrUInt(BinBytes) * 2 + 1;
-  if PtrUInt(BEnd - B) <= max then
-    if max >= cardinal(fTempBufSize) then
+  max := BinBytes * 2 + 1;
+  if BEnd - B <= max then // note: PtrInt(BEnd - B) could be < 0
+    if PtrUInt(max) >= PtrUInt(fTempBufSize) then
       exit // too big for a single call
     else
       FlushToStream;
@@ -5321,7 +5321,7 @@ begin
     dec(BinBytes, chunk);
     if BinBytes = 0 then
       break;
-    // FlushToStream writes B-fTempBuf+1 -> special one below:
+    // FlushToStream writes B-fTempBuf+1 -> need custom code here
     WriteToStream(fTempBuf, B - fTempBuf);
     B := fTempBuf;
   until false;
