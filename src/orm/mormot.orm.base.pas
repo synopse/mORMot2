@@ -9019,7 +9019,7 @@ begin
             W.AddShort(U, {$ifdef NOTORMTABLELEN}StrLen(U){$else}fLen[o]{$endif});
           ftDate,
           ftUtf8,
-          ftBlob:
+          ftBlob: // ftBlob is already stored with base-64 encoding
             begin
 str:          W.AddDirect('"');
               W.AddJsonEscape(U, 0); // Len=0 is slightly faster

@@ -5316,10 +5316,10 @@ begin
     else
       mormot.core.text.BinToHex(PAnsiChar(Bin), PAnsiChar(B), chunk);
     inc(B, chunk * 2);
-    inc(PByte(Bin), chunk);
     dec(BinBytes, chunk);
     if BinBytes = 0 then
       break;
+    inc(PByte(Bin), chunk);
     // FlushToStream writes B-fTempBuf+1 -> need custom code here
     WriteToStream(fTempBuf, B - fTempBuf);
     B := fTempBuf;
