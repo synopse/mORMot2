@@ -8932,7 +8932,7 @@ begin
     v := pointer(Values);
     for i := 0 to NamesCount do
       if (v^.Text = nil) and
-         IdemPropNameU(Names[i], name, namelen) then
+         (StrIComp(Names[i], name) = 0) then // properly inlined
       begin
         v^.Text := info.Value;
         v^.Len := info.ValueLen;
