@@ -687,6 +687,17 @@ type
     /// same as calling TMvcApplication.GotoDefault
     // - HTTP_TEMPORARYREDIRECT will change the URI, but HTTP_SUCCESS won't
     constructor CreateDefault(aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
+    /// just a wrapper around raise CreateGotoView()
+    class procedure GotoView(const aMethod: RawUtf8;
+      const aParametersNameValuePairs: array of const;
+      aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
+    /// just a wrapper around raise CreateGotoError()
+    class procedure GotoError(const aErrorMessage: string;
+      aErrorCode: integer = HTTP_BADREQUEST); overload;
+    /// just a wrapper around raise CreateGotoError()
+    class procedure GotoError(aHtmlErrorCode: integer); overload;
+    /// just a wrapper around raise CreateDefault()
+    class procedure Default(aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
   end;
 
   /// defines the main and error pages for the ViewModel of one application
@@ -2247,6 +2258,28 @@ constructor EMvcApplication.CreateGotoView(const aMethod: RawUtf8;
 begin
   inherited CreateFmt('GotoView(''%s'',%d)', [aMethod, aStatus]);
   TMvcApplication.GotoView(fAction, aMethod, aParametersNameValuePairs, aStatus);
+end;
+
+class procedure EMvcApplication.GotoView(const aMethod: RawUtf8;
+  const aParametersNameValuePairs: array of const; aStatus: cardinal);
+begin
+  raise CreateGotoView(aMethod, aParametersNameValuePairs, aStatus);
+end;
+
+class procedure EMvcApplication.GotoError(const aErrorMessage: string;
+  aErrorCode: integer);
+begin
+  raise CreateGotoError(aErrorMessage, aErrorCode);
+end;
+
+class procedure EMvcApplication.GotoError(aHtmlErrorCode: integer);
+begin
+  raise CreateGotoError(aHtmlErrorCode);
+end;
+
+class procedure EMvcApplication.Default(aStatus: cardinal);
+begin
+  raise CreateDefault(aStatus);
 end;
 
 
