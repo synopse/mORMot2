@@ -3946,7 +3946,7 @@ begin
   result := nil;
   if Len >= fTempBufSize - 16 then
     exit;
-  if BEnd - B <= Len then
+  if BEnd - B <= Len then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   result := B + 1;
 end;
@@ -4372,7 +4372,7 @@ procedure TTextWriter.AddShort(Text: PUtf8Char; TextLen: PtrInt);
 begin
   if TextLen <= 0 then
     exit;
-  if BEnd - B <= TextLen then
+  if BEnd - B <= TextLen then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   MoveFast(Text^, B[1], TextLen);
   inc(B, TextLen);
@@ -4462,12 +4462,11 @@ var
 begin
   if (B >= fTempBuf) and
      (B^ = #9) then
-    // we just already added an indentation level - do it once
-    exit;
+    exit; // we just already added an indentation level - do it once
   ntabs := fHumanReadableLevel;
   if ntabs >= cardinal(fTempBufSize) then
     ntabs := 0; // fHumanReadableLevel=-1 after the last level of a document
-  if BEnd - B <= PtrInt(ntabs) then
+  if BEnd - B <= PtrInt(ntabs) then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   PCardinal(B + 1)^ := 13 + 10 shl 8; // CR + LF
   if ntabs > 0 then
@@ -4481,7 +4480,7 @@ var
 begin
   while aCount > 0 do
   begin
-    n := BEnd - B;
+    n := BEnd - B; // note: PtrInt(BEnd - B) could be < 0
     if n <= aCount then
     begin
       FlushToStream;
@@ -4668,7 +4667,7 @@ begin
      (Len > 0) then
     if Len < fTempBufSize then // can be inlined for small chunk
     begin
-      if BEnd - B <= Len then
+      if BEnd - B <= Len then  // note: PtrInt(BEnd - B) could be < 0
         FlushToStream;
       MoveFast(P^, B[1], Len);
       inc(B, Len);
@@ -4933,7 +4932,7 @@ var
   L: PtrInt;
 begin
   L := ord(Text[0]);
-  if BEnd - B <= L then
+  if BEnd - B <= L then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   inc(B);
   if L > 0 then
@@ -5218,7 +5217,7 @@ begin
         AddString(Text) // would overfill our buffer -> manual append
     else
     begin
-      if BEnd - B <= siz then
+      if BEnd - B <= siz then // note: PtrInt(BEnd - B) could be < 0
         FlushToStream;
       for i := 1 to count do
       begin
@@ -5806,7 +5805,7 @@ begin
           inc(result);
           continue;
         end;
-        if src^ = #0 then // expect valid \c
+        if src^ = #0 then // unexpected \c into c (drop the escape)
           break;
       end;
       result^ := src^;

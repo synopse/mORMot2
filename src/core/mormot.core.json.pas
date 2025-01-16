@@ -6446,7 +6446,7 @@ begin
     n := Len div 3;
     trailing := Len - n * 3;
     dec(Len, trailing);
-    if BEnd - B > integer(n + 1) shl 2 then
+    if PtrInt(BEnd - B) > PtrInt(n + 1) shl 2 then // BEnd - B could be < 0
     begin
       // will fit in available space in Buf -> fast in-buffer Base64 encoding
       n := Base64EncodeMain(@B[1], P, Len); // may use AVX2 on FPC x86_64
