@@ -5530,149 +5530,6 @@ begin
 end;
 
 
-{ TEchoWriter }
-
-constructor TEchoWriter.Create(Owner: TTextWriter);
-begin
-  fWriter := Owner;
-  if Assigned(fWriter.OnFlushToStream) then
-    ESynException.RaiseUtf8('Unexpected %.Create', [self]);
-  fWriter.OnFlushToStream := FlushToStream; // register
-end;
-
-destructor TEchoWriter.Destroy;
-begin
-  if (fWriter <> nil) and
-     (TMethod(fWriter.OnFlushToStream).Data = self) then
-    fWriter.OnFlushToStream := nil; // unregister
-  inherited Destroy;
-end;
-
-procedure TEchoWriter.EchoPendingToBackground(aLevel: TSynLogLevel);
-var
-  n, cap: PtrInt;
-begin
-  fBackSafe.Lock;
-  try
-    n := fBack.Count;
-    if length(fBack.Level) = n then
-    begin
-      cap := NextGrow(n);
-      SetLength(fBack.Level, cap);
-      SetLength(fBack.Text, cap);
-    end;
-    fBack.Level[n] := aLevel;
-    fBack.Text[n] := fEchoBuf;
-  finally
-    fBackSafe.UnLock;
-  end;
-end;
-
-procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogLevel);
-var
-  e: PtrInt;
-begin
-  if twoEndOfLineCRLF in fWriter.CustomOptions then
-    fWriter.AddCR
-  else
-    fWriter.Add(#10);
-  if fEchos = nil then
-    exit; // no redirection yet
-  fEchoStart := EchoFlush;
-  if fEchoPendingExecuteBackground then
-    EchoPendingToBackground(aLevel)
-  else
-    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
-      try
-        fEchos[e](self, aLevel, fEchoBuf);
-      except // remove callback in case of exception during echoing
-        MultiEventRemove(fEchos, e);
-      end;
-  fEchoBuf := '';
-end;
-
-procedure TEchoWriter.EchoPendingExecute;
-var
-  todo: TEchoWriterBack; // thread-safe per reference copy
-  i, e: PtrInt;
-begin
-  if fBack.Count = 0 then
-    exit;
-  fBackSafe.Lock;
-  MoveFast(fBack, todo, SizeOf(fBack)); // fast copy without refcount
-  FillCharFast(fBack, SizeOf(fBack), 0);
-  fBackSafe.UnLock;
-  for i := 0 to todo.Count - 1 do
-    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
-      try
-        fEchos[e](self, todo.Level[i], todo.Text[i]);
-      except // remove callback in case of exception during echoing in user code
-        MultiEventRemove(fEchos, e);
-        if fEchos = nil then
-          break;
-      end;
-end;
-
-procedure TEchoWriter.FlushToStream(Text: PUtf8Char; Len: PtrInt);
-begin
-  if fEchos = nil then
-    exit;
-  EchoFlush;
-  fEchoStart := 0;
-end;
-
-procedure TEchoWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
-begin
-  if self <> nil then
-    if MultiEventAdd(fEchos, TMethod(aEcho)) then
-      if fEchos <> nil then
-        fEchoStart := fWriter.B - fWriter.fTempBuf + 1; // ignore any previous buffer
-end;
-
-procedure TEchoWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
-begin
-  if self <> nil then
-    MultiEventRemove(fEchos, TMethod(aEcho));
-end;
-
-function TEchoWriter.EchoFlush: PtrInt;
-var
-  L, LI: PtrInt;
-  P: PUtf8Char;
-begin
-  P := fWriter.fTempBuf;
-  result := fWriter.B - P + 1;
-  L := result - fEchoStart;
-  inc(P, fEchoStart);
-  while (L > 0) and
-        (P[L - 1] in [#10, #13]) do // trim right CR/LF chars
-    dec(L);
-  if L = 0 then
-    exit;
-  LI := length(fEchoBuf); // fast append to fEchoBuf
-  SetLength(fEchoBuf, LI + L);
-  MoveFast(P^, PByteArray(fEchoBuf)[LI], L);
-end;
-
-procedure TEchoWriter.EchoReset;
-begin
-  fEchoBuf := '';
-end;
-
-function TEchoWriter.GetEndOfLineCRLF: boolean;
-begin
-  result := twoEndOfLineCRLF in fWriter.CustomOptions;
-end;
-
-procedure TEchoWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
-begin
-  if aEndOfLineCRLF then
-    fWriter.CustomOptions := fWriter.CustomOptions + [twoEndOfLineCRLF]
-  else
-    fWriter.CustomOptions := fWriter.CustomOptions - [twoEndOfLineCRLF];
-end;
-
-
 function ObjectToJson(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUtf8;
 begin
   ObjectToJson(Value, result, Options);
@@ -6001,6 +5858,149 @@ begin
       toescape, escape) - pointer(result);
   end;
   FakeSetLength(result, l); // return in-place with no realloc
+end;
+
+
+{ TEchoWriter }
+
+constructor TEchoWriter.Create(Owner: TTextWriter);
+begin
+  fWriter := Owner;
+  if Assigned(fWriter.OnFlushToStream) then
+    ESynException.RaiseUtf8('Unexpected %.Create', [self]);
+  fWriter.OnFlushToStream := FlushToStream; // register
+end;
+
+destructor TEchoWriter.Destroy;
+begin
+  if (fWriter <> nil) and
+     (TMethod(fWriter.OnFlushToStream).Data = self) then
+    fWriter.OnFlushToStream := nil; // unregister
+  inherited Destroy;
+end;
+
+procedure TEchoWriter.EchoPendingToBackground(aLevel: TSynLogLevel);
+var
+  n, cap: PtrInt;
+begin
+  fBackSafe.Lock;
+  try
+    n := fBack.Count;
+    if length(fBack.Level) = n then
+    begin
+      cap := NextGrow(n);
+      SetLength(fBack.Level, cap);
+      SetLength(fBack.Text, cap);
+    end;
+    fBack.Level[n] := aLevel;
+    fBack.Text[n] := fEchoBuf;
+  finally
+    fBackSafe.UnLock;
+  end;
+end;
+
+procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogLevel);
+var
+  e: PtrInt;
+begin
+  if twoEndOfLineCRLF in fWriter.CustomOptions then
+    fWriter.AddCR
+  else
+    fWriter.Add(#10);
+  if fEchos = nil then
+    exit; // no redirection yet
+  fEchoStart := EchoFlush;
+  if fEchoPendingExecuteBackground then
+    EchoPendingToBackground(aLevel)
+  else
+    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
+      try
+        fEchos[e](self, aLevel, fEchoBuf);
+      except // remove callback in case of exception during echoing
+        MultiEventRemove(fEchos, e);
+      end;
+  fEchoBuf := '';
+end;
+
+procedure TEchoWriter.EchoPendingExecute;
+var
+  todo: TEchoWriterBack; // thread-safe per reference copy
+  i, e: PtrInt;
+begin
+  if fBack.Count = 0 then
+    exit;
+  fBackSafe.Lock;
+  MoveFast(fBack, todo, SizeOf(fBack)); // fast copy without refcount
+  FillCharFast(fBack, SizeOf(fBack), 0);
+  fBackSafe.UnLock;
+  for i := 0 to todo.Count - 1 do
+    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
+      try
+        fEchos[e](self, todo.Level[i], todo.Text[i]);
+      except // remove callback in case of exception during echoing in user code
+        MultiEventRemove(fEchos, e);
+        if fEchos = nil then
+          break;
+      end;
+end;
+
+procedure TEchoWriter.FlushToStream(Text: PUtf8Char; Len: PtrInt);
+begin
+  if fEchos = nil then
+    exit;
+  EchoFlush;
+  fEchoStart := 0;
+end;
+
+procedure TEchoWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
+begin
+  if self <> nil then
+    if MultiEventAdd(fEchos, TMethod(aEcho)) then
+      if fEchos <> nil then
+        fEchoStart := fWriter.B - fWriter.fTempBuf + 1; // ignore any previous buffer
+end;
+
+procedure TEchoWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
+begin
+  if self <> nil then
+    MultiEventRemove(fEchos, TMethod(aEcho));
+end;
+
+function TEchoWriter.EchoFlush: PtrInt;
+var
+  L, LI: PtrInt;
+  P: PUtf8Char;
+begin
+  P := fWriter.fTempBuf;
+  result := fWriter.B - P + 1;
+  L := result - fEchoStart;
+  inc(P, fEchoStart);
+  while (L > 0) and
+        (P[L - 1] in [#10, #13]) do // trim right CR/LF chars
+    dec(L);
+  if L = 0 then
+    exit;
+  LI := length(fEchoBuf); // fast append to fEchoBuf
+  SetLength(fEchoBuf, LI + L);
+  MoveFast(P^, PByteArray(fEchoBuf)[LI], L);
+end;
+
+procedure TEchoWriter.EchoReset;
+begin
+  fEchoBuf := '';
+end;
+
+function TEchoWriter.GetEndOfLineCRLF: boolean;
+begin
+  result := twoEndOfLineCRLF in fWriter.CustomOptions;
+end;
+
+procedure TEchoWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
+begin
+  if aEndOfLineCRLF then
+    fWriter.CustomOptions := fWriter.CustomOptions + [twoEndOfLineCRLF]
+  else
+    fWriter.CustomOptions := fWriter.CustomOptions - [twoEndOfLineCRLF];
 end;
 
 
