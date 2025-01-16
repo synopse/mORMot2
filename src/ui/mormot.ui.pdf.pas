@@ -4871,14 +4871,14 @@ end;
 
 function TPdfWrite.AddHex(const Bin: PdfString): TPdfWrite;
 var
-  L, len: integer;
+  L, len: PtrInt;
   PW: pointer;
 begin
   len := length(Bin);
   PW := pointer(Bin);
   repeat
     L := len;
-    if BEnd - B <= L * 2 then
+    if PtrInt(BEnd - B) <= L * 2 then // note: PtrInt(BEnd - B) could be < 0
     begin
       Save;
       if L > high(fTmp) shr 1 then
@@ -5039,7 +5039,7 @@ function TPdfWrite.AddUnicodeHex(PW: PWideChar; WideCharCount: integer): TPdfWri
   end;
 
 var
-  L: integer;
+  L: PtrInt;
   {$ifdef USE_PDFSECURITY}
   sectmp: TSynTempBuffer;
   {$endif USE_PDFSECURITY}
