@@ -482,7 +482,7 @@ begin
     end;
   end
   else
-    raise EMvcApplication.CreateGotoError(HTTP_NOTFOUND);
+    EMvcApplication.GotoError(HTTP_NOTFOUND);
 end;
 
 procedure TBlogApplication.AuthorView(var ID: TID; var Author: TOrmAuthor;
@@ -494,7 +494,7 @@ begin
     Articles := RestModel.Orm.RetrieveDocVariantArray(TOrmArticle, '',
       'Author=? order by RowId desc limit 50', [ID], ARTICLE_FIELDS)
   else
-    raise EMvcApplication.CreateGotoError(HTTP_NOTFOUND);
+    EMvcApplication.GotoError(HTTP_NOTFOUND);
 end;
 
 function TBlogApplication.Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
@@ -583,12 +583,12 @@ var
 begin
   AuthorID := GetLoggedAuthorID(canPost, Article);
   if AuthorID = 0 then
-    raise EMvcApplication.CreateGotoError(sErrorNeedValidAuthorSession);
+    EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
   if ID <> 0 then
     if not RestModel.Orm.Retrieve(ID, Article) then
-      raise EMvcApplication.CreateGotoError(HTTP_UNAVAILABLE)
+      EMvcApplication.GotoError(HTTP_UNAVAILABLE)
     else if Article.Author <> CastID(AuthorID) then
-      raise EMvcApplication.CreateGotoError(sErrorNeedValidAuthorSession);
+      EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
   if Title <> '' then
     Article.Title := Title;
   if Content <> '' then
