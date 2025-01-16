@@ -7026,7 +7026,8 @@ end;
 
 procedure TJsonWriter.AddJsonEscape(P: pointer; Len: PtrInt);
 var
-  i, start: PtrInt;
+  c: PByte;
+  l: PtrInt;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute JSON_ESCAPE;
   {$else}
@@ -7035,67 +7036,67 @@ var
 label
   noesc;
 begin
-  if P = nil then
+  c := P;
+  if c = nil then
     exit;
-  if Len = 0 then
-    dec(Len); // -1 = no end = AddJsonEscape(P, 0)
-  i := 0;
+  if Len <> 0 then
+    inc(Len, PtrUInt(c)); // pointer(Len)=nil if no end, or pointer(Len)=P[Len]
   {$ifndef CPUX86NOTPIC}
   tab := @JSON_ESCAPE;
   {$endif CPUX86NOTPIC}
-  if tab[PByteArray(P)[i]] = JSON_ESCAPE_NONE then
+  if tab[c^] = JSON_ESCAPE_NONE then
   begin
 noesc:
-    start := i;
-    if Len < 0 then  // fastest loop is with AddJsonEscape(P, 0)
+    P := c;
+    if Len = 0 then  // fastest loop is with AddJsonEscape(P, 0)
       repeat
-        inc(i);
-      until tab[PByteArray(P)[i]] <> JSON_ESCAPE_NONE
+        inc(c);
+      until tab[c^] <> JSON_ESCAPE_NONE
     else
       repeat
-        inc(i);
-      until (i >= Len) or
-            (tab[PByteArray(P)[i]] <> JSON_ESCAPE_NONE);
-    inc(PByte(P), start);
-    dec(i, start);
-    if Len >= 0 then
-      dec(Len, start);
-    if BEnd - B <= i then
-      AddNoJsonEscapeBig(P, i)
+        inc(c);
+      until (PtrUInt(c) >= PtrUInt(Len)) or
+            (tab[c^] <> JSON_ESCAPE_NONE);
+    l := PUtf8Char(c) - P;
+    if PtrInt(BEnd - B) < l then // note: PtrInt(BEnd - B) could be < 0
+      AddNoJsonEscapeBig(P, l)
     else
     begin
-      MoveFast(P^, B[1], i);
-      inc(B, i);
+      MoveFast(P^, B[1], l);
+      inc(B, l);
     end;
-    if (Len >= 0) and
-       (i >= Len) then
+    if Len = 0 then
+    begin
+      if c^ = 0 then
+        exit; // optimize most common path
+    end
+    else if PtrUInt(c) >= PtrUInt(Len) then
       exit;
   end;
   repeat
     if B >= BEnd then
       FlushToStream;
-    case tab[PByteArray(P)[i]] of // better codegen with no temp var
+    case tab[c^] of // better codegen with no temp var
       JSON_ESCAPE_NONE:
         goto noesc;
       JSON_ESCAPE_ENDINGZERO:
-        // #0
-        exit;
+        exit; // #0
       JSON_ESCAPE_UNICODEHEX:
         begin
           // characters below ' ', #7 e.g. -> // 'u0007'
           PCardinal(B + 1)^ :=
             ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
           inc(B, 4);
-          PWord(B + 1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
+          PWord(B + 1)^ := TwoDigitsHexWB[c^];
         end;
     else
       // escaped as \ + b,t,n,f,r,\,"
-      PWord(B + 1)^ := (integer(tab[PByteArray(P)[i]]) shl 8) or ord('\');
+      PWord(B + 1)^ := (integer(tab[c^]) shl 8) or ord('\');
     end;
-    inc(i);
+    inc(c);
     inc(B, 2);
-  until (Len >= 0) and
-        (i >= Len);
+  until (Len <> 0) and
+        (PtrUInt(c) >= PtrUInt(Len));
 end;
 
 procedure TJsonWriter.AddJsonEscapeString(const s: string);
