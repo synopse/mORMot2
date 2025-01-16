@@ -957,7 +957,7 @@ type
     // - see TextLength for the total number of bytes, on both stream and memory
     function PendingBytes: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
-      /// how many bytes are currently available in the internal memory buffer
+    /// how many bytes are currently available in the internal memory buffer
     function AvailableBytes: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// how many bytes were currently written on disk/stream
@@ -3712,7 +3712,7 @@ begin
   fTempBuf := aBuf;
   dec(aBuf);
   B := aBuf;   // Add() methods will append at B+1
-  BEnd := @aBuf[aBufSize - 15]; // BEnd := B-16 to avoid overwrite/overread
+  BEnd := @aBuf[aBufSize - 15]; // BEnd := B+size-16 to avoid overwrite/overread
   {$ifndef PUREMORMOT2}
   if DefaultTextWriterTrimEnum then
     Include(fCustomOptions, twoTrimLeftEnumSets);
@@ -3805,6 +3805,8 @@ end;
 function TTextWriter.AvailableBytes: PtrUInt;
 begin
   result := BEnd - B;
+  if PtrInt(result) < 0 then
+    result := 0; // may happen with AddDirect/AddComma
 end;
 
 procedure TTextWriter.Add(const c: AnsiChar);
