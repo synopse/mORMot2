@@ -138,6 +138,7 @@ function CldapGetDefaultLdapController(
 /// pickup the preferred LDAP 'server:port' of a set of LDAP servers
 // - will send CLDAP NetLogon messages to the LdapServers to retrieve
 // TCldapDomainInfo.ClientSite then request the DNS for the LDAP of this site
+// - if no site is defined, fallback to the first known LDAP server
 // - as used by CldapGetLdapController() and CldapMyLdapController()
 function CldapGetBestLdapController(const LdapServers: TRawUtf8DynArray;
   const DomainName, NameServer: RawUtf8; TimeOutMS: integer = 500): RawUtf8;
@@ -2568,12 +2569,15 @@ begin
       res := DnsServices(n, NameServer);
       if res <> nil then
       begin
-        result := res[0];
+        result := res[0]; // found a matching site
         exit;
       end;
     end;
   end;
-  result := '';
+  if LdapServers <> nil then
+    result := LdapServers[0] // if no site is defined, use first server
+  else
+    result := '';
 end;
 
 function CldapGetLdapController(const DomainName, NameServer: RawUtf8;
