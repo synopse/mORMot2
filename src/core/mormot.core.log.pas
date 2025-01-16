@@ -1549,7 +1549,7 @@ type
     fHost, fUser, fCPU, fOSDetailed, fFramework: RawUtf8;
     fExeDate: TDateTime;
     fOS: TWindowsVersion;
-    fWow64: boolean;
+    fWow64, fWow64Emulated: boolean;
     fOSServicePack: integer;
     fStartDateTime: TDateTime;
     fDayCurrent: Int64; // as PInt64('20160607')^
@@ -1733,6 +1733,9 @@ type
     /// if the 32 bit process was running under WOW 64 virtual emulation
     property Wow64: boolean
       read fWow64;
+    /// if the process was running under WOW 64 hardware emulation, e.g. Prism
+    property Wow64Emulated: boolean
+      read fWow64Emulated;
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     // - under Linux, it will return the full system version, e.g.
@@ -5341,8 +5344,12 @@ begin
       AddDirect('/');
       AddTrimSpaces(OSVersionInfoEx);
     end;
+    {$ifdef OSWINDOWS}
     AddShorter(' Wow64=');
-    AddB({$ifdef OSWINDOWS} ord(IsWow64) {$else} 0 {$endif});
+    AddB(ord(IsWow64) + ord(IsWow64Emulation) shl 1); // 0, 1, 2 or 3
+    {$else}
+    AddShorter(' Wow64=0');
+    {$endif OSWINDOWS}
     AddShort(' Freq=1000000'); // we use QueryPerformanceMicroSeconds()
     if IsLibrary then
     begin
@@ -6748,7 +6755,7 @@ var
   aWow64, feat: RawUtf8;
   f: PAnsiChar;
   i: PtrInt;
-  j, Level: integer;
+  j, Level, wow64: integer;
   TSEnter, TSLeave: Int64;
   fp, fpe: PSynLogFileProc;
   OK: boolean;
@@ -6828,7 +6835,9 @@ begin
       else
         mormot.core.text.HexToBin(f, @fIntelCPU, SizeOf(fIntelCPU));
       end;
-    fWow64 := aWow64 = '1';
+    wow64 := GetInteger(pointer(aWow64)); // 0, 1, 2 or 3
+    fWow64 := (wow64 and 1) <> 0;
+    fWow64Emulated := (wow64 and 2) <> 0; // + ord(IsWow64Emulation) shl 1
     SetInt64(PBeg, fFreq);
     while (PBeg < PEnd) and
           (PBeg^ > ' ') do
