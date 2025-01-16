@@ -1021,6 +1021,9 @@ var
   // to run seamlessly on 64-bit Windows
   // - equals always FALSE if the current executable is a 64-bit image
   IsWow64: boolean;
+  /// is set to TRUE if the current process running through a software emulation
+  // - e.g. a Win32/Win64 Intel application running via Prism on Windows for Arm
+  IsWow64Emulation: boolean;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
   // to retrieve the real top-most system information

@@ -5271,16 +5271,24 @@ begin // where to cache our computed UUID as a local file
   result := GetSystemPath(spCommonData) + 'synopse.uuid';
 end;
 
+const
+  IMAGE_FILE_MACHINE_UNKNOWN = 0; // if the process is not under WOW64
+  IMAGE_FILE_MACHINE_I386    = $014c;
+  IMAGE_FILE_MACHINE_AMD64   = $8664;
+  IMAGE_FILE_MACHINE_ARM64   = $aa64;
+
 procedure InitializeSpecificUnit;
 var
   h: THandle;
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
+  IsWow64Process2: function(Handle: THandle; var Process, Machine: word): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
   GetLogicalProcessorInformation: function(
    var Info: TSystemLogicalProcessorInformation; Len: PDWord): BOOL; stdcall;
   wine_get_version: function: PAnsiChar; stdcall;
   mem: TMemoryStatusEx;
-  Res: BOOL;
+  res: BOOL;
+  process, machine: word;
   P: pointer;
   Vers: TWindowsVersion;
   cpu, manuf, prod, prodver: RawUtf8;
@@ -5324,15 +5332,28 @@ begin
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
   _QueryPerformanceFrequencyPer10 := _QueryPerformanceFrequency = 10000000;
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
-  Res := false;
+  res := false;
   IsWow64 := Assigned(IsWow64Process) and
-             IsWow64Process(GetCurrentProcess, Res) and
-             Res;
+             IsWow64Process(GetCurrentProcess, res) and
+             res;
   if IsWow64 then
     // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
     GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
   else
     @GetNativeSystemInfo := nil;
+  // see https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation
+  IsWow64Process2 := GetProcAddress(h, 'IsWow64Process2'); // Windows 10+
+  process := 0; // = IMAGE_FILE_MACHINE_UNKNOWN if not under WOW64
+  machine := 0;
+  IsWow64Emulation := Assigned(IsWow64Process2) and
+    IsWow64Process2(GetCurrentProcess, process, machine) and
+    {$ifdef CPUINTEL}
+    (machine <> IMAGE_FILE_MACHINE_I386) and
+    (machine <> IMAGE_FILE_MACHINE_AMD64); // detecting PRISM is enough by now
+    {$else}
+    ((machine = IMAGE_FILE_MACHINE_I386) or
+     (machine = IMAGE_FILE_MACHINE_AMD64));
+    {$endif CPUINTEL}
   GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
   GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
   QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
