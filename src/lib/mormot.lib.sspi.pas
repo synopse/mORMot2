@@ -1455,7 +1455,6 @@ end;
 const
   RSA_PREFIX: PAnsiChar = '1.2.840.113549.1.1.'; // len=19
   ECC_PREFIX: PAnsiChar = '1.2.840.10045.';      // len=14
-  ENU_PREFIX: PAnsiChar = '1.3.6.1.5.5.7.3.';    // len=16
 
 procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
 var
@@ -1589,7 +1588,8 @@ begin // rough parsing, but works with most simple content
 end;
 
 const
-  WIN_CERT_EXT: array[wkuTlsServer..wkuTimestamp] of PAnsiChar = (
+  ENU_PREFIX: PAnsiChar = '1.3.6.1.5.5.7.3.';    // len=16
+  ENU_SUFFIX: array[wkuTlsServer..wkuTimestamp] of AnsiChar = (
     '1',  // wkuTlsServer
     '2',  // wkuTlsClient
     '4',  // wkuEmail
@@ -1601,10 +1601,10 @@ function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal): boolean;
 var
   nfo: PCERT_INFO;
-  i, o: PtrInt;
+  i, j, o: PtrInt;
   oid: PAnsiChar;
-  ku: byte;
   u: TWinCertUsage;
+  ku: byte;
   len: cardinal;
   sub: RawUtf8;
   h: THash160;
@@ -1634,9 +1634,12 @@ begin
         if not CompareMemSmall(oid, ENU_PREFIX, 16) then
           continue;
         inc(oid, 16);
-        for u := low(WIN_CERT_EXT) to high(WIN_CERT_EXT) do
-          if StrComp(oid, WIN_CERT_EXT[u]) = 0 then
-            include(Cert.Usage, u);
+        if oid[1] = #0 then
+        begin
+          j := ByteScanIndex(@ENU_SUFFIX, length(ENU_SUFFIX), ord(oid[0]));
+          if j >= 0 then
+            include(Cert.Usage, TWinCertUsage(j + ord(low(ENU_SUFFIX))));
+        end;
       end;
   WinCertName(nfo^.Issuer, Cert.IssuerName, StrType);
   WinCertName(nfo^.Subject, Cert.SubjectName, StrType);
