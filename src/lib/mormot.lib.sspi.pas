@@ -730,7 +730,7 @@ function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
 /// return some multi-line text of the main TWinCertInfo fields
 // - in a layout similar to X509_print() OpenSSL formatting
 // - fully implemented by mormot.crypt.secure - a cut-down version is set by
-// this unit
+// this unit, missing some less-used fields
 var
   WinCertInfoToText: function(const c: TWinCertInfo): RawUtf8;
 
@@ -1726,8 +1726,18 @@ begin
     '  Subject: ' + c.SubjectName + #13#10 +
     '  Subject Public Key Info:'#13#10 +
     '    Public Key Algorithm: ' + c.PublicKeyAlgorithmName + #13#10 +
-    '    OID: ' + c.PublicKeyAlgorithm + #13#10;
-  // known extensions will be properly written by mormot.crypt.secure code
+    '    OID: ' + c.PublicKeyAlgorithm + #13#10 +
+    '  X509v3 extensions:'#13#10;
+  if c.SubjectID <> '' then
+    result := result + '    X509v3 Subject Key Identifier:'#13#10 +
+                       '      ' + c.SubjectID + #13#10;
+  if c.IssuerID <> '' then
+    result := result + '    X509v3 Authority Key Identifier:'#13#10 +
+                       '      ' + c.IssuerID + #13#10;
+  if c.SubjectAltNames <> '' then
+    result := result + '    X509v3 Subject Alternative Name:'#13#10 +
+                       '      ' + c.SubjectAltNames + #13#10;
+  // other extensions will be properly written by mormot.crypt.secure code
 end;
 
 
