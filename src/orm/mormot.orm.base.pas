@@ -8270,6 +8270,7 @@ var
   t: TTimeLogBits;
   id: TSynUniqueIdentifierBits;
   V: PUtf8Char;
+  ft: POrmTableFieldType;
   enum, err: integer;
   time: RawUtf8;
 begin
@@ -8280,9 +8281,12 @@ begin
     exit; // out of range
   if fFieldType = nil then
     InitFieldTypes;
+  ft := @fFieldType[field];
   row := row * fFieldCount + field;
   V := GetResults(row);
-  with fFieldType[field] do
+  if V = nil then
+    TSynVarData(value).VType := varNull
+  else
     if expandHugeIDAsUniqueIdentifier and
        (field = fFieldIndexID) then
     begin
@@ -8295,18 +8299,18 @@ begin
     else
     begin
       if expandEnumsAsText and
-         (ContentType = oftEnumerate) then
+         (ft^.ContentType = oftEnumerate) then
       begin
         enum := GetInteger(V, err);
         if (err = 0) and
-           (ContentTypeInfo <> nil) then
+           (ft^.ContentTypeInfo <> nil) then
         begin
-          value := PRttiEnumType(ContentTypeInfo)^.GetEnumNameOrd(enum)^;
+          value := PRttiEnumType(ft^.ContentTypeInfo)^.GetEnumNameOrd(enum)^;
           exit;
         end;
       end
       else if expandTimeLogAsText then
-        case ContentType of
+        case ft^.ContentType of
           oftTimeLog,
           oftModTime,
           oftCreateTime,
@@ -8318,9 +8322,9 @@ begin
                 value := 0
               else
               begin
-                if ContentType = oftUnixTime then
+                if ft^.ContentType = oftUnixTime then
                   t.FromUnixTime(t.Value);
-                if ContentType <> oftUnixMSTime then
+                if ft^.ContentType <> oftUnixMSTime then
                   time := t.Text(true)
                 else
                   // no TTimeLog use for milliseconds resolution
@@ -8332,8 +8336,8 @@ begin
               exit;
             end;
         end;
-      ValueVarToVariant(V, GetResultsLen(row, V), ContentType, TVarData(value),
-        {createTempCopy=}true, ContentTypeInfo, options);
+      ValueVarToVariant(V, GetResultsLen(row, V), ft^.ContentType, TVarData(value),
+        {createTempCopy=}true, ft^.ContentTypeInfo, options);
     end;
 end;
 
