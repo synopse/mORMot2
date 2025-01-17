@@ -443,8 +443,7 @@ begin
   Check(VarIsString(v));
   t := nil; // makes the compiler happy
   ValueVarToVariant(nil, 0, oftBoolean, vd, false, t);
-  Check(not boolean(v));
-  Check(VariantTypeName(v)^ = 'Boolean');
+  CheckEqual(TVarData(v).VType, varNull);
   ValueVarToVariant('0', 1, oftBoolean, vd, false, t);
   Check(not boolean(v));
   Check(VariantTypeName(v)^ = 'Boolean');

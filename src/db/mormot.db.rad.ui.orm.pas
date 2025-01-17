@@ -286,7 +286,7 @@ begin
   result := nil;
   f := Field.Index;
   inc(RowIndex); // first TOrmTable row are field names
-  P := fTable.Get(RowIndex, f, ResultLen);
+  P := fTable.GetWithLen(RowIndex, f, ResultLen);
   if P = nil then // null field or out-of-range RowIndex/f -> result := nil
     exit;
   result := @fTemp64; // let result point to Int64, Double or TDatetime

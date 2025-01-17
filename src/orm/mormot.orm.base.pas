@@ -3636,6 +3636,11 @@ procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
 var
   err: integer;
 begin
+  if Value = nil then
+  begin
+    TSynVarData(result).VType := varNull;
+    exit;
+  end;
   VarClearAndSetType(variant(result), SQL_ELEMENTTYPES[fieldType]);
   result.VAny := nil; // avoid GPF
   case fieldType of
