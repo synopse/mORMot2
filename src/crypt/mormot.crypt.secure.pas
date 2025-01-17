@@ -3362,8 +3362,13 @@ var
   X509Parse: function(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
 {$ifdef OSWINDOWS}
+
 /// the raw mormot.lib.sspi parser - published for testing
 function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
+
+/// internal conversion fuction, as used e.g. by WinX509Parse()
+procedure WinInfoToParse(const c: TWinCertInfo; out Info: TX509Parsed);
+
 {$endif OSWINDOWS}
 
 
