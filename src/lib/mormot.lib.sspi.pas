@@ -656,6 +656,9 @@ type
     // - contains e.g. 'C=FR, O=Certplus, CN=Class 3P Primary CA'
     // - you can use ExtractX500() to retrieve one actual field value
     SubjectName: RawUtf8;
+    /// the certificate Alternate Subject names as a CSV array
+    // - contains e.g. 'synopse.info, www.synopse.info'
+    SubjectAltNames: RawUtf8;
     /// the certificate Issuer ID, stored as 'xx:xx:xx:xx...' hexa text
     IssuerID: RawUtf8;
     /// the certificate Subject ID, stored as 'xx:xx:xx:xx...' hexa text
@@ -687,7 +690,7 @@ type
     KeyContainer: RawUtf8;
     /// the key container provider name
     KeyProvider: RawUtf8;
-    /// the X509 extensions of this certificate
+    /// the raw X509 extensions of this certificate
     Extension: array of TWinCertExtension;
   end;
   PWinCertInfo = ^TWinCertInfo;
@@ -1553,6 +1556,36 @@ begin
   TrimCopy(t, i, j - i, result);
 end;
 
+function ParseSubjectAltNames(P: PByteArray; L: PtrInt): RawUtf8;
+begin // rough parsing, but works with most simple content
+  result := '';
+  { 2.5.29.17 = 30:20:
+                  82:0c:73:79:6e:6f:70:73:65:2e:69:6e:66:6f:
+                  82:10:77:77:77:2e:73:79:6e:6f:70:73:65:2e:69:6e:66:6f }
+  dec(L, 2);
+  if (L <= 0) or
+     (P[0] <> $30) or
+     (P[1] and $80 <> 0) then
+    exit;
+  P := @P[2]; // 30:xx initial sequence
+  repeat
+    if L <= 2 then
+      exit;
+    dec(L, P[1] + 2);
+    if (L < 0) or
+       (P[1] and $80 <> 0) then
+      exit;
+    if P[0] = $82 then // CHOICE dNSName [2] IA5String
+    begin
+      AppendBufferToUtf8(pointer(@P[2]), P[1], result);
+      if L = 0 then
+        break;
+      AppendShortToUtf8(', ', result);
+    end;
+    P := @P[P[1] + 2]; // next choice
+  until L = 0;
+end;
+
 const
   WIN_CERT_EXT: array[wkuTlsServer..wkuTimestamp] of PAnsiChar = (
     '1',  // wkuTlsServer
@@ -1646,23 +1679,33 @@ begin
     with nfo^.rgExtension[i],
          Cert.Extension[i] do
     begin
+      // store the raw extension content as hexadecimal
       OID := pszObjId;
       Critical := fCritical;
       ToHumanHex(Value, pointer(Blob.pbData), Blob.cbData);
-      if (OID = '2.5.29.19') and
-         (PosEx('01:ff', Value) <> 0) then
-        include(Cert.Usage, wkuCA) // X509v3 Basic Constraints: CA:TRUE
-      else if (Cert.SubjectID = '') and
-              (OID = '2.5.29.14') and
-              (copy(Value, 1, 6) = '04:14:') then
-        Cert.SubjectID := copy(Value, 7, 2000) // rough parsing of 20-byte IDs
-      else if (Cert.IssuerID = '') and
-              (OID = '2.5.29.35') and // authorityKeyIdentifier
-              (length(Value) > 60) then
+      // decode most needed information
+      if OID = '2.5.29.17' then // e.g. 'synopse.info, www.synopse.info'
+        Cert.SubjectAltNames := ParseSubjectAltNames(Blob.pbData, Blob.cbData)
+      else if OID = '2.5.29.19' then
       begin
-        o := PosEx('80:14:', Value); // rough detection of 20-byte IDs
-        if o <> 0 then
-          Cert.IssuerID := copy(Value, o + 6, 59);
+        if PosEx('01:ff', Value) <> 0 then
+          include(Cert.Usage, wkuCA); // X509v3 Basic Constraints: CA:TRUE
+      end
+      else if OID = '2.5.29.14' then
+      begin
+       if (Cert.SubjectID = '') and
+          (copy(Value, 1, 6) = '04:14:') then // rough parsing of 20-byte IDs
+         Cert.SubjectID := copy(Value, 7, 59)
+      end
+      else if OID = '2.5.29.35' then // authorityKeyIdentifier
+      begin
+        if (Cert.IssuerID = '') and
+           (length(Value) > 60) then
+        begin
+          o := PosEx('80:14:', Value); // rough detection of 20-byte IDs
+          if o <> 0 then
+            Cert.IssuerID := copy(Value, o + 6, 59);
+        end;
       end;
     end;
   result := true;
