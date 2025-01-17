@@ -1556,24 +1556,26 @@ begin
   TrimCopy(t, i, j - i, result);
 end;
 
-function ParseSubjectAltNames(P: PByteArray; L: PtrInt): RawUtf8;
+function ParseAltNames(P: PByteArray; L: PtrInt): RawUtf8;
 begin // rough parsing, but works with most simple content
   result := '';
   { 2.5.29.17 = 30:20:
-                  82:0c:73:79:6e:6f:70:73:65:2e:69:6e:66:6f:
-                  82:10:77:77:77:2e:73:79:6e:6f:70:73:65:2e:69:6e:66:6f }
+                  82:0c: 73:79:6e:6f:70:73:65:2e:69:6e:66:6f:
+                  82:10: 77:77:77:2e:73:79:6e:6f:70:73:65:2e:69:6e:66:6f
+    into 'synopse.info, www.synopse.info' }
   dec(L, 2);
   if (L <= 0) or
      (P[0] <> $30) or
-     (P[1] and $80 <> 0) then
+     (P[1] and $80 <> 0) or
+     (P[1] <> L) then
     exit;
   P := @P[2]; // 30:xx initial sequence
   repeat
-    if L <= 2 then
+    if (L <= 2) or
+       (P[1] and $80 <> 0) then
       exit;
     dec(L, P[1] + 2);
-    if (L < 0) or
-       (P[1] and $80 <> 0) then
+    if L < 0 then
       exit;
     if P[0] = $82 then // CHOICE dNSName [2] IA5String
     begin
@@ -1606,6 +1608,8 @@ var
   len: cardinal;
   sub: RawUtf8;
   h: THash160;
+  e: PCERT_EXTENSION;
+  c: PWinCertExtension;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -1675,39 +1679,41 @@ begin
   if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
     ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
-  for i := 0 to integer(nfo^.cExtension) - 1 do
-    with nfo^.rgExtension[i],
-         Cert.Extension[i] do
+  c := pointer(Cert.Extension);
+  e := @nfo^.rgExtension[0];
+  for i := 1 to nfo^.cExtension do
+  begin
+    // store the raw extension content as hexadecimal
+    c^.OID := e^.pszObjId;
+    c^.Critical := e^.fCritical;
+    ToHumanHex(c^.Value, pointer(e^.Blob.pbData), e^.Blob.cbData);
+    // decode most needed information
+    if c^.OID = '2.5.29.17' then // e.g. 'synopse.info, www.synopse.info'
+      Cert.SubjectAltNames := ParseAltNames(e^.Blob.pbData, e^.Blob.cbData)
+    else if c^.OID = '2.5.29.19' then
     begin
-      // store the raw extension content as hexadecimal
-      OID := pszObjId;
-      Critical := fCritical;
-      ToHumanHex(Value, pointer(Blob.pbData), Blob.cbData);
-      // decode most needed information
-      if OID = '2.5.29.17' then // e.g. 'synopse.info, www.synopse.info'
-        Cert.SubjectAltNames := ParseSubjectAltNames(Blob.pbData, Blob.cbData)
-      else if OID = '2.5.29.19' then
+      if PosEx('01:ff', c^.Value) <> 0 then
+        include(Cert.Usage, wkuCA); // X509v3 Basic Constraints: CA:TRUE
+    end
+    else if c^.OID = '2.5.29.14' then
+    begin
+     if (Cert.SubjectID = '') and
+        (copy(c^.Value, 1, 6) = '04:14:') then // rough parsing of 20-byte IDs
+       Cert.SubjectID := copy(c^.Value, 7, 59)
+    end
+    else if c^.OID = '2.5.29.35' then // authorityKeyIdentifier
+    begin
+      if (Cert.IssuerID = '') and
+         (length(c^.Value) > 60) then
       begin
-        if PosEx('01:ff', Value) <> 0 then
-          include(Cert.Usage, wkuCA); // X509v3 Basic Constraints: CA:TRUE
-      end
-      else if OID = '2.5.29.14' then
-      begin
-       if (Cert.SubjectID = '') and
-          (copy(Value, 1, 6) = '04:14:') then // rough parsing of 20-byte IDs
-         Cert.SubjectID := copy(Value, 7, 59)
-      end
-      else if OID = '2.5.29.35' then // authorityKeyIdentifier
-      begin
-        if (Cert.IssuerID = '') and
-           (length(Value) > 60) then
-        begin
-          o := PosEx('80:14:', Value); // rough detection of 20-byte IDs
-          if o <> 0 then
-            Cert.IssuerID := copy(Value, o + 6, 59);
-        end;
+        o := PosEx('80:14:', c^.Value); // rough detection of 20-byte IDs
+        if o <> 0 then
+          Cert.IssuerID := copy(c^.Value, o + 6, 59);
       end;
     end;
+    inc(c);
+    inc(e);
+  end;
   result := true;
 end;
 
