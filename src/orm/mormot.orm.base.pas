@@ -10322,24 +10322,31 @@ function TOrmTableAbstract.SearchFieldEquals(Value: PUtf8Char;
   FieldIndex, StartRow: PtrInt; CaseSensitive: boolean): PtrInt;
 var
   o: PtrInt;
+  u: PUtf8Char;
+  cmp: TUtf8Compare;
 begin
   if (self <> nil) and
-     (Value <> nil) and
      (PtrUInt(FieldIndex) < PtrUInt(fFieldCount)) then
   begin
     o := fFieldCount * StartRow + FieldIndex;
     if CaseSensitive then
-      for result := StartRow to fRowCount do
-        if StrComp(GetResults(o), Value) = 0 then
-          exit
-        else
-          inc(o, fFieldCount)
+      cmp := @StrComp
     else
-      for result := StartRow to fRowCount do
-        if Utf8IComp(GetResults(o), Value) = 0 then
-          exit
-        else
-          inc(o, fFieldCount);
+      cmp := @Utf8IComp;
+    for result := StartRow to fRowCount do
+    begin
+      u := GetResults(o);
+      if u <> nil then
+        if u^ = #0 then
+        begin
+          if Value = nil then
+            exit;
+        end
+        else if (Value <> nil) and
+                (cmp(u, Value) = 0) then
+          exit;
+      inc(o, fFieldCount);
+    end;
   end;
   result := 0;
 end;
