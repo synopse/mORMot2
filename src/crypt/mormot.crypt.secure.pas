@@ -3343,10 +3343,31 @@ type
   /// output of the X509Parse() function
   // - contains X.509 certificate main properties and binary public key
   TX509Parsed = record
-    Serial, SubjectDN, IssuerDN, SubjectID, IssuerID,
-    SigAlg, PubAlg, SubjectAltNames, PeerInfo: RawUtf8;
+    /// the certificate Serial Number, stored as 'xx:xx:xx:xx...' hexa text
+    Serial: RawUtf8;
+    /// the certificate Subject, decoded as RFC 1779 text, with X500 key names
+    SubjectDN: RawUtf8;
+    /// the certificate Issuer, decoded as RFC 1779 text, with X500 key names
+    IssuerDN: RawUtf8;
+    /// the certificate Subject ID, stored as 'xx:xx:xx:xx...' hexa text
+    SubjectID: RawUtf8;
+    /// the certificate Issuer ID, stored as 'xx:xx:xx:xx...' hexa text
+    IssuerID: RawUtf8;
+    /// the algorithm name of this certificate's digital signature
+    SigAlg: RawUtf8;
+    /// the algorithm name of this certificate's public key
+    PubAlg: RawUtf8;
+    /// the certificate Alternate Subject names as a CSV array
+    SubjectAltNames: RawUtf8;
+    /// human-friendly multi-line text of this certificate main fields
+    PeerInfo: RawUtf8;
+    /// the main key usages of this certificate
     Usage: TCryptCertUsages;
-    NotBefore, NotAfter: TDateTime;
+    /// the certificate validity start date
+    NotBefore: TDateTime;
+    /// the certificate validity end date
+    NotAfter: TDateTime;
+    /// the certificate public key ASN1 raw binary as stored in the certificate
     PubKey: RawByteString;
   end;
 
@@ -9125,19 +9146,19 @@ end;
 
 procedure WinInfoToParse(const c: TWinCertInfo; out Info: TX509Parsed);
 begin
-  Info.Serial    := c.Serial;
-  Info.SubjectDN := c.SubjectName;
-  Info.IssuerDN  := c.IssuerName;
-  Info.SubjectAltNames := ''; // not yet part of TWinCertInfo
-  Info.SubjectID := c.SubjectID;
-  Info.IssuerID  := c.IssuerID;
-  Info.SigAlg    := c.AlgorithmName;
-  Info.PubAlg    := c.PublicKeyAlgorithmName;
-  Info.Usage     := TCryptCertUsages(c.Usage); // match TWinCertUsages 16-bit
-  Info.NotBefore := c.NotBefore;
-  Info.NotAfter  := c.NotAfter;
-  Info.PubKey    := c.PublicKeyContent;
-  Info.PeerInfo  := ParsedToText(Info); // should be the last
+  Info.Serial          := c.Serial;
+  Info.SubjectDN       := c.SubjectName;
+  Info.IssuerDN        := c.IssuerName;
+  Info.SubjectAltNames := c.SubjectAltNames;
+  Info.SubjectID       := c.SubjectID;
+  Info.IssuerID        := c.IssuerID;
+  Info.SigAlg          := c.AlgorithmName;
+  Info.PubAlg          := c.PublicKeyAlgorithmName;
+  Info.Usage           := TCryptCertUsages(c.Usage); // match TWinCertUsages
+  Info.NotBefore       := c.NotBefore;
+  Info.NotAfter        := c.NotAfter;
+  Info.PubKey          := c.PublicKeyContent;
+  Info.PeerInfo        := ParsedToText(Info); // should be the last
 end;
 
 function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
