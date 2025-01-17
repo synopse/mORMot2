@@ -2752,7 +2752,7 @@ begin
     c := pointer(gen.Items[i]);
     if c.fLastOperation <= oldms then // AddGC() set c.fLastOperation as ms
     begin
-      // release after timeout
+      // move to next generation list after timeout
       if d = length(dst.Items) then
         SetLength(dst.Items, NextGrow(d));
       dst.Items[d] := c;

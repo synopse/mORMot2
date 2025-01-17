@@ -9059,7 +9059,7 @@ begin
             if PubText <> nil then
             begin
               name := 'RSA ';
-              bits := '      Modulus' + bits + ':'#13#10 +
+              bits := '      Modulus:'#13#10 +
                 BinToHumanHex(pointer(modulo), length(modulo), 16, 8) +
                 '      Exponent: 0x' + BinToHex(exp) + #13#10 ;
             end;
