@@ -7037,7 +7037,8 @@ label
   noesc;
 begin
   c := P;
-  if c = nil then
+  if (c = nil) or
+     (c^ = 0) then
     exit;
   if Len <> 0 then
     inc(Len, PtrUInt(c)); // pointer(Len)=nil if no end, or pointer(Len)=P[Len]
