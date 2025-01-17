@@ -8544,7 +8544,8 @@ begin
           for r := 1 to fRowCount do
           begin
             U := GetResults(f);
-            if U = nil then  // search for a non void column
+            if (U = nil) or
+               (U^ = #0) then  // search for a non void column
               inc(f, fFieldCount)
             else
             begin
@@ -8636,16 +8637,7 @@ begin
      (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     result := nil
   else
-  begin
-    inc(Field, Row * fFieldCount);
-    {$ifdef NOPOINTEROFFSET} // inlined GetResults() for Delphi 7
-    result := fData[Field];
-    {$else}
-    result := PUtf8Char(PtrInt(fData[Field]));
-    if result <> nil then
-      inc(result, PtrUInt(fDataStart));
-    {$endif NOPOINTEROFFSET}
-  end;
+    result := GetResults(Field + Row * fFieldCount);
 end;
 
 function TOrmTableAbstract.GetWithLen(Row, Field: PtrInt; out Len: integer): PUtf8Char;
@@ -8754,24 +8746,24 @@ begin
   if Row = 0 then
     exit; // header
   P := Get(Row, Field);
-  if P = nil then
-    exit;
-  case FieldType(Field) of
-    oftCurrency,
-    oftFloat:
-      result := GetExtended(P);
-    oftInteger, // TOrmTableAbstract.InitFieldTypes may have recognized an integer
-    oftTimeLog,
-    oftModTime,
-    oftCreateTime:
-      result := TimeLogToDateTime(GetInt64(P));
-    oftUnixTime:
-      result := UnixTimeToDateTime(GetInt64(P));
-    oftUnixMSTime:
-      result := UnixMSTimeToDateTime(GetInt64(P));
-  else // oftDateTime and any other kind will try from ISO-8601 text
-    result := Iso8601ToDateTimePUtf8Char(P);
-  end;
+  if (P <> nil) and
+     (P^ <> #0) then
+    case FieldType(Field) of
+      oftCurrency,
+      oftFloat:
+        result := GetExtended(P);
+      oftInteger, // TOrmTableAbstract.InitFieldTypes may have recognized an integer
+      oftTimeLog,
+      oftModTime,
+      oftCreateTime:
+        result := TimeLogToDateTime(GetInt64(P));
+      oftUnixTime:
+        result := UnixTimeToDateTime(GetInt64(P));
+      oftUnixMSTime:
+        result := UnixMSTimeToDateTime(GetInt64(P));
+    else // oftDateTime and any other kind will try from ISO-8601 text
+      result := Iso8601ToDateTimePUtf8Char(P);
+    end;
 end;
 
 function TOrmTableAbstract.GetAsDateTime(Row: PtrInt; const FieldName: RawUtf8): TDateTime;
@@ -8859,7 +8851,8 @@ begin
   begin
     inc(Field, fFieldCount); // next row - ignore first row = field names
     U := GetResults(Field);
-    FastSetString(Values[i], U, GetResultsLen(Field, U));
+    if U <> nil then
+      FastSetString(Values[i], U, GetResultsLen(Field, U));
   end;
   result := fRowCount;
 end;
@@ -8951,13 +8944,16 @@ begin
   repeat
     inc(Field, fFieldCount); // next row - ignore first row = field names
     U := GetResults(Field);
-    {$ifdef NOTORMTABLELEN}
-    i := StrLen(U);
-    {$else}
-    i := fLen[Field];
-    {$endif NOTORMTABLELEN}
-    MoveFast(U^, P^, i);
-    inc(P, i);
+    if U <> nil then
+    begin
+      {$ifdef NOTORMTABLELEN}
+      i := StrLen(U);
+      {$else}
+      i := fLen[Field];
+      {$endif NOTORMTABLELEN}
+      MoveFast(U^, P^, i);
+      inc(P, i);
+    end;
     dec(n);
     if n = 0 then
       break;
@@ -9131,11 +9127,14 @@ begin
         for F := 0 to FMax do
         begin
           U := GetResults(o);
-          len := GetResultsLen(o, U);
-          if Tab or not IsStringJson(U) then
-            W.AddNoJsonEscape(U, len)
-          else
-            W.AddQuotedStr(U, len, '"');
+          if U <> nil then
+          begin
+            len := GetResultsLen(o, U);
+            if Tab or not IsStringJson(U) then
+              W.AddNoJsonEscape(U, len)
+            else
+              W.AddQuotedStr(U, len, '"');
+          end;
           if F = FMax then
             W.AddCR
           else
@@ -9288,6 +9287,7 @@ var
   Zip: TZipWrite;
   Dest: TRawByteStringStream;
   content: RawUtf8;
+  U: PUtf8Char;
   W: TJsonWriter;
   r, f, o: PtrInt;
 begin
@@ -9324,26 +9324,27 @@ begin
               for f := 0 to FieldCount - 1 do
               begin
                 W.AddShort('<table:table-cell office:value-type="');
+                U := GetResults(o);
                 case fFieldType[f].ContentDB of
                   ftInt64,
                   ftDouble,
                   ftCurrency:
                     begin
                       W.AddShort('float" office:value="');
-                      W.AddXmlEscape(GetResults(o));
+                      W.AddXmlEscape(U);
                       W.AddShorter('" />');
                     end;
                   ftDate:
                     begin
                       W.AddShort('date" office:date-value="');
-                      W.AddXmlEscape(GetResults(o));
+                      W.AddXmlEscape(U);
                       W.AddShorter('" />');
                     end;
                 else
                   begin
                     //ftUnknown,ftNull,ftUtf8,ftBlob:
                     W.AddShort('string"><text:p>');
-                    W.AddXmlEscape(GetResults(o));
+                    W.AddXmlEscape(U);
                     W.AddShort('</text:p></table:table-cell>');
                   end;
                 end;
