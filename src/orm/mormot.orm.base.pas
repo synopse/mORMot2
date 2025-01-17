@@ -2085,7 +2085,6 @@ type
     /// the corresponding index in fQueryTables[]
     TableIndex: integer;
   end;
-
   POrmTableFieldType = ^TOrmTableFieldType;
 
   {$ifdef NOPOINTEROFFSET}
@@ -2447,7 +2446,8 @@ type
     function FieldNames: TRawUtf8DynArray;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the Field content (encoded as UTF-8 text) from a property name
-    // - return nil if not found
+    // - return nil if not found, or for a JSON null value
+    // - may return result^ = #0 for JSON ""
     function FieldValue(const FieldName: RawUtf8; Row: PtrInt): PUtf8Char;
       {$ifdef HASINLINE}inline;{$endif}
     /// sort result Rows, according to a specific field
@@ -2687,6 +2687,7 @@ type
       read fFieldCount;
     /// raw access to the data values memory pointers
     // - you should rather use the Get*() methods which can use the length
+    // - returns the text value, nil for JSON null, or #0 for JSON ""
     property Results[Offset: PtrInt]: PUtf8Char
       read GetResults write SetResultsSafe;
     /// raw access to the data values UTF-8 length
@@ -8386,7 +8387,7 @@ end;
 procedure TOrmTableAbstract.ToDocVariant(out docarray: variant; readonly: boolean);
 var
   Values: TVariantDynArray;
-begin
+begin // warning: do not inline this method
   ToDocVariant(Values, readonly);
   TDocVariantData(docarray).InitArrayFromVariants(Values, JSON_FAST);
 end;
@@ -9010,7 +9011,7 @@ begin
         W.AddBinToHexDisplayQuoted(@i64, IDBinarySize);
       end
       else if U = nil then
-        W.AddNull
+        W.AddNull // from JSON null (a JSON "" has U^=#0)
       else
         case fFieldType[f].ContentDB of
           ftInt64,

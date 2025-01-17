@@ -5926,7 +5926,7 @@ end;
 
 constructor TOrmTableJson.Create(const aSql, aJson: RawUtf8);
 var
-  len: integer;
+  len: PtrInt;
 begin
   len := length(aJson);
   PrivateCopyChanged(pointer(aJson), len, {updatehash=}false);
@@ -5998,6 +5998,7 @@ function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): bo
 var
   i, max, resmax, f: PtrInt;
   P: PUtf8Char;
+  datavoid: TOrmTableData; // used for all JSON "" values
   info: TGetJsonField;
 begin
   result := false; // error on parsing
@@ -6006,6 +6007,7 @@ begin
      (Buffer = nil) then
     exit;
   // go to start of object
+  datavoid := TOrmTableData(0);
   {$ifndef NOPOINTEROFFSET}
   fDataStart := Buffer; // before first value, to ensure offset=0 means nil
   {$endif NOPOINTEROFFSET}
@@ -6040,12 +6042,17 @@ begin
          IsRowID(info.Value) then
         fFieldIndexID := i;
     end;
+    datavoid := TOrmTableData(PtrUInt(info.Value) + PtrUInt(info.ValueLen)
+      {$ifndef NOPOINTEROFFSET} - PtrUInt(fDataStart) {$endif}); // ^ = #0
     f := 0;
     for i := fFieldCount to max do
     begin
       // get a field value
       info.GetJsonFieldOrObjectOrArray({handleobjarr=}true, {normbool=}false);
-      SetResults(i, info.Value, info.ValueLen);
+      if info.Value <> nil then
+        SetResults(i, info.Value, info.ValueLen)
+      else if info.WasString then // JSON null -> Value=nil
+        fData[i] := datavoid; // JSON "" -> Value^=#0, ValueLen=0
       if (info.Json = nil) and
          (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
@@ -6098,7 +6105,10 @@ begin
              IsRowID(info.Value) then
             fFieldIndexID := f;
           SetResults(f, info.Value, info.ValueLen);
-          if P = nil then
+          if datavoid = TOrmTableData(0) then
+            datavoid := TOrmTableData(PtrUInt(info.Value) + PtrUInt(info.ValueLen)
+              {$ifndef NOPOINTEROFFSET} - PtrUInt(fDataStart) {$endif}); // ^ = #0
+          if info.Json = nil then
             break;
         end
         else
@@ -6119,7 +6129,10 @@ begin
           fData := pointer(fJsonData);
         end;
         info.GetJsonFieldOrObjectOrArray({objarray=}true, {normbool=}false);
-        SetResults(max, info.Value, info.ValueLen);
+        if info.Value <> nil then
+          SetResults(max, info.Value, info.ValueLen)
+        else if info.WasString then  // JSON null -> Value=nil
+          fData[max] := datavoid;    // JSON ""   -> Value^=#0, ValueLen=0
         if info.Json = nil then
         begin
           // unexpected end
