@@ -9488,8 +9488,10 @@ begin
   result := Data[Offset];
   {$else}
   result := PUtf8Char(PtrInt(Data[Offset]));
-  if result <> nil then
-    inc(result, PtrUInt(DataStart));
+  Offset := PtrUInt(DataStart); // in two steps for better code generation
+  if result = nil then
+    Offset := PtrInt(result);   // compile as branchless cmove on FPC
+  inc(result, Offset);
   {$endif NOPOINTEROFFSET}
 end;
 
