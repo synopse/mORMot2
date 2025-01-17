@@ -3055,6 +3055,8 @@ type
     /// contain the hash value of the last JSON data sent to ContentChanged()
     // - used to don't repeat parsing if data has not been changed
     fPrivateCopyHash: cardinal;
+    /// void the whole content
+    procedure InternalReset;
     /// fill the result table content from a JSON-formated Data message
     // - returns TRUE on parsing success
     // - returns FALSE if no valid JSON data was found
@@ -5994,6 +5996,20 @@ begin
   FastSetString(fPrivateCopy, pointer(aJson), aLen);
 end;
 
+procedure TOrmTableJson.InternalReset;
+begin
+  fJsonData := nil;
+  {$ifndef NOTORMTABLELEN}
+  fLen := nil;
+  {$endif NOTORMTABLELEN}
+  {$ifndef NOPOINTEROFFSET}
+  fDataStart := nil;
+  {$endif NOPOINTEROFFSET}
+  fFieldIndexID := -1;
+  fFieldCount := 0;
+  fRowCount := 0;
+end;
+
 function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): boolean;
 var
   i, max, resmax, f: PtrInt;
@@ -6002,9 +6018,11 @@ var
   info: TGetJsonField;
 begin
   result := false; // error on parsing
-  fFieldIndexID := -1;
-  if (self = nil) or
-     (Buffer = nil) then
+  if self = nil then
+    exit;
+  InternalReset;
+  if (Buffer = nil) or
+     (BufferLen <= 0) then
     exit;
   // go to start of object
   datavoid := TOrmTableData(0);
@@ -6169,12 +6187,7 @@ begin
     if max <> (fRowCount + 1) * fFieldCount then
     begin
       // field count must be the same for all objects
-      fJsonData := nil;
-      {$ifndef NOTORMTABLELEN}
-      fLen := nil;
-      {$endif NOTORMTABLELEN}
-      fFieldCount := 0;
-      fRowCount := 0;
+      InternalReset;
       exit; // data field layout is not consistent: should never happen
     end;
   end;
