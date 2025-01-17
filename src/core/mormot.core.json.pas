@@ -2868,9 +2868,14 @@ begin
     result := false;
     exit;
   end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
+  while P^ <= ' ' do
+    if P^ = #0 then
+    begin
+      result := true;
+      exit;
+    end
+    else
+      inc(P);
   tab := @JSON_CHARS;
   c4 := PInteger(P)^;
   if (((c4 = NULL_LOW) or
