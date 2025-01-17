@@ -3895,6 +3895,7 @@ begin
   FastAssignNew(TLS.PeerIssuer);
   FastAssignNew(TLS.PeerSubject);
   FastAssignNew(TLS.PeerInfo);
+  TLS.PeerCert := nil;
   FastAssignNew(TLS.LastError);
 end;
 

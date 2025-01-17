@@ -2033,12 +2033,7 @@ var
   res, f, trial: cardinal;
 begin
   // reset output information
-  Context.CipherName := '';
-  Context.PeerIssuer := '';
-  Context.PeerSubject := '';
-  Context.PeerInfo := '';
-  Context.PeerCert := nil;
-  Context.LastError := '';
+  ResetNetTlsContext(Context);
   // method called once to attach the socket from the client side
   fSocket := Socket;
   fServerAddressW := SynUnicode(ServerAddress);
