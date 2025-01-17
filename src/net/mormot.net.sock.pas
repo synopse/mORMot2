@@ -775,7 +775,7 @@ type
   // - wasok=true if the TLS library did validate the incoming certificate
   // - should process the supplied peer information, and return true to continue
   // and accept the connection, or false to abort the connection
-  // - Context.PeerIssuer and PeerSubject have been properly populated from Peer
+  // - Context.PeerIssuer, PeerSubject and PeerCert have been properly populated
   // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509 pointers
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
@@ -901,8 +901,7 @@ type
     // - only populated if WithPeerInfo was set to true, or an error occurred
     PeerInfo: RawUtf8;
     /// output: full detailed raw information about the connected Peer
-    // - is a PWinCertInfo from mormot.lib.sspi on SChannel
-    // - not used on OpenSSL
+    // - is a PX509 on OpenSSL, or a PWinCertInfo from mormot.lib.sspi on SChannel
     PeerCert: pointer;
     /// output: low-level details about the last error at TLS level
     // - typically one X509_V_ERR_* integer constant

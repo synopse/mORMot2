@@ -10289,6 +10289,7 @@ begin
   c := _PeerVerify;
   c.fContext.PeerIssuer := peer.IssuerName;
   c.fContext.PeerSubject := peer.SubjectName;
+  c.fContext.PeerCert := peer;
   try
     result := ord(c.fContext.OnEachPeerVerify(
       c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
@@ -10384,6 +10385,7 @@ begin
   Context.PeerIssuer := '';
   Context.PeerSubject := '';
   Context.PeerInfo := '';
+  Context.PeerCert := nil;
   Context.LastError := '';
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
@@ -10430,6 +10432,7 @@ begin
         // writeln(fPeer.SetUsage([kuCodeSign, kuDigitalSignature, kuTlsServer, kuTlsClient]));
         Context.PeerIssuer := fPeer.IssuerName;
         Context.PeerSubject := fPeer.SubjectName;
+        Context.PeerCert := fPeer;
         if Context.WithPeerInfo or
            (not Context.IgnoreCertificateErrors and
             not fSsl.IsVerified(@Context.LastError)) then
