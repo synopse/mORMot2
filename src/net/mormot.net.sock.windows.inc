@@ -1885,6 +1885,7 @@ type
     fAccept: boolean;
     fAcceptCert: mormot.core.os.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
+    fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseLastError(const ctx: shortstring; res: cardinal);
     function CheckSEC_E_OK(const ctx: shortstring; res: integer): cardinal;
     function FreeAndCheckSocket(const ctx: shortstring; res: integer;
@@ -2029,7 +2030,6 @@ procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
 var
   cred: TSChannelCred;
   buf: THandshakeBuf;
-  nfo: TWinCertInfo;
   res, f, trial: cardinal;
 begin
   // method called once to attach the socket from the client side
@@ -2091,13 +2091,14 @@ begin
           raise;
     end;
   Context.CipherName := GetCipherName;
-  if TlsCertInfo(fCtxt, nfo) then
+  if TlsCertInfo(fCtxt, fPeerInfo) then
   begin
-    Context.PeerIssuer := nfo.IssuerName;
-    Context.PeerSubject := nfo.SubjectName;
+    Context.PeerIssuer := fPeerInfo.IssuerName;
+    Context.PeerSubject := fPeerInfo.SubjectName;
+    Context.PeerCert := @fPeerInfo;
     if Context.WithPeerInfo and
        Assigned(WinCertInfoToText) then
-      Context.PeerInfo := WinCertInfoToText(nfo);
+      Context.PeerInfo := WinCertInfoToText(fPeerInfo);
   end;
 end;
 

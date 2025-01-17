@@ -895,11 +895,15 @@ type
     // - e.g. 'CN=synopse.info'
     // - populated on both SChannel and OpenSSL
     PeerSubject: RawUtf8;
-    /// output: detailed information about the connected Peer
+    /// output: detailed information about the connected Peer as text
     // - stored in the native format of the TLS library, e.g. X509_print()
     // or ToText(TWinCertInfo)
     // - only populated if WithPeerInfo was set to true, or an error occurred
     PeerInfo: RawUtf8;
+    /// output: full detailed raw information about the connected Peer
+    // - is a PWinCertInfo from mormot.lib.sspi on SChannel
+    // - not used on OpenSSL
+    PeerCert: pointer;
     /// output: low-level details about the last error at TLS level
     // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
