@@ -2168,13 +2168,12 @@ type
     function GetID(Row: PtrInt): TID;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - if Row and Fields are correct, returns a pointer to the UTF-8 buffer,
-    // or nil if the corresponding JSON was null or ""
+    // nil if the corresponding JSON was null, or result^=#0 from JSON ""
     // - if Row and Fields are not correct, returns nil
     function Get(Row, Field: PtrInt): PUtf8Char; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field UTF-8 value and length
-    function Get(Row, Field: PtrInt; out Len: integer): PUtf8Char; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetWithLen(Row, Field: PtrInt; out Len: integer): PUtf8Char;
     /// read-only access to a particular field value, as RawUtf8 text
     function GetU(Row, Field: PtrInt): RawUtf8; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
@@ -2351,7 +2350,6 @@ type
     // may be slightly slower to access than readonly=FALSE, if all values are
     // likely be accessed later in the process
     procedure ToDocVariant(out docarray: variant; readonly: boolean); overload;
-    // {$ifdef HASINLINE}inline;{$endif} won't reset docarray as required
 
     /// save the table values in JSON format
     // - JSON data is added to TResultsWriter, with UTF-8 encoding, and not flushed
@@ -8641,13 +8639,16 @@ begin
   end;
 end;
 
-function TOrmTableAbstract.Get(Row, Field: PtrInt; out Len: integer): PUtf8Char;
+function TOrmTableAbstract.GetWithLen(Row, Field: PtrInt; out Len: integer): PUtf8Char;
 begin
   if (self = nil) or
-     (fData = nil) or
      (PtrUInt(Row) > PtrUInt(fRowCount)) or
-     (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
-    result := nil
+     (PtrUInt(Field) >= PtrUInt(fFieldCount)) or
+     (fData = nil) then
+  begin
+    Len := 0;
+    result := nil;
+  end
   else
   begin
     inc(Field, Row * fFieldCount);
@@ -8655,8 +8656,10 @@ begin
     result := fData[Field];
     {$else}
     result := PUtf8Char(PtrInt(fData[Field]));
-    if result <> nil then
-      inc(result, PtrUInt(fDataStart));
+    Row := PtrUInt(fDataStart); // in two steps for better code generation
+    if result = nil then
+      Row := PtrInt(result); // compile as branchless cmove on FPC
+    inc(result, Row);
     {$endif NOPOINTEROFFSET}
     {$ifdef NOTORMTABLELEN}
     Len := StrLen(result);
@@ -8671,8 +8674,9 @@ var
   P: PUtf8Char;
   PLen: integer;
 begin
-  P := Get(Row, Field, PLen);
-  if P = nil then
+  P := GetWithLen(Row, Field, PLen);
+  if (P = nil) or
+     (PLen = 0) then
     FastAssignNew(result)
   else
     FastSetString(result, P, PLen);
@@ -8781,8 +8785,9 @@ var
   U: PUtf8Char;
   ULen: integer;
 begin
-  U := Get(Row, Field, ULen);
-  if U = nil then
+  U := GetWithLen(Row, Field, ULen);
+  if (U = nil) or
+     (ULen = 0) then
     result := ''
   else
     {$ifdef UNICODE}
@@ -8798,8 +8803,9 @@ var
   ULen: integer;
 begin
   result := '';
-  U := Get(Row, Field, ULen);
-  if U <> nil then
+  U := GetWithLen(Row, Field, ULen);
+  if (U <> nil) and
+     (ULen <> 0) then
     Utf8ToSynUnicode(U, ULen, result);
 end;
 
@@ -10364,7 +10370,7 @@ begin
   else
   begin
     aType := FieldType(Field, info);
-    U := Get(Row, Field, ULen);
+    U := GetWithLen(Row, Field, ULen);
     ValueVarToVariant(U, ULen, aType, TVarData(result),
       {createTempCopy=}true, info.ContentTypeInfo);
   end;

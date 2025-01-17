@@ -2651,7 +2651,7 @@ begin
   fJsonData := nil;
   {$ifndef NOTORMTABLELEN}
   prevlen := fLen;
-  fLen := nil; // SetResultsSafe() won't try to set fLen[]
+  fLen := nil; // now to ensure SetResultsSafe() won't try to set fLen[]
   {$endif NOTORMTABLELEN}
   n := (fRowCount + 1) * fFieldCount;
   // adjust data rows
