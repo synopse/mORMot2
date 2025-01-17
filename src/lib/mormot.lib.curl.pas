@@ -62,8 +62,8 @@ const
   CURLOPTTYPE_CBPOINT       = CURLOPTTYPE_OBJECTPOINT;
   CURLOPTTYPE_VALUES        = CURLOPTTYPE_LONG;
 
-  /// flag bits in the TCurlBlob record
-  CURL_BLOB_COPY = 1;
+  // flag bits in the TCurlBlob record
+  CURL_BLOB_COPY   = 1;
   CURL_BLOB_NOCOPY = 0;
 
 {$ifdef FPC}
