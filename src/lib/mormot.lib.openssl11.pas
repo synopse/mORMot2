@@ -10134,8 +10134,6 @@ var
   i: PtrInt;
 begin
   result := '';
-  if X509 = nil then
-    exit;
   for i := 0 to length(X509) - 1 do
     result := result +  X509[i].PeerInfo + '---------'#13#10;
 end;
@@ -10380,13 +10378,8 @@ begin
   fSocket := Socket;
   fContext := @Context;
   // reset output information
+  ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
-  Context.CipherName := '';
-  Context.PeerIssuer := '';
-  Context.PeerSubject := '';
-  Context.PeerInfo := '';
-  Context.PeerCert := nil;
-  Context.LastError := '';
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   SetupCtx(Context, {bind=}false);
@@ -10646,6 +10639,8 @@ begin
     if fDoSslShutdown then
       SSL_shutdown(fSsl);
     fSsl.Free;
+    if fContext <> nil then
+      fContext^.PeerCert := nil;
   end;
   if fCtx <> nil then
     fCtx.Free; // client or AfterBind server context
