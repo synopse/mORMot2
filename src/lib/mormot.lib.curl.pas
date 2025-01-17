@@ -42,6 +42,13 @@ type
   /// low-level exception raised during libcurl library access
   ECurl = class(ExceptionWithProps);
 
+  /// low-level access to the libcurl CURLOPTTYPE_BLOB options
+  TCurlBlob = record
+    data: pointer;
+    len: PtrUInt;
+    flags: cardinal;
+  end;
+
 const
   { actual libcurl options are a combination of the following
     constants as actual value type, and a sequence number }
@@ -54,6 +61,10 @@ const
   CURLOPTTYPE_SLISTPOINT    = CURLOPTTYPE_OBJECTPOINT;
   CURLOPTTYPE_CBPOINT       = CURLOPTTYPE_OBJECTPOINT;
   CURLOPTTYPE_VALUES        = CURLOPTTYPE_LONG;
+
+  /// flag bits in the TCurlBlob record
+  CURL_BLOB_COPY = 1;
+  CURL_BLOB_NOCOPY = 0;
 
 {$ifdef FPC}
   {$WARN 3031 off : Values in enumeration types have to be ascending }
