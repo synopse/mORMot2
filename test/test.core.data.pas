@@ -6021,6 +6021,10 @@ begin
         (j[1] = #$E2) and
         (j[2] = #$80) and
         (j[3] = #$9D), 'e2809d');
+  vd := _JsonFast('{"price": 0.156}').price;
+  CheckSame(vd, 0.156);
+  vd := _JsonFastFloat('{"price": 0.156}').price; // 0.156 is a varCurrency here
+  CheckSame(vd, 0.156);
   V1 := _Arr([]);
   vs := 1.5;
   _Safe(V1)^.AddItem(vs);
