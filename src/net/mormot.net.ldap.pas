@@ -1538,7 +1538,8 @@ type
     dNSHostName, operatingSystem, operatingSystemVersion: RawUtf8;
     servicePrincipalName: TRawUtf8DynArray;
     procedure Fill(Attributes: TLdapAttributeList;
-      const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
+      const CustomAttributes: TRawUtf8DynArray;
+      const CustomTypes: TLdapAttributeTypes);
   end;
   PLdapComputer = ^TLdapComputer;
 
@@ -1551,7 +1552,8 @@ type
     groupType: TGroupTypes;
     member: TRawUtf8DynArray;
     procedure Fill(Attributes: TLdapAttributeList; WithMember: boolean;
-      const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
+      const CustomAttributes: TRawUtf8DynArray;
+      const CustomTypes: TLdapAttributeTypes);
   end;
 
   /// high-level information of a User in the LDAP database
@@ -1566,7 +1568,8 @@ type
     userAccountControl: TUserAccountControls;
     primaryGroupID: cardinal;
     procedure Fill(Attributes: TLdapAttributeList; WithMemberOf: boolean;
-      const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
+      const CustomAttributes: TRawUtf8DynArray;
+      const CustomTypes: TLdapAttributeTypes);
   end;
   PLdapUser = ^TLdapUser;
 
@@ -3435,8 +3438,7 @@ var
   i, n, failed: PtrInt;
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
-  _LdapIntern := TRawUtf8Interning.Create;
-  RegisterGlobalShutdownRelease(_LdapIntern);
+  _LdapIntern := RegisterGlobalShutdownRelease(TRawUtf8Interning.Create);
   // register all our common Attribute Types names for quick search as pointer()
   failed := -1;
   n := 0;
@@ -3617,9 +3619,30 @@ const
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=User-Account-Control%20Attribute%20Values
   UAC_VALUE: array[TUserAccountControl] of integer = (
-    1, 2, 8, 16, 32, 64, 128, 256, 512, 2048, 4096, 8192, 65536,
-    131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216,
-    33554432, 67108864, integer($80000000));
+    1,                   // uacScript
+    2,                   // uacAccountDisable
+    8,                   // uacHomeDirRequired
+    16,                  // uacLockedOut
+    32,                  // uacPasswordNotRequired
+    64,                  // uacPasswordCannotChange
+    128,                 // uacPasswordUnencrypted
+    256,                 // uacTempDuplicateAccount
+    512,                 // uacNormalAccount
+    2048,                // uacInterDomainTrusted
+    4096,                // uacWorkstationTrusted
+    8192,                // uacServerTrusted
+    65536,               // uacPasswordDoNotExpire
+    131072,              // uacLogonAccount
+    262144,              // uacSmartcardRequired
+    524288,              // uacKerberosTrustedForDelegation
+    1048576,             // uacKerberosNotDelegated
+    2097152,             // uacKerberosDesOnly
+    4194304,             // uacKerberosRequirePreAuth
+    8388608,             // uacPasswordExpired
+    16777216,            // uacKerberosTrustedToDelegate
+    33554432,            // uacKerberosNoPac
+    67108864,            // uacPartialSecretsRodc
+    integer($80000000)); // uacUserUseAesKeys
 
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=X-SYSTEMFLAGS
   SF_VALUE: array[TSystemFlag] of integer = (
