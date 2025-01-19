@@ -1410,7 +1410,7 @@ function PosCharAny(Str: PUtf8Char; Characters: PAnsiChar): PUtf8Char;
 /// a non case-sensitive RawUtf8 version of Pos()
 // - uppersubstr is expected to be already in upper case
 // - this version handle only 7-bit ASCII (no accentuated characters)
-// - see PosIU() if you want an UTF-8 version with accentuated chars support
+// - see PosIU() if you want an UTF-8 version with WinAnsi accents support
 function PosI(uppersubstr: PUtf8Char; const str: RawUtf8): PtrInt;
 
 /// a non case-sensitive version of Pos()
@@ -1420,7 +1420,8 @@ function StrPosI(uppersubstr, str: PUtf8Char): PUtf8Char;
 
 /// a non case-sensitive RawUtf8 version of Pos()
 // - substr is expected to be already in upper case
-// - this version will decode the UTF-8 content before using NormToUpper[]
+// - this version will decode the UTF-8 content before using NormToUpper[],
+// so will support only WinAnsi (Code Page 1252) codepoints
 // - see PosI() for a non-accentuated, but faster version
 function PosIU(substr: PUtf8Char; const str: RawUtf8): integer;
 
@@ -1645,16 +1646,16 @@ function SameTextU(const S1, S2: RawUtf8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of the supplied text into 8-bit uppercase
-// - this will not only convert 'a'..'z' into 'A'..'Z', but also accentuated
-// latin characters ('e' acute into 'E' e.g.), using NormToUpper[] array
+// - this will not only convert 'a'..'z' into 'A'..'Z', but also WinAnsi
+// accentuated latin characters ('e' acute into 'E' e.g.), using NormToUpper[]
 // - it will therefore decode the supplied UTF-8 content to handle more than
 // 7-bit of ascii characters (so this function is dedicated to WinAnsi code page
 // 1252 characters set)
 function UpperCaseU(const S: RawUtf8): RawUtf8;
 
 /// fast conversion of the supplied text into 8-bit lowercase
-// - this will not only convert 'A'..'Z' into 'a'..'z', but also accentuated
-// latin characters ('E' acute into 'e' e.g.), using NormToLower[] array
+// - this will not only convert 'A'..'Z' into 'a'..'z', but also WinAnsi
+// accentuated latin characters ('E' acute into 'e' e.g.), using NormToLower[]
 // - it will therefore decode the supplied UTF-8 content to handle more than
 // 7-bit of ascii characters
 function LowerCaseU(const S: RawUtf8): RawUtf8;
@@ -5772,8 +5773,7 @@ function IdemPCharAnsi(
   {$else}
   const table: PNormTable;
   {$endif CPUX86NOTPIC}
-  p: PUtf8Char; up: PAnsiChar): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  p: PUtf8Char; up: PAnsiChar): boolean; {$ifdef HASINLINE}inline;{$endif}
 begin
   // in this local IdemPChar() version, p and up are expected to be <> nil
   result := false;
@@ -5794,8 +5794,7 @@ function IdemPCharByte(
   {$else}
   const table: PByteArray;
   {$endif CPUX86NOTPIC}
-  p: PUtf8Char; up: PAnsiChar): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  p: PUtf8Char; up: PAnsiChar): boolean; {$ifdef HASINLINE}inline;{$endif}
 begin
   // in this local IdemPChar() version, p and up are expected to be <> nil
   result := false;
