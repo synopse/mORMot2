@@ -74,8 +74,8 @@ type
     /// CompressShaAes() using SHA-256 / AES-256-CTR algorithm over SynLZ
     procedure _CompressShaAes;
     {$endif PUREMORMOT2}
-    /// AES-based pseudorandom number generator
-    procedure _TAesPNRG;
+    /// AES-based (and OpenSSL) pseudorandom number generator
+    procedure _PRNG;
     /// CryptDataForCurrentUser() function
     procedure _CryptDataForCurrentUser;
     {$ifdef OSWINDOWS}
@@ -170,7 +170,6 @@ begin
   end;
   {$endif ASMX64}
 end;
-
 
 procedure TTestCoreCrypto._SHA256;
 
@@ -620,12 +619,13 @@ begin
   {$endif ASMX64AVXNOCONST}
 end;
 
-procedure TTestCoreCrypto._TAesPNRG;
+procedure TTestCoreCrypto._PRNG;
 var
   timer: TPrecisionTimer;
   i: integer;
   big: RawByteString;
 begin
+  // validate TAesPrgn (+ TAesPrngOsl) generators
   check(TAesPrng.IsAvailable);
   check(TSystemPrng.IsAvailable);
   Prng(TAesPrng, 'mORMot');
@@ -661,11 +661,23 @@ var
 begin
   if not meta.IsAvailable then
     exit;
+  // basic 16-bytes AES block validation
+  FillZero(b1);
+  FillZero(b2);
+  Check(IsZero(b1));
+  Check(IsZero(b2));
+  Check(IsEqual(b1, b2));
+  Check(CompareMem(@b1, @b2, SizeOf(b1)));
   p := meta.Main;
   p.FillRandom(b1);
+  Check(not IsZero(b1));
+  Check(IsZero(b2));
+  Check(not IsEqual(b1, b2));
   p.FillRandom(b2);
+  Check(not IsZero(b2));
   Check(not IsEqual(b1, b2));
   Check(not CompareMem(@b1, @b2, SizeOf(b1)));
+  // validate this PRNG class
   clo := 0;
   chi := 0;
   dlo := 0;
@@ -679,21 +691,23 @@ begin
     a2.FillRandom(b2);
     Check(not IsEqual(b1, b2));
     Check(not CompareMem(@b1, @b2, SizeOf(b1)));
-    Check(a1.FillRandom(0) = '');
-    Check(a1.FillRandomHex(0) = '');
+    CheckEqual(a1.FillRandom(0), '');
+    CheckEqual(a1.FillRandomHex(0), '');
     for i := 1 to 2000 do
     begin
+      s1 := '';
+      s2 := '';
       s1 := a1.FillRandom(i);
       s2 := a2.FillRandom(i);
-      check(length(s1) = i);
-      check(length(s2) = i);
+      CheckEqual(length(s1), i);
+      CheckEqual(length(s2), i);
       if i > 4 then
         check(s1 <> s2);
       // compress the output to validate (somehow) its randomness
       check(length(AlgoSynLZ.Compress(s1)) > i, 'random should not compress');
       check(length(AlgoSynLZ.Compress(s2)) > i, 'random should not compress');
       s1 := a1.FillRandomHex(i);
-      check(length(s1) = i * 2);
+      CheckEqual(length(s1), i * 2);
       check(mormot.core.text.HexToBin(pointer(s1), nil, i));
       // verify Random32 / RandomDouble / RandomDouble distribution
       c := a1.Random32;
@@ -733,27 +747,29 @@ begin
     a1.Free;
     a2.Free;
   end;
-  Check(clo + chi = 2000);
-  Check(dlo + dhi = 4000);
-  Check(elo + ehi = 4000);
+  CheckEqual(clo + chi, 2000);
+  CheckEqual(dlo + dhi, 4000);
+  CheckEqual(elo + ehi, 4000);
   CheckUtf8((clo >= 900) and
             (clo <= 1100), 'Random32 distribution clo=%', [clo]);
   CheckUtf8((dlo >= 1800) and
             (dlo <= 2200), 'RandomDouble distribution dlo=%', [dlo]);
   CheckUtf8((elo >= 1800) and
             (elo <= 2200), 'RandomExt distribution elo=%', [elo]);
+  // verify AFSplit/AFUnsplit anti-forensic secret distribution
   s1 := p.FillRandom(100);
   for i := 1 to length(s1) do
     for stripes := 0 to 10 do
     begin
       split := p.AFSplit(pointer(s1)^, i, stripes);
-      check(length(split) = i * (stripes + 1));
+      CheckEqual(length(split), i * (stripes + 1));
       check(TAesPrng.AFUnsplit(split, pointer(s2)^, i));
       check(CompareMem(pointer(s1), pointer(s2), i));
     end;
-  check(PosEx(s1, split) = 0);
+  CheckEqual(PosEx(s1, split), 0);
+  // some raw benchmark
   timer.Start;
-  Check(p.Random32(0) = 0);
+  CheckEqual(p.Random32(0), 0);
   for i := 1 to 50000 do
     Check(p.Random32(i) < cardinal(i));
   for i := 0 to 50000 do
@@ -787,7 +803,7 @@ begin
   for i := 0 to MAX - 1 do
   begin
     plain := TAesPrng.Main.FillRandom(i);
-    check(length(plain) = i);
+    CheckEqual(length(plain), i);
     UInt32ToUtf8(i, appsec);
     enc := func(plain, appsec, true);
     if not ((plain = '') or
@@ -797,8 +813,8 @@ begin
           (enc <> ''));
     check(length(enc) >= length(plain));
     test := func(enc, appsec, false);
-    check(length(test) = i);
-    check(test = plain);
+    CheckEqual(length(test), i);
+    CheckEqual(test, plain);
     inc(size, i + length(enc));
   end;
   if dpapi then
