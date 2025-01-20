@@ -11594,7 +11594,7 @@ begin
   if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
-    // optimized Intel's .asm using SSE4 or SHA HW opcodes
+    // optimized Intel's .asm using SSE4 or SHA-NI HW opcodes
     K256Aligned := @K256;
     if PtrUInt(K256Aligned) and 15 <> 0 then
     begin
