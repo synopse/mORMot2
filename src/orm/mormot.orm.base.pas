@@ -6785,38 +6785,50 @@ procedure TOrmPropInfoRttiVariant.SetValuePtr(Instance: TObject;
   Value: PUtf8Char; ValueLen: integer; wasString: boolean);
 var
   tmp: TSynTempBuffer;
-  V: Variant;
+  vd: TSynVarData;
+  v: PSynVarData;
 begin
-  if ValueLen > 0 then
+  if fSetterIsFieldPropOffset <> 0 then
+  begin // direct assignment
+    v := pointer(PtrUInt(Instance) + fSetterIsFieldPropOffset);
+    VarClear(PVariant(v)^);
+  end
+  else
+  begin
+    v := @vd; // use temp variant to call a setter method
+    vd.VType := varEmpty;
+  end;
+  if Value <> nil then // Value=nil means null
   begin
     tmp.Init(Value, ValueLen);
     try
       if fOrmFieldType = oftNullable then
-        if fSqlDBFieldType = ftDate then
+        if fSqlDBFieldType = ftDate then // decode as date/time variant
         begin
-          // decode as date/time variant
-          TVarData(V).VType := varDate;
-          TVarData(V).VDate := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
+          v^.VType := varDate;
+          v^.VDate := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
         end
         else
-          GetVariantFromJsonField(tmp.buf, wasString, V, nil, false, ValueLen)
+          GetVariantFromJsonField(
+            tmp.buf, wasString, PVariant(v)^, nil, false, ValueLen)
       else
       begin
         if wasString and
            (GotoNextNotSpace(Value)^ in ['{', '[']) then
           wasString := false; // allow to create a TDocVariant stored as DB text
-        GetVariantFromJsonField(tmp.buf, wasString, V, @DocVariantOptions,false, ValueLen);
+        GetVariantFromJsonField(tmp.buf, wasString, PVariant(v)^,
+          @DocVariantOptions, false, ValueLen);
       end;
     finally
       tmp.Done;
     end;
   end
   else
-    TVarData(V).VType := varNull; // TEXT or NULL: see GetValueVar()
+    v^.VType := varNull; // TEXT or NULL: see GetValueVar()
   if fSetterIsFieldPropOffset <> 0 then
-    PVariant(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V
-  else
-    fPropInfo.SetVariantProp(Instance, V);
+    exit;
+  fPropInfo.SetVariantProp(Instance, PVariant(v)^); // call the setter
+  VarClearProc(vd.Data);
 end;
 
 procedure TOrmPropInfoRttiVariant.SetVariant(Instance: TObject; const Source: Variant);
