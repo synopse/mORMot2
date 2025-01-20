@@ -1602,6 +1602,7 @@ type
   // this could be a good option if you don't trust your clients
   // - rsoSessionInConnectionOpaque uses LowLevelConnectionOpaque^.ValueInternal
   // to store the current TAuthSession - may be used with a lot of sessions
+  // - rsoCookieSecure will add the "Secure" directive in the cookie content
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1621,7 +1622,8 @@ type
     rsoNoTableURI,
     rsoMethodUnderscoreAsSlashUri,
     rsoValidateUtf8Input,
-    rsoSessionInConnectionOpaque);
+    rsoSessionInConnectionOpaque,
+    rsoCookieSecure);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -2842,10 +2844,14 @@ const
   HTTPONLY: array[boolean] of string[15] = (
     '; HttpOnly', '');
 begin
+  // https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/Cookies
   inherited SetOutSetCookie(aOutSetCookie);
   if StrPosI('; PATH=', pointer(fOutSetCookie)) = nil then
     fOutSetCookie := FormatUtf8('%; Path=/%%', [fOutSetCookie, Server.fModel.Root,
       HTTPONLY[rsoCookieHttpOnlyFlagDisable in Server.fOptions]]);
+  if (rsoCookieSecure in Server.fOptions) and
+     (StrPosI('; SECURE', pointer(fOutSetCookie)) = nil) then
+    fOutSetCookie := FormatUtf8('__Secure-%; Secure', [fOutSetCookie]);
 end;
 
 procedure TRestServerUriContext.OutHeadFromCookie;
