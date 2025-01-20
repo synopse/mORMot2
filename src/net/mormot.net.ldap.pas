@@ -5218,16 +5218,16 @@ var
   i: PtrInt;
   t: TLdapAttributeType;
 begin
-  sAMAccountName := Attributes[atSAMAccountName];
+  sAMAccountName    := Attributes[atSAMAccountName];
   distinguishedName := Attributes[atDistinguishedName];
-  canonicalName := DNToCN(distinguishedName, {NoRaise=}true);
-  name := Attributes[atName];
-  CN := Attributes[atCommonName];
-  description := Attributes[atDescription];
-  objectSid := Attributes[atObjectSid];
-  objectGUID := Attributes[atObjectGuid];
-  whenCreated := LdapToDate(Attributes[atWhenCreated]);
-  whenChanged := LdapToDate(Attributes[atWhenChanged]);
+  canonicalName     := DNToCN(distinguishedName, {NoRaise=}true);
+  name              := Attributes[atName];
+  CN                := Attributes[atCommonName];
+  description       := Attributes[atDescription];
+  objectSid         := Attributes[atObjectSid];
+  objectGUID        := Attributes[atObjectGuid];
+  whenCreated       := LdapToDate(Attributes[atWhenCreated]);
+  whenChanged       := LdapToDate(Attributes[atWhenChanged]);
   for i := 0 to length(CustomAttributes) - 1 do
     CustomAdd(Attributes.Find(CustomAttributes[i]));
   if CustomTypes <> [] then
@@ -5275,10 +5275,10 @@ procedure TLdapUser.Fill(Attributes: TLdapAttributeList; WithMemberOf: boolean;
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
   userPrincipalName := Attributes[atUserPrincipalName];
-  displayName := Attributes[atDisplayName];
-  mail := Attributes[atMail];
-  pwdLastSet := LdapToDate(Attributes[atPwdLastSet]);
-  lastLogon := LdapToDate(Attributes[atLastLogon]);
+  displayName       := Attributes[atDisplayName];
+  mail              := Attributes[atMail];
+  pwdLastSet        := LdapToDate(Attributes[atPwdLastSet]);
+  lastLogon         := LdapToDate(Attributes[atLastLogon]);
   ToCardinal(Attributes[atPrimaryGroupID], primaryGroupID);
   if WithMemberOf then
     memberOf := Attributes.Find(atMemberOf).GetAllReadable;
@@ -5292,15 +5292,15 @@ procedure TLdapComputer.Fill(Attributes: TLdapAttributeList;
   const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
-  pwdLastSet := LdapToDate(Attributes[atPwdLastSet]);
-  lastLogonTimestamp := LdapToDate(Attributes[atLastLogon]);
+  pwdLastSet           := LdapToDate(Attributes[atPwdLastSet]);
+  lastLogonTimestamp   := LdapToDate(Attributes[atLastLogon]);
   admPwdExpirationTime := LdapToDate(Attributes[atMcsAdmPwdExpirationTime]);
-  userAccountControl := Attributes.UserAccountControl;
+  userAccountControl   := Attributes.UserAccountControl;
   ToCardinal(Attributes[atPrimaryGroupID], primaryGroupID);
   ToCardinal(Attributes[atLogonCount], logonCount);
   ToCardinal(Attributes[atBadPwdCount], badPwdCount);
-  dNSHostName := Attributes[atDnsHostName];
-  operatingSystem := Attributes[atOperatingSystem];
+  dNSHostName          := Attributes[atDnsHostName];
+  operatingSystem      := Attributes[atOperatingSystem];
   operatingSystemVersion := Attributes[atOperatingSystemVersion];
   servicePrincipalName := Attributes.GetAll(atServicePrincipalName);
 end;
