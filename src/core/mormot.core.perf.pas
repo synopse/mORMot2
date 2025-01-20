@@ -3870,8 +3870,7 @@ begin
     GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if ProcessSystemUse = nil then
-        ProcessSystemUse := RegisterGlobalShutdownRelease(
-          TSystemUse.Create(60));
+        ProcessSystemUse := RegisterGlobalShutdownRelease(TSystemUse.Create(60));
     finally
       GlobalUnLock;
     end;
@@ -4799,8 +4798,7 @@ begin
   result := GlobalSynFpuExceptionLibrary; // threadvar instances
   if result <> nil then
     exit;
-  obj := TSynFpuException.Create(ffLibrary);
-  RegisterGlobalShutdownRelease(obj);
+  obj := RegisterGlobalShutdownRelease(TSynFpuException.Create(ffLibrary));
   GlobalSynFpuExceptionLibrary := obj;
   result := obj;
 end;
@@ -4812,8 +4810,7 @@ begin
   result := GlobalSynFpuExceptionDelphi;
   if result <> nil then
     exit;
-  obj := TSynFpuException.Create(ffPascal);
-  RegisterGlobalShutdownRelease(obj);
+  obj := RegisterGlobalShutdownRelease(TSynFpuException.Create(ffPascal));
   GlobalSynFpuExceptionDelphi := obj;
   result := obj;
 end;

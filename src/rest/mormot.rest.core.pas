@@ -1263,7 +1263,7 @@ type
   TRestClientKind = (
     ckUnknown,
     ckFramework,
-    ckAJAX);
+    ckAjax);
 
   TRestUriInputCookie = record
     Name, Value: RawUtf8; // only computed if InCookie[] is used
