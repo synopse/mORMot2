@@ -1936,14 +1936,57 @@ begin
 end;
 
 procedure TTestCoreCrypto._AES;
+
+  procedure NistVector(aes: TAesAbstractClass; const plain, iv: RawByteString;
+    ks: integer; const key: RawUtf8; const expected: RawUtf8);
+  var
+    k, c, d, e: RawByteString;
+    n: integer;
+    a: TAesAbstract;
+  begin
+    Check(plain <> '');
+    Check((length(iv) = 16) or
+          (iv = ''));
+    CheckEqual(length(plain) and AesBlockMod, 0);
+    k := mormot.core.text.HexToBin(Key);
+    Check(length(k) in [16, 24, 32]);
+    e := mormot.core.text.HexToBin(expected);
+    CheckEqual(length(e) and AesBlockMod, 0);
+    CheckEqual(length(k) shl 3, ks);
+    SetLength(c, length(plain));
+    SetLength(d, length(plain));
+    a := aes.Create(pointer(k)^, ks);
+    try
+      if iv <> '' then
+        a.IV := PAesBlock(iv)^;
+      a.Encrypt(pointer(plain), pointer(c), length(plain));
+    finally
+      a.Free;
+    end;
+    CheckEqual(mormot.core.text.BinToHex(c), expected);
+    a := aes.Create(pointer(k)^, ks);
+    try
+      if iv <> '' then
+        a.IV := PAesBlock(iv)^;
+      a.Decrypt(pointer(c), pointer(d), length(plain));
+    finally
+      a.Free;
+    end;
+    Check(d = plain);
+    {writeln('plain=',BinToHex(plain));
+    writeln('key=',BinToHex(k));
+    writeln('ciphered=',BinToHex(c));
+    writeln('deciph=',BinToHex(d));}
+  end;
+
 const
   MAX = 4096 * 1024;  // test 4 MB data, i.e. multi-threaded AES
   MODES: array[0..9
      {$ifdef USE_OPENSSL} + 7 {$endif}
      {$ifdef USE_PROV_RSA_AES} + 2 {$endif}] of TAesAbstractClass = (
-     // 0      1        2        3        4          5            6
+     // 0      1         2        3        4         5        6
      TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesGcm,
-     // 7           8         9
+     // 7      8         9
      TAesCfc, TAesOfc, TAesCtc
      {$ifdef USE_OPENSSL} ,
      // 10          11         12         13         14
@@ -1957,7 +2000,7 @@ const
      {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant?
 var
   A: TAes;
-  st, orig, crypted, s2, s3, s4: RawByteString;
+  st, orig, crypted, s2, s3, s4, nistplain, nistiv: RawByteString;
   Key: TSha256Digest;
   s, b, p: TAesBlock;
   iv: THash128Rec;
@@ -2000,6 +2043,75 @@ begin
   PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random32;
   for noaesni := false to true do
   begin
+    // FIPS 197 and SP 800-38A - Advanced Encryption Standard (AES) tests
+    nistplain := mormot.core.text.HexToBin(
+      '6BC1BEE22E409F96E93D7E117393172AAE2D8A571E03AC9C9EB76FAC45AF8E51' +
+      '30C81C46A35CE411E5FBC1191A0A52EFF69F2445DF4F9B17AD2B417BE66C3710');
+    nistiv := mormot.core.text.HexToBin(
+      '000102030405060708090A0B0C0D0E0F');
+    NistVector(TAesEcb, nistplain, '', 128,
+      '2B7E151628AED2A6ABF7158809CF4F3C',
+      '3AD77BB40D7A3660A89ECAF32466EF97F5D3D58503B9699DE785895A96FDBAAF' +
+      '43B1CD7F598ECE23881B00E3ED0306887B0C785E27E8AD3F8223207104725DD4');
+    NistVector(TAesEcb, nistplain, '', 192,
+      '8E73B0F7DA0E6452C810F32B809079E562F8EAD2522C6B7B',
+      'BD334F1D6E45F25FF712A214571FA5CC974104846D0AD3AD7734ECB3ECEE4EEF' +
+      'EF7AFD2270E2E60ADCE0BA2FACE6444E9A4B41BA738D6C72FB16691603C18E0E');
+    NistVector(TAesEcb, nistplain, '', 256,
+      '603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4',
+      'F3EED1BDB5D2A03C064B5A7E3DB181F8591CCB10D410ED26DC5BA74A31362870' +
+      'B6ED21B99CA6F4F9F153E7B1BEAFED1D23304B7A39F9F3FF067D8D8F9E24ECC7');
+    NistVector(TAesCbc, nistplain, nistiv, 128,
+      '2B7E151628AED2A6ABF7158809CF4F3C',
+      '7649ABAC8119B246CEE98E9B12E9197D5086CB9B507219EE95DB113A917678B2' +
+      '73BED6B8E3C1743B7116E69E222295163FF1CAA1681FAC09120ECA307586E1A7');
+    NistVector(TAesCbc, nistplain, nistiv, 192,
+      '8E73B0F7DA0E6452C810F32B809079E562F8EAD2522C6B7B',
+      '4F021DB243BC633D7178183A9FA071E8B4D9ADA9AD7DEDF4E5E738763F69145A' +
+      '571B242012FB7AE07FA9BAAC3DF102E008B0E27988598881D920A9E64F5615CD');
+    NistVector(TAesCbc, nistplain, nistiv, 256,
+      '603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4',
+      'F58C4C04D6E5F1BA779EABFB5F7BFBD69CFC4E967EDB808D679F777BC6702C7D' +
+      '39F23369A9D9BACFA530E26304231461B2EB05E2C39BE9FCDA6C19078C6A9D1B');
+    NistVector(TAesCfb, nistplain, nistiv, 128,
+      '2B7E151628AED2A6ABF7158809CF4F3C',
+      '3B3FD92EB72DAD20333449F8E83CFB4AC8A64537A0B3A93FCDE3CDAD9F1CE58B' +
+      '26751F67A3CBB140B1808CF187A4F4DFC04B05357C5D1C0EEAC4C66F9FF7F2E6');
+    NistVector(TAesCfb, nistplain, nistiv, 192,
+      '8E73B0F7DA0E6452C810F32B809079E562F8EAD2522C6B7B',
+      'CDC80D6FDDF18CAB34C25909C99A417467CE7F7F81173621961A2B70171D3D7A' +
+      '2E1E8A1DD59B88B1C8E60FED1EFAC4C9C05F9F9CA9834FA042AE8FBA584B09FF');
+    NistVector(TAesCfb, nistplain, nistiv, 256,
+      '603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4',
+      'DC7E84BFDA79164B7ECD8486985D386039FFED143B28B1C832113C6331E5407B' +
+      'DF10132415E54B92A13ED0A8267AE2F975A385741AB9CEF82031623D55B1E471');
+    NistVector(TAesOfb, nistplain, nistiv, 128,
+      '2B7E151628AED2A6ABF7158809CF4F3C',
+      '3B3FD92EB72DAD20333449F8E83CFB4A7789508D16918F03F53C52DAC54ED825' +
+      '9740051E9C5FECF64344F7A82260EDCC304C6528F659C77866A510D9C1D6AE5E');
+    NistVector(TAesOfb, nistplain, nistiv, 192,
+      '8E73B0F7DA0E6452C810F32B809079E562F8EAD2522C6B7B',
+      'CDC80D6FDDF18CAB34C25909C99A4174FCC28B8D4C63837C09E81700C1100401' +
+      '8D9A9AEAC0F6596F559C6D4DAF59A5F26D9F200857CA6C3E9CAC524BD9ACC92A');
+    NistVector(TAesOfb, nistplain, nistiv, 256,
+      '603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4',
+      'DC7E84BFDA79164B7ECD8486985D38604FEBDC6740D20B3AC88F6AD82A4FB08D' +
+      '71AB47A086E86EEDF39D1C5BBA97C4080126141D67F37BE8538F5A8BE740E484');
+    nistiv := mormot.core.text.HexToBin(
+      'F0F1F2F3F4F5F6F7F8F9FAFBFCFDFEFF');
+    NistVector(TAesCtr, nistplain, nistiv, 128,
+      '2B7E151628AED2A6ABF7158809CF4F3C',
+      '874D6191B620E3261BEF6864990DB6CE9806F66B7970FDFF8617187BB9FFFDFF' +
+      '5AE4DF3EDBD5D35E5B4F09020DB03EAB1E031DDA2FBE03D1792170A0F3009CEE');
+    NistVector(TAesCtr, nistplain, nistiv, 192,
+      '8E73B0F7DA0E6452C810F32B809079E562F8EAD2522C6B7B',
+      '1ABC932417521CA24F2B0459FE7E6E0B090339EC0AA6FAEFD5CCC2C6F4CE8E94' +
+      '1E36B26BD1EBC670D1BD1D665620ABF74F78A7F6D29809585A97DAEC58C6B050');
+    NistVector(TAesCtr, nistplain, nistiv, 256,
+      '603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4',
+      '601EC313775789A5B7A7F504BBF3D228F443E3CA4D62B59ACA84E990CACAF5C5' +
+      '2B0930DAA23DE94CE87017BA2D84988DDFC9C58DB67AADA613C2DD08457941A6');
+    // check both mORMot and OpenSSL against our reference vectors
     {%H-}Timer[noaesni].Init;
     for k := 0 to 2 do
     begin
@@ -2234,19 +2346,19 @@ begin
   CpuFeatures := backup;
   {$endif CPUINTEL}
   // see https://datatracker.ietf.org/doc/html/rfc3962#appendix-B
-  st := HexToBin('636869636b656e207465726979616b69');
+  st := mormot.core.text.HexToBin('636869636b656e207465726979616b69');
   CheckEqual(length(st), 16);
   FillZero(iv.b);
   cts := TAesCbc.Create(PHash128(st)^);
   try
-    orig := HexToBin('4920776f756c64206c696b652074686520');
+    orig := mormot.core.text.HexToBin('4920776f756c64206c696b652074686520');
     crypted := cts.EncryptCts(orig);
     CheckEqual(BinToHex(crypted), 'C6353568F2BF8CB4D8A580362DA7FF7F97');
     cts.iv := iv.b; // reset IV
     s2 := cts.DecryptCts(crypted);
     CheckEqual(s2, orig);
     cts.iv := iv.b;
-    orig := HexToBin(
+    orig := mormot.core.text.HexToBin(
       '4920776f756c64206c696b65207468652047656e6572616c20476175277320');
     crypted := cts.EncryptCts(orig);
     CheckEqual(BinToHex(crypted),
