@@ -5454,7 +5454,7 @@ type
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
   r: integer;
-  fid, f, o, nmap: PtrInt;
+  fid, f, o, i, nmap: PtrInt;
   map: ^TOrmTableFillOrm;
   fields: TOrmPropInfoList;
   u: PUtf8Char;
@@ -5476,19 +5476,25 @@ begin // inlined FillPrepare/TOrmFill process
       inc(map);
       inc(nmap);
     end;
+  if nmap = 0 then
+    exit;
   r := fRowCount;
   o := 0;
   repeat
-    inc(o, fFieldCount);
+    inc(o, fFieldCount); // next row (first is field names)
     P^ := RecordType.Create;
     if fid >= 0 then
       P^.IDValue := GetInt64(GetResults(o + fid));
     map := @maps;
     for f := 1 to nmap do
     begin
-      u := GetResults(o + map^.map);
-      map^.prop.SetValue(P^, u, {$ifdef NOTORMTABLELEN} StrLen(u)
-            {$else} fLen[o + map^.map] {$endif}, map^.ws);
+      i := o + map^.map;
+      u := GetResults(i);
+      if u = nil then
+        map^.prop.SetValue(P^, nil, 0, {wasString=}false) // null
+      else
+        map^.prop.SetValue(P^, u,
+          {$ifdef NOTORMTABLELEN} StrLen(u) {$else} fLen[i] {$endif}, map^.ws);
       inc(map);
     end;
     P^.fInternalState := fInternalState;
