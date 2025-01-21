@@ -1941,7 +1941,6 @@ procedure TTestCoreCrypto._AES;
     ks: integer; const key: RawUtf8; const expected: RawUtf8);
   var
     k, c, d, e: RawByteString;
-    n: integer;
     a: TAesAbstract;
   begin
     Check(plain <> '');

@@ -5843,6 +5843,8 @@ begin
   Doc.ToArrayOfConst(vr);
   s := FormatJson('[?,?,?]', [], vr);
   CheckEqual(s, '["one",2,3]');
+  s := FormatUtf8('[%,%,%]', vr);
+  CheckEqual(s, '[one,2,3]');
   s := FormatJson('[%,%,%]', vr, []);
   CheckEqual(s, '[one,2,3]');
   s := FormatJson('[?,?,?]', [], Doc.ToArrayOfConst);
