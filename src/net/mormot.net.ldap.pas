@@ -523,7 +523,11 @@ function RawLdapError(ErrorCode: integer): TLdapError;
 /// translate a LDAP_RES_* integer result code into some human-readable text
 // - searching for the ErrorCode within LDAP_RES_CODE[] values
 // - use LDAP_ERROR_TEXT[RawLdapError()] if you only need the error text
-function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
+function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8; overload;
+
+/// translate a LDAP_RES_* integer result code into some human-readable text
+function RawLdapErrorString(ErrorCode: integer): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// encode a LDAP search filter text into its ASN.1 binary representation
 // - as used by CLDAP raw functions and TLdapClient.Search()
@@ -2491,7 +2495,7 @@ implementation
 { **************** CLDAP Client Functions }
 
 const
-  NTVER: RawUtf8 = '\06\00\00\00';
+  NTVER: RawUtf8 = '\06\00\00\00'; // RawLdapTranslateFilter() does UnescapeHex()
 
 function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
   const DomainName, LdapServerAddress, LdapServerPort: RawUtf8): boolean;
@@ -2990,6 +2994,13 @@ function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
 begin
   Enum := RawLdapError(ErrorCode);
   FormatUtf8('% (#%)', [LDAP_ERROR_TEXT[Enum], ErrorCode], result);
+end;
+
+function RawLdapErrorString(ErrorCode: integer): RawUtf8;
+var
+  dummy: TLdapError;
+begin
+  result := RawLdapErrorString(ErrorCode, dummy);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
