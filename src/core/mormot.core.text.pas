@@ -8305,8 +8305,6 @@ end;
 
 procedure WideToTempUtf8(WideChar: PWideChar; WideCharCount: PtrUInt;
   var Res: TTempUtf8);
-var
-  tmp: TSynTempBuffer;
 begin
   if (WideChar = nil) or
      (WideCharCount = 0) then
@@ -8314,7 +8312,7 @@ begin
     Res.Text := nil;
     Res.Len := 0;
   end
-  else if IsAnsiCompatibleW(WideChar, WideCharCount) then // very common case
+  else if IsAnsiCompatibleW(WideChar, WideCharCount) then // most common case
   begin
     PrepareTempUtf8(Res, WideCharCount);
     repeat
@@ -8324,11 +8322,9 @@ begin
   end
   else
   begin
-    tmp.Init(WideCharCount * 3);
-    PrepareTempUtf8(Res, RawUnicodeToUtf8(tmp.buf, tmp.len + 1,
-      WideChar, WideCharCount, [ccfNoTrailingZero]));
-    MoveFast(tmp.buf^, Res.Text^, Res.Len);
-    tmp.Done;
+    PrepareTempUtf8(Res, WideCharCount * 3); // use temporarly worst case
+    Res.Len := RawUnicodeToUtf8(Res.Text, Res.Len + 1,
+      WideChar, WideCharCount, [ccfNoTrailingZero]);
   end;
 end;
 
