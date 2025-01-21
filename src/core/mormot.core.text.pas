@@ -8285,7 +8285,8 @@ begin
 end;
 
 procedure PrepareTempUtf8(var Res: TTempUtf8; Len: PtrInt);
-begin // Res.Len has been set by caller
+  {$ifdef FPC} inline; {$endif} // Delphi XE8 fails to inline this anyway :(
+begin
   Res.Len := Len;
   Res.Text := @Res.Temp;
   if Len <= SizeOf(Res.Temp) then // no memory allocation needed
