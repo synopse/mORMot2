@@ -90,10 +90,12 @@ type
     cbBuffer: cardinal;
     BufferType: cardinal;
     pvBuffer: pointer;
-    procedure Init(aType: cardinal; aData: pointer; aSize: cardinal);
+    procedure Init(aType: cardinal; aData: pointer = nil; aSize: cardinal = 0);
       {$ifdef HASINLINE} inline; {$endif}
   end;
   PSecBuffer = ^TSecBuffer;
+  TSecBufferArray = array[byte] of TSecBuffer;
+  PSecBufferArray = ^TSecBufferArray;
 
   /// describes a SSPI buffer
   {$ifdef USERECORDWITHMETHODS}
@@ -104,10 +106,11 @@ type
   public
     ulVersion: cardinal;
     cBuffers: cardinal;
-    pBuffers: PSecBuffer;
-    procedure Init(aVersion: cardinal;
-      aBuffers: PSecBuffer; aBuffersCount: cardinal);
-      {$ifdef HASINLINE} inline; {$endif}
+    pBuffers: PSecBufferArray;
+    Data: array[0..2] of TSecBuffer;
+    procedure Init;
+    procedure Add(aType: cardinal; aData: pointer = nil; aSize: cardinal = 0); overload;
+    procedure Add(aType: cardinal; const aData: RawByteString); overload;
   end;
   PSecBufferDesc = ^TSecBufferDesc;
 
@@ -1195,12 +1198,24 @@ end;
 
 { TSecBufferDesc }
 
-procedure TSecBufferDesc.Init(aVersion: cardinal; aBuffers: PSecBuffer;
-  aBuffersCount: cardinal);
+procedure TSecBufferDesc.Init;
 begin
-  ulVersion := aVersion;
-  pBuffers := aBuffers;
-  cBuffers := aBuffersCount;
+  ulVersion := SECBUFFER_VERSION;
+  pBuffers := @Data;
+  cBuffers := 0;
+end;
+
+procedure TSecBufferDesc.Add(aType: cardinal; aData: pointer; aSize: cardinal);
+begin
+  if cBuffers = high(Data) then
+    raise ESynSspi.Create('TSecBufferDesc overflow)');
+  Data[cBuffers].Init(aType, aData, aSize);
+  inc(cBuffers);
+end;
+
+procedure TSecBufferDesc.Add(aType: cardinal; const aData: RawByteString);
+begin
+  Add(aType, pointer(aData), length(aData));
 end;
 
 
@@ -1333,10 +1348,9 @@ function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;
 var
   Sizes: TSecPkgContext_Sizes;
-  SrcLen, EncLen: cardinal;
+  EncLen: cardinal;
   Token: array [0..127] of byte; // Usually 60 bytes
   Padding: array [0..63] of byte; // Usually 1 byte
-  InBuf: array[0..2] of TSecBuffer;
   InDesc: TSecBufferDesc;
   EncBuffer: RawByteString;
   Status: integer;
@@ -1350,6 +1364,10 @@ begin
   if (Sizes.cbSecurityTrailer > SizeOf(Token)) or
      (Sizes.cbBlockSize > SizeOf(Padding)) then
     raise ESynSspi.Create('SecEncrypt: invalid ATTR_SIZES');
+  FillCharFast(Token, Sizes.cbSecurityTrailer, 0);
+  FillCharFast(Padding, Sizes.cbBlockSize, 0);
+  // Encoding done in-place, so we copy the data into local EncBuffer
+  FastSetRawByteString(EncBuffer, pointer(aPlain), Length(aPlain));
   // Encrypted data buffer structure:
   //
   // SSPI/Kerberos Interoperability with GSSAPI
@@ -1364,24 +1382,21 @@ begin
   // +-------------------------+----------------+--------------------------+
   // | Trailer                 | Data           | Padding                  |
   // +-------------------------+----------------+--------------------------+
-  {%H-}InBuf[0].Init(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
-  // Encoding done in-place, so we copy the data
-  SrcLen := Length(aPlain);
-  FastSetRawByteString(EncBuffer, pointer(aPlain), SrcLen);
-  InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
-  InBuf[2].Init(SECBUFFER_PADDING, @Padding[0], Sizes.cbBlockSize);
-  {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
+  {%H-}InDesc.Init;
+  InDesc.Add(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
+  InDesc.Add(SECBUFFER_DATA, EncBuffer);
+  InDesc.Add(SECBUFFER_PADDING, @Padding, Sizes.cbBlockSize);
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  EncLen := InBuf[0].cbBuffer + InBuf[1].cbBuffer + InBuf[2].cbBuffer;
+  EncLen := InDesc.Data[0].cbBuffer + InDesc.Data[1].cbBuffer + InDesc.Data[2].cbBuffer;
   SetLength(result, EncLen);
   BufPtr := pointer(result);
-  MoveFast(PByte(InBuf[0].pvBuffer)^, BufPtr^, InBuf[0].cbBuffer);
-  Inc(BufPtr, InBuf[0].cbBuffer);
-  MoveFast(PByte(InBuf[1].pvBuffer)^, BufPtr^, InBuf[1].cbBuffer);
-  Inc(BufPtr, InBuf[1].cbBuffer);
-  MoveFast(PByte(InBuf[2].pvBuffer)^, BufPtr^, InBuf[2].cbBuffer);
+  MoveFast(InDesc.Data[0].pvBuffer^, BufPtr^, InDesc.Data[0].cbBuffer);
+  inc(BufPtr, InDesc.Data[0].cbBuffer);
+  MoveFast(InDesc.Data[1].pvBuffer^, BufPtr^, InDesc.Data[1].cbBuffer);
+  inc(BufPtr, InDesc.Data[1].cbBuffer);
+  MoveFast(InDesc.Data[2].pvBuffer^, BufPtr^, InDesc.Data[2].cbBuffer);
 end;
 
 function SecDecrypt(var aSecContext: TSecContext;
@@ -1389,7 +1404,6 @@ function SecDecrypt(var aSecContext: TSecContext;
 var
   EncLen, SigLen: cardinal;
   BufPtr: PByte;
-  InBuf: array [0..1] of TSecBuffer;
   InDesc: TSecBufferDesc;
   Status: integer;
   QOP: cardinal;
@@ -1409,16 +1423,16 @@ begin
   if (SigLen = 16) or
      (SigLen = 60) then
   begin
-    Inc(BufPtr, SizeOf(cardinal));
-    Dec(EncLen, SizeOf(cardinal));
+    inc(BufPtr, SizeOf(cardinal));
+    dec(EncLen, SizeOf(cardinal));
   end;
-  {%H-}InBuf[0].Init(SECBUFFER_STREAM, BufPtr, EncLen);
-  InBuf[1].Init(SECBUFFER_DATA, nil, 0);
-  {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
+  {%H-}InDesc.Init;
+  InDesc.Add(SECBUFFER_STREAM, BufPtr, EncLen);
+  InDesc.Add(SECBUFFER_DATA);
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(result, InBuf[1].pvBuffer, InBuf[1].cbBuffer);
+  FastSetRawByteString(result, InDesc.Data[1].pvBuffer, InDesc.Data[1].cbBuffer);
 end;
 
 function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
@@ -1827,45 +1841,32 @@ function ClientSspiAuthWorker(var aSecContext: TSecContext;
   pAuthData: PSecWinntAuthIdentityW;
   out aOutData: RawByteString): boolean;
 var
-  InBuf: TSecBuffer;
-  InDesc: TSecBufferDesc;
+  InDesc, OutDesc: TSecBufferDesc;
   LInCtxPtr: PSecHandle;
-  OutBuf: TSecBuffer;
-  OutDesc: TSecBufferDesc;
-  CtxReqAttr: cardinal;
-  CtxAttr: cardinal;
+  CtxReqAttr, CtxAttr: cardinal;
   Status: integer;
 begin
-  InBuf.BufferType := SECBUFFER_TOKEN;
-  InBuf.cbBuffer := Length(aInData);
-  InBuf.pvBuffer := PByte(aInData);
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.pBuffers := @InBuf;
+  {%H-}InDesc.Init;
+  {%H-}OutDesc.Init;
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
     if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
         nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-    InDesc.cBuffers := 0;
     LInCtxPtr := nil;
   end
   else
   begin
-    InDesc.cBuffers := 1;
+    InDesc.Add(SECBUFFER_TOKEN, aInData);
     LInCtxPtr := @aSecContext.CtxHandle;
   end;
+  OutDesc.Add(SECBUFFER_TOKEN);
   CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or
                 ISC_REQ_CONFIDENTIALITY or
                 ISC_REQ_INTEGRITY;
   if pszTargetName <> nil then
     CtxReqAttr := CtxReqAttr or ISC_REQ_MUTUAL_AUTH;
-  OutBuf.BufferType := SECBUFFER_TOKEN;
-  OutBuf.cbBuffer := 0;
-  OutBuf.pvBuffer := nil;
-  OutDesc.ulVersion := SECBUFFER_VERSION;
-  OutDesc.cBuffers := 1;
-  OutDesc.pBuffers := @OutBuf;
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
     pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, @InDesc, 0,
     @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
@@ -1876,8 +1877,8 @@ begin
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(aOutData, OutBuf.pvBuffer, OutBuf.cbBuffer);
-  FreeContextBuffer(OutBuf.pvBuffer);
+  FastSetRawByteString(aOutData, OutDesc.Data[0].pvBuffer, OutDesc.Data[0].cbBuffer);
+  FreeContextBuffer(OutDesc.Data[0].pvBuffer);
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
@@ -1946,21 +1947,15 @@ end;
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
-  InBuf: TSecBuffer;
-  InDesc: TSecBufferDesc;
+  InDesc, OutDesc: TSecBufferDesc;
   PkgName: PWideChar;
   LInCtxPtr: PSecHandle;
-  OutBuf: TSecBuffer;
-  OutDesc: TSecBufferDesc;
   CtxAttr: cardinal;
   Status: integer;
 begin
-  InBuf.BufferType := SECBUFFER_TOKEN;
-  InBuf.cbBuffer := Length(aInData);
-  InBuf.pvBuffer := PByte(aInData);
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.cBuffers := 1;
-  InDesc.pBuffers := @InBuf;
+  {%H-}InDesc.Init;
+  {%H-}OutDesc.Init;
+  InDesc.Add(SECBUFFER_TOKEN, aInData);
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
@@ -1977,12 +1972,7 @@ begin
   end
   else
     LInCtxPtr := @aSecContext.CtxHandle;
-  OutBuf.BufferType := SECBUFFER_TOKEN;
-  OutBuf.cbBuffer := 0;
-  OutBuf.pvBuffer := nil;
-  OutDesc.ulVersion := SECBUFFER_VERSION;
-  OutDesc.cBuffers := 1;
-  OutDesc.pBuffers := @OutBuf;
+  OutDesc.Add(SECBUFFER_TOKEN);
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
     ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
     SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
@@ -1993,8 +1983,8 @@ begin
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(aOutData, OutBuf.pvBuffer, OutBuf.cbBuffer);
-  FreeContextBuffer(OutBuf.pvBuffer);
+  FastSetRawByteString(aOutData, OutDesc.Data[0].pvBuffer, OutDesc.Data[0].cbBuffer);
+  FreeContextBuffer(OutDesc.Data[0].pvBuffer);
 end;
 
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
