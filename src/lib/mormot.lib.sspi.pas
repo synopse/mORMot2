@@ -730,6 +730,10 @@ function ExtractX500(const Pattern, Text: RawUtf8): RawUtf8;
 /// retrieve the end certificate information of a given TLS connection
 function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
 
+/// retrieve the raw end certificate binary of a given TLS connection
+// - and optionally its signature algorithm OID as text
+function TlsCertRaw(var Ctxt: TCtxtHandle; SignOid: PRawUtf8 = nil): RawByteString;
+
 /// return some multi-line text of the main TWinCertInfo fields
 // - in a layout similar to X509_print() OpenSSL formatting
 // - fully implemented by mormot.crypt.secure - a cut-down version is set by
@@ -1456,6 +1460,27 @@ begin
       CertFreeCertificateContext(nfo);
     end;
 end;
+
+function TlsCertRaw(var Ctxt: TCtxtHandle; SignOid: PRawUtf8): RawByteString;
+var
+  nfo: PCCERT_CONTEXT;
+begin
+  result := '';
+  if SignOid <> nil then
+    SignOid^ := '';
+  nfo := nil;
+  if QueryContextAttributesW(
+      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) = SEC_E_OK then
+    try
+      FastSetRawByteString(result, nfo.pbCertEncoded, nfo.cbCertEncoded);
+      if (SignOid <> nil) and
+         (nfo^.pCertInfo <> nil) then
+        SignOid^ := nfo^.pCertInfo^.SignatureAlgorithm.pszObjId;
+    finally
+      CertFreeCertificateContext(nfo);
+    end;
+end;
+
 
 const
   OID_CERT: array[0 .. 14] of RawUtf8 = (
