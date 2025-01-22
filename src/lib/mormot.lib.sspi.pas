@@ -1455,46 +1455,61 @@ begin
 end;
 
 const
-  RSA_PREFIX: PAnsiChar = '1.2.840.113549.1.1.'; // len=19
-  ECC_PREFIX: PAnsiChar = '1.2.840.10045.';      // len=14
+  OID_CERT: array[0 .. 14] of RawUtf8 = (
+    '1.2.840.113549.1.1.4',   // Md5Rsa
+    '1.2.840.113549.1.1.5',   // Sha1Rsa
+    '1.2.840.113549.1.1.11',  // Sha256Rsa
+    '1.2.840.113549.1.1.12',  // Sha384Rsa
+    '1.2.840.113549.1.1.13',  // Sha512Rsa
+    '1.2.840.113549.1.1.14',  // Sha224Rsa
+    '2.16.840.1.101.3.4.2.1', // Sha256RsaPss
+    '2.16.840.1.101.3.4.2.2', // Sha384RsaPss
+    '2.16.840.1.101.3.4.2.3', // Sha512RsaPss
+    '1.2.840.10045.4.1',      // Sha1Ecc
+    '1.2.840.10045.4.3.1',    // Sha224Ecc
+    '1.2.840.10045.4.3.2',    // Sha256Ecc
+    '1.2.840.10045.4.3.3',    // Sha384Ecc
+    '1.2.840.10045.4.3.4',    // Sha512Ecc
+    '1.3.101.110');           // Sha512EdDSA
+  OID_CERT_NAME: array[-1 .. high(OID_CERT)] of RawUtf8 = (
+    '',
+    'md5RSA',
+    'sha1RSA',
+    'sha256RSA',
+    'sha384RSA',
+    'sha512RSA',
+    'sha224RSA',
+    'sha256PSS',
+    'sha384PSS',
+    'sha512PSS',
+    'sha1ECC',
+    'sha224ECC',
+    'sha256ECC',
+    'sha384ECC',
+    'sha512ECC',
+    'sha512EDDSA');
 
-procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
+function WinCertAlgoIndex(const OID: RawUtf8): PtrInt;
+begin
+  if OID = '' then
+    result := -1
+  else
+    result := FindNonVoidRawUtf8(@OID_CERT, pointer(OID), length(OID), length(OID_CERT));
+end;
+
+procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
 var
   nfo: PCRYPT_OID_INFO;
 begin
-  nfo := CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, OID, 0);
+  if OID = '' then
+    exit;
+  nfo := CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, pointer(OID), 0);
   if nfo <> nil then
-    Win32PWideCharToUtf8(nfo^.pwszName, Text)
-  else if OID <> nil then
+    // from Windows API
+    Win32PWideCharToUtf8(nfo^.pwszName, Name)
+  else
     // minimal decoding fallback for Windows XP
-    if CompareMemSmall(OID, RSA_PREFIX, 19) then
-    begin
-      inc(OID, 19);
-      if StrComp(OID, PAnsiChar('4'#0)) = 0 then
-        Text := 'md5RSA'
-      else if StrComp(OID, PAnsiChar('5'#0)) = 0 then
-        Text := 'sha1RSA'
-      else if StrComp(OID, PAnsiChar('11')) = 0 then
-        Text := 'sha256RSA'
-      else if StrComp(OID, PAnsiChar('12')) = 0 then
-        Text := 'sha384RSA'
-      else if StrComp(OID, PAnsiChar('13')) = 0 then
-        Text := 'sha512RSA'
-      else if StrComp(OID, PAnsiChar('14')) = 0 then
-        Text := 'sha224RSA'
-      else
-        Text := 'RSA';
-    end
-    else if CompareMemSmall(OID, ECC_PREFIX, 14) then
-    begin
-      inc(OID, 14);
-      if StrComp(OID, PAnsiChar('4.1')) = 0 then
-        Text := 'sha1ECDSA'
-      else if StrComp(OID, PAnsiChar('4.2')) = 0 then
-        Text := 'sha2ECDSA'
-      else
-        Text := 'ECC';
-    end;
+    Name := OID_CERT_NAME[WinCertAlgoIndex(OID)];
 end;
 
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
@@ -1666,10 +1681,9 @@ begin
   Cert.NotBefore := FileTimeToDateTime(nfo^.NotBefore);
   Cert.NotAfter  := FileTimeToDateTime(nfo^.NotAfter);
   Cert.Algorithm := nfo^.SignatureAlgorithm.pszObjId;
-  WinCertAlgoName(nfo^.SignatureAlgorithm.pszObjId, Cert.AlgorithmName);
+  WinCertAlgoName(Cert.Algorithm, Cert.AlgorithmName);
   Cert.PublicKeyAlgorithm := nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId;
-  WinCertAlgoName(nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId,
-    Cert.PublicKeyAlgorithmName);
+  WinCertAlgoName(Cert.PublicKeyAlgorithm, Cert.PublicKeyAlgorithmName);
   with nfo^.SubjectPublicKeyInfo.PublicKey do
     FastSetRawByteString(Cert.PublicKeyContent, pbData, cbData);
   len := tmp.Init;
