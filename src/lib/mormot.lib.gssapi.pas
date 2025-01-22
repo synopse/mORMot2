@@ -424,6 +424,8 @@ type
     CredHandle: pointer;
     CtxHandle: pointer;
     CreatedTick64: Int64;
+    ChannelBindingsHash: pointer;
+    ChannelBindingsHashLen: cardinal;
   end;
   PSecContext = ^TSecContext;
 
@@ -787,6 +789,8 @@ begin
   aSecContext.CredHandle := nil;
   aSecContext.CtxHandle := nil;
   aSecContext.CreatedTick64 := aTick64;
+  aSecContext.ChannelBindingsHash := nil;
+  aSecContext.ChannelBindingsHashLen := 0;
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -877,6 +881,33 @@ end;
 var
   ForceSecKerberosSpn: RawUtf8;
 
+type
+  TGssBindIdent = array[0..20] of AnsiChar;
+  TGssBind = packed record
+    head: gss_channel_bindings_struct;
+    ident: TGssBindIdent;
+    hash: THash512;
+  end;
+
+const
+  GSS_SERVERENDPOINT: TGssBindIdent = 'tls-server-end-point:';
+
+function SetBind(const SC: TSecContext; var Bind: TGssBind): gss_channel_bindings_t;
+begin
+  result := nil;
+  if SC.ChannelBindingsHash = nil then
+    exit;
+  if SC.ChannelBindingsHashLen > SizeOf(Bind.hash) then
+    raise EGssApi.CreateFmt('ClientSspi: ChannelBindingsHashLen=%d>%d',
+      [SC.ChannelBindingsHashLen, SizeOf(Bind.hash)]);
+  FillCharFast(Bind.head, SizeOf(Bind.head), 0);
+  Bind.ident := GSS_SERVERENDPOINT;
+  MoveFast(SC.ChannelBindingsHash^, Bind.hash, SC.ChannelBindingsHashLen);
+  Bind.head.application_data.value := @Bind.ident;
+  Bind.head.application_data.length := SC.ChannelBindingsHashLen + SizeOf(Bind.ident);
+  result := @Bind;
+end;
+
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString; aMech: gss_OID): boolean;
@@ -887,6 +918,7 @@ var
   OutBuf: gss_buffer_desc;
   CtxReqAttr: cardinal;
   CtxAttr: cardinal;
+  Bind: TGssBind;
 begin
   TargetName := nil;
   if aSecKerberosSpn <> '' then
@@ -907,8 +939,8 @@ begin
     OutBuf.length := 0;
     OutBuf.value := nil;
     MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
-      aSecContext.CtxHandle, TargetName, aMech,
-      CtxReqAttr, GSS_C_INDEFINITE, nil, @InBuf, nil, @OutBuf, @CtxAttr, nil);
+      aSecContext.CtxHandle, TargetName, aMech, CtxReqAttr, GSS_C_INDEFINITE,
+        SetBind(aSecContext, Bind), @InBuf, nil, @OutBuf, @CtxAttr, nil);
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to initialize security context');
     result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
@@ -1027,6 +1059,7 @@ var
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
   CtxAttr: cardinal;
+  Bind: TGssBind;
 begin
   RequireGssApi;
   if aSecContext.CredHandle = nil then // initial call
@@ -1044,7 +1077,8 @@ begin
   OutBuf.length := 0;
   OutBuf.value := nil;
   MajStatus := GssApi.gss_accept_sec_context(MinStatus, aSecContext.CtxHandle,
-    aSecContext.CredHandle, @InBuf, nil, nil, nil, @OutBuf, @CtxAttr, nil, nil);
+    aSecContext.CredHandle, @InBuf, SetBind(aSecContext, Bind), nil, nil,
+    @OutBuf, @CtxAttr, nil, nil);
   GccCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
   result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
   FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
