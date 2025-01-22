@@ -1597,7 +1597,8 @@ var
   tmp: array[0..4095] of WideChar;
 begin
   len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, @tmp, SizeOf(tmp));
-  Win32PWideCharToUtf8(@tmp, len - 1, Text);
+  if len <> 0 then
+    Win32PWideCharToUtf8(@tmp, len - 1, Text);
 end;
 
 function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
