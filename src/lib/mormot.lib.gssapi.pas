@@ -78,12 +78,22 @@ type
   end;
   gss_buffer_t = ^gss_buffer_desc;
 
+  gss_channel_bindings_struct = record
+    initiator_addrtype: cardinal;
+    initiator_address: gss_buffer_desc;
+    acceptor_addrtype: cardinal;
+    acceptor_address: gss_buffer_desc;
+    application_data: gss_buffer_desc;
+  end;
+  gss_channel_bindings_t = ^gss_channel_bindings_struct;
+
   {$A+} // back to usual class/record alignment
 
 
 const
   GSS_C_NO_NAME = nil;
   GSS_C_NO_OID  = nil;
+  GSS_C_NO_CHANNEL_BINDINGS = nil;
 
   GSS_C_GSS_CODE  = 1;
   GSS_C_MECH_CODE = 2;
@@ -249,7 +259,7 @@ type
       mech_type: gss_OID;
       req_flags: cardinal;
       time_req: cardinal;
-      input_chan_bindings: pointer;
+      input_chan_bindings: gss_channel_bindings_t;
       input_token: gss_buffer_t;
       actual_mech_type: gss_OID_ptr;
       output_token: gss_buffer_t;
@@ -260,7 +270,7 @@ type
       var context_handle: pointer;
       acceptor_cred_handle: pointer;
       input_token_buffer: gss_buffer_t;
-      input_chan_bindings: pointer;
+      input_chan_bindings: gss_channel_bindings_t;
       src_name: gss_name_t;
       mech_type: gss_OID_ptr;
       output_token: gss_buffer_t;
