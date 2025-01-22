@@ -73,6 +73,8 @@ type
     CredHandle: TSecHandle;
     CtxHandle: TSecHandle;
     CreatedTick64: Int64;
+    ChannelBindingsHash: pointer;
+    ChannelBindingsHashLen: cardinal;
   end;
   PSecContext = ^TSecContext;
 
@@ -1330,6 +1332,8 @@ begin
   aSecContext.CtxHandle.dwLower := -1;
   aSecContext.CtxHandle.dwUpper := -1;
   aSecContext.CreatedTick64 := aTick64;
+  aSecContext.ChannelBindingsHash := nil;
+  aSecContext.ChannelBindingsHashLen := 0;
 end;
 
 procedure FreeSecurityContext(var handle: TSecHandle);
@@ -1851,6 +1855,33 @@ var
   ForceSecKerberosSpn: SynUnicode;
   NtlmName, NegotiateName: SynUnicode;
 
+type
+  TGssBindIdent = array[0..20] of AnsiChar;
+  TGssBind = packed record
+    head: TSecChannelBindings;
+    ident: TGssBindIdent;
+    hash: THash512;
+  end;
+
+const
+  GSS_SERVERENDPOINT: TGssBindIdent = 'tls-server-end-point:';
+
+procedure SetBind(const SC: TSecContext; var Desc: TSecBufferDesc; var Bind: TGssBind);
+begin
+  if OSVersion < wSeven then
+    exit; // this API is not available on XP and Vista
+  if SC.ChannelBindingsHashLen > SizeOf(Bind.hash) then
+     raise ESynSspi.CreateFmt('ClientSspi: ChannelBindingsHashLen=%d>%d',
+       [SC.ChannelBindingsHashLen, SizeOf(Bind.hash)]);
+  FillCharFast(Bind.head, SizeOf(Bind), 0);
+  Bind.ident := GSS_SERVERENDPOINT;
+  MoveFast(SC.ChannelBindingsHash^, Bind.hash, SC.ChannelBindingsHashLen);
+  Bind.head.dwApplicationDataOffset := SizeOf(Bind.head);
+  Bind.head.cbApplicationDataLength := SizeOf(Bind.Ident) + SC.ChannelBindingsHashLen;
+  Desc.Add(SECBUFFER_CHANNEL_BINDINGS,
+    @Bind, SizeOf(Bind.head) + Bind.head.cbApplicationDataLength);
+end;
+
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
   pAuthData: PSecWinntAuthIdentityW;
@@ -1860,6 +1891,7 @@ var
   LInCtxPtr: PSecHandle;
   CtxReqAttr, CtxAttr: cardinal;
   Status: integer;
+  Bind: TGssBind;
 begin
   {%H-}InDesc.Init;
   {%H-}OutDesc.Init;
@@ -1876,6 +1908,8 @@ begin
     InDesc.Add(SECBUFFER_TOKEN, aInData);
     LInCtxPtr := @aSecContext.CtxHandle;
   end;
+  if aSecContext.ChannelBindingsHash <> nil then
+    SetBind(aSecContext, InDesc, Bind);
   OutDesc.Add(SECBUFFER_TOKEN);
   CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or
                 ISC_REQ_CONFIDENTIALITY or
@@ -1967,6 +2001,7 @@ var
   LInCtxPtr: PSecHandle;
   CtxAttr: cardinal;
   Status: integer;
+  Bind: TGssBind;
 begin
   {%H-}InDesc.Init;
   {%H-}OutDesc.Init;
@@ -1987,6 +2022,8 @@ begin
   end
   else
     LInCtxPtr := @aSecContext.CtxHandle;
+  if aSecContext.ChannelBindingsHash <> nil then
+    SetBind(aSecContext, InDesc, Bind);
   OutDesc.Add(SECBUFFER_TOKEN);
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
     ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
