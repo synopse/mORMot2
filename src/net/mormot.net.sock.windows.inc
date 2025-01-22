@@ -1903,6 +1903,7 @@ type
       LastError, CipherName: PRawUtf8);
     function GetCipherName: RawUtf8;
     function GetRawTls: pointer;
+    function GetRawCert(SignHashName: PRawUtf8): RawByteString;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -2191,6 +2192,15 @@ end;
 function TSChannelNetTls.GetRawTls: pointer;
 begin
   result := @fCtxt; // return as PCtxtHandle
+end;
+
+function TSChannelNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
+var
+  oid: RawUtf8;
+begin
+  result := TlsCertRaw(fCtxt, @oid);
+  if SignHashName <> nil then
+    WinCertHashAlgo(oid, SignHashName^);
 end;
 
 function TSChannelNetTls.HandshakeStep(buf: PByteArray; var len: integer): cardinal;
