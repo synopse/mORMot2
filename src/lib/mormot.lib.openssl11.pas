@@ -10285,6 +10285,7 @@ type
       LastError, CipherName: PRawUtf8);
     function GetCipherName: RawUtf8;
     function GetRawTls: pointer;
+    function GetRawCert(SignHashName: PRawUtf8): RawByteString;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -10452,6 +10453,7 @@ begin
         writeln('SerialNumber=',fPeer.SerialNumber);
         writeln(fPeer.GetSerial.ToDecimal);
         writeln(fPeer.GetSignatureAlgo);
+        writeln(fPeer.GetSignatureHash);
         writeln(fPeer.GetIssuerName.ToDigest);
         exts := fPeer.SubjectAlternativeNames;
         for len := 0 to high(exts) do
@@ -10646,6 +10648,17 @@ function TOpenSslNetTls.GetRawTls: pointer;
 //   $ssl_client_fingerprint $ssl_client_s_dn
 begin
   result := fSsl;
+end;
+
+function TOpenSslNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
+begin
+  result := '';
+  if (fSsl = nil) or
+     (fSsl.PeerCertificate = nil) then
+    exit;
+  result := fSsl.PeerCertificate^.ToBinary;
+  if SignHashName <> nil then
+    SignHashName^ := fSsl.PeerCertificate^.GetSignatureHash;
 end;
 
 destructor TOpenSslNetTls.Destroy;

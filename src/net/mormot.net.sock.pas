@@ -958,6 +958,9 @@ type
     // - typically a PSSL on OpenSSL, so you can use e.g. PSSL().PeerCertificate,
     // or a PCtxtHandle on SChannel
     function GetRawTls: pointer;
+    /// return the low-level certificate binary content
+    // - and optionally the name of its signature algorithm hash (e.g. 'SHA256')
+    function GetRawCert(SignHashName: PRawUtf8 = nil): RawByteString;
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     /// check if there are some input data within the TLS buffers
