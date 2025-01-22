@@ -1814,11 +1814,15 @@ type
     function IsCA: boolean;
     /// if the Certificate issuer is itself
     function IsSelfSigned: boolean;
-    /// returns e.g. '128 ecdsa-with-SHA256' or '256 ecdsa-with-SHA512'
-    // or '128 ED25519'
+    /// retrieve the signature algorithm as human-readable text
+    // - returns e.g. '128 ecdsa-with-SHA256' or '256 ecdsa-with-SHA512'
+    // '128 RSA-SHA256' or '128 ED25519'
     // - the first number being the actual security bits of the algorithm
     // as retrieved by X509_get_signature_info()
     function GetSignatureAlgo: RawUtf8;
+    /// retrieve the digest name used for the signature algorithm
+    // - returns e.g. 'SHA256'
+    function GetSignatureHash: RawUtf8;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
     function GetUsage: TX509Usages;
     /// check a X509v3 Key and Extended Key Usage Flag of this Certificate
@@ -9601,6 +9605,18 @@ begin
         result := result + '-' + RawUtf8(OBJ_nid2sn(md));
     end;
   end;
+end;
+
+function X509.GetSignatureHash: RawUtf8;
+var
+  md: integer;
+begin
+  result := '';
+  md := 0;
+  if (@self <> nil) and
+     (X509_get_signature_info(@self, @md, nil, nil, nil) = OPENSSLSUCCESS) and
+     (md <> 0) then
+    result := OBJ_nid2sn(md);
 end;
 
 const
