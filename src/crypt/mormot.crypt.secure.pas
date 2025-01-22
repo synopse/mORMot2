@@ -3216,7 +3216,6 @@ const
     '1.3.132.0.10',           // ckaEcc256k (with ASN1_OID_X962_PUBLICKEY)
     '1.3.101.112');           // ckaEdDSA
 
-
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): TCertPem; overload;
 

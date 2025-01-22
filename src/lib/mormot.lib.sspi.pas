@@ -1446,10 +1446,12 @@ begin
   result := false;
   nfo := nil;
   if QueryContextAttributesW(
-      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) <> SEC_E_OK then
-    exit;
-  result := WinCertCtxtDecode(nfo, Info);
-  CertFreeCertificateContext(nfo);
+      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) = SEC_E_OK then
+    try
+      result := WinCertCtxtDecode(nfo, Info);
+    finally
+      CertFreeCertificateContext(nfo);
+    end;
 end;
 
 const
