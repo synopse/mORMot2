@@ -225,18 +225,32 @@ type
     AccessToken: pointer;
   end;
 
+  /// SEC_CHANNEL_BINDINGS to specify channel binding information for a security context
+  TSecChannelBindings = record
+    dwInitiatorAddrType: cardinal;
+    cbInitiatorLength: cardinal;
+    dwInitiatorOffset: cardinal;
+    dwAcceptorAddrType: cardinal;
+    cbAcceptorLength: cardinal;
+    dwAcceptorOffset: cardinal;
+    cbApplicationDataLength: cardinal;
+    dwApplicationDataOffset: cardinal;
+  end;
+  PSecChannelBindings = ^TSecChannelBindings;
+
 const
   SECBUFFER_VERSION = 0;
 
-  SECBUFFER_EMPTY          = 0;
-  SECBUFFER_DATA           = 1;
-  SECBUFFER_TOKEN          = 2;
-  SECBUFFER_EXTRA          = 5;
-  SECBUFFER_STREAM_TRAILER = 6;
-  SECBUFFER_STREAM_HEADER  = 7;
-  SECBUFFER_PADDING        = 9;
-  SECBUFFER_STREAM         = 10;
-  SECBUFFER_ALERT          = 17;
+  SECBUFFER_EMPTY            = 0;
+  SECBUFFER_DATA             = 1;
+  SECBUFFER_TOKEN            = 2;
+  SECBUFFER_EXTRA            = 5;
+  SECBUFFER_STREAM_TRAILER   = 6;
+  SECBUFFER_STREAM_HEADER    = 7;
+  SECBUFFER_PADDING          = 9;
+  SECBUFFER_STREAM           = 10;
+  SECBUFFER_CHANNEL_BINDINGS = 14;
+  SECBUFFER_ALERT            = 17;
 
   SECPKG_CRED_INBOUND  = 1;
   SECPKG_CRED_OUTBOUND = 2;
