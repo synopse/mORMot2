@@ -705,8 +705,11 @@ const
     CERT_NON_REPUDIATION_KEY_USAGE,     // wkuNonRepudiation
     CERT_DIGITAL_SIGNATURE_KEY_USAGE);  // wkuDigitalSignature
 
-/// return the whole algorithm name from a OID text
-procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
+/// return the whole algorithm name from a OID text of a signature algorithm
+procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
+
+/// return the hash algorithm name from a OID text of a signature algorithm
+procedure WinCertHashAlgo(const OID: RawUtf8; out HashAlgo: RawUtf8);
 
 /// decode a CERT_NAME_BLOB binary blob into RFC 1779 text, with X500 key names
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
@@ -1488,6 +1491,23 @@ const
     'sha384ECC',
     'sha512ECC',
     'sha512EDDSA');
+  OID_CERT_HASH: array[-1 .. high(OID_CERT)] of RawUtf8 = (
+    '',
+    'MD5',
+    'SHA1',
+    'SHA256',
+    'SHA384',
+    'SHA512',
+    'SHA224',
+    'SHA256',
+    'SHA384',
+    'SHA512',
+    'SHA1',
+    'SHA224',
+    'SHA256',
+    'SHA384',
+    'SHA512',
+    'SHA512');
 
 function WinCertAlgoIndex(const OID: RawUtf8): PtrInt;
 begin
@@ -1495,6 +1515,11 @@ begin
     result := -1
   else
     result := FindNonVoidRawUtf8(@OID_CERT, pointer(OID), length(OID), length(OID_CERT));
+end;
+
+procedure WinCertHashAlgo(const OID: RawUtf8; out HashAlgo: RawUtf8);
+begin
+  HashAlgo := OID_CERT_HASH[WinCertAlgoIndex(OID)];
 end;
 
 procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
