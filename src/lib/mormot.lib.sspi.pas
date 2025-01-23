@@ -1873,7 +1873,7 @@ begin
   if SC.ChannelBindingsHashLen > SizeOf(Bind.hash) then
      raise ESynSspi.CreateFmt('ClientSspi: ChannelBindingsHashLen=%d>%d',
        [SC.ChannelBindingsHashLen, SizeOf(Bind.hash)]);
-  FillCharFast(Bind.head, SizeOf(Bind), 0);
+  FillCharFast(Bind.head, SizeOf(Bind.head), 0);
   Bind.ident := GSS_SERVERENDPOINT;
   MoveFast(SC.ChannelBindingsHash^, Bind.hash, SC.ChannelBindingsHashLen);
   Bind.head.dwApplicationDataOffset := SizeOf(Bind.head);
