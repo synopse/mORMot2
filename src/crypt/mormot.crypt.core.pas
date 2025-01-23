@@ -5212,6 +5212,8 @@ begin
      (aKeySizeBits <> 256) then
     ESynCrypto.RaiseUtf8('%.Create(KeySize=%): 128/192/256 required',
       [self, aKeySizeBits]);
+  if @aKey = nil then
+    ESynCrypto.RaiseUtf8('%.Create(aKey=nil)', [self]);
   fKeySize := aKeySizeBits;
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey, fKey, fKeySizeBytes);
