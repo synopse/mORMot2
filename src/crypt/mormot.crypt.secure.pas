@@ -788,9 +788,10 @@ function CryptCrc32(algo: TCrc32Algo): THasher;
 
 function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: THashAlgo): PShortString; overload;
+function ToUtf8(algo: THashAlgo): RawUtf8; overload;
 function ToText(algo: TCrc32Algo): PShortString; overload;
 
-/// recognize a THashAlgo from a text, e.g. 'SHA1' or 'SHA3_256'
+/// recognize a THashAlgo from a text, e.g. 'SHA1', 'SHA3_256' or 'SHA-512/256'
 function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
 
 /// compute the hexadecimal hash of any (big) file
@@ -4392,17 +4393,52 @@ begin
   result := GetEnumName(TypeInfo(THashAlgo), ord(algo));
 end;
 
+function ToUtf8(algo: THashAlgo): RawUtf8;
+begin
+  result := GetEnumNameTrimed(TypeInfo(THashAlgo), ord(algo));
+end;
+
 function ToText(algo: TCrc32Algo): PShortString;
 begin
   result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
 end;
 
+function SanitizeAlgo(P: PUtf8Char; L: PtrInt; var tmp: TShort15): boolean;
+begin
+  tmp[0] := #0;
+  result := false;
+  if (L < 3) or
+     (L > 15) then
+    exit;
+  repeat
+    case P^ of
+      #0:
+        break;
+      'A' .. 'Z', '0' .. '9', 'a' .. 'z', '_':
+        AppendShortChar(P^, @tmp);
+      '-', '/':
+        if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
+            (PCardinal(@tmp[1])^ and $ffdfdfdf =
+              ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('3') shl 24)) or
+           ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
+            (PCardinal(@tmp[1])^ and $ffdfdfdf =
+              ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
+          AppendShortChar('_', @tmp);
+    end;
+    inc(P);
+  until false;
+  result := tmp[0] in [#3 .. #10];
+end;
+
 function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
 var
+  tmp: TShort15;
   i: integer;
 begin
-  i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), pointer(Text), length(Text));
   result := false;
+  if not SanitizeAlgo(pointer(Text), length(Text), tmp) then
+    exit;
+  i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), @tmp[1], ord(tmp[0]));
   if i < 0 then
     exit;
   Algo := THashAlgo(i);
