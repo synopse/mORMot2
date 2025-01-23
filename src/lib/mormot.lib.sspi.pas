@@ -1223,7 +1223,7 @@ end;
 
 procedure TSecBufferDesc.Add(aType: cardinal; aData: pointer; aSize: cardinal);
 begin
-  if cBuffers = high(Data) then
+  if cBuffers = length(Data) then
     raise ESynSspi.Create('TSecBufferDesc overflow)');
   Data[cBuffers].Init(aType, aData, aSize);
   inc(cBuffers);
