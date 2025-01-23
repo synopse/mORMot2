@@ -1881,15 +1881,19 @@ const
   SHA3_CONTEXT_SIZE = 410;
 
 type
+  /// 224-bit (24 bytes) memory block for SHA-224 hash digest storage
+  TSha224Digest = THash224;
+  PSha224Digest = ^TSha224Digest;
+
   /// 256-bit (32 bytes) memory block for SHA-256 hash digest storage
   TSha256Digest = THash256;
   PSha256Digest = ^TSha256Digest;
 
-  /// 384 bits (64 bytes) memory block for SHA-384 hash digest storage
+  /// 384-bit (48 bytes) memory block for SHA-384 hash digest storage
   TSha384Digest = THash384;
   PSha384Digest = ^TSha384Digest;
 
-  /// 512 bits (64 bytes) memory block for SHA-512 hash digest storage
+  /// 512-bit (64 bytes) memory block for SHA-512 hash digest storage
   TSha512Digest = THash512;
   PSha512Digest = ^TSha512Digest;
 
@@ -1932,14 +1936,14 @@ type
 // - result is returned in TSha256Digest binary format
 // - since the result would be stored temporarly in the stack, it may be
 // safer to use an explicit TSha256Digest variable, which would be filled
-// with zeros by a ... finally FillZero(
+// with zeros by a ... finally FillZero()
 function Sha256Digest(Data: pointer; Len: integer): TSha256Digest; overload;
 
 /// direct SHA-256 hash calculation of some binary data
 // - result is returned in TSha256Digest binary format
 // - since the result would be stored temporarly in the stack, it may be
 // safer to use an explicit TSha256Digest variable, which would be filled
-// with zeros by a ... finally FillZero(
+// with zeros by a ... finally FillZero()
 function Sha256Digest(const Data: RawByteString): TSha256Digest; overload;
 
 
@@ -2791,6 +2795,15 @@ function Sha1DigestToString(const D: TSha1Digest): RawUtf8;
 function Sha1StringToDigest(const Source: RawUtf8; out Dest: TSha1Digest): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// compute the hexadecimal representation of a SHA-224 digest
+function Sha224DigestToString(const D: TSha224Digest): RawUtf8;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute the SHA-224 digest from its hexadecimal representation
+// - returns true on success (i.e. Source has the expected size and characters)
+// - just a wrapper around mormot.core.text.HexToBin()
+function Sha224StringToDigest(const Source: RawUtf8; out Dest: TSha224Digest): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
@@ -2810,7 +2823,6 @@ function Sha256DigestToString(const D: TSha256Digest): RawUtf8;
 function Sha256StringToDigest(const Source: RawUtf8; out Dest: TSha256Digest): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-
 /// direct SHA-384 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 function Sha384(const s: RawByteString): RawUtf8;
@@ -2822,7 +2834,6 @@ function Sha384DigestToString(const D: TSha384Digest): RawUtf8;
 /// direct SHA-512/256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 function Sha512_256(const s: RawByteString): RawUtf8;
-
 
 /// direct SHA-512 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
@@ -2845,7 +2856,6 @@ function Sha3(Algo: TSha3Algo; const s: RawByteString;
 // output memory buffer, according to the specified TSha3Algo
 function Sha3(Algo: TSha3Algo; Buffer: pointer; Len: integer;
   DigestBits: integer = 0): RawUtf8; overload;
-
 
 
 { ****************** Deprecated Weak AES/SHA Process }
@@ -10939,15 +10949,19 @@ begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
+function Sha224DigestToString(const D: TSha224Digest): RawUtf8;
+begin
+  BinToHexLower(@D, SizeOf(D), result);
+end;
+
+function Sha224StringToDigest(const Source: RawUtf8; out Dest: TSha224Digest): boolean;
+begin
+  result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
+end;
 
 function Sha256(const s: RawByteString): RawUtf8;
-var
-  SHA: TSha256;
-  Digest: TSha256Digest;
 begin
-  SHA.Full(pointer(s), length(s), Digest);
-  result := Sha256DigestToString(Digest);
-  FillZero(Digest);
+  result := Sha256(pointer(s), length(s));
 end;
 
 function Sha256(Data: pointer; Len: integer): RawUtf8;
@@ -10969,7 +10983,6 @@ function Sha256StringToDigest(const Source: RawUtf8; out Dest: TSha256Digest): b
 begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
-
 
 function Sha384DigestToString(const D: TSha384Digest): RawUtf8;
 begin
