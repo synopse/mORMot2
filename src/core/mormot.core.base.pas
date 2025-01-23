@@ -2198,19 +2198,20 @@ type
   PHash128 = ^THash128;
 
   /// store a 160-bit hash value
-  // - e.g. a SHA-1 digest
+  // - e.g. a SHA-1 digest, or array[0..4] of cardinal
   // - consumes 20 bytes of memory
   THash160 = array[0..19] of byte;
   /// pointer to a 160-bit hash value
   PHash160 = ^THash160;
 
   /// store a 192-bit hash value
-  // - consumes 24 bytes of memory
+  // - consumes 24 bytes of memory, or array[0..5] of cardinal
   THash192 = array[0..23] of byte;
   /// pointer to a 192-bit hash value
   PHash192 = ^THash192;
 
   /// store a 224-bit hash value
+  // - e.g. a SHA-224 digest, or array[0..6] of cardinal
   // - consumes 28 bytes of memory
   THash224 = array[0..27] of byte;
   /// pointer to a 224-bit hash value
@@ -2411,6 +2412,23 @@ function IsEqual(const A, B: THash160): boolean; overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash160); overload;
+
+/// returns TRUE if all 28 bytes of this 224-bit buffer equal zero
+// - e.g. a SHA-224 digest
+function IsZero(const dig: THash224): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if all 28 bytes of both 224-bit buffers do match
+// - e.g. a SHA-224 digest
+// - this function is not sensitive to any timing attack, so is designed
+// for cryptographic purpose
+function IsEqual(const A, B: THash224): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill all 28 bytes of this 224-bit buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(digest); end;
+procedure FillZero(out dig: THash224); overload;
 
 /// returns TRUE if all 32 bytes of this 256-bit buffer equal zero
 // - e.g. a SHA-256 digest, or a TEccSignature result
@@ -8471,6 +8489,31 @@ begin
   PInt64Array(@dig)^[0] := 0;
   PInt64Array(@dig)^[1] := 0;
   PIntegerArray(@dig)^[4] := 0;
+end;
+
+function IsZero(const dig: THash224): boolean;
+var
+  a: TIntegerArray absolute dig;
+begin
+  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5] or a[6] = 0;
+end;
+
+function IsEqual(const A, B: THash224): boolean;
+var
+  a_: TIntegerArray absolute A;
+  b_: TIntegerArray absolute B;
+begin
+  // uses anti-forensic time constant "xor/or" pattern
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
+    (a_[3] xor b_[3]) or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or (a_[6] xor b_[6])) = 0;
+end;
+
+procedure FillZero(out dig: THash224);
+begin
+  PInt64Array(@dig)^[0] := 0;
+  PInt64Array(@dig)^[1] := 0;
+  PInt64Array(@dig)^[2] := 0;
+  PIntegerArray(@dig)^[6] := 0;
 end;
 
 function IsZero(const dig: THash256): boolean;
