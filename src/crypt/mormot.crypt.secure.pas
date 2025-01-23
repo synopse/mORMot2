@@ -509,14 +509,10 @@ type
 { implemented in this unit and not in mormot.crypt.core, since TSynSignerParams
   expects JSON support, which requires mormot.core.json }
 
-const
-  SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
-
 type
-  /// the HMAC/SHA-3 algorithms known by TSynSigner
+  /// the HMAC/SHA-1 HMAC/SHA-2 and SHA-3 algorithms known by TSynSigner
   // - HMAC/SHA-1 is considered unsafe, HMAC/SHA-2 are well proven, and
-  // HMAC/SHA-3 is newer but strong, so a good candidate for safety
-  // - saSha3S128 is used by default, i.e. SHA-3 in SHAKE_128 mode
+  // SHA-3 is newer and strong, including HMAC, so a good candidate for safety
   TSignAlgo = (
     saSha1,
     saSha256,
@@ -529,6 +525,15 @@ type
     saSha3S128,
     saSha3S256);
 
+const
+  /// the standard text of a TSignAlgo
+  SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
+    'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512',
+    'SHA3-224', 'SHA3-256', 'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256');
+  SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
+  SIGNER_DEFAULT_ALGO = saSha3S128;
+
+type
   /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
   // - default value for unspecified parameters will be SHAKE_128 with
   // rounds=1000 and a fixed salt
@@ -592,14 +597,14 @@ type
     procedure Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
-      aDefaultAlgo: TSignAlgo = saSha3S128); overload;
+      aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     // - accept as input a TSynSignerParams serialized as JSON object e.g.
     // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
     procedure Pbkdf2(const aParamsJson: RawUtf8;
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
-      aDefaultAlgo: TSignAlgo = saSha3S128); overload;
+      aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
     /// prepare a TAes object with the key derivated via a Pbkdf2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec;
@@ -779,6 +784,10 @@ const
     TStreamRedirectSha3_256,   // hfSHA3_256
     TStreamRedirectSha3_512,   // hfSHA3_512
     TStreamRedirectSha224);    // hfSHA224
+  /// the standard text of a THashAlgo
+  HASH_TXT: array[THashAlgo] of RawUtf8 = (
+    'MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-512/256',
+    'SHA3-256', 'SHA3-512', 'SHA-224');
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
@@ -787,8 +796,9 @@ const
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
 function ToText(algo: TSignAlgo): PShortString; overload;
+function ToUtf8(algo: TSignAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; {$endif}
 function ToText(algo: THashAlgo): PShortString; overload;
-function ToUtf8(algo: THashAlgo): RawUtf8; overload;
+function ToUtf8(algo: THashAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; {$endif}
 function ToText(algo: TCrc32Algo): PShortString; overload;
 
 /// recognize a THashAlgo from a text, e.g. 'SHA1', 'hfSHA3_256' or 'SHA-512/256'
@@ -4389,6 +4399,11 @@ begin
   result := GetEnumName(TypeInfo(TSignAlgo), ord(algo));
 end;
 
+function ToUtf8(algo: TSignAlgo): RawUtf8;
+begin
+  result := SIGNER_TXT[algo];
+end;
+
 function ToText(algo: THashAlgo): PShortString;
 begin
   result := GetEnumName(TypeInfo(THashAlgo), ord(algo));
@@ -4396,7 +4411,7 @@ end;
 
 function ToUtf8(algo: THashAlgo): RawUtf8;
 begin
-  result := GetEnumNameTrimed(TypeInfo(THashAlgo), ord(algo));
+  result := HASH_TXT[algo];
 end;
 
 function ToText(algo: TCrc32Algo): PShortString;
