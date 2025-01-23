@@ -6155,6 +6155,8 @@ begin
     result := nil;
     exit;
   end;
+  if GlobalCryptAlgo = nil then
+    GlobalCryptAlgoInit;
   result := Last; // simple but efficient cache
   if (result <> nil) and
      PropNameEquals(TCryptAlgo(result).fName, name) then
