@@ -256,6 +256,14 @@ procedure TTestCoreCrypto._SHA256;
     sha.Final(Digest.Lo);
     Check(Sha256DigestToString(Digest.Lo) =
       'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0');
+    CheckEqual(Sha224(''),
+      'd14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f');
+    CheckEqual(Sha256(''),
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    CheckEqual(Sha224('The quick brown fox jumps over the lazy dog'),
+      '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
+    CheckEqual(Sha224('The quick brown fox jumps over the lazy dog.'),
+      '619cba8e8e05826e9b8c519c0a5c68f4fb653e8a3d8aa04bb2c8cd4c');
   end;
 
 begin
@@ -1557,13 +1565,36 @@ const
   HASHALIGN = 4; // you may try with paranoid 32 here
 var
   buf: RawByteString;
+  u: RawUtf8;
   P: PAnsiChar;
   msg: string;
   unalign: PtrInt;
   exp321, exp322, exp323, exp324, exp325: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
+  h, h2: THashAlgo;
 begin
+  for h := low(h) to high(h) do
+  begin
+    u := ToUtf8(h);
+    Check(u <> '');
+    Check(TextToHashAlgo(u, h2));
+    Check(h = h2);
+    Check(TextToHashAlgo(' ' + u, h2));
+    Check(h = h2);
+    Check(TextToHashAlgo(' ' + u + ' ', h2));
+    Check(h = h2);
+    Check(TextToHashAlgo(HASH_EXT[h], h2));
+    Check(h = h2);
+  end;
+  Check(TextToHashAlgo('SHA-512/256', h2));
+  Check(h2 = hfSHA512_256);
+  Check(TextToHashAlgo('SHA-3/256', h2));
+  Check(h2 = hfSHA3_256);
+  Check(TextToHashAlgo('SHA-3/512', h2));
+  Check(h2 = hfSHA3_512);
+  Check(not TextToHashAlgo('SHA5122', h));
+  Check(not TextToHashAlgo('SHA512256', h));
   Check(Adler32SelfTest);
   SetLength(buf, HASHESMAX + HASHALIGN);
   exp321 := 0;
