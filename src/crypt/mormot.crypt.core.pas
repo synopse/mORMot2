@@ -1897,11 +1897,12 @@ type
   TSha512Digest = THash512;
   PSha512Digest = ^TSha512Digest;
 
-  /// implements SHA-256 hashing
+  /// implements SHA-256 hashing - and optionally SHA-224
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THmacSha256
   // - see TSynHasher if you expect to support more than one algorithm at runtime
   // - can use several asm versions with HW opcodes support on x86_64 and aarch64
+  // - SHA-224 is just a truncated SHA-256 with difference initial values
   {$ifdef USERECORDWITHMETHODS}
   TSha256 = record
   {$else}
@@ -1912,21 +1913,26 @@ type
   public
     /// initialize SHA-256 context for hashing
     procedure Init;
-    /// update the SHA-256 context with some data
+    /// initialize SHA-224 context for hashing
+    procedure Init224;
+    /// update the SHA-224/SHA-256 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA-256 context with some data
+    /// update the SHA-224/SHA-256 context with some data
     procedure Update(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// finalize and compute the resulting SHA-256 hash Digest of all data
+    /// finalize and compute the resulting SHA-224/SHA-256 hash Digest of all data
     // affected to Update() method
     procedure Final(out Digest: TSha256Digest; NoInit: boolean = false); overload;
-    /// finalize and compute the resulting SHA-256 hash Digest of all data
+    /// finalize and compute the resulting SHA-224/SHA-256 hash Digest of all data
     // affected to Update() method
     function Final(NoInit: boolean = false): TSha256Digest; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// one method to rule them all
+    /// one method to rule them all as SHA-256
     // - call Init, then Update(), then Final()
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSha256Digest);
+    /// one method to rule them all as SHA-224
+    // - call Init224, then Update(), then Final()
+    procedure Full224(Buffer: pointer; Len: integer; out Digest: TSha224Digest);
   end;
 
   /// points to SHA-256 hashing instance
@@ -1945,6 +1951,20 @@ function Sha256Digest(Data: pointer; Len: integer): TSha256Digest; overload;
 // safer to use an explicit TSha256Digest variable, which would be filled
 // with zeros by a ... finally FillZero()
 function Sha256Digest(const Data: RawByteString): TSha256Digest; overload;
+
+/// direct SHA-224 hash calculation of some binary data
+// - result is returned in TSha224Digest binary format
+// - since the result would be stored temporarly in the stack, it may be
+// safer to use an explicit TSha224Digest variable, which would be filled
+// with zeros by a ... finally FillZero()
+function Sha224Digest(Data: pointer; Len: integer): TSha224Digest; overload;
+
+/// direct SHA-224 hash calculation of some binary data
+// - result is returned in TSha224Digest binary format
+// - since the result would be stored temporarly in the stack, it may be
+// safer to use an explicit TSha224Digest variable, which would be filled
+// with zeros by a ... finally FillZero()
+function Sha224Digest(const Data: RawByteString): TSha224Digest; overload;
 
 
 type
@@ -2450,6 +2470,7 @@ type
   // - you may use HmacSha256() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
+  // - can optionally return SHA-224 content instead of SHA-256
   {$ifdef USERECORDWITHMETHODS}
   THmacSha256 = record
   {$else}
@@ -2459,11 +2480,12 @@ type
     sha: TSha256;
     step7data: THash512Rec;
   public
-    /// prepare the HMAC authentication with the supplied key
+    /// prepare the SHA-256 HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
     // key using Init, then copy this THmacSha256 instance to a local variable,
     // and use this local thread-safe copy for actual HMAC computing
-    procedure Init(key: pointer; keylen: integer);
+    // - SHA-224 is just a truncated SHA-256 with difference initial values
+    procedure Init(key: pointer; keylen: integer; asSha224: boolean = false);
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer); overload;
@@ -2794,6 +2816,14 @@ function Sha1DigestToString(const D: TSha1Digest): RawUtf8;
 // - just a wrapper around mormot.core.text.HexToBin()
 function Sha1StringToDigest(const Source: RawUtf8; out Dest: TSha1Digest): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// direct SHA-224 hash calculation of some data (string-encoded)
+// - result is returned in hexadecimal format
+function Sha224(const s: RawByteString): RawUtf8; overload;
+
+/// direct SHA-224 hash calculation of some binary data
+// - result is returned in hexadecimal format
+function Sha224(Data: pointer; Len: integer): RawUtf8; overload;
 
 /// compute the hexadecimal representation of a SHA-224 digest
 function Sha224DigestToString(const D: TSha224Digest): RawUtf8;
@@ -8260,18 +8290,25 @@ end;
 
 { TSha256 }
 
+const
+  SHA256_INIT: array[0..7] of cardinal = (
+    $6a09e667, $bb67ae85, $3c6ef372, $a54ff53a, $510e527f, $9b05688c, $1f83d9ab, $5be0cd19);
+  SHA224_INIT: array[0..7] of cardinal = (
+    $c1059ed8, $367cd507, $3070dd17, $f70e5939, $ffc00b31, $68581511, $64f98fa7, $befa4fa4);
+
 procedure TSha256.Init;
 var
   Data: TShaContext absolute Context;
 begin
-  Data.Hash.A := $6a09e667;
-  Data.Hash.B := $bb67ae85;
-  Data.Hash.C := $3c6ef372;
-  Data.Hash.D := $a54ff53a;
-  Data.Hash.E := $510e527f;
-  Data.Hash.F := $9b05688c;
-  Data.Hash.G := $1f83d9ab;
-  Data.Hash.H := $5be0cd19;
+  Data.Hash := TShaHash(SHA256_INIT);
+  FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
+end;
+
+procedure TSha256.Init224;
+var
+  Data: TShaContext absolute Context;
+begin
+  Data.Hash := TShaHash(SHA224_INIT);
   FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
@@ -8367,6 +8404,17 @@ begin
   Final(Digest);
 end;
 
+procedure TSha256.Full224(Buffer: pointer; Len: integer;
+  out Digest: TSha224Digest);
+var
+  d256: TSha256Digest;
+begin
+  Init224;
+  Update(Buffer, Len);
+  Final(d256);
+  Digest := PSha224Digest(@d256)^; // truncate
+end;
+
 
 function Sha256Digest(Data: pointer; Len: integer): TSha256Digest;
 var
@@ -8380,6 +8428,20 @@ var
   SHA: TSha256;
 begin
   SHA.Full(pointer(Data), Length(Data), result);
+end;
+
+function Sha224Digest(Data: pointer; Len: integer): TSha224Digest;
+var
+  SHA: TSha256;
+begin
+  SHA.Full224(Data, Len, result);
+end;
+
+function Sha224Digest(const Data: RawByteString): TSha224Digest;
+var
+  SHA: TSha256;
+begin
+  SHA.Full224(pointer(Data), Length(Data), result);
 end;
 
 
@@ -9351,7 +9413,7 @@ end;
 
 { THmacSha256 }
 
-procedure THmacSha256.Init(key: pointer; keylen: integer);
+procedure THmacSha256.Init(key: pointer; keylen: integer; asSha224: boolean);
 var
   i: PtrInt;
   k0, k0xorIpad: THash512Rec;
@@ -9365,7 +9427,10 @@ begin
     k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  SHA.Init;
+  if asSha224 then
+    SHA.Init224
+  else
+    SHA.Init;
   SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
   FillZero(k0.b);
   FillZero(k0xorIpad.b);
@@ -10947,6 +11012,21 @@ end;
 function Sha1StringToDigest(const Source: RawUtf8; out Dest: TSha1Digest): boolean;
 begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
+end;
+
+function Sha224(const s: RawByteString): RawUtf8;
+begin
+  result := Sha224(pointer(s), length(s));
+end;
+
+function Sha224(Data: pointer; Len: integer): RawUtf8;
+var
+  SHA: TSha256;
+  Digest: TSha224Digest;
+begin
+  SHA.Full224(Data, Len, Digest);
+  result := Sha224DigestToString(Digest);
+  FillZero(Digest);
 end;
 
 function Sha224DigestToString(const D: TSha224Digest): RawUtf8;
