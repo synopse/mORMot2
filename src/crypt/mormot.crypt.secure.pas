@@ -3330,6 +3330,14 @@ function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
 function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
   const rawsignature: RawUtf8): RawByteString;
 
+/// compute the hash of a certificate as expected by Kerberos Channel Binding
+// - use the SignatureHashAlgo, forcing SHA-256 for 'MD5' or 'SHA1'
+// - returns the size of the corresponding Hash in bytes, or 0 on error
+// - as defined by RFC 5929 - side note: we follow this RFC, which does not take
+// into account SHA-224 substitution to SHA-256 as it should
+function HashForChannelBinding(const CertRaw: TCertDer;
+  const SignatureHashAlgo: RawUtf8; out Hash: THash512Rec): integer;
+
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
 
@@ -8972,6 +8980,21 @@ begin
       AsnEncInt(@PByteArray(result)[0], eccbytes),
       AsnEncInt(@PByteArray(result)[eccbytes], eccbytes)
       ]);
+end;
+
+function HashForChannelBinding(const CertRaw: TCertDer;
+  const SignatureHashAlgo: RawUtf8; out Hash: THash512Rec): integer;
+var
+  h: THashAlgo;
+  hasher: TSynHasher;
+begin // see https://datatracker.ietf.org/doc/html/rfc5929#section-4.1
+  result := 0;
+  if (CertRaw = '') or
+     not TextToHashAlgo(SignatureHashAlgo, h) then
+    exit;
+  if h in [hfMD5, hfSHA1] then
+    h := hfSHA256; // avoid weak algorithm (as per RFC - but keep hfSHA224)
+  result := hasher.Full(h, pointer(CertRaw), length(CertRaw), Hash);
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
