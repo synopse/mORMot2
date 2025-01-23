@@ -1618,6 +1618,7 @@ type
     fTimeout: integer;
     fTls: boolean;
     fAllowUnsafePasswordBind: boolean;
+    fKerberosDisableChannelBinding: boolean;
     function GetTargetUri: RawUtf8;
     procedure SetTargetUri(const uri: RawUtf8);
   public
@@ -1699,6 +1700,12 @@ type
     // - typical value is e.g. 'LDAP/dc-one.mycorp.com@AD.MYCORP.COM'
     property KerberosSpn: RawUtf8
       read fKerberosSpn write fKerberosSpn;
+    /// option to disable Channel Binding on Kerberos + TLS
+    // - Microsoft will eventually (someday) make it mandatory for its AD servers
+    // - needed also e.g. on Samba >= 4.20.3, if defined with non-default
+    // $ ldap server require strong auth = allow_sasl_without_tls_channel_bindings
+    property KerberosDisableChannelBinding: boolean
+      read fKerberosDisableChannelBinding write fKerberosDisableChannelBinding;
   end;
 
   /// implementation of LDAP client version 2 and 3
@@ -5956,7 +5963,9 @@ const
 function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
   KerberosUser: PRawUtf8): boolean;
 var
-  datain, dataout: RawByteString;
+  datain, dataout, cert: RawByteString;
+  certhashname: RawUtf8;
+  channelbindinghash: THash512Rec;
   t, req1, req2: TAsnObject;
   needencrypt: boolean;
   seclayers: TKerbSecLayer;
@@ -5988,6 +5997,7 @@ begin
     fResultString := 'Kerberos: Error initializing the library';
     exit;
   end;
+  // initiate GSSAPI bind request
   needencrypt := false;
   if (fSettings.KerberosSpn = '') and
      (fSettings.KerberosDN <> '') then
@@ -6001,7 +6011,23 @@ begin
   t := SendAndReceive(req1);
   if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
     exit;
+  // setup GSSAPI / Kerberos context
   InvalidateSecContext(fSecContext);
+  if fSock.TLS.Enabled and
+     Assigned(fSock.Secure) and
+     not fSettings.KerberosDisableChannelBinding then
+  begin
+    // Kerberos + TLS now requires tls-server-end-point channel binding
+    cert := fSock.Secure.GetRawCert(@certhashname);
+    if cert <> '' then
+    begin
+      fSecContext.ChannelBindingsHashLen :=
+        HashForChannelBinding(cert, certhashname, channelbindinghash);
+      if fSecContext.ChannelBindingsHashLen <> 0 then
+        fSecContext.ChannelBindingsHash := @channelbindinghash;
+    end;
+  end;
+  // main GSSAPI / Kerberos loop
   try
     repeat
       ParseInput;
@@ -6094,6 +6120,7 @@ begin
     until not (fResultCode in [LDAP_RES_SUCCESS, LDAP_RES_SASL_BIND_IN_PROGRESS]);
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // error
+    // we are successfully authenticated (and probably encrypted)
     ServerSspiAuthUser(fSecContext, fBoundUser);
     if KerberosUser <> nil then
       KerberosUser^ := fBoundUser;
