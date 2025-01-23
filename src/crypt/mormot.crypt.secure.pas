@@ -538,7 +538,7 @@ type
   // - default value for unspecified parameters will be SHAKE_128 with
   // rounds=1000 and a fixed salt
   // - a typical (extended) JSON to supply to TSynSigner.Pbkdf2() may be
-  // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
+  // ${algo:"sha-512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
   TSynSignerParams = packed record
     algo: TSignAlgo;
     secret, salt: RawUtf8;
@@ -4315,7 +4315,7 @@ begin
   if (aParamsJson = nil) or
      (aParamsJsonLen <= 0) then
     k.secret := aDefaultSalt
-  else if aParamsJson[1] <> '{' then
+  else if GotoNextNotSpace(aParamsJson)^ <> '{' then
     FastSetString(k.secret, aParamsJson, aParamsJsonLen)
   else
   begin
@@ -4330,7 +4330,7 @@ begin
         FastSetString(k.secret, aParamsJson, aParamsJsonLen);
       end;
     finally
-      FillCharFast(tmp.buf^, tmp.len, 0);
+      FillCharFast(tmp.buf^, tmp.len, 0); // anti-forensic
       tmp.Done;
     end;
   end;
