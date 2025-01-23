@@ -801,8 +801,13 @@ function ToText(algo: THashAlgo): PShortString; overload;
 function ToUtf8(algo: THashAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; {$endif}
 function ToText(algo: TCrc32Algo): PShortString; overload;
 
+/// recognize a TSignAlgo from a text, e.g. 'SHAKE-128', 'saSha256' or 'SHA-3/256'
+function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean; overload;
+function TextToSignAlgo(P: PUtf8Char; Len: PtrInt; out Algo: TSignAlgo): boolean; overload;
+
 /// recognize a THashAlgo from a text, e.g. 'SHA1', 'hfSHA3_256' or 'SHA-512/256'
-function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
+function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean; overload;
+function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean; overload;
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
@@ -4420,7 +4425,7 @@ begin
 end;
 
 function SanitizeAlgo(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
-  trimprefix: cardinal): boolean;
+  trimprefix: cardinal; onlyalphanum: boolean): boolean;
 begin
   tmp[0] := #0;
   result := false;
@@ -4433,30 +4438,63 @@ begin
     case P^ of
       #0:
         break;
-      'A' .. 'Z', '0' .. '9', 'a' .. 'z', '_':
+      'A' .. 'Z', '0' .. '9', 'a' .. 'z':
         AppendShortChar(P^, @tmp);
-      '-', '/':
-        if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
-            (PCardinal(@tmp[1])^ and $ffdfdfdf =
-              ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('3') shl 24)) or
-           ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
-            (PCardinal(@tmp[1])^ and $ffdfdfdf =
-              ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
+      '_':
+        if not onlyalphanum then
           AppendShortChar('_', @tmp);
+      '-', '/':
+        if not onlyalphanum then
+          if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
+              (PCardinal(@tmp[1])^ and $ffdfdfdf =
+                ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('3') shl 24)) or
+             ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
+              (PCardinal(@tmp[1])^ and $ffdfdfdf =
+                ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
+            AppendShortChar('_', @tmp);
     end;
     inc(P);
   until false;
   result := tmp[0] in [#3 .. #10];
 end;
 
-function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
+function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean;
+begin
+  result := TextToSignAlgo(pointer(Text), length(Text), Algo);
+end;
+
+function TextToSignAlgo(P: PUtf8Char; Len: PtrInt; out Algo: TSignAlgo): boolean;
 var
   tmp: TShort15;
   i: integer;
 begin
   result := false;
-  if not SanitizeAlgo(pointer(Text), length(Text), tmp,
-      ord('h') + ord('f') shl 8) then
+  if not SanitizeAlgo(P, Len, tmp, ord('s') + ord('a') shl 8, true) then
+    exit;
+  i := GetEnumNameValueTrimmed(TypeInfo(TSignAlgo), @tmp[1], ord(tmp[0]));
+  if i >= 0 then
+    Algo := TSignAlgo(i)
+  else if IdemPropName(tmp, 'SHAKE128') then
+    Algo := saSha3S128
+  else if IdemPropName(tmp, 'SHAKE256') then
+    Algo := saSha3S256
+  else
+    exit;
+  result := true;
+end;
+
+function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
+begin
+  result := TextToHashAlgo(pointer(Text), length(Text), Algo);
+end;
+
+function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean;
+var
+  tmp: TShort15;
+  i: integer;
+begin
+  result := false;
+  if not SanitizeAlgo(P, Len, tmp, ord('h') + ord('f') shl 8, false) then
     exit;
   i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), @tmp[1], ord(tmp[0]));
   if i < 0 then
