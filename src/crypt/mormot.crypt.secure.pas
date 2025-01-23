@@ -791,7 +791,7 @@ function ToText(algo: THashAlgo): PShortString; overload;
 function ToUtf8(algo: THashAlgo): RawUtf8; overload;
 function ToText(algo: TCrc32Algo): PShortString; overload;
 
-/// recognize a THashAlgo from a text, e.g. 'SHA1', 'SHA3_256' or 'SHA-512/256'
+/// recognize a THashAlgo from a text, e.g. 'SHA1', 'hfSHA3_256' or 'SHA-512/256'
 function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
 
 /// compute the hexadecimal hash of any (big) file
@@ -862,6 +862,7 @@ const
     SizeOf(THash224));     // hfSHA224
 
   /// map the file extension text of any THashAlgo digest
+  // - TextToHashAlgo() is able to recognize those values
   HASH_EXT: array[THashAlgo] of RawUtf8 = (
     '.md5',        // hfMD5
     '.sha1',       // hfSHA1
@@ -4403,13 +4404,16 @@ begin
   result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
 end;
 
-function SanitizeAlgo(P: PUtf8Char; L: PtrInt; var tmp: TShort15): boolean;
+function SanitizeAlgo(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
+  trimprefix: cardinal): boolean;
 begin
   tmp[0] := #0;
   result := false;
   if (L < 3) or
      (L > 15) then
     exit;
+  if PWord(P)^ = trimprefix then
+    inc(P, 2); // recognize plain un-trimmed ToText() e.g. 'hfMD5'
   repeat
     case P^ of
       #0:
@@ -4436,7 +4440,8 @@ var
   i: integer;
 begin
   result := false;
-  if not SanitizeAlgo(pointer(Text), length(Text), tmp) then
+  if not SanitizeAlgo(pointer(Text), length(Text), tmp,
+      ord('h') + ord('f') shl 8) then
     exit;
   i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), @tmp[1], ord(tmp[0]));
   if i < 0 then
