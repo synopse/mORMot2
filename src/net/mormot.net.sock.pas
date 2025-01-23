@@ -1927,6 +1927,10 @@ type
     /// low-level socket handle as pointer, initialized after Open() with socket
     property Sock: TNetSocket
       read fSock write fSock;
+    /// low-level access to the TLS layer implementation class
+    // - may be using OpenSSL or the SChannel API
+    property Secure: INetTls
+      read fSecure;
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
     property SockIn: PTextFile
       read fSockIn;
