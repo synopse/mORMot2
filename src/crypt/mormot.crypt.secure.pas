@@ -10137,11 +10137,36 @@ const
   _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAcl ' +
     'flags:TSecControls modified:TSecurityDescriptorInfos';
 
+procedure _JL_SignAlgo(Data: PByte; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.WasString then // more tolerant than plain RTTI
+      if TextToSignAlgo(Ctxt.Value, Ctxt.ValueLen, TSignAlgo(Data^)) then
+        exit
+      else
+        Ctxt.Valid := jpoIgnoreUnknownEnum in Ctxt.Options
+    else
+      Ctxt.ValueEnumNotString(Data);
+end;
+
+procedure _JL_HashAlgo(Data: PByte; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.WasString then // more tolerant than plain RTTI
+      if TextToHashAlgo(Ctxt.Value, Ctxt.ValueLen, THashAlgo(Data^)) then
+        exit
+      else
+        Ctxt.Valid := jpoIgnoreUnknownEnum in Ctxt.Options
+    else
+      Ctxt.ValueEnumNotString(Data);
+end;
+
 procedure InitializeUnit;
 begin
   // register proper JSON serialization of security related types
+  Rtti.RegisterType(TypeInfo(TSignAlgo)).JsonLoad := @_JL_SignAlgo;
+  Rtti.RegisterType(TypeInfo(THashAlgo)).JsonLoad := @_JL_HashAlgo;
   Rtti.RegisterTypes([
-    TypeInfo(TSignAlgo),
     TypeInfo(TSecAceType),
     TypeInfo(TSecAceFlags),
     TypeInfo(TSecAccessMask),
