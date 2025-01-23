@@ -1804,6 +1804,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// parse a property value, properly calling any setter
     procedure ParsePropComplex(Data: pointer);
+    /// make GetInteger(Value) and check against Ctxt.Options and Ctxt.Info
+    procedure ValueEnumNotString(Data: PByte);
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -7822,6 +7824,19 @@ begin
   result := Valid;
 end;
 
+procedure TJsonParserContext.ValueEnumNotString(Data: PByte);
+var
+  v, err: integer;
+begin // caller ensured Ctxt.WasString is false
+  v := GetInteger({$ifdef USERECORDWITHMETHODS}Get.{$endif}Value, err);
+  if (err = 0) and
+     (cardinal(v) <= Info.Cache.EnumMax) then // assume EnumMin=0
+    Data^ := v
+  else
+    Valid := jpoIgnoreUnknownEnum in Options; // keep existing Data^
+end;
+
+
 procedure _JL_Boolean(Data: PBoolean; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
@@ -8083,28 +8098,27 @@ procedure _JL_Enumeration(Data: pointer; var Ctxt: TJsonParserContext);
 var
   v, err: integer;
 begin
-  if Ctxt.ParseNext then
+  if not Ctxt.ParseNext then
+    exit;
+  if Ctxt.WasString then
+    v := TRttiJson(Ctxt.Info).GetEnumNameValue(Ctxt.Value, Ctxt.ValueLen)
+  else
   begin
-    if Ctxt.WasString then
-      v := TRttiJson(Ctxt.Info).GetEnumNameValue(Ctxt.Value, Ctxt.ValueLen)
-    else
-    begin
-      v := GetInteger(Ctxt.Value, err);
-      if (err <> 0) or
-         (cardinal(v) > Ctxt.Info.Cache.EnumMax) or
-         (cardinal(v) < Ctxt.Info.Cache.EnumMin) then
-        v := -1;
-    end;
-    if v < 0 then
-      if jpoIgnoreUnknownEnum in Ctxt.Options then
-        v := 0
-      else
-        Ctxt.Valid := false;
-    if Ctxt.Info.Size = 1 then
-      PByte(Data)^ := v
-    else
-      PWord(Data)^ := v;
+    v := GetInteger(Ctxt.Value, err);
+    if (err <> 0) or
+       (cardinal(v) > Ctxt.Info.Cache.EnumMax) or
+       (cardinal(v) < Ctxt.Info.Cache.EnumMin) then
+      v := -1;
   end;
+  if v < 0 then
+    if jpoIgnoreUnknownEnum in Ctxt.Options then
+      v := 0
+    else
+      Ctxt.Valid := false;
+  if Ctxt.Info.Size = 1 then
+    PByte(Data)^ := v
+  else
+    PWord(Data)^ := v;
 end;
 
 function EnumFind(List: PPUtf8Char; Max: PtrInt;
