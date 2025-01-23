@@ -1232,7 +1232,8 @@ const
     'sha512',     // hfSHA512
     'sha512-256', // hfSHA512_256
     'sha3-256',   // hfSHA3_256
-    'sha3-512');  // hfSHA3_512
+    'sha3-512',   // hfSHA3_512
+    'sha224');    // hfSHA224
 
   CAA_MD: array[TCryptAsymAlgo] of RawUtf8 = (
     'SHA256', // caaES256

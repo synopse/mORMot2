@@ -622,7 +622,8 @@ type
     hfSHA512,
     hfSHA512_256,
     hfSHA3_256,
-    hfSHA3_512);
+    hfSHA3_512,
+    hfSHA224);
 
   /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgos = set of THashAlgo;
@@ -707,6 +708,12 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
+  /// TStreamRedirect with SHA-224 cryptographic hashing
+  TStreamRedirectSha224 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
   /// TStreamRedirect with SHA-256 cryptographic hashing
   TStreamRedirectSha256 = class(TStreamRedirectSynHasher)
   public
@@ -770,7 +777,8 @@ const
     TStreamRedirectSha512,     // hfSHA512
     TStreamRedirectSha512_256, // hfSHA512_256
     TStreamRedirectSha3_256,   // hfSHA3_256
-    TStreamRedirectSha3_512);  // hfSHA3_512
+    TStreamRedirectSha3_512,   // hfSHA3_512
+    TStreamRedirectSha224);    // hfSHA224
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
@@ -811,6 +819,10 @@ function HashFileMd5(const FileName: TFileName): RawUtf8;
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha1(const FileName: TFileName): RawUtf8;
 
+/// compute the SHA-224 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha224(const FileName: TFileName): RawUtf8;
+
 /// compute the SHA-256 checksum of a given file
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha256(const FileName: TFileName): RawUtf8;
@@ -845,7 +857,8 @@ const
     SizeOf(TSHA512Digest), // hfSHA512
     SizeOf(THash256),      // hfSHA512_256
     SizeOf(THash256),      // hfSHA3_256
-    SizeOf(THash512));     // hfSHA3_512
+    SizeOf(THash512),      // hfSHA3_512
+    SizeOf(THash224));     // hfSHA224
 
   /// map the file extension text of any THashAlgo digest
   HASH_EXT: array[THashAlgo] of RawUtf8 = (
@@ -856,7 +869,8 @@ const
     '.sha512',     // hfSHA512
     '.sha512-256', // hfSHA512_256
     '.sha3-256',   // hfSHA3_256
-    '.sha3-512');  // hfSHA3_512
+    '.sha3-512',   // hfSHA3_512
+    '.sha224');    // hfSHA224
 
 
 { **************** Client and Server HTTP Access Authentication }
@@ -3199,7 +3213,8 @@ const
     '2.16.840.1.101.3.4.2.3',   // hfSHA512
     '2.16.840.1.101.3.4.2.6',   // hfSHA512_256
     '2.16.840.1.101.3.4.2.8',   // hfSHA3_256
-    '2.16.840.1.101.3.4.2.10'); // hfSHA3_512
+    '2.16.840.1.101.3.4.2.10',  // hfSHA3_512
+    '2.16.840.1.101.3.4.2.4');  // hfSHA224
 
   /// the OID of all ECC public keys (X962)
   // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
@@ -3663,6 +3678,8 @@ begin
       PMd5(@ctxt)^.Init;
     hfSHA1:
       PSha1(@ctxt)^.Init;
+    hfSHA224:
+      PSha256(@ctxt)^.Init224;
     hfSHA256:
       PSha256(@ctxt)^.Init;
     hfSHA384:
@@ -3687,6 +3704,7 @@ begin
       PMd5(@ctxt)^.Update(aBuffer^, aLen);
     hfSHA1:
       PSha1(@ctxt)^.Update(aBuffer, aLen);
+    hfSHA224,
     hfSHA256:
       PSha256(@ctxt)^.Update(aBuffer, aLen);
     hfSHA384:
@@ -3735,6 +3753,7 @@ begin
       PMd5(@ctxt)^.Final(aDigest.h0);
     hfSHA1:
       PSha1(@ctxt)^.Final(aDigest.b160);
+    hfSHA224, // SHA-224 is just a truncated SHA-256 result
     hfSHA256:
       PSha256(@ctxt)^.Final(aDigest.Lo);
     hfSHA384:
@@ -3888,6 +3907,13 @@ end;
 class function TStreamRedirectSha256.GetAlgo: THashAlgo;
 begin
   result := hfSHA256;
+end;
+
+{ TStreamRedirectSha224 }
+
+class function TStreamRedirectSha224.GetAlgo: THashAlgo;
+begin
+  result := hfSHA224;
 end;
 
 { TStreamRedirectSha1 }
@@ -4079,6 +4105,11 @@ end;
 function HashFileSha256(const FileName: TFileName): RawUtf8;
 begin
   result := HashFile(FileName, hfSHA256);
+end;
+
+function HashFileSha224(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA224);
 end;
 
 function HashFileSha384(const FileName: TFileName): RawUtf8;
@@ -6174,8 +6205,7 @@ class function TCryptAlgo.InternalResolve(
 begin
   result := FindCsvIndex(CSV, name, ',', {casesens=}false);
   if result < 0 then
-    ECrypt.RaiseUtf8('%.Create(''%''): unknown algorithm - try %',
-      [self, name, CSV]);
+    ECrypt.RaiseUtf8('%.Create(''%''): unknown algorithm in %', [self, name, CSV]);
 end;
 
 class function TCryptAlgo.Implements(const name: array of RawUtf8): pointer;
@@ -6594,7 +6624,8 @@ type
 
 const
   // CSV text of THashAlgo items, as recognized by Hasher/Hash factories
-  HashAlgosText: PUtf8Char = 'md5,sha1,sha256,sha384,sha512,sha3_256,sha3_512';
+  HashAlgosText: PUtf8Char =
+    'md5,sha1,sha256,sha384,sha512,sha3_256,sha3_512,sha224';
 
 constructor TCryptHasherInternal.Create(const name: RawUtf8);
 begin
