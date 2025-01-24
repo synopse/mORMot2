@@ -191,7 +191,7 @@ type
     // - condition must equals TRUE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
     // caller to stop testing with such code:
-    // ! if CheckFailed(A=10) then exit;
+    // ! if CheckFailed(A = 10) then exit;
     function CheckFailed(condition: boolean; const msg: string = ''): boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion
@@ -289,7 +289,9 @@ type
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
     /// this method is triggered internally - e.g. by Check() - when a test failed
-    procedure TestFailed(const msg: string);
+    procedure TestFailed(const msg: string); overload;
+    /// this method can be triggered directly - e.g. after CheckFailed() = true
+    procedure TestFailed(const msg: string; const args: array of const); overload;
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
@@ -1059,6 +1061,11 @@ begin
   finally
     fOwner.fSafe.UnLock;
   end;
+end;
+
+procedure TSynTestCase.TestFailed(const msg: string; const args: array of const);
+begin
+  fOwner.DoLog(sllFail, msg, Args);
 end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
