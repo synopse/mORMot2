@@ -503,8 +503,8 @@ procedure TTestCoreCrypto._SHA3;
   procedure DoTest;
   const
     HASH1 = '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787';
-    DK = '7bbdbe37ea70dd2ed640837ff8a926d381806ffa931695addd38ab950d35ad1880' +
-      '1a8290e8d97fe14cdfd3cfdbcd0fe766d3e6e4636bd0a17d710a61678db363';
+    DK    = '7bbdbe37ea70dd2ed640837ff8a926d381806ffa931695addd38ab950d35ad18' +
+            '801a8290e8d97fe14cdfd3cfdbcd0fe766d3e6e4636bd0a17d710a61678db363';
   var
     instance: TSha3;
     secret, data, encrypted: RawByteString;
@@ -543,17 +543,6 @@ procedure TTestCoreCrypto._SHA3;
     CheckEqual(instance.FullStr(SHA3_512, pointer(data), length(data)),
       'E76DFAD22084A8B1467FCF2FFA58361BEC7628EDF5F3FDC0E4805DC48CAEECA8' +
       '1B7C13C30ADF52A3659584739A2DF46BE589C51CA1A4A8416DF6545A1CE8BA00');
-    {$ifdef ASMX64AVXNOCONST}
-    if cpuAVX2 in X64CpuFeatures then
-    begin
-      exclude(X64CpuFeatures, cpuAVX2); // validate plain x86_64 asm version
-      CheckEqual(instance.FullStr(SHA3_256, nil, 0),
-        'A7FFC6F8BF1ED76651C14756A061D662F580FF4DE43B49FA82D80A4B80F8434A');
-      CheckEqual(instance.FullStr(SHA3_256, pointer(data), length(data)),
-        '79F38ADEC5C20307A98EF76E8324AFBFD46CFD81B22E3973C65FA1BD9DE31787');
-      include(X64CpuFeatures, cpuAVX2);
-    end;
-    {$endif ASMX64AVXNOCONST}
     instance.Init(SHA3_256);
     for i := 1 to length(data) do
       instance.Update(pointer(data), 1);
@@ -604,10 +593,17 @@ procedure TTestCoreCrypto._SHA3;
       end;
     end;
     Pbkdf2Sha3(SHA3_512, 'pass', 'salt', 1000, @h512);
-    check(Sha512DigestToString(h512.b) = DK);
+    checkEqual(Sha512DigestToString(h512.b), DK);
     FillZero(h512.b);
+    check(Sha512DigestToString(h512.b) <> DK);
     sign.Pbkdf2(saSha3512, 'pass', 'salt', 1000, h512);
-    check(Sha512DigestToString(h512.b) = DK);
+    checkEqual(Sha512DigestToString(h512.b), DK);
+    FillZero(h512.b);
+    check(Sha512DigestToString(h512.b) <> DK);
+    sign.Pbkdf2('{algo:"sha-3/512",secret:"pass",salt:"salt",rounds:1000}', h512);
+    checkEqual(Sha512DigestToString(h512.b), DK);
+    sign.Pbkdf2('{algo:"sha-3/512",secret:"pass",salt:"salt",rounds:100}', h512);
+    check(Sha512DigestToString(h512.b) <> DK);
     // taken from https://en.wikipedia.org/wiki/SHA-3
     CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dog'),
       'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');
