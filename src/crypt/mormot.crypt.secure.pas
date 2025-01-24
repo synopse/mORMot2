@@ -3619,7 +3619,7 @@ function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
   AsnSize: integer): Int64;
 
 /// decode an OID ASN.1 value into human-readable text
-function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
+function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
 
 /// decode an OCTSTR ASN.1 value into its raw bynary buffer
 // - returns plain input value if was not a valid ASN1_OCTSTR
@@ -9321,6 +9321,10 @@ end;
 
 { **************** Basic ASN.1 Support }
 
+// the longest OID described in the OID repository has 171 chars and 34 arcs
+// the greatest number for an OID arc has 39 digits, but we limit to 32-bit
+// see https://oid-base.com/faq.htm#size-limitations
+
 procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
 var
   tmp: array[0..15] of byte; // written in reverse order (big endian)
@@ -9365,19 +9369,6 @@ begin
       tmp[0] := #0; // clearly invalid input
   end;
   FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
-end;
-
-function AsnDecOidItem(var Pos: integer; const Buffer: TAsnObject): cardinal;
-var
-  x: byte;
-begin
-  result := 0;
-  repeat
-    result := result shl 7;
-    x := ord(Buffer[Pos]);
-    inc(Pos);
-    inc(result, x and $7F);
-  until (x and $80) = 0;
 end;
 
 function AsnEncLen(Len: cardinal; dest: PByte): PtrInt;
@@ -9676,23 +9667,33 @@ begin
   Append(Data, Asn(AsnType, [Buffer]));
 end;
 
-function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
+function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
 var
+  b: byte;
   x, y: cardinal;
+  tmp: ShortString; // the longest OID described in the repository has 171 chars
 begin
-  result := '';
+  tmp[0] := #0;
   y := 0;
   while Pos < EndPos do
   begin
-    x := AsnDecOidItem(Pos, Buffer);
+    x := 0;
+    repeat
+      x := x shl 7;
+      b := ord(Buffer[Pos]);
+      inc(Pos);
+      inc(x, cardinal(b) and $7F);
+    until (b and $80) = 0;
     if y = 0 then
     begin
       y := x div 40; // first byte = two first numbers modulo 40
       dec(x, y * 40);
-      UInt32ToUtf8(y, result);
+      AppendShortCardinal(y, tmp);
     end;
-    Append(result, ['.', x]);
+    AppendShortChar('.', @tmp);
+    AppendShortCardinal(x, tmp);
   end;
+  FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
 function AsnDecOctStr(const input: RawByteString): RawByteString;
