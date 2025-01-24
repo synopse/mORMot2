@@ -1569,6 +1569,7 @@ var
   exp641, exp642: QWord;
   hasher: TSynHasher;
   h, h2: THashAlgo;
+  s, s2: TSignAlgo;
 begin
   for h := low(h) to high(h) do
   begin
@@ -1582,6 +1583,10 @@ begin
     Check(h = h2);
     Check(TextToHashAlgo(HASH_EXT[h], h2));
     Check(h = h2);
+    u := ShortStringToUtf8(ToText(h)^);
+    Check(u <> '');
+    Check(TextToHashAlgo(u, h2));
+    Check(h = h2);
   end;
   Check(TextToHashAlgo('SHA-512/256', h2));
   Check(h2 = hfSHA512_256);
@@ -1591,6 +1596,33 @@ begin
   Check(h2 = hfSHA3_512);
   Check(not TextToHashAlgo('SHA5122', h));
   Check(not TextToHashAlgo('SHA512256', h));
+  for s := low(s) to high(s) do
+  begin
+    u := ToUtf8(s);
+    Check(u <> '');
+    Check(TextToSignAlgo(u, s2));
+    Check(s = s2);
+    Check(TextToSignAlgo(' ' + u, s2));
+    Check(s = s2);
+    Check(TextToSignAlgo(' ' + u + ' ', s2));
+    Check(s = s2);
+    u := ShortStringToUtf8(ToText(s)^);
+    Check(u <> '');
+    Check(TextToSignAlgo(u, s2));
+    Check(s = s2);
+  end;
+  Check(TextToSignAlgo('SHA-512', s2));
+  Check(s2 = saSHA512);
+  Check(TextToSignAlgo('SHA-3/256', s2));
+  Check(s2 = saSHA3256);
+  Check(TextToSignAlgo('SHA3-512', s2));
+  Check(s2 = saSHA3512);
+  Check(TextToSignAlgo('SHAKE-128', s2));
+  Check(s2 = saSha3S128);
+  Check(TextToSignAlgo('SHAKE/256', s2));
+  Check(s2 = saSha3S256);
+  Check(not TextToSignAlgo('SHA5122', s));
+  Check(not TextToSignAlgo('SHA512256', s));
   Check(Adler32SelfTest);
   SetLength(buf, HASHESMAX + HASHALIGN);
   exp321 := 0;
