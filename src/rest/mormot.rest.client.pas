@@ -1609,17 +1609,16 @@ class function TRestClientAuthenticationSspi.ClientComputeSessionKey(
   Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
   SecCtx: TSecContext;
-  WithPassword: boolean;
   OutData: RawByteString;
 begin
-  InitializeDomainAuth; // setup mormot.lib.sspi/gssapi unit depending on the OS
   result := '';
-  InvalidateSecContext(SecCtx);
-  WithPassword := User.LogonName <> '';
+  if not InitializeDomainAuth then
+    exit;
   Sender.fSession.Data := '';
+  InvalidateSecContext(SecCtx);
   try
     repeat
-      if WithPassword then // will use ClientForceSpn() value
+      if User.LogonName <> '' then // will use ClientForceSpn() value
         ClientSspiAuthWithPassword(SecCtx, Sender.fSession.Data,
           User.LogonName, User.PasswordHashHexa, {spn=}'', OutData)
       else

@@ -5517,7 +5517,8 @@ const
 constructor TRestServerAuthenticationSspi.Create(aServer: TRestServer);
 begin
   // setup mormot.lib.sspi/gssapi unit depending on the OS
-  InitializeDomainAuth;
+  if not InitializeDomainAuth then
+    ESecurityException.RaiseUtf8('%.Create with no %', [self, SECPKGNAMEAPI]);
   // initialize this authentication scheme
   inherited Create(aServer);
   // TDynArray access to fSspiAuthContext[] by TRestConnectionID (ptInt64)
