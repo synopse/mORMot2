@@ -1754,7 +1754,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     procedure SendPacket(const Asn1Data: TAsnObject);
-    procedure ReceivePacket(Dest: pointer; DestLen: integer); overload;
+    procedure ReceivePacket(Dest: pointer; DestLen: PtrInt); overload;
     procedure ReceivePacket(var Append: RawByteString; Len: PtrInt); overload;
     procedure ReceivePacketFillSockBuffer;
     function ReceiveResponse: TAsnObject;
@@ -5721,9 +5721,9 @@ begin
   {$endif ASNDEBUG}
 end;
 
-procedure TLdapClient.ReceivePacket(Dest: pointer; DestLen: integer);
+procedure TLdapClient.ReceivePacket(Dest: pointer; DestLen: PtrInt);
 var
-  len: integer;
+  len: PtrInt;
 begin
   while DestLen > 0 do
   begin

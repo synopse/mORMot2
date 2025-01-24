@@ -1281,7 +1281,7 @@ type
     /// initialize the dictionary storage, specifying keys/values as generic types
     // - just a convenient wrapper around TSynDictionary.Create()
     // - consider IKeyValue<> from mormot.core.collections.pas, for more robust
-    // generics-based code where TKey/TValue are propagated to all methods
+    // generics-based code where TKey/TValue types are propagated to most methods
     class function New<TKey, TValue>(aKeyCaseInsensitive: boolean = false;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aHasher: THasher = nil; aKeySpecific: TRttiParserType = ptNone): TSynDictionary;
