@@ -3462,16 +3462,10 @@ const
   ASN1_IA5STRING   = $16;
   ASN1_UTCTIME     = $17;
   ASN1_GENTIME     = $18;
+
   // base ASN1_CL_CTR types
   ASN1_SEQ         = $30;
   ASN1_SETOF       = $31;
-  // common ASN1_CL_APP types
-  ASN1_IPADDR      = $40;
-  ASN1_COUNTER     = $41;
-  ASN1_GAUGE       = $42;
-  ASN1_TIMETICKS   = $43;
-  ASN1_OPAQUE      = $44;
-  ASN1_COUNTER64   = $46;
 
   ASN1_TEXT = [
     ASN1_UTF8STRING,
@@ -3481,11 +3475,7 @@ const
   ASN1_NUMBERS = [
     ASN1_INT,
     ASN1_ENUM,
-    ASN1_BOOL,
-    ASN1_COUNTER,
-    ASN1_GAUGE,
-    ASN1_TIMETICKS,
-    ASN1_COUNTER64];
+    ASN1_BOOL];
 
   //  context-specific class, tag #n
   ASN1_CTX0  = $80;
@@ -9842,7 +9832,6 @@ function AsnNext(var Pos: integer; const Buffer: TAsnObject;
   Value: PRawByteString; CtrEndPos: PInteger): integer;
 var
   asnsize: integer;
-  y: Int64;
 begin
   if Value <> nil then
     Value^ := '';
@@ -9870,34 +9859,15 @@ begin
       ASN1_ENUM,
       ASN1_BOOL:
         Int64ToUtf8(AsnDecInt(Pos, Buffer, asnsize), RawUtf8(Value^));
-      ASN1_COUNTER,
-      ASN1_GAUGE,
-      ASN1_TIMETICKS,
-      ASN1_COUNTER64:
-        begin
-          y := 0;
-          while asnsize <> 0 do
-          begin
-            y := (y shl 8) + ord(Buffer[Pos]);
-            inc(Pos);
-            dec(asnsize);
-          end;
-          Int64ToUtf8(y, RawUtf8(Value^));
-        end;
       ASN1_OBJID:
         begin
           Value^ := AsnDecOid(Pos, Pos + asnsize, Buffer);
           inc(Pos, asnsize);
         end;
-      ASN1_IPADDR:
-        begin
-          Value^ := AsnDecIp(@Buffer[Pos], asnsize);
-          inc(Pos, asnsize);
-        end;
       ASN1_NULL:
         inc(Pos, asnsize);
     else
-      // ASN1_UTF8STRING, ASN1_OCTSTR, ASN1_OPAQUE or unknown
+      // ASN1_UTF8STRING, ASN1_OCTSTR or unknown
       begin
         Value^ := copy(Buffer, Pos, asnsize); // return as raw binary
         DetectRawUtf8(Value^); // detect and mark CP_UTF8 to please the FPC RTL
@@ -10013,21 +9983,6 @@ begin
             w.AddShorter('ENUM');
           ASN1_UTF8STRING:
             w.AddShorter('UTF8');
-          // ASN1_CL_APP are application-specific
-          {
-          ASN1_IPADDR:
-            w.AddShorter('IPADDR');
-          ASN1_COUNTER:
-            w.AddShorter('COUNTER');
-          ASN1_GAUGE:
-            w.AddShorter('GAUGE');
-          ASN1_TIMETICKS:
-            w.AddShorter('TIMETICK');
-          ASN1_OPAQUE:
-            w.AddShorter('OPAQUE');
-          ASN1_COUNTER64:
-            w.AddShorter('CNTR64');
-          }
         else
           DumpClass(at, w);
         end;
