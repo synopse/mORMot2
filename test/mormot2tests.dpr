@@ -74,7 +74,8 @@ uses
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
-  test.soa.network         in '.\test.soa.network.pas';
+  test.soa.network         in '.\test.soa.network.pas'
+  test.ui.pdf              in '.\test.ui.pdf.pas';
 
 
 { TIntegrationTests }
