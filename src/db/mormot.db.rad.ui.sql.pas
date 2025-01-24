@@ -394,7 +394,7 @@ begin // only execute writes in current implementation
           stmt.BindBlob(p + 1, pointer(blob), length(blob));
         end
         else
-          stmt.BindVariant(p + 1, AParams[p].Value, False);
+          stmt.BindVariant(p + 1, AParams[p].Value, false);
     stmt.ExecutePrepared;
     result := stmt.UpdateCount;
     if result = 0 then

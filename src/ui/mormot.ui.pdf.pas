@@ -11942,7 +11942,7 @@ begin
   begin
     Canvas.GSave;
     Canvas.NewPath;
-    DC[nDC].ClipRgnNull := False;
+    DC[nDC].ClipRgnNull := false;
     d := @Data^.RgnData;
     pr := @d^.Buffer;
     for i := 1 to d^.rdh.nCount do

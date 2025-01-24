@@ -1968,7 +1968,7 @@ begin
       mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
       fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
     end;
-    Ctxt.Returns(fMvcInfoCache, HTTP_SUCCESS, HTML_CONTENT_TYPE_HEADER, True);
+    Ctxt.Returns(fMvcInfoCache, HTTP_SUCCESS, HTML_CONTENT_TYPE_HEADER, true);
   end
   else
   // 3. serve static resources, with proper caching

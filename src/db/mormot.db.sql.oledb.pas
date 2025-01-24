@@ -1914,7 +1914,7 @@ begin
   begin
     inherited Commit;
     try
-      OleDbCheck(nil, fTransaction.Commit(False, XACTTC_SYNC, 0));
+      OleDbCheck(nil, fTransaction.Commit(false, XACTTC_SYNC, 0));
     except
       inc(fTransactionCount); // the transaction is still active
       raise;
@@ -1930,7 +1930,7 @@ begin
   if assigned(fTransaction) then
   begin
     inherited Rollback;
-    OleDbCheck(nil, fTransaction.Abort(nil, False, False));
+    OleDbCheck(nil, fTransaction.Abort(nil, false, false));
   end;
 end;
 
@@ -1980,7 +1980,7 @@ begin
       case res of
         S_OK:
           begin
-            OleCheck(DataInitialize.GetInitializationString(DBInitialize, True, tmp));
+            OleCheck(DataInitialize.GetInitializationString(DBInitialize, true, tmp));
             fConnectionString := tmp;
             if tmp <> nil then
               CoTaskMemFree(tmp);

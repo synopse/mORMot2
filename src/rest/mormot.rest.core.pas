@@ -1206,14 +1206,14 @@ type
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
     procedure InBodyType(var ContentType: RawUtf8;
-      GuessJsonIfNoneSet: boolean = True);
+      GuessJsonIfNoneSet: boolean = true);
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
-    function OutBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
+    function OutBodyType(GuessJsonIfNoneSet: boolean = true): RawUtf8;
     /// check if the "Content-Type" value from OutHead is JSON
     // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
-    function OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
+    function OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean = true): boolean;
     /// just a wrapper around FindNameValue(InHead,UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)

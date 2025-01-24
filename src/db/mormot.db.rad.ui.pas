@@ -473,7 +473,7 @@ begin
   if DefaultFields then
   {$endif ISDELPHIXE6}
     DestroyFields;
-  fIsCursorOpen := False;
+  fIsCursorOpen := false;
 end;
 
 procedure TVirtualDataSet.InternalFirst;
@@ -516,7 +516,7 @@ begin
     CreateFields;
   BindFields(true);
   fCurrentRow := -1;
-  fIsCursorOpen := True;
+  fIsCursorOpen := true;
 end;
 
 procedure TVirtualDataSet.InternalSetToRecord(Buffer: TRecordBuffer);

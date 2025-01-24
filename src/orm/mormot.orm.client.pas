@@ -593,7 +593,7 @@ begin
   begin
     state := Value.InternalState;
     if ClientRetrieve(fModel.GetTableIndexExisting(POrmClass(Value)^),
-        aID, False, state, resp) then
+        aID, false, state, resp) then
     begin
       Value.InternalState := state;
       original := Value.GetJsonValues(

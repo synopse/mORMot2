@@ -5881,7 +5881,7 @@ begin
     raise EInterfaceStub.CreateUtf8(
       '%.IntCheckCount(): Unexpected % operator', [self, Ord(aOperator)]);
   end;
-  InternalCheck(ok, True, 'ExpectsCount(''%'',%,%) failed: count=%',
+  InternalCheck(ok, true, 'ExpectsCount(''%'',%,%) failed: count=%',
     [fInterface.Methods[aMethodIndex].Uri, ToText(aOperator)^, aCount, aComputed]);
 end;
 
@@ -5906,7 +5906,7 @@ begin
                 IntCheckCount(m, num, ExpectedPassCountOperator, ExpectedPassCount);
               end;
     if fInterfaceExpectedTraceHash <> 0 then
-      InternalCheck(LogHash = fInterfaceExpectedTraceHash, True,
+      InternalCheck(LogHash = fInterfaceExpectedTraceHash, true,
         'ExpectsTrace(%) returned %', [fInterfaceExpectedTraceHash, LogHash]);
     if eTrace in fHasExpects then
       for m := 0 to fInterface.MethodsCount - 1 do
@@ -5918,7 +5918,7 @@ begin
               if ExpectedTraceHash <> 0 then
                 InternalCheck(
                   ExpectedTraceHash = Hash32(IntGetLogAsText(asmndx, Params,
-                    [wName, wParams, wResults], ',')), True,
+                    [wName, wParams, wResults], ',')), true,
                   'ExpectsTrace(''%'') failed', [fInterface.Methods[m].Uri]);
         end;
   finally

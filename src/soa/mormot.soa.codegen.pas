@@ -1037,7 +1037,7 @@ begin
       services.AddItem(rec);
     end;
     fSOA := _ObjFast([
-      'enabled',          True,
+      'enabled',          true,
       'services',         variant(services),
       'expectMangledUri', fServer.Services.ExpectMangledUri]);
   end;

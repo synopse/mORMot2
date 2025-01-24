@@ -2075,7 +2075,7 @@ begin
     instance := ObjectFromInterface(SlaveCallback);
     if (instance <> nil) and
        (PClass(instance)^ = TInterfacedObjectFakeServer) then
-      TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := True;
+      TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := true;
   finally
     fRestServer.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;

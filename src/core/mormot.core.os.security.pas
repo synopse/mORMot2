@@ -1342,13 +1342,13 @@ function ShortToKnownUuid(const text: ShortString; out uuid: TGuid): boolean;
 /// return a human-friendly algorithm name from a OID text of most used X.509
 // Certificate signature algorithms
 // - returns e.g. 'sha256RSA' for CertAlgoName('1.2.840.113549.1.1.11')
-// - returns '' if the OID is not found
+// - returns '' if the OID is not known
 function CertAlgoName(const OID: RawUtf8): RawUtf8;
 
 /// return the hash algorithm name from a OID text of a X.509 Certificate
 // signature algorithm
 // - returns e.g. 'SHA256' for CertAlgoHash('1.2.840.113549.1.1.11')
-// - returns '' if the OID is not found
+// - returns '' if the OID is not known
 function CertAlgoHash(const OID: RawUtf8): RawUtf8;
 
 

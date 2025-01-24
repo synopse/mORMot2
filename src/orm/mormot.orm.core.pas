@@ -1464,9 +1464,9 @@ type
     // execute a CREATE INDEX IF NOT EXISTS on the main engine
     // - note that with SQLite3, your database schema should never contain two
     // indices where one index is a prefix of the other, e.g. if you defined:
-    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], True);
+    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], true);
     // Then the following index is not mandatory for SQLite3:
-    // ! aServer.CreateSqlIndex(TEmails, 'Email', False);
+    // ! aServer.CreateSqlIndex(TEmails, 'Email', false);
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
     function CreateSqlMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUtf8; Unique: boolean; IndexName: RawUtf8 = ''): boolean;
@@ -6766,7 +6766,7 @@ begin
         f := D.IndexByNameU(pointer(SP.Name));
       if f >= 0 then
       begin
-        SP.GetValueVar(aRecord, False, tmp, @wasString);
+        SP.GetValueVar(aRecord, false, tmp, @wasString);
         D.List[f].SetValueVar(self, tmp, wasString);
       end;
     end;
@@ -7803,7 +7803,7 @@ begin
   if T = nil then
     exit;
   fFill := TOrmFill.Create;
-  fFill.fJoinedFields := True;
+  fFill.fJoinedFields := true;
   fFill.fTable := T;
   fFill.fTable.OwnerMustFree := true;
   n := 0;
@@ -8362,7 +8362,7 @@ begin
     exit;
   P := Orm.Fields.ByName(pointer(PropName)); // fast O(log(n)) binary search
   if P <> nil then
-    P.GetValueVar(self, False, result, nil);
+    P.GetValueVar(self, false, result, nil);
 end;
 
 procedure TOrm.SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char; ValueLen: PtrInt);
@@ -8822,11 +8822,9 @@ end;
 function TOrmMany.ManyAdd(const aClient: IRestOrm; aDestID: TID;
   NoDuplicates: boolean): boolean;
 begin
-  if (self = nil) or
-     (fSourceID = nil) then
-    result := false
-  else // avoid GPF
-    result := ManyAdd(aClient, fSourceID^, aDestID, NoDuplicates);
+  result := (self <> nil) and
+            (fSourceID <> nil) and
+            ManyAdd(aClient, fSourceID^, aDestID, NoDuplicates);
 end;
 
 function TOrmMany.DestGet(const aClient: IRestOrm; aSourceID: TID;
@@ -8834,12 +8832,9 @@ function TOrmMany.DestGet(const aClient: IRestOrm; aSourceID: TID;
 var
   where: RawUtf8;
 begin
-  where := IDWhereSql(aClient, aSourceID, False);
-  if where = '' then
-    result := false
-  else
-    result := aClient.OneFieldValues(RecordClass, 'Dest', where,
-      TInt64DynArray(DestIDs));
+  where := IDWhereSql(aClient, aSourceID, false);
+  result := (where <> '') and
+    aClient.OneFieldValues(RecordClass, 'Dest', where, TInt64DynArray(DestIDs));
 end;
 
 function TOrmMany.DestGetJoined(const aClient: IRestOrm;
@@ -8888,7 +8883,7 @@ var
   begin
     for i := 0 to high(Classes) do
     begin
-      select := select + Classes[i].sql.TableSimpleFields[True, True];
+      select := select + Classes[i].sql.TableSimpleFields[true, true];
       if i < high(Classes) then
         select := select + ',';
     end;
@@ -9084,7 +9079,7 @@ function TOrmMany.SourceGet(const aClient: IRestOrm; aDestID: TID;
 var
   where: RawUtf8;
 begin
-  where := IDWhereSql(aClient, aDestID, True);
+  where := IDWhereSql(aClient, aDestID, true);
   if where = '' then
     result := false
   else
@@ -11784,7 +11779,7 @@ var
 begin
   tmp.Init(Value);
   try
-    JsonDecode(tmp.buf, ['FieldNames'], @V, True);
+    JsonDecode(tmp.buf, ['FieldNames'], @V, true);
     Finalize(fFieldNames);
     CsvToRawUtf8DynArray(V[0].Text, fFieldNames);
   finally

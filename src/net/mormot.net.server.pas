@@ -6752,7 +6752,7 @@ begin
       Http.CreateHttpHandle(fReqQueue));
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
   if Suspended then
-    Suspended := False;
+    Suspended := false;
 end;
 
 constructor THttpApiServer.CreateClone(From: THttpApiServer);

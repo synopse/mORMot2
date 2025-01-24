@@ -444,9 +444,9 @@ type
     // execute a CREATE INDEX IF NOT EXISTS on the main engine
     // - note that with SQLite3, your database schema should never contain two
     // indices where one index is a prefix of the other, e.g. if you defined:
-    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], True);
+    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], true);
     // Then the following index is not mandatory for SQLite3:
-    // ! aServer.CreateSqlIndex(TEmails, 'Email', False);
+    // ! aServer.CreateSqlIndex(TEmails, 'Email', false);
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
     function CreateSqlMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUtf8;
@@ -829,9 +829,9 @@ begin
       Int64(TableIndex) shl ORMVERSION_DELETEID_SHIFT;
     deleted.Deleted := ID;
     if Batch <> nil then
-      Batch.Add(deleted, True, True)
+      Batch.Add(deleted, true, true)
     else
-      Add(deleted, True, True);
+      Add(deleted, true, true);
     if (fOwner <>nil) and
        (fOwner.Services <> nil) then
       (fOwner.Services as TServiceContainerServer).

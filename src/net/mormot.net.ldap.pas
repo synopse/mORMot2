@@ -6651,7 +6651,7 @@ end;
 function TLdapClient.Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
 begin
   result := false;
-  if not Connected(False) then
+  if not Connected(false) then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    Asn(obj),

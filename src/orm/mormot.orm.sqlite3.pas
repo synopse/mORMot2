@@ -633,7 +633,7 @@ begin
       with prepared^.Where[i],
            pInfo.aConstraint^[i] do
       begin
-        OmitCheck := False;
+        OmitCheck := false;
         Value.VType := ftUnknown;
         if usable then
         begin

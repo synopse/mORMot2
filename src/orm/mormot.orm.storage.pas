@@ -2443,7 +2443,7 @@ begin
     result := false
   else
   begin
-    StorageLock(True {$ifdef DEBUGSTORAGELOCK}, 'EngineDelete'{$endif});
+    StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'EngineDelete'{$endif});
     try
       result := DeleteOne(IDToIndex(ID));
     finally
@@ -2549,7 +2549,7 @@ begin
   n := length(IDs);
   SetLength(ndx, n);
   dec(n);
-  StorageLock(True {$ifdef DEBUGSTORAGELOCK}, 'EngineDeleteWhere' {$endif});
+  StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'EngineDeleteWhere' {$endif});
   try
     for i := 0 to n do
     begin

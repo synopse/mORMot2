@@ -2386,7 +2386,7 @@ begin
       begin
         ProxyInfo.URL := WinHttpProxyInfo.lpszProxy;
         ProxyInfo.Bypass := WinHttpProxyInfo.lpszProxyBypass;
-        ProxyInfo.AutoDetected := True;
+        ProxyInfo.AutoDetected := true;
       end
       else
         result := GetLastError;

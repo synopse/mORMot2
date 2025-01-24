@@ -1278,7 +1278,7 @@ begin
       on E: Exception do
       begin
         fStatement := nil; // do not release the statement in constructor
-        FreeHandles(True);
+        FreeHandles(true);
         raise;
       end;
     end;
@@ -1533,7 +1533,7 @@ begin
               ociArrays[ociArraysCount] := nil;
               OCI.Check(nil, self,
                 OCI.ObjectNew(Env, fError, Context, OCI_TYPECODE_VARRAY,
-                  Type_List, nil, OCI_DURATION_SESSION, True,
+                  Type_List, nil, OCI_DURATION_SESSION, true,
                   ociArrays[ociArraysCount]),
                 fError);
               inc(ociArraysCount);
@@ -2358,7 +2358,7 @@ begin
     except
       on E: Exception do
       begin
-        FreeHandles(True);
+        FreeHandles(true);
         raise;
       end;
     end;

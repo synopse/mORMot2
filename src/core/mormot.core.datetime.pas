@@ -1485,7 +1485,7 @@ begin
   else
   begin
     FastSetString(result, 10);
-    DateToIso8601PChar(Date, pointer(result), True);
+    DateToIso8601PChar(Date, pointer(result), true);
   end;
 end;
 

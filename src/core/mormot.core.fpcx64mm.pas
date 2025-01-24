@@ -1394,7 +1394,7 @@ begin
     LargeBlocksCircularList.NextLargeBlockHeader := new;
     new.NextLargeBlockHeader := old;
     old.PreviousLargeBlockHeader := new;
-    LargeBlocksLocked := False;
+    LargeBlocksLocked := false;
     inc(new);
   end;
   result := new;
@@ -1427,7 +1427,7 @@ begin
   next := header.NextLargeBlockHeader;
   next.PreviousLargeBlockHeader := prev;
   prev.NextLargeBlockHeader := next;
-  LargeBlocksLocked := False;
+  LargeBlocksLocked := false;
   result := DropMediumAndLargeFlagsMask and header.BlockSizeAndFlags;
   FreeLarge(header, result);
 end;
@@ -1485,7 +1485,7 @@ begin
       next := header^.NextLargeBlockHeader;
       next.PreviousLargeBlockHeader := prev;
       prev.NextLargeBlockHeader := next;
-      LargeBlocksLocked := False;
+      LargeBlocksLocked := false;
       // on Linux, call Kernel mremap() and its TLB magic
       // on Windows, try to reserve the memory block just after the existing
       // otherwise, use Alloc/Move/Free pattern, with asm/AVX move

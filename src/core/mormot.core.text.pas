@@ -2742,7 +2742,7 @@ begin
   P := pointer(Csv);
   if P = nil then
     exit;
-  first := True;
+  first := true;
   for i := 0 to high(Values) do
   begin
     s := GetNextItemString(P);

@@ -2007,7 +2007,7 @@ end;
 
 procedure TThreadAbstract.Terminate;
 begin
-  inherited Terminate; // FTerminated := True
+  inherited Terminate; // FTerminated := true
   TerminatedSet;
 end;
 

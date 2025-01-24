@@ -6417,7 +6417,7 @@ begin
   if not CheckNumberOfArgs(Context, 1, argc, 'timelog') then
     exit;
   TimeLog.Value := sqlite3.value_int64(argv[0]);
-  RawUtf8ToSQlite3Context(TimeLog.Text(True, 'T'), Context, false);
+  RawUtf8ToSQlite3Context(TimeLog.Text(true, 'T'), Context, false);
 end;
 
 procedure InternalTimeLogUnix(Context: TSqlite3FunctionContext; argc: integer;

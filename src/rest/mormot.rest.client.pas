@@ -1777,7 +1777,7 @@ begin
     i := FindIndex(aID);
     if i < 0 then
       exit;
-    List[i].ReleasedFromServer := True; // just flag it -> delay deletion
+    List[i].ReleasedFromServer := true; // just flag it -> delay deletion
   finally
     fSafe.UnLock;
   end;

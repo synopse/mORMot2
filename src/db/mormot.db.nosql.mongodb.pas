@@ -3131,7 +3131,7 @@ begin
   Result.Init(Request, reply, start);
   if start <> 0 then
     Client.Log.Log(Client.LogReplyEvent,
-      Result.ToJson(modMongoShell, True, Client.LogReplyEventMaxSize), Request);
+      Result.ToJson(modMongoShell, true, Client.LogReplyEventMaxSize), Request);
   {$ifdef MONGO_OLDPROTOCOL}
   if mrfQueryFailure in Result.ResponseFlags then
     raise EMongoRequestException.Create('Query failure', self, Request, Result);
@@ -3334,7 +3334,7 @@ begin
   end;
   if (fError.fReply <> '') and
      WR.InheritsFrom(TJsonWriter) then
-    fError.FetchAllToJson(TJsonWriter(WR), modMongoShell, True);
+    fError.FetchAllToJson(TJsonWriter(WR), modMongoShell, true);
   result := false; // log stack trace
 end;
 {$endif NOEXCEPTIONINTERCEPT}
@@ -4474,7 +4474,7 @@ begin
   result := 0;
   _Safe(Database.Client.Connections[0].SendAndFree(
     TMongoRequestDelete.Create(fFullCollectionName,
-      Query, Flags), False))^.GetAsInteger('n', result);
+      Query, Flags), false))^.GetAsInteger('n', result);
 end;
 
 {$else}

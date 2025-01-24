@@ -9753,7 +9753,8 @@ function GetVariantFromRtti(var Value; Info: PRttiInfo;
   Options: PDocVariantOptions): variant;
 begin
   VarClear(result);
-  GetVarDataFromRtti(Value, Info, PVarData(@result)^, Options);
+  if @Value <> nil then
+    GetVarDataFromRtti(Value, Info, PVarData(@result)^, Options);
 end;
 
 function GetVariantFromNotStringJson(Json: PUtf8Char; var Value: TVarData;

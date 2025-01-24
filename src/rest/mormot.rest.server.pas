@@ -3094,8 +3094,7 @@ begin
         method := ExecuteOrmWrite;
       end;
   else
-    raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
-      [ord(Command), self]);
+    EOrmException.RaiseUtf8('Unexpected Command=% in %.Execute', [ord(Command), self]);
   end;
   if exec^.Mode = amBackgroundOrmSharedThread then
     if (Command = execOrmWrite) and
@@ -5560,6 +5559,7 @@ begin
      not Ctxt.InputExists['Data'] then
     exit;
   // use connectionID to find authentication session
+  browserauth := false;
   connectionID := Ctxt.Call^.LowLevelConnectionID;
   indataenc := Ctxt.InputUtf8['Data'];
   if indataenc = '' then
@@ -5574,10 +5574,8 @@ begin
       StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
       exit;
     end;
-    browserauth := True;
-  end
-  else
-    browserauth := False;
+    browserauth := true;
+  end;
   // SSPI authentication
   fSafe.Lock;
   try
@@ -7479,8 +7477,7 @@ procedure TRestServer.SessionsLoadFromFile(const aFileName: TFileName;
 
   procedure ContentError;
   begin
-    raise ESecurityException.CreateUtf8('%.SessionsLoadFromFile("%")',
-      [self, aFileName]);
+    ESecurityException.RaiseUtf8('%.SessionsLoadFromFile("%")', [self, aFileName]);
   end;
 
 var
