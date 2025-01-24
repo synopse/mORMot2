@@ -21,7 +21,7 @@ type
   /// regression tests for mormot.ui.pdf
   TTestUiPdf = class(TSynTestCase)
   private
-    function CountOccurrences(const SubStr, Text: string): Integer;
+    function CountOccurrences(const SubStr, Text: RawUTF8): Integer;
   public
 
   published
@@ -54,12 +54,12 @@ uses
 {$ifndef FPC}
 {$ifndef LVCL}
 
-function TTestUiPdf.CountOccurrences(const SubStr, Text: string): Integer;
+function TTestUiPdf.CountOccurrences(const SubStr, Text: RawUTF8): Integer;
 var
   PosIdx: Integer;
 begin
   Result := 0;
-  PosIdx := Pos(SubStr, Text);
+  PosIdx := PosEx(SubStr, Text); // Use PosEx for RawUTF8
   while PosIdx > 0 do
   begin
     Inc(Result);
@@ -148,11 +148,11 @@ begin
 
     FillChar(Header, SizeOf(Header), 0);
     PdfStream.Read(Header, SizeOf(Header));
-    CheckEqual('%PDF-', string(Header), 'PDF header is missing or invalid');
+    CheckEqual('%PDF-', RawUTF8(AnsiString(Header)), 'PDF header is missing or invalid');
 
     PdfStream.Position := PdfStream.Size - 6;
     PdfStream.Read(Trailer, SizeOf(Trailer));
-    CheckEqual('%%EOF'#10, string(Trailer), 'PDF trailer is missing or invalid');
+    CheckEqual('%%EOF'#10, RawUTF8(AnsiString(Trailer)), 'PDF trailer is missing or invalid');
   finally
     PdfStream.Free;
   end;
@@ -442,7 +442,7 @@ begin
     PdfStream.Position := 0;
     PdfStream.ReadBuffer(PdfBuffer[0], PdfStream.Size);
 
-    PageCount := CountOccurrences('/Page/', TEncoding.ANSI.GetString(PdfBuffer));
+    PageCount := CountOccurrences('/Page/', StringToUTF8(TEncoding.ANSI.GetString(PdfBuffer)));
     CheckEqual(3, PageCount, 'The number of pages in the PDF is incorrect');
   finally
     PdfStream.Free;
