@@ -1850,6 +1850,7 @@ const
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 {$ifdef USEWININET}
@@ -6287,26 +6288,44 @@ function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
   aFlags: THttpServerRequestFlags): cardinal;
 var
   msg: THttpPeerCacheMessage;
+  msgText: ShortString;
   ip4: cardinal;
   err: TOnBeforeBodyErr;
 begin
   // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code to reject the request immediately as a "TeaPot", close the
   // socket and ban this IP for a few seconds at accept() level
-  result := HTTP_FORBIDDEN;
-  if (length(aBearerToken) > (SizeOf(msg) div 3) * 4) and // base64uri length
-     IsGet(aMethod) and
-     (aUrl <> '') and // URI is just ignored but something should be specified
-     IPToCardinal(aRemoteIP, ip4) and
-     not fInstable.IsBanned(ip4) and // banned for RejectInstablePeersMin
-     BearerDecode(aBearerToken, msg) and
-     (msg.IP4 = fIP4) and
-     (IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
-      IsEqualGuid(msg.Uuid, fUuid)) then
-    result := HTTP_SUCCESS
-  else if not fVerboseLog then
+  err := [];
+  if length(aBearerToken) < (SizeOf(msg) div 3) * 4 then // base64uri length
+    include(err, eBearer);
+  if not IsGet(aMethod) then
+    include(err, eGet);
+  if aUrl = '' then // URI is just ignored but something should be specified
+    include(err, eUrl);
+  if not IPToCardinal(aRemoteIP, ip4) then
+    include(err, eIp1);
+  if fInstable.IsBanned(ip4) then // banned for RejectInstablePeersMin
+    include(err, eBanned);
+  msgtext[0] := #0;
+  if Check(BearerDecode(aBearerToken, msg), 'OnBeforeBody') then
+  begin
+    ToText(msg, msgtext);
+    if msg.IP4 <> fIP4 then
+      include(err, eIp2);
+    if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
+           IsEqualGuid(msg.Uuid, fUuid))) then
+      include(err, eUuid);
+  end
+  else
+    include(err, eDecode);
+  result := HTTP_SUCCESS;
+  if err = [] then
     exit;
-  fLog.Add.Log(sllTrace, 'OnBeforeBody=% from %', [result, aRemoteIP], self);
+  result := HTTP_FORBIDDEN;
+  if not fVerboseLog then
+    exit;
+  fLog.Add.Log(sllTrace, 'OnBeforeBody=% from % % % [%] %', [result, aRemoteIP,
+    aMethod, aUrl, GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err), msgtext], self);
 end;
 
 procedure THttpPeerCache.OnIdle(tix64: Int64);
@@ -6562,6 +6581,11 @@ begin
 end;
 
 function ToText(const msg: THttpPeerCacheMessage): shortstring;
+begin
+  ToText(msg, result);
+end;
+
+procedure ToText(const msg: THttpPeerCacheMessage; result: shortstring);
 var
   l: PtrInt;
   algo: PUtf8Char;
