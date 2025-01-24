@@ -3094,7 +3094,8 @@ begin
         method := ExecuteOrmWrite;
       end;
   else
-    EOrmException.RaiseUtf8('Unexpected Command=% in %.Execute', [ord(Command), self]);
+    raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
+      [ord(Command), self]); // RaiseUtf8() makes a Delphi compiler warning
   end;
   if exec^.Mode = amBackgroundOrmSharedThread then
     if (Command = execOrmWrite) and
