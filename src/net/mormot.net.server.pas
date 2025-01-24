@@ -6278,12 +6278,17 @@ begin
   result := fUdpServer.Broadcast(req, alone);
 end;
 
+type
+  TOnBeforeBodyErr = set of (
+    eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid);
+
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
   aFlags: THttpServerRequestFlags): cardinal;
 var
   msg: THttpPeerCacheMessage;
   ip4: cardinal;
+  err: TOnBeforeBodyErr;
 begin
   // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code to reject the request immediately as a "TeaPot", close the

@@ -291,7 +291,7 @@ type
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
-    procedure TestFailed(const msg: string; const args: array of const); overload;
+    procedure TestFailed(const msg: RawUtf8; const args: array of const); overload;
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
@@ -1063,7 +1063,7 @@ begin
   end;
 end;
 
-procedure TSynTestCase.TestFailed(const msg: string; const args: array of const);
+procedure TSynTestCase.TestFailed(const msg: RawUtf8; const args: array of const);
 begin
   fOwner.DoLog(sllFail, msg, Args);
 end;
