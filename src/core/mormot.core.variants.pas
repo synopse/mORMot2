@@ -2796,6 +2796,17 @@ function GetVariantFromNotStringJson(Json: PUtf8Char;
   var Value: TVarData; AllowDouble: boolean): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// initialize a variant instance from any kind of value, using mORMot RTTI
+// - classes, records, arrays will be instantiated as TDocVariant
+// - just a wrapper around Rtti.RegisterType(Info).ValueToVariant()
+function GetVarDataFromRtti(var Value; Info: PRttiInfo; var Dest: TVarData;
+  Options: PDocVariantOptions = nil): boolean;
+
+/// initialize a variant instance from any kind of value, using mORMot RTTI
+// - classes, records, arrays will be instantiated as TDocVariant
+function GetVariantFromRtti(var Value; Info: PRttiInfo;
+  Options: PDocVariantOptions = nil): variant;
+
 /// low-level function to parse a JSON buffer content into a variant
 // - warning: will decode in the Json buffer memory itself (no memory
 // allocation or copy), for faster process - so take care that it is not shared
@@ -9725,6 +9736,25 @@ end;
 
 
 { ************** JSON Parsing into Variant }
+
+function GetVarDataFromRtti(var Value; Info: PRttiInfo; var Dest: TVarData;
+  Options: PDocVariantOptions): boolean;
+var
+  r: TRttiCustom;
+begin
+  if Options = nil then
+    Options := @JSON_[mFastFloat];
+  r := Rtti.RegisterType(Info);
+  result := (r <> nil) and
+            (r.ValueToVariant(@Value, Dest, Options) <> 0);
+end;
+
+function GetVariantFromRtti(var Value; Info: PRttiInfo;
+  Options: PDocVariantOptions): variant;
+begin
+  VarClear(result);
+  GetVarDataFromRtti(Value, Info, PVarData(@result)^, Options);
+end;
 
 function GetVariantFromNotStringJson(Json: PUtf8Char; var Value: TVarData;
   AllowDouble: boolean): boolean;
