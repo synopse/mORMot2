@@ -6355,7 +6355,7 @@ begin
   msgtext[0] := #0;
   if Check(BearerDecode(aBearerToken, msg), 'OnBeforeBody') then
   begin
-    ToText(msg, msgtext);
+    inc(msgtext[0]); // to trigger ToText() below
     if msg.IP4 <> fIP4 then
       include(err, eIp2);
     if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
@@ -6370,6 +6370,8 @@ begin
   result := HTTP_FORBIDDEN;
   if not fVerboseLog then
     exit;
+  if msgtext[0] <> #0 then
+    ToText(msg, msgtext);
   fLog.Add.Log(sllTrace, 'OnBeforeBody=% % % % [%] %', [result, aRemoteIP,
     aMethod, aUrl, GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err), msgtext], self);
 end;
