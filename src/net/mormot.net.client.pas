@@ -131,12 +131,13 @@ type
 
 type
   /// the supported authentication schemes which may be used by HTTP clients
-  // - supported only by TWinHttp class yet, and TCurlHttp
+  // - not supported by all classes (e.g. TWinINet won't support all schemes)
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
     wraDigest,
     wraNegotiate,
+    wraNegotiateChannelBinding,
     wraBearer);
 
   /// pointer to some extended options for HTTP clients
@@ -755,6 +756,12 @@ function GetProxyForUri(const uri: RawUtf8;
 // - optionally sanitize the output to be filename-compatible
 // - note that it returns an UTF-8 string as resource URI, not TFileName
 function ExtractResourceName(const uri: RawUtf8; sanitize: boolean = true): RawUtf8;
+
+{$ifdef DOMAINRESTAUTH}
+/// setup Kerberos tls-server-end-point channel binding on a given TLS connection
+procedure KerberosChannelBinding(const Tls: INetTls; var SecContext: TSecContext;
+  var Temp: THash512Rec);
+{$endif DOMAINRESTAUTH}
 
 
 { ******************** Additional Client Protocols Support }
@@ -2236,7 +2243,8 @@ begin
         fOnAuthorize := OnAuthorizeDigest; // as AuthorizeDigest()
         fAuthDigestAlgo := daMD5_Sess;
       end;
-    wraNegotiate:
+    wraNegotiate,
+    wraNegotiateChannelBinding:
       {$ifdef DOMAINRESTAUTH}
       fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
       {$else}
@@ -3041,6 +3049,22 @@ end;
 
 {$ifdef DOMAINRESTAUTH}
 
+procedure KerberosChannelBinding(const Tls: INetTls; var SecContext: TSecContext;
+  var Temp: THash512Rec);
+var
+  hasher: RawUtf8;
+  cert: RawUtf8;
+begin
+  if not Assigned(Tls) then
+    exit;
+  cert := Tls.GetRawCert(@hasher);
+  if cert = '' then
+    exit;
+  SecContext.ChannelBindingsHashLen := HashForChannelBinding(cert, hasher, Temp);
+  if SecContext.ChannelBindingsHashLen <> 0 then
+      SecContext.ChannelBindingsHash := @Temp;
+end;
+
 // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
 
 procedure DoSspi(Sender: THttpClientSocket; var Context: THttpClientRequest;
@@ -3050,6 +3074,7 @@ var
   bak: RawUtf8;
   unauthstatus: integer;
   datain, dataout: RawByteString;
+  channelbindingtemp: THash512Rec;
 begin
   if (Sender = nil) or
      not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
@@ -3058,6 +3083,11 @@ begin
   bak := Context.header;
   InvalidateSecContext(sc);
   try
+    // Kerberos + TLS may require tls-server-end-point channel binding
+    if Assigned(Sender.Secure) and
+       (Sender.AuthScheme = wraNegotiateChannelBinding) then
+      KerberosChannelBinding(Sender.Secure, sc, channelbindingtemp);
+    // main Kerberos loop
     repeat
       FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
       datain := Base64ToBin(TrimU(datain));
@@ -3244,7 +3274,8 @@ begin
     case Auth.Scheme of
       wraBasic,
       wraDigest,
-      wraNegotiate:
+      wraNegotiate,
+      wraNegotiateChannelBinding:
         result := (Auth.UserName = Another^.Auth.UserName) and
                   (Auth.Password = Another^.Auth.Password);
       wraBearer:
@@ -3755,7 +3786,8 @@ begin
           winAuth := WINHTTP_AUTH_SCHEME_BASIC;
         wraDigest:
           winAuth := WINHTTP_AUTH_SCHEME_DIGEST;
-        wraNegotiate:
+        wraNegotiate,
+        wraNegotiateChannelBinding:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
       else
         raise EWinHttp.CreateUtf8(
@@ -4187,6 +4219,7 @@ const
     [cauBasic],     // wraBasic
     [cauDigest],    // wraDigest
     [cauNegotiate], // wraNegotiate
+    [cauNegotiate], // wraNegotiateChannelBinding
     [cauBearer]);   // wraBearer
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
