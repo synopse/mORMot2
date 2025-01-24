@@ -3606,6 +3606,7 @@ procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
 
 /// decode the len of a ASN.1 binary item
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// decode the header of a ASN.1 binary item
 function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
@@ -9401,14 +9402,15 @@ function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
 var
   n: byte;
 begin
-  result := ord(Buffer[Start]);
+  result := cardinal(Buffer[Start]);
   inc(Start);
   if result <= $7f then
     exit;
   n := result and $7f; // first byte is number of following bytes + $80
   result := 0;
   repeat
-    result := (result shl 8) + cardinal(Buffer[Start]);
+    result := result shl 8;
+    inc(result, cardinal(Buffer[Start]));
     if integer(result) < 0 then
       exit; // 31-bit overflow: clearly invalid input
     inc(Start);
@@ -9491,7 +9493,8 @@ begin
     x := ord(Buffer[Start]);
     if neg then
       x := not x;
-    result := (result shl 8) + x;
+    result := result shl 8;
+    inc(result, x);
     inc(Start);
     dec(AsnSize);
   end;
