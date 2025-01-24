@@ -3541,8 +3541,7 @@ begin
         exit;
       end;
     atsSecurityDescriptor:
-      if SecurityDescriptorToText(s, s, dom, uuid) then
-        // the TSecurityDescriptor wrapper did convert binary into SDDL text
+      if SecurityDescriptorToText(s, s, dom, uuid) then // into SDDL text
         exit;
     atsFileTime: // 64-bit FileTime
       begin

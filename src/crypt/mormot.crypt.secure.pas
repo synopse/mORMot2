@@ -3677,11 +3677,9 @@ function AsnDump(const Value: TAsnObject): RawUtf8;
 
 
 /// serialize a TSecurityDescriptor instance into JSON
-// - here to avoid dependency of mormot.core.os.security to mormot.core.json
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
 
 /// unserialize a TSecurityDescriptor instance from JSON
-// - here to avoid dependency of mormot.core.os.security to mormot.core.json
 function SecurityDescriptorFromJson(const Json: RawUtf8;
   out SD: TSecurityDescriptor): boolean;
 
@@ -10063,6 +10061,19 @@ begin
 end;
 
 
+function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
+begin
+  SaveJson(SD, TypeInfo(TSecurityDescriptor), [twoIgnoreDefaultInRecord,
+    twoEnumSetsAsTextInRecord, twoTrimLeftEnumSets], result);
+end;
+
+function SecurityDescriptorFromJson(const Json: RawUtf8;
+  out SD: TSecurityDescriptor): boolean;
+begin
+  SD.Clear;
+  result := RecordLoadJson(SD, Json, TypeInfo(TSecurityDescriptor));
+end;
+
 // some callbacks for custom JSON serialization of security related types
 
 procedure _JL_RawSid(Data: PRawSid; var Ctxt: TJsonParserContext);
@@ -10141,25 +10152,6 @@ begin
   Ctxt.W.AddDirect('"');
 end;
 
-function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
-begin
-  SaveJson(SD, TypeInfo(TSecurityDescriptor), [twoIgnoreDefaultInRecord,
-    twoEnumSetsAsTextInRecord, twoTrimLeftEnumSets], result);
-end;
-
-function SecurityDescriptorFromJson(const Json: RawUtf8;
-  out SD: TSecurityDescriptor): boolean;
-begin
-  result := RecordLoadJson(SD, Json, TypeInfo(TSecurityDescriptor));
-end;
-
-const
-  _TSynSignerParams = 'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer';
-  _TSecAce = 'type:TSecAceType flags:TSecAceFlags raw:word mask:TSecAccessMask ' +
-    'sid:RawSid opaque:RawUtf8 obj,inh:TGuid';
-  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAcl ' +
-    'flags:TSecControls modified:TSecurityDescriptorInfos';
-
 procedure _JL_SignAlgo(Data: PByte; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
@@ -10183,6 +10175,13 @@ begin
     else
       Ctxt.ValueEnumNotString(Data);
 end;
+
+const
+  _TSynSignerParams = 'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer';
+  _TSecAce = 'type:TSecAceType flags:TSecAceFlags raw:word mask:TSecAccessMask ' +
+    'sid:RawSid opaque:RawUtf8 obj,inh:TGuid';
+  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAcl ' +
+    'flags:TSecControls modified:TSecurityDescriptorInfos';
 
 procedure InitializeUnit;
 begin
