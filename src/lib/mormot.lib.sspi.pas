@@ -724,11 +724,8 @@ const
     CERT_NON_REPUDIATION_KEY_USAGE,     // wkuNonRepudiation
     CERT_DIGITAL_SIGNATURE_KEY_USAGE);  // wkuDigitalSignature
 
-/// return the whole algorithm name from a OID text of a signature algorithm
+/// return the whole algorithm name from a OID text using Windows API
 procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
-
-/// return the hash algorithm name from a OID text of a signature algorithm
-procedure WinCertHashAlgo(const OID: RawUtf8; out HashAlgo: RawUtf8);
 
 /// decode a CERT_NAME_BLOB binary blob into RFC 1779 text, with X500 key names
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
@@ -1513,72 +1510,6 @@ begin
     end;
 end;
 
-
-const
-  OID_CERT: array[0 .. 14] of RawUtf8 = (
-    '1.2.840.113549.1.1.4',   // Md5Rsa
-    '1.2.840.113549.1.1.5',   // Sha1Rsa
-    '1.2.840.113549.1.1.11',  // Sha256Rsa
-    '1.2.840.113549.1.1.12',  // Sha384Rsa
-    '1.2.840.113549.1.1.13',  // Sha512Rsa
-    '1.2.840.113549.1.1.14',  // Sha224Rsa
-    '2.16.840.1.101.3.4.2.1', // Sha256RsaPss
-    '2.16.840.1.101.3.4.2.2', // Sha384RsaPss
-    '2.16.840.1.101.3.4.2.3', // Sha512RsaPss
-    '1.2.840.10045.4.1',      // Sha1Ecc
-    '1.2.840.10045.4.3.1',    // Sha224Ecc
-    '1.2.840.10045.4.3.2',    // Sha256Ecc
-    '1.2.840.10045.4.3.3',    // Sha384Ecc
-    '1.2.840.10045.4.3.4',    // Sha512Ecc
-    '1.3.101.110');           // Sha512EdDSA
-  OID_CERT_NAME: array[-1 .. high(OID_CERT)] of RawUtf8 = (
-    '',
-    'md5RSA',
-    'sha1RSA',
-    'sha256RSA',
-    'sha384RSA',
-    'sha512RSA',
-    'sha224RSA',
-    'sha256PSS',
-    'sha384PSS',
-    'sha512PSS',
-    'sha1ECC',
-    'sha224ECC',
-    'sha256ECC',
-    'sha384ECC',
-    'sha512ECC',
-    'sha512EDDSA');
-  OID_CERT_HASH: array[-1 .. high(OID_CERT)] of RawUtf8 = (
-    '',
-    'MD5',
-    'SHA1',
-    'SHA256',
-    'SHA384',
-    'SHA512',
-    'SHA224',
-    'SHA256',
-    'SHA384',
-    'SHA512',
-    'SHA1',
-    'SHA224',
-    'SHA256',
-    'SHA384',
-    'SHA512',
-    'SHA512');
-
-function WinCertAlgoIndex(const OID: RawUtf8): PtrInt;
-begin
-  if OID = '' then
-    result := -1
-  else
-    result := FindNonVoidRawUtf8(@OID_CERT, pointer(OID), length(OID), length(OID_CERT));
-end;
-
-procedure WinCertHashAlgo(const OID: RawUtf8; out HashAlgo: RawUtf8);
-begin
-  HashAlgo := OID_CERT_HASH[WinCertAlgoIndex(OID)];
-end;
-
 procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
 var
   nfo: PCRYPT_OID_INFO;
@@ -1591,7 +1522,7 @@ begin
     Win32PWideCharToUtf8(nfo^.pwszName, Name)
   else
     // minimal decoding fallback for Windows XP
-    Name := OID_CERT_NAME[WinCertAlgoIndex(OID)];
+    Name := CertAlgoName(OID);
 end;
 
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;

@@ -1339,6 +1339,18 @@ procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
 // - use O(n) case-insensitive brute force search over ATTR_TXT[] values
 function ShortToKnownUuid(const text: ShortString; out uuid: TGuid): boolean;
 
+/// return a human-friendly algorithm name from a OID text of most used X.509
+// Certificate signature algorithms
+// - returns e.g. 'sha256RSA' for CertAlgoName('1.2.840.113549.1.1.11')
+// - returns '' if the OID is not found
+function CertAlgoName(const OID: RawUtf8): RawUtf8;
+
+/// return the hash algorithm name from a OID text of a X.509 Certificate
+// signature algorithm
+// - returns e.g. 'SHA256' for CertAlgoHash('1.2.840.113549.1.1.11')
+// - returns '' if the OID is not found
+function CertAlgoHash(const OID: RawUtf8): RawUtf8;
+
 
 { ****************** Security Descriptor Definition Language (SDDL) }
 
@@ -2795,6 +2807,76 @@ begin
     uuid := ATTR_UUID[a];
     result := true;
   end;
+end;
+
+const
+  OID_CERT: array[0 .. 14] of RawUtf8 = (
+    '1.2.840.113549.1.1.4',   // Md5Rsa
+    '1.2.840.113549.1.1.5',   // Sha1Rsa
+    '1.2.840.113549.1.1.11',  // Sha256Rsa
+    '1.2.840.113549.1.1.12',  // Sha384Rsa
+    '1.2.840.113549.1.1.13',  // Sha512Rsa
+    '1.2.840.113549.1.1.14',  // Sha224Rsa
+    '2.16.840.1.101.3.4.2.1', // Sha256RsaPss
+    '2.16.840.1.101.3.4.2.2', // Sha384RsaPss
+    '2.16.840.1.101.3.4.2.3', // Sha512RsaPss
+    '1.2.840.10045.4.1',      // Sha1Ecc
+    '1.2.840.10045.4.3.1',    // Sha224Ecc
+    '1.2.840.10045.4.3.2',    // Sha256Ecc
+    '1.2.840.10045.4.3.3',    // Sha384Ecc
+    '1.2.840.10045.4.3.4',    // Sha512Ecc
+    '1.3.101.110');           // Sha512EdDSA
+  OID_CERT_NAME: array[-1 .. high(OID_CERT)] of RawUtf8 = (
+    '',
+    'md5RSA',        // Md5Rsa
+    'sha1RSA',       // Sha1Rsa
+    'sha256RSA',     // Sha256Rsa
+    'sha384RSA',     // Sha384Rsa
+    'sha512RSA',     // Sha512Rsa
+    'sha224RSA',     // Sha224Rsa
+    'sha256PSS',     // Sha256RsaPss
+    'sha384PSS',     // Sha384RsaPss
+    'sha512PSS',     // Sha512RsaPss
+    'sha1ECC',       // Sha1Ecc
+    'sha224ECC',     // Sha224Ecc
+    'sha256ECC',     // Sha256Ecc
+    'sha384ECC',     // Sha384Ecc
+    'sha512ECC',     // Sha512Ecc
+    'sha512EDDSA');  // Sha512EdDSA
+  OID_CERT_HASH: array[-1 .. high(OID_CERT)] of RawUtf8 = (
+    '',
+    'MD5',           // Md5Rsa
+    'SHA1',          // Sha1Rsa
+    'SHA256',        // Sha256Rsa
+    'SHA384',        // Sha384Rsa
+    'SHA512',        // Sha512Rsa
+    'SHA224',        // Sha224Rsa
+    'SHA256',        // Sha256RsaPss
+    'SHA384',        // Sha384RsaPss
+    'SHA512',        // Sha512RsaPss
+    'SHA1',          // Sha1Ecc
+    'SHA224',        // Sha224Ecc
+    'SHA256',        // Sha256Ecc
+    'SHA384',        // Sha384Ecc
+    'SHA512',        // Sha512Ecc
+    'SHA512');       // Sha512EdDSA
+
+function CertAlgoIndex(const OID: RawUtf8): PtrInt;
+begin
+  if OID = '' then
+    result := -1
+  else
+    result := FindNonVoidRawUtf8(@OID_CERT, pointer(OID), length(OID), length(OID_CERT));
+end;
+
+function CertAlgoName(const OID: RawUtf8): RawUtf8;
+begin
+  result := OID_CERT_NAME[CertAlgoIndex(OID)];
+end;
+
+function CertAlgoHash(const OID: RawUtf8): RawUtf8;
+begin
+  result := OID_CERT_HASH[CertAlgoIndex(OID)];
 end;
 
 

@@ -10,6 +10,7 @@
 
 uses
   Windows,
+  mormot.core.os.security,
   mormot.lib.sspi; // for Low-Level SSPI/SChannel Functions
 
 
@@ -2200,7 +2201,7 @@ var
 begin
   result := TlsCertRaw(fCtxt, @oid);
   if SignHashName <> nil then
-    WinCertHashAlgo(oid, SignHashName^);
+    SignHashName^ := CertAlgoHash(oid);
 end;
 
 function TSChannelNetTls.HandshakeStep(buf: PByteArray; var len: integer): cardinal;
