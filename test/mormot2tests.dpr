@@ -90,6 +90,7 @@ type
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
+    procedure UI;
   end;
 
 class procedure TIntegrationTests.DescribeCommandLine;
@@ -189,6 +190,14 @@ begin
   AddCase([
     TTestServiceOrientedArchitecture,
     TTestBidirectionalRemoteConnection
+  ]);
+end;
+
+procedure TIntegrationTests.UI;
+begin
+  //exit;
+  AddCase([
+    TTestUiPdf
   ]);
 end;
 
