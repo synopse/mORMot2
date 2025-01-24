@@ -1700,7 +1700,12 @@ function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
-  out result: ShortString; trimlowercase: boolean = false);
+  out result: ShortString; trimlowercase: boolean = false); overload;
+
+/// helper to retrieve the CSV text of all enumerate items defined in a set
+function GetSetNameShort(aTypeInfo: PRttiInfo; value: pointer;
+  trimlowercase: boolean = false): shortstring; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// low-level function parsing Value/ValueLen into a set, returned as 64-bit
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
@@ -6175,7 +6180,7 @@ var
   PS: PShortString;
   i: PtrInt;
 begin
-  result := '';
+  result[0] := #0;
   info := aTypeInfo^.BaseType;
   if (info = nil) or
      (@value = nil) then
@@ -6189,6 +6194,12 @@ begin
   end;
   if result[0] <> #0 then
     dec(result[0]); // cancel last comma
+end;
+
+function GetSetNameShort(aTypeInfo: PRttiInfo; value: pointer;
+  trimlowercase: boolean): shortstring;
+begin
+  GetSetNameShort(aTypeInfo, value^, result, trimlowercase);
 end;
 
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
