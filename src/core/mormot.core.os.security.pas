@@ -2891,14 +2891,51 @@ const
     // TWellKnownRid in SDDL_WKR[] order
     'ROLALGDADUDGDCDDCASAEAPACNAPKAEKRSHO';
 var
-  SID_SDDLW: packed array[byte] of word absolute SID_SDDL; // for fast lookup
+  SddlInitialized: boolean; // delayed initialization of those lookup constants
   SDDL_WKS_INDEX: array[TWellKnownSid] of byte; // into 1..48
   SDDL_WKR_INDEX: array[TWellKnownRid] of byte; // into 49..66
+  SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
+
+procedure SddlInitialize;
+var
+  wks: TWellKnownSid;
+  wkr: TWellKnownRid;
+  sam: TSecAccess;
+  i: PtrInt;
+begin
+  GlobalLock;
+  try
+    if SddlInitialized then
+      exit;
+    SddlInitialized := true;
+    for i := low(SDDL_WKS) to high(SDDL_WKS) do
+    begin
+      wks := SDDL_WKS[i];
+      include(wksWithSddl, wks);
+      SDDL_WKS_INDEX[wks] := i;
+    end;
+    for i := low(SDDL_WKR) to high(SDDL_WKR) do
+    begin
+      wkr := SDDL_WKR[i];
+      include(wkrWithSddl, wkr);
+      SDDL_WKR_INDEX[wkr] := i + high(SDDL_WKS);
+    end;
+    for i := low(SDDL_OPER) to high(SDDL_OPER) do
+      SDDL_OPER_INDEX[SDDL_OPER[i]] := i;
+    for sam := low(sam) to high(sam) do
+      if SAM_SDDL[sam][0] <> #0  then
+        include(samWithSddl, sam);
+  finally
+    GlobalUnLock;
+  end;
+end;
 
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
 var
   i: PtrInt;
 begin
+  if not SddlInitialized then
+    SddlInitialize;
   FastAssignNew(result);
   i := SDDL_WKS_INDEX[wks];
   if i <> 0 then
@@ -2909,6 +2946,8 @@ function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
 var
   i: PtrInt;
 begin
+  if not SddlInitialized then
+    SddlInitialize;
   FastAssignNew(result);
   i := SDDL_WKR_INDEX[wkr];
   if i <> 0 then
@@ -2990,6 +3029,8 @@ var
 begin
   if sid = nil then
     exit;
+  if not SddlInitialized then
+    SddlInitialize;
   k := SidToKnown(sid);
   i := SDDL_WKS_INDEX[k];
   if i <> 0 then
@@ -3125,6 +3166,8 @@ var
 begin
   if cardinal(mask) = 0 then
     exit;
+  if not SddlInitialized then
+    SddlInitialize;
   i := IntegerScanIndex(@SAR_MASK, length(SAR_MASK), cardinal(mask));
   if i >= 0 then
     AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
@@ -3234,6 +3277,8 @@ procedure SddlUnaryToText(tok: TSecConditionalToken; var l, u: RawUtf8);
 var
   op: PRawUtf8;
 begin
+  if not SddlInitialized then
+    SddlInitialize;
   op := @SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]];
   if tok = sctNot then
     // inner parenth for '!(..)'
@@ -3248,6 +3293,8 @@ procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
 var
   op: PRawUtf8;
 begin
+  if not SddlInitialized then
+    SddlInitialize;
   op := @SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]];
   if tok in [sctContains, sctAnyOf, sctNotContains, sctNotAnyOf] then
     if (r <> '') and
@@ -3462,6 +3509,8 @@ begin
     ord('a') .. ord('z'),
     $80 .. $ff: // allow any UTF-8 identifier without any decoding
       begin
+        if not SddlInitialized then
+          SddlInitialize;
         result := sctLocalAttribute;
         repeat
           inc(s);
@@ -4565,6 +4614,8 @@ end;
 
 procedure TSecurityDescriptor.Clear;
 begin
+  if not SddlInitialized then
+    SddlInitialize;
   Finalize(self);
   Flags := [scSelfRelative];
   Modified := [];
@@ -5320,35 +5371,6 @@ end;
 
 {$endif OSWINDOWS}
 
-
-procedure InitializeUnit;
-var
-  wks: TWellKnownSid;
-  wkr: TWellKnownRid;
-  sam: TSecAccess;
-  i: PtrInt;
-begin
-  for i := low(SDDL_WKS) to high(SDDL_WKS) do
-  begin
-    wks := SDDL_WKS[i];
-    include(wksWithSddl, wks);
-    SDDL_WKS_INDEX[wks] := i;
-  end;
-  for i := low(SDDL_WKR) to high(SDDL_WKR) do
-  begin
-    wkr := SDDL_WKR[i];
-    include(wkrWithSddl, wkr);
-    SDDL_WKR_INDEX[wkr] := i + high(SDDL_WKS);
-  end;
-  for i := low(SDDL_OPER) to high(SDDL_OPER) do
-    SDDL_OPER_INDEX[SDDL_OPER[i]] := i;
-  for sam := low(sam) to high(sam) do
-    if SAM_SDDL[sam][0] <> #0  then
-      include(samWithSddl, sam);
-end;
-
-initialization
-  InitializeUnit;
 
 end.
 
