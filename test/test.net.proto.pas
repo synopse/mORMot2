@@ -1549,6 +1549,7 @@ var
   hpc2: THttpPeerCryptHook; // another instance to validate remote decoding
   hps: THttpPeerCacheSettings;
   msg, msg2: THttpPeerCacheMessage;
+  m, m2: RawUtf8;
   res: THttpPeerCryptMessageDecode;
   i, n, alter: integer;
   tmp: RawByteString;
@@ -1584,7 +1585,9 @@ begin
             Check(CompareMem(@msg, @msg2, SizeOf(msg)));
           end;
           NotifyTestSpeed('messages', n * 2, n * 2 * SizeOf(msg), @timer);
-          Check(ToText(msg) = ToText(msg2));
+          m := RawUtf8(ToText(msg));
+          m2 := RawUtf8(ToText(msg2));
+          CheckEqual(m, m2);
           timer.Start;
           n := 10000;
           for i := 1 to n do

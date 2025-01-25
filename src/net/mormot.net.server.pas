@@ -1865,7 +1865,7 @@ const
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(md: THttpPeerCryptMessageDecode): PShortString; overload;
-procedure ToText(const msg: THttpPeerCacheMessage; result: shortstring); overload;
+procedure ToText(const msg: THttpPeerCacheMessage; var result: shortstring); overload;
 function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -6638,7 +6638,7 @@ begin
   ToText(msg, result);
 end;
 
-procedure ToText(const msg: THttpPeerCacheMessage; result: shortstring);
+procedure ToText(const msg: THttpPeerCacheMessage; var result: shortstring);
 var
   l: PtrInt;
   algo: PUtf8Char;
