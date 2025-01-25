@@ -1549,6 +1549,7 @@ var
   hpc2: THttpPeerCryptHook; // another instance to validate remote decoding
   hps: THttpPeerCacheSettings;
   msg, msg2: THttpPeerCacheMessage;
+  res: THttpPeerCryptMessageDecode;
   i, n, alter: integer;
   tmp: RawByteString;
   timer: TPrecisionTimer;
@@ -1577,7 +1578,8 @@ begin
             msg.Hash.Hash.i0 := i;
             tmp := hpc.MessageEncode(msg);
             Check(tmp <> '');
-            Check(hpc2.MessageDecode(pointer(tmp), length(tmp), msg2), 'hpc2');
+            res := hpc2.MessageDecode(pointer(tmp), length(tmp), msg2);
+            Check(res = mdOk, 'hpc2');
             CheckEqual(msg2.Size, i);
             Check(CompareMem(@msg, @msg2, SizeOf(msg)));
           end;
@@ -1589,11 +1591,14 @@ begin
           begin
             alter := Random32(length(tmp));
             inc(PByteArray(tmp)[alter]); // should be detected at crc level
-            Check(not hpc2.MessageDecode(pointer(tmp), length(tmp), msg2), 'alt');
+            res := hpc2.MessageDecode(pointer(tmp), length(tmp), msg2);
+            if CheckFailed(res = mdCrc, 'alt') then
+              TestFailed('alt=%', [ToText(res)^]);
             dec(PByteArray(tmp)[alter]); // restore
           end;
           NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
-          Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2), 'hpc');
+          res := hpc.MessageDecode(pointer(tmp), length(tmp), msg2);
+          Check(res = mdOk, 'hpc');
           Check(CompareMem(@msg, @msg2, SizeOf(msg)));
           for i := 1 to 10 do
             Check(hpc.Ping = nil);
