@@ -6427,24 +6427,21 @@ function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
 var
   i: PtrInt;
 begin
-  result := nil;
-  if Text = nil then
-    TextLen := 0;
-  Dest.Init(TextLen * 2); // maximum absolute UTF-16 size in bytes (pure ASCII)
-  if Dest.len = 0 then
-    exit;
-  result := Dest.buf;
-  if IsAnsiCompatible(pointer(Text), TextLen) then // fastest optimistic way
+  if (Text = nil) or
+     (TextLen <= 0) then
+    result := Dest.Init(0)
+  else if IsAnsiCompatible(pointer(Text), TextLen) then // optimistic way
   begin
-    Dest.len := TextLen;
+    result := Dest.Init(TextLen);
     for i := 0 to TextLen - 1 do
       PWordArray(result)[i] := PByteArray(Text)[i];
     result[Dest.len] := #0; // Text[TextLen] may not be #0
   end
   else // use the RTL to perform the UTF-8 to UTF-16 conversion
-  begin                                     // + SYNTEMPTRAIL included
-    Dest.len := Utf8ToUnicode(result, Dest.Len + 16, pointer(Text), TextLen);
-    if Dest.len <= 0 then
+  begin                               
+    result := Dest.Init(TextLen * 2); // maximum absolute UTF-16 size in bytes
+    Dest.len := Utf8ToUnicode(result, TextLen + 8, pointer(Text), TextLen);
+    if Dest.len <= 0 then                  // + 8 = + SYNTEMPTRAIL/2
       Dest.len := 0
     else
     begin
