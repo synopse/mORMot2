@@ -3973,6 +3973,11 @@ procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
 // - caller should always call d.Done to release any (unlikely) allocated memory
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+// - returns true and set A on conversion success from UTF-8 to code page CP
+// - as used internally by Utf8ToConsole()
+function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
+
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API
 // - POSIX define this in mormot.net.http.pas, where TUri is available

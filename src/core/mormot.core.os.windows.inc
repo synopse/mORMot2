@@ -187,6 +187,29 @@ begin
   result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, @DefaultCharVar, nil);
 end;
 
+function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
+var
+  tmpW, tmpA: TSynTempBuffer;
+begin
+  result := false;
+  tmpW.Init(L * 2);
+  L := Utf8ToUnicode(tmpW.Buf, L + 8, P, L); // use the RTL
+  if L > 0 then // valid UTF-8
+  begin
+    dec(L); // Utf8ToUnicode() included trailing #0
+    tmpA.Init(L * 3);
+    L := WideCharToMultiByte(CP, 0, tmpW.buf, L,
+      tmpA.buf, tmpA.len + 16, @DefaultCharVar, nil); // use the Windows API
+    if L > 0 then
+    begin
+      FastSetStringCP(A, tmpA.buf, L, CP);
+      result := true; // success
+    end;
+    tmpA.Done;
+  end;
+  tmpW.Done;
+end;
+
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 var
   tmp: TW32Temp;
