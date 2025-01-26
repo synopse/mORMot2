@@ -439,7 +439,7 @@ begin
   if (err = INVALID_HANDLE_VALUE) or
      (err = 0) then
     exit;
-  txt := Utf8ToConsole(text);
+  txt := Utf8ToConsole(text); // convert to GetConsoleOutputCP() code page
   FileWriteAll(err, pointer(txt), length(txt));
 end;
 
@@ -2607,7 +2607,11 @@ begin
 end;
 
 var
-  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock 
+  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
+  ConsoleOutputCP: cardinal; // to call the Windows API once
+  {$ifdef ISDELPHI}
+  StdInputHandle: THandle;   // Delphi doesn't define this global variable
+  {$endif ISDELPHI}
 
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
@@ -2617,7 +2621,7 @@ var
 begin
   if not HasConsole then
     exit;
-  txt := Utf8ToConsole(Text);
+  txt := Utf8ToConsole(Text); // convert to final GetConsoleOutputCP() code page
   l := length(txt);
   if not NoLineFeed then
   begin
@@ -2718,12 +2722,6 @@ begin
 end;
 {$I+}
 
-{$ifdef ISDELPHI}
-var
-  // Delphi doesn't define this global variable need by ConsoleReadBody
-  StdInputHandle: THandle;
-{$endif ISDELPHI}
-
 function ConsoleStdInputLen: integer;
 begin
   if StdInputHandle = 0 then
@@ -2732,29 +2730,17 @@ begin
     result := 0;
 end;
 
-procedure Utf8ToConsoleDoConv(const Utf8: RawUtf8; var Console: RawByteString);
-var
-  tmp16, tmp: TSynTempBuffer;
-begin
-  Utf8ToWin32PWideChar(Utf8, tmp16);
-  if tmp16.len = 0 then
-  begin
-    Console := Utf8; // input is not valid UTF-8 -> return without conversion
-    exit;
-  end;
-  tmp.Init(tmp16.len * 3);
-  CharToOemBuffW(tmp16.buf, tmp.buf, tmp16.len + 1); // +1 = ending #0
-  tmp16.Done;
-  FastSetStringCP(Console, tmp.buf, StrLen(tmp.buf), CP_OEMCP);
-  tmp.Done;
-end;
-
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 begin
-  if IsAnsiCompatible(S) then
-    result := S // no conversion needed
-  else
-    Utf8ToConsoleDoConv(S, result);
+  if not IsAnsiCompatible(S) then
+  begin
+    if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
+      ConsoleOutputCP := GetConsoleOutputCP;
+    if ConsoleOutputCP <> CP_UTF8 then
+      if Win32Utf8ToAnsi(pointer(S), length(S), ConsoleOutputCP, result) then
+        exit;
+  end;
+  result := S; // no conversion needed, or conversion failed
 end;
 
 function TFileVersion.RetrieveInformationFromFileName: boolean;

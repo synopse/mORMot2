@@ -1880,7 +1880,7 @@ function MakeCsv(const Value: array of const; EndWithComma: boolean = false;
   Comma: AnsiChar = ','): RawUtf8;
 
 /// direct conversion of a RTL string into a console OEM-encoded String
-// - under Windows, will use the CP_OEMCP encoding
+// - under Windows, will use GetConsoleOutputCP() codepage, following CP_OEM
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 function StringToConsole(const S: string): RawByteString;
 

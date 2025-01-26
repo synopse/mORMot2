@@ -4030,7 +4030,7 @@ var
   AppendShortUuid: TAppendShortUuid;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
-// - under Windows, will use the CP_OEM encoding
+// - under Windows, will use GetConsoleOutputCP() codepage, following CP_OEM
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 // - we don't propose any ConsoleToUtf8() function because Windows depends on
 // the running program itself: most should generates CP_OEM (e.g. 850) as expected,
