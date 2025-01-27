@@ -5812,11 +5812,12 @@ var
   t: TClass;
   n: integer;
   flags: set of ( // will be a register on x86_64 to make the main loop fast
-    isNotFirst, noStored, noDefault, noHook, noVoid, isHumanReadable);
+    isNotFirst, noStored, noDefault, noHook, noVoidDetect, isHumanReadable);
   c: TJsonSaveContext; // dedicated context used for fields/properties
 begin
   c.W := Ctxt.W;
   c.Options := Ctxt.Options;
+  flags := [noDefault, noHook, noVoidDetect];
   nfo := TRttiJson(Ctxt.Info);
   if nfo.Kind = rkClass then
   begin
@@ -5830,19 +5831,21 @@ begin
     t := PClass(Data)^; // actual class of this instance
     if t <> nfo.ValueClass then
       nfo := TRttiJson(Rtti.RegisterClass(t)); // work on proper inherited class
-    flags := [];
     if (woStoreStoredFalse in c.Options) or
        (rcfDisableStored in nfo.Flags) then
       include(flags, noStored);
-    if not (woDontStoreDefault in c.Options) then
-      include(flags, noDefault);
-    if not (rcfHookWriteProperty in nfo.Flags) then
-      include(flags, noHook);
+    if woDontStoreDefault in c.Options then
+      exclude(flags, noDefault);
+    if woDontStoreVoid in c.Options then
+      exclude(flags, noVoidDetect);
+    if rcfHookWriteProperty in nfo.Flags then
+      exclude(flags, noHook);
   end
   else
   begin
     exclude(c.Options, woFullExpand); // not available for null or records
-    flags := [noStored, noDefault, noHook];
+    if twoIgnoreDefaultInRecord in c.W.CustomOptions then
+      exclude(flags, noVoidDetect);
   end;
   if nfo.fJsonWriter.Code <> nil then // TRttiJson.RegisterCustomSerializer()
   begin // e.g. TOrm.RttiJsonWrite
@@ -5853,9 +5856,6 @@ begin
      not TORHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
   begin
     // regular JSON serialization using nested fields/properties
-    if not ((woDontStoreVoid in c.Options) or
-            (twoIgnoreDefaultInRecord in c.W.CustomOptions)) then
-      include(flags, noVoid);
     if woHumanReadable in c.Options then
     begin
       include(flags, isHumanReadable);
@@ -5920,7 +5920,7 @@ begin
             (p^.OrdinalDefault = NO_DEFAULT) or
             not p^.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
-           ((noVoid in flags) or
+           ((noVoidDetect in flags) or
             not p^.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
