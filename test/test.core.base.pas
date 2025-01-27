@@ -175,6 +175,7 @@ type
     property values: TComplexNumberObjArray read fValues write fValues;
   end;
 
+// sorting function to order by StrIComp(TOrmPeople.FirstName)
 function TOrmPeopleCompareByFirstName(const A, B): integer;
 
 
@@ -282,6 +283,10 @@ type
     procedure _TSynLogFile;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
+    {$ifdef OSWINDOWS}
+    /// some Windows-specific tests
+    procedure WindowsSpecificApi;
+    {$endif OSWINDOWS}
   end;
 
 
@@ -2887,22 +2892,6 @@ begin
 end;
 
 procedure TTestCoreBase._TExecutableCommandLine;
-
-  {$ifdef OSWINDOWS}
-  procedure Win32DotException(code: cardinal; const expected: RawUtf8);
-  var
-    e: TPShortStringDynArray;
-    i: PtrInt;
-    v: RawUtf8;
-  begin
-    Check(e = nil);
-    Win32DotExceptions(code, e);
-    for i := 0 to high(e) do
-      Append(v, [e[i]^]);
-    CheckEqual(v, expected);
-  end;
-  {$endif OSWINDOWS}
-
 var
   c: TExecutableCommandLine;
   f: RawUtf8;
@@ -2973,49 +2962,6 @@ begin
   finally
     c.Free;
   end;
-  {$ifdef OSWINDOWS}
-  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
-  Check(WinErrorConstant(ERROR_OPERATION_ABORTED)^ = 'OPERATION_ABORTED', 'wecb');
-  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
-  Check(WinErrorConstant(ERROR_MORE_DATA)^ = 'MORE_DATA', 'wecd');
-  Check(WinErrorConstant(ERROR_ACCESS_DENIED)^ = 'ACCESS_DENIED', 'wece');
-  Check(WinErrorConstant(ERROR_WINHTTP_TIMEOUT)^ = 'WINHTTP_TIMEOUT', 'wecf');
-  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecg');
-  Check(WinErrorConstant($800b010d)^ = '', 'wech');
-  Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
-  Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
-  Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
-    'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
-  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
-  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
-  Win32DotException(0, '');
-  Win32DotException(9234, '');
-  Win32DotException($800703E9, '_StackOverflow');
-  Win32DotException($80131500, '_Unspecified_SUDSGenerator_SUDSParser');
-  Check(IsSystemFolder('c:\program files'));
-  Check(IsSystemFolder('c:\program Files\toto'));
-  Check(IsSystemFolder('c:\Program files (x86)'));
-  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
-  Check(IsSystemFolder('c:\windows'));
-  Check(IsSystemFolder('c:\windows\toto'));
-  Check(not IsSystemFolder('c:\program file'));
-  Check(not IsSystemFolder('c:\program files other\toto'));
-  Check(not IsSystemFolder('c:\windowstorage'));
-  if IsUacVirtualizationEnabled then
-  begin
-    Check(IsUacVirtualFolder('c:\program files'));
-    Check(IsUacVirtualFolder('c:\program Files\toto'));
-    Check(IsUacVirtualFolder('c:\Program files (x86)'));
-    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
-    Check(IsUacVirtualFolder('c:\windows'));
-    Check(IsUacVirtualFolder('c:\windows\toto'));
-    Check(not IsUacVirtualFolder('c:\program file'));
-    Check(not IsUacVirtualFolder('c:\program files other\toto'));
-    Check(not IsUacVirtualFolder('c:\windowstorage'));
-  end
-  else
-    Check(not IsUacVirtualFolder('c:\program files'));
-  {$endif OSWINDOWS}
 end;
 
 procedure TTestCoreBase._IsMatch;
@@ -9084,6 +9030,74 @@ begin
   result := StrIComp(
     pointer(TOrmPeople(A).FirstName), pointer(TOrmPeople(B).FirstName));
 end;
+
+{$ifdef OSWINDOWS}
+
+procedure TTestCoreBase.WindowsSpecificApi;
+
+  procedure Win32DotException(code: cardinal; const expected: RawUtf8);
+  var
+    e: TPShortStringDynArray;
+    i: PtrInt;
+    v: RawUtf8;
+  begin
+    Check(e = nil);
+    Win32DotExceptions(code, e);
+    for i := 0 to high(e) do
+      Append(v, [e[i]^, ' ']);
+    CheckEqual(v, expected);
+  end;
+
+var
+  nfo: TWinProcessInfo;
+begin
+  // validate Windows API error code recognition
+  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
+  Check(WinErrorConstant(ERROR_OPERATION_ABORTED)^ = 'OPERATION_ABORTED', 'wecb');
+  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
+  Check(WinErrorConstant(ERROR_MORE_DATA)^ = 'MORE_DATA', 'wecd');
+  Check(WinErrorConstant(ERROR_ACCESS_DENIED)^ = 'ACCESS_DENIED', 'wece');
+  Check(WinErrorConstant(ERROR_WINHTTP_TIMEOUT)^ = 'WINHTTP_TIMEOUT', 'wecf');
+  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecg');
+  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
+  Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
+  Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
+    'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
+  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
+  // validate DotNet exceptions error code recognition
+  Win32DotException(0, '');
+  Win32DotException(9234, '');
+  Win32DotException($800703E9, '_StackOverflow ');
+  Win32DotException($80131500, '_ _SUDSGenerator _SUDSParser ');
+  // validate UAC specific functions
+  Check(IsSystemFolder('c:\program files'));
+  Check(IsSystemFolder('c:\program Files\toto'));
+  Check(IsSystemFolder('c:\Program files (x86)'));
+  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
+  Check(IsSystemFolder('c:\windows'));
+  Check(IsSystemFolder('c:\windows\toto'));
+  Check(not IsSystemFolder('c:\program file'));
+  Check(not IsSystemFolder('c:\program files other\toto'));
+  Check(not IsSystemFolder('c:\windowstorage'));
+  if IsUacVirtualizationEnabled then
+  begin
+    Check(IsUacVirtualFolder('c:\program files'));
+    Check(IsUacVirtualFolder('c:\program Files\toto'));
+    Check(IsUacVirtualFolder('c:\Program files (x86)'));
+    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
+    Check(IsUacVirtualFolder('c:\windows'));
+    Check(IsUacVirtualFolder('c:\windows\toto'));
+    Check(not IsUacVirtualFolder('c:\program file'));
+    Check(not IsUacVirtualFolder('c:\program files other\toto'));
+    Check(not IsUacVirtualFolder('c:\windowstorage'));
+  end
+  else
+    Check(not IsUacVirtualFolder('c:\program files'));
+end;
+
+{$endif OSWINDOWS}
 
 
 initialization
