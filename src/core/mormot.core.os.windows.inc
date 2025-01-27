@@ -1588,7 +1588,7 @@ type
     _DuplicateWaitObject,               // $80131529
     _EndOfStream,                       // $00801338
     _EntryPointNotFound,                // $80131522
-    _Unspecified,                       // $80131500 - name is plain Exception
+    _,                                  // $80131500 - name is plain Exception
     _ExecutionEngine,                   // $80131506
     _External,                          // $80004005
     _FieldAccess,                       // $80131507
@@ -1765,7 +1765,7 @@ begin
   result := false;
 end;
 
-procedure Win32DotExceptions(code: cardinal; out names: TPShortStringDynArray);
+procedure Win32DotExceptions(code: cardinal; var names: TPShortStringDynArray);
 var
   e: TDotNetException;
 begin
