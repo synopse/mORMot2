@@ -8104,6 +8104,7 @@ const
 var
   nv: TSynNameValue;
   i: integer;
+  v: RawUtf8;
   tmp: TSynTempBuffer;
 begin
   nv.Init(false);
@@ -8112,46 +8113,48 @@ begin
     nv.Add(UInt32ToUtf8(i), UInt32ToUtf8(i + MAX));
   check(nv.Count = MAX);
   for i := 1 to MAX do
-    check(nv.Find(UInt32ToUtf8(i)) = i - 1);
+    checkEqual(nv.Find(UInt32ToUtf8(i)), i - 1);
   for i := MAX + 1 to MAX * 2 do
     check(nv.Find(UInt32ToUtf8(i)) < 0);
   for i := 1 to MAX do
-    check(nv.Value(UInt32ToUtf8(i)) = UInt32ToUtf8(i + MAX));
-  for i := 1 to MAX do
-    check(nv.Str[UInt32ToUtf8(i)] = UInt32ToUtf8(i + MAX));
+  begin
+    UInt32ToUtf8(i + MAX, v);
+    checkEqual(nv.Value(UInt32ToUtf8(i)), v);
+    checkEqual(nv.Str[UInt32ToUtf8(i)], v);
+  end;
   nv.InitFromNamesValues(['a', 'b'], ['1', 'be']);
-  check(nv.Count = 2);
-  check(nv.Str['a'] = '1');
-  check(nv.Str['b'] = 'be');
-  check(nv.Str['c'] = '');
-  check(nv.ValueInt('a') = 1);
-  check(nv.ValueInt('b') = 0);
-  check(nv.ValueInt('c') = 0);
-  check(nv.AsCsv('=', ';') = 'a=1;b=be;');
-  check(nv.AsJson = '{"a":"1","b":"be"}');
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.Str['a'], '1');
+  checkEqual(nv.Str['b'], 'be');
+  checkEqual(nv.Str['c'], '');
+  checkEqual(nv.ValueInt('a'), 1);
+  checkEqual(nv.ValueInt('b'), 0);
+  checkEqual(nv.ValueInt('c'), 0);
+  checkEqual(nv.AsCsv('=', ';'), 'a=1;b=be;');
+  checkEqual(nv.AsJson, '{"a":"1","b":"be"}');
   tmp.Init('{a:10,b:"bee"}');
   check(nv.InitFromJson(tmp.buf));
-  check(nv.Count = 2);
-  check(nv.Str['a'] = '10');
-  check(nv.Str['b'] = 'bee');
-  check(nv.Str['c'] = '');
-  check(nv.Int['a'] = 10);
-  check(nv.Int['b'] = 0);
-  check(nv.Int['c'] = 0);
-  check(nv.AsCsv('=', ';') = 'a=10;b=bee;');
-  check(nv.AsJson = '{"a":"10","b":"bee"}');
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.Str['a'], '10');
+  checkEqual(nv.Str['b'], 'bee');
+  checkEqual(nv.Str['c'], '');
+  checkEqual(nv.Int['a'], 10);
+  checkEqual(nv.Int['b'], 0);
+  checkEqual(nv.Int['c'], 0);
+  checkEqual(nv.AsCsv('=', ';'), 'a=10;b=bee;');
+  checkEqual(nv.AsJson, '{"a":"10","b":"bee"}');
   check(nv.Delete('b'));
-  check(nv.ValueInt('a') = 10);
-  check(nv.Str['b'] = '');
+  checkEqual(nv.ValueInt('a'), 10);
+  checkEqual(nv.Str['b'], '');
   check(not nv.Delete('b'));
-  check(nv.DeleteByValue('10') = 1);
-  check(nv.ValueInt('a') = 0);
-  check(nv.DeleteByValue('10') = 0);
-  check(nv.Count = 0);
-  check(nv.AsCsv('=', ';') = '');
+  checkEqual(nv.DeleteByValue('10'), 1);
+  checkEqual(nv.ValueInt('a'), 0);
+  checkEqual(nv.DeleteByValue('10'), 0);
+  checkEqual(nv.Count, 0);
+  checkEqual(nv.AsCsv('=', ';'), '');
   tmp.Init('{"a":20,b:"bi"]');
   check(not nv.InitFromJson(tmp.buf));
-  check(nv.Count = 0);
+  checkEqual(nv.Count, 0);
 end;
 
 procedure TTestCoreBase._TSynUniqueIdentifier;
