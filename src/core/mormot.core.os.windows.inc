@@ -1765,7 +1765,7 @@ begin
   result := false;
 end;
 
-procedure Win32DotExceptions(code: cardinal; var names: TPShortStringDynArray);
+procedure Win32DotNetExceptions(code: cardinal; var names: TPShortStringDynArray);
 var
   e: TDotNetException;
 begin
@@ -1782,7 +1782,7 @@ begin
   begin
     result := EOleSysError(EInstance).ErrorCode;
     if result > $80000000 then
-      Win32DotExceptions(result, ExceptionNames);
+      Win32DotNetExceptions(result, ExceptionNames);
   end
   else
     result := 0;

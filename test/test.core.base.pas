@@ -9042,7 +9042,8 @@ procedure TTestCoreBase.WindowsSpecificApi;
     v: RawUtf8;
   begin
     Check(e = nil);
-    Win32DotExceptions(code, e);
+    Win32DotNetExceptions(code, e);
+    CheckEqual(v, '');
     for i := 0 to high(e) do
       Append(v, [e[i]^, ' ']);
     CheckEqual(v, expected);
