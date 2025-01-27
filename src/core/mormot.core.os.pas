@@ -1977,7 +1977,7 @@ function IsUacVirtualizationEnabled: boolean;
 function ReadRegString(Key: THandle; const Path, Value: string): string;
 
 /// convenient late-binding of any external library function
-// - just wrapper around LoadLibray + GetProcAddress once over a pointer
+// - thread-safe wrapper around LoadLibray + GetProcAddress once over a pointer
 function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 

@@ -410,6 +410,13 @@ function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
+var
+  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
+  ConsoleOutputCP: cardinal;       // to call the Windows API once
+  {$ifdef ISDELPHI}
+  StdInputHandle: THandle;         // Delphi doesn't define this global variable
+  {$endif ISDELPHI}
+
 function HasConsole: boolean;
 begin
   if StdOut = 0 then
@@ -420,6 +427,7 @@ end;
 
 procedure AllocConsole;
 begin
+  ConsoleOutputCP := 0; // reset to force calling GetConsoleOutputCP() again
   Windows.AllocConsole;
   if (StdOut = 0) or
      (StdOut = INVALID_HANDLE_VALUE) then
@@ -439,6 +447,7 @@ begin
   if (err = INVALID_HANDLE_VALUE) or
      (err = 0) then
     exit;
+  ConsoleOutputCP := 0; // reset to force calling GetConsoleOutputCP() again
   txt := Utf8ToConsole(text); // convert to GetConsoleOutputCP() code page
   FileWriteAll(err, pointer(txt), length(txt));
 end;
@@ -2007,7 +2016,6 @@ begin
   result := pointer(api) <> pointer(1);
 end;
 
-
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
   beg: PAnsiChar;
@@ -2606,13 +2614,6 @@ begin
     SetConsoleTextAttribute(StdOut, TextAttr);
 end;
 
-var
-  ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
-  ConsoleOutputCP: cardinal; // to call the Windows API once
-  {$ifdef ISDELPHI}
-  StdInputHandle: THandle;   // Delphi doesn't define this global variable
-  {$endif ISDELPHI}
-
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 var
@@ -2720,7 +2721,6 @@ begin
     HandleCtrlC(nil);
   end;
 end;
-{$I+}
 
 function ConsoleStdInputLen: integer;
 begin
@@ -2735,7 +2735,7 @@ begin
   if not IsAnsiCompatible(S) then
   begin
     if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
-      ConsoleOutputCP := GetConsoleOutputCP;
+      ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall
     if ConsoleOutputCP <> CP_UTF8 then
       if Win32Utf8ToAnsi(pointer(S), length(S), ConsoleOutputCP, result) then
         exit;
