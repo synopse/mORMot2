@@ -2073,7 +2073,7 @@ begin
   appendrow := false;
 end;
 
-{$I-}
+{$I-} // for debugtoconsole
 
 function TDwarfReader.FindSections(const filename: ShortString): boolean;
 var

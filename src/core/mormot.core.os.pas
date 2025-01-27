@@ -1977,7 +1977,7 @@ function IsUacVirtualizationEnabled: boolean;
 function ReadRegString(Key: THandle; const Path, Value: string): string;
 
 /// convenient late-binding of any external library function
-// - just wrapper around LoadLibray + GetProcAddress once over a pointer
+// - thread-safe wrapper around LoadLibray + GetProcAddress once over a pointer
 function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
@@ -2017,13 +2017,13 @@ const
   // - but more than 260 chars are possible with the \\?\..... prefix
   // or by disabling the limitation in registry since Windows 10, version 1607
   // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
-  // - extended-length path allows up to 32,767 widechars
-  // - but 2047 chars seems big enough in practice e.g. with NTFS - POSIX uses 4096
+  // - extended-length path allows up to 32,767 widechars in theory, but 2047
+  // widechars seems big enough in practice e.g. with NTFS - POSIX uses 4096
   W32_MAX = 2047;
 
 type
-  /// 4KB stack buffer for no heap allocation during UTF-16 encoding or
-  // switch to extended-length path
+  /// 4KB stack buffer for no heap allocation during UTF-16 path encoding or
+  // switch to extended-length on > MAX_PATH
   TW32Temp = array[0..W32_MAX] of WideChar;
 
 /// efficiently return a PWideChar from a TFileName on all compilers
@@ -3109,7 +3109,7 @@ type
     ELevel: TSynLogLevel;
     /// retrieve some extended information about a given Exception
     // - on Windows, recognize most DotNet CLR Exception Names
-    function AdditionalInfo(out ExceptionNames: TPUtf8CharDynArray): cardinal;
+    function AdditionalInfo(out ExceptionNames: TPShortStringDynArray): cardinal;
   end;
 
   /// the global function signature expected by RawExceptionIntercept()
@@ -3977,6 +3977,9 @@ function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideCha
 // - returns true and set A on conversion success from UTF-8 to code page CP
 // - as used internally by Utf8ToConsole()
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
+
+/// get DotNet exception class names from HRESULT - published for testing purpose
+procedure Win32DotExceptions(code: cardinal; var names: TPShortStringDynArray);
 
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API

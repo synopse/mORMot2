@@ -415,6 +415,7 @@ type
   PRawJsonDynArray = ^TRawJsonDynArray;
   TGuidDynArray = array of TGuid;
   PGuidDynArray = array of PGuid;
+  TPShortStringDynArray = array of PShortString;
 
   PObject = ^TObject;
   PClass = ^TClass;
