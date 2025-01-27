@@ -4203,11 +4203,11 @@ procedure TTestCoreBase.NumericalConversions;
   begin
     s := DoubleToString(v);
     val(s, d, err);
-    Check(err = 0);
+    CheckEqual(err, 0);
     CheckSame(d, v);
     StringToUtf8(s, u);
     d := GetExtended(pointer(u), err);
-    Check(err = 0);
+    CheckEqual(err, 0);
     CheckSame(d, v);
   end;
 
@@ -4549,6 +4549,17 @@ begin
   Check(UInt32ToUtf8(1599638299) = '1599638299');
   Check(Int32ToUtf8(-1599638299) = '-1599638299');
   Check(Int64ToUtf8(-1271083787498396012) = '-1271083787498396012');
+  CheckEqual(Int64ToUtf8(242161819595454762), '242161819595454762');
+  // detect 64-bit overflow of main digits in GetExtended()
+  CheckDoubleToShort(95.0290695380, '95.029069538');
+  Check(ToDouble('95.0290695380', d), '95.02');
+  CheckSame(d, 95.029069538);
+  Check(ToDouble('95.02906953800000000000', d), '95.x');
+  CheckSame(d, 95.029069538);
+  Check(ToDouble('184467440737095514', d), '184467440737095514');
+  CheckSame(d, 184467440737095514);
+  Check(ToDouble('1844674407370955148', d), '1844674407370955148');
+  CheckSame(d, 1844674407370955148);
   //  SQLite text-to-float converter routine failed with this number
   Check(ToDouble('18446744073709551488', d), '18446744073709551488');
   CheckSame(d, 1.8446744074e+19, 1e+10);
@@ -4557,9 +4568,11 @@ begin
   CheckDoubleToShortSame(d);
   CheckDoubleToShort(1234567890123456789, '1.2345678901234568E18');
   CheckDoubleToShortSame(1234567890123456789);
+  CheckDoubleToShortSame(18446744073709551);
+  CheckDoubleToShortSame(184467440737095514);
+  CheckDoubleToShortSame(1844674407370955148);
   {$endif FPC}
-  s := Int64ToUtf8(242161819595454762);
-  Check(s = '242161819595454762');
+  // validate ScanUtf8()
   Check(ScanUtf8('1 2 3', '  %', [@i, @j, @d]) = 0);
   Check(ScanUtf8('', '%d%d%f', [@i, @j, @d]) = 0);
   Check(ScanUtf8('1 2 7', '%d%d%f', [@i, @j, @d]) = 3);
