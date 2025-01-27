@@ -9095,6 +9095,14 @@ begin
   end
   else
     Check(not IsUacVirtualFolder('c:\program files'));
+  // validate raw Windows process access
+  FillCharFast(nfo, SizeOf(nfo), 0);
+  GetProcessInfo(GetCurrentProcessId, nfo);
+  Check(nfo.CommandLine <> '', 'Cmd0');
+  Check(PosEx(Executable.ProgramName, SynUnicodeToUtf8(nfo.CommandLine)) > 0, 'Cmd1');
+  Check(nfo.AvailableInfo = [wpaiPID..wpaiImagePath], 'AvailableInfo');
+  CheckEqual(nfo.PID, GetCurrentProcessId, 'PID');
+  Check(nfo.AffinityMask <> 0, 'AffinityMask');
 end;
 
 {$endif OSWINDOWS}
