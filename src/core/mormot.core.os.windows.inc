@@ -3293,9 +3293,15 @@ begin
   if aRestoreInitiallyEnabled then
   begin
     new := fEnabled - fDefEnabled;
-    for p := low(p) to high(p) do
-      if p in new then
-        Disable(p);
+    if new <> [] then
+      for p := low(p) to high(p) do
+        if p in new then
+        begin
+          Disable(p);
+          exclude(new, p);
+          if new = [] then
+            break; // all done
+        end;
   end;
   CloseHandle(fToken);
   fToken := 0;
