@@ -3973,6 +3973,11 @@ procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
 // - caller should always call d.Done to release any (unlikely) allocated memory
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+// - returns true and set A on conversion success from UTF-8 to code page CP
+// - as used internally by Utf8ToConsole()
+function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
+
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API
 // - POSIX define this in mormot.net.http.pas, where TUri is available
@@ -4025,7 +4030,7 @@ var
   AppendShortUuid: TAppendShortUuid;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
-// - under Windows, will use the CP_OEM encoding
+// - under Windows, will use GetConsoleOutputCP() codepage, following CP_OEM
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 // - we don't propose any ConsoleToUtf8() function because Windows depends on
 // the running program itself: most should generates CP_OEM (e.g. 850) as expected,
@@ -6422,24 +6427,21 @@ function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
 var
   i: PtrInt;
 begin
-  result := nil;
-  if Text = nil then
-    TextLen := 0;
-  Dest.Init(TextLen * 2); // maximum absolute UTF-16 size in bytes (pure ASCII)
-  if Dest.len = 0 then
-    exit;
-  result := Dest.buf;
-  if IsAnsiCompatible(pointer(Text), TextLen) then // fastest optimistic way
+  if (Text = nil) or
+     (TextLen <= 0) then
+    result := Dest.Init(0)
+  else if IsAnsiCompatible(pointer(Text), TextLen) then // optimistic way
   begin
-    Dest.len := TextLen;
+    result := Dest.Init(TextLen);
     for i := 0 to TextLen - 1 do
       PWordArray(result)[i] := PByteArray(Text)[i];
     result[Dest.len] := #0; // Text[TextLen] may not be #0
   end
   else // use the RTL to perform the UTF-8 to UTF-16 conversion
-  begin                                     // + SYNTEMPTRAIL included
-    Dest.len := Utf8ToUnicode(result, Dest.Len + 16, pointer(Text), TextLen);
-    if Dest.len <= 0 then
+  begin                               
+    result := Dest.Init(TextLen * 2); // maximum absolute UTF-16 size in bytes
+    Dest.len := Utf8ToUnicode(result, TextLen + 8, pointer(Text), TextLen);
+    if Dest.len <= 0 then                  // + 8 = + SYNTEMPTRAIL/2
       Dest.len := 0
     else
     begin
