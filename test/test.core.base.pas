@@ -9035,7 +9035,7 @@ end;
 
 procedure TTestCoreBase.WindowsSpecificApi;
 
-  procedure Win32DotException(code: cardinal; const expected: RawUtf8);
+  procedure Win32DotNetException(code: cardinal; const expected: RawUtf8);
   var
     e: TPShortStringDynArray;
     i: PtrInt;
@@ -9068,10 +9068,10 @@ begin
   CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
   CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
   // validate DotNet exceptions error code recognition
-  Win32DotException(0, '');
-  Win32DotException(9234, '');
-  Win32DotException($800703E9, '_StackOverflow ');
-  Win32DotException($80131500, '_ _SUDSGenerator _SUDSParser ');
+  Win32DotNetException(0, '');
+  Win32DotNetException(9234, '');
+  Win32DotNetException($800703E9, '_StackOverflow ');
+  Win32DotNetException($80131500, '_ _SUDSGenerator _SUDSParser ');
   // validate UAC specific functions
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));
