@@ -2474,10 +2474,12 @@ type
   // libraries for Unicode support, internationalization and globalization
   // - used by Unicode_CompareString, Unicode_AnsiToWide, Unicode_WideToAnsi,
   // Unicode_InPlaceUpper and Unicode_InPlaceLower function from this unit
-  TIcuLibrary = packed object
-  protected
+  // - can maintain a thread-safe cache of up to 16 code page converters,
+  // via SharedUcnv() and SharedUcnvUnLock()
+  TIcuLibrary = record
+  private
     icu, icudata, icui18n: pointer;
-    Loaded: boolean;
+    fLoaded: boolean;
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
   public
@@ -2485,6 +2487,8 @@ type
     ucnv_open: function (converterName: PAnsiChar; var err: SizeInt): pointer; cdecl;
     /// finalize the ICU text converter for a given encoding
     ucnv_close: procedure (converter: pointer); cdecl;
+    /// reset the ICU text converter for a given encoding
+    ucnv_reset: procedure (converter: pointer); cdecl;
     /// customize the ICU text converter substitute char
     ucnv_setSubstChars: procedure (converter: pointer;
       subChars: PAnsiChar; len: byte; var err: SizeInt); cdecl;
@@ -2529,6 +2533,22 @@ type
     // - wrapper around ucnv_open/ucnv_setSubstChars/ucnv_setFallback calls
     // - caller should make ucnv_close() once done with the returned instance
     function ucnv(codepage: cardinal): pointer;
+    /// return a shared ICU text converter instance
+    // - the first call will initialize a shared instance for the whole process
+    // - if nil is returned, regular ucnv() should be called with a local instance
+    // - if <> nil is returned, SharedUcnvUnLock should eventually be called
+    function SharedUcnv(codepage: cardinal; out ndx: PtrInt): pointer;
+    /// release the SharedUcnv() instance
+    procedure SharedUcnvUnLock(ndx: PtrInt);
+  private
+    // implement a thread-safe cache of up to 16 converters
+    fSharedLock: PtrUInt; // = TLightLock
+    fSharedCP: array[0 .. 15] of word; // CPU cache friendly lookup
+    fShared: array[0 .. 15] of record
+      Lock: PtrUInt; // = TLightLock
+      Cnv: pointer;
+    end;
+    fSharedCount, fSharedLast: integer;
   end;
 
 var
