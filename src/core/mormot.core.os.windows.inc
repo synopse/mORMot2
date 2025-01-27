@@ -2727,29 +2727,11 @@ begin
 end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
-  function TranslatePlaceholderCP(cp: TSystemCodePage): TSystemCodePage; {$ifdef SYSTEMINLINE}inline;{$endif}
-  begin
-    Result := cp;
-    case cp of
-      CP_OEMCP:
-        Result := GetOEMCP;
-      CP_ACP:
-        Result := DefaultSystemCodePage;
-    end;
-  end;
 begin
   if IsAnsiCompatible(S) then
     result := S // no conversion needed
   else
-  {$ifdef HASCODEPAGE}
-  if TextRec(Output).CodePage<>TranslatePlaceholderCP(StringCodePage(S)) then
-    Utf8ToConsoleDoConv(S, result)
-  else
-    result := S;
-  {$else}
-     Utf8ToConsoleDoConv(S, result)
-  {$endif}
-
+    Utf8ToConsoleDoConv(S, result);
 end;
 
 function TFileVersion.RetrieveInformationFromFileName: boolean;
