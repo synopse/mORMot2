@@ -5946,8 +5946,8 @@ begin
   CheckEqual(length(rb1), 7);
   CheckEqual(length(rb2), 7);
   Check(rb1 = rb2, 'setcodepage');
-  {$endif OSPOSIX}
   Check(SortDynArrayRawByteString(rb1, rb2) = 0);
+  {$endif OSPOSIX}
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
