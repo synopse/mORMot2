@@ -1562,104 +1562,104 @@ type
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
-const
+type
   // https://docs.microsoft.com/en-us/archive/blogs/yizhang/interpreting-hresults-returned-from-netclr-0x8013xxxx
   // see also https://referencesource.microsoft.com/#mscorlib/system/__hresults.cs
-  DOTNET_EXCEPTIONNAME: array[0..91] of PUtf8Char = (
-    'Access',                            // $8013151A
-    'AmbiguousMatch',                    // $8000211D
-    'appdomainUnloaded',                 // $80131015
-    'Application',                       // $80131600
-    'Argument',                          // $80070057
-    'ArgumentNull',                      // $80004003
-    'ArgumentOutOfRange',                // $80131502
-    'Arithmetic',                        // $80070216
-    'ArrayTypeMismatch',                 // $80131503
-    'BadImageFormat',                    // $8007000B
-    'CannotUnloadappdomain',             // $80131015
-    'ContextMarshal',                    // $80090020
-    'Cryptographic',                     // $80004001
-    'CryptographicUnexpectedOperation',  // $80131431
-    'CustomAttributeFormat',             // $80131537
-    'DirectoryNotFound',                 // $80070003
-    'DirectoryNotFound',                 // $80030003
-    'DivideByZero',                      // $80020012
-    'DllNotFound',                       // $80131524
-    'DuplicateWaitObject',               // $80131529
-    'EndOfStream',                       // $00801338
-    'EntryPointNotFound',                // $80131522
-    '',                                  // $80131500 - name is plain Exception
-    'ExecutionEngine',                   // $80131506
-    'External',                          // $80004005
-    'FieldAccess',                       // $80131507
-    'FileLoad',                          // $80131621
-    'FileLoad',                          // $80131018
-    'FileNotFound',                      // $80070002
-    'Format',                            // $80131537
-    'IndexOutOfRange',                   // $80131508
-    'InvalidCast',                       // $80004002
-    'InvalidComObject',                  // $80131527
-    'InvalidFilterCriteria',             // $80131601
-    'InvalidOleVariantType',             // $80131531
-    'InvalidOperation',                  // $80131509
-    'InvalidProgram',                    // $8013153A
-    'IO',                                // $80131620
-    'IsolatedStorage',                   // $80131450
-    'MarshalDirective',                  // $80131535
-    'MethodAccess',                      // $80131510
-    'MissingField',                      // $80131511
-    'MissingManifestResource',           // $80131532
-    'MissingMember',                     // $80131512
-    'MissingMethod',                     // $80131513
-    'MulticastNotSupported',             // $80131514
-    'NotFiniteNumber',                   // $80131528
-    'NotImplemented',                    // $80004001
-    'NotSupported',                      // $80131515
-    'NullReference',                     // $80004003
-    'OutOfMemory',                       // $8007000E
-    'Overflow',                          // $80131516
-    'PlatformNotSupported',              // $80131539
-    'Policy',                            // $80131416
-    'Rank',                              // $80131517
-    'ReflectionTypeLoad',                // $80131602
-    'Remoting',                          // $8013150B
-    'RemotingTimeout',                   // $8013150B
-    'SafeArrayTypeMismatch',             // $80131533
-    'SafeArrayRankMismatch',             // $80131538
-    'Security',                          // $8013150A
-    'SEH',                               // $80004005
-    'Serialization',                     // $8013150C
-    'Server',                            // $8013150E
-    'StackOverflow',                     // $800703E9
-    'SUDSGenerator',                     // $80131500
-    'SUDSParser',                        // $80131500
-    'SynchronizationLock',               // $80131518
-    'System',                            // $80131501
-    'Target',                            // $80131603
-    'TargetInvocation',                  // $80131604
-    'TargetParameterCount',              // $80138002
-    'ThreadAbort',                       // $80131530
-    'ThreadInterrupted',                 // $80131519
-    'ThreadState',                       // $80131520
-    'ThreadStop',                        // $80131521
-    'TypeInitialization',                // $80131534
-    'TypeLoad',                          // $80131522
-    'TypeUnloaded',                      // $80131013
-    'UnauthorizedAccess',                // $80070005
-    'InClassConstructor',                // $80131543
-    'KeyNotFound',                       // $80131577
-    'InsufficientStack',                 // $80131578
-    'InsufficientMemory',                // $8013153D
-    'Verification',                      // $8013150D
-    'HostProtection',                    // $80131640
-    'MinGrantFailed',                    // $80131417
-    'Crypto',                            // $80131430
-    'CryptoUnexOper',                    // $80131431
-    'Overflow',                          // $8002000a
-    'InvalidName',                       // $80131047
-    'TypeMismatch');                     // $80028ca0
-
-  DOTNET_EXCEPTIONHRESULT: array[0..91] of cardinal = (
+  TDotNetException = (
+    _Access,                            // $8013151A
+    _AmbiguousMatch,                    // $8000211D
+    _appdomainUnloaded,                 // $80131015
+    _Application,                       // $80131600
+    _Argument,                          // $80070057
+    _ArgumentNull,                      // $80004003
+    _ArgumentOutOfRange,                // $80131502
+    _Arithmetic,                        // $80070216
+    _ArrayTypeMismatch,                 // $80131503
+    _BadImageFormat,                    // $8007000B
+    _CannotUnloadappdomain,             // $80131015
+    _ContextMarshal,                    // $80090020
+    _Cryptographic,                     // $80004001
+    _CryptographicUnexpectedOperation,  // $80131431
+    _CustomAttributeFormat,             // $80131537
+    _DirectoryNotFound,                 // $80070003
+    _DirectoryNotFound2,                // $80030003
+    _DivideByZero,                      // $80020012
+    _DllNotFound,                       // $80131524
+    _DuplicateWaitObject,               // $80131529
+    _EndOfStream,                       // $00801338
+    _EntryPointNotFound,                // $80131522
+    _Unspecified,                       // $80131500 - name is plain Exception
+    _ExecutionEngine,                   // $80131506
+    _External,                          // $80004005
+    _FieldAccess,                       // $80131507
+    _FileLoad,                          // $80131621
+    _FileLoad2,                         // $80131018
+    _FileNotFound,                      // $80070002
+    _Format,                            // $80131537
+    _IndexOutOfRange,                   // $80131508
+    _InvalidCast,                       // $80004002
+    _InvalidComObject,                  // $80131527
+    _InvalidFilterCriteria,             // $80131601
+    _InvalidOleVariantType,             // $80131531
+    _InvalidOperation,                  // $80131509
+    _InvalidProgram,                    // $8013153A
+    _IO,                                // $80131620
+    _IsolatedStorage,                   // $80131450
+    _MarshalDirective,                  // $80131535
+    _MethodAccess,                      // $80131510
+    _MissingField,                      // $80131511
+    _MissingManifestResource,           // $80131532
+    _MissingMember,                     // $80131512
+    _MissingMethod,                     // $80131513
+    _MulticastNotSupported,             // $80131514
+    _NotFiniteNumber,                   // $80131528
+    _NotImplemented,                    // $80004001
+    _NotSupported,                      // $80131515
+    _NullReference,                     // $80004003
+    _OutOfMemory,                       // $8007000E
+    _Overflow,                          // $80131516
+    _PlatformNotSupported,              // $80131539
+    _Policy,                            // $80131416
+    _Rank,                              // $80131517
+    _ReflectionTypeLoad,                // $80131602
+    _Remoting,                          // $8013150B
+    _RemotingTimeout,                   // $8013150B
+    _SafeArrayTypeMismatch,             // $80131533
+    _SafeArrayRankMismatch,             // $80131538
+    _Security,                          // $8013150A
+    _SEH,                               // $80004005
+    _Serialization,                     // $8013150C
+    _Server,                            // $8013150E
+    _StackOverflow,                     // $800703E9
+    _SUDSGenerator,                     // $80131500
+    _SUDSParser,                        // $80131500
+    _SynchronizationLock,               // $80131518
+    _System,                            // $80131501
+    _Target,                            // $80131603
+    _TargetInvocation,                  // $80131604
+    _TargetParameterCount,              // $80138002
+    _ThreadAbort,                       // $80131530
+    _ThreadInterrupted,                 // $80131519
+    _ThreadState,                       // $80131520
+    _ThreadStop,                        // $80131521
+    _TypeInitialization,                // $80131534
+    _TypeLoad,                          // $80131522
+    _TypeUnloaded,                      // $80131013
+    _UnauthorizedAccess,                // $80070005
+    _InClassConstructor,                // $80131543
+    _KeyNotFound,                       // $80131577
+    _InsufficientStack,                 // $80131578
+    _InsufficientMemory,                // $8013153D
+    _Verification,                      // $8013150D
+    _HostProtection,                    // $80131640
+    _MinGrantFailed,                    // $80131417
+    _Crypto,                            // $80131430
+    _CryptoUnexOper,                    // $80131431
+    _Overflow2,                         // $8002000a
+    _InvalidName,                       // $80131047
+    _TypeMismatch);                     // $80028ca0
+const
+  DOTNET_EXCEPTIONHRESULT: array[TDotNetException] of cardinal = (
     $8013151A,
     $8000211D,
     $80131015,
@@ -1765,19 +1765,24 @@ begin
   result := false;
 end;
 
+procedure Win32DotExceptions(code: cardinal; out names: TPShortStringDynArray);
+var
+  e: TDotNetException;
+begin
+  for e := low(e) to high(e) do
+    // manual loop: the same error code can appear several times
+    if DOTNET_EXCEPTIONHRESULT[e] = code then
+      PtrArrayAdd(names, WinGetEnumName(TypeInfo(TDotNetException), ord(e)));
+end;
+
 function TSynLogExceptionContext.AdditionalInfo(
   out ExceptionNames: TPShortStringDynArray): cardinal;
-var
-  i: PtrInt;
 begin
   if ExceptionInheritsFrom(EClass, 'EOleSysError') then
   begin
     result := EOleSysError(EInstance).ErrorCode;
     if result > $80000000 then
-      for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
-        // manual loop: the same error code can appear several times
-        if DOTNET_EXCEPTIONHRESULT[i] = result then
-          PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
+      Win32DotExceptions(result, ExceptionNames);
   end
   else
     result := 0;
