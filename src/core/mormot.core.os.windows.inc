@@ -83,7 +83,7 @@ procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
 var
   u: SynUnicode;
 begin
-  u := SynUnicode(FileName); // convert with RTL + OS
+  u := SynUnicode(FileName); // let the RTL do the conversion
   ExtendedPathName(pointer(u), length(u), Temp);
 end;
 
@@ -98,7 +98,7 @@ begin
   if (len < MAX_PATH) and
      IsAnsiCompatible(pointer(FileName), len) then
     // most common cases do not need any Unicode conversion
-    for i := 0 to len do // include #0 terminator
+    for i := 0 to len do // includes #0 terminator
       PWordArray(@Temp)[i] := PByteArray(FileName)[i]
   else
     // use a temporary SynUnicode variable for complex UTF-16 conversion
@@ -128,7 +128,7 @@ begin
   end
   {$ifdef FPC}
   else if DefaultRTLFileSystemCodePage = CP_UTF8 then // happens with Lazarus
-    DoWin32PWideCharToUtf8(P, l, RawUtf8(fn))
+    DoWin32PWideCharToUtf8(P, l, RawUtf8(fn)) // use RTL UnicodeToUtf8()
   {$endif FPC}
   else
     Win32PWideCharToFileNameConv(P, l, fn);
@@ -160,7 +160,7 @@ begin
         PByteArray(res)[i] := PWordArray(P)[i]; // fast direct conversion
     end
     else
-      DoWin32PWideCharToUtf8(P, Len, res);
+      DoWin32PWideCharToUtf8(P, Len, res); // use RTL UnicodeToUtf8()
 end;
 
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
@@ -202,7 +202,7 @@ begin
       tmpA.buf, tmpA.len + 16, @DefaultCharVar, nil); // use the Windows API
     if L > 0 then
     begin
-      FastSetStringCP(A, tmpA.buf, L, CP);
+      FastSetStringCP(A, tmpA.buf, L, CP); // keep A untouched on failure
       result := true; // success
     end;
     tmpA.Done;

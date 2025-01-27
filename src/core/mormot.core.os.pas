@@ -2017,13 +2017,13 @@ const
   // - but more than 260 chars are possible with the \\?\..... prefix
   // or by disabling the limitation in registry since Windows 10, version 1607
   // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
-  // - extended-length path allows up to 32,767 widechars
-  // - but 2047 chars seems big enough in practice e.g. with NTFS - POSIX uses 4096
+  // - extended-length path allows up to 32,767 widechars in theory, but 2047
+  // widechars seems big enough in practice e.g. with NTFS - POSIX uses 4096
   W32_MAX = 2047;
 
 type
-  /// 4KB stack buffer for no heap allocation during UTF-16 encoding or
-  // switch to extended-length path
+  /// 4KB stack buffer for no heap allocation during UTF-16 path encoding or
+  // switch to extended-length on > MAX_PATH
   TW32Temp = array[0..W32_MAX] of WideChar;
 
 /// efficiently return a PWideChar from a TFileName on all compilers
