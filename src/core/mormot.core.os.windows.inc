@@ -3858,6 +3858,7 @@ function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUI
   forward; // implemented later in mormot.core.os.pas
 
 const
+  // raw SMBIOS firmware table provider signature = 'RSMB' in big-endian
   _RSMB_ = $52534D42;
   // potential location of the SMBIOS buffer pointers within a 64KB fixed frame
   SMB_START  = $000f0000;

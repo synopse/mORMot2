@@ -2934,7 +2934,7 @@ begin
      PropNameEquals(u.Server, 'localhost') or
      IsLocalHost(pointer(u.Server)) then // supports only local files
   begin
-    result := string(UrlDecodeName(u.Address));
+    Utf8ToFileName(UrlDecodeName(u.Address), result);
     if (result <> '') and
        (result[1] <> '/') then
       insert('/', result, 1);

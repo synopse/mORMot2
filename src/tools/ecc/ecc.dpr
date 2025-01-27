@@ -57,7 +57,7 @@ var
   main: TEccCommand;
   sw: ICommandLine;
 begin
-  cmd := StringToUtf8(ParamStr(1));
+  StringToUtf8(ParamStr(1), cmd);
   main := TEccCommand(
     GetEnumNameValueTrimmed(TypeInfo(TEccCommand), pointer(cmd), length(cmd)));
   if main = ecChain then

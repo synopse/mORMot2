@@ -1960,7 +1960,7 @@ var
 begin
   fs := TFileStreamEx.Create(filename, fmOpenReadShared);
   // an exception is raised in above line if filename is incorrect
-  fn := StringToUtf8(ExtractFileName(filename));
+  StringToUtf8(ExtractFileName(filename), fn);
   Add(name, '', contenttype, fn, 'binary')^.ContentFile := filename;
   NewStream(fs);
   Append(#13#10);
