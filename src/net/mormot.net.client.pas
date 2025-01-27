@@ -1469,6 +1469,7 @@ type
     jcoResultNoClear,
     jcoHttpExceptionIntercept,
     jcoHttpErrorRaise,
+    jcoPayloadWithoutVoid,
     jcoParseTolerant,
     jcoParseErrorClear,
     jcoParseErrorRaise);
@@ -4676,11 +4677,17 @@ var
   b: RawUtf8;
   j: TRttiJson;
   u: PUtf8Char;
+  two: TTextWriterOptions;
   err: ShortString;
 begin
   if (Payload <> nil) and
      (PayloadInfo <> nil) then
-    SaveJson(Payload^, PayloadInfo, [], b);
+  begin
+    two := [];
+    if jcoPayloadWithoutVoid in fOptions then
+      two := [twoIgnoreDefaultInRecord];
+    SaveJson(Payload^, PayloadInfo, two, b);
+  end;
   if Assigned(fOnLog) then
     fOnLog(sllServiceCall, FMT_REQ[((jcoLogFullRequest in fOptions) or
       (length(b) < 1024))], [Method, Action, b], self);
