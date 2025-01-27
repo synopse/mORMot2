@@ -9679,7 +9679,7 @@ function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 var
   extcode: cardinal;
-  extnames: TPUtf8CharDynArray;
+  extnames: TPShortStringDynArray;
   i: PtrInt;
 begin
   WR.AddClassName(Context.EClass);
@@ -9699,7 +9699,7 @@ begin
         {$else}
         WR.AddShort(' [unhandled ');
         {$endif OSWINDOWS}
-        WR.AddNoJsonEscape(extnames[i]);
+        WR.AddShort(extnames[i]^);
         WR.AddShort('Exception]');
       end;
     end;

@@ -3109,7 +3109,7 @@ type
     ELevel: TSynLogLevel;
     /// retrieve some extended information about a given Exception
     // - on Windows, recognize most DotNet CLR Exception Names
-    function AdditionalInfo(out ExceptionNames: TPUtf8CharDynArray): cardinal;
+    function AdditionalInfo(out ExceptionNames: TPShortStringDynArray): cardinal;
   end;
 
   /// the global function signature expected by RawExceptionIntercept()

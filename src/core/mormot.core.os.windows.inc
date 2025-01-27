@@ -1766,7 +1766,7 @@ begin
 end;
 
 function TSynLogExceptionContext.AdditionalInfo(
-  out ExceptionNames: TPUtf8CharDynArray): cardinal;
+  out ExceptionNames: TPShortStringDynArray): cardinal;
 var
   i: PtrInt;
 begin
