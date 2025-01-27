@@ -1765,7 +1765,7 @@ begin
   result := false;
 end;
 
-procedure Win32DotExceptions(code: cardinal; var names: TPShortStringDynArray);
+procedure Win32DotNetExceptions(code: cardinal; var names: TPShortStringDynArray);
 var
   e: TDotNetException;
 begin
@@ -1782,7 +1782,7 @@ begin
   begin
     result := EOleSysError(EInstance).ErrorCode;
     if result > $80000000 then
-      Win32DotExceptions(result, ExceptionNames);
+      Win32DotNetExceptions(result, ExceptionNames);
   end
   else
     result := 0;
@@ -3858,6 +3858,7 @@ function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUI
   forward; // implemented later in mormot.core.os.pas
 
 const
+  // raw SMBIOS firmware table provider signature = 'RSMB' in big-endian
   _RSMB_ = $52534D42;
   // potential location of the SMBIOS buffer pointers within a 64KB fixed frame
   SMB_START  = $000f0000;

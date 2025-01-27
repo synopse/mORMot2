@@ -373,7 +373,7 @@ end;
 
 function TIcuLibrary.ucnv(codepage: cardinal): pointer;
 var
-  s: ShortString;
+  cp: ShortString;
   err: SizeInt;
   {$ifdef CPUINTEL}
   mask: cardinal;
@@ -381,17 +381,13 @@ var
 begin
   if not IsAvailable then
     exit(nil);
-  str(codepage, s);
-  MoveFast(s[1], s[3], ord(s[0]));
-  PWord(@s[1])^ := ord('c') + ord('p') shl 8;
-  inc(s[0], 3);
-  s[ord(s[0])] := #0;
+  Unicode_CodePageName(codepage, cp);
   {$ifdef CPUINTEL}
   mask := GetMXCSR;
   SetMXCSR(mask or $0080 {MM_MaskInvalidOp} or $1000 {MM_MaskPrecision});
   {$endif CPUINTEL}
   err := 0;
-  result := ucnv_open(@s[1], err);
+  result := ucnv_open(@cp[1], err);
   if result <> nil then
   begin
     err := 0;

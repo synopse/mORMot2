@@ -1623,7 +1623,7 @@ begin
     if urlParam[i] < 0 then
       EOpenApi.RaiseUtf8('%.Body: missing {%} in [%]', [self, urlName[i], fPath]);
   // emit the body block with its declaration and Request() call
-  Declaration(w, ClassName, {implemtation=}true);
+  Declaration(w, ClassName, {implementation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
          '  fClient.Request(''', UpperCase(fMethod), ''', ''', url, '''']);
   // Path parameters

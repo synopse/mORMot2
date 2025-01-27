@@ -3009,6 +3009,9 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
 
+/// return a code page number into human-friendly text
+procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
+
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
 // redirected to a custom wrapper function for older Windows versions (XP)
@@ -3979,7 +3982,7 @@ function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideCha
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
 
 /// get DotNet exception class names from HRESULT - published for testing purpose
-procedure Win32DotExceptions(code: cardinal; var names: TPShortStringDynArray);
+procedure Win32DotNetExceptions(code: cardinal; var names: TPShortStringDynArray);
 
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API
@@ -6452,6 +6455,35 @@ begin
       result[Dest.len] := #0; // missing on FPC
     end;
   end;
+end;
+
+procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
+begin
+  case codepage of
+    28591 .. 28605:
+      begin
+        Name := 'iso8859-';
+        AppendShortCardinal(codepage - 28590, Name);
+      end;
+    51936:
+      Name := 'EUC-CN'; // EUC Simplified Chinese
+    51949:
+      Name := 'euc-kr'; // EUC Korean
+    52936:
+      Name := 'hz-gb-2312'; // HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
+    54936:
+      Name := 'GB18030';    // GB18030 Simplified Chinese
+    CP_UTF8:
+      Name := 'UTF8';
+    CP_UTF16:
+      Name := 'UTF16LE';
+  else
+    begin  // 'CP####' is enough for most code pages
+      Name := 'CP';
+      AppendShortCardinal(codepage, Name);
+    end;
+  end;
+  Name[ord(Name[0]) + 1] := #0; // ensure is ASCIIZ - e.g. for ucnv_open()
 end;
 
 function NowUtc: TDateTime;

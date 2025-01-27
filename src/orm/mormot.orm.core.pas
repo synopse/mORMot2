@@ -8449,10 +8449,8 @@ var
   P: TOrmPropInfo;
 begin
   if self = nil then
-    P := nil
-  else
-    P := Orm.Fields.ByRawUtf8Name(
-      {$ifdef UNICODE}StringToUtf8{$endif}(PropName));
+    exit;
+  P := Orm.Fields.ByRawUtf8Name({$ifdef UNICODE}StringToUtf8{$endif}(PropName));
   if P <> nil then
     P.SetVariant(self, Source);
 end;

@@ -1865,9 +1865,9 @@ const
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(md: THttpPeerCryptMessageDecode): PShortString; overload;
-procedure ToText(const msg: THttpPeerCacheMessage; var result: shortstring); overload;
 function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
   {$ifdef HASINLINE} inline; {$endif}
+procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
 
 
 {$ifdef USEWININET}
@@ -6371,7 +6371,7 @@ begin
   if not fVerboseLog then
     exit;
   if msgtext[0] <> #0 then
-    ToText(msg, msgtext);
+    MsgToShort(msg, msgtext);
   fLog.Add.Log(sllTrace, 'OnBeforeBody=% % % % [%] %', [result, aRemoteIP,
     aMethod, aUrl, GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err), msgtext], self);
 end;
@@ -6635,10 +6635,10 @@ end;
 
 function ToText(const msg: THttpPeerCacheMessage): shortstring;
 begin
-  ToText(msg, result);
+  MsgToShort(msg, result);
 end;
 
-procedure ToText(const msg: THttpPeerCacheMessage; var result: shortstring);
+procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
 var
   l: PtrInt;
   algo: PUtf8Char;
