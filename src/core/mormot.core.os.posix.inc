@@ -411,24 +411,28 @@ end;
 
 function TIcuLibrary.SharedUcnv(codepage: cardinal; out ndx: PtrInt): pointer;
 var
-  n: PtrInt;
+  i, n: PtrInt;
 begin
   result := nil;
   if (codepage < CP_MIN) or
      (codepage >= CP_RAWBLOB) then
     exit;
+  // quickly check if this codepage is part of cached converters
   n := fSharedCount;
-  ndx := fSharedLast;
-  if (PtrUInt(ndx) >= PtrUInt(n)) or
-     (fSharedCP[ndx] <> codepage) then
-    ndx := WordScanIndex(@fSharedCP, n, codepage); // SSE2 brute force search
-  if ndx >= 0 then
+  i := fSharedLast;
+  if (PtrUInt(i) >= PtrUInt(n)) or
+     (fSharedCP[i] <> codepage) then
+    i := WordScanIndex(@fSharedCP, n, codepage); // SSE2 brute force search
+  if i >= 0 then
   begin
-    fSharedLast := ndx; // optimistic usage
-    with fShared[ndx] do
+    ndx := i; // for eventual SharedUcnvUnLock()
+    fSharedLast := i; // optimistic usage
+    with fShared[i] do
       if PLightLock(@Lock)^.TryLock then
-        exit(Cnv);
+        result := Cnv; // this thread acquired this converter
+    exit;
   end;
+  // first time we see this codepage: try to add in our internal cache
   PLightLock(@fSharedLock)^.Lock; // main write lock
   try
     n := fSharedCount;
