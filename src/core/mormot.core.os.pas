@@ -3009,7 +3009,7 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
 
-/// return a code page number into human-friendly text
+/// return a code page number into human-friendly (or ICU) text
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
 
 /// returns a system-wide current monotonic timestamp as milliseconds
@@ -6460,11 +6460,21 @@ end;
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
 begin
   case codepage of
+    CP_UTF16:
+      Name := 'UTF16LE';
+    1201:
+      Name := 'UTF16BE';
+    20932:
+      Name := 'EUC-JP';
     28591 .. 28605:
       begin
         Name := 'iso8859-';
         AppendShortCardinal(codepage - 28590, Name);
       end;
+    50222:
+      Name := 'iso-2022-jp';
+    50225:
+      Name := 'iso-2022-kr';
     51936:
       Name := 'EUC-CN'; // EUC Simplified Chinese
     51949:
@@ -6475,8 +6485,6 @@ begin
       Name := 'GB18030';    // GB18030 Simplified Chinese
     CP_UTF8:
       Name := 'UTF8';
-    CP_UTF16:
-      Name := 'UTF16LE';
   else
     begin  // 'CP####' is enough for most code pages
       Name := 'CP';
