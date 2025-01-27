@@ -3978,6 +3978,9 @@ function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideCha
 // - as used internally by Utf8ToConsole()
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
 
+/// get DotNet exception class names from HRESULT - published for testing purpose
+procedure Win32DotExceptions(code: cardinal; out names: TPShortStringDynArray);
+
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API
 // - POSIX define this in mormot.net.http.pas, where TUri is available

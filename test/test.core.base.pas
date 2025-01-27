@@ -2887,6 +2887,22 @@ begin
 end;
 
 procedure TTestCoreBase._TExecutableCommandLine;
+
+  {$ifdef OSWINDOWS}
+  procedure Win32DotException(code: cardinal; const expected: RawUtf8);
+  var
+    e: TPShortStringDynArray;
+    i: PtrInt;
+    v: RawUtf8;
+  begin
+    Check(e = nil);
+    Win32DotExceptions(code, e);
+    for i := 0 to high(e) do
+      Append(v, [e[i]^]);
+    CheckEqual(v, expected);
+  end;
+  {$endif OSWINDOWS}
+
 var
   c: TExecutableCommandLine;
   f: RawUtf8;
@@ -2972,6 +2988,10 @@ begin
     'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
   CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
   CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
+  Win32DotException(0, '');
+  Win32DotException(9234, '');
+  Win32DotException($800703E9, '_StackOverflow');
+  Win32DotException($80131500, '_Unspecified_SUDSGenerator_SUDSParser');
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));
   Check(IsSystemFolder('c:\Program files (x86)'));
