@@ -4550,7 +4550,7 @@ begin
   Check(Int32ToUtf8(-1599638299) = '-1599638299');
   Check(Int64ToUtf8(-1271083787498396012) = '-1271083787498396012');
   CheckEqual(Int64ToUtf8(242161819595454762), '242161819595454762');
-  // detect 64-bit overflow of main digits in GetExtended()
+  // detect 64-bit integer overflow in GetExtended()
   CheckDoubleToShort(95.0290695380, '95.029069538');
   Check(ToDouble('95.0290695380', d), '95.02');
   CheckSame(d, 95.029069538);
@@ -5920,8 +5920,8 @@ begin
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
-  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312_CHARSET
-  CheckEqual(length(rb1), 7);
+  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312
+  CheckEqual(length(rb1), 7, 'cp936');
   SU2 := TSynAnsiConvert.Engine(936).AnsiToUnicodeString(rb1);
   Check(SU = SU2);
   rb1 := '';
@@ -5929,6 +5929,25 @@ begin
   CheckEqual(length(rb1), 7);
   U2 := TSynAnsiConvert.Engine(936).AnsiToUtf8(rb1);
   CheckEqual(U, U2);
+  {$ifdef OSPOSIX} // most Windows won't support this code page
+  rb1 := TSynAnsiConvert.Engine(54936).UnicodeStringToAnsi(SU); // GB18030
+  CheckEqual(length(rb1), 7, 'cp54936');
+  SU2 := TSynAnsiConvert.Engine(54936).AnsiToUnicodeString(rb1);
+  Check(SU = SU2, 'cp54936');
+  rb1 := '';
+  rb1 := TSynAnsiConvert.Engine(54936).Utf8ToAnsi(U);
+  CheckEqual(length(rb1), 7, 'cp54936');
+  U2 := TSynAnsiConvert.Engine(54936).AnsiToUtf8(rb1);
+  CheckEqual(U, U2, 'cp54936');
+  rb2 := U;
+  CheckEqual(length(rb2), 9);
+  SetCodePage(rb2, 54936, {convert=}true);
+  CheckEqual(length(u), 9);
+  CheckEqual(length(rb1), 7);
+  CheckEqual(length(rb2), 7);
+  Check(rb1 = rb2, 'setcodepage');
+  {$endif OSPOSIX}
+  Check(SortDynArrayRawByteString(rb1, rb2) = 0);
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
