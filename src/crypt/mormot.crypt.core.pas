@@ -7466,7 +7466,7 @@ end;
 destructor TAesLocked.Destroy;
 begin
   inherited Destroy;
-  fAes.Done; // fill AES buffer with 0 for safety
+  fAes.Done; // anti-forensic: fill AES buffer with 0
 end;
 
 
@@ -7823,7 +7823,7 @@ procedure TAesPrng.Seed;
 var
   alreadyseeding: boolean;
   key: THash512Rec;
-  entropy: RawByteString;
+  entropy, previous: RawByteString;
 begin
   if fSeedAfterBytes = 0 then
     exit;
@@ -7834,12 +7834,22 @@ begin
   if alreadyseeding then
     exit; // only a single (first) thread would do the entropy seeding
   try
-    entropy := GetEntropy(128, fSeedEntropySource); // 128=HmacSha512 block size
-    Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
+    // gather 128 bytes (=HmacSha512 block size) from several sources of entropy
+    entropy := GetEntropy(128, fSeedEntropySource);
+    // combine the new state with the previous state
+    FastSetRawByteString(previous, @fAes, SizeOf(fAes));
+    // derivate 512-bit of secret using PBKDF2-HMAC-512
+    Pbkdf2HmacSha512(entropy, previous, fSeedPbkdf2Round, key.b);
+    // initialize the new thread-safe state
     fSafe.Lock;
     try
+      // paranoid anti-forensic
+      fAes.Done;
+      // AES-CTR key is derivated from low 128-256 bits of PBKDF2-HMAC-512 output
       fAes.EncryptInit(key.Lo, fAesKeySize);
-      DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
+      // IV is weakly derivated from high 256-bit of PBKDF2-HMAC-512 output
+      DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi, SizeOf(key.Hi));
+      // reset seeding
       fBytesSinceSeed := 0;
       fSeeding := false;
     finally
@@ -7848,6 +7858,7 @@ begin
   finally
     FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
     FillZero(entropy);
+    FillZero(previous);
   end;
 end;
 
@@ -9596,7 +9607,7 @@ var
   i: PtrInt;
   k0, k0xorIpad: array[0..31] of cardinal;
 begin
-  FillCharFast(k0, SizeOf(k0), 0);
+  FillCharFast(k0, SizeOf(k0), 0); // 128 bytes (1024 bits) of internal state
   if keylen > SizeOf(k0) then
     SHA.Full(key, keylen, PSha512Digest(@k0)^)
   else
