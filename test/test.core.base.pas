@@ -5921,7 +5921,7 @@ begin
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
   rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312
-  CheckEqual(length(rb1), 7, 'cp936');
+  CheckEqual(length(rb1), 7, 'cp936a');
   SU2 := TSynAnsiConvert.Engine(936).AnsiToUnicodeString(rb1);
   Check(SU = SU2);
   rb1 := '';
@@ -5929,25 +5929,28 @@ begin
   CheckEqual(length(rb1), 7);
   U2 := TSynAnsiConvert.Engine(936).AnsiToUtf8(rb1);
   CheckEqual(U, U2);
-  {$ifdef OSPOSIX} // most Windows won't support this code page
   rb1 := TSynAnsiConvert.Engine(54936).UnicodeStringToAnsi(SU); // GB18030
-  CheckEqual(length(rb1), 7, 'cp54936');
-  SU2 := TSynAnsiConvert.Engine(54936).AnsiToUnicodeString(rb1);
-  Check(SU = SU2, 'cp54936');
-  rb1 := '';
-  rb1 := TSynAnsiConvert.Engine(54936).Utf8ToAnsi(U);
-  CheckEqual(length(rb1), 7, 'cp54936');
-  U2 := TSynAnsiConvert.Engine(54936).AnsiToUtf8(rb1);
-  CheckEqual(U, U2, 'cp54936');
-  rb2 := U;
-  CheckEqual(length(rb2), 9);
-  SetCodePage(rb2, 54936, {convert=}true);
-  CheckEqual(length(u), 9);
-  CheckEqual(length(rb1), 7);
-  CheckEqual(length(rb2), 7);
-  Check(rb1 = rb2, 'setcodepage');
-  Check(SortDynArrayRawByteString(rb1, rb2) = 0);
-  {$endif OSPOSIX}
+  if rb1 <> '' then // some Windows versions won't support this code page
+  begin
+    CheckEqual(length(rb1), 7, 'cp54936a');
+    SU2 := TSynAnsiConvert.Engine(54936).AnsiToUnicodeString(rb1);
+    Check(SU = SU2, 'cp54936b');
+    rb1 := '';
+    rb1 := TSynAnsiConvert.Engine(54936).Utf8ToAnsi(U);
+    CheckEqual(length(rb1), 7, 'cp54936c');
+    U2 := TSynAnsiConvert.Engine(54936).AnsiToUtf8(rb1);
+    CheckEqual(U, U2, 'cp54936d');
+    {$ifdef HASCODEPAGE}
+    rb2 := U;
+    CheckEqual(length(rb2), 9);
+    SetCodePage(rb2, 54936, {convert=}true);
+    CheckEqual(length(u), 9);
+    CheckEqual(length(rb1), 7);
+    CheckEqual(length(rb2), 7);
+    Check(rb1 = rb2, 'setcodepage');
+    Check(SortDynArrayRawByteString(rb1, rb2) = 0);
+    {$endif HASCODEPAGE}
+  end;
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
@@ -9100,6 +9103,7 @@ begin
   Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
   Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
     'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  Check(WinErrorConstant(ERROR_INVALID_PARAMETER)^ = 'INVALID_PARAMETER', 'wecl');
   CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
   CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
   // validate DotNet exceptions error code recognition
