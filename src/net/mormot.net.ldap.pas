@@ -931,9 +931,9 @@ type
     uacKerberosDesOnly,                   //   200000 = 2097152
     uacKerberosRequirePreAuth,            //   400000 = 4194304
     uacPasswordExpired,                   //   800000 = 8388608
-    uacKerberosTrustedToDelegate,         // 01000000 = 16777216
-    uacKerberosNoPac,                     // 02000000 = 33554432
-    uacPartialSecretsRodc,                // 04000000 = 67108864
+    uacKerberosTrustedToDelegate,         //  1000000 = 16777216
+    uacKerberosNoPac,                     //  2000000 = 33554432
+    uacPartialSecretsRodc,                //  4000000 = 67108864
     uacUserUseAesKeys);                   // 80000000
 
   /// define TLdapUser.userAccountControl decoded flags
@@ -958,14 +958,14 @@ type
 
   /// known systemFlags values
   TSystemFlag = (
-    sfAttrNotReplicated,          // 01
-    sfAttrReqPartialSetMember,    // 02
-    sfAttrIsConstructed,          // 04
-    sfAttrIsOperational,          // 08
-    sfSchemaBaseObject,           // 10
-    sfAttrIsRdn,                  // 20
-    sfDomainDisallowMove,         // 04000000
-    sfDomainDisallowRename,       // 08000000
+    sfAttrNotReplicated,          //        1
+    sfAttrReqPartialSetMember,    //        2
+    sfAttrIsConstructed,          //        4
+    sfAttrIsOperational,          //        8
+    sfSchemaBaseObject,           //       10
+    sfAttrIsRdn,                  //       20
+    sfDomainDisallowMove,         //  4000000
+    sfDomainDisallowRename,       //  8000000
     sfConfigAllowLimitedMove,     // 10000000
     sfConfigAllowMove,            // 20000000
     sfConfigAllowRename,          // 40000000

@@ -5962,7 +5962,7 @@ begin
     RB1 := eng.Utf8ToAnsi(U);
     Check((RB1 <> '') and (PCardinal(RB1)^ = $37EE3598), 'Utf8ToAnsi');
     RB2 := eng.UnicodeStringToAnsi(SU);
-    CheckEqual(RB1, RB2, 'RB1=RB2');
+    Check(SortDynArrayRawByteString(rb1, rb2) = 0, 'UnicodeStringToAnsi');
     U2 := eng.AnsiToUtf8(RB1);
     CheckEqual(U2, U, 'AnsiToUtf8');
   end;

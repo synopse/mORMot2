@@ -706,10 +706,10 @@ begin
       CheckEqual(length(s1), i);
       CheckEqual(length(s2), i);
       if i > 4 then
-        check(s1 <> s2);
+        checkUtf8(s1 <> s2, 'prng len=%', [i]);
       // compress the output to validate (somehow) its randomness
-      check(length(AlgoSynLZ.Compress(s1)) > i, 'random should not compress');
-      check(length(AlgoSynLZ.Compress(s2)) > i, 'random should not compress');
+      check(length(AlgoSynLZ.Compress(s1)) > i, 'random1 should not compress');
+      check(length(AlgoSynLZ.Compress(s2)) > i, 'random2 should not compress');
       s1 := a1.FillRandomHex(i);
       CheckEqual(length(s1), i * 2);
       check(mormot.core.text.HexToBin(pointer(s1), nil, i));
