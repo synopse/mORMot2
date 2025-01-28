@@ -701,16 +701,16 @@ var
   code: integer;
 begin
   code := GetLastError;
-  raise ModuleException.CreateFmt('%s error %x (%s)',
-    [ModuleName, code, string(WinErrorText(code, ModuleName))]);
+  raise ModuleException.CreateFmt('%s error [%s] (0x%x)',
+    [ModuleName, string(WinErrorText(code, ModuleName)), code]);
 end;
 
 function WinLastError(const Context: shortstring; Code: integer): string;
 begin
   if Code = 0 then
     Code := GetLastError;
-  result := Format('%s error %x (%s)',
-    [Context, Code, string(WinErrorText(Code, nil))]);
+  result := Format('%s error [%s] (0x%x)',
+    [Context, string(WinErrorText(Code, nil)), code]);
 end;
 
 procedure RaiseLastError(const Context: shortstring;
