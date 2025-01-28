@@ -179,7 +179,15 @@ end;
 { TIcuLibrary }
 
 procedure TIcuLibrary.Done;
+var
+  i: PtrInt;
 begin
+  if fLoaded then
+  begin
+    for i := 0 to fSharedCount - 1 do
+      ucnv_close(fShared[i].Cnv);
+    fSharedCount := 0;
+  end;
   if icui18n <> nil then
     dlclose(icui18n);
   if icu <> nil then
@@ -194,7 +202,7 @@ end;
 
 function TIcuLibrary.IsAvailable: boolean;
 begin
-  if not Loaded then
+  if not fLoaded then
     DoLoad;
   result := Assigned(ucnv_open);
 end;
@@ -217,9 +225,10 @@ end;
 
 procedure TIcuLibrary.DoLoad(const LibName: TFileName; Version: string);
 const
-  NAMES: array[0..12] of string = (
+  NAMES: array[0..13] of string = (
     'ucnv_open',
     'ucnv_close',
+    'ucnv_reset',
     'ucnv_setSubstChars',
     'ucnv_setFallback',
     'ucnv_fromUChars',
@@ -256,9 +265,10 @@ var
 begin
   GlobalLock;
   try
-    if Loaded then
+    if fLoaded then
       exit;
-    Loaded := true;
+    fLoaded := true;
+    fSharedCount := 0;
     if LibName <> '' then
     begin
       icu := dlopen(pointer(LibName), RTLD_LAZY);
@@ -366,7 +376,7 @@ end;
 function TIcuLibrary.ForceLoad(const LibName: TFileName; const Version: string): boolean;
 begin
   Done;
-  Loaded := false;
+  fLoaded := false;
   DoLoad(LibName, Version);
   result := Assigned(ucnv_open);
 end;
@@ -399,6 +409,63 @@ begin
   {$endif CPUINTEL}
 end;
 
+function TIcuLibrary.SharedUcnv(codepage: cardinal; out ndx: PtrInt): pointer;
+var
+  i, n: PtrInt;
+begin
+  result := nil;
+  if (codepage < CP_MIN) or
+     (codepage >= CP_RAWBLOB) then
+    exit;
+  // quickly check if this codepage is part of cached converters
+  n := fSharedCount;
+  i := fSharedLast;
+  if (PtrUInt(i) >= PtrUInt(n)) or
+     (fSharedCP[i] <> codepage) then
+    i := WordScanIndex(@fSharedCP, n, codepage); // SSE2 brute force search
+  if i >= 0 then
+  begin
+    ndx := i; // for eventual SharedUcnvUnLock()
+    fSharedLast := i; // optimistic usage
+    with fShared[i] do
+      if PLightLock(@Lock)^.TryLock then
+        result := Cnv; // this thread acquired this converter
+    exit;
+  end;
+  // first time we see this codepage: try to add in our internal cache
+  PLightLock(@fSharedLock)^.Lock; // main write lock
+  try
+    n := fSharedCount;
+    if (n <> length(fShared)) and // cache up to 16 instances
+       (WordScanIndex(@fSharedCP, n, codepage) < 0) then // paranoid
+    begin
+      result := ucnv(codepage);
+      if result <> nil then
+      begin
+        ndx := n;
+        fSharedLast := n;
+        fSharedCP[n] := CodePage;
+        with fShared[n] do
+        begin
+          Lock := 1; // = Init + Lock
+          Cnv := result;
+        end;
+        inc(fSharedCount); // should be set last
+      end;
+    end;
+  finally
+    PLightLock(@fSharedLock)^.UnLock;
+  end;
+end;
+
+procedure TIcuLibrary.SharedUcnvUnLock(ndx: PtrInt);
+begin
+  with fShared[ndx] do
+  begin
+    PLightLock(@Lock)^.UnLock;
+    ucnv_reset(Cnv); // clean-up from this thread
+  end;
+end;
 
 const
   // for CompareStringW()
@@ -456,6 +523,7 @@ function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar;
 var
   cnv: pointer;
   err: SizeInt;
+  ndx: PtrInt;
 begin
   if CodePage = CP_UTF8 then
   begin
@@ -464,14 +532,28 @@ begin
       dec(result); // Utf8ToUnicode() returned length includes #0 terminator
     exit;
   end;
-  cnv := icu.ucnv(CodePage);
-  if cnv = nil then
-    exit(AnsiToWideRTL(CodePage, A, W, LA, LW)); // fallback to cwstring/iconv
+  if CodePage < CP_MIN then
+    exit(0); // clearly invalid/unsupported CodePage
   err := 0;
-  result := icu.ucnv_toUChars(cnv, W, LW, A, LA, err);
+  cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
+  if cnv <> nil then
+  begin
+    result := icu.ucnv_toUChars(cnv, W, LW, A, LA, err);
+    icu.SharedUcnvUnLock(ndx);
+  end
+  else
+  begin
+    cnv := icu.ucnv(CodePage); // use a transient converter if locked
+    if cnv <> nil then
+    begin
+      result := icu.ucnv_toUChars(cnv, W, LW, A, LA, err);
+      icu.ucnv_close(cnv);
+    end
+    else // fallback to cwstring/iconv
+      result := AnsiToWideRTL(CodePage, A, W, LA, LW);
+  end;
   if result < 0 then
     result := 0;
-  icu.ucnv_close(cnv);
 end;
 
 function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
@@ -492,6 +574,7 @@ function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar;
 var
   cnv: pointer;
   err: SizeInt;
+  ndx: PtrInt;
 begin
   if CodePage = CP_UTF8 then
   begin
@@ -500,14 +583,26 @@ begin
       dec(result); // UnicodeToUtf8() result includes the #0 terminator
     exit;
   end;
-  cnv := icu.ucnv(CodePage);
-  if cnv = nil then
-    exit(WideToAnsiRTL(CodePage, W, A, LW, LA)); // fallback to cwstring/iconv
   err := 0;
-  result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err); // more accurate ICU
+  cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
+  if cnv <> nil then
+  begin
+    result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
+    icu.SharedUcnvUnLock(ndx);
+  end
+  else
+  begin
+    cnv := icu.ucnv(CodePage); // use a transient converter if locked
+    if cnv <> nil then
+    begin
+      result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
+      icu.ucnv_close(cnv);
+    end
+    else // fallback to cwstring/iconv
+      result := WideToAnsiRTL(CodePage, W, A, LW, LA);
+  end;
   if result < 0 then
     result := 0;
-  icu.ucnv_close(cnv);
 end;
 
 function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;

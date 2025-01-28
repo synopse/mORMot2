@@ -4550,7 +4550,7 @@ begin
   Check(Int32ToUtf8(-1599638299) = '-1599638299');
   Check(Int64ToUtf8(-1271083787498396012) = '-1271083787498396012');
   CheckEqual(Int64ToUtf8(242161819595454762), '242161819595454762');
-  // detect 64-bit overflow of main digits in GetExtended()
+  // detect 64-bit integer overflow in GetExtended()
   CheckDoubleToShort(95.0290695380, '95.029069538');
   Check(ToDouble('95.0290695380', d), '95.02');
   CheckSame(d, 95.029069538);
@@ -5920,8 +5920,8 @@ begin
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
-  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312_CHARSET
-  CheckEqual(length(rb1), 7);
+  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312
+  CheckEqual(length(rb1), 7, 'cp936a');
   SU2 := TSynAnsiConvert.Engine(936).AnsiToUnicodeString(rb1);
   Check(SU = SU2);
   rb1 := '';
@@ -5929,6 +5929,28 @@ begin
   CheckEqual(length(rb1), 7);
   U2 := TSynAnsiConvert.Engine(936).AnsiToUtf8(rb1);
   CheckEqual(U, U2);
+  rb1 := TSynAnsiConvert.Engine(54936).UnicodeStringToAnsi(SU); // GB18030
+  if rb1 <> '' then // some Windows versions won't support this code page
+  begin
+    CheckEqual(length(rb1), 7, 'cp54936a');
+    SU2 := TSynAnsiConvert.Engine(54936).AnsiToUnicodeString(rb1);
+    Check(SU = SU2, 'cp54936b');
+    rb1 := '';
+    rb1 := TSynAnsiConvert.Engine(54936).Utf8ToAnsi(U);
+    CheckEqual(length(rb1), 7, 'cp54936c');
+    U2 := TSynAnsiConvert.Engine(54936).AnsiToUtf8(rb1);
+    CheckEqual(U, U2, 'cp54936d');
+    {$ifdef HASCODEPAGE}
+    rb2 := U;
+    CheckEqual(length(rb2), 9);
+    SetCodePage(rb2, 54936, {convert=}true);
+    CheckEqual(length(u), 9);
+    CheckEqual(length(rb1), 7);
+    CheckEqual(length(rb2), 7);
+    Check(rb1 = rb2, 'setcodepage');
+    Check(SortDynArrayRawByteString(rb1, rb2) = 0);
+    {$endif HASCODEPAGE}
+  end;
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
@@ -8085,6 +8107,7 @@ const
 var
   nv: TSynNameValue;
   i: integer;
+  v: RawUtf8;
   tmp: TSynTempBuffer;
 begin
   nv.Init(false);
@@ -8093,46 +8116,48 @@ begin
     nv.Add(UInt32ToUtf8(i), UInt32ToUtf8(i + MAX));
   check(nv.Count = MAX);
   for i := 1 to MAX do
-    check(nv.Find(UInt32ToUtf8(i)) = i - 1);
+    checkEqual(nv.Find(UInt32ToUtf8(i)), i - 1);
   for i := MAX + 1 to MAX * 2 do
     check(nv.Find(UInt32ToUtf8(i)) < 0);
   for i := 1 to MAX do
-    check(nv.Value(UInt32ToUtf8(i)) = UInt32ToUtf8(i + MAX));
-  for i := 1 to MAX do
-    check(nv.Str[UInt32ToUtf8(i)] = UInt32ToUtf8(i + MAX));
+  begin
+    UInt32ToUtf8(i + MAX, v);
+    checkEqual(nv.Value(UInt32ToUtf8(i)), v);
+    checkEqual(nv.Str[UInt32ToUtf8(i)], v);
+  end;
   nv.InitFromNamesValues(['a', 'b'], ['1', 'be']);
-  check(nv.Count = 2);
-  check(nv.Str['a'] = '1');
-  check(nv.Str['b'] = 'be');
-  check(nv.Str['c'] = '');
-  check(nv.ValueInt('a') = 1);
-  check(nv.ValueInt('b') = 0);
-  check(nv.ValueInt('c') = 0);
-  check(nv.AsCsv('=', ';') = 'a=1;b=be;');
-  check(nv.AsJson = '{"a":"1","b":"be"}');
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.Str['a'], '1');
+  checkEqual(nv.Str['b'], 'be');
+  checkEqual(nv.Str['c'], '');
+  checkEqual(nv.ValueInt('a'), 1);
+  checkEqual(nv.ValueInt('b'), 0);
+  checkEqual(nv.ValueInt('c'), 0);
+  checkEqual(nv.AsCsv('=', ';'), 'a=1;b=be;');
+  checkEqual(nv.AsJson, '{"a":"1","b":"be"}');
   tmp.Init('{a:10,b:"bee"}');
   check(nv.InitFromJson(tmp.buf));
-  check(nv.Count = 2);
-  check(nv.Str['a'] = '10');
-  check(nv.Str['b'] = 'bee');
-  check(nv.Str['c'] = '');
-  check(nv.Int['a'] = 10);
-  check(nv.Int['b'] = 0);
-  check(nv.Int['c'] = 0);
-  check(nv.AsCsv('=', ';') = 'a=10;b=bee;');
-  check(nv.AsJson = '{"a":"10","b":"bee"}');
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.Str['a'], '10');
+  checkEqual(nv.Str['b'], 'bee');
+  checkEqual(nv.Str['c'], '');
+  checkEqual(nv.Int['a'], 10);
+  checkEqual(nv.Int['b'], 0);
+  checkEqual(nv.Int['c'], 0);
+  checkEqual(nv.AsCsv('=', ';'), 'a=10;b=bee;');
+  checkEqual(nv.AsJson, '{"a":"10","b":"bee"}');
   check(nv.Delete('b'));
-  check(nv.ValueInt('a') = 10);
-  check(nv.Str['b'] = '');
+  checkEqual(nv.ValueInt('a'), 10);
+  checkEqual(nv.Str['b'], '');
   check(not nv.Delete('b'));
-  check(nv.DeleteByValue('10') = 1);
-  check(nv.ValueInt('a') = 0);
-  check(nv.DeleteByValue('10') = 0);
-  check(nv.Count = 0);
-  check(nv.AsCsv('=', ';') = '');
+  checkEqual(nv.DeleteByValue('10'), 1);
+  checkEqual(nv.ValueInt('a'), 0);
+  checkEqual(nv.DeleteByValue('10'), 0);
+  checkEqual(nv.Count, 0);
+  checkEqual(nv.AsCsv('=', ';'), '');
   tmp.Init('{"a":20,b:"bi"]');
   check(not nv.InitFromJson(tmp.buf));
-  check(nv.Count = 0);
+  checkEqual(nv.Count, 0);
 end;
 
 procedure TTestCoreBase._TSynUniqueIdentifier;
@@ -9078,6 +9103,7 @@ begin
   Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
   Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
     'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  Check(WinErrorConstant(ERROR_INVALID_PARAMETER)^ = 'INVALID_PARAMETER', 'wecl');
   CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
   CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
   // validate DotNet exceptions error code recognition

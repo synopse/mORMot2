@@ -177,14 +177,36 @@ end;
 const
   DefaultCharVar: AnsiChar = '?';
 
-function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+function FullCodePage(CodePage: cardinal): boolean; {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := MultiByteToWideChar(CodePage, MB_PRECOMPOSED, A, LA, W, LW);
+  case CodePage of
+    50220 .. 50229, 54936, 57002 .. 57011, 65000, CP_UTF8:
+      result := true; // as required by the Windows API
+  else
+    result := false;
+  end;
+end;
+
+function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+var
+  flags: cardinal;
+begin
+  if FullCodePage(CodePage) then
+    flags := 0
+  else
+    flags := MB_PRECOMPOSED;
+  result := MultiByteToWideChar(CodePage, flags, A, LA, W, LW);
 end;
 
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+var
+  defchar: PAnsiChar;
 begin
-  result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, @DefaultCharVar, nil);
+  if FullCodePage(CodePage) then
+    defchar := nil
+  else
+    defchar := @DefaultCharVar;
+  result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, defchar, nil);
 end;
 
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
@@ -679,16 +701,16 @@ var
   code: integer;
 begin
   code := GetLastError;
-  raise ModuleException.CreateFmt('%s error %x (%s)',
-    [ModuleName, code, string(WinErrorText(code, ModuleName))]);
+  raise ModuleException.CreateFmt('%s error [%s] (0x%x)',
+    [ModuleName, string(WinErrorText(code, ModuleName)), code]);
 end;
 
 function WinLastError(const Context: shortstring; Code: integer): string;
 begin
   if Code = 0 then
     Code := GetLastError;
-  result := Format('%s error %x (%s)',
-    [Context, Code, string(WinErrorText(Code, nil))]);
+  result := Format('%s error [%s] (0x%x)',
+    [Context, string(WinErrorText(Code, nil)), code]);
 end;
 
 procedure RaiseLastError(const Context: shortstring;

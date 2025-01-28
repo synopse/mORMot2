@@ -104,6 +104,9 @@ const
   /// internal Code Page for System Console encoding
   CP_OEM = 1;
 
+  /// the minimal possible Code Page (Cyrillic-Asian)
+  CP_MIN = 154;
+
   /// use rather CP_WINANSI with mORMot 2
   CODEPAGE_US = CP_WINANSI;
 
