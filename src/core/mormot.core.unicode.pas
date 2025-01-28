@@ -3547,7 +3547,7 @@ begin
   if SourceChars > 0 then
     // rely on the Operating System for all remaining ASCII characters
     inc(Dest,
-      Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars, fCodePage));
+      Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars + 8, fCodePage));
   if not NoTrailingZero then
     Dest^ := #0;
   result := Dest;
@@ -3585,7 +3585,7 @@ begin
     result := Dest
   else
   begin
-    u := AnsiBufferToUnicode(tmp.Init(SourceChars * 3), Source, SourceChars);
+    u := AnsiBufferToUnicode(tmp.Init(SourceChars * 2), Source, SourceChars);
     result := Dest + RawUnicodeToUtf8(Dest, SourceChars * 3, tmp.buf,
       (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1, [ccfNoTrailingZero]);
     tmp.Done;
@@ -3777,7 +3777,7 @@ begin
     // rely on the Operating System for all remaining ASCII characters
     if SourceChars <> 0 then
       inc(Dest,
-        Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars * 3, fCodePage));
+        Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars * 3 + 4, fCodePage));
   end;
   result := Dest;
 end;
@@ -3911,7 +3911,7 @@ begin
     result := ''
   else
   begin
-    u := tmp.Init(SourceChars * 2 + 2);
+    u := tmp.Init(SourceChars * 2);
     result := UnicodeBufferToAnsi(u,
       From.AnsiBufferToUnicode(u, Source, SourceChars) - u);
     tmp.Done;
