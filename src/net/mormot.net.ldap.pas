@@ -696,7 +696,8 @@ type
     atOperatingSystem,
     atOperatingSystemVersion,
     atServicePrincipalName,
-    atUnicodePwd);
+    atUnicodePwd,
+    atAccountNameHistory);
 
   /// set of common Attribute Types
   TLdapAttributeTypes = set of TLdapAttributeType;
@@ -777,7 +778,8 @@ const
     'Operating-System',            // atOperatingSystem
     'Operating-System-Version',    // atOperatingSystemVersion
     'Service-Principal-Name',      // atServicePrincipalName
-    'Unicode-Pwd');                // atUnicodePwd
+    'Unicode-Pwd',                 // atUnicodePwd
+    'Account-Name-History');       // atAccountNameHistory
 
   /// how all TLdapAttributeType are actually stored in the LDAP raw value
   AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
@@ -834,7 +836,8 @@ const
     atsRawUtf8,                     // atOperatingSystem
     atsRawUtf8,                     // atOperatingSystemVersion
     atsRawUtf8,                     // atServicePrincipalName
-    atsUnicodePwd);                 // atUnicodePwd
+    atsUnicodePwd,                  // atUnicodePwd
+    atsRawUtf8);                    // atAccountNameHistory
 
   /// the LDAP raw values stored as UTF-8, which do not require any conversion
   ATS_READABLE = [atsRawUtf8 .. atsIntegerAccountType];
@@ -3429,7 +3432,8 @@ const
     'operatingSystem',             // atOperatingSystem
     'operatingSystemVersion',      // atOperatingSystemVersion
     'servicePrincipalName',        // atServicePrincipalName
-    'unicodePwd');                 // atUnicodePwd
+    'unicodePwd',                  // atUnicodePwd
+    'accountNameHistory');         // atAccountNameHistory
 
   // reference names to fill the global AttrTypeNameAlt[]
   _AttrTypeNameAlt: array[0 .. high(AttrTypeNameAlt)] of RawUtf8 = (
