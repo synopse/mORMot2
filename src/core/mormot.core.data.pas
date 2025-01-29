@@ -1908,13 +1908,11 @@ type
     function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
-    /// returns position in array, or -1 if not found with a custom comparer
-    function FindOrNewComp(aHashCode: cardinal; Item: pointer;
-      Comp: TDynArraySortCompare = nil): PtrInt;
+    /// returns position in array, or -1 if not found with an optional custom comparer
+    function FindIndex(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare = nil): PtrInt;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
-    function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
-      aHashCode: cardinal): PtrInt;
+    function FindBeforeAdd(Item: pointer; out wasAdded: boolean; aHashCode: cardinal): PtrInt;
     /// search and delete an element value, updating the internal hash table
     function FindBeforeDelete(Item: pointer): PtrInt;
     /// full computation of the internal hash table
@@ -4485,7 +4483,7 @@ begin
   c := aText[aTextLen];
   if c <> #0 then // write only if needed - avoid GPF from constant string
     aText[aTextLen] := #0; // input buffer may not be #0 terminated
-  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText, @SortDynArrayPUtf8Char);
   if i >= 0 then
   begin
     aResult := fHash.Value[i]; // return the interned value
@@ -4521,7 +4519,7 @@ var
   added: boolean;
 begin
   fSafe.ReadLock;
-  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText);
   if i >= 0 then
   begin
     aText := fHash.Value[i]; // return unified string instance
@@ -4544,7 +4542,7 @@ var
 begin
   result := nil;
   fSafe.ReadLock;
-  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText);
   if i >= 0 then
     result := pointer(fHash.Value[i]); // return a pointer to unified string instance
   fSafe.ReadUnLock;
@@ -9572,7 +9570,7 @@ begin
   result := RaiseFatalCollision('FindOrNew', aHashCode);
 end;
 
-function TDynArrayHasher.FindOrNewComp(aHashCode: cardinal; Item: pointer;
+function TDynArrayHasher.FindIndex(aHashCode: cardinal; Item: pointer;
   Comp: TDynArraySortCompare): PtrInt;
 var
   first, last, ndx: PtrInt;
@@ -9600,7 +9598,7 @@ begin // cut-down version of FindOrNew()
         last := first;
       end;
   until false;
-  result := RaiseFatalCollision('FindOrNewComp', aHashCode);
+  result := RaiseFatalCollision('FindIndex', aHashCode);
 end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
