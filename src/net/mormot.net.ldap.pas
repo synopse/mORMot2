@@ -1117,8 +1117,9 @@ type
   TLdapAttributeDynArray = array of TLdapAttribute;
 
   /// list one or several TLdapAttribute
-  // - will use a global TRawUtf8InterningSlot as hashed list of names to minimize
-  // memory allocation, and makes efficient lookup
+  // - will use a global case-insensitive TRawUtf8InterningSlot hashed list of
+  // names to minimize memory allocation, makes efficient lookup, and normalize
+  // known TLdapAttributeType casing
   // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapAttributeList = class(TClonable)
   protected
@@ -3446,7 +3447,7 @@ const
     'organizationalUnitName');     // ou
 
 var
-  // we intern "normalized" case-sensitive attribute names
+  // we intern "normalized" case-insensitive attribute names
   _LdapIntern: TRawUtf8InterningSlot;
   // allow fast linear search in L1 CPU cache of interned attribute names
   // - 32-bit is enough to identify pointers, and leverage O(n) SSE2 asm
@@ -3461,7 +3462,7 @@ var
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
   // register all our common Attribute Types names for quick search as pointer()
-  _LdapIntern.Init({CaseInsensitive=}false, {Capacity=}128);
+  _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);
   failed := -1;
   n := 0;
   for t := succ(low(t)) to high(t) do
@@ -4333,32 +4334,39 @@ function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8;
   IgnoreRange: boolean): PtrInt;
 var
   existing: pointer;
+  a: ^TLdapAttribute;
+  p: PtrInt;
 begin
   if (self <> nil) and
-     (fItems <> nil) then
-    if IgnoreRange then // match 'AttributeName;range=1500-2999'
-    begin
-      for result := 0 to fCount - 1 do
-        if StartWithExact(fItems[result].AttributeName, AttributeName) and
-           (fItems[result].AttributeName[length(AttributeName) + 1] = ';') then
-          exit;
-    end
-    else // extat name match, using fast interned string pointer comparison
-    begin
-      result := fCount - 1;
-      if result = 0 then // very common case for single attribute lookup
+     (AttributeName <> '') then
+  begin
+    result := fCount - 1;
+    a := pointer(fItems);
+    if a <> nil then
+      if IgnoreRange then // match 'AttributeName;range=1500-2999'
       begin
-        if fItems[0].AttributeName = AttributeName then
-          exit;
+        for result := 0 to result do
+        begin
+          p := PosExChar(';', a^.AttributeName) - 1;
+          if (p = length(AttributeName)) and
+             IdemPropNameUSameLenNotNull(pointer(AttributeName), pointer(a^.AttributeName), p) then
+            exit;
+          inc(a);
+        end;
       end
-      begin
+      else if result <> 0 then
+      begin // case-insensitive name match, using fast interned string pointer comparison
         existing := _LdapIntern.Existing(AttributeName);
-        if existing <> nil then // no need to search if we know it won't be there
+        if existing <> nil then // no need to search if it won't be there
           for result := 0 to result do
-            if pointer(fItems[result].AttributeName) = existing then
-              exit;
-      end;
-    end;
+            if pointer(a^.AttributeName) = existing then
+              exit
+            else
+              inc(a);
+      end
+      else if IdemPropNameU(fItems[0].AttributeName, AttributeName) then
+        exit; // single attribute found with fCount = 1
+  end;
   result := -1;
 end;
 
@@ -4428,7 +4436,7 @@ begin
   if AttributeName = '' then
     ELdap.RaiseUtf8('Unexpected %.Add('''')', [self]);
   // search for existing TLdapAttribute instance during the name interning step
-  if not _LdapIntern.Unique(n, AttributeName) then // n = existing name
+  if not _LdapIntern.Unique(n, AttributeName) then // n = normalized name
     for i := 0 to fCount - 1 do // fast interned pointer search as in Find()
     begin
       result := fItems[i];
@@ -4972,7 +4980,7 @@ begin
     v := res.AppendToLocate(Dvo, last, lastdc, Options);
     if ObjectAttributeField = '' then
       continue; // no attribute
-    a.Init(mNameValue, dvObject);
+    a.Init(mFast, dvObject);
     a.SetCount(res.Attributes.Count +
                ord(not(roNoObjectName in Options)) +
                ord(roWithCanonicalName in Options));
@@ -5046,7 +5054,7 @@ function TLdapResultList.GetVariant(Options: TLdapResultOptions;
   const ObjectAttributeField: RawUtf8): variant;
 begin
   VarClear(result);
-  TDocVariantData(result).Init(mNameValue, dvObject); // case sensitive names
+  TDocVariantData(result).Init(mFast, dvObject);
   AppendTo(TDocVariantData(result), Options, ObjectAttributeField);
 end;
 
@@ -6546,7 +6554,7 @@ begin
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID
-  Dest.Init(mNameValue, dvObject); // case sensitive names
+  Dest.Init(mFast, dvObject);
   n := 0;
   // check for "paging attributes" auto-range results
   if (roAutoRange in Options) and
