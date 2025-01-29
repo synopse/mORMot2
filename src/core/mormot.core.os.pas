@@ -6480,36 +6480,40 @@ end;
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
 begin
   case codepage of
-    CP_UTF16:
-      Name := 'UTF16LE';
-    1201:
-      Name := 'UTF16BE';
-    20932:
-      Name := 'EUC-JP';
-    28591 .. 28605:
-      begin
-        Name := 'iso8859-';
-        AppendShortCardinal(codepage - 28590, Name);
+      950:
+        Name := 'BIG5';
+      CP_UTF16:
+        Name := 'UTF16LE';
+      1201:
+        Name := 'UTF16BE';
+      20932:
+        Name := 'EUC-JP';
+      28591 .. 28605:
+        begin
+          Name := 'ISO-8859-';
+          AppendShortCardinal(codepage - 28590, Name);
+        end;
+      50220..50222:
+        Name := 'ISO-2022-JP-2';
+      50225:
+        Name := 'ISO-2022-KR';
+      50227:
+        Name := 'ISO-2022-CN';
+      51936:
+        Name := 'EUC-CN';  // EUC Simplified Chinese
+      51949:
+        Name := 'EUC-KR';  // EUC Korean
+      52936:
+        Name := 'HZ';      // HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
+      54936:
+        Name := 'GB18030'; // GB18030 Simplified Chinese
+      CP_UTF8:
+        Name := 'UTF8';
+    else
+      begin  // 'CP####' is enough for most code pages
+        Name := 'CP';
+        AppendShortCardinal(codepage, Name);
       end;
-    50222:
-      Name := 'iso-2022-jp';
-    50225:
-      Name := 'iso-2022-kr';
-    51936:
-      Name := 'EUC-CN'; // EUC Simplified Chinese
-    51949:
-      Name := 'euc-kr'; // EUC Korean
-    52936:
-      Name := 'hz-gb-2312'; // HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
-    54936:
-      Name := 'GB18030';    // GB18030 Simplified Chinese
-    CP_UTF8:
-      Name := 'UTF8';
-  else
-    begin  // 'CP####' is enough for most code pages
-      Name := 'CP';
-      AppendShortCardinal(codepage, Name);
-    end;
   end;
   Name[ord(Name[0]) + 1] := #0; // ensure is ASCIIZ - e.g. for ucnv_open()
 end;
