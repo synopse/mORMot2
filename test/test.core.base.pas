@@ -5074,6 +5074,7 @@ var
   Unic: RawByteString;
   WA, HasValidUtf8Avx2: Boolean;
   rb1, rb2, rb3: RawByteString;
+  eng: TSynAnsiConvert;
 const
   ROWIDS: array[0..17] of PUtf8Char = ('id', 'ID', 'iD', 'rowid', 'ROWid',
     'ROWID', 'rowiD', 'ROWId', // ok
@@ -5920,25 +5921,29 @@ begin
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
-  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312
+  eng := TSynAnsiConvert.Engine(936);
+  Check(eng <> nil, 'Engine(936)');
+  rb1 := eng.UnicodeStringToAnsi(SU); // GB2312
   CheckEqual(length(rb1), 7, 'cp936a');
-  SU2 := TSynAnsiConvert.Engine(936).AnsiToUnicodeString(rb1);
+  SU2 := eng.AnsiToUnicodeString(rb1);
   Check(SU = SU2);
   rb1 := '';
-  rb1 := TSynAnsiConvert.Engine(936).Utf8ToAnsi(U);
+  rb1 := eng.Utf8ToAnsi(U);
   CheckEqual(length(rb1), 7);
-  U2 := TSynAnsiConvert.Engine(936).AnsiToUtf8(rb1);
+  U2 := eng.AnsiToUtf8(rb1);
   CheckEqual(U, U2);
-  rb1 := TSynAnsiConvert.Engine(54936).UnicodeStringToAnsi(SU); // GB18030
+  eng := TSynAnsiConvert.Engine(54936);
+  Check(eng <> nil, 'Engine(54936)');
+  rb1 := eng.UnicodeStringToAnsi(SU); // GB18030
   if rb1 <> '' then // some Windows versions won't support this code page
   begin
     CheckEqual(length(rb1), 7, 'cp54936a');
-    SU2 := TSynAnsiConvert.Engine(54936).AnsiToUnicodeString(rb1);
+    SU2 := eng.AnsiToUnicodeString(rb1);
     Check(SU = SU2, 'cp54936b');
     rb1 := '';
-    rb1 := TSynAnsiConvert.Engine(54936).Utf8ToAnsi(U);
+    rb1 := eng.Utf8ToAnsi(U);
     CheckEqual(length(rb1), 7, 'cp54936c');
-    U2 := TSynAnsiConvert.Engine(54936).AnsiToUtf8(rb1);
+    U2 := eng.AnsiToUtf8(rb1);
     CheckEqual(U, U2, 'cp54936d');
     {$ifdef HASCODEPAGE}
     rb2 := U;
@@ -5950,6 +5955,16 @@ begin
     Check(rb1 = rb2, 'setcodepage');
     Check(SortDynArrayRawByteString(rb1, rb2) = 0);
     {$endif HASCODEPAGE}
+    SetLength(U, 4);
+    PCardinal(U)^ := $A59AAAF0; // valid in GB18030 only
+    SU := Utf8ToSynUnicode(U);  // 69 D8 A5 DE , UTF16, Code Point: \uD869\uDEA5
+    CheckEqual(PCardinal(SU)^, $DEA5D869);
+    RB1 := eng.Utf8ToAnsi(U);
+    Check((RB1 <> '') and (PCardinal(RB1)^ = $37EE3598), 'Utf8ToAnsi');
+    RB2 := eng.UnicodeStringToAnsi(SU);
+    Check(SortDynArrayRawByteString(rb1, rb2) = 0, 'UnicodeStringToAnsi');
+    U2 := eng.AnsiToUtf8(RB1);
+    CheckEqual(U2, U, 'AnsiToUtf8');
   end;
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');

@@ -696,7 +696,8 @@ type
     atOperatingSystem,
     atOperatingSystemVersion,
     atServicePrincipalName,
-    atUnicodePwd);
+    atUnicodePwd,
+    atAccountNameHistory);
 
   /// set of common Attribute Types
   TLdapAttributeTypes = set of TLdapAttributeType;
@@ -777,7 +778,8 @@ const
     'Operating-System',            // atOperatingSystem
     'Operating-System-Version',    // atOperatingSystemVersion
     'Service-Principal-Name',      // atServicePrincipalName
-    'Unicode-Pwd');                // atUnicodePwd
+    'Unicode-Pwd',                 // atUnicodePwd
+    'Account-Name-History');       // atAccountNameHistory
 
   /// how all TLdapAttributeType are actually stored in the LDAP raw value
   AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
@@ -834,7 +836,8 @@ const
     atsRawUtf8,                     // atOperatingSystem
     atsRawUtf8,                     // atOperatingSystemVersion
     atsRawUtf8,                     // atServicePrincipalName
-    atsUnicodePwd);                 // atUnicodePwd
+    atsUnicodePwd,                  // atUnicodePwd
+    atsRawUtf8);                    // atAccountNameHistory
 
   /// the LDAP raw values stored as UTF-8, which do not require any conversion
   ATS_READABLE = [atsRawUtf8 .. atsIntegerAccountType];
@@ -928,9 +931,9 @@ type
     uacKerberosDesOnly,                   //   200000 = 2097152
     uacKerberosRequirePreAuth,            //   400000 = 4194304
     uacPasswordExpired,                   //   800000 = 8388608
-    uacKerberosTrustedToDelegate,         // 01000000 = 16777216
-    uacKerberosNoPac,                     // 02000000 = 33554432
-    uacPartialSecretsRodc,                // 04000000 = 67108864
+    uacKerberosTrustedToDelegate,         //  1000000 = 16777216
+    uacKerberosNoPac,                     //  2000000 = 33554432
+    uacPartialSecretsRodc,                //  4000000 = 67108864
     uacUserUseAesKeys);                   // 80000000
 
   /// define TLdapUser.userAccountControl decoded flags
@@ -955,14 +958,14 @@ type
 
   /// known systemFlags values
   TSystemFlag = (
-    sfAttrNotReplicated,          // 01
-    sfAttrReqPartialSetMember,    // 02
-    sfAttrIsConstructed,          // 04
-    sfAttrIsOperational,          // 08
-    sfSchemaBaseObject,           // 10
-    sfAttrIsRdn,                  // 20
-    sfDomainDisallowMove,         // 04000000
-    sfDomainDisallowRename,       // 08000000
+    sfAttrNotReplicated,          //        1
+    sfAttrReqPartialSetMember,    //        2
+    sfAttrIsConstructed,          //        4
+    sfAttrIsOperational,          //        8
+    sfSchemaBaseObject,           //       10
+    sfAttrIsRdn,                  //       20
+    sfDomainDisallowMove,         //  4000000
+    sfDomainDisallowRename,       //  8000000
     sfConfigAllowLimitedMove,     // 10000000
     sfConfigAllowMove,            // 20000000
     sfConfigAllowRename,          // 40000000
@@ -3429,7 +3432,8 @@ const
     'operatingSystem',             // atOperatingSystem
     'operatingSystemVersion',      // atOperatingSystemVersion
     'servicePrincipalName',        // atServicePrincipalName
-    'unicodePwd');                 // atUnicodePwd
+    'unicodePwd',                  // atUnicodePwd
+    'accountNameHistory');         // atAccountNameHistory
 
   // reference names to fill the global AttrTypeNameAlt[]
   _AttrTypeNameAlt: array[0 .. high(AttrTypeNameAlt)] of RawUtf8 = (
