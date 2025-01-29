@@ -3512,7 +3512,10 @@ end;
 
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 begin
-  result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
+  if AttrName = '' then
+    result := atUndefined
+  else
+    result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
 end;
 
 procedure AttributeValueMakeReadable(var s: RawUtf8;
