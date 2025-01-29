@@ -1117,7 +1117,7 @@ type
   TLdapAttributeDynArray = array of TLdapAttribute;
 
   /// list one or several TLdapAttribute
-  // - will use a global TRawUtf8Interning as hashed list of names to minimize
+  // - will use a global TRawUtf8InterningSlot as hashed list of names to minimize
   // memory allocation, and makes efficient lookup
   // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapAttributeList = class(TClonable)
@@ -3446,7 +3446,8 @@ const
     'organizationalUnitName');     // ou
 
 var
-  _LdapIntern: TRawUtf8Interning;
+  // we intern "normalized" case-sensitive attribute names
+  _LdapIntern: TRawUtf8InterningSlot;
   // allow fast linear search in L1 CPU cache of interned attribute names
   // - 32-bit is enough to identify pointers, and leverage O(n) SSE2 asm
   _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of cardinal;
@@ -3459,8 +3460,8 @@ var
   i, n, failed: PtrInt;
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
-  _LdapIntern := RegisterGlobalShutdownRelease(TRawUtf8Interning.Create);
   // register all our common Attribute Types names for quick search as pointer()
+  _LdapIntern.Init({CaseInsensitive=}false, {Capacity=}128);
   failed := -1;
   n := 0;
   for t := succ(low(t)) to high(t) do
@@ -4996,7 +4997,7 @@ begin
     attr := pointer(res.Attributes.Items);
     for j := k to k + res.Attributes.Count - 1 do
     begin
-      a.Names[j] := attr^.AttributeName; // use TRawUtf8Interning
+      a.Names[j] := attr^.AttributeName; // use TRawUtf8InterningSlot
       attr^.SetNewVariant(a.Values[j], Options, Dom, uuid);
       inc(attr);
     end;
