@@ -868,6 +868,12 @@ const
 // - allow to use e.g. AttrTypeStorage[AttributeNameType(AttrName)]
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 
+/// replace an attribute name with its known case-insensitive normalized value
+// - i.e. all AttrTypeStorage[] known identifiers, and all previously used
+// attribute names during the curent process lifetime
+// - as done by the TLdapAttributeList class itself
+procedure AttributeNameNormalize(var AttrName: RawUtf8);
+
 /// convert in-place a raw attribute value into human-readable text
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
 // - will detect SID, GUID, FileTime and text date/time known fields
@@ -3451,8 +3457,8 @@ var
   _LdapIntern: TRawUtf8InterningSlot;
   // allow fast linear search in L1 CPU cache of interned attribute names
   // - 32-bit is enough to identify pointers, and leverage O(n) SSE2 asm
-  _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of cardinal;
-  _LdapInternType: array[0 .. high(_LdapInternAll)] of TLdapAttributeType;
+  _LdapIntern32: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of cardinal;
+  _LdapInternType: array[0 .. high(_LdapIntern32)] of TLdapAttributeType;
   sObjectName, sCanonicalName: RawUtf8;
 
 procedure InitializeUnit;
@@ -3470,9 +3476,9 @@ begin
     begin
       {$ifdef CPU64} // identify very unlikely low 32-bit pointer collision
       if failed < 0 then
-        failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeName[t]));
+        failed := IntegerScanIndex(@_LdapIntern32, n, PtrUInt(AttrTypeName[t]));
       {$endif CPU64}
-      _LdapInternAll[n] := PtrUInt(AttrTypeName[t]); // truncated to 32-bit
+      _LdapIntern32[n] := PtrUInt(AttrTypeName[t]); // truncated to 32-bit
       _LdapInternType[n] := t;
       inc(n);
     end
@@ -3483,16 +3489,16 @@ begin
     begin
       {$ifdef CPU64}
       if failed < 0 then
-        failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeNameAlt[i]));
+        failed := IntegerScanIndex(@_LdapIntern32, n, PtrUInt(AttrTypeNameAlt[i]));
       {$endif CPU64}
-      _LdapInternAll[n] := PtrUInt(AttrTypeNameAlt[i]);
+      _LdapIntern32[n] := PtrUInt(AttrTypeNameAlt[i]);
       _LdapInternType[n] := AttrTypeAltType[i];
       inc(n);
     end
     else
       ELdap.RaiseUtf8('dup alt %', [_AttrTypeNameAlt[i]]);
   if failed >= 0 then
-    ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapInternAll[failed]]);
+    ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapIntern32[failed]]);
   _LdapIntern.Unique(sObjectName, 'objectName');
   _LdapIntern.Unique(sCanonicalName, 'canonicalName');
 end;
@@ -3505,7 +3511,7 @@ begin
   result := atUndefined;
   if AttrName = nil then
     exit;
-  i := IntegerScanIndex(@_LdapInternAll, length(_LdapInternAll), PtrUInt(AttrName));
+  i := IntegerScanIndex(@_LdapIntern32, length(_LdapIntern32), PtrUInt(AttrName));
   if i >= 0 then
     result := _LdapInternType[i];
 end;
@@ -3516,6 +3522,18 @@ begin
     result := atUndefined
   else
     result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
+end;
+
+procedure AttributeNameNormalize(var AttrName: RawUtf8);
+var
+  existing: pointer;
+begin
+  if AttrName = '' then
+    exit;
+  existing := _LdapIntern.Existing(AttrName);
+  if (existing <> nil) and
+     (existing <> pointer(AttrName)) then
+    AttrName := RawUtf8(existing); // replace with existing interned name
 end;
 
 procedure AttributeValueMakeReadable(var s: RawUtf8;

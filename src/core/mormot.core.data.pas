@@ -4605,7 +4605,7 @@ begin
   fSafe.ReadLock;
   i := fHash.Values.Hasher.FindIndex(aTextHash, @aText);
   if i >= 0 then
-    result := pointer(fHash.Value[i]); // return a pointer to unified string instance
+    result := pointer(fHash.Value[i]); // return a pointer to the unified string
   fSafe.ReadUnLock;
 end;
 
