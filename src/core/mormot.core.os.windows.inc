@@ -220,8 +220,7 @@ begin
   begin
     dec(L); // Utf8ToUnicode() included trailing #0
     tmpA.Init(L * 3);
-    L := WideCharToMultiByte(CP, 0, tmpW.buf, L,
-      tmpA.buf, tmpA.len + 16, @DefaultCharVar, nil); // use the Windows API
+    L := Unicode_WideToAnsi(tmpW.buf, tmpA.buf, L, tmpA.len + 16, CP);
     if L > 0 then
     begin
       FastSetStringCP(A, tmpA.buf, L, CP); // keep A untouched on failure
