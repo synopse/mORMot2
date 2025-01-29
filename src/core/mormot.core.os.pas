@@ -6500,13 +6500,13 @@ begin
     51949:
       Name := 'euc-kr'; // EUC Korean
     52936:
-      Name := 'hz-gb-2312'; // HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
+      Name := 'hz-gb-2312'; // HZ-GB2312 Simplified Chinese
     54936:
       Name := 'GB18030';    // GB18030 Simplified Chinese
     CP_UTF8:
       Name := 'UTF8';
   else
-    begin  // 'CP####' is enough for most code pages
+    begin  // 'CP####' is enough for most code pages, e.g. CP_WINANSI
       Name := 'CP';
       AppendShortCardinal(codepage, Name);
     end;

@@ -3467,7 +3467,7 @@ begin
   for t := succ(low(t)) to high(t) do
     if _LdapIntern.Unique(AttrTypeName[t], _AttrTypeName[t]) then
     begin
-      {$ifdef CPU64}
+      {$ifdef CPU64} // identify very unlikely low 32-bit pointer collision
       if failed < 0 then
         failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeName[t]));
       {$endif CPU64}
@@ -3490,7 +3490,7 @@ begin
     end
     else
       ELdap.RaiseUtf8('dup alt %', [_AttrTypeNameAlt[i]]);
-  if failed >= 0 then // paranoid
+  if failed >= 0 then
     ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapInternAll[failed]]);
   _LdapIntern.Unique(sObjectName, 'objectName');
   _LdapIntern.Unique(sCanonicalName, 'canonicalName');
@@ -6428,7 +6428,7 @@ begin
       break;
     inc(fSearchRange.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
     new := fSearchResult.Find(ObjectName).
-                         Find(Attribute.AttributeName, {range=}true);
+                         Find(Attribute.AttributeName, {ignorerange=}true);
     if new = nil then
       break;
     Attribute.AddFrom(new);

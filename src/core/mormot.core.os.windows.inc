@@ -2759,7 +2759,7 @@ end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 begin
-  if not IsAnsiCompatible(S) then
+  if not IsAnsiCompatible(S) then // need some encoding conversion
   begin
     if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
       ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall

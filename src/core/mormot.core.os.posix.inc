@@ -4378,12 +4378,12 @@ begin
          (crc32carm64(0, @SystemInfo, SizeOf(SystemInfo)) =
            crc32cfast(0, @SystemInfo, SizeOf(SystemInfo))) then
       begin
-        crc32c := @crc32carm64;
-        DefaultHasher := @crc32carm64;
+        crc32c          := @crc32carm64;
+        DefaultHasher   := @crc32carm64;
         InterningHasher := @crc32carm64;
-        crc32cby4 := @crc32cby4arm64;
-        crcblock := @crc32blockarm64;
-        crcblocks := @crc32blocksarm64;
+        crc32cby4       := @crc32cby4arm64;
+        crcblock        := @crc32blockarm64;
+        crcblocks       := @crc32blocksarm64;
       end;
       if crc32arm64(0, @SystemInfo, SizeOf(SystemInfo)) =
           crc32fast(0, @SystemInfo, SizeOf(SystemInfo)) then
