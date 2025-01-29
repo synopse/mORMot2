@@ -1058,6 +1058,15 @@ begin
   begin
     CheckEqual(ToText(at), AttrTypeName[at]);
     CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
+    u := AttrTypeName[at];
+    CheckEqual(u, AttrTypeName[at]);
+    Check(pointer(u) = pointer(AttrTypeName[at]));
+    UpperCaseSelf(u);
+    Check(IdemPropNameU(u, AttrTypeName[at]));
+    Check((u = '') or (pointer(u) <> pointer(AttrTypeName[at])));
+    AttributeNameNormalize(u);
+    CheckEqual(u, AttrTypeName[at]);
+    Check(pointer(u) = pointer(AttrTypeName[at]));
     ats := [at];
     a := ToText(ats);
     if at = low(at) then
