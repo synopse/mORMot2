@@ -770,7 +770,7 @@ end;
 
 procedure TNetworkProtocols.DNSAndLDAP;
 var
-  ip, rev, u, v, sid: RawUtf8;
+  ip, rev, u, v, json, sid: RawUtf8;
   o: TAsnObject;
   c: cardinal;
   withntp: boolean;
@@ -1057,7 +1057,7 @@ begin
   for at := low(at) to high(at) do
   begin
     CheckEqual(ToText(at), AttrTypeName[at]);
-    CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, ToText(at));
+    CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
     ats := [at];
     a := ToText(ats);
     if at = low(at) then
@@ -1147,10 +1147,12 @@ begin
     r.Attributes[atObjectClass] := 'person';
     CheckEqual(r.Attributes.Count, 1);
     r.Attributes.AddPairs(['cn', 'John Doe',
-                           'cn', v,
-                           'sn', 'Doe']);
+                           'CN', v,           // CN will be identified as cn
+                           'Sn', 'Doe']);     // Sn will be normalized as sn
     CheckEqual(r.Attributes.Count, 3);
-    CheckHash(rl.GetJson([]), $8AAB69D2);
+    json := rl.GetJson([]);
+// '{"bar":{"foo":{"objectName":"CN=foo,OU=bar","objectClass":"person","cn":["John Doe",v],"sn":"Doe"}}}'
+    CheckHash(json, $8AAB69D2);
     CheckHash(rl.GetJson([roRawValues]), $8AAB69D2);
     CheckHash(rl.GetJson([roNoDCAtRoot]), $8AAB69D2);
     CheckHash(rl.GetJson([roNoObjectName]), $6A4853FA);
