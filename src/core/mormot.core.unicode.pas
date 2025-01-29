@@ -1473,6 +1473,8 @@ type
   /// function prototype used internally for UTF-8 buffer comparison
   // - also used e.g. in mormot.core.variants unit
   TUtf8Compare = function(P1, P2: PUtf8Char): PtrInt;
+  /// function prototype used internally for UTF-8 buffer hashing
+  TUtf8Hasher = function(P: PUtf8Char; L: PtrUInt): cardinal;
 
 var
   /// a quick wrapper to StrComp or StrIComp comparison functions

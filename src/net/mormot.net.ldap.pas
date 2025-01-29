@@ -1124,7 +1124,6 @@ type
   protected
     fItems: TLdapAttributeDynArray;
     fCount: integer;
-    fLastFound: integer;
     fKnownTypes: TLdapAttributeTypes;
     fIndexTypes: array[TLdapAttributeType] of byte; // index in fItems[] + 1
     procedure AssignTo(Dest: TClonable); override;
@@ -4316,7 +4315,6 @@ procedure TLdapAttributeList.Clear;
 begin
   ObjArrayClear(fItems, fCount);
   fCount := 0;
-  fLastFound := 0;
   fKnownTypes := [];
   FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0); // store index+1
 end;
@@ -4352,13 +4350,6 @@ begin
         if fItems[0].AttributeName = AttributeName then
           exit;
       end
-      else if (fLastFound <= result) and
-              (fItems[fLastFound].AttributeName = AttributeName) then
-      begin
-        result := fLastFound; // match last Find()
-        exit;
-      end
-      else
       begin
         existing := _LdapIntern.Existing(AttributeName);
         if existing <> nil then // no need to search if we know it won't be there
@@ -4377,11 +4368,7 @@ var
 begin
   i := FindIndex(AttributeName, IgnoreRange);
   if i >= 0 then
-  begin
-    if not IgnoreRange then
-      fLastFound := i;
-    result := fItems[i];
-  end
+    result := fItems[i]
   else
     result := nil;
 end;
