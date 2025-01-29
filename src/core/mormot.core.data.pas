@@ -2502,11 +2502,18 @@ type
   TRawUtf8Hashed = object
   {$endif USERECORDWITHMETHODS}
   public
+    /// how many items are currently in this hash table
     Count: integer;
+    /// actually stores the Values items
     Value: TRawUtf8DynArray;
+    /// the hash table associated to Value[0 .. Count - 1]
     Values: TDynArrayHashed;
+    /// alternative to Values.Hasher.HashOne() using PUtf8Char + Length
+    FromBuffer: TUtf8Hasher;
+    /// alternative to Values.Compare() using PUtf8Char + Length
+    CompFromBuffer: TDynArraySortCompare;
     /// initialize the RawUtf8 dynamic array and hasher
-    procedure Init;
+    procedure Init(CaseInsensitive: boolean);
   end;
 
   /// used to store one list of hashed RawUtf8 in TRawUtf8Interning pool
@@ -2522,22 +2529,28 @@ type
     fHash: TRawUtf8Hashed;
   public
     /// initialize the RawUtf8 slot (and its Safe mutex)
-    procedure Init;
-    /// computes one interned RawUtf8 value
-    // - returns true if aText was added to the list, or false if was existing
+    // - if CaseInsensitive is true, similar strings will be recognized, and
+    // stored normalized as the first occurence of each case-insensitive match
+    procedure Init(CaseInsensitive: boolean = false; Capacity: integer = 0);
+    /// compute one interned RawUtf8 value
+    // - return true if aText was added to the list, or false if was existing
     function Unique(var aResult: RawUtf8; const aText: RawUtf8;
-      aTextHash: cardinal): boolean;
+      aTextHash: cardinal): boolean; overload;
+    /// compute one interned RawUtf8 value, with no pre-computed hash
+    function Unique(var aResult: RawUtf8; const aText: RawUtf8): boolean; overload;
     /// returns the interned RawUtf8 value
     // - only allocates new aResult string if needed
     procedure UniqueFromBuffer(var aResult: RawUtf8;
       aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal); overload;
-    /// returns the interned RawUtf8 value with no pre-computed hash
+    /// compute the interned RawUtf8 value from a buffer, with no pre-computed hash
     procedure UniqueFromBuffer(var aResult: RawUtf8;
       aText: PUtf8Char; aTextLen: PtrInt); overload;
-    /// ensure the supplied RawUtf8 value is interned
+    /// ensure the supplied RawUtf8 value is interned and unique
     procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
-    /// return the interned value, if any
-    function Existing(const aText: RawUtf8; aTextHash: cardinal): pointer;
+    /// return the interned value reference, or nil if aText did not appear yet
+    function Existing(const aText: RawUtf8; aTextHash: cardinal): pointer; overload;
+    /// return the interned value reference, with no pre-computed hash
+    function Existing(const aText: RawUtf8): pointer; overload;
     /// delete all stored RawUtf8 values
     procedure Clear;
     /// reclaim any unique RawUtf8 values
@@ -2557,11 +2570,15 @@ type
   protected
     fPool: array of TRawUtf8InterningSlot;
     fPoolLast: integer;
+    HashBuffer: TUtf8Hasher; // = fPool[].Values.Hasher.HashOne()
   public
     /// initialize the storage and its internal hash pools
     // - aHashTables is the pool size, and should be a power of two <= 512
     // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512) - rounded up if not an exact power
-    constructor Create(aHashTables: integer = 4); reintroduce;
+    // - if aCaseInsensitive is true, similar strings will be recognized, and
+    // stored normalized as the first occurence of each case-insensitive match
+    constructor Create(aHashTables: integer = 4;
+      aCaseInsensitive: boolean = false); reintroduce;
     /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
@@ -4428,20 +4445,60 @@ end;
 var // filled at startup with a 32-bit random value to avoid hash flooding
   HashSeed: cardinal; // defined locally in this unit to avoid symbol export
 
+{ HashAnsiString/HashAnsiStringI alternatives from PUtf8Char + length }
+
+function HashIntern(P: PUtf8Char; L: PtrUInt): cardinal;
+begin
+  if P <> nil then
+  begin
+    if L > 256 then // no need to hash too big a content
+    begin
+      P := @P[L - 256]; // hash ending of string (more likely to vary)
+      L := 256;
+    end;
+    result := InterningHasher(HashSeed, pointer(P), L);
+  end
+  else
+    result := 0;
+end;
+
+function HashInternI(P: PUtf8Char; L: PtrUInt): cardinal;
+var
+  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+begin
+  if (P <> nil) and
+     (L <> 0) then
+    result := InterningHasher(HashSeed, tmp{%H-},
+      UpperCopy255Buf(tmp{%H-}, P, L) - {%H-}tmp)
+  else
+    result := 0;
+end;
+
+const
+  HASH_INTERN: array[{CaseInsensitive:}boolean] of TUtf8Hasher = (
+    HashIntern, HashInternI);
+  COMP_PUTF8CHAR: array[{CaseInsensitive:}boolean] of TDynArraySortCompare = (
+    SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI);
+
+
 { TRawUtf8Hashed }
 
-procedure TRawUtf8Hashed.Init;
+procedure TRawUtf8Hashed.Init(CaseInsensitive: boolean);
 begin
   Values.InitSpecific(TypeInfo(TRawUtf8DynArray), Value, ptRawUtf8,
-    @Count, false, InterningHasher);
+    @Count, CaseInsensitive, InterningHasher);
+  FromBuffer := HASH_INTERN[CaseInsensitive]; // same as Values.Hasher.HashOne()
+  CompFromBuffer := COMP_PUTF8CHAR[CaseInsensitive]; // same as Values.Compare()
 end;
 
 
 { TRawUtf8InterningSlot }
 
-procedure TRawUtf8InterningSlot.Init;
+procedure TRawUtf8InterningSlot.Init(CaseInsensitive: boolean; Capacity: integer);
 begin
-  fHash.Init;
+  fHash.Init(CaseInsensitive);
+  if Capacity <> 0 then
+    fHash.Values.SetCapacity(Capacity);
 end;
 
 function TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
@@ -4450,7 +4507,7 @@ var
   i: PtrInt;
 begin
   fSafe.ReadLock; // a TRWLightLock is faster here than an upgradable TRWLock
-  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText);
   if i >= 0 then
   begin
     aResult := fHash.Value[i]; // return the interned value
@@ -4465,6 +4522,11 @@ begin
     fHash.Value[i] := aText; // copy new value to the pool
   aResult := fHash.Value[i]; // return the interned value
   fSafe.WriteUnLock;
+end;
+
+function TRawUtf8InterningSlot.Unique(var aResult: RawUtf8; const aText: RawUtf8): boolean;
+begin
+  result := Unique(aResult, aText, fHash.FromBuffer(pointer(aText), length(aText)));
 end;
 
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
@@ -4483,7 +4545,7 @@ begin
   c := aText[aTextLen];
   if c <> #0 then // write only if needed - avoid GPF from constant string
     aText[aTextLen] := #0; // input buffer may not be #0 terminated
-  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText, @SortDynArrayPUtf8Char);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText, fHash.CompFromBuffer);
   if i >= 0 then
   begin
     aResult := fHash.Value[i]; // return the interned value
@@ -4495,7 +4557,7 @@ begin
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added in exclusive mode
   bak := fHash.Values.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
-  PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
+  PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := fHash.CompFromBuffer;
   i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := bak;
   if added then
@@ -4509,8 +4571,7 @@ end;
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt);
 begin
-  UniqueFromBuffer(aResult, aText, aTextLen,
-    InterningHasher(HashSeed, pointer(aText), aTextLen));
+  UniqueFromBuffer(aResult, aText, aTextLen, fHash.FromBuffer(aText, aTextLen));
 end;
 
 procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
@@ -4546,6 +4607,11 @@ begin
   if i >= 0 then
     result := pointer(fHash.Value[i]); // return a pointer to unified string instance
   fSafe.ReadUnLock;
+end;
+
+function TRawUtf8InterningSlot.Existing(const aText: RawUtf8): pointer;
+begin
+  result := Existing(aText, fHash.FromBuffer(pointer(aText), length(aText)));
 end;
 
 procedure TRawUtf8InterningSlot.Clear;
@@ -4608,18 +4674,20 @@ end;
 
 { TRawUtf8Interning }
 
-constructor TRawUtf8Interning.Create(aHashTables: integer);
+constructor TRawUtf8Interning.Create(aHashTables: integer; aCaseInsensitive: boolean);
 var
   i: PtrInt;
 begin
   inherited Create; // may have been overriden
-  if aHashTables > 512 then
+  if (aHashTables > 512) or
+     (aHashTables <= 0) then
     ESynException.RaiseUtf8('%.Create(%) failed as > 512', [self, aHashTables]);
   aHashTables := NextPowerOfTwo(aHashTables);
   SetLength(fPool, aHashTables);
   fPoolLast := aHashTables - 1;
   for i := 0 to fPoolLast do
-    fPool[i].Init;
+    fPool[i].Init(aCaseInsensitive);
+  HashBuffer := HASH_INTERN[aCaseInsensitive]; // same as fPool[i].FromBuffer()
 end;
 
 procedure TRawUtf8Interning.Clear;
@@ -4662,8 +4730,7 @@ begin
     aResult := aText
   else
   begin
-    // inlined fPool[].Values.HashElement
-    hash := InterningHasher(HashSeed, pointer(aText), length(aText));
+    hash := HashBuffer(pointer(aText), length(aText));
     result := fPool[hash and fPoolLast].Unique(aResult, aText, hash); // maybe added
   end;
 end;
@@ -4675,8 +4742,7 @@ begin
   if (self <> nil) and
      (aText <> '') then
   begin
-    // inlined fPool[].Values.HashElement
-    hash := InterningHasher(HashSeed, pointer(aText), length(aText));
+    hash := HashBuffer(pointer(aText), length(aText));
     fPool[hash and fPoolLast].UniqueText(aText, hash);
   end;
 end;
@@ -4691,8 +4757,7 @@ begin
     result := aText
   else
   begin
-    // inlined fPool[].Values.HashElement
-    hash := InterningHasher(HashSeed, pointer(aText), length(aText));
+    hash := HashBuffer(pointer(aText), length(aText));
     fPool[hash and fPoolLast].Unique(result, aText, hash);
   end;
 end;
@@ -4704,7 +4769,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  hash := InterningHasher(HashSeed, pointer(aText), length(aText));
+  hash := HashBuffer(pointer(aText), length(aText));
   result := fPool[hash and fPoolLast].Existing(aText, hash);
 end;
 
@@ -4725,8 +4790,7 @@ begin
     FastSetString(aResult, aText, aTextLen)
   else
   begin
-    // inlined fPool[].Values.HashElement
-    hash := InterningHasher(HashSeed, pointer(aText), aTextLen);
+    hash := HashBuffer(aText, aTextLen);
     fPool[hash and fPoolLast].UniqueFromBuffer(aResult, aText, aTextLen, hash);
   end;
 end;
@@ -7993,10 +8057,7 @@ procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
 var
   QS: TDynArrayQuickSort;
 begin
-  if CaseSensitive then
-    QS.Compare := SortDynArrayPUtf8Char
-  else
-    QS.Compare := SortDynArrayPUtf8CharI;
+  QS.Compare := COMP_PUTF8CHAR[not CaseSensitive];
   QS.Value := pointer(Values);
   QS.ElemSize := SizeOf(PUtf8Char);
   SetLength(SortedIndexes, Count);
@@ -9017,8 +9078,8 @@ var
 begin
   if PtrUInt(Item^) <> 0 then
   begin
-    l := Length(Item^) * 2;
-    if l > 255 then // no need to hash too big a content
+    l := Length(Item^) * 2; // binary length of UTF-16 content in bytes
+    if l > 256 then // no need to hash too big a content
     begin
       Item := @PAnsiChar(Item)[l - 256]; // hash ending of string
       l := 256;
