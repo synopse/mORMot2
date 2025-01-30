@@ -3500,8 +3500,10 @@ function AppendToFile(const Content: RawUtf8; const FileName: TFileName;
   BackupOverMaxSize: Int64 = 0): boolean;
 
 /// compute an unique temporary file name
-// - following 'exename_123.tmp' pattern, in the system temporary folder
-function TemporaryFileName: TFileName;
+// - return by default GetSystemPath(spTemp) + 'exename_xxxxxxxx.tmp'
+// - return the first non-existing file name: caller would ensure it is writable
+function TemporaryFileName(FolderName: TFileName = '';
+  ExeName: RawUtf8 = ''): TFileName;
 
 /// extract a path from a file name like ExtractFilePath function
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
@@ -7084,26 +7086,28 @@ begin
 end;
 
 var
-  _TmpCounter: integer;
+  _TmpCounter: integer; // global thread-safe counter for this process
 
-function TemporaryFileName: TFileName;
+function TemporaryFileName(FolderName: TFileName; ExeName: RawUtf8): TFileName;
 var
-  folder: TFileName;
   retry: integer;
 begin
-  // fast cross-platform implementation
-  folder := GetSystemPath(spTemp);
+  if FolderName = '' then
+    FolderName := GetSystemPath(spTemp)
+  else
+    FolderName := IncludeTrailingPathDelimiter(FolderName);
+  if ExeName = '' then
+    ExeName := Executable.ProgramName;
   if _TmpCounter = 0 then
-    _TmpCounter := Random31Not0; // avoid paranoid overflow
-  retry := 10;
-  repeat
+    _TmpCounter := Random31Not0; // to avoid collision and easily forged names
+  for retry := 1 to 10 do // no endless loop
+  begin
     // thread-safe unique file name generation
     result := Format('%s%s_%x.tmp',
-      [folder, Executable.ProgramName, InterlockedIncrement(_TmpCounter)]);
+      [FolderName, ExeName, InterlockedIncrement(_TmpCounter)]);
     if not FileExists(result) then
       exit;
-    dec(retry); // no endless loop
-  until retry = 0;
+  end;
   raise EOSException.Create('TemporaryFileName failed');
 end;
 

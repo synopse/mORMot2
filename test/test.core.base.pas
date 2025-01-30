@@ -5977,6 +5977,10 @@ begin
     U2 := eng.AnsiToUtf8(RB1);
     CheckEqual(U2, U, 'AnsiToUtf8');
   end;
+  Check(CodePageToText(CP_UTF8) = 'utf8');
+  Check(CodePageToText(CP_UTF16) = 'utf16le');
+  Check(CodePageToText(CP_WINANSI) = 'cp1252');
+  Check(CodePageToText(54936) = 'gb18030');
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);

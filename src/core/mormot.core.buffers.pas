@@ -10184,9 +10184,9 @@ begin
   begin
     result := pointer(fNested[n - 1].Stream);
     if PClass(result)^ = TRawByteStringStream then
-      exit;
+      exit; // we can append to the previous text stream
   end;
-  result := TRawByteStringStream.Create;
+  result := TRawByteStringStream.Create; // need a new text stream
   NewStream(result);
 end;
 
