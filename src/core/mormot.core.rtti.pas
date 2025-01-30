@@ -5876,20 +5876,21 @@ var
   p: PRttiCustomProp;
   i: integer;
 begin
-  if Value <> nil then
-  begin
-    result := false;
-    rc := Rtti.RegisterClass(Value);
-    if (rc.ValueRtlClass <> vcNone) and
-       (rc.ValueIterateCount(@Value) > 0) then
-      exit; // e.g. TObjectList.Count or TCollection.Count
-    p := pointer(rc.Props.List);
-    for i := 1 to rc.Props.Count do
-      if p^.ValueIsVoid(Value) then
-        inc(p)
-      else
-        exit;
-  end;
+  result := Value = nil;
+  if result then
+    exit;
+  // check e.g. TObjectList.Count or TCollection.Count > 0
+  rc := Rtti.RegisterClass(Value);
+  if (rc.ValueRtlClass <> vcNone) and
+     (rc.ValueIterateCount(@Value) > 0) then
+    exit;
+  // a class instance is void if all its published properties are void
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
+    if p^.ValueIsVoid(Value) then
+      inc(p)
+    else
+      exit;
   result := true;
 end;
 
@@ -9042,23 +9043,20 @@ begin
       result := cardinal(PVarData(Data).VType) <= varNull;
     rkClass:
       result := IsObjectDefaultOrVoid(PObject(Data)^);
-    else
-      // work fast for ordinal types and also any pointer/managed values
+    else // work fast for ordinal/float types and pointer/managed types
       begin
         result := false;
+        if Data[0] <> #0 then
+          exit; // most obvious case
         s := fCache.Size;
-        if s >= 4 then
+        if s <> SizeOf(pointer) then
           repeat
-            dec(s, 4);
-            if PInteger(Data + s)^ <> 0 then
-              exit;
-          until s < 4;
-        if s > 0 then
-          repeat
-            if Data[s - 1] <> #0 then
-              exit;
             dec(s);
-          until s = 0;
+            if Data[s] <> #0 then
+              exit;
+          until s = 0
+        else if PPointer(Data)^ <> nil then
+          exit; // all pointer/managed types
         result := true;
       end;
   end;
