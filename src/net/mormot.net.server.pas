@@ -1655,8 +1655,6 @@ type
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-    function Check(Status: THttpPeerCryptMessageDecode; const Ctxt: ShortString;
-      const Msg: THttpPeerCacheMessage): boolean;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode; virtual;
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
@@ -1777,6 +1775,8 @@ type
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
       aHttp: PHttpRequestContext; aFileName: PFileName; aSize: PInt64): integer;
+    function Check(Status: THttpPeerCryptMessageDecode;
+      const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -5430,28 +5430,6 @@ begin
     result := mdBearer;
 end;
 
-function THttpPeerCrypt.Check(Status: THttpPeerCryptMessageDecode;
-  const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
-var
-  tmp: shortstring;
-begin
-  result := true;
-  if Status = mdOk then
-    exit;
-  if fLog <> nil then
-    with fLog.Family do
-      if sllTrace in Level then
-      begin
-        tmp[0] := #0;
-        if Status > mdAes then
-          MsgToShort(Msg, tmp); // decrypt ok, but some unexpected fields
-        Add.Log(sllTrace, '% Decode=% #%<=#% %',
-          [Ctxt, ToText(Status)^, CardinalToHexShort(fFrameSeqLow),
-           CardinalToHexShort(fFrameSeq), tmp], self);
-      end;
-  result := false;
-end;
-
 function THttpPeerCrypt.LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
   var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
   aOutStream: TStreamRedirect; aRetry: boolean): integer;
@@ -5702,16 +5680,17 @@ begin
        (fMsg.DestIP4 <> fOwner.fIP4) then // will also detect any unexpected NAT
      begin
        if fOwner.fVerboseLog then
-         DoLog('ignored %', [ToText(fMsg)]);
+         DoLog('ignored % %<>%', [ToText(fMsg.Kind)^,
+           IP4ToShort(@fMsg.DestIP4), IP4ToShort(@fOwner.fIP4)]);
        exit;
      end;
   late := (fMsg.Kind in PCF_RESPONSE) and
           (fMsg.Seq <> fCurrentSeq);
   if fOwner.fVerboseLog then
     if ok = mdOk then
-      DoLog('%%', [_LATE[late], ToText(fMsg)])
-    else
-      DoLog('unexpected msg=% len=% [%]',
+      DoLog('%%', [_LATE[late], ToText(fMsg.Kind)^])
+    else if ok <= mdAes then // decoding error
+      DoLog('unexpected % len=% [%]',
         [ToText(ok)^, len, EscapeToShort(pointer(fFrame), len)]);
   // process the frame message
   if ok = mdOk then
@@ -6016,6 +5995,26 @@ begin
   FreeAndNil(fPartials);
   fFilesSafe.Done;
   inherited Destroy;
+end;
+
+function THttpPeerCache.Check(Status: THttpPeerCryptMessageDecode;
+  const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
+var
+  msgtxt: shortstring;
+begin
+  result := (Status = mdOk);
+  if fLog <> nil then
+    with fLog.Family do
+      if sllTrace in Level then
+      begin
+        msgtxt[0] := #0;
+        if fVerboseLog and
+           (Status > mdAes) then
+          MsgToShort(Msg, msgtxt); // decrypt ok: log the content
+        Add.Log(sllTrace, '% decode=% #%<=#% %',
+          [Ctxt, ToText(Status)^, CardinalToHexShort(fFrameSeqLow),
+           CardinalToHexShort(fFrameSeq), msgtxt], self);
+      end;
 end;
 
 function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
@@ -6346,7 +6345,6 @@ function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
   aFlags: THttpServerRequestFlags): cardinal;
 var
   msg: THttpPeerCacheMessage;
-  msgText: ShortString;
   ip4: cardinal;
   err: TOnBeforeBodyErr;
 begin
@@ -6364,10 +6362,8 @@ begin
     include(err, eIp1);
   if fInstable.IsBanned(ip4) then // banned for RejectInstablePeersMin
     include(err, eBanned);
-  msgtext[0] := #0;
   if Check(BearerDecode(aBearerToken, msg), 'OnBeforeBody', msg) then
   begin
-    inc(msgtext[0]); // to trigger ToText() below
     if msg.IP4 <> fIP4 then
       include(err, eIp2);
     if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
@@ -6377,15 +6373,12 @@ begin
   else
     include(err, eDecode);
   result := HTTP_SUCCESS;
-  if err = [] then
-    exit;
-  result := HTTP_FORBIDDEN;
-  if not fVerboseLog then
-    exit;
-  if msgtext[0] <> #0 then
-    MsgToShort(msg, msgtext);
-  fLog.Add.Log(sllTrace, 'OnBeforeBody=% % % % [%] %', [result, aRemoteIP,
-    aMethod, aUrl, GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err), msgtext], self);
+  if err <> [] then
+    result := HTTP_FORBIDDEN;
+  if fVerboseLog or
+     (err <> []) then
+    fLog.Add.Log(sllTrace, 'OnBeforeBody=% % % % [%]', [result, aRemoteIP,
+      aMethod, aUrl, GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err)], self);
 end;
 
 procedure THttpPeerCache.OnIdle(tix64: Int64);
