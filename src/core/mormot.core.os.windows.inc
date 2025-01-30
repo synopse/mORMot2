@@ -201,9 +201,12 @@ end;
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 var
   defchar: PAnsiChar;
-  len: integer;
 begin
-  result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, nil, nil);
+  if FullCodePage(CodePage) then
+    defchar := nil
+  else
+    defchar := @DefaultCharVar;
+  result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, defchar, nil);
 end;
 
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
