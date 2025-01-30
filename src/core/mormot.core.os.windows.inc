@@ -189,6 +189,8 @@ begin
 end;
 
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+var
+  defchar: PAnsiChar;
 begin
   if CodePage >= 50220 then // wild guess - FPC RTL would always use nil anyway
     defchar := nil

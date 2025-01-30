@@ -39,8 +39,8 @@ uses
   mormot.db.rad.ui.sql, mormot.net.tftp.client, mormot.net.tftp.server, 
   mormot.lib.gdiplus, mormot.net.acme, mormot.db.rad.ui.cds, 
   mormot.core.os.mac, mormot.app.agl, mormot.misc.pecoff, mormot.lib.pkcs11, 
-  mormot.net.ldap, mormot.core.fpclibcmm, mormot.net.dns, mormot.lib.win7zip,
-  mormot.crypt.rsa, mormot.crypt.x509, mormot.crypt.pkcs11, mormot.net.openapi,
+  mormot.net.ldap, mormot.core.fpclibcmm, mormot.net.dns, mormot.lib.win7zip, 
+  mormot.crypt.rsa, mormot.crypt.x509, mormot.net.openapi, 
   mormot.core.os.security, mormot.tools.mget;
 
 implementation
