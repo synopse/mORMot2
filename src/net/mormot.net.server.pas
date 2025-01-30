@@ -5380,7 +5380,8 @@ function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       exit;
     MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
     result := mdSeq;
-    if aMsg.Kind in PCF_RESPONSE then
+    if (aMsg.Kind in PCF_RESPONSE) and // responses are broadcasted on POSIX
+       (aMsg.DestIP4 = fIP4) then    // only validate against the local sequence
       if (aMsg.Seq < fFrameSeqLow) or
          (aMsg.Seq > cardinal(fFrameSeq)) then // compare with local sequence
         exit;
