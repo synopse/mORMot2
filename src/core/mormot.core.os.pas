@@ -6493,7 +6493,7 @@ begin
         Name := 'ISO-8859-';
         AppendShortCardinal(codepage - 28590, Name);
       end;
-    50220..50222:
+    50220 .. 50222:
       Name := 'ISO-2022-JP-2';
     50225:
       Name := 'ISO-2022-KR';
@@ -6504,7 +6504,7 @@ begin
     51949:
       Name := 'EUC-KR';  // EUC Korean
     52936:
-      Name := 'HZ';      // HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
+      Name := 'HZ';      // HZ-GB2312 Simplified Chinese
     54936:
       Name := 'GB18030'; // GB18030 Simplified Chinese
     CP_UTF8:

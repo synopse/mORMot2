@@ -868,6 +868,12 @@ const
 // - allow to use e.g. AttrTypeStorage[AttributeNameType(AttrName)]
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 
+/// replace an attribute name with its known case-insensitive normalized value
+// - i.e. all AttrTypeStorage[] known identifiers, and all previously used
+// attribute names during the curent process lifetime
+// - as done by the TLdapAttributeList class itself
+procedure AttributeNameNormalize(var AttrName: RawUtf8);
+
 /// convert in-place a raw attribute value into human-readable text
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
 // - will detect SID, GUID, FileTime and text date/time known fields
@@ -1117,14 +1123,14 @@ type
   TLdapAttributeDynArray = array of TLdapAttribute;
 
   /// list one or several TLdapAttribute
-  // - will use a global TRawUtf8Interning as hashed list of names to minimize
-  // memory allocation, and makes efficient lookup
+  // - will use a global case-insensitive TRawUtf8InterningSlot hashed list of
+  // names to minimize memory allocation, makes efficient lookup, and normalize
+  // known TLdapAttributeType casing
   // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
   TLdapAttributeList = class(TClonable)
   protected
     fItems: TLdapAttributeDynArray;
     fCount: integer;
-    fLastFound: integer;
     fKnownTypes: TLdapAttributeTypes;
     fIndexTypes: array[TLdapAttributeType] of byte; // index in fItems[] + 1
     procedure AssignTo(Dest: TClonable); override;
@@ -3447,11 +3453,12 @@ const
     'organizationalUnitName');     // ou
 
 var
-  _LdapIntern: TRawUtf8Interning;
+  // we intern "normalized" case-insensitive attribute names
+  _LdapIntern: TRawUtf8InterningSlot;
   // allow fast linear search in L1 CPU cache of interned attribute names
   // - 32-bit is enough to identify pointers, and leverage O(n) SSE2 asm
-  _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of cardinal;
-  _LdapInternType: array[0 .. high(_LdapInternAll)] of TLdapAttributeType;
+  _LdapIntern32: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of cardinal;
+  _LdapInternType: array[0 .. high(_LdapIntern32)] of TLdapAttributeType;
   sObjectName, sCanonicalName: RawUtf8;
 
 procedure InitializeUnit;
@@ -3460,18 +3467,18 @@ var
   i, n, failed: PtrInt;
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
-  _LdapIntern := RegisterGlobalShutdownRelease(TRawUtf8Interning.Create);
   // register all our common Attribute Types names for quick search as pointer()
+  _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);
   failed := -1;
   n := 0;
   for t := succ(low(t)) to high(t) do
     if _LdapIntern.Unique(AttrTypeName[t], _AttrTypeName[t]) then
     begin
-      {$ifdef CPU64}
+      {$ifdef CPU64} // identify very unlikely low 32-bit pointer collision
       if failed < 0 then
-        failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeName[t]));
+        failed := IntegerScanIndex(@_LdapIntern32, n, PtrUInt(AttrTypeName[t]));
       {$endif CPU64}
-      _LdapInternAll[n] := PtrUInt(AttrTypeName[t]); // truncated to 32-bit
+      _LdapIntern32[n] := PtrUInt(AttrTypeName[t]); // truncated to 32-bit
       _LdapInternType[n] := t;
       inc(n);
     end
@@ -3482,16 +3489,16 @@ begin
     begin
       {$ifdef CPU64}
       if failed < 0 then
-        failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeNameAlt[i]));
+        failed := IntegerScanIndex(@_LdapIntern32, n, PtrUInt(AttrTypeNameAlt[i]));
       {$endif CPU64}
-      _LdapInternAll[n] := PtrUInt(AttrTypeNameAlt[i]);
+      _LdapIntern32[n] := PtrUInt(AttrTypeNameAlt[i]);
       _LdapInternType[n] := AttrTypeAltType[i];
       inc(n);
     end
     else
       ELdap.RaiseUtf8('dup alt %', [_AttrTypeNameAlt[i]]);
-  if failed >= 0 then // paranoid
-    ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapInternAll[failed]]);
+  if failed >= 0 then
+    ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapIntern32[failed]]);
   _LdapIntern.Unique(sObjectName, 'objectName');
   _LdapIntern.Unique(sCanonicalName, 'canonicalName');
 end;
@@ -3504,14 +3511,29 @@ begin
   result := atUndefined;
   if AttrName = nil then
     exit;
-  i := IntegerScanIndex(@_LdapInternAll, length(_LdapInternAll), PtrUInt(AttrName));
+  i := IntegerScanIndex(@_LdapIntern32, length(_LdapIntern32), PtrUInt(AttrName));
   if i >= 0 then
     result := _LdapInternType[i];
 end;
 
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 begin
-  result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
+  if AttrName = '' then
+    result := atUndefined
+  else
+    result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
+end;
+
+procedure AttributeNameNormalize(var AttrName: RawUtf8);
+var
+  existing: pointer;
+begin
+  if AttrName = '' then
+    exit;
+  existing := _LdapIntern.Existing(AttrName);
+  if (existing <> nil) and
+     (existing <> pointer(AttrName)) then
+    AttrName := RawUtf8(existing); // replace with existing interned name
 end;
 
 procedure AttributeValueMakeReadable(var s: RawUtf8;
@@ -4316,7 +4338,6 @@ procedure TLdapAttributeList.Clear;
 begin
   ObjArrayClear(fItems, fCount);
   fCount := 0;
-  fLastFound := 0;
   fKnownTypes := [];
   FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0); // store index+1
 end;
@@ -4334,39 +4355,39 @@ function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8;
   IgnoreRange: boolean): PtrInt;
 var
   existing: pointer;
+  a: ^TLdapAttribute;
+  p: PtrInt;
 begin
   if (self <> nil) and
-     (fItems <> nil) then
-    if IgnoreRange then // match 'AttributeName;range=1500-2999'
-    begin
-      for result := 0 to fCount - 1 do
-        if StartWithExact(fItems[result].AttributeName, AttributeName) and
-           (fItems[result].AttributeName[length(AttributeName) + 1] = ';') then
-          exit;
-    end
-    else // extat name match, using fast interned string pointer comparison
-    begin
-      result := fCount - 1;
-      if result = 0 then // very common case for single attribute lookup
+     (AttributeName <> '') then
+  begin
+    result := fCount - 1;
+    a := pointer(fItems);
+    if a <> nil then
+      if IgnoreRange then // match 'AttributeName;range=1500-2999'
       begin
-        if fItems[0].AttributeName = AttributeName then
-          exit;
+        for result := 0 to result do
+        begin
+          p := PosExChar(';', a^.AttributeName) - 1;
+          if (p = length(AttributeName)) and
+             IdemPropNameUSameLenNotNull(pointer(AttributeName), pointer(a^.AttributeName), p) then
+            exit;
+          inc(a);
+        end;
       end
-      else if (fLastFound <= result) and
-              (fItems[fLastFound].AttributeName = AttributeName) then
-      begin
-        result := fLastFound; // match last Find()
-        exit;
-      end
-      else
-      begin
+      else if result <> 0 then
+      begin // case-insensitive name match, using fast interned string pointer comparison
         existing := _LdapIntern.Existing(AttributeName);
-        if existing <> nil then // no need to search if we know it won't be there
+        if existing <> nil then // no need to search if it won't be there
           for result := 0 to result do
-            if pointer(fItems[result].AttributeName) = existing then
-              exit;
-      end;
-    end;
+            if pointer(a^.AttributeName) = existing then
+              exit
+            else
+              inc(a);
+      end
+      else if IdemPropNameU(fItems[0].AttributeName, AttributeName) then
+        exit; // single attribute found with fCount = 1
+  end;
   result := -1;
 end;
 
@@ -4377,11 +4398,7 @@ var
 begin
   i := FindIndex(AttributeName, IgnoreRange);
   if i >= 0 then
-  begin
-    if not IgnoreRange then
-      fLastFound := i;
-    result := fItems[i];
-  end
+    result := fItems[i]
   else
     result := nil;
 end;
@@ -4440,7 +4457,7 @@ begin
   if AttributeName = '' then
     ELdap.RaiseUtf8('Unexpected %.Add('''')', [self]);
   // search for existing TLdapAttribute instance during the name interning step
-  if not _LdapIntern.Unique(n, AttributeName) then // n = existing name
+  if not _LdapIntern.Unique(n, AttributeName) then // n = normalized name
     for i := 0 to fCount - 1 do // fast interned pointer search as in Find()
     begin
       result := fItems[i];
@@ -4984,7 +5001,7 @@ begin
     v := res.AppendToLocate(Dvo, last, lastdc, Options);
     if ObjectAttributeField = '' then
       continue; // no attribute
-    a.Init(mNameValue, dvObject);
+    a.Init(mFast, dvObject);
     a.SetCount(res.Attributes.Count +
                ord(not(roNoObjectName in Options)) +
                ord(roWithCanonicalName in Options));
@@ -5009,7 +5026,7 @@ begin
     attr := pointer(res.Attributes.Items);
     for j := k to k + res.Attributes.Count - 1 do
     begin
-      a.Names[j] := attr^.AttributeName; // use TRawUtf8Interning
+      a.Names[j] := attr^.AttributeName; // use TRawUtf8InterningSlot
       attr^.SetNewVariant(a.Values[j], Options, Dom, uuid);
       inc(attr);
     end;
@@ -5058,7 +5075,7 @@ function TLdapResultList.GetVariant(Options: TLdapResultOptions;
   const ObjectAttributeField: RawUtf8): variant;
 begin
   VarClear(result);
-  TDocVariantData(result).Init(mNameValue, dvObject); // case sensitive names
+  TDocVariantData(result).Init(mFast, dvObject);
   AppendTo(TDocVariantData(result), Options, ObjectAttributeField);
 end;
 
@@ -6428,7 +6445,7 @@ begin
       break;
     inc(fSearchRange.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
     new := fSearchResult.Find(ObjectName).
-                         Find(Attribute.AttributeName, {range=}true);
+                         Find(Attribute.AttributeName, {ignorerange=}true);
     if new = nil then
       break;
     Attribute.AddFrom(new);
@@ -6558,7 +6575,7 @@ begin
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID
-  Dest.Init(mNameValue, dvObject); // case sensitive names
+  Dest.Init(mFast, dvObject);
   n := 0;
   // check for "paging attributes" auto-range results
   if (roAutoRange in Options) and

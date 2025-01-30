@@ -3428,6 +3428,7 @@ var
   tmp: RawUtf8;
   vs: TRawUtf8DynArray;
   timer: TPrecisionTimer;
+  caseinsensitive: boolean;
 
   procedure DoOne(const u: RawUtf8);
   var
@@ -3443,61 +3444,71 @@ const
   DIRSIZE = ONESIZE * (MAX + 1);
   INTSIZE = ONESIZE * 512;
 begin
-  int := TRawUtf8Interning.Create(1);
-  try
-    CheckEqual(int.Count, 0);
-    DoOne('test');
-    CheckEqual(int.Count, 1);
-    DoOne('test');
-    CheckEqual(int.Count, 1);
-    CheckEqual(int.Clean, 1);
-    DoOne('single');
-    CheckEqual(int.Count, 1);
-    CheckEqual(int.Clean, 1);
-    CheckEqual(int.Count, 0);
-    CheckEqual(int.Clean, 0);
-    CheckEqual(int.Count, 0);
-    DoOne('single1');
-    CheckEqual(int.Count, 1);
-    DoOne('single1');
-    CheckEqual(int.Count, 1);
-    DoOne('test2');
-    CheckEqual(int.Count, 2);
-    DoOne('test2');
-    CheckEqual(int.Count, 2);
-    DoOne('single2');
-    CheckEqual(int.Count, 3);
-    CheckEqual(int.Clean, 3);
-    CheckEqual(int.Count, 0);
-    int.Unique(tmp, 'kept', 4);
-    CheckEqual(tmp, 'kept');
-    CheckEqual(GetRefCount(tmp), 2);
-    CheckEqual(int.Count, 1);
-    CheckEqual(int.Clean, 0);
-    CheckEqual(int.Count, 1);
-    tmp := '';
-    CheckEqual(int.Clean, 1);
-    CheckEqual(int.Count, 0);
-    int.Clear;
-    CheckEqual(int.Count, 0);
-    CheckEqual(int.Clean, 0);
-    CheckEqual(int.Count, 0);
-  finally
-    int.Free;
-  end;
-  int := TRawUtf8Interning.Create(16);
-  try
-    for i := 0 to MAX do
-    begin
-      v := i and 511;
-      int.Unique(tmp, SmallUInt32Utf8[v]);
-      check(Utf8ToInteger(tmp) = v);
+  for caseinsensitive := false to true do
+  begin
+    int := TRawUtf8Interning.Create(1, caseinsensitive);
+    try
+      CheckEqual(int.Count, 0);
+      DoOne('test');
+      CheckEqual(int.Count, 1);
+      DoOne('test');
+      CheckEqual(int.Count, 1);
+      CheckEqual(int.Clean, 1);
+      DoOne('single');
+      CheckEqual(int.Count, 1);
+      CheckEqual(int.Clean, 1);
+      CheckEqual(int.Count, 0);
+      CheckEqual(int.Clean, 0);
+      CheckEqual(int.Count, 0);
+      DoOne('single1');
+      CheckEqual(int.Count, 1);
+      DoOne('single1');
+      CheckEqual(int.Count, 1);
+      DoOne('test2');
+      CheckEqual(int.Count, 2);
+      DoOne('test2');
+      CheckEqual(int.Count, 2);
+      DoOne('single2');
+      CheckEqual(int.Count, 3);
+      CheckEqual(int.Clean, 3);
+      CheckEqual(int.Count, 0);
+      int.Unique(tmp, 'kept', 4);
+      CheckEqual(tmp, 'kept');
+      CheckEqual(GetRefCount(tmp), 2);
+      tmp := '';
+      if caseinsensitive then
+        int.Unique(tmp, 'KEPT', 4) // should be identified as previous 'kept'
+      else
+        int.Unique(tmp, 'kept', 4);
+      CheckEqual(tmp, 'kept');
+      CheckEqual(GetRefCount(tmp), 2);
+      CheckEqual(int.Count, 1);
+      CheckEqual(int.Clean, 0);
+      CheckEqual(int.Count, 1);
+      tmp := '';
+      CheckEqual(int.Clean, 1);
+      CheckEqual(int.Count, 0);
+      int.Clear;
+      CheckEqual(int.Count, 0);
+      CheckEqual(int.Clean, 0);
+      CheckEqual(int.Count, 0);
+    finally
+      int.Free;
     end;
-    checkEqual(int.Count, 512);
-    checkEqual(int.Clean, 0);
-    checkEqual(int.Count, 512);
-  finally
-    int.Free;
+    int := TRawUtf8Interning.Create(16, caseinsensitive);
+    try
+      for i := 0 to MAX do
+      begin
+        v := i and 511;
+        int.Unique(tmp, SmallUInt32Utf8[v]);
+        check(Utf8ToInteger(tmp) = v);
+      end;
+      checkEqual(int.Count, 512);
+      checkEqual(int.Clean, 0);
+      checkEqual(int.Count, 512);
+    finally
+      int.Free;
+    end;
   end;
   int := TRawUtf8Interning.Create(4);
   try
