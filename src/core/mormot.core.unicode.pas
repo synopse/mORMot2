@@ -1727,6 +1727,12 @@ procedure LowerCaseCopy(Text: PUtf8Char; Len: PtrInt; var Dest: RawUtf8);
 procedure LowerCaseSelf(var S: RawUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// fast in-place conversion of the supplied variable text into lowercase
+procedure LowerCaseShort(var S: ShortString);
+
+/// fast in-place conversion of the supplied variable text into uppercase
+procedure UpperCaseShort(var S: ShortString);
+
 /// check if a text variable content matches a given case conversion table
 function IsCase(const S: RawUtf8; Table: PNormTable): boolean;
 
@@ -3504,6 +3510,7 @@ end;
 function CodePageToText(aCodePage: cardinal): TShort16;
 begin
   Unicode_CodePageName(aCodePage, result);
+  LowerCaseShort(result); // more convenient
 end;
 
 
@@ -7460,14 +7467,20 @@ begin
   FastAssignNew(Dest, tmp);
 end;
 
-procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
-var
-  i: PtrInt;
-  p: PUtf8Char;
+procedure CaseConvert(p: PUtf8Char; l: integer; Table: PNormTable);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  p := UniqueRawUtf8(S);
-  for i := 0 to length(S) - 1 do
-    p[i] := Table[p[i]]; // branchless conversion
+  if l <> 0 then
+    repeat
+      p^ := Table[p^]; // branchless conversion
+      inc(p);
+      dec(l)
+    until l = 0;
+end;
+
+procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
+begin
+  CaseConvert(UniqueRawUtf8(S), length(S), Table);
 end;
 
 function UpperCase(const S: RawUtf8): RawUtf8;
@@ -7503,6 +7516,16 @@ end;
 procedure LowerCaseSelf(var S: RawUtf8);
 begin
   CaseSelf(S, @NormToLowerAnsi7);
+end;
+
+procedure UpperCaseShort(var S: ShortString);
+begin
+  CaseConvert(@S[1], ord(S[0]), @NormToUpperAnsi7);
+end;
+
+procedure LowerCaseShort(var S: ShortString);
+begin
+  CaseConvert(@S[1], ord(S[0]), @NormToLowerAnsi7);
 end;
 
 function IsCase(const S: RawUtf8; Table: PNormTable): boolean;

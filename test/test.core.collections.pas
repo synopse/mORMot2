@@ -446,7 +446,9 @@ var
   vi: Int64;
   di: IKeyValue<integer, Int64>;
   ei: TPair<integer, Int64>;
+  ui: IKeyValue<SynUnicode, integer>;
   u: RawUtf8;
+  s: SynUnicode;
   pu: PRawUtf8Array;
   vu: double;
   du: IKeyValue<RawUtf8, double>;
@@ -569,6 +571,24 @@ begin
     du.Clear;
     Check(du.Count = 0);
   end;
+  // manual IKeyValue<SynUnicode, integer> validation
+  ui := Collections.NewKeyValue<SynUnicode, integer>;
+  Utf8ToSynUnicode(RawUtf8OfChar('x', 300), s); // used to trigger GPF
+  CheckEqual(length(s), 300);
+  CheckEqual(ui.Count, 0);
+  Check(not ui.TryGetValue(s, i));
+  i := 100;
+  ui.Add(s, i);
+  CheckEqual(ui.Count, 1);
+  i := 0;
+  Check(ui.TryGetValue(s, i));
+  CheckEqual(i, 100);
+  CheckEqual(ui.Count, 1);
+  Check(not ui.TryGetValue('abc', i));
+  ui.Add('abc', 10);
+  Check(ui.TryGetValue('abc', i));
+  CheckEqual(i, 10);
+  CheckEqual(ui.Count, 2);
 end;
 
 

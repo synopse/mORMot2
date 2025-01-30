@@ -1599,14 +1599,14 @@ begin
   else
   begin
     // 2. aKey no 'a=...'/'pw#xx.private' layout -> use symmetric TProtocolAes
-    if aSettings.AesRounds = 0 then
+    if aSettings^.AesRounds = 0 then
       // mORMot 1.18 deprecated password derivation
       Sha256Weak(aKey, key.b)
     else
       // new safer password derivation algorithm (rounds=1000 -> 1ms)
-      Pbkdf2Sha3(SHA3_256, aKey, aSettings.AesSalt, aSettings.AesRounds,
+      Pbkdf2Sha3(SHA3_256, aKey, aSettings^.AesSalt, aSettings^.AesRounds,
         @key, SizeOf(key));
-    SetEncryptKeyAes(aSettings.AesCipher, key, aSettings.AesBits);
+    SetEncryptKeyAes(aSettings^.AesCipher, key, aSettings^.AesBits);
   end;
 end;
 
