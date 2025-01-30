@@ -3373,6 +3373,8 @@ var
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   first, last: PByte;
   vmt: PAnsiChar;
+  instancesize, blocksize: PtrInt;
+  classname: PShortString;
   exceptcount: integer;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 begin
@@ -3397,8 +3399,9 @@ begin
       if header and IsSmallBlockPoolInUseFlag <> 0 then
       begin
         {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-        if PSmallBlockPoolHeader(block).BlocksInUse > 0 then
+        if PSmallBlockPoolHeader(block).BlocksInUse > 0 then // some leaks
         begin
+          blocksize := PSmallBlockPoolHeader(block).BlockType.BlockSize;
           first := PByte(block) + SmallBlockPoolHeaderSize;
           with PSmallBlockPoolHeader(block).BlockType^ do
             if (CurrentSequentialFeedPool <> pointer(block)) or
@@ -3417,29 +3420,30 @@ begin
               if (vmt <> nil) and
                  {$ifdef FPCMM_REPORTMEMORYLEAKS}
                  (PtrUInt(vmt) <> REPORTMEMORYLEAK_FREEDHEXSPEAK) and
-                 // FreeMem marked freed blocks with 00000000 BLOODLESS marker
+                 // FreeMem marked freed blocks with BLOODLESS magic
                  {$endif FPCMM_REPORTMEMORYLEAKS}
                  SeemsRealPointer(vmt) then
               try
                 // try to access the TObject VMT
-                if (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
-                   (PPtrInt(vmt + vmtInstanceSize)^ <=
-                    PSmallBlockPoolHeader(block).BlockType.BlockSize) and
-                   SeemsRealPointer(PPointer(vmt + vmtClassName)^) then
+                instancesize := PPtrInt(vmt + vmtInstanceSize)^;
+                if (instancesize >= sizeof(vmt)) and
+                   (instancesize <= blocksize) then
                 begin
-                   StartReport;
-                   writeln(' probable ', PShortString(PPointer(vmt + vmtClassName)^)^,
-                     ' leak (', PPtrInt(vmt + vmtInstanceSize)^, '/',
-                     PSmallBlockPoolHeader(block).BlockType.BlockSize,
-                     ' bytes) at $', HexStr(first));
-                   inc(ObjectLeaksCount);
+                  classname := PPointer(vmt + vmtClassName)^;
+                  if SeemsRealPointer(classname) then
+                  begin
+                     StartReport;
+                     writeln(' probable ', classname^, ' leak (', instancesize,
+                       '/', blocksize, ' bytes) at $', HexStr(first));
+                     inc(ObjectLeaksCount);
+                  end;
                 end;
               except
                 // intercept and ignore any GPF - SeemsRealPointer() not enough?
                 inc(exceptcount);
               end;
             end;
-            inc(first, PSmallBlockPoolHeader(block).BlockType.BlockSize);
+            inc(first, blocksize);
           end;
         end;
         {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
