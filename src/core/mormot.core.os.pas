@@ -4007,10 +4007,10 @@ function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideCha
 // - as used internally by Utf8ToConsole()
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
 
-{$IfNDef NOEXCEPTIONINTERCEPT}
+{$ifndef NOEXCEPTIONINTERCEPT}
 /// get DotNet exception class names from HRESULT - published for testing purpose
 procedure Win32DotNetExceptions(code: cardinal; var names: TPShortStringDynArray);
-{$EndIf}
+{$endif NOEXCEPTIONINTERCEPT}
 
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API
