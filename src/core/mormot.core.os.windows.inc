@@ -201,12 +201,9 @@ end;
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 var
   defchar: PAnsiChar;
+  len: integer;
 begin
-  if FullCodePage(CodePage) then
-    defchar := nil
-  else
-    defchar := @DefaultCharVar;
-  result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, defchar, nil);
+  result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, nil, nil);
 end;
 
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
@@ -220,8 +217,7 @@ begin
   begin
     dec(L); // Utf8ToUnicode() included trailing #0
     tmpA.Init(L * 3);
-    L := WideCharToMultiByte(CP, 0, tmpW.buf, L,
-      tmpA.buf, tmpA.len + 16, @DefaultCharVar, nil); // use the Windows API
+    L := Unicode_WideToAnsi(tmpW.buf, tmpA.buf, L, tmpA.len + 16, CP);
     if L > 0 then
     begin
       FastSetStringCP(A, tmpA.buf, L, CP); // keep A untouched on failure
@@ -2759,7 +2755,7 @@ end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 begin
-  if not IsAnsiCompatible(S) then
+  if not IsAnsiCompatible(S) then // need some encoding conversion
   begin
     if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
       ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall

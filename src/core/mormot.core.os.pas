@@ -6480,6 +6480,8 @@ end;
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
 begin
   case codepage of
+    950:
+      Name := 'BIG5';
     CP_UTF16:
       Name := 'UTF16LE';
     1201:
@@ -6488,21 +6490,23 @@ begin
       Name := 'EUC-JP';
     28591 .. 28605:
       begin
-        Name := 'iso8859-';
+        Name := 'ISO-8859-';
         AppendShortCardinal(codepage - 28590, Name);
       end;
-    50222:
-      Name := 'iso-2022-jp';
+    50220 .. 50222:
+      Name := 'ISO-2022-JP-2';
     50225:
-      Name := 'iso-2022-kr';
+      Name := 'ISO-2022-KR';
+    50227:
+      Name := 'ISO-2022-CN';
     51936:
-      Name := 'EUC-CN'; // EUC Simplified Chinese
+      Name := 'EUC-CN';  // EUC Simplified Chinese
     51949:
-      Name := 'euc-kr'; // EUC Korean
+      Name := 'EUC-KR';  // EUC Korean
     52936:
-      Name := 'hz-gb-2312'; // HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
+      Name := 'HZ';      // HZ-GB2312 Simplified Chinese
     54936:
-      Name := 'GB18030';    // GB18030 Simplified Chinese
+      Name := 'GB18030'; // GB18030 Simplified Chinese
     CP_UTF8:
       Name := 'UTF8';
   else
