@@ -199,9 +199,6 @@ begin
 end;
 
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
-var
-  defchar: PAnsiChar;
-  len: integer;
 begin
   result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, nil, nil);
 end;
