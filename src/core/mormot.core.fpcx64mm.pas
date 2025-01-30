@@ -472,7 +472,7 @@ const
 type
   // VirtualQuery() API result structure
   TMemInfo = record
-    BaseAddress, AllocationBase: pointer;
+    BaseAddress, AllocationBase: PtrUInt;
     AllocationProtect: cardinal;
     PartitionId: word;
     RegionSize: PtrUInt;
@@ -527,7 +527,8 @@ begin
     next := addr + old_len;
     if (VirtualQuery(next, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
        (meminfo.State = MEM_FREE) and
-       (meminfo.RegionSize >= nextsize) and // enough space?
+       (meminfo.BaseAddress <= PtrUInt(next)) and // enough space?
+       (meminfo.BaseAddress + meminfo.RegionSize >= PtrUInt(next) + nextsize) and
        // set the address space in two reserve + commit steps for thread safety
        (VirtualAlloc(next, nextsize, MEM_RESERVE, PAGE_READWRITE) <> nil) and
        (VirtualAlloc(next, nextsize, MEM_COMMIT, PAGE_READWRITE) <> nil) then
@@ -3349,8 +3350,7 @@ begin
   if PtrUInt(p) <= 65535 then
     exit; // first 64KB is not a valid pointer by definition
   if (LastMemInfo.State <> 0) and
-     (PtrUInt(p) - PtrUInt(LastMemInfo.BaseAddress) <=
-       PtrUInt(LastMemInfo.RegionSize)) then
+     (PtrUInt(p) - LastMemInfo.BaseAddress < LastMemInfo.RegionSize) then
     result := true // quick check against last valid memory region
   else
   begin
@@ -3358,8 +3358,8 @@ begin
     // see https://stackoverflow.com/a/37547837/458259
     FillChar(meminfo, SizeOf(meminfo), 0);
     result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
-              (meminfo.RegionSize >= SizeOf(pointer)) and
               (meminfo.State = MEM_COMMIT) and
+              (PtrUInt(p) - meminfo.BaseAddress < meminfo.RegionSize) and
               (meminfo.Protect and PAGE_VALID <> 0) and
               (meminfo.Protect and PAGE_GUARD = 0);
     if result then
@@ -3452,6 +3452,9 @@ begin
               except
                 // intercept and ignore any GPF - SeemsRealPointer() not enough
                 inc(ObjectLeaksRaiseCount);
+                {$ifdef MSWINDOWS}
+                LastMemInfo.State := 0; // reset cache
+                {$endif MSWINDOWS}
               end;
             end;
             inc(first, blocksize);

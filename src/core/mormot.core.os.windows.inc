@@ -2053,8 +2053,7 @@ begin
   if PtrUInt(p) <= 65535 then
     exit; // first 64KB is not a valid pointer by definition
   if (LastMemInfo.State <> 0) and
-     (PtrUInt(p) - PtrUInt(LastMemInfo.BaseAddress) <=
-       PtrUInt(LastMemInfo.RegionSize)) then
+     (PtrUInt(p) - PtrUInt(LastMemInfo.BaseAddress) < PtrUInt(LastMemInfo.RegionSize)) then
     result := true // quick check against last valid memory region
   else
   begin
@@ -2062,8 +2061,8 @@ begin
     // see https://stackoverflow.com/a/37547837/458259
     FillCharFast(meminfo, SizeOf(meminfo), 0);
     result := (VirtualQuery(p, meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
-              (meminfo.RegionSize >= SizeOf(pointer)) and
               (meminfo.State = MEM_COMMIT) and
+              (PtrUInt(p) - PtrUInt(meminfo.BaseAddress) < PtrUInt(meminfo.RegionSize)) and
               (meminfo.Protect and PAGE_VALID <> 0) and
               (meminfo.Protect and PAGE_GUARD = 0);
     if result then

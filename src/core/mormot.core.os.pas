@@ -7746,6 +7746,9 @@ begin
     result := true;
   except
     result := false; // paranoid
+    {$ifdef OSWINDOWS}
+    LastMemInfo.State := 0; // reset VirtualQuery() cache
+    {$endif OSWINDOWS}
   end;
 end;
 
