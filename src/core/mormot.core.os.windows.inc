@@ -177,24 +177,14 @@ end;
 const
   DefaultCharVar: AnsiChar = '?';
 
-function FullCodePage(CodePage: cardinal): boolean; {$ifdef HASINLINE} inline; {$endif}
-begin
-  case CodePage of
-    50220 .. 50229, 54936, 57002 .. 57011, 65000, CP_UTF8:
-      result := true; // as required by the Windows API
-  else
-    result := false;
-  end;
-end;
-
 function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 var
   flags: cardinal;
 begin
-  if FullCodePage(CodePage) then
+  if CodePage >= 50220 then // wild guess - FPC RTL would always use 0 anyway
     flags := 0
   else
-    flags := MB_PRECOMPOSED;
+    flags := MB_PRECOMPOSED; // force no diaresis in output
   result := MultiByteToWideChar(CodePage, flags, A, LA, W, LW);
 end;
 
@@ -202,7 +192,7 @@ function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt
 var
   defchar: PAnsiChar;
 begin
-  if FullCodePage(CodePage) then
+  if CodePage >= 50220 then // wild guess - FPC RTL would always use nil anyway
     defchar := nil
   else
     defchar := @DefaultCharVar;
