@@ -3337,32 +3337,45 @@ end;
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 var
-  ObjectLeaksCount: integer;
+  ObjectLeaksCount, ObjectLeaksRaiseCount: integer;
+{$ifdef MSWINDOWS}
+  LastMemInfo: TMemInfo; // simple cache
 
 function SeemsRealPointer(p: pointer): boolean;
-{$ifdef MSWINDOWS}
 var
   meminfo: TMemInfo;
-{$endif MSWINDOWS}
 begin
   result := false;
   if PtrUInt(p) <= 65535 then
-    exit;
-  {$ifdef MSWINDOWS}
-  // VirtualQuery API is slow but better than raising an exception
-  // see https://stackoverflow.com/a/37547837/458259
-  FillChar(meminfo, SizeOf(meminfo), 0);
-  result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
-            (meminfo.RegionSize >= SizeOf(pointer)) and
-            (meminfo.State = MEM_COMMIT) and
-            (meminfo.Protect and PAGE_VALID <> 0) and
-            (meminfo.Protect and PAGE_GUARD = 0);
-  {$else}
-  // let the GPF happen silently in the kernel
-  result := (fpaccess(p, F_OK) <> 0) and
-            (fpgeterrno <> ESysEFAULT);
-  {$endif MSWINDOWS}
+    exit; // first 64KB is not a valid pointer by definition
+  if (LastMemInfo.State <> 0) and
+     (PtrUInt(p) - PtrUInt(LastMemInfo.BaseAddress) <=
+       PtrUInt(LastMemInfo.RegionSize)) then
+    result := true // quick check against last valid memory region
+  else
+  begin
+    // VirtualQuery API is slow but better than raising an exception
+    // see https://stackoverflow.com/a/37547837/458259
+    FillChar(meminfo, SizeOf(meminfo), 0);
+    result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
+              (meminfo.RegionSize >= SizeOf(pointer)) and
+              (meminfo.State = MEM_COMMIT) and
+              (meminfo.Protect and PAGE_VALID <> 0) and
+              (meminfo.Protect and PAGE_GUARD = 0);
+    if result then
+      LastMemInfo := meminfo;
+  end;
 end;
+{$else}
+function SeemsRealPointer(p: pointer): boolean;
+begin
+  // let the GPF happen silently in the kernel
+  result := (PtrUInt(p) > 65535) and
+            (fpaccess(p, F_OK) <> 0) and
+            (fpgeterrno <> ESysEFAULT);
+end;
+{$endif MSWINDOWS}
+
 {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 
 procedure MediumMemoryLeakReport(
@@ -3375,7 +3388,6 @@ var
   vmt: PAnsiChar;
   instancesize, blocksize: PtrInt;
   classname: PShortString;
-  exceptcount: integer;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 begin
   if (Info.SequentialFeedBytesLeft = 0) or
@@ -3387,9 +3399,6 @@ begin
       block := Info.LastSequentiallyFed
     else
       exit;
-  {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-  exceptcount := 0;
-  {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   repeat
     header := PPtrUInt(block - BlockHeaderSize)^;
     size := header and DropMediumAndLargeFlagsMask;
@@ -3412,7 +3421,7 @@ begin
             else
               last := Pointer(PByte(NextSequentialFeedBlockAddress) - 1);
           while (first <= last) and
-                (exceptcount < 64) do
+                (ObjectLeaksRaiseCount < 64) do
           begin
             if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) then
             begin
@@ -3420,7 +3429,7 @@ begin
               if (vmt <> nil) and
                  {$ifdef FPCMM_REPORTMEMORYLEAKS}
                  (PtrUInt(vmt) <> REPORTMEMORYLEAK_FREEDHEXSPEAK) and
-                 // FreeMem marked freed blocks with BLOODLESS magic
+                 // FreeMem marked freed blocks with BLOODLESS hexspeak magic
                  {$endif FPCMM_REPORTMEMORYLEAKS}
                  SeemsRealPointer(vmt) then
               try
@@ -3430,7 +3439,9 @@ begin
                    (instancesize <= blocksize) then
                 begin
                   classname := PPointer(vmt + vmtClassName)^;
-                  if SeemsRealPointer(classname) then
+                  if SeemsRealPointer(classname) and
+                     (classname^[0] <> #0) and
+                     (classname^[1] in ['A' .. 'z']) then
                   begin
                      StartReport;
                      writeln(' probable ', classname^, ' leak (', instancesize,
@@ -3439,8 +3450,8 @@ begin
                   end;
                 end;
               except
-                // intercept and ignore any GPF - SeemsRealPointer() not enough?
-                inc(exceptcount);
+                // intercept and ignore any GPF - SeemsRealPointer() not enough
+                inc(ObjectLeaksRaiseCount);
               end;
             end;
             inc(first, blocksize);
