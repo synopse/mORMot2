@@ -8002,7 +8002,7 @@ begin
       varBoolean:
         result := rvd.Data.VInt64 = 0;
       varAny: // e.g. rkEnumeration
-        result := Prop.GetInt64Value(Data) <> 0;
+        result := Prop.GetInt64Value(Data) = 0;
     else
       result := false;
     end;
