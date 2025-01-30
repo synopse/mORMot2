@@ -3453,7 +3453,7 @@ begin
                 // intercept and ignore any GPF - SeemsRealPointer() not enough
                 inc(ObjectLeaksRaiseCount);
                 {$ifdef MSWINDOWS}
-                LastMemInfo.State := 0; // reset cache
+                LastMemInfo.State := 0; // reset VirtualQuery() cache
                 {$endif MSWINDOWS}
               end;
             end;

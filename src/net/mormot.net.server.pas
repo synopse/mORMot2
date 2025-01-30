@@ -1655,7 +1655,8 @@ type
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-    function Check(Status: THttpPeerCryptMessageDecode; const Ctxt: ShortString): boolean;
+    function Check(Status: THttpPeerCryptMessageDecode; const Ctxt: ShortString;
+      const Msg: THttpPeerCacheMessage): boolean;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode; virtual;
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
@@ -5430,7 +5431,9 @@ begin
 end;
 
 function THttpPeerCrypt.Check(Status: THttpPeerCryptMessageDecode;
-  const Ctxt: ShortString): boolean;
+  const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
+var
+  tmp: shortstring;
 begin
   result := true;
   if Status = mdOk then
@@ -5438,7 +5441,14 @@ begin
   if fLog <> nil then
     with fLog.Family do
       if sllTrace in Level then
-        Add.Log(sllTrace, '% Decode=%', [Ctxt, ToText(Status)^], self);
+      begin
+        tmp[0] := #0;
+        if Status > mdAes then
+          MsgToShort(Msg, tmp); // decrypt ok, but some unexpected fields
+        Add.Log(sllTrace, '% Decode=% #%<=#% %',
+          [Ctxt, ToText(Status)^, CardinalToHexShort(fFrameSeqLow),
+           CardinalToHexShort(fFrameSeq), tmp], self);
+      end;
   result := false;
 end;
 
@@ -5669,7 +5679,8 @@ var
   end;
 
 var
-  ok, late: boolean;
+  ok: THttpPeerCryptMessageDecode;
+  late: boolean;
 begin
   // quick return if this frame is not worth decoding
   if (fOwner = nil) or
@@ -5685,9 +5696,8 @@ begin
     exit;
   end;
   // validate the input frame content
-  ok := (len >= SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
-        fOwner.Check(fOwner.MessageDecode(pointer(fFrame), len, fMsg), 'OnFrameReceived');
-  if ok then
+  ok := fOwner.MessageDecode(pointer(fFrame), len, fMsg);
+  if fOwner.Check(ok, 'OnFrameReceived', fMsg) then
     if (fMsg.Kind in PCF_RESPONSE) and    // responses are broadcasted on POSIX
        (fMsg.DestIP4 <> fOwner.fIP4) then // will also detect any unexpected NAT
      begin
@@ -5698,12 +5708,13 @@ begin
   late := (fMsg.Kind in PCF_RESPONSE) and
           (fMsg.Seq <> fCurrentSeq);
   if fOwner.fVerboseLog then
-    if ok then
+    if ok = mdOk then
       DoLog('%%', [_LATE[late], ToText(fMsg)])
     else
-      DoLog('unexpected len=% [%]', [len, EscapeToShort(pointer(fFrame), len)]);
+      DoLog('unexpected msg=% len=% [%]',
+        [ToText(ok)^, len, EscapeToShort(pointer(fFrame), len)]);
   // process the frame message
-  if ok then
+  if ok = mdOk then
     case fMsg.Kind of
       pcfPing:
         begin
@@ -6354,7 +6365,7 @@ begin
   if fInstable.IsBanned(ip4) then // banned for RejectInstablePeersMin
     include(err, eBanned);
   msgtext[0] := #0;
-  if Check(BearerDecode(aBearerToken, msg), 'OnBeforeBody') then
+  if Check(BearerDecode(aBearerToken, msg), 'OnBeforeBody', msg) then
   begin
     inc(msgtext[0]); // to trigger ToText() below
     if msg.IP4 <> fIP4 then
@@ -6596,7 +6607,7 @@ var
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
-  if Check(BearerDecode(Ctxt.AuthBearer, msg), 'OnRequest') then
+  if Check(BearerDecode(Ctxt.AuthBearer, msg), 'OnRequest', msg) then
   try
     // get local filename from decoded bearer hash
     progsize := 0;
