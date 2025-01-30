@@ -4641,7 +4641,7 @@ begin
     d := s;
     for i := 1 to fHash.Count do
     begin
-      if PStrCnt(PAnsiChar(s^) - _STRCNT)^ <= aMaxRefCount then
+      if PStrCnt(PAnsiChar(s^) - _STRCNT)^ <= aMaxRefCount then // also -1
       begin
         {$ifdef FPC}
         FastAssignNew(PRawUtf8(s)^);
@@ -9072,19 +9072,20 @@ begin
     result := 0;
 end;
 
-function HashSynUnicode(Item: PSynUnicode; Hasher: THasher): cardinal;
+function HashSynUnicode(Item: PAnsiChar; Hasher: THasher): cardinal;
 var
   l: PtrInt;
 begin
-  if PtrUInt(Item^) <> 0 then
+  l := Length(PSynUnicode(Item)^) * 2; // binary length of content in bytes
+  if l <> 0 then
   begin
-    l := Length(Item^) * 2; // binary length of UTF-16 content in bytes
+    Item := PPointer(Item)^; // access to the UTF-16 content in bytes
     if l > 256 then // no need to hash too big a content
     begin
-      Item := @PAnsiChar(Item)[l - 256]; // hash ending of string
+      Item := @Item[l - 256]; // hash ending of string
       l := 256;
     end;
-    result := Hasher(HashSeed, pointer(Item^), l)
+    result := Hasher(HashSeed, Item, l)
   end
   else
     result := 0;
@@ -9322,7 +9323,7 @@ const
     @HashAnsiStringI,        //  ptRawUtf8
     nil,                     //  ptRecord
     @HashInteger,            //  ptSingle
-    {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif}, //  ptString
+    {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif}, // ptString
     @HashSynUnicodeI,        //  ptSynUnicode
     @HashInt64,              //  ptDateTime
     @HashInt64,              //  ptDateTimeMS
