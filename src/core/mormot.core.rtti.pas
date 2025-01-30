@@ -9052,9 +9052,11 @@ begin
         if s <> SizeOf(pointer) then
           repeat
             dec(s);
+            if s = 0 then
+              break; // Data[0] has been checked above
             if Data[s] <> #0 then
               exit;
-          until s = 0
+          until false
         else if PPointer(Data)^ <> nil then
           exit; // all pointer/managed types
         result := true;
