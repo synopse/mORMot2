@@ -9026,8 +9026,8 @@ begin
   end;
   // release memory (T*ObjArray would never occur here)
   repeat
-    ArrayRtti.ValueFinalize(Data);
-    inc(Data, ArrayRtti.Size);
+    fArrayRtti.ValueFinalize(Data);
+    inc(Data, fArrayRtti.Size);
     dec(n);
   until n = 0;
   if mem <> nil then
@@ -9057,8 +9057,8 @@ begin
             if Data[s] <> #0 then
               exit;
           until false
-        else if PPointer(Data)^ <> nil then
-          exit; // all pointer/managed types
+        else if PPointer(Data)^ <> nil then // pointer/managed values
+          exit;
         result := true;
       end;
   end;
