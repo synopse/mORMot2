@@ -3801,6 +3801,10 @@ procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 // syscall on POSIX systems (validated on Linux only)
 function SeemsRealPointer(p: pointer): boolean;
 
+/// check if the supplied pointer is likely to be a valid TObject
+// - will call SeemsRealPointer(p) then check its main VMT entries
+function SeemsRealObject(p: pointer): boolean;
+
 /// fill a buffer with a copy of some low-level system memory
 // - used e.g. by GetRawSmbios on XP or Linux/POSIX
 // - will allow to read up to 4MB of memory
@@ -7717,6 +7721,31 @@ begin
     result := CurrentFakeStubBuffer.Reserve(size);
   finally
     CurrentFakeStubBufferLock.UnLock;
+  end;
+end;
+
+function SeemsRealObject(p: pointer): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if SeemsRealPointer(p) then
+  try
+    p := PPointer(p)^; // p = vmt
+    if (not SeemsRealPointer(p)) or
+       (PPtrInt(PAnsiChar(p) + vmtInstanceSize)^ < sizeof(pointer)) or
+       (PPtrInt(PAnsiChar(p) + vmtDestroy)^ = 0) then
+      exit;
+    p := PPointer(PAnsiChar(p) + vmtClassName)^; // p = ClassName: PShortString
+    if (not SeemsRealPointer(p)) or
+       (PByte(p)^ = 0) then // length(ClassName)
+      exit;
+    for i := 1 to PByte(p)^ do
+      if PAnsiChar(p)[i] <= ' ' then
+        exit; // should be a valid ASCII or UTF-8 pascal identifier
+    result := true;
+  except
+    result := false; // paranoid
   end;
 end;
 
