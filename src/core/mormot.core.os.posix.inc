@@ -415,7 +415,8 @@ var
 begin
   result := nil;
   if (codepage < CP_MIN) or
-     (codepage >= CP_RAWBLOB) then
+     (codepage >= CP_RAWBLOB) or
+     not IsAvailable then
     exit;
   // quickly check if this codepage is part of cached converters
   n := fSharedCount;
