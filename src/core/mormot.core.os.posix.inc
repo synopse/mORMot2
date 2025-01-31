@@ -462,8 +462,8 @@ procedure TIcuLibrary.SharedUcnvUnLock(ndx: PtrInt);
 begin
   with fShared[ndx] do
   begin
+    ucnv_reset(Cnv); // clean-up from this thread (before unlock)
     PLightLock(@Lock)^.UnLock;
-    ucnv_reset(Cnv); // clean-up from this thread
   end;
 end;
 
@@ -531,8 +531,8 @@ begin
     if result > 0 then
       dec(result); // Utf8ToUnicode() returned length includes #0 terminator
     exit;
-  end;
-  if CodePage < CP_MIN then
+  end
+  else if CodePage < CP_MIN then
     exit(0); // clearly invalid/unsupported CodePage
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
@@ -582,7 +582,9 @@ begin
     if result > 0 then
       dec(result); // UnicodeToUtf8() result includes the #0 terminator
     exit;
-  end;
+  end
+  else if CodePage < CP_MIN then
+    exit(0); // clearly invalid/unsupported CodePage
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
   if cnv <> nil then
