@@ -11461,35 +11461,42 @@ procedure JsonForDebug(Value: pointer; var TypeName: RawUtf8;
   out JsonResultText: RawUtf8);
 var
   nfo: TRttiCustom;
-  vmt: PAnsiChar;
+  obj: TObject;
 begin
   if (TypeName <> '') and
-     (Value <> nil) then
+     (Value <> nil) and
+     SeemsRealPointer(Value) then
   try
-    nfo := Rtti.RegisterTypeFromName(TypeName); // from Rtti.Register*() functions
-    if (nfo = nil) and
-       (TypeName[1] = 'I') then // guess class instance from interface variable
-      nfo := Rtti.RegisterClass(PInterface(Value)^ as TObject);
-    if (nfo = nil) and
-       (TypeName[1] = 'T') then
+    nfo := Rtti.RegisterTypeFromName(TypeName); // known by Rtti.Register*()
+    if PPointer(Value)^ <> nil then
     begin
-      vmt := PPointer(Value)^; // guess if seems to be a real TObject instance
-      if (vmt <> nil) and
-         SeemsRealPointer(vmt) and
-         (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
-         SeemsRealPointer(PPointer(vmt + vmtClassName)^) and
-         IdemPropName(PShortString(vmt + vmtClassName)^,
-           pointer(TypeName), length(TypeName)) then
-        nfo := Rtti.RegisterClass(TClass(pointer(vmt)));
+      obj := nil;
+      if nfo = nil then
+        case TypeName[1] of
+          'T':
+            obj := PPointer(Value)^; // try as class
+          'I':
+            begin
+              obj := PInterface(Value)^ as TObject; // try as interface
+              Value := @obj; // to serialize this class instance, not interface
+            end;
+        end
+      else if nfo.Kind = rkClass then
+        obj := PPointer(Value)^; // ensure the TypeName matches the class
+      if (obj <> nil) and
+         SeemsRealObject(obj) and
+         ((TypeName[1] = 'I') or
+          ClassInheritsFromName(PClass(obj)^, TypeName)) then // allow sub-class
+         if nfo = nil then
+           nfo := Rtti.RegisterClass(obj)
+         else if nfo <> Rtti.FindClass(PClass(obj)^) then
+           exit; // same name, but not same type
     end;
     if nfo <> nil then
-    begin
       SaveJson(Value^, nfo.Cache.Info, [twoEnumSetsAsBooleanInRecord],
         JsonResultText, [woEnumSetsAsText]);
-      exit;
-    end;
-  except // especially if Value is no class
-    JsonResultText := ''; // impossible to serialization this value
+  except // especially if Value is no interface
+    JsonResultText := ''; // impossible to serialize this value
   end;
 end;
 {$endif FPC}

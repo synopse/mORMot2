@@ -985,17 +985,20 @@ procedure ClassToText(C: TClass; var result: RawUtf8);
 function ToText(C: TClass): RawUtf8; overload;
   {$ifdef HASSAFEINLINE}inline;{$endif}
 
+/// works like C.InheritsFrom() but using case-insensitive name comparison
+function ClassInheritsFromName(C: TClass; const Name: RawUtf8): boolean;
+
+/// just a wrapper around vmtParent to avoid a function call
+// - slightly faster than TClass.ClassParent thanks to proper inlining
+function GetClassParent(C: TClass): TClass;
+  {$ifdef HASINLINE}inline;{$endif}
+
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
   // - is needed since Delphi 7-2009 do not define TObject.UnitName (because
   // there is no such information available in RTTI)
   ClassUnit: function(C: TClass): PShortString;
-
-/// just a wrapper around vmtParent to avoid a function call
-// - slightly faster than TClass.ClassParent thanks to proper inlining
-function GetClassParent(C: TClass): TClass;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// case-insensitive comparison of two text buffers only containing ASCII 7-bit
 // - this is the actual comparison function called by its overloads
@@ -5261,7 +5264,7 @@ begin
     result := '' // avoid GPF
   else
   begin
-    P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;
+    P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^; // either ASCII or UTF-8
     FastSetString(result, @P^[1], ord(P^[0]));
   end;
 end;
@@ -5278,6 +5281,18 @@ begin
   if result <> nil then
     result := PPointer(result)^;
   {$endif HASDIRECTTYPEINFO}
+end;
+
+function ClassInheritsFromName(C: TClass; const Name: RawUtf8): boolean;
+begin
+  result := true;
+  while C <> nil do
+    if PropNameEquals(PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^,
+         pointer(Name), length(Name)) then
+      exit
+    else
+      C := GetClassParent(C);
+  result := false;
 end;
 
 function PropNameEquals(P1, P2: PAnsiChar; P1Len, P2Len: PtrInt): boolean;

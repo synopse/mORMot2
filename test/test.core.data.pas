@@ -6295,6 +6295,13 @@ type
     property arr: TRawUtf8DynArray
       read GetArray write SetArray;
   end;
+  TLocalClass = class(TInterfacedPersistent)
+  protected
+    fValue: RawUtf8;
+  published
+    property Value: RawUtf8
+      read fValue;
+  end;
 
 const
   ENUMPETSTORE1_TXT: array[TEnumPetStore1] of RawUtf8 = (
@@ -6333,8 +6340,10 @@ type
 procedure TTestCoreProcess._RTTI;
 var
   i: Integer;
-  tmp, u: RawUtf8;
+  tmp, u, json: RawUtf8;
   auto: TPersistentAutoCreateFieldsTest;
+  local: TLocalClass;
+  int: IUnknown;
   s: TSynLogLevels;
   ps: TEnumPetStore1;
   pss, pss2: TEnumPetStore1Set;
@@ -6522,8 +6531,8 @@ begin
   u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
   CheckEqual(u, '["available","pending","sold"]');
   TRttiJson.UnRegisterCustomSerializer(TypeInfo(TEnumPetStore1Set));
-  u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
-  CheckEqual(u, '15');
+  json := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
+  CheckEqual(json, '15');
   // class RTTI
   with PRttiInfo(TypeInfo(TOrmTest))^ do
   begin
@@ -6543,16 +6552,68 @@ begin
     TRestServer.MethodAddress('STAT'));
   Check(GetPublishedMethodAddr(TRestServer, 'timestamp') =
     TRestServer.MethodAddress('TIMEstamp'));
+  Check(not SeemsRealObject(nil));
   auto := TPersistentAutoCreateFieldsTest.CreateFake;
   try
+    Check(SeemsRealObject(auto));
     Check(auto.Value1 <> nil);
     Check(auto.Value2 <> nil);
     tmp := ObjectToJson(auto);
-    Check(tmp = '{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},' +
+    CheckEqual(tmp, '{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},' +
       '"Value2":{"Real":1.7,"Imaginary":2.7}}');
+    Check(SeemsRealObject(auto));
+    {$ifdef FPC}
+    u := 'TPersistentAutoCreateFieldsTest';
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, tmp);
+    u := '';
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, '');
+    u := 'TUnknown'; // wrong name
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, '');
+    u := 'TLocalClass'; // wrong name but same fields
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, '');
+    {$endif FPC}
   finally
     auto.Free;
   end;
+  Check(ClassInheritsFromName(TLocalClass, 'TLocalClass'));
+  Check(ClassInheritsFromName(TLocalClass, 'TInterfacedPersistent'));
+  Check(ClassInheritsFromName(TLocalClass, 'TInterfacedObject'));
+  Check(ClassInheritsFromName(TLocalClass, 'TObject'));
+  Check(not ClassInheritsFromName(TLocalClass, 'TSynPersistent'));
+  Check(not ClassInheritsFromName(TLocalClass, 'TPersistent'));
+  local := TLocalClass.Create;
+  int := local; // will do local.Free
+  local.fValue := 'test';
+  tmp := '{"Value":"test"}';
+  Check(Rtti.FindClass(TLocalClass) = nil, 'check before registered to the Rtti');
+  {$ifdef FPC}
+  u := 'TLocalClass';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, tmp);
+  u := '';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, '');
+  u := 'TUnknown'; // wrong name
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, '');
+  {$endif FPC}
+  CheckEqual(ObjectToJson(local), tmp);
+  Check(Rtti.FindClass(TLocalClass) <> nil, 'check after registered to the Rtti');
+  {$ifdef FPC}
+  u := 'TLocalClass';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, tmp, 'exact class');
+  u := 'TObject';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, tmp, 'sub-class');
+  u := 'IUnknown';
+  JsonForDebug(@int, u, json);
+  CheckEqual(json, tmp, 'as IUnknown');
+  {$endif FPC}
   cc := TComplexClass.Create;
   try
     CheckEqual(RawUtf8ArrayToCsv(cc.arr), '');
@@ -6562,6 +6623,7 @@ begin
     CheckEqual(RawUtf8ArrayToCsv(cc.arr), 'win32,win64');
     Check(GetValueObject(cc, 'arr', v));
     CheckEqual(_Safe(v)^.ToJson, '["win32","win64"]');
+    Check(SeemsRealObject(cc));
   finally
     cc.Free;
   end;
