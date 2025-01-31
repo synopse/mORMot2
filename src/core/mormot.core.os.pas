@@ -6490,6 +6490,8 @@ begin
   case codepage of
     950:
       Name := 'BIG5';
+    951:
+      Name := 'BIG5-HKSCS';
     CP_UTF16:
       Name := 'UTF16LE';
     1201:
