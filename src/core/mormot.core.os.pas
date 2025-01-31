@@ -6511,7 +6511,7 @@ begin
       Name := 'EUC-CN';  // EUC Simplified Chinese
     51949:
       Name := 'EUC-KR';  // EUC Korean
-    52936:
+    CP_HZ:
       Name := 'HZ';      // HZ-GB2312 Simplified Chinese
     54936:
       Name := 'GB18030'; // GB18030 Simplified Chinese

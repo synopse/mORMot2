@@ -107,6 +107,9 @@ const
   /// the minimal possible Code Page (Cyrillic-Asian)
   CP_MIN = 154;
 
+  /// the RFC 1842 Code Page of HZ-GB2312 simplified Chinese
+  CP_HZ = 52936;
+
   /// use rather CP_WINANSI with mORMot 2
   CODEPAGE_US = CP_WINANSI;
 

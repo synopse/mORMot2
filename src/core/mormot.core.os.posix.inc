@@ -602,7 +602,16 @@ begin
       result := WideToAnsiRTL(CodePage, W, A, LW, LA);
   end;
   if result < 0 then
-    result := 0;
+    result := 0
+  else
+    case CodePage of
+      CP_HZ: // HZ-GB2312
+        if PWord(A)^ = ord('~') + ord('}') shl 8 then // to mimic Windows API
+        begin
+          dec(result, 2); // trim RFC 1842 escape from HZ mode to ASCII mode
+          MoveFast(A[2], A[0], result);
+        end;
+    end;
 end;
 
 function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
