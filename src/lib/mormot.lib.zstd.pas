@@ -34,11 +34,11 @@ uses
   mormot.core.buffers; // for TAlgoCompress
 
 
-{ ****************** Low-Level ZSTD Process }
+  { ****************** Low-Level ZSTD Process }
 
 type
-  TZSTD_CCtx = type PtrUInt;
-  TZSTD_DCtx = type PtrUInt;
+  TZSTD_CCtx = type pointer;
+  TZSTD_DCtx = type pointer;
 
 const
   ZSTD_CLEVEL_DEFAULT = 3;
@@ -95,7 +95,7 @@ type
     /// version number of the linked ZSTD library
     versionNumber: function: cardinal; cdecl;
     /// version string of the linked ZSTD library
-    versionString: function: PChar; cdecl;
+    versionString: function: PAnsiChar; cdecl;
     /// tells if a `size_t` function result is an error code
     isError: function(code: size_t): cardinal; cdecl;
     /// maximum size that ZSTD compression may output in a "worst case" scenario
@@ -124,7 +124,8 @@ type
     // free an instance of a decompression context
     freeDCtx: function(dctx: TZSTD_DCtx): size_t; cdecl;
     // compresses `src` content as a single zstd compressed frame into already allocated `dst`.
-    decompressDCtx: function(dctx: TZSTD_DCtx; dst: pointer; dstCapacity: size_t; src: pointer; srcSize: size_t): size_t; cdecl;
+    decompressDCtx: function(dctx: TZSTD_DCtx; dst: pointer; dstCapacity: size_t; src: pointer;
+      srcSize: size_t): size_t; cdecl;
   end;
 
 
@@ -164,7 +165,7 @@ var
   ZSTD: TSynZSTD;
 
 
-{ ****************** TAlgoZSTD High-Level Algorithms }
+  { ****************** TAlgoZSTD High-Level Algorithms }
 
 var
   /// implement ZSTD compression in level 3 (ZSTD_CLEVEL_DEFAULT)
@@ -183,7 +184,7 @@ implementation
 {$ifndef ZSTD_EXTERNALONLY}
 
 function ZSTD_versionNumber: cardinal; cdecl; external;
-function ZSTD_versionString: PChar; cdecl; external;
+function ZSTD_versionString: PAnsiChar; cdecl; external;
 function ZSTD_isError(code: size_t): cardinal; cdecl; external;
 function ZSTD_compressBound(srcSize: size_t): size_t; cdecl; external;
 function ZSTD_createCCtx: TZSTD_CCtx; cdecl; external;
@@ -232,20 +233,20 @@ end;
 
 const
   ZSTD_ENTRIES: array[0..13] of RawUtf8 = (
-   'versionNumber',
-   'versionString',
-   'isError',
-   'compressBound',
-   'createCCtx',
-   'freeCCtx',
-   'CCtx_setParameter',
-   'CCtx_getParameter',
-   'compress2',
-   'isFrame',
-   'getFrameContentSize',
-   'createDCtx',
-   'freeDCtx',
-   'decompressDCtx');
+    'versionNumber',
+    'versionString',
+    'isError',
+    'compressBound',
+    'createCCtx',
+    'freeCCtx',
+    'CCtx_setParameter',
+    'CCtx_getParameter',
+    'compress2',
+    'isFrame',
+    'getFrameContentSize',
+    'createDCtx',
+    'freeDCtx',
+    'decompressDCtx');
 
 constructor TSynZSTDDynamic.Create(const aLibraryFile: TFileName;
   aRaiseNoException: boolean);
@@ -261,12 +262,12 @@ begin
     for i := 0 to High(ZSTD_ENTRIES) do
       if fLibrary.Resolve('ZSTD_', ZSTD_ENTRIES[i], P, EAlgoCompress) then
         inc(P);
-    if versionString <> '1.5.6' then
+    if versionNumber div 10000 <> 1 then
       if aRaiseNoException then
         exit
       else
-        EAlgoCompress.RaiseUtf8('% has unexpected versionString=%',
-          [fLibrary.LibraryPath, versionString]);
+        EAlgoCompress.RaiseUtf8('% has unexpected versionNumber=%',
+          [fLibrary.LibraryPath, versionNumber]);
     // register TAlgoZSTD
     inherited Create;
     // if we reached here, the external library has been properly setup
@@ -309,17 +310,28 @@ end;
 { ****************** TAlgoZSTD High-Level Algorithms }
 
 type
-  TAlgoZSTD = class(TAlgoCompressWithNoDestLen)
+  TAlgoZSTD = class(TAlgoCompress)
   protected
     fCompressionLevel: integer;
-    function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
-      process: TAlgoCompressWithNoDestLenProcess): integer; override;
+    fCompressionContext: TZSTD_CCtx;
+    fCompressionContextSafe: TLightLock;
+    fDecompressionContext: TZSTD_DCtx;
+    fDecompressionContextSafe: TLightLock;
   public
+    /// set AlgoID = 11 as genuine byte identifier for ZSTD (even if not used)
     constructor Create; override;
+    destructor Destroy; override;
     function AlgoCompressDestLen(PlainLen: integer): integer; override;
+    function AlgoCompress(Plain: pointer; PlainLen: integer;
+      Comp: pointer): integer; override;
+    function AlgoDecompressDestLen(Comp: pointer): integer; override;
+    function AlgoDecompress(Comp: pointer; CompLen: integer;
+      Plain: pointer): integer; override;
+    function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
-{ TAlgoZSTD }
+  { TAlgoZSTD }
 
 constructor TAlgoZSTD.Create;
 begin
@@ -330,6 +342,15 @@ begin
   fCompressionLevel := ZSTD_CLEVEL_DEFAULT;
 end;
 
+destructor TAlgoZSTD.Destroy;
+begin
+  if fCompressionContext <> nil then
+    ZSTD.freeCCtx(fCompressionContext);
+  if fDecompressionContext <> nil then
+    ZSTD.freeDCtx(fDecompressionContext);
+  inherited Destroy;
+end;
+
 function TAlgoZSTD.AlgoCompressDestLen(PlainLen: integer): integer;
 begin
   if ZSTD = nil then
@@ -338,39 +359,54 @@ begin
     result := ZSTD.compressBound(PlainLen);
 end;
 
-function TAlgoZSTD.RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
-  process: TAlgoCompressWithNoDestLenProcess): integer;
-var
-  cctx: TZSTD_CCtx;
-  dctx: TZSTD_DCtx;
+function TAlgoZSTD.AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer;
 begin
   if ZSTD = nil then
     result := 0
   else
-  case process of
-    doCompress:
-      begin
-        cctx := ZSTD.createCCtx;
-        try
-          ZSTD.CCtx_setParameter(cctx, ZSTD_c_compressionLevel, fCompressionLevel);
-          result := zstd.compress2(cctx, dst, dstLen, src, srcLen);
-        finally
-          ZSTD.freeCCtx(cctx);
-        end;
-      end;
-    doUnCompress:
-      begin
-        dctx := ZSTD.createDCtx;
-        try
-          result := zstd.decompressDCtx(dctx, dst, dstLen, src, srcLen);
-        finally
-          ZSTD.freeDCtx(dctx);
-        end;
-      end;
-    doUncompressPartial: result := 0; //Todo: Implement
-  else
-    result := 0;
+  begin
+    fCompressionContextSafe.Lock;
+    try
+      if fCompressionContext = nil then
+        fCompressionContext := ZSTD.createCCtx;
+      ZSTD.CCtx_setParameter(fCompressionContext, ZSTD_c_compressionLevel, fCompressionLevel);
+      result := zstd.compress2(fCompressionContext, Comp, ZSTD.compressBound(PlainLen) {Todo}, Plain, PlainLen);
+    finally
+      fCompressionContextSafe.UnLock;
+    end;
   end;
+end;
+
+function TAlgoZSTD.AlgoDecompressDestLen(Comp: pointer): integer;
+begin
+  if ZSTD = nil then
+    result := 0
+  else
+    result := ZSTD.getFrameContentSize(Comp, MemSize(Comp) {Todo});
+end;
+
+function TAlgoZSTD.AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer;
+begin
+  if ZSTD = nil then
+    result := 0
+  else
+  begin
+    fDecompressionContextSafe.Lock;
+    try
+      if fDecompressionContext = nil then
+        fDecompressionContext := ZSTD.createDCtx;
+      result := zstd.decompressDCtx(fDecompressionContext, Plain, ZSTD.getFrameContentSize(Comp, CompLen)
+        {Todo}, Comp, CompLen);
+    finally
+      fDecompressionContextSafe.UnLock;
+    end;
+  end;
+end;
+
+function TAlgoZSTD.AlgoDecompressPartial(Comp: pointer; CompLen: integer; Partial: pointer; PartialLen,
+  PartialLenMax: integer): integer;
+begin
+  result := 0; //Not supported by ZSTD
 end;
 
 // this constructor uses TAlgoZSTD* classes so is defined hereafter
