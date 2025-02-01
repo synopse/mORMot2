@@ -342,6 +342,7 @@ type
   TSynAnsiConvert = class
   protected
     fCodePage: cardinal;
+    fAnsiCharMbcs: boolean;
     fAnsiCharShift: byte;
   public
     /// initialize the internal conversion engine
@@ -443,6 +444,10 @@ type
     /// corresponding length binary shift used for worst conversion case
     property AnsiCharShift: byte
       read fAnsiCharShift;
+    /// detect complex MBCS asiatic charsets with ~} ~{ escape codes (e.g. CP_HZ)
+    // - i.e. to disable chars < $80 direct assignement optimization
+    property AnsiCharMbcs: boolean
+      read fAnsiCharMbcs;
   end;
 
   /// a class to handle Ansi to/from Unicode translation of fixed width encoding
@@ -3531,28 +3536,31 @@ function TSynAnsiConvert.AnsiBufferToUnicode(Dest: PWideChar;
 var
   c: cardinal;
 begin
-  // first handle trailing 7-bit ASCII chars, by quad (Sha optimization)
-  if SourceChars >= 4 then
-    repeat
-      c := PCardinal(Source)^;
-      if c and $80808080 <> 0 then
-        break; // break on first non ASCII quad
-      dec(SourceChars, 4);
-      inc(Source, 4);
-      PCardinal(Dest)^ := (c shl 8 or (c and $ff)) and $00ff00ff;
-      c := c shr 16;
-      PCardinal(Dest + 2)^ := (c shl 8 or c) and $00ff00ff;
-      inc(Dest, 4);
-    until SourceChars < 4;
-  if (SourceChars > 0) and
-     (ord(Source^) < 128) then
-    repeat
-      dec(SourceChars);
-      PWord(Dest)^ := ord(Source^); // faster than dest^ := WideChar(c) on FPC
-      inc(Source);
-      inc(Dest);
-    until (SourceChars = 0) or
-          (ord(Source^) >= 128);
+  if not fAnsiCharMbcs then
+  begin
+    // first handle trailing 7-bit ASCII chars, by quad (Sha optimization)
+    if SourceChars >= 4 then
+      repeat
+        c := PCardinal(Source)^;
+        if c and $80808080 <> 0 then
+          break; // break on first non ASCII quad
+        dec(SourceChars, 4);
+        inc(Source, 4);
+        PCardinal(Dest)^ := (c shl 8 or (c and $ff)) and $00ff00ff;
+        c := c shr 16;
+        PCardinal(Dest + 2)^ := (c shl 8 or c) and $00ff00ff;
+        inc(Dest, 4);
+      until SourceChars < 4;
+    if (SourceChars > 0) and
+       (ord(Source^) < 128) then
+      repeat
+        dec(SourceChars);
+        PWord(Dest)^ := ord(Source^); // faster than dest^ := WideChar(c) on FPC
+        inc(Source);
+        inc(Dest);
+      until (SourceChars = 0) or
+            (ord(Source^) >= 128);
+  end;
   if SourceChars > 0 then
     // rely on the Operating System for all remaining ASCII characters
     inc(Dest,
@@ -3569,28 +3577,31 @@ var
   c: cardinal;
   u: PWideChar;
 begin
-  // first handle trailing 7-bit ASCII chars, by quad (Sha optimization)
-  if SourceChars >= 4 then
-    repeat
-      c := PCardinal(Source)^;
-      if c and $80808080 <> 0 then
-        break; // break on first non ASCII quad
-      PCardinal(Dest)^ := c;
-      dec(SourceChars, 4);
-      inc(Source, 4);
-      inc(Dest, 4);
-    until SourceChars < 4;
-  if (SourceChars > 0) and
-     (ord(Source^) < 128) then
-    repeat
-      Dest^ := Source^;
-      dec(SourceChars);
-      inc(Source);
-      inc(Dest);
-    until (SourceChars = 0) or
-          (ord(Source^) >= 128);
+  if not fAnsiCharMbcs then
+  begin
+    // first handle trailing 7-bit ASCII chars, by quad (Sha optimization)
+    if SourceChars >= 4 then
+      repeat
+        c := PCardinal(Source)^;
+        if c and $80808080 <> 0 then
+          break; // break on first non ASCII quad
+        PCardinal(Dest)^ := c;
+        dec(SourceChars, 4);
+        inc(Source, 4);
+        inc(Dest, 4);
+      until SourceChars < 4;
+    if (SourceChars > 0) and
+       (ord(Source^) < 128) then
+      repeat
+        Dest^ := Source^;
+        dec(SourceChars);
+        inc(Source);
+        inc(Dest);
+      until (SourceChars = 0) or
+            (ord(Source^) >= 128);
+  end;
   // rely on the Operating System for all remaining ASCII characters
-  if SourceChars = 0 then
+  if SourceChars <= 0 then
     result := Dest
   else
   begin
@@ -3687,6 +3698,7 @@ constructor TSynAnsiConvert.Create(aCodePage: cardinal);
 begin
   fCodePage := aCodePage;
   fAnsiCharShift := 1; // default is safe
+  fAnsiCharMbcs := aCodePage = CP_HZ; // RFC 1842 defines ~} GB2312 escape mode
 end;
 
 function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
@@ -3762,27 +3774,30 @@ begin
       inc(Source);
       dec(SourceChars);
     end;
-    // first handle trailing 7-bit ASCII chars, by pairs (Sha optimization)
-    if SourceChars >= 2 then
-      repeat
-        c := PCardinal(Source)^;
-        if c and $ff80ff80 <> 0 then
-          break; // break on first non ASCII pair
-        dec(SourceChars, 2);
-        inc(Source, 2);
-        c := c shr 8 or c;
-        PWord(Dest)^ := c;
-        inc(Dest, 2);
-      until SourceChars < 2;
-    if (SourceChars > 0) and
-       (ord(Source^) < 128) then
-      repeat
-        Dest^ := AnsiChar(ord(Source^));
-        dec(SourceChars);
-        inc(Source);
-        inc(Dest);
-      until (SourceChars = 0) or
-            (ord(Source^) >= 128);
+    if not fAnsiCharMbcs then
+    begin
+      // first handle trailing 7-bit ASCII chars, by pairs (Sha optimization)
+      if SourceChars >= 2 then
+        repeat
+          c := PCardinal(Source)^;
+          if c and $ff80ff80 <> 0 then
+            break; // break on first non ASCII pair
+          dec(SourceChars, 2);
+          inc(Source, 2);
+          c := c shr 8 or c;
+          PWord(Dest)^ := c;
+          inc(Dest, 2);
+        until SourceChars < 2;
+      if (SourceChars > 0) and
+         (ord(Source^) < 128) then
+        repeat
+          Dest^ := AnsiChar(ord(Source^));
+          dec(SourceChars);
+          inc(Source);
+          inc(Dest);
+        until (SourceChars = 0) or
+              (ord(Source^) >= 128);
+    end;
     // rely on the Operating System for all remaining ASCII characters
     if SourceChars <> 0 then
       inc(Dest,
