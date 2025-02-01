@@ -181,10 +181,12 @@ function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt
 var
   flags: cardinal;
 begin
-  if CodePage >= 50220 then // wild guess - FPC RTL would always use 0 anyway
-    flags := 0
-  else
-    flags := MB_PRECOMPOSED; // force no diaresis in output
+  flags := 0;
+  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+    if CodePage = 951 then // 951 is a "fake" code page
+      CodePage := 950
+    else if (CodePage <> 932) and (CodePage <> 949) then
+      flags := MB_PRECOMPOSED; // force no diaresis in output
   result := MultiByteToWideChar(CodePage, flags, A, LA, W, LW);
 end;
 
@@ -192,10 +194,12 @@ function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt
 var
   defchar: PAnsiChar;
 begin
-  if CodePage >= 50220 then // wild guess - FPC RTL would always use nil anyway
-    defchar := nil
-  else
-    defchar := @DefaultCharVar;
+  defchar := nil;
+  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+    if CodePage = 951 then
+      CodePage := 950
+    else if (CodePage <> 932) and (CodePage <> 949) then
+      defchar := @DefaultCharVar;
   result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, defchar, nil);
 end;
 

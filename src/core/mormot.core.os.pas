@@ -2541,7 +2541,7 @@ type
     /// release the SharedUcnv() instance
     procedure SharedUcnvUnLock(ndx: PtrInt);
   private
-    // implement a thread-safe cache of up to 16 converters
+    // implement a thread-safe cache of up to 16 shared ICU text converters
     fSharedLock: PtrUInt; // = TLightLock
     fSharedCP: array[0 .. 15] of word; // CPU cache friendly lookup
     fShared: array[0 .. 15] of record
@@ -6490,6 +6490,8 @@ begin
   case codepage of
     950:
       Name := 'BIG5';
+    951:
+      Name := 'BIG5-HKSCS';
     CP_UTF16:
       Name := 'UTF16LE';
     1201:
@@ -6511,7 +6513,7 @@ begin
       Name := 'EUC-CN';  // EUC Simplified Chinese
     51949:
       Name := 'EUC-KR';  // EUC Korean
-    52936:
+    CP_HZ:
       Name := 'HZ';      // HZ-GB2312 Simplified Chinese
     54936:
       Name := 'GB18030'; // GB18030 Simplified Chinese

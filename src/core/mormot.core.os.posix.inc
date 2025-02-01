@@ -415,7 +415,8 @@ var
 begin
   result := nil;
   if (codepage < CP_MIN) or
-     (codepage >= CP_RAWBLOB) then
+     (codepage >= CP_RAWBLOB) or
+     not IsAvailable then
     exit;
   // quickly check if this codepage is part of cached converters
   n := fSharedCount;
@@ -462,8 +463,8 @@ procedure TIcuLibrary.SharedUcnvUnLock(ndx: PtrInt);
 begin
   with fShared[ndx] do
   begin
+    ucnv_reset(Cnv); // clean-up from this thread (before unlock)
     PLightLock(@Lock)^.UnLock;
-    ucnv_reset(Cnv); // clean-up from this thread
   end;
 end;
 
@@ -531,8 +532,8 @@ begin
     if result > 0 then
       dec(result); // Utf8ToUnicode() returned length includes #0 terminator
     exit;
-  end;
-  if CodePage < CP_MIN then
+  end
+  else if CodePage < CP_MIN then
     exit(0); // clearly invalid/unsupported CodePage
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
@@ -582,7 +583,9 @@ begin
     if result > 0 then
       dec(result); // UnicodeToUtf8() result includes the #0 terminator
     exit;
-  end;
+  end
+  else if CodePage < CP_MIN then
+    exit(0); // clearly invalid/unsupported CodePage
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
   if cnv <> nil then
@@ -602,7 +605,16 @@ begin
       result := WideToAnsiRTL(CodePage, W, A, LW, LA);
   end;
   if result < 0 then
-    result := 0;
+    result := 0
+  else
+    case CodePage of
+      CP_HZ: // HZ-GB2312
+        if PWord(A)^ = ord('~') + ord('}') shl 8 then // to mimic Windows API
+        begin
+          dec(result, 2); // trim RFC 1842 escape from HZ mode to ASCII mode
+          MoveFast(A[2], A[0], result);
+        end;
+    end;
 end;
 
 function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
