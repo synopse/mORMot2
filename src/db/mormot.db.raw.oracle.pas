@@ -1765,7 +1765,7 @@ begin
     exit;
   for i1 := 0 to high(CODEPAGES) do
     if CODEPAGES[i1].Charset = aCharset1 then
-      for i2 := 0 to High(CODEPAGES) do
+      for i2 := 0 to high(CODEPAGES) do
         if (CODEPAGES[i2].Charset = aCharset2) and
            (CODEPAGES[i1].Num = CODEPAGES[i2].Num) then
           exit; // aliases are allowed
