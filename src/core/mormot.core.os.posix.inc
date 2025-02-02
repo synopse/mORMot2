@@ -584,8 +584,9 @@ begin
       dec(result); // UnicodeToUtf8() result includes the #0 terminator
     exit;
   end
-  else if CodePage < CP_MIN then
-    exit(0); // clearly invalid/unsupported CodePage
+  else if (CodePage < CP_MIN) or
+          (LW <= 0) then
+    exit(0); // clearly invalid/unsupported CodePage or void input
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
   if cnv <> nil then
@@ -601,10 +602,10 @@ begin
       result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
       icu.ucnv_close(cnv);
     end
-    else // fallback to cwstring/iconv
+    else // fallback to cwstring/iconv (less complete than ICU)
       result := WideToAnsiRTL(CodePage, W, A, LW, LA);
   end;
-  if result < 0 then
+  if result <= 0 then
     result := 0
   else
     case CodePage of
