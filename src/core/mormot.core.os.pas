@@ -6497,14 +6497,14 @@ begin
     1201:
       Name := 'UTF16BE';
     20932:
-      Name := 'EUC-JP';
+      Name := 'IBM-eucJP';
     28591 .. 28605:
       begin
         Name := 'ISO-8859-';
         AppendShortCardinal(codepage - 28590, Name);
       end;
     50220 .. 50222:
-      Name := 'ISO-2022-JP-2';
+      Name := 'ISO-2022-JP';
     50225:
       Name := 'ISO-2022-KR';
     50227:
