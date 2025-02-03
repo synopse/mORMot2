@@ -596,7 +596,8 @@ type
   // ! begin
   // !   ILog := TSynLogDB.Enter(self,'MyMethod');
   // !   // do some stuff
-  // !   ILog.Log(sllInfo,'method called');
+  // !   if Assigned(ILog) then // may be nil if sllEnter is not enabled
+  // !     ILog.Log(sllInfo,'method called');
   // ! end; // when ILog is out-of-scope, will log the method leaving
   TSynLogFamily = class
   protected
@@ -3400,30 +3401,29 @@ var
 begin
   LineNumber := 0;
   result := FindUnit(aAddressOffset);
-  if result >= 0 then
-  begin
-    u := @fUnit[result];
-    // unit found -> search line number
-    if u^.Addr = nil then
-      exit;
-    max := length(u^.Addr) - 1;
-    L := 0;
-    R := max;
-    if R >= 0 then
-      repeat
-        n := (L + R) shr 1;
-        if aAddressOffset < u^.Addr[n] then
-          R := n - 1
-        else if (n < max) and
-                (aAddressOffset >= u^.Addr[n + 1]) then
-          L := n + 1
-        else
-        begin
-          LineNumber := u^.Line[n];
-          exit;
-        end;
-      until L > R;
-  end;
+  if result < 0 then
+    exit;
+  // unit found -> search line number
+  u := @fUnit[result];
+  if u^.Addr = nil then
+    exit;
+  max := length(u^.Addr) - 1;
+  L := 0;
+  R := max;
+  if R >= 0 then
+    repeat
+      n := (L + R) shr 1;
+      if aAddressOffset < u^.Addr[n] then
+        R := n - 1
+      else if (n < max) and
+              (aAddressOffset >= u^.Addr[n + 1]) then
+        L := n + 1
+      else
+      begin
+        LineNumber := u^.Line[n];
+        exit;
+      end;
+    until L > R;
 end;
 
 function TDebugFile.AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
