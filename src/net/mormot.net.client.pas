@@ -2332,6 +2332,8 @@ begin
     DoRetry(HTTP_CLIENTERROR, 'connection closed (keepalive timeout or max)', [])
   else if not fSock.Available(@loerr) then
     DoRetry(HTTP_CLIENTERROR, 'connection broken (socketerror=%)', [loerr])
+  else if not SockConnected then
+    DoRetry(HTTP_CLIENTERROR, 'getpeername() failed', [])
   else
   try
     // send request - we use SockSend because writeln() is calling flush()
@@ -2377,6 +2379,7 @@ begin
         cspDataAvailableOnClosedSocket:
           include(Http.HeaderFlags, hfConnectionClose); // socket is closed
         cspNoData:
+          if SockConnected then // getpeername()=nrOK
           begin
             // timeout may happen not because the server took its time, but
             // because the network is down: sadly, the socket is still reported
@@ -2385,6 +2388,11 @@ begin
             ctxt.Status := HTTP_TIMEOUT;
             // -> close the socket, since this HTTP request is clearly aborted
             include(Http.HeaderFlags, hfConnectionClose);
+            exit;
+          end
+          else
+          begin
+            DoRetry(HTTP_CLIENTERROR, 'NoData waiting %ms for headers', [TimeOut]);
             exit;
           end;
       else // cspSocketError, cspSocketClosed
