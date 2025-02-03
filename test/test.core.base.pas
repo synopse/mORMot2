@@ -6141,14 +6141,32 @@ procedure TTestCoreBase.Charsets;
     CheckEqual(length(w), length(su), 'rtl1');
     Check(CompareMem(pointer(w), pointer(su), length(w)), 'rtl2');
     {$endif HASCODEPAGE}
-    // don't even try on buggy charsets
+    // validate mORMot conversion
+    eng := TSynAnsiConvert.Engine(cp);
+    // with ASCII-7 chars
+    su2 := eng.AnsiToUnicodeString('abcd efgh');
+    Check(su2 = 'abcd efgh', msg);
+    a := eng.UnicodeStringToAnsi(su2);
+    {$ifdef OSPOSIX}
+    if cp = 50225 then
+      if not CheckFailed(a <> '') then
+        if not CheckFailed(PCardinal(a)^ = 1126769691) then
+          delete(a, 1, 4); // delete IEC 2022 escape char
+    {$endif OSPOSIX}
+    CheckEqual(a, 'abcd efgh');
+    // don't even try on unsupported charsets
+    if (name = 'euc_jisx0213') or
+       (name = 'big5hkscs') then
+      exit; // seems unstandardized on Windows: no matching code page
     case cp of
-      932, 949, 951, 50222, 51949:
+      951, 50220, 50222, 51949:
         // those codepages fail on both Windows and Debian ICU
-        // -> some inacurracy in the cpython reference material?
+        // -> some inacurracy in Unicode_CodePageName() ?
         exit;
       // mORMot is therefore currently validated against:
-      // hz (cp=52936) gb18030 (cp=54936) big5 (cp=950) gb2312 (cp=936) gbk (cp=936)
+      // hz (cp=52936) gb18030 (cp=54936) big5 (cp=950) cp949 (cp=949)
+      // euc_jp (cp=20932) gb2312 (cp=936) gbk (cp=936) iso2022_kr (cp=50225)
+      // johab (cp=1361) shift_jis (cp=932)
       // -> we would need some input from native speakers of missing charsets
     end;
     {$ifdef OSWINDOWS} // old Windows miss most encodings
@@ -6168,24 +6186,22 @@ procedure TTestCoreBase.Charsets;
       CheckEqual(GetCodePage(ru), CP_UTF8);
       a := ru;
       SetCodePage(a, cp, {convert=}true);
-      Check(a = ra, msg);
+      CheckEqual(a, ra, name);
     end;
     {$endif HASCODEPAGE}
-    // validate mORMot conversion
-    eng := TSynAnsiConvert.Engine(cp);
-    // with ASCII-7 chars
-    su2 := eng.AnsiToUnicodeString('abcd efgh');
-    Check(su2 = 'abcd efgh', msg);
-    CheckEqual(eng.UnicodeStringToAnsi(su2), 'abcd efgh');
     // with variable-length encoding
+    a := eng.Utf8ToAnsi(ru);
+    CheckEqual(a, ra, name);
+    {$ifdef OSWINDOWS}
+    if cp = 1361 then
+      exit; // some casing issue to investigate on Windows (not with ICU)
+    {$endif OSWINDOWS}
     su2 := eng.AnsiToUnicodeString(ra);
     Check(su = su2, msg);
-    a := eng.Utf8ToAnsi(ru);
-    Check(a = ra, msg);
     u2 := eng.AnsiToUtf8(a);
     Check(u2 = ru, msg);
     a2 := eng.UnicodeStringToAnsi(su);
-    Check(a2 = a, msg);
+    CheckEqual(a2, a, name);
     u := eng.AnsiToUtf8(ra);
     CheckEqual(u, ru, name);
   end;
@@ -6193,6 +6209,7 @@ procedure TTestCoreBase.Charsets;
 begin
   // from https://github.com/python/cpython/tree/main/Lib/test/cjkencodings
   // encoded as ASCII via base-64 to please all Delphi/FPC compilers
+  // - note that python code page naming may be inconsistent with ICU
   CheckCodePage('hz',
     'VGhpcyBzZW50ZW5jZSBpcyBpbiBBU0NJSS4KVGhlIG5leHQgc2VudGVuY2UgaXMg' +
     'aW4gR0Iu5bex5omA5LiN5qyy77yM5Yu/5pa95pa85Lq644CCQnllLgo=',
@@ -6265,8 +6282,8 @@ begin
     'pM6+46ZYLiCo5KSks8ylRK1upF2sT6farcyp0gqtbrBRvdequrDdw0S0TqxPOgoK',  950);
   CheckCodePage('big5hkscs',
     '8KCEjMSa6bWu572T5rSGCsOKw4rMhMOqIMOqw6rMhAo=',
-    'iEWIXIpzi9qN2AqIZohiiKcgiKeIowo=', 951);
-  CheckCodePage('cp949',
+    'iEWIXIpzi9qN2AqIZohiiKcgiKeIowo=', 950);
+  CheckCodePage('cp949', // with Python, this means
     '65ig67Cp6rCB7ZWYIO2OsuyLnOy9nOudvAoK44mv44mv64KpISEg5Zug5Lmd5pyI' +
     '7Yyo66+k66aU6raIIOKToeKTlu2bgMK/wr/CvyDquI3rkpkg4pOU646oIOOJry4g' +
     'Lgrkup7smIHik5TriqXtmrkgLiAuIC4gLiDshJzsmrjrpIQg646Q7ZWZ5LmZIOWu' +
@@ -6366,7 +6383,7 @@ begin
     '66SzpMikz6SipN6k6qSipOqk3qS7pPOhowq4wLjsvKvCzqTOtaHHvaTPuse+rrjC' +
     'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
     'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCqXOpPcgpf4g' +
-    'pcilra+sr9ogz+OP/tggj/7Uj/7oj/zWCg==', 932);
+    'pcilra+sr9ogz+OP/tggj/7Uj/7oj/zWCg==', 20932);
   CheckCodePage('euc_kr',
     '4peOIO2MjOydtOyNrChQeXRob24p7J2AIOuwsOyasOq4sCDsib3qs6AsIOqwleug' +
     'pe2VnCDtlITroZzqt7jrnpjrsI0g7Ja47Ja07J6F64uI64ukLiDtjIzsnbTsjazs' +
@@ -6533,7 +6550,7 @@ begin
     'IIqJtIGuuiDc0YqhINzen4ncwot6IPFn8WL1Se388+mMYbuaCrXBsqHSeiAhICEg' +
     '7Ty1d9zRIOA7k3eKoSDZaeq+icUgtPSTd4qhk3cg7TyTd5bB0nogi2m0gZd6Ctze' +
     'nWGXQeKcIK+BzqGuodJ6ILThn5og8WfxYvVJ7fzz6a+C3O+XabR6ISEg3MDcwJBz' +
-    '2b0g2WLZYioKCg==', 949);
+    '2b0g2WLZYioKCg==', 1361);
   CheckCodePage('shift_jisx0213',
     'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
     '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
@@ -6575,7 +6592,7 @@ begin
     '6YKxgsaCzYKggtyC6IKgguiC3IK5gvGBQgqMvozqjqmRzILMi0CUXILNjcWPrIzA' +
     'gsmJn4KzgqaBQZVLl3aCyItAlFyCzYpnkqODgoNXg4WBW4OLgsaCtYLEkseJwYK3' +
     'gumBQYLGgqKCpILMgqogUHl0aG9uIILMg3yDioNWgVuCxYK3gUIKCoNtgvUgg54g' +
-    'g2eDTIhLiHkgmIP81iD80vzm+9QK', 20932);
+    'g2eDTIhLiHkgmIP81iD80vzm+9QK', 50220);
   CheckCodePage('shift_jis',
     'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
     '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
@@ -6615,7 +6632,7 @@ begin
     'gsyCxYK3gqqBQVB5dGhvbiCCxYLNgruCpIKigsGCvY+sjdeNSIKqkseJwYKzguqC' +
     '6YKxgsaCzYKggtyC6IKgguiC3IK5gvGBQgqMvozqjqmRzILMi0CUXILNjcWPrIzA' +
     'gsmJn4KzgqaBQZVLl3aCyItAlFyCzYpnkqODgoNXg4WBW4OLgsaCtYLEkseJwYK3' +
-    'gumBQYLGgqKCpILMgqogUHl0aG9uIILMg3yDioNWgVuCxYK3gUIKCg==', 20932);
+    'gumBQYLGgqKCpILMgqogUHl0aG9uIILMg3yDioNWgVuCxYK3gUIKCg==', 932);
 end;
 
 procedure TTestCoreBase.Iso8601DateAndTime;
