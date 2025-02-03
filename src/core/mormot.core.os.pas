@@ -2541,13 +2541,11 @@ type
     /// release the SharedUcnv() instance
     procedure SharedUcnvUnLock(ndx: PtrInt);
   private
-    // implement a thread-safe cache of up to 16 shared ICU text converters
-    fSharedLock: PtrUInt; // = TLightLock
-    fSharedCP: array[0 .. 15] of word; // CPU cache friendly lookup
-    fShared: array[0 .. 15] of record
-      Lock: PtrUInt; // = TLightLock
-      Cnv: pointer;
-    end;
+    // implement a thread-safe cache of up to 32 shared ICU text converters
+    fSharedMainLock: PtrUInt; // = TLightLock
+    fSharedCP:   array[0 .. 31] of word;    // CPU cache-friendly lookup
+    fSharedLock: array[0 .. 31] of PtrUInt; // = TLightLock
+    fSharedCnv:  array[0 .. 31] of pointer; // = ICU converter instance
     fSharedCount, fSharedLast: integer;
   end;
 

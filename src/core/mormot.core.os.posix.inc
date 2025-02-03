@@ -185,7 +185,7 @@ begin
   if fLoaded then
   begin
     for i := 0 to fSharedCount - 1 do
-      ucnv_close(fShared[i].Cnv);
+      ucnv_close(fSharedCnv[i]);
     fSharedCount := 0;
   end;
   if icui18n <> nil then
@@ -428,44 +428,36 @@ begin
   begin
     ndx := i; // for eventual SharedUcnvUnLock()
     fSharedLast := i; // optimistic usage
-    with fShared[i] do
-      if PLightLock(@Lock)^.TryLock then
-        result := Cnv; // this thread acquired this converter
+    if PLightLock(@fSharedLock[i])^.TryLock then
+      result := fSharedCnv[i]; // this thread acquired this converter
     exit;
   end;
   // first time we see this codepage: try to add in our internal cache
-  PLightLock(@fSharedLock)^.Lock; // main write lock
+  PLightLock(@fSharedMainLock)^.Lock; // main write lock
   try
     n := fSharedCount;
-    if (n <> length(fShared)) and // cache up to 16 instances
+    if (n <> length(fSharedCP)) and // cache up to 32 instances
        (WordScanIndex(@fSharedCP, n, codepage) < 0) then // paranoid
     begin
       result := ucnv(codepage);
-      if result <> nil then
-      begin
-        ndx := n;
-        fSharedLast := n;
-        fSharedCP[n] := CodePage;
-        with fShared[n] do
-        begin
-          Lock := 1; // = Init + Lock
-          Cnv := result;
-        end;
-        inc(fSharedCount); // should be set last
-      end;
+      if result = nil then
+        exit;
+      ndx := n;
+      fSharedLast := n;
+      fSharedCP[n] := CodePage;
+      fSharedLock[n] := 1; // = Init + Lock
+      fSharedCnv[n] := result;
+      inc(fSharedCount); // should be set last
     end;
   finally
-    PLightLock(@fSharedLock)^.UnLock;
+    PLightLock(@fSharedMainLock)^.UnLock;
   end;
 end;
 
 procedure TIcuLibrary.SharedUcnvUnLock(ndx: PtrInt);
 begin
-  with fShared[ndx] do
-  begin
-    ucnv_reset(Cnv); // clean-up from this thread (before unlock)
-    PLightLock(@Lock)^.UnLock;
-  end;
+  ucnv_reset(fSharedCnv[ndx]); // clean-up from this thread (before unlock)
+  PLightLock(@fSharedLock[ndx])^.UnLock;
 end;
 
 const
@@ -533,8 +525,9 @@ begin
       dec(result); // Utf8ToUnicode() returned length includes #0 terminator
     exit;
   end
-  else if CodePage < CP_MIN then
-    exit(0); // clearly invalid/unsupported CodePage
+  else if (CodePage < CP_MIN) or
+          (LA <= 0) then
+    exit(0); // clearly invalid/unsupported CodePage or void input
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
   if cnv <> nil then
