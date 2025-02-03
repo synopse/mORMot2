@@ -196,7 +196,7 @@ var
 begin
   defchar := nil;
   if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
-    if CodePage = 951 then
+    if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
       defchar := @DefaultCharVar;

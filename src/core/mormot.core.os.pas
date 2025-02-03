@@ -3027,7 +3027,7 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
 
-/// return a code page number into human-friendly (or ICU) text
+/// return a code page number into ICU-compatible charset name
 // - Unicode_CodePageName(932) returns e.g. 'SHIFT_JIS'
 // - Unicode_CodePageName(1251) returns 'MS1251' since 'CP####' is used
 // for IBM code pages by ICU - which do not match Windows code pages
@@ -6491,10 +6491,14 @@ begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
   case codepage of
     932:
       Name  := 'SHIFT_JIS';
+    936:
+      Name := 'GBK';
     949:
       Name := 'KS-C5601'; // Unified Hangul Code
     950:
-      Name := 'BIG5'; // 951 as 'BIG5-HKSCS' is not standard
+      Name := 'BIG5';
+    951: // not standard: will fallback to 950 in mormot.core.os.windows.inc
+      Name := 'BIG5-HKSCS';
     CP_UTF16: // = 1200
       Name := 'UTF16LE';
     1201:

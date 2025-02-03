@@ -324,6 +324,8 @@ function CodePageToCharSet(CodePage: cardinal): integer;
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 
 /// return a code page number into human-friendly text
+// - e.g. 'shift_jis' for aCodePage = 932, or 'ms1252' for 1252
+// - returns the lowercased Unicode_CodePageName(aCodePage) value
 function CodePageToText(aCodePage: cardinal): TShort16;
 
 
