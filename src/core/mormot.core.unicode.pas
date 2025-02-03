@@ -444,7 +444,8 @@ type
     /// corresponding length binary shift used for worst conversion case
     property AnsiCharShift: byte
       read fAnsiCharShift;
-    /// detect complex MBCS asiatic charsets with ~} ~{ escape codes (e.g. CP_HZ)
+    /// detect complex MBCS asiatic charsets with escape codes
+    // - e.g. CP_HZ with ~} ~{ or IEC-2022 with $1b ESC [I..] F
     // - i.e. to disable chars < $80 direct assignement optimization
     property AnsiCharMbcs: boolean
       read fAnsiCharMbcs;
@@ -3698,7 +3699,11 @@ constructor TSynAnsiConvert.Create(aCodePage: cardinal);
 begin
   fCodePage := aCodePage;
   fAnsiCharShift := 1; // default is safe
-  fAnsiCharMbcs := aCodePage = CP_HZ; // RFC 1842 defines ~} GB2312 escape mode
+  case aCodePage of
+    CP_HZ,          // RFC 1842 defines ~} GB2312 escape mode
+    50220 .. 52000: // rough IEC-2022 detection with $1b ESC [I..] F
+      fAnsiCharMbcs := true;
+  end;
 end;
 
 function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
