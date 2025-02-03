@@ -1847,11 +1847,10 @@ var
   log: ISynLog;
   one: TSynLog;
 begin
+  one := nil;
   log := fSettings.LogClass.Enter(self, 'StartServices');
-  if Assigned(log) then
-    one := log.Instance
-  else
-    one := nil;
+  if Assigned(log) then // log=nil if LogClass=nil or sllEnter is not enabled
+    one := log.Instance;
   {$ifdef OSWINDOWS}
   // initialize a main Windows Job to kill all sub-process when main is killed
   if fRunJob = 0 then
@@ -1922,11 +1921,10 @@ var
   log: ISynLog;
   one: TSynLog;
 begin
+  one := nil;
   log := fSas.LogClass.Enter(self, 'StopServices');
-  if Assigned(log) then
-    one := log.Instance
-  else
-    one := nil;
+  if Assigned(log) then // log=nil if LogClass=nil or sllEnter is not enabled
+    one := log.Instance;
   // stop sub-services following their reverse Level order
   for l := high(fSet.Levels) downto 0 do
     for i := 0 to high(fSet.Service) do
