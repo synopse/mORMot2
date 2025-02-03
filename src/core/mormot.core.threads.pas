@@ -3178,12 +3178,14 @@ procedure TLoggedThread.Execute;
 var
   ilog: ISynLog;
 begin
+  fLog := nil;
   try
     SetCurrentThreadName(fProcessName);
     if fLogClass <> nil then
     begin
       ilog := fLogClass.Enter('Execute %', [fProcessName], self);
-      fLog := ilog.Instance;
+      if Assigned(ilog) then
+        fLog := ilog.Instance;
     end;
     fProcessing := true;
     DoExecute;
