@@ -6207,7 +6207,7 @@ begin
   l := nil;
   log := fLog.Enter('OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
     Params.Hasher.GetHashName, Params.Hash, Url], self);
-  if Assigned(log) then
+  if Assigned(log) then // log=nil if fLog=nil or sllEnter is not enabled
     l := log.Instance;
   MessageInit(pcfRequest, 0, req);
   if not WGetToHash(Params, req.Hash) then
