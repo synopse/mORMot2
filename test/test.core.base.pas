@@ -6155,11 +6155,10 @@ procedure TTestCoreBase.Charsets;
     {$endif OSPOSIX}
     CheckEqual(a, 'abcd efgh');
     // don't even try on unsupported charsets
-    if (name = 'euc_jisx0213') or
-       (name = 'big5hkscs') then
+    if name = 'big5hkscs' then
       exit; // seems unstandardized on Windows: no matching code page
     case cp of
-      951, 50220, 50222, 51949:
+      50220, 50222, 51949:
         // those codepages fail on both Windows and Debian ICU
         // -> some inacurracy in Unicode_CodePageName() ?
         exit;
@@ -6208,7 +6207,7 @@ procedure TTestCoreBase.Charsets;
 
 begin
   // from https://github.com/python/cpython/tree/main/Lib/test/cjkencodings
-  // encoded as ASCII via base-64 to please all Delphi/FPC compilers
+  // - base-64 encoded reference as 7-bit text to please all Delphi/FPC versions
   // - note that python code page naming may be inconsistent with ICU
   CheckCodePage('hz',
     'VGhpcyBzZW50ZW5jZSBpcyBpbiBBU0NJSS4KVGhlIG5leHQgc2VudGVuY2UgaXMg' +
@@ -6282,7 +6281,7 @@ begin
     'pM6+46ZYLiCo5KSks8ylRK1upF2sT6farcyp0gqtbrBRvdequrDdw0S0TqxPOgoK',  950);
   CheckCodePage('big5hkscs',
     '8KCEjMSa6bWu572T5rSGCsOKw4rMhMOqIMOqw6rMhAo=',
-    'iEWIXIpzi9qN2AqIZohiiKcgiKeIowo=', 950);
+    'iEWIXIpzi9qN2AqIZohiiKcgiKeIowo=', 951);
   CheckCodePage('cp949', // with Python, this means
     '65ig67Cp6rCB7ZWYIO2OsuyLnOy9nOudvAoK44mv44mv64KpISEg5Zug5Lmd5pyI' +
     '7Yyo66+k66aU6raIIOKToeKTlu2bgMK/wr/CvyDquI3rkpkg4pOU646oIOOJry4g' +
@@ -6383,7 +6382,7 @@ begin
     '66SzpMikz6SipN6k6qSipOqk3qS7pPOhowq4wLjsvKvCzqTOtaHHvaTPuse+rrjC' +
     'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
     'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCqXOpPcgpf4g' +
-    'pcilra+sr9ogz+OP/tggj/7Uj/7oj/zWCg==', 20932);
+    'pcilra+sr9ogz+OP/tggj/7Uj/7oj/zWCg==', 50220);
   CheckCodePage('euc_kr',
     '4peOIO2MjOydtOyNrChQeXRob24p7J2AIOuwsOyasOq4sCDsib3qs6AsIOqwleug' +
     'pe2VnCDtlITroZzqt7jrnpjrsI0g7Ja47Ja07J6F64uI64ukLiDtjIzsnbTsjazs' +
