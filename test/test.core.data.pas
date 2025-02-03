@@ -4102,9 +4102,9 @@ begin
   CheckEqual(l.V[0], 1);
   CheckEqual(l.V[1], 2);
   CheckEqual(l.V[2], 3);
-  CheckEqual(l.V[3], '4');
+  CheckEqual(RawUtf8(l.V[3]), '4');
   CheckEqual(l.V[4], 5);
-  CheckEqual(l.V[5], '6');
+  CheckEqual(RawUtf8(l.V[5]), '6');
   {$endif HASIMPLICITOPERATOR}
   CheckEqual(l.Json, '[1,2,3,"4",5,"6"]');
   Check(l.Exists(1));

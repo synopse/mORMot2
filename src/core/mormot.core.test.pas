@@ -205,12 +205,13 @@ type
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: Int64; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
-    /// used by the published methods to run test assertion against UTF-8 strings
+    /// used by the published methods to run test assertion against UTF-8/Ansi strings
+    // - will ignore the a+b string codepages, and call SortDynArrayRawByteString()
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
-    /// used by the published methods to run test assertion against UTF-8 strings
+    function CheckEqual(const a, b: RawByteString; const msg: RawUtf8 = ''): boolean; overload;
+    /// used by the published methods to run test assertion against UTF-8/Ansi strings
     // - if Trim(a)<>Trim(b), will fail and include '#<>#' text before the supplied msg
-    function CheckEqualTrim(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean;
+    function CheckEqualTrim(const a, b: RawByteString; const msg: RawUtf8 = ''): boolean;
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
@@ -762,7 +763,7 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(const a, b, msg: RawUtf8): boolean;
+function TSynTestCase.CheckEqual(const a, b: RawByteString; const msg: RawUtf8): boolean;
 begin
   inc(fAssertions);
   result := SortDynArrayRawByteString(a, b) = 0;
@@ -771,7 +772,7 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqualTrim(const a, b, msg: RawUtf8): boolean;
+function TSynTestCase.CheckEqualTrim(const a, b: RawByteString; const msg: RawUtf8): boolean;
 begin
   result := CheckEqual(TrimU(a), TrimU(b), msg);
 end;
