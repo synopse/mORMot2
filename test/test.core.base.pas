@@ -6143,7 +6143,7 @@ procedure TTestCoreBase.Charsets;
     {$endif HASCODEPAGE}
     // don't even try on buggy charsets
     case cp of
-      932, 949, 951, 20932, 50222, 51949:
+      932, 949, 951, 50222, 51949:
         // those codepages fail on both Windows and Debian ICU
         // -> some inacurracy in the cpython reference material?
         exit;
@@ -6324,7 +6324,7 @@ begin
     'pM6kx6S5pKyholB5dGhvbiCkx6TPpL2kpqSkpMOkv76uutm5qaSsxMmyw6S1pOyk' +
     '66SzpMikz6SipN6k6qSipOqk3qS7pPOhowq4wLjsvKvCzqTOtaHHvaTPuse+rrjC' +
     'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
-    'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCg==', 50222);
+    'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCg==', 20932);
   CheckCodePage('euc_jisx0213',
     'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
     '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
@@ -6514,7 +6514,7 @@ begin
     'R0M3J0Z7PyE8LUBHDyAOOnw4JQ8KDj5WR0M4LkRJQEw8Rw8gDjAzOV9AOw8gDkdS' +
     'DyAOPHYPIA5AVjRCDyAOQEw7c0B7QE4PIA4+cD5uN04PIA44ODVpPm5BXTRPNFkP' +
     'LgoKDiFZQzkwITMhDzogDjMvPkY2cw8gDj4xD34gDkUtDyEgDjFdPnhATA8gDkB8' +
-    'NE80WQ8uIA4xVzcxMEUPIA40WQ8uCg==', 51949);
+    'NE80WQ8uIA4xVzcxMEUPIA40WQ8uCg==', 50225);
   CheckCodePage('johab',
     '65ig67Cp6rCB7ZWYIO2OsuyLnOy9nOudvAoK44mv44mv64KpISEg5Zug5Lmd5pyI' +
     '7Yyo66+k66aU6raIIOKToeKTlu2bgMK/wr/CvyDquI3rkpkg4pOU646oIOOJry4g' +
