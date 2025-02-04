@@ -4731,8 +4731,8 @@ type
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked and LockedUtf8 array properties
     // - Int64s will be stored internally as a varInt64 variant
-    // - returns the newly stored value
-    // - if the internal value is not defined yet, would use 0 as default value
+    // - returns the previously stored value
+    // - if the internal value is not defined yet, would return 0 as default
     function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
     /// safe locked in-place exchange of a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
