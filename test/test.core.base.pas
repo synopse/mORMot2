@@ -6143,24 +6143,25 @@ procedure TTestCoreBase.Charsets;
     {$endif HASCODEPAGE}
     // validate mORMot conversion
     eng := TSynAnsiConvert.Engine(cp);
+    Check(eng <> nil);
     // with ASCII-7 chars
     su2 := eng.AnsiToUnicodeString('abcd efgh');
     Check(su2 = 'abcd efgh', msg);
     a := eng.UnicodeStringToAnsi(su2);
     {$ifdef OSPOSIX}
     if cp = 50225 then // iso2022_kr
-      if not CheckFailed(a <> '') then
-        if not CheckFailed(PCardinal(a)^ = 1126769691) then
+      {$ifdef OSDARWIN}
+      exit;  // MacOS ICU seems to be not as expected with escape chars
+      {$else}
+      if not CheckFailed(a <> '', 'kr1') then
+        if not CheckFailed(PCardinal(a)^ = 1126769691, 'kr2') then
           delete(a, 1, 4); // delete IEC 2022 escape char
+      {$endif OSDARWIN}
     {$endif OSPOSIX}
     CheckEqual(a, 'abcd efgh');
     // don't even try on unsupported charsets
-    if name = 'big5hkscs' then
-      exit; // seems unstandardized on Windows: no matching code page
     case cp of
-      {$ifdef OSDARWIN}
-      50225,  // MacOS ICU seems to be not as expected with escape chars
-      {$endif OSDARWIN}
+      951, // big5hkscs seems unstandardized on Windows: no matching code page
       50220, 50222, 51949:
         // those codepages fail on both Windows and Debian ICU
         // -> some inacurracy in Unicode_CodePageName() ?
