@@ -610,6 +610,7 @@ type
     // the second has a TTL of 10 seconds and will be used by ConnectionCreate to
     // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
     fGC1, fGC2: TPollAsyncConnections;
+    fGCLast: integer;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
@@ -2806,7 +2807,7 @@ end;
 procedure TAsyncConnections.DoGC;
 var
   tofree: TPollAsyncConnections;
-  n1, n2: integer;
+  n1, n2, h: integer;
 begin
   // retrieve the connection instances to be released
   if Terminated or
@@ -2828,8 +2829,11 @@ begin
   finally
     fGC2.Safe.UnLock;
   end;
-  if n1 + n2 + tofree.Count = 0 then
-    exit;
+  h := n1 xor (n2 shl 16); // compute the current state of both GC
+  if (h = fGCLast) and
+     (tofree.Count = 0) then
+    exit; // nothing new to report
+  fGCLast := h;
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
       [n1, n2, tofree.Count, fSockets.Count], self);
