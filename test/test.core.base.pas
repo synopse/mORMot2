@@ -3388,8 +3388,11 @@ begin
   for i := 0 to high(c) do
     c[i] := Random32;
   QuickSortInteger(@c, 0, high(c));
+  n := 0;
   for i := 0 to high(c) - 1 do
-    Check(c[i + 1] <> c[i], 'unique Random32');
+    if c[i + 1] = c[i] then
+      inc(n);
+  Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
   Check(Random32(0) = 0);
   for i := 1 to 100000 do
