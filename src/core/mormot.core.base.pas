@@ -3877,13 +3877,13 @@ const
   /// unsigned 64bit integer variant type
   // - currently called varUInt64 in Delphi (not defined in older versions),
   // and varQWord in FPC
-  varWord64 = 21;
+  varWord64       = 21;
   /// map the Windows VT_INT extended VARENUM, i.e. a 32-bit signed integer
   // - also detected and handled by VariantToInteger/VariantToInt64
-  varOleInt = 22;
+  varOleInt       = 22;
   /// map the Windows VT_UINT extended VARENUM, i.e. a 32-bit unsigned integer
   // - also detected and handled by VariantToInteger/VariantToInt64
-  varOleUInt = 23;
+  varOleUInt      = 23;
   /// map the Windows VT_LPSTR extended VARENUM, i.e. a PAnsiChar
   // - also detected and handled by VariantToUtf8
   varOlePAnsiChar = 30;
@@ -3892,9 +3892,9 @@ const
   varOlePWideChar = 31;
   /// map the Windows VT_FILETIME extended VARENUM, i.e. a 64-bit TFileTime
   // - also detected and handled by VariantToDateTime
-  varOleFileTime = 64;
+  varOleFileTime  = 64;
   /// map the Windows VT_CLSID extended VARENUM, i.e. a by-reference PGuid
-  varOleClsid = 72;
+  varOleClsid     = 72;
 
   varVariantByRef = varVariant or varByRef;
   varStringByRef  = varString  or varByRef;
@@ -3918,7 +3918,7 @@ const
   {$endif UNICODE}
 
   {$ifdef ISDELPHI}
-  CFirstUserType = $10F;
+  CFirstUserType  = $10F;
   {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values

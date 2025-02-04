@@ -6505,8 +6505,10 @@ begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
       Name := 'UTF16BE';
     1361:
       Name := 'JOHAB';
+    12000:
+      Name := 'UTF32LE';
     20932:
-      Name := 'EUC-JP';
+      Name := 'EUC-JP'; // Japanese (JIS 0208-1990 and 0121-1990)
     28591 .. 28606:
       begin
         Name := 'ISO-8859-';
