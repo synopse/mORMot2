@@ -605,12 +605,12 @@ type
     fSocketsEpoll: boolean; // = PollSocketClass.FollowEpoll
     {$endif USE_WINIOCP}
     /// implement generational garbage collector of TAsyncConnection instances
-    // - we define two generations: the first has a TTL of KeepConnectionInstanceMS
+    // - we define two generations: GC #1 has a TTL of KeepConnectionInstanceMS
     // (100ms) and are used to avoid GPF or confusion on still active connections;
-    // the second has a TTL of 10 seconds and will be used by ConnectionCreate to
+    // GC #2 has a TTL of 10 seconds and will be used by ConnectionCreate to
     // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
     fGC1, fGC2: TPollAsyncConnections;
-    fGCLast: integer;
+    fGCLast, fGCTix: integer;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
@@ -2814,21 +2814,29 @@ begin
      (fGC1.Count + fGC2.Count = 0) then
     exit;
   tofree.Count := 0;
-  SetLength(tofree.Items, 32); // good initial provisioning
-  fGC2.Safe.Lock;
+  if fGC2.Safe.TryLock then
   try
-    fGC1.Safe.Lock;
-    try
-      // keep in first generation GC for 100 ms by default
-      n1 := OneGC(fGC1, fGC2, fLastOperationMS, fKeepConnectionInstanceMS);
-    finally
-      fGC1.Safe.UnLock;
-    end;
+    if fGC1.Safe.TryLock then
+      try
+        // keep in first generation GC for 100 ms by default
+        n1 := OneGC(fGC1, fGC2, fLastOperationMS, fKeepConnectionInstanceMS);
+      finally
+        fGC1.Safe.UnLock;
+      end
+    else
+      exit; // won't block if another thread is accessing GC#1
+    fGCTix := fLastOperationMS shr 5; // as checked in ProcessIdleTix()
     // wait 10 seconds until no pending event is in queue and free instances
-    n2 := OneGC(fGC2, tofree, fLastOperationMS, 10000);
+    if fGC2.Count <> 0 then
+    begin
+      SetLength(tofree.Items, 32); // good initial provisioning
+      n2 := OneGC(fGC2, tofree, fLastOperationMS, 10000);
+    end;
   finally
     fGC2.Safe.UnLock;
-  end;
+  end
+  else
+    exit; // won't block if another thread is accessing GC#2
   h := n1 xor (n2 shl 16); // compute the current state of both GC
   if (h = fGCLast) and
      (tofree.Count = 0) then
@@ -2838,7 +2846,7 @@ begin
     fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
       [n1, n2, tofree.Count, fSockets.Count], self);
   // actually release the deprecated connection instances
-  if tofree.Count > 0 then
+  if tofree.Count <> 0 then
     FreeGC(tofree);
 end;
 
@@ -3560,16 +3568,19 @@ begin
   if Terminated then
     exit;
   try
+    sec := Qword(NowTix) shr 5; // change at most every 32ms
     if (fSockets <> nil) and
        (fSockets.fWaitingWrite.Count <> 0) and
-       (fLastOperationMS shr 5 <> NowTix shr 5) then // at most every 32ms
+       (TAsyncConnectionSec(fLastOperationMS shr 5) <> sec) then
     begin
       fSockets.ProcessWaitingWrite; // process pending soWaitWrite
       if Terminated then
         exit;
     end;
     fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
-    DoGC;
+    if (TAsyncConnectionSec(fGCTix) <> sec) and
+       (fGC1.Count + fGC2.Count <> 0) then
+      DoGC;
     if fOnIdle <> nil then
       for i := 0 to length(fOnIdle) - 1 do
         if Terminated then
