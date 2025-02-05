@@ -2957,11 +2957,11 @@ type
     Adler, // CRC from uncrypted compressed data - for Key check
     DestSize: cardinal;
   private
-    Dest: TStream;
-    Buf: TAesBlock; // very small buffer for remainging 0..15 bytes
-    BufCount: integer; // number of pending bytes (0..15) in Buf
-    Aes: TAes;
-    NoCrypt: boolean; // if KeySize=0
+    fDest: TStream;
+    fBuf: TAesBlock;    // very small buffer for remainging 0..15 bytes
+    fBufCount: integer; // number of pending bytes (0..15) in Buf
+    fAes: TAes;
+    fNoCrypt: boolean;  // if KeySize=0
   public
     /// initialize the AES encryption stream for an output stream (e.g.
     // a TMemoryStream or a TFileStreamEx)
@@ -11497,29 +11497,30 @@ constructor TAesWriteStream.Create(outStream: TStream;
 begin
   inherited Create;
   if KeySize = 0 then
-    NoCrypt := true
+    fNoCrypt := true
   else
-    Aes.EncryptInit(Key, KeySize);
-  Dest := outStream;
+    fAes.EncryptInit(Key, KeySize);
+  fDest := outStream;
 end;
 
 destructor TAesWriteStream.Destroy;
 begin
   Finish;
-  Aes.Done;
+  fAes.Done;
   inherited;
 end;
 
 procedure TAesWriteStream.Finish;
 begin
-  if BufCount = 0 then
+  if fBufCount = 0 then
     exit;
-  if (BufCount >= SizeOf(TAesBlock)) or
-     not Aes.Initialized or NoCrypt then
+  if (fBufCount >= SizeOf(TAesBlock)) or
+     fNoCrypt or
+     not fAes.Initialized then
     ESynCrypto.RaiseUtf8('Unexpected %.Finish', [self]);
-  XorOffset(@buf, DestSize, BufCount);
-  Dest.WriteBuffer(buf, BufCount);
-  BufCount := 0;
+  XorOffset(@fBuf, DestSize, fBufCount);
+  fDest.WriteBuffer(fBuf, fBufCount);
+  fBufCount := 0;
 end;
 
 function TAesWriteStream.{%H-}Read(var Buffer; Count: integer): Longint;
@@ -11543,38 +11544,37 @@ var
 begin
   result := Count;
   Adler := Adler32Asm(Adler, @Buffer, Count);
-  if not NoCrypt then
+  if not fNoCrypt then
     // KeySize=0 -> save as-is
-    if not Aes.Initialized then
+    if not fAes.Initialized then
       // if error in KeySize -> default fast XorOffset()
       XorOffset(@B, DestSize, Count)
     else
     begin
-      if BufCount > 0 then
+      Len := 0;
+      if fBufCount > 0 then // append to data pending in fBuf[fBufCount]
       begin
-        Len := SizeOf(TAesBlock) - BufCount;
+        Len := SizeOf(fBuf) - fBufCount;
         if Len > Count then
           Len := Count;
-        MoveFast(Buffer, buf[BufCount], Len);
-        inc(BufCount, Len);
-        if BufCount < SizeOf(TAesBlock) then
+        MoveFast(Buffer, fBuf[fBufCount], Len);
+        inc(fBufCount, Len);
+        if fBufCount < SizeOf(fBuf) then
           exit;
-        Aes.Encrypt(buf);
-        Dest.WriteBuffer(buf, SizeOf(TAesBlock));
-        inc(DestSize, SizeOf(TAesBlock));
+        fAes.Encrypt(fBuf);
+        fDest.WriteBuffer(fBuf, SizeOf(fBuf));
+        inc(DestSize, SizeOf(fBuf));
         dec(Count, Len);
-        Aes.DoBlocks(@B[Len], @B[Len], cardinal(Count) shr AesBlockShift, true);
-      end
-      else
-        Aes.DoBlocks(@B, @B, cardinal(Count) shr AesBlockShift, true);
-      BufCount := cardinal(Count) and AesBlockMod;
-      if BufCount <> 0 then
+      end;
+      fAes.DoBlocks(@B[Len], @B[Len], Count shr AesBlockShift, true);
+      fBufCount := Count and AesBlockMod;
+      if fBufCount <> 0 then
       begin
-        dec(Count, BufCount);
-        MoveFast(B[Count], buf[0], BufCount);
+        dec(Count, fBufCount);
+        MoveFast(B[Count], fBuf[0], fBufCount);
       end;
     end;
-  Dest.WriteBuffer(Buffer, Count);
+  fDest.WriteBuffer(Buffer, Count);
   inc(DestSize, Count);
 end;
 
