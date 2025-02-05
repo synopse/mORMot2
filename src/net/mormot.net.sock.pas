@@ -2023,6 +2023,27 @@ type
   end;
   {$M-}
 
+  /// encapsulate TCrtSocket process as a TStream class
+  // - directly redirect Read/Write to TCrtSocket.SockRecv/SockSend methods
+  // - this class will always report Size = 0 and Position = 0
+  // - see TSocketStream if you prefer raw TNetSocket/INetTls support
+  TCrtSocketStream = class(TSocketStreamAbstract)
+  protected
+    fSocket: TCrtSocket;
+  public
+    /// initialize this TStream for a given TCrtSocket instance
+    // - this class instance won't own nor release this TCrtSocket once done
+    constructor Create(aSocket: TCrtSocket); reintroduce;
+    /// receive some bytes calling the associated TCrtSocket.SockRecv()
+    // - returns the number of bytes filled into Buffer (<=Count)
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// send some data calling the associated TCrtSocket.SockSend()
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// access to the underlying TCrtSocket instance
+    property Socket: TCrtSocket
+      read fSocket;
+  end;
+
 
 /// create a TCrtSocket instance, returning nil on error
 // - useful to easily catch any exception, and provide a custom TNetTlsContext
@@ -6365,6 +6386,34 @@ begin
       result := TSocketStream.Create(fSock)
   else
     result := nil;
+end;
+
+
+{ TCrtSocketStream }
+
+constructor TCrtSocketStream.Create(aSocket: TCrtSocket);
+begin
+  fSocket := aSocket;
+end;
+
+function TCrtSocketStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true, @fLastResult) then
+    result := Count
+  else if fLastResult = nrRetry then
+    result := 0
+  else
+    result := -1; // fatal error
+end;
+
+function TCrtSocketStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  if fSocket.TrySndLow(@Buffer, Count, @fLastResult) then
+    result := Count
+  else if fLastResult = nrRetry then
+    result := 0
+  else
+    result := -1; // fatal error, e.g. timeout
 end;
 
 
