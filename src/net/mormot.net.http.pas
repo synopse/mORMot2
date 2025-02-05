@@ -3532,7 +3532,7 @@ begin
     exit;
   include(HeaderFlags, nfHeadersParsed);
   Head.AsText(Headers, {overheadForRemoteIP=}40, {usemain=}false); // keep 2KB main buffer
-  Head.Reset;
+  Head.Reset; // set Len := 0
   if (Compress <> nil) and
      (AcceptEncoding <> '') then
     CompressAcceptHeader := ComputeContentEncoding(Compress, pointer(AcceptEncoding));
@@ -3967,7 +3967,7 @@ begin
       result^.Append(CompressAcceptEncoding);
       result^.AppendCRLF;
     end;
-    result^.AppendCRLF;
+    result^.AppendCRLF; // end with a void line
   end;
   // try to send both headers and body in a single socket syscall
   Process.Reset;
@@ -4174,7 +4174,7 @@ begin
       exit;
     end;
   // check if there is something new to send
-  offs := ContentStream.Seek(0, soCurrent);
+  offs := ContentStream.Seek(0, soCurrent); // current position
   if offs < 0 then
     exit; // FileSeek() returned -1 on error: something is wrong with this file
   dec(availablesize, offs);
@@ -6480,7 +6480,7 @@ var
   tmp: TSynTempBuffer;
 begin
   // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"i":x,"r":x,"w":x}
-  existing := Dest.Seek(0, soEnd);
+  existing := Dest.Seek(0, soEnd); // append to existing content
   if existing <> 0 then
     Dest.Seek(existing - 1, soBeginning); // rewind ending ']'
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));

@@ -1361,6 +1361,8 @@ type
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
+    function OnExecuteLocal(Ctxt: THttpServerRequestAbstract;
+      Definition: THttpProxyUrl; const Uri: TUriMatchName): cardinal;
   public
     /// initialize this forward proxy instance
     // - the supplied aSettings should be owned by the caller (e.g from a main
@@ -5239,10 +5241,11 @@ begin
     exit;
   if not fHashCached.FindAndCopy(name, hashes) then
   begin
+    // first time this hash is request: try to load and compute now
     i := length(fn);
     while i > 0 do
       if fn[i] = '.' then
-        break
+        break // remove the .sha256 or .md5 file extension
       else
         dec(i);
     if i = 0 then
@@ -5253,6 +5256,7 @@ begin
       exit; // no such file
     fHashCached.Add(name, hashes);
   end;
+  // return the pre-computed hash of this file
   i := 0;
   for a := low(a) to high(a) do
     if a in fAlgos then
@@ -5441,7 +5445,7 @@ begin
       if one.Disabled or
          (one.Source = '') then
         continue;
-      // validate source as local file folder or remote http server
+      // validate source as local file folder or remote http(s) server
       one.fSourced := sUndefined;
       if IsHttp(one.Source) then
       begin
@@ -5511,17 +5515,90 @@ begin
   end;
 end;
 
+function THttpProxyServer.OnExecuteLocal(Ctxt: THttpServerRequestAbstract;
+  Definition: THttpProxyUrl; const Uri: TUriMatchName): cardinal;
+var
+  fn: TFileName;
+  name: RawUtf8;
+  cached: RawByteString;
+  tix, siz: Int64;
+  ext: PUtf8Char;
+  pck: THttpProxyCacheKind;
+begin
+  // delete any deprecated cached content
+  tix := Int64(fServer.Async.LastOperationSec) * 1000; // = GetTickCount64
+  Definition.fMemCached.DeleteDeprecated(tix);
+  Definition.fHashCached.DeleteDeprecated(tix);
+  // supplied URI should be a safe local file
+  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {name=}true);
+  NormalizeFileNameU(name);
+  if not SafePathNameU(name) then
+    exit;
+  // try to assign a local file to the output Ctxt
+  fn := FormatString('%%', [Definition.fLocalFolder, name]);
+  result := Ctxt.SetOutFile(fn, Definition.IfModifiedSince, '',
+    Definition.CacheControlMaxAgeSec, @siz); // to be streamed from file
+  // complete the actual URI process
+  case result of
+    HTTP_SUCCESS:
+      // this local file does exist: try if we could use Definition.MemCache
+      if Assigned(Definition.fMemCached) then
+      begin
+        pck := Definition.MemCache.FromUri(Uri);
+        if not (pckIgnore in pck) then
+          if (pckForce in pck) or
+             (siz <= Definition.MemCache.MaxSize) then
+          begin
+            // use a memory cache
+            if not Definition.fMemCached.FindAndCopy(name, cached) then
+            begin
+              cached := StringFromFile(fn);
+              Definition.fMemCached.Add(name, cached);
+            end;
+            Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
+            Ctxt.OutContent := cached;
+          end;
+      end;
+    HTTP_NOTFOUND:
+      // this URI is no file, but may be a folder
+      if (siz < 0) and // siz=-1 for folder
+         not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
+      begin
+        // return the folder files info as cached HTML
+        if (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) or
+           not Definition.fMemCached.FindAndCopy(name, cached) then
+        begin
+          FolderHtmlIndex(fn, Ctxt.Url,
+            StringReplaceChars(name, PathDelim, '/'), RawUtf8(cached));
+          if Assigned(Definition.fMemCached) and
+             not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
+            Definition.fMemCached.Add(name, cached);
+        end;
+        result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
+      end
+      else if siz = 0 then
+        // URI may be a  ####.sha256 / ####.md5 hash
+        if Assigned(Definition.fHashCached) then
+        begin
+          ext := ExtractExtP(name, {withoutdot:}true);
+          if ext <> nil then
+            case PCardinal(ext)^ of
+              ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+                result := Definition.ReturnHash(Ctxt, hfSHA256, name, fn);
+              ord('m') + ord('d') shl 8 + ord('5') shl 16:
+                result := Definition.ReturnHash(Ctxt, hfMd5, name, fn);
+            end;
+        end;
+  end; // may be e.g. HTTP_NOTMODIFIED (304)
+  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
+    [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
+end;
+
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   one: THttpProxyUrl;
   uri: TUriMatchName;
-  fn: TFileName;
-  name: RawUtf8;
-  cached: RawByteString;
-  siz, tix: Int64;
-  ext: PUtf8Char;
   met: TUriRouterMethod;
-  pck: THttpProxyCacheKind;
 begin
   result := HTTP_NOTFOUND;
   // retrieve O(1) execution context
@@ -5535,88 +5612,25 @@ begin
     exit;
   // retrieve path and resource/file name from URI
   Ctxt.RouteAt(0, uri.Path);
-  if uri.Path.Len > 512 then
+  if uri.Path.Len > 512 then // obviously invalid
     exit;
   uri.ParsePath; // compute uri.Name for file-level TUriMatch
   // ensure was not marked as rejected
   if (one.RejectCsv <> '') and
      one.fReject.Check(one.RejectCsv, uri, PathCaseInsensitive) then
     exit;
-  // delete any deprecated cached content
-  tix := Int64(fServer.Async.LastOperationSec) * 1000; // = GetTickCount64
-  one.fMemCached.DeleteDeprecated(tix);
-  one.fHashCached.DeleteDeprecated(tix);
   // actual request processing
-  case met of
-    urmGet,
-    urmHead:
-    case one.fSourced of
-      sLocalFolder:
-        begin
-          // get content from a local file
-          UrlDecodeVar(uri.Path.Text, uri.Path.Len, name, {name=}true);
-          NormalizeFileNameU(name);
-          if not SafePathNameU(name) then
-            exit;
-          fn := FormatString('%%', [one.fLocalFolder, name]);
-          result := Ctxt.SetOutFile(fn, one.IfModifiedSince, '',
-            one.CacheControlMaxAgeSec, @siz); // will be streamed from file
-          case result of
-            HTTP_SUCCESS:
-              if Assigned(one.fMemCached) then
-              begin
-                pck := one.MemCache.FromUri(uri);
-                if not (pckIgnore in pck) then
-                  if (pckForce in pck) or
-                     (siz <= one.MemCache.MaxSize) then
-                  begin
-                    // use a memory cache
-                    if not one.fMemCached.FindAndCopy(name, cached) then
-                    begin
-                      cached := StringFromFile(fn);
-                      one.fMemCached.Add(name, cached);
-                    end;
-                    Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
-                    Ctxt.OutContent := cached;
-                  end;
-              end;
-            HTTP_NOTFOUND:
-              if (siz < 0) and // siz=-1 if the requested resource was a folder
-                 not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
-              begin
-                // return the folder files info as cached HTML
-                if (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) or
-                   not one.fMemCached.FindAndCopy(name, cached) then
-                begin
-                  FolderHtmlIndex(fn, Ctxt.Url,
-                    StringReplaceChars(name, PathDelim, '/'), RawUtf8(cached));
-                  if Assigned(one.fMemCached) and
-                     not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
-                    one.fMemCached.Add(name, cached);
-                end;
-                result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
-              end
-              else if siz = 0 then
-                if Assigned(one.fHashCached) then
-                begin
-                  ext := ExtractExtP(name, {withoutdot:}true);
-                  if ext <> nil then
-                    case PCardinal(ext)^ of
-                      ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
-                        result := one.ReturnHash(Ctxt, hfSHA256, name, fn);
-                      ord('m') + ord('d') shl 8 + ord('5') shl 16:
-                        result := one.ReturnHash(Ctxt, hfMd5, name, fn);
-                    end;
-                end;
-          end; // may be e.g. HTTP_NOTMODIFIED (304)
-          fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
-            [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
-        end;
-      sRemoteUri:
-        begin
-          { TODO: implement progressive proxy cache on a remote server }
-        end;
-    end;
+  case one.fSourced of
+    sLocalFolder:
+      case met of
+        urmGet,
+        urmHead:
+          OnExecuteLocal(Ctxt, one, uri);
+      end;
+    sRemoteUri:
+      begin
+        { TODO: implement progressive proxy cache on a remote server }
+      end;
   end;
 end;
 
