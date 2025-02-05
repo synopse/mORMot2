@@ -2472,10 +2472,12 @@ type
   /// Low-level access to the ICU library installed on this system
   // - "International Components for Unicode" (ICU) is an open-source set of
   // libraries for Unicode support, internationalization and globalization
+  // - ICU seems more complete and standard than FPC RTL iconv/cwstrings
   // - used by Unicode_CompareString, Unicode_AnsiToWide, Unicode_WideToAnsi,
   // Unicode_InPlaceUpper and Unicode_InPlaceLower function from this unit
-  // - can maintain a thread-safe cache of up to 16 code page converters,
+  // - can maintain a thread-safe cache of up to 32 code page converters,
   // via SharedUcnv() and SharedUcnvUnLock()
+  // - ICU is loaded only when needed outside of mORMot needs
   TIcuLibrary = record
   private
     icu, icudata, icui18n: pointer;

@@ -603,7 +603,7 @@ begin
   else
     case CodePage of
       CP_HZ: // HZ-GB2312
-        if PWord(A)^ = ord('~') + ord('}') shl 8 then // to mimic Windows API
+        if PWord(A)^ = ord('~') + ord('}') shl 8 then // to match Windows API
         begin
           dec(result, 2); // trim RFC 1842 escape from HZ mode to ASCII mode
           MoveFast(A[2], A[0], result);

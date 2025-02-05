@@ -3730,7 +3730,7 @@ begin
   SynAnsiConvertListLock.WriteLock;
   try
     i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-      SynAnsiConvertListCount, aCodePage); // search again for thread safety
+      SynAnsiConvertListCount, aCodePage); // search (again) for thread safety
     if i >= 0 then
     begin
       result := SynAnsiConvertList[i]; // avoid any (unlikely) race condition
@@ -4114,7 +4114,7 @@ const
 
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var
-  i, len: PtrInt;
+  i, len, c: PtrInt;
   a: array[0..255] of AnsiChar;
   u: array[0..255] of WideChar;
 begin
@@ -4157,9 +4157,11 @@ begin
     fWideToAnsi[i] := i;
   FillcharFast(fWideToAnsi[127], 65536 - 127, ord('?')); // '?' for unknown char
   for i := 127 to 255 do
-    if (fAnsiToWide[i] <> 0) and
-       (fAnsiToWide[i] <> ord('?')) then
-      fWideToAnsi[fAnsiToWide[i]] := i;
+  begin
+    c := fAnsiToWide[i];
+    if c <> 0 then
+      fWideToAnsi[c] := i;
+  end;
   // fixed width Ansi will never be bigger than UTF-8
   fAnsiCharShift := 0;
 end;
@@ -10985,7 +10987,7 @@ begin
   begin
     c := NormToUpper[AnsiChar(i)];
     if c in ['A'..'Z'] then
-      inc(c, 32);
+      inc(c, 32); // manual lower
     NormToLower[AnsiChar(i)] := c;
   end;
   for c := low(c) to high(c) do
@@ -11039,15 +11041,15 @@ begin
   end;
   // setup sorting functions redirection
   StrCompByCase[false] := @StrComp;
-  StrCompByCase[true] := @StrIComp;
+  StrCompByCase[true]  := @StrIComp;
   {$ifdef CPUINTEL}
   SortDynArrayAnsiStringByCase[false] := @SortDynArrayAnsiString;
   {$else}
   SortDynArrayAnsiStringByCase[false] := @SortDynArrayRawByteString;
   {$endif CPUINTEL}
-  SortDynArrayAnsiStringByCase[true] := @SortDynArrayAnsiStringI;
+  SortDynArrayAnsiStringByCase[true]  := @SortDynArrayAnsiStringI;
   IdemPropNameUSameLen[false] := @IdemPropNameUSameLenNotNull;
-  IdemPropNameUSameLen[true] := @mormot.core.base.CompareMem;
+  IdemPropNameUSameLen[true]  := @mormot.core.base.CompareMem;
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
   WinAnsiConvert       := NewEngine(CP_WINANSI) as TSynAnsiFixedWidth;

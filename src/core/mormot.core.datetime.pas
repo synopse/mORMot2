@@ -670,7 +670,7 @@ const
     '%%%%%%%%%',
     '%-%-%%%:%:%.%%');
 
-/// compute an Etag: xxxx value from 64-bit of information, as '"xxxxxx...xxxx"' text
+/// compute an Etag: xxxx value from 64-bit of information, as '"##hexa##"' text
 procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort23);
 
 /// handle HTTP_NOTMODIFIED (304) process against raw file information
