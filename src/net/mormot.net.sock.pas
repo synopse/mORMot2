@@ -1931,6 +1931,12 @@ type
     function PeerAddress(LocalAsVoid: boolean = false): RawUtf8;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
     function PeerPort: TNetPort;
+    /// compute a TStream compatible class instance from this (secured) socket
+    // - return nil if SockIsDefined is false, or a new TSocketStream instance
+    // which should be owned and released by the caller, while keeping this
+    // TCrtSocket instance available
+    // - see TCrtSocketStream if you just want to encapsulate TCrtSocket calls
+    function AsSocketStream: TSocketStream;
     /// set the TCP_NODELAY option for the connection
     // - default true will disable the Nagle buffering algorithm; it should
     // only be set for applications that send frequent small bursts of information
@@ -6348,6 +6354,17 @@ begin
     result := 0
   else
     result := fPeerAddr^.Port;
+end;
+
+function TCrtSocket.AsSocketStream: TSocketStream;
+begin
+  if SockIsDefined then
+    if Assigned(fSecure) then
+      result := TSocketStream.Create(fSecure)
+    else
+      result := TSocketStream.Create(fSock)
+  else
+    result := nil;
 end;
 
 
