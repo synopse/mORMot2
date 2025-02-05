@@ -10,6 +10,7 @@ unit mormot.net.sock;
    - Socket Process High-Level Encapsulation
    - MAC and IP Addresses Support
    - TLS / HTTPS Encryption Abstract Layer
+   - TSocketStream Socket Wrapper
    - Efficient Multiple Sockets Polling
    - Windows IOCP sockets support
    - TUri parsing/generating URL wrapper
@@ -1027,6 +1028,46 @@ var
 // ! @NewNetTls := @NewSChannelNetTls;
 function NewSChannelNetTls: INetTls;
 {$endif OSWINDOWS}
+
+
+{ ******************** TSocketStream Socket Wrapper }
+
+type
+  /// abstract parent class of both TSocketStream and TCrtSocketStream
+  TSocketStreamAbstract = class(TStreamWithNoSeek)
+  protected
+    fLastResult: TNetResult;
+  public
+    /// the low-level result code of the last Read() or Write() method call
+    property LastResult: TNetResult
+      read fLastResult;
+  end;
+
+  /// encapsulate a raw (TLS-encrypted) Socket to a TStream class
+  // - directly redirect Read/Write to socket's recv/send methods
+  // - this class will always report Size = 0 and Position = 0
+  TSocketStream = class(TSocketStreamAbstract)
+  protected
+    fSocket: TNetSocket;
+    fSecure: INetTls;
+  public
+    /// initialize this TStream for a given Socket handle
+    // - this class instance won't own nor release this Socket once done
+    constructor Create(aSocket: TNetSocket); overload; reintroduce;
+    /// initialize this TStream for a given TLS encryption instance
+    constructor Create(const aSecure: INetTls); overload; reintroduce;
+    /// receive some bytes from the associated Socket
+    // - returns the number of bytes filled into Buffer (<=Count)
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// send some data to the associated Socket
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// access to the underlying Socket instance
+    property Socket: TNetSocket
+      read fSocket;
+    /// access to the underlying INetTls instance
+    property Secure: INetTls
+      read fSecure;
+  end;
 
 
 { ******************** Efficient Multiple Sockets Polling }
@@ -3918,6 +3959,55 @@ begin
               (tls1.PrivatePassword         = tls2.PrivatePassword) and
               (tls1.PrivateKeyRaw           = tls2.PrivateKeyRaw) and
               (tls1.HostNamesCsv            = tls2.HostNamesCsv)));
+end;
+
+
+{ ******************** TSocketStream Socket Wrapper }
+
+{ TSocketStream }
+
+constructor TSocketStream.Create(aSocket: TNetSocket);
+begin
+  fSocket := aSocket;
+end;
+
+constructor TSocketStream.Create(const aSecure: INetTls);
+begin
+  fSecure := aSecure;
+end;
+
+function TSocketStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  if Assigned(fSecure) then
+    fLastResult := fSecure.Receive(@Buffer, Count)
+  else
+    fLastResult := fSocket.Recv(@Buffer, Count);
+  case fLastResult of
+    nrOk:
+      result := Count;
+    nrRetry:
+      result := 0; // no data available yet
+  else
+    result := -1;  // fatal error - e.g. nrClosed for recv()=0
+  end;
+  // fSize and fPosition are left untouched to keep both always equal 0
+end;
+
+function TSocketStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  if Assigned(fSecure) then
+    fLastResult := fSecure.Send(@Buffer, Count)
+  else
+    fLastResult := fSocket.Send(@Buffer, Count);
+  case fLastResult of
+    nrOk:
+      result := Count;
+    nrRetry:
+      result := 0; // no data available yet
+  else
+    result := -1;  // fatal error
+  end;
+  // fSize and fPosition are left untouched to keep both always equal 0
 end;
 
 

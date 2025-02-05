@@ -17,11 +17,14 @@ Cross-Platform Raw Sockets API Definition
 - MAC and IP Addresses Support
 - TLS / HTTPS Encryption Abstract Layer
 - Efficient Multiple Sockets Polling
+- `TSocketStream` Socket Wrapper
+- Windows IOCP sockets support
 - `TUri` parsing/generating URL wrapper
 - `TCrtSocket` Buffered Socket Read/Write Class
 - NTP / SNTP Protocol Client
 
-The Low-Level Sockets API is encapsultated into a single set of functions, and wrapped around a `TNetSocket` abstract helper, and never made public.
+The Low-Level Sockets API, which is complex and inconsistent among OS, is not made public and shouldn't be used in end-user code. This unit encapsultates all Sockets features into a single set of functions, e.g. around the TNetSocket abstract wrapper.
+
 
 ### mormot.net.http
 
