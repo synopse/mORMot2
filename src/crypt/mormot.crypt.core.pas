@@ -1315,7 +1315,7 @@ type
 {$endif USE_PROV_RSA_AES}
 
   /// abstract parent class to TAesPkcs7Writer and TAesPkcs7Reader
-  TAesPkcs7Abstract = class(TStreamWithPositionAndSize)
+  TAesPkcs7Abstract = class(TStreamWithNoSeek)
   protected
     fStream: TStream;
     fAes: TAesAbstract;
@@ -1338,8 +1338,6 @@ type
       aesMode: TAesMode = mCtr; bufferSize: integer = 128 shl 10); overload;
     /// finalize the AES encryption stream
     destructor Destroy; override;
-    /// position change is not allowed: this method will raise an exception
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// access to the associated stream, e.g. a TFileStreamEx instance
     property Stream: TStream
       read fStream;
@@ -7009,16 +7007,6 @@ destructor TAesPkcs7Abstract.Destroy;
 begin
   inherited Destroy;
   fAes.Free;
-end;
-
-function TAesPkcs7Abstract.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-var
-  prev: Int64;
-begin
-  prev := fPosition;
-  result := inherited Seek(Offset, Origin);
-  if prev <> fPosition then
-    RaiseStreamError(self, 'Seek');
 end;
 
 
