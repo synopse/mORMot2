@@ -4225,7 +4225,7 @@ type
   TStreamDynArray = array of TStream;
 
   {$M+}
-  /// TStream with a protected fPosition field
+  /// TStream with an internal Position field
   TStreamWithPosition = class(TStream)
   protected
     fPosition: Int64;
@@ -4235,16 +4235,23 @@ type
   public
     /// change the current Read/Write position, within current GetSize
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    /// call the 64-bit Seek() overload
+    /// generic override calling the 64-bit Seek() overload
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
   {$M-}
 
-  /// TStream with two protected fPosition/fSize fields
+  /// TStream with internal Position/Size fields
   TStreamWithPositionAndSize = class(TStreamWithPosition)
   protected
     fSize: Int64;
     function GetSize: Int64; override;
+  end;
+
+  /// TStream with internal Position/Size fields but allowing no Seek() change
+  TStreamWithNoSeek = class(TStreamWithPositionAndSize)
+  public
+    /// allow to retrieve but not change the current Read/Write position
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
   end;
 
   /// TStream using a RawByteString as internal storage
@@ -12801,7 +12808,7 @@ begin
     fPosition := result;
   end
   else
-    // optimize on Delphi when retrieving TStream.Position as Seek(0,soCurrent)
+    // optimize for Delphi when retrieving TStream.Position as Seek(0,soCurrent)
     result := fPosition;
 end;
 
@@ -12816,6 +12823,19 @@ end;
 function TStreamWithPositionAndSize.GetSize: Int64;
 begin
   result := fSize;
+end;
+
+
+{ TStreamWithNoSeek }
+
+function TStreamWithNoSeek.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var
+  prev: Int64;
+begin
+  prev := fPosition;
+  result := inherited Seek(Offset, Origin);
+  if prev <> fPosition then
+    RaiseStreamError(self, 'Seek');
 end;
 
 
