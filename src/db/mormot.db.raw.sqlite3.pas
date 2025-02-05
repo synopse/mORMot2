@@ -5428,11 +5428,10 @@ type
   // - data is read/written directly from/to the SQLite3 BTree
   // - data can be written after a TSqlRequest.BindZero() call to reserve memory
   // - this TStream has a fixed size, but Position property can be used to rewind
-  TSqlBlobStream = class(TStream)
+  TSqlBlobStream = class(TStreamWithPositionAndSize)
   protected
     fBlob: TSqlite3Blob;
     fDB: TSqlite3DB;
-    fSize, fPosition: Int64;
     fWritable: boolean;
   public
     /// Opens a BLOB located in row RowID, column ColumnName, table TableName
@@ -5447,10 +5446,6 @@ type
     /// write is allowed for in-place replacement (resizing is not allowed)
     // - Create() must have been called with ReadWrite=true
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// change the current read position
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    /// change the current read position
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// reuse this class instance with another row of the same table
     // - will update the stream size, and also rewind position to the beginning
     // - it is actually faster than creating a new TSqlBlobStream instance
@@ -8841,26 +8836,6 @@ begin
       sqlite3.blob_read(fBlob, Buffer, result, fPosition), 'blob_read');
     inc(fPosition, result);
   end;
-end;
-
-function TSqlBlobStream.Seek(Offset: Longint; Origin: Word): Longint;
-begin
-  result := Seek(Offset, TSeekOrigin(Origin));
-end;
-
-function TSqlBlobStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
-  case Origin of
-    soBeginning:
-      fPosition := Offset;
-    soCurrent:
-      Inc(fPosition, Offset);
-    soEnd:
-      fPosition := fSize + Offset;
-  end;
-  if fPosition > fSize then
-    fPosition := fSize;
-  result := fPosition;
 end;
 
 procedure TSqlBlobStream.ChangeRow(RowID: Int64);
