@@ -6144,6 +6144,11 @@ procedure TTestCoreBase.Charsets;
     CheckEqual(length(w), length(su), 'rtl1');
     Check(CompareMem(pointer(w), pointer(su), length(w)), 'rtl2');
     {$endif HASCODEPAGE}
+    {$ifdef OSWINDOWS}
+    // skip old Windows (XP/Vista/Seven) which may miss some/most encodings
+    if OSVersion < wTen then
+      exit; // seems not available without a specific language pack
+    {$endif OSWINDOWS}
     // validate mORMot conversion
     eng := TSynAnsiConvert.Engine(cp);
     Check(eng <> nil);
@@ -6175,14 +6180,11 @@ procedure TTestCoreBase.Charsets;
       // johab (cp=1361) shift_jis (cp=932)
       // -> we would need some input from native speakers of missing charsets
     end;
-    {$ifdef OSWINDOWS} // old Windows miss most encodings
-    if OSVersion < wTen then
-      exit; // seems not available without a specific language pack
-    {$else}
+    {$ifdef OSPOSIX}
     if (name = 'hz') and
        not icu.IsAvailable then // FPC RTL iconv is not enough about HZ-GB2312
       exit;
-    {$endif OSWINDOWS}
+    {$endif OSPOSIX}
     // validate Unicode RTL conversion
     {$ifdef HASCODEPAGE}
     {$ifdef OSPOSIX}
