@@ -209,26 +209,40 @@ type
     lfCustom,
     lfDDD);
 
+  /// global increasing log levels as expected by most applications
+  TAppLogLevel = (
+    aplNone,
+    aplCritical,
+    aplError,
+    aplWarning,
+    aplInfo,
+    aplDebug);
+
 const
   /// up to 16 TSynLogFamily, i.e. TSynLog children classes can be defined
   MAX_SYNLOGFAMILY = 15;
 
+  /// constant with all TSynLogFamily.Level items, as set by LOG_VERBOSE
+  LOG_ALL = [succ(sllNone) .. high(TSynLogLevel)];
+  /// constant matching TSynLogFamily.Level items for regular aplCritical level
+  LOG_CRI = [sllException, sllExceptionOS];
+  /// constant matching TSynLogFamily.Level items for regular aplError level
+  LOG_ERR = LOG_CRI + [sllLastError, sllError, sllDDDError];
+  /// constant matching TSynLogFamily.Level items for regular aplWarning level
+  LOG_WNG = LOG_ERR + [sllWarning, sllFail, sllStackTrace];
+  /// constant matching TSynLogFamily.Level items for regular aplInfo level
+  LOG_NFO = LOG_WNG + [sllInfo, sllDDDInfo, sllMonitoring, sllClient, sllServer, sllServiceCall];
+
   /// can be set to TSynLogFamily.Level in order to log all available events
-  LOG_VERBOSE: TSynLogLevels =
-    [succ(sllNone)..high(TSynLogLevel)];
+  LOG_VERBOSE: TSynLogLevels = LOG_ALL;
 
   /// contains the logging levels for which stack trace should be dumped
   // - which are mainly exceptions or application errors
-  LOG_STACKTRACE: TSynLogLevels =
-    [sllException,
-     sllExceptionOS,
-     sllLastError,
-     sllError,
-     sllDDDError];
+  LOG_STACKTRACE: TSynLogLevels = LOG_ERR;
 
   /// the text equivalency of each logging level, as written in the log file
   // - PCardinal(@LOG_LEVEL_TEXT[L][3])^ will be used for fast level matching
-  // so text must be unique for characters [3..6] -> e.g. 'UST4'
+  // so text must be unique for characters [3..6] -> e.g. 'ust4'
   LOG_LEVEL_TEXT: array[TSynLogLevel] of string[7] = (
     '       ',  // sllNone
     ' info  ',  // sllInfo
@@ -372,11 +386,10 @@ var
     ccWhite,        // sllDDDInfo
     ccLightBlue);   // sllMonitoring
 
-const
   /// how TLogFilter map TSynLogLevel events
   LOG_FILTER: array[TSynLogFilter] of TSynLogLevels = (
     [],                                                       // lfNone
-    [succ(sllNone) .. high(TSynLogLevel)],                    // lfAll
+    LOG_ALL,                                                  // lfAll
     [sllError, sllLastError, sllException, sllExceptionOS],   // lfErrors
     [sllException, sllExceptionOS],                           // lfExceptions
     [sllEnter, sllLeave],                                     // lfProfile
@@ -401,6 +414,16 @@ const
     sllInfo,
     sllWarning);
 
+  /// may be used to log as regular application-like levels
+  LOG_APP: array[TAppLogLevel] of TSynLogLevels = (
+    [],        // aplNone
+    LOG_CRI,   // aplCritical (1)
+    LOG_ERR,   // aplError    (2)
+    LOG_WNG,   // aplWarning  (3)
+    LOG_NFO,   // aplInfo     (4)
+    LOG_ALL);  // aplDebug    (5)
+
+
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
 function ToText(event: TSynLogLevel): RawUtf8; overload;
@@ -416,6 +439,18 @@ function ToCaption(filter: TSynLogFilter): string; overload;
 
 /// returns a method event as text, using the .map/.dbg/.mab information if available
 function ToText(const Event: TMethod): RawUtf8; overload;
+
+/// returns the trimmed text value of an application-like logging level
+// - i.e. 'Critical' for aplCritical
+function ToText(apl: TAppLogLevel): RawUtf8; overload;
+
+/// recognize TAppLogLevel common text like 'WARNING'
+// - ignoring case and only checking the first 4 chars
+// - would also recognize '1' .. '5' numbers as increasing aplCritical .. aplDebug
+function ToAppLogLevel(const Text: RawUtf8): TAppLogLevel;
+
+/// could be used to set TSynLogFamily.Levels e.g. from 'DEBUG' or 'CRITICAL' text
+function FromAppLogLevel(const Text: RawUtf8): TSynLogLevels;
 
 /// retrieve a one-line of text including detailed heap information
 // - will use the RTL status entrypoint, or detect mormot.core.fpcx64mm
@@ -3630,6 +3665,39 @@ begin
   FormatUtf8('% using %(%)', [
     GetInstanceDebugFile.FindLocationShort(PtrUInt(Event.Code)),
     TObject(Event.Data), Event.Data], result);
+end;
+
+function ToText(apl: TAppLogLevel): RawUtf8;
+begin
+  result := _LogAppText[apl];
+end;
+
+function ToAppLogLevel(const Text: RawUtf8): TAppLogLevel;
+begin
+  if Text <> '' then
+    case PCardinal(Text)^ and $dfdfdfdf of
+      ord('C') + ord('R') shl 8 + ord('I') shl 16 + ord('T') shl 24:
+        result := aplCritical;
+      ord('E') + ord('R') shl 8 + ord('R') shl 16 + ord('O') shl 24:
+        result := aplError;
+      ord('W') + ord('A') shl 8 + ord('R') shl 16 + ord('N') shl 24:
+        result := aplWarning;
+      ord('I') + ord('N') shl 8 + ord('F') shl 16 + ord('O') shl 24:
+        result := aplInfo;
+      ord('D') + ord('E') shl 8 + ord('B') shl 16 + ord('U') shl 24:
+        result := aplDebug;
+    else if PWord(Text)^ in [ord('1') .. ord('5')] then
+      result := TAppLogLevel(PByte(Text)^ - ord('0'))
+    else
+      result := aplNone;
+    end
+  else
+    result := aplNone;
+end;
+
+function FromAppLogLevel(const Text: RawUtf8): TSynLogLevels;
+begin
+  result := LOG_APP[ToAppLogLevel(Text)];
 end;
 
 {$ifdef FPC}
