@@ -1053,9 +1053,9 @@ type
   public
     /// initialize this TStream for a given Socket handle
     // - this class instance won't own nor release this Socket once done
-    constructor Create(aSocket: TNetSocket); overload; reintroduce;
+    constructor Create(aSocket: TNetSocket); reintroduce; overload;
     /// initialize this TStream for a given TLS encryption instance
-    constructor Create(const aSecure: INetTls); overload; reintroduce;
+    constructor Create(const aSecure: INetTls); reintroduce; overload;
     /// receive some bytes from the associated Socket
     // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
