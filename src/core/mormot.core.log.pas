@@ -1608,7 +1608,7 @@ type
     fLogProcMerged: TSynLogFileProcDynArray;
     fLogProcMergedCount: integer;
     fLogProcIsMerged: boolean;
-    fLogProcStack: array of array of cardinal;
+    fLogProcStack: array of TIntegerDynArray;
     fLogProcStackCount: array of integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
     fLogProcSortInternalComp: function(A, B: PtrInt): PtrInt of object;
@@ -1620,6 +1620,7 @@ type
     procedure SetLogProcMerged(const Value: boolean);
     function GetEventText(index: integer): RawUtf8;
     function GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogLevel;
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve headers + fLevels[] + fLogProcNatural[], and delete invalid fLines[]
     procedure LoadFromMap(AverageLineLength: integer = 32); override;
     procedure CleanLevels;
@@ -3639,6 +3640,7 @@ end;
 var
   _LogInfoText: array[TSynLogLevel] of RawUtf8;
   _LogInfoCaption: array[TSynLogLevel] of string;
+  _LogAppText: array[TAppLogLevel] of RawUtf8;
 
 function ToText(event: TSynLogLevel): RawUtf8;
 begin
@@ -6630,21 +6632,14 @@ var
   L: TSynLogLevel;
 begin
   for L := low(TSynLogLevel) to high(TSynLogLevel) do
-    // LOG_LEVEL_TEXT[L][3] -> test e.g. 'UST4' chars
+    // LOG_LEVEL_TEXT[L][3] -> case-sensitive lookup e.g. 'ust4' chars
     fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^;
 end;
 
 function TSynLogFile.GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogLevel;
-var
-  P: PtrInt;
-begin
-  P := PtrInt(IntegerScan(@fLogLevelsTextMap[succ(sllNone)],
-    ord(high(TSynLogLevel)), PCardinal(LineBeg + fLineLevelOffset)^));
-  if P <> 0 then
-    result := TSynLogLevel(
-      (P - PtrInt(PtrUInt(@fLogLevelsTextMap[succ(sllNone)]))) shr 2 + 1)
-  else
-    result := sllNone;
+begin // very fast lookup, using SSE2 on Intel/AMD
+  result := TSynLogLevel(IntegerScanIndex(@fLogLevelsTextMap[succ(sllNone)],
+         ord(high(TSynLogLevel)), PCardinal(LineBeg + fLineLevelOffset)^) + 1);
 end;
 
 function TSynLogFile.EventCount(const aSet: TSynLogLevels): integer;
@@ -6959,7 +6954,7 @@ begin
       end;
     end;
     // 4. compute customer-side profiling
-    SetLength(fLogProcNatural, fLogProcNaturalCount);
+    SetLength(fLogProcNatural, fLogProcNaturalCount); // exact resize
     fp := pointer(fLogProcNatural);
     fpe := @fLogProcNatural[fLogProcNaturalCount];
     while PAnsiChar(fp) < PAnsiChar(fpe) do
@@ -7232,9 +7227,10 @@ end;
 
 procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUtf8Char);
 var
-  thread, n, i: PtrUInt;
+  thread: PtrUInt;
   MS: integer;
   L: TSynLogLevel;
+  p: PCardinalArray;
 begin
   inherited ProcessOneLine(LineBeg, LineEnd);
   if length(fLevels) < fLinesMax then
@@ -7259,7 +7255,7 @@ begin
     else
       fLineLevelOffset := 18;
     if (LineBeg[fLineLevelOffset] = '!') or // ! = thread 1
-      (GetLogLevelFromText(LineBeg) = sllNone) then
+       (GetLogLevelFromText(LineBeg) = sllNone) then
     begin
       inc(fLineLevelOffset, 3);
       fThreadsCount := fLinesMax;
@@ -7297,15 +7293,15 @@ begin
       end;
     end;
     inc(fThreadInfo[thread].Rows);
-    if (L = sllInfo) and
-       IdemPChar(LineBeg + fLineLevelOffset + 5, 'SETTHREADNAME ') then
-      with fThreadInfo[thread] do
-      begin
-        // see TSynLog.LogThreadName
-        n := length(SetThreadName);
-        SetLength(SetThreadName, n + 1);
-        SetThreadName[n] := LineBeg;
-      end;
+    if L = sllInfo then
+    begin // fast detect case-insensitive ' info  SetThreadName ' pattern
+      p := pointer(LineBeg + fLineLevelOffset + 5);
+      if (p^[0] = ord('S') + ord('e') shl 8 + ord('t') shl 16 + ord('T') shl 24) and
+         (p^[1] = ord('h') + ord('r') shl 8 + ord('e') shl 16 + ord('a') shl 24) and
+         (p^[2] = ord('d') + ord('N') shl 8 + ord('a') shl 16 + ord('m') shl 24) and
+         (PWord(@p[3])^ = ord('e') + ord(' ') shl 8) then
+        PtrArrayAdd(fThreadInfo[thread].SetThreadName, LineBeg); // from now on
+    end;
   end
   else
     thread := 0;
@@ -7314,16 +7310,10 @@ begin
   case L of
     sllEnter:
       begin
-        n := length(fLogProcStack[thread]);
-        i := fLogProcStackCount[thread];
-        if i >= n then
-          SetLength(fLogProcStack[thread], i + 256);
-        fLogProcStack[thread][i] := fLogProcNaturalCount;
-        inc(fLogProcStackCount[thread]);
-        n := length(fLogProcNatural);
-        if PtrUInt(fLogProcNaturalCount) >= n then
+        AddInteger(fLogProcStack[thread], fLogProcStackCount[thread], fLogProcNaturalCount);
+        if length(fLogProcNatural) <= fLogProcNaturalCount then
           SetLength(fLogProcNatural, NextGrow(fLogProcNaturalCount));
-        // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
+        // fLogProcNatural[].### fields will be set later during parsing
         inc(fLogProcNaturalCount);
       end;
     sllLeave:
@@ -7365,7 +7355,7 @@ begin
     result := '';
     if cardinal(ThreadID) <= fThreadMax then
       with fThreadInfo[ThreadID] do
-        if SetThreadName <> nil then
+        if SetThreadName <> nil then // search the thread name at this position
         begin
           found := SetThreadName[0];
           if cardinal(CurrentLogIndex) < cardinal(fCount) then
@@ -8018,6 +8008,7 @@ begin
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';
+  GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
