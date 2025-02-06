@@ -5920,7 +5920,8 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
-  U := TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsi(pointer(SU), length(SU));
+  TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsiVar(
+    pointer(SU), length(SU), RawByteString(U));
   Check(length(U) = 4);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);

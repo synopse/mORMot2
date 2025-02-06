@@ -401,10 +401,10 @@ type
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
-      SourceChars: cardinal): PAnsiChar; overload; virtual;
+      SourceChars: cardinal): PAnsiChar; virtual;
     /// direct conversion of an Unicode buffer into an Ansi Text
-    function UnicodeBufferToAnsi(Source: PWideChar;
-      SourceChars: cardinal): RawByteString; overload; virtual;
+    procedure UnicodeBufferToAnsiVar(Source: PWideChar;
+      SourceChars: cardinal; var Result: RawByteString); virtual;
     /// convert any Unicode-encoded String into Ansi Text
     // - internally calls UnicodeBufferToAnsi virtual method
     function UnicodeStringToAnsi(const Source: SynUnicode): RawByteString;
@@ -567,8 +567,8 @@ type
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
       SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an Unicode buffer into an Ansi Text
-    function UnicodeBufferToAnsi(Source: PWideChar;
-      SourceChars: cardinal): RawByteString; override;
+    procedure UnicodeBufferToAnsiVar(Source: PWideChar;
+      SourceChars: cardinal; var Result: RawByteString); override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no #0 terminator is appended to the buffer
@@ -3902,18 +3902,18 @@ begin
   Dest[result] := #0;
 end;
 
-function TSynAnsiConvert.UnicodeBufferToAnsi(Source: PWideChar;
-  SourceChars: cardinal): RawByteString;
+procedure TSynAnsiConvert.UnicodeBufferToAnsiVar(Source: PWideChar;
+  SourceChars: cardinal; var Result: RawByteString);
 var
   tmp: TSynTempBuffer;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    result := ''
+    Result := ''
   else
   begin
     tmp.Init(SourceChars * 3);
-    FastSetStringCP(result, tmp.buf, UnicodeBufferToAnsi(
+    FastSetStringCP(Result, tmp.buf, UnicodeBufferToAnsi(
       tmp.buf, Source, SourceChars) - PAnsiChar(tmp.buf), fCodePage);
     tmp.Done;
   end;
@@ -3921,13 +3921,13 @@ end;
 
 function TSynAnsiConvert.UnicodeStringToAnsi(const Source: SynUnicode): RawByteString;
 begin
-  result := UnicodeBufferToAnsi(pointer(Source), length(Source));
+  UnicodeBufferToAnsiVar(pointer(Source), length(Source), result);
 end;
 
 {$ifndef PUREMORMOT2}
 function TSynAnsiConvert.RawUnicodeToAnsi(const Source: RawUnicode): RawByteString;
 begin
-  result := UnicodeBufferToAnsi(pointer(Source), length(Source) shr 1);
+  UnicodeBufferToAnsiVar(pointer(Source), length(Source) shr 1, result);
 end;
 {$endif PUREMORMOT2}
 
@@ -3954,8 +3954,8 @@ begin
   else
   begin
     u := tmp.Init(SourceChars * 2);
-    result := UnicodeBufferToAnsi(u,
-      From.AnsiBufferToUnicode(u, Source, SourceChars) - u);
+    UnicodeBufferToAnsiVar(u,
+      From.AnsiBufferToUnicode(u, Source, SourceChars) - u, result);
     tmp.Done;
   end;
 end;
@@ -4510,18 +4510,18 @@ begin
     Source, SourceChars, [ccfNoTrailingZero]);
 end;
 
-function TSynAnsiUtf8.UnicodeBufferToAnsi(Source: PWideChar;
-  SourceChars: cardinal): RawByteString;
+procedure TSynAnsiUtf8.UnicodeBufferToAnsiVar(Source: PWideChar;
+  SourceChars: cardinal; var Result: RawByteString);
 var
   tmp: TSynTempBuffer;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    result := ''
+    Result := ''
   else
   begin
     tmp.Init(SourceChars * 3);
-    FastSetStringCP(result, tmp.buf, RawUnicodeToUtf8(tmp.buf,
+    FastSetStringCP(Result, tmp.buf, RawUnicodeToUtf8(tmp.buf,
       SourceChars * 3, Source, SourceChars, [ccfNoTrailingZero]), fCodePage);
     tmp.Done;
   end;
@@ -4753,11 +4753,11 @@ begin
       else
         result := CurrentAnsiConvert.Utf8BufferToAnsi(buf, len);
     bomUtf16LE:
-      result := CurrentAnsiConvert.UnicodeBufferToAnsi(buf, len);
+      CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, len, RawByteString(result));
     bomUtf16BE:
       begin
         RawUnicodeSwapEndian(buf, len); // Little Endian in-place conversion
-        result := CurrentAnsiConvert.UnicodeBufferToAnsi(buf, len);
+        CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, len, RawByteString(result));
       end;
     bomUtf8:
       result := CurrentAnsiConvert.Utf8BufferToAnsi(buf, len);
@@ -4976,7 +4976,8 @@ end;
 
 function RawUnicodeToWinAnsi(const Unicode: RawUnicode): WinAnsiString;
 begin
-  result := WinAnsiConvert.UnicodeBufferToAnsi(pointer(Unicode), Length(Unicode) shr 1);
+  WinAnsiConvert.UnicodeBufferToAnsiVar(pointer(Unicode), Length(Unicode) shr 1,
+    RawByteString(result));
 end;
 
 {$endif PUREMORMOT2}
@@ -4998,12 +4999,12 @@ end;
 
 function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString;
 begin
-  result := WinAnsiConvert.UnicodeBufferToAnsi(WideChar, WideCharCount);
+  WinAnsiConvert.UnicodeBufferToAnsiVar(WideChar, WideCharCount, RawByteString(result));
 end;
 
 function WideStringToWinAnsi(const Wide: WideString): WinAnsiString;
 begin
-  result := WinAnsiConvert.UnicodeBufferToAnsi(pointer(Wide), Length(Wide));
+  WinAnsiConvert.UnicodeBufferToAnsiVar(pointer(Wide), Length(Wide), RawByteString(result));
 end;
 
 procedure UnicodeBufferToWinAnsi(source: PWideChar; out Dest: WinAnsiString);
@@ -5337,7 +5338,8 @@ end;
 function RawUnicodeToString(const U: RawUnicode): string;
 begin
   // uses StrLenW() and not length(U) to handle case when was used as buffer
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(pointer(U), StrLenW(pointer(U)));
+  CurrentAnsiConvert.UnicodeBufferToAnsiVar(pointer(U), StrLenW(pointer(U)),
+    RawByteString(result));
 end;
 
 {$endif PUREMORMOT2}
@@ -5354,17 +5356,17 @@ end;
 
 function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P, L);
+  CurrentAnsiConvert.UnicodeBufferToAnsiVar(P, L, RawByteString(result));
 end;
 
 procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P, L);
+  CurrentAnsiConvert.UnicodeBufferToAnsiVar(P, L, RawByteString(result));
 end;
 
 function SynUnicodeToString(const U: SynUnicode): string;
 begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(pointer(U), length(U));
+  CurrentAnsiConvert.UnicodeBufferToAnsiVar(pointer(U), length(U), RawByteString(result));
 end;
 
 function Utf8DecodeToString(P: PUtf8Char; L: integer): string;
@@ -5428,7 +5430,7 @@ end;
 
 function UnicodeStringToWinAnsi(const S: UnicodeString): WinAnsiString;
 begin
-  result := WinAnsiConvert.UnicodeBufferToAnsi(pointer(S), Length(S));
+  WinAnsiConvert.UnicodeBufferToAnsiVar(pointer(S), Length(S), RawByteString(result));
 end;
 
 function Utf8DecodeToUnicodeString(P: PUtf8Char; L: integer): UnicodeString;

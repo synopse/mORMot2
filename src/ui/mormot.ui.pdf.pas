@@ -9019,7 +9019,7 @@ begin
   if PW <> nil then
     if fPage.fFont.FTrueTypeFontsIndex = 0 then
     begin
-      s := fDoc.Engine.UnicodeBufferToAnsi(PW, StrLenW(PW));
+      fDoc.Engine.UnicodeBufferToAnsiVar(PW, StrLenW(PW), s);
       i := 1;
       while i <= length(s) do
       begin // loop is MBCS ready
