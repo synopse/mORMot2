@@ -9237,32 +9237,32 @@ var
 begin
   // generated asm is much better with a local proc
   if P < PEnd then
-  repeat
-    PBeg := P;
-    {$ifdef CPUX64}
-    inc(P, BufferLineLength(P, PEnd)); // use branchless SSE2 on x86_64
-    {$else}
-    while (P < PEnd) and
-          (P^ <> #13) and
-          (P^ <> #10) do
-      inc(P);
-    {$endif CPUX64}
-    Map.ProcessOneLine(PBeg, P);
-    if P + 1 < PEnd then
-      if PWord(P)^ = 13 + 10 shl 8 then
-      begin
-        inc(P, 2); // ignore #13#10
-        if P < PEnd then
-          continue;
-      end
-      else
-      begin
-        inc(P);    // ignore #13 or #10
-        if P < PEnd then
-          continue;
-      end;
-    break;
-  until false;
+    repeat
+      PBeg := P;
+      {$ifdef CPUX64}
+      inc(P, BufferLineLength(P, PEnd)); // use branchless SSE2 on x86_64
+      {$else}
+      while (P < PEnd) and
+            (P^ <> #13) and
+            (P^ <> #10) do
+        inc(P);
+      {$endif CPUX64}
+      Map.ProcessOneLine(PBeg, P);
+      if P + 1 < PEnd then
+        if PWord(P)^ = 13 + 10 shl 8 then
+        begin
+          inc(P, 2); // ignore #13#10
+          if P < PEnd then
+            continue;
+        end
+        else
+        begin
+          inc(P);    // ignore #13 or #10
+          if P < PEnd then
+            continue;
+        end;
+      break;
+    until false;
 end;
 
 procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer = 32);
@@ -9275,9 +9275,8 @@ begin
   GetMem(fLines, fLinesMax * SizeOf(pointer));
   P := pointer(fMap.Buffer);
   fMapEnd := P + fMap.Size;
-  if (PWord(P)^ = $BBEF) and
-     (P[2] = #$BF) then
-    inc(P, 3); // ignore UTF-8 BOM
+  if PCardinal(P)^ and $00ffffff = BOM_UTF8 then
+    inc(P, 3); // ignore any UTF-8 BOM
   ParseLines(P, fMapEnd, self);
   if fLinesMax > fCount + 16384 then
     Reallocmem(fLines, fCount * SizeOf(pointer)); // size down only if worth it

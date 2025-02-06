@@ -658,8 +658,12 @@ type
     bomUtf8);
 
 const
+  /// UTF-8 BOM marker three bytes value (in little-endian)
+  BOM_UTF8 = $bfbbef;
   /// UTF-16LE BOM WideChar marker, as existing e.g. in some UTF-16 Windows files
-  BOM_UTF16LE = #$FEFF;
+  BOM_UTF16LE = #$feff;
+  /// UTF-16BE BOM WideChar marker, which is not supported
+  BOM_UTF16BE = #$fffe;
 
 /// check the file BOM at the beginning of a file buffer
 // - BOM is common only with Microsoft products
@@ -4615,9 +4619,9 @@ begin
           dec(BufferSize, 2);
           result := bomUnicode; // UTF-16 LE
         end;
-      $bbef:
+      BOM_UTF8 and $ffff:
         if (BufferSize >= 3) and
-           (PByteArray(Buffer)[2] = $bf) then
+           (PByteArray(Buffer)[2] = (BOM_UTF8 shr 16)) then // UTF-8
         begin
           inc(PByte(Buffer), 3);
           dec(BufferSize, 3);

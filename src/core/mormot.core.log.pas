@@ -7994,7 +7994,7 @@ begin
   len := Utf8TruncatedLength(P, len, destsize - (destbuffer - start) - 3);
   if not IsAnsiCompatible(P, len) then
   begin
-    PInteger(destbuffer)^ := $bfbbef; // UTF-8 BOM
+    PInteger(destbuffer)^ := BOM_UTF8;
     inc(destbuffer, 3);
   end;
   MoveFast(P^, destbuffer^, len);
