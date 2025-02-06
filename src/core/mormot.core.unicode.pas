@@ -64,6 +64,9 @@ const
   /// TUtf8Table.Lookup[] value for a 7-bit ASCII character
   UTF8_ASCII    = 0;
   /// maximum TUtf8Table.Lookup[] value within UTF-16 accessible range
+  // - this unit support the full original UTF-8 range, but this constant could
+  // be used to ensure RFC 3629 expectations, as used e.g. by IsValidUtf8() and
+  // most UTF-16 software or language (e.g. Windows, Java, JavaScript...)
   UTF8_MAXUTF16 = 3;
   /// impossible TUtf8Table.Lookup[] value
   UTF8_INVALID  = 6;
@@ -3194,7 +3197,7 @@ procedure DetectRawUtf8(var source: RawByteString);
 begin
   {$ifdef HASCODEPAGE} // do nothing on oldest Delphi
   if (source <> '') and
-     IsValidUtf8(source) then
+     IsValidUtf8Buffer(pointer(source), length(source)) then
     EnsureRawUtf8(source);
   {$endif HASCODEPAGE}
 end;
@@ -4726,46 +4729,50 @@ end;
 
 { *************** Low-Level String Conversion Functions }
 
-procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8);
 {$ifdef HASCODEPAGE}
+procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8);
 var
+  p: PStrRec;
   cp: cardinal;
-{$endif HASCODEPAGE}
 begin
+  if result <> '' then
+    FastAssignNew(result);
   if s = '' then
-    result := ''
-  else
-  {$ifdef HASCODEPAGE}
+    exit;
+  p := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE);
+  cp := p^.codePage;
+  if cp = CP_UTF8 then
   begin
-    cp := GetCodePage(s);
-    if cp = CP_ACP then
-    begin
-      cp := Unicode_CodePage;
-      {$ifdef FPC}
-      if cp = CP_UTF8 then // happens on POSIX and with Lazarus - so FPC only
-      begin
-        if PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.refCnt >= 0 then
-        begin
-          result := s; // not a read-only constant: assign by ref
-          FakeCodePage(RawByteString(result), cp); // override 0 by CP_UTF8
-        end
-        else
-          FastSetString(result, pointer(s), length(s)); // realloc constant
-        exit;
-      end;
-      {$endif FPC}
-    end;
-    if cp = CP_UTF8 then
-      result := s
-    else if cp >= CP_RAWBLOB then
-      FastSetString(result, pointer(s), length(s)) // no convert, just copy
-    else
-      TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), length(s), result);
+    if p^.refCnt >= 0 then // inlined result := s of this RawUtf8 string
+      StrCntAdd(p^.refCnt);
+    pointer(result) := pointer(s);
+    exit;
   end;
-  {$else}
-  CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(s), length(s), result);
-  {$endif HASCODEPAGE}
+  if cp = CP_ACP then
+    cp := Unicode_CodePage;
+  if (cp >= CP_RAWBLOB) or
+     (cp = CP_UTF8) then
+      if p^.refCnt >= 0 then
+      begin
+        p^.codePage := cp; // fix the code page of s in-place with no alloc
+        StrCntAdd(p^.refCnt);
+        pointer(result) := pointer(s);
+      end
+      else
+        FastSetString(result, pointer(s), p^.length) // no convert, just copy
+  else // need a charset conversion
+    TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), p^.length, result);
 end;
+{$else}
+procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8);
+begin
+  if (s = '') or
+     IsValidUtf8Buffer(pointer(s), length(s)) then // slower but safe
+    result := s
+  else
+    CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(s), length(s), result);
+end;
+{$endif HASCODEPAGE}
 
 function AnyAnsiToUtf8(const s: RawByteString): RawUtf8;
 begin
@@ -4997,7 +5004,7 @@ begin
   if Txt <> '' then
     {$ifndef UNICODE}
     if (Unicode_CodePage = CP_UTF8) or
-       IsAnsiCompatible(Txt) then
+       IsValidUtf8Buffer(pointer(Txt), length(Txt)) then
     begin
       RawByteString(TVarData(result).VAny) := Txt;
       EnsureRawUtf8(RawByteString(TVarData(result).VAny));
