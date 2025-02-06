@@ -7223,6 +7223,8 @@ begin
   if IsObject then
     SetLength(VName, aValue);
   SetLength(VValue, aValue);
+  if aValue < VCount then
+    VCount := aValue; // avoid access to unallocated memory slots
 end;
 
 function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
