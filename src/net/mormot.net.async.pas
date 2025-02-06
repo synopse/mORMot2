@@ -592,7 +592,7 @@ type
     fLastOperationReleaseMemorySeconds: cardinal;
     fLastOperationIdleSeconds: cardinal;
     fKeepConnectionInstanceMS: cardinal;
-    fLastOperationMS: Int64; // as set by ProcessIdleTix()
+    fLastOperationMS: Int64; // = GetTickCount64 as set by ProcessIdleTix()
     {$ifdef USE_WINIOCP}
     // in IOCP mode, Execute does wieSend (and wieAccept for TAsyncServer)
     fIocp: TWinIocp; // wieAccept/wieSend events in their its own IOCP queue
@@ -2812,23 +2812,20 @@ var
   n1, n2, h: integer;
 begin
   // retrieve the connection instances to be released
-  if Terminated or
-     (fGC1.Count + fGC2.Count = 0) then
-    exit;
   tofree.Count := 0;
   if fGC2.Safe.TryLock then
   try
     if fGC1.Safe.TryLock then
+      // if we reached here, both GC#1 and GC#2 have been acquired
       try
-        // keep in first generation GC for 100 ms by default
+        // keep just-closed-connections in GC#1 list for 100 ms by default
         n1 := OneGC(fGC1, fGC2, fLastOperationMS, fKeepConnectionInstanceMS);
       finally
         fGC1.Safe.UnLock;
       end
     else
       exit; // won't block if another thread is accessing GC#1
-    fGCTix := fLastOperationMS shr 5; // as checked in ProcessIdleTix()
-    // wait 10 seconds until no pending event is in queue and free instances
+    // keep instances 10 seconds in GC#2 until no pending accept needs them
     n2 := 0;
     if fGC2.Count <> 0 then
     begin
@@ -2840,6 +2837,8 @@ begin
   end
   else
     exit; // won't block if another thread is accessing GC#2
+  // notify the result of GC#1 and GC#2 collection
+  fGCTix := fLastOperationMS shr 5; // as checked in ProcessIdleTix()
   h := n1 xor (n2 shl 16); // compute the current state of both GC
   if (h = fGCLast) and
      (tofree.Count = 0) then
