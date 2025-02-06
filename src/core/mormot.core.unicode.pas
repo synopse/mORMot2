@@ -5064,7 +5064,8 @@ begin
     result := ''
   else
     {$ifdef UNICODE}
-    result := TSynAnsiConvert.Engine(CodePage).AnsiToUnicodeString(Ansi);
+    TSynAnsiConvert.Engine(CodePage).AnsiToUnicodeStringVar(
+      pointer(Ansi), length(Ansi), result);
     {$else}
     result := CurrentAnsiConvert.AnsiToAnsi(TSynAnsiConvert.Engine(CodePage), Ansi);
     {$endif UNICODE}
