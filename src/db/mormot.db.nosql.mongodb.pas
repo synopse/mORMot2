@@ -3604,7 +3604,7 @@ begin
           Auth(DatabaseName, UserName, digest, ForceMongoDBCR, i);
           with fGracefulReconnect do
             if Enabled and
-               (EncryptedDigest='') then
+               (EncryptedDigest = '') then
             begin
               ForcedDBCR := ForceMongoDBCR;
               User := UserName;
@@ -3695,6 +3695,7 @@ begin
         'payload', bson,
         'autoAuthorize', 1
         ]), res);
+    resp.Init;
     CheckPayload;
     if err = '' then
     begin
@@ -3703,8 +3704,9 @@ begin
         err := 'returned invalid nonce';
     end;
     if err <> '' then
-      EMongoException.RaiseUtf8('%.OpenAuthSCRAM("%") step1: % - res=%',
-        [self, DatabaseName, err, res]);
+      EMongoException.RaiseUtf8(
+        '%.OpenAuthSCRAM("%") step1: % - res=% payload=%',
+        [self, DatabaseName, err, res, PVariant(@resp)^]);
     key := 'c=biws,r=' {%H-}+ rnonce;
     Pbkdf2HmacSha1(Digest, Base64ToBin(resp.U['s']),
       Utf8ToInteger(resp.U['i']), salted);
@@ -3729,8 +3731,9 @@ begin
        (resp.U['v'] <> BinToBase64(@server, SizeOf(server))) then
       err := 'Server returned an invalid signature';
     if err <> '' then
-      EMongoException.RaiseUtf8('%.OpenAuthSCRAM("%") step2: % - res=%',
-        [self, DatabaseName, err, res]);
+      EMongoException.RaiseUtf8(
+        '%.OpenAuthSCRAM("%") step2: % - res=% payload=%',
+        [self, DatabaseName, err, res, PVariant(@resp)^]);
     if not res.done then
     begin
       // third empty challenge may be required
