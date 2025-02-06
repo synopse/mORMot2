@@ -6856,23 +6856,32 @@ begin
 end;
 
 procedure EnsureUnique(var Value: TIntegerDynArray);
+var
+  v: PAnsiChar; // for better inlining
 begin
-  if (Value <> nil) and
-     (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
+  v := pointer(Value);
+  if (v <> nil) and
+     (PDACnt(v - _DACNT)^ > 1) then
     DynArrayEnsureUnique(@Value, TypeInfo(TIntegerDynArray));
 end;
 
 procedure EnsureUnique(var Value: TRawUtf8DynArray);
+var
+  v: PAnsiChar;
 begin
-  if (Value <> nil) and
-     (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
+  v := pointer(Value);
+  if (v <> nil) and
+     (PDACnt(v - _DACNT)^ > 1) then
     DynArrayEnsureUnique(@Value, TypeInfo(TRawUtf8DynArray));
 end;
 
 procedure EnsureUnique(var Value: TVariantDynArray);
+var
+  v: PAnsiChar;
 begin
-  if (Value <> nil) and
-     (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
+  v := pointer(Value);
+  if (v <> nil) and
+     (PDACnt(v - _DACNT)^ > 1) then
     DynArrayEnsureUnique(@Value, TypeInfo(TVariantDynArray));
 end;
 
