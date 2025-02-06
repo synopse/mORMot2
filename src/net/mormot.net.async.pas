@@ -2829,6 +2829,7 @@ begin
       exit; // won't block if another thread is accessing GC#1
     fGCTix := fLastOperationMS shr 5; // as checked in ProcessIdleTix()
     // wait 10 seconds until no pending event is in queue and free instances
+    n2 := 0;
     if fGC2.Count <> 0 then
     begin
       SetLength(tofree.Items, 32); // good initial provisioning
@@ -5530,6 +5531,7 @@ begin
   Definition.fMemCached.DeleteDeprecated(tix);
   Definition.fHashCached.DeleteDeprecated(tix);
   // supplied URI should be a safe local file
+  result := HTTP_NOTFOUND;
   UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {name=}true);
   NormalizeFileNameU(name);
   if not SafePathNameU(name) then
