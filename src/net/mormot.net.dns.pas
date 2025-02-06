@@ -278,6 +278,10 @@ type
 function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
   var Dest: TDnsAnswer; QClass: cardinal): boolean;
 
+const
+  /// DnsQuery() and related functions do expect a response within 200 ms delay
+  DNSQUERY_TIMEOUT = 200;
+
 /// send a DNS query and parse the answer
 // - if no NameServer is supplied, will use GetDnsAddresses list from OS
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
@@ -286,8 +290,7 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
 // - use DnsLookup/DnsReverseLookup/DnsServices() for most simple requests
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
   RR: TDnsResourceRecord = drrA; const NameServers: RawUtf8 = '';
-  TimeOutMS: integer = 200; QClass: cardinal = QC_INET): boolean;
-
+  TimeOutMS: integer = DNSQUERY_TIMEOUT; QClass: cardinal = QC_INET): boolean;
 
 /// retrieve the IPv4 address of a DNS host name - using DnsQuery(drrA)
 // - e.g. DnsLookup('synopse.info') currently returns '62.210.254.173'
@@ -299,8 +302,8 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - warning: executes a raw DNS query, so hosts system file is not used,
 // and no cache is involved: use TNetAddr.SetFrom() instead if you can
-function DnsLookup(const HostName: RawUtf8;
-  const NameServers: RawUtf8 = ''): RawUtf8;
+function DnsLookup(const HostName: RawUtf8; const NameServers: RawUtf8 = '';
+  TimeoutMS: integer = DNSQUERY_TIMEOUT): RawUtf8;
 
 /// retrieve the IPv4 address(es) of a DNS host name - using DnsQuery(drrA)
 // - e.g. DnsLookups('synopse.info') currently returns ['62.210.254.173'] but
@@ -308,8 +311,8 @@ function DnsLookup(const HostName: RawUtf8;
 // - will also recognize obvious values like 'localhost' or an IPv4 address
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
-function DnsLookups(const HostName: RawUtf8;
-  const NameServers: RawUtf8 = ''): TRawUtf8DynArray;
+function DnsLookups(const HostName: RawUtf8; const NameServers: RawUtf8 = '';
+  TimeoutMS: integer = DNSQUERY_TIMEOUT): TRawUtf8DynArray;
 
 /// retrieve the DNS host name of an IPv4 address - using DnsQuery(drrPTR)
 // - note that the reversed host name is the one from the hosting company, and
@@ -317,8 +320,8 @@ function DnsLookups(const HostName: RawUtf8;
 // returns the horsey '62-210-254-173.rev.poneytelecom.eu' from online.net
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
-function DnsReverseLookup(const IP4: RawUtf8;
-  const NameServers: RawUtf8 = ''): RawUtf8;
+function DnsReverseLookup(const IP4: RawUtf8; const NameServers: RawUtf8 = '';
+  TimeoutMS: integer = DNSQUERY_TIMEOUT): RawUtf8;
 
 /// retrieve the Services of a DNS host name - using DnsQuery(drrSRV)
 // - services addresses are returned with their port, e.g.
@@ -326,8 +329,8 @@ function DnsReverseLookup(const IP4: RawUtf8;
 // ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
-function DnsServices(const HostName: RawUtf8;
-  const NameServers: RawUtf8 = ''): TRawUtf8DynArray;
+function DnsServices(const HostName: RawUtf8; const NameServers: RawUtf8 = '';
+  TimeoutMS: integer = DNSQUERY_TIMEOUT): TRawUtf8DynArray;
 
 /// retrieve the LDAP Services of a DNS host name - using DnsQuery(drrSRV)
 // - just a wrapper around DnsServices('_ldap._tcp.' + DomainName, NameServer)
@@ -797,13 +800,13 @@ begin
     result := false;
 end;
 
-function DnsLookup(const HostName, NameServers: RawUtf8): RawUtf8;
+function DnsLookup(const HostName, NameServers: RawUtf8; TimeoutMS: integer): RawUtf8;
 var
   res: TDnsResult;
   i: PtrInt;
 begin
   if not DnsLookupKnown(HostName, result) then
-    if DnsQuery(HostName, res, drrA, NameServers) then
+    if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
         begin
@@ -812,7 +815,7 @@ begin
         end;
 end;
 
-function DnsLookups(const HostName, NameServers: RawUtf8): TRawUtf8DynArray;
+function DnsLookups(const HostName, NameServers: RawUtf8; TimeoutMS: integer): TRawUtf8DynArray;
 var
   res: TDnsResult;
   known: RawUtf8;
@@ -821,13 +824,13 @@ begin
   result := nil;
   if DnsLookupKnown(HostName, known) then
     AddRawUtf8(result, known)
-  else if DnsQuery(HostName, res, drrA, NameServers) then
+  else if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrA then
         AddRawUtf8(result, res.Answer[i].Text); // return all A records
 end;
 
-function DnsReverseLookup(const IP4, NameServers: RawUtf8): RawUtf8;
+function DnsReverseLookup(const IP4, NameServers: RawUtf8; TimeoutMS: integer): RawUtf8;
 var
   b: array[0..3] of byte; // to be asked in inverse byte order
   res: TDnsResult;
@@ -837,7 +840,7 @@ begin
   cardinal(b) := 0;
   if NetIsIP4(pointer(IP4), @b) and
      DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa', [b[3], b[2], b[1], b[0]]),
-       res, drrPTR, NameServers) then
+       res, drrPTR, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrPTR then
       begin
@@ -846,13 +849,13 @@ begin
       end;
 end;
 
-function DnsServices(const HostName, NameServers: RawUtf8): TRawUtf8DynArray;
+function DnsServices(const HostName, NameServers: RawUtf8; TimeoutMS: integer): TRawUtf8DynArray;
 var
   res: TDnsResult;
   i: PtrInt;
 begin
   result := nil;
-  if DnsQuery(HostName, res, drrSRV, NameServers) then
+  if DnsQuery(HostName, res, drrSRV, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrSRV then
         AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
