@@ -383,11 +383,12 @@ type
     {$endif PUREMORMOT2}
     /// convert any Ansi buffer into an Unicode String
     // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
-    function AnsiToUnicodeString(
-      Source: PAnsiChar; SourceChars: cardinal): SynUnicode; overload;
+    procedure AnsiToUnicodeStringVar(
+      Source: PAnsiChar; SourceChars: cardinal; var Result: SynUnicode);
     /// convert any Ansi buffer into an Unicode String
     // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
-    function AnsiToUnicodeString(const Source: RawByteString): SynUnicode; overload;
+    function AnsiToUnicodeString(const Source: RawByteString): SynUnicode;
+      {$ifdef HASINLINE} inline; {$endif}
     /// convert any Ansi Text into an UTF-8 encoded String
     // - internally calls AnsiBufferToUtf8 virtual method
     function AnsiToUtf8(const AnsiText: RawByteString): RawUtf8; virtual;
@@ -3657,36 +3658,25 @@ end;
 
 {$endif PUREMORMOT2}
 
-function TSynAnsiConvert.AnsiToUnicodeString(Source: PAnsiChar;
-  SourceChars: cardinal): SynUnicode;
+procedure TSynAnsiConvert.AnsiToUnicodeStringVar(Source: PAnsiChar;
+  SourceChars: cardinal; var Result: SynUnicode);
 var
   tmp: TSynTempBuffer;
   u: PWideChar;
 begin
   if SourceChars = 0 then
-    result := ''
+    Result := ''
   else
   begin
     u := AnsiBufferToUnicode(tmp.Init(SourceChars * 2), Source, SourceChars);
-    FastSynUnicode(result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
+    FastSynUnicode(Result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
     tmp.Done;
   end;
 end;
 
 function TSynAnsiConvert.AnsiToUnicodeString(const Source: RawByteString): SynUnicode;
-var
-  tmp: TSynTempBuffer;
-  u: PWideChar;
 begin
-  if Source = '' then
-    result := ''
-  else
-  begin
-    tmp.Init(length(Source) * 2); // max dest size in bytes
-    u := AnsiBufferToUnicode(tmp.buf, pointer(Source), length(Source));
-    FastSynUnicode(result, tmp.buf, (PtrUInt(u) - PtrUInt(tmp.buf)) shr 1);
-    tmp.Done;
-  end;
+  AnsiToUnicodeStringVar(pointer(Source), length(Source), result);
 end;
 
 function TSynAnsiConvert.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
@@ -4715,7 +4705,7 @@ begin
          IsValidUtf8Buffer(buf, len) then
         Utf8ToSynUnicode(buf, len, result)
       else
-        result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
+        CurrentAnsiConvert.AnsiToUnicodeStringVar(buf, len, result);
     bomUtf16LE:
       FastSynUnicode(result, buf, len);
     bomUtf16BE:
@@ -5346,12 +5336,12 @@ end;
 
 function StringToSynUnicode(const S: string): SynUnicode;
 begin
-  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S), length(S));
+  CurrentAnsiConvert.AnsiToUnicodeStringVar(pointer(S), length(S), result);
 end;
 
 procedure StringToSynUnicode(const S: string; var result: SynUnicode);
 begin
-  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S), length(S));
+  CurrentAnsiConvert.AnsiToUnicodeStringVar(pointer(S), length(S), result);
 end;
 
 function RawUnicodeToString(P: PWideChar; L: integer): string;

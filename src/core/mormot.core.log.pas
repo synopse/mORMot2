@@ -7439,7 +7439,7 @@ begin
     Utf8ToStringVar(tmp, result)
   else
     {$ifdef UNICODE}
-    result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(tmp), length(tmp));
+    CurrentAnsiConvert.AnsiToUnicodeStringVar(pointer(tmp), length(tmp), result);
     {$else}
     result := tmp;
     {$endif UNICODE}
