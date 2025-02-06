@@ -5647,30 +5647,30 @@ begin
   begin
     len := i * 5;
     W := RandomAnsi7(len);
-    Check(length(W) = len);
+    CheckEqual(length(W), len);
     lenup100 := len;
     if lenup100 > 100 then
       lenup100 := 100;
     str := Ansi7ToString(W); // should be fine on any code page
     if len > 0 then
     begin
-      Check(length(str) = len);
-      check(PosExString(str[1], str) = 1);
+      CheckEqual(length(str), len);
+      CheckEqual(PosExString(str[1], str), 1);
       if str[1] <> str[2] then
       begin
-        check(PosExString(str[2], str) = 2);
+        CheckEqual(PosExString(str[2], str), 2);
         if (str[1] <> str[2]) and
            (str[2] <> str[3]) and
            (str[1] <> str[3]) then
-          check(PosExString(str[3], str) = 3);
+          CheckEqual(PosExString(str[3], str), 3);
       end;
       for j := 1 to lenup100 do
       begin
-        check(PosExString(#13, str, j) = 0);
-        check(PosExString(str[j], str, j) = j);
+        CheckEqual(PosExString(#13, str, j), 0);
+        CheckEqual(PosExString(str[j], str, j), j);
         if (j > 1) and
            (str[j - 1] <> str[j]) then
-          check(PosExString(str[j], str, j - 1) = j);
+          CheckEqual(PosExString(str[j], str, j - 1), j);
         k := PosExString(str[j], str);
         check((k > 0) and
              (str[k] = str[j]));
@@ -5696,22 +5696,22 @@ begin
     check(PosChar(P, #10) = nil);
     if len > 0 then
     begin
-      check(PosEx(U[1], U) = 1);
-      check(PosExChar(U[1], U) = 1);
+      CheckEqual(PosEx(U[1], U), 1);
+      CheckEqual(PosExChar(U[1], U), 1);
       check(PosChar(P, P[0]) = @P[0], 'PosChar0');
       if (len > 1) and
          (U[1] <> U[2]) then
       begin
-        check(PosEx(U[2], U) = 2);
-        check(PosExChar(U[2], U) = 2);
+        CheckEqual(PosEx(U[2], U), 2);
+        CheckEqual(PosExChar(U[2], U), 2);
         check(PosChar(P, P[1]) = @P[1], 'PosChar1');
         if (len > 2) and
            (U[1] <> U[2]) and
            (U[2] <> U[3]) and
            (U[1] <> U[3]) then
         begin
-          check(PosEx(U[3], U) = 3);
-          check(PosExChar(U[3], U) = 3);
+          CheckEqual(PosEx(U[3], U), 3);
+          CheckEqual(PosExChar(U[3], U), 3);
           check(PosChar(P, P[2]) = @P[2], 'PosChar2');
         end;
       end;
@@ -5720,7 +5720,7 @@ begin
       len120 := Utf8TruncatedLength(P, 120)
     else
       len120 := 0;
-    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer');
+    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer truncated');
     {$ifdef ASMX64AVXNOCONST}
     HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
     if HasValidUtf8Avx2 then
@@ -5732,15 +5732,15 @@ begin
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
       // validates with offset parameter
-      check(PosEx(#13, U, j) = 0);
-      check(PosEx(U[j], U, j) = j);
+      CheckEqual(PosEx(#13, U, j), 0);
+      CheckEqual(PosEx(U[j], U, j), j);
       if (j > 1) and
          (U[j - 1] <> U[j]) then
-        check(PosEx(U[j], U, j - 1) = j);
+        CheckEqual(PosEx(U[j], U, j - 1), j);
       k := PosEx(U[j], U);
       check((k > 0) and
             (U[k] = U[j]));
-      check(PosExChar(U[j], U) = k);
+      CheckEqual(PosExChar(U[j], U), k);
       if len120 <> 0 then
       begin
         bak := P[len120];
@@ -5762,28 +5762,27 @@ begin
     Check(IsValidJson(json1, true));
     Check(IsAnsiCompatible(U) or (PosEx('\u', json1) > 0));
     json2 := JsonReformat(json1, jsonNoEscapeUnicode);
-    Check(json2 = json, 'jeu2');
+    CheckEqual(json2, json, 'jeu2');
     Unic := Utf8DecodeToUnicodeRawByteString(U);
-    {$ifndef FPC_HAS_CPSTRING} // buggy FPC
-    Check(Utf8ToWinAnsi(U) = W);
-    Check(WinAnsiConvert.Utf8ToAnsi(WinAnsiConvert.AnsiToUtf8(W)) = W);
-    Check(WinAnsiConvert.UnicodeStringToAnsi(WinAnsiConvert.AnsiToUnicodeString(W)) = W);
+    CheckEqual(Utf8ToWinAnsi(U), W);
+    CheckEqual(WinAnsiConvert.Utf8ToAnsi(WinAnsiConvert.AnsiToUtf8(W)), W);
+    CheckEqual(WinAnsiConvert.UnicodeStringToAnsi(WinAnsiConvert.AnsiToUnicodeString(W)), W);
     if CurrentAnsiConvert.InheritsFrom(TSynAnsiFixedWidth) then
     begin
-      Check(CurrentAnsiConvert.Utf8ToAnsi(CurrentAnsiConvert.AnsiToUtf8(W)) = W);
-      Check(CurrentAnsiConvert.UnicodeStringToAnsi(CurrentAnsiConvert.AnsiToUnicodeString(W)) = W);
+      CheckEqual(CurrentAnsiConvert.Utf8ToAnsi(CurrentAnsiConvert.AnsiToUtf8(W)), W);
+      CheckEqual(CurrentAnsiConvert.UnicodeStringToAnsi(CurrentAnsiConvert.AnsiToUnicodeString(W)), W);
     end;
     res := RawUnicodeToUtf8(pointer(Unic), length(Unic) shr 1);
-    Check(res = U);
-    Check(WinAnsiConvert.UnicodeBufferToAnsi(pointer(Unic), length(Unic) shr 1) = W);
-    {$endif FPC_HAS_CPSTRING}
+    CheckEqual(res, U);
+    WinAnsiConvert.UnicodeBufferToAnsiVar(pointer(Unic), length(Unic) shr 1, rb1);
+    CheckEqual(rb1, W);
     WS := Utf8ToWideString(U);
-    Check(length(WS) = length(Unic) shr 1);
+    CheckEqual(length(WS), length(Unic) shr 1);
     if WS <> '' then
       Check(CompareMem(pointer(WS), pointer(Unic), length(WS) * SizeOf(WideChar)));
-    Check(integer(Utf8ToUnicodeLength(Pointer(U))) = length(WS));
+    CheckEqual(integer(Utf8ToUnicodeLength(Pointer(U))), length(WS));
     SU := Utf8ToSynUnicode(U);
-    Check(length(SU) = length(Unic) shr 1);
+    CheckEqual(length(SU), length(Unic) shr 1);
     if SU <> '' then
       Check(CompareMem(pointer(SU), pointer(Unic), length(Unic)), 'Utf8ToSU');
     WA := IsWinAnsi(pointer(Unic));
