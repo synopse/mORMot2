@@ -6009,6 +6009,11 @@ begin
   begin
     SetLength(VValue, ndx);
     SetLength(VName, ndx);
+  end
+  else
+  begin
+    EnsureUnique(VValue); // as SetLength() above
+    EnsureUnique(VName);
   end;
   ndx := VCount;
   for arg := 0 to n - 1 do
@@ -7107,7 +7112,9 @@ begin
   begin
     len := NextGrow(VCount);
     SetLength(VValue, len);
-  end;
+  end
+  else
+    EnsureUnique(VValue); // make unique as SetLengh() does
   result := VCount;
   inc(VCount);
   if cardinal(aIndex) < cardinal(result) then
@@ -7131,7 +7138,9 @@ begin
     exit;
   // store the object field name
   if Length(VName) <> len then
-    SetLength(VName, len);
+    SetLength(VName, len)
+  else
+    EnsureUnique(VName); // make unique
   if Has(dvoInternNames) then
     DocVariantType.InternNames.Unique(VName[result], aName)
   else
