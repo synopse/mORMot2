@@ -2868,11 +2868,11 @@ function DACntDecFree(var refcnt: TDACnt): boolean;
   {$ifndef CPUINTEL} inline; {$endif}
 
 /// low-level string reference counter process
-procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt);
+procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt = 1);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// low-level dynarray reference counter process
-procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt);
+procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt = 1);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// fast atomic compare-and-swap operation on a pointer-sized integer value
