@@ -7435,7 +7435,7 @@ begin
     Utf8TruncateToLength(tmp, maxutf8len);
   if replaceTabs <> '' then
     tmp := StringReplaceAll(tmp, #9, replaceTabs);
-  if IsValidUtf8(pointer(tmp)) then
+  if IsValidUtf8(tmp) then
     Utf8ToStringVar(tmp, result)
   else
     {$ifdef UNICODE}
