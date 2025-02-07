@@ -1662,7 +1662,8 @@ type
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-    function BearerDecode(const aBearerToken: RawUtf8;
+    function BearerDecode(
+      const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode; virtual;
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
@@ -5424,7 +5425,8 @@ begin
     result := DoDecode;
 end;
 
-function THttpPeerCrypt.BearerDecode(const aBearerToken: RawUtf8;
+function THttpPeerCrypt.BearerDecode(
+  const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
   out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
 var
   tok: array[0.. 511] of AnsiChar; // no memory allocation
@@ -5440,7 +5442,8 @@ begin
     exit;
   result := MessageDecode(@tok, toklen, aMsg);
   if (result = mdOk) and
-     (aMsg.Kind <> pcfBearer) then
+     (aExpected >= pcfBearer) and
+     (aMsg.Kind <> aExpected) then
     result := mdBearer;
 end;
 
@@ -6291,7 +6294,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownload') then
     exit; // you are too small, buddy
   // try first the current/last HTTP client (if any)
-  FormatUtf8('%/%', [Sender.Server, Url], u); // url used only for log/debugging
+  FormatUtf8('?%=%', [Sender.Server, Url], u); // url used only for log/debugging
   if (fClient <> nil) and
      (fClientIP4 <> 0) and
      ((pcoTryLastPeer in fSettings.Options) or
@@ -6376,7 +6379,8 @@ end;
 
 type
   TOnBeforeBodyErr = set of (
-    eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid);
+    eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid,
+    eDirectIp, eDirectDecode, eDirectOpaque, aDirectDisabled);
 
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
@@ -6395,21 +6399,41 @@ begin
   if not IsGet(aMethod) then
     include(err, eGet);
   if aUrl = '' then // URI is just ignored but something should be specified
-    include(err, eUrl);
-  if not IPToCardinal(aRemoteIP, ip4) then
-    include(err, eIp1);
-  if fInstable.IsBanned(ip4) then // banned for RejectInstablePeersMin
-    include(err, eBanned);
-  if Check(BearerDecode(aBearerToken, msg), 'OnBeforeBody', msg) then
+    include(err, eUrl)
+  else if PCardinal(aUrl)^ =
+            ord('/') + ord('h') shl 8 + ord('t') shl 16 + ord('t') shl 24 then
   begin
-    if msg.IP4 <> fIP4 then
-      include(err, eIp2);
-    if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
-           IsEqualGuid(msg.Uuid, fUuid))) then
-      include(err, eUuid);
+    // pcfBearerDirect for pcoHttpDirect mode: /https/microsoft.com/...
+    if (aRemoteIp <> '') and
+       not IsLocalHost(pointer(aRemoteIP)) then
+      include(err, eDirectIp);
+    if not Check(BearerDecode(aBearerToken, pcfBearerDirect, msg),
+             'OnBeforeBody Direct', msg) then
+      include(err, eDirectDecode)
+    else if Int64(msg.Opaque) <> crc64c(pointer(aUrl), length(aUrl)) then
+      include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
+    if not (pcoHttpDirect in fSettings.Options) then
+      include(err, aDirectDisabled);
   end
   else
-    include(err, eDecode);
+  begin
+    // pcfBearer for regular request in broadcasting mode
+    if not IPToCardinal(aRemoteIP, ip4) then
+      include(err, eIp1)
+    else if fInstable.IsBanned(ip4) then // banned for RejectInstablePeersMin
+      include(err, eBanned);
+    if err = [] then
+      if Check(BearerDecode(aBearerToken, pcfBearer, msg), 'OnBeforeBody', msg) then
+      begin
+        if msg.IP4 <> fIP4 then
+          include(err, eIp2);
+        if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
+               IsEqualGuid(msg.Uuid, fUuid))) then
+          include(err, eUuid);
+      end
+      else
+        include(err, eDecode);
+  end;
   result := HTTP_SUCCESS;
   if err <> [] then
     result := HTTP_FORBIDDEN;
@@ -6638,7 +6662,7 @@ var
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
-  if Check(BearerDecode(Ctxt.AuthBearer, msg), 'OnRequest', msg) then
+  if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg), 'OnRequest', msg) then
   try
     // get local filename from decoded bearer hash
     progsize := 0;
