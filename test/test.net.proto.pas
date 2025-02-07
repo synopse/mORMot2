@@ -796,12 +796,13 @@ var
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   dn: TNameValueDNs;
   hasinternet: boolean;
+  endtix: Int64;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
     ntp := NTP_DEFAULT_SERVER;
   withntp := not Executable.Command.Option('nontp');
-  hasinternet := DnsLookups('yahoo.com') <> nil; // avoid waiting for nothing
+  hasinternet := DnsLookups('yahoo.com', '', 500) <> nil; // avoid abusive wait
   if hasinternet then
   begin
     utc1 := GetSntpTime(ntp);
@@ -845,24 +846,27 @@ begin
   CheckEqual(DnsLookup('1.2.3.4'), '1.2.3.4');
   if hasinternet then
   begin
-    ip := DnsLookup('synopse.info');
-    if ip = '' then
-    begin
-      Sleep(200); // some DNS servers may fail at first: wait a little
+    endtix := GetTickCount64 + 2000; // never wait forever
+    repeat
+      inc(fAssertions);
       ip := DnsLookup('synopse.info');
-    end;
+      if ip <> '' then
+        break;
+      Sleep(100); // some DNS servers may fail at first: wait a little
+    until GetTickCount64 > endtix;
     rev := '62.210.254.173';
     CheckEqual(ip, rev, 'dns1');
     ip := DnsLookup('blog.synopse.info');
     CheckEqual(ip, rev, 'dns2');
-    rev := '62-210-254-173.rev.poneytelecom.eu';
-    if DnsReverseLookup(ip) <> rev then
-    begin
-      Sleep(200); // wait a little
-      CheckEqual(DnsReverseLookup(ip), rev, 'rev');
-    end
-    else
+    endtix := GetTickCount64 + 2000;
+    repeat
       inc(fAssertions);
+      rev := DnsReverseLookup(ip);
+      if rev <> '' then
+        break; // success
+      Sleep(100); // wait a little and retry up to 2 seconds
+    until GetTickCount64 > endtix;
+    CheckEqual(rev, '62-210-254-173.rev.poneytelecom.eu');
   end;
   // validate LDAP distinguished name conversion (no client)
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
