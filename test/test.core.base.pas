@@ -6148,7 +6148,8 @@ procedure TTestCoreBase.Charsets;
     {$endif OSWINDOWS}
     // validate mORMot conversion
     eng := TSynAnsiConvert.Engine(cp);
-    Check(eng <> nil);
+    Check(eng <> nil, 'eng1');
+    CheckEqual(eng.CodePage, cp, 'eng2');
     // with ASCII-7 chars
     su2 := eng.AnsiToUnicodeString('abcd efgh');
     Check(su2 = 'abcd efgh', msg);
@@ -6203,6 +6204,9 @@ procedure TTestCoreBase.Charsets;
     {$endif OSWINDOWS}
     su2 := eng.AnsiToUnicodeString(ra);
     Check(su = su2, msg);
+    eng := TSynAnsiConvert.Engine(cp); // validate "last" cache
+    Check(eng <> nil, 'eng3');
+    CheckEqual(eng.CodePage, cp, 'eng4');
     u2 := eng.AnsiToUtf8(a);
     Check(u2 = ru, msg);
     a2 := eng.UnicodeStringToAnsi(su);
