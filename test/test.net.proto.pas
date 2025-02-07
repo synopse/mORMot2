@@ -1568,8 +1568,10 @@ var
   res: THttpPeerCryptMessageDecode;
   i, n, alter: integer;
   tmp: RawByteString;
+  dUri, dBearer, dTok: RawUtf8;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
   // for further tests, use the dedicated "mORMot GET" (mget) sample
   hps := THttpPeerCacheSettings.Create;
   try
@@ -1586,12 +1588,14 @@ begin
           hpc2.AfterSettings;
           hpc.MessageInit(pcfBearer, 0, msg);
           msg.Hash.Algo := hfSHA256;
+          RandomBytes(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]);
+          // validate UDP messages encoding/decoding
           timer.Start;
           n := 1000;
           for i := 1 to n do
           begin
             msg.Size := i;
-            msg.Hash.Hash.i0 := i;
+            msg.Hash.Bin.i0 := i;
             tmp := hpc.MessageEncode(msg);
             Check(tmp <> '');
             res := hpc2.MessageDecode(pointer(tmp), length(tmp), msg2);
@@ -1603,6 +1607,7 @@ begin
           m := RawUtf8(ToText(msg));
           m2 := RawUtf8(ToText(msg2));
           CheckEqual(m, m2);
+          // validate UDP messages alteration (quick CRC identification)
           timer.Start;
           n := 10000;
           for i := 1 to n do
@@ -1618,8 +1623,36 @@ begin
           res := hpc.MessageDecode(pointer(tmp), length(tmp), msg2);
           Check(res = mdOk, 'hpc');
           Check(CompareMem(@msg, @msg2, SizeOf(msg)));
+          // validate the UDP client/server stack is running
           for i := 1 to 10 do
             Check(hpc.Ping = nil);
+          // validate THttpPeerCrypt.HttpDirectUri request encoding/decoding
+          Check(THttpPeerCrypt.HttpDirectUri('secret', 'https://synopse.info/forum',
+             BinToHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]), dUri, dBearer));
+          CheckEqual(dUri, '/https/synopse.info/forum');
+          Check(dBearer <> '', 'dBearer');
+          FillCharFast(msg2, SizeOf(msg2), 0);
+          Check(msg2.Hash.Algo <> hfSHA256);
+          Check(not CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
+          res := hpc2.BearerDecode(dBearer, pcfBearerDirect, msg2);
+          Check(res = mdB64, 'directB64');
+          Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
+          FillCharFast(msg2, SizeOf(msg2), 0);
+          res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
+          Check(res = mdBearer, 'directKo');
+          FillCharFast(msg2, SizeOf(msg2), 0);
+          res := hpc2.BearerDecode(dTok, pcfBearerDirect, msg2);
+          Check(res = mdOk, 'directOk');
+          Check(not CompareMem(@msg, @msg2, SizeOf(msg)));
+          Check(msg2.Kind = pcfBearerDirect);
+          CheckEqual(msg2.Opaque, -2080670699100626208);
+          Check(msg2.Hash.Algo = hfSHA256);
+          Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
+          FillCharFast(msg2, SizeOf(msg2), 0);
+          inc(dTok[10]);
+          res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
+          Check(res = mdCrc, 'directCrc');
+          //write('running'); ConsoleWaitForEnterKey;
         finally
           hpc2.Free;
         end;
