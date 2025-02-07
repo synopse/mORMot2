@@ -528,7 +528,7 @@ type
 const
   /// the standard text of a TSignAlgo
   SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
-    'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512',
+    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512',
     'SHA3-224', 'SHA3-256', 'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256');
   SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
   SIGNER_DEFAULT_ALGO = saSha3S128;
@@ -808,6 +808,9 @@ function TextToSignAlgo(P: PUtf8Char; Len: PtrInt; out Algo: TSignAlgo): boolean
 /// recognize a THashAlgo from a text, e.g. 'SHA1', 'hfSHA3_256' or 'SHA-512/256'
 function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean; overload;
 function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean; overload;
+
+/// decode and recognize an hexadecimal hash from its size - but not SHA-3
+function HashDetect(const Hash: RawUtf8; out Bin: THash512Rec; out Algo: THashAlgo): boolean;
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
@@ -4498,6 +4501,24 @@ begin
     exit;
   Algo := THashAlgo(i);
   result := true;
+end;
+
+function HashDetect(const Hash: RawUtf8; out Bin: THash512Rec; out Algo: THashAlgo): boolean;
+var
+  s: byte;
+  a: THashAlgo;
+begin
+  result := false;
+  s := length(Hash) shr 1;
+  if (s >= SizeOf(TMd5Digest)) and
+     (s <= SizeOf(Bin)) then
+    for a := low(a) to hfSHA512 do
+      if HASH_SIZE[a] = s then
+      begin
+        Algo := a;
+        result := mormot.core.text.HexToBin(pointer(Hash), @Bin, s);
+        break;
+      end;
 end;
 
 
