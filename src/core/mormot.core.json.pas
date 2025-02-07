@@ -870,6 +870,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - escapes chars according to the JSON RFC
+    // - on FPC and Delphi Unicode, uses the codepage to do any needed conversion
     procedure AddJsonEscapeAnsiString(const s: AnsiString);
     /// append an open array constant value to the buffer
     // - "" will be added if necessary
@@ -4374,7 +4375,7 @@ var
     while (ending > start) and
           (ending[-1] <= ' ') do
       dec(ending); // trim right
-    WR.AddNoJsonEscape(start, ending - start);
+    WR.AddNoJsonEscapeBig(start, ending - start);
   end;
 
 begin
@@ -6746,7 +6747,7 @@ begin
     Add('"');
   {$ifdef HASCODEPAGE}
   AddAnyAnsiString(Text, Escape);
-  {$else}
+  {$else} // Delphi 7/2007 assume CP_UTF8/RawUtf8
   Add(pointer(Text), length(Text), Escape);
   {$endif HASCODEPAGE}
   if Escape = twJsonEscape then
@@ -7257,7 +7258,7 @@ end;
 procedure TJsonWriter.AddNoJsonEscape(Source: TJsonWriter);
 begin
   if Source.fTotalFileSize = 0 then
-    AddNoJsonEscape(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
+    AddNoJsonEscapeBig(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
   else
     AddNoJsonEscapeUtf8(Source.Text);
 end;
