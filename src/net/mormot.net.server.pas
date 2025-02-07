@@ -1400,7 +1400,7 @@ type
     /// the algorithm used for Hash
     Algo: THashAlgo;
     /// up to 512-bit of raw binary hash, according to Algo
-    Hash: THash512Rec;
+    Bin: THash512Rec;
   end;
   THttpPeerCacheHashs = array of THttpPeerCacheHash;
 
@@ -5354,7 +5354,7 @@ begin
   finally
     fAesSafe.UnLock;
   end;
-  // append salted checksum to quickly reject any fuzzing attempt
+  // append salted checksum to quickly reject any fuzzing attempt (endsize=4)
   p := pointer(result);
   l := length(result) - 4;
   PCardinal(p + l)^ := crc32c(fSharedMagic, p, l);
@@ -5382,7 +5382,7 @@ function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
     MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
     result := mdSeq;
     if (aMsg.Kind in PCF_RESPONSE) and // responses are broadcasted on POSIX
-       (aMsg.DestIP4 = fIP4) then    // only validate against the local sequence
+       (aMsg.DestIP4 = fIP4) then     // only validate against the local sequence
       if (aMsg.Seq < fFrameSeqLow) or
          (aMsg.Seq > cardinal(fFrameSeq)) then // compare with local sequence
         exit;
@@ -6099,7 +6099,7 @@ begin
     exit; // no valid hash for sure
   Hash.Algo := TStreamRedirectSynHasherClass(Params.Hasher).GetAlgo;
   result := mormot.core.text.HexToBin(
-    pointer(Params.Hash), @Hash.Hash, HASH_SIZE[Hash.Algo]);
+    pointer(Params.Hash), @Hash.Bin, HASH_SIZE[Hash.Algo]);
 end;
 
 function THttpPeerCache.CachedFileName(const aParams: THttpClientSocketWGet;
@@ -6555,7 +6555,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownloading') then
     result := 0
   else
-    result := fPartials.Add(Partial, ExpectedFullSize, @h.Hash, HASH_SIZE[h.Algo]);
+    result := fPartials.Add(Partial, ExpectedFullSize, @h.Bin, HASH_SIZE[h.Algo]);
 end;
 
 function THttpPeerCache.PartialFileName(
@@ -6568,7 +6568,7 @@ begin
   result := HTTP_NOTFOUND;
   if fPartials = nil then // not supported by this fHttpServer class
     exit;
-  fn := fPartials.Find(@aMessage.Hash.Hash, HASH_SIZE[aMessage.Hash.Algo], aHttp, size);
+  fn := fPartials.Find(@aMessage.Hash.Bin, HASH_SIZE[aMessage.Hash.Algo], aHttp, size);
   if fVerboseLog then
     fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
       [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
@@ -6647,15 +6647,15 @@ procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
 var
   l: PtrInt;
   algo: PUtf8Char;
-  hex: string[SizeOf(msg.Hash.Hash.b) * 2];
+  hex: string[SizeOf(msg.Hash.Bin.b) * 2];
 begin
   l := 0;
   algo := nil;
-  if not IsZero(msg.Hash.Hash.b) then
+  if not IsZero(msg.Hash.Bin.b) then
   begin
     algo := pointer(HASH_EXT[msg.Hash.Algo]);
     l := HASH_SIZE[msg.Hash.Algo];
-    BinToHexLower(@msg.Hash.Hash, @hex[1], l);
+    BinToHexLower(@msg.Hash.Bin, @hex[1], l);
   end;
   hex[0] := AnsiChar(l * 2);
   with msg do
