@@ -5908,12 +5908,7 @@ begin
               BindDateTime(i, Iso8601ToDateTimePUtf8Char(PUtf8Char(VAnsiString) + 3,
                 length(RawUtf8(VAnsiString)) - 3))
             else
-              {$ifdef HASCODEPAGE}
               BindTextU(i, AnyAnsiToUtf8(RawByteString(VAnsiString)), IO);
-              {$else}
-              // expect UTF-8 content only for AnsiString, i.e. RawUtf8 values
-              BindTextU(i, RawUtf8(VAnsiString), IO);
-              {$endif HASCODEPAGE}
           end;
         vtPChar:
           BindTextP(i, PUtf8Char(VPChar), IO);
@@ -6029,11 +6024,7 @@ begin
             BindBlob(Param, RawByteString(VAny), IO)
         else
           // direct bind of AnsiString as UTF-8 value
-          {$ifdef HASCODEPAGE}
           BindTextU(Param, AnyAnsiToUtf8(RawByteString(VAny)), IO);
-          {$else} // on older Delphi, we assume AnsiString = RawUtf8
-          BindTextU(Param, RawUtf8(VAny), IO);
-          {$endif HASCODEPAGE}
     else
       if VType = varVariantByRef then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
