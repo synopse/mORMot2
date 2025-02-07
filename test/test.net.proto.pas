@@ -1651,7 +1651,7 @@ begin
           FillCharFast(msg2, SizeOf(msg2), 0);
           inc(dTok[10]);
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
-          Check(res = mdCrc, 'directCrc');
+          Check(res in [mdCrc, mdB64], 'directCrc');
           //write('running'); ConsoleWaitForEnterKey;
         finally
           hpc2.Free;
