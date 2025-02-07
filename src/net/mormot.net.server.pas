@@ -5503,8 +5503,6 @@ var
   key: THash256Rec;
 begin
   // setup internal processing status
-  if IsNullGuid(fUuid) then
-    GetComputerUuid(fUuid);
   fFrameSeqLow := Random31Not0; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   // setup internal cryptography
@@ -5870,9 +5868,10 @@ begin
   log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
-  if (fSettings <> nil) and
-     (fSettings.Uuid <> '') and // allow UUID customization
-     not RawUtf8ToGuid(fSettings.Uuid, fUuid) then
+  if (fSettings = nil) or
+     (fSettings.Uuid = '') then // allow UUID customization
+    GetComputerUuid(fUuid)
+  else if not RawUtf8ToGuid(fSettings.Uuid, fUuid) then
     EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, fSettings.Uuid]);
   inherited Create(aSharedSecret, aServerTls, aClientTls);
   // setup the processing options
