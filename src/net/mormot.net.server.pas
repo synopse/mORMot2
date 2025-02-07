@@ -1390,7 +1390,8 @@ type
     pcfResponseOverloaded,
     pcfResponsePartial,
     pcfResponseFull,
-    pcfBearer);
+    pcfBearer,
+    pcfBearerDirect);
 
   /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
   // - we store and compare in our implementation the algorithm in addition to
@@ -1478,6 +1479,8 @@ type
   // (warning: this option should be set on all peers, clients and servers) -
   // as an alternative, you could set THttpPeerCache.ServerTls/ClientTls props
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
+  // - pcoHttpDirect extends the HTTP endpoint to initiate a download process
+  // from localhost, and return the cached content (used e.g. as proxy + cache)
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
@@ -1487,7 +1490,8 @@ type
     pcoNoServer,
     pcoNoBanIP,
     pcoSelfSignedHttps,
-    pcoVerboseLog);
+    pcoVerboseLog,
+    pcoHttpDirect);
 
   /// THttpPeerCacheSettings.Options values
   THttpPeerCacheOptions = set of THttpPeerCacheOption;
@@ -1675,6 +1679,12 @@ type
     /// check if the network interface defined in Settings did actually change
     // - you may want to recreate a peer-cache to track the new network layout
     function NetworkInterfaceChanged: boolean;
+    /// encode a remote URI for pcoHttpDirect download at localhost
+    // - aSharedSecret should match the Create() value
+    // - returns aDirectUri as '/https/microsoft.com/...' and aDirectHeaderBearer
+    class function HttpDirectUri(const aSharedSecret: RawByteString;
+      const aRemoteUri, aRemoteHash: RawUtf8;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
     /// optional TLS options for the peer HTTPS server
     // - e.g. to set a custom certificate for this peer
     // - when ServerTls.Enabled is set, ClientTls.Enabled and other params should match
@@ -1871,6 +1881,7 @@ function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(md: THttpPeerCryptMessageDecode): PShortString; overload;
 function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
   {$ifdef HASINLINE} inline; {$endif}
+
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
 
 
@@ -5557,6 +5568,31 @@ begin
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'NetworkInterfaceChanged=% [% % % %] %',
       [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
+end;
+
+class function THttpPeerCrypt.HttpDirectUri(const aSharedSecret: RawByteString;
+  const aRemoteUri, aRemoteHash: RawUtf8;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+var
+  c: THttpPeerCrypt;
+  msg: THttpPeerCacheMessage;
+  uri: TUri;
+begin
+  result := false;
+  if not uri.From(aRemoteUri) then
+    exit;
+  c := THttpPeerCrypt.Create(aSharedSecret, nil, nil);
+  try
+    c.MessageInit(pcfBearerDirect, 0, msg);
+    if not HashDetect(aRemoteHash, msg.Hash.Bin, msg.Hash.Algo) then
+      exit;
+    FormatUtf8('/%/%/%', [uri.Scheme, uri.Server, uri.Address], aDirectUri);
+    msg.Opaque := crc64c(pointer(aDirectUri), length(aDirectUri)); // no replay
+    aDirectHeaderBearer := AuthorizationBearer(BinToBase64uri(c.MessageEncode(msg)));
+    result := true;
+  finally
+    c.Free;
+  end;
 end;
 
 
