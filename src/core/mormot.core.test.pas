@@ -269,7 +269,11 @@ type
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
     /// create a temporary string random content, WinAnsi (code page 1252) content
+    class function RandomWinAnsi(CharCount: integer): WinAnsiString;
+    {$ifndef PUREMORMOT2}
     class function RandomString(CharCount: integer): WinAnsiString;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif PUREMORMOT2}
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
     class function RandomUtf8(CharCount: integer): RawUtf8;
@@ -888,7 +892,7 @@ begin
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
 
-class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
+class function TSynTestCase.RandomWinAnsi(CharCount: integer): WinAnsiString;
 var
   i: PtrInt;
   R: PByteArray;
@@ -900,6 +904,13 @@ begin
     PByteArray(result)[i] := 32 + R[i] and 127;
   tmp.Done;
 end;
+
+{$ifndef PUREMORMOT2}
+class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
+begin
+  result := RandomWinAnsi(CharCount);
+end;
+{$endif PUREMORMOT2}
 
 class function TSynTestCase.RandomAnsi7(CharCount: integer): RawByteString;
 var
@@ -945,12 +956,12 @@ end;
 
 class function TSynTestCase.RandomUtf8(CharCount: integer): RawUtf8;
 begin
-  result := WinAnsiToUtf8(RandomString(CharCount));
+  result := WinAnsiToUtf8(RandomWinAnsi(CharCount));
 end;
 
 class function TSynTestCase.RandomUnicode(CharCount: integer): SynUnicode;
 begin
-  result := WinAnsiConvert.AnsiToUnicodeString(RandomString(CharCount));
+  result := WinAnsiConvert.AnsiToUnicodeString(RandomWinAnsi(CharCount));
 end;
 
 class function TSynTestCase.RandomTextParagraph(WordCount: integer;

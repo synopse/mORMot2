@@ -1412,8 +1412,8 @@ begin
     CheckEqual(serverinstance.Thread.Sent, 0);
     for i := 1 to 100 do
     begin
-      sent := RandomString(Random32(200) + 1);
-      sent2 := RandomString(Random32(200) + 1);
+      sent := RandomWinAnsi(Random32(200) + 1);
+      sent2 := RandomWinAnsi(Random32(200) + 1);
       Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(serversock.RecvWait(1000, received) = nrOk);
       CheckEqual(sent, received);

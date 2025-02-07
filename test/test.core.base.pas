@@ -3824,7 +3824,7 @@ begin
     with {%H-}crc[i] do
     begin
       j := i shr 3 + 1; // circumvent weird FPC code generation bug in -O2 mode
-      S := RandomString(j);
+      S := RandomWinAnsi(j);
       crc := crc32creference(0, pointer(S), length(S));
       inc(totallen, length(S));
       c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
@@ -5060,9 +5060,7 @@ procedure TTestCoreBase._UTF8;
     CheckEqual(CP, C.CodePage, 'cpb');
     CheckEqual(CP, GetCodePage(A), 'cpc');
     {$endif HASCODEPAGE}
-    if CP = CP_UTF16 then
-      exit;
-    Check(length(W) = length(A));
+    CheckEqual(length(W), length(A));
     CheckUtf8(EqualBuf(W, A), 'CP%', [CP]);
   end;
 
@@ -5683,12 +5681,11 @@ begin
     Test(932, W);
     Test(949, W);
     Test(874, W);
-    Test(CP_UTF8, W);
+    Test(CP_UTF8, W); // note: CP_UTF16 is not a true ANSI charset for Test()
     L := Length(W);
     if L and 1 <> 0 then
       SetLength(W, L - 1); // force exact UTF-16 buffer length
-    Test(CP_UTF16, W);
-    W := WinAnsiString(RandomString(len));
+    W := RandomWinAnsi(len);
     U := WinAnsiToUtf8(W);
     check(IsValidUtf8(U), 'IsValidUtf8U');
     P := UniqueRawUtf8(U);
@@ -5807,7 +5804,7 @@ begin
       CheckEqual(Utf8CompareIOS(pointer(U), pointer(Up)), 0);
     //for j := 1 to 5000 do
     try
-      //W := WinAnsiString(RandomString(len));
+      //W := RandomWinAnsi(len);
       //U := WinAnsiToUtf8(W);
       //check(IsValidUtf8(U), 'IsValidUtf8U');
       //Up := mormot.core.unicode.UpperCase(U);
