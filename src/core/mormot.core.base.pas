@@ -11652,11 +11652,9 @@ end;
 {$endif HASINLINE}
 
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
-var
-  lo: PtrInt;
 begin
-  lo := crc32c(0, buf, len);
-  result := Int64(lo) or (Int64(crc32c(lo, buf, len)) shl 32);
+  PQWordRec(@result)^.L := crc32c(0, buf, len);
+  PQWordRec(@result)^.H := crc32c(PQWordRec(@result)^.L, buf, len);
 end;
 
 function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
@@ -11666,11 +11664,9 @@ begin
 end;
 
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
-var
-  lo: PtrInt;
 begin
-  lo := crc32c(0, buf, len);
-  result := Int64(lo) or (Int64(crc32c(lo, buf, len) and $7fffffff) shl 32);
+  PQWordRec(@result)^.L := crc32c(0, buf, len);
+  PQWordRec(@result)^.H := crc32c(PQWordRec(@result)^.L, buf, len) and $7fffffff;
 end;
 
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
