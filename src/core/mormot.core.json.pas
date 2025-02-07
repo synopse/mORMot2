@@ -743,6 +743,7 @@ type
     // - if CodePage is defined to a >= 0 value, the encoding will take place
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
       CodePage: integer = -1);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from any Ansi buffer
     // - the codepage should be specified, e.g. CP_UTF8, CP_RAWBYTESTRING,
     // CP_WINANSI, or any version supported by the Operating System
@@ -6342,24 +6343,24 @@ end;
 procedure TJsonWriter.AddAnyAnsiString(const s: RawByteString;
   Escape: TTextWriterKind; CodePage: integer);
 var
-  L: integer;
+  sr: PStrRec;
 begin
-  L := length(s);
-  if L = 0 then
+  if s = '' then
     exit;
-  if (L > 2) and
-     (PInteger(s)^ and $ffffff = JSON_BASE64_MAGIC_C) then
+  sr := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE);
+  if (sr^.length > 2) and
+     (PInteger(s)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
   begin
-    AddNoJsonEscape(pointer(s), L); // was marked as a BLOB content
+    AddNoJsonEscapeBig(pointer(s), sr^.length); // already encoded as BLOB
     exit;
   end;
   if CodePage < 0 then
     {$ifdef HASCODEPAGE}
-    CodePage := GetCodePage(s);
+    CodePage := sr^.codePage; // is very likely to be CP_UTF8
     {$else}
     CodePage := CP_ACP; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif HASCODEPAGE}
-  AddAnyAnsiBuffer(pointer(s), L, Escape, CodePage);
+  AddAnyAnsiBuffer(pointer(s), sr^.length, Escape, CodePage);
 end;
 
 procedure EngineAppendUtf8(W: TJsonWriter; Engine: TSynAnsiConvert;
