@@ -1450,9 +1450,12 @@ type
     RangeEnd: Int64;
     /// some internal state representation, e.g. sent back as pcfBearer
     Opaque: QWord;
+    /// define the kind of content in the padding block - always 0 by now
+    PaddingVersion: byte;
     /// some random padding up to 192 bytes, used for future content revisions
     // - e.g. for a TEccPublicKey (ECDHE) and additional fields
-    Padding: array[0 .. 42] of byte;
+    // - using random enhances AES-GCM obfuscation by making it unpredictable
+    Padding: array[0 .. 41] of byte;
   end;
   THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
 
