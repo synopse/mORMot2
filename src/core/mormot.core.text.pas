@@ -7874,7 +7874,7 @@ begin
         begin
           wasString := true;
           {$ifdef HASCODEPAGE}
-          AnyAnsiToUtf8(RawByteString(VString), result);
+          AnyAnsiToUtf8Var(RawByteString(VString), result);
           {$else}
           result := RawUtf8(VString);
           {$endif HASCODEPAGE}
@@ -7917,7 +7917,7 @@ begin
       begin
         wasString := true;
         {$ifdef HASCODEPAGE}
-        AnyAnsiToUtf8(PRawByteString(VString)^, result);
+        AnyAnsiToUtf8Var(PRawByteString(VString)^, result);
         {$else}
         result := PRawUtf8(VString)^;
         {$endif HASCODEPAGE}
@@ -8630,12 +8630,12 @@ begin
           isString := true;
           if VString = nil then
             goto none;
-          FastSetString(result, @VString^[1], ord(VString^[0]));
+          FastSetString(result, @VString^[1], ord(VString^[0])); // assume UTF-8
         end;
       vtAnsiString:
         begin
           isString := true;
-          result := RawUtf8(VAnsiString); // expect UTF-8 content
+          AnyAnsiToUtf8Var(RawByteString(VAnsiString), result); // check CP_UTF8
         end;
       {$ifdef HASVARUSTRING}
       vtUnicodeString:

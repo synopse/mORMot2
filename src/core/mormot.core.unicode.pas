@@ -764,17 +764,17 @@ function IsWinAnsiU8Bit(Utf8Text: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of an AnsiString with an unknown code page into an
-// UTF-8 encoded String
-// - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
-// - newer UNICODE versions of Delphi will retrieve the code page from string
-procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8); overload;
+// UTF-8 encoded String, as mainly used by VariantToUtf8() or VarRecToUtf8()
+// - FPC and Unicode versions of Delphi will retrieve the code page from s
+// - Delphi 7/2007 calls IsValidUtf8() then assume CurrentAnsiConvert.CodePage
+procedure AnyAnsiToUtf8Var(const s: RawByteString; var result: RawUtf8);
 
 /// direct conversion of an AnsiString with an unknown code page into an
 // UTF-8 encoded String
-// - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
-// - newer UNICODE versions of Delphi will retrieve the code page from string
+// - FPC and Unicode versions of Delphi will retrieve the code page from s
+// - Delphi 7/2007 calls IsValidUtf8() then assume CurrentAnsiConvert.CodePage
 // - use AnsiToUtf8() if you want to specify the codepage
-function AnyAnsiToUtf8(const s: RawByteString): RawUtf8; overload;
+function AnyAnsiToUtf8(const s: RawByteString): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an AnsiString (of a given code page) into a UTF-8 string
@@ -4758,41 +4758,41 @@ end;
 { *************** Low-Level String Conversion Functions }
 
 {$ifdef HASCODEPAGE}
-procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8);
+procedure AnyAnsiToUtf8Var(const s: RawByteString; var result: RawUtf8);
 var
-  p: PStrRec;
+  sr: PStrRec;
   cp: cardinal;
 begin
   if result <> '' then
     FastAssignNew(result);
   if s = '' then
     exit;
-  p := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE);
-  cp := p^.codePage;
+  sr := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE);
+  cp := sr^.codePage;
   if cp = CP_UTF8 then
   begin
-    if p^.refCnt >= 0 then // inlined result := s of this RawUtf8 string
-      StrCntAdd(p^.refCnt);
+    if sr^.refCnt >= 0 then // inlined result := s of this RawUtf8 string
+      StrCntAdd(sr^.refCnt);
     pointer(result) := pointer(s);
     exit;
   end;
   if cp = CP_ACP then
-    cp := Unicode_CodePage;
+    cp := Unicode_CodePage; // most likely on FPC
   if (cp >= CP_RAWBLOB) or
      (cp = CP_UTF8) then
-      if p^.refCnt >= 0 then
+      if sr^.refCnt >= 0 then
       begin
-        p^.codePage := cp; // fix the code page of s in-place with no alloc
-        StrCntAdd(p^.refCnt);
+        sr^.codePage := cp; // fix CP_ACP code page of s in-place
+        StrCntAdd(sr^.refCnt);
         pointer(result) := pointer(s);
       end
-      else
-        FastSetString(result, pointer(s), p^.length) // no convert, just copy
+      else // constant string: no convert, just copy as new CP_UTF8
+        FastSetString(result, pointer(s), sr^.length)
   else // need a full charset conversion
-    TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), p^.length, result);
+    TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), sr^.length, result);
 end;
 {$else}
-procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8);
+procedure AnyAnsiToUtf8Var(const s: RawByteString; var result: RawUtf8);
 begin
   if (s = '') or
      IsValidUtf8Buffer(pointer(s), length(s)) then // slower but safe
@@ -4804,7 +4804,7 @@ end;
 
 function AnyAnsiToUtf8(const s: RawByteString): RawUtf8;
 begin
-  AnyAnsiToUtf8(s, result);
+  AnyAnsiToUtf8Var(s, result);
 end;
 
 function WinAnsiBufferToUtf8(Dest: PUtf8Char;
