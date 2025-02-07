@@ -339,25 +339,25 @@ type
   ESynUnicode = class(ExceptionWithProps);
 
   /// an abstract class to handle Ansi to/from Unicode translation
-  // - implementations of this class will handle efficiently all Code Pages
+  // - implementations of this class will handle efficiently all CharSets
   // - this default implementation will use the Operating System APIs
-  // - you should not create your own class instance by yourself, but should
-  // better retrieve an instance using TSynAnsiConvert.Engine(), which will
-  // initialize either a TSynAnsiFixedWidth or a TSynAnsiConvert instance on need
+  // - NEVER call Create() constructor directly: use the Engine() factory instead
   TSynAnsiConvert = class
   protected
     fCodePage: cardinal;
     fAnsiCharMbcs: boolean;
     fAnsiCharShift: byte;
   public
-    /// initialize the internal conversion engine
-    constructor Create(aCodePage: cardinal); reintroduce; virtual;
     /// returns the engine corresponding to a given code page
     // - a global list of TSynAnsiConvert instances is handled by the unit -
     // therefore, caller should not release the returned instance
     // - will return nil in case of unhandled code page
     // - is aCodePage is 0, will return CurrentAnsiConvert value
     class function Engine(aCodePage: cardinal): TSynAnsiConvert;
+      {$ifdef HASINLINE} static; {$endif}
+    /// initialize the internal conversion engine
+    // - NEVER call this constructor directly: use the Engine() factory instead
+    constructor Create(aCodePage: cardinal); reintroduce; virtual;
     /// direct conversion of a PAnsiChar buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
     // - this default implementation will use the Operating System APIs
@@ -458,23 +458,20 @@ type
   end;
 
   /// a class to handle Ansi to/from Unicode translation of fixed width encoding
-  // (i.e. non MBCS)
   // - this class will handle efficiently all Code Page availables without MBCS
   // encoding - like WinAnsi (1252) or Russian (1251)
   // - it will use internal fast look-up tables for such encodings
-  // - this class could take some time to generate, and will consume more than
-  // 64 KB of memory: you should not create your own class instance by yourself,
-  // but should better retrieve an instance using TSynAnsiConvert.Engine(), which
-  // will initialize either a TSynAnsiFixedWidth or a TSynAnsiConvert instance
-  // on need
+  // - each instance will consume a bit more than 64 KB of memory
   // - this class has some additional methods (e.g. IsValid*) which take
   // advantage of the internal lookup tables to provide some fast process
+  // - NEVER call Create() constructor directly: use the Engine() factory instead
   TSynAnsiFixedWidth = class(TSynAnsiConvert)
   protected
     fAnsiToWide: TWordDynArray;
     fWideToAnsi: TByteDynArray;
   public
     /// initialize the internal conversion engine
+    // - NEVER call this constructor directly: use the Engine() factory instead
     constructor Create(aCodePage: cardinal); override;
     /// direct conversion of a PAnsiChar buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
@@ -538,11 +535,12 @@ type
   end;
 
   /// a class to handle UTF-8 to/from Unicode translation
-  // - match the TSynAnsiConvert signature, for code page CP_UTF8
   // - this class is mostly a non-operation for conversion to/from UTF-8
+  // - NEVER call Create() constructor directly: use the Engine() factory instead
   TSynAnsiUtf8 = class(TSynAnsiConvert)
   public
     /// initialize the internal conversion engine
+    // - NEVER call this constructor directly: use the Engine() factory instead
     constructor Create(aCodePage: cardinal); override;
     /// direct conversion of a PAnsiChar UTF-8 buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
@@ -590,13 +588,14 @@ type
   end;
 
   /// a class to handle UTF-16 to/from Unicode translation
-  // - match the TSynAnsiConvert signature, for code page CP_UTF16
   // - even if UTF-16 is not an Ansi format, code page CP_UTF16 may have been
   // used to store UTF-16 encoded binary content
   // - this class is mostly a non-operation for conversion to/from Unicode
+  // - NEVER call Create() constructor directly: use the Engine() factory instead
   TSynAnsiUtf16 = class(TSynAnsiConvert)
   public
     /// initialize the internal conversion engine
+    // - NEVER call this constructor directly: use the Engine() factory instead
     constructor Create(aCodePage: cardinal); override;
     /// direct conversion of a PAnsiChar UTF-16 buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
@@ -629,23 +628,24 @@ type
 
 var
   /// global TSynAnsiConvert instance to handle WinAnsi encoding (code page 1252)
-  // - this instance is global and instantied during the whole program life time
+  // - this instance is global and created during this unit's initialization
   // - it will be created from hard-coded values, and not using the system API,
   // since it appeared that some systems (e.g. in Russia) did tweak the registry
   // so that 1252 code page maps 1251 code page
   WinAnsiConvert: TSynAnsiFixedWidth;
 
   /// global TSynAnsiConvert instance to handle current system encoding
+  // - this instance is global and created during this unit's initialization
   // - this is the encoding as used by the AnsiString type, so will be used
   // before Delphi 2009 to speed-up RTL string handling (especially for UTF-8)
-  // - this instance is global and instantied during the whole program life time
   CurrentAnsiConvert: TSynAnsiConvert;
 
   /// global TSynAnsiConvert instance to handle UTF-8 encoding (code page CP_UTF8)
-  // - this instance is global and instantied during the whole program life time
+  // - this instance is global and created during this unit's initialization
   Utf8AnsiConvert: TSynAnsiUtf8;
 
   /// global TSynAnsiConvert instance with no encoding (RawByteString/RawBlob)
+  // - this instance is global and created during this unit's initialization
   RawByteStringConvert: TSynAnsiFixedWidth;
 
 
@@ -3536,14 +3536,6 @@ end;
 
 { **************** UTF-8 / Unicode / Ansi Conversion Classes }
 
-var
-  // internal list of TSynAnsiConvert instances
-  SynAnsiConvertList: array of TSynAnsiConvert;
-  SynAnsiConvertListLock: TRWLightLock;
-  SynAnsiConvertListCount: integer;
-  SynAnsiConvertListCodePage: TWordDynArray; // for fast lookup in CPU L1 cache
-
-
 { TSynAnsiConvert }
 
 function TSynAnsiConvert.AnsiBufferToUnicode(Dest: PWideChar;
@@ -3707,63 +3699,74 @@ begin
     50220 .. 52000: // rough IEC-2022 detection with $1b ESC [I..] F
       fAnsiCharMbcs := true;
   end;
+  RegisterGlobalShutdownRelease(self);
 end;
 
-function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  i: PtrInt;
-begin
-  SynAnsiConvertListLock.ReadLock; // concurrent read lock
-  i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-    SynAnsiConvertListCount, aCodePage); // SSE2 asm on i386 and x86_64
-  if i >= 0 then
-    result := SynAnsiConvertList[i]
-  else
-    result := nil;
-  SynAnsiConvertListLock.ReadUnLock;
-end;
-
-function NewEngine(aCodePage: cardinal): TSynAnsiConvert;
-var
-  i: PtrInt;
-begin
-  SynAnsiConvertListLock.WriteLock;
-  try
-    i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-      SynAnsiConvertListCount, aCodePage); // search (again) for thread safety
-    if i >= 0 then
-    begin
-      result := SynAnsiConvertList[i]; // avoid any (unlikely) race condition
-      exit;
-    end;
-    if aCodePage = CP_UTF8 then
-      result := TSynAnsiUtf8.Create(CP_UTF8)
-    else if aCodePage = CP_UTF16 then
-      result := TSynAnsiUtf16.Create(CP_UTF16)
-    else if IsFixedWidthCodePage(aCodePage) then
-      result := TSynAnsiFixedWidth.Create(aCodePage)
-    else
-      result := TSynAnsiConvert.Create(aCodePage);
-    RegisterGlobalShutdownRelease(result);
-    ObjArrayAdd(SynAnsiConvertList, result);
-    AddWord(SynAnsiConvertListCodePage, SynAnsiConvertListCount, aCodePage);
-  finally
-    SynAnsiConvertListLock.WriteUnLock;
+type
+  // maintain the thread-safe internal list of TSynAnsiConvert instances
+  TSynAnsiConvertList = record
+    Last: TSynAnsiConvert;
+    Lock: TRWLightLock;
+    Count: integer;
+    CodePage: TWordDynArray; // for (SSE2) fast lookup in CPU L1 cache
+    Engine: array of TSynAnsiConvert;
   end;
+var
+  SynAnsiConvertList: TSynAnsiConvertList;
+
+function GetEngine(var List: TSynAnsiConvertList; CodePage: cardinal): TSynAnsiConvert;
+var
+  i: PtrInt;
+begin
+  result := List.Last; // atomic cache
+  if result <> nil then
+    if result.CodePage = CodePage then
+      exit // very common case
+    else
+      result := nil;
+  List.Lock.ReadLock; // concurrent read lock
+  i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
+  if i >= 0 then
+    result := List.Engine[i];
+  List.Lock.ReadUnLock;
+  if result = nil then // thread-safe register a new TSynAnsiConvert instance
+  begin
+    List.Lock.WriteLock;
+    try
+      i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
+      if i < 0 then // really need to create
+      begin
+        if CodePage = CP_UTF16 then // seldom used: no global variable
+          result := TSynAnsiUtf16.Create(CP_UTF16)
+        else if IsFixedWidthCodePage(CodePage) then
+          result := TSynAnsiFixedWidth.Create(CodePage) // use lookup table
+        else
+          result := TSynAnsiConvert.Create(CodePage); // use system API
+        ObjArrayAdd(List.Engine, result);
+        AddWord(List.CodePage, List.Count, CodePage);
+      end
+      else
+        result := List.Engine[i];
+    finally
+      List.Lock.WriteUnLock;
+    end;
+  end;
+  List.Last := result;
 end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
 begin
   if aCodePage <> CP_ACP then
-  begin
-    result := GetEngine(aCodePage);
-    if result = nil then
-      if aCodePage = CP_RAWBLOB then
-        result := RawByteStringConvert // CP_RAWBLOB is internal -> no engine
+    if aCodePage < CP_RAWBLOB then
+      if aCodePage <> CP_UTF8 then
+        if aCodePage <> CP_WINANSI then
+          result := GetEngine(SynAnsiConvertList, aCodePage) // from list
+        else
+          result := WinAnsiConvert
       else
-        result := NewEngine(aCodePage)
-  end
+        result := Utf8AnsiConvert
+    else
+      result := RawByteStringConvert // CP_RAWBLOB is internal -> no engine
   else
     result := CurrentAnsiConvert;
 end;
@@ -11092,12 +11095,11 @@ begin
   SortDynArrayAnsiStringByCase[true]  := @SortDynArrayAnsiStringI;
   IdemPropNameUSameLen[false] := @IdemPropNameUSameLenNotNull;
   IdemPropNameUSameLen[true]  := @mormot.core.base.CompareMem;
-  // setup basic Unicode conversion engines
-  SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
-  WinAnsiConvert       := NewEngine(CP_WINANSI) as TSynAnsiFixedWidth;
-  Utf8AnsiConvert      := NewEngine(CP_UTF8) as TSynAnsiUtf8;
-  CurrentAnsiConvert   := NewEngine(Unicode_CodePage);
-  RawByteStringConvert := NewEngine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
+  // setup basic/global Unicode conversion engines
+  WinAnsiConvert       := TSynAnsiFixedWidth.Create(CP_WINANSI);
+  Utf8AnsiConvert      := TSynAnsiUtf8.Create(CP_UTF8);
+  RawByteStringConvert := TSynAnsiFixedWidth.Create(CP_RAWBYTESTRING);
+  CurrentAnsiConvert   := TSynAnsiConvert.Engine(Unicode_CodePage);
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
   {$ifdef ASMX64AVXNOCONST}
