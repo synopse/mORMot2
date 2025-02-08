@@ -1645,7 +1645,7 @@ begin
           Check(res = mdOk, 'directOk');
           Check(not CompareMem(@msg, @msg2, SizeOf(msg)));
           Check(msg2.Kind = pcfBearerDirect);
-          CheckEqual(msg2.Opaque, -2080670699100626208);
+          CheckEqual(msg2.Opaque, 7142701337754149600, 'Opaque');
           Check(msg2.Hash.Algo = hfSHA256);
           Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
           FillCharFast(msg2, SizeOf(msg2), 0);

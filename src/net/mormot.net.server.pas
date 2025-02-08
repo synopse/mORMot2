@@ -5582,7 +5582,9 @@ var
   uri: TUri;
 begin
   result := false;
-  if not uri.From(aRemoteUri) then
+  if (aSharedSecret = '') or
+     (aRemoteHash = '') or
+     not uri.From(aRemoteUri) then
     exit;
   c := THttpPeerCrypt.Create(aSharedSecret, nil, nil);
   try
@@ -5590,7 +5592,7 @@ begin
     if not HashDetect(aRemoteHash, msg.Hash.Bin, msg.Hash.Algo) then
       exit;
     FormatUtf8('/%/%/%', [uri.Scheme, uri.Server, uri.Address], aDirectUri);
-    msg.Opaque := crc64c(pointer(aDirectUri), length(aDirectUri)); // no replay
+    msg.Opaque := crc63c(pointer(aDirectUri), length(aDirectUri)); // no replay
     aDirectHeaderBearer := AuthorizationBearer(BinToBase64uri(c.MessageEncode(msg)));
     result := true;
   finally
@@ -6410,7 +6412,7 @@ begin
     if not Check(BearerDecode(aBearerToken, pcfBearerDirect, msg),
              'OnBeforeBody Direct', msg) then
       include(err, eDirectDecode)
-    else if Int64(msg.Opaque) <> crc64c(pointer(aUrl), length(aUrl)) then
+    else if Int64(msg.Opaque) <> crc63c(pointer(aUrl), length(aUrl)) then
       include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
     if not (pcoHttpDirect in fSettings.Options) then
       include(err, aDirectDisabled);
