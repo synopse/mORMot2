@@ -1521,6 +1521,14 @@ type
     // the peer cache instance when a better interface is available
     // - returns '' on success, or an error message
     function GuessInterface(out Mac: TMacAddress): RawUtf8; virtual;
+    /// encode a remote URI for pcoHttpDirect download at localhost
+    // - returns aDirectUri as 'http://localhost:8099/https/microsoft.com/...'
+    // and aDirectHeaderBearer
+    // - aForceTls should map ServerTls.Enabled
+    function HttpDirectUri(const aSharedSecret: RawByteString;
+      const aRemoteUri, aRemoteHash: RawUtf8;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8;
+      aForceTls: boolean = false): boolean;
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
@@ -5634,6 +5642,25 @@ begin
   end
   else if not GetMainMacAddress(Mac, [mafLocalOnly, mafRequireBroadcast]) then
     result := 'impossible to find a local network interface';
+end;
+
+function THttpPeerCacheSettings.HttpDirectUri(
+  const aSharedSecret: RawByteString; const aRemoteUri, aRemoteHash: RawUtf8;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aForceTls: boolean): boolean;
+var
+  mac: TMacAddress;
+begin
+  result := false;
+  if (self = nil) or
+     (aSharedSecret = '') or
+     (pcoNoServer in fOptions) or
+     (GuessInterface(mac) <> '') or
+     not THttpPeerCrypt.HttpDirectUri(aSharedSecret, aRemoteUri, aRemoteHash,
+           aDirectUri, aDirectHeaderBearer) then
+    exit;
+  aForceTls := aForceTls or (pcoSelfSignedHttps in fOptions);
+  aDirectUri := Make([HTTPS_TEXT[aForceTls], mac.IP, ':', fPort, aDirectUri]);
+  result := true;
 end;
 
 
