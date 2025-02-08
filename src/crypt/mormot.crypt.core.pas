@@ -7568,8 +7568,8 @@ end;
 function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
 const
   CHARS: array[0..127] of AnsiChar =
-    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
-    ':bcd.fgh(jklmn)pqrst?vwx-z+BCD%FGH!JKLMN/PQRST@VWX#Z$.:()?%!-+*/@#';
+    'abcdefghijklmnopqrstuvwxyzABCDEFGH[JKLMN0PQRSTUVWXYZ0123456789' +
+    ':bcd.fgh(jklmn)pqrst?vwx_z+BCD%FGH!JKLMN/PQRST@VWX#Z$.:()?%!,;*/]#';
 var
   i: integer;
   haspunct: boolean;
