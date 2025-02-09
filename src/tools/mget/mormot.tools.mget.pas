@@ -85,6 +85,11 @@ type
     function Execute(const Url: RawUtf8): TFileName;
     /// write some message to the console, if Silent flag is false
     procedure ToConsole(const Fmt: RawUtf8; const Args: array of const);
+    /// encode a remote URI for pcoHttpDirect download at localhost
+    // - returns aDirectUri e.g. as 'http://1.2.3.4:8099/https/microsoft.com/...'
+    // (if peer cache runs on 1.2.3.4:8099) and its associated aDirectHeaderBearer
+    function HttpDirectUri(const aRemoteUri, aRemoteHash: RawUtf8;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
     /// access to the associated THttpPeerCache instance
     // - a single peer-cache run in the background between Execute() calls
     property PeerCache: IWGetAlternate
@@ -339,6 +344,25 @@ procedure TMGetProcess.ToConsole(const Fmt: RawUtf8;
 begin
   if not Silent then
     ConsoleWrite(Fmt, Args);
+end;
+
+function TMGetProcess.HttpDirectUri(const aRemoteUri, aRemoteHash: RawUtf8;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+var
+  secret: RawUtf8;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  secret := fPeerSecret;
+  if secret = '' then
+    if fPeerSecretHexa = '' then
+      exit
+    else
+      secret := HexToBin(fPeerSecretHexa);
+  result := fPeerSettings.HttpDirectUri(secret, aRemoteUri, aRemoteHash,
+              aDirectUri, aDirectHeaderBearer, ServerTls.Enabled);
+  FillZero(secret);
 end;
 
 

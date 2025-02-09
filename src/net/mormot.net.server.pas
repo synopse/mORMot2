@@ -1522,8 +1522,8 @@ type
     // - returns '' on success, or an error message
     function GuessInterface(out Mac: TMacAddress): RawUtf8; virtual;
     /// encode a remote URI for pcoHttpDirect download at localhost
-    // - returns aDirectUri as 'http://localhost:8099/https/microsoft.com/...'
-    // and aDirectHeaderBearer
+    // - returns aDirectUri e.g. as 'http://1.2.3.4:8099/https/microsoft.com/...'
+    // (if port is 8099 and Mac.IP is 1.2.3.4) and its aDirectHeaderBearer
     // - aForceTls should map ServerTls.Enabled
     function HttpDirectUri(const aSharedSecret: RawByteString;
       const aRemoteUri, aRemoteHash: RawUtf8;
