@@ -813,6 +813,7 @@ function ToUtf8(algo: TSignAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; 
 function ToText(algo: THashAlgo): PShortString; overload;
 function ToUtf8(algo: THashAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; {$endif}
 function ToText(algo: TCrc32Algo): PShortString; overload;
+function ToText(const Digest: THashDigest): RawUtf8; overload;
 
 /// recognize a TSignAlgo from a text, e.g. 'SHAKE-128', 'saSha256' or 'SHA-3/256'
 function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean; overload;
@@ -4439,6 +4440,14 @@ end;
 function ToText(algo: TCrc32Algo): PShortString;
 begin
   result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
+end;
+
+function ToText(const Digest: THashDigest): RawUtf8;
+begin
+  if Digest.Algo <= high(THashAlgo) then
+    BinToHexLower(PAnsiChar(@Digest.Bin), HASH_SIZE[Digest.Algo], result)
+  else
+    FastAssignNew(result);
 end;
 
 function SanitizeAlgo(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
