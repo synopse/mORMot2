@@ -1373,6 +1373,7 @@ function TAcmeLetsEncryptServer.OnHeaderParsed(
   Request: THttpServerSocket): THttpServerSocketGetRequestResult;
 var
   client: TAcmeLetsEncryptClient;
+  body, redirect: RawUtf8;
 begin
   // quick process of HTTP requests on port 80 into HTTP/1.0 responses
   if (Request.Http.CommandUri <> '') and
@@ -1380,8 +1381,7 @@ begin
             ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
     // handle Let's Encrypt challenges on /.well-known/* URI
     if fRenewing and
-       OnNetTlsAcceptChallenge(Request.Http.Host,
-         Request.Http.CommandUri, Request.Http.CommandResp) then
+       OnNetTlsAcceptChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
       // return HTTP-01 challenge content
       Request.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
     else
@@ -1400,28 +1400,26 @@ begin
       client := GetClientLocked(Request.Http.Host);
     if client <> nil then
     begin
-      Request.Http.Upgrade := client.fRedirectHttps; // Http.Upgrade as temp
+      redirect := client.fRedirectHttps; // <> '' if customized
       client.Safe.UnLock;
-      if Request.Http.Upgrade = '' then
+      if redirect = '' then
         client := nil;
     end;
     if client <> nil then
       // redirect to the customized URI for this host
       Request.SockSend([
-        'Location: ', Request.Http.Upgrade])
+        'Location: ', redirect])
     else
       // redirect to the same URI but on HTTPS host
       Request.SockSend([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
     if IsGet(Request.Http.CommandMethod) then
-      Request.Http.CommandResp := 'Back to HTTPS'
-    else
-      Request.Http.CommandResp := '';
+      body := 'Back to HTTPS';
   end;
   // finalize the headers and send the response body
   Request.SockSend([
-    'Server: ', fHttpServer.ServerName, #13#10 +
-    'Content-Length: ', length(Request.Http.CommandResp), #13#10 +
+    'Server: ',         fHttpServer.ServerName, #13#10 +
+    'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
   Request.SockSendFlush(Request.Http.CommandResp);
   // no regular OnRequest() event: we have sent the response
