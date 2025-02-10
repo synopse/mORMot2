@@ -5569,12 +5569,16 @@ begin
       [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
 end;
 
+const
+  DIRECTURI_32 = ord('/') + ord('h') shl 8 + ord('t') shl 16 + ord('t') shl 24;
+
 class function THttpPeerCrypt.HttpDirectUri(const aSharedSecret: RawByteString;
   const aRemoteUri, aRemoteHash: RawUtf8;
   out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
 var
   c: THttpPeerCrypt;
   msg: THttpPeerCacheMessage;
+  p: RawUtf8;
   uri: TUri;
 begin
   result := false;
@@ -5585,9 +5589,11 @@ begin
   c := THttpPeerCrypt.Create(aSharedSecret, nil, nil);
   try
     c.MessageInit(pcfBearerDirect, 0, msg);
-    if not HashDetect(aRemoteHash, msg.Hash.Bin, msg.Hash.Algo) then
+    if not HashDetect(aRemoteHash, msg.Hash) then
       exit;
-    FormatUtf8('/%/%/%', [uri.Scheme, uri.Server, uri.Address], aDirectUri);
+    if uri.Port <> DEFAULT_PORT[uri.Https] then
+      p := NetConcat(['_', uri.Port]); // '_' is ok for URI, but not for domain
+    FormatUtf8('/%/%%/%', [uri.Scheme, uri.Server, p, uri.Address], aDirectUri);
     msg.Opaque := crc63c(pointer(aDirectUri), length(aDirectUri)); // no replay
     aDirectHeaderBearer := AuthorizationBearer(BinToBase64uri(c.MessageEncode(msg)));
     result := true;
@@ -6417,8 +6423,7 @@ begin
     include(err, eGet);
   if aUrl = '' then // URI is just ignored but something should be specified
     include(err, eUrl)
-  else if PCardinal(aUrl)^ =
-            ord('/') + ord('h') shl 8 + ord('t') shl 16 + ord('t') shl 24 then
+  else if PCardinal(aUrl)^ = DIRECTURI_32 then
   begin
     // pcfBearerDirect for pcoHttpDirect mode: /https/microsoft.com/...
     if (aRemoteIp <> '') and
