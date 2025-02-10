@@ -1393,18 +1393,6 @@ type
     pcfBearer,
     pcfBearerDirect);
 
-  /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
-  // - we store and compare in our implementation the algorithm in addition to
-  // the hash, to avoid any potential attack about (unlikely) hash collisions
-  // between algorithms, and allow any change of algo restrictions in the future
-  THttpPeerCacheHash = packed record
-    /// the algorithm used for Hash
-    Algo: THashAlgo;
-    /// up to 512-bit of raw binary hash, according to Algo
-    Bin: THash512Rec;
-  end;
-  THttpPeerCacheHashs = array of THttpPeerCacheHash;
-
   /// one UDP request frame used during THttpPeerCache discovery
   // - requests and responses have the same binary layout
   // - some fields may be void or irrelevant, and the structure is padded
@@ -1442,7 +1430,7 @@ type
     /// number of background download connections currently on this server
     Connections: word;
     /// up to 512-bit of binary Hash (and algo) of the requested file content
-    Hash: THttpPeerCacheHash;
+    Hash: THashDigest;
     /// the known full size of this file
     Size: Int64;
     /// the Range offset of the requested file content
@@ -1590,7 +1578,7 @@ type
     property HttpTimeoutMS: integer
       read fHttpTimeoutMS write fHttpTimeoutMS;
     /// location of the temporary cached files, available for remote requests
-    // - the files are cached using their THttpPeerCacheHash values as filename
+    // - the files are cached using their THashDigest values as filename
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
     // - if this value equals '', or pcoNoServer is defined in Options,
     // temporary caching would be disabled
@@ -1615,7 +1603,7 @@ type
       read fCacheTempMaxMin write fCacheTempMaxMin;
     /// location of the permanent cached files, available for remote requests
     // - in respect to CacheTempPath, this folder won't be purged
-    // - the files are cached using their THttpPeerCacheHash values as filename
+    // - the files are cached using their THashDigest values as filename
     // - if this value equals '', or pcoNoServer is defined in Options,
     // permanent caching would be disabled
     property CachePermPath: TFileName
@@ -1784,7 +1772,7 @@ type
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
     function CurrentConnections: integer; override;
-    function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
+    function ComputeFileName(const aHash: THashDigest): TFileName; virtual;
     function PermFileName(const aFileName: TFileName;
       aFlags: THttpPeerCacheLocalFileName): TFileName; virtual;
     function LocalFileName(const aMessage: THttpPeerCacheMessage;
@@ -6087,7 +6075,7 @@ begin
       end;
 end;
 
-function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
+function THttpPeerCache.ComputeFileName(const aHash: THashDigest): TFileName;
 begin
   // filename is binary algo + hash encoded as hexadecimal
   result := FormatString('%.cache',
@@ -6160,7 +6148,7 @@ begin
 end;
 
 function WGetToHash(const Params: THttpClientSocketWGet;
-  out Hash: THttpPeerCacheHash): boolean;
+  out Hash: THashDigest): boolean;
 begin
   result := false;
   if (Params.Hash = '') or
@@ -6176,7 +6164,7 @@ function THttpPeerCache.CachedFileName(const aParams: THttpClientSocketWGet;
   aFlags: THttpPeerCacheLocalFileName;
   out aLocal: TFileName; out isTemp: boolean): boolean;
 var
-  hash: THttpPeerCacheHash;
+  hash: THashDigest;
 begin
   if not WGetToHash(aParams, hash) then
   begin
@@ -6638,7 +6626,7 @@ end;
 function THttpPeerCache.OnDownloading(const Params: THttpClientSocketWGet;
   const Partial: TFileName; ExpectedFullSize: Int64): THttpPartialID;
 var
-  h: THttpPeerCacheHash;
+  h: THashDigest;
 begin
   if (fPartials = nil) or // not supported by this fHttpServer class
      (waoNoProgressiveDownloading in Params.AlternateOptions) or
@@ -6646,7 +6634,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownloading') then
     result := 0
   else
-    result := fPartials.Add(Partial, ExpectedFullSize, @h.Bin, HASH_SIZE[h.Algo]);
+    result := fPartials.Add(Partial, ExpectedFullSize, h);
 end;
 
 function THttpPeerCache.PartialFileName(
@@ -6659,7 +6647,7 @@ begin
   result := HTTP_NOTFOUND;
   if fPartials = nil then // not supported by this fHttpServer class
     exit;
-  fn := fPartials.Find(@aMessage.Hash.Bin, HASH_SIZE[aMessage.Hash.Algo], aHttp, size);
+  fn := fPartials.Find(aMessage.Hash, aHttp, size);
   if fVerboseLog then
     fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
       [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
