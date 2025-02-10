@@ -10577,18 +10577,18 @@ var
   ctx: PNetTlsContext absolute arg;
   new: PSSL_CTX;
 begin
-  result := SSL_TLSEXT_ERR_OK;
+  result := SSL_TLSEXT_ERR_OK; // requested servername has been accepted
   if not Assigned(ctx) or
-     not Assigned(ctx.OnAcceptServerName) then
+     not Assigned(ctx^.OnAcceptServerName) then
     exit; // use default context/certificate
   servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
   if servername = nil then
     exit;
-  new := ctx.OnAcceptServerName(ctx, s, servername);
+  new := ctx^.OnAcceptServerName(ctx, s, servername);
   if new <> nil then
     // switching server context
     if SSL_set_SSL_CTX(s, new) = nil then // note: only change certificates
-      result := SSL_TLSEXT_ERR_NOACK;
+      result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
 end;
 
 procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
@@ -10599,7 +10599,7 @@ begin
   fCtx := SSL_CTX_new(TLS_server_method);
   SetupCtx(Context, {bind=}true);
   // allow SNI per-server certificate via OnAcceptServerName callback
-  if Assigned(Context.OnAcceptServerName) then
+  if EnableOnNetTlsAcceptServerName then
   begin
     SSL_CTX_set_tlsext_servername_callback(fCtx, AfterAcceptSNI);
     SSL_CTX_set_tlsext_servername_arg(fCtx, @Context);

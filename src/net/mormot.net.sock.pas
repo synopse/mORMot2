@@ -781,7 +781,7 @@ type
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
 
-  /// callback raised by INetTls.AfterAccept for SNI resolution
+  /// callback raised by INetTls.AfterAccept for SNI poer-host resolution
   // - should check the ServerName and return the proper certificate context,
   // typically one OpenSSL PSSL_CTX instance
   // - if the ServerName has no match, and the default certificate is good
@@ -789,7 +789,7 @@ type
   // - on any error, should raise an exception
   // - TLS is an opaque structure, typically OpenSSL PSSL
   TOnNetTlsAcceptServerName = function(Context: PNetTlsContext; TLS: pointer;
-    const ServerName: RawUtf8): pointer of object;
+    ServerName: PUtf8Char): pointer of object;
 
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
@@ -923,6 +923,7 @@ type
     // - not used on SChannel
     OnPrivatePassword: TOnNetTlsGetPassword;
     /// called by INetTls.AfterAccept to set a server/host-specific certificate
+    // - used e.g. by TAcmeLetsEncryptServer to allow SNI per-host certificate
     // - not used on SChannel
     OnAcceptServerName: TOnNetTlsAcceptServerName;
     /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
@@ -975,13 +976,6 @@ type
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
-  /// event called by HTTPS server to publish HTTP-01 challenges on port 80
-  // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
-  // - the server should send back the returned content as response with
-  // application/octet-stream (i.e. BINARY_CONTENT_TYPE)
-  TOnNetTlsAcceptChallenge = function(const domain, uri: RawUtf8;
-    var content: RawUtf8): boolean;
-
 
 /// initialize a stack-allocated TNetTlsContext instance
 procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
@@ -1001,17 +995,11 @@ var
   // - could also be overriden e.g. by the mormot.lib.openssl11.pas unit
   NewNetTls: function: INetTls;
 
-  /// global callback set to TNetTlsContext.AfterAccept from InitNetTlsContext()
-  // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
-  // - any HTTPS server should also publish a HTTP server on port 80 to serve
-  // HTTP-01 challenges via the OnNetTlsAcceptChallenge callback
-  OnNetTlsAcceptServerName: TOnNetTlsAcceptServerName;
-
-  /// global callback used for HTTP-01 Let's Encrypt challenges
-  // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
-  // - any HTTPS server should also publish a HTTP server on port 80 to serve
-  // HTTP-01 challenges associated with the OnNetTlsAcceptServerName callback
-  OnNetTlsAcceptChallenge: TOnNetTlsAcceptChallenge;
+  /// set globally to setup TNetTlsContext.OnAcceptServerName SNI callbacks
+  // - default false may be lighter, e.g. for a single-host HTTPS server
+  // - is set e.g. by mormot.net.acme.pas initialization section
+  // - not used on SChannel yet
+  EnableOnNetTlsAcceptServerName: boolean;
 
 
 {$ifdef OSWINDOWS}
@@ -3959,8 +3947,6 @@ begin
   TLS.PrivateKeyFile  := RawUtf8(PrivateKeyFile);
   TLS.PrivatePassword := PrivateKeyPassword;
   TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
-  if Server then
-    TLS.OnAcceptServerName := OnNetTlsAcceptServerName; // e.g. mormot.net.acme
 end;
 
 procedure ResetNetTlsContext(var TLS: TNetTlsContext);
