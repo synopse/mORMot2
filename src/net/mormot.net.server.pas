@@ -1682,6 +1682,10 @@ type
     class function HttpDirectUri(const aSharedSecret: RawByteString;
       const aRemoteUri, aRemoteHash: RawUtf8;
       out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+    /// decode a remote URI for pcoHttpDirect download at localhost
+    // - as previously encoded by HttpDirectUri() class function
+    class function HttpDirectUriReconstruct(P: PUtf8Char;
+      out Decoded: TUri): boolean;
     /// optional TLS options for the peer HTTPS server
     // - e.g. to set a custom certificate for this peer
     // - when ServerTls.Enabled is set, ClientTls.Enabled and other params should match
@@ -5600,6 +5604,24 @@ begin
   finally
     c.Free;
   end;
+end;
+
+class function THttpPeerCrypt.HttpDirectUriReconstruct(P: PUtf8Char;
+  out Decoded: TUri): boolean;
+var
+  scheme, domain: RawUtf8;
+begin
+  result := false;
+  if (P = nil) or
+     (PCardinal(P)^ <> DIRECTURI_32) then
+    exit;
+  inc(P); // http/... or https/...
+  GetNextItem(P, '/', scheme);
+  GetNextItem(P, '/', domain); // domain/... or domain_port/...
+  domain := StringReplaceChars(domain, '_', ':');
+  if (domain <> '') and
+     (P <> nil) then
+    result := Decoded.From(Make([scheme, '://', domain, '/', P]));
 end;
 
 
