@@ -1628,8 +1628,8 @@ begin
           for i := 1 to 10 do
             Check(hpc.Ping = nil);
           // validate THttpPeerCrypt.HttpDirectUri request encoding/decoding
-          Check(THttpPeerCrypt.HttpDirectUri('secret', 'https://synopse.info/forum',
-             BinToHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]), dUri, dBearer));
+          Check(THttpPeerCrypt.HttpDirectUri('secret',
+            'https://synopse.info/forum', ToText(msg.Hash), dUri, dBearer));
           CheckEqual(dUri, '/https/synopse.info/forum');
           Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
           CheckEqual(decoded.URI, 'https://synopse.info/forum');
@@ -1637,6 +1637,7 @@ begin
           FillCharFast(msg2, SizeOf(msg2), 0);
           Check(msg2.Hash.Algo <> hfSHA256);
           Check(not CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
+          Check(not HashDigestEqual(msg.Hash, msg2.Hash), 'hde0');
           res := hpc2.BearerDecode(dBearer, pcfBearerDirect, msg2);
           Check(res = mdB64, 'directB64');
           Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
@@ -1646,17 +1647,20 @@ begin
           FillCharFast(msg2, SizeOf(msg2), 0);
           res := hpc2.BearerDecode(dTok, pcfBearerDirect, msg2);
           Check(res = mdOk, 'directOk');
-          Check(not CompareMem(@msg, @msg2, SizeOf(msg)));
+          Check(not CompareMem(@msg, @msg2, SizeOf(msg)), 'cm');
+          Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
+          Check(HashDigestEqual(msg.Hash, msg2.Hash), 'hde1');
           Check(msg2.Kind = pcfBearerDirect);
           CheckEqual(msg2.Opaque, 7142701337754149600, 'Opaque');
           Check(msg2.Hash.Algo = hfSHA256);
           Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
+          Check(HashDigestEqual(msg.Hash, msg2.Hash), 'hde2');
           FillCharFast(msg2, SizeOf(msg2), 0);
           inc(dTok[10]);
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
-          Check(res in [mdCrc, mdB64], 'directCrc');
-          Check(THttpPeerCrypt.HttpDirectUri('secret', 'https://synopse.info:123/forum',
-             BinToHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]), dUri, dBearer));
+          Check(res in [mdCrc, mdB64], 'altered');
+          Check(THttpPeerCrypt.HttpDirectUri('secret',
+            'https://synopse.info:123/forum', ToText(msg.Hash), dUri, dBearer));
           CheckEqual(dUri, '/https/synopse.info_123/forum');
           Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
           CheckEqual(decoded.URI, 'https://synopse.info:123/forum');
