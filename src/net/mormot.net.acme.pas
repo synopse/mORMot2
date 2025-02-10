@@ -1323,7 +1323,7 @@ begin
     fHttpServer.ServerName := fHttpsServer.ServerName;
     if hsoEnableLogging in opt then
     begin
-      fHttpServer.Logger.CopyParams(fHttpServer.Logger);
+      fHttpServer.Logger.CopyParams(fHttpsServer.Logger);
       fHttpServer.Logger.Settings.DestMainFile := 'access80.log';
     end;
   end;
