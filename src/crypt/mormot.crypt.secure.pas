@@ -708,6 +708,11 @@ type
     constructor Create(aDestination: TStream; aRead: boolean = false); override;
     function GetHash: RawUtf8; override;
     class function GetHashFileExt: RawUtf8; override;
+    /// return the current state of the hash as its raw binary and algorithm
+    function GetHashDigest(out Digest: THashDigest): boolean; overload;
+    /// will decode an hexadecimal hash into its raw binary and algorithm
+    class function GetHashDigest(const HexaHash: RawUtf8;
+      out Digest: THashDigest): boolean; overload;
     /// inherited classes will properly return the hash algorithm
     class function GetAlgo: THashAlgo; virtual; abstract;
   end;
@@ -3906,6 +3911,21 @@ begin
   result := HASH_EXT[GetAlgo];
 end;
 
+function TStreamRedirectSynHasher.GetHashDigest(out Digest: THashDigest): boolean;
+var
+  tmp: TSynHasher;
+begin
+  Digest.Algo := GetAlgo;
+  tmp := fHash;
+  tmp.Final(Digest.Bin);
+end;
+
+class function TStreamRedirectSynHasher.GetHashDigest(const HexaHash: RawUtf8;
+  out Digest: THashDigest): boolean;
+begin
+  Digest.Algo := GetAlgo;
+  result := mormot.core.text.HexToBin(pointer(HexaHash), @Digest.Bin, HASH_SIZE[Digest.Algo]);
+end;
 
 { TStreamRedirectSha3_512 }
 
