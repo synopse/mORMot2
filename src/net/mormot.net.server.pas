@@ -1063,6 +1063,7 @@ type
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
+    function GetBanned: THttpAcceptBan; virtual; abstract;
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
@@ -1195,6 +1196,9 @@ type
     // - for THttpAsyncServer inherited class, redirect to TAsyncServer.fServer
     property Sock: TCrtSocket
       read fSock;
+    /// access to the the IPv4 banning list, if hsoBan40xIP was set
+    property Banned: THttpAcceptBan
+      read GetBanned;
   published
     /// the bound TCP port, as specified to Create() constructor
     property SockPort: RawUtf8
@@ -1297,6 +1301,7 @@ type
     fBanned: THttpAcceptBan; // for hsoBan40xIP
     fOnAcceptIdle: TOnPollSocketsIdle;
     function GetExecuteState: THttpServerExecuteState; override;
+    function GetBanned: THttpAcceptBan; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
@@ -4473,6 +4478,11 @@ end;
 function THttpServer.GetExecuteState: THttpServerExecuteState;
 begin
   result := fExecuteState;
+end;
+
+function THttpServer.GetBanned: THttpAcceptBan;
+begin
+  result := fBanned;
 end;
 
 function THttpServer.GetHttpQueueLength: cardinal;

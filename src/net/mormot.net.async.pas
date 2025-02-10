@@ -1072,6 +1072,7 @@ type
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
     function GetExecuteState: THttpServerExecuteState; override;
+    function GetBanned: THttpAcceptBan; override;
     procedure IdleEverySecond; virtual;
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
     // the main thread will Send output packets in the background
@@ -3955,7 +3956,7 @@ begin
         end;
         // if we reached here, we have accepted a connection -> process
         inc(fAccepted);
-        start := 0; // reset sleep pace on error
+        start := 0; // reset sleep pace if no error
         if ConnectionCreate(client, sin, connection) then
         begin
           // no log here, because already done in ConnectionNew and Start()
@@ -5037,7 +5038,12 @@ end;
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
 begin
   result := fAsync.fExecuteState; // state comes from THttpAsyncConnections
-  fExecuteMessage := fAsync.fExecuteMessage;
+  fExecuteMessage := fAsync.fExecuteMessage; // copy message
+end;
+
+function THttpAsyncServer.GetBanned: THttpAcceptBan;
+begin
+  result := fAsync.fBanned;
 end;
 
 {$ifdef OSWINDOWS}
@@ -5158,7 +5164,7 @@ begin
             break;
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
           tix64 := mormot.core.os.GetTickCount64;
-          tix := tix64 shr 16; // check SendFrame idle after 1 minute
+          tix := tix64 shr 16; // check SendFrame idle after 1 minute (64K ms)
           fAsync.ProcessIdleTix(self, tix64);
           if (fCallbackSendDelay <> nil) and
              //TODO: set and check fCallbackOutgoingCount>0 instead?
