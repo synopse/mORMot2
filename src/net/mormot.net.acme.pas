@@ -256,6 +256,7 @@ type
     fCtx: PSSL_CTX;
     fRedirectHttps: RawUtf8;
     fRenewing: boolean;
+    fSignedCertTime, fPrivKeyTime: TUnixTime;
     procedure ClearCtx;
     // internal method called by TAcmeLetsEncrypt.OnNetTlsAcceptServerName
     function GetServerContext: PSSL_CTX;
@@ -972,19 +973,31 @@ begin
 end;
 
 function TAcmeLetsEncryptClient.GetServerContext: PSSL_CTX;
+var
+  sc, pk: TUnixTime;
 begin
   // client made fSafe.Lock
   result := fCtx;
-  if (result <> nil) or // most of time, immediate return from cache
-     not FileExists(fSignedCert) or
-     not FileExists(fPrivKey) then
+  if result <> nil then // most of time, immediate return from cache
     exit;
+  // check missing or unmodified key files
+  sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
+  if sc <= 0 then
+    exit;
+  pk := FileAgeToUnixTimeUtc(fPrivKey);    // ####.key.pem
+  if (pk <= 0) or
+     ((fSignedCertTime = sc) and
+      (fPrivKeyTime = pk)) then
+    exit;
+  // only retry SSL_CTX_new().SetCertificateFiles() if actually changed
+  fSignedCertTime := sc;
+  fPrivKeyTime := pk;
   // will be assigned by SSL_set_SSL_CTX() which requires only a certificate
   result := SSL_CTX_new(TLS_server_method);
   // cut-down version of TOpenSslNetTls.SetupCtx
   if result.SetCertificateFiles(
        fSignedCert, fPrivKey, fOwner.fPrivateKeyPassword) then
-    fCtx := result
+    fCtx := result // owned and cached
   else
   begin
     result.Free;
