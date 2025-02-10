@@ -6105,7 +6105,7 @@ end;
 
 function THttpPeerCache.ComputeFileName(const aHash: THashDigest): TFileName;
 begin
-  // filename is binary algo + hash encoded as hexadecimal
+  // filename is binary algo + hash encoded as hexadecimal up to 520-bit
   result := FormatString('%.cache',
     [BinToHexLower(@aHash, SizeOf(aHash.Algo) + HASH_SIZE[aHash.Algo])]);
   // note: it does not make sense to obfuscate this file name because we can
@@ -6178,14 +6178,10 @@ end;
 function WGetToHash(const Params: THttpClientSocketWGet;
   out Hash: THashDigest): boolean;
 begin
-  result := false;
-  if (Params.Hash = '') or
-     (Params.Hasher = nil) or
-     not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) then
-    exit; // no valid hash for sure
-  Hash.Algo := TStreamRedirectSynHasherClass(Params.Hasher).GetAlgo;
-  result := mormot.core.text.HexToBin(
-    pointer(Params.Hash), @Hash.Bin, HASH_SIZE[Hash.Algo]);
+  result := (Params.Hash <> '') and
+            (Params.Hasher <> nil) and
+            Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) and
+       TStreamRedirectSynHasher(Params.Hasher).GetHashDigest(Params.Hash, Hash);
 end;
 
 function THttpPeerCache.CachedFileName(const aParams: THttpClientSocketWGet;
