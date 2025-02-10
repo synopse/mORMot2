@@ -6710,12 +6710,24 @@ begin
   try
     // get local filename from decoded bearer hash
     progsize := 0;
-    // msg.Kind = pcfBearer so we need to ask both Local+PartialFileName()
-    result := LocalFileName(msg, [lfnSetDate], @fn, nil);
-    if (result <> HTTP_SUCCESS) and
-       (fPartials <> nil) then // if supported by the fHttpServer class
-      result := PartialFileName(
-                  msg, (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
+    case msg.Kind of
+      pcfBearer:
+        begin
+          // after UDP: download from LocalFileName() or PartialFileName()
+          result := LocalFileName(msg, [lfnSetDate], @fn, nil);
+          if (result <> HTTP_SUCCESS) and
+             (fPartials <> nil) then // if supported by the fHttpServer class
+            result := PartialFileName(
+                        msg, (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
+        end;
+      pcfBearerDirect:
+        begin
+          // perform a HEAD to the original server to retrieve progsize
+
+          // start the proper request to the remote URI
+
+        end;
+    end;
     if result <> HTTP_SUCCESS then
     begin
       if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
