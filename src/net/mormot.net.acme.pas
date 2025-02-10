@@ -375,8 +375,8 @@ type
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
     // - you can specify the associated main HTTPS server into aHttpsServer so
     // that our plain HTTP server will follow its configuration (e.g. logging)
-    // - by default, the HTTP server will consume a single thread, but you can
-    // set e.g. aHttpServerThreadCount = 2 on a production server
+    // - by default, the port 80 HTTP server will consume a single thread, but
+    // you can set e.g. aHttpServerThreadCount = 2 on a production server
     // - aPort can be set to something else than 80, e.g. behind a reverse proxy
     // - will raise an exception if port 80 is not available for binding (e.g.
     // if the user is not root on Linux/POSIX)
@@ -386,13 +386,14 @@ type
       aHttpServerThreadCount: integer = -1; const aPort: RawUtf8 = ''); reintroduce;
     /// finalize the certificates management and the associated HTTP server
     destructor Destroy; override;
-    /// allow to specify the https URI to redirect from any request on port 80
+    /// customize the https URI to redirect from any request on port 80
     // - Redirection should include the full URI, e.g. 'https://blog.synopse.info'
     function Redirect(const Domain, Redirection: RawUtf8): boolean;
-    // the associated HTTPS server as supplied to Create()
-    property HttpsServer: THttpServerGeneric
-      read fHttpsServer;
   published
+    /// the associated HTTPS server as supplied to Create()
+    // - could be also set later one, if really needed
+    property HttpsServer: THttpServerGeneric
+      read fHttpsServer write fHttpsServer;
     /// the limited HTTP server launched by this class, running on port 80
     property HttpServer: THttpServer
       read fHttpServer;
@@ -1103,6 +1104,7 @@ var
   res: TAcmeStatus;
   log: ISynLog;
 begin
+  // this method is run from a transient TLoggedWorkThread
   log := fLog.Enter(self, 'CheckCertificates');
   if (self = nil) or
      (fClient = nil) or
@@ -1218,7 +1220,7 @@ function TAcmeLetsEncrypt.GetClientLocked(
 begin
   fSafe.Lock;
   try
-    result := GetClient(ServerName);
+    result := GetClient(ServerName); // case-insensitive search
     if result <> nil then
       result.Safe.Lock;
   finally
@@ -1289,7 +1291,7 @@ var
   p, hp: RawUtf8;
   log: ISynLog;
 begin
-  // prepare the needed information for our HTTP server
+  // prepare the needed information for our HTTP server (on port 80 by default)
   p := aPort;
   if p = '' then
     p := '80';
@@ -1298,14 +1300,14 @@ begin
   begin
     // retrieve some information from the main HTTPS server
     fHttpsServer := aHttpsServer;
-    // bind to the same interface
+    // bind to the same interface/IP
     if fHttpsServer.InheritsFrom(THttpServerSocketGeneric) then
     begin
       hp := THttpServerSocketGeneric(fHttpsServer).SockPort;
       i := PosExChar(':', hp);
       if (i <> 0) and
          (PosExChar(':', p) = 0) then
-        p := copy(hp, 1, i) + p; // 'IP:port'
+        p := copy(hp, 1, i) + p; // e.g. 'IP:443' into 'IP:80'
     end;
     // enable logging also into an "access80.log" file
     if hsoEnableLogging in fHttpsServer.Options then
@@ -1328,7 +1330,7 @@ begin
   // setup the ACME configuration
   inherited Create(aLog, aKeyStoreFolder, aDirectoryUrl, aAlgo,
     aPrivateKeyPassword);
-  // handle requests on port 80 as redirection or ACME challenges
+  // handle requests on port 80 as HTTP/1.0 redirection or ACME challenges
   fHttpServer.OnHeaderParsed := OnHeaderParsed;
   // ban an IP for 4 seconds on any DoS attack
   fHttpServer.HeaderRetrieveAbortDelay := 200; // grTimeOut after 200ms headers
@@ -1416,6 +1418,7 @@ begin
     else
       Request.Http.CommandResp := '';
   end;
+  // finalize the headers and send the response body
   Request.SockSend([
     'Server: ', fHttpServer.ServerName, #13#10 +
     'Content-Length: ', length(Request.Http.CommandResp), #13#10 +
