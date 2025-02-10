@@ -633,6 +633,19 @@ type
   /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgos = set of THashAlgo;
 
+  /// store a hash value and its algorithm, e.g. for THttpPeerCacheMessage.Hash
+  // - we store and compare in our implementation the algorithm in addition to
+  // the hash, to avoid any potential attack about (unlikely) hash collisions
+  // between algorithms, and allow any change of algo restrictions in the future
+  THashDigest = packed record
+    /// the algorithm used for Hash
+    Algo: THashAlgo;
+    /// up to 512-bit of raw binary hash, according to Algo
+    Bin: THash512Rec;
+  end;
+  /// store a dynamic array of hash value and its algorithm
+  THashDigests = array of THashDigest;
+
   /// convenient multi-algorithm hashing wrapper
   // - as used e.g. by HashFile/HashFull functions
   // - we defined a record instead of a class, to allow stack allocation and
@@ -810,7 +823,11 @@ function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean; over
 function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean; overload;
 
 /// decode and recognize an hexadecimal hash from its size - but not SHA-3
-function HashDetect(const Hash: RawUtf8; out Bin: THash512Rec; out Algo: THashAlgo): boolean;
+function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
+
+/// fast compare two hash digest and their associated algorithm
+function HashDigestEqual(const a, b: THashDigest): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
@@ -4503,22 +4520,28 @@ begin
   result := true;
 end;
 
-function HashDetect(const Hash: RawUtf8; out Bin: THash512Rec; out Algo: THashAlgo): boolean;
+function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
 var
   s: byte;
   a: THashAlgo;
 begin
   result := false;
+  FillCharFast(Digest, SizeOf(Digest), 0);
   s := length(Hash) shr 1;
   if (s >= SizeOf(TMd5Digest)) and
-     (s <= SizeOf(Bin)) then
+     (s <= SizeOf(Digest.Bin)) then
     for a := low(a) to hfSHA512 do
       if HASH_SIZE[a] = s then
       begin
-        Algo := a;
-        result := mormot.core.text.HexToBin(pointer(Hash), @Bin, s);
+        Digest.Algo := a;
+        result := mormot.core.text.HexToBin(pointer(Hash), @Digest.Bin, s);
         break;
       end;
+end;
+
+function HashDigestEqual(const a, b: THashDigest): boolean;
+begin
+  result := CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
 end;
 
 
