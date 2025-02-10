@@ -986,7 +986,6 @@ type
 
   /// callback event able to return the HA0 binary from a username
   // - called by DigestServerAuth() e.g. to lookup from a local .htdigest file
-  // - should return the hash size in bytes, or 0 if User is unknown
   // - is typically implemented via DigestHA0() wrapper function
   TOnDigestServerAuthGetUserHash = function(
     const User, Realm: RawUtf8; out HA0: THash512Rec): TAuthServerResult of object;
@@ -1129,6 +1128,7 @@ type
     // this is the main abstract virtual method to override for DIGEST auth
     function GetUserHash(const aUser, aRealm: RawUtf8;
       out aDigest: THash512Rec): TAuthServerResult; virtual; abstract;
+    // TOnDigestServerAuthGetUserHash signature
     function GetUserHashWithCallback(const aUser, aRealm: RawUtf8;
       out aDigest: THash512Rec): TAuthServerResult;
     procedure ComputeDigest(const aUser: RawUtf8; const aPassword: SpiUtf8;
@@ -1167,7 +1167,7 @@ type
     fUsers: TSynDictionary; // UserName:RawUtf8 / HA0:TDigestAuthHash
     fModified: boolean;
     function GetUserHash(const aUser, aRealm: RawUtf8;
-      out aDigest: THash512Rec): TAuthServerResult; override;
+      out aDigest: THash512Rec): TAuthServerResult; override; // main method
     function GetCount: integer;
   public
     /// initialize the Digest access authentication engine
@@ -4555,7 +4555,7 @@ type
     HA2: RawUtf8;
     Response: RawUtf8;
     tmp: RawByteString;
-    Hasher: TSynHasher;
+    Hasher: TSynHasher; // instance used internally by methods
     HA0: THash512Rec;
     procedure Init(DigestAlgo: TDigestAlgo); {$ifdef HASINLINE} inline; {$endif}
     function Parse(var p: PUtf8Char): boolean;
@@ -4667,7 +4667,7 @@ begin
     Hasher.Update(Method);
   Hasher.Update([':', Url]);
   Hasher.Final(HA2);
-  hasher.Full(Hash,
+  Hasher.Full(Hash,
     [HA1, ':', nonce, ':', nc, ':', cnonce, ':', qop, ':', HA2], Response);
 end;
 
