@@ -3917,7 +3917,8 @@ var
 begin
   Digest.Algo := GetAlgo;
   tmp := fHash;
-  tmp.Final(Digest.Bin);
+  tmp.Final(Digest.Bin); // hash the current state
+  result := true;
 end;
 
 class function TStreamRedirectSynHasher.GetHashDigest(const HexaHash: RawUtf8;
