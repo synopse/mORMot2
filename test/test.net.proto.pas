@@ -1569,6 +1569,7 @@ var
   i, n, alter: integer;
   tmp: RawByteString;
   dUri, dBearer, dTok: RawUtf8;
+  decoded: TUri;
   timer: TPrecisionTimer;
 begin
   CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
@@ -1630,6 +1631,8 @@ begin
           Check(THttpPeerCrypt.HttpDirectUri('secret', 'https://synopse.info/forum',
              BinToHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]), dUri, dBearer));
           CheckEqual(dUri, '/https/synopse.info/forum');
+          Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
+          CheckEqual(decoded.URI, 'https://synopse.info/forum');
           Check(dBearer <> '', 'dBearer');
           FillCharFast(msg2, SizeOf(msg2), 0);
           Check(msg2.Hash.Algo <> hfSHA256);
@@ -1652,6 +1655,11 @@ begin
           inc(dTok[10]);
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
           Check(res in [mdCrc, mdB64], 'directCrc');
+          Check(THttpPeerCrypt.HttpDirectUri('secret', 'https://synopse.info:123/forum',
+             BinToHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]), dUri, dBearer));
+          CheckEqual(dUri, '/https/synopse.info_123/forum');
+          Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
+          CheckEqual(decoded.URI, 'https://synopse.info:123/forum');
           //write('running'); ConsoleWaitForEnterKey;
         finally
           hpc2.Free;
