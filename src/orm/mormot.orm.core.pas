@@ -9776,8 +9776,9 @@ var
   i: PtrInt;
 begin
   fRootLen := length(aRoot);
-  for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment
-    if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
+  for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment (exclude ~)
+    if (aRoot[i] <> '/') and
+       not (tcUriUnreserved in TEXT_CHARS[aRoot[i]]) then
       EModelException.RaiseUtf8(
         '%.Root=[%] contains URI unfriendly char #% [%]',
         [self, aRoot, ord(aRoot[i]), aRoot[i]]);
