@@ -5317,7 +5317,7 @@ begin
   if fSettings.RejectInstablePeersMin > 0 then
   begin
     fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
-    fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
+    fInstable.WhiteIP := fIP4; // no UDP ban from localhost
   end;
   fLog.Add.Log(sllDebug, 'Create: network="%" as % (broadcast=%) %',
     [fMac.Name, fIpPort, fMac.Broadcast, fMac.Address], self);
@@ -6033,6 +6033,7 @@ procedure THttpPeerCache.StartHttpServer(
   aHttpServerThreadCount: integer; const aIP: RawUtf8);
 var
   opt: THttpServerOptions;
+  srv: THttpServerSocketGeneric;
 begin
   if fClientTls.Enabled <> fServerTls.Enabled then
     EHttpPeerCache.RaiseUtf8(
@@ -6052,24 +6053,31 @@ begin
     fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
   if aHttpServerClass.InheritsFrom(THttpServerSocketGeneric) then
   begin
+    srv := fHttpServer as THttpServerSocketGeneric;
+    // no TCP/HTTP ban from localhost
+    if Assigned(srv.Banned) then
+      srv.Banned.WhiteIP := fIP4;
     // note: both THttpServer and THttpAsyncServer support rfProgressiveStatic
     fPartials := THttpPartials.Create;
     if fVerboseLog then
       fPartials.OnLog := fLog.DoLog;
-    THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
-    // actually start and wait for the local HTTP server to be available
+    srv.fOnProgressiveRequestFree := fPartials;
+    // actually start and wait for the local HTTP(S) server to be available
     if fServerTls.Enabled then
     begin
       fLog.Add.Log(sllTrace, 'StartHttpServer: HTTPS from ServerTls', self);
-      THttpServerSocketGeneric(fHttpServer).WaitStarted(10, @fServerTls);
+      srv.WaitStarted(10, @fServerTls);
     end
     else if pcoSelfSignedHttps in fSettings.Options then
     begin
       fLog.Add.Log(sllTrace, 'StartHttpServer: self-signed HTTPS', self);
-      THttpServerSocketGeneric(fHttpServer).WaitStartedHttps(10);
+      srv.WaitStartedHttps(10);
     end
     else
-      THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
+    begin
+      fLog.Add.Log(sllTrace, 'StartHttpServer: plain HTTP', self);
+      srv.WaitStarted(10);
+    end;
   end;
 end;
 
@@ -6723,8 +6731,8 @@ begin
           result := LocalFileName(msg, [lfnSetDate], @fn, nil);
           if (result <> HTTP_SUCCESS) and
              (fPartials <> nil) then // if supported by the fHttpServer class
-            result := PartialFileName(
-                        msg, (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
+            result := PartialFileName(msg,
+              (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
         end;
       pcfBearerDirect:
         begin
