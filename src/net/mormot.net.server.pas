@@ -6463,7 +6463,8 @@ begin
   begin
     // pcfBearerDirect for pcoHttpDirect mode: /https/microsoft.com/...
     if (aRemoteIp <> '') and
-       not IsLocalHost(pointer(aRemoteIP)) then
+       not (IsLocalHost(pointer(aRemoteIP)) or
+            (aRemoteIP = fMac.IP)) then
       include(err, eDirectIp);
     if not Check(BearerDecode(aBearerToken, pcfBearerDirect, msg),
              'OnBeforeBody Direct', msg) then
@@ -6478,7 +6479,7 @@ begin
     // pcfBearer for regular request in broadcasting mode
     if not IPToCardinal(aRemoteIP, ip4) then
       include(err, eIp1)
-    else if fInstable.IsBanned(ip4) then // banned for RejectInstablePeersMin
+    else if fInstable.IsBanned(ip4) then // banned from RejectInstablePeersMin
       include(err, eBanned);
     if err = [] then
       if Check(BearerDecode(aBearerToken, pcfBearer, msg), 'OnBeforeBody', msg) then
