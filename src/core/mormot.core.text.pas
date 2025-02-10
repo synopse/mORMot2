@@ -9787,10 +9787,11 @@ function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
   var Bin: RawByteString): boolean;
 begin
   Bin := '';
-  if HexLen and 1 <> 0 then
+  if (Hex = nil) or
+     (HexLen and 1 <> 0) then
   begin
     result := false;
-    exit; // hexadecimal should be in char pairs
+    exit; // hexadecimal should be not void, and in char pairs
   end;
   HexLen := HexLen shr 1;
   pointer(Bin) := FastNewString(HexLen, CP_RAWBYTESTRING);
