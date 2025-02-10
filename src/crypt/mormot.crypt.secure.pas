@@ -696,7 +696,7 @@ type
   end;
 
   /// TStreamRedirect with TSynHasher cryptographic hashing
-  // - do not use this abstract class but inherited with overloaded GetAlgo
+  // - do not use this abstract class but inherited types with overriden GetAlgo
   TStreamRedirectSynHasher = class(TStreamRedirect)
   protected
     fHash, fHashAppend: TSynHasher;
@@ -704,10 +704,12 @@ type
     procedure AfterAppend; override;
     procedure ResetHash; override;
   public
+    // proper implement TStreamRedirect (abstract) virtual methods
     constructor Create(aDestination: TStream; aRead: boolean = false); override;
     function GetHash: RawUtf8; override;
-    class function GetAlgo: THashAlgo; virtual; abstract;
     class function GetHashFileExt: RawUtf8; override;
+    /// inherited classes will properly return the hash algorithm
+    class function GetAlgo: THashAlgo; virtual; abstract;
   end;
 
   /// meta-class of TStreamRedirectSynHasher
@@ -3892,8 +3894,11 @@ begin
 end;
 
 function TStreamRedirectSynHasher.GetHash: RawUtf8;
+var
+  tmp: TSynHasher; // local copy to return current state but continue processing
 begin
-  fHash.Final(result);
+  tmp := fHash;
+  tmp.Final(result);
 end;
 
 class function TStreamRedirectSynHasher.GetHashFileExt: RawUtf8;
