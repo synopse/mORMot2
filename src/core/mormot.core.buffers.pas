@@ -1573,7 +1573,8 @@ type
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
 // ! url := UrlEncode(['select','*','where','ID=12','offset',23,'object',aObject]);
 // - parameters names should be plain ASCII-7 RFC compatible identifiers
-// (0..9a..zA..Z_.~), otherwise they are skipped unless ueEncodeNames is set
+// (0..9a..zA..Z_.), otherwise they are skipped unless ueEncodeNames is set - the
+// tilde (~) character is part of RFC 3986 but should be escaped in practice
 // - parameters values can be either textual, integer or extended, or any TObject
 // - TObject serialization into UTF-8 will be processed with ObjectToJson()
 function UrlEncode(const NameValuePairs: array of const;
@@ -1700,12 +1701,13 @@ function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
 
 /// checks if the supplied UTF-8 text don't need URI encoding
 // - returns TRUE if all its chars are non-void plain ASCII-7 RFC compatible
-// identifiers (0..9a..zA..Z-_.~)
+// identifiers (0..9a..zA..Z-_.) - the tilde (~) character is part of RFC 3986
+// but should be escaped in practice
 function IsUrlValid(P: PUtf8Char): boolean;
 
 /// checks if the supplied UTF-8 text values don't need URI encoding
 // - returns TRUE if all its chars of all strings are non-void plain ASCII-7 RFC
-// compatible identifiers (0..9a..zA..Z-_.~)
+// compatible identifiers (0..9a..zA..Z-_.) - excluding tilde (~)
 function AreUrlValid(const Url: array of RawUtf8): boolean;
 
 /// ensure the supplied URI contains a trailing '/' charater
@@ -8065,7 +8067,7 @@ begin
     inc(s);
     if tcUriUnreserved in tab[c] then
     begin
-      // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
+      // was ['_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z'] - '~' excluded
       d^ := c;
       inc(d);
     end
@@ -8294,7 +8296,7 @@ begin
   tab := @TEXT_CHARS;
   repeat
     if tcUriUnreserved in tab[P^] then
-      inc(P) // was  ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
+      inc(P) // was  ['_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z'] - exclude '~'
     else if P^ = #0 then
       break
     else

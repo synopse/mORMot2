@@ -2274,7 +2274,7 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 @by16:    // loop comparing 16 bytes
           movups  xmm1, oword ptr [P1 + L]
           movups  xmm2, oword ptr [P2 + L]
-          pcmpeqb xmm1, xmm2             // compare 16 bytes
+          pcmpeqb xmm1, xmm2             // compare 16 bytes (128-bit)
           pmovmskb eax, xmm1             // get byte mask
           xor     eax, r9d               // not ax
           jnz     @diff                  // difference found
