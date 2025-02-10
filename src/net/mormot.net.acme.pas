@@ -288,6 +288,7 @@ type
     fOnChallenge: TOnAcmeChallenge;
     function GetClient(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
+    procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); virtual; abstract;
   public
     /// initialize certificates management with Let's Encrypt
     // - if aDirectoryUrl is not '', will use the "staging" environment - you
@@ -364,8 +365,11 @@ type
     fHttpsServer: THttpServerGeneric;
     fNextCheckTix: Int64;
     fRedirectHttps: integer;
-    function OnHeaderParsed(
-      Request: THttpServerSocket): THttpServerSocketGetRequestResult;
+    // (un)assign the TNetTlsContext.OnAcceptServerName callback to this instance
+    procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); override;
+    // main entry point for all HTTP requests on port 80
+    function OnHeaderParsed(Request: THttpServerSocket): THttpServerSocketGetRequestResult;
+    // will check twice a day if any certificate is to be renewed
     procedure OnAcceptIdle(Sender: TObject; Tix64: Int64);
   public
     /// initialize certificates management and HTTP server with Let's Encrypt
@@ -1057,7 +1061,7 @@ var
   log: ISynLog;
 begin
   log := fLog.Enter(self, 'LoadFromKeyStoreFolder');
-  mormot.net.sock.OnNetTlsAcceptServerName := nil;
+  SetCallbackForLoadFromKeyStoreFolder({enabled=}false);
   fSafe.Lock;
   try
     ObjArrayClear(fClient);
@@ -1086,7 +1090,7 @@ begin
     fSafe.UnLock;
   end;
   if fClient <> nil then
-    mormot.net.sock.OnNetTlsAcceptServerName := OnNetTlsAcceptServerName;
+    SetCallbackForLoadFromKeyStoreFolder({enabled=}true);
   if Assigned(log) then
     log.Log(sllDebug, 'LoadFromKeyStoreFolder: added %',
       [Plural('domain', length(fClient))], self);
@@ -1421,7 +1425,7 @@ begin
     'Server: ',         fHttpServer.ServerName, #13#10 +
     'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
-  Request.SockSendFlush(Request.Http.CommandResp);
+  Request.SockSendFlush(body);
   // no regular OnRequest() event: we have sent the response
   result := grIntercepted;
   // grIntercepted won't trigger any IP ban, just close the connection
@@ -1434,15 +1438,29 @@ begin
      fRenewTerminated or
      (fClient = nil) or
      (fRenewBeforeEndDays <= 0) or
+     (fHttpsServer = nil) or
      (Tix64 < fNextCheckTix) then
     exit;
   fNextCheckTix := Tix64 + (MilliSecsPerDay shr 1); // retry every half a day
   CheckCertificatesBackground; // launch a dedicated background thread
 end;
 
+procedure TAcmeLetsEncryptServer.SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean);
+begin
+  if fHttpsServer <> nil then
+    if Enabled then
+      fHttpsServer.SetTlsServerNameCallback(OnNetTlsAcceptServerName)
+    else
+      fHttpsServer.SetTlsServerNameCallback(nil);
+end;
+
 
 { **************** HTTP/HTTPS Fully Featured Multi-Host Web Server }
 
+
+
+initialization
+  EnableOnNetTlsAcceptServerName := true; // this global variable should be set
 
 {$else}
 
