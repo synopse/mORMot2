@@ -312,7 +312,7 @@ type
     /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
     // global variable of mormot.net.sock
     function OnNetTlsAcceptServerName(Context: PNetTlsContext; TLS: pointer;
-      const ServerName: RawUtf8): pointer;
+      ServerName: PUtf8Char): pointer;
     /// TOnNetTlsAcceptChallenge event, set to OnNetTlsAcceptChallenge
     // global variable of mormot.net.sock
     // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
@@ -1227,19 +1227,23 @@ begin
 end;
 
 function TAcmeLetsEncrypt.OnNetTlsAcceptServerName(Context: PNetTlsContext;
-  TLS: pointer; const ServerName: RawUtf8): pointer;
+  TLS: pointer; ServerName: PUtf8Char): pointer;
 var
   client: TAcmeLetsEncryptClient;
+  name: RawUtf8;
 begin
-  client := GetClientLocked(ServerName);
+  result := nil;
+  if (fClient = nil) or
+     (ServerName = nil) then
+    exit;
+  FastSetString(name, ServerName, StrLen(ServerName));
+  client := GetClientLocked(name); // case-insensitive search
   if client <> nil then
     try
-      result := client.GetServerContext; // PSSL_CTX from cache
+      result := client.GetServerContext; // cached PSSL_CTX
     finally
       client.Safe.UnLock;
     end
-  else
-    result := nil;
 end;
 
 const
