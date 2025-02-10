@@ -570,6 +570,9 @@ type
     // - if '' is supplied, /favicon.ico will return a 404 error status
     // - warning: with THttpApiServer, may require a proper URI registration
     procedure SetFavIcon(const FavIconContent: RawByteString = 'default');
+    /// used e.g. by TAcmeLetsEncryptServer to redirect TLS server name requests
+    // - do nothing by default
+    procedure SetTlsServerNameCallback(const OnAccept: TOnNetTlsAcceptServerName); virtual;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -1041,7 +1044,7 @@ type
     fHeaderRetrieveAbortDelay: cardinal;
     fCompressGz: integer; // >=0 if GZ is activated
     fSockPort: RawUtf8;
-    fSock: TCrtSocket;
+    fSock: TCrtSocket; // the server socket, setup after Bind()
     fExecuteMessage: RawUtf8;
     fNginxSendFileFrom: array of TFileName;
     fAuthorize: THttpServerRequestAuthentication;
@@ -1137,6 +1140,8 @@ type
     // - otherwise TLS is initialized at first incoming connection, which
     // could be too late in case of invalid Sock.TLS parameters
     procedure InitializeTlsAfterBind;
+    /// overriden to properly support TLS Server Name lookup
+    procedure SetTlsServerNameCallback(const OnAccept: TOnNetTlsAcceptServerName); override;
     /// remove any previous authorization, i.e. any previous SetAuthorizeBasic /
     // SetAuthorizeDigest / SetAuthorizeKerberos call
     procedure SetAuthorizeNone;
@@ -3505,6 +3510,12 @@ begin
   Dest.AppendShort(HttpDateNowUtc);
 end;
 
+procedure THttpServerGeneric.SetTlsServerNameCallback(
+  const OnAccept: TOnNetTlsAcceptServerName);
+begin
+  // do nothing by default
+end;
+
 function THttpServerGeneric.CanNotifyCallback: boolean;
 begin
   result := (self <> nil) and
@@ -4216,6 +4227,13 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+procedure THttpServerSocketGeneric.SetTlsServerNameCallback(
+  const OnAccept: TOnNetTlsAcceptServerName);
+begin
+  if Assigned(fSock) then
+    fSock.TLS.OnAcceptServerName := OnAccept;
 end;
 
 procedure THttpServerSocketGeneric.SetAuthorizeNone;

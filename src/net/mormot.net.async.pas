@@ -783,7 +783,7 @@ type
   // state for server process
   TAsyncServer = class(TAsyncConnections)
   protected
-    fServer: TCrtSocket; // for proper complex binding
+    fServer: TCrtSocket; // for proper complex binding (including TLS)
     fMaxPending: integer;
     fMaxConnections: integer;
     fAccepted: Int64;
