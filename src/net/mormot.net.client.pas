@@ -227,6 +227,54 @@ const
   /// standard text used to identify the WebSockets protocol
   HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
 
+type
+  /// maintain one partial download for THttpPartials
+  THttpPartial = record
+    /// genuine positive identifier, 0 if empty/recyclable
+    ID: THttpPartialID;
+    /// the expected full size of this download
+    FullSize: Int64;
+    /// the partial file name currently downloaded
+    PartFile: TFileName;
+    /// up to 512-bit of raw binary hash, precessed by hash algo byte
+    Digest: THashDigest;
+    /// the HTTP requests which are waiting for data on this partial download
+    HttpContext: array of PHttpRequestContext;
+  end;
+
+  /// maintain a list of partial downloads
+  // - used e.g. during progressive download in THttpPeerCache
+  THttpPartials = class
+  protected
+    /// thread-safe access to the list of partial downloads
+    fSafe: TLightLock;
+    /// 32-bit monotonic counter sequence to populate THttpPartial.ID
+    fLastID: cardinal;
+    /// store (a few) partial download states
+    fDownload: array of THttpPartial;
+    /// retrieve an index in Partial[] for a given sequence ID
+    function IndexFromID(aID: THttpPartialID): PtrInt;
+  public
+    /// can be assigned to TSynLog.DoLog class method for low-level logging
+    OnLog: TSynLogProc;
+    /// thread-safe register a new partial download
+    function Add(const Partial: TFileName; ExpectedFullSize: Int64;
+      const Hash: THashDigest): THttpPartialID;
+    /// register a HTTP request to a given partial
+    function Find(const Hash: THashDigest; Http: PHttpRequestContext;
+      out Size: Int64): TFileName;
+    /// notify a partial file name change, e.g. when download is complete
+    // - returns the number of changed entries
+    function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): integer;
+    /// notify a partial file download failure, e.g. on invalid hash
+    // - returns the number of removeed HTTP requests
+    function Abort(ID: THttpPartialID): integer;
+    /// unregister a HTTP request to a given partial
+    // - called when the request is finished e.g. via
+    // THttpServerSocketGeneric.DoProgressiveRequestFree private method
+    procedure Remove(Sender: PHttpRequestContext);
+  end;
+
 
 type
   THttpClientSocket = class;
@@ -2040,6 +2088,185 @@ begin
     FormatShort16('/%', [Executable.Version.Major], vers);
   FormatUtf8('Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/2 %%',
     [name, Executable.ProgramName, vers], result);
+end;
+
+
+{ THttpPartials }
+
+function THttpPartials.IndexFromID(aID: THttpPartialID): PtrInt;
+var
+  p: ^THttpPartial;
+begin
+  p := pointer(fDownload);
+  if (p <> nil) and
+     (cardinal(aID) <= fLastID) then
+    for result := 0 to length(fDownload) - 1 do
+      if p^.ID = aID then // fast enough with a few slots
+        exit
+      else
+        inc(p);
+  result := -1;
+end;
+
+function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
+  const Hash: THashDigest): THttpPartialID;
+var
+  i: PtrInt;
+begin
+  result := 0; // unsupported
+  if (self = nil) or
+     (ExpectedFullSize = 0) then
+    exit;
+  fSafe.Lock;
+  try
+    inc(fLastID);
+    result := fLastID; // returns 1,2,3... THttpPartialID
+    i := IndexFromID(0); // try to reuse an empty slot
+    if i < 0 then
+    begin
+      i := length(fDownload);
+      SetLength(fDownload, i + 1); // need a new slot
+    end;
+    with fDownload[i] do
+    begin
+      ID := result;
+      Digest := Hash;
+      FullSize := ExpectedFullSize;
+      PartFile := Partial;
+      HttpContext := nil;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'Add(%,%)=%', [Partial, ExpectedFullSize, result], self);
+end;
+
+function THttpPartials.Find(const Hash: THashDigest; Http: PHttpRequestContext;
+  out Size: Int64): TFileName;
+var
+  i: PtrInt;
+  p: ^THttpPartial;
+begin
+  Size := 0;
+  result := '';
+  if self = nil then
+    exit;
+  fSafe.Lock;
+  try
+    p := pointer(fDownload);
+    for i := 1 to length(fDownload) do
+      if (p^.ID <> 0) and // not a recycled slot
+         HashDigestEqual(p^.Digest, Hash) then
+      begin
+        Size := p^.FullSize;
+        result := p^.PartFile;
+        if Http <> nil then
+        begin
+          PtrArrayAdd(p^.HttpContext, Http);
+          Http^.ProgressiveID := p^.ID;
+        end;
+        break;
+      end
+      else
+        inc(p);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpPartials.ChangeFile(ID: THttpPartialID;
+  const NewFile: TFileName): integer;
+var
+  i, j: PtrInt;
+begin
+  result := 0; // returns the number of changed entries
+  if (self = nil) or
+     (fDownload = nil) or
+     (ID = 0) or
+     (cardinal(ID) >= fLastID) then
+    exit;
+  fSafe.Lock;
+  try
+    i := IndexFromID(ID);
+    if i >= 0 then
+      with fDownload[i] do
+      begin
+        PartFile := NewFile;
+        for j := length(HttpContext) - 1 downto 0 do
+        try
+          if HttpContext[j]^.ChangeProgressiveFileName(ID, NewFile) then
+            inc(result);
+        except
+          PtrArrayDelete(HttpContext, j); // paranoid
+        end;
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+  if Assigned(OnLog) then
+    OnLog(LOG_TRACEWARNING[result = 0], 'ChangeFile(%)=%', [ID, result], self);
+end;
+
+function THttpPartials.Abort(ID: THttpPartialID): integer;
+var
+  i, j: PtrInt;
+begin
+  result := 0; // returns the number of changed entries
+  if (self = nil) or
+     (fDownload = nil) or
+     (ID = 0) or
+     (cardinal(ID) >= fLastID) then
+    exit;
+  fSafe.Lock;
+  try
+    i := IndexFromID(ID);
+    if i >= 0 then
+      with fDownload[i] do
+      begin
+        ID := 0; // reuse this slot at next Add()
+        PartFile := '';
+        for j := 0 to length(HttpContext) - 1 do
+          try
+            HttpContext[j].ProgressiveID := 0; // abort THttpServer.Process
+            inc(result);
+          except
+            ; // paranoid
+          end;
+        HttpContext := nil;
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+  if Assigned(OnLog) then
+    OnLog(LOG_TRACEWARNING[result = 0], 'Abort(%)=%', [ID, result], self);
+end;
+
+procedure THttpPartials.Remove(Sender: PHttpRequestContext);
+var
+  i: PtrInt;
+begin
+  if (self = nil) or
+     (fDownload = nil) or
+     (Sender = nil) or
+     (Sender.ProgressiveID = 0) then
+    exit;
+  fSafe.Lock;
+  try
+    i := IndexFromID(Sender.ProgressiveID);
+    if i >= 0 then
+      with fDownload[i] do
+      begin
+        i := PtrArrayDelete(HttpContext, Sender);
+        if HttpContext = nil then
+          ID := 0; // we can reuse this slot
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+  if Assigned(OnLog) then
+    OnLog(LOG_TRACEWARNING[i < 0], 'Remove(%)=%',
+      [Sender.ProgressiveID, i], self);
 end;
 
 
