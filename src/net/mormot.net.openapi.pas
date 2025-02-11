@@ -177,6 +177,7 @@ type
     function AllowEmptyValues: boolean;
     function Default: PVariant;
     function Required: boolean;
+    function Explode: boolean;
     function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
@@ -966,6 +967,12 @@ begin
   result := Data.B['required'];
 end;
 
+function TOpenApiParameter.Explode: boolean;
+begin
+  if not Data.GetAsBoolean('explode', result) then
+    result := true; // default is true
+end;
+
 function TOpenApiParameter.Schema(Parser: TOpenApiParser): POpenApiSchema;
 begin
   if Parser.Version = oav2 then
@@ -1564,7 +1571,8 @@ var
         w.AddShorter('    ''');
         case p.Location of
           oplQuery:
-            if p.ParamType.IsArray then
+            if p.ParamType.IsArray and
+               p.Parameter^.Explode then
               w.AddDirect('*'); // ueStarNameIsCsv for UrlEncodeFull()
           // oplHeader uses natively CSV in OpenAPI default "simple" style
           oplCookie:
