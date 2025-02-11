@@ -2712,18 +2712,18 @@ begin
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   if (url = '') or
      (url[1] <> '/') then
-    SockSend([method, ' /', url, ' HTTP/1.1'])
+    SockSendLine([method, ' /', url, ' HTTP/1.1'])
   else
-    SockSend([method, ' ', url, ' HTTP/1.1']);
+    SockSendLine([method, ' ', url, ' HTTP/1.1']);
   {$ifdef OSPOSIX}
   if SocketLayer = nlUnix then
     SockSend('Host: unix')
   else
   {$endif OSPOSIX}
   if Port = DEFAULT_PORT[TLS.Enabled] then
-    SockSend(['Host: ', Server])
+    SockSendLine(['Host: ', Server])
   else
-    SockSend(['Host: ', Server, ':', Port]);
+    SockSendLine(['Host: ', Server, ':', Port]);
   if (fRangeStart > 0) or
      (fRangeEnd > 0) then
     if fRangeEnd > fRangeStart then
@@ -2733,16 +2733,25 @@ begin
   with fExtendedOptions.Auth do
     case Scheme of
       wraBasic:
-        SockSend(['Authorization: Basic ',
+        SockSendLine(['Authorization: Basic ',
           mormot.core.buffers.BinToBase64(Make([UserName, ':', Password]))]);
       wraBearer:
-        SockSend(['Authorization: Bearer ', Token]);
+        SockSendLine(['Authorization: Bearer ', Token]);
     end; // other Scheme values would have set OnAuthorize
   if fReferer <> '' then
-    SockSend(['Referer: ', fReferer]);
+    SockSendLine(['Referer: ', fReferer]);
   if fAccept <> '' then
-    SockSend(['Accept: ', fAccept]);
-  SockSend(['User-Agent: ', fExtendedOptions.UserAgent]);
+    SockSendLine(['Accept: ', fAccept]);
+  SockSendLine(['User-Agent: ', fExtendedOptions.UserAgent]);
+  p := pointer(fCookies.Cookies);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  repeat
+    SockSendLine(['Set-Cookie: ', p^.Name, '=', p^.Value]);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 procedure THttpClientSocket.RequestClear;
@@ -5364,7 +5373,8 @@ var
 
   procedure Exec(const Command, answer: RawUtf8);
   begin
-    sock.SockSendFlush(NetConcat([Command, #13#10]));
+    sock.SockSend(Command);
+    sock.SockSendFlush;
     if ioresult <> 0 then
       ESendEmail.RaiseUtf8('Write error for %', [Command]);
     Expect(answer)
@@ -5393,7 +5403,7 @@ begin
     end
     else
       Exec('HELO ' + Server, '25');
-    sock.SockSend(['MAIL FROM:<', From, '>']);
+    sock.SockSendLine(['MAIL FROM:<', From, '>']);
     sock.SockSendFlush;
     Expect('250');
     repeat
@@ -5410,7 +5420,7 @@ begin
         Append(ToList, ', ', rec);
     until P = nil;
     Exec('DATA', '354');
-    sock.SockSend([
+    sock.SockSendLine([
       'Subject: ', Subject, #13#10 +
       'From: ', From, ToList]);
     head := trimU(Headers);

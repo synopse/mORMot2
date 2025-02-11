@@ -706,18 +706,18 @@ begin
       RequestSendHeader(aWebSocketsURI, 'GET');
       RandomBytes(@key, SizeOf(key)); // Lecuyer is enough for public random
       bin1 := BinToBase64(@key, SizeOf(key));
-      SockSend(['Content-Length: 0'#13#10 +
-                'Connection: Upgrade'#13#10 +
-                'Upgrade: websocket'#13#10 +
-                'Sec-WebSocket-Key: ', bin1, #13#10 +
-                'Sec-WebSocket-Version: 13']);
+      SockSendLine(['Content-Length: 0'#13#10 +
+                    'Connection: Upgrade'#13#10 +
+                    'Upgrade: websocket'#13#10 +
+                    'Sec-WebSocket-Key: ', bin1, #13#10 +
+                    'Sec-WebSocket-Version: 13']);
       expectedprot := aProtocol.GetSubprotocols;
       if expectedprot <> '' then
         // this header may be omitted, e.g. by TWebSocketEngineIOProtocol
-        SockSend(['Sec-WebSocket-Protocol: ', expectedprot]);
+        SockSendLine(['Sec-WebSocket-Protocol: ', expectedprot]);
       if aProtocol.ProcessHandshake(nil, extout, nil) and
-         (extout <> '') then
-        SockSend(['Sec-WebSocket-Extensions: ', extout]); // e.g. TEcdheProtocol
+         (extout <> '') then // e.g. for TEcdheProtocol
+        SockSendLine(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
         SockSend(aCustomHeaders);
       SockSendCRLF;

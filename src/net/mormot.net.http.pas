@@ -4008,16 +4008,16 @@ begin
     CompressContent(Http.CompressAcceptHeader, Http.Compress, OutContentType,
       OutContent, OutContentEncoding);
     if OutContentEncoding <> '' then
-      SockSend(['Content-Encoding: ', OutContentEncoding]);
+      SockSendLine(['Content-Encoding: ', OutContentEncoding]);
   end;
   if OutStream = nil then
     len := length(OutContent)
   else
     len := OutStream.Size;
-  SockSend(['Content-Length: ', len]); // needed even 0
+  SockSend(['Content-Length: ', len]); // even if 0 (unless chunked)
   if (OutContentType <> '') and
      (OutContentType[1] <> '!') then
-    SockSend(['Content-Type: ', OutContentType]);
+    SockSendLine(['Content-Type: ', OutContentType]);
 end;
 
 procedure THttpSocket.HttpStateReset;

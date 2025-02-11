@@ -1809,6 +1809,9 @@ type
     // - useful on multi-treaded environnement (as in THttpServer.Process)
     // - handle RawByteString, ShortString, Char, integer/Int64 parameters
     procedure SockSend(const Values: array of const); overload;
+    /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
+    // - slightly faster than SockSend() if all appended items are RawUtf8
+    procedure SockSendLine(const Values: array of RawUtf8);
     /// simulate writeln() with a single line - includes trailing #13#10
     procedure SockSend(const Line: RawByteString; NoCrLf: boolean = false); overload;
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
@@ -5371,9 +5374,9 @@ begin
           addr.IP(fRemoteIP, true);
           fSocketFamily := addr.Family;
           res := nrRefused;
-          SockSend(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
+          SockSendLine(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
-            SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+            SockSendLine(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
           SockSendFlush(#13#10);
           repeat
             SockRecvLn(head);
@@ -5917,6 +5920,24 @@ begin
           [ClassNameShort(self)^, VType]); // paranoid
       end;
   SockSendCRLF;
+end;
+
+procedure TCrtSocket.SockSendLine(const Values: array of RawUtf8);
+var
+  i, len: PtrInt;
+  p: PUtf8Char;
+begin
+  len := 2; // for CRLFW
+  for i := 0 to high(Values) do
+    inc(len, length(Values[i]));
+  p := EnsureSockSend(len); // reserve all needed memory at once
+  for i := 0 to high(Values) do
+  begin
+    len := length(Values[i]);
+    MoveFast(pointer(Values[i])^, p^, len);
+    inc(p, len);
+  end;
+  PWord(p)^ := CRLFW;
 end;
 
 procedure TCrtSocket.SockSend(const Line: RawByteString; NoCrLf: boolean);

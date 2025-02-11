@@ -1411,18 +1411,18 @@ begin
     end;
     if client <> nil then
       // redirect to the customized URI for this host
-      Request.SockSend([
+      Request.SockSendLine([
         'Location: ', redirect])
     else
       // redirect to the same URI but on HTTPS host
-      Request.SockSend([
+      Request.SockSendLine([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
     if IsGet(Request.Http.CommandMethod) then
       body := 'Back to HTTPS';
   end;
   // finalize the headers and send the response body
   Request.SockSend([
-    'Server: ',         fHttpServer.ServerName, #13#10 +
+    'Server: ', fHttpServer.ServerName, #13#10 +
     'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
   Request.SockSendFlush(body);
