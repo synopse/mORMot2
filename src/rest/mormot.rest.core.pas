@@ -106,9 +106,6 @@ const
   /// size in bytes, to log up to 2 KB of JSON response, to save space
   MAX_SIZE_RESPONSE_LOG = 2 shl 10;
 
-  /// you can use this cookie value to delete a cookie on the browser side
-  COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
-
   CONTENT_TYPE_WEBFORM: PAnsiChar = 'APPLICATION/X-WWW-FORM-URLENCODED';
   CONTENT_TYPE_MULTIPARTFORM: PAnsiChar = 'MULTIPART/FORM-DATA';
 
@@ -1333,7 +1330,7 @@ type
       read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
-    property InCookie[CookieName: RawUtf8]: RawUtf8
+    property InCookie[const CookieName: RawUtf8]: RawUtf8
       read GetInCookie write SetInCookie;
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'

@@ -2137,6 +2137,8 @@ type
   end;
   /// referes to one HTTP input cookie
   PHttpCookie = ^THttpCookie;
+  /// a dynamic array of THttpCookie name/value pairs
+  THttpCookieDynArray = array of THttpCookie;
 
   /// parse and manage HTTP input cookies
   {$ifdef USERECORDWITHMETHODS}
@@ -2146,7 +2148,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fParsed: boolean;
-    fCookies: array of THttpCookie; // only if InCookie[] is used
+    fCookies: THttpCookieDynArray; // only if InCookie[] is used
   public
     /// detect and parse the cookies from HTTP headers
     procedure Parse(const InHead: RawUtf8);
@@ -2166,8 +2168,16 @@ type
     // - should always previously check "if not Parsed then Parse()"
     property Cookie[CookieName: RawUtf8]: RawUtf8
       read GetCookie write SetCookie; default;
+    /// direct access to the internal name/value pairs list
+    property Cookies: THttpCookieDynArray
+      read fCookies;
   end;
   PHttpCookies = ^THttpCookies;
+
+const
+  /// server can use this cookie value to delete a cookie on the browser side
+  COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
+
 
 /// retrieve the HTTP reason text from its integer code as PRawUtf8
 // - e.g. StatusCodeToText(200)^='OK'
