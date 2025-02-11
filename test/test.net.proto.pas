@@ -856,9 +856,14 @@ begin
     until GetTickCount64 > endtix;
     rev := '62.210.254.173';
     CheckEqual(ip, rev, 'dns1');
-    ip := DnsLookup('blog.synopse.info');
+    repeat
+      inc(fAssertions);
+      ip := DnsLookup('blog.synopse.info');
+      if ip <> '' then
+        break;
+      Sleep(100); // some DNS servers may fail at first: wait a little
+    until GetTickCount64 > endtix;
     CheckEqual(ip, rev, 'dns2');
-    endtix := GetTickCount64 + 2000;
     repeat
       inc(fAssertions);
       rev := DnsReverseLookup(ip);
