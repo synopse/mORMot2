@@ -1444,7 +1444,7 @@ function ToInt64(const text: RawUtf8; out value: Int64): boolean;
 function ToDouble(const text: RawUtf8; out value: double): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// internal fast integer val to text conversion
+/// internal fast integer value to text conversion
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
 // - typical use:
@@ -1460,7 +1460,7 @@ function ToDouble(const text: RawUtf8; out value: double): boolean;
 // - not to be called directly: use IntToStr() or Int32ToUtf8() instead
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 
-/// internal fast unsigned integer val to text conversion
+/// internal fast unsigned integer value to text conversion
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
 // - convert the input value as PtrUInt, so work with QWord on 64-bit CPUs
@@ -1471,10 +1471,14 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// internal fast unsigned Int64 val to text conversion
+/// internal fast unsigned Int64 value to text conversion
 // - same calling convention as with StrInt32() above
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
   {$ifdef CPU64}inline;{$endif}
+
+/// fast convert an Int64 value into a temporary shortstring on stack
+function ToShort(const val: Int64): TShort23;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// add the 4 digits of integer Y to P^ as '0000'..'9999'
 procedure YearToPChar(Y: PtrUInt; P: PUtf8Char);
@@ -6353,6 +6357,16 @@ begin
 end;
 
 {$endif CPU64}
+
+function ToShort(const val: Int64): TShort23;
+var
+  tmp: array[0..23] of AnsiChar;
+  p: PAnsiChar;
+begin
+  p := {%H-}StrInt64(@tmp[23], val);
+  result[0] := AnsiChar(@tmp[23] - p);
+  MoveFast(p^, result[1], ord(result[0]));
+end;
 
 function GetExtended(P: PUtf8Char): TSynExtended;
 var
