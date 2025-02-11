@@ -952,9 +952,11 @@ function DigestClient(Algo: TDigestAlgo;
 // - could be proposed to the user interation UI to specify the auth context
 function DigestRealm(const FromServer: RawUtf8): RawUtf8;
 
-/// compute the Basic access authentication client code
+/// compute the Basic access authentication client header
 // - as defined in https://en.wikipedia.org/wiki/Basic_access_authentication
-function BasicClient(const UserName: RawUtf8; const Password: SpiUtf8): RawUtf8;
+// - for safety, caller should better call FillZero(Result) once done
+procedure BasicClient(const UserName: RawUtf8; const Password: SpiUtf8;
+  out Result: SpiUtf8; const Prefix: RawUtf8 = 'Authorization: Basic ');
 
 /// extract the Basic access authentication realm on client side
 // - FromServer is the 'xxx' encoded value from 'WWW-Authenticate: Basic xxx'
@@ -4799,12 +4801,13 @@ begin
   result := dp.ClientResponse(DigestUriName);
 end;
 
-function BasicClient(const UserName: RawUtf8; const Password: SpiUtf8): RawUtf8;
+procedure BasicClient(const UserName: RawUtf8; const Password: SpiUtf8;
+  out Result: SpiUtf8; const Prefix: RawUtf8);
 var
   ha: RawUtf8;
 begin
-  FormatUtf8('%:%', [UserName, Password], ha);
-  result := BinToBase64(ha);
+  Make([UserName, ':', Password], ha);
+  Result := BinToBase64(ha, Prefix, '', false);
   FillZero(ha);
 end;
 

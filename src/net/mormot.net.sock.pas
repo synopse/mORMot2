@@ -1810,7 +1810,7 @@ type
     // - handle RawByteString, ShortString, Char, integer/Int64 parameters
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
-    // - slightly faster than SockSend() if all appended items are RawUtf8
+    // - slightly faster than SockSend([]) if all appended items are RawUtf8
     procedure SockSendLine(const Values: array of RawUtf8);
     /// simulate writeln() with a single line - includes trailing #13#10
     procedure SockSend(const Line: RawByteString; NoCrLf: boolean = false); overload;
@@ -5684,7 +5684,7 @@ var // closesocket() or shutdown() are slow e.g. on Windows with wrong Linger
 {$endif SYNCRTDEBUGLOW2}
 begin
   // reset internal state
-  fSndBufLen := 0; // always reset (e.g. in case of further Open)
+  fSndBufLen := 0; // always reset (e.g. in case of further Open after error)
   fSockInEofError := 0;
   ioresult; // reset readln/writeln value
   if fSockIn <> nil then

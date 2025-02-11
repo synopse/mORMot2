@@ -2736,6 +2736,7 @@ var
   a: TDigestAlgo;
   h32: cardinal;
   realm, user, url, pwd, s, c, authuser, authurl, fpwd: RawUtf8;
+  sec: SpiUtf8;
   opaque: Int64;
   fn: TFileName;
   dig: TDigestAuthServerFile;
@@ -2887,13 +2888,13 @@ begin
         s := dig.BasicInit;
         Check(IdemPChar(pointer(s), 'WWW-AUTHENTICATE: BASIC '));
         CheckEqual(BasicRealm(copy(s, 25, 100)), dig.Realm);
-        c := BasicClient(users[u], pwds[u]);
-        Check(c <> '');
-        Check(dig.BasicAuth(pointer(c), authuser));
+        BasicClient(users[u], pwds[u], sec);
+        Check(sec <> '');
+        Check(dig.BasicAuth(pointer(sec), authuser));
         CheckEqual(authuser, users[u]);
-        c := BasicClient(users[u], pwds[u] + 'wrong');
-        Check(c <> '');
-        Check(not dig.BasicAuth(pointer(c), authuser));
+        BasicClient(users[u], pwds[u] + 'wrong', sec);
+        Check(sec <> '');
+        Check(not dig.BasicAuth(pointer(sec), authuser));
         CheckEqual(authuser, '');
       end;
       // force file refresh (from previously bak state)

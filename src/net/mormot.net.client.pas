@@ -2705,6 +2705,8 @@ begin
 end;
 
 procedure THttpClientSocket.RequestSendHeader(const url, method: RawUtf8);
+var
+  secret: SpiUtf8;
 begin
   if not SockIsDefined then
     exit;
@@ -2733,8 +2735,11 @@ begin
   with fExtendedOptions.Auth do
     case Scheme of
       wraBasic:
-        SockSendLine(['Authorization: Basic ',
-          mormot.core.buffers.BinToBase64(Make([UserName, ':', Password]))]);
+        begin
+          BasicClient(UserName, Password, secret);
+          SockSend(secret);
+          FillZero(secret);
+        end;
       wraBearer:
         SockSendLine(['Authorization: Bearer ', Token]);
     end; // other Scheme values would have set OnAuthorize
@@ -2743,15 +2748,6 @@ begin
   if fAccept <> '' then
     SockSendLine(['Accept: ', fAccept]);
   SockSendLine(['User-Agent: ', fExtendedOptions.UserAgent]);
-  p := pointer(fCookies.Cookies);
-  if p = nil then
-    exit;
-  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-  repeat
-    SockSendLine(['Set-Cookie: ', p^.Name, '=', p^.Value]);
-    inc(p);
-    dec(n);
-  until n = 0;
 end;
 
 procedure THttpClientSocket.RequestClear;
