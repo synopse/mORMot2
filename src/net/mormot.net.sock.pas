@@ -1679,6 +1679,8 @@ type
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
+    function EnsureSockSend(Len: integer): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
   public
@@ -1805,9 +1807,7 @@ type
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
     // - useful on multi-treaded environnement (as in THttpServer.Process)
-    // - no temp buffer is used
-    // - handle RawByteString, ShortString, Char, integer parameters
-    // - raise ENetSock exception on socket error
+    // - handle RawByteString, ShortString, Char, integer/Int64 parameters
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line - includes trailing #13#10
     procedure SockSend(const Line: RawByteString; NoCrLf: boolean = false); overload;
@@ -5852,28 +5852,26 @@ begin
             (fSock.GetPeer(addr) = nrOK); // OS may return ENOTCONN/WSAENOTCONN
 end;
 
-procedure TCrtSocket.SockSend(P: pointer; Len: integer);
+function TCrtSocket.EnsureSockSend(Len: integer): pointer;
 var
   cap: integer;
 begin
-  if Len <= 0 then
-    exit;
   cap := Length(fSndBuf);
-  if Len + fSndBufLen > cap then
+  if fSndBufLen + Len > cap then
     SetLength(fSndBuf, Len + cap + cap shr 3 + 2048);
-  MoveFast(P^, PByteArray(fSndBuf)[fSndBufLen], Len);
+  result := @PByteArray(fSndBuf)[fSndBufLen];
   inc(fSndBufLen, Len);
 end;
 
-procedure TCrtSocket.SockSendCRLF;
-var
-  cap: integer;
+procedure TCrtSocket.SockSend(P: pointer; Len: integer);
 begin
-  cap := Length(fSndBuf);
-  if fSndBufLen + 2 > cap then
-    SetLength(fSndBuf, cap + cap shr 3 + 2048);
-  PWord(@PByteArray(fSndBuf)[fSndBufLen])^ := CRLFW;
-  inc(fSndBufLen, 2);
+  if Len > 0 then
+    MoveFast(P^, EnsureSockSend(Len)^, Len);
+end;
+
+procedure TCrtSocket.SockSendCRLF;
+begin
+  PWord(EnsureSockSend(2))^ := CRLFW;
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -5905,13 +5903,13 @@ begin
         vtInteger:
           begin
             Str(VInteger, tmp);
-            SockSend(@tmp[1], Length(tmp));
+            SockSend(@tmp[1], ord(tmp[0]));
           end;
         {$ifdef FPC} vtQWord, {$endif}
         vtInt64: // e.g. for "Content-Length:" or  "Range:" sizes
           begin
             Str(VInt64^, tmp);
-            SockSend(@tmp[1], Length(tmp));
+            SockSend(@tmp[1], ord(tmp[0]));
           end;
       else
         raise ENetSock.CreateFmt('%s.SockSend: unsupported VType=%d',
@@ -5921,11 +5919,15 @@ begin
 end;
 
 procedure TCrtSocket.SockSend(const Line: RawByteString; NoCrLf: boolean);
+var
+  len: PtrInt;
+  p: PUtf8Char;
 begin
-  if Line <> '' then
-    SockSend(pointer(Line), Length(Line));
+  len := length(Line);
+  p := EnsureSockSend(len + 2);
+  MoveFast(pointer(Line)^, p^, len);
   if not NoCrLf then
-    SockSendCRLF;
+    PWord(p + len)^ := CRLFW;
 end;
 
 procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);

@@ -1569,7 +1569,7 @@ var
 begin
   ctxt := ServiceRunningContext.Request;
   ctxt.OutSetCookie := fContext.CookieName + '=' + cookie;
-  ctxt.InCookie[CookieName] := cookie;
+  ctxt.InCookie[fContext.CookieName] := cookie;
 end;
 
 
