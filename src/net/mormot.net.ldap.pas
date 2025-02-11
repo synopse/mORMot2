@@ -5700,8 +5700,8 @@ begin
   if not (fSecContextEncrypt in fFlags) then
     exit;
   result := SecEncrypt(fSecContext, result);
-  insert('0000', result, 1);
-  PCardinal(result)^ := bswap32(length(result) - 4); // SASL Buffer Length
+  insert('0000', result, 1); // SASL Buffer Length prefix
+  PCardinal(result)^ := bswap32(length(result) - 4);
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
@@ -5711,8 +5711,7 @@ begin
   if fSecContextEncrypt in fFlags then writeln('(encrypted) =') else writeln('=');
   writeln(AsnDump(Asn1Data));
   {$endif ASNDEBUG}
-  if fSock <> nil then
-    fSock.SockSendFlush(BuildPacket(Asn1Data));
+  fSock.SndLow(BuildPacket(Asn1Data));
 end;
 
 procedure TLdapClient.ReceivePacketFillSockBuffer;
@@ -5725,7 +5724,7 @@ begin
   begin
     // through Kerberos encryption (sealing)
     saslLen := 0;
-    fSock.SockRecv(@saslLen, 4);
+    fSock.SockRecv(@saslLen, 4); // SASL Buffer Length prefix
     ciphered := fSock.SockRecv(bswap32(saslLen));
     fSockBuffer := SecDecrypt(fSecContext, ciphered);
   end
