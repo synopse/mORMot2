@@ -4173,8 +4173,10 @@ end;
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
 begin
   fServerKeepAliveTimeOut := Value; // in ms
-  if Value <= 1000 then
-    fServerKeepAliveTimeOutSec := 1 // 0 means no keep-alive -> minimum 1 second
+  if Value = 0 then
+    fServerKeepAliveTimeOutSec := 0 // 0 means no keep-alive
+  else if Value <= 1999 then
+    fServerKeepAliveTimeOutSec := 1 // minimum 1 second
   else
     fServerKeepAliveTimeOutSec := Value div 1000;
 end;
