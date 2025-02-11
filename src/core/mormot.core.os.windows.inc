@@ -2634,7 +2634,7 @@ begin
   if not NoLineFeed then
   begin
     SetLength(txt, l + 2); // faster to reallocate than WriteFile() twice
-    PWord(@PByteArray(txt)[l])^ := $0a0d; // CRLF
+    PWord(@PByteArray(txt)[l])^ := CRLFW;
     inc(l, 2);
   end;
   ConsoleCriticalSection.Lock;

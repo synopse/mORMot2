@@ -70,6 +70,8 @@ const
   /// operating-system dependent boolean if paths are case-insensitive
   PathCaseInsensitive = false;
   {$endif OSWINDOWS}
+  /// system-independent CR+LF two chars, as 16-bit constant
+  CRLFW = $0a0d;
   /// convert a TLineFeed value into its UTF-8 text representation
   LINE_FEED: array[TLineFeed] of string[3] = (CRLF, #10, #13#10);
 
@@ -10503,7 +10505,7 @@ begin
       '^':
         if not posix and
            (state * [sInSQ, sInDQ, sBslash] = []) then
-          if PWord(p)^ = $0a0d then
+          if PWord(p)^ = CRLFW then
           begin
             inc(p, 2);
             continue;

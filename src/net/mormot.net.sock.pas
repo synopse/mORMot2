@@ -5872,7 +5872,7 @@ begin
   cap := Length(fSndBuf);
   if fSndBufLen + 2 > cap then
     SetLength(fSndBuf, cap + cap shr 3 + 2048);
-  PWord(@PByteArray(fSndBuf)[fSndBufLen])^ := $0a0d;
+  PWord(@PByteArray(fSndBuf)[fSndBufLen])^ := CRLFW;
   inc(fSndBufLen, 2);
 end;
 
@@ -5930,14 +5930,14 @@ end;
 
 procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);
 var
-  S: PUtf8Char;
+  s: PUtf8Char;
 begin
   if P <> nil then
     repeat
-      S := P;
+      s := P;
       while P^ >= ' ' do  // go to end of header line
         inc(P);
-      SockSend(S, P - S); // append line content
+      SockSend(s, P - s); // append line content
       SockSendCRLF;       // normalize line end
       while P^ < ' ' do
         if P^ = #0 then
