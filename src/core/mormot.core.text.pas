@@ -2131,8 +2131,12 @@ type
   /// store one HTTP input cookie name/value pair
   THttpCookie = record
     /// the cookie name
+    // - e.g. 'sessionId' for
+    // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
     Name: RawUtf8;
-    /// the actual cookie value
+    /// the actual cookie value, excluding its attributes
+    // - e.g. 'e8bb43229de9' for
+    // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
     Value: RawUtf8;
   end;
   /// referes to one HTTP input cookie
@@ -2150,8 +2154,9 @@ type
     fParsed: boolean;
     fCookies: THttpCookieDynArray; // only if InCookie[] is used
   public
-    /// detect and parse the cookies from HTTP headers
-    procedure Parse(const InHead: RawUtf8);
+    /// detect and parse the cookies from HTTP headers on server side
+    // - e.g. 'Cookie: name=value; name2=value2; name3=value3'
+    procedure ParseServer(const InHead: RawUtf8);
     /// retrieve a cookie name/value pair in the internal storage
     function FindCookie(var CookieName: RawUtf8): PHttpCookie;
     /// retrieve a cookie value from its name
@@ -2160,7 +2165,7 @@ type
     /// set or change a cookie value from its name
     // - should always previously check "if not Parsed then Parse()"
     procedure SetCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
-    /// false if Parse() should be called with the HTTP header
+    /// false if ParseServer() should be called with the HTTP header
     property Parsed: boolean
       read fParsed;
     /// retrieve an incoming HTTP cookie value
@@ -10065,16 +10070,16 @@ const
   // Deny-Of-Service (DOS) Attack detection threshold
   COOKIE_MAXCOUNT_DOSATTACK = 128;
 
-procedure THttpCookies.Parse(const InHead: RawUtf8);
+procedure THttpCookies.ParseServer(const InHead: RawUtf8);
 var
   n: PtrInt;
   P: PUtf8Char;
-  cookie, cn, cv: RawUtf8;
-  c: PHttpCookie;
+  c, cn, cv: RawUtf8;
+  hc: PHttpCookie;
 begin
   fParsed := true;
-  FindNameValue(InHead, 'COOKIE:', cookie);
-  P := pointer(cookie);
+  FindNameValue(InHead, 'COOKIE:', c);
+  P := pointer(c);
   n := 0;
   while P <> nil do
   begin
@@ -10087,13 +10092,12 @@ begin
       break;
     if n = length(fCookies) then
       SetLength(fCookies, NextGrow(n));
-    c := @fCookies[n];
-    c^.Name := cn;
-    c^.Value := cv;
+    hc := @fCookies[n];
+    hc^.Name := cn;
+    hc^.Value := cv;
     inc(n);
     if n > COOKIE_MAXCOUNT_DOSATTACK then
-      ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
-        [KB(cookie)]);
+      ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?', [KB(c)]);
   end;
   if n <> 0 then
     DynArrayFakeLength(fCookies, n);
