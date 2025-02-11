@@ -2154,17 +2154,18 @@ type
     function FindCookie(var CookieName: RawUtf8): PHttpCookie;
     /// retrieve a cookie value from its name
     // - should always previously check "if not Parsed then Parse()"
-    function GetInCookie(CookieName: RawUtf8): RawUtf8;
+    function GetCookie(CookieName: RawUtf8): RawUtf8;
     /// set or change a cookie value from its name
     // - should always previously check "if not Parsed then Parse()"
-    procedure SetInCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
+    procedure SetCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
     /// false if Parse() should be called with the HTTP header
     property Parsed: boolean
       read fParsed;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
-    property InCookie[CookieName: RawUtf8]: RawUtf8
-      read GetInCookie write SetInCookie; default;
+    // - should always previously check "if not Parsed then Parse()"
+    property Cookie[CookieName: RawUtf8]: RawUtf8
+      read GetCookie write SetCookie; default;
   end;
   PHttpCookies = ^THttpCookies;
 
@@ -10107,7 +10108,7 @@ begin
   result := nil;
 end;
 
-procedure THttpCookies.SetInCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
+procedure THttpCookies.SetCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
 var
   n: PtrInt;
   c: PHttpCookie;
@@ -10125,7 +10126,7 @@ begin
   c^.Value := CookieValue; // may just replace an existing value
 end;
 
-function THttpCookies.GetInCookie(CookieName: RawUtf8): RawUtf8;
+function THttpCookies.GetCookie(CookieName: RawUtf8): RawUtf8;
 var
   c: PHttpCookie;
 begin
