@@ -7967,7 +7967,7 @@ procedure TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
 var
   ndx, j: PtrInt;
   reduced: TDocVariantData;
-  p: PUtf8Char;
+  propname: PUtf8Char;
 begin
   result.Init(VOptions); // same options than the main document
   if (VCount = 0) or
@@ -7976,11 +7976,11 @@ begin
   if IsObject then
     for j := 0 to high(aPropNames) do
     begin
-      p := pointer(aPropNames[j]);
-      if p = nil then
+      propname := pointer(aPropNames[j]);
+      if propname = nil then
         continue; // avoid GPF in FindNonVoid()
       ndx := FindNonVoid[aCaseSensitive](pointer(VName),
-        p, PStrLen(p - _STRLEN)^, VCount);
+        propname, PStrLen(propname - _STRLEN)^, VCount);
       if ndx >= 0 then
         if not aDoNotAddVoidProp or
            not VarIsVoid(VValue[ndx]) then
