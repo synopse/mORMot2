@@ -7462,7 +7462,7 @@ begin
     exit;
   ndx := -1;
   if aPreviousIndex <> nil then
-  begin // optimistic try if this field is in the same place
+  begin // optimistic try if this field appears at the same position
     ndx := aPreviousIndex^;
     if (PtrUInt(ndx) >= PtrUInt(n)) or
        (SortDynArrayAnsiStringByCase[not IsCaseSensitive](
@@ -7470,8 +7470,8 @@ begin
       ndx := -1;
   end;
   if ndx < 0 then
-    ndx := FindNonVoid[IsCaseSensitive](
-          pointer(VName), pointer(aName), length(aName), n);
+    ndx := FindNonVoid[IsCaseSensitive](pointer(VName),
+      pointer(aName), PStrLen(PAnsiChar(pointer(aName)) - _STRLEN)^, n);
   if ndx < 0 then
     exit;
   if aPreviousIndex <> nil then
@@ -7967,6 +7967,7 @@ procedure TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
 var
   ndx, j: PtrInt;
   reduced: TDocVariantData;
+  p: PUtf8Char;
 begin
   result.Init(VOptions); // same options than the main document
   if (VCount = 0) or
@@ -7975,10 +7976,11 @@ begin
   if IsObject then
     for j := 0 to high(aPropNames) do
     begin
-      if aPropNames[j] = '' then
+      p := pointer(aPropNames[j]);
+      if p = nil then
         continue; // avoid GPF in FindNonVoid()
-      ndx := FindNonVoid[aCaseSensitive](
-        pointer(VName), pointer(aPropNames[j]), length(aPropNames[j]), VCount);
+      ndx := FindNonVoid[aCaseSensitive](pointer(VName),
+        p, PStrLen(p - _STRLEN)^, VCount);
       if ndx >= 0 then
         if not aDoNotAddVoidProp or
            not VarIsVoid(VValue[ndx]) then
@@ -7987,7 +7989,7 @@ begin
   else if IsArray then
     for ndx := 0 to VCount - 1 do
     begin
-      _Safe(VValue[ndx])^.Reduce(
+      _Safe(VValue[ndx])^.Reduce( // recursive object reduction
         aPropNames, aCaseSensitive, reduced, aDoNotAddVoidProp);
       if not reduced.IsObject then
         continue;
@@ -8763,8 +8765,8 @@ begin
         ndx := FastFindPUtf8CharSorted(
           pointer(VName), VCount - 1, pointer(aName), aSortedCompare)
     else
-      ndx := FindNonVoid[IsCaseSensitive](
-        pointer(VName), pointer(aName), length(aName), VCount);
+      ndx := FindNonVoid[IsCaseSensitive](pointer(VName),
+        pointer(aName), PStrLen(PAnsiChar(pointer(aName)) - _STRLEN)^, VCount);
     if aFoundIndex <> nil then
       aFoundIndex^ := ndx;
     if ndx >= 0 then
