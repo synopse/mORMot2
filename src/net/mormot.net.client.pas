@@ -2506,21 +2506,21 @@ end;
 
 procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
 
-  procedure DoRetry(FatalError: integer;
-    const Fmt: RawUtf8; const Args: array of const);
+  procedure DoRetry(const Fmt: RawUtf8; const Args: array of const;
+    FatalErrorCode: integer = HTTP_CLIENTERROR);
   var
     msg: RawUtf8;
   begin
     FormatUtf8(Fmt, Args, msg);
-    //writeln('DoRetry ',byte(ctxt.Retry), ' ', FatalError, ' / ', msg);
+    //writeln('DoRetry ',byte(ctxt.Retry), ' ', FatalErrorCode, ' / ', msg);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
-         [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.Retry]], self);
+         [msg, fSock.Socket, FatalErrorCode, BOOL_STR[rMain in ctxt.Retry]], self);
     if fAborted then
       ctxt.Status := HTTP_CLIENTERROR
     else if rMain in ctxt.Retry then
       // we should retry once -> return error only if failed twice
-      ctxt.Status := FatalError
+      ctxt.Status := FatalErrorCode
     else
       try
         // recreate the connection and try again
@@ -2531,7 +2531,7 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
         RequestInternal(ctxt); // retry once
       except
         on Exception do
-          ctxt.Status := FatalError;
+          ctxt.Status := FatalErrorCode;
       end;
   end;
 
@@ -2549,18 +2549,16 @@ begin
     OnLog(sllTrace, 'RequestInternal % %:%/% flags=% retry=%', [ctxt.Method,
       fServer, fPort, ctxt.Url, ToText(Http.HeaderFlags), byte(ctxt.Retry)], self);
   end;
-  if SockIn = nil then // done once
-    CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Http.Content := '';
   if fAborted then
     ctxt.Status := HTTP_CLIENTERROR
   else if (hfConnectionClose in Http.HeaderFlags) or
           not SockIsDefined then
-    DoRetry(HTTP_CLIENTERROR, 'connection closed (keepalive timeout or max)', [])
+    DoRetry('connection closed (keepalive timeout or max)', [])
   else if not fSock.Available(@loerr) then
-    DoRetry(HTTP_CLIENTERROR, 'connection broken (socketerror=%)', [loerr])
+    DoRetry('connection broken (socketerror=%)', [loerr])
   else if not SockConnected then
-    DoRetry(HTTP_CLIENTERROR, 'getpeername() failed', [])
+    DoRetry('getpeername() failed', [])
   else
   try
     // send request - we use SockSend because writeln() is calling flush()
@@ -2619,12 +2617,12 @@ begin
           end
           else
           begin
-            DoRetry(HTTP_CLIENTERROR, 'NoData waiting %ms for headers', [TimeOut]);
+            DoRetry('NoData waiting %ms for headers', [TimeOut]);
             exit;
           end;
       else // cspSocketError, cspSocketClosed
         begin
-          DoRetry(HTTP_CLIENTERROR, '% % waiting %ms for headers',
+          DoRetry('% % waiting %ms for headers',
             [ToText(pending)^, CardinalToHexShort(loerr), TimeOut]);
           exit;
         end;
@@ -2646,9 +2644,9 @@ begin
       begin
         // error on reading answer -> 505=wrong format
         if Http.CommandResp = '' then
-          DoRetry(HTTP_CLIENTERROR, 'Broken Link - timeout=%ms', [TimeOut])
+          DoRetry('Broken Link - timeout=%ms', [TimeOut])
         else
-          DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.CommandResp]);
+          DoRetry('Command=%', [Http.CommandResp], HTTP_HTTPVERSIONNONSUPPORTED);
         exit;
       end;
       // retrieve all HTTP headers
@@ -2689,7 +2687,7 @@ begin
         if E.InheritsFrom(ENetSock) or
            E.InheritsFrom(EHttpSocket) then
           // network layer problem - typically EHttpSocket
-          DoRetry(HTTP_CLIENTERROR, '% raised after % [%]',
+          DoRetry('% raised after % [%]',
             [E, ToText(ENetSock(E).LastError)^, E.Message])
         else
           // propagate custom exceptions to the caller (e.g. from progression)
