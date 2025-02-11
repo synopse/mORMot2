@@ -719,7 +719,7 @@ begin
          (extout <> '') then // e.g. for TEcdheProtocol
         SockSendLine(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
-        SockSend(aCustomHeaders);
+        SockSendHeaders(pointer(aCustomHeaders));
       SockSendCRLF;
       SockSendFlush('');
       // validate the response as WebSockets upgrade
