@@ -2539,7 +2539,7 @@ var
   cmd: PUtf8Char;
   pending: TCrtSocketPending;
   bodystream: TStream;
-  loerr: integer;
+  loerr, buflen: integer;
   dat: RawByteString;
   start: Int64;
 begin
@@ -2565,6 +2565,7 @@ begin
     try
       // prepare headers
       RequestSendHeader(ctxt.Url, ctxt.Method);
+      buflen := fSndBufLen;
       if ctxt.KeepAliveSec <> 0 then
         SockSend(['Connection: Keep-Alive'#13#10 +
                   'Keep-Alive: timeout=', ctxt.KeepAliveSec]) // as seconds
@@ -2582,6 +2583,8 @@ begin
       SockSendCRLF;
       // flush headers and Data/InStream body
       SockSendFlush(dat);
+      if fExtendedOptions.Auth.Scheme in [wraBasic, wraBearer] then
+        FillCharFast(pointer(fSndBuf)^, buflen, 0); // hide SPI bearer
       if ctxt.InStream <> nil then
       begin
         // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
