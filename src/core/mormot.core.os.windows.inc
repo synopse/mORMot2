@@ -18,7 +18,7 @@ begin
     dec(Len); // UnicodeToUtf8() result includes the null terminator
   FastSetString(res, tmp.buf, Len);
   tmp.Done;
-end;
+end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL doesn't handle surrogates
 
 function IsExtendedPathName(Name: PWideChar): boolean;
 begin

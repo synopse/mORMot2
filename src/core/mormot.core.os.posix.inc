@@ -570,9 +570,9 @@ var
   err: SizeInt;
   ndx: PtrInt;
 begin
-  if CodePage = CP_UTF8 then
+  if CodePage = CP_UTF8 then // FPC RTL is correct, and fast enough for UTF-8
   begin
-    result := UnicodeToUtf8(A, LA, W, LW); // FPC RTL is fast enough for UTF-8
+    result := UnicodeToUtf8(A, LA, W, LW);
     if result > 0 then
       dec(result); // UnicodeToUtf8() result includes the #0 terminator
     exit;
