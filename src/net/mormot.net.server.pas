@@ -1039,8 +1039,8 @@ type
   THttpServerSocketGeneric = class(THttpServerGeneric)
   protected
     fSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fServerKeepAliveTimeOut: cardinal;
-    fServerKeepAliveTimeOutSec: cardinal;
+    fServerKeepAliveTimeOut: cardinal;    // in ms - 0 to disable keep alive
+    fServerKeepAliveTimeOutSec: cardinal; // in seconds - for THttpAsyncServer
     fHeaderRetrieveAbortDelay: cardinal;
     fCompressGz: integer; // >=0 if GZ is activated
     fSockPort: RawUtf8;
@@ -1215,7 +1215,7 @@ type
     // (may be a good idea e.g. behind a NGINX reverse proxy)
     // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
     property ServerKeepAliveTimeOut: cardinal
-      read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
+      read fServerKeepAliveTimeOut write SetServerKeepAliveTimeOut;
     /// if we should search for local .gz cached file when serving static files
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
@@ -4172,8 +4172,11 @@ end;
 
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
 begin
-  fServerKeepAliveTimeOut := Value;
-  fServerKeepAliveTimeOutSec := Value div 1000;
+  fServerKeepAliveTimeOut := Value; // in ms
+  if Value <= 1000 then
+    fServerKeepAliveTimeOutSec := 1 // 0 means no keep-alive -> minimum 1 second
+  else
+    fServerKeepAliveTimeOutSec := Value div 1000;
 end;
 
 function THttpServerSocketGeneric.OnNginxAllowSend(
@@ -4825,7 +4828,7 @@ begin
         begin
           pool := TSynThreadPoolTHttpServer(aCaller.Owner);
           // connection and header seem valid -> process request further
-          if (fServer.ServerKeepAliveTimeOut > 0) and
+          if (fServer.fServerKeepAliveTimeOut > 0) and
              (fServer.fInternalHttpServerRespList.Count < pool.MaxBodyThreadCount) and
              (KeepAliveClient or
               (Http.ContentLength > pool.BigBodySize)) then
@@ -4922,7 +4925,7 @@ begin
       exit;
     http10 := P[7] = '0';
     fKeepAliveClient := ((fServer = nil) or
-                         (fServer.ServerKeepAliveTimeOut > 0)) and
+                         (fServer.fServerKeepAliveTimeOut > 0)) and
                         not http10;
     Http.Content := '';
     // get and parse HTTP request header
@@ -5098,7 +5101,7 @@ procedure THttpServerResp.Execute;
     try
       repeat
         beforetix := mormot.core.os.GetTickCount64;
-        keepaliveendtix := beforetix + fServer.ServerKeepAliveTimeOut;
+        keepaliveendtix := beforetix + fServer.fServerKeepAliveTimeOut;
         repeat
           // within this loop, break=wait for next command, exit=quit
           if (fServer = nil) or
