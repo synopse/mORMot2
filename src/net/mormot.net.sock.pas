@@ -5955,20 +5955,23 @@ end;
 
 procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);
 var
-  s: PUtf8Char;
+  s, d: PUtf8Char;
+  len: PtrInt;
 begin
   if P <> nil then
     repeat
       s := P;
-      while P^ >= ' ' do  // go to end of header line
+      while P^ >= ' ' do  // quickly go to end of header line
         inc(P);
-      SockSend(s, P - s); // append line content
-      SockSendCRLF;       // normalize line end
+      len := P - s;
+      d := EnsureSockSend(len + 2); // reserve enough space at once
+      MoveFast(s^, d^, len);        // append line content
+      PWord(d + len)^ := CRLFW;     // normalize line end
       while P^ < ' ' do
         if P^ = #0 then
-          exit            // end of input
+          exit    // end of input
         else
-          inc(P);         // ignore any control char, e.g. #10 or #13
+          inc(P); // ignore any control char, e.g. #10 or #13
     until false;
 end;
 
