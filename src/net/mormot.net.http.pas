@@ -4107,10 +4107,10 @@ begin
       EHttpSocket.RaiseUtf8('%.GetBody(%) does not support compression',
         [self, DestStream]);
   {$I-}
-  // direct read bytes, as indicated by Content-Length or Chunked
+  // direct read bytes, as indicated by Content-Length or Chunked (RFC2616 #4.3)
   if hfTransferChunked in Http.HeaderFlags then
   begin
-    // Content-Length header should be ignored when chunked by RFC 2616 #4.4.3
+    // Content-Length header should be ignored when chunked (RFC2616 #4.4.3)
     Http.ContentLength := 0;
     repeat // chunks decoding loop
       if SockIn <> nil then
@@ -4148,7 +4148,7 @@ begin
     until false;
   end
   else if Http.ContentLength > 0 then
-    // read Content-Length header bytes
+    // read Content-Length: header bytes
     if DestStream <> nil then
     begin
       len32 := 256 shl 10; // not chunked: use a 256 KB temp buffer
@@ -4169,13 +4169,13 @@ begin
       SetLength(Http.Content, Http.ContentLength); // not chuncked: direct read
       SockInRead(pointer(Http.Content), Http.ContentLength);
     end
-  else if Http.ContentLength < 0 then // -1 means no Content-Length header
+  else if (Http.ContentLength < 0) and // -1 means no Content-Length header
+          (hfConnectionClose in Http.HeaderFlags) then
   begin
     // no Content-Length neither chunk -> read until the connection is closed
-    // also for HTTP/1.1: https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
+    // mainly for HTTP/1.0: https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
-    // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
     if SockIn <> nil then // client loop for compatibility with oldest servers
       while not eof(SockIn^) do
       begin
