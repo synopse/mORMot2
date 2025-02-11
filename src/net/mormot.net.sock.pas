@@ -5876,7 +5876,7 @@ end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
-  i: PtrInt;
+  i, j: PtrInt;
   tmp: ShortString;
 begin
   for i := 0 to high(Values) do
@@ -5888,10 +5888,11 @@ begin
           SockSend(VAnsiString, Length(RawByteString(VAnsiString)));
         {$ifdef HASVARUSTRING}
         vtUnicodeString:
-          begin // truncating to 255 bytes of shortstring is good enough
-            Unicode_WideToShort(VUnicodeString, // assume WinAnsi encoding
-              length(UnicodeString(VUnicodeString)), CP_WINANSI, tmp);
-            SockSend(@tmp[1], Length(tmp));
+          begin // constant text should be < 255 chars, and pure ASCII-7
+            tmp[0] := AnsiChar(length(UnicodeString(VUnicodeString)));
+            for j := 1 to ord(tmp[0]) do
+              tmp[j] := AnsiChar(PWordArray(VUnicodeString)[j - 1]);
+            SockSend(@tmp[1], ord(tmp[0]));
           end;
         {$endif HASVARUSTRING}
         vtPChar:
