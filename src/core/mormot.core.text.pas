@@ -13,7 +13,7 @@ unit mormot.core.text;
     - Text Formatting functions
     - Resource and Time Functions
     - ESynException class
-    - HTTP/REST Common Headers Parsing
+    - HTTP/REST Common Headers Parsing (e.g. cookies)
     - Hexadecimal Text And Binary Conversion
 
   *****************************************************************************
@@ -2126,6 +2126,47 @@ function ToMethod(const method: RawUtf8): TUriMethod;
 
 /// convert a TUriMethod enumerate to its #0 terminated uppercase text
 function ToText(m: TUriMethod): PUtf8Char; overload;
+
+type
+  /// store one HTTP input cookie name/value pair
+  THttpCookie = record
+    /// the cookie name
+    Name: RawUtf8;
+    /// the actual cookie value
+    Value: RawUtf8;
+  end;
+  /// referes to one HTTP input cookie
+  PHttpCookie = ^THttpCookie;
+
+  /// parse and manage HTTP input cookies
+  {$ifdef USERECORDWITHMETHODS}
+  THttpCookies = record
+  {$else}
+  THttpCookies = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fParsed: boolean;
+    fCookies: array of THttpCookie; // only if InCookie[] is used
+  public
+    /// detect and parse the cookies from HTTP headers
+    procedure Parse(const InHead: RawUtf8);
+    /// retrieve a cookie name/value pair in the internal storage
+    function FindCookie(var CookieName: RawUtf8): PHttpCookie;
+    /// retrieve a cookie value from its name
+    // - should always previously check "if not Parsed then Parse()"
+    function GetInCookie(CookieName: RawUtf8): RawUtf8;
+    /// set or change a cookie value from its name
+    // - should always previously check "if not Parsed then Parse()"
+    procedure SetInCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
+    /// false if Parse() should be called with the HTTP header
+    property Parsed: boolean
+      read fParsed;
+    /// retrieve an incoming HTTP cookie value
+    // - cookie name are case-sensitive
+    property InCookie[CookieName: RawUtf8]: RawUtf8
+      read GetInCookie write SetInCookie; default;
+  end;
+  PHttpCookies = ^THttpCookies;
 
 /// retrieve the HTTP reason text from its integer code as PRawUtf8
 // - e.g. StatusCodeToText(200)^='OK'
@@ -9802,7 +9843,7 @@ end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-{ **************** HTTP/REST Common Headers Parsing }
+{ **************** HTTP/REST Common Headers Parsing (e.g. cookies) }
 
 const
   // sorted by occurrence for in-order O(n) search via IntegerScanIndex()
@@ -10004,6 +10045,94 @@ begin
       exit;
   end;
   result := false;
+end;
+
+
+{ THttpCookies }
+
+const
+  // Deny-Of-Service (DOS) Attack detection threshold
+  COOKIE_MAXCOUNT_DOSATTACK = 128;
+
+procedure THttpCookies.Parse(const InHead: RawUtf8);
+var
+  n: PtrInt;
+  P: PUtf8Char;
+  cookie, cn, cv: RawUtf8;
+  c: PHttpCookie;
+begin
+  fParsed := true;
+  FindNameValue(InHead, 'COOKIE:', cookie);
+  P := pointer(cookie);
+  n := 0;
+  while P <> nil do
+  begin
+    if IdemPChar(P, '__SECURE-') then
+      inc(P, 9); // e.g. if rsoCookieSecure is in Server.Options
+    GetNextItemTrimed(P, '=', cn);
+    GetNextItemTrimed(P, ';', cv);
+    if (cn = '') and
+       (cv = '') then
+      break;
+    if n = length(fCookies) then
+      SetLength(fCookies, NextGrow(n));
+    c := @fCookies[n];
+    c^.Name := cn;
+    c^.Value := cv;
+    inc(n);
+    if n > COOKIE_MAXCOUNT_DOSATTACK then
+      ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
+        [KB(cookie)]);
+  end;
+  if n <> 0 then
+    DynArrayFakeLength(fCookies, n);
+end;
+
+function THttpCookies.FindCookie(var CookieName: RawUtf8): PHttpCookie;
+var
+  i: integer;
+begin
+  result := nil;
+  TrimSelf(CookieName);
+  if CookieName = '' then
+    exit;
+  result := pointer(fCookies);
+  if result = nil then
+    exit;
+  for i := 1 to length(fCookies) do
+    if result^.Name = CookieName then // cookies are case-sensitive
+      exit
+    else
+      inc(result);
+  result := nil;
+end;
+
+procedure THttpCookies.SetInCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
+var
+  n: PtrInt;
+  c: PHttpCookie;
+begin
+  c := FindCookie(CookieName);
+  if CookieName = '' then
+    exit;
+  if c = nil then // add a new cookie
+  begin
+    n := length(fCookies);
+    SetLength(fCookies, n + 1);
+    c := @fCookies[n];
+    c^.Name := CookieName;
+  end;
+  c^.Value := CookieValue; // may just replace an existing value
+end;
+
+function THttpCookies.GetInCookie(CookieName: RawUtf8): RawUtf8;
+var
+  c: PHttpCookie;
+begin
+  result := '';
+  c := FindCookie(CookieName);
+  if c <> nil then
+    result := c^.Value;
 end;
 
 
