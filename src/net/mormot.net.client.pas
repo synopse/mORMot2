@@ -2634,6 +2634,8 @@ begin
       if IdemPChar(cmd, 'HTTP/1.') and
          (cmd[7] in ['0', '1']) then
       begin
+        if cmd[7] = '0' then
+          include(Http.ResponseFlags, rfHttp10);
         // get http numeric status code (200,404...) from 'HTTP/1.x ###'
         ctxt.Status := GetCardinal(cmd + 9);
         if (ctxt.Status < 200) or
@@ -2651,16 +2653,18 @@ begin
       end;
       // retrieve all HTTP headers
       GetHeader({unfiltered=}false);
-      if (cmd[7] = '0') and  // plain HTTP/1.0 should force connection close
+      if (rfHttp10 in Http.ResponseFlags) and // implicit keepalive in HTTP/1.1
          not (hfConnectionKeepAlive in Http.HeaderFlags) then
         include(Http.HeaderFlags, hfConnectionClose);
-      // retrieve Body content (if any)
+      // retrieve Body content (if any) - see RFC 7230 #3.3.3
       if (ctxt.Status >= HTTP_SUCCESS) and
-         // HEAD/OPTIONS or status 100..109,204,304 -> no body (RFC 2616 #4.3)
-         ((Http.ContentLength <> 0) or // server bug of 204,304 with body
-          ((ctxt.Status <> HTTP_NOCONTENT) and
-           (ctxt.Status <> HTTP_NOTMODIFIED))) and
-         not HttpMethodWithNoBody(ctxt.Method) then // HEAD/OPTIONS
+         // status 100..109,204,304 -> no body (RFC 2616 #4.3)
+         (((ctxt.Status <> HTTP_NOCONTENT) and
+           (ctxt.Status <> HTTP_NOTMODIFIED)) or
+          (Http.ContentLength > 0) or // server bug of 204,304 with body
+          (hfTransferChunked in Http.HeaderFlags)) and
+         // HEAD/OPTIONS
+         not HttpMethodWithNoBody(ctxt.Method) then
       begin
         // specific TStreamRedirect expectations
         bodystream := ctxt.OutStream;
