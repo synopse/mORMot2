@@ -5861,7 +5861,7 @@ var
 begin
   cap := Length(fSndBuf);
   if fSndBufLen + Len > cap then
-    SetLength(fSndBuf, Len + cap + cap shr 3 + 2048);
+    SetLength(fSndBuf, Len + cap + cap shr 3 + 2048); // generous 2K provision
   result := @PByteArray(fSndBuf)[fSndBufLen];
   inc(fSndBufLen, Len);
 end;
@@ -5879,7 +5879,8 @@ end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
-  i, j: PtrInt;
+  i, j, l: PtrInt;
+  p: PByteArray;
   tmp: ShortString;
 begin
   for i := 0 to high(Values) do
@@ -5891,11 +5892,11 @@ begin
           SockSend(VAnsiString, Length(RawByteString(VAnsiString)));
         {$ifdef HASVARUSTRING}
         vtUnicodeString:
-          begin // constant text should be < 255 chars, and pure ASCII-7
-            tmp[0] := AnsiChar(length(UnicodeString(VUnicodeString)));
-            for j := 1 to ord(tmp[0]) do
-              tmp[j] := AnsiChar(PWordArray(VUnicodeString)[j - 1]);
-            SockSend(@tmp[1], ord(tmp[0]));
+          begin // constant text is expected to be pure ASCII-7
+            l := length(UnicodeString(VUnicodeString));
+            p := EnsureSockSend(l);
+            for j := 0 to l - 1 do
+              p[j] := PWordArray(VUnicodeString)[j];
           end;
         {$endif HASVARUSTRING}
         vtPChar:
@@ -5927,7 +5928,7 @@ var
   i, len: PtrInt;
   p: PUtf8Char;
 begin
-  len := 2; // for CRLFW
+  len := 2; // for trailing CRLFW
   for i := 0 to high(Values) do
     inc(len, length(Values[i]));
   p := EnsureSockSend(len); // reserve all needed memory at once
