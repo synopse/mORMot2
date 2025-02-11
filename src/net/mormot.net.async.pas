@@ -967,7 +967,7 @@ type
   /// handle one HTTP server connection to our non-blocking THttpAsyncServer
   THttpAsyncServerConnection = class(THttpAsyncConnection)
   protected
-    fKeepAliveSec: TAsyncConnectionSec;
+    fKeepAliveMaxSec: TAsyncConnectionSec; // 0 for no keep-alive (force close)
     fHeadersSec: TAsyncConnectionSec;
     fRequestFlags: THttpServerRequestFlags;
     fPipelineState: set of (pEnabled, pWrite);
@@ -4374,9 +4374,9 @@ begin
   fHttp.Compress := fServer.fCompress;
   fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
   fHttp.Options := fServer.fDefaultRequestOptions;
-  if fServer.fServerKeepAliveTimeOutSec <> 0 then
-    fKeepAliveSec := fServer.Async.fLastOperationSec +
-                     fServer.fServerKeepAliveTimeOutSec;
+  if fServer.fServerKeepAliveTimeOutSec <> 0 then // 0 = no keep alive
+    fKeepAliveMaxSec := fServer.Async.fLastOperationSec +
+                        fServer.fServerKeepAliveTimeOutSec;
   if hsoEnablePipelining in fServer.Options then
     fPipelineState := [pEnabled];
   HttpInit;
@@ -4390,8 +4390,8 @@ begin
   if fServer <> nil then
   begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
-      fKeepAliveSec := fServer.Async.fLastOperationSec +
-                       fServer.fServerKeepAliveTimeOutSec;
+      fKeepAliveMaxSec := fServer.Async.fLastOperationSec +
+                          fServer.fServerKeepAliveTimeOutSec;
     fPipelineState := fPipelineState * [pEnabled];
   end;
 end;
@@ -4483,7 +4483,7 @@ begin
       // detect pipelined GET input
       if (st.Len <> 0) and // there are still data in the input read buffer
          (fPipelineState = [pEnabled]) and // no pWrite yet
-         (fKeepAliveSec > 0) and
+         (fKeepAliveMaxSec > 0) and
          not (hfConnectionClose in fHttp.HeaderFlags) then
         include(fPipelineState, pWrite); // DoRequest will gather output in fWr
       // handle main steps change
@@ -4758,17 +4758,18 @@ begin
     end
   end;
   // handle HTTP/1.1 keep alive timeout
-  if (fKeepAliveSec > 0) and
-     not (hfConnectionClose in fHttp.HeaderFlags) and
-     (fServer.Async.fLastOperationSec > fKeepAliveSec) then
-  begin
-    if acoVerboseLog in fOwner.fOptions then
-      fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
-        [fKeepAliveSec], self);
-    include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
-  end
+  if not (hfConnectionClose in fHttp.HeaderFlags) then
+    if fKeepAliveMaxSec = 0 then // fServer.ServerKeepAliveTimeOut = 0
+      include(fHttp.HeaderFlags, hfConnectionClose) // disable Keep-Alive
+    else if fServer.Async.fLastOperationSec > fKeepAliveMaxSec then
+    begin
+      if acoVerboseLog in fOwner.fOptions then
+        fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=%ms timeout: close connnection',
+          [fServer.ServerKeepAliveTimeOut], self);
+      include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
+    end;
   // trigger optional hsoBan40xIP temporary IP4 bans on unexpected request
-  else if fServer.fAsync.Banned.ShouldBan(fRequest.RespStatus, fRemoteIP4) then
+  if fServer.fAsync.Banned.ShouldBan(fRequest.RespStatus, fRemoteIP4) then
   begin
     fOwner.DoLog(sllTrace, 'DoRequest=%: BanIP(%) %',
       [fRequest.RespStatus, fRemoteIP, fServer.fAsync.Banned], self);
