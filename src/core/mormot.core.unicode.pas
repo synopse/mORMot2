@@ -9505,6 +9505,7 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         test    Value, Value
         jz      @void
         mov     cl, byte ptr [Value]  // to check first char (likely diverse)
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     lea     rax, qword ptr [r9 + R]
         shr     rax, 1
         lea     r12, qword ptr [rax - 1]  // branchless main loop
@@ -9525,6 +9526,10 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         pop     rdi
         {$endif win64}
         ret
+@void:  mov     rax, -1
+        cmp     qword ptr [P], 0
+        cmove   rax, Value
+        jmp     @found
 @lt:    mov     r9, r13 // very unlikely P[rax]=nil
         jmp     @nxt
 @eq:    mov     r11, Value // first char equal -> check others
@@ -9542,10 +9547,6 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         cmp     r9, R
         jle     @s
         jmp     @err
-@void:  mov     rax, -1
-        cmp     qword ptr [P], 0
-        cmove   rax, Value
-        jmp     @found
 end;
 
 {$else}
