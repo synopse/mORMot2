@@ -2712,9 +2712,10 @@ begin
     exit;
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  fSndBufLen := 0;
   if (url = '') or
      (url[1] <> '/') then
-    SockSendLine([method, ' /', url, ' HTTP/1.1'])
+    SockSendLine([method, ' /', url, ' HTTP/1.1']) // should always start with /
   else
     SockSendLine([method, ' ', url, ' HTTP/1.1']);
   {$ifdef OSPOSIX}
@@ -5426,8 +5427,8 @@ begin
         'Content-Type: text/plain; charset=', TextCharSet, #13#10 +
         'Content-Transfer-Encoding: 8bit']);
     if head <> '' then
-      sock.SockSendHeaders(pointer(head));
-    sock.SockSendCRLF; // end of headers
+      sock.SockSendHeaders(pointer(head)); // normalizing CRLF
+    sock.SockSendCRLF;                     // end of headers
     sock.SockSend(Text);
     Exec('.', '25');
     Exec('QUIT', '22');

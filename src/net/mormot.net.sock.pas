@@ -5983,39 +5983,40 @@ end;
 function TCrtSocket.SockSendFlush(const aBody: RawByteString;
   aNoRaise: boolean): TNetResult;
 var
-  bodylen: integer;
+  bodylen, buflen: integer;
 begin
-  // try to send a small bodylen with the headers
+  buflen := fSndBufLen;
+  fSndBufLen := 0; // always reset the output buffer position
+  result := nrOK;
+  // check if we can send smallest body with the headers in a single syscall
   bodylen := Length(aBody);
   if (bodylen > 0) and
-     (SockSendRemainingSize >= bodylen) then // around 1800 bytes
+     (buflen + bodylen <= length(fSndBuf)) then // around 1800 bytes
   begin
-    MoveFast(pointer(aBody)^, PByteArray(fSndBuf)[fSndBufLen], bodylen);
-    inc(fSndBufLen, bodylen); // append to buffer as single TCP packet
+    MoveFast(pointer(aBody)^, PByteArray(fSndBuf)[buflen], bodylen);
+    inc(buflen, bodylen); // append to buffer as single TCP packet
     bodylen := 0;
   end;
   {$ifdef SYNCRTDEBUGLOW}
   if Assigned(OnLog) then
   begin
     OnLog(sllCustom2, 'SockSend sock=% flush len=% bodylen=% %',
-      [fSock.Socket, fSndBufLen, Length(aBody),
-       LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
+      [fSock.Socket, buflen, Length(aBody),
+       LogEscapeFull(pointer(fSndBuf), buflen)], self);
     if bodylen > 0 then
       OnLog(sllCustom2, 'SockSend sock=% bodylen len=% %',
         [fSock.Socket, bodylen, LogEscapeFull(pointer(aBody), bodylen)], self);
   end;
   {$endif SYNCRTDEBUGLOW}
   // actually send the internal buffer (headers + maybe body)
-  result := nrOK;
-  if fSndBufLen > 0 then
-    if TrySndLow(pointer(fSndBuf), fSndBufLen, @result) then
-      fSndBufLen := 0
-    else if aNoRaise then
-      exit
-    else
-      raise ENetSock.CreateLastError('%s.SockSendFlush(%s) len=%d',
-        [ClassNameShort(self)^, fServer, fSndBufLen], result);
-  // direct sending of the bodylen is needed
+  if buflen > 0 then
+    if not TrySndLow(pointer(fSndBuf), buflen, @result) then
+      if aNoRaise then
+        exit
+      else
+        raise ENetSock.CreateLastError('%s.SockSendFlush(%s) len=%d',
+          [ClassNameShort(self)^, fServer, buflen], result);
+  // direct sending of the remaining bodylen bytes (if needed)
   if bodylen > 0 then
     if not TrySndLow(pointer(aBody), bodylen, @result) then
       if not aNoRaise then
@@ -6302,7 +6303,8 @@ end;
 
 procedure TCrtSocket.SndLow(const Data: RawByteString);
 begin
-  SndLow(pointer(Data), Length(Data));
+  if self <> nil then
+    SndLow(pointer(Data), Length(Data));
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer; NetResult: PNetResult): boolean;

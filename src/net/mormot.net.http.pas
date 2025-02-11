@@ -4024,6 +4024,7 @@ procedure THttpSocket.HttpStateReset;
 begin
   Http.Reset;
   fBodyRetrieved := false;
+  fSndBufLen := 0;
 end;
 
 const
