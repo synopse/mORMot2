@@ -1079,17 +1079,19 @@ type
       read fProcessName;
   end;
 
-  /// event called in a background thread by TLoggedWorkThread.Create
-  TOnLoggedWorkProcess = procedure(const Context: TDocVariantData) of object;
+  /// TDocVariantData background thread callback for TLoggedWorkThread.Create
+  TOnLoggedWorkProcessData = procedure(const Context: TDocVariantData) of object;
 
-  /// a class able to run some process in a background thread
+  /// a class able to run some complex/long process in a background thread
   // - with proper logging and eventual ending notification
+  // - a dedicated thread will be initialized and launch for the process, so
+  // OnExecute() should better take some time to be worth the thread creation
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fSender: TObject;
     fOnExecute, fOnExecuted: TNotifyEvent;
-    fOnExecuteParam: TOnLoggedWorkProcess;
-    fContext: TDocVariantData;
+    fOnExecuteData: TOnLoggedWorkProcessData;
+    fData: TDocVariantData;
     procedure DoExecute; override;
   public
     /// this constructor will directly start the thread in background
@@ -1101,7 +1103,7 @@ type
     /// this constructor will directly start the thread in background
     // - with the context as a TDocVariantData object with name/value pairs
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
-      const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcess;
+      const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
       const OnExecuted: TNotifyEvent = nil);
         reintroduce; overload;
   end;
@@ -3221,17 +3223,15 @@ end;
 
 procedure TLoggedWorkThread.DoExecute;
 begin
-  if Assigned(fOnExecute) or
-     Assigned(fOnExecuteParam) then
-    try
-      if Assigned(fOnExecute) then
-        fOnExecute(fSender)
-      else
-        fOnExecuteParam(fContext);
-    finally
-      if Assigned(fOnExecuted) then
-        fOnExecuted(fSender);
-    end;
+  try
+    if Assigned(fOnExecute) then
+      fOnExecute(fSender)
+    else if Assigned(fOnExecuteData) then
+      fOnExecuteData(fData);
+  finally
+    if Assigned(fOnExecuted) then
+      fOnExecuted(fSender);
+  end;
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
@@ -3247,11 +3247,11 @@ end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const ProcessName: RawUtf8; const NameValuePairs: array of const;
-  const OnExecute: TOnLoggedWorkProcess; const OnExecuted: TNotifyEvent);
+  const OnExecute: TOnLoggedWorkProcessData; const OnExecuted: TNotifyEvent);
 begin
-  fOnExecuteParam := OnExecute;
+  fOnExecuteData := OnExecute;
   fOnExecuted := OnExecuted;
-  fContext.InitObject(NameValuePairs, mFastFloat);
+  fData.InitObject(NameValuePairs, mFastFloat);
   FreeOnTerminate := true;
   inherited Create({suspended=}false, Logger, ProcessName);
 end;
