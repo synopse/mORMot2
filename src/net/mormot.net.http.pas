@@ -1556,6 +1556,7 @@ type
   // - hlvSent is the response size sent back to the client, as KBNoSpace() text
   // - hlvServer_Protocol is either "HTTP/1.0" or "HTTP/1.1"
   // - hlvStatus is the response status code (e.g. "200" or "404")
+  // - hlvStatus_Text is human friendly "404 Not Found" text
   // - hlvTime_Epoch is the UTC time as seconds since the Unix Epoch
   // - hlvTime_EpochMSec is the UTC time as milliseconds since the Unix Epoch
   // - hlvTime_Iso8601 is the UTC (not local) time in the ISO 8601 standard format

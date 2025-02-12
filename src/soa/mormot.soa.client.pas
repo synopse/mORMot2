@@ -715,8 +715,12 @@ begin
             error := ' - ' + error;
           if not withinput then
             sent := ''; // exclude sensitive input in error text
-          FormatUtf8('URI % % returned status ''%'' (%%)',
-            [{%H-}uri, {%H-}sent, resp, status, error], aErrorMsg^);
+          if status = HTTP_CLIENTERROR then // no 666 misleading number
+            FormatUtf8('URI % % returned ''%'' (%%)',
+              [{%H-}uri, {%H-}sent, resp, error], aErrorMsg^)
+          else
+            FormatUtf8('URI % % returned status ''%'' (%%)',
+              [{%H-}uri, {%H-}sent, resp, status, error], aErrorMsg^);
         end
         else
           aErrorMsg^ := resp;

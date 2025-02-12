@@ -1198,6 +1198,9 @@ type
   // - do not use this abstract class, but e.g. TRestServerAuthenticationHttpBasic
   // - this class will transmit the session_signature as HTTP cookie, not at
   // URI level, so is expected to be used only from browsers or old clients
+  // - security level is very low for this kind of authentication: consider
+  // the other more secure algorithms
+  // - note that such sessions can not be persisted on disk
   TRestServerAuthenticationHttpAbstract = class(TRestServerAuthentication)
   protected
     /// should be overriden according to the HTTP authentication scheme
