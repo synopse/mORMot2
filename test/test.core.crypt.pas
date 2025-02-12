@@ -2888,11 +2888,11 @@ begin
         s := dig.BasicInit;
         Check(IdemPChar(pointer(s), 'WWW-AUTHENTICATE: BASIC '));
         CheckEqual(BasicRealm(copy(s, 25, 100)), dig.Realm);
-        BasicClient(users[u], pwds[u], sec);
+        BasicClient(users[u], pwds[u], sec, '');
         Check(sec <> '');
         Check(dig.BasicAuth(pointer(sec), authuser));
         CheckEqual(authuser, users[u]);
-        BasicClient(users[u], pwds[u] + 'wrong', sec);
+        BasicClient(users[u], pwds[u] + 'wrong', sec, '');
         Check(sec <> '');
         Check(not dig.BasicAuth(pointer(sec), authuser));
         CheckEqual(authuser, '');
