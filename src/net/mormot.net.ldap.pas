@@ -1683,14 +1683,15 @@ type
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
       read fTimeout write fTimeout;
-    /// if protocol needs user authorization, then fill here user name
-    // - if you can, use instead password-less Kerberos authentication, or
-    // at least ensure the connection is secured via TLS
-    // - with BindSaslKerberos, on Linux or Windows it should be 'username'
-    // but on MacOS it should be 'username@ad.mycompany.tld'
+    /// the user identifier for non-anonymous Bind/BindSaslKerberos
+    // - with Bind, should be a DN like 'CN=John,CN=Users,DC=mycompany,DC=tld',
+    // as stated by the official LDAP specification - but note that some servers
+    // (like Active Directory) allow displayName or even 'john@mycompany.tld'
+    // - with BindSaslKerberos, on Linux or Windows it could be plain 'logonname'
+    // but on MacOS it seems to be the fully qualified 'logonname@mycompany.tld'
     property UserName: RawUtf8
       read fUserName write fUserName;
-    /// if protocol needs user authorization, then fill here its password
+    /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
     property Password: SpiUtf8
