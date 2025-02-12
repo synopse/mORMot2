@@ -43,7 +43,7 @@ type
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
 begin
-  // jump over Kind+Name - compiles as 2 asm opcodes on x86_64
+  // jump over Kind+RawName - compiles as 2 asm opcodes on x86_64
   result := @PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2];
 end;
 

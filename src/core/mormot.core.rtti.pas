@@ -8953,18 +8953,18 @@ begin
     fCache.Info.RawName := PointerToHexShort(self)
   else
     fCache.Info.RawName := TypeName;
-  def := GetTypeData(fCache.Info);
-  case ParserType of // minimal RTTI field(s)
-    ptRecord:
+  def := GetTypeData(fCache.Info); // points after Info.Kind + Info.RawName
+  case fCache.Kind of // cross-platform minimal RTTI field(s)
+    rkRecord:
       PRecordInfo(def)^.RecSize := fCache.Size;
-    ptDynArray:
+    rkDynArray:
       def^.elSize := fCache.ItemSize;
-    ptArray:
+    rkArray:
       begin
         PArrayInfo(def)^.Size := fCache.Size;
         PArrayInfo(def)^.ElCount := fCache.ItemCount;
       end;
-    ptClass:
+    rkClass:
       def^.ClassType := fCache.ValueClass;
   end;
   // initialize process
