@@ -1693,7 +1693,7 @@ var
   c: THttpCookies;
   U: TUri;
 begin
-  // validate method names and HTTP URIs
+  // validate method names and HTTP status codes or schemes
   Check(ToMethod('') = mNone);
   Check(ToMethod('toto') = mNone);
   Check(ToMethod('get') = mGET);
@@ -1721,6 +1721,15 @@ begin
   Check(not IsHttp('c:\'));
   Check(not IsHttp('c:\toto'));
   Check(not IsHttp('file://toto'));
+  CheckEqual(StatusCodeToText(100)^, 'Continue');
+  CheckEqual(StatusCodeToText(200)^, 'OK');
+  CheckEqual(StatusCodeToText(206)^, 'Partial Content');
+  CheckEqual(StatusCodeToText(300)^, 'Multiple Choices');
+  CheckEqual(StatusCodeToText(503)^, 'Service Unavailable');
+  CheckEqual(StatusCodeToText(513)^, 'Invalid Request');
+  CheckEqual(StatusCodeToText(514)^, 'Invalid Request');
+  CheckEqual(StatusCodeToText(499)^, 'Invalid Request');
+  CheckEqual(StatusCodeToText(666)^, 'Client Side Connection Error');
   // validate TUri data structure
   Check(U.From('toto.com'));
   CheckEqual(U.Uri, 'http://toto.com/');

@@ -8250,14 +8250,6 @@ var
   s, t, d: RawUtf8;
   U: PUtf8Char;
 begin
-  CheckEqual(StatusCodeToText(100)^, 'Continue');
-  CheckEqual(StatusCodeToText(200)^, 'OK');
-  CheckEqual(StatusCodeToText(206)^, 'Partial Content');
-  CheckEqual(StatusCodeToText(300)^, 'Multiple Choices');
-  CheckEqual(StatusCodeToText(503)^, 'Service Unavailable');
-  CheckEqual(StatusCodeToText(513)^, 'Invalid Request');
-  CheckEqual(StatusCodeToText(514)^, 'Invalid Request');
-  CheckEqual(StatusCodeToText(499)^, 'Invalid Request');
   for i := 1 to 100 do
   begin
     s := DateTimeToIso8601(Now / 20 + RandomDouble * 20, true);
