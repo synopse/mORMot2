@@ -68,6 +68,11 @@ function GetNextItemMultiple(var P: PUtf8Char; const Sep: RawUtf8;
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 
+/// return trimmed next CSV string from P, ending value at #0 .. #13
+// - P=nil after call when P^ = #0 end of text is reached, or return P^ = #10
+procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
+  var result: RawUtf8);
+
 /// return trimmed next CSV string from P, ignoring any Escaped char
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimedEscaped(var P: PUtf8Char; Sep, Esc: AnsiChar;
@@ -2740,7 +2745,7 @@ begin
     S := P;
     while (S^ <> #0) and
           (S^ <> Sep) do
-      inc(S);
+      inc(S); // go to end of value
     E := S;
     while (E > P) and
           (E[-1] in [#1..' ']) do
@@ -2750,6 +2755,37 @@ begin
       P := S + 1
     else
       P := nil;
+  end;
+end;
+
+procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
+  var result: RawUtf8);
+var
+  S, E: PUtf8Char;
+begin
+  if (P = nil) or
+     (Sep <= ' ') then
+    result := ''
+  else
+  begin
+    while P^ in [#14 .. ' '] do
+      inc(P); // trim left
+    S := P;
+    while (S^ > #13) and
+          (S^ <> Sep) do
+      inc(S); // go to end of value
+    E := S;
+    while (E > P) and
+          (E[-1] in [#14 .. ' ']) do
+      dec(E); // trim right
+    FastSetString(result, P, E - P);
+    if (PWord(S)^ = CRLFW) or
+       (S^ = Sep) then
+      P := S + 1
+    else if S^ = #10 then
+      P := S
+    else
+      P := nil; // end of text or malformatted
   end;
 end;
 
