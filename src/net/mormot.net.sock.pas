@@ -5879,8 +5879,11 @@ end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
-  i, j, l: PtrInt;
+  i: PtrInt;
+  {$ifdef HASVARUSTRING}
+  j, l: PtrInt;
   p: PByteArray;
+  {$endif HASVARUSTRING}
   tmp: ShortString;
 begin
   for i := 0 to high(Values) do
