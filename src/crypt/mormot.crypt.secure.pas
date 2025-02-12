@@ -7558,7 +7558,7 @@ begin
   if (Csr = '') or
      (fCryptAlgo = nil) then
     exit;
-  x := (fCryptAlgo as TCryptCertAlgo).Load(Csr);
+  x := CertAlgo.Load(Csr);
   if (x <> nil) and
      (x.Verify(x) = cvValidSelfSigned) then
     result := Generate(x.GetUsage, RawUtf8ArrayToCsv(x.GetSubjects),
@@ -7729,9 +7729,8 @@ begin
   if payload.Count = 0 then
     exit; // we need something to sign
   // see TJwtAbstract.Compute
-  headpayload := BinToBase64Uri(FormatUtf8('{"alg":"%"}',
-                   [(fCryptAlgo as TCryptCertAlgo).JwtName])) + '.' +
-                 BinToBase64Uri(payload.ToJson);
+  headpayload := BinToBase64Uri(FormatUtf8('{"alg":"%"}', [CertAlgo.JwtName])) +
+           '.' + BinToBase64Uri(payload.ToJson);
   sig := self.Sign(headpayload);
   if sig = '' then
     exit;
@@ -7760,7 +7759,7 @@ begin
   if S = nil then
     exit;
   head := Base64UriToBin(pointer(Jwt), P - pointer(Jwt));
-  if JsonDecode(head, 'alg') <> (fCryptAlgo as TCryptCertAlgo).JwtName then
+  if JsonDecode(head, 'alg') <> CertAlgo.JwtName then
     exit;
   inc(P);
   payl := Base64UriToBin(pointer(P), S - P);
