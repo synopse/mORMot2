@@ -4480,21 +4480,27 @@ begin
     // process one request (or several in case of pipelined input/output)
     while fHttp.ProcessRead(st, {returnOnStateChange=}false) do
     begin
-      // detect pipelined GET input
-      if (st.Len <> 0) and // there are still data in the input read buffer
-         (fPipelineState = [pEnabled]) and // no pWrite yet
-         (fKeepAliveMaxSec > 0) and
-         not (hfConnectionClose in fHttp.HeaderFlags) then
-        include(fPipelineState, pWrite); // DoRequest will gather output in fWr
       // handle main steps change
       case fHttp.State of
         hrsGetBodyChunkedHexFirst,
         hrsGetBodyContentLengthFirst:
-          // we just received command + all headers
-          result := DoHeaders;
+          // received command + all headers
+          if not (nfHeadersParsed in fHttp.HeaderFlags) then
+            result := DoHeaders;
         hrsWaitProcessing:
-          // calls the (blocking) HTTP request processing callback
-          result := DoRequest;
+          // received command + all headers + body (if any)
+          begin
+            // detect pipelined GET input
+            if st.Len <> 0 then // there are still data in the input read buffer
+              if (fPipelineState = [pEnabled]) and // no pWrite yet
+                 (fKeepAliveMaxSec > 0) and
+                 not (hfConnectionClose in fHttp.HeaderFlags) then
+                // DoRequest should gather output in fWr
+                include(fPipelineState, pWrite);
+                // note: if hsoEnablePipelining is not set, will continue
+            // = DoHeader (if needed) + call fServer.DoRequest() callback
+            result := DoRequest;
+          end
       else
         begin
           fOwner.DoLog(sllWarning, 'OnRead: close connection after % (before=%)',
