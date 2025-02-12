@@ -313,8 +313,8 @@ const
 const
   /// hide all AES Context complex code
   AES_CONTEXT_SIZE = 276 + SizeOf(pointer)
-    {$ifdef WIN64ABI}  + SizeOf(THash128) {$endif}
-    {$ifdef USEAESNI32} + SizeOf(pointer) {$endif};
+     {$ifdef WIN64ABI}   + SizeOf(THash128) {$endif}
+     {$ifdef USEAESNI32} + SizeOf(pointer)  {$endif};
 
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AesBlockShift or 1 shr AesBlockShift for fast div/mod
@@ -3086,11 +3086,11 @@ type
   // - is defined privately in the implementation section
   // - do NOT change this structure: it is fixed in the asm code
   TAesContext = packed record
-    // Key (encr. or decr.) - should remain the first field
+    // expanded key (encryption or decryption) - asm expects it as first field
     RK: TKeyArray;
-    // IV or CTR used e.g. by TAesGcmEngine or TAesPrng
+    // IV or CTR used e.g. by GCM or TAesPrng
     iv: THash128Rec;
-    // Work buffer used e.g. by TAesGcmEngine or AesNiTrailer()
+    // work buffer used e.g. by CTR/GCM or AesNiTrailer()
     buf: TAesBlock;
     // main AES function to process one 16-bytes block
     DoBlock: TAesContextDoBlock;
@@ -11766,7 +11766,7 @@ begin
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
   assert(SizeOf(TAes) = AES_CONTEXT_SIZE);
   assert(SizeOf(TAesContext) = AES_CONTEXT_SIZE);
-  assert(AES_CONTEXT_SIZE <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
+  assert(AES_CONTEXT_SIZE <= 300); // lib/static/libsqlite3/sqlite3mc.c KEYLENGTH
   assert(SizeOf(TShaContext) = SHA_CONTEXT_SIZE);
   assert(SizeOf(TSha3Context) = SHA3_CONTEXT_SIZE);
   assert(1 shl AesBlockShift = SizeOf(TAesBlock));
