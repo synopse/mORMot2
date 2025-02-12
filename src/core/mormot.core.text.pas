@@ -2159,6 +2159,8 @@ type
     fParsed: boolean;
     fCookies: THttpCookieDynArray; // only if InCookie[] is used
   public
+    /// reset the internal list and Parsed status
+    procedure Clear;
     /// detect and parse the cookies from HTTP headers on server side
     // - e.g. 'Cookie: name=value; name2=value2; name3=value3'
     procedure ParseServer(const InHead: RawUtf8);
@@ -10106,28 +10108,35 @@ const
   // Deny-Of-Service (DOS) Attack detection threshold
   COOKIE_MAXCOUNT_DOSATTACK = 128;
 
+procedure THttpCookies.Clear;
+begin
+  fParsed := false;
+  fCookies := nil;
+end;
+
 procedure THttpCookies.ParseServer(const InHead: RawUtf8);
 var
-  count, linelen: PtrInt;
-  h, line, p: PUtf8Char;
-  fullline, name, value: RawUtf8;
+  count, plen: PtrInt;
+  h, p: PUtf8Char;
+  name, value: RawUtf8;
   new: PHttpCookie;
 begin
   fParsed := true;
   count := 0;
   h := pointer(InHead);
   while h <> nil do
-  begin // find all 'Cookie: name=value; name2=value2; name3=value3' lines
-    line := FindNameValuePointer(h, 'COOKIE:', linelen, #0);
-    if line = nil then
+  begin
+    // find all 'Cookie: name=value; name2=value2; name3=value3' lines
+    p := FindNameValuePointer(h, 'COOKIE:', plen, #0);
+    if p = nil then
       break;
-    FastSetString(fullline, line, linelen);
-    p := pointer(fullline);
+    h := GotoNextLine(p + plen);
+    // parse each line pairs
     repeat
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
-      GetNextItemTrimed(p, '=', name);
-      GetNextItemTrimed(p, ';', value);
+      GetNextItemTrimedLine(p, '=', name);
+      GetNextItemTrimedLine(p, ';', value);
       if (name = '') and
          (value = '') then
         break;
@@ -10141,7 +10150,6 @@ begin
         ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
           [KB(InHead)]);
     until p = nil; // next 'name2=value2; ...' pair
-    h := GotoNextLine(line + linelen);
   end;
   if count <> 0 then
     DynArrayFakeLength(fCookies, count);
