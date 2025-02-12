@@ -2084,16 +2084,20 @@ begin
   CheckEqual(SizeOf(TMd5Buf), SizeOf(TMd5Digest));
   CheckEqual(1 shl AesBlockShift, SizeOf(TAesBlock));
   CheckEqual(SizeOf(TAes), AES_CONTEXT_SIZE);
-  Check(AES_CONTEXT_SIZE <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
+  Check(AES_CONTEXT_SIZE <= 300); // lib/static/libsqlite3/sqlite3mc.c KEYLENGTH
   {$ifndef PUREMORMOT2}
   CheckEqual(SizeOf(TAesFullHeader), SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
   CheckEqual(SizeOf(TSha1), SHA_CONTEXT_SIZE);
   CheckEqual(SizeOf(TSha256), SHA_CONTEXT_SIZE);
   CheckEqual(SizeOf(TSha256), SizeOf(TSha1));
+  CheckEqual(SizeOf(TSha3), SHA3_CONTEXT_SIZE);
   Check(SizeOf(TSha512) > SizeOf(TSha256));
   Check(SizeOf(TSha3) > SizeOf(TSha512));
   Check(SizeOf(TSha3) > SizeOf(THmacSha512));
+  CheckEqual(SizeOf(TSha384), SizeOf(TSha384512));
+  CheckEqual(SizeOf(TSha512), SizeOf(TSha384512));
+  CheckEqual(SizeOf(TSha512_256), SizeOf(TSha384512));
   SetLength(orig, MAX);
   SetLength(crypted, MAX + 256);
   st := '1234essai';
