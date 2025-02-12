@@ -2032,8 +2032,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
 {$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
 {$endif WIN64ABI}
         // + 60H ajustments to keep asm opcodes offsets within -$7f..+$7f range
-        lea     r8, qword ptr [rip + @rhotates_left + 60H]
-        lea     r9, qword ptr [rip + @rhotates_right + 60H]
+        lea     r8,  qword ptr [rip + @rhotates_left + 60H]
+        lea     r9,  qword ptr [rip + @rhotates_right + 60H]
         lea     rax, qword ptr [rip + @iotas]
         lea     rdi, qword ptr [A + 60H]
         mov     ecx, 24 // cKeccakNumberOfRounds
@@ -2048,61 +2048,61 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         vmovdqu ymm6, yword ptr [rdi + 48H]
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @round: // Theta
-        vpshufd ymm13, ymm2, 4EH
-        vpxor   ymm12, ymm5, ymm3
-        vpxor   ymm9, ymm4, ymm6
-        vpxor   ymm12, ymm12, ymm1
-        vpxor   ymm12, ymm12, ymm9
-        vpermq  ymm11, ymm12, 93H
-        vpxor   ymm13, ymm13, ymm2
-        vpermq  ymm7, ymm13, 4EH
-        vpsrlq  ymm8, ymm12, 63
-        vpaddq  ymm9, ymm12, ymm12
-        vpor    ymm8, ymm8, ymm9
-        vpermq  ymm15, ymm8, 39H
-        vpxor   ymm14, ymm8, ymm11
-        vpermq  ymm14, ymm14, 00H
-        vpxor   ymm13, ymm13, ymm0
-        vpxor   ymm13, ymm13, ymm7
-        vpsrlq  ymm7, ymm13, 63
-        vpaddq  ymm8, ymm13, ymm13
-        vpor    ymm8, ymm8, ymm7
-        vpxor   ymm2, ymm2, ymm14
-        vpxor   ymm0, ymm0, ymm14
+        vpshufd  ymm13, ymm2, 4EH
+        vpxor    ymm12, ymm5, ymm3
+        vpxor    ymm9, ymm4, ymm6
+        vpxor    ymm12, ymm12, ymm1
+        vpxor    ymm12, ymm12, ymm9
+        vpermq   ymm11, ymm12, 93H
+        vpxor    ymm13, ymm13, ymm2
+        vpermq   ymm7, ymm13, 4EH
+        vpsrlq   ymm8, ymm12, 63
+        vpaddq   ymm9, ymm12, ymm12
+        vpor     ymm8, ymm8, ymm9
+        vpermq   ymm15, ymm8, 39H
+        vpxor    ymm14, ymm8, ymm11
+        vpermq   ymm14, ymm14, 00H
+        vpxor    ymm13, ymm13, ymm0
+        vpxor    ymm13, ymm13, ymm7
+        vpsrlq   ymm7, ymm13, 63
+        vpaddq   ymm8, ymm13, ymm13
+        vpor     ymm8, ymm8, ymm7
+        vpxor    ymm2, ymm2, ymm14
+        vpxor    ymm0, ymm0, ymm14
         vpblendd ymm15, ymm15, ymm8, 0C0H
         vpblendd ymm11, ymm11, ymm13, 03H
-        vpxor   ymm15, ymm15, ymm11
+        vpxor    ymm15, ymm15, ymm11
         // Rho + Pi + pre-Chi shuffle
-        vpsllvq ymm10, ymm2, yword ptr [r8 - 60H]
-        vpsrlvq ymm2, ymm2, yword ptr [r9 - 60H]
-        vpor    ymm2, ymm2, ymm10
-        vpxor   ymm3, ymm3, ymm15
-        vpsllvq ymm11, ymm3, yword ptr [r8 - 20H]
-        vpsrlvq ymm3, ymm3, yword ptr [r9 - 20H]
-        vpor    ymm3, ymm3, ymm11
-        vpxor   ymm4, ymm4, ymm15
-        vpsllvq ymm12, ymm4, yword ptr [r8]
-        vpsrlvq ymm4, ymm4, yword ptr [r9]
-        vpor    ymm4, ymm4, ymm12
-        vpxor   ymm5, ymm5, ymm15
-        vpsllvq ymm13, ymm5, yword ptr [r8 + 20H]
-        vpsrlvq ymm5, ymm5, yword ptr [r9 + 20H]
-        vpor    ymm5, ymm5, ymm13
-        vpxor   ymm6, ymm6, ymm15
-        vpermq  ymm10, ymm2, 8DH
-        vpermq  ymm11, ymm3, 8DH
-        vpsllvq ymm14, ymm6, yword ptr [r8 + 40H]
-        vpsrlvq ymm8, ymm6, yword ptr [r9 + 40H]
-        vpor    ymm8, ymm8, ymm14
-        vpxor   ymm1, ymm1, ymm15
-        vpermq  ymm12, ymm4, 1BH
-        vpermq  ymm13, ymm5, 72H
-        vpsllvq ymm15, ymm1, yword ptr [r8 - 40H]
-        vpsrlvq ymm9, ymm1, yword ptr [r9 - 40H]
-        vpor    ymm9, ymm9, ymm15
+        vpsllvq  ymm10, ymm2, yword ptr [r8 - 60H]
+        vpsrlvq  ymm2, ymm2, yword ptr [r9 - 60H]
+        vpor     ymm2, ymm2, ymm10
+        vpxor    ymm3, ymm3, ymm15
+        vpsllvq  ymm11, ymm3, yword ptr [r8 - 20H]
+        vpsrlvq  ymm3, ymm3, yword ptr [r9 - 20H]
+        vpor     ymm3, ymm3, ymm11
+        vpxor    ymm4, ymm4, ymm15
+        vpsllvq  ymm12, ymm4, yword ptr [r8]
+        vpsrlvq  ymm4, ymm4, yword ptr [r9]
+        vpor     ymm4, ymm4, ymm12
+        vpxor    ymm5, ymm5, ymm15
+        vpsllvq  ymm13, ymm5, yword ptr [r8 + 20H]
+        vpsrlvq  ymm5, ymm5, yword ptr [r9 + 20H]
+        vpor     ymm5, ymm5, ymm13
+        vpxor    ymm6, ymm6, ymm15
+        vpermq   ymm10, ymm2, 8DH
+        vpermq   ymm11, ymm3, 8DH
+        vpsllvq  ymm14, ymm6, yword ptr [r8 + 40H]
+        vpsrlvq  ymm8, ymm6, yword ptr [r9 + 40H]
+        vpor     ymm8, ymm8, ymm14
+        vpxor    ymm1, ymm1, ymm15
+        vpermq   ymm12, ymm4, 1BH
+        vpermq   ymm13, ymm5, 72H
+        vpsllvq  ymm15, ymm1, yword ptr [r8 - 40H]
+        vpsrlvq  ymm9, ymm1, yword ptr [r9 - 40H]
+        vpor     ymm9, ymm9, ymm15
         // Chi
-        vpsrldq ymm14, ymm8, 8
-        vpandn  ymm7, ymm8, ymm14
+        vpsrldq  ymm14, ymm8, 8
+        vpandn   ymm7, ymm8, ymm14
         vpblendd ymm3, ymm9, ymm13, 0CH
         vpblendd ymm15, ymm11, ymm9, 0CH
         vpblendd ymm5, ymm10, ymm11, 0CH
@@ -2115,45 +2115,45 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         vpblendd ymm15, ymm15, ymm13, 0C0H
         vpblendd ymm5, ymm5, ymm13, 0C0H
         vpblendd ymm14, ymm14, ymm11, 0C0H
-        vpandn  ymm3, ymm3, ymm15
-        vpandn  ymm5, ymm5, ymm14
+        vpandn   ymm3, ymm3, ymm15
+        vpandn   ymm5, ymm5, ymm14
         vpblendd ymm6, ymm12, ymm9, 0CH
         vpblendd ymm15, ymm10, ymm12, 0CH
-        vpxor   ymm3, ymm3, ymm10
+        vpxor    ymm3, ymm3, ymm10
         vpblendd ymm6, ymm6, ymm10, 30H
         vpblendd ymm15, ymm15, ymm11, 30H
-        vpxor   ymm5, ymm5, ymm12
+        vpxor    ymm5, ymm5, ymm12
         vpblendd ymm6, ymm6, ymm11, 0C0H
         vpblendd ymm15, ymm15, ymm9, 0C0H
-        vpandn  ymm6, ymm6, ymm15
-        vpxor   ymm6, ymm6, ymm13
-        vpermq  ymm4, ymm8, 1EH
+        vpandn   ymm6, ymm6, ymm15
+        vpxor    ymm6, ymm6, ymm13
+        vpermq   ymm4, ymm8, 1EH
         vpblendd ymm15, ymm4, ymm0, 30H
-        vpermq  ymm1, ymm8, 39H
+        vpermq   ymm1, ymm8, 39H
         vpblendd ymm1, ymm1, ymm0, 0C0H
-        vpandn  ymm1, ymm1, ymm15
+        vpandn   ymm1, ymm1, ymm15
         vpblendd ymm2, ymm11, ymm12, 0CH
         vpblendd ymm14, ymm13, ymm11, 0CH
         vpblendd ymm2, ymm2, ymm13, 30H
         vpblendd ymm14, ymm14, ymm10, 30H
         vpblendd ymm2, ymm2, ymm10, 0C0H
         vpblendd ymm14, ymm14, ymm12, 0C0H
-        vpandn  ymm2, ymm2, ymm14
-        vpxor   ymm2, ymm2, ymm9
-        vpermq  ymm7, ymm7, 00H
-        vpermq  ymm3, ymm3, 1BH
-        vpermq  ymm5, ymm5, 8DH
-        vpermq  ymm6, ymm6, 72H
+        vpandn   ymm2, ymm2, ymm14
+        vpxor    ymm2, ymm2, ymm9
+        vpermq   ymm7, ymm7, 00H
+        vpermq   ymm3, ymm3, 1BH
+        vpermq   ymm5, ymm5, 8DH
+        vpermq   ymm6, ymm6, 72H
         vpblendd ymm4, ymm13, ymm10, 0CH
         vpblendd ymm14, ymm12, ymm13, 0CH
         vpblendd ymm4, ymm4, ymm12, 30H
         vpblendd ymm14, ymm14, ymm9, 30H
         vpblendd ymm4, ymm4, ymm9, 0C0H
         vpblendd ymm14, ymm14, ymm10, 0C0H
-        vpandn  ymm4, ymm4, ymm14
-        vpxor   ymm0, ymm0, ymm7
-        vpxor   ymm1, ymm1, ymm8
-        vpxor   ymm4, ymm4, ymm11
+        vpandn   ymm4, ymm4, ymm14
+        vpxor    ymm0, ymm0, ymm7
+        vpxor    ymm1, ymm1, ymm8
+        vpxor    ymm4, ymm4, ymm11
         // Iota
         vpxor   ymm0, ymm0, yword ptr [rax]
         add     rax, 32

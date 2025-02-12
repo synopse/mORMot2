@@ -556,7 +556,7 @@ type
     ctxt: packed array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all
   public
     /// the size, in bytes, of the digital signature of this algorithm
-    // - potential values are 20, 28, 32, 48 and 64
+    // - potential values are 20 (for SHA-1), 28, 32, 48 and 64 (for SHA-512)
     SignatureSize: integer;
     /// the algorithm used for digitial signature
     Algo: TSignAlgo;
