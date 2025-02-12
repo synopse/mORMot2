@@ -232,7 +232,8 @@ type
     hrsGetBodyChunkedData,
     hrsGetBodyChunkedDataVoidLine,
     hrsGetBodyChunkedDataLastLine,
-    hrsGetBodyContentLength,
+    hrsGetBodyContentLengthFirst,
+    hrsGetBodyContentLengthNext,
     hrsWaitProcessing,
     hrsWaitAsyncProcessing,
     hrsSendBody,
@@ -243,7 +244,6 @@ type
     hrsErrorPayloadTooLarge,
     hrsErrorRejected,
     hrsErrorMisuse,
-    hrsErrorUnsupportedFormat,
     hrsErrorUnsupportedRange,
     hrsErrorAborted,
     hrsErrorShutdownInProgress);
@@ -496,7 +496,8 @@ const
      hrsGetBodyChunkedHexNext,
      hrsGetBodyChunkedData,
      hrsGetBodyChunkedDataVoidLine,
-     hrsGetBodyContentLength,
+     hrsGetBodyContentLengthFirst,
+     hrsGetBodyContentLengthNext,
      hrsConnect];
 
   /// when THttpRequestContext.State is expected some ProcessWrite() data
@@ -3528,14 +3529,14 @@ begin
               State := hrsGetBodyChunkedHexFirst
             else if ContentLength > 0 then // -1 = no Content-Length: header
               // regular process with explicit content-length
-              State := hrsGetBodyContentLength
+              State := hrsGetBodyContentLengthFirst
               // note: old HTTP/1.0 format with no Content-Length is unsupported
               // because officially not defined in HTTP/1.1 RFC2616 4.3
             else
-              // no body
+              // ContentLength<=0 and not chunked = no body
               State := hrsWaitProcessing
         else
-          exit;
+          exit; // not enough input
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st) then
@@ -3556,7 +3557,7 @@ begin
             State := hrsGetBodyChunkedDataLastLine;
         end
         else
-          exit;
+          exit; // not enough input
       hrsGetBodyChunkedData:
         begin
           if st.Len < fContentLeft then
@@ -3574,22 +3575,20 @@ begin
           if fContentLeft = 0 then
             State := hrsGetBodyChunkedDataVoidLine
           else
-            exit;
+            exit; // not enough input
         end;
       hrsGetBodyChunkedDataVoidLine:
         if ProcessParseLine(st) then // chunks end with a void line
           State := hrsGetBodyChunkedHexNext
         else
-          exit;
+          exit; // not enough input
       hrsGetBodyChunkedDataLastLine:
-        if ProcessParseLine(st) then // last chunk
-          if st.Len <> 0 then
-            State := hrsErrorUnsupportedFormat // should be no further input
-          else
-            State := hrsWaitProcessing
+        if ProcessParseLine(st) then // last chunk void line
+          State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
         else
-          exit;
-      hrsGetBodyContentLength:
+          exit; // not enough input
+      hrsGetBodyContentLengthFirst,
+      hrsGetBodyContentLengthNext:
         begin
           if fContentLeft = 0 then
             fContentLeft := ContentLength;
@@ -3604,8 +3603,7 @@ begin
               if ContentLength > 1 shl 30 then // 1 GB mem chunk is fair enough
               begin
                 State := hrsErrorPayloadTooLarge; // avoid memory overflow
-                result := true;
-                exit;
+                break;
               end;
               FastSetString(RawUtf8(Content), ContentLength); // CP_UTF8 for FPC
               fContentPos := pointer(Content);
@@ -3615,24 +3613,22 @@ begin
           end
           else
             ContentStream.WriteBuffer(st.P^, st.LineLen);
+          State := hrsGetBodyContentLengthNext;
           dec(st.Len, st.LineLen);
           dec(fContentLeft, st.LineLen);
-          if fContentLeft = 0 then
-            if st.Len <> 0 then
-              State := hrsErrorUnsupportedFormat // should be no further input
-            else
-              State := hrsWaitProcessing
+          if fContentLeft = 0 then     // reached end of Content-Length body
+            State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
           else
-            exit;
+            exit; // not enough input
         end;
     else
       State := hrsErrorMisuse; // out of context State for input
     end;
   until (State <> previous) and
         (returnOnStateChange or
-         (State = hrsGetBodyChunkedHexFirst) or
-         (State = hrsGetBodyContentLength) or
-         (State >= hrsWaitProcessing));
+         (State = hrsGetBodyChunkedHexFirst) or     // start chunked body
+         (State = hrsGetBodyContentLengthFirst) or  // start Content-Length body
+         (State >= hrsWaitProcessing));             // done or error
   result := true; // notify the next main state change
 end;
 

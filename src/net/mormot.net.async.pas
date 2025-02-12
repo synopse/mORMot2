@@ -4124,7 +4124,7 @@ begin
     end;
     case fHttp.State of
       hrsGetBodyChunkedHexFirst,
-      hrsGetBodyContentLength,
+      hrsGetBodyContentLengthFirst,
       hrsWaitProcessing:
         if not (nfHeadersParsed in fHttp.HeaderFlags) then
         begin
@@ -4489,7 +4489,7 @@ begin
       // handle main steps change
       case fHttp.State of
         hrsGetBodyChunkedHexFirst,
-        hrsGetBodyContentLength:
+        hrsGetBodyContentLengthFirst:
           // we just received command + all headers
           result := DoHeaders;
         hrsWaitProcessing:
