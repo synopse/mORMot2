@@ -70,6 +70,8 @@ type
     procedure _SocketIO;
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
+    /// some HTTP shared/low-level process
+    procedure HTTP;
     /// validate THttpProxyCache process
     procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
@@ -1682,6 +1684,79 @@ begin
   finally
     hps.Free;
   end;
+end;
+
+procedure TNetworkProtocols.HTTP;
+var
+  met: TUriMethod;
+  s: RawUtf8;
+  U: TUri;
+begin
+  // validate method names and HTTP URIs
+  Check(ToMethod('') = mNone);
+  Check(ToMethod('toto') = mNone);
+  Check(ToMethod('get') = mGET);
+  Check(ToMethod('Patch') = mPATCH);
+  Check(ToMethod('OPTIONS') = mOPTIONS);
+  Check(not IsGet('get'));
+  Check(IsGet('GET'));
+  Check(not IsPost('Post'));
+  Check(IsPost('POST'));
+  for met := low(met) to high(met) do
+  begin
+    s := RawUtf8(ToText(met));
+    Check(ToMethod(s) = met);
+    LowerCaseSelf(s);
+    Check(ToMethod(s) = met);
+  end;
+  Check(IsOptions('OPTIONS'));
+  Check(not IsOptions('opTIONS'));
+  Check(IsUrlFavIcon('/favicon.ico'));
+  Check(not IsUrlFavIcon('/favicon.ice'));
+  Check(not IsHttp('http:'));
+  Check(IsHttp('https:'));
+  Check(IsHttp('http://toto'));
+  Check(IsHttp('https://titi'));
+  Check(not IsHttp('c:\'));
+  Check(not IsHttp('c:\toto'));
+  Check(not IsHttp('file://toto'));
+  // validate TUri data structure
+  Check(U.From('toto.com'));
+  CheckEqual(U.Uri, 'http://toto.com/');
+  Check(not U.Https);
+  Check(U.From('toto.com:123'));
+  CheckEqual(U.Uri, 'http://toto.com:123/');
+  Check(not U.Https);
+  Check(U.From('https://toto.com:123/tata/titi'));
+  CheckEqual(U.Uri, 'https://toto.com:123/tata/titi');
+  Check(U.Https);
+  CheckEqual(U.Address, 'tata/titi');
+  Check(U.From('https://toto.com:123/tata/tutu:tete'));
+  CheckEqual(U.Address, 'tata/tutu:tete');
+  CheckEqual(U.Uri, 'https://toto.com:123/tata/tutu:tete');
+  Check(U.From('http://user:password@server:port/address'));
+  Check(not U.Https);
+  CheckEqual(U.Uri, 'http://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  CheckEqual(U.Address, 'address');
+  Check(U.From('https://user@server:port/address'));
+  Check(U.Https);
+  CheckEqual(U.Uri, 'https://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, '');
+  Check(U.From('toto.com/tata/tutu:tete'));
+  CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
+  CheckEqual(U.User, '');
+  CheckEqual(U.Password, '');
+  Check(U.From('file://server/path/to%20image.jpg'));
+  CheckEqual(U.Scheme, 'file');
+  CheckEqual(U.Server, 'server');
+  CheckEqual(U.Address, 'path/to%20image.jpg');
+  Check(not U.From('file:///path/to%20image.jpg'), 'false if valid');
+  CheckEqual(U.Scheme, 'file');
+  CheckEqual(U.Server, '');
+  CheckEqual(U.Address, 'path/to%20image.jpg');
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;
