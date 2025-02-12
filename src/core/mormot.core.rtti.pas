@@ -1329,7 +1329,7 @@ type
     ElCount: integer;
     ArrayType: PPRttiInfo;
     DimCount: byte;
-    Dims: array[0..255 {DimCount-1}] of PPRttiInfo;
+    Dims: array[0 .. 255 {DimCount-1}] of PPRttiInfo;
   end;
   /// rkArray RTTI fields  published here for proper Delphi inlining
   PArrayInfo = ^TArrayInfo;
@@ -2847,11 +2847,11 @@ type
     /// thread-safe speedup search by PRttiInfo e.g. from a loop
     LastInfo: TRttiCustom;
     /// thread-safe speedup search by PRttiInfo e.g. from a loop
-    LastHash: array[0..RTTIHASH_MAX] of TRttiCustom;
+    LastHash: array[0 .. RTTIHASH_MAX] of TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by PRttiInfo
-    HashInfo: array[0..RTTIHASH_MAX] of TPointerDynArray;
+    HashInfo: array[0 .. RTTIHASH_MAX] of TPointerDynArray;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name
-    HashName: array[0..RTTIHASH_MAX] of TPointerDynArray;
+    HashName: array[0 .. RTTIHASH_MAX] of TPointerDynArray;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
 
@@ -9779,7 +9779,7 @@ function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt;
   Kind: TRttiKind): TRttiCustom;
 var
   k: PRttiCustomListPairs;
-  p: PPointer; // ^TPointerDynArray
+  p: pointer; // ^TPointerDynArray
 begin
   if (Kind <> rkUnknown) and
      (Name <> nil) and
@@ -9793,9 +9793,10 @@ begin
        IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
       exit;
     // our dedicated "hash table of the poor" (tm) lookup
-    p := @k^.HashName[RttiHashName(pointer(Name), NameLen)];
+    p := Name; // for better code generation on FPC when inlining RttiHashName()
+    p := @k^.HashName[RttiHashName(p, NameLen)];
     k^.Safe.ReadLock;
-    result := p^; // read TPointerDynArray within the lock
+    result := PPointer(p)^; // read TPointerDynArray within the lock
     if result <> nil then
       result := LockedFindNameInPairs(@PPointerArray(result)[0],
         @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF],
