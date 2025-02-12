@@ -2203,6 +2203,7 @@ type
   TCryptStoreAlgoOpenSsl = class(TCryptStoreAlgo)
   public
     function New: ICryptStore; override; // = TCryptStoreOpenSsl.Create(self)
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
   /// class implementing ICryptStore using OpenSSL
@@ -2228,7 +2229,6 @@ type
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
 
@@ -2929,6 +2929,11 @@ begin
   result := TCryptStoreOpenSsl.Create(self);
 end;
 
+function TCryptStoreAlgoOpenSsl.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertOpenSsl[CryptAlgoDefault];
+end;
+
 
 { TCryptStoreOpenSsl }
 
@@ -3119,11 +3124,6 @@ end;
 function TCryptStoreOpenSsl.CrlCount: integer;
 begin
   result := fStore.CrlCount;
-end;
-
-function TCryptStoreOpenSsl.DefaultCertAlgo: TCryptCertAlgo;
-begin
-  result := CryptCertOpenSsl[CryptAlgoDefault];
 end;
 
 function TCryptStoreOpenSsl.Revoke(const Cert: ICryptCert;

@@ -998,6 +998,7 @@ type
   TCryptStoreAlgoX509 = class(TCryptStoreAlgo)
   public
     function New: ICryptStore; override; // = TCryptStoreX509.Create(self)
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
   /// 'x509-pki' ICryptStore using TX509 and TX509Crl as a full featured PKI
@@ -1045,7 +1046,6 @@ type
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    function DefaultCertAlgo: TCryptCertAlgo; override;
   public
     /// how many levels IsValid() should iterate over the trusted certificates
     // before finding a self-signed "root anchor"
@@ -4147,6 +4147,11 @@ begin
   result := TCryptStoreX509.Create(self);
 end;
 
+function TCryptStoreAlgoX509.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertX509[CryptAlgoDefault];
+end;
+
 
 { TCryptStoreX509 }
 
@@ -4475,12 +4480,6 @@ function TCryptStoreX509.CrlCount: integer;
 begin
   result := fSignedCrl.Count + fUnsignedCrl.Count;
 end;
-
-function TCryptStoreX509.DefaultCertAlgo: TCryptCertAlgo;
-begin
-  result := CryptCertX509[CryptAlgoDefault];
-end;
-
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }

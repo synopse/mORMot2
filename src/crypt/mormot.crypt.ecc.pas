@@ -6139,6 +6139,7 @@ type
   TCryptStoreAlgoInternal = class(TCryptStoreAlgo)
   public
     function New: ICryptStore; override; // = TCryptStoreInternal.Create(self)
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
   /// class implementing ICryptStore using our ECC Public Key Cryptography
@@ -6165,7 +6166,6 @@ type
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
   /// maintain a cache of ICryptCert instances, from their DER/binary
@@ -6296,11 +6296,6 @@ begin
   result := length(fEcc.fCrl);
 end;
 
-function TCryptStoreInternal.DefaultCertAlgo: TCryptCertAlgo;
-begin
-  result := CryptCertSyn;
-end;
-
 
 { TCryptStoreAlgoInternal }
 
@@ -6311,6 +6306,11 @@ begin
   a := TCryptStoreInternal.Create(self);
   a.fEcc.IsValidCached := AlgoName <> 'syn-store-nocache';
   result := a;
+end;
+
+function TCryptStoreAlgoInternal.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertSyn;
 end;
 
 

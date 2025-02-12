@@ -2596,7 +2596,7 @@ type
         virtual; abstract;
     function Count: integer; virtual; abstract;
     function CrlCount: integer; virtual; abstract;
-    function DefaultCertAlgo: TCryptCertAlgo; virtual; abstract;
+    function DefaultCertAlgo: TCryptCertAlgo; virtual;
   end;
 
   /// meta-class of the abstract parent to implement ICryptStore interface
@@ -2609,6 +2609,9 @@ type
     function New: ICryptStore; virtual; abstract;
     /// main factory to create a new Store instance from saved Binary
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
+    /// return the prefered algo to be used with this store
+    // - should be the same class as ICryptStore.DefaultCertAlgo
+    function DefaultCertAlgo: TCryptCertAlgo; virtual; abstract;
   end;
 
   /// abstract parent of TCryptCertList and TCryptCertCache storage classes
@@ -7988,6 +7991,10 @@ begin
   result := IsValid(c[n - 1], date);
 end;
 
+function TCryptStore.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := (fCryptAlgo as TCryptStoreAlgo).DefaultCertAlgo;
+end;
 
 
 { TCryptStoreAlgo }
