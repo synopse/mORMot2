@@ -10072,35 +10072,43 @@ const
 
 procedure THttpCookies.ParseServer(const InHead: RawUtf8);
 var
-  n: PtrInt;
-  P: PUtf8Char;
-  c, cn, cv: RawUtf8;
-  hc: PHttpCookie;
+  count, linelen: PtrInt;
+  h, line, p: PUtf8Char;
+  fullline, name, value: RawUtf8;
+  new: PHttpCookie;
 begin
   fParsed := true;
-  FindNameValue(InHead, 'COOKIE:', c);
-  P := pointer(c);
-  n := 0;
-  while P <> nil do
-  begin
-    if IdemPChar(P, '__SECURE-') then
-      inc(P, 9); // e.g. if rsoCookieSecure is in Server.Options
-    GetNextItemTrimed(P, '=', cn);
-    GetNextItemTrimed(P, ';', cv);
-    if (cn = '') and
-       (cv = '') then
+  count := 0;
+  h := pointer(InHead);
+  while h <> nil do
+  begin // find all 'Cookie: name=value; name2=value2; name3=value3' lines
+    line := FindNameValuePointer(h, 'COOKIE:', linelen, #0);
+    if line = nil then
       break;
-    if n = length(fCookies) then
-      SetLength(fCookies, NextGrow(n));
-    hc := @fCookies[n];
-    hc^.Name := cn;
-    hc^.Value := cv;
-    inc(n);
-    if n > COOKIE_MAXCOUNT_DOSATTACK then
-      ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?', [KB(c)]);
+    FastSetString(fullline, line, linelen);
+    p := pointer(fullline);
+    repeat
+      if IdemPChar(p, '__SECURE-') then
+        inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
+      GetNextItemTrimed(p, '=', name);
+      GetNextItemTrimed(p, ';', value);
+      if (name = '') and
+         (value = '') then
+        break;
+      if count = length(fCookies) then
+        SetLength(fCookies, NextGrow(count));
+      new := @fCookies[count];
+      new^.Name := name;
+      new^.Value := value;
+      inc(count);
+      if count > COOKIE_MAXCOUNT_DOSATTACK then
+        ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
+          [KB(InHead)]);
+    until p = nil; // next 'name2=value2; ...' pair
+    h := GotoNextLine(line + linelen);
   end;
-  if n <> 0 then
-    DynArrayFakeLength(fCookies, n);
+  if count <> 0 then
+    DynArrayFakeLength(fCookies, count);
 end;
 
 function THttpCookies.FindCookie(var CookieName: RawUtf8): PHttpCookie;
