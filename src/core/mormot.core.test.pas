@@ -1146,6 +1146,8 @@ begin
       TestFailed('RunWait timeout after % sec', [TimeoutSec]);
       break;
     end
+    else if GetCurrentThreadID = MainThreadID then
+      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
     else
       SleepHiRes(10);
 end;
