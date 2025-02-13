@@ -1210,9 +1210,9 @@ begin
       end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientTest(aRouting:
-  TRestServerUriContextClass; aAsJsonObject: boolean; aRunInOtherThread: boolean;
-  aOptions: TInterfaceMethodOptions);
+procedure TTestServiceOrientedArchitecture.ClientTest(
+  aRouting: TRestServerUriContextClass; aAsJsonObject: boolean;
+  aRunInOtherThread: boolean; aOptions: TInterfaceMethodOptions);
 var
   Inst: TTestServiceInstances;
   O: TObject;

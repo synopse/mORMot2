@@ -9972,7 +9972,7 @@ const
    'Request Timeout',                   // HTTP_TIMEOUT
    'Conflict',                          // HTTP_CONFLICT
    'Gone',                              // 410
-   'Length Required',                   // 411
+   'Length Required',                   // HTTP_LENGTHREQUIRED
    'Precondition Failed',               // 412
    'URI Too Long',                      // 414
    'Unsupported Media Type',            // 415
@@ -9987,9 +9987,9 @@ const
    'HTTP Version Not Supported',        // HTTP_HTTPVERSIONNONSUPPORTED
    'Network Authentication Required',   // 511
    'Client Side Connection Error',      // HTTP_CLIENTERROR = 666
-   'Invalid Request');                  // 513 - should be last as fallback
-  HTTP_INVALID = high(HTTP_REASON);
-  HTTP_CODE: array[0 .. HTTP_INVALID] of word = ( // match HTTP_REASON[]
+   'Invalid Request');                  // 513 should be last INDEX_HTTP_INVALID
+  INDEX_HTTP_INVALID = high(HTTP_REASON);
+  HTTP_CODE: array[0 .. INDEX_HTTP_INVALID] of word = ( // match HTTP_REASON[]
     HTTP_SUCCESS,
     HTTP_NOCONTENT,
     HTTP_TEMPORARYREDIRECT,
@@ -10019,7 +10019,7 @@ const
     HTTP_TIMEOUT,
     HTTP_CONFLICT,
     410,
-    411,
+    HTTP_LENGTHREQUIRED,
     412,
     414,
     415,
@@ -10034,7 +10034,7 @@ const
     HTTP_HTTPVERSIONNONSUPPORTED,
     511,
     HTTP_CLIENTERROR,
-    513); // HTTP_INVALID = 'Invalid Request' - should be last as fallback
+    513); // INDEX_HTTP_INVALID = 'Invalid Request' - should be last
 
 function StatusCodeToText(Code: cardinal): PRawUtf8;
 var
@@ -10046,10 +10046,10 @@ begin
     begin
       i := WordScanIndex(@HTTP_CODE, length(HTTP_CODE), Code); // may use SSE2
       if i < 0 then
-        i := HTTP_INVALID; // returns cached 513 'Invalid Request'
+        i := INDEX_HTTP_INVALID; // returns cached 513 'Invalid Request'
     end
     else
-      i := HTTP_INVALID
+      i := INDEX_HTTP_INVALID
   else
     i := 0;
   result := @HTTP_REASON[i];
