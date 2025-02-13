@@ -1978,6 +1978,9 @@ procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil;
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+ /// wrapper to retrieve the last added pointer in a dynamic array storage
+function PtrArrayPop(var aPtrArray): pointer;
+
 /// wrapper to count all nil items in a pointer dynamic array storage
 function PtrArrayNotNilCount(const aPtrArray): integer;
 
@@ -2059,6 +2062,10 @@ function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt; overload;
 // - returns -1 if the item is not found in the dynamic array
 function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to retrieve the last added T*ObjArray dynamic array storage
+// - would implement a simple LIFO queue of TObject
+function ObjArrayPop(var aObjArray): TObject; {$ifdef HASINLINE} inline; {$endif}
 
 /// wrapper to count all not nil items in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -8090,6 +8097,23 @@ begin
   result := PtrUIntScanIndex(pointer(a), length(a), PtrUInt(aItem));
 end;
 
+function PtrArrayPop(var aPtrArray): pointer;
+var
+  n: PtrInt;
+  a: PAnsiChar;
+begin
+  result := nil;
+  a := pointer(aPtrArray);
+  if a = nil then
+    exit;
+  n := PDALen(a - _DALEN)^ + (_DAOFF - 1);
+  result := PPointerArray(a)[n];
+  if n = 0 then
+    TPointerDynArray(aPtrArray) := nil
+  else
+    PDALen(a - _DALEN)^ := n - _DAOFF; // no realloc, in-place shrink
+end;
+
 function PtrArrayNotNilCount(const aPtrArray): integer;
 var
   i: PtrInt;
@@ -8154,6 +8178,11 @@ end;
 function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt;
 begin
   result := PtrUIntScanIndex(pointer(aObjArray), aCount, PtrUInt(aItem));
+end;
+
+function ObjArrayPop(var aObjArray): TObject;
+begin
+  result := PtrArrayPop(aObjArray);
 end;
 
 function ObjArrayNotNilCount(const aObjArray): integer;

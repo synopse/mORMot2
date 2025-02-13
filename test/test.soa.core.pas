@@ -251,7 +251,6 @@ type
   // the mORMot framework
   TTestServiceOrientedArchitecture = class(TSynTestCase)
   protected
-    fModel: TOrmModel;
     fClient: TRestClientDB;
     procedure Test(const Inst: TTestServiceInstances; Iterations: Cardinal = 700);
     procedure TestHttp(withlog: boolean);
@@ -1317,8 +1316,7 @@ var
   Inst: TTestServiceInstances;
 begin
   FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
-  if CheckFailed(fModel <> nil) or
-     CheckFailed(fClient <> nil) or
+  if CheckFailed(fClient <> nil) or
      CheckFailed(fClient.Server.Services.Count = 7) or
      CheckFailed(fClient.Server.Services.Index(0).Get(Inst.I)) or
      CheckFailed(Assigned(Inst.I)) or
@@ -1434,6 +1432,7 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
 var
   S: TServiceFactory;
   i: integer;
+  uid: TID;
   rout: integer;
   resp: RawUtf8;
 const
@@ -1458,12 +1457,17 @@ const
   ExpectedResult: array[0..2] of string[10] = (
     'Integer', 'Int64', 'Double');
 begin
-  if CheckFailed(fModel = nil) then
+  if CheckFailed(fClient = nil) then
     exit; // should be called once
   // create model, client and server
-  fModel := TOrmModel.Create([TOrmPeople, TAuthUser, TAuthGroup]);
-  fClient := TRestClientDB.Create(fModel, nil, WorkDir + 'test.db3', TRestServerDB, true);
+  fClient := TRestClientDB.Create(
+    TOrmModel.Create([TAuthUser, TAuthGroup]),
+    nil, SQLITE_MEMORY_DATABASE_NAME, TRestServerDB, {useAuth=}true);
+  fClient.Model.Owner := fClient;
   fClient.Server.Server.CreateMissingTables; // if tests are run with no db
+  uid := fClient.Server.Orm.MainFieldID(TAuthGroup, 'User');
+  Check(uid <> 0, 'server orm');
+  CheckEqual(fClient.Orm.MainFieldID(TAuthGroup, 'User'), 0, 'client orm');
   Check(fClient.SetUser('User', 'synopse'), 'default user for Security tests');
   Check(fClient.Server.ServiceRegister(TServiceCalculator,
     [TypeInfo(ICalculator)], sicShared) <> nil,
@@ -1624,11 +1628,11 @@ var
 begin
   fClient.ServicesRouting := TRestServerRoutingJsonRpc.ClientRouting;
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc;
-  GroupID := fClient.Orm.MainFieldID(TAuthGroup, 'User');
+  GroupID := fClient.Server.Orm.MainFieldID(TAuthGroup, 'User');
   Check(GroupID <> 0);
-  Check(fClient.Orm.MainFieldIDs(TAuthGroup, ['User', 'Admin'], g));
-  Check(length(g) = 2);
-  Check((g[0] = GroupID) or (g[1] = GroupID));
+  Check(fClient.Server.Orm.MainFieldIDs(TAuthGroup, ['User', 'Admin'], g));
+  if not CheckFailed(length(g) = 2) then
+    Check((g[0] = GroupID) or (g[1] = GroupID));
   S := fClient.Server.Services['Calculator'] as TServiceFactoryServer;
   Test([1, 2, 3, 4, 5], 'by default, all methods are allowed');
   S.AllowAll;
@@ -1786,7 +1790,7 @@ begin
     if withlog then
       HTTPServer.HttpServer.Logger.Settings.DefaultRotate := hrtAfter1MB;
     FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
-    HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fModel);
+    HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fClient.Model);
     try
       HTTPClient.ServicePublishOwnInterfaces :=
         fClient.Server.ServicesPublishedInterfaces;
@@ -1969,18 +1973,16 @@ procedure TTestServiceOrientedArchitecture.Cleanup;
 var
   stats: RawUtf8;
 begin
-  if fClient <> nil then
-  begin
-    fClient.CallBackGet('stat', [
-      'withtables',     true,
-      'withsqlite3',    true,
-      'withmethods',    true,
-      'withinterfaces', true,
-      'withsessions',   true], stats);
-    FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
-    FreeAndNil(fClient);
-  end;
-  FreeAndNil(fModel);
+  if fClient = nil then
+    exit;
+  fClient.CallBackGet('stat', [
+    'withtables',     true,
+    'withsqlite3',    true,
+    'withmethods',    true,
+    'withinterfaces', true,
+    'withsessions',   true], stats);
+  FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
+  FreeAndNil(fClient);
 end;
 
 
