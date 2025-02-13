@@ -451,28 +451,28 @@ const
 
   // https://github.com/c-smile/quickjspp encoding = always 64-bit
 
-  JS_TAG_UNINITIALIZED = 0;
-  JS_TAG_INT = 1;
-  JS_TAG_BOOL = 2;
-  JS_TAG_NULL = 3;
-  JS_TAG_UNDEFINED = 4;
-  JS_TAG_CATCH_OFFSET = 5;
-  JS_TAG_EXCEPTION = 6;
-  JS_TAG_FLOAT64 = 7;
+  JS_TAG_UNINITIALIZED     = 0;
+  JS_TAG_INT               = 1;
+  JS_TAG_BOOL              = 2;
+  JS_TAG_NULL              = 3;
+  JS_TAG_UNDEFINED         = 4;
+  JS_TAG_CATCH_OFFSET      = 5;
+  JS_TAG_EXCEPTION         = 6;
+  JS_TAG_FLOAT64           = 7;
   // all tags with a reference count have (NormTag and $fff8) = $0008
-  JS_TAG_OBJECT = 8;
-  JS_TAG_FUNCTION_BYTECODE = 9; // internal use
-  JS_TAG_MODULE = 10;           // internal use
-  JS_TAG_STRING = 11;
-  JS_TAG_SYMBOL = 12;
-  JS_TAG_BIG_FLOAT = 13;
-  JS_TAG_BIG_INT = 14;
-  JS_TAG_BIG_DECIMAL = 15;
+  JS_TAG_OBJECT            = 8;
+  JS_TAG_FUNCTION_BYTECODE = 9;  // internal use
+  JS_TAG_MODULE            = 10; // internal use
+  JS_TAG_STRING            = 11;
+  JS_TAG_SYMBOL            = 12;
+  JS_TAG_BIG_FLOAT         = 13;
+  JS_TAG_BIG_INT           = 14;
+  JS_TAG_BIG_DECIMAL       = 15;
 
-  JS_TAG_MASK = $000FFFFFFFFFFFFF;
+  JS_TAG_MASK = $000fffffffffffff;
   JS_NAN_MASK = $7ff00000;
 
-  JS_NAN = UInt64(JS_TAG_FLOAT64) shl 48 + 0;
+  JS_NAN               = UInt64(JS_TAG_FLOAT64) shl 48 + 0;
   JS_INFINITY_NEGATIVE = UInt64(JS_TAG_FLOAT64) shl 48 + 1;
   JS_INFINITY_POSITIVE = UInt64(JS_TAG_FLOAT64) shl 48 + 2;
 
@@ -480,24 +480,24 @@ const
 
   // regular https://github.com/bellard/quickjs encoding (buggy on Windows)
 
-  JS_TAG_FIRST = -11; // first negative tag
-  JS_TAG_BIG_DECIMAL = -11;
-  JS_TAG_BIG_INT = -10;
-  JS_TAG_BIG_FLOAT = -9;
-  JS_TAG_SYMBOL = -8;
-  JS_TAG_STRING = -7;
-  JS_TAG_MODULE = -3; // internal use
+  JS_TAG_FIRST             = -11; // first negative tag
+  JS_TAG_BIG_DECIMAL       = -11;
+  JS_TAG_BIG_INT           = -10;
+  JS_TAG_BIG_FLOAT         = -9;
+  JS_TAG_SYMBOL            = -8;
+  JS_TAG_STRING            = -7;
+  JS_TAG_MODULE            = -3; // internal use
   JS_TAG_FUNCTION_BYTECODE = -2; // internal use
-  JS_TAG_OBJECT = -1;
+  JS_TAG_OBJECT            = -1;
   // all tags with a reference count are negative
-  JS_TAG_INT = 0;
-  JS_TAG_BOOL = 1;
-  JS_TAG_NULL = 2;
-  JS_TAG_UNDEFINED = 3;
-  JS_TAG_UNINITIALIZED = 4;
-  JS_TAG_CATCH_OFFSET = 5;
-  JS_TAG_EXCEPTION = 6;
-  JS_TAG_FLOAT64 = 7;
+  JS_TAG_INT               = 0;
+  JS_TAG_BOOL              = 1;
+  JS_TAG_NULL              = 2;
+  JS_TAG_UNDEFINED         = 3;
+  JS_TAG_UNINITIALIZED     = 4;
+  JS_TAG_CATCH_OFFSET      = 5;
+  JS_TAG_EXCEPTION         = 6;
+  JS_TAG_FLOAT64           = 7;
   // any tag larger than FLOAT64 needs to be handled as JS_NAN_BOXING
 
   {$ifdef JS_NAN_BOXING}
@@ -511,108 +511,111 @@ var
   {$endif JS_STRICT_NAN_BOXING}
 
 const
-  JS_FLOAT64_NAN: double = NaN;
+  JS_FLOAT64_NAN:    double = NaN;
   JS_FLOAT64_POSINF: double = Infinity;
   JS_FLOAT64_NEGINF: double = NegInfinity;
 
   {$ifdef CPU64}
   // any 64-bit pointer can be truncated to 48-bit on Intel/AMD CPUs
-  JS_PTR64_MASK = $0000FFFFFFFFFFFF;
+  JS_PTR64_MASK = $0000ffffffffffff;
   {$endif CPU64}
 
 const
   // flags for object properties
   JS_PROP_CONFIGURABLE = 1 shl 0;
-  JS_PROP_WRITABLE = 1 shl 1;
-  JS_PROP_ENUMERABLE = 1 shl 2;
-  JS_PROP_C_W_E = JS_PROP_CONFIGURABLE or JS_PROP_WRITABLE or JS_PROP_ENUMERABLE;
-  JS_PROP_LENGTH = 1 shl 3;  // used internally in Arrays
-  JS_PROP_TMASK = 3 shl 4;   // mask for NORMAL, GETSET, VARREF, AUTOINIT
-  JS_PROP_NORMAL = 0 shl 4;
-  JS_PROP_GETSET = 1 shl 4;
-  JS_PROP_VARREF = 2 shl 4;   // internal use
-  JS_PROP_AUTOINIT = 3 shl 4; // internal use
+  JS_PROP_WRITABLE     = 1 shl 1;
+  JS_PROP_ENUMERABLE   = 1 shl 2;
+  JS_PROP_C_W_E        = JS_PROP_CONFIGURABLE or
+                         JS_PROP_WRITABLE or
+                         JS_PROP_ENUMERABLE;
+  JS_PROP_LENGTH       = 1 shl 3;  // used internally in Arrays
+  JS_PROP_TMASK        = 3 shl 4;  // mask for NORMAL, GETSET, VARREF, AUTOINIT
+  JS_PROP_NORMAL       = 0 shl 4;
+  JS_PROP_GETSET       = 1 shl 4;
+  JS_PROP_VARREF       = 2 shl 4; // internal use
+  JS_PROP_AUTOINIT     = 3 shl 4; // internal use
 
   // flags for JS_DefineProperty
-  JS_PROP_HAS_SHIFT = 8;
+  JS_PROP_HAS_SHIFT        = 1 shl 3;
   JS_PROP_HAS_CONFIGURABLE = 1 shl 8;
-  JS_PROP_HAS_WRITABLE = 1 shl 9;
-  JS_PROP_HAS_ENUMERABLE = 1 shl 10;
-  JS_PROP_HAS_GET = 1 shl 11;
-  JS_PROP_HAS_SET = 1 shl 12;
-  JS_PROP_HAS_VALUE = 1 shl 13;
+  JS_PROP_HAS_WRITABLE     = 1 shl 9;
+  JS_PROP_HAS_ENUMERABLE   = 1 shl 10;
+  JS_PROP_HAS_GET          = 1 shl 11;
+  JS_PROP_HAS_SET          = 1 shl 12;
+  JS_PROP_HAS_VALUE        = 1 shl 13;
 
   // throw an exception if false would be returned JS_DefineProperty/JS_SetProperty
-  JS_PROP_THROW = 1 shl 14;
+  JS_PROP_THROW            = 1 shl 14;
   // throw an exception if false would be returned in strict mode JS_SetProperty
-  JS_PROP_THROW_STRICT = 1 shl 15;
-  JS_PROP_NO_ADD = 1 shl 16;    // internal use
-  JS_PROP_NO_EXOTIC = 1 shl 17; // internal use
+  JS_PROP_THROW_STRICT     = 1 shl 15;
+  JS_PROP_NO_ADD           = 1 shl 16; // internal use
+  JS_PROP_NO_EXOTIC        = 1 shl 17; // internal use
 
   JS_DEFAULT_STACK_SIZE = 256 * 1024;
 
   // JS_Eval flags
-  JS_EVAL_TYPE_GLOBAL = 0 shl 0;   // global code default
-  JS_EVAL_TYPE_MODULE = 1 shl 0;   // module code
-  JS_EVAL_TYPE_DIRECT = 2 shl 0;   // direct call internal use
+  JS_EVAL_TYPE_GLOBAL   = 0 shl 0; // global code default
+  JS_EVAL_TYPE_MODULE   = 1 shl 0; // module code
+  JS_EVAL_TYPE_DIRECT   = 2 shl 0; // direct call internal use
   JS_EVAL_TYPE_INDIRECT = 3 shl 0; // indirect call internal use
-  JS_EVAL_TYPE_MASK = 3 shl 0;
-  JS_EVAL_FLAG_STRICT = 1 shl 3;   // force 'strict' mode
-  JS_EVAL_FLAG_STRIP = 1 shl 4;    // force 'strip' mode
+  JS_EVAL_TYPE_MASK     = 3 shl 0;
+  JS_EVAL_FLAG_STRICT   = 1 shl 3; // force 'strict' mode
+  JS_EVAL_FLAG_STRIP    = 1 shl 4; // force 'strip' mode
 
   // compile but do not run. The result is an object with a
   //  JS_TAG_FUNCTION_BYTECODE or JS_TAG_MODULE tag. It can be executed
   //  with JS_EvalFunction.
-  JS_EVAL_FLAG_COMPILE_ONLY = 1 shl 5; // internal use
-  JS_EVAL_FLAG_MODULE_COMPILE_ONLY = JS_EVAL_TYPE_MODULE or JS_EVAL_FLAG_COMPILE_ONLY;
+  JS_EVAL_FLAG_COMPILE_ONLY        = 1 shl 5; // internal use
+  JS_EVAL_FLAG_MODULE_COMPILE_ONLY = JS_EVAL_TYPE_MODULE or
+                                     JS_EVAL_FLAG_COMPILE_ONLY;
 
   // don't include the stack frames before this eval in the Error backtraces
   JS_EVAL_FLAG_BACKTRACE_BARRIER = 1 shl 6;
 
   // Object Writer/Reader currently only used to handle precompiled code
   JS_WRITE_OBJ_BYTECODE = 1 shl 0; // allow function/module
-  JS_WRITE_OBJ_BSWAP = 1 shl 1;    // byte swapped output
+  JS_WRITE_OBJ_BSWAP    = 1 shl 1; // byte swapped output
 
-  JS_READ_OBJ_BYTECODE = 1 shl 0;  // allow function/module
-  JS_READ_OBJ_ROM_DATA = 1 shl 1;  // avoid duplicating 'buf' data
+  JS_READ_OBJ_BYTECODE  = 1 shl 0;  // allow function/module
+  JS_READ_OBJ_ROM_DATA  = 1 shl 1;  // avoid duplicating 'buf' data
 
   // C property definition
-  JS_DEF_CFUNC = 0;
-  JS_DEF_CGETSET = 1;
-  JS_DEF_CGETSET_MAGIC = 2;
-  JS_DEF_PROP_STRING = 3;
-  JS_DEF_PROP_INT32 = 4;
-  JS_DEF_PROP_INT64 = 5;
-  JS_DEF_PROP_DOUBLE = 6;
+  JS_DEF_CFUNC          = 0;
+  JS_DEF_CGETSET        = 1;
+  JS_DEF_CGETSET_MAGIC  = 2;
+  JS_DEF_PROP_STRING    = 3;
+  JS_DEF_PROP_INT32     = 4;
+  JS_DEF_PROP_INT64     = 5;
+  JS_DEF_PROP_DOUBLE    = 6;
   JS_DEF_PROP_UNDEFINED = 7;
-  JS_DEF_OBJECT = 8;
-  JS_DEF_ALIAS = 9;
+  JS_DEF_OBJECT         = 8;
+  JS_DEF_ALIAS          = 9;
 
 
   // C function definition
 
   // JSCFunctionEnum
-  JS_CFUNC_generic = 0;
-  JS_CFUNC_generic_magic = 1;
-  JS_CFUNC_constructor = 2;
-  JS_CFUNC_constructor_magic = 3;
-  JS_CFUNC_constructor_or_func = 4;
+  JS_CFUNC_generic                   = 0;
+  JS_CFUNC_generic_magic             = 1;
+  JS_CFUNC_constructor               = 2;
+  JS_CFUNC_constructor_magic         = 3;
+  JS_CFUNC_constructor_or_func       = 4;
   JS_CFUNC_constructor_or_func_magic = 5;
-  JS_CFUNC_f_f = 6;
-  JS_CFUNC_f_f_f = 7;
-  JS_CFUNC_getter = 8;
-  JS_CFUNC_setter = 9;
-  JS_CFUNC_getter_magic = 10;
-  JS_CFUNC_setter_magic = 11;
-  JS_CFUNC_iterator_next = 12;
+  JS_CFUNC_f_f                       = 6;
+  JS_CFUNC_f_f_f                     = 7;
+  JS_CFUNC_getter                    = 8;
+  JS_CFUNC_setter                    = 9;
+  JS_CFUNC_getter_magic              = 10;
+  JS_CFUNC_setter_magic              = 11;
+  JS_CFUNC_iterator_next             = 12;
 
-  JS_GPN_STRING_MASK = 1 shl 0;
-  JS_GPN_SYMBOL_MASK = 1 shl 1;
+  JS_GPN_STRING_MASK  = 1 shl 0;
+  JS_GPN_SYMBOL_MASK  = 1 shl 1;
   JS_GPN_PRIVATE_MASK = 1 shl 2;
   // only include the enumerable properties
-  JS_GPN_ENUM_ONLY = 1 shl 4;
+  JS_GPN_ENUM_ONLY    = 1 shl 4;
   // set theJSPropertyEnum.is_enumerable field
-  JS_GPN_SET_ENUM = 1 shl 5;
+  JS_GPN_SET_ENUM     = 1 shl 5;
 
   // C Call Flags
   JS_CALL_FLAG_CONSTRUCTOR = 1 shl 0;
@@ -3634,13 +3637,13 @@ initialization
   {$else}
   assert(SizeOf(JSValueRaw) = 2 * SizeOf(pointer));
   JSValue(JS_NAN).UnboxedTag := JS_TAG_FLOAT64;
-  JSValue(JS_NAN).u.f64 := JS_FLOAT64_NAN;
+  JSValue(JS_NAN).u.f64      := JS_FLOAT64_NAN;
   {$endif JS_ANY_NAN_BOXING}
-  JSValue(JS_NULL).Fill(JS_TAG_NULL, 0);
-  JSValue(JS_UNDEFINED).Fill(JS_TAG_UNDEFINED, 0);
-  JSValue(JS_FALSE).Fill(JS_TAG_BOOL, 0);
-  JSValue(JS_TRUE).Fill(JS_TAG_BOOL, 1);
-  JSValue(JS_EXCEPTION).Fill(JS_TAG_EXCEPTION, 0);
+  JSValue(JS_NULL).         Fill(JS_TAG_NULL, 0);
+  JSValue(JS_UNDEFINED).    Fill(JS_TAG_UNDEFINED, 0);
+  JSValue(JS_FALSE).        Fill(JS_TAG_BOOL, 0);
+  JSValue(JS_TRUE).         Fill(JS_TAG_BOOL, 1);
+  JSValue(JS_EXCEPTION).    Fill(JS_TAG_EXCEPTION, 0);
   JSValue(JS_UNINITIALIZED).Fill(JS_TAG_UNINITIALIZED, 0);
 
 {$else}
