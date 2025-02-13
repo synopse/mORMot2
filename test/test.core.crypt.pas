@@ -7,10 +7,6 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{.$define CATALOGALLGENERATE}
-// by default, we don't validate the very slow RSA keypair generation
-// - define this conditional for slower but full coverage of the tests
-
 uses
   sysutils,
   mormot.core.base,
@@ -40,10 +36,12 @@ type
   TTestCoreCrypto = class(TSynTestCase)
   public
     fDigestAlgo: TDigestAlgo;
+    fCatalogAllGenerate: boolean;
     procedure CryptData(dpapi: boolean);
     procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
     function DigestUser(const User, Realm: RawUtf8;
       out HA0: THash512Rec): TAuthServerResult;
+    procedure CatalogRunAsym(Context: TObject);
     procedure CatalogRunCert(Context: TObject);
     procedure CatalogRunStore(Context: TObject);
   published
@@ -2930,6 +2928,42 @@ begin
   end;
 end;
 
+procedure TTestCoreCrypto.CatalogRunAsym(Context: TObject);
+var
+  asy: TCryptAsym absolute Context;
+  pub, pub2, priv, priv2: RawUtf8;
+  n, s: RawByteString;
+  timer: TPrecisionTimer;
+begin
+  Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
+  if (asy.KeyAlgo in CKA_RSA) and
+     not fCatalogAllGenerate then
+  begin
+    pub := _rsapub; // don't validate the very slow RSA keypair generation
+    priv := _rsapriv;
+  end
+  else
+  begin
+    timer.Start;
+    asy.GeneratePem(pub, priv, '');
+    Check(pub <> '');
+    Check(priv <> '');
+    asy.GeneratePem(pub2, priv2, '');
+    NotifyTestSpeed('%.Generate', [asy], 2, 0, @timer, {onlylog=}true);
+    Check(pub2 <> '');
+    Check(priv2 <> '');
+    Check(pub <> pub2);
+    Check(priv <> priv2);
+  end;
+  n := RandomAnsi7(999);
+  CheckUtf8(asy.Sign(n, priv, s), asy.AlgoName);
+  Check(s <> '');
+  Check(asy.Verify(n, pub, s));
+  inc(n[1]);
+  Check(not asy.Verify(n, pub, s));
+  dec(n[1]);
+end;
+
 procedure TTestCoreCrypto.CatalogRunCert(Context: TObject);
 var
   crt: TCryptCertAlgo absolute Context;
@@ -2944,8 +2978,6 @@ var
   fields: TCryptCertFields;
   cpe: TCryptCertPerUsage;
 begin
-  if crt = nil then
-    exit;
   timer.Start;
   check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
   c1 := crt.New;
@@ -3292,7 +3324,7 @@ begin
   CheckEqual(st1.Count, 1);
   Check(st1.IsValid(c1) = cvValidSelfSigned);
   Check(c1.HasPrivateSecret, 'priv1');
-  r := RandomUtf8(99);
+  r := RandomAnsi7(99);
   Check(c1.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 1');
   Check((c1.GetAuthorityKey = '') or
         (c1.GetAuthorityKey = c1.GetSubjectKey));
@@ -3506,53 +3538,25 @@ begin
   end;
   // validate Asym High-Level Algorithms Factory
   alg := TCryptAsym.Instances;
+  //fCatalogAllGenerate := SystemInfo.dwNumberOfProcessors > 8;
   for a := 0 to high(alg) do
   begin
     asy := alg[a] as TCryptAsym;
-    NotifyProgress([asy.AlgoName]);
-    Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
-    {$ifndef CATALOGALLGENERATE}
-    if (asy.AlgoName[2] = 's') and
-       (asy.AlgoName[1] in ['p', 'r']) then
-    begin
-      pub := _rsapub; // don't validate the very slow RSA keypair generation
-      priv := _rsapriv;
-    end
-    else
-    {$endif CATALOGALLGENERATE}
-    begin
-      timer.Start;
-      asy.GeneratePem(pub, priv, '');
-      Check(pub <> '');
-      Check(priv <> '');
-      asy.GeneratePem(pub2, priv2, '');
-      NotifyTestSpeed('%.Generate', [asy], 2, 0, @timer, {onlylog=}true);
-      Check(pub2 <> '');
-      Check(priv2 <> '');
-      Check(pub <> pub2);
-      Check(priv <> priv2);
-    end;
-    CheckUtf8(asy.Sign(n, priv, s), asy.AlgoName);
-    Check(s <> '');
-    Check(asy.Verify(n, pub, s));
-    inc(n[1]);
-    Check(not asy.Verify(n, pub, s));
-    dec(n[1]);
+    Run(CatalogRunAsym, asy, asy.AlgoName,
+      {threaded=} (asy.KeyAlgo in CKA_RSA) and fCatalogAllGenerate);
   end;
   // validate Cert High-Level Algorithms Factory
   alg := TCryptCertAlgo.Instances;
   for a := 0 to high(alg) do
   begin
     crt := alg[a] as TCryptCertAlgo;
-    // RSA generation is slow -> threaded
-    Run(CatalogRunCert, crt, crt.AlgoName, crt.AsymAlgo in CAA_RSA);
+    Run(CatalogRunCert, crt, crt.AlgoName, {threaded=} crt.AsymAlgo in CAA_RSA);
   end;
   // validate Store High-Level Algorithms Factory
   alg := TCryptStoreAlgo.Instances;
   for a := 0 to high(alg) do
   begin
     str := alg[a] as TCryptStoreAlgo;
-    // RSA generation is slow -> threaded
     Run(CatalogRunStore, str, str.AlgoName, str.DefaultCertAlgo.AsymAlgo in CAA_RSA);
   end;
   // wait for all background thread process
