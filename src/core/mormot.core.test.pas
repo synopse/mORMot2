@@ -156,7 +156,11 @@ type
     fAssertionsFailedBeforeRun: integer;
     fBackgroundRunSafe: TLightLock;
     fBackgroundRun: integer;
-    fBackgroundPending: array of TLoggedWorkThread; // if ForcedThreaded
+    fBackgroundPending: array of record // pending Run() if ForcedThreaded
+      EventTask: TNotifyEvent;
+      EventSender: TObject;
+      EventName: RawUtf8;
+    end;
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -675,7 +679,6 @@ end;
 destructor TSynTestCase.Destroy;
 begin
   CleanUp;
-  ObjArrayClear(fBackgroundRun);
   inherited;
 end;
 
@@ -1082,6 +1085,8 @@ end;
 
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
+var
+  n: PtrInt;
 begin
   if NotifyTask then
     NotifyProgress([TaskName]);
@@ -1103,29 +1108,54 @@ begin
     end
     else if ForcedThreaded then
     begin
-      // this method requires to be run in a background thread: enqueue
-      ObjArrayAdd(fBackgroundPending, TLoggedWorkThread.Create(
-        TSynLogTestLog, TaskName, Sender, OnTask, RunDone, {suspended=}true));
+      // caller requires to run in a background thread: enqueue task
+      n := length(fBackgroundPending);
+      SetLength(fBackgroundPending, n + 1);
+      with fBackgroundPending[n] do
+      begin
+        EventTask := OnTask;
+        EventSender := Sender;
+        EventName := TaskName;
+      end;
       exit;
     end;
   finally
     fBackgroundRunSafe.UnLock;
   end;
-  OnTask(Sender); // not enough CPU power: run now in main thread
+  OnTask(Sender); // not enough CPU power: run now in main thread (outside lock)
 end;
 
 procedure TSynTestCase.RunDone(Sender: TObject);
+var
+  task: TNotifyEvent;
+  name: RawUtf8;
+  n: PtrInt;
 begin
-  fBackgroundRunSafe.Lock;
-  try
-    Sender := ObjArrayPop(fBackgroundPending);
-    if Sender = nil then
-      dec(fBackgroundRun);
-  finally
-    fBackgroundRunSafe.UnLock;
-  end;
-  if Sender <> nil then
-    TLoggedWorkThread(Sender).Start; // new thread from pending task
+  repeat
+    // check for any pending task
+    fBackgroundRunSafe.Lock;
+    try
+      if fBackgroundPending = nil then
+      begin
+        dec(fBackgroundRun); // no pending task: atomic decrease global counter
+        exit;
+      end;
+      // pop next pending task
+      n := high(fBackgroundPending);
+      with fBackgroundPending[n] do
+      begin
+        task := EventTask;
+        Sender := EventSender;
+        name := EventName;
+      end;
+      SetLength(fBackgroundPending, n);
+    finally
+      fBackgroundRunSafe.UnLock;
+    end;
+    // run next pending task in this thread
+    SetCurrentThreadName(name);
+    task(Sender);
+  until false;
 end;
 
 procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer);
