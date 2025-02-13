@@ -1089,23 +1089,31 @@ type
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fSender: TObject;
-    fOnExecute, fOnExecuted: TNotifyEvent;
-    fOnExecuteData: TOnLoggedWorkProcessData;
     fData: TDocVariantData;
+    fOnExecuteSender, fOnExecuted: TNotifyEvent;
+    fOnExecuteData: TOnLoggedWorkProcessData;
     procedure DoExecute; override;
   public
     /// this constructor will directly start the thread in background
     // - with the context as a regular TNotifyEvent
+    // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       Sender: TObject; const OnExecute: TNotifyEvent;
-      const OnExecuted: TNotifyEvent = nil);
+      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context as a TDocVariantData object supplied as name/value pairs
+    // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
-      const OnExecuted: TNotifyEvent = nil);
+      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
         reintroduce; overload;
+    /// the associated OnExecute: TNotifyEvent parameter
+    property Sender: TObject
+      read fSender;
+    /// the associated OnExecute: TOnLoggedWorkProcessData parameter
+    property Data: TDocVariantData
+      read fData;
   end;
 
   TSynThreadPool = class;
@@ -3224,36 +3232,37 @@ end;
 procedure TLoggedWorkThread.DoExecute;
 begin
   try
-    if Assigned(fOnExecute) then
-      fOnExecute(fSender)
+    if Assigned(fOnExecuteSender) then
+      fOnExecuteSender(fSender)
     else if Assigned(fOnExecuteData) then
       fOnExecuteData(fData);
   finally
     if Assigned(fOnExecuted) then
-      fOnExecuted(fSender);
+      fOnExecuted(self);
   end;
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const ProcessName: RawUtf8; Sender: TObject;
-  const OnExecute, OnExecuted: TNotifyEvent);
+  const OnExecute, OnExecuted: TNotifyEvent; Suspended: boolean);
 begin
   fSender := Sender;
-  fOnExecute := OnExecute;
+  fOnExecuteSender := OnExecute;
   fOnExecuted := OnExecuted;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, Logger, ProcessName);
+  inherited Create(Suspended, Logger, ProcessName);
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const ProcessName: RawUtf8; const NameValuePairs: array of const;
-  const OnExecute: TOnLoggedWorkProcessData; const OnExecuted: TNotifyEvent);
+  const OnExecute: TOnLoggedWorkProcessData; const OnExecuted: TNotifyEvent;
+  Suspended: boolean);
 begin
   fOnExecuteData := OnExecute;
   fOnExecuted := OnExecuted;
   fData.InitObject(NameValuePairs, mFastFloat);
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, Logger, ProcessName);
+  inherited Create(Suspended, Logger, ProcessName);
 end;
 
 
