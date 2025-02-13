@@ -1673,11 +1673,26 @@ type
     function RawFinal(var gmac: TAesBlock): boolean; virtual; abstract;
   end;
 
+  /// the algorithms supported by a ICryptPublicKey/ICryptPrivateKey
+  // - does not match TCryptAsymAlgo because ckaRsa/ckaRsaPss do not define the
+  // hash algorithm needed, so dedicated caaRSxxx/caaPSxxx items are needed
+  TCryptKeyAlgo = (
+    ckaNone,
+    ckaRsa,
+    ckaRsaPss,
+    ckaEcc256,
+    ckaEcc384,
+    ckaEcc512,
+    ckaEcc256k,
+    ckaEdDSA);
+
   /// asymmetric public-key cryptography parent class, as returned by Asym()
   TCryptAsym = class(TCryptAlgo)
   protected
     fPemPublic, fPemPrivate: byte; // TPemKind as defined below
   public
+    /// the high-level asymmetric algorithm used for this certificate
+    function KeyAlgo: TCryptKeyAlgo; virtual; abstract;
     /// generate a public/private pair of keys in the PEM text format
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); virtual;
     /// generate a public/private pair of keys in the DER binary format
@@ -1743,19 +1758,6 @@ type
 
   /// set of supported asymmetric algorithms
   TCryptAsymAlgos = set of TCryptAsymAlgo;
-
-  /// the algorithms supported by a ICryptPublicKey/ICryptPrivateKey
-  // - does not match TCryptAsymAlgo because ckaRsa/ckaRsaPss do not define the
-  // hash algorithm needed, so dedicated caaRSxxx/caaPSxxx items are needed
-  TCryptKeyAlgo = (
-    ckaNone,
-    ckaRsa,
-    ckaRsaPss,
-    ckaEcc256,
-    ckaEcc384,
-    ckaEcc512,
-    ckaEcc256k,
-    ckaEdDSA);
 
   TCryptAbstractKey = class;
 

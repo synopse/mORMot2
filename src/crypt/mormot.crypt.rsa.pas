@@ -3229,6 +3229,7 @@ type
   public
     constructor Create(const name: RawUtf8); overload; override;
     constructor Create(const name, hasher: RawUtf8); reintroduce; overload;
+    function KeyAlgo: TCryptKeyAlgo; override;
     procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -3263,6 +3264,14 @@ begin
   if fDefaultHasher = nil then
     ECrypt.RaiseUtf8('%.Create: unknown hasher=%', [self, hasher]);
   Create(name);
+end;
+
+function TCryptAsymRsa.KeyAlgo: TCryptKeyAlgo;
+begin
+  if fRsaClass = TRsa then
+    result := ckaRsa
+  else
+    result := ckaRsaPss;
 end;
 
 procedure TCryptAsymRsa.GenerateDer(out pub, priv: RawByteString;

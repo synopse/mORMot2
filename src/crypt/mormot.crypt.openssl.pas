@@ -1867,6 +1867,7 @@ type
   public
     constructor Create(const name: RawUtf8); overload; override;
     constructor Create(caa: TCryptAsymAlgo); reintroduce; overload;
+    function KeyAlgo: TCryptKeyAlgo; override;
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -1884,6 +1885,11 @@ begin
     result := fDefaultHashAlgorithm
   else
     result := hasher.AlgoName; // let OpenSSL resolve the algorithm by name
+end;
+
+function TCryptAsymOsl.KeyAlgo: TCryptKeyAlgo;
+begin
+  result := CAA_CKA[fCaa];
 end;
 
 constructor TCryptAsymOsl.Create(const name: RawUtf8);

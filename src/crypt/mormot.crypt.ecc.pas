@@ -5204,6 +5204,7 @@ type
     fDefaultHasher: TCryptHasher;
   public
     constructor Create(const name: RawUtf8); override;
+    function KeyAlgo: TCryptKeyAlgo; override;
     procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -5221,6 +5222,11 @@ begin
   fDefaultHasher := Hasher('sha256');
   fPemPrivate := ord(pemEcPrivateKey);
   fPemPublic := ord(pemEcPublicKey);
+end;
+
+function TCryptAsymInternal.KeyAlgo: TCryptKeyAlgo;
+begin
+  result := ckaEcc256;
 end;
 
 procedure TCryptAsymInternal.GenerateDer(out pub, priv: RawByteString;
