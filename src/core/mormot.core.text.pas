@@ -8852,7 +8852,7 @@ begin
           if VClass <> nil then
             ClassToText(VClass, result)
           else
-none:       result := '';
+none:       FastAssignNew(result);
         end;
       vtObject:
         if VObject <> nil then

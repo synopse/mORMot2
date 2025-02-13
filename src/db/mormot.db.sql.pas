@@ -5451,8 +5451,7 @@ begin
     else
       batchRowCount := RowCount;
   if batchRowCount = 0 then
-    ESqlDBException.RaiseUtf8(
-      '%.MultipleValuesInsert(%) with # params = %>%',
+    ESqlDBException.RaiseUtf8('%.MultipleValuesInsert(%) with # params = %>%',
       [self, TableName, RowCount * maxf, paramCountLimit]);
   dec(maxf);
   prevrowcount := 0;
@@ -5869,8 +5868,7 @@ begin
           BindTextU(Param, tmp, IO);
         end;
     else
-      ESqlDBException.RaiseUtf8(
-        'Invalid %.Bind(%,TSqlDBFieldType(%),%)',
+      ESqlDBException.RaiseUtf8('Invalid %.Bind(%,TSqlDBFieldType(%),%)',
         [self, Param, ord(ParamType), Value]);
     end;
 end;
@@ -6045,8 +6043,7 @@ begin
      (fConnection = nil) or
      (fConnection.fProperties.BatchSendingAbilities *
       [cCreate, cUpdate, cDelete] = []) then
-    ESqlDBException.RaiseUtf8(
-      'Invalid call to %.BindArray(Param=%,Type=%)',
+    ESqlDBException.RaiseUtf8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(ParamType)^]);
 end;
 
@@ -6092,8 +6089,7 @@ end;
 
 procedure TSqlDBStatement.CheckColInvalid(Col: integer);
 begin
-  ESqlDBException.RaiseUtf8(
-    'Invalid call to %.Column*(Col=%)', [self, Col]);
+  ESqlDBException.RaiseUtf8('Invalid call to %.Column*(Col=%)', [self, Col]);
 end;
 
 function TSqlDBStatement.GetForceBlobAsNull: boolean;
@@ -6153,8 +6149,7 @@ end;
 
 procedure TSqlDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
 begin
-  ESqlDBException.RaiseUtf8(
-    '%.ColumnBlobFromStream not implemented', [self]);
+  ESqlDBException.RaiseUtf8('%.ColumnBlobFromStream not implemented', [self]);
 end;
 
 function TSqlDBStatement.ColumnVariant(Col: integer; ForceUtf8: boolean): Variant;
@@ -6358,8 +6353,7 @@ begin // default implementation (never called in practice)
           W.WrBase64(pointer(blob), length(blob), {withMagic=}true);
         end;
     else
-      ESqlDBException.RaiseUtf8(
-        '%.ColumnToJson: invalid ColumnType(%)=%',
+      ESqlDBException.RaiseUtf8('%.ColumnToJson: invalid ColumnType(%)=%',
         [self, col, ord(ColumnType(col))]);
     end;
 end;
@@ -6663,8 +6657,7 @@ begin
         ftBlob:
           W.Write(ColumnBlob(f));
       else
-        ESqlDBException.RaiseUtf8(
-          '%.ColumnsToBinary: Invalid ColumnType(%)=%',
+        ESqlDBException.RaiseUtf8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
           [self, ColumnName(f), ord(ft)]);
       end;
     end;
@@ -8046,8 +8039,7 @@ begin
      (fConnection = nil) or
      (fConnection.fProperties.BatchSendingAbilities *
        [cCreate, cUpdate, cDelete] = []) then
-    ESqlDBException.RaiseUtf8(
-      'Invalid call to %.BindArray(Param=%,Type=%)',
+    ESqlDBException.RaiseUtf8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(NewType)^]);
   SetLength(result^.VArray, ArrayCount);
   result^.VInt64 := ArrayCount;
