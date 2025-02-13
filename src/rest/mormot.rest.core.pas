@@ -3549,7 +3549,7 @@ begin
         G.Free;
       end;
       if not (itoNoAutoCreateUsers in Options) and
-         (Server.TableRowCount(UC) = 0) then
+         not Server.TableHasRows(UC) then
       begin
         U := UC.Create;
         try
