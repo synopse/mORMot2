@@ -73,6 +73,12 @@ type
     Address: RawUtf8;
   end;
 
+  TClientSide = (
+    csUndefined, csDirect, csServer,
+    csMainThread, csBackground, csJsonObject, csSessions, csLocked,
+    csCrc32, csCrc32c, csXxHash, csMd5, csSha1, csSha256, csSha512, csSha3,
+    csWeak, csBasic, csDbLog, csJsonRpc, csHttp, csHttpLog, csCustomRtti);
+
   /// a test interface, used by TTestServiceOrientedArchitecture
   // - to test basic and high-level remote service calls
   ICalculator = interface(IInvokable)
@@ -122,13 +128,14 @@ type
   // ICalculator methods are also available)
   IComplexCalculator = interface(ICalculator)           
     ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
+    /// customize the server-side execution expectations for this interface
     /// purpose of this method is to substract two complex numbers
     // - using class instances as parameters
     procedure Substract(n1, n2: TComplexNumber; out Result: TComplexNumber);
     /// purpose of this method is to check for boolean handling
     function IsNull(n: TComplexNumber): boolean;
     /// this will test the BLOB kind of remote answer
-    function TestBlob(n: TComplexNumber): TServiceCustomAnswer;
+    function TestBlob(n: TComplexNumber; cs: TClientSide): TServiceCustomAnswer;
     /// test variant kind of parameters
     function TestVariants(const Text: RawUtf8; V1: Variant;
       var V2: variant): variant;
@@ -144,7 +151,7 @@ type
       out CustomerData: TCustomerData): Boolean;
     //// validate TOrm transmission
     procedure FillPeople(var People: TOrmPeople);
-    //// validate array of TOrm transmission
+    /// validate array of TOrm transmission
     procedure FillPeoples(n: integer; out People: TOrmPeopleObjArray);
     {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
     {$ifndef HASNOSTATICRTTI}
@@ -242,82 +249,92 @@ type
     CG: ITestGroup;
     CS: ITestSession;
     CT: ITestPerThread;
+    ClientSide: TClientSide;
     ExpectedSessionID: integer;
     ExpectedUserID: integer;
     ExpectedGroupID: integer;
+  end;
+
+  TRestClientDBNamed = class(TRestClientDB)
+  public
+    Name: RawUtf8;
+    ClientSide: TClientSide;
   end;
 
   /// a test case which will test the interface-based SOA implementation of
   // the mORMot framework
   TTestServiceOrientedArchitecture = class(TSynTestCase)
   protected
-    fClient: TRestClientDB;
+    fMain: TRestClientDBNamed;
     procedure Test(const Inst: TTestServiceInstances; Iterations: Cardinal = 700);
-    procedure TestHttp(withlog: boolean);
-    procedure ClientTest(aRouting: TRestServerUriContextClass;
+    procedure TestHttp(aClient: TRestClientDBNamed; withlog: boolean; const port: RawUtf8);
+    procedure ClientTest(aClient: TRestClientDBNamed; aRouting: TRestServerUriContextClass;
       aAsJsonObject: boolean; aRunInOtherThread: boolean = false;
       aOptions: TInterfaceMethodOptions = []);
-    procedure ClientAlgo(algo: TRestAuthenticationSignedUriAlgo);
+    procedure ClientAlgo(aClient: TRestClientDBNamed; algo: TRestAuthenticationSignedUriAlgo);
     class procedure CustomReader(var Context: TJsonParserContext; Data: pointer);
     class procedure CustomWriter(W: TJsonWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
-    procedure SetOptions(aAsJsonObject: boolean; aOptions: TInterfaceMethodOptions);
     procedure IntSubtractJson(Ctxt: TOnInterfaceStubExecuteParamsJson);
     procedure IntSubtractVariant(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
-    /// release used instances (e.g. http server) and memory
-    procedure CleanUp; override;
+  public
+    { all threaded callbacks for validating all client side modes }
+    /// test the custom record Json serialization - could NOT be parallelized
+    procedure ClientSideRESTCustomRecord(Sender: TObject);
+    /// test the client-side in RESTful mode with values transmitted as Json objects
+    procedure ClientSideRESTAsJsonObject(Sender: TObject);
+    /// test the client-side in RESTful mode with full session statistics
+    procedure ClientSideRESTSessionsStats(Sender: TObject);
+    /// test the client-side implementation of optExecLockedPerInterface
+    procedure ClientSideRESTLocked(Sender: TObject);
+    /// test the client-side implementation of opt*InMainThread option
+    // - warning: should be executed in a background thread
+    procedure ClientSideRESTMainThread(Sender: TObject);
+    /// test the client-side implementation of opt*InPerInterfaceThread option
+    // - warning: should be executed in a background thread
+    procedure ClientSideRESTBackgroundThread(Sender: TObject);
+    /// test the client-side implementation with default crc32 URI signature
+    procedure ClientSideRESTSignWithCrc32(Sender: TObject);
+    /// test the client-side implementation with crc32c URI signature
+    procedure ClientSideRESTSignWithCrc32c(Sender: TObject);
+    /// test the client-side implementation with xxHash32 URI signature
+    procedure ClientSideRESTSignWithXxhash(Sender: TObject);
+    /// test the client-side implementation with MD5 URI signature
+    procedure ClientSideRESTSignWithMd5(Sender: TObject);
+    /// test the client-side implementation with SHA-1 URI signature
+    procedure ClientSideRESTSignWithSha1(Sender: TObject);
+    /// test the client-side implementation with SHA-256 URI signature
+    procedure ClientSideRESTSignWithSha256(Sender: TObject);
+    /// test the client-side implementation with SHA-512 URI signature
+    procedure ClientSideRESTSignWithSha512(Sender: TObject);
+    /// test the client-side implementation with SHA3-256 URI signature
+    procedure ClientSideRESTSignWithSha3(Sender: TObject);
+    /// test the client-side implementation using TRestServerAuthenticationNone
+    procedure ClientSideRESTWeakAuth(Sender: TObject);
+    /// test the client-side implementation using TRestServerAuthenticationHttpBasic
+    procedure ClientSideRESTBasicAuth(Sender: TObject);
+    /// test the client-side in RESTful mode with all calls logged in a table
+    procedure ClientSideRESTServiceLogToDB(Sender: TObject);
+    /// test the client-side implementation in Json-RPC mode
+    procedure ClientSideJsonRPC(Sender: TObject);
+    /// test REStful mode using HTTP client/server communication
+    procedure ClientSideOverHTTP(Sender: TObject);
+    /// test REStful mode using HTTP client/server communication and logs
+    procedure ClientSideOverHTTPWithLogs(Sender: TObject);
+    /// initialize a new REST server + REST client with SOA implementation
+    function NewClient(aClientSide: TClientSide): TRestClientDBNamed;
   published
     /// test the SetWeak/SetWeakZero weak interface functions
     procedure WeakInterfaces;
-    /// initialize the SOA implementation
-    procedure ServiceInitialization;
     /// test direct call to the class instance
     procedure DirectCall;
     /// test the server-side implementation
     procedure ServerSide;
-    /// test the client-side implementation in RESTful mode
-    procedure ClientSideREST;
-    /// test the client-side in RESTful mode with values transmitted as Json objects
-    procedure ClientSideRESTAsJsonObject;
-    /// test the client-side in RESTful mode with full session statistics
-    procedure ClientSideRESTSessionsStats;
-    /// test the client-side implementation of optExecLockedPerInterface
-    procedure ClientSideRESTLocked;
-    /// test the client-side implementation of opt*InMainThread option
-    procedure ClientSideRESTMainThread;
-    /// test the client-side implementation of opt*InPerInterfaceThread option
-    procedure ClientSideRESTBackgroundThread;
-    /// test the client-side implementation with crc32c URI signature
-    procedure ClientSideRESTSignWithCrc32c;
-    /// test the client-side implementation with xxHash32 URI signature
-    procedure ClientSideRESTSignWithXxhash;
-    /// test the client-side implementation with MD5 URI signature
-    procedure ClientSideRESTSignWithMd5;
-    /// test the client-side implementation with SHA-1 URI signature
-    procedure ClientSideRESTSignWithSha1;
-    /// test the client-side implementation with SHA-256 URI signature
-    procedure ClientSideRESTSignWithSha256;
-    /// test the client-side implementation with SHA-512 URI signature
-    procedure ClientSideRESTSignWithSha512;
-    /// test the client-side implementation with SHA3-256 URI signature
-    procedure ClientSideRESTSignWithSha3;
-    /// test the client-side implementation using TRestServerAuthenticationNone
-    procedure ClientSideRESTWeakAuth;
-    /// test the client-side implementation using TRestServerAuthenticationHttpBasic
-    procedure ClientSideRESTBasicAuth;
-    /// test the custom record Json serialization
-    procedure ClientSideRESTCustomRecord;
-    /// test the client-side in RESTful mode with all calls logged in a table
-    procedure ClientSideRESTServiceLogToDB;
-    /// test the client-side implementation in Json-RPC mode
-    procedure ClientSideJsonRPC;
-    /// test REStful mode using HTTP client/server communication
-    procedure TestOverHTTP;
-    /// test REStful mode using HTTP client/server communication and logs
-    procedure TestOverHTTPWithLogs;
     /// test the security features
     procedure Security;
+    /// multi-threaded tests of the client-side implementation in all mode
+    procedure ClientSide;
     /// test interface stubbing / mocking
     procedure MocksAndStubs;
   end;
@@ -356,11 +373,13 @@ type
 
   TServiceComplexCalculator = class(TServiceCalculator, IComplexCalculator)
   protected
+    fExpected: TClientSide;
+    fMethodThread: PtrUInt;
     procedure EnsureInExpectedThread;
   public
     procedure Substract(n1, n2: TComplexNumber; out Result: TComplexNumber);
     function IsNull(n: TComplexNumber): boolean;
-    function TestBlob(n: TComplexNumber): TServiceCustomAnswer;
+    function TestBlob(n: TComplexNumber; cs: TClientSide): TServiceCustomAnswer;
     function TestVariants(const Text: RawUtf8;
       V1: Variant; var V2: variant): variant;
     function TestRawJson(len, value: integer; const j: RawJson): RawJson;
@@ -557,17 +576,14 @@ begin
   dict := DocDict(['a', 1, 'b', 2, 'data', data]);
 end;
 
-var
-  GlobalInterfaceTestMode: (
-    itmDirect,
-    itmClient,
-    itmLocked,
-    itmMainThread,
-    itmPerInterfaceThread,
-    itmHttp) = itmDirect;
 
 
 { TServiceComplexCalculator }
+
+function GetThreadID: PtrUInt; {$ifdef HASINLINE} inline; {$endif}
+begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
+  Result := PtrUInt(GetCurrentThreadId);
+end;
 
 function TServiceComplexCalculator.IsNull(n: TComplexNumber): boolean;
 begin
@@ -577,45 +593,58 @@ end;
 procedure TServiceComplexCalculator.Substract(n1, n2: TComplexNumber;
   out Result: TComplexNumber);
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   {%H-}result.Real := n1.Real - n2.Real;
   result.Imaginary := n1.Imaginary - n2.Imaginary;
 end;
 
 function TServiceComplexCalculator.EchoRecord(const Nav: TConsultaNav): TConsultaNav;
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   result := Nav;
 end;
 
-function GetThreadID: PtrUInt;
-begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
-  Result := PtrUInt(GetCurrentThreadId);
-end;
-
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
+var
+  name: PShortString;
+  thrid: PtrUInt;
 begin
-  case GlobalInterfaceTestMode of
-    itmDirect,
-    itmClient,
-    itmMainThread:
+  name := GetEnumName(TypeInfo(TClientSide), ord(fExpected));
+  thrid := GetThreadID;
+  if fMethodThread <> 0 then
+    if fMethodThread <> thrid then
+      ESynException.RaiseUtf8('%.EnsureInExpectedThread % in #% <> #%',
+        [self, name^, thrid, fMethodThread]);
+  case fExpected of
+    csDirect,
+    csServer,
+    csMainThread:
       {$ifdef OSANDROID}
       // On Android, processes never run in the mainthread
       ;
       {$else}
-      if GetThreadID <> PtrUInt(MainThreadID) then
-        raise Exception.Create('Shall be in main thread');
+      if thrid <> PtrUInt(MainThreadID) then
+        ESynException.RaiseUtf8('% shall be in main thread', [name^]);
       {$endif OSANDROID}
-    itmPerInterfaceThread,
-    itmHttp,
-    itmLocked:
-      if GetThreadID = PtrUInt(MainThreadID) then
-        raise Exception.Create('Shall NOT be in main thread')
+    csBackground,
+    csHttp,
+    csHttpLog:
+      if thrid = PtrUInt(MainThreadID) then
+        ESynException.RaiseUtf8('% shall NOT be in main thread', [name^])
       else if ServiceRunningContext.RunningThread = nil then
-        raise Exception.Create('Shall have a known RunningThread');
+        ESynException.RaiseUtf8('% shall have a known RunningThread', [name^]);
+    // other TClientSide could be in main thread or background thread
   end;
 end;
 
-function TServiceComplexCalculator.TestBlob(n: TComplexNumber): TServiceCustomAnswer;
+function TServiceComplexCalculator.TestBlob(n: TComplexNumber;
+  cs: TClientSide): TServiceCustomAnswer;
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
+  fExpected := cs;
   EnsureInExpectedThread;
   Result.Header := TEXT_CONTENT_TYPE_HEADER;
   if n.Real = maxInt then
@@ -627,6 +656,8 @@ end;
 function TServiceComplexCalculator.TestVariants(const Text: RawUtf8;
   V1: Variant; var V2: variant): variant;
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   V2 := V2 + V1;
   VariantLoadJson(Result, Text);
 end;
@@ -637,6 +668,8 @@ const
 function TServiceComplexCalculator.TestRawJson(
   len, value: integer; const j: RawJson): RawJson;
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   if len < 0 then
     len := 0;
   if j <> _TESTRAWJSON then
@@ -653,11 +686,14 @@ end;
 function TServiceComplexCalculator.GetCurrentThreadID: PtrUInt;
 begin
   Result := GetThreadID;
+  fMethodThread := Result;
 end;
 
 function TServiceComplexCalculator.GetCustomer(CustomerId: Integer;
   out CustomerData: TCustomerData): Boolean;
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   CustomerData.Id := CustomerId;
   CustomerData.AccountNum := Int32ToUtf8(CustomerId);
   Result := True;
@@ -665,6 +701,8 @@ end;
 
 procedure TServiceComplexCalculator.FillPeople(var People: TOrmPeople);
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   if People.ID = 0 then
     exit; // check transmission of LastName/FirstName as ""
   People.LastName  := FormatUtf8('Last %', [People.ID]);
@@ -677,6 +715,8 @@ var
   i: PtrInt;
   p: TOrmPeople;
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   SetLength(People, n);
   for i := 0 to n - 1 do
   begin
@@ -693,6 +733,8 @@ end;
 procedure TServiceComplexCalculator.Collections(Item: TCollTest;
   var List: TCollTestsI; out Copy: TCollTestsI);
 begin
+  if fMethodThread = 0 then
+    fMethodThread := GetThreadID;
   CopyObject(Item, List.Add);
   CopyObject(List, Copy{%H-});
 end;
@@ -774,33 +816,35 @@ end;
 constructor TServicePerThread.Create;
 begin
   inherited;
-  fThreadIDAtCreation := PtrUInt(GetThreadID);
+  fThreadIDAtCreation := GetThreadID;
 end;
 
 function TServicePerThread.GetCurrentThreadID: PtrUInt;
 begin
-  Result := PtrUInt(GetThreadID);
+  result := GetThreadID;
   with ServiceRunningContext^ do
     if Request <> nil then
-      if PtrUInt(Result) <> Request.ServiceInstanceID then
-        raise Exception.Create('Unexpected ServiceInstanceID');
+      if result <> PtrUInt(Request.ServiceInstanceID) then
+        ESynException.RaiseUtf8('%.GetCurrentThreadID=%<>%',
+          [self, result, Request.ServiceInstanceID]);
 end;
 
 function TServicePerThread.GetThreadIDAtCreation: PtrUInt;
 begin
-  Result := fThreadIDAtCreation;
+  result := fThreadIDAtCreation;
 end;
 
 function TServicePerThread.GetContextServiceInstanceID: PtrUInt;
 begin
   with ServiceRunningContext^ do
     if Request = nil then
-      Result := 0
+      result := 0
     else
     begin
-      Result := Request.ServiceInstanceID;
-      if Result <> PtrUInt(GetThreadID) then
-        raise Exception.Create('Unexpected ThreadID');
+      result := Request.ServiceInstanceID;
+      if result <> GetThreadID then
+        ESynException.RaiseUtf8('%.GetContextServiceInstanceID=%<>%',
+          [self, result, GetThreadID]);
     end;
 end;
 
@@ -809,24 +853,267 @@ var
   Thread: TThread;
 begin
   Thread := ServiceRunningContext.RunningThread;
-  if (Thread = nil) and
-     (GlobalInterfaceTestMode = itmHttp) then
-    raise Exception.Create('Unexpected Thread=nil');
   if Thread = nil then
-    Result := 0
+    result := 0
   else
   begin
-    Result := PtrUInt(Thread.ThreadID);
-    if Result <> PtrUInt(GetThreadID) then
-      raise Exception.Create('Unexpected ThreadID');
+    result := PtrUInt(Thread.ThreadID);
+    if result <> GetThreadID then
+      ESynException.RaiseUtf8('%.GetCurrentRunningThreadID=%<>%',
+        [self, result, GetThreadID]);
   end;
 end;
 
 
 { TTestServiceOrientedArchitecture }
 
-procedure TTestServiceOrientedArchitecture.Test(const Inst:
-  TTestServiceInstances; Iterations: Cardinal = 700);
+function TTestServiceOrientedArchitecture.NewClient(
+  aClientSide: TClientSide): TRestClientDBNamed;
+
+  function Ask(client: TRestClientDBNamed; Method, Params, ParamsURI, ParamsObj: RawUtf8;
+    ExpectedResult: integer): RawUtf8;
+  var
+    resp, data, uriencoded, head: RawUtf8;
+  begin
+    Params := ' [ ' + Params + ' ]'; // add some ' ' to test real-world values
+    uriencoded := '?' + UrlEncode(Params);
+    if client.Server.ServicesRouting = TRestServerRoutingRest then
+    begin
+      FastSetString(data, pointer(Params), length(Params)); // =UniqueString
+      CheckEqual(client.URI(
+        'root/calculator.' + Method, 'POST', @resp, nil, @data),
+        ExpectedResult);
+      if ExpectedResult = HTTP_SUCCESS then
+      begin
+        CheckEqual(client.URI(
+          'root/CALCulator.' + Method + uriencoded, 'POST', @data),
+          ExpectedResult);
+        CheckEqual(data, resp, 'alternative URI-encoded-inlined parameters use');
+        CheckEqual(client.URI(
+          'root/Calculator.' + Method + '?' + ParamsURI, 'GET', @data),
+          ExpectedResult);
+        CheckEqual(data, resp,
+          'alternative "param1=value1&param2=value2" URI-encoded scheme');
+        FastSetString(data, pointer(Params), length(Params)); // =UniqueString
+        CheckEqual(client.URI(
+          'root/calculator/' + Method, 'POST', @data, nil, @data),
+          ExpectedResult);
+        CheckEqual(data, resp, 'interface/method routing');
+        FastSetString(data, pointer(Params), length(Params)); // =UniqueString
+        CheckEqual(client.URI(
+          'root/CALCulator/' + Method + uriencoded, 'POST', @data),
+          ExpectedResult);
+        CheckEqual(data, resp, 'alternative URI-encoded-inlined parameters use');
+        CheckEqual(client.URI(
+           'root/Calculator/' + Method + '?' + ParamsURI, 'GET', @data),
+           ExpectedResult);
+        CheckEqual(data, resp,
+          'alternative "param1=value1&param2=value2" URI-encoded scheme');
+        FastSetString(data, pointer(ParamsObj), length(ParamsObj)); // =UniqueString
+        CheckEqual(client.URI(
+          'root/calculator/' + Method, 'POST', @data, nil, @data),
+          ExpectedResult);
+        CheckEqual(data, resp, 'alternative object-encoded-as-body parameters use');
+        head := 'accept: application/xml';
+        CheckEqual(client.URI(
+          'root/Calculator/' + Method + '?' + ParamsURI, 'GET', @data, @head),
+          ExpectedResult);
+        Check(data <> resp, 'returned as XML');
+        CheckEqual(head, XML_CONTENT_TYPE_HEADER);
+        Check(IdemPChar(pointer(data), '<?XML'), 'returned as XML');
+      end;
+    end
+    else if client.Server.ServicesRouting = TRestServerRoutingJsonRpc then
+    begin
+      data := '{"method":"' + Method + '", "params":' + Params + '}';
+      CheckEqual(client.URI(
+        'root/calculator', 'POST', @resp, nil, @data), ExpectedResult);
+    end
+    else
+      raise Exception.Create('Invalid call');
+    result := JsonDecode(resp, 'result', nil, true);
+    if IdemPChar(Pointer(result), '{"result"') then
+      result := JsonDecode(result, 'result', nil, false)
+    else
+      TrimChars(result, 1, 1); // trim '[' + ']'
+    if (result <> '') and
+       (result[1] = '"') then
+      result := UnQuoteSQLString(result); // '"777"' -> '777'
+    if (ExpectedResult = HTTP_SUCCESS) and
+       (client.Server.ServicesRouting = TRestServerRoutingRest) then
+    begin
+      resp := XMLUTF8_HEADER + '<result><Result>' + result + '</Result></result>';
+      CheckEqual(data, resp, 'xml');
+    end;
+  end;
+
+var
+  S: TServiceFactory;
+  i: integer;
+  uid: TID;
+  rout: integer;
+  resp: RawUtf8;
+const
+  ROUTING: array[0..1] of TRestServerURIContextClass = (
+    TRestServerRoutingRest, TRestServerRoutingJsonRpc);
+const
+  ExpectedURI: array[0..5] of RawUtf8 = (
+    'Add', 'Multiply', 'Subtract', 'ToText', 'ToTextFunc', 'Swap');
+  ExpectedParCount: array[0..5] of Integer = (
+    4, 4, 4, 3, 3, 3);
+  ExpectedArgs: array[0..5] of TInterfaceMethodValueTypes = (
+    [imvSelf, imvInteger],
+    [imvSelf, imvInt64],
+    [imvSelf, imvDouble],
+    [imvSelf, imvCurrency, imvRawUtf8],
+    [imvSelf, imvDouble, imvString],
+    [imvSelf, imvDouble]);
+  ExpectedTypes: array[0..4] of string[10] = (
+    'Integer', 'Int64', 'Double', 'Currency', 'Double');
+  ExpectedType: array[0..5] of TInterfaceMethodValueType = (
+    imvInteger, imvInt64, imvDouble, imvCurrency, imvDouble, imvDouble);
+  ExpectedResult: array[0..2] of string[10] = (
+    'Integer', 'Int64', 'Double');
+begin
+  // create model, client and server
+  result := TRestClientDBNamed.Create(
+    TOrmModel.Create([TAuthUser, TAuthGroup]),
+    nil, SQLITE_MEMORY_DATABASE_NAME, TRestServerDB, {useAuth=}true);
+  result.Name := GetEnumNameTrimed(TypeInfo(TClientSide), ord(aClientSide));
+  result.ClientSide := aClientSide;
+  result.Model.Owner := result;
+  result.Server.Server.CreateMissingTables; // if tests are run with no db
+  uid := result.Server.Orm.MainFieldID(TAuthGroup, 'User');
+  Check(uid <> 0, 'server orm');
+  CheckEqual(result.Orm.MainFieldID(TAuthGroup, 'User'), 0, 'client orm');
+  Check(result.SetUser('User', 'synopse'), 'default user for Security tests');
+  Check(result.Server.ServiceRegister(TServiceCalculator,
+    [TypeInfo(ICalculator)], sicShared) <> nil,
+    'register TServiceCalculator as the ICalculator implementation on the server');
+  // verify ICalculator RTTI-generated details
+  Check(result.Server.Services <> nil);
+  if CheckFailed(result.Server.Services.Count = 1) then
+    exit;
+  S := result.Server.Services.Index(0);
+  if CheckFailed(S <> nil) then
+    exit;
+  Check(S.InterfaceURI = 'Calculator');
+  Check(S.InstanceCreation = sicShared);
+  Check(S.InterfaceTypeInfo^.Kind = rkInterface);
+  Check(S.InterfaceTypeInfo^.Name^ = 'ICalculator');
+  Check(GuidToString(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
+  Check(GuidToRawUtf8(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
+  Check(S.InterfaceMangledURI = '7chgmrLOCU6H1EoW9Jbl_g');
+  result.Server.Services.ExpectMangledURI := true;
+  Check(result.Server.Services[S.InterfaceMangledURI] = S);
+  result.Server.Services.ExpectMangledURI := false;
+  Check(result.Server.Services['Calculator'] = S);
+  Check(result.Server.Services['CALCULAtor'] = S);
+  Check(result.Server.Services['CALCULAtors'] = nil);
+  if CheckFailed(length(S.InterfaceFactory.Methods) = 15) then
+    exit;
+  //JsonReformatToFile(S.Contract, 'contract.json');
+  //FileFromString(S.ContractHash, 'contract.hash');
+  CheckEqual(S.ContractHash, '"8AB8C2407CD836D7"');
+  Check(TServiceCalculator(nil).Test(1, 2) = '3');
+  Check(TServiceCalculator(nil).ToTextFunc(777) = '777');
+  for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
+    with S.InterfaceFactory.Methods[i] do
+    begin
+      Check(URI = ExpectedURI[i]);
+      Check(length(Args) = ExpectedParCount[i]);
+      Check(ArgsUsed = ExpectedArgs[i]);
+      Check(Args[0].ParamName^ = 'Self');
+      Check(Args[0].ValueDirection = imdConst);
+      Check(Args[0].ValueType = imvSelf);
+      Check(Args[0].ArgTypeName^ = 'ICalculator');
+      Check(Args[1].ValueType = ExpectedType[i]);
+      if i < 3 then
+      begin
+        // 0 function Add(n1,n2: integer): integer;
+        // 1 function Multiply(n1,n2: Int64): Int64;
+        // 2 function Subtract(n1,n2: double): double;
+        Check(Args[1].ParamName^ = 'n1');
+        Check(Args[1].ValueDirection = imdConst);
+        Check(Args[2].ParamName^ = 'n2');
+        Check(Args[2].ValueDirection = imdConst);
+        Check(Args[2].ValueType = ExpectedType[i]);
+        Check(IdemPropName(Args[3].ArgTypeName^, ExpectedTypes[i]),
+          string(Args[3].ArgTypeName^));
+        Check(Args[3].ValueDirection = imdResult);
+        Check(Args[3].ValueType = ExpectedType[i]);
+      end
+      else if i < 5 then
+      begin
+        // 3 procedure ToText(Value: Currency; var Result: RawUtf8);
+        // 4 function ToTextFunc(Value: double): string;
+        Check(Args[1].ParamName^ = 'Value');
+        Check(Args[1].ValueDirection = imdConst);
+        Check(Args[2].ParamName^ = 'Result');
+        if i < 4 then
+          Check(Args[2].ValueDirection = imdVar)
+        else
+          Check(Args[2].ValueDirection = imdResult);
+        if i < 4 then
+          Check(Args[2].ValueType = imvRawUtf8)
+        else
+          Check(Args[2].ValueType = imvString);
+      end
+      else
+      begin
+        // 5 procedure Swap(var n1,n2: double);
+        Check(Args[1].ParamName^ = 'n1');
+        Check(Args[1].ValueDirection = imdVar);
+        Check(Args[2].ParamName^ = 'n2');
+        Check(Args[2].ValueDirection = imdVar);
+      end;
+    end;
+  // IComplexCalculator + IComplexNumber services
+  Check(result.Server.ServiceRegister(
+    TServiceComplexCalculator, [TypeInfo(IComplexCalculator)], sicSingle) <> nil);
+  Check(result.Server.ServiceRegister(
+    TServiceComplexNumber, [TypeInfo(IComplexNumber)], sicClientDriven) <> nil);
+  Check(result.Server.ServiceRegister(
+    TServiceUserGroupSession, [TypeInfo(ITestSession)], sicPerSession) <> nil);
+  Check(result.Server.ServiceRegister(
+    TServiceUserGroupSession, [TypeInfo(ITestUser)], sicPerUser) <> nil);
+  Check(result.Server.ServiceRegister(
+    TServiceUserGroupSession, [TypeInfo(ITestGroup)], sicPerGroup) <> nil);
+  Check(result.Server.ServiceRegister(
+    TServicePerThread, [TypeInfo(ITestPerThread)], sicPerThread) <> nil);
+  // Json-level access
+  for rout := low(ROUTING) to high(ROUTING) do
+  begin
+    result.ServicesRouting := ROUTING[rout].ClientRouting;
+    result.Server.ServicesRouting := ROUTING[rout];
+    if rout = 0 then
+      (result.Server.Services['Calculator'] as TServiceFactoryServer).
+        ResultAsXMLObjectIfAcceptOnlyXML := true;
+    CheckEqual(Ask(result, 'None', '1,2', 'one=1&two=2',
+      '{one:1,two=2}', HTTP_BADREQUEST), '');
+    CheckEqual(Ask(result, 'Add', '1,2', 'n1=1&n2=2',
+      '{n1:1,n2:2}', HTTP_SUCCESS), '3');
+    CheckEqual(Ask(result, 'Add', '1,0', 'n2=1',
+      '{n2:1}', HTTP_SUCCESS), '1');
+    CheckEqual(Ask(result, 'Multiply', '2,3', 'n1=2&n2=3',
+      '{n0:"abc",n2:3,m:null,n1:2}', HTTP_SUCCESS), '6');
+    CheckEqual(Ask(result, 'Subtract', '23,20', 'n2=20&n1=23',
+      '{n0:"abc",n2:20,n1:23}', HTTP_SUCCESS), '3');
+    CheckEqual(Ask(result, 'ToText', '777,"abc"', 'result=abc&value=777',
+      '{result:"abc",value=777}', HTTP_SUCCESS), '777');
+    CheckEqual(Ask(result, 'ToTextFunc', '777', 'value=777',
+      '{result:"abc",value=777}', HTTP_SUCCESS), '777');
+    if rout = 0 then
+      CheckEqual(result.URI(
+        'root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe', 'POST',
+          @resp, nil, nil), 406, 'incorrect input');
+  end;
+  result.ServicesRouting := TRestServerRoutingRest.ClientRouting; // back to default
+  result.Server.ServicesRouting := TRestServerRoutingRest;
+end;
+
+procedure TTestServiceOrientedArchitecture.Test(
+  const Inst: TTestServiceInstances; Iterations: cardinal);
 
   procedure TestCalculator(const I: ICalculator);
   var
@@ -941,7 +1228,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       CheckEqual(l1.U[i1], s, 'RJA');
     c := 1; // within the same process, no need to push this request
     n := 100;
-    if GlobalInterfaceTestMode = itmHttp then
+    if Inst.ClientSide in [csHttp, csHttpLog] then
     begin
       c := 50; // >5000 for very agressive tests
       n := 1000; // generate a 600KB response (e.g. test IOCP background send)
@@ -973,7 +1260,7 @@ var
   Item: TCollTest;
   List, Copy: TCollTestsI;
   n, j: integer;
-  x, y: PtrUInt; // TThreadID  = ^TThreadRec under BSD
+  w, x, y, z: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   V1, V2, V3: variant;
   {$ifndef HASNOSTATICRTTI}
   Nav, Nav2: TConsultaNav;
@@ -988,17 +1275,23 @@ begin
   CheckEqual(s, '3.14');
   Check(Inst.I.ToTextFunc(777) = '777', '777');
   x := Inst.CT.GetCurrentThreadID;
-  if GlobalInterfaceTestMode <> itmHttp then
+  Check(x <> 0, 'x');
+  if not (Inst.ClientSide in [csHttp, csHttpLog]) then
   begin
     y := Inst.CT.GetThreadIDAtCreation;
     Check(x = y, 'x=y');
   end;
-  case GlobalInterfaceTestMode of
-    itmMainThread:
-      Check(Inst.CC.GetCurrentThreadID = PtrUInt(MainThreadID), 'thrd1');
-    itmPerInterfaceThread,
-    itmLocked:
-      Check(Inst.CC.GetCurrentThreadID <> PtrUInt(MainThreadID), 'thrd2');
+  y := Inst.CC.GetCurrentThreadID;
+  Check(y <> 0, 'y');
+  case Inst.ClientSide of
+    csDirect,
+    csServer,
+    csMainThread:
+      Check(y = PtrUInt(MainThreadID), 'thrd1');
+    csBackground,
+    csHttp,
+    csHttpLog:
+      Check(y <> PtrUInt(MainThreadID), 'thrd2');
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -1022,7 +1315,7 @@ begin
       Inst.CC.Substract(C1, C2, C3);
       CheckSame(C3.Real, c - 18.0);
       CheckSame(C3.Imaginary, -27);
-      cust := Inst.CC.TestBlob(C3);
+      cust := Inst.CC.TestBlob(C3, Inst.ClientSide);
       Check(PosEx(TEXT_CONTENT_TYPE_HEADER, cust.Header) > 0);
       FormatUtf8('%,%', [C3.Real, C3.Imaginary], s);
       CheckEqual(cust.Content, s);
@@ -1128,7 +1421,7 @@ begin
       C1.Real := C1.Real + 1;
     end;
     C3.Real := maxInt; // magic value for huge content
-    cust := Inst.CC.TestBlob(C3);
+    cust := Inst.CC.TestBlob(C3, Inst.ClientSide);
     j := length(cust.Content);
     checkutf8(j = 600, 'TestBlob len=%', [j]);
   finally
@@ -1159,47 +1452,47 @@ begin
   Inst.CN.Assign(3.14, 1.05946);
   CheckSame(Inst.CN.Real, 3.14);
   CheckSame(Inst.CN.Imaginary, 1.05946);
-  Check(Inst.CU.GetContextSessionID = Inst.ExpectedSessionID);
-  Check(Inst.CG.GetContextSessionGroup = Inst.ExpectedGroupID);
-  Check(Inst.CS.GetContextSessionUser = Inst.ExpectedUserID);
+  CheckEqual(Inst.CU.GetContextSessionID, Inst.ExpectedSessionID, 'session');
+  CheckEqual(Inst.CG.GetContextSessionGroup, Inst.ExpectedGroupID, 'group');
+  CheckEqual(Inst.CS.GetContextSessionUser, Inst.ExpectedUserID, 'user');
+  w := Inst.CT.GetContextServiceInstanceID;
   x := Inst.CT.GetCurrentThreadID;
+  Check(x <> 0, 'x0');
   y := Inst.CT.GetThreadIDAtCreation;
-  case GlobalInterfaceTestMode of
-    itmDirect:
+  z := Inst.CT.GetCurrentRunningThreadID;
+  case Inst.ClientSide of
+    csServer,
+    csDirect:
       begin
         Check(x = y);
-        Check(Inst.CT.GetCurrentRunningThreadID = 0);
-        Check(Inst.CT.GetContextServiceInstanceID = 0);
+        Check(x = PtrUInt(MainThreadID));
+        Check(z = 0);
+        Check(w = 0);
       end;
-    itmClient,
-    itmPerInterfaceThread:
+    csHttp,
+    csHttpLog:
       begin
-        Check(x = y);
-        Check(Inst.CT.GetCurrentRunningThreadID = 0);
-        Check(Inst.CT.GetContextServiceInstanceID <> 0);
+        Check(z <> 0);
+        Check(x <> PtrUInt(MainThreadID));
+        Check(y <> PtrUInt(MainThreadID));
+        Check(w <> 0);
       end;
-    itmLocked,
-    itmMainThread:
-      begin
-        Check(x = y);
-        Check(Inst.CT.GetCurrentRunningThreadID <> 0);
-        Check(Inst.CT.GetContextServiceInstanceID <> 0);
-      end;
-    itmHttp:
-      begin
-        Check(Inst.CT.GetCurrentRunningThreadID <> 0);
-        Check(Inst.CT.GetCurrentThreadID <> PtrUInt(MainThreadID));
-        Check(Inst.CT.GetContextServiceInstanceID <> 0);
-      end;
+  // csLocked, csMainThread, csBackground does not apply to CC: ITestPerThread
+  else
+    begin
+      Check(x = y);
+      Check(z = 0);
+      Check(w <> 0);
+    end;
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.SetOptions(aAsJsonObject: boolean;
+procedure SetOptions(aClient: TRestClientDBNamed; aAsJsonObject: boolean;
   aOptions: TInterfaceMethodOptions);
 var
   s: integer;
 begin
-  with fClient.Server.Services do
+  with aClient.Server.Services do
     for s := 0 to count - 1 do
       with Index(s) as TServiceFactoryServer do
       begin
@@ -1209,89 +1502,98 @@ begin
       end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientTest(
+procedure TTestServiceOrientedArchitecture.ClientTest(aClient: TRestClientDBNamed;
   aRouting: TRestServerUriContextClass; aAsJsonObject: boolean;
   aRunInOtherThread: boolean; aOptions: TInterfaceMethodOptions);
 var
   Inst: TTestServiceInstances;
   O: TObject;
-  sign, sign2: RawUtf8;
+  sign, sign2, ok: RawUtf8;
   stat: TSynMonitorInputOutput;
+  timer: TPrecisionTimer;
 begin
- // exit;
+  if CheckFailed(aClient <> nil) then
+    exit;
   FillCharFast(Inst, SizeOf(Inst), 0);
-  GlobalInterfaceTestMode := itmClient;
-  if aRunInOtherThread then
-    if optExecLockedPerInterface in aOptions then
-      GlobalInterfaceTestMode := itmLocked
-    else if optExecInMainThread in aOptions then
-      GlobalInterfaceTestMode := itmMainThread
-    else if optExecInPerInterfaceThread in aOptions then
-      GlobalInterfaceTestMode := itmPerInterfaceThread;
-  (fClient.Services['Calculator'] as TServiceFactoryClient).
-    ParamsAsJsonObject := aAsJsonObject;
-  SetOptions(aAsJsonObject, aOptions);
-  fClient.Server.ServicesRouting := aRouting;
-  fClient.ServicesRouting := aRouting.ClientRouting;
-  (fClient.Server.Services as TServiceContainerServer).PublishSignature := true;
-  sign := fClient.Services['Calculator'].RetrieveSignature;
-  sign2 := fClient.Server.Services['Calculator'].RetrieveSignature;
-  CheckEqual(sign, sign2, 'sign');
-  (fClient.Server.Services as TServiceContainerServer).PublishSignature := false;
-  CheckEqual(fClient.Services['Calculator'].RetrieveSignature, '');
-  // once registered, can be accessed by its GUID or URI
-  if CheckFailed(
-       fClient.Services.Info(TypeInfo(ICalculator)).Get(Inst.I)) or
-     CheckFailed(
-       fClient.Services.Info(TypeInfo(IComplexCalculator)).Get(Inst.CC)) or
-     CheckFailed(
-       fClient.Services.Info(TypeInfo(IComplexNumber)).Get(Inst.CN)) or
-     CheckFailed(
-       fClient.Services.Info(TypeInfo(ITestUser)).Get(Inst.CU)) or
-     CheckFailed(
-       fClient.Services.Info(TypeInfo(ITestSession)).Get(Inst.CS)) or
-     CheckFailed(
-       fClient.Services.Info(TypeInfo(ITestGroup)).Get(Inst.CG)) or
-     CheckFailed(
-       fClient.Services.Info(TypeInfo(ITestPerThread)).Get(Inst.CT)) then
-    exit;
-  O := ObjectFromInterface(Inst.I);
-  Check((O <> nil) and
-        (Copy(O.ClassName, 1, 21) = 'TInterfacedObjectFake'));
-  Inst.ExpectedSessionID := fClient.SessionID;
-  if CheckFailed(fClient.SessionUser <> nil) then
-    exit;
-  fClient.Orm.Retrieve('LogonName=?', [], [fClient.SessionUser.LogonName],
-    fClient.SessionUser);
-  Inst.ExpectedUserID := fClient.SessionUser.ID;
-  Inst.ExpectedGroupID := fClient.SessionUser.GroupRights.ID;
-  Test(Inst);
-  Inst.I := nil;
-  if CheckFailed(fClient.Services.Info(ICalculator).Get(Inst.I)) then
-    exit;
-  Test(Inst);
-  Inst.I := nil;
-  if CheckFailed(fClient.Services.Resolve(ICalculator, Inst.I)) then
-    exit;
-  Test(Inst);
-  Finalize(Inst);
-  if CheckFailed(fClient.Services['Calculator'].Get(Inst.I)) or
-     CheckFailed(fClient.Services['ComplexCalculator'].Get(Inst.CC)) or
-     CheckFailed(fClient.Services['ComplexNumber'].Get(Inst.CN)) or
-     CheckFailed(fClient.Services['TestUser'].Get(Inst.CU)) or
-     CheckFailed(fClient.Services['TestSession'].Get(Inst.CS)) or
-     CheckFailed(fClient.Services['TestGroup'].Get(Inst.CG)) or
-     CheckFailed(fClient.Services['testperthread'].Get(Inst.CT)) then
-    exit;
-  {$ifndef CPUARM}
-  // The FPC arm optimizer ruins a return address at level -O2
-  // So, disable this test until a suitable fix is found.
-  Inst.CN.Imaginary;
-  {$endif CPUARM}
-  Test(Inst);
-  SetOptions(false, []);
-  stat := (fClient.Server.Services['Calculator'] as TServiceFactoryServer).stat['ToText'];
-  Check(stat.TaskCount > 0);
+  Inst.ClientSide := aClient.ClientSide;
+  ok := '!';
+  timer.Start;
+  try
+    Check(aClient.ServiceRegister([TypeInfo(ICalculator)], sicShared));
+    Check(aClient.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
+    Check(aClient.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
+    Check(aClient.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
+    Check(aClient.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
+    Check(aClient.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
+    (aClient.Services['Calculator'] as TServiceFactoryClient).
+      ParamsAsJsonObject := aAsJsonObject;
+    SetOptions(aClient, aAsJsonObject, aOptions);
+    aClient.Server.ServicesRouting := aRouting;
+    aClient.ServicesRouting := aRouting.ClientRouting;
+    (aClient.Server.Services as TServiceContainerServer).PublishSignature := true;
+    sign := aClient.Services['Calculator'].RetrieveSignature;
+    sign2 := aClient.Server.Services['Calculator'].RetrieveSignature;
+    CheckEqual(sign, sign2, 'sign');
+    (aClient.Server.Services as TServiceContainerServer).PublishSignature := false;
+    CheckEqual(aClient.Services['Calculator'].RetrieveSignature, '');
+    // once registered, can be accessed by its GUID or URI
+    if CheckFailed(
+         aClient.Services.Info(TypeInfo(ICalculator)).Get(Inst.I)) or
+       CheckFailed(
+         aClient.Services.Info(TypeInfo(IComplexCalculator)).Get(Inst.CC)) or
+       CheckFailed(
+         aClient.Services.Info(TypeInfo(IComplexNumber)).Get(Inst.CN)) or
+       CheckFailed(
+         aClient.Services.Info(TypeInfo(ITestUser)).Get(Inst.CU)) or
+       CheckFailed(
+         aClient.Services.Info(TypeInfo(ITestSession)).Get(Inst.CS)) or
+       CheckFailed(
+         aClient.Services.Info(TypeInfo(ITestGroup)).Get(Inst.CG)) or
+       CheckFailed(
+         aClient.Services.Info(TypeInfo(ITestPerThread)).Get(Inst.CT)) then
+      exit;
+    O := ObjectFromInterface(Inst.I);
+    Check((O <> nil) and
+          (Copy(O.ClassName, 1, 21) = 'TInterfacedObjectFake'));
+    Inst.ExpectedSessionID := aClient.SessionID;
+    if CheckFailed(aClient.SessionUser <> nil) then
+      exit;
+    aClient.Orm.Retrieve('LogonName=?', [], [aClient.SessionUser.LogonName],
+      aClient.SessionUser);
+    Inst.ExpectedUserID := aClient.SessionUser.ID;
+    Inst.ExpectedGroupID := aClient.SessionUser.GroupRights.ID;
+    Test(Inst);
+    Inst.I := nil;
+    if CheckFailed(aClient.Services.Info(ICalculator).Get(Inst.I)) then
+      exit;
+    Test(Inst);
+    Inst.I := nil;
+    if CheckFailed(aClient.Services.Resolve(ICalculator, Inst.I)) then
+      exit;
+    Test(Inst);
+    Finalize(Inst);
+    if CheckFailed(aClient.Services['Calculator'].Get(Inst.I)) or
+       CheckFailed(aClient.Services['ComplexCalculator'].Get(Inst.CC)) or
+       CheckFailed(aClient.Services['ComplexNumber'].Get(Inst.CN)) or
+       CheckFailed(aClient.Services['TestUser'].Get(Inst.CU)) or
+       CheckFailed(aClient.Services['TestSession'].Get(Inst.CS)) or
+       CheckFailed(aClient.Services['TestGroup'].Get(Inst.CG)) or
+       CheckFailed(aClient.Services['testperthread'].Get(Inst.CT)) then
+      exit;
+    {$ifndef CPUARM}
+    // The FPC arm optimizer ruins a return address at level -O2
+    // So, disable this test until a suitable fix is found.
+    Inst.CN.Imaginary;
+    {$endif CPUARM}
+    Test(Inst);
+    SetOptions(aClient, false, []);
+    stat := (aClient.Server.Services['Calculator'] as TServiceFactoryServer).stat['ToText'];
+    Check(stat.TaskCount > 0);
+    ok := '';
+  finally
+    if aClient.Name <> '' then
+      NotifyProgress([ok, aClient.Name, '=', timer.StopInMicroSec div 1000, 'ms']);
+  end;
 end;
 
 procedure TTestServiceOrientedArchitecture.DirectCall;
@@ -1299,6 +1601,7 @@ var
   Inst: TTestServiceInstances;
 begin
   FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
+  Inst.ClientSide := csDirect;
   Inst.I := TServiceCalculator.Create;
   Inst.CC := TServiceComplexCalculator.Create;
   Inst.CN := TServiceComplexNumber.Create;
@@ -1315,283 +1618,41 @@ procedure TTestServiceOrientedArchitecture.ServerSide;
 var
   Inst: TTestServiceInstances;
 begin
+  fMain := NewClient(csServer);
   FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
-  if CheckFailed(fClient <> nil) or
-     CheckFailed(fClient.Server.Services.Count = 7) or
-     CheckFailed(fClient.Server.Services.Index(0).Get(Inst.I)) or
+  Inst.ClientSide := csServer;
+  if CheckFailed(fMain <> nil) or
+     CheckFailed(fMain.Server.Services.Count = 7) or
+     CheckFailed(fMain.Server.Services.Index(0).Get(Inst.I)) or
      CheckFailed(Assigned(Inst.I)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(ICalculator)).Get(Inst.I)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(IComplexCalculator)).Get(Inst.CC)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(IComplexNumber)).Get(Inst.CN)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(ITestUser)).Get(Inst.CU)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(ITestSession)).Get(Inst.CS)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(ITestGroup)).Get(Inst.CG)) or
-     CheckFailed(fClient.Server.Services.Info(
+     CheckFailed(fMain.Server.Services.Info(
        TypeInfo(ITestPerThread)).Get(Inst.CT)) then
     exit;
   Test(Inst);
   Finalize(Inst);
   Check(Inst.I = nil);
-  if CheckFailed(fClient.Server.Services['Calculator'].Get(Inst.I)) or
-     CheckFailed(fClient.Server.Services['ComplexCalculator'].Get(Inst.CC)) or
-     CheckFailed(fClient.Server.Services['ComplexNumber'].Get(Inst.CN)) or
-     CheckFailed(fClient.Server.Services['TestUser'].Get(Inst.CU)) or
-     CheckFailed(fClient.Server.Services['TestSession'].Get(Inst.CS)) or
-     CheckFailed(fClient.Server.Services['TestGroup'].Get(Inst.CG)) or
-     CheckFailed(fClient.Server.Services['TestPerThread'].Get(Inst.CT)) then
+  if CheckFailed(fMain.Server.Services['Calculator'].Get(Inst.I)) or
+     CheckFailed(fMain.Server.Services['ComplexCalculator'].Get(Inst.CC)) or
+     CheckFailed(fMain.Server.Services['ComplexNumber'].Get(Inst.CN)) or
+     CheckFailed(fMain.Server.Services['TestUser'].Get(Inst.CU)) or
+     CheckFailed(fMain.Server.Services['TestSession'].Get(Inst.CS)) or
+     CheckFailed(fMain.Server.Services['TestGroup'].Get(Inst.CG)) or
+     CheckFailed(fMain.Server.Services['TestPerThread'].Get(Inst.CT)) then
     exit;
   Test(Inst);
   Test(Inst);
-end;
-
-procedure TTestServiceOrientedArchitecture.ServiceInitialization;
-
-  function Ask(Method, Params, ParamsURI, ParamsObj: RawUtf8;
-    ExpectedResult: integer): RawUtf8;
-  var
-    resp, data, uriencoded, head: RawUtf8;
-  begin
-    Params := ' [ ' + Params + ' ]'; // add some ' ' to test real-world values
-    uriencoded := '?' + UrlEncode(Params);
-    if fClient.Server.ServicesRouting = TRestServerRoutingRest then
-    begin
-      FastSetString(data, pointer(Params), length(Params)); // =UniqueString
-      CheckEqual(fClient.URI(
-        'root/calculator.' + Method, 'POST', @resp, nil, @data),
-        ExpectedResult);
-      if ExpectedResult = HTTP_SUCCESS then
-      begin
-        CheckEqual(fClient.URI(
-          'root/CALCulator.' + Method + uriencoded, 'POST', @data),
-          ExpectedResult);
-        CheckEqual(data, resp, 'alternative URI-encoded-inlined parameters use');
-        CheckEqual(fClient.URI(
-          'root/Calculator.' + Method + '?' + ParamsURI, 'GET', @data),
-          ExpectedResult);
-        CheckEqual(data, resp,
-          'alternative "param1=value1&param2=value2" URI-encoded scheme');
-        FastSetString(data, pointer(Params), length(Params)); // =UniqueString
-        CheckEqual(fClient.URI(
-          'root/calculator/' + Method, 'POST', @data, nil, @data),
-          ExpectedResult);
-        CheckEqual(data, resp, 'interface/method routing');
-        FastSetString(data, pointer(Params), length(Params)); // =UniqueString
-        CheckEqual(fClient.URI(
-          'root/CALCulator/' + Method + uriencoded, 'POST', @data),
-          ExpectedResult);
-        CheckEqual(data, resp, 'alternative URI-encoded-inlined parameters use');
-        CheckEqual(fClient.URI(
-           'root/Calculator/' + Method + '?' + ParamsURI, 'GET', @data),
-           ExpectedResult);
-        CheckEqual(data, resp,
-          'alternative "param1=value1&param2=value2" URI-encoded scheme');
-        FastSetString(data, pointer(ParamsObj), length(ParamsObj)); // =UniqueString
-        CheckEqual(fClient.URI(
-          'root/calculator/' + Method, 'POST', @data, nil, @data),
-          ExpectedResult);
-        CheckEqual(data, resp, 'alternative object-encoded-as-body parameters use');
-        head := 'accept: application/xml';
-        CheckEqual(fClient.URI(
-          'root/Calculator/' + Method + '?' + ParamsURI, 'GET', @data, @head),
-          ExpectedResult);
-        Check(data <> resp, 'returned as XML');
-        CheckEqual(head, XML_CONTENT_TYPE_HEADER);
-        Check(IdemPChar(pointer(data), '<?XML'), 'returned as XML');
-      end;
-    end
-    else if fClient.Server.ServicesRouting = TRestServerRoutingJsonRpc then
-    begin
-      data := '{"method":"' + Method + '", "params":' + Params + '}';
-      CheckEqual(fClient.URI(
-        'root/calculator', 'POST', @resp, nil, @data), ExpectedResult);
-    end
-    else
-      raise Exception.Create('Invalid call');
-    result := JsonDecode(resp, 'result', nil, true);
-    if IdemPChar(Pointer(result), '{"result"') then
-      result := JsonDecode(result, 'result', nil, false)
-    else
-      TrimChars(result, 1, 1); // trim '[' + ']'
-    if (result <> '') and
-       (result[1] = '"') then
-      result := UnQuoteSQLString(result); // '"777"' -> '777'
-    if (ExpectedResult = HTTP_SUCCESS) and
-       (fClient.Server.ServicesRouting = TRestServerRoutingRest) then
-    begin
-      resp := XMLUTF8_HEADER + '<result><Result>' + result + '</Result></result>';
-      CheckEqual(data, resp, 'xml');
-    end;
-  end;
-
-var
-  S: TServiceFactory;
-  i: integer;
-  uid: TID;
-  rout: integer;
-  resp: RawUtf8;
-const
-  ROUTING: array[0..1] of TRestServerURIContextClass = (
-    TRestServerRoutingRest, TRestServerRoutingJsonRpc);
-const
-  ExpectedURI: array[0..5] of RawUtf8 = (
-    'Add', 'Multiply', 'Subtract', 'ToText', 'ToTextFunc', 'Swap');
-  ExpectedParCount: array[0..5] of Integer = (
-    4, 4, 4, 3, 3, 3);
-  ExpectedArgs: array[0..5] of TInterfaceMethodValueTypes = (
-    [imvSelf, imvInteger],
-    [imvSelf, imvInt64],
-    [imvSelf, imvDouble],
-    [imvSelf, imvCurrency, imvRawUtf8],
-    [imvSelf, imvDouble, imvString],
-    [imvSelf, imvDouble]);
-  ExpectedTypes: array[0..4] of string[10] = (
-    'Integer', 'Int64', 'Double', 'Currency', 'Double');
-  ExpectedType: array[0..5] of TInterfaceMethodValueType = (
-    imvInteger, imvInt64, imvDouble, imvCurrency, imvDouble, imvDouble);
-  ExpectedResult: array[0..2] of string[10] = (
-    'Integer', 'Int64', 'Double');
-begin
-  if CheckFailed(fClient = nil) then
-    exit; // should be called once
-  // create model, client and server
-  fClient := TRestClientDB.Create(
-    TOrmModel.Create([TAuthUser, TAuthGroup]),
-    nil, SQLITE_MEMORY_DATABASE_NAME, TRestServerDB, {useAuth=}true);
-  fClient.Model.Owner := fClient;
-  fClient.Server.Server.CreateMissingTables; // if tests are run with no db
-  uid := fClient.Server.Orm.MainFieldID(TAuthGroup, 'User');
-  Check(uid <> 0, 'server orm');
-  CheckEqual(fClient.Orm.MainFieldID(TAuthGroup, 'User'), 0, 'client orm');
-  Check(fClient.SetUser('User', 'synopse'), 'default user for Security tests');
-  Check(fClient.Server.ServiceRegister(TServiceCalculator,
-    [TypeInfo(ICalculator)], sicShared) <> nil,
-    'register TServiceCalculator as the ICalculator implementation on the server');
-  // verify ICalculator RTTI-generated details
-  Check(fClient.Server.Services <> nil);
-  if CheckFailed(fClient.Server.Services.Count = 1) then
-    exit;
-  S := fClient.Server.Services.Index(0);
-  if CheckFailed(S <> nil) then
-    exit;
-  Check(S.InterfaceURI = 'Calculator');
-  Check(S.InstanceCreation = sicShared);
-  Check(S.InterfaceTypeInfo^.Kind = rkInterface);
-  Check(S.InterfaceTypeInfo^.Name^ = 'ICalculator');
-  Check(GuidToString(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
-  Check(GuidToRawUtf8(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
-  Check(S.InterfaceMangledURI = '7chgmrLOCU6H1EoW9Jbl_g');
-  fClient.Server.Services.ExpectMangledURI := true;
-  Check(fClient.Server.Services[S.InterfaceMangledURI] = S);
-  fClient.Server.Services.ExpectMangledURI := false;
-  Check(fClient.Server.Services['Calculator'] = S);
-  Check(fClient.Server.Services['CALCULAtor'] = S);
-  Check(fClient.Server.Services['CALCULAtors'] = nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods) = 15) then
-    exit;
-  //JsonReformatToFile(S.Contract, 'contract.json');
-  //FileFromString(S.ContractHash, 'contract.hash');
-  CheckEqual(S.ContractHash, '"8AB8C2407CD836D7"');
-  Check(TServiceCalculator(nil).Test(1, 2) = '3');
-  Check(TServiceCalculator(nil).ToTextFunc(777) = '777');
-  for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
-    with S.InterfaceFactory.Methods[i] do
-    begin
-      Check(URI = ExpectedURI[i]);
-      Check(length(Args) = ExpectedParCount[i]);
-      Check(ArgsUsed = ExpectedArgs[i]);
-      Check(Args[0].ParamName^ = 'Self');
-      Check(Args[0].ValueDirection = imdConst);
-      Check(Args[0].ValueType = imvSelf);
-      Check(Args[0].ArgTypeName^ = 'ICalculator');
-      Check(Args[1].ValueType = ExpectedType[i]);
-      if i < 3 then
-      begin
-        // 0 function Add(n1,n2: integer): integer;
-        // 1 function Multiply(n1,n2: Int64): Int64;
-        // 2 function Subtract(n1,n2: double): double;
-        Check(Args[1].ParamName^ = 'n1');
-        Check(Args[1].ValueDirection = imdConst);
-        Check(Args[2].ParamName^ = 'n2');
-        Check(Args[2].ValueDirection = imdConst);
-        Check(Args[2].ValueType = ExpectedType[i]);
-        Check(IdemPropName(Args[3].ArgTypeName^, ExpectedTypes[i]),
-          string(Args[3].ArgTypeName^));
-        Check(Args[3].ValueDirection = imdResult);
-        Check(Args[3].ValueType = ExpectedType[i]);
-      end
-      else if i < 5 then
-      begin
-        // 3 procedure ToText(Value: Currency; var Result: RawUtf8);
-        // 4 function ToTextFunc(Value: double): string;
-        Check(Args[1].ParamName^ = 'Value');
-        Check(Args[1].ValueDirection = imdConst);
-        Check(Args[2].ParamName^ = 'Result');
-        if i < 4 then
-          Check(Args[2].ValueDirection = imdVar)
-        else
-          Check(Args[2].ValueDirection = imdResult);
-        if i < 4 then
-          Check(Args[2].ValueType = imvRawUtf8)
-        else
-          Check(Args[2].ValueType = imvString);
-      end
-      else
-      begin
-        // 5 procedure Swap(var n1,n2: double);
-        Check(Args[1].ParamName^ = 'n1');
-        Check(Args[1].ValueDirection = imdVar);
-        Check(Args[2].ParamName^ = 'n2');
-        Check(Args[2].ValueDirection = imdVar);
-      end;
-    end;
-  // IComplexCalculator + IComplexNumber services
-  Check(fClient.Server.ServiceRegister(
-    TServiceComplexCalculator, [TypeInfo(IComplexCalculator)], sicSingle) <> nil);
-  Check(fClient.Server.ServiceRegister(
-    TServiceComplexNumber, [TypeInfo(IComplexNumber)], sicClientDriven) <> nil);
-  Check(fClient.Server.ServiceRegister(
-    TServiceUserGroupSession, [TypeInfo(ITestSession)], sicPerSession) <> nil);
-  Check(fClient.Server.ServiceRegister(
-    TServiceUserGroupSession, [TypeInfo(ITestUser)], sicPerUser) <> nil);
-  Check(fClient.Server.ServiceRegister(
-    TServiceUserGroupSession, [TypeInfo(ITestGroup)], sicPerGroup) <> nil);
-  Check(fClient.Server.ServiceRegister(
-    TServicePerThread, [TypeInfo(ITestPerThread)], sicPerThread) <> nil);
-  // Json-level access
-  for rout := low(ROUTING) to high(ROUTING) do
-  begin
-    fClient.ServicesRouting := ROUTING[rout].ClientRouting;
-    fClient.Server.ServicesRouting := ROUTING[rout];
-    if rout = 0 then
-      (fClient.Server.Services['Calculator'] as TServiceFactoryServer).
-        ResultAsXMLObjectIfAcceptOnlyXML := true;
-    CheckEqual(Ask('None', '1,2', 'one=1&two=2',
-      '{one:1,two=2}', HTTP_BADREQUEST), '');
-    CheckEqual(Ask('Add', '1,2', 'n1=1&n2=2',
-      '{n1:1,n2:2}', HTTP_SUCCESS), '3');
-    CheckEqual(Ask('Add', '1,0', 'n2=1',
-      '{n2:1}', HTTP_SUCCESS), '1');
-    CheckEqual(Ask('Multiply', '2,3', 'n1=2&n2=3',
-      '{n0:"abc",n2:3,m:null,n1:2}', HTTP_SUCCESS), '6');
-    CheckEqual(Ask('Subtract', '23,20', 'n2=20&n1=23',
-      '{n0:"abc",n2:20,n1:23}', HTTP_SUCCESS), '3');
-    CheckEqual(Ask('ToText', '777,"abc"', 'result=abc&value=777',
-      '{result:"abc",value=777}', HTTP_SUCCESS), '777');
-    CheckEqual(Ask('ToTextFunc', '777', 'value=777',
-      '{result:"abc",value=777}', HTTP_SUCCESS), '777');
-    if rout = 0 then
-      CheckEqual(fClient.URI(
-        'root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe', 'POST',
-          @resp, nil, nil), 406, 'incorrect input');
-  end;
-  fClient.ServicesRouting := TRestServerRoutingRest.ClientRouting; // back to default
-  fClient.Server.ServicesRouting := TRestServerRoutingRest;
 end;
 
 procedure TTestServiceOrientedArchitecture.Security;
@@ -1603,7 +1664,7 @@ procedure TTestServiceOrientedArchitecture.Security;
       resp, data: RawUtf8;
     begin
       data := '{"method":"' + Method + '", "params": [ ' + Params + ' ]}';
-      fClient.URI('root/calculator', 'POST', @resp, nil, @data);
+      fMain.URI('root/calculator', 'POST', @resp, nil, @data);
       Result := JsonDecode(resp, 'result', nil, true);
     end;
 
@@ -1626,14 +1687,14 @@ var
   GroupID: TID;
   g: TIDDynArray;
 begin
-  fClient.ServicesRouting := TRestServerRoutingJsonRpc.ClientRouting;
-  fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc;
-  GroupID := fClient.Server.Orm.MainFieldID(TAuthGroup, 'User');
+  fMain.ServicesRouting := TRestServerRoutingJsonRpc.ClientRouting;
+  fMain.Server.ServicesRouting := TRestServerRoutingJsonRpc;
+  GroupID := fMain.Server.Orm.MainFieldID(TAuthGroup, 'User');
   Check(GroupID <> 0);
-  Check(fClient.Server.Orm.MainFieldIDs(TAuthGroup, ['User', 'Admin'], g));
+  Check(fMain.Server.Orm.MainFieldIDs(TAuthGroup, ['User', 'Admin'], g));
   if not CheckFailed(length(g) = 2) then
     Check((g[0] = GroupID) or (g[1] = GroupID));
-  S := fClient.Server.Services['Calculator'] as TServiceFactoryServer;
+  S := fMain.Server.Services['Calculator'] as TServiceFactoryServer;
   Test([1, 2, 3, 4, 5], 'by default, all methods are allowed');
   S.AllowAll;
   Test([1, 2, 3, 4, 5], 'AllowAll should change nothing');
@@ -1657,9 +1718,9 @@ begin
   Test([1, 2, 3, 5], 'allow a specific method for the current user');
   S.AllowAll;
   Test([1, 2, 3, 4, 5], 'restore allowed for the current user');
-  Check(not fClient.SetUser('unknown', 'wrongpass'));
+  Check(not fMain.SetUser('unknown', 'wrongpass'));
   Test([], 'no authentication -> access denied');
-  Check(fClient.SetUser('Admin', 'synopse'));
+  Check(fMain.SetUser('Admin', 'synopse'));
   Test([1, 2, 3, 4, 5], 'authenticated user');
   S.DenyAll;
   Test([], 'DenyAll works even for admins');
@@ -1674,24 +1735,50 @@ begin
   S.AllowAllByName(['Admin']);
   Test([1, 2, 3, 4, 5], 'restore allowed for current Admin user');
   S.AllowAll;
-  Check(fClient.SetUser('User', 'synopse'));
+  Check(fMain.SetUser('User', 'synopse'));
   Test([1, 2, 3, 4, 5], 'restore allowed for everybody');
+  FreeAndNil(fMain);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideREST;
+procedure TTestServiceOrientedArchitecture.ClientSide;
+
+  procedure One(const Event: TNotifyEvent; cs: TClientSide);
+  begin
+    Run(Event, NewClient(cs), SmallUInt32Utf8[ord(cs)],
+      {threaded=}true, {notify=}false, {forcedThreaded=}true);
+  end;
+
 begin
-  Check(fClient.ServiceRegister([TypeInfo(ICalculator)], sicShared));
-  Check(fClient.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
-  Check(fClient.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
-  Check(fClient.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
-  Check(fClient.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
-  Check(fClient.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
-  ClientTest(TRestServerRoutingRest, false);
+  // most client test cases would be run in their own thread (if possible)
+  One(ClientSideRESTMainThread,       csMainThread);
+  One(ClientSideRESTBackgroundThread, csBackground); // start with slowest
+  One(ClientSideRESTAsJsonObject,     csJsonObject);
+  One(ClientSideRESTSessionsStats,    csSessions);
+  One(ClientSideRESTLocked,           csLocked);
+  One(ClientSideRESTSignWithCrc32,    csCrc32);
+  One(ClientSideRESTSignWithCrc32c,   csCrc32c);
+  One(ClientSideRESTSignWithXxhash,   csXxhash);
+  One(ClientSideRESTSignWithMd5,      csMd5);
+  One(ClientSideRESTSignWithSha1,     csSha1);
+  One(ClientSideRESTSignWithSha256,   csSha256);
+  One(ClientSideRESTSignWithSha512,   csSha512);
+  One(ClientSideRESTSignWithSha3,     csSha3);
+  One(ClientSideRESTWeakAuth,         csWeak);
+  One(ClientSideRESTBasicAuth,        csBasic);
+  One(ClientSideRESTServiceLogToDB,   csDblog);
+  One(ClientSideJsonRPC,              csJsonrpc);
+  One(ClientSideOverHTTP,             csHttp);
+  One(ClientSideOverHTTPWithLogs,     csHttplog);
+  // wait for all multi-threaded background process to finish
+  RunWait({notifyThreadCount=}false, {timeoutSec=}120);
+  // RTTI override could NOT be parallelized
+  ClientSideRESTCustomRecord(NewClient(csCustomRtti));
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTServiceLogToDB;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTServiceLogToDB(Sender: TObject);
 var
   Log: TRestServerDB;
+  c: TRestClientDBNamed absolute Sender;
 begin
   {$ifdef OSDARWIN}
   {$ifdef NOSQLITE3STATIC}
@@ -1708,59 +1795,67 @@ begin
     Log.DB.Synchronous := smOff;
     Log.DB.LockingMode := lmExclusive;
     Log.Server.CreateMissingTables;
-    (fClient.Server.ServiceContainer as TServiceContainerServer).
-      SetServiceLog(Log.Orm);
-    ClientTest(TRestServerRoutingRest, false);
+    (c.Server.ServiceContainer as TServiceContainerServer).SetServiceLog(Log.Orm);
+    ClientTest(c, TRestServerRoutingRest, false);
   finally
-    (fClient.Server.ServiceContainer as TServiceContainerServer).
-      SetServiceLog(nil);
+    (c.Server.ServiceContainer as TServiceContainerServer).SetServiceLog(nil);
     Log.Free;
   end;
+  c.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats(Sender: TObject);
 var
   stats: RawUtf8;
   store: TRestServerDB;
+  c: TRestClientDBNamed absolute Sender;
 begin
-  fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS + [mlSessions];
-  store := TRestServerDB.CreateWithOwnModel([TOrmMonitorUsage], WorkDir + 'servicestats.db3');
+  store := TRestServerDB.CreateWithOwnModel(
+    [TOrmMonitorUsage], WorkDir + 'servicestats.db3');
   try
+    c.Server.StatLevels := SERVERDEFAULTMONITORLEVELS + [mlSessions];
     store.DB.Synchronous := smOff;
     store.DB.LockingMode := lmExclusive;
     store.Server.CreateMissingTables;
-    fClient.Server.StatUsage := TSynMonitorUsageRest.Create(store.Orm, 1);
-    ClientTest(TRestServerRoutingRest, false);
-    fClient.CallBackGet('stat', ['withall', true], stats);
+    c.Server.StatUsage := TSynMonitorUsageRest.Create(store.Orm, 1);
+    ClientTest(c, TRestServerRoutingRest, false);
+    c.CallBackGet('stat', ['withall', true], stats);
     JsonReformatToFile(stats, WorkDir + 'statsSessions.Json');
-    fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS;
-    fClient.Server.StatUsage := nil;
+    c.Server.StatLevels := SERVERDEFAULTMONITORLEVELS;
+    c.Server.StatUsage := nil;
   finally
     store.Free;
+    c.Free;
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideJsonRPC;
+procedure TTestServiceOrientedArchitecture.ClientSideJsonRPC(Sender: TObject);
 begin
-  ClientTest(TRestServerRoutingJsonRpc, false);
+  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingJsonRpc, false);
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTAsJsonObject;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTAsJsonObject(Sender: TObject);
 begin
-  ClientTest(TRestServerRoutingRest, true);
+  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, true);
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.TestOverHTTP;
+procedure TTestServiceOrientedArchitecture.ClientSideOverHTTP(Sender: TObject);
 begin
-  TestHttp({withlog=}false);
+  TestHttp(Sender as TRestClientDBNamed, {withlog=}false, HTTP_DEFAULTPORT);
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.TestOverHTTPWithLogs;
+procedure TTestServiceOrientedArchitecture.ClientSideOverHttpWithLogs(Sender: TObject);
 begin
-  TestHttp({withlog=}true);
+  TestHttp(Sender as TRestClientDBNamed, {withlog=}true,
+    UInt32ToUtf8(GetInteger(HTTP_DEFAULTPORT) + 1));
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.TestHttp(withlog: boolean);
+procedure TTestServiceOrientedArchitecture.TestHttp(
+  aClient: TRestClientDBNamed; withlog: boolean; const port: RawUtf8);
 var
   HTTPServer: TRestHttpServer;
   HTTPClient: TRestHttpClient;
@@ -1769,6 +1864,7 @@ var
   i: integer;
   opt: TRestHttpServerOptions;
   URI: TRestServerUriDynArray;
+  timer: TPrecisionTimer;
 const
   SERVICES: array[0..4] of RawUtf8 = (
     'Calculator',
@@ -1777,23 +1873,24 @@ const
     'TestGroup',
     'TestPerThread');
 begin
-  fClient.Server.ServicesRouting := TRestServerRoutingRest; // back to default
-  GlobalInterfaceTestMode := itmHttp;
+  Check(aClient.Server.ServicesRouting = TRestServerRoutingRest);
   opt := HTTPSERVER_DEFAULT_OPTIONS;
   //opt := opt + [rsoLogVerbose];
   if withlog then
     opt := opt + [rsoEnableLogging, rsoTelemetryCsv, rsoTelemetryJson];
-  HTTPServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [fClient.Server], '+',
+  HTTPServer := TRestHttpServer.Create(port, [aClient.Server], '+',
     useBidirAsync, // HTTP_DEFAULT_MODE,
     8, secNone, '', '', opt);
   try
+    timer.Start;
     if withlog then
       HTTPServer.HttpServer.Logger.Settings.DefaultRotate := hrtAfter1MB;
     FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
-    HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fClient.Model);
+    Inst.ClientSide := aClient.ClientSide;
+    HTTPClient := TRestHttpClient.Create('127.0.0.1', port, aClient.Model);
     try
       HTTPClient.ServicePublishOwnInterfaces :=
-        fClient.Server.ServicesPublishedInterfaces;
+        aClient.Server.ServicesPublishedInterfaces;
       //HTTPClient.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
       // HTTPClient.Compression := [hcSynShaAes]; // 350ms (300ms for [])
       Check(HTTPClient.SetUser('User', 'synopse'));
@@ -1836,115 +1933,119 @@ begin
         Check(Json <> '[]');
         Check(HTTPClient.ServiceRetrieveAssociated(SERVICES[i], URI));
         Check(length(URI) = 1);
-        Check(URI[0].Port = HTTP_DEFAULTPORT);
-        Check(URI[0].Root = fClient.Model.Root);
+        Check(URI[0].Port = port);
+        Check(URI[0].Root = aClient.Model.Root);
       end;
       Check(HTTPClient.ServiceRetrieveAssociated(IComplexNumber, URI));
       Check(length(URI) = 1);
       Check(HTTPClient.ServiceRetrieveAssociated(ITestSession, URI));
       Check(length(URI) = 1);
       Test(Inst, 100);
+      if aClient.Name <> '' then
+        NotifyProgress([aClient.Name, '=', timer.StopInMicroSec div 1000, 'ms']);
     finally
       Finalize(Inst);
       HTTPClient.Free;
     end;
   finally
     HTTPServer.Free;
-    GlobalInterfaceTestMode := itmClient;
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientAlgo(
+procedure TTestServiceOrientedArchitecture.ClientAlgo(aClient: TRestClientDBNamed;
   algo: TRestAuthenticationSignedUriAlgo);
 begin
-  (fClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
+  (aClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
     TRestServerAuthenticationDefault).Algorithm := algo;
-  fClient.SetUser('User', 'synopse');
-  ClientTest(TRestServerRoutingRest, false);
+  aClient.SetUser('User', 'synopse');
+  ClientTest(aClient, TRestServerRoutingRest, false);
+  aClient.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCRC32C;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCrc32(Sender: TObject);
 begin
-  ClientAlgo(suaCRC32C)
+  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false);
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithXXHASH;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCRC32C(Sender: TObject);
 begin
-  ClientAlgo(suaXXHASH);
+  ClientAlgo(Sender as TRestClientDBNamed, suaCRC32C)
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithMD5;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithXXHASH(Sender: TObject);
 begin
-  ClientAlgo(suaMD5);
+  ClientAlgo(Sender as TRestClientDBNamed, suaXXHASH);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA1;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithMD5(Sender: TObject);
 begin
-  ClientAlgo(suaSHA1);
+  ClientAlgo(Sender as TRestClientDBNamed, suaMD5);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA256;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA1(Sender: TObject);
 begin
-  ClientAlgo(suaSHA256);
+  ClientAlgo(Sender as TRestClientDBNamed, suaSHA1);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA256(Sender: TObject);
 begin
-  ClientAlgo(suaSHA512);
+  ClientAlgo(Sender as TRestClientDBNamed, suaSHA256);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA3;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512(Sender: TObject);
 begin
-  ClientAlgo(suaSHA3);
-  // restore to the default hasher
-  (fClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
-    TRestServerAuthenticationDefault).Algorithm := suaCRC32;
+  ClientAlgo(Sender as TRestClientDBNamed, suaSHA512);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuth;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA3(Sender: TObject);
 begin
-  fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
-  fClient.Server.AuthenticationUnregister([
+  ClientAlgo(Sender as TRestClientDBNamed, suaSHA3);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuth(Sender: TObject);
+var
+  c: TRestClientDBNamed absolute Sender;
+begin
+  c.Server.AuthenticationUnregister([
     {$ifdef OSWINDOWS}
     TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
-  fClient.Server.AuthenticationRegister(TRestServerAuthenticationNone);
-  TRestClientAuthenticationNone.ClientSetUser(fClient, 'User', '');
-  ClientTest(TRestServerRoutingRest, false);
-  fClient.Server.AuthenticationUnregister(TRestServerAuthenticationNone);
+  c.Server.AuthenticationRegister(TRestServerAuthenticationNone);
+  TRestClientAuthenticationNone.ClientSetUser(c, 'User', '');
+  ClientTest(c, TRestServerRoutingRest, false);
+  c.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTBasicAuth;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTBasicAuth(Sender: TObject);
+var
+  c: TRestClientDBNamed absolute Sender;
 begin
-  fClient.SessionClose;
-  fClient.Server.AuthenticationRegister(TRestServerAuthenticationHttpBasic);
-  TRestClientAuthenticationHttpBasic.ClientSetUser(fClient, 'User', 'synopse');
-  ClientTest(TRestServerRoutingRest, false);
-  fClient.Server.AuthenticationUnregister(TRestServerAuthenticationHttpBasic);
-  // restore default authentications
-  fClient.Server.AuthenticationRegister([
-    {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSspi,
-    {$endif OSWINDOWS}
-    TRestServerAuthenticationDefault]);
-  fClient.SetUser('User', 'synopse');
+  c.SessionClose;
+  c.Server.AuthenticationRegister(TRestServerAuthenticationHttpBasic);
+  TRestClientAuthenticationHttpBasic.ClientSetUser(c, 'User', 'synopse');
+  ClientTest(c, TRestServerRoutingRest, false);
+  c.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecord;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecord(
+  Sender: TObject);
 begin
+  // warning: could NOT be parallelized before RTTI override is global
   TRttiJson.RegisterCustomSerializer(TypeInfo(TEntry),
     TTestServiceOrientedArchitecture.CustomReader,
     TTestServiceOrientedArchitecture.CustomWriter);
   try
-    ClientTest(TRestServerRoutingRest, false);
+    ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false);
   finally
     TRttiJson.UnRegisterCustomSerializer(TypeInfo(TEntry));
+    Sender.Free;
   end;
 end;
 
-class procedure TTestServiceOrientedArchitecture.CustomReader(var Context:
-  TJsonParserContext; Data: pointer);
+class procedure TTestServiceOrientedArchitecture.CustomReader(
+  var Context: TJsonParserContext; Data: pointer);
 var
   V: PEntry absolute Data;
   Values: array[0..2] of TValuePUtf8Char;
@@ -1958,8 +2059,8 @@ begin
   end;
 end;
 
-class procedure TTestServiceOrientedArchitecture.CustomWriter(W: TJsonWriter;
-  Data: pointer; Options: TTextWriterWriteObjectOptions);
+class procedure TTestServiceOrientedArchitecture.CustomWriter(
+  W: TJsonWriter; Data: pointer; Options: TTextWriterWriteObjectOptions);
 var
   V: PEntry absolute Data;
 begin
@@ -1969,7 +2070,7 @@ begin
     'Json',      V.Json]);
 end;
 
-procedure TTestServiceOrientedArchitecture.Cleanup;
+{procedure TTestServiceOrientedArchitecture.Cleanup;
 var
   stats: RawUtf8;
 begin
@@ -1984,77 +2085,31 @@ begin
   FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
   FreeAndNil(fClient);
 end;
+}
 
-
-{ TTestThread }
-
-type
-  TTestThread = class(TSynThread)
-  protected
-    options: TInterfaceMethodOptions;
-    procedure Execute; override;
-  public
-    Test: TTestServiceOrientedArchitecture;
-  end;
-
-procedure TTestThread.Execute;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread(Sender: TObject);
 begin
-  try
-    Test.fClient.Server.Run.BeginCurrentThread(self);
-    Test.ClientTest(TRestServerRoutingRest, false, true, options);
-    Test.fClient.Server.Run.EndCurrentThread(self);
-  finally
-    Test := nil; // mark tests finished
-  end;
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread;
-begin
-  {$ifdef OSANDROID}
-  // Tests on Android never run on MainThread
-  exit;
+  {$ifndef OSANDROID}
+  // processes on Android seem to never run on main Thread
+  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false, true,
+    [optExecInMainThread, optFreeInMainThread]);
   {$endif OSANDROID}
-  with TTestThread.Create(true) do
-  try
-    Test := self;
-    options := [optExecInMainThread, optFreeInMainThread];
-    Start;
-    while Test<>nil do
-      if IsMultiThread and
-         (GetCurrentThreadID = MainThreadID) then
-        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
-      else
-        sleep(1);
-  finally
-    Free;
-  end;
-  fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTBackgroundThread;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTBackgroundThread(
+  Sender: TObject);
 begin
-  ClientTest(TRestServerRoutingRest, false, true,
+  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false, true,
     [optExecInPerInterfaceThread, optFreeInPerInterfaceThread]);
-  fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
+  Sender.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTLocked;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTLocked(Sender: TObject);
 begin
-  with TTestThread.Create(true) do
-  try
-    Test := self;
-    options := [optExecLockedPerInterface];
-    Start;
-    while Test <> nil do
-      if IsMultiThread and
-         (GetCurrentThreadID=MainThreadID) then
-        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
-      else
-        sleep(1);
-  finally
-    Free;
-  end;
-  fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
+  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false, true,
+    [optExecLockedPerInterface]);
+  Sender.Free;
 end;
 
 type
