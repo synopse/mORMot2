@@ -2200,7 +2200,7 @@ type
     procedure InternalSend(aBufferType: WEB_SOCKET_BUFFER_TYPE; WebsocketBufferData: pointer);
     procedure Ping;
     procedure Disconnect;
-    procedure CheckIsActive;
+    procedure CheckIsActive(Tix64: Int64);
     // call onAccept Method of protocol, and if protocol not accept connection or
     // can not be accepted from other reasons return false else return true
     function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol;
@@ -2252,24 +2252,24 @@ type
   THttpApiWebSocketServerProtocol = class
   private
     fName: RawUtf8;
-    fManualFragmentManagement: boolean;
+    fSafe: TRTLCriticalSection;
+    fServer: THttpApiWebSocketServer;
+    fConnections: PHttpApiWebSocketConnectionVector;
+    fConnectionsCapacity: integer;
+    // number of used connections. Some of them can be nil (if not used anymore)
+    fConnectionsCount: integer;
+    fFirstEmptyConnectionIndex: integer;
+    fIndex: integer;
     fOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
     fOnMessage: TOnHttpApiWebSocketServerMessageEvent;
     fOnFragment: TOnHttpApiWebSocketServerMessageEvent;
     fOnConnect: TOnHttpApiWebSocketServerConnectEvent;
     fOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
-    fConnections: PHttpApiWebSocketConnectionVector;
-    fConnectionsCapacity: integer;
-    //Count of used connections. Some of them can be nil(if not used more)
-    fConnectionsCount: integer;
-    fFirstEmptyConnectionIndex: integer;
-    fServer: THttpApiWebSocketServer;
-    fSafe: TRTLCriticalSection;
     fPendingForClose: TSynList;
-    fIndex: integer;
+    fManualFragmentManagement: boolean;
     function AddConnection(aConn: PHttpApiWebSocketConnection): integer;
     procedure RemoveConnection(index: integer);
-    procedure doShutdown;
+    procedure DoShutdown;
   public
     /// initialize the WebSockets process
     // - if aManualFragmentManagement is true, onMessage will appear only for whole
@@ -2321,32 +2321,27 @@ type
       aBuffer: pointer; aBufferSize: ULONG): boolean;
   end;
 
-  THttpApiWebSocketServerProtocolDynArray =
-    array of THttpApiWebSocketServerProtocol;
-  PHttpApiWebSocketServerProtocolDynArray =
-    ^THttpApiWebSocketServerProtocolDynArray;
+  THttpApiWebSocketServerProtocolDynArray = array of THttpApiWebSocketServerProtocol;
 
   /// HTTP & WebSocket server using fast http.sys kernel-mode server
   // - can be used like simple THttpApiServer
-  // - when AddUrlWebSocket is called WebSocket support are added
-  // in this case WebSocket will receiving the frames in asynchronous
+  // - when AddUrlWebSocket() is called, WebSocket support is added
+  // and the frames will be received in asynchronous mode
   THttpApiWebSocketServer = class(THttpApiServer)
-  private
+  protected
     fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
     fGuard: TSynWebSocketGuard;
     fLastConnection: PHttpApiWebSocketConnection;
     fPingTimeout: integer;
-    fRegisteredProtocols: PHttpApiWebSocketServerProtocolDynArray;
     fOnWSThreadStart: TOnNotifyThread;
     fOnWSThreadTerminate: TOnNotifyThread;
     fSendOverlaped: TOverlapped;
     fServiceOverlaped: TOverlapped;
     fOnServiceMessage: TThreadMethod;
+    fOwnedProtocolsSafe: TLightLock;
+    fOwnedProtocols: THttpApiWebSocketServerProtocolDynArray;
     procedure SetOnWSThreadTerminate(const Value: TOnNotifyThread);
-    function GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
-    function GetProtocolsCount: integer;
     procedure SetOnWSThreadStart(const Value: TOnNotifyThread);
-  protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); override;
@@ -2386,18 +2381,14 @@ type
     // this timeout it will be closed
     property PingTimeout: integer
       read fPingTimeout;
-    /// access to the associated endpoints
-    property Protocols[index: integer]: THttpApiWebSocketServerProtocol
-      read GetProtocol;
-    /// access to the associated endpoints count
-    property ProtocolsCount: integer
-      read GetProtocolsCount;
+    /// access to the associated endpoints as a thread-safe array copy
+    function GetRegisteredProtocols: THttpApiWebSocketServerProtocolDynArray;
     /// event called when the processing thread starts
     property OnWSThreadStart: TOnNotifyThread
-      read FOnWSThreadStart write SetOnWSThreadStart;
+      read fOnWSThreadStart write SetOnWSThreadStart;
     /// event called when the processing thread termintes
     property OnWSThreadTerminate: TOnNotifyThread
-      read FOnWSThreadTerminate write SetOnWSThreadTerminate;
+      read fOnWSThreadTerminate write SetOnWSThreadTerminate;
     /// send a "service" message to a WebSocketServer to wake up a WebSocket thread
     // - can be called from any thread
     // - when a webSocket thread receives such a message it will call onServiceMessage
@@ -2430,10 +2421,9 @@ type
   TSynWebSocketGuard = class(TThread)
   protected
     fServer: THttpApiWebSocketServer;
-    fSmallWait, fWaitCount: integer;
     procedure Execute; override;
   public
-    /// initialize the thread
+    /// initialize the background thread
     constructor Create(Server: THttpApiWebSocketServer); reintroduce;
   end;
 
@@ -8104,7 +8094,7 @@ begin
   inherited;
 end;
 
-procedure THttpApiWebSocketServerProtocol.doShutdown;
+procedure THttpApiWebSocketServerProtocol.DoShutdown;
 var
   i: PtrInt;
   conn: PHttpApiWebSocketConnection;
@@ -8322,15 +8312,18 @@ begin
   end;
 end;
 
-procedure THttpApiWebSocketConnection.CheckIsActive;
+procedure THttpApiWebSocketConnection.CheckIsActive(Tix64: Int64);
 var
-  elapsed: Int64;
+  elapsed, delay: Int64;
 begin
-  if (fLastReceiveTickCount > 0) and
-     (fProtocol.fServer.fPingTimeout > 0) then
-  begin
-    elapsed := mormot.core.os.GetTickCount64 - fLastReceiveTickCount;
-    if elapsed > 2 * fProtocol.fServer.PingTimeout * 1000 then
+  if (@self = nil) or
+     (fLastReceiveTickCount <= 0) or
+     (fProtocol.fServer.fPingTimeout <= 0) then
+    exit;
+  elapsed := Tix64 - fLastReceiveTickCount;
+  delay := fProtocol.fServer.PingTimeout * 1000;
+  if elapsed >= delay then
+    if elapsed > 2 * delay then
     begin
       fProtocol.RemoveConnection(fIndex);
       fState := wsClosedByGuard;
@@ -8339,9 +8332,8 @@ begin
       IocpPostQueuedStatus(
         fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, nil, @fOverlapped);
     end
-    else if elapsed >= fProtocol.fServer.PingTimeout * 1000 then
+    else
       Ping;
-  end;
 end;
 
 procedure THttpApiWebSocketConnection.Disconnect;
@@ -8547,10 +8539,8 @@ begin
   fPingTimeout := aPingTimeout;
   if fPingTimeout > 0 then
     fGuard := TSynWebSocketGuard.Create(Self);
-  New(fRegisteredProtocols);
-  SetLength(fRegisteredProtocols^, 0);
-  FOnWSThreadStart := aOnWSThreadStart;
-  FOnWSThreadTerminate := aOnWSThreadTerminate;
+  fOnWSThreadStart := aOnWSThreadStart;
+  fOnWSThreadTerminate := aOnWSThreadTerminate;
   fThreadPoolServer := TSynThreadPoolHttpApiWebSocketServer.Create(Self,
     aSocketThreadsCount);
 end;
@@ -8562,7 +8552,18 @@ begin
   inherited CreateClone(From);
   fThreadPoolServer := serv.fThreadPoolServer;
   fPingTimeout := serv.fPingTimeout;
-  fRegisteredProtocols := serv.fRegisteredProtocols
+end;
+
+function THttpApiWebSocketServer.GetRegisteredProtocols: THttpApiWebSocketServerProtocolDynArray;
+var
+  main: THttpApiWebSocketServer;
+begin
+  main := self;
+  if fOwner <> nil then
+    main := fOwner as THttpApiWebSocketServer;
+  main.fOwnedProtocolsSafe.Lock; // thread-safe by-reference copy
+  result := main.fOwnedProtocols;
+  main.fOwnedProtocolsSafe.UnLock;
 end;
 
 procedure THttpApiWebSocketServer.DestroyMainThread;
@@ -8570,15 +8571,11 @@ var
   i: PtrInt;
 begin
   fGuard.Free;
-  for i := 0 to Length(fRegisteredProtocols^) - 1 do
-    fRegisteredProtocols^[i].doShutdown;
+  for i := 0 to Length(fOwnedProtocols) - 1 do
+    fOwnedProtocols[i].DoShutdown;
   FreeAndNilSafe(fThreadPoolServer);
-  for i := 0 to Length(fRegisteredProtocols^) - 1 do
-    fRegisteredProtocols^[i].Free;
-  fRegisteredProtocols^ := nil;
-  Dispose(fRegisteredProtocols);
-  fRegisteredProtocols := nil;
-  inherited;
+  ObjArrayClear(fOwnedProtocols);
+  inherited DestroyMainThread;
 end;
 
 procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
@@ -8588,23 +8585,6 @@ begin
     IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil,
       @fLastConnection.fOverlapped);
   inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
-end;
-
-function THttpApiWebSocketServer.GetProtocol(index: integer):
-  THttpApiWebSocketServerProtocol;
-begin
-  if cardinal(index) < cardinal(Length(fRegisteredProtocols^)) then
-    result := fRegisteredProtocols^[index]
-  else
-    result := nil;
-end;
-
-function THttpApiWebSocketServer.GetProtocolsCount: integer;
-begin
-  if self = nil then
-    result := 0
-  else
-    result := Length(fRegisteredProtocols^);
 end;
 
 function THttpApiWebSocketServer.GetSendResponseFlags(Ctxt: THttpServerRequest): integer;
@@ -8621,18 +8601,19 @@ function THttpApiWebSocketServer.UpgradeToWebSocket(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
   proto: THttpApiWebSocketServerProtocol;
+  protos: THttpApiWebSocketServerProtocolDynArray;
   i, j: PtrInt;
   req: PHTTP_REQUEST;
   p: PHTTP_UNKNOWN_HEADER;
   ch, chB: PUtf8Char;
   protoname: RawUtf8;
-  protofound: boolean;
-label
-  fnd;
+  specified: boolean;
 begin
-  result := 404;
+  result := HTTP_NOTFOUND;
+  // search for explicit name specified in 'SEC-WEBSOCKET-PROTOCOL:' header
   proto := nil;
-  protofound := false;
+  protos := GetRegisteredProtocols; // local copy
+  specified := false;
   req := PHTTP_REQUEST((Ctxt as THttpServerRequest).HttpApiRequest);
   p := req^.headers.pUnknownHeaders;
   for j := 1 to req^.headers.UnknownHeaderCount do
@@ -8640,55 +8621,54 @@ begin
     if (p.NameLength = Length(sProtocolHeader)) and
        IdemPChar(p.pName, pointer(sProtocolHeader)) then
     begin
-      protofound := true;
-      for i := 0 to Length(fRegisteredProtocols^) - 1 do
+      specified := true;
+      ch := p.pRawValue;
+      while (proto = nil) and
+            ((ch - p.pRawValue) < p.RawValueLength) do
       begin
-        ch := p.pRawValue;
-        while (ch - p.pRawValue) < p.RawValueLength do
-        begin
-          while ((ch - p.pRawValue) < p.RawValueLength) and
-                (ch^ in [',', ' ']) do
-            inc(ch);
-          chB := ch;
-          while ((ch - p.pRawValue) < p.RawValueLength) and
-                not (ch^ in [',']) do
-            inc(ch);
-          FastSetString(protoname, chB, ch - chB);
-          if protoname = fRegisteredProtocols^[i].name then
+        while ((ch - p.pRawValue) < p.RawValueLength) and
+              (ch^ in [',', ' ']) do
+          inc(ch);
+        chB := ch;
+        while ((ch - p.pRawValue) < p.RawValueLength) and
+              not (ch^ in [',']) do
+          inc(ch);
+        FastSetString(protoname, chB, ch - chB);
+        for i := 0 to Length(protos) - 1 do
+          if protos[i].name = protoname then
           begin
-            proto := fRegisteredProtocols^[i];
-            goto fnd;
+            proto := protos[i];
+            break;
           end;
-        end;
       end;
+      if proto <> nil then
+        break;
     end;
     inc(p);
   end;
-  if not protofound and
+  if not specified and
      (proto = nil) and
-     (Length(fRegisteredProtocols^) = 1) then
-    proto := fRegisteredProtocols^[0];
-fnd:
-  if proto <> nil then
-  begin
-    EnterCriticalSection(proto.fSafe);
-    try
-      New(fLastConnection);
-      if fLastConnection.TryAcceptConnection(
-          proto, Ctxt, protofound) then
-      begin
-        proto.AddConnection(fLastConnection);
-        result := 101
-      end
-      else
-      begin
-        Dispose(fLastConnection);
-        fLastConnection := nil;
-        result := HTTP_NOTALLOWED;
-      end;
-    finally
-      LeaveCriticalSection(proto.fSafe);
+     (Length(protos) = 1) then
+    proto := protos[0]; // fallback to our single known protocol
+  if proto = nil then
+    exit;
+  // add the connection for this protocol
+  EnterCriticalSection(proto.fSafe);
+  try
+    New(fLastConnection);
+    if fLastConnection.TryAcceptConnection(proto, Ctxt, specified) then
+    begin
+      proto.AddConnection(fLastConnection);
+      result := HTTP_SWITCHINGPROTOCOLS;
+    end
+    else
+    begin
+      Dispose(fLastConnection);
+      fLastConnection := nil;
+      result := HTTP_NOTALLOWED;
     end;
+  finally
+    LeaveCriticalSection(proto.fSafe);
   end;
 end;
 
@@ -8707,16 +8687,18 @@ procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUtf8;
   const aOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
   const aOnFragment: TOnHttpApiWebSocketServerMessageEvent);
 var
-  protocol: THttpApiWebSocketServerProtocol;
+  proto: THttpApiWebSocketServerProtocol;
+  main: THttpApiWebSocketServer;
 begin
   if self = nil then
     exit;
-  protocol := THttpApiWebSocketServerProtocol.Create(aName,
-    aManualFragmentManagement, Self, aOnAccept, aOnMessage, aOnConnect,
+  main := self;
+  if fOwner <> nil then
+    main := fOwner as THttpApiWebSocketServer;
+  proto := THttpApiWebSocketServerProtocol.Create(aName,
+    aManualFragmentManagement, main, aOnAccept, aOnMessage, aOnConnect,
     aOnDisconnect, aOnFragment);
-  protocol.fIndex := length(fRegisteredProtocols^);
-  SetLength(fRegisteredProtocols^, protocol.fIndex + 1);
-  fRegisteredProtocols^[protocol.fIndex] := protocol;
+  ObjArrayAdd(main.fOwnedProtocols, proto, main.fOwnedProtocolsSafe);
 end;
 
 function THttpApiWebSocketServer.Request(
@@ -8739,12 +8721,12 @@ end;
 
 procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TOnNotifyThread);
 begin
-  FOnWSThreadStart := Value;
+  fOnWSThreadStart := Value;
 end;
 
 procedure THttpApiWebSocketServer.SetOnWSThreadTerminate(const Value: TOnNotifyThread);
 begin
-  FOnWSThreadTerminate := Value;
+  fOnWSThreadTerminate := Value;
 end;
 
 
@@ -8813,8 +8795,8 @@ begin
   end;
 end;
 
-constructor TSynThreadPoolHttpApiWebSocketServer.Create(Server:
-  THttpApiWebSocketServer; NumberOfThreads: integer);
+constructor TSynThreadPoolHttpApiWebSocketServer.Create(
+  Server: THttpApiWebSocketServer; NumberOfThreads: integer);
 begin
   fServer := Server;
   fOnThreadStart := OnThreadStart;
@@ -8828,40 +8810,38 @@ end;
 procedure TSynWebSocketGuard.Execute;
 var
   i, j: PtrInt;
-  prot: THttpApiWebSocketServerProtocol;
+  proto: THttpApiWebSocketServerProtocol;
+  protos: THttpApiWebSocketServerProtocolDynArray;
+  tix: Int64;
 begin
-  if fServer.fPingTimeout > 0 then
-    while not Terminated do
+  repeat
+    tix := mormot.core.os.GetTickCount64;
+    protos := fServer.GetRegisteredProtocols; // local copy
+    for i := 0 to Length(protos) - 1 do
     begin
-      if fServer <> nil then
-        for i := 0 to Length(fServer.fRegisteredProtocols^) - 1 do
-        begin
-          prot := fServer.fRegisteredProtocols^[i];
-          EnterCriticalSection(prot.fSafe);
-          try
-            for j := 0 to prot.fConnectionsCount - 1 do
-              if Assigned(prot.fConnections[j]) then
-                prot.fConnections[j].CheckIsActive;
-          finally
-            LeaveCriticalSection(prot.fSafe);
-          end;
-        end;
-      i := 0;
-      while not Terminated and
-            (i < fServer.fPingTimeout) do
-      begin
-        Sleep(1000);
-        inc(i);
+      proto := protos[i];
+      EnterCriticalSection(proto.fSafe);
+      try
+        for j := 0 to proto.fConnectionsCount - 1 do
+          if Terminated then
+            exit
+          else
+            proto.fConnections^[j]^.CheckIsActive(tix);
+      finally
+        LeaveCriticalSection(proto.fSafe);
       end;
-    end
-  else
-    Terminate;
+    end;
+    inc(tix, fServer.PingTimeout shl MilliSecsPerSecShl);
+    while not Terminated and
+          (mormot.core.os.GetTickCount64 < tix) do
+      SleepHiRes(100);
+  until Terminated;
 end;
 
 constructor TSynWebSocketGuard.Create(Server: THttpApiWebSocketServer);
 begin
   fServer := Server;
-  inherited Create(false);
+  inherited Create({suspended=}false);
 end;
 
 {$endif USEWININET}
