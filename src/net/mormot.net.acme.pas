@@ -877,7 +877,7 @@ begin
   repeat
     result := asInvalid;
     if Terminated = nil then
-      sleep(1000)
+      SleepHiRes(1000)
     else if SleepHiRes(1000, Terminated^) then
       exit;
     result := CheckChallengesStatus;
@@ -1045,7 +1045,7 @@ begin
   begin
     endtix := GetTickCount64 + 1000; // wait for background task to abort
     repeat
-      sleep(10);
+      SleepHiRes(10);
     until (GetTickCount64 > endtix) or
           not fRenewing;
   end;

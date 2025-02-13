@@ -1621,6 +1621,7 @@ var
   timeout: TTimespec;
   s: cardinal;
 begin
+  timeout.tv_sec := 0;
   if ms = 0 then
     // handle SleepHiRes(0) special case
     if SleepHiRes0Yield then
@@ -1631,10 +1632,9 @@ begin
       exit;
     end
     else
-    begin
-      timeout.tv_sec := 0;
-      timeout.tv_nsec := 10000; // 10us is around timer resolution on modern HW
-    end
+      timeout.tv_nsec := 10000 // 10us is around timer resolution on modern HW
+  else if ms < 1000 then
+    timeout.tv_nsec := ms * NanoSecsPerMilliSec
   else
   begin
     s := ms div MilliSecsPerSec;
@@ -2024,7 +2024,7 @@ begin
       if IsMultiThread then
         CheckSynchronize(100)
       else
-        Sleep(100);
+        SleepHiRes(100);
       if SynDaemonTerminated <> 0 then
         break;
       if UnixKeyPending then
@@ -3486,7 +3486,7 @@ begin
   tix := GetTickCount64 + waitseconds * MilliSecsPerSec;
   repeat
     // RunUntilSigTerminated() below should delete the .pid file
-    sleep(10);
+    SleepHiRes(10);
     if not FileExists(pidfilename) then
       result := true;
   until result or
@@ -3555,7 +3555,7 @@ begin
       if GetCurrentThreadID = MainThreadID then
         CheckSynchronize(100)
       else
-        Sleep(100);
+        SleepHiRes(100);
   finally
     if Assigned(onlog) then
       onlog(sllNewRun, 'Stop /% from Sig=%',

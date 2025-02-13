@@ -809,7 +809,7 @@ begin
     tix := GetTickCount64 + 500;
     while (fRestPending <> 0) and
           (GetTickCount64 < tix) do
-      Sleep(1); // warning: waits typically 1-15 ms on Windows
+      SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
   end;
   inherited Destroy;
 end;
@@ -1039,7 +1039,7 @@ begin
            fServerConnectedToLocalHost then
           SleepHiRes(0) // faster on loopback (e.g. tests)
         else
-          Sleep(1); // warning: waits typically 1-15 ms on Windows
+          SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
         continue;
       end;
       if log <> nil then

@@ -2704,7 +2704,7 @@ begin
         if IsMultiThread then
           CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif}
         else
-          Sleep(100);
+          Windows.Sleep(100);
         while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
           if msg.Message = WM_QUIT then
             exit // stop waiting when the process is gracefully closing
@@ -2719,7 +2719,7 @@ begin
       while not ConsoleKeyPressed(VK_RETURN) and
             not ConsoleHandleCtrlCPressed do
       begin
-        Sleep(100);
+        Windows.Sleep(100);
         if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
           if msg.Message = WM_QUIT then
             exit; // nothing to dispatch with PostThreadMessage()

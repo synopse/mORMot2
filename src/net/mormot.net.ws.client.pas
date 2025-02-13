@@ -612,7 +612,7 @@ begin
   // WebSocketsUpgrade() did succeed: use the upgraded connection
   t := fProcess.fOwnerThread as TWebSocketProcessClientThread;
   if t.fThreadState = sCreate then
-    sleep(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
+    SleepHiRes(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
   if (t.fThreadState <> sRun) or // WebSockets closed by server side
      not fProcess.Protocol.InheritsFrom(TWebSocketProtocolRest) then
   begin

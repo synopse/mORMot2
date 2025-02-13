@@ -4031,9 +4031,9 @@ end;
 procedure THttpServerSocketGeneric.WaitStarted(
   Seconds: integer; TLS: PNetTlsContext);
 var
-  tix: Int64;
+  endtix: Int64;
 begin
-  tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
+  endtix := mormot.core.os.GetTickCount64 + Seconds * MilliSecsPerSecShl;
   repeat
     if Terminated then
       exit;
@@ -4044,8 +4044,8 @@ begin
         EHttpServer.RaiseUtf8('%.Execute aborted due to %',
           [self, fExecuteMessage]);
     end;
-    Sleep(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > tix then
+    SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
+    if mormot.core.os.GetTickCount64 > endtix then
       EHttpServer.RaiseUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
@@ -4057,13 +4057,13 @@ begin
       not fSock.TLS.Enabled) then
   begin
     if fSock = nil then
-      Sleep(5); // paranoid on some servers which propagate the pointer
+      SleepHiRes(5); // paranoid on some servers which propagate the pointer
     if (fSock <> nil) and
        not fSock.TLS.Enabled then // call InitializeTlsAfterBind once
     begin
       fSock.TLS := TLS^;
       InitializeTlsAfterBind; // validate TLS certificate(s) now
-      Sleep(1); // let some warmup happen
+      SleepHiRes(1); // let some warmup happen
     end;
   end;
 end;
@@ -5590,7 +5590,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  tix := GetTickCount64 shr 10; // calling OS API every second is good enough
+  tix := GetTickCount64 shr MilliSecsPerSecShl; // call OS API every second
   if tix = fLastNetworkTix then
     exit;
   fLastNetworkTix := tix;

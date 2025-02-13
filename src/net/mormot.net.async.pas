@@ -3739,7 +3739,7 @@ destructor TAsyncServer.Destroy;
 var
   endtix: Int64;
 begin
-  endtix := mormot.core.os.GetTickCount64 + 10000;
+  endtix := mormot.core.os.GetTickCount64 + 10000; // never wait forever
   Shutdown;
   //DoLog(sllTrace, 'Destroy before inherited', [], self);
   inherited Destroy;

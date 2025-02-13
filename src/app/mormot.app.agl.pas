@@ -1597,7 +1597,7 @@ begin
       end;
     aaSleep:
       if ToInteger(Param, ms) then
-        Sleep(ms)
+        sysutils.Sleep(ms) // would retry on ESysEINTR
       else
         exit;
     {$ifdef OSWINDOWS}
