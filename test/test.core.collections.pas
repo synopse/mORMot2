@@ -37,6 +37,7 @@ type
   TTestCoreCollections = class(TSynTestCase)
   protected
     procedure TestOne<T>(const li: IList<T>);
+    procedure RunBenchmark(Sender: TObject);
   published
     procedure _IList;
     procedure _IKeyValue;
@@ -852,37 +853,45 @@ const
     mORMotKeyValue2);
   {$endif RTL_BENCH}
 
-procedure TTestCoreCollections.Benchmark;
+procedure TTestCoreCollections.RunBenchmark(Sender: TObject);
 const
   REP = 4;
 var
+  func: TBenchMark;
   timer1, timer2: TPrecisionTimer;
   name: string;
-  b, i, j, mul, n, max, tot: PtrInt;
+  i, j, mul, n, max, tot: PtrInt;
+begin
+  func := BENCHS[PtrInt(Sender)];
+  max := 10;
+  for i := 1 to REP - 1 do
+    max := max * 20;
+  timer1.Start;
+  tot := 0;
+  n := 10;
+  for i := 1 to REP do
+  begin
+    timer2.Start;
+    mul := max div n; // to have big enough time
+    for j := 1 to mul do
+    begin
+      name := func(n);
+      Check(name <> '');
+    end;
+    NotifyTestSpeed('size=%', [n], n * mul, 0, @timer2, {onlylog=}true);
+    inc(tot, n * mul);
+    n := n * 20;
+  end;
+  NotifyTestSpeed(name, tot, 0, @timer1);
+end;
+
+procedure TTestCoreCollections.Benchmark;
+var
+  b: PtrInt;
 begin
   for b := low(BENCHS) to high(BENCHS) do
-  begin
-    max := 10;
-    for i := 1 to REP - 1 do
-      max := max * 20;
-    timer1.Start;
-    tot := 0;
-    n := 10;
-    for i := 1 to REP do
-    begin
-      timer2.Start;
-      mul := max div n; // to have big enough time
-      for j := 1 to mul do
-      begin
-        name := BENCHS[b](n);
-        Check(name <> '');
-      end;
-      NotifyTestSpeed('size=%', [n], n * mul, 0, @timer2, {onlylog=}true);
-      inc(tot, n * mul);
-      n := n * 20;
-    end;
-    NotifyTestSpeed(name, tot, 0, @timer1);
-  end;
+    Run(RunBenchmark, pointer(b), '', {threaded=}true, {notify=}false);
+  RunWait({notify=}false);
 end;
 
 {$else}
