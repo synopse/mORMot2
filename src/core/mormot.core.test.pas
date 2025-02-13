@@ -154,7 +154,9 @@ type
     fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
+    fBackgroundRunSafe: TLightLock;
     fBackgroundRun: integer;
+    fBackgroundPending: array of TLoggedWorkThread; // if ForcedThreaded
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -300,9 +302,12 @@ type
     /// execute a method possibly in a dedicated TLoggedWorkThread
     // - OnTask() should take some time running, to be worth a thread execution
     // - won't create more background threads than currently available CPU cores,
-    // to avoid resource exhaustion and unexpected timeouts on smaller computers
+    // to avoid resource exhaustion and unexpected timeouts on smaller computers,
+    // unless ForcedThreaded is used and then an internal queue is used to
+    // force all taks to be executed in their own thread
     procedure Run(const OnTask: TNotifyEvent; Sender: TObject;
-      const TaskName: RawUtf8; Threaded: boolean = true; NotifyTask: boolean = true);
+      const TaskName: RawUtf8; Threaded: boolean = true; NotifyTask: boolean = true;
+      ForcedThreaded: boolean = false);
     /// wait for background thread started by Run() to finish
     procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60);
     /// this method is triggered internally - e.g. by Check() - when a test failed
@@ -670,6 +675,7 @@ end;
 destructor TSynTestCase.Destroy;
 begin
   CleanUp;
+  ObjArrayClear(fBackgroundRun);
   inherited;
 end;
 
@@ -1075,25 +1081,51 @@ begin
 end;
 
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
-  const TaskName: RawUtf8; Threaded, NotifyTask: boolean);
+  const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
 begin
   if NotifyTask then
     NotifyProgress([TaskName]);
-  if Assigned(OnTask) then
-    if (fBackgroundRun >= integer(SystemInfo.dwNumberOfProcessors)) or
-       not Threaded then
-      // don't exhaust CPU capacity (could trigger timeouts)
-      OnTask(Sender)
-    else
+  if not Assigned(OnTask) then
+    exit;
+  if not Threaded then
+  begin
+    OnTask(Sender); // run in main thread
+    exit;
+  end;
+  fBackgroundRunSafe.Lock;
+  try
+    if fBackgroundRun < integer(SystemInfo.dwNumberOfProcessors) then
     begin
-      LockedInc32(@fBackgroundRun);
+      // enough CPU core to run a new thread now
+      inc(fBackgroundRun);
       TLoggedWorkThread.Create(TSynLogTestLog, TaskName, Sender, OnTask, RunDone);
+      exit;
+    end
+    else if ForcedThreaded then
+    begin
+      // this method requires to be run in a background thread: enqueue
+      ObjArrayAdd(fBackgroundPending, TLoggedWorkThread.Create(
+        TSynLogTestLog, TaskName, Sender, OnTask, RunDone, {suspended=}true));
+      exit;
     end;
+  finally
+    fBackgroundRunSafe.UnLock;
+  end;
+  OnTask(Sender); // not enough CPU power: run now in main thread
 end;
 
 procedure TSynTestCase.RunDone(Sender: TObject);
 begin
-  LockedDec32(@fBackgroundRun);
+  fBackgroundRunSafe.Lock;
+  try
+    Sender := ObjArrayPop(fBackgroundPending);
+    if Sender = nil then
+      dec(fBackgroundRun);
+  finally
+    fBackgroundRunSafe.UnLock;
+  end;
+  if Sender <> nil then
+    TLoggedWorkThread(Sender).Start; // new thread from pending task
 end;
 
 procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer);
