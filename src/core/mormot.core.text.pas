@@ -614,11 +614,12 @@ type
     /// append two chars to the buffer
     procedure Add(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {$ifdef CPU32} // already implemented by Add(Value: PtrInt) method on CPU64
+    {$ifdef CPU32}
     /// append a 64-bit signed integer Value as text
+    // - already implemented by Add(Value: PtrInt) method on CPU64
     procedure Add(Value: Int64); overload;
     {$endif CPU32}
-    /// append a 32-bit signed integer Value as text
+    /// append a PtrInt signed integer Value as text
     procedure Add(Value: PtrInt); overload;
       {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append a boolean Value as text
@@ -8742,11 +8743,7 @@ begin
         DoubleToTempUtf8(V.VExtended^, Res);
       end;
     vtPointer, vtInterface:
-      begin
-        Res.Text := @Res.Temp;
-        Res.Len := DisplayMinChars(@V.VPointer, SizeOf(pointer)) * 2;
-        BinToHexDisplayLower(@V.VPointer, @Res.Temp, Res.Len shr 1);
-      end;
+      PtrIntToTempUtf8(PtrInt(V.VPointer), Res);
     vtClass:
       if V.VClass = nil then
         Res.Len := 0
@@ -8845,10 +8842,7 @@ begin
       vtExtended:
         DoubleToStr(VExtended^,result);
       vtPointer:
-        begin
-          isString := true;
-          PointerToHex(VPointer, result);
-        end;
+        Int32ToUtf8(PtrInt(VPointer), result);
       vtClass:
         begin
           isString := true;

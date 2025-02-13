@@ -4083,8 +4083,6 @@ begin
   VarClear(result{%H-});
   with TSynVarData(result) do
     case V.VType of
-      vtPointer:
-        VType := varNull;
       vtBoolean:
         begin
           VType := varBoolean;
@@ -4119,10 +4117,9 @@ begin
         end;
       vtVariant:
         result := V.VVariant^; // make a copy
-      // warning: use varStringByRef makes GPF -> safe and fast refcount
       vtAnsiString:
         begin
-          VType := varString;
+          VType := varString; // varStringByRef triggers GPF -> refcnt assign
           VAny := nil;
           RawByteString(VAny) := RawByteString(V.VAnsiString);
         end;
@@ -4140,9 +4137,16 @@ begin
           VString := nil; // avoid GPF on next line
           VarRecToUtf8(V, RawUtf8(VString)); // decode as new RawUtf8
         end;
-      vtObject:
-        // class instance will be serialized as a TDocVariant
+      vtObject:  // class instance will be serialized as a TDocVariant
         ObjectToVariant(V.VObject, result, [woDontStoreDefault]);
+      vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec)
+        if V.VPointer = nil then
+          VType := varNull
+        else
+        begin // raw pointer <> nil will be serialized as PtrInt
+          VType := varPtrInt;
+          VInt64 := PtrInt(V.VPointer);
+        end
     else
       ESynVariant.RaiseUtf8('Unhandled TVarRec.VType=%', [V.VType]);
     end;

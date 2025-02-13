@@ -3491,7 +3491,9 @@ begin
   result{%H-}.Empty;
   case val.VType of
     vtPointer:
-      ;
+      if val.VPointer = nil then
+        result.Fill(JS_TAG_NULL, 0);
+      // we can't store PtrInt=Int64 on 53-bit JSValue resolution -> keep empty
     vtBoolean:
       result.From(val.VBoolean);
     vtInteger:

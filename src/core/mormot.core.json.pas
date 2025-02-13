@@ -7172,8 +7172,11 @@ procedure TJsonWriter.AddJsonEscape(const V: TVarRec);
 begin
   with V do
     case VType of
-      vtPointer:
-        AddNull;
+      vtPointer: // see VarRecToVariant()
+        if VPointer = nil then
+          AddNull
+        else // raw pointer <> nil will be serialized as PtrInt
+          Add(PtrInt(VPointer));
       vtString:
         begin
           Add('"');
@@ -7398,9 +7401,12 @@ begin
         if (VString <> nil) and
            (VString^[0] <> #0) then
           Add(@VString^[1], ord(VString^[0]), Escape);
-      vtInterface,
-      vtPointer:
-        AddPointer(PtrUInt(VPointer));
+      vtPointer,
+      vtInterface:
+        if VPointer = nil then
+          AddNull
+        else
+          Add(PtrInt(VPointer)); // as VarRecToVariant()
       vtPChar:
         Add(PUtf8Char(VPChar), Escape);
       vtObject:

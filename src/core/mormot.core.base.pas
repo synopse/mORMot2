@@ -3878,6 +3878,8 @@ type
   PSynVarData = ^TSynVarData;
 
 const
+  /// variant type holding a PtrInt value
+  varPtrInt = {$ifdef CPU32} varInteger {$else} varInt64 {$endif};
   /// unsigned 64bit integer variant type
   // - currently called varUInt64 in Delphi (not defined in older versions),
   // and varQWord in FPC

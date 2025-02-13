@@ -5946,12 +5946,11 @@ begin
           BindCurrency(i, VCurrency^, IO);
         vtExtended:
           Bind(i, VExtended^, IO);
-        vtPointer:
+        vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec) or VarRecToVariant()
           if VPointer = nil then
             BindNull(i, IO)
           else
-            ESqlDBException.RaiseUtf8(
-              'Unexpected %.Bind() pointer', [self]);
+            Bind(i, PtrInt(VPointer), IO);
         vtVariant:
           BindVariant(i, VVariant^, VariantIsBlob(VVariant^), IO);
       else
