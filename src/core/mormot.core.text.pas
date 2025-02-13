@@ -2150,7 +2150,8 @@ type
   /// a dynamic array of THttpCookie name/value pairs
   THttpCookieDynArray = array of THttpCookie;
 
-  /// parse and manage HTTP input cookies
+  /// parse and store HTTP cookies received on server side
+  // - shared by framework server classes, both at HTTP or REST levels
   {$ifdef USERECORDWITHMETHODS}
   THttpCookies = record
   {$else}
@@ -2162,24 +2163,26 @@ type
   public
     /// reset the internal list and Parsed status
     procedure Clear;
-    /// detect and parse the cookies from HTTP headers on server side
+    /// parse the cookies from request HTTP headers on server side
     // - e.g. 'Cookie: name=value; name2=value2; name3=value3'
+    // - will first clear all existing cookies, then decode from headers
     procedure ParseServer(const InHead: RawUtf8);
     /// retrieve a cookie name/value pair in the internal storage
-    function FindCookie(var CookieName: RawUtf8): PHttpCookie;
+    function FindCookie(const CookieName: RawUtf8): PHttpCookie;
     /// retrieve a cookie value from its name
     // - should always previously check "if not Parsed then Parse()"
-    function GetCookie(CookieName: RawUtf8): RawUtf8;
+    function GetCookie(const CookieName: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     /// set or change a cookie value from its name
     // - should always previously check "if not Parsed then Parse()"
-    procedure SetCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
+    procedure SetCookie(const CookieName, CookieValue: RawUtf8);
     /// false if ParseServer() should be called with the HTTP header
     property Parsed: boolean
       read fParsed;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
     // - should always previously check "if not Parsed then Parse()"
-    property Cookie[CookieName: RawUtf8]: RawUtf8
+    property Cookie[const CookieName: RawUtf8]: RawUtf8
       read GetCookie write SetCookie; default;
     /// direct access to the internal name/value pairs list
     property Cookies: THttpCookieDynArray
@@ -10116,6 +10119,7 @@ var
   new: PHttpCookie;
 begin
   fParsed := true;
+  fCookies := nil; // first Clear any previous cookie
   count := 0;
   h := pointer(InHead);
   while h <> nil do
@@ -10149,12 +10153,11 @@ begin
     DynArrayFakeLength(fCookies, count);
 end;
 
-function THttpCookies.FindCookie(var CookieName: RawUtf8): PHttpCookie;
+function THttpCookies.FindCookie(const CookieName: RawUtf8): PHttpCookie;
 var
   i: integer;
 begin
   result := nil;
-  TrimSelf(CookieName);
   if CookieName = '' then
     exit;
   result := pointer(fCookies);
@@ -10168,7 +10171,7 @@ begin
   result := nil;
 end;
 
-procedure THttpCookies.SetCookie(CookieName: RawUtf8; const CookieValue: RawUtf8);
+procedure THttpCookies.SetCookie(const CookieName, CookieValue: RawUtf8);
 var
   n: PtrInt;
   c: PHttpCookie;
@@ -10186,7 +10189,7 @@ begin
   c^.Value := CookieValue; // may just replace an existing value
 end;
 
-function THttpCookies.GetCookie(CookieName: RawUtf8): RawUtf8;
+function THttpCookies.GetCookie(const CookieName: RawUtf8): RawUtf8;
 var
   c: PHttpCookie;
 begin
