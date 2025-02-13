@@ -19,6 +19,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.data,
   mormot.core.os,
@@ -28,7 +29,8 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.perf,
-  mormot.core.log;
+  mormot.core.log,
+  mormot.core.threads;
 
 
 { ************ Unit-Testing classes and functions }
@@ -152,6 +154,7 @@ type
     fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
+    fBackgroundRun: integer;
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -174,6 +177,7 @@ type
     procedure AddLog(condition: boolean; const msg: string);
     procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const);
+    procedure RunDone(Sender: TObject);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -293,6 +297,14 @@ type
     class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
+    /// execute a method possibly in a dedicated TLoggedWorkThread
+    // - OnTask() should take some time running, to be worth a thread execution
+    // - won't create more background threads than currently available CPU cores,
+    // to avoid resource exhaustion and unexpected timeouts on smaller computers
+    procedure Run(const OnTask: TNotifyEvent; Sender: TObject;
+      const TaskName: RawUtf8; Threaded: boolean = false; NotifyTask: boolean = true);
+    /// wait for background thread started by Run() to finish
+    procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60);
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
@@ -1060,6 +1072,50 @@ begin
     WR.AddShorter('bla');
     WR.Add(LastPunctuation);
   end;
+end;
+
+procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
+  const TaskName: RawUtf8; Threaded, NotifyTask: boolean);
+begin
+  if NotifyTask then
+    NotifyProgress([TaskName]);
+  if Assigned(OnTask) then
+    if (fBackgroundRun >= integer(SystemInfo.dwNumberOfProcessors)) or
+       not Threaded then
+      // don't exhaust CPU capacity (could trigger timeouts)
+      OnTask(Sender)
+    else
+    begin
+      LockedInc32(@fBackgroundRun);
+      TLoggedWorkThread.Create(TSynLogTestLog, TaskName, Sender, OnTask, RunDone);
+    end;
+end;
+
+procedure TSynTestCase.RunDone(Sender: TObject);
+begin
+  LockedDec32(@fBackgroundRun);
+end;
+
+procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer);
+var
+  max: Int64;
+begin
+  if fBackgroundRun = 0 then
+    exit;
+  if NotifyThreadCount then
+    NotifyProgress(['(waiting for ', Plural('thread', fBackgroundRun), ')']);
+  max := TimeoutSec shl 10;
+  if max <> 0 then
+    inc(max, GetTickCount64()); // never wait forever
+  while fBackgroundRun <> 0 do
+    if (max <> 0) and
+       (GetTickCount64 > max) then
+    begin
+      TestFailed('RunWait timeout after % sec', [TimeoutSec]);
+      break;
+    end
+    else
+      SleepHiRes(10);
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string);

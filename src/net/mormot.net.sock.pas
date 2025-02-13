@@ -5861,7 +5861,7 @@ var
 begin
   cap := Length(fSndBuf);
   if fSndBufLen + Len > cap then
-    SetLength(fSndBuf, Len + cap + cap shr 3 + 2048); // generous 2K provision
+    SetLength(fSndBuf, Len + cap + cap shr 3 + 2048); // generous 2KB provision
   result := @PByteArray(fSndBuf)[fSndBufLen];
   inc(fSndBufLen, Len);
 end;
