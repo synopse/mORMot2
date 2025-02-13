@@ -9394,25 +9394,13 @@ begin
 end;
 
 function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;
-var
-  len, L: PtrInt;
 begin
-  len := (AppendUInt32ToBuffer(@result[1], itemcount) - PUtf8Char(@result[1])) + 1;
-  result[len] := ' ';
-  L := ord(itemname[0]);
-  if (L > 0) and
-     (L <= 240) then
-  begin
-    // avoid buffer overflow
-    MoveFast(itemname[1], result[len + 1], L);
-    inc(len, L);
-    if itemcount > 1 then
-    begin
-      inc(len);
-      result[len] := 's';
-    end;
-  end;
-  result[0] := AnsiChar(len);
+  result[0] := #0;
+  AppendShortCardinal(itemcount, result);
+  AppendShortChar(' ', @result);
+  AppendShort(itemname, result);
+  if itemcount > 1 then
+    AppendShortChar('s', @result);
 end;
 
 function EscapeBuffer(s: PAnsiChar; slen: integer;
