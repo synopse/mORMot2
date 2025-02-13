@@ -1254,7 +1254,7 @@ var
 begin
   if (_HashAlgoMd[hfSHA256] = nil) and
      OpenSslIsAvailable then
-    for h := low(h) to high(h) do
+    for h := low(h) to high(h) do // populate once
       _HashAlgoMd[h] := EVP_get_digestbyname(HF_MD[h]);
   result := _HashAlgoMd[Algorithm];
 end;
@@ -1312,7 +1312,7 @@ begin
 end;
 
 var
-  EvpOk, EvpKo: TIntegerDynArray; // creating a context has a cost
+  EvpOk, EvpKo: TIntegerDynArray; // cache to avoid creating ctx each time
 
 function OpenSslSupports(EvpType: integer): boolean;
 var
@@ -1399,7 +1399,7 @@ begin
           EOpenSsl.Check(EVP_PKEY_keygen(ctx, @result));
         end
       else
-        exit; // unsupported type
+        exit; // unsupported type (yet)
     end;
   finally
     EVP_PKEY_CTX_free(ctx);
