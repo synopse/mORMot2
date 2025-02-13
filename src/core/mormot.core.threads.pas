@@ -1082,9 +1082,9 @@ type
   /// TDocVariantData background thread callback for TLoggedWorkThread.Create
   TOnLoggedWorkProcessData = procedure(const Context: TDocVariantData) of object;
 
-  /// a class able to run some complex/long process in a background thread
+  /// a class able to run some complex/long process in its own background thread
   // - with proper logging and eventual ending notification
-  // - a dedicated thread will be initialized and launch for the process, so
+  // - a dedicated thread will be initialized and launched for the process, so
   // OnExecute() should better take some time to be worth the thread creation
   TLoggedWorkThread = class(TLoggedThread)
   protected
@@ -1101,7 +1101,7 @@ type
       const OnExecuted: TNotifyEvent = nil);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
-    // - with the context as a TDocVariantData object with name/value pairs
+    // - with the context as a TDocVariantData object supplied as name/value pairs
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
       const OnExecuted: TNotifyEvent = nil);
