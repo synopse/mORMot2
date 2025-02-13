@@ -6120,7 +6120,7 @@ begin
   end;
   // retrieve UriSessionSignaturePos as needed by Ctxt.Authenticate
   p := Ctxt.fParameters;
-  if p <> nil then
+  if p <> nil then // pre-located just after '?par=val&par=val&...'
   begin
     if fOwner.fHandleAuthentication then
     begin

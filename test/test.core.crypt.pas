@@ -13,7 +13,6 @@ interface
 
 uses
   sysutils,
-  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -28,7 +27,6 @@ uses
   mormot.core.perf,
   mormot.core.test,
   mormot.core.variants,
-  mormot.core.threads,
   mormot.lib.pkcs11,
   mormot.lib.openssl11,
   mormot.net.sock, // for NetBinToBase64()
@@ -42,15 +40,12 @@ type
   TTestCoreCrypto = class(TSynTestCase)
   public
     fDigestAlgo: TDigestAlgo;
-    fCatalogRunCount: integer;
     procedure CryptData(dpapi: boolean);
     procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
     function DigestUser(const User, Realm: RawUtf8;
       out HA0: THash512Rec): TAuthServerResult;
-    procedure CatalogRun(Algo: TCryptAlgo; const OnExecute: TNotifyEvent);
     procedure CatalogRunCert(Context: TObject);
     procedure CatalogRunStore(Context: TObject);
-    procedure CatalogRunDone(Sender: TObject);
   published
     /// MD5 (and MD4) hashing functions
     procedure _MD5;
@@ -2935,22 +2930,6 @@ begin
   end;
 end;
 
-procedure TTestCoreCrypto.CatalogRun(Algo: TCryptAlgo; const OnExecute: TNotifyEvent);
-begin
-  if fCatalogRunCount >= integer(SystemInfo.dwNumberOfProcessors) then
-  begin
-    OnExecute(Algo); // don't exhaust the CPU power (could trigger timeouts)
-    exit;
-  end;
-  LockedInc32(@fCatalogRunCount);
-  TLoggedWorkThread.Create(TSynLog, Algo.AlgoName, Algo, OnExecute, CatalogRunDone);
-end;
-
-procedure TTestCoreCrypto.CatalogRunDone(Sender: TObject);
-begin
-  LockedDec32(@fCatalogRunCount);
-end;
-
 procedure TTestCoreCrypto.CatalogRunCert(Context: TObject);
 var
   crt: TCryptCertAlgo absolute Context;
@@ -3565,29 +3544,19 @@ begin
   for a := 0 to high(alg) do
   begin
     crt := alg[a] as TCryptCertAlgo;
-    NotifyProgress([crt.AlgoName]);
-    if crt.AsymAlgo in CAA_RSA then
-      // RSA generation is slow -> threaded
-      CatalogRun(crt, CatalogRunCert)
-    else
-      CatalogRunCert(crt);
+    // RSA generation is slow -> threaded
+    Run(CatalogRunCert, crt, crt.AlgoName, crt.AsymAlgo in CAA_RSA);
   end;
   // validate Store High-Level Algorithms Factory
   alg := TCryptStoreAlgo.Instances;
   for a := 0 to high(alg) do
   begin
     str := alg[a] as TCryptStoreAlgo;
-    NotifyProgress([str.AlgoName]);
-    if str.DefaultCertAlgo.AsymAlgo in CAA_RSA then
-      // RSA generation is slow -> threaded
-      CatalogRun(str, CatalogRunStore)
-    else
-      CatalogRunStore(str);
+    // RSA generation is slow -> threaded
+    Run(CatalogRunStore, str, str.AlgoName, str.DefaultCertAlgo.AsymAlgo in CAA_RSA);
   end;
   // wait for all background thread process
-  NotifyProgress(['(waiting for ', fCatalogRunCount, ' threads)']);
-  while fCatalogRunCount <> 0 do
-    Sleep(10);
+  RunWait;
 end;
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
