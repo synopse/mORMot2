@@ -6373,6 +6373,9 @@ begin
   Check(RecordLoadJson(d, u, TypeInfo(TTest)));
   check(d.d <> 0);
   {$endif HASEXTRECORDRTTI}
+  CheckEqual(SizeOf(TRttiVarData), SizeOf(TVarData));
+  CheckEqual(SizeOf(TSynVarData), SizeOf(TVarData));
+  Check(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
   // CSV to set
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'none'), 0, 'TSetMyEnum?');

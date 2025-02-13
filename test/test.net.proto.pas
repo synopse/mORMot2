@@ -1690,8 +1690,21 @@ procedure TNetworkProtocols.HTTP;
 var
   met: TUriMethod;
   s: RawUtf8;
-  c: THttpCookies;
+  hc: THttpCookies;
   U: TUri;
+
+  procedure Check4;
+  begin
+    CheckEqual(hc.Cookies[0].Name, 'name');
+    CheckEqual(hc.Cookies[0].Value, 'value');
+    CheckEqual(hc.Cookies[1].Name, 'name 1');
+    CheckEqual(hc.Cookies[1].Value, 'value1');
+    CheckEqual(hc.Cookies[2].Name, 'name 2');
+    CheckEqual(hc.Cookies[2].Value, 'value 2');
+    CheckEqual(hc.Cookies[3].Name, 'name3');
+    CheckEqual(hc.Cookies[3].Value, 'value3');
+  end;
+
 begin
   // validate method names and HTTP status codes or schemes
   Check(ToMethod('') = mNone);
@@ -1768,45 +1781,28 @@ begin
   CheckEqual(U.Server, '');
   CheckEqual(U.Address, 'path/to%20image.jpg');
   // validate THttpCookies
-  c.Clear;
-  c.ParseServer('');
-  CheckEqual(length(c.Cookies), 0);
-  c.Clear;
-  c.ParseServer('one: value'#13#10'cookie: name=value');
-  CheckEqual(length(c.Cookies), 1);
-  CheckEqual(c.Cookies[0].Name, 'name');
-  CheckEqual(c.Cookies[0].Value, 'value');
-  c.Clear;
-  c.ParseServer('one: value'#13#10'cookie: name = value ');
-  CheckEqual(length(c.Cookies), 1);
-  CheckEqual(c.Cookies[0].Name, 'name');
-  CheckEqual(c.Cookies[0].Value, 'value');
-  c.Clear;
-  c.ParseServer('cookie: name=value'#13#10 +
+  hc.ParseServer('');
+  CheckEqual(length(hc.Cookies), 0);
+  hc.ParseServer('one: value'#13#10'cookie: name=value');
+  CheckEqual(length(hc.Cookies), 1);
+  CheckEqual(hc.Cookies[0].Name, 'name');
+  CheckEqual(hc.Cookies[0].Value, 'value');
+  hc.Clear;
+  CheckEqual(length(hc.Cookies), 0);
+  hc.ParseServer('one: value'#13#10'cookie: name = value ');
+  CheckEqual(length(hc.Cookies), 1);
+  CheckEqual(hc.Cookies[0].Name, 'name');
+  CheckEqual(hc.Cookies[0].Value, 'value');
+  hc.ParseServer('cookie: name=value'#13#10 +
     'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
     'cookone: value'#13#10);
-  CheckEqual(length(c.Cookies), 4);
-  CheckEqual(c.Cookies[0].Name, 'name');
-  CheckEqual(c.Cookies[0].Value, 'value');
-  CheckEqual(c.Cookies[1].Name, 'name 1');
-  CheckEqual(c.Cookies[1].Value, 'value1');
-  CheckEqual(c.Cookies[2].Name, 'name 2');
-  CheckEqual(c.Cookies[2].Value, 'value 2');
-  CheckEqual(c.Cookies[3].Name, 'name3');
-  CheckEqual(c.Cookies[3].Value, 'value3');
-  c.Clear;
-  c.ParseServer('cookie: name=value'#10'toto: titi'#10#10 +
+  CheckEqual(length(hc.Cookies), 4);
+  Check4;
+  hc.ParseServer('cookie: name=value'#10'toto: titi'#10#10 +
     'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
     'cookone: value'#13#10#13#10);
-  CheckEqual(length(c.Cookies), 4, 'malformatted CRLF');
-  CheckEqual(c.Cookies[0].Name, 'name');
-  CheckEqual(c.Cookies[0].Value, 'value');
-  CheckEqual(c.Cookies[1].Name, 'name 1');
-  CheckEqual(c.Cookies[1].Value, 'value1');
-  CheckEqual(c.Cookies[2].Name, 'name 2');
-  CheckEqual(c.Cookies[2].Value, 'value 2');
-  CheckEqual(c.Cookies[3].Name, 'name3');
-  CheckEqual(c.Cookies[3].Value, 'value3');
+  CheckEqual(length(hc.Cookies), 4, 'malformatted CRLF');
+  Check4;
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;
