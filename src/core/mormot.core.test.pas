@@ -302,7 +302,7 @@ type
     // - won't create more background threads than currently available CPU cores,
     // to avoid resource exhaustion and unexpected timeouts on smaller computers
     procedure Run(const OnTask: TNotifyEvent; Sender: TObject;
-      const TaskName: RawUtf8; Threaded: boolean = false; NotifyTask: boolean = true);
+      const TaskName: RawUtf8; Threaded: boolean = true; NotifyTask: boolean = true);
     /// wait for background thread started by Run() to finish
     procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60);
     /// this method is triggered internally - e.g. by Check() - when a test failed
