@@ -1067,7 +1067,7 @@ type
     fInterningTix: cardinal;
     fExecuteEvent: TSynEvent;
     fSockets: THttpAsyncClientConnections; // allocated when needed
-    fHttpDateNowUtc: string[39]; // consume 37 chars, aligned to 40 bytes
+    fHttpDateNowUtc: THttpDateNowUtc;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
@@ -2643,7 +2643,8 @@ begin
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
   fLastOperationReleaseMemorySeconds := 60;
-  fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
+  fLastOperationMS := mormot.core.os.GetTickCount64;
+  fLastOperationSec := Qword(fLastOperationMS) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
   {$ifndef USE_WINIOCP}
   fThreadPollingWakeupLoad :=
@@ -4860,7 +4861,7 @@ begin
   ctx.StatusCode := fRespStatus;
   ctx.Received := fBytesRecv;
   ctx.Sent := fBytesSend;
-  ctx.Tix64 := 0;
+  ctx.Tix64 := fServer.fAsync.fLastOperationMS; // ProcessIdleTix() GetTickCount64
   try
     fServer.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
