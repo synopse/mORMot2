@@ -2646,6 +2646,8 @@ begin
   fLastOperationMS := mormot.core.os.GetTickCount64;
   fLastOperationSec := Qword(fLastOperationMS) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
+  SetLength(fGC1.Items, 512);
+  SetLength(fGC2.Items, 512);
   {$ifndef USE_WINIOCP}
   fThreadPollingWakeupLoad :=
     (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
@@ -2744,36 +2746,95 @@ end;
 
 function OneGC(var gen, dst: TPollAsyncConnections; lastms, oldms: cardinal): PtrInt;
 var
-  c: TAsyncConnection;
-  i, d: PtrInt;
+  c: PAsyncConnection;
+  ms, n: cardinal;
+  d: PtrInt;
 begin
   result := 0;
-  if gen.Count = 0 then
+  n := gen.Count;
+  if n = 0 then
     exit;
   d := dst.Count;
+  if oldms < 50 then
+    oldms := 50; // bare minimum for GC#1
   oldms := lastms - oldms;
-  for i := 0 to gen.Count - 1 do
-  begin
-    c := pointer(gen.Items[i]);
-    if c.fLastOperation <= oldms then // AddGC() set c.fLastOperation as ms
+  c := pointer(gen.Items);
+  repeat
+    ms := c^.fLastOperation;
+    if ms <= oldms then // AddGC() set c.fLastOperation as ms
     begin
       // move to next generation list after timeout
       if d = length(dst.Items) then
         SetLength(dst.Items, NextGrow(d));
-      dst.Items[d] := c;
+      dst.Items[d] := c^;
       inc(d);
     end
     else
     begin
-      if c.fLastOperation > lastms then
+      if ms > lastms then
         // need to reset time flag every 49.7 days (32-bit unlikely overflow)
-        c.fLastOperation := lastms; // will wait twice fKeepConnectionInstanceMS
-      gen.Items[result] := c; // keep
+        c^.fLastOperation := lastms; // will wait twice the delay
+      gen.Items[result] := c^; // keep
       inc(result);
     end;
-  end;
+    inc(c);
+    dec(n);
+  until n = 0;
   gen.Count := result; // don't resize gen.Items[] to avoid realloc
   dst.Count := d;
+end;
+
+procedure TAsyncConnections.DoGC;
+var
+  tofree: TPollAsyncConnections;
+  n1, n2, h, tix1, tix2: integer;
+  lastms: cardinal;
+begin
+  // refresh ticks markers
+  tix1 := fLastOperationMS shr 5; // ProcessIdleTix() to call every 32 ms
+  tix2 := tix1 shr 5;             // check GC#2 only every second
+  lastms := fLastOperationMS;     // to force 32-bit unsigned value
+  // retrieve the connection instances to be released
+  if fGC2.Safe.TryLock then
+  try
+    n1 := 0;
+    if fGC1.Count <> 0 then
+      if fGC1.Safe.TryLock then
+        // if we reached here, both GC#1 and GC#2 have been acquired
+        try
+          // keep just-closed-connections in GC#1 list for 100 ms by default
+          n1 := OneGC(fGC1, fGC2, lastms, fKeepConnectionInstanceMS);
+        finally
+          fGC1.Safe.UnLock;
+        end
+      else
+        exit; // won't block and retry if another thread is accessing GC#1
+    fGCTix1 := tix1;
+    if (fGCTix2 = tix2) or
+       (fGC2.Count = 0) then
+      exit;
+    fGCTix2 := tix2;
+    // keep instances 10 seconds in GC#2 until no pending accept() needs them
+    tofree.Count := 0;
+    SetLength(tofree.Items, NextGrow(fGC2.Count shr 1));
+    n2 := OneGC(fGC2, tofree, lastms, 10000);
+  finally
+    fGC2.Safe.UnLock;
+  end
+  else
+    exit; // won't block if another thread is accessing GC#2
+  // notify the result of GC#1 and GC#2 collection
+  h := n1 xor (n2 shl 16); // compute the current state of both GC
+  if (h = fGCLast) and
+     (tofree.Count = 0) then
+    exit; // nothing new to report
+  fGCLast := h;
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
+      [n1, n2, tofree.Count, fSockets.Count], self);
+  // actually release the deprecated connection instances
+  if tofree.Count <> 0 then
+    FreeGC(tofree);
 end;
 
 procedure TAsyncConnections.FreeGC(var conn: TPollAsyncConnections);
@@ -2799,63 +2860,13 @@ begin
       on E: Exception do
       begin
         if Assigned(fLog) then
-          fLog.Add.Log(sllWarning, 'DoGC: %.Free failed as %',
+          fLog.Add.Log(sllWarning, 'FreeGC: %.Free failed as %',
             [pointer(c), PClass(E)^], self);
         dec(i); // just ignore this entry
       end;
     end;
   conn.Count := 0;
   conn.Items := nil;
-end;
-
-procedure TAsyncConnections.DoGC;
-var
-  tofree: TPollAsyncConnections;
-  n1, n2, h, tix2: integer;
-begin
-  // retrieve the connection instances to be released
-  tofree.Count := 0;
-  if fGC2.Safe.TryLock then
-  try
-    if fGC1.Safe.TryLock then
-      // if we reached here, both GC#1 and GC#2 have been acquired
-      try
-        // keep just-closed-connections in GC#1 list for 100 ms by default
-        n1 := OneGC(fGC1, fGC2, fLastOperationMS, fKeepConnectionInstanceMS);
-      finally
-        fGC1.Safe.UnLock;
-      end
-    else
-      exit; // won't block if another thread is accessing GC#1
-    // keep instances 10 seconds in GC#2 until no pending accept needs them
-    tix2 := fLastOperationMS shr 10;
-    if tix2 = fGCTix2 then
-      exit; // GC#2 is enough to be checked every second
-    n2 := 0;
-    if fGC2.Count <> 0 then
-    begin
-      SetLength(tofree.Items, 32); // good initial provisioning
-      n2 := OneGC(fGC2, tofree, fLastOperationMS, 10000);
-    end;
-  finally
-    fGC2.Safe.UnLock;
-  end
-  else
-    exit; // won't block if another thread is accessing GC#2
-  // notify the result of GC#1 and GC#2 collection
-  fGCTix1 := fLastOperationMS shr 5; // ProcessIdleTix() to call every 32 ms
-  fGCTix2 := tix2;
-  h := n1 xor (n2 shl 16); // compute the current state of both GC
-  if (h = fGCLast) and
-     (tofree.Count = 0) then
-    exit; // nothing new to report
-  fGCLast := h;
-  if Assigned(fLog) then
-    fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
-      [n1, n2, tofree.Count, fSockets.Count], self);
-  // actually release the deprecated connection instances
-  if tofree.Count <> 0 then
-    FreeGC(tofree);
 end;
 
 procedure TAsyncConnections.Shutdown;
@@ -3616,7 +3627,8 @@ begin
   // e.g. overriden in TWebSocketAsyncConnections to send pending frames
 end;
 
-procedure TAsyncConnections.SetOnIdle(const aOnIdle: TOnPollSocketsIdle; Remove: boolean);
+procedure TAsyncConnections.SetOnIdle(
+  const aOnIdle: TOnPollSocketsIdle; Remove: boolean);
 begin
   if Remove then
     MultiEventRemove(fOnIdle, TMethod(aOnIdle))
