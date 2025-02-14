@@ -1421,6 +1421,8 @@ begin
           end;
           if not started then
             continue;
+          if C.fBackgroundRun.Waiting then
+            C.fBackgroundRun.Terminate({andwait=}true); // paranoid
           C.CleanUp; // should be done before Destroy call
           if C.AssertionsFailed = 0 then
             DoColor(ccLightGreen)
