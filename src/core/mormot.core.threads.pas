@@ -3309,7 +3309,7 @@ end;
 
 procedure SetWork(var Work: TLoggedWork; const Task: TOnLoggedWorkProcessData;
   const NameValuePairs: array of const; const Name: RawUtf8); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 begin
   Work.Name := Name;
   Work.Task := TNotifyEvent(Task);
