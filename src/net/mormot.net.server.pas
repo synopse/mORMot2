@@ -3157,6 +3157,7 @@ begin
   // process content
   Context.ContentLength := 0; // needed by ProcessStaticFile
   Context.ContentLastModified := 0;
+  Context.CommandUri := fUrl; // may have been normalized/cleaned during process
   if (fOutContentType <> '') and
      (fOutContentType[1] = '!') then
     if fOutContentType = NORESPONSE_CONTENT_TYPE then

@@ -6055,7 +6055,7 @@ begin
     exit;
   p := pointer(Ctxt.Call^.Url);
   if p^ = '/' then
-    inc(p);
+    inc(p); // normalize
   result := pointer(TRestTreeNode(fTree[Ctxt.Method].Root).Lookup(p, Ctxt));
   if result = nil then
     exit;

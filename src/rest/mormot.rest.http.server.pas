@@ -1187,13 +1187,12 @@ begin
   else
     // no AdjustHostUrl() below
     Ctxt.Host := '';
-  if call.Url = '' then
-  begin
-    call.Url := Ctxt.Url;
-    if (call.Url <> '') and
-       (call.Url[1] = '/') then
-      delete(call.Url, 1, 1); // normalize URI
-  end;
+  if (call.Url = '') and
+     (Ctxt.Url <> '') then
+    if Ctxt.Url[1] = '/' then // trim any initial '/'
+      FastSetString(call.Url, @PByteArray(Ctxt.Url)[1], length(Ctxt.Url) - 1)
+    else
+      call.Url := Ctxt.Url;
   call.Method := Ctxt.Method;
   call.InHead := Ctxt.InHeaders;
   call.InBody := Ctxt.InContent;
@@ -1264,6 +1263,7 @@ begin
   end;
   // set output content
   result := call.OutStatus;
+  Ctxt.Url := call.Url;
   Ctxt.OutContent := call.OutBody;
   P := pointer(call.OutHead);
   if IdemPChar(P, 'CONTENT-TYPE: ') then
