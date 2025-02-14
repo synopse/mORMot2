@@ -2832,6 +2832,7 @@ begin
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
       [n1, n2, tofree.Count, fSockets.Count], self);
+//writeln('DoGC n1=', n1, ' n2=',n2, ' tofree=',tofree.Count);
   // actually release the deprecated connection instances
   if tofree.Count <> 0 then
     FreeGC(tofree);
@@ -3600,25 +3601,28 @@ begin
         exit;
       NowTix := mormot.core.os.GetTickCount64; // may have changed
     end;
+    // update internal cache to avoid GetTickCount64 syscall
+    fLastOperationMS := NowTix;
     // perform connection GC
-    fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
     if (fGCTix1 <> ms32) and
        (fGC1.Count + fGC2.Count <> 0) then
       DoGC;
+    if Terminated then
+      exit;
+    // notify IdleEverySecond
+    sec := Qword(NowTix) div 1000; // when 32-bit second resolution is fine
+    if sec <> fLastOperationSec then
+    begin
+      fLastOperationSec := sec;
+      IdleEverySecond;
+    end;
     // notify the SetOnIdle() registered events
     if fOnIdle <> nil then
       for i := 0 to length(fOnIdle) - 1 do
         if Terminated then
           exit
         else
-          fOnIdle[i](Sender, NowTix);
-    // notify IdleEverySecond
-    sec := Qword(NowTix) div 1000; // when 32-bit second resolution is fine
-    if (sec = fLastOperationSec) or
-       Terminated then
-      exit; // not a new second tick yet
-    fLastOperationSec := sec;
-    IdleEverySecond;
+          fOnIdle[i](Sender, NowTix); // any exception is cathed below
   except // any exception from here is fatal for the whole server process
     on E: Exception do
       DoLog(sllWarning, 'ProcessIdleTix catched %', [E], self);
