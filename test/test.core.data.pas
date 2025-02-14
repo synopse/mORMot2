@@ -6744,41 +6744,43 @@ const
     CheckEqual(res, expected);
   end;
 
-  procedure Test(const decoded, encoded: RawUtf8);
+  procedure Test(decoded, encoded: RawUtf8);
   begin
     CheckEqual(UrlEncode(decoded), encoded);
     Check(UrlDecode(encoded) = decoded);
     Check(UrlDecode(PUtf8Char(encoded)) = decoded);
+    if decoded[1] <> '/' then
+      insert('/', decoded, 1); // as AddUrlNameNormalize() does
     DoOne(StringReplaceChars(encoded, '+', ' '), decoded); // + only after ?
   end;
 
 begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
-    DoOne('', '');
-    DoOne('a', 'a');
-    DoOne('ab', 'ab');
-    DoOne('a%20b', 'a b');
-    DoOne('a% b', 'a% b');
+    DoOne('', '/');
+    DoOne('a', '/a');
+    DoOne('ab', '/ab');
+    DoOne('a%20b', '/a b');
+    DoOne('a% b', '/a% b');
     DoOne('/', '/');
     DoOne('//', '/');
-    DoOne('a/b', 'a/b');
-    DoOne('a//b', 'a/b');
-    DoOne('a///b', 'a/b');
+    DoOne('a/b', '/a/b');
+    DoOne('a//b', '/a/b');
+    DoOne('a///b', '/a/b');
     DoOne('/ab', '/ab');
     DoOne('//ab', '/ab');
     DoOne('///ab', '/ab');
-    DoOne('ab/', 'ab/');
-    DoOne('ab//', 'ab/');
-    DoOne('ab///', 'ab/');
-    DoOne('a/b/', 'a/b/');
+    DoOne('ab/', '/ab/');
+    DoOne('ab//', '/ab/');
+    DoOne('ab///', '/ab/');
+    DoOne('a/b/', '/a/b/');
     DoOne('/ab//', '/ab/');
     DoOne('//ab///', '/ab/');
-    DoOne('ab'#0, 'ab');
-    DoOne('ab'#0'c', 'ab');
+    DoOne('ab'#0, '/ab');
+    DoOne('ab'#0'c', '/ab');
     DoOne('/ab'#0'c', '/ab');
     DoOne('/ab//'#0'c', '/ab/');
-    DoOne(#0'c', '');
+    DoOne(#0'c', '/');
     Test('abcdef', 'abcdef');
     Test('where=name like :(''Arnaud%'')', 'where%3Dname+like+%3A%28%27Arnaud%25%27%29');
     Test('"Aardvarks lurk, OK?"', '%22Aardvarks+lurk%2C+OK%3F%22');
