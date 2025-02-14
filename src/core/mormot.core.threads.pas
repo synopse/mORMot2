@@ -1082,6 +1082,14 @@ type
   /// TDocVariantData background thread callback for TLoggedWorkThread.Create
   TOnLoggedWorkProcessData = procedure(const Context: TDocVariantData) of object;
 
+  /// data structure used internally by TLoggedWorkThread/TLoggedWorker
+  TLoggedWork = record
+    Name: RawUtf8;
+    Task: TNotifyEvent; // may be TOnLoggedWorkProcessData
+    Sender: TObject;
+    Data: TDocVariantData;
+  end;
+
   /// a class able to run some complex/long process in its own background thread
   // - with proper logging and eventual ending notification
   // - a dedicated thread will be initialized and launched for the process, so
@@ -1089,10 +1097,8 @@ type
   // - see TLoggedWorker for a global mechanism to handle a pool of this class
   TLoggedWorkThread = class(TLoggedThread)
   protected
-    fSender: TObject;
-    fData: TDocVariantData;
-    fOnExecuteSender, fOnExecuted: TNotifyEvent;
-    fOnExecuteData: TOnLoggedWorkProcessData;
+    fWork: TLoggedWork;
+    fOnDone: TNotifyEvent;
     procedure DoExecute; override;
   public
     /// this constructor will directly start the thread in background
@@ -1109,19 +1115,11 @@ type
       const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
       const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
         reintroduce; overload;
-    /// the associated OnExecute: TNotifyEvent parameter
-    property Sender: TObject
-      read fSender;
-    /// the associated OnExecute: TOnLoggedWorkProcessData parameter
-    property Data: TDocVariantData
-      read fData;
-  end;
-
-  /// data structure used internally by TLoggedWorker
-  TLoggedWorkerTask = record
-    Task: TNotifyEvent;
-    Sender: TObject;
-    Name: RawUtf8;
+    /// this constructor will directly start the thread in background
+    // - with the context as its internal TLoggedWork data structure
+    constructor Create(Logger: TSynLogClass; const Work: TLoggedWork;
+      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
+        reintroduce; overload;
   end;
 
   /// execute tasks in a pool of runtime-adjusted TLoggedWorkThread
@@ -3278,28 +3276,60 @@ end;
 
 { TLoggedWorkThread }
 
+procedure DoWork(const Work: TLoggedWork);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if Work.Data.VarType = 0 then
+    Work.Task(Work.Sender)
+  else
+    TOnLoggedWorkProcessData(Work.Task)(Work.Data);
+end;
+
+procedure SetWork(var Work: TLoggedWork; const Task: TNotifyEvent;
+  Sender: TObject; const Name: RawUtf8); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Work.Name := Name;
+  Work.Task := Task;
+  Work.Sender := Sender;
+  TSynVarData(Work.Data).VType := 0;
+end;
+
+procedure SetWork(var Work: TLoggedWork; const Task: TOnLoggedWorkProcessData;
+  const NameValuePairs: array of const; const Name: RawUtf8); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Work.Name := Name;
+  Work.Task := TNotifyEvent(Task);
+  Work.Sender := nil;
+  Work.Data.InitObject(NameValuePairs, mFastFloat);
+end;
+
 procedure TLoggedWorkThread.DoExecute;
 begin
   try
-    if Assigned(fOnExecuteSender) then
-      fOnExecuteSender(fSender)
-    else if Assigned(fOnExecuteData) then
-      fOnExecuteData(fData);
+    DoWork(fWork);
   finally
-    if Assigned(fOnExecuted) then
-      fOnExecuted(self);
+    if Assigned(fOnDone) then
+      fOnDone(self);
   end;
+end;
+
+constructor TLoggedWorkThread.Create(Logger: TSynLogClass; const Work: TLoggedWork;
+  const OnExecuted: TNotifyEvent; Suspended: boolean);
+begin
+  fWork := Work;
+  fOnDone := OnExecuted;
+  FreeOnTerminate := true;
+  inherited Create(Suspended, Logger, Work.Name);
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const ProcessName: RawUtf8; Sender: TObject;
   const OnExecute, OnExecuted: TNotifyEvent; Suspended: boolean);
 begin
-  fSender := Sender;
-  fOnExecuteSender := OnExecute;
-  fOnExecuted := OnExecuted;
-  FreeOnTerminate := true;
-  inherited Create(Suspended, Logger, ProcessName);
+  SetWork(fWork, OnExecute, Sender, ProcessName);
+  Create(Logger, fWork, OnExecuted, Suspended);
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
@@ -3307,11 +3337,8 @@ constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const OnExecute: TOnLoggedWorkProcessData; const OnExecuted: TNotifyEvent;
   Suspended: boolean);
 begin
-  fOnExecuteData := OnExecute;
-  fOnExecuted := OnExecuted;
-  fData.InitObject(NameValuePairs, mFastFloat);
-  FreeOnTerminate := true;
-  inherited Create(Suspended, Logger, ProcessName);
+  SetWork(fWork, OnExecute, NameValuePairs, ProcessName);
+  Create(Logger, fWork, OnExecuted, Suspended);
 end;
 
 
