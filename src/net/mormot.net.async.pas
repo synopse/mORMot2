@@ -610,7 +610,7 @@ type
     // GC #2 has a TTL of 10 seconds and will be used by ConnectionCreate to
     // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
     fGC1, fGC2: TPollAsyncConnections;
-    fGCLast, fGCTix: integer;
+    fGCLast, fGCTix1, fGCTix2: integer;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
@@ -2811,7 +2811,7 @@ end;
 procedure TAsyncConnections.DoGC;
 var
   tofree: TPollAsyncConnections;
-  n1, n2, h: integer;
+  n1, n2, h, tix2: integer;
 begin
   // retrieve the connection instances to be released
   tofree.Count := 0;
@@ -2828,6 +2828,9 @@ begin
     else
       exit; // won't block if another thread is accessing GC#1
     // keep instances 10 seconds in GC#2 until no pending accept needs them
+    tix2 := fLastOperationMS shr 10;
+    if tix2 = fGCTix2 then
+      exit; // GC#2 is enough to be checked every second
     n2 := 0;
     if fGC2.Count <> 0 then
     begin
@@ -2840,7 +2843,8 @@ begin
   else
     exit; // won't block if another thread is accessing GC#2
   // notify the result of GC#1 and GC#2 collection
-  fGCTix := fLastOperationMS shr 5; // as checked in ProcessIdleTix()
+  fGCTix1 := fLastOperationMS shr 5; // ProcessIdleTix() to call every 32 ms
+  fGCTix2 := tix2;
   h := n1 xor (n2 shl 16); // compute the current state of both GC
   if (h = fGCLast) and
      (tofree.Count = 0) then
@@ -3587,7 +3591,7 @@ begin
     end;
     // perform connection GC
     fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
-    if (fGCTix <> ms32) and
+    if (fGCTix1 <> ms32) and
        (fGC1.Count + fGC2.Count <> 0) then
       DoGC;
     // notify the SetOnIdle() registered events
@@ -4857,9 +4861,9 @@ begin
   ctx.Method := pointer(fHttp.CommandMethod);
   ctx.Host := pointer(fHttp.Host);
   ctx.Url := pointer(fHttp.CommandUri);
-  ctx.User := nil; // from THttpServerSocketGeneric.Authorization()
+  ctx.User := nil;
   if hsrAuthorized in fRequestFlags then
-    ctx.User := pointer(fHttp.BearerToken);
+    ctx.User := pointer(fHttp.BearerToken); // see fServer.Authorization()
   ctx.Referer := pointer(fHttp.Referer);
   ctx.UserAgent := pointer(fHttp.UserAgent);
   ctx.RemoteIP := pointer(fRemoteIP);
