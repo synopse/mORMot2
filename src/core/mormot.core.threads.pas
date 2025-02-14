@@ -1086,6 +1086,7 @@ type
   // - with proper logging and eventual ending notification
   // - a dedicated thread will be initialized and launched for the process, so
   // OnExecute() should better take some time to be worth the thread creation
+  // - see TLoggedWorker for a global mechanism to handle a pool of this class
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fSender: TObject;
@@ -1114,6 +1115,55 @@ type
     /// the associated OnExecute: TOnLoggedWorkProcessData parameter
     property Data: TDocVariantData
       read fData;
+  end;
+
+  /// data structure used internally by TLoggedWorker
+  TLoggedWorkerTask = record
+    Task: TNotifyEvent;
+    Sender: TObject;
+    Name: RawUtf8;
+  end;
+
+  /// execute tasks in a pool of runtime-adjusted TLoggedWorkThread
+  // - as used e.g. by TSynTestCase.Run/RunWait methods
+  // - in respect to TSynThreadPool, threads will be created and released on need
+  // - tasks should better take at least some dozen milliseconds
+  TLoggedWorker = class
+  protected
+    fSafe: TLightLock;
+    fRunning: integer;
+    fMaxRunning: integer;
+    fPending: array of TLoggedWorkerTask; // pending Run() if ForcedThreaded
+    fSynLog: TSynLogClass;
+    procedure RunAdd(const OnTask: TNotifyEvent; Sender: TObject;
+      const TaskName: RawUtf8);
+    procedure RunDone(Sender: TObject); virtual;
+  public
+    /// initialize the task threading process
+    // - default aMaxThread=0 will use SystemInfo.dwNumberOfProcessors
+    constructor Create(aSynLog: TSynLogClass; aMaxThread: integer = 0); reintroduce;
+    /// execute a task method, possibly in a dedicated TLoggedWorkThread
+    // - OnTask() should take some time running, to be worth a thread execution
+    // - default ForcedThread=false ensure TLoggedWorker.Running <= MaxRunning
+    // or would just block and execute OnTask(Sender) in the current (main) thread
+    // - ForcedThread=true will put OnTask(Sender) in an internal queue if
+    // TLoggedWorker.Running > MaxRunning and never use the current (main) thread
+    procedure Run(const OnTask: TNotifyEvent; Sender: TObject;
+      const TaskName: RawUtf8; ForcedThread: boolean = false);
+    /// wait for background thread started by Run() to finish
+    // - returns true on success, false on timeout
+    // - can optionally call CheckSynchronize() if needed
+    function RunWait(TimeoutSec: integer = 60; CallSynchronize: boolean = false): boolean;
+    /// check if Running > 0
+    function Waiting: boolean;
+    /// how many TLoggedWorkThread are currently running
+    property Running: integer
+      read fRunning;
+    /// up to how many TLoggedWorkThread could be used
+    // - default to SystemInfo.dwNumberOfProcessors if 0 is kept at Create()
+    // - lwtForceThreadMaybeQueued would use an internal queue
+    property MaxRunning: integer
+      read fMaxRunning;
   end;
 
   TSynThreadPool = class;
@@ -1273,7 +1323,6 @@ const
 
 
 implementation
-
 
 { ************ Thread-Safe TSynQueue and TPendingTaskList }
 
@@ -3263,6 +3312,116 @@ begin
   fData.InitObject(NameValuePairs, mFastFloat);
   FreeOnTerminate := true;
   inherited Create(Suspended, Logger, ProcessName);
+end;
+
+
+{ TLoggedWorker }
+
+constructor TLoggedWorker.Create(aSynLog: TSynLogClass; aMaxThread: integer);
+begin
+  fSynLog := aSynLog;
+  if aMaxThread = 0 then
+    aMaxThread := SystemInfo.dwNumberOfProcessors;
+  fMaxRunning := aMaxThread;
+end;
+
+procedure TLoggedWorker.Run(const OnTask: TNotifyEvent; Sender: TObject;
+  const TaskName: RawUtf8; ForcedThread: boolean);
+begin
+  if not Assigned(OnTask) then
+    exit;
+  fSafe.Lock;
+  try
+    if fRunning < fMaxRunning then
+    begin
+      // enough CPU cores to run a new thread now
+      inc(fRunning);
+      TLoggedWorkThread.Create(fSynLog, TaskName, Sender, OnTask, RunDone);
+      exit;
+    end
+    else if ForcedThread then
+    begin
+      // caller requires to run in a background thread: enqueue task
+      RunAdd(OnTask, Sender, TaskName);
+      exit;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+  // ForcedThread=false and not enough CPU power: run now (outside lock)
+  OnTask(Sender);
+end;
+
+procedure TLoggedWorker.RunAdd(const OnTask: TNotifyEvent; Sender: TObject;
+  const TaskName: RawUtf8);
+var
+  n: PtrInt;
+  new: ^TLoggedWorkerTask;
+begin
+  n := length(fPending);
+  SetLength(fPending, n + 1);
+  new := @fPending[n];
+  new^.Task := OnTask;
+  new^.Sender := Sender;
+  new^.Name := TaskName;
+end;
+
+procedure TLoggedWorker.RunDone(Sender: TObject);
+var
+  n: PtrInt;
+  next: TLoggedWorkerTask; // local copy on stack, outside of the lock
+begin
+  // called from TLoggedWorkThread.DoExecute when a task is finished
+  repeat
+    // thread-safe check for any pending task
+    fSafe.Lock;
+    try
+      if fPending = nil then
+      begin
+        dec(fRunning); // no pending task: atomic decrease global counter
+        exit;
+      end;
+      // pop last pending task
+      n := PDALen(PAnsiChar(fPending) - _DALEN)^ + (_DAOFF - 1); // = high()
+      next := fPending[n];
+      SetLength(fPending, n);
+    finally
+      fSafe.UnLock;
+    end;
+    // run next pending task in this TLoggedWorkThread (outside lock)
+    if next.Name <> '' then
+      SetCurrentThreadName(next.Name);
+    next.Task(next.Sender);
+  until false; // consume all pending tasks
+end;
+
+function TLoggedWorker.RunWait(TimeoutSec: integer; CallSynchronize: boolean): boolean;
+var
+  endtix: Int64;
+begin
+  result := (self = nil) or
+            (fRunning = 0);
+  if result then
+    exit;
+  endtix := TimeoutSec shl 10;
+  if endtix <> 0 then
+    inc(endtix, GetTickCount64()); // never wait forever
+  CallSynchronize := CallSynchronize and (GetCurrentThreadID = MainThreadID);
+  while fRunning <> 0 do
+    if (endtix <> 0) and
+       (GetTickCount64 > endtix) then
+      exit // result = false on timeout
+    else if CallSynchronize then
+      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+    else
+      SleepHiRes(10);
+  result := true; // success
+end;
+
+function TLoggedWorker.Waiting: boolean;
+begin
+  result := (self <> nil) and
+            (fRunning <> 0);
 end;
 
 
