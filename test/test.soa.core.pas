@@ -271,7 +271,6 @@ type
     procedure ClientTest(aClient: TRestClientDBNamed; aRouting: TRestServerUriContextClass;
       aAsJsonObject: boolean; aRunInOtherThread: boolean = false;
       aOptions: TInterfaceMethodOptions = []);
-    procedure ClientAlgo(aClient: TRestClientDBNamed; algo: TRestAuthenticationSignedUriAlgo);
     class procedure CustomReader(var Context: TJsonParserContext; Data: pointer);
     class procedure CustomWriter(W: TJsonWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
@@ -280,40 +279,16 @@ type
     procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
   public
     { all threaded callbacks for validating all client side modes }
-    /// test the custom record Json serialization - could NOT be parallelized
-    procedure ClientSideRESTCustomRecord(Sender: TObject);
     /// test the client-side in RESTful mode with values transmitted as Json objects
     procedure ClientSideRESTAsJsonObject(Sender: TObject);
-    /// test the client-side in RESTful mode with full session statistics
+    /// test the client-side in RESTful mode with full SQlite3 session statistics
     procedure ClientSideRESTSessionsStats(Sender: TObject);
-    /// test the client-side implementation of optExecLockedPerInterface
-    procedure ClientSideRESTLocked(Sender: TObject);
-    /// test the client-side implementation of opt*InMainThread option
-    // - warning: should be executed in a background thread
-    procedure ClientSideRESTMainThread(Sender: TObject);
-    /// test the client-side implementation of opt*InPerInterfaceThread option
-    // - warning: should be executed in a background thread
-    procedure ClientSideRESTBackgroundThread(Sender: TObject);
-    /// test the client-side implementation with default crc32 URI signature
-    procedure ClientSideRESTSignWithCrc32(Sender: TObject);
-    /// test the client-side implementation with crc32c URI signature
-    procedure ClientSideRESTSignWithCrc32c(Sender: TObject);
-    /// test the client-side implementation with xxHash32 URI signature
-    procedure ClientSideRESTSignWithXxhash(Sender: TObject);
-    /// test the client-side implementation with MD5 URI signature
-    procedure ClientSideRESTSignWithMd5(Sender: TObject);
-    /// test the client-side implementation with SHA-1 URI signature
-    procedure ClientSideRESTSignWithSha1(Sender: TObject);
-    /// test the client-side implementation with SHA-256 URI signature
-    procedure ClientSideRESTSignWithSha256(Sender: TObject);
-    /// test the client-side implementation with SHA-512 URI signature
-    procedure ClientSideRESTSignWithSha512(Sender: TObject);
-    /// test the client-side implementation with SHA3-256 URI signature
-    procedure ClientSideRESTSignWithSha3(Sender: TObject);
-    /// test the client-side implementation using TRestServerAuthenticationNone
-    procedure ClientSideRESTWeakAuth(Sender: TObject);
-    /// test the client-side implementation using TRestServerAuthenticationHttpBasic
-    procedure ClientSideRESTBasicAuth(Sender: TObject);
+    /// test the client-side implementation with threading options
+    procedure ClientSideRESTThread(Sender: TObject);
+    /// test the client-side implementation with any hash URI signature
+    procedure ClientSideRESTSign(Sender: TObject);
+    /// test the client-side implementation using TRestServerAuthentication*
+    procedure ClientSideRESTAuth(Sender: TObject);
     /// test the client-side in RESTful mode with all calls logged in a table
     procedure ClientSideRESTServiceLogToDB(Sender: TObject);
     /// test the client-side implementation in Json-RPC mode
@@ -322,6 +297,8 @@ type
     procedure ClientSideOverHTTP(Sender: TObject);
     /// test REStful mode using HTTP client/server communication and logs
     procedure ClientSideOverHTTPWithLogs(Sender: TObject);
+    /// test the custom record Json serialization - could NOT be parallelized
+    procedure ClientSideRESTCustomRecord(Client: TRestClientDBNamed);
     /// initialize a new REST server + REST client with SOA implementation
     function NewClient(aClientSide: TClientSide): TRestClientDBNamed;
   published
@@ -1750,27 +1727,29 @@ procedure TTestServiceOrientedArchitecture.ClientSide;
 
 begin
   // most client test cases would be run in their own thread (if possible)
-  One(ClientSideRESTMainThread,       csMainThread);
-  One(ClientSideRESTBackgroundThread, csBackground); // start with slowest
+  {$ifndef OSANDROID} // no "main" thread on Android?
+  One(ClientSideRESTThread,           csMainThread); // should be threaded
+  {$endif OSANDROID}
+  One(ClientSideRESTThread,           csBackground); // (slowest first)
   One(ClientSideRESTAsJsonObject,     csJsonObject);
   One(ClientSideRESTSessionsStats,    csSessions);
-  One(ClientSideRESTLocked,           csLocked);
-  One(ClientSideRESTSignWithCrc32,    csCrc32);
-  One(ClientSideRESTSignWithCrc32c,   csCrc32c);
-  One(ClientSideRESTSignWithXxhash,   csXxhash);
-  One(ClientSideRESTSignWithMd5,      csMd5);
-  One(ClientSideRESTSignWithSha1,     csSha1);
-  One(ClientSideRESTSignWithSha256,   csSha256);
-  One(ClientSideRESTSignWithSha512,   csSha512);
-  One(ClientSideRESTSignWithSha3,     csSha3);
-  One(ClientSideRESTWeakAuth,         csWeak);
-  One(ClientSideRESTBasicAuth,        csBasic);
+  One(ClientSideRESTThread,           csLocked);
+  One(ClientSideRESTSign,             csCrc32);
+  One(ClientSideRESTSign,             csCrc32c);
+  One(ClientSideRESTSign,             csXxhash);
+  One(ClientSideRESTSign,             csMd5);
+  One(ClientSideRESTSign,             csSha1);
+  One(ClientSideRESTSign,             csSha256);
+  One(ClientSideRESTSign,             csSha512);
+  One(ClientSideRESTSign,             csSha3);
+  One(ClientSideRESTAuth,             csWeak);
+  One(ClientSideRESTAuth,             csBasic);
   One(ClientSideRESTServiceLogToDB,   csDblog);
   One(ClientSideJsonRPC,              csJsonrpc);
   One(ClientSideOverHTTP,             csHttp);
   One(ClientSideOverHTTPWithLogs,     csHttplog);
   // wait for all multi-threaded background process to finish
-  RunWait({notifyThreadCount=}false, {timeoutSec=}120);
+  RunWait({notifyThreadCount=}false, {timeoutSec=}120, {callSynchronize=}true);
   // RTTI override could NOT be parallelized
   ClientSideRESTCustomRecord(NewClient(csCustomRtti));
 end;
@@ -1952,58 +1931,22 @@ begin
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientAlgo(aClient: TRestClientDBNamed;
-  algo: TRestAuthenticationSignedUriAlgo);
+const
+  CS_ALGO: array[csCrc32 .. csSha3] of TRestAuthenticationSignedUriAlgo = (
+    suaCrc32, suaCrc32c, suaXxHash, suaMd5, suaSha1, suaSha256, suaSha512, suaSha3);
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSign(Sender: TObject);
+var
+  c: TRestClientDBNamed absolute Sender;
 begin
-  (aClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
-    TRestServerAuthenticationDefault).Algorithm := algo;
-  aClient.SetUser('User', 'synopse');
-  ClientTest(aClient, TRestServerRoutingRest, false);
-  aClient.Free;
+  (c.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
+    TRestServerAuthenticationDefault).Algorithm := CS_ALGO[c.ClientSide];
+  c.SetUser('User', 'synopse');
+  ClientTest(c, TRestServerRoutingRest, false);
+  c.Free;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCrc32(Sender: TObject);
-begin
-  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false);
-  Sender.Free;
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCRC32C(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaCRC32C)
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithXXHASH(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaXXHASH);
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithMD5(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaMD5);
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA1(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaSHA1);
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA256(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaSHA256);
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaSHA512);
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA3(Sender: TObject);
-begin
-  ClientAlgo(Sender as TRestClientDBNamed, suaSHA3);
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuth(Sender: TObject);
+procedure TTestServiceOrientedArchitecture.ClientSideRESTAuth(Sender: TObject);
 var
   c: TRestClientDBNamed absolute Sender;
 begin
@@ -2012,35 +1955,34 @@ begin
     TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
-  c.Server.AuthenticationRegister(TRestServerAuthenticationNone);
-  TRestClientAuthenticationNone.ClientSetUser(c, 'User', '');
-  ClientTest(c, TRestServerRoutingRest, false);
-  c.Free;
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTBasicAuth(Sender: TObject);
-var
-  c: TRestClientDBNamed absolute Sender;
-begin
-  c.SessionClose;
-  c.Server.AuthenticationRegister(TRestServerAuthenticationHttpBasic);
-  TRestClientAuthenticationHttpBasic.ClientSetUser(c, 'User', 'synopse');
+  case c.ClientSide of
+    csWeak:
+      begin
+        c.Server.AuthenticationRegister(TRestServerAuthenticationNone);
+        TRestClientAuthenticationNone.ClientSetUser(c, 'User', '');
+      end;
+    csBasic:
+      begin
+        c.Server.AuthenticationRegister(TRestServerAuthenticationHttpBasic);
+        TRestClientAuthenticationHttpBasic.ClientSetUser(c, 'User', 'synopse');
+      end;
+  end;
   ClientTest(c, TRestServerRoutingRest, false);
   c.Free;
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecord(
-  Sender: TObject);
+  Client: TRestClientDBNamed);
 begin
   // warning: could NOT be parallelized before RTTI override is global
   TRttiJson.RegisterCustomSerializer(TypeInfo(TEntry),
     TTestServiceOrientedArchitecture.CustomReader,
     TTestServiceOrientedArchitecture.CustomWriter);
   try
-    ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false);
+    ClientTest(Client, TRestServerRoutingRest, false);
   finally
     TRttiJson.UnRegisterCustomSerializer(TypeInfo(TEntry));
-    Sender.Free;
+    Client.Free;
   end;
 end;
 
@@ -2084,32 +2026,23 @@ begin
     'withsessions',   true], stats);
   FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
   FreeAndNil(fClient);
-end;
-}
+end;}
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread(Sender: TObject);
+procedure TTestServiceOrientedArchitecture.ClientSideRESTThread(Sender: TObject);
+var
+  c: TRestClientDBNamed absolute Sender;
+  opt: TInterfaceMethodOptions;
 begin
-  {$ifndef OSANDROID}
-  // processes on Android seem to never run on main Thread
-  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false, true,
-    [optExecInMainThread, optFreeInMainThread]);
-  {$endif OSANDROID}
-  Sender.Free;
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTBackgroundThread(
-  Sender: TObject);
-begin
-  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false, true,
-    [optExecInPerInterfaceThread, optFreeInPerInterfaceThread]);
-  Sender.Free;
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTLocked(Sender: TObject);
-begin
-  ClientTest(Sender as TRestClientDBNamed, TRestServerRoutingRest, false, true,
-    [optExecLockedPerInterface]);
-  Sender.Free;
+  case c.ClientSide of
+    csMainThread:
+      opt := [optExecInMainThread, optFreeInMainThread];
+    csBackground:
+      opt := [optExecInPerInterfaceThread, optFreeInPerInterfaceThread];
+    csLocked:
+      opt := [optExecLockedPerInterface];
+  end;
+  ClientTest(c, TRestServerRoutingRest, false, true, opt);
+  c.Free;
 end;
 
 type
