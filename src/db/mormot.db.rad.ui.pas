@@ -365,18 +365,16 @@ begin
         PAnsiChar(dest)[len] := #0;
       end;
     ftWideString:
-      begin
-        {$ifdef ISDELPHI2007ANDUP}
-        // here dest = PWideChar[] of DataSize bytes
-        if len = 0 then
-          PWideChar(dest)^ := #0
-        else
-          Utf8ToWideChar(dest, data, Field.DataSize shr 1, len);
-        {$else}
-        // here dest is PWideString
-        Utf8ToWideString(data, len, WideString(dest^));
-        {$endif ISDELPHI2007ANDUP}
-      end;
+      {$ifdef HASDBFTWIDE}
+      // here dest = PWideChar[] of DataSize bytes
+      if len = 0 then
+        PWideChar(dest)^ := #0
+      else
+        Utf8ToWideChar(dest, data, Field.DataSize shr 1, len);
+      {$else}
+      // on Delphi 7, dest is PWideString
+      Utf8ToWideString(data, len, PWideString(dest)^);
+      {$endif HASDBFTWIDE}
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
   else
     EVirtualDataSet.RaiseUtf8('%.GetFieldData unhandled DataType=% (%)',
