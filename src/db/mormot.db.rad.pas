@@ -670,7 +670,11 @@ begin
     else
       {$ifndef UNICODE}
       if ColumnValueDBType = IsTWideStringField then
+      {$ifdef FPC}
+        result := UnicodeStringToUtf8(TWideStringField(ColumnAttr).AsUnicodeString)
+      {$else}
         result := WideStringToUtf8(TWideStringField(ColumnAttr).Value)
+      {$endif FPC}
       else
       {$endif UNICODE}
         result := StringToUtf8(TField(ColumnAttr).AsString);
@@ -795,7 +799,8 @@ end;
 
 procedure TSqlDBDatasetStatementAbstract.ReleaseRows;
 begin
-  if (fQuery <> nil) and fQuery.Active then
+  if (fQuery <> nil) and
+     fQuery.Active then
     fQuery.Close;
   inherited ReleaseRows;
 end;
@@ -819,11 +824,11 @@ function TSqlDBDatasetStatementAbstract.ColumnTypeNativeToDB(
   aNativeType: TFieldType): TSqlDBFieldType;
 begin
   case aNativeType of
-  {$ifdef UNICODE}
+  {$ifdef FPC_OR_UNICODE}
     ftLongWord,
     ftShortint,
     ftByte,
-  {$endif UNICODE}
+  {$endif FPC_OR_UNICODE}
     ftAutoInc,
     ftBoolean,
     ftSmallint,
@@ -831,9 +836,11 @@ begin
     ftLargeint,
     ftWord:
       result := mormot.db.core.ftInt64;
+  {$ifdef FPC_OR_UNICODE}
+    ftExtended,
+  {$endif FPC_OR_UNICODE}
   {$ifdef UNICODE}
     ftSingle,
-    ftExtended,
   {$endif UNICODE}
     ftFloat:
       result := mormot.db.core.ftDouble;
@@ -841,10 +848,10 @@ begin
     ftBCD,
     ftFMTBcd:
       result := mormot.db.core.ftCurrency;
-  {$ifdef UNICODE}
+  {$ifdef FPC_OR_UNICODE}
     ftOraTimeStamp,
     ftOraInterval,
-  {$endif UNICODE}
+  {$endif FPC_OR_UNICODE}
     ftDate,
     ftTime,
     ftDateTime,
@@ -928,8 +935,12 @@ begin
             W.Add('"');
           {$ifndef UNICODE}
             if ColumnValueDBType = IsTWideStringField then
+              {$ifdef FPC}
+              W.AddJsonEscapeW(pointer(TWideStringField(ColumnAttr).AsUnicodeString))
+              {$else}
               W.AddJsonEscapeW(pointer(TWideStringField(ColumnAttr).Value))
-            else
+             {$endif FPC}
+          else
           {$endif UNICODE}
               W.AddJsonEscapeString(f.AsString);
             W.AddDirect('"');
