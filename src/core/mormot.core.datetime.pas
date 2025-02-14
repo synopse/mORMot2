@@ -633,13 +633,14 @@ function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
 function HttpDateToUnixTimeBuffer(httpdate: PUtf8Char): TUnixTime;
 
 type
+  // HttpDateNowUtc consumes 37 chars, aligned to 40 bytes
   THttpDateNowUtc = string[39];
 
 /// returns the current UTC timestamp as the full 'Date' HTTP header line
 // - e.g. as 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
 // - returns as a 40-bytes shortstring to avoid a memory allocation by caller
 // - use an internal cache for every second refresh
-function HttpDateNowUtc: THttpDateNowUtc;
+function HttpDateNowUtc(Tix64: Int64 = 0): THttpDateNowUtc;
 
 /// returns the a specified UTC timestamp in HTTP-like format
 // - e.g. as 'Tue, 15 Nov 1994 12:45:26 GMT'
@@ -2829,13 +2830,15 @@ var
     Value: THttpDateNowUtc;
   end;
 
-function HttpDateNowUtc: THttpDateNowUtc;
+function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
   c: cardinal;
   T: TSynSystemTime;
   now: shortstring; // use a temp variable for _HttpDateNowUtc atomic set
 begin
-  c := GetTickCount64 shr MilliSecsPerSecShl;
+  if Tix64 = 0 then
+    Tix64 := GetTickCount64;
+  c := Tix64 shr MilliSecsPerSecShl;
   with _HttpDateNowUtc do
   begin
     Safe.Lock;
