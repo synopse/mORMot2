@@ -3565,33 +3565,40 @@ end;
 
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
 var
+  ms32: integer; // change at most every 32ms
   sec: TAsyncConnectionSec;
   i: PtrInt;
 begin
-  // called from fSockets.fWrite.OnGetOneIdle callback
-  if Terminated then
+  // called from fSockets.fWrite.OnGetOneIdle callback at most every 500ms
+  if Terminated or
+     (fLastOperationMS = NowTix) then
     exit;
   try
-    sec := Qword(NowTix) shr 5; // change at most every 32ms
+    ms32 := NowTix shr 5;
+    // process pending soWaitWrite
     if (fSockets <> nil) and
        (fSockets.fWaitingWrite.Count <> 0) and
-       (TAsyncConnectionSec(fLastOperationMS shr 5) <> sec) then
+       (fLastOperationMS shr 5 <> ms32) then
     begin
-      fSockets.ProcessWaitingWrite; // process pending soWaitWrite
+      fSockets.ProcessWaitingWrite;
       if Terminated then
         exit;
+      NowTix := mormot.core.os.GetTickCount64; // may have changed
     end;
+    // perform connection GC
     fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
-    if (TAsyncConnectionSec(fGCTix) <> sec) and
+    if (fGCTix <> ms32) and
        (fGC1.Count + fGC2.Count <> 0) then
       DoGC;
+    // notify the SetOnIdle() registered events
     if fOnIdle <> nil then
       for i := 0 to length(fOnIdle) - 1 do
         if Terminated then
           exit
         else
           fOnIdle[i](Sender, NowTix);
-    sec := Qword(NowTix) div 1000; // 32-bit second resolution is fine
+    // notify IdleEverySecond
+    sec := Qword(NowTix) div 1000; // when 32-bit second resolution is fine
     if (sec = fLastOperationSec) or
        Terminated then
       exit; // not a new second tick yet
@@ -4762,7 +4769,7 @@ begin
       include(fHttp.ResponseFlags, rfAsynchronous);
       fHttp.State := hrsWaitAsyncProcessing;
       exit;
-    end
+    end;
   end;
   // handle HTTP/1.1 keep alive timeout
   if not (hfConnectionClose in fHttp.HeaderFlags) then
