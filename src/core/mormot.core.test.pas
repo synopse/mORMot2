@@ -154,13 +154,7 @@ type
     fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
-    fBackgroundRunSafe: TLightLock;
-    fBackgroundRun: integer;
-    fBackgroundPending: array of record // pending Run() if ForcedThreaded
-      EventTask: TNotifyEvent;
-      EventSender: TObject;
-      EventName: RawUtf8;
-    end;
+    fBackgroundRun: TLoggedWorker;
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -183,7 +177,6 @@ type
     procedure AddLog(condition: boolean; const msg: string);
     procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const);
-    procedure RunDone(Sender: TObject);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -313,7 +306,8 @@ type
       const TaskName: RawUtf8; Threaded: boolean = true; NotifyTask: boolean = true;
       ForcedThreaded: boolean = false);
     /// wait for background thread started by Run() to finish
-    procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60);
+    procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60;
+      CallSynchronize: boolean = false);
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
@@ -679,6 +673,7 @@ end;
 destructor TSynTestCase.Destroy;
 begin
   CleanUp;
+  fBackgroundRun.Free;
   inherited;
 end;
 
@@ -1085,101 +1080,29 @@ end;
 
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
-var
-  n: PtrInt;
 begin
   if NotifyTask then
     NotifyProgress([TaskName]);
-  if not Assigned(OnTask) then
-    exit;
-  if not Threaded then
-  begin
-    OnTask(Sender); // run in main thread
-    exit;
-  end;
-  fBackgroundRunSafe.Lock;
-  try
-    if fBackgroundRun < integer(SystemInfo.dwNumberOfProcessors) then
+  if Assigned(OnTask) then
+    if not Threaded then
+      OnTask(Sender) // run in main thread
+    else
     begin
-      // enough CPU core to run a new thread now
-      inc(fBackgroundRun);
-      TLoggedWorkThread.Create(TSynLogTestLog, TaskName, Sender, OnTask, RunDone);
-      exit;
-    end
-    else if ForcedThreaded then
-    begin
-      // caller requires to run in a background thread: enqueue task
-      n := length(fBackgroundPending);
-      SetLength(fBackgroundPending, n + 1);
-      with fBackgroundPending[n] do
-      begin
-        EventTask := OnTask;
-        EventSender := Sender;
-        EventName := TaskName;
-      end;
-      exit;
+      if fBackgroundRun = nil then
+        fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
+      fBackgroundRun.Run(Ontask, Sender, TaskName, ForcedThreaded);
     end;
-  finally
-    fBackgroundRunSafe.UnLock;
-  end;
-  OnTask(Sender); // not enough CPU power: run now in main thread (outside lock)
 end;
 
-procedure TSynTestCase.RunDone(Sender: TObject);
-var
-  task: TNotifyEvent;
-  name: RawUtf8;
-  n: PtrInt;
+procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer;
+  CallSynchronize: boolean);
 begin
-  repeat
-    // check for any pending task
-    fBackgroundRunSafe.Lock;
-    try
-      if fBackgroundPending = nil then
-      begin
-        dec(fBackgroundRun); // no pending task: atomic decrease global counter
-        exit;
-      end;
-      // pop next pending task
-      n := high(fBackgroundPending);
-      with fBackgroundPending[n] do
-      begin
-        task := EventTask;
-        Sender := EventSender;
-        name := EventName;
-      end;
-      SetLength(fBackgroundPending, n);
-    finally
-      fBackgroundRunSafe.UnLock;
-    end;
-    // run next pending task in this thread
-    SetCurrentThreadName(name);
-    task(Sender);
-  until false;
-end;
-
-procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer);
-var
-  max: Int64;
-begin
-  if fBackgroundRun = 0 then
+  if not fBackgroundRun.Waiting then
     exit;
   if NotifyThreadCount then
-    NotifyProgress(['(waiting for ', Plural('thread', fBackgroundRun), ')']);
-  max := TimeoutSec shl 10;
-  if max <> 0 then
-    inc(max, GetTickCount64()); // never wait forever
-  while fBackgroundRun <> 0 do
-    if (max <> 0) and
-       (GetTickCount64 > max) then
-    begin
-      TestFailed('RunWait timeout after % sec', [TimeoutSec]);
-      break;
-    end
-    else if GetCurrentThreadID = MainThreadID then
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
-    else
-      SleepHiRes(10);
+    NotifyProgress(['(waiting for ', Plural('thread', fBackgroundRun.Running), ')']);
+  if not fBackgroundRun.RunWait(TimeoutSec, CallSynchronize) then
+    TestFailed('RunWait timeout after % sec', [TimeoutSec]);
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
