@@ -1773,6 +1773,9 @@ type
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
     fFlags: set of (ffHadDefineHost, ffOwnWriterSingle);
     fVariables: THttpLogVariables;
+    fTimeLastTix: array[hlvTime_Iso8601 .. hlvTime_Http] of cardinal;
+    fTimeLastTxt: array[hlvTime_Iso8601 .. hlvTime_Http] of THttpDateNowUtc;
+    procedure SetTimeLast(t: THttpLogVariable; Tix64: Int64);
     procedure SetSettings(aSettings: THttpLoggerSettings);
     function GetWriterFileName(const aHost: RawUtf8; aError: boolean): TFileName; virtual;
     procedure CreateMainWriters;
@@ -5254,13 +5257,35 @@ begin
   fUnknownPosLen := nil;
 end;
 
+procedure THttpLogger.SetTimeLast(t: THttpLogVariable; Tix64: Int64);
+var
+  now: TSynSystemTime;
+begin
+  // dates are all in UTC/GMT as it should on any serious server design
+  fTimeLastTix[t] := Tix64 shr MilliSecsPerSecShl;
+  FromGlobalTime(now, {local=}false, Tix64); // call OS outside of the lock
+  fSafe.Lock; // update the cached text in an atomic way
+  case t of
+    hlvTime_Iso8601:
+      begin
+        now.ToIsoDateTimeShort(fTimeLastTxt[hlvTime_Iso8601]);
+        AppendShortChar('Z', @fTimeLastTxt[hlvTime_Iso8601]);
+      end;
+    hlvTime_Local:
+      now.ToNcsaShort(fTimeLastTxt[hlvTime_Local], '+0000');
+    hlvTime_Http:
+      now.ToHttpDateShort(fTimeLastTxt[hlvTime_Http], 'GMT');
+  end;
+  fSafe.UnLock;
+end;
+
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   n, urllen: integer;
   tix10, crc, reqcrc, uricrc: cardinal;
+  t: THttpLogVariable;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
-  now: TSynSystemTime;
   wr: TTextDateWriter;
 const
   SCHEME: array[boolean] of string[7]  = ('http', 'https');
@@ -5288,12 +5313,14 @@ begin
     if urllen < 0 then
       urllen := length(RawUtf8(Context.Url));
   end;
-  if fVariables * [hlvTime_Iso8601, hlvTime_Local, hlvTime_Http] <> [] then
-    // dates are all in UTC/GMT as it should on any serious design
-    FromGlobalTime(now, {local=}false, Context.Tix64);
+  for t := low(fTimeLastTix) to high(fTimeLastTix) do
+    if (t in fVariables) and
+       (fTimeLastTix[t] <> tix10) then
+      SetTimeLast(t, Context.Tix64); // update each cache every second
   reqcrc := 0;
   uricrc := 0;
-  if fVariables * [hlvRequest_Hash, hlvUri_Hash] <> [] then
+  if (hlvRequest_Hash in fVariables) or
+     (hlvUri_Hash in fVariables) then
   begin
     crc := crc32c(crc32c(byte(Context.Flags),
                          Context.Host,   length(RawUtf8(Context.Host))),
@@ -5424,12 +5451,10 @@ begin
           wr.AddQ(UnixTimeUtc);
         hlvTime_EpochMSec:
           wr.AddQ(UnixMSTimeUtcFast);
-        hlvTime_Iso8601:
-          now.AddIsoDateTime(wr, {ms=}false, 'T', 'Z');
-        hlvTime_Local:
-          now.AddNcsaText(wr, '+0000');
+        hlvTime_Iso8601,
+        hlvTime_Local,
         hlvTime_Http:
-          now.AddHttpDate(wr, 'GMT');
+          wr.AddShort(fTimeLastTxt[v^]); // per-second cached timestamp
         hlvUri_Hash:
           wr.AddUHex(uricrc, #0);
       end;
