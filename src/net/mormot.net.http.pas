@@ -510,7 +510,8 @@ const
   /// wait up to 10 seconds for new file content in rfProgressiveStatic mode
   STATICFILE_PROGTIMEOUTSEC = 10;
 
-var // filled from RTTI enum trimmed text during unit initialization
+var
+  /// filled from RTTI trimmed enum (e.g. 'ErrorRejected') at unit initialization
   HTTP_STATE: array[THttpRequestState] of RawUtf8;
 
   /// highest files size for THttpRequestContext.ContentFromFile load to memory
@@ -4253,22 +4254,23 @@ end;
 procedure THttpServerRequestAbstract.Prepare(var aHttp: THttpRequestContext;
   const aRemoteIP: RawUtf8; aAuthorize: THttpServerRequestAuthentication);
 begin
+  // no FastAssign() to keep aHttp.* for TOnHttpServerAfterResponseContext
   fRemoteIP := aRemoteIP;
   fHttp := @aHttp;
-  FastAssign(fUrl, aHttp.CommandUri);
+  fUrl := aHttp.CommandUri;
+  fHost := aHttp.Host;
   fMethod := aHttp.CommandMethod;
-  FastAssign(fInHeaders, aHttp.Headers);
+  FastAssign(fInHeaders, aHttp.Headers); // also set aHttp.Headers := ''
   FastAssign(fInContentType, aHttp.ContentType);
-  FastAssign(fHost, aHttp.Host);
   if hsrAuthorized in fConnectionFlags then
   begin
     // reflect the current valid "www-authenticate:" header
     fAuthenticationStatus := aAuthorize;
-    FastAssign(fAuthenticatedUser, aHttp.BearerToken); // set by fServer.Authorization()
+    fAuthenticatedUser := aHttp.BearerToken; // set by fServer.Authorization()
   end
   else
     FastAssign(fAuthBearer, aHttp.BearerToken);
-  FastAssign(fUserAgent, aHttp.UserAgent);
+  fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
 end;
 
