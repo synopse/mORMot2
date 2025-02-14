@@ -409,6 +409,9 @@ type
     // use the InputAsMultiPart() method instead when working with binary
     function GetInputAsTDocVariant(const Options: TDocVariantOptions;
       InterfaceMethod: PInterfaceMethod): variant;
+    /// could be used to trim a sensitive parameter from Call^.Uri buffer itself
+    // - typical UpperParamName is e.g. 'PASSWORD='
+    procedure InputRemoveFromUri(const UpperParamName: RawUtf8);
     /// low-level access to the input parameters, stored as pairs of UTF-8
     // - even items are parameter names, odd are values
     // - Input*[] properties should have been called previously to fill the
@@ -4382,6 +4385,22 @@ begin
   end
   else if InputAsMultiPart(multipart) then
     MultiPartToDocVariant(multipart, res, @Options);
+end;
+
+procedure TRestServerUriContext.InputRemoveFromUri(const UpperParamName: RawUtf8);
+var
+  p: PUtf8Char;
+begin
+  p := StrPosI(pointer(UpperParamName), pointer(fCall^.Url));
+  if (p = nil) or
+     not (p[-1] in ['?', '&']) then
+    exit;
+  inc(p, length(UpperParamName));
+  while not (p^ in [#0, '&']) do
+  begin
+    p^ := 'x'; // in-place obfuscate
+    inc(p);
+  end;
 end;
 
 function TRestServerUriContext.IsRemoteIPBanned: boolean;
