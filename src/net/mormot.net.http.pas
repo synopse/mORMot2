@@ -5572,7 +5572,7 @@ begin
   fromgz := 0;
   tmp := StringFromFile(fSuspendFile);
   if (tmp <> '') and
-     (length(tmp) <= SizeOf(fState)) and
+     (length(tmp) <= SizeOf(fState) * 2) and
      gz.Init(pointer(tmp), length(tmp)) and
      (gz.uncomplen32 = SizeOf(fState)) then
     if gz.ToBuffer(@fState) then
