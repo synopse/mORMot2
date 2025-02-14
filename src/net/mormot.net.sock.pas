@@ -4713,7 +4713,7 @@ function TPollSockets.GetOne(timeoutMS: integer; const call: RawUtf8;
   out notif: TPollSocketResult): boolean;
 {$ifndef POLLSOCKETEPOLL}
 var
-  start, tix, endtix, lasttix: Int64;
+  start, tix, endtix: Int64;
 {$endif POLLSOCKETEPOLL}
 begin
   // first check if some pending events are available
@@ -4726,6 +4726,8 @@ begin
   {$ifdef POLLSOCKETEPOLL}
   // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
   PollForPendingEvents(timeoutMS); // inc(fGettingOne) +  blocking epoll_wait
+  if fTerminated then
+    exit;
   result := GetOnePending(notif, call);
   if Assigned(fOnGetOneIdle) then
     fOnGetOneIdle(self, mormot.core.os.GetTickCount64);
@@ -4734,7 +4736,6 @@ begin
   PQWord(@notif)^ := 0;
   start := 0;
   endtix := 0;
-  lasttix := 0;
   LockedInc32(@fGettingOne);
   try
     repeat
@@ -4758,12 +4759,8 @@ begin
       tix := SleepStep(start, @fTerminated); // 0/1/5/50/120-250 ms steps
       if endtix = 0 then
         endtix := start + timeoutMS
-      else if Assigned(fOnGetOneIdle) and
-              (tix shr 6 <> lasttix) then
-      begin
+      else if Assigned(fOnGetOneIdle) then
         fOnGetOneIdle(self, tix);
-        lasttix := tix shr 6; // call every 64ms at most
-      end;
       if fTerminated then
         exit;
       result := GetOnePending(notif, call); // retrieved from another thread?
