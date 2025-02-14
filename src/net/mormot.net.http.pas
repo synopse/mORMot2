@@ -5395,7 +5395,10 @@ begin
           begin
             wr.AddString(RawUtf8(Context.Method));
             wr.AddDirect(' ');
-            wr.AddString(RawUtf8(Context.Url)); // full request = not normalized
+            if (Context.Url = nil) or
+               (PAnsiChar(Context.Url)^ <> '/') then
+              wr.AddDirect('/'); // TRestHttpServer may have trimmed it
+            wr.AddString(RawUtf8(Context.Url)); // full request = raw Url
             wr.AddDirect(' ');
             wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
           end;
