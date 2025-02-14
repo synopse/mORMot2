@@ -295,8 +295,6 @@ type
     procedure ClientSideJsonRPC(Sender: TObject);
     /// test REStful mode using HTTP client/server communication
     procedure ClientSideOverHTTP(Sender: TObject);
-    /// test REStful mode using HTTP client/server communication and logs
-    procedure ClientSideOverHTTPWithLogs(Sender: TObject);
     /// test the custom record Json serialization - could NOT be parallelized
     procedure ClientSideRESTCustomRecord(Client: TRestClientDBNamed);
     /// initialize a new REST server + REST client with SOA implementation
@@ -1747,7 +1745,7 @@ begin
   One(ClientSideRESTServiceLogToDB,   csDblog);
   One(ClientSideJsonRPC,              csJsonrpc);
   One(ClientSideOverHTTP,             csHttp);
-  One(ClientSideOverHTTPWithLogs,     csHttplog);
+  One(ClientSideOverHTTP,             csHttplog);
   // wait for all multi-threaded background process to finish
   RunWait({notifyThreadCount=}false, {timeoutSec=}120, {callSynchronize=}true);
   // RTTI override could NOT be parallelized
@@ -1821,23 +1819,19 @@ begin
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideOverHTTP(Sender: TObject);
+var
+  c: TRestClientDBNamed absolute Sender;
 begin
-  TestHttp(Sender as TRestClientDBNamed, {withlog=}false, HTTP_DEFAULTPORT);
-  Sender.Free;
-end;
-
-procedure TTestServiceOrientedArchitecture.ClientSideOverHttpWithLogs(Sender: TObject);
-begin
-  TestHttp(Sender as TRestClientDBNamed, {withlog=}true,
-    UInt32ToUtf8(GetInteger(HTTP_DEFAULTPORT) + 1));
-  Sender.Free;
+  TestHttp(c, c.ClientSide = csHttpLog,
+    UInt32ToUtf8(GetInteger(HTTP_DEFAULTPORT) + ord(c.ClientSide = csHttpLog)));
+  c.Free;
 end;
 
 procedure TTestServiceOrientedArchitecture.TestHttp(
   aClient: TRestClientDBNamed; withlog: boolean; const port: RawUtf8);
 var
-  HTTPServer: TRestHttpServer;
-  HTTPClient: TRestHttpClient;
+  srv: TRestHttpServer;
+  clt: TRestHttpClient;
   Inst: TTestServiceInstances;
   Json: RawUtf8;
   i: integer;
@@ -1857,77 +1851,84 @@ begin
   //opt := opt + [rsoLogVerbose];
   if withlog then
     opt := opt + [rsoEnableLogging, rsoTelemetryCsv, rsoTelemetryJson];
-  HTTPServer := TRestHttpServer.Create(port, [aClient.Server], '+',
+  srv := TRestHttpServer.Create(port, [aClient.Server], '+',
     useBidirAsync, // HTTP_DEFAULT_MODE,
     8, secNone, '', '', opt);
   try
     timer.Start;
+    Check(srv.HttpServer <> nil);
     if withlog then
-      HTTPServer.HttpServer.Logger.Settings.DefaultRotate := hrtAfter1MB;
+    begin
+      Check(srv.HttpServer.Logger <> nil);
+      Check(srv.HttpServer.Logger.Settings <> nil);
+      srv.HttpServer.Logger.Settings.DefaultRotate := hrtAfter1MB;
+    end
+    else
+      Check(srv.HttpServer.Logger = nil);
     FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
     Inst.ClientSide := aClient.ClientSide;
-    HTTPClient := TRestHttpClient.Create('127.0.0.1', port, aClient.Model);
+    clt := TRestHttpClient.Create('127.0.0.1', port, aClient.Model);
     try
-      HTTPClient.ServicePublishOwnInterfaces :=
+      clt.ServicePublishOwnInterfaces :=
         aClient.Server.ServicesPublishedInterfaces;
-      //HTTPClient.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
-      // HTTPClient.Compression := [hcSynShaAes]; // 350ms (300ms for [])
-      Check(HTTPClient.SetUser('User', 'synopse'));
+      //clt.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
+      // clt.Compression := [hcSynShaAes]; // 350ms (300ms for [])
+      Check(clt.SetUser('User', 'synopse'));
       // register services on the client side
-      Check(HTTPClient.ServiceRegister([TypeInfo(ICalculator)], sicShared));
-      Check(HTTPClient.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
-      Check(HTTPClient.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
-      Check(HTTPClient.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
-      Check(HTTPClient.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
-      Check(HTTPClient.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
+      Check(clt.ServiceRegister([TypeInfo(ICalculator)], sicShared));
+      Check(clt.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
+      Check(clt.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
+      Check(clt.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
+      Check(clt.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
+      Check(clt.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
       // retrieve service instances
-      if CheckFailed(HTTPClient.Services.Info(TypeInfo(ICalculator)).
+      if CheckFailed(clt.Services.Info(TypeInfo(ICalculator)).
            Get(Inst.I)) or
-         CheckFailed(HTTPClient.Services.Info(TypeInfo(IComplexCalculator)).
+         CheckFailed(clt.Services.Info(TypeInfo(IComplexCalculator)).
            Get(Inst.CC)) or
-         CheckFailed(HTTPClient.Services.Info(TypeInfo(IComplexNumber)).
+         CheckFailed(clt.Services.Info(TypeInfo(IComplexNumber)).
            Get(Inst.CN)) or
-         CheckFailed(HTTPClient.Services.Info(TypeInfo(ITestUser)).
+         CheckFailed(clt.Services.Info(TypeInfo(ITestUser)).
            Get(Inst.CU)) or
-         CheckFailed(HTTPClient.Services.Info(TypeInfo(ITestSession)).
+         CheckFailed(clt.Services.Info(TypeInfo(ITestSession)).
            Get(Inst.CS)) or
-         CheckFailed(HTTPClient.Services.Info(TypeInfo(ITestGroup)).
+         CheckFailed(clt.Services.Info(TypeInfo(ITestGroup)).
            Get(Inst.CG)) or
-         CheckFailed(HTTPClient.Services.Info(TypeInfo(ITestPerThread)).
+         CheckFailed(clt.Services.Info(TypeInfo(ITestPerThread)).
            Get(Inst.CT)) then
         exit;
-      Inst.ExpectedSessionID := HTTPClient.SessionID;
-      HTTPClient.Orm.Retrieve('LogonName=?', [],
-        [HTTPClient.SessionUser.LogonName], HTTPClient.SessionUser);
-      Inst.ExpectedUserID := HTTPClient.SessionUser.ID;
-      Inst.ExpectedGroupID := HTTPClient.SessionUser.GroupRights.ID;
+      Inst.ExpectedSessionID := clt.SessionID;
+      clt.Orm.Retrieve('LogonName=?', [],
+        [clt.SessionUser.LogonName], clt.SessionUser);
+      Inst.ExpectedUserID := clt.SessionUser.ID;
+      Inst.ExpectedGroupID := clt.SessionUser.GroupRights.ID;
       CheckEqual(
-        HTTPClient.CallBackGet('stat', ['findservice', 'toto'], Json),
+        clt.CallBackGet('stat', ['findservice', 'toto'], Json),
         HTTP_SUCCESS);
       CheckEqual(Json, '[]');
       for i := 0 to High(SERVICES) do
       begin
-        CheckEqual(HTTPClient.CallBackGet(
+        CheckEqual(clt.CallBackGet(
           'stat', ['findservice', SERVICES[i]], Json), HTTP_SUCCESS, 'stat');
         Check(Json <> '[]');
-        Check(HTTPClient.ServiceRetrieveAssociated(SERVICES[i], URI));
+        Check(clt.ServiceRetrieveAssociated(SERVICES[i], URI));
         Check(length(URI) = 1);
         Check(URI[0].Port = port);
         Check(URI[0].Root = aClient.Model.Root);
       end;
-      Check(HTTPClient.ServiceRetrieveAssociated(IComplexNumber, URI));
+      Check(clt.ServiceRetrieveAssociated(IComplexNumber, URI));
       Check(length(URI) = 1);
-      Check(HTTPClient.ServiceRetrieveAssociated(ITestSession, URI));
+      Check(clt.ServiceRetrieveAssociated(ITestSession, URI));
       Check(length(URI) = 1);
       Test(Inst, 100);
       if aClient.Name <> '' then
         NotifyProgress([aClient.Name, '=', timer.StopInMicroSec div 1000, 'ms']);
     finally
       Finalize(Inst);
-      HTTPClient.Free;
+      clt.Free;
     end;
   finally
-    HTTPServer.Free;
+    srv.Free;
   end;
 end;
 
