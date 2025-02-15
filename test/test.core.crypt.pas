@@ -44,6 +44,7 @@ type
     procedure CatalogRunAsym(Context: TObject);
     procedure CatalogRunCert(Context: TObject);
     procedure CatalogRunStore(Context: TObject);
+    procedure RsaSlow(Context: TObject);
   published
     /// MD5 (and MD4) hashing functions
     procedure _MD5;
@@ -3658,6 +3659,64 @@ const
     '38af1d64b49766a5cf9a82644650ffd733b61942db0bd8d47c8ef24a02dc9fd2ef557b' +
     '12ded804519f2b2b6c284d';
 
+procedure TTestCoreCrypto.RsaSlow(Context: TObject);
+var
+  c: TRsa;
+  bin, hash, signed, encrypted: RawByteString;
+  timer: TPrecisionTimer;
+begin
+  // validate RSA key generation - in a background thread for this slow process
+  hash := HexToBin(_hash);
+  CheckEqual(length(hash), SizeOf(TSha256Digest));
+  CheckHash(hash, $401CD1EB);
+  try
+    timer.Start;
+    c := TRsa.GenerateNew; // with RSA_DEFAULT_GENERATION_* values
+    NotifyTestSpeed('RS256 generate', -1, 0, @timer, {onlylog=}true);
+    if CheckFailed(c <> nil, 'TimeOut') then
+      exit;
+    CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
+    CheckEqual(c.ModulusLen, 256);
+    CheckEqual(c.E^.ToText, '65537');
+    Check(c.HasPublicKey);
+    Check(c.HasPrivateKey);
+    Check(c.CheckPrivateKey);
+    Check(c.MatchKey(c));
+    Check(c.E^.IsPrime, 'genIsPrimeE');
+    Check(c.P^.IsPrime, 'genIsPrimeP');
+    Check(c.Q^.IsPrime, 'genIsPrimeQ');
+    Check(not c.M^.IsPrime, 'genIsPrimeM');
+    //c.P^.Debug('p', true); c.Q^.Debug('q', true);
+    // have been pasted and verified with Wolfram Alpha "isprime" command and
+    // http://www.javascripter.net/math/calculators/100digitbigintcalculator.htm
+    signed := c.Sign(pointer(hash), hfSHA256);
+    Check(c.Verify(pointer(hash), hfSHA256, signed), 'verif2');
+    bin := c.SavePrivateKeyDer;
+  finally
+    c.Free;
+  end;
+  // ensure our generated RSA keys can be properly persisted and used
+  c := TRsa.Create;
+  try
+    Check(c.LoadFromPrivateKeyDer(bin));
+    CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
+    CheckEqual(c.ModulusLen, 256);
+    Check(c.HasPublicKey);
+    Check(c.HasPrivateKey);
+    Check(c.CheckPrivateKey);
+    Check(c.SavePrivateKeyDer = bin, 'gensaveload');
+    CheckEqual(length(hash), SizeOf(TSha256Digest));
+    CheckHash(hash, $401CD1EB);
+    Check(c.Sign(pointer(hash), hfSHA256) = signed);
+    Check(c.Verify(pointer(hash), hfSHA256, signed), 'verif3');
+    encrypted := c.Seal(bin); // bin is typically > 1KB long
+    Check(encrypted <> '', 'Seal');
+    Check(c.Open(encrypted) = bin, 'Open');
+  finally
+    c.Free;
+  end;
+end;
+
 procedure TTestCoreCrypto._RSA;
 var
   c: TRsa;
@@ -3670,9 +3729,11 @@ var
   pri1, pri2: TRsaPrivateKey;
   timer: TPrecisionTimer;
 begin
+  // validate RSA key generation - in a background thread for this slow process
+  Run(RsaSlow, nil, 'rsaSlow', {threaded=}true, {notify=}false);
+  // validate TBigInt/TRsaContext raw calculation
   c := TRsa.Create;
   try
-    // validate TBigInt/TRsaContext raw calculation
     for i := 1 to 100 do
     begin
       CheckEqual(c.ActiveCount, 0, 'nomem');
@@ -4082,61 +4143,11 @@ begin
   finally
     c.Free;
   end;
-  // validate RSA key generation
-  for i := 1 to 1 do
-  begin
-    c := nil;
-    try
-      timer.Start;
-      c := TRsa.GenerateNew; // with RSA_DEFAULT_GENERATION_* values
-      NotifyTestSpeed('RS256 generate', -1, 0, @timer);
-      if CheckFailed(c <> nil, 'TimeOut') then
-        break;
-      CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
-      CheckEqual(c.ModulusLen, 256);
-      CheckEqual(c.E^.ToText, '65537');
-      Check(c.HasPublicKey);
-      Check(c.HasPrivateKey);
-      Check(c.CheckPrivateKey);
-      Check(c.MatchKey(c));
-      Check(c.E^.IsPrime, 'genIsPrimeE');
-      Check(c.P^.IsPrime, 'genIsPrimeP');
-      Check(c.Q^.IsPrime, 'genIsPrimeQ');
-      Check(not c.M^.IsPrime, 'genIsPrimeM');
-      //c.P^.Debug('p', true); c.Q^.Debug('q', true);
-      // have been pasted and verified with Wolfram Alpha "isprime" command and
-      // http://www.javascripter.net/math/calculators/100digitbigintcalculator.htm
-      signed := c.Sign(pointer(hash), hfSHA256);
-      Check(c.Verify(pointer(hash), hfSHA256, signed), 'verif2');
-      bin := c.SavePrivateKeyDer;
-    finally
-      c.Free;
-    end;
-    // ensure our generated RSA keys can be properly persisted and used
-    c := TRsa.Create;
-    try
-      Check(c.LoadFromPrivateKeyDer(bin));
-      CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
-      CheckEqual(c.ModulusLen, 256);
-      Check(c.HasPublicKey);
-      Check(c.HasPrivateKey);
-      Check(c.CheckPrivateKey);
-      Check(c.SavePrivateKeyDer = bin, 'gensaveload');
-      CheckEqual(length(hash), SizeOf(TSha256Digest));
-      CheckHash(hash, $401CD1EB);
-      Check(c.Sign(pointer(hash), hfSHA256) = signed);
-      Check(c.Verify(pointer(hash), hfSHA256, signed), 'verif3');
-      encrypted := c.Seal(bin); // bin is typically > 1KB long
-      Check(encrypted <> '', 'Seal');
-      Check(c.Open(encrypted) = bin, 'Open');
-    finally
-      c.Free;
-    end;
-  end;
   // validate RSA-PSS padding
+  bin := PemToDer(_rsapriv);
   c := TRsaPss.Create;
   try
-    Check(c.LoadFromPrivateKeyDer(bin)); // just reuse previous RSA keys
+    Check(c.LoadFromPrivateKeyDer(bin));
     CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
     CheckEqual(c.ModulusLen, 256);
     Check(c.HasPublicKey);
