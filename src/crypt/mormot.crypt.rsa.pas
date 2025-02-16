@@ -358,10 +358,10 @@ const
   {$endif CPUARM}
 
 var
-  /// runtime-computed table of all known 2, 3, 5, 7, ... 17989 prime numbers
+  /// runtime-computed 4KB table of all known 2, 3, 5, 7, ... 17989 prime numbers
   // - as used by TBigInt.MatchKnownPrime
   // - published in interface section for TTestCoreCrypto._RSA validation
-  BIGINT_PRIMES: array[0 .. 258 * 8 - 1] of word;
+  BIGINT_PRIMES: array[0 .. 2063] of word;
 
 /// compute the base-10 decimal text from a Big Integer binary buffer
 // - wrap PBigInt.ToText from LoadPermanent(der) in a temporary TRsaContext
@@ -1398,11 +1398,11 @@ begin
   odd := false;
   p := @BIGINT_PRIMES_DELTA;
   w := @BIGINT_PRIMES;
-  PCardinal(w)^ := $00030002;
+  PCardinal(w)^ := $00030002; // store 2,3 first primes (to avoid delta = 1)
   v := 3;
   for i := 2 to high(BIGINT_PRIMES) do // uncompress BIGINT_PRIMES_DELTA[]
   begin
-    c := p^;
+    c := p^; // retrieve the next 4-bit nibble
     odd := not odd;
     if odd then
       c := c and 15
@@ -1411,10 +1411,10 @@ begin
       c := c shr 4;
       inc(p);
     end;
-    c := c shl 1;
+    c := c shl 1; // deltas are all >= 2, so stored "shr 1"
     if c = 0 then
     begin
-      c := p^;
+      c := p^; // was > 15 -> stored as two 4-bit nibbles (0, delta-15)
       odd := not odd;
       if odd then
         c := c and 15
