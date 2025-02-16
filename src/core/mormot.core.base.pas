@@ -365,11 +365,12 @@ type
   TExtendedDynArray = array of Extended;
   TWordDynArray = array of word;
   PWordDynArray = ^TWordDynArray;
-  TByteDynArray = array of byte;
-  PByteDynArray = ^TByteDynArray;
-  {$ifndef ISDELPHI2007ANDUP}
+  {$ifndef FPC_OR_UNICODE}
   TBytes = array of byte;
   {$endif ISDELPHI2007ANDUP}
+  PBytes = ^TBytes;
+  TByteDynArray = array of byte; // can't reuse TBytes (Delphi XE internal error)
+  PByteDynArray = ^TByteDynArray;
   TBytesDynArray = array of TBytes;
   PBytesDynArray = ^TBytesDynArray;
   TObjectDynArray = array of TObject;
