@@ -96,7 +96,7 @@ type
     bidMod,
     bidModNorm);
 
-  /// store one Big Integer value with proper COW support
+  /// store one Big Integer value with proper Copy-On-Write (RefCnt) support
   // - each value is owned as PBigInt by an associated TRsaContext instance
   // - you should call TBigInt.Release() once done with any instance
   {$ifdef USERECORDWITHMETHODS}
@@ -140,7 +140,7 @@ type
       {$ifdef HASSAFEINLINE} inline; {$endif}
     /// allocate a new Big Integer value with the same data as an existing one
     function Clone: PBigInt;
-    /// mark the value with a RefCnt < 0
+    /// mark the value with a RefCnt < 0, i.e. as constant until Owner is freed
     function SetPermanent: PBigInt;
     /// mark the value with a RefCnt = 1
     function ResetPermanent: PBigInt;
@@ -235,7 +235,8 @@ type
     // - will eventually release the m instance
     function ModInverse(m: PBigInt): PBigInt;
     /// check if this value is divisable by a small prime
-    // - detection coverage can be customized from default primes < 2000
+    // - prime detection range is bspFast<256, bspMost<2000 or bspAll<18000
+    // - usually called with default RSA_DEFAULT_GENERATION_KNOWNPRIME = bspMost
     function MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
     /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
@@ -549,10 +550,12 @@ type
   public
     /// initialize the RSA key context
     constructor Create; override;
-    /// initialize and generate a new RSA key context
+    /// factory method to initialize and generate a new RSA key context
     // - this is the main factory to generate a new RSA keypair
     // - will call Create and Generate() with proper retry on rgrWeakBitsMayRetry
     // - returns nil on generation error (with a silent exception)
+    // - generating a RSA keypair could take some time, more than one second on
+    // 32-bit or slower systems - consider the much faster ECC-256 if possible
     class function GenerateNew(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
       Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
       Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
@@ -1414,7 +1417,7 @@ const
 
 function TBigInt.MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
 var
-  i, v: PtrInt;
+  i, v: PtrUInt;
 begin
   if not IsZero then
   begin

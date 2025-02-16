@@ -9464,12 +9464,12 @@ begin
               // try T##DynArray/T##s patterns
               aname := pointer(typname);
               alen := length(typname);
-              if (alen > 10) and
+              if (alen > 10) and // e.g. TWordDynArray
                  (IdemPropName('DynArray', aname + alen - 8, 8) or
                   IdemPropName('ObjArray', aname + alen - 8, 8)) then
                 dec(alen, 8)
               else if (alen > 3) and
-                      (aname[aLen] in ['s', 'S']) then
+                      (aname[aLen] in ['s', 'S']) then // e.g. TBytes
                 dec(alen)
               else
                 alen := 0;
@@ -10848,7 +10848,7 @@ begin
   PTC_INFO[pctRecordVersion]   := TypeInfo(QWord);
   PTC_INFO[pctRecordReferenceToBeDeleted] := TypeInfo(QWord);
   PT_DYNARRAY[ptBoolean]       := TypeInfo(TBooleanDynArray);
-  PT_DYNARRAY[ptByte]          := TypeInfo(TByteDynArray);
+  PT_DYNARRAY[ptByte]          := TypeInfo(TByteDynArray); // = TBytes
   PT_DYNARRAY[ptCardinal]      := TypeInfo(TCardinalDynArray);
   PT_DYNARRAY[ptCurrency]      := TypeInfo(TCurrencyDynArray);
   PT_DYNARRAY[ptDouble]        := TypeInfo(TDoubleDynArray);
