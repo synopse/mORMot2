@@ -3669,9 +3669,9 @@ begin
   hash := HexToBin(_hash);
   CheckEqual(length(hash), SizeOf(TSha256Digest));
   CheckHash(hash, $401CD1EB);
+  timer.Start;
+  c := TRsa.GenerateNew; // with RSA_DEFAULT_GENERATION_* values
   try
-    timer.Start;
-    c := TRsa.GenerateNew; // with RSA_DEFAULT_GENERATION_* values
     NotifyTestSpeed('RS256 generate', -1, 0, @timer, {onlylog=}true);
     if CheckFailed(c <> nil, 'TimeOut') then
       exit;
