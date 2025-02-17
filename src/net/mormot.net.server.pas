@@ -6055,8 +6055,9 @@ begin
     EHttpPeerCache.RaiseUtf8(
       '%.StartHttpServer: inconsistent ClientTls=% ServerTls=%',
       [self, fClientTls.Enabled, fServerTls.Enabled]);
-  if aHttpServerClass = nil then
-    aHttpServerClass := THttpServer; // classic per-thread client is good enough
+  if (aHttpServerClass = nil) or
+     (pcoHttpDirect in fSettings.Options) then // download in a THttpServerResp
+    aHttpServerClass := THttpServer; // classic per-thread client
   opt := [hsoNoXPoweredHeader, hsoThreadSmooting];
   if not (pcoNoBanIP in fSettings.Options) then // RejectInstablePeersMin = UDP
     include(opt, hsoBan40xIP);
@@ -6199,7 +6200,8 @@ begin
   if size = 0 then
     exit; // not existing
   result := HTTP_NOTACCEPTABLE;
-  if (aMessage.Size <> 0) and // ExpectedSize may be 0 if waoNoHeadFirst was set
+  if (aMessage.Size <> 0) and
+     // ExpectedSize may be 0 if waoNoHeadFirst was set, or for pcfBearerDirect
      (size <> aMessage.Size) then
     exit; // invalid file
   result := HTTP_SUCCESS;
@@ -6744,33 +6746,37 @@ begin
   result := HTTP_BADREQUEST;
   if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg), 'OnRequest', msg) then
   try
-    // get local filename from decoded bearer hash
+    // resource will always be identified by decoded bearer hash
     progsize := 0;
-    case msg.Kind of
-      pcfBearer:
-        begin
-          // after UDP: download from LocalFileName() or PartialFileName()
-          result := LocalFileName(msg, [lfnSetDate], @fn, nil);
-          if (result <> HTTP_SUCCESS) and
-             (fPartials <> nil) then // if supported by the fHttpServer class
-            result := PartialFileName(msg,
-              (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
-        end;
-      pcfBearerDirect:
-        begin
-          // perform a HEAD to the original server to retrieve progsize
-
-          // start the proper request to the remote URI
-
-        end;
-    end;
+    // always try to download from LocalFileName() or PartialFileName()
+    result := LocalFileName(msg, [lfnSetDate], @fn, nil);
+    if (result <> HTTP_SUCCESS) and
+       (fPartials <> nil) then // if supported by the fHttpServer class
+      result := PartialFileName(msg,
+        (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
     if result <> HTTP_SUCCESS then
-    begin
-      if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
-        result := HTTP_NOCONTENT;        // OnDownload should make a broadcast
-      exit;
-    end;
-    // just return the (partial) file as requested
+      // handle any currently unknown hash
+      case msg.Kind of
+        pcfBearerDirect:
+          begin
+            if (hsrHttp10 in Ctxt.ConnectionFlags) or
+               not Ctxt.ConnectionThread.InheritsFrom(THttpServerResp) then
+              // downloading better requires a THttpServer per-connection thread
+              result := HTTP_NOTACCEPTABLE
+            else
+              // try to start a remote download in this thread
+              result := HTTP_NOTFOUND; // to be implemented
+            if result <> HTTP_SUCCESS then
+              exit;
+          end;
+      else // pcfBearer with no local/partial known file
+        begin
+          if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
+            result := HTTP_NOCONTENT; // OnDownload should make a broadcast
+          exit;
+        end;
+      end;
+    // HTTP_SUCCESS: return the (partial) file as requested
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
     if progsize <> 0 then // header for rfProgressiveStatic mode
