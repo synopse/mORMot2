@@ -4787,7 +4787,36 @@ begin
   Check(st.IsRevoked(chain[1]) = crrNotRevoked);
   Check(st.IsRevoked(chain[2]) = crrServerCompromised);
 end;
+(*
+var
+  i, v, v2, n, c, d: PtrInt;
+  p: PByte;
 
+  procedure Add(v: PtrInt); // 4-bit encoding
+  begin
+    inc(n);
+    if n and 1 = 1 then
+      c := v
+    else
+      write(c + v shl 4, ',');
+  end;
 
+initialization // compress BIGINT_PRIMES[] from 8-bit deltas above
+  n := 0;
+  c := 0;
+  for i := 2 to high(BIGINT_PRIMES_DELTA_BYTE) do
+  begin
+    v := BIGINT_PRIMES_DELTA_BYTE[i] shr 1; // all deltas are >= 2
+    if v > 15 then // stored as (0, delta-15)
+    begin
+      Add(0);
+      dec(v, 15);
+    end;
+    Add(v);
+    if n and 63 = 0 then
+      writeln;
+  end;
+  writeln(n);
+*)
 end.
 
