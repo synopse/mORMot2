@@ -5202,7 +5202,7 @@ end;
 function THttpLogger.Parse(const aFormat: RawUtf8): RawUtf8;
 var
   p, start: PUtf8Char;
-  v: integer;
+  v, vn, un: integer;
 begin
   // check the state
   result := 'Impossible once started';
@@ -5217,7 +5217,8 @@ begin
   if length(aFormat) shr 16 <> 0 then
     exit; // fUnknownPosLen[] are encoded as two 16-bit values
   // reset any previous format
-  result := '';
+  vn := 0;
+  un := 0;
   fVariable := nil;
   fVariables := [];
   fUnknownPosLen := nil;
@@ -5230,12 +5231,12 @@ begin
       inc(p);
     if p <> start then
     begin
-      SetLength(fVariable, length(fVariable) + 1); // append 0 = hlvUnknown
-      AddInteger(fUnknownPosLen, (start - pointer(aFormat)) +  // 16-bit pos
-                                 ((p - start) shl 16))         // 16-bit len
+      AddByte(TByteDynArray(fVariable), vn, ord(hlvUnknown));
+      AddInteger(fUnknownPosLen, un, (start - pointer(aFormat)) + // 16-bit pos
+                                     ((p - start) shl 16));       // 16-bit len
     end;
     if p^ = #0 then // success
-      exit;
+      break;
     inc(p); // ignore '$'
     start := p;
     while tcIdentifier in TEXT_CHARS[p^] do
@@ -5243,18 +5244,22 @@ begin
     v := GetEnumNameValueTrimmed(TypeInfo(THttpLogVariable), start, p - start);
     if v <= 0 then
     begin
+      // reset internal state on error parsing
+      fSettings.Format := '';
+      fVariable := nil;
+      fVariables := [];
+      fUnknownPosLen := nil;
       FormatUtf8('Unknown $% variable', [start], result);
-      break;
+      exit;
     end;
-    SetLength(fVariable, length(fVariable) + 1);
-    fVariable[high(fVariable)] := THttpLogVariable(v);
+    AddByte(TByteDynArray(fVariable), vn, v);
     include(fVariables, THttpLogVariable(v));
   until false;
-  // reset internal state on error parsing
-  fSettings.Format := '';
-  fVariable := nil;
-  fVariables := [];
-  fUnknownPosLen := nil;
+  result := ''; // success
+  if vn <> 0 then
+    DynArrayFakeLength(fVariable, vn);
+  if un <> 0 then
+    DynArrayFakeLength(fUnknownPosLen, un);
 end;
 
 procedure THttpLogger.SetTimeLast(t: THttpLogVariable; Tix64: Int64);
