@@ -430,11 +430,11 @@ begin
             end;
           oftUtf8Text:
             if aField.DataType = ftWideString then
-              {$ifdef FPC_OR_UNICODE}
+              {$ifdef HASVARUSTRING}
               TWideStringField(aField).AsUnicodeString :=
               {$else}
               TWideStringField(aField).Value :=
-              {$endif FPC_OR_UNICODE}
+              {$endif HASVARUSTRING}
                 aTable.GetSynUnicode(aRow, SqlIndex)
             else
               aField.AsString := aTable.GetString(aRow, SqlIndex);

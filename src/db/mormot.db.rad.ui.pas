@@ -776,11 +776,11 @@ begin
             ftWideString:
               begin
                 W.AddDirect('"');
-                {$ifdef FPC_OR_UNICODE}
+                {$ifdef HASVARUSTRING}
                 W.AddJsonEscapeW(pointer(TWideStringField(f).AsUnicodeString));
                 {$else}
                 W.AddJsonEscapeW(pointer(TWideStringField(f).Value));
-                {$endif FPC_OR_UNICODE}
+                {$endif HASVARUSTRING}
                 W.AddDirect('"');
               end;
             ftVariant:
@@ -806,15 +806,15 @@ begin
             ftFixedWideChar:
               begin
                 W.AddDirect('"');
-                {$ifdef FPC_OR_UNICODE}
+                {$ifdef HASVARUSTRING}
                 W.AddJsonEscapeW(pointer(f.AsUnicodeString));
                 {$else}
                 W.AddJsonEscapeW(pointer(f.AsWideString));
-                {$endif FPC_OR_UNICODE}
+                {$endif HASVARUSTRING}
                 W.AddDirect('"');
               end;
             {$endif HASDBFTWIDE}
-            {$ifdef FPC_OR_UNICODE}
+            {$ifdef HASDBFNEW}
             ftShortint,
             ftByte:
               W.Add(f.AsInteger);
@@ -822,11 +822,11 @@ begin
               W.AddU(TLongWordField(f).Value);
             ftExtended:
               W.AddDouble(f.AsFloat);
-            {$endif FPC_OR_UNICODE}
-            {$ifdef UNICODE}
+            {$endif HASDBFNEW}
+            {$ifdef HASDBFSINGLE}
             ftSingle:
               W.Add(f.AsFloat, SINGLE_PRECISION);
-            {$endif UNICODE}
+            {$endif HASDBFSINGLE}
           else
             W.AddNull; // unhandled field type
           end;

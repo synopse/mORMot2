@@ -824,11 +824,11 @@ function TSqlDBDatasetStatementAbstract.ColumnTypeNativeToDB(
   aNativeType: TFieldType): TSqlDBFieldType;
 begin
   case aNativeType of
-  {$ifdef FPC_OR_UNICODE}
+  {$ifdef HASDBFNEW}
     ftLongWord,
     ftShortint,
     ftByte,
-  {$endif FPC_OR_UNICODE}
+  {$endif HASDBFNEW}
     ftAutoInc,
     ftBoolean,
     ftSmallint,
@@ -836,22 +836,22 @@ begin
     ftLargeint,
     ftWord:
       result := mormot.db.core.ftInt64;
-  {$ifdef FPC_OR_UNICODE}
+  {$ifdef HASDBFNEW}
     ftExtended,
-  {$endif FPC_OR_UNICODE}
-  {$ifdef UNICODE}
+  {$endif HASDBFNEW}
+  {$ifdef HASDBFSINGLE}
     ftSingle,
-  {$endif UNICODE}
+  {$endif HASDBFSINGLE}
     ftFloat:
       result := mormot.db.core.ftDouble;
     ftCurrency,
     ftBCD,
     ftFMTBcd:
       result := mormot.db.core.ftCurrency;
-  {$ifdef FPC_OR_UNICODE}
+  {$ifdef HASDBFNEW}
     ftOraTimeStamp,
     ftOraInterval,
-  {$endif FPC_OR_UNICODE}
+  {$endif HASDBFNEW}
     ftDate,
     ftTime,
     ftDateTime,

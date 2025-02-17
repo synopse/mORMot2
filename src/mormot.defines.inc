@@ -194,6 +194,8 @@
     {$endif VER3_2_2}
     {$ifdef VER3_2_3}
       {$define HASTTHREADTERMINATESET}
+      {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+      // https://gitlab.com/freepascal.org/fpc/source/-/commit/254c175b9f7627c92
     {$endif VER3_2_3}
   {$endif VER3_2}
   {$ifdef VER3_3} // trunk before 3.4
@@ -203,6 +205,8 @@
     {$define ISFPC33}
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$define HASEXTRECORDRTTI}       // latest trunk has extended record RTTI
+    {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+    // https://gitlab.com/freepascal.org/fpc/source/-/commit/d68ce429ab6d94c8ffb
   {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}
@@ -215,6 +219,9 @@
     // see https://gitlab.com/freepascal.org/fpc/source/-/issues/38018
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$define HASEXTRECORDRTTI}       // extended record RTTI
+    {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+    {$define HASDBFSINGLE}  // ftSingle
+    // https://gitlab.com/freepascal.org/fpc/source/-/commit/b907920ef392d6b3a2a
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
@@ -510,7 +517,7 @@
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // = Delphi 2007 or newer
       {$define HASITERATORS}
-      {$define HASDBFTWIDE}
+      {$define HASDBFTWIDE}       // ftWideMemo,ftFixedWideChar
     {$ifend}
     {$if CompilerVersion = 20}    // = Delphi 2009
       {$define ISDELPHI2009}      // to circumvent some specific bugs
@@ -529,7 +536,9 @@
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
-      {$ifdef NEWRTTINOTUSED}     // to reduce EXE size by disabling some RTTI
+      {$define HASDBFNEW}     // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+      {$define HASDBFSINGLE}  // ftSingle
+      {$ifdef NEWRTTINOTUSED} // to reduce EXE size by disabling some RTTI
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
       {$endif NEWRTTINOTUSED}
