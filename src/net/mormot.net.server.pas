@@ -1796,6 +1796,8 @@ type
     function CachedFileName(const aParams: THttpClientSocketWGet;
       aFlags: THttpPeerCacheLocalFileName;
       out aLocal: TFileName; out isTemp: boolean): boolean;
+    function DirectFileName(const aMessage: THttpPeerCacheMessage;
+      aFileName: PFileName; aSize: PInt64): integer;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -6736,6 +6738,17 @@ begin
     SleepHiRes(500); // wait for THttpServer.Process abort
 end;
 
+function THttpPeerCache.DirectFileName(const aMessage: THttpPeerCacheMessage;
+  aFileName: PFileName; aSize: PInt64): integer;
+begin
+  result := HTTP_NOTFOUND; { still to be completed }
+  // perform a HEAD to the original server to retrieve progsize
+
+  // start the proper request to the remote URI into a temp stream
+
+  // when the stream is cleared, will close the HTTP request (and socket)
+end;
+
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
@@ -6765,7 +6778,7 @@ begin
               result := HTTP_NOTACCEPTABLE
             else
               // try to start a remote download in this thread
-              result := HTTP_NOTFOUND; // to be implemented
+              result := DirectFileName(msg, @fn, @progsize);
             if result <> HTTP_SUCCESS then
               exit;
           end;
