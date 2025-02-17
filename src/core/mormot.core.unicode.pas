@@ -10919,6 +10919,8 @@ end;
 
 const
   // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
+  // - UU[] would convert accents into upper accents: this one to upper plain
+  // (e.g. e acute to E)
   {%H-}WinAnsiToUp: array[138..255] of byte = (
     83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
     153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,
