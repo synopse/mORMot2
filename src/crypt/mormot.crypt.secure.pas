@@ -4584,7 +4584,8 @@ end;
 
 function HashDigestEqual(const a, b: THashDigest): boolean;
 begin
-  result := CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
+  result := (a.Algo <= high(THashAlgo)) and
+            CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
 end;
 
 
