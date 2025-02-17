@@ -820,7 +820,7 @@ function ToUtf8(algo: TSignAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; 
 function ToText(algo: THashAlgo): PShortString; overload;
 function ToUtf8(algo: THashAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; {$endif}
 function ToText(algo: TCrc32Algo): PShortString; overload;
-function ToText(const Digest: THashDigest): RawUtf8; overload;
+function ToText(const Digest: THashDigest): RawUtf8; overload; // 'hexhash' w/o algo
 
 /// recognize a TSignAlgo from a text, e.g. 'SHAKE-128', 'saSha256' or 'SHA-3/256'
 function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean; overload;
@@ -893,16 +893,17 @@ function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 const
   /// map the size in bytes (16..64) of any THashAlgo digest
+  // - note that SHA-3 or SHA512-256 share the same size with other algos
   HASH_SIZE: array[THashAlgo] of byte = (
-    SizeOf(TMd5Digest),    // hfMD5
-    SizeOf(TSHA1Digest),   // hfSHA1
-    SizeOf(TSHA256Digest), // hfSHA256
-    SizeOf(TSHA384Digest), // hfSHA384
-    SizeOf(TSHA512Digest), // hfSHA512
-    SizeOf(THash256),      // hfSHA512_256
-    SizeOf(THash256),      // hfSHA3_256
-    SizeOf(THash512),      // hfSHA3_512
-    SizeOf(THash224));     // hfSHA224
+    SizeOf(TMd5Digest),    // 16 bytes for hfMD5
+    SizeOf(TSHA1Digest),   // 20 bytes for hfSHA1
+    SizeOf(TSHA256Digest), // 32 bytes for hfSHA256
+    SizeOf(TSHA384Digest), // 48 bytes for hfSHA384
+    SizeOf(TSHA512Digest), // 64 bytes for hfSHA512
+    SizeOf(THash256),      // 32 bytes for hfSHA512_256
+    SizeOf(THash256),      // 32 bytes for hfSHA3_256
+    SizeOf(THash512),      // 64 bytes for hfSHA3_512
+    SizeOf(THash224));     // 28 bytes for hfSHA224
 
   /// map the file extension text of any THashAlgo digest
   // - TextToHashAlgo() is able to recognize those values
@@ -4477,7 +4478,7 @@ end;
 
 function ToText(const Digest: THashDigest): RawUtf8;
 begin
-  if Digest.Algo <= high(THashAlgo) then
+  if Digest.Algo <= high(THashAlgo) then // don't include the algorithm
     BinToHexLower(PAnsiChar(@Digest.Bin), HASH_SIZE[Digest.Algo], result)
   else
     FastAssignNew(result);

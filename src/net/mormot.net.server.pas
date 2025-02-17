@@ -940,9 +940,9 @@ type
       read fServer;
   end;
 
-  /// HTTP response Thread as used by THttpServer Socket API based class
-  // - Execute procedure get the request and calculate the answer, using
-  // the thread for a single client connection, until it is closed
+  /// per-client HTTP response Thread as used by THttpServer Socket API Server
+  // - Execute procedure get the request and calculate the answer, dedicating
+  // this thread for one particular client connection, until it is closed
   // - you don't have to overload the protected THttpServerResp Execute method:
   // override THttpServer.Request() function or, if you need a lower-level access
   // (change the protocol, e.g.) THttpServer.Process() method itself
@@ -1479,6 +1479,7 @@ type
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   // - pcoHttpDirect extends the HTTP endpoint to initiate a download process
   // from localhost, and return the cached content (used e.g. as proxy + cache)
+  // using a URI + Bearer returned by HttpDirectUri() overloaded methods
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
@@ -6175,14 +6176,14 @@ begin
   fFilesSafe.Lock; // disable any concurrent file access
   try
     size := FileSize(perm); // fast syscall on all platforms
-    if size <> 0 then
-      fn := perm            // found in permanent cache folder
+    if size <> 0 then // found in permanent cache folder
+      fn := perm
     else
     begin
       size := FileSize(temp);
-      if size <> 0 then
+      if size <> 0 then // found in temporary cache folder
       begin
-        fn := temp;      // found in temporary cache folder
+        fn := temp;
         if lfnSetDate in aFlags then
           FileSetDateFromUnixUtc(temp, UnixTimeUtc); // renew TTL
       end;
@@ -6473,7 +6474,7 @@ begin
     include(err, eGet);
   if aUrl = '' then // URI is just ignored but something should be specified
     include(err, eUrl)
-  else if PCardinal(aUrl)^ = DIRECTURI_32 then
+  else if PCardinal(aUrl)^ = DIRECTURI_32 then // start with '/htt'
   begin
     // pcfBearerDirect for pcoHttpDirect mode: /https/microsoft.com/...
     if (aRemoteIp <> '') and
@@ -6658,7 +6659,7 @@ begin
     if ok then
       fPartials.ChangeFile(PartialID, local) // switch to final local file
     else
-      OnDownloadingFailed(PartialID);     // abort
+      OnDownloadingFailed(PartialID); // abort
   QueryPerformanceMicroSeconds(stop);
   fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
       [Partial, local, MicroSecToString(stop - start)], self);

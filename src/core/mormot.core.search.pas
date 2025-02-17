@@ -107,7 +107,7 @@ function FileNames(const Path: array of const; const Mask: TFileName = FILES_ALL
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
-/// sort a FindFiles() result list by its TFindFiles[].Timestamp field
+/// sort a FindFiles() result list by increasing TFindFiles[].Timestamp field
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
 /// compute the HTML index page corresponding to a local folder
