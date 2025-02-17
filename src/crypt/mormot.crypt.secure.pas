@@ -4573,7 +4573,7 @@ begin
   s := length(Hash) shr 1;
   if (s >= SizeOf(TMd5Digest)) and
      (s <= SizeOf(Digest.Bin)) then
-    for a := low(a) to hfSHA512 do
+    for a := low(a) to high(a) do // would miss SHA-3 or SHA-512-256 for sure
       if HASH_SIZE[a] = s then
       begin
         Digest.Algo := a;
