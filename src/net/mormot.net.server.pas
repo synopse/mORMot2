@@ -6806,25 +6806,25 @@ end;
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
 var
   l: PtrInt;
-  algo: PUtf8Char;
-  hex: string[SizeOf(msg.Hash.Bin.b) * 2];
+  algoext: PUtf8Char;
+  algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
 begin
   l := 0;
-  algo := nil;
-  if not IsZero(msg.Hash.Bin.b) then
+  algoext := nil;
+  if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
   begin
-    algo := pointer(HASH_EXT[msg.Hash.Algo]);
+    algoext := pointer(HASH_EXT[msg.Hash.Algo]);
     l := HASH_SIZE[msg.Hash.Algo];
-    BinToHexLower(@msg.Hash.Bin, @hex[1], l);
+    BinToHexLower(@msg.Hash.Bin, @algohex[1], l);
   end;
-  hex[0] := AnsiChar(l * 2);
+  algohex[0] := AnsiChar(l * 2);
   with msg do
     FormatShort('% #% % % % to % % % msk=% bst=% %Mb/s %% siz=%',
       [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid), OS_NAME[Os.os],
        IP4ToShort(@IP4), IP4ToShort(@DestIP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
-       hex, algo, Size], result);
+       algohex, algoext, Size], result);
 end;
 
 {$ifdef USEWININET}
