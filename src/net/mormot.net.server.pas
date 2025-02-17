@@ -1800,6 +1800,7 @@ type
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
       aHttp: PHttpRequestContext; aFileName: PFileName; aSize: PInt64): integer;
+    function TempFolderEstimateNewSize(aAddingSize: Int64): Int64;
     function Check(Status: THttpPeerCryptMessageDecode;
       const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
   public
@@ -6238,6 +6239,42 @@ begin
   result := true;
 end;
 
+function THttpPeerCache.TempFolderEstimateNewSize(aAddingSize: Int64): Int64;
+var
+  i: PtrInt;
+  deleted: Int64;
+  dir: TFindFilesDynArray;
+begin
+  // compute the current folder cache size
+  result := fTempCurrentSize;
+  if result = 0 then // first time, or after OnIdle
+  begin
+    dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
+    for i := 0 to high(dir) do
+      inc(result, dir[i].Size);
+    fTempCurrentSize := result;
+  end;
+  // enough space to write this file?
+  inc(result, aAddingSize); // simulate adding this file
+  if result < fTempFilesMaxSize then
+    exit;
+  // delete oldest files in cache up to CacheTempMaxMB
+  if dir = nil then
+    dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
+  FindFilesSortByTimestamp(dir);
+  deleted := 0;
+  for i := 0 to high(dir) do
+    if DeleteFile(dir[i].Name) then // if not currently downloading
+    begin
+      dec(result, dir[i].Size);
+      inc(deleted, dir[i].Size);
+      if result < fTempFilesMaxSize then
+        break; // we have deleted enough old files
+    end;
+  fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
+  dec(fTempCurrentSize, deleted);
+end;
+
 function THttpPeerCache.TooSmallFile(const aParams: THttpClientSocketWGet;
   aSize: Int64; const aCaller: shortstring): boolean;
 var
@@ -6561,10 +6598,8 @@ procedure THttpPeerCache.OnDowloaded(var Params: THttpClientSocketWGet;
   const Partial: TFileName; PartialID: integer);
 var
   local: TFileName;
-  localsize, sourcesize, tot, start, stop, deleted: Int64;
+  localsize, sourcesize, tot, start, stop: Int64;
   ok, istemp: boolean;
-  i: PtrInt;
-  dir: TFindFilesDynArray;
 begin
   if pcoNoServer in fSettings.Options then
     exit;
@@ -6607,36 +6642,7 @@ begin
       if sourcesize >= fTempFilesMaxSize then
         tot := sourcesize // this file is oversized for sure
       else
-      begin
-        // compute the current folder cache size
-        tot := fTempCurrentSize;
-        if tot = 0 then // first time, or after OnIdle
-        begin
-          dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
-          for i := 0 to high(dir) do
-            inc(tot, dir[i].Size);
-          fTempCurrentSize := tot;
-        end;
-        inc(tot, sourcesize); // simulate adding this file
-        if tot >= fTempFilesMaxSize then
-        begin
-          // delete oldest files in cache up to CacheTempMaxMB
-          if dir = nil then
-            dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
-          FindFilesSortByTimestamp(dir);
-          deleted := 0;
-          for i := 0 to high(dir) do
-            if DeleteFile(dir[i].Name) then // if not currently downloading
-            begin
-              dec(tot, dir[i].Size);
-              inc(deleted, dir[i].Size);
-              if tot < fTempFilesMaxSize then
-                break; // we have deleted enough old files
-            end;
-          fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
-          dec(fTempCurrentSize, deleted);
-        end;
-      end;
+        tot := TempFolderEstimateNewSize(sourcesize);
       if tot >= fTempFilesMaxSize then
       begin
         fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
