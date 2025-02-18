@@ -1025,10 +1025,14 @@ type
   TSocketStreamAbstract = class(TStreamWithNoSeek)
   protected
     fLastResult: TNetResult;
+    fOwned: TObject;
   public
     /// the low-level result code of the last Read() or Write() method call
     property LastResult: TNetResult
       read fLastResult;
+    /// optional class instance for which Destroy will call Owned.Free
+    property Owned: TObject
+      read fOwned write fOwned;
   end;
 
   /// encapsulate a raw (TLS-encrypted) Socket to a TStream class
@@ -1044,6 +1048,8 @@ type
     constructor Create(aSocket: TNetSocket); reintroduce; overload;
     /// initialize this TStream for a given TLS encryption instance
     constructor Create(const aSecure: INetTls); reintroduce; overload;
+    /// finalize this TStream instance, eventually calling Owned.Free
+    destructor Destroy; override;
     /// receive some bytes from the associated Socket
     // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -2025,6 +2031,8 @@ type
     /// initialize this TStream for a given TCrtSocket instance
     // - this class instance won't own nor release this TCrtSocket once done
     constructor Create(aSocket: TCrtSocket); reintroduce;
+    /// finalize this TStream instance, eventually calling Owned.Free
+    destructor Destroy; override;
     /// receive some bytes calling the associated TCrtSocket.SockRecv()
     // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -3990,6 +3998,14 @@ end;
 constructor TSocketStream.Create(const aSecure: INetTls);
 begin
   fSecure := aSecure;
+end;
+
+destructor TSocketStream.Destroy;
+begin
+  inherited Destroy;
+  fSocket := nil;
+  fSecure := nil; // before fOwned.Free e.g. if fOwned is matching TCrtSocket
+  fOwned.Free;
 end;
 
 function TSocketStream.Read(var Buffer; Count: Longint): Longint;
@@ -6416,6 +6432,13 @@ end;
 constructor TCrtSocketStream.Create(aSocket: TCrtSocket);
 begin
   fSocket := aSocket;
+end;
+
+destructor TCrtSocketStream.Destroy;
+begin
+  inherited Destroy;
+  fSocket := nil; // before fOwned.Free e.g. if fOwned=fSocket
+  fOwned.Free;
 end;
 
 function TCrtSocketStream.Read(var Buffer; Count: Longint): Longint;
