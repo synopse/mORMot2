@@ -1805,8 +1805,10 @@ type
     function CachedFileName(const aParams: THttpClientSocketWGet;
       aFlags: THttpPeerCacheLocalFileName;
       out aLocal: TFileName; out isTemp: boolean): boolean;
-    function DirectFileName(const aMessage: THttpPeerCacheMessage;
-      aFileName: PFileName; aSize: PInt64): integer;
+    function DirectFileName(const aUrl: RawUtf8;
+      const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
+      out aFileName: TFileName; out aSize: Int64): integer;
+    procedure DirectFileNameBackgroundGet(Sender: TObject);
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -6758,24 +6760,143 @@ begin
     SleepHiRes(500); // wait for THttpServer.Process abort
 end;
 
-function THttpPeerCache.DirectFileName(const aMessage: THttpPeerCacheMessage;
-  aFileName: PFileName; aSize: PInt64): integer;
+type
+  THttpClientSocketPeerCache = class(THttpClientSocket)
+  public // some additional internal parameters
+    DestFileName: TFileName;
+    ExpectedHash: THashDigest;
+    RemoteUri: RawUtf8;
+    RemoteHeaders: RawUtf8;
+    PartialID: THttpPartialID;
+  end;
+
+function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
+  const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
+  out aFileName: TFileName; out aSize: Int64): integer;
+var
+  cs:  THttpClientSocketPeerCache;
+  uri: TUri;
+  opt: THttpRequestExtendedOptions;
+  hdr: RawUtf8;
 begin
-  result := HTTP_NOTFOUND; { still to be completed }
-  // perform a HEAD to the original server to retrieve progsize
-
-  // start the proper request to the remote URI into a temp stream
-
-  // when the stream is cleared, will close the HTTP request (and socket)
+  cs := nil;
+  try
+    // compute the remote URI and its associated options/header
+    result := HTTP_BADREQUEST;
+    if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) or
+       not HttpDirectUriReconstruct(pointer(aUrl), uri) then
+      exit;
+    opt.Init;
+    opt.RedirectMax := 3; // seems fair enough
+    if Assigned(fOnDirectOptions) then
+    begin
+      result := fOnDirectOptions(uri, hdr, opt); // customizable
+      if result <> HTTP_SUCCESS then
+        exit;
+    end;
+    // perform a HEAD to the original server to connect and retrieve progsize
+    cs := THttpClientSocketPeerCache.OpenOptions(uri, opt);
+    result := cs.Head(uri.Address, 30000, hdr);
+    if not (result in HTTP_GET_OK) then
+      exit;
+    result := HTTP_LENGTHREQUIRED;
+    aSize := cs.Http.ContentLength;
+    if aSize <= 0 then
+      exit;
+    if cs.Redirected <> '' then
+      uri.Address := cs.Redirected; // follow 3xx changes
+    // we will download directly into the final cache file name
+    aFileName := ComputeFileName(aMessage.Hash);
+    case aMessage.Kind of
+      pcfBearerDirect:
+        begin
+          result := HTTP_PAYLOADTOOLARGE;
+          if TempFolderEstimateNewSize(aSize) >= fTempFilesMaxSize then
+            exit;
+          aFileName := fTempFilesPath + aFileName;
+        end;
+      pcfBearerDirectPermanent:
+        aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
+    else
+      begin
+        result := HTTP_BADREQUEST;
+        exit;
+      end;
+    end;
+    result := HTTP_NOTACCEPTABLE;
+    if not FileFromString('', aFileName) then
+      exit; // progressive download requires a file (even void)
+    cs.DestFileName := aFileName;
+    cs.ExpectedHash := aMessage.Hash;
+    // mimics THttpPeerCache.OnDownloading() for progressive mode
+    cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
+    // start the GET request to the remote URI into a temp stream via a thread
+    cs.RemoteUri := uri.Address;
+    cs.RemoteHeaders := hdr;
+    cs := nil; // will be owned by TLoggedWorkThread from now on
+    TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
+    result := HTTP_SUCCESS;
+  except
+    on E: Exception do
+    begin
+      result := HTTP_NOTFOUND;
+      fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
+      cs.Free;
+    end;
+  end;
 end;
+
+procedure THttpPeerCache.DirectFileNameBackgroundGet(Sender: TObject);
+var
+  cs: THttpClientSocketPeerCache absolute Sender;
+  fs: TFileStreamEx;
+  res: integer;
+begin
+  // remote HTTP/HTTPS GET request executed in its own TLoggedWorkThread thread
+  fs := nil;
+  try
+    try
+      { TODO: use TStreamRedirect with hashing }
+      fs := TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead);
+      res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
+        {retry=}false, {instream=}nil, fs);
+      if not (res in HTTP_GET_OK) then
+        EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
+      { TODO: verify TStreamRedirect hash against cs.ExpectedHash }
+      fLog.Add.Log(sllTrace, 'DirectFileNameBackgroundGet(%)=%',
+        [cs.DestFileName, res], self);
+    except
+      on E: Exception do
+      begin
+        fLog.Add.Log(sllDebug, 'DirectFileNameBackgroundGet(%) raised %',
+          [cs.DestFileName, E], self);
+        OnDownloadingFailed(cs.PartialID);
+        FreeAndNil(fs);
+        DeleteFile(cs.DestFileName); // remove any incompleted/invalid file
+      end;
+    end;
+  finally
+    fs.Free;
+    cs.Free;
+  end;
+end;
+
+type
+  TOnRequestError = (
+    oreOK, oreNoLocalFile, oreDirectNoThread, oreDirectRemoteUriFailed);
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
   fn: TFileName;
+  http: PHttpRequestContext;
   progsize: Int64; // expected progressive file size, to be supplied as header
+  err: TOnRequestError;
+  errtxt: RawUtf8;
 begin
   // retrieve context - already checked by OnBeforeBody
+  err := oreOK;
+  http := (Ctxt as THttpServerRequest).fHttp;
   result := HTTP_BADREQUEST;
   if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg), 'OnRequest', msg) then
   try
@@ -6785,29 +6906,35 @@ begin
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if (result <> HTTP_SUCCESS) and
        (fPartials <> nil) then // if supported by the fHttpServer class
-      result := PartialFileName(msg,
-        (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
+      result := PartialFileName(msg, http, @fn, @progsize);
     if result <> HTTP_SUCCESS then
       // handle any currently unknown hash
-      case msg.Kind of
-        pcfBearerDirect:
-          begin
-            if (hsrHttp10 in Ctxt.ConnectionFlags) or
-               not Ctxt.ConnectionThread.InheritsFrom(THttpServerResp) then
-              // downloading better requires a THttpServer per-connection thread
-              result := HTTP_NOTACCEPTABLE
-            else
-              // try to start a remote download in this thread
-              result := DirectFileName(msg, @fn, @progsize);
-            if result <> HTTP_SUCCESS then
-              exit;
-          end;
-      else // pcfBearer with no local/partial known file
+      if (result = HTTP_NOTFOUND) and // abort on HTTP_NOTACCEPTABLE
+         (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
+        if (hsrHttp10 in Ctxt.ConnectionFlags) or
+           not Ctxt.ConnectionThread.InheritsFrom(THttpServerResp) then
         begin
-          if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
-            result := HTTP_NOCONTENT; // OnDownload should make a broadcast
+          // downloading better requires a THttpServer per-connection thread
+          err := oreDirectNoThread;
+          result := HTTP_NOTACCEPTABLE;
           exit;
-        end;
+        end
+        else
+        begin
+          // try to start a remote download in this thread
+          result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
+          if result <> HTTP_SUCCESS then
+          begin
+            err := oreDirectRemoteUriFailed;
+            exit;
+          end;
+        end
+      else // pcfBearer with no local/partial known file
+      begin
+        err := oreNoLocalFile;
+        if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
+          result := HTTP_NOCONTENT; // OnDownload should make a broadcast
+        exit;
       end;
     // HTTP_SUCCESS: return the (partial) file as requested
     Ctxt.OutContent := StringToUtf8(fn);
@@ -6815,8 +6942,11 @@ begin
     if progsize <> 0 then // header for rfProgressiveStatic mode
       Ctxt.OutCustomHeaders := FormatUtf8(STATICFILE_PROGSIZE + ' %', [progsize]);
   finally
-    fLog.Add.Log(sllDebug, 'OnRequest=% from % % as % %',
-      [result, Ctxt.RemoteIP, Ctxt.Url, fn, progsize], self);
+    errtxt := GetEnumNameUnCamelCase(TypeInfo(TOnRequestError), ord(err));
+    if not StatusCodeIsSuccess(result) then
+      Ctxt.OutContent := Make([StatusCodeToErrorMsg(result), ' - ', errtxt]);
+    fLog.Add.Log(sllDebug, 'OnRequest=% from % % as % % (%)',
+      [result, Ctxt.RemoteIP, Ctxt.Url, fn, progsize, errtxt], self);
   end;
 end;
 
