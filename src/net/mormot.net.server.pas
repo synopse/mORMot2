@@ -1768,6 +1768,12 @@ type
     lfnSetDate,
     lfnEnsureDirectoryExists);
 
+  /// callback to optimize HTTP/HTTPS remote access a given URI with pcoHttpDirect
+  // - as defined in THttpPeerCache.OnDirectOptions property
+  // - should override proper options (and/or header/URI) and return HTTP_SUCCESS
+  TOnHttpPeerCacheDirectOptions = function(var aUri: TUri; var aHeader: RawUtf8;
+    var aOptions: THttpRequestExtendedOptions): integer of object;
+
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer/THttpAsyncServer content delivery
@@ -1783,6 +1789,7 @@ type
     fSettingsOwned, fVerboseLog: boolean;
     fFilesSafe: TOSLock; // concurrent cached files access
     fPartials: THttpPartials;
+    fOnDirectOptions: TOnHttpPeerCacheDirectOptions;
     // most of these internal methods are virtual for proper customization
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
@@ -1862,6 +1869,9 @@ type
     // actually reading and purging the CacheTempPath folder every minute
     // - could call Instable.DoRotate every minute to refresh IP banishments
     procedure OnIdle(tix64: Int64);
+    /// event to customize the access of a given URI in pcoHttpDirect mode
+    property OnDirectOptions: TOnHttpPeerCacheDirectOptions
+      read fOnDirectOptions write fOnDirectOptions;
   published
     /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
