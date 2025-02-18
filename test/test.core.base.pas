@@ -5565,11 +5565,11 @@ begin
   {$ifdef OSWINDOWS}
   Check(MakeFileName([1, 2, 'doc'], false) = '1\2\doc');
   Check(MakeFileName([1, 2, 'doc'], true) = '1\2.doc');
-  Check(MakeFileName([1, 2, '.doc'], true) = '1\2.doc');
+  Check(MakeFileName([1, '', 2, '.doc'], true) = '1\2.doc');
   {$else}
   Check(MakeFileName([1, 2, 'doc'], false) = '1/2/doc');
   Check(MakeFileName([1, 2, 'doc'], true) = '1/2.doc');
-  Check(MakeFileName([1, 2, '.doc'], true) = '1/2.doc');
+  Check(MakeFileName([1, '', 2, '.doc'], true) = '1/2.doc');
   {$endif OSWINDOWS}
   CheckEqual(MakeCsv([]), '');
   CheckEqual(MakeCsv([], true), '');
