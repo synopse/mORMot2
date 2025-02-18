@@ -59,7 +59,7 @@ type
     function GetTcpTimeoutSec: integer;
     procedure SetTcpTimeoutSec(Seconds: integer);
     // could be overriden to change the behavior of this class
-    procedure PeerCacheStarted; virtual;
+    procedure PeerCacheStarted(PeerInstance: THttpPeerCache); virtual;
     procedure PeerCacheStopping; virtual;
     procedure BeforeClientConnect(var Uri: TUri); virtual;
     procedure AfterClientConnect; virtual;
@@ -191,6 +191,7 @@ end;
 procedure TMGetProcess.StartPeerCache;
 var
   l: ISynLog;
+  peerinstance: THttpPeerCache;
 begin
   if not Peer then
     exit;
@@ -211,10 +212,11 @@ begin
        (fPeerSecretHexa <> '') then
       fPeerSecret := HexToBin(fPeerSecretHexa);
     try
-      fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
+      peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
         nil, 2, self.Log, @ServerTls, @ClientTls);
+      fPeerCache := peerinstance;
       // THttpAsyncServer could also be tried with rfProgressiveStatic
-      PeerCacheStarted; // may be overriden
+      PeerCacheStarted(peerinstance); // may be overriden
     except
       // don't disable Peer: we would try on next Execute()
       on E: Exception do
@@ -225,7 +227,7 @@ begin
   end;
 end;
 
-procedure TMGetProcess.PeerCacheStarted;
+procedure TMGetProcess.PeerCacheStarted(PeerInstance: THttpPeerCache);
 begin
   // do nothing
 end;
