@@ -6263,6 +6263,10 @@ var
   deleted: Int64;
   dir: TFindFilesDynArray;
 begin
+  // check if the file is clearly too big to be cached
+  result := aAddingSize;
+  if result > fTempFilesMaxSize then
+    exit;
   // compute the current folder cache size
   result := fTempCurrentSize;
   if result = 0 then // first time, or after OnIdle
@@ -6662,10 +6666,7 @@ begin
     if (fTempFilesMaxSize > 0) and
        istemp then
     begin
-      if sourcesize >= fTempFilesMaxSize then
-        tot := sourcesize // this file is oversized for sure
-      else
-        tot := TempFolderEstimateNewSize(sourcesize);
+      tot := TempFolderEstimateNewSize(sourcesize);
       if tot >= fTempFilesMaxSize then
       begin
         fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
