@@ -1401,7 +1401,8 @@ type
     pcfResponsePartial,
     pcfResponseFull,
     pcfBearer,
-    pcfBearerDirect);
+    pcfBearerDirect,
+    pcfBearerDirectPermanent);
 
   /// one UDP request frame used during THttpPeerCache discovery
   // - requests and responses have the same binary layout
@@ -1527,7 +1528,7 @@ type
     function HttpDirectUri(const aSharedSecret: RawByteString;
       const aRemoteUri, aRemoteHash: RawUtf8;
       out aDirectUri, aDirectHeaderBearer: RawUtf8;
-      aForceTls: boolean = false): boolean;
+      aForceTls: boolean = false; aPermanent: boolean = false): boolean;
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
@@ -1692,7 +1693,8 @@ type
     // - returns aDirectUri as '/https/microsoft.com/...' and aDirectHeaderBearer
     class function HttpDirectUri(const aSharedSecret: RawByteString;
       const aRemoteUri, aRemoteHash: RawUtf8;
-      out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8;
+      aPermanent: boolean = false): boolean;
     /// decode a remote URI for pcoHttpDirect download at localhost
     // - as previously encoded by HttpDirectUri() class function
     class function HttpDirectUriReconstruct(P: PUtf8Char;
@@ -5616,7 +5618,7 @@ const
 
 class function THttpPeerCrypt.HttpDirectUri(const aSharedSecret: RawByteString;
   const aRemoteUri, aRemoteHash: RawUtf8;
-  out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean): boolean;
 var
   c: THttpPeerCrypt;
   msg: THttpPeerCacheMessage;
@@ -5631,6 +5633,8 @@ begin
   c := THttpPeerCrypt.Create(aSharedSecret, nil, nil);
   try
     c.MessageInit(pcfBearerDirect, 0, msg);
+    if aPermanent then
+      msg.Kind := pcfBearerDirectPermanent;
     if not HashDetect(aRemoteHash, msg.Hash) then
       exit;
     if uri.Port <> DEFAULT_PORT[uri.Https] then
@@ -5700,7 +5704,7 @@ end;
 
 function THttpPeerCacheSettings.HttpDirectUri(
   const aSharedSecret: RawByteString; const aRemoteUri, aRemoteHash: RawUtf8;
-  out aDirectUri, aDirectHeaderBearer: RawUtf8; aForceTls: boolean): boolean;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aForceTls, aPermanent: boolean): boolean;
 var
   mac: TMacAddress;
 begin
@@ -5710,7 +5714,7 @@ begin
      (pcoNoServer in fOptions) or
      (GuessInterface(mac) <> '') or
      not THttpPeerCrypt.HttpDirectUri(aSharedSecret, aRemoteUri, aRemoteHash,
-           aDirectUri, aDirectHeaderBearer) then
+           aDirectUri, aDirectHeaderBearer, aPermanent) then
     exit;
   aForceTls := aForceTls or (pcoSelfSignedHttps in fOptions);
   aDirectUri := Make([HTTPS_TEXT[aForceTls], mac.IP, ':', fPort, aDirectUri]);
@@ -6213,7 +6217,7 @@ begin
     exit; // not existing
   result := HTTP_NOTACCEPTABLE;
   if (aMessage.Size <> 0) and
-     // ExpectedSize may be 0 if waoNoHeadFirst was set, or for pcfBearerDirect
+     // ExpectedSize may be 0 if waoNoHeadFirst was set, or for pcfBearerDirect*
      (size <> aMessage.Size) then
     exit; // invalid file
   result := HTTP_SUCCESS;
@@ -6505,7 +6509,7 @@ end;
 type
   TOnBeforeBodyErr = set of (
     eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid,
-    eDirectIp, eDirectDecode, eDirectOpaque, aDirectDisabled);
+    eDirectIp, eDirectDecode, eDirectKind, eDirectOpaque, aDirectDisabled);
 
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
@@ -6527,16 +6531,21 @@ begin
     include(err, eUrl)
   else if PCardinal(aUrl)^ = DIRECTURI_32 then // start with '/htt'
   begin
-    // pcfBearerDirect for pcoHttpDirect mode: /https/microsoft.com/...
+    // pcfBearerDirect* for pcoHttpDirect mode: /https/microsoft.com/...
     if (aRemoteIp <> '') and
        not (IsLocalHost(pointer(aRemoteIP)) or
             (aRemoteIP = fMac.IP)) then
       include(err, eDirectIp);
-    if not Check(BearerDecode(aBearerToken, pcfBearerDirect, msg),
+    if not Check(BearerDecode(aBearerToken, pcfRequest, msg),
              'OnBeforeBody Direct', msg) then
       include(err, eDirectDecode)
-    else if Int64(msg.Opaque) <> crc63c(pointer(aUrl), length(aUrl)) then
-      include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
+    else
+    begin
+      if not (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
+        include(err, eDirectKind);
+      if Int64(msg.Opaque) <> crc63c(pointer(aUrl), length(aUrl)) then
+        include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
+    end;
     if not (pcoHttpDirect in fSettings.Options) then
       include(err, aDirectDisabled);
   end

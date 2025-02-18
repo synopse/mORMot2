@@ -90,7 +90,8 @@ type
     // - returns aDirectUri e.g. as 'http://1.2.3.4:8099/https/microsoft.com/...'
     // (if peer cache runs on 1.2.3.4:8099) and its associated aDirectHeaderBearer
     function HttpDirectUri(const aRemoteUri, aRemoteHash: RawUtf8;
-      out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8;
+      aPermanent: boolean = false): boolean;
     /// access to the associated THttpPeerCache instance
     // - a single peer-cache run in the background between Execute() calls
     property PeerCache: IWGetAlternate
@@ -354,7 +355,7 @@ begin
 end;
 
 function TMGetProcess.HttpDirectUri(const aRemoteUri, aRemoteHash: RawUtf8;
-  out aDirectUri, aDirectHeaderBearer: RawUtf8): boolean;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean): boolean;
 var
   secret: RawUtf8;
 begin
@@ -368,7 +369,7 @@ begin
     else
       secret := HexToBin(fPeerSecretHexa);
   result := fPeerSettings.HttpDirectUri(secret, aRemoteUri, aRemoteHash,
-              aDirectUri, aDirectHeaderBearer, ServerTls.Enabled);
+              aDirectUri, aDirectHeaderBearer, ServerTls.Enabled, aPermanent);
   FillZero(secret);
 end;
 
