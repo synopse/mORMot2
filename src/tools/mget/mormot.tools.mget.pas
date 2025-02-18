@@ -53,6 +53,7 @@ type
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
     fOnProgress: TOnStreamProgress;
+    fOnPeerCacheDirectOptions: TOnHttpPeerCacheDirectOptions;
     fOnStep: TOnWGetStep;
     fOutSteps: TWGetSteps;
     fPeerCache: IWGetAlternate;
@@ -97,6 +98,9 @@ type
     /// optional callback event called during download process
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
+    /// optional event to customize the access of a given URI in pcoHttpDirect mode
+    property OnPeerCacheDirectOptions: TOnHttpPeerCacheDirectOptions
+      read fOnPeerCacheDirectOptions write fOnPeerCacheDirectOptions;
     /// optional callback event raised during WGet() process
     // - if OutSteps: TWGetSteps field and LogSteps boolean flag are not enough
     // - alternative for business logic tracking: the OnProgress callback is
@@ -215,6 +219,7 @@ begin
       peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
         nil, 2, self.Log, @ServerTls, @ClientTls);
       fPeerCache := peerinstance;
+      peerinstance.OnDirectOptions := fOnPeerCacheDirectOptions;
       // THttpAsyncServer could also be tried with rfProgressiveStatic
       PeerCacheStarted(peerinstance); // may be overriden
     except
