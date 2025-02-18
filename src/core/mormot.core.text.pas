@@ -9014,11 +9014,10 @@ begin
       repeat
         inc(L, VarRecToTempUtf8(Arg^, c^)); // add param
         inc(Arg);
-        if (EndWithDelim and
-            (ArgCount = 1)) or
-           ((ArgCount <> 1) and
-            (c^.Len <> 0) and
-            (c^.Text[c^.Len - 1] <> Delim)) then // append delimiter
+        if (c^.Len <> 0) and
+           (c^.Text[c^.Len - 1] <> Delim) and
+           (EndWithDelim or
+            (ArgCount <> 1)) then // append delimiter
         begin
           inc(c);
           c^.Len := 1;
