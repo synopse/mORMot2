@@ -262,7 +262,7 @@ type
     OnLog: TSynLogProc;
     /// thread-safe register a new partial download
     function Add(const Partial: TFileName; ExpectedFullSize: Int64;
-      const Hash: THashDigest): THttpPartialID;
+      const Hash: THashDigest; Http: PHttpRequestContext = nil): THttpPartialID;
     /// register a HTTP request to a given partial
     function Find(const Hash: THashDigest; Http: PHttpRequestContext;
       out Size: Int64): TFileName;
@@ -270,7 +270,7 @@ type
     // - returns the number of changed entries
     function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): integer;
     /// notify a partial file download failure, e.g. on invalid hash
-    // - returns the number of removeed HTTP requests
+    // - returns the number of removed HTTP requests
     function Abort(ID: THttpPartialID): integer;
     /// unregister a HTTP request to a given partial
     // - called when the request is finished e.g. via
@@ -2125,7 +2125,7 @@ begin
 end;
 
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
-  const Hash: THashDigest): THttpPartialID;
+  const Hash: THashDigest; Http: PHttpRequestContext): THttpPartialID;
 var
   i: PtrInt;
   p: PHttpPartial;
@@ -2150,6 +2150,11 @@ begin
     p^.FullSize := ExpectedFullSize;
     p^.PartFile := Partial;
     p^.HttpContext := nil;
+    if Http <> nil then
+    begin
+      PtrArrayAdd(p^.HttpContext, Http);
+      Http^.ProgressiveID := p^.ID;
+    end;
   finally
     fSafe.UnLock;
   end;
