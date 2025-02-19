@@ -6809,6 +6809,7 @@ begin
       uri.Address := cs.Redirected; // follow 3xx changes
     // we will download directly into the final cache file name
     aFileName := ComputeFileName(aMessage.Hash);
+    result := HTTP_BADREQUEST;
     case aMessage.Kind of
       pcfBearerDirect:
         begin
@@ -6820,11 +6821,11 @@ begin
       pcfBearerDirectPermanent:
         aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
     else
-      begin
-        result := HTTP_BADREQUEST;
-        exit;
-      end;
+      exit;
     end;
+    result := HTTP_CONFLICT;
+    if FileSize(aFileName) > 0 then
+      exit; // paranoid: existing cached files should have been checked
     result := HTTP_NOTACCEPTABLE;
     if not FileFromString('', aFileName) then
       exit; // progressive download requires a file (even void)
@@ -6835,8 +6836,8 @@ begin
     // start the GET request to the remote URI into aFileName via a thread
     cs.RemoteUri := uri.Address;
     cs.RemoteHeaders := hdr;
-    cs := nil; // will be owned by TLoggedWorkThread from now on
     TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
+    cs := nil; // will be owned by TLoggedWorkThread from now on
     result := HTTP_SUCCESS;
   except
     on E: Exception do
