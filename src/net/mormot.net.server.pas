@@ -6076,9 +6076,8 @@ begin
     EHttpPeerCache.RaiseUtf8(
       '%.StartHttpServer: inconsistent ClientTls=% ServerTls=%',
       [self, fClientTls.Enabled, fServerTls.Enabled]);
-  if (aHttpServerClass = nil) or
-     (pcoHttpDirect in fSettings.Options) then // download in a THttpServerResp
-    aHttpServerClass := THttpServer; // classic per-thread client
+  if aHttpServerClass = nil then
+    aHttpServerClass := THttpServer; // classic per-client thread server is enough
   opt := [hsoNoXPoweredHeader, hsoThreadSmooting];
   if not (pcoNoBanIP in fSettings.Options) then // RejectInstablePeersMin = UDP
     include(opt, hsoBan40xIP);
@@ -6886,7 +6885,7 @@ end;
 
 type
   TOnRequestError = (
-    oreOK, oreNoLocalFile, oreDirectNoThread, oreDirectRemoteUriFailed);
+    oreOK, oreNoLocalFile, oreDirectRemoteUriFailed);
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
@@ -6899,12 +6898,12 @@ var
 begin
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
-  http := (Ctxt as THttpServerRequest).fHttp;
   result := HTTP_BADREQUEST;
   if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg), 'OnRequest', msg) then
   try
     // resource will always be identified by decoded bearer hash
     progsize := 0;
+    http := (Ctxt as THttpServerRequest).fHttp;
     // always try to download from LocalFileName() or PartialFileName()
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if (result <> HTTP_SUCCESS) and
@@ -6912,26 +6911,17 @@ begin
       result := PartialFileName(msg, http, @fn, @progsize);
     if result <> HTTP_SUCCESS then
       // handle any currently unknown hash
-      if (result = HTTP_NOTFOUND) and // abort on HTTP_NOTACCEPTABLE
+      if (result <> HTTP_NOTACCEPTABLE) and // abort on non acceptable message
          (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-        if (hsrHttp10 in Ctxt.ConnectionFlags) or
-           not Ctxt.ConnectionThread.InheritsFrom(THttpServerResp) then
+      begin
+        // try to start a remote download in this thread
+        result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
+        if result <> HTTP_SUCCESS then
         begin
-          // downloading better requires a THttpServer per-connection thread
-          err := oreDirectNoThread;
-          result := HTTP_NOTACCEPTABLE;
+          err := oreDirectRemoteUriFailed;
           exit;
-        end
-        else
-        begin
-          // try to start a remote download in this thread
-          result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
-          if result <> HTTP_SUCCESS then
-          begin
-            err := oreDirectRemoteUriFailed;
-            exit;
-          end;
-        end
+        end;
+      end
       else // pcfBearer with no local/partial known file
       begin
         err := oreNoLocalFile;
