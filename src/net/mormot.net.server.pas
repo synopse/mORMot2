@@ -4027,8 +4027,13 @@ end;
 
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
 begin
-  fServerKeepAliveTimeOut := Value;
-  fServerKeepAliveTimeOutSec := Value div 1000;
+  fServerKeepAliveTimeOut := Value; // in ms
+  if Value = 0 then
+    fServerKeepAliveTimeOutSec := 0 // 0 means no keep-alive
+  else if Value <= 1999 then
+    fServerKeepAliveTimeOutSec := 1 // minimum 1 second
+  else
+    fServerKeepAliveTimeOutSec := Value div 1000;
 end;
 
 function THttpServerSocketGeneric.OnNginxAllowSend(
