@@ -5439,22 +5439,19 @@ function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
     if length(plain) <> SizeOf(aMsg) then
       exit;
     MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
-    result := mdSeq;
     if (aMsg.Kind in PCF_RESPONSE) and // responses are broadcasted on POSIX
-       (aMsg.DestIP4 = fIP4) then     // only validate against the local sequence
-      if (aMsg.Seq < fFrameSeqLow) or
-         (aMsg.Seq > cardinal(fFrameSeq)) then // compare with local sequence
-        exit;
-    result := mdKind;
-    if ord(aMsg.Kind) > ord(high(aMsg.Kind)) then
-      exit;
-    result := mdHw;
-    if ord(aMsg.Hardware) > ord(high(aMsg.Hardware)) then
-      exit;
-    result := mdAlgo;
-    if ord(aMsg.Hash.Algo) > ord(high(aMsg.Hash.Algo)) then
-      exit;
-    result := mdOk;
+       (aMsg.DestIP4 = fIP4) and     // only validate against the local sequence
+       ((aMsg.Seq < fFrameSeqLow) or
+         (aMsg.Seq > cardinal(fFrameSeq))) then // compare with local sequence
+      result := mdSeq
+    else if ord(aMsg.Kind) > ord(high(aMsg.Kind)) then
+      result := mdKind
+    else if ord(aMsg.Hardware) > ord(high(aMsg.Hardware)) then
+      result := mdHw
+    else if ord(aMsg.Hash.Algo) > ord(high(aMsg.Hash.Algo)) then
+      result := mdAlgo
+    else
+      result := mdOk;
   end;
 
 begin
