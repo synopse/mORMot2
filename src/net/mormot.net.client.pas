@@ -3144,6 +3144,7 @@ begin
         '%.WGet: impossible to delete deprecated %', [self, result]);
   part := result + '.part';
   size := FileSize(part);
+  RequestClear; // reset Range from any previous failed request
   resumed := params.Resume;
   if (size > 0) and
      resumed then
