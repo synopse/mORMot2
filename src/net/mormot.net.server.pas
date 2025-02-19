@@ -6796,7 +6796,7 @@ begin
       if result <> HTTP_SUCCESS then
         exit;
     end;
-    // perform a HEAD to the original server to connect and retrieve progsize
+    // HEAD to the original server to connect, retrieve progsize and redirection
     cs := THttpClientSocketPeerCache.OpenOptions(uri, opt);
     result := cs.Head(uri.Address, 30000, hdr);
     if not (result in HTTP_GET_OK) then
@@ -6852,20 +6852,28 @@ end;
 procedure THttpPeerCache.DirectFileNameBackgroundGet(Sender: TObject);
 var
   cs: THttpClientSocketPeerCache absolute Sender;
-  fs: TFileStreamEx;
+  dest: TStreamRedirect;
+  expected, done: RawUtf8;
   res: integer;
 begin
   // remote HTTP/HTTPS GET request executed in its own TLoggedWorkThread thread
-  fs := nil;
+  dest := nil;
   try
     try
-      { TODO: use TStreamRedirect with hashing }
-      fs := TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead);
+      // prepare to download (and hash) into cs.DestFileName
+      dest := HASH_STREAMREDIRECT[cs.ExpectedHash.Algo].Create(
+        TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead));
+      // make the actual blocking GET request
       res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
-        {retry=}false, {instream=}nil, fs);
+        {retry=}false, {instream=}nil, dest);
       if not (res in HTTP_GET_OK) then
         EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
-      { TODO: verify TStreamRedirect hash against cs.ExpectedHash }
+      // verify TStreamRedirect hash against cs.ExpectedHash
+      done := dest.GetHash;
+      expected := ToText(cs.ExpectedHash);
+      if not PropNameEquals(done, expected) then
+        EHttpPeerCache.RaiseUtf8('GET % hash % failed: %<>%',
+          [cs.RemoteUri, dest, done, expected]);
       fLog.Add.Log(sllTrace, 'DirectFileNameBackgroundGet(%)=%',
         [cs.DestFileName, res], self);
     except
@@ -6874,12 +6882,12 @@ begin
         fLog.Add.Log(sllDebug, 'DirectFileNameBackgroundGet(%) raised %',
           [cs.DestFileName, E], self);
         OnDownloadingFailed(cs.PartialID);
-        FreeAndNil(fs);
+        FreeAndNil(dest); // close stream before deleting file
         DeleteFile(cs.DestFileName); // remove any incompleted/invalid file
       end;
     end;
   finally
-    fs.Free;
+    dest.Free;
     cs.Free;
   end;
 end;
