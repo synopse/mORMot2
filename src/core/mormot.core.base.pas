@@ -6298,12 +6298,15 @@ begin
     c := P^;
     include(flags, fNeg);
   end;
-  remdigit := 19; // max Int64 resolution
+  remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
   repeat
     inc(P);
     if (c >= '0') and
        (c <= '9') then
     begin
+      if remdigit = 0 then
+        if v64 < 922337203685477580 then // avoid 64-bit overflow
+          inc(remdigit); // but allow up to 19 digits if possible
       dec(remdigit);
       if remdigit >= 0 then // over-required digits are just ignored
       begin
