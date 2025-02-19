@@ -3773,6 +3773,8 @@ end;
 function TTextWriter.AvailableBytes: PtrUInt;
 begin
   result := BEnd - B;
+  if PtrInt(result) < 0 then
+    result := 0; // may happen with AddDirect/AddComma
 end;
 
 procedure TTextWriter.Add(const c: AnsiChar);
@@ -5208,11 +5210,11 @@ end;
 procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 var
-  max: PtrUInt;
+  max: PtrInt;
 begin
-  max := PtrUInt(BinBytes) * 2 + 1;
-  if PtrUInt(BEnd - B) <= max then
-    if max >= cardinal(fTempBufSize) then
+  max := BinBytes * 2 + 1;
+  if BEnd - B <= max then // note: PtrInt(BEnd - B) could be < 0
+    if PtrUInt(max) >= PtrUInt(fTempBufSize) then
       exit // too big for a single call
     else
       FlushToStream;
