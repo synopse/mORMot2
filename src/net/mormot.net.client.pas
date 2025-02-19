@@ -257,15 +257,18 @@ type
     function IndexFromID(aID: THttpPartialID): PtrInt;
     /// retrieve a Partial[] for a given sequence ID
     function FromID(aID: THttpPartialID): PHttpPartial;
+    /// retrieve a Partial[] for a given hash
+    function FromHash(const Hash: THashDigest): PHttpPartial;
   public
     /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
-    /// thread-safe register a new partial download
+    /// thread-safe register a new partial download and its associated HTTP request
     function Add(const Partial: TFileName; ExpectedFullSize: Int64;
       const Hash: THashDigest; Http: PHttpRequestContext = nil): THttpPartialID;
-    /// register a HTTP request to a given partial
-    function Find(const Hash: THashDigest; Http: PHttpRequestContext;
-      out Size: Int64): TFileName;
+    /// search for given partial file name and size, from its hash
+    function Find(const Hash: THashDigest; out Size: Int64): TFileName;
+    /// register a HTTP request to an existing partial
+    function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// notify a partial file name change, e.g. when download is complete
     // - returns the number of changed entries
     function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): integer;
@@ -442,8 +445,8 @@ type
     // currently downloading into a .partial local file content
     // - e.g. THttpPeerCache will make this file available as pcfResponsePartial
     // - Params.Hasher/Hash are expected to be populated
-    // - returns an integer OnDownloadingID > 0 to be supplied to OnDowloaded()
-    // or OnDownloadingFailed()
+    // - returns an integer OnDownloadingID > 0 sequence to be eventually
+    // supplied to OnDowloaded() or OnDownloadingFailed()
     function OnDownloading(const Params: THttpClientSocketWGet;
       const Partial: TFileName; ExpectedFullSize: Int64): THttpPartialID;
     /// put a downloaded file into the alternative source cache
@@ -2124,6 +2127,20 @@ begin
   result := nil;
 end;
 
+function THttpPartials.FromHash(const Hash: THashDigest): PHttpPartial;
+var
+  i: PtrInt;
+begin
+  result := pointer(fDownload);
+  for i := 1 to length(fDownload) do
+    if (result^.ID <> 0) and // not a recycled slot
+       HashDigestEqual(result^.Digest, Hash) then
+      exit
+    else
+      inc(result);
+  result := nil;
+end;
+
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
   const Hash: THashDigest; Http: PHttpRequestContext): THttpPartialID;
 var
@@ -2162,10 +2179,8 @@ begin
     OnLog(sllTrace, 'Add(%,%)=%', [Partial, ExpectedFullSize, result], self);
 end;
 
-function THttpPartials.Find(const Hash: THashDigest; Http: PHttpRequestContext;
-  out Size: Int64): TFileName;
+function THttpPartials.Find(const Hash: THashDigest; out Size: Int64): TFileName;
 var
-  i: PtrInt;
   p: PHttpPartial;
 begin
   Size := 0;
@@ -2174,22 +2189,31 @@ begin
     exit;
   fSafe.Lock;
   try
-    p := pointer(fDownload);
-    for i := 1 to length(fDownload) do
-      if (p^.ID <> 0) and // not a recycled slot
-         HashDigestEqual(p^.Digest, Hash) then
-      begin
-        Size := p^.FullSize;
-        result := p^.PartFile;
-        if Http <> nil then
-        begin
-          PtrArrayAdd(p^.HttpContext, Http);
-          Http^.ProgressiveID := p^.ID;
-        end;
-        break;
-      end
-      else
-        inc(p);
+    p := FromHash(Hash);
+    if p = nil then
+      exit;
+    Size := p^.FullSize;
+    result := p^.PartFile;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpPartials.Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
+var
+  p: PHttpPartial;
+begin
+  result := false;
+  if (self = nil) or
+     (Http = nil) then
+    exit;
+  fSafe.Lock;
+  try
+    p := FromHash(Hash);
+    if p = nil then
+      exit;
+    PtrArrayAdd(p^.HttpContext, Http);
+    Http^.ProgressiveID := p^.ID;
   finally
     fSafe.UnLock;
   end;
