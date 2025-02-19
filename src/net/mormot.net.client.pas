@@ -253,8 +253,6 @@ type
     fLastID: cardinal;
     /// store (a few) partial download states
     fDownload: array of THttpPartial;
-    /// retrieve an index in Partial[] for a given sequence ID
-    function IndexFromID(aID: THttpPartialID): PtrInt;
     /// retrieve a Partial[] for a given sequence ID
     function FromID(aID: THttpPartialID): PHttpPartial;
     /// retrieve a Partial[] for a given hash
@@ -2099,20 +2097,6 @@ end;
 
 { THttpPartials }
 
-function THttpPartials.IndexFromID(aID: THttpPartialID): PtrInt;
-var
-  p: PHttpPartial;
-begin
-  p := pointer(fDownload);
-  if cardinal(aID) <= fLastID then
-    for result := 0 to length(fDownload) - 1 do
-      if p^.ID = aID then // fast enough with a few slots
-        exit
-      else
-        inc(p);
-  result := -1;
-end;
-
 function THttpPartials.FromID(aID: THttpPartialID): PHttpPartial;
 var
   i: PtrInt;
@@ -2144,7 +2128,7 @@ end;
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
   const Hash: THashDigest; Http: PHttpRequestContext): THttpPartialID;
 var
-  i: PtrInt;
+  n: PtrInt;
   p: PHttpPartial;
 begin
   result := 0; // unsupported
@@ -2155,13 +2139,13 @@ begin
   try
     inc(fLastID);
     result := fLastID; // returns 1,2,3... THttpPartialID
-    i := IndexFromID(0); // try to reuse an empty slot
-    if i < 0 then
+    p := FromID(0); // try to reuse an empty slot
+    if p = nil then
     begin
-      i := length(fDownload);
-      SetLength(fDownload, i + 1); // need a new slot
+      n := length(fDownload);
+      SetLength(fDownload, n + 1); // need a new slot
+      p := @fDownload[n];
     end;
-    p := @fDownload[i];
     p^.ID := result;
     p^.Digest := Hash;
     p^.FullSize := ExpectedFullSize;

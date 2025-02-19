@@ -6926,7 +6926,7 @@ begin
       begin
         fLog.Add.Log(sllDebug, 'DirectFileNameBackgroundGet(%) raised %',
           [cs.DestFileName, E], self);
-        OnDownloadingFailed(cs.PartialID);
+        OnDownloadingFailed(cs.PartialID); // abort progressive HTTP requests
         fFilesSafe.Lock; // disable any concurrent file access
         try
           FreeAndNil(dest); // close stream before deleting file
