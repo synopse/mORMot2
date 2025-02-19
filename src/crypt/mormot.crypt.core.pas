@@ -1680,7 +1680,7 @@ type
   /// which sources uses TAesPrng.GetEntropy() to gather its entropy
   // - gesSystemAndUser uses OS and mORMot random sources
   // - gesSystemOnly and gesSystemOnlyMayBlock use OS random sources, the later
-  // may block on some systems (so keep it small)
+  // may block on some systems (so should be used only for small output)
   // - gesUserOnly uses mORMot random sources, and 512-bit of OS source once
   TAesPrngGetEntropySource = (
     gesSystemAndUser,

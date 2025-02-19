@@ -2955,13 +2955,13 @@ function IsDer(const Rdn: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// main resolver of the randomness generators
-// - the shared TCryptRandom of this algorithm is returned: caller should NOT free it
+// - a shared TCryptRandom instance is returned: caller should NOT free it
 // - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine
-// - call Rnd('rnd-entropy').Get() to gather OS entropy, optionally as
-// 'rnd-entropysys', 'rnd-entropysysblocking', 'rnd-entropyuser'
+// - call Rnd('rnd-entropy').Get() to gather OS entropy (which may be slow),
+// optionally as 'rnd-entropysys', 'rnd-entropysysblocking', 'rnd-entropyuser'
 // - alternative generators are 'rnd-aes' (same as 'rnd-default'), 'rnd-lecuyer'
 // (fast on small content) and 'rnd-system'/'rnd-systemblocking' (mapping
-// FillSystemRandom)
+// FillSystemRandom, which may be slow and even blocking)
 function Rnd(const name: RawUtf8 = 'rnd-default'): TCryptRandom;
 
 /// main resolver of the registered hashers
@@ -6517,7 +6517,26 @@ begin
 end;
 
 
+{ TCryptRandomAesPrng }
+
+type
+  TCryptRandomAesPrng = class(TCryptRandom) // 'rnd-default,rnd-aes'
+  public
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+  end;
+
+procedure TCryptRandomAesPrng.Get(dst: pointer; dstlen: PtrInt);
+begin
+  TAesPrng.Main.FillRandom(dst, dstlen);
+end;
+
+
 { TCryptRandomEntropy }
+
+const
+  // CSV text of TAesPrngGetEntropySource items as used for Rnd() factory naming
+  RndAlgosText: PUtf8Char =
+    'rnd-entropy,rnd-entropysys,rnd-entropysysblocking,rnd-entropyuser';
 
 type
   TCryptRandomEntropy = class(TCryptRandom)
@@ -6528,11 +6547,6 @@ type
     function Get(len: PtrInt): RawByteString; override;
     procedure Get(dst: pointer; dstlen: PtrInt); override;
   end;
-
-const
-  /// CSV text of TAesPrngGetEntropySource items
-  RndAlgosText: PUtf8Char =
-    'rnd-entropy,rnd-entropysys,rnd-entropysysblocking,rnd-entropyuser';
 
 constructor TCryptRandomEntropy.Create(const name: RawUtf8);
 begin
@@ -6549,44 +6563,30 @@ procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
 var
   tmp: RawByteString;
 begin
-  tmp := TAesPrng.GetEntropy(dstlen, fSource);
+  tmp := TAesPrng.GetEntropy(dstlen, fSource); // may be slow
   MoveFast(pointer(tmp)^, dst^, dstlen);
   FillZero(tmp);
-end;
-
-
-{ TCryptRandomAesPrng }
-
-type
-  TCryptRandomAesPrng = class(TCryptRandom)
-  public
-    procedure Get(dst: pointer; dstlen: PtrInt); override;
-  end;
-
-procedure TCryptRandomAesPrng.Get(dst: pointer; dstlen: PtrInt);
-begin
-  TAesPrng.Main.FillRandom(dst, dstlen);
 end;
 
 
 { TCryptRandomSysPrng }
 
 type
-  TCryptRandomSysPrng = class(TCryptRandom)
+  TCryptRandomSysPrng = class(TCryptRandom) // 'rnd-system,rnd-systemblocking'
   public
     procedure Get(dst: pointer; dstlen: PtrInt); override;
   end;
 
 procedure TCryptRandomSysPrng.Get(dst: pointer; dstlen: PtrInt);
-begin // 'rnd-system,rnd-systemblocking'
-  FillSystemRandom(dst, dstlen, length(fName) > 10);
+begin
+  FillSystemRandom(dst, dstlen, length(fName) > 10); // may be blocking
 end;
 
 
 { TCryptRandomLecuyerPrng }
 
 type
-  TCryptRandomLecuyerPrng = class(TCryptRandom)
+  TCryptRandomLecuyerPrng = class(TCryptRandom) // 'rnd-lecuyer'
   public
     procedure Get(dst: pointer; dstlen: PtrInt); override;
     function Get32: cardinal; override;
@@ -6741,7 +6741,7 @@ type
 { TCryptCrc32Internal }
 
 const
-  /// CSV text of TCrc32Algo items
+  // CSV text of TCrc32Algo items as used for Hasher/Hash factories naming
   CrcAlgosText: PUtf8Char =
     'crc32,crc32c,xxhash32,adler32,fnv32,default32,md5-32,sha1-32,sha256-32';
 
@@ -6803,7 +6803,7 @@ type
   end;
 
 const
-  // CSV text of THashAlgo items, as recognized by Hasher/Hash factories
+  // CSV text of THashAlgo items, as recognized by Hasher/Hash factories naming
   HashAlgosText: PUtf8Char =
     'md5,sha1,sha256,sha384,sha512,sha3_256,sha3_512,sha224';
 
@@ -6907,7 +6907,7 @@ type
   end;
 
 const
-  /// CSV text of TSignAlgo items, as recognized by Signer/Sign factories
+  // CSV text of TSignAlgo items, as used for Signer/Sign factories naming
   SignAlgosText: PUtf8Char = 'hmac-sha1,hmac-sha256,hmac-sha384,hmac-sha512,' +
     'sha3-224,sha3-256,sha3-384,sha3-512,sha3-s128,sha3-s256';
 
@@ -8557,9 +8557,9 @@ begin
     GlobalCryptAlgo := RegisterGlobalShutdownRelease(
       TRawUtf8List.CreateEx([fNoDuplicate, fThreadSafe])); // no fObjectsOwned
     // register mormot.crypt.core engines into our factories
-    TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
     TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
+    TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomSysPrng.Implements('rnd-system,rnd-systemblocking');
     TCryptHasherInternal.Implements(HashAlgosText);
     TCryptCrc32Internal.Implements(CrcAlgosText);
