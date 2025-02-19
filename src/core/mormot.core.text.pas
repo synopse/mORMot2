@@ -5332,8 +5332,14 @@ end;
 
 procedure TTextWriter.AddUrlNameNormalize(U: PUtf8Char; L: PtrInt);
 begin
-  if L <= 0 then
-    exit;
+  if (L <= 0) or
+     (U^ <> '/') then
+  begin
+    inc(B);
+    B^ := '/'; // a normalized URI should start with '/'
+    if L <= 0 then
+      exit;
+  end;
   repeat
     if B >= BEnd then
       FlushToStream; // inlined Add() in the loop
