@@ -1462,6 +1462,7 @@ type
   /// each THttpPeerCacheSettings.Options item
   // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
   // hash nibble) within CacheTempPath to reduce filesystem fragmentation
+  // - pcoCacheTempNoCheckSize will ignore checking CacheTempMaxMB ratio on disk
   // - pcoUseFirstResponse will accept the first positive response, and don't
   // wait for the BroadcastTimeoutMS delay for all responses to be received
   // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
@@ -1483,6 +1484,7 @@ type
   // using a URI + Bearer returned by HttpDirectUri() overloaded methods
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
+    pcoCacheTempNoCheckSize,
     pcoUseFirstResponse,
     pcoTryLastPeer,
     pcoTryAllPeers,
@@ -6025,7 +6027,8 @@ begin
     if Assigned(log) then
       log.Log(sllDebug, 'Create: % folder has % available, with % existing cache',
         [fTempFilesPath, KB(avail), KB(existing)], self);
-    if avail <> 0 then
+    if (avail <> 0) and
+       not (pcoCacheTempNoCheckSize in fSettings.Options) then
     begin
       avail := (avail + existing) shr 2;
       if fTempFilesMaxSize > avail then
