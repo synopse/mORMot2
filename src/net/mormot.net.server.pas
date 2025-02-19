@@ -6841,12 +6841,17 @@ begin
         exit;
       end;
       de := deFile;
-      result := HTTP_CONFLICT;
-      if FileSize(aFileName) > 0 then
-        exit; // paranoid: existing cached files should have been checked
-      result := HTTP_NOTACCEPTABLE;
-      if not FileFromString('', aFileName) then
-        exit; // progressive download requires a file ASAP (even void)
+      fFilesSafe.Lock; // disable any concurrent file access
+      try
+        result := HTTP_CONFLICT;
+        if FileSize(aFileName) > 0 then
+          exit; // paranoid: existing cached files should have been checked
+        result := HTTP_NOTACCEPTABLE;
+        if not FileFromString('', aFileName) then
+          exit; // progressive download requires a file ASAP (even void)
+      finally
+        fFilesSafe.UnLock;
+      end;
       cs.DestFileName := aFileName;
       cs.ExpectedHash := aMessage.Hash;
       // mimics THttpPeerCache.OnDownloading() for this request progressive mode
@@ -6882,15 +6887,28 @@ var
   dest: TStreamRedirect;
   expected, done: RawUtf8;
   res: integer;
+  fsize: Int64;
 begin
   // remote HTTP/HTTPS GET request executed in its own TLoggedWorkThread thread
   dest := nil;
   try
     try
       // prepare to download (and hash) into cs.DestFileName
-      dest := HASH_STREAMREDIRECT[cs.ExpectedHash.Algo].Create(
-        TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead));
-      // make the actual blocking GET request
+      fFilesSafe.Lock; // disable any concurrent file access
+      try
+        // ensure nothing new since DirectFileName() made FileFromString('')
+        fsize := FileSize(cs.DestFileName);
+        if fsize <> 0 then
+          EHttpPeerCache.RaiseUtf8('GET % with % filesize=%',
+            [cs.RemoteUri, cs.DestFileName, fsize]);
+        // stream to store and hash
+        dest := HASH_STREAMREDIRECT[cs.ExpectedHash.Algo].Create(
+          TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead));
+              fFilesSafe.Lock; // disable any concurrent file access
+      finally
+        fFilesSafe.UnLock;
+      end;
+      // make the actual blocking GET request in this background thread
       res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
         {retry=}false, {instream=}nil, dest);
       if not (res in HTTP_GET_OK) then
@@ -6909,8 +6927,13 @@ begin
         fLog.Add.Log(sllDebug, 'DirectFileNameBackgroundGet(%) raised %',
           [cs.DestFileName, E], self);
         OnDownloadingFailed(cs.PartialID);
-        FreeAndNil(dest); // close stream before deleting file
-        DeleteFile(cs.DestFileName); // remove any incompleted/invalid file
+        fFilesSafe.Lock; // disable any concurrent file access
+        try
+          FreeAndNil(dest); // close stream before deleting file
+          DeleteFile(cs.DestFileName); // remove any incompleted/invalid file
+        finally
+          fFilesSafe.UnLock;
+        end;
       end;
     end;
   finally
