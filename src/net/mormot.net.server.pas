@@ -6035,7 +6035,7 @@ begin
       begin
         fTempFilesMaxSize := avail; // allow up to 25% of the folder capacity
         if Assigned(log) then
-          log.Log(sllDebug, 'Create: use CacheTempMax=%', [KB(avail)], self);
+          log.Log(sllDebug, 'Create: trim CacheTempMax=%', [KB(avail)], self);
       end;
     end;
   end;
@@ -6833,7 +6833,7 @@ begin
     cs.ExpectedHash := aMessage.Hash;
     // mimics THttpPeerCache.OnDownloading() for progressive mode
     cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
-    // start the GET request to the remote URI into a temp stream via a thread
+    // start the GET request to the remote URI into aFileName via a thread
     cs.RemoteUri := uri.Address;
     cs.RemoteHeaders := hdr;
     cs := nil; // will be owned by TLoggedWorkThread from now on

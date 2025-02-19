@@ -189,7 +189,7 @@ function ToText(op: TMongoOperation): PShortString; overload;
   // this is the standard command request and reply body
   // - mmkSequence is used when there are several sections, encoded as the
   // 32-bit size, then the ASCIIZ document identifier, then zero or more
-  // BSON objects, ending one the declared size has been reached
+  // BSON objects, ending once the declared size has been reached
   // - mmkInternal is used for internal purposes and rejected by the server
   TMongoMsgKind = (
     mmkBody,

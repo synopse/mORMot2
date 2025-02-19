@@ -3460,7 +3460,7 @@ begin
     Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
     cprev := 0;
     dprev := 0;
-    for i := 1 to 10 do
+    for i := 1 to 10 do // some system random generators may be slow/blocking
     begin
       c32 := rnd.Get32;
       CheckUtf8(c32 <> cprev, rnd.AlgoName);
@@ -3470,7 +3470,7 @@ begin
       d := rnd.GetDouble;
       check(d <> dprev);
       dprev := d;
-      n := rnd.Get(i);
+      n := rnd.Get(i); // up to 10 bytes is fine on slow/blocking OS random API
       CheckEqual(length(n), i);
     end;
   end;
