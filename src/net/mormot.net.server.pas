@@ -6160,8 +6160,8 @@ begin
   // filename is binary algo + hash encoded as hexadecimal up to 520-bit
   result := FormatString('%.cache',
     [BinToHexLower(@aHash, SizeOf(aHash.Algo) + HASH_SIZE[aHash.Algo])]);
-  // note: it does not make sense to obfuscate this file name because we can
-  // recompute the hash from its actual content since it's not encrypted at rest
+  // note: it does not make sense to obfuscate this file name because the file
+  // content itself is unencrypted on disk, so the hash can be recomputed anyway
 end;
 
 function THttpPeerCache.PermFileName(const aFileName: TFileName;
@@ -6774,6 +6774,9 @@ type
     RemoteHeaders: RawUtf8;
     PartialID: THttpPartialID;
   end;
+  TDirectError = (
+    deOk, deKind, deUri, deExcept, deCallback, deHead, deLen, deMsg,
+    deTempSize, deFile, deThread);
 
 function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
@@ -6783,72 +6786,93 @@ var
   uri: TUri;
   opt: THttpRequestExtendedOptions;
   hdr: RawUtf8;
+  de: TDirectError;
 begin
-  cs := nil;
+  result := HTTP_BADREQUEST;
+  de := deOk;
   try
-    // compute the remote URI and its associated options/header
-    result := HTTP_BADREQUEST;
-    if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) or
-       not HttpDirectUriReconstruct(pointer(aUrl), uri) then
-      exit;
-    opt.Init;
-    opt.RedirectMax := 3; // seems fair enough
-    if Assigned(fOnDirectOptions) then
-    begin
-      result := fOnDirectOptions(uri, hdr, opt); // customizable
-      if result <> HTTP_SUCCESS then
+    cs := nil;
+    try
+      // compute the remote URI and its associated options/header
+      if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
+        de := deKind
+      else if not HttpDirectUriReconstruct(pointer(aUrl), uri) then
+        de := deUri;
+      if de <> deOk then
         exit;
+      opt.Init;
+      opt.RedirectMax := 3; // seems fair enough
+      if Assigned(fOnDirectOptions) then
+      begin
+        result := fOnDirectOptions(uri, hdr, opt); // customizable
+        de := deCallback;
+        if result <> HTTP_SUCCESS then
+          exit;
+      end;
+      // HEAD to the original server to connect, retrieving size and redirection
+      cs := THttpClientSocketPeerCache.OpenOptions(uri, opt);
+      result := cs.Head(uri.Address, 30000, hdr);
+      de := deHead;
+      if not (result in HTTP_GET_OK) then
+        exit;
+      de := deLen;
+      result := HTTP_LENGTHREQUIRED;
+      aSize := cs.Http.ContentLength;
+      if aSize <= 0 then
+        exit; // progressive request requires a final size
+      if cs.Redirected <> '' then
+        uri.Address := cs.Redirected; // follow 3xx redirection
+      // prepare direct download into the final cache file as in LocalFileName()
+      aFileName := ComputeFileName(aMessage.Hash);
+      de := deMsg;
+      result := HTTP_BADREQUEST;
+      case aMessage.Kind of
+        pcfBearerDirect:
+          begin
+            result := HTTP_PAYLOADTOOLARGE;
+            de := deTempSize;
+            if TempFolderEstimateNewSize(aSize) >= fTempFilesMaxSize then
+              exit;
+            aFileName := fTempFilesPath + aFileName;
+          end;
+        pcfBearerDirectPermanent:
+          aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
+      else
+        exit;
+      end;
+      de := deFile;
+      result := HTTP_CONFLICT;
+      if FileSize(aFileName) > 0 then
+        exit; // paranoid: existing cached files should have been checked
+      result := HTTP_NOTACCEPTABLE;
+      if not FileFromString('', aFileName) then
+        exit; // progressive download requires a file ASAP (even void)
+      cs.DestFileName := aFileName;
+      cs.ExpectedHash := aMessage.Hash;
+      // mimics THttpPeerCache.OnDownloading() for this request progressive mode
+      cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
+      // start the GET request to the remote URI into aFileName via a sub-thread
+      cs.RemoteUri := uri.Address;
+      cs.RemoteHeaders := hdr;
+      de := deThread;
+      TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
+      cs := nil; // will be owned by TLoggedWorkThread from now on
+      de := deOk;
+      result := HTTP_SUCCESS;
+    except
+      on E: Exception do
+      begin
+        de := deExcept;
+        result := HTTP_NOTFOUND;
+        fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
+        cs.Free;
+      end;
     end;
-    // HEAD to the original server to connect, retrieve progsize and redirection
-    cs := THttpClientSocketPeerCache.OpenOptions(uri, opt);
-    result := cs.Head(uri.Address, 30000, hdr);
-    if not (result in HTTP_GET_OK) then
-      exit;
-    result := HTTP_LENGTHREQUIRED;
-    aSize := cs.Http.ContentLength;
-    if aSize <= 0 then
-      exit;
-    if cs.Redirected <> '' then
-      uri.Address := cs.Redirected; // follow 3xx changes
-    // we will download directly into the final cache file name
-    aFileName := ComputeFileName(aMessage.Hash);
-    result := HTTP_BADREQUEST;
-    case aMessage.Kind of
-      pcfBearerDirect:
-        begin
-          result := HTTP_PAYLOADTOOLARGE;
-          if TempFolderEstimateNewSize(aSize) >= fTempFilesMaxSize then
-            exit;
-          aFileName := fTempFilesPath + aFileName;
-        end;
-      pcfBearerDirectPermanent:
-        aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
-    else
-      exit;
-    end;
-    result := HTTP_CONFLICT;
-    if FileSize(aFileName) > 0 then
-      exit; // paranoid: existing cached files should have been checked
-    result := HTTP_NOTACCEPTABLE;
-    if not FileFromString('', aFileName) then
-      exit; // progressive download requires a file (even void)
-    cs.DestFileName := aFileName;
-    cs.ExpectedHash := aMessage.Hash;
-    // mimics THttpPeerCache.OnDownloading() for progressive mode
-    cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
-    // start the GET request to the remote URI into aFileName via a thread
-    cs.RemoteUri := uri.Address;
-    cs.RemoteHeaders := hdr;
-    TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
-    cs := nil; // will be owned by TLoggedWorkThread from now on
-    result := HTTP_SUCCESS;
-  except
-    on E: Exception do
-    begin
-      result := HTTP_NOTFOUND;
-      fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
-      cs.Free;
-    end;
+  finally
+    if (de <> deOk) and
+       fVerboseLog then
+      fLog.Add.Log(sllTrace, 'DirectFileName=% % (%)',
+        [result, aFileName, GetEnumName(TypeInfo(TDirectError), ord(de))^], self);
   end;
 end;
 
