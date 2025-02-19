@@ -120,7 +120,9 @@ function umoddi3(num, den: uint64): uint64; cdecl;
 function divdi3(num, den: int64): int64; cdecl;
 function udivdi3(num, den: uint64): uint64; cdecl;
 function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
+{$ifdef CPUINTEL}
 procedure __chkstk_ms;
+{$endif CPUINTEL}
 
 {$ifdef CPUX64}
 
@@ -578,6 +580,8 @@ begin
   raise ELibStatic.Create('Unexpected exit() call');
 end;
 
+{$ifdef CPUINTEL}
+
 procedure printf; assembler; 
  {$ifdef FPC} nostackframe; public name _PREFIX + 'printf'; {$else} export; {$endif}
 asm
@@ -601,6 +605,10 @@ procedure _vsnprintf; assembler;
 asm
   jmp libc_vsnprintf
 end;
+
+{$else}
+
+{$endif CPUINTEL}
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strcspn'; {$else} export; {$endif}
