@@ -6944,7 +6944,7 @@ end;
 
 type
   TOnRequestError = (
-    oreOK, oreNoLocalFile, oreDirectRemoteUriFailed);
+    oreOK, oreNoLocalFile, oreLocalFileNotAcceptable, oreDirectRemoteUriFailed);
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
@@ -6963,7 +6963,7 @@ begin
     // resource will always be identified by decoded bearer hash
     progsize := 0;
     http := (Ctxt as THttpServerRequest).fHttp;
-    // always try to download from LocalFileName() or PartialFileName()
+    // always first try from LocalFileName() or PartialFileName()
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if (result <> HTTP_SUCCESS) and
        (fPartials <> nil) then // if supported by the fHttpServer class
@@ -6973,7 +6973,7 @@ begin
       if (result <> HTTP_NOTACCEPTABLE) and // abort on non acceptable message
          (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
       begin
-        // try to start a remote download in this thread
+        // try to start a remote download in a background thread
         result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
         if result <> HTTP_SUCCESS then
         begin
@@ -6981,9 +6981,12 @@ begin
           exit;
         end;
       end
-      else // pcfBearer with no local/partial known file
+      else // pcfBearer with no local/partial known file: nothing to return
       begin
-        err := oreNoLocalFile;
+        if result = HTTP_NOTACCEPTABLE then
+          err := oreLocalFileNotAcceptable
+        else
+          err := oreNoLocalFile;
         if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
           result := HTTP_NOCONTENT; // OnDownload should make a broadcast
         exit;
