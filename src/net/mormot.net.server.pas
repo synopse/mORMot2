@@ -6738,7 +6738,7 @@ begin
   result := HTTP_NOTFOUND;
   if fPartials = nil then // not supported by this fHttpServer class
     exit;
-  fn := fPartials.Find(aMessage.Hash, aHttp, size);
+  fn := fPartials.Find(aMessage.Hash, size);
   if fVerboseLog then
     fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
       [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
@@ -6748,6 +6748,12 @@ begin
   if (aMessage.Size <> 0) and // ExpectedSize may be 0 if waoNoHeadFirst was set
      (size <> aMessage.Size) then
     exit; // invalid file
+  if (aHttp <> nil) and // register the partial for this HTTP request
+     not fPartials.Associate(aMessage.Hash, aHttp) then
+  begin
+    fLog.Add.Log(sllWarning, 'PartialFileName: % race condition', [fn], self);
+    exit; // race condition with Find() - paranoid
+  end;
   result := HTTP_SUCCESS;
   if aFileName <> nil then
     aFileName^ := fn;
