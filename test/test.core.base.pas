@@ -8374,6 +8374,8 @@ begin
     '605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'));
   Check(not IsHttpUserAgentBot(
     'Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko'));
+  Check(not IsHttpUserAgentBot(DefaultUserAgent(self)),
+    'Mozilla/5.0 (Linux x64; mORMot) TCB/2 mormot2tests');
   Check(IsHttpUserAgentBot(
     'Googlebot/2.1 (+http://www.google.com/bot.html)'));
   Check(IsHttpUserAgentBot(

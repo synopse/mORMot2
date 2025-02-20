@@ -166,6 +166,7 @@ function IsUrlFavIcon(P: PUtf8Char): boolean;
 function IsHttp(const text: RawUtf8): boolean;
 
 /// true if the supplied text is case-insensitive 'none'
+// - as in THttpRequestExtendedOptions.Proxy field
 function IsNone(const text: RawUtf8): boolean;
 
 /// naive detection of most used bots from a HTTP User-Agent string
@@ -1916,7 +1917,8 @@ type
     // so should be considered as a somewhat good approximation of the reality
     // - for periods longer than hapMinute, this field is the mean of numbers
     // of unique IPs per minute for the number of measures within this period
-    // - it should always considered as a relative number, not an absolute number
+    // - it should always considered as a relative number / order of magnitude
+    // guess, not an absolute number
     UniqueIP: cardinal;
     /// number of bytes received from the client for this counter requests
     Read: THttpAnalyzerBytes;
