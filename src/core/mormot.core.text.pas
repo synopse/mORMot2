@@ -9945,7 +9945,7 @@ end;
 
 const
   // sorted by actual usage order for WordScanIndex() in matching HTTP_CODE[]
-  HTTP_REASON: array[0 .. 44] of RawUtf8 = (
+  HTTP_REASON: array[0 .. 45] of RawUtf8 = (
    'OK',                                // HTTP_SUCCESS - should be first
    'No Content',                        // HTTP_NOCONTENT
    'Temporary Redirect',                // HTTP_TEMPORARYREDIRECT

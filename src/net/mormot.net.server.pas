@@ -6822,7 +6822,6 @@ begin
         uri.Address := cs.Redirected; // follow 3xx redirection
       // prepare direct download into the final cache file as in LocalFileName()
       aFileName := ComputeFileName(aMessage.Hash);
-      result := HTTP_BADREQUEST;
       case aMessage.Kind of
         pcfBearerDirect:
           begin
@@ -6841,7 +6840,7 @@ begin
         result := HTTP_CONFLICT;
         if FileSize(aFileName) > 0 then
           exit; // paranoid: existing cached files should have been checked
-        result := HTTP_NOTACCEPTABLE;
+        result := HTTP_UNPROCESSABLE_CONTENT;
         if not FileFromString('', aFileName) then
           exit; // progressive download requires a file ASAP (even void)
       finally
