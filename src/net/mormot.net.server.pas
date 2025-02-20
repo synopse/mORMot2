@@ -6769,14 +6769,11 @@ type
   THttpClientSocketPeerCache = class(THttpClientSocket)
   public // some additional internal parameters
     DestFileName: TFileName;
-    ExpectedHash: THashDigest;
     RemoteUri: RawUtf8;
     RemoteHeaders: RawUtf8;
     PartialID: THttpPartialID;
+    ExpectedHash: THashDigest;
   end;
-  TDirectError = (
-    deOk, deKind, deUri, deExcept, deCallback, deHead, deLen, deMsg,
-    deTempSize, deFile, deThread);
 
 function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
@@ -6785,62 +6782,58 @@ var
   cs:  THttpClientSocketPeerCache;
   uri: TUri;
   opt: THttpRequestExtendedOptions;
-  hdr: RawUtf8;
-  de: TDirectError;
+  hdr, err: RawUtf8;
 begin
   result := HTTP_BADREQUEST;
-  de := deOk;
   try
     cs := nil;
     try
       // compute the remote URI and its associated options/header
       if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-        de := deKind
+        err := GetEnumNameTrimed(TypeInfo(pcfBearerDirect), ord(aMessage.Kind))
       else if not HttpDirectUriReconstruct(pointer(aUrl), uri) then
-        de := deUri;
-      if de <> deOk then
+        err := aUrl;
+      if err <> '' then
         exit;
       opt.Init;
+      opt.CreateTimeoutMS := 1000;
       opt.RedirectMax := 3; // seems fair enough
       if Assigned(fOnDirectOptions) then
       begin
         result := fOnDirectOptions(uri, hdr, opt); // customizable
-        de := deCallback;
+        err := 'callback';
         if result <> HTTP_SUCCESS then
           exit;
       end;
       // HEAD to the original server to connect, retrieving size and redirection
       cs := THttpClientSocketPeerCache.OpenOptions(uri, opt);
       result := cs.Head(uri.Address, 30000, hdr);
-      de := deHead;
+      err := 'head';
       if not (result in HTTP_GET_OK) then
         exit;
-      de := deLen;
       result := HTTP_LENGTHREQUIRED;
       aSize := cs.Http.ContentLength;
+      Int32ToUtf8(aSize, err);
       if aSize <= 0 then
         exit; // progressive request requires a final size
       if cs.Redirected <> '' then
         uri.Address := cs.Redirected; // follow 3xx redirection
       // prepare direct download into the final cache file as in LocalFileName()
       aFileName := ComputeFileName(aMessage.Hash);
-      de := deMsg;
       result := HTTP_BADREQUEST;
       case aMessage.Kind of
         pcfBearerDirect:
           begin
             result := HTTP_PAYLOADTOOLARGE;
-            de := deTempSize;
+            err := 'temp';
             if TempFolderEstimateNewSize(aSize) >= fTempFilesMaxSize then
               exit;
             aFileName := fTempFilesPath + aFileName;
           end;
         pcfBearerDirectPermanent:
           aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
-      else
-        exit;
       end;
-      de := deFile;
+      err := 'file';
       fFilesSafe.Lock; // disable any concurrent file access
       try
         result := HTTP_CONFLICT;
@@ -6859,25 +6852,24 @@ begin
       // start the GET request to the remote URI into aFileName via a sub-thread
       cs.RemoteUri := uri.Address;
       cs.RemoteHeaders := hdr;
-      de := deThread;
+      err := 'thrd';
       TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
-      de := deOk;
+      err :='';
       result := HTTP_SUCCESS;
     except
       on E: Exception do
       begin
-        de := deExcept;
+        ClassToText(PClass(E)^, err);
         result := HTTP_NOTFOUND;
         fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
         cs.Free;
       end;
     end;
   finally
-    if (de <> deOk) and
+    if (err <> '') and
        fVerboseLog then
-      fLog.Add.Log(sllTrace, 'DirectFileName=% % (%)',
-        [result, aFileName, GetEnumName(TypeInfo(TDirectError), ord(de))^], self);
+      fLog.Add.Log(sllTrace, 'DirectFileName=% % (%)', [result, aFileName, err], self);
   end;
 end;
 
