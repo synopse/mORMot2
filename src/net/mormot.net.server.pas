@@ -3164,7 +3164,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
        fOutContentType, XPOWEREDVALUE],
       RawUtf8(fOutContent));
     fOutCustomHeaders := '';
-    fOutContentType := 'text/html; charset=utf-8'; // create message to display
+    fOutContentType := HTML_CONTENT_TYPE; // create message to display
   end;
 
 var
@@ -7370,7 +7370,7 @@ var
       if E <> nil then
         msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
       msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
-      resp^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
+      resp^.SetContent(datachunkmem, msg, HTML_CONTENT_TYPE);
       Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
         bytessent, nil, 0, nil, fLogData);
     except

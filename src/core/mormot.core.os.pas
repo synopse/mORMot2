@@ -202,7 +202,7 @@ const
 
   /// MIME content type used for JSON communication (as used by the Microsoft
   // WCF framework and the YUI framework)
-  // - no 'charset=UTF-8' encoding is necessary, as by specified by RFC 7159
+  // - no 'charset=utf-8' encoding is necessary, as specified by RFC 7159
   JSON_CONTENT_TYPE = 'application/json';
 
   /// HTTP header for MIME content type used for plain JSON
@@ -218,14 +218,14 @@ const
   JSON_CONTENT_TYPE_HEADER_UPPER =
     HEADER_CONTENT_TYPE_UPPER + JSON_CONTENT_TYPE_UPPER;
 
-  /// MIME content type used for plain UTF-8 text
-  TEXT_CONTENT_TYPE = 'text/plain; charset=UTF-8';
+  /// MIME content type used for plain UTF-8 text - see RFC 7231 section-3.1.1
+  TEXT_CONTENT_TYPE = 'text/plain;charset=utf-8';
 
   /// HTTP header for MIME content type used for plain UTF-8 text
   TEXT_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + TEXT_CONTENT_TYPE;
 
-  /// MIME content type used for UTF-8 encoded HTML
-  HTML_CONTENT_TYPE = 'text/html; charset=UTF-8';
+  /// MIME content type used for UTF-8 encoded HTML - see RFC 7231 section-3.1.1
+  HTML_CONTENT_TYPE = 'text/html;charset=utf-8';
 
   /// HTTP header for MIME content type used for UTF-8 encoded HTML
   HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + HTML_CONTENT_TYPE;

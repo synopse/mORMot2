@@ -5452,7 +5452,7 @@ begin
     if (TextCharSet <> '') or
        (head = '') then
       sock.SockSend([
-        'Content-Type: text/plain; charset=', TextCharSet, #13#10 +
+        'Content-Type: text/plain;charset=', TextCharSet, #13#10 +
         'Content-Transfer-Encoding: 8bit']);
     if head <> '' then
       sock.SockSendHeaders(pointer(head)); // normalizing CRLF
