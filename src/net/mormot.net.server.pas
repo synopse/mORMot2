@@ -4173,12 +4173,14 @@ procedure THttpServerSocketGeneric.DoProgressiveRequestFree(
 begin
   if Assigned(fOnProgressiveRequestFree) and
      (rfProgressiveStatic in Ctxt.ResponseFlags) then
+  begin
     try
       fOnProgressiveRequestFree.Remove(@Ctxt);
-      exclude(Ctxt.ResponseFlags, rfProgressiveStatic); // remove it once
     except
       ; // ignore any exception in callbacks
     end;
+    exclude(Ctxt.ResponseFlags, rfProgressiveStatic); // remove it once
+  end;
 end;
 
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
