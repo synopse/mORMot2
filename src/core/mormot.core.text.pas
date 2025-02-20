@@ -9981,6 +9981,7 @@ const
    'Unsupported Media Type',            // 415
    'Requested Range Not Satisfiable',   // HTTP_RANGENOTSATISFIABLE
    'I''m a teapot',                     // HTTP_TEAPOT
+   'Unprocessable Content',             // HTTP_UNPROCESSABLE_CONTENT
    'Upgrade Required',                  // 426
    'Internal Server Error',             // HTTP_SERVERERROR
    'Not Implemented',                   // HTTP_NOTIMPLEMENTED
@@ -10028,6 +10029,7 @@ const
     415,
     HTTP_RANGENOTSATISFIABLE,
     HTTP_TEAPOT,
+    HTTP_UNPROCESSABLE_CONTENT,
     426,
     HTTP_SERVERERROR,
     HTTP_NOTIMPLEMENTED,

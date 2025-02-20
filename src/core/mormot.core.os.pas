@@ -159,6 +159,8 @@ const
   HTTP_RANGENOTSATISFIABLE = 416;
   /// HTTP Status Code for "I'm a teapot"
   HTTP_TEAPOT = 418;
+ /// HTTP Status Code for "Unprocessable Content"
+  HTTP_UNPROCESSABLE_CONTENT = 422;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -6535,7 +6537,7 @@ end;
 
 function TFileStreamEx.GetSize: Int64;
 begin
-  result := FileSize(Handle); // faster than 3 FileSeek() calls
+  result := FileSize(Handle); // faster than 3 FileSeek() calls - and threadsafe
 end;
 
 constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
