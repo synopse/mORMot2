@@ -6792,13 +6792,14 @@ end;
 
 type
   THttpClientSocketPeerCache = class(THttpClientSocket)
-  public // some additional internal parameters
+  public
+    // some additional internal parameters and methods for proper threading
     DestFileName: TFileName;
     DestStream: TStreamRedirect;
     RemoteUri: RawUtf8;
     RemoteHeaders: RawUtf8;
-    PartialID: THttpPartialID;
     ExpectedHash: RawUtf8;
+    PartialID: THttpPartialID;
     procedure ExpectedHashOrRaiseEHttpPeerCache;
     procedure AbortDownload(Sender: THttpPeerCache; E: Exception);
     destructor Destroy; override;
@@ -6885,32 +6886,32 @@ begin
       cs.RemoteHeaders := hdr;
       // prepare direct download into the final cache file as in LocalFileName()
       aFileName := ComputeFileName(aMessage.Hash);
-      case aMessage.Kind of
-        pcfBearerDirect:
-          begin
-            result := HTTP_PAYLOADTOOLARGE;
-            err := 'temp';
-            if TempFolderEstimateNewSize(aSize) >= fTempFilesMaxSize then
-              exit;
-            aFileName := fTempFilesPath + aFileName;
-          end;
-        pcfBearerDirectPermanent:
-          aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
-      end;
-      cs.DestFileName := aFileName;
-      err := 'file';
       fFilesSafe.Lock; // disable any concurrent file access
       try
+        case aMessage.Kind of
+          pcfBearerDirect:
+            begin
+              result := HTTP_PAYLOADTOOLARGE;
+              err := 'temp';
+              if TempFolderEstimateNewSize(aSize) >= fTempFilesMaxSize then
+                exit;
+              aFileName := fTempFilesPath + aFileName;
+            end;
+          pcfBearerDirectPermanent:
+            aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
+        end;
+        // create the proper TStreamRedirect to store and hash
+        err := 'file';
         result := HTTP_CONFLICT;
         if FileSize(aFileName) > 0 then
           exit; // paranoid: existing cached files should have been checked
-        // stream to store and hash
         cs.DestStream := HASH_STREAMREDIRECT[aMessage.Hash.Algo].Create(
           TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
       finally
         fFilesSafe.UnLock;
       end;
       // mimics THttpPeerCache.OnDownloading() for progressive mode
+      cs.DestFileName := aFileName;
       cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
       cs.ExpectedHash := ToText(aMessage.Hash);
       // ask the local peers for this resource (enabled by default above 64KB)
@@ -6953,6 +6954,7 @@ begin
               fLog.Add.Log(sllDebug, 'DirectFileName(%) switch to %:% peer',
                 [aUrl, ip, fPort], self);
               LocalPeerClientSetup(ip, cs, 1000); // local cs, not fClient
+              // local peer requires a new bearer
               peers[i].Kind := pcfBearer;
               cs.RemoteHeaders := AuthorizationBearer(
                 BinToBase64uri(MessageEncode(peers[i])));
@@ -6974,7 +6976,7 @@ begin
            (cs.DestStream <> nil) then
           cs.AbortDownload(self, E)
         else
-          fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
+          fLog.Add.Log(sllDebug, 'DirectFileName(%)=%', [aUrl, PClass(E)^], self);
         result := HTTP_NOTFOUND;
         cs.Free;
       end;
