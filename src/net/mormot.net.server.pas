@@ -6897,7 +6897,6 @@ begin
         // stream to store and hash
         dest := HASH_STREAMREDIRECT[cs.ExpectedHash.Algo].Create(
           TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead));
-              fFilesSafe.Lock; // disable any concurrent file access
       finally
         fFilesSafe.UnLock;
       end;
