@@ -53,6 +53,8 @@ type
     options: TTunnelOptions;
     tunnelexecutedone: boolean;
     tunnelexecuteremote, tunnelexecutelocal: TNetPort;
+    function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
+      var aOptions: THttpRequestExtendedOptions): integer;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelExecuted(Sender: TObject);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
@@ -1675,15 +1677,52 @@ begin
         finally
           hpc2.Free;
         end;
+        // validate pcoHttpDirect proxy mode with some constant web resources
+        hpc.OnDirectOptions := OnPeerCacheDirect;
+        // ensure we can access the reference resources over Internet
+        status := 0;
+        tmp := HttpGet(HTTP_LINK[0], '', nil, false, @status, 1000);
+        if status = HTTP_SUCCESS then
+          // validate all resources
+          for i := 0 to high(HTTP_LINK) do
+          begin
+            // test according to local cache status
+            cache := MakeString([hpc.TempFilesPath, '02', HTTP_HASH[i], '.cache']);
+            DeleteFile(cache);
+            // compute the direct proxy URI and bearer
+            Check(hps.HttpDirectUri('secret', HTTP_LINK[i], HTTP_HASH[i], dUri, dBearer));
+            Check(PosEx(':8008', dUri) <> 0);
+            Check(dBearer <> '');
+            Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
+            // first request with download from reference website
+            status := 0;
+            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true);
+            CheckEqual(status, HTTP_SUCCESS);
+            CheckEqual(Sha256(tmp), HTTP_HASH[i]);
+            CheckEqual(StringFromFile(cache), tmp);
+            // twice to retrieve from cache
+            status := 0;
+            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true);
+            CheckEqual(status, HTTP_SUCCESS);
+            CheckEqual(Sha256(tmp), HTTP_HASH[i]);
+            Check(DeleteFile(cache));
+          end;
       finally
         hpc.Free;
       end;
     except
-      // exception here is likely to be port 8099 already used -> continue
+      // exception here is likely to be port 8008 already used -> continue
     end;
   finally
     hps.Free;
   end;
+end;
+
+function TNetworkProtocols.OnPeerCacheDirect(var aUri: TUri;
+  var aHeader: RawUtf8; var aOptions: THttpRequestExtendedOptions): integer;
+begin
+  //aOptions.TLS.IgnoreCertificateErrors := true; // needed e.g. with https
+  result := HTTP_SUCCESS;
 end;
 
 procedure TNetworkProtocols.HTTP;
