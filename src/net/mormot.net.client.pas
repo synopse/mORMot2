@@ -260,6 +260,9 @@ type
   public
     /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
+    /// return true if self is nil or fDownload is void
+    function IsVoid: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// thread-safe register a new partial download and its associated HTTP request
     function Add(const Partial: TFileName; ExpectedFullSize: Int64;
       const Hash: THashDigest; Http: PHttpRequestContext = nil): THttpPartialID;
@@ -2125,6 +2128,12 @@ begin
   result := nil;
 end;
 
+function THttpPartials.IsVoid: boolean;
+begin
+  result := (self = nil) or
+            (fDownload = nil);
+end;
+
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
   const Hash: THashDigest; Http: PHttpRequestContext): THttpPartialID;
 var
@@ -2169,7 +2178,7 @@ var
 begin
   Size := 0;
   result := '';
-  if self = nil then
+  if IsVoid then
     exit;
   fSafe.Lock;
   try
@@ -2188,7 +2197,7 @@ var
   p: PHttpPartial;
 begin
   result := false;
-  if (self = nil) or
+  if IsVoid or
      (Http = nil) then
     exit;
   fSafe.Lock;
@@ -2210,8 +2219,7 @@ var
   p: PHttpPartial;
 begin
   result := 0; // returns the number of changed entries
-  if (self = nil) or
-     (fDownload = nil) or
+  if IsVoid or
      (ID = 0) or
      (cardinal(ID) >= fLastID) then
     exit;
@@ -2242,8 +2250,7 @@ var
   p: PHttpPartial;
 begin
   result := 0; // returns the number of changed entries
-  if (self = nil) or
-     (fDownload = nil) or
+  if IsVoid or
      (ID = 0) or
      (cardinal(ID) >= fLastID) then
     exit;
@@ -2277,8 +2284,7 @@ procedure THttpPartials.Remove(Sender: PHttpRequestContext);
 var
   p: PHttpPartial;
 begin
-  if (self = nil) or
-     (fDownload = nil) or
+  if IsVoid or
      (Sender = nil) or
      (Sender.ProgressiveID = 0) then
     exit;

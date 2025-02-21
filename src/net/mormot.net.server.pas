@@ -6758,7 +6758,7 @@ var
   size: Int64;
 begin
   result := HTTP_NOTFOUND;
-  if fPartials = nil then // not supported by this fHttpServer class
+  if fPartials.IsVoid then // not supported or not used yet
     exit;
   fn := fPartials.Find(aMessage.Hash, size);
   if fVerboseLog then
