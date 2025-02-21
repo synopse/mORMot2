@@ -1710,7 +1710,7 @@ begin
             tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true);
             CheckEqual(status, HTTP_SUCCESS);
             CheckEqual(Sha256(tmp), HTTP_HASH[i]);
-            CheckEqual(StringFromFile(cache), tmp);
+            CheckEqual(HashFileSha256(cache), HTTP_HASH[i]);
             // twice to retrieve from cache
             status := 0;
             tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true);
