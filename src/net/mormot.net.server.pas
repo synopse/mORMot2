@@ -6798,7 +6798,7 @@ begin
     try
       // compute the remote URI and its associated options/header
       if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-        err := GetEnumNameTrimed(TypeInfo(pcfBearerDirect), ord(aMessage.Kind))
+        err := GetEnumNameTrimed(TypeInfo(THttpPeerCacheMessageKind), ord(aMessage.Kind))
       else if not HttpDirectUriReconstruct(pointer(aUrl), uri) then
         err := aUrl;
       if err <> '' then
@@ -6908,7 +6908,7 @@ begin
       end;
       // make the actual blocking GET request in this background thread
       res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
-        {retry=}false, {instream=}nil, dest);
+        {retry=}false, {instream=}nil, {outstream=}dest);
       if not (res in HTTP_GET_OK) then
         EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
       // verify TStreamRedirect hash against cs.ExpectedHash
