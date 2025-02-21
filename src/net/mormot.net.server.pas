@@ -7017,11 +7017,11 @@ begin
     // resource will always be identified by decoded bearer hash
     progsize := 0;
     http := (Ctxt as THttpServerRequest).fHttp;
-    // always first try from LocalFileName() or PartialFileName()
-    result := LocalFileName(msg, [lfnSetDate], @fn, nil);
-    if (result <> HTTP_SUCCESS) and
-       (fPartials <> nil) then // if supported by the fHttpServer class
+    // always first try from PartialFileName() then LocalFileName()
+    if fPartials <> nil then // check partial first (local may not be finished)
       result := PartialFileName(msg, http, @fn, @progsize);
+    if result <> HTTP_SUCCESS then
+      result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if result <> HTTP_SUCCESS then
       // handle any currently unknown hash
       if (result <> HTTP_NOTACCEPTABLE) and // abort on non acceptable message
