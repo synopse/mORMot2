@@ -2254,14 +2254,17 @@ begin
     begin
       p^.ID := 0; // reuse this slot at next Add()
       p^.PartFile := '';
-      for i := 0 to length(p^.HttpContext) - 1 do
-        try
-          p^.HttpContext[i].ProgressiveID := 0; // abort THttpServer.Process
-          inc(result);
-        except
-          ; // paranoid
-        end;
-      p^.HttpContext := nil;
+      if p^.HttpContext <> nil then
+      begin
+        for i := 0 to length(p^.HttpContext) - 1 do
+          try
+            p^.HttpContext[i].ProgressiveID := 0; // abort THttpServer.Process
+            inc(result);
+          except
+            ; // paranoid
+          end;
+        p^.HttpContext := nil;
+      end;
     end;
   finally
     fSafe.UnLock;
