@@ -1567,6 +1567,14 @@ type
   THttpPeerCacheHook = class(THttpPeerCache); // to test protected methods
   THttpPeerCryptHook = class(THttpPeerCrypt);
 
+const
+  HTTP_LINK: array[0 .. 1] of RawUtf8 = ( // some constant images on our website
+    'http://bouchez.info/_wp_generated/wpacaa94d5.gif',
+    'http://bouchez.info/_wp_generated/wp5e714672.jpg');
+  HTTP_HASH: array[0 .. high(HTTP_LINK)] of RawUtf8 = (
+    'af33fb8c84461b3e0893b88ef6a2fdecc79fe7de4170f13566edaf4d190d8a9d',
+    '4d950e49fe18379a2b81fc531794ecedfa0f10fa21a2fc5fe2ba2e33ac660c99');
+
 procedure TNetworkProtocols._THttpPeerCache;
 var
   hpc: THttpPeerCacheHook;
@@ -1575,8 +1583,9 @@ var
   msg, msg2: THttpPeerCacheMessage;
   m, m2: RawUtf8;
   res: THttpPeerCryptMessageDecode;
-  i, n, alter: integer;
+  i, n, alter, status: integer;
   tmp: RawByteString;
+  cache: TFileName;
   dUri, dBearer, dTok: RawUtf8;
   decoded: TUri;
   timer: TPrecisionTimer;
@@ -1587,8 +1596,10 @@ begin
   try
     hps.CacheTempPath := Executable.ProgramFilePath + 'peercachetemp';
     hps.CachePermPath := Executable.ProgramFilePath + 'peercacheperm';
+    hps.CacheTempMinBytes := 100;
     hps.Port := 8008; // don't use default 8099
-    hps.Options := [pcoVerboseLog {,pcoSelfSignedHttps}];
+    hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
+                    pcoVerboseLog {,pcoSelfSignedHttps}];
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret');
       try
