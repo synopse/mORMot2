@@ -1409,7 +1409,7 @@ type
   // - some fields may be void or irrelevant, and the structure is padded
   // with random up to 192 bytes
   // - over the wire, packets are encrypted and authenticated via AES-GCM-128
-  // with an ending salted checksum for quick anti-fuzzing
+  // with an ending salted checksum for quick anti-fuzzing (as 212 bytes blocks)
   THttpPeerCacheMessage = packed record
     /// the content of this binary frame
     Kind: THttpPeerCacheMessageKind;
@@ -1675,6 +1675,8 @@ type
     function BearerDecode(
       const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode; virtual;
+    procedure LocalPeerClientSetup(const aIp: RawUtf8;
+      aClient: THttpClientSocket; aRecvTimeout: integer);
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
       aOutStream: TStreamRedirect; aRetry: boolean): integer;
@@ -5496,11 +5498,27 @@ begin
     result := mdBearer;
 end;
 
+procedure THttpPeerCrypt.LocalPeerClientSetup(const aIp: RawUtf8;
+  aClient: THttpClientSocket; aRecvTimeout: integer);
+var
+  tls: boolean;
+begin
+  tls := true;
+  if fClientTls.Enabled then
+    aClient.TLS := fClientTls
+  else if pcoSelfSignedHttps in fSettings.Options then
+    aClient.TLS.IgnoreCertificateErrors := true // self-signed
+  else
+    tls := false;
+  aClient.OpenBind(aIp, fPort, {bind=}false, tls); // try to connect
+  aClient.ReceiveTimeout := aRecvTimeout; // socket timeout once connected
+  aClient.OnLog := fLog.DoLog;
+end;
+
 function THttpPeerCrypt.LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
   var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
   aOutStream: TStreamRedirect; aRetry: boolean): integer;
 var
-  tls: boolean;
   head, ip: RawUtf8;
 
   procedure LocalPeerRequestFailed(E: TClass);
@@ -5531,16 +5549,7 @@ begin
     if fClient = nil then
     begin
       fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
-      tls := fClientTls.Enabled or
-             (pcoSelfSignedHttps in fSettings.Options);
-      if tls then
-        if fClientTls.Enabled then
-          fClient.TLS := fClientTls
-        else
-          fClient.TLS.IgnoreCertificateErrors := true; // self-signed
-      fClient.OpenBind(ip, fPort, {bind=}false, tls);
-      fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
-      fClient.OnLog := fLog.DoLog;
+      LocalPeerClientSetup(ip, fClient, 5000);
     end;
     // makes the GET request, optionally with the needed range bytes
     fClient.RangeStart := aRequest.RangeStart;
