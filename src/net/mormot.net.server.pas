@@ -1482,6 +1482,8 @@ type
   // - pcoHttpDirect extends the HTTP endpoint to initiate a download process
   // from localhost, and return the cached content (used e.g. as proxy + cache)
   // using a URI + Bearer returned by HttpDirectUri() overloaded methods
+  // - pcoHttpDirectNoBroadcast would disable UDP peer search for pcoHttpDirect
+  // - pcoHttpDirectTryLastPeer could make pcoTryLastPeer for pcoHttpDirect
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoCacheTempNoCheckSize,
@@ -1493,7 +1495,9 @@ type
     pcoNoBanIP,
     pcoSelfSignedHttps,
     pcoVerboseLog,
-    pcoHttpDirect);
+    pcoHttpDirect,
+    pcoHttpDirectNoBroadcast,
+    pcoHttpDirectTryLastPeer);
 
   /// THttpPeerCacheSettings.Options values
   THttpPeerCacheOptions = set of THttpPeerCacheOption;
@@ -6806,7 +6810,11 @@ var
   cs:  THttpClientSocketPeerCache;
   uri: TUri;
   opt: THttpRequestExtendedOptions;
-  hdr, err: RawUtf8;
+  hdr, err, ip: RawUtf8;
+  i: PtrInt;
+  alone: boolean;
+  req: THttpPeerCacheMessage;
+  peers: THttpPeerCacheMessageDynArray;
 begin
   result := HTTP_BADREQUEST;
   try
@@ -6870,6 +6878,50 @@ begin
           TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
       finally
         fFilesSafe.UnLock;
+      end;
+      // ask the local peers for this resource (enabled by default)
+      if not (pcoHttpDirectNoBroadcast in fSettings.Options) then
+      begin
+        MessageInit(pcfRequest, 0, req);
+        req.Hash := aMessage.Hash;
+        req.Size := aSize;
+        // try first the current/last HTTP peer client (disabled by default)
+        if (pcoHttpDirectTryLastPeer in fSettings.Options) and
+           (fClient <> nil) and
+           (fClientIP4 <> 0) and
+           (aSize < 256 shl 10) and // don't lock fClient/fClientSafe too long
+           fClientSafe.TryLock then
+        try
+          SetLength(peers, 1);
+          peers[0] := req;
+          FillZero(peers[0].Uuid); // "fake" request
+          result := LocalPeerRequest(req, peers[0], aUrl, cs.DestStream, {retry=}false);
+          if result = HTTP_SUCCESS then // returns HTTP_NOCONTENT if not found
+          begin
+            FreeAndNil(cs); // has been downloaded from last peer into cache
+            exit;
+          end;
+        finally
+          fClientSafe.UnLock;
+        end;
+        // make an actual UDP broadcast about this file hash
+        peers := fUdpServer.Broadcast(req, alone);
+        if peers <> nil then
+          for i := 0 to high(peers) do
+            if peers[i].IP4 <> fIP4 then
+            begin
+              // switch to this best local peer instead of main server
+              cs.Close;
+              IP4Text(@peers[i].IP4, ip);
+              fLog.Add.Log(sllDebug, 'DirectFileName(%) switch to %:% peer',
+                [aUrl, ip, fPort], self);
+              LocalPeerClientSetup(ip, cs, 1000); // local cs, not fClient
+              peers[i].Kind := pcfBearer;
+              cs.RemoteHeaders := AuthorizationBearer(
+                BinToBase64uri(MessageEncode(peers[i])));
+              cs.RemoteUri := aUrl;
+              break;
+            end;
       end;
       // mimics THttpPeerCache.OnDownloading() for this request progressive mode
       cs.ExpectedHash := aMessage.Hash;
