@@ -1485,14 +1485,12 @@ var
   O: TObject;
   sign, sign2, ok: RawUtf8;
   stat: TSynMonitorInputOutput;
-  timer: TPrecisionTimer;
 begin
   if CheckFailed(aClient <> nil) then
     exit;
   FillCharFast(Inst, SizeOf(Inst), 0);
   Inst.ClientSide := aClient.ClientSide;
   ok := '!';
-  timer.Start;
   try
     Check(aClient.ServiceRegister([TypeInfo(ICalculator)], sicShared));
     Check(aClient.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
@@ -1566,8 +1564,7 @@ begin
     Check(stat.TaskCount > 0);
     ok := '';
   finally
-    if aClient.Name <> '' then
-      NotifyProgress([ok, aClient.Name, '=', timer.StopInMicroSec div 1000, 'ms']);
+    NotifyProgress([ok, aClient.Name]);
   end;
 end;
 
@@ -1837,7 +1834,6 @@ var
   i: integer;
   opt: TRestHttpServerOptions;
   URI: TRestServerUriDynArray;
-  timer: TPrecisionTimer;
 const
   SERVICES: array[0..4] of RawUtf8 = (
     'Calculator',
@@ -1855,7 +1851,6 @@ begin
     useBidirAsync, // HTTP_DEFAULT_MODE,
     8, secNone, '', '', opt);
   try
-    timer.Start;
     Check(srv.HttpServer <> nil);
     if withlog then
     begin
@@ -1921,8 +1916,7 @@ begin
       Check(clt.ServiceRetrieveAssociated(ITestSession, URI));
       Check(length(URI) = 1);
       Test(Inst, 100);
-      if aClient.Name <> '' then
-        NotifyProgress([aClient.Name, '=', timer.StopInMicroSec div 1000, 'ms']);
+      NotifyProgress([aClient.Name]);
     finally
       Finalize(Inst);
       clt.Free;
