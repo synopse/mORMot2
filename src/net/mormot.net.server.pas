@@ -1878,6 +1878,12 @@ type
     /// event to customize the access of a given URI in pcoHttpDirect mode
     property OnDirectOptions: TOnHttpPeerCacheDirectOptions
       read fOnDirectOptions write fOnDirectOptions;
+    /// access to the current directory storing temporary cache files
+    property TempFilesPath: TFileName
+      read fTempFilesPath;
+    /// access to the current directory storing permanent cache files
+    property PermFilesPath: TFileName
+      read fPermFilesPath;
   published
     /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
