@@ -6798,9 +6798,35 @@ type
     RemoteUri: RawUtf8;
     RemoteHeaders: RawUtf8;
     PartialID: THttpPartialID;
-    ExpectedHash: THashDigest;
+    ExpectedHash: RawUtf8;
+    procedure ExpectedHashOrRaiseEHttpPeerCache;
+    procedure AbortDownload(Sender: THttpPeerCache; E: Exception);
     destructor Destroy; override;
   end;
+
+procedure THttpClientSocketPeerCache.ExpectedHashOrRaiseEHttpPeerCache;
+var
+  done: RawUtf8;
+begin
+  done := DestStream.GetHash;
+  if not PropNameEquals(done, ExpectedHash) then
+    EHttpPeerCache.RaiseUtf8('GET % hash % failed: %<>%',
+      [RemoteUri, DestStream, done, ExpectedHash]);
+end;
+
+procedure THttpClientSocketPeerCache.AbortDownload(Sender: THttpPeerCache; E: Exception);
+begin
+  Sender.fLog.Add.Log(sllDebug, 'DirectFileName(%) raised %',
+    [DestFileName, E], Sender);
+  Sender.OnDownloadingFailed(PartialID); // abort progressive HTTP requests
+  Sender.fFilesSafe.Lock; // disable any concurrent file access
+  try
+    FreeAndNil(DestStream);   // close incorrect stream before deleting file
+    DeleteFile(DestFileName); // remove any incompleted/invalid file
+  finally
+    Sender.fFilesSafe.UnLock;
+  end;
+end;
 
 destructor THttpClientSocketPeerCache.Destroy;
 begin
@@ -6884,6 +6910,9 @@ begin
       finally
         fFilesSafe.UnLock;
       end;
+      // mimics THttpPeerCache.OnDownloading() for progressive mode
+      cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
+      cs.ExpectedHash := ToText(aMessage.Hash);
       // ask the local peers for this resource (enabled by default above 64KB)
       if (aSize > fSettings.BroadCastDirectMinBytes) and
          not (pcoHttpDirectNoBroadcast in fSettings.Options) then
@@ -6904,7 +6933,9 @@ begin
           result := LocalPeerRequest(req, peers[0], aUrl, cs.DestStream, {retry=}false);
           if result = HTTP_SUCCESS then // returns HTTP_NOCONTENT if not found
           begin
+            cs.ExpectedHashOrRaiseEHttpPeerCache;
             FreeAndNil(cs); // has been downloaded from last peer into cache
+            // caller OnRequest() will return aFileName in progressive mode
             exit;
           end;
         finally
@@ -6929,9 +6960,6 @@ begin
               break;
             end;
       end;
-      // mimics THttpPeerCache.OnDownloading() for this request progressive mode
-      cs.ExpectedHash := aMessage.Hash;
-      cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
       // start the GET request to the remote URI into aFileName via a sub-thread
       err := 'thrd';
       TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
@@ -6942,8 +6970,12 @@ begin
       on E: Exception do
       begin
         ClassToText(PClass(E)^, err);
+        if (cs <> nil) and
+           (cs.DestStream <> nil) then
+          cs.AbortDownload(self, E)
+        else
+          fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
         result := HTTP_NOTFOUND;
-        fLog.Add.Log(sllDebug, 'DirectFileName(%) after %', [aUrl, PClass(E)^], self);
         cs.Free;
       end;
     end;
