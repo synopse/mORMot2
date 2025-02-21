@@ -6785,11 +6785,19 @@ type
   THttpClientSocketPeerCache = class(THttpClientSocket)
   public // some additional internal parameters
     DestFileName: TFileName;
+    DestStream: TStreamRedirect;
     RemoteUri: RawUtf8;
     RemoteHeaders: RawUtf8;
     PartialID: THttpPartialID;
     ExpectedHash: THashDigest;
+    destructor Destroy; override;
   end;
+
+destructor THttpClientSocketPeerCache.Destroy;
+begin
+  FreeAndNil(DestStream);
+  inherited Destroy;
+end;
 
 function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
@@ -6834,6 +6842,8 @@ begin
         exit; // progressive request requires a final size
       if cs.Redirected <> '' then
         uri.Address := cs.Redirected; // follow 3xx redirection
+      cs.RemoteUri := uri.Address;
+      cs.RemoteHeaders := hdr;
       // prepare direct download into the final cache file as in LocalFileName()
       aFileName := ComputeFileName(aMessage.Hash);
       case aMessage.Kind of
@@ -6848,25 +6858,23 @@ begin
         pcfBearerDirectPermanent:
           aFileName := PermFileName(aFileName, [lfnEnsureDirectoryExists]);
       end;
+      cs.DestFileName := aFileName;
       err := 'file';
       fFilesSafe.Lock; // disable any concurrent file access
       try
         result := HTTP_CONFLICT;
         if FileSize(aFileName) > 0 then
           exit; // paranoid: existing cached files should have been checked
-        result := HTTP_UNPROCESSABLE_CONTENT;
-        if not FileFromString('', aFileName) then
-          exit; // progressive download requires a file ASAP (even void)
+        // stream to store and hash
+        cs.DestStream := HASH_STREAMREDIRECT[aMessage.Hash.Algo].Create(
+          TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
       finally
         fFilesSafe.UnLock;
       end;
-      cs.DestFileName := aFileName;
-      cs.ExpectedHash := aMessage.Hash;
       // mimics THttpPeerCache.OnDownloading() for this request progressive mode
+      cs.ExpectedHash := aMessage.Hash;
       cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
       // start the GET request to the remote URI into aFileName via a sub-thread
-      cs.RemoteUri := uri.Address;
-      cs.RemoteHeaders := hdr;
       err := 'thrd';
       TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
@@ -6891,40 +6899,23 @@ end;
 procedure THttpPeerCache.DirectFileNameBackgroundGet(Sender: TObject);
 var
   cs: THttpClientSocketPeerCache absolute Sender;
-  dest: TStreamRedirect;
   expected, done: RawUtf8;
   res: integer;
-  fsize: Int64;
 begin
   // remote HTTP/HTTPS GET request executed in its own TLoggedWorkThread thread
-  dest := nil;
   try
     try
-      // prepare to download (and hash) into cs.DestFileName
-      fFilesSafe.Lock; // disable any concurrent file access
-      try
-        // ensure nothing new since DirectFileName() made FileFromString('')
-        fsize := FileSize(cs.DestFileName);
-        if fsize <> 0 then
-          EHttpPeerCache.RaiseUtf8('GET % with % filesize=%',
-            [cs.RemoteUri, cs.DestFileName, fsize]);
-        // stream to store and hash
-        dest := HASH_STREAMREDIRECT[cs.ExpectedHash.Algo].Create(
-          TFileStreamEx.Create(cs.DestFileName, fmCreate or fmShareRead));
-      finally
-        fFilesSafe.UnLock;
-      end;
       // make the actual blocking GET request in this background thread
       res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
-        {retry=}false, {instream=}nil, {outstream=}dest);
+        {retry=}false, {instream=}nil, {outstream=}cs.DestStream);
       if not (res in HTTP_GET_OK) then
         EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
       // verify TStreamRedirect hash against cs.ExpectedHash
-      done := dest.GetHash;
+      done := cs.DestStream.GetHash;
       expected := ToText(cs.ExpectedHash);
       if not PropNameEquals(done, expected) then
         EHttpPeerCache.RaiseUtf8('GET % hash % failed: %<>%',
-          [cs.RemoteUri, dest, done, expected]);
+          [cs.RemoteUri, cs.DestStream, done, expected]);
       fLog.Add.Log(sllTrace, 'DirectFileNameBackgroundGet(%)=%',
         [cs.DestFileName, res], self);
     except
@@ -6935,7 +6926,7 @@ begin
         OnDownloadingFailed(cs.PartialID); // abort progressive HTTP requests
         fFilesSafe.Lock; // disable any concurrent file access
         try
-          FreeAndNil(dest); // close stream before deleting file
+          FreeAndNil(cs.DestStream);   // close stream before deleting file
           DeleteFile(cs.DestFileName); // remove any incompleted/invalid file
         finally
           fFilesSafe.UnLock;
@@ -6943,8 +6934,7 @@ begin
       end;
     end;
   finally
-    dest.Free;
-    cs.Free;
+    cs.Free; // overriden Destroy will make cs.DestStream.Free
   end;
 end;
 
