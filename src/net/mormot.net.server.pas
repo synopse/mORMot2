@@ -5883,6 +5883,26 @@ begin
       fOwner.fInstable.BanIP(remote.IP4);
 end;
 
+function SortMessagePerPriority(const VA, VB): integer;
+var
+  a: THttpPeerCacheMessage absolute VA;
+  b: THttpPeerCacheMessage absolute VB;
+begin
+  result := CompareCardinal(ord(b.Kind), ord(a.Kind));
+  if result <> 0 then // pcfResponseFull first
+    exit;
+  result := CompareCardinal(NETHW_ORDER[a.Hardware], NETHW_ORDER[b.Hardware]);
+  if result <> 0 then // ethernet first
+    exit;
+  result := CompareCardinal(b.Speed, a.Speed);
+  if result <> 0 then // highest speed first
+    exit;
+  result := CompareCardinal(a.Connections, b.Connections);
+  if result <> 0 then // less active
+    exit;
+  result := ComparePointer(@a, @b); // by pointer in a dynamic array = received first
+end;
+
 function THttpPeerCacheThread.Broadcast(const aReq: THttpPeerCacheMessage;
   out aAlone: boolean): THttpPeerCacheMessageDynArray;
 var
@@ -5925,10 +5945,13 @@ begin
     aAlone := (fResponses = 0);
     fBroadcastSafe.UnLock;
   end;
+  // select the best responses
+  if length(result) > 1 then
+    DynArray(TypeInfo(THttpPeerCacheMessageDynArray), result).
+      Sort(SortMessagePerPriority);
   QueryPerformanceMicroSeconds(stop);
-  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: %=%/% in %',
-    [ToText(aReq.Kind)^, length(result), fResponses,
-     MicroSecToString(stop - start)], self);
+  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: %=%/% in %', [ToText(aReq.Kind)^,
+    length(result), fResponses, MicroSecToString(stop - start)], self);
 end;
 
 function THttpPeerCacheThread.AddResponseAndDone(
@@ -6335,26 +6358,6 @@ begin
   result := true; // too small
 end;
 
-function SortMessagePerPriority(const VA, VB): integer;
-var
-  a: THttpPeerCacheMessage absolute VA;
-  b: THttpPeerCacheMessage absolute VB;
-begin
-  result := CompareCardinal(ord(b.Kind), ord(a.Kind));
-  if result <> 0 then // pcfResponseFull first
-    exit;
-  result := CompareCardinal(NETHW_ORDER[a.Hardware], NETHW_ORDER[b.Hardware]);
-  if result <> 0 then // ethernet first
-    exit;
-  result := CompareCardinal(b.Speed, a.Speed);
-  if result <> 0 then // highest speed first
-    exit;
-  result := CompareCardinal(a.Connections, b.Connections);
-  if result <> 0 then // less active
-    exit;
-  result := ComparePointer(@a, @b); // by pointer = received first
-end;
-
 function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
   var Params: THttpClientSocketWGet; const Url: RawUtf8;
   ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
@@ -6444,7 +6447,7 @@ begin
   if (ExpectedFullSize <> 0) and
      TooSmallFile(Params, ExpectedFullSize, 'OnDownload') then
     exit; // you are too small, buddy
-  // try first the current/last HTTP client (if any)
+  // try first the current/last HTTP peer client (if any)
   FormatUtf8('?%=%', [Sender.Server, Url], u); // url used only for log/debugging
   if (fClient <> nil) and
      (fClientIP4 <> 0) and
@@ -6485,10 +6488,6 @@ begin
     exit; // no match
   end;
   fBroadcastTix := 0; // resp<>nil -> broadcasting seems fine
-  // select the best responses
-  if length(resp) <> 1 then
-    DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).
-      Sort(SortMessagePerPriority);
   // HTTP/HTTPS request over the best peer corresponding to this response
   Params.SetStep(wgsAlternateGet, [IP4ToShort(@resp[0].IP4)]);
   if not ResetOutStreamPosition then
