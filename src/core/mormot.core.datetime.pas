@@ -780,6 +780,10 @@ function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
 // - a used e.g. by _JL_DateTime from mormot.core.json to unserialize TDateTime
 procedure UnixTimeOrDoubleToDateTime(P: PUtf8Char; Len: PtrInt; var V: TDateTime);
 
+/// convert some text encoded as a number into a TDateTime
+// - will recognize double/COM flots or TUnixTime/TUnixMSTime 64-bit integers
+function UnixTimeAnyToDateTime(const Text: RawUtf8): TDateTime;
+
 
 { ************ TTimeLog efficient 64-bit custom date/time encoding }
 
@@ -3059,6 +3063,11 @@ begin
     else
       V := u64; // likely to have day resolution, i.e. TDate
   end;
+end;
+
+function UnixTimeAnyToDateTime(const Text: RawUtf8): TDateTime;
+begin
+  UnixTimeOrDoubleToDateTime(pointer(Text), length(Text), result);
 end;
 
 
