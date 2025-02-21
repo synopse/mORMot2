@@ -6961,8 +6961,8 @@ begin
             end;
       end;
       // start the GET request to the remote URI into aFileName via a sub-thread
-      err := 'thrd';
-      TLoggedWorkThread.Create(fLog, aUrl, cs, DirectFileNameBackgroundGet);
+      Make(['partial', cs.PartialID], err);
+      TLoggedWorkThread.Create(fLog, err, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
       err :='';
       result := HTTP_SUCCESS;
