@@ -1509,8 +1509,8 @@ type
     fInterfaceFilter: TMacAddressFilter;
     fOptions: THttpPeerCacheOptions;
     fLimitMBPerSec, fLimitClientCount,
-    fBroadcastTimeoutMS, fBroadcastMaxResponses, fTryAllPeersCount,
-    fHttpTimeoutMS, fRejectInstablePeersMin,
+    fBroadcastTimeoutMS, fBroadcastMaxResponses, fBroadCastDirectMinBytes,
+    fTryAllPeersCount, fHttpTimeoutMS, fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName, fUuid: RawUtf8;
@@ -1519,7 +1519,7 @@ type
     /// set the default settings
     // - i.e. Port=8099, LimitMBPerSec=10, LimitClientCount=32,
     // RejectInstablePeersMin=4, CacheTempMaxMB=1000, CacheTempMaxMin=60,
-    // CacheTempMinBytes=CachePermMinBytes=2048,
+    // CacheTempMinBytes=CachePermMinBytes=2048, BroadCastDirectMinBytes=65536,
     // BroadcastTimeoutMS=10 HttpTimeoutMS=500 and BroadcastMaxResponses=24
     constructor Create; override;
     /// retrieve the network interface fulfilling these settings
@@ -1587,6 +1587,10 @@ type
     // - default is 24
     property BroadcastMaxResponses: integer
       read fBroadcastMaxResponses write fBroadcastMaxResponses;
+    /// above how many bytes the peer network should be asked for a pcoHttpDirect
+    // - default is 65536 bytes, i.e. 64KB
+    property BroadCastDirectMinBytes: integer
+      read fBroadCastDirectMinBytes write fBroadCastDirectMinBytes;
     /// how many of the best responses should pcoTryAllPeers also try
     // - default is 10
     property TryAllPeersCount: integer
@@ -5706,6 +5710,7 @@ begin
   fCachePermMinBytes := 2048;
   fBroadcastTimeoutMS := 10;
   fBroadcastMaxResponses := 24;
+  fBroadCastDirectMinBytes := 64 shl 10;
   fTryAllPeersCount := 10;
   fHttpTimeoutMS := 500;
 end;
@@ -6879,8 +6884,9 @@ begin
       finally
         fFilesSafe.UnLock;
       end;
-      // ask the local peers for this resource (enabled by default)
-      if not (pcoHttpDirectNoBroadcast in fSettings.Options) then
+      // ask the local peers for this resource (enabled by default above 64KB)
+      if (aSize > fSettings.BroadCastDirectMinBytes) and
+         not (pcoHttpDirectNoBroadcast in fSettings.Options) then
       begin
         MessageInit(pcfRequest, 0, req);
         req.Hash := aMessage.Hash;
