@@ -2214,6 +2214,7 @@ begin
       exit;
     PtrArrayAdd(p^.HttpContext, Http);
     Http^.ProgressiveID := p^.ID;
+    result := true;
   finally
     fSafe.UnLock;
   end;
