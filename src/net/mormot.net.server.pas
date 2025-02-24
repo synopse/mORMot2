@@ -7052,11 +7052,11 @@ var
   errtxt: RawUtf8;
 begin
   // avoid GPF at shutdown
+  result := HTTP_BADREQUEST;
   if fSettings = nil then
     exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
-  result := HTTP_BADREQUEST;
   if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg), 'OnRequest', msg) then
   try
     // resource will always be identified by decoded bearer hash
