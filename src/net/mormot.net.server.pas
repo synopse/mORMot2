@@ -1671,6 +1671,7 @@ type
     fClient: THttpClientSocket;
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
+    fSettingsOwned, fVerboseLog: boolean;
     fUuid: TGuid;
     fServerTls, fClientTls: TNetTlsContext;
     procedure AfterSettings; virtual;
@@ -1800,7 +1801,6 @@ type
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
     fTempFilesDeleteDeprecatedTix, fInstableTix, fBroadcastTix: cardinal;
-    fSettingsOwned, fVerboseLog: boolean;
     fFilesSafe: TOSLock; // concurrent cached files access
     fPartials: THttpPartials;
     fOnDirectOptions: TOnHttpPeerCacheDirectOptions;
@@ -5512,7 +5512,8 @@ var
   tls: boolean;
 begin
   aClient.ResetExtendedOptions;
-  aClient.OnLog := fLog.DoLog;
+  if fVerboseLog then
+    aClient.OnLog := fLog.DoLog;
   tls := true;
   if fClientTls.Enabled then
     aClient.TLS := fClientTls
