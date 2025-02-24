@@ -6806,12 +6806,12 @@ type
     RemoteHeaders: RawUtf8;
     ExpectedHash: RawUtf8;
     PartialID: THttpPartialID;
-    procedure ExpectedHashOrRaiseEHttpPeerCache;
+    function ExpectedHashOrRaiseEHttpPeerCache: Int64;
     procedure AbortDownload(Sender: THttpPeerCache; E: Exception);
     destructor Destroy; override;
   end;
 
-procedure THttpClientSocketPeerCache.ExpectedHashOrRaiseEHttpPeerCache;
+function THttpClientSocketPeerCache.ExpectedHashOrRaiseEHttpPeerCache: Int64;
 var
   done: RawUtf8;
 begin
@@ -6819,6 +6819,7 @@ begin
   if not PropNameEquals(done, ExpectedHash) then
     EHttpPeerCache.RaiseUtf8('GET % hash % failed: %<>%',
       [RemoteUri, DestStream, done, ExpectedHash]);
+  result := DestStream.Size;
 end;
 
 procedure THttpClientSocketPeerCache.AbortDownload(Sender: THttpPeerCache; E: Exception);
@@ -6998,6 +6999,7 @@ procedure THttpPeerCache.DirectFileNameBackgroundGet(Sender: TObject);
 var
   cs: THttpClientSocketPeerCache absolute Sender;
   res: integer;
+  endsize: Int64;
 begin
   // remote HTTP/HTTPS GET request executed in its own TLoggedWorkThread thread
   try
@@ -7007,9 +7009,9 @@ begin
         {retry=}false, {instream=}nil, {outstream=}cs.DestStream);
       if not (res in HTTP_GET_OK) then
         EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
-      cs.ExpectedHashOrRaiseEHttpPeerCache;
-      fLog.Add.Log(sllTrace, 'DirectFileNameBackgroundGet(%)=%',
-        [cs.DestFileName, res], self);
+      endsize := cs.ExpectedHashOrRaiseEHttpPeerCache;
+      fLog.Add.Log(sllTrace, 'DirectFileNameBackgroundGet(%)=% size=%',
+        [cs.DestFileName, res, endsize], self);
     except
       on E: Exception do
         cs.AbortDownload(self, E);
