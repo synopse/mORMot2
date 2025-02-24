@@ -5755,8 +5755,8 @@ end;
 
 constructor THttpPeerCacheThread.Create(Owner: THttpPeerCache);
 begin
-  fBroadcastSafe.Init;
   fOwner := Owner;
+  fBroadcastSafe.Init;
   fBroadcastAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
   fBroadcastIpPort := fBroadcastAddr.IPWithPort;
   fBroadcastEvent := TSynEvent.Create;
@@ -5768,6 +5768,9 @@ end;
 
 destructor THttpPeerCacheThread.Destroy;
 begin
+  if Assigned(fBroadcastEvent) and
+     not fBroadcastSafe.TryLock then
+    fBroadcastEvent.SetEvent;
   inherited Destroy;
   fBroadcastEvent.Free;
   fBroadcastSafe.Done;
