@@ -5511,6 +5511,8 @@ procedure THttpPeerCrypt.LocalPeerClientSetup(const aIp: RawUtf8;
 var
   tls: boolean;
 begin
+  aClient.ResetExtendedOptions;
+  aClient.OnLog := fLog.DoLog;
   tls := true;
   if fClientTls.Enabled then
     aClient.TLS := fClientTls
@@ -5520,7 +5522,6 @@ begin
     tls := false;
   aClient.OpenBind(aIp, fPort, {bind=}false, tls); // try to connect
   aClient.ReceiveTimeout := aRecvTimeout; // socket timeout once connected
-  aClient.OnLog := fLog.DoLog;
 end;
 
 function THttpPeerCrypt.LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
@@ -6960,11 +6961,11 @@ begin
             if peers[i].IP4 <> fIP4 then
             begin
               // switch to this best local peer instead of main server
-              cs.Close;
               IP4Text(@peers[i].IP4, ip);
               fLog.Add.Log(sllDebug, 'DirectFileName(%) switch to %:% peer',
                 [aUrl, ip, fPort], self);
-              LocalPeerClientSetup(ip, cs, 1000); // local cs, not fClient
+              cs.Close;
+              LocalPeerClientSetup(ip, cs, 5000); // local cs, not fClient
               // local peer requires a new bearer
               peers[i].Kind := pcfBearer;
               cs.RemoteHeaders := AuthorizationBearer(
