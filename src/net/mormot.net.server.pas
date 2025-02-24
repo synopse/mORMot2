@@ -6983,7 +6983,8 @@ begin
               peers[i].Kind := pcfBearer;
               cs.RemoteHeaders := AuthorizationBearer(
                 BinToBase64uri(MessageEncode(peers[i])));
-              cs.RemoteUri := aUrl;
+              FormatUtf8('?%=%', [uri.Server, uri.Address],
+                cs.RemoteUri); // <> DIRECTURI_32
               break;
             end;
       end;
