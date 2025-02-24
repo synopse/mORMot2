@@ -1757,7 +1757,7 @@ type
     fRespSafe: TLightLock;
     fResp: THttpPeerCacheMessageDynArray;
     fRespCount: integer;
-    fCurrentSeq: cardinal;
+    fBroadcastCurrentSeq: cardinal;
     fBroadcastEvent: TSynEvent;   // e.g. for pcoUseFirstResponse
     fBroadcastAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
     fBroadcastSafe: TOSLightLock; // non-reentrant, to serialize Broadcast()
@@ -5769,7 +5769,7 @@ end;
 destructor THttpPeerCacheThread.Destroy;
 begin
   if Assigned(fBroadcastEvent) and
-     not fBroadcastSafe.TryLock then
+     (fBroadcastCurrentSeq <> 0) then
     fBroadcastEvent.SetEvent;
   inherited Destroy;
   fBroadcastEvent.Free;
@@ -5844,7 +5844,7 @@ begin
        exit;
      end;
   late := (fMsg.Kind in PCF_RESPONSE) and
-          (fMsg.Seq <> fCurrentSeq);
+          (fMsg.Seq <> fBroadcastCurrentSeq);
   if fOwner.fVerboseLog then
     if ok = mdOk then
       DoLog('%%', [_LATE[late], ToText(fMsg.Kind)^])
@@ -5883,7 +5883,7 @@ begin
           inc(fResponses);
           if AddResponseAndDone(fMsg) then
           begin
-            fCurrentSeq := 0;            // ignore next responses
+            fBroadcastCurrentSeq := 0;   // ignore next responses
             fBroadcastEvent.SetEvent;    // notify MessageBroadcast
           end;
         end;
@@ -5934,8 +5934,8 @@ begin
   try
     // setup this broadcasting sequence
     fBroadcastEvent.ResetEvent;
-    fCurrentSeq := aReq.Seq; // ignore any other responses
-    fResponses := 0;         // reset counter for this fCurrentSeq (not late)
+    fBroadcastCurrentSeq := aReq.Seq; // ignore any other responses
+    fResponses := 0; // reset counter for this broadcast (not late)
     // broadcast request over the UDP sub-net of the selected network interface
     sock := fBroadcastAddr.NewSocket(nlUdp);
     if sock = nil then
@@ -5955,7 +5955,7 @@ begin
     fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS);
     result := GetResponses(aReq.Seq);
   finally
-    fCurrentSeq := 0; // ignore any late responses
+    fBroadcastCurrentSeq := 0; // ignore any late responses
     aAlone := (fResponses = 0);
     fBroadcastSafe.UnLock;
   end;
@@ -5994,7 +5994,7 @@ var
 begin
   result := nil;
   // retrieve the pending responses
-  fCurrentSeq := 0; // no more reponse from now on
+  fBroadcastCurrentSeq := 0; // no more reponse from now on
   fRespSafe.Lock;
   try
     if fRespCount = 0 then
