@@ -6847,6 +6847,7 @@ function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
   out aFileName: TFileName; out aSize: Int64): integer;
 var
   cs:  THttpClientSocketPeerCache;
+  cslog: TSynLogProc;
   uri: TUri;
   opt: THttpRequestExtendedOptions;
   hdr, err, ip: RawUtf8;
@@ -6877,7 +6878,10 @@ begin
           exit;
       end;
       // HEAD to the original server to connect, retrieving size and redirection
-      cs := THttpClientSocketPeerCache.OpenOptions(uri, opt);
+      cslog := nil;
+      if fVerboseLog then
+        cslog := fLog.DoLog;
+      cs := THttpClientSocketPeerCache.OpenOptions(uri, opt, cslog);
       result := cs.Head(uri.Address, 30000, hdr);
       err := 'head';
       if not (result in HTTP_GET_OK) then
