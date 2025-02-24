@@ -251,6 +251,8 @@ type
     fSafe: TLightLock;
     /// 32-bit monotonic counter sequence to populate THttpPartial.ID
     fLastID: cardinal;
+    /// how many fDownload[] are actually non void (ID <> 0)
+    fUsed: cardinal;
     /// store (a few) partial download states
     fDownload: array of THttpPartial;
     /// retrieve a Partial[] for a given sequence ID
@@ -2133,7 +2135,7 @@ end;
 function THttpPartials.IsVoid: boolean;
 begin
   result := (self = nil) or
-            (fDownload = nil);
+            (fUsed = 0);
 end;
 
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
@@ -2149,13 +2151,15 @@ begin
   fSafe.Lock;
   try
     inc(fLastID);
-    result := fLastID; // returns 1,2,3... THttpPartialID
+    inc(fUsed);
+    result := fLastID; // returns 1,2,3... THttpPartialID (process specific)
+    n := length(fDownload);
     p := FromID(0); // try to reuse an empty slot
     if p = nil then
     begin
-      n := length(fDownload);
       SetLength(fDownload, n + 1); // need a new slot
       p := @fDownload[n];
+      inc(n); // for OnLog() below
     end;
     p^.ID := result;
     p^.Digest := Hash;
@@ -2171,7 +2175,8 @@ begin
     fSafe.UnLock;
   end;
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'Add(%,%)=%', [Partial, ExpectedFullSize, result], self);
+    OnLog(sllTrace, 'Add(%,%)=% used=%/%',
+      [Partial, ExpectedFullSize, result, Fused, n], self);
 end;
 
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64): TFileName;
@@ -2248,9 +2253,10 @@ end;
 
 function THttpPartials.Abort(ID: THttpPartialID): integer;
 var
-  i: PtrInt;
+  i, n: PtrInt;
   p: PHttpPartial;
 begin
+  // called on aborted partial retrieval
   result := 0; // returns the number of changed entries
   if IsVoid or
      (ID = 0) or
@@ -2274,36 +2280,54 @@ begin
           end;
         p^.HttpContext := nil;
       end;
+      dec(fUsed);
+      if fUsed = 0 then
+        fDownload := nil;
     end;
+    n := length(fDownload);
   finally
     fSafe.UnLock;
   end;
   if Assigned(OnLog) then
-    OnLog(LOG_TRACEWARNING[p = nil], 'Abort(%)=%', [ID, result], self);
+    OnLog(LOG_TRACEWARNING[p = nil], 'Abort(%)=% used=%/%',
+      [ID, result, fUsed, n], self);
 end;
 
 procedure THttpPartials.Remove(Sender: PHttpRequestContext);
 var
   p: PHttpPartial;
+  n: integer;
 begin
+  // nominal case, when the partial retrieval has eventually successed
   if IsVoid or
      (Sender = nil) or
      (Sender.ProgressiveID = 0) then
     exit;
   fSafe.Lock;
   try
+    n := length(fDownload);
     p := FromID(Sender.ProgressiveID);
     if p <> nil then
     begin
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
-        p^.ID := 0; // we can reuse this slot
+      begin
+        p^.ID := 0; // reuse this slot at next Add()
+        dec(fUsed);
+        if (fUsed = 0) and
+           (n > 16) then // worth releasing the memory
+        begin
+          fDownload := nil;
+          n := 0;
+        end;
+      end;
     end;
   finally
     fSafe.UnLock;
   end;
   if Assigned(OnLog) then
-    OnLog(LOG_TRACEWARNING[p = nil], 'Remove(%)', [Sender.ProgressiveID], self);
+    OnLog(LOG_TRACEWARNING[p = nil], 'Remove(%) used=%/%',
+      [Sender.ProgressiveID, fUsed, n], self);
 end;
 
 
