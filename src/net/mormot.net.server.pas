@@ -6260,8 +6260,11 @@ begin
     fFilesSafe.UnLock;
   end;
   if fVerboseLog then
-    fLog.Add.Log(sllTrace, 'LocalFileName: % size=% msg: size=% start=% end=%',
-      [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
+    if fn = '' then
+      fLog.Add.Log(sllTrace, 'LocalFileName: none', self)
+    else
+      fLog.Add.Log(sllTrace, 'LocalFileName: % size=% msg: size=% start=% end=%',
+        [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
   result := HTTP_NOTFOUND;
   if size = 0 then
     exit; // not existing
@@ -6762,8 +6765,11 @@ begin
     exit;
   fn := fPartials.Find(aMessage.Hash, size);
   if fVerboseLog then
-    fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
-      [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
+    if fn = '' then
+      fLog.Add.Log(sllTrace, 'PartialFileName: none', self)
+    else
+      fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
+        [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
   if size = 0 then
     exit; // not existing
   result := HTTP_NOTACCEPTABLE;
