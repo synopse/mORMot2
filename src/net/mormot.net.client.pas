@@ -559,7 +559,7 @@ type
     // - raise an exception on connection error
     // - as used e.g. by TSimpleHttpClient
     constructor OpenOptions(const aUri: TUri;
-      var aOptions: THttpRequestExtendedOptions);
+      var aOptions: THttpRequestExtendedOptions; const aOnLog: TSynLogProc = nil);
     /// compare TUri and its options with the actual connection
     // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
     // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
@@ -2492,7 +2492,7 @@ begin
 end;
 
 constructor THttpClientSocket.OpenOptions(const aUri: TUri;
-  var aOptions: THttpRequestExtendedOptions);
+  var aOptions: THttpRequestExtendedOptions; const aOnLog: TSynLogProc);
 var
   temp: TUri;
   pu: PUri;
@@ -2500,6 +2500,8 @@ begin
   // setup the proper options before any connection
   fExtendedOptions := aOptions;
   Create(fExtendedOptions.CreateTimeoutMS);
+  if Assigned(aOnLog) then
+    OnLog := aOnLog; // allow to debug ASAP
   case fExtendedOptions.Auth.Scheme of
     wraDigest:
       begin
