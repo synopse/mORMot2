@@ -5642,7 +5642,7 @@ begin
       [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
 end;
 
-const
+const // URI start for pcfBearerDirect/pcfBearerDirectPermanent peer requests
   DIRECTURI_32 = ord('/') + ord('h') shl 8 + ord('t') shl 16 + ord('t') shl 24;
 
 class function THttpPeerCrypt.HttpDirectUri(const aSharedSecret: RawByteString;
@@ -6467,7 +6467,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownload') then
     exit; // you are too small, buddy
   // try first the current/last HTTP peer client (if any)
-  FormatUtf8('?%=%', [Sender.Server, Url], u); // url used only for log/debugging
+  FormatUtf8('?%=%', [Sender.Server, Url], u); // just <> DIRECTURI_32 (for log)
   if (fClient <> nil) and
      (fClientIP4 <> 0) and
      ((pcoTryLastPeer in fSettings.Options) or
@@ -6984,7 +6984,7 @@ begin
               cs.RemoteHeaders := AuthorizationBearer(
                 BinToBase64uri(MessageEncode(peers[i])));
               FormatUtf8('?%=%', [uri.Server, uri.Address],
-                cs.RemoteUri); // <> DIRECTURI_32
+                cs.RemoteUri); // <> DIRECTURI_32 as in OnDownload()
               break;
             end;
       end;
@@ -6993,6 +6993,7 @@ begin
       TLoggedWorkThread.Create(fLog, err, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
       result := HTTP_SUCCESS;
+      // caller OnRequest() will return aFileName in progressive mode
     except
       on E: Exception do
       begin
