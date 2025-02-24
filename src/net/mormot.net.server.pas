@@ -4951,8 +4951,9 @@ begin
     GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
     result := grRejected;
-    if PCardinal(P)^ <>
-         ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24 then
+    if (P = nil) or
+       (PCardinal(P)^ <>
+         ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) then
       exit;
     http10 := P[7] = '0';
     fKeepAliveClient := ((fServer = nil) or
