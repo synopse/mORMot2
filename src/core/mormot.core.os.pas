@@ -73,11 +73,11 @@ const
   /// convert a TLineFeed value into its UTF-8 text representation
   LINE_FEED: array[TLineFeed] of string[3] = (CRLF, #10, #13#10);
 
-  /// human-friendly alias to open a file for exclusive writing
+  /// human-friendly alias to open a file for exclusive writing ($20)
   fmShareRead      = fmShareDenyWrite;
-  /// human-friendly alias to open a file for exclusive reading
+  /// human-friendly alias to open a file for exclusive reading ($30)
   fmShareWrite     = fmShareDenyRead;
-  /// human-friendly alias to open a file with no read/write exclusion
+  /// human-friendly alias to open a file with no read/write exclusion ($40)
   fmShareReadWrite = fmShareDenyNone;
 
   /// a convenient constant to open a file for reading without exclusion
@@ -87,6 +87,8 @@ const
   fmOpenWriteShared = fmOpenReadWrite or fmShareReadWrite;
 
   /// a convenient constant to create a file without exclusion
+  // - warning: on Delphi 7..2009, fmCreate is defined as $ffff so can't be
+  // associated with file sharing attributes: we will force fmShareReadWrite
   fmCreateShared = fmCreate or fmShareReadWrite;
 
   /// a convenient array constant to open a file for writing without exclusion
@@ -6613,7 +6615,7 @@ var
   h: THandle;
 begin
   if Mode and fmCreate = fmCreate then
-    h := FileCreate(aFileName, Mode and (not fmCreate))
+    h := FileCreate(aFileName, Mode and $00ff) // fmCreate=$ffff on oldest Delphi
   else
     h := FileOpen(aFileName, Mode);
   CreateFromHandle(aFileName, h);

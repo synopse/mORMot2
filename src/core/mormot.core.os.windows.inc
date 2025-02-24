@@ -1067,11 +1067,14 @@ end;
 function FileShare(aMode: integer): DWord;
 begin
   case (aMode and $f0) of
-    fmShareRead:       // fmShareDenyWrite
+    fmShareRead:       // fmShareDenyWrite = $20
       result := FILE_SHARE_READ;
-    fmShareWrite:      // fmShareDenyRead
+    fmShareWrite:      // fmShareDenyRead = $30
       result := FILE_SHARE_WRITE;
-    fmShareReadWrite:  // fmShareDenyNone
+    {$ifndef HASSAFEINLINE}
+    $f0, // fmCreate=$ffff on oldest Delphi 7-2009 :( -> assume shared R+W
+    {$endif HASSAFEINLINE}
+    fmShareReadWrite:  // fmShareDenyNone = $40
       result := FILE_SHARE_READ or FILE_SHARE_WRITE;
   else
     result := 0;
@@ -1294,10 +1297,10 @@ begin
   // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
   t32 := Windows.GetTickCount; // we only have the 32-bit counter on XP
   p := @LastTickXP;
-  inc(p^.H, ord(t32 < p^.L)); // wrap-up overflow after 49 days
+  inc(p^.H, ord(t32 < p^.L)); // wrap-up overflow after 49.7 days
   p^.L := t32;
   result := p^.V;
-end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
+end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
 procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
 begin
