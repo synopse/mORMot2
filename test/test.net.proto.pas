@@ -1569,7 +1569,7 @@ type
 
 const
   HTTP_LINK: array[0 .. 1] of RawUtf8 = ( // some constant images on our website
-    'http://bouchez.info/_wp_generated/wpacaa94d5.gif',
+    'http://bouchez.info/_wp_generated/wpacaa94d5.gif', // plain HTTP is easier
     'http://bouchez.info/_wp_generated/wp5e714672.jpg');
   HTTP_HASH: array[0 .. high(HTTP_LINK)] of RawUtf8 = (
     'af33fb8c84461b3e0893b88ef6a2fdecc79fe7de4170f13566edaf4d190d8a9d',
@@ -1600,9 +1600,9 @@ begin
     hps.BroadCastDirectMinBytes := 10000; // broadcast for HTTP_LINK[1] only
     hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
-                    pcoVerboseLog {,pcoSelfSignedHttps}];
+                    pcoVerboseLog {}, pcoSelfSignedHttps{}];
     try
-      hpc := THttpPeerCacheHook.Create(hps, 'secret');
+      hpc := THttpPeerCacheHook.Create(hps, 'secret'{,THttpAsyncServer});
       try
         hpc2 := THttpPeerCryptHook.Create('secret', nil, nil);
         try
@@ -1689,10 +1689,11 @@ begin
           hpc2.Free;
         end;
         // validate pcoHttpDirect proxy mode with some constant web resources
+        // (will also validate rfProgressiveStatic process of our web server)
         hpc.OnDirectOptions := OnPeerCacheDirect;
         // ensure we can access the reference resources over Internet
         status := 0;
-        tmp := HttpGet(HTTP_LINK[0], '', nil, false, @status, 1000);
+        tmp := HttpGet(HTTP_LINK[0], '', nil, false, @status, 1000, true, true);
         if status = HTTP_SUCCESS then
           // validate all resources
           for i := 0 to high(HTTP_LINK) do
@@ -1705,15 +1706,15 @@ begin
             Check(PosEx(':8008', dUri) <> 0);
             Check(dBearer <> '');
             Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
-            // first request with download from reference website
+            // first request to download from reference website
             status := 0;
-            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true);
+            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true, true);
             CheckEqual(status, HTTP_SUCCESS);
             CheckEqual(Sha256(tmp), HTTP_HASH[i]);
             CheckEqual(HashFileSha256(cache), HTTP_HASH[i]);
             // twice to retrieve from cache
             status := 0;
-            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true);
+            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true, true);
             CheckEqual(status, HTTP_SUCCESS);
             CheckEqual(Sha256(tmp), HTTP_HASH[i]);
             Check(DeleteFile(cache));
@@ -1732,7 +1733,7 @@ end;
 function TNetworkProtocols.OnPeerCacheDirect(var aUri: TUri;
   var aHeader: RawUtf8; var aOptions: THttpRequestExtendedOptions): integer;
 begin
-  //aOptions.TLS.IgnoreCertificateErrors := true; // needed e.g. with https
+  aOptions.TLS.IgnoreCertificateErrors := true; // needed e.g. with https
   result := HTTP_SUCCESS;
 end;
 
