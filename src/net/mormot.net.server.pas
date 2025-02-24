@@ -6394,7 +6394,8 @@ var
   function ResetOutStreamPosition: boolean;
   begin
     // not moved (e.g. first request, or connection issue) returns true
-    result := OutStream.Position = outStreamInitialPos;
+    result := (fSettings <> nil) and // nil at shutdown
+              (OutStream.Position = outStreamInitialPos);
     if not result then
       // TStreamRedirect requires full rewind for full content re-hash
       if outStreamInitialPos = 0 then
@@ -6406,7 +6407,7 @@ begin
   result := 0;
   // validate WGet caller context
   if (self = nil) or
-     (fSettings = nil) or
+     (fSettings = nil) or // nil at shutdown
      (Sender = nil) or
      (Params.Hash = '') or
      (Url = '') or
@@ -6546,7 +6547,7 @@ end;
 
 type
   TOnBeforeBodyErr = set of (
-    eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid,
+    eShutdown, eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid,
     eDirectIp, eDirectDecode, eDirectKind, eDirectOpaque, aDirectDisabled);
 
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
@@ -6561,6 +6562,8 @@ begin
   // error code to reject the request immediately as a "TeaPot", close the
   // socket and ban this IP for a few seconds at accept() level
   err := [];
+  if fSettings = nil then
+    include(err, eShutdown);
   if length(aBearerToken) < (SizeOf(msg) div 3) * 4 then // base64uri length
     include(err, eBearer);
   if not IsGet(aMethod) then
@@ -6662,7 +6665,9 @@ var
   localsize, sourcesize, tot, start, stop: Int64;
   ok, istemp: boolean;
 begin
-  if pcoNoServer in fSettings.Options then
+  // avoid GPF at shutdown
+  if (fSettings = nil) or
+     (pcoNoServer in fSettings.Options) then
     exit;
   // the supplied downloaded source file should be big enough
   sourcesize := FileSize(Partial);
@@ -6894,8 +6899,9 @@ begin
       result := HTTP_LENGTHREQUIRED;
       aSize := cs.Http.ContentLength;
       Int32ToUtf8(aSize, err);
-      if aSize <= 0 then
-        exit; // progressive request requires a final size
+      if (aSize <= 0) or  // progressive request requires a final size
+         (fSettings = nil) then // shutdown in progress
+        exit;
       if cs.Redirected <> '' then
         uri.Address := cs.Redirected; // follow 3xx redirection
       cs.RemoteUri := uri.Address;
@@ -6919,7 +6925,8 @@ begin
         // create the proper TStreamRedirect to store and hash
         err := 'file';
         result := HTTP_CONFLICT;
-        if FileSize(aFileName) > 0 then
+        if (FileSize(aFileName) > 0) or
+           (fSettings = nil) then // shutdown in progress
           exit; // paranoid: existing cached files should have been checked
         cs.DestStream := HASH_STREAMREDIRECT[aMessage.Hash.Algo].Create(
           TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
@@ -6948,7 +6955,8 @@ begin
           peers[0] := req;
           FillZero(peers[0].Uuid); // "fake" request
           result := LocalPeerRequest(req, peers[0], aUrl, cs.DestStream, {retry=}false);
-          if result = HTTP_SUCCESS then // returns HTTP_NOCONTENT if not found
+          if (result = HTTP_SUCCESS) or // returns HTTP_NOCONTENT if not found
+             (fSettings = nil) then     // shutdown in progress
           begin
             cs.ExpectedHashOrRaiseEHttpPeerCache;
             FreeAndNil(cs); // has been downloaded from last peer into cache
@@ -6979,7 +6987,7 @@ begin
             end;
       end;
       // start the GET request to the remote URI into aFileName via a sub-thread
-      Make(['partial', cs.PartialID], err);
+      Make(['direct', cs.PartialID], err);
       TLoggedWorkThread.Create(fLog, err, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
       err :='';
@@ -7043,6 +7051,9 @@ var
   err: TOnRequestError;
   errtxt: RawUtf8;
 begin
+  // avoid GPF at shutdown
+  if fSettings = nil then
+    exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
   result := HTTP_BADREQUEST;
