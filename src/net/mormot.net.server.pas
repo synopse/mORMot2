@@ -3135,7 +3135,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     h: THandle;
   begin
     ExtractOutContentType;
-    Utf8ToFileName(OutContent, fn);
+    fn := Utf8ToString(OutContent); // safer than Utf8ToFileName() here
     OutContent := '';
     ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
     SetInt64(pointer(progsizeHeader), Context.ContentLength);
@@ -6992,7 +6992,6 @@ begin
       Make(['direct', cs.PartialID], err);
       TLoggedWorkThread.Create(fLog, err, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
-      err :='';
       result := HTTP_SUCCESS;
     except
       on E: Exception do
@@ -7026,6 +7025,8 @@ begin
       // make the actual blocking GET request in this background thread
       res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
         {retry=}false, {instream=}nil, {outstream=}cs.DestStream);
+      if fSettings = nil then
+        exit; // shutdown
       if not (res in HTTP_GET_OK) then
         EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
       endsize := cs.ExpectedHashOrRaiseEHttpPeerCache;
