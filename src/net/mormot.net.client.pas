@@ -618,6 +618,8 @@ type
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer;
+    /// low-level method which could be used after Close to reset options
+    procedure ResetExtendedOptions;
     /// setup web authentication using the Basic access algorithm
     procedure AuthorizeBasic(const UserName: RawUtf8; const Password: SpiUtf8);
     /// setup web authentication using the Digest access algorithm
@@ -3289,6 +3291,11 @@ function THttpClientSocket.Delete(const url: RawUtf8; KeepAlive: cardinal;
   const header: RawUtf8): integer;
 begin
   result := Request(url, 'DELETE', KeepAlive, header);
+end;
+
+procedure THttpClientSocket.ResetExtendedOptions;
+begin
+  fExtendedOptions.Init;
 end;
 
 procedure THttpClientSocket.SetAuthBearer(const Value: SpiUtf8);
