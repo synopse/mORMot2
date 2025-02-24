@@ -5156,12 +5156,7 @@ begin
   log := Add;
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
-  begin
     log.LogInternalFmt(Level, Fmt, Args, Instance);
-    if Level = sllExceptionOS then
-      // ensure all log is safely written
-      log.Flush({diskwrite=}true);
-  end;
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
