@@ -7105,7 +7105,8 @@ end;
 
 type
   TOnRequestError = (
-    oreOK, oreNoLocalFile, oreLocalFileNotAcceptable, oreDirectRemoteUriFailed);
+    oreOK, oreNoLocalFile, oreLocalFileNotAcceptable, oreDirectRemoteUriFailed,
+    oreShutdown);
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
@@ -7157,7 +7158,12 @@ begin
           result := LocalFileName(msg, [lfnSetDate], @fn, nil);
       end;
     end;
-    if result <> HTTP_SUCCESS then
+    if fSettings = nil then
+    begin
+      err := oreShutdown;
+      result := HTTP_BADGATEWAY;
+    end
+    else if result <> HTTP_SUCCESS then
     begin
       // no local/partial known file: nothing to return
       if result = HTTP_NOTACCEPTABLE then
