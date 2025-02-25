@@ -1821,6 +1821,7 @@ type
       const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
       out aFileName: TFileName; out aSize: Int64): integer;
     procedure DirectFileNameBackgroundGet(Sender: TObject);
+    function DirectFileNameHead(Ctxt: THttpServerRequestAbstract): cardinal;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -7062,6 +7063,28 @@ begin
   end;
 end;
 
+function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  hdr: RawUtf8;
+  cs:  THttpClientSocketPeerCache;
+begin
+  try
+    cs := nil;
+    try
+      result := DirectConnectAndHead(self, Ctxt.Url, {redir=}0, hdr, cs);
+      Ctxt.OutCustomHeaders := cs.Headers; // as hroHeadersUnfiltered
+    finally
+      cs.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      fLog.Add.Log(sllDebug, 'DirectFileNameHead(%)=%', [Ctxt.Url, PClass(E)^], self);
+      result := HTTP_BADGATEWAY;
+    end;
+  end;
+end;
+
 type
   TOnRequestError = (
     oreOK, oreNoLocalFile, oreLocalFileNotAcceptable, oreDirectRemoteUriFailed);
@@ -7095,15 +7118,24 @@ begin
       // handle any currently unknown hash
       if (result <> HTTP_NOTACCEPTABLE) and // abort on non acceptable message
          (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-      begin
-        // try to start a remote download in a background thread
-        result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
-        if result <> HTTP_SUCCESS then
+        if IsHead(Ctxt.Method) then
         begin
-          err := oreDirectRemoteUriFailed;
+          // proxy the HEAD request to the final server
+          result := DirectFileNameHead(Ctxt);
+          if not (result in HTTP_GET_OK) then
+            err := oreDirectRemoteUriFailed;
           exit;
-        end;
-      end
+        end
+        else
+        begin
+          // remote GET in a background thread
+          result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
+          if result <> HTTP_SUCCESS then
+          begin
+            err := oreDirectRemoteUriFailed;
+            exit;
+          end;
+        end
       else // pcfBearer with no local/partial known file: nothing to return
       begin
         if result = HTTP_NOTACCEPTABLE then
