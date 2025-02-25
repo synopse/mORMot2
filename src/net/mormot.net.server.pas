@@ -6672,73 +6672,74 @@ var
   localsize, sourcesize, tot, start, stop: Int64;
   ok, istemp: boolean;
 begin
-  // avoid GPF at shutdown
+  // avoid GPF at shutdown or in case of unexpected method call
   if (fSettings = nil) or
      (pcoNoServer in fSettings.Options) then
     exit;
-  // the supplied downloaded source file should be big enough
-  sourcesize := FileSize(Partial);
-  if (sourcesize = 0) or // paranoid
-     TooSmallFile(Params, sourcesize, 'OnDownloaded') then
-    exit;
-  // compute the local cache file name from the known file hash
-  if not CachedFileName(Params, [lfnEnsureDirectoryExists], local, istemp) then
-  begin
-    fLog.Add.Log(sllWarning,
-      'OnDownloaded: no hash specified for %', [Partial], self);
-    exit;
-  end;
-  // check if this file was not already in the cache folder
-  // - outside fFilesSafe.Lock because happens just after OnDownload from cache
-  localsize := FileSize(local);
-  if localsize <> 0 then
-  begin
-    fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
-      'OnDownloaded: % already in cache', [Partial], self);
-    // size mismatch may happen on race condition (hash collision is unlikely)
-    if PartialID <> 0 then
-      fPartials.ChangeFile(PartialID, local); // switch to the local file
-    if localsize = sourcesize then
-      Params.SetStep(wgsAlternateAlreadyInCache, [local])
-    else
-      Params.SetStep(wgsAlternateWrongSizeInCache,
-        [local, ' ', localsize, '<>', sourcesize]); // paranaoid
-    exit;
-  end;
-  QueryPerformanceMicroSeconds(start);
-  fFilesSafe.Lock; // disable any concurrent file access
+  ok := false; // for proper PartialID cleanup on abort
   try
-    // ensure adding this file won't trigger the maximum cache size limit
-    if (fTempFilesMaxSize > 0) and
-       istemp then
+    // the supplied downloaded source file should be big enough
+    sourcesize := FileSize(Partial);
+    if (sourcesize = 0) or // paranoid
+       TooSmallFile(Params, sourcesize, 'OnDownloaded') then
+      exit;
+    // compute the local cache file name from the known file hash
+    if not CachedFileName(Params, [lfnEnsureDirectoryExists], local, istemp) then
     begin
-      tot := TempFolderEstimateNewSize(sourcesize);
-      if tot >= fTempFilesMaxSize then
-      begin
-        fLog.Add.Log(sllDebug, 'OnDownloaded: % is too big (%) for tot=%',
-          [Partial, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
-        if PartialID <> 0 then
-          OnDownloadingFailed(PartialID); // abort partial downloading
-        exit;
-      end;
+      fLog.Add.Log(sllWarning,
+        'OnDownloaded: no hash specified for %', [Partial], self);
+      exit;
     end;
-    // actually copy the source file into the local cache folder
-    ok := CopyFile(Partial, local, {failsifexists=}false);
-    Params.SetStep(wgsAlternateCopiedInCache, [local]);
-    if ok and istemp then
-      // force timestamp = now within the temporary folder
-      FileSetDateFromUnixUtc(local, UnixTimeUtc)
-  finally
-    fFilesSafe.UnLock;
-  end;
-  if PartialID <> 0 then
-    if ok then
-      fPartials.ChangeFile(PartialID, local) // switch to final local file
-    else
-      OnDownloadingFailed(PartialID); // abort
-  QueryPerformanceMicroSeconds(stop);
-  fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDownloaded: copy % into % in %',
+    // check if this file was not already in the cache folder
+    // - outside fFilesSafe.Lock because happens just after OnDownload from cache
+    localsize := FileSize(local);
+    if localsize <> 0 then
+    begin
+      fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
+        'OnDownloaded: % already in cache', [Partial], self);
+      // size mismatch may happen on race condition (hash collision is unlikely)
+      if localsize = sourcesize then
+        Params.SetStep(wgsAlternateAlreadyInCache, [local])
+      else
+        Params.SetStep(wgsAlternateWrongSizeInCache,
+          [local, ' ', localsize, '<>', sourcesize]); // paranaoid
+      ok := true; // call fPartials.ChangeFile() to switch to the local file
+      exit;
+    end;
+    QueryPerformanceMicroSeconds(start);
+    fFilesSafe.Lock; // disable any concurrent file access
+    try
+      // ensure adding this file won't trigger the maximum cache size limit
+      if (fTempFilesMaxSize > 0) and
+         istemp then
+      begin
+        tot := TempFolderEstimateNewSize(sourcesize);
+        if tot >= fTempFilesMaxSize then
+        begin
+          fLog.Add.Log(sllDebug, 'OnDownloaded: % is too big (%) for tot=%',
+            [Partial, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
+          exit;
+        end;
+      end;
+      // actually copy the source file into the local cache folder
+      ok := CopyFile(Partial, local, {failsifexists=}false);
+      Params.SetStep(wgsAlternateCopiedInCache, [local]);
+      if ok and istemp then
+        // force timestamp = now within the temporary folder
+        FileSetDateFromUnixUtc(local, UnixTimeUtc)
+    finally
+      fFilesSafe.UnLock;
+    end;
+    QueryPerformanceMicroSeconds(stop);
+    fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDownloaded: copy % into % in %',
       [Partial, local, MicroSecToString(stop - start)], self);
+  finally
+    if PartialID <> 0 then // always eventually finalize any associated partial
+      if ok then
+        fPartials.ChangeFile(PartialID, local) // switch to final local file
+      else
+        OnDownloadingFailed(PartialID); // remove this partial on abort
+  end;
 end;
 
 procedure THttpPeerCache.OnDownloadFailed(const Params: THttpClientSocketWGet);
