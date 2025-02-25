@@ -143,7 +143,7 @@ type
   end;
 
   // the req* values identify Request Headers, and resp* Response Headers
-  THttpHeader = (
+  THttpApiHeader = (
     reqCacheControl,
     reqConnection,
     reqDate,
@@ -287,7 +287,7 @@ type
     // Reserved, must be nil
     pTrailers: pointer;
     // Known headers
-    KnownHeaders: array[low(THttpHeader)..respWwwAuthenticate] of HTTP_KNOWN_HEADER;
+    KnownHeaders: array[low(THttpApiHeader)..respWwwAuthenticate] of HTTP_KNOWN_HEADER;
   end;
 
   HTTP_REQUEST_HEADERS = record
@@ -301,7 +301,7 @@ type
     pTrailers: pointer;
     // Known headers
     // - warning: don't assume pRawValue is #0 terminated - use RawValueLength
-    KnownHeaders: array[low(THttpHeader)..reqUserAgent] of HTTP_KNOWN_HEADER;
+    KnownHeaders: array[low(THttpApiHeader)..reqUserAgent] of HTTP_KNOWN_HEADER;
   end;
 
   HTTP_BYTE_RANGE = record
@@ -950,7 +950,7 @@ const
   // flag which can be used by HttpRemoveUrlFromUrlGroup()
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
-  HTTP_KNOWNHEADERS: array[low(THttpHeader)..reqUserAgent] of string[19] = (
+  HTTP_KNOWNHEADERS: array[low(THttpApiHeader)..reqUserAgent] of string[19] = (
     'Cache-Control',
     'Connection',
     'Date',
@@ -1939,7 +1939,7 @@ function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
   var ConnectionID: QWord): RawUtf8;
 var
   i, L, Lip: integer;
-  H: THttpHeader;
+  H: THttpApiHeader;
   P: PHTTP_UNKNOWN_HEADER;
   D: PAnsiChar;
   V: PUtf8Char;
@@ -2205,8 +2205,8 @@ begin
     i := IdemPPChar(P, @KNOWNHEADERS);
   // WebSockets need CONNECTION as unknown header
   if (i >= 0) and
-     (THttpHeader(i) <> reqConnection) then
-    with Headers.KnownHeaders[THttpHeader(i)] do
+     (THttpApiHeader(i) <> reqConnection) then
+    with Headers.KnownHeaders[THttpApiHeader(i)] do
     begin
       while P^ <> ':' do
         inc(P);
@@ -2486,7 +2486,7 @@ function HttpSys2ToWebSocketHeaders(
 var
   headerCnt: integer;
   i: PtrInt;
-  h: THttpHeader;
+  h: THttpApiHeader;
   p: PHTTP_UNKNOWN_HEADER;
   r: PWEB_SOCKET_HTTP_HEADER;
 begin
@@ -2603,7 +2603,7 @@ initialization
     {$endif CPU64}
     (ord(reqUserAgent) = 40) and
     (ord(respLocation) = 23) and
-    (SizeOf(THttpHeader) = 4) and
+    (SizeOf(THttpApiHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
 

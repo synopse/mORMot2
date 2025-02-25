@@ -804,10 +804,14 @@ const
     TStreamRedirectSha3_256,   // hfSHA3_256
     TStreamRedirectSha3_512,   // hfSHA3_512
     TStreamRedirectSha224);    // hfSHA224
-  /// the standard text of a THashAlgo
+  /// the standard text of a THashAlgo (in uppercase characters)
   HASH_TXT: array[THashAlgo] of RawUtf8 = (
     'MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-512/256',
     'SHA3-256', 'SHA3-512', 'SHA-224');
+  /// the standard text of a THashAlgo (in lowercase characters)
+  HASH_TXT_LOWER: array[THashAlgo] of RawUtf8 = (
+    'md5', 'sha-1', 'sha-256', 'sha-384', 'sha-512', 'sha-512/256',
+    'sha3-256', 'sha3-512', 'sha-224');
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded

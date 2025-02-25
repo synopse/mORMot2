@@ -1148,11 +1148,14 @@ end;
 function FileShare(aMode: integer): DWord;
 begin
   case (aMode and $f0) of
-    fmShareRead:       // fmShareDenyWrite
+    fmShareRead:       // fmShareDenyWrite = $20
       result := FILE_SHARE_READ;
-    fmShareWrite:      // fmShareDenyRead
+    fmShareWrite:      // fmShareDenyRead = $30
       result := FILE_SHARE_WRITE;
-    fmShareReadWrite:  // fmShareDenyNone
+    {$ifndef HASSAFEINLINE}
+    $f0, // fmCreate=$ffff on oldest Delphi 7-2009 :( -> assume shared R+W
+    {$endif HASSAFEINLINE}
+    fmShareReadWrite:  // fmShareDenyNone = $40
       result := FILE_SHARE_READ or FILE_SHARE_WRITE;
   else
     result := 0;
@@ -2085,11 +2088,11 @@ var
   ok: BOOL;
   err: integer;
 begin
+  SetDynamicTimeZoneInformation := GetProcAddress(
+    GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
   privileges.Init;
   try
     privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
-    SetDynamicTimeZoneInformation := GetProcAddress(
-      GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
     if Assigned(SetDynamicTimeZoneInformation) then
       ok := SetDynamicTimeZoneInformation(info)    // Vista+
     else

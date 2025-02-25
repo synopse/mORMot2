@@ -39,6 +39,31 @@ uses
 { ******************** Shared HTTP Constants and Functions }
 
 type
+  /// identify the most known HTTP header variables
+  // - used e.g. for efficient parsing via KnownHttpHeader() function
+  THttpHeader = (
+    hhUnknown,
+    hhContentType,
+    hhContentEncoding,
+    hhContentLength,
+    hhHost,
+    hhConnection,
+    hhAcceptEncoding,
+    hhAcceptRangeBytes,
+    hhUserAgent,
+    hhServer,
+    hhServerInternalState,
+    hhExpect100,
+    hhAuthorization,
+    hhRangeBytes,
+    hhUpgrade,
+    hhReferer,
+    hhTransferEncoding,
+    hhLastModified);
+
+  /// set of HTTP headers e.g. as used in THttpRequestContext.HeadCustom
+  THttpHeaders = set of THttpHeader;
+
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
   // e.g. 'gzip' or 'deflate' for standard HTTP format, but you can add
@@ -82,6 +107,10 @@ type
   /// how TWebSocketProtocolBinary implements the 'synopsebin' protocol
   // - should match on both client and server ends
   TWebSocketProtocolBinaryOptions = set of TWebSocketProtocolBinaryOption;
+
+/// efficiently recognize most known HTTP header variables
+// - as used e.g. by THttpRequestContext.ParseHeader
+function KnownHttpHeader(P: PUtf8Char): THttpHeader;
 
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 // - will detect most used compressible content (like 'text/*' or
@@ -339,6 +368,8 @@ type
     ResponseFlags: THttpRequestResponseFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
+    /// most used output headers as recognized by HeadAddCustom()
+    HeadCustom: THttpHeaders;
     /// could be set so that ParseHeader/GetTrimmed will intern RawUtf8 values
     Interning: PRawUtf8InterningSlot;
     /// will contain the first header line on client side
@@ -440,6 +471,8 @@ type
     /// search if a value exists from the internal parsed Headers
     function HeaderHasValue(const aUpperName: RawUtf8): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// append (and sanitize CRLF) of some custom headers e.g. from Request()
+    procedure HeadAddCustom(P, PEnd: PUtf8Char);
     /// initialize ContentStream/ContentLength from a given file name
     // - if CompressGz is set, would also try for a cached local FileName+'.gz'
     // - returns HTTP_SUCCESS, HTTP_NOTFOUND or HTTP_RANGENOTSATISFIABLE
@@ -836,6 +869,9 @@ type
     // status HTTP_NOTMODIFIED (304) if it did not change
     function SetOutContent(const Content: RawByteString; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0): cardinal;
+    /// append a new line of HTTP headers to the request output
+    // - just a wrapper around AppendLine(fOutCustomHeaders, Args)
+    procedure SetOutCustomHeader(const Args: array of const);
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -864,6 +900,7 @@ type
       read fOutContentType write fOutContentType;
     /// output parameter to be sent back as the response message header
     // - e.g. to set Content-Type/Location
+    // - see SetOutCustomHeader() function to safely set a new HTTP header value
     property OutCustomHeaders: RawUtf8
       read fOutCustomHeaders write fOutCustomHeaders;
     /// the client remote IP, as specified to Prepare()
@@ -2394,6 +2431,141 @@ implementation
 
 { ******************** Shared HTTP Constants and Functions }
 
+function KnownHttpHeader(P: PUtf8Char): THttpHeader;
+begin
+  result := hhUnknown;
+  // standard headers are expected to be pure A-Z chars: fast lowercase search
+  // - or $20 makes conversion to a-z lowercase, but won't affect - / : chars
+  // - the worse case may be some false positive, which won't hurt unless
+  // your network architecture suffers from HTTP request smuggling
+  // - much less readable than cascaded IdemPPChar(), but O(1) efficiency
+  case PCardinal(P)^ or $20202020 of
+    // 'CONTENT-'
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
+      if PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24 then
+        case PCardinal(P + 8)^ or $20202020 of
+          ord('l') + ord('e') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+            if PCardinal(P + 12)^ or $20202020 =
+              ord('t') + ord('h') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
+            // 'CONTENT-LENGTH:'
+            result := hhContentLength;
+          ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+            if P[12] = ':' then
+              // 'CONTENT-TYPE:'
+              result := hhContentType;
+          ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24:
+            if (PCardinal(P + 12)^ or $20202020 =
+                ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+               (P[16] = ':') then
+              // 'CONTENT-ENCODING:'
+              result := hhContentEncoding;
+        end;
+    // 'HOST:'
+    ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if P[4] = ':' then
+        result := hhHost;
+    // 'CONNECTION: '
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
+        (PCardinal(P + 8)^ or $20202020 =
+          ord('o') + ord('n') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
+        // connection: close/upgrade/keep-alive
+        result := hhConnection;
+    // 'ACCEPT-ENCODING:' or 'ACCEPT-RANGES: BYTES'
+    ord('a') + ord('c') shl 8 + ord('c') shl 16 + ord('e') shl 24:
+      case PCardinal(P + 4)^ or $20202020 of
+        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('e') shl 24:
+          if (PCardinal(P + 8)^ or $20202020 =
+              ord('n') + ord('c') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+             (PCardinal(P + 12)^ or $20202020 =
+              ord('i') + ord('n') shl 8 + ord('g') shl 16 + ord(':') shl 24) then
+            result := hhAcceptEncoding;
+        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('r') shl 24:
+          if (PCardinal(P + 8)^ or $20202020 =
+              ord('a') + ord('n') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
+             (PCardinal(P + 12)^ or $20202020 =
+              ord('s') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+             (PCardinal(P + 16)^ or $20202020 =
+              ord('y') + ord('t') shl 8 + ord('e') shl 16 + ord('s') shl 24) then
+            result := hhAcceptRangeBytes;
+      end;
+    // 'USER-AGENT:'
+    ord('u') + ord('s') shl 8 + ord('e') shl 16 + ord('r') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('-') + ord('a') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('n') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
+        result := hhUserAgent;
+    // 'SERVER-INTERNALSTATE:'
+    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('v') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('r') shl 8 + ord('-') shl 16 + ord('i') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('n') + ord('t') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+          ord('n') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) and
+         (PCardinal(P + 16)^ or $20202020 =
+          ord('t') + ord('a') shl 8 + ord('t') shl 16 + ord('e') shl 24) and
+         (P[20] = ':') then
+        result := hhServerInternalState
+      else if PCardinal(P + 4)^ or $20202020 =
+               ord('e') + ord('r') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
+        result := hhServer;
+    // 'EXPECT: 100-CONTINUE'
+    ord('e') + ord('x') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('c') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) and
+         (PCardinal(P + 8)^ =
+          ord('1') + ord('0') shl 8 + ord('0') shl 16 + ord('-') shl 24) then
+      result := hhExpect100;
+    // 'AUTHORIZATION:'
+    ord('a') + ord('u') shl 8 + ord('t') shl 16 + ord('h') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) then
+        result := hhAuthorization;
+    // 'RANGE: BYTES='
+    ord('r') + ord('a') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('y') + ord('t') shl 8 + ord('e') shl 16 + ord('s') shl 24) and
+         (P[12] = '=') then
+        result := hhRangeBytes;
+    // 'UPGRADE:'
+    ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
+      if PCardinal(P + 4)^ or $00202020 =
+          ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
+        result := hhUpgrade;
+    // 'REFERER:'
+    ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
+      if PCardinal(P + 4)^ or $00202020 =
+          ord('r') + ord('e') shl 8 + ord('r') shl 16 + ord(':') shl 24 then
+        result := hhReferer;
+    // 'TRANSFER-ENCODING:'
+    ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('s') + ord('f') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
+         (PCardinal(P + 8)^ or $202020ff =
+          ord('-') + ord('e') shl 8 + ord('n') shl 16 + ord('c') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+          ord('o') + ord('d') shl 8 + ord('i') shl 16 + ord('n') shl 24) and
+         (PWord(P + 16)^ or $2020 = ord('g') + ord(':') shl 8) then
+        result := hhTransferEncoding;
+    // 'LAST-MODIFIED: Sat, 10 Feb 2024 10:10:38 GMT'
+    ord('l') + ord('a') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+            ord('-') + ord('m') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+            ord('i') + ord('f') shl 8 + ord('i') shl 16 + ord('e') shl 24) and
+         (PWord(P + 12)^ or $2020 = ord('d') + ord(':') shl 8) then
+        result := hhLastModified;
+  end;
+end;
+
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 begin
   if AuthToken = '' then
@@ -2531,12 +2703,8 @@ begin
       j := i;
       inc(i, length(upname));
       TrimCopy(headers, i, k - i, res);
-      while true do // delete also ending #13#10
-        if (headers[k] = #0) or
-           (headers[k] >= ' ') then
-          break
-        else
-          inc(k);
+      while headers[k] in [#1 .. #31] do // delete also ending #13#10
+        inc(k);
       delete(headers, j, k - j); // and remove
       exit;
     end;
@@ -2936,7 +3104,8 @@ begin
     ContentStream.Free; // ensure no leak on (reused) broken connection
   ResponseFlags := [];
   Options := [];
-  FastAssignNew(Headers); // note: too soon for CommandUri
+  HeadCustom := [];
+  FastAssignNew(Headers); // note: too soon for CommandUri (needed e.g. by logs)
   FastAssignNew(ContentType);
   if Upgrade <> '' then
     FastAssignNew(Upgrade);
@@ -3012,76 +3181,58 @@ begin
   if P = nil then
     exit; // avoid unexpected GPF in case of wrong usage
   P2 := P;
-  // standard headers are expected to be pure A-Z chars: fast lowercase search
-  // - or $20 makes conversion to a-z lowercase, but won't affect - / : chars
-  // - the worse case may be some false positive, which won't hurt unless
-  // your network architecture suffers from HTTP request smuggling
-  // - much less readable than cascaded IdemPPChar(), but slightly faster ;)
-  case PCardinal(P)^ or $20202020 of
-    // content-length/type/encoding
-    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
-      if PCardinal(P + 4)^ or $20202020 =
-        ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24 then
-        // 'CONTENT-'
-        case PCardinal(P + 8)^ or $20202020 of
-          ord('l') + ord('e') shl 8 + ord('n') shl 16 + ord('g') shl 24:
-            if PCardinal(P + 12)^ or $20202020 =
-              ord('t') + ord('h') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
+  case KnownHttpHeader(P) of // FPC will generate jmp table here
+    hhContentLength:
+      begin
+        // 'CONTENT-LENGTH:'
+        ContentLength := GetInt64(P + 16);
+        if not HeadersUnFiltered then
+          exit;
+      end;
+    hhContentType:
+      begin
+        // 'CONTENT-TYPE:'
+        P := GotoNextNotSpace(P + 13);
+        if (PCardinal(P)^ or $20202020 =
+            ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24) and
+           (PCardinal(P + 4)^ or $20202020 =
+            ord('i') + ord('c') shl 8 + ord('a') shl 16 + ord('t') shl 24) and
+           (PCardinal(P + 8)^ or $20202020 =
+            ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('/') shl 24) and
+           (PWord(P + 12)^ or $2020 = ord('j') + ord('s') shl 8) then
+        begin
+          // 'APPLICATION/JSON'
+          ContentType := JSON_CONTENT_TYPE_VAR;
+          if not HeadersUnFiltered then
+            exit; // '' in headers means JSON for our REST server
+        end
+        else
+        begin
+          GetTrimmed(P, P2, PLen, ContentType);
+          if ContentType = '' then
+            // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
+            exit;
+        end;
+      end;
+    hhContentEncoding:
+      begin
+        // 'CONTENT-ENCODING:'
+        P := GotoNextNotSpace(P + 17);
+        P1 := P;
+        while P^ > ' ' do
+          inc(P); // no control char should appear in any header
+        len := P - P1;
+        if len <> 0 then
+          for i := 0 to length(Compress) - 1 do
+            if IdemPropNameU(Compress[i].Name, P1, len) then
             begin
-              // 'CONTENT-LENGTH:'
-              ContentLength := GetInt64(P + 16);
+              CompressContentEncoding := i; // will handle e.g. gzip
               if not HeadersUnFiltered then
                 exit;
+              break;
             end;
-          ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24:
-            if P[12] = ':' then
-            begin
-              // 'CONTENT-TYPE:'
-              P := GotoNextNotSpace(P + 13);
-              if (PCardinal(P)^ or $20202020 =
-                ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24) and
-                 (PCardinal(P + 11)^ or $20202020 =
-                ord('/') + ord('j') shl 8 + ord('s') shl 16 + ord('o') shl 24) then
-              begin
-                // 'APPLICATION/JSON'
-                ContentType := JSON_CONTENT_TYPE_VAR;
-                if not HeadersUnFiltered then
-                  exit; // '' in headers means JSON for our REST server
-              end
-              else
-              begin
-                GetTrimmed(P, P2, PLen, ContentType);
-                if ContentType = '' then
-                  // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
-                  exit;
-              end;
-            end;
-          ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24:
-            if (Compress <> nil) and
-               (PCardinal(P + 12)^ or $20202020 =
-                ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
-               (P[16] = ':') then
-            begin
-              // 'CONTENT-ENCODING:'
-              P := GotoNextNotSpace(P + 17);
-              P1 := P;
-              while P^ > ' ' do
-                inc(P); // no control char should appear in any header
-              len := P - P1;
-              if len <> 0 then
-                for i := 0 to length(Compress) - 1 do
-                  if IdemPropNameU(Compress[i].Name, P1, len) then
-                  begin
-                    CompressContentEncoding := i; // will handle e.g. gzip
-                    if not HeadersUnFiltered then
-                      exit;
-                    break;
-                  end;
-            end;
-        end;
-    // host
-    ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
-      if P[4] = ':' then
+      end;
+    hhHost:
       begin
         // 'HOST:'
         inc(P, 5);
@@ -3099,12 +3250,7 @@ begin
         end;
         // always add to headers - 'host:' sometimes parsed directly
       end;
-    // connection: close/upgrade/keep-alive
-    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-          ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
-        (PCardinal(P + 8)^ or $20202020 =
-          ord('o') + ord('n') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
+    hhConnection: // connection: close/upgrade/keep-alive
       begin
         // 'CONNECTION: '
         inc(P, 12);
@@ -3146,43 +3292,21 @@ begin
             end;
         end;
       end;
-    // accept-encoding
-    ord('a') + ord('c') shl 8 + ord('c') shl 16 + ord('e') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('e') shl 24) and
-         (PCardinal(P + 8)^ or $20202020 =
-        ord('n') + ord('c') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
-         (PCardinal(P + 12)^ or $20202020 =
-        ord('i') + ord('n') shl 8 + ord('g') shl 16 + ord(':') shl 24) then
-        begin
-           // 'ACCEPT-ENCODING:'
-          GetTrimmed(P + 17, P2, PLen, AcceptEncoding);
-          if not HeadersUnFiltered then
-            exit;
-        end;
-    // user-agent
-    ord('u') + ord('s') shl 8 + ord('e') shl 16 + ord('r') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-        ord('-') + ord('a') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
-         (PCardinal(P + 8)^ or $20202020 =
-        ord('n') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
+    hhAcceptEncoding:
+      begin
+         // 'ACCEPT-ENCODING:'
+        GetTrimmed(P + 17, P2, PLen, AcceptEncoding);
+        if not HeadersUnFiltered then
+          exit;
+      end;
+    hhUserAgent:
       begin
         // 'USER-AGENT:'
         GetTrimmed(P + 11, P2, PLen, UserAgent);
         if not HeadersUnFiltered then
           exit;
       end;
-    // server-internalstate
-    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('v') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-        ord('e') + ord('r') shl 8 + ord('-') shl 16 + ord('i') shl 24) and
-         (PCardinal(P + 8)^ or $20202020 =
-        ord('n') + ord('t') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
-         (PCardinal(P + 12)^ or $20202020 =
-        ord('n') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) and
-         (PCardinal(P + 16)^ or $20202020 =
-        ord('t') + ord('a') shl 8 + ord('t') shl 16 + ord('e') shl 24) and
-         (P[20] = ':') then
+    hhServerInternalState:
       begin
         // 'SERVER-INTERNALSTATE:'
         inc(P, 21);
@@ -3190,24 +3314,14 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
-    // expect
-    ord('e') + ord('x') shl 8 + ord('p') shl 16 + ord('e') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-        ord('c') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) and
-         (PCardinal(P + 8)^ =
-        ord('1') + ord('0') shl 8 + ord('0') shl 16 + ord('-') shl 24) then
+    hhExpect100:
       begin
         // 'Expect: 100-continue'
         include(HeaderFlags, hfExpect100);
         if not HeadersUnFiltered then
           exit;
       end;
-    // authorization
-    ord('a') + ord('u') shl 8 + ord('t') shl 16 + ord('h') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-        ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
-         (PCardinal(P + 8)^ or $20202020 =
-        ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) then
+    hhAuthorization:
       begin
         include(HeaderFlags, hfHasAuthorization);
         if (PCardinal(P + 12)^ or $20202020 =
@@ -3219,79 +3333,62 @@ begin
           GetTrimmed(P + 22, P2, PLen, BearerToken, {nointern=}true);
         // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
       end;
-    // range
-    ord('r') + ord('a') shl 8 + ord('n') shl 16 + ord('g') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-        ord('e') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
-         (PCardinal(P + 8)^ or $20202020 =
-        ord('y') + ord('t') shl 8 + ord('e') shl 16 + ord('s') shl 24) and
-         (P[12] = '=') then
-        if rfWantRange in ResponseFlags then
-          State := hrsErrorUnsupportedRange // no multipart range
-        else
+    hhRangeBytes:
+      if rfWantRange in ResponseFlags then
+        State := hrsErrorUnsupportedRange // no multipart range
+      else
+      begin
+        // 'RANGE: BYTES='
+        P1 := GotoNextNotSpace(P + 13); // use pointer on stack
+        RangeOffset := GetNextRange(P1);
+        if P1^ = '-' then
         begin
-          // 'RANGE: BYTES='
-          P1 := GotoNextNotSpace(P + 13); // use pointer on stack
-          RangeOffset := GetNextRange(P1);
-          if P1^ = '-' then
+          inc(P1);
+          if P1^ in ['0'..'9'] then
           begin
-            inc(P1);
-            if P1^ in ['0'..'9'] then
-            begin
-              // "Range: bytes=0-499" -> start=0, len=500
-              RangeLength := Int64(GetNextRange(P1)) - RangeOffset + 1;
-              if RangeLength < 0 then
-                RangeLength := 0;
-            end;
-            // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
-            if P1^ = ',' then
-              State := hrsErrorUnsupportedRange // no multipart range
-            else
-              include(ResponseFlags, rfWantRange);
-           end
+            // "Range: bytes=0-499" -> start=0, len=500
+            RangeLength := Int64(GetNextRange(P1)) - RangeOffset + 1;
+            if RangeLength < 0 then
+              RangeLength := 0;
+          end;
+          // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
+          if P1^ = ',' then
+            State := hrsErrorUnsupportedRange // no multipart range
           else
-            State := hrsErrorUnsupportedRange;
-          if not HeadersUnFiltered then
-            exit;
-        end;
-    // upgrade
-    ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
-      if PCardinal(P + 4)^ or $00202020 =
-        ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
+            include(ResponseFlags, rfWantRange);
+         end
+        else
+          State := hrsErrorUnsupportedRange;
+        if not HeadersUnFiltered then
+          exit;
+      end;
+    hhUpgrade:
       begin
         // 'UPGRADE:'
         GetTrimmed(P + 8, P2, PLen, Upgrade);
         if not HeadersUnFiltered then
           exit;
       end;
-    // referer
-    ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
-      if PCardinal(P + 4)^ or $00202020 =
-        ord('r') + ord('e') shl 8 + ord('r') shl 16 + ord(':') shl 24 then
+    hhReferer:
       begin
         // 'REFERER:'
         GetTrimmed(P + 8, P2, PLen, Referer, {nointern=}true);
         if not HeadersUnFiltered then
           exit;
       end;
-    // transfer-encoding
-    ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
-      if IdemPChar(P + 4, 'SFER-ENCODING: CHUNKED') then
+    hhTransferEncoding:
+      if (PCardinal(P + 18)^ or $20202020 =
+          ord(' ') + ord('c') shl 8 + ord('h') shl 16 + ord('u') shl 24) and
+         (PWord(P + 22)^ or $2020 = ord('k') + ord('e') shl 8) then
       begin
         // 'TRANSFER-ENCODING: CHUNKED'
         include(HeaderFlags, hfTransferChunked);
         if not HeadersUnFiltered then
           exit;
       end;
-    // last-modified
-    ord('l') + ord('a') shl 8 + ord('s') shl 16 + ord('t') shl 24:
-      if (PCardinal(P + 4)^ or $20202020 =
-            ord('-') + ord('m') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
-         (PCardinal(P + 8)^ or $20202020 =
-            ord('i') + ord('f') shl 8 + ord('i') shl 16 + ord('e') shl 24) and
-         (PWord(P + 12)^ or $2020 = ord('d') + ord(':') shl 8) then
-        // 'LAST-MODIFIED: Sat, 10 Feb 2024 10:10:38 GMT'
-        ContentLastModified := HttpDateToUnixTimeBuffer(P + 14);
+    hhLastModified:
+      // 'LAST-MODIFIED: Sat, 10 Feb 2024 10:10:38 GMT'
+      ContentLastModified := HttpDateToUnixTimeBuffer(P + 14);
   end;
   // store meaningful headers into WorkBuffer, if not already there
   if PLen < 0 then
@@ -3449,6 +3546,34 @@ begin
   end
   else
     result := false;
+end;
+
+procedure THttpRequestContext.HeadAddCustom(P, PEnd: PUtf8Char);
+var
+  len: PtrInt;
+  hh: THttpHeader;
+begin
+  repeat
+    len := BufferLineLength(P, PEnd); // use fast SSE2 assembly on x86-64 CPU
+    if len > 0 then // no void line (means headers ending)
+    begin
+      hh := KnownHttpHeader(P);
+      include(HeadCustom, hh); // used e.g. by CompressContentAndFinalizeHead()
+      case hh of
+        hhContentEncoding:
+          // custom CONTENT-ENCODING: disable any late compression
+          integer(CompressAcceptHeader) := 0;
+      end;
+      if not (hh in [hhConnection, hhTransferEncoding]) then
+      begin
+        Head.Append(P, len);
+        Head.AppendCRLF; // normalize CR/LF endings
+      end;
+      inc(P, len);
+    end;
+    while P^ in [#10, #13] do
+      inc(P);
+  until P^ = #0;
 end;
 
 procedure THttpRequestContext.UncompressData;
@@ -3687,7 +3812,8 @@ begin
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
   // handle response body with optional range support
-  if rfAcceptRange in ResponseFlags then
+  if (rfAcceptRange in ResponseFlags) and
+      not (hhAcceptRangeBytes in HeadCustom) then
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
   if ContentStream = nil then
   begin
@@ -3701,7 +3827,8 @@ begin
           ContentLength := 0; // invalid range: return void response
     // ContentStream<>nil did set ContentLength/rfRange in ContentFromFile
   end;
-  if rfRange in ResponseFlags then
+  if (rfRange in ResponseFlags) and
+     not (hhRangeBytes in HeadCustom) then
   begin
     // Content-Range: bytes 0-1023/146515
     result^.AppendShort('Content-Range: bytes ');
@@ -3713,23 +3840,29 @@ begin
     result^.AppendCRLF;
   end;
   // finalize headers
-  if fContentEncoding <> '' then
+  if (fContentEncoding <> '') and
+     not (hhContentEncoding in HeadCustom) then
   begin
     result^.AppendShort('Content-Encoding: ');
     result^.Append(fContentEncoding);
     result^.AppendCRLF;
   end;
-  result^.AppendShort('Content-Length: ');
-  result^.Append(ContentLength);
-  result^.AppendCRLF;
-  if ContentLastModified > 0 then
+  if not (hhContentLength in HeadCustom) then
+  begin
+    result^.AppendShort('Content-Length: ');
+    result^.Append(ContentLength);
+    result^.AppendCRLF;
+  end;
+  if (ContentLastModified > 0) and
+     not (hhLastModified in HeadCustom) then
   begin
     result^.AppendShort('Last-Modified: ');
     result^.AppendShort(UnixMSTimeUtcToHttpDate(ContentLastModified));
     result^.AppendCRLF;
   end;
   if (ContentType <> '') and
-     (ContentType[1] <> '!') then
+     (ContentType[1] <> '!') and
+     not (hhContentType in HeadCustom) then
   begin
     result^.AppendShort('Content-Type: ');
     result^.Append(ContentType);
@@ -3741,7 +3874,8 @@ begin
   begin
     if rfHttp10 in ResponseFlags then // implicit with HTTP/1.1
       result^.AppendShort('Connection: Keep-Alive'#13#10);
-    if CompressAcceptEncoding <> '' then
+    if (CompressAcceptEncoding <> '') and
+       not (hhAcceptEncoding in HeadCustom) then
     begin
       result^.Append(CompressAcceptEncoding);
       result^.AppendCRLF;
@@ -4496,6 +4630,11 @@ begin
     fOutContentType := GetMimeContentType(pointer(Content), length(Content));
   fOutContent := Content;
   result := HTTP_SUCCESS;
+end;
+
+procedure THttpServerRequestAbstract.SetOutCustomHeader(const Args: array of const);
+begin
+  AppendLine(fOutCustomHeaders, Args);
 end;
 
 

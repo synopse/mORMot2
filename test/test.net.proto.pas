@@ -1574,6 +1574,7 @@ const
   HTTP_HASH: array[0 .. high(HTTP_LINK)] of RawUtf8 = (
     'af33fb8c84461b3e0893b88ef6a2fdecc79fe7de4170f13566edaf4d190d8a9d',
     '4d950e49fe18379a2b81fc531794ecedfa0f10fa21a2fc5fe2ba2e33ac660c99');
+  HTTP_TIMEOUT = 30000;
 
 procedure TNetworkProtocols._THttpPeerCache;
 var
@@ -1583,11 +1584,13 @@ var
   msg, msg2: THttpPeerCacheMessage;
   m, m2: RawUtf8;
   res: THttpPeerCryptMessageDecode;
-  i, n, alter, status: integer;
+  i, n, alter, status, len: integer;
   tmp: RawByteString;
   cache: TFileName;
-  dUri, dBearer, dTok: RawUtf8;
+  dUri, dBearer, dTok, dAddr, ctyp: RawUtf8;
+  hcs: THttpClientSocket;
   decoded: TUri;
+  tls: TNetTlsContext;
   timer: TPrecisionTimer;
 begin
   CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
@@ -1600,7 +1603,7 @@ begin
     hps.BroadCastDirectMinBytes := 10000; // broadcast for HTTP_LINK[1] only
     hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
-                    pcoVerboseLog {}, pcoSelfSignedHttps{}];
+      pcoVerboseLog, pcoHttpReprDigest {}, pcoSelfSignedHttps{}];
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret'{,THttpAsyncServer});
       try
@@ -1692,9 +1695,11 @@ begin
         // (will also validate rfProgressiveStatic process of our web server)
         hpc.OnDirectOptions := OnPeerCacheDirect;
         // ensure we can access the reference resources over Internet
+        hcs := nil;
         status := 0;
         tmp := HttpGet(HTTP_LINK[0], '', nil, false, @status, 1000, true, true);
         if status = HTTP_SUCCESS then
+        try
           // validate all resources
           for i := 0 to high(HTTP_LINK) do
           begin
@@ -1706,19 +1711,46 @@ begin
             Check(PosEx(':8008', dUri) <> 0);
             Check(dBearer <> '');
             Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
-            // first request to download from reference website
-            status := 0;
-            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true, true);
+            Check(decoded.From(dUri));
+            // first GET request to download from reference website
+            if hcs = nil then
+            begin
+              InitNetTlsContext(tls);
+              tls.IgnoreCertificateErrors := true;
+              hcs := THttpClientSocket.OpenUri(dUri, dAddr, '', 10000, @tls);
+              hcs.OnLog := TSynLog.DoLog;
+              CheckEqual(dAddr, decoded.Address);
+            end;
+            status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
             CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(Sha256(tmp), HTTP_HASH[i]);
+            CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
             CheckEqual(HashFileSha256(cache), HTTP_HASH[i]);
-            // twice to retrieve from cache
-            status := 0;
-            tmp := HttpGet(dUri, dBearer, nil, false, @status, 100000, true, true);
+            ctyp := hcs.ContentType;
+            CheckUtf8(IdemPChar(pointer(ctyp), 'IMAGE/'), ctyp);
+            len := hcs.ContentLength;
+            CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+            // GET twice to retrieve from cache
+            status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
             CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(Sha256(tmp), HTTP_HASH[i]);
+            CheckEqual(hcs.ContentLength, len);
+            CheckEqual(hcs.ContentType, ctyp);
+            CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+            // HEAD should work with cache
+            status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
+            CheckEqual(status, HTTP_SUCCESS);
+            CheckEqual(hcs.ContentLength, len);
+            CheckEqual(hcs.ContentType, ctyp);
             Check(DeleteFile(cache));
+            CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+            // HEAD should work without cache
+            status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
+            CheckEqual(status, HTTP_SUCCESS);
+            CheckEqual(hcs.ContentLength, len);
+            CheckEqual(hcs.ContentType, ctyp);
           end;
+        finally
+          hcs.Free;
+        end;
       finally
         hpc.Free;
       end;

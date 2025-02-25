@@ -449,7 +449,7 @@ type
     // - e.g. THttpPeerCache will make this file available as pcfResponsePartial
     // - Params.Hasher/Hash are expected to be populated
     // - returns an integer OnDownloadingID > 0 sequence to be eventually
-    // supplied to OnDowloaded() or OnDownloadingFailed()
+    // supplied to OnDownloaded() or OnDownloadingFailed()
     function OnDownloading(const Params: THttpClientSocketWGet;
       const Partial: TFileName; ExpectedFullSize: Int64): THttpPartialID;
     /// put a downloaded file into the alternative source cache
@@ -457,7 +457,7 @@ type
     // pcfResponsePartial with the new file name
     // - this method is called after any file has been successfully downloaded
     // - Params.Hasher/Hash are expected to be populated
-    procedure OnDowloaded(var Params: THttpClientSocketWGet;
+    procedure OnDownloaded(var Params: THttpClientSocketWGet;
       const Partial: TFileName; OnDownloadingID: THttpPartialID);
     /// notify the alternate download implementation that the data supplied
     // by OnDownload() was incorrect
@@ -2214,6 +2214,7 @@ begin
       exit;
     PtrArrayAdd(p^.HttpContext, Http);
     Http^.ProgressiveID := p^.ID;
+    result := true;
   finally
     fSafe.UnLock;
   end;
@@ -2716,7 +2717,7 @@ begin
         exit;
       end;
       // retrieve all HTTP headers
-      GetHeader({unfiltered=}false);
+      GetHeader(hroHeadersUnfiltered in Http.Options);
       if (rfHttp10 in Http.ResponseFlags) and // implicit keepalive in HTTP/1.1
          not (hfConnectionKeepAlive in Http.HeaderFlags) then
         include(Http.HeaderFlags, hfConnectionClose);
@@ -3240,7 +3241,7 @@ begin
         DeletePartAndResetDownload('resume'); // get rid of wrong file
         NewStream(fmCreate);                  // setup a new output stream
         requrl := url;                        // reset any redirection
-        RttiRequestAndFreeStream;               // try again without any resume
+        RttiRequestAndFreeStream;             // try again without any resume
       end;
       // now the hash should be correct
       if not PropNameEquals(parthash, params.Hash) then
@@ -3262,7 +3263,7 @@ begin
        (params.Hasher <> nil) and
        (params.Hash <> '') then
       try
-        params.Alternate.OnDowloaded(params, part, altdownloading);
+        params.Alternate.OnDownloaded(params, part, altdownloading);
         altdownloading := 0;
       except
         // ignore any fatal error in callbacks
