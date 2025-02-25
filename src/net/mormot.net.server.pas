@@ -1484,6 +1484,7 @@ type
   // using a URI + Bearer returned by HttpDirectUri() overloaded methods
   // - pcoHttpDirectNoBroadcast would disable UDP peer search for pcoHttpDirect
   // - pcoHttpDirectTryLastPeer could make pcoTryLastPeer for pcoHttpDirect
+  // - pcoHttpReprDigest would include a 'Repr-Digest:' header as per RFC 9530
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoCacheTempNoCheckSize,
@@ -1497,7 +1498,8 @@ type
     pcoVerboseLog,
     pcoHttpDirect,
     pcoHttpDirectNoBroadcast,
-    pcoHttpDirectTryLastPeer);
+    pcoHttpDirectTryLastPeer,
+    pcoHttpReprDigest);
 
   /// THttpPeerCacheSettings.Options values
   THttpPeerCacheOptions = set of THttpPeerCacheOption;
@@ -1821,7 +1823,8 @@ type
       const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
       out aFileName: TFileName; out aSize: Int64): integer;
     procedure DirectFileNameBackgroundGet(Sender: TObject);
-    function DirectFileNameHead(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
+      const aHash: THashDigest): cardinal;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -7064,7 +7067,14 @@ begin
   end;
 end;
 
-function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract): cardinal;
+procedure AddReprDigest(Ctxt: THttpServerRequestAbstract; const Hash: THashDigest);
+begin // implement pcoHttpReprDigest option
+  Ctxt.SetOutCustomHeader(['Repr-Digest: ', HASH_TXT_LOWER[Hash.Algo],
+    '=:', BinToBase64Short(@Hash.Bin, HASH_SIZE[Hash.Algo]), ':']);
+end;
+
+function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
+  const aHash: THashDigest): cardinal;
 var
   cs:  THttpClientSocketPeerCache;
 begin
@@ -7073,6 +7083,8 @@ begin
     try
       // direct HEAD to the remote server, with no redirection
       result := DirectConnectAndHead(self, Ctxt, {redir=}0, cs);
+      if pcoHttpReprDigest in fSettings.Options then
+        AddReprDigest(Ctxt, aHash);
     finally
       cs.Free;
     end;
@@ -7115,7 +7127,7 @@ begin
         if IsHead(Ctxt.Method) then
         begin
           // proxy the HEAD request to the final server
-          result := DirectFileNameHead(Ctxt);
+          result := DirectFileNameHead(Ctxt, msg.Hash);
           if not (result in HTTP_GET_OK) then
             err := oreDirectRemoteUriFailed;
           exit;
@@ -7156,6 +7168,8 @@ begin
       Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
       if progsize <> 0 then // append header for rfProgressiveStatic mode
         Ctxt.SetOutCustomHeader([STATICFILE_PROGSIZE + ' ', progsize]);
+      if pcoHttpReprDigest in fSettings.Options then
+        AddReprDigest(Ctxt, msg.Hash);
     end;
   finally
     errtxt := GetEnumNameUnCamelCase(TypeInfo(TOnRequestError), ord(err));
