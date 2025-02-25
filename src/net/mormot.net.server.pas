@@ -3259,7 +3259,8 @@ begin
   if Context.ResponseHeaders <> '' then // e.g. 'WWW-Authenticate: #####'#13#10
     h^.Append(Context.ResponseHeaders);
   // generic headers
-  h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
+  if not (hhServer in Context.HeadCustom) then
+    h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
   if hsoIncludeDateHeader in fServer.Options then
     fServer.AppendHttpDate(h^);
   Context.Content := fOutContent;

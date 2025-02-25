@@ -3812,7 +3812,8 @@ begin
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
   // handle response body with optional range support
-  if rfAcceptRange in ResponseFlags then
+  if (rfAcceptRange in ResponseFlags) and
+      not (hhAcceptRangeBytes in HeadCustom) then
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
   if ContentStream = nil then
   begin
@@ -3826,7 +3827,8 @@ begin
           ContentLength := 0; // invalid range: return void response
     // ContentStream<>nil did set ContentLength/rfRange in ContentFromFile
   end;
-  if rfRange in ResponseFlags then
+  if (rfRange in ResponseFlags) and
+     not (hhRangeBytes in HeadCustom) then
   begin
     // Content-Range: bytes 0-1023/146515
     result^.AppendShort('Content-Range: bytes ');
@@ -3838,26 +3840,29 @@ begin
     result^.AppendCRLF;
   end;
   // finalize headers
-  if fContentEncoding <> '' then
+  if (fContentEncoding <> '') and
+     not (hhContentEncoding in HeadCustom) then
   begin
     result^.AppendShort('Content-Encoding: ');
     result^.Append(fContentEncoding);
     result^.AppendCRLF;
   end;
-  if not (rfHasContentLength in ResponseFlags) then
+  if not (hhContentLength in HeadCustom) then
   begin
     result^.AppendShort('Content-Length: ');
     result^.Append(ContentLength);
     result^.AppendCRLF;
   end;
-  if ContentLastModified > 0 then
+  if (ContentLastModified > 0) and
+     not (hhLastModified in HeadCustom) then
   begin
     result^.AppendShort('Last-Modified: ');
     result^.AppendShort(UnixMSTimeUtcToHttpDate(ContentLastModified));
     result^.AppendCRLF;
   end;
   if (ContentType <> '') and
-     (ContentType[1] <> '!') then
+     (ContentType[1] <> '!') and
+     not (hhContentType in HeadCustom) then
   begin
     result^.AppendShort('Content-Type: ');
     result^.Append(ContentType);
@@ -3869,7 +3874,8 @@ begin
   begin
     if rfHttp10 in ResponseFlags then // implicit with HTTP/1.1
       result^.AppendShort('Connection: Keep-Alive'#13#10);
-    if CompressAcceptEncoding <> '' then
+    if (CompressAcceptEncoding <> '') and
+       not (hhAcceptEncoding in HeadCustom) then
     begin
       result^.Append(CompressAcceptEncoding);
       result^.AppendCRLF;
