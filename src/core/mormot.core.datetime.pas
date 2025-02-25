@@ -956,23 +956,30 @@ function Iso8601ToTimeLogPUtf8Char(P: PUtf8Char; L: integer;
 function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
   {$ifdef HASINLINE}inline;{$endif}
 
-const // some constants for efficient TTimeLog / TTimeLogBits.Value process
+const
+  { some constants for efficient TTimeLog / TTimeLogBits.Value process
+       bits 0..5   = Seconds (0..59)   BTS_S   AND_S
+       bits 6..11  = Minutes (0..59)   BTS_M   AND_M   SHR_M
+       bits 12..16 = Hours   (0..23)   BTS_H   AND_H   SHR_H
+       bits 17..21 = Day-1   (0..31)   BTS_DD  AND_DD  SHR_DD
+       bits 22..25 = Month-1 (0..11)   BTS_MM  AND_MM  SHR_MM
+       bits 26..40 = Year    (0..9999) BTS_YY  AND_YY  SHR_YY   }
   BTS_S  = 6;
   BTS_M  = 6;
   BTS_H  = 5;
   BTS_DD = 5;
   BTS_MM = 4;
   BTS_YY = 12;
-  SHR_M  = BTS_S;
-  SHR_H  = SHR_M  + BTS_M;
-  SHR_DD = SHR_H  + BTS_H;
-  SHR_MM = SHR_DD + BTS_DD;
-  SHR_YY = SHR_MM + BTS_MM;
   AND_S  = (1 shl BTS_S)  - 1;
   AND_M  = (1 shl BTS_M)  - 1;
   AND_H  = (1 shl BTS_H)  - 1;
   AND_DD = (1 shl BTS_DD) - 1;
   AND_MM = (1 shl BTS_MM) - 1;
+  SHR_M  = BTS_S;
+  SHR_H  = SHR_M  + BTS_M;
+  SHR_DD = SHR_H  + BTS_H;
+  SHR_MM = SHR_DD + BTS_DD;
+  SHR_YY = SHR_MM + BTS_MM;
 
 
 { ******************* TTextDateWriter supporting date/time ISO-8601 serialization }
