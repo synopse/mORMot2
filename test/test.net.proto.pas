@@ -1574,7 +1574,7 @@ const
   HTTP_HASH: array[0 .. high(HTTP_LINK)] of RawUtf8 = (
     'af33fb8c84461b3e0893b88ef6a2fdecc79fe7de4170f13566edaf4d190d8a9d',
     '4d950e49fe18379a2b81fc531794ecedfa0f10fa21a2fc5fe2ba2e33ac660c99');
-  HTTP_TIMEOUT = 300000;
+  HTTP_TIMEOUT = 30000;
 
 procedure TNetworkProtocols._THttpPeerCache;
 var
@@ -1603,7 +1603,7 @@ begin
     hps.BroadCastDirectMinBytes := 10000; // broadcast for HTTP_LINK[1] only
     hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
-                    pcoVerboseLog {}, pcoSelfSignedHttps{}];
+      pcoVerboseLog, pcoHttpReprDigest {}, pcoSelfSignedHttps{}];
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret'{,THttpAsyncServer});
       try
@@ -1712,7 +1712,7 @@ begin
             Check(dBearer <> '');
             Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
             Check(decoded.From(dUri));
-            // first request to download from reference website
+            // first GET request to download from reference website
             if hcs = nil then
             begin
               InitNetTlsContext(tls);
@@ -1728,7 +1728,8 @@ begin
             ctyp := hcs.ContentType;
             CheckUtf8(IdemPChar(pointer(ctyp), 'IMAGE/'), ctyp);
             len := hcs.ContentLength;
-            // twice to retrieve from cache
+            CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+            // GET twice to retrieve from cache
             status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
             CheckEqual(status, HTTP_SUCCESS);
             CheckEqual(hcs.ContentLength, len);
@@ -1740,6 +1741,7 @@ begin
             CheckEqual(hcs.ContentLength, len);
             CheckEqual(hcs.ContentType, ctyp);
             Check(DeleteFile(cache));
+            CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
             // HEAD should work without cache
             status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
             CheckEqual(status, HTTP_SUCCESS);
