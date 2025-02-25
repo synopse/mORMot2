@@ -2717,7 +2717,7 @@ begin
         exit;
       end;
       // retrieve all HTTP headers
-      GetHeader({unfiltered=}false);
+      GetHeader(hroHeadersUnfiltered in Http.Options);
       if (rfHttp10 in Http.ResponseFlags) and // implicit keepalive in HTTP/1.1
          not (hfConnectionKeepAlive in Http.HeaderFlags) then
         include(Http.HeaderFlags, hfConnectionClose);
