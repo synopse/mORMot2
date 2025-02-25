@@ -368,6 +368,8 @@ type
     ResponseFlags: THttpRequestResponseFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
+    /// most used output headers as recognized by HeadAddCustom()
+    HeadCustom: THttpHeaders;
     /// could be set so that ParseHeader/GetTrimmed will intern RawUtf8 values
     Interning: PRawUtf8InterningSlot;
     /// will contain the first header line on client side
@@ -469,6 +471,8 @@ type
     /// search if a value exists from the internal parsed Headers
     function HeaderHasValue(const aUpperName: RawUtf8): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// append (and sanitize CRLF) of some custom headers e.g. from Request()
+    procedure HeadAddCustom(P, PEnd: PUtf8Char);
     /// initialize ContentStream/ContentLength from a given file name
     // - if CompressGz is set, would also try for a cached local FileName+'.gz'
     // - returns HTTP_SUCCESS, HTTP_NOTFOUND or HTTP_RANGENOTSATISFIABLE
@@ -3100,7 +3104,8 @@ begin
     ContentStream.Free; // ensure no leak on (reused) broken connection
   ResponseFlags := [];
   Options := [];
-  FastAssignNew(Headers); // note: too soon for CommandUri
+  HeadCustom := [];
+  FastAssignNew(Headers); // note: too soon for CommandUri (needed e.g. by logs)
   FastAssignNew(ContentType);
   if Upgrade <> '' then
     FastAssignNew(Upgrade);
@@ -3541,6 +3546,34 @@ begin
   end
   else
     result := false;
+end;
+
+procedure THttpRequestContext.HeadAddCustom(P, PEnd: PUtf8Char);
+var
+  len: PtrInt;
+  hh: THttpHeader;
+begin
+  repeat
+    len := BufferLineLength(P, PEnd); // use fast SSE2 assembly on x86-64 CPU
+    if len > 0 then // no void line (means headers ending)
+    begin
+      hh := KnownHttpHeader(P);
+      include(HeadCustom, hh); // used e.g. by CompressContentAndFinalizeHead()
+      case hh of
+        hhContentEncoding:
+          // custom CONTENT-ENCODING: disable any late compression
+          integer(CompressAcceptHeader) := 0;
+      end;
+      if not (hh in [hhConnection, hhTransferEncoding]) then
+      begin
+        Head.Append(P, len);
+        Head.AppendCRLF; // normalize CR/LF endings
+      end;
+      inc(P, len);
+    end;
+    while P^ in [#10, #13] do
+      inc(P);
+  until P^ = #0;
 end;
 
 procedure THttpRequestContext.UncompressData;
