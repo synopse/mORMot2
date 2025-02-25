@@ -6977,27 +6977,22 @@ begin
         if (pcoHttpDirectTryLastPeer in fSettings.Options) and
            (fClient <> nil) and
            (fClientIP4 <> 0) and
-           (aSize < 256 shl 10) and // don't lock fClient/fClientSafe too long
            fClientSafe.TryLock then
         try
           SetLength(peers, 1);
           peers[0] := req;
-          FillZero(peers[0].Uuid); // "fake" request
-          result := LocalPeerRequest(
-            req, peers[0], Ctxt.Url, cs.DestStream, {retry=}false);
-          if (result = HTTP_SUCCESS) or // returns HTTP_NOCONTENT if not found
-             (fSettings = nil) then     // shutdown in progress
-          begin
-            cs.ExpectedHashOrRaiseEHttpPeerCache;
-            FreeAndNil(cs); // has been downloaded from last peer into cache
-            // caller OnRequest() will return aFileName in progressive mode
-            exit;
-          end;
+          FillZero(peers[0].Uuid); // "fake" HEAD request to check this peer
+          result := LocalPeerRequest(req, peers[0], Ctxt.Url, nil, {retry=}false);
+          if fSettings = nil then
+            exit; // shutdown in progress
+          if result <> HTTP_SUCCESS then // returns HTTP_NOCONTENT if not found
+            peers := nil; // make full GET in background thread
         finally
           fClientSafe.UnLock;
         end;
         // make an actual UDP broadcast about this file hash
-        peers := fUdpServer.Broadcast(req, alone);
+        if peers = nil then
+          peers := fUdpServer.Broadcast(req, alone);
         if peers <> nil then
           for i := 0 to high(peers) do
             if peers[i].IP4 <> fIP4 then
@@ -7013,7 +7008,10 @@ begin
               cs.RemoteHeaders := AuthorizationBearer(
                 BinToBase64uri(MessageEncode(peers[i])));
               FormatUtf8('?%', [Ctxt.Url], cs.RemoteUri); // <> DIRECTURI_32
+              // make a quick HEAD on this new socket to verify the peer
               result := cs.Request(cs.RemoteUri, 'HEAD', 30000, cs.RemoteHeaders);
+              if fSettings = nil then
+                exit; // shutdown in progress
               if result in HTTP_GET_OK then
                 break; // this peer seems just fine: background GET
             end;
