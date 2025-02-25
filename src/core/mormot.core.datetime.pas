@@ -567,6 +567,10 @@ procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 
 /// our own faster version of the corresponding RTL function
+function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; out Time: TDateTime): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
 
 /// compute how many days there are in a given month
@@ -1963,6 +1967,21 @@ begin
   result := true;
 end;
 
+function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; out Time: TDateTime): boolean;
+var
+  d: cardinal;
+begin
+  result := false;
+  if (Hour > 23) or
+     (Min > 59) or
+     (Sec > 59) or
+     (MSec > 999) then
+    exit;
+  d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
+  Time := d / MSecsPerDay;
+  result := true;
+end;
+
 
 { TSynDate }
 
@@ -2595,7 +2614,7 @@ var
   time: TDateTime;
 begin
   if mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
-    if TryEncodeTime(Hour, Minute, Second, MilliSecond, time) then
+    if mormot.core.datetime.TryEncodeTime(Hour, Minute, Second, MilliSecond, time) then
       result := result + time
     else
       result := 0
@@ -3257,7 +3276,7 @@ begin
                         result) then
     result := 0;
   if (lo and (1 shl SHR_DD - 1) <> 0) and
-     TryEncodeTime((lo shr SHR_H) and AND_H,
+     mormot.core.datetime.TryEncodeTime((lo shr SHR_H) and AND_H,
                    (lo shr SHR_M) and AND_M,
                    lo and AND_S,
                    0,
