@@ -280,7 +280,8 @@ type
     rfHttp10,
     rfContentStreamNeedFree,
     rfAsynchronous,
-    rfProgressiveStatic);
+    rfProgressiveStatic,
+    rfHasContentLength);
 
   /// define THttpRequestContext.ProcessBody response
   // - hrpSend should try to send the Dest buffer content
@@ -3719,9 +3720,12 @@ begin
     result^.Append(fContentEncoding);
     result^.AppendCRLF;
   end;
-  result^.AppendShort('Content-Length: ');
-  result^.Append(ContentLength);
-  result^.AppendCRLF;
+  if not (rfHasContentLength in ResponseFlags) then
+  begin
+    result^.AppendShort('Content-Length: ');
+    result^.Append(ContentLength);
+    result^.AppendCRLF;
+  end;
   if ContentLastModified > 0 then
   begin
     result^.AppendShort('Last-Modified: ');
