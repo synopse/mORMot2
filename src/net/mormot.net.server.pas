@@ -6860,14 +6860,47 @@ begin
   inherited Destroy;
 end;
 
+function DirectConnectAndHead(
+  Sender: THttpPeerCache; const url: RawUtf8; redirmax: integer;
+  out hdr: RawUtf8; out cs: THttpClientSocketPeerCache): integer;
+var
+  cslog: TSynLogProc;
+  uri: TUri;
+  opt: THttpRequestExtendedOptions;
+begin
+  cs := nil;
+  // compute the remote URI and its associated options/header
+  result := HTTP_BADREQUEST;
+  if not Sender.HttpDirectUriReconstruct(pointer(url), uri) then
+    exit;
+  // HEAD to the original server to connect, retrieving size and redirection
+  opt.Init;
+  opt.CreateTimeoutMS := 1000;
+  opt.RedirectMax := redirmax;
+  if Assigned(Sender.fOnDirectOptions) then
+  begin
+    result := Sender.fOnDirectOptions(uri, hdr, opt); // customizable
+    if result <> HTTP_SUCCESS then
+      exit;
+  end;
+  cslog := nil;
+  if Sender.fVerboseLog then
+    cslog := Sender.fLog.DoLog;
+  cs := THttpClientSocketPeerCache.OpenOptions(uri, opt, cslog);
+  if redirmax = 0 then // from DirectFileNameHead()
+    include(cs.Http.Options, hroHeadersUnfiltered);
+  result := cs.Head(uri.Address, 30000, hdr);
+  if cs.Redirected <> '' then
+    uri.Address := cs.Redirected; // follow 3xx redirection
+  cs.RemoteUri := uri.Address;
+  cs.RemoteHeaders := hdr;
+end;
+
 function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
   out aFileName: TFileName; out aSize: Int64): integer;
 var
   cs:  THttpClientSocketPeerCache;
-  cslog: TSynLogProc;
-  uri: TUri;
-  opt: THttpRequestExtendedOptions;
   hdr, err, ip: RawUtf8;
   i: PtrInt;
   alone: boolean;
@@ -6878,29 +6911,13 @@ begin
   try
     cs := nil;
     try
-      // compute the remote URI and its associated options/header
       if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-        err := GetEnumNameTrimed(TypeInfo(THttpPeerCacheMessageKind), ord(aMessage.Kind))
-      else if not HttpDirectUriReconstruct(pointer(aUrl), uri) then
-        err := aUrl;
-      if err <> '' then
-        exit;
-      opt.Init;
-      opt.CreateTimeoutMS := 1000;
-      opt.RedirectMax := 3; // seems fair enough
-      if Assigned(fOnDirectOptions) then
       begin
-        result := fOnDirectOptions(uri, hdr, opt); // customizable
-        err := 'callback';
-        if result <> HTTP_SUCCESS then
-          exit;
+        err := GetEnumNameTrimed(TypeInfo(THttpPeerCacheMessageKind), ord(aMessage.Kind));
+        exit;
       end;
       // HEAD to the original server to connect, retrieving size and redirection
-      cslog := nil;
-      if fVerboseLog then
-        cslog := fLog.DoLog;
-      cs := THttpClientSocketPeerCache.OpenOptions(uri, opt, cslog);
-      result := cs.Head(uri.Address, 30000, hdr);
+      result := DirectConnectAndHead(self, aUrl, {redir=}3, hdr, cs);
       err := 'head';
       if not (result in HTTP_GET_OK) then
         exit;
@@ -6910,10 +6927,6 @@ begin
       if (aSize <= 0) or  // progressive request requires a final size
          (fSettings = nil) then // shutdown in progress
         exit;
-      if cs.Redirected <> '' then
-        uri.Address := cs.Redirected; // follow 3xx redirection
-      cs.RemoteUri := uri.Address;
-      cs.RemoteHeaders := hdr;
       // prepare direct download into the final cache file as in LocalFileName()
       aFileName := ComputeFileName(aMessage.Hash);
       fFilesSafe.Lock; // disable any concurrent file access
@@ -6990,8 +7003,7 @@ begin
               peers[i].Kind := pcfBearer;
               cs.RemoteHeaders := AuthorizationBearer(
                 BinToBase64uri(MessageEncode(peers[i])));
-              FormatUtf8('?%=%', [uri.Server, uri.Address],
-                cs.RemoteUri); // <> DIRECTURI_32 as in OnDownload()
+              FormatUtf8('?%', [aUrl], cs.RemoteUri); // <> DIRECTURI_32
               break;
             end;
       end;
