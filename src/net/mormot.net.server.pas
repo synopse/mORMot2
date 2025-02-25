@@ -6554,7 +6554,7 @@ end;
 
 type
   TOnBeforeBodyErr = set of (
-    eShutdown, eBearer, eGet, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid,
+    eShutdown, eBearer, eNoGetHead, eUrl, eIp1, eBanned, eDecode, eIp2, eUuid,
     eDirectIp, eDirectDecode, eDirectKind, eDirectOpaque, aDirectDisabled);
 
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
@@ -6573,8 +6573,9 @@ begin
     include(err, eShutdown);
   if length(aBearerToken) < (SizeOf(msg) div 3) * 4 then // base64uri length
     include(err, eBearer);
-  if not IsGet(aMethod) then
-    include(err, eGet);
+  if not (IsGet(aMethod) or
+          IsHead(aMethod)) then
+    include(err, eNoGetHead);
   if aUrl = '' then // URI is just ignored but something should be specified
     include(err, eUrl)
   else if PCardinal(aUrl)^ = DIRECTURI_32 then // start with '/htt'
