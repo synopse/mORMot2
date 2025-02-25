@@ -309,8 +309,7 @@ type
     rfHttp10,
     rfContentStreamNeedFree,
     rfAsynchronous,
-    rfProgressiveStatic,
-    rfHasContentLength);
+    rfProgressiveStatic);
 
   /// define THttpRequestContext.ProcessBody response
   // - hrpSend should try to send the Dest buffer content
@@ -2696,12 +2695,8 @@ begin
       j := i;
       inc(i, length(upname));
       TrimCopy(headers, i, k - i, res);
-      while true do // delete also ending #13#10
-        if (headers[k] = #0) or
-           (headers[k] >= ' ') then
-          break
-        else
-          inc(k);
+      while headers[k] in [#1 .. #31] do // delete also ending #13#10
+        inc(k);
       delete(headers, j, k - j); // and remove
       exit;
     end;
