@@ -2329,7 +2329,7 @@ begin
            (not ParseMonth(P, Month)) then
         begin
           hasday := true; // first alphabetic word is always the week day text
-          P := GotoNextSpace(P); // also ignore trailing '-'
+          P := GotoNextSpace(P); // also ignore trailing '-' or ','
         end;
       '0'..'9':
         begin

@@ -5511,12 +5511,12 @@ function THttpPeerCrypt.LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
   var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
   aOutStream: TStreamRedirect; aRetry: boolean): integer;
 var
-  head, ip: RawUtf8;
+  head, ip, method: RawUtf8;
 
   procedure LocalPeerRequestFailed(E: TClass);
   begin
-    fLog.Add.Log(sllWarning, 'OnDownload: request %:% % failed as % %',
-      [ip, fPort, aUrl, StatusCodeToShort(result), E], self);
+    fLog.Add.Log(sllWarning, 'OnDownload: % %:% % failed as % %',
+      [method, ip, fPort, aUrl, StatusCodeToShort(result), E], self);
     if (fInstable <> nil) and // add to RejectInstablePeersMin list
        not aRetry then        // not from partial request before broadcast
       fInstable.BanIP(aResp.IP4); // this peer may have a HTTP firewall issue
@@ -5543,13 +5543,19 @@ begin
       fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
       LocalPeerClientSetup(ip, fClient, 5000);
     end;
-    // makes the GET request, optionally with the needed range bytes
+    // makes the HEAD/GET request, optionally with the needed range bytes
     fClient.RangeStart := aRequest.RangeStart;
     fClient.RangeEnd   := aRequest.RangeEnd;
-    if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
-      aOutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+    if aOutStream = nil then
+      method := 'HEAD'
+    else
+    begin
+      if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
+        aOutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+      method := 'GET';
+    end;
     result := fClient.Request(
-      aUrl, 'GET', 30000, head, '',  '', aRetry, nil, aOutStream);
+      aUrl, method, 30000, head, '',  '', aRetry, nil, aOutStream);
     fLog.Add.Log(sllTrace, 'OnDownload: request=%', [result], self);
     if result in HTTP_GET_OK then
       fClientIP4 := aResp.IP4 // success or not found (HTTP_NOCONTENT)
@@ -6919,9 +6925,9 @@ begin
       if result = HTTP_SUCCESS then
         if localsize <> aSize then // paranoid
         begin
-          fLog.Add.Log(sllWarning, 'DirectFileName % size: local=% remote=%',
-            [aFileName, localsize, aSize], self);
-          DeleteFile(aFileName); // this file seems invalid
+          fLog.Add.Log(sllWarning, 'DirectFileName delete % size: %=% remote=%',
+            [aFileName, err, localsize, aSize], self);
+          DeleteFile(aFileName); // this file seems invalid: clean from cache
         end
         else
         begin
