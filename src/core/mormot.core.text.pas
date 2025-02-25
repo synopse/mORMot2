@@ -9094,8 +9094,10 @@ begin
   until ArgCount = 0;
   last := c;
   ArgCount := length(Text);
-  SetLength(Text, L); // realloc in-place and append the new text
-  Write(PUtf8Char(@PByteArray(Text)[ArgCount]));
+  if ArgCount = L then // nothing to append
+    exit;
+  SetLength(Text, L); // realloc in-place
+  Write(PUtf8Char(@PByteArray(Text)[ArgCount])); // append Arg[] text
 end;
 
 procedure TFormatUtf8.DoPrepend(var Text: RawUtf8; Arg: PVarRec;
