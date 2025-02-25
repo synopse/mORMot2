@@ -11493,8 +11493,12 @@ begin
 end;
 
 procedure TRawByteStringBuffer.AppendCRLF;
+var
+  p: PByteArray; // faster than PWord() on Intel
 begin
-  PWord(@PByteArray(fBuffer)[fLen])^ := CRLFW;
+  p := @PByteArray(fBuffer)[fLen];
+  p[0] := 13;
+  p[1] := 10;
   inc(fLen, 2);
 end;
 
