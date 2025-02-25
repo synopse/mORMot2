@@ -865,6 +865,9 @@ type
     // status HTTP_NOTMODIFIED (304) if it did not change
     function SetOutContent(const Content: RawByteString; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0): cardinal;
+    /// append a new line of HTTP headers to the request output
+    // - just a wrapper around AppendLine(fOutCustomHeaders, Args)
+    procedure SetOutCustomHeader(const Args: array of const);
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -893,6 +896,7 @@ type
       read fOutContentType write fOutContentType;
     /// output parameter to be sent back as the response message header
     // - e.g. to set Content-Type/Location
+    // - see SetOutCustomHeader() function to safely set a new HTTP header value
     property OutCustomHeaders: RawUtf8
       read fOutCustomHeaders write fOutCustomHeaders;
     /// the client remote IP, as specified to Prepare()
@@ -4587,6 +4591,11 @@ begin
     fOutContentType := GetMimeContentType(pointer(Content), length(Content));
   fOutContent := Content;
   result := HTTP_SUCCESS;
+end;
+
+procedure THttpServerRequestAbstract.SetOutCustomHeader(const Args: array of const);
+begin
+  AppendLine(fOutCustomHeaders, Args);
 end;
 
 
