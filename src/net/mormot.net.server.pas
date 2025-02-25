@@ -1854,7 +1854,7 @@ type
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
     // should be called to copy the content into this instance files cache
-    procedure OnDowloaded(var Params: THttpClientSocketWGet;
+    procedure OnDownloaded(var Params: THttpClientSocketWGet;
       const Partial: TFileName; PartialID: integer); virtual;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - OnDownload() may have returned corrupted data: local cache file is
@@ -6352,7 +6352,7 @@ begin
       if result < fTempFilesMaxSize then
         break; // we have deleted enough old files
     end;
-  fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
+  fLog.Add.Log(sllTrace, 'OnDownloaded: deleted %', [KB(deleted)], self);
   dec(fTempCurrentSize, deleted);
 end;
 
@@ -6659,7 +6659,7 @@ begin
   end;
 end;
 
-procedure THttpPeerCache.OnDowloaded(var Params: THttpClientSocketWGet;
+procedure THttpPeerCache.OnDownloaded(var Params: THttpClientSocketWGet;
   const Partial: TFileName; PartialID: integer);
 var
   local: TFileName;
@@ -6679,7 +6679,7 @@ begin
   if not CachedFileName(Params, [lfnEnsureDirectoryExists], local, istemp) then
   begin
     fLog.Add.Log(sllWarning,
-      'OnDowloaded: no hash specified for %', [Partial], self);
+      'OnDownloaded: no hash specified for %', [Partial], self);
     exit;
   end;
   // check if this file was not already in the cache folder
@@ -6688,7 +6688,7 @@ begin
   if localsize <> 0 then
   begin
     fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
-      'OnDowloaded: % already in cache', [Partial], self);
+      'OnDownloaded: % already in cache', [Partial], self);
     // size mismatch may happen on race condition (hash collision is unlikely)
     if PartialID <> 0 then
       fPartials.ChangeFile(PartialID, local); // switch to the local file
@@ -6709,7 +6709,7 @@ begin
       tot := TempFolderEstimateNewSize(sourcesize);
       if tot >= fTempFilesMaxSize then
       begin
-        fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
+        fLog.Add.Log(sllDebug, 'OnDownloaded: % is too big (%) for tot=%',
           [Partial, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
         if PartialID <> 0 then
           OnDownloadingFailed(PartialID); // abort partial downloading
@@ -6731,7 +6731,7 @@ begin
     else
       OnDownloadingFailed(PartialID); // abort
   QueryPerformanceMicroSeconds(stop);
-  fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
+  fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDownloaded: copy % into % in %',
       [Partial, local, MicroSecToString(stop - start)], self);
 end;
 
