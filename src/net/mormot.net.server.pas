@@ -3233,14 +3233,20 @@ begin
         if (PCardinal(P)^ or $20202020 =
              ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24) and
            (PCardinal(P + 4)^ or $20202020 =
-             ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24) and
-           (PCardinal(P + 8)^ or $20202020 =
-             ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
-           (PCardinal(P + 12)^ or $20202020 =
-             ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
-           (P[16] = ':') then
-          // custom CONTENT-ENCODING: disable any late compression
-          integer(Context.CompressAcceptHeader) := 0;
+             ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24) then
+          case PCardinal(P + 8)^ or $20202020  of
+            ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24:
+              if (PCardinal(P + 12)^ or $20202020 =
+                   ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+                 (P[16] = ':') then
+              // custom CONTENT-ENCODING: disable any late compression
+              integer(Context.CompressAcceptHeader) := 0;
+            ord('l') + ord('e') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+              if PCardinal(P + 12)^ or $ff202020 =
+                   ord('t') + ord('h') shl 8 + ord(':') shl 16 + $ff000000 then
+                // ignore Context.ContentLength field (e.g. for a HEAD or a proxy)
+                include(Context.ResponseFlags, rfHasContentLength);
+          end;
         h^.Append(P, len);
         h^.AppendCRLF; // normalize CR/LF endings
         inc(P, len);
