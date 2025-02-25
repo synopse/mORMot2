@@ -2088,11 +2088,11 @@ var
   ok: BOOL;
   err: integer;
 begin
+  SetDynamicTimeZoneInformation := GetProcAddress(
+    GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
   privileges.Init;
   try
     privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
-    SetDynamicTimeZoneInformation := GetProcAddress(
-      GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
     if Assigned(SetDynamicTimeZoneInformation) then
       ok := SetDynamicTimeZoneInformation(info)    // Vista+
     else
