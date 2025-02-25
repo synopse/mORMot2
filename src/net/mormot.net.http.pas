@@ -39,6 +39,31 @@ uses
 { ******************** Shared HTTP Constants and Functions }
 
 type
+  /// identify the most known HTTP header variables
+  // - used e.g. for efficient parsing via KnownHttpHeader() function
+  THttpHeader = (
+    hhUnknown,
+    hhContentType,
+    hhContentEncoding,
+    hhContentLength,
+    hhHost,
+    hhConnection,
+    hhAcceptEncoding,
+    hhAcceptRangeBytes,
+    hhUserAgent,
+    hhServer,
+    hhServerInternalState,
+    hhExpect100,
+    hhAuthorization,
+    hhRangeBytes,
+    hhUpgrade,
+    hhReferer,
+    hhTransferEncoding,
+    hhLastModified);
+
+  /// set of HTTP headers e.g. as used in THttpRequestContext.HeadCustom
+  THttpHeaders = set of THttpHeader;
+
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
   // e.g. 'gzip' or 'deflate' for standard HTTP format, but you can add
@@ -82,6 +107,10 @@ type
   /// how TWebSocketProtocolBinary implements the 'synopsebin' protocol
   // - should match on both client and server ends
   TWebSocketProtocolBinaryOptions = set of TWebSocketProtocolBinaryOption;
+
+/// efficiently recognize most known HTTP header variables
+// - as used e.g. by THttpRequestContext.ParseHeader
+function KnownHttpHeader(P: PUtf8Char): THttpHeader;
 
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 // - will detect most used compressible content (like 'text/*' or
@@ -2394,6 +2423,141 @@ implementation
 
 
 { ******************** Shared HTTP Constants and Functions }
+
+function KnownHttpHeader(P: PUtf8Char): THttpHeader;
+begin
+  result := hhUnknown;
+  // standard headers are expected to be pure A-Z chars: fast lowercase search
+  // - or $20 makes conversion to a-z lowercase, but won't affect - / : chars
+  // - the worse case may be some false positive, which won't hurt unless
+  // your network architecture suffers from HTTP request smuggling
+  // - much less readable than cascaded IdemPPChar(), but O(1) efficiency
+  case PCardinal(P)^ or $20202020 of
+    // 'CONTENT-'
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
+      if PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24 then
+        case PCardinal(P + 8)^ or $20202020 of
+          ord('l') + ord('e') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+            if PCardinal(P + 12)^ or $20202020 =
+              ord('t') + ord('h') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
+            // 'CONTENT-LENGTH:'
+            result := hhContentLength;
+          ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+            if P[12] = ':' then
+              // 'CONTENT-TYPE:'
+              result := hhContentType;
+          ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24:
+            if (PCardinal(P + 12)^ or $20202020 =
+                ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+               (P[16] = ':') then
+              // 'CONTENT-ENCODING:'
+              result := hhContentEncoding;
+        end;
+    // 'HOST:'
+    ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if P[4] = ':' then
+        result := hhHost;
+    // 'CONNECTION: '
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
+        (PCardinal(P + 8)^ or $20202020 =
+          ord('o') + ord('n') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
+        // connection: close/upgrade/keep-alive
+        result := hhConnection;
+    // 'ACCEPT-ENCODING:' or 'ACCEPT-RANGES: BYTES'
+    ord('a') + ord('c') shl 8 + ord('c') shl 16 + ord('e') shl 24:
+      case PCardinal(P + 4)^ or $20202020 of
+        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('e') shl 24:
+          if (PCardinal(P + 8)^ or $20202020 =
+              ord('n') + ord('c') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+             (PCardinal(P + 12)^ or $20202020 =
+              ord('i') + ord('n') shl 8 + ord('g') shl 16 + ord(':') shl 24) then
+            result := hhAcceptEncoding;
+        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('r') shl 24:
+          if (PCardinal(P + 8)^ or $20202020 =
+              ord('a') + ord('n') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
+             (PCardinal(P + 12)^ or $20202020 =
+              ord('s') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+             (PCardinal(P + 16)^ or $20202020 =
+              ord('y') + ord('t') shl 8 + ord('e') shl 16 + ord('s') shl 24) then
+            result := hhAcceptRangeBytes;
+      end;
+    // 'USER-AGENT:'
+    ord('u') + ord('s') shl 8 + ord('e') shl 16 + ord('r') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('-') + ord('a') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('n') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
+        result := hhUserAgent;
+    // 'SERVER-INTERNALSTATE:'
+    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('v') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('r') shl 8 + ord('-') shl 16 + ord('i') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('n') + ord('t') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+          ord('n') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) and
+         (PCardinal(P + 16)^ or $20202020 =
+          ord('t') + ord('a') shl 8 + ord('t') shl 16 + ord('e') shl 24) and
+         (P[20] = ':') then
+        result := hhServerInternalState
+      else if PCardinal(P + 4)^ or $20202020 =
+               ord('e') + ord('r') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
+        result := hhServer;
+    // 'EXPECT: 100-CONTINUE'
+    ord('e') + ord('x') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('c') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) and
+         (PCardinal(P + 8)^ =
+          ord('1') + ord('0') shl 8 + ord('0') shl 16 + ord('-') shl 24) then
+      result := hhExpect100;
+    // 'AUTHORIZATION:'
+    ord('a') + ord('u') shl 8 + ord('t') shl 16 + ord('h') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) then
+        result := hhAuthorization;
+    // 'RANGE: BYTES='
+    ord('r') + ord('a') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+          ord('y') + ord('t') shl 8 + ord('e') shl 16 + ord('s') shl 24) and
+         (P[12] = '=') then
+        result := hhRangeBytes;
+    // 'UPGRADE:'
+    ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
+      if PCardinal(P + 4)^ or $00202020 =
+          ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
+        result := hhUpgrade;
+    // 'REFERER:'
+    ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
+      if PCardinal(P + 4)^ or $00202020 =
+          ord('r') + ord('e') shl 8 + ord('r') shl 16 + ord(':') shl 24 then
+        result := hhReferer;
+    // 'TRANSFER-ENCODING:'
+    ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('s') + ord('f') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
+         (PCardinal(P + 8)^ or $202020ff =
+          ord('-') + ord('e') shl 8 + ord('n') shl 16 + ord('c') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+          ord('o') + ord('d') shl 8 + ord('i') shl 16 + ord('n') shl 24) and
+         (PWord(P + 16)^ or $2020 = ord('g') + ord(':') shl 8) then
+        result := hhTransferEncoding;
+    // 'LAST-MODIFIED: Sat, 10 Feb 2024 10:10:38 GMT'
+    ord('l') + ord('a') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+            ord('-') + ord('m') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+            ord('i') + ord('f') shl 8 + ord('i') shl 16 + ord('e') shl 24) and
+         (PWord(P + 12)^ or $2020 = ord('d') + ord(':') shl 8) then
+        result := hhLastModified;
+  end;
+end;
 
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 begin
