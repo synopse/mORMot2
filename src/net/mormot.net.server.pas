@@ -1817,7 +1817,7 @@ type
     function CachedFileName(const aParams: THttpClientSocketWGet;
       aFlags: THttpPeerCacheLocalFileName;
       out aLocal: TFileName; out isTemp: boolean): boolean;
-    function DirectFileName(const aUrl: RawUtf8;
+    function DirectFileName(Ctxt: THttpServerRequestAbstract;
       const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
       out aFileName: TFileName; out aSize: Int64): integer;
     procedure DirectFileNameBackgroundGet(Sender: TObject);
@@ -6833,18 +6833,19 @@ begin
   inherited Destroy;
 end;
 
-function DirectConnectAndHead(
-  Sender: THttpPeerCache; const url: RawUtf8; redirmax: integer;
-  out hdr: RawUtf8; out cs: THttpClientSocketPeerCache): integer;
+function DirectConnectAndHead(Sender: THttpPeerCache;
+  Ctxt: THttpServerRequestAbstract; redirmax: integer;
+  out cs: THttpClientSocketPeerCache): integer;
 var
   cslog: TSynLogProc;
   uri: TUri;
+  hdr: RawUtf8;
   opt: THttpRequestExtendedOptions;
 begin
   cs := nil;
   // compute the remote URI and its associated options/header
   result := HTTP_BADREQUEST;
-  if not Sender.HttpDirectUriReconstruct(pointer(url), uri) then
+  if not Sender.HttpDirectUriReconstruct(pointer(Ctxt.Url), uri) then
     exit;
   // HEAD to the original server to connect, retrieving size and redirection
   opt.Init;
@@ -6863,35 +6864,38 @@ begin
   if redirmax = 0 then // from DirectFileNameHead()
     include(cs.Http.Options, hroHeadersUnfiltered);
   result := cs.Head(uri.Address, 30000, hdr);
+  if not (result in HTTP_GET_OK) then
+  begin
+    FreeAndNil(cs);
+    exit;
+  end;
   if cs.Redirected <> '' then
     uri.Address := cs.Redirected; // follow 3xx redirection
   cs.RemoteUri := uri.Address;
   cs.RemoteHeaders := hdr;
+  Ctxt.OutCustomHeaders := cs.Headers; // to include e.g. Content-Type
 end;
 
-function THttpPeerCache.DirectFileName(const aUrl: RawUtf8;
+function THttpPeerCache.DirectFileName(Ctxt: THttpServerRequestAbstract;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
   out aFileName: TFileName; out aSize: Int64): integer;
 var
   cs:  THttpClientSocketPeerCache;
-  hdr, err, ip: RawUtf8;
+  err, ip: RawUtf8;
   i: PtrInt;
+  localsize: Int64;
   alone: boolean;
   req: THttpPeerCacheMessage;
   peers: THttpPeerCacheMessageDynArray;
 begin
+  cs := nil;
   result := HTTP_BADREQUEST;
   try
-    cs := nil;
+    if aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent] then
     try
-      if not (aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-      begin
-        err := GetEnumNameTrimed(TypeInfo(THttpPeerCacheMessageKind), ord(aMessage.Kind));
-        exit;
-      end;
-      // HEAD to the original server to connect, retrieving size and redirection
-      result := DirectConnectAndHead(self, aUrl, {redir=}3, hdr, cs);
+      // HEAD to the original server to connect and retrieve size + redirection
       err := 'head';
+      result := DirectConnectAndHead(self, Ctxt, {redir=}3, cs);
       if not (result in HTTP_GET_OK) then
         exit;
       result := HTTP_LENGTHREQUIRED;
@@ -6900,6 +6904,28 @@ begin
       if (aSize <= 0) or  // progressive request requires a final size
          (fSettings = nil) then // shutdown in progress
         exit;
+      // try from cached files
+      err := 'from partial';
+      if fPartials <> nil then // check partial first (local may not be finished)
+        result := PartialFileName(aMessage, aHttp, @aFileName, @localsize);
+      if result <> HTTP_SUCCESS then
+      begin
+        err := 'from local';
+        result := LocalFileName(aMessage, [lfnSetDate], @aFileName, @localsize);
+      end;
+      if result = HTTP_SUCCESS then
+        if localsize <> aSize then // paranoid
+        begin
+          fLog.Add.Log(sllWarning, 'DirectFileName % size: local=% remote=%',
+            [aFileName, localsize, aSize], self);
+          DeleteFile(aFileName); // this file seems invalid
+        end
+        else
+        begin
+          if err = 'from local' then
+            aSize := 0; // not progressive
+          exit;
+        end;
       // prepare direct download into the final cache file as in LocalFileName()
       aFileName := ComputeFileName(aMessage.Hash);
       fFilesSafe.Lock; // disable any concurrent file access
@@ -6948,7 +6974,8 @@ begin
           SetLength(peers, 1);
           peers[0] := req;
           FillZero(peers[0].Uuid); // "fake" request
-          result := LocalPeerRequest(req, peers[0], aUrl, cs.DestStream, {retry=}false);
+          result := LocalPeerRequest(
+            req, peers[0], Ctxt.Url, cs.DestStream, {retry=}false);
           if (result = HTTP_SUCCESS) or // returns HTTP_NOCONTENT if not found
              (fSettings = nil) then     // shutdown in progress
           begin
@@ -6969,15 +6996,17 @@ begin
               // switch to this best local peer instead of main server
               IP4Text(@peers[i].IP4, ip);
               fLog.Add.Log(sllDebug, 'DirectFileName(%) switch to %:% peer',
-                [aUrl, ip, fPort], self);
+                [Ctxt.Url, ip, fPort], self);
               cs.Close;
               LocalPeerClientSetup(ip, cs, 5000); // local cs, not fClient
               // local peer requires a new bearer
               peers[i].Kind := pcfBearer;
               cs.RemoteHeaders := AuthorizationBearer(
                 BinToBase64uri(MessageEncode(peers[i])));
-              FormatUtf8('?%', [aUrl], cs.RemoteUri); // <> DIRECTURI_32
-              break;
+              FormatUtf8('?%', [Ctxt.Url], cs.RemoteUri); // <> DIRECTURI_32
+              result := cs.Request(cs.RemoteUri, 'HEAD', 30000, cs.RemoteHeaders);
+              if result in HTTP_GET_OK then
+                break; // this peer seems just fine: background GET
             end;
       end;
       // start the GET request to the remote URI into aFileName via a sub-thread
@@ -6994,15 +7023,16 @@ begin
            (cs.DestStream <> nil) then
           cs.AbortDownload(self, E)
         else
-          fLog.Add.Log(sllDebug, 'DirectFileName(%)=%', [aUrl, PClass(E)^], self);
+          fLog.Add.Log(sllDebug, 'DirectFileName(% %)=%',
+            [Ctxt.Method, Ctxt.Url, PClass(E)^], self);
         result := HTTP_NOTFOUND;
-        cs.Free;
       end;
     end;
   finally
     if (err <> '') and
        fVerboseLog then
       fLog.Add.Log(sllTrace, 'DirectFileName=% % (%)', [result, aFileName, err], self);
+    cs.Free;
   end;
 end;
 
@@ -7036,14 +7066,13 @@ end;
 
 function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  hdr: RawUtf8;
   cs:  THttpClientSocketPeerCache;
 begin
   try
     cs := nil;
     try
-      result := DirectConnectAndHead(self, Ctxt.Url, {redir=}0, hdr, cs);
-      Ctxt.OutCustomHeaders := cs.Headers; // as hroHeadersUnfiltered
+      // direct HEAD to the remote server, with no redirection
+      result := DirectConnectAndHead(self, Ctxt, {redir=}0, cs);
     finally
       cs.Free;
     end;
