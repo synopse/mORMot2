@@ -2820,7 +2820,7 @@ var
   T: TSynSystemTime;
 begin
   PInt64(@datetime)^ := 0;
-  result := (httpdate <> '') and
+  result := (httpdate <> nil) and
             T.FromHttpDateBuffer(httpdate, tolocaltime);
   if result then
     datetime := T.ToDateTime;
