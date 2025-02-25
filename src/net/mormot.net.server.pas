@@ -503,7 +503,7 @@ type
     fCompress: THttpSocketCompressRecDynArray;
     fCompressAcceptEncoding: RawUtf8;
     fServerName: RawUtf8;
-    fRequestHeaders: RawUtf8; // pre-computed headers with ServerName
+    fRequestHeaders: RawUtf8; // pre-computed headers with 'Server: xxxx'
     fCallbackSendDelay: PCardinal;
     fCallbackOutgoingCount: PCardinal; //TODO
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;

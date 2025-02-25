@@ -1687,15 +1687,14 @@ begin
           CheckEqual(dUri, '/https/synopse.info_123/forum');
           Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
           CheckEqual(decoded.URI, 'https://synopse.info:123/forum');
-          //write('running'); ConsoleWaitForEnterKey;
         finally
           hpc2.Free;
         end;
         // validate pcoHttpDirect proxy mode with some constant web resources
         // (will also validate rfProgressiveStatic process of our web server)
+        hcs := nil;
         hpc.OnDirectOptions := OnPeerCacheDirect;
         // ensure we can access the reference resources over Internet
-        hcs := nil;
         status := 0;
         tmp := HttpGet(HTTP_LINK[0], '', nil, false, @status, 1000, true, true);
         if status = HTTP_SUCCESS then

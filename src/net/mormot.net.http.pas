@@ -40,7 +40,8 @@ uses
 
 type
   /// identify the most known HTTP header variables
-  // - used e.g. for efficient parsing via KnownHttpHeader() function
+  // - used e.g. for efficient parsing via KnownHttpHeader() low-level function,
+  // and within the THttpRequestContext.ParseHeader() method
   THttpHeader = (
     hhUnknown,
     hhContentType,
