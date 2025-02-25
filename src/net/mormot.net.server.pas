@@ -7109,15 +7109,9 @@ begin
     // resource will always be identified by decoded bearer hash
     progsize := 0;
     http := (Ctxt as THttpServerRequest).fHttp;
-    // always first try from PartialFileName() then LocalFileName()
-    if fPartials <> nil then // check partial first (local may not be finished)
-      result := PartialFileName(msg, http, @fn, @progsize);
-    if result <> HTTP_SUCCESS then
-      result := LocalFileName(msg, [lfnSetDate], @fn, nil);
-    if result <> HTTP_SUCCESS then
-      // handle any currently unknown hash
-      if (result <> HTTP_NOTACCEPTABLE) and // abort on non acceptable message
-         (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
+    case msg.Kind of
+      pcfBearerDirect,
+      pcfBearerDirectPermanent:
         if IsHead(Ctxt.Method) then
         begin
           // proxy the HEAD request to the final server
@@ -7128,29 +7122,41 @@ begin
         end
         else
         begin
-          // remote GET in a background thread
-          result := DirectFileName(Ctxt.Url, msg, http, fn, progsize);
+          // remote HEAD + GET new partial file in a background thread
+          result := DirectFileName(Ctxt, msg, http, fn, progsize);
           if result <> HTTP_SUCCESS then
           begin
             err := oreDirectRemoteUriFailed;
             exit;
           end;
-        end
-      else // pcfBearer with no local/partial known file: nothing to return
+        end;
+    else // pcfBearer
       begin
-        if result = HTTP_NOTACCEPTABLE then
-          err := oreLocalFileNotAcceptable
-        else
-          err := oreNoLocalFile;
-        if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
-          result := HTTP_NOCONTENT; // OnDownload should make a broadcast
-        exit;
+        // try first from PartialFileName() then LocalFileName()
+        if fPartials <> nil then // check partial first (local may not be finished)
+          result := PartialFileName(msg, http, @fn, @progsize);
+        if result <> HTTP_SUCCESS then
+          result := LocalFileName(msg, [lfnSetDate], @fn, nil);
       end;
-    // HTTP_SUCCESS: return the (partial) file as requested
-    Ctxt.OutContent := StringToUtf8(fn);
-    Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
-    if progsize <> 0 then // header for rfProgressiveStatic mode
-      Ctxt.OutCustomHeaders := FormatUtf8(STATICFILE_PROGSIZE + ' %', [progsize]);
+    end;
+    if result <> HTTP_SUCCESS then
+    begin
+      // no local/partial known file: nothing to return
+      if result = HTTP_NOTACCEPTABLE then
+        err := oreLocalFileNotAcceptable
+      else
+        err := oreNoLocalFile;
+      if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
+        result := HTTP_NOCONTENT; // OnDownload should make a broadcast
+    end
+    else
+    begin
+      // HTTP_SUCCESS: return the (partial) file as requested
+      Ctxt.OutContent := StringToUtf8(fn);
+      Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
+      if progsize <> 0 then // append header for rfProgressiveStatic mode
+        Ctxt.SetOutCustomHeader([STATICFILE_PROGSIZE + ' ', progsize]);
+    end;
   finally
     errtxt := GetEnumNameUnCamelCase(TypeInfo(TOnRequestError), ord(err));
     if not StatusCodeIsSuccess(result) then
