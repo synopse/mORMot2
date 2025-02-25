@@ -1929,6 +1929,40 @@ begin
     end;
 end;
 
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
+var
+  y100: TDiv100Rec;
+  d: cardinal;
+begin
+  result := false;
+  if (Month - 1 >= 12) or
+     (Day = 0) or
+     (Year = 0) or
+     (Year > 10000) then
+    exit;
+  Div100(Year, y100{%H-});
+  if Day > MonthDays[(Year and 3 = 0) and // inlined IsLeapYear()
+            ((y100.M <> 0) or (Year - ((y100.D shr 2) * 400) = 0))][Month] then
+    exit;
+  if Month > 2 then
+    dec(Month, 3)
+  else if Month > 0 then
+  begin
+    inc(Month, 9);
+    if y100.M = 0 then // Div100(Year - 1, y100)
+    begin
+      dec(y100.D);
+      y100.M := 99;
+    end
+    else
+      dec(y100.M);
+  end;
+  d := (146097 * y100.D) shr 2 + (1461 * y100.M) shr 2 +
+       (153 * Month + 2) div 5 + Day;
+  Date := d - 693900; // separated to avoid sign issue
+  result := true;
+end;
+
 
 { TSynDate }
 
@@ -2690,33 +2724,6 @@ begin
 end;
 
 
-function TryEncodeDate(Year, Month, Day: cardinal;
-  out Date: TDateTime): boolean;
-var
-  d100: TDiv100Rec;
-begin 
-  result := false;
-  if (Month = 0) or
-     (Month > 12) or
-     (Day = 0) or
-     (Year = 0) or
-     (Year > 10000) or
-     (Day > MonthDays[IsLeapYear(Year)][Month]) then
-    exit;
-  if Month > 2 then
-    dec(Month, 3)
-  else if Month > 0 then
-  begin
-    inc(Month, 9);
-    dec(Year);
-  end;
-  Div100(Year, d100{%H-});
-  Date := (146097 * d100.D) shr 2 + (1461 * d100.M) shr 2 +
-          (153 * Month + 2) div 5 + Day;
-  Date := Date - 693900; // separated to avoid sign issue
-  result := true;
-end;
-
 function NowToString(Expanded: boolean; FirstTimeChar: AnsiChar;
   UtcDate: boolean): RawUtf8;
 var
@@ -2796,7 +2803,7 @@ begin
 end;
 
 function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
-  tolocaltime: boolean): boolean; overload;
+  tolocaltime: boolean): boolean;
 var
   T: TSynSystemTime;
 begin
