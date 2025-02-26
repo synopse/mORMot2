@@ -4228,7 +4228,7 @@ begin
       begin
         include(Cache.Flags, rcfIsRawBlob);
         Cache.CodePage := CP_RAWBYTESTRING; // CP_RAWBLOB is internal
-        Cache.Engine := TSynAnsiConvert.Engine(CP_RAWBYTESTRING);
+        Cache.Engine := RawByteStringConvert;
       end
       else
       begin
