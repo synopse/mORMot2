@@ -2550,7 +2550,7 @@ begin
     ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
           ord('s') + ord('f') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
-         (PCardinal(P + 8)^ or $202020ff =
+         (PCardinal(P + 8)^ or $20202020 =
           ord('-') + ord('e') shl 8 + ord('n') shl 16 + ord('c') shl 24) and
          (PCardinal(P + 12)^ or $20202020 =
           ord('o') + ord('d') shl 8 + ord('i') shl 16 + ord('n') shl 24) and
@@ -3380,7 +3380,8 @@ begin
     hhTransferEncoding:
       if (PCardinal(P + 18)^ or $20202020 =
           ord(' ') + ord('c') shl 8 + ord('h') shl 16 + ord('u') shl 24) and
-         (PWord(P + 22)^ or $2020 = ord('k') + ord('e') shl 8) then
+         (PCardinal(P + 22)^ or $20202020 =
+          ord('n') + ord('k') shl 8 + ord('e') shl 16 + ord('d') shl 24) then
       begin
         // 'TRANSFER-ENCODING: CHUNKED'
         include(HeaderFlags, hfTransferChunked);
