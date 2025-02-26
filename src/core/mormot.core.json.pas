@@ -103,6 +103,8 @@ const
   JSON_UNESCAPE_UNEXPECTED = #0;
   /// JSON_UNESCAPE[] lookup value: indicates '\u0123' UTF-16 pattern
   JSON_UNESCAPE_UTF16 = #1;
+  /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
+  JSON_UHEXC = ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
 
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
@@ -7046,13 +7048,11 @@ noesc:
     case tab[c^] of // better codegen with no temp var
       JSON_ESCAPE_NONE:
         goto noesc;
-      JSON_ESCAPE_ENDINGZERO:
-        exit; // #0
-      JSON_ESCAPE_UNICODEHEX:
+      JSON_ESCAPE_ENDINGZERO: // #0
+        exit;
+      JSON_ESCAPE_UNICODEHEX: // characters below ' ', #7 e.g. -> // 'u0007'
         begin
-          // characters below ' ', #7 e.g. -> // 'u0007'
-          PCardinal(B + 1)^ :=
-            ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+          PCardinal(B + 1)^ := JSON_UHEXC;
           inc(B, 4);
           PWord(B + 1)^ := TwoDigitsHexWB[c^];
         end;
