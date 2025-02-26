@@ -675,8 +675,8 @@ type
     fBlockComment: RawUtf8;
     // used by WriteObjectAsString/AddDynArrayJsonAsString methods
     fInternalJsonWriter: TJsonWriter;
-    procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
-      AnsiToWide: PWordArray; Escape: TTextWriterKind);
+    procedure InternalAddFixedAnsi(Source: PByte; AnsiToWide: PWordArray;
+      Escape: TTextWriterKind);
     // called for varAny after TRttiCustomProp.GetRttiVarData
     procedure AddRttiVarData(Value: PRttiVarData; Escape: TTextWriterKind;
       WriteOptions: TTextWriterWriteObjectOptions);
@@ -6188,80 +6188,71 @@ begin
   AddComma;
 end;
 
-procedure TJsonWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
+procedure TJsonWriter.InternalAddFixedAnsi(Source: PByte;
   AnsiToWide: PWordArray; Escape: TTextWriterKind);
 var
-  c: cardinal;
-  esc: byte;
+  c: PtrUInt;
 begin
-  if SourceChars > 0 then
   repeat
-    case Escape of // twJsonEscape or twOnSameLine only occur on c <= $7f
-      twNone:
-        repeat
-          if B >= BEnd then
-            FlushToStream;
-          c := byte(Source^);
-          inc(Source);
-          if c > $7f then
-             break;
-          if c = 0 then
-            exit;
-          inc(B);
-          B^ := AnsiChar(c);
-          dec(SourceChars);
-          if SourceChars = 0 then
-            exit;
-        until false;
-      twJsonEscape:
-        repeat
-          if B >= BEnd then
-            FlushToStream;
-          c := byte(Source^);
-          inc(Source);
-          if c > $7f then
-             break;
-          if c = 0 then
-            exit;
-          esc := JSON_ESCAPE[c]; // c<>0 -> esc<>JSON_ESCAPE_ENDINGZERO
-          if esc = JSON_ESCAPE_NONE then
-          begin
-            // no escape needed
-            inc(B);
-            B^ := AnsiChar(c);
-          end
-          else if esc = JSON_ESCAPE_UNICODEHEX then
-          begin
-            // characters below ' ', #7 e.g. -> \u0007
-            AddShorter('\u00');
-            AddByteToHex(c);
-          end
-          else
-            Add('\', AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
-          dec(SourceChars);
-          if SourceChars = 0 then
-            exit;
-        until false;
-    else  //twOnSameLine:
+    if Escape = twJsonEscape then
       repeat
         if B >= BEnd then
           FlushToStream;
-        c := byte(Source^);
+        c := Source^;
+        inc(Source);
+        case JSON_ESCAPE[c] of
+          JSON_ESCAPE_NONE: // no escape needed (most common case)
+            begin
+              if c > $7f then
+                break; // need AnsiToWide[] UTF-8 conversion
+              inc(B);
+              B^ := AnsiChar(c);
+            end;
+          JSON_ESCAPE_ENDINGZERO:
+            exit;
+          JSON_ESCAPE_UNICODEHEX: // characters below ' ', #7 e.g. -> \u0007
+            begin
+              PCardinal(B + 1)^ :=
+                ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+              PWord(B + 5)^ := TwoDigitsHexWB[c];
+              inc(B, 6);
+            end;
+        else // escaped as \ + b,t,n,f,r,\,"
+          begin
+            PWord(B + 1)^ := (integer(JSON_ESCAPE[c]) shl 8) or ord('\');
+            inc(B, 2);
+          end;
+        end;
+      until false
+    else if Escape = twNone then
+      repeat
+        if B >= BEnd then
+          FlushToStream;
+        c := Source^;
         inc(Source);
         if c > $7f then
-           break;
-        if c = 0 then
+          break
+        else if c = 0 then
+          exit;
+        inc(B);
+        B^ := AnsiChar(c);
+      until false
+    else  // twOnSameLine
+      repeat
+        if B >= BEnd then
+          FlushToStream;
+        c := Source^;
+        inc(Source);
+        if c > $7f then
+           break
+        else if c = 0 then
           exit;
         inc(B);
         if c < 32 then
           B^ := ' ' // on same line
         else
           B^ := AnsiChar(c);
-        dec(SourceChars);
-        if SourceChars = 0 then
-          exit;
       until false;
-    end;
     // handle c > $7F (no surrogate is expected in TSynAnsiFixedWidth charsets)
     c := AnsiToWide[c]; // convert FixedAnsi char into Unicode char
     if c > $7ff then
@@ -6277,8 +6268,7 @@ begin
       B[2] := AnsiChar($80 or (c and $3f));
       inc(B, 2);
     end;
-    dec(SourceChars);
-  until SourceChars = 0;
+  until false;
 end;
 
 destructor TJsonWriter.Destroy;
@@ -6428,7 +6418,7 @@ utf8:   Add(PUtf8Char(P), Len, Escape);
       // rely on explicit conversion for all remaining ASCII characters
       engine := TSynAnsiConvert.Engine(CodePage);
       if PClass(engine)^ = TSynAnsiFixedWidth then
-        InternalAddFixedAnsi(P, Len,
+        InternalAddFixedAnsi(P,
           pointer(TSynAnsiFixedWidth(engine).AnsiToWide), Escape)
       else
         EngineAppendUtf8(self, engine, P, Len, Escape);
