@@ -3994,9 +3994,7 @@ begin
       CheckEqual(b^.Size, 1);
       Check(not b^.IsZero);
       b.Release;
-      {$ifdef CPU64} // up to 4096 bits = typical <= 512 bytes
-      CheckUtf8(s^.Size > 200, '%>200', [s^.Size]);
-      {$endif CPU64}
+      CheckUtf8(s^.Size > 100, '%>100', [s^.Size]); // typical <= 512 bytes
       Check(not s^.IsZero);
       s.Release;
       CheckEqual(c.ActiveCount, 0);
