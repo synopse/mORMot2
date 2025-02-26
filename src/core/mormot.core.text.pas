@@ -700,33 +700,33 @@ type
     procedure AddCsvDouble(const Doubles: array of double);
     /// append some UTF-8 chars to the buffer
     // - input length is calculated from zero-ended char
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscape(P: pointer); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     // - called by inlined AddNoJsonEscape() if Len >= fTempBufSize
     procedure AddNoJsonEscapeBig(P: pointer; Len: PtrInt);
     /// append some UTF-8 chars to the buffer - inlined for small content
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscape(P: pointer; Len: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscapeUtf8(const text: RawByteString);
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from a RTL string type
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
     procedure AddNoJsonEscapeString(const s: string);
     /// append some unicode chars to the buffer
     // - WideCharCount is the UTF-16 chars count, not the byte size; if it is
     // 0, then it will convert until an ending #0 (fastest way)
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
     /// append some Ansi text of a specific CodePage as UTF-8 chars to the buffer
-    // - don't escapes chars according to the JSON RFC
+    // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscapeCP(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
     /// append some UTF-8 content to the buffer, with no JSON escape
     // - if supplied json is '', will write 'null' so that valid JSON is written

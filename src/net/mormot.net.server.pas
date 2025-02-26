@@ -6882,7 +6882,7 @@ begin
     uri.Address := cs.Redirected; // follow 3xx redirection
   cs.RemoteUri := uri.Address;
   cs.RemoteHeaders := hdr;
-  Ctxt.OutCustomHeaders := cs.Headers; // to include e.g. Content-Type
+  Ctxt.OutCustomHeaders := cs.Headers; // to include e.g. Content-Type:
 end;
 
 function THttpPeerCache.DirectFileName(Ctxt: THttpServerRequestAbstract;

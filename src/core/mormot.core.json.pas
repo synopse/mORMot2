@@ -7277,7 +7277,7 @@ label
 begin
   if Len > 0 then
   repeat
-    // handle 7-bit ASCII chars, by quad if possible
+    // handle 7-bit ASCII chars from UTF-8 input, by quad if possible
     S := P;
     if Len >= 4 then
       repeat
