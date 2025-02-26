@@ -4844,52 +4844,42 @@ begin
     AddNoJsonEscape(P, mormot.core.base.StrLen(PUtf8Char(P)));
 end;
 
-procedure EngineAppendUtf8(W: TTextWriter; Engine: TSynAnsiConvert;
-  P: PAnsiChar; Len: PtrInt);
-var
-  tmp: TSynTempBuffer;
-begin
-  // explicit conversion using a temporary buffer on stack
-  Len := Engine.AnsiBufferToUtf8(tmp.Init(Len * 3), P, Len) - PUtf8Char({%H-}tmp.buf);
-  W.AddNoJsonEscape(tmp.buf, Len);
-  tmp.Done;
-end;
-
 procedure TTextWriter.AddNoJsonEscapeCP(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
 var
-  B: PAnsiChar;
+  engine: TSynAnsiConvert;
+  max: PtrInt;
+  tmp: pointer; // temporary RawUtf8 buffer
 begin
-  if Len > 0 then
-    case CodePage of
-      CP_UTF8, CP_RAWBYTESTRING, CP_RAWBLOB:
-        AddNoJsonEscape(P, Len);
-      CP_UTF16:
-        AddNoJsonEscapeW(PWord(P), 0);
-    else
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  if CodePage = CP_ACP then // CP_UTF8 is very likely on POSIX or LCL
+    CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
+  case CodePage of
+    CP_UTF8, CP_RAWBYTESTRING, CP_RAWBLOB:
+      AddNoJsonEscape(P, Len);
+    CP_UTF16:
+      AddNoJsonEscapeW(PWord(P), 0);
+  else
+    begin
+      engine := TSynAnsiConvert.Engine(CodePage);
+      max := Len * 3;
+      if max < fTempBufSize then // write directly into the output buffer
       begin
-        // first handle trailing 7-bit ASCII chars, by quad
-        B := P;
-        if Len >= 4 then
-          repeat
-            if PCardinal(P)^ and $80808080 <> 0 then
-              break; // break on first non ASCII quad
-            inc(P, 4);
-            dec(Len, 4);
-          until Len < 4;
-        if (Len > 0) and
-           (P^ <= #127) then
-          repeat
-            inc(P);
-            dec(Len);
-          until (Len = 0) or
-                (P^ > #127);
-        if P <> B then
-          AddNoJsonEscape(B, P - B);
-        if Len > 0 then
-          // rely on explicit conversion for all remaining ASCII characters
-          EngineAppendUtf8(self, TSynAnsiConvert.Engine(CodePage), P, Len);
+        if BEnd - B <= max then  // note: PtrInt(BEnd - B) could be < 0
+          FlushToStream;
+        B := engine.AnsiBufferToUtf8(B + 1, P, Len, {notrail0=}true) - 1;
+      end
+      else
+      begin
+        tmp := nil; // we need to work with a temporary buffer
+        FastSetString(RawUtf8(tmp), max);
+        P := pointer(engine.AnsiBufferToUtf8(tmp, P, Len, {notrail0=}true));
+        AddNoJsonEscape(tmp, P - tmp);
+        FastAssignNew(tmp);
       end;
     end;
+  end;
 end;
 
 procedure TTextWriter.AddNoJsonEscapeUtf8(const text: RawByteString);
