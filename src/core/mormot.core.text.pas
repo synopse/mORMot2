@@ -4897,11 +4897,12 @@ end;
 
 procedure TTextWriter.AddNoJsonEscapeString(const s: string);
 begin
-  if s <> '' then
+  if pointer(s) <> nil then
     {$ifdef UNICODE}
     AddNoJsonEscapeW(pointer(s), 0);
     {$else}
-    AddNoJsonEscapeCP(pointer(s), length(s), Unicode_CodePage);
+    AddNoJsonEscapeCP(pointer(s), PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^,
+      Unicode_CodePage);
     {$endif UNICODE}
 end;
 
