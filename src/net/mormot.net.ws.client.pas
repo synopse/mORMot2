@@ -291,9 +291,8 @@ type
     // - with error interception and optional logging, returning nil on error,
     // or a new TSocketsIOClient instance on success
     // - never call the Create constructor, but one of the Open() factory methods
-    class function Open(const aHost, aPort: RawUtf8;
+    class function Open(const aHost, aPort: RawUtf8; aLog: TSynLogClass = nil;
       aOptions: TSocketsIOClientOptions = SCI_DEFAULT;
-      aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
       aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
     /// low-level client WebSockets connection factory for host and port
@@ -305,8 +304,8 @@ type
     // - never call the Create constructor, but one of the Open() factory methods
     class function Open(const aUri: RawUtf8; aLog: TSynLogClass = nil;
       aOptions: TSocketsIOClientOptions = SCI_DEFAULT;
-      const aLogContext: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
-      aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
+      const aCustomHeaders: RawUtf8 = '';
+      aTLSContext: PNetTlsContext = nil): pointer; overload;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
     /// return the array of connected remote namespaces as text
@@ -811,8 +810,9 @@ end;
 { TSocketsIOClient }
 
 class function TSocketsIOClient.Open(const aHost, aPort: RawUtf8;
-  aOptions: TSocketsIOClientOptions; aLog: TSynLogClass; const aLogContext,
-  aRoot, aCustomHeaders: RawUtf8; aTls: boolean; aTLSContext: PNetTlsContext): pointer;
+  aLog: TSynLogClass; aOptions: TSocketsIOClientOptions;
+  const aRoot, aCustomHeaders: RawUtf8;
+  aTls: boolean; aTLSContext: PNetTlsContext): pointer;
 var
   c: THttpClientWebSockets;
   proto: TWebSocketSocketIOClientProtocol;
@@ -822,8 +822,8 @@ begin
   proto.fClient := Create;
   proto.fClient.fDefaultWaitTimeoutSec := 2;
   proto.fClient.fOptions := aOptions;
-  c := THttpClientWebSockets.WebSocketsConnect(
-    aHost, aPort, proto, aLog, aLogContext, EngineIOHandshakeUri(aRoot),
+  c := THttpClientWebSockets.WebSocketsConnect(aHost, aPort, proto,
+    aLog, 'TSocketsIOClient.Open', EngineIOHandshakeUri(aRoot),
     aCustomHeaders, aTls, aTLSContext);
   if c = nil then
     exit; // WebSocketsConnect() made proto.Free on Open() failure
@@ -833,15 +833,15 @@ begin
   result := proto.fClient;
 end;
 
-class function TSocketsIOClient.Open(const aUri: RawUtf8;
-  aLog: TSynLogClass; aOptions: TSocketsIOClientOptions; const aLogContext,
-  aCustomHeaders: RawUtf8; aTls: boolean; aTLSContext: PNetTlsContext): pointer;
+class function TSocketsIOClient.Open(const aUri: RawUtf8; aLog: TSynLogClass;
+  aOptions: TSocketsIOClientOptions; const aCustomHeaders: RawUtf8;
+  aTLSContext: PNetTlsContext): pointer;
 var
   uri: TUri;
 begin
   if uri.From(aUri) then // detect both https:// and wss:// schemes
-    result := Open(uri.Server, uri.Port, aOptions, aLog, aLogContext,
-      uri.Address, aCustomHeaders, aTls or uri.Https, aTLSContext)
+    result := Open(uri.Server, uri.Port, aLog, aOptions,
+      uri.Address, aCustomHeaders, uri.Https, aTLSContext)
   else
     result := nil;
 end;
