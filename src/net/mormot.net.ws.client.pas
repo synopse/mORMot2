@@ -841,7 +841,7 @@ var
 begin
   if uri.From(aUri) then // detect both https:// and wss:// schemes
     result := Open(uri.Server, uri.Port, aOptions, aLog, aLogContext,
-      uri.Address, aCustomHeaders, aTls, aTLSContext)
+      uri.Address, aCustomHeaders, aTls or uri.Https, aTLSContext)
   else
     result := nil;
 end;
