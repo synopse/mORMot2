@@ -363,7 +363,7 @@ type
     Head, Process: TRawByteStringBuffer;
     /// the current state of this HTTP context
     State: THttpRequestState;
-    /// map the presence of some HTTP headers, retrieved during ParseHeader
+    /// map the presence of some HTTP headers, retrieved during ParseHeader()
     HeaderFlags: THttpRequestHeaderFlags;
     /// some flags used when sending the response
     ResponseFlags: THttpRequestResponseFlags;
@@ -381,23 +381,23 @@ type
     CommandMethod: RawUtf8;
     /// the HTTP URI parsed from first header line, e.g. '/path/to/resource'
     CommandUri: RawUtf8;
-    /// will contain all header lines after all ParseHeader
+    /// will contain all header lines after all ParseHeader()
     // - use HeaderGetValue() to get one HTTP header item value by name
     Headers: RawUtf8;
-    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during ParseHeader
+    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during ParseHeader()
     ContentType: RawUtf8;
-    /// same as HeaderGetValue('ACCEPT-ENCODING'), but retrieved during ParseHeader
+    /// same as HeaderGetValue('ACCEPT-ENCODING'), but retrieved during ParseHeader()
     AcceptEncoding: RawUtf8;
-    /// same as HeaderGetValue('HOST'), but retrieved during ParseHeader
+    /// same as HeaderGetValue('HOST'), but retrieved during ParseHeader()
     Host: RawUtf8;
-    /// same as HeaderGetValue('USER-AGENT'), but retrieved during ParseHeader
+    /// same as HeaderGetValue('USER-AGENT'), but retrieved during ParseHeader()
     UserAgent: RawUtf8;
-    /// same as HeaderGetValue('UPGRADE'), but retrieved during ParseHeader
+    /// same as HeaderGetValue('UPGRADE'), but retrieved during ParseHeader()
     Upgrade: RawUtf8;
-    /// same as HeaderGetValue('REFERER'), but retrieved during ParseHeader
+    /// same as HeaderGetValue('REFERER'), but retrieved during ParseHeader()
     Referer: RawUtf8;
     /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
-    // but retrieved during ParseHeader
+    // but retrieved during ParseHeader()
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
     // - if hsrAuthorized is set, THttpServerSocketGeneric.Authorization() will
     // put the authenticated User name in this field
@@ -415,10 +415,10 @@ type
     // - e.g. -1 for 'Range: bytes=1024-'
     // - contains size for CompressContentAndFinalizeHead Content-Range: header
     RangeLength: Int64;
-    /// will contain the data retrieved from the server, after all ParseHeader
+    /// will contain the data retrieved from the server, after all ParseHeader()
     Content: RawByteString;
-    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader
-    // - equals -1 if there is no such header during ParseHeader
+    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader()
+    // - equals -1 if there is no such header during ParseHeader()
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: Int64;
     /// known GMT timestamp of output content, may be reported as 'Last-Modified:'
@@ -426,7 +426,7 @@ type
     /// stream-oriented alternative to the Content in-memory buffer
     // - is typically a TFileStreamEx
     ContentStream: TStream;
-    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved by ParseHeader
+    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved by ParseHeader()
     // - proprietary header, used with our RESTful ORM access
     ServerInternalState: integer;
     /// the known Content-Encoding compression methods
@@ -435,7 +435,7 @@ type
     CompressAcceptEncoding: RawUtf8;
     /// index of protocol in Compress[], from Accept-encoding
     CompressAcceptHeader: THttpSocketCompressSet;
-    /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader
+    /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader()
     // and mapped into the Compress[] array
     CompressContentEncoding: integer;
     /// reset this request context to be used prior to any ProcessInit/Read/Write
