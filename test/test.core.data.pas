@@ -2438,6 +2438,9 @@ begin
   Check(uct('123.1a') = oftUtf8Text);
   Check(uct('123.1234a') = oftUtf8Text);
   Check(uct('123-2') = oftUtf8Text);
+  J := JsonEncode([]);
+  CheckEqual(J, '{}');
+  check(IsValidJson(J));
   J := JsonEncode(['name', 'john', 'year', 1982, 'pi', 3.14159]);
   CheckEqual(J, '{"name":"john","year":1982,"pi":3.14159}');
   check(IsValidJson(J));

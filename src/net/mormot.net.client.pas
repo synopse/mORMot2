@@ -198,8 +198,16 @@ type
     // - returns e.g. {"ti":1,"as":3} for TLS.IgnoreCertificateErrors = true
     // and Auth.Scheme = wraNegotiate
     function ToDocVariant: variant;
+    /// persist all fields of this record as a URI-encoded TDocVariant
+    // - returns e.g. '/root?ti=1&as=3' for TLS.IgnoreCertificateErrors = true
+    // and Auth.Scheme = wraNegotiate and UriRoot = '/root'
+    function ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
     /// reset this record, then set all fields from a ToDocVariant() value
     function InitFromDocVariant(const Value: variant): boolean;
+    /// reset this record, then set all fields from a URI-encoded ToDocVariant()
+    // - expects UrlParams to be just after the '?', e.g.  'ti=1&as=3' for
+    // TLS.IgnoreCertificateErrors = true and Auth.Scheme = wraNegotiate
+    function InitFromUrl(const UrlParams: RawUtf8): boolean;
   end;
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
@@ -3628,6 +3636,11 @@ begin
     v.Clear;
 end;
 
+function THttpRequestExtendedOptions.ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
+begin
+  result := _Safe(ToDocVariant)^.ToUrlEncode(UriRoot);
+end;
+
 function THttpRequestExtendedOptions.InitFromDocVariant(const Value: variant): boolean;
 var
   v: PDocVariantData;
@@ -3646,6 +3659,14 @@ begin
   v^.GetAsRawUtf8('au', Auth.UserName);
   v^.GetAsRawUtf8('ap', RawUtf8(Auth.Password));
   v^.GetAsRawUtf8('at', RawUtf8(Auth.Token));
+end;
+
+function THttpRequestExtendedOptions.InitFromUrl(const UrlParams: RawUtf8): boolean;
+var
+  v: TDocVariantData;
+begin
+  v.InitFromUrl(pointer(UrlParams), JSON_FAST);
+  result := InitFromDocVariant(variant(v));
 end;
 
 

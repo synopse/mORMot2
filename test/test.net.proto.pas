@@ -1592,8 +1592,21 @@ var
   decoded: TUri;
   tls: TNetTlsContext;
   timer: TPrecisionTimer;
+  opt: THttpRequestExtendedOptions;
 begin
   CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
+  // validate THttpRequestExtendedOptions serialization
+  opt.Init;
+  Check(VarIsEmptyOrNull(opt.ToDocVariant));
+  CheckEqual(opt.ToUrlEncode('/root'), '/root');
+  opt.TLS.IgnoreCertificateErrors := true;
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
+  CheckEqual(opt.ToUrlEncode('/root'), '/root?ti=1');
+  opt.Auth.Scheme := wraNegotiate;
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true,"as":3}');
+  CheckEqual(opt.ToUrlEncode('/root'), '/root?ti=1&as=3');
+  opt.Init;
+  Check(VarIsEmptyOrNull(opt.ToDocVariant));
   // for further tests, use the dedicated "mORMot GET" (mget) sample
   hps := THttpPeerCacheSettings.Create;
   try
