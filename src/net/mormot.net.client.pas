@@ -5143,9 +5143,9 @@ begin
   p := @NameValuePairs[0];
   for a := 0 to high(NameValuePairs) shr 1 do
   begin
-    VarRecToUtf8(p^, name);
+    VarRecToUtf8(p, name);
     inc(p);
-    VarRecToUtf8(p^, value);
+    VarRecToUtf8(p, value);
     if (name = '') or
        (value = '') then
       continue;

@@ -3636,7 +3636,7 @@ begin
     vtWideChar,
     vtWideString:
       begin
-        VarRecToTempUtf8(value, tmp);
+        VarRecToTempUtf8(@value, tmp);
         BsonWriteText(name, tmp.Text, tmp.Len);
         if tmp.TempRawUtf8 <> nil then
           RawUtf8(tmp.TempRawUtf8) := '';
@@ -3896,7 +3896,7 @@ begin
   BsonDocumentBegin;
   for i := 0 to (length(NameValuePairs) shr 1) - 1 do
   begin
-    VarRecToUtf8(NameValuePairs[i * 2], Name);
+    VarRecToUtf8(@NameValuePairs[i * 2], Name);
     BsonWrite(Name, NameValuePairs[i * 2 + 1]);
   end;
   BsonDocumentEnd;
@@ -4151,7 +4151,7 @@ begin
      (NameValuePairs[1].VType = vtAnsiString) then
   begin
     // optimized for the ['$db', 'databasename'] usecase
-    VarRecToUtf8(NameValuePairs[0], name);
+    VarRecToUtf8(@NameValuePairs[0], name);
     vallen := length(RawUtf8(NameValuePairs[1].VAnsiString));
     len := length(Bson);
     SetLength(Bson, len + length(name) + vallen + 7); // in-place resize
@@ -4176,7 +4176,7 @@ begin
       a := 0;
       while a < high(NameValuePairs) do
       begin
-        VarRecToUtf8(NameValuePairs[a], name);
+        VarRecToUtf8(@NameValuePairs[a], name);
         W.BsonWrite(name, NameValuePairs[a + 1]);
         inc(a, 2);
       end;
@@ -4470,14 +4470,14 @@ var
   var
     ndx: cardinal;
   begin
-    case VarRecAsChar(NameValuePairs[a]) of
+    case VarRecAsChar(@NameValuePairs[a]) of
       ord('['):
         begin
           W.BsonDocumentBegin(name, betArray);
           ndx := 0;
           repeat
             inc(a);
-            if VarRecAsChar(NameValuePairs[a]) = ord(']') then
+            if VarRecAsChar(@NameValuePairs[a]) = ord(']') then
               break;
             UInt32ToUtf8(ndx, name);
             WriteValue;
@@ -4490,7 +4490,7 @@ var
           W.BsonDocumentBegin(name, betDoc);
           repeat
             inc(a);
-            VarRecToUtf8(NameValuePairs[a], name);
+            VarRecToUtf8(@NameValuePairs[a], name);
             if (a = high(NameValuePairs)) or
                (name = '}') then
               break;
@@ -4511,7 +4511,7 @@ begin
     a := 0;
     while a < high(NameValuePairs) do
     begin
-      VarRecToUtf8(NameValuePairs[a], name);
+      VarRecToUtf8(@NameValuePairs[a], name);
       inc(a);
       WriteValue;
       inc(a);
@@ -4613,7 +4613,7 @@ begin
   if (Format = '?') and
      (high(Params) >= 0) then
   begin
-    VarRecToVariant(Params[0], v);
+    VarRecToVariant(@Params[0], v);
     if DocVariantType.IsOfType(v) then
     begin
       result := Bson(TDocVariantData(v));

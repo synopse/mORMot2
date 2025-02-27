@@ -2041,7 +2041,7 @@ begin
     WR.AddDirect('[');
     for i := 0 to High(Values) do
     begin
-      WR.AddJsonEscape(Values[i]);
+      WR.AddJsonEscapeVarRec(@Values[i]);
       WR.AddComma;
     end;
     WR.AddDirect('"');
@@ -2265,7 +2265,7 @@ begin
   it := @item;
   for i := 0 to high(Values) do
   begin
-    VarRecToTempUtf8(Values[i], it^);
+    VarRecToTempUtf8(@Values[i], it^);
     inc(len, ToVarUInt32LengthWithData(it^.Len));
     inc(it);
   end;

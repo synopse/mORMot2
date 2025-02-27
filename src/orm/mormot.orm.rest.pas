@@ -1585,7 +1585,7 @@ begin
       // handle optimized primary key direct access
       if fCache.IsCached(Table) and
          (length(BoundsSqlWhere) = 1) and
-         VarRecToInt64(BoundsSqlWhere[0], Int64(ID)) and
+         VarRecToInt64(@BoundsSqlWhere[0], Int64(ID)) and
          FieldBitsFromCsv(FieldsCsv, bits) and
          (PropNameEquals('RowID=?', FormatSqlWhere) or
           PropNameEquals('ID=?', FormatSqlWhere)) then

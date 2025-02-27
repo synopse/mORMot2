@@ -3947,7 +3947,7 @@ begin
   for i := 0 to n - 1 do // see TLdapAttribute.ToAsnSeq
     if Types[i] <> atUndefined then
     begin
-      VarRecToUtf8(Values[i], v); // Values[] are typically RawUtf8 or integer
+      VarRecToUtf8(@Values[i], v); // Values[] are typically RawUtf8 or integer
       Append(result,
         Asn(AttrTypeName[Types[i]]), // attribute description
         Asn(Asn(v), ASN1_SETOF));    // attribute value set
@@ -4513,7 +4513,7 @@ begin
   if high(Types) = high(Values) then
     for i := 0 to high(Types) do
     begin
-      VarRecToUtf8(Values[i], v); // typically RawUtf8 or integer value
+      VarRecToUtf8(@Values[i], v); // typically RawUtf8 or integer value
       Add(Types[i], v, Option)
     end
   else

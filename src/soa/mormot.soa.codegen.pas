@@ -1866,7 +1866,7 @@ begin
     begin
       if VarRecToUtf8IsString(CustomDelays[i], intf) and
          VarRecToUtf8IsString(CustomDelays[i + 1], meth) and
-         VarRecToInt64(CustomDelays[i + 2], delay) then
+         VarRecToInt64(@CustomDelays[i + 2], delay) then
         if _Safe(context.soa.services)^.
             GetDocVariantByProp('interfaceName', intf, false, service) and
            service^.GetAsDocVariantSafe('methods')^.

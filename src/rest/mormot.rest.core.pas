@@ -4017,14 +4017,14 @@ begin
       AddShort('{"result":');
       if h = 0 then
         // result is one value
-        AddJsonEscape(Values[0])
+        AddJsonEscapeVarRec(@Values[0])
       else
       begin
         // result is one array of values
         AddDirect('[');
         i := 0;
         repeat
-          AddJsonEscape(Values[i]);
+          AddJsonEscapeVarRec(@Values[i]);
           if i = h then
             break;
           AddComma;

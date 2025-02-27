@@ -3430,7 +3430,7 @@ begin
   {$ifndef SYNDB_SILENCE}
   if high(Args) >= 0 then
   begin
-    fStatement := VarRecAs(Args[0], TSqlDBStatement);
+    fStatement := VarRecAs(@Args[0], TSqlDBStatement);
     if (fStatement <> nil) and
        fStatement.Connection.Properties.LogSqlStatementOnException then
       try
@@ -8340,7 +8340,7 @@ begin
           Connection.Properties.SqlDateToIso8601Quoted(aValues[i].VExtended^)
       else
       begin
-        VarRecToUtf8(aValues[i], VArray[fParamsArrayCount]);
+        VarRecToUtf8(@aValues[i], VArray[fParamsArrayCount]);
         case VType of
           ftUtf8:
             if StoreVoidStringAsNull and

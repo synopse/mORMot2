@@ -7694,7 +7694,7 @@ begin
       begin
         for i := 0 to high(aSimpleFields) do
         begin
-          VarRecToUtf8(aSimpleFields[i], tmp); // will work for every type
+          VarRecToUtf8(@aSimpleFields[i], tmp); // will work for every type
           SimpleFields[i].SetValueVar(self, tmp, false);
         end;
         result := true;

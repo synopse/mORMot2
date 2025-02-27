@@ -4806,7 +4806,7 @@ begin
         [fInterfaceName, a, self, aName]);
     arg^.ValueDirection :=
       TInterfaceMethodValueDirection(aParams[a * ARGPERARG].VInteger);
-    VarRecToUtf8(aParams[a * ARGPERARG + 1], u);
+    VarRecToUtf8(@aParams[a * ARGPERARG + 1], u);
     if u = '' then
       EInterfaceFactory.RaiseUtf8(
         '%: invalid param name #% for %.AddMethod("%")',

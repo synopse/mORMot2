@@ -3530,7 +3530,7 @@ begin
     vtClass:
       begin
         tmp := nil;
-        VarRecToUtf8(val, RawUtf8(tmp)); // return as new RawUtf8 instance
+        VarRecToUtf8(@val, RawUtf8(tmp)); // return as new RawUtf8 instance
         result := From(RawUtf8(tmp));
         FastAssignNew(tmp);
       end;

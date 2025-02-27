@@ -7917,7 +7917,7 @@ begin
         {$endif UNICODE}
       else
         begin
-          VarRecToUtf8(Params[i], tmp);
+          VarRecToUtf8(@Params[i], tmp);
           Bind(i, tmp); // bind e.g. vtPChar/vtUnicodeString as UTF-8
         end;
       end;
