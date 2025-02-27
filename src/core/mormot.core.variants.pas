@@ -1063,12 +1063,12 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
     // e.g. never call _Safe(...)^.InitObject() because it could leak memory
     procedure InitObject(const NameValuePairs: array of const;
-      aOptions: TDocVariantOptions = []); overload;
+      aOptions: TDocVariantOptions = []; DontAddDefault: boolean = false); overload;
     /// initialize a TDocVariantData to store document-based object content
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
     // e.g. never call _Safe(...)^.InitObject() because it could leak memory
     procedure InitObject(const NameValuePairs: array of const;
-      Model: TDocVariantModel); overload;
+      Model: TDocVariantModel; DontAddDefault: boolean = false); overload;
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as parameters, e.g.
     // !var
@@ -1855,7 +1855,9 @@ type
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be duplicated - use Update() if you want to
     // replace any existing value
-    procedure AddNameValuesToObject(const NameValuePairs: array of const);
+    // - DontAddDefault=true would check
+    procedure AddNameValuesToObject(const NameValuePairs: array of const;
+      DontAddDefault: boolean = false);
     /// merge some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
@@ -1915,7 +1917,7 @@ type
     // - new object will keep the same options as this document
     // - slightly faster than AddItem(_Obj(...)) or AddValue(aName, _Obj(...))
     procedure AddObject(const aNameValuePairs: array of const;
-      const aName: RawUtf8 = '');
+      const aName: RawUtf8 = ''; DontAddDefault: boolean = false);
     /// add one or several values from another document
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
@@ -2498,7 +2500,7 @@ procedure _ObjAddPropU(const Name: RawUtf8; const Value: RawUtf8;
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
 procedure _ObjAddProps(const NameValuePairs: array of const;
-  var Obj: variant); overload;
+  var Obj: variant; DontAddDefault: boolean = false); overload;
 
 /// add the property values of a document to a document-based object content
 // - if Document is not a TDocVariant object, will do nothing
@@ -5963,17 +5965,17 @@ begin
 end;
 
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
-  aOptions: TDocVariantOptions);
+  aOptions: TDocVariantOptions; DontAddDefault: boolean);
 begin
   Init(aOptions, dvObject);
-  AddNameValuesToObject(NameValuePairs);
+  AddNameValuesToObject(NameValuePairs, DontAddDefault);
 end;
 
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
-  Model: TDocVariantModel);
+  Model: TDocVariantModel; DontAddDefault: boolean);
 begin
   Init(Model, dvObject);
-  AddNameValuesToObject(NameValuePairs);
+  AddNameValuesToObject(NameValuePairs, DontAddDefault);
 end;
 
 procedure TDocVariantData.InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
@@ -5997,9 +5999,9 @@ begin
 end;
 
 procedure TDocVariantData.AddNameValuesToObject(
-  const NameValuePairs: array of const);
+  const NameValuePairs: array of const; DontAddDefault: boolean);
 var
-  n, arg, ndx: PtrInt;
+  n, arg, len, ndx: PtrInt;
 begin
   n := length(NameValuePairs);
   if (n = 0) or
@@ -6008,11 +6010,11 @@ begin
     exit; // nothing to add
   Include(dvoIsObject);
   n := n shr 1;
-  ndx := n + VCount;
-  if length(VValue) < ndx then
+  len := n + VCount;
+  if length(VValue) < len then
   begin
-    SetLength(VValue, ndx);
-    SetLength(VName, ndx);
+    SetLength(VValue, len);
+    SetLength(VName, len);
   end
   else
   begin
@@ -6021,14 +6023,16 @@ begin
   end;
   ndx := VCount;
   for arg := 0 to n - 1 do
-  begin
-    VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
-    if Has(dvoInternNames) then
-      DocVariantType.InternNames.UniqueText(VName[ndx]);
-    InternalSetVarRec(ndx, NameValuePairs[arg * 2 + 1]);
-    inc(ndx);
-  end;
-  inc(VCount, n);
+    if not (DontAddDefault or
+            VarRecIsDefault(NameValuePairs[arg * 2 + 1])) then
+    begin
+      VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
+      if Has(dvoInternNames) then
+        DocVariantType.InternNames.UniqueText(VName[ndx]);
+      InternalSetVarRec(ndx, NameValuePairs[arg * 2 + 1]);
+      inc(ndx);
+    end;
+  VCount := ndx;
 end;
 
 {$ifndef PUREMORMOT2}
@@ -7431,7 +7435,7 @@ begin
 end;
 
 procedure TDocVariantData.AddObject(const aNameValuePairs: array of const;
-  const aName: RawUtf8);
+  const aName: RawUtf8; DontAddDefault: boolean);
 var
   added: PtrInt;
   obj: PDocVariantData;
@@ -7447,7 +7451,7 @@ begin
   else if (obj^.VType <> VType) or
           not obj^.IsObject then
     EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
-  obj^.AddNameValuesToObject(aNameValuePairs);
+  obj^.AddNameValuesToObject(aNameValuePairs, DontAddDefault);
   if Has(dvoInternValues) then
     InternalUniqueValueAt(added);
 end;
@@ -9608,7 +9612,7 @@ begin
 end;
 
 procedure _ObjAddProps(const NameValuePairs: array of const;
-  var Obj: variant);
+  var Obj: variant; DontAddDefault: boolean);
 var
   o: PDocVariantData;
 begin
@@ -9618,13 +9622,13 @@ begin
     if o <> @Obj then
       // ensure not stored by reference
       TVarData(Obj) := PVarData(o)^;
-    o^.AddNameValuesToObject(NameValuePairs);
+    o^.AddNameValuesToObject(NameValuePairs, DontAddDefault);
   end
   else
   begin
     // create new object
     VarClear(Obj);
-    TDocVariantData(Obj).InitObject(NameValuePairs, JSON_FAST);
+    TDocVariantData(Obj).InitObject(NameValuePairs, JSON_FAST, DontAddDefault);
   end
 end;
 
