@@ -8354,11 +8354,8 @@ begin
 end;
 
 function VarRecIsVoid(const V: TVarRec): boolean;
-begin
-  if V.VType = vtBoolean then
-    result := false // we consider a boolean to be never void by design
-  else
-    result := VarRecIsDefault(V);
+begin // we consider a boolean to be never void by design
+  result := (V.VType <> vtBoolean) and VarRecIsDefault(V);
 end;
 
 function VarRecIsDefault(const V: TVarRec): boolean;
