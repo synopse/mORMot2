@@ -9389,7 +9389,7 @@ var
   json: RawUtf8; // temporary in-place modified buffer
 begin
   DocVariantType.ToJson(@self, json);
-  result := UrlEncodeJsonObject(UriRoot, pointer(json), []);
+  result := UrlEncodeJsonObjectBuffer(UriRoot, pointer(json), []);
 end;
 
 function TDocVariantData.GetOrAddIndexByName(const aName: RawUtf8): integer;
