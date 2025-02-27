@@ -9261,7 +9261,8 @@ var
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
 begin
-  if not IsArray then
+  if (cardinal(VType) <> DocVariantVType) or
+     not IsArray then
   begin
     result := '';
     exit;
@@ -9320,10 +9321,12 @@ var
   ndx: PtrInt;
   wasString: boolean;
 begin
+  if cardinal(VType) <> DocVariantVType then
+    exit;
   if IsObject then
     raise EDocVariant.Create('ToRawUtf8DynArray expects a dvArray');
   if not IsArray then
-    exit;
+    exit; // undefined
   SetLength(Result, VCount);
   for ndx := 0 to VCount - 1 do
     VariantToUtf8(VValue[ndx], Result[ndx], wasString);
@@ -9348,7 +9351,8 @@ var
   ndx: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
-  if IsArray then
+  if (cardinal(VType) <> DocVariantVType) or
+     IsArray then
     raise EDocVariant.Create('ToTextPairs expects a dvObject');
   if (VCount > 0) and
      IsObject then
@@ -9378,7 +9382,8 @@ end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
 begin
-  if IsObject then
+  if (cardinal(VType) <> DocVariantVType) or
+     IsObject then
     raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
   if IsArray then
     VariantsToArrayOfConst(VValue, VCount, Result);
@@ -9393,6 +9398,11 @@ function TDocVariantData.ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
 var
   json: RawUtf8; // temporary in-place modified buffer
 begin
+  result := UriRoot;
+  if (cardinal(VType) <> DocVariantVType) or
+     (VCount = 0) or
+     not IsObject then
+    exit;
   DocVariantType.ToJson(@self, json);
   result := UrlEncodeJsonObjectBuffer(UriRoot, pointer(json), []);
 end;
