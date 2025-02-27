@@ -323,7 +323,7 @@ procedure GetJsonPropNameShort(var P: PUtf8Char; out PropName: ShortString);
 function GetJsonObjectOrArray(P: PUtf8Char;
   EndOfObject: PUtf8Char; Len: PInteger = nil): PUtf8Char;
 
-/// retrieve the next JSON item as a RawJson undecoded variable
+/// retrieve the next JSON item as a whole RawJson variable
 // - P buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
@@ -877,7 +877,7 @@ type
     // - "" will be added if necessary
     // - escapes chars according to the JSON RFC
     // - very fast (avoid most temporary storage)
-    procedure AddJsonEscape(const V: TVarRec); overload;
+    procedure AddJsonEscapeVarRec(V: PVarRec);
     /// append a UTF-8 JSON string, JSON escaped between double quotes
     // - "" will always be added, before calling AddJsonEscape()
     procedure AddJsonString(const Text: RawUtf8);
@@ -903,7 +903,7 @@ type
     // - "" won't be added for string values
     // - string values may be escaped, depending on the supplied parameter
     // - very fast (avoid most temporary storage)
-    procedure Add(const V: TVarRec; Escape: TTextWriterKind = twNone;
+    procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
     /// encode the supplied data as an UTF-8 valid JSON object content
     // - data must be supplied two by two, as Name,Value pairs, e.g.
@@ -7093,87 +7093,86 @@ begin
   end;
 end;
 
-procedure TJsonWriter.AddJsonEscape(const V: TVarRec);
+procedure TJsonWriter.AddJsonEscapeVarRec(V: PVarRec);
 begin
-  with V do
-    case VType of
-      vtPointer: // see VarRecToVariant()
-        if VPointer = nil then
-          AddNull
-        else // raw pointer <> nil will be serialized as PtrInt
-          Add(PtrInt(VPointer));
-      vtString:
-        begin
-          Add('"');
-          if (VString <> nil) and
-             (VString^[0] <> #0) then
-            AddJsonEscape(@VString^[1], ord(VString^[0]));
-          AddDirect('"');
-        end;
-      vtAnsiString:
-        begin
-          Add('"');
-          AddJsonEscape(VAnsiString);
-          AddDirect('"');
-        end;
-      {$ifdef HASVARUSTRING}
-      vtUnicodeString:
-        begin
-          Add('"');
-          AddJsonEscapeW(pointer(UnicodeString(VUnicodeString)),
-                          length(UnicodeString(VUnicodeString)));
-          AddDirect('"');
-        end;
-      {$endif HASVARUSTRING}
-      vtPChar:
-        begin
-          Add('"');
-          AddJsonEscape(VPChar);
-          AddDirect('"');
-        end;
-      vtChar:
-        begin
-          Add('"');
-          AddJsonEscape(@VChar, 1);
-          AddDirect('"');
-        end;
-      vtWideChar:
-        begin
-          Add('"');
-          AddJsonEscapeW(@VWideChar, 1);
-          AddDirect('"');
-        end;
-      vtWideString:
-        begin
-          Add('"');
-          AddJsonEscapeW(VWideString);
-          AddDirect('"');
-        end;
-      vtClass:
-        begin
-          Add('"');
-          AddClassName(VClass);
-          AddDirect('"');
-        end;
-      vtBoolean:
-        Add(VBoolean); // 'true'/'false'
-      vtInteger:
-        Add(VInteger);
-      vtInt64:
-        Add(VInt64^);
-      {$ifdef FPC}
-      vtQWord:
-        AddQ(V.VQWord^);
-      {$endif FPC}
-      vtExtended:
-        AddDouble(VExtended^);
-      vtCurrency:
-        AddCurr64(VInt64);
-      vtObject:
-        WriteObject(VObject);
-      vtVariant:
-        AddVariant(VVariant^, twJsonEscape);
-    end;
+  case V^.VType of
+    vtPointer: // see VarRecToVariant()
+      if V^.VPointer = nil then
+        AddNull
+      else // raw pointer <> nil will be serialized as PtrInt
+        Add(PtrInt(V^.VPointer));
+    vtString:
+      begin
+        Add('"');
+        if (V^.VString <> nil) and
+           (V^.VString^[0] <> #0) then
+          AddJsonEscape(@V^.VString^[1], ord(V^.VString^[0]));
+        AddDirect('"');
+      end;
+    vtAnsiString:
+      begin
+        Add('"');
+        AddJsonEscape(V^.VAnsiString);
+        AddDirect('"');
+      end;
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString:
+      begin
+        Add('"');
+        AddJsonEscapeW(pointer(UnicodeString(V^.VUnicodeString)),
+                        length(UnicodeString(V^.VUnicodeString)));
+        AddDirect('"');
+      end;
+    {$endif HASVARUSTRING}
+    vtPChar:
+      begin
+        Add('"');
+        AddJsonEscape(V^.VPChar);
+        AddDirect('"');
+      end;
+    vtChar:
+      begin
+        Add('"');
+        AddJsonEscape(@V^.VChar, 1);
+        AddDirect('"');
+      end;
+    vtWideChar:
+      begin
+        Add('"');
+        AddJsonEscapeW(@V^.VWideChar, 1);
+        AddDirect('"');
+      end;
+    vtWideString:
+      begin
+        Add('"');
+        AddJsonEscapeW(V^.VWideString);
+        AddDirect('"');
+      end;
+    vtClass:
+      begin
+        Add('"');
+        AddClassName(V^.VClass);
+        AddDirect('"');
+      end;
+    vtBoolean:
+      Add(V^.VBoolean); // 'true'/'false'
+    vtInteger:
+      Add(V^.VInteger);
+    vtInt64:
+      Add(V^.VInt64^);
+    {$ifdef FPC}
+    vtQWord:
+      AddQ(V^.VQWord^);
+    {$endif FPC}
+    vtExtended:
+      AddDouble(V^.VExtended^);
+    vtCurrency:
+      AddCurr64(V^.VInt64);
+    vtObject:
+      WriteObject(V^.VObject);
+    vtVariant:
+      AddVariant(V^.VVariant^, twJsonEscape);
+  end;
 end;
 
 procedure TJsonWriter.AddJsonEscape(Source: TJsonWriter);
@@ -7296,64 +7295,63 @@ begin
   AddDirect('"');
 end;
 
-procedure TJsonWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
+procedure TJsonWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
-  with V do
-    case VType of
-      vtInteger:
-        Add(VInteger);
-      vtBoolean:
-        if VBoolean then // normalize
-          Add('1')
-        else
-          Add('0');
-      vtChar:
-        Add(@VChar, 1, Escape);
-      vtExtended:
-        AddDouble(VExtended^);
-      vtCurrency:
-        AddCurr64(VInt64);
-      vtInt64:
-        Add(VInt64^);
-      {$ifdef FPC}
-      vtQWord:
-        AddQ(VQWord^);
-      {$endif FPC}
-      vtVariant:
-        AddVariant(VVariant^, Escape);
-      vtString:
-        if (VString <> nil) and
-           (VString^[0] <> #0) then
-          Add(@VString^[1], ord(VString^[0]), Escape);
-      vtPointer,
-      vtInterface:
-        if VPointer = nil then
-          AddNull
-        else
-          Add(PtrInt(VPointer)); // as VarRecToVariant()
-      vtPChar:
-        Add(PUtf8Char(VPChar), Escape);
-      vtObject:
-        WriteObject(VObject, WriteObjectOptions);
-      vtClass:
-        AddClassName(VClass);
-      vtWideChar:
-        AddW(@VWideChar, 1, Escape);
-      vtPWideChar:
-        AddW(pointer(VPWideChar), StrLenW(VPWideChar), Escape);
-      vtAnsiString:
-        if VAnsiString <> nil then // expect RawUtf8
-          Add(VAnsiString, PStrLen(PAnsiChar(VAnsiString) - _STRLEN)^, Escape);
-      vtWideString:
-        if VWideString <> nil then
-          AddW(VWideString, length(WideString(VWideString)), Escape);
-      {$ifdef HASVARUSTRING}
-      vtUnicodeString:
-        if VUnicodeString <> nil then // convert to UTF-8
-          AddW(VUnicodeString, length(UnicodeString(VUnicodeString)), Escape);
-      {$endif HASVARUSTRING}
-    end;
+  case V^.VType of
+    vtInteger:
+      Add(V^.VInteger);
+    vtBoolean:
+      if V^.VBoolean then // normalize
+        Add('1')
+      else
+        Add('0');
+    vtChar:
+      Add(@V^.VChar, 1, Escape);
+    vtExtended:
+      AddDouble(V^.VExtended^);
+    vtCurrency:
+      AddCurr64(V^.VInt64);
+    vtInt64:
+      Add(V^.VInt64^);
+    {$ifdef FPC}
+    vtQWord:
+      AddQ(V^.VQWord^);
+    {$endif FPC}
+    vtVariant:
+      AddVariant(V^.VVariant^, Escape);
+    vtString:
+      if (V^.VString <> nil) and
+         (V^.VString^[0] <> #0) then
+        Add(@V^.VString^[1], ord(V^.VString^[0]), Escape);
+    vtPointer,
+    vtInterface:
+      if V^.VPointer = nil then
+        AddNull
+      else
+        Add(PtrInt(V^.VPointer)); // as VarRecToVariant()
+    vtPChar:
+      Add(PUtf8Char(V^.VPChar), Escape);
+    vtObject:
+      WriteObject(V^.VObject, WriteObjectOptions);
+    vtClass:
+      AddClassName(V^.VClass);
+    vtWideChar:
+      AddW(@V^.VWideChar, 1, Escape);
+    vtPWideChar:
+      AddW(pointer(V^.VPWideChar), StrLenW(V^.VPWideChar), Escape);
+    vtAnsiString:
+      if V^.VAnsiString <> nil then // expect RawUtf8
+        Add(V^.VAnsiString, PStrLen(PAnsiChar(V^.VAnsiString) - _STRLEN)^, Escape);
+    vtWideString:
+      if V^.VWideString <> nil then
+        AddW(V^.VWideString, length(WideString(V^.VWideString)), Escape);
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString:
+      if V^.VUnicodeString <> nil then // convert to UTF-8
+        AddW(V^.VUnicodeString, length(UnicodeString(V^.VUnicodeString)), Escape);
+    {$endif HASVARUSTRING}
+  end;
 end;
 
 procedure TJsonWriter.AddJson(const Format: RawUtf8; const Args, Params: array of const);
