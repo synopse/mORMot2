@@ -5180,16 +5180,16 @@ begin
   result := Data.Has(dvoReturnNullForUnknownProperty); // to avoid error
 end;
 
-procedure AddNameValueJson(w: TJsonWriter; nam: PPUtf8Char; val: PVariant;
+procedure AddNameValueJson(w: TJsonWriter; nam: PUtf8Char; val: PVariant;
   checkExtendedPropName: boolean);
 begin
   if checkExtendedPropName and
-     JsonPropNameValid(nam^) then
-    w.AddNoJsonEscape(nam^, PStrLen(nam^ - _STRLEN)^)
+     JsonPropNameValid(nam) then
+    w.AddNoJsonEscape(nam, PStrLen(nam - _STRLEN)^)
   else
   begin
     w.AddDirect('"');
-    w.AddJsonEscape(nam^);
+    w.AddJsonEscape(nam);
     w.AddDirect('"');
   end;
   w.AddDirect(':');
@@ -5236,7 +5236,7 @@ begin
     nam := pointer(dv^.VName);
     if n <> 0 then
       repeat
-        AddNameValueJson(W, nam, val, checkExtendedPropName);
+        AddNameValueJson(W, nam^, val, checkExtendedPropName);
         dec(n);
         if n = 0 then
           break;
@@ -9029,7 +9029,7 @@ begin
     val := pointer(VValue);
     repeat
       if IdemPChar(nam^, Up) then
-        AddNameValueJson(wr, nam, val, checkExtendedPropName);
+        AddNameValueJson(wr, nam^, val, checkExtendedPropName);
       dec(n);
       if n = 0 then
         break;
