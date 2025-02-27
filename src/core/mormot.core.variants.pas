@@ -1345,6 +1345,12 @@ type
       NameValueSep: AnsiChar = '='; ItemSep: AnsiChar = #10;
       DoTrim: boolean = true); overload;
        {$ifdef HASINLINE}inline;{$endif}
+    /// initialize an object document from an URI-encoded list of parameters
+    // - object field names should be plain ASCII-7 RFC compatible identifiers
+    // (0..9a..zA..Z_.~), otherwise their values are skipped
+    // - as encoded e.g. by ToUrlEncode()
+    // - Url should point to the first character after '?' in the URI
+    procedure InitFromUrl(Url: PUtf8Char; aOptions: TDocVariantOptions);
 
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
@@ -6888,6 +6894,20 @@ begin
     end;
   end;
   VariantDynArrayClear(SourceVValue);
+end;
+
+procedure TDocVariantData.InitFromUrl(Url: PUtf8Char; aOptions: TDocVariantOptions);
+var
+  n, v: RawUtf8;
+begin
+  Init(aOptions, dvObject);
+  if Url <> nil then
+    repeat
+      Url := UrlDecodeNextNameValue(Url, n, v);
+      if Url = nil then
+        break;
+      AddValueFromText(n, v); // would recognize booleans or numbers
+    until Url^ = #0;
 end;
 
 procedure TDocVariantData.Void;
