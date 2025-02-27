@@ -3668,7 +3668,12 @@ end;
 
 function TDocVariantData.Has(dvo: TDocVariantOption): boolean;
 begin // faster equivalency to "result := dvo in VOptions;"
-  result := (TSynVarData(self).VType and (1 shl (ord(dvo) + 16))) <> 0;
+  result := (TSynVarData(self).VType and cardinal(1 shl (ord(dvo) + 16))) <> 0;
+end;
+
+procedure TDocVariantData.Include(dvo: TDocVariantOption);
+begin
+  TSynVarData(self).VType := TSynVarData(self).VType or cardinal(1 shl (ord(dvo) + 16));
 end;
 
 function TDocVariantData.IsObject: boolean;
@@ -5992,12 +5997,6 @@ begin
     SetVariantByValue(aValue.VVariant^, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
   if Has(dvoInternValues) then
     InternalUniqueValueAt(aIndex);
-end;
-
-procedure TDocVariantData.Include(dvo: TDocVariantOption);
-begin
-  TSynVarData(self).VType := TSynVarData(self).VType or
-                              cardinal(1 shl (ord(dvo) + 16));
 end;
 
 procedure TDocVariantData.AddNameValuesToObject(
