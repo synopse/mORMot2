@@ -1684,8 +1684,7 @@ function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 // - if a pair is decoded, return a PUtf8Char pointer to the next pair in
 // the input buffer, or points to #0 if all content has been processed
 // - if a pair is not decoded, return nil
-function UrlDecodeNextNameValue(U: PUtf8Char;
-  var Name, Value: RawUtf8): PUtf8Char;
+function UrlDecodeNextNameValue(U: PUtf8Char; var Name, Value: RawUtf8): PUtf8Char;
 
 /// decode a URI-encoded Value from an input buffer
 // - decoded value is set in Value out variable

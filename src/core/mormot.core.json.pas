@@ -4672,37 +4672,35 @@ var
   Params: TNameValuePUtf8CharDynArray;
   temp: TTextWriterStackBuffer;
 begin
-  if ParametersJson = nil then
-    result := UriName
+  if (ParametersJson = nil) or
+     (JsonDecode(ParametersJson, Params, true) = nil) or
+     (Params = nil)  then
+    result := UriName // no valid parameter to encode
   else
   begin
     w := TTextWriter.CreateOwnedStream(temp);
     try
       w.AddString(UriName);
-      if (JsonDecode(ParametersJson, Params, true) <> nil) and
-         (Params <> nil) then
-      begin
-        sep := '?';
-        for i := 0 to length(Params) - 1 do
-          with Params[i] do
-          begin
-            for j := 0 to high(PropNamesToIgnore) do
-              if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
-              begin
-                Name.Len := 0;
-                break;
-              end;
-            if Name.Len = 0 then
-              continue; // was within PropNamesToIgnore[]
-            if IncludeQueryDelimiter then
-              w.AddDirect(sep);
-            w.AddShort(Name.Text, Name.Len);
-            w.AddDirect('=');
-            UrlEncode(w, Value.Text, Value.Len);
-            sep := '&';
-            IncludeQueryDelimiter := true;
-          end;
-      end;
+      sep := '?';
+      for i := 0 to length(Params) - 1 do
+        with Params[i] do
+        begin
+          for j := 0 to high(PropNamesToIgnore) do
+            if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
+            begin
+              Name.Len := 0;
+              break;
+            end;
+          if Name.Len = 0 then
+            continue; // was within PropNamesToIgnore[]
+          if IncludeQueryDelimiter then
+            w.AddDirect(sep);
+          w.AddShort(Name.Text, Name.Len);
+          w.AddDirect('=');
+          UrlEncode(w, Value.Text, Value.Len);
+          sep := '&';
+          IncludeQueryDelimiter := true;
+        end;
       w.SetText(result);
     finally
       w.Free;
@@ -8959,7 +8957,7 @@ begin
   {$ifdef FPC}
   Values := nil;
   {$endif FPC}
-  result := nil;
+  result := nil; // so that "exit" below would indicate JSON parser failure
   n := 0;
   if P <> nil then
   begin
