@@ -1132,12 +1132,12 @@ function BsonVariant(const NameValuePairs: array of const): variant; overload;
 
 /// create a fields selector BSON document from a field names list
 // - can be used for the projection parameter of a TMongoRequestQuery, e.g.:
-// ! VariantToJson(BsonVariantFieldSelector(['a','b','c']))='{"a":1,"b":1,"c":1}'
+// ! VariantSaveJson(BsonVariantFieldSelector(['a','b','c']))='{"a":1,"b":1,"c":1}'
 function BsonVariantFieldSelector(const FieldNames: array of RawUtf8): variant; overload;
 
 /// create a fields selector BSON document from a CSV field names list
 // - can be used for the projection parameter of a TMongoRequestQuery, e.g.:
-// ! VariantToJson(BsonVariantFieldSelector('a,b,c'))='{"a":1,"b":1,"c":1}'
+// ! VariantSaveJson(BsonVariantFieldSelector('a,b,c'))='{"a":1,"b":1,"c":1}'
 function BsonVariantFieldSelector(const FieldNamesCsv: RawUtf8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

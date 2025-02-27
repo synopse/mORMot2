@@ -4858,7 +4858,7 @@ end;
 procedure GCM_IncCtr(var x: TAesBlock);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  // in AES-GCM, CTR covers only 32 LSB Big-Endian bits, i.e. x[15]..x[12]
+  // in AES-GCM, CTR covers only lowest Big-Endian 32-bit, i.e. x[15]..x[12]
   inc(x[15]);
   if x[15] <> 0 then
     exit;
@@ -6741,7 +6741,7 @@ begin
       ESynCrypto.RaiseUtf8('%.Encrypt/Decrypt should use PKCS7', [self]);
     inc(fGcm.atx_cnt.V, Count);
     repeat
-      // regroup GMAC + AES-CTR per 1MB chunks to fit in CPU cache
+      // regroup GMAC + AES-CTR per 1MB chunks to fit in L2/L3 CPU cache
       onepass := 1 shl 20;
       if Count < onepass then
         onepass := Count;

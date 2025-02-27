@@ -6856,7 +6856,6 @@ begin
   result := HTTP_BADREQUEST;
   if not Sender.HttpDirectUriReconstruct(pointer(Ctxt.Url), uri) then
     exit;
-  // HEAD to the original server to connect, retrieving size and redirection
   opt.Init;
   opt.CreateTimeoutMS := 1000;
   opt.RedirectMax := redirmax;
@@ -6866,6 +6865,7 @@ begin
     if result <> HTTP_SUCCESS then
       exit;
   end;
+  // HEAD to the original server to connect, retrieving size and redirection
   cslog := nil;
   if Sender.fVerboseLog then
     cslog := Sender.fLog.DoLog;

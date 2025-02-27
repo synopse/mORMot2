@@ -195,6 +195,8 @@ type
     /// compare the Auth fields, depending on their scheme
     function SameAuth(Another: PHttpRequestExtendedOptions): boolean;
     /// persist all fields of this record as a TDocVariant
+    // - returns e.g. {"ti":1,"as":3} for TLS.IgnoreCertificateErrors = true
+    // and Auth.Scheme = wraNegotiate
     function ToDocVariant: variant;
     /// reset this record, then set all fields from a ToDocVariant() value
     function InitFromDocVariant(const Value: variant): boolean;
