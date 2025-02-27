@@ -7424,13 +7424,13 @@ begin
   CancelLastComma('}');
 end;
 
-procedure AddJsonEscapeValue(W: TJsonWriter; var a: PVarRec; aEnd: PVarRec);
+procedure AddJsonEscapeValue(W: TJsonWriter; var a: PVarRec; aEnd: PtrUInt);
 begin
   case VarRecAsChar(a) of
     ord('['):
       begin
         W.Add('[');
-        while a < aEnd do
+        while PtrUInt(a) < aEnd do
         begin
           inc(a);
           if VarRecAsChar(a) = ord(']') then
@@ -7442,7 +7442,7 @@ begin
     ord('{'):
       begin
         W.Add('{');
-        while a < aEnd do
+        while PtrUInt(a) < aEnd do
         begin
           inc(a);
           if VarRecAsChar(a) = ord('}') then
@@ -7467,12 +7467,12 @@ begin
   Add('{');
   a := @NameValuePairs[0];
   aEnd := @NameValuePairs[high(NameValuePairs)];
-  while a < aEnd do
+  while PtrUInt(a) < PtrUInt(aEnd) do
   begin
     AddJsonEscapeVarRec(a); // name
     inc(a);
     AddDirect(':');
-    AddJsonEscapeValue(self, a, aEnd);
+    AddJsonEscapeValue(self, a, PtrUInt(aEnd));
     inc(a);
   end;
   CancelLastComma('}');
