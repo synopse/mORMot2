@@ -1256,7 +1256,7 @@ var
 begin
   // limitation: CertName is ignored and 'Dummy Cert' is forced
   result := '';
-  FastNewRawByteString(dummy, _DUMMYLEN);
+  pointer(dummy) := FastNewString(_DUMMYLEN);
   if RleUnCompress(@_DUMMY, pointer(dummy), SizeOf(_DUMMY)) <> _DUMMYLEN then
     exit;
   p := pointer(dummy);

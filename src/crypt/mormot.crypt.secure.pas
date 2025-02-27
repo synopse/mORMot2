@@ -9549,8 +9549,8 @@ begin
     tmp[n] := 0; // positive numbers start with a 0 or 0x..7x
     inc(n);
   end;
-  FastNewRawByteString(result, n);
-  p := pointer(result);
+  p := FastNewString(n);
+  pointer(result) := p;
   repeat
     dec(n);
     p^ := tmp[n]; // stored as big endian

@@ -3883,7 +3883,7 @@ begin
     siz := get(_RSMB_, 0, nil, 0); // first call to retrieve the full size
     if siz > SizeOf(info) then
     begin
-      FastNewRawByteString(tmp, siz);
+      pointer(tmp) := FastNewString(siz);
       get(_RSMB_, 0, pointer(tmp), siz);
       PInt64(@info)^ := PInt64(tmp)^; // header fields = 64-bit
       FastSetRawByteString(info.data, @PInt64Array(tmp)[1], siz - SizeOf(Int64));

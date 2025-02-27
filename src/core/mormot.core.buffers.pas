@@ -5351,19 +5351,17 @@ var
   crc: cardinal;
   tmp: array[0..16383] of AnsiChar;  // big enough to resize result in-place
 begin
+  result := '';
   if (PlainLen = 0) or
      (Plain = nil) then
-  begin
-    result := '';
     exit;
-  end;
   EnsureAlgoHasNoForcedFormat('Compress');
   crc := AlgoHash(0, Plain, PlainLen);
   if (PlainLen < CompressionSizeTrigger) or
      (CheckMagicForCompressed and
       IsContentCompressed(Plain, PlainLen)) then
   begin
-    FastNewRawByteString(result, PlainLen + BufferOffset + 9);
+    pointer(result) := FastNewString(PlainLen + BufferOffset + 9);
     R := pointer(result);
     inc(R, BufferOffset);
     PCardinal(R)^ := crc;
@@ -5376,7 +5374,7 @@ begin
     len := CompressDestLen(PlainLen) + BufferOffset;
     if len > SizeOf(tmp) then
     begin
-      FastNewRawByteString(result, len);
+      pointer(result) := FastNewString(len);
       R := pointer(result);
     end
     else
@@ -5646,11 +5644,11 @@ begin
       head.UnCompressedSize := count;
     if S = nil then
     begin
-      FastNewRawByteString(tmps, head.UnCompressedSize);
-      S := pointer(tmps); // here S is a temporary buffer
+      S := FastNewString(head.UnCompressedSize);
+      pointer(tmps) := S; // here S is a temporary buffer
     end;
     if {%H-}tmpd = '' then
-      FastNewRawByteString(tmpd, AlgoCompressDestLen(head.UnCompressedSize));
+      pointer(tmpd) := FastNewString(AlgoCompressDestLen(head.UnCompressedSize));
     dec(count, head.UnCompressedSize); // supports premature end of input
     if S = pointer(tmps) then
       head.UnCompressedSize := Source.Read(S^, head.UnCompressedSize);
@@ -7550,7 +7548,7 @@ begin
       // BLOB literals are string literals containing hexadecimal data and
       // preceded by a single "x" or "X" character. For example: X'53514C697465'
       LenHex := (Len - 3) shr 1;
-      pointer(result) := FastNewString(LenHex, CP_RAWBYTESTRING);
+      pointer(result) := FastNewString(LenHex);
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
         exit; // valid hexa data
     end
@@ -7579,7 +7577,7 @@ begin
       // BLOB literals are string literals containing hexadecimal data and
       // preceded by a single "x" or "X" character. For example: X'53514C697465'
       LenHex := (Len - 3) shr 1;
-      pointer(result) := FastNewString(LenHex, CP_RAWBYTESTRING);
+      pointer(result) := FastNewString(LenHex);
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
         exit; // valid hexa data
     end
@@ -9925,7 +9923,7 @@ begin
   else
   begin
     // compute the hash of the existing partial content
-    FastNewRawByteString(buf, 1 shl 20); // 1MB temporary buffer
+    pointer(buf) := FastNewString(1 shl 20); // 1MB temporary buffer
     repeat
       read := fRedirected.Read(pointer(buf)^, length(buf));
       if read <= 0 then
@@ -10263,7 +10261,7 @@ end;
 
 constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer);
 begin
-  FastNewRawByteString(fBuffer, aBufSize);
+  pointer(fBuffer) := FastNewString(aBufSize);
   fSource := aSource;
   fSize := fSource.Size; // get it once
   fSource.Seek(0, soBeginning);

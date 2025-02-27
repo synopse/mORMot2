@@ -1381,7 +1381,7 @@ begin
   if UseLobChunks then
   begin
     Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
-    pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount, CP_RAWBYTESTRING);
+    pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount);
     result := 0;
     repeat
       Read := BlobLen;
@@ -1394,7 +1394,7 @@ begin
   end
   else
   begin
-    pointer(tmp) := FastNewString(BlobLen, CP_RAWBYTESTRING);
+    pointer(tmp) := FastNewString(BlobLen);
     Check(nil, Stmt, LobRead(svchp, errhp, locp, result, 1, pointer(tmp), result,
       nil, nil, csid, csfrm), errhp);
     stream.WriteBuffer(pointer(tmp)^, result);
@@ -1409,7 +1409,7 @@ var
 begin
   Len := BlobOpen(Stmt, svchp, errhp, locp);
   try
-    pointer(result) := FastNewString(Len, CP_RAWBYTESTRING);
+    pointer(result) := FastNewString(Len);
     Read := BlobRead(Stmt, svchp, errhp, locp, pointer(result), Len);
     if Read <> Len then
       SetLength(result, Read);
@@ -1461,7 +1461,7 @@ var
   tmp: RawByteString;
 begin
   Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
-  pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount, CP_RAWBYTESTRING);
+  pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount);
   l_Offset := 1;
   while stream.Position < stream.Size do
   begin

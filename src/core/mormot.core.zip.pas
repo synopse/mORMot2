@@ -1789,7 +1789,7 @@ begin
                 // read and move the file by 1MB chunks
                 InfoStart(len, 'Read ', s^.zipName);
                 if tmp = '' then
-                  FastNewRawByteString(tmp, 1 shl 20);
+                  pointer(tmp) := FastNewString(1 shl 20);
                 readpos := Int64(s^.fileinfo.offset) + info.localsize;
                 repeat
                   FileSeek64(h, readpos);
@@ -2075,7 +2075,7 @@ begin
          (Int64(todo) <= LIBDEFLATE_MAXSIZE) then
       begin
         // files up to 64MB/128MB will be loaded into memory and call libdeflate
-        FastNewRawByteString(tmp, todo);
+        pointer(tmp) := FastNewString(todo);
         if not FileReadAll(f, pointer(tmp), todo) then
           ESynZip.RaiseUtf8('%.AddDeflated: failed to read % [%]',
             [self, aFileName, GetLastError]);
@@ -2101,7 +2101,7 @@ begin
         len := 1 shl 20;
         if todo < len then
           len := todo;
-        FastNewRawByteString(tmp, len); // 1MB temporary chunk for reading
+        pointer(tmp) := FastNewString(len); // 1MB temporary chunk for reading
         deflate := nil;
         if met = Z_DEFLATED then
           deflate := TSynZipCompressor.Create(fDest, CompressLevel, szcfRaw);
@@ -2349,9 +2349,8 @@ begin
         inc(lh64.headerSize, SizeOf(h64));
       end;
     end;
-  FastNewRawByteString(tmp,
-    lh64.headerSize + SizeOf(lh) + SizeOf(lh64) + SizeOf(loc64));
-  P := pointer(tmp);
+  P := FastNewString(lh64.headerSize + SizeOf(lh) + SizeOf(lh64) + SizeOf(loc64));
+  pointer(tmp) := P;
   for i := 0 to Count - 1 do
     with Entry[i] do
     begin
@@ -2981,7 +2980,7 @@ begin
         fSource.ReadBuffer(pointer(result)^, len);
       Z_DEFLATED:
         begin
-          FastNewRawByteString(tmp, info.f64.zzipSize);
+          pointer(tmp) := FastNewString(info.f64.zzipSize);
           fSource.Read(pointer(tmp)^, info.f64.zzipSize);
           len := UnCompressMem(pointer(tmp), pointer(result),
             info.f64.zzipsize, info.f64.zfullsize);
@@ -3047,7 +3046,7 @@ begin
        (len < LIBDEFLATE_MAXSIZE) then
       with aInfo.f64 do
       begin
-        FastNewRawByteString(tmp, zzipSize + len); // alloc zip+unziped
+        pointer(tmp) := FastNewString(zzipSize + len); // alloc zip+unziped
         if fSource.Read(pointer(tmp)^, zzipSize) <> zzipSize then
           exit;
         data := @PByteArray(tmp)[zzipsize];
@@ -3068,7 +3067,7 @@ begin
         tmpLen := 1 shl 20;
         if len < tmpLen then
           tmpLen := len;
-        FastNewRawByteString(tmp, tmpLen);
+        pointer(tmp) := FastNewString(tmpLen);
         crc := 0; // for Z_STORED
         repeat
           if len < tmpLen then
@@ -3119,7 +3118,7 @@ begin
         // up to 64MB/128MB will call libdeflate using a temporary memory buffer
         if len < LIBDEFLATE_MAXSIZE then
         begin
-          FastNewRawByteString(tmp, len);
+          pointer(tmp) := FastNewString(len);
           if UnCompressMem(data, pointer(tmp), zzipsize, len) <> len then
              exit;
           crc := mormot.lib.z.crc32(0, pointer(tmp), len);

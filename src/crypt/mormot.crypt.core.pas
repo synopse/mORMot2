@@ -5595,8 +5595,8 @@ begin
     begin
       len := length(Data);
       enclen := EncryptPkcs7Length(len, IVAtBeginning);
-      SetLength(result, enclen + SizeOf(TAesBlock) + EndingSize);
-      P := pointer(result);
+      P := FastNewString(enclen + SizeOf(TAesBlock) + EndingSize);
+      pointer(result) := P;
       if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
         result := '';
     end
@@ -5624,7 +5624,7 @@ begin
     // inlined EncryptPkcs7() + RecordSave()
     len := length(Data);
     enclen := EncryptPkcs7Length(len, IVAtBeginning);
-    SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen + EndingSize);
+    rcd := FastNewString(SIZ + ToVarUInt32Length(enclen) + enclen + EndingSize);
     P := pointer(ToVarUInt32(enclen, @rcd^.data));
     if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) and
        MacEncryptGetTag(rcd.mac) then
@@ -5993,7 +5993,7 @@ begin
   len := length(Input);
   if IVAtBeginning then
     inc(len, SizeOf(TAesBlock));
-  FastNewRawByteString(result, len);
+  pointer(result) := FastNewString(len);
   p := pointer(result);
   if IVAtBeginning then
   begin
@@ -7746,7 +7746,7 @@ begin
   else
   try
     // retrieve some initial entropy from OS (but for gesUserOnly)
-    FastNewRawByteString(fromos, Len);
+    pointer(fromos) := FastNewString(Len);
     if Source <> gesUserOnly then
       FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
     if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then

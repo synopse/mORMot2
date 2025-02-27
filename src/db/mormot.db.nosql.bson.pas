@@ -2438,8 +2438,7 @@ var
   var
     buf: PAnsiChar;
   begin
-    bsonvalue.VBlob := nil; // avoid GPF
-    FastNewRawByteString(RawByteString(bsonvalue.VBlob), RegLen + OptLen + 2);
+    bsonvalue.VBlob := FastNewString(RegLen + OptLen + 2);
     buf := bsonvalue.VBlob;
     MoveFast(Reg^, buf^, RegLen);
     inc(buf, RegLen);

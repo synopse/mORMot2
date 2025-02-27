@@ -7713,7 +7713,7 @@ begin
   begin
     head.encryptedkeylen := ekl;
     msgpos := SizeOf(head) + ekl;
-    FastNewRawByteString(result, msgpos + head.plainlen + 16);
+    pointer(result) := FastNewString(msgpos + head.plainlen + 16);
     // encrypt the message
     if EVP_EncryptUpdate(ctx, @PByteArray(result)[msgpos], @lu,
          pointer(Msg), head.plainlen) = OPENSSLSUCCESS then
@@ -7819,7 +7819,7 @@ begin
     EOpenSsl.Check( // first call to retrieve the maximum output length
       EVP_PKEY_encrypt(ctx, nil, len, pointer(Content), Length(Content)),
       'EVP_PKEY_encrypt1');
-    FastNewRawByteString(result, len); // allocate
+    pointer(result) := FastNewString(len); // allocate
     EOpenSsl.Check( // second call to make the actual encryption
       EVP_PKEY_encrypt(ctx, pointer(result), len, pointer(Content), Length(Content)),
       'EVP_PKEY_encrypt2');
@@ -9245,7 +9245,7 @@ end;
 
 procedure BIGNUM.ToBin(out bin: RawByteString);
 begin
-  FastNewRawByteString(bin, Size);
+  pointer(bin) := FastNewString(Size);
   ToBin(pointer(bin));
 end;
 

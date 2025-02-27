@@ -841,7 +841,7 @@ procedure FastAssignNewNotVoid(var d; s: pointer); overload;
   {$ifndef FPC_CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// internal function used by FastSetString/FastSetStringCP
-function FastNewString(len, codepage: PtrInt): PAnsiChar;
+function FastNewString(len: PtrInt; codepage: PtrInt = CP_RAWBYTESTRING): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure the supplied variable will have a CP_UTF8 code page
@@ -4829,32 +4829,31 @@ end;
 
 {$endif FPC_CPUX64}
 
-function FastNewString(len, codepage: PtrInt): PAnsiChar;
+function FastNewString(len, codepage: PtrInt): pointer;
 var
   rec: PStrRec;
 begin
   result := nil;
-  if len > 0 then
-  begin
-    {$ifdef FPC}
-    rec := GetMem(len + (_STRRECSIZE + 4));
-    result := PAnsiChar(rec) + _STRRECSIZE;
-    {$else}
-    GetMem(result, len + (_STRRECSIZE + 4));
-    rec := pointer(result);
-    inc(PStrRec(result));
-    {$endif FPC}
-    {$ifdef HASCODEPAGE} // also set elemSize := 1
-    {$ifdef FPC}
-    rec^.codePageElemSize := codepage + (1 shl 16);
-    {$else}
-    PCardinal(@rec^.codePage)^ := codepage + (1 shl 16);
-    {$endif FPC}
-    {$endif HASCODEPAGE}
-    rec^.refCnt := 1;
-    rec^.length := len;
-    PCardinal(PAnsiChar(rec) + len + _STRRECSIZE)^ := 0; // ends with four #0
-  end;
+  if len <= 0 then
+    exit;
+  {$ifdef FPC}
+  rec := GetMem(len + (_STRRECSIZE + 4));
+  result := PAnsiChar(rec) + _STRRECSIZE;
+  {$else}
+  GetMem(result, len + (_STRRECSIZE + 4));
+  rec := result;
+  inc(PStrRec(result));
+  {$endif FPC}
+  {$ifdef HASCODEPAGE} // also set elemSize := 1
+  {$ifdef FPC}
+  rec^.codePageElemSize := codepage + (1 shl 16);
+  {$else}
+  PCardinal(@rec^.codePage)^ := codepage + (1 shl 16);
+  {$endif FPC}
+  {$endif HASCODEPAGE}
+  rec^.refCnt := 1;
+  rec^.length := len;
+  PCardinal(PAnsiChar(rec) + len + _STRRECSIZE)^ := 0; // ends with four #0
 end;
 
 {$ifdef HASCODEPAGE}
@@ -5012,7 +5011,7 @@ procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
 var
   r: pointer;
 begin
-  r := FastNewString(len, CP_RAWBYTESTRING); // FPC does constant propagation
+  r := FastNewString(len); // FPC does constant propagation
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
@@ -5026,7 +5025,7 @@ procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
 var
   r: pointer;
 begin
-  r := FastNewString(len, CP_RAWBYTESTRING);
+  r := FastNewString(len);
   if pointer(s) = nil then
     pointer(s) := r
   else

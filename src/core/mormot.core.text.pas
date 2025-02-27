@@ -4878,8 +4878,7 @@ begin
       end
       else
       begin
-        tmp := nil; // we need to work with a temporary buffer
-        FastSetString(RawUtf8(tmp), max);
+        tmp := FastNewString(max); // allocate temporary (big) buffer
         P := pointer(engine.AnsiBufferToUtf8(tmp, P, Len, {notrail0=}true));
         AddNoJsonEscape(tmp, P - tmp);
         FastAssignNew(tmp);
@@ -9419,7 +9418,7 @@ begin
       Text := Added
     else
     begin
-      new := FastNewString(t + a, CP_RAWBYTESTRING);
+      new := FastNewString(t + a);
       MoveFast(PByteArray(Text)[0], new[a], t);
       MoveFast(PByteArray(Added)[0], new[0], a);
       FastAssignNew(Text, new);
@@ -10259,7 +10258,7 @@ begin
     exit; // hexadecimal should be not void, and in char pairs
   end;
   HexLen := HexLen shr 1;
-  pointer(Bin) := FastNewString(HexLen, CP_RAWBYTESTRING);
+  pointer(Bin) := FastNewString(HexLen);
   result := mormot.core.text.HexToBin(Hex, pointer(Bin), HexLen);
   if not result then
     Bin := '';
@@ -10300,7 +10299,7 @@ begin
   len := length(hex);
   if len = 0 then
     exit;
-  p := FastNewString(len shr 1, CP_RAWBYTESTRING); // shr 1 = maximum length
+  p := FastNewString(len shr 1); // shr 1 = maximum length
   pointer(Bin) := p;
   h := pointer(hex);
   repeat
@@ -11185,7 +11184,7 @@ begin
   size := aStream.Size - aPosition;
   if size <= 0 then
     exit; // nothing new
-  pointer(result) := FastNewString(size, CP_RAWBYTESTRING);
+  pointer(result) := FastNewString(size);
   current := aStream.Position;
   aStream.Position := aPosition;
   aStream.ReadBuffer(pointer(result)^, size);

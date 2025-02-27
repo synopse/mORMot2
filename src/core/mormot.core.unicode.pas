@@ -5560,8 +5560,8 @@ begin
     result := u;
     exit;
   end;
-  FastNewRawByteString(result, len);
-  d := pointer(result);
+  d := FastNewString(len);
+  pointer(result) := d;
   MoveFast(s^, d^, c);
   inc(s, c);
   inc(d, c);

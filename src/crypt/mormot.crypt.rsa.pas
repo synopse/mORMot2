@@ -1085,13 +1085,11 @@ end;
 
 function TBigInt.Save(andrelease: boolean): RawByteString;
 begin
+  result := '';
   if @self = nil then
-    result := ''
-  else
-  begin
-    FastNewRawByteString(result, Size * HALF_BYTES);
-    Save(pointer(result), length(result), andrelease);
-  end;
+    exit;
+  pointer(result) := FastNewString(Size * HALF_BYTES);
+  Save(pointer(result), length(result), andrelease);
 end;
 
 function TBigInt.Add(b: PBigInt): PBigInt;
@@ -3035,7 +3033,7 @@ begin
     end;
     // concatenate the header, encrypted key and message
     msgpos := SizeOf(head) + length(enckey);
-    FastNewRawByteString(result, msgpos + length(encmsg));
+    pointer(result) := FastNewString(msgpos + length(encmsg));
     PRsaSealHeader(result)^ := head;
     MoveFast(pointer(enckey)^, PByteArray(result)[SizeOf(head)], length(enckey));
     MoveFast(pointer(encmsg)^, PByteArray(result)[msgpos], length(encmsg));
