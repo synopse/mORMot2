@@ -178,7 +178,7 @@ type
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
-    /// may be used to initialize this record on stack
+    /// may be used to initialize this record on stack with zeroed values
     procedure Init;
     /// reset this record, calling FillZero() on Password/Token SpiUtf8 values
     procedure Clear;
@@ -194,6 +194,10 @@ type
     procedure AuthorizeBearer(const Value: SpiUtf8);
     /// compare the Auth fields, depending on their scheme
     function SameAuth(Another: PHttpRequestExtendedOptions): boolean;
+    /// persist all fields of this record as a TDocVariant
+    function ToDocVariant: variant;
+    /// reset this record, then set all fields from a ToDocVariant() value
+    function InitFromDocVariant(const Value: variant): boolean;
   end;
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
@@ -3606,6 +3610,42 @@ begin
         result := (Auth.Token = Another^.Auth.Token);
     end;
 end;
+
+function THttpRequestExtendedOptions.ToDocVariant: variant;
+var
+  v: TDocVariantData absolute result;
+begin
+  result := SaveNetTlsContext(TLS);
+  v.AddNameValuesToObject([
+    'p',  Proxy,
+    'as', ord(Auth.Scheme),
+    'au', Auth.UserName,
+    'ap', Auth.Password,
+    'at', Auth.Token], {dontAddDefault=}true);
+  if v.Count = 0 then
+    v.Clear;
+end;
+
+function THttpRequestExtendedOptions.InitFromDocVariant(const Value: variant): boolean;
+var
+  v: PDocVariantData;
+  s: integer;
+begin
+  Init;
+  result := _SafeObject(Value, v);
+  if not result or
+     (v^.Count = 0) then
+    exit;
+  LoadTlsContext(TLS, v^);
+  v^.GetAsRawUtf8('p', Proxy);
+  if v^.GetAsInteger('as', s) and
+     (cardinal(s) <= cardinal(high(Auth.Scheme))) then
+    Auth.Scheme := THttpRequestAuthentication(s);
+  v^.GetAsRawUtf8('au', Auth.UserName);
+  v^.GetAsRawUtf8('ap', Auth.Password);
+  v^.GetAsRawUtf8('at', Auth.Token);
+end;
+
 
 function ToText(wra: THttpRequestAuthentication): PShortString;
 begin
