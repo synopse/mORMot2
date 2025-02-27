@@ -9321,6 +9321,9 @@ var
   ndx: PtrInt;
   wasString: boolean;
 begin
+  {$ifdef FPC}
+  Result := nil;
+  {$endif FPC}
   if cardinal(VType) <> DocVariantVType then
     exit;
   if IsObject then
@@ -9382,6 +9385,9 @@ end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
 begin
+  {$ifdef FPC}
+  Result := nil;
+  {$endif FPC}
   if (cardinal(VType) <> DocVariantVType) or
      IsObject then
     raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
