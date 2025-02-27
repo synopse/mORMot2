@@ -1587,16 +1587,18 @@ var
   i, n, alter, status, len: integer;
   tmp: RawByteString;
   cache: TFileName;
-  dUri, dBearer, dTok, dAddr, ctyp: RawUtf8;
+  dUri, dBearer, dTok, dAddr, ctyp, params: RawUtf8;
   hcs: THttpClientSocket;
   decoded: TUri;
   tls: TNetTlsContext;
   timer: TPrecisionTimer;
   opt: THttpRequestExtendedOptions;
+  popt: PHttpRequestExtendedOptions;
 begin
   CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
   // validate THttpRequestExtendedOptions serialization
   opt.Init;
+  Check(not opt.TLS.IgnoreCertificateErrors);
   Check(VarIsEmptyOrNull(opt.ToDocVariant));
   CheckEqual(opt.ToUrlEncode('/root'), '/root');
   opt.TLS.IgnoreCertificateErrors := true;
@@ -1606,7 +1608,15 @@ begin
   CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true,"as":3}');
   CheckEqual(opt.ToUrlEncode('/root'), '/root?ti=1&as=3');
   opt.Init;
+  Check(not opt.TLS.IgnoreCertificateErrors);
   Check(VarIsEmptyOrNull(opt.ToDocVariant));
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), 'null');
+  Check(opt.InitFromUrl('ti=1&as=3'));
+  Check(opt.TLS.IgnoreCertificateErrors);
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true,"as":3}');
+  Check(opt.InitFromUrl('ti=1'));
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
+  Check(opt.TLS.IgnoreCertificateErrors);
   // for further tests, use the dedicated "mORMot GET" (mget) sample
   hps := THttpPeerCacheSettings.Create;
   try
@@ -1676,6 +1686,7 @@ begin
           Check(not HashDigestEqual(msg.Hash, msg2.Hash), 'hde0');
           res := hpc2.BearerDecode(dBearer, pcfBearerDirect, msg2);
           Check(res = mdB64, 'directB64');
+          dTok := '';
           Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
           FillCharFast(msg2, SizeOf(msg2), 0);
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
@@ -1696,10 +1707,20 @@ begin
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
           Check(res in [mdCrc, mdB64], 'altered');
           Check(THttpPeerCrypt.HttpDirectUri('secret',
-            'https://synopse.info:123/forum', ToText(msg.Hash), dUri, dBearer));
+            'https://synopse.info:123/forum', ToText(msg.Hash), dUri, dBearer,
+            {permanent=}true, @opt));
           CheckEqual(dUri, '/https/synopse.info_123/forum');
           Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
           CheckEqual(decoded.URI, 'https://synopse.info:123/forum');
+          dTok := '';
+          Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
+          FillCharFast(msg2, SizeOf(msg2), 0);
+          Check(msg2.Kind = pcfPing);
+          CheckEqual(params, '');
+          res := hpc2.BearerDecode(dTok, pcfBearerDirectPermanent, msg2, @params);
+          CheckEqual(params, 'ti=1');
+          Check(res = mdOk, 'directOkParams');
+          Check(msg2.Kind = pcfBearerDirectPermanent);
         finally
           hpc2.Free;
         end;
@@ -1713,13 +1734,16 @@ begin
         if status = HTTP_SUCCESS then
         try
           // validate all resources
+          popt := @opt;
           for i := 0 to high(HTTP_LINK) do
           begin
             // test according to local cache status
             cache := MakeString([hpc.TempFilesPath, '02', HTTP_HASH[i], '.cache']);
             DeleteFile(cache);
             // compute the direct proxy URI and bearer
-            Check(hps.HttpDirectUri('secret', HTTP_LINK[i], HTTP_HASH[i], dUri, dBearer));
+            Check(hps.HttpDirectUri('secret', HTTP_LINK[i], HTTP_HASH[i],
+              dUri, dBearer, false, false, popt));
+            popt := nil; // ext parameters only for the first
             Check(PosEx(':8008', dUri) <> 0);
             Check(dBearer <> '');
             Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
@@ -1777,7 +1801,12 @@ end;
 function TNetworkProtocols.OnPeerCacheDirect(var aUri: TUri;
   var aHeader: RawUtf8; var aOptions: THttpRequestExtendedOptions): integer;
 begin
-  aOptions.TLS.IgnoreCertificateErrors := true; // needed e.g. with https
+  // ext parameters only for the first
+  CheckUtf8((aUri.Address = '_wp_generated/wpacaa94d5.gif') =
+            aOptions.TLS.IgnoreCertificateErrors, aUri.Address);
+  // it is time to setup our custom parameters, needed e.g. with https
+  aOptions.TLS.IgnoreCertificateErrors := true;
+  // continue
   result := HTTP_SUCCESS;
 end;
 
