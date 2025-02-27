@@ -7424,55 +7424,55 @@ begin
   CancelLastComma('}');
 end;
 
+procedure AddJsonEscapeValue(W: TJsonWriter; var a: PVarRec; aEnd: PVarRec);
+begin
+  case VarRecAsChar(a) of
+    ord('['):
+      begin
+        W.Add('[');
+        while a < aEnd do
+        begin
+          inc(a);
+          if VarRecAsChar(a) = ord(']') then
+            break;
+          AddJsonEscapeValue(W, a, aEnd);
+        end;
+        W.CancelLastComma(']');
+      end;
+    ord('{'):
+      begin
+        W.Add('{');
+        while a < aEnd do
+        begin
+          inc(a);
+          if VarRecAsChar(a) = ord('}') then
+            break;
+          W.AddJsonEscapeVarRec(a);
+          W.AddDirect(':');
+          inc(a);
+          AddJsonEscapeValue(W, a, aEnd);
+        end;
+        W.CancelLastComma('}');
+      end
+  else
+    W.AddJsonEscapeVarRec(a);
+  end;
+  W.AddComma;
+end;
+
 procedure TJsonWriter.AddJsonEscape(const NameValuePairs: array of const);
 var
-  a: integer;
-
-  procedure WriteValue;
-  begin
-    case VarRecAsChar(NameValuePairs[a]) of
-      ord('['):
-        begin
-          Add('[');
-          while a < high(NameValuePairs) do
-          begin
-            inc(a);
-            if VarRecAsChar(NameValuePairs[a]) = ord(']') then
-              break;
-            WriteValue;
-          end;
-          CancelLastComma(']');
-        end;
-      ord('{'):
-        begin
-          Add('{');
-          while a < high(NameValuePairs) do
-          begin
-            inc(a);
-            if VarRecAsChar(NameValuePairs[a]) = ord('}') then
-              break;
-            AddJsonEscapeVarRec(NameValuePairs[a]);
-            AddDirect(':');
-            inc(a);
-            WriteValue;
-          end;
-          CancelLastComma('}');
-        end
-    else
-      AddJsonEscapeVarRec(NameValuePairs[a]);
-    end;
-    AddComma;
-  end;
-
+  a, aEnd: PVarRec;
 begin
   Add('{');
-  a := 0;
-  while a < high(NameValuePairs) do
+  a := @NameValuePairs[0];
+  aEnd := @NameValuePairs[high(NameValuePairs)];
+  while a < aEnd do
   begin
-    AddJsonEscapeVarRec(NameValuePairs[a]);
+    AddJsonEscapeVarRec(a); // name
     inc(a);
     AddDirect(':');
-    WriteValue;
+    AddJsonEscapeValue(self, a, aEnd);
     inc(a);
   end;
   CancelLastComma('}');
