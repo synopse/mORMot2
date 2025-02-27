@@ -3073,8 +3073,7 @@ begin
       a := Cipher.Create(pointer(key)^, AesBits);
       try
         a.IV := head^.iv;
-        result := a.DecryptPkcs7Buffer(@input[msgpos], msglen - msgpos,
-          {ivatbeg=}false, {raiseerror=}false);
+        a.DecryptPkcs7Var(@input[msgpos], msglen - msgpos, {iv=}false, result);
       finally
         a.Free;
       end;

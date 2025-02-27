@@ -1984,7 +1984,7 @@ begin
   a := aes.Create(secret.l, aesbits);
   try
     a.IV := secret.h.Lo;
-    result := a.DecryptPkcs7Buffer(p, l - SizeOf(p^), false, false);
+    a.DecryptPkcs7Var(p, l - SizeOf(p^), false, result);
   finally
     a.Free;
     FillZero(secret.b);
@@ -2994,7 +2994,7 @@ begin
       Aes := TAesCfb;
     a := Aes.Create(aeskey);
     try
-      decrypted := a.DecryptPkcs7Buffer(Data, Len, true, false);
+      a.DecryptPkcs7Var(Data, Len, true, decrypted);
       if decrypted = '' then
         exit; // invalid content
     finally
@@ -4874,7 +4874,7 @@ begin
   try
     SetIVAndMacNonce({encrypt=}false);
     // decrypt the input
-    aPlain := fAes[false].DecryptPkcs7Buffer(P, len, false, false);
+    fAes[false].DecryptPkcs7Var(P, len, false, aPlain);
     if aPlain = '' then
     begin
       IncKM(false); // no MAC, but increase sequence on void/invalid message
