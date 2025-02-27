@@ -1684,9 +1684,9 @@ type
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-    function BearerDecode(
-      const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
-      out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode; virtual;
+    function BearerDecode(const aBearerToken: RawUtf8;
+      aExpected: THttpPeerCacheMessageKind; out aMsg: THttpPeerCacheMessage;
+      aParams: PRawUtf8 = nil): THttpPeerCryptMessageDecode; virtual;
     procedure LocalPeerClientSetup(const aIp: RawUtf8;
       aClient: THttpClientSocket; aRecvTimeout: integer);
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
@@ -1822,10 +1822,10 @@ type
       out aLocal: TFileName; out isTemp: boolean): boolean;
     function DirectFileName(Ctxt: THttpServerRequestAbstract;
       const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
-      out aFileName: TFileName; out aSize: Int64): integer;
+      out aFileName: TFileName; out aSize: Int64; const aParams: RawUtf8): integer;
     procedure DirectFileNameBackgroundGet(Sender: TObject);
     function DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
-      const aHash: THashDigest): cardinal;
+      const aHash: THashDigest; const aParams: RawUtf8): cardinal;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -5469,12 +5469,22 @@ end;
 
 function THttpPeerCrypt.BearerDecode(
   const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
-  out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
+  out aMsg: THttpPeerCacheMessage; aParams: PRawUtf8): THttpPeerCryptMessageDecode;
 var
   tok: array[0.. 511] of AnsiChar; // no memory allocation
-  bearerlen, toklen: PtrInt;
+  bearerlen, toklen, p: PtrInt;
 begin
-  bearerlen := length(aBearerToken);
+  bearerlen := length(aBearerToken); // typically 326 base64 chars into 244 bytes
+  if bearerlen > 326 then
+  begin
+    p := ByteScanIndex(pointer(aBearerToken), bearerlen, ord('?'));
+    if p >= 0 then // e.g. 'xxxxxxxx?ti=1&as=3' -> aParams^ := 'ti=1&as=3'
+    begin
+      if aParams <> nil then // e.g. URI-encoded THttpRequestExtendedOptions
+        FastSetString(aParams^, @PByteArray(aBearerToken)[p + 1], bearerlen - p - 1);
+      bearerlen := p;
+    end;
+  end;
   toklen := Base64uriToBinLength(bearerlen);
   result := mdBLen;
   if toklen > SizeOf(tok) then
@@ -6848,7 +6858,7 @@ begin
 end;
 
 function DirectConnectAndHead(Sender: THttpPeerCache;
-  Ctxt: THttpServerRequestAbstract; redirmax: integer;
+  Ctxt: THttpServerRequestAbstract; redirmax: integer; const aParams: RawUtf8;
   out cs: THttpClientSocketPeerCache): integer;
 var
   cslog: TSynLogProc;
@@ -6861,7 +6871,10 @@ begin
   result := HTTP_BADREQUEST;
   if not Sender.HttpDirectUriReconstruct(pointer(Ctxt.Url), uri) then
     exit;
-  opt.Init;
+  if aParams = '' then
+    opt.Init
+  else if not opt.InitFromUrl(aParams) then // e.g. 'ti=1&as=3'
+    exit;
   opt.CreateTimeoutMS := 1000;
   opt.RedirectMax := redirmax;
   if Assigned(Sender.fOnDirectOptions) then
@@ -6892,7 +6905,7 @@ end;
 
 function THttpPeerCache.DirectFileName(Ctxt: THttpServerRequestAbstract;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
-  out aFileName: TFileName; out aSize: Int64): integer;
+  out aFileName: TFileName; out aSize: Int64; const aParams: RawUtf8): integer;
 var
   cs:  THttpClientSocketPeerCache;
   err, ip: RawUtf8;
@@ -6909,7 +6922,7 @@ begin
     try
       // HEAD to the original server to connect and retrieve size + redirection
       err := 'head';
-      result := DirectConnectAndHead(self, Ctxt, {redir=}3, cs);
+      result := DirectConnectAndHead(self, Ctxt, {redir=}3, aParams, cs);
       if not (result in HTTP_GET_OK) then
         exit;
       result := HTTP_LENGTHREQUIRED;
@@ -7083,7 +7096,7 @@ begin // implement pcoHttpReprDigest option
 end;
 
 function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
-  const aHash: THashDigest): cardinal;
+  const aHash: THashDigest; const aParams: RawUtf8): cardinal;
 var
   cs:  THttpClientSocketPeerCache;
 begin
@@ -7091,7 +7104,7 @@ begin
     cs := nil;
     try
       // direct HEAD to the remote server, with no redirection
-      result := DirectConnectAndHead(self, Ctxt, {redir=}0, cs);
+      result := DirectConnectAndHead(self, Ctxt, {redir=}0, aParams, cs);
       if pcoHttpReprDigest in fSettings.Options then
         AddReprDigest(Ctxt, aHash);
     finally
@@ -7118,7 +7131,7 @@ var
   http: PHttpRequestContext;
   progsize: Int64; // expected progressive file size, to be supplied as header
   err: TOnRequestError;
-  errtxt: RawUtf8;
+  errtxt, params: RawUtf8;
 begin
   // avoid GPF at shutdown
   result := HTTP_BADREQUEST;
@@ -7126,7 +7139,7 @@ begin
     exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
-  if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg), 'OnRequest', msg) then
+  if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg, @params), 'OnRequest', msg) then
   try
     // resource will always be identified by decoded bearer hash
     progsize := 0;
@@ -7137,7 +7150,7 @@ begin
         if IsHead(Ctxt.Method) then
         begin
           // proxy the HEAD request to the final server
-          result := DirectFileNameHead(Ctxt, msg.Hash);
+          result := DirectFileNameHead(Ctxt, msg.Hash, params);
           if not (result in HTTP_GET_OK) then
             err := oreDirectRemoteUriFailed;
           exit;
@@ -7145,7 +7158,7 @@ begin
         else
         begin
           // remote HEAD + GET new partial file in a background thread
-          result := DirectFileName(Ctxt, msg, http, fn, progsize);
+          result := DirectFileName(Ctxt, msg, http, fn, progsize, params);
           if result <> HTTP_SUCCESS then
           begin
             err := oreDirectRemoteUriFailed;
