@@ -1536,7 +1536,8 @@ type
     function HttpDirectUri(const aSharedSecret: RawByteString;
       const aRemoteUri, aRemoteHash: RawUtf8;
       out aDirectUri, aDirectHeaderBearer: RawUtf8;
-      aForceTls: boolean = false; aPermanent: boolean = false): boolean;
+      aForceTls: boolean = false; aPermanent: boolean = false;
+      aOptions: PHttpRequestExtendedOptions = nil): boolean;
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
@@ -1708,8 +1709,8 @@ type
     // - returns aDirectUri as '/https/microsoft.com/...' and aDirectHeaderBearer
     class function HttpDirectUri(const aSharedSecret: RawByteString;
       const aRemoteUri, aRemoteHash: RawUtf8;
-      out aDirectUri, aDirectHeaderBearer: RawUtf8;
-      aPermanent: boolean = false): boolean;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean = false;
+      aOptions: PHttpRequestExtendedOptions = nil): boolean;
     /// decode a remote URI for pcoHttpDirect download at localhost
     // - as previously encoded by HttpDirectUri() class function
     class function HttpDirectUriReconstruct(P: PUtf8Char;
@@ -5634,7 +5635,8 @@ const // URI start for pcfBearerDirect/pcfBearerDirectPermanent peer requests
 
 class function THttpPeerCrypt.HttpDirectUri(const aSharedSecret: RawByteString;
   const aRemoteUri, aRemoteHash: RawUtf8;
-  out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean): boolean;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean;
+  aOptions: PHttpRequestExtendedOptions): boolean;
 var
   c: THttpPeerCrypt;
   msg: THttpPeerCacheMessage;
@@ -5658,6 +5660,8 @@ begin
     FormatUtf8('/%/%%/%', [uri.Scheme, uri.Server, p, uri.Address], aDirectUri);
     msg.Opaque := crc63c(pointer(aDirectUri), length(aDirectUri)); // no replay
     aDirectHeaderBearer := AuthorizationBearer(BinToBase64uri(c.MessageEncode(msg)));
+    if aOptions <> nil then // extended options are URI-encoded to the bearer
+      aDirectHeaderBearer := aOptions^.ToUrlEncode(aDirectHeaderBearer);
     result := true;
   finally
     c.Free;
@@ -5721,7 +5725,8 @@ end;
 
 function THttpPeerCacheSettings.HttpDirectUri(
   const aSharedSecret: RawByteString; const aRemoteUri, aRemoteHash: RawUtf8;
-  out aDirectUri, aDirectHeaderBearer: RawUtf8; aForceTls, aPermanent: boolean): boolean;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aForceTls, aPermanent: boolean;
+  aOptions: PHttpRequestExtendedOptions): boolean;
 var
   mac: TMacAddress;
 begin
@@ -5731,7 +5736,7 @@ begin
      (pcoNoServer in fOptions) or
      (GuessInterface(mac) <> '') or
      not THttpPeerCrypt.HttpDirectUri(aSharedSecret, aRemoteUri, aRemoteHash,
-           aDirectUri, aDirectHeaderBearer, aPermanent) then
+           aDirectUri, aDirectHeaderBearer, aPermanent, aOptions) then
     exit;
   aForceTls := aForceTls or (pcoSelfSignedHttps in fOptions);
   aDirectUri := Make([HTTPS_TEXT[aForceTls], mac.IP, ':', fPort, aDirectUri]);
