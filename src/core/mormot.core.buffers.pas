@@ -1220,12 +1220,12 @@ function IsBase64(sp: PAnsiChar; len: PtrInt): boolean; overload;
 function BinToBase64Length(len: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// retrieve the expected undecoded length of a Base64 encoded buffer
-// - here len is the number of bytes in sp
+/// retrieve the expected decoded length of a Base64 encoded buffer
+// - here len is the number of chars in the input sp buffer
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
 
-/// retrieve the expected undecoded length of a Base64 encoded buffer
-// - here len is the number of bytes in sp
+/// retrieve the expected decoded length of a Base64 encoded buffer
+// - here len is the number of chars in the input sp buffer
 // - will check supplied text is a valid Base64 encoded stream
 function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 
@@ -1266,8 +1266,8 @@ procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 function BinToBase64uriLength(len: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// retrieve the expected undecoded length of a Base64-URI encoded buffer
-// - here len is the number of bytes in sp
+/// retrieve the expected decoded length of a Base64-URI encoded buffer
+// - here len is the number of chars in the encoded buffer
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 function Base64uriToBinLength(len: PtrInt): PtrInt;
@@ -7007,7 +7007,7 @@ begin
     result := (len shr 2) * 3;
     case len and 3 of
       1:
-        result := 0;
+        result := 0; // invalid
       2:
         inc(result, 1);
       3:
