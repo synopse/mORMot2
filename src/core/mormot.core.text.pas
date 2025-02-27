@@ -938,8 +938,8 @@ type
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
     /// append an open array constant value to the buffer
     // - use overriden TJsonWriter version instead!
-    procedure Add(const V: TVarRec; Escape: TTextWriterKind = twNone;
-      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
+    procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind = twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
     // - return the position to write text
@@ -1699,7 +1699,7 @@ const
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8;
+procedure VarRecToUtf8(V: PVarRec; var result: RawUtf8;
   wasString: PBoolean = nil);
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
@@ -1711,7 +1711,7 @@ procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8;
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8;
+function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
   wasString: PBoolean = nil): PtrInt;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
@@ -1725,7 +1725,7 @@ function VarRecToUtf8IsString(const V: TVarRec; var value: RawUtf8): boolean;
 // - returns FALSE if the argument is not an integer
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
-function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
+function VarRecToInt64(V: PVarRec; out value: Int64): boolean;
 
 /// convert an open array (const Args: array of const) argument to a floating
 // point value
@@ -1734,7 +1734,7 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 // - returns FALSE if the argument is not a number
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
-function VarRecToDouble(const V: TVarRec; out value: double): boolean;
+function VarRecToDouble(V: PVarRec; out value: double): boolean;
 
 /// convert an open array (const Args: array of const) argument to a value
 // encoded as with :(...): inlined parameters in FormatUtf8(Format,Args,Params)
@@ -1745,19 +1745,20 @@ procedure VarRecToInlineValue(const V: TVarRec; var result: RawUtf8);
 
 /// get an open array (const Args: array of const) character argument
 // - only handle varChar and varWideChar kind of arguments
-function VarRecAsChar(const V: TVarRec): integer;
+function VarRecAsChar(V: PVarRec): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a supplied "array of const" argument is an instance of a given class
-function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
+function VarRecAs(V: PVarRec; aClass: TClass): pointer;
 
 /// check if a supplied "array of const" argument is a default value
 // - e.g. '', 0, nil or false
-function VarRecIsDefault(const V: TVarRec): boolean;
+function VarRecIsDefault(V: PVarRec): boolean;
 
 /// check if a supplied "array of const" argument is a void value
 // - same as VarRecIsDefault() but vtBoolean always returns false
-function VarRecIsVoid(const V: TVarRec): boolean;
+function VarRecIsVoid(V: PVarRec): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUtf8
 // - only supported token is %, which will be written in the resulting string
@@ -4073,18 +4074,18 @@ end;
 
 procedure TTextWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
 begin
-  RaiseUnimplemented('Add(..,Escape: TTextWriterKind)');
+  RaiseUnimplemented('Add(Escape)');
 end;
 
 procedure TTextWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
 begin
-  RaiseUnimplemented('Add(..,Escape: TTextWriterKind)');
+  RaiseUnimplemented('Add(Escape)');
 end;
 
-procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
+procedure TTextWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
-  RaiseUnimplemented('Add(TVarRec)');
+  RaiseUnimplemented('AddVarRec');
 end;
 
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
@@ -8331,38 +8332,38 @@ end;
 
 { ************ Text Formatting functions }
 
-function VarRecAsChar(const V: TVarRec): integer;
+function VarRecAsChar(V: PVarRec): integer;
 begin
-  case V.VType of
+  case V^.VType of
     vtChar:
-      result := ord(V.VChar);
+      result := ord(V^.VChar);
     vtWideChar:
-      result := ord(V.VWideChar);
+      result := ord(V^.VWideChar);
   else
     result := 0;
   end;
 end;
 
-function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
+function VarRecAs(V: PVarRec; aClass: TClass): pointer;
 begin
-  if (aArg.VType = vtObject) and
-     (aArg.VObject <> nil) and
-     aArg.VObject.InheritsFrom(aClass) then
-    result := aArg.VObject
+  if (V^.VType = vtObject) and
+     (V^.VObject <> nil) and
+     V^.VObject.InheritsFrom(aClass) then
+    result := V^.VObject
   else
     result := nil;
 end;
 
-function VarRecIsVoid(const V: TVarRec): boolean;
+function VarRecIsVoid(V: PVarRec): boolean;
 begin // we consider a boolean to be never void by design
-  result := (V.VType <> vtBoolean) and VarRecIsDefault(V);
+  result := (V^.VType <> vtBoolean) and VarRecIsDefault(V);
 end;
 
-function VarRecIsDefault(const V: TVarRec): boolean;
+function VarRecIsDefault(V: PVarRec): boolean;
 begin
-  case V.VType of
+  case V^.VType of
     vtString:
-      result := V.VString^[0] = #0;
+      result := V^.VString^[0] = #0;
     vtAnsiString,
     {$ifdef HASVARUSTRING}
     vtUnicodeString,
@@ -8374,45 +8375,45 @@ begin
     vtObject,
     vtClass,
     vtInterface:
-      result := V.VPointer = nil; // void pointer value
+      result := V^.VPointer = nil; // void pointer value
     vtChar:
-      result := V.VChar = #0;
+      result := V^.VChar = #0;
     vtWideChar:
-      result := V.VWideChar = #0;
+      result := V^.VWideChar = #0;
     vtBoolean:
-      result := not V.VBoolean; // false means default
+      result := not V^.VBoolean; // false means default
     vtInteger:
-      result := V.VInteger = 0;
+      result := V^.VInteger = 0;
     {$ifdef FPC}
     vtQWord,
     {$endif FPC}
     vtCurrency,
     vtInt64:
-      result := V.VInt64^ = 0;
+      result := V^.VInt64^ = 0;
     vtExtended:
-      result := V.VExtended^ = 0;
+      result := V^.VExtended^ = 0;
     vtVariant:
-      result := VarIsEmptyOrNull(V.VVariant^);
+      result := VarIsEmptyOrNull(V^.VVariant^);
   else
     result := false;
   end;
 end;
 
-function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
+function VarRecToInt64(V: PVarRec; out value: Int64): boolean;
 begin
-  case V.VType of
+  case V^.VType of
     vtInteger:
-      value := V.VInteger;
+      value := V^.VInteger;
     {$ifdef FPC} vtQWord, {$endif}
     vtInt64:
-      value := V.VInt64^;
+      value := V^.VInt64^;
     vtBoolean:
-      if V.VBoolean then
+      if V^.VBoolean then
         value := 1
       else
         value := 0; // normalize
     vtVariant:
-      value := V.VVariant^;
+      value := V^.VVariant^;
   else
     begin
       result := false;
@@ -8422,28 +8423,28 @@ begin
   result := true;
 end;
 
-function VarRecToDouble(const V: TVarRec; out value: double): boolean;
+function VarRecToDouble(V: PVarRec; out value: double): boolean;
 begin
-  case V.VType of
+  case V^.VType of
     vtInteger:
-      value := V.VInteger;
+      value := V^.VInteger;
     vtInt64:
-      value := V.VInt64^;
+      value := V^.VInt64^;
     {$ifdef FPC}
     vtQWord:
-      value := V.VQWord^;
+      value := V^.VQWord^;
     {$endif FPC}
     vtBoolean:
-      if V.VBoolean then
+      if V^.VBoolean then
         value := 1
       else
         value := 0; // normalize
     vtExtended:
-      value := V.VExtended^;
+      value := V^.VExtended^;
     vtCurrency:
-      value := V.VCurrency^;
+      value := V^.VCurrency^;
     vtVariant:
-      value := V.VVariant^;
+      value := V^.VVariant^;
   else
     begin
       result := false;
@@ -8674,52 +8675,52 @@ begin
    end;
 end;
 
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8;
+function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
   wasString: PBoolean): PtrInt;
 var
   isString: boolean;
 begin
   isString := true;
   Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
-  case V.VType of
+  case V^.VType of
     vtString:
-      if V.VString = nil then
+      if V^.VString = nil then
         Res.Len := 0
       else
       begin
-        Res.Text := @V.VString^[1];
-        Res.Len := ord(V.VString^[0]);
+        Res.Text := @V^.VString^[1];
+        Res.Len := ord(V^.VString^[0]);
       end;
     vtAnsiString: // expect UTF-8 content
       begin
-        Res.Text := pointer(V.VAnsiString);
-        Res.Len := length(RawUtf8(V.VAnsiString));
+        Res.Text := pointer(V^.VAnsiString);
+        Res.Len := length(RawUtf8(V^.VAnsiString));
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      WideToTempUtf8(V.VPWideChar, length(UnicodeString(V.VUnicodeString)), Res);
+      WideToTempUtf8(V^.VPWideChar, length(UnicodeString(V^.VUnicodeString)), Res);
     {$endif HASVARUSTRING}
     vtWideString:
-      WideToTempUtf8(V.VPWideChar, length(WideString(V.VWideString)), Res);
+      WideToTempUtf8(V^.VPWideChar, length(WideString(V^.VWideString)), Res);
     vtPChar: // expect UTF-8 content
       begin
-        Res.Text := V.VPointer;
-        Res.Len := mormot.core.base.StrLen(V.VPointer);
+        Res.Text := V^.VPointer;
+        Res.Len := mormot.core.base.StrLen(V^.VPointer);
       end;
     vtChar:
       begin
-        Res.Temp[0] := V.VChar; // V may be on transient stack (alf: FPC)
+        Res.Temp[0] := V^.VChar; // V may be on transient stack (alf: FPC)
         Res.Text := @Res.Temp;
         Res.Len := 1;
       end;
     vtPWideChar:
-      WideToTempUtf8(V.VPWideChar, StrLenW(V.VPWideChar), Res);
+      WideToTempUtf8(V^.VPWideChar, StrLenW(V^.VPWideChar), Res);
     vtWideChar:
-      WideToTempUtf8(@V.VWideChar, 1, Res);
+      WideToTempUtf8(@V^.VWideChar, 1, Res);
     vtBoolean:
       begin
         isString := false;
-        if V.VBoolean then // normalize
+        if V^.VBoolean then // normalize
           Res.Text := pointer(SmallUInt32Utf8[1])
         else
           Res.Text := pointer(SmallUInt32Utf8[0]);
@@ -8728,51 +8729,51 @@ begin
     vtInteger:
       begin
         isString := false;
-        PtrIntToTempUtf8(V.VInteger, Res);
+        PtrIntToTempUtf8(V^.VInteger, Res);
       end;
     vtInt64:
       begin
         isString := false;
-        Int64ToTempUtf8(V.VInt64, Res);
+        Int64ToTempUtf8(V^.VInt64, Res);
       end;
     {$ifdef FPC}
     vtQWord:
       begin
         isString := false;
-        QwordToTempUtf8(V.VQWord, Res);
+        QwordToTempUtf8(V^.VQWord, Res);
       end;
     {$endif FPC}
     vtCurrency:
       begin
         isString := false;
         Res.Text := @Res.Temp;
-        Res.Len := Curr64ToPChar(V.VInt64^, Res.Temp);
+        Res.Len := Curr64ToPChar(V^.VInt64^, Res.Temp);
       end;
     vtExtended:
       begin
         isString := false;
-        DoubleToTempUtf8(V.VExtended^, Res);
+        DoubleToTempUtf8(V^.VExtended^, Res);
       end;
     vtPointer, vtInterface:
-      PtrIntToTempUtf8(PtrInt(V.VPointer), Res);
+      PtrIntToTempUtf8(PtrInt(V^.VPointer), Res);
     vtClass:
-      if V.VClass = nil then
+      if V^.VClass = nil then
         Res.Len := 0
       else
       begin
-        Res.Text := PPUtf8Char(PtrInt(PtrUInt(V.VClass)) + vmtClassName)^ + 1;
+        Res.Text := PPUtf8Char(PtrInt(PtrUInt(V^.VClass)) + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
       end;
     vtObject:
-      if V.VObject = nil then
+      if V^.VObject = nil then
         Res.Len := 0
       else
       begin
-        Res.Text := PPUtf8Char(PPtrInt(V.VObject)^ + vmtClassName)^ + 1;
+        Res.Text := PPUtf8Char(PPtrInt(V^.VObject)^ + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
       end;
     vtVariant:
-      VariantToTempUtf8(V.VVariant^, Res, isString);
+      VariantToTempUtf8(V^.VVariant^, Res, isString);
   else
     Res.Len := 0;
   end;
@@ -8781,113 +8782,112 @@ begin
     wasString^ := isString;
 end;
 
-procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8; wasString: PBoolean);
+procedure VarRecToUtf8(V: PVarRec; var result: RawUtf8; wasString: PBoolean);
 var
   isString: boolean;
 label
   none;
 begin
   isString := false;
-  with V do
-    case V.VType of
-      vtString:
-        begin
-          isString := true;
-          if VString = nil then
-            goto none;
-          FastSetString(result, @VString^[1], ord(VString^[0])); // assume UTF-8
-        end;
-      vtAnsiString:
-        begin
-          isString := true;
-          AnyAnsiToUtf8Var(RawByteString(VAnsiString), result); // check CP_UTF8
-        end;
-      {$ifdef HASVARUSTRING}
-      vtUnicodeString:
-        begin
-          isString := true;
-          RawUnicodeToUtf8(VUnicodeString,
-            length(UnicodeString(VUnicodeString)), result);
-        end;
-      {$endif HASVARUSTRING}
-      vtWideString:
-        begin
-          isString := true;
-          RawUnicodeToUtf8(VWideString, length(WideString(VWideString)), result);
-        end;
-      vtPChar:
-        begin
-          isString := true;
-          FastSetString(result, VPChar, mormot.core.base.StrLen(VPChar));
-        end;
-      vtChar:
-        begin
-          isString := true;
-          FastSetString(result, PAnsiChar(@VChar), 1);
-        end;
-      vtPWideChar:
-        begin
-          isString := true;
-          RawUnicodeToUtf8(VPWideChar, StrLenW(VPWideChar), result);
-        end;
-      vtWideChar:
-        begin
-          isString := true;
-          RawUnicodeToUtf8(@VWideChar, 1, result);
-        end;
-      vtBoolean:
-        if VBoolean then // normalize
-          result := SmallUInt32Utf8[1]
-        else
-          result := SmallUInt32Utf8[0];
-      vtInteger:
-        Int32ToUtf8(VInteger, result);
-      vtInt64:
-        Int64ToUtf8(VInt64^, result);
-      {$ifdef FPC}
-      vtQWord:
-        UInt64ToUtf8(VQWord^, result);
-      {$endif FPC}
-      vtCurrency:
-        Curr64ToStr(VInt64^, result);
-      vtExtended:
-        DoubleToStr(VExtended^,result);
-      vtPointer:
-        Int32ToUtf8(PtrInt(VPointer), result);
-      vtClass:
-        begin
-          isString := true;
-          if VClass <> nil then
-            ClassToText(VClass, result)
-          else
-none:       FastAssignNew(result);
-        end;
-      vtObject:
-        if VObject <> nil then
-          ClassToText(PClass(VObject)^, result)
-        else
+  case V^.VType of
+    vtString: // assume UTF-8
+      begin
+        isString := true;
+        if V^.VString = nil then
           goto none;
-      vtInterface:
-      {$ifdef HASINTERFACEASTOBJECT}
-        if VInterface <> nil then
-          ClassToText((IInterface(VInterface) as TObject).ClassType, result)
+        FastSetString(result, @V^.VString^[1], ord(V^.VString^[0]));
+      end;
+    vtAnsiString:
+      begin
+        isString := true;
+        AnyAnsiToUtf8Var(RawByteString(V^.VAnsiString), result); // use codepage
+      end;
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString:
+      begin
+        isString := true;
+        RawUnicodeToUtf8(V^.VUnicodeString,
+          length(UnicodeString(V^.VUnicodeString)), result);
+      end;
+    {$endif HASVARUSTRING}
+    vtWideString:
+      begin
+        isString := true;
+        RawUnicodeToUtf8(V^.VWideString, length(WideString(V^.VWideString)), result);
+      end;
+    vtPChar:
+      begin
+        isString := true;
+        FastSetString(result, V^.VPChar, mormot.core.base.StrLen(V^.VPChar));
+      end;
+    vtChar:
+      begin
+        isString := true;
+        FastSetString(result, PAnsiChar(@V^.VChar), 1);
+      end;
+    vtPWideChar:
+      begin
+        isString := true;
+        RawUnicodeToUtf8(V^.VPWideChar, StrLenW(V^.VPWideChar), result);
+      end;
+    vtWideChar:
+      begin
+        isString := true;
+        RawUnicodeToUtf8(@V^.VWideChar, 1, result);
+      end;
+    vtBoolean:
+      if V^.VBoolean then // normalize
+        result := SmallUInt32Utf8[1]
+      else
+        result := SmallUInt32Utf8[0];
+    vtInteger:
+      Int32ToUtf8(V^.VInteger, result);
+    vtInt64:
+      Int64ToUtf8(V^.VInt64^, result);
+    {$ifdef FPC}
+    vtQWord:
+      UInt64ToUtf8(V^.VQWord^, result);
+    {$endif FPC}
+    vtCurrency:
+      Curr64ToStr(V^.VInt64^, result);
+    vtExtended:
+      DoubleToStr(V^.VExtended^,result);
+    vtPointer:
+      Int32ToUtf8(PtrInt(V^.VPointer), result);
+    vtClass:
+      begin
+        isString := true;
+        if V^.VClass <> nil then
+          ClassToText(V^.VClass, result)
         else
-          goto none;
-      {$else}
-        PointerToHex(VInterface, result);
-      {$endif HASINTERFACEASTOBJECT}
-      vtVariant:
-        VariantToUtf8(VVariant^, result, isString);
-    else
-      goto none;
-    end;
+none:     FastAssignNew(result);
+      end;
+    vtObject:
+      if V^.VObject <> nil then
+        ClassToText(PClass(V^.VObject)^, result)
+      else
+        goto none;
+    vtInterface:
+    {$ifdef HASINTERFACEASTOBJECT}
+      if V^.VInterface <> nil then
+        ClassToText((IInterface(V^.VInterface) as TObject).ClassType, result)
+      else
+        goto none;
+    {$else}
+      PointerToHex(V^.VInterface, result);
+    {$endif HASINTERFACEASTOBJECT}
+    vtVariant:
+      VariantToUtf8(V^.VVariant^, result, isString);
+  else
+    goto none;
+  end;
   if wasString <> nil then
     wasString^ := isString;
 end;
 
 function VarRecToUtf8IsString(const V: TVarRec; var value: RawUtf8): boolean;
 begin
-  VarRecToUtf8(V, value, @result);
+  VarRecToUtf8(@V, value, @result);
 end;
 
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUtf8);
@@ -8895,7 +8895,7 @@ var
   wasString: boolean;
   tmp: RawUtf8;
 begin
-  VarRecToUtf8(V, tmp, @wasString);
+  VarRecToUtf8(@V, tmp, @wasString);
   if wasString then
     QuotedStr(tmp, '"', result)
   else
@@ -8976,7 +8976,7 @@ begin
     inc(F); // jump '%'
     if ArgCount <> 0 then
     begin
-      inc(L, VarRecToTempUtf8(Arg^, c^));
+      inc(L, VarRecToTempUtf8(Arg, c^));
       if c^.Len > 0 then
         inc(c);
       inc(Arg);
@@ -9013,7 +9013,7 @@ begin
     begin
       c := @blocks;
       repeat
-        inc(L, VarRecToTempUtf8(Arg^, c^)); // add param
+        inc(L, VarRecToTempUtf8(Arg, c^)); // add param
         inc(Arg);
         if (c^.Len <> 0) and
            (c^.Text[c^.Len - 1] <> Delim) and
@@ -9057,7 +9057,7 @@ begin
   if ArgCount > length(blocks) then
     TooManyArgs;
   repeat
-    inc(L, VarRecToTempUtf8(Arg^, last^));
+    inc(L, VarRecToTempUtf8(Arg, last^));
     inc(Arg);
     inc(last);
     dec(ArgCount)
@@ -9088,7 +9088,7 @@ begin
     inc(c);
   end;
   repeat
-    inc(L, VarRecToTempUtf8(Arg^, c^));
+    inc(L, VarRecToTempUtf8(Arg, c^));
     inc(Arg);
     inc(c);
     dec(ArgCount)
@@ -9112,7 +9112,7 @@ begin
   L := length(Text);
   c := @blocks;
   repeat
-    inc(L, VarRecToTempUtf8(Arg^, c^));
+    inc(L, VarRecToTempUtf8(Arg, c^));
     inc(Arg);
     inc(c);
     dec(ArgCount)
@@ -9216,7 +9216,7 @@ begin
      (high(Args) < 0) then // no formatting needed
     result := Format
   else if PWord(Format)^ = ord('%') then // optimize raw conversion
-    VarRecToUtf8(Args[0], result)
+    VarRecToUtf8(@Args[0], result)
   else
   begin
     f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
@@ -9449,7 +9449,7 @@ var
 begin
   if high(Args) = 0 then
   begin
-    VarRecToUtf8(Args[0], result); // can be returned e.g. by reference
+    VarRecToUtf8(@Args[0], result); // can be returned e.g. by reference
     exit;
   end;
   {%H-}f.DoAdd(@Args[0], length(Args));

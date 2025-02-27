@@ -332,6 +332,8 @@ type
 
   /// a dynamic array of TVarRec, i.e. could match an "array of const" parameter
   TTVarRecDynArray = array of TVarRec;
+  TVarRecArray = array[ 0 .. MaxInt div SizeOf(TVarRec) - 1 ] of TVarRec;
+  PVarRecArray = ^TVarRecArray;
 
   /// a TVarData values array
   // - is not called TVarDataArray to avoid confusion with the corresponding
