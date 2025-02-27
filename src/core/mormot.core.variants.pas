@@ -679,7 +679,7 @@ type
     // - in practice, you should better use the function _Obj() which is a
     // wrapper around this class method
     class function NewObject(const NameValuePairs: array of const;
-      Options: TDocVariantOptions = []): variant;
+      Options: TDocVariantOptions = []; DontAddDefault: boolean = false): variant;
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as parameters, e.g.
     // ! aVariant := TDocVariant.NewArray(['one',2,3.0]);
@@ -2473,7 +2473,7 @@ function _DV(const DocVariant: variant;
 // propagated into another place, set Options=[dvoValueCopiedByReference]
 // or using _ObjFast() will increase the process speed a lot
 function _Obj(const NameValuePairs: array of const;
-  Options: TDocVariantOptions = []): variant;
+  Options: TDocVariantOptions = []; DontAddDefault: boolean = false): variant;
 
 /// add a property value to a document-based object content
 // - if Obj is a TDocVariant object, will add the Name/Value pair
@@ -2603,7 +2603,8 @@ function _Json(const Json: RawUtf8; var Value: variant;
 // ! Obj(NameValuePairs, JSON_FAST);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
-function _ObjFast(const NameValuePairs: array of const): variant; overload;
+function _ObjFast(const NameValuePairs: array of const;
+  DontAddDefault: boolean = false): variant; overload;
 
 /// initialize a variant instance to store any object as a TDocVariant
 // - is a wrapper around ObjectToVariant(aObject, result, aOptions)
@@ -3616,7 +3617,8 @@ function DocDictDynArray(const json: RawUtf8;
 
 /// create a self-owned IDocDict from a set of key,value pairs
 function DocDict(const keyvalues: array of const;
-  model: TDocVariantModel = mFastFloat): IDocDict; overload;
+  model: TDocVariantModel = mFastFloat;
+  dontAddDefault: boolean = false): IDocDict; overload;
 
 /// create a self-owned IDocDict from a set of keys - values will be Null
 function DocDictFromKeys(const keys: array of RawUtf8;
@@ -5393,10 +5395,10 @@ begin
 end;
 
 class function TDocVariant.NewObject(const NameValuePairs: array of const;
-  Options: TDocVariantOptions): variant;
+  Options: TDocVariantOptions; DontAddDefault: boolean): variant;
 begin
   VarClear(result{%H-});
-  TDocVariantData(result).InitObject(NameValuePairs, Options);
+  TDocVariantData(result).InitObject(NameValuePairs, Options, DontAddDefault);
 end;
 
 class function TDocVariant.NewArray(const Items: array of const;
@@ -9562,10 +9564,10 @@ begin
 end;
 
 function _Obj(const NameValuePairs: array of const;
-  Options: TDocVariantOptions): variant;
+  Options: TDocVariantOptions; DontAddDefault: boolean): variant;
 begin
   VarClear(result{%H-});
-  TDocVariantData(result).InitObject(NameValuePairs, Options);
+  TDocVariantData(result).InitObject(NameValuePairs, Options, DontAddDefault);
 end;
 
 function _Arr(const Items: array of const;
@@ -9646,10 +9648,10 @@ begin
         o^.AddOrUpdateValue(d^.VName[ndx], d^.VValue[ndx]);
 end;
 
-function _ObjFast(const NameValuePairs: array of const): variant;
+function _ObjFast(const NameValuePairs: array of const; DontAddDefault: boolean): variant;
 begin
   VarClear(result{%H-});
-  TDocVariantData(result).InitObject(NameValuePairs, JSON_FAST);
+  TDocVariantData(result).InitObject(NameValuePairs, JSON_FAST, DontAddDefault);
 end;
 
 function _ObjFast(aObject: TObject;
@@ -11139,10 +11141,11 @@ begin
   result := d;
 end;
 
-function DocDict(const keyvalues: array of const; model: TDocVariantModel): IDocDict;
+function DocDict(const keyvalues: array of const; model: TDocVariantModel;
+  dontAddDefault: boolean): IDocDict;
 begin
   result := TDocDict.CreateOwned;
-  result.Value^.InitObject(keyvalues, model);
+  result.Value^.InitObject(keyvalues, model, dontAddDefault);
 end;
 
 function DocDictFromKeys(const keys: array of RawUtf8;
