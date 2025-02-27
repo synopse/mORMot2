@@ -1751,7 +1751,12 @@ function VarRecAsChar(const V: TVarRec): integer;
 /// check if a supplied "array of const" argument is an instance of a given class
 function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
 
+/// check if a supplied "array of const" argument is a default value
+// - e.g. '', 0, nil or false
+function VarRecIsDefault(const V: TVarRec): boolean;
+
 /// check if a supplied "array of const" argument is a void value
+// - same as VarRecIsDefault() but vtBoolean always returns false
 function VarRecIsVoid(const V: TVarRec): boolean;
 
 /// fast Format() function replacement, optimized for RawUtf8
@@ -8350,6 +8355,14 @@ end;
 
 function VarRecIsVoid(const V: TVarRec): boolean;
 begin
+  if V.VType = vtBoolean then
+    result := false // we consider a boolean to be never void by design
+  else
+    result := VarRecIsDefault(V);
+end;
+
+function VarRecIsDefault(const V: TVarRec): boolean;
+begin
   case V.VType of
     vtString:
       result := V.VString^[0] = #0;
@@ -8370,7 +8383,7 @@ begin
     vtWideChar:
       result := V.VWideChar = #0;
     vtBoolean:
-      result := false; // never void by design
+      result := not V.VBoolean; // false means default
     vtInteger:
       result := V.VInteger = 0;
     {$ifdef FPC}
