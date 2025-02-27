@@ -655,6 +655,11 @@ type
     // - if RaiseESynCryptoOnError=false, returns '' on any decryption error
     function DecryptPkcs7Buffer(Input: pointer; InputLen: PtrInt;
       IVAtBeginning: boolean; RaiseESynCryptoOnError: boolean = true): RawByteString;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// decrypt a memory buffer using a PKCS7 padding pattern
+    // - as called by DecryptPkcs7Buffer()
+    function DecryptPkcs7Var(Input: pointer; InputLen: PtrInt;
+      IVAtBeginning: boolean; var Plain: RawByteString): boolean;
 
     /// initialize AEAD (authenticated-encryption with associated-data) nonce
     // - i.e. setup 256-bit MAC computation before next Encrypt/Decrypt call
@@ -5407,6 +5412,7 @@ function TAesAbstract.DecryptPkcs7Len(var InputLen, ivsize: PtrInt;
 var
   needed: integer;
 begin
+  result := false;
   needed := SizeOf(TAesBlock);
   if IVAtBeginning then
     inc(needed, SizeOf(TAesBlock));
@@ -5416,10 +5422,7 @@ begin
       ESynCrypto.RaiseUtf8('%.DecryptPkcs7: Invalid InputLen=%',
         [self, InputLen])
     else
-    begin
-      result := false;
       exit;
-    end;
   if IVAtBeginning then
   begin
     fIV := PAesBlock(Input)^;
@@ -5454,34 +5457,39 @@ end;
 
 function TAesAbstract.DecryptPkcs7Buffer(Input: pointer; InputLen: PtrInt;
   IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
+begin
+  if not DecryptPkcs7Var(Input, InputLen, IVAtBeginning, result) and
+     RaiseESynCryptoOnError then
+    ESynCrypto.RaiseUtf8('%.DecryptPkcs7Buffer: Invalid Input', [self]);
+end;
+
+function TAesAbstract.DecryptPkcs7Var(Input: pointer; InputLen: PtrInt;
+  IVAtBeginning: boolean; var Plain: RawByteString): boolean;
 var
   ivsize, padding: PtrInt;
 begin
-  result := '';
-  if not DecryptPkcs7Len(InputLen, ivsize, Input,
-      IVAtBeginning, RaiseESynCryptoOnError) then
+  Plain := '';
+  result := false;
+  if not DecryptPkcs7Len(InputLen, ivsize, Input, IVAtBeginning, false) then
     exit;
-  FastSetString(RawUtf8(result), InputLen); // assume CP_UTF8 for FPC RTL bug
-  Decrypt(@PByteArray(Input)^[ivsize], pointer(result), InputLen);
-  padding := CheckPadding(@PByteArray(result)^[InputLen - 1]);
+  pointer(Plain) := FastNewString(InputLen, CP_UTF8); // CP_UTF8 for FPC RTL bug
+  Decrypt(@PByteArray(Input)^[ivsize], pointer(Plain), InputLen);
+  padding := CheckPadding(@PByteArray(Plain)^[InputLen - 1]);
   if padding = 0 then
-    if RaiseESynCryptoOnError then
-      ESynCrypto.RaiseUtf8('%.DecryptPkcs7: Invalid Input', [self])
-    else
-      result := ''
+    Plain := ''
   else
   begin
-    // fast in-place set result length without any memory resize
-    dec(InputLen, padding);
-    FakeSetLength(result, InputLen);
+    FakeSetLength(Plain, InputLen - padding); // no memory realloc, but maybe ''
+    result := true;
   end;
 end;
 
 function TAesAbstract.DecryptPkcs7(const Input: RawByteString;
   IVAtBeginning, RaiseESynCryptoOnError: boolean; TrailerLen: PtrInt): RawByteString;
 begin
-  result := DecryptPkcs7Buffer(pointer(Input), length(Input) - TrailerLen,
-    IVAtBeginning, RaiseESynCryptoOnError);
+  if not DecryptPkcs7Var(pointer(Input), length(Input) - TrailerLen, IVAtBeginning, result) and
+     RaiseESynCryptoOnError then
+    ESynCrypto.RaiseUtf8('%.DecryptPkcs7: Invalid Input', [self]);
 end;
 
 function TAesAbstract.DecryptPkcs7(const Input: TBytes;
@@ -5607,7 +5615,7 @@ begin
         exit;
       dec(enclen, SizeOf(TAesBlock));
       P := pointer(Data);
-      result := DecryptPkcs7Buffer(P, enclen, IVAtBeginning, {raiseexc=}false);
+      DecryptPkcs7Var(P, enclen, IVAtBeginning, result);
     end;
     if result <> '' then
       if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(@P[enclen])^) then
@@ -5650,7 +5658,7 @@ begin
       exit;
     // decrypt and check MAC
     if MacSetNonce({encrypt=}false, pcd^.nonce, Associated) then
-      result := DecryptPkcs7Buffer(P, len, IVAtBeginning, {raiseexc=}false);
+      DecryptPkcs7Var(P, len, IVAtBeginning, result);
     if result <> '' then
       if not MacDecryptCheckTag(pcd^.mac) then
       begin
