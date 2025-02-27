@@ -703,7 +703,7 @@ type
     // AES/MAC process - for TAesGcm, authentication requires decryption
     // - EndingSize can be used if some custom info is stored at the end of Data
     function MacAndCrypt(const Data: RawByteString; Encrypt, IVAtBeginning: boolean;
-      const Associated: RawByteString = ''; EndingSize: cardinal = 0): RawByteString;
+      const Associated: RawByteString = ''; EndingSize: cardinal = 0): RawByteString; virtual;
 
     {$ifndef PUREMORMOT2}
     /// deprecated wrapper able to cypher/decypher any in-memory content
@@ -1164,6 +1164,12 @@ type
     // - always return true, since AES-GCM is a one pass process, and perform
     // the authentication during the decryption process
     function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; override;
+    /// perform one step PKCS7 encryption/decryption and authentication with
+    // the curent AES instance over a small memory block
+    // - overriden to generate the standard AES-GCM output, which does not match
+    // our TAesAbstract.MacAndCrypt() layout with dual 256-bit signatures
+    function MacAndCrypt(const Data: RawByteString; Encrypt, IVAtBeginning: boolean;
+      const Associated: RawByteString = ''; EndingSize: cardinal = 0): RawByteString; override;
     /// AES-GCM pure alternative to MacSetNonce()
     // - if the MacEncrypt pattern is not convenient for your purpose
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
@@ -5593,35 +5599,6 @@ var
   P: PByteArray;
 begin
   result := ''; // e.g. MacSetNonce not supported
-  if (fAlgoMode = mGCM) and
-     InheritsFrom(TAesGcmAbstract) then
-  begin
-    // for AES-GCM, no nonce needed: use standard encrypted + tag layout
-    if not MacSetNonce(encrypt, nonce{%H-}, Associated) then
-      exit; // AEAD data is assigned to fAssociated before cipher blocks
-    if Encrypt then
-    begin
-      len := length(Data);
-      enclen := EncryptPkcs7Length(len, IVAtBeginning);
-      P := FastNewString(enclen + SizeOf(TAesBlock) + EndingSize);
-      pointer(result) := P;
-      if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
-        result := '';
-    end
-    else
-    begin
-      enclen := cardinal(length(Data)) - EndingSize;
-      if enclen < SizeOf(TAesBlock) * 2 then
-        exit;
-      dec(enclen, SizeOf(TAesBlock));
-      P := pointer(Data);
-      DecryptPkcs7Var(P, enclen, IVAtBeginning, result);
-    end;
-    if result <> '' then
-      if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(@P[enclen])^) then
-        result := '';
-  end
-  else
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
@@ -6670,6 +6647,41 @@ end;
 function TAesGcmAbstract.MacCheckError(Encrypted: pointer; Count: cardinal): boolean;
 begin
   result := true; // AES-GCM is a one-pass algorithm -> GMAC is checked later
+end;
+
+function TAesGcmAbstract.MacAndCrypt(const Data: RawByteString;
+  Encrypt, IVAtBeginning: boolean; const Associated: RawByteString;
+  EndingSize: cardinal): RawByteString;
+var
+  P: PByteArray;
+  len, enclen: cardinal;
+begin
+  // for AES-GCM, no nonce needed: use standard encrypted + tag layout
+  result := '';
+  if fStarted <> stNone then
+    exit;
+  fAssociated := Associated; // AEAD data is assigned before cipher blocks
+  if Encrypt then
+  begin
+    len := length(Data);
+    enclen := EncryptPkcs7Length(len, IVAtBeginning);
+    P := FastNewString(enclen + SizeOf(TAesBlock) + EndingSize);
+    pointer(result) := P;
+    if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
+      result := '';
+  end
+  else
+  begin
+    enclen := cardinal(length(Data)) - EndingSize;
+    if enclen < SizeOf(TAesBlock) * 2 then
+      exit;
+    dec(enclen, SizeOf(TAesBlock));
+    P := pointer(Data);
+    DecryptPkcs7Var(P, enclen, IVAtBeginning, result);
+  end;
+  if result <> '' then
+    if not AesGcmFinal(PAesBlock(@P[enclen])^) then
+      result := '';
 end;
 
 
