@@ -1595,7 +1595,9 @@ var
   opt: THttpRequestExtendedOptions;
   popt: PHttpRequestExtendedOptions;
 begin
-  CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
+  CheckEqual(SizeOf(msg), 192);
+  CheckEqual(PEER_CACHE_MESSAGELEN, SizeOf(msg) + 4 + SizeOf(TAesBlock) * 3);
+  CheckEqual(Base64uriToBinLength(PEER_CACHE_BEARERLEN), PEER_CACHE_MESSAGELEN);
   // validate THttpRequestExtendedOptions serialization
   opt.Init;
   Check(not opt.TLS.IgnoreCertificateErrors);
@@ -1685,7 +1687,7 @@ begin
           Check(not CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
           Check(not HashDigestEqual(msg.Hash, msg2.Hash), 'hde0');
           res := hpc2.BearerDecode(dBearer, pcfBearerDirect, msg2);
-          Check(res = mdB64, 'directB64');
+          Check(res = mdBParam, 'directB64');
           dTok := '';
           Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
           FillCharFast(msg2, SizeOf(msg2), 0);
