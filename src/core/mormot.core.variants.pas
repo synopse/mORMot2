@@ -6009,7 +6009,8 @@ end;
 procedure TDocVariantData.AddNameValuesToObject(
   const NameValuePairs: array of const; DontAddDefault: boolean);
 var
-  n, arg, len, ndx: PtrInt;
+  n, len, ndx: PtrInt;
+  arg: PVarRecArray;
 begin
   n := length(NameValuePairs);
   if (n = 0) or
@@ -6030,16 +6031,20 @@ begin
     EnsureUnique(VName);
   end;
   ndx := VCount;
-  for arg := 0 to n - 1 do
+  arg := @NameValuePairs[0];
+  repeat
     if not (DontAddDefault and
-            VarRecIsDefault(NameValuePairs[arg * 2 + 1])) then
+            VarRecIsDefault(@arg[1])) then
     begin
-      VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
+      VarRecToUtf8(@arg[0], VName[ndx]);
       if Has(dvoInternNames) then
         DocVariantType.InternNames.UniqueText(VName[ndx]);
-      InternalSetVarRec(ndx, NameValuePairs[arg * 2 + 1]);
+      InternalSetVarRec(ndx, @arg[1]);
       inc(ndx);
     end;
+    arg := @arg[2];
+    dec(n);
+  until n = 0;
   VCount := ndx;
 end;
 
@@ -6053,21 +6058,26 @@ end;
 
 procedure TDocVariantData.Update(const NameValuePairs: array of const);
 var
-  n, arg: PtrInt;
+  n: PtrInt;
   nam: RawUtf8;
   val: Variant;
+  arg: PVarRecArray;
 begin
   n := length(NameValuePairs);
   if (n = 0) or
      (n and 1 = 1) or
      IsArray then
     exit; // nothing to add
-  for arg := 0 to (n shr 1) - 1 do
-  begin
-    VarRecToUtf8(NameValuePairs[arg * 2], nam);
-    VarRecToVariant(NameValuePairs[arg * 2 + 1], val);
-    AddOrUpdateValue(nam, val)
-  end;
+  arg := @NameValuePairs[0];
+  n := n shr 1;
+  if n <> 0 then
+    repeat
+      VarRecToUtf8(@arg[0], nam);
+      VarRecToVariant(@arg[1], val);
+      AddOrUpdateValue(nam, val);
+      arg := @arg[2];
+      dec(n);
+    until n = 0;
 end;
 
 procedure TDocVariantData.AddOrUpdateObject(const NewValues: variant;
