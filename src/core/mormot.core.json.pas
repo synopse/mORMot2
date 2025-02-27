@@ -4695,11 +4695,11 @@ begin
             continue; // was within PropNamesToIgnore[]
           if IncludeQueryDelimiter then
             w.AddDirect(sep);
+          sep := '&';
+          IncludeQueryDelimiter := true;
           w.AddShort(Name.Text, Name.Len);
           w.AddDirect('=');
           UrlEncode(w, Value.Text, Value.Len);
-          sep := '&';
-          IncludeQueryDelimiter := true;
         end;
       w.SetText(result);
     finally
