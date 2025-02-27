@@ -1648,6 +1648,7 @@ type
   /// information about THttpPeerCrypt.MessageDecode() success
   THttpPeerCryptMessageDecode = (
     mdOk,
+    mdBParam,
     mdBLen,
     mdB64,
     mdBearer,
@@ -1928,6 +1929,10 @@ const
     pcfResponseFull];
 
   PEER_CACHE_PATTERN = '*.cache';
+  /// AES-GCM enciphered UDP frame length: iv + msg + padding + mac + crc (244 bytes)
+  PEER_CACHE_MESSAGELEN = SizeOf(THttpPeerCacheMessage) + SizeOf(TAesBlock) * 3 + 4;
+  /// base-64 HttpDirectUri() bearer size in chars, from PEER_CACHE_MESSAGELEN
+  PEER_CACHE_BEARERLEN = 326;
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(md: THttpPeerCryptMessageDecode): PShortString; overload;
@@ -5420,79 +5425,78 @@ begin
   PCardinal(p + l)^ := crc32c(fSharedMagic, p, l);
 end;
 
+function DoDecode(Sender: THttpPeerCrypt; P: pointer;
+  var aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
+var // sub-function to avoid any hidden try..finally
+  encoded, plain: RawByteString;
+begin
+  // AES-GCM-128 decoding and authentication
+  FastSetRawByteString(encoded, P, PEER_CACHE_MESSAGELEN - 4);
+  Sender.fAesSafe.Lock;
+  try
+    plain := Sender.fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
+  finally
+    Sender.fAesSafe.UnLock;
+  end;
+  // check consistency of the decoded THttpPeerCacheMessage value
+  result := mdAes;
+  if length(plain) <> SizeOf(aMsg) then
+    exit;
+  MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
+  if (aMsg.Kind in PCF_RESPONSE) and  // responses are broadcasted on POSIX
+     (aMsg.DestIP4 = Sender.fIP4) and // validate against local sequence
+     ((aMsg.Seq < Sender.fFrameSeqLow) or
+       (aMsg.Seq > cardinal(Sender.fFrameSeq))) then
+    result := mdSeq
+  else if ord(aMsg.Kind) > ord(high(aMsg.Kind)) then
+    result := mdKind
+  else if ord(aMsg.Hardware) > ord(high(aMsg.Hardware)) then
+    result := mdHw
+  else if ord(aMsg.Hash.Algo) > ord(high(aMsg.Hash.Algo)) then
+    result := mdAlgo
+  else
+    result := mdOk;
+end;
+
 function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
   out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-
-  function DoDecode: THttpPeerCryptMessageDecode;
-  var // sub-function to avoid any hidden try..finally
-    encoded, plain: RawByteString;
-  begin
-    // AES-GCM-128 decoding and authentication
-    FastSetRawByteString(encoded, aFrame, aFrameLen);
-    fAesSafe.Lock;
-    try
-      plain := fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
-    finally
-      fAesSafe.UnLock;
-    end;
-    // check consistency of the decoded THttpPeerCacheMessage value
-    result := mdAes;
-    if length(plain) <> SizeOf(aMsg) then
-      exit;
-    MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
-    if (aMsg.Kind in PCF_RESPONSE) and // responses are broadcasted on POSIX
-       (aMsg.DestIP4 = fIP4) and     // only validate against the local sequence
-       ((aMsg.Seq < fFrameSeqLow) or
-         (aMsg.Seq > cardinal(fFrameSeq))) then // compare with local sequence
-      result := mdSeq
-    else if ord(aMsg.Kind) > ord(high(aMsg.Kind)) then
-      result := mdKind
-    else if ord(aMsg.Hardware) > ord(high(aMsg.Hardware)) then
-      result := mdHw
-    else if ord(aMsg.Hash.Algo) > ord(high(aMsg.Hash.Algo)) then
-      result := mdAlgo
-    else
-      result := mdOk;
-  end;
-
 begin
-  // quickly reject any naive fuzzing attempt
+  // quickly reject any naive fuzzing attempt against length and 32-bit checksum
   result := mdLen;
-  dec(aFrameLen, 4);
-  if aFrameLen < SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding} then
+  if aFrameLen <> PEER_CACHE_MESSAGELEN then
     exit;
   result := mdCrc;
-  if PCardinal(aFrame + aFrameLen)^ = crc32c(fSharedMagic, aFrame, aFrameLen) then
+  if crc32c(fSharedMagic, aFrame, PEER_CACHE_MESSAGELEN - 4) =
+       PCardinal(aFrame + PEER_CACHE_MESSAGELEN - 4)^ then
     // decode and verify the frame content
-    result := DoDecode;
+    result := DoDecode(self, aFrame, aMsg);
 end;
 
 function THttpPeerCrypt.BearerDecode(
   const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
   out aMsg: THttpPeerCacheMessage; aParams: PRawUtf8): THttpPeerCryptMessageDecode;
 var
-  tok: array[0.. 511] of AnsiChar; // no memory allocation
-  bearerlen, toklen, p: PtrInt;
+  tok: array[0.. PEER_CACHE_MESSAGELEN - 1] of AnsiChar; // no memory allocation
+  bearerlen: PtrInt;
 begin
-  bearerlen := length(aBearerToken); // typically 326 base64 chars into 244 bytes
-  if bearerlen > 326 then
-  begin
-    p := ByteScanIndex(pointer(aBearerToken), bearerlen, ord('?'));
-    if p >= 0 then // e.g. 'xxxxxxxx?ti=1&as=3' -> aParams^ := 'ti=1&as=3'
-    begin
-      if aParams <> nil then // e.g. URI-encoded THttpRequestExtendedOptions
-        FastSetString(aParams^, @PByteArray(aBearerToken)[p + 1], bearerlen - p - 1);
-      bearerlen := p;
-    end;
-  end;
-  toklen := Base64uriToBinLength(bearerlen);
   result := mdBLen;
-  if toklen > SizeOf(tok) then
-    exit;
+  bearerlen := length(aBearerToken) - PEER_CACHE_BEARERLEN;
+  if bearerlen <> 0 then
+    if bearerlen > 0 then
+    begin
+      result := mdBParam;
+      if aBearerToken[PEER_CACHE_BEARERLEN + 1] <> '?' then
+        exit;
+      if aParams <> nil then // e.g. URI-encoded THttpRequestExtendedOptions
+        FastSetString(aParams^,
+          @PByteArray(aBearerToken)[PEER_CACHE_BEARERLEN + 1], bearerlen - 1);
+    end
+    else
+      exit; // not enough input
   result := mdB64;
-  if not Base64uriToBin(pointer(aBearerToken), @tok, bearerlen, toklen) then
+  if not Base64uriToBin(pointer(aBearerToken), @tok, PEER_CACHE_BEARERLEN, SizeOf(tok)) then
     exit;
-  result := MessageDecode(@tok, toklen, aMsg);
+  result := MessageDecode(@tok, SizeOf(tok), aMsg);
   if (result = mdOk) and
      (aExpected >= pcfBearer) and
      (aMsg.Kind <> aExpected) then
@@ -6567,52 +6571,53 @@ begin
   err := [];
   if fSettings = nil then
     include(err, eShutdown);
-  if length(aBearerToken) < (SizeOf(msg) div 3) * 4 then // base64uri length
+  if length(aBearerToken) < PEER_CACHE_BEARERLEN then // base64uri length
     include(err, eBearer);
   if not (IsGet(aMethod) or
           IsHead(aMethod)) then
     include(err, eNoGetHead);
   if aUrl = '' then // URI is just ignored but something should be specified
     include(err, eUrl)
-  else if PCardinal(aUrl)^ = DIRECTURI_32 then // start with '/htt'
-  begin
-    // pcfBearerDirect* for pcoHttpDirect mode: /https/microsoft.com/...
-    if (aRemoteIp <> '') and
-       not (IsLocalHost(pointer(aRemoteIP)) or
-            (aRemoteIP = fMac.IP)) then
-      include(err, eDirectIp);
-    if not Check(BearerDecode(aBearerToken, pcfRequest, msg),
-             'OnBeforeBody Direct', msg) then
-      include(err, eDirectDecode)
+  else if err = [] then
+    if PCardinal(aUrl)^ = DIRECTURI_32 then // start with '/htt'
+    begin
+      // pcfBearerDirect* for pcoHttpDirect mode: /https/microsoft.com/...
+      if (aRemoteIp <> '') and
+         not (IsLocalHost(pointer(aRemoteIP)) or
+              (aRemoteIP = fMac.IP)) then
+        include(err, eDirectIp);
+      if not Check(BearerDecode(aBearerToken, pcfRequest, msg),
+               'OnBeforeBody Direct', msg) then
+        include(err, eDirectDecode)
+      else
+      begin
+        if not (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
+          include(err, eDirectKind);
+        if Int64(msg.Opaque) <> crc63c(pointer(aUrl), length(aUrl)) then
+          include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
+      end;
+      if not (pcoHttpDirect in fSettings.Options) then
+        include(err, aDirectDisabled);
+    end
     else
     begin
-      if not (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
-        include(err, eDirectKind);
-      if Int64(msg.Opaque) <> crc63c(pointer(aUrl), length(aUrl)) then
-        include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
+      // pcfBearer for regular request in broadcasting mode
+      if not IPToCardinal(aRemoteIP, ip4) then
+        include(err, eIp1)
+      else if fInstable.IsBanned(ip4) then // banned from RejectInstablePeersMin
+        include(err, eBanned);
+      if err = [] then
+        if Check(BearerDecode(aBearerToken, pcfBearer, msg), 'OnBeforeBody', msg) then
+        begin
+          if msg.IP4 <> fIP4 then
+            include(err, eIp2);
+          if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
+                 IsEqualGuid(msg.Uuid, fUuid))) then
+            include(err, eUuid);
+        end
+        else
+          include(err, eDecode);
     end;
-    if not (pcoHttpDirect in fSettings.Options) then
-      include(err, aDirectDisabled);
-  end
-  else
-  begin
-    // pcfBearer for regular request in broadcasting mode
-    if not IPToCardinal(aRemoteIP, ip4) then
-      include(err, eIp1)
-    else if fInstable.IsBanned(ip4) then // banned from RejectInstablePeersMin
-      include(err, eBanned);
-    if err = [] then
-      if Check(BearerDecode(aBearerToken, pcfBearer, msg), 'OnBeforeBody', msg) then
-      begin
-        if msg.IP4 <> fIP4 then
-          include(err, eIp2);
-        if not ((IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
-               IsEqualGuid(msg.Uuid, fUuid))) then
-          include(err, eUuid);
-      end
-      else
-        include(err, eDecode);
-  end;
   result := HTTP_SUCCESS;
   if err <> [] then
     result := HTTP_FORBIDDEN;
@@ -7131,7 +7136,7 @@ var
   http: PHttpRequestContext;
   progsize: Int64; // expected progressive file size, to be supplied as header
   err: TOnRequestError;
-  errtxt, params: RawUtf8;
+  errtxt, opt: RawUtf8;
 begin
   // avoid GPF at shutdown
   result := HTTP_BADREQUEST;
@@ -7139,7 +7144,7 @@ begin
     exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
-  if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg, @params), 'OnRequest', msg) then
+  if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg, @opt), 'OnRequest', msg) then
   try
     // resource will always be identified by decoded bearer hash
     progsize := 0;
@@ -7150,7 +7155,7 @@ begin
         if IsHead(Ctxt.Method) then
         begin
           // proxy the HEAD request to the final server
-          result := DirectFileNameHead(Ctxt, msg.Hash, params);
+          result := DirectFileNameHead(Ctxt, msg.Hash, opt);
           if not (result in HTTP_GET_OK) then
             err := oreDirectRemoteUriFailed;
           exit;
@@ -7158,7 +7163,7 @@ begin
         else
         begin
           // remote HEAD + GET new partial file in a background thread
-          result := DirectFileName(Ctxt, msg, http, fn, progsize, params);
+          result := DirectFileName(Ctxt, msg, http, fn, progsize, opt);
           if result <> HTTP_SUCCESS then
           begin
             err := oreDirectRemoteUriFailed;
