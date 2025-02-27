@@ -6478,32 +6478,53 @@ end;
 
 procedure TJsonWriter.AddCsvConst(const Values: array of const);
 var
-  i: PtrInt;
+  n: integer;
+  a: PVarRec;
 begin
-  if length(Values) = 0 then
+  n := length(Values);
+  if n = 0 then
     exit;
-  for i := 0 to high(Values) do
-  begin
-    AddJsonEscape(Values[i]);
+  a := @Values[0];
+  repeat
+    AddJsonEscapeVarRec(a);
+    dec(n);
+    if n = 0 then
+      break;
     AddComma;
-  end;
-  CancelLastComma;
+    inc(a);
+  until false;
 end;
 
 procedure TJsonWriter.Add(const Values: array of const);
 var
-  i: PtrInt;
+  n: integer;
+  a: PVarRec;
 begin
-  for i := 0 to high(Values) do
-    AddJsonEscape(Values[i]);
+  n := length(Values);
+  if n = 0 then
+    exit;
+  a := @Values[0];
+  repeat
+    AddJsonEscapeVarRec(a);
+    inc(a);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TJsonWriter.Add(const Values: array of const; Escape: TTextWriterKind);
 var
-  i: PtrInt;
+  n: integer;
+  a: PVarRec;
 begin
-  for i := 0 to high(Values) do
-    Add(Values[i], Escape);
+  n := length(Values);
+  if n = 0 then
+    exit;
+  a := @Values[0];
+  repeat
+    AddVarRec(a);
+    inc(a);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TJsonWriter.AddQuotedStringAsJson(const QuotedString: RawUtf8);
