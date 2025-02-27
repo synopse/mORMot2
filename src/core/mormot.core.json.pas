@@ -4970,6 +4970,7 @@ var
   isParam: AnsiChar;
   tmp: TTempUtf8;
   wasString: boolean;
+  pa: PVarRec;
   temp: TTextWriterStackBuffer;
 begin
   if (Format = '') or
@@ -4983,7 +4984,7 @@ begin
     FormatUtf8(Format, Args, Result)
   else if Format = '%' then
     // optimize raw conversion
-    VarRecToUtf8(Args[0], Result)
+    VarRecToUtf8(@Args[0], Result)
   else
     // handle any number of parameters with minimal memory allocations
     with TJsonWriter.CreateOwnedStream(temp) do
@@ -5011,22 +5012,24 @@ begin
            (A <= high(Args)) then
         begin
           // handle % substitution
-          if Args[A].VType = vtObject then
-            AddShort(ClassNameShort(Args[A].VObject)^)
+          pa := @Args[A];
+          if pa^.VType = vtObject then
+            AddShort(ClassNameShort(pa^.VObject)^)
           else
-            Add(Args[A]);
+            AddVarRec(pa);
           inc(A);
         end
         else if (isParam = '?') and
                 (P <= high(Params)) then
         begin
           // handle ? substitution as JSON or SQL
+          pa := @Params[P];
           if JsonFormat then
-            AddJsonEscape(Params[P]) // does the JSON magic including "quotes"
+            AddJsonEscapeVarRec(pa) // proper JSON including "quotes"
           else
           begin
             AddDirect(':', '('); // markup for SQL parameter binding
-            VarRecToTempUtf8(Params[P], tmp, @wasString);
+            VarRecToTempUtf8(pa, tmp, @wasString);
             if wasString then
               AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
             else
@@ -6452,7 +6455,7 @@ begin
       exit;
     // add next value as text instead of F^='%' placeholder
     if ValuesIndex <= high(Values) then // missing value will display nothing
-      Add(Values[ValuesIndex], Escape, WriteObjectOptions);
+      AddVarRec(@Values[ValuesIndex], Escape, WriteObjectOptions);
     inc(F);
     inc(ValuesIndex);
   until false;
@@ -7427,7 +7430,7 @@ var
             inc(a);
             if VarRecAsChar(NameValuePairs[a]) = ord('}') then
               break;
-            AddJsonEscape(NameValuePairs[a]);
+            AddJsonEscapeVarRec(NameValuePairs[a]);
             AddDirect(':');
             inc(a);
             WriteValue;
@@ -7435,7 +7438,7 @@ var
           CancelLastComma('}');
         end
     else
-      AddJsonEscape(NameValuePairs[a]);
+      AddJsonEscapeVarRec(NameValuePairs[a]);
     end;
     AddComma;
   end;
@@ -7445,7 +7448,7 @@ begin
   a := 0;
   while a < high(NameValuePairs) do
   begin
-    AddJsonEscape(NameValuePairs[a]);
+    AddJsonEscapeVarRec(NameValuePairs[a]);
     inc(a);
     AddDirect(':');
     WriteValue;
@@ -11221,8 +11224,7 @@ function JsonEncode(const NameValuePairs: array of const): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
 begin
-  if high(NameValuePairs) < 1 then
-    // return void JSON object on error
+  if high(NameValuePairs) < 1 then // void JSON object if not enough parameters
     result := '{}'
   else
     with TJsonWriter.CreateOwnedStream(temp) do
