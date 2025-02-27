@@ -4097,6 +4097,21 @@ const
   // MAX_METHOD_ARGS=128 may not be enough for CONTENT_TYPE_WEBFORM POST
   MAX_INPUT = 512;
 
+function IsSessionSignature(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin // = IdemPChar(P, 'SESSION_SIGNATURE=')
+  result := (PCardinal(P)^ or $20202020 =
+             ord('s') + ord('e') shl 8 + ord('s') shl 16 + ord('s') shl 24) and
+            (PCardinal(P + 4)^ or $00202020 =
+             ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('_') shl 24) and
+            (PCardinal(P + 8)^ or $20202020 =
+             ord('s') + ord('i') shl 8 + ord('g') shl 16 + ord('n') shl 24) and
+            (PCardinal(P + 12)^ or $20202020 =
+             ord('a') + ord('t') shl 8 + ord('u') shl 16 + ord('r') shl 24) and
+            (PCardinal(P + 16)^ or $ffff2020 =
+             ord('e') + ord('=') shl 8 + $ffff0000);
+end;
+
 procedure TRestServerUriContext.FillInput(const LogInputIdent: RawUtf8);
 var
   n, max: PtrInt;
@@ -4115,11 +4130,11 @@ begin
       if n >= MAX_INPUT * 2 then
         EParsingException.RaiseUtf8(
           'Security Policy: Accept up to % parameters for %.FillInput',
-          [MAX_INPUT * 2, self]);
+          [MAX_INPUT, self]);
       inc(max, NextGrow(max));
       SetLength(fInput, max);
     end;
-    if IdemPChar(P, 'SESSION_SIGNATURE=') then
+    if IsSessionSignature(P) then // = IdemPChar(P, 'SESSION_SIGNATURE=')
     begin
       // don't include the TAuthSession signature into Input[]
       P := PosChar(P + 18, '&');
@@ -6126,7 +6141,7 @@ begin
   begin
     if fOwner.fHandleAuthentication then
     begin
-      if IdemPChar(p, 'SESSION_SIGNATURE=') then
+      if IsSessionSignature(p) then // = IdemPChar(p, 'SESSION_SIGNATURE=')
         dec(p)
       else
         p := StrPosI('&SESSION_SIGNATURE=', p);
