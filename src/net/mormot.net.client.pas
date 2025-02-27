@@ -3644,8 +3644,8 @@ begin
      (cardinal(s) <= cardinal(high(Auth.Scheme))) then
     Auth.Scheme := THttpRequestAuthentication(s);
   v^.GetAsRawUtf8('au', Auth.UserName);
-  v^.GetAsRawUtf8('ap', Auth.Password);
-  v^.GetAsRawUtf8('at', Auth.Token);
+  v^.GetAsRawUtf8('ap', RawUtf8(Auth.Password));
+  v^.GetAsRawUtf8('at', RawUtf8(Auth.Token));
 end;
 
 
