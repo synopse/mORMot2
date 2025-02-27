@@ -6023,7 +6023,7 @@ begin
   end;
   ndx := VCount;
   for arg := 0 to n - 1 do
-    if not (DontAddDefault or
+    if not (DontAddDefault and
             VarRecIsDefault(NameValuePairs[arg * 2 + 1])) then
     begin
       VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
