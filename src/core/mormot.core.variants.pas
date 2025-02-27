@@ -104,7 +104,7 @@ procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: TVarData;
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - vt*String or vtVariant arguments are returned as varByRef
-procedure VarRecToVariant(const V: TVarRec; var result: variant); overload;
+procedure VarRecToVariant(V: PVarRec; var result: variant); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that, due to a Delphi compiler limitation, cardinal values should be
@@ -985,7 +985,7 @@ type
     function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
     function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
+    procedure InternalSetVarRec(aIndex: PtrInt; aValue: PVarRec);
       {$ifdef HASSAFEINLINE}inline;{$endif}
     procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(aCsv: PUtf8Char; aPathDelim: AnsiChar;
@@ -4090,81 +4090,82 @@ end;
 
 function VarRecToVariant(const V: TVarRec): variant;
 begin
-  VarRecToVariant(V, result);
+  VarRecToVariant(@V, result);
 end;
 
-procedure VarRecToVariant(const V: TVarRec; var result: variant);
+procedure VarRecToVariant(V: PVarRec; var result: variant);
+var
+  r: TSynVarData absolute result;
 begin
   VarClear(result{%H-});
-  with TSynVarData(result) do
-    case V.VType of
-      vtBoolean:
-        begin
-          VType := varBoolean;
-          Data.VBoolean := V.VBoolean;
-        end;
-      vtInteger:
-        begin
-          VType := varInteger;
-          VInteger := V.VInteger;
-        end;
-      vtInt64:
-        begin
-          VType := varInt64;
-          VInt64 := V.VInt64^;
-        end;
-      {$ifdef FPC}
-      vtQWord:
-        begin
-          VType := varWord64;
-          Data.VQWord := V.VQWord^;
-        end;
-      {$endif FPC}
-      vtCurrency:
-        begin
-          VType := varCurrency;
-          VInt64 := PInt64(V.VCurrency)^;
-        end;
-      vtExtended:
-        begin
-          VType := varDouble;
-          VDouble := V.VExtended^;
-        end;
-      vtVariant:
-        result := V.VVariant^; // make a copy
-      vtAnsiString:
-        begin
-          VType := varString; // varStringByRef triggers GPF -> refcnt assign
-          VAny := nil;
-          RawByteString(VAny) := RawByteString(V.VAnsiString);
-        end;
-      {$ifdef HASVARUSTRING}
-      vtUnicodeString,
-      {$endif HASVARUSTRING}
-      vtWideString,
-      vtString,
-      vtPChar,
-      vtChar,
-      vtWideChar,
-      vtClass:
-        begin
-          VType := varString;
-          VString := nil; // avoid GPF on next line
-          VarRecToUtf8(V, RawUtf8(VString)); // decode as new RawUtf8
-        end;
-      vtObject:  // class instance will be serialized as a TDocVariant
-        ObjectToVariant(V.VObject, result, [woDontStoreDefault]);
-      vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec)
-        if V.VPointer = nil then
-          VType := varNull
-        else
-        begin // raw pointer <> nil will be serialized as PtrInt
-          VType := varPtrInt;
-          VInt64 := PtrInt(V.VPointer);
-        end
-    else
-      ESynVariant.RaiseUtf8('Unhandled TVarRec.VType=%', [V.VType]);
-    end;
+  case V^.VType of
+    vtBoolean:
+      begin
+        r.VType := varBoolean;
+        r.Data.VBoolean := V^.VBoolean;
+      end;
+    vtInteger:
+      begin
+        r.VType := varInteger;
+        r.VInteger := V^.VInteger;
+      end;
+    vtInt64:
+      begin
+        r.VType := varInt64;
+        r.VInt64 := V^.VInt64^;
+      end;
+    {$ifdef FPC}
+    vtQWord:
+      begin
+        r.VType := varWord64;
+        r.Data.VQWord := V^.VQWord^;
+      end;
+    {$endif FPC}
+    vtCurrency:
+      begin
+        r.VType := varCurrency;
+        r.VInt64 := PInt64(V^.VCurrency)^;
+      end;
+    vtExtended:
+      begin
+        r.VType := varDouble;
+        r.VDouble := V^.VExtended^;
+      end;
+    vtVariant:
+      result := V^.VVariant^; // make a copy
+    vtAnsiString:
+      begin
+        r.VType := varString; // varStringByRef triggers GPF -> refcnt assign
+        r.VAny := nil;
+        RawByteString(r.VAny) := RawByteString(V^.VAnsiString);
+      end;
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString,
+    {$endif HASVARUSTRING}
+    vtWideString,
+    vtString,
+    vtPChar,
+    vtChar,
+    vtWideChar,
+    vtClass:
+      begin
+        r.VType := varString;
+        r.VString := nil; // avoid GPF on next line
+        VarRecToUtf8(V, RawUtf8(r.VString)); // decode as new RawUtf8
+      end;
+    vtObject:  // class instance will be serialized as a TDocVariant
+      ObjectToVariant(V^.VObject, result, [woDontStoreDefault]);
+    vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec)
+      if V^.VPointer = nil then
+        r.VType := varNull
+      else
+      begin // raw pointer <> nil will be serialized as PtrInt
+        r.VType := varPtrInt;
+        r.VInt64 := PtrInt(V^.VPointer);
+      end
+  else
+    ESynVariant.RaiseUtf8('Unhandled TVarRec.VType=%', [V^.VType]);
+  end;
 end;
 
 function VariantDynArrayToJson(const V: TVariantDynArray): RawUtf8;
@@ -5991,16 +5992,16 @@ begin
   AddNameValuesToObject(NameValuePairs, DontAddDefault);
 end;
 
-procedure TDocVariantData.InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
+procedure TDocVariantData.InternalSetVarRec(aIndex: PtrInt; aValue: PVarRec);
 var
   v: PVariant;
 begin
   v := @VValue[aIndex];
   if Has(dvoValueCopiedByReference) or
-     (aValue.VType <> vtVariant) then
+     (aValue^.VType <> vtVariant) then
     VarRecToVariant(aValue, v^)
   else
-    SetVariantByValue(aValue.VVariant^, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
+    SetVariantByValue(aValue^.VVariant^, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
   if Has(dvoInternValues) then
     InternalUniqueValueAt(aIndex);
 end;
@@ -7443,7 +7444,7 @@ begin
   for ndx := 0 to high(aValue) do
   begin
     added := InternalAdd('');
-    VarRecToVariant(aValue[ndx], VValue[added]);
+    VarRecToVariant(@aValue[ndx], VValue[added]);
     if Has(dvoInternValues) then
       InternalUniqueValueAt(added);
   end;
