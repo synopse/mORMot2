@@ -8215,7 +8215,7 @@ begin
       for a := 0 to n shr 1 do
       begin
         p := @NameValuePairs[a * 2];
-        VarRecToUtf8(p^, name);
+        VarRecToUtf8(p, name);
         if name = '' then
           continue;
         flags := flags - [valueDirect, valueIsCsv];
@@ -8236,13 +8236,13 @@ begin
            (byte(p^.VType) in vtNotString) then
           include(flags, valuedirect);
         if (ueSkipVoidValue in Options) and
-           VarRecIsVoid(p^) then
+           VarRecIsVoid(p) then
           continue // skip e.g. '' or 0
         else if p^.VType = vtObject then // no VarRecToUtf8(vtObject)=ClassName
           value := ObjectToJson(p^.VObject, [])
         else if not (valueDirect in flags) then
         begin
-          VarRecToUtf8(p^, value);
+          VarRecToUtf8(p, value);
           if (ueSkipVoidString in Options) and
              (value = '') then
             continue; // skip ''
@@ -8275,7 +8275,7 @@ begin
         w.AddString(name);
         w.AddDirect('=');
         if valueDirect in flags then
-          w.Add(p^) // requires TJsonWriter
+          w.AddVarRec(p) // requires TJsonWriter
         else
           _UrlEncodeW(w, pointer(value), length(value), 32); // = UrlEncode(W)
       end;
