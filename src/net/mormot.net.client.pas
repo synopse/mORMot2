@@ -198,6 +198,13 @@ type
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
+/// persist main TNetTlsContext input fields into a TDocVariant
+function SaveNetTlsContext(const TLS: TNetTlsContext): variant;
+
+/// fill TNetTlsContext input fields from a SaveNetTlsContext() TDocVariant
+procedure LoadTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData);
+
+
 var
   /// THttpRequest timeout default value for DNS resolution
   // - only used by TWinHttp class - other clients will ignore it
@@ -3603,6 +3610,28 @@ end;
 function ToText(wra: THttpRequestAuthentication): PShortString;
 begin
   result := GetEnumName(TypeInfo(THttpRequestAuthentication), ord(wra));
+end;
+
+function SaveNetTlsContext(const TLS: TNetTlsContext): variant;
+begin
+  VarClear(result{%H-});
+  TDocVariantData(result).InitObject([
+    'te', TLS.Enabled,
+    'ti', TLS.IgnoreCertificateErrors,
+    'ta', TLS.AllowDeprecatedTls,
+    'tu', TLS.ClientAllowUnsafeRenegotation,
+    'cf', TLS.CertificateFile,
+    'ca', TLS.CACertificatesFile], JSON_FAST, {dontAddDefault=}true);
+end;
+
+procedure LoadTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData);
+begin
+  V.GetAsBoolean('te', TLS.Enabled);
+  V.GetAsBoolean('ti', TLS.IgnoreCertificateErrors);
+  V.GetAsBoolean('ta', TLS.AllowDeprecatedTls);
+  V.GetAsBoolean('tu', TLS.ClientAllowUnsafeRenegotation);
+  V.GetAsRawUtf8('cf', TLS.CertificateFile);
+  V.GetAsRawUtf8('ca', TLS.CACertificatesFile);
 end;
 
 
