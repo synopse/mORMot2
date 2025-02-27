@@ -6117,15 +6117,23 @@ end;
 procedure TDocVariantData.InitArray(const aItems: array of const;
   aOptions: TDocVariantOptions);
 var
-  arg: PtrInt;
+  n, ndx: PtrInt;
+  arg: PVarRec;
 begin
   Init(aOptions, dvArray);
-  if high(aItems) < 0 then
+  n := length(aItems);
+  if n = 0 then
     exit;
-  VCount := length(aItems);
-  SetLength(VValue, VCount);
-  for arg := 0 to high(aItems) do
-    InternalSetVarRec(arg, aItems[arg]);
+  VCount := n;
+  SetLength(VValue, n);
+  ndx := 0;
+  arg := @aItems[0];
+  repeat
+    InternalSetVarRec(ndx, arg);
+    inc(ndx);
+    inc(arg);
+    dec(n)
+  until n = 0;
 end;
 
 procedure TDocVariantData.InitArray(const aItems: array of const;
