@@ -1585,7 +1585,7 @@ var
   m, m2: RawUtf8;
   res: THttpPeerCryptMessageDecode;
   i, n, alter, status, len: integer;
-  tmp: RawByteString;
+  tmp: THttpPeerCacheMessageEncoded;
   cache: TFileName;
   dUri, dBearer, dTok, dAddr, ctyp, params: RawUtf8;
   hcs: THttpClientSocket;
@@ -1646,9 +1646,8 @@ begin
           begin
             msg.Size := i;
             msg.Hash.Bin.i0 := i;
-            tmp := hpc.MessageEncode(msg);
-            Check(tmp <> '');
-            res := hpc2.MessageDecode(pointer(tmp), length(tmp), msg2);
+            hpc.MessageEncode(msg, tmp);
+            res := hpc2.MessageDecode(@tmp, SizeOf(tmp), msg2);
             Check(res = mdOk, 'hpc2');
             CheckEqual(msg2.Size, i);
             Check(CompareMem(@msg, @msg2, SizeOf(msg)));
@@ -1662,15 +1661,15 @@ begin
           n := 10000;
           for i := 1 to n do
           begin
-            alter := Random32(length(tmp));
-            inc(PByteArray(tmp)[alter]); // should be detected at crc level
-            res := hpc2.MessageDecode(pointer(tmp), length(tmp), msg2);
+            alter := Random32(SizeOf(tmp));
+            inc(PByteArray(@tmp)[alter]); // should be detected at crc level
+            res := hpc2.MessageDecode(@tmp, SizeOf(tmp), msg2);
             if CheckFailed(res = mdCrc, 'alt') then
               TestFailed('alt=%', [ToText(res)^]);
-            dec(PByteArray(tmp)[alter]); // restore
+            dec(PByteArray(@tmp)[alter]); // restore
           end;
           NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
-          res := hpc.MessageDecode(pointer(tmp), length(tmp), msg2);
+          res := hpc.MessageDecode(@tmp, SizeOf(tmp), msg2);
           Check(res = mdOk, 'hpc');
           Check(CompareMem(@msg, @msg2, SizeOf(msg)));
           // validate the UDP client/server stack is running
@@ -1732,7 +1731,8 @@ begin
         hpc.OnDirectOptions := OnPeerCacheDirect;
         // ensure we can access the reference resources over Internet
         status := 0;
-        tmp := HttpGet(HTTP_LINK[0], '', nil, false, @status, 1000, true, true);
+        CheckEqual(Sha256(HttpGet(HTTP_LINK[0], '', nil, false, @status,
+          1000, true, true)), HTTP_HASH[0], HTTP_LINK[0]);
         if status = HTTP_SUCCESS then
         try
           // validate all resources
