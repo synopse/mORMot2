@@ -2916,8 +2916,8 @@ function GetDesktopWindow: PtrInt;
 /// returns the curent system code page for AnsiString types
 // - as used to initialize CurrentAnsiConvert in mormot.core.unicode unit
 // - calls GetACP() Win32 API value on Delphi, or DefaultSystemCodePage on FPC -
-// i.e. GetSystemCodePage() on POSIX (likely to be UTF-8) or the value used
-// by the LCL for its "string" types (also typically UTF-8 even on Windows)
+// i.e. GetSystemCodePage() on POSIX (likely to be CP_UTF8) or the value used
+// by the LCL for its "string" types (also typically be CP_UTF8 even on Windows)
 function Unicode_CodePage: integer;
   {$ifdef FPC} inline; {$endif}
 
@@ -6163,7 +6163,7 @@ end;
 function Unicode_CodePage: integer;
 begin
   {$ifdef FPC}
-  // = GetSystemCodePage on POSIX, Lazarus may override to UTF-8 on Windows
+  // = GetSystemCodePage on POSIX, Lazarus may override to be CP_UTF8 on Windows
   result := DefaultSystemCodePage;
   {$else}
   // Delphi always uses the main Windows System Code Page

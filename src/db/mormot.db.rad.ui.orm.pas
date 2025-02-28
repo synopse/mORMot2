@@ -429,7 +429,7 @@ begin
               end;
             end;
           oftUtf8Text:
-            {$ifdef HASVARUSTRING} // Value is WideString on Delphi 7/2007
+            {$ifndef HASVARUSTRING} // Value is WideString on Delphi 7/2007
             if aField.DataType = ftWideString then
               TWideStringField(aField).Value := aTable.GetSynUnicode(aRow, SqlIndex)
             else
