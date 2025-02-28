@@ -204,9 +204,7 @@ type
     function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; override;
   public
     /// creates a new instance with the very same values
-    // - by design, our classes will use TAesGcmEngine stateless context, so
-    // this method will just copy the current fields to a new instance,
-    // by-passing the key creation step
+    // - calls TAesOsl.Clone to copy existing PEVP_CIPHER_CTX
     function Clone: TAesAbstract; override;
     /// compute a class instance similar to this one, for performing the
     // reverse encryption/decryption process

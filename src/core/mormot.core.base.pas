@@ -3200,7 +3200,7 @@ type
     function RawNext: cardinal;
     /// compute the next 32-bit generated value
     // - will automatically reseed after around 2^32 generated values, which is
-    // huge but very conservative since this generator has a period of 2^88
+    // huge but conservative since this generator has a known period of 2^88
     function Next: cardinal; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute the next 32-bit generated value, in range [0..max-1]
@@ -9546,7 +9546,7 @@ end;
 function mach_absolute_time: Int64;   cdecl external 'c';
 function mach_continuous_time: Int64; cdecl external 'c';
 
-procedure CreateGuid(var guid: TGuid); // sysutils version is slow
+procedure CreateGuid(var guid: TGuid); // sysutils MacOS version is sloooow
 begin
   PInt64Array(@guid)^[0] := mach_absolute_time;  // monotonic time (in ns)
   PInt64Array(@guid)^[1] := mach_continuous_time;
@@ -11735,8 +11735,7 @@ procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var
   h: THash128Rec absolute crc;
   h1, h2: cardinal;
-begin
-  // see https://goo.gl/Pls5wi
+begin // see https://goo.gl/Pls5wi
   h1 := crc32c(0, buf, len);
   h2 := crc32c(h1, buf, len);
   h.i0 := h1;
@@ -11752,8 +11751,7 @@ procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
 var
   h: THash256Rec absolute crc;
   h1, h2: cardinal;
-begin
-  // see https://goo.gl/Pls5wi
+begin // see https://goo.gl/Pls5wi
   h1 := crc32c(0, buf, len);
   h2 := crc32c(h1, buf, len);
   h.i0 := h1;

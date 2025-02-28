@@ -335,11 +335,12 @@ type
   TAesKey = THash256;
 
 type
-  /// handle AES cypher/uncypher
+  /// internal low-level static engine to handle raw AES cypher/uncypher
   // - this is the default Electronic codebook (ECB) mode
-  // - this class will use AES-NI hardware instructions, if available
+  // - will use AES-NI hardware instructions, if available
   // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance
+  // thread-safe reuse of one initialized instance as a static memory copy
+  // - do not use this raw data structure, but TAesFast[] high-level classes
   {$ifdef USERECORDWITHMETHODS}
   TAes = record
   {$else}
@@ -415,11 +416,14 @@ type
   /// points to a TAes encryption/decryption instance
   PAes = ^TAes;
 
+  /// points to a TAesGcmEngine encryption/decryption instance
+  PAesGcmEngine = ^TAesGcmEngine;
 
-  /// low-level AES-GCM processing
+  /// internal low-level static engine to handle raw AES-GCM processing
   // - implements standard AEAD (authenticated-encryption with associated-data)
   // algorithm, as defined by NIST Special Publication 800-38D
   // - will use AES-NI and CLMUL Intel/AMD opcodes if available on x86_64/i386
+  // - do not use this raw data structure, but TAesFast[mGCM] with proper padding
   {$ifdef USERECORDWITHMETHODS}
   TAesGcmEngine = record
   {$else}
@@ -446,6 +450,7 @@ type
     flags: set of (flagFinalComputed, flagFlushed, flagCLMUL, flagAVX);
     /// 4KB lookup table for fast Galois Finite Field multiplication
     // - is defined as last field of the object for better code generation
+    // - only first 256 bytes are used in flagAVX mode
     gf_t4k: array[byte] of THash128Rec;
     /// build the gf_t4k[] internal table - assuming set to zero by caller
     procedure Make4K_Table;
@@ -5392,22 +5397,19 @@ begin
     ivsize := SizeOf(TAesBlock)
   else
     ivsize := 0;
+  result := false;
   if OutputLen <> ivsize + InputLen + padding then
-  begin
-    result := false;
     exit;
-  end;
   if IVAtBeginning then
   begin
-    RandomBytes(@fIV, SizeOf(fIV)); // Lecuyer is enough for public random
+    RandomBytes(@fIV, SizeOf(fIV)); // Lecuyer is enough for public randomness
     PAesBlock(Output)^ := fIV;
     inc(PAesBlock(Output));
   end;
-  if fIVUpdated then
+  if fIVUpdated then // this class update the IV/MAC so we can call Encrypt() twice
   begin
-    // we know that our classes update the IV/MAC so we can call Encrypt() twice
     by16 := InputLen + padding - 16;
-    Encrypt(Input, Output, by16); // avoid a (potentially huge) MoveFast()
+    Encrypt(Input, Output, by16); // and avoid a (potentially huge) MoveFast()
     inc(PByte(Input), by16);
     inc(PByte(Output), by16);
     dec(InputLen, by16);
