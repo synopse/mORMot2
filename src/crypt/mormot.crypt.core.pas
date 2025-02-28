@@ -6807,28 +6807,8 @@ end;
 { TAesGcm }
 
 function TAesGcm.AesGcmInit: boolean;
-{$ifdef USEGCMAVX}
-var
-  cf: ^TIntelCpuFeatures;
-{$endif USEGCMAVX}
 begin
-  {$ifdef USEGCMAVX}
-  cf := @CpuFeatures;
-  if (cfCLMUL in cf^) and
-     (cfSSE41 in cf^) and
-     (cfAESNI in cf^) and
-     not (daAesGcmAvx in DisabledAsm) then
-  begin
-    // 8x interleaved aesni + pclmulqdq x86_64 asm
-    include(fGcm.flags, flagAVX);
-    result := fGcm.aes.EncryptInit(fKey, fKeySize);
-    if result then
-      GcmAvxInit(@fGcm.gf_t4k, @fGcm.aes, TAesContext(fGcm.aes).Rounds);
-  end
-  else
-  {$endif USEGCMAVX}
-    // regular TAesGcmEngine
-    result := fGcm.Init(fKey, fKeySize);
+  result := fGcm.Init(fKey, fKeySize, true);
 end;
 
 function TAesGcm.Clone: TAesAbstract;
@@ -6838,92 +6818,30 @@ begin
   result.fKeySize := fKeySize;
   result.fKeySizeBytes := fKeySizeBytes;
   result.fAlgoMode := mGcm;
-  {$ifdef USEGCMAVX}
-  if flagAVX in fGcm.flags then
-  begin
-    TAesGcm(result).fGcm.aes := fGcm.aes;
-    TAesGcm(result).fGcm.flags := fGcm.flags;
-    MoveFast(fGcm.gf_t4k, TAesGcm(result).fGcm.gf_t4k, 256);
-  end
-  else
-  {$endif USEGCMAVX}
-    TAesGcm(result).fGcm := fGcm; // reuse the very same TAesGcmEngine memory
+  fGcm.Clone(@TAesGcm(result).fGcm);
 end;
 
 procedure TAesGcm.AesGcmDone;
 begin
-  {$ifdef USEGCMAVX}
-  if flagAVX in fGcm.flags then
-    fGcm.aes.Done
-  else
-  {$endif USEGCMAVX}
-    fGcm.Done;
+  fGcm.Done;
 end;
 
 procedure TAesGcm.AesGcmReset;
 begin
-  fGcm.Reset(@fIV, CTR_POS); // reused for USEGCMAVX since CTR_POS computes nothing
+  fGcm.Reset(@fIV, CTR_POS);
 end;
 
 function TAesGcm.AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean;
-{$ifdef USEGCMAVX}
-var
-  blocks, ctr, onepass: cardinal;
-{$endif USEGCMAVX}
 begin
-  {$ifdef USEGCMAVX}
-  if flagAVX in fGcm.flags then
-  begin
-    // 8x interleaved aesni + pclmulqdq x86_64 asm
-    result := true;
-    if Count and AesBlockMod <> 0 then
-      ESynCrypto.RaiseUtf8('%.Encrypt/Decrypt should use PKCS7', [self]);
-    inc(fGcm.atx_cnt.V, Count);
-    repeat
-      // regroup GMAC + AES-CTR per 1MB chunks to fit in L2/L3 CPU cache
-      onepass := 1 shl 20;
-      if Count < onepass then
-        onepass := Count;
-      // GMAC done before decryption
-      if fStarted = stDec then
-        GcmAvxAuth(@fGcm.gf_t4k, BufIn, onepass, @fGcm.txt_ghv);
-      // AES-CTR using AES-NI and SSE4.1 over a 32-bit counter
-      blocks := onepass shr AesBlockShift;
-      ctr := bswap32(TAesContext(fGcm.aes).iv.c3) + blocks;
-      GCM_IncCtr(TAesContext(fGcm.aes).iv.b); // should be done before
-      AesNiEncryptCtrNist32(
-        BufIn, BufOut, blocks, @fGcm.aes, @TAesContext(fGcm.aes).iv);
-      TAesContext(fGcm.aes).iv.c3 := bswap32(ctr);
-      // GMAC done after encryption
-      if fStarted = stEnc then
-        GcmAvxAuth(@fGcm.gf_t4k, BufOut, onepass, @fGcm.txt_ghv);
-      dec(Count, onepass);
-      if Count = 0 then
-        exit;
-      inc(PByte(BufIn), onepass);
-      inc(PByte(BufOut), onepass);
-    until false;
-  end
+  if fStarted = stEnc then
+    result := fGcm.Encrypt(BufIn, BufOut, Count)
   else
-  {$endif USEGCMAVX}
-    // regular TAesGcmEngine process (allowing non-16-bytes Count)
-    if fStarted = stEnc then
-      result := fGcm.Encrypt(BufIn, BufOut, Count)
-    else
-      result := fGcm.Decrypt(BufIn, BufOut, Count);
+    result := fGcm.Decrypt(BufIn, BufOut, Count);
 end;
 
 procedure TAesGcm.AesGcmAad(Buf: pointer; Len: integer);
 begin
-  {$ifdef USEGCMAVX}
-  if flagAVX in fGcm.flags then
-  begin
-    inc(fGcm.aad_cnt.V, Len);
-    GcmAvxAuth(@fGcm.gf_t4k, Buf, Len, @fGcm.txt_ghv); // use txt_ghv for both
-  end
-  else
-  {$endif USEGCMAVX}
-    fGcm.Add_AAD(Buf, Len);
+  fGcm.Add_AAD(Buf, Len);
 end;
 
 function TAesGcm.AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean;
@@ -6934,18 +6852,7 @@ begin
   if (fStarted = stNone) or
      (cardinal(TagLen) > 16) then
     exit;
-  {$ifdef USEGCMAVX}
-  if flagAVX in fGcm.flags then
-  begin
-    decoded := TAesContext(fGcm.aes).iv;
-    decoded.c3 := fGcm.y0_val; // restore initial counter (always 1 for CTR_POS)
-    fGcm.aes.Encrypt(decoded.b);  // compute E(K,Y0)
-    GcmAvxGetTag(@fGcm.gf_t4k, @decoded, @fGcm.txt_ghv, fGcm.atx_cnt.V, fGcm.aad_cnt.V);
-    decoded.b := fGcm.txt_ghv;
-  end
-  else
-  {$endif USEGCMAVX}
-    fGcm.Final(decoded.b, {andDone=}false);
+  fGcm.Final(decoded.b, {andDone=}false);
   case fStarted of
     stEnc:
       begin
