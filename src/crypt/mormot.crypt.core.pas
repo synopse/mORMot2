@@ -6658,35 +6658,16 @@ function TAesGcmAbstract.MacAndCrypt(const Data: RawByteString;
   Encrypt, IVAtBeginning: boolean; const Associated: RawByteString;
   EndingSize: cardinal): RawByteString;
 var
-  P: PByteArray;
-  len, enclen: cardinal;
+  l: PtrInt;
 begin
-  // for AES-GCM, no nonce needed: use standard encrypted + tag layout
-  result := '';
-  if fStarted <> stNone then
-    exit;
-  fAssociated := Associated; // AEAD data is assigned before cipher blocks
-  if Encrypt then
-  begin
-    len := length(Data);
-    enclen := EncryptPkcs7Length(len, IVAtBeginning);
-    P := FastNewString(enclen + SizeOf(TAesBlock) + EndingSize);
-    pointer(result) := P;
-    if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
-      result := '';
-  end
+  l := length(Data);
+  FastNewRawByteString(result, l + SizeOf(TAesBlock) * 3 + PtrInt(EndingSize));
+  l := AesGcmBuffer(pointer(Data), pointer(result), l, length(result),
+    Encrypt, IVAtBeginning, Associated);
+  if l < 0 then
+    FastAssignNew(result) // error
   else
-  begin
-    enclen := cardinal(length(Data)) - EndingSize;
-    if enclen < SizeOf(TAesBlock) * 2 then
-      exit;
-    dec(enclen, SizeOf(TAesBlock));
-    P := pointer(Data);
-    DecryptPkcs7Var(P, enclen, IVAtBeginning, result);
-  end;
-  if result <> '' then
-    if not AesGcmFinal(PAesBlock(@P[enclen])^) then
-      result := '';
+    FakeSetLength(result, l + PtrInt(EndingSize));
 end;
 
 function TAesGcmAbstract.AesGcmBuffer(Input, Output: pointer;
