@@ -455,7 +455,7 @@ type
     // - is defined as last field of the object for better code generation
     // - only first 256 bytes are used in flagAVX mode
     gf_t4k: array[byte] of THash128Rec;
-    /// build the gf_t4k[] internal table - assuming set to zero by caller
+    /// build the gf_t4k[] internal table from current state.ghash_h
     procedure Make4K_Table;
     /// compute a * ghash_h in Galois Finite Field 2^128 using gf_t4k[]
     procedure gf_mul_h_pas(var a: TAesBlock);
@@ -4824,7 +4824,7 @@ begin
   else
   {$endif USECLMUL}
   {$ifdef USEARMCRYPTO}
-  if PmullArmAvailable then
+  if flagCLMUL in engine.state.flags then
     gf_mul_h_arm(@a, @engine.state.ghash_h)
   else
   {$endif USEARMCRYPTO}
@@ -5059,7 +5059,7 @@ begin
      (cfAESNI in cf^) and
      not (daAesGcmAvx in DisabledAsm) then
   begin
-    // 8x interleaved aesni + pclmulqdq x86_64 asm
+    // 8x interleaved aesni + pclmulqdq x86_64 asm - using 256 bytes in gf_t4k[]
     state.flags := [flagAVX, flagCLMUL];
     GcmAvxInit(@gf_t4k, @aes, TAesContext(aes).Rounds);
   end
@@ -5068,9 +5068,14 @@ begin
   // regular TAesGcmEngine
   {$ifdef USECLMUL}
   if cfCLMUL in CpuFeatures then
-    include(state.flags, flagCLMUL)
+    include(state.flags, flagCLMUL) // no gf_t4k[] use
   else
   {$endif USECLMUL}
+  {$ifdef USEARMCRYPTO}
+  if PmullArmAvailable then
+    include(state.flags, flagCLMUL) // no gf_t4k[] use
+  else
+  {$endif USEARMCRYPTO}
     Make4K_Table;
 end;
 
@@ -5132,13 +5137,16 @@ begin
 end;
 
 procedure TAesGcmEngine.Clone(another: PAesGcmEngine);
-begin
+begin // only copy what is really needed
   {$ifdef USEGCMAVX}
-  if flagAVX in state.flags then // only copy what is really needed
+  if flagAVX in state.flags then // x86_64 asm uses 256 bytes in gf_t4k[]
     MoveFast(self, another^, PtrInt(@PAesGcmEngine(nil)^.gf_t4k[256 div 16]))
   else
   {$endif USEGCMAVX}
-    MoveFast(self, another^, SizeOf(self)); // reuse the very same TAesGcmEngine
+  if flagCLMUL in state.flags then // USECLMUL or USEARMCRYPTO: no gf_t4k[] use
+    MoveFast(self, another^, PtrInt(@PAesGcmEngine(nil)^.gf_t4k))
+  else
+    MoveFast(self, another^, SizeOf(self));
 end;
 
 function TAesGcmEngine.Encrypt(ptp, ctp: pointer; ILen: PtrInt): boolean;
@@ -5286,7 +5294,7 @@ begin
   aes.Encrypt(e.b);
   // compute GMAC = GHASH(H, AAD, ctp) xor E(K,Y0)
   {$ifdef USEGCMAVX}
-  if flagAVX in state.flags then
+  if flagAVX in state.flags then // x86_64 asm uses 256 bytes in gf_t4k[]
   begin
     GcmAvxGetTag(@gf_t4k, @e, @state.txt_ghv, state.atx_cnt.V, state.aad_cnt.V);
     tag := state.txt_ghv;
@@ -5306,7 +5314,7 @@ begin
       while ln <> 0 do
       begin
         if ln and 1 <> 0 then
-          gf_mul(state.aad_ghv, t.b);
+          gf_mul(state.aad_ghv, t.b); // maybe CLMUL
         ln := ln shr 1;
         if ln <> 0 then
           gf_mul(t.b, t.b);
