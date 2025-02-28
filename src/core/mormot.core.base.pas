@@ -863,6 +863,7 @@ procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// internal function which could be used instead of SetLength() if RefCnt = 1
+// - FakeLength() don't handle len = 0, whereas FakeSetLength() will
 procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
   {$ifdef HASINLINE} inline; {$endif}
 

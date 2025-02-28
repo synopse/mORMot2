@@ -6678,7 +6678,7 @@ var
 begin
   result := -1; // indicates error
   if (fStarted <> stNone) or
-     (Input = nil) or
+     ((Input = nil) and (InputLen <> 0)) or
      (Output = nil) then
     exit;
   fAssociated := Associated; // see TAesGcmAbstract.MacAndCrypt()
