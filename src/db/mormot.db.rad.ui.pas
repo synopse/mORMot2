@@ -776,11 +776,12 @@ begin
             ftWideString:
               begin
                 W.AddDirect('"');
-                {$ifdef HASVARUSTRING}
+                {$ifdef FPC} // Value is still WideString on FPC
                 W.AddJsonEscapeW(pointer(TWideStringField(f).AsUnicodeString));
                 {$else}
+                // Value: string on Delphi 2009+ or WideString on Delphi 7/2007
                 W.AddJsonEscapeW(pointer(TWideStringField(f).Value));
-                {$endif HASVARUSTRING}
+                {$endif FPC}
                 W.AddDirect('"');
               end;
             ftVariant:
@@ -806,11 +807,12 @@ begin
             ftFixedWideChar:
               begin
                 W.AddDirect('"');
-                {$ifdef HASVARUSTRING}
+                {$ifdef FPC} // AsWideString is still WideString on FPC
                 W.AddJsonEscapeW(pointer(f.AsUnicodeString));
                 {$else}
+                // AsWideString: string on Delphi 2009+ or WideString before
                 W.AddJsonEscapeW(pointer(f.AsWideString));
-                {$endif HASVARUSTRING}
+                {$endif FPC}
                 W.AddDirect('"');
               end;
             {$endif HASDBFTWIDE}
