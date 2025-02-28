@@ -1184,6 +1184,11 @@ type
     // - warning: by design, you should always call AesGcmFinal() after
     // Encrypt/Decrypt before reusing this instance
     function AesGcmFinal(var Tag: TAesBlock; TagLen: integer = 16): boolean; virtual; abstract;
+    /// AES-GCM pure alternative to MacAndCrypt() over memory buffers
+    // - returns -1 on error, or the number of bytes written to Output (which
+    // may be 0 with a 16-byte input padding)
+    function AesGcmBuffer(Input, Output: pointer; InputLen, OutputMax: PtrInt;
+      Encrypt, IVAtBeginning: boolean; const Associated: RawByteString = ''): PtrInt;
   end;
 
   /// meta-class of TAesGcmAbstract types
@@ -6682,6 +6687,41 @@ begin
   if result <> '' then
     if not AesGcmFinal(PAesBlock(@P[enclen])^) then
       result := '';
+end;
+
+function TAesGcmAbstract.AesGcmBuffer(Input, Output: pointer;
+  InputLen, OutputMax: PtrInt; Encrypt, IVAtBeginning: boolean;
+  const Associated: RawByteString): PtrInt;
+var
+  enclen, ivsize, padding: PtrInt;
+begin
+  result := -1; // indicates error
+  if (fStarted <> stNone) or
+     (Input = nil) or
+     (Output = nil) then
+    exit;
+  fAssociated := Associated; // see TAesGcmAbstract.MacAndCrypt()
+  if Encrypt then
+  begin
+    enclen := EncryptPkcs7Length(InputLen, IVAtBeginning);
+    if (enclen + SizeOf(TAesBlock) <= OutputMax) and
+       EncryptPkcs7Buffer(Input, Output, InputLen, enclen, IVAtBeginning) and
+       AesGcmFinal(PAesBlock(@PByteArray(Output)^[enclen])^) then
+      result := enclen + SizeOf(TAesBlock);
+  end
+  else
+  begin
+    dec(InputLen, SizeOf(TAesBlock));
+    enclen := InputLen;
+    if not DecryptPkcs7Len(InputLen, ivsize, Input, IVAtBeginning, false) or
+       (InputLen > OutputMax) then
+      exit;
+    Decrypt(@PByteArray(Input)[ivsize], Output, InputLen);
+    padding := CheckPadding(@PByteArray(Output)^[InputLen - 1]);
+    if AesGcmFinal(PAesBlock(@PByteArray(Input)^[enclen])^) and
+       (padding <> 0) then
+      result := InputLen - padding; // may be 0
+  end;
 end;
 
 
