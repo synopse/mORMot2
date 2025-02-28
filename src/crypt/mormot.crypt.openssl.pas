@@ -94,7 +94,11 @@ type
 
 type
   /// reusable wrapper around OpenSSL Cipher process
+  {$ifdef USERECORDWITHMETHODS}
+  TAesOsl = record
+  {$else}
   TAesOsl = object
+  {$endif USERECORDWITHMETHODS}
   public
     Owner: TAesAbstract;
     Cipher: PEVP_CIPHER; // computed from TAesAbstractOsl.AlgoName
