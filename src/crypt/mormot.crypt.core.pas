@@ -541,6 +541,7 @@ type
     fAlgoMode: TAesMode;
     fIVUpdated: boolean; // so you can chain Encrypt/Decrypt() calls
     procedure AfterCreate; virtual; // circumvent Delphi bug about const aKey
+    function InternalCopy: TAesAbstract; // copy main properties for Clone()
     function DecryptPkcs7Len(var InputLen, ivsize: PtrInt; Input: pointer;
       IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
   public
@@ -798,8 +799,8 @@ type
   public
     /// creates a new instance with the very same values
     // - by design, our classes will use TAes stateless context, so this method
-    // will just copy the current fields to a new instance, by-passing
-    // the key creation step
+    // will just copy all current static fields to a new instance, by-passing
+    // the key creation step and reuse the current state of this instance
     function Clone: TAesAbstract; override;
     /// release the used instance memory and resources
     // - also fill the TAes instance with zeros, for safety
@@ -5436,6 +5437,16 @@ begin
   FillZero(fKey);
 end;
 
+function TAesAbstract.InternalCopy: TAesAbstract;
+begin
+  result := TAesAbstract(NewInstance); // new instance with same main properties
+  result.fKey := fKey;
+  result.fKeySize := fKeySize;
+  result.fKeySizeBytes := fKeySizeBytes;
+  result.fAlgoMode := fAlgoMode;
+  result.fIVUpdated := fIVUpdated;
+end;
+
 class function TAesAbstract.IsAvailable: boolean;
 begin
   result := true;
@@ -5872,7 +5883,7 @@ end;
 function TAesAbstractSyn.Clone: TAesAbstract;
 begin
   result := NewInstance as TAesAbstractSyn;
-  MoveFast(pointer(self)^, pointer(result)^, InstanceSize);
+  MoveFast(pointer(self)^, pointer(result)^, InstanceSize); // copy all fields
 end;
 
 procedure TAesAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -6815,11 +6826,7 @@ end;
 
 function TAesGcm.Clone: TAesAbstract;
 begin
-  result := NewInstance as TAesGcm;
-  result.fKey := fKey;
-  result.fKeySize := fKeySize;
-  result.fKeySizeBytes := fKeySizeBytes;
-  result.fAlgoMode := mGcm;
+  result := InternalCopy;
   fGcm.Clone(@TAesGcm(result).fGcm);
 end;
 
