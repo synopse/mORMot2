@@ -2689,25 +2689,8 @@ begin
 end;
 
 procedure TSynSystemTime.Normalize;
-
-  procedure NormalizeMonth;
-  var
-    thismonth: cardinal;
-  begin
-    repeat
-      thismonth := DaysInMonth;
-      if Day <= thismonth then
-        break;
-      dec(Day, thismonth);
-      inc(Month);
-      if Month > 12 then
-      begin
-        dec(Month, 12);
-        inc(Year);
-      end;
-    until false;
-  end;
-
+var
+  thismonth: cardinal;
 begin
   DayOfWeek := 0;
   while MilliSecond >= MilliSecsPerSec do
@@ -2730,13 +2713,23 @@ begin
     dec(Hour, 24);
     inc(Day);
   end;
-  NormalizeMonth;
   while Month > 12 do
   begin
     dec(Month, 12);
     inc(Year);
-    NormalizeMonth;
   end;
+  repeat
+    thismonth := DaysInMonth;
+    if Day <= thismonth then
+      break;
+    dec(Day, thismonth);
+    inc(Month);
+    if Month > 12 then
+    begin
+      dec(Month, 12);
+      inc(Year);
+    end;
+  until false;
 end;
 
 function TSynSystemTime.ChangeOperatingSystemTime: boolean;
