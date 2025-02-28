@@ -1103,6 +1103,11 @@ implementation
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
 
+const // sysutils' MonthDays[] stores Word values - and better alignment here
+  DaysPerMonth: array [{leapYear=}boolean, 0 .. 15] of byte = (
+   (0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0),
+   (0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0));
+
 function Iso8601ToDateTimePUtf8Char(P: PUtf8Char; L: integer): TDateTime;
 var
   tmp: TDateTime; // circumvent FPC limitation
@@ -1204,7 +1209,7 @@ begin
           exit; // invalid date format
         d := ord(P[6]) * 10 + ord(P[7]) - (48 + 480);
         if (d = 0) or
-           (d > MonthDays[true][m]) then
+           (d > DaysPerMonth[true][m]) then
           exit; // worse day number to allow is for leapyear=true
       end;
     end
@@ -1375,7 +1380,7 @@ begin
     inc(P);
   D := ord(P[6]) * 10 + ord(P[7]) - (48 + 480);
   if (D <> 0) and
-     (D <= MonthDays[true][M]) then
+     (D <= DaysPerMonth[true][M]) then
     // worse day number to allow is for leapyear=true
     result := true;
 end;
@@ -1603,8 +1608,9 @@ end;
 
 function DaysToIso8601(Days: cardinal; Expanded: boolean): RawUtf8;
 var
-  y, m: cardinal;
-begin
+  m: PtrUInt;
+  y, d: cardinal;
+begin // not very optimized, but fast enough
   y := 0;
   while Days > 365 do
   begin
@@ -1613,14 +1619,13 @@ begin
   end;
   m := 0;
   if Days > 31 then
-  begin
-    inc(m); // years as increment, not absolute: always 365 days with no leap
-    while Days > MonthDays[false][m] do
-    begin
-      dec(Days, MonthDays[false][m]);
-      inc(m);
-    end;
-  end;
+    repeat
+      inc(m); // years as increment, not absolute: always 365 days with no leap
+      d := DaysPerMonth[false][m];
+      if Days <= d then
+        break;
+      dec(Days, d);
+    until false;
   result := DateToIso8601(y, m, Days, Expanded);
 end;
 
@@ -1952,7 +1957,7 @@ begin
      (Year > 10000) then
     exit;
   Div100(Year, y100{%H-});
-  if Day > MonthDays[(Year and 3 = 0) and // inlined IsLeapYear()
+  if Day > DaysPerMonth[(Year and 3 = 0) and // inlined IsLeapYear()
             ((y100.M <> 0) or (Year - ((y100.D shr 2) * 400) = 0))][Month] then
     exit;
   if Month > 2 then
@@ -2111,7 +2116,7 @@ end;
 
 function DaysInMonth(Year, Month: cardinal): cardinal;
 begin
-  result := MonthDays[IsLeapYear(Year)][Month];
+  result := DaysPerMonth[mormot.core.datetime.IsLeapYear(Year)][Month];
 end;
 
 function DaysInMonth(Date: TDateTime): cardinal;
@@ -2127,7 +2132,7 @@ end;
 
 function TSynSystemTime.DaysInMonth: cardinal;
 begin
-  result := MonthDays[IsLeapYear(Year)][Month];
+  result := DaysPerMonth[mormot.core.datetime.IsLeapYear(Year)][Month];
 end;
 
 function TryEncodeDayOfWeekInMonth(y, m, nthdow, dow: integer;
