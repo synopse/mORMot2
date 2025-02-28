@@ -1149,6 +1149,7 @@ type
     procedure AfterCreate; override;
     // abstract methods which should be overriden with the AES-GCM engine
     function AesGcmInit: boolean; virtual; abstract; // from fKey/fKeySize
+    procedure AesGcmClone(another: TAesGcmAbstract); virtual; abstract;
     procedure AesGcmDone; virtual; abstract;
     procedure AesGcmReset; virtual; abstract; // from fIV/CTR_POS
     function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; virtual; abstract;
@@ -1156,6 +1157,8 @@ type
     /// release the used instance memory and resources
     // - also fill the internal TAes instance with zeros, for safety
     destructor Destroy; override;
+    /// creates a new instance with the very same values using AesGcmClone()
+    function Clone: TAesAbstract; override;
     /// perform the AES-GCM cypher and authentication
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher and authentication
@@ -1234,15 +1237,11 @@ type
   protected
     fGcm: TAesGcmEngine;
     function AesGcmInit: boolean; override; // from fKey/fKeySize
+    procedure AesGcmClone(another: TAesGcmAbstract); override;
     procedure AesGcmDone; override;
     procedure AesGcmReset; override; // from fIV/CTR_POS
     function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; override;
   public
-    /// creates a new instance with the very same values
-    // - by design, our classes will use TAesGcmEngine stateless context, so
-    // this method will just copy the current fields to a new instance,
-    // by-passing the key creation step
-    function Clone: TAesAbstract; override;
     /// AES-GCM pure alternative to MacSetNonce()
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method; warning: you need
@@ -6696,6 +6695,13 @@ begin
   FillZero(fIV);
 end;
 
+function TAesGcmAbstract.Clone: TAesAbstract;
+begin
+  // we can just copy the main properties
+  result := InternalCopy;
+  AesGcmClone(TAesGcmAbstract(result));
+end;
+
 procedure TAesGcmAbstract.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   if fStarted <> stEnc then
@@ -6824,10 +6830,9 @@ begin
   result := fGcm.Init(fKey, fKeySize, true);
 end;
 
-function TAesGcm.Clone: TAesAbstract;
+procedure TAesGcm.AesGcmClone(another: TAesGcmAbstract);
 begin
-  result := InternalCopy;
-  fGcm.Clone(@TAesGcm(result).fGcm);
+  fGcm.Clone(@(another as TAesGcm).fGcm);
 end;
 
 procedure TAesGcm.AesGcmDone;
