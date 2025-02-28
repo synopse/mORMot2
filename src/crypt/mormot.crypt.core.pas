@@ -494,13 +494,15 @@ type
     // - do nothing if Final() has been already called
     procedure Done;
     /// single call AES-GCM encryption and authentication process
+    // - mostly used for testing purpose with reference vectors
     function FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
-      pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
-      ptp, ctp: pointer; pLen: PtrInt; out tag: TAesBlock): boolean;
+      pIV, pAAD, ptp, ctp: pointer; IV_len, aLen, pLen: PtrInt;
+      out tag: TAesBlock; allowavx: boolean = true): boolean;
     /// single call AES-GCM decryption and verification process
+    // - mostly used for testing purpose with reference vectors
     function FullDecryptAndVerify(const Key; KeyBits: PtrInt;
-      pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
-      ctp, ptp: pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
+      pIV, pAAD, ctp, ptp, ptag: pointer; IV_len, aLen, pLen, tLen: PtrInt;
+      allowavx: boolean = true): boolean;
   end;
 
   /// the AES chaining modes implemented by this unit
@@ -5334,10 +5336,10 @@ begin
 end;
 
 function TAesGcmEngine.FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
-  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ptp, ctp: pointer;
-  pLen: PtrInt; out tag: TAesBlock): boolean;
-begin
-  result := Init(Key, KeyBits) and
+  pIV, pAAD, ptp, ctp: pointer; IV_len, aLen, pLen: PtrInt;
+  out tag: TAesBlock; allowavx: boolean): boolean;
+begin // allowavx is set to false in test.core.crypt for testing purpose
+  result := Init(Key, KeyBits, allowavx and (pLen and AesBlockMod = 0)) and
             Reset(pIV, IV_len) and
             Add_AAD(pAAD, aLen) and
             Encrypt(ptp, ctp, pLen) and
@@ -5346,13 +5348,13 @@ begin
 end;
 
 function TAesGcmEngine.FullDecryptAndVerify(const Key; KeyBits: PtrInt;
-  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ctp, ptp: pointer;
-  pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
+  pIV, pAAD, ctp, ptp, ptag: pointer; IV_len, aLen, pLen, tLen: PtrInt;
+  allowavx: boolean): boolean;
 begin
-  result := Init(Key, KeyBits) and
+  result := Init(Key, KeyBits, allowavx and (pLen and AesBlockMod = 0)) and
             Reset(pIV, IV_len) and
             Add_AAD(pAAD, aLen) and
-            Decrypt(ctp,ptp, pLen, ptag, tlen);
+            Decrypt(ctp, ptp, pLen, ptag, tlen);
   Done;
 end;
 
