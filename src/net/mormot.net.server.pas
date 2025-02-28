@@ -5594,7 +5594,8 @@ begin
   if aSharedSecret = '' then
     EHttpPeerCache.RaiseUtf8('%.Create without aSharedSecret', [self]);
   HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
-  fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
+  // favor our TAesGcm for small messages, instead of OpenSSL TAesFast[mGCM]
+  fAesEnc := TAesGcm.Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
