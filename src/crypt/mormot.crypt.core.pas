@@ -5461,7 +5461,7 @@ begin
     if n = 0 then
       break;
     if P^ <> padding then
-      exit; // all padded bytes should equal the padding length
+      exit; // all PKCS-7 padded bytes should equal the padding length
   until false;
   result := padding;
 end;

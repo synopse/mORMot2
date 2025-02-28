@@ -1457,7 +1457,17 @@ type
     // - using random enhances AES-GCM obfuscation by making it unpredictable
     Padding: array[0 .. 41] of byte;
   end;
+  PHttpPeerCacheMessage = ^THttpPeerCacheMessage;
   THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
+
+  /// AES-GCM encoded binary frame of THttpPeerCacheMessage
+  THttpPeerCacheMessageEncoded = packed record
+    iv: THash128;
+    msg: THttpPeerCacheMessage;
+    padding, mac: THash128;
+    crc: cardinal;
+  end;
+  PHttpPeerCacheMessageEncoded = ^THttpPeerCacheMessageEncoded;
 
   /// each THttpPeerCacheSettings.Options item
   // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
@@ -1682,8 +1692,11 @@ type
     function CurrentConnections: integer; virtual;
     procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
       out aMsg: THttpPeerCacheMessage); virtual;
-    function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-    function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
+    procedure MessageEncode(const aMsg: THttpPeerCacheMessage;
+      out aEncoded: THttpPeerCacheMessageEncoded);
+    procedure MessageEncodeBearer(const aMsg: THttpPeerCacheMessage;
+      out aBearer: RawUtf8);
+    function MessageDecode(aFrame: PHttpPeerCacheMessageEncoded; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
     function BearerDecode(const aBearerToken: RawUtf8;
       aExpected: THttpPeerCacheMessageKind; out aMsg: THttpPeerCacheMessage;
@@ -1929,8 +1942,9 @@ const
     pcfResponseFull];
 
   PEER_CACHE_PATTERN = '*.cache';
-  /// AES-GCM enciphered UDP frame length: iv + msg + padding + mac + crc (244 bytes)
-  PEER_CACHE_MESSAGELEN = SizeOf(THttpPeerCacheMessage) + SizeOf(TAesBlock) * 3 + 4;
+
+  PEER_CACHE_MESSAGELEN = SizeOf(THttpPeerCacheMessageEncoded);
+  PEER_CACHE_AESLEN = PEER_CACHE_MESSAGELEN - SizeOf(THttpPeerCacheMessageEncoded.Crc);
   /// base-64 HttpDirectUri() bearer size in chars, from PEER_CACHE_MESSAGELEN
   PEER_CACHE_BEARERLEN = 326;
 
@@ -5401,52 +5415,67 @@ end;
 
 // UDP frames are AES-GCM encrypted and signed, ending with a 32-bit crc, fixed
 // to crc32c(): md5/sha (without SHA-NI) are slower than AES-GCM-128 itself ;)
-// - on x86_64 THttpPeerCache: 14,003 assertions passed  17.39ms
-//   2000 messages in 413us i.e. 4.6M/s, aver. 206ns, 886.7 MB/s  = AES-GCM-128
-//   10000 altered in 135us i.e. 70.6M/s, aver. 13ns, 13.2 GB/s   = crc32c()
+// - on x86_64
+//    2000 messages in 275us i.e. 6.9M/s, aver. 137ns, 1.3 GB/s   = AES-GCM-128
+//    10000 altered in 126us i.e. 75.6M/s, aver. 12ns, 14.1 GB/s  = crc32c()
+// - on i386
+//    2000 messages in 673us i.e. 2.8M/s, aver. 336ns, 544.1 MB/s
+//    10000 altered in 310us i.e. 30.7M/s, aver. 31ns, 5.7 GB/s
 
-function THttpPeerCrypt.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-var
-  tmp: RawByteString;
-  p: PAnsiChar;
-  l: PtrInt;
+procedure THttpPeerCrypt.MessageEncode(const aMsg: THttpPeerCacheMessage;
+  out aEncoded: THttpPeerCacheMessageEncoded);
 begin
   // AES-GCM-128 encoding and authentication
-  FastSetRawByteString(tmp, @aMsg, SizeOf(aMsg));
   fAesSafe.Lock;
   try
-    result := fAesEnc.MacAndCrypt(tmp, {enc=}true, {iv=}true, '', {endsize=}4);
+    if fAesEnc.AesGcmBuffer(@aMsg, @aEncoded, SizeOf(aMsg), SizeOf(aEncoded),
+          true, true) <> PEER_CACHE_AESLEN then
+      exit;
   finally
     fAesSafe.UnLock;
   end;
   // append salted checksum to quickly reject any fuzzing attempt (endsize=4)
-  p := pointer(result);
-  l := length(result) - 4;
-  PCardinal(p + l)^ := crc32c(fSharedMagic, p, l);
+  aEncoded.crc := crc32c(fSharedMagic, @aEncoded, PEER_CACHE_AESLEN);
 end;
 
-function DoDecode(Sender: THttpPeerCrypt; P: pointer;
-  var aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-var // sub-function to avoid any hidden try..finally
-  encoded, plain: RawByteString;
+procedure THttpPeerCrypt.MessageEncodeBearer(const aMsg: THttpPeerCacheMessage;
+  out aBearer: RawUtf8);
+var
+  bin: THttpPeerCacheMessageEncoded;
 begin
-  // AES-GCM-128 decoding and authentication
-  FastSetRawByteString(encoded, P, PEER_CACHE_MESSAGELEN - 4);
-  Sender.fAesSafe.Lock;
-  try
-    plain := Sender.fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
-  finally
-    Sender.fAesSafe.UnLock;
-  end;
-  // check consistency of the decoded THttpPeerCacheMessage value
-  result := mdAes;
-  if length(plain) <> SizeOf(aMsg) then
+  MessageEncode(aMsg, bin);
+  aBearer := AuthorizationBearer(BinToBase64uri(@bin, SizeOf(bin)));
+end;
+
+function THttpPeerCrypt.MessageDecode(
+  aFrame: PHttpPeerCacheMessageEncoded; aFrameLen: PtrInt;
+  out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
+var
+  tmp: THttpPeerCacheMessageEncoded; // need more space to decode the padding
+begin
+  // quickly reject any naive fuzzing attempt against length and 32-bit checksum
+  result := mdLen;
+  if aFrameLen <> PEER_CACHE_MESSAGELEN then
     exit;
-  MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
+  result := mdCrc;
+  if crc32c(fSharedMagic, pointer(aFrame), PEER_CACHE_AESLEN) <> aFrame^.crc then
+     exit;
+  // AES-GCM-128 decoding and authentication
+  result := mdAes;
+  fAesSafe.Lock;
+  try
+    if fAesDec.AesGcmBuffer(aFrame, @tmp, PEER_CACHE_AESLEN, SizeOf(tmp),
+         {enc=}false, {iv=}true) <> SizeOf(aMsg) then
+      exit;
+  finally
+    fAesSafe.UnLock;
+  end;
+  MoveFast(tmp, aMsg, SizeOf(aMsg));
+  // check consistency of the decoded THttpPeerCacheMessage value
   if (aMsg.Kind in PCF_RESPONSE) and  // responses are broadcasted on POSIX
-     (aMsg.DestIP4 = Sender.fIP4) and // validate against local sequence
-     ((aMsg.Seq < Sender.fFrameSeqLow) or
-       (aMsg.Seq > cardinal(Sender.fFrameSeq))) then
+     (aMsg.DestIP4 = fIP4) and // validate against local sequence
+     ((aMsg.Seq < fFrameSeqLow) or
+       (aMsg.Seq > cardinal(fFrameSeq))) then
     result := mdSeq
   else if ord(aMsg.Kind) > ord(high(aMsg.Kind)) then
     result := mdKind
@@ -5458,25 +5487,11 @@ begin
     result := mdOk;
 end;
 
-function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
-  out aMsg: THttpPeerCacheMessage): THttpPeerCryptMessageDecode;
-begin
-  // quickly reject any naive fuzzing attempt against length and 32-bit checksum
-  result := mdLen;
-  if aFrameLen <> PEER_CACHE_MESSAGELEN then
-    exit;
-  result := mdCrc;
-  if crc32c(fSharedMagic, aFrame, PEER_CACHE_MESSAGELEN - 4) =
-       PCardinal(aFrame + PEER_CACHE_MESSAGELEN - 4)^ then
-    // decode and verify the frame content
-    result := DoDecode(self, aFrame, aMsg);
-end;
-
 function THttpPeerCrypt.BearerDecode(
   const aBearerToken: RawUtf8; aExpected: THttpPeerCacheMessageKind;
   out aMsg: THttpPeerCacheMessage; aParams: PRawUtf8): THttpPeerCryptMessageDecode;
 var
-  tok: array[0.. PEER_CACHE_MESSAGELEN - 1] of AnsiChar; // no memory allocation
+  tok: THttpPeerCacheMessageEncoded; // no memory allocation
   bearerlen: PtrInt;
 begin
   result := mdBLen;
@@ -5547,7 +5562,7 @@ begin
     IP4Text(@aResp.IP4, ip);
     fLog.Add.Log(sllDebug, 'OnDownload: request %:% %', [ip, fPort, aUrl], self);
     aResp.Kind := pcfBearer; // authorize OnBeforeBody with response message
-    head := AuthorizationBearer(BinToBase64uri(MessageEncode(aResp)));
+    MessageEncodeBearer(aResp, head);
     // ensure we have the right peer
     if (fClient <> nil) and
        (fClientIP4 <> aResp.IP4) then
@@ -5674,7 +5689,7 @@ begin
       p := NetConcat(['_', uri.Port]); // '_' is ok for URI, but not for domain
     FormatUtf8('/%/%%/%', [uri.Scheme, uri.Server, p, uri.Address], aDirectUri);
     msg.Opaque := crc63c(pointer(aDirectUri), length(aDirectUri)); // no replay
-    aDirectHeaderBearer := AuthorizationBearer(BinToBase64uri(c.MessageEncode(msg)));
+    c.MessageEncodeBearer(msg, aDirectHeaderBearer);
     if aOptions <> nil then // extended options are URI-encoded to the bearer
       aDirectHeaderBearer := aOptions^.ToUrlEncode(aDirectHeaderBearer);
     result := true;
@@ -5803,20 +5818,20 @@ var
 
   procedure DoSendResponse;
   var
-    sock: TNetSocket;
-    frame: RawByteString;
     res: TNetResult;
+    sock: TNetSocket;
+    frame: THttpPeerCacheMessageEncoded;
   begin
     // compute PCF_RESPONSE frame
     resp.DestIP4 := remote.IP4; // notify actual source IP (over broadcast)
-    frame := fOwner.MessageEncode(resp);
+    fOwner.MessageEncode(resp, frame);
     // respond on main UDP port and on broadcast (POSIX) or local (Windows) IP
     if fMsg.Os.os = osWindows then
       remote.SetPort(fBroadcastAddr.Port) // local IP is good enough on Windows
     else
       remote.SetIP4Port(fOwner.fBroadcastIP4, fBroadcastAddr.Port); // need to broadcast
     sock := remote.NewSocket(nlUdp);
-    res := sock.SendTo(pointer(frame), length(frame), remote);
+    res := sock.SendTo(@frame, SizeOf(frame), remote);
     sock.Close;
     if fOwner.fVerboseLog then
       DoLog('send=% %', [ToText(res)^, ToText(resp)]);
@@ -5930,14 +5945,14 @@ function THttpPeerCacheThread.Broadcast(const aReq: THttpPeerCacheMessage;
 var
   sock: TNetSocket;
   res: TNetResult;
-  frame: RawByteString;
+  frame: THttpPeerCacheMessageEncoded;
   start, stop: Int64;
 begin
   result := nil;
   if self = nil then
     exit;
   QueryPerformanceMicroSeconds(start);
-  frame := fOwner.MessageEncode(aReq);
+  fOwner.MessageEncode(aReq, frame);
   fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
     // setup this broadcasting sequence
@@ -5950,7 +5965,7 @@ begin
       exit;
     try
       sock.SetBroadcast(true);
-      res := sock.SendTo(pointer(frame), length(frame), fBroadcastAddr);
+      res := sock.SendTo(@frame, SizeOf(frame), fBroadcastAddr);
       if fOwner.fVerboseLog then
         fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
           [fBroadcastIpPort, ToText(aReq), ToText(res)^], self);
@@ -7029,8 +7044,7 @@ begin
               LocalPeerClientSetup(ip, cs, 5000); // local cs, not fClient
               // local peer requires a new bearer
               peers[i].Kind := pcfBearer;
-              cs.RemoteHeaders := AuthorizationBearer(
-                BinToBase64uri(MessageEncode(peers[i])));
+              MessageEncodeBearer(peers[i], cs.RemoteHeaders);
               FormatUtf8('?%', [Ctxt.Url], cs.RemoteUri); // <> DIRECTURI_32
               // make a quick HEAD on this new socket to verify the peer
               result := cs.Request(cs.RemoteUri, 'HEAD', 30000, cs.RemoteHeaders);
@@ -7127,7 +7141,10 @@ end;
 
 type
   TOnRequestError = (
-    oreOK, oreNoLocalFile, oreLocalFileNotAcceptable, oreDirectRemoteUriFailed,
+    oreOK,
+    oreNoLocalFile,
+    oreLocalFileNotAcceptable,
+    oreDirectRemoteUriFailed,
     oreShutdown);
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
