@@ -810,7 +810,7 @@ begin
                 {$ifdef FPC} // AsWideString is still WideString on FPC
                 W.AddJsonEscapeW(pointer(f.AsUnicodeString));
                 {$else}
-                // AsWideString: string on Delphi 2009+ or WideString before
+                // AsWideString: string on Delphi 2009+, WideString Delphi 7/2007
                 W.AddJsonEscapeW(pointer(f.AsWideString));
                 {$endif FPC}
                 W.AddDirect('"');
