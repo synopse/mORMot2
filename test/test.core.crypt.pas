@@ -2455,6 +2455,7 @@ const
     $7f, $53, $16, $59, $12);
   tag32: array[0..15] of byte = ($10, $f9, $72, $b6, $f9, $e0, $a3, $c1, $cf,
     $9c, $cf, $56, $54, $3d, $ca, $79);
+
   K01: THash256 = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   I01: array[0..11] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -2463,12 +2464,14 @@ const
     $c5, $d3, $ba, $f3, $9d, $18);
   T01: array[0..15] of byte = ($d0, $d1, $c8, $a7, $99, $99, $6b, $f0, $26, $5b,
     $98, $b5, $d4, $8a, $b9, $19);
+
   K02: THash256 = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   I02: array[0..11] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   H02: array[0..15] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   T02: array[0..15] of byte = ($2d, $45, $55, $2d, $85, $75, $92, $2b, $3c, $a3,
     $cc, $53, $84, $42, $fa, $26);
+
   K03: THash256 = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   I03: array[0..11] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -2478,6 +2481,7 @@ const
     $c5, $d3, $ba, $f3, $9d, $18);
   T03: array[0..15] of byte = ($ae, $9b, $17, $71, $db, $a9, $cf, $62, $b3, $9b,
     $e0, $17, $94, $03, $30, $b4);
+
   K04: THash256 = ($fb, $76, $15, $b2, $3d, $80, $89, $1d, $d4, $70, $98, $0b,
     $c7, $95, $84, $c8, $b2, $fb, $64, $ce, $60, $97, $8f, $4d, $17, $fc, $e4,
     $5a, $49, $e8, $30, $b7);
@@ -2489,6 +2493,7 @@ const
     $25, $24, $44, $17, $87, $04);
   T04: array[0..15] of byte = ($4c, $43, $cc, $e5, $a5, $74, $d8, $a8, $8b, $43,
     $d4, $35, $3b, $d6, $0f, $9f);
+
   K05: THash256 = ($40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $4a, $4b,
     $4c, $4d, $4e, $4f, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $5a,
     $5b, $5c, $5d, $5e, $5f);
@@ -2502,6 +2507,7 @@ const
     $fc, $7b, $c7, $d5, $21, $99, $35, $26, $b6, $fa, $32, $24, $7c, $3c);
   T05: array[0..15] of byte = ($7d, $e1, $2a, $56, $70, $e5, $70, $d8, $ca, $e6,
     $24, $a1, $6d, $f0, $9c, $08);
+
   K07: THash256 = ($40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $4a, $4b,
     $4c, $4d, $4e, $4f, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $5a,
     $5b, $5c, $5d, $5e, $5f);
@@ -2548,6 +2554,7 @@ const
     $8d, $cd, $de, $09, $e4);
   T07: array[0..15] of byte = ($87, $ec, $83, $7a, $bf, $53, $28, $55, $b2, $ce,
     $a1, $69, $d6, $94, $3f, $cd);
+
   K08: THash256 = ($fb, $76, $15, $b2, $3d, $80, $89, $1d, $d4, $70, $98, $0b,
     $c7, $95, $84, $c8, $b2, $fb, $64, $ce, $60, $97, $87, $8d, $17, $fc, $e4,
     $5a, $49, $e8, $30, $b7);
@@ -2558,6 +2565,7 @@ const
   C08: array[0..0] of byte = ($0a);
   T08: array[0..15] of byte = ($be, $98, $7d, 0, $9a, $4b, $34, $9a, $a8, $0c,
     $b9, $c4, $eb, $c1, $e9, $f4);
+
   K09: THash256 = ($f8, $d4, $76, $cf, $d6, $46, $ea, $6c, $23, $84, $cb, $1c,
     $27, $d6, $19, $5d, $fe, $f1, $a9, $f3, $7b, $9c, $8d, $21, $a7, $9c, $21,
     $f8, $cb, $90, $d2, $89);
@@ -2571,6 +2579,7 @@ const
     $65, $83, $4d, $75, $fd, $0f, $07, $29, $75, $2e);
   T09: array[0..15] of byte = ($ac, $d8, $83, $38, $37, $ab, $0e, $de, $84, $f4,
     $74, $8d, $a8, $89, $9c, $15);
+
   K10: THash256 = ($db, $bc, $85, $66, $d6, $f5, $b1, $58, $da, $99, $a2, $ff,
     $2e, $01, $dd, $a6, $29, $b8, $9c, $34, $ad, $1e, $5f, $eb, $a7, $0e, $7a,
     $ae, $43, $28, $28, $9c);
@@ -2582,6 +2591,7 @@ const
     $7f, $3a, $ca, $ce, $66, $ef);
   T10: array[0..15] of byte = ($99, $84, $ef, $f6, $90, $57, $55, $d1, $83, $6f,
     $2d, $b0, $40, $89, $63, $4c);
+
   K11: THash256 = ($0e, $05, $93, $5d, $f0, $c6, $93, $74, $18, $92, $b7, $6f,
     $af, $67, $13, $3a, $bd, $2c, $f2, $03, $11, $21, $bd, $8b, $b3, $81, $27,
     $a4, $d2, $ee, $de, $ea);
@@ -2596,23 +2606,30 @@ const
   T11: array[0..15] of byte = ($61, $08, $dc, $41, $7b, $f3, $2f, $7f, $b7, $55,
     $4a, $e5, $2f, $08, $8f, $87);
 
-  procedure test(ptag: pointer; tlen: PtrInt; const key; kbits: PtrInt; pIV:
-    pointer; IV_Len: PtrInt; pAAD: pointer; aLen: PtrInt; ctp: pointer; cLen:
-    PtrInt; ptp: pointer; tn: integer);
+  procedure test(ptag: pointer; tlen: PtrInt; const key; kbits: PtrInt;
+    pIV: pointer; IV_Len: PtrInt; pAAD: pointer; aLen: PtrInt;
+    ctp: pointer; cLen: PtrInt; ptp: pointer; tn: integer);
   var
     tag: TAesBLock;
     ctxt: TAesGcmEngine;
+    avx: boolean;
     pt, ct: array[0..511] of byte;
   begin
-    FillCharFast(pt, SizeOf(pt), 0);
-    CheckUtf8(ctxt.FullDecryptAndVerify(key, kbits, pIV, IV_Len, pAAD, aLen, ctp,
-      @pt, cLen, ptag, tlen), 'FullDecryptAndVerify #%', [tn]);
-    CheckUtf8(CompareMem(@pt, ptp, cLen), 'Plain #%', [tn]);
-    FillCharFast(ct, SizeOf(ct), 0);
-    CheckUtf8(ctxt.FullEncryptAndAuthenticate(key, kbits, pIV, IV_Len, pAAD,
-      aLen, ptp, @ct, cLen, tag), 'FullEncryptAndAuthenticate #%', [tn]);
-    CheckUtf8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
-    CheckUtf8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
+    for avx := false to true do
+    begin
+      FillCharFast(pt, SizeOf(pt), 0);
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, kbits, pIV, pAAD, ctp, @pt, ptag,
+        IV_Len, aLen, cLen, tlen, avx), 'FullDecryptAndVerify #%', [tn]);
+      CheckUtf8(CompareMem(@pt, ptp, cLen), 'Plain #%', [tn]);
+      FillCharFast(ct, SizeOf(ct), 0);
+      CheckUtf8(ctxt.FullEncryptAndAuthenticate(key, kbits, pIV, pAAD, ptp, @ct,
+        IV_Len, aLen, cLen, tag, avx), 'FullEncryptAndAuthenticate #%', [tn]);
+      CheckUtf8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
+      CheckUtf8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
+      {$ifndef CPUX64ASM}
+      break;
+      {$endif CPUX64ASM}
+    end;
   end;
 
 var
@@ -2620,17 +2637,21 @@ var
   key, tag: TAesBlock;
   buf: THash512;
   n: integer;
+  avx: boolean;
 begin
-  key := PAesBlock(@hex32)^;
-  FillZero(buf);
-  FillZero(tag);
-  check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, 12, nil, 0,
-    @buf, @buf, SizeOf(buf), tag));
-  CheckEqual(CardinalToHex(crc32c(0, @buf, SizeOf(buf))), 'AC3DDD17');
-  CheckEqual(Md5DigestToString(tag), '0332c40f9926bd3cdadf33148912c672');
+  for avx := false to true do
+  begin
+    key := PAesBlock(@hex32)^;
+    FillZero(buf);
+    FillZero(tag);
+    check(ctxt.FullEncryptAndAuthenticate(key, 128,
+      @hex32, nil, @buf, @buf, 12, 0, SizeOf(buf), tag, avx));
+    CheckEqual(CardinalToHex(crc32c(0, @buf, SizeOf(buf))), 'AC3DDD17');
+    CheckEqual(Md5DigestToString(tag), '0332c40f9926bd3cdadf33148912c672');
+  end;
   for n := 1 to 32 do
   begin
-    Check(ctxt.Init(key, 128));
+    Check(ctxt.Init(key, 128, false));
     Check(ctxt.Reset(@hex32, n));
     Check(ctxt.Add_AAD(@hex32, n));
     Check(ctxt.Encrypt(@hex32, @buf, n));
@@ -2655,8 +2676,8 @@ begin
        @C08, SizeOf(C08), @P08, 08);
   test(@T09, 16, K09, 8 * SizeOf(K09), @I09, SizeOf(I09), @H09, SizeOf(H09),
        @C09, SizeOf(C09), @P09, 09);
-  test(@T10, 16, K10, 8 * SizeOf(K10), @I10, SizeOf(I10), nil, 0, @C10,
-       SizeOf(C10), @P10, 10);
+  test(@T10, 16, K10, 8 * SizeOf(K10), @I10, SizeOf(I10), nil, 0,
+       @C10, SizeOf(C10), @P10, 10);
   test(@T11, 16, K11, 8 * SizeOf(K11), @I11, SizeOf(I11), @H11, SizeOf(H11),
        @C11, SizeOf(C11), @P11, 11);
 end;
