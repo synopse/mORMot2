@@ -1608,23 +1608,22 @@ end;
 
 function DaysToIso8601(Days: cardinal; Expanded: boolean): RawUtf8;
 var
-  m: PtrUInt;
-  y, d: cardinal;
-begin // not very optimized, but fast enough
+  y, m, d: cardinal;
+begin
   y := 0;
-  while Days > 365 do
+  if Days >= 365 then
   begin
-    dec(Days, 366);
-    inc(y);
+    y := Days div 365;
+    dec(Days, y * 365);
   end;
   m := 0;
   if Days > 31 then
     repeat
-      inc(m); // years as increment, not absolute: always 365 days with no leap
-      d := DaysPerMonth[false][m];
+      d := DaysPerMonth[false][m + 1];
       if Days <= d then
         break;
       dec(Days, d);
+      inc(m); // years as increment, not absolute: always 365 days with no leap
     until false;
   result := DateToIso8601(y, m, Days, Expanded);
 end;
