@@ -1221,7 +1221,7 @@ end;
 constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
-  fSafe.Init;
+  fSafe.InitFromClass;
 end;
 
 procedure TSynTests.EndSaveToFileExternal;

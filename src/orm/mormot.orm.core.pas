@@ -11694,9 +11694,9 @@ constructor TRestBatchLocked.CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
   InternalBufferSize: cardinal);
 begin
+  fSafe.InitFromClass;
   inherited CreateNoRest(
     aModel, aTable, AutomaticTransactionPerRow, Options, InternalBufferSize);
-  fSafe.Init;
 end;
 
 destructor TRestBatchLocked.Destroy;

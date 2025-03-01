@@ -9558,7 +9558,7 @@ constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
   aCompressAlgo: TAlgoCompress; aHasher: THasher; aKeySpecific: TRttiParserType);
 begin
-  inherited Create;
+  fSafe.InitFromClass;
   fSafe.Padding[DIC_KEYCOUNT].VType   := varInteger;  // Keys.Count
   fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count
   fSafe.Padding[DIC_TIMESEC].VType    := varInteger;  // Timeouts Seconds

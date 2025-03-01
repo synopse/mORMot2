@@ -4132,7 +4132,7 @@ constructor TRestThread.Create(aRest: TRest; aOwnRest, aCreateSuspended: boolean
 begin
   if aRest = nil then
     EOrmException.RaiseUtf8('%.Create(aRest=nil)', [self]);
-  fSafe.Init;
+  fSafe.InitFromClass;
   fRest := aRest;
   fOwnRest := aOwnRest;
   if fThreadName = '' then

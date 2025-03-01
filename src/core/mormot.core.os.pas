@@ -4540,6 +4540,9 @@ type
     // the TSynLocker instance), otherwise you may encounter unexpected
     // behavior, like access violations or memory leaks
     procedure Init;
+    /// initialize the mutex if this TSynLocker instance is filled with zeros
+    procedure InitFromClass;
+       {$ifdef FPC} inline; {$endif} { Delphi makes warning about Windows unit }
     /// finalize the mutex
     // - calling this method is mandatory (e.g. in the class destructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
@@ -9685,20 +9688,25 @@ end;
 
 { TSynLocker }
 
+procedure TSynLocker.InitFromClass;
+begin
+  InitializeCriticalSection(fSection);
+  fInitialized := true;
+end;
+
 function NewSynLocker: PSynLocker;
 begin
   result := AllocMem(SizeOf(TSynLocker));
-  InitializeCriticalSection(result^.fSection);
-  result^.fInitialized := true;
+  result^.InitFromClass;
 end;
 
 procedure TSynLocker.Init;
 begin
-  InitializeCriticalSection(fSection);
   fLockCount := 0;
   fPaddingUsedCount := 0;
-  fInitialized := true;
   fRW.Init;
+  InitializeCriticalSection(fSection);
+  fInitialized := true;
 end;
 
 procedure TSynLocker.Done;

@@ -508,10 +508,10 @@ type
     fThreadPoolCount: integer;
     fPort, fDatabaseName: RawUtf8;
     fHttps: boolean;
+    fProcessLocked: boolean;
     fProperties: TSqlDBConnectionProperties;
     fProtocol: TSqlDBProxyConnectionProtocol;
     fSafe: TSynLocker;
-    fProcessLocked: boolean;
     // this is where the process would take place
     function Process(Ctxt: THttpServerRequestAbstract): cardinal;
   public
@@ -1899,7 +1899,7 @@ begin
       fProcessLocked := true;
   end;
   fDatabaseName := aDatabaseName;
-  fSafe.Init;
+  fSafe.InitFromClass;
   fPort := aPort;
   fHttps := aHttps;
   fThreadPoolCount := aThreadPoolCount;
