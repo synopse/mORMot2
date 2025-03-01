@@ -1206,6 +1206,16 @@ type
 
 { *********** JSON-aware TSynDictionary Storage }
 
+const
+  // TSynDictionary.fSafe.Padding[DIC_*] place holders - defined here for inlining
+  DIC_KEYCOUNT   = 0;   // Keys.Count integer
+  DIC_VALUECOUNT = 1;   // Values.Count integer
+  DIC_KEY        = 2;   // Key.Value pointer
+  DIC_VALUE      = 3;   // Values.Value pointer
+  DIC_COMPALGO   = 4;   // CompressAlgo pointer
+  DIC_TIMESEC    = 5;   // Timeouts Seconds integer
+  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
+
 type
   /// exception raised during TSynDictionary process
   ESynDictionary = class(ESynException);
@@ -1256,9 +1266,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    function GetTimeOutSeconds: cardinal;
-      {$ifdef HASINLINE} inline; {$endif}
-    procedure SetTimeOutSeconds(Value: cardinal);
+    procedure SetTimeOutSeconds(Value: integer);
     function GetCompressAlgo: TAlgoCompress;
     procedure SetCompressAlgo(Value: TAlgoCompress);
   public
@@ -1503,11 +1511,8 @@ type
     {$endif PUREMORMOT2}
     /// returns how many items are currently stored in this dictionary
     // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
-    function Count: integer;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// access to the associated dictionary lock (typically a critical section)
-    property Safe: TSynLocker
-      read fSafe;
+    property Count: integer
+      read fSafe.Padding[DIC_KEYCOUNT].VInteger;
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
     property Keys: TDynArrayHashed
@@ -1526,9 +1531,10 @@ type
     property TimeOut: TCardinalDynArray
       read fTimeOut;
     /// returns the aTimeOutSeconds parameter value, as specified to Create()
+    // - default 0 means timeout deprecation is disabled
     // - warning: setting a new timeout will clear all previous content
-    property TimeOutSeconds: cardinal
-      read GetTimeOutSeconds write SetTimeOutSeconds;
+    property TimeOutSeconds: integer
+      read fSafe.Padding[DIC_TIMESEC].VInteger write SetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress
       read GetCompressAlgo write SetCompressAlgo;
@@ -1537,6 +1543,9 @@ type
     // TSynLockedWithRttiMethods instance, to avoid any potential access violation
     property OnCanDeleteDeprecated: TOnSynDictionaryCanDelete
       read fOnCanDelete write fOnCanDelete;
+    /// access to the lock associated to this dictionary (see also ThreadUse)
+    property Safe: TSynLocker
+      read fSafe;
     /// can tune TSynDictionary threading process depending on your use case
     // - will redirect to the internal Safe TSynLocker instance
     // - warning: to be set only before any process is done
@@ -1545,16 +1554,6 @@ type
       {$ifdef FPC} read fSafe.fRWUse write fSafe.fRWUse;
       {$else} read fSafe.RWUse write fSafe.RWUse; {$endif}
   end;
-
-const
-  // TSynDictionary.fSafe.Padding[DIC_*] place holders - defined here for inlining
-  DIC_KEYCOUNT   = 0;   // Keys.Count integer
-  DIC_VALUECOUNT = 1;   // Values.Count integer
-  DIC_KEY        = 2;   // Key.Value pointer
-  DIC_VALUE      = 3;   // Values.Value pointer
-  DIC_COMPALGO   = 4;   // CompressAlgo pointer
-  DIC_TIMESEC    = 5;   // Timeouts Seconds integer
-  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
 
 
 { ********** Low-level JSON Serialization for any kind of Values }
@@ -9653,12 +9652,7 @@ begin
   end;
 end;
 
-function TSynDictionary.GetTimeOutSeconds: cardinal;
-begin
-  result := fSafe.Padding[DIC_TIMESEC].VInteger;
-end;
-
-procedure TSynDictionary.SetTimeOutSeconds(Value: cardinal);
+procedure TSynDictionary.SetTimeOutSeconds(Value: integer);
 begin
   // no fSafe.Lock because RWLock(cWrite) in DeleteAll is enough
   DeleteAll;
@@ -9953,9 +9947,7 @@ var
   tim: cardinal;
 begin
   // caller is expected to call fSafe.Lock/Unlock
-  if self = nil then
-    result := -1
-  else
+  if self <> nil then
   begin
     result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey, nil);
     if result < 0 then
@@ -9966,7 +9958,9 @@ begin
       if tim > 0 then // inlined fTimeout[result] := GetTimeout
         fTimeout[result] := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
     end;
-  end;
+  end
+  else
+    result := -1
 end;
 
 function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean;
@@ -10241,11 +10235,6 @@ begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then
     fTimeOut[aIndex] := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
-end;
-
-function TSynDictionary.Count: integer;
-begin
-  result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
 end;
 
 procedure TSynDictionary.SaveToJson(W: TJsonWriter; EnumSetsAsText: boolean);
