@@ -9558,6 +9558,7 @@ constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
   aCompressAlgo: TAlgoCompress; aHasher: THasher; aKeySpecific: TRttiParserType);
 begin
+  // inherited Create; is void
   fSafe.InitFromClass;
   fSafe.Padding[DIC_KEYCOUNT].VType   := varInteger;  // Keys.Count
   fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count
@@ -11948,13 +11949,13 @@ end;
 constructor TSynAutoCreateFieldsLocked.Create;
 begin
   AutoCreateFields(self);
-  inherited Create; // initialize fSafe := NewSynLocker
+  fSafe := NewSynLocker; // = inherited Create
 end;
 
 destructor TSynAutoCreateFieldsLocked.Destroy;
 begin
   AutoDestroyFields(self);
-  inherited Destroy;
+  fSafe^.DoneAndFreeMem; // = inherited Destroy
 end;
 
 

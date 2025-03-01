@@ -10484,13 +10484,11 @@ end;
 
 constructor TSynLockedWithRttiMethods.Create;
 begin
-  inherited Create; // may have been overriden
   fSafe := NewSynLocker;
 end;
 
 destructor TSynLockedWithRttiMethods.Destroy;
 begin
-  inherited Destroy;
   fSafe^.DoneAndFreeMem;
 end;
 

@@ -5540,7 +5540,7 @@ end;
 
 constructor TSynAuthenticationAbstract.Create;
 begin
-  fSafe.Init;
+  fSafe.InitFromClass;
   fTokenSeed := Random32Not0;
   fSessionGenerator := abs(fTokenSeed * PPtrInt(self)^);
   fTokenSeed := fTokenSeed * Random31Not0;

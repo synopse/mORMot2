@@ -10072,7 +10072,6 @@ end;
 
 destructor TSynLocked.Destroy;
 begin
-  inherited Destroy;
   fSafe^.DoneAndFreeMem;
 end;
 

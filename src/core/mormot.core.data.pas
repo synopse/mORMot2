@@ -3432,13 +3432,11 @@ end;
 
 constructor TInterfacedObjectLocked.Create;
 begin
-  inherited Create;
   fSafe := NewSynLocker;
 end;
 
 destructor TInterfacedObjectLocked.Destroy;
 begin
-  inherited Destroy;
   fSafe^.DoneAndFreeMem;
 end;
 
