@@ -1487,13 +1487,13 @@ type
     /// unserialize the content from "key":value JSON object
     // - the JSON input should be safe, i.e. with no key collision
     function LoadFromJson(const Json: RawUtf8;
-      CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
+      CustomVariantOptions: PDocVariantOptions = nil): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// unserialize the content from "key":value JSON object
     // - note that input JSON buffer is not modified in place: no need to create
     // a temporary copy if the buffer is about to be re-used
-    function LoadFromJson(Json: PUtf8Char;
-      CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
+    function LoadFromJsonBuffer(Json: PUtf8Char;
+      CustomVariantOptions: PDocVariantOptions = nil): boolean;
     /// save the content as SynLZ-compressed raw binary data
     // - warning: this format is tied to the values low-level RTTI, so if you
     // change the value/key type definitions, LoadFromBinary() would fail
@@ -10312,10 +10312,10 @@ function TSynDictionary.LoadFromJson(const Json: RawUtf8;
   CustomVariantOptions: PDocVariantOptions): boolean;
 begin
   // pointer(Json) is not modified in-place thanks to JsonObjectAsJsonArrays()
-  result := LoadFromJson(pointer(Json), CustomVariantOptions);
+  result := LoadFromJsonBuffer(pointer(Json), CustomVariantOptions);
 end;
 
-function TSynDictionary.LoadFromJson(Json: PUtf8Char;
+function TSynDictionary.LoadFromJsonBuffer(Json: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions): boolean;
 var
   k, v: RawUtf8; // private copy of the Json input, expanded as Keys/Values arrays

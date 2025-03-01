@@ -1852,7 +1852,8 @@ type
   /// implements O(1) lookup to any dynamic array content
   // - this won't handle the storage process (like add/update), just efficiently
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
-  // could be applied to a single TDynArray wrapper
+  // could be applied to a single TDynArray wrapper or could index one or several
+  // fields of an ORM table via TRestStorageInMemoryUnique in mormot.orm.storage
   // - TDynArrayHashed will use a TDynArrayHasher on its own storage
   {$ifdef USERECORDWITHMETHODS}
   TDynArrayHasher = record
