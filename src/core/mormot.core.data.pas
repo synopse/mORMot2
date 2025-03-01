@@ -1974,6 +1974,8 @@ type
     procedure SetCount(aCount: PtrInt); inline;
     procedure SetCapacity(aCapacity: PtrInt); inline;
     function GetCapacity: PtrInt; inline;
+    function GetNoFinalize: boolean; inline;
+    procedure SetNoFinalize(Value: boolean); inline;
   public
     InternalDynArray: TDynArray;
     function Value: PPointer; inline;
@@ -2002,6 +2004,7 @@ type
       aCompare: TDynArraySortCompare);
     property Count: PtrInt read GetCount write SetCount;
     property Capacity: PtrInt read GetCapacity write SetCapacity;
+    property NoFinalize: boolean read GetNoFinalize write SetNoFinalize;
   private
   {$else UNDIRECTDYNARRAY}
   TDynArrayHashed = object(TDynArray)
@@ -10037,6 +10040,16 @@ end;
 procedure TDynArrayHashed.SetCapacity(aCapacity: PtrInt);
 begin
   InternalDynArray.SetCapacity(aCapacity);
+end;
+
+function TDynArrayHashed.GetNoFinalize: boolean;
+begin
+  result := InternalDynArray.NoFinalize;
+end;
+
+procedure TDynArrayHashed.SetNoFinalize(Value: boolean);
+begin
+  InternalDynArray.NoFinalize := Value;
 end;
 
 function TDynArrayHashed.Value: PPointer;

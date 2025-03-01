@@ -1266,9 +1266,13 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    procedure SetTimeOutSeconds(Value: integer);
+    function GetTimeOutSeconds: cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure SetTimeOutSeconds(Value: cardinal);
     function GetCompressAlgo: TAlgoCompress;
     procedure SetCompressAlgo(Value: TAlgoCompress);
+    function GetThreadUse: TSynLockerUse;
+    procedure SetThreadUse(Value: TSynLockerUse);
   public
     /// initialize the dictionary storage, specifying dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -1511,8 +1515,8 @@ type
     {$endif PUREMORMOT2}
     /// returns how many items are currently stored in this dictionary
     // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
-    property Count: integer
-      read fSafe.Padding[DIC_KEYCOUNT].VInteger;
+    function Count: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
     property Keys: TDynArrayHashed
@@ -1533,8 +1537,8 @@ type
     /// returns the aTimeOutSeconds parameter value, as specified to Create()
     // - default 0 means timeout deprecation is disabled
     // - warning: setting a new timeout will clear all previous content
-    property TimeOutSeconds: integer
-      read fSafe.Padding[DIC_TIMESEC].VInteger write SetTimeOutSeconds;
+    property TimeOutSeconds: cardinal
+      read GetTimeOutSeconds write SetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress
       read GetCompressAlgo write SetCompressAlgo;
@@ -1551,8 +1555,7 @@ type
     // - warning: to be set only before any process is done
     // - advice: any performance impact should always be monitored, not guessed
     property ThreadUse: TSynLockerUse
-      {$ifdef FPC} read fSafe.fRWUse write fSafe.fRWUse;
-      {$else} read fSafe.RWUse write fSafe.RWUse; {$endif}
+      read GetThreadUse write SetThreadUse;
   end;
 
 
@@ -9652,7 +9655,17 @@ begin
   end;
 end;
 
-procedure TSynDictionary.SetTimeOutSeconds(Value: integer);
+function TSynDictionary.Count: integer;
+begin // we need a function to avoid URW1111 Internal Error on Delphi
+  result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
+end;
+
+function TSynDictionary.GetTimeOutSeconds: cardinal;
+begin // we need a function to avoid URW1111 Internal Error on Delphi
+  result := fSafe.Padding[DIC_TIMESEC].VInteger;
+end;
+
+procedure TSynDictionary.SetTimeOutSeconds(Value: cardinal);
 begin
   // no fSafe.Lock because RWLock(cWrite) in DeleteAll is enough
   DeleteAll;
@@ -9667,6 +9680,16 @@ end;
 procedure TSynDictionary.SetCompressAlgo(Value: TAlgoCompress);
 begin
   fSafe.Padding[DIC_COMPALGO].VAny := Value;
+end;
+
+function TSynDictionary.GetThreadUse: TSynLockerUse;
+begin
+  result := fSafe.RWUse; // Delphi can't use read/write on a record property
+end;
+
+procedure TSynDictionary.SetThreadUse(Value: TSynLockerUse);
+begin
+  fSafe.RWUse := Value;
 end;
 
 procedure TSynDictionary.AdjustAfterLoad;
