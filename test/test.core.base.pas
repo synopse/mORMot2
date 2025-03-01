@@ -9083,7 +9083,7 @@ var
 
 var
   v: tvalue;
-  s, k, key, val: RawUtf8;
+  s, k, key, val, u: RawUtf8;
   i, n: integer;
   exists: boolean;
   sdk: TSDKey;
@@ -9165,6 +9165,13 @@ begin
     check(dict.LoadFromJson(s));
     Test;
     s := dict.SaveToBinary;
+    u := '{"a":1,"b":2}';
+    check(dict.LoadFromJson(u));
+    CheckEqual(dict.SaveToJson, u);
+    check(dict.LoadFromJson('{a:1,b:2}'), 'extended syntax');
+    CheckEqual(dict.SaveToJson, u);
+    check(dict.LoadFromJson('{a:1,2:{b:3,c:4}}'));
+    CheckEqual(dict.SaveToJson, '{"a":1,"2":{"b":3,"c":4}}');
   finally
     dict.Free;
   end;
