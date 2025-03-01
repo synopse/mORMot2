@@ -1246,7 +1246,6 @@ type
     fKeys: TDynArrayHashed;
     fValues: TDynArray;
     fTimeOut: TCardinalDynArray;
-    fCompressAlgo: TAlgoCompress;
     fOnCanDelete: TOnSynDictionaryCanDelete;
     function InternalAddUpdate(aKey, aValue: pointer; aUpdate: boolean): PtrInt;
     function InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray;
@@ -1263,6 +1262,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetThreadUse(const Value: TSynLockerUse);
       {$ifdef HASINLINE} inline; {$endif}
+    function GetCompressAlgo: TAlgoCompress;
+    procedure SetCompressAlgo(Value: TAlgoCompress);
   public
     /// initialize the dictionary storage, specifying dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -1524,7 +1525,7 @@ type
       read GetTimeOutSeconds write SetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress
-      read fCompressAlgo write fCompressAlgo;
+      read GetCompressAlgo write SetCompressAlgo;
     /// callback to by-pass DeleteDeprecated deletion by returning false
     // - can be assigned e.g. to OnCanDeleteSynLockedWithRttiMethods if Value is a
     // TSynLockedWithRttiMethods instance, to avoid any potential access violation
@@ -1544,8 +1545,9 @@ const
   DIC_KEY        = 1;   // Key.Value pointer
   DIC_VALUECOUNT = 2;   // Values.Count integer
   DIC_VALUE      = 3;   // Values.Value pointer
-  DIC_TIMESEC    = 4;   // Timeouts Seconds integer
-  DIC_TIMETIX    = 5;   // last GetTickCount64 shr 10 integer
+  DIC_COMPALGO   = 4;   // CompressAlgo pointer
+  DIC_TIMESEC    = 5;   // Timeouts Seconds integer
+  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
 
 
 { ********** Low-level JSON Serialization for any kind of Values }
@@ -9569,7 +9571,7 @@ begin
   fValues.Compare := DynArraySortOne(fValues.Info.ArrayFirstField, aKeyCaseInsensitive);
   if aCompressAlgo = nil then
     aCompressAlgo := AlgoSynLZ;
-  fCompressAlgo := aCompressAlgo;
+  fSafe.Padding[DIC_COMPALGO].VAny := aCompressAlgo;
   fSafe.Padding[DIC_TIMESEC].VInteger := aTimeoutSeconds;
 end;
 
@@ -9635,6 +9637,16 @@ end;
 procedure TSynDictionary.SetThreadUse(const Value: TSynLockerUse);
 begin
   fSafe^.RWUse := Value;
+end;
+
+function TSynDictionary.GetCompressAlgo: TAlgoCompress;
+begin
+  result := fSafe.Padding[DIC_COMPALGO].VAny;
+end;
+
+procedure TSynDictionary.SetCompressAlgo(Value: TAlgoCompress);
+begin
+  fSafe.Padding[DIC_COMPALGO].VAny := Value;
 end;
 
 procedure TSynDictionary.AdjustAfterLoad;
@@ -10297,7 +10309,7 @@ var
   n: integer;
 begin
   result := false;
-  plain := fCompressAlgo.Decompress(binary);
+  plain := GetCompressAlgo.Decompress(binary);
   if plain = '' then
     exit;
   rdr.Init(plain);
