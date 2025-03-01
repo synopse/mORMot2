@@ -1328,9 +1328,9 @@ end;
 constructor TIKeyValueParent.Create(const aContext: TNewKeyValueContext);
 begin
   fOptions := aContext.Options;
-  // validate or recognize most simple dynamic arrays from its TKey/TValue types
+  // we need dynamic arrays RTTI for our TKey/TValue types
   if (aContext.KeyArrayTypeInfo = nil) or
-     (aContext.KeyArrayTypeInfo ^.Kind <> rkDynArray) then
+     (aContext.KeyArrayTypeInfo^.Kind <> rkDynArray) then
      EIKeyValue.RaiseUtf8('%.Create: % should be an array of TKey',
        [self, aContext.KeyArrayTypeInfo^.Name^]);
   if (aContext.ValueArrayTypeInfo = nil) or
@@ -1347,19 +1347,17 @@ begin
     fData.ThreadUse := uNoLock // not thread-safe by default
   else if not (kvoThreadCriticalSection in fOptions) then
     fData.ThreadUse := uRWLock;
+  fHasLock := fData.ThreadUse <> uNoLock;
   if kvoKeyNoFinalize in fOptions then
     fData.Keys.NoFinalize := true; // force weak references
   if kvoValueNoFinalize in fOptions then
     fData.Values.NoFinalize := true;
-  fHasLock := fData.ThreadUse <> uNoLock;
   if (fData.Keys.Info.ArrayRtti = nil) or
-     ((aContext.KeyArrayTypeInfo <> nil) and
-      (fData.Keys.Info.ArrayRtti.Info <> aContext.KeyItemTypeInfo)) then
+     (fData.Keys.Info.ArrayRtti.Kind <> aContext.KeyItemTypeInfo^.Kind) then
     EIKeyValue.RaiseUtf8('%.Create: TKey does not match %',
       [self, aContext.KeyArrayTypeInfo^.RawName]);
   if (fData.Values.Info.ArrayRtti = nil) or
-     ((aContext.ValueArrayTypeInfo <> nil) and
-      (fData.Values.Info.ArrayRtti.Info <> aContext.ValueItemTypeInfo)) then
+     (fData.Values.Info.ArrayRtti.Kind <> aContext.ValueItemTypeInfo^.Kind) then
     EIKeyValue.RaiseUtf8('%.Create: TValue does not match %',
       [self, aContext.ValueArrayTypeInfo^.RawName]);
 end;
