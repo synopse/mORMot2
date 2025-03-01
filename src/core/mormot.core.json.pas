@@ -478,7 +478,7 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 
 /// convert one JSON object into two JSON arrays of keys and values
 // - i.e. makes the following transformation:
-// $ {key1:value1,key2,value2...} -> [key1,key2...] + [value1,value2...]
+// $ {key1:value1,key2:value2...} -> ["key1","key2"...] + [value1,value2...]
 // - this function won't allocate any memory during its process, nor
 // modify the JSON input buffer
 // - is the reverse of the TJsonWriter.AddJsonArraysAsJsonObject() method
@@ -942,7 +942,7 @@ type
       const Args, Params: array of const);
     /// append two JSON arrays of keys and values as one JSON object
     // - i.e. makes the following transformation:
-    // $ [key1,key2...] + [value1,value2...] -> {key1:value1,key2,value2...}
+    // $ ["key1","key2"...] + [value1,value2...] -> {"key1":value1,"key2":value2...}
     // - this method won't allocate any memory during its process, nor
     // modify the keys and values input buffers
     // - is the reverse of the JsonObjectAsJsonArrays() function
@@ -1473,10 +1473,10 @@ type
     function SaveValuesToJson(EnumSetsAsText: boolean = false;
       ReFormat: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// unserialize the content from "key":value JSON object
-    // - if the JSON input may not be correct (i.e. if not coming from SaveToJson),
-    // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
+    // - the JSON input should be safe, i.e. with no key collision
     function LoadFromJson(const Json: RawUtf8;
       CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// unserialize the content from "key":value JSON object
     // - note that input JSON buffer is not modified in place: no need to create
     // a temporary copy if the buffer is about to be re-used
@@ -2946,7 +2946,9 @@ type
   TJsonGotoEndParserState = (
     stObjectName,
     stObjectValue,
-    stValue);
+    stValue,
+    stPropName,
+    stPropNameUnquoted);
 
   /// state machine for fast (900MB/s) parsing of (extended) JSON input
   {$ifdef USERECORDWITHMETHODS}
@@ -3199,7 +3201,13 @@ prop:     if ExpectStandard then
               inc(P);
           end
           else if State <> stObjectName then
-            exit; // identifier values are functions like isodate() objectid()
+            if State = stPropName then
+            begin
+              State := stPropNameUnquoted;
+              break;
+            end
+            else
+              exit; // identifier values are functions like isodate() objectid()
           continue;
         end;
       jtSlash: // '/' extended /regex/i or /*comment*/ or //comment
@@ -4449,9 +4457,10 @@ function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): int
 var
   wk, wv: TTextWriter;
   kb, ke, vb, ve: PUtf8Char;
-  temp1, temp2: TTextWriterStackBuffer;
-  parser: TJsonGotoEndParser;
   n: integer;
+  aftername: TJsonGotoEndParserState;
+  parser: TJsonGotoEndParser;
+  temp1, temp2: TTextWriterStackBuffer;
 begin
   result := -1;
   if (Json = nil) or
@@ -4466,17 +4475,25 @@ begin
     wv.AddDirect('[');
     kb := Json + 1;
     repeat
+      parser.State := stPropName; // parse '"a":' or 'a:'
       ke := parser.GotoEnd(kb);
       if (ke = nil) or
          (ke^ <> ':') then
         exit; // invalid input content
+      aftername := parser.State;
       vb := ke + 1;
+      parser.State := stValue;
       ve := parser.GotoEnd(vb);
       if (ve = nil) or
          not (ve^ in [',', '}']) then
         exit;
+      if aftername = stPropNameUnquoted then // was 'a:' -> append '"a",'
+        wk.AddDirect('"');
       wk.AddNoJsonEscape(kb, ke - kb);
-      wk.AddComma;
+      if aftername = stPropNameUnquoted then
+        wk.AddDirect('"', ',')
+      else
+        wk.AddComma;
       wv.AddNoJsonEscape(vb, ve - vb);
       wv.AddComma;
       kb := ve + 1;
