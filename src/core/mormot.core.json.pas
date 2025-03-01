@@ -1241,11 +1241,12 @@ type
   // access the stored data, including JSON serialization and binary storage
   // - consider IKeyValue<> from mormot.core.collections.pas, for more robust
   // generics-based code where TKey/TValue are propagated to all methods
-  TSynDictionary = class(TSynLocked)
+  TSynDictionary = class(TSynPersistent)
   protected
     fKeys: TDynArrayHashed;
     fValues: TDynArray;
     fTimeOut: TCardinalDynArray;
+    fSafe: TSynLocker;
     fOnCanDelete: TOnSynDictionaryCanDelete;
     function InternalAddUpdate(aKey, aValue: pointer; aUpdate: boolean): PtrInt;
     function InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray;
@@ -1258,10 +1259,6 @@ type
     function GetTimeOutSeconds: cardinal;
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
-    function GetThreadUse: TSynLockerUse;
-      {$ifdef HASINLINE} inline; {$endif}
-    procedure SetThreadUse(const Value: TSynLockerUse);
-      {$ifdef HASINLINE} inline; {$endif}
     function GetCompressAlgo: TAlgoCompress;
     procedure SetCompressAlgo(Value: TAlgoCompress);
   public
@@ -1292,6 +1289,12 @@ type
     /// finalize the storage
     // - would release all internal stored values
     destructor Destroy; override;
+    /// could be used as a short-cut to Safe.Lock
+    procedure Lock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// could be used as a short-cut to Safe.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE} inline; {$endif}
     /// try to add a value associated with a primary key
     // - returns the index of the inserted item, -1 if aKey is already existing
     // - this method is thread-safe, since it will lock the instance
@@ -1502,6 +1505,9 @@ type
     // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
     function Count: integer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// access to the associated dictionary lock (typically a critical section)
+    property Safe: TSynLocker
+      read fSafe;
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
     property Keys: TDynArrayHashed
@@ -1536,14 +1542,15 @@ type
     // - warning: to be set only before any process is done
     // - advice: any performance impact should always be monitored, not guessed
     property ThreadUse: TSynLockerUse
-      read GetThreadUse write SetThreadUse;
+      {$ifdef FPC} read fSafe.fRWUse write fSafe.fRWUse;
+      {$else} read fSafe.RWUse write fSafe.RWUse; {$endif}
   end;
 
 const
   // TSynDictionary.fSafe.Padding[DIC_*] place holders - defined here for inlining
   DIC_KEYCOUNT   = 0;   // Keys.Count integer
-  DIC_KEY        = 1;   // Key.Value pointer
-  DIC_VALUECOUNT = 2;   // Values.Count integer
+  DIC_VALUECOUNT = 1;   // Values.Count integer
+  DIC_KEY        = 2;   // Key.Value pointer
   DIC_VALUE      = 3;   // Values.Value pointer
   DIC_COMPALGO   = 4;   // CompressAlgo pointer
   DIC_TIMESEC    = 5;   // Timeouts Seconds integer
@@ -9590,7 +9597,18 @@ destructor TSynDictionary.Destroy;
 begin
   fKeys.Clear;
   fValues.Clear;
-  inherited Destroy;
+  fSafe.Done;
+  // inherited Destroy; is void
+end;
+
+procedure TSynDictionary.Lock;
+begin
+  fSafe.Lock;
+end;
+
+procedure TSynDictionary.Unlock;
+begin
+  fSafe.UnLock;
 end;
 
 function TSynDictionary.ComputeNextTimeOut: cardinal;
@@ -9628,16 +9646,6 @@ begin
   // no fSafe.Lock because RWLock(cWrite) in DeleteAll is enough
   DeleteAll;
   fSafe.Padding[DIC_TIMESEC].VInteger := Value;
-end;
-
-function TSynDictionary.GetThreadUse: TSynLockerUse;
-begin
-  result := fSafe^.RWUse;
-end;
-
-procedure TSynDictionary.SetThreadUse(const Value: TSynLockerUse);
-begin
-  fSafe^.RWUse := Value;
 end;
 
 function TSynDictionary.GetCompressAlgo: TAlgoCompress;

@@ -1407,7 +1407,7 @@ begin
   else
   begin
     if fHasLock then
-      fData.Safe^.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
+      fData.Safe.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
     EIKeyValue.RaiseUtf8('%.GetItem: key not found', [self]);
   end;
 end;
@@ -1456,13 +1456,13 @@ end;
 procedure TIKeyValueParent.ReadLock;
 begin
   if fHasLock then
-    fData.Safe^.ReadLock;
+    fData.Safe.ReadLock;
 end;
 
 procedure TIKeyValueParent.ReadUnLock;
 begin
   if fHasLock then
-    fData.Safe^.ReadUnLock;
+    fData.Safe.ReadUnLock;
 end;
 
 
@@ -1479,14 +1479,14 @@ var
   ndx: PtrInt; // slightly more verbose but faster than plain FindAndCopy
 begin
   if fHasLock then
-    fData.Safe^.ReadLock;
+    fData.Safe.ReadLock;
   ndx := fData.Find(key, fHasTimeout);
   if ndx < 0 then
     GetDefaultOrUnlockAndRaise(@result) // may ReadUnLock and raise EIKeyValue
   else
     result := TArray<TValue>(fData.Values.Value^)[ndx]; // more efficient
   if fHasLock then
-    fData.Safe^.ReadUnLock;
+    fData.Safe.ReadUnLock;
 end;
 {$endif SMALLGENERICS}
 
@@ -1529,7 +1529,7 @@ var
   ndx: PtrInt;
 begin
   if fHasLock then
-    fData.Safe^.ReadLock;
+    fData.Safe.ReadLock;
   ndx := fData.Find(key, fHasTimeout);
   if ndx >= 0 then
   begin
@@ -1539,7 +1539,7 @@ begin
   else
     result := false;
   if fHasLock then
-    fData.Safe^.ReadUnLock;
+    fData.Safe.ReadUnLock;
 end;
 {$endif SMALLGENERICS}
 
