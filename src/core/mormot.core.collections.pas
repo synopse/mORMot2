@@ -571,11 +571,14 @@ type
   // TCriticalSection for the thread safety
   // - kvoDefaultIfNotFound will let IKeyValue<TKey, TValue>.Items[] return the
   // default TValue (e.g. 0 or '') and raise no exception if TKey is not found
+  // - by default, managed values and T*ObjArray will delete their content
+  // unless the kvoNoFinalize option is set (handle with care to avoid mem leaks)
   TKeyValueOptions = set of (
     kvoKeyCaseInsensitive,
     kvoThreadSafe,
     kvoThreadCriticalSection,
-    kvoDefaultIfNotFound);
+    kvoDefaultIfNotFound,
+    kvoNoFinalize);
 
   /// stack parameters to ease TIKeyValue<TKey, TValue> creation
   TNewKeyValueContext = record
@@ -1343,6 +1346,8 @@ begin
     fData.ThreadUse := uNoLock // not thread-safe by default
   else if not (kvoThreadCriticalSection in fOptions) then
     fData.ThreadUse := uRWLock;
+  if kvoNoFinalize in fOptions then
+    fData.Values.NoFinalize := true; // force weak references
   fHasLock := fData.ThreadUse <> uNoLock;
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
