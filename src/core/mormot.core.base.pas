@@ -1885,6 +1885,9 @@ function FromI64(const Values: array of Int64): TInt64DynArray;
 function FromU64(const Values: array of QWord): TQWordDynArray;
   {$ifdef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
+/// internal function called e.g. by DeleteWord/DeleteInteger/DeleteInt64
+procedure UnmanagedDynArrayDelete(var v; Count, Index, ItemSize: PtrUInt);
+
 type
   /// used to store and retrieve Words in a sorted array
   // - ensure Count=0 before use - if not defined as a private member of a class
@@ -2983,7 +2986,7 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$else}
 
 // fallback to RTL versions on non-INTEL or PIC platforms by default
-// and mormot.core.os.posix.inc redirects them to libc memset/memmove
+// - mormot.core.os.posix.inc will redirect them to libc memset/memmove
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 
