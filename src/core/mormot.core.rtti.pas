@@ -317,6 +317,9 @@ const
   /// types which are considerated as non-simple values
   rkComplexTypes = [rkClass, rkDynArray, rkInterface];
 
+  /// types which may nest other values, as record/array/class/variant
+  rkCompositeTypes = rkComplexTypes + rkRecordTypes + [rkVariant];
+
   /// types which are stored as pointers so are always accessed by reference
   rkPerReference = rkStringTypes + rkComplexTypes;
 
@@ -325,7 +328,7 @@ const
     rkHasRttiOrdTypes + [ {$ifdef FPC} rkQWord, {$endif} rkInt64 ];
 
   /// maps integer and floating point types in TRttiKind RTTI enumerates
-  rkNumberTypes = rkOrdinalTypes + [ rkFloat ];
+  rkNumberTypes = rkOrdinalTypes + [rkFloat];
 
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
   // - includes ordinals and class pointers, but no managed types

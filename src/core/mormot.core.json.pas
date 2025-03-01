@@ -10293,9 +10293,12 @@ var
   n: integer;
 begin
   result := false;
-  n := JsonObjectAsJsonArrays(Json, k, v);
+  n := JsonObjectAsJsonArrays(Json, k, v); // translate without JSON (un)escape
   if n <= 0 then
     exit;
+  if (CustomVariantOptions = nil) and
+     (fValues.Info.ArrayRtti.Kind in rkCompositeTypes) then
+    CustomVariantOptions := @JSON_[mFast]; // may contain TDocVariant values
   fSafe.Lock;
   try
     if (fKeys.LoadFromJson(pointer(k), nil, CustomVariantOptions) <> nil) and
