@@ -9675,10 +9675,10 @@ begin
   {$endif NOPATCHVMT}
     // our dedicated "hash table of the poor" (tm) lookup
     k := @fHashTable[RK_TOSLOT[Info^.Kind]];
-    // try latest found RTTI for this slot of type definition (naive but works)
+    // try latest found RTTI for this slot of type definition (very effective)
     result := k^.LastInfo;
     if (result <> nil) and
-       (result.Info = Info) then
+       (result.Info = Info) then // happens e.g. 12,612,097 times during tests
       exit;
     // O(1) hash of the PRttiInfo pointer using inlined xxHash32 shuffle stage
     h := xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX;
@@ -9688,7 +9688,7 @@ begin
     // try latest found RTTI for this hash slot
     result := k^.LastHash[h];
     if (result <> nil) and
-       (result.Info = Info) then
+       (result.Info = Info) then // happens e.g. 1280 times during tests
     begin
       k^.LastInfo := result; // for faster lookup next time
       exit; // avoid most ReadLock/ReadUnLock and LockedFind() search
@@ -9699,7 +9699,7 @@ begin
     if p <> nil then
       result := LockedFind(p, @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF], Info);
     k^.Safe.ReadUnLock;
-    if result <> nil then
+    if result <> nil then // happens e.g. 864 times during tests
     begin
       k^.LastInfo := result;   // aligned pointers are atomically accessed
       k^.LastHash[h] := result;
@@ -9999,6 +9999,7 @@ begin
     {$ifdef FPC} // FPC extended RTTI generates no name for nested plain records
     if Info.RawName[0] <> #0 then
     {$endif FPC}
+    if PosExChar('$', Instance.Name) = 0 then // e.g. 'TArray$1$crcA5831B1D'
       AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
     ObjArrayAddCount(fInstances, Instance, Count); // to release memory
     inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister

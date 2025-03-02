@@ -10677,7 +10677,6 @@ type
     procedure SetL(position: integer; const value: IDocList);
     procedure SetS(position: integer; const value: string);
     procedure SetU(position: integer; const value: RawUtf8);
-    //procedure SetJson(const value: RawUtf8); override;
     function Append(const value: variant): integer; overload;
     function Append(const value: RawUtf8): integer; overload;
     function AppendDoc(const value: IDocAny): integer;
