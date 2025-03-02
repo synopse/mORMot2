@@ -1161,6 +1161,7 @@ type
     procedure SetCapacity(aCapacity: PtrInt);
     procedure SetCompare(const aCompare: TDynArraySortCompare);
       {$ifdef HASINLINE}inline;{$endif}
+    procedure SetNoFinalize(aValue: boolean);
     function FindIndex(const Item; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1776,7 +1777,7 @@ type
     /// can be set to TRUE to avoid any item finalization
     // -  e.g. with T*ObjArray - handle with care to avoid memory leaks
     property NoFinalize: boolean
-      read fNoFinalize write fNoFinalize;
+      read fNoFinalize write SetNoFinalize;
 
     /// low-level direct access to the storage variable
     property Value: PPointer
@@ -8874,6 +8875,11 @@ begin
     @fCompare := @aCompare;
     fSorted := false;
   end;
+end;
+
+procedure TDynArray.SetNoFinalize(aValue: boolean);
+begin // need a method to avoid compilation error on Delphi
+  fNoFinalize := aValue;
 end;
 
 procedure TDynArray.Slice(var Dest; Limit, Offset: cardinal);
