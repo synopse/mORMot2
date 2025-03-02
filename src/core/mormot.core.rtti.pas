@@ -9675,7 +9675,7 @@ begin
   {$endif NOPATCHVMT}
     // our dedicated "hash table of the poor" (tm) lookup
     k := @fHashTable[RK_TOSLOT[Info^.Kind]];
-    // try latest found RTTI for this kind of type definition (naive but works)
+    // try latest found RTTI for this slot of type definition (naive but works)
     result := k^.LastInfo;
     if (result <> nil) and
        (result.Info = Info) then

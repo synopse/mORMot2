@@ -657,7 +657,7 @@ end;
 
 const
   // gather rk* to reduce number of TRttiCustomListPairs hash slots in memory
-  RK_TOSLOT_MAX = 14;
+  RK_TOSLOT_MAX = {$ifdef NOPATCHVMT} 11 {$else} 10 {$endif NOPATCHVMT};
   RK_TOSLOT: array[TRttiKind] of byte = (
     0,   // rkUnknown
     1,   // rkInteger
@@ -670,21 +670,25 @@ const
     6,   // rkLStringOld
     6,   // rkLString
     7,   // rkWString
-    8,   // rkVariant
+    7,   // rkVariant
     2,   // rkArray
-    9,   // rkRecord
-    8,   // rkInterface
-    10,  // rkClass
-    11,  // rkObject
-    7,   // rkWChar
+    8,   // rkRecord
+    7,   // rkInterface
+    {$ifdef NOPATCHVMT}
+    11,  // rkClass
+    {$else}
+    4,   // vmtAutoTable is used instead of rkClass slot
+    {$endif NOPATCHVMT}
+    8,  // rkObject
+    2,   // rkWChar
     3,   // rkBool
-    12,  // rkInt64
-    13,  // rkQWord
-    14,  // rkDynArray
+    9,   // rkInt64
+    9,   // rkQWord
+    10,  // rkDynArray
     0,   // rkInterfaceRaw
     0,   // rkProcVar
     7,   // rkUString
-    7,   // rkUChar
+    2,   // rkUChar
     0,   // rkHelper
     0,   // rkFile
     0,   // rkClassRef
