@@ -8337,15 +8337,15 @@ end;
 procedure TDynArray.SortRange(aStart, aStop: integer;
   aCompare: TDynArraySortCompare);
 var
-  QuickSort: TDynArrayQuickSort;
+  qs: TDynArrayQuickSort;
 begin
   if aStop <= aStart then
     exit; // nothing to sort
   if Assigned(aCompare) then
-    QuickSort.Compare := aCompare
+    qs.Compare := aCompare
   else
-    QuickSort.Compare := @fCompare;
-  if Assigned(QuickSort.Compare) and
+    qs.Compare := @fCompare;
+  if Assigned(qs.Compare) and
      (fValue <> nil) and
      (fValue^ <> nil) then
   begin
@@ -8353,31 +8353,31 @@ begin
       case fInfo.ArrayRtti.Parser of
         // call optimized sorting functions for most simple types
         ptWord:
-          if @QuickSort.Compare = @SortDynArrayWord then
+          if @qs.Compare = @SortDynArrayWord then
           begin
             QuickSortWord(fValue^, aStart, aStop);
             exit;
           end;
         ptInteger:
-          if @QuickSort.Compare = @SortDynArrayInteger then
+          if @qs.Compare = @SortDynArrayInteger then
           begin
             QuickSortInteger(fValue^, aStart, aStop);
             exit;
           end;
         ptInt64:
-          if @QuickSort.Compare = @SortDynArrayInt64 then
+          if @qs.Compare = @SortDynArrayInt64 then
           begin
             QuickSortInt64(fValue^, aStart, aStop);
             exit;
           end;
         ptQWord:
-          if @QuickSort.Compare = @SortDynArrayQWord then
+          if @qs.Compare = @SortDynArrayQWord then
           begin
             QuickSortQWord(fValue^, aStart, aStop);
             exit;
           end;
         ptDouble:
-          if @QuickSort.Compare = @SortDynArrayDouble then
+          if @qs.Compare = @SortDynArrayDouble then
           begin
             QuickSortDouble(fValue^, aStart, aStop);
             exit;
@@ -8385,13 +8385,13 @@ begin
       end;
     if fInfo.Cache.ItemSize = SizeOf(pointer) then
       // dedicated function for pointers - e.g. strings or T*ObjArray
-      QuickSortPtr(aStart, aStop, QuickSort.Compare, fValue^)
+      QuickSortPtr(aStart, aStop, qs.Compare, fValue^)
     else
     begin
       // generic process for any kind of array items
-      QuickSort.Value := fValue^;
-      QuickSort.ElemSize := fInfo.Cache.ItemSize;
-      QuickSort.QuickSort(aStart, aStop);
+      qs.Value := fValue^;
+      qs.ElemSize := fInfo.Cache.ItemSize;
+      qs.QuickSort(aStart, aStop);
     end;
   end;
 end;
@@ -8435,34 +8435,34 @@ end;
 
 procedure TDynArray.Sort(const aCompare: TOnDynArraySortCompare; aReverse: boolean);
 var
-  QuickSort: TDynArrayQuickSort;
+  qs: TDynArrayQuickSort;
   R: PtrInt;
 begin
   if (not Assigned(aCompare)) or
      (fValue = nil) or
      (fValue^ = nil) then
     exit; // nothing to sort
-  QuickSort.CompareEvent := aCompare;
-  QuickSort.Value := fValue^;
-  QuickSort.ElemSize := fInfo.Cache.ItemSize;
+  qs.CompareEvent := aCompare;
+  qs.Value := fValue^;
+  qs.ElemSize := fInfo.Cache.ItemSize;
   R := Count - 1;
   if aReverse then
-    QuickSort.QuickSortEventReverse(0, R)
+    qs.QuickSortEventReverse(0, R)
   else
-    QuickSort.QuickSortEvent(0, R);
+    qs.QuickSortEvent(0, R);
 end;
 
 procedure TDynArray.CreateOrderedIndex(var aIndex: TIntegerDynArray;
   aCompare: TDynArraySortCompare);
 var
-  QuickSort: TDynArrayQuickSort;
+  qs: TDynArrayQuickSort;
   n: integer;
 begin
   if Assigned(aCompare) then
-    QuickSort.Compare := aCompare
+    qs.Compare := aCompare
   else
-    QuickSort.Compare := @fCompare;
-  if Assigned(QuickSort.Compare) and
+    qs.Compare := @fCompare;
+  if Assigned(qs.Compare) and
      (fValue <> nil) and
      (fValue^ <> nil) then
   begin
@@ -8472,32 +8472,32 @@ begin
       SetLength(aIndex, n);
       FillIncreasing(pointer(aIndex), 0, n);
     end;
-    QuickSort.Value := fValue^;
-    QuickSort.ElemSize := fInfo.Cache.ItemSize;
-    QuickSort.Index := pointer(aIndex);
-    QuickSort.QuickSortIndexed(0, n - 1);
+    qs.Value := fValue^;
+    qs.ElemSize := fInfo.Cache.ItemSize;
+    qs.Index := pointer(aIndex);
+    qs.QuickSortIndexed(0, n - 1);
   end;
 end;
 
 procedure TDynArray.CreateOrderedIndex(out aIndex: TSynTempBuffer;
   aCompare: TDynArraySortCompare);
 var
-  QuickSort: TDynArrayQuickSort;
+  qs: TDynArrayQuickSort;
   n: integer;
 begin
   if Assigned(aCompare) then
-    QuickSort.Compare := aCompare
+    qs.Compare := aCompare
   else
-    QuickSort.Compare := @fCompare;
-  if Assigned(QuickSort.Compare) and
+    qs.Compare := @fCompare;
+  if Assigned(qs.Compare) and
      (fValue <> nil) and
      (fValue^ <> nil) then
   begin
     n := GetCount;
-    QuickSort.Value := fValue^;
-    QuickSort.ElemSize := fInfo.Cache.ItemSize;
-    QuickSort.Index := PCardinalArray(aIndex.InitIncreasing(n));
-    QuickSort.QuickSortIndexed(0, n - 1);
+    qs.Value := fValue^;
+    qs.ElemSize := fInfo.Cache.ItemSize;
+    qs.Index := PCardinalArray(aIndex.InitIncreasing(n));
+    qs.QuickSortIndexed(0, n - 1);
   end
   else
     aIndex.buf := nil; // avoid GPF in aIndex.Done
@@ -8531,17 +8531,17 @@ end;
 procedure TDynArray.AddDynArray(aSource: PDynArray;
   aStartIndex: integer; aCount: integer);
 var
-  SourceCount: integer;
+  n: integer;
 begin
   if (aSource <> nil) and
      (aSource^.fValue <> nil) and
      (fInfo.Cache.ItemInfoRaw = aSource^.Info.Cache.ItemInfoRaw) then
   begin
     // check supplied aCount paramter with (external) Source.Count
-    SourceCount := aSource^.Count;
+    n := aSource^.Count;
     if (aCount < 0) or
-       (aCount > SourceCount) then
-      aCount := SourceCount;
+       (aCount > n) then
+      aCount := n;
     // actually add the items
     AddArray(aSource.fValue^, aStartIndex, aCount);
   end;
@@ -8609,19 +8609,19 @@ end;
 
 procedure TDynArray.CopyFrom(const Source; MaxItem: integer; ObjArrayByRef: boolean);
 var
-  SourceDynArray: TDynArray;
+  src: TDynArray;
 begin
-  SourceDynArray.InitRtti(fInfo, pointer(@Source)^);
-  SourceDynArray.fCountP := @MaxItem; // would set Count=0 at Init()
-  Copy(@SourceDynArray, ObjArrayByRef);
+  src.InitRtti(fInfo, pointer(@Source)^);
+  src.fCountP := @MaxItem; // would set Count=0 at Init()
+  Copy(@src, ObjArrayByRef);
 end;
 
 procedure TDynArray.CopyTo(out Dest; ObjArrayByRef: boolean);
 var
-  DestDynArray: TDynArray;
+  dst: TDynArray;
 begin
-  DestDynArray.InitRtti(fInfo, Dest);
-  DestDynArray.Copy(@self, ObjArrayByRef);
+  dst.InitRtti(fInfo, Dest);
+  dst.Copy(@self, ObjArrayByRef);
 end;
 
 function IndexFind(P, V: PAnsiChar; cmp: TRttiCompare; rtti: PRttiInfo; n: integer): PtrInt;
@@ -8685,7 +8685,7 @@ end;
 procedure TDynArray.InternalSetLength(OldLength, NewLength: PtrUInt);
 var
   p: PDynArrayRec;
-  NeededSize, minLength: PtrUInt;
+  needed, siz: PtrUInt;
 begin
   // this method is faster than default System.DynArraySetLength() function
   p := fValue^;
@@ -8712,9 +8712,9 @@ begin
     exit;
   end;
   // calculate the needed size of the resulting memory structure on heap
-  NeededSize := NewLength * PtrUInt(fInfo.Cache.ItemSize) + SizeOf(TDynArrayRec);
+  needed := NewLength * PtrUInt(fInfo.Cache.ItemSize) + SizeOf(TDynArrayRec);
   {$ifdef CPU32}
-  if NeededSize > 1 shl 30 then
+  if needed > 1 shl 30 then
     // in practice, consider that max workable memory block is 1 GB on 32-bit
     EDynArray.RaiseUtf8('TDynArray.InternalSetLength(%,%) size concern',
       [fInfo.Name, NewLength]);
@@ -8722,7 +8722,7 @@ begin
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if p = nil then
   begin
-    p := AllocMem(NeededSize); // RTL/OS will return zeroed memory
+    p := AllocMem(needed); // RTL/OS will return zeroed memory
     OldLength := NewLength;    // no FillcharFast() below
   end
   else
@@ -8735,30 +8735,30 @@ begin
          not fNoFinalize then
         // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
-          FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
+          FastFinalizeArray(pointer(PAnsiChar(p) + needed),
             fInfo.Cache.ItemInfoManaged, OldLength - NewLength)
         else if rcfObjArray in fInfo.Flags then // FreeAndNil() of resized objects
-          RawObjectsClear(pointer(PAnsiChar(p) + NeededSize), OldLength - NewLength);
-      ReallocMem(p, NeededSize);
+          RawObjectsClear(pointer(PAnsiChar(p) + needed), OldLength - NewLength);
+      ReallocMem(p, needed);
     end
     else
     begin
       // dynamic array already referenced elsewhere -> create our own copy
-      minLength := OldLength;
-      if minLength > NewLength then
-        minLength := NewLength;
+      siz := OldLength;
+      if siz > NewLength then
+        siz := NewLength;
       if fInfo.Cache.ItemInfoManaged = nil then // unmanaged items
       begin
-        GetMem(p, NeededSize);
+        GetMem(p, needed);
         MoveFast(fValue^^, PByteArray(p)[SizeOf(TDynArrayRec)],
-          minLength * PtrUInt(fInfo.Cache.ItemSize));
+          siz * PtrUInt(fInfo.Cache.ItemSize));
       end
       else
       begin
-        p := AllocMem(NeededSize);
+        p := AllocMem(needed);
         OldLength := NewLength;    // no FillcharFast() below
         CopySeveral(@PByteArray(p)[SizeOf(TDynArrayRec)], fValue^,
-          minLength, fInfo.Cache.ItemInfoManaged, fInfo.Cache.ItemSize);
+          siz, fInfo.Cache.ItemInfoManaged, fInfo.Cache.ItemSize);
       end;
       // for thread safety, adjust the refcount after data copy
       if fNoFinalize then
@@ -8778,9 +8778,9 @@ begin
   // reset new allocated items content to zero
   if NewLength > OldLength then
   begin
-    minLength := fInfo.Cache.ItemSize;
-    OldLength := OldLength * minLength;
-    FillCharFast(PAnsiChar(p)[OldLength], NewLength * minLength - OldLength, 0);
+    siz := fInfo.Cache.ItemSize;
+    OldLength := OldLength * siz;
+    FillCharFast(PAnsiChar(p)[OldLength], NewLength * siz - OldLength, 0);
   end;
 end;
 
@@ -8952,7 +8952,7 @@ function TDynArray.AddArray(const DynArrayVar; aStartIndex, aCount: integer): in
 var
   c, s: PtrInt;
   n: integer;
-  PS, PD: pointer;
+  ps, pd: pointer;
 begin
   result := 0;
   if fValue = nil then
@@ -8971,9 +8971,9 @@ begin
   n := GetCount;
   SetCount(n + aCount);
   s := fInfo.Cache.ItemSize;
-  PS := PAnsiChar(DynArrayVar) + aStartIndex * s;
-  PD := PAnsiChar(fValue^) + n * s;
-  CopySeveral(PD, PS, aCount, fInfo.Cache.ItemInfoManaged, s);
+  ps := PAnsiChar(DynArrayVar) + aStartIndex * s;
+  pd := PAnsiChar(fValue^) + n * s;
+  CopySeveral(pd, ps, aCount, fInfo.Cache.ItemInfoManaged, s);
 end;
 
 function TDynArray.ItemLoadMem(Source, SourceMax: PAnsiChar): RawByteString;
@@ -10228,7 +10228,7 @@ var
   ndx: PtrInt;
   j: PtrUInt;
   added: boolean;
-  aName_: RawUtf8;
+  nam: RawUtf8;
 begin
   if aName = '' then
     aName := '_';
@@ -10236,12 +10236,12 @@ begin
   if not added then
   begin
     // force unique column name
-    aName_ := aName + '_';
+    nam := aName + '_';
     j := 1;
     repeat
       if j > high(SmallUInt32Utf8) then // should never happen - 999 is enough
         raise EDynArray.Create('TDynArrayHashed.AddAndMakeUniqueName overflow');
-      aName := aName_ + SmallUInt32Utf8[j];
+      aName := nam + SmallUInt32Utf8[j];
       ndx := FindHashedForAdding(aName, added);
       inc(j);
     until added;
