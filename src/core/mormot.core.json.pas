@@ -12061,7 +12061,7 @@ begin
   TOnRttiJsonRead(result.fJsonReader)  := JsonReader;
   TOnRttiJsonWrite(result.fJsonWriter) := JsonWriter;
   result.SetParserType(result.Parser, result.ParserComplex); // needed
-  result.fCache.NewInterface := @_New_ISerializable;
+  result.fCache.NewInterface := @_New_ISerializable; // = tkClass NewInstance
   obj := Rtti.RegisterClass(self) as TRttiJson;
   obj.fCache.SerializableInterface := result;
   if not InheritsFrom(TSerializablePersistent) then

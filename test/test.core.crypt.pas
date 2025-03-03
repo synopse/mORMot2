@@ -37,8 +37,8 @@ type
   public
     fDigestAlgo: TDigestAlgo;
     fCatalogAllGenerate: boolean;
-    procedure CryptData(dpapi: boolean);
-    procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
+    procedure CryptData(dpapi: integer; const name: RawUtf8);
+    procedure Prng(meta: TAesPrngClass; const name: RawUtf8);
     function DigestUser(const User, Realm: RawUtf8;
       out HA0: THash512Rec): TAuthServerResult;
     procedure CatalogRunAsym(Context: TObject);
@@ -84,6 +84,8 @@ type
     /// CryptDataForCurrentUserApi() function
     procedure _CryptDataForCurrentUserApi;
     {$endif OSWINDOWS}
+    /// CryptDataWithSecret() function
+    procedure _CryptDataWithSecret;
     /// JWT classes
     procedure _JWT;
     /// validate TBinaryCookieGenerator object
@@ -652,7 +654,7 @@ begin
   NotifyTestSpeed('       Lecuyer RandomBytes', [], 1, length(big), @timer);
 end;
 
-procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUTF8);
+procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUtf8);
 var
   p: TAesPrngAbstract;
   b1, b2: TAesBlock;
@@ -787,26 +789,40 @@ begin
   NotifyTestSpeed('       % FillRandom', [name], 1, length(big), @timer);
 end;
 
-procedure TTestCoreCrypto.CryptData(dpapi: boolean);
+function CryptDataSecretWrapper(const Data, AppSecret: RawByteString;
+  Encrypt: boolean): RawByteString;
+begin
+  result := CryptDataWithSecret(Data, [AppSecret]);
+end;
+
+procedure TTestCoreCrypto.CryptData(dpapi: integer; const name: RawUtf8);
 var
-  i, size: integer;
+  i, size, max: integer;
   plain, enc, test: RawByteString;
   appsec: RawUtf8;
   func: function(const Data, AppSecret: RawByteString; Encrypt: boolean): RawByteString;
   tim: TPrecisionTimer;
-const
-  MAX = 1000;
 begin
-  {$ifdef OSWINDOWS}
-  if dpapi then
-    func := CryptDataForCurrentUserDPAPI
+  max := 1000;
+  case dpapi of
+    {$ifdef OSWINDOWS}
+    0:
+      func := CryptDataForCurrentUserDPAPI
+    {$endif OSWINDOWS}
+    1:
+      func := CryptDataForCurrentUser;
+    2:
+      begin
+        func := CryptDataSecretWrapper;
+        max := 50; // Pbkdf2Sha3() is slow
+      end
   else
-  {$endif OSWINDOWS}
-    func := CryptDataForCurrentUser;
+    exit;
+  end;
   func('warmup', 'appsec', true);
   size := 0;
   tim.Start;
-  for i := 0 to MAX - 1 do
+  for i := 0 to max - 1 do
   begin
     plain := TAesPrng.Main.FillRandom(i);
     CheckEqual(length(plain), i);
@@ -823,23 +839,25 @@ begin
     CheckEqual(test, plain);
     inc(size, i + length(enc));
   end;
-  if dpapi then
-    NotifyTestSpeed('DPAPI', MAX * 2, size, @tim)
-  else
-    NotifyTestSpeed('AES-CFB', MAX * 2, size, @tim);
+  NotifyTestSpeed(name, max * 2, size, @tim);
 end;
 
 procedure TTestCoreCrypto._CryptDataForCurrentUser;
 begin
-  CryptData(false);
+  CryptData(1, 'AES-CFB');
 end;
 
 {$ifdef OSWINDOWS}
 procedure TTestCoreCrypto._CryptDataForCurrentUserApi;
 begin
-  CryptData(true);
+  CryptData(0, 'DPAPI');
 end;
 {$endif OSWINDOWS}
+
+procedure TTestCoreCrypto._CryptDataWithSecret;
+begin
+  CryptData(2, 'WithSecret');
+end;
 
 const
   _rsapriv = // from "openssl genrsa -out priv.pem 2048"
