@@ -8257,12 +8257,12 @@ end;
 function CryptDataWithSecret(const Data: RawByteString; const Secret: array of const;
   Rounds: integer; const Salt: RawByteString): RawByteString;
 var
-  sec: RawByteString;
+  sec: RawUtf8;
 begin
   FastSetRawByteString(result, pointer(Data), length(Data)); // in-place encrypt
   if Data = '' then
     exit;
-  sec := Make(Secret);
+  Make(Secret, sec);
   Pbkdf2Sha3Crypt(SHAKE_128, sec, Salt, Rounds, result); // XOF/cipher mode
   FillZero(sec);
 end;
