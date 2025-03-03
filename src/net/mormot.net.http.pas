@@ -4205,7 +4205,7 @@ function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
 var
   s: RawUtf8;
   err: integer;
-  line: array[0..4095] of AnsiChar; // avoid most memory allocations
+  line: array[0..8191] of AnsiChar; // avoid most memory allocations
 begin
   // parse the headers
   result := false;
