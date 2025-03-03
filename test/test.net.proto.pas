@@ -1619,6 +1619,24 @@ begin
   Check(opt.InitFromUrl('ti=1'));
   CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
   Check(opt.TLS.IgnoreCertificateErrors);
+  opt.TLS.PrivatePassword := 'password';
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
+  Check(opt.InitFromUrl('pp=RGUUac6iP4Y&ti=1'));
+  Check(opt.TLS.IgnoreCertificateErrors);
+  CheckEqual(opt.TLS.PrivatePassword, '', 'missing pf');
+  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
+  opt.TLS.PrivateKeyFile := '/p/f';
+  opt.TLS.PrivatePassword := 'password'; // also for OnPeerCacheDirect() below
+  CheckEqual(VariantSaveJson(opt.ToDocVariant),
+    '{"ti":true,"pf":"/p/f","pp":"Y7rINao7mcc"}');
+  params := opt.ToUrlEncode('/root');
+  CheckEqual(params, '/root?ti=1&pf=%2Fp%2Ff&pp=Y7rINao7mcc');
+  opt.Init;
+  CheckEqual(opt.TLS.PrivatePassword, '');
+  Check(opt.InitFromUrl(params));
+  CheckEqual(opt.TLS.PrivatePassword, 'password');
+  opt.TLS.IgnoreCertificateErrors := true;
+  params := '';
   // for further tests, use the dedicated "mORMot GET" (mget) sample
   hps := THttpPeerCacheSettings.Create;
   try
@@ -1719,7 +1737,7 @@ begin
           Check(msg2.Kind = pcfPing);
           CheckEqual(params, '');
           res := hpc2.BearerDecode(dTok, pcfBearerDirectPermanent, msg2, @params);
-          CheckEqual(params, 'ti=1');
+          CheckEqual(params, 'ti=1&pf=%2Fp%2Ff&pp=NCpB3InJzms');
           Check(res = mdOk, 'directOkParams');
           Check(msg2.Kind = pcfBearerDirectPermanent);
         finally
@@ -1803,9 +1821,13 @@ end;
 function TNetworkProtocols.OnPeerCacheDirect(var aUri: TUri;
   var aHeader: RawUtf8; var aOptions: THttpRequestExtendedOptions): integer;
 begin
-  // ext parameters only for the first
+  // ext parameters only for the first resource
   CheckUtf8((aUri.Address = '_wp_generated/wpacaa94d5.gif') =
             aOptions.TLS.IgnoreCertificateErrors, aUri.Address);
+  if aOptions.TLS.IgnoreCertificateErrors then
+    CheckEqual(aOptions.TLS.PrivatePassword, 'password')
+  else
+    CheckEqual(aOptions.TLS.PrivatePassword, '');
   // it is time to setup our custom parameters, needed e.g. with https
   aOptions.TLS.IgnoreCertificateErrors := true;
   // continue
