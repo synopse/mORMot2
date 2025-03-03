@@ -1902,11 +1902,11 @@ var
 function CryptDataForCurrentUser(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
-/// symmetric protect/obfuscate some data with a private key using AES-CTR
-// - the private key is derivated using Pbkdf2Sha3Crypt() from the supplied
+/// symmetrical protect/obfuscate some data from some secret(s)
+// - a "private key" is derivated using Pbkdf2Sha3Crypt() from the supplied
 // secret values, then applied in SHAKE-128 XOF cipher mode to the input data
 // - may be used as a stateless fallback to CryptDataForCurrentUser() to obfuscate
-// some data, but not as secure as pure asymmetric public/private cryptogaphy
+// some data, but not as secure than pure asymmetric public/private cryptogaphy
 // - note that this function is much slower than CryptDataForCurrentUser()
 // because of Pbkdf2Sha3(Rounds) execution time (typically 1000-3000 calls/sec)
 // - pure function, by which encryption/decryption is the same symmetrical
@@ -10028,7 +10028,7 @@ var
 begin
   if resultbytes <= 0 then
     resultbytes := SHA3_DEF_LEN[algo] shr 3;
-  SetLength(tmp, resultbytes);
+  pointer(tmp) := FastNewString(resultbytes);
   first.Init(algo);
   first.Update(password);
   mac := first;
@@ -10054,7 +10054,9 @@ var
   len: integer;
 begin
   len := length(data);
-  SetLength(key, len);
+  if len = 0 then
+    exit;
+  pointer(key) := FastNewString(len);
   Pbkdf2Sha3(algo, password, salt, count, pointer(key), len);
   XorMemory(pointer(data), pointer(key), len);
   FillZero(key);
