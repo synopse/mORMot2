@@ -37,7 +37,7 @@ type
   public
     fDigestAlgo: TDigestAlgo;
     fCatalogAllGenerate: boolean;
-    procedure CryptData(dpapi: integer; const name: RawUtf8);
+    procedure CryptData(dpapi: integer; const name: string);
     procedure Prng(meta: TAesPrngClass; const name: RawUtf8);
     function DigestUser(const User, Realm: RawUtf8;
       out HA0: THash512Rec): TAuthServerResult;
@@ -795,7 +795,7 @@ begin
   result := CryptDataWithSecret(Data, [AppSecret]);
 end;
 
-procedure TTestCoreCrypto.CryptData(dpapi: integer; const name: RawUtf8);
+procedure TTestCoreCrypto.CryptData(dpapi: integer; const name: string);
 var
   i, size, max: integer;
   plain, enc, test: RawByteString;
@@ -807,7 +807,7 @@ begin
   case dpapi of
     {$ifdef OSWINDOWS}
     0:
-      func := CryptDataForCurrentUserDPAPI
+      func := CryptDataForCurrentUserDPAPI;
     {$endif OSWINDOWS}
     1:
       func := CryptDataForCurrentUser;
