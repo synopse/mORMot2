@@ -55,6 +55,7 @@ uses
   mormot.lib.sspi, // do-nothing units on non compliant systems
   mormot.lib.gssapi,
   {$endif DOMAINRESTAUTH}
+  mormot.crypt.core,
   mormot.crypt.secure;
 
 
@@ -212,11 +213,17 @@ type
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
+var
+  /// Pbkdf2Sha3() rounds for SaveNetTlsContext/LoadNetTlsContext password
+  TLS_ROUNDS: integer = 1000;
+  /// Pbkdf2Sha3() salt for SaveNetTlsContext/LoadNetTlsContext password
+  TLS_SALT: RawUtf8 = 'a41c0c2447821c01afdcdc75f7ab8a0a';
+
 /// persist main TNetTlsContext input fields into a TDocVariant
 function SaveNetTlsContext(const TLS: TNetTlsContext): variant;
 
 /// fill TNetTlsContext input fields from a SaveNetTlsContext() TDocVariant
-procedure LoadTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData);
+procedure LoadNetTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData);
 
 
 var
@@ -3651,7 +3658,7 @@ begin
   if not result or
      (v^.Count = 0) then
     exit;
-  LoadTlsContext(TLS, v^);
+  LoadNetTlsContext(TLS, v^);
   v^.GetAsRawUtf8('p', Proxy);
   if v^.GetAsInteger('as', s) and
      (cardinal(s) <= cardinal(high(Auth.Scheme))) then
@@ -3684,10 +3691,14 @@ begin
     'ta', TLS.AllowDeprecatedTls,
     'tu', TLS.ClientAllowUnsafeRenegotation,
     'cf', TLS.CertificateFile,
-    'ca', TLS.CACertificatesFile], JSON_FAST, {dontAddDefault=}true);
+    'ca', TLS.CACertificatesFile,
+    'pf', TLS.PrivateKeyFile,
+    'pp', BinToBase64uri(CryptDataWithSecret(TLS.PrivatePassword,
+            [TLS.PrivateKeyFile, TLS.CertificateFile], TLS_ROUNDS, TLS_SALT))],
+    JSON_FAST, {dontAddDefault=}true);
 end;
 
-procedure LoadTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData);
+procedure LoadNetTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData);
 begin
   V.GetAsBoolean('te', TLS.Enabled);
   V.GetAsBoolean('ti', TLS.IgnoreCertificateErrors);
@@ -3695,6 +3706,11 @@ begin
   V.GetAsBoolean('tu', TLS.ClientAllowUnsafeRenegotation);
   V.GetAsRawUtf8('cf', TLS.CertificateFile);
   V.GetAsRawUtf8('ca', TLS.CACertificatesFile);
+  V.GetAsRawUtf8('pf', TLS.PrivateKeyFile);
+  if (TLS.PrivateKeyFile <> '') and
+     V.GetAsRawUtf8('pp', TLS.PrivatePassword) then
+    TLS.PrivatePassword := CryptDataWithSecret(Base64uriToBin(TLS.PrivatePassword),
+      [TLS.PrivateKeyFile, TLS.CertificateFile], TLS_ROUNDS, TLS_SALT);
 end;
 
 
