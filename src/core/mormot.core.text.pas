@@ -2556,19 +2556,23 @@ type
   TGuidShortString = string[38];
   PGuidShortString = ^TGuidShortString;
 
-/// convert a TGuid into text
-// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+  /// convert a TGuid into its standard uppercase text representation with the {}
+  // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
 function GuidToShort(const guid: TGuid): TGuidShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a TGuid into text
-// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+/// convert a TGuid into its standard uppercase text representation with the {}
+// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
-procedure GuidToShort(const
-  guid: TGuid; out dest: TGuidShortString); overload;
+procedure GuidToShort(const guid: TGuid;
+  out dest: TGuidShortString); overload;
+
+/// convert a TGuid into lowercase '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
+function UuidToShort(const guid: TGuid): TGuidShortString;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some text into its TGuid binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {}) but
@@ -10980,6 +10984,12 @@ begin
   dest[0] := #38;
   dest[1] := '{';
   GuidToText(@dest[2], @guid)^ := '}';
+end;
+
+function UuidToShort(const guid: TGuid): TGuidShortString;
+begin
+  result[0] := #36;
+  GuidToText(@result[1], @guid, @TwoDigitsHexWBLower);
 end;
 
 {$ifdef UNICODE}
