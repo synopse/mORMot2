@@ -819,12 +819,16 @@ begin
   else
     exit;
   end;
-  func('warmup', 'appsec', true);
+  enc := func('warmup', 'appsec', true);
+  Check(enc <> '');
+  test := func(enc, 'appsec', false);
+  Check(test <> '');
+  CheckEqual(test, 'warmup');
   size := 0;
   tim.Start;
   for i := 0 to max - 1 do
   begin
-    plain := TAesPrng.Main.FillRandom(i);
+    plain := RandomAnsi7(i);
     CheckEqual(length(plain), i);
     UInt32ToUtf8(i, appsec);
     enc := func(plain, appsec, true);
@@ -856,7 +860,7 @@ end;
 
 procedure TTestCoreCrypto._CryptDataWithSecret;
 begin
-  CryptData(2, 'WithSecret');
+  CryptData(2, 'PBKDF2-SHAKE128');
 end;
 
 const

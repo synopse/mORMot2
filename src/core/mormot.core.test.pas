@@ -279,6 +279,8 @@ type
     {$endif PUREMORMOT2}
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
+    // - CharCount is the number of random WinAnsi chars, so it is possible that
+    // length(result) > CharCount once encoded into UTF-8
     class function RandomUtf8(CharCount: integer): RawUtf8;
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
