@@ -743,6 +743,10 @@ var
 // 'macOS 13 Ventura'
 function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
+/// low-level function used internally by ToText(osv) for Windows 10/11 versions
+function WinOsBuild(const osv: TOperatingSystemVersion;
+  firstchar: AnsiChar = #0): TShort8;
+
 /// convert an Operating System type into its one-word text representation
 // - returns e.g. 'Vista' or 'Ubuntu' or 'OSX'
 function OsvToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
@@ -5911,25 +5915,45 @@ const
      10240, 10586, 14393, 15063, 16299, 17134, 17763, 18362, 18363,
      19041, 19042, 19043, 19044, 19045, 22000, 22621, 22631, 26100);
 
-function ToText(const osv: TOperatingSystemVersion): RawUtf8;
+function WinOsBuild(const osv: TOperatingSystemVersion; firstchar: AnsiChar): TShort8;
 var
-  i, l: PtrInt;
+  i: PtrInt;
+  w: word;
+  c: cardinal;
+  wi: PWordArray;
+begin
+  result[0] := #0;
+  if not (osv.win in [wTen, wTen_64, wEleven, wEleven_64]) then
+    exit;
+  w := osv.winbuild;
+  wi := @WINBUILD_INT[0];
+  for i := high(WINBUILD_INT) downto 0 do
+    if w >= wi^[i] then
+    begin
+      c := PCardinal(@WINBUILD_TXT[i])^;
+      if firstchar = #0 then
+      begin
+        result[0] := #4;
+        PCardinal(@result[1])^ := c;
+      end
+      else
+      begin
+        result[0] := #5;
+        result[1] := firstchar;
+        PCardinal(@result[2])^ := c;
+      end;
+      break;
+    end;
+end;
+
+function ToText(const osv: TOperatingSystemVersion): RawUtf8;
 begin
   result := OS_NAME[osv.os];
   case osv.os of
     osWindows:
       begin
         result := 'Windows ' + WINDOWS_NAME[osv.win];
-        if osv.win in [wTen, wTen_64, wEleven, wEleven_64] then
-          for i := high(WINBUILD_INT) downto 0 do
-            if osv.winbuild >= WINBUILD_INT[i] then
-            begin
-              l := length(result);
-              SetLength(result, l + 5); // e.g. 'Windows 10 22H2'
-              PByteArray(result)[l] := ord(' ');
-              PCardinal(@PByteArray(result)[l + 1])^ := PCardinal(@WINBUILD_TXT[i])^;
-              break;
-            end;
+        AppendShortToUtf8(WinOsBuild(osv, ' '), result);
       end;
     osOSX:
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
