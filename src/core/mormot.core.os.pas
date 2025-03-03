@@ -443,6 +443,7 @@ type
 const
   /// the recognized MacOS versions, as plain text
   // - indexed from OSVersion32.utsrelease[2] kernel revision
+  // - see https://en.wikipedia.org/wiki/MacOS_version_history#Releases
   MACOS_NAME: array[8 .. 25] of RawUtf8 = (
     '10.4 Tiger',
     '10.5 Leopard',
@@ -743,7 +744,11 @@ function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
 /// convert an Operating System type into its one-word text representation
 // - returns e.g. 'Vista' or 'Ubuntu' or 'OSX'
-function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
+function OsvToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function called when inlining ToTextShort()
+function OsvToTextShorter(const osv: TOperatingSystemVersion): PRawUtf8;
 
 /// convert a 32-bit Operating System type into its full text representation
 // - including the kernel revision (not the distribution version) on POSIX systems
@@ -5907,16 +5912,24 @@ begin
   end;
 end;
 
-function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
+function OsvToTextShorter(const osv: TOperatingSystemVersion): PRawUtf8;
 begin
-  result := OS_NAME[osv.os];
+  result := nil;
   case osv.os of
     osWindows:
-      result := WINDOWS_NAME[osv.win];
+      result := @WINDOWS_NAME[osv.win];
     osOSX:
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
-        result := MACOS_NAME[osv.utsrelease[2]];
+        result := @MACOS_NAME[osv.utsrelease[2]];
   end;
+  if (result = nil) or
+     (result^ = '') then
+    result := @OS_NAME[osv.os];
+end;
+
+function OsvToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
+begin
+  result := OsvToTextShorter(osv)^;
 end;
 
 const
