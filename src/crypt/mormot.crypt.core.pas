@@ -1900,6 +1900,18 @@ var
 function CryptDataForCurrentUser(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
+/// symmetric protect/obfuscate some data with a private key using AES-CTR
+// - the private key (and one IV) are derivated using Pbkdf2Sha3() from a set of
+// supplied secret values - SHA-3 is preferred to SHA-256 here for consistency
+// - then AES-CTR-128 is applied on the Data (identical for both encrypt and decrypt)
+// - may be used as a stateless fallback to CryptDataForCurrentUser() to obfuscate
+// some data, but not as secure as pure asymmetric public/private cryptogaphy
+// - note that this function is much slower than CryptDataForCurrentUser()
+// because of Pbkdf2Sha3(Rounds) execution time (typically around 3000 calls/sec)
+function CryptDataWithSecret(const Data: RawByteString;
+  const Secret: array of const; Rounds: integer = 1000;
+  const Salt: RawByteString = 'f21d40859d9f7f4c82e7-b1759c1f0ed9'): RawByteString;
+
 
 { ****************** SHA-2 SHA-3 Secure Hashing }
 
@@ -8237,6 +8249,31 @@ begin
   DetectRawUtf8(result); // detect and mark as CP_UTF8 to circumvent FPC RTL bug
 end;
 
+function CryptDataWithSecret(const Data: RawByteString; const Secret: array of const;
+  Rounds: integer; const Salt: RawByteString): RawByteString;
+var
+  len: PtrInt;
+  sec: RawByteString;
+  key: THash256Rec;
+  aes: TAesCtr;
+begin
+  result := '';
+  len := length(Data);
+  if len = 0 then
+    exit;
+  sec := Make(Secret);
+  Pbkdf2Sha3(SHA3_256, sec, Salt, Rounds, @key, SizeOf(key)); // slow
+  FillZero(sec);
+  aes := TAesCtr.Create(key.Lo, 128); // internal TAesCtr is safe and fast enough
+  try
+    aes.IV := key.Hi;
+    pointer(result) := FastNewString(len);
+    aes.Encrypt(pointer(Data), pointer(result), len); // CTR needs no padding
+  finally
+    aes.Free;
+    FillZero(key.b);
+  end;
+end;
 
 
 { ****************** SHA-2 SHA-3 Hashing }
