@@ -1674,14 +1674,14 @@ type
   THttpPeerCrypt = class(TInterfacedPersistent)
   protected
     fAesSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fClientSafe: TLightLock; // paranoid - only if unproperly used
+    fClientSafe: TLightLock; // if try to download with background direct mode
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
     fIP4, fMaskIP4, fBroadcastIP4, fClientIP4, fLastNetworkTix: cardinal;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fLog: TSynLogClass;
-    fPort, fIpPort: RawUtf8;
+    fPort, fIpPort, fDirectSecret: RawUtf8;
     fClient: THttpClientSocket;
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
@@ -5614,6 +5614,7 @@ begin
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
+  FastSetString(fDirectSecret, @key, SizeOf(key)); // for HttpDirectUri()
   if Assigned(fLog) then
     // log includes safe 16-bit key.w[0] fingerprint
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
@@ -5633,6 +5634,7 @@ begin
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
   inherited Destroy;
+  FillZero(fDirectSecret);
 end;
 
 function THttpPeerCrypt.NetworkInterfaceChanged: boolean;
@@ -5691,7 +5693,8 @@ begin
     msg.Opaque := crc63c(pointer(aDirectUri), length(aDirectUri)); // no replay
     c.MessageEncodeBearer(msg, aDirectHeaderBearer);
     if aOptions <> nil then // extended options are URI-encoded to the bearer
-      aDirectHeaderBearer := aOptions^.ToUrlEncode(aDirectHeaderBearer);
+      aDirectHeaderBearer :=
+        aOptions^.ToUrlEncode(aDirectHeaderBearer, c.fDirectSecret);
     result := true;
   finally
     c.Free;
@@ -6894,8 +6897,8 @@ begin
     exit;
   if aParams = '' then
     opt.Init
-  else if not opt.InitFromUrl(aParams) then // e.g. 'ti=1&as=3'
-    exit;
+  else if not opt.InitFromUrl(aParams, Sender.fDirectSecret) then
+    exit; // e.g. 'ti=1&as=3'
   opt.CreateTimeoutMS := 1000;
   opt.RedirectMax := redirmax;
   if Assigned(Sender.fOnDirectOptions) then
