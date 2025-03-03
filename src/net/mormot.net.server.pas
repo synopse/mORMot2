@@ -1817,6 +1817,7 @@ type
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
+    fBroadcastStart: Int64;   // QueryPerformanceMicroSeconds()
     fTempFilesDeleteDeprecatedTix, fInstableTix, fBroadcastTix: cardinal;
     fFilesSafe: TOSLock; // concurrent cached files access
     fPartials: THttpPartials;
@@ -5959,6 +5960,7 @@ begin
   fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
     // setup this broadcasting sequence
+    QueryPerformanceMicroSeconds(fOwner.fBroadcastStart);
     fBroadcastEvent.ResetEvent;
     fBroadcastCurrentSeq := aReq.Seq; // ignore any other responses
     fResponses := 0; // reset counter for this broadcast (not late)
@@ -5982,6 +5984,7 @@ begin
     result := GetResponses(aReq.Seq);
   finally
     fBroadcastCurrentSeq := 0; // ignore any late responses
+    fOwner.fBroadcastStart := 0;
     aAlone := (fResponses = 0);
     fBroadcastSafe.UnLock;
   end;
@@ -6219,6 +6222,8 @@ function THttpPeerCache.Check(Status: THttpPeerCryptMessageDecode;
   const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
 var
   msgtxt: shortstring;
+  microsec: TShort16;
+  stop: Int64;
 begin
   result := (Status = mdOk);
   if fLog <> nil then
@@ -6227,11 +6232,19 @@ begin
       begin
         msgtxt[0] := #0;
         if fVerboseLog and
-           (Status > mdAes) then
-          MsgToShort(Msg, msgtxt); // decrypt ok: log the content
-        Add.Log(sllTrace, '% decode=% #%<=#% %',
+           (Status > mdAes) then // decrypt ok: log the content
+          MsgToShort(Msg, msgtxt);
+        microsec[0] := #0;
+        if fBroadcastStart <> 0 then
+        begin
+          QueryPerformanceMicroSeconds(stop);
+          dec(stop, fBroadcastStart);
+          if stop > 0 then
+            MicroSecToString(stop, microsec);
+        end;
+        Add.Log(sllTrace, '% decode=% #%<=#% % %',
           [Ctxt, ToText(Status)^, CardinalToHexShort(fFrameSeqLow),
-           CardinalToHexShort(fFrameSeq), msgtxt], self);
+           CardinalToHexShort(fFrameSeq), microsec, msgtxt], self);
       end;
 end;
 
