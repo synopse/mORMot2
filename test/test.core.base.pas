@@ -8641,6 +8641,7 @@ var
   tmp: array[0..512] of AnsiChar;
   msg, n, v: RawUtf8;
   os: TOperatingSystem;
+  osv: TOperatingSystemVersion;
   len: integer;
 begin
   Check(not UserAgentParse('toto (mozilla)', n, v, os));
@@ -8656,6 +8657,29 @@ begin
   Check(n = 'myprogram');
   Check(v = '3.1.2');
   check(os = osWindows);
+  osv.os := osWindows;
+  osv.win := wSeven;
+  osv.winbuild := 0;
+  CheckEqual(ToText(osv), 'Windows 7');
+  osv.win := wTen_64;
+  CheckEqual(ToText(osv), 'Windows 10 64bit');
+  osv.winbuild := 10240;
+  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  osv.winbuild := 10241;
+  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  osv.win := wTen;
+  osv.winbuild := 19045;
+  CheckEqual(ToText(osv), 'Windows 10 22H2');
+  osv.win := wEleven;
+  osv.winbuild := 22000;
+  CheckEqual(ToText(osv), 'Windows 11 21H2');
+  osv.winbuild := 22621;
+  CheckEqual(ToText(osv), 'Windows 11 22H2');
+  osv.win := wEleven_64;
+  osv.winbuild := 26100;
+  CheckEqual(ToText(osv), 'Windows 11 64bit 24H2');
+  osv.winbuild := 26100;
+  CheckEqual(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
   FillcharFast(tmp, SizeOf(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences
