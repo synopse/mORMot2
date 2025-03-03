@@ -675,6 +675,10 @@ type
   end;
   TMacAddressDynArray = array of TMacAddress;
 
+const
+  /// identify each TMacAddressKind as one uppercase letter
+  MAK_TXT: array[TMacAddressKind] of AnsiChar = '?EWTPCS';
+
 /// enumerate all network MAC addresses and their associated IP information
 // - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;

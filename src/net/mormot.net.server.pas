@@ -5618,7 +5618,7 @@ begin
   if Assigned(fLog) then
     // log includes safe 16-bit key.w[0] fingerprint
     fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
-      [GuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
+      [UuidToShort(fUuid), key.w[0], CardinalToHexShort(fFrameSeq)], self);
   FillZero(key.b);
   if aServerTls <> nil then
     fServerTls := aServerTls^;
@@ -7252,26 +7252,26 @@ end;
 
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
 var
-  l: PtrInt;
   algoext: PUtf8Char;
   algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
 begin
-  l := 0;
   algoext := nil;
+  algohex[0] := #0;
   if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
   begin
+    BinToHexLower(@msg.Hash.Bin, @algohex[1], HASH_SIZE[msg.Hash.Algo]);
+    algohex[0] := AnsiChar(HASH_SIZE[msg.Hash.Algo] * 2);
     algoext := pointer(HASH_EXT[msg.Hash.Algo]);
-    l := HASH_SIZE[msg.Hash.Algo];
-    BinToHexLower(@msg.Hash.Bin, @algohex[1], l);
   end;
-  algohex[0] := AnsiChar(l * 2);
   with msg do
-    FormatShort('% #% % % % to % % % msk=% bst=% %Mb/s %% siz=%',
-      [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid), OS_NAME[Os.os],
-       IP4ToShort(@IP4), IP4ToShort(@DestIP4), ToText(Hardware)^,
-       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
+    FormatShort('% #% % % % % to % % % %Mb/s % %% siz=% con=% ',
+      [ToText(Kind)^, CardinalToHexShort(Seq), OS_INITIAL[Os.os],
+       OsvToTextShorter(Os)^, MAK_TXT[Hardware],
+       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
-       algohex, algoext, Size], result);
+       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
+       algohex, algoext, Size, Connections], result);
+  AppendShortUuid(msg.Uuid, result);
 end;
 
 {$ifdef USEWININET}

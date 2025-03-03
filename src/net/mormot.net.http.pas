@@ -252,6 +252,7 @@ type
 
   /// a 31-bit > 0 sequence identifier of each THttpPartial.ID instance
   THttpPartialID = integer;
+  PHttpPartialID = ^THttpPartialID;
 
   /// the machine states of THttpRequestContext processing
   THttpRequestState = (
