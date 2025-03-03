@@ -6805,23 +6805,23 @@ begin
     result := fPartials.Add(Partial, ExpectedFullSize, h);
 end;
 
-function THttpPeerCache.PartialFileName(
-  const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
-  aFileName: PFileName; aSize: PInt64): integer;
+function THttpPeerCache.PartialFileName(const aMessage: THttpPeerCacheMessage;
+  aHttp: PHttpRequestContext; aFileName: PFileName; aSize: PInt64): integer;
 var
   fn: TFileName;
   size: Int64;
+  id: THttpPartialID;
 begin
   result := HTTP_NOTFOUND;
   if fPartials.IsVoid then // not supported or not used yet
     exit;
-  fn := fPartials.Find(aMessage.Hash, size);
+  fn := fPartials.Find(aMessage.Hash, size, @id);
   if fVerboseLog then
     if fn = '' then
       fLog.Add.Log(sllTrace, 'PartialFileName: none', self)
     else
-      fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
-        [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
+      fLog.Add.Log(sllTrace, 'PartialFileName: % id=% size=% msg: size=% start=% end=%',
+        [fn, id, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
   if size = 0 then
     exit; // not existing
   result := HTTP_NOTACCEPTABLE;

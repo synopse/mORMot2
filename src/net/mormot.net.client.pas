@@ -296,7 +296,8 @@ type
     function Add(const Partial: TFileName; ExpectedFullSize: Int64;
       const Hash: THashDigest; Http: PHttpRequestContext = nil): THttpPartialID;
     /// search for given partial file name and size, from its hash
-    function Find(const Hash: THashDigest; out Size: Int64): TFileName;
+    function Find(const Hash: THashDigest; out Size: Int64;
+      aID: PHttpPartialID = nil): TFileName;
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// notify a partial file name change, e.g. when download is complete
@@ -2206,12 +2207,15 @@ begin
       [Partial, ExpectedFullSize, result, Fused, n], self);
 end;
 
-function THttpPartials.Find(const Hash: THashDigest; out Size: Int64): TFileName;
+function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
+  aID: PHttpPartialID): TFileName;
 var
   p: PHttpPartial;
 begin
   Size := 0;
   result := '';
+  if aID <> nil then
+    aID^ := 0;
   if IsVoid then
     exit;
   fSafe.Lock;
@@ -2221,6 +2225,8 @@ begin
       exit;
     Size := p^.FullSize;
     result := p^.PartFile;
+    if aID <> nil then
+      aID^ := p^.ID;
   finally
     fSafe.UnLock;
   end;
