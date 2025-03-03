@@ -7690,12 +7690,12 @@ var
   i: integer;
 begin
   result := '';
-  if self <> nil then
-    SetLength(result, BufferBytes * (StripesCount + 1));
-  if result = '' then
+  if (self = nil) or
+     (BufferBytes <= 0) then
     exit;
-  dst := pointer(result);
-  SetLength(tmp, BufferBytes);
+  dst := FastNewString(BufferBytes * (StripesCount + 1));
+  pointer(result) := dst;
+  SetLength(tmp, BufferBytes); // filled with zeros
   for i := 1 to StripesCount do
   begin
     FillRandom(dst, BufferBytes);
@@ -7746,7 +7746,7 @@ begin
   if (len = 0) or
      (unsplit * cardinal(StripesCount) <> len) then
     exit;
-  SetLength(result, unsplit);
+  pointer(result) := FastNewString(unsplit);
   if not AFUnsplit(Split, pointer(result)^, unsplit) then
     result := '';
 end;
