@@ -738,8 +738,9 @@ var
   /// the running Operating System, encoded as a 32-bit integer
   OSVersionInt32: integer absolute OSVersion32;
 
-/// convert an Operating System type into its text representation
-// - returns e.g. 'Windows Vista' or 'Ubuntu' or 'macOS 13 Ventura'
+/// convert an Operating System type into its human-friendly text representation
+// - returns e.g. 'Windows Vista' or 'Windows 10 22H2' or 'Ubuntu' or
+// 'macOS 13 Ventura'
 function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
 /// convert an Operating System type into its one-word text representation
@@ -752,7 +753,8 @@ function OsvToTextShorter(const osv: TOperatingSystemVersion): PRawUtf8;
 
 /// convert a 32-bit Operating System type into its full text representation
 // - including the kernel revision (not the distribution version) on POSIX systems
-// - returns e.g. 'Windows Vista', 'Windows 11 64-bit 22000' or 'Ubuntu Linux 5.4.0'
+// - returns e.g. 'Windows Vista', 'Windows 11 64-bit 21H2 22000' or
+// 'Ubuntu Linux 5.4.0'
 function ToTextOS(osint32: integer): RawUtf8;
 
 /// check if the current OS (i.e. OS_KIND value) match a description
@@ -5900,12 +5902,35 @@ end;
 
 { ****************** Gather Operating System Information }
 
+const
+// https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions#Personal_computer_versions
+  WINBUILD_TXT: array[0 .. 17, 0 .. 3] of AnsiChar = (
+    '1507', '1511', '1607', '1703', '1709', '1803', '1809', '1903', '1909',
+    '2004', '20H2', '21H1', '21H2', '22H2', '21H2', '22H2', '23H2', '24H2');
+  WINBUILD_INT: array[0 .. high(WINBUILD_TXT)] of word = (
+     10240, 10586, 14393, 15063, 16299, 17134, 17763, 18362, 18363,
+     19041, 19042, 19043, 19044, 19045, 22000, 22621, 22631, 26100);
+
 function ToText(const osv: TOperatingSystemVersion): RawUtf8;
+var
+  i, l: PtrInt;
 begin
   result := OS_NAME[osv.os];
   case osv.os of
     osWindows:
-      result := 'Windows ' + WINDOWS_NAME[osv.win];
+      begin
+        result := 'Windows ' + WINDOWS_NAME[osv.win];
+        if osv.win in [wTen, wTen_64, wEleven, wEleven_64] then
+          for i := high(WINBUILD_INT) downto 0 do
+            if osv.winbuild >= WINBUILD_INT[i] then
+            begin
+              l := length(result);
+              SetLength(result, l + 5); // e.g. 'Windows 10 22H2'
+              PByteArray(result)[l] := ord(' ');
+              PCardinal(@PByteArray(result)[l + 1])^ := PCardinal(@WINBUILD_TXT[i])^;
+              break;
+            end;
+      end;
     osOSX:
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
         result := 'macOS ' + MACOS_NAME[osv.utsrelease[2]];
@@ -5948,7 +5973,7 @@ begin
   result := ToText(osv);
   if (osv.os = osWindows) and
      (osv.winbuild <> 0) then
-    // include the Windows build number, e.g. 'Windows 11 64bit 22000'
+    // include the Windows build number, e.g. 'Windows 11 64bit 21H2 22000'
     result := _fmt('%s %d', [result, osv.winbuild]);
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
