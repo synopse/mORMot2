@@ -8423,23 +8423,19 @@ begin
   result := Get(UnAmp(name), value, description, default);
 end;
 
-function defI(default: integer): RawUtf8;
-begin
-  if default = maxInt then
-    result := ''
-  else
-    str(default, result);
-end;
-
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
   out value: integer; const description: RawUtf8; default: integer): boolean;
 var
   i: PtrInt;
+  def: RawUtf8;
 begin
-  if self = nil then
-    i := -1
-  else
-    i := Find(name, clkParam, description, defI(default));
+  i := -1;
+  if self <> nil then
+  begin
+    if default <> maxInt then
+      ShortStringToAnsi7String(ToShort(default), def); // no Delphi str(RawUtf8)
+    i := Find(name, clkParam, description, def);
+  end;
   result := (i >= 0) and
             ToInteger(Values[i], value);
   if not result and
