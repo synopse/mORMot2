@@ -2435,8 +2435,8 @@ begin
     else
       EWebSockets.RaiseUtf8('%.SendFrames[%]: Unexpected opcode=%',
         [self, i, ord(Frames[i].opcode)]);
-  FastNewRawByteString(jumboFrame.payload, len);
-  P := pointer(jumboFrame.payload);
+  P := FastNewString(len);
+  pointer(jumboFrame.payload) := P;
   MoveFast(JUMBO_HEADER, P^, SizeOf(JUMBO_HEADER));
   inc(P, SizeOf(JUMBO_HEADER));
   P := ToVarUInt32(FramesCount, P); // store max

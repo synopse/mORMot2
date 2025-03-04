@@ -5361,8 +5361,8 @@ begin
      (CheckMagicForCompressed and
       IsContentCompressed(Plain, PlainLen)) then
   begin
-    pointer(result) := FastNewString(PlainLen + BufferOffset + 9);
-    R := pointer(result);
+    R := FastNewString(PlainLen + BufferOffset + 9);
+    pointer(result) := R;
     inc(R, BufferOffset);
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
@@ -5374,8 +5374,8 @@ begin
     len := CompressDestLen(PlainLen) + BufferOffset;
     if len > SizeOf(tmp) then
     begin
-      pointer(result) := FastNewString(len);
-      R := pointer(result);
+      R := FastNewString(len);
+      pointer(result) := R;
     end
     else
       R := @tmp;
