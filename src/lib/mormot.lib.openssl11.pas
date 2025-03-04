@@ -1699,8 +1699,9 @@ type
     function IsRevoked(const serial: RawUtf8): integer; overload;
     function IsRevoked(serial: PASN1_INTEGER): integer; overload;
     function SetDefaultPaths: boolean;
-    // both methods will increase the certificate/CRL refcount
+    // those methods will increase the certificate/CRL refcount
     function AddCertificate(x: PX509): boolean;
+    function AddCertificates(const x: PX509DynArray): boolean;
     function AddCrl(c: PX509_CRL): boolean;
     // try binary DER serialization of X509 Certificate or CRL
     function AddFromBinary(const Der: RawByteString): RawUtf8;
@@ -9070,6 +9071,20 @@ begin
   result := (@self <> nil) and
             (x <> nil) and
             (X509_STORE_add_cert(@self, x) = OPENSSLSUCCESS);
+end;
+
+function X509_STORE.AddCertificates(const x: PX509DynArray): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if @self = nil then
+    exit;
+  for i := 0 to high(x) do
+    if x[i] <> nil then
+      if X509_STORE_add_cert(@self, x[i]) <> OPENSSLSUCCESS then
+        exit;
+  result := true;
 end;
 
 function X509_STORE.AddCrl(c: PX509_CRL): boolean;
