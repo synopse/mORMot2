@@ -10720,15 +10720,14 @@ end;
 
 procedure TrimDualSpaces(var s: RawUtf8);
 var
-  f, i: PtrInt;
+  i: PtrInt;
 begin
-  f := 1;
+  i := 1;
   repeat
-    i := PosEx('  ', s, f);
+    i := PosEx('  ', s, i);
     if i = 0 then
       break;
-    delete(s, i, 1); // dual space -> single space
-    f := i;
+    delete(s, i, 1); // dual spaces -> single space
   until false;
   TrimSelf(s);
 end;
@@ -10755,10 +10754,10 @@ begin
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
-  // minimal stubs which will be properly implemented in mormot.core.log.pas
-  GetExecutableLocation := _GetExecutableLocation;
+  // minimal stubs which will be properly implemented in other mormot.core units
+  GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
   SetThreadName := _SetThreadName;
-  ShortToUuid := _ShortToUuid;
+  ShortToUuid := _ShortToUuid;                     // mormot.core.text.pas
   AppendShortUuid := _AppendShortUuid;
 end;
 
