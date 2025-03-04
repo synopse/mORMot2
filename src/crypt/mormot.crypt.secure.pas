@@ -2169,6 +2169,12 @@ type
     // private key, so cccCertWithPrivateKey and cccPrivateKeyOnly content could
     // be used, with an optional PrivatePassword, to save the private key
     // - will use binary by default, but you can set e.g. ccfPem if needed
+    // - note that OpenSSL ccfBinary will use PKCS12 encoding, which default
+    // encoding did change with OpenSSL 3.X: you may start the PrivatePassword
+    // with PKCS12_3DES_PREFIX '3des=' prefix (which will be trimmed) to force
+    // legacy PBE-SHA1-3DES as compatible with Windows Server 2012 or MacOS/iOS,
+    // or start with PKCS12_AES_PREFIX 'aes=' prefix to force the newer (and
+    // safer) AES-256-CBC algorithm on OpenSSL 1.x
     // - warning: don't forget FillZero() once done with any sensitive result
     function Save(Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = '';

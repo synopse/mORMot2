@@ -2614,8 +2614,12 @@ begin
           FillZero(pem);
         end
         else
-          // ccfBinary will use the PKCS#12 binary encoding
-          result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
+          // ccfBinary will use the PKCS#12 default binary encoding
+          // - warning: default algorithm changed to AES-256-CBC with OpenSSL 3
+          // https://github.com/openssl/openssl/commit/762970bd686c4aa
+          // - use '3des=' prefix (which will be trimmed) to force PBE-SHA1-3DES
+          // or 'aes=' prefix to force AES-256-CBC algorithm on OpenSSL 1.x
+          result := fX509.ToPkcs12Ex(fPrivKey, PrivatePassword);
     cccPrivateKeyOnly:
       if fPrivKey = nil then
         RaiseError('Save(cccPrivateKeyOnly) with no Private Key')
