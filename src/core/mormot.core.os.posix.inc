@@ -4246,11 +4246,12 @@ begin
   begin
     proccpuinfo := '';
     for i := 0 to high(aci) do // there should be a single implementer
-      proccpuinfo := proccpuinfo +
-        ArmCpuImplementerName(ArmCpuImplementer(aci[i]), aci[i]) + ' ';
-    proccpuinfo := proccpuinfo + ArmCpuTypeName(ArmCpuType(act[0]), act[0]);
+      AppendShortToUtf8(ArmCpuImplementerName(
+        ArmCpuImplementer(aci[i]), aci[i], ' '), proccpuinfo);
+    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), proccpuinfo);
     for i := 1 to high(act) do // but there may be several parts/models
-      proccpuinfo := proccpuinfo + ' / ' + ArmCpuTypeName(ArmCpuType(act[i]), act[i]);
+      AppendShortToUtf8(ArmCpuTypeName(
+        ArmCpuType(act[i]), act[i], ' / '), proccpuinfo);
     modname := pointer(proccpuinfo);
   end;
   RetrieveCpuInfoArm;

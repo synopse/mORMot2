@@ -873,13 +873,15 @@ type
 function ArmCpuType(id: word): TArmCpuType;
 
 /// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
-function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+function ArmCpuTypeName(act: TArmCpuType; id: word;
+  const before: shortstring = ''): shortstring;
 
 /// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
 
 /// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
-function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word;
+  const after: shortstring = ''): shortstring;
 
 
 const
@@ -6169,12 +6171,16 @@ begin
   result := actUnknown;
 end;
 
-function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+function ArmCpuTypeName(act: TArmCpuType; id: word; const before: shortstring): shortstring;
 begin
+  result := before;
   if act = actUnknown then
-    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3))
+  begin
+    AppendShort('ARM 0x', result);;
+    AppendShortIntHex(id, result);
+  end
   else
-    ShortStringToAnsi7String(ARMCPU_ID_TXT[act], result);
+    AppendShort(ARMCPU_ID_TXT[act], result);
 end;
 
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
@@ -6185,12 +6191,17 @@ begin
   result := aciUnknown;
 end;
 
-function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word;
+  const after: shortstring): shortstring;
 begin
   if aci = aciUnknown then
-    result := 'HW 0x' + RawUtf8(IntToHex(id, 2))
+  begin
+    result := 'HW 0x';
+    AppendShortIntHex(id, result);
+  end
   else
-    ShortStringToAnsi7String(ARMCPU_IMPL_TXT[aci], result);
+    result := ARMCPU_IMPL_TXT[aci];
+  AppendShort(after, result);
 end;
 
 
@@ -8417,7 +8428,7 @@ begin
   if default = maxInt then
     result := ''
   else
-    result := RawUtf8(IntToStr(default));
+    str(default, result);
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
