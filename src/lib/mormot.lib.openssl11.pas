@@ -354,6 +354,8 @@ const
   EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
   EVP_MD_FLAG_FIPS = $0400;
 
+  SN_pbe_WithSHA1And3_Key_TripleDES_CBC = 'PBE-SHA1-3DES';
+  NID_pbe_WithSHA1And3_Key_TripleDES_CBC = 146; // for old PKCS#12 nid_key
   SN_X9_62_prime192v1 = 'prime192v1';
   NID_X9_62_prime192v1 = 409;
   SN_X9_62_prime192v2 = 'prime192v2';
@@ -368,6 +370,7 @@ const
   NID_X9_62_prime239v3 = 414;
   SN_X9_62_prime256v1 = 'prime256v1';
   NID_X9_62_prime256v1 = 415; // = secp256r1
+  NID_aes_256_cbc = 427;
   NID_sha256 = 672;
   NID_sha384 = 673;
   NID_sha512 = 674;
@@ -1773,7 +1776,6 @@ type
 
   PX509_VAL = type pointer;
 
-
   PX509V3_CTX = ^v3_ext_ctx;
 
   /// convenient wrapper to a PX509 instance
@@ -1895,7 +1897,7 @@ type
     // - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
     function ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
       CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
-      iter: integer = 0; mac_iter: integer = 0;
+      iter: integer = 0; mac_iter: integer = 0; md_type: PEVP_MD = nil;
       const FriendlyName: RawUtf8 = ''): RawByteString;
     /// increment the X509 reference count to avoid premature release
     function Acquire: integer;
@@ -2297,6 +2299,8 @@ function PKCS12_new(): PPKCS12; cdecl;
 procedure PKCS12_free(a: PPKCS12); cdecl;
 function PKCS12_create(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509;
   ca: Pstack_st_X509; nid_key, nid_cert, iter, mac_iter, keytype: integer): PPKCS12; cdecl;
+function PKCS12_set_mac(p12: PPKCS12; pass: PUtf8Char; passlen: integer;
+  salt: PByte; saltlen: integer; iter: integer; md_type: PEVP_MD): integer; cdecl;
 function PKCS12_add_cert(pbags: PPstack_st_PKCS12_SAFEBAG; cert: PX509): PPKCS12_SAFEBAG; cdecl;
 function PKCS12_add_key(pbags: PPstack_st_PKCS12_SAFEBAG; key: PEVP_PKEY; key_usage: integer;
   iter: integer; key_nid: integer; pass: PUtf8Char): PPKCS12_SAFEBAG; cdecl;
@@ -3429,6 +3433,7 @@ type
     PKCS12_new: function(): PPKCS12; cdecl;
     PKCS12_free: procedure(a: PPKCS12); cdecl;
     PKCS12_create: function(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509; ca: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer; mac_iter: integer; keytype: integer): PPKCS12; cdecl;
+    PKCS12_set_mac: function(p12: PPKCS12; pass: PUtf8Char; passlen: integer; salt: PByte; saltlen: integer; iter: integer; md_type: PEVP_MD): integer; cdecl;
     PKCS12_add_cert: function(pbags: PPstack_st_PKCS12_SAFEBAG; cert: PX509): PPKCS12_SAFEBAG; cdecl;
     PKCS12_add_key: function(pbags: PPstack_st_PKCS12_SAFEBAG; key: PEVP_PKEY; key_usage: integer; iter: integer; key_nid: integer; pass: PUtf8Char): PPKCS12_SAFEBAG; cdecl;
     i2d_PKCS12_bio: function(bp: PBIO; p12: PPKCS12): integer; cdecl;
@@ -3570,7 +3575,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..335] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..336] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3771,6 +3776,7 @@ const
     'PKCS12_new',
     'PKCS12_free',
     'PKCS12_create',
+    'PKCS12_set_mac',
     'PKCS12_add_cert',
     'PKCS12_add_key',
     'i2d_PKCS12_bio',
@@ -4957,6 +4963,12 @@ function PKCS12_create(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: 
 begin
   result := libcrypto.PKCS12_create(
     pass, name, pkey, cert, ca, nid_key, nid_cert, iter, mac_iter, keytype);
+end;
+
+function PKCS12_set_mac(p12: PPKCS12; pass: PUtf8Char; passlen: integer;
+  salt: PByte; saltlen: integer; iter: integer; md_type: PEVP_MD): integer;
+begin
+  result := libcrypto.PKCS12_set_mac(p12, pass, passlen, salt, saltlen, iter, md_type);
 end;
 
 function PKCS12_add_cert(pbags: PPstack_st_PKCS12_SAFEBAG; cert: PX509): PPKCS12_SAFEBAG;
@@ -6698,6 +6710,9 @@ procedure PKCS12_free(a: PPKCS12); cdecl;
 
 function PKCS12_create(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509; ca: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer; mac_iter: integer; keytype: integer): PPKCS12; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_create';
+
+function PKCS12_set_mac(p12: PPKCS12; pass: PUtf8Char; passlen: integer; salt: PByte; saltlen: integer; iter: integer; md_type: PEVP_MD): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PKCS12_set_mac';
 
 function PKCS12_add_cert(pbags: PPstack_st_PKCS12_SAFEBAG; cert: PX509): PPKCS12_SAFEBAG; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_add_cert';
@@ -9323,7 +9338,7 @@ end;
 
 function X509.ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
   CA: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer;
-  mac_iter: integer; const FriendlyName: RawUtf8): RawByteString;
+  mac_iter: integer; md_type: PEVP_MD; const FriendlyName: RawUtf8): RawByteString;
 var
   p12: PPKCS12;
 begin
@@ -9331,10 +9346,13 @@ begin
   if (@self = nil) or
      (pkey = nil) then
     exit;
-  p12 := NewPkcs12(
-    password, pkey, @self, CA, nid_key, nid_cert, iter, mac_iter, FriendlyName);
+  p12 := NewPkcs12(password, pkey, @self,
+           CA, nid_key, nid_cert, iter, mac_iter, FriendlyName);
   if p12 = nil then
     exit;
+  if md_type <> nil then // non-default hasher: recompute the password digest
+    // PKCS12_create() did PKCS12_set_mac(p12, pass, -1, NULL, 0, mac_iter, NULL))
+    PKCS12_set_mac(p12, pointer(password), -1, nil, 0, mac_iter, md_type);
   result := p12.ToBinary;
   p12.Free;
 end;
