@@ -1894,11 +1894,19 @@ type
     /// serialize the certificate as PEM text
     function ToPem: RawUtf8;
     /// serialize the certificate and associated private key as PKCS12 raw binary
-    // - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
+    // - warning: default algorithm changed to AES-256-CBC with OpenSSL 3
+    // https://github.com/openssl/openssl/commit/762970bd686c4aa
+    // - see also ToPkcs12Ex() - as used by TCryptCertOpenSsl.Save()
     function ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
       CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
       iter: integer = 0; mac_iter: integer = 0; md_type: PEVP_MD = nil;
       const FriendlyName: RawUtf8 = ''): RawByteString;
+    /// serialize the certificate and associated private key as PKCS12 raw binary
+    // - this method will recognize '3des=' (PKCS12_3DES_PREFIX) and 'aes='
+    // (PKCS12_AES_PREFIX) prefixes to the password text (which will be trimmed),
+    // to force either legacy SHA1-3DES or new AES-256-CBC algorithm
+    // - as used by TCryptCertOpenSsl.Save()
+    function ToPkcs12Ex(pkey: PEVP_PKEY; const password: SpiUtf8): RawByteString;
     /// increment the X509 reference count to avoid premature release
     function Acquire: integer;
     /// sign this Certificate with the supplied private key and algorithm
@@ -1991,6 +1999,11 @@ type
   PCRYPTO_EX_free = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
   PCRYPTO_EX_dup = function(_to: PCRYPTO_EX_DATA; from: PCRYPTO_EX_DATA; from_d: pointer; idx: integer; argl: integer; argp: pointer): integer; cdecl;
 
+const
+  /// password prefix recognized by X509.ToPkcs12Ex() to force legacy PBE-SHA1-3DES
+  PKCS12_3DES_PREFIX = '3des=';
+  /// password prefix recognized by X509.ToPkcs12Ex() to force new AES-256-CBC
+  PKCS12_AES_PREFIX = 'aes=';
 
 
 { ******************** OpenSSL Library Functions }
@@ -9355,6 +9368,51 @@ begin
     PKCS12_set_mac(p12, pointer(password), -1, nil, 0, mac_iter, md_type);
   result := p12.ToBinary;
   p12.Free;
+end;
+
+function X509.ToPkcs12Ex(pkey: PEVP_PKEY; const password: SpiUtf8): RawByteString;
+var
+  pwd: RawUtf8;
+  nid, mac_iter: integer;
+  md_type: PEVP_MD;
+begin
+  // warning: default algorithm changed to AES-256-CBC with OpenSSL 3
+  // see https://github.com/openssl/openssl/commit/762970bd686c4aa
+  nid := 0;
+  mac_iter := 0;
+  md_type := nil;
+  // allow to force a specific algorithm via a password prefix
+  pwd := password;
+  if pwd <> '' then
+    case PCardinal(pwd)^ of
+      ord('3') + ord('d') shl 8 + ord('e') shl 16 + ord('s') shl 24:
+        if pwd[5] = '=' then // start with PKCS12_3DES_PREFIX = '3des='
+        begin
+          delete(pwd, 1, 5);
+          // force legacy compatibility with Windows Server 2012 or MacOS/iOS
+          if OpenSslVersion >= OPENSSL3_VERNUM then
+          begin
+            nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC;
+            mac_iter := 1;
+            md_type := EVP_sha1;
+          end;
+        end;
+      ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('=') shl 24:
+        begin // start with PKCS12_AES_PREFIX = 'aes='
+          delete(pwd, 1, 4);
+          // force new safe algorithm on OpenSSL 1.x
+          if OpenSslVersion < OPENSSL3_VERNUM then
+          begin
+            nid := NID_aes_256_cbc;
+            mac_iter := PKCS12_DEFAULT_ITER;
+            md_type := EVP_sha256;
+          end;
+        end;
+    end;
+  // perform the actual PCKS#12 binary export
+  result := ToPkcs12(pkey, pwd, nil, nid, nid, 0, mac_iter, md_type);
+  if pointer(pwd) <> pointer(password) then
+    FillCharFast(pointer(pwd)^, length(pwd), 0); // anti-forensic
 end;
 
 function X509.Acquire: integer;
