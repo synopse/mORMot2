@@ -879,6 +879,12 @@ type
     // - on OpenSSL, calls the SSL_CTX_load_verify_locations() API
     // - not used on SChannel
     CACertificatesFile: RawUtf8;
+    /// input: opaque pointers containing a set of CA certificates
+    // - on OpenSSL client or server, calls SSL_CTX_get_cert_store() API then
+    // X509_STORE_add_cert() on all pointers of PX509 type - i.e. expects here
+    // a PX509DynArray e.g. from LoadCertificates()
+    // - not used on SChannel client
+    CACertificatesRaw: TPointerDynArray;
     /// input: preferred Cipher List
     // - not used on SChannel
     CipherList: RawUtf8;

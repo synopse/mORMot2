@@ -10538,6 +10538,9 @@ begin
     if FileExists(TFileName(Context.CACertificatesFile)) then
       SSL_CTX_load_verify_locations(
         fCtx, pointer(Context.CACertificatesFile), nil)
+    else if Context.CACertificatesRaw <> nil then
+      SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
+        PX509DynArray(Context.CACertificatesRaw))
     else
       SSL_CTX_set_default_verify_paths(fCtx);
     if not Bind then
