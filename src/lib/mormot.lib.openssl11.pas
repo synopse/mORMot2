@@ -1783,6 +1783,13 @@ type
 
   PX509V3_CTX = ^v3_ext_ctx;
 
+  /// used by X509.ToPkcs12Ex() method and OpenSslDefaultPkcs12 global variable
+  TX509Pkcs12Format = (
+   p12Default,
+   p12Legacy,
+   p12New,
+   p12PrefixDisabled);
+
   /// convenient wrapper to a PX509 instance
   X509 = object
   public
@@ -1905,7 +1912,11 @@ type
     function ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
       CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
       iter: integer = 0; mac_iter: integer = 0; md_type: PEVP_MD = nil;
-      const FriendlyName: RawUtf8 = ''): RawByteString;
+      const FriendlyName: RawUtf8 = ''): RawByteString; overload;
+    /// serialize the certificate and associated private key as PKCS12 raw binary
+    // - can specify the actual output format
+    function ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
+      format: TX509Pkcs12Format): RawByteString; overload;
     /// serialize the certificate and associated private key as PKCS12 raw binary
     // - this method will recognize '3des=' (PKCS12_3DES_PREFIX) and 'aes='
     // (PKCS12_AES_PREFIX) prefixes to the password text (which will be trimmed),
@@ -9374,6 +9385,39 @@ begin
     PKCS12_set_mac(p12, pointer(password), -1, nil, 0, mac_iter, md_type);
   result := p12.ToBinary;
   p12.Free;
+end;
+
+function X509.ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
+  format: TX509Pkcs12Format): RawByteString;
+var
+  nid, mac_iter: integer;
+  md_type: PEVP_MD;
+begin
+  // warning: default algorithm changed to AES-256-CBC with OpenSSL 3
+  // see https://github.com/openssl/openssl/commit/762970bd686c4aa
+  nid := 0;
+  mac_iter := 0;
+  md_type := nil;
+  case format of
+    p12Legacy:
+      // force legacy compatibility with Windows Server 2012 or MacOS/iOS
+      if OpenSslVersion >= OPENSSL3_VERNUM then
+      begin
+        nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC; // old SHA1-3DES algo
+        mac_iter := 1;
+        md_type := EVP_sha1;
+      end;
+    p12New:
+      // force OpenSSL 3.x new algorithm on OpenSSL 1.x
+      if OpenSslVersion < OPENSSL3_VERNUM then
+      begin
+        nid := NID_aes_256_cbc; // new AES-256-CBC safer algo
+        mac_iter := PKCS12_DEFAULT_ITER;
+        md_type := EVP_sha256;
+      end;
+  end;
+  // perform the actual PCKS#12 binary export
+  result := ToPkcs12(pkey, password, nil, nid, nid, 0, mac_iter, md_type);
 end;
 
 function X509.ToPkcs12Ex(pkey: PEVP_PKEY; const password: SpiUtf8): RawByteString;
