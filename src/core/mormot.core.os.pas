@@ -8795,7 +8795,7 @@ begin
     for s := low(s) to high(s) do
       if s in CertStores then
       begin
-        v := GetOneSystemStoreAsPem(s, FlushCache, now);
+        v := GetOneSystemStoreAsPem(s, FlushCache, now); // may use its cache
         if v <> '' then
           result := result + v + #13#10;
       end;

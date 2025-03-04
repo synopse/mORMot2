@@ -885,6 +885,12 @@ type
     // a PX509DynArray e.g. from LoadCertificates()
     // - not used on SChannel client
     CACertificatesRaw: TPointerDynArray;
+    /// input: defines a set of CA certificates to be retrieved from the OS
+    // - on OpenSSL, calls and uses our cached LoadCertificatesFromSystemStore()
+    // which may be more accurate than SSL_CTX_set_default_verify_paths(),
+    // especially on Windows
+    // - not used on SChannel client
+    CASystemStores: TSystemCertificateStores;
     /// input: preferred Cipher List
     // - not used on SChannel
     CipherList: RawUtf8;

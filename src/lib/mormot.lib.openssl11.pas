@@ -7417,7 +7417,7 @@ var
 begin
   result := PX509DynArray(PeerChain.ToDynArray);
   if acquire then
-    for i := 0 to high(result) do
+    for i := 0 to length(result) - 1 do
       result[i].Acquire;
 end;
 
@@ -9093,7 +9093,7 @@ begin
   result := false;
   if @self = nil then
     exit;
-  for i := 0 to high(x) do
+  for i := 0 to length(x) - 1 do
     if x[i] <> nil then
       if X509_STORE_add_cert(@self, x[i]) <> OPENSSLSUCCESS then
         exit;
@@ -10591,6 +10591,9 @@ begin
     if FileExists(TFileName(Context.CACertificatesFile)) then
       SSL_CTX_load_verify_locations(
         fCtx, pointer(Context.CACertificatesFile), nil)
+    else if Context.CASystemStores <> [] then
+      SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
+        LoadCertificatesFromSystemStore(Context.CASystemStores)) // cached
     else if Context.CACertificatesRaw <> nil then
       SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
         PX509DynArray(Context.CACertificatesRaw))
@@ -10873,11 +10876,9 @@ procedure FinalizeUnit;
 var
   s: TSystemCertificateStore;
 begin
-  if _lasts.x509 <> nil then
-    PX509DynArrayFree(_lasts.x509);
+  PX509DynArrayFree(_lasts.x509);
   for s := low(s) to high(s) do
-    if _last[s].x509 <> nil then
-      PX509DynArrayFree(_last[s].x509);
+    PX509DynArrayFree(_last[s].x509);
 end;
 
 
