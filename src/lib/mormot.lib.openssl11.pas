@@ -2629,6 +2629,26 @@ function NewPkcs12(const Password: SpiUtf8; PrivKey: PEVP_PKEY; Cert: PX509;
 /// unserialize a new OpenSSL PKCS12 structure instance
 function LoadPkcs12(const Der: RawByteString): PPKCS12;
 
+type
+  /// a convenient PX509 array wrapper to leverage mormot.core.os.pas PEM cache
+  {$ifdef USERECORDWITHMETHODS}
+  TX509Cache = record
+  {$else}
+  TX509Cache = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fSafe: TLightLock;
+    fPem: RawUtf8;
+    fX509: PX509DynArray;
+  public
+    /// fill res[] from pem content, using an internal cache of last instances
+    // - a faster alternative to res := LoadCertificates(pem)
+    procedure Cache(const pem: RawUtf8; out res: PX509DynArray);
+    /// should eventually be called to release the stored PX509 instances
+    procedure Done;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
 
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
 
@@ -10082,44 +10102,20 @@ begin
   bio.Free;
 end;
 
-type
-  TLastSystem = record // to leverage mormot.core.os.pas PEM cache
-    safe: TLightLock;
-    pem: RawUtf8;
-    x509: PX509DynArray;
-  end;
 var
-  _lasts: TLastSystem;
-  _last: array[TSystemCertificateStore] of TLastSystem;
-
-procedure FromLast(var last: TLastSystem; const pem: RawUtf8; out res: PX509DynArray);
-begin
-  if pem = '' then
-    exit;
-  last.safe.Lock;
-  try
-    if last.pem <> pem then
-    begin
-      last.pem := pem;
-      PX509DynArrayFree(last.x509);
-      last.x509 := LoadCertificates(pem);
-    end;
-    res := last.x509;
-  finally
-    last.safe.UnLock;
-  end;
-end;
+  _lasts: TX509Cache;
+  _last: array[TSystemCertificateStore] of TX509Cache;
 
 function LoadCertificatesFromSystemStore(CertStores: TSystemCertificateStores;
   FlushCache, OnlySystemStore: boolean): PX509DynArray;
 begin
-  FromLast(_lasts, GetSystemStoreAsPem(CertStores, FlushCache, OnlySystemStore), result);
+  _lasts.Cache(GetSystemStoreAsPem(CertStores, FlushCache, OnlySystemStore), result);
 end;
 
 function LoadCertificatesFromOneSystemStore(CertStore: TSystemCertificateStore;
   FlushCache: boolean): PX509DynArray;
 begin
-  FromLast(_last[CertStore], GetOneSystemStoreAsPem(CertStore, FlushCache), result);
+  _last[CertStore].Cache(GetOneSystemStoreAsPem(CertStore, FlushCache), result);
 end;
 
 function NewCertificateStore: PX509_STORE;
@@ -10195,7 +10191,6 @@ function LoadPkcs12(const Der: RawByteString): PPKCS12;
 begin
   result := BioLoad(Der, @d2i_PKCS12_bio);
 end;
-
 
 function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
 var
@@ -10876,9 +10871,9 @@ procedure FinalizeUnit;
 var
   s: TSystemCertificateStore;
 begin
-  PX509DynArrayFree(_lasts.x509);
+  _lasts.Done;
   for s := low(s) to high(s) do
-    PX509DynArrayFree(_last[s].x509);
+    _last[s].Done;
 end;
 
 
