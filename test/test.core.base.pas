@@ -8680,6 +8680,9 @@ begin
   CheckEqual(ToText(osv), 'Windows 11 64bit 24H2');
   osv.winbuild := 26100;
   CheckEqual(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
+  osv.win := wServer2022_64;
+  osv.winbuild := 20349;
+  CheckEqual(ToTextOS(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
   FillcharFast(tmp, SizeOf(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences

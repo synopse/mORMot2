@@ -743,7 +743,7 @@ var
 // 'macOS 13 Ventura'
 function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
-/// low-level function used internally by ToText(osv) for Windows 10/11 versions
+/// low-level function used internally by ToText(osv) to detect Windows versions
 function WinOsBuild(const osv: TOperatingSystemVersion;
   firstchar: AnsiChar = #0): TShort8;
 
@@ -5906,43 +5906,60 @@ end;
 
 { ****************** Gather Operating System Information }
 
-const
-// https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions#Personal_computer_versions
-  WINBUILD_TXT: array[0 .. 17, 0 .. 3] of AnsiChar = (
+const // cf https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions
+  DESKTOP_INT: array[0 .. 17] of cardinal = (
+     10240,  10586,  14393,  15063,  16299,  17134,  17763,  18362,  18363,
+     19041,  19042,  19043,  19044,  19045,  22000,  22621,  22631,  26100);
+  DESKTOP_TXT: array[0 .. high(DESKTOP_INT), 0 .. 3] of AnsiChar = (
     '1507', '1511', '1607', '1703', '1709', '1803', '1809', '1903', '1909',
     '2004', '20H2', '21H1', '21H2', '22H2', '21H2', '22H2', '23H2', '24H2');
-  WINBUILD_INT: array[0 .. high(WINBUILD_TXT)] of word = (
-     10240, 10586, 14393, 15063, 16299, 17134, 17763, 18362, 18363,
-     19041, 19042, 19043, 19044, 19045, 22000, 22621, 22631, 26100);
+  SERVER_INT: array[0 .. 10] of cardinal = (
+    14393,  16299,  17134,  17763,  18362,  18363,  19041,  19042,  20348,
+    25398,  26100);
+  SERVER_TXT: array[0 .. high(SERVER_INT), 0 .. 3] of AnsiChar = (
+    '1607', '1709', '1803', '1809', '1903', '1909', '2004', '20H2', '21H2',
+    '23H2', '24H2');
+
+function FindOsBuild(c: cardinal; hi: PtrInt; b, t: PCardinalArray): cardinal;
+begin
+  repeat
+    if c >= b^[hi] then
+    begin
+      result := t^[hi];
+      exit;
+    end;
+    dec(hi);
+  until hi < 0;
+  result := 0;
+end;
 
 function WinOsBuild(const osv: TOperatingSystemVersion; firstchar: AnsiChar): TShort8;
 var
-  i: PtrInt;
-  w: word;
   c: cardinal;
-  wi: PWordArray;
 begin
   result[0] := #0;
-  if not (osv.win in [wTen, wTen_64, wEleven, wEleven_64]) then
+  if osv.os <> osWindows then
     exit;
-  w := osv.winbuild;
-  wi := @WINBUILD_INT[0];
-  for i := high(WINBUILD_INT) downto 0 do
-    if w >= wi^[i] then
+  c := osv.winbuild;
+  case  osv.win of
+    wTen, wTen_64, wEleven, wEleven_64: // desktop versions
+      c := FindOsBuild(c, high(DESKTOP_INT), @DESKTOP_INT, @DESKTOP_TXT);
+    wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64:
+      c := FindOsBuild(c, high(SERVER_INT), @SERVER_INT, @SERVER_TXT);
+  else
+    exit;
+  end;
+  if c <> 0 then
+    if firstchar = #0 then
     begin
-      c := PCardinal(@WINBUILD_TXT[i])^;
-      if firstchar = #0 then
-      begin
-        result[0] := #4;
-        PCardinal(@result[1])^ := c;
-      end
-      else
-      begin
-        result[0] := #5;
-        result[1] := firstchar;
-        PCardinal(@result[2])^ := c;
-      end;
-      break;
+      result[0] := #4; // e.g. '21H2' for firstchar=#0
+      PCardinal(@result[1])^ := c;
+    end
+    else
+    begin
+      result[0] := #5; // e.g. ' 21H2' for firstchar=' '
+      result[1] := firstchar;
+      PCardinal(@result[2])^ := c;
     end;
 end;
 
