@@ -228,11 +228,6 @@ var
   /// internal PSSL data reference slot - for SSL_get_ex_data/SSL_set_ex_data
   OpenSslExIndexSsl: integer;
 
-  /// can be set to PKCS12_3DES_PREFIX = '3des=' or PKCS12_AES_PREFIX = 'aes='
-  // to force a specific algorithm for X509.ToPkcs12Ex() binary persistence
-  OpenSslDefaultPkcs12PasswordPrefix: RawUtf8;
-
-
 {$ifdef OPENSSLSTATIC}
 
   // only OpenSSL 1.1 is supported yet as static linking (need more testing)
@@ -1921,8 +1916,8 @@ type
     // - this method will recognize '3des=' (PKCS12_3DES_PREFIX) and 'aes='
     // (PKCS12_AES_PREFIX) prefixes to the password text (which will be trimmed),
     // to force either legacy SHA1-3DES or new AES-256-CBC algorithm
-    // - see also OpenSslDefaultPkcs12PasswordPrefix global variable
-    // - as used by TCryptCertOpenSsl.Save()
+    // - will use OpenSslDefaultPkcs12 global variable format by default
+    // - as used by TCryptCertOpenSsl.Save() with cccCertWithPrivateKey and ccfBinary
     function ToPkcs12Ex(pkey: PEVP_PKEY; const password: SpiUtf8): RawByteString;
     /// increment the X509 reference count to avoid premature release
     function Acquire: integer;
@@ -2021,6 +2016,12 @@ const
   PKCS12_3DES_PREFIX = '3des=';
   /// password prefix recognized by X509.ToPkcs12Ex() to force new AES-256-CBC
   PKCS12_AES_PREFIX = 'aes=';
+
+var
+  /// globally set a specific algorithm for X509.ToPkcs12Ex() binary persistence
+  // - see also TCryptCertOpenSsl.Save() with cccCertWithPrivateKey and ccfBinary
+  // - could also disable password prefix recognition with p12PrefixDisabled
+  OpenSslDefaultPkcs12: TX509Pkcs12Format;
 
 
 { ******************** OpenSSL Library Functions }
@@ -9426,7 +9427,7 @@ var
   fmt: TX509Pkcs12Format;
 begin
   // retrieve the default global format
-  fmt := p12Default;
+  fmt := OpenSslDefaultPkcs12;
   // allow to force a specific algorithm via a password prefix
   if password <> '' then
   begin
