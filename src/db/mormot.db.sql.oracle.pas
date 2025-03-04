@@ -248,10 +248,10 @@ type
     // to retrieve the data rows
     // - raise an ESqlDBOracle on any error
     // - if aSql requires a trailing ';', you should end it with ';;' e.g. for
-    // $ DB.ExecuteNoResult(
-    // $  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
-    // $  ' AS LANGUAGE JAVA' +
-    // $  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
+    // ! DB.ExecuteNoResult(
+    // !  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
+    // !  ' AS LANGUAGE JAVA' +
+    // !  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
     procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions

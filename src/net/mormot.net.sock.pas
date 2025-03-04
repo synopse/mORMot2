@@ -799,19 +799,19 @@ type
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
   // - typical usage is the following:
-  // $ with THttpClientSocket.Create do
-  // $ try
-  // $   TLS.WithPeerInfo := true;
-  // $   TLS.IgnoreCertificateErrors := true;
-  // $   TLS.CipherList := 'ECDHE-RSA-AES256-GCM-SHA384';
-  // $   ConnectUri('https://synopse.info');
-  // $   ConsoleWrite(TLS.PeerInfo);
-  // $   ConsoleWrite(TLS.CipherName);
-  // $   ConsoleWrite([Get('/forum/', 1000), ' len=', ContentLength]);
-  // $   ConsoleWrite(Get('/fossil/wiki/Synopse+OpenSource', 1000));
-  // $ finally
-  // $   Free;
-  // $ end;
+  // ! with THttpClientSocket.Create do
+  // ! try
+  // !   TLS.WithPeerInfo := true;
+  // !   TLS.IgnoreCertificateErrors := true;
+  // !   TLS.CipherList := 'ECDHE-RSA-AES256-GCM-SHA384';
+  // !   ConnectUri('https://synopse.info');
+  // !   ConsoleWrite(TLS.PeerInfo);
+  // !   ConsoleWrite(TLS.CipherName);
+  // !   ConsoleWrite([Get('/forum/', 1000), ' len=', ContentLength]);
+  // !   ConsoleWrite(Get('/fossil/wiki/Synopse+OpenSource', 1000));
+  // ! finally
+  // !   Free;
+  // ! end;
   // - for passing a PNetTlsContext, use InitNetTlsContext for initialization
   TNetTlsContext = record
     /// output: set by ConnectUri/OpenBind method once TLS is established
@@ -881,13 +881,19 @@ type
     CACertificatesFile: RawUtf8;
     /// input: opaque pointers containing a set of CA certificates
     // - on OpenSSL client or server, calls SSL_CTX_get_cert_store() API then
-    // X509_STORE_add_cert() on all pointers of PX509 type - i.e. expects here
-    // a PX509DynArray e.g. from LoadCertificates()
+    // X509_STORE_add_cert() on all pointers of PX509 type - i.e. expecting
+    // here a PX509DynArray e.g. from LoadCertificates() as such:
+    // ! var certs: PX509DynArray;
+    // ! ...
+    // !   certs := LoadCertificates(CA_CHAIN);
+    // !   aTlsContext.CACertificatesRaw := TPointerDynArray(certs);
+    // !   // ... eventually ...
+    // !   PX509DynArrayFree(certs);
     // - not used on SChannel client
     CACertificatesRaw: TPointerDynArray;
     /// input: defines a set of CA certificates to be retrieved from the OS
     // - on OpenSSL, calls and uses our cached LoadCertificatesFromSystemStore()
-    // which may be more accurate than SSL_CTX_set_default_verify_paths(),
+    // which is more versatile than default SSL_CTX_set_default_verify_paths(),
     // especially on Windows
     // - not used on SChannel client
     CASystemStores: TSystemCertificateStores;

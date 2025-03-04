@@ -951,7 +951,7 @@ type
     // the internal asynchronous notification system, to run the callback
     // in the main UI thread
     // - WM_* message identifier should have been set e.g. via the associated
-    // $ ServiceNotificationMethodViaMessages(Form.Handle, WM_USER)
+    // ! ServiceNotificationMethodViaMessages(Form.Handle, WM_USER);
     // - message will be sent for any interface-based service method callback
     // which expects no result (i.e. no out parameter nor function result),
     // so is safely handled as asynchronous notification

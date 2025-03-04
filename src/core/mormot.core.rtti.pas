@@ -832,13 +832,13 @@ type
     /// efficiently finalize any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly
-    // $ RTTI_FINALIZE[Info^.Kind](Data, Info);
+    // ! RTTI_FINALIZE[Info^.Kind](Data, Info);
     procedure Clear(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// efficiently copy any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly
-    // $ RTTI_MANAGEDCOPY[Info^.Kind](Dest, Source, Info);
+    // ! RTTI_MANAGEDCOPY[Info^.Kind](Dest, Source, Info);
     procedure Copy(Dest, Source: pointer);
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute extended information about this RTTI type
@@ -1610,12 +1610,12 @@ function SetObjectFromExecutableCommandLine(Value: TObject;
 
 /// helper to retrieve low-level RTTI information of an enumeration type
 // - just a wrapper around
-// $ aTypeInfo^.EnumBaseType(List, result);
+// ! aTypeInfo^.EnumBaseType(List, result);
 function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
 
 /// helper to retrieve the text of an enumerate item
 // - just a wrapper around
-// $ aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex)
+// ! aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex)
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 
 /// get the corresponding enumeration name, without the first lowercase chars

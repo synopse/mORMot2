@@ -192,11 +192,11 @@ type
     // - <param> will be replaced in aToUri
     // - if aToUri is an '200'..'599' integer, it will return it as HTTP error
     // - otherwise, the URI will be rewritten into aToUri, e.g.
-    // $ Rewrite(urmGet, '/info', urmGet, 'root/timestamp/info');
-    // $ Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
-    // $  '/root/myservice/convert?from=<from>&to=<to>'); // for IMyService.Convert
-    // $ Rewrite(urmGet, '/index.php', '400'); // to avoid fuzzing
-    // $ Rewrite(urmGet, '/*', '/static/*' // '*' synonymous to '<path:path>'
+    // ! Rewrite(urmGet, '/info', urmGet, 'root/timestamp/info');
+    // ! Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
+    // !  '/root/myservice/convert?from=<from>&to=<to>'); // for IMyService.Convert
+    // ! Rewrite(urmGet, '/index.php', '400'); // to avoid fuzzing
+    // ! Rewrite(urmGet, '/*', '/static/*' // '*' synonymous to '<path:path>'
     procedure Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8);
     /// just a wrapper around Rewrite(urmGet, aFrom, aToMethod, aTo)
@@ -238,9 +238,9 @@ type
     // - <param> place holders will be parsed and available in callback
     // as Ctxt['param'] default property or Ctxt.RouteInt64/RouteEquals methods
     // - could be used e.g. for standard REST process as
-    // $ Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
-    // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
-    // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
+    // ! Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
+    // ! Route.Run([urmGet, urmPost, urmPut, urmDelete],
+    // !    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
     procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
       const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil);
     /// just a wrapper around Run([urmGet], aUri, aExecute) registration method
@@ -554,9 +554,9 @@ type
     // rewrite internally '/user/1234' URI as '/root/userservice/new?id=1234'
     // - could be used e.g. for standard REST process via event callbacks with
     // Ctxt['user'] or Ctxt.RouteInt64('id') parameter extraction in DoUserPic:
-    // $ Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
-    // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
-    // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
+    // ! Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
+    // ! Route.Run([urmGet, urmPost, urmPut, urmDelete],
+    // !    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
     // - warning: with the THttpApiServer, URIs will be limited by the actual
     // root URI registered at http.sys level - there is no such limitation with
     // the socket servers, which bind to a port, so handle all URIs on it
@@ -1287,9 +1287,9 @@ type
   // - under Windows, will trigger the firewall UAC popup at first run
   // - don't forget to use Free method when you are finished
   // - a typical HTTPS server usecase could be:
-  // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
-  // $ fHttpServer.WaitStarted('cert.pem', 'privkey.pem', '');  // cert.pfx for SSPI
-  // $ // now certificates will be initialized and used
+  // ! fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
+  // ! fHttpServer.WaitStarted('cert.pem', 'privkey.pem', '');  // cert.pfx for SSPI
+  // ! // now certificates will be initialized and used
   THttpServer = class(THttpServerSocketGeneric)
   protected
     fThreadPool: TSynThreadPoolTHttpServer;

@@ -3103,10 +3103,10 @@ var
   // mormot.crypt.rsa with TCryptPublicKeyRsa or mormot.crypt.opensssl with
   // with TCryptPublicKeyOpenSsl
   // - use as such:
-  // $ var key: ICryptPublicKey;
-  // $ ...
-  // $   key := CryptPublicKey[ckaEcc].Create;
-  // $   if key.Load(...) then ...
+  // ! var key: ICryptPublicKey;
+  // ! ...
+  // !   key := CryptPublicKey[ckaEcc].Create;
+  // !   if key.Load(...) then ...
   CryptPublicKey: array[TCryptKeyAlgo] of TCryptPublicKeyClass;
 
   /// RSA/ECC private key factory
@@ -3114,10 +3114,10 @@ var
   // mormot.crypt.rsa with TCryptPrivateKeyRsa or mormot.crypt.opensssl with
   // with TCryptPrivateKeyOpenSsl
   // - use as such:
-  // $ var key: ICryptPrivateKey;
-  // $ ...
-  // $   key := CryptPrivateKey[ckaEcc].Create;
-  // $   if key.Load(...) then ...
+  // ! var key: ICryptPrivateKey;
+  // ! ...
+  // !   key := CryptPrivateKey[ckaEcc].Create;
+  // !   if key.Load(...) then ...
   CryptPrivateKey: array[TCryptKeyAlgo] of TCryptPrivateKeyClass;
 
 
@@ -3130,13 +3130,13 @@ var
   /// direct access to the mormot.crypt.x509.pas ICryptCert factories
   // - may be nil if this unit was not included
   // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
-  // $ CryptCertX509[caaRS256].New
+  // ! CryptCertX509[caaRS256].New
   CryptCertX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
   /// direct access to the mormot.crypt.openssl.pas ICryptCert factories
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - to return a ICryptCert instance using OpenSSL RSA 2048 key, use e.g.
-  // $ CryptCertOpenSsl[caaRS256].New
+  // ! CryptCertOpenSsl[caaRS256].New
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptCertOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
 

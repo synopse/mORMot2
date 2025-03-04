@@ -3292,12 +3292,12 @@ type
     function GetEnumerator: TDocValueEnumerator;
     /// allow to iterate over a specific range of elements of this IDocList
     // - elements are returned directly from the main list as weak references
-    // $ var v: TDocValue;
-    // $ "for v in list.Range" returns all elements, i.e. maps "for v in list"
-    // $ "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
-    // $ "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
-    // $ "for v in list.Range(1, 9)" returns #1..#8, i.e. list[1..9]
-    // $ "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
+    // ! var v: TDocValue;
+    // ! "for v in list.Range" returns all elements, i.e. maps "for v in list"
+    // ! "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
+    // ! "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
+    // ! "for v in list.Range(1, 9)" returns #1..#8, i.e. list[1..9]
+    // ! "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
     function Range(start: integer = 0; stop: integer = 0): TDocValueEnumerator;
     /// iterate over IDocDict kind of elements in this IDocList
     // - the list should consist e.g. of a JSON array of JSON objects
