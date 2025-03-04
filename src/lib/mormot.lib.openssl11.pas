@@ -9423,49 +9423,31 @@ end;
 function X509.ToPkcs12Ex(pkey: PEVP_PKEY; const password: SpiUtf8): RawByteString;
 var
   pwd: RawUtf8;
-  nid, mac_iter: integer;
-  md_type: PEVP_MD;
+  fmt: TX509Pkcs12Format;
 begin
-  // warning: default algorithm changed to AES-256-CBC with OpenSSL 3
-  // see https://github.com/openssl/openssl/commit/762970bd686c4aa
-  nid := 0;
-  mac_iter := 0;
-  md_type := nil;
+  // retrieve the default global format
+  fmt := p12Default;
   // allow to force a specific algorithm via a password prefix
   if password <> '' then
   begin
     pwd := password;
-    if (OpenSslDefaultPkcs12PasswordPrefix <> '') and
-       (PCardinal(pwd)^ <> PCardinal(OpenSslDefaultPkcs12PasswordPrefix)^) then
-      pwd := OpenSslDefaultPkcs12PasswordPrefix + password;
-    case PCardinal(pwd)^ of
-      ord('3') + ord('d') shl 8 + ord('e') shl 16 + ord('s') shl 24:
-        if pwd[5] = '=' then // start with PKCS12_3DES_PREFIX = '3des='
-        begin
-          delete(pwd, 1, 5);
-          // force legacy compatibility with Windows Server 2012 or MacOS/iOS
-          if OpenSslVersion >= OPENSSL3_VERNUM then
+    if fmt <> p12PrefixDisabled then
+      case PCardinal(pwd)^ of
+        ord('3') + ord('d') shl 8 + ord('e') shl 16 + ord('s') shl 24:
+          if pwd[5] = '=' then // start with PKCS12_3DES_PREFIX = '3des='
           begin
-            nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC; // old defaults
-            mac_iter := 1;
-            md_type := EVP_sha1;
+            delete(pwd, 1, 5); // trim
+            fmt := p12Legacy;
           end;
-        end;
-      ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('=') shl 24:
-        begin // start with PKCS12_AES_PREFIX = 'aes='
-          delete(pwd, 1, 4);
-          // force OpenSSL 3.x new algorithm on OpenSSL 1.x
-          if OpenSslVersion < OPENSSL3_VERNUM then
-          begin
-            nid := NID_aes_256_cbc; // new safer algorithm
-            mac_iter := PKCS12_DEFAULT_ITER;
-            md_type := EVP_sha256;
+        ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('=') shl 24:
+          begin // start with PKCS12_AES_PREFIX = 'aes='
+            delete(pwd, 1, 4);
+            fmt := p12New;
           end;
-        end;
-    end;
+      end;
   end;
   // perform the actual PCKS#12 binary export
-  result := ToPkcs12(pkey, pwd, nil, nid, nid, 0, mac_iter, md_type);
+  result := ToPkcs12(pkey, pwd, fmt);
   if pointer(pwd) <> pointer(password) then
     FillCharFast(pointer(pwd)^, length(pwd), 0); // anti-forensic
 end;
