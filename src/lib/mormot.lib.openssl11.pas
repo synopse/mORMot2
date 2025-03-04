@@ -2574,6 +2574,19 @@ function LoadCsr(const Der: RawByteString): PX509_REQ;
 // - once done with the X509 instances, free them e.g. using PX509DynArrayFree()
 function LoadCertificates(const Pem: RawUtf8): PX509DynArray;
 
+/// retrieve the OS certificates store as PX509DynArray
+// - wrap LoadCertificates() over mormot.core.os.GetSystemStoreAsPem()
+// - an internal cache of PX509 instances is maintained
+function LoadCertificatesFromSystemStore(
+  CertStores: TSystemCertificateStores = [scsCA, scsRoot];
+  FlushCache: boolean = false; OnlySystemStore: boolean = false): PX509DynArray;
+
+/// retrieve all certificates of a given system store as PX509DynArray
+// - wrap LoadCertificates() over mormot.core.os.GetOneSystemStoreAsPem()
+// - an internal cache of PX509 instances is maintained
+function LoadCertificatesFromOneSystemStore(CertStore: TSystemCertificateStore;
+  FlushCache: boolean = false): PX509DynArray;
+
 /// create a new X509 Certificates Store Instance
 function NewCertificateStore: PX509_STORE;
 
@@ -10069,6 +10082,46 @@ begin
   bio.Free;
 end;
 
+type
+  TLastSystem = record // to leverage mormot.core.os.pas PEM cache
+    safe: TLightLock;
+    pem: RawUtf8;
+    x509: PX509DynArray;
+  end;
+var
+  _lasts: TLastSystem;
+  _last: array[TSystemCertificateStore] of TLastSystem;
+
+procedure FromLast(var last: TLastSystem; const pem: RawUtf8; out res: PX509DynArray);
+begin
+  if pem = '' then
+    exit;
+  last.safe.Lock;
+  try
+    if last.pem <> pem then
+    begin
+      last.pem := pem;
+      PX509DynArrayFree(last.x509);
+      last.x509 := LoadCertificates(pem);
+    end;
+    res := last.x509;
+  finally
+    last.safe.UnLock;
+  end;
+end;
+
+function LoadCertificatesFromSystemStore(CertStores: TSystemCertificateStores;
+  FlushCache, OnlySystemStore: boolean): PX509DynArray;
+begin
+  FromLast(_lasts, GetSystemStoreAsPem(CertStores, FlushCache, OnlySystemStore), result);
+end;
+
+function LoadCertificatesFromOneSystemStore(CertStore: TSystemCertificateStore;
+  FlushCache: boolean): PX509DynArray;
+begin
+  FromLast(_last[CertStore], GetOneSystemStoreAsPem(CertStore, FlushCache), result);
+end;
+
 function NewCertificateStore: PX509_STORE;
 begin
   EOpenSsl.CheckAvailable(nil, 'NewCertificateStore');
@@ -10816,6 +10869,16 @@ begin
   PX509DynArrayFree(chain);
 end;
 
+procedure FinalizeUnit;
+var
+  s: TSystemCertificateStore;
+begin
+  if _lasts.x509 <> nil then
+    PX509DynArrayFree(_lasts.x509);
+  for s := low(s) to high(s) do
+    if _last[s].x509 <> nil then
+      PX509DynArrayFree(_last[s].x509);
+end;
 
 
 initialization
@@ -10826,6 +10889,7 @@ initialization
     @NewNetTls := @NewOpenSslNetTls;
 
 finalization
+  FinalizeUnit;
   {$ifndef OPENSSLSTATIC}
   FreeAndNil(libssl);
   FreeAndNil(libcrypto);

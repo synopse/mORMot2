@@ -6315,7 +6315,7 @@ var
   {$endif CPUX86NOTPIC}
 begin
   if PCardinalArray(@val)^[1] = 0 then
-    P := StrUInt32(P, PCardinal(@val)^)
+    P := StrUInt32(P, PCardinal(@val)^) // 32-bit value
   else
   begin
     {$ifndef CPUX86NOTPIC}

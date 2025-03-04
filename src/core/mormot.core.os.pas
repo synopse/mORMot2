@@ -8799,19 +8799,18 @@ begin
         if v <> '' then
           result := result + v + #13#10;
       end;
-  if result <> '' then
-  begin
-    _SystemStoreAsPemSafe.Lock;
-    try
-      with _SystemStoreAsPem do
-      begin
-        Tix := now;
-        Scope := CertStores;
-        Pem := result;
-      end;
-    finally
-      _SystemStoreAsPemSafe.UnLock;
+  if result = '' then
+    exit;
+  _SystemStoreAsPemSafe.Lock;
+  try
+    with _SystemStoreAsPem do
+    begin
+      Tix := now;
+      Scope := CertStores;
+      Pem := result;
     end;
+  finally
+    _SystemStoreAsPemSafe.UnLock;
   end;
 end;
 
