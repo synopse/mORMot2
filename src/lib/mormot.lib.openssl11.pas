@@ -228,6 +228,11 @@ var
   /// internal PSSL data reference slot - for SSL_get_ex_data/SSL_set_ex_data
   OpenSslExIndexSsl: integer;
 
+  /// can be set to PKCS12_3DES_PREFIX = '3des=' or PKCS12_AES_PREFIX = 'aes='
+  // to force a specific algorithm for X509.ToPkcs12Ex() binary persistence
+  OpenSslDefaultPkcs12PasswordPrefix: RawUtf8;
+
+
 {$ifdef OPENSSLSTATIC}
 
   // only OpenSSL 1.1 is supported yet as static linking (need more testing)
@@ -1905,6 +1910,7 @@ type
     // - this method will recognize '3des=' (PKCS12_3DES_PREFIX) and 'aes='
     // (PKCS12_AES_PREFIX) prefixes to the password text (which will be trimmed),
     // to force either legacy SHA1-3DES or new AES-256-CBC algorithm
+    // - see also OpenSslDefaultPkcs12PasswordPrefix global variable
     // - as used by TCryptCertOpenSsl.Save()
     function ToPkcs12Ex(pkey: PEVP_PKEY; const password: SpiUtf8): RawByteString;
     /// increment the X509 reference count to avoid premature release
@@ -9382,8 +9388,12 @@ begin
   mac_iter := 0;
   md_type := nil;
   // allow to force a specific algorithm via a password prefix
-  pwd := password;
-  if pwd <> '' then
+  if password <> '' then
+  begin
+    pwd := password;
+    if (OpenSslDefaultPkcs12PasswordPrefix <> '') and
+       (PCardinal(pwd)^ <> PCardinal(OpenSslDefaultPkcs12PasswordPrefix)^) then
+      pwd := OpenSslDefaultPkcs12PasswordPrefix + password;
     case PCardinal(pwd)^ of
       ord('3') + ord('d') shl 8 + ord('e') shl 16 + ord('s') shl 24:
         if pwd[5] = '=' then // start with PKCS12_3DES_PREFIX = '3des='
@@ -9392,7 +9402,7 @@ begin
           // force legacy compatibility with Windows Server 2012 or MacOS/iOS
           if OpenSslVersion >= OPENSSL3_VERNUM then
           begin
-            nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC;
+            nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC; // old defaults
             mac_iter := 1;
             md_type := EVP_sha1;
           end;
@@ -9400,15 +9410,16 @@ begin
       ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('=') shl 24:
         begin // start with PKCS12_AES_PREFIX = 'aes='
           delete(pwd, 1, 4);
-          // force new safe algorithm on OpenSSL 1.x
+          // force OpenSSL 3.x new algorithm on OpenSSL 1.x
           if OpenSslVersion < OPENSSL3_VERNUM then
           begin
-            nid := NID_aes_256_cbc;
+            nid := NID_aes_256_cbc; // new safer algorithm
             mac_iter := PKCS12_DEFAULT_ITER;
             md_type := EVP_sha256;
           end;
         end;
     end;
+  end;
   // perform the actual PCKS#12 binary export
   result := ToPkcs12(pkey, pwd, nil, nid, nid, 0, mac_iter, md_type);
   if pointer(pwd) <> pointer(password) then
