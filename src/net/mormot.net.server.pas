@@ -816,7 +816,7 @@ function PrivKeyCertPfx: RawByteString;
 // pre-computed constant
 // - you should eventually call DeleteFile(Utf8ToString(TLS.CertificateFile))
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
-  Algo: TCryptAsymAlgo = caaRS256; UsePreComputed: boolean = false);
+  Algo: TCryptAsymAlgo = caaRS256; UsePreComputed: boolean = true);
 
 /// used by THttpServerGeneric.SetFavIcon to return a nice /favicon.ico
 function FavIconBinary: RawByteString;
@@ -1133,7 +1133,7 @@ type
     // some temporary key files, which are deleted once started
     // - as used e.g. by TRestHttpServer for secTLSSelfSigned
     procedure WaitStartedHttps(Seconds: integer = 30;
-      UsePreComputed: boolean = false);
+      UsePreComputed: boolean = true);
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
     // - validate Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
     // - otherwise TLS is initialized at first incoming connection, which
