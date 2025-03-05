@@ -3861,9 +3861,10 @@ begin
   result := _FavIconBinary;
 end;
 
-var
-  GetMacAddressSafe: TLightLock; // to protect the filter global variable
-  GetMacAddressFilter: TMacAddressFilter;
+type
+  TSortByMacAddress = class // a fake class to propagate TMacAddressFilter
+    function Compare(const A, B): integer;
+  end;
 
 const
   NETHW_ORDER: array[TMacAddressKind] of byte = ( // Kind to sort priority
@@ -3875,34 +3876,44 @@ const
     5,  // makCellular
     6); // makSoftware
 
-function SortByMacAddressFilter(const A, B): integer;
+function TSortByMacAddress.Compare(const A, B): integer;
 var
   ma: TMacAddress absolute A;
   mb: TMacAddress absolute B;
+  filter: TMacAddressFilter;
 begin
+  result := 0;
+  if @ma = @mb then
+    exit;
+  // was called as arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare)
+  byte(filter) := PtrInt(self);
   // sort by kind
-  if not (mafIgnoreKind in GetMacAddressFilter) then
+  if not (mafIgnoreKind in filter) then
   begin
     result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
     if result <> 0 then
       exit;
   end;
   // sort with gateway first
-  if not (mafIgnoreGateway in GetMacAddressFilter) then
+  if not (mafIgnoreGateway in filter) then
   begin
     result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
     if result <> 0 then
       exit;
   end;
   // sort by speed within this kind and gateway
-  if not (mafIgnoreSpeed in GetMacAddressFilter) then
+  if not (mafIgnoreSpeed in filter) then
   begin
     result := CompareCardinal(mb.Speed, ma.Speed);
     if result <> 0 then
       exit;
   end;
-  // fallback to sort by IfIndex
+  // fallback to sort by IfIndex or plain MAC address
   result := CompareCardinal(ma.IfIndex, mb.IfIndex);
+  if result = 0 then
+    result := SortDynArrayAnsiStringI(ma.Address, mb.Address);
+  if result = 0 then
+    result := ComparePointer(@ma, @mb);
 end;
 
 function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
@@ -3913,7 +3924,7 @@ var
   i, bct: PtrInt;
 begin
   result := false;
-  all := copy(GetMacAddresses({upanddown=}false));
+  all := copy(GetMacAddresses({upanddown=}false)); // using a 65-seconds cache
   if all = nil then
     exit;
   arr.Init(TypeInfo(TMacAddressDynArray), all);
@@ -3945,15 +3956,7 @@ begin
   if all = nil then
     exit;
   if length(all) > 1 then
-  begin
-    GetMacAddressSafe.Lock; // protect GetMacAddressFilter global variable
-    try
-      GetMacAddressFilter := Filter;
-      arr.Sort(SortByMacAddressFilter);
-    finally
-      GetMacAddressSafe.UnLock;
-    end;
-  end;
+    arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare);
   Mac := all[0];
   result := true;
 end;
@@ -4088,7 +4091,8 @@ begin
   if (hsoEnableTls in fOptions) and
      (TLS <> nil) and(
       (TLS^.CertificateFile <> '') or
-      (TLS^.CertificateRaw <> nil)) and
+      (TLS^.CertificateRaw <> nil) or
+      (TLS^.CertificateBin <> '')) and
      ((fSock = nil) or
       not fSock.TLS.Enabled) then
   begin
