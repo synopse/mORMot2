@@ -10742,6 +10742,9 @@ end;
 procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
   v, mode: integer;
+  cert: RawByteString;
+  x: PX509;
+  pk: PEVP_PKEY;
 begin
   _PeerVerify := self; // safe and simple context for the callbacks
   if Context.IgnoreCertificateErrors then
@@ -10776,10 +10779,28 @@ begin
         SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
     end;
   end;
-  if FileExists(TFileName(Context.CertificateFile)) then
-    EOpenSslNetTls.Check(self, 'SetupCtx CertificateFile',
-      SSL_CTX_use_certificate_file(
-        fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
+  cert := StringFromFile(TFileName(Context.CertificateFile));
+  if cert <> '' then
+  begin
+    if (Context.PrivateKeyRaw <> nil) or
+       (Context.PrivateKeyFile <> '') or
+       IsPem(pointer(cert)) then
+      EOpenSslNetTls.Check(self, 'SetupCtx CertificateFile',
+        SSL_CTX_use_certificate_file(
+          fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
+    else if ParsePkcs12(cert, Context.PrivatePassword, x, pk) then
+      try // was .pfx/pkcs#12 format as with SChannel
+        SSL_CTX_use_certificate(fCtx, x);
+        SSL_CTX_use_PrivateKey(fCtx, pk);
+        EOpenSslNetTls.Check(self, 'SetupCtx pfx',
+          SSL_CTX_check_private_key(fCtx), @Context.LastError);
+      finally
+        x^.Free;
+        pk^.Free;
+      end
+    else
+      EOpenSslNetTls.CheckFailed(self, 'SetupCtx')
+  end
   else if Context.CertificateRaw <> nil then
     EOpenSslNetTls.Check(self, 'SetupCtx CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
