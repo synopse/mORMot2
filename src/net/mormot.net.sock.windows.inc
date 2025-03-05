@@ -2108,7 +2108,7 @@ end;
 
 procedure TSChannelNetTls.AfterBind(var Context: TNetTlsContext);
 var
-  certblob: RawByteString;
+  pfx: RawByteString;
   blob: TCryptDataBlob;
   pass: SynUnicode;
   flags: integer;
@@ -2117,21 +2117,24 @@ var
   freeprov: BOOL;
 begin
   // method called once the socket has been bound on server side
-  if Context.CertificateFile = '' then
-    // Load certificate and private key from Windows certificate store
+  pfx := Context.CertificateBin;
+  if (pfx = '') and
+     (Context.CertificateFile <> '') then
+    // try to load from .PFX file
+    pfx := StringFromFile(TFileName(Context.CertificateFile));
+  if pfx = '' then
+    // fallback to first certificate and private key from personal Windows store
     fAcceptCertStore := CertOpenSystemStoreW(nil, 'MY')
   else
   begin
-    certblob := StringFromFile(TFileName(Context.CertificateFile));
-    blob.cbData := Length(certblob);
-    blob.pbData := pointer(certblob);
-    // Load certificate from file. You can use Let's Encrypt certificate,
-    // converted to PFX:
+    // expecting e.g. a Let's Encrypt certificate, converted to PFX:
     //   openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
-    // or using mormot.core.secure on OpenSSL:
+    // or using mormot.crypt.openssl:
     //   c := Cert('x509-rs256');
-    //   c.Generate([cuTlsServer], '127.0.0.1', nil, 3650);
-    //   FileFromString(c.Save('pass', ccfBinary), WorkDir + 'privkeycert.pfx');
+    //   c.Generate([cuTlsServer], 'toto.com', nil, 3650);
+    //   FileFromString(c.Save('3des=pass', ccfBinary), WorkDir + 'privkeycert.pfx');
+    blob.cbData := Length(pfx);
+    blob.pbData := pointer(pfx);
     pass := SynUnicode(Context.PrivatePassword);
     flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
     if OSVersion < wVista then
@@ -2143,7 +2146,6 @@ begin
       ESChannelRaiseLastError('AfterBind: PFXImportCertStore', SEC_E_CERT_UNKNOWN);
   end;
   // find first certificate in store with private key
-  fAcceptCert := nil;
   repeat
     fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
       fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
@@ -2154,7 +2156,7 @@ begin
   if freeprov and
      CryptoApi.Available then
     CryptoApi.ReleaseContext(prov, 0);
-  // this global certificate will be used by AfterAccept()
+  // this global certificate and its private key will be used by AfterAccept()
   Context.AcceptCert := fAcceptCert;
 end;
 
