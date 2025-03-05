@@ -3809,7 +3809,8 @@ var
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo; UsePreComputed: boolean);
 begin
-  InitNetTlsContext(TLS, {server=}true);
+  InitNetTlsContext(TLS);
+  TLS.IgnoreCertificateErrors := true; // needed if no mutual auth is done
   if UsePrecomputed or
      (CryptCertOpenSsl[Algo] = nil) then // pure SChannel can use embedded PFX
   // can't use CryptCertX509[] because SChannel/SSPI requires PFX binary format

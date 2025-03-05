@@ -1003,11 +1003,14 @@ type
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
-
 /// initialize a stack-allocated TNetTlsContext instance
-procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
-  const CertificateFile: TFileName = ''; const PrivateKeyFile: TFileName = '';
-  const PrivateKeyPassword: RawUtf8 = ''; const CACertificatesFile: TFileName = '');
+procedure InitNetTlsContext(var TLS: TNetTlsContext); overload;
+
+/// initialize a stack-allocated TNetTlsContext instance with auth parameters
+procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
+  const CertificateFile: TFileName = '';
+  const PrivateKeyFile: TFileName = ''; const PrivateKeyPassword: RawUtf8 = '';
+  const CACertificatesFile: TFileName = ''); overload;
 
 /// purge all output fields for a TNetTlsContext instance for proper reuse
 procedure ResetNetTlsContext(var TLS: TNetTlsContext);
@@ -3974,12 +3977,17 @@ end;
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
+procedure InitNetTlsContext(var TLS: TNetTlsContext); overload;
+begin
+  Finalize(TLS);
+  FillCharFast(TLS, SizeOf(TLS), 0);
+end;
+
 procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
   const CertificateFile, PrivateKeyFile: TFileName;
   const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
 begin
-  Finalize(TLS);
-  FillCharFast(TLS, SizeOf(TLS), 0);
+  InitNetTlsContext(TLS);
   TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
   TLS.CertificateFile := RawUtf8(CertificateFile); // RTL TFileName to RawUtf8
   TLS.PrivateKeyFile  := RawUtf8(PrivateKeyFile);
