@@ -92,7 +92,7 @@ type
     class function GetOpenSsl: string;
     /// wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
     class procedure CheckFailed(caller: TObject; const method: shortstring;
-      errormsg: PRawUtf8; ssl: pointer; sslretcode: integer);
+      errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0);
     class procedure TryNotAvailable(caller: TClass; const method: shortstring);
   public
     /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
@@ -2578,7 +2578,7 @@ function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8; overload;
 /// load a private key from a PEM or DER buffer, optionally with a password
 // - try first with PEM text format, then will fallback to DER binary (as raw,
 // PKCS#8 or PKCS#12 format)
-// - you can also extract the certificate stored with the key in PKCS#12 format
+// - can also extract the certificate stored with the key in PKCS12/.PFX format
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const Password: SpiUtf8; Pkcs12Cert: PPX509 = nil): PEVP_PKEY; overload;
@@ -2587,7 +2587,7 @@ function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
 // - just a wrapper to the overloaded LoadPrivateKey() function
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(const Saved: RawByteString;
-  const Password: SpiUtf8 = ''): PEVP_PKEY; overload;
+  const Password: SpiUtf8 = ''; Pkcs12Cert: PPX509 = nil): PEVP_PKEY; overload;
 
 /// load a public key from a PEM or DER buffer, optionally with a password
 // - try first with PEM text format, then will fallback to DER binary
@@ -2676,15 +2676,19 @@ function LoadCertificateRequest(const Der: RawByteString): PX509_REQ;
 /// create a new OpenSSL pointer Stack storage instance
 function NewOpenSslStack: POPENSSL_STACK;
 
-/// create a new OpenSSL PKCS12 structure instance with all given parameters
+/// create a new OpenSSL PKCS12/.PFX structure instance with all given parameters
 // - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
 function NewPkcs12(const Password: SpiUtf8; PrivKey: PEVP_PKEY; Cert: PX509;
   CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
   iter: integer = 0; mac_iter: integer = 0;
   const FriendlyName: RawUtf8 = ''): PPKCS12;
 
-/// unserialize a new OpenSSL PKCS12 structure instance
+/// unserialize a new OpenSSL PKCS12/.PFX structure instance
 function LoadPkcs12(const Der: RawByteString): PPKCS12;
+
+/// unserialize a PKCS12/.PFX binary into its certificate and private key
+function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
+  out Cert: PX509; out PrivateKey: PEVP_PKEY): boolean;
 
 type
   /// a convenient PX509 array wrapper to leverage mormot.core.os.pas PEM cache
@@ -10257,10 +10261,10 @@ begin
 end;
 
 function LoadPrivateKey(const Saved: RawByteString;
-  const Password: SpiUtf8): PEVP_PKEY;
+  const Password: SpiUtf8; Pkcs12Cert: PPX509): PEVP_PKEY;
 begin
   if Saved <> '' then
-    result := LoadPrivateKey(pointer(Saved), length(Saved), Password)
+    result := LoadPrivateKey(pointer(Saved), length(Saved), Password, Pkcs12Cert)
   else
     result := nil;
 end;
@@ -10443,6 +10447,16 @@ end;
 function LoadPkcs12(const Der: RawByteString): PPKCS12;
 begin
   result := BioLoad(Der, @d2i_PKCS12_bio);
+end;
+
+function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
+  out Cert: PX509; out PrivateKey: PEVP_PKEY): boolean;
+var
+  pkcs12: PPKCS12;
+begin
+  pkcs12 := LoadPkcs12(Saved);
+  result := pkcs12.Extract(Password, @PrivateKey, @Cert, nil); // ignore CA
+  pkcs12.Free;
 end;
 
 function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;

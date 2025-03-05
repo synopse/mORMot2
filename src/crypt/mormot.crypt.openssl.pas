@@ -2685,19 +2685,14 @@ begin
           if fX509 = nil then
             exit;
           fPrivKey := LoadPrivateKey(priv, PrivatePassword);
+          if not fX509.MatchPrivateKey(fPrivKey) then
+            Clear;
         finally
           FillZero(priv);
         end
-        else
-        begin
-          // input should be PKCS#12 binary with certificate and private key
-          pkcs12 := LoadPkcs12(Saved);
-          if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
+        else // try PKCS#12/.PFX binary with certificate and private key
+          if not ParsePkcs12(Saved, PrivatePassword, fX509, fPrivKey) then
             Clear;
-          pkcs12.Free;
-        end;
-        if not fX509.MatchPrivateKey(fPrivKey) then
-          Clear;
       end;
   end;
   result := fX509 <> nil;
