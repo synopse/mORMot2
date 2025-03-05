@@ -2618,8 +2618,7 @@ function NewCertificate: PX509;
 
 /// unserialize as a new X509 Certificate Instance
 // - from DER binary as serialized by X509.ToBinary, or PEM text format
-// - use LoadCertificate(PemToDer()) to load a PEM certificate
-function LoadCertificate(const Der: RawByteString): PX509;
+function LoadCertificate(const DerOrPem: RawByteString): PX509;
 
 /// unserialize as a new X509 CSR Instance
 // - from DER binary as serialized by X509_REQ.ToBinary, or PEM text format
@@ -2629,7 +2628,7 @@ function LoadCsr(const Der: RawByteString): PX509_REQ;
 /// unserialize one or several new X509 Certificate Instance(s) from PEM
 // - from PEM concatenated text content
 // - once done with the X509 instances, free them e.g. using PX509DynArrayFree()
-function LoadCertificates(const Pem: RawUtf8): PX509DynArray;
+function LoadCertificates(const Pem: RawUtf8; Max: integer = 0): PX509DynArray;
 
 /// retrieve the OS certificates store as PX509DynArray
 // - wrap LoadCertificates() over mormot.core.os.GetSystemStoreAsPem()
@@ -2698,7 +2697,7 @@ type
   TX509Cache = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSafe: TLightLock;
+    fSafe: TLightLock; // to ensure Cache() is thread-safe
     fPem: RawUtf8;
     fX509: PX509DynArray;
   public
@@ -10332,12 +10331,22 @@ begin
     x.Free;
 end;
 
-function LoadCertificate(const Der: RawByteString): PX509;
+function LoadCertificate(const DerOrPem: RawByteString): PX509;
+var
+  x: PX509DynArray;
 begin
-  result := BioLoad(Der, @d2i_X509_bio);
+  result := nil;
+  if IsPem(pointer(DerOrPem)) then
+  begin
+    x := LoadCertificates(DerOrPem, {max=}1); // read first PEM
+    if x <> nil then
+      result := x[0];
+  end
+  else
+    result := BioLoad(DerOrPem, @d2i_X509_bio); // DER binary format
 end;
 
-function LoadCertificates(const Pem: RawUtf8): PX509DynArray;
+function LoadCertificates(const Pem: RawUtf8; Max: integer): PX509DynArray;
 var
   bio: PBIO;
   x: PX509;
@@ -10353,7 +10362,7 @@ begin
     if x = nil then
       break;
     PtrArrayAdd(result, x, n);
-  until false;
+  until (Max <> 0) and (n >= Max);
   if n <> 0 then
     DynArrayFakeLength(result, n);
   bio.Free;
