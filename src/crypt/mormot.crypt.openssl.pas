@@ -2614,7 +2614,7 @@ begin
           FillZero(pem);
         end
         else
-          // ccfBinary will use the PKCS#12 default binary encoding
+          // ccfBinary will use PKCS#12/.PFX encoding
           // - warning: default algorithm changed to AES-256-CBC with OpenSSL 3
           // https://github.com/openssl/openssl/commit/762970bd686c4aa
           // - use '3des=' prefix (which will be trimmed) to force PBE-SHA1-3DES
@@ -2660,15 +2660,15 @@ begin
     exit;
   case Content of
     cccCertOnly:
-      // input only include the X.509 certificate as PEM, DER or PKCS#12
+      // input only include the X.509 certificate as PEM, DER or PKCS#12/.PFX
       if IsPem(Saved) then
-        fX509 := LoadCertificate(PemToDer(Saved)) // PEM
+        fX509 := LoadCertificate(PemToDer(Saved)) // certificate-only PEM
       else
       begin
-        fX509 := LoadCertificate(Saved); // DER
+        fX509 := LoadCertificate(Saved); // certificate-only DER binary
         if not Assigned(fX509) then
         begin
-          pkcs12 := LoadPkcs12(Saved); // try PKCS#12 certificate
+          pkcs12 := LoadPkcs12(Saved); // certificate in PKCS#12/.PFX binary
           pkcs12.Extract(PrivatePassword, nil, @fX509, nil); // ignore key
           pkcs12.Free;
         end;

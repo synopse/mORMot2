@@ -3930,7 +3930,7 @@ begin
             FreeAndNil(fX509);
         end;
       cccCertWithPrivateKey:
-        // unconcatenate certificate PEM and private key PEM - no PKCS#12 yet
+        // unconcatenate cert PEM and private key PEM - no PKCS#12/.PFX yet
         result := PemToCertAndPrivKey(Saved, der, bin) and
                   Load(der, cccCertOnly, '') and
                   Load(bin, cccPrivateKeyOnly, PrivatePassword)
@@ -3965,7 +3965,7 @@ begin
           if HasPrivateSecret then
           try
             // save as concatenated PEM, even if ccfBinary was requested
-            // (no PKCS#12 support yet)
+            // (no PKCS#12/.PFX support yet)
             pem := Save(cccPrivateKeyOnly, PrivatePassword, ccfPem);
             result := Save(cccCertOnly, '', ccfPem) + RawUtf8(#13#10) + pem;
           finally

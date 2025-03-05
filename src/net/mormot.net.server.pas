@@ -3643,8 +3643,8 @@ end;
 const
   // was generated from InitNetTlsContextSelfSignedServer commented lines
   // - .pfx/pkcs#12 of RSA-2048 cert+pk for CN:127.0.0.1 valid until 03/03/2035
-  // - was regenerated with OpenSSL 3.x to avoid usage of legacy MD4 algorithm
-  // as the initial constant did - so that TCryptCertOpenSsl.Load succeed
+  // - was regenerated with OpenSSL 3.x to avoid usage of legacy RC2 algorithm
+  // as the initial constant did - so that TCryptCertOpenSsl.Load() can succeed
   // - Save() used '3des=pass' password to force SHA1-3DES legacy format
   PRIVKEY_PFX: array[0..2400] of byte = (
     $30, $82, $09, $5d, $02, $01, $03, $30, $82, $09, $27, $06, $09, $2a, $86, $48,
