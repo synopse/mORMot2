@@ -804,6 +804,7 @@ const
 
 /// some pre-computed CryptCertOpenSsl[caaRS256].New key for Windows
 // - the associated password is 'pass'
+// - was generated via X509.ToPkcs12(p12Legacy), i.e. encoded as SHA1-3DES
 // - as used e.g. by THttpServerSocketGeneric.WaitStartedHttps
 function PrivKeyCertPfx: RawByteString;
 
@@ -3644,7 +3645,7 @@ const
   // - .pfx/pkcs#12 of RSA-2048 cert+pk for CN:127.0.0.1 valid until 03/03/2035
   // - was regenerated with OpenSSL 3.x to avoid usage of legacy RC2 algorithm
   // as the initial constant did - so that TCryptCertOpenSsl.Load() can succeed
-  // - Save() used '3des=pass' password to force SHA1-3DES legacy format
+  // - Save() used '3des=pass' password to force SHA1-3DES p12Legacy format
   PRIVKEY_PFX: array[0..2400] of byte = (
     $30, $82, $09, $5d, $02, $01, $03, $30, $82, $09, $27, $06, $09, $2a, $86, $48,
     $86, $f7, $0d, $01, $07, $01, $a0, $82, $09, $18, $04, $82, $09, $14, $30, $82,
@@ -3804,7 +3805,7 @@ begin
 end;
 
 var
-  SharedCert: array[TCryptAsymAlgo] of ICryptCert; // generated once per algo
+  SelfSignedCert: array[TCryptAsymAlgo] of ICryptCert; // one generated per algo
 
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo; UsePreComputed: boolean);
@@ -3812,21 +3813,22 @@ begin
   InitNetTlsContext(TLS);
   TLS.IgnoreCertificateErrors := true; // needed if no mutual auth is done
   if UsePrecomputed or
-     (CryptCertOpenSsl[Algo] = nil) then // pure SChannel can use embedded PFX
+     (CryptCertOpenSsl[Algo] = nil) then // pure SChannel will use embedded PFX
   // can't use CryptCertX509[] because SChannel/SSPI requires PFX binary format
   begin
     TLS.CertificateBin := PrivKeyCertPfx; // use pre-computed key
     TLS.PrivatePassword := 'pass';
     exit;
   end;
-  if SharedCert[Algo] = nil then // reuse a per-algo ICryptCert instance
-    SharedCert[Algo] := CryptCertOpenSsl[Algo].Generate(
+  // generate a reusable per-algo ICryptCert instance (RSA-2048 can take time)
+  if SelfSignedCert[Algo] = nil then
+    SelfSignedCert[Algo] := CryptCertOpenSsl[Algo].Generate(
       CU_TLS_SERVER, '127.0.0.1', nil, 3650);
-  //writeln(BinToSource('PRIVKEY_PFX', '', // force SHA1-3DES legacy format
-  //  SharedCert.Save(cccCertWithPrivateKey, '3des=pass', ccfBinary)));
+  //writeln(BinToSource('PRIVKEY_PFX', '', // force SHA1-3DES p12Legacy format
+  //  SelfSignedCert[Algo].Save(cccCertWithPrivateKey, '3des=pass', ccfBinary)));
   // no temporary file needed: we just provide the shared OpenSSL handles
-  TLS.CertificateRaw := SharedCert[Algo].Handle;           // PX509
-  TLS.PrivateKeyRaw  := SharedCert[Algo].PrivateKeyHandle; // PEVP_PKEY
+  TLS.CertificateRaw := SelfSignedCert[Algo].Handle;           // PX509
+  TLS.PrivateKeyRaw  := SelfSignedCert[Algo].PrivateKeyHandle; // PEVP_PKEY
 end;
 
 const
