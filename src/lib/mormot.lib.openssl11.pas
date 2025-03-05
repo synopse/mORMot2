@@ -10788,16 +10788,24 @@ begin
         SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
     end;
   end;
-  cert := StringFromFile(TFileName(Context.CertificateFile));
+  pk := nil;
+  cert := Context.CertificateBin;
+  if (cert = '') and
+     (Context.CertificateFile <> '') then
+    cert := StringFromFile(TFileName(Context.CertificateFile));
   if cert <> '' then
   begin
-    if (Context.PrivateKeyRaw <> nil) or
-       (Context.PrivateKeyFile <> '') or
-       IsPem(pointer(cert)) then
-      EOpenSslNetTls.Check(self, 'SetupCtx CertificateFile',
-        SSL_CTX_use_certificate_file(
-          fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
-    else if ParsePkcs12(cert, Context.PrivatePassword, x, pk) then
+    x := LoadCertificate(cert); // PEM or DER
+    if x <> nil then
+    try
+      EOpenSslNetTls.Check(self, 'SetupCtx Certificate',
+        SSL_CTX_use_certificate(fCtx, x));
+    finally
+      x^.Free;
+    end
+    else if (Context.PrivateKeyRaw = nil) and
+            (Context.PrivateKeyFile = '') and
+            ParsePkcs12(cert, Context.PrivatePassword, x, pk) then
       try // was .pfx/pkcs#12 format as with SChannel
         SSL_CTX_use_certificate(fCtx, x);
         SSL_CTX_use_PrivateKey(fCtx, pk);
@@ -10808,13 +10816,13 @@ begin
         pk^.Free;
       end
     else
-      EOpenSslNetTls.CheckFailed(self, 'SetupCtx')
+      EOpenSslNetTls.CheckFailed(self, 'SetupCtx: unsupported Certificate');
   end
   else if Context.CertificateRaw <> nil then
     EOpenSslNetTls.Check(self, 'SetupCtx CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
-    raise EOpenSslNetTls.Create('AfterBind: CertificateFile required');
+    raise EOpenSslNetTls.Create('AfterBind: Certificate required');
   if FileExists(TFileName(Context.PrivateKeyFile)) then
   begin
     if Assigned(Context.OnPrivatePassword) then
@@ -10833,8 +10841,8 @@ begin
     EOpenSslNetTls.Check(self, 'SetupCtx check_private_key raw',
       SSL_CTX_check_private_key(fCtx), @Context.LastError);
   end
-  else if Bind then
-    raise EOpenSslNetTls.Create('AfterBind: PrivateKeyFile required');
+  else if Bind and (pk = nil) then
+    raise EOpenSslNetTls.Create('AfterBind: PrivateKey required');
   if Context.CipherList = '' then
     Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
   EOpenSslNetTls.Check(self, 'SetupCtx set_cipher_list',
