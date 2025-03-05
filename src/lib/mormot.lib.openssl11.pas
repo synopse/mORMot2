@@ -2578,9 +2578,10 @@ function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8; overload;
 /// load a private key from a PEM or DER buffer, optionally with a password
 // - try first with PEM text format, then will fallback to DER binary (as raw,
 // PKCS#8 or PKCS#12 format)
+// - you can also extract the certificate stored with the key in PKCS#12 format
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
-  const Password: SpiUtf8): PEVP_PKEY; overload;
+  const Password: SpiUtf8; Pkcs12Cert: PPX509 = nil): PEVP_PKEY; overload;
 
 /// load a private key from a PEM or DER content, optionally with a password
 // - just a wrapper to the overloaded LoadPrivateKey() function
@@ -10199,7 +10200,7 @@ begin
   result := BioLoad(Der, @d2i_X509_REQ_bio);
 end;
 
-function IsPem(p: PUtf8Char; up: PUtf8Char): boolean;
+function IsPem(p: PUtf8Char; up: PUtf8Char = '-----BEGIN'): boolean;
 begin
   result := true;
   repeat
@@ -10214,7 +10215,7 @@ begin
 end;
 
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
-  const Password: SpiUtf8): PEVP_PKEY;
+  const Password: SpiUtf8; Pkcs12Cert: PPX509): PEVP_PKEY;
 var
   pw: pointer;
   priv: PBIO;
@@ -10227,7 +10228,7 @@ begin
   begin
     pw := PassNotNil(Password);
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
-    if IsPem(PrivateKey, '-----BEGIN') then
+    if IsPem(PrivateKey) then
       result := PEM_read_bio_PrivateKey(priv, nil, nil, pw)
     else
       result := nil;
@@ -10247,7 +10248,7 @@ begin
       begin
         priv.Reset;
         pkcs12 := d2i_PKCS12_bio(priv, nil); // try PKCS#12
-        pkcs12.Extract(Password, @result, nil, nil); // ignore cert
+        pkcs12.Extract(Password, @result, Pkcs12Cert, nil); // ignore CA
         pkcs12.Free;
       end;
     end;
@@ -10275,7 +10276,7 @@ begin
   else
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-    if IsPem(PublicKey, '-----BEGIN') then
+    if IsPem(PublicKey) then
       result := PEM_read_bio_PUBKEY(pub, nil, nil, PassNotNil(Password))
     else
       result := nil;
