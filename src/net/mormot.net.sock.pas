@@ -852,10 +852,15 @@ type
     // ICryptCert.SaveToFile(FileName, cccCertWithPrivateKey, ', ccfBinary) or
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     CertificateFile: RawUtf8;
+    /// input: PEM/PFX content of a certificate to be loaded
+    // - on OpenSSL client or server, calls SSL_CTX_use_certificat() API
+    // - not used on SChannel client
+    // - on SChannel server, expects a .pfx / PKCS#12 binary content
+    CertificateBin: RawByteString;
     /// input: opaque pointer containing a certificate to be used
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate() API
     // expecting the pointer to be of PX509 type
-    // - not used on SChannel client
+    // - not used on SChannel
     CertificateRaw: pointer;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
@@ -3999,6 +4004,7 @@ begin
             ((not tls1.Enabled) or
              ((tls1.IgnoreCertificateErrors = tls2.IgnoreCertificateErrors) and
               (tls1.CertificateFile         = tls2.CertificateFile) and
+              (tls1.CertificateBin          = tls2.CertificateBin) and
               (tls1.CACertificatesFile      = tls2.CACertificatesFile) and
               (tls1.CACertificatesRaw       = tls2.CACertificatesRaw) and
               (tls1.CASystemStores          = tls2.CASystemStores) and
