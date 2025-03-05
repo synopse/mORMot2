@@ -3641,7 +3641,7 @@ end;
 
 
 const
-  // was generated from InitNetTlsContextSelfSignedServer commented lines
+  // was generated from InitNetTlsContextSelfSignedServer() commented lines
   // - .pfx/pkcs#12 of RSA-2048 cert+pk for CN:127.0.0.1 valid until 03/03/2035
   // - was regenerated with OpenSSL 3.x to avoid usage of legacy RC2 algorithm
   // as the initial constant did - so that TCryptCertOpenSsl.Load() can succeed

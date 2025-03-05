@@ -3931,8 +3931,6 @@ end;
 
 function THttpRequestContext.ProcessBody(
   var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
-var
-  available: Int64;
 begin
   // THttpAsyncConnection.DoRequest did send the headers: now send body chunk(s)
   if ContentLength = 0 then
@@ -3944,13 +3942,10 @@ begin
   // support progressive/partial ContentStream process
   if rfProgressiveStatic in ResponseFlags then
   begin
-    result := DoProgressive(available);
-    if result <> hrpSend then
-      exit; // e.g. hrpWait or hrpAbort
-    if available < MaxSize then
-      MaxSize := available; // send what we got until now
+    result := DoProgressive(Dest, MaxSize);
+    exit;
   end;
-  // send in the background, using polling up to MaxSize (256KB typical)
+  // send in the background, using polling up to MaxSize (128/256KB typical)
   if ContentLength < MaxSize then
     MaxSize := ContentLength;
   if MaxSize <= 0 then
@@ -4001,7 +3996,7 @@ begin
     begin
       ContentStream := TFileStreamEx.CreateFromHandle(h, gz);
       include(ResponseFlags, rfContentStreamNeedFree);
-      ContentLength := FileSize(h);
+      FileInfoByHandle(h, nil, @ContentLength, @ContentLastModified, nil);
       fContentEncoding := 'gzip';
       result := HTTP_SUCCESS;
       exit; // force ContentStream of raw .gz file to bypass recompression
@@ -4053,11 +4048,11 @@ begin
   result := true;
 end;
 
-function THttpRequestContext.DoProgressive(
-  out availablesize: Int64): THttpRequestProcessBody;
+function THttpRequestContext.DoProgressive(var Dest: TRawByteStringBuffer;
+  MaxSize: PtrInt): THttpRequestProcessBody;
 var
   tix: cardinal;
-  offs: Int64;
+  offs, avail: Int64;
 begin
   result := hrpAbort;
   // check if OnDownloadingFailed() notified to abort
@@ -4084,11 +4079,11 @@ begin
       exit; // abort if file is not readable
     end;
   // check current state of the progressive/partial file
-  availablesize := ContentStream.Size;
+  avail := ContentStream.Size;
   // implement RangeOffset
   offs := RangeOffset;
   if offs <> 0 then
-    if availablesize >= offs then
+    if avail >= offs then
       if ContentStream.Seek(offs, soBeginning) <> offs then
         exit // paranoid
       else
@@ -4103,15 +4098,25 @@ begin
   offs := ContentStream.Seek(0, soCurrent); // current position
   if offs < 0 then
     exit; // FileSeek() returned -1 on error: something is wrong with this file
-  dec(availablesize, offs);
-  if availablesize <= 0 then
+  dec(avail, offs);
+  if avail <= 0 then
   begin
     if tix < fProgressiveTix then
       result := hrpWait; // wait until got some data
     exit;
   end;
-  // we have something to send
+  // we have something to send - inlined ProcessBody()
   fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
+  if avail < MaxSize then
+    MaxSize := avail; // send what we got until now
+  if ContentLength < MaxSize then
+    MaxSize := ContentLength;
+  if MaxSize <= 0 then
+    exit; // abort on server logic failure
+  Process.Reserve(MaxSize);
+  MaxSize := ContentStream.Read(Process.Buffer^, MaxSize);
+  Dest.Append(Process.Buffer, MaxSize);
+  dec(ContentLength, MaxSize);
   result := hrpSend;
 end;
 
