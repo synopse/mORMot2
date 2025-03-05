@@ -815,7 +815,6 @@ function PrivKeyCertPfx: RawByteString;
 // - if UsePreComputed=true or on pure SChannel, will use the PrivKeyCertPfx
 // pre-computed constant
 // - you should eventually call DeleteFile(Utf8ToString(TLS.CertificateFile))
-// and DeleteFile(Utf8ToString(TLS.PrivateKeyFile)) to delete the two temp files
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo = caaRS256; UsePreComputed: boolean = false);
 
@@ -3801,34 +3800,35 @@ begin
   FastSetRawByteString(result, @PRIVKEY_PFX, SizeOf(PRIVKEY_PFX));
 end;
 
+var
+  SharedCert: ICryptCert; // loaded or generated once
+
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo; UsePreComputed: boolean);
 var
-  cert: ICryptCert;
-  certfile, keyfile: TFileName;
-  keypass: RawUtf8;
+  certfile: TFileName;
 begin
-  certfile := TemporaryFileName;
-  if UsePreComputed or
-     (CryptCertOpenSsl[Algo] = nil) then
-     // we can't use CryptCertX509[] because SSPI requires PFX binary format
+  InitNetTlsContext(TLS, {server=}true);
+  if CryptCertOpenSsl[Algo] = nil then // no OpenSSL: use embedded PFX
+  // can't use CryptCertX509[] because SChannel/SSPI requires PFX binary format
   begin
+    certfile := TemporaryFileName;
     FileFromString(PrivKeyCertPfx, certfile); // use pre-computed key
-    keypass := 'pass';
-    // warning: will work with SSPI but NOT with OpenSSL
-  end
-  else
-  begin
-    keyfile := TemporaryFileName;
-    keypass := CardinalToHexLower(Random32Not0);
-    cert := CryptCertOpenSsl[Algo].
-              Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650);
-    cert.SaveToFile(certfile, cccCertOnly, '', ccfPem);
-    cert.SaveToFile(keyfile, cccPrivateKeyOnly, keypass, ccfPem);
-    //writeln(BinToSource('PRIVKEY_PFX', '',
-    //  cert.Save(cccCertWithPrivateKey, 'pass', ccfBinary)));
+    TLS.CertificateFile := StringToUtf8(certfile);
+    TLS.PrivatePassword := 'pass';
+    exit;
   end;
-  InitNetTlsContext(TLS, {server=}true, certfile, keyfile, keypass);
+  if SharedCert = nil then
+  begin
+    SharedCert := CryptCertOpenSsl[Algo].New;
+    // OpenSSL 3.x can't load our PRIVKEY_PFX due to legacy MD4 algo usage
+    SharedCert.Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650);
+    //writeln(BinToSource('PRIVKEY_PFX', '', // forcing SHA1-3DES legacy format
+    //  SharedCert.Save(cccCertWithPrivateKey, '3des=pass', ccfBinary)));
+  end;
+  // no temporary file needed: we just provide the shared OpenSSL handles
+  TLS.CertificateRaw := SharedCert.Handle;           // PX509
+  TLS.PrivateKeyRaw  := SharedCert.PrivateKeyHandle; // PEVP_PKEY
 end;
 
 const
@@ -4080,8 +4080,9 @@ begin
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (TLS <> nil) and
-     (TLS^.CertificateFile <> '') and
+     (TLS <> nil) and(
+      (TLS^.CertificateFile <> '') or
+      (TLS^.CertificateRaw <> nil)) and
      ((fSock = nil) or
       not fSock.TLS.Enabled) then
   begin
@@ -4106,8 +4107,8 @@ begin
   try
     WaitStarted(Seconds, @net);
   finally
-    DeleteFile(Utf8ToString(net.CertificateFile));
-    DeleteFile(Utf8ToString(net.PrivateKeyFile));
+    if net.CertificateFile <> '' then // only needed with SChannel
+      DeleteFile(Utf8ToString(net.CertificateFile));
   end;
 end;
 

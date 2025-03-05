@@ -4000,6 +4000,8 @@ begin
              ((tls1.IgnoreCertificateErrors = tls2.IgnoreCertificateErrors) and
               (tls1.CertificateFile         = tls2.CertificateFile) and
               (tls1.CACertificatesFile      = tls2.CACertificatesFile) and
+              (tls1.CACertificatesRaw       = tls2.CACertificatesRaw) and
+              (tls1.CASystemStores          = tls2.CASystemStores) and
               (tls1.CertificateRaw          = tls2.CertificateRaw) and
               (tls1.PrivateKeyFile          = tls2.PrivateKeyFile) and
               (tls1.PrivatePassword         = tls2.PrivatePassword) and
