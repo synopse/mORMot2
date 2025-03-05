@@ -2302,14 +2302,16 @@ type
     // - used internally to quickly retrieve the TCryptCert from an ICryptCert
     function Instance: TCryptCert;
     /// access to the low-level implementation handle of the certificate
-    // - e.g. a PX509 for OpenSsl, aTEccCertificate class for mormot.crypt.ecc,
+    // - e.g. a PX509 for OpenSsl, a TEccCertificate class for mormot.crypt.ecc,
     // or a TX509 class for mormot.crypt.x509
     // - equals nil if there is no associated certificate yet, e.g. after New
+    // - can be assigned e.g. to TNetTlsContext.CertificateRaw for OpenSSL
     function Handle: pointer;
     /// access to the low-level implementation handle of the stored private key
     // - e.g. a PEVP_PKEY for OpenSsl, a PEccPrivateKey for mormot.crypt.ecc,
-    // or a ICryptPrivateKey weak instance for mormot.crypt.x509
+    // or a ICryptPrivateKey weak reference for mormot.crypt.x509
     // - equals nil if there is no associated private key
+    // - can be assigned e.g. to TNetTlsContext.PrivateKeyRaw for OpenSSL
     function PrivateKeyHandle: pointer;
     /// return the public BigInt values associated to the stored private key
     // - as BigInt binaries, ready e.g. for JWS / JSON Web Key responses

@@ -814,7 +814,6 @@ function PrivKeyCertPfx: RawByteString;
 // Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650) with a random password
 // - if UsePreComputed=true or on pure SChannel, will use the PrivKeyCertPfx
 // pre-computed constant
-// - you should eventually call DeleteFile(Utf8ToString(TLS.CertificateFile))
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo = caaRS256; UsePreComputed: boolean = true);
 
@@ -3805,36 +3804,28 @@ begin
 end;
 
 var
-  SharedCert: ICryptCert; // loaded or generated once
+  SharedCert: array[TCryptAsymAlgo] of ICryptCert; // generated once per algo
 
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo; UsePreComputed: boolean);
-var
-  certfile: TFileName;
 begin
   InitNetTlsContext(TLS, {server=}true);
-  if CryptCertOpenSsl[Algo] = nil then // no OpenSSL: use embedded PFX
+  if UsePrecomputed or
+     (CryptCertOpenSsl[Algo] = nil) then // pure SChannel can use embedded PFX
   // can't use CryptCertX509[] because SChannel/SSPI requires PFX binary format
   begin
-    certfile := TemporaryFileName;
-    FileFromString(PrivKeyCertPfx, certfile); // use pre-computed key
-    TLS.CertificateFile := StringToUtf8(certfile);
+    TLS.CertificateBin := PrivKeyCertPfx; // use pre-computed key
     TLS.PrivatePassword := 'pass';
     exit;
   end;
-  if SharedCert = nil then
-  begin
-    SharedCert := CryptCertOpenSsl[Algo].New;
-    if UsePrecomputed then
-      SharedCert.Load(PrivKeyCertPfx, cccCertWithPrivateKey, 'pass') // pkcs#12
-    else
-      SharedCert.Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650);
-    //writeln(BinToSource('PRIVKEY_PFX', '', // forcing SHA1-3DES legacy format
-    //  SharedCert.Save(cccCertWithPrivateKey, '3des=pass', ccfBinary)));
-  end;
+  if SharedCert[Algo] = nil then // reuse a per-algo ICryptCert instance
+    SharedCert[Algo] := CryptCertOpenSsl[Algo].Generate(
+      CU_TLS_SERVER, '127.0.0.1', nil, 3650);
+  //writeln(BinToSource('PRIVKEY_PFX', '', // force SHA1-3DES legacy format
+  //  SharedCert.Save(cccCertWithPrivateKey, '3des=pass', ccfBinary)));
   // no temporary file needed: we just provide the shared OpenSSL handles
-  TLS.CertificateRaw := SharedCert.Handle;           // PX509
-  TLS.PrivateKeyRaw  := SharedCert.PrivateKeyHandle; // PEVP_PKEY
+  TLS.CertificateRaw := SharedCert[Algo].Handle;           // PX509
+  TLS.PrivateKeyRaw  := SharedCert[Algo].PrivateKeyHandle; // PEVP_PKEY
 end;
 
 const
@@ -4114,12 +4105,7 @@ var
   net: TNetTlsContext;
 begin
   InitNetTlsContextSelfSignedServer(net, caaRS256, UsePreComputed);
-  try
-    WaitStarted(Seconds, @net);
-  finally
-    if net.CertificateFile <> '' then // only needed with SChannel
-      DeleteFile(Utf8ToString(net.CertificateFile));
-  end;
+  WaitStarted(Seconds, @net);
 end;
 
 function THttpServerSocketGeneric.GetStat(
