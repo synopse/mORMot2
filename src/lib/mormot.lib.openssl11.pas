@@ -10203,23 +10203,6 @@ begin
   result := BioLoad(Der, @d2i_X509_REQ_bio);
 end;
 
-function IsPem(p: PUtf8Char): boolean;
-begin
-  result := true;
-  repeat
-    p := PosChar(p, '-');
-    if p = nil then
-      break;
-    repeat
-      inc(p);
-      if (PCardinal(p)^ = $2d2d2d2d) and  // -----BEGIN
-         (PCardinal(p + 4)^ = ord('B') + ord('E') shl 8 + ord('G') shl 16 + ord('I') shl 24) then
-        exit;
-    until p^ <> '-';
-  until p^ = #0;
-  result := false;
-end;
-
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const Password: SpiUtf8; Pkcs12Cert: PPX509): PEVP_PKEY;
 var
@@ -10234,7 +10217,7 @@ begin
   begin
     pw := PassNotNil(Password);
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
-    if IsPem(PrivateKey) then
+    if NetIsPem(PrivateKey) then
       result := PEM_read_bio_PrivateKey(priv, nil, nil, pw)
     else
       result := nil;
@@ -10282,7 +10265,7 @@ begin
   else
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-    if IsPem(PublicKey) then
+    if NetIsPem(PublicKey) then
       result := PEM_read_bio_PUBKEY(pub, nil, nil, PassNotNil(Password))
     else
       result := nil;
@@ -10339,7 +10322,7 @@ var
   x: PX509DynArray;
 begin
   result := nil;
-  if IsPem(pointer(DerOrPem)) then
+  if NetIsPem(pointer(DerOrPem)) then
   begin
     x := LoadCertificates(DerOrPem, {max=}1); // read first PEM
     if x <> nil then

@@ -1650,6 +1650,10 @@ function NetStartWith(p, up: PUtf8Char): boolean;
 /// BinToBase64() like function, to avoid linking mormot.core.buffers
 function NetBinToBase64(const s: RawByteString): RawUtf8;
 
+/// IsPem() like function, to avoid linking mormot.crypt.secure
+// - search for '-----BEGIN' text, so may hardly give some false positives
+function NetIsPem(p: PUtf8Char): boolean;
+
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
 
@@ -5010,6 +5014,25 @@ begin
     exit;
   SetLength(result, ((len + 2) div 3) * 4);
   DoEncode(pointer(result), pointer(s), @b64, len);
+end;
+
+function NetIsPem(p: PUtf8Char): boolean;
+var
+  c: cardinal;
+begin
+  result := true;
+  repeat
+    p := PosChar(p, '-'); // may use SSE2 asm
+    if p = nil then
+      break;
+    repeat
+      inc(p);
+      if (PCardinal(p)^ = $2d2d2d2d) and  // -----BEGIN
+         (PCardinal(p + 4)^ = ord('B') + ord('E') shl 8 + ord('G') shl 16 + ord('I') shl 24) then
+        exit;
+    until p^ <> '-'
+  until p^ = #0;
+  result := false;
 end;
 
 function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
