@@ -10203,16 +10203,17 @@ begin
   result := BioLoad(Der, @d2i_X509_REQ_bio);
 end;
 
-function IsPem(p: PUtf8Char; up: PUtf8Char = '-----BEGIN'): boolean;
+function IsPem(p: PUtf8Char): boolean;
 begin
   result := true;
   repeat
     p := PosChar(p, '-');
     if p = nil then
       break;
-    if NetStartWith(p, up) then // naive but good enough
-      exit;
     inc(p);
+    if (PCardinal(p)^ = $2d2d2d2d) and  // -----BEGIN
+       (PCardinal(p + 4)^ = ord('B') + ord('E') shl 8 + ord('G') shl 16 + ord('I') shl 24) then
+      exit;
   until false;
   result := false;
 end;
