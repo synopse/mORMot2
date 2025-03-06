@@ -7076,7 +7076,7 @@ begin
             end;
       end;
       // start the GET request to the remote URI into aFileName via a sub-thread
-      Make(['direct', cs.PartialID], err);
+      Make(['direct-', cs.PartialID], err);
       TLoggedWorkThread.Create(fLog, err, cs, DirectFileNameBackgroundGet);
       cs := nil; // will be owned by TLoggedWorkThread from now on
       result := HTTP_SUCCESS;
@@ -7183,11 +7183,11 @@ begin
     exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
+  http := (Ctxt as THttpServerRequest).fHttp;
   if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg, @opt), 'OnRequest', msg) then
   try
     // resource will always be identified by decoded bearer hash
     progsize := 0;
-    http := (Ctxt as THttpServerRequest).fHttp;
     case msg.Kind of
       pcfBearerDirect,
       pcfBearerDirectPermanent:
@@ -7244,11 +7244,13 @@ begin
         AddReprDigest(Ctxt, msg.Hash);
     end;
   finally
-    errtxt := GetEnumNameUnCamelCase(TypeInfo(TOnRequestError), ord(err));
+    if err <> oreOK then
+      errtxt := GetEnumNameUnCamelCase(TypeInfo(TOnRequestError), ord(err));
     if not StatusCodeIsSuccess(result) then
       Ctxt.OutContent := Make([StatusCodeToErrorMsg(result), ' - ', errtxt]);
-    fLog.Add.Log(sllDebug, 'OnRequest=% from % % as % % (%)',
-      [result, Ctxt.RemoteIP, Ctxt.Url, fn, progsize, errtxt], self);
+    fLog.Add.Log(sllDebug, 'OnRequest=% % % % fn=% progsiz=% progid=% %',
+      [result, Ctxt.Method, Ctxt.RemoteIP, Ctxt.Url, fn, progsize,
+       http^.ProgressiveID, errtxt], self);
   end;
 end;
 
