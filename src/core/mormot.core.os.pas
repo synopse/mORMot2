@@ -4008,7 +4008,7 @@ type
 // in mormot.core.search to efficiently implement name mask search with a TMatch
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil;
-  ExcludesDir: boolean = false): TRawUtf8DynArray;
+  ExcludesDir: boolean = false; IncludeHiddenFiles: boolean = false): TRawUtf8DynArray;
 
 {$endif OSWINDOWS}
 

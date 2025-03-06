@@ -2414,7 +2414,8 @@ const
   DT_WHT      = 14;
 
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
-  OnFile: TOnPosixFileName; OnFileOpaque: pointer; ExcludesDir: boolean): TRawUtf8DynArray;
+  OnFile: TOnPosixFileName; OnFileOpaque: pointer;
+  ExcludesDir, IncludeHiddenFiles: boolean): TRawUtf8DynArray;
 var
   n: PtrInt;
   root: TFileName;
@@ -2443,6 +2444,9 @@ var
           if Assigned(OnFile) and
              not OnFile(OnFileOpaque, ent^.d_name, entlen) then
             continue // e.g. no MatchAnyP()
+          else if not IncludeHiddenFiles and
+                  (ent^.d_name[0] = '.') then
+            continue
           else
             withsub := not ExcludesDir;
         DT_DIR:
