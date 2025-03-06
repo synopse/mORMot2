@@ -1900,8 +1900,11 @@ begin
     begin
       Check(not IsPem(b64));
       Check(not IsPem(b32));
+      Check(not NetIsPem(pointer(b64)));
+      Check(not NetIsPem(pointer(b32)));
       b64 := DerToPem(pointer(tmp), length(tmp), TPemKind(i and 7));
       Check(IsPem(b64));
+      Check(NetIsPem(pointer(b64)));
       CheckUtf8(PemToDer(b64) = tmp, b64);
       P := pointer(b64);
       CheckEqual(NextPem(P, @k), b64);
