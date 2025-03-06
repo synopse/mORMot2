@@ -6381,9 +6381,11 @@ end;
 
 function THttpPeerCache.TempFolderEstimateNewSize(aAddingSize: Int64): Int64;
 var
-  i: PtrInt;
+  i: integer;
   deleted: Int64;
   dir: TFindFilesDynArray;
+  d: PFindFiles;
+  fn: TFileName;
 begin
   // check if the file is clearly too big to be cached
   result := aAddingSize;
@@ -6391,11 +6393,15 @@ begin
     exit;
   // compute the current folder cache size
   result := fTempCurrentSize;
-  if result = 0 then // first time, or after OnIdle
+  if result = 0 then // first time, or after OnIdle DirectoryDeleteOlderFiles()
   begin
-    dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
-    for i := 0 to high(dir) do
-      inc(result, dir[i].Size);
+    dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN, '', [ffoExcludesDir]);
+    d := pointer(dir);
+    for i := 1 to length(dir) do
+    begin
+      inc(result, d^.Size);
+      inc(d);
+    end;
     fTempCurrentSize := result;
   end;
   // enough space to write this file?
@@ -6404,17 +6410,23 @@ begin
     exit;
   // delete oldest files in cache up to CacheTempMaxMB
   if dir = nil then
-    dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
+    dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN, '', [ffoExcludesDir]);
   FindFilesSortByTimestamp(dir);
   deleted := 0;
-  for i := 0 to high(dir) do
-    if DeleteFile(dir[i].Name) then // if not currently downloading
-    begin
-      dec(result, dir[i].Size);
-      inc(deleted, dir[i].Size);
-      if result < fTempFilesMaxSize then
-        break; // we have deleted enough old files
-    end;
+  d := pointer(dir);
+  for i := 1 to length(dir) do
+  begin
+    fn := fTempFilesPath + d^.Name;
+    if not fPartials.FindFile(fn) then // if not currently downloading
+      if DeleteFile(fn) then
+      begin
+        dec(result, d^.Size);
+        inc(deleted, d^.Size);
+        if result < fTempFilesMaxSize then
+          break; // we have deleted enough old files
+      end;
+    inc(d);
+  end;
   fLog.Add.Log(sllTrace, 'OnDownloaded: deleted %', [KB(deleted)], self);
   dec(fTempCurrentSize, deleted);
 end;
@@ -6718,7 +6730,7 @@ begin
     if size = 0 then
       exit; // nothing changed on disk
     fLog.Add.Log(sllTrace, 'OnIdle: deleted %', [KBNoSpace(size)], self);
-    fTempCurrentSize := 0; // we need to call FindFiles()
+    fTempCurrentSize := 0; // folder change: need to call FindFiles() again
   finally
     fFilesSafe.UnLock; // re-allow background file access
   end;
