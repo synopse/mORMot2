@@ -1052,9 +1052,11 @@ type
     fAuthorizeBasic: TOnHttpServerBasicAuth;
     fAuthorizeBasicRealm: RawUtf8;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fOnProgressiveRequestFree: THttpPartials;
+    fProgressiveRequests: THttpPartials;
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean; // fRoute or Request()
+    function DoProcessBody(var Ctxt: THttpRequestContext;
+      var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
     procedure DoProgressiveRequestFree(var Ctxt: THttpRequestContext);
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
@@ -3162,7 +3164,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     fn := Utf8ToString(OutContent); // safer than Utf8ToFileName() here
     OutContent := '';
     ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
-    SetInt64(pointer(progsizeHeader), Context.ContentLength);
+    SetInt64(pointer(progsizeHeader), Context.ContentLength); // expected size
     if Context.ContentLength <> 0 then
       // STATICFILE_PROGSIZE: file is not fully available: wait for sending
       if ((not (rfWantRange in Context.ResponseFlags)) or
@@ -3171,10 +3173,11 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
         h := FileOpen(fn, fmOpenReadShared);
         if ValidHandle(h) then
         begin
-          Context.ContentStream := TFileStreamEx.CreateFromHandle(h, fn);
+          FileInfoByHandle(h, nil, nil, @Context.ContentLastModified, nil);
+          FileClose(h);
+          Context.ContentStream := TStreamWithPositionAndSize.Create; // <> nil
           Context.ResponseFlags := Context.ResponseFlags +
             [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
-          FileInfoByHandle(h, nil, nil, @Context.ContentLastModified, nil);
         end
         else
           fRespStatus := HTTP_NOTFOUND
@@ -4186,18 +4189,33 @@ begin
   end;
 end;
 
+function THttpServerSocketGeneric.DoProcessBody(var Ctxt: THttpRequestContext;
+  var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
+begin
+  // called when up to MaxSize (128/256KB typical) bytes could be sent
+  result := hrpDone;
+  if Ctxt.ContentLength = 0 then
+    // we just finished background ProcessWrite of the last chunk
+    Ctxt.State := hrsResponseDone
+  else if Ctxt.State = hrsSendBody then
+    if rfProgressiveStatic in Ctxt.ResponseFlags then
+      // support progressive/partial body process
+      result := fProgressiveRequests.ProcessBody(Ctxt, Dest, MaxSize)
+    else
+      // send in the background from ContentStream / fContentPos
+      result := Ctxt.ProcessBody(Dest, MaxSize);
+end;
+
 procedure THttpServerSocketGeneric.DoProgressiveRequestFree(
   var Ctxt: THttpRequestContext);
 begin
-  if Assigned(fOnProgressiveRequestFree) and
-     (rfProgressiveStatic in Ctxt.ResponseFlags) then
-  begin
-    try
-      fOnProgressiveRequestFree.Remove(@Ctxt);
-    except
-      ; // ignore any exception in callbacks
-    end;
-    exclude(Ctxt.ResponseFlags, rfProgressiveStatic); // remove it once
+  if (fProgressiveRequests = nil) or
+     not (rfProgressiveStatic in Ctxt.ResponseFlags) then
+    exit;
+  try
+    fProgressiveRequests.Remove(@Ctxt);
+  except
+    ; // ignore any exception in callbacks
   end;
 end;
 
@@ -6183,7 +6201,7 @@ begin
     fPartials := THttpPartials.Create;
     if fVerboseLog then
       fPartials.OnLog := fLog.DoLog;
-    srv.fOnProgressiveRequestFree := fPartials;
+    srv.fProgressiveRequests := fPartials;
     // actually start and wait for the local HTTP(S) server to be available
     if fServerTls.Enabled then
     begin
