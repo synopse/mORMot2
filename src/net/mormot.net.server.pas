@@ -4565,6 +4565,7 @@ var
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
+  SetCurrentThreadName('=httpA-%', [fSockPort]);
   NotifyThreadStart(self);
   bansec := 0;
   // main server process loop
@@ -4691,6 +4692,7 @@ begin
   fSafe.Lock;
   fExecuteState := esFinished;
   fSafe.UnLock;
+  TSynLog.Add.NotifyThreadEnded;
 end;
 
 procedure THttpServer.OnConnect;
@@ -5253,6 +5255,7 @@ procedure THttpServerResp.Execute;
 var
   netsock: TNetSocket;
 begin
+  SetCurrentThreadName('=conn-%', [fServerSock.RemoteConnectionID]);
   fServer.NotifyThreadStart(self);
   try
     try
@@ -5298,6 +5301,7 @@ begin
     on Exception do
       ; // just ignore unexpected exceptions here, especially during clean-up
   end;
+  TSynLog.Add.NotifyThreadEnded;
 end;
 
 
@@ -5310,6 +5314,7 @@ begin
   fOnThreadTerminate := fServer.fOnThreadTerminate;
   fBigBodySize := THREADPOOL_BIGBODYSIZE;
   fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
+  fPoolName := 'http';
   inherited Create(NumberOfThreads,
     {$ifdef USE_WINIOCP} INVALID_HANDLE_VALUE {$else} {queuepending=}true{$endif},
     Server.ProcessName);
