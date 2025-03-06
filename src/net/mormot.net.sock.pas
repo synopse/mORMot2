@@ -6149,8 +6149,8 @@ begin
   read := Length;
   if not TrySockRecv(Buffer, read, {StopBeforeLength=}false, @res) or
      (Length <> read) then
-    raise ENetSock.CreateLastError('%s.SockRecv(%d) read=%d',
-      [ClassNameShort(self)^, Length, read], res);
+    raise ENetSock.CreateLastError('%s.SockRecv(%d) read=%d at %s:%s',
+      [ClassNameShort(self)^, Length, read, fServer, fPort], res);
 end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
@@ -6281,7 +6281,7 @@ begin
       else if neRead in events then
         continue; // retry Recv()
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'TrySockRecv: timeout after %ms)', [TimeOut], self);
+        OnLog(sllTrace, 'TrySockRecv: timeout after %s', [TimeOut div 1000], self);
       res := nrTimeout;  // identify read timeout as error
       break;
     until fAborted;
