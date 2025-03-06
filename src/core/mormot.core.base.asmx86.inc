@@ -1195,7 +1195,7 @@ asm
 @no:    mov     eax, -1
         pop     ebx
         ret
-        // 16bit-unaligned loop (seldom called)
+        // 16bit-unaligned loop (hardly called)
 @unal:  lea     ecx, [ecx + edx * 2]
         neg     edx
 @unals: cmp     word ptr [ecx + edx * 2], ax
@@ -1254,7 +1254,7 @@ asm
 @no:    mov     eax, -1
         pop     ebx
         ret
-        // 32bit-unaligned loop (seldom called)
+        // 32bit-unaligned loop (hardly called)
 @unal:  lea     ecx, [ecx + edx * 4]
         neg     edx
 @unals: cmp     dword ptr [ecx + edx * 4], eax

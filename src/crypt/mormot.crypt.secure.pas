@@ -3321,6 +3321,7 @@ function NextPemToDer(var P: PUtf8Char; Kind: PPemKind = nil): TCertDer;
 
 /// quickly check the begin/end of a single-instance PEM text
 // - do not validate the internal Base64 encoding, just the trailer/ending lines
+// so may (hardly) give some false positive
 // - expects at least a single-instance PEM, with ----BEGIN and -----END markers
 function IsPem(const pem: RawUtf8): boolean;
 
@@ -8758,7 +8759,7 @@ var
 begin
   i := PosEx('-----BEGIN', pem); // ignore e.g. any trailing comments
   result := (i <> 0) and
-            (PosEx('-----END', pem, i + 10) <> 0);
+            (PosEx('-----END', pem, i + 10) <> 0); // rough analysis
 end;
 
 function IsPemEncrypted(const pem: TCertPem): boolean;

@@ -4845,7 +4845,7 @@ begin
       inc(B, Len);
     end
     else
-      AddNoJsonEscapeBig(P, Len); // big chunks (seldom used)
+      AddNoJsonEscapeBig(P, Len); // big chunks (hardly the case)
 end;
 
 procedure TTextWriter.AddNoJsonEscape(P: pointer);

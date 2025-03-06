@@ -3860,7 +3860,7 @@ begin
       inc(P);
     until jcJsonStringMarker in tab[P^]; // [#0, '"', '\']
     if P^ <> '"' then
-      // we need to handle a complex property name (seldom encoutered)
+      // we need to handle a complex property name (hardly encoutered)
       if P^ = #0 then
         exit
       else if NoJsonUnescape then
@@ -5809,7 +5809,7 @@ begin
       cv := FindSynVariantType(vt); // our custom types
       if cv <> nil then
         cv.ToJson(Ctxt.W, Data)
-      else // unsupported or seldom used
+      else // unsupported or seldom appearing
         Ctxt.W.AddVariant(PVariant(Data)^, twJsonEscape, Ctxt.Options);
     end;
   end;

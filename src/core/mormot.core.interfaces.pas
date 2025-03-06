@@ -3416,7 +3416,7 @@ begin
     W.CancelAllAsNew;
   end
   else 
-    // paranoid thread-safety call with its own temp buffer (seldom called)
+    // paranoid thread-safety call with its own temp buffer (hardly called)
     W := TJsonWriter.CreateOwnedStream(8192);
   try
     if ifoJsonAsExtended in fOptions then

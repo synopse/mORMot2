@@ -7157,7 +7157,7 @@ begin
         if result = 0 then
         begin
           log := fLogClass.Enter(self, 'SessionDeleteDeprecated');
-          fSessions.Safe.WriteLock; // upgrade the lock (seldom)
+          fSessions.Safe.WriteLock; // upgrade the lock (hardly)
         end;
         LockedSessionDelete(i, nil);
         inc(result);

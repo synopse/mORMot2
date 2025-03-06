@@ -3736,7 +3736,7 @@ begin
       i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
       if i < 0 then // really need to create
       begin
-        if CodePage = CP_UTF16 then // seldom used: no global variable
+        if CodePage = CP_UTF16 then // hardly used: no global variable
           result := TSynAnsiUtf16.Create(CP_UTF16)
         else if IsFixedWidthCodePage(CodePage) then
           result := TSynAnsiFixedWidth.Create(CodePage) // use lookup table
@@ -4657,7 +4657,7 @@ end;
 procedure RawUnicodeSwapEndian(buf: PWord; len: PtrInt);
 begin // internal function used with len > 0
   repeat
-    buf^ := bswap16(buf^); // fast enough for our purpose (seldom used)
+    buf^ := bswap16(buf^); // fast enough for our purpose (hardly used)
     inc(buf);
     dec(len)
   until len = 0;

@@ -1641,7 +1641,7 @@ function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 /// parse a text input buffer until the end space or EOL
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
-/// RawUtf8-ready result := v + v + ... concatenation for FPC
+/// RawUtf8-ready result := v + v + ... concatenation (safer and faster on FPC)
 function NetConcat(const v: array of RawUtf8): RawUtf8;
 
 /// IdemPChar() like function, to avoid linking mormot.core.text

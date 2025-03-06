@@ -2940,7 +2940,7 @@ function Unicode_CodePage: integer;
 // - will compute StrLen(PW1/PW2) if L1 or L2 < 0
 // - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
 // with a temporary variable - you would need to include cwstring unit
-// - in practice, is seldom called, unless our proprietary WIN32CASE collation
+// - in practice, is hardly called, unless our proprietary WIN32CASE collation
 // is used in mormot.db.raw.sqlite3, or via Utf8CompareOS() or Utf8CompareIOS()
 // functions from mormot.core.unicode
 // - consider Utf8ILCompReference() from mormot.core.unicode.pas for an
@@ -5896,7 +5896,7 @@ begin
   result := ShortToUuid(tmp, uuid); // may call mormot.core.text
 end;
 
-procedure UuidToText(const u: TGuid; var result: RawUtf8); // seldom used
+procedure UuidToText(const u: TGuid; var result: RawUtf8); // rarely called
 var
   tmp: ShortString;
 begin

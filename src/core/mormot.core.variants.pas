@@ -4235,7 +4235,7 @@ const
     'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',
     'String', 'UString', 'Any', 'Array', 'DocVariant');
 var
-  _VariantTypeNameAsInt: shortstring; // seldom called
+  _VariantTypeNameAsInt: shortstring; // not thread-safe, but hardly called
 
 function VariantTypeName(V: PVarData): PShortString;
 var

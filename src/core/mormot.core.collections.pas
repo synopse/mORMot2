@@ -707,7 +707,7 @@ type
     {.$define SPECIALIZE_SMALL}
 
     // enable cold compilation of THash128/TGuid and THash256/THash612
-    // - those types are seldom used, so not cold compiled by default
+    // - those types are hardly used, so not cold compiled by default
     {.$define SPECIALIZE_HASH}
 
     // WideString are slow - RawUtf8 or UnicodeString are to be used instead -
