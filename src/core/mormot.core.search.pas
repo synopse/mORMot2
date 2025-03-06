@@ -72,12 +72,14 @@ type
 
   /// one optional feature of FindFiles()
   // - ffoSortByName will sort the result files by extension then name
+  // - ffoSortByFullName will sort the result files by name but not extension
   // - ffoExcludesDir won't include the path in TFindFiles.Name
   // - ffoSubFolder will search within nested folders
   // - ffoIncludeFolder will add the nested folders
   // - ffoIncludeHiddenFiles will add any hidden file (on Windows)
   TFindFilesOption = (
     ffoSortByName,
+    ffoSortByFullName,
     ffoExcludesDir,
     ffoSubFolder,
     ffoIncludeFolder,
@@ -1723,16 +1725,19 @@ begin
 end;
 
 function SortDynArrayFindFiles(const A, B): integer;
+var
+  fa: TFindFiles absolute A;
+  fb: TFindFiles absolute B;
 begin
-  if TFindFiles(A).Size < 0 then
-    if TFindFiles(B).Size < 0 then
-      result := SortDynArrayFileName(A, B) // both are folders
+  if fa.Size < 0 then
+    if fb.Size < 0 then
+      result := SortDynArrayFileName(fa.Name, fb.Name) // both are folders
     else
-      result := -1                         // folders first
-  else if TFindFiles(B).Size < 0 then
-    result := 1                           // files last
+      result := -1 // folders first
+  else if fb.Size < 0 then
+    result := 1    // files last
   else
-    result := SortDynArrayFileName(A, B); // both are files
+    result := SortDynArrayFileName(fa.Name, fb.Name); // both are files
 end;
 
 function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
@@ -1792,7 +1797,7 @@ begin
   if masks <> nil then
   begin
     // recursive calls for each masks[], optionally sorted by mask
-    if ffoSortByName in Options then
+    if Options * [ffoSortByName, ffoSortByFullName] <> [] then
       QuickSortRawUtf8(masks, length(masks), nil,
         {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
     for m := 0 to length(masks) - 1 do
@@ -1808,9 +1813,15 @@ begin
     if Directory <> '' then
       dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
-    if (ffoSortByName in Options) and
-       (da.Count > 1) then
-      da.Sort(SortDynArrayFindFiles);
+    if count > 1 then
+      if ffoSortByName in Options then
+        da.Sort(SortDynArrayFindFiles) // use RTL and "natural" order
+      else if ffoSortByFullName in Options then
+        {$ifdef OSWINDOWS}
+        da.Sort(SortDynArrayStringI); // case-insensitive on Windows
+        {$else}
+        da.Sort(SortDynArrayString); // StrComp() is good enough on POSIX
+        {$endif OSWINDOWS}
   end;
   if count <> 0 then
     DynArrayFakeLength(result, count);
@@ -1826,7 +1837,7 @@ var
 begin
   {$ifdef OSPOSIX}
   if (Options * [ffoIncludeFolder] = []) and
-     ((Options * [ffoSortByName] = []) or
+     ((Options * [ffoSortByName, ffoSortByFullName] = []) or
       (PosExChar(';', Mask) = 0)) then // sort on multi-mask not yet implemented
   begin
     // use much faster PosixFileNames() low-level function over TMatchDynArray
@@ -1843,7 +1854,9 @@ begin
     if IgnoreFileName <> '' then
       DeleteRawUtf8(result, FindRawUtf8(result, IgnoreFileName));
     if ffoSortByName in Options then
-      QuickSortRawUtf8(result, length(result), nil, StrCompPosixFileName);)
+      QuickSortRawUtf8(result, length(result), nil, StrCompPosixFileName)
+    else if ffoSortByFullName in Options then
+      QuickSortRawUtf8(result, length(result));
   end
   else
   {$endif OSPOSIX}
