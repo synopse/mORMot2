@@ -10210,11 +10210,13 @@ begin
     p := PosChar(p, '-');
     if p = nil then
       break;
-    inc(p);
-    if (PCardinal(p)^ = $2d2d2d2d) and  // -----BEGIN
-       (PCardinal(p + 4)^ = ord('B') + ord('E') shl 8 + ord('G') shl 16 + ord('I') shl 24) then
-      exit;
-  until false;
+    repeat
+      inc(p);
+      if (PCardinal(p)^ = $2d2d2d2d) and  // -----BEGIN
+         (PCardinal(p + 4)^ = ord('B') + ord('E') shl 8 + ord('G') shl 16 + ord('I') shl 24) then
+        exit;
+    until p^ <> '-';
+  until p^ = #0;
   result := false;
 end;
 
