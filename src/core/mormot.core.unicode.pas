@@ -1504,6 +1504,9 @@ var
 // - so plain numbers will appear first, then case-sensitive text values
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
+// POSIX-like case-sensitive TUtf8Compare version of SortDynArrayFileName()
+function StrCompPosixFileName(P1, P2: PUtf8Char): PtrInt;
+
 /// case-sensitive comparison function using the Operating System, as TUtf8Compare
 // - "direct" StrComp() would follow UTF-8 byte order, i.e. UCS-4 CodePoint order,
 // which may not be the same as the "human" expected order, especially on Windows
@@ -6412,6 +6415,14 @@ begin
     result := CompareInt64(v1, v2)
   else
     result := StrComp(Str1, Str2);
+end;
+
+function StrCompPosixFileName(P1, P2: PUtf8Char): PtrInt;
+begin
+  // efficient case-sensitive comparison of the extension, then the name
+  result := StrComp(PosChar(P1, '.'), PosChar(P2, '.'));
+  if result = 0 then
+    result := StrComp(P1, P2);
 end;
 
 function _Utf8CompareOS(P1, P2: PUtf8Char; IgnoreCase: boolean): PtrInt;
