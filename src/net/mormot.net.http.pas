@@ -358,7 +358,8 @@ type
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
     /// implements rfProgressiveStatic mode from ProcessBody
-    function DoProgressive(out availablesize: Int64): THttpRequestProcessBody;
+    function DoProgressive(var Dest: TRawByteStringBuffer;
+      MaxSize: PtrInt): THttpRequestProcessBody;
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
