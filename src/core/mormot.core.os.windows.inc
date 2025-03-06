@@ -791,6 +791,26 @@ begin
   result := WindowsFileTimeToDateTime(FileDate);
 end;
 
+{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
+function AnsiCompareFileName(const S1, S2 : TFileName): integer;
+begin
+  result := SysUtils.AnsiCompareFileName(S1,S2);
+end;
+{$endif ISDELPHI20062007}
+
+function SortDynArrayFileName(const A, B): integer;
+var
+  an, ae, bn, be: TFileName;
+begin
+  // not very fast, but correct / as expected - POSIX is much faster
+  an := GetFileNameWithoutExt(string(A), @ae);
+  bn := GetFileNameWithoutExt(string(B), @be);
+  // check extension, then filename, using slow but "human" RTL sort
+  result := AnsiCompareFileName(ae, be);
+  if result = 0 then
+    result := AnsiCompareFileName(an, bn);
+end;
+
 // some definitions missing on oldest Delphi
 const
   FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink

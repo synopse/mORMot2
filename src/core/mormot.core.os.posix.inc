@@ -2394,6 +2394,14 @@ begin
             (fpgeterrno <> ESysEFAULT);
 end;
 
+function SortDynArrayFileName(const A, B): integer;
+begin
+  // efficient case-sensitive comparison of the extension, then the name
+  result := StrComp(PosChar(pointer(A), '.'), PosChar(pointer(B), '.'));
+  if result = 0 then
+    result := StrComp(pointer(A), pointer(B));
+end;
+
 const
   DT_UNKNOWN  = 0; // need to call fpstat() if this is returned (depends on FS)
   DT_FIFO     = 1;

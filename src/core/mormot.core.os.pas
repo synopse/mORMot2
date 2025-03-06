@@ -7094,26 +7094,6 @@ begin
   result := RawUtf8(GetFileNameWithoutExt(ExtractFileName(FileName)));
 end;
 
-{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
-function AnsiCompareFileName(const S1, S2 : TFileName): integer;
-begin
-  result := SysUtils.AnsiCompareFileName(S1,S2);
-end;
-{$endif ISDELPHI20062007}
-
-function SortDynArrayFileName(const A, B): integer;
-var
-  an, ae, bn, be: TFileName;
-begin
-  // code below is not very fast, but correct ;)
-  an := GetFileNameWithoutExt(string(A), @ae);
-  bn := GetFileNameWithoutExt(string(B), @be);
-  result := AnsiCompareFileName(ae, be);
-  if result = 0 then
-    // if both extensions matches, compare by filename
-    result := AnsiCompareFileName(an, bn);
-end;
-
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin
