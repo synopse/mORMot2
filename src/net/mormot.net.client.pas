@@ -492,8 +492,9 @@ type
     // pcfResponsePartial with the new file name
     // - this method is called after any file has been successfully downloaded
     // - Params.Hasher/Hash are expected to be populated
+    // - can Rename(Partial, ToRename) with proper progressive support
     procedure OnDownloaded(var Params: THttpClientSocketWGet;
-      const Partial: TFileName; OnDownloadingID: THttpPartialID);
+      const Partial, ToRename: TFileName; OnDownloadingID: THttpPartialID);
     /// notify the alternate download implementation that the data supplied
     // by OnDownload() was incorrect
     // - e.g. THttpPeerCache will delete this file from its cache
@@ -3368,15 +3369,17 @@ begin
        (params.Hasher <> nil) and
        (params.Hash <> '') then
       try
-        params.Alternate.OnDownloaded(params, part, altdownloading);
+        // notify peercache and also make RenameFile(part, result)
+        params.Alternate.OnDownloaded(params, part, result, altdownloading);
         altdownloading := 0;
       except
         // ignore any fatal error in callbacks
       end;
     // valid .part file can now be converted into the result file
-    if not RenameFile(part, result) then
-      EHttpSocket.RaiseUtf8(
-        '%.WGet: impossible to rename % as %', [self, part, result]);
+    if FileExists(part) then // if not already done in Alternate.OnDownloaded()
+      if not RenameFile(part, result) then
+        EHttpSocket.RaiseUtf8(
+          '%.WGet: impossible to rename % as %', [self, part, result]);
     // set part='' to notify fully downloaded into result file name
     part := '';
   finally

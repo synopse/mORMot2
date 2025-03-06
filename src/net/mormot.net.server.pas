@@ -1875,8 +1875,9 @@ type
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
     // should be called to copy the content into this instance files cache
+    // - also makes Rename(Partial, ToRename) with proper progressive support
     procedure OnDownloaded(var Params: THttpClientSocketWGet;
-      const Partial: TFileName; PartialID: integer); virtual;
+      const Partial, ToRename: TFileName; PartialID: integer); virtual;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - OnDownload() may have returned corrupted data: local cache file is
     // likely to be deleted, for safety
@@ -6724,17 +6725,17 @@ begin
 end;
 
 procedure THttpPeerCache.OnDownloaded(var Params: THttpClientSocketWGet;
-  const Partial: TFileName; PartialID: integer);
+  const Partial, ToRename: TFileName; PartialID: integer);
 var
   local: TFileName;
   localsize, sourcesize, tot, start, stop: Int64;
-  ok, istemp: boolean;
+  localok, istemp: boolean;
 begin
   // avoid GPF at shutdown or in case of unexpected method call
   if (fSettings = nil) or
      (pcoNoServer in fSettings.Options) then
     exit;
-  ok := false; // for proper PartialID cleanup on abort
+  localok := false; // for proper PartialID cleanup on abort
   try
     // the supplied downloaded source file should be big enough
     sourcesize := FileSize(Partial);
@@ -6761,7 +6762,7 @@ begin
       else
         Params.SetStep(wgsAlternateWrongSizeInCache,
           [local, ' ', localsize, '<>', sourcesize]); // paranaoid
-      ok := true; // call fPartials.ChangeFile() to switch to the local file
+      localok := true; // call fPartials.ChangeFile() to switch to the local file
       exit;
     end;
     QueryPerformanceMicroSeconds(start);
@@ -6780,20 +6781,39 @@ begin
         end;
       end;
       // actually copy the source file into the local cache folder
-      ok := CopyFile(Partial, local, {failsifexists=}false);
+      localok := CopyFile(Partial, local, {failsifexists=}false);
       Params.SetStep(wgsAlternateCopiedInCache, [local]);
-      if ok and istemp then
+      if localok and istemp then
         // force timestamp = now within the temporary folder
-        FileSetDateFromUnixUtc(local, UnixTimeUtc)
+        FileSetDateFromUnixUtc(local, UnixTimeUtc);
     finally
       fFilesSafe.UnLock;
     end;
     QueryPerformanceMicroSeconds(stop);
-    fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDownloaded: copy % into % in %',
+    fLog.Add.Log(LOG_TRACEWARNING[not localok], 'OnDownloaded: copy % into % in %',
       [Partial, local, MicroSecToString(stop - start)], self);
   finally
-    if PartialID <> 0 then // always eventually finalize any associated partial
-      if ok then
+    // optional rename *.partial to final WGet() file name
+    if ToRename <> '' then
+    begin
+      fPartials.Safe.WriteLock; // safely move file without background access
+      try
+        if RenameFile(Partial, ToRename) then
+        begin
+          Params.SetStep(wgsAlternateRename, [ToRename]);
+          if not localok then
+          begin
+            local := ToRename; // fallback to the renamed file as progressive source
+            localok := true;   // it would work as much time as it remains available
+          end;
+        end;
+      finally
+        fPartials.Safe.WriteUnLock;
+      end;
+    end;
+    // always eventually finalize any associated partial
+    if PartialID <> 0 then
+      if localok then
         fPartials.ChangeFile(PartialID, local) // switch to final local file
       else
         OnDownloadingFailed(PartialID); // remove this partial on abort
@@ -6869,7 +6889,7 @@ procedure THttpPeerCache.OnDownloadingFailed(ID: THttpPartialID);
 begin
   // unregister and abort any partial downloading process
   if fPartials.Abort(ID) <> 0 then
-    SleepHiRes(500); // wait for THttpServer.Process abort
+    SleepHiRes(100); // wait for THttpServer.Process abort
 end;
 
 type
