@@ -307,6 +307,9 @@ type
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// notify a partial file name change, e.g. when download is complete
     function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): boolean;
+    /// fill Dest buffer from up to MaxSize bytes from Ctxt.ProgressiveID
+    function ProcessBody(var Ctxt: THttpRequestContext;
+      var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
     /// notify a partial file download failure, e.g. on invalid hash
     // - returns the number of removed HTTP requests
     function Abort(ID: THttpPartialID): integer;
@@ -2272,6 +2275,58 @@ begin
   finally
     Safe.WriteUnLock;
   end;
+end;
+
+function THttpPartials.ProcessBody(var Ctxt: THttpRequestContext;
+  var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
+var
+  tix: cardinal;
+  fn: TFileName;
+  src: THandle;
+begin
+  result := hrpAbort;
+  if IsVoid or
+     (Ctxt.ProgressiveID = 0) or // e.g. after Abort()
+     not (rfProgressiveStatic in Ctxt.ResponseFlags) then
+    exit;
+  // prepare to wait for the data to be available
+  tix := GetTickCount64 shr MilliSecsPerSecShl;
+  if Ctxt.ProgressiveTix = 0 then
+    Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first seen
+  // retrieve the file name to be processed
+  fn := FindReadLocked(Ctxt.ProgressiveID);
+  if fn <> '' then
+    try
+      src := FileOpen(fn, fmOpenReadShared); // partial file access
+      if ValidHandle(src) then
+      try
+        // fill up to MaxSize bytes of src file into Dest buffer
+        result := Ctxt.ProcessBody(src, Dest, MaxSize);
+        case result of
+          hrpSend:
+            Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset
+          hrpWait:
+            if tix > Ctxt.ProgressiveTix then
+            begin
+              if Assigned(OnLog) then
+                OnLog(sllWarning, 'ProcessBody: ProgressiveID=% timeout % at %/%',
+                  [Ctxt.ProgressiveID, fn, FileSize(src), Ctxt.ContentLength], self);
+              result := hrpAbort; // never wait forever: abort after 10 seconds
+            end;
+        else // hrpAbort (hrpDone in THttpServerSocketGeneric.DoProcessBody)
+          if Assigned(OnLog) then
+            OnLog(sllTrace, 'ProcessBody=% id=% fn=%',
+              [ToText(result)^, Ctxt.ProgressiveID], self);
+        end;
+      finally
+        FileClose(src); // the lock protects the file itself
+      end
+      else if Assigned(OnLog) then
+        OnLog(sllLastError, 'ProcessBody: ProgressiveID=% FileOpen % failed',
+          [Ctxt.ProgressiveID, fn], self);
+    finally
+      Safe.ReadUnLock;
+    end;
 end;
 
 function THttpPartials.ChangeFile(ID: THttpPartialID;
