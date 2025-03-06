@@ -1695,7 +1695,9 @@ implementation
 
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
-  Name := Directory + TFileName(F.Name);
+  Name := TFileName(F.Name);
+  if Directory <> '' then
+    insert(Directory, Name, 1);
   Attr := F.Attr;
   if Attr and faDirectory <> 0 then // may happen with ffoIncludeFolder option
     Size := -1
