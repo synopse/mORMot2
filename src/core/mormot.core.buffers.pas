@@ -2358,17 +2358,10 @@ type
   end;
 
   /// a fake TStream, which will just count the number of bytes written
-  TFakeWriterStream = class(TStream)
-  protected
-    fWritten: Int64;
-    {$ifdef FPC}
-    function GetPosition: Int64; override;
-    {$endif FPC}
+  TFakeWriterStream = class(TStreamWithPositionAndSize)
   public
     function Read(var Buffer; Count: Longint): Longint; override;
     function Write(const Buffer; Count: Longint): Longint; override;
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
 
   TNestedStream = record
@@ -10090,45 +10083,14 @@ end;
 
 function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
 begin
-  // do nothing
-  result := Count;
+  result := Count; // do nothing
 end;
 
 function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
 begin
-  // do nothing
-  inc(fWritten, Count);
+  inc(fPosition, Count);
+  inc(fSize, Count);
   result := Count;
-end;
-
-{$ifdef FPC}
-function TFakeWriterStream.GetPosition: Int64;
-begin
-  result := fWritten;
-end;
-{$endif FPC}
-
-function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
-begin
-  result := Seek(Offset, TSeekOrigin(Origin));
-end;
-
-function TFakeWriterStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
-  case Origin of
-    soBeginning:
-      result := Offset;
-    soEnd:
-      result := fWritten - Offset;
-    else
-      result := fWritten + Offset;
-  end;
-  if result > fWritten then
-    result := fWritten
-  else if result < 0 then
-    result := 0
-  else if result < fWritten then
-    fWritten := result;
 end;
 
 
