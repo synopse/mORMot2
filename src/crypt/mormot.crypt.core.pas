@@ -1391,8 +1391,6 @@ type
     /// finalize the AES encryption stream
     // - internally call the Finish method
     destructor Destroy; override;
-    /// reading some data is not allowed -> will raise an exception on call
-    function Read(var Buffer; Count: Longint): Longint; override;
     /// append some data to the outStream, after encryption
     function Write(const Buffer; Count: Longint): Longint; override;
     /// write pending data to the Dest stream
@@ -1419,8 +1417,6 @@ type
       bufferSize: integer = 128 shl 10); override;
     /// read and decode some data from the inStream
     function Read(var Buffer; Count: Longint): Longint; override;
-    /// writing some data is not allowed -> will raise an exception on call
-    function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
 /// cypher/decypher any buffer using AES and PKCS7 padding, from a key buffer
@@ -7118,17 +7114,12 @@ begin
   inherited Destroy;
 end;
 
-function TAesPkcs7Writer.Read(var Buffer; Count: Longint): Longint;
-begin
-  result := RaiseStreamError(self, 'Read');
-end;
-
 function TAesPkcs7Writer.Write(const Buffer; Count: Longint): Longint;
 var
   chunk: integer;
 begin
   if fBuf = '' then
-    RaiseStreamError(self, 'Write');
+    RaiseStreamError(self, 'Write: no buffer');
   result := 0;
   repeat
     chunk := fBufAvailable;
@@ -7161,7 +7152,7 @@ var
   padding: integer;
 begin
   if fBuf = '' then
-    RaiseStreamError(self, 'Finish twice');
+    RaiseStreamError(self, 'Finish: twice');
   padding := SizeOf(TAesBlock) - (fBufPos and AesBlockMod); // PKCS7 padding
   FillcharFast(PByteArray(fBuf)^[fBufPos], padding, padding);
   inc(padding, fBufPos); // now we can encrypt as full AES blocks
@@ -7243,10 +7234,6 @@ begin
   until Count = 0;
 end;
 
-function TAesPkcs7Reader.Write(const Buffer; Count: Longint): Longint;
-begin
-  result := RaiseStreamError(self, 'Write');
-end;
 
 function AesPkcs7(const src: RawByteString; encrypt: boolean; const key;
   keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock): RawByteString;

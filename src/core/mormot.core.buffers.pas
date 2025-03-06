@@ -2392,8 +2392,6 @@ type
     procedure Flush; virtual;
     /// will read up to Count bytes from the internal nested TStream
     function Read(var Buffer; Count: Longint): Longint; override;
-    /// this TStream is read-only: calling this method will raise an exception
-    function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
   /// TStream with an internal memory buffer
@@ -2420,8 +2418,6 @@ type
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// will read up to Count bytes from the internal buffer or source TStream
     function Read(var Buffer; Count: Longint): Longint; override;
-    /// this TStream is read-only: calling this method will raise an exception
-    function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
 
@@ -5670,7 +5666,7 @@ begin
   trail.Magic := Magic;
   trail.HeaderRelativeOffset := result;        // Int64 into cardinal
   if trail.HeaderRelativeOffset <> result then // max 4GB compressed size
-    RaiseStreamError(self, 'StreamCompress trail overflow');
+    RaiseStreamError(self, 'StreamCompress: trail overflow');
   Dest.WriteBuffer(trail, SizeOf(trail));
 end;
 
@@ -10213,11 +10209,6 @@ begin
   fContentRead := pointer(s);
 end;
 
-function TNestedStreamReader.Write(const Buffer; Count: Longint): Longint;
-begin
-  result := RaiseStreamError(self, 'Write');
-end;
-
 
 { TBufferedStreamReader }
 
@@ -10293,12 +10284,6 @@ begin
   end;
   inc(fPosition, result);
 end;
-
-function TBufferedStreamReader.Write(const Buffer; Count: Longint): Longint;
-begin
-  result := RaiseStreamError(self, 'Write');
-end;
-
 
 
 function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;

@@ -4250,6 +4250,7 @@ type
 
   {$M+}
   /// TStream with an internal Position field
+  // - also override Read/Write to raise EStreamError, for Delphi/FPC consistency
   TStreamWithPosition = class(TStream)
   protected
     fPosition: Int64;
@@ -4261,6 +4262,10 @@ type
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// generic override calling the 64-bit Seek() overload
     function Seek(Offset: Longint; Origin: Word): Longint; override;
+    /// default implementation which will raise an exception on call
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// default implementation which will raise an exception on call
+    function Write(const Buffer; Count: Longint): Longint; override;
   end;
   {$M-}
 
@@ -12833,6 +12838,11 @@ end;
 
 { ************ Some Convenient TStream descendants }
 
+function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
+begin
+  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
+end;
+
 { TStreamWithPosition }
 
 {$ifdef FPC}
@@ -12865,13 +12875,23 @@ begin
     fPosition := result;
   end
   else
-    // optimize for Delphi when retrieving TStream.Position as Seek(0,soCurrent)
+    // optimize for Delphi with no GetPosition method but Seek(0,soCurrent) call
     result := fPosition;
 end;
 
 function TStreamWithPosition.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
+end;
+
+function TStreamWithPosition.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := RaiseStreamError(self, 'Read');
+end;
+
+function TStreamWithPosition.Write(const Buffer; Count: Longint): Longint;
+begin
+  result := RaiseStreamError(self, 'Write');
 end;
 
 
@@ -12995,11 +13015,6 @@ begin
   result := RaiseStreamError(self, 'Write');
 end;
 
-
-function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
-begin
-  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
-end;
 
 procedure crc32tabInit(polynom: cardinal; var tab: TCrc32tab);
 var
