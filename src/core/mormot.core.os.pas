@@ -3282,7 +3282,8 @@ function FileIsSymLink(const FileName: TFileName): boolean;
 function DirectorySize(const FileName: TFileName; Recursive: boolean = false;
   const Mask: TFileName = FILES_ALL): Int64;
 
-/// copy one file to another, similar to the Windows API
+/// copy one file to another, using the Windows API if possible
+// - on POSIX, will call StreamCopyUntilEnd() between two TFileStreamEx
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 
@@ -6630,11 +6631,6 @@ end;
 
 { TFileStreamEx }
 
-function TFileStreamEx.GetSize: Int64;
-begin
-  result := FileSize(Handle); // faster than 3 FileSeek() calls - and threadsafe
-end;
-
 constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
 var
   h: THandle;
@@ -6663,6 +6659,11 @@ begin
   if not ValidHandle(h) then // we may need to create the file
     h := FileCreate(aFileName, fmShareRead);
   CreateFromHandle(h, aFileName);
+end;
+
+function TFileStreamEx.GetSize: Int64;
+begin
+  result := FileSize(Handle); // faster than 3 FileSeek() calls - and threadsafe
 end;
 
 

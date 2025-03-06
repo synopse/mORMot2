@@ -1488,6 +1488,7 @@ function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 var
   src, dst: THandleStream;
+  copied: Int64;
 begin
   result := false;
   if FileExists(Target) then
@@ -1500,17 +1501,21 @@ begin
     try
       dst := TFileStreamEx.Create(Target, fmCreate);
       try
-        StreamCopyUntilEnd(src, dst); // faster than dst.CopyFrom()
+        copied := StreamCopyUntilEnd(src, dst); // faster than dst.CopyFrom()
+        result := copied = src.Size; // paranoid check
       finally
         dst.Free;
       end;
-      FileSetDateFrom(Target, src.Handle);
+      if result then
+        FileSetDateFrom(Target, src.Handle)
+      else
+        DeleteFile(Target);
     finally
       src.Free;
     end;
-    result := true;
   except
     result := false;
+    DeleteFile(Target); // remove any partial file
   end;
 end;
 
