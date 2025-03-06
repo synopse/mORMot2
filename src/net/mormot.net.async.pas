@@ -4435,7 +4435,7 @@ end;
 procedure THttpAsyncServerConnection.BeforeDestroy;
 begin
   if Assigned(fServer) and
-     Assigned(fServer.fOnProgressiveRequestFree) and
+     Assigned(fServer.fProgressiveRequests) and
      (rfProgressiveStatic in fHttp.ResponseFlags) then
     fServer.DoProgressiveRequestFree(fHttp);
   fHttp.ProcessDone; // ContentStream.Free
@@ -4599,7 +4599,7 @@ begin
   if fHttp.State = hrsSendBody then
   begin
     // use the HTTP state machine to fill fWr with outgoing body chunk
-    hrp := fHttp.ProcessBody(fWr, fOwner.fSockets.fSendBufferSize);
+    hrp := fServer.DoProcessBody(fHttp, fWr, fOwner.fSockets.fSendBufferSize);
     if acoVerboseLog in fOwner.fOptions then
       fOwner.DoLog(sllTrace, 'AfterWrite ProcessBody=% ContentLength=% Wr=%',
         [ToText(hrp)^, fHttp.ContentLength, fWr.Len], self);
@@ -4617,7 +4617,7 @@ begin
     end; // hrpAbort, hrpDone will check hrsResponseDone
   end;
   // if we reached here, we are either finished or failed
-  if Assigned(fServer.fOnProgressiveRequestFree) and
+  if Assigned(fServer.fProgressiveRequests) and
      (rfProgressiveStatic in fHttp.ResponseFlags) then
     fServer.DoProgressiveRequestFree(fHttp);
   fHttp.ProcessDone;   // ContentStream.Free

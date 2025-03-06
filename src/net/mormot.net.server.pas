@@ -4217,6 +4217,7 @@ begin
   except
     ; // ignore any exception in callbacks
   end;
+  exclude(Ctxt.ResponseFlags, rfProgressiveStatic); // remove it once
 end;
 
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
@@ -4768,7 +4769,7 @@ begin
           hrsSendBody:
             begin
               dest.Reset; // body is retrieved from Content/ContentStream
-              case ClientSock.Http.ProcessBody(dest, fServerSendBufferSize) of
+              case DoProcessBody(ClientSock.Http, dest, fServerSendBufferSize) of
                 hrpSend:
                   if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
                     continue;
@@ -4823,7 +4824,7 @@ begin
     end;
   finally
     req.Free;
-    if Assigned(fOnProgressiveRequestFree) then
+    if Assigned(fProgressiveRequests) then
       DoProgressiveRequestFree(ClientSock.Http); // e.g. THttpPartials.Remove
     ClientSock.Http.ProcessDone;   // ContentStream.Free
   end;
