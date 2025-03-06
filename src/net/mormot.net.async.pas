@@ -2619,6 +2619,9 @@ begin
         fOwner.DoLog(sllWarning, 'Execute raised a % -> terminate % thread %',
           [PClass(E)^, fOwner.fConnectionClass, fName], self);
   end;
+  if (fOwner <> nil) and
+     (fOwner.fLog <> nil) then
+    fOwner.fLog.Add.NotifyThreadEnded;
   fExecuteState := esFinished;
 end;
 
@@ -4024,6 +4027,8 @@ begin
   end;
   DoLog(sllInfo, 'Execute: done AW %', [fProcessName], self);
   SetExecuteState(esFinished);
+  if fLog <> nil then
+    fLog.Add.NotifyThreadEnded;
 end;
 
 
@@ -4081,6 +4086,8 @@ begin
       DoLog(sllWarning, 'Execute raised % -> terminate %',
         [PClass(E)^, fProcessName], self);
   end;
+  if fLog <> nil then
+    fLog.Add.NotifyThreadEnded;
 end;
 
 
@@ -5227,7 +5234,11 @@ begin
         fAsync.DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
           [PClass(E)^, fAsync.fProcessName], self);
     end;
+  if fAsync = nil then
+    exit;
   fAsync.DoLog(sllInfo, 'Execute: done W %', [fAsync.fProcessName], self);
+  if fAsync.fLog <> nil then
+    fAsync.fLog.Add.NotifyThreadEnded;
 end;
 
 
