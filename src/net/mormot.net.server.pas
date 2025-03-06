@@ -6735,10 +6735,10 @@ begin
   if (fSettings = nil) or
      (pcoNoServer in fSettings.Options) then
     exit;
+  sourcesize := FileSize(Partial);
   localok := false; // for proper PartialID cleanup on abort
   try
     // the supplied downloaded source file should be big enough
-    sourcesize := FileSize(Partial);
     if (sourcesize = 0) or // paranoid
        TooSmallFile(Params, sourcesize, 'OnDownloaded') then
       exit;
@@ -6758,11 +6758,13 @@ begin
         'OnDownloaded: % already in cache', [Partial], self);
       // size mismatch may happen on race condition (hash collision is unlikely)
       if localsize = sourcesize then
-        Params.SetStep(wgsAlternateAlreadyInCache, [local])
+      begin
+        Params.SetStep(wgsAlternateAlreadyInCache, [local]);
+        localok := true; // switch to the local file via fPartials.ChangeFile()
+      end
       else
         Params.SetStep(wgsAlternateWrongSizeInCache,
           [local, ' ', localsize, '<>', sourcesize]); // paranaoid
-      localok := true; // call fPartials.ChangeFile() to switch to the local file
       exit;
     end;
     QueryPerformanceMicroSeconds(start);
@@ -6803,20 +6805,22 @@ begin
           Params.SetStep(wgsAlternateRename, [ToRename]);
           if not localok then
           begin
-            local := ToRename; // fallback to the renamed file as progressive source
-            localok := true;   // it would work as much time as it remains available
+            local := ToRename; // fallback to the renamed file for partials
+            localok := true;   // it would work as long as it remains available
           end;
         end;
       finally
         fPartials.Safe.WriteUnLock;
       end;
     end;
-    // always eventually finalize any associated partial
+    // always eventually notify or finalize any associated partial
     if PartialID <> 0 then
-      if localok then
+      if sourcesize = 0 then
+        OnDownloadingFailed(PartialID) // clearly something went wrong
+      else if localok then
         fPartials.ChangeFile(PartialID, local) // switch to final local file
       else
-        OnDownloadingFailed(PartialID); // remove this partial on abort
+        fPartials.ChangeFile(PartialID, Partial); // fallback to downloaded file
   end;
 end;
 
