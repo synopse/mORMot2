@@ -9406,14 +9406,16 @@ begin
   case format of
     p12Legacy:
       // force legacy compatibility with Windows Server 2012 or MacOS/iOS
-      if OpenSslVersion >= OPENSSL3_VERNUM then
+      // - warning: OpenSSL 1.x uses legacy 40bit-RC2 by default, which is sadly
+      // incompatible with OpenSSL 3.x, so we force those safer (but still
+      // downward compatible with Windows XP) parameters on all OpenSSL versions
       begin
         nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC; // old SHA1-3DES algo
         mac_iter := 1;
         md_type := EVP_sha1;
       end;
     p12New:
-      // force OpenSSL 3.x new algorithm on OpenSSL 1.x
+      // force OpenSSL 3.x new algorithm on OpenSSL 1.x (keep default otherwise)
       if OpenSslVersion < OPENSSL3_VERNUM then
       begin
         nid := NID_aes_256_cbc; // new AES-256-CBC safer algo
