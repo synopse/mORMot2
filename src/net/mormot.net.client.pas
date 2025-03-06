@@ -274,8 +274,6 @@ type
   // - used e.g. during progressive download in THttpPeerCache
   THttpPartials = class
   protected
-    /// thread-safe access to the list of partial downloads
-    fSafe: TLightLock;
     /// 32-bit monotonic counter sequence to populate THttpPartial.ID
     fLastID: cardinal;
     /// how many fDownload[] are actually non void (ID <> 0)
@@ -287,6 +285,10 @@ type
     /// retrieve a Partial[] for a given hash
     function FromHash(const Hash: THashDigest): PHttpPartial;
   public
+    /// thread-safe access to the list of partial downloads
+    // - concurrent ReadLock is used during background rfProgressiveStatic process
+    // - blocking WriteLock is for Add/Associate/ChangeFile/Abort/Remove methods
+    Safe: TRWLightLock;
     /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
     /// return true if self is nil or fDownload is void
@@ -301,8 +303,7 @@ type
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// notify a partial file name change, e.g. when download is complete
-    // - returns the number of changed entries
-    function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): integer;
+    function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): boolean;
     /// notify a partial file download failure, e.g. on invalid hash
     // - returns the number of removed HTTP requests
     function Abort(ID: THttpPartialID): integer;
@@ -2176,7 +2177,7 @@ begin
   if (self = nil) or
      (ExpectedFullSize = 0) then
     exit;
-  fSafe.Lock;
+  Safe.WriteLock;
   try
     inc(fLastID);
     inc(fUsed);
@@ -2200,7 +2201,7 @@ begin
       Http^.ProgressiveID := p^.ID;
     end;
   finally
-    fSafe.UnLock;
+    Safe.WriteUnLock;
   end;
   if Assigned(OnLog) then
     OnLog(sllTrace, 'Add(%,%)=% used=%/%',
@@ -2218,7 +2219,7 @@ begin
     aID^ := 0;
   if IsVoid then
     exit;
-  fSafe.Lock;
+  Safe.ReadLock;
   try
     p := FromHash(Hash);
     if p = nil then
@@ -2228,7 +2229,7 @@ begin
     if aID <> nil then
       aID^ := p^.ID;
   finally
-    fSafe.UnLock;
+    Safe.ReadUnLock;
   end;
 end;
 
@@ -2240,7 +2241,7 @@ begin
   if IsVoid or
      (Http = nil) then
     exit;
-  fSafe.Lock;
+  Safe.WriteLock;
   try
     p := FromHash(Hash);
     if p = nil then
@@ -2249,40 +2250,34 @@ begin
     Http^.ProgressiveID := p^.ID;
     result := true;
   finally
-    fSafe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
 function THttpPartials.ChangeFile(ID: THttpPartialID;
-  const NewFile: TFileName): integer;
+  const NewFile: TFileName): boolean;
 var
-  i: PtrInt;
   p: PHttpPartial;
 begin
-  result := 0; // returns the number of changed entries
+  result := false;
   if IsVoid or
      (ID = 0) or
      (cardinal(ID) >= fLastID) then
     exit;
-  fSafe.Lock;
+  Safe.WriteLock;
   try
     p := FromID(ID);
     if p <> nil then
     begin
       p^.PartFile := NewFile;
-      for i := length(p^.HttpContext) - 1 downto 0 do
-      try
-        if p^.HttpContext[i]^.ChangeProgressiveFileName(ID, NewFile) then
-          inc(result);
-      except
-        PtrArrayDelete(p^.HttpContext, i); // paranoid
-      end;
+      result := true;
     end;
   finally
-    fSafe.UnLock;
+    Safe.WriteUnLock;
   end;
   if Assigned(OnLog) then
-    OnLog(LOG_TRACEWARNING[result = 0], 'ChangeFile(%)=%', [ID, result], self);
+    OnLog(LOG_TRACEWARNING[not result], 'ChangeFile(%,%)=%',
+      [ID, NewFile, result], self);
 end;
 
 function THttpPartials.Abort(ID: THttpPartialID): integer;
@@ -2296,7 +2291,7 @@ begin
      (ID = 0) or
      (cardinal(ID) >= fLastID) then
     exit;
-  fSafe.Lock;
+  Safe.WriteLock;
   try
     p := FromID(ID);
     if p <> nil then
@@ -2310,7 +2305,9 @@ begin
             p^.HttpContext[i].ProgressiveID := 0; // abort THttpServer.Process
             inc(result);
           except
-            ; // paranoid
+            on E: Exception do // paranoid
+              if Assigned(OnLog) then
+                OnLog(sllWarning, 'Abort: HttpContext[%] raised %', [i, E], self);
           end;
         p^.HttpContext := nil;
       end;
@@ -2320,7 +2317,7 @@ begin
     end;
     n := length(fDownload);
   finally
-    fSafe.UnLock;
+    Safe.WriteUnLock;
   end;
   if Assigned(OnLog) then
     OnLog(LOG_TRACEWARNING[p = nil], 'Abort(%)=% used=%/%',
@@ -2337,7 +2334,7 @@ begin
      (Sender = nil) or
      (Sender.ProgressiveID = 0) then
     exit;
-  fSafe.Lock;
+  Safe.WriteLock;
   try
     n := length(fDownload);
     p := FromID(Sender.ProgressiveID);
@@ -2357,7 +2354,7 @@ begin
       end;
     end;
   finally
-    fSafe.UnLock;
+    Safe.WriteUnLock;
   end;
   if Assigned(OnLog) then
     OnLog(LOG_TRACEWARNING[p = nil], 'Remove(%) used=%/%',
