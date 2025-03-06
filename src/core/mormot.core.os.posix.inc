@@ -2415,7 +2415,7 @@ const
 
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   OnFile: TOnPosixFileName; OnFileOpaque: pointer;
-  ExcludesDir, IncludeHiddenFiles: boolean): TRawUtf8DynArray;
+  ExcludesDir, IncludeHiddenFiles, IncludeFoldersWith0: boolean): TRawUtf8DynArray;
 var
   n: PtrInt;
   root: TFileName;
@@ -2450,10 +2450,9 @@ var
           else
             withsub := not ExcludesDir;
         DT_DIR:
-          if Recursive and
-             (ent^.d_name[0] <> '.') then
+          if Recursive then
             withsub := true // DoFolder(fn) requires full nested path
-          else
+          else if not IncludeFoldersWith0 then
             continue;
       else
         continue; // not a real file (e.g. link, sysproc or blockdev)
@@ -2471,16 +2470,25 @@ var
         FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
       // handle this entry
       if ent^.d_type = DT_DIR then
-        DoFolder(fn)
-      else
       begin
-        if n = 0 then // generous initial result capacity
-          SetLength(result, 128)
-        else if n = length(result) then
-          SetLength(result, NextGrow(n));
-        result[n] := fn;
-        inc(n);
+        if Recursive and
+           (ent^.d_name[0] <> '.') then
+          DoFolder(fn);
+        if not IncludeFoldersWith0 then
+          continue;
+        inc(entlen); // include ending #0 for folders in result[]
+        if withsub and
+           (sublen <> 0) then
+          FastSetString(fn, @ent^.d_name, entlen) // no subpath
+        else
+          FakeLength(fn, entlen);
       end;
+      if n = 0 then // generous initial result capacity
+        SetLength(result, 128)
+      else if n = length(result) then
+        SetLength(result, NextGrow(n));
+      result[n] := fn;
+      inc(n);
     until false;
     FpClosedir(dir^);
   end;
