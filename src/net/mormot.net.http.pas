@@ -342,12 +342,9 @@ type
   THttpRequestContext = object
   {$endif USERECORDWITHMETHODS}
   private
-    fContentLeft: Int64;
+    fContentLeft, fProgressivePosition: Int64;
     fContentPos: PByte;
     fContentEncoding, fLastHost: RawUtf8;
-    fProgressiveTix: cardinal;
-    fProgressiveID: THttpPartialID;
-    fProgressiveNewStreamFileName: TFileName;
     procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
@@ -357,9 +354,6 @@ type
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
-    /// implements rfProgressiveStatic mode from ProcessBody
-    function DoProgressive(var Dest: TRawByteStringBuffer;
-      MaxSize: PtrInt): THttpRequestProcessBody;
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -440,6 +434,12 @@ type
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader()
     // and mapped into the Compress[] array
     CompressContentEncoding: integer;
+    /// the sequence ID used in rfProgressiveStatic mode
+    // - equals 0 if disabled or aborted
+    // - several THttpRequestContext could share the same ID
+    ProgressiveID: THttpPartialID;
+    /// internal per-second ticks set by THttpServerSocketGeneric.DoProgressive
+    ProgressiveTix: cardinal;
     /// reset this request context to be used prior to any ProcessInit/Read/Write
     procedure Reset;
     /// parse CommandUri into CommandMethod/CommandUri fields on server side
@@ -495,6 +495,12 @@ type
     // input is needed
     function ProcessRead(var st: TProcessParseLine;
       returnOnStateChange: boolean): boolean;
+    /// read up to MaxSize bytes from ContentStream or fContentPos into Dest
+    function ProcessBody(var Dest: TRawByteStringBuffer;
+      MaxSize: PtrInt): THttpRequestProcessBody; overload;
+    /// read up to MaxSize bytes from Source into Dest
+    function ProcessBody(Source: THandle; var Dest: TRawByteStringBuffer;
+      MaxSize: PtrInt): THttpRequestProcessBody; overload;
     /// compress Content according to CompressAcceptHeader, adding headers
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Content is not '', will add 'Content-Type: ' header
@@ -505,23 +511,12 @@ type
     /// compute ouput headers and body from current output state
     // - alternate to CompressContentAndFinalizeHead() when Headers and
     // Content/ContentStream/ContentLength/ContentEncoding are manually set
+    // - used by THttpClientSocket.Request on custom protocol (e.g. 'file://')
     function ContentToOutput(aStatus: integer; aOutStream: TStream): integer;
-    /// body sending socket entry point of our asynchronous HTTP Server
-    // - to be called when some bytes could be written to output socket
-    function ProcessBody(var Dest: TRawByteStringBuffer;
-      MaxSize: PtrInt): THttpRequestProcessBody;
     /// should be done when the HTTP Server state machine is done
     // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
       {$ifdef HASINLINE} inline; {$endif}
-    /// notify that a file in rfProgressiveStatic mode has changed
-    // - e.g. from THttpPeerCache.OnDownloaded/PartialChangeFile
-    function ChangeProgressiveFileName(
-      ID: THttpPartialID; const FileName: TFileName): boolean;
-    /// the sequence ID used in rfProgressiveStatic mode
-    // - equals 0 if disabled or aborted
-    property ProgressiveID: THttpPartialID
-      read fProgressiveID write fProgressiveID;
   end;
 
 const
@@ -544,14 +539,15 @@ const
 
   /// rfProgressiveStatic mode custom HTTP header to supply the expected file size
   STATICFILE_PROGSIZE = 'STATIC-PROGSIZE:';
-  /// wait up to 10 seconds for new file content in rfProgressiveStatic mode
-  STATICFILE_PROGTIMEOUTSEC = 10;
 
 var
+  /// wait up to 10 seconds for new file content in rfProgressiveStatic mode
+  STATICFILE_PROGTIMEOUTSEC: cardinal = 10;
+
   /// filled from RTTI trimmed enum (e.g. 'ErrorRejected') at unit initialization
   HTTP_STATE: array[THttpRequestState] of RawUtf8;
 
-  /// highest files size for THttpRequestContext.ContentFromFile load to memory
+  /// biggest file size for THttpRequestContext.ContentFromFile memory pre-load
   // - default to 1MB on 32-bit systems, 2MB on 64-bit systems
   HttpContentFromFileSizeInMemory: PtrInt =
      {$ifdef CPU32} 1 shl 20 {$else} 2 shl 20 {$endif};
@@ -3141,10 +3137,9 @@ begin
   if fContentEncoding <> '' then
     FastAssignNew(fContentEncoding);
   integer(CompressAcceptHeader) := 0;
-  fProgressiveID := 0;
-  fProgressiveTix := 0;
-  if fProgressiveNewStreamFileName <> '' then
-    fProgressiveNewStreamFileName := '';
+  ProgressiveID := 0;
+  ProgressiveTix := 0;
+  fProgressivePosition := 0;
 end;
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
@@ -3784,7 +3779,7 @@ begin
      (ContentLength = 0) then
     aStatus := HTTP_NOCONTENT;
   result := aStatus;
-  // compute response headers
+  // compute response headers for custom protocol (e.g. 'file://')
   AppendLine(Headers, ['Content-Length: ', ContentLength]); // should always be
   if ContentLastModified <> 0 then
     AppendLine(Headers, ['Last-Modified: ',
@@ -3930,28 +3925,15 @@ begin
       State := hrsSendBody; // let ProcessBody() send ContentStream by chunks
 end;
 
-function THttpRequestContext.ProcessBody(
-  var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
+function THttpRequestContext.ProcessBody(var Dest: TRawByteStringBuffer;
+  MaxSize: PtrInt): THttpRequestProcessBody;
 begin
-  // THttpAsyncConnection.DoRequest did send the headers: now send body chunk(s)
-  if ContentLength = 0 then
-    // we just finished background ProcessWrite of the last chunk
-    State := hrsResponseDone;
-  result := hrpDone;
-  if State <> hrsSendBody then
-    exit;
-  // support progressive/partial ContentStream process
-  if rfProgressiveStatic in ResponseFlags then
-  begin
-    result := DoProgressive(Dest, MaxSize);
-    exit;
-  end;
-  // send in the background, using polling up to MaxSize (128/256KB typical)
+  result := hrpAbort;
+  // send in the background up to MaxSize (128/256KB typical) content
   if ContentLength < MaxSize then
     MaxSize := ContentLength;
   if MaxSize <= 0 then
-    // paranoid check of the server logic
-    EHttpSocket.RaiseUtf8('ProcessWrite: len=%', [MaxSize]);
+    exit; // paranoid abort on server logic failure
   if ContentStream <> nil then
   begin
     Process.Reserve(MaxSize);
@@ -3963,6 +3945,71 @@ begin
     Dest.Append(fContentPos, MaxSize);
     inc(fContentPos, MaxSize);
   end;
+  dec(ContentLength, MaxSize);
+  result := hrpSend;
+end;
+
+function THttpRequestContext.ProcessBody(Source: THandle;
+  var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
+var
+  offs, avail: Int64;
+begin
+  result := hrpAbort;
+  // check current state of the progressive/partial file
+  avail := FileSize(Source);
+  if avail <= 0 then // void or invalid file
+  begin
+    if avail = 0 then
+      result := hrpWait; // wait until not void
+    exit;
+  end;
+  // go to the expected position, implementing RangeOffset if needed
+  offs := RangeOffset;
+  if offs <> 0 then
+    if avail >= offs then
+      if FileSeek64(Source, offs) <> offs then
+        exit // paranoid
+      else
+      begin
+        RangeOffset := 0; // Seek() once
+        fProgressivePosition := offs;
+      end
+    else
+    begin
+      result := hrpWait; // wait until reached offset
+      exit;
+    end
+  else
+  begin
+    offs := fProgressivePosition;
+    if FileSeek64(Source, offs) <> offs then
+      exit; // something is wrong with this file
+  end;
+  // check if there is something new to send
+  dec(avail, offs);
+  if avail <= 0 then // nothing new
+  begin
+    result := hrpWait; // wait until got some data
+    exit;
+  end;
+  // we have something to send - see overloaded ProcessBody()
+  if avail < MaxSize then
+    MaxSize := avail; // send what we got until now
+  // send in the background, using polling up to MaxSize (128/256KB typical)
+  if ContentLength < MaxSize then
+    MaxSize := ContentLength;
+  if MaxSize <= 0 then
+    exit; // paranoid abort on server logic failure
+  Process.Reserve(MaxSize);
+  MaxSize := FileRead(Source, Process.Buffer^, MaxSize);
+  if MaxSize <= 0 then
+  begin
+    if MaxSize = 0 then
+      result := hrpWait;
+    exit;
+  end;
+  inc(fProgressivePosition, MaxSize);
+  Dest.Append(Process.Buffer, MaxSize);
   dec(ContentLength, MaxSize);
   result := hrpSend;
 end;
@@ -4037,88 +4084,6 @@ begin
   // stream existing big file by chunks (also used for HEAD or Range)
   ContentStream := TFileStreamEx.CreateFromHandle(h, FileName);
   include(ResponseFlags, rfContentStreamNeedFree);
-end;
-
-function THttpRequestContext.ChangeProgressiveFileName(
-  ID: THttpPartialID; const FileName: TFileName): boolean;
-begin
-  result := false;
-  if fProgressiveID <> ID then
-    exit;
-  fProgressiveNewStreamFileName := FileName;
-  result := true;
-end;
-
-function THttpRequestContext.DoProgressive(var Dest: TRawByteStringBuffer;
-  MaxSize: PtrInt): THttpRequestProcessBody;
-var
-  tix: cardinal;
-  offs, avail: Int64;
-begin
-  result := hrpAbort;
-  // check if OnDownloadingFailed() notified to abort
-  if fProgressiveID = 0 then
-    exit; // abort
-  // prepare to wait for the data to be available
-  tix := GetTickCount64 shr MilliSecsPerSecShl;
-  if fProgressiveTix = 0 then
-    fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first call
-  // check if ChangeProgressiveFileName() did notify the switch to a final file
-  if fProgressiveNewStreamFileName <> '' then
-    try
-      offs := ContentStream.Seek(0, soCurrent); // current position
-      if offs < 0 then
-        exit; // the stream is clearly in foobar state
-      FreeAndNil(ContentStream);
-      ContentStream := TFileStreamEx.Create(
-        fProgressiveNewStreamFileName, fmOpenReadShared);
-      fProgressiveNewStreamFileName := '';
-      if (ContentStream.Seek(offs, soBeginning) <> offs) or
-         (fProgressiveID = 0) then
-        exit; // the final file can't be smaller than the partial file
-    except
-      exit; // abort if file is not readable
-    end;
-  // check current state of the progressive/partial file
-  avail := ContentStream.Size;
-  // implement RangeOffset
-  offs := RangeOffset;
-  if offs <> 0 then
-    if avail >= offs then
-      if ContentStream.Seek(offs, soBeginning) <> offs then
-        exit // paranoid
-      else
-        RangeOffset := 0 // Seek() once
-    else
-    begin
-      if tix < fProgressiveTix then
-        result := hrpWait; // wait until reached offset
-      exit;
-    end;
-  // check if there is something new to send
-  offs := ContentStream.Seek(0, soCurrent); // current position
-  if offs < 0 then
-    exit; // FileSeek() returned -1 on error: something is wrong with this file
-  dec(avail, offs);
-  if avail <= 0 then
-  begin
-    if tix < fProgressiveTix then
-      result := hrpWait; // wait until got some data
-    exit;
-  end;
-  // we have something to send - inlined ProcessBody()
-  fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
-  if avail < MaxSize then
-    MaxSize := avail; // send what we got until now
-  if ContentLength < MaxSize then
-    MaxSize := ContentLength;
-  if MaxSize <= 0 then
-    exit; // abort on server logic failure
-  Process.Reserve(MaxSize);
-  MaxSize := ContentStream.Read(Process.Buffer^, MaxSize);
-  Dest.Append(Process.Buffer, MaxSize);
-  dec(ContentLength, MaxSize);
-  result := hrpSend;
 end;
 
 
