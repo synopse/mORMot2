@@ -1223,6 +1223,11 @@ var
 
 {$endif NOEXCEPTIONINTERCEPT}
 
+function UnixTimeToLocal: TUnixTime;
+begin
+  result := TZSeconds;
+end;
+
 function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
 begin
   if FileDate <= 0 then

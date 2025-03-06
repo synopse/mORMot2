@@ -2710,6 +2710,9 @@ type
   /// system-specific structure holding a non-recursive mutex
   TOSLightMutex = TRTLCriticalSection;
 
+/// just redirect RTL TZSeconds value from unixutil
+function UnixTimeToLocal: TUnixTime;
+
 {$ifdef OSLINUX}
   {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
