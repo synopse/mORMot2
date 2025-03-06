@@ -1221,7 +1221,7 @@ type
     fContentionTime: Int64;
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
-    fName: RawUtf8;
+    fName, fPoolName: RawUtf8;
     fPendingContextCount: integer;
     fTerminated: boolean;
     {$ifdef USE_WINIOCP}
@@ -3525,6 +3525,8 @@ begin
   if fName = '' then
     fName := StringReplaceAll(StringReplaceAll(ToText(ClassType),
       'Pool', ''), 'Thread', '');
+  if fPoolName = '' then
+    fPoolName := 'pool';
   // create IO completion port to queue the HTTP requests
   {$ifdef USE_WINIOCP}
   fRequestQueue := IocpCreate(aOverlapHandle, 0, nil, NumberOfThreads);
@@ -3845,7 +3847,7 @@ begin
     Sender.fStartNotified := self;
   end;
   if CurrentThreadNameShort^[0] = #0 then
-    SetCurrentThreadName('Pool%-%', [fThreadNumber, fOwner.fName]);
+    SetCurrentThreadName('%%-%', [fOwner.fPoolName, fThreadNumber, fOwner.fName]);
 end;
 
 
