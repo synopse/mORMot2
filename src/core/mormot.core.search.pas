@@ -1836,14 +1836,14 @@ begin
       cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
       SetMatchs(Mask, {caseinsens=}false, m, ';');
     end;
-    result := PosixFileNames(Directory,
-      ffoSubFolder in Options, cb, pointer(m), ffoExcludesDir in Options);
+    result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
+      ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options);
     if result = nil then
       exit;
     if IgnoreFileName <> '' then
       DeleteRawUtf8(result, FindRawUtf8(result, IgnoreFileName));
     if ffoSortByName in Options then
-      QuickSortRawUtf8(result, length(result));
+      QuickSortRawUtf8(result, length(result), nil, StrCompPosixFileName);)
   end
   else
   {$endif OSPOSIX}
