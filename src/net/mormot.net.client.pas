@@ -303,6 +303,8 @@ type
     /// search for given partial file name from its ID, returning its file name
     // - caller should eventually run Safe.ReadUnLock
     function FindReadLocked(ID: THttpPartialID): TFileName;
+    /// search for a given partial file name
+    function FindFile(const FileName: TFileName): boolean;
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// notify a partial file name change, e.g. when download is complete
@@ -2257,6 +2259,31 @@ begin
       Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
 end;
+
+function THttpPartials.FindFile(const FileName: TFileName): boolean;
+var
+  p: PHttpPartial;
+  i: integer;
+begin
+  result := false;
+  if IsVoid then
+    exit;
+  result := true;
+  Safe.ReadLock;
+  try
+    p := pointer(fDownload);
+    for i := 1 to length(fDownload) do
+      if (p^.ID <> 0) and
+         (p^.PartFile = FileName) then // fast enough O(n) search
+        exit
+      else
+         inc(p);
+  finally
+    Safe.ReadUnLock; // keep ReadLock if a file name was found
+  end;
+  result := false;
+end;
+
 function THttpPartials.Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
 var
   p: PHttpPartial;
