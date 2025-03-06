@@ -1478,7 +1478,7 @@ var
   {%H-}log: ISynLog;
 begin
   fProcessing := true;
-  SetCurrentThreadName(fName);
+  SetCurrentThreadName('=%', [fName]);
   log := SynDBLog.Enter(self, 'Execute');
   try
     repeat

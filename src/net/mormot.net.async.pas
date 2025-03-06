@@ -2498,7 +2498,7 @@ var
   notif: TPollSocketResult;
 begin
   FormatUtf8('R%:%', [fIndex, fOwner.fProcessName], fName);
-  SetCurrentThreadName(fName);
+  SetCurrentThreadName('=%', [fName]);
   fOwner.NotifyThreadStart(self);
   try
     fExecuteState := esRunning;
@@ -3842,7 +3842,7 @@ var
 begin
   // Accept() incoming connections
   // and Send() output packets in the background if fExecuteAcceptOnly=false
-  SetCurrentThreadName('AW:%', [fProcessName]);
+  SetCurrentThreadName('=AW:%', [fProcessName]);
   NotifyThreadStart(self);
   try
     // create and bind fServer to the expected TCP port
@@ -4053,7 +4053,7 @@ var
   sub: PWinIocpSubscription;
   {$endif USE_WINIOCP}
 begin
-  SetCurrentThreadName('W:% %', [fProcessName, self]);
+  SetCurrentThreadName('=W:% %', [fProcessName, self]);
   NotifyThreadStart(self);
   try
     if fThreadClients.Count > 0 then
@@ -5160,7 +5160,7 @@ var
   msidle: integer;
 begin
   // call ProcessIdleTix - and POSIX Send() output packets in the background
-  SetCurrentThreadName('M:%', [fAsync.fProcessName]);
+  SetCurrentThreadName('=M:%', [fAsync.fProcessName]);
   NotifyThreadStart(self);
   WaitStarted(10); // wait for fAsync.Execute to bind and start
   if fAsync <> nil then

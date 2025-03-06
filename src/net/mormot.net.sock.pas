@@ -5017,8 +5017,6 @@ begin
 end;
 
 function NetIsPem(p: PUtf8Char): boolean;
-var
-  c: cardinal;
 begin
   result := true;
   repeat

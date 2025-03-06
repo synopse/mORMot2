@@ -6366,38 +6366,46 @@ var
 begin
   if SynLogFileFreeing then
     exit;
-  FormatUtf8(Format, Args, name);
-  for i := 1 to length(name) do
-    if name[i] < ' ' then
-      name[i] := ' '; // ensure on same line
-  name := TrimU(StringReplaceAll(name, [
-    'TSqlRest',        '',
-    'TRest',           '',
-    'TSql',            '',
-    'TSQLRest',        '',
-    'TSQL',            '',
-    'TOrmRest',        '',
-    'TOrm',            '',
-    'TWebSocket',      'WS',
-    'TServiceFactory', 'SF',
-    'TSyn',            '',
-    'Thread',          '',
-    'Process',         '',
-    'Background',      'Bgd',
-    'WebSocket',       'WS',
-    'Asynch',          'A',
-    'Async',           'A',
-    'Parallel',        'Prl',
-    'Timer',           'Tmr',
-    'Thread',          'Thd',
-    'Database',        'DB',
-    'Backup',          'Bak',
-    'Server',          'Srv',
-    'Client',          'Cli',
-    'synopse',         'syn',
-    'memory',          'mem',
-    '  ',              ' '
-    ]));
+  if Format <> '' then
+  begin
+    FormatUtf8(Format, Args, name);
+    if Format[1] = '=' then
+      delete(name, 1, 1) // no need to clean this thread identifier
+    else
+    begin
+      for i := 1 to length(name) do
+        if name[i] < ' ' then
+          name[i] := ' '; // ensure on same line
+      name := TrimU(StringReplaceAll(name, [
+        'TSqlRest',        '',
+        'TRest',           '',
+        'TSql',            '',
+        'TSQLRest',        '',
+        'TSQL',            '',
+        'TOrmRest',        '',
+        'TOrm',            '',
+        'TWebSocket',      'WS',
+        'TServiceFactory', 'SF',
+        'TSyn',            '',
+        'Thread',          '',
+        'Process',         '',
+        'Background',      'Bgd',
+        'WebSocket',       'WS',
+        'Asynch',          'A',
+        'Async',           'A',
+        'Parallel',        'Prl',
+        'Timer',           'Tmr',
+        'Thread',          'Thd',
+        'Database',        'DB',
+        'Backup',          'Bak',
+        'Server',          'Srv',
+        'Client',          'Cli',
+        'synopse',         'syn',
+        'memory',          'mem',
+        '  ',              ' '
+        ]));
+    end;
+  end;
   n[0] := #0;
   for i := 1 to length(name) do
     if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.', ':'

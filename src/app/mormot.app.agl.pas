@@ -621,7 +621,7 @@ begin
   sn := fService.Name;
   se := fService.AbortExitCodes;
   notifytix := false;
-  SetCurrentThreadName('run %', [sn]);
+  SetCurrentThreadName('=run %', [sn]);
   try
     lastunstable := 0;
     repeat
