@@ -132,7 +132,7 @@ type
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
     procedure _RTTI;
-    /// validate some internal data structures
+    /// validate some internal data structures like TLockedList
     procedure DataStructures;
     /// some low-level Url encoding from parameters
     procedure UrlEncoding;
@@ -162,6 +162,8 @@ type
     procedure _TSelectStatement;
     /// test advanced statistics monitoring
     procedure _TSynMonitorUsage;
+    /// validate some folder-level functions
+    procedure Folders;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -7279,6 +7281,47 @@ begin
     id.From(n.Year);
     Check(id.Granularity = mugYear);
   end;
+end;
+
+procedure TTestCoreProcess.Folders;
+
+  procedure DoOne(const folder: TFileName; opt: TFindFilesOptions);
+  var
+    f1, f2: TFindFilesDynArray;
+    n: TFileNameDynArray;
+    siz: Int64;
+    i: PtrInt;
+  begin
+    include(opt, ffoExcludesDir); // like FolderInfo
+    f1 := FindFiles(folder, FILES_ALL, '', opt);
+    n := FileNames(folder, FILES_ALL, opt);
+    CheckEqual(length(f1), length(n));
+    for i := 0 to high(f1) do
+      CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(n[i]));
+    siz := FolderInfo(folder, f2, FILES_ALL, opt);
+    Check((siz = 0) = (f1 = nil));
+    CheckEqual(length(f1), length(f2));
+    for i := 0 to high(f1) do
+    begin
+      CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(f2[i].Name));
+      CheckEqual(f1[i].Size, f2[i].Size);
+      CheckSameTime(f1[i].Timestamp, f2[i].Timestamp);
+      dec(siz, f1[i].Size);
+    end;
+    CheckEqual(siz, 0, 'size');
+  end;
+
+  procedure DoFolder(const folder: TFileName);
+  begin
+    DoOne(folder, []);
+    DoOne(folder, [ffoIncludeHiddenFiles]);
+    DoOne(folder, [ffoSortByName]);     // "human" sort by extension then name
+    DoOne(folder, [ffoSortByFullName]); // name sort
+  end;
+
+begin
+  DoFolder(Executable.ProgramFilePath + 'data');
+  DoFolder(Executable.ProgramFilePath + 'log');
 end;
 
 
