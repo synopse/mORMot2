@@ -2445,43 +2445,35 @@ var
   var
     dir: pDir;
     ent: pDirent;
-    sublen, entlen: PtrInt;
+    entlen, subcount, i: integer;
+    addedpath: TFileName;
     fn: RawUtf8;
+    sub: TRawUtf8DynArray;
 
-    procedure MakeFileName(nopath, startwithslash: boolean);
+    procedure MakeFileName(const path: TFileName);
     var
-      d: PUtf8Char;
+      plen: PtrInt;
     begin
-      if (not nopath) and
-         (sublen <> 0) then // fn := [ '/' + ] subpath + '/' + d_name
+      if path <> '' then // fn := path + d_name
       begin
-        FastSetString(fn, sublen + entlen + ord(startwithslash) + 1);
-        d := pointer(fn);
-        if startwithslash then
-        begin
-          d^ := '/';
-          inc(d);
-        end;
-        MoveFast(pointer(subpath)^, d^, sublen);
-        d[sublen] := '/';
-        MoveFast(ent^.d_name, d[sublen + 1], entlen);
-      end
-      else if startwithslash then
-      begin
-        FastSetString(fn, entlen + 1);
-        d := pointer(fn);
-        d^ := '/';
-        MoveFast(ent^.d_name, d[1], entlen); // fn := '/' + d_name
+        plen := length(path);
+        FastSetString(fn, plen + entlen);
+        MoveFast(pointer(path)^, pointer(fn)^, plen);
+        MoveFast(ent^.d_name, PBytearray(fn)[plen], entlen);
       end
       else
         FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
     end;
 
   begin
-    dir := FpOpendir(root + subpath); // faster alternative to FindFirst()
+    // read all the file or directory names of this folder
+    subcount := 0;
+    addedpath := root + subpath;
+    dir := FpOpendir(pointer(addedpath)); // faster than FindFirst()
     if dir = nil then
       exit;
-    sublen := length(subpath);
+    if ExcludesDir then
+      addedpath := subpath;
     repeat
       ent := FpReaddir(dir^); // FPC RTL use getdents64 syscall on Linux and BSD :)
       if ent = nil then
@@ -2496,9 +2488,7 @@ var
             continue // e.g. no MatchAnyP()
           else if (not IncludeHiddenFiles) and
                   (ent^.d_name[0] = '.') then
-            continue
-          else
-            MakeFileName(ExcludesDir, {startwithslash=}false);
+            continue;
         DT_DIR:
           begin
             if (ent^.d_name[0] = '.') and
@@ -2508,25 +2498,38 @@ var
               continue; // ignore hidden or '.' or '..' folders
             if Recursive then
             begin
-              MakeFileName(false, {startwithslash=}false);
-              DoFolder(fn); // requires full nested path as argument
+              MakeFileName(subpath);
+              i := length(fn);
+              FakeLength(fn, i + 1);
+              PByteArray(fn)[i] := ord('/'); // full nested path in sub[]
+              if subcount = length(sub) then
+                SetLength(sub, NextGrow(subcount));
+              pointer(sub[subcount]) := pointer(fn);
+              pointer(fn) := nil;
+              inc(subcount);
             end;
-            if IncludeFolders then
-              MakeFileName(ExcludesDir, {startwithslash=}true)
-            else
+            if not IncludeFolders then
               continue;
+            if Assigned(OnFile) and
+               not OnFile(OnFileOpaque, ent^.d_name, entlen) then
+              continue; // simulate a FindFirst(mask) as in FindFilesRtl()
           end;
       else
         continue; // not a real file (e.g. link, sysproc or blockdev)
       end;
+      MakeFileName(addedpath);
       if n = 0 then // generous initial result capacity
         SetLength(result, 128)
       else if n = length(result) then
         SetLength(result, NextGrow(n));
-      result[n] := fn;
+      pointer(result[n]) := pointer(fn);
+      pointer(fn) := nil;
       inc(n);
     until false;
     FpClosedir(dir^);
+    // now process the sub-folders recursively outside of FpOpendir/FpCLoseDir
+    for i := 0 to subcount - 1 do
+      DoFolder(sub[i]);
   end;
 
 begin
