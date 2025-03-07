@@ -1381,7 +1381,7 @@ end;
 function TMvcViewsMustache.FindTemplates(
   const Mask: TFileName): TFileNameDynArray;
 begin
-  result := FileNames(ViewTemplateFolder, Mask, [ffoExcludesDir]);
+  result := FileNames(ViewTemplateFolder, Mask, [ffoExcludesDir, ffoSortByName]);
 end;
 
 function TMvcViewsMustache.GetTemplate(const aFileName: TFileName): RawUtf8;

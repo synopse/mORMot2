@@ -6396,12 +6396,7 @@ begin
   if result = 0 then // first time, or after OnIdle DirectoryDeleteOlderFiles()
   begin
     dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN, '', [ffoExcludesDir]);
-    d := pointer(dir);
-    for i := 1 to length(dir) do
-    begin
-      inc(result, d^.Size);
-      inc(d);
-    end;
+    result := FindFilesSize(dir);
     fTempCurrentSize := result;
   end;
   // enough space to write this file?
@@ -6411,7 +6406,7 @@ begin
   // delete oldest files in cache up to CacheTempMaxMB
   if dir = nil then
     dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN, '', [ffoExcludesDir]);
-  FindFilesSortByTimestamp(dir);
+  FindFilesSortByTimestamp(dir); // only sort if needed
   deleted := 0;
   d := pointer(dir);
   for i := 1 to length(dir) do
