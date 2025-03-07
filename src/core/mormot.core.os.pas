@@ -7096,6 +7096,33 @@ begin
   result := RawUtf8(GetFileNameWithoutExt(ExtractFileName(FileName)));
 end;
 
+function PosExtString(Str: PChar): PChar; // work on AnsiString + UnicodeString
+var
+  i: PtrInt;
+begin
+  if Str <> nil then
+    for i := PStrLen(PAnsiChar(Str) - _STRLEN)^ - 1 downto 0 do
+      if Str[i] = '.' then
+      begin
+        result := Str + i + 1; // compare extension just after '.'
+        exit;
+      end;
+  result := nil;
+end;
+
+function SortDynArrayFileName(const A, B): integer;
+begin // check extension, then filename
+  {$ifdef OSPOSIX}
+  result := StrComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
+  if result = 0 then
+    result := StrComp(pointer(A), pointer(B)); // fast case-sensitive order
+  {$else}
+  result := StrIComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
+  if result = 0 then
+    result := AnsiCompareFileName(string(A), string(B)); // as user-expected
+  {$endif OSPOSIX}
+end;
+
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin

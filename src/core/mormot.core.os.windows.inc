@@ -798,36 +798,6 @@ begin
 end;
 {$endif ISDELPHI20062007}
 
-function PosDotString(Str: PChar): PChar;
-var
-  len: PtrInt;
-begin
-  if Str <> nil then
-  begin
-    len := PStrLen(PAnsiChar(Str) - _STRLEN)^; // works for Ansi/UnicodeString
-    {$ifdef UNICODE}
-    len := WordScanIndex(pointer(Str), len, ord('.'));
-    {$else}
-    len := ByteScanIndex(pointer(Str), len, ord('.'));
-    {$endif UNICODE}
-    if len >= 0 then
-      result := Str + len + 1 // compare just after '.'
-    else
-      result := nil;
-  end
-  else
-    result := nil;
-end;
-
-function SortDynArrayFileName(const A, B): integer;
-begin
-  // check extension, then filename
-  result := StrIComp(PosDotString(pointer(A)), PosDotString(pointer(B)));
-  if result = 0 then
-    // not very fast, but correct / as expected - POSIX StrComp() is faster
-    result := AnsiCompareFileName(string(A), string(B));
-end;
-
 // some definitions missing on oldest Delphi
 const
   FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink
