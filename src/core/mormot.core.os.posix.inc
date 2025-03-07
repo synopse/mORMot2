@@ -1336,7 +1336,7 @@ end;
 
 procedure FileSetSticky(const FileName: TFileName);
 begin
-  fpchmod(FileName, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
+  fpchmod(pointer(FileName), S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -2774,7 +2774,7 @@ var
   pid: cardinal;
 begin
   result := nil;
-  d := FpOpendir('/proc'); // (much) faster alternative to FindFirst()
+  d := FpOpendir(PAnsiChar('/proc')); // faster alternative to FindFirst()
   if d = nil then
     exit;
   n := 0;
@@ -3003,7 +3003,7 @@ begin
   result := '';
   if size > 4 shl 20 then
     exit; // read up to 4MB
-  mem := FpOpen('/dev/mem', O_RDONLY, 0);
+  mem := FpOpen(PAnsiChar('/dev/mem'), O_RDONLY, 0);
   if mem <= 0 then
     exit;
   // Fpmmap() is more complex but works around problems using plain read() calls
@@ -3121,7 +3121,7 @@ begin
   if aDriveFolderOrFile = '' then
     aDriveFolderOrFile := '.';
   FillCharFast(fs, SizeOf(fs), 0);
-  result := fpStatFS(aDriveFolderOrFile, @fs) = 0;
+  result := fpStatFS(pointer(aDriveFolderOrFile), @fs) = 0;
   aAvailableBytes := QWord(fs.bavail) * QWord(fs.bsize);
   aFreeBytes := aAvailableBytes; // no user Quota involved here
   aTotalBytes := QWord(fs.blocks) * QWord(fs.bsize);

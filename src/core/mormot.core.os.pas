@@ -8391,7 +8391,7 @@ begin
   repeat
     i := Find(name, clkParam, '', '', first);
     if i < 0 then
-      break;
+      break; // no more occurence
     AddRawUtf8(value, fValues[i]);
     result := true;
     first := i + 1;
