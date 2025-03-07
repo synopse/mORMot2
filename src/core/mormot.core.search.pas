@@ -1921,26 +1921,18 @@ begin
   n := length(names);
   if n = 0 then
     exit;
-  tolocal := UnixTimeToLocal * MSecsPerSec; // read TZSeconds
+  tolocal := UnixTimeToLocal * MSecsPerSec; // local TSearchRec: use TZSeconds
   SetLength(Files, n);
   r := 0;
   d := pointer(Files);
   for i := 0 to n - 1 do
   begin
     d^.Name := names[i];
-    if FileInfoByName(dir + d^.Name, d^.Size, ts) then
+    if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
     begin
-      if (ffoIncludeFolder in Options) and
-         (d^.Name[length(d^.Name)] = #0) then // was a folder
-      begin
-        FakeLength(RawUtf8(d^.Name), length(d^.Name) - 1); // trim ending #0
-        d^.Attr := faDirectory;
-      end
-      else
+      if d^.Size > 0 then
         inc(result, d^.Size);
-      if d^.Name[1] = '.' then
-        d^.Attr := d^.Attr or faHidden{%H-};
-      d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal); // local in TSearchRec
+      d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal);
       inc(d); // will leave d^.Attr = 0
       inc(r);
     end;
