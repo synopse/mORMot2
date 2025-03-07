@@ -107,17 +107,15 @@ procedure FindFilesRtl(const Directory, Mask, IgnoreFileName: TFileName;
 // - by design, will ignore ffoSortByDate option (because not POSIX compatible)
 function FileNames(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = [];
-  const IgnoreFileName: TFileName = '';
-  FoldersWithSlash: boolean = false): TFileNameDynArray; overload;
+  const IgnoreFileName: TFileName = ''): TFileNameDynArray; overload;
 
 /// search for matching file names from path-delimited content
-// - is a wrapper around FindFileNames(MakePath())
+// - just wrap FindFileNames(MakePath(Path))
 function FileNames(const Path: array of const; const Mask: TFileName = FILES_ALL;
   Options: TFindFilesOptions = []): TFileNameDynArray; overload;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
-function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray;
-  FoldersWithSlash: boolean = false): TFileNameDynArray;
+function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
 /// sort a FindFiles() result list by increasing TFindFiles[].Timestamp field
 // - could be done if not already via ffoSortByDate
@@ -1930,10 +1928,8 @@ begin
 end;
 
 function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
-  const IgnoreFileName: TFileName; FoldersWithSlash: boolean): TFileNameDynArray;
+  const IgnoreFileName: TFileName): TFileNameDynArray;
 var
-  i: integer;
-  fn: PRawUtf8; // TFileName on POSIX
   m: TMatchDynArray;
   cb: TOnPosixFileName;
 begin
@@ -1955,16 +1951,6 @@ begin
     QuickSortRawUtf8(result, length(result), nil, StrCompPosixFileName)
   else if ffoSortByFullName in Options then
     QuickSortRawUtf8(result, length(result));
-  if FoldersWithSlash or
-     not (ffoIncludeFolder in Options) then
-    exit;
-  fn := pointer(result);
-  for i := 1 to length(result) do
-  begin
-    if fn^[1] = '/' then
-      TrimFirstChar(fn^);
-    inc(fn);
-  end;
 end;
 
 {$else} // Windows can just call FindFiles() and RTL FindFirst/FindNext
@@ -1988,11 +1974,12 @@ begin
 end;
 
 function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
-  const IgnoreFileName: TFileName; FoldersWithSlash: boolean): TFileNameDynArray;
+  const IgnoreFileName: TFileName): TFileNameDynArray;
+var
+  files: TFindFilesDynArray;
 begin
-  result := FindFilesDynArrayToFileNames(
-    FindFiles(Directory, Mask, IgnoreFileName, Options - [ffoSortByDate]),
-    FoldersWithSlash);
+  FindFilesRtl(Directory, Mask, IgnoreFileName, Options, files);
+  result := FindFilesDynArrayToFileNames(files);
 end;
 
 {$endif OSPOSIX}
@@ -2006,10 +1993,9 @@ begin
   result := FileNames(dir, Mask, Options);
 end;
 
-function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray;
-  FoldersWithSlash: boolean): TFileNameDynArray;
+function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 var
-  n: PtrInt;
+  n: integer;
   r: PFileName;
   f: PFindFiles;
 begin
@@ -2022,9 +2008,6 @@ begin
   r := pointer(result);
   repeat
     r^ := f^.Name;
-    if FoldersWithSlash and
-       (f^.Size < 0) then
-      insert(PathDelim, r^, 1);
     inc(f);
     inc(r);
     dec(n);
