@@ -129,11 +129,11 @@ procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
 /// compare two TFindFilesDynArray elements by file extension then name
 // - folders will be put in front of all files, as with ffoSortByName
-function SortDynArrayFindFiles(const A, B): integer;
+function SortFindFileName(const A, B): integer;
 
 /// compare two TFindFilesDynArray elements by full name
-// - folders will be put in front of all files, as with ffoSortByFullName
-function SortDynArrayFullName(const A, B): integer;
+// - folders won't be put in front of all files, as with ffoSortByFullName
+function SortFindFileFullName(const A, B): integer;
 
 /// compare two TFindFilesDynArray elements by date
 // - folders will be put in front of all files, as with ffoSortByDate
@@ -1751,7 +1751,7 @@ begin
   FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
 end;
 
-function SortDynArrayFindFiles(const A, B): integer;
+function SortFindFileName(const A, B): integer;
 var
   fa: TFindFiles absolute A;
   fb: TFindFiles absolute B;
@@ -1761,33 +1761,25 @@ begin
     exit;
   if fa.Size < 0 then
     if fb.Size < 0 then
-      result := SortDynArrayFileName(fa.Name, fb.Name) // both are folders
+      result := 0 // both are folders
     else
       dec(result) // folders first
   else if fb.Size < 0 then
     inc(result)   // files last
   else
-    result := SortDynArrayFileName(fa.Name, fb.Name); // both are files
+    result := 0;  // both are files
+  if result = 0 then
+    result := SortDynArrayFileName(fa.Name, fb.Name)
 end;
 
-function SortDynArrayFullName(const A, B): integer;
+function SortFindFileFullName(const A, B): integer;
 var
   fa: TFindFiles absolute A;
   fb: TFindFiles absolute B;
 begin
-  result := 0;
   if @A = @B then
-    exit;
-  if fa.Size < 0 then
-    if fb.Size < 0 then
-      result := 0
-    else
-      dec(result) // folders first
-  else if fb.Size < 0 then
-    inc(result)   // files last
+    result := 0
   else
-    result := 0;
-  if result = 0 then
     {$ifdef OSPOSIX}
     result := SortDynArrayString(fa.Name, fb.Name);
     {$else}
