@@ -127,12 +127,16 @@ function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNam
 // - could be done if not already via ffoSortByDate
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
-/// compare two TFindFilesDynArray elements, grouped by file extension then name
-// - folders will be put in front of all files
+/// compare two TFindFilesDynArray elements by file extension then name
+// - folders will be put in front of all files, as with ffoSortByName
 function SortDynArrayFindFiles(const A, B): integer;
 
+/// compare two TFindFilesDynArray elements by full name
+// - folders will be put in front of all files, as with ffoSortByFullName
+function SortDynArrayFullName(const A, B): integer;
+
 /// compare two TFindFilesDynArray elements by date
-// - folders will be put in front of all files
+// - folders will be put in front of all files, as with ffoSortByDate
 function SortFindFileTimestamp(const A, B): integer;
 
 /// compute the HTML index page corresponding to a local folder
@@ -1766,6 +1770,31 @@ begin
     result := SortDynArrayFileName(fa.Name, fb.Name); // both are files
 end;
 
+function SortDynArrayFullName(const A, B): integer;
+var
+  fa: TFindFiles absolute A;
+  fb: TFindFiles absolute B;
+begin
+  result := 0;
+  if @A = @B then
+    exit;
+  if fa.Size < 0 then
+    if fb.Size < 0 then
+      result := 0
+    else
+      dec(result) // folders first
+  else if fb.Size < 0 then
+    inc(result)   // files last
+  else
+    result := 0;
+  if result = 0 then
+    {$ifdef OSPOSIX}
+    result := SortDynArrayString(fa.Name, fb.Name);
+    {$else}
+    result := SortDynArrayStringI(fa.Name, fb.Name);
+    {$endif}
+end;
+
 function SortFindFileTimestamp(const A, B): integer;
 var
   fa: TFindFiles absolute A;
@@ -1864,11 +1893,7 @@ begin
       if ffoSortByName in Options then
         da.Sort(SortDynArrayFindFiles) // use RTL and "natural" order
       else if ffoSortByFullName in Options then
-        {$ifdef OSWINDOWS}
-        da.Sort(SortDynArrayStringI) // case-insensitive on Windows
-        {$else}
-        da.Sort(SortDynArrayString) // StrComp() is good enough on POSIX
-        {$endif OSWINDOWS}
+        da.Sort(SortDynArrayFullName)
       else if ffoSortByDate in Options then
         da.Sort(SortFindFileTimestamp);
   end;
