@@ -2447,7 +2447,7 @@ var
     ent: pDirent;
     entlen, subcount, i: integer;
     addedpath: TFileName;
-    fn: RawUtf8;
+    fn: PByteArray; // is a temp RawUtf8
     sub: TRawUtf8DynArray;
 
     procedure MakeFileName(const path: TFileName);
@@ -2457,12 +2457,15 @@ var
       if path <> '' then // fn := path + d_name
       begin
         plen := length(path);
-        FastSetString(fn, plen + entlen);
-        MoveFast(pointer(path)^, pointer(fn)^, plen);
-        MoveFast(ent^.d_name, PBytearray(fn)[plen], entlen);
+        fn := FastNewString(plen + entlen, CP_UTF8);
+        MoveFast(pointer(path)^, fn^, plen);
+        MoveFast(ent^.d_name, fn[plen], entlen);
       end
       else
-        FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
+      begin
+        fn := FastNewString(entlen, CP_UTF8);
+        MoveFast(ent^.d_name, fn^, entlen); // fn := d_name
+      end;
     end;
 
   begin
@@ -2499,13 +2502,14 @@ var
             if Recursive then
             begin
               MakeFileName(subpath);
-              i := length(fn);
-              FakeLength(fn, i + 1);
-              PByteArray(fn)[i] := ord('/'); // full nested path in sub[]
+              with PStrRec(PAnsiChar(fn) - _STRRECSIZE)^ do
+              begin
+                fn[length] := ord('/'); // full nested path/ in sub[]
+                inc(length);
+              end;
               if subcount = length(sub) then
                 SetLength(sub, NextGrow(subcount));
-              pointer(sub[subcount]) := pointer(fn);
-              pointer(fn) := nil;
+              pointer(sub[subcount]) := fn;
               inc(subcount);
             end;
             if not IncludeFolders then
@@ -2517,13 +2521,12 @@ var
       else
         continue; // not a real file (e.g. link, sysproc or blockdev)
       end;
-      MakeFileName(addedpath);
       if n = 0 then // generous initial result capacity
         SetLength(result, 128)
       else if n = length(result) then
         SetLength(result, NextGrow(n));
-      pointer(result[n]) := pointer(fn);
-      pointer(fn) := nil;
+      MakeFileName(addedpath);
+      pointer(result[n]) := fn;
       inc(n);
     until false;
     FpClosedir(dir^);
