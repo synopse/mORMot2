@@ -7285,28 +7285,43 @@ end;
 
 procedure TTestCoreProcess.Folders;
 var
-  folder: TFileName;
+  folder, subfolder: TFileName;
 
   procedure DoOne(opt: TFindFilesOptions; const mask: TFileName);
   var
-    f1 {$ifdef OSPOSIX}, f2 {$endif}: TFindFilesDynArray;
+    f1: TFindFilesDynArray;
+    {$ifdef OSPOSIX}
+    f2: TFindFilesDynArray;
+    p1, p2: PFindFiles;
+    siz: Int64;
+    {$endif}
     n1, n2: TFileNameDynArray;
     i: PtrInt;
   begin
     f1 := FindFiles(folder, mask, '', opt);
     {$ifdef OSPOSIX} // not needed on Windows where FindFiles=FindFilesRtl
+    siz := FindFilesSize(f1);
     FindFilesRtl(folder, mask, '', opt, f2); // use TSearchRec on POSIX
     CheckEqual(length(f1), length(f2));
-    for i := 0 to high(f1) do
+    CheckEqual(FindFilesSize(f2), siz);
+    p1 := pointer(f1);
+    p2 := pointer(f2);
+    for i := 1 to length(f1) do
     begin
+      Check(p1 <> p2);
       if not (ffoSortByDate in opt) then // only dates are identical after sort
       begin
-        Check(f1[i].Name = f2[i].Name);
-        CheckEqual(f1[i].Size, f2[i].Size);
-        CheckEqual(f1[i].Attr, f2[i].Attr);
+        Check(p1^.Name = p2^.Name);
+        CheckEqual(p1^.Size, p2^.Size);
+        CheckEqual(p1^.Attr, p2^.Attr);
       end;
-      CheckSameTime(f1[i].Timestamp, f2[i].Timestamp);
+      CheckSameTime(p1^.Timestamp, p2^.Timestamp);
+      if p1^.Size > 0 then
+        dec(siz, p1^.Size);
+      inc(p1);
+      inc(p2);
     end;
+    CheckEqual(siz, 0);
     {$endif OSPOSIX}
     if ffoSortByDate in opt then
       exit; // FileNames() knows no date
@@ -7350,11 +7365,13 @@ var
 
 begin
   // create at least two sub-folder levels to validate proper recursive process
-  Check(FileFromString('non void folder', EnsureDirectoryExists([
-    Executable.ProgramFilePath, 'data', 'synecc', 'level2']) + 'test.txt'));
+  subfolder := EnsureDirectoryExists([
+    Executable.ProgramFilePath, 'data', 'synecc', 'level2']);
+  Check(FileFromString('non void folder', subfolder + 'test.txt'));
   // we can't use Executable.ProgramFilePath because of its live mormot*.log
   DoFolder(Executable.ProgramFilePath + 'data');
   DoFolder(Executable.ProgramFilePath + 'log');
+  Check(DirectoryDelete(subfolder), subfolder);
 end;
 
 
