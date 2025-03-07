@@ -6995,13 +6995,12 @@ begin
     exit;
   p := pointer(FileName);
   repeat
-    dec(result);
-    if result = 0 then
+    c := p[result - 1];
+    if (c = OtherDelim) or
+       (c in [ord('\'), ord('/'), ord(':')]) then
       exit;
-    c := p[result];
-  until (c = OtherDelim) or
-        (c in [ord('\'), ord('/'), ord(':')]);
-  inc(result);
+    dec(result);
+  until result = 0;
 end;
 
 function GetLastDelimU(const FileName: RawUtf8; OtherDelim: cardinal): PtrInt;
@@ -7012,13 +7011,12 @@ begin
   if result = 0 then
     exit;
   repeat
-    dec(result);
-    if result = 0 then
+    c := PByteArray(FileName)[result - 1];
+    if (c = OtherDelim) or
+       (c in [ord('\'), ord('/'), ord(':')]) then
       exit;
-    c := PByteArray(FileName)[result];
-  until (c = OtherDelim) or
-        (c in [ord('\'), ord('/'), ord(':')]);
-  inc(result);
+    dec(result);
+  until result = 0;
 end;
 
 function ExtractPath(const FileName: TFileName): TFileName;
