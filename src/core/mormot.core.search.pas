@@ -100,7 +100,7 @@ function FindFiles(const Directory: TFileName;
 // - by design, won't support nested ffoSubFolder search
 // - on Windows, will just call FindFiles()
 // - on POSIX, calls PosixFileNames() and avoid slower RTL FindFirst/FindNext -
-// but will set Files[].Attr = 0 only
+// but will set only faHidden and/or faDirectory in Files[].Attr
 function FolderInfo(const Directory: TFileName; out Files: TFindFilesDynArray;
   const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = []): Int64;
 
@@ -1869,9 +1869,14 @@ begin
     begin
       if (ffoIncludeFolder in Options) and
          (d^.Name[length(d^.Name)] = #0) then // was a folder
-        FakeLength(RawUtf8(d^.Name), length(d^.Name) - 1) // trim ending #0
+      begin
+        FakeLength(RawUtf8(d^.Name), length(d^.Name) - 1); // trim ending #0
+        d^.Attr := faDirectory;
+      end
       else
         inc(result, d^.Size);
+      if d^.Name[1] = '.' then
+        d^.Attr := d^.Attr or faHidden;
       d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal); // local in TSearchRec
       inc(d); // will leave d^.Attr = 0
       inc(r);

@@ -7305,6 +7305,8 @@ procedure TTestCoreProcess.Folders;
     begin
       CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(f2[i].Name));
       CheckEqual(f1[i].Size, f2[i].Size);
+      CheckEqual(f1[i].Attr and (faHidden{%H-} or faDirectory),
+                 f2[i].Attr and (faHidden{%H-} or faDirectory));
       CheckSameTime(f1[i].Timestamp, f2[i].Timestamp);
       dec(siz, f1[i].Size);
     end;
