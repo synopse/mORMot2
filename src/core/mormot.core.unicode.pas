@@ -6417,10 +6417,23 @@ begin
     result := StrComp(Str1, Str2);
 end;
 
+function PosExtChar(P: PUtf8Char): PUtf8Char; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := nil;
+  if P <> nil then
+    repeat
+      if P^ = #0 then
+        exit
+      else if P^ = '.' then
+        result := P + 1; // just return the extension just after the last '.'
+      inc(P);
+    until false;
+end;
+
 function StrCompPosixFileName(P1, P2: PUtf8Char): PtrInt;
 begin
   // efficient case-sensitive comparison of the extension, then the name
-  result := StrComp(PosChar(P1, '.'), PosChar(P2, '.'));
+  result := StrComp(PosExtChar(P1), PosExtChar(P2));
   if result = 0 then
     result := StrComp(P1, P2);
 end;
