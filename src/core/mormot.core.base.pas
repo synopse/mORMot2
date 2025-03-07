@@ -3109,6 +3109,9 @@ procedure TrimSelf(var S: RawUtf8);
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
   var result: RawUtf8);
 
+/// faster dedicated RawUtf8 version of delete(s, 1, 1) to avoid realloc
+procedure TrimFirstChar(var S: RawUtf8);
+
 /// returns the left part of a RawUtf8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
 // - if SepStr is not found, returns Str
@@ -9224,6 +9227,29 @@ begin
     dec(i);
     FastSetString(result, @PByteArray(S)[i], len - i); // trim and allocate
   end;
+end;
+
+procedure TrimFirstChar(var S: RawUtf8);
+var
+  len: PtrInt;
+  sr: PStrRec; // local copy to use register
+begin
+  sr := pointer(S);
+  if sr = nil then
+    exit;
+  dec(sr);
+  len := sr^.length - 1;
+  if len = 0 then
+    FastAssignNew(S)
+  else if sr^.refCnt = 1 then
+  begin
+    sr^.length := len; // fast in-place modify
+    inc(sr);
+    MoveFast(PAnsiChar(sr)[1], sr^, len);
+    PAnsiChar(sr)[len] := #0;
+  end
+  else
+    FastSetString(S, @PByteArray(S)[1], len); // need realloc
 end;
 
 procedure TrimSelf(var S: RawUtf8);
