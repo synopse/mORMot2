@@ -6432,6 +6432,9 @@ end;
 
 function StrCompPosixFileName(P1, P2: PUtf8Char): PtrInt;
 begin
+  result := 0;
+  if P1 = P2 then
+    exit;
   // efficient case-sensitive comparison of the extension, then the name
   result := StrComp(PosExtChar(P1), PosExtChar(P2));
   if result = 0 then

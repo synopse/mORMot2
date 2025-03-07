@@ -3521,7 +3521,7 @@ function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 /// compare two "array of TFileName" elements, grouped by file extension
 // - i.e. with no case sensitivity on Windows
 // - the expected string type is the RTL string, i.e. TFileName
-// - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
+// - like calling GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
 
 {$ifdef ISDELPHI20062007}
@@ -7112,6 +7112,9 @@ end;
 
 function SortDynArrayFileName(const A, B): integer;
 begin // check extension, then filename
+  result := 0;
+  if @A = @B then
+    exit;
   {$ifdef OSPOSIX}
   result := StrComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
   if result = 0 then
