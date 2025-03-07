@@ -6422,11 +6422,11 @@ begin
   result := nil;
   if P <> nil then
     repeat
+      inc(P); // excludes '.' at first position e.g. for '.htdigest'
       if P^ = #0 then
         exit
       else if P^ = '.' then
         result := P + 1; // just return the extension just after the last '.'
-      inc(P);
     until false;
 end;
 

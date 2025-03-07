@@ -136,6 +136,35 @@ end;
 
 {$endif UNICODE}
 
+function StrICompPChar(Str1, Str2: PChar): PtrInt;
+var
+  c1, c2: PtrInt;
+begin // StrIComp() from Delphi does not support Str1/Str2 = nil
+  result := 0;
+  if Str1 <> Str2 then
+    if Str1 <> nil then
+      if Str2 <> nil then
+        repeat
+          c1 := ord(Str1^);
+          if c1 in [ord('a') .. ord('z')] then
+            dec(c1, 32);
+          c2 := ord(Str2^);
+          if c2 in [ord('a') .. ord('z')] then
+            dec(c2, 32);
+          result := c1 - c2;
+          if result <> 0 then
+            exit;
+          if c1 = 0 then
+            exit; // Str1 = Str2
+          inc(Str1);
+          inc(Str2);
+        until false
+      else
+        inc(result) // Str2=''
+    else
+      dec(result);  // Str1=''
+end;
+
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
 begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
