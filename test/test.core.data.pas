@@ -7288,18 +7288,28 @@ procedure TTestCoreProcess.Folders;
   procedure DoOne(const folder: TFileName; opt: TFindFilesOptions);
   var
     f1, f2: TFindFilesDynArray;
-    n: TFileNameDynArray;
+    n1, n2: TFileNameDynArray;
     siz: Int64;
     i: PtrInt;
+    withslash: boolean;
   begin
     include(opt, ffoExcludesDir); // like FolderInfo
     f1 := FindFiles(folder, FILES_ALL, '', opt);
     if not (ffoSortByDate in opt) then // FileNames() ignores this option
     begin
-      n := FileNames(folder, FILES_ALL, opt);
-      CheckEqual(length(f1), length(n));
+      n1 := FileNames(folder, FILES_ALL, opt, '', {withslash=}false);
+      CheckEqual(length(f1), length(n1));
       for i := 0 to high(f1) do
-        CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(n[i]));
+        Check(f1[i].Name = n1[i]);
+      n2 := FindFilesDynArrayToFileNames(f1, {withslash=}false);
+      CheckEqual(length(n1), length(n2));
+      for i := 0 to high(n1) do
+        Check(n1[i] = n2[i]);
+      n1 := FileNames(folder, FILES_ALL, opt, '', {withslash=}true);
+      n2 := FindFilesDynArrayToFileNames(f1, {withslash=}true);
+      CheckEqual(length(n1), length(n2));
+      for i := 0 to high(n1) do
+        Check(n1[i] = n2[i]);
     end;
     siz := FolderInfo(folder, f2, FILES_ALL, opt);
     Check((siz = 0) = (f1 = nil));
@@ -7308,13 +7318,13 @@ procedure TTestCoreProcess.Folders;
     begin
       if not (ffoSortByDate in opt) then // only dates are identical after sort
       begin
-        CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(f2[i].Name));
+        Check(f1[i].Name = f2[i].Name);
         CheckEqual(f1[i].Size, f2[i].Size);
-        CheckEqual(f1[i].Attr and (faHidden{%H-} or faDirectory),
-                   f2[i].Attr and (faHidden{%H-} or faDirectory));
+        CheckEqual(f1[i].Attr, f2[i].Attr);
       end;
       CheckSameTime(f1[i].Timestamp, f2[i].Timestamp);
-      dec(siz, f1[i].Size);
+      if f1[i].Size > 0 then // not a folder
+        dec(siz, f1[i].Size);
     end;
     CheckEqual(siz, 0, 'size');
   end;
@@ -7326,6 +7336,9 @@ procedure TTestCoreProcess.Folders;
     DoOne(folder, [ffoSortByName]); // "human" sort by extension then name
     DoOne(folder, [ffoSortByFullName]); // name-only sort
     DoOne(folder, [ffoSortByDate]);
+    DoOne(folder, [ffoIncludeFolder]);
+    DoOne(folder, [ffoIncludeFolder, ffoSortByName]);
+    DoOne(folder, [ffoIncludeFolder, ffoSortByFullName]);
   end;
 
 begin
