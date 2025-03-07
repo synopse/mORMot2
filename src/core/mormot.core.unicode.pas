@@ -6417,25 +6417,29 @@ begin
     result := StrComp(Str1, Str2);
 end;
 
-function PosExtChar(P: PUtf8Char): PUtf8Char; {$ifdef HASINLINE}inline;{$endif}
-begin
+function PosExtChar(P: PUtf8Char): PUtf8Char; // expects P to be a RawUtf8
+var
+  i: PtrInt;
+begin // see POSIX-mode PosExtString() in mormot.core.os
   result := nil;
-  if P <> nil then
-    repeat
-      inc(P); // excludes '.' at first position e.g. for '.htdigest'
-      if P^ = #0 then
-        exit
-      else if P^ = '.' then
-        result := P + 1; // just return the extension just after the last '.'
-    until false;
+  if P <> nil then // excludes '.' at first position e.g. for '.htdigest'
+    for i := PStrLen(P - _STRLEN)^ - 1 downto 1 do
+      case P[i] of
+        '/':
+          exit; // reached end of filename
+        '.':
+          begin
+            result := P + i + 1; // compare extension just after '.'
+            exit;
+          end;
+      end;
 end;
 
 function StrCompPosixFileName(P1, P2: PUtf8Char): PtrInt;
-begin
+begin // efficient case-sensitive comparison of the extension, then the name
   result := 0;
   if P1 = P2 then
     exit;
-  // efficient case-sensitive comparison of the extension, then the name
   result := StrComp(PosExtChar(P1), PosExtChar(P2));
   if result = 0 then
     result := StrComp(P1, P2);

@@ -7118,14 +7118,18 @@ function PosExtString(Str: PChar): PChar; // work on AnsiString + UnicodeString
 var
   i: PtrInt;
 begin
+  result := nil;
   if Str <> nil then // excludes '.' at first position e.g. for '.htdigest'
     for i := PStrLen(PAnsiChar(Str) - _STRLEN)^ - 1 downto 1 do
-      if Str[i] = '.' then
-      begin
-        result := Str + i + 1; // compare extension just after '.'
-        exit;
+      case Str[i] of
+        {$ifdef OSWINDOWS} '\', ':' {$else} '/' {$endif}:
+          exit; // reached end of filename
+        '.':
+          begin
+            result := @Str[i + 1]; // compare extension just after '.'
+            exit;
+          end;
       end;
-  result := nil;
 end;
 
 function SortDynArrayFileName(const A, B): integer;
