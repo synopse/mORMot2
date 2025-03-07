@@ -7294,19 +7294,25 @@ procedure TTestCoreProcess.Folders;
   begin
     include(opt, ffoExcludesDir); // like FolderInfo
     f1 := FindFiles(folder, FILES_ALL, '', opt);
-    n := FileNames(folder, FILES_ALL, opt);
-    CheckEqual(length(f1), length(n));
-    for i := 0 to high(f1) do
-      CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(n[i]));
+    if not (ffoSortByDate in opt) then // FileNames() ignores this option
+    begin
+      n := FileNames(folder, FILES_ALL, opt);
+      CheckEqual(length(f1), length(n));
+      for i := 0 to high(f1) do
+        CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(n[i]));
+    end;
     siz := FolderInfo(folder, f2, FILES_ALL, opt);
     Check((siz = 0) = (f1 = nil));
     CheckEqual(length(f1), length(f2));
     for i := 0 to high(f1) do
     begin
-      CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(f2[i].Name));
-      CheckEqual(f1[i].Size, f2[i].Size);
-      CheckEqual(f1[i].Attr and (faHidden{%H-} or faDirectory),
-                 f2[i].Attr and (faHidden{%H-} or faDirectory));
+      if not (ffoSortByDate in opt) then // only dates are identical after sort
+      begin
+        CheckEqual(StringToUtf8(f1[i].Name), StringToUtf8(f2[i].Name));
+        CheckEqual(f1[i].Size, f2[i].Size);
+        CheckEqual(f1[i].Attr and (faHidden{%H-} or faDirectory),
+                   f2[i].Attr and (faHidden{%H-} or faDirectory));
+      end;
       CheckSameTime(f1[i].Timestamp, f2[i].Timestamp);
       dec(siz, f1[i].Size);
     end;
@@ -7317,11 +7323,13 @@ procedure TTestCoreProcess.Folders;
   begin
     DoOne(folder, []);
     DoOne(folder, [ffoIncludeHiddenFiles]);
-    DoOne(folder, [ffoSortByName]);     // "human" sort by extension then name
-    DoOne(folder, [ffoSortByFullName]); // name sort
+    DoOne(folder, [ffoSortByName]); // "human" sort by extension then name
+    DoOne(folder, [ffoSortByFullName]); // name-only sort
+    DoOne(folder, [ffoSortByDate]);
   end;
 
 begin
+  // we can't use Executable.ProgramFilePath because of its live mormot*.log
   DoFolder(Executable.ProgramFilePath + 'data');
   DoFolder(Executable.ProgramFilePath + 'log');
 end;

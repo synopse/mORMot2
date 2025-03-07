@@ -73,6 +73,7 @@ type
   /// each optional feature of FindFiles()
   // - ffoSortByName will sort the result files by extension then name
   // - ffoSortByFullName will sort the result files by name but not extension
+  // - ffoSortByDate will sort the result files by increasing timestamp
   // - ffoExcludesDir won't include the path in TFindFiles.Name
   // - ffoSubFolder will recursively search within nested folders
   // - ffoIncludeFolder will add the nested folder names with Size=-1
@@ -80,6 +81,7 @@ type
   TFindFilesOption = (
     ffoSortByName,
     ffoSortByFullName,
+    ffoSortByDate,
     ffoExcludesDir,
     ffoSubFolder,
     ffoIncludeFolder,
@@ -107,6 +109,7 @@ function FolderInfo(const Directory: TFileName; out Files: TFindFilesDynArray;
 /// search for matching file names
 // - on Windows, just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
 // - on POSIX, calls PosixFileNames() if possible, with fast TMatch mask lookup
+// - by design, will ignore ffoSortByDate option (because not POSIX compatible)
 function FileNames(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = [];
   const IgnoreFileName: TFileName = '' {$ifdef OSPOSIX};
@@ -121,6 +124,7 @@ function FileNames(const Path: array of const; const Mask: TFileName = FILES_ALL
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
 /// sort a FindFiles() result list by increasing TFindFiles[].Timestamp field
+// - could be done if not already via ffoSortByDate
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
 /// compute the HTML index page corresponding to a local folder
@@ -1751,6 +1755,11 @@ begin
     result := SortDynArrayFileName(fa.Name, fb.Name); // both are files
 end;
 
+function SortFindFileTimestamp(const A, B): integer;
+begin
+  result := CompareFloat(TFindFiles(A).Timestamp, TFindFiles(B).Timestamp);
+end;
+
 function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
   Options: TFindFilesOptions): TFindFilesDynArray;
 var
@@ -1808,7 +1817,7 @@ begin
   if masks <> nil then
   begin
     // recursive calls for each masks[], optionally sorted by mask
-    if Options * [ffoSortByName, ffoSortByFullName] <> [] then
+    if Options * [ffoSortByName, ffoSortByFullName] = [] then
       QuickSortRawUtf8(masks, length(masks), nil,
         {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
     for m := 0 to length(masks) - 1 do
@@ -1829,10 +1838,12 @@ begin
         da.Sort(SortDynArrayFindFiles) // use RTL and "natural" order
       else if ffoSortByFullName in Options then
         {$ifdef OSWINDOWS}
-        da.Sort(SortDynArrayStringI); // case-insensitive on Windows
+        da.Sort(SortDynArrayStringI) // case-insensitive on Windows
         {$else}
-        da.Sort(SortDynArrayString); // StrComp() is good enough on POSIX
+        da.Sort(SortDynArrayString) // StrComp() is good enough on POSIX
         {$endif OSWINDOWS}
+      else if ffoSortByDate in Options then
+        da.Sort(SortFindFileTimestamp);
   end;
   if count <> 0 then
     DynArrayFakeLength(result, count);
@@ -1876,7 +1887,7 @@ begin
       else
         inc(result, d^.Size);
       if d^.Name[1] = '.' then
-        d^.Attr := d^.Attr or faHidden;
+        d^.Attr := d^.Attr or faHidden{%H-};
       d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal); // local in TSearchRec
       inc(d); // will leave d^.Attr = 0
       inc(r);
@@ -1884,6 +1895,8 @@ begin
   end;
   if r <> n then
     DynArrayFakeLength(Files, r);
+  if ffoSortByDate in Options then
+    FindFilesSortByTimestamp(Files);
 end;
 
 function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
@@ -1950,7 +1963,7 @@ function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
   const IgnoreFileName: TFileName): TFileNameDynArray;
 begin
   result := FindFilesDynArrayToFileNames(
-    FindFiles(Directory, Mask, IgnoreFileName, Options));
+    FindFiles(Directory, Mask, IgnoreFileName, Options - [ffoSortByDate]));
 end;
 
 {$endif OSPOSIX}
@@ -1975,11 +1988,6 @@ begin
   SetLength(result, n);
   for i := 0 to n - 1 do
     result[i] := Files[i].Name;
-end;
-
-function SortFindFileTimestamp(const A, B): integer;
-begin
-  result := CompareFloat(TFindFiles(A).Timestamp, TFindFiles(B).Timestamp);
 end;
 
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
