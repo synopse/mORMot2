@@ -3253,7 +3253,7 @@ function FileSeek64(Handle: THandle; const Offset: Int64;
 // - if FileName is a folder/directory, then returned FileSize equals -1
 // - use a single Operating System call, so is faster than FileSize + FileAge
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
-  out FileTimestampUtc: TUnixMSTime): boolean; overload;
+  out FileTimestampUtc: TUnixMSTime; FileAttr: PInteger = nil): boolean; overload;
 
 /// get low-level file information, in a cross-platform way
 // - returns true on success

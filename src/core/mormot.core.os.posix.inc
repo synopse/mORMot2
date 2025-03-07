@@ -1386,8 +1386,35 @@ begin
           {$endif OSLINUXANDROID}
 end;
 
+function StatFileAttr(const fn: RawUtf8; const st: TStat): integer;
+var
+  p: PByteArray;
+begin
+  result := faArchive; // as LinuxToWinAttr() in fpcsrc/rtl/unix/sysutils.pp
+  p := @PByteArray(fn)[GetLastDelimU(fn)]; // no memory allocation
+  if FpS_ISDIR(st.st_mode) then
+  begin
+    result := result or faDirectory;
+    if (p[0] = ord('.')) and
+       (p[1] <> 0) and
+       (PWord(@p[1])^ <> ord('.')) then
+      result := result or faHidden{%H-}; // '.' and '..' are not hidden
+  end
+  else if p[0] = ord('.') then
+    result := result or faHidden{%H-}; // e.g. '.htdigest'
+  if (st.st_mode and S_IWUSR) = 0 then
+    result := result or faReadOnly;
+  if fpS_ISSOCK(st.st_mode) or
+     fpS_ISBLK(st.st_mode) or
+     fpS_ISCHR(st.st_mode) or
+     fpS_ISFIFO(st.st_mode) Then
+    result := result or faSysFile{%H-};
+  if fpS_ISLNK(st.st_mode) then
+    result := result or faSymLink{%H-};
+end;
+
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
-  out FileTimestampUtc: TUnixMSTime): boolean;
+  out FileTimestampUtc: TUnixMSTime; FileAttr: PInteger): boolean;
 var
   st: TStat;
 begin
@@ -1400,6 +1427,8 @@ begin
   else
     FileSize := st.st_size;
   StatTimeMS(st, FileTimestampUtc);
+  if FileAttr <> nil then
+    FileAttr^ := StatFileAttr(FileName, st);
 end;
 
 function FileSize(F: THandle): Int64;

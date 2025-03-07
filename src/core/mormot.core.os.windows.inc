@@ -1120,7 +1120,7 @@ begin
 end;
 
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
-  out FileTimestampUtc: TUnixMSTime): boolean;
+  out FileTimestampUtc: TUnixMSTime; FileAttr: PInteger): boolean;
 var
   fa: WIN32_FILE_ATTRIBUTE_DATA;
 begin
@@ -1135,7 +1135,9 @@ begin
   end
   else
     FileSize := -1; // FileName is a folder
-  FileTimestampUtc := FileTimeToUnixMSTime(fa.ftLastWriteTime) // no local time
+  FileTimestampUtc := FileTimeToUnixMSTime(fa.ftLastWriteTime); // no local time
+  if FileAttr <> nil then
+    FileAttr^ := fa.dwFileAttributes;
 end;
 
 function FileIsSymLink(const FileName: TFileName): boolean;
