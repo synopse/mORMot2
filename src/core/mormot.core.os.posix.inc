@@ -2407,7 +2407,7 @@ const
 
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   OnFile: TOnPosixFileName; OnFileOpaque: pointer;
-  ExcludesDir, IncludeHiddenFiles, IncludeFoldersWith0: boolean): TRawUtf8DynArray;
+  ExcludesDir, IncludeHiddenFiles, IncludeFolders: boolean): TRawUtf8DynArray;
 var
   n: PtrInt;
   root: TFileName;
@@ -2418,7 +2418,36 @@ var
     ent: pDirent;
     sublen, entlen: PtrInt;
     fn: RawUtf8;
-    withsub: boolean;
+
+    procedure MakeFileName(nopath, startwithslash: boolean);
+    var
+      d: PUtf8Char;
+    begin
+      if (not nopath) and
+         (sublen <> 0) then // fn := [ '/' + ] subpath + '/' + d_name
+      begin
+        FastSetString(fn, sublen + entlen + ord(startwithslash) + 1);
+        d := pointer(fn);
+        if startwithslash then
+        begin
+          d^ := '/';
+          inc(d);
+        end;
+        MoveFast(pointer(subpath)^, d^, sublen);
+        d[sublen] := '/';
+        MoveFast(ent^.d_name, d[sublen + 1], entlen);
+      end
+      else if startwithslash then
+      begin
+        FastSetString(fn, entlen + 1);
+        d := pointer(fn);
+        d^ := '/';
+        MoveFast(ent^.d_name, d[1], entlen); // fn := '/' + d_name
+      end
+      else
+        FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
+    end;
+
   begin
     dir := FpOpendir(root + subpath); // faster alternative to FindFirst()
     if dir = nil then
@@ -2436,44 +2465,30 @@ var
           if Assigned(OnFile) and
              not OnFile(OnFileOpaque, ent^.d_name, entlen) then
             continue // e.g. no MatchAnyP()
-          else if not IncludeHiddenFiles and
+          else if (not IncludeHiddenFiles) and
                   (ent^.d_name[0] = '.') then
             continue
           else
-            withsub := not ExcludesDir;
+            MakeFileName(ExcludesDir, {startwithslash=}false);
         DT_DIR:
-          if Recursive then
-            withsub := true // DoFolder(fn) requires full nested path
-          else if not IncludeFoldersWith0 then
-            continue;
+          begin
+            if (ent^.d_name[0] = '.') and
+               ((not IncludeHiddenFiles) or
+                (ent^.d_name[1] = #0) or
+                (PWord(@ent^.d_name[1])^ = ord('.'))) then
+              continue; // ignore hidden or '.' or '..' folders
+            if Recursive then
+            begin
+              MakeFileName(false, {startwithslash=}false);
+              DoFolder(fn); // requires full nested path as argument
+            end;
+            if IncludeFolders then
+              MakeFileName(ExcludesDir, {startwithslash=}true)
+            else
+              continue;
+          end;
       else
         continue; // not a real file (e.g. link, sysproc or blockdev)
-      end;
-      // compute file/folder name
-      if withsub and
-         (sublen <> 0) then // fn := subpath + '/' + d_name
-      begin
-        FastSetString(fn, sublen + entlen + 1);
-        MoveFast(pointer(subpath)^, pointer(fn)^, sublen);
-        PByteArray(fn)[sublen] := ord('/');
-        MoveFast(ent^.d_name, PByteArray(fn)[sublen + 1], entlen);
-      end
-      else
-        FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
-      // handle this entry
-      if ent^.d_type = DT_DIR then
-      begin
-        if Recursive and
-           (ent^.d_name[0] <> '.') then
-          DoFolder(fn);
-        if not IncludeFoldersWith0 then
-          continue;
-        inc(entlen); // include ending #0 for folders in result[]
-        if withsub and
-           (sublen <> 0) then
-          FastSetString(fn, @ent^.d_name, entlen) // no subpath
-        else
-          FakeLength(fn, entlen);
       end;
       if n = 0 then // generous initial result capacity
         SetLength(result, 128)

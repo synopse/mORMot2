@@ -4006,11 +4006,11 @@ type
 // search, and may return some false positives, like symlinks or nested folders
 // - an optional callback can be supplied, used e.g. by the FileNames() function
 // in mormot.core.search to efficiently implement name mask search with a TMatch
-// - IncludeFoldersWith0 would include folder names, but with an ending #0 char
+// - IncludeFolders would include nested folders as '/foldername'
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil;
   ExcludesDir: boolean = false; IncludeHiddenFiles: boolean = false;
-  IncludeFoldersWith0: boolean = false): TRawUtf8DynArray;
+  IncludeFolders: boolean = false): TRawUtf8DynArray;
 
 {$endif OSWINDOWS}
 
