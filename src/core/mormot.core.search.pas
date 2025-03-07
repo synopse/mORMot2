@@ -1888,43 +1888,48 @@ end;
 
 {$ifdef OSPOSIX}
 
-function FolderInfo(const Directory: TFileName; out Files: TFindFilesDynArray;
-  const Mask: TFileName; Options: TFindFilesOptions): Int64;
+function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions): TFindFilesDynArray;
 var
   dir: TFileName;
   names: TRawUtf8DynArray;
   n, r, i: PtrInt;
   d: PFindFiles;
   ts, tolocal: TUnixMSTime;
+  da: TDynArray;
 begin
-  result := 0;
+  result := nil;
   dir := IncludeTrailingPathDelimiter(Directory);
   if not DirectoryExists(dir) then
     exit;
-  names := FileNames(dir, Mask, Options + [ffoExcludesDir]);
+  // call PosixFileNames() i.e. getdents/getdents64 syscall
+  names := FileNames(dir, Mask, Options, IgnoreFileName);
   n := length(names);
   if n = 0 then
     exit;
+  // compute TFindFilesDynArray from names[]
+  if not (ffoExcludesDir in Options) then
+    dir := '';
   tolocal := UnixTimeToLocal * MSecsPerSec; // local TSearchRec: use TZSeconds
-  SetLength(Files, n);
+  SetLength(result, n);
   r := 0;
-  d := pointer(Files);
+  d := pointer(result);
   for i := 0 to n - 1 do
   begin
     d^.Name := names[i];
     if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
     begin
-      if d^.Size > 0 then
-        inc(result, d^.Size);
       d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal);
       inc(d); // will leave d^.Attr = 0
       inc(r);
     end;
   end;
   if r <> n then
-    DynArrayFakeLength(Files, r);
-  if ffoSortByDate in Options then
-    FindFilesSortByTimestamp(Files);
+    DynArrayFakeLength(result, r);
+  if not (ffoSortByDate in Options) then
+    exit;
+  da.Init(TypeInfo(TFindFilesDynArray), result);
+  FindFilesSort(da, Options);
 end;
 
 function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
@@ -1955,22 +1960,10 @@ end;
 
 {$else} // Windows can just call FindFiles() and RTL FindFirst/FindNext
 
-function FolderInfo(const Directory: TFileName; out Files: TFindFilesDynArray;
-  const Mask: TFileName; Options: TFindFilesOptions): Int64;
-var
-  i: PtrInt;
-  d: PFindFiles;
+function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions): TFindFilesDynArray;
 begin
-  Files := FindFiles(Directory, Mask, '', Options + [ffoExcludesDir]);
-  result := 0;
-  d := pointer(Files);
-  if d <> nil then
-    for i := 1 to length(Files) do
-    begin
-      if d^.Size > 0 then // d^ is a file, not folder
-        inc(result, d^.Size);
-      inc(d);
-    end;
+  FindFilesRtl(Directory, Mask, IgnoreFileName, Options, result);
 end;
 
 function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
