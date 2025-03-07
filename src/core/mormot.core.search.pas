@@ -121,6 +121,9 @@ function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNam
 // - could be done if not already via ffoSortByDate
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
+/// compute the sum of all Files[].Size file sizes in bytes
+function FindFilesSize(const Files: TFindFilesDynArray): Int64;
+
 /// compare two TFindFilesDynArray elements by file extension then name
 // - folders will be put in front of all files, as with ffoSortByName
 function SortFindFileName(const A, B): integer;
@@ -1902,7 +1905,7 @@ begin
   dir := IncludeTrailingPathDelimiter(Directory);
   if not DirectoryExists(dir) then
     exit;
-  // call PosixFileNames() i.e. getdents/getdents64 syscall
+  // call PosixFileNames() i.e. efficient getdents/getdents64 syscall
   names := FileNames(dir, Mask, Options, IgnoreFileName);
   n := length(names);
   if n = 0 then
@@ -2010,6 +2013,26 @@ end;
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 begin
   DynArray(TypeInfo(TFindFilesDynArray), Files).Sort(SortFindFileTimestamp);
+end;
+
+function FindFilesSize(const Files: TFindFilesDynArray): Int64;
+var
+  n: integer;
+  f: PFindFiles;
+begin
+  result := 0;
+  f := pointer(Files);
+  if f = nil then
+    exit;
+  n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
+  repeat
+    if f^.Size > 0 then // folder f^.Size = -1
+      inc(result, f^.Size);
+    dec(n);
+    if n = 0 then
+      break;
+    inc(f);
+  until false;
 end;
 
 function SynchFolders(const Reference, Dest: TFileName;
