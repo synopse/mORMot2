@@ -3494,7 +3494,7 @@ function ExtractNameU(const FileName: RawUtf8): RawUtf8;
 function ExtractExt(const FileName: TFileName; WithoutDot: boolean = false): TFileName;
 
 // defined here for proper ExtractExtP() inlining
-function GetLastDelimU(const FileName: RawUtf8; OtherDelim: cardinal = 0): PtrInt;
+function GetLastDelimU(const FileName: RawUtf8; OtherDelim: AnsiChar = #0): PtrInt;
 
 /// extract an extension from a file name like ExtractFileExt function
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
@@ -6996,24 +6996,22 @@ begin
   p := pointer(FileName);
   repeat
     c := p[result - 1];
-    if (c = OtherDelim) or
-       (c in [ord('\'), ord('/'), ord(':')]) then
+    if (c = OtherDelim) or  (c = ord('\')) or (c = ord('/')) or (c = ord(':')) then
       exit;
     dec(result);
   until result = 0;
 end;
 
-function GetLastDelimU(const FileName: RawUtf8; OtherDelim: cardinal): PtrInt;
+function GetLastDelimU(const FileName: RawUtf8; OtherDelim: AnsiChar): PtrInt;
 var
-  c: cardinal;
+  c: AnsiChar;
 begin
   result := length(FileName);
   if result = 0 then
     exit;
   repeat
-    c := PByteArray(FileName)[result - 1];
-    if (c = OtherDelim) or
-       (c in [ord('\'), ord('/'), ord(':')]) then
+    c := AnsiChar(PByteArray(FileName)[result - 1]);
+    if (c = OtherDelim) or  (c = '\') or (c = '/') or (c = ':') then
       exit;
     dec(result);
   until result = 0;
@@ -7031,12 +7029,12 @@ end;
 
 function ExtractNameU(const FileName: RawUtf8): RawUtf8;
 begin
-  result := copy(FileName, GetLastDelimU(FileName, 0) + 1, maxInt);
+  result := copy(FileName, GetLastDelimU(FileName) + 1, maxInt);
 end;
 
 function ExtractPathU(const FileName: RawUtf8): RawUtf8;
 begin
-  FastSetString(result, pointer(FileName), GetLastDelimU(FileName, 0));
+  FastSetString(result, pointer(FileName), GetLastDelimU(FileName));
 end;
 
 function ExtractExt(const FileName: TFileName; WithoutDot: boolean): TFileName;
@@ -7058,7 +7056,7 @@ var
   i: PtrInt;
 begin
   result := '';
-  i := GetLastDelimU(FileName, ord('.'));
+  i := GetLastDelimU(FileName, '.');
   if (i <= 1) or
      (FileName[i] <> '.') then
     exit;
@@ -7072,7 +7070,7 @@ var
   i: PtrInt;
 begin
   result := nil;
-  i := GetLastDelimU(FileName, ord('.')) - 1;
+  i := GetLastDelimU(FileName, '.') - 1;
   if i <= 0 then
     exit;
   result := PUtf8Char(pointer(FileName)) + i;
