@@ -7284,35 +7284,18 @@ begin
 end;
 
 procedure TTestCoreProcess.Folders;
+var
+  folder: TFileName;
 
-  procedure DoOne(const folder: TFileName; opt: TFindFilesOptions);
+  procedure DoOne(opt: TFindFilesOptions; const mask: TFileName);
   var
-    f1, f2: TFindFilesDynArray;
+    f1 {$ifdef OSPOSIX}, f2 {$endif}: TFindFilesDynArray;
     n1, n2: TFileNameDynArray;
-    siz: Int64;
     i: PtrInt;
-    withslash: boolean;
   begin
-    include(opt, ffoExcludesDir); // like FolderInfo
-    f1 := FindFiles(folder, FILES_ALL, '', opt);
-    if not (ffoSortByDate in opt) then // FileNames() ignores this option
-    begin
-      n1 := FileNames(folder, FILES_ALL, opt, '', {withslash=}false);
-      CheckEqual(length(f1), length(n1));
-      for i := 0 to high(f1) do
-        Check(f1[i].Name = n1[i]);
-      n2 := FindFilesDynArrayToFileNames(f1, {withslash=}false);
-      CheckEqual(length(n1), length(n2));
-      for i := 0 to high(n1) do
-        Check(n1[i] = n2[i]);
-      n1 := FileNames(folder, FILES_ALL, opt, '', {withslash=}true);
-      n2 := FindFilesDynArrayToFileNames(f1, {withslash=}true);
-      CheckEqual(length(n1), length(n2));
-      for i := 0 to high(n1) do
-        Check(n1[i] = n2[i]);
-    end;
-    siz := FolderInfo(folder, f2, FILES_ALL, opt);
-    Check((siz = 0) = (f1 = nil));
+    f1 := FindFiles(folder, mask, '', opt);
+    {$ifdef OSPOSIX} // not needed on Windows where FindFiles=FindFilesRtl
+    FindFilesRtl(folder, mask, '', opt, f2); // use TSearchRec on POSIX
     CheckEqual(length(f1), length(f2));
     for i := 0 to high(f1) do
     begin
@@ -7323,25 +7306,52 @@ procedure TTestCoreProcess.Folders;
         CheckEqual(f1[i].Attr, f2[i].Attr);
       end;
       CheckSameTime(f1[i].Timestamp, f2[i].Timestamp);
-      if f1[i].Size > 0 then // not a folder
-        dec(siz, f1[i].Size);
     end;
-    CheckEqual(siz, 0, 'size');
+    {$endif OSPOSIX}
+    if ffoSortByDate in opt then
+      exit; // FileNames() knows no date
+    n1 := FileNames(folder, mask, opt);
+    CheckEqual(length(f1), length(n1));
+    for i := 0 to high(f1) do
+      Check(f1[i].Name = n1[i]);
+    n2 := FindFilesDynArrayToFileNames(f1);
+    CheckEqual(length(n1), length(n2));
+    for i := 0 to high(n1) do
+      Check(n1[i] = n2[i]);
   end;
 
-  procedure DoFolder(const folder: TFileName);
+  procedure DoOptions(opt: TFindFilesOptions);
   begin
-    DoOne(folder, []);
-    DoOne(folder, [ffoIncludeHiddenFiles]);
-    DoOne(folder, [ffoSortByName]); // "human" sort by extension then name
-    DoOne(folder, [ffoSortByFullName]); // name-only sort
-    DoOne(folder, [ffoSortByDate]);
-    DoOne(folder, [ffoIncludeFolder]);
-    DoOne(folder, [ffoIncludeFolder, ffoSortByName]);
-    DoOne(folder, [ffoIncludeFolder, ffoSortByFullName]);
+    DoOne(opt + [ffoExcludesDir], FILES_ALL);
+    DoOne(opt, FILES_ALL);
+    DoOne(opt + [ffoExcludesDir], '*.txt');
+    DoOne(opt, '*.txt');
+  end;
+
+  procedure DoFolder(const one: TFileName);
+  begin
+    folder := one;
+    DoOptions([]);
+    DoOptions([ffoIncludeHiddenFiles]);
+    DoOptions([ffoSortByName]); // "human" sort by extension then name
+    DoOptions([ffoSortByFullName]); // name-only sort
+    DoOptions([ffoSortByDate]);
+    DoOptions([ffoIncludeFolder]);
+    DoOptions([ffoIncludeFolder, ffoSortByName]);
+    DoOptions([ffoIncludeFolder, ffoSortByFullName]);
+    DoOptions([ffoSubFolder]);
+    DoOptions([ffoSubFolder, ffoSortByName]);
+    DoOptions([ffoSubFolder, ffoSortByFullName]);
+    DoOne([ffoSubFolder, ffoSortByName], '*.txt;*.json');
+    DoOne([ffoSubFolder, ffoSortByName, ffoExcludesDir], '*.txt;*.json');
+    DoOne([ffoSubFolder, ffoSortByFullName], '*.txt;*.json');
+    DoOne([ffoSubFolder, ffoSortByDate], '*.txt;*.json');
   end;
 
 begin
+  // create at least two sub-folder levels to validate proper recursive process
+  Check(FileFromString('non void folder', EnsureDirectoryExists([
+    Executable.ProgramFilePath, 'data', 'synecc', 'level2']) + 'test.txt'));
   // we can't use Executable.ProgramFilePath because of its live mormot*.log
   DoFolder(Executable.ProgramFilePath + 'data');
   DoFolder(Executable.ProgramFilePath + 'log');
