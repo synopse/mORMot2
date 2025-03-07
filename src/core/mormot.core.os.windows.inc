@@ -798,17 +798,34 @@ begin
 end;
 {$endif ISDELPHI20062007}
 
-function SortDynArrayFileName(const A, B): integer;
+function PosDotString(Str: PChar): PChar;
 var
-  an, ae, bn, be: TFileName;
+  len: PtrInt;
 begin
-  // not very fast, but correct / as expected - POSIX is much faster
-  an := GetFileNameWithoutExt(string(A), @ae);
-  bn := GetFileNameWithoutExt(string(B), @be);
-  // check extension, then filename, using slow but "human" RTL sort
-  result := AnsiCompareFileName(ae, be);
+  if Str <> nil then
+  begin
+    len := PStrLen(PAnsiChar(Str) - _STRLEN)^; // works for Ansi/UnicodeString
+    {$ifdef UNICODE}
+    len := WordScanIndex(pointer(Str), len, ord('.'));
+    {$else}
+    len := ByteScanIndex(pointer(Str), len, ord('.'));
+    {$endif UNICODE}
+    if len >= 0 then
+      result := Str + len + 1 // compare just after '.'
+    else
+      result := nil;
+  end
+  else
+    result := nil;
+end;
+
+function SortDynArrayFileName(const A, B): integer;
+begin
+  // check extension, then filename
+  result := StrIComp(PosDotString(pointer(A)), PosDotString(pointer(B)));
   if result = 0 then
-    result := AnsiCompareFileName(an, bn);
+    // not very fast, but correct / as expected - POSIX StrComp() is faster
+    result := AnsiCompareFileName(string(A), string(B));
 end;
 
 // some definitions missing on oldest Delphi
