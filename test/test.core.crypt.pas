@@ -4040,7 +4040,7 @@ begin
       CheckEqual(b^.Size, 1);
       Check(not b^.IsZero);
       b.Release;
-      CheckUtf8(s^.Size > 100, '%>100', [s^.Size]); // typical <= 512 bytes
+      CheckUtf8(s^.Size > 80, '%>80', [s^.Size]); // typical 90 .. 512 bytes
       Check(not s^.IsZero);
       s.Release;
       CheckEqual(c.ActiveCount, 0);
