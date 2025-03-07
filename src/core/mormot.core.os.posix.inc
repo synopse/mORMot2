@@ -85,7 +85,6 @@ var
 begin
   p := pointer(s);
   while p <> nil do
-  begin
     if IdemPChar(p, pointer(up)) then
     begin
       inc(p, length(up));
@@ -99,10 +98,43 @@ begin
         dec(L); // trim right
       FastSetString(res, p, L);
       exit;
-    end;
-    p := GotoNextLine(p);
+    end
+    else
+      p := GotoNextLine(p);
+  FastAssignNew(res);
+end;
+
+function FindNameValueCardinal(p: PUtf8Char; const up: shortstring): PtrUInt;
+begin
+  while p <> nil do
+    if IdemPChar(p, @up[1]) then
+    begin
+      inc(p, ord(up[0]));
+      result := GetCardinal(p);
+      exit;
+    end
+    else
+      p := GotoNextLine(p);
+  result := 0;
+end;
+
+function FindFileCardinal(const fn: TFileName; const up: shortstring): PtrUInt;
+var
+  h: THandle;
+  len: PtrInt;
+  buf: array[0..4095] of AnsiChar; // reading first 4KB of content is enough
+begin
+  result := 0;
+  h := FpOpen(pointer(fn), O_RDONLY);
+  if PtrInt(h) <= 0 then
+    exit;
+  len := FileRead(h, buf, SizeOf(buf) - 1);
+  if len >= 10 then
+  begin
+    buf[len] := #0;
+    result := FindNameValueCardinal(@buf, up);
   end;
-  res := '';
+  FileClose(h);
 end;
 
 function GetNextCardinal(var P: PAnsiChar): PtrUInt;
@@ -1255,6 +1287,11 @@ begin
     result := st.st_mtime; // as TUnixTime seconds, with no local conversion
 end;
 
+function ValidHandle(Handle: THandle): boolean;
+begin
+  result := PtrInt(Handle) >= 0; // 0=StdIn is a valid POSIX file descriptor
+end;
+
 function FileHandleToUnixTimeUtc(F: THandle): TUnixTime;
 var
   st: TStat;
@@ -1558,11 +1595,6 @@ begin
   result := (SymLink <> '') and
             FileExists(Target) and
             (fpsymlink(pointer(Target), pointer(SymLink)) = 0);
-end;
-
-function ValidHandle(Handle: THandle): boolean;
-begin
-  result := PtrInt(Handle) >= 0; // 0=StdIn is a valid POSIX file descriptor
 end;
 
 function WaitReadPending(fd, timeout: integer): boolean;
@@ -2759,17 +2791,11 @@ end;
 {$else} // Linux-specific code
 
 function IsValidPid(pid: cardinal): boolean;
-var
-  status, tgid: RawUtf8;
 begin
-  result := false;
-  if pid = 0 then
-    exit;
-  status := StringFromFile('/proc/' + IntToStr(pid) + '/status', {nosize=}true);
   // ensure is a real process, not a thread
   // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
-  FindNameValue(status, 'TGID:', tgid);
-  result := GetCardinal(pointer(tgid)) = pid;
+  result := (pid <> 0) and
+    (FindFileCardinal('/proc/' + IntToStr(pid) + '/status', 'TGID:') = pid);
 end;
 
 function EnumAllProcesses: TCardinalDynArray;
@@ -2829,43 +2855,22 @@ begin
 end;
 
 function GetParentProcess(PID: cardinal): cardinal;
-var
-  status, ppid: RawUtf8;
 begin
   if PID = 0 then
     result := FpGetppid // we have a system call for the current process :)
   else
-  begin
-    result := 0;
-    status := StringFromFile('/proc/' + IntToStr(PID) + '/status', {nosize=}true);
-    if status = '' then
-      exit; // no such process
-    FindNameValue(status, 'PPID:', ppid);
-    result := GetCardinal(pointer(ppid));
-  end;
+    result := FindFileCardinal('/proc/' + IntToStr(PID) + '/status', 'PPID:');
 end;
 
 function _IsDebuggerPresent: boolean;
-var
-  status, tracerpid: RawUtf8;
 begin
-  status := StringFromFile('/proc/self/status', {nosize=}true);
-  FindNameValue(status, 'TRACERPID:', tracerpid);
-  result := (tracerpid <> '0');
+  result := FindFileCardinal('/proc/self/status', 'TRACERPID:') <> 0;
 end;
 
 function RetrieveLoadAvg: RawUtf8;
 begin
   // the libc parses this file anyway :)
   result := TrimU(StringFromFile('/proc/loadavg', {nosize=}true));
-end;
-
-function FindMemInfo(const meminfo, up: RawUtf8): PtrUInt;
-var
-  v: RawUtf8;
-begin
-  FindNameValue(meminfo, up, v);
-  result := GetCardinal(pointer(v)) shl 10; // from KB to bytes
 end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
@@ -2879,19 +2884,19 @@ begin
   proc := StringFromFile('/proc/meminfo', {hasnosize=}true);
   if proc = '' then
     exit;
-  info.memtotal  := FindMemInfo(proc, 'MEMTOTAL:');
-  info.memfree   := FindMemInfo(proc, 'MEMAVAILABLE:'); // MemFree is too low
-  info.filetotal := FindMemInfo(proc, 'SWAPTOTAL:');
-  info.filefree  := FindMemInfo(proc, 'SWAPFREE:');
+  info.memtotal  := FindNameValueCardinal(pointer(proc), 'MEMTOTAL:') shr 10;
+  info.memfree   := FindNameValueCardinal(pointer(proc), 'MEMAVAILABLE:') shr 10;
+  info.filetotal := FindNameValueCardinal(pointer(proc), 'SWAPTOTAL:') shr 10;
+  info.filefree  := FindNameValueCardinal(pointer(proc), 'SWAPFREE:') shr 10;
   // note: Windows-like virtual memory information is not available under Linux
-  info.vmtotal   := FindMemInfo(proc, 'COMMITLIMIT:');
-  info.vmfree    := FindMemInfo(proc, 'MEMFREE:');
+  info.vmtotal   := FindNameValueCardinal(pointer(proc), 'COMMITLIMIT:') shr 10;
+  info.vmfree    := FindNameValueCardinal(pointer(proc), 'MEMFREE:') shr 10;
   if info.memfree = 0 then // kernel < 3.14 may not have the MemAvailable field
-    info.memfree  := info.vmfree +
-                     FindMemInfo(proc, 'BUFFERS:') +
-                     FindMemInfo(proc, 'CACHED:')  +
-                     FindMemInfo(proc, 'SRECLAIMABLE:') -
-                     FindMemInfo(proc, 'SHMEM:');
+    info.memfree  := info.vmfree + (
+                     FindNameValueCardinal(pointer(proc), 'BUFFERS:') +
+                     FindNameValueCardinal(pointer(proc), 'CACHED:')  +
+                     FindNameValueCardinal(pointer(proc), 'SRECLAIMABLE:') -
+                     FindNameValueCardinal(pointer(proc), 'SHMEM:')) shr 10;
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
