@@ -2774,8 +2774,8 @@ begin
   QueryPerformanceMicroSeconds(us);
   e.i[0] := e.i[0] xor us;
   e.i[1] := e.i[1] xor GetTickCount64;
-  getloadavg(avg, 3);
-  DefaultHasher128(@e.h1, @avg, SizeOf(avg)); // may be AesNiHash128
+  getloadavg(avg, 3); // cpu stats and random stack data
+  DefaultHasher128(@e.h1, @mem, SizeOf(mem)); // may be AesNiHash128
   GetMemoryInfo(mem, {withalloc=}false);
   DefaultHasher128(@e.h2, @mem, SizeOf(mem));
   {$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
