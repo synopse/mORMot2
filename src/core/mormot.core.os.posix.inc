@@ -78,65 +78,6 @@ begin
   result := false;
 end;
 
-procedure FindNameValue(const s, up: RawUtf8; var res: RawUtf8);
-var
-  p: PUtf8Char;
-  L: PtrInt;
-begin
-  p := pointer(s);
-  while p <> nil do
-    if IdemPChar(p, pointer(up)) then
-    begin
-      inc(p, length(up));
-      while (p^ <= ' ') and
-            (p^ <> #0) do
-        inc(p); // trim left
-      L := 0;
-      while p[L] > #13 do
-        inc(L);
-      while p[L - 1] = ' ' do
-        dec(L); // trim right
-      FastSetString(res, p, L);
-      exit;
-    end
-    else
-      p := GotoNextLine(p);
-  FastAssignNew(res);
-end;
-
-function FindNameValueCardinal(p: PUtf8Char; const up: shortstring): PtrUInt;
-begin
-  while p <> nil do
-    if IdemPChar(p, @up[1]) then
-    begin
-      inc(p, ord(up[0]));
-      result := GetCardinal(p);
-      exit;
-    end
-    else
-      p := GotoNextLine(p);
-  result := 0;
-end;
-
-function FindFileCardinal(const fn: TFileName; const up: shortstring): PtrUInt;
-var
-  h: THandle;
-  len: PtrInt;
-  buf: array[0..4095] of AnsiChar; // reading first 4KB of content is enough
-begin
-  result := 0;
-  h := FpOpen(pointer(fn), O_RDONLY);
-  if PtrInt(h) <= 0 then
-    exit;
-  len := FileRead(h, buf, SizeOf(buf) - 1);
-  if len >= 10 then
-  begin
-    buf[len] := #0;
-    result := FindNameValueCardinal(@buf, up);
-  end;
-  FileClose(h);
-end;
-
 function GetNextCardinal(var P: PAnsiChar): PtrUInt;
 var
   c: cardinal;
@@ -2790,12 +2731,121 @@ end;
 
 {$else} // Linux-specific code
 
+procedure FindNameValue(const s, up: RawUtf8; var res: RawUtf8);
+var
+  p: PUtf8Char;
+  L: PtrInt;
+begin
+  p := pointer(s);
+  while p <> nil do
+    if IdemPChar(p, pointer(up)) then
+    begin
+      inc(p, length(up));
+      while (p^ <= ' ') and
+            (p^ <> #0) do
+        inc(p); // trim left
+      L := 0;
+      while p[L] > #13 do
+        inc(L);
+      while p[L - 1] = ' ' do
+        dec(L); // trim right
+      FastSetString(res, p, L);
+      exit;
+    end
+    else
+      p := GotoNextLine(p);
+  FastAssignNew(res);
+end;
+
+function FindNameValueCardinal(p: PUtf8Char; const up: shortstring): PtrUInt;
+begin
+  while p <> nil do
+    if IdemPChar(p, @up[1]) then // agressively inlined on FPC
+    begin
+      inc(p, ord(up[0]));
+      result := GetCardinal(p);
+      exit;
+    end
+    else
+      p := GotoNextLine(p);
+  result := 0;
+end;
+
+procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
+var
+  v: integer;
+begin
+  v := ParseHex0x(p);
+  if v <> 0 then
+    AddInteger(result, v, {nodup=}true);
+end;
+
+function ParseLine(P: PUtf8Char): PUtf8Char;
+begin
+  if P <> nil then
+    P := strscan(P, ':');
+  result := P;
+  if P = nil then
+    exit;
+  repeat
+    inc(P);
+  until (P^ = #0) or
+        (P^ > ' ');
+  result := P;
+  while not (ord(P^) in [0, 10, 13]) do
+  begin
+    if P^ < ' ' then
+      P^ := ' '; // change any tab into space
+    inc(P);
+  end;
+  P^ := #0; // make asciiz
+end;
+
+function ParseInt(P: PUtf8Char): integer;
+begin
+  P := ParseLine(P);
+  if (P <> nil) and
+     (P^ in ['0'..'9']) then
+    result := GetCardinal(P)
+  else
+    result := -1;
+end;
+
+function FindFileCardinal(fn: PAnsiChar; const up: shortstring): PtrUInt;
+var
+  h: THandle;
+  len: PtrInt;
+  buf: array[0..4095] of AnsiChar; // reading up to 4KB of content is enough
+begin
+  result := 0;
+  h := FpOpen(fn, O_RDONLY);
+  if PtrInt(h) <= 0 then
+    exit;
+  len := FileRead(h, buf, SizeOf(buf) - 1);
+  if len >= 10 then
+  begin
+    buf[len] := #0;
+    result := FindNameValueCardinal(@buf, up);
+  end;
+  FileClose(h);
+end;
+
+function FindPidStatus(pid: cardinal; const up: shortstring): PtrUInt;
+var
+  fn: shortstring; // avoid any memory allocation
+begin
+  fn := '/proc/';
+  AppendShortCardinal(pid, fn);
+  AppendShort('/status'#0, fn);
+  result := FindFileCardinal(@fn[1], up);
+end;
+
 function IsValidPid(pid: cardinal): boolean;
 begin
   // ensure is a real process, not a thread
   // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
   result := (pid <> 0) and
-    (FindFileCardinal('/proc/' + IntToStr(pid) + '/status', 'TGID:') = pid);
+            (FindPidStatus(pid, 'TGID:') = pid);
 end;
 
 function EnumAllProcesses: TCardinalDynArray;
@@ -2859,7 +2909,7 @@ begin
   if PID = 0 then
     result := FpGetppid // we have a system call for the current process :)
   else
-    result := FindFileCardinal('/proc/' + IntToStr(PID) + '/status', 'PPID:');
+    result := FindPidStatus(PID, 'PPID:');
 end;
 
 function _IsDebuggerPresent: boolean;
@@ -4055,46 +4105,6 @@ end;
 {$endif OSLINUXANDROID}
 
 {$endif CPUARM3264}
-
-procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
-var
-  v: integer;
-begin
-  v := ParseHex0x(p);
-  if v <> 0 then
-    AddInteger(result, v, {nodup=}true);
-end;
-
-function ParseLine(P: PUtf8Char): PUtf8Char;
-begin
-  if P <> nil then
-    P := strscan(P, ':');
-  result := P;
-  if P = nil then
-    exit;
-  repeat
-    inc(P);
-  until (P^ = #0) or
-        (P^ > ' ');
-  result := P;
-  while not (ord(P^) in [0, 10, 13]) do
-  begin
-    if P^ < ' ' then
-      P^ := ' '; // change any tab into space
-    inc(P);
-  end;
-  P^ := #0; // make asciiz
-end;
-
-function ParseInt(P: PUtf8Char): integer;
-begin
-  P := ParseLine(P);
-  if (P <> nil) and
-     (P^ in ['0'..'9']) then
-    result := GetCardinal(P)
-  else
-    result := -1;
-end;
 
 {$ifdef CPUAARCH64}
 {$ifdef OSLINUXANDROID}
