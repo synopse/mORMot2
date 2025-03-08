@@ -1947,6 +1947,16 @@ end;
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup
+  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY: boolean;
+
+procedure TestOnceDebuggerTty; forward;
+
+function StdOutIsTTY: boolean;
+begin
+  if not __IsDebuggerTested then
+    TestOnceDebuggerTty;
+  result :=  __StdOutIsTTY;
+end;
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
 const
@@ -3034,17 +3044,21 @@ end;
 
 {$endif OSBSDDARWIN}
 
-var
-  __IsDebuggerPresent: (idpUntested, idpNone, idpPresent);
+procedure TestOnceDebuggerTty;
+begin
+  __IsDebuggerTested := true;
+  __IsDebuggerPresent := _IsDebuggerPresent; // syscall
+  __StdOutIsTTY := (not __IsDebuggerPresent) and
+                   (IsATTY(StdOut) = 1) and
+                   IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
+                     'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
+end;
 
 function IsDebuggerPresent: boolean;
 begin
-  if __IsDebuggerPresent = idpUntested then
-    if _IsDebuggerPresent then
-      __IsDebuggerPresent := idpPresent
-    else
-      __IsDebuggerPresent := idpNone;
-  result := __IsDebuggerPresent = idpPresent;
+  if not __IsDebuggerTested then
+    TestOnceDebuggerTty;
+  result := __IsDebuggerPresent;
 end;
 
 {$ifndef OSDARWIN}
@@ -4156,10 +4170,6 @@ var
 begin
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
-  StdOutIsTTY := not IsDebuggerPresent and
-                 (IsATTY(StdOut) = 1) and
-                 IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
-                   'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
   {$ifdef OSBSDDARWIN}

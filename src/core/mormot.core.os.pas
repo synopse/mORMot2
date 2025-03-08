@@ -3893,12 +3893,6 @@ var
   // - on Windows, is initialized when AllocConsole or TextColor() are called
   StdOut: THandle;
 
-  {$ifdef OSPOSIX}
-  /// set at initialization if StdOut has the TTY flag and env has a known TERM
-  // - equals false if the console does not support colors, e.g. piped to a file
-  StdOutIsTTY: boolean;
-  {$endif OSPOSIX}
-
   /// global flag to modify the code behavior at runtime when run from TSynTests
   // - e.g. TSynDaemon.AfterCreate won't overwrite TSynTests.RunAsConsole logs
   RunFromSynTests: boolean;
@@ -3911,6 +3905,13 @@ procedure AllocConsole;
 /// always true on POSIX, may be false for a plain Windows GUI application
 function HasConsole: boolean;
   {$ifdef OSPOSIX} inline; {$endif OSPOSIX}
+
+{$ifdef OSPOSIX}
+/// true if StdOut has the TTY flag and env has a known TERM
+// - equals false if the console does not support colors, e.g. piped to a file
+// or from the Lazarus debugger
+function StdOutIsTTY: boolean; inline;
+{$endif OSPOSIX}
 
 /// change the console text writing color
 procedure TextColor(Color: TConsoleColor);
