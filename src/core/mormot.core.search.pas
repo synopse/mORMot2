@@ -1913,7 +1913,7 @@ begin
   // compute TFindFilesDynArray from names[]
   if not (ffoExcludesDir in Options) then
     dir := '';
-  tolocal := UnixTimeToLocal * MSecsPerSec; // local TSearchRec: use TZSeconds
+  tolocal := TimeZoneLocalBias * 60000; // local TSearchRec: use TZSeconds * 60
   SetLength(result, n);
   r := 0;
   d := pointer(result);

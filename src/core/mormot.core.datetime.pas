@@ -1777,7 +1777,7 @@ begin
       exit;
     if (s^ = '-') and
        (PCardinal(s + 1)^ = $30303030) then // '-0000' for current local
-      Zone := TimeZoneLocalBias
+      Zone := TimeZoneLocalBias // retrieved once at startup
     else
     begin
       Zone := (ord(s[1]) * 10 + ord(s[2]) - (48 + 480)) * 60 +
