@@ -146,10 +146,10 @@ begin // StrIComp() from Delphi does not support Str1/Str2 = nil
       if Str2 <> nil then
         repeat
           c1 := ord(Str1^);
-          if c1 in [ord('a') .. ord('z')] then
+          if (c1 >= ord('a')) and (c1 <= ord('z')) then
             dec(c1, 32);
           c2 := ord(Str2^);
-          if c2 in [ord('a') .. ord('z')] then
+          if (c2 >= ord('a')) and (c2 <= ord('z')) then
             dec(c2, 32);
           result := c1 - c2;
           if result <> 0 then
