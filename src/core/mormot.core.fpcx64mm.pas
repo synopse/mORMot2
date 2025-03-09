@@ -347,13 +347,13 @@ procedure WriteHeapStatus(const context: ShortString = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
   compilationflags: boolean = false);
 
-/// convenient debugging function into a string
+/// convenient debugging function of the heap details into a text buffer
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurrences
 // - see also RetrieveMemoryManagerInfo from mormot.core.log for more details
-// - warning: this function is not thread-safe
+// - warning: this function is not thread-safe, and return a global static buffer
 function GetHeapStatus(const context: ShortString; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 
 
 const
@@ -2820,7 +2820,7 @@ begin
   result.CurrHeapFree := 0;
 end;
 
-function _GetHeapInfo: string;
+function _GetHeapInfo: Utf8String; // mormot.core.log will use RawUtF8
 begin
   result := GetHeapStatus(' - fpcx64mm: ', 16, 16, {flags=}true, {sameline=}true);
 end;
@@ -2978,118 +2978,132 @@ begin
     result := maxcount;
 end;
 
-type
-  TShort = string[31]; // full shortstring is not needed
+var
+  WrStrBuf: array[0 .. 1023] of AnsiChar; // typically less than 600 bytes
+  WrStrPos: PtrInt;
+  WrStrOnSameLine: boolean;
+
+procedure W(const txt: shortstring);
+var
+  p, n: PtrInt;
+begin
+  n := ord(txt[0]);
+  if n = 0 then
+    exit;
+  p := WrStrPos;
+  inc(n, p);
+  if n >= high(WrStrBuf) then
+    exit; // paranoid
+  Move(txt[1], WrStrBuf[p], ord(txt[0]));
+  WrStrPos := n;
+end;
 
 const
   K_: array[0..4] of string[1] = (
     'P', 'T', 'G', 'M', 'K');
 
-function K(i: PtrUInt): TShort;
+procedure K(const txt: shortstring; i: PtrUInt);
 var
   j, n: PtrUInt;
-  tmp: PShortString;
+  kk: PShortString;
+  tmp: shortstring;
 begin
-  tmp := nil;
+  W(txt);
+  kk := nil;
   n := 1 shl 50;
   for j := 0 to high(K_) do
     if i >= n then
     begin
       i := i div n;
-      tmp := @K_[j];
+      kk := @K_[j];
       break;
     end
     else
       n := n shr 10;
-  str(i, result);
-  if tmp <> nil then
-    result := result + tmp^;
+  str(i, tmp);
+  W(tmp);
+  if kk <> nil then
+    W(kk^);
 end;
 
-function S(i: PtrUInt): TShort;
+procedure S(const txt: shortstring; i: PtrUInt);
+var
+  tmp: shortstring;
 begin
-  str(i, result);
+  W(txt);
+  str(i, tmp);
+  W(tmp);
 end;
 
-var
-  WrStrTemp: string; // we don't require thread safety here
-  WrStrOnSameLine: boolean;
-
-procedure Wr(const V: array of TShort; CRLF: boolean = true);
-var
-  i, j, n, cr: PtrInt;
-  p: PAnsiChar;
-begin // we don't have format() nor formatutf8() -> this is good enough
-  n := length(WrStrTemp);
-  j := n;
-  for i := 0 to high(V) do
-    inc(n, ord(V[i][0]));
-  cr := 0;
-  if CRLF and
-     not WrStrOnSameLine then
-    cr := {$ifdef OSWINDOWS} 2 {$else} 1 {$endif};
-  inc(n, cr);
-  SetLength(WrStrTemp, n); // re-allocate at once
-  p := pointer(WrStrTemp);
-  inc(p, j);
-  for i := 0 to high(V) do
-  begin
-    Move(V[i][1], p^, ord(V[i][0]));
-    inc(p, ord(V[i][0]));
-  end;
-  if cr <> 0 then
-    {$ifdef OSWINDOWS} PWord(P)^ := $0a0d {$else} P^ := #10 {$endif};
+procedure LF(const txt: shortstring = '');
+begin
+  if txt[0] <> #0 then
+    W(txt);
+  if WrStrOnSameLine then
+    W(' ')
+  else
+    W({$ifdef OSWINDOWS} #13#10 {$else} #10 {$endif});
 end;
 
 procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-  const name: TShort);
+  const name: shortstring);
 begin
-  Wr([name, K(arena.CurrentBytes),
-      'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
+  K(name, arena.CurrentBytes);
+  K('B/', arena.CumulativeBytes);
+  W('B ');
   {$ifdef FPCMM_DEBUG}
-  Wr([  '   peak=', K(arena.PeakBytes),
-      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
-         ' alloc=', K(arena.CumulativeAlloc),
-          ' free=', K(arena.CumulativeFree)], false);
+  K('   peak=', arena.PeakBytes);
+  K('B current=', arena.CumulativeAlloc - arena.CumulativeFree);
+  K(' alloc=', arena.CumulativeAlloc);
+  K(' free=', arena.CumulativeFree);
   {$endif FPCMM_DEBUG}
-  Wr([' sleep=', K(arena.SleepCount)]);
+  K(' sleep=', arena.SleepCount);
+  LF;
 end;
 
-procedure ComputeHeapStatus(const context: TShort; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags: boolean);
+function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 var
   res: TResArray; // no heap allocation involved
   i, n: PtrInt;
   t, b: PtrUInt;
   small, tiny: cardinal;
 begin
+  WrStrOnSameLine := onsameline;
+  WrStrPos := 0;
   if context[0] <> #0 then
-    Wr([context]);
+    LF(context);
   if compilationflags then
-    Wr([' Flags:' + FPCMM_FLAGS]);
+    LF(' Flags:' + FPCMM_FLAGS);
   with CurrentHeapStatus do
   begin
-    Wr([' Small:  ', K(SmallBlocks),
-                '/', K(SmallBlocksSize),
-        'B  including tiny<=', K(SmallBlockSizes[NumTinyBlockTypes - 1]),
-        'B arenas=', S(NumTinyBlockArenas + 1),
-       {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
-       {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-        ' pools=', S(length(SmallMediumBlockInfo))
-       {$else}
-        ' fed from its own pool'
-       {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-       {$else}
-        ' fed from Medium'
-       {$endif FPCMM_SMALLNOTWITHMEDIUM}
-       ]);
+    K(' Small:  ', SmallBlocks);
+    K('/', SmallBlocksSize);
+    K('B  including tiny<=', SmallBlockSizes[NumTinyBlockTypes - 1]);
+    S('B arenas=', NumTinyBlockArenas + 1);
+    {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
+    {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+    S(' pools=', length(SmallMediumBlockInfo));
+    {$else}
+    W(' fed from its own pool');
+    {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+    {$else}
+    W(' fed from Medium');
+    {$endif FPCMM_SMALLNOTWITHMEDIUM}
+    LF;
     WriteHeapStatusDetail(Medium, ' Medium: ');
     WriteHeapStatusDetail(Large,  ' Large:  ');
     if SleepCount <> 0 then
-      Wr([' Total Sleep: count=', K(SleepCount)
-        {$ifdef FPCMM_SLEEPTSC} , ' rdtsc=', K(SleepCycles) {$endif}]);
+    begin
+      K(' Total Sleep: count=', SleepCount);
+      {$ifdef FPCMM_SLEEPTSC} K(' rdtsc=', SleepCycles); {$endif}
+      LF;
+    end;
     if SmallGetmemSleepCount <> 0 then
-      Wr([' Small Getmem Sleep: count=', K(SmallGetmemSleepCount)]);
+    begin
+      K(' Small Getmem Sleep: count=', SmallGetmemSleepCount);
+      LF;
+    end;
   end;
   if (smallblockcontentioncount > 0) and
      (CurrentHeapStatus.SmallGetmemSleepCount <> 0) then
@@ -3098,65 +3112,65 @@ begin
     for i := 0 to n - 1 do
       with TSmallBlockContention(res[i]) do
       begin
-        Wr([' ', S(GetmemBlockSize), '=' , K(GetmemSleepCount)], {crlf=}false);
+        S(' ', GetmemBlockSize);
+        K('=' , GetmemSleepCount);
         if (i and 7 = 7) or
            (i = n - 1) then
-          Wr([]);
+          LF;
       end;
   end;
   if smallblockstatuscount > 0 then
   begin
     SetSmallBlockStatus(res, small, tiny);
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal), @t, @b) - 1;
-    Wr([' Small Blocks since beginning: ', K(t), '/', K(b),
-        'B (as small=', K(small), '/', S(NumSmallBlockTypes),
-        ' tiny=', K(tiny), '/', S(NumTinyBlockArenas * NumTinyBlockTypes), ')']);
+    K(' Small Blocks since beginning: ', t);
+    K('/', b);
+    K('B (as small=', small);
+    S('/', NumSmallBlockTypes);
+    K(' tiny=', tiny);
+    S('/', NumTinyBlockArenas * NumTinyBlockTypes);
+    LF(')');
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
-        Wr(['  ', S(BlockSize), '=', K(Total)], false);
+        S('  ', BlockSize);
+        K('=', Total);
         if (i and 7 = 7) or
            (i = n) then
-          Wr([]);
+          LF;
       end;
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent), @t, @b) - 1;
-    Wr([' Small Blocks current: ', K(t), '/', K(b), 'B']);
+    K(' Small Blocks current: ', t);
+    K('/', b);
+    LF('B');
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
-        Wr(['  ', S(BlockSize), '=', K(Current)], false);
+        S('  ', BlockSize);
+        K('=', Current);
         if (i and 7 = 7) or
            (i = n) then
-          Wr([]);
+          LF;
       end;
   end;
-end;
-
-function GetHeapStatus(const context: shortstring; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
-begin
-  WrStrOnSameLine := onsameline;
-  ComputeHeapStatus(context, smallblockstatuscount, smallblockcontentioncount,
-    compilationflags);
-  result := WrStrTemp;
-  WrStrTemp := '';
+  LF;
+  WrStrBuf[WrStrPos] := #0; // makes PAnsiChar
+  result := @WrStrBuf;
 end;
 
 procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean);
 begin
-  WrStrOnSameLine := false;
-  ComputeHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,
-    compilationflags);
+  GetHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,
+    compilationflags, {onsameline=}false);
   {$ifdef MSWINDOWS} // write all text at once
   {$I-}
-  write(WrStrTemp);
+  write(PAnsiChar(@WrStrBuf));
   ioresult;
   {$I+}
   {$else}
-  fpwrite(StdOutputHandle, pointer(WrStrTemp), length(WrStrTemp)); // POSIX
+  fpwrite(StdOutputHandle, @WrStrBuf, WrStrPos); // POSIX
   {$endif MSWINDOWS}
-  WrStrTemp := '';
 end;
 
 function GetSmallBlockStatus(maxcount: integer; orderby: TSmallBlockOrderBy;
@@ -3474,7 +3488,7 @@ begin
       else
       begin
         StartReport;
-        writeln(' medium block leak of ', size, ' bytes (', K(size), 'B)');
+        writeln(' medium block leak of ', size, ' bytes');
       end;
     inc(block, size);
   until false;
@@ -3538,7 +3552,6 @@ var
   leak, leaks: PtrUInt;
   {$endif FPCMM_REPORTMEMORYLEAKS}
 begin
-  WrStrTemp := '';
   {$ifdef FPCMM_REPORTMEMORYLEAKS}
   leaks := 0;
   {$endif FPCMM_REPORTMEMORYLEAKS}
@@ -3598,7 +3611,7 @@ begin
     size := large.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
     {$ifdef FPCMM_REPORTMEMORYLEAKS}
     StartReport;
-    writeln(' large block leak of ', size, ' bytes (', K(size), 'B)');
+    writeln(' large block leak of ', size, ' bytes');
     {$endif FPCMM_REPORTMEMORYLEAKS}
     nextlarge := large.NextLargeBlockHeader;
     FreeLarge(large, size);
