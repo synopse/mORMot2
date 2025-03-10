@@ -2565,28 +2565,32 @@ begin
     result := 0; // not implemented yet on BSD/Darwin
 end;
 
-function fpsysctlhwint(hwid: cint): Int64;
+function bsdsysctl(node, id: cint; dest: pointer; len: cint): cint; overload;
 var
   mib: array[0..1] of cint;
-  len: cint;
+begin
+  mib[0] := node;
+  mib[1] := id;
+  result := len;
+  fpsysctl(pointer(@mib), 2, dest, @result, nil, 0);
+end;
+
+function bsdsysctl(name: PAnsiChar; dest: pointer; len: cint): cint; overload;
+begin
+  result := len;
+  FPsysctlbyname(name, dest, @result, nil, 0);
+end;
+
+function fpsysctlhwint(hwid: cint): Int64;
 begin
   result := 0;
-  mib[0] := CTL_HW;
-  mib[1] := hwid;
-  len := SizeOf(result);
-  fpsysctl(pointer(@mib), 2, @result, @len, nil, 0);
+  bsdsysctl(CTL_HW, hwid, @result, SizeOf(result));
 end;
 
 function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
-var
-  mib: array[0..1] of cint;
-  len: cint;
 begin
-  mib[0] := CTL_HW;
-  mib[1] := hwid;
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
-  len := SizeOf(temp);
-  fpsysctl(pointer(@mib), 2, @temp, @len, nil, 0);
+  bsdsysctl(CTL_HW, hwid, @temp, SizeOf(temp));
   if temp[0] <> #0 then
     result := @temp
   else
@@ -2594,12 +2598,9 @@ begin
 end;
 
 function fpsysctlbynamehwstr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
-var
-  len: cint;
 begin
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
-  len := SizeOf(temp);
-  FPsysctlbyname(name, @temp, @len, nil, 0);
+  bsdsysctl(name, @temp, SizeOf(temp));
   if temp[0] <> #0 then
     result := @temp
   else
@@ -2717,7 +2718,8 @@ var
   us: Int64 absolute mem.vmtotal; // =0 after above GetMemoryInfo()
   guid: THash128Rec absolute mem.filetotal; // also = 0
 begin
-  //some minimal OS entropy we could get for BSD/Darwin
+  // some minimal OS entropy we could get for BSD/Darwin
+  bsdsysctl('kern.cp_times', @e, SizeOf(e)); // user/nice/system/int/idle
   QueryPerformanceMicroSeconds(us);
   e.i[0] := e.i[0] xor us;
   e.i[1] := e.i[1] xor GetTickCount64;
