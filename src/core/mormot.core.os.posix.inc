@@ -3217,6 +3217,15 @@ begin
   FillSystemRandom(@e, SizeOf(e), {allowblocking=}false);
 end;
 
+const
+  // FillSystemRandom() retrieves 256 bytes max (2048-bit) from the OS API
+  // - "man urandom" Usage states that 256-bit makes sense for /dev/urandom - as
+  // it is usually called in our framework, e.g. from _XorEntropyGetOsRandom256
+  // - but we pushed the limit up since it may be called by TBigInt.FillPrime to
+  // generate 2048-bit RSA keys
+  // - "man getrandom" states that the Linux syscall can always return 256 bytes
+  MAXFROMOS = 256;
+
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean): boolean;
 var
@@ -3226,9 +3235,9 @@ begin
   result := false;
   if Len <= 0 then
     exit;
-  // retrieve 32 bytes max (256-bit) from OS
-  rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
-  if Len < 32 then
+  // retrieve up to MAXFROMOS bytes max from OS
+  rd := MAXFROMOS;
+  if Len < MAXFROMOS then
     rd := Len;
   dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
   if (dev <= 0) and
@@ -3245,8 +3254,8 @@ begin
     dec(Len, rd);
     Buffer := @Buffer[rd];
   end
-  else // fallback on OS API call failure (paranoid)
-    for i := 1 to 2 do // 2 * TGuid = 2 * 128-bit = 256-bit
+  else // OS API call failure (paranoid)
+    for i := 1 to MAXFROMOS div SizeOf(tmp) do // 128-bit per loop
     begin
       sysutils.CreateGUID(tmp); // use FPC RTL as fallback
       rd := SizeOf(tmp);
@@ -3254,9 +3263,11 @@ begin
         rd := Len;
       MoveFast(tmp, Buffer[0], rd);
       dec(Len, rd);
+      if Len = 0 then
+        exit;
       Buffer := @Buffer[rd];
     end;
-  // use Lecuyer's gsl_rng_taus2 for the remaining bytes (unlikely)
+  // use Lecuyer's gsl_rng_taus2 for the remaining bytes > MAXFROMOS (unlikely)
   if Len > 0 then
     SharedRandom.Fill(Buffer, Len);
 end;
