@@ -1352,7 +1352,6 @@ begin
   DoTextLn([CRLF + '   ', Ident,
             CRLF + '  ', RawUtf8OfChar('-', length(Ident) + 2)]);
   RunTimer.Start;
-  Randomize;
   fFailed := nil;
   fAssertions := 0;
   fAssertionsFailed := 0;
