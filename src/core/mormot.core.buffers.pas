@@ -7777,7 +7777,7 @@ function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
 var
   random: array[0..2] of cardinal;
 begin
-  RandomBytes(@random, SizeOf(random));
+  SharedRandom.Fill(@random, SizeOf(random));
   result := BinToBase64uri(@random, SizeOf(random));
   AddRawUtf8(boundaries, result);
 end;

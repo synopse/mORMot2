@@ -5032,7 +5032,7 @@ begin
   FillCharFast(aClient, SizeOf(aClient), 0);
   aClient.algo := fAlgo;
   // client-side randomness for ephemeral keys and signatures
-  RandomBytes(@fRndA, SizeOf(fRndA)); // Lecuyer is enough for public random
+  SharedRandom.Fill(@fRndA, SizeOf(fRndA)); // enough for public randomness
   aClient.RndA := fRndA;
   // generate the client ephemeral key
   if fAlgo.auth <> authClient then
@@ -5154,7 +5154,7 @@ begin
   FillCharFast(aServer, SizeOf(aServer), 0);
   aServer.algo := fAlgo;
   aServer.RndA := fRndA;
-  RandomBytes(@fRndB, SizeOf(fRndB)); // Lecuyer is enough for public random
+  SharedRandom.Fill(@fRndB, SizeOf(fRndB)); // enough for public randomness
   aServer.RndB := fRndB;
   if fAlgo.auth <> authServer then
     if not Ecc256r1MakeKey(aServer.QF, dF) then

@@ -3251,13 +3251,13 @@ begin
       result := (FileRead(dev, Buffer[0], rd) = rd);
       if result and
          (Len > 32) then
-        RandomBytes(@Buffer[32], Len - 32); // simple gsl_rng_taus2 padding
+        SharedRandom.Fill(@Buffer[32], Len - 32); // simple gsl_rng_taus2 padding
     finally
       FileClose(dev);
     end;
   if not result then
     // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
-    RandomBytes(pointer(Buffer), Len);
+    SharedRandom.Fill(pointer(Buffer), Len);
 end;
 
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;

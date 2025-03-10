@@ -7158,7 +7158,7 @@ begin
   end;
   if needFileID then
   begin
-    RandomBytes(@fFileID, SizeOf(fFileID));
+    SharedRandom.Fill(@fFileID, SizeOf(fFileID));
     SetLength(hexFileID, SizeOf(fFileID) * 2 + 2);
     P := pointer(hexFileID);
     P[0] := '<';

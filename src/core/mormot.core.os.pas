@@ -4866,7 +4866,7 @@ type
 function NewSynLocker: PSynLocker;
 
 type
-  /// a thread-safe Pierre L'Ecuyer software random generator
+  /// a thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - just wrap TLecuyer with a TLighLock
   // - should not be used, unless may be slightly faster than a threadvar
   {$ifdef USERECORDWITHMETHODS}
@@ -4890,8 +4890,8 @@ type
   TThreadIDDynArray = array of TThreadID;
 
 var
-  /// a global thread-safe Pierre L'Ecuyer software random generator
-  // - should not be used, unless may be slightly faster than a threadvar
+  /// a global thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
+  // - could be used if a threadvar is overkill, e.g. for short-living threads
   SharedRandom: TLecuyerThreadSafe;
 
 {$ifdef OSPOSIX}

@@ -9583,7 +9583,7 @@ end;
 
 procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
 begin
-  sysutils.CreateGUID(e.l.guid); // Windows CoCreateGuid()
+  sysutils.CreateGUID(e.l.guid); // e.g. Windows CoCreateGuid()
   sysutils.CreateGUID(e.h.guid);
 end;
 
@@ -9597,7 +9597,7 @@ var
   rnd: THash256Rec;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
-  XorEntropyGetOsRandom256(rnd);
+  XorEntropyGetOsRandom256(rnd); // fast get 256-bit of randomness from OS
   if _EntropyGlobal.L = 0 then
     _EntropyGlobal.guid := rnd.h.guid; // initialize forward security
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;

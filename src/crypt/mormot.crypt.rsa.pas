@@ -2807,7 +2807,7 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    RandomBytes(@r[2], padding); // Lecuyer is enough for public padding
+    SharedRandom.Fill(@r[2], padding); // Lecuyer is enough for public padding
     inc(padding, 2);
     for i := 2 to padding - 1 do
       if r[i] = 0 then
@@ -3017,7 +3017,7 @@ begin
      not HasPublicKey then
     exit;
   // generate the ephemeral secret key and IV within the corresponding header
-  RandomBytes(@head.iv, SizeOf(head.iv)); // use Lecuyer for public random
+  SharedRandom.Fill(@head.iv, SizeOf(head.iv)); // use Lecuyer for public random
   try
     TAesPrng.Main.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
@@ -3192,7 +3192,7 @@ begin
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
-  RandomBytes(@salt, hlen); // Lecuyer is good enough for public salt
+  SharedRandom.Fill(@salt, hlen); // Lecuyer is good enough for public salt
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
   if pslen < 0 then

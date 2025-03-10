@@ -5419,7 +5419,7 @@ var
   n: cardinal;
 begin
   FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
-  RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding)); // Lecuyer is enough
+  SharedRandom.Fill(@aMsg.Padding, SizeOf(aMsg.Padding)); // Lecuyer is enough
   if aSeq = 0 then
     aSeq := InterlockedIncrement(fFrameSeq);
   aMsg.Seq := aSeq;

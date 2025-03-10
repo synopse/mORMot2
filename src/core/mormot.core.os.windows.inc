@@ -2421,7 +2421,7 @@ begin
     end;
   if not result then
     // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
-    RandomBytes(pointer(Buffer), Len);
+    SharedRandom.Fill(pointer(Buffer), Len);
 end;
 
 function TProcessInfo.Init: boolean;
