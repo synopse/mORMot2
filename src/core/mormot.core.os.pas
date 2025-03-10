@@ -709,9 +709,6 @@ var
   /// the available cache information as returned by the OS
   // - e.g. 'L1=2*32KB  L2=256KB  L3=3MB' on Windows or '3072 KB' on Linux
   CpuCacheText: RawUtf8;
-  /// some textual information about the current computer hardware, from BIOS
-  // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
-  BiosInfoText: RawUtf8;
 
   /// how many hardware CPU sockets are defined on this system
   // - i.e. the number of physical CPU slots, not the number of logical CPU
@@ -737,6 +734,11 @@ var
   OSVersion32: TOperatingSystemVersion;
   /// the running Operating System, encoded as a 32-bit integer
   OSVersionInt32: integer absolute OSVersion32;
+
+/// some textual information about the current computer hardware, from BIOS
+// - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
+// - is a function on Linux to avoid some syscalls at startup
+{$ifdef OSLINUXANDROID} function {$endif} BiosInfoText: RawUtf8;
 
 /// convert an Operating System type into its human-friendly text representation
 // - returns e.g. 'Windows Vista' or 'Windows 10 22H2' or 'Ubuntu' or
@@ -10788,7 +10790,7 @@ begin
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
-  TrimDualSpaces(BiosInfoText);
+  {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
   TrimDualSpaces(CpuInfoText);
   OSVersionShort := ToTextOS(OSVersionInt32);
   InitializeExecutableInformation;

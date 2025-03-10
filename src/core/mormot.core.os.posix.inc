@@ -4165,6 +4165,52 @@ begin
   FindClose(SR);
 end;
 
+var
+  __BiosInfoText: RawUtf8;
+  __BiosInfoHardwareFromCpuInfo: RawUtf8;
+
+procedure TrimDualSpaces(var s: RawUtf8); forward;
+
+procedure SetBiosInfoText(var txt: RawUtf8);
+var
+  prod: RawUtf8;
+begin
+  {$ifdef OSANDROID}
+  txt:= TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
+                      GetSystemProperty('ro.product.name') + ' ' +
+                      GetSystemProperty('ro.product.device')));
+  {$else}
+  txt := TrimU(LoadProcFileTrimed('/sys/class/dmi/id/sys_vendor') + ' ' +
+               LoadProcFileTrimed('/sys/class/dmi/id/product_name'));
+  if txt <> '' then
+  begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
+    prod := LoadProcFileTrimed('/sys/class/dmi/id/product_version');
+    if prod <> '' then
+      txt := txt + ' ' + prod;
+  end
+  else
+    // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
+    txt := LoadProcFileTrimed('/proc/device-tree/model');
+  {$endif OSANDROID}
+  if __BiosInfoHardwareFromCpuInfo <> '' then
+  begin // e.g. Hardware : BCM2709 on a RPi3
+    if txt = '' then
+      txt := __BiosInfoHardwareFromCpuInfo
+    else
+      txt := txt + ' (' + __BiosInfoHardwareFromCpuInfo + ')';
+  end
+  else if txt = '' then
+    txt := 'Generic ' + CPU_ARCH_TEXT + ' system'; // noname computer
+  TrimDualSpaces(txt);
+end;
+
+function BiosInfoText: RawUtf8;
+begin
+  if __BiosInfoText = '' then
+    SetBiosInfoText(__BiosInfoText);
+  result := __BiosInfoText;
+end;
+
 {$endif OSLINUX}
 
 {$ifdef CPUARM3264} // POSIX libc is faster than FPC RTL or our pascal code
@@ -4259,21 +4305,14 @@ var
   {$ifdef OSBSDDARWIN}
   temp1, temp2: ShortString;
   {$else}
-  hw, cache, cpuinfo: PUtf8Char;
-  proccpuinfo, release, prod: RawUtf8;
+  cache, cpuinfo: PUtf8Char;
+  proccpuinfo, release: RawUtf8;
   procid, phyid, phyndx: integer;
   phy: TIntegerDynArray;
   {$ifdef OSLINUX}
-  prodver, dist: RawUtf8;
+  dist: RawUtf8;
   SR: TSearchRec;
   si: TSysInfo;  // Linuxism
-
-  function GetSysFile(const fn: TFileName): RawUtf8;
-  begin
-    result := TrimU(StringFromFileNoSize(fn));
-    if result = 'Default string' then // e.g. on ProxMox containers or VMs
-      result := '';
-  end;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
 begin
@@ -4319,56 +4358,41 @@ begin
   {$ifdef OSANDROID}
   // pure ANDROID branch
   release := GetSystemProperty('ro.build.version.release');
-  prod := TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
-                        GetSystemProperty('ro.product.name') + ' ' +
-                        GetSystemProperty('ro.product.device')));
   {$else}
   // pure LINUX branch
   GetSystemMacAddress := _GetSystemMacAddress;
   if Sysinfo(@si) = 0 then
     SystemMemorySize := si.totalram * si.mem_unit;
-  prod := TrimU(GetSysFile('/sys/class/dmi/id/sys_vendor') + ' ' +
-                GetSysFile('/sys/class/dmi/id/product_name'));
-  if prod <> '' then
-  begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
-    prodver := GetSysFile('/sys/class/dmi/id/product_version');
-    if prodver <> '' then
-      prod := prod + ' ' + prodver;
-  end
-  else
-    // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
-    prod := GetSysFile('/proc/device-tree/model');
-  FindNameValue(StringFromFileNoSize('/etc/os-release'),
-    'PRETTY_NAME=', release);
+  // https://www.freedesktop.org/software/systemd/man/latest/os-release.html
+  FindFileValue('/etc/os-release', 'PRETTY_NAME=', release);
   if (release <> '') and
      (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
   TrimSelf(release);
   if release = '' then
   begin
-    FindNameValue(StringFromFileNoSize('/etc/lsb-release'),
-      'DISTRIB_DESCRIPTION=', release);
+    FindFileValue('/etc/lsb-release', 'DISTRIB_DESCRIPTION=', release);
     if (release <> '') and
        (release[1] = '"') then
       release := copy(release, 2, length(release) - 2);
-  end;
-  if (release = '') and
-     (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then
-  begin
-    release := SR.Name; // 'redhat-release' 'SuSE-release'
-    if IdemPChar(pointer(release), 'LSB-') and
-       (FindNext(SR) = 0) then
-      release := SR.Name;
-    release := split(release, '-');
-    dist := split(StringFromFileNoSize('/etc/' + SR.Name), #10);
-    if (dist <> '') and
-       (PosExChar('=', dist) = 0) and
-       (PosExChar(' ', dist) > 0) then
-      // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
-      SetLinuxDistrib(dist)
-    else
-      dist := '';
-    FindClose(SR);
+    if (release = '') and
+       (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then
+    begin
+      release := SR.Name; // 'redhat-release' 'SuSE-release'
+      if IdemPChar(pointer(release), 'LSB-') and
+         (FindNext(SR) = 0) then
+        release := SR.Name;
+      release := split(release, '-');
+      dist := split(StringFromFileNoSize('/etc/' + SR.Name), #10);
+      if (dist <> '') and
+         (PosExChar('=', dist) = 0) and
+         (PosExChar(' ', dist) > 0) then
+        // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+        SetLinuxDistrib(dist)
+      else
+        dist := '';
+      FindClose(SR);
+    end;
   end;
   if (release <> '') and
      (OS_KIND = osLinux) then
@@ -4386,8 +4410,6 @@ begin
       OS_KIND := osRedHat;
   end;
   {$endif OSANDROID}
-  BiosInfoText := prod;
-  hw := nil;
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
   proccpuinfo := StringFromFileNoSize('/proc/cpuinfo'); // LoadProcFile() not ok
@@ -4414,7 +4436,7 @@ begin
             IdemPChar(beg, 'FLAGS') then
       CpuInfoFeatures := ParseLine(beg)
     else if IdemPChar(beg, 'HARDWARE') then
-      hw := ParseLine(beg)
+      __BiosInfoHardwareFromCpuInfo := ParseLine(beg)
     else if IdemPChar(beg, 'SERIAL') then
       _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)))
     else if IdemPChar(beg, 'CACHE SIZE') then
@@ -4457,16 +4479,6 @@ begin
   end;
   RetrieveCpuInfoArm;
   {$endif CPUARM3264}
-  if hw <> nil then
-  begin
-    prod := hw;
-    if BiosInfoText = '' then
-      BiosInfoText := prod
-    else
-      BiosInfoText := BiosInfoText + ' (' + prod + ')';
-  end
-  else if BiosInfoText = '' then
-    BiosInfoText := 'Generic ' + CPU_ARCH_TEXT + ' system'; // noname computer
   if cache <> nil then
   begin
     CpuCacheText := TrimU(cache);
