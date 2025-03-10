@@ -7841,7 +7841,7 @@ begin
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid
+    // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid or dev/urandom
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
@@ -7849,24 +7849,24 @@ begin
       OpenSslRandBytes(@data, SizeOf(data));
     sha3.Update(@data, SizeOf(data));
     // 512-bit from /dev/urandom or CryptGenRandom system entropy source
-    with _OSEntropySeed do
-      if IsZero(bits.b) then
-      begin
-        // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
-        FillSystemRandom(@data, SizeOf(data), {block=}false);
-        safe.Lock;
-        aes.EncryptInit(data, 128); // for in-place diffusion of those 512-bit
-        bits := data;
-        safe.UnLock;
-      end
-      else
-      begin
-        // 512-bit of perfect forward security using AES-CTR diffusion
-        safe.Lock;
-        aes.DoBlocksCtr({iv=}@data, @bits, @bits, SizeOf(bits) shr AesBlockShift);
-        data := bits;
-        safe.UnLock;
-      end;
+    if IsZero(_OSEntropySeed.bits.b) then
+    begin
+      // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
+      FillSystemRandom(@data, SizeOf(data), {block=}false);
+      _OSEntropySeed.safe.Lock;
+      _OSEntropySeed.aes.EncryptInit(data, 128); // for in-place diffusion
+      _OSEntropySeed.bits := data;
+      _OSEntropySeed.safe.UnLock;
+    end
+    else
+    begin
+      // 512-bit of perfect forward security using AES-CTR diffusion
+      _OSEntropySeed.safe.Lock;
+      _OSEntropySeed.aes.DoBlocksCtr({iv=}@data, @_OSEntropySeed.bits,
+        @_OSEntropySeed.bits, SizeOf(_OSEntropySeed.bits) shr AesBlockShift);
+      data := _OSEntropySeed.bits;
+      _OSEntropySeed.safe.UnLock;
+    end;
     sha3.Update(@data, SizeOf(data));
     // 512-bit of low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
