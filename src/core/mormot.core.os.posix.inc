@@ -2177,7 +2177,7 @@ end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
 begin
-  Host := RawUtf8(GetHostName);
+  Host := SystemInfo.uts.nodename;
   if Host = '' then
     Host := RawUtf8(GetEnvironmentVariable('HOSTNAME'));
   User := RawUtf8(GetEnvironmentVariable('LOGNAME')); // POSIX
@@ -4356,7 +4356,8 @@ begin
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
   modname := nil;
-  fpuname(uts);
+  if fpuname(uts) < 0 then
+    FillChar(uts, SizeOf(uts), 0);
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -4369,8 +4370,6 @@ begin
   FastSetString(BiosInfoText, beg, StrLen(beg));
   if modname = nil then
     modname := fpsysctlhwstr(HW_MODEL, temp2);
-  with uts do
-    OSVersionText := sysname + '-' + release + ' ' + version;
   {$ifdef OSDARWIN}
   // pure MACOS branch
   CpuCache[1].LineSize := fpsysctlhwint(HW_CACHELINE);
@@ -4538,18 +4537,18 @@ begin
   if CpuSockets = 0 then
     CpuSockets := 1;
   SystemInfo.uts.release := uts.Release;
-  SystemInfo.uts.sysname := uts.Sysname;
+  SystemInfo.uts.sysname := uts.SysName;
   SystemInfo.uts.version := uts.Version;
+  SystemInfo.uts.nodename := uts.NodeName;
+  OSVersionText := SystemInfo.uts.sysname + ' ' + SystemInfo.uts.release;
+  if SystemInfo.release <> '' then
+    OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
   P := @uts.release[0];
   KernelRevision := GetNextCardinal(P) shl 16 +
                     GetNextCardinal(P) shl 8 +
-                    GetNextCardinal(P);
+                    GetNextCardinal(P); // stored in big endian for easy compare
   OSVersion32.os := OS_KIND;
   MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
-  with SystemInfo.uts do
-    OSVersionText := sysname + ' ' + release;
-  if SystemInfo.release <> '' then
-    OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
   {$ifdef OSANDROID}
   OSVersionText := 'Android (' + OSVersionText + ')';
   {$else}

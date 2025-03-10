@@ -1014,7 +1014,7 @@ var
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
     uts: record
-      sysname, release, version: RawUtf8;
+      sysname, release, version, nodename: RawUtf8;
     end;
     /// Linux Distribution release name, retrieved from /etc/*-release
     release: RawUtf8;
