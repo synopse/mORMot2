@@ -778,13 +778,6 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 function AddGuid(var guids: TGuidDynArray; const guid: TGuid;
   NoDuplicates: boolean = false): integer;
 
-/// compute a random UUid value from the RandomBytes() generator and RFC 4122
-procedure RandomGuid(out result: TGuid); overload;
-
-/// compute a random UUid value from the RandomBytes() generator and RFC 4122
-function RandomGuid: TGuid; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// fast O(log(n)) binary search of a binary (e.g. TGuid) value in a sorted array
 function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
 
@@ -3235,60 +3228,6 @@ function Lecuyer: PLecuyer;
 /// internal function used e.g. by TLecuyer.FillShort/FillShort31
 procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
 
-/// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
-// - this function will use well documented and proven Pierre L'Ecuyer software
-// generator - which happens to be faster (and safer) than RDRAND opcode (which
-// is used for seeding anyway)
-// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
-// randomness, but is twice slower (even with AES-NI)
-// - thread-safe and non-blocking function: each thread will maintain its own
-// TLecuyer table (note that RTL's system.Random function is not thread-safe)
-function Random32: cardinal; overload;
-
-/// compute of a 32-bit random value <> 0, using the gsl_rng_taus2 generator
-// - thread-safe function: each thread will maintain its own TLecuyer table
-function Random32Not0: cardinal;
-
-/// fast compute of some 31-bit random value, using the gsl_rng_taus2 generator
-// - thread-safe function: each thread will maintain its own TLecuyer table
-function Random31: integer;
-
-/// compute of a 31-bit random value <> 0, using the gsl_rng_taus2 generator
-// - thread-safe function: each thread will maintain its own TLecuyer table
-function Random31Not0: integer;
-
-/// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
-// - thread-safe function: each thread will maintain its own TLecuyer table
-function Random64: QWord;
-
-/// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
-// - calls internally the overloaded Random32 function, ensuring Random32(max)<max
-// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
-// randomness, but is twice slower (even with AES-NI)
-// - thread-safe and non-blocking function using a per-thread TLecuyer engine
-function Random32(max: cardinal): cardinal; overload;
-
-/// fast compute of a 64-bit random floating point, using the gsl_rng_taus2 generator
-// - thread-safe and non-blocking function using a per-thread TLecuyer engine
-// - returns a random value in range [0..1)
-function RandomDouble: double;
-
-/// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
-// - will actually XOR the Dest buffer with Lecuyer numbers
-// - consider also the cryptographic-level TAesPrng.Main.FillRandom() method
-// - thread-safe and non-blocking function using a per-thread TLecuyer engine
-procedure RandomBytes(Dest: PByte; Count: integer);
-
-/// fill some string[31] with 7-bit ASCII random text
-// - thread-safe and non-blocking function using a per-thread TLecuyer engine
-procedure RandomShort31(var dest: TShort31);
-
-{$ifndef PUREMORMOT2}
-/// fill some 32-bit memory buffer with values from the gsl_rng_taus2 generator
-// - the destination buffer is expected to be allocated as 32-bit items
-procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
-{$endif PUREMORMOT2}
-
 /// seed the thread-specific gsl_rng_taus2 Random32 generator
 // - by default, gsl_rng_taus2 generator is re-seeded every 2^32 values, which
 // is very conservative against the Pierre L'Ecuyer's algorithm period of 2^88
@@ -4740,18 +4679,6 @@ var
 begin
   d[0] := 0;
   d[1] := 0;
-end;
-
-function RandomGuid: TGuid;
-begin
-  RandomGuid(result);
-end;
-
-procedure RandomGuid(out result: TGuid);
-begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
-  RandomBytes(@result, SizeOf(TGuid));
-  PCardinal(@result.D3)^ := (PCardinal(@result.D3)^ and $ff3f0fff) + $00804000;
-  // version bits 12-15 = 4 (random) and reserved bits 6-7 = 1
 end;
 
 function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
@@ -9598,7 +9525,7 @@ var
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
   XorEntropyGetOsRandom256(rnd); // fast get 256-bit of randomness from OS
-  if _EntropyGlobal.L = 0 then
+  if _EntropyGlobal.c0 = 0 then
     _EntropyGlobal.guid := rnd.h.guid; // initialize forward security
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
@@ -9802,58 +9729,6 @@ begin
   _Lecuyer.Seed(entropy, entropylen);
 end;
 
-function Random32: cardinal;
-begin
-  result := _Lecuyer.Next;
-end;
-
-function Random32Not0: cardinal;
-begin
-  with _Lecuyer do
-    repeat
-      result := Next;
-    until result <> 0;
-end;
-
-function Random31: integer;
-begin
-  result := _Lecuyer.Next shr 1;
-end;
-
-function Random31Not0: integer;
-begin
-  with _Lecuyer do
-    repeat
-      result := Next shr 1;
-    until result <> 0;
-end;
-
-function Random32(max: cardinal): cardinal;
-begin
-  result := (QWord(_Lecuyer.Next) * max) shr 32;
-end;
-
-function Random64: QWord;
-begin
-  result := _Lecuyer.NextQWord;
-end;
-
-function RandomDouble: double;
-begin
-  result := _Lecuyer.NextDouble;
-end;
-
-procedure RandomBytes(Dest: PByte; Count: integer);
-begin
-  if Count > 0 then
-    _Lecuyer.Fill(pointer(Dest), Count);
-end;
-
-procedure RandomShort31(var dest: TShort31);
-begin
-  _Lecuyer.FillShort31(dest);
-end;
-
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 var
   gen: TLecuyer;
@@ -9867,14 +9742,6 @@ begin
   gen.Fill(@data[1], length(data));
   FillZero(THash128(gen)); // to avoid forensic leak
 end;
-
-{$ifndef PUREMORMOT2}
-procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
-begin
-  if CardinalCount > 0 then
-    _Lecuyer.Fill(pointer(Dest), CardinalCount shl 2);
-end;
-{$endif PUREMORMOT2}
 
 
 { MultiEvent* functions }
@@ -11455,7 +11322,7 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  RandomBytes(Init(RandomLen), RandomLen);
+  _Lecuyer.Fill(Init(RandomLen), RandomLen);
   result := buf;
 end;
 

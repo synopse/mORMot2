@@ -4888,9 +4888,11 @@ type
     Safe: TLightLock;
     Generator: TLecuyer;
     /// compute the next 32-bit generated value
-    function Next: cardinal; overload;
+    function Next: cardinal;
     /// compute a 64-bit floating point value
     function NextDouble: double;
+    /// compute a 64-bit integer value
+    function NextQWord: QWord;
     /// XOR some memory buffer with random bytes
     procedure Fill(dest: pointer; count: integer);
     /// fill some string[31] with 7-bit ASCII random text
@@ -4902,9 +4904,75 @@ type
 var
   /// a global thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - could be used if a threadvar is overkill, e.g. for short-living threads
+  // - called e.g. by Random32/Random31/Random64/RandomDouble/RandomBytes functions
   SharedRandom: TLecuyerThreadSafe;
 
+/// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
+// - this function will use well documented and proven Pierre L'Ecuyer software
+// generator - which happens to be faster (and safer) than RDRAND opcode (which
+// is used for seeding anyway)
+// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
+// randomness, but is twice slower (even with AES-NI)
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function Random32: cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute of a 32-bit random value <> 0, using the gsl_rng_taus2 generator
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function Random32Not0: cardinal;
+
+/// fast compute of some 31-bit random value, using the gsl_rng_taus2 generator
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function Random31: integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute of a 31-bit random value <> 0, using the gsl_rng_taus2 generator
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function Random31Not0: integer;
+
+/// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function Random64: QWord;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
+// - calls internally the overloaded Random32 function, ensuring Random32(max)<max
+// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
+// randomness, but is twice slower (even with AES-NI)
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function Random32(max: cardinal): cardinal; overload;
+
+/// fast compute of a 64-bit random floating point, using the gsl_rng_taus2 generator
+// - returns a random value in range [0..1)
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+function RandomDouble: double;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
+// - will actually XOR the Dest buffer with Lecuyer numbers
+// - consider also the cryptographic-level TAesPrng.Main.FillRandom() method
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+procedure RandomBytes(Dest: PByte; Count: integer);
+
+/// fill some string[31] with 7-bit ASCII random text
+// - thread-safe function calling SharedRandom - whereas the RTL Random() is not
+procedure RandomShort31(var dest: TShort31);
+
+{$ifndef PUREMORMOT2}
+/// fill some 32-bit memory buffer with values from the gsl_rng_taus2 generator
+// - the destination buffer is expected to be allocated as 32-bit items
+procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
+{$endif PUREMORMOT2}
+
+/// compute a random UUid value from the RandomBytes() generator and RFC 4122
+procedure RandomGuid(out result: TGuid); overload;
+
+/// compute a random UUid value from the RandomBytes() generator and RFC 4122
+function RandomGuid: TGuid; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 {$ifdef OSPOSIX}
+var
   /// could be set to TRUE to force SleepHiRes(0) to call the POSIX sched_yield
   // - in practice, it has been reported as buggy under POSIX systems
   // - even Linus Torvald himself raged against its usage - see e.g.
@@ -10313,6 +10381,13 @@ begin
   Safe.UnLock;
 end;
 
+function TLecuyerThreadSafe.NextQWord: QWord;
+begin
+  Safe.Lock;
+  result := Generator.NextQWord;
+  Safe.UnLock;
+end;
+
 procedure TLecuyerThreadSafe.Fill(dest: pointer; count: integer);
 begin
   Safe.Lock;
@@ -10325,6 +10400,76 @@ begin
   Fill(@dest, 32);
   FillAnsiStringFromRandom(@dest, 32);
 end;
+
+function Random32: cardinal;
+begin
+  result := SharedRandom.Next;
+end;
+
+function Random32Not0: cardinal;
+begin
+  repeat
+    result := SharedRandom.Next;
+  until result <> 0;
+end;
+
+function Random31: integer;
+begin
+  result := SharedRandom.Next shr 1;
+end;
+
+function Random31Not0: integer;
+begin
+  repeat
+    result := SharedRandom.Next shr 1;
+  until result <> 0;
+end;
+
+function Random32(max: cardinal): cardinal;
+begin
+  result := (QWord(SharedRandom.Next) * max) shr 32;
+end;
+
+function Random64: QWord;
+begin
+  result := SharedRandom.NextQWord;
+end;
+
+function RandomDouble: double;
+begin
+  result := SharedRandom.NextDouble;
+end;
+
+procedure RandomBytes(Dest: PByte; Count: integer);
+begin
+  if Count > 0 then
+    SharedRandom.Fill(pointer(Dest), Count);
+end;
+
+procedure RandomShort31(var dest: TShort31);
+begin
+  SharedRandom.FillShort31(dest);
+end;
+
+function RandomGuid: TGuid;
+begin
+  RandomGuid(result);
+end;
+
+procedure RandomGuid(out result: TGuid);
+begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
+  SharedRandom.Fill(@result, SizeOf(TGuid));
+  PCardinal(@result.D3)^ := (PCardinal(@result.D3)^ and $ff3f0fff) + $00804000;
+  // version bits 12-15 = 4 (random) and reserved bits 6-7 = 1
+end;
+
+{$ifndef PUREMORMOT2}
+procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
+begin
+  if CardinalCount > 0 then
+    SharedRandom.Fill(pointer(Dest), CardinalCount shl 2);
+end;
+{$endif PUREMORMOT2}
 
 
 procedure GlobalLock;
