@@ -3073,7 +3073,7 @@ const
   // read some of the /sys/class/dmi/id/* files (may require root access)
   _KNOWN: array[0..15] of record
     id: TSmbiosBasicInfo;
-    fn: string;
+    fn: string[15];
   end = (
     (id: sbiBiosVendor;        fn: 'bios_vendor'),
     (id: sbiBiosVersion;       fn: 'bios_version'),
@@ -3096,10 +3096,17 @@ const
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
+  n: shortstring;
 begin
+  n := '/sys/class/dmi/id/';
   for i := 0 to high(_KNOWN) do
     with _KNOWN[i] do
-      info[id] := TrimU(StringFromFile('/sys/class/dmi/id/' + fn, {nosize=}true));
+    begin
+      n[0] := #18;
+      AppendShort(fn, n);
+      AppendShortChar(#0, @n);
+      info[id] := LoadProcFileTrimed(@n[1]);
+    end;
   // note: /var/lib/dbus/machine-id and /etc/machine-id are SW generated from
   // random at system install so do NOT match sbiUuid HW DMI value - see
   // https://www.freedesktop.org/software/systemd/man/machine-id.html
@@ -4118,7 +4125,7 @@ begin
     efi := StringFromFileNoSize('/proc/efi/systab'); // old Linux<2.6.6
   if efi = '' then
     exit;
-  FindNameValue(efi, 'SMBIOS', addr);
+  FindNameValue(pointer(efi), 'SMBIOS', addr);
   xaddr := ParseHex0x(pointer(addr));
   if xaddr <> 0 then
     result := ReadSystemMemory(xaddr, 32); // 32 bytes is enough
