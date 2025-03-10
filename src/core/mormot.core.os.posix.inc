@@ -1860,28 +1860,28 @@ begin
   end;
 end;
 
-{$ifdef HASEVENTFD}
+{$ifdef HASEVENTFD} // only validated on Linux x86_64 by now
 
 const
   EFD_SEMAPHORE = $00000001;
   EFD_NONBLOCK  = O_NONBLOCK;
   EFD_CLOEXEC   = O_CLOEXEC;
 
-  // exists since Kernel 2.6.27
+  // eventfd2 syscall exists since Kernel 2.6.27, getrandom since Kernel 3.17
   {$ifdef CPUX64}
   syscall_nr_eventfd2 = 290;
+  syscall_nr_getrandom = 318;
   {$endif CPUX64}
   {$ifdef CPUX86}
   syscall_nr_eventfd2 = 328;
+  syscall_nr_getrandom = 355;
   {$endif CPUX86}
   {$ifdef CPUAARCH64}
   syscall_nr_eventfd2 = 356;
+  syscall_nr_getrandom = 278;
   {$endif CPUAARCH64}
-
-function eventfd(initval, flags: cardinal): integer; inline;
-begin
-  result := do_syscall(syscall_nr_eventfd2, TSysParam(initval), TSysParam(flags));
-end;
+var
+  __LinuxGetRandomFailed: boolean;
 
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 var
@@ -1889,15 +1889,27 @@ var
 begin
   result := 0;
   if KernelRevision < $02061b then
-    exit; // not available prior to kernel 2.6.27
+    exit; // not available prior to Kernel 2.6.27
   flags := 0;
   if nonblocking then
     flags := EFD_NONBLOCK;
   if semaphore then
     flags := flags or EFD_SEMAPHORE;
-  result := eventfd(0, flags);
+  result := do_syscall(syscall_nr_eventfd2, 0, flags);
   if not ValidHandle(result) then
     result := 0;
+end;
+
+function LinuxGetRandom(buf: pointer; len: integer): boolean;
+begin
+  result := false;
+  if (KernelRevision < $031100) or // introduced in Kernel 3.17
+     __LinuxGetRandomFailed then
+    exit;
+  if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
+    result := true
+  else
+    __LinuxGetRandomFailed := true // won't retry on syscall failure
 end;
 
 {$else}
@@ -1907,6 +1919,10 @@ begin
   result := 0; // non implemented (not tested, infact) on this CPU
 end;
 
+function LinuxGetRandom(buf: pointer; len: integer): boolean;
+begin
+  result := false;
+ebd,
 {$endif HASEVENTFD}
 
 function LinuxEventFDRead(fd: integer): Int64;

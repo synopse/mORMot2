@@ -2595,9 +2595,9 @@ var
   // - this unit will make sd.Done in its finalization section
   sd: TSystemD;
 
-/// a wrapper to the eventfd() syscall
-// - returns 0 if the kernel does not support eventfd2 (before 2.6.27) or
-// if the platform is not supported (only validated on Linux x86_64 by now)
+/// a wrapper to the Linux eventfd() syscall
+// - returns 0 if the kernel does not support eventfd2 (before 2.6.27) or if the
+// platform is not supported (only validated on Linux x86_64 by now)
 // - returns a file descriptor handle on success, which should be fpclose()
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 
@@ -2614,6 +2614,11 @@ procedure LinuxEventFDWrite(fd: integer; count: QWord);
 /// wrapper to wait for a eventfd() file read
 // - return true if was notified for reading, or false on timeout
 function LinuxEventFDWait(fd: integer; ms: integer): boolean; inline;
+
+/// a wrapper to the Linux getrandom() syscall
+// - returns false if the kernel is unsupported (before 3.17) or if the
+// platform is not supported (only validated on Linux x86_64 by now)
+function LinuxGetRandom(buf: pointer; len: integer): boolean;
 
 {$endif OSLINUX}
 
