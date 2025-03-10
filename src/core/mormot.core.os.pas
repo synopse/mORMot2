@@ -3218,7 +3218,7 @@ function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 // - returns 0 if the conversion failed
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 
-/// check if a file exists and can be written
+/// check if a file (or folder) exists and can be written
 // - on POSIX, call fpaccess() and check for the W_OK attribute
 // - on Windows, check faReadOnly and supports aFileName longer than MAX_PATH
 function FileIsWritable(const FileName: TFileName): boolean;
@@ -3576,17 +3576,22 @@ type
   // - on Win32 Vista+, idwExcludeWinUac will check IsUacVirtualFolder()
   // - on Windows, idwExcludeWinSys will check IsSystemFolder()
   // - on Windows, idwTryWinExeFile will try to generate a 'xxxxx.exe' file
+  // - idwAttributesOnly won't create any file but just check folder faReadOnly
+  // which may be enough with a POSIX's fpaccess() call
   // - idwWriteSomeContent will also try to write some bytes into the file
   TIsDirectoryWritable = set of (
     idwExcludeWinUac,
     idwExcludeWinSys,
     idwTryWinExeFile,
+    idwAttributesOnly,
     idwWriteSomeContent);
 
 /// check if the directory is writable for the current user
 // - try to write and delete a void file with a random name in this folder
+// - use idwAttributesOnly by default on POSIX, since fpaccess() is accurate
+// unless the current user was changed via setuid / DropPriviledges()
 function IsDirectoryWritable(const Directory: TFileName;
-  Flags: TIsDirectoryWritable = []): boolean;
+  Flags: TIsDirectoryWritable = [ {$ifdef OSPOSIX} idwAttributesOnly {$endif} ]): boolean;
 
 type
   /// cross-platform memory mapping of a file content
@@ -7367,6 +7372,11 @@ begin
   end;
   if not FileIsWritable(dir) then
     exit; // the folder does not exist or is read-only for the current user
+  if idwAttributesOnly in Flags then
+  begin
+    result := true; // e.g. POSIX folder fpaccess() seems enough
+    exit;
+  end;
   {$ifdef OSWINDOWS}
   // ensure is not a system/virtual folder
   if ((idwExcludeWinUac in Flags) and
