@@ -2621,7 +2621,7 @@ function LinuxEventFDWait(fd: integer; ms: integer): boolean; inline;
 // platform is not validated yet (only Linux x86_64 by now)
 // - used e.g. by function FillSystemRandom() if available, since it makes a
 // single syscall, and /dev/urandom may be not available from some chroot
-function LinuxGetRandom(buf: pointer; len: integer): boolean;
+function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 
 {$endif OSLINUX}
 

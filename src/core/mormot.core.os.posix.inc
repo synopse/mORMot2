@@ -1900,7 +1900,7 @@ begin
     result := 0;
 end;
 
-function LinuxGetRandom(buf: pointer; len: integer): boolean;
+function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
   if (KernelRevision < $031100) or // introduced in Kernel 3.17
@@ -3071,9 +3071,13 @@ begin
   DefaultHasher128(@e.h2, @rt, SizeOf(rt)); // maybe AesNiHash128
   // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/uuid', tmp));
-  DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/boot_id', tmp));
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
+  {$ifdef HASEVENTFD}
+  // eventually XOR with getrandom syscall result if available
+  if LinuxGetRandom(@tmp, SizeOf(e)) then
+    XorMemory(@e, @tmp, SizeOf(e));
+  {$endif HASEVENTFD}
 end;
 
 {$ifdef OSANDROID}
@@ -3257,7 +3261,12 @@ begin
     rd := Len;
   {$ifdef OSLINUX} // a single syscall to rule them all on Linux x86_64
   result := LinuxGetRandom(Buffer, rd);
-  if not result then
+  if result then
+  begin
+    if rd = Len then // most obvious case
+      exit;
+  end
+  else
   {$endif OSLINUX}
   begin
     dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
