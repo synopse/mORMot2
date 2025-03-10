@@ -2538,8 +2538,6 @@ const
   /// low-level libcurl library file name, depending on the running OS
   LIBSYSTEMD_PATH = 'libsystemd.so.0';
 
-  ENV_INVOCATION_ID: PAnsiChar = 'INVOCATION_ID';
-
 type
   /// low-level systemd parameter to sd.journal_sendv() function
   TIoVec = record

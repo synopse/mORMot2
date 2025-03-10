@@ -1488,7 +1488,10 @@ var
 begin
   FillCharFast(dlinfo, sizeof(dlinfo), 0);
   dladdr(aAddress, @dlinfo);
-  result := ExpandFileName(string(dlinfo.dli_fname));
+  FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
+  if (result <> '') and
+     (result[1] <> '/') then
+    result := ExpandFileName(string(result));
 end;
 
 function CopyFile(const Source, Target: TFileName;
@@ -1844,11 +1847,8 @@ end;
 function TSystemD.ProcessIsStartedBySystemd: boolean;
 begin
   result := IsAvailable and
-    // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
-    // from the other side PPID 1 can be in case we run under docker of started
-    // by init.d so let's verify both
-    (fpgetppid() = 1) and
-    (fpGetenv(ENV_INVOCATION_ID) <> nil);
+    (fpgetppid() = 1) and // e.g. under Docker or when started by init.d
+    (BaseUnix.fpGetenv('INVOCATION_ID') <> nil); // as set e.g. on Ubuntu 20.04
 end;
 
 procedure TSystemD.Done;
@@ -2175,21 +2175,27 @@ begin
 end;
 {$endif FPCUSEVERSIONINFO}
 
+function GetEnv(name: PAnsiChar; var env: RawUtf8): boolean;
+begin
+  name := BaseUnix.FPGetenv(name); // local GetEnvironmentVariable()
+  result := name <> nil;
+  if result then
+    FastSetString(env, name, StrLen(name));
+end;
+
 procedure GetUserHost(out User, Host: RawUtf8);
 begin
   Host := SystemInfo.uts.nodename;
   if Host = '' then
-    Host := RawUtf8(GetEnvironmentVariable('HOSTNAME'));
-  User := RawUtf8(GetEnvironmentVariable('LOGNAME')); // POSIX
-  if User = '' then
-    User := RawUtf8(GetEnvironmentVariable('USER'));
+    GetEnv('HOSTNAME', Host);
+  if not GetEnv('LOGNAME', User) then // POSIX
+    GetEnv('USER', User);
 end;
 
-function GetEnvFolder(const name: string; var folder: TFileName;
+function GetEnvFolder(name: PAnsiChar; var folder: TFileName;
   writable: boolean): boolean;
 begin
-  folder := GetEnvironmentVariable(name);
-  if folder <> '' then
+  if GetEnv(name, RawUtf8(folder)) then
     if writable and
        not IsDirectoryWritable(folder) then
       folder := ''
@@ -3136,13 +3142,15 @@ end;
 {$endif OSBSDDARWIN}
 
 procedure TestOnceDebuggerTty;
+var
+  term: RawUtf8;
 begin
   __IsDebuggerTested := true;
   __IsDebuggerPresent := _IsDebuggerPresent; // syscall
   __StdOutIsTTY := (not __IsDebuggerPresent) and
                    (IsATTY(StdOut) = 1) and
-                   IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
-                     'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
+                   GetEnv('TERM', term) and
+       IdemPChars(term, ['XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
 end;
 
 function IsDebuggerPresent: boolean;
