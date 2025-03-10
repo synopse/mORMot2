@@ -3038,32 +3038,25 @@ begin
   info.allocused     := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmRSS
 end;
 
-procedure DoHash128File(var h: THash128; const filename: TFileName);
-var
-  s: RawByteString;
-begin
-  s := StringFromFile(filename, {nosize=}true);
-  DefaultHasher128(@h, pointer(s), length(s)); // maybe AesNiHash128
-end;
-
 procedure XorOSEntropy(var e: THash512Rec);
 var
   si: TSysInfo;  // Linuxism
   rt: TTimeSpec; // with nanoseconds resolution
+  tmp: TSynTempBuffer;
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt);
   DefaultHasher128(@e.h0, @rt, SizeOf(rt)); // maybe AesNiHash128
   SysInfo(@si); // uptime + loadavg + meminfo + numprocess
   DefaultHasher128(@e.h0, @si, SizeOf(si));
   // detailed CPU execution context and timing from Linux kernel
-  DoHash128File(e.h0, '/proc/self/statm');
-  DoHash128File(e.h0, '/proc/self/stat');
-  DoHash128File(e.h1, '/proc/stat');
+  DefaultHasher128(@e.h0, @tmp, LoadProcFile('/proc/self/statm', tmp));
+  DefaultHasher128(@e.h0, @tmp, LoadProcFile('/proc/self/stat', tmp));
+  DefaultHasher128(@e.h1, @tmp, LoadProcFile('/proc/stat', tmp));
   clock_gettime(CLOCK_UPTIME, @rt);
   DefaultHasher128(@e.h2, @rt, SizeOf(rt)); // maybe AesNiHash128
   // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
-  DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
-  DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
+  DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/uuid', tmp));
+  DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/boot_id', tmp));
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
 end;
