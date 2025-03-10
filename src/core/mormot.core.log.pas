@@ -4005,7 +4005,7 @@ begin
   fSynLogClass := aSynLog;
   fIdent := ObjArrayAdd(SynLogFamily, self);
   fDestinationPath := Executable.ProgramFilePath;
-  // use .exe path by default - without [idwExcludeWinSys] (writable is enough)
+  // use .exe path by default - no [idwExcludeWinSys] needed here
   if not IsDirectoryWritable(fDestinationPath) then
     // fallback to a writable folder
     fDestinationPath := GetSystemPath(spLog);

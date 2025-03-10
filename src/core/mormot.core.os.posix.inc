@@ -2197,7 +2197,7 @@ function GetEnvFolder(name: PAnsiChar; var folder: TFileName;
 begin
   if GetEnv(name, RawUtf8(folder)) then
     if writable and
-       not IsDirectoryWritable(folder) then
+       not FileIsWritable(folder) then
       folder := ''
     else
       folder := IncludeTrailingPathDelimiter(folder);
@@ -2207,12 +2207,12 @@ end;
 function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
 begin
   result := false;
-  if not IsDirectoryWritable(parent) then
+  if not FileIsWritable(parent) then
     exit;
   folder := EnsureDirectoryExists(parent + sub);
   if folder = '' then
     exit;
-  if IsDirectoryWritable(folder) then
+  if FileIsWritable(folder) then
     result := true
   else
     folder := '';
@@ -2247,7 +2247,7 @@ begin
           exit;
         // try /tmp
         result := '/tmp/';
-        if not IsDirectoryWritable(result) then
+        if not FileIsWritable(result) then
           // fallback to /var/tmp
           result := '/var/tmp/';
       end;
@@ -3741,7 +3741,7 @@ begin
     if FileExists(result) then
       exit;
   end;
-  if not IsDirectoryWritable(pidpath) then
+  if not FileIsWritable(pidpath) then
     // if the executable folder is not writable, use the temporary folder
     pidpath := GetSystemPath(spTemp);
   result := Format('%s.%s.pid', [pidpath, Executable.ProgramName]);
