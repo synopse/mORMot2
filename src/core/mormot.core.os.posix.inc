@@ -2725,8 +2725,8 @@ begin
   DefaultHasher128(@e.h1, @mem, SizeOf(mem)); // may be AesNiHash128
   GetMemoryInfo(mem, {withalloc=}false);
   DefaultHasher128(@e.h2, @mem, SizeOf(mem));
-  {$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
-  guid.Lo := mach_absolute_time; // monotonic clock in nanoseconds
+  {$ifdef OSDARWIN} // we have some monotonic clocks in nanoseconds resolution
+  guid.Lo := mach_absolute_time;
   guid.Hi := mach_continuous_time;
   {$else}
   CreateGuid(guid.guid); // use e.g. FreeBSD syscall or /dev/urandom
@@ -3277,11 +3277,11 @@ end;
 {$endif OSBSDDARWIN}
 
 {$ifdef USEMPROTECT}
-function mprotect(Addr: pointer; Len: size_t; Prot: integer): integer;
+function mprotect(Addr: PtrUInt; Len: size_t; Prot: integer): integer;
   cdecl external clib name 'mprotect';
 {$endif USEMPROTECT}
 
-function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
+function SynMProtect(addr: PtrUInt; size: size_t; prot: integer): integer;
 begin
   result := -1;
   {$ifdef UNIX}
@@ -3294,22 +3294,51 @@ begin
   {$endif UNIX}
 end;
 
+{$ifdef OSLINUX}
+var
+  Patched: TPtrUIntDynArray;
+  PatchedCount: integer;
+
+procedure PatchCodeProtectBack;
+var
+  i: PtrInt;
+begin
+  for i := 0 to PatchedCount - 1 do
+    SynMProtect(Patched[i], SystemInfo.dwPageSize, PROT_READ or PROT_EXEC);
+  PatchedCount := 0;
+end;
+{$else}
+procedure PatchCodeProtectBack;
+begin // nothing to do on Android/BSD/Darwin: not tested yet
+end;
+{$endif OSLINUX}
+
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
-  PageSize: PtrUInt;
-  AlignedAddr: pointer;
+  OsPageSize, PageSize, AlignedAddr: PtrUInt;
   i: PtrInt;
   ProtectedResult, ProtectedMemory: boolean;
 begin
+  if Size <= 0 then
+    exit;
   if Backup <> nil then
     for i := 0 to Size - 1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
-  PageSize := SystemInfo.dwPageSize;
-  AlignedAddr :=
-    pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
-  while PtrUInt(Old) + PtrUInt(Size) >= PtrUInt(AlignedAddr) + PageSize do
-    inc(PageSize, SystemInfo.dwPageSize);
+  OsPageSize := SystemInfo.dwPageSize;
+  PageSize := OsPageSize;
+  AlignedAddr := (PtrUInt(Old) div OsPageSize) * OsPageSize;
+  while PtrUInt(Old) + PtrUInt(Size) >= AlignedAddr + PageSize do
+    inc(PageSize, OsPageSize);
+  {$ifdef OSLINUX}
+  if LeaveUnprotected and
+     (PageSize = OsPageSize) and
+     PtrUIntScanExists(pointer(Patched), PatchedCount, AlignedAddr) then
+  begin
+    MoveByOne(New, Old, Size); // do not use Move() here
+    exit;
+  end;
+  {$endif OSLINUX}
   ProtectedResult := SynMProtect(
     AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
   ProtectedMemory := not ProtectedResult;
@@ -3318,10 +3347,12 @@ begin
       AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
   if ProtectedResult then
     try
-      for i := 0 to Size - 1 do // do not use Move() here
-        PByteArray(Old)^[i] := PByteArray(New)^[i];
-      if not LeaveUnprotected and
-         ProtectedMemory then
+      MoveByOne(New, Old, Size);// do not use Move() here
+      if LeaveUnprotected then
+        {$ifdef OSLINUX}
+        AddPtrUInt(Patched, PatchedCount, AlignedAddr)
+        {$endif OSLINUX}
+      else if ProtectedMemory then
         SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
     except
       // we ignore any exception here - it should work anyway
@@ -3417,20 +3448,20 @@ end;
 
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 var
-  aligned: pointer;
+  aligned, pagesize: PtrUInt;
   flags: cardinal;
 begin
   if not StubMemoryExecXorWrite then
     // nothing to be done on this platform
     exit;
   // toggle execution permission of memory to be able to write into memory
-  aligned := pointer(
-    (PtrUInt(Reserved) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  pagesize := SystemInfo.dwPageSize;
+  aligned := (PtrUInt(Reserved) div pagesize) * pagesize;
   if Exec then
     flags := PROT_READ OR PROT_EXEC
   else
     flags := PROT_READ or PROT_WRITE;
-  if SynMProtect(aligned, SystemInfo.dwPageSize shl 1, flags) < 0 then
+  if SynMProtect(aligned, pagesize shl 1, flags) < 0 then
      raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 

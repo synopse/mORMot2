@@ -4098,16 +4098,22 @@ type
 // - some systems do forbid such live patching: consider setting NOPATCHVMT
 // and NOPATCHRTL conditionals for such projects
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer = nil;
-  LeaveUnprotected: boolean = false);
+  LeaveUnprotected: boolean = {$ifdef OSLINUX} true {$else} false {$endif});
 
 /// self-modifying code - change one PtrUInt in the code segment
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
-  LeaveUnprotected: boolean = false);
+  LeaveUnprotected: boolean = {$ifdef OSLINUX} true {$else} false {$endif});
 
 {$ifdef CPUINTEL}
 /// low-level i386/x86_64 asm routine patch and redirection
 procedure RedirectCode(Func, RedirectFunc: pointer);
 {$endif CPUINTEL}
+
+/// close any LeaveUnprotected=true R/W/X memory-mapped paged back as R/X
+// - could be used to harden back all memory regions at once, when every RTTI,
+// ORM or SOA features are eventually initialized
+// - only implemented and tested on Linux by now
+procedure PatchCodeProtectBack;
 
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }

@@ -2971,15 +2971,14 @@ procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
   restore, ignore: DWord;
-  i: PtrInt;
 begin
+  if Size <= 0 then
+    exit;
   if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, restore) then
   begin
     if Backup <> nil then
-      for i := 0 to Size - 1 do  // do not use Move() here
-        PByteArray(Backup)^[i] := PByteArray(Old)^[i];
-    for i := 0 to Size - 1 do    // do not use Move() here
-      PByteArray(Old)^[i] := PByteArray(New)^[i];
+      MoveByOne(Old, Backup, Size); // do not use Move() here
+    MoveByOne(New, Old, Size);
     if not LeaveUnprotected then
       VirtualProtect(Old, Size, restore, ignore);
     FlushInstructionCache(GetCurrentProcess, Old, Size);
@@ -2988,6 +2987,9 @@ begin
   end;
 end;
 
+procedure PatchCodeProtectBack;
+begin // nothing to do on Windows - LeaveUnprotected=false by default
+end;
 
 function StubMemoryAlloc: pointer;
 begin
