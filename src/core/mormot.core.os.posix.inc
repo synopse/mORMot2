@@ -1947,7 +1947,8 @@ end;
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup
-  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY: boolean;
+  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY,
+  _XorEntropyGetOsRandom256failed: boolean;
 
 procedure TestOnceDebuggerTty; forward;
 
@@ -3153,6 +3154,23 @@ begin
   Idle   := 100 - Kernel - User; // ensure sum is always 100%
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
+procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
+var
+  dev: THandle;
+begin
+  dev := 0;
+  if not _XorEntropyGetOsRandom256failed then
+    dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
+  if (dev <= 0) or
+     (FileRead(dev, e, SizeOf(e)) <> SizeOf(e)) then
+  begin
+    _XorEntropyGetOsRandom256failed := true;
+    sysutils.CreateGUID(e.l.guid); // fallback to FPC RTL
+    sysutils.CreateGUID(e.h.guid);
+  end;
+  if dev > 0 then
+    FileClose(dev);
+end;
 
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean): boolean;
@@ -4411,6 +4429,7 @@ begin
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
+  XorEntropyGetOsRandom256 := @_XorEntropyGetOsRandom256;
   {$ifndef NODIRECTTHREADMANAGER}
   // for inlined RTL calls (avoid one level of redirection)
   GetThreadManager(tm);

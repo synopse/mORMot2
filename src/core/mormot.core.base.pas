@@ -3312,6 +3312,13 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 // to system-retrieved randomness from mormot.core.os.pas' XorOSEntropy()
 procedure XorEntropy(var e: THash512Rec);
 
+var
+  /// stub used by XorEntropy() to retrieve 256-bit of randomness
+  // - this default unit with call sysutils.CreateGuid() twice
+  // - mormot.core.os.posix.inc will implement a proper POSIX function here
+  // and try to read 32 bytes from /dev/urandom
+  XorEntropyGetOsRandom256: procedure(var e: THash256Rec);
+
 /// convert the endianness of a given unsigned 16-bit integer into BigEndian
 function bswap16(a: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
@@ -9574,17 +9581,11 @@ begin
   result := @_Lecuyer;
 end;
 
-{$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
-function mach_absolute_time: Int64;   cdecl external 'c';
-function mach_continuous_time: Int64; cdecl external 'c';
-
-procedure CreateGuid(var guid: TGuid); // sysutils MacOS version is sloooow
+procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
 begin
-  PInt64Array(@guid)^[0] := mach_absolute_time;  // monotonic time (in ns)
-  PInt64Array(@guid)^[1] := mach_continuous_time;
-  crc128c(@guid, SizeOf(guid), THash128(guid)); // good enough diffusion
+  sysutils.CreateGUID(e.l.guid); // Windows CoCreateGuid()
+  sysutils.CreateGUID(e.h.guid);
 end;
-{$endif OSDARWIN}
 
 var
   // cascaded 128-bit random to avoid replay attacks - shared by all threads
@@ -9593,28 +9594,22 @@ var
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PLecuyer;
-  guid: THash128Rec;
+  rnd: THash256Rec;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
+  XorEntropyGetOsRandom256(rnd);
   if _EntropyGlobal.L = 0 then
-    sysutils.CreateGuid(_EntropyGlobal.guid); // slow but rich initial value
+    _EntropyGlobal.guid := rnd.h.guid; // initialize forward security
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
   lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
-  e.r[1].c0 := e.r[1].c0 xor lec^.RawNext; // perfect forward security
-  e.r[1].c1 := e.r[1].c1 xor lec^.RawNext; // but don't expose rs1,rs2,rs3
-  e.r[1].c2 := e.r[1].c2 xor lec^.RawNext;
+  e.r[1].c0 := e.r[1].c0 xor lec^.RawNext xor rnd.l.c0;
+  e.r[1].c1 := e.r[1].c1 xor lec^.RawNext xor rnd.l.c1;
+  e.r[1].c2 := e.r[1].c2 xor lec^.RawNext xor rnd.l.c2;
   // any threadvar is thread-specific, so PtrUInt(lec) identifies this thread
-  {$ifdef CPUINTELARM}
-  e.r[1].c3 := e.r[1].c3 xor crc32c(PtrUInt(lec), @CpuFeatures, SizeOf(CpuFeatures));
-  {$else}
-  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec);
-  {$endif CPUINTELARM}
-  // Windows CoCreateGuid, Linux /proc/sys/kernel/random/uuid, FreeBSD syscall,
-  // then fallback to /dev/urandom or RTL mtwist_u32rand
-  CreateGuid(guid.guid); // not from sysutils: redefined above for OSDARWIN
-  e.r[2].L := e.r[2].L xor guid.L;
-  e.r[2].H := e.r[2].H xor guid.H;
+  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec) xor rnd.l.c3;
+  e.r[2].L := e.r[2].L xor rnd.h.L;
+  e.r[2].H := e.r[2].H xor rnd.h.H;
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
   unaligned(PDouble(@e.r[3].Lo)^) := Now * 2123923447; // cross-platform time
   {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
@@ -13084,6 +13079,7 @@ begin
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
+  XorEntropyGetOsRandom256 := @_XorEntropyGetOsRandom256;
   // initialize CPU-specific asm
   TestCpuFeatures;
 end;

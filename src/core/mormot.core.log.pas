@@ -3704,7 +3704,7 @@ end;
 
 {$ifdef FPC}
 type
-  THeapInfo = function: string;
+  THeapInfo = function: RawUtf8;
 
 function RetrieveMemoryManagerInfo: RawUtf8;
 begin
