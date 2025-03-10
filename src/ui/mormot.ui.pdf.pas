@@ -7871,7 +7871,7 @@ begin
   str.Attributes.AddItem('Type', 'EmbeddedFile');
   if MimeType <> '' then
     StringToUtf8(MimeType, mime)
-  else if Pos('.', Description) <> 0 then      
+  else if Pos('.', Description) <> 0 then
     mime := GetMimeContentType(pointer(Buffer), length(Buffer), Description)
   else
     mime := GetMimeContentType(pointer(Buffer), length(Buffer));
@@ -7896,20 +7896,29 @@ begin
   ef.AddItem('F', str);
   ef.AddItem('UF', str);
   fs.AddItem('EF', ef);
-  // set title and Filespec as Names array 
-  arr := TPdfArray.Create(fXref);
+  // ensure we have the needed Names and EmbeddedFiles dictionaries
+  ndic := Root.Data.PdfDictionaryByName('Names');
+  if ndic = nil then
+  begin
+    ndic := TPdfDictionary.Create(fXref);
+    root.Data.AddItem('Names', ndic);
+  end;
+  efdic := ndic.PdfDictionaryByName('EmbeddedFiles');
+  if efdic = nil then
+  begin
+    efdic := TPdfDictionary.Create(fXref);
+    ndic.AddItem('EmbeddedFiles', efdic);
+    arr := TPdfArray.Create(fXref);
+    efdic.AddItem('Names', arr);
+  end
+  else
+    arr := efdic.PdfArrayByName('Names');
+  // add title and Filespec in Names array
   txt := TPdfTextString.Create(Title);
   arr.AddItem(txt);
   arr.AddItem(fs);
-  // create EmbeddedFiles with Names 
-  ndic := TPdfDictionary.Create(fXref);
-  ndic.AddItem('Names', arr);
-  // create the main returned dictionary
-  efdic := TPdfDictionary.Create(fXref);
-  efdic.AddItem('EmbeddedFiles', ndic);
-  result := efdic;
-  // register to the main catalog
-  Root.Data.AddItem('Names', efdic);
+  // return the newly created Filespec dictionary
+  result := fs;
 end;
 
 procedure TPdfDocument.SetUseOptionalContent(Value: boolean);
