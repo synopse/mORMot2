@@ -3234,30 +3234,45 @@ end;
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean): boolean;
 var
-  rd, dev: integer;
+  rd, dev, i: integer;
+  tmp: TGuid;
 begin
   result := false;
   if Len <= 0 then
     exit;
+  // retrieve 32 bytes max (256-bit) from OS
+  rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
+  if Len < 32 then
+    rd := Len;
   dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
   if (dev <= 0) and
      AllowBlocking then
     dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
   if dev > 0 then
     try
-      rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
-      if Len <= 32 then
-        rd := Len;
       result := (FileRead(dev, Buffer[0], rd) = rd);
-      if result and
-         (Len > 32) then
-        SharedRandom.Fill(@Buffer[32], Len - 32); // simple gsl_rng_taus2 padding
     finally
       FileClose(dev);
     end;
-  if not result then
-    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
-    SharedRandom.Fill(pointer(Buffer), Len);
+  if result then
+  begin
+    dec(Len, rd);
+    Buffer := @Buffer[rd];
+  end
+  else // fallback on OS API call failure (paranoid)
+    for i := 1 to 2 do // 2 * TGuid = 2 * 128-bit = 256-bit
+    begin
+      sysutils.CreateGUID(tmp); // use FPC RTL as fallback
+      rd := SizeOf(tmp);
+      if Len < SizeOf(tmp) then
+        rd := Len;
+      MoveFast(tmp, Buffer[0], rd);
+      dec(Len, rd);
+      Buffer := @Buffer[rd];
+    end;
+  // use Lecuyer's gsl_rng_taus2 for the remaining bytes (unlikely)
+  if Len > 0 then
+    SharedRandom.Fill(Buffer, Len);
 end;
 
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
