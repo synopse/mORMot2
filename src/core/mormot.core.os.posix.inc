@@ -2940,20 +2940,26 @@ var
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 var
-  proc: TFileName;
-  cmdline: RawUtf8;
+  fn: shortstring;
+  tmp: TSynTempBuffer;
+  n: AnsiChar;
 begin
-  proc := '/proc/' + IntToStr(PID);
+  fn := '/proc/';
+  AppendShortCardinal(PID, fn);
+  n := fn[0];
   if tryprocexe then
   begin
-    // need to be root to follow /proc/[pid]/exe
-    result := fpReadLink(proc + '/exe');
+    // may need to be root to follow /fn/[pid]/exe
+    AppendShort('/exe'#0, fn);
+    result := fpReadLink(PChar(@fn[1])); // a single syscall is fine
     if result <> '' then
       exit;
   end;
-  cmdline := StringFromFile(proc + '/cmdline', {nosize=}true);
+  fn[0] := n;
+  AppendShort('/cmdline'#0, fn);
+  LoadProcFile(@fn[1], tmp);
   // set of strings separated by null bytes -> exe is the first argument
-  FastSetString(result, pointer(cmdline), StrLen(pointer(cmdline)));
+  FastSetString(result, pointer(@tmp), StrLen(pointer(@tmp)));
   if result <> '' then
     tryprocexe := false; // no need to try again next time
 end;
@@ -2996,28 +3002,28 @@ end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
-  proc: RawUtf8;
+  tmp: TSynTempBuffer; // 4KB seems enough
   P: PUtf8Char;
 begin
   result := false;
   FillCharFast(info, SizeOf(info), 0);
   // sysinfo() syscall has not enough information: use /proc sysfiles
-  proc := StringFromFile('/proc/meminfo', {hasnosize=}true);
-  if proc = '' then
+  if LoadProcFile('/proc/meminfo', tmp) <= 0 then
     exit;
-  info.memtotal  := FindNameValueCardinal(pointer(proc), 'MEMTOTAL:') shr 10;
-  info.memfree   := FindNameValueCardinal(pointer(proc), 'MEMAVAILABLE:') shr 10;
-  info.filetotal := FindNameValueCardinal(pointer(proc), 'SWAPTOTAL:') shr 10;
-  info.filefree  := FindNameValueCardinal(pointer(proc), 'SWAPFREE:') shr 10;
+  P := @tmp;
+  info.memtotal  := FindNameValueCardinal(P, 'MEMTOTAL:') shr 10;
+  info.memfree   := FindNameValueCardinal(P, 'MEMAVAILABLE:') shr 10;
+  info.filetotal := FindNameValueCardinal(P, 'SWAPTOTAL:') shr 10;
+  info.filefree  := FindNameValueCardinal(P, 'SWAPFREE:') shr 10;
   // note: Windows-like virtual memory information is not available under Linux
-  info.vmtotal   := FindNameValueCardinal(pointer(proc), 'COMMITLIMIT:') shr 10;
-  info.vmfree    := FindNameValueCardinal(pointer(proc), 'MEMFREE:') shr 10;
+  info.vmtotal   := FindNameValueCardinal(P, 'COMMITLIMIT:') shr 10;
+  info.vmfree    := FindNameValueCardinal(P, 'MEMFREE:') shr 10;
   if info.memfree = 0 then // kernel < 3.14 may not have the MemAvailable field
     info.memfree  := info.vmfree + (
-                     FindNameValueCardinal(pointer(proc), 'BUFFERS:') +
-                     FindNameValueCardinal(pointer(proc), 'CACHED:')  +
-                     FindNameValueCardinal(pointer(proc), 'SRECLAIMABLE:') -
-                     FindNameValueCardinal(pointer(proc), 'SHMEM:')) shr 10;
+                     FindNameValueCardinal(P, 'BUFFERS:') +
+                     FindNameValueCardinal(P, 'CACHED:')  +
+                     FindNameValueCardinal(P, 'SRECLAIMABLE:') -
+                     FindNameValueCardinal(P, 'SHMEM:')) shr 10;
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
@@ -3026,8 +3032,8 @@ begin
   if not withalloc then
     exit;
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
-  proc := StringFromFile('/proc/self/statm', {hasnosize=}true);
-  P := pointer(proc);
+  if LoadProcFile('/proc/self/statm', tmp) <= 0 then
+    exit;
   info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
   info.allocused     := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmRSS
 end;
