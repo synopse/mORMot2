@@ -2739,16 +2739,14 @@ end;
 
 {$else} // Linux-specific code
 
-procedure FindNameValue(const s, up: RawUtf8; var res: RawUtf8);
+procedure FindNameValue(p: PUtf8Char; const up: shortstring; var res: RawUtf8);
 var
-  p: PUtf8Char;
   L: PtrInt;
 begin
-  p := pointer(s);
   while p <> nil do
-    if IdemPChar(p, pointer(up)) then
+    if IdemPChar(p, @up[1]) then
     begin
-      inc(p, length(up));
+      inc(p, ord(up[0]));
       while (p^ <= ' ') and
             (p^ <> #0) do
         inc(p); // trim left
@@ -2819,23 +2817,56 @@ begin
     result := -1;
 end;
 
-function FindFileCardinal(fn: PAnsiChar; const up: shortstring): PtrUInt;
+function LoadProcFile(fn: PAnsiChar; var dest: TSynTempBuffer): PtrInt;
 var
   h: THandle;
-  len: PtrInt;
-  buf: array[0..4095] of AnsiChar; // reading up to 4KB of content is enough
 begin
   result := 0;
   h := FpOpen(fn, O_RDONLY);
   if PtrInt(h) <= 0 then
     exit;
-  len := FileRead(h, buf, SizeOf(buf) - 1);
-  if len >= 10 then
-  begin
-    buf[len] := #0;
-    result := FindNameValueCardinal(@buf, up);
-  end;
+  result := FileRead(h, dest, SizeOf(dest) - 1); // read up to 4KB
+  if result >= 0 then
+    PAnsiChar(@dest)[result] := #0;
   FileClose(h);
+end;
+
+function LoadProcFileTrimed(fn: PAnsiChar): RawUtf8;
+var
+  buf: TSynTempBuffer; // reading up to 4KB of content is enough
+  p: PAnsiChar;
+  l: PtrInt;
+begin
+  l := LoadProcFile(fn, buf);
+  p := @buf;
+  while (l > 0) and
+        (p[0] <= ' ') do // trim left
+  begin
+    dec(l);
+    inc(p);
+  end;
+  while (l > 0) and
+        (p[l - 1] <= ' ') do // trim right
+    dec(l);
+  FastSetString(result, p, l);
+  if result = 'Default string' then // e.g. on ProxMox containers or VMs
+    result := '';
+end;
+
+procedure FindFileValue(fn: PAnsiChar; const up: shortstring; var res: RawUtf8);
+var
+  buf: TSynTempBuffer; // reading up to 4KB of content is enough
+begin
+  LoadProcFile(fn, buf);
+  FindNameValue(@buf, up, res);
+end;
+
+function FindFileCardinal(fn: PAnsiChar; const up: shortstring): PtrUInt;
+var
+  buf: TSynTempBuffer; // reading up to 4KB of content is enough
+begin
+  LoadProcFile(fn, buf);
+  result := FindNameValueCardinal(@buf, up)
 end;
 
 function FindPidStatus(pid: cardinal; const up: shortstring): PtrUInt;
