@@ -2313,7 +2313,7 @@ begin
   {$ifdef OSLINUX}
   // on Linux, first try from sysfs tables
   fromsysfs := false;
-  mem := StringFromFile('/sys/firmware/dmi/tables/smbios_entry_point', true);
+  mem := StringFromFileNoSize('/sys/firmware/dmi/tables/smbios_entry_point');
   if mem <> '' then
     fromsysfs := true
   else
@@ -2330,7 +2330,7 @@ begin
     exit;
   {$ifdef OSLINUX}
   if fromsysfs then
-    info.data := StringFromFile('/sys/firmware/dmi/tables/DMI', {nosize=}true)
+    info.data := StringFromFileNoSize('/sys/firmware/dmi/tables/DMI')
   else
   {$endif OSLINUX}
     info.data := ReadSystemMemory(addr, info.Length);
@@ -3180,10 +3180,10 @@ begin
   result := false;
   if Len <= 0 then
     exit;
-  dev := FileOpenSequentialRead('/dev/urandom');  // non blocking on Linux + BSD
+  dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
   if (dev <= 0) and
      AllowBlocking then
-    dev := FileOpenSequentialRead('/dev/random'); // may block until got entropy
+    dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
   if dev > 0 then
     try
       rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
@@ -3226,11 +3226,10 @@ begin
   // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
   result := nil;
   {$ifdef OSLINUXANDROID}
-  mounts := StringFromFile('/proc/self/mounts', {hasnosize=}true);
+  mounts := StringFromFileNoSize('/proc/self/mounts');
   if mounts = '' then
   {$endif OSLINUXANDROID}
-    mounts := StringFromFile('/etc/mtab', {hasnosize=}true);
-  n := 0;
+    mounts := StringFromFileNoSize('/etc/mtab');
   p := pointer(mounts);
   if p <> nil then // e.g. Darwin has no /etc/mtab :(
   repeat
@@ -4031,9 +4030,9 @@ begin
   // retrieve raw EFI information from systab
   result := '';
   xaddr := 0;
-  efi := StringFromFile('/sys/firmware/efi/systab', {nosize=}true);
+  efi := StringFromFileNoSize('/sys/firmware/efi/systab');
   if efi = '' then
-    efi := StringFromFile('/proc/efi/systab', {nosize=}true); // old Linux<2.6.6
+    efi := StringFromFileNoSize('/proc/efi/systab'); // old Linux<2.6.6
   if efi = '' then
     exit;
   FindNameValue(efi, 'SMBIOS', addr);
@@ -4058,11 +4057,11 @@ begin
        SearchRecValidFolder(SR) then
     begin
       fn := '/sys/class/net/' + SR.Name;
-      f := StringFromFile(fn + '/flags', {nosize=}true);
+      f := StringFromFileNoSize(fn + '/flags');
       if (length(f) > 2) and // e.g. '0x40' or '0x1043'
          (ParseHex0x(pointer(f)) and {IFF_LOOPBACK:}8 = 0) then
       begin
-        f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
+        f := TrimU(StringFromFileNoSize(fn + '/address'));
         if f <> '' then
         begin
           SetLength(result, length(result) + 1);
@@ -4179,7 +4178,7 @@ var
 
   function GetSysFile(const fn: TFileName): RawUtf8;
   begin
-    result := TrimU(StringFromFile(fn, true));
+    result := TrimU(StringFromFileNoSize(fn));
     if result = 'Default string' then // e.g. on ProxMox containers or VMs
       result := '';
   end;
@@ -4247,7 +4246,7 @@ begin
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     prod := GetSysFile('/proc/device-tree/model');
-  FindNameValue(StringFromFile('/etc/os-release', true),
+  FindNameValue(StringFromFileNoSize('/etc/os-release'),
     'PRETTY_NAME=', release);
   if (release <> '') and
      (release[1] = '"') then
@@ -4255,7 +4254,7 @@ begin
   TrimSelf(release);
   if release = '' then
   begin
-    FindNameValue(StringFromFile('/etc/lsb-release', true),
+    FindNameValue(StringFromFileNoSize('/etc/lsb-release'),
       'DISTRIB_DESCRIPTION=', release);
     if (release <> '') and
        (release[1] = '"') then
@@ -4269,7 +4268,7 @@ begin
        (FindNext(SR) = 0) then
       release := SR.Name;
     release := split(release, '-');
-    dist := split(StringFromFile('/etc/' + SR.Name, true), #10);
+    dist := split(StringFromFileNoSize('/etc/' + SR.Name), #10);
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then
@@ -4299,7 +4298,7 @@ begin
   hw := nil;
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
-  proccpuinfo := StringFromFile('/proc/cpuinfo', true);
+  proccpuinfo := StringFromFileNoSize('/proc/cpuinfo'); // LoadProcFile() not ok
   procid := -1;
   cpuinfo := pointer(proccpuinfo);
   while cpuinfo <> nil do

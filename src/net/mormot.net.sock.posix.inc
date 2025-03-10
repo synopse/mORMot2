@@ -677,12 +677,12 @@ var
 begin
   // see https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
   sysfs := NetConcat(['/sys/class/net/', a.Name, '/']);
-  a.FriendlyName := TrimU(StringFromFile(sysfs + 'ifalias', {nosize=}true));
-  a.Speed := GetCardinal(pointer(StringFromFile(sysfs + 'speed', true)));
-  a.Mtu := GetCardinal(pointer(StringFromFile(sysfs + 'mtu', true)));
+  a.FriendlyName := TrimU(StringFromFileNoSize(sysfs + 'ifalias'));
+  a.Speed := GetCardinal(pointer(StringFromFileNoSize(sysfs + 'speed')));
+  a.Mtu := GetCardinal(pointer(StringFromFileNoSize(sysfs + 'mtu')));
   // we retrieve the gateway from /proc/net/route
   l := length(a.Name);
-  p := pointer(StringFromFile('/proc/net/route', true));
+  p := pointer(StringFromFileNoSize('/proc/net/route'));
   while p <> nil do
   begin
     if (MemCmp(pointer(p), pointer(a.Name), l) = 0) and
@@ -976,11 +976,11 @@ begin
          SearchRecValidFolder(SR) then
       begin
         fn := '/sys/class/net/' + SR.Name;
-        f := StringFromFile(fn + '/flags', {nosize=}true);
+        f := StringFromFileNoSize(fn + '/flags');
         if (length(f) > 2) and // e.g. '0x40' or '0x1043'
            (ParseHex0x(pointer(f)) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then
         begin
-          f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
+          f := TrimU(StringFromFileNoSize(fn + '/address'));
           if f <> '' then
           begin
             SetLength(result, n + 1);
@@ -1041,7 +1041,7 @@ var
 begin
   result := nil;
   if usePosixEnv then
-    resolv := StringFromFile(GetEnvironmentVariable('ETC'), true);
+    resolv := StringFromFileNoSize(GetEnvironmentVariable('ETC'));
   if resolv = '' then
     // all systems are likely to have or generate this file
     // - even the libc seems to read it when implementing gethostname()

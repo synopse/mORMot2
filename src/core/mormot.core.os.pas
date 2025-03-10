@@ -3422,14 +3422,16 @@ function FileIsReadable(const aFileName: TFileName): boolean;
 // - returns the number of bytes copied from Source to Dest
 function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
 
-/// read a File content into a string
+/// read a File content into a string, using FileSize() to guess its length
 // - content can be binary or text
 // - returns '' if file was not found or any read error occurred
-// - will use FileSize() API by default, unless HasNoSize is defined,
-// and read will be done using a buffer (required e.g. for POSIX char files)
 // - uses RawByteString for byte storage, whatever the codepage is
-function StringFromFile(const FileName: TFileName;
-  HasNoSize: boolean = false): RawByteString;
+function StringFromFile(const FileName: TFileName): RawByteString;
+
+/// read a File content into a string, without using FileSize()
+// - result will be filled using a buffer as required e.g. for POSIX char files
+// like /proc/... or /sys/...
+function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 
 /// read a File content from a list of potential files
 // - returns '' if no file was found, or the first matching FileName[] content
@@ -6783,12 +6785,30 @@ begin
   result := true;
 end;
 
-function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
+function StringFromFileNoSize(const FileName: TFileName): RawByteString;
+var
+  h: THandle;
+  read: PtrInt;
+  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
+begin
+  result := '';
+  h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
+  if not ValidHandle(h) then
+    exit;
+  repeat
+    read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
+    if read <= 0 then
+      break;
+    AppendBufferToUtf8(@tmp, read, RawUtf8(result)); // in-place resize
+  until false;
+  FileClose(h);
+end;
+
+function StringFromFile(const FileName: TFileName): RawByteString;
 var
   h: THandle;
   size: Int64;
   read: PtrInt;
-  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
   if FileName = '' then
@@ -6796,23 +6816,13 @@ begin
   h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
   if not ValidHandle(h) then
     exit;
-  if HasNoSize then
-    repeat
-      read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
-      if read <= 0 then
-        break;
-      AppendBufferToUtf8(@tmp, read, RawUtf8(result)); // in-place resize
-    until false
-  else
+  size := FileSize(h);
+  if (size < MaxInt) and // 2GB seems big enough for a RawByteString
+     (size > 0) then
   begin
-    size := FileSize(h);
-    if (size < MaxInt) and // 2GB seems big enough for a RawByteString
-       (size > 0) then
-    begin
-      pointer(result) := FastNewString(size, CP_UTF8); // UTF-8 for FPC RTL bug
-      if not FileReadAll(h, pointer(result), size) then
-        result := ''; // error reading
-    end;
+    pointer(result) := FastNewString(size, CP_UTF8); // UTF-8 for FPC RTL bug
+    if not FileReadAll(h, pointer(result), size) then
+      result := ''; // error reading
   end;
   FileClose(h);
 end;
