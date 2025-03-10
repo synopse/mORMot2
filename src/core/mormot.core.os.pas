@@ -2386,11 +2386,6 @@ function DirectoryExists(const FileName: TFileName;
 /// redefined here to avoid warning to include "Windows" in uses clause
 // and support FileName longer than MAX_PATH
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
-function DeleteFile(const aFileName: TFileName): boolean;
-
-/// redefined here to avoid warning to include "Windows" in uses clause
-// and support FileName longer than MAX_PATH
-// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function RenameFile(const OldName, NewName: TFileName): boolean;
 
 /// redirection to Windows SetFileTime() of a file name from Int64(TFileTime)
@@ -3215,6 +3210,11 @@ function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
+
+/// redefined here to avoid warning to include "Windows" in uses clause
+// and support FileName longer than MAX_PATH
+// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
+function DeleteFile(const aFileName: TFileName): boolean;
 
 /// check if a file (or folder) exists and can be written
 // - on POSIX, call fpaccess() and check for the W_OK attribute

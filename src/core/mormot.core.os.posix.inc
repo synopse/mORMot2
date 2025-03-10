@@ -1296,6 +1296,15 @@ function FileIsWritable(const FileName: TFileName): boolean;
 begin
   result := (FileName <> '') and
             (fpaccess(pointer(FileName), W_OK) = 0);
+  { access() does not answer the "can I read/write/execute this file?" question.
+    It answers a slightly different question: "(assuming I'm a setuid binary)
+    can the user who invoked me read/write/execute this file?" (man access) }
+end;
+
+function DeleteFile(const aFileName: TFileName): boolean;
+begin
+  result := (aFileName <> '') and
+            (FpUnlink(pointer(aFileName)) >= 0);
 end;
 
 procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
@@ -1848,7 +1857,7 @@ function TSystemD.ProcessIsStartedBySystemd: boolean;
 begin
   result := IsAvailable and
     (fpgetppid() = 1) and // e.g. under Docker or when started by init.d
-    (BaseUnix.fpGetenv('INVOCATION_ID') <> nil); // as set e.g. on Ubuntu 20.04
+    (BaseUnix.fpGetenv(PAnsiChar('INVOCATION_ID')) <> nil); // as set e.g. on Ubuntu 20.04
 end;
 
 procedure TSystemD.Done;
