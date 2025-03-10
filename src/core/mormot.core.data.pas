@@ -11437,7 +11437,7 @@ begin
     end;
   // setup internal function wrappers
   GetDataFromJson := _GetDataFromJson;
-  HashSeed := Random32Not0; // flush at startup, to avoid hash flooding
+  HashSeed := Random32Not0; // random at startup, to avoid hash flooding
 end;
 
 
