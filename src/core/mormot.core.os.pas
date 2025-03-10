@@ -1083,7 +1083,8 @@ type
     // GetExecutableVersion / SetExecutableVersion and access the Executable
     // global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
-      aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0); reintroduce;
+      aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0;
+      aBuildDate: TDateTime = 0); reintroduce;
     /// open and extract file information from the executable FileName
     // - note that resource extraction is not available on POSIX, unless the
     // FPCUSEVERSIONINFO conditional has been specified in the project options
@@ -7989,16 +7990,17 @@ end;
 { TFileVersion }
 
 constructor TFileVersion.Create(const aFileName: TFileName;
-  aMajor, aMinor, aRelease, aBuild: integer);
+  aMajor, aMinor, aRelease, aBuild: integer; aBuildDate: TDateTime);
 var
   m, d: word;
 begin
   fFileName := aFileName;
   SetVersion(aMajor, aMinor, aRelease, aBuild);
-  if fBuildDateTime = 0 then // get build date from file age
-    fBuildDateTime := FileAgeToDateTime(aFileName);
-  if fBuildDateTime <> 0 then
-    DecodeDate(fBuildDateTime, BuildYear, m, d);
+  if aBuildDate = 0 then // get build date from file age
+    aBuildDate := FileAgeToDateTime(aFileName);
+  fBuildDateTime := aBuildDate;
+  if aBuildDate <> 0 then
+    DecodeDate(aBuildDate, BuildYear, m, d);
 end;
 
 function TFileVersion.Version32: integer;
@@ -8165,15 +8167,23 @@ begin
 end;
 
 procedure InitializeExecutableInformation; // called once at startup
+var
+  dt: TDateTime;
 begin
   with Executable do
   begin
     {$ifdef OSWINDOWS}
     ProgramFileName := ParamStr(0); // RTL seems just fine here
+    dt := FileAgeToDateTime(ProgramFileName);
     {$else}
     ProgramFileName := GetExecutableName(@InitializeExecutableInformation);
-    if (ProgramFileName = '') or
-       not FileExists(ProgramFileName) then
+    if ProgramFileName <> '' then
+    begin
+      dt := FileAgeToDateTime(ProgramFileName);
+      if dt = 0 then
+        ProgramFileName := '';
+    end;
+    if ProgramFileName = '' then
       ProgramFileName := ExpandFileName(ParamStr(0));
     {$endif OSWINDOWS}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
@@ -8187,7 +8197,7 @@ begin
       Host := 'unknown';
     if User = '' then
       User := 'unknown';
-    Version := TFileVersion.Create(ProgramFileName); // with versions=0
+    Version := TFileVersion.Create(ProgramFileName, 0, 0, 0, 0, dt);
     Command := TExecutableCommandLine.Create;
     Command.ExeDescription := ProgramName;
     Command.Parse;
