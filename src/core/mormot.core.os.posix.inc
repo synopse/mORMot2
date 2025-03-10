@@ -1947,8 +1947,7 @@ end;
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup
-  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY,
-  _XorEntropyGetOsRandom256failed: boolean;
+  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY: boolean;
 
 procedure TestOnceDebuggerTty; forward;
 
@@ -3214,21 +3213,8 @@ begin
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
 procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
-var
-  dev: THandle;
 begin
-  dev := 0;
-  if not _XorEntropyGetOsRandom256failed then
-    dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
-  if (dev <= 0) or
-     (FileRead(dev, e, SizeOf(e)) <> SizeOf(e)) then
-  begin
-    _XorEntropyGetOsRandom256failed := true;
-    sysutils.CreateGUID(e.l.guid); // fallback to FPC RTL
-    sysutils.CreateGUID(e.h.guid);
-  end;
-  if dev > 0 then
-    FileClose(dev);
+  FillSystemRandom(@e, SizeOf(e), {allowblocking=}false);
 end;
 
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
