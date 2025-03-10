@@ -1367,11 +1367,13 @@ function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boole
 var
   s, t: TW32Temp;
 begin
-  if (Source = '') or
-     (Target = '') then
-    result := false
-  else
-    result := Windows.CopyFileW(W32(Source, s), W32(Target, t), FailIfExists);
+  result := false;
+  if (Source <> '') and
+     (Target <> '') then
+    if Windows.CopyFileW(W32(Source, s), W32(Target, t), FailIfExists) then
+      result := true
+    else if not FailIfExists then
+      DeleteFile(Target); // remove any partial file
 end;
 
 const

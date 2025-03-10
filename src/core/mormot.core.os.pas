@@ -3298,6 +3298,7 @@ function DirectorySize(const FileName: TFileName; Recursive: boolean = false;
 
 /// copy one file to another, using the Windows API if possible
 // - on POSIX, will call StreamCopyUntilEnd() between two TFileStreamEx
+// - will delete the Target file on any copying issue (e.g. process abort)
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 
@@ -6893,6 +6894,8 @@ var
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
+  if FileName = '' then
+    exit;
   h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
   if not ValidHandle(h) then
     exit;
