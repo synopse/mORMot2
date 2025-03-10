@@ -7686,7 +7686,7 @@ begin
     // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
     exit;
   fHookedFreeInstance := P^;
-  PatchCodePtrUInt(P, PtrUInt(@HookedFreeInstance));
+  PatchCodePtrUInt(P, PtrUInt(@HookedFreeInstance), {leaveunprot=}false);
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;
