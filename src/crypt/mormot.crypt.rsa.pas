@@ -1532,7 +1532,7 @@ var
   last32: PCardinal;
 begin
   // ensure it is worth searching (paranoid)
-  n := Size;
+  n := Size; // number of HalfUInt
   if n <= 2 then
     raise ERsaException.Create('TBigInt.FillPrime: unsupported size');
   // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
@@ -1547,7 +1547,7 @@ begin
   last32 := @Value[n - 1 {$ifdef CPU32} - 1 {$endif}];
   // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
-  FillSystemRandom(pointer(Value), n * HALF_BYTES, false); // slow but approved
+  FillSystemRandom(pointer(Value), n * HALF_BYTES, {mayblock=}true); // official OS API
   {$ifdef CPUINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
   RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
