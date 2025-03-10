@@ -4299,6 +4299,7 @@ var
   {$ifdef CPUARM3264}
   act, aci: TIntegerDynArray;
   i: PtrInt;
+  armmodel: RawUtf8;
   {$endif CPUARM3264}
   tp: timespec;
   {$endif OSDARWIN}
@@ -4306,7 +4307,7 @@ var
   temp1, temp2: ShortString;
   {$else}
   cache, cpuinfo: PUtf8Char;
-  proccpuinfo, release: RawUtf8;
+  release: RawUtf8;
   procid, phyid, phyndx: integer;
   phy: TIntegerDynArray;
   {$ifdef OSLINUX}
@@ -4412,9 +4413,9 @@ begin
   {$endif OSANDROID}
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
-  proccpuinfo := StringFromFileNoSize('/proc/cpuinfo'); // LoadProcFile() not ok
+  CpuInfoLinux := StringFromFileNoSize('/proc/cpuinfo'); // too big for LoadProcFile
   procid := -1;
-  cpuinfo := pointer(proccpuinfo);
+  cpuinfo := pointer(CpuInfoLinux);
   while cpuinfo <> nil do
   begin
     beg := cpuinfo;
@@ -4467,15 +4468,14 @@ begin
   {$ifdef CPUARM3264}
   if act <> nil then // CPU part/implementer are more detailed than model name
   begin
-    proccpuinfo := '';
     for i := 0 to high(aci) do // there should be a single implementer
       AppendShortToUtf8(ArmCpuImplementerName(
-        ArmCpuImplementer(aci[i]), aci[i], ' '), proccpuinfo);
-    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), proccpuinfo);
+        ArmCpuImplementer(aci[i]), aci[i], ' '), armmodel);
+    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), armmodel);
     for i := 1 to high(act) do // but there may be several parts/models
       AppendShortToUtf8(ArmCpuTypeName(
-        ArmCpuType(act[i]), act[i], ' / '), proccpuinfo);
-    modname := pointer(proccpuinfo);
+        ArmCpuType(act[i]), act[i], ' / '), armmodel);
+    modname := pointer(armmodel);
   end;
   RetrieveCpuInfoArm;
   {$endif CPUARM3264}

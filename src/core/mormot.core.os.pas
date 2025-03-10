@@ -726,6 +726,8 @@ var
   end;
 
   {$ifdef OSLINUXANDROID}
+  /// contains the content of Linux /proc/cpuinfo as retrieved at startup
+  CpuInfoLinux: RawUtf8;
   /// contains the Flags: or Features: value of Linux /proc/cpuinfo
   CpuInfoFeatures: RawUtf8;
   {$endif OSLINUXANDROID}
@@ -8059,7 +8061,7 @@ begin
       Version.DetailedOrVoid, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
     {$ifdef OSLINUXANDROID}
-    Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));
+    Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoLinux), length(CpuInfoLinux));
     {$else}
     {$ifdef CPUINTELARM}
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
