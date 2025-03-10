@@ -6122,6 +6122,7 @@ begin
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
+  fTempCurrentSize := -1; // will force compute current folder size
   fTempFilesPath := EnsureDirectoryExists(fSettings.CacheTempPath);
   if fTempFilesPath <> '' then
   begin
@@ -6393,11 +6394,11 @@ begin
     exit;
   // compute the current folder cache size
   result := fTempCurrentSize;
-  if result = 0 then // first time, or after OnIdle DirectoryDeleteOlderFiles()
+  if result < 0 then // first time, or after OnIdle DirectoryDeleteOlderFiles()
   begin
     dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN, '', [ffoExcludesDir]);
     result := FindFilesSize(dir);
-    fTempCurrentSize := result;
+    fTempCurrentSize := result; // may be 0
   end;
   // enough space to write this file?
   inc(result, aAddingSize); // simulate adding this file
@@ -6725,7 +6726,7 @@ begin
     if size = 0 then
       exit; // nothing changed on disk
     fLog.Add.Log(sllTrace, 'OnIdle: deleted %', [KBNoSpace(size)], self);
-    fTempCurrentSize := 0; // folder change: need to call FindFiles() again
+    fTempCurrentSize := -1; // folder change: need to call FindFiles() again
   finally
     fFilesSafe.UnLock; // re-allow background file access
   end;
@@ -6793,8 +6794,11 @@ begin
       localok := CopyFile(Partial, local, {failsifexists=}false);
       Params.SetStep(wgsAlternateCopiedInCache, [local]);
       if localok and istemp then
+      begin
         // force timestamp = now within the temporary folder
         FileSetDateFromUnixUtc(local, UnixTimeUtc);
+        fTempCurrentSize := tot;
+      end;
     finally
       fFilesSafe.UnLock;
     end;
@@ -7037,7 +7041,13 @@ begin
         begin
           fLog.Add.Log(sllWarning, 'DirectFileName delete % size: %=% remote=%',
             [aFileName, err, localsize, aSize], self);
-          DeleteFile(aFileName); // this file seems invalid: clean from cache
+          fFilesSafe.Lock;
+          try
+            DeleteFile(aFileName); // this file seems invalid: clean from cache
+            fTempCurrentSize := -1;
+          finally
+            fFilesSafe.UnLock;
+          end;
         end
         else
         begin
