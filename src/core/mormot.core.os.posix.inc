@@ -3290,7 +3290,9 @@ begin
   {$endif OSLINUXANDROID}
     mounts := StringFromFileNoSize('/etc/mtab');
   p := pointer(mounts);
-  if p <> nil then // e.g. Darwin has no /etc/mtab :(
+  if p = nil then // e.g. Darwin has no /etc/mtab :(
+    exit;
+  n := 0;
   repeat
     fs :=  GetNextItem(p);
     mnt := GetNextItem(p);
