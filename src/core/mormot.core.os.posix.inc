@@ -2623,6 +2623,21 @@ begin
     result := '';
 end;
 
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+var
+  times: array[0..4] of clong;
+begin
+  // on BSD, use kern.cp_time 0=user/1=nice/2=system/3=interrupt/4=idle values
+  // see https://man.openbsd.org/sysctl.2#KERN_CPTIME~2
+  // https://freebsd-hackers.freebsd.narkive.com/DBF0kxOC/cpu-utilization-break-down-via-sysctl#post3
+  FillCharFast(times, SizeOf(times), 0);
+  bsdsysctl('kern.cp_time', @times, SizeOf(times));
+  UserTime   := times[0] + times[1];
+  KernelTime := times[2] + times[3];
+  IdleTime   := times[4];
+  result := (UserTime + KernelTime) <> 0;
+end;
+
 {$ifdef OSFREEBSD}
 
 const
@@ -2959,7 +2974,24 @@ end;
 function RetrieveLoadAvg: RawUtf8;
 begin
   // the libc parses this file anyway :)
-  result := TrimU(StringFromFile('/proc/loadavg', {nosize=}true));
+  result := LoadProcFileTrimed('/proc/loadavg');
+end;
+
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+var
+  P: PUtf8Char;
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  // see http://www.linuxhowtos.org/System/procstat.htm
+  if LoadProcFile('/proc/stat', tmp) <= 10 then
+    exit;
+  P := @tmp;
+  // e.g. 'cpu  3418147 18140 265232 6783435 12184 0 34219 0 0 0'
+  UserTime   := GetNextCardinal(P){=user} + GetNextCardinal(P){=nice};
+  KernelTime := GetNextCardinal(P){=system};
+  IdleTime   := GetNextCardinal(P){=idle};
+  result := true;
 end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
@@ -3136,11 +3168,6 @@ begin
     PosixInjectSmbiosInfo(info);
 end;
 
-function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
-begin
-  result := false; // should call e.g. RetrieveLoadAvg() instead
-end;
-
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 begin
@@ -3166,25 +3193,18 @@ end;
 
 function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
 var
-  P: PUtf8Char;
-  U, K, I, S: cardinal;
+  I, K, U, S: Int64;
 begin
-  // see http://www.linuxhowtos.org/System/procstat.htm
   result := false;
-  P := pointer(StringFromFile('/proc/stat', {nosize=}true));
-  if P = nil then
+   if not RetrieveSystemTimes(I, K, U) then
     exit;
-  // e.g. 'cpu  3418147 18140 265232 6783435 12184 0 34219 0 0 0'
-  U := GetNextCardinal(P){=user} + GetNextCardinal(P){=nice};
-  K := GetNextCardinal(P){=system};
-  I := GetNextCardinal(P){=idle};
   S := U + K + I;
-  result := S <> 0;
-  if not result then
+  if S = 0 then
     exit;
   Kernel := {%H-}SimpleRoundTo2Digits((K * 100) / S);
   User   := {%H-}SimpleRoundTo2Digits((U * 100) / S);
   Idle   := 100 - Kernel - User; // ensure sum is always 100%
+  result := true;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
 procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
