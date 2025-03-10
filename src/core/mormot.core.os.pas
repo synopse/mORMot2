@@ -6799,19 +6799,26 @@ end;
 function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 var
   h: THandle;
-  read: PtrInt;
+  pos, read: PtrInt;
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
   h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
   if not ValidHandle(h) then
     exit;
+  pos := 0;
   repeat
-    read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
+    read := FileRead(h, tmp[pos], SizeOf(tmp) - pos); // try to fill the buffer
     if read <= 0 then
-      break;
-    AppendBufferToUtf8(@tmp, read, RawUtf8(result)); // in-place resize
+      break; // end of input
+    inc(pos, read);
+    if pos < SizeOf(tmp) then // is likely to flush before 32KB of output
+      continue;
+    AppendBufferToUtf8(@tmp, pos, RawUtf8(result)); // in-place resize
+    pos := 0;
   until false;
+  if pos <> 0 then
+    AppendBufferToUtf8(@tmp, pos, RawUtf8(result));
   FileClose(h);
 end;
 
@@ -6819,7 +6826,6 @@ function StringFromFile(const FileName: TFileName): RawByteString;
 var
   h: THandle;
   size: Int64;
-  read: PtrInt;
 begin
   result := '';
   if FileName = '' then
