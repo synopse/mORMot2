@@ -2597,8 +2597,8 @@ var
 
 /// a wrapper to the Linux eventfd() syscall
 // - returns 0 if the kernel does not support eventfd2 (before 2.6.27) or if the
-// platform is not supported (only validated on Linux x86_64 by now)
-// - returns a file descriptor handle on success, which should be fpclose()
+// platform is not validated yet (only Linux x86_64 by now)
+// - returns a file descriptor handle on success, to be eventually closed
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 
 /// wrapper to read from a eventfd() file
@@ -2617,7 +2617,9 @@ function LinuxEventFDWait(fd: integer; ms: integer): boolean; inline;
 
 /// a wrapper to the Linux getrandom() syscall
 // - returns false if the kernel is unsupported (before 3.17) or if the
-// platform is not supported (only validated on Linux x86_64 by now)
+// platform is not validated yet (only Linux x86_64 by now)
+// - used e.g. by function FillSystemRandom() if available, since it makes a
+// single syscall, and /dev/urandom may be not available from some chroot
 function LinuxGetRandom(buf: pointer; len: integer): boolean;
 
 {$endif OSLINUX}

@@ -3255,19 +3255,27 @@ begin
   rd := MAXFROMOS;
   if Len < MAXFROMOS then
     rd := Len;
-  dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
-  if (dev <= 0) and
-     AllowBlocking then
-    dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
-  if dev > 0 then
-    try
-      result := (FileRead(dev, Buffer[0], rd) = rd);
-    finally
-      FileClose(dev);
-    end;
+  {$ifdef OSLINUX} // a single syscall to rule them all on Linux x86_64
+  result := LinuxGetRandom(Buffer, rd);
+  if not result then
+  {$endif OSLINUX}
+  begin
+    dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
+    if (dev <= 0) and
+       AllowBlocking then
+      dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
+    if dev > 0 then
+      try
+        result := (FileRead(dev, Buffer[0], rd) = rd);
+      finally
+        FileClose(dev);
+      end;
+  end;
   if result then
   begin
     dec(Len, rd);
+    if Len = 0 then
+      exit;
     Buffer := @Buffer[rd];
   end
   else // OS API call failure (paranoid)
