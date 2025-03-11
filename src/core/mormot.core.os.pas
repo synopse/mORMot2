@@ -3827,12 +3827,13 @@ function IsDebuggerPresent: boolean;
 
 /// return the time and memory usage information about a given process
 // - under Windows, is a wrapper around GetProcessTimes/GetProcessMemoryInfo
+// - on POSIX, is not implemented yet, and return false
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 
 /// return the system-wide time usage information
 // - under Windows, is a wrapper around GetSystemTimes() kernel API call
-// - return false on POSIX system - call RetrieveLoadAvg() instead
+// - will use /proc/stat on Linux, or kern.cp_time sysctl on BSD
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 
 /// return the system-wide time usage information

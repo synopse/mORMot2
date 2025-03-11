@@ -2641,14 +2641,18 @@ type
 function getloadavg(var loadavg: TLoadAvg; nelem: integer): integer;
   cdecl external clib name 'getloadavg';
 
-function RetrieveLoadAvg: RawUtf8;
+function RetrieveLoadAvg: TShort23;
 var
   avg: TLoadAvg;
 begin
-  if getloadavg(avg, 3) = 3 then
-    result := _fmt('%g %g %g', [avg[0], avg[1], avg[2]])
-  else
-    result := '';
+  result[0] := #0;
+  if getloadavg(avg, 3) <> 3 then
+    exit;
+  AppendShort(TwoDigits(avg[0]), result);
+  AppendShortChar(' ', @result);
+  AppendShort(TwoDigits(avg[1]), result);
+  AppendShortChar(' ', @result);
+  AppendShort(TwoDigits(avg[2]), result);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
@@ -3010,22 +3014,18 @@ begin
   result := FindFileCardinal('/proc/self/status', 'TRACERPID:') <> 0;
 end;
 
-function RetrieveLoadAvg: RawUtf8;
+function RetrieveLoadAvg: TShort23;
 var
   si: TSysInfo;  // Linuxism
-  s: ShortString;
 begin
-  if SysInfo(@si) = 0 then // one syscall is faster than /proc/loadavg access
-  begin
-    s := TwoDigits(si.loads[0] / 65536);
-    AppendShortChar(' ', @s);
-    AppendShort(TwoDigits(si.loads[1] / 65536), s);
-    AppendShortChar(' ', @s);
-    AppendShort(TwoDigits(si.loads[2] / 65536), s);
-    FastSetString(result, @s[1], ord(s[0]));
-  end
-  else
-    LoadProcFileTrimed('/proc/loadavg', result)
+  result[0] := #0;
+  if SysInfo(@si) <> 0 then // one syscall is faster than /proc/loadavg access
+    exit;
+  AppendShort(TwoDigits(si.loads[0] / 65536.0), result);
+  AppendShortChar(' ', @result);
+  AppendShort(TwoDigits(si.loads[1] / 65536.0), result);
+  AppendShortChar(' ', @result);
+  AppendShort(TwoDigits(si.loads[2] / 65536.0), result);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;

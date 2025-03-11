@@ -1851,6 +1851,7 @@ end;
 
 var
   AppendToTextFileSafe: TLightLock; // to make AppendToTextFile() thread-safe
+  LogToTextFileName: TFileName;
 
 function AppendToTextFile(const aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64; aUtcTimeStamp: boolean): boolean;
@@ -1870,9 +1871,6 @@ begin
     AppendToTextFileSafe.UnLock;
   end;
 end;
-
-var
-  LogToTextFileName: TFileName;
 
 procedure LogToTextFile(Msg: RawUtf8);
 begin
