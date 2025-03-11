@@ -943,6 +943,10 @@ type
     /// access to a global instance, corresponding to the current process
     // - its HistoryDepth will be of 60 items
     class function Current(aCreateIfNone: boolean = true): TSystemUse;
+    /// returns detailed CPU and RAM usage history as text of the supplied process
+    // - fallback to RetrieveLoadAvg if the ProcessID was not registered
+    class function CurrentHistoryText(aProcessID: integer = 0; aDepth: integer = 0;
+      aDestMemoryMB: PRawUtf8 = nil): RawUtf8;
     /// returns detailed CPU and RAM usage history of the supplied process
     // - aProcessID=0 will return information from the current process
     // - returns nil if the Process ID was not registered via Create/Subscribe
@@ -3876,6 +3880,15 @@ begin
     end;
   end;
   result := ProcessSystemUse;
+end;
+
+class function TSystemUse.CurrentHistoryText(aProcessID, aDepth: integer;
+  aDestMemoryMB: PRawUtf8): RawUtf8;
+begin
+  if ProcessSystemUse <> nil then
+    result := ProcessSystemUse.HistoryText(aProcessID, aDepth, aDestMemoryMB)
+  else // fallback to POSIX loadavg or Windows 'U:xx K:xx'
+    ShortStringToAnsi7String(RetrieveLoadAvg, result);
 end;
 
 function TSystemUse.HistoryText(aProcessID, aDepth: integer;
