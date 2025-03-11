@@ -3850,8 +3850,8 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 
 /// retrieve some human-readable text from GetMemoryInfo
 // - numbers are rounded up to a single GB number with no decimals
-// - returns e.g. 'used 6GB/16GB (35% free)' text
-function GetMemoryInfoText: RawUtf8;
+// - returns e.g. '6GB/16GB (35%)' text
+function GetMemoryInfoText: TShort31;
 
 /// retrieve some human-readable text about the current system in several lines
 // - includes UTC timestamp, memory and disk availability, and exe/OS/CPU info
@@ -7763,15 +7763,19 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-function GetMemoryInfoText: RawUtf8;
+function GetMemoryInfoText: TShort31;
 var
   info: TMemoryInfo;
 begin
-  if GetMemoryInfo(info, false) then
-    _fmt('used %s/%s (%d%s free)', [_oskb(info.memtotal - info.memfree),
-      _oskb(info.memtotal), info.percent, '%'], result)
-  else
-    result := '';
+  result[0] := #0;
+  if not GetMemoryInfo(info, false) then
+    exit;
+  AppendShort(_oskb(info.memtotal - info.memfree), result);
+  AppendShortChar('/', @result);
+  AppendShort(_oskb(info.memtotal), result);
+  AppendShort(' (', result);
+  AppendShortCardinal(info.percent, result);
+  AppendShort('%)', result);
 end;
 
 function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
@@ -7787,13 +7791,12 @@ var
   avail, free, total: QWord;
 begin
   GetDiskInfo(Executable.ProgramFilePath, avail, free, total);
-  result := _fmt('Current UTC date is %s (%d)'#13#10'Memory %s'#13#10 +
-                 'Executable free disk %s/%s'#13#10'Cpu %s'#13#10 +
-                 '%s'#13#10'%s'#13#10'%s'#13#10'%s'#13#10,
+  result := _fmt('Current UTC date: %s (%d)'+ CRLF +'Memory: %s'+ CRLF +
+                 'Current disk free: %s/%s'+ CRLF +'Load: %s'+ CRLF +
+                 'Exe: %s'+ CRLF +'OS: %s'+ CRLF +'Cpu: %s'+ CRLF +'Bios: %s'+ CRLF,
     [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
-     GetMemoryInfoText, _oskb(avail), _oskb(total),
-     RetrieveLoadAvg, Executable.Version.VersionInfo,
-     OSVersionText, CpuInfoText, BiosInfoText]);
+     GetMemoryInfoText, _oskb(avail), _oskb(total), RetrieveLoadAvg,
+     Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText]);
 end;
 
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
