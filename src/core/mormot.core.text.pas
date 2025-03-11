@@ -6282,10 +6282,10 @@ begin
     if L > 4 then
     begin
       Decim := PCardinal(P + L - SizeOf(cardinal))^; // 4 last digits = 4 decimals
-      if Decim = ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('0') shl 24 then
+      if Decim = $30303030 then
         dec(L, 5)
       else // no decimal
-      if Decim and $ffff0000 = ord('0') shl 16 + ord('0') shl 24 then
+      if Decim and $ffff0000 = $30300000 then
         dec(L, 2); // 2 decimals
     end;
     FastSetString(result, P, L);
@@ -6314,11 +6314,9 @@ begin
   begin
     // Decim = 4 last digits = 4 decimals
     Decim := PCardinal(P + result - SizeOf(cardinal))^;
-    if Decim = ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('0') shl 24 then
-      // no decimal -> trunc trailing *.0000 chars
+    if Decim = $30303030 then // no decimal -> trunc trailing *.0000 chars
       dec(result, 5)
-    else if Decim and $ffff0000 = ord('0') shl 16 + ord('0') shl 24 then
-      // 2 decimals -> trunc trailing *.??00 chars
+    else if Decim and $ffff0000 = $30300000 then // 2 decimals -> trunc *.??00
       dec(result, 2);
   end;
   MoveFast(P^, Dest^, result);

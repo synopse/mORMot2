@@ -6923,7 +6923,7 @@ begin
     if fHeaderLinesCount <> 4 then
       FastSetString(fHeaders, fLines[2],
         PtrUInt(fLines[fHeaderLinesCount - 2]) - PtrUInt(fLines[2]));
-    if PWord(fLines[fHeaderLinesCount])^ <> ord('0') + ord('0') shl 8 then
+    if PWord(fLines[fHeaderLinesCount])^ <> $3030 then
       // YYYYMMDD -> 20101225 e.g. fFreq=0 if date time,
       fFreq := 0
     else
