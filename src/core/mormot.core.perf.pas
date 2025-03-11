@@ -3915,7 +3915,8 @@ begin
   data := HistoryData(aProcessID, aDepth);
   res.InitFast(length(data), dvArray);
   for i := 0 to high(data) do
-    res.AddItem(TwoDigits(data[i].Kernel + data[i].User));
+    with data[i] do
+      res.AddItem(SimpleRoundTo2Digits(DoubleToCurrency(Kernel + User)));
 end;
 
 function SortDynArrayDiskPartitions(const A, B): integer;
