@@ -6797,7 +6797,7 @@ begin
       begin
         // force timestamp = now within the temporary folder
         FileSetDateFromUnixUtc(local, UnixTimeUtc);
-        fTempCurrentSize := tot;
+        inc(fTempCurrentSize, localsize);
       end;
     finally
       fFilesSafe.UnLock;
