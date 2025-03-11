@@ -4594,7 +4594,7 @@ var
   p: PAnsiChar;
   l: PtrInt;
 begin
-  DoubleToCurrency(d, PCurrency(@v)^); //
+  DoubleToCurrency(d, PCurrency(@v)^); // specific code for x87
   SimpleRoundTo2DigitsCurr64(v);
   p := StrCurr64(@tmp[31], v);
   l := @tmp[31] - p;
