@@ -1473,6 +1473,14 @@ function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
   {$ifdef CPU64}inline;{$endif}
 
+/// internal fast INTEGER Curr64 (value*10000) value to text conversion
+// - expect the last available temporary char position in P
+// - return the last written char position (write in reverse order in P^)
+// - will return 0 for Value=0, or a string representation with always 4 decimals
+//   (e.g. 1->'0.0001' 500->'0.0500' 25000->'2.5000' 30000->'3.0000')
+// - is called by Curr64ToPChar() and Curr64ToStr() functions
+function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
+
 /// fast convert an Int64 value into a temporary shortstring on stack
 function ToShort(const val: Int64): TShort23;
   {$ifdef HASINLINE}inline;{$endif}
@@ -6316,6 +6324,41 @@ begin
 end;
 
 {$endif CPU64}
+
+function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
+var
+  c: QWord;
+  d: cardinal;
+begin
+  if Value = 0 then
+  begin
+    result := P - 1;
+    result^ := '0';
+    exit;
+  end;
+  if Value < 0 then
+    c := -Value
+  else
+    c := Value;
+  if c < 10000 then
+  begin
+    result := P - 6; // only decimals -> append '0.xxxx'
+    PCardinal(result)^ := ord('0') + ord('.') shl 8;
+    YearToPChar(c, PUtf8Char(P) - 4);
+  end
+  else
+  begin
+    result := StrUInt64(P - 1, c);
+    d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
+    PCardinal(P - 4)^ := d;
+    P[-5] := '.'; // insert '.' just before last 4 decimals
+  end;
+  if Value < 0 then
+  begin
+    dec(result);
+    result^ := '-';
+  end;
+end;
 
 function ToShort(const val: Int64): TShort23;
 var
