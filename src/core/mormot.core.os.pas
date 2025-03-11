@@ -7359,13 +7359,10 @@ begin
   end;
 end;
 
-var
-  lastIsDirectoryWritable: TFileName; // naive but efficient cache
-
 function IsDirectoryWritable(const Directory: TFileName;
   Flags: TIsDirectoryWritable): boolean;
 var
-  dir, last, fmt, fn: TFileName;
+  dir, fmt, fn: TFileName;
   h: THandle;
   retry: integer;
 begin
@@ -7374,14 +7371,6 @@ begin
   if Directory = '' then
     exit;                       
   dir := ExcludeTrailingPathDelimiter(Directory);
-  if Flags = [] then
-  begin
-    last := lastIsDirectoryWritable;
-    result := (last <> '') and
-              (dir = last);
-    if result then
-      exit; // we just tested this folder
-  end;
   if not FileIsWritable(dir) then
     exit; // the folder does not exist or is read-only for the current user
   if idwAttributesOnly in Flags then
@@ -7419,15 +7408,11 @@ begin
   h := FileCreate(fn);
   if not ValidHandle(h) then
     exit; // a file can't be created
-  result := true;
-  if (idwWriteSomeContent in flags) and // some pointers and hash
-     (FileWrite(h, Executable, SizeOf(Executable)) <> SizeOf(Executable)) then
-    result := false;
+  result := (not (idwWriteSomeContent in flags)) or // some pointers and hash
+            (FileWrite(h, Executable, SizeOf(Executable)) = SizeOf(Executable));
   FileClose(h);
   if not DeleteFile(fn) then // success if the file can be created and deleted
-    result := false
-  else if result then
-    lastIsDirectoryWritable := dir
+    result := false;
 end;
 
 
