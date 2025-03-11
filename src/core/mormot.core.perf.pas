@@ -1147,7 +1147,7 @@ function GetDiskPartitionSize(var one: TDiskPartition;
   withfreespace, nospace: boolean): RawUtf8;
 
 /// returns a JSON object containing basic information about the computer
-// - including Host, User, CPU, OS, freemem, freedisk...
+// - including Host, User, CPU, OS, memused, diskfree...
 function SystemInfoJson: RawUtf8;
 
 /// returns a TDocVariant array of the latest intercepted exception texts
@@ -3608,29 +3608,21 @@ begin
     TypeInfo(TArm64HwCap), aArm64CPUFeatures, Sep, 6);
 end;
 
-
 function SystemInfoJson: RawUtf8;
-var
-  cpu, mem, free: RawUtf8;
 begin
-  cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
-  if mem = '' then
-    free := TSynMonitorMemory.FreeAsText(false, @mem)
-  else
-    free := TSynMonitorMemory.FreeAsText;
-  with SystemInfo do
-    result := JsonEncode([
-      'host',        Executable.Host,
-      'user',        Executable.User,
-      'os',          OSVersionText,
-      'cpu',         CpuInfoText,
-      'bios',        BiosInfoText,
-      {$ifdef OSWINDOWS}{$ifdef CPU32}'wow64', IsWow64, {$endif}{$endif OSWINDOWS}
-      'cpufeatures', CpuFeaturesText,
-      'processcpu',  cpu,
-      'processmem',  mem,
-      'freemem',     free,
-      'disk',        GetDiskPartitionsText({nocache=}false, {withfree=}true)]);
+  result := JsonEncode([
+    'host',        Executable.Host,
+    'user',        Executable.User,
+    'os',          OSVersionText,
+    'cpu',         CpuInfoText,
+    'bios',        BiosInfoText,
+    {$ifdef OSWINDOWS}
+      {$ifdef CPU32}'wow64', IsWow64, {$endif}
+    {$endif OSWINDOWS}
+    'cpufeatures', CpuFeaturesText,
+    'load',        RetrieveLoadAvg, // POSIX loadavg or Windows 'U:xx K:xx'
+    'memused',     GetMemoryInfoText,
+    'diskfree',    GetDiskPartitionsVariant]);
 end;
 
 {$ifdef NOEXCEPTIONINTERCEPT}
