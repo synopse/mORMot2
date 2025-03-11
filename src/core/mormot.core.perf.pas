@@ -3895,27 +3895,29 @@ function TSystemUse.HistoryText(aProcessID, aDepth: integer;
   aDestMemoryMB: PRawUtf8): RawUtf8;
 var
   data: TSystemUseDataDynArray;
+  d: ^TSystemUseData;
   mem: RawUtf8;
-  i: PtrInt;
+  i: integer;
 begin
   result := '';
-  mem := '';
-  data := HistoryData(aProcessID, aDepth);
-  {$ifndef OSWINDOWS}
-  if data = nil then // from sysinfo or libc getloadavg
+  if self <> nil then
+    data := HistoryData(aProcessID, aDepth);
+  d := pointer(data);
+  if d = nil then // POSIX loadavg or Windows 'U:xx K:xx'
     ShortStringToAnsi7String(RetrieveLoadAvg, result)
   else
-  {$endif OSWINDOWS}
-    for i := 0 to high(data) do
-      with data[i] do
-      begin
-        result := FormatUtf8('%% ', [result, TwoDigits(Kernel + User)]);
-        if aDestMemoryMB <> nil then
-          mem := FormatUtf8('%% ', [mem, TwoDigits(WorkKB / 1024)]);
-      end;
+    for i := 1 to length(data) do
+    begin
+      Append(result, [TwoDigits(d^.Kernel + d^.User), ' ']);
+      if aDestMemoryMB <> nil then
+        Append(mem, [TwoDigits(d^.WorkKB / 1024), ' ']);
+      inc(d);
+    end;
   TrimSelf(result);
-  if aDestMemoryMB <> nil then
-    aDestMemoryMB^ := TrimU(mem);
+  if aDestMemoryMB = nil then
+    exit;
+  TrimSelf(mem);
+  aDestMemoryMB^ := mem;
 end;
 
 function TSystemUse.HistoryVariant(aProcessID, aDepth: integer): variant;
