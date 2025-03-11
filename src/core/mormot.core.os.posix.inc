@@ -2216,8 +2216,6 @@ end;
 function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
 begin
   result := false;
-  if not FileIsWritable(parent) then
-    exit;
   folder := EnsureDirectoryExists(parent + sub);
   if folder = '' then
     exit;
