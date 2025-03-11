@@ -4589,22 +4589,12 @@ end;
 
 function TwoDigits(const d: double): TShort23;
 var
-  tmp: array[0..31] of AnsiChar;
   v: Int64;
-  p: PAnsiChar;
-  l: PtrInt;
 begin
   DoubleToCurrency(d, PCurrency(@v)^); // specific code for x87
   SimpleRoundTo2DigitsCurr64(v);
-  p := StrCurr64(@tmp[31], v);
-  l := @tmp[31] - p;
-  if (l > 5) and
-     (p[l - 5] = '.') then
-    if PWord(@p[l - 4])^ = $3030 then
-      dec(l, 5) // x.00xx -> x
-    else
-      dec(l, 2); // x.12xx -> x.12
-  SetString(result, p, L);
+  result[0] := #0;
+  AppendShortCurr64(v, result, {decimals=}2);
 end;
 
 function TruncTo2Digits(const Value: Currency): Currency;
