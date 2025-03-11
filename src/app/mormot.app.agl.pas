@@ -964,7 +964,7 @@ begin
         GetMemoryInfo(mem, false);
         res := ord(AppendToTextFile(FormatUtf8('% %: % [mem=%/%] [cpu=%]',
           [w, Name, msg, KBNoSpace(mem.memfree), KBNoSpace(mem.memtotal),
-           RetrieveLoadAvg]), fn));
+           RetrieveLoadAvg]), fn)); // POSIX loadavg or Windows 'U:xx K:xx' %
       end;
     end;
     fOwner.fSettings.LogClass.Add.Log(sllTrace,

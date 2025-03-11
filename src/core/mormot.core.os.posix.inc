@@ -37,6 +37,8 @@ uses
 
 // define some raw text functions, to avoid linking mormot.core.text
 
+procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
+
 function IdemPChar(p, up: PUtf8Char): boolean; inline;
 var
   c, u: AnsiChar;
@@ -2653,7 +2655,7 @@ begin
   AppendShort(TwoDigits(avg[1]), result);
   AppendShortChar(' ', @result);
   AppendShort(TwoDigits(avg[2]), result);
-end;
+end; // we didn't use AppendShortCurr64() because of expected rounding
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
@@ -2784,7 +2786,7 @@ begin
   crcblocks(@e.h3, @mem, SizeOf(mem) shr 4); // another algo
 end;
 
-{$else} // Linux-specific code
+{$else} // Linux (and Android) specific code
 
 procedure FindNameValue(p: PUtf8Char; const up: shortstring; var res: RawUtf8);
 var
@@ -3026,7 +3028,7 @@ begin
   AppendShort(TwoDigits(si.loads[1] / 65536.0), result);
   AppendShortChar(' ', @result);
   AppendShort(TwoDigits(si.loads[2] / 65536.0), result);
-end;
+end; // we didn't use AppendShortCurr64() because of expected rounding
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
@@ -3394,8 +3396,7 @@ begin
   //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         if n = length(result) then
           SetLength(result, NextGrow(n));
-        if length(fs) > 24 then
-          fs := copy(fs, 1, 24) + '..';
+        //if length(fs) > 24 then fs := copy(fs, 1, 24) + '..';
         result[n].name := fs;
         result[n].mounted := fn;
         result[n].size := tot;
@@ -4233,15 +4234,16 @@ begin
       begin
         f := TrimU(StringFromFileNoSize(fn + '/address'));
         if f <> '' then
-        begin
-          SetLength(result, length(result) + 1);
-          result[high(result)] := f;
-        end;
+          AddRawUtf8(result, f);
       end;
     end;
   until FindNext(SR) <> 0;
   FindClose(SR);
 end;
+
+{$endif OSLINUX}
+
+{$ifdef OSLINUXANDROID}
 
 var
   __BiosInfoText: RawUtf8;
@@ -4250,14 +4252,12 @@ var
 procedure TrimDualSpaces(var s: RawUtf8); forward;
 
 procedure SetBiosInfoText(var txt: RawUtf8);
+{$ifdef OSLINUX}
 var
   prod: RawUtf8;
+{$endif OSLINUX}
 begin
-  {$ifdef OSANDROID}
-  txt:= TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
-                      GetSystemProperty('ro.product.name') + ' ' +
-                      GetSystemProperty('ro.product.device')));
-  {$else}
+  {$ifdef OSLINUX}
   txt := TrimU(LoadProcFileTrimed('/sys/class/dmi/id/sys_vendor') + ' ' +
                LoadProcFileTrimed('/sys/class/dmi/id/product_name'));
   if txt <> '' then
@@ -4269,8 +4269,12 @@ begin
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     LoadProcFileTrimed('/proc/device-tree/model', txt);
-  {$endif OSANDROID}
-  if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. "Hardware : BCM2709" on a RPi3
+  {$else}
+  txt := TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
+                       GetSystemProperty('ro.product.name') + ' ' +
+                       GetSystemProperty('ro.product.device')));
+  {$endif OSLINUX}
+  if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
       txt := __BiosInfoHardwareFromCpuInfo
     else
@@ -4292,7 +4296,7 @@ begin
   result := __BiosInfoText;
 end;
 
-{$endif OSLINUX}
+{$endif OSLINUXANDROID}
 
 {$ifdef CPUARM3264} // POSIX libc is faster than FPC RTL or our pascal code
 
