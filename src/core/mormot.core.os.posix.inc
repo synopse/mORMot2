@@ -1957,6 +1957,47 @@ begin
   result := WaitReadPending(fd, ms);
 end;
 
+var
+  _RealFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
+
+function _RealFileSystem(const typ: RawUtf8): boolean; inline;
+begin
+  result := FindNonVoidRawUtf8(pointer(_RealFileSystems),
+    pointer(typ), length(typ), length(_RealFileSystems)) >= 0;
+end;
+
+function LoadRealFileSystems: boolean;
+var
+  fs, s: RawUtf8;
+  p: PUtf8Char;
+begin
+  result := false;
+  fs := StringFromFileNoSize('/proc/filesystems');
+  p := pointer(fs);
+  if p = nil then
+    exit;
+  repeat
+    while p^ = ' ' do
+      inc(p);
+    if (PCardinal(p)^ <> ord('n') + ord('o') shl 8 + ord('d') shl 16 + ord('e') shl 24) or
+       (p[4] <> 'v') then
+    begin
+      s := GetNextItem(p);
+      if s <> '' then
+        AddRawUtf8(_RealFileSystems, s);
+    end;
+    p := GotoNextLine(p);
+  until p = nil;
+  if _RealFileSystems = nil then
+    exit;
+  // add some FS which may be marked as nodev but could be considered as "real"
+  if not _RealFileSystem('zfs') then
+    AddRawUtf8(_RealFileSystems, 'zfs');
+  if not _RealFileSystem('cis') then
+    AddRawUtf8(_RealFileSystems, 'cifs');
+  result := true;
+end;
+
 {$endif OSLINUX}
 
 
@@ -3354,55 +3395,69 @@ begin
   aTotalBytes := QWord(fs.blocks) * QWord(fs.bsize);
 end;
 
+function IsRealFileSystem(const typ: RawUtf8): boolean;
+begin
+  {$ifdef OSLINUX}
+  if (_RealFileSystems <> nil) or
+     LoadRealFileSystems then
+    result := _RealFileSystem(typ) // from /proc/filesystems
+  else
+  {$endif OSLINUX}
+  result := IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
+    'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS', 'PTY',
+    'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS', 'DEVTMPFS',
+    'HUGETLBFS', 'ISO9660']);
+end;
+
+procedure AddDiskPartition(const typ, mnt, fs: RawUtf8;
+  var result: TDiskPartitions; var n:PtrInt);
+var
+  av, fr, tot: QWord;
+  fn: TFileName;
+begin
+  if (fs = '') or
+     (mnt = '') or
+     (typ = '') or
+     (fs = 'rootfs') or
+     (mnt = '/mnt') or
+     IdemPChar(pointer(fs), '/DEV/LOOP') or
+     IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) or
+     not IsRealFileSystem(typ) then
+    exit;
+  fn := mnt;
+  if not (GetDiskInfo(fn, av, fr, tot)) or
+     (tot < 1 shl 20) then
+    exit;
+//writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',_oskb(av),' fr=',_oskb(fr),' tot=',_oskb(tot));
+  if n = length(result) then
+    SetLength(result, NextGrow(n));
+  //if length(fs) > 24 then fs := copy(fs, 1, 24) + '..';
+  with result[n] do
+  begin
+    name := fs;
+    mounted := fn;
+    size := tot;
+  end;
+  inc(n);
+end;
+
 function GetDiskPartitions: TDiskPartitions;
 var
-  mounts, fs, mnt, typ: RawUtf8;
+  mounts: RawUtf8;
   p: PUtf8Char;
-  fn: TFileName;
-  n: integer;
-  av, fr, tot: QWord;
+  n: PtrInt;
 begin
   // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
   result := nil;
-  {$ifdef OSLINUXANDROID}
   mounts := StringFromFileNoSize('/proc/self/mounts');
   if mounts = '' then
-  {$endif OSLINUXANDROID}
     mounts := StringFromFileNoSize('/etc/mtab');
   p := pointer(mounts);
   if p = nil then // e.g. Darwin has no /etc/mtab :(
     exit;
   n := 0;
   repeat
-    fs :=  GetNextItem(p);
-    mnt := GetNextItem(p);
-    typ := GetNextItem(p);
-    if (fs <> '') and
-       (fs <> 'rootfs') and
-       not IdemPChar(pointer(fs), '/DEV/LOOP') and
-       (mnt <> '') and
-       (mnt <> '/mnt') and
-       (typ <> '') and
-       not IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) and
-       not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
-        'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
-        'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS', 'DEVTMPFS',
-        'HUGETLBFS', 'ISO9660']) then
-    begin
-      fn := mnt;
-      if GetDiskInfo(fn, av, fr, tot) and
-         (tot > 1 shl 20) then
-      begin
-  //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
-        if n = length(result) then
-          SetLength(result, NextGrow(n));
-        //if length(fs) > 24 then fs := copy(fs, 1, 24) + '..';
-        result[n].name := fs;
-        result[n].mounted := fn;
-        result[n].size := tot;
-        inc(n);
-      end;
-    end;
+    AddDiskPartition(GetNextItem(p), GetNextItem(p), GetNextItem(p), result, n);
     p := GotoNextLine(p);
   until p = nil;
   SetLength(result, n);
