@@ -3057,19 +3057,19 @@ begin
   if LoadProcFile('/proc/meminfo', tmp) <= 0 then
     exit;
   P := @tmp;
-  info.memtotal  := FindNameValueCardinal(P, 'MEMTOTAL:') shr 10;
-  info.memfree   := FindNameValueCardinal(P, 'MEMAVAILABLE:') shr 10;
-  info.filetotal := FindNameValueCardinal(P, 'SWAPTOTAL:') shr 10;
-  info.filefree  := FindNameValueCardinal(P, 'SWAPFREE:') shr 10;
+  info.memtotal  := FindNameValueCardinal(P, 'MEMTOTAL:') shl 10;
+  info.memfree   := FindNameValueCardinal(P, 'MEMAVAILABLE:') shl 10;
+  info.filetotal := FindNameValueCardinal(P, 'SWAPTOTAL:') shl 10;
+  info.filefree  := FindNameValueCardinal(P, 'SWAPFREE:') shl 10;
   // note: Windows-like virtual memory information is not available under Linux
-  info.vmtotal   := FindNameValueCardinal(P, 'COMMITLIMIT:') shr 10;
-  info.vmfree    := FindNameValueCardinal(P, 'MEMFREE:') shr 10;
+  info.vmtotal   := FindNameValueCardinal(P, 'COMMITLIMIT:') shl 10;
+  info.vmfree    := FindNameValueCardinal(P, 'MEMFREE:') shl 10;
   if info.memfree = 0 then // kernel < 3.14 may not have the MemAvailable field
     info.memfree  := info.vmfree + (
                      FindNameValueCardinal(P, 'BUFFERS:') +
                      FindNameValueCardinal(P, 'CACHED:')  +
                      FindNameValueCardinal(P, 'SRECLAIMABLE:') -
-                     FindNameValueCardinal(P, 'SHMEM:')) shr 10;
+                     FindNameValueCardinal(P, 'SHMEM:')) shl 10;
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;

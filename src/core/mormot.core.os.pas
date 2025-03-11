@@ -3843,7 +3843,7 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 function RetrieveLoadAvg: TShort23;
 
 /// retrieve low-level information about current memory usage
-// - as used by TSynMonitorMemory
+// - as used e.g. by TSynMonitorMemory or GetMemoryInfoText
 // - under BSD, only memtotal/memfree/percent are properly returned
 // - allocreserved and allocused are set only if withalloc is TRUE
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
@@ -3858,7 +3858,7 @@ function GetMemoryInfoText: TShort31;
 function GetSystemInfoText: RawUtf8;
 
 /// retrieve low-level information about a given disk partition
-// - as used by TSynMonitorDisk and GetDiskPartitionsText()
+// - as used e.g. by TSynMonitorDisk and GetDiskPartitionsText()
 // - aDriveFolderOrFile is a directory on disk (no need to specify a raw drive
 // name like 'c:\' on Windows)
 // - warning: aDriveFolderOrFile may be modified at input
@@ -3873,7 +3873,6 @@ function GetDiskInfo(var aDriveFolderOrFile: TFileName;
 function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
 
 /// retrieve low-level information about all mounted disk partitions of the system
-// - returned partitions array is sorted by "mounted" ascending order
 function GetDiskPartitions: TDiskPartitions;
 
 /// call several Operating System APIs to gather 512-bit of entropy information
