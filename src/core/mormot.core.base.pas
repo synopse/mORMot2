@@ -933,6 +933,10 @@ procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 /// simple concatenation of an unsigned 64-bit integer as text into a shorstring
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 
+/// simple concatenation of INTEGER Curr64 (value*10000) into a shorstring
+// - will emit 0, 2 or 4 decimals in the output text (e.g. '1', '1.23', '1.2345')
+procedure AppendShortCurr64(const value: Int64; var dest: ShortString);
+
 /// simple concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
@@ -5195,6 +5199,24 @@ var
   tmp: array[0..23] of AnsiChar;
 begin
   AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest);
+end;
+
+procedure AppendShortCurr64(const value: Int64; var dest: ShortString);
+var
+  tmp: array[0..31] of AnsiChar;
+  p: PUtf8Char;
+  l: PtrInt;
+begin
+  p := StrCurr64(@tmp[31], value);
+  l := @tmp[31] - p;
+  if (l > 5) and
+     (p[l - 5] = '.') and
+     (PWord(@p[l - 2])^ = $3030) then
+    if PWord(@p[l - 4])^ = $3030 then
+      dec(l, 5) // x.0000 -> x
+    else
+      dec(l, 2); // x.xx00 -> x.xx
+  AppendShortBuffer(p, l, @dest);
 end;
 
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
