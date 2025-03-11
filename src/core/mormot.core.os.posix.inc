@@ -3011,9 +3011,21 @@ begin
 end;
 
 function RetrieveLoadAvg: RawUtf8;
+var
+  si: TSysInfo;  // Linuxism
+  s: ShortString;
 begin
-  // the libc parses this file anyway :)
-  LoadProcFileTrimed('/proc/loadavg', result);
+  if SysInfo(@si) = 0 then // one syscall is faster than /proc/loadavg access
+  begin
+    s := TwoDigits(si.loads[0] / 65536);
+    AppendShortChar(' ', @s);
+    AppendShort(TwoDigits(si.loads[1] / 65536), s);
+    AppendShortChar(' ', @s);
+    AppendShort(TwoDigits(si.loads[2] / 65536), s);
+    FastSetString(result, @s[1], ord(s[0]));
+  end
+  else
+    LoadProcFileTrimed('/proc/loadavg', result)
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
