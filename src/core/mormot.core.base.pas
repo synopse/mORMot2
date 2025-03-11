@@ -4590,7 +4590,7 @@ function TwoDigits(const d: double): TShort23;
 var
   tmp: array[0..31] of AnsiChar;
   v: Int64;
-  p: PUtf8Char;
+  p: PAnsiChar;
   l: PtrInt;
 begin
   DoubleToCurrency(d, PCurrency(@v)^); //
@@ -5206,7 +5206,7 @@ end;
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString);
 var
   tmp: array[0..31] of AnsiChar;
-  p: PUtf8Char;
+  p: PAnsiChar;
   l: PtrInt;
 begin
   p := StrCurr64(@tmp[31], value);
