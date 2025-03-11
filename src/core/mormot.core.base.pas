@@ -928,10 +928,10 @@ procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortStrin
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
 /// simple concatenation of a signed 64-bit integer as text into a shorstring
-procedure AppendShortInt64(value: Int64; var dest: ShortString);
+procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 
 /// simple concatenation of an unsigned 64-bit integer as text into a shorstring
-procedure AppendShortQWord(value: QWord; var dest: ShortString);
+procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 
 /// simple concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
@@ -1238,7 +1238,7 @@ procedure Int64ToCurrency(const i: Int64; c: PCurrency); overload;
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
 // - implementation will use fast Int64 math to avoid any precision loss due to
 // temporary floating-point conversion
-function SimpleRoundTo2Digits(Value: Currency): Currency;
+function SimpleRoundTo2Digits(const Value: Currency): Currency;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// simple, no banker rounding of a Currency value, stored as Int64, to only 2 digits
@@ -1254,19 +1254,20 @@ function TwoDigits(const d: double): TShort23;
 /// truncate a currency value to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
 // temporary floating-point conversion
-function TruncTo2Digits(Value: currency): currency;
+function TruncTo2Digits(const Value: currency): currency;
+  {$ifdef CPU64}inline;{$endif}
 
 /// truncate a currency value, stored as Int64, to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
 // temporary floating-point conversion
 procedure TruncTo2DigitsCurr64(var Value: Int64);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// truncate a Currency value, stored as Int64, to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
 // temporary floating-point conversion
-function TruncTo2Digits64(Value: Int64): Int64;
-  {$ifdef HASINLINE}inline;{$endif}
+function TruncTo2Digits64(const Value: Int64): Int64;
+  {$ifdef CPU64}inline;{$endif}
 
 /// simple wrapper to efficiently compute both division and modulo per 100
 // - compute result.D = Y div 100 and result.M = Y mod 100
@@ -4559,10 +4560,10 @@ begin
   PVarData(@v).VCurrency := c;
 end;
 
-function SimpleRoundTo2Digits(Value: Currency): Currency;
+function SimpleRoundTo2Digits(const Value: Currency): Currency;
 begin
-  SimpleRoundTo2DigitsCurr64(PInt64(@Value)^);
   result := Value;
+  SimpleRoundTo2DigitsCurr64(PInt64(@result)^);
 end;
 
 procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
@@ -4599,12 +4600,12 @@ begin
   SetString(result, p, L);
 end;
 
-function TruncTo2Digits(Value: Currency): Currency;
+function TruncTo2Digits(const Value: Currency): Currency;
 var
-  v64: Int64 absolute Value; // to avoid any floating-point precision issues
+  r64: Int64 absolute result; // to avoid any floating-point precision issues
 begin
-  dec(v64, v64 mod 100);
   result := Value;
+  dec(r64, r64 mod 100);
 end;
 
 procedure TruncTo2DigitsCurr64(var Value: Int64);
@@ -4612,7 +4613,7 @@ begin
   dec(Value, Value mod 100);
 end;
 
-function TruncTo2Digits64(Value: Int64): Int64;
+function TruncTo2Digits64(const Value: Int64): Int64;
 begin
   result := Value - Value mod 100;
 end;
@@ -5182,14 +5183,14 @@ begin
   AppendShortTemp(StrUInt32(@tmp[23], value), @tmp[23], @dest);
 end;
 
-procedure AppendShortInt64(value: Int64; var dest: ShortString);
+procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 var
   tmp: array[0..23] of AnsiChar;
 begin
   AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest);
 end;
 
-procedure AppendShortQWord(value: QWord; var dest: ShortString);
+procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 var
   tmp: array[0..23] of AnsiChar;
 begin
