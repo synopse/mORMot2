@@ -9544,10 +9544,6 @@ begin
   RdRand32(@e.r[0].c, length(e.r[0].c));
   e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has slightly changed in-between
   {$else}
-  {$ifdef OSDARWIN} // fallback to known OS API on Mac M1/M2
-  e.r[3].Lo := e.r[3].Lo xor mach_absolute_time; // as defined above
-  e.r[3].Hi := e.r[3].Hi xor mach_continuous_time;
-  {$endif OSDARWIN}
   e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
   crc128c(@e, SizeOf(e), _EntropyGlobal.b); // simple diffusion to move forward
