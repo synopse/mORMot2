@@ -4263,7 +4263,12 @@ begin
     else
       txt := txt + ' (' + __BiosInfoHardwareFromCpuInfo + ')'
   else if txt = '' then
-    txt := 'Generic ' + CPU_ARCH_TEXT + ' system'; // noname computer
+    {$ifdef CPUARM3264}
+    if CpuArmModel <> '' then
+      txt := 'Unamed ' + CpuArmModel + ' system'
+    else
+    {$endif CPUARM3264}
+      txt := 'Generic ' + CPU_ARCH_TEXT + ' system';
   TrimDualSpaces(txt);
 end;
 
@@ -4362,7 +4367,6 @@ var
   {$ifdef CPUARM3264}
   act, aci: TIntegerDynArray;
   i: PtrInt;
-  armmodel: RawUtf8;
   {$endif CPUARM3264}
   tp: timespec;
   {$endif OSDARWIN}
@@ -4532,12 +4536,12 @@ begin
   begin
     for i := 0 to high(aci) do // there should be a single implementer
       AppendShortToUtf8(ArmCpuImplementerName(
-        ArmCpuImplementer(aci[i]), aci[i], ' '), armmodel);
-    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), armmodel);
+        ArmCpuImplementer(aci[i]), aci[i], ' '), CpuArmModel);
+    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), CpuArmModel);
     for i := 1 to high(act) do // but there may be several parts/models
-      AppendShortToUtf8(ArmCpuTypeName(
-        ArmCpuType(act[i]), act[i], ' / '), armmodel);
-    modname := pointer(armmodel);
+      AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[i]),
+        act[i], ' / '), CpuArmModel);
+    modname := pointer(CpuArmModel);
   end;
   RetrieveCpuInfoArm;
   {$endif CPUARM3264}

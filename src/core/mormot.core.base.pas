@@ -2793,6 +2793,8 @@ var
   /// the low-level ARM/AARCH64 CPU features retrieved from system.envp
   // - text from CpuInfoFeatures may not be accurate on oldest kernels
   CpuFeatures: TArmHwCaps;
+  /// the low-level ARM/AARCH64 CPU model text as retrieved by mormot.core.os
+  CpuArmModel: RawUtf8;
 {$endif CPUARM3264}
 
 /// cross-platform wrapper function to check AES HW support on Intel or ARM
