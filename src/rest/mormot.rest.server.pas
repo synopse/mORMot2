@@ -6658,34 +6658,28 @@ end;
 procedure TRestServer.InternalInfo(Ctxt: TRestServerUriContext;
   var Info: TDocVariantData);
 var
-  cpu, mem, free: RawUtf8;
   now: TTimeLogBits;
-  m: TSynMonitorMemory;
+  {$ifdef OSWINDOWS}
+  mem: RawUtf8;
+  {$endif OSWINDOWS}
 begin
   // called by root/Timestamp/Info REST method
   now.Value := GetServerTimestamp(Ctxt.TickCount64);
-  cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
-  m := TSynMonitorMemory.Create({nospace=}true);
-  try
-    FormatUtf8('%/%', [m.PhysicalMemoryFree.Text, m.PhysicalMemoryTotal.Text], free);
-    Info.AddNameValuesToObject([
-      'nowutc',    now.Text(true, ' '),
-      'timestamp', now.Value,
-      'exe',       Executable.ProgramName,
-      'version',   Executable.Version.DetailedOrVoid,
-      'host',      Executable.Host,
-      'cpu',       cpu,
-      {$ifdef OSWINDOWS}
-      'mem',       mem,
-      {$endif OSWINDOWS}
-      'memused',   KB(m.AllocatedUsed.Bytes),
-      'memfree',   free,
-      'diskfree',  GetDiskPartitionsText(
-        {nocache=}false, {withfree=}true, {nospace=}true, {nomount=}true),
-      'exception', GetLastExceptions(10)]);
-  finally
-    m.Free;
-  end;
+  Info.AddNameValuesToObject([
+    'nowutc',    now.Text(true, ' '),
+    'timestamp', now.Value,
+    'exe',       Executable.ProgramName,
+    'version',   Executable.Version.DetailedOrVoid,
+    'host',      Executable.Host,
+    {$ifdef OSWINDOWS}
+    'cpuhist',   TSystemUse.CurrentHistoryText(0, 15, @mem),
+    'memhist',   mem,
+    {$else}
+    'load',      RetrieveLoadAvg,
+    {$endif OSWINDOWS}
+    'memused',   GetMemoryInfoText,
+    'diskfree',  GetDiskPartitionsVariant,
+    'exception', GetLastExceptions(10)]);
   Stats.Lock;
   try
     Info.AddNameValuesToObject([

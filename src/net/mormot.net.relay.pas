@@ -1077,7 +1077,7 @@ begin
       'version',     Executable.Version.Detailed,
       'started',     Started,
       'memory',      TSynMonitorMemory.ToVariant,
-      'disk free',   GetDiskPartitionsText,
+      'diskfree',    GetDiskPartitionsVariant,
       'exceptions',  GetLastExceptions,
       'connections', fClients.ServerConnectionCount,
       'rejected',    Rejected,
