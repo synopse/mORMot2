@@ -3838,8 +3838,8 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 
 /// return the system-wide time usage information
 // - on LINUX, retrieve /proc/loadavg or on OSX/BSD call libc getloadavg()
-// - return '' on Windows - call RetrieveSystemTimes() instead
-function RetrieveLoadAvg: RawUtf8;
+// - on Windows, calls RetrieveSystemTimes() and return user/kernel/idle percents
+function RetrieveLoadAvg: TShort23;
 
 /// retrieve low-level information about current memory usage
 // - as used by TSynMonitorMemory
@@ -7787,12 +7787,11 @@ var
 begin
   GetDiskInfo(Executable.ProgramFilePath, avail, free, total);
   result := _fmt('Current UTC date is %s (%d)'#13#10'Memory %s'#13#10 +
-                 'Executable free disk %s/%s'#13#10 +
-                 {$ifdef OSPOSIX} 'LoadAvg is %s'#13#10 + {$endif OSPOSIX}
+                 'Executable free disk %s/%s'#13#10'Cpu %s'#13#10 +
                  '%s'#13#10'%s'#13#10'%s'#13#10'%s'#13#10,
     [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
      GetMemoryInfoText, _oskb(avail), _oskb(total),
-     {$ifdef OSPOSIX} RetrieveLoadAvg, {$endif} Executable.Version.VersionInfo,
+     RetrieveLoadAvg, Executable.Version.VersionInfo,
      OSVersionText, CpuInfoText, BiosInfoText]);
 end;
 

@@ -3889,8 +3889,8 @@ begin
   mem := '';
   data := HistoryData(aProcessID, aDepth);
   {$ifndef OSWINDOWS}
-  if data = nil then
-    result := RetrieveLoadAvg // from '/proc/loadavg' or libc getloadavg()
+  if data = nil then // from sysinfo or libc getloadavg
+    ShortStringToAnsi7String(RetrieveLoadAvg, result)
   else
   {$endif OSWINDOWS}
     for i := 0 to high(data) do

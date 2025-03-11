@@ -960,9 +960,9 @@ begin
       if FileIsExecutable(fn) then
         res := RunCommand(Utf8ToString(n), {waitfor=}true)
       else
-      begin
+      begin // append to text log file
         GetMemoryInfo(mem, false);
-        res := ord(AppendToTextFile(FormatUtf8('% %: % [mem=%/%] %',
+        res := ord(AppendToTextFile(FormatUtf8('% %: % [mem=%/%] [cpu=%]',
           [w, Name, msg, KBNoSpace(mem.memfree), KBNoSpace(mem.memtotal),
            RetrieveLoadAvg]), fn));
       end;

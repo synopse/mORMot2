@@ -2295,9 +2295,23 @@ begin
   FileTimeToInt64(ftusr, UserTime);
 end;
 
-function RetrieveLoadAvg: RawUtf8;
-begin
-  result := ''; // call RetrieveSystemTimes() instead
+function RetrieveLoadAvg: TShort23;
+var
+  I, K, U, S: Int64;
+begin // return user/kernel/idle percents
+  result[0] := #0;
+  RetrieveSystemTimes(I, K, U);
+  S := I + K + U;
+  if S = 0 then
+    exit;
+  I := (I * 100) div S;
+  K := (K * 100) div S;
+  U := 100 - K - I; // so that the sum of all percents equals 100
+  AppendShortCardinal(U, result);
+  AppendShortChar(' ', @result);
+  AppendShortCardinal(K, result);
+  AppendShortChar(' ', @result);
+  AppendShortCardinal(I, result);
 end;
 
 function DelayedGetProcessMemoryInfo: boolean;
