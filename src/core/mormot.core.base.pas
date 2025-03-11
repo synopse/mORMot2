@@ -4550,7 +4550,7 @@ end;
 
 function DoubleToCurrency(const d: double): currency;
 begin
-  result := trunc(d * CURR_RES);
+  PInt64(@result)^ := trunc(d * CURR_RES);
 end;
 
 {$endif CPUX86}
