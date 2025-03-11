@@ -1819,7 +1819,7 @@ type
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
     fBroadcastStart: Int64;   // QueryPerformanceMicroSeconds()
-    fTempFilesDeleteDeprecatedTix, fInstableTix, fBroadcastTix: cardinal;
+    fTempFilesTix, fInstableTix, fBroadcastTix: cardinal;
     fFilesSafe: TOSLock; // concurrent cached files access
     fPartials: THttpPartials;
     fOnDirectOptions: TOnHttpPeerCacheDirectOptions;
@@ -6703,7 +6703,7 @@ begin
   // check state every minute (65,536 seconds)
   if tix64 = 0 then
     tix64 := GetTickCount64;
-  tix := (tix64 shr 16) + 1; 
+  tix := (tix64 shr 16) + 1;
   // renew banned peer IPs TTL to implement RejectInstablePeersMin
   if (fInstable <> nil) and
      (fInstableTix <> tix) then
@@ -6713,23 +6713,23 @@ begin
       if fInstable.DoRotate <> 0 then
         fLog.Add.Log(sllTrace, 'OnIdle: %', [fInstable], self);
   end;
-  // handle temporary cache folder deprecation
-  if (fSettings.CacheTempMaxMin <= 0) or
-     (fTempFilesPath = '') then
-    exit;
-  if (fTempFilesDeleteDeprecatedTix <> tix) and
-     fFilesSafe.TryLock then
-  try
-    fTempFilesDeleteDeprecatedTix := tix;
-    DirectoryDeleteOlderFiles(fTempFilesPath,
-      fSettings.CacheTempMaxMin / MinsPerDay, PEER_CACHE_PATTERN, false, @size);
-    if size = 0 then
-      exit; // nothing changed on disk
-    fLog.Add.Log(sllTrace, 'OnIdle: deleted %', [KBNoSpace(size)], self);
-    fTempCurrentSize := -1; // folder change: need to call FindFiles() again
-  finally
-    fFilesSafe.UnLock; // re-allow background file access
-  end;
+  // check the temp folder every minute
+  if fTempFilesTix <> tix then
+    if fFilesSafe.TryLock then // within the lock
+    try
+      fTempFilesTix := tix;
+      fTempCurrentSize := -1; // call FindFiles() again every minute
+      // handle temporary cache folder deprecation
+      if (fSettings.CacheTempMaxMin <= 0) or
+         (fTempFilesPath = '') then
+        exit;
+      DirectoryDeleteOlderFiles(fTempFilesPath,
+        fSettings.CacheTempMaxMin / MinsPerDay, PEER_CACHE_PATTERN, false, @size);
+      if size <> 0 then // something changed on disk
+        fLog.Add.Log(sllTrace, 'OnIdle: deleted %', [KBNoSpace(size)], self);
+    finally
+      fFilesSafe.UnLock; // re-allow background file access
+    end;
 end;
 
 procedure THttpPeerCache.OnDownloaded(var Params: THttpClientSocketWGet;
