@@ -2921,7 +2921,7 @@ begin
   result := FindNameValueCardinal(@buf, up)
 end;
 
-function FindPidStatus(pid: cardinal; const up: shortstring): PtrUInt;
+function FindPidStatus(pid: cardinal; const up: shortstring): cardinal;
 var
   fn: shortstring; // avoid any memory allocation
 begin
@@ -3057,19 +3057,19 @@ begin
   if LoadProcFile('/proc/meminfo', tmp) <= 0 then
     exit;
   P := @tmp;
-  info.memtotal  := FindNameValueCardinal(P, 'MEMTOTAL:') shl 10;
-  info.memfree   := FindNameValueCardinal(P, 'MEMAVAILABLE:') shl 10;
-  info.filetotal := FindNameValueCardinal(P, 'SWAPTOTAL:') shl 10;
-  info.filefree  := FindNameValueCardinal(P, 'SWAPFREE:') shl 10;
+  info.memtotal  := QWord(FindNameValueCardinal(P, 'MEMTOTAL:')) shl 10;
+  info.memfree   := QWord(FindNameValueCardinal(P, 'MEMAVAILABLE:')) shl 10;
+  info.filetotal := QWord(FindNameValueCardinal(P, 'SWAPTOTAL:')) shl 10;
+  info.filefree  := QWord(FindNameValueCardinal(P, 'SWAPFREE:')) shl 10;
   // note: Windows-like virtual memory information is not available under Linux
-  info.vmtotal   := FindNameValueCardinal(P, 'COMMITLIMIT:') shl 10;
-  info.vmfree    := FindNameValueCardinal(P, 'MEMFREE:') shl 10;
+  info.vmtotal   := QWord(FindNameValueCardinal(P, 'COMMITLIMIT:')) shl 10;
+  info.vmfree    := QWord(FindNameValueCardinal(P, 'MEMFREE:')) shl 10;
   if info.memfree = 0 then // kernel < 3.14 may not have the MemAvailable field
-    info.memfree  := info.vmfree + (
-                     FindNameValueCardinal(P, 'BUFFERS:') +
-                     FindNameValueCardinal(P, 'CACHED:')  +
-                     FindNameValueCardinal(P, 'SRECLAIMABLE:') -
-                     FindNameValueCardinal(P, 'SHMEM:')) shl 10;
+    info.memfree  := info.vmfree + QWord(
+                       FindNameValueCardinal(P, 'BUFFERS:') +
+                       FindNameValueCardinal(P, 'CACHED:')  +
+                       FindNameValueCardinal(P, 'SRECLAIMABLE:') -
+                       FindNameValueCardinal(P, 'SHMEM:')) shl 10;
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
@@ -3080,8 +3080,8 @@ begin
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
   if LoadProcFile('/proc/self/statm', tmp) <= 0 then
     exit;
-  info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
-  info.allocused     := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmRSS
+  info.allocreserved := QWord(GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmSize
+  info.allocused     := QWord(GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmRSS
 end;
 
 procedure XorOSEntropy(var e: THash512Rec);
