@@ -4593,7 +4593,7 @@ var
   p: PUtf8Char;
   l: PtrInt;
 begin
-  v := trunc(d * CURR_RES);
+  DoubleToCurrency(d, PCurrency(@v)^); //
   SimpleRoundTo2DigitsCurr64(v);
   p := StrCurr64(@tmp[31], v);
   l := @tmp[31] - p;
