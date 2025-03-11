@@ -1248,8 +1248,7 @@ function SimpleRoundTo2Digits(Value: Currency): Currency;
 procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 
 /// no banker rounding into text, with two digits after the decimal point
-// - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
-// - this function will only allow 2 digits in the returned text
+// - i.e. SimpleRoundTo2DigitsCurr64() as text
 function TwoDigits(const d: double): TShort23;
 
 /// truncate a currency value to only 2 digits
@@ -4582,32 +4581,21 @@ end;
 
 function TwoDigits(const d: double): TShort23;
 var
+  tmp: array[0..31] of AnsiChar;
   v: Int64;
-  m, L: PtrInt;
-  tmp: array[0..23] of AnsiChar;
-  p: PAnsiChar;
+  p: PUtf8Char;
+  l: PtrInt;
 begin
   v := trunc(d * CURR_RES);
-  m := v mod 100;
-  if m <> 0 then
-    if m > 50 then
-      {%H-}inc(v, 100 - m)
-    else if m < -50 then
-      {%H-}dec(v, 100 + m)
+  SimpleRoundTo2DigitsCurr64(v);
+  p := StrCurr64(@tmp[31], v);
+  l := @tmp[31] - p;
+  if (l > 5) and
+     (p[l - 5] = '.') then
+    if PWord(@p[l - 4])^ = $3030 then
+      dec(l, 5) // x.00xx -> x
     else
-      dec(v, m);
-  p := {%H-}StrInt64(@tmp[23], v);
-  L := @tmp[22] - p;
-  m := PWord(@tmp[L - 2])^;
-  if m = ord('0') or ord('0') shl 8 then
-    // '300' -> '3'
-    dec(L, 3)
-  else
-  begin
-    // '301' -> '3.01'
-    PWord(@tmp[L - 1])^ := m;
-    tmp[L - 2] := '.';
-  end;
+      dec(l, 2); // x.12xx -> x.12
   SetString(result, p, L);
 end;
 
