@@ -2874,7 +2874,7 @@ begin
   FileClose(h);
 end;
 
-function LoadProcFileTrimed(fn: PAnsiChar): RawUtf8;
+procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 var
   buf: TSynTempBuffer; // reading up to 4KB of content is enough
   p: PAnsiChar;
@@ -2894,6 +2894,11 @@ begin
   FastSetString(result, p, l);
   if result = 'Default string' then // e.g. on ProxMox containers or VMs
     result := '';
+end;
+
+function LoadProcFileTrimed(fn: PAnsiChar): RawUtf8; overload; inline;
+begin
+  LoadProcFileTrimed(fn, result);
 end;
 
 procedure FindFileValue(fn: PAnsiChar; const up: shortstring; var res: RawUtf8);
@@ -3008,7 +3013,7 @@ end;
 function RetrieveLoadAvg: RawUtf8;
 begin
   // the libc parses this file anyway :)
-  result := LoadProcFileTrimed('/proc/loadavg');
+  LoadProcFileTrimed('/proc/loadavg', result);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
@@ -3137,7 +3142,7 @@ begin
       n[0] := #18;
       AppendShort(fn, n);
       AppendShortChar(#0, @n);
-      info[id] := LoadProcFileTrimed(@n[1]);
+      LoadProcFileTrimed(@n[1], info[id]);
     end;
   // note: /var/lib/dbus/machine-id and /etc/machine-id are SW generated from
   // random at system install so do NOT match sbiUuid HW DMI value - see
@@ -4244,21 +4249,19 @@ begin
                LoadProcFileTrimed('/sys/class/dmi/id/product_name'));
   if txt <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
-    prod := LoadProcFileTrimed('/sys/class/dmi/id/product_version');
+    LoadProcFileTrimed('/sys/class/dmi/id/product_version', prod);
     if prod <> '' then
       txt := txt + ' ' + prod;
   end
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
-    txt := LoadProcFileTrimed('/proc/device-tree/model');
+    LoadProcFileTrimed('/proc/device-tree/model', txt);
   {$endif OSANDROID}
-  if __BiosInfoHardwareFromCpuInfo <> '' then
-  begin // e.g. Hardware : BCM2709 on a RPi3
+  if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. "Hardware : BCM2709" on a RPi3
     if txt = '' then
       txt := __BiosInfoHardwareFromCpuInfo
     else
-      txt := txt + ' (' + __BiosInfoHardwareFromCpuInfo + ')';
-  end
+      txt := txt + ' (' + __BiosInfoHardwareFromCpuInfo + ')'
   else if txt = '' then
     txt := 'Generic ' + CPU_ARCH_TEXT + ' system'; // noname computer
   TrimDualSpaces(txt);
