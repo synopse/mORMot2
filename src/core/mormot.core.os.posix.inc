@@ -4387,8 +4387,6 @@ begin
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
   modname := nil;
-  if fpuname(uts) < 0 then
-    FillChar(uts, SizeOf(uts), 0);
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -4431,35 +4429,30 @@ begin
   if Sysinfo(@si) = 0 then
     SystemMemorySize := si.totalram * si.mem_unit;
   // https://www.freedesktop.org/software/systemd/man/latest/os-release.html
-  FindFileValue('/etc/os-release', 'PRETTY_NAME=', release);
+  FindFileValue('/etc/os-release', 'PRETTY_NAME=', release); // new "standard"
+  if release = '' then // oldest Linux Standard Base location
+    FindFileValue('/etc/lsb-release', 'DISTRIB_DESCRIPTION=', release);
   if (release <> '') and
      (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
   TrimSelf(release);
-  if release = '' then
-  begin
-    FindFileValue('/etc/lsb-release', 'DISTRIB_DESCRIPTION=', release);
-    if (release <> '') and
-       (release[1] = '"') then
-      release := copy(release, 2, length(release) - 2);
-    if (release = '') and
-       (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then
-    begin
-      release := SR.Name; // 'redhat-release' 'SuSE-release'
-      if IdemPChar(pointer(release), 'LSB-') and
-         (FindNext(SR) = 0) then
-        release := SR.Name;
-      release := split(release, '-');
-      dist := split(StringFromFileNoSize('/etc/' + SR.Name), #10);
-      if (dist <> '') and
-         (PosExChar('=', dist) = 0) and
-         (PosExChar(' ', dist) > 0) then
-        // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
-        SetLinuxDistrib(dist)
-      else
-        dist := '';
-      FindClose(SR);
-    end;
+  if (release = '') and
+     (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then // fast enough
+  begin // http://linuxmafia.com/faq/Admin/release-files.html
+    release := SR.Name; // 'redhat-release' 'SuSE-release'
+    if IdemPChar(pointer(release), 'LSB-') and // /etc/lsb-release done above
+       (FindNext(SR) = 0) then
+      release := SR.Name;
+    release := Split(release, '-');
+    dist := Split(StringFromFileNoSize('/etc/' + SR.Name), #10);
+    if (dist <> '') and
+       (PosExChar('=', dist) = 0) and
+       (PosExChar(' ', dist) > 0) then
+      // e.g. dist='Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+      SetLinuxDistrib(dist)
+    else
+      dist := '';
+    FindClose(SR);
   end;
   if (release <> '') and
      (OS_KIND = osLinux) then
@@ -4567,6 +4560,8 @@ begin
     _fmt('[%s]', [_oskb(CpuCacheSize)], CpuInfoText);
   if CpuSockets = 0 then
     CpuSockets := 1;
+  if fpuname(uts) < 0 then
+    FillChar(uts, SizeOf(uts), 0);
   SystemInfo.uts.release := uts.Release;
   SystemInfo.uts.sysname := uts.SysName;
   SystemInfo.uts.version := uts.Version;
