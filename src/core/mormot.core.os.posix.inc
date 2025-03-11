@@ -1928,10 +1928,10 @@ begin
   result := 0; // non implemented (not tested, infact) on this CPU
 end;
 
-function LinuxGetRandom(buf: pointer; len: integer): boolean;
+function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
-ebd,
+end;
 {$endif HASEVENTFD}
 
 function LinuxEventFDRead(fd: integer): Int64;
