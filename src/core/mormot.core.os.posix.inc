@@ -2665,7 +2665,7 @@ begin
   FillCharFast(times, SizeOf(times), 0);
   bsdsysctl('kern.cp_time', @times, SizeOf(times));
   UserTime   := times[0] + times[1];
-  KernelTime := times[2] + times[3];
+  KernelTime := times[2] + times[3] + times[4]; // krn includes idl as on Windows
   IdleTime   := times[4];
   result := (UserTime + KernelTime) <> 0;
 end;
@@ -3042,7 +3042,8 @@ begin
   UserTime   := GetNextCardinal(P){=user} + GetNextCardinal(P){=nice};
   KernelTime := GetNextCardinal(P){=system};
   IdleTime   := GetNextCardinal(P){=idle};
-  result := true;
+  inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
+  result := (UserTime + KernelTime) <> 0;
 end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;

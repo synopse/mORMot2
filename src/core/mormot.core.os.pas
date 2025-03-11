@@ -3736,8 +3736,8 @@ type
       out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
   end;
 
-  /// hold low-level information about current memory usage
-  // - as filled by GetMemoryInfo()
+  /// hold low-level GetMemoryInfo() result about current memory usage
+  // - most fields are in bytes, but percent which is the % of used memory
   TMemoryInfo = record
     memtotal, memfree, filetotal, filefree,
     vmtotal, vmfree, allocreserved, allocused: QWord;
@@ -3834,6 +3834,7 @@ function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
 /// return the system-wide time usage information
 // - under Windows, is a wrapper around GetSystemTimes() kernel API call
 // - will use /proc/stat on Linux, or kern.cp_time sysctl on BSD
+// - returned KernelTime includes IdleTime, as with GetSystemTimes() WinAPI
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 
 /// return the system-wide time usage information
