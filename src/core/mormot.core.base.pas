@@ -9520,7 +9520,7 @@ var
 
 procedure XorEntropy(var e: THash512Rec);
 var
-  lec: PLecuyer;
+  lec: PHash128Rec;
   rnd: THash256Rec;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
@@ -9529,12 +9529,9 @@ begin
     _EntropyGlobal.guid := rnd.h.guid; // initialize forward security
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
-  lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
-  e.r[1].c0 := e.r[1].c0 xor lec^.RawNext xor rnd.l.c0;
-  e.r[1].c1 := e.r[1].c1 xor lec^.RawNext xor rnd.l.c1;
-  e.r[1].c2 := e.r[1].c2 xor lec^.RawNext xor rnd.l.c2;
-  // any threadvar is thread-specific, so PtrUInt(lec) identifies this thread
-  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec) xor rnd.l.c3;
+  lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
+  e.r[1].L := e.r[1].L xor PtrUInt(@e)  xor lec^.L xor rnd.l.L;
+  e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H xor rnd.l.H;
   e.r[2].L := e.r[2].L xor rnd.h.L;
   e.r[2].H := e.r[2].H xor rnd.h.H;
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
