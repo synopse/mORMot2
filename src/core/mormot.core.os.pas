@@ -3839,7 +3839,7 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 
 /// return the system-wide time usage information
 // - on LINUX, retrieve /proc/loadavg or on OSX/BSD call libc getloadavg()
-// - on Windows, calls RetrieveSystemTimes() and return user/kernel/idle percents
+// - on Windows, calls RetrieveSystemTimes() and return 'U:user K:kernel' percents
 function RetrieveLoadAvg: TShort23;
 
 /// retrieve low-level information about current memory usage

@@ -2291,27 +2291,26 @@ begin
   if not result then
     exit;
   FileTimeToInt64(ftidl, IdleTime);
-  FileTimeToInt64(ftkrn, KernelTime);
+  FileTimeToInt64(ftkrn, KernelTime); // on Windows, ftkrn includes ftidl
   FileTimeToInt64(ftusr, UserTime);
 end;
 
 function RetrieveLoadAvg: TShort23;
 var
   I, K, U, S: Int64;
-begin // return user/kernel/idle percents
+begin // return 'U:usr K:krn' percents on windows
   result[0] := #0;
   RetrieveSystemTimes(I, K, U);
+  dec(K, I); // raw KernelTime includes IdleTime with GetSystemTimes() WinAPI
   S := I + K + U;
   if S = 0 then
     exit;
-  I := (I * 100) div S;
-  K := (K * 100) div S;
-  U := 100 - K - I; // so that the sum of all percents equals 100
-  AppendShortCardinal(U, result);
-  AppendShortChar(' ', @result);
-  AppendShortCardinal(K, result);
-  AppendShortChar(' ', @result);
-  AppendShortCardinal(I, result);
+  U := (U * 1000000) div S;
+  K := (K * 1000000) div S;
+  PCardinal(@result)^ := 2 + ord('U') shl 8 + ord(':') shl 16;
+  AppendShortCurr64(U, result, {fixeddecimals=}2);
+  AppendShort(' K:', result);
+  AppendShortCurr64(K, result, {fixeddecimals=}2);
 end;
 
 function DelayedGetProcessMemoryInfo: boolean;
