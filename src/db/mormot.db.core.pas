@@ -395,10 +395,14 @@ type
     procedure SetCapacity(max: integer);
   end;
 
-/// set an error message for the current thread
+/// set a database error message for the current thread
 // - using an internal TLastError store and an associated TLastErrorID threadvar
 // since we can't create any string/RawUtf8 threadvar
-procedure SetDbError(const text: RawUtf8);
+procedure SetDbError(const text: RawUtf8); overload;
+
+/// set a database error message for the current thread from an exception
+// - could be used when E was not created via CreateU/CreateUtf8/RaiseUtf8
+procedure SetDbError(E: Exception); overload;
 
 /// unset the error message for the current thread
 procedure ClearDbError;
@@ -1986,6 +1990,11 @@ threadvar // do not publish for compilation within Delphi packages
 procedure SetDbError(const text: RawUtf8);
 begin
   LastDbErrorID := LastDbError.NewMsg(text); // store in current threadvar
+end;
+
+procedure SetDbError(E: Exception);
+begin
+  SetDbError(FormatUtf8('%.%', [E, E.Message]));
 end;
 
 procedure ClearDbError;
