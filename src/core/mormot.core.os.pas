@@ -2595,7 +2595,7 @@ var
 
 /// a wrapper to the Linux eventfd() syscall
 // - returns 0 if the kernel does not support eventfd2 (before 2.6.27) or if the
-// platform is not validated yet (only Linux x86_64 by now)
+// platform is not validated yet (only Linux i386/x86_64/aarch64 by now)
 // - returns a file descriptor handle on success, to be eventually closed
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 

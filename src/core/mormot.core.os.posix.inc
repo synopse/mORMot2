@@ -1670,11 +1670,11 @@ end;
     {$define HASGETRANDOM}
   {$endif CPUX64}
   {$ifdef CPUX86}
-    {.$define HASEVENTFD} // our tests do fail on Linux i386 :(
+    {$define HASEVENTFD}
     {$define HASGETRANDOM}
   {$endif CPUX86}
   {$ifdef CPUAARCH64}
-    {.$define HASEVENTFD} // untested
+    {$define HASEVENTFD} 
     {$define HASGETRANDOM}
   {$endif CPUAARCH64}
 {$endif OSLINUX}
@@ -1802,20 +1802,33 @@ end;
 
 {$ifdef OSLINUX} { the systemd API is Linux-specific }
 
-{ TSystemD }
-
-procedure TSystemD.DoLoad;
-var
-  p: PPointer;
-  i, j: PtrInt;
 const
-  NAMES: array[0..5] of PAnsiChar = (
+  SD_NAMES: array[0..5] of PAnsiChar = (
     'sd_listen_fds',
     'sd_is_socket_unix',
     'sd_journal_print',
     'sd_journal_sendv',
     'sd_notify',
     'sd_watchdog_enabled');
+
+  // eventfd2 syscall exists since Kernel 2.6.27, getrandom since Kernel 3.17
+  {$ifdef CPUX64}
+  syscall_nr_eventfd2 = 290;
+  syscall_nr_getrandom = 318;
+  {$endif CPUX64}
+  {$ifdef CPUX86}
+  syscall_nr_eventfd2 = 328;
+  syscall_nr_getrandom = 355;
+  {$endif CPUX86}
+  // other archs (like linux-aarch64) have those syscalls defined
+
+
+{ TSystemD }
+
+procedure TSystemD.DoLoad;
+var
+  p: PPointer;
+  i, j: PtrInt;
 begin
   GlobalLock;
   if not tested then
@@ -1824,9 +1837,9 @@ begin
     if systemd <> nil then
     begin
       p := @@listen_fds;
-      for i := 0 to high(NAMES) do
+      for i := 0 to high(SD_NAMES) do
       begin
-        p^ := dlsym(systemd, NAMES[i]);
+        p^ := dlsym(systemd, SD_NAMES[i]);
         if p^ = nil then
         begin
           p := @@listen_fds;
@@ -1868,24 +1881,9 @@ begin
   end;
 end;
 
-const
-  // eventfd2 syscall exists since Kernel 2.6.27, getrandom since Kernel 3.17
-  {$ifdef CPUX64}
-  syscall_nr_eventfd2 = 290;
-  syscall_nr_getrandom = 318;
-  {$endif CPUX64}
-  {$ifdef CPUX86}
-  syscall_nr_eventfd2 = 328;
-  syscall_nr_getrandom = 355;
-  {$endif CPUX86}
-  {$ifdef CPUAARCH64}
-  syscall_nr_eventfd2 = 356;
-  syscall_nr_getrandom = 278;
-  {$endif CPUAARCH64}
-
 {$ifdef HASGETRANDOM}
 var
-  __LinuxGetRandomFailed: boolean;
+  __LinuxGetRandomFailed, __LinuxEventFdFailed: boolean;
 
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
@@ -1916,16 +1914,21 @@ var
   flags: cardinal;
 begin
   result := 0;
-  if KernelRevision < $02061b then
-    exit; // not available prior to Kernel 2.6.27
-  flags := 0;
-  if nonblocking then
-    flags := EFD_NONBLOCK;
-  if semaphore then
-    flags := flags or EFD_SEMAPHORE;
-  result := do_syscall(syscall_nr_eventfd2, 0, flags);
-  if not ValidHandle(result) then
-    result := 0;
+  if __LinuxEventFdFailed then
+    exit;
+  if KernelRevision >= $02061b then // not available prior to Kernel 2.6.27
+  begin
+    flags := 0;
+    if nonblocking then
+      flags := EFD_NONBLOCK;
+    if semaphore then
+      flags := flags or EFD_SEMAPHORE;
+    result := do_syscall(syscall_nr_eventfd2, 0, flags);
+    if ValidHandle(result) then
+      exit;
+  end;
+  __LinuxEventFdFailed := true; // don't retry next type
+  result := 0;
 end;
 {$else}
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
@@ -1935,12 +1938,16 @@ end;
 {$endif HASEVENTFD}
 
 function LinuxEventFDRead(fd: integer): Int64;
+var
+  res: Int64; // need a local variable on i386
 begin
   { If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value,
     then a read returns 8 bytes containing the value 1, and the counter's value
     is decremented by 1 }
-  result := 0;
-  if do_syscall(syscall_nr_read, fd, TSysParam(@result), 8) <> 8 then
+  res := 0;
+  if do_syscall(syscall_nr_read, fd, TSysParam(@res), SizeOf(res)) = SizeOf(res) then
+    result := res
+  else
     result := -1;
 end;
 
