@@ -6220,10 +6220,18 @@ begin
   if LibraryName = SQLITE_LIBRARY_DEFAULT_NAME then
     // first search for the standard library in the executable folder
     l1 := Executable.ProgramFilePath + LibraryName;
-  fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
-  P := @@initialize;
-  for i := 0 to High(SQLITE3_ENTRIES) do
-    fLoader.Resolve('sqlite3_', SQLITE3_ENTRIES[i], @P^[i]); // no except, set nil
+  try
+    fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
+    P := @@initialize;
+    for i := 0 to High(SQLITE3_ENTRIES) do
+      fLoader.Resolve('sqlite3_', SQLITE3_ENTRIES[i], @P^[i]); // no except, set nil
+  except
+    on E: Exception do
+    begin
+      SetDbError(E);
+      raise;
+    end;
+  end;
   if (Assigned(limit) and
       (LibraryResolve(fLoader.Handle, 'sqlite3_limit') <> @limit)) or
      (Assigned(P^[High(SQLITE3_ENTRIES)]) and

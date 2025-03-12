@@ -894,7 +894,7 @@ var
 begin
   // follow TSqlDBRemoteConnectionPropertiesAbstract.Process binary layout
   if self = nil then
-    raise ESqlDBRemote.Create('RemoteProcessMessage: unexpected self=nil');
+    raise ESqlDBRemote.CreateU('RemoteProcessMessage: unexpected self=nil');
   if Connection = nil then
     ESqlDBRemote.RaiseUtf8(
       '%.RemoteProcessMessage(connection=nil)', [self]);

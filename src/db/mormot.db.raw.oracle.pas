@@ -1687,16 +1687,24 @@ begin
   if l3 <> '' then
     l3 := IncludeTrailingPathDelimiter(l3) +
             'bin' + PathDelim + LibraryFileName;
-  TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
-  P := @@ClientVersion;
-  for i := 0 to High(OCI_ENTRIES) do
-    Resolve('OCI', OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
-  ClientVersion(
-    major_version, minor_version, update_num, patch_num, port_update_num);
-  SupportsInt64Params := (major_version > 11) or
-                         ((major_version = 11) and
-                          (minor_version > 1));
-  UseLobChunks := true; // by default
+  try
+    TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
+    P := @@ClientVersion;
+    for i := 0 to High(OCI_ENTRIES) do
+      Resolve('OCI', OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
+    ClientVersion(
+      major_version, minor_version, update_num, patch_num, port_update_num);
+    SupportsInt64Params := (major_version > 11) or
+                           ((major_version = 11) and
+                            (minor_version > 1));
+    UseLobChunks := true; // by default
+  except
+    on E: Exception do
+    begin
+      SetDbError(E);
+      raise;
+    end;
+  end;
 end;
 
 

@@ -1030,10 +1030,18 @@ var
   P: PPointerArray;
   i: PtrInt;
 begin
-  TryLoadLibrary([ODBC_LIB], EOdbcException);
-  P := @@AllocEnv;
-  for i := 0 to High(ODBC_ENTRIES) do
-    Resolve('SQL', ODBC_ENTRIES[i], @P[i], {raiseonfailure=}EOdbcException);
+  try
+    TryLoadLibrary([ODBC_LIB], EOdbcException);
+    P := @@AllocEnv;
+    for i := 0 to High(ODBC_ENTRIES) do
+      Resolve('SQL', ODBC_ENTRIES[i], @P[i], {raiseonfailure=}EOdbcException);
+  except
+    on E: Exception do
+    begin
+      SetDbError(E);
+      raise;
+    end;
+  end;
 end;
 
 function TOdbcLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;

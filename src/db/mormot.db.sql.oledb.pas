@@ -816,7 +816,7 @@ begin
   if (NewType in [ftUnknown, ftNull]) or
      (fConnection.Properties.BatchSendingAbilities *
        [cCreate, cUpdate, cDelete] = []) then
-    ESqlDBException.RaiseUtf8(
+    EOleDBException.RaiseUtf8(
       'Invalid call to %s.BindArray(Param=%d,Type=%s)',
       [self, Param, TSqlDBFieldTypeToString(NewType)]);
   SetLength(result^.VArray, ArrayCount);
