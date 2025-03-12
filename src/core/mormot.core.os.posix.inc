@@ -55,19 +55,14 @@ begin
     u := up^;
     if u = #0 then
       break;
-    inc(up);
     c := p^;
-    inc(p);
+    if (c >= 'a') and
+       (c <= 'z') then
+      dec(c, 32);
     if c <> u then
-      if (c >= 'a') and
-         (c <= 'z') then
-      begin
-        dec(c, 32);
-        if c <> u then
-          exit;
-      end
-      else
-        exit;
+      exit;
+    inc(up);
+    inc(p);
   until false;
   result := true;
 end;
@@ -76,50 +71,34 @@ function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
 var
   i: PtrInt;
 begin
+  result := true;
   if s <> '' then
-  begin
-    result := true;
     for i := 0 to high(up) do
       if IdemPChar(pointer(s), up[i]) then
         exit;
-  end;
   result := false;
 end;
 
 function GetNextCardinal(var P: PAnsiChar): PtrUInt;
 var
   c: cardinal;
+  S: PAnsiChar;
 begin
   result := 0;
-  while not (P^ in ['0'..'9']) do
-    if P^ = #0 then
+  S := P;
+  while not (S^ in ['0'..'9']) do
+    if S^ = #0 then
       exit
     else
-      inc(P);
+      inc(S);
   repeat
-    c := ord(P^) - 48;
+    c := ord(S^) - 48;
     if c > 9 then
       break;
     result := result * 10 + c;
-    inc(P);
+    inc(S);
   until false;
-end;
-
-function GetNextItem(var P: PAnsiChar): RawUtf8;
-var
-  S: PAnsiChar;
-begin
-  result := '';
-  while P^ <= ' ' do
-    if P^ = #0 then
-      exit
-    else
-      inc(P);
-  S := P;
-  repeat
-    inc(P);
-  until P^ <= ' ';
-  FastSetString(result, S, P - S);
+  P := S;
 end;
 
 
