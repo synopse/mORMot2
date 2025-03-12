@@ -1662,6 +1662,7 @@ begin
 end;
 
 
+// eventfd + getrandom syscalls are validated on Linux i386, x86_64 and aarch64
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
 {$ifdef OSLINUX}
@@ -1813,14 +1814,17 @@ const
 
   // eventfd2 syscall exists since Kernel 2.6.27, getrandom since Kernel 3.17
   {$ifdef CPUX64}
-  syscall_nr_eventfd2 = 290;
+  syscall_nr_eventfd2  = 290;
   syscall_nr_getrandom = 318;
   {$endif CPUX64}
   {$ifdef CPUX86}
-  syscall_nr_eventfd2 = 328;
+  syscall_nr_eventfd2  = 328;
   syscall_nr_getrandom = 355;
   {$endif CPUX86}
-  // other archs (like linux-aarch64) have those syscalls defined
+  // other archs (like aarch64) are properly defined - see https://syscall.sh
+
+var
+  __ProcFileSystemsTested, __LinuxGetRandomFailed, __LinuxEventFdFailed: boolean;
 
 
 { TSystemD }
@@ -1881,10 +1885,7 @@ begin
   end;
 end;
 
-{$ifdef HASGETRANDOM}
-var
-  __LinuxGetRandomFailed, __LinuxEventFdFailed: boolean;
-
+{$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
@@ -1903,7 +1904,7 @@ begin
 end;
 {$endif HASGETRANDOM}
 
-{$ifdef HASEVENTFD} // only validated on Linux x86_64 by now
+{$ifdef HASEVENTFD} // validated on Linux i386, x86_64 and aarch64
 const
   EFD_SEMAPHORE = $00000001;
   EFD_NONBLOCK  = O_NONBLOCK;
@@ -1966,7 +1967,6 @@ end;
 
 var
   _ProcFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
-  _ProcFileSystemsTested: boolean;
 
 function IsProcFileSystem(const typ: RawUtf8): boolean; inline;
 begin
@@ -1979,7 +1979,7 @@ var
   fs, s: RawUtf8;
   p: PUtf8Char;
 begin
-  _ProcFileSystemsTested := true;
+  __ProcFileSystemsTested := true;
   result := false;
   fs := StringFromFileNoSize('/proc/filesystems');
   p := pointer(fs);
@@ -3504,7 +3504,7 @@ begin
   p := pointer(mounts);
   if p = nil then // e.g. Darwin has no /etc/mtab :(
     exit;
-  if not _ProcFileSystemsTested then
+  if not __ProcFileSystemsTested then
     LoadProcFileSystems; // read once from /proc/filesystems
   n := 0;
   repeat
