@@ -243,7 +243,8 @@ type
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 10): boolean;
     /// guess a random prime number of the exact current size
-    // - loop over TAesPrng.Fill and IsPrime method within a timeout period
+    // - a secret is generated from several audited sources (OS, cpu RdRand),
+    // then looped over TAesPrng.Fill and IsPrime method within a timeout period
     // - if Iterations is too low, FIPS 4.48 recommendation will be forced
     function FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
       EndTix: Int64): boolean;
@@ -489,10 +490,13 @@ type
     /// compute a genuine RSA public/private key pair of a given bit size
     // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096 and 7680;
     // today's minimal is 2048-bit, but you may consider 3072-bit for security
-    // beyond 2030, and 4096-bit have a much higher computational cost and
-    // 7680-bit is highly impractical (e.g. generation can be more than 30 secs)
+    // beyond 2030; note that 4096-bit have a much higher computational cost
+    // with almost the same security than 3072-bit, and 7680-bit is highly
+    // impractical (e.g. generation can be more than 30 secs)
     // - since our generator is not yet officially validated by any agency,
     // anything above default 2048 would not make much sense
+    // - our main goal is to have "secure enough" results with default params,
+    // to ensure the end-user won't be tempted to naively change these defaults
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
@@ -1528,33 +1532,38 @@ end;
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   EndTix: Int64): boolean;
 var
-  n, min: integer;
+  min, bytes: integer;
   last32: PCardinal;
+  rnd: RawByteString;
 begin
   // ensure it is worth searching (paranoid)
-  n := Size; // number of HalfUInt
-  if n <= 2 then
+  if Size <= 2 then
     raise ERsaException.Create('TBigInt.FillPrime: unsupported size');
   // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
   if EndTix <= 0 then
     EndTix := GetTickCount64 + MilliSecsPerMin; // time on Intel is around 1 sec
   // compute number of Miller-Rabin rounds for 2^-112 error probability
-  min := FipsMinIterations(n shl HALF_SHR);
+  min := FipsMinIterations(Size shl HALF_SHR);
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
   min := 16;
-  last32 := @Value[n - 1 {$ifdef CPU32} - 1 {$endif}];
+  last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
   // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
-  FillSystemRandom(pointer(Value), n * HALF_BYTES, {mayblock=}true); // official OS API
+  // note that RSA-2048 requires only 128-bit of true cryptographic randomness
+  bytes := Size * HALF_BYTES;
+  pointer(rnd) := FastNewString(bytes);
+  FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
   {$ifdef CPUINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU prng
+  RdRand32(pointer(Value), bytes shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
+  AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
+  FillZero(rnd);
   repeat
-    // xor the original trusted sources with our CSPRNG until we get enough
-    TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
-    if GetBitsCount(Value^, n * HALF_BITS) < n * (HALF_BITS div 3) then
+    // xor the original trusted sources with our CSPRNG until we get enough bits
+    TAesPrng.Main.XorRandom(Value, bytes);
+    if GetBitsCount(Value^, Size * HALF_BITS) < Size * (HALF_BITS div 3) then
     begin
       // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
       // - with our TAesPrng, it never occurred after 1,000,000,000 trials
@@ -1567,7 +1576,7 @@ begin
     Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
     if last32^ < FIPS_MIN then
       last32^ := last32^ or $b5050000; // let's grow up
-    if (Value[n - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
+    if (Value[Size - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
        (last32^ >= FIPS_MIN) then
       break;
     raise ERsaException.Create('TBigInt.FillPrime FIPS_MIN'); // paranoid
@@ -1581,7 +1590,7 @@ begin
     while last32^ < FIPS_MIN do
     begin
       // handle IntAdd overflow - paranoid but safe
-      TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
+      TAesPrng.Main.XorRandom(Value, bytes);
       Value[0] := Value[0] or 1;
     end;
     // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
@@ -2481,7 +2490,7 @@ begin
   fModulusBits := Bits;
   fModulusLen := Bits shr 3;
   _e := LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
-  _p := Allocate(ValuesSize(ModulusLen shr 1));
+  _p := Allocate(ValuesSize(ModulusLen shr 1)); // p,q size = half Bits
   _q := Allocate(_p.Size);
   _d := nil;
   try
