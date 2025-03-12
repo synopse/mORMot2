@@ -3416,7 +3416,6 @@ begin
 //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',_oskb(av),' fr=',_oskb(fr),' tot=',_oskb(tot));
   if n = length(result) then
     SetLength(result, NextGrow(n));
-  //if length(fs) > 24 then fs := copy(fs, 1, 24) + '..';
   with result[n] do
   begin
     name := fs;
@@ -3425,6 +3424,49 @@ begin
   end;
   inc(n);
 end;
+
+// we tried with libc setmntent/getmntent but it is Linux only :(
+// and Darwin has no /etc/mtab - so we use the getfsstat() BSD/Mac API
+
+{$ifdef OSBSDDARWIN}
+
+const
+  MNT_WAIT = 1;
+
+// getmntinfo() is not thread-safe: we prefer getfsstat() dual call
+function getfsstat(statfs: pstatfs; bufsize: clong; mode: cint): cint;
+  cdecl; external clib name 'getfsstat';
+
+function GetDiskPartitions: TDiskPartitions;
+var
+  fs: pstatfs;
+  max, n: PtrInt;
+  all: array of TStatFs;
+begin
+  result := nil;
+  max := getfsstat(nil, 0, MNT_WAIT); // return the number to allocate
+  if max <= 0 then
+    exit;
+  SetLength(all, max);
+  fs := pointer(all);
+  max := getfsstat(fs, max * SizeOf(all[0]), MNT_WAIT);
+  if max <= 0 then
+    exit;
+  n := 0;
+  repeat
+    writeln(fs^.mntfromname, ' ',fs^.mountpoint, ' ', fs^.fstypename);
+    {$ifdef OSBSD} // the FPC RTL headers has field names issues
+    AddDiskPartition(fs^.f_mntfromname, fs^.f_mntonname, fs^.f_fstypename, result, n);
+    {$else} // FPC RTL use properly statfs/statfs64 depending on arch
+    AddDiskPartition(fs^.mntfromname, fs^.mountpoint, fs^.fstypename, result, n);
+    {$endif OSBSD}
+    inc(fs);
+    dec(max);
+  until max = 0;
+  SetLength(result, n);
+end;
+
+{$else}
 
 function GetDiskPartitions: TDiskPartitions;
 var
@@ -3440,6 +3482,8 @@ begin
   p := pointer(mounts);
   if p = nil then // e.g. Darwin has no /etc/mtab :(
     exit;
+  if not _ProcFileSystemsTested then
+    LoadProcFileSystems; // read once from /proc/filesystems
   n := 0;
   repeat
     AddDiskPartition(_GetNextItem(p), _GetNextItem(p), _GetNextItem(p), result, n);
@@ -3447,6 +3491,8 @@ begin
   until p = nil;
   SetLength(result, n);
 end;
+
+{$endif OSBSDDARWIN}
 
 {$ifdef OSBSDDARWIN}
   {$define USEMPROTECT}
