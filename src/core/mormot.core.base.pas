@@ -1910,7 +1910,7 @@ type
     /// the actual 16-bit word storage
     Values: TWordDynArray;
     /// how many items are currently in Values[]
-    Count: PtrInt;
+    Count: integer;
     /// add a value into the sorted array
     // - return the index of the new inserted value into the Values[] array
     // - return -(foundindex+1) if this value is already in the Values[] array
@@ -1918,6 +1918,9 @@ type
     /// return the index if the supplied value in the Values[] array
     // - return -1 if not found
     function IndexOf(aValue: Word): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    /// search and delete a supplied value in the Values[] array
+    // - return -1 if not found, or the index of the delete item
+    function Remove(aValue: Word): PtrInt;
     /// save the internal array into a TWordDynArray variable
     procedure SetArray(out aValues: TWordDynArray);
   end;
@@ -1934,7 +1937,7 @@ type
     /// the actual 32-bit integers storage
     Values: TIntegerDynArray;
     /// how many items are currently in Values[]
-    Count: PtrInt;
+    Count: integer;
     /// add a value into the sorted array
     // - return the index of the new inserted value into the Values[] array
     // - return -(foundindex+1) if this value is already in the Values[] array
@@ -1942,6 +1945,9 @@ type
     /// return the index if the supplied value in the Values[] array
     // - return -1 if not found
     function IndexOf(aValue: integer): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    /// search and delete a supplied value in the Values[] array
+    // - return -1 if not found, or the index of the delete item
+    function Remove(aValue: integer): PtrInt;
     /// save the internal array into a TWordDynArray variable
     procedure SetArray(out aValues: TIntegerDynArray);
   end;
@@ -7917,6 +7923,13 @@ begin
   result := FastFindWordSorted(pointer(Values), Count - 1, aValue);
 end;
 
+function TSortedWordArray.Remove(aValue: Word): PtrInt;
+begin
+  result := IndexOf(aValue);
+  if result >= 0 then
+    DeleteWord(Values, Count, result);
+end;
+
 procedure TSortedWordArray.SetArray(out aValues: TWordDynArray);
 begin
   if Count = 0 then
@@ -7949,6 +7962,13 @@ end;
 function TSortedIntegerArray.IndexOf(aValue: integer): PtrInt;
 begin
   result := FastFindIntegerSorted(pointer(Values), Count - 1, aValue);
+end;
+
+function TSortedIntegerArray.Remove(aValue: integer): PtrInt;
+begin
+  result := IndexOf(aValue);
+  if result >= 0 then
+    DeleteInteger(Values, Count, result);
 end;
 
 procedure TSortedIntegerArray.SetArray(out aValues: TIntegerDynArray);
