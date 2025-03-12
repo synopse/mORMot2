@@ -3388,10 +3388,10 @@ begin
     result := IsProcFileSystem(typ) // from /proc/filesystems
   else
   {$endif OSLINUX}
-  result := IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
-    'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS', 'PTY',
-    'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS', 'DEVTMPFS',
-    'HUGETLBFS', 'ISO9660']);
+    result := not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS',
+      'DEVPTS', 'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
+      'PTY', 'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS',
+      'DEVTMPFS', 'HUGETLBFS', 'ISO9660']);
 end;
 
 procedure AddDiskPartition(const typ, mnt, fs: RawUtf8;
