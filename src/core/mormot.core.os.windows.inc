@@ -142,35 +142,6 @@ end;
 
 {$endif UNICODE}
 
-function StrICompPChar(Str1, Str2: PChar): PtrInt;
-var
-  c1, c2: PtrInt;
-begin // StrIComp() from Delphi does not support Str1/Str2 = nil
-  result := 0;
-  if Str1 <> Str2 then
-    if Str1 <> nil then
-      if Str2 <> nil then
-        repeat
-          c1 := ord(Str1^);
-          if (c1 >= ord('a')) and (c1 <= ord('z')) then
-            dec(c1, 32);
-          c2 := ord(Str2^);
-          if (c2 >= ord('a')) and (c2 <= ord('z')) then
-            dec(c2, 32);
-          result := c1 - c2;
-          if result <> 0 then
-            exit;
-          if c1 = 0 then
-            exit; // Str1 = Str2
-          inc(Str1);
-          inc(Str2);
-        until false
-      else
-        inc(result) // Str2=''
-    else
-      dec(result);  // Str1=''
-end;
-
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
 var
@@ -247,6 +218,45 @@ begin
     tmpA.Done;
   end;
   tmpW.Done;
+end;
+
+function StrICompPChar(Str1, Str2: PChar): PtrInt;
+var
+  c1, c2: PtrInt;
+begin // StrIComp() from Delphi does not support Str1/Str2 = nil
+  result := 0;
+  if Str1 <> Str2 then
+    if Str1 <> nil then
+      if Str2 <> nil then
+        repeat
+          c1 := ord(Str1^);
+          if (c1 >= ord('a')) and (c1 <= ord('z')) then
+            dec(c1, 32);
+          c2 := ord(Str2^);
+          if (c2 >= ord('a')) and (c2 <= ord('z')) then
+            dec(c2, 32);
+          result := c1 - c2;
+          if result <> 0 then
+            exit;
+          if c1 = 0 then
+            exit; // Str1 = Str2
+          inc(Str1);
+          inc(Str2);
+        until false
+      else
+        inc(result) // Str2=''
+    else
+      dec(result);  // Str1=''
+end;
+
+function SortDynArrayFileName(const A, B): integer;
+begin // case-insensitive extension, then filename using plain string/PChar
+  result := 0;
+  if @A = @B then
+    exit;
+  result := StrICompPChar(PosExtString(pointer(A)), PosExtString(pointer(B)));
+  if result = 0 then
+    result := AnsiCompareFileName(string(A), string(B)); // as user-expected
 end;
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;

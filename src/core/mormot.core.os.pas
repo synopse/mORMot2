@@ -7287,22 +7287,6 @@ begin
       end;
 end;
 
-function SortDynArrayFileName(const A, B): integer;
-begin // check extension, then filename
-  result := 0;
-  if @A = @B then
-    exit;
-  {$ifdef OSPOSIX}
-  result := StrComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
-  if result = 0 then
-    result := StrComp(pointer(A), pointer(B)); // fast case-sensitive order
-  {$else}
-  result := StrICompPChar(PosExtString(pointer(A)), PosExtString(pointer(B)));
-  if result = 0 then
-    result := AnsiCompareFileName(string(A), string(B)); // as user-expected
-  {$endif OSPOSIX}
-end;
-
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin

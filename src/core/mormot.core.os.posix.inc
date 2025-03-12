@@ -125,6 +125,16 @@ end;
 
 { ****************** Unicode, Time, File process }
 
+function SortDynArrayFileName(const A, B): integer;
+begin // case-sensitive extension, then filename comparison on POSIX
+  result := 0;
+  if @A = @B then
+    exit;
+  result := StrComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
+  if result = 0 then
+    result := StrComp(pointer(A), pointer(B)); // fast case-sensitive order
+end;
+
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 begin
   result := TLibHandle(dlopen(pointer(LibraryName), RTLD_LAZY));
