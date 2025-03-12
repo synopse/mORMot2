@@ -1744,21 +1744,28 @@ type
     // - the main fields are published below as Network* properties
     property Mac: TMacAddress
       read fMac;
+    /// the 'ip:port' value used for UDP and TCP process
+    property IpPort: RawUtf8
+      read fIpPort;
   published
     /// define how this instance handles its process
     property Settings: THttpPeerCacheSettings
       read fSettings;
+    /// the UUID used to identify this PeerCache node
+    property Uuid: RawUtf8
+      read GetUuidText;
     /// which network interface is used for UDP and TCP process
     property NetworkInterface: RawUtf8
       read fMac.Name;
     /// the local IP address used for UDP and TCP process
     property NetworkIP: RawUtf8
       read fMac.IP;
+    /// the port value used for UDP and TCP process
+    property NetworkPort: RawUtf8
+      read fPort;
     /// the IP used for UDP and TCP process broadcast
     property NetworkBroadcast: RawUtf8
       read fMac.Broadcast;
-    property Uuid: RawUtf8
-      read GetUuidText;
   end;
 
   /// exception class raised on THttpPeerCache issues
