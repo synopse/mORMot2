@@ -49,7 +49,7 @@ type
     fHashAlgo: TMGetProcessHash;
     fPeerRequest: TWGetAlternateOptions;
     fLimitBandwidthMB, fWholeRequestTimeoutSec: integer;
-    fHeader, fHashValue: RawUtf8;
+    fHeader, fHashValue, fPeerCacheInterface: RawUtf8;
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
     fOnProgress: TOnStreamProgress;
@@ -93,9 +93,13 @@ type
       out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean = false;
       aOptions: PHttpRequestExtendedOptions = nil): boolean;
     /// access to the associated THttpPeerCache instance
-    // - a single peer-cache run in the background between Execute() calls
+    // - a single peer-cache is run in the background between Execute() calls
+    // - equals nil if this instance Peer property is false
     property PeerCache: IWGetAlternate
       read fPeerCache;
+    /// the 'ip:port' of the running THttpPeerCache instance, '' if none
+    property PeerCacheInterface: RawUtf8
+      read fPeerCacheInterface;
     /// optional callback event called during download process
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
@@ -208,6 +212,7 @@ begin
       l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
       PeerCacheStopping;
       fPeerCache := nil; // force re-create just below
+      fPeerCacheInterface := '';
     end;
   // (re)create the peer-cache background process if necessary
   if fPeerCache = nil then
@@ -220,6 +225,7 @@ begin
       peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
         nil, 2, self.Log, @ServerTls, @ClientTls);
       fPeerCache := peerinstance;
+      fPeerCacheInterface := peerinstance.IpPort;
       peerinstance.OnDirectOptions := fOnPeerCacheDirectOptions;
       // THttpAsyncServer could also be tried with rfProgressiveStatic
       PeerCacheStarted(peerinstance); // may be overriden
