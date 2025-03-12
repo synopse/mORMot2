@@ -7814,12 +7814,13 @@ var
   avail, free, total: QWord;
 begin
   GetDiskInfo(Executable.ProgramFilePath, avail, free, total);
-  result := _fmt('Current UTC date: %s (%d)'+ CRLF +'Memory: %s'+ CRLF +
-                 'Current disk free: %s/%s'+ CRLF +'Load: %s'+ CRLF +
-                 'Exe: %s'+ CRLF +'OS: %s'+ CRLF +'Cpu: %s'+ CRLF +'Bios: %s'+ CRLF,
+  _fmt('Current UTC date: %s (%d)'+ CRLF +'Memory: %s'+ CRLF +
+       'Current disk free: %s/%s'+ CRLF +'Load: %s'+ CRLF +
+       'Exe: %s'+ CRLF +'OS: %s'+ CRLF +'Cpu: %s'+ CRLF +'Bios: %s'+ CRLF,
     [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
      GetMemoryInfoText, _oskb(avail), _oskb(total), RetrieveLoadAvg,
-     Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText]);
+     Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText],
+     result);
 end;
 
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
@@ -8293,7 +8294,7 @@ begin
       if high(v) = 0 then
         param := v[0]
       else if argindex > 0 then
-        param := _fmt('arg%d', [argindex])
+        _fmt('arg%d', [argindex], param)
       else
         param := 'arg'
     else
@@ -8347,7 +8348,7 @@ begin
     until false;
   if def <> '' then
     def := ' (default ' + def + ')';
-  pnames := _fmt('  %0:-20s', [desc + def]);
+  _fmt('  %0:-20s', [desc + def], pnames);
   if (length(pnames) > 22) or
      (length(d) > 80) then
   begin
@@ -8464,7 +8465,8 @@ begin
   end
   else if FileExists(result) then
     exit;
-  _fmt('%s%s %s does not exist%s', [fUnknown, FD[isFolder], result, fLineFeed], fUnknown);
+  fUnknown := _fmt('%s%s %s does not exist%s',
+    [fUnknown, FD[isFolder], result, fLineFeed]);
 end;
 
 function TExecutableCommandLine.Arg(const name, description: RawUtf8): boolean;
