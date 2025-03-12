@@ -1663,15 +1663,19 @@ end;
 
 
 {$undef HASEVENTFD}
+{$undef HASGETRANDOM}
 {$ifdef OSLINUX}
   {$ifdef CPUX64}
     {$define HASEVENTFD}
+    {$define HASGETRANDOM}
   {$endif CPUX64}
   {$ifdef CPUX86}
     {.$define HASEVENTFD} // our tests do fail on Linux i386 :(
+    {$define HASGETRANDOM}
   {$endif CPUX86}
   {$ifdef CPUAARCH64}
     {.$define HASEVENTFD} // untested
+    {$define HASGETRANDOM}
   {$endif CPUAARCH64}
 {$endif OSLINUX}
 
@@ -1864,13 +1868,7 @@ begin
   end;
 end;
 
-{$ifdef HASEVENTFD} // only validated on Linux x86_64 by now
-
 const
-  EFD_SEMAPHORE = $00000001;
-  EFD_NONBLOCK  = O_NONBLOCK;
-  EFD_CLOEXEC   = O_CLOEXEC;
-
   // eventfd2 syscall exists since Kernel 2.6.27, getrandom since Kernel 3.17
   {$ifdef CPUX64}
   syscall_nr_eventfd2 = 290;
@@ -1884,8 +1882,34 @@ const
   syscall_nr_eventfd2 = 356;
   syscall_nr_getrandom = 278;
   {$endif CPUAARCH64}
+
+{$ifdef HASGETRANDOM}
 var
   __LinuxGetRandomFailed: boolean;
+
+function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
+begin
+  result := false;
+  if (KernelRevision < $031100) or // introduced in Kernel 3.17
+     __LinuxGetRandomFailed then
+    exit;
+  if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
+    result := true // "man getrandom" states to read up to 256 bytes in one call
+  else
+    __LinuxGetRandomFailed := true; // won't retry on syscall failure
+end;
+{$else}
+function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
+begin
+  result := false;
+end;
+{$endif HASGETRANDOM}
+
+{$ifdef HASEVENTFD} // only validated on Linux x86_64 by now
+const
+  EFD_SEMAPHORE = $00000001;
+  EFD_NONBLOCK  = O_NONBLOCK;
+  EFD_CLOEXEC   = O_CLOEXEC;
 
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 var
@@ -1903,29 +1927,10 @@ begin
   if not ValidHandle(result) then
     result := 0;
 end;
-
-function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
-begin
-  result := false;
-  if (KernelRevision < $031100) or // introduced in Kernel 3.17
-     __LinuxGetRandomFailed then
-    exit;
-  if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
-    result := true // "man getrandom" states to read up to 256 bytes in one call
-  else
-    __LinuxGetRandomFailed := true // won't retry on syscall failure
-end;
-
 {$else}
-
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 begin
-  result := 0; // non implemented (not tested, infact) on this CPU
-end;
-
-function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
-begin
-  result := false;
+  result := 0; // non implemented (not validated by our tests) on this arch
 end;
 {$endif HASEVENTFD}
 
@@ -3142,11 +3147,11 @@ begin
   DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/uuid', tmp));
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
-  {$ifdef HASEVENTFD}
+  {$ifdef HASGETRANDOM}
   // eventually XOR with getrandom syscall result if available
   if LinuxGetRandom(@tmp, SizeOf(e)) then
     XorMemory(@e, @tmp, SizeOf(e));
-  {$endif HASEVENTFD}
+  {$endif HASGETRANDOM}
 end;
 
 {$ifdef OSANDROID}
