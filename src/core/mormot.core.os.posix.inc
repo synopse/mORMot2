@@ -1941,20 +1941,24 @@ begin
   result := WaitReadPending(fd, ms);
 end;
 
-var
-  _RealFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
+// https://www.cyberciti.biz/tips/tell-what-filesystems-linux-kernel-can-handle.html
 
-function _RealFileSystem(const typ: RawUtf8): boolean; inline;
+var
+  _ProcFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
+  _ProcFileSystemsTested: boolean;
+
+function IsProcFileSystem(const typ: RawUtf8): boolean; inline;
 begin
-  result := FindNonVoidRawUtf8(pointer(_RealFileSystems),
-    pointer(typ), length(typ), length(_RealFileSystems)) >= 0;
+  result := FindNonVoidRawUtf8(pointer(_ProcFileSystems),
+    pointer(typ), length(typ), length(_ProcFileSystems)) >= 0;
 end;
 
-function LoadRealFileSystems: boolean;
+function LoadProcFileSystems: boolean;
 var
   fs, s: RawUtf8;
   p: PUtf8Char;
 begin
+  _ProcFileSystemsTested := true;
   result := false;
   fs := StringFromFileNoSize('/proc/filesystems');
   p := pointer(fs);
@@ -1963,22 +1967,20 @@ begin
   repeat
     while p^ = ' ' do
       inc(p);
-    if (PCardinal(p)^ <> ord('n') + ord('o') shl 8 + ord('d') shl 16 + ord('e') shl 24) or
-       (p[4] <> 'v') then
-    begin
-      s := GetNextItem(p);
-      if s <> '' then
-        AddRawUtf8(_RealFileSystems, s);
-    end;
+    s := _GetNextItem(p);
+    if (s <> '') and
+       (s <> 'nodev') and
+       (s <> 'squashfs') and
+       (s <> 'nullfs') then
+      _AddRawUtf8(_ProcFileSystems, s);
     p := GotoNextLine(p);
   until p = nil;
-  if _RealFileSystems = nil then
+  if _ProcFileSystems = nil then
     exit;
   // add some FS which may be marked as nodev but could be considered as "real"
-  if not _RealFileSystem('zfs') then
-    AddRawUtf8(_RealFileSystems, 'zfs');
-  if not _RealFileSystem('cis') then
-    AddRawUtf8(_RealFileSystems, 'cifs');
+  _AddRawUtf8(_ProcFileSystems, 'zfs');
+  _AddRawUtf8(_ProcFileSystems, 'cifs');
+  _AddRawUtf8(_ProcFileSystems, 'drvfs');
   result := true;
 end;
 
@@ -2896,7 +2898,7 @@ var
   h: THandle;
 begin
   result := 0;
-  h := FpOpen(fn, O_RDONLY);
+  h := FpOpen(fn, O_RDONLY); // no fpFlock() call
   if PtrInt(h) <= 0 then
     exit;
   result := FileRead(h, dest, SizeOf(dest) - 1); // read up to 4KB
@@ -3382,9 +3384,8 @@ end;
 function IsRealFileSystem(const typ: RawUtf8): boolean;
 begin
   {$ifdef OSLINUX}
-  if (_RealFileSystems <> nil) or
-     LoadRealFileSystems then
-    result := _RealFileSystem(typ) // from /proc/filesystems
+  if _ProcFileSystems <> nil then   // caller made LoadProcFileSystems once
+    result := IsProcFileSystem(typ) // from /proc/filesystems
   else
   {$endif OSLINUX}
   result := IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
