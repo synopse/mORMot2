@@ -3449,12 +3449,12 @@ begin
     exit;
   SetLength(all, max);
   fs := pointer(all);
-  max := getfsstat(fs, max * SizeOf(all[0]), MNT_WAIT);
+  max := getfsstat(fs, max * SizeOf(all[0]), MNT_WAIT); // fill all[]
   if max <= 0 then
     exit;
   n := 0;
   repeat
-    writeln(fs^.mntfromname, ' ',fs^.mountpoint, ' ', fs^.fstypename);
+    //writeln(fs^.mntfromname, ' ',fs^.mountpoint, ' ', fs^.fstypename);
     {$ifdef OSBSD} // the FPC RTL headers has field names issues
     AddDiskPartition(fs^.f_mntfromname, fs^.f_mntonname, fs^.f_fstypename, result, n);
     {$else} // FPC RTL use properly statfs/statfs64 depending on arch
