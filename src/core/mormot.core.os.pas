@@ -4038,6 +4038,7 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 
 /// internal function to avoid linking mormot.core.buffers.pas
 // - will output the value as one number with one decimal and KB/MB/GB/TB suffix
+// - defined here for regression tests purposes
 function _oskb(Size: QWord): shortstring;
 
 type
@@ -5938,6 +5939,45 @@ implementation
 
 
 { ****************** Some Cross-System Type and Constant Definitions }
+
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
+procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
+var
+  n: PtrInt;
+begin
+  n := length(Values);
+  SetLength(Values, n + 1);
+  Values[n] := Value;
+end;
+
+function _GetNextItem(var P: PAnsiChar): RawUtf8;
+var
+  S: PAnsiChar;
+begin
+  result := '';
+  S := P;
+  while S^ <= ' ' do
+    if S^ = #0 then
+      exit
+    else
+      inc(S);
+  P := S;
+  repeat
+    inc(S);
+  until S^ <= ' ';
+  FastSetString(result, P, S - P);
+  P := S;
+end;
 
 function _oskb(Size: QWord): shortstring;
 const
@@ -7850,7 +7890,7 @@ begin
     exit; // avoid GPF
   p := pointer(ProcName);
   repeat
-    name := GetNextItem(p); // try all alternate names
+    name := _GetNextItem(p); // try all alternate names
     if name = '' then
       break;
     if name[1] = '?' then
@@ -8141,9 +8181,9 @@ begin
   p := pointer(tmp);
   for i := 0 to length(tmp) - 1 do
     if p[i] = '.' then
-      p[i] := ' '; // as expected by GetNextItem
+      p[i] := ' '; // as expected by _GetNextItem()
   for i := 0 to 3 do
-    ver[i] := GetCardinal(pointer(GetNextItem(p)));
+    ver[i] := GetCardinal(pointer(_GetNextItem(p)));
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
@@ -8485,15 +8525,6 @@ begin
   result := Get(UnAmp(name), value, description, default);
 end;
 
-procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
-var
-  n: PtrInt;
-begin
-  n := length(Values);
-  SetLength(Values, n + 1);
-  Values[n] := Value;
-end;
-
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
   out value: TRawUtf8DynArray; const description: RawUtf8): boolean;
 var
@@ -8508,7 +8539,7 @@ begin
     i := Find(name, clkParam, '', '', first);
     if i < 0 then
       break; // no more occurence
-    AddRawUtf8(value, fValues[i]);
+    _AddRawUtf8(value, fValues[i]);
     result := true;
     first := i + 1;
   until first >= length(fValues);
@@ -8810,22 +8841,22 @@ begin
           if j <> 1 then
             if j <> 0 then
             begin
-              AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
-              AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
+              _AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
+              _AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
             end
             else if (i + 1 = n) or
                     (swlen[i + 1] <> 0) then
-              AddRawUtf8(fNames[clkOption], s)
+              _AddRawUtf8(fNames[clkOption], s)
             else
             begin
-              AddRawUtf8(fNames[clkParam], s);
+              _AddRawUtf8(fNames[clkParam], s);
               inc(i);
-              AddRawUtf8(fValues, fRawParams[i]);
+              _AddRawUtf8(fValues, fRawParams[i]);
             end;
           end;
       end
       else
-        AddRawUtf8(fNames[clkArg], s);
+        _AddRawUtf8(fNames[clkArg], s);
     inc(i);
   until i = n;
   SetLength(fRetrieved[clkArg],    length(fNames[clkArg]));

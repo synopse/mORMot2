@@ -37,7 +37,13 @@ uses
 
 // define some raw text functions, to avoid linking mormot.core.text
 
-procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
+  overload; forward;
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload; forward;
+procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
+function _GetNextItem(var P: PAnsiChar): RawUtf8; forward;
+function PosExtString(Str: PChar): PChar; forward;
 
 function IdemPChar(p, up: PUtf8Char): boolean; inline;
 var
@@ -114,17 +120,6 @@ begin
     inc(P);
   until P^ <= ' ';
   FastSetString(result, S, P - S);
-end;
-
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
-begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
-end;
-
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload;
-begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
 
@@ -1918,7 +1913,7 @@ begin
      __LinuxGetRandomFailed then
     exit;
   if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
-    result := true
+    result := true // "man getrandom" states to read up to 256 bytes in one call
   else
     __LinuxGetRandomFailed := true // won't retry on syscall failure
 end;
@@ -3339,7 +3334,7 @@ begin
   result := LinuxGetRandom(Buffer, rd);
   if result then
   begin
-    if rd = Len then // most obvious case
+    if rd = Len then // most obvious case (e.g. from _XorEntropyGetOsRandom256)
       exit;
   end
   else
@@ -3457,7 +3452,7 @@ begin
     exit;
   n := 0;
   repeat
-    AddDiskPartition(GetNextItem(p), GetNextItem(p), GetNextItem(p), result, n);
+    AddDiskPartition(_GetNextItem(p), _GetNextItem(p), _GetNextItem(p), result, n);
     p := GotoNextLine(p);
   until p = nil;
   SetLength(result, n);
@@ -4289,7 +4284,7 @@ begin
       begin
         f := TrimU(StringFromFileNoSize(fn + '/address'));
         if f <> '' then
-          AddRawUtf8(result, f);
+          _AddRawUtf8(result, f);
       end;
     end;
   until FindNext(SR) <> 0;

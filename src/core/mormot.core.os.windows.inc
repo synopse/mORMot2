@@ -8,6 +8,12 @@
 
 { ****************** Unicode, Time, File process }
 
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
+  overload; forward;
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload; forward;
+function PosExtString(Str: PChar): PChar; forward;
+
 procedure DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
 var
   tmp: TSynTempBuffer;
@@ -163,17 +169,6 @@ begin // StrIComp() from Delphi does not support Str1/Str2 = nil
         inc(result) // Str2=''
     else
       dec(result);  // Str1=''
-end;
-
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
-begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
-end;
-
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload;
-begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
@@ -2065,23 +2060,6 @@ begin
     GlobalUnLock;
   end;
   result := pointer(api) <> pointer(1);
-end;
-
-function GetNextItem(var P: PAnsiChar): RawUtf8;
-var
-  beg: PAnsiChar;
-begin
-  result := '';
-  while P^ <= ' ' do
-    if P^ = #0 then
-      exit
-    else
-      inc(P);
-  beg := P;
-  repeat
-    inc(P);
-  until P^ <= ' ';
-  FastSetString(result, beg, P - beg);
 end;
 
 const
@@ -5655,7 +5633,6 @@ begin
     CpuSockets := 1; // e.g. on XP prior to SP3
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
-  // writeln(CpuInfoText); writeln(CpuCacheText);
 end;
 
 procedure FinalizeSpecificUnit;
