@@ -3325,7 +3325,7 @@ const
   // - "man urandom" Usage states that 256-bit makes sense for /dev/urandom - as
   // it is usually called in our framework, e.g. from _XorEntropyGetOsRandom256
   // - but we pushed the limit up since it may be called by TBigInt.FillPrime to
-  // generate 2048-bit RSA keys
+  // generate e.g. 4096-bit RSA keys which requires one 2048-bit random number
   // - "man getrandom" states that the Linux syscall can always return 256 bytes
   MAXFROMOS = 256;
 
@@ -3342,7 +3342,7 @@ begin
   rd := MAXFROMOS;
   if Len < MAXFROMOS then
     rd := Len;
-  {$ifdef OSLINUX} // a single syscall to rule them all on Linux x86_64
+  {$ifdef OSLINUX} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);
   if result then
   begin
@@ -3355,13 +3355,16 @@ begin
     dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
     if (dev <= 0) and
        AllowBlocking then
+    begin
+      if rd > 32 then
+        rd := 32; // better to get only 256-bit from blocking /dev/random
       dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
+    end;
     if dev > 0 then
-      try
-        result := (FileRead(dev, Buffer[0], rd) = rd);
-      finally
-        FileClose(dev);
-      end;
+    begin
+      result := (FileRead(dev, Buffer[0], rd) = rd);
+      FileClose(dev);
+    end;
   end;
   if result then
   begin
