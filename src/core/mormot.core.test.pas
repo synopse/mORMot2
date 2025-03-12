@@ -1617,7 +1617,7 @@ begin
       RotateFileSizeKB := 100*1024; // rotate verbose logs by 100MB files
     end;
     if tcoLogInSubFolder in options then
-      DestinationPath := EnsureDirectoryExists(Executable.ProgramFilePath + 'log');
+      DestinationPath := EnsureDirectoryExists([Executable.ProgramFilePath, 'log']);
   end;
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);

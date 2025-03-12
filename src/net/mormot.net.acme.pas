@@ -912,8 +912,7 @@ begin
     EAcmeClient.RaiseUtf8(
       '%.RegisterAndWaitFolder: unknown %', [self, ChallengeWwwFolder]);
   fChallengeWwwFolder := EnsureDirectoryExists(
-    FormatString('%.well-known%acme-challenge',
-      [IncludeTrailingPathDelimiter(ChallengeWwwFolder), PathDelim]), EAcmeClient);
+    [ChallengeWwwFolder, '.well-known', 'acme-challenge'], EAcmeClient);
   try
     result := RegisterAndWait(OnChallengeWwwFolder,
       OutSignedCert, OutPrivateKey, aPrivateKeyPassword, WaitForSec, nil);

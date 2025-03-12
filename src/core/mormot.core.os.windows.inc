@@ -2383,7 +2383,7 @@ begin
   e.i[6] := e.i[6] xor u.Lo;
   if Assigned(GetProcessTimes) then
     GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
-  DefaultHasher128(@e.h0, @ft, SizeOf(ft));
+  DefaultHasher128(@e.h0, @ft, SizeOf(ft)); // maybe AesNiHash128
   mem.cb := SizeOf(mem);
   if Assigned(GetProcessMemoryInfo) then // may have been delayed
     if GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem)) then

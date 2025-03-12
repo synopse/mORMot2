@@ -3167,8 +3167,7 @@ begin
     if not SafeFileName(LocalZipName) then
       ESynZip.RaiseUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
-    Dest := EnsureDirectoryExists(
-              EnsureDirectoryExists(DestDir) + ExtractFilePath(LocalZipName));
+    Dest := EnsureDirectoryExists([DestDir, LocalZipName]);
     if Dest = '' then
       exit; // impossible to write in this folder
     Dest := Dest + ExtractFileName(LocalZipName);

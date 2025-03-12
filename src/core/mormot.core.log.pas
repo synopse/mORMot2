@@ -4113,7 +4113,7 @@ var
   tmp: string[7];
 begin
   // returns 'ArchivePath\log\YYYYMM\'
-  result := EnsureDirectoryExists(ArchivePath + 'log');
+  result := EnsureDirectoryExists([ArchivePath, 'log']);
   if result = '' then
     exit; // impossible to create the archive folder
   dt.FromDate(age); // faster than RTL DecodeDate()

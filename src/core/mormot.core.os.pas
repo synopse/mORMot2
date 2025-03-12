@@ -3546,8 +3546,10 @@ function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing path delimiter
 // - returns '' on error, unless RaiseExceptionOnCreationFailure is set
+// - you can set NoExpand=true if you now that Directory has already a full path
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil;
+  NoExpand: boolean = false): TFileName; overload;
 
 /// just a wrapper around EnsureDirectoryExists(NormalizeFileName(Directory))
 function NormalizeDirectoryExists(const Directory: TFileName;
@@ -7288,7 +7290,7 @@ begin
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass; NoExpand: boolean): TFileName;
 begin
   if Directory = '' then
     if RaiseExceptionOnCreationFailure <> nil then
@@ -7297,7 +7299,11 @@ begin
       result := ''
   else
   begin
-    result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
+    if NoExpand then
+      result := Directory
+    else
+      result := ExpandFileName(Directory);
+    result := IncludeTrailingPathDelimiter(result);
     if not DirectoryExists(result) then
       if not ForceDirectories(result) then
         if RaiseExceptionOnCreationFailure <> nil then

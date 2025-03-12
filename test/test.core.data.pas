@@ -7367,6 +7367,7 @@ begin
   // create at least two sub-folder levels to validate proper recursive process
   subfolder := EnsureDirectoryExists([
     Executable.ProgramFilePath, 'data', 'synecc', 'level2']);
+  Check(subfolder <> '', 'subfolder');
   Check(FileFromString('non void folder', subfolder + 'test.txt'));
   // we can't use Executable.ProgramFilePath because of its live mormot*.log
   DoFolder(Executable.ProgramFilePath + 'data');

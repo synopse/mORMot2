@@ -3279,7 +3279,7 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 procedure XorEntropy(var e: THash512Rec);
 
 var
-  /// stub used by XorEntropy() to retrieve 256-bit of randomness from OS
+  /// stub used at startup by XorEntropy() to retrieve 256-bit random from OS
   // - this default unit with call sysutils.CreateGuid() twice
   // - mormot.core.os.posix.inc will implement a proper POSIX function here
   // and try to read 32 bytes from /dev/urandom or getrandom Linux syscall

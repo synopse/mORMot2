@@ -1871,7 +1871,8 @@ function MakePath(const Part: array of const; EndWithDelim: boolean = false;
 
 /// just a wrapper around EnsureDirectoryExists(MakePath([Part]))
 function EnsureDirectoryExists(const Part: array of const;
-  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil;
+  NoExpand: boolean = false): TFileName; overload;
 
 /// just a wrapper around EnsureDirectoryExists(NormalizeFileName(MakePath([Part])))
 function NormalizeDirectoryExists(const Part: array of const;
@@ -9445,9 +9446,10 @@ begin
 end;
 
 function EnsureDirectoryExists(const Part: array of const;
-  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass; NoExpand: boolean): TFileName;
 begin
-  result := EnsureDirectoryExists(MakePath(Part), RaiseExceptionOnCreationFailure);
+  result := EnsureDirectoryExists(MakePath(Part),
+    RaiseExceptionOnCreationFailure, NoExpand);
 end;
 
 function NormalizeDirectoryExists(const Part: array of const;
