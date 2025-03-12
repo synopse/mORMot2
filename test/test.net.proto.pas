@@ -361,9 +361,11 @@ begin
                      'Accept: ' + RTSP_MIME + #13#10 +
                      'Pragma: no-cache'#13#10 +
                      'Cache-Control: no-cache'#13#10#13#10);
+          get.CreateSockIn; // much faster process
           get.SockRecvLn(text);
           test.Check(text = 'HTTP/1.0 200 OK');
           get.GetHeader(false);
+          get.CloseSockIn; // buffer not needed now
           test.Check(hfConnectionClose in get.Http.HeaderFlags);
           test.Check(get.SockConnected);
           test.Check(get.Http.ContentType = RTSP_MIME);
