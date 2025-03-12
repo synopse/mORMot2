@@ -1536,6 +1536,11 @@ begin
   WaitForSingleObject(THandle(fHandle), INFINITE);
 end;
 
+function TSynEvent.IsEventFD: boolean;
+begin
+  result := false;
+end;
+
 
 {$ifdef FPC}
   {$define NOSETTHREADNAME} // only tested and supported on Delphi

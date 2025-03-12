@@ -10392,15 +10392,6 @@ begin
     until result >= endtix;
 end;
 
-function TSynEvent.IsEventFD: boolean;
-begin
-  {$ifdef HASEVENTFD}
-  result := fFD <> 0;
-  {$else}
-  result := false;
-  {$endif HASEVENTFD}
-end;
-
 
 { TLecuyerThreadSafe }
 

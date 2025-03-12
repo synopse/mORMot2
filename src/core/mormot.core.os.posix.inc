@@ -1668,7 +1668,7 @@ end;
     {$define HASEVENTFD}
   {$endif CPUX64}
   {$ifdef CPUX86}
-    {.$define HASEVENTFD} // untested
+    {.$define HASEVENTFD} // our tests do fail on Linux i386 :(
   {$endif CPUX86}
   {$ifdef CPUAARCH64}
     {.$define HASEVENTFD} // untested
@@ -1740,6 +1740,15 @@ begin
   else
   {$endif HASEVENTFD}
     RTLEventWaitFor(fHandle);
+end;
+
+function TSynEvent.IsEventFD: boolean;
+begin
+  {$ifdef HASEVENTFD}
+  result := fFD <> 0;
+  {$else}
+  result := false;
+  {$endif HASEVENTFD}
 end;
 
 
@@ -3388,6 +3397,7 @@ begin
     result := IsProcFileSystem(typ) // from /proc/filesystems
   else
   {$endif OSLINUX}
+    // generic / best guess fallback list
     result := not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS',
       'DEVPTS', 'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
       'PTY', 'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS',

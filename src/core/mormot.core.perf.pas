@@ -4013,7 +4013,7 @@ begin
   if (_DiskPartitionsCache = nil) or
      nocache then
   begin
-    result := GetDiskPartitions;
+    result := GetDiskPartitions; // from mormot.core.os
     {$ifdef OSPOSIX} // makes sense to order
     DynArray(TypeInfo(TDiskPartitions), result).Sort(SortDynArrayDiskPartitions);
     {$endif OSPOSIX}
