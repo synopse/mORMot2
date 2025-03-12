@@ -2374,41 +2374,33 @@ var
   ft: packed record
     krn, usr, p, e: TFileTime;
   end;
+  i: PtrInt;
   mem: TProcessMemoryCounters;
   memst: TMemoryStatusEx;
-  h: THash128Rec absolute memst;
+  u: THash128Rec absolute memst;
 begin
-  QueryPerformanceCounter(h.Lo); // e.h3 xored with raw timestamps
-  e.i[6] := e.i[6] xor h.Lo;
+  QueryPerformanceCounter(u.Lo); // e.h3 xored with raw timestamps
+  e.i[6] := e.i[6] xor u.Lo;
   if Assigned(GetProcessTimes) then
     GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
   DefaultHasher128(@e.h0, @ft, SizeOf(ft));
-  FillCharFast(mem, SizeOf(mem), 0);
   mem.cb := SizeOf(mem);
   if Assigned(GetProcessMemoryInfo) then // may have been delayed
     if GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem)) then
       DefaultHasher128(@e.h1, @mem, SizeOf(mem));
-  FillCharFast(memst, SizeOf(memst), 0);
   memst.dwLength := SizeOf(memst);
   if GlobalMemoryStatusEx(memst) then
     DefaultHasher128(@e.h2, @memst, SizeOf(memst));
   if Assigned(GetSystemTimes) then
     GetSystemTimes(ft.usr, ft.p, ft.e);
   DefaultHasher128(@e.h3, @ft, SizeOf(ft));
-  CoCreateGuid(h); // very fast on Windows - used to obfuscate system info
-  e.i[0] := e.i[0] xor h.Lo;
-  e.i[1] := e.i[1] xor h.Hi;
-  CoCreateGuid(h);
-  e.i[2] := e.i[2] xor h.Lo;
-  e.i[3] := e.i[3] xor h.Hi;
-  CoCreateGuid(h);
-  e.i[4] := e.i[4] xor h.Lo;
-  e.i[5] := e.i[5] xor h.Hi;
-  CoCreateGuid(h);
-  e.i[6] := e.i[6] xor h.Lo;
-  e.i[7] := e.i[7] xor h.Hi;
-  QueryPerformanceCounter(h.Lo); // is likely to have changed in-between
-  e.i[7] := e.i[7] xor h.Lo;     // e.h3 xored with raw timestamps
+  for i := 0 to high(e.r) do
+  begin
+    CoCreateGuid(u); // very fast on Windows - used to obfuscate system info
+    XorMemory(@e.r[i], @u, SizeOf(u));
+  end;
+  QueryPerformanceCounter(u.Lo); // is likely to have changed in-between
+  e.i[7] := e.i[7] xor u.Lo;     // e.h3 XORed with raw timestamps
 end;
 
 function FillSystemRandom(Buffer: PByteArray; Len: integer;

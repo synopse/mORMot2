@@ -3136,9 +3136,9 @@ end;
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
-  si: TSysInfo;  // Linuxism
-  rt: TTimeSpec; // with nanoseconds resolution
   tmp: TSynTempBuffer;
+  si: TSysInfo absolute tmp;  // Linuxism
+  rt: TTimeSpec absolute tmp; // with nanoseconds resolution
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt);
   DefaultHasher128(@e.h0, @rt, SizeOf(rt)); // maybe AesNiHash128
@@ -3155,7 +3155,7 @@ begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
   {$ifdef HASGETRANDOM}
-  // eventually XOR with getrandom syscall result if available
+  // eventually XOR with getrandom syscall if available
   if LinuxGetRandom(@tmp, SizeOf(e)) then
     XorMemory(@e, @tmp, SizeOf(e));
   {$endif HASGETRANDOM}

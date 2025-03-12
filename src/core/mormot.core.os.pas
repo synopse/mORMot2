@@ -3882,7 +3882,7 @@ procedure XorOSEntropy(var e: THash512Rec);
 // - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
 // on Windows then return TRUE, or fallback to mormot.core.base gsl_rng_taus2
 // generator and return FALSE if the system API failed
-// - on POSIX, only up to 32 bytes (256-bits) bits are retrieved from /dev/urandom
+// - on POSIX, only up to 256 bytes (2048-bits) are retrieved from /dev/urandom
 // or /dev/random as stated by "man urandom" Usage - then padded with our L'Ecuyer
 // gsl_rng_taus2 random generator
 // - so you may consider that the output Buffer is always filled with random
