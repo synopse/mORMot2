@@ -1837,17 +1837,21 @@ function AddPtrUInt(var Values: TPtrUIntDynArray;
 /// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
-/// delete any 32-bit integer in Values[]
+/// delete any 32-bit integer in Values[] and associated ValuesCount
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Index: PtrInt); overload;
 
 /// delete any 16-bit integer in Values[]
-procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
+procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt); overload;
+
+/// delete any 16-bit integer in Values[] and associated ValuesCount
+procedure DeleteWord(var Values: TWordDynArray; var ValuesCount: integer;
+  Index: PtrInt); overload;
 
 /// delete any 64-bit integer in Values[]
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 
-/// delete any 64-bit integer in Values[]
+/// delete any 64-bit integer in Values[] and associated ValuesCount
 procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer;
   Index: PtrInt); overload;
 
@@ -7095,6 +7099,18 @@ begin
   dec(n);
   UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
   SetLength(Values, n);
+end;
+
+procedure DeleteWord(var Values: TWordDynArray; var ValuesCount: integer; Index: PtrInt);
+var
+  n: PtrInt;
+begin
+  n := ValuesCount;
+  if PtrUInt(Index) >= PtrUInt(n) then
+    exit; // wrong Index
+  dec(n);
+  ValuesCount := n;
+  UnmanagedDynArrayDelete(Values, n, Index, SizeOf(Values[0]));
 end;
 
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt);
