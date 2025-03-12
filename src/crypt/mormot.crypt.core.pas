@@ -1852,6 +1852,7 @@ var
 
 /// low-level anti-forensic diffusion of a memory buffer using SHA-256
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
+// - could also be used to expand some PRNG output into any size
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 
 
@@ -7841,7 +7842,7 @@ begin
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid or dev/urandom
+    // 512-bit from RdRand32 + Rdtsc + Lecuyer + thread + startup OS random
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)

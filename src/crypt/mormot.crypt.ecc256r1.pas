@@ -194,6 +194,12 @@ function Ecc256r1DoVerify(const pub: TEccPublicKey; unc: PEccPublicKeyUncompress
 
 
 /// pascal function to create a secp256r1 public/private key pair
+// - is not optimized for performance, but for secrecy: the private key is
+// generated with a very safe SHA-256 diffusion of 1024-bit of randomness from
+// the Operating System and our TAesPrng
+// - our idea was to minimize the chances that two consecutive key generations
+// have any similarity, even if performance is not the ultimate goal
+// - ephemeral keys (e.g. in ECDHE) could use faster OpenSSL instead
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 
@@ -1205,6 +1211,7 @@ var
   priv: THash256Rec;
   pub: TEccPoint;
   tries: integer;
+  sha: TSha256;
 begin
   result := false;
   tries := MAX_TRIES;
@@ -1212,7 +1219,14 @@ begin
     dec(tries);
     if tries = 0 then
       exit;
-    TAesPrng.Fill(THash256(priv));
+    // generate a 256-bit secret key using TAesPrng + OS and SHA-256 diffusion
+    sha.Init;
+    sha.Update(@tries, SizeOf(tries));
+    TAesPrng.Fill(@pub, SizeOf(pub));  // 512-bit from our AES-PRNG
+    sha.Update(@pub, SizeOf(pub));
+    XorOSEntropy(THash512Rec(pub));    // 512-bit from OS entropy sources
+    sha.Update(@pub, SizeOf(pub));
+    sha.Final(priv.b);                 // diffused with three SHA-256 rounds
     if _isZero(priv) or
        _equals(priv, _1) or
        _equals(priv, _11) then
@@ -1320,7 +1334,7 @@ var
   product: TEccPoint;
   rnd: THash256Rec;
 begin
-  TAesPrng.Fill(THash256(rnd));
+  TAesPrng.Fill(rnd.b); // no SHA-256 diffusion needed if ephemeral
   _bswap256(@priv, @PrivateKey);
   EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
   _bswap256(@Secret, @product.x);
@@ -1412,7 +1426,7 @@ begin
   tries := 0;
   repeat
     inc(tries);
-    TAesPrng.Fill(THash256(k));
+    TAesPrng.Fill(k.b);
     if tries >= MAX_TRIES then
       exit; // the random generator seems broken
     if _isZero(k) or
