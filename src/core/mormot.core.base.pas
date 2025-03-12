@@ -3270,17 +3270,19 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 /// retrieve 512-bit of entropy, from system time and current execution state
 // - entropy is gathered over several sources like RTL Now(), CreateGuid(),
 // current gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
+// - will call XorEntropyGetOsRandom256() once at process startup as main seed,
+// otherwise won't make any OS API call on Indel/AMD
 // - the resulting output is to be hashed - e.g. with DefaultHasher128
-// - execution is fast, but not enough as unique seed for a cryptographic PRNG:
+// - execution is fast and safe, but not secure enough for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
-// to system-retrieved randomness from mormot.core.os.pas' XorOSEntropy()
+// to the more complete mormot.core.os.pas' XorOSEntropy() function
 procedure XorEntropy(var e: THash512Rec);
 
 var
-  /// stub used by XorEntropy() to retrieve 256-bit of randomness
+  /// stub used by XorEntropy() to retrieve 256-bit of randomness from OS
   // - this default unit with call sysutils.CreateGuid() twice
   // - mormot.core.os.posix.inc will implement a proper POSIX function here
-  // and try to read 32 bytes from /dev/urandom
+  // and try to read 32 bytes from /dev/urandom or getrandom Linux syscall
   XorEntropyGetOsRandom256: procedure(var e: THash256Rec);
 
 /// convert the endianness of a given unsigned 16-bit integer into BigEndian
@@ -9597,38 +9599,36 @@ procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
 begin
   sysutils.CreateGUID(e.l.guid); // e.g. Windows CoCreateGuid()
   sysutils.CreateGUID(e.h.guid);
-end;
+end; // overriden in mormot.core.os.posix.inc to use /dev/urandom or getrandom
 
 var
-  // cascaded 128-bit random to avoid replay attacks - shared by all threads
-  _EntropyGlobal: THash128Rec;
+  // cascaded 256-bit random to avoid replay attacks - shared by all threads
+  _EntropyGlobal: THash256Rec;
 
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PHash128Rec;
-  rnd: THash256Rec;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
-  XorEntropyGetOsRandom256(rnd); // fast get 256-bit of randomness from OS
-  if _EntropyGlobal.c0 = 0 then
-    _EntropyGlobal.guid := rnd.h.guid; // initialize forward security
-  e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
-  e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
+  if _EntropyGlobal.i0 = 0 then
+    XorEntropyGetOsRandom256(_EntropyGlobal); // initial randomness from OS
+  e.r[0].L := e.r[0].L xor _EntropyGlobal.l.L;
+  e.r[0].H := e.r[0].H xor _EntropyGlobal.l.H;
   lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
-  e.r[1].L := e.r[1].L xor PtrUInt(@e)  xor lec^.L xor rnd.l.L;
-  e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H xor rnd.l.H;
-  e.r[2].L := e.r[2].L xor rnd.h.L;
-  e.r[2].H := e.r[2].H xor rnd.h.H;
-  // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
-  unaligned(PDouble(@e.r[3].Lo)^) := Now * 2123923447; // cross-platform time
+  e.r[1].L := e.r[1].L xor PtrUInt(@e)  xor lec^.L;
+  e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H;
+  e.r[2].L := e.r[2].L xor _EntropyGlobal.h.L;
+  e.r[2].H := e.r[2].H xor _EntropyGlobal.h.H;
   {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
-  RdRand32(@e.r[0].c, length(e.r[0].c));
+  RdRand32(@e.r[0].c, length(e.r[0].c)); // no-op if cfSSE42 is not available
   e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has slightly changed in-between
   {$else}
+  unaligned(PDouble(@e.r[3].Lo)^) := Now * 2123923447; // cross-platform time
   e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
-  crc128c(@e, SizeOf(e), _EntropyGlobal.b); // simple diffusion to move forward
+  crcblocks(@_EntropyGlobal.l, @e, 4); // simple diffusion to move forward
+  crcblocks(@_EntropyGlobal.h, @e, 4);
 end;
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
