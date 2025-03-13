@@ -4025,8 +4025,8 @@ end;
 function THttpRequestContext.ContentFromFile(
   const FileName: TFileName; CompressGz: integer): integer;
 var
-  h: THandle;
   gz: TFileName;
+  h: THandle;
 begin
   result := HTTP_NOTFOUND;
   Content := '';
@@ -4039,30 +4039,31 @@ begin
      not (rfWantRange in ResponseFlags) then
   begin
     gz := FileName + '.gz';
-    h := FileOpen(gz, fmOpenRead or fmShareRead);
-    if ValidHandle(h) then
+    if FileInfoByName(gz, ContentLength, ContentLastModified) and
+       (ContentLength >= 0) then
     begin
-      ContentStream := TFileStreamEx.CreateFromHandle(h, gz);
+      ContentStream := TFileStreamEx.CreateRead(gz);
       include(ResponseFlags, rfContentStreamNeedFree);
-      FileInfoByHandle(h, nil, @ContentLength, @ContentLastModified, nil);
       fContentEncoding := 'gzip';
       result := HTTP_SUCCESS;
       exit; // force ContentStream of raw .gz file to bypass recompression
     end;
   end;
   // check the actual file on disk against any requested range
-  h := FileOpen(FileName, fmOpenReadShared);
-  if not ValidHandle(h) then
+  if not FileInfoByName(FileName, ContentLength, ContentLastModified) or
+     (ContentLength < 0) then
     exit;
-  FileInfoByHandle(h, nil, @ContentLength, @ContentLastModified, nil);
   if rfWantRange in ResponseFlags then
     if not ValidateRange then
     begin
       result := HTTP_RANGENOTSATISFIABLE;
-      FileClose(h);
       exit;
-    end
-    else if RangeOffset <> 0 then
+    end;
+  h := FileOpen(FileName, fmOpenReadShared);
+  if not ValidHandle(h) then
+    exit;
+  if rfWantRange in ResponseFlags then
+    if RangeOffset <> 0 then
       FileSeek64(h, RangeOffset);
   // we can send this file out
   result := HTTP_SUCCESS;
