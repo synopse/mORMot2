@@ -7678,39 +7678,10 @@ begin
 end;
 
 function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
-var
-  L {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
-  cmp: integer;
 begin
-  if R < 0 then
-    result := 0
-  else
-  begin
-    L := 0;
-    repeat
-      result := (L + R) shr 1;
-      cmp := P^[result] - Value;
-      if cmp = 0 then
-        exit; // return exact matching index
-      {$ifdef CPUX86}
-      if cmp < 0 then
-        L := result + 1
-      else
-        R := result - 1;
-      {$else}
-      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      ll := result - 1;
-      if cmp < 0 then
-        L := rr
-      else
-        R := ll;
-      {$endif CPUX86}
-    until L > R;
-    while (result >= 0) and
-          (P^[result] >= Value) do
-      dec(result);
-    inc(result); // return the index where to insert
-  end;
+  result := FastLocateIntegerSorted(P, R, Value);
+  if result < 0 then
+     result := -(result + 1);  // returned -(foundindex+1)
 end;
 
 function FastLocateWordSorted(P: PWordArray; R: integer; Value: word): PtrInt;
