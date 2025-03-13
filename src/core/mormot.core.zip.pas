@@ -1707,7 +1707,7 @@ begin
       [self, {%H-}pointer(aDest), aDestFileName]);
   fFileName := aDestFileName;
   fDestOwned := true;
-  Create(TFileStreamFromHandle.Create(aDest));
+  Create(TFileStreamEx.CreateFromHandle(aDest, aDestFileName));
 end;
 
 constructor TZipWrite.Create(const aDestFileName: TFileName);
@@ -2715,8 +2715,7 @@ begin
   // initialize source stream - released (possibly with handle) on ESynZip below
   if not ValidHandle(aFile) then
     exit;
-  fSource := TFileStreamFromHandle.Create(aFile);
-  TFileStreamFromHandle(fSource).DontReleaseHandle := DontReleaseHandle;
+  fSource := TFileStreamEx.CreateFromHandle(aFile, fFileName, DontReleaseHandle);
   // prepare the internal buffer - contains at least the central directory
   if Size = 0 then
     Size := FileSize(aFile);
@@ -3295,7 +3294,7 @@ begin
       else
       begin
         // use efficient direct streaming decompression/recompression
-        s := FileStreamSequentialRead(aOldLogFileName);
+        s := TFileStreamEx.CreateRead(aOldLogFileName);
         try
           z := EventArchiveZipWrite.AddDeflatedStream(zipname,
              DateTimeToWindowsFileTime(UnixMSTimeToDateTime(ftime)),

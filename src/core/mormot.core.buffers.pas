@@ -4388,7 +4388,7 @@ end;
 
 constructor TBufferWriter.Create(aFile: THandle; BufLen: integer);
 begin
-  Create(THandleStream.Create(aFile), BufLen);
+  Create(TFileStreamEx.CreateFromHandle(aFile, ''), BufLen);
   fInternalStream := true;
 end;
 
@@ -4397,14 +4397,9 @@ constructor TBufferWriter.Create(const aFileName: TFileName;
 var
   s: TStream;
 begin
-  if Append and
-     FileExists(aFileName) then
-  begin
-    s := TFileStreamEx.Create(aFileName, fmOpenWrite);
+  s := TFileStreamEx.CreateWrite(aFileName);
+  if Append then
     s.Seek(0, soEnd);
-  end
-  else
-    s := TFileStreamEx.Create(aFileName, fmCreate);
   Create(s, BufLen);
   fInternalStream := true;
 end;
@@ -9876,7 +9871,7 @@ begin
   f := FileOpenSequentialRead(FileName);
   if not ValidHandle(f) then
     exit;
-  hasher := Create(TFileStreamFromHandle.Create(f));
+  hasher := Create(TFileStreamEx.CreateFromHandle(f, FileName));
   try
     if Assigned(OnProgress) then
     begin
@@ -10220,7 +10215,7 @@ end;
 constructor TBufferedStreamReader.Create(const aSourceFileName: TFileName;
   aBufSize: integer);
 begin
-  Create(TFileStreamEx.Create(aSourceFileName, fmOpenReadShared));
+  Create(TFileStreamEx.CreateRead(aSourceFileName));
   fOwnStream := fSource;
 end;
 
