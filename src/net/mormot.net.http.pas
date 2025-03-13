@@ -4059,17 +4059,23 @@ begin
       result := HTTP_RANGENOTSATISFIABLE;
       exit;
     end;
+  include(ResponseFlags, rfAcceptRange);
+  if PCardinal(CommandMethod)^ = _HEAD32 then // make FileOpen() only for GET
+  begin
+    result := HTTP_SUCCESS;
+    ContentStream := TStreamWithPositionAndSize.Create; // <> nil
+    include(ResponseFlags, rfContentStreamNeedFree);
+    exit;
+  end;
+  // we can send this file content out
   h := FileOpen(FileName, fmOpenReadShared);
   if not ValidHandle(h) then
     exit;
   if rfWantRange in ResponseFlags then
     if RangeOffset <> 0 then
       FileSeek64(h, RangeOffset);
-  // we can send this file out
   result := HTTP_SUCCESS;
-  include(ResponseFlags, rfAcceptRange);
-  if (ContentLength < HttpContentFromFileSizeInMemory) and
-     (PCardinal(CommandMethod)^ <> _HEAD32) then
+  if ContentLength < HttpContentFromFileSizeInMemory then
   begin
     // smallest files (up to few MB) are sent from temp memory (maybe compressed)
     FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
