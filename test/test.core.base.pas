@@ -8368,7 +8368,7 @@ var
   fu: TUnixMSTime;
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
-  s, mpc, mpct: RawUtf8;
+  s, ct, mpc, mpct: RawUtf8;
   st: THttpMultiPartStream;
   rfc2388: boolean;
 
@@ -8466,19 +8466,23 @@ begin
   Check(not HttpMethodWithNoBody('PUT'));
   Check(not HttpMethodWithNoBody('OPT'));
   // mime content types
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.', 'def2'), 'def2');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.a', 'def3'), 'application/a');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.1', 'def4'), 'def4');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.ab', 'def5'), 'application/ab');
+  CheckEqual(GetMimeContentType('', 'toto.h264'), 'video/H264');
+  CheckEqual(GetMimeContentType('', 'toto', 'def1'), 'def1');
+  CheckEqual(GetMimeContentType('', 'toto.', 'def2'), 'def2');
+  CheckEqual(GetMimeContentType('', 'toto.a', 'def3'), 'application/a');
+  CheckEqual(GetMimeContentType('', 'toto.1', 'def4'), 'def4');
+  CheckEqual(GetMimeContentType('', 'toto.ab', 'def5'), 'application/ab');
   for i := 0 to high(MIMES) shr 1 do
-    CheckEqual(GetMimeContentType(nil, 0, 'toto.' + MIMES[i * 2]),
+    CheckEqual(GetMimeContentType('', 'toto.' + MIMES[i * 2]),
       ToUtf8(MIMES[i * 2 + 1]));
+  FastSetString(s, 34);
   for i := 0 to high(BIN) do
   begin
-    CheckEqual(GetMimeContentType(@BIN[i], 34, ''), BIN_MIME[i]);
-    CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i], 34, ''), BIN_MIME[i]);
+    PCardinal(s)^ := BIN[i];
+    CheckEqual(GetMimeContentType(s), BIN_MIME[i]);
+    ct := '';
+    Check(GetMimeContentTypeFromBuffer(s, ct) <> mtUnknown);
+    CheckEqual(ct, BIN_MIME[i]);
   end;
   s := '<?xml';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);

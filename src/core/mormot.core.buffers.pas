@@ -1814,9 +1814,9 @@ function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 /// retrieve the MIME content type from a supplied binary buffer
 // - inspect the first bytes, to guess from standard known headers
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
-// - returns DefaultContentType if the binary buffer has an unknown layout
-function GetMimeContentTypeFromBuffer(Content: pointer; Len: PtrInt;
-  const DefaultContentType: RawUtf8; Mime: PMimeType = nil): RawUtf8;
+// - keep the supplied ContentType if the binary buffer has an unknown layout
+function GetMimeContentTypeFromBuffer(const Content: RawByteString;
+  var ContentType: RawUtf8): TMimeType;
 
 /// retrieve the MIME content type from its file name or a supplied binary buffer
 // - will first check for known file extensions, then inspect the binary content
@@ -1824,15 +1824,15 @@ function GetMimeContentTypeFromBuffer(Content: pointer; Len: PtrInt;
 // - default is DefaultContentType or 'application/octet-stream' (BINARY_CONTENT_TYPE)
 // or 'application/fileextension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
-function GetMimeContentType(Content: pointer; Len: PtrInt; const FileName: TFileName = '';
-  const DefaultContentType: RawUtf8 = BINARY_CONTENT_TYPE; Mime: PMimeType = nil): RawUtf8;
+function GetMimeContentType(const Content: RawByteString; const FileName: TFileName = '';
+  const DefaultContentType: RawUtf8 = BINARY_CONTENT_TYPE): RawUtf8;
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
 // - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
 // - can be used as such:
 // !  Call.OutHead := GetMimeContentTypeHeader(Call.OutBody,aFileName);
 function GetMimeContentTypeHeader(const Content: RawByteString;
-  const FileName: TFileName = ''; Mime: PMimeType = nil): RawUtf8;
+  const FileName: TFileName = ''): RawUtf8;
 
 function ToText(t: TMimeType): PShortString; overload;
 
@@ -7861,8 +7861,7 @@ begin
   if ForcedContentType <> '' then
     part.ContentType := ForcedContentType
   else
-    part.ContentType := GetMimeContentType(
-      pointer(content), length(content), FileName);
+    part.ContentType := GetMimeContentType(content, FileName);
   part.Encoding := 'base64';
   part.Content := BinToBase64(content);
   SetLength(MultiPart, newlen);
@@ -7883,9 +7882,8 @@ begin
   part.Name := FieldName;
   if ForcedContentType <> '' then
     part.ContentType := ForcedContentType
-  else
-    part.ContentType := GetMimeContentTypeFromBuffer(
-      pointer(FieldValue), length(FieldValue), TEXT_CONTENT_TYPE);
+  else if GetMimeContentTypeFromBuffer(FieldValue, part.ContentType) = mtUnknown then
+    part.ContentType := TEXT_CONTENT_TYPE; // fallback to plain text
   part.Content := FieldValue;
   SetLength(MultiPart, newlen);
   MultiPart[newlen - 1] := part;
@@ -8840,18 +8838,12 @@ begin
   end;
 end;
 
-function GetMimeContentTypeFromBuffer(Content: pointer; Len: PtrInt;
-  const DefaultContentType: RawUtf8; Mime: PMimeType): RawUtf8;
-var
-  m: TMimeType;
+function GetMimeContentTypeFromBuffer(const Content: RawByteString;
+  var ContentType: RawUtf8): TMimeType;
 begin
-  m := GetMimeContentTypeFromMemory(Content, Len);
-  if Mime <> nil then
-    Mime^ := m;
-  if m = mtUnknown then
-    result := DefaultContentType
-  else
-    result := MIME_TYPE[m];
+  result := GetMimeContentTypeFromMemory(pointer(Content), Length(Content));
+  if result <> mtUnknown then
+    ContentType := MIME_TYPE[result];
 end;
 
 const
@@ -8901,41 +8893,34 @@ begin
     FileExt^ := {%H-}ext;
 end;
 
-function GetMimeContentType(Content: pointer; Len: PtrInt; const FileName: TFileName;
-  const DefaultContentType: RawUtf8; Mime: PMimeType): RawUtf8;
+function GetMimeContentType(const Content: RawByteString; const FileName: TFileName;
+  const DefaultContentType: RawUtf8): RawUtf8;
 var
   ext: RawUtf8;
   m: TMimeType;
 begin
-  if FileName <> '' then
+  result := DefaultContentType;
+  if FileName <> '' then // file extension is more precise -> check first
   begin
-    // file extension is more precise -> check first
     m := GetMimeContentTypeFromExt(FileName, @ext);
     if m <> mtUnknown then
     begin
       result := MIME_TYPE[m];
-      if Mime <> nil then
-        Mime^ := m;
       exit;
     end;
-    // fallback to content check
-    if (ext <> '') and
+    if (ext <> '') and // default e.g. 'application/zip' or 'application/pdf'
        (ext[1] in ['a'..'z']) then
-      // e.g. 'application/zip' or 'application/pdf'
-      result := 'application/' + LowerCase(ext)
-    else
-      result := DefaultContentType;
-  end
-  else
-    result := DefaultContentType;
-  result := GetMimeContentTypeFromBuffer(Content, Len, result, Mime);
+      result := 'application/' + LowerCase(ext);
+  end;
+  if Content <> '' then
+    GetMimeContentTypeFromBuffer(Content, result);
 end;
 
 function GetMimeContentTypeHeader(const Content: RawByteString;
-  const FileName: TFileName; Mime: PMimeType): RawUtf8;
+  const FileName: TFileName): RawUtf8;
 begin
-  result := HEADER_CONTENT_TYPE + GetMimeContentType(
-      pointer(Content), length(Content), FileName, BINARY_CONTENT_TYPE, Mime);
+  result := HEADER_CONTENT_TYPE +
+              GetMimeContentType(Content, FileName, BINARY_CONTENT_TYPE);
 end;
 
 function ToText(t: TMimeType): PShortString;

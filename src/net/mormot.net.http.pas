@@ -4612,7 +4612,7 @@ begin
     exit;
   fOutContentType := ContentType;
   if fOutContentType = '' then
-    fOutContentType := GetMimeContentType(pointer(Content), length(Content));
+    GetMimeContentTypeFromBuffer(Content, fOutContentType);
   fOutContent := Content;
   result := HTTP_SUCCESS;
 end;

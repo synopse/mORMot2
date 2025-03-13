@@ -1202,7 +1202,7 @@ begin
               break;
           end;
           FileName := ViewTemplateFolder + ShortFileName;
-          ContentType := GetMimeContentType(nil, 0, ShortFileName);
+          ContentType := GetMimeContentType('', ShortFileName);
         end
         else
         begin
@@ -1933,8 +1933,7 @@ function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
   const aFileContent: RawByteString): RawByteString;
 begin
   if aFileContent <> '' then
-    result := Make([
-      GetMimeContentType(pointer(aFileContent), length(aFileContent), aFileName),
+    result := Make([GetMimeContentType(aFileContent, aFileName),
       #10, aFileContent]) // also cache content-type
   else
     result := '';

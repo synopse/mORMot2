@@ -569,8 +569,7 @@ begin
       P := GotoNextLine(P);
     end;
     if Content <> '' then // always favor content type from binary
-      ContentType := GetMimeContentTypeFromBuffer(
-        pointer(Content), Length(Content), ContentType);
+      GetMimeContentTypeFromBuffer(Content, ContentType);
     if fUriPrefix <> '' then
       Call.Url := fUriPrefix + Call.Url;
     if fCustomHeader <> '' then

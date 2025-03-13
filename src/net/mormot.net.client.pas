@@ -1979,8 +1979,7 @@ begin
   result^.Content := content;
   result^.ContentType := contenttype;
   if result^.ContentType = '' then
-    result^.ContentType := GetMimeContentType(
-      pointer(content), length(content), Ansi7ToString(filename));
+    result^.ContentType := GetMimeContentType(content, Ansi7ToString(filename));
   if result^.ContentType = '' then
     if filename = '' then
       if (content <> '') and
