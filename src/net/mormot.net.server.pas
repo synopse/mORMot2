@@ -461,6 +461,8 @@ type
   // - hsoEnableLogging enable an associated THttpServerGeneric.Logger instance
   // - hsoTelemetryCsv and hsoTelemetryJson will enable CSV or JSON consolidated
   // per-minute metrics logging via an associated THttpServerGeneric.Analyzer
+  // - hsoContentTypeNoGuess will disable content-type detection from small
+  // content buffers via GetMimeContentTypeFromBuffer()
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -478,7 +480,8 @@ type
     hsoEnablePipelining,
     hsoEnableLogging,
     hsoTelemetryCsv,
-    hsoTelemetryJson);
+    hsoTelemetryJson,
+    hsoContentTypeNoGuess);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -1747,6 +1750,9 @@ type
     /// the 'ip:port' value used for UDP and TCP process
     property IpPort: RawUtf8
       read fIpPort;
+    /// the raw 32-bit IPv4 value used for UDP and TCP process
+    property Ip4: cardinal
+      read fIp4;
   published
     /// define how this instance handles its process
     property Settings: THttpPeerCacheSettings
@@ -3267,7 +3273,12 @@ begin
   if hsoIncludeDateHeader in fServer.Options then
     fServer.AppendHttpDate(h^);
   Context.Content := fOutContent;
-  Context.ContentType := fOutContentType;
+  if (fOutContentType = '') and
+     (fOutContent <> '') and
+     not (hsoContentTypeNoGuess in fServer.Options) then
+    GetMimeContentTypeFromBuffer(fOutContent, Context.ContentType)
+  else
+    Context.ContentType := fOutContentType;
   fOutContent := ''; // dec RefCnt to release body memory ASAP
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // set State
   // now TAsyncConnectionsSockets.Write(result) should be called
