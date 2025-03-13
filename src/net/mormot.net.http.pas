@@ -4040,7 +4040,7 @@ begin
   begin
     gz := FileName + '.gz';
     if FileInfoByName(gz, ContentLength, ContentLastModified) and
-       (ContentLength >= 0) then
+       (ContentLength >= 0) then // not a folder
     begin
       ContentStream := TFileStreamEx.CreateRead(gz);
       include(ResponseFlags, rfContentStreamNeedFree);
@@ -4051,7 +4051,7 @@ begin
   end;
   // check the actual file on disk against any requested range
   if not FileInfoByName(FileName, ContentLength, ContentLastModified) or
-     (ContentLength < 0) then
+     (ContentLength < 0) then // valid file, not a folder (size=-1)
     exit;
   if rfWantRange in ResponseFlags then
     if not ValidateRange then

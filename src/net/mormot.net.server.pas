@@ -3166,7 +3166,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   var
     fn: TFileName;
     progsizeHeader: RawUtf8; // for rfProgressiveStatic mode
-    h: THandle;
+    fsiz: Int64;
   begin
     ExtractOutContentType;
     fn := Utf8ToString(OutContent); // safer than Utf8ToFileName() here
@@ -3178,11 +3178,10 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
       if ((not (rfWantRange in Context.ResponseFlags)) or
           Context.ValidateRange) then
       begin
-        h := FileOpen(fn, fmOpenReadShared);
-        if ValidHandle(h) then
+        if FileInfoByName(fn, fsiz, Context.ContentLastModified) and
+          (fsiz >= 0) and // not a folder
+          (fsiz <= Context.ContentLength) then
         begin
-          FileInfoByHandle(h, nil, nil, @Context.ContentLastModified, nil);
-          FileClose(h);
           Context.ContentStream := TStreamWithPositionAndSize.Create; // <> nil
           Context.ResponseFlags := Context.ResponseFlags +
             [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
