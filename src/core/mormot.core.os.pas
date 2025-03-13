@@ -3353,33 +3353,30 @@ function FindFirstDirectory(const Path: TFileName; IncludeHidden: boolean;
     out F: TSearchRec): integer;
 
 type
-  /// FPC TFileStream miss a Create(aHandle) constructor like Delphi
-  TFileStreamFromHandle = class(THandleStream)
-  protected
-    fDontReleaseHandle: boolean;
-  public
-    /// explictely close the handle if needed
-    destructor Destroy; override;
-    /// Destroy calls FileClose(Handle) unless this property is true
-    property DontReleaseHandle: boolean
-      read fDontReleaseHandle write fDontReleaseHandle;
-  end;
-
   /// a TFileStream replacement which supports FileName longer than MAX_PATH,
   // and a proper Create(aHandle) constructor in FPC
-  TFileStreamEx = class(TFileStreamFromHandle)
+  TFileStreamEx = class(THandleStream)
   protected
     fFileName : TFileName;
-    function GetSize: Int64; override; // faster (1 API call instead of 3)
+    fDontReleaseHandle: boolean;
+    function GetSize: Int64; override;
   public
     /// open or create the file from its name, depending on the supplied Mode
     // - Mode is typically fmCreate / fmOpenReadShared
     constructor Create(const aFileName: TFileName; Mode: cardinal);
     /// can use this class from a low-level file OS handle
-    constructor CreateFromHandle(aHandle: THandle; const aFileName: TFileName);
+    constructor CreateFromHandle(aHandle: THandle; const aFileName: TFileName;
+      aDontReleaseHandle: boolean = false);
+    /// open for reading via FileOpenSequentialRead()
+    constructor CreateRead(const aFileName: TFileName);
     /// open for writing or create a non-existing file from its name
     // - use fmCreate if aFileName does not exists, or fmOpenWrite otherwise
     constructor CreateWrite(const aFileName: TFileName);
+    /// explictely close the handle if needed
+    destructor Destroy; override;
+    /// Destroy calls FileClose(Handle) unless this property is true
+    property DontReleaseHandle: boolean
+      read fDontReleaseHandle write fDontReleaseHandle;
     /// the file name assigned to this class constructor
     property FileName : TFileName
       read fFilename;
@@ -6774,14 +6771,6 @@ begin
 end;
 
 
-{ TFileStreamFromHandle }
-
-destructor TFileStreamFromHandle.Destroy;
-begin
-  if not fDontReleaseHandle then
-    FileClose(Handle); // otherwise file remains opened (FPC RTL inconsistency)
-end;
-
 { TFileStreamEx }
 
 constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
@@ -6795,13 +6784,20 @@ begin
   CreateFromHandle(h, aFileName);
 end;
 
-constructor TFileStreamEx.CreateFromHandle(aHandle: THandle; const aFileName: TFileName);
+constructor TFileStreamEx.CreateFromHandle(aHandle: THandle;
+  const aFileName: TFileName; aDontReleaseHandle: boolean);
 begin
   if not ValidHandle(aHandle) then
     raise EOSException.CreateFmt('%s.Create(%s) failed as %s',
       [ClassNameShort(self)^, aFileName, GetErrorText(GetLastError)]);
   inherited Create(aHandle); // TFileStreamFromHandle constructor which own it 
   fFileName := aFileName;
+  fDontReleaseHandle := aDontReleaseHandle;
+end;
+
+constructor TFileStreamEx.CreateRead(const aFileName: TFileName);
+begin
+  CreateFromHandle(FileOpenSequentialRead(aFileName), aFileName);
 end;
 
 constructor TFileStreamEx.CreateWrite(const aFileName: TFileName);
@@ -6812,6 +6808,12 @@ begin
   if not ValidHandle(h) then // we may need to create the file
     h := FileCreate(aFileName, fmShareRead);
   CreateFromHandle(h, aFileName);
+end;
+
+destructor TFileStreamEx.Destroy;
+begin
+  if not fDontReleaseHandle then
+    FileClose(Handle); // otherwise file remains opened (FPC RTL inconsistency)
 end;
 
 function TFileStreamEx.GetSize: Int64;
