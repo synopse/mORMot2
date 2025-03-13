@@ -7853,7 +7853,7 @@ begin
   buf := StringFromFile(AttachFile);
   if buf <> '' then
     result := CreateFileAttachmentFromBuffer(buf, ExtractFileName(AttachFile),
-      Description, '', UnixMSTimeToDateTimeZ(lw), UnixMSTimeToDateTimeZ(fc));
+      Description, '', UnixMSTimeToDateTimeZ(fc), UnixMSTimeToDateTimeZ(lw));
 end;
 
 function TPdfDocument.CreateFileAttachmentFromBuffer(const Buffer: RawByteString;
