@@ -233,7 +233,12 @@ function CsvToRawUtf8DynArray(const Csv: RawUtf8; const Sep: RawUtf8 = ',';
   const SepEnd: RawUtf8 = ''): TRawUtf8DynArray; overload;
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
-function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
+function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray;
+  const Sep: RawUtf8 = ','; Reverse: boolean = false): RawUtf8;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// return the corresponding CSV text from a dynamic array of UTF-8 strings
+function RawUtf8ToCsv(const Values: array of RawUtf8;
   const Sep: RawUtf8 = ','; Reverse: boolean = false): RawUtf8;
 
 /// low-level generate CSV e.g. for RawUtf8ArrayToCsv() and TRawUtf8List.GetText
@@ -3657,7 +3662,13 @@ begin
   until false;
 end;
 
-function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
+function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray; const Sep: RawUtf8;
+  Reverse: boolean): RawUtf8;
+begin
+  PRawUtf8ToCsv(pointer(Values), length(Values), Sep, Reverse, result);
+end;
+
+function RawUtf8ToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
   Reverse: boolean): RawUtf8;
 begin
   PRawUtf8ToCsv(@Values[0], length(Values), Sep, Reverse, result);

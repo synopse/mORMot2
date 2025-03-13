@@ -5144,7 +5144,7 @@ begin
        not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dMariaDB, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
       indexname := owner + '.';
-    fieldscsv := RawUtf8ArrayToCsv(aFieldNames, '');
+    fieldscsv := RawUtf8ToCsv(aFieldNames, '');
     if length(fieldscsv) + length(table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
       indexname := {%H-}indexname + 'INDEX' + crc32cUtf8ToHex(table) +
@@ -5159,10 +5159,10 @@ begin
       posGlobalBefore:
         result := result + 'DESC ';
       posWithColumn:
-        coldesc := RawUtf8ArrayToCsv(aFieldNames, ' DESC,') + ' DESC';
+        coldesc := RawUtf8ToCsv(aFieldNames, ' DESC,') + ' DESC';
     end;
   if {%H-}coldesc = '' then
-    coldesc := RawUtf8ArrayToCsv(aFieldNames, ',');
+    coldesc := RawUtf8ToCsv(aFieldNames, ',');
   result := FormatUtf8('CREATE %INDEX %% ON %(%)', [result,
     CREATNDXIFNE[GetDbms in DB_HANDLECREATEINDEXIFNOTEXISTS],
     indexname, aTableName, coldesc]);
