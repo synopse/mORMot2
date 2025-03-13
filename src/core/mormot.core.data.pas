@@ -5284,9 +5284,6 @@ begin
 end;
 
 function TRawUtf8List.GetText(const Delimiter: RawUtf8): RawUtf8;
-var
-  DelimLen, i, Len: PtrInt;
-  P: PUtf8Char;
 begin
   result := '';
   if (self = nil) or
@@ -5294,34 +5291,9 @@ begin
     exit;
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyLock;
-  try
-    DelimLen := length(Delimiter);
-    Len := DelimLen * (fCount - 1);
-    for i := 0 to fCount - 1 do
-      inc(Len, length(fValue[i]));
-    FastSetString(result, Len);
-    P := pointer(result);
-    i := 0;
-    repeat
-      Len := length(fValue[i]);
-      if Len > 0 then
-      begin
-        MoveFast(pointer(fValue[i])^, P^, Len);
-        inc(P, Len);
-      end;
-      inc(i);
-      if i >= fCount then
-        Break;
-      if DelimLen > 0 then
-      begin
-        MoveByOne(pointer(Delimiter), P, DelimLen);
-        inc(P, DelimLen);
-      end;
-    until false;
-  finally
-    if fThreadSafe in fFlags then
-      fSafe.ReadOnlyUnLock;
-  end;
+  PRawUtf8ToCsv(pointer(fValue), fCount, Delimiter, {rev=}false, result);
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyUnLock;
 end;
 
 procedure TRawUtf8List.SaveToStream(Dest: TStream; const Delimiter: RawUtf8);
@@ -5358,15 +5330,9 @@ end;
 
 procedure TRawUtf8List.SaveToFile(
   const FileName: TFileName; const Delimiter: RawUtf8);
-var
-  FS: TStream;
 begin
-  FS := TFileStreamEx.Create(FileName, fmCreate);
-  try
-    SaveToStream(FS, Delimiter);
-  finally
-    FS.Free;
-  end;
+  if FileName <> '' then
+    FileFromString(GetText(Delimiter), FileName); // faster than SaveToStream()
 end;
 
 function TRawUtf8List.GetTextCRLF: RawUtf8;
