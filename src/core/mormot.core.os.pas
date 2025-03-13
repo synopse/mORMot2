@@ -3266,7 +3266,7 @@ function FileSeek64(Handle: THandle; const Offset: Int64;
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime; FileAttr: PInteger = nil): boolean; overload;
 
-/// get low-level file information, in a cross-platform way
+/// get low-level file information with timings, in a cross-platform way
 // - returns true on success
 // - you can specify nil for any returned value if you don't need
 // - here file write/creation time are given as TUnixMSTime values, for better
@@ -3276,8 +3276,9 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
   LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
 
-/// get low-level file information, in a cross-platform way
-// - is a wrapper around FileInfoByHandle() function
+/// get low-level file information with timings, in a cross-platform way
+// - is a wrapper around FileInfoByHandle() function - rarely called
+// - please prefer FileInfoByName() overload if FileCreateDateTime is not needed
 // - returns true on success
 function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;
   LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean; overload;
@@ -3421,9 +3422,11 @@ function FileWriteAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 
 /// returns a TFileStreamFromHandle optimized for one pass file reading
-// - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
+// - wrap TFileStreamEx.CreateRead() to use FileOpenSequentialRead(),
+// i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
+// - returns nil if FileName does not exist, without any exception
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 
 /// try to open the file from its name, as fmOpenReadShared
@@ -6867,13 +6870,18 @@ end;
 function TFileStreamNoWriteError.Write(const Buffer; Count: Longint): Longint;
 begin
   FileWriteAll(Handle, @Buffer, Count); // and ignore any I/O error
-  result := Count; //
+  result := Count; // optimistic view: emulate all data was properly written
 end;
 
 
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
+var
+  h: THandle;
 begin
-  result := TFileStreamFromHandle.Create(FileOpenSequentialRead(FileName));
+  result := nil;
+  h := FileOpenSequentialRead(FileName);
+  if ValidHandle(h) then
+    result := TFileStreamEx.CreateFromHandle(h, FileName);
 end;
 
 function StreamCopyUntilEnd(Source, Dest: TStream): Int64;

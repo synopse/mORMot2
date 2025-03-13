@@ -607,14 +607,13 @@ begin
   // don't use direct GDI+ file oriented API: it's better having a local
   // copy of the untouched data in memory (e.g. for further jpeg saving)
   Clear;
-  if not FileExists(FileName) then
-    exit;
-  s := TFileStreamEx.Create(FileName, fmOpenReadShared);
-  try
-    LoadFromStream(s);
-  finally
-    s.Free;
-  end;
+  s := FileStreamSequentialRead(FileName);
+  if s <> nil then
+    try
+      LoadFromStream(s);
+    finally
+      s.Free;
+    end;
 end;
 
 procedure TSynPicture.LoadFromResourceName(

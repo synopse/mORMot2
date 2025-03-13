@@ -5836,17 +5836,17 @@ function TAlgoCompress.StreamUnCompress(const Source: TFileName;
 var
   S: TStream;
 begin
-  try
-    S := FileStreamSequentialRead(Source);
+  result := nil;
+  S := FileStreamSequentialRead(Source);
+  if S <> nil then
     try
-      result := StreamUnCompress(S, Magic, ForceHash32);
-    finally
-      S.Free;
+      try
+        result := StreamUnCompress(S, Magic, ForceHash32);
+      finally
+        S.Free;
+      end;
+    except // catch any StreamUnCompress issue
     end;
-  except
-    on E: Exception do
-      result := nil;
-  end;
 end;
 
 function TAlgoCompress.StreamComputeLen(P: PAnsiChar; Len: PtrUInt;
@@ -5888,26 +5888,25 @@ var
 begin
   EnsureAlgoHasNoForcedFormat('FileCompres'); // should be overriden
   result := false;
-  if (ChunkBytes > 0) and
-     FileExists(Source) then
-  try
-    S := FileStreamSequentialRead(Source);
+  if ChunkBytes <= 0 then
+    exit;
+  S := FileStreamSequentialRead(Source);
+  if S <> nil then
     try
-      DeleteFile(Dest);
-      D := TFileStreamEx.Create(Dest, fmCreate);
       try
-        StreamCompress(S, D, Magic, ForceHash32, WithTrailer, ChunkBytes);
+        DeleteFile(Dest);
+        D := TFileStreamEx.Create(Dest, fmCreate);
+        try
+          StreamCompress(S, D, Magic, ForceHash32, WithTrailer, ChunkBytes);
+        finally
+          D.Free;
+        end;
+        result := FileSetDateFrom(Dest, S.Handle);
       finally
-        D.Free;
+        S.Free;
       end;
-      result := FileSetDateFrom(Dest, S.Handle);
-    finally
-      S.Free;
+    except  // catch any StreamUnCompress issue
     end;
-  except
-    on Exception do
-      result := false;
-  end;
 end;
 
 function TAlgoCompress.FileUnCompress(const Source, Dest: TFileName;
@@ -5917,9 +5916,9 @@ var
 begin
   EnsureAlgoHasNoForcedFormat('FileUnCompress'); // should be overriden
   result := false;
-  if FileExists(Source) then
+  S := FileStreamSequentialRead(Source);
+  if S <> nil then
   try
-    S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
       D := TFileStreamEx.Create(Dest, fmCreate);
@@ -5933,9 +5932,7 @@ begin
     finally
       S.Free;
     end;
-  except
-    on Exception do
-      result := false;
+  except  // catch any StreamUnCompress issue
   end;
 end;
 

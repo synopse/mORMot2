@@ -1489,8 +1489,7 @@ begin
     result := ExpandFileName(string(result));
 end;
 
-function CopyFile(const Source, Target: TFileName;
-  FailIfExists: boolean): boolean;
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 var
   src, dst: THandleStream;
   copied: Int64;
@@ -1501,8 +1500,9 @@ begin
       exit
     else
       DeleteFile(Target);
+  src := FileStreamSequentialRead(Source);
+  if src <> nil then
   try
-    src := TFileStreamEx.Create(Source, fmOpenReadShared);
     try
       dst := TFileStreamEx.Create(Target, fmCreate);
       try
