@@ -1656,7 +1656,10 @@ begin
         try
           hpc2.fSettings := hps;
           hpc2.AfterSettings;
+          FillCharFast(msg, SizeOf(msg2), 0);
+          CheckEqual(msg.IP4, 0);
           hpc.MessageInit(pcfBearer, 0, msg);
+          CheckEqual(msg.IP4, hpc.IP4);
           msg.Hash.Algo := hfSHA256;
           RandomBytes(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo]);
           // validate UDP messages encoding/decoding
@@ -1770,6 +1773,18 @@ begin
             Check(dBearer <> '');
             Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
             Check(decoded.From(dUri));
+            // decode dBearer
+            dTok := '';
+            Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
+            params := '';
+            FillCharFast(msg2, SizeOf(msg2), 0);
+            res := hpc.BearerDecode(dTok, pcfBearerDirect, msg2, @params);
+            if i = 0 then
+              Check(params <> '')
+            else
+              CheckEqual(params, '');
+            Check(res = mdOk, 'directDecode');
+            Check(msg2.Kind = pcfBearerDirect);
             // first GET request to download from reference website
             if hcs = nil then
             begin
@@ -1798,9 +1813,31 @@ begin
             CheckEqual(status, HTTP_SUCCESS);
             CheckEqual(hcs.ContentLength, len);
             CheckEqual(hcs.ContentType, ctyp);
-            Check(DeleteFile(cache));
             CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-            // HEAD should work without cache
+            // prepare local requests on cache in pcfBearer mode (like a peer)
+            hpc.MessageInit(pcfBearer, 0, msg2);
+            CheckEqual(msg2.IP4, hpc.IP4);
+            Check(msg2.Hash.Algo = low(THashAlgo), 'hfMD5');
+            hpc.MessageEncodeBearer(msg2, dTok);
+            Check(dTok <> dBearer);
+            // GET on cache in pcfBearer mode
+            status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
+            CheckEqual(status, HTTP_NOTFOUND, 'no hash');
+            msg2.Hash.Algo := hfSHA256;
+            Check(Sha256StringToDigest(HTTP_HASH[i], msg2.Hash.Bin.Lo), 'sha');
+            hpc.MessageEncodeBearer(msg2, dTok);
+            status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
+            CheckEqual(status, HTTP_SUCCESS);
+            CheckEqual(hcs.ContentLength, len);
+            CheckEqual(hcs.ContentType, ctyp, 'ctyp from content');
+            CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+            // HEAD on cache in pcfBearer mode
+            status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
+            CheckEqual(status, HTTP_SUCCESS);
+            CheckEqual(hcs.ContentLength, len);
+            CheckEqual(hcs.ContentType, '');
+            // HEAD should work without cache and call directly ictuswin.com
+            Check(DeleteFile(cache));
             status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
             CheckEqual(status, HTTP_SUCCESS);
             CheckEqual(hcs.ContentLength, len);
