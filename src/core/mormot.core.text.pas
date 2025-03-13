@@ -234,8 +234,11 @@ function CsvToRawUtf8DynArray(const Csv: RawUtf8; const Sep: RawUtf8 = ',';
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
-  const Sep: RawUtf8 = ','; HighValues: integer = -1;
-  Reverse: boolean = false): RawUtf8;
+  const Sep: RawUtf8 = ','; Reverse: boolean = false): RawUtf8;
+
+/// low-level generate CSV e.g. for RawUtf8ArrayToCsv() and TRawUtf8List.GetText
+procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
+  Reverse: boolean; var result: RawUtf8);
 
 /// return the corresponding CSV quoted text from a dynamic array of UTF-8 strings
 // - apply QuoteStr() function to each Values[] item
@@ -3618,48 +3621,46 @@ begin
     result := #0;
 end;
 
-function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
-  HighValues: integer; Reverse: boolean): RawUtf8;
+procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
+  Reverse: boolean; var result: RawUtf8);
 var
-  i, len, seplen, L: integer;
-  P: PAnsiChar;
+  len, seplen: PtrInt;
+  p: PAnsiChar;
 begin
   result := '';
-  if HighValues < 0 then
-    HighValues := high(Values);
-  if HighValues < 0 then
+  if (v = nil) or
+     (n <= 0) then
     exit;
-  seplen := length(Sep);
-  len := seplen * HighValues;
-  for i := 0 to HighValues do
-    inc(len, length(Values[i]));
-  FastSetString(result, len); // allocate the result buffer as once
-  P := pointer(result);
-  i := 0;
+  seplen := length(sep);
+  p := FastNewString(seplen * (n - 1) + SumRawUtf8Length(pointer(v), n), CP_UTF8);
+  pointer(result) := p;
   if Reverse then
-  begin
-    i := HighValues;
-    HighValues := 0;
-  end;
+    v := @PPointerArray(v)[n - 1];
   repeat
-    L := length(Values[i]);
-    if L > 0 then
+    if v^ <> nil then
     begin
-      MoveFast(pointer(Values[i])^, P^, L);
-      inc(P, L);
+      len := PStrLen(v^ - _STRLEN)^;
+      MoveFast(v^^, p^, len);
+      inc(p, len);
     end;
-    if i = HighValues then
+    dec(n);
+    if n = 0 then
       break;
-    if seplen > 0 then
-    begin
-      MoveFast(pointer(Sep)^, P^, seplen);
-      inc(P, seplen);
-    end;
     if Reverse then
-      dec(i)
+      dec(v)
     else
-      inc(i);
+      inc(v);
+    if seplen = 0 then
+      continue;
+    MoveFast(pointer(sep)^, p^, seplen);
+    inc(p, seplen);
   until false;
+end;
+
+function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
+  Reverse: boolean): RawUtf8;
+begin
+  PRawUtf8ToCsv(@Values[0], length(Values), Sep, Reverse, result);
 end;
 
 function RawUtf8ArrayToQuotedCsv(const Values: array of RawUtf8;

@@ -4726,7 +4726,7 @@ begin
   else if roCanonicalNameAtRoot in Options then
     result := result^.O_[fCanonicalName]
   else if roCommonNameAtRoot in Options then
-    result := result^.O_[RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true)]
+    result := result^.O_[RawUtf8ArrayToCsv(cn, '/', {reverse=}true)]
   else
   begin
     if dc <> nil then
