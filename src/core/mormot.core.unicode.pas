@@ -2415,6 +2415,9 @@ procedure QuickSortRawUtf8(var Values: TRawUtf8DynArray; ValuesCount: integer;
 procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
   caseInsensitive: boolean = false); overload;
 
+/// compute the sum of all length(Values^[...))
+function SumRawUtf8Length(Values: PRawUtf8; n: integer): TStrLen;
+
 /// sort and remove any duplicated RawUtf8 from Values[]
 procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
 
@@ -9812,6 +9815,17 @@ begin
   qs.Compare := StrCompByCase[caseInsensitive];
   qs.CoValues := nil;
   qs.Sort(pointer(Values), L, R);
+end;
+
+function SumRawUtf8Length(Values: PRawUtf8; n: integer): TStrLen;
+begin
+  result := 0;
+  if n > 0 then
+    repeat
+      inc(result, length(Values^));
+      inc(Values);
+      dec(n);
+    until n = 0;
 end;
 
 function DeduplicateRawUtf8Sorted(val: PPointerArray; last: PtrInt): PtrInt;
