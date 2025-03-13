@@ -8733,38 +8733,46 @@ begin
   if (Content <> nil) and
      (Len > 4) then
   begin
-    if PAnsiChar(Content)^ = '<' then
-      case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
-        ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
-          begin
-            result := mtHtml; // legacy HTML document
-            exit;
-          end;
-        ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
-          begin
-            if (PCardinal(PAnsiChar(Content) + 5)^ or $20202020 =
-               ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24) and
-               (PAnsiChar(Content)[9] = ' ') then
-              if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 =
-                 ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24) then
-                result := mtHtml // HTML5 markup
-              else
-                result := mtXml; // malformed XML document
-            exit;
-          end;
-        ord('?') + ord('x') shl 8 + ord('m') shl 16 + ord('l') shl 24:
-          begin
-            result := mtXml; // "well formed" XML document
-            exit;
-          end;
-      end;
+    case PAnsiChar(Content)^ of
+      '<':
+        case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
+          ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+            begin
+              result := mtHtml; // legacy HTML document
+              exit;
+            end;
+          ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
+            begin
+              if (PCardinal(PAnsiChar(Content) + 5)^ or $20202020 =
+                 ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24) and
+                 (PAnsiChar(Content)[9] = ' ') then
+                if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 =
+                   ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24) then
+                  result := mtHtml // HTML5 markup
+                else
+                  result := mtXml; // malformed XML document
+              exit;
+            end;
+          ord('?') + ord('x') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+            begin
+              result := mtXml; // "well formed" XML document
+              exit;
+            end;
+        end;
+      '{', '[':
+        begin
+          if (Len < 65535) and (StrLen(Content) = Len) then
+            result := mtJson;
+          exit;
+        end;
+    end;
     i := IntegerScanIndex(@MIME_MAGIC, length(MIME_MAGIC), PCardinal(Content)^ + 1);
     // + 1 to avoid finding it in the exe - may use SSE2
     if i >= 0 then
       result := MIME_MAGIC_TYPE[i];
     case result of // identify some partial matches
       mtUnknown:
-        case PCardinal(Content)^ and $00ffffff of
+        case PCardinal(Content)^ and $00ffffff of // identify 3 bytes magic
           $685a42:
             result := mtBz2;  // 42 5A 68
           $088b1f:

@@ -8498,6 +8498,12 @@ begin
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '<!DocType HTML<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  s := '{"json":123}';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
+  s := '["json",123]';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
+  s := '["json",'#0'123]';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
   Check(not IsContentTypeCompressible('anything'));
   Check(not IsContentTypeCompressible('toto/plain'));
   Check(IsContentTypeCompressible('text/plain'));
