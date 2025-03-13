@@ -1752,6 +1752,7 @@ function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): P
 
 /// retrieve the matching index or where to insert an integer value
 function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where to insert a word value in a sorted word array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -3267,11 +3268,9 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 // algorithm, and its gsl_rng_taus2 generator
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 
-/// retrieve 512-bit of entropy, from system time and current execution state
-// - entropy is gathered over several sources like RTL Now(), CreateGuid(),
-// current gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
-// - will call XorEntropyGetOsRandom256() once at process startup as main seed,
-// otherwise won't make any OS API call on Indel/AMD
+/// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
+// - will call XorEntropyGetOsRandom256() once at process startup for Intel/AMD,
+// or each time on other CPUs with no RdRand32/Rdtsc opcodes
 // - the resulting output is to be hashed - e.g. with DefaultHasher128
 // - execution is fast and safe, but not secure enough for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
@@ -9581,8 +9580,10 @@ var
   lec: PHash128Rec;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
-  if _EntropyGlobal.i0 = 0 then
-    XorEntropyGetOsRandom256(_EntropyGlobal); // initial randomness from OS
+  {$ifdef CPUINTEL}
+  if _EntropyGlobal.i0 = 0 then // call OS API each only once at startup
+  {$endif CPUINTEL}
+    XorEntropyGetOsRandom256(_EntropyGlobal); // 256-bit randomness from OS
   e.r[0].L := e.r[0].L xor _EntropyGlobal.l.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.l.H;
   lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
@@ -9590,16 +9591,16 @@ begin
   e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H;
   e.r[2].L := e.r[2].L xor _EntropyGlobal.h.L;
   e.r[2].H := e.r[2].H xor _EntropyGlobal.h.H;
-  {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
+  {$ifdef CPUINTEL} // Intel/AMD opcodes are safe enough between calls
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   RdRand32(@e.r[0].c, length(e.r[0].c)); // no-op if cfSSE42 is not available
-  e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has slightly changed in-between
+  crcblocks(@_EntropyGlobal.l, @e, 4);   // simple diffusion to move forward
+  crcblocks(@_EntropyGlobal.h, @e, 4);
+  e.r[3].Hi := e.r[3].Hi xor Rdtsc;      // has slightly changed in-between
   {$else}
-  unaligned(PDouble(@e.r[3].Lo)^) := Now * 2123923447; // cross-platform time
+  FillCharFast(_EntropyGlobal, SizeOf(_EntropyGlobal), 0); // anti-forensic
   e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
-  crcblocks(@_EntropyGlobal.l, @e, 4); // simple diffusion to move forward
-  crcblocks(@_EntropyGlobal.h, @e, 4);
 end;
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
