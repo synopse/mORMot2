@@ -2750,16 +2750,15 @@ type
     arm32SWP, arm32HALF, arm32THUMB, arm3226BIT, arm32FAST_MULT, arm32FPA,
     arm32VFP, arm32EDSP, arm32JAVA, arm32IWMMXT, arm32CRUNCH, arm32THUMBEE,
     arm32NEON, arm32VFPv3, arm32VFPv3D16, arm32TLS, arm32VFPv4, arm32IDIVA,
-    arm32IDIVT, arm32VFPD32, arm32LPAE, arm32EVTSTRM,
-    arm32_22, arm32_23, arm32_24, arm32_25, arm32_26, arm32_27, arm32_28,
-    arm32_29, arm32_30, arm32_31,
+    arm32IDIVT, arm32VFPD32, arm32LPAE, arm32EVTSTRM, arm32FPHP, arm32ASIMDHP,
+    arm32ASIMDDP, arm32ASIMDFHM, arm32ASIMDBF16, arm32I8MM, a28, a29, a30, a31,
     // HWCAP2_* constants
-    arm32AES, arm32PMULL, arm32SHA1, arm32SHA2, arm32CRC32);
+    arm32AES, arm32PMULL, arm32SHA1, arm32SHA2, arm32CRC32, arm32SB, arm32SSBS);
   TArm32HwCaps = set of TArm32HwCap;
 
   /// 64-bit AARCH64 Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
-  // github.com/torvalds/linux/blob/master/arch/arm64/include/uapi/asm/ahccap.h
+  // github.com/torvalds/linux/blob/master/arch/arm64/include/uapi/asm/hwcap.h
   // - is defined on all platforms for cross-system use
   TArm64HwCap = (
     // HWCAP_* constants
@@ -2768,12 +2767,19 @@ type
     arm64CPUID, arm64ASIMDRDM, arm64JSCVT, arm64FCMA, arm64LRCPC, arm64DCPOP,
     arm64SHA3, arm64SM3, arm64SM4, arm64ASIMDDP, arm64SHA512, arm64SVE,
     arm64ASIMDFHM, arm64DIT, arm64USCAT, arm64ILRCPC, arm64FLAGM, arm64SSBS,
-    arm64SB, arm64PACA, arm64PACG,
+    arm64SB, arm64PACA, arm64PACG, arm64GCS, arm64CMPBR, arm64FPRCVT,
+    arm64F8MM8, arm64F8MM4, arm64SVE_F16MM, arm64SVE_ELTPERM, arm64SVE_AES2,
+    arm64SVE_BFSCALE, arm64SVE2P2, arm64SME2P2, arm64SME_SBITPERM, arm64SME_AES,
+    arm64SME_SFEXPA, arm64SME_STMOP, arm64SME_SMOP4,
+    a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63,
     // HWCAP2_* constants
     arm64DCPODP, arm64SVE2, arm64SVEAES, arm64SVEPMULL, arm64SVEBITPERM,
     arm64SVESHA3, arm64SVESM4, arm64FLAGM2, arm64FRINT, arm64SVEI8MM,
     arm64SVEF32MM, arm64SVEF64MM, arm64SVEBF16, arm64I8MM,
-    arm64BF16, arm64DGH, arm64RNG, arm64BTI, arm64MTE);
+    arm64BF16, arm64DGH, arm64RNG, arm64BTI, arm64MTE, arm64ECV,
+    arm64AFP, arm64RPRES, arm64MTE3, arm64SME, arm64SME_I16I64, arm64SME_F64F64,
+    arm64SME_I8I32, arm64SME_F16F32, arm64SME_B16F32, arm64SME_F32F32,
+    arm64SME_FA64, arm64WFXT);
   TArm64HwCaps = set of TArm64HwCap;
 
 {$ifdef CPUARM}
@@ -10509,9 +10515,9 @@ begin
     inc(p); // auxv is located after the last textual environment variable
     repeat
       if PtrUInt(p[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
-        PCardinalArray(@caps)[0] := PtrUInt(p[1])
+        PPtrUIntArray(@caps)[0] := PtrUInt(p[1])
       else if PtrUInt(p[0]) = AT_HWCAP2 then
-        PCardinalArray(@caps)[1] := PtrUInt(p[1]);
+        PPtrUIntArray(@caps)[1] := PtrUInt(p[1]);
       p := @p[2];
     until p[0] = nil;
   except
