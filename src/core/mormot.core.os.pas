@@ -7812,7 +7812,8 @@ var
   I, K, U, S: Int64;
 begin // return 'U:usr K:krn' percents on windows
   result[0] := #0;
-  RetrieveSystemTimes(I, K, U);
+  if not RetrieveSystemTimes(I, K, U) then
+    exit;
   dec(K, I); // raw KernelTime includes IdleTime with GetSystemTimes() WinAPI
   S := I + K + U;
   if S = 0 then
