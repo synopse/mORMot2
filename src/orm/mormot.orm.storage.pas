@@ -800,7 +800,7 @@ type
     // - consider using the overlaoded PUtf8Char/len method if you don't need this copy
     procedure LoadFromJson(const aJson: RawUtf8); overload;
     /// load the values from JSON data
-    procedure LoadFromJson(JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt); overload;
+    function LoadFromJson(JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt): boolean; overload;
     /// save the values into JSON data
     function SaveToJson(Expand: boolean): RawUtf8; overload;
     /// save the values into JSON data
@@ -847,7 +847,7 @@ type
     /// will reload all content from the current disk file
     // - any not saved modification will be lost (e.g. if Updatefile has not
     // been called since)
-    procedure ReloadFromFile;
+    function ReloadFromFile: boolean;
     /// retrieve the index in Items[] of a particular ID
     // - return -1 if this ID was not found
     // - use internally fast O(1) hashed search algorithm
@@ -3467,12 +3467,13 @@ begin
     [_CALLER[binary], fStoredClass, fCount, loaded.Stop, timer.Stop]);
 end;
 
-procedure TRestStorageInMemory.LoadFromJson(
-  JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt);
+function TRestStorageInMemory.LoadFromJson(
+  JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt): boolean;
 var
   T: TOrmTableJson;
   timer: TPrecisionTimer;
 begin
+  result := false;
   timer.Start;
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'LoadFromJson' {$endif});
   try
@@ -3486,7 +3487,7 @@ begin
     try
       if T.FieldIndexID < 0 then // no ID field -> load is impossible
         exit;
-      T.ToObjArray(fValue, fStoredClass);
+      result := T.ToObjArray(fValue, fStoredClass);
     finally
       T.Free;
     end;
@@ -4275,28 +4276,28 @@ begin
   fModified := true;
 end;
 
-procedure TRestStorageInMemory.ReloadFromFile;
+function TRestStorageInMemory.ReloadFromFile: boolean;
 var
   json: RawUtf8;
   stream: TStream;
 begin
-  if (fFileName <> '') and
-     FileExists(fFileName) then
+  result := false;
+  if fFileName = '' then
+    exit;
+  if fBinaryFile then
   begin
-    if fBinaryFile then
-    begin
-      stream := FileStreamSequentialRead(fFileName);
+    stream := FileStreamSequentialRead(fFileName);
+    if stream <> nil then
       try
-        LoadFromBinary(stream)
+        result := LoadFromBinary(stream)
       finally
         stream.Free;
       end;
-    end
-    else
-    begin
-      json := RawUtf8FromFile(fFileName);
-      LoadFromJson(pointer(json), length(json)); // buffer parsed in-place
-    end;
+  end
+  else
+  begin
+    json := RawUtf8FromFile(fFileName);
+    result := LoadFromJson(pointer(json), length(json)); // buffer parsed in-place
   end;
 end;
 
