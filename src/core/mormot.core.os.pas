@@ -3839,10 +3839,15 @@ function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
 // - returned KernelTime includes IdleTime, as with GetSystemTimes() WinAPI
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 
+/// return the system-wide time usage information as 'U:#.## K:#.##' percents
+// - calling RetrieveSystemTimes() on all platforms
+function RetrieveSystemTimesText: TShort23;
+
 /// return the system-wide time usage information
 // - on LINUX, retrieve /proc/loadavg or on OSX/BSD call libc getloadavg()
-// - on Windows, calls RetrieveSystemTimes() and return 'U:user K:kernel' percents
+// - on Windows, calls RetrieveSystemTimesText to return 'U:user K:kernel' text
 function RetrieveLoadAvg: TShort23;
+  {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
 /// retrieve low-level information about current memory usage
 // - as used e.g. by TSynMonitorMemory or GetMemoryInfoText
@@ -7801,6 +7806,24 @@ begin
   result := COMPILER_VERSION;
 end;
 {$endif PUREMORMOT2}
+
+function RetrieveSystemTimesText: TShort23;
+var
+  I, K, U, S: Int64;
+begin // return 'U:usr K:krn' percents on windows
+  result[0] := #0;
+  RetrieveSystemTimes(I, K, U);
+  dec(K, I); // raw KernelTime includes IdleTime with GetSystemTimes() WinAPI
+  S := I + K + U;
+  if S = 0 then
+    exit;
+  U := (U * 1000000) div S;
+  K := (K * 1000000) div S;
+  PCardinal(@result)^ := 2 + ord('U') shl 8 + ord(':') shl 16;
+  AppendShortCurr64(U, result, {fixeddecimals=}2);
+  AppendShort(' K:', result);
+  AppendShortCurr64(K, result, {fixeddecimals=}2);
+end;
 
 function GetMemoryInfoText: TShort31;
 var

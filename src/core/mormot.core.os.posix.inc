@@ -2675,7 +2675,7 @@ begin
     result := nil;
 end;
 
-function fpsysctlbynamehwstr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
+function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
   bsdsysctl(name, @temp, SizeOf(temp));
@@ -2794,6 +2794,7 @@ end;
 
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
+ // info[sbiUuid] := fpsysctlbynamestr('kern.uuid', tmp); // <> SMBios value :(
 end;
 
 {$endif OSFREEBSD}
@@ -4522,7 +4523,7 @@ begin
   {$ifdef OSDARWIN}
   if strscan(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
-  modname := fpsysctlbynamehwstr('machdep.cpu.brand_string', temp2);
+  modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
   {$endif OSDARWIN}
   FastSetString(BiosInfoText, beg, StrLen(beg));
   if modname = nil then

@@ -2289,21 +2289,8 @@ begin
 end;
 
 function RetrieveLoadAvg: TShort23;
-var
-  I, K, U, S: Int64;
-begin // return 'U:usr K:krn' percents on windows
-  result[0] := #0;
-  RetrieveSystemTimes(I, K, U);
-  dec(K, I); // raw KernelTime includes IdleTime with GetSystemTimes() WinAPI
-  S := I + K + U;
-  if S = 0 then
-    exit;
-  U := (U * 1000000) div S;
-  K := (K * 1000000) div S;
-  PCardinal(@result)^ := 2 + ord('U') shl 8 + ord(':') shl 16;
-  AppendShortCurr64(U, result, {fixeddecimals=}2);
-  AppendShort(' K:', result);
-  AppendShortCurr64(K, result, {fixeddecimals=}2);
+begin
+  result := RetrieveSystemTimesText;
 end;
 
 function DelayedGetProcessMemoryInfo: boolean;
