@@ -9169,23 +9169,21 @@ var
   F: THandle;
   Header: THash256Rec;
 begin
+  result := false;
   F := FileOpenSequentialRead(FileName);
   if not ValidHandle(F) then
-    result := false
-  else
-  begin
-    result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
-              (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
-              // don't check header 8..15 (may equal encrypted bytes 16..23)
-              (Header.b[21] = 64) and
-              (Header.b[22] = 32) and
-              (Header.b[23] = 32);
-    if result and
-       (PageSize <> nil) then
-      // header bytes 16..23 are always stored unencrypted
-      PageSize^ := integer(Header.b[16]) shl 8 + Header.b[17];
-    FileClose(F);
-  end;
+    exit;
+  result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
+            (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
+            // don't check header 8..15 (may equal encrypted bytes 16..23)
+            (Header.b[21] = 64) and
+            (Header.b[22] = 32) and
+            (Header.b[23] = 32);
+  if result and
+     (PageSize <> nil) then
+    // header bytes 16..23 are always stored unencrypted
+    PageSize^ := integer(Header.b[16]) shl 8 + Header.b[17];
+  FileClose(F);
 end;
 
 function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
@@ -9198,15 +9196,14 @@ begin
   F := FileOpenSequentialRead(FileName);
   if not ValidHandle(F) then
     exit;
-  if (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
-     // header bytes 8..15 are encrypted bytes 16..23
-     // header bytes 16..23 are stored unencrypted
-     (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
-     (Header.d1 <> SQLITE_FILE_HEADER128.Hi) and
-     (Header.b[21] = 64) and
-     (Header.b[22] = 32) and
-     (Header.b[23] = 32) then
-    result := true;
+  result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
+            // header bytes 8..15 are encrypted bytes 16..23
+            // header bytes 16..23 are stored unencrypted
+            (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
+            (Header.d1 <> SQLITE_FILE_HEADER128.Hi) and
+            (Header.b[21] = 64) and
+            (Header.b[22] = 32) and
+            (Header.b[23] = 32);
   FileClose(F);
 end;
 
