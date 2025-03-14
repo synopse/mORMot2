@@ -7839,10 +7839,14 @@ begin
     {$ifdef CPUINTELARM}
     sha3.Update(@CpuFeatures, SizeOf(CpuFeatures));
     {$endif CPUINTELARM}
+    // 256 random bytes salt, set at startup to avoid hash flooding of AesNiHash
+    {$ifdef USEAESNIHASH}
+    sha3.Update(AESNIHASHKEYSCHED_);
+    {$endif USEAESNIHASH}
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from RdRand32 + Rdtsc + Lecuyer + thread + startup OS random
+    // 512-bit from XorEntropyGetOsRandom256 + RdRand + Rdtsc + Lecuyer + thread
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)

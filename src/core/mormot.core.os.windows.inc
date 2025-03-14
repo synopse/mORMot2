@@ -2332,9 +2332,6 @@ begin
   end;
 end;
 
-function CoCreateGuid(out guid: THash128Rec): HRESULT;
-  stdcall; external 'ole32.dll';
-
 {$ifndef UNICODE} // 64-bit aware Windows API missing on FPC and oldest Delphi
 
 type
