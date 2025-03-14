@@ -2425,14 +2425,14 @@ type
 
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
 // - e.g. a MD5 digest, or an AES block
-function IsZero(const dig: THash128): boolean; overload;
+function IsZero({$ifdef FPC}constref{$else}const{$endif} dig: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose - and it is also branchless therefore fast
-function IsEqual(const A, B: THash128): boolean; overload;
+function IsEqual({$ifdef FPC}constref{$else}const{$endif} A, B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all 16 bytes of this 128-bit buffer with zero
@@ -2444,7 +2444,8 @@ procedure FillZero(out dig: THash128); overload;
 function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 
 /// add a 128-bit item in an array of such values
-function AddHash128(var Arr: THash128DynArray; const V: THash128; var Count: integer): PtrInt;
+function AddHash128(var Arr: THash128DynArray;
+  {$ifdef FPC}constref{$else}const{$endif} V: THash128; var Count: integer): PtrInt;
 
 /// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
 // - e.g. a SHA-1 digest
@@ -3277,7 +3278,7 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
 // - will call XorEntropyGetOsRandom256() once at process startup for Intel/AMD,
-// or each time on other CPUs with no RdRand32/Rdtsc opcodes
+// or each time on other CPUs with no RdRand32/Rdtsc opcodes (e.g. on ARM)
 // - the resulting output is to be hashed - e.g. with DefaultHasher128
 // - execution is fast and safe, but not secure enough for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
@@ -3772,7 +3773,7 @@ function crc32cHash(const b: TBytes): cardinal; overload;
 
 /// combine/reduce a 128-bit hash into a 64-bit hash
 // - e.g. from non cryptographic 128-bit hashers with linked lower/higher 64-bit
-function Hash128To64(const b: THash128): QWord;
+function Hash128To64({$ifdef FPC}constref{$else}const{$endif} b: THash128): QWord;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get maximum possible (worse) SynLZ compressed size
@@ -8459,14 +8460,14 @@ end;
 
 { ************ low-level types mapping binary structures }
 
-function IsZero(const dig: THash128): boolean;
+function IsZero({$ifdef FPC}constref{$else}const{$endif} dig: THash128): boolean;
 var
   a: TPtrIntArray absolute dig;
 begin
   result := a[0] or a[1] {$ifdef CPU32} or a[2] or a[3]{$endif}  = 0;
 end;
 
-function IsEqual(const A, B: THash128): boolean;
+function IsEqual({$ifdef FPC}constref{$else}const{$endif} A, B: THash128): boolean;
 var
   a_: TPtrIntArray absolute A;
   b_: TPtrIntArray absolute B;
@@ -8560,8 +8561,8 @@ end;
 
 {$endif CPU64}
 
-function AddHash128(var Arr: THash128DynArray; const V: THash128;
-  var Count: integer): PtrInt;
+function AddHash128(var Arr: THash128DynArray;
+  {$ifdef FPC}constref{$else}const{$endif} V: THash128; var Count: integer): PtrInt;
 begin
   result := Count;
   if result = length(Arr) then
@@ -11788,7 +11789,7 @@ begin
   result := crc32c(0, pointer(b), length(b));
 end;
 
-function Hash128To64(const b: THash128): QWord;
+function Hash128To64({$ifdef FPC}constref{$else}const{$endif} b: THash128): QWord;
 begin
   result := THash128Rec(b).L xor (THash128Rec(b).H * QWord(2685821657736338717));
 end;
