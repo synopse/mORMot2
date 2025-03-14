@@ -677,11 +677,11 @@ type
   protected
     fSession: TBinaryCookieGeneratorSessionID;
     fCreated: cardinal;
-    fGenerator: PBinaryCookieGenerator;
+    fGenerator: TBinaryCookieGenerator;
     fRecordTypeInfo: PRttiInfo;
-    fGeneratorOwned: boolean;
     fRecordData: pointer;
     fPublicUri: RawUtf8;
+    fGeneratorOwned: boolean;
   public
     /// initialize the protocol for a given Jwt
     // - if aExpirationMinutes is set, will own a new URI generator
@@ -706,7 +706,7 @@ type
     function NewUri(out SessionID: TBinaryCookieGeneratorSessionID;
       PRecordData: pointer = nil): RawUtf8; virtual;
     /// access to the low-level ephemeral URI generator
-    property Generator: PBinaryCookieGenerator
+    property Generator: TBinaryCookieGenerator
       read fGenerator;
     /// optional associated record, as recognized by ProcessHandshakeUri()
     // - is a pointer to a RecordTypeInfo record, owned by this instance
@@ -2556,8 +2556,7 @@ begin
   // initialize the generator and associated record RTTI
   if aExpirationMinutes <> 0 then
   begin
-    New(fGenerator);
-    fGenerator^.Init('uri', aExpirationMinutes);
+    fGenerator := TBinaryCookieGenerator.Create('uri', aExpirationMinutes);
     fGeneratorOwned := true;
   end;
   if (aRecordTypeInfo <> nil) and
@@ -2570,7 +2569,7 @@ destructor TWebSocketProtocolUri.Destroy;
 begin
   inherited Destroy;
   if fGeneratorOwned then
-    Dispose(fGenerator);
+    FreeAndNil(fGenerator);
   if fRecordData <> nil then
   begin
     if fRecordTypeInfo <> nil then
@@ -2598,7 +2597,7 @@ begin
     if (fRecordTypeInfo <> nil) and
        (fRecordData = nil) then
       fRecordData := AllocMem(fRecordTypeInfo.RecordSize);
-    fSession := fGenerator^.Validate(
+    fSession := fGenerator.Validate(
       bearer, fRecordData, fRecordTypeInfo, @fCreated);
   end;
   result := fSession <> 0;
@@ -2608,7 +2607,7 @@ function TWebSocketProtocolUri.NewUri(
   out SessionID: TBinaryCookieGeneratorSessionID;
   PRecordData: pointer): RawUtf8;
 begin
-  SessionID := fGenerator^.Generate(result, 0, PRecordData, fRecordTypeInfo);
+  SessionID := fGenerator.Generate(result, 0, PRecordData, fRecordTypeInfo);
   result := fPublicUri + result;
 end;
 
