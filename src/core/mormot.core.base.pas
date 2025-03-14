@@ -4028,7 +4028,7 @@ function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 /// convert any numerical Variant into a 64-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return the supplied DefaultValue
-function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
+function VariantToInt64Def(const V: Variant; DefaultValue: Int64 = 0): Int64;
 
 /// convert any numerical Variant into a floating point value
 function VariantToDouble(const V: Variant; var Value: double): boolean;
@@ -4046,7 +4046,7 @@ function VariantToBoolean(const V: Variant; var Value: boolean): boolean;
 /// convert any numerical Variant into an integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return the supplied DefaultValue
-function VariantToIntegerDef(const V: Variant; DefaultValue: integer): integer; overload;
+function VariantToIntegerDef(const V: Variant; DefaultValue: integer = 0): integer; overload;
 
 /// convert an UTF-8 encoded text buffer into a variant RawUtf8 varString
 procedure RawUtf8ToVariant(Txt: PUtf8Char; TxtLen: integer; var Value: variant); overload;

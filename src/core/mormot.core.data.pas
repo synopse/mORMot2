@@ -6295,7 +6295,7 @@ procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
 var
   temp: RawUtf8;
 begin
-  // not very fast, but creates valid JSON
+  // not very fast, but creates valid JSON to be embedded in the binary output
   _VariantSaveJson(Data^, twJsonEscape, temp);
   Dest.Write(temp);
 end;

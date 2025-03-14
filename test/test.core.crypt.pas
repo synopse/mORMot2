@@ -3615,9 +3615,11 @@ var
   i: PtrInt;
   bak: RawUtf8;
   timer: TPrecisionTimer;
+  r, r2: TJwtContent;
   cook: array of RawUtf8;
   cookid: array of TBinaryCookieGeneratorSessionID;
 begin
+  // validate and benchmark a plain cookie with no record
   SetLength(cook, 16384);
   SetLength(cookid, length(cook));
   gen := TBinaryCookieGenerator.Create;
@@ -3648,6 +3650,39 @@ begin
     for i := 0 to high(cook) do
       CheckEqual(gen.Validate(cook[i]), cookid[i], 'loaded');
     NotifyTestSpeed('validate', length(cook), 0, @timer);
+  finally
+    gen.Free;
+  end;
+  // validate a cookie with its associated complex binary record
+  SetLength(cook, 1024);
+  gen := TBinaryCookieGenerator.Create;
+  try
+    FillCharFast(r, SizeOf(r), 0);
+    for i := 0 to high(cook) do
+    begin
+      UInt32ToUtf8(i, r.reg[jrcIssuer]);
+      r.data.InitObject([r.reg[jrcIssuer], i]);
+      r.id.Value := i;
+      cookid[i] := gen.Generate(cook[i], 0, @r, TypeInfo(TJwtContent));
+      r.data.Clear; // to be reused in the loop
+    end;
+    for i := 0 to high(cook) - 1 do
+      Check(cookid[i] <> cookid[i + 1]);
+    for i := 0 to high(cook) do
+      Check(cookid[i] <> 0);
+    for i := 0 to high(cook) do
+    begin
+      // no Finalize(r); done to verify that RecordLoadBinary() does it
+      r.id.Value := 0;
+      CheckEqual(gen.Validate(cook[i], @r, TypeInfo(TJwtContent)),
+        cookid[i], 'gen3');
+      CheckEqual(r.id.Value, i);
+      CheckEqual(GetInteger(pointer(r.reg[jrcIssuer])), i);
+      Check(r.data.IsObject, 'obj');
+      CheckEqual(r.data.Count, 1);
+      CheckEqual(r.data.Names[0], r.reg[jrcIssuer]);
+      CheckEqual(VariantToIntegerDef(r.data.Values[0], 0), i);
+    end;
   finally
     gen.Free;
   end;
