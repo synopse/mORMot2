@@ -1394,7 +1394,7 @@ type
   /// a 31-bit increasing sequence used for TBinaryCookieGenerator sessions
   TBinaryCookieGeneratorSessionID = type integer;
 
-  /// TBinaryCookieGenerator execution context - 192-bit to be persisted on disk
+  /// TBinaryCookieGenerator execution context - to be persisted on disk
   TBinaryCookieContext = packed record
   public
     /// identify this data structure on disk - should equal 1 now
@@ -1405,6 +1405,8 @@ type
     SessionSequenceStart: TBinaryCookieGeneratorSessionID;
     /// 32-bit random salt used for anti-fuzzing via crc32c()
     CrcSalt: cardinal;
+    /// identify deleted cookies as 32-bit low = id, 32-bit high = expires
+    Invalid: TInt64DynArray;
     /// 128-bit secret information, used for AES-GCM encoding of the cookie
     CryptKey: THash128;
   end;
@@ -1421,6 +1423,8 @@ type
     fContext: TBinaryCookieContext;
     fCookieName: RawUtf8;
     fDefaultTimeOutMinutes: cardinal;
+    fInvalidCount: integer; // how many items are currently in f
+    fNextUnixTimeMinimalInvalidateCheck: cardinal;
     fAes: TAesGcmEngine;
   public
     /// initialize ephemeral temporary cookie generation
@@ -1441,9 +1445,11 @@ type
       PRecordTypeInfo: PRttiInfo = nil): TBinaryCookieGeneratorSessionID;
     ///  decode a base64uri cookie and optionally fill an associated record
     // - return the associated session/sequence number, 0 on error
+    // - Invalidate=true would force this cookie to be rejected in the future,
+    // by adding it into an internal in-memory list
     function Validate(const Cookie: RawUtf8; PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
-      PIssued: PUnixTime = nil): TBinaryCookieGeneratorSessionID;
+      PIssued: PUnixTime = nil; Invalidate: boolean = false; Now32: cardinal = 0): TBinaryCookieGeneratorSessionID;
     /// allow currently available cookies to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
@@ -6243,8 +6249,8 @@ type
     head: packed record   // 256-bit header (minimum cookie size if no record)
       crc: cardinal;      // = 32-bit naive anti-fuzzing crc32c
       session: cardinal;  // = jti claim sequence
+      expires: cardinal;  // = exp claim - should be just after session
       issued: cardinal;   // = iat claim (UnixTimeMinimalUtc)
-      expires: cardinal;  // = exp claim
       gmac: THash128;     // = 128-bit AES-GCM tag
     end;
     data: array[0..2047] of byte; // optional AES-CTR record serialization
@@ -6300,11 +6306,10 @@ begin
 end;
 
 function TBinaryCookieGenerator.Validate(const Cookie: RawUtf8;
-  PRecordData: pointer; PRecordTypeInfo: PRttiInfo;
-  PExpires, PIssued: PUnixTime): TBinaryCookieGeneratorSessionID;
+  PRecordData: pointer; PRecordTypeInfo: PRttiInfo; PExpires, PIssued: PUnixTime;
+  Invalidate: boolean; Now32: cardinal): TBinaryCookieGeneratorSessionID;
 var
   clen, len: integer;
-  now: cardinal;
   ccend: PAnsiChar;
   cc: TCookieContent; // local working buffer on stack (no memory allocation)
 begin
@@ -6321,9 +6326,10 @@ begin
      (cc.head.expires <= cc.head.issued) or
      (crc32c(fContext.CrcSalt, @cc.head.session, len - 4) <> cc.head.crc) then
     exit; // simple but efficient anti-fuzzing detection
-  now := UnixTimeMinimalUtc;
-  if (cc.head.issued > now) or
-     (cc.head.expires < now) then
+  if Now32 = 0 then
+    Now32 := UnixTimeMinimalUtc;
+  if (cc.head.issued > Now32) or
+     (cc.head.expires <= Now32) then
     exit;
   dec(len, SizeOf(cc.head));
   fSafe.Lock;
@@ -6332,6 +6338,22 @@ begin
        not fAes.Add_AAD(@cc.head.session, 3 * SizeOf(cardinal)) or
        not fAes.Decrypt(@cc.data, @cc.data, len, @cc.head.gmac, SizeOf(THash128)) then
       exit;
+    if Invalidate then // expired cookies are stored as 64-bit session + expire
+    begin
+      if AddSortedInt64(fContext.Invalid, fInvalidCount, PInt64(@cc.head.session)^) < 0 then
+        exit; // this session was already invalidated
+    end
+    else if fInvalidCount <> 0 then
+    begin
+      if Now32 >= fNextUnixTimeMinimalInvalidateCheck then
+      begin // cleanup of clearly deprecated invalid sessions once per minute
+        fNextUnixTimeMinimalInvalidateCheck := Now32 + SecsPerMin;
+        RemoveSortedInt64SmallerThan(fContext.Invalid, fInvalidCount, Int64(Now32) shl 32);
+      end;
+      if FastFindInt64Sorted(pointer(fContext.Invalid), fInvalidCount - 1,
+           PInt64(@cc.head.session)^) >= 0 then // branchless O(log(n)) search
+        exit;
+    end;
   finally
     fSafe.UnLock;
   end;
@@ -6339,32 +6361,36 @@ begin
     PExpires^ := QWord(cc.head.expires) + UNIXTIME_MINIMAL;
   if PIssued <> nil then
     PIssued^ := QWord(cc.head.issued) + UNIXTIME_MINIMAL;
-  if (PRecordData = nil) or
-     (PRecordTypeInfo = nil) then
-    result := cc.head.session
-  else if len <> 0 then
+  if (PRecordData <> nil) and
+     (PRecordTypeInfo <> nil) then
   begin
+    if len = 0 then
+      exit; // expects a record, but no associated data
     ccend := PAnsiChar(@cc.data) + len;
     if PtrUInt(ccend - BinaryLoad(PRecordData, @cc.data, PRecordTypeInfo, nil,
-         ccend, rkRecordTypes)) <= AesBlockMod then
-      result := cc.head.session;
+         ccend, rkRecordTypes)) > AesBlockMod then
+      exit;
   end;
+  result := cc.head.session;
 end;
 
 function TBinaryCookieGenerator.Save: RawUtf8;
 begin
-  result := BinToBase64(@fContext, SizeOf(fContext));
+  SetLength(fContext.Invalid, fInvalidCount);
+  result := RecordSaveBase64(fContext, TypeInfo(TBinaryCookieContext));
 end;
 
 function TBinaryCookieGenerator.Load(const Saved: RawUtf8): boolean;
 begin
-  result := (self <> nil) and
-            Base64ToBin(Saved, @fContext, SizeOf(fContext)) and
-            (fContext.Version = 1) and
-            (fContext.SessionSequenceStart <> 0) and
-            (fContext.SessionSequence > fContext.SessionSequenceStart) and
-            (fContext.CrcSalt <> 0) and
-            not IsZero(fContext.CryptKey);
+  Finalize(fContext);
+  result := RecordLoadBase64(pointer(Saved), length(Saved), fContext,
+      TypeInfo(TBinaryCookieContext), false, @JSON_[mFast]) and
+    (fContext.Version = 1) and
+    (fContext.SessionSequenceStart <> 0) and
+    (fContext.SessionSequence > fContext.SessionSequenceStart) and
+    (fContext.CrcSalt <> 0) and
+    not IsZero(fContext.CryptKey);
+  fInvalidCount := length(fContext.Invalid);
   if result then
     fAes.Init(fContext.CryptKey, 128, {avx=}false);
 end;
