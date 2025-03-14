@@ -4923,6 +4923,8 @@ var
   {$ifdef USEAESNI64} ctr, {$endif USEAESNI64}
   blocks: cardinal;
 begin
+  if ILen = 0 then
+    exit;
   b_pos := state.blen;
   inc(state.blen, ILen);
   state.blen := state.blen and AesBlockMod;
@@ -4982,20 +4984,26 @@ end;
 procedure TAesGcmEngine.internal_auth(ctp: PByte; ILen: PtrUInt;
   var ghv: TAesBlock; var gcnt: TQWordRec);
 var
-  b_pos: PtrUInt;
+  b_pos, tomove: PtrUInt;
 begin
-  b_pos := gcnt.L and AesBlockMod;
+  if ILen = 0 then
+    exit;
+  b_pos := PPtrUInt(@gcnt)^ and AesBlockMod;
   inc(gcnt.V, ILen);
   if (b_pos = 0) and
      (gcnt.V <> 0) then
     gf_mul_h(self, ghv); // maybe CLMUL
-  while (ILen > 0) and
-        (b_pos < SizeOf(TAesBlock)) do
+  tomove := SizeOf(TAesBlock) - b_pos;
+  if tomove <> 0 then
   begin
-    ghv[b_pos] := ghv[b_pos] xor ctp^;
-    inc(b_pos);
-    inc(ctp);
-    dec(ILen);
+    if tomove > ILen then
+      tomove := ILen;
+    XorMemory(@ghv[b_pos], pointer(ctp), tomove);
+    dec(ILen, tomove);
+    if ILen = 0 then
+      exit;
+    inc(b_pos, tomove);
+    inc(ctp, tomove);
   end;
   while ILen >= SizeOf(TAesBlock) do
   begin
@@ -5003,19 +5011,23 @@ begin
     XorBlock16(@ghv, pointer(ctp));
     inc(PAesBlock(ctp));
     dec(ILen, SizeOf(TAesBlock));
+    if ILen = 0 then
+      exit;
   end;
-  while ILen > 0 do
-  begin
-    if b_pos = SizeOf(TAesBlock) then
-    begin
-      gf_mul_h(self, ghv); // maybe CLMUL
-      b_pos := 0;
-    end;
-    ghv[b_pos] := ghv[b_pos] xor ctp^;
-    inc(b_pos);
-    inc(ctp);
-    dec(ILen);
-  end;
+  if ILen <> 0 then
+    repeat
+      if b_pos = SizeOf(TAesBlock) then
+      begin
+        gf_mul_h(self, ghv); // maybe CLMUL
+        b_pos := 0;
+      end;
+      ghv[b_pos] := ghv[b_pos] xor ctp^;
+      dec(ILen);
+      if ILen = 0 then
+        exit;
+      inc(b_pos);
+      inc(ctp);
+    until false;
 end;
 
 {$ifdef USEGCMAVX}
@@ -5187,7 +5199,7 @@ begin
     inc(state.atx_cnt.V, ILen);
     ILen := ILen shr AesBlockShift;
     repeat
-      // single-pass loop optimized e.g. for PKCS7 padding without SSE4.1
+      // single-pass loop e.g. for PKCS7 padding without SSE4.1 (e.g. on ARM)
       {%H-}GCM_IncCtr(TAesContext(aes).iv.b);
       TAesContext(aes).DoBlock(aes, TAesContext(aes).iv,
         TAesContext(aes).buf); // buf=AES(iv) maybe AES-NI
@@ -5213,20 +5225,21 @@ function TAesGcmEngine.Decrypt(ctp, ptp: pointer; ILen: PtrInt;
 var
   tag: TAesBlock;
 begin
-  result := true;
-  if ILen <= 0 then
-    exit;
   result := false;
-  if (ptp = nil) or
-     (ctp = nil) or
+  if (ILen < 0) or
+     ((ILen <> 0) and
+       ((ptp = nil) or
+        (ctp = nil))) or
      (flagFinalComputed in state.flags) then
     exit;
   {$ifdef USEGCMAVX}
-  if flagAVX in state.flags then
+  if (flagAVX in state.flags) and
+     (ILen <> 0) then
     AvxProcess(ctp, ptp, ILen, {encrypt=}false)
   else
   {$endif USEGCMAVX}
-  if (ILen and AesBlockMod = 0) and
+  if (ILen <> 0) and
+     (ILen and AesBlockMod = 0) and
      {$ifdef USEAESNI64} // faster with 8x interleaved internal_crypt()
      not (aesNiSse41 in TAesContext(aes).Flags) and
      {$endif USEAESNI64}
