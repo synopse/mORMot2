@@ -3466,10 +3466,35 @@ begin
     SharedRandom.Fill(Buffer, Len);
 end;
 
+{$if defined(cpuarm) or defined(cpuaarch64) or defined(iphonesim)}
+const // FPC RTL defined wrong field lengths for TStatfs in darwin/ptypes.inc
+  MFSTYPENAMELEN = 16;
+
+type // see https://keith.github.io/xcode-man-pages/statfs.2.html
+  TStatfs = record
+    bsize: cuint32;
+    iosize: cint32;
+    blocks: cuint64;
+    bfree: cuint64;
+    bavail: cuint64;
+    files: cuint64;
+    ffree: cuint64;
+    fsid: fsid_t;
+    owner: uid_t;
+    ftype: cuint32;
+    fflags: cuint32;
+    fssubtype: cuint32;
+    fstypename:  array[0 .. MFSTYPENAMELEN - 1] of AnsiChar;
+    mountpoint:  array[0 .. PATH_MAX - 1]       of AnsiChar;
+    mntfromname: array[0 .. PATH_MAX - 1]       of AnsiChar;
+    reserved:    array[0 .. 7] of cuint32;
+  end;
+{$ifend}
+
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord): boolean;
 var
-  fs: tstatfs;
+  fs: TStatfs; // TStatfs may be redefined above for darwin aarch64
 begin
   if aDriveFolderOrFile = '' then
     aDriveFolderOrFile := '.';
@@ -3535,17 +3560,18 @@ end;
 const
   MNT_WAIT = 1;
 
-// getmntinfo() is not thread-safe: we prefer getfsstat() dual call
-function getfsstat(statfs: pstatfs; bufsize: clong; mode: cint): cint;
+// getmntinfo() is not thread-safe: we favor getfsstat() dual call
+function getfsstat(statfs: pointer; bufsize: clong; mode: cint): cint;
   cdecl; external clib name 'getfsstat';
 
 function GetDiskPartitions: TDiskPartitions;
 var
-  fs: pstatfs;
+  fs: ^TStatfs; // TStatfs may be redefined above for darwin aarch64
   max, n: PtrInt;
   all: array of TStatFs;
 begin
   result := nil;
+  fs := nil;
   max := getfsstat(nil, 0, MNT_WAIT); // return the number to allocate
   if max <= 0 then
     exit;
