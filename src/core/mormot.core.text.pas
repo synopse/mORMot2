@@ -4289,13 +4289,14 @@ begin
   if twoStreamIsRawByteString in fCustomOptions then
     TRawByteStringStream(fStream).GetAsText(fInitialStreamPosition, Len, result)
   else if fStream.InheritsFrom(TCustomMemoryStream) then
-    with TCustomMemoryStream(fStream) do
-      FastSetString(result, PAnsiChar(Memory) + fInitialStreamPosition, Len)
+    FastSetString(result, PAnsiChar(TCustomMemoryStream(fStream).Memory) +
+                            fInitialStreamPosition, Len)
   else
   begin
     FastSetString(result, Len);
     fStream.Seek(fInitialStreamPosition, soBeginning);
-    fStream.Read(pointer(result)^, Len);
+    if not StreamReadAll(fStream, pointer(result), Len) then
+      result := '';
   end;
   if reformat <> jsonCompact then
   begin
