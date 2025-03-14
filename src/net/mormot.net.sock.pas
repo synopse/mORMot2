@@ -6117,7 +6117,7 @@ begin
   pos := 0;
   repeat
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
-    if rd = 0 then
+    if rd <= 0 then
       break; // reached the end of the stream
     TrySndLow(pointer(chunk), rd, @result); // error if result <> nrOk
     if aCheckRecv and  // always check for any response, e.g. on closed connection

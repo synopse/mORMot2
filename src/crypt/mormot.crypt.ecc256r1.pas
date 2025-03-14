@@ -1934,7 +1934,7 @@ begin
       // include Info content from the stream
       result := (s.Read(Info, 4) = 4) and
                 (Info.DataLen <= SizeOf(Info.Data)) and
-                (s.Read(Info.Data, Info.DataLen) = Info.DataLen);
+                StreamReadAll(s, @Info.Data, Info.DataLen);
 end;
 
 

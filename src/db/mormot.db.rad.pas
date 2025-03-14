@@ -586,11 +586,7 @@ begin
   begin
     strm := f.DataSet.CreateBlobStream(f, bmRead);
     try
-      if strm.Size > 0 then
-      begin
-        SetLength(result, strm.Size);
-        strm.Read(pointer(result)^, strm.Size);
-      end;
+      result := StreamToRawByteString(strm);
     finally
       strm.Free;
     end;
