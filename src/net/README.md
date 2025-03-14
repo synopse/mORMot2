@@ -111,7 +111,7 @@ A Private Relay client should connect to a Public Relay Server, probably behind 
 
 ### mormot.net.rtsphttp
 
-RTSP Stream Tunnelling over HTTP as defined by Apple at https://goo.gl/CX6VA3
+RTSP Stream Tunnelling over HTTP as defined by Apple at https://web.archive.org/web/20090706123224/developer.apple.com/quicktime/icefloe/dispatch028.html
 - Low-level HTTP and RTSP Connections
 - RTSP over HTTP Tunnelling 
 

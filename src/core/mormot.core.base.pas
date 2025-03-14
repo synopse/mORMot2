@@ -11688,7 +11688,7 @@ procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var
   h: THash128Rec absolute crc;
   h1, h2: cardinal;
-begin // see https://goo.gl/Pls5wi
+begin // // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
   h1 := crc32c(0, buf, len);
   h2 := crc32c(h1, buf, len);
   h.i0 := h1;
@@ -11704,7 +11704,7 @@ procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
 var
   h: THash256Rec absolute crc;
   h1, h2: cardinal;
-begin // see https://goo.gl/Pls5wi
+begin // see // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
   h1 := crc32c(0, buf, len);
   h2 := crc32c(h1, buf, len);
   h.i0 := h1;

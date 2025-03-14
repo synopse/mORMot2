@@ -9758,7 +9758,7 @@ end;
 
 procedure crc256cmix(h1, h2: cardinal; h: PCardinalArray);
 begin
-  // see https://goo.gl/Pls5wi
+  // see // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
   h^[0] := h1;
   inc(h1, h2);
   h^[1] := h1;

@@ -6,7 +6,7 @@ unit mormot.net.rtsphttp;
 {
   *****************************************************************************
 
-   RTSP Stream Tunnelling over HTTP as defined by Apple at https://goo.gl/CX6VA3
+   RTSP Stream Tunnelling over HTTP as defined by Apple
    - Low-level HTTP and RTSP Connections
    - RTSP over HTTP Tunnelling 
 
@@ -14,6 +14,7 @@ unit mormot.net.rtsphttp;
 
   Encapsulate a RTSP TCP/IP duplex video stream into two HTTP links,
   one POST for upgoing commands, and one GET for downloaded video.
+  https://web.archive.org/web/20090706123224/developer.apple.com/quicktime/icefloe/dispatch028.html
 
   Thanks to TAsyncServer, it can handle thousands on concurrent streams,
   with minimal resources, in a cross-platform way.
@@ -80,8 +81,9 @@ type
   /// implements RTSP over HTTP asynchronous proxy
   // - the HTTP transport is built from two separate HTTP GET and POST requests
   // initiated by the client; the server then binds the connections to form a
-  // virtual full-duplex connection - see https://goo.gl/CX6VA3 for reference
-  // material about this horrible, but widely accepted, Apple hack
+  // virtual full-duplex connection - see for reference material about this
+  // horrible, but widely accepted, Apple hack:
+  // https://web.archive.org/web/20090706123224/developer.apple.com/quicktime/icefloe/dispatch028.html
   TRtspOverHttpServer = class(TAsyncServer)
   protected
     fRtspServer, fRtspPort: RawUtf8;

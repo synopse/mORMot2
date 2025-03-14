@@ -4530,8 +4530,8 @@ end;
 procedure TSynBloomFilter.Insert(aValue: pointer; aValueLen: integer);
 var
   h: integer;
-  h1, h2: cardinal; // https://goo.gl/Pls5wi
-begin
+  h1, h2: cardinal;
+begin // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
   if (self = nil) or
      (aValueLen <= 0) or
      (fBits = 0) then
@@ -4563,7 +4563,7 @@ end;
 function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
 var
   h: integer;
-  h1, h2: cardinal; // adding h2 is enough and safe - see https://goo.gl/Pls5wi
+  h1, h2: cardinal; // adding h2 is enough and safe - see pdf above
 begin
   result := false;
   if (self = nil) or
