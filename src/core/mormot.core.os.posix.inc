@@ -712,10 +712,20 @@ function mach_continuous_time: UInt64;
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
   cdecl external clib name 'mach_timebase_info';
 
+function host_processor_info(host, flavor: cint; var proccount: cardinal;
+  var info: PCardinalArray; var infocount: cardinal): cint;
+  cdecl external '_host_processor_info';
+
+function mach_host_self: cint;
+  cdecl external '_mach_host_self';
+
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
   mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
+
+const
+  PROCESSOR_CPU_LOAD_INFO = 2;
 
 procedure machtimetonanosec(var Value: Int64); inline;
 begin
@@ -2713,67 +2723,15 @@ begin
   AppendShort(TwoDigits(avg[2]), result);
 end; // we didn't use AppendShortCurr64() because of expected rounding
 
-{$ifdef OSDARWIN}
-
-const
-  PROCESSOR_CPU_LOAD_INFO = 2;
-
-function host_processor_info(host, flavor: cint; var proccount: cardinal;
-  var info: PCardinalArray; var infocount: cardinal): cint;
-  cdecl external '_host_processor_info';
-
-function mach_host_self: cint;
-  cdecl external '_mach_host_self';
-
-function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
-var
-  proccount, infocount: cardinal;
-  info: PCardinalArray; // per User/System/Idle/Nice quad
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
-  result := false;
-  IdleTime := 0;
-  KernelTime := 0;
-  UserTime := 0;
-  proccount := 0;
-  infocount := 0;
-  info := nil;
-  if (host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
-       proccount, info, infocount) <> 0) or
-     (proccount = 0) or
-     //(proccount <> SystemInfo.dwNumberOfProcessors) or
-     (infocount <> proccount * 4) or
-     (info = nil) then
-    exit;
-  repeat
-    //writeln('U:',info[0],' S:', info[1],' I:', info[2],' N:', info[3]);
-    inc(UserTime,   info[0] + info[3]);  // CPU_STATE_USER + CPU_STATE_NICE
-    inc(KernelTime, info[1]);            // CPU_STATE_SYSTEM
-    inc(IdleTime,   info[2]);            // CPU_STATE_IDLE
-    info := @info[4];
-    dec(proccount);
-  until proccount = 0;
-  inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
-  result := (UserTime + KernelTime) <> 0;
-  //writeln('I:',IdleTime,',K:',KernelTime,',U:',UserTime,'  result=',result);
+  FillCharFast(info, SizeOf(info), 0);
+  info.memtotal := SystemMemorySize; // retrieved at startup
+  info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
+  result := info.memtotal <> 0;// avoid div per 0 exception
+  if result then
+    info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
 end;
-
-{$else}
-function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
-var
-  times: array[0..4] of clong;
-begin
-  // on BSD, use kern.cp_time 0=user/1=nice/2=system/3=interrupt/4=idle values
-  // see https://man.openbsd.org/sysctl.2#KERN_CPTIME~2
-  // - note: this does not work on MacOS - we will use host_processorinfo() instead
-  // https://freebsd-hackers.freebsd.narkive.com/DBF0kxOC/cpu-utilization-break-down-via-sysctl#post3
-  FillCharFast(times, SizeOf(times), 0);
-  bsdsysctl('kern.cp_time', @times, SizeOf(times));
-  UserTime   := times[0] + times[1];
-  KernelTime := times[2] + times[3] + times[4]; // krn includes idl as on Windows
-  IdleTime   := times[4];
-  result := (UserTime + KernelTime) <> 0;
-end;
-{$endif OSDARWIN}
 
 {$ifdef OSFREEBSD}
 
@@ -2830,6 +2788,14 @@ begin
         info[id] := TrimU(tmp);
 end;
 
+type
+  TBsdProcTimes = array[0 .. 4] of clong; // user/nice/system/int/idle
+
+procedure BsdProcTimes(var times: TBsdProcTimes);
+begin
+  bsdsysctl('kern.cp_time', @times, SizeOf(times));
+end;
+
 {$else}
 
 // help is needed to implement those on buggy Mac OS
@@ -2854,15 +2820,57 @@ end;
 
 {$endif OSFREEBSD}
 
-function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+{$ifdef OSDARWIN}
+
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+var
+  proccount, infocount: cardinal;
+  info: PCardinalArray; // per User/System/Idle/Nice quad
 begin
-  FillCharFast(info, SizeOf(info), 0);
-  info.memtotal := SystemMemorySize; // retrieved at startup
-  info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
-  result := info.memtotal <> 0;// avoid div per 0 exception
-  if result then
-    info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
+  result := false;
+  IdleTime := 0;
+  KernelTime := 0;
+  UserTime := 0;
+  proccount := 0;
+  infocount := 0;
+  info := nil;
+  if (host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
+       proccount, info, infocount) <> 0) or
+     (proccount = 0) or
+     //(proccount <> SystemInfo.dwNumberOfProcessors) or
+     (infocount <> proccount * 4) or
+     (info = nil) then
+    exit;
+  repeat
+    //writeln('U:',info[0],' S:', info[1],' I:', info[2],' N:', info[3]);
+    inc(UserTime,   info[0] + info[3]);  // CPU_STATE_USER + CPU_STATE_NICE
+    inc(KernelTime, info[1]);            // CPU_STATE_SYSTEM
+    inc(IdleTime,   info[2]);            // CPU_STATE_IDLE
+    info := @info[4];
+    dec(proccount);
+  until proccount = 0;
+  inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
+  result := (UserTime + KernelTime) <> 0;
+  //writeln('I:',IdleTime,',K:',KernelTime,',U:',UserTime,'  result=',result);
 end;
+
+{$else}
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+var
+  times: TBsdProcTimes;
+begin
+  // on BSD, use kern.cp_time 0=user/1=nice/2=system/3=interrupt/4=idle values
+  // see https://man.openbsd.org/sysctl.2#KERN_CPTIME~2
+  // - note: this does not work on MacOS - we will use host_processorinfo() instead
+  // https://freebsd-hackers.freebsd.narkive.com/DBF0kxOC/cpu-utilization-break-down-via-sysctl#post3
+  FillCharFast(times, SizeOf(times), 0);
+  BsdProcTimes(times);
+  UserTime   := times[0] + times[1];
+  KernelTime := times[2] + times[3] + times[4]; // krn includes idl as on Windows
+  IdleTime   := times[4];
+  result := (UserTime + KernelTime) <> 0;
+end;
+{$endif OSDARWIN}
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
