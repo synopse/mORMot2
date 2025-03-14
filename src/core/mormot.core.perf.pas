@@ -3566,24 +3566,27 @@ end;
 
 { ************ Operating System Monitoring }
 
-function FeaturesToText(Info: PRttiInfo; const Features;
-  const Sep: RawUtf8; UnderscorePos: integer): RawUtf8;
+function FeaturesToText(Info: PRttiInfo; Features: pointer;
+  const Sep: RawUtf8): RawUtf8;
 var
-  f, max: integer;
-  List: PShortString;
+  f, min, max: integer;
+  ps: PShortString;
 begin
   result := '';
-  max := GetEnumType(Info, List);
-  for f := 0 to max do
+  Info^.SetEnumType(ps, min, max);
+  for f := min to max do
   begin
-    if GetBitPtr(@Features, f) and
-       (List^[UnderscorePos] <> '_') then
+    if GetBitPtr(Features, f) and
+       (ps^[1] <> '_') then // ignore e.g. _c15 or _63
     begin
       if result <> '' then
-        result := result + Sep;
-      result := result + RawUtf8(copy(List^, UnderscorePos, 20));
+        Append(result, Sep);
+      min := 1;
+      while not (ps^[min] in ['A' .. 'Z']) do
+        inc(min);
+      AppendStr(result, copy(ps^, min, 100));
     end;
-    inc(PByte(List), PByte(List)^ + 1); // next
+    inc(PByte(ps), PByte(ps)^ + 1); // next
   end;
 end;
 
@@ -3591,21 +3594,21 @@ function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   aIntelCPUFeatures: TIntelCpuFeatures; const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
-    TypeInfo(TIntelCpuFeature), aIntelCPUFeatures, Sep, 3);
+    TypeInfo(TIntelCpuFeatures), @aIntelCPUFeatures, Sep);
 end;
 
 function ToText(const aArm32CPUFeatures: TArm32HwCaps;
   const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
-    TypeInfo(TArm32HwCap), aArm32CPUFeatures, Sep, 6);
+    TypeInfo(TArm32HwCaps), @aArm32CPUFeatures, Sep);
 end;
 
 function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
    aArm64CPUFeatures: TArm64HwCaps; const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
-    TypeInfo(TArm64HwCap), aArm64CPUFeatures, Sep, 6);
+    TypeInfo(TArm64HwCaps), @aArm64CPUFeatures, Sep);
 end;
 
 function SystemInfoJson: RawUtf8;

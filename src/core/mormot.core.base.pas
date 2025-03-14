@@ -2695,12 +2695,12 @@ type
   TIntelCpuFeature = (
    { CPUID EAX=1 into EDX, ECX }
    cfFPU,  cfVME,   cfDE,   cfPSE,   cfTSC,  cfMSR, cfPAE,  cfMCE,
-   cfCX8,  cfAPIC,  cf_d10, cfSEP,   cfMTRR, cfPGE, cfMCA,  cfCMOV,
-   cfPAT,  cfPSE36, cfPSN,  cfCLFSH, cf_d20, cfDS,  cfACPI, cfMMX,
+   cfCX8,  cfAPIC,  _d10, cfSEP,   cfMTRR, cfPGE, cfMCA,  cfCMOV,
+   cfPAT,  cfPSE36, cfPSN,  cfCLFSH, _d20, cfDS,  cfACPI, cfMMX,
    cfFXSR, cfSSE,   cfSSE2, cfSS,    cfHTT,  cfTM,  cfIA64, cfPBE,
    cfSSE3, cfCLMUL, cfDS64, cfMON,   cfDSCPL, cfVMX,  cfSMX,   cfEST,
    cfTM2,  cfSSSE3, cfCID,  cfSDBG,  cfFMA,   cfCX16, cfXTPR,  cfPDCM,
-   cf_c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
+   _c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS,   cfOSXS,  cfAVX,   cfF16C, cfRAND,  cfHYP,
    { extended features CPUID EAX=7,ECX=0 into EBX, ECX, EDX }
    cfFSGS, cfTSCADJ, cfSGX, cfBMI1, cfHLE, cfAVX2, cfFDPEO, cfSMEP,
@@ -2709,22 +2709,22 @@ type
    cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA,
    cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE,
    cfWAITPKG, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
-   cfAVX512BITALG, cfTMEEN, cfAVX512VPC, cf_c15, cfFLP, cfMPX0, cfMPX1,
-   cfMPX2, cfMPX3, cfMPX4, cfRDPID, cfKL, cfBUSLOCK, cfCLDEMOTE, cf_c26,
-   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cfSGXKEYS,
-   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cfUINTR, cf_d6, cf_d7, cfAVX512VP2I,
-   cfSRBDS, cfMDCLR, cfTSXABRT, cf_d12, cfTSXFA, cfSER, cfHYBRID,
-   cfTSXLDTRK, cf_d17, cfPCFG, cfLBR, cfIBT, cf_d21, cfAMXBF16, cfAVX512FP16,
+   cfAVX512BITALG, cfTMEEN, cfAVX512VPC, _c15, cfFLP, cfMPX0, cfMPX1,
+   cfMPX2, cfMPX3, cfMPX4, cfRDPID, cfKL, cfBUSLOCK, cfCLDEMOTE, _c26,
+   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, _d0, cfSGXKEYS,
+   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cfUINTR, _d6, _d7, cfAVX512VP2I,
+   cfSRBDS, cfMDCLR, cfTSXABRT, _d12, cfTSXFA, cfSER, cfHYBRID,
+   cfTSXLDTRK, _d17, cfPCFG, cfLBR, cfIBT, _d21, cfAMXBF16, cfAVX512FP16,
    cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD,
    { extended features CPUID EAX=7,ECX=1 into EAX, EDX }
    cfSHA512, cfSM3, cfSM4, cfRAOINT, cfAVXVNNI, cfAVX512BF16, cfLASS,
-   cfCMPCCXADD, cfAPMEL, cf_a9, cfFZLREPM, cfFSREPS, cfFSREPC, cf_a13, cf_a14,
-   cf_a15, cf_a16, cfFRED, cfLKGS, cfWRMSRNS, cfNMISRC, cfAMXFP16, cfHRESET,
-   cfAVXIFMA, cf_a24, cf_a25, cfLAM, cfMSRLIST, cf_a28, cf_a29, cfINVDDIS, cfMOVRS,
-   cf__d0, cf_d1, cf_d2, cf_d3, cfAVXVNN8, cfAVXNECVT, cf__d6, cf__d7, cfAMXCPLX,
-   cf_d9, cfAVXVNNI16, cf_d11, cf__d12, cfUTMR, cfPREFETCHI, cfUSERMSR, cf_d16,
-   cfUIRETUIF, cfCETSSS, cfAVX10, cf__d20, cf_APXF, cf_d22, cfMWAIT, cf_d24,
-   cf_d25, cf_d26, cf_d27, cf_d28, cf_d29, cf_d30, cf_d31);
+   cfCMPCCXADD, cfAPMEL, _a9, cfFZLREPM, cfFSREPS, cfFSREPC, _a13, _a14,
+   _a15, _a16, cfFRED, cfLKGS, cfWRMSRNS, cfNMISRC, cfAMXFP16, cfHRESET,
+   cfAVXIFMA, _a24, _a25, cfLAM, cfMSRLIST, _a28, _a29, cfINVDDIS, cfMOVRS,
+   _d0_, _d1, _d2, _d3, cfAVXVNN8, cfAVXNECVT, _d6_, _d7_, cfAMXCPLX,
+   _d9, cfAVXVNNI16, _d11, _d12_, cfUTMR, cfPREFETCHI, cfUSERMSR, _d16,
+   cfUIRETUIF, cfCETSSS, cfAVX10, _d20_, _APXF, _d22, cfMWAIT, _d24,
+   _d25, _d26, _d27, _d28, _d29, _d30, _d31);
 
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
@@ -2745,14 +2745,14 @@ type
   /// 32-bit ARM Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
-  // - is defined on all platforms for cross-system use
+  // - Linux-specific list, but defined on all platforms for cross-system use
   TArm32HwCap = (
     // HWCAP_* constants
     arm32SWP, arm32HALF, arm32THUMB, arm3226BIT, arm32FAST_MULT, arm32FPA,
     arm32VFP, arm32EDSP, arm32JAVA, arm32IWMMXT, arm32CRUNCH, arm32THUMBEE,
     arm32NEON, arm32VFPv3, arm32VFPv3D16, arm32TLS, arm32VFPv4, arm32IDIVA,
     arm32IDIVT, arm32VFPD32, arm32LPAE, arm32EVTSTRM, arm32FPHP, arm32ASIMDHP,
-    arm32ASIMDDP, arm32ASIMDFHM, arm32ASIMDBF16, arm32I8MM, a28, a29, a30, a31,
+    arm32ASIMDDP, arm32ASIMDFHM, arm32ASIMDBF16, arm32I8MM, _28, _29, _30, _31,
     // HWCAP2_* constants
     arm32AES, arm32PMULL, arm32SHA1, arm32SHA2, arm32CRC32, arm32SB, arm32SSBS);
   TArm32HwCaps = set of TArm32HwCap;
@@ -2760,7 +2760,7 @@ type
   /// 64-bit AARCH64 Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm64/include/uapi/asm/hwcap.h
-  // - is defined on all platforms for cross-system use
+  // - Linux-specific list, but defined on all platforms for cross-system use
   TArm64HwCap = (
     // HWCAP_* constants
     arm64FP, arm64ASIMD, arm64EVTSTRM, arm64AES, arm64PMULL,
@@ -2772,7 +2772,7 @@ type
     arm64F8MM8, arm64F8MM4, arm64SVE_F16MM, arm64SVE_ELTPERM, arm64SVE_AES2,
     arm64SVE_BFSCALE, arm64SVE2P2, arm64SME2P2, arm64SME_SBITPERM, arm64SME_AES,
     arm64SME_SFEXPA, arm64SME_STMOP, arm64SME_SMOP4,
-    a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63,
+    _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, _62, _63,
     // HWCAP2_* constants
     arm64DCPODP, arm64SVE2, arm64SVEAES, arm64SVEPMULL, arm64SVEBITPERM,
     arm64SVESHA3, arm64SVESM4, arm64FLAGM2, arm64FRINT, arm64SVEI8MM,
