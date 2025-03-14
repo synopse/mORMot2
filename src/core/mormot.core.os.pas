@@ -6330,17 +6330,17 @@ const
      '',
      'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
      'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
-     'ARM1176', 'Cortex-A5', 'Cortex-A7', 'Cortex-A8', 'Cortex-A9',
-     'Cortex-A17',{Originally A12} 'Cortex-A15', 'Cortex-A17', 'Cortex-R4',
-     'Cortex-R5', 'Cortex-R7', 'Cortex-R8', 'Cortex-M0', 'Cortex-M1',
-     'Cortex-M3', 'Cortex-M4', 'Cortex-M7', 'Cortex-M0+', 'Cortex-A32',
-     'Cortex-A53', 'Cortex-A35', 'Cortex-A55', 'Cortex-A65', 'Cortex-A57',
-     'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
-     'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
-     'Neoverse-V1', 'Cortex-A78', 'Cortex-A78AE', 'Cortex-X1', 'Cortex-510',
-     'Cortex-710', 'Cortex-X2', 'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
-     'Cortex-X1C', 'Cortex-A715', 'Cortex-X3', 'Neoverse-V2', 'Cortex-A520',
-     'Cortex-A720', 'Cortex-X4', 'Neoverse-V3AE', 'Neoverse-V3', 'Cortex-X925',
+     'ARM1176',     'Cortex-A5',   'Cortex-A7',   'Cortex-A8',   'Cortex-A9',
+     'Cortex-A17',{originally A12} 'Cortex-A15',  'Cortex-A17',  'Cortex-R4',
+     'Cortex-R5',   'Cortex-R7',   'Cortex-R8',   'Cortex-M0',   'Cortex-M1',
+     'Cortex-M3',   'Cortex-M4',   'Cortex-M7',   'Cortex-M0+',  'Cortex-A32',
+     'Cortex-A53',  'Cortex-A35',  'Cortex-A55',  'Cortex-A65',  'Cortex-A57',
+     'Cortex-A72',  'Cortex-A73',  'Cortex-A75',  'Cortex-A76',  'Neoverse-N1',
+     'Cortex-A77',  'Cortex-A76AE','Cortex-R52',  'Cortex-M23',  'Cortex-M33',
+     'Neoverse-V1', 'Cortex-A78',  'Cortex-A78AE','Cortex-X1',   'Cortex-510',
+     'Cortex-710',  'Cortex-X2',   'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
+     'Cortex-X1C',  'Cortex-A715', 'Cortex-X3',   'Neoverse-V2', 'Cortex-A520',
+     'Cortex-A720', 'Cortex-X4',   'Neoverse-V3AE','Neoverse-V3','Cortex-X925',
      'Cortex-A725', 'Cortex-A520AE', 'Cortex-A720AE', 'Neoverse-N3',
      'Cortex-A320');
 
@@ -7888,9 +7888,9 @@ begin
   AppendShort(_oskb(info.memtotal - info.memfree), result);
   AppendShortChar('/', @result);
   AppendShort(_oskb(info.memtotal), result);
-  AppendShort(' (', result);
+  AppendShortTwoChars(' (', @result);
   AppendShortCardinal(info.percent, result);
-  AppendShort('%)', result);
+  AppendShortTwoChars('%)', @result);
 end;
 
 function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
