@@ -2426,19 +2426,20 @@ type
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
 // - e.g. a MD5 digest, or an AES block
 function IsZero({$ifdef FPC}constref{$else}const{$endif} dig: THash128): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose - and it is also branchless therefore fast
 function IsEqual({$ifdef FPC}constref{$else}const{$endif} A, B: THash128): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// fill all 16 bytes of this 128-bit buffer with zero
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash128); overload;
+  {$ifdef CPU64}inline;{$endif}
 
 /// fast O(n) search of a 128-bit item in an array of such values
 function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
@@ -2450,14 +2451,14 @@ function AddHash128(var Arr: THash128DynArray;
 /// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
 // - e.g. a SHA-1 digest
 function IsZero(const dig: THash160): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// returns TRUE if all 20 bytes of both 160-bit buffers do match
 // - e.g. a SHA-1 digest
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A, B: THash160): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// fill all 20 bytes of this 160-bit buffer with zero
 // - may be used to cleanup stack-allocated content
@@ -2467,14 +2468,14 @@ procedure FillZero(out dig: THash160); overload;
 /// returns TRUE if all 28 bytes of this 224-bit buffer equal zero
 // - e.g. a SHA-224 digest
 function IsZero(const dig: THash224): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// returns TRUE if all 28 bytes of both 224-bit buffers do match
 // - e.g. a SHA-224 digest
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A, B: THash224): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// fill all 28 bytes of this 224-bit buffer with zero
 // - may be used to cleanup stack-allocated content
@@ -2484,14 +2485,14 @@ procedure FillZero(out dig: THash224); overload;
 /// returns TRUE if all 32 bytes of this 256-bit buffer equal zero
 // - e.g. a SHA-256 digest, or a TEccSignature result
 function IsZero(const dig: THash256): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
 // - e.g. a SHA-256 digest, or a TEccSignature result
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A, B: THash256): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// fast O(n) search of a 256-bit item in an array of such values
 function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
@@ -2504,14 +2505,14 @@ procedure FillZero(out dig: THash256); overload;
 /// returns TRUE if all 48 bytes of this 384-bit buffer equal zero
 // - e.g. a SHA-384 digest
 function IsZero(const dig: THash384): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// returns TRUE if all 48 bytes of both 384-bit buffers do match
 // - e.g. a SHA-384 digest
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A, B: THash384): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// fill all 32 bytes of this 384-bit buffer with zero
 // - may be used to cleanup stack-allocated content
@@ -2521,14 +2522,12 @@ procedure FillZero(out dig: THash384); overload;
 /// returns TRUE if all 64 bytes of this 512-bit buffer equal zero
 // - e.g. a SHA-512 digest
 function IsZero(const dig: THash512): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if all 64 bytes of both 512-bit buffers do match
 // - e.g. two SHA-512 digests
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A, B: THash512): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all 64 bytes of this 512-bit buffer with zero
 // - may be used to cleanup stack-allocated content
