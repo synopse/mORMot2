@@ -336,12 +336,16 @@ type
   TMvcSessionWithCookies = class(TMvcSessionAbstract)
   protected
     fContext: TBinaryCookieGenerator;
+    function GetCookieName: RawUtf8;
+    procedure SetCookieName(const Value: RawUtf8);
     // overriden e.g. in TMvcSessionWithRestServer using ServiceContext threadvar
     function GetCookie: RawUtf8; virtual; abstract;
     procedure SetCookie(const cookie: RawUtf8); virtual; abstract;
   public
     /// create an instance of this ViewModel implementation class
     constructor Create(Owner: TMvcApplication); override;
+    /// finalize this instance
+    destructor Destroy; override;
     /// will initialize the session cookie
     // - setting an optional record data, which will be stored Base64-encoded
     // - will return the 32-bit internal session ID
@@ -379,7 +383,7 @@ type
     /// you can customize the cookie name
     // - default is 'mORMot', and cookie is restricted to Path=/RestRoot
     property CookieName: RawUtf8
-      read fContext.CookieName write fContext.CookieName;
+      read GetCookieName write SetCookieName;
   end;
 
   /// implement a ViewModel/Controller sessions in a TRestServer instance
@@ -1480,7 +1484,23 @@ end;
 constructor TMvcSessionWithCookies.Create(Owner: TMvcApplication);
 begin
   inherited Create(Owner);
-  fContext.Init('mORMot');
+  fContext := TBinaryCookieGenerator.Create('mORMot');
+end;
+
+destructor TMvcSessionWithCookies.Destroy;
+begin
+  inherited Destroy;
+  fContext.Free;
+end;
+
+function TMvcSessionWithCookies.GetCookieName: RawUtf8;
+begin
+  result := fContext.CookieName;
+end;
+
+procedure TMvcSessionWithCookies.SetCookieName(const Value: RawUtf8);
+begin
+  fContext.CookieName := Value;
 end;
 
 function TMvcSessionWithCookies.Exists: boolean;
