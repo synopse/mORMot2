@@ -2524,21 +2524,25 @@ function GuidToText(P: PUtf8Char; guid: PByteArray; tab: PWordArray = nil): PUtf
 /// convert a TGuid into 38 chars encoded { text } as RawUtf8
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - if you do not need the embracing { }, use ToUtf8() overloaded function
-function GuidToRawUtf8(const guid: TGuid): RawUtf8;
+function GuidToRawUtf8(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): RawUtf8;
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - if you need the embracing { }, use GuidToRawUtf8() function instead
-function ToUtf8(const guid: TGuid): RawUtf8; overload;
+function ToUtf8(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}guid: TGuid): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8, unless it is GUID_NULL
-function NotNullGuidToUtf8(const guid: TGuid): RawUtf8;
+function NotNullGuidToUtf8(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): RawUtf8;
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
-procedure ToUtf8(const guid: TGuid; var text: RawUtf8; tab: PWordArray = nil); overload;
+procedure ToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid;
+  var text: RawUtf8; tab: PWordArray = nil); overload;
 
 /// convert one or several TGuid into 36 chars encoded CSV text
 // - will return e.g.
@@ -2550,7 +2554,8 @@ function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ',';
 /// convert a TGuid into into 38 chars encoded { text } as RTL string
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
-function GuidToString(const guid: TGuid): string;
+function GuidToString(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): string;
 
 type
   /// stack-allocated ASCII string, used by GuidToShort() function
@@ -2561,18 +2566,20 @@ type
   // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
-function GuidToShort(const guid: TGuid): TGuidShortString; overload;
+function GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): TGuidShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGuid into its standard uppercase text representation with the {}
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
-procedure GuidToShort(const guid: TGuid;
-  out dest: TGuidShortString); overload;
+procedure GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid; out dest: TGuidShortString); overload;
 
 /// convert a TGuid into lowercase '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
-function UuidToShort(const guid: TGuid): TGuidShortString;
+function UuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): TGuidShortString;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some text into its TGuid binary value
@@ -10889,7 +10896,8 @@ begin
   result := P;
 end;
 
-function GuidToRawUtf8(const guid: TGuid): RawUtf8;
+function GuidToRawUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): RawUtf8;
 var
   P: PUtf8Char;
 begin
@@ -10899,19 +10907,22 @@ begin
   GuidToText(P + 1, @guid)^ := '}';
 end;
 
-function ToUtf8(const guid: TGuid): RawUtf8;
+function ToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): RawUtf8;
 begin
   ToUtf8(guid, result);
 end;
 
-function NotNullGuidToUtf8(const guid: TGuid): RawUtf8;
+function NotNullGuidToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): RawUtf8;
 begin
   result := '';
   if not IsNullGuid(guid) then
     ToUtf8(guid, result);
 end;
 
-procedure ToUtf8(const guid: TGuid; var text: RawUtf8; tab: PWordArray);
+procedure ToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid;
+  var text: RawUtf8; tab: PWordArray);
 begin
   FastSetString(text, 36);
   GuidToText(pointer(text), @guid, tab);
@@ -10943,26 +10954,30 @@ begin
   until false;
 end;
 
-function GuidToShort(const guid: TGuid): TGuidShortString;
+function GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): TGuidShortString;
 begin
   GuidToShort(Guid, result);
 end;
 
-procedure GuidToShort(const guid: TGuid; out dest: TGuidShortString);
+procedure GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid; out dest: TGuidShortString);
 begin
   dest[0] := #38;
   dest[1] := '{';
   GuidToText(@dest[2], @guid)^ := '}';
 end;
 
-function UuidToShort(const guid: TGuid): TGuidShortString;
+function UuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): TGuidShortString;
 begin
   result[0] := #36;
   GuidToText(@result[1], @guid, @TwoDigitsHexWBLower);
 end;
 
 {$ifdef UNICODE}
-function GuidToString(const guid: TGuid): string;
+function GuidToString({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid): string;
 var
   tmp: TGuidShortString;
 begin
@@ -10970,7 +10985,8 @@ begin
   Ansi7ToString(@tmp[1], 38, result);
 end;
 {$else}
-function GuidToString(const guid: TGuid): string;
+function GuidToString(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): string;
 begin
   result := GuidToRawUtf8(guid);
 end;

@@ -703,11 +703,8 @@ type
     // - can be used as such to resolve an I: ICalculator interface
     // ! if fClient.Services.Info(ICalculator).Get(I) then
     // !   ... use I
-    {$ifdef FPC_HAS_CONSTREF}
-    function Info(constref aGuid: TGuid): TServiceFactory; overload;
-    {$else}
-    function Info(const aGuid: TGuid): TServiceFactory; overload;
-    {$endif FPC_HAS_CONSTREF}
+    function Info({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      aGuid: TGuid): TServiceFactory; overload;
     /// retrieve a service provider from its type information
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the type information does not match any registered interface
@@ -1647,11 +1644,8 @@ begin
   result := nil;
 end;
 
-{$ifdef FPC_HAS_CONSTREF}
-function TServiceContainer.Info(constref aGuid: TGuid): TServiceFactory;
-{$else}
-function TServiceContainer.Info(const aGuid: TGuid): TServiceFactory;
-{$endif FPC_HAS_CONSTREF}
+function TServiceContainer.Info({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  aGuid: TGuid): TServiceFactory;
 var
   n: TDALen;
   p: PServiceContainerInterface;

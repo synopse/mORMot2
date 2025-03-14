@@ -560,11 +560,8 @@ type
     // - you shall have registered the interface by a previous call to the
     // overloaded Get(TypeInfo(IMyInterface)) method or RegisterInterfaces()
     // - if the supplied TGuid has not been previously registered, returns nil
-    {$ifdef FPC_HAS_CONSTREF}
-    class function Get(constref aGuid: TGuid): TInterfaceFactory; overload;
-    {$else}
-    class function Get(const aGuid: TGuid): TInterfaceFactory; overload;
-    {$endif FPC_HAS_CONSTREF}
+    class function Get({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      aGuid: TGuid): TInterfaceFactory; overload;
     /// retrieve an interface factory from cache, from its name (e.g. 'IMyInterface')
     // - access to this method is thread-safe
     // - you shall have registered the interface by a previous call to the
@@ -577,7 +574,8 @@ type
     /// could be used to retrieve an array of TypeInfo() from their Guid
     class function Guid2TypeInfo(const aGuids: array of TGuid): PRttiInfoDynArray; overload;
     /// could be used to retrieve an array of TypeInfo() from their Guid
-    class function Guid2TypeInfo(const aGuid: TGuid): PRttiInfo; overload;
+    class function Guid2TypeInfo({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      aGuid: TGuid): PRttiInfo; overload;
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
     class function GetUsedInterfaces: TSynObjectListLightLocked;
@@ -819,8 +817,8 @@ type
     // ! begin
     // !   if ServiceContainer.Resolve(ICalculator,cal) then
     // !   ... use calc methods
-    function Resolve(const aGuid: TGuid; out Obj;
-      aRaiseIfNotFound: ESynExceptionClass = nil): boolean; overload;
+    function Resolve({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}aGuid: TGuid;
+      out Obj; aRaiseIfNotFound: ESynExceptionClass = nil): boolean; overload;
     /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     // - raise an EServiceException if any interface can't be resolved, unless
@@ -1053,7 +1051,8 @@ type
     /// can be used to perform an DI/IoC for a given interface type information
     procedure Resolve(aInterface: PRttiInfo; out Obj); overload;
     /// can be used to perform an DI/IoC for a given interface TGuid
-    procedure Resolve(const aGuid: TGuid; out Obj); overload;
+    procedure Resolve({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      aGuid: TGuid; out Obj); overload;
     /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
@@ -3716,11 +3715,8 @@ begin
   result := nil;
 end;
 
-{$ifdef FPC_HAS_CONSTREF}
-class function TInterfaceFactory.Get(constref aGuid: TGuid): TInterfaceFactory;
-{$else}
-class function TInterfaceFactory.Get(const aGuid: TGuid): TInterfaceFactory;
-{$endif FPC_HAS_CONSTREF}
+class function TInterfaceFactory.Get({$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif}aGuid: TGuid): TInterfaceFactory;
 var
   cache: TSynObjectListLightLocked;
 begin
@@ -3762,7 +3758,8 @@ begin
     result[i] := Guid2TypeInfo(aGuids[i]);
 end;
 
-class function TInterfaceFactory.Guid2TypeInfo(const aGuid: TGuid): PRttiInfo;
+class function TInterfaceFactory.Guid2TypeInfo(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} aGuid: TGuid): PRttiInfo;
 var
   fact: TInterfaceFactory;
 begin
@@ -4876,8 +4873,8 @@ begin
     result := TryResolve(aInterface, Obj);
 end;
 
-function TInterfaceResolver.Resolve(const aGuid: TGuid; out Obj;
-  aRaiseIfNotFound: ESynExceptionClass): boolean;
+function TInterfaceResolver.Resolve({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  aGuid: TGuid; out Obj; aRaiseIfNotFound: ESynExceptionClass): boolean;
 var
   known: TInterfaceFactory;
 begin
@@ -5338,7 +5335,8 @@ begin
       aInterface^.RawName]);
 end;
 
-procedure TInjectableObject.Resolve(const aGuid: TGuid; out Obj);
+procedure TInjectableObject.Resolve(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} aGuid: TGuid; out Obj);
 var
   info: PRttiInfo;
 begin

@@ -1330,8 +1330,8 @@ procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
 /// convert an ObjectID as UTF-8 text
 // - used e.g. by TSecAce.ObjectText and TSecAce.InheritedText
 // - to customize the output format set e.g. uuid = @AppendShortKnownUuid
-procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
-  var Text: RawUtf8);
+procedure ObjectUuidToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid; uuid: TAppendShortUuid; var Text: RawUtf8);
 
 /// parse an ObjectID, recognizing TAdsKnownAttribute's ldapDisplayName or UUID hexa
 // - can be used as TShortToUuid optional parameter for SDDL parsing
@@ -2769,8 +2769,8 @@ begin
     AppendShortAnsi7String(ATTR_TXT[a], s); // append the ldapDisplayName
 end;
 
-procedure ObjectUuidToText(const guid: TGuid; uuid: TAppendShortUuid;
-  var Text: RawUtf8);
+procedure ObjectUuidToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid; uuid: TAppendShortUuid; var Text: RawUtf8);
 var
   s: ShortString;
 begin

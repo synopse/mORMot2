@@ -997,7 +997,8 @@ type
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
     /// for rkInterface: check if this type (or ancestor) implements a TGuid
-    function InterfaceImplements(const AGuid: TGuid): boolean;
+    function InterfaceImplements(
+      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}aGuid: TGuid): boolean;
   end;
 
   {$A+}
@@ -4362,14 +4363,15 @@ begin
   until false;
 end;
 
-function TRttiInfo.InterfaceImplements(const AGuid: TGuid): boolean;
+function TRttiInfo.InterfaceImplements(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else} const{$endif} aGuid: TGuid): boolean;
 var
   nfo: PRttiInfo;
   typ: PRttiInterfaceTypeData;
 begin
   result := false;
   if (@self = nil) or
-     IsNullGuid(AGuid) or
+     IsNullGuid(aGuid) or
      (Kind <> rkInterface) then
     exit;
   typ := InterfaceType;
@@ -4380,7 +4382,7 @@ begin
       exit;
     typ := nfo^.InterfaceType;
   until (ifHasGuid in typ^.IntfFlags) and
-        IsEqualGuid(AGuid, typ^.IntfGuid^);
+        IsEqualGuid(aGuid, typ^.IntfGuid^);
   result := true; // found
 end;
 

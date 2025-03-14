@@ -765,7 +765,8 @@ function IsEqualGuid(guid1, guid2: PGuid): boolean; overload;
 
 /// returns the index of a matching TGuid in an array
 // - returns -1 if no item matched
-function IsEqualGuidArray(const guid: TGuid; const guids: array of TGuid): integer;
+function IsEqualGuidArray({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid; const guids: array of TGuid): integer;
 
 /// check if a TGuid value contains only zero bytes, i.e. GUID_NULL
 // - this version is faster than the one supplied by SysUtils
@@ -775,8 +776,8 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 /// append one TGuid item to a TGuid dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGuid already exists
-function AddGuid(var guids: TGuidDynArray; const guid: TGuid;
-  NoDuplicates: boolean = false): integer;
+function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif} guid: TGuid; NoDuplicates: boolean = false): integer;
 
 /// fast O(log(n)) binary search of a binary (e.g. TGuid) value in a sorted array
 function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
@@ -4656,7 +4657,8 @@ begin
             (PHash128Rec(guid1).H = PHash128Rec(guid2).H);
 end;
 
-function IsEqualGuidArray(const guid: TGuid; const guids: array of TGuid): integer;
+function IsEqualGuidArray({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  guid: TGuid; const guids: array of TGuid): integer;
 begin
   result := Hash128Index(@guids[0], length(guids), @guid);
 end;
@@ -4671,7 +4673,8 @@ begin
             (a[3] = 0) {$endif CPU32};
 end;
 
-function AddGuid(var guids: TGuidDynArray; const guid: TGuid; NoDuplicates: boolean): integer;
+function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif} guid: TGuid; NoDuplicates: boolean): integer;
 begin
   if NoDuplicates then
   begin
