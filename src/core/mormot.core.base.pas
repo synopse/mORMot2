@@ -3493,6 +3493,11 @@ procedure XorMemory(Dest, Source: PByteArray; size: PtrInt); overload;
 procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// logical XOR of two 128-bit memory buffers
+procedure XorMemory(var Dest: THash128Rec;
+  {$ifdef FPC}constref{$else}const{$endif} Source: THash128Rec); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// logical AND of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] and Source[i];
@@ -9567,6 +9572,13 @@ begin
   until Length = 0;
 end;
 
+procedure XorMemory(var Dest: THash128Rec;
+  {$ifdef FPC}constref{$else}const{$endif} Source: THash128Rec);
+begin
+  Dest.Lo := Dest.Lo xor Source.Lo;
+  Dest.Hi := Dest.Hi xor Source.Hi;
+end;
+
 threadvar // do not publish for compilation within Delphi packages
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
@@ -9594,13 +9606,11 @@ begin
   if _EntropyGlobal.i0 = 0 then // call OS API each only once at startup
   {$endif CPUINTEL}
     XorEntropyGetOsRandom256(_EntropyGlobal); // 256-bit randomness from OS
-  e.r[0].L := e.r[0].L xor _EntropyGlobal.l.L;
-  e.r[0].H := e.r[0].H xor _EntropyGlobal.l.H;
+  XorMemory(e.r[0], _EntropyGlobal.l);
   lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
   e.r[1].L := e.r[1].L xor PtrUInt(@e)  xor lec^.L;
   e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H;
-  e.r[2].L := e.r[2].L xor _EntropyGlobal.h.L;
-  e.r[2].H := e.r[2].H xor _EntropyGlobal.h.H;
+  XorMemory(e.r[2], _EntropyGlobal.h);
   {$ifdef CPUINTEL} // Intel/AMD opcodes are safe enough between calls
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   RdRand32(@e.r[0].c, length(e.r[0].c)); // no-op if cfSSE42 is not available

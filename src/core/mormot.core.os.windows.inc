@@ -2356,6 +2356,9 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 
 {$endif UNICODE}
 
+function CoCreateGuid(out guid: THash128Rec): HRESULT;
+  stdcall; external 'ole32.dll';
+
 procedure XorOSEntropy(var e: THash512Rec);
 var
   ft: packed record
@@ -2384,7 +2387,7 @@ begin
   for i := 0 to high(e.r) do
   begin
     CoCreateGuid(u); // very fast on Windows - used to obfuscate system info
-    XorMemory(@e.r[i], @u, SizeOf(u));
+    XorMemory(e.r[i], u);
   end;
   QueryPerformanceCounter(u.Lo); // is likely to have changed in-between
   e.i[7] := e.i[7] xor u.Lo;     // e.h3 XORed with raw timestamps
