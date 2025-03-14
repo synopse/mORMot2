@@ -5973,6 +5973,8 @@ var
 begin
   result := '';
   S := P;
+  if S = nil then
+    exit;
   while S^ <= ' ' do
     if S^ = #0 then
       exit
@@ -5983,6 +5985,30 @@ begin
     inc(S);
   until S^ <= ' ';
   FastSetString(result, P, S - P);
+  P := S;
+end;
+
+function _GetNextCardinal(var P: PAnsiChar): PtrUInt;
+var
+  c: cardinal;
+  S: PAnsiChar;
+begin
+  result := 0;
+  S := P;
+  if S = nil then
+    exit;
+  while not (S^ in ['0'..'9']) do
+    if S^ = #0 then
+      exit
+    else
+      inc(S);
+  repeat
+    c := ord(S^) - 48;
+    if c > 9 then
+      break;
+    result := result * 10 + c;
+    inc(S);
+  until false;
   P := S;
 end;
 
@@ -8199,16 +8225,11 @@ procedure SetExecutableVersion(const aVersionText: RawUtf8);
 var
   p: PAnsiChar;
   i: PtrInt;
-  tmp: RawUtf8;
   ver: array[0 .. 3] of integer;
 begin
-  FastSetString(tmp, pointer(aVersionText), length(aVersionText));
-  p := pointer(tmp);
-  for i := 0 to length(tmp) - 1 do
-    if p[i] = '.' then
-      p[i] := ' '; // as expected by _GetNextItem()
+  p := pointer(aVersionText);
   for i := 0 to 3 do
-    ver[i] := GetCardinal(pointer(_GetNextItem(p)));
+    ver[i] := _GetNextCardinal(p);
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 

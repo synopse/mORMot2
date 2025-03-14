@@ -43,6 +43,7 @@ procedure _fmt(const Fmt: string; const Args: array of const;
   var result: RawUtf8); overload; forward;
 procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
 function _GetNextItem(var P: PAnsiChar): RawUtf8; forward;
+function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
 procedure WrDeb(const t: shortstring; const p; l: PtrInt); // internal use below
@@ -85,28 +86,6 @@ begin
       if IdemPChar(pointer(s), up[i]) then
         exit;
   result := false;
-end;
-
-function GetNextCardinal(var P: PAnsiChar): PtrUInt;
-var
-  c: cardinal;
-  S: PAnsiChar;
-begin
-  result := 0;
-  S := P;
-  while not (S^ in ['0'..'9']) do
-    if S^ = #0 then
-      exit
-    else
-      inc(S);
-  repeat
-    c := ord(S^) - 48;
-    if c > 9 then
-      break;
-    result := result * 10 + c;
-    inc(S);
-  until false;
-  P := S;
 end;
 
 
@@ -3164,9 +3143,9 @@ begin
     exit;
   P := @tmp;
   // e.g. 'cpu  3418147 18140 265232 6783435 12184 0 34219 0 0 0'
-  UserTime   := GetNextCardinal(P){=user} + GetNextCardinal(P){=nice};
-  KernelTime := GetNextCardinal(P){=system};
-  IdleTime   := GetNextCardinal(P){=idle};
+  UserTime   := _GetNextCardinal(P){=user} + _GetNextCardinal(P){=nice};
+  KernelTime := _GetNextCardinal(P){=system};
+  IdleTime   := _GetNextCardinal(P){=idle};
   inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
   result := (UserTime + KernelTime) <> 0;
 end;
@@ -3205,8 +3184,8 @@ begin
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
   if LoadProcFile('/proc/self/statm', tmp) <= 0 then
     exit;
-  info.allocreserved := QWord(GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmSize
-  info.allocused     := QWord(GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmRSS
+  info.allocreserved := QWord(_GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmSize
+  info.allocused     := QWord(_GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmRSS
 end;
 
 procedure XorOSEntropy(var e: THash512Rec);
@@ -4780,7 +4759,7 @@ begin
   if cache <> nil then
   begin
     CpuCacheText := TrimU(cache);
-    CpuCacheSize := GetNextCardinal(cache);
+    CpuCacheSize := _GetNextCardinal(cache);
     while cache^ = ' ' do
       inc(cache);
     case upcase(cache^) of
@@ -4809,9 +4788,9 @@ begin
   if SystemInfo.release <> '' then
     OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
   P := @uts.release[0];
-  KernelRevision := GetNextCardinal(P) shl 16 +
-                    GetNextCardinal(P) shl 8 +
-                    GetNextCardinal(P); // stored in big endian for easy compare
+  KernelRevision := _GetNextCardinal(P) shl 16 +
+                    _GetNextCardinal(P) shl 8 +
+                    _GetNextCardinal(P); // stored in big endian for easy compare
   OSVersion32.os := OS_KIND;
   MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
   {$ifdef OSANDROID}
