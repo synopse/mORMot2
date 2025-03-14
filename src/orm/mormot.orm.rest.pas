@@ -2289,22 +2289,12 @@ end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUtf8; BlobData: TStream): boolean;
-var
-  data: RawBlob;
-  L: Int64;
 begin
-  result := false;
-  if (self = nil) or
-     (BlobData = nil) then
-    exit;
-  L := BlobData.Seek(0, soEnd);
-  if L > maxInt then
-    EOrmException.RaiseUtf8('%.UpdateBlob: %.Size=%', [self, BlobData, L]);
-  SetLength(data, L);
-  BlobData.Seek(0, soBeginning);
-  if BlobData.Read(pointer(data)^, L) <> L then
-    exit;
-  result := UpdateBlob(Table, aID, BlobFieldName, data);
+  result := (self <> nil) and
+            (aID > 0) or
+            (BlobData <> nil) and
+            UpdateBlob(Table, aID, BlobFieldName,
+              StreamToRawByteString(BlobData, -1, CP_RAWBLOB));
 end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
@@ -2313,6 +2303,7 @@ var
   tmp: RawByteString;
 begin
   if (self = nil) or
+     (aID <= 0) or
      (BlobData = nil) or
      (BlobSize < 0) then
     result := false
