@@ -3620,29 +3620,37 @@ var
 begin
   SetLength(cook, 16384);
   SetLength(cookid, length(cook));
-  gen.Init;
-  timer.Start;
-  for i := 0 to high(cook) do
-    cookid[i] := gen.Generate(cook[i]);
-  NotifyTestSpeed('generate', length(cook), 0, @timer);
-  for i := 0 to high(cook) - 1 do
-    Check(cookid[i] <> cookid[i + 1]);
-  for i := 0 to high(cook) do
-    Check(cookid[i] <> 0);
-  for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), cookid[i], 'gen1');
-  for i := 0 to high(cook) shr 4 do
-    CheckEqual(gen.Validate(ParseTrailingJwt(
-      '/uri/' + cook[i] + '  ', {nodot=}true)), cookid[i], 'gen2');
-  bak := gen.Save;
-  gen.Init;
-  for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), 0, 'void');
-  Check(gen.Load(bak), 'load');
-  timer.Start;
-  for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), cookid[i], 'loaded');
-  NotifyTestSpeed('validate', length(cook), 0, @timer);
+  gen := TBinaryCookieGenerator.Create;
+  try
+    timer.Start;
+    for i := 0 to high(cook) do
+      cookid[i] := gen.Generate(cook[i]);
+    NotifyTestSpeed('generate', length(cook), 0, @timer);
+    for i := 0 to high(cook) - 1 do
+      Check(cookid[i] <> cookid[i + 1]);
+    for i := 0 to high(cook) do
+      Check(cookid[i] <> 0);
+    for i := 0 to high(cook) do
+      CheckEqual(gen.Validate(cook[i]), cookid[i], 'gen1');
+    for i := 0 to high(cook) shr 4 do
+      CheckEqual(gen.Validate(ParseTrailingJwt(
+        '/uri/' + cook[i] + '  ', {nodot=}true)), cookid[i], 'gen2');
+    bak := gen.Save;
+  finally
+    gen.Free;
+  end;
+  gen := TBinaryCookieGenerator.Create;
+  try
+    for i := 0 to high(cook) do
+      CheckEqual(gen.Validate(cook[i]), 0, 'void');
+    Check(gen.Load(bak), 'load');
+    timer.Start;
+    for i := 0 to high(cook) do
+      CheckEqual(gen.Validate(cook[i]), cookid[i], 'loaded');
+    NotifyTestSpeed('validate', length(cook), 0, @timer);
+  finally
+    gen.Free;
+  end;
 end;
 
 procedure TTestCoreCrypto.Pkcs11;
