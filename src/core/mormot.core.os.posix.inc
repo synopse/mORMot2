@@ -3568,6 +3568,7 @@ function GetDiskPartitions: TDiskPartitions;
 var
   fs: ^TStatfs; // TStatfs may be redefined above for darwin aarch64
   max, n: PtrInt;
+  t, m, f: RawUtf8; // FPC aarch64 requires explicit temp variables
   all: array of TStatFs;
 begin
   result := nil;
@@ -3586,10 +3587,15 @@ begin
     //WrDeb('fs^.mountpoint', fs^.mountpoint, SizeOf(fs^.mountpoint));
     //WrDeb('fs^.fstypename',fs^.fstypename,SizeOf(fs^.fstypename));
     {$ifdef OSBSD} // the FPC RTL headers has field names issues
-    AddDiskPartition(fs^.f_mntfromname, fs^.f_mntonname, fs^.f_fstypename, result, n);
-    {$else} // FPC RTL use properly statfs/statfs64 depending on arch
-    AddDiskPartition(fs^.mntfromname, fs^.mountpoint, fs^.fstypename, result, n);
+    FastSetString(t, @fs^.f_mntfromname, StrLen(@fs^.f_mntfromname));
+    FastSetString(m, @fs^.f_mntonname,   StrLen(@fs^.f_mntonname));
+    FastSetString(f, @fs^.f_fstypename,  StrLen(@fs^.f_fstypename));
+    {$else}
+    FastSetString(t, @fs^.mntfromname, StrLen(@fs^.mntfromname));
+    FastSetString(m, @fs^.mountpoint,  StrLen(@fs^.mountpoint));
+    FastSetString(f, @fs^.fstypename,  StrLen(@fs^.fstypename));
     {$endif OSBSD}
+    AddDiskPartition(t, m, f, result, n);
     inc(fs);
     dec(max);
   until max = 0;
