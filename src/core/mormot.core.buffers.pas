@@ -5634,10 +5634,9 @@ begin
     if {%H-}tmpd = '' then
       pointer(tmpd) := FastNewString(AlgoCompressDestLen(head.UnCompressedSize));
     dec(count, head.UnCompressedSize); // supports premature end of input
-    if S = pointer(tmps) then
-      head.UnCompressedSize := Source.Read(S^, head.UnCompressedSize);
-    if head.UnCompressedSize <= 0 then
-      exit; // read error
+    if S = pointer({%H-}tmps) then
+      if not StreamReadAll(Source, S, head.UnCompressedSize) then
+        exit;
     head.UncompressedHash := AlgoHash(ForceHash32, S, head.UnCompressedSize);
     D := pointer(tmpd);
     head.CompressedSize := AlgoCompress(S, head.UnCompressedSize, D);
@@ -5716,7 +5715,7 @@ var
       if sourcesize < tmplen then
         tmplen := sourcesize;
       Source.Position := sourceSize - tmplen;
-      if Source.Read(tmp, tmplen) <> tmplen then
+      if not StreamReadAll(Source, @tmp, tmplen) then
         exit;
       dec(tmplen, SizeOf(TAlgoCompressTrailer));
       t := @tmp[tmplen];
@@ -5768,8 +5767,8 @@ begin
       if Head.CompressedSize > length({%H-}tmps) then
         FastNewRawByteString(tmps, Head.CompressedSize);
       S := pointer(tmps);
-      if Source.Read(S^, Head.CompressedSize) <> Head.CompressedSize then
-        break;
+      if not StreamReadAll(Source, S, Head.CompressedSize) then
+        exit;
     end;
     inc(sourcePosition, Head.CompressedSize);
     // decompress chunk into Dest
