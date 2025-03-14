@@ -45,6 +45,14 @@ procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forwa
 function _GetNextItem(var P: PAnsiChar): RawUtf8; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
+procedure WrDeb(const t: shortstring; const p; l: PtrInt); // internal use below
+var
+  tmp: RawUtf8;
+begin
+  ToHumanHex(tmp, @p, l);
+  {$I-}writeln(t, ' = ',tmp);{$I+}
+end;
+
 function IdemPChar(p, up: PUtf8Char): boolean; inline;
 var
   c, u: AnsiChar;
@@ -3473,6 +3481,7 @@ var
   av, fr, tot: QWord;
   fn: TFileName;
 begin
+  //writeln('AddDiskPartition typ=',typ,' mnt=',mnt,' fs=',fs);
   if (fs = '') or
      (mnt = '') or
      (typ = '') or
@@ -3483,10 +3492,11 @@ begin
      not IsRealFileSystem(typ) then
     exit;
   fn := mnt;
+  //writeln('GetDiskInfo=',GetDiskInfo(fn, av, fr, tot));
+  //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',_oskb(av),' fr=',_oskb(fr),' tot=',_oskb(tot));
   if not (GetDiskInfo(fn, av, fr, tot)) or
      (tot < 1 shl 20) then
     exit;
-//writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',_oskb(av),' fr=',_oskb(fr),' tot=',_oskb(tot));
   if n = length(result) then
     SetLength(result, NextGrow(n));
   with result[n] do
@@ -3527,7 +3537,9 @@ begin
     exit;
   n := 0;
   repeat
-    //writeln(fs^.mntfromname, ' ',fs^.mountpoint, ' ', fs^.fstypename);
+    //WrDeb('fs^.mntfromname', fs^.mntfromname, SizeOf(fs^.mntfromname));
+    //WrDeb('fs^.mountpoint', fs^.mountpoint, SizeOf(fs^.mountpoint));
+    //WrDeb('fs^.fstypename',fs^.fstypename,SizeOf(fs^.fstypename));
     {$ifdef OSBSD} // the FPC RTL headers has field names issues
     AddDiskPartition(fs^.f_mntfromname, fs^.f_mntonname, fs^.f_fstypename, result, n);
     {$else} // FPC RTL use properly statfs/statfs64 depending on arch
