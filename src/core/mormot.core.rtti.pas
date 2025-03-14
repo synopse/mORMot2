@@ -589,12 +589,11 @@ type
     function GetEnumNameTrimed(const Value): RawUtf8;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// get the enumeration names corresponding to a set value as CSV
-    function GetSetName({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} value;
-      trimmed: boolean = false; sep: AnsiChar = ','): RawUtf8;
+    function GetSetName(const value; trimmed: boolean = false; sep: AnsiChar = ','): RawUtf8;
     /// get the enumeration names corresponding to a set value as a RawUtf8 rray
     // - optionally return the corresponding ordinal values in a TIntegerDynArray
-    procedure GetSetNameArray({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} value;
-      var res: TRawUtf8DynArray; trimmed: boolean = false; resOrd: PIntegerDynArray = nil);
+    procedure GetSetNameArray(const value; var res: TRawUtf8DynArray;
+    trimmed: boolean = false; resOrd: PIntegerDynArray = nil);
     /// get the enumeration names corresponding to a set value as JSON array
     function GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
@@ -1682,21 +1681,18 @@ function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
 procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
-function GetSetName(aTypeInfo: PRttiInfo;
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} value;
+function GetSetName(aTypeInfo: PRttiInfo; const value;
   trimmed: boolean = false; sep: AnsiChar = ','): RawUtf8;
 
 /// retrieve the text of all enumerate items defined in a set as dynamic array
 // - optionally return the corresponding ordinal values in a TIntegerDynArray
-function GetSetNameArray(aTypeInfo: PRttiInfo;
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} value;
+function GetSetNameArray(aTypeInfo: PRttiInfo; const value;
   trimmed: boolean = false; resOrd: PIntegerDynArray = nil): TRawUtf8DynArray;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 // - expects CustomText in the TRttiJson.RegisterCustomEnumValues() format, e.g.
 // ! const MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('one', 'and 2');
-function GetSetNameCustom(aTypeInfo: PRttiInfo;
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} value;
+function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
   customText: PRawUtf8Array; sepChar: AnsiChar = ','): RawUtf8;
 
 /// helper to retrieve the CSV text of all enumerates defined in a dynamic array
@@ -1706,8 +1702,7 @@ function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
   customText: PRawUtf8Array; sepChar: AnsiChar = ','): RawUtf8;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
-procedure GetSetNameShort(aTypeInfo: PRttiInfo;
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}value;
+procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
   out result: ShortString; trimlowercase: boolean = false); overload;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
@@ -3768,8 +3763,7 @@ begin
   TrimLeftLowerCaseShort(GetEnumName(Value), result);
 end;
 
-function TRttiEnumType.GetSetName({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} value;
-  trimmed: boolean; sep: AnsiChar): RawUtf8;
+function TRttiEnumType.GetSetName(const value; trimmed: boolean; sep: AnsiChar): RawUtf8;
 var
   j: PtrInt;
   PS, v: PShortString;
@@ -3804,8 +3798,8 @@ begin
   tmp.Done(result, CP_UTF8);
 end;
 
-procedure TRttiEnumType.GetSetNameArray({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  value; var res: TRawUtf8DynArray; trimmed: boolean; resOrd: PIntegerDynArray);
+procedure TRttiEnumType.GetSetNameArray(const value;
+  var res: TRawUtf8DynArray; trimmed: boolean; resOrd: PIntegerDynArray);
 var
   n, j: PtrInt;
   PS: PShortString;
@@ -6108,20 +6102,20 @@ begin
   aTypeInfo^.EnumBaseType^.SetEnumFromOrdinal(Value, Ordinal);
 end;
 
-function GetSetName(aTypeInfo: PRttiInfo; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} value; trimmed: boolean; sep: AnsiChar): RawUtf8;
+function GetSetName(aTypeInfo: PRttiInfo; const value;
+  trimmed: boolean; sep: AnsiChar): RawUtf8;
 begin
   result := aTypeInfo^.SetEnumType^.EnumBaseType.GetSetName(value, trimmed, sep);
 end;
 
-function GetSetNameArray(aTypeInfo: PRttiInfo; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} value; trimmed: boolean; resOrd: PIntegerDynArray): TRawUtf8DynArray;
+function GetSetNameArray(aTypeInfo: PRttiInfo; const value; trimmed: boolean;
+  resOrd: PIntegerDynArray): TRawUtf8DynArray;
 begin
   aTypeInfo^.SetEnumType^.EnumBaseType.GetSetNameArray(value, result, trimmed, resOrd);
 end;
 
-function GetSetNameCustom(aTypeInfo: PRttiInfo; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} value; customText: PRawUtf8Array; sepChar: AnsiChar): RawUtf8;
+function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
+  customText: PRawUtf8Array; sepChar: AnsiChar): RawUtf8;
 var
   info: PRttiEnumType;
   tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
@@ -6184,8 +6178,8 @@ begin
   tmp.Done(result, CP_UTF8);
 end;
 
-procedure GetSetNameShort(aTypeInfo: PRttiInfo; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif}value; out result: ShortString; trimlowercase: boolean);
+procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
+  out result: ShortString; trimlowercase: boolean);
 var
   info: PRttiEnumType;
   PS: PShortString;
