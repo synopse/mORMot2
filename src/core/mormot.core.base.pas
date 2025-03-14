@@ -1775,9 +1775,9 @@ function FastSearchInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
 function AddSortedInt64(var Values: TInt64DynArray; var Count: integer;
   Value: Int64): PtrInt;
 
-/// remove all values smaller or equal than MinValue in a sorted array of Int64
+/// remove all Values[] < MinAllowedValue in a sorted array of Int64
 procedure RemoveSortedInt64SmallerThan(var Values: TInt64DynArray;
-  var Count: integer; MinValue: Int64);
+  var Count: integer; MinAllowedValue: Int64);
 
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
@@ -7795,17 +7795,19 @@ begin
 end;
 
 procedure RemoveSortedInt64SmallerThan(var Values: TInt64DynArray;
-  var Count: integer; MinValue: Int64);
+  var Count: integer; MinAllowedValue: Int64);
 var
   lastok: integer;
 begin
   if (Count = 0) or
-     (Values[0] > MinValue) then
+     (Values[0] >= MinAllowedValue) then
     exit; // nothing to remove
-  lastok := FastSearchInt64Sorted(pointer(Values), Count - 1, MinValue);
+  lastok := FastSearchInt64Sorted(pointer(Values), Count - 1, MinAllowedValue);
   dec(Count, lastok);
-  if Count <> 0 then
-    MoveFast(Values[lastok], Values[0], lastok * SizeOf(Int64));
+  if Count = 0 then
+    Finalize(Values)
+  else
+    MoveFast(Values[lastok], Values[0], Count * SizeOf(Int64));
 end;
 
 function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
