@@ -3418,10 +3418,10 @@ begin
   begin
     dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
     if (dev <= 0) and
-       AllowBlocking then
+       AllowBlocking then // paranoid: any decent POSIX system has /dev/urandom
     begin
-      if rd > 32 then
-        rd := 32; // better to get only 256-bit from blocking /dev/random
+      if rd > 16 then
+        rd := 16; // better to get only 128-bit from old blocking /dev/random
       dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
     end;
     if dev > 0 then
