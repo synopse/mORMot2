@@ -3963,6 +3963,7 @@ var
   i32, i32_: TIntegerDynArray;
   i64: TInt64DynArray;
   i, n: PtrInt;
+  c: integer;
   timer: TPrecisionTimer;
 begin
   CheckEqual(NextPowerOfTwo(0), 1);
@@ -4145,6 +4146,31 @@ begin
   check(i64[1] = 1);
   check(i64[2] = 2);
   check(i64[3] = 3);
+  c := 4;
+  AddSortedInt64(i64, c, 10);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10');
+  AddSortedInt64(i64, c, 20);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,20');
+  AddSortedInt64(i64, c, 15);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, -100);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 0);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 1);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 2);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 9);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 17);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '20');
+  RemoveSortedInt64SmallerThan(i64, c, 20);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '20');
+  RemoveSortedInt64SmallerThan(i64, c, 170);
+  Check(i64 = nil);
+  CheckEqual(c, 0);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '');
   for n := 1 to 1000 do
   begin
     SetLength(i64, n);
