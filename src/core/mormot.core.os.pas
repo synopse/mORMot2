@@ -3400,7 +3400,7 @@ type
 
 /// a wrapper around FileRead() to ensure a whole memory buffer is retrieved
 // - expects Size to be up to 2GB (seems like a big enough memory buffer)
-// - on Windows, will read by 16MB chunks to avoid ERROR_NO_SYSTEM_RESOURCES
+// - on Windows, will read by 16MB chunks max to avoid ERROR_NO_SYSTEM_RESOURCES
 // - will call FileRead() and retry up to Size bytes are filled in the buffer
 // - return true if all memory buffer has been read, or false on error
 function FileReadAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
@@ -3436,6 +3436,11 @@ function FileIsReadable(const aFileName: TFileName): boolean;
 // not compatible e.g. with TAesPkcs7Reader padding - and has a small buffer
 // - returns the number of bytes copied from Source to Dest
 function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
+
+/// a wrapper around TStream.Read() to ensure a whole memory buffer is retrieved
+// - same as TStream.ReadBuffer but returning false with no exception on failure
+// - on Windows, will read by 16MB chunks max to avoid ERROR_NO_SYSTEM_RESOURCES
+function StreamReadAll(S: TStream; Buffer: pointer; Size: PtrInt): boolean;
 
 /// read a File content into a string, using FileSize() to guess its length
 // - content can be binary or text
@@ -6947,6 +6952,27 @@ begin
       chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
     {$endif OSWINDOWS}
     read := FileRead(F, Buffer^, chunk);
+    if read <= 0 then
+      exit; // error reading Size bytes
+    inc(PByte(Buffer), read);
+    dec(Size, read);
+  end;
+  result := true;
+end;
+
+function StreamReadAll(S: TStream; Buffer: pointer; Size: PtrInt): boolean;
+var
+  chunk, read: PtrInt;
+begin
+  result := false;
+  while Size > 0 do
+  begin
+    chunk := Size;
+    {$ifdef OSWINDOWS}
+    if chunk > 16 shl 20 then
+      chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
+    {$endif OSWINDOWS}
+    read := S.Read(Buffer^, chunk);
     if read <= 0 then
       exit; // error reading Size bytes
     inc(PByte(Buffer), read);
