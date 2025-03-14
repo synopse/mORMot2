@@ -7741,7 +7741,7 @@ begin
     repeat
       result := (L + R) shr 1;
       {$ifdef CPU32}
-      result := CompareInt64(P^[result], Value);
+      cmp := CompareInt64(P^[result], Value);
       {$else}
       cmp :=  P^[result] - Value;
       {$endif CPU32}

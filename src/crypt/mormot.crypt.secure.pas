@@ -6264,6 +6264,7 @@ var
   tmp: TSynTempBuffer;
   pad: integer;
 begin
+  result := 0;
   tmp.Init(0);
   try
     if (PRecordData <> nil) and

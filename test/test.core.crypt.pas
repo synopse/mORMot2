@@ -3672,7 +3672,7 @@ begin
       Check(cookid[i] <> 0);
     for i := 0 to high(cook) do
     begin
-      // no Finalize(r); done to verify that RecordLoadBinary() does it
+      // no Finalize(r); here to verify that RecordLoadBinary() does it
       r.id.Value := 0;
       CheckEqual(gen.Validate(cook[i], @r, TypeInfo(TJwtContent)),
         cookid[i], 'gen3');
