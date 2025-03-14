@@ -1760,6 +1760,25 @@ function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): P
 // - returns -(foundindex+1) i.e. <0 if the specified Value was found
 function FastLocateWordSorted(P: PWordArray; R: integer; Value: word): PtrInt;
 
+/// retrieve the index where to insert an Int64 value in a sorted Int64 array
+// - R is the last index of available integer entries in P^ (i.e. Count-1)
+// - returns -(foundindex+1) i.e. <0 if the specified Value was found
+function FastLocateInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
+
+/// retrieve the matching index or where to insert an integer value
+function FastSearchInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// add an integer value in a sorted dynamic array of Int64
+// - returns the index where the Value was added successfully in Values[]
+// - returns -(foundindex+1) i.e. <0 if the specified Value was already present
+function AddSortedInt64(var Values: TInt64DynArray; var Count: integer;
+  Value: Int64): PtrInt;
+
+/// remove all values smaller or equal than MinValue in a sorted array of Int64
+procedure RemoveSortedInt64SmallerThan(var Values: TInt64DynArray;
+  var Count: integer; MinValue: Int64);
+
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
 // - returns -(foundindex+1) i.e. <0 if the specified Value was already present
@@ -1828,9 +1847,6 @@ function AddInt64(var Values: TInt64DynArray;
 
 /// if not already existing, add a 64-bit integer value to a dynamic array
 function AddInt64Once(var Values: TInt64DynArray; Value: Int64): PtrInt;
-
-/// if not already existing, add a 64-bit integer value to a sorted dynamic array
-procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
 
 /// add a pointer-sized integer array at the end of a dynamic array
 function AddPtrUInt(var Values: TPtrUIntDynArray;
@@ -7062,19 +7078,6 @@ begin
   inc(ValuesCount);
 end;
 
-procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
-var
-  last: PtrInt;
-begin
-  last := high(Values);
-  if FastFindInt64Sorted(pointer(Values), last, Value) >= 0 then
-    exit; // found
-  inc(last);
-  SetLength(Values, last + 1);
-  Values[last] := Value;
-  QuickSortInt64(pointer(Values), 0, last);
-end;
-
 function AddInt64Once(var Values: TInt64DynArray; Value: Int64): PtrInt;
 begin
   result := Int64ScanIndex(pointer(Values), Length(Values), Value);
@@ -7724,6 +7727,85 @@ begin
       dec(result);
     inc(result); // return the index where to insert
   end;
+end;
+
+function FastLocateInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
+var
+  L, cmp {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
+begin
+  if R < 0 then
+    result := 0
+  else
+  begin
+    L := 0;
+    repeat
+      result := (L + R) shr 1;
+      {$ifdef CPU32}
+      result := CompareInt64(P^[result], Value);
+      {$else}
+      cmp :=  P^[result] - Value;
+      {$endif CPU32}
+      if cmp = 0 then
+      begin
+        result := -result - 1; // return -(foundindex+1) if already exists
+        exit;
+      end;
+      {$ifdef CPUX86}   // less registers on good old i386 target
+      if cmp < 0 then
+        L := result + 1
+      else
+        R := result - 1;
+      {$else}
+      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+      ll := result - 1;
+      if cmp < 0 then
+        L := rr
+      else
+        R := ll;
+      {$endif CPUX86}
+    until L > R;
+    while (result >= 0) and
+          (P^[result] >= Value) do
+      dec(result);
+    inc(result); // return the index where to insert
+  end;
+end;
+
+function FastSearchInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
+begin
+  result := FastLocateInt64Sorted(P, R, Value);
+  if result < 0 then
+     result := -(result + 1);  // returned -(foundindex+1)
+end;
+
+function AddSortedInt64(var Values: TInt64DynArray; var Count: integer;
+  Value: Int64): PtrInt;
+begin
+  result := FastLocateInt64Sorted(pointer(Values), Count - 1, Value);
+  if result < 0 then
+    exit; // Value exists -> fails and return -(foundindex+1)
+  if Count = Length(Values) then
+    SetLength(Values, NextGrow(Count));
+  if result < Count then
+    MoveFast(Values[result], Values[result + 1], (Count - result) * SizeOf(Int64))
+  else
+    result := Count;
+  Values[result] := Value;
+  inc(Count);
+end;
+
+procedure RemoveSortedInt64SmallerThan(var Values: TInt64DynArray;
+  var Count: integer; MinValue: Int64);
+var
+  lastok: integer;
+begin
+  if (Count = 0) or
+     (Values[0] > MinValue) then
+    exit; // nothing to remove
+  lastok := FastSearchInt64Sorted(pointer(Values), Count - 1, MinValue);
+  dec(Count, lastok);
+  if Count <> 0 then
+    MoveFast(Values[lastok], Values[0], lastok * SizeOf(Int64));
 end;
 
 function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
