@@ -335,6 +335,7 @@
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
       {$define CPUARM3264}
+      {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
     {$endif CPUAARCH64}
   {$else}
     // 32-bit Architecture
@@ -355,6 +356,7 @@
     {$endif CPUX86}
     {$ifdef CPUARM}
       {$define CPUARM3264}
+      {$define FPC_CPUARM}
     {$endif CPUARM}
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt

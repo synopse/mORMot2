@@ -1093,16 +1093,16 @@ type
 
 
 /// convert Intel CPU features as plain CSV text
-function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
-  const Sep: RawUtf8 = ','): RawUtf8; overload;
+function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  aIntelCPUFeatures: TIntelCpuFeatures; const Sep: RawUtf8 = ','): RawUtf8; overload;
 
 /// convert ARM 32-bit CPU features as plain CSV text
 function ToText(const aArm32CPUFeatures: TArm32HwCaps;
   const Sep: RawUtf8 = ','): RawUtf8; overload;
 
 /// convert ARM 64-bit CPU features as plain CSV text
-function ToText(const aArm64CPUFeatures: TArm64HwCaps;
-  const Sep: RawUtf8 = ','): RawUtf8; overload;
+function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  aArm64CPUFeatures: TArm64HwCaps; const Sep: RawUtf8 = ','): RawUtf8; overload;
 
 /// contains the current CPU Features as space-separated text
 // - computed from CpuFeatures set for Intel/AMD or ARM 32-bit/64-bit
@@ -3587,8 +3587,8 @@ begin
   end;
 end;
 
-function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
-  const Sep: RawUtf8): RawUtf8;
+function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  aIntelCPUFeatures: TIntelCpuFeatures; const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
     TypeInfo(TIntelCpuFeature), aIntelCPUFeatures, Sep, 3);
@@ -3601,8 +3601,8 @@ begin
     TypeInfo(TArm32HwCap), aArm32CPUFeatures, Sep, 6);
 end;
 
-function ToText(const aArm64CPUFeatures: TArm64HwCaps;
-  const Sep: RawUtf8): RawUtf8;
+function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+   aArm64CPUFeatures: TArm64HwCaps; const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
     TypeInfo(TArm64HwCap), aArm64CPUFeatures, Sep, 6);
