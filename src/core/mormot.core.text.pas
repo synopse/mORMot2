@@ -11163,11 +11163,18 @@ begin
   if aSize < 0 then
     aSize := aStream.Size - current;
   if (aSize = 0) or
-     (aSize > maxInt) then
+     (aSize > maxInt) then // Delphi uses 32-bit length() even on Win64
     exit;
+  if aStream.InheritsFrom(TCustomMemoryStream) then
+  begin
+    FastSetStringCP(result, PAnsiChar(TCustomMemoryStream(aStream).
+      Memory) + current, aSize, aCodePage);
+    exit;
+  end;
   pointer(result) := FastNewString(aSize, aCodePage);
-  aStream.ReadBuffer(pointer(result)^, aSize);
-  aStream.Position := current;
+  if not StreamReadAll(aStream, pointer(result), aSize) then
+    result := '';
+  aStream.Position := current; // always restore position
 end;
 
 function StreamChangeToRawByteString(aStream: TStream; var aPosition: Int64): RawByteString;
@@ -11182,10 +11189,13 @@ begin
     exit; // nothing new
   pointer(result) := FastNewString(size);
   current := aStream.Position;
-  aStream.Position := aPosition;
-  aStream.ReadBuffer(pointer(result)^, size);
-  aStream.Position := current;
-  aPosition := current;
+  if aPosition <> current then
+    aStream.Position := aPosition;
+  if StreamReadAll(aStream, pointer(result), size) then
+    aPosition := current
+  else
+    result := '';
+  aStream.Position := current; // always restore position
 end;
 
 function RawByteStringToStream(const aString: RawByteString): TStream;
@@ -11204,7 +11214,7 @@ begin
      (L > MaxAllowedSize) then
     exit;
   FastSetString(result, L);
-  if S.Read(pointer(result)^, L) <> L then
+  if not StreamReadAll(S, pointer(result), L) then
     result := '';
 end;
 
