@@ -9606,11 +9606,11 @@ begin
   if _EntropyGlobal.i0 = 0 then // call OS API each only once at startup
   {$endif CPUINTEL}
     XorEntropyGetOsRandom256(_EntropyGlobal); // 256-bit randomness from OS
-  XorMemory(e.r[0], _EntropyGlobal.l);
+  XorMemory(e.r[0], _EntropyGlobal.h);
   lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
   e.r[1].L := e.r[1].L xor PtrUInt(@e)  xor lec^.L;
   e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H;
-  XorMemory(e.r[2], _EntropyGlobal.h);
+  XorMemory(e.r[2], _EntropyGlobal.l);
   {$ifdef CPUINTEL} // Intel/AMD opcodes are safe enough between calls
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   RdRand32(@e.r[0].c, length(e.r[0].c)); // no-op if cfSSE42 is not available

@@ -3739,7 +3739,7 @@ type
   end;
 
   /// hold low-level GetMemoryInfo() result about current memory usage
-  // - most fields are in bytes, but percent which is the % of used memory
+  // - most fields are in bytes, except percent which is the % of used memory
   TMemoryInfo = record
     memtotal, memfree, filetotal, filefree,
     vmtotal, vmfree, allocreserved, allocused: QWord;

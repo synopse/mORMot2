@@ -2875,24 +2875,35 @@ end;
 procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
-  avg: TLoadAvg absolute mem;
-  us: Int64 absolute mem.vmtotal; // =0 after above GetMemoryInfo()
-  guid: THash128Rec absolute mem.filetotal; // also = 0
+  us: Int64            absolute mem.memtotal;
+  avg: TLoadAvg        absolute mem.memfree; // just after us value
+  guid: THash128Rec    absolute mem.memfree; // fill up to mem.vmfree
+  {$ifdef OSDARWIN}
+  proccount: cardinal  absolute mem.vmfree;
+  infocount: cardinal  absolute mem.percent;
+  info: PCardinalArray absolute mem.allocused;
+  {$else}
+  times: TBsdProcTimes absolute mem.filefree;
+  {$endif OSDARWIN}
 begin
   // some minimal OS entropy we could get for BSD/Darwin
-  bsdsysctl('kern.cp_times', @e, SizeOf(e)); // user/nice/system/int/idle
   QueryPerformanceMicroSeconds(us);
-  e.i[0] := e.i[0] xor us;
-  e.i[1] := e.i[1] xor GetTickCount64;
-  getloadavg(avg, 3); // cpu stats and random stack data
-  DefaultHasher128(@e.h1, @mem, SizeOf(mem)); // may be AesNiHash128
-  GetMemoryInfo(mem, {withalloc=}false);
-  DefaultHasher128(@e.h2, @mem, SizeOf(mem));
-  {$ifdef OSDARWIN} // we have some monotonic clocks in nanoseconds resolution
-  guid.Lo := mach_absolute_time;
+  getloadavg(avg, 3); // cpu stats and random stack data in mem
+  DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // may be AesNiHash128
+  GetMemoryInfo(mem, {withalloc=}false); // also fill mem with zeros
+  mem.vmtotal := GetTickCount64; // not retrieved by GetMemoryInfo()
+  DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+  {$ifdef OSDARWIN}
+  infocount := 0;
+  host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
+    proccount, info, infocount); // detailed per-cpu times
+  DefaultHasher128(@e.h2, pointer(info), infocount * SizeOf(cardinal));
+  guid.Lo := mach_absolute_time; // monotonic clocks in nanoseconds resolution
   guid.Hi := mach_continuous_time;
   {$else}
   CreateGuid(guid.guid); // use e.g. FreeBSD syscall or /dev/urandom
+  XorMemory(e.h2, guid);
+  BsdProcTimes(times);
   {$endif OSDARWIN}
   QueryPerformanceMicroSeconds(us); // should have changed in-between
   crcblocks(@e.h3, @mem, SizeOf(mem) shr 4); // another algo
@@ -3201,7 +3212,7 @@ end;
 procedure XorOSEntropy(var e: THash512Rec);
 var
   tmp: TSynTempBuffer;
-  si: TSysInfo absolute tmp;  // Linuxism
+  si: TSysInfo  absolute tmp; // Linuxism
   rt: TTimeSpec absolute tmp; // with nanoseconds resolution
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt);
