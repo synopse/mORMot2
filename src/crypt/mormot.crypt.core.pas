@@ -7189,7 +7189,7 @@ end;
 
 function TAesPkcs7Reader.Read(var Buffer; Count: Longint): Longint;
 var
-  chunk, padding: integer;
+  chunk, padding, max: integer;
 begin
   result := 0;
   if Count > fStreamSize then
@@ -7202,7 +7202,15 @@ begin
     begin
       // we need to read and decode input stream into fBuf[]
       fBufPos := 0;
-      fBufAvailable := fStream.Read(pointer(fBuf)^, length(fBuf));
+      fBufAvailable := 0;
+      max := length(fBuf);
+      repeat
+        chunk := fStream.Read(PByteArray(fBuf)[fBufAvailable], max);
+        if chunk <= 0 then
+          break;
+        inc(fBufAvailable, chunk); // may need several Read() calls
+        dec(max, chunk);
+      until max = 0;
       if fBufAvailable = 0 then
         break;
       if fBufAvailable and AesBlockMod <> 0 then
@@ -11372,7 +11380,7 @@ var
   procedure Read(Tmp: pointer; ByteCount: cardinal);
   begin
     if pIn = nil then
-      inStream.Read(Tmp^, ByteCount)
+      inStream.ReadBuffer(Tmp^, ByteCount)
     else
     begin
       MoveFast(pIn^, Tmp^, ByteCount);
