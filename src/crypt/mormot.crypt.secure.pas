@@ -6388,7 +6388,7 @@ begin
       TypeInfo(TBinaryCookieContext), false, @JSON_[mFast]) and
     (fContext.Version = 1) and
     (fContext.SessionSequenceStart <> 0) and
-    (fContext.SessionSequence > fContext.SessionSequenceStart) and
+    (fContext.SessionSequence >= fContext.SessionSequenceStart) and
     (fContext.CrcSalt <> 0) and
     not IsZero(fContext.CryptKey);
   fInvalidCount := length(fContext.Invalid);
