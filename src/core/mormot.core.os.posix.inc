@@ -3289,7 +3289,32 @@ begin
   result := __IsDebuggerPresent;
 end;
 
-{$ifndef OSDARWIN}
+{$ifdef OSDARWIN}
+{$if defined(cpuarm) or defined(cpuaarch64) or defined(iphonesim)}
+const // FPC RTL defined wrong field lengths for TStatfs in darwin/ptypes.inc
+  MFSTYPENAMELEN = 16;
+
+type // see https://keith.github.io/xcode-man-pages/statfs.2.html
+  TStatfs = record
+    bsize: cuint32;
+    iosize: cint32;
+    blocks: cuint64;
+    bfree: cuint64;
+    bavail: cuint64;
+    files: cuint64;
+    ffree: cuint64;
+    fsid: fsid_t;
+    owner: uid_t;
+    ftype: cuint32;
+    fflags: cuint32;
+    fssubtype: cuint32;
+    fstypename:  array[0 .. MFSTYPENAMELEN - 1] of AnsiChar;
+    mountpoint:  array[0 .. PATH_MAX - 1]       of AnsiChar;
+    mntfromname: array[0 .. PATH_MAX - 1]       of AnsiChar;
+    reserved:    array[0 .. 7] of cuint32;
+  end;
+{$ifend}
+{$else}
 // on POSIX systems, /dev/mem may be available from root
 // but sometimes even root can't access it on hardened systems
 function ReadSystemMemory(address, size: PtrUInt): RawByteString;
@@ -3444,31 +3469,6 @@ begin
   if Len > 0 then
     SharedRandom.Fill(Buffer, Len);
 end;
-
-{$if defined(cpuarm) or defined(cpuaarch64) or defined(iphonesim)}
-const // FPC RTL defined wrong field lengths for TStatfs in darwin/ptypes.inc
-  MFSTYPENAMELEN = 16;
-
-type // see https://keith.github.io/xcode-man-pages/statfs.2.html
-  TStatfs = record
-    bsize: cuint32;
-    iosize: cint32;
-    blocks: cuint64;
-    bfree: cuint64;
-    bavail: cuint64;
-    files: cuint64;
-    ffree: cuint64;
-    fsid: fsid_t;
-    owner: uid_t;
-    ftype: cuint32;
-    fflags: cuint32;
-    fssubtype: cuint32;
-    fstypename:  array[0 .. MFSTYPENAMELEN - 1] of AnsiChar;
-    mountpoint:  array[0 .. PATH_MAX - 1]       of AnsiChar;
-    mntfromname: array[0 .. PATH_MAX - 1]       of AnsiChar;
-    reserved:    array[0 .. 7] of cuint32;
-  end;
-{$ifend}
 
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord): boolean;
