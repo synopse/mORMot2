@@ -260,7 +260,7 @@ function TimeToIso8601PChar(Time: TDateTime; P: PUtf8Char; Expanded: boolean;
 // ISO-8601 parsing if possible
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
-/// decode most used TimeZone text values (CEST, GMT, +0200, -0800...)
+/// decode most used HTML TimeZone text values (CEST, GMT, +0200, -0800...)
 // - on match, returns true and the time zone minutes offset in respect to UTC
 // - if P is not a time zone, returns false and leave Zone to its supplied value
 // - will recognize only the most used text values using a fixed table (RFC 822
@@ -268,9 +268,34 @@ function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 // numerical zones is the preferred way in recent RFC anyway
 function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean; overload;
 
-/// decode most used TimeZone text values (CEST, GMT, +0200, -0800...)
+/// decode most used HTML TimeZone text values (CEST, GMT, +0200, -0800...)
 // - just a wrapper around overloaded ParseTimeZone(PUtf8Char)
 function ParseTimeZone(const s: RawUtf8; var Zone: integer): boolean; overload;
+
+const
+  /// three-chars abbreviation of all week days, starting at Sunday = index 1
+  HTML_WEEK_DAYS: array[1..7] of string[3] = (
+    'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
+
+  /// three-chars abbreviation of all month names, starting at January = index 1
+  HTML_MONTH_NAMES: array[1..12] of string[3] = (
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
+
+  /// all month names full text, starting at January = index 1
+  MONTH_NAMES: array[1..12] of RawUtF8 = (
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December');
 
 /// decode a month from its RFC 822 text value (Jan, Feb...)
 function ParseMonth(var P: PUtF8Char; var Month: word): boolean; overload;
@@ -1736,13 +1761,6 @@ const
     0, -1, -1, -1, -2, -3, -4, -4, -5,
     -5, -6, -6, -7, -7, -8, -8, -9, -9,
     -10, -10, -10, -10, -11, -12, -12);
-
-  HTML_WEEK_DAYS: array[1..7] of string[3] = (
-    'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
-
-  HTML_MONTH_NAMES: array[1..12] of string[3] = (
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
 
   HTML_MONTH_NAMES_32: array[0..11] of array[0..3] of AnsiChar = (
     'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
