@@ -363,7 +363,7 @@ type
   // basic process, and can't be easily inherited
   // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
   // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
-  TSynList = class(TObjectWithProps)
+  TSynList = class(TSynPersistent)
   protected
     fCount: integer;
     fList: TPointerDynArray;
@@ -3319,12 +3319,7 @@ end;
 
 function TSynList.Add(item: pointer): PtrInt;
 begin
-  // inlined result := ObjArrayAddCount(fList, item, fCount);
-  result := fCount;
-  if result = length(fList) then
-    SetLength(fList, NextGrow(result));
-  fList[result] := item;
-  inc(fCount);
+  result := PtrArrayAdd(fList, item, fCount);
 end;
 
 function TSynList.Insert(item: pointer; index: PtrInt): PtrInt;
