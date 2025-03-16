@@ -1877,6 +1877,10 @@ procedure AppendLine(var Text: RawUtf8; const Args: array of const;
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
   Delim: AnsiChar = PathDelim): TFileName;
 
+/// a wrapper around ExpandFileName(MakePath(Part))
+function MakeExpandedPath(const Part: array of const;
+  EndWithDelim: boolean = false): TFileName;
+
 /// a wrapper around EnsureDirectoryExists(MakePath(Part))
 function EnsureDirectoryExists(const Part: array of const;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil;
@@ -9473,6 +9477,11 @@ var
 begin
   {%H-}f.DoDelim(@Part[0], length(Part), EndWithDelim, Delim);
   f.WriteString(string(result));
+end;
+
+function MakeExpandedPath(const Part: array of const; EndWithDelim: boolean): TFileName;
+begin
+  result := ExpandFileName(MakePath(Part, EndWithDelim));
 end;
 
 function EnsureDirectoryExists(const Part: array of const;
