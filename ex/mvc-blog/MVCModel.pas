@@ -710,9 +710,7 @@ var
 begin
   if aStaticFolder <> '' then
   begin
-    PublicFolder :=
-      IncludeTrailingPathDelimiter(aStaticFolder) + 'public' + PathDelim;
-    EnsureDirectoryExists(PublicFolder);
+    PublicFolder := EnsureDirectoryExists([aStaticFolder, 'public']);
     HTTP_DEFAULT_RESOLVETIMEOUT := 1000; // don't wait forever
     HTTP_DEFAULT_CONNECTTIMEOUT := 1000;
     HTTP_DEFAULT_RECEIVETIMEOUT := 2000;

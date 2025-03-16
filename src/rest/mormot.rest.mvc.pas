@@ -221,8 +221,9 @@ type
     // html+json+css in the "Views" sub-folder under the executable)
     // - will search and parse the matching views (and associated *.partial),
     // optionally creating void templates for any missing view
-    constructor Create(aInterface: PRttiInfo; aLogClass: TSynLogClass = nil;
-      aExtensionForNotExistingTemplate: TFileName = ''); overload;
+    constructor Create(aInterface: PRttiInfo;
+      const aTemplatesFolder: TFileName = ''; aLogClass: TSynLogClass = nil;
+      const aExtensionForNotExistingTemplate: TFileName = ''); overload;
     /// define the supplied Expression Helpers definition
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpers(const aNames: array of RawUtf8;
@@ -298,7 +299,7 @@ type
     /// retrieve the current session ID
     // - can optionally retrieve the associated record Data parameter
     // - Invalidate=true would force this cookie to be rejected in the future,
-    // e.g. from Finalize()
+    // and avoid cookies replay attacks e.g. from Finalize()
     function CheckAndRetrieve(PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
       Invalidate: boolean = false): integer; virtual; abstract;
@@ -643,8 +644,8 @@ type
     // - aPublishOptions could be used to specify integration with the server
     // - aAllowedMethods will render standard GET/POST by default
     constructor Create(aApplication: TMvcApplication;
-      aRestServer: TRestServer = nil; const aSubURI: RawUtf8 = '';
-      aViews: TMvcViewsAbstract = nil;
+      const aTemplatesFolder: TFileName = ''; aRestServer: TRestServer = nil;
+      const aSubURI: RawUtf8 = ''; aViews: TMvcViewsAbstract = nil;
       aPublishOptions: TMvcPublishOptions=
         [low(TMvcPublishOption) .. high(TMvcPublishOption)];
       aAllowedMethods: TUriMethods = [mGET, mPOST]); reintroduce;
@@ -828,12 +829,12 @@ type
   end;
 
 
-const
+var
   /// the pseudo-method name for the MVC information html page
-  MVCINFO_URI = 'mvc-info';
+  MVCINFO_URI: RawUtf8 = 'mvc-info';
 
   /// the pseudo-method name for any static content for Views
-  STATIC_URI = '.static';
+  STATIC_URI: RawUtf8 = '.static';
 
 
 
@@ -903,10 +904,8 @@ end;
 
 procedure TMvcViewsAbstract.SetViewTemplateFolder(const aFolder: TFileName);
 begin
-  fViewTemplateFolder :=
-    IncludeTrailingPathDelimiter(aFolder);
-  fViewStaticFolder :=
-    IncludeTrailingPathDelimiter(fViewTemplateFolder + STATIC_URI);
+  fViewTemplateFolder := IncludeTrailingPathDelimiter(aFolder);
+  fViewStaticFolder := MakePath([fViewTemplateFolder,  STATIC_URI], true);
 end;
 
 function TMvcViewsAbstract.GetStaticFile(
@@ -1167,7 +1166,7 @@ constructor TMvcViewsMustache.Create(aInterface: PRttiInfo;
   const aParameters: TMvcViewsMustacheParameters; aLogClass: TSynLogClass);
 var
   m, i: PtrInt;
-  LowerExt: TFileName;
+  folder, LowerExt: TFileName;
   files: TFileNameDynArray;
   partial: TSynMustache;
   partialName: RawUtf8;
@@ -1177,13 +1176,17 @@ begin
   // get views
   fViewTemplateFileTimestampMonitor :=
     aParameters.FileTimestampMonitorAfterSeconds;
-  if aParameters.Folder = '' then
-    ViewTemplateFolder := Executable.ProgramFilePath + 'Views'
-  else
-    ViewTemplateFolder := aParameters.Folder;
+  folder := aParameters.Folder;
+  if folder = '' then
+  begin
+    folder := Executable.ProgramFilePath + 'Views';
+    if not DirectoryExists(folder) then
+      DirectoryExists([Executable.ProgramFilePath + '..', 'Views'], @folder);
+  end;
+  SetViewTemplateFolder(folder); // set with the proper method
   if (aParameters.ExtensionForNotExistingTemplate <> '') and
-     not DirectoryExists(ViewTemplateFolder) then
-    ForceDirectories(ViewTemplateFolder);
+     not DirectoryExists(folder) then
+    ForceDirectories(folder);
   if aParameters.CsvExtensions = '' then
     LowerExt := ',html,json,css,'
   else
@@ -1250,11 +1253,13 @@ begin
 end;
 
 constructor TMvcViewsMustache.Create(aInterface: PRttiInfo;
-  aLogClass: TSynLogClass; aExtensionForNotExistingTemplate: TFileName);
+  const aTemplatesFolder: TFileName; aLogClass: TSynLogClass;
+  const aExtensionForNotExistingTemplate: TFileName);
 var
   params: TMvcViewsMustacheParameters;
 begin
   FillcharFast(params, SizeOf(params), 0);
+  params.Folder := aTemplatesFolder;
   params.FileTimestampMonitorAfterSeconds := 5;
   params.ExtensionForNotExistingTemplate := aExtensionForNotExistingTemplate;
   params.Helpers := TSynMustache.HelpersGetStandardList;
@@ -1405,8 +1410,8 @@ end;
 procedure TMvcViewsMustache.Render(methodIndex: integer; const Context: variant;
   var View: TMvcView);
 begin
-  View.Content := GetRenderer(methodIndex, View).Render(
-    Context, fViewPartials, fViewHelpers);
+  View.Content := GetRenderer(methodIndex, View).
+                  Render(Context, fViewPartials, fViewHelpers);
   if IsVoid(View.Content) then
     // rendering failure
     with fViews[methodIndex] do
@@ -1892,7 +1897,8 @@ end;
 { TMvcRunOnRestServer }
 
 constructor TMvcRunOnRestServer.Create(aApplication: TMvcApplication;
-  aRestServer: TRestServer; const aSubURI: RawUtf8; aViews: TMvcViewsAbstract;
+  const aTemplatesFolder: TFileName; aRestServer: TRestServer;
+  const aSubURI: RawUtf8; aViews: TMvcViewsAbstract;
   aPublishOptions: TMvcPublishOptions; aAllowedMethods: TUriMethods);
 var
   m: PtrInt;
@@ -1907,7 +1913,7 @@ begin
     fRestServer := aRestServer;
   if aViews = nil then
     aViews := TMvcViewsMustache.Create(aApplication.fFactory.InterfaceTypeInfo,
-      fRestServer.LogClass, '.html')
+      aTemplatesFolder, fRestServer.LogClass, '.html')
   else
     aViews.fLogClass := fRestServer.LogClass;
   inherited Create(aApplication, aViews);
