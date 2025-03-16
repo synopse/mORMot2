@@ -191,26 +191,15 @@ begin
 end;
 
 procedure TBlogApplication.MonthToText(const Value: variant; out result: variant);
-const
-  MONTHS: array[0..11] of RawUtf8 = (
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December');
 var
-  month: integer;
+  m, y: integer;
 begin
-  if VariantToInteger(Value, month) and
-     (month > 0) then
-    RawUtf8ToVariant(MONTHS[month mod 12] + ' ' + UInt32ToUTF8(month div 12), result)
+  if VariantToInteger(Value, m) and
+     (m > 0) then
+  begin
+    y := m div 12;
+    RawUtf8ToVariant(Make([MONTH_NAMES[m - y * 12 + 1], ' ', y]), result);
+  end
   else
     SetVariantNull(result);
 end;
