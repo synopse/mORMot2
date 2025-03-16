@@ -1877,14 +1877,24 @@ procedure AppendLine(var Text: RawUtf8; const Args: array of const;
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
   Delim: AnsiChar = PathDelim): TFileName;
 
-/// just a wrapper around EnsureDirectoryExists(MakePath([Part]))
+/// a wrapper around EnsureDirectoryExists(MakePath(Part))
 function EnsureDirectoryExists(const Part: array of const;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil;
   NoExpand: boolean = false): TFileName; overload;
 
-/// just a wrapper around EnsureDirectoryExists(NormalizeFileName(MakePath([Part])))
+/// a wrapper around EnsureDirectoryExists(NormalizeFileName(MakePath(Part)))
 function NormalizeDirectoryExists(const Part: array of const;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
+
+/// a wrapper around FileExists(MakePath(Part))
+// - can optionally set the file name into a variable if it did exist
+function FileExists(const Part: array of const;
+  SetIfFound: PFileName = nil): boolean; overload;
+
+/// a wrapper around DirectoryExists(MakePath(Part))
+// - can optionally set the file name into a variable if it did exist
+function DirectoryExists(const Part: array of const;
+  SetIfFound: PFileName = nil): boolean; overload;
 
 /// MakePath() variant which can handle the file extension specifically
 function MakeFileName(const Part: array of const; LastIsExt: boolean = true): TFileName;
@@ -9477,6 +9487,30 @@ function NormalizeDirectoryExists(const Part: array of const;
 begin
   result := EnsureDirectoryExists(NormalizeFileName(MakePath(Part)),
     RaiseExceptionOnCreationFailure);
+end;
+
+function FileExists(const Part: array of const;
+  SetIfFound: PFileName): boolean;
+var
+  filename: TFileName;
+begin
+  filename := MakePath(Part);
+  result := FileExists(filename);
+  if result and
+     (SetIfFound <> nil) then
+    SetIfFound^ := filename;
+end;
+
+function DirectoryExists(const Part: array of const;
+  SetIfFound: PFileName): boolean;
+var
+  folder: TFileName;
+begin
+  folder := MakePath(Part);
+  result := DirectoryExists(folder);
+  if result and
+     (SetIfFound <> nil) then
+    SetIfFound^ := folder;
 end;
 
 function MakeFileName(const Part: array of const; LastIsExt: boolean): TFileName;
