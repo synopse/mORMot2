@@ -605,12 +605,18 @@ type
   // for every TOrm table of the Server data model
   // - by default, TRestServer authentication would be by-passed for all
   // MVC routes, unless bypassAuthentication option is undefined
+  // - allowJsonFormat will recognize ####/json URIs and return the Mustache
+  // data context as plain JSON without any HTML rendering
+  // - defaultErrorContext will include basic {{originalErrorContext}}
+  // information - could be disabled for verbose object debugging purposes
   TMvcPublishOption = (
     publishMvcInfo,
     publishStatic,
     cacheStatic,
     registerOrmTableAsExpressions,
-    bypassAuthentication);
+    bypassAuthentication,
+    allowJsonFormat,
+    defaultErrorContext);
 
   /// which kind of optional content should be publish
   TMvcPublishOptions = set of TMvcPublishOption;
@@ -743,6 +749,7 @@ type
     fFactory: TInterfaceFactory;
     fFactoryEntry: pointer;
     fFactoryErrorIndex: integer;
+    fRenderOptions: set of (roDefaultErrorContext);
     fSession: TMvcSessionAbstract;
     fRestModel: TRest;
     fRestServer: TRestServer;
@@ -1920,6 +1927,8 @@ var
 begin
   if aApplication = nil then
     EMvcException.RaiseUtf8('%.Create(aApplication=nil)', [self]);
+  if defaultErrorContext in aPublishOptions then
+    include(aApplication.fRenderOptions, roDefaultErrorContext);
   if aRestServer = nil then
     fRestServer := aApplication.RestModel as TRestServer
   else
@@ -1984,7 +1993,7 @@ procedure TMvcRunOnRestServer.InternalRunOnRestServer(
 var
   p: PUtf8Char;
   mvcinfo, inputContext: variant;
-  rawMethodName, rawFormat, cached, body, content: RawUtf8;
+  mainMethod, subMethod, cached, body, content: RawUtf8;
   staticFileName: TFileName;
   rendererClass: TMvcRendererReturningDataClass;
   renderer: TMvcRendererReturningData;
@@ -1994,11 +2003,11 @@ var
 begin
   // 1. parse URI
   p := pointer(MethodName);
-  if GetNextItemMultiple(p, '/?', rawMethodName) = '/' then
-    GetNextItem(p, '?', rawFormat);
+  if GetNextItemMultiple(p, '/?', mainMethod) = '/' then
+    GetNextItem(p, '?', subMethod);
   // 2. implement mvc-info endpoint
   if (publishMvcInfo in fPublishOptions) and
-     PropNameEquals(rawMethodName, MVCINFO_URI) then
+     PropNameEquals(mainMethod, MVCINFO_URI) then
   begin
     if fMvcInfoCache = '' then
     begin
@@ -2011,23 +2020,23 @@ begin
   else
   // 3. serve static resources, with proper caching
   if (publishStatic in fPublishOptions) and
-     PropNameEquals(rawMethodName, STATIC_URI) then
+     PropNameEquals(mainMethod, STATIC_URI) then
   begin
     // code below will use a local in-memory cache, but would do the same as:
     // Ctxt.ReturnFileFromFolder(fViews.ViewStaticFolder);
     fCacheLocker.Enter;
     try
       if cacheStatic in fPublishOptions then
-        cached := fStaticCache.Value(rawFormat, #0)
+        cached := fStaticCache.Value(subMethod, #0)
       else
         cached := #0;
       if cached = #0 then
-        if not SafeFileNameU(rawFormat) then // avoid injection
+        if not SafeFileNameU(subMethod) then // avoid injection
           // cached='' means HTTP_NOTFOUND
           cached := ''
         else
         begin
-          Utf8ToFileName(StringReplaceChars(rawFormat, '/', PathDelim), staticFileName);
+          Utf8ToFileName(StringReplaceChars(subMethod, '/', PathDelim), staticFileName);
           if cacheStatic in fPublishOptions then
           begin
             // retrieve and cache
@@ -2059,8 +2068,15 @@ begin
   begin
     // 4. render regular page using proper viewer
     QueryPerformanceMicroSeconds(start);
-    if PropNameEquals(rawFormat, 'json') then
-      rendererClass := TMvcRendererJson
+    if subMethod <> '' then
+      if (allowJsonFormat in fPublishOptions) and
+         PropNameEquals(subMethod, 'json') then
+        rendererClass := TMvcRendererJson
+      else
+      begin
+        Ctxt.Error('', HTTP_NOTFOUND);
+        exit;
+      end
     else
       rendererClass := TMvcRendererFromViews;
     renderer := rendererClass.Create(self);
@@ -2069,7 +2085,7 @@ begin
       renderer.fRemoteUserAgent := Ctxt.Call^.LowLevelUserAgent;
       if Ctxt.Method in fAllowedMethods then
       begin
-        methodIndex := fApplication.fFactory.FindMethodIndex(rawMethodName);
+        methodIndex := fApplication.fFactory.FindMethodIndex(mainMethod);
         if methodIndex >= 0 then
         begin
           method := @fApplication.fFactory.Methods[methodIndex];
