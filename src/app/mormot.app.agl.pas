@@ -1090,7 +1090,7 @@ constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
   fHttpTimeoutMS := 200;
-  fFolder := IncludeTrailingPathDelimiter(Executable.ProgramFilePath + 'services');
+  fFolder := MakePath([Executable.ProgramFilePath, 'services'], true);
   fExt := '.service';
   fCommandFile := 'cmd';
 end;

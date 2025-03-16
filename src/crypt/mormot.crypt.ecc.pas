@@ -2773,8 +2773,7 @@ constructor TEccCertificateSecret.CreateFromSecureFile(
   Pbkdf2Round: integer; Aes: TAesAbstractClass);
 begin
   CreateFromSecureFile(
-    IncludeTrailingPathDelimiter(FolderName) + Utf8ToString(Serial),
-    PassWord, Pbkdf2Round, Aes);
+    MakePath([FolderName, Serial], true), PassWord, Pbkdf2Round, Aes);
 end;
 
 constructor TEccCertificateSecret.CreateFrom(Cert: TEccCertificate;
@@ -2905,8 +2904,7 @@ begin
     result := false
   else
     result := FileFromString(SaveToSecureBinary(PassWord, AFStripes,
-      Pbkdf2Round, Aes, NoHeader), IncludeTrailingPathDelimiter(DestFolder) +
-      SaveToSecureFileName);
+      Pbkdf2Round, Aes, NoHeader), MakePath([DestFolder, SaveToSecureFileName]));
 end;
 
 function TEccCertificateSecret.SaveToSecureFiles(const PassWord: RawUtf8;

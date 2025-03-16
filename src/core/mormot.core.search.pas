@@ -1859,7 +1859,7 @@ var
         if SearchRecValidFolder(F, ffoIncludeHiddenFiles in Options) and
            ((IgnoreFileName = '') or
             (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
-          SearchFolder(IncludeTrailingPathDelimiter(folder + F.Name));
+          SearchFolder(MakePath([folder, F.Name], true));
       until FindNext(F) <> 0;
       FindClose(F);
     end;

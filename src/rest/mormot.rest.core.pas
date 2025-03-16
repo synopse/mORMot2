@@ -3978,7 +3978,7 @@ var
   fileName: TFileName;
 begin
   if DefaultFileName <> '' then
-    fileName := IncludeTrailingPathDelimiter(FolderName) + DefaultFileName;
+    fileName := MakePath([FolderName, DefaultFileName]);
   ReturnFile(fileName,
     Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;

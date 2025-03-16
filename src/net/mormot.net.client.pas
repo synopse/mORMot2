@@ -3271,8 +3271,7 @@ begin
   // try to get from local HashCacheDir
   if (params.HashCacheDir <> '') and
      DirectoryExists(params.HashCacheDir) then
-    cached := IncludeTrailingPathDelimiter(params.HashCacheDir) +
-              ExtractFileName(result);
+    cached := MakePath([params.HashCacheDir, ExtractFileName(result)]);
   if (destfile <> '') and
      Assigned(params.Hasher) and
      (params.Hash <> '') then

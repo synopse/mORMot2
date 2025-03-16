@@ -7975,12 +7975,12 @@ var
   var
     F: TSearchRec;
   begin
-    if FindFirst(DirName + Mask, faAnyfile - faDirectory, F) = 0 then
+    if FindFirst(MakePath([DirName, Mask]), faAnyfile - faDirectory, F) = 0 then
     begin
       repeat
         if SearchRecValidFile(F, {includehidden=}true) and
            (F.Size < 65535) then // certificate files are expected to be < 64KB
-          AddRawUtf8(result, n, AddFromFile(DirName + F.Name));
+          AddRawUtf8(result, n, AddFromFile(MakePath([DirName, F.Name])));
       until FindNext(F) <> 0;
       FindClose(F);
     end;
@@ -7989,7 +7989,7 @@ var
     begin
       repeat
         if SearchRecValidFolder(F, {includehidden=}true) then
-          SearchFolder(IncludeTrailingPathDelimiter(DirName + F.Name));
+          SearchFolder(MakePath([DirName, F.Name]));
       until FindNext(F) <> 0;
       FindClose(F);
     end;
@@ -7997,7 +7997,7 @@ var
 
 begin
   n := 0;
-  SearchFolder(IncludeTrailingPathDelimiter(Folder));
+  SearchFolder(Folder);
   SetLength(result, n);
 end;
 

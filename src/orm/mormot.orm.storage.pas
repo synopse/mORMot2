@@ -1597,7 +1597,7 @@ begin
   if fFilePath = '' then
     result := Executable.ProgramFilePath + result
   else
-    result := IncludeTrailingPathDelimiter(fFilePath) + result;
+    result := MakePath([fFilePath, result]);
 end;
 
 

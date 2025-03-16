@@ -1384,8 +1384,7 @@ begin
     exit;
   templateFound := -1;
   for i := 0 to high(Path) do
-    if FindFirst(IncludeTrailingPathDelimiter(Path[i]) + '*.mustache',
-        faAnyFile, SR) = 0 then
+    if FindFirst(MakePath([Path[i], '*.mustache']), faAnyFile, SR) = 0 then
     begin
       templateFound := i;
       break;
@@ -1464,8 +1463,7 @@ begin
     // download as file
     head := HEADER_CONTENT_TYPE + 'application/' + LowerCase(templateExt);
   templateName := templateName + '.' + templateExt + '.mustache';
-  template := RawUtf8FromFile(
-    IncludeTrailingPathDelimiter(Path[templateFound]) + Utf8ToString(templateName));
+  template := RawUtf8FromFile(MakePath([Path[templateFound], templateName]));
   if template = '' then
   begin
     Ctxt.Error(templateName, HTTP_NOTFOUND);
@@ -1613,7 +1611,7 @@ begin
   ComputeSearchPath(Path, SearchPath);
   for i := 0 to High(SearchPath) do
   begin
-    result := IncludeTrailingPathDelimiter(SearchPath[i]) + TemplateName;
+    result := MakePath([SearchPath[i], TemplateName]);
     if FileExists(result) then
       exit;
   end;

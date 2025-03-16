@@ -1669,24 +1669,18 @@ begin
     LibraryFileName := LIBNAME;
   if (SynDBOracleOCIpath <> '') and
      DirectoryExists(SynDBOracleOCIpath) then
-    l1 := ExtractFilePath(ExpandFileName(
-      SynDBOracleOCIpath + PathDelim)) + LibraryFileName;
+    l1 := MakePath([SynDBOracleOCIpath, LibraryFileName]);
   l2 := Executable.ProgramFilePath + LibraryFileName;
   if not FileExists(l2) then
   begin
-    l2 := Executable.ProgramFilePath + 'OracleInstantClient';
-    if not DirectoryExists(l2) then
-    begin
-      l2 := Executable.ProgramFilePath + 'OCI';
-      if not DirectoryExists(l2) then
-        l2 := Executable.ProgramFilePath + 'Oracle';
-    end;
+    if not DirectoryExists([Executable.ProgramFilePath, 'Oracle'], @l2) then
+      if not DirectoryExists([Executable.ProgramFilePath, 'OCI'], @l2) then
+        l2 := Executable.ProgramFilePath + 'OracleInstantClient';
     l2 := l2 + PathDelim + LibraryFileName;
   end;
   l3 := GetEnvironmentVariable('ORACLE_HOME');
   if l3 <> '' then
-    l3 := IncludeTrailingPathDelimiter(l3) +
-            'bin' + PathDelim + LibraryFileName;
+    l3 := MakePath([l3, 'bin', LibraryFileName]);
   try
     TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
     P := @@ClientVersion;
