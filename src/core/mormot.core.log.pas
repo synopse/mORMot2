@@ -668,7 +668,7 @@ type
     {$ifdef OSWINDOWS}
     fNoEnvironmentVariable: boolean;
     {$endif OSWINDOWS}
-    fExceptionIgnore: TList;
+    fExceptionIgnore: TSynList;
     fEchoToConsole: TSynLogLevels;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
@@ -747,7 +747,7 @@ type
     // - you may also trigger ESynLogSilent exceptions for silent process
     // - see also ExceptionIgnoreCurrentThread property, if you want a per-thread
     // filtering of all exceptions
-    property ExceptionIgnore: TList
+    property ExceptionIgnore: TSynList
       read fExceptionIgnore;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// allow to (temporarly) ignore exceptions in the current thread
@@ -4020,7 +4020,7 @@ begin
   {$ifdef OSWINDOWS}
   fEchoToConsoleBackground := true; // big speed-up on Windows
   {$endif OSWINDOWS}
-  fExceptionIgnore := TList.Create;
+  fExceptionIgnore := TSynList.Create;
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS,
                        sllError, sllFail, sllLastError, sllDDDError];
 end;
