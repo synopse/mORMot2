@@ -1673,8 +1673,8 @@ begin
   l2 := Executable.ProgramFilePath + LibraryFileName;
   if not FileExists(l2) then
   begin
-    if not DirectoryExists([Executable.ProgramFilePath, 'Oracle'], @l2) then
-      if not DirectoryExists([Executable.ProgramFilePath, 'OCI'], @l2) then
+    if not DirectoryExistsMake([Executable.ProgramFilePath, 'Oracle'], @l2) then
+      if not DirectoryExistsMake([Executable.ProgramFilePath, 'OCI'], @l2) then
         l2 := Executable.ProgramFilePath + 'OracleInstantClient';
     l2 := l2 + PathDelim + LibraryFileName;
   end;

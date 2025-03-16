@@ -1892,13 +1892,13 @@ function NormalizeDirectoryExists(const Part: array of const;
 
 /// a wrapper around FileExists(MakePath(Part))
 // - can optionally set the file name into a variable if it did exist
-function FileExists(const Part: array of const;
-  SetIfFound: PFileName = nil): boolean; overload;
+function FileExistsMake(const Part: array of const;
+  SetIfFound: PFileName = nil): boolean;
 
 /// a wrapper around DirectoryExists(MakePath(Part))
 // - can optionally set the file name into a variable if it did exist
-function DirectoryExists(const Part: array of const;
-  SetIfFound: PFileName = nil): boolean; overload;
+function DirectoryExistsMake(const Part: array of const;
+  SetIfFound: PFileName = nil): boolean;
 
 /// MakePath() variant which can handle the file extension specifically
 function MakeFileName(const Part: array of const; LastIsExt: boolean = true): TFileName;
@@ -9498,7 +9498,7 @@ begin
     RaiseExceptionOnCreationFailure);
 end;
 
-function FileExists(const Part: array of const;
+function FileExistsMake(const Part: array of const;
   SetIfFound: PFileName): boolean;
 var
   filename: TFileName;
@@ -9510,7 +9510,7 @@ begin
     SetIfFound^ := filename;
 end;
 
-function DirectoryExists(const Part: array of const;
+function DirectoryExistsMake(const Part: array of const;
   SetIfFound: PFileName): boolean;
 var
   folder: TFileName;

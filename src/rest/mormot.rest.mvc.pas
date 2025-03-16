@@ -1188,7 +1188,7 @@ begin
   begin
     folder := Executable.ProgramFilePath + 'Views';
     if not DirectoryExists(folder) then
-      DirectoryExists([Executable.ProgramFilePath + '..', 'Views'], @folder);
+      DirectoryExistsMake([Executable.ProgramFilePath + '..', 'Views'], @folder);
   end;
   SetViewTemplateFolder(folder); // set with the proper method
   if (aParameters.ExtensionForNotExistingTemplate <> '') and
