@@ -18,6 +18,7 @@ uses
 
   sysutils,
   mormot.core.base,
+  mormot.core.text,
   mormot.core.rtti,
   mormot.core.os,
   mormot.db.raw.sqlite3,
@@ -34,6 +35,7 @@ var
   aServer: TRestServerDB;
   aApplication: TBlogApplication;
   aHTTPServer: TRestHttpServer;
+  aTemplatesFolder: TFileName;
   LogFamily: TSynLogFamily;
 
 begin
@@ -53,7 +55,10 @@ begin
       aServer.Server.CreateMissingTables;
       aApplication := TBlogApplication.Create;
       try
-        aApplication.Start(aServer);
+        if not DirectoryExists([Executable.ProgramFilePath, 'Views'], @aTemplatesFolder) then
+          // circumvent if was not compiled into 'exe' sub-folder
+          DirectoryExists([Executable.ProgramFilePath, 'exe', 'Views'], @aTemplatesFolder);
+        aApplication.Start(aServer, aTemplatesFolder);
         aHTTPServer := TRestHttpServer.Create('8092', aServer, '+',
           HTTP_DEFAULT_MODE, nil, 16, secNone, '', '', HTTPSERVER_DEBUG_OPTIONS);
         try
