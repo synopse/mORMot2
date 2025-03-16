@@ -443,8 +443,7 @@ type
   protected
     fApplication: TMvcApplication;
     fMethodIndex: integer;
-    fMethodReturnsAction: boolean;
-    fInput: RawUtf8;
+    fInput, fRemoteIP, fRemoteUserAgent: RawUtf8;
     fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure Renders(var outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
@@ -2066,6 +2065,8 @@ begin
       rendererClass := TMvcRendererFromViews;
     renderer := rendererClass.Create(self);
     try
+      renderer.fRemoteIP := Ctxt.Call^.LowLevelRemoteIP;
+      renderer.fRemoteUserAgent := Ctxt.Call^.LowLevelUserAgent;
       if Ctxt.Method in fAllowedMethods then
       begin
         methodIndex := fApplication.fFactory.FindMethodIndex(rawMethodName);
