@@ -1325,6 +1325,15 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
+function DirectoryExists(const FolderName: TFileName): boolean;
+var
+  st: TStat;
+begin
+  result := (FolderName <> '') and
+            (fpStat(pointer(FolderName), st) = 0) and
+            FpS_ISDIR(st.st_mode);
+end;
+
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
 begin
   if aFileName = '' then

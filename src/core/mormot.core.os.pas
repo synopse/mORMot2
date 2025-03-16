@@ -2409,6 +2409,10 @@ function ExpandFileName(const FileName: TFileName): TFileName;
 // - will directly use fpstat() so is slightly faster than default FPC RTL
 function FileExists(const FileName: TFileName): boolean;
 
+/// faster cross-platform alternative to sysutils homonymous function
+// - will directly use fpstat() so is slightly faster than default FPC RTL
+function DirectoryExists(const FolderName: TFileName): boolean; overload;
+
 /// redefined from FPC RTL sysutils for consistency
 // - warning: this function replaces ALL SysUtils.FileCreate() overloads,
 // putting aMode as the SECOND parameter, just like with FileOpen()
