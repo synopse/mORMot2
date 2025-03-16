@@ -7659,38 +7659,41 @@ var
   L {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
   cmp: integer;
 begin
-  if R < 0 then
-    result := 0
+  if R >= 0 then
+    if Value < P[R] then
+    begin
+      L := 0;
+      repeat
+        result := (L + R) shr 1;
+        cmp := P^[result] - Value;
+        if cmp = 0 then
+        begin
+          result := -result - 1; // return -(foundindex+1) if already exists
+          exit;
+        end;
+        {$ifdef CPUX86}   // less registers on good old i386 target
+        if cmp < 0 then
+          L := result + 1
+        else
+          R := result - 1;
+        {$else}
+        rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+        ll := result - 1;
+        if cmp < 0 then
+          L := rr
+        else
+          R := ll;
+        {$endif CPUX86}
+      until L > R;
+      while (result >= 0) and
+            (P^[result] > Value) do
+        dec(result);
+      inc(result); // return the index where to insert
+    end
+    else
+      result := R + 1 // common case when the new value is bigger than others
   else
-  begin
-    L := 0;
-    repeat
-      result := (L + R) shr 1;
-      cmp := P^[result] - Value;
-      if cmp = 0 then
-      begin
-        result := -result - 1; // return -(foundindex+1) if already exists
-        exit;
-      end;
-      {$ifdef CPUX86}   // less registers on good old i386 target
-      if cmp < 0 then
-        L := result + 1
-      else
-        R := result - 1;
-      {$else}
-      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      ll := result - 1;
-      if cmp < 0 then
-        L := rr
-      else
-        R := ll;
-      {$endif CPUX86}
-    until L > R;
-    while (result >= 0) and
-          (P^[result] >= Value) do
-      dec(result);
-    inc(result); // return the index where to insert
-  end;
+    result := 0;
 end;
 
 function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
@@ -7723,7 +7726,7 @@ begin
         R := result - 1;
     until L > R;
     while (result >= 0) and
-          (P^[result] >= Value) do
+          (P^[result] > Value) do
       dec(result);
     inc(result); // return the index where to insert
   end;
@@ -7733,42 +7736,45 @@ function FastLocateInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
 var
   L, cmp {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
 begin
-  if R < 0 then
-    result := 0
+  if R >= 0 then
+    if Value < P[R] then
+    begin
+      L := 0;
+      repeat
+        result := (L + R) shr 1;
+        {$ifdef CPU32}
+        cmp := CompareInt64(P^[result], Value);
+        {$else}
+        cmp :=  P^[result] - Value;
+        {$endif CPU32}
+        if cmp = 0 then
+        begin
+          result := -result - 1; // return -(foundindex+1) if already exists
+          exit;
+        end;
+        {$ifdef CPUX86}   // less registers on good old i386 target
+        if cmp < 0 then
+          L := result + 1
+        else
+          R := result - 1;
+        {$else}
+        rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+        ll := result - 1;
+        if cmp < 0 then
+          L := rr
+        else
+          R := ll;
+        {$endif CPUX86}
+      until L > R;
+      while (result >= 0) and
+            (P^[result] > Value) do
+        dec(result);
+      inc(result); // return the index where to insert
+    end
+    else
+      result := R + 1 // common case when the new value is bigger than others
   else
-  begin
-    L := 0;
-    repeat
-      result := (L + R) shr 1;
-      {$ifdef CPU32}
-      cmp := CompareInt64(P^[result], Value);
-      {$else}
-      cmp :=  P^[result] - Value;
-      {$endif CPU32}
-      if cmp = 0 then
-      begin
-        result := -result - 1; // return -(foundindex+1) if already exists
-        exit;
-      end;
-      {$ifdef CPUX86}   // less registers on good old i386 target
-      if cmp < 0 then
-        L := result + 1
-      else
-        R := result - 1;
-      {$else}
-      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      ll := result - 1;
-      if cmp < 0 then
-        L := rr
-      else
-        R := ll;
-      {$endif CPUX86}
-    until L > R;
-    while (result >= 0) and
-          (P^[result] >= Value) do
-      dec(result);
-    inc(result); // return the index where to insert
-  end;
+    result := 0;
 end;
 
 function FastSearchInt64Sorted(P: PInt64Array; R: PtrInt; Value: Int64): PtrInt;
@@ -7787,9 +7793,7 @@ begin
   if Count = Length(Values) then
     SetLength(Values, NextGrow(Count));
   if result < Count then
-    MoveFast(Values[result], Values[result + 1], (Count - result) * SizeOf(Int64))
-  else
-    result := Count;
+    MoveFast(Values[result], Values[result + 1], (Count - result) * SizeOf(Int64));
   Values[result] := Value;
   inc(Count);
 end;
