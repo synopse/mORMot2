@@ -55,9 +55,11 @@ begin
       aServer.Server.CreateMissingTables;
       aApplication := TBlogApplication.Create;
       try
-        if not DirectoryExists([Executable.ProgramFilePath, 'Views'], @aTemplatesFolder) then
+        if not DirectoryExistsMake(
+            [Executable.ProgramFilePath, 'Views'], @aTemplatesFolder) then
           // circumvent if was not compiled into 'exe' sub-folder
-          DirectoryExists([Executable.ProgramFilePath, 'exe', 'Views'], @aTemplatesFolder);
+          DirectoryExistsMake(
+            [Executable.ProgramFilePath, 'exe', 'Views'], @aTemplatesFolder);
         aApplication.Start(aServer, aTemplatesFolder);
         aHTTPServer := TRestHttpServer.Create('8092', aServer, '+',
           HTTP_DEFAULT_MODE, nil, 16, secNone, '', '', HTTPSERVER_DEBUG_OPTIONS);
