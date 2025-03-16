@@ -449,6 +449,7 @@ type
     procedure Renders(var outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
     function Redirects(const action: TMvcAction): boolean; virtual;
+    procedure AddErrorContext(var context: variant; error: integer);
     procedure CommandError(const ErrorName: RawUtf8; const ErrorValue: variant;
       ErrorCode: integer); virtual;
   public
@@ -1540,18 +1541,17 @@ var
 begin
   result := fContext.Generate(cookie, SessionTimeOutMinutes,
     PRecordData, PRecordTypeInfo);
-  if result <> 0 then
+  if result = 0 then
+    exit;
+  if Assigned(fApplication) and
+     Assigned(fApplication.OnSessionCreate) then
   begin
-    if Assigned(fApplication) and
-       Assigned(fApplication.OnSessionCreate) then
-    begin
-      if (PRecordData <> nil) and
-         (PRecordTypeInfo <> nil) then
-        CookieRecordToVariant(PRecordData, PRecordTypeInfo, info);
-      fApplication.OnSessionCreate(self, result, info);
-    end;
-    SetCookie(cookie); // will be sent back to the client and stored there
+    if (PRecordData <> nil) and
+       (PRecordTypeInfo <> nil) then
+      CookieRecordToVariant(PRecordData, PRecordTypeInfo, info);
+    fApplication.OnSessionCreate(self, result, info);
   end;
+  SetCookie(cookie); // will be sent back to the client and stored there
 end;
 
 procedure TMvcSessionWithCookies.Finalize(PRecordTypeInfo: PRttiInfo);
@@ -1637,11 +1637,27 @@ begin
   fApplication.GetViewInfo(fMethodIndex, info);
   renderContext := _ObjFast([
     'main',      info,
-    'msg',       StatusCodeToErrorMsg(ErrorCode),
-    'errorCode', ErrorCode,
     ErrorName, ErrorValue]);
-  renderContext.originalErrorContext := JsonReformat(ToUtf8(renderContext));
+  AddErrorContext(renderContext, ErrorCode);
   Renders(renderContext, ErrorCode, true);
+end;
+
+procedure TMvcRendererAbstract.AddErrorContext(
+  var context: variant; error: integer);
+var
+  details: RawUtf8;
+begin
+  _ObjAddProps([
+    'msg',       StatusCodeToErrorMsg(error),
+    'errorCode', error,
+    'ip',        fRemoteIP,
+    'useragent', fRemoteUserAgent], context, {dontadddef=}true);
+  if roDefaultErrorContext in fApplication.fRenderOptions then
+    details := Make([fApplication.fFactory.InterfaceName, ' ', NowToString,
+      ' ', fRemoteIP, ' ', fRemoteUserAgent])
+  else
+    details := JsonReformat(VariantSaveJson(context));
+  _ObjAddPropU('originalErrorContext', details, context);
 end;
 
 procedure TMvcRendererAbstract.ExecuteCommand(aMethodIndex: integer);
@@ -1698,14 +1714,12 @@ begin
             fApplication.GetViewInfo(fMethodIndex, info);
             _Safe(renderContext)^.AddValue('main', info);
             if fMethodIndex = fApplication.fFactoryErrorIndex then
-              _ObjAddProps([
-                'errorCode',            action.ReturnedStatus,
-                'originalErrorContext', JsonReformat(ToUtf8(renderContext))],
-                renderContext);
+              AddErrorContext(renderContext, action.ReturnedStatus);
             Renders(renderContext, action.ReturnedStatus, false);
             exit; // success
           end;
         except
+          // handle EMvcApplication.GotoView/GotoError/Default redirections
           on E: EMvcApplication do
             // lower level exceptions will be handled below
             action := E.fAction;
