@@ -1590,7 +1590,8 @@ type
     function Root: RawUtf8;
     /// comute the root resource Address as a resource "file" name
     // - e.g. '10' for '/category/name/10?param=1'
-    // - warning: no TFileName nor UrlDecode() conversion is performed
+    // - warning: no TFileName nor UrlDecode() conversion is performed - call
+    // ExtractResourceName() from mormot.net.client.pas for proper sanitation
     function ResourceName: RawUtf8;
     /// returns BinToBase64(User + ':' + Password) encoded value
     // - as used for "Authorization: Basic" and "Proxy-Authorization: Basic"
@@ -5205,14 +5206,8 @@ begin
 end;
 
 function TUri.Root: RawUtf8;
-var
-  i: PtrInt;
 begin
-  i := PosExChar('?', Address);
-  if i = 0 then
-    result := Address
-  else
-    result := copy(Address, 1, i - 1);
+  result := Split(Address, '?');
 end;
 
 function TUri.ResourceName: RawUtf8;

@@ -2610,7 +2610,7 @@ begin
   result := UrlDecode(u.ResourceName);
   if sanitize and
      not SafeFileNameU(result) then
-    result := OnlyChar(result, ['0'..'9', 'A'..'Z', 'a'..'z', '_', '.']);
+    result := OnlyChar(result, ['0'..'9', 'A'..'Z', 'a'..'z', '_', '.', '-']);
 end;
 
 
