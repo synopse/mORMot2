@@ -1405,7 +1405,9 @@ type
     SessionSequenceStart: TBinaryCookieGeneratorSessionID;
     /// 32-bit random salt used for anti-fuzzing via crc32c()
     CrcSalt: cardinal;
-    /// identify deleted cookies as 32-bit low = id, 32-bit high = expires
+    /// identify deleted cookies as 32-bit low = sessionid, 32-bit high = expires
+    // - used to avoid cookie replay attacks
+    // - so to clean up, we just remove the smallest items against current time
     Invalid: TInt64DynArray;
     /// 128-bit secret information, used for AES-GCM encoding of the cookie
     CryptKey: THash128;
@@ -1423,7 +1425,7 @@ type
     fContext: TBinaryCookieContext;
     fCookieName: RawUtf8;
     fDefaultTimeOutMinutes: cardinal;
-    fInvalidCount: integer; // how many items are currently in f
+    fInvalidCount: integer; // how many items are currently in fContext.Invalid[]
     fNextUnixTimeMinimalInvalidateCheck: cardinal;
     fAes: TAesGcmEngine;
   public
@@ -1446,7 +1448,7 @@ type
     ///  decode a base64uri cookie and optionally fill an associated record
     // - return the associated session/sequence number, 0 on error
     // - Invalidate=true would force this cookie to be rejected in the future,
-    // by adding it into an internal in-memory list
+    // adding it into an internal in-memory list, and avoid cookie replay attacks
     function Validate(const Cookie: RawUtf8; PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
       PIssued: PUnixTime = nil; Invalidate: boolean = false; Now32: cardinal = 0): TBinaryCookieGeneratorSessionID;
@@ -6248,8 +6250,8 @@ type
   TCookieContent = packed record
     head: packed record   // 256-bit header (minimum cookie size if no record)
       crc: cardinal;      // = 32-bit naive anti-fuzzing crc32c
-      session: cardinal;  // = jti claim sequence
-      expires: cardinal;  // = exp claim - should be just after session
+      session: cardinal;  // = jti claim sequence (genuine number)
+      expires: cardinal;  // = exp claim - just after session for Invalidate[]
       issued: cardinal;   // = iat claim (UnixTimeMinimalUtc)
       gmac: THash128;     // = 128-bit AES-GCM tag
     end;
@@ -6339,7 +6341,7 @@ begin
        not fAes.Add_AAD(@cc.head.session, 3 * SizeOf(cardinal)) or
        not fAes.Decrypt(@cc.data, @cc.data, len, @cc.head.gmac, SizeOf(THash128)) then
       exit;
-    if Invalidate then // expired cookies are stored as 64-bit session + expire
+    if Invalidate then // expired cookies are stored as 64-bit session + expires
     begin
       if AddSortedInt64(fContext.Invalid, fInvalidCount, PInt64(@cc.head.session)^) < 0 then
         exit; // this session was already invalidated
@@ -6347,13 +6349,13 @@ begin
     else if fInvalidCount <> 0 then
     begin
       if Now32 >= fNextUnixTimeMinimalInvalidateCheck then
-      begin // cleanup of clearly deprecated invalid sessions once per minute
+      begin // cleanup of deprecated invalid sessions once per minute
         fNextUnixTimeMinimalInvalidateCheck := Now32 + SecsPerMin;
         RemoveSortedInt64SmallerThan(fContext.Invalid, fInvalidCount, Int64(Now32) shl 32);
       end;
       if FastFindInt64Sorted(pointer(fContext.Invalid), fInvalidCount - 1,
            PInt64(@cc.head.session)^) >= 0 then // branchless O(log(n)) search
-        exit;
+        exit; // this cookie was marked as closed/invalid
     end;
   finally
     fSafe.UnLock;
