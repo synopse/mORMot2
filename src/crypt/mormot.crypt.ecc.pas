@@ -2773,7 +2773,7 @@ constructor TEccCertificateSecret.CreateFromSecureFile(
   Pbkdf2Round: integer; Aes: TAesAbstractClass);
 begin
   CreateFromSecureFile(
-    MakePath([FolderName, Serial], true), PassWord, Pbkdf2Round, Aes);
+    MakePath([FolderName, Serial]), PassWord, Pbkdf2Round, Aes);
 end;
 
 constructor TEccCertificateSecret.CreateFrom(Cert: TEccCertificate;
