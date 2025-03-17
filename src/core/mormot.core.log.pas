@@ -637,37 +637,33 @@ type
   TSynLogFamily = class
   protected
     fLevel, fLevelStackTrace, fLevelSysInfo: TSynLogLevels;
-    fArchiveAfterDays: integer;
-    fArchivePath: TFileName;
-    fOnArchive: TSynLogArchiveEvent;
-    fOnRotate: TSynLogRotateEvent;
-    fCustomFileName: TFileName;
-    fGlobalLog: TSynLog;
-    fSynLogClass: TSynLogClass;
-    fDestinationPath: TFileName;
-    fDefaultExtension: TFileName;
-    fIdent: byte;
-    fBufferSize: integer;
-    fPerThreadLog: TSynLogPerThreadMode;
-    fIncludeComputerNameInFileName: boolean;
-    fIncludeUserNameInFileName: boolean;
     fHighResolutionTimestamp: boolean;
     fLocalTimestamp: boolean;
     fZonedTimestamp: boolean;
+    fIdent: byte;
+    fGlobalLog: TSynLog;
+    fSynLogClass: TSynLogClass;
+    fPerThreadLog: TSynLogPerThreadMode;
     fWithUnitName: boolean;
     fWithInstancePointer: boolean;
-    fNoFile: boolean;
-    fAutoFlushTimeOut: cardinal;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    fOnBeforeException: TOnBeforeException;
-    fHandleExceptions: boolean;
-    {$endif NOEXCEPTIONINTERCEPT}
     fStackTraceLevel: byte;
     fStackTraceUse: TSynLogStackTraceUse;
     fFileExistsAction: TSynLogExistsAction;
     {$ifdef OSWINDOWS}
     fNoEnvironmentVariable: boolean;
     {$endif OSWINDOWS}
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    fHandleExceptions: boolean;
+    fOnBeforeException: TOnBeforeException;
+    {$endif NOEXCEPTIONINTERCEPT}
+    fAutoFlushTimeOut: cardinal;
+    fArchiveAfterDays: integer;
+    fArchivePath: TFileName;
+    fOnArchive: TSynLogArchiveEvent;
+    fOnRotate: TSynLogRotateEvent;
+    fCustomFileName: TFileName;
+    fDestinationPath: TFileName;
+    fDefaultExtension: TFileName;
     fExceptionIgnore: TSynList;
     fEchoToConsole: TSynLogLevels;
     fEchoCustom: TOnTextWriterEcho;
@@ -677,7 +673,11 @@ type
     fEchoToConsoleUseJournal: boolean;
     fEchoToConsoleBackground: boolean;
     fEndOfLineCRLF: boolean;
+    fIncludeComputerNameInFileName: boolean;
+    fIncludeUserNameInFileName: boolean;
+    fNoFile: boolean;
     fDestroying: boolean;
+    fBufferSize: integer;
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSizeKB: cardinal;
