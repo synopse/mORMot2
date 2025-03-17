@@ -181,8 +181,9 @@ type
     fClaims: TJwtClaims;
     fOptions: TJwtOptions;
     fAudience: TRawUtf8DynArray;
-    fExpirationSeconds: integer;
     fIDGen: TSynUniqueIdentifierGenerator;
+    fExpirationSeconds: integer;
+    fVerifyTimeToleranceSeconds: integer;
     fCacheTimeoutSeconds: integer;
     fCacheResults: TJwtResults;
     fCache: TSynDictionary; // TRawUtf8DynArray/TJwtContentDynArray
@@ -270,14 +271,14 @@ type
     // - it will parse the JWT payload and check for its expiration, and some
     // mandatory fied values - you can optionally retrieve the Expiration time,
     // the ending Signature, and/or the Payload decoded as TDocVariant
-    // - NotBeforeDelta allows to define some time frame for the "nbf" field
+    // - TimeTolerance allows to define some grace delay for "nbf"/"exp" fields
     // - may be used on client side to quickly validate a JWT received from
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token,
       ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
       Expiration: PUnixTime; Signature, Subject, Issuer, HeadPayload: PRawUtf8;
       Payload: PVariant = nil;
-      IgnoreTime: boolean = false; NotBeforeDelta: TUnixTime = 15): TJwtResult;
+      IgnoreTime: boolean = false; TimeTolerance: TUnixTime = 15): TJwtResult;
     /// in-place decoding of the JWT header, returning the algorithm
     // - checking there is a payload and a signature, without decoding them
     // - could be used to quickly check if a token is likely to be a JWT
@@ -1267,7 +1268,7 @@ const
 class function TJwtAbstract.VerifyPayload(const Token,
   ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
   Expiration: PUnixTime; Signature, Subject, Issuer, HeadPayload: PRawUtf8;
-  Payload: PVariant; IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJwtResult;
+  Payload: PVariant; IgnoreTime: boolean; TimeTolerance: TUnixTime): TJwtResult;
 var
   P, B: PUtf8Char;
   V: array[0..high(JWT_PLD)] of TValuePUtf8Char;
@@ -1327,25 +1328,28 @@ begin
       Expiration^ := 0;
     if (V[2].Text <> nil) or
        (V[3].Text <> nil) then
-    begin
-      now := UnixTimeUtc;
+    begin // note: "iat" is just ignored here
+      if IgnoreTime then
+        now := 0
+      else
+        now := UnixTimeUtc;
       if V[2].Text <> nil then
       begin
         time := V[2].ToCardinal;
         result := jwtExpired;
-        if not IgnoreTime and
-           (now > time) then
+        if (now <> 0) and
+           (now > time + PtrUInt(TimeTolerance)) then
           break;
         if Expiration <> nil then
           Expiration^ := time;
       end;
-      if not IgnoreTime and
+      if (now <> 0) and
          (V[3].Text <> nil) then
       begin
         time := V[3].ToCardinal;
         result := jwtNotBeforeFailed;
         if (time = 0) or
-           (now + PtrUInt(NotBeforeDelta) < time) then
+           (now + PtrUInt(TimeTolerance) < time) then
           break;
       end;
     end;
