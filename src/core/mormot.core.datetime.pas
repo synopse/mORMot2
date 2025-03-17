@@ -324,7 +324,6 @@ procedure LogToTextFile(Msg: RawUtf8);
 function AppendToTextFile(const aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64 = MAXLOGSIZE; aUtcTimeStamp: boolean = false): boolean;
 
-
 var
   /// custom TTimeLog date to ready to be displayed text function
   // - you can override this pointer in order to display the text according
@@ -594,6 +593,10 @@ function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean
 /// our own faster version of the corresponding RTL function
 function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; out Time: TDateTime): boolean;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// our own faster version of the corresponding RTL function
+// - returns 0 if TryEncodeDate/TryEncodeTime failed
+function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
 
 /// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
@@ -1212,7 +1215,7 @@ begin
     begin
       inc(P);
       dec(L);
-    end; // allow YYYY-MM-DD
+    end; // allow YYYY-MM-DD and YYYY/MM/DD
     d := 1;
     if L >= 6 then
     begin
@@ -1225,7 +1228,7 @@ begin
       begin
         inc(P);
         dec(L);
-      end; // allow YYYY-MM-DD
+      end; // allow YYYY-MM-DD and YYYY/MM/DD
       if L >= 8 then
       begin
         // YYYYMMDD
@@ -2007,6 +2010,17 @@ begin
   d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
   Time := d / MSecsPerDay;
   result := true;
+end;
+
+function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
+var
+  time: TDateTime;
+begin
+  if TryEncodeDate(Year, Month, Day, result) and
+     TryEncodeTime(Hour, Min, Sec, MSec, time) then
+    result := result + time
+  else
+    result := 0;
 end;
 
 
