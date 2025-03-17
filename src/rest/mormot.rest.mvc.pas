@@ -2425,10 +2425,10 @@ end;
 
 procedure TMvcApplication.GetViewInfo(MethodIndex: integer; out info: variant);
 begin
+  TDocVariantData(info).InitFast(8, dvObject);
   if MethodIndex >= 0 then
-    info := _ObjFast(['pageName', fFactory.Methods[MethodIndex].Uri])
-  else
-    info := _ObjFast([]);
+    TDocVariantData(info).AddValueFromText(
+      'pageName', fFactory.Methods[MethodIndex].Uri);
 end;
 
 procedure TMvcApplication.GetMvcInfo(out info: variant);
