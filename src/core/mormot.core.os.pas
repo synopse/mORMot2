@@ -4060,10 +4060,7 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 /// internal function to avoid linking mormot.core.buffers.pas
 // - will output the value as one number with one decimal and KB/MB/GB/TB suffix
 // - defined here for regression tests purposes
-function _oskb(Size: QWord): shortstring; overload; {$ifdef HASINLINE} inline; {$endif}
-
-/// called when inlining overloaded _oskb()
-procedure _oskb(Size: QWord; var text: shortstring); overload;
+function _oskb(Size: QWord): shortstring;
 
 type
   /// function prototype for AppendShortUuid()
@@ -6029,12 +6026,7 @@ begin
   P := S;
 end;
 
-function _oskb(Size: QWord): shortstring;
-begin
-  _oskb(Size, result);
-end;
-
-procedure _oskb(Size: QWord; var text: shortstring);
+procedure __oskb(Size: QWord; var text: shortstring);
 const
   _U: array[0..3] of AnsiChar = 'TGMK';
 var
@@ -6056,6 +6048,11 @@ begin
     inc(text[0], 2);
   text[ord(text[0]) - 1] := _U[u];
   text[ord(text[0])] := 'B';
+end;
+
+function _oskb(Size: QWord): shortstring;
+begin
+  __oskb(Size, result);
 end;
 
 {$ifdef ISDELPHI} // missing convenient RTL function in Delphi
@@ -7898,10 +7895,10 @@ procedure AppendShortKB(free, total: QWord; out text: shortstring);
 var
   tmp: shortstring;
 begin
-  _oskb(free, tmp);
+  __oskb(free, tmp);
   AppendShort(tmp, text);
   AppendShortChar('/', @text);
-  _oskb(total, tmp);
+  __oskb(total, tmp);
   AppendShort(tmp, text);
   AppendShortChar(' ', @text);
 end;
