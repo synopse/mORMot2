@@ -2037,7 +2037,7 @@ var
   // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
   OpenProcessAccess: DWord;
 
-  // late-binding of Windows API entries not available on XP
+  // late-binding of Windows API entries not available before XP SP1
   GetSystemTimes: function(
     var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessTimes: function(hProcess: THandle;
@@ -2347,7 +2347,7 @@ type
     ullAvailExtendedVirtual: QWord;
   end;
 
-// information about the system's current usage of both physical and virtual memory
+// Windows system's current usage of both physical and virtual memory
 function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
   stdcall; external kernel32;
 
@@ -2414,7 +2414,7 @@ end;
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self, SizeOf(self), 0);
-  // no monitoring API available under oldest Windows
+  // no monitoring API available under oldest Windows (need at least XP SP1)
   result := Assigned(GetSystemTimes) and
             Assigned(GetProcessTimes) and
             DelayedGetProcessMemoryInfo;

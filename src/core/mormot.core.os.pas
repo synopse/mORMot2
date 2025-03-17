@@ -3866,7 +3866,7 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 
 /// retrieve some human-readable text from GetMemoryInfo
 // - numbers are rounded up to a single GB number with no decimals
-// - returns e.g. '6GB/16GB (35%)' text
+// - returns the size of used memory / total memory e.g. as '6GB/16GB (35%)'
 function GetMemoryInfoText: TShort31;
 
 /// retrieve some human-readable text about the current system in several lines
@@ -4055,7 +4055,10 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 /// internal function to avoid linking mormot.core.buffers.pas
 // - will output the value as one number with one decimal and KB/MB/GB/TB suffix
 // - defined here for regression tests purposes
-function _oskb(Size: QWord): shortstring;
+function _oskb(Size: QWord): shortstring; overload; {$ifdef HASINLINE} inline; {$endif}
+
+/// called when inlining overloaded _oskb()
+procedure _oskb(Size: QWord; var text: shortstring); overload;
 
 type
   /// function prototype for AppendShortUuid()
@@ -6022,6 +6025,11 @@ begin
 end;
 
 function _oskb(Size: QWord): shortstring;
+begin
+  _oskb(Size, result);
+end;
+
+procedure _oskb(Size: QWord; var text: shortstring);
 const
   _U: array[0..3] of AnsiChar = 'TGMK';
 var
@@ -6036,13 +6044,13 @@ begin
     b := b shr 10;
     inc(u);
   until u = high(_u);
-  str(Size / b : 1 : 1, result); // let the FPU + RTL do the conversion for us
-  if (result[0] <= #2) or
-     (result[ord(result[0]) - 1] <> '.') or
-     (result[ord(result[0])] <> '0') then
-    inc(result[0], 2);
-  result[ord(result[0]) - 1] := _U[u];
-  result[ord(result[0])] := 'B';
+  str(Size / b : 1 : 1, text); // let the FPU + RTL do the conversion for us
+  if (text[0] <= #2) or
+     (text[ord(text[0]) - 1] <> '.') or
+     (text[ord(text[0])] <> '0') then
+    inc(text[0], 2);
+  text[ord(text[0]) - 1] := _U[u];
+  text[ord(text[0])] := 'B';
 end;
 
 {$ifdef ISDELPHI} // missing convenient RTL function in Delphi
@@ -7882,6 +7890,18 @@ begin // return 'U:usr K:krn' percents on windows
   AppendShortCurr64(K, result, {fixeddecimals=}2);
 end;
 
+procedure AppendShortKB(free, total: QWord; out text: shortstring);
+var
+  tmp: shortstring;
+begin
+  _oskb(free, tmp);
+  AppendShort(tmp, text);
+  AppendShortChar('/', @text);
+  _oskb(total, tmp);
+  AppendShort(tmp, text);
+  AppendShortChar(' ', @text);
+end;
+
 function GetMemoryInfoText: TShort31;
 var
   info: TMemoryInfo;
@@ -7889,10 +7909,8 @@ begin
   result[0] := #0;
   if not GetMemoryInfo(info, false) then
     exit;
-  AppendShort(_oskb(info.memtotal - info.memfree), result);
-  AppendShortChar('/', @result);
-  AppendShort(_oskb(info.memtotal), result);
-  AppendShortTwoChars(' (', @result);
+  AppendShortKB(info.memtotal - info.memfree, info.memtotal, result);
+  AppendShortChar('(', @result);
   AppendShortCardinal(info.percent, result);
   AppendShortTwoChars('%)', @result);
 end;
@@ -7910,7 +7928,7 @@ var
   avail, free, total: QWord;
 begin
   GetDiskInfo(Executable.ProgramFilePath, avail, free, total);
-  _fmt('Current UTC date: %s (%d)'+ CRLF +'Memory: %s'+ CRLF +
+  _fmt('Current UTC date: %s (%d)'+ CRLF +'Memory used: %s'+ CRLF +
        'Current disk free: %s/%s'+ CRLF +'Load: %s'+ CRLF +
        'Exe: %s'+ CRLF +'OS: %s'+ CRLF +'Cpu: %s'+ CRLF +'Bios: %s'+ CRLF,
     [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
