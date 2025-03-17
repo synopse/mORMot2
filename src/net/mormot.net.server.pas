@@ -3540,13 +3540,14 @@ begin
   // real Internet IP (replace RemoteIP='127.0.0.1' from a proxy)
   if fRemoteIPHeaderUpper <> '' then
     FindNameValue(Headers, pointer(fRemoteIPHeaderUpper),
-      RemoteIP, {keepnotfound=}true);
+      RemoteIP, {keepnotfound=}true, {Sep=}':');
   // real proxy connection ID
   if fRemoteConnIDHeaderUpper <> '' then
   begin
     P := FindNameValue(pointer(Headers), pointer(fRemoteConnIDHeaderUpper));
-    if P <> nil then
-      SetQWord(P, PQWord(@RemoteConnID)^);
+    if (P <> nil) and
+       (P^ = ':') then
+      SetQWord(P + 1, PQWord(@RemoteConnID)^);
   end;
   if RemoteConnID = 0 then
     // fallback to 31-bit sequence
