@@ -5812,7 +5812,7 @@ function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
 var
   P: PPointerArray;
   api: PtrInt;
-  libenv, libsys1, libsys3, libexe1, libexe3: TFileName;
+  libenv, libsys1, libsys3, libexe1, libexe3, libpath, libexact, libname: TFileName;
 begin
   result := true;
   if openssl_initialized = osslAvailable then
@@ -5836,7 +5836,7 @@ begin
     libcrypto := TLibCrypto.Create;
     libssl := TLibSsl.Create;
     try
-      // attempt to load libcrypto
+      // try to guess the potential libcrypto library names
       if libcryptoname = '' then
       begin
         {$ifndef NOOPENSSL1}
@@ -5852,6 +5852,7 @@ begin
         libsys3 := libenv + LIB_CRYPTO3;
         {$endif NOOPENSSL3}
       end;
+      // attempt to load libcrypto
       libcrypto.TryLoadLibrary([
         // first try the exact supplied crypto library name
         libcryptoname,
@@ -5865,50 +5866,50 @@ begin
         libsys1
         {$ifdef OSPOSIX}
         {$ifndef OSDARWIN}
-        // generic library name on most UNIX
+        // generic library name on most UNIX (but MacOS)
         , 'libcrypto.so'
         {$endif OSDARWIN}
         {$endif OSPOSIX}
         ], EOpenSsl);
       P := @@libcrypto.CRYPTO_malloc;
+      // resolve libcrypto entrypoints
       for api := low(LIBCRYPTO_ENTRIES) to high(LIBCRYPTO_ENTRIES) do
         libcrypto.Resolve(libprefix, LIBCRYPTO_ENTRIES[api], @P[api], EOpenSsl);
+      // validate the loaded libcrypto
       if not Assigned(libcrypto.X509_print) then // last known entry
         raise EOpenSsl.Create('OpenSslInitialize: incorrect libcrypto API');
+      OpenSslVersion := libcrypto.OpenSSL_version_num;
+      OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
+      OpenSslVersionText := RawUtf8(libcrypto.OpenSSL_version(OPENSSL_VERSION_));
+      if OpenSslVersion and $ffffff00 < LIB_MIN then // paranoid check
+        raise EOpenSsl.CreateFmt(
+          'Incorrect %s version in %s - expects ' + LIB_TXT,
+          [OpenSslVersionText, libcrypto.LibraryPath]);
+      // guess libssl names of the same version or name pattern from libcrypto
+      libpath := ExtractFilePath(libcrypto.LibraryPath);
+      if OpenSslVersion < OPENSSL3_VERNUM then
+        libexact := libpath + LIB_SSL1
+      else
+        libexact := libpath + LIB_SSL3;
+      libname := libpath + StringReplace(ExtractFileName(libcrypto.LibraryPath),
+        'libcrypto', 'libssl', [rfReplaceAll {$ifdef OSWINDOWS}, rfIgnoreCase{$endif}]);
       // attempt to load libssl
-      if libsslname = '' then
-      begin
-        {$ifndef NOOPENSSL1}
-        libexe1 := Executable.ProgramFilePath + LIB_SSL1;
-        if not FileExists(libexe1) then
-          libexe1 := '';
-        libsys1 := libenv + LIB_SSL1;
-        {$endif NOOPENSSL1}
-        {$ifndef NOOPENSSL3}
-        libexe3 := Executable.ProgramFilePath + LIB_SSL3;
-        if not FileExists(libexe3) then
-          libexe3 := '';
-        libsys3 := libenv + LIB_SSL3;
-        {$endif NOOPENSSL3}
-      end;
       libssl.TryLoadLibrary([
         // first try the exact supplied ssl library name
         libsslname,
         // try with the global variable
         OpenSslDefaultSsl,
-        // try from executable folder
-        libexe3,
-        libexe1,
-        // try the library from OPENSSL_LIBPATH or somewhere in the system
-        libsys3,
-        libsys1
-        {$ifndef OSDARWIN}
+        // try same version and/or name in the libcrypto folder
+        libexact,
+        libname
         {$ifdef OSPOSIX}
-          // generic library name on most UNIX
-          , 'libssl.so'
-        {$endif OSPOSIX}
+        {$ifndef OSDARWIN}
+        // generic library name on most UNIX
+        , 'libssl.so'
         {$endif OSDARWIN}
+        {$endif OSPOSIX}
         ], EOpenSsl);
+      // resolve libssl entrypoints
       P := @@libssl.SSL_CTX_new;
       for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
         libssl.Resolve(libprefix, LIBSSL_ENTRIES[api], @P[api], EOpenSsl);
@@ -5919,13 +5920,6 @@ begin
       if libcrypto.CRYPTO_set_mem_functions(@rtl_malloc, @rtl_realloc, @rtl_free) = 0 then
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
-      OpenSslVersion := libcrypto.OpenSSL_version_num;
-      OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
-      OpenSslVersionText := RawUtf8(libcrypto.OpenSSL_version(OPENSSL_VERSION_));
-      if OpenSslVersion and $ffffff00 < LIB_MIN then // paranoid check
-        raise EOpenSsl.CreateFmt(
-          'Incorrect %s version in %s - expects ' + LIB_TXT,
-          [OpenSslVersionText, libcrypto.LibraryPath]);
       OpenSslExIndexSsl := SSL_get_ex_new_index(0, nil, nil, nil, nil);
       openssl_initialize_errormsg := ''; // no error with these lib paths
     except
