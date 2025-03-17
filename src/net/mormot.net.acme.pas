@@ -430,7 +430,7 @@ begin
     fLog.Add.Log(sllTrace, '% = % %',
        [fUri, fStatus, KBNoSpace(length(fBody))], self);
   // the server includes a Replay-Nonce header field in every response
-  fNonce := FindIniNameValue(pointer(fHeaders), 'REPLAY-NONCE: ');
+  fNonce := FindNameValue(pointer(fHeaders), 'REPLAY-NONCE: ');
   // validate the response
   if not (fStatus in [HTTP_SUCCESS, HTTP_CREATED, HTTP_NOCONTENT]) then
   begin
@@ -492,7 +492,7 @@ begin
   Request(aUrl, 'POST', '', data, 'application/jose+json');
   result := GetNonceAndBody;
   if fKid = '' then
-    fKid := FindIniNameValue(pointer(fHeaders), 'LOCATION: ');
+    fKid := FindNameValue(pointer(fHeaders), 'LOCATION: ');
 end;
 
 function TJwsHttpClient.Post(const aUrl: RawUtf8;

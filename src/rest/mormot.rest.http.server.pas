@@ -1091,7 +1091,7 @@ begin
   if (Call.OutStatus = HTTP_MOVEDPERMANENTLY) or
      (Call.OutStatus = HTTP_TEMPORARYREDIRECT) then
   begin
-    loc := FindIniNameValue(pointer(Call.OutHead), 'LOCATION: ');
+    loc := FindNameValue(pointer(Call.OutHead), 'LOCATION: ');
     if (loc <> '') and
        (loc[1] = '/') then
       delete(loc, 1, 1); // what is needed for real URI doesn't help here
