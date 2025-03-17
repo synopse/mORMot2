@@ -7872,9 +7872,9 @@ begin
   if MimeType <> '' then
     StringToUtf8(MimeType, mime)
   else if Pos('.', Description) <> 0 then
-    mime := GetMimeContentType(pointer(Buffer), length(Buffer), Description)
+    mime := GetMimeContentType(Buffer, Description)
   else
-    mime := GetMimeContentType(pointer(Buffer), length(Buffer));
+    mime := GetMimeContentType(Buffer);
   str.Attributes.AddItem('Subtype', mime);
   // file Params attribute
   parms := TPdfDictionary.Create(fXref);

@@ -1396,7 +1396,6 @@ type
 
   /// TBinaryCookieGenerator execution context - to be persisted on disk
   TBinaryCookieContext = packed record
-  public
     /// identify this data structure on disk - should equal 1 now
     Version: cardinal;
     /// 31-bit increasing counter, to implement unique session ID
