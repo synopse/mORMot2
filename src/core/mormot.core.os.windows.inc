@@ -1947,9 +1947,12 @@ type
     ContextRecord: pointer;
   end;
 
-var
-  AddVectoredExceptionHandler: function(FirstHandler: cardinal;
-    VectoredHandler: pointer): PtrInt; stdcall;
+var // to register SynLogVectoredHandler once
+  AddVectoredExceptionHandlerCalled: boolean;
+  // RemoveVectoredContinueHandler() is available under 64 bit editions only
+
+function AddVectoredExceptionHandler(FirstHandler: cardinal;
+  VectoredHandler: pointer): PtrInt; stdcall; external kernel32;
 
 function SynLogVectoredHandler(ExceptionInfo: PExceptionInfo): PtrInt; stdcall;
 const
@@ -2037,12 +2040,6 @@ var
   // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
   OpenProcessAccess: DWord;
 
-  // late-binding of Windows API entries not available before XP SP1
-  GetSystemTimes: function(
-    var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
-  GetProcessTimes: function(hProcess: THandle;
-    var lpCreationTime, lpExitTime, lpKernelTime,
-        lpUserTime: TFileTime): BOOL; stdcall;
   // Vista+/WS2008+ (use GetModuleFileNameEx on XP)
   QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWord;
     lpExeName: PWideChar; lpdwSize: PDWord): BOOL; stdcall;
@@ -2221,9 +2218,15 @@ type
   end;
 
 const
-  TH32CS_SNAPPROCESS  = $00000002;
-  TH32CS_SNAPTHREAD = $00000004;
+  TH32CS_SNAPPROCESS = $00000002;
+  TH32CS_SNAPTHREAD  = $00000004;
 
+// direct Windows API defitions if not available on some compiler revisions
+function GetSystemTimes(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL;
+  stdcall; external kernel32;
+function GetProcessTimes(hProcess: THandle;
+    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL;
+  stdcall; external kernel32;
 function AttachConsole(pid: cardinal): BOOL;
   stdcall; external kernel32;
 function GetConsoleWindow: HWND;
@@ -2279,8 +2282,7 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 var
   ftidl, ftkrn, ftusr: TFileTime;
 begin
-  result := Assigned(GetSystemTimes) and
-            GetSystemTimes(ftidl, ftkrn, ftusr);
+  result := GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
   FileTimeToInt64(ftidl, IdleTime);
@@ -2307,8 +2309,7 @@ var
   mem: TProcessMemoryCounters;
 begin
   result := false;
-  if (not Assigned(GetProcessTimes)) or
-     (not DelayedGetProcessMemoryInfo) then
+  if not DelayedGetProcessMemoryInfo then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
   if h = 0 then
@@ -2368,8 +2369,7 @@ var
 begin
   QueryPerformanceCounter(u.Lo); // e.h3 xored with raw timestamps
   e.i[6] := e.i[6] xor u.Lo;
-  if Assigned(GetProcessTimes) then
-    GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
+  GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
   DefaultHasher128(@e.h0, @ft, SizeOf(ft)); // maybe AesNiHash128
   mem.cb := SizeOf(mem);
   if Assigned(GetProcessMemoryInfo) then // may have been delayed
@@ -2378,8 +2378,7 @@ begin
   memst.dwLength := SizeOf(memst);
   if GlobalMemoryStatusEx(memst) then
     DefaultHasher128(@e.h2, @memst, SizeOf(memst));
-  if Assigned(GetSystemTimes) then
-    GetSystemTimes(ft.usr, ft.p, ft.e);
+  GetSystemTimes(ft.usr, ft.p, ft.e);
   DefaultHasher128(@e.h3, @ft, SizeOf(ft));
   for i := 0 to high(e.r) do
   begin
@@ -2415,9 +2414,7 @@ function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self, SizeOf(self), 0);
   // no monitoring API available under oldest Windows (need at least XP SP1)
-  result := Assigned(GetSystemTimes) and
-            Assigned(GetProcessTimes) and
-            DelayedGetProcessMemoryInfo;
+  result := DelayedGetProcessMemoryInfo;
 end;
 
 function TProcessInfo.Start: boolean;
@@ -2425,8 +2422,7 @@ var
   ftidl, ftkrn, ftusr: TFileTime;
   sidl, skrn, susr: Int64;
 begin
-  result := Assigned(GetSystemTimes) and
-            GetSystemTimes(ftidl, ftkrn, ftusr);
+  result := GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
   FileTimeToInt64(ftidl, sidl);
@@ -5416,10 +5412,6 @@ begin
   if not Assigned(GetSystemTimePreciseAsFileTime) then
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
   CreateSymbolicLinkW := GetProcAddress(h, 'CreateSymbolicLinkW'); // Vista+
-  {$ifdef WITH_VECTOREXCEPT}
-  AddVectoredExceptionHandler :=
-    GetProcAddress(h, 'AddVectoredExceptionHandler');
-  {$endif WITH_VECTOREXCEPT}
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
@@ -5447,11 +5439,9 @@ begin
     ((machine = IMAGE_FILE_MACHINE_I386) or
      (machine = IMAGE_FILE_MACHINE_AMD64));
     {$endif CPUINTEL}
-  GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
-  GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
-  QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
+  QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW'); // Vista+
   GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
-  InitializeSRWLock := GetProcAddress(h, 'InitializeSRWLock');
+  InitializeSRWLock := GetProcAddress(h, 'InitializeSRWLock'); // Vista+
   AcquireSRWLockExclusive := GetProcAddress(h, 'AcquireSRWLockExclusive');
   ReleaseSRWLockExclusive := GetProcAddress(h, 'ReleaseSRWLockExclusive');
   if not Assigned(InitializeSRWLock) or

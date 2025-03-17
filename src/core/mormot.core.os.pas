@@ -7594,11 +7594,10 @@ begin
   end;
   {$endif WITH_RAISEPROC}
   {$ifdef WITH_VECTOREXCEPT} // SEH32/SEH64 official API
-  // RemoveVectoredContinueHandler() is available under 64 bit editions only
-  if Assigned(AddVectoredExceptionHandler) then
+  if not AddVectoredExceptionHandlerCalled then
   begin
     AddVectoredExceptionHandler(0, @SynLogVectoredHandler);
-    AddVectoredExceptionHandler := nil;
+    AddVectoredExceptionHandlerCalled := true;
   end;
   {$endif WITH_VECTOREXCEPT}
   {$ifdef WITH_RTLUNWINDPROC}
