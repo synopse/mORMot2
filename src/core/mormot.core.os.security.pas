@@ -2089,7 +2089,7 @@ begin // faster than ConvertSidToStringSidA(), and cross-platform
   end;
   for i := 0 to PtrInt(sid^.SubAuthorityCount) - 1 do
   begin
-    AppendShortChar('-', @s);
+    AppendShortCharSafe('-', @s);
     AppendShortCardinal(sid^.SubAuthority[i], s);
   end;
 end;
@@ -3335,13 +3335,13 @@ begin
         AppendShortQWord(v^.Int.Value, s);
     sctUnicode:
       begin
-        AppendShortChar('"', @s);
+        AppendShortCharSafe('"', @s);
         Unicode_WideToShort(@v^.Unicode, v^.UnicodeBytes shr 1, CP_UTF8, utf8);
         if ord(s[0]) + ord(utf8[0]) > 250 then
           result := false // we don't like to be truncated
         else
           AppendShort(utf8, s);
-        AppendShortChar('"', @s);
+        AppendShortCharSafe('"', @s);
       end;
     sctLocalAttribute,
     sctUserAttribute,
@@ -3366,7 +3366,7 @@ begin
       end;
     sctOctetString:
       begin
-        AppendShortChar('#', @s);
+        AppendShortCharSafe('#', @s);
         if ord(s[0]) + v^.OctetBytes shl 1 > 250 then
           result := false // we don't like to be truncated
         else
@@ -3386,9 +3386,9 @@ begin
             singleComposite := false
           else
             // e.g. '(@User.Project Any_of 1)'
-            AppendShortChar(' ', @s);
+            AppendShortCharSafe(' ', @s);
         if not singleComposite then
-          AppendShortChar('{', @s);
+          AppendShortCharSafe('{', @s);
         repeat
           clen := AceTokenLength(c);
           if clen > comp then
@@ -3400,10 +3400,10 @@ begin
           if comp = 0 then
             break;
           inc(PByte(c), clen);
-          AppendShortChar(',', @s);
+          AppendShortCharSafe(',', @s);
         until false;
         if not singleComposite then
-          AppendShortChar('}', @s);
+          AppendShortCharSafe('}', @s);
         result := true;
       end;
     sctSid:
@@ -3411,7 +3411,7 @@ begin
       begin
         AppendShort('SID(', s);
         SddlAppendSid(s, @v^.Sid, dom);
-        AppendShortChar(')', @s);
+        AppendShortCharSafe(')', @s);
       end
       else
         exit; // should not be void
@@ -3724,7 +3724,7 @@ procedure TSecAce.AppendAsText(var s: ShortString; var sddl: TSynTempBuffer;
 var
   f: TSecAceFlag;
 begin
-  AppendShortChar('(', @s);
+  AppendShortCharSafe('(', @s);
   if SAT_SDDL[AceType][0] <> #0 then
     AppendShort(SAT_SDDL[AceType], s)
   else
@@ -3732,34 +3732,34 @@ begin
     AppendShortTwoChars('0x', @s);
     AppendShortIntHex(RawType, s); // fallback to lower hex - paranoid
   end;
-  AppendShortChar(';', @s);
+  AppendShortCharSafe(';', @s);
   if Flags <> [] then
     for f := low(f) to high(f) do
       if f in Flags then
         AppendShort(SAF_SDDL[f], s);
-  AppendShortChar(';', @s);
+  AppendShortCharSafe(';', @s);
   SddlAppendMask(s, Mask);
   if AceType in satObject then
   begin
-    AppendShortChar(';', @s);
+    AppendShortCharSafe(';', @s);
     if not IsNullGuid(ObjectType) then
       uuid(ObjectType, s); // RTL or mormot.core.text
-    AppendShortChar(';', @s);
+    AppendShortCharSafe(';', @s);
     if not IsNullGuid(InheritedObjectType) then
       uuid(InheritedObjectType, s);
-    AppendShortChar(';', @s);
+    AppendShortCharSafe(';', @s);
   end
   else
     AppendShort(';;;', s);
   SddlAppendSid(s, pointer(Sid), dom);
   if Opaque <> '' then
   begin
-    AppendShortChar(';', @s);
+    AppendShortCharSafe(';', @s);
     sddl.AddShort(s);
     s[0] := #0;
     SddlAppendOpaque(sddl, self, dom); // direct expression write in sddl
   end;
-  AppendShortChar(')', @s);
+  AppendShortCharSafe(')', @s);
   sddl.AddShort(s);
   s[0] := #0;
 end;

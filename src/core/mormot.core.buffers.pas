@@ -9370,7 +9370,7 @@ begin
   AppendShortChar(' ', @result);
   AppendShort(itemname, result);
   if itemcount > 1 then
-    AppendShortChar('s', @result);
+    AppendShortCharSafe('s', @result);
 end;
 
 function EscapeBuffer(s: PAnsiChar; slen: integer;

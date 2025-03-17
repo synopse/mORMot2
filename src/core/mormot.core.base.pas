@@ -939,6 +939,11 @@ procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
+/// simple concatenation of a character into a @shorstring, checking its length
+// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar = #255);
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// simple concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
@@ -5112,10 +5117,16 @@ begin
   SetString(result, PAnsiChar(pointer(source)), length(source));
 end;
 
+procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar);
+begin
+  if dest[0] = max then
+    exit;
+  inc(dest[0]);
+  dest[ord(dest[0])] := chr;
+end;
+
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
 begin
-  if dest[0] = #255 then
-    exit;
   inc(dest[0]);
   dest[ord(dest[0])] := chr;
 end;

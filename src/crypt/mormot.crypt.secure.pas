@@ -4523,10 +4523,10 @@ begin
       #0:
         break;
       'A' .. 'Z', '0' .. '9', 'a' .. 'z':
-        AppendShortChar(P^, @tmp);
+        AppendShortCharSafe(P^, @tmp, #15);
       '_':
         if not onlyalphanum then
-          AppendShortChar('_', @tmp);
+          AppendShortCharSafe('_', @tmp, #15);
       '-', '/':
         if not onlyalphanum then
           if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
@@ -4535,7 +4535,7 @@ begin
              ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
               (PCardinal(@tmp[1])^ and $ffdfdfdf =
                 ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
-            AppendShortChar('_', @tmp);
+            AppendShortCharSafe('_', @tmp, #15);
     end;
     inc(P);
   until false;
@@ -9845,7 +9845,7 @@ begin
       dec(x, y * 40);
       AppendShortCardinal(y, tmp);
     end;
-    AppendShortChar('.', @tmp);
+    AppendShortCharSafe('.', @tmp);
     AppendShortCardinal(x, tmp);
   end;
   FastSetString(result, @tmp[1], ord(tmp[0]));

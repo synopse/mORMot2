@@ -2551,11 +2551,10 @@ begin
   else
     exit;
   end;
-  if withport then
-  begin
-    AppendShortChar(':', @result);
-    AppendShortCardinal(port, result);
-  end;
+  if not withport then
+    exit;
+  AppendShortChar(':', @result);
+  AppendShortCardinal(port, result);
 end;
 
 function TNetAddr.IPWithPort: RawUtf8;
