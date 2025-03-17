@@ -2656,13 +2656,15 @@ begin
   mib[0] := node;
   mib[1] := id;
   result := len;
-  fpsysctl(pointer(@mib), 2, dest, @result, nil, 0);
+  if fpsysctl(pointer(@mib), 2, dest, @result, nil, 0) <> 0 then
+    result := 0;
 end;
 
 function bsdsysctl(name: PAnsiChar; dest: pointer; len: cint): cint; overload;
 begin
   result := len;
-  FPsysctlbyname(name, dest, @result, nil, 0);
+  if FPsysctlbyname(name, dest, @result, nil, 0) <> 0 then
+    result := 0;
 end;
 
 function fpsysctlhwint(hwid: cint): Int64;
@@ -2674,8 +2676,8 @@ end;
 function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
-  bsdsysctl(CTL_HW, hwid, @temp, SizeOf(temp));
-  if temp[0] <> #0 then
+  if (bsdsysctl(CTL_HW, hwid, @temp, SizeOf(temp)) <> 0) and
+     (temp[0] <> #0) then
     result := @temp
   else
     result := nil;
@@ -2684,8 +2686,8 @@ end;
 function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
-  bsdsysctl(name, @temp, SizeOf(temp));
-  if temp[0] <> #0 then
+  if (bsdsysctl(name, @temp, SizeOf(temp)) <> 0) and
+     (temp[0] <> #0) then
     result := @temp
   else
     result := nil;
@@ -2890,7 +2892,7 @@ begin
   guid.Hi := mach_continuous_time;
   {$else}
   CreateGuid(guid.guid); // use e.g. FreeBSD syscall or /dev/urandom
-  XorMemory(e.h2, guid);
+  XorMemory(e.r[2], guid);
   BsdProcTimes(times);
   {$endif OSDARWIN}
   QueryPerformanceMicroSeconds(us); // should have changed in-between
