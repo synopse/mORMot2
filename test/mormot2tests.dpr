@@ -121,7 +121,6 @@ end;
 function TIntegrationTests.Run: boolean;
 var
   ssl: shortstring;
-  comptime: RawUtf8;
 begin
   ssl[0] := #0;
   {$ifdef USE_OPENSSL}
@@ -131,19 +130,15 @@ begin
   if OpenSslIsAvailable then
     FormatShort(' and %', [OpenSslVersionText], ssl);
   {$endif USE_OPENSSL}
-  // get compilation time of this executable: if moved to mormot.core.os, will
-  // return the compilation timestamp of this unit, not of the project itself
-  {$ifdef FPC}
-  comptime := StringReplaceAll({$I %DATE%}, '/', '-') + ' ' + {$I %TIME%};
-  {$else}
-  StringToUtf8(Executable.Version.BuildDateTimeString, comptime);
-  {$endif FPC}
   // add addition version information about the system and the executable
   CustomVersions := Format(CRLF + CRLF + '%s [%s %s %x]'+ CRLF +
     '    %s' + CRLF + '    on %s'+ CRLF + 'Using mORMot %s %s%s'+ CRLF + '    %s',
     [OSVersionText, CodePageToText(Unicode_CodePage), KBNoSpace(SystemMemorySize),
      OSVersionInt32, CpuInfoText, BiosInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
-     comptime, ssl, sqlite3.Version]);
+     // get compilation date of this executable: if moved to mormot.core.os, will
+     // return the compilation timestamp of this unit, not of the project itself
+     DateToTextDateShort({$ifdef FPC} Iso8601ToDateTime({$I %DATE%}) {$else}
+       Executable.Version.BuildDateTime {$endif}), ssl, sqlite3.Version]);
   result := inherited Run;
 end;
 

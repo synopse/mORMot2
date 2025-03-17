@@ -3615,7 +3615,7 @@ var
   i: PtrInt;
   bak: RawUtf8;
   timer: TPrecisionTimer;
-  r, r2: TJwtContent;
+  r: TJwtContent;
   cook: array of RawUtf8;
   cookid: array of TBinaryCookieGeneratorSessionID;
 begin
