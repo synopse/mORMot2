@@ -296,7 +296,7 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
 
 function LibraryError: string;
 begin
-  result := IntToStr(GetLastError); // enough for basic troubleshouting
+  result := WinLastError('LoadLibrary');
 end;
 
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
