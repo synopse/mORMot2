@@ -623,6 +623,9 @@ function NowTextDateShort(UtcDate: boolean = false): TShort15;
 /// convert a TUnixTime date into '19 Sep 2023' English-readable text
 function UnixTimeToTextDateShort(Date: TUnixTime): TShort15;
 
+/// convert a TDateTime date into '19 Sep 2023' English-readable text
+function DateToTextDateShort(Date: TDateTime): TShort15;
+
 /// convert some date/time to the ISO 8601 text layout, including milliseconds
 // - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
@@ -2807,6 +2810,14 @@ var
   T: TSynSystemTime;
 begin
   T.FromUnixTime(Date);
+  T.ToTextDateShort(result);
+end;
+
+function DateToTextDateShort(Date: TDateTime): TShort15;
+var
+  T: TSynSystemTime;
+begin
+  T.FromDate(Date);
   T.ToTextDateShort(result);
 end;
 
