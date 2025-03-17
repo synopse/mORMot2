@@ -300,6 +300,10 @@ type
     /// the period, in seconds, for the "exp" claim
     property ExpirationSeconds: integer
       read fExpirationSeconds;
+    /// allow to relax the "exp" and "nbf" claims against current timestamp
+    // - default is 30 seconds, to allow small clock sync issue between nodes
+    property VerifyTimeToleranceSeconds: integer
+      read fVerifyTimeToleranceSeconds write fVerifyTimeToleranceSeconds;
     /// the audience string values associated with this instance
     // - will be checked by Verify() method, and set in TJwtContent.audience
     property Audience: TRawUtf8DynArray
@@ -842,6 +846,7 @@ begin
     FormatUtf8('{"alg":"%","typ":"JWT"}', [aAlgorithm], fHeader);
   fHeaderB64 := BinToBase64Uri(fHeader) + '.';
   fCacheResults := [jwtValid];
+  fVerifyTimeToleranceSeconds := 30; // default grace delay
 end;
 
 destructor TJwtAbstract.Destroy;
@@ -998,30 +1003,30 @@ end;
 
 function TJwtAbstract.CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
 var
-  nowunix, unix: cardinal;
+  nowunix, unix, tolerance: cardinal;
 begin
   if [jrcExpirationTime, jrcNotBefore, jrcIssuedAt] * Jwt.claims <> [] then
   begin
     result := false;
+    tolerance := fVerifyTimeToleranceSeconds;
     nowunix := UnixTimeUtc; // validate against actual timestamp
     if jrcExpirationTime in Jwt.claims then
       if not ToCardinal(Jwt.reg[jrcExpirationTime], unix) or
-         (nowunix > {%H-}unix) then
+         (nowunix > {%H-}unix + tolerance) then
       begin
         Jwt.result := jwtExpired;
         exit;
       end;
     if jrcNotBefore in Jwt.claims then
       if not ToCardinal(Jwt.reg[jrcNotBefore], unix) or
-         (nowunix < unix) then
+         (nowunix + tolerance < unix) then
       begin
         Jwt.result := jwtNotBeforeFailed;
         exit;
       end;
     if jrcIssuedAt in Jwt.claims then
       if not ToCardinal(Jwt.reg[jrcIssuedAt], unix) or
-         // +60 to allow 1 minute time lap between nodes
-         (unix > nowunix + 60) then
+         (nowunix + tolerance < unix)then
       begin
         Jwt.result := jwtInvalidIssuedAt;
         exit;
