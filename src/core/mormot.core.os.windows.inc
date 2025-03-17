@@ -2501,6 +2501,46 @@ begin
   end;
 end;
 
+type
+  // emulate sysinfo() Linux syscall on Windows
+  TSysInfo = packed record
+    uptime: cardinal;                    // Seconds since boot
+    loads: array[0 .. 1] of cardinal;    // User and Kernel current percent
+    totalram: cardinal;                  // Total usable main memory size
+    freeram: cardinal;                   // Available memory size
+    totalswap: cardinal;                 // Total swap space size
+    freeswap: cardinal;                  // swap space still available
+    mem_unit: cardinal;                  // Memory unit size in bytes
+  end;
+
+function RetrieveSysInfo(var si: TSysInfo): boolean;
+var
+  global: TMemoryStatusEx;
+  I, K, U, S: Int64;
+begin
+  FillCharFast(si, SizeOf(si), 0);
+  si.uptime := GetUptimeSec;
+  if RetrieveSystemTimes(i, k, u) then
+  begin
+    dec(K, I); // raw KernelTime includes IdleTime with GetSystemTimes() WinAPI
+    S := I + K + U;
+    if S <> 0 then
+    begin
+      si.loads[0] := ((U * 100) shl 16) div S;
+      si.loads[1] := ((K * 100) shl 16) div S;
+    end;
+  end;
+  global.dwLength := SizeOf(global);
+  result := GlobalMemoryStatusEx(global);
+  if not result then
+    exit;
+  si.totalram  := global.ullTotalPhys shr 12;
+  si.freeram   := global.ullAvailPhys shr 12;
+  si.totalswap := global.ullTotalPageFile shr 12;
+  si.freeswap  := global.ullAvailPageFile shr 12;
+  si.mem_unit := 1 shl 12; // 4096
+end;
+
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 {$ifdef WITH_FASTMM4STATS}
 var
