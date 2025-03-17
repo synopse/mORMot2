@@ -3858,6 +3858,11 @@ function RetrieveSystemTimesText: TShort23;
 function RetrieveLoadAvg: TShort23;
   {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
+/// a shorter version of GetSystemInfoText
+// - 'avg1 avg5 avg15 [updays] used/totalram [used/totalswap] osint32' on POSIX,
+// or 'user kern [updays] used/totalram [used/totalswap] osint32' on Windows
+procedure RetrieveSysInfoText(out text: shortstring);
+
 /// retrieve low-level information about current memory usage
 // - as used e.g. by TSynMonitorMemory or GetMemoryInfoText
 // - under BSD, only memtotal/memfree/percent are properly returned
@@ -7936,6 +7941,36 @@ begin
      Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText],
      result);
 end;
+
+procedure RetrieveSysInfoText(out text: shortstring);
+var
+  si: TSysInfo;  // Linuxism
+begin
+  text[0] := #0;
+  if not RetrieveSysInfo(si) then // single syscall on Linux/Android
+    exit;
+  AppendShortCurr64((Int64(si.loads[0]) * CURR_RES + 5000) shr 16, text, 2);
+  AppendShortChar(' ', @text);
+  AppendShortCurr64((Int64(si.loads[1]) * CURR_RES + 5000) shr 16, text, 2);
+  AppendShortChar(' ', @text);
+  {$ifdef OSPOSIX}
+  AppendShortCurr64((Int64(si.loads[2]) * CURR_RES + 5000) shr 16, text, 2);
+  AppendShortChar(' ', @text);
+  inc(si.freeram, si.bufferram);
+  {$endif OSPOSIX}
+  if si.uptime > SecsPerDay then
+  begin
+    AppendShortCardinal(cardinal(si.uptime) div SecsPerDay, text);
+    AppendShortChar(' ', @text);
+  end;
+  AppendShortKB(QWord(si.totalram - si.freeram) * si.mem_unit,
+                QWord(si.totalram) * si.mem_unit, text);
+  if si.freeswap < si.totalswap shr 2 then // include swap if free below 25%
+    AppendShortKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
+                  QWord(si.totalswap) * si.mem_unit, text);
+  AppendShortIntHex(OSVersionInt32, text); // identify OS version
+end;
+
 
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
 begin
