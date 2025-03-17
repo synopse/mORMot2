@@ -636,7 +636,7 @@ type
   // ! end; // when ILog is out-of-scope, will log the method leaving
   TSynLogFamily = class
   protected
-    fLevel, fLevelStackTrace: TSynLogLevels;
+    fLevel, fLevelStackTrace, fLevelSysInfo: TSynLogLevels;
     fArchiveAfterDays: integer;
     fArchivePath: TFileName;
     fOnArchive: TSynLogArchiveEvent;
@@ -836,6 +836,10 @@ type
     // - exceptions will always trace the stack
     property LevelStackTrace: TSynLogLevels
       read fLevelStackTrace write fLevelStackTrace;
+    /// the levels which will include some minimal system info
+    // - by default, contains sllException, sllExceptionOS and sllLastError
+    property LevelSysInfo: TSynLogLevels
+      read fLevelSysInfo write fLevelSysInfo;
     /// the folder where the log must be stored
     // - by default, is in the executable folder
     property DestinationPath: TFileName
@@ -1104,6 +1108,7 @@ type
     procedure AddMemoryStats; virtual;
     procedure AddErrorMessage(Error: cardinal);
     procedure AddStackTrace(Stack: PPtrUInt);
+    procedure AddSysInfo;
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
@@ -4027,6 +4032,7 @@ begin
   fExceptionIgnore := TSynList.Create;
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS,
                        sllError, sllFail, sllLastError, sllDDDError];
+  fLevelSysInfo := [sllException, sllExceptionOS, sllLastError];
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -4520,6 +4526,8 @@ procedure TSynLog.LogTrailer(Level: TSynLogLevel);
 begin
   if Level in fFamily.fLevelStackTrace then
     AddStackTrace(nil);
+  if Level in fFamily.fLevelSysInfo then
+    AddSysInfo;
   fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
   if (fFileRotationDailyAtHourTix <> 0) and
      (GetTickCount64 >= fFileRotationDailyAtHourTix) then
@@ -5500,6 +5508,16 @@ begin
   fWriter.AddDirect(')', ' ');
 end;
 
+procedure TSynLog.AddSysInfo;
+var
+  tmp: shortstring;
+begin
+  fWriter.AddDirect(' ', '{');
+  RetrieveSysInfoText(tmp);
+  fWriter.AddShort(tmp);
+  fWriter.AddDirect('}');
+end;
+
 procedure TSynLog.LogCurrentTime;
 var
   time: TSynSystemTime;
@@ -6243,7 +6261,9 @@ adr:  // regular exception context log with its stack trace
         {$endif FPC}
       except // paranoid
       end;
-fin:  log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
+fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
+        log.AddSysInfo;
+      log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
       log.fWriter.FlushToStream; // exceptions available on disk ASAP
     except
       // any nested exception should never be propagated to the OS caller
