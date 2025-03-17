@@ -181,8 +181,9 @@ const
         {$endif CPUINTEL}
         // regular OpenSSL 3 from https://synopse.info/files/OpenSSLMacX64.tgz
         // the system dylib fails as "xxx is loading libcrypto in an unsafe way"
-        // because Apple deprecates its OS lib since 10.7 days (2011) so we
-        // won't try to load plain libcrypto/libssl.dylib
+        // because Apple deprecates its OpenSSL API since 10.7 days (2011) in
+        // favor of its own "Cryptographic Services", so we won't try to load
+        // plain libcrypto/libssl.dylib but search for modern custom .dylib
         LIB_CRYPTO3 = 'libcrypto.3.dylib';
         LIB_SSL3 = 'libssl.3.dylib';
       {$else}
@@ -192,10 +193,11 @@ const
         LIB_SSL1 = 'libssl.so.1.1';
         LIB_CRYPTO3 = 'libcrypto.so.3';
         LIB_SSL3 = 'libssl.so.3';
-        {$else}
-        {$define NOOPENSSL3} // unsupported yet
-        LIB_CRYPTO1 = 'libcrypto.so'; // should redirect to 1.1
+        {$else} // not tested on OpenBSD/FreeBSD yet
+        LIB_CRYPTO1 = 'libcrypto.so'; // should redirect to 1.1 or 3
         LIB_SSL1 = 'libssl.so';
+        LIB_CRYPTO3 = 'libcrypto.so.3';
+        LIB_SSL3 = 'libssl.so.3';
         {$endif OSLINUX}
         _PU = '';
       {$endif OSDARWIN}
