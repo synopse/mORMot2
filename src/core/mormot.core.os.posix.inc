@@ -2723,6 +2723,35 @@ begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
 end;
 
+type
+  // emulate sysinfo() Linux syscall on BSD/Mac
+  TSysInfo = packed record
+    uptime: cardinal;                    // Seconds since boot
+    loads: array[0 .. 2] of cardinal;    // 1, 5, and 15 minute load averages
+    totalram: cardinal;                  // Total usable main memory size
+    freeram: cardinal;                   // Available memory size
+    bufferram: cardinal;                 // Memory used by buffers
+    totalswap: cardinal;                 // Total swap space size
+    freeswap: cardinal;                  // swap space still available
+    mem_unit: cardinal;                  // Memory unit size in bytes
+  end;
+
+function RetrieveSysInfo(var si: TSysInfo): boolean;
+var
+  avg: TLoadAvg;
+  i: PtrInt;
+begin
+  FillCharFast(si, SizeOf(si), 0);
+  si.uptime := GetUptimeSec;
+  if getloadavg(avg, 3) = 3 then
+    for i := 0 to 2 do
+      si.loads[i] := Trunc(avg[i] * 65536.0);
+  si.totalram := SystemMemorySize shr 12;
+  si.freeram := (SystemMemorySize - fpsysctlhwint(HW_USERMEM)) shr 12;
+  si.mem_unit := 1 shl 12; // 4096
+  result := true; // bufferram and totalswap/freeswap are left with 0
+end;
+
 {$ifdef OSFREEBSD}
 
 const
@@ -3142,6 +3171,11 @@ begin
   AppendShortChar(' ', @result);
   AppendShort(TwoDigits(si.loads[2] / 65536.0), result);
 end; // we didn't use AppendShortCurr64() because of expected rounding
+
+function RetrieveSysInfo(var si: TSysInfo): boolean;
+begin // single syscall gives enough information on Linux
+  result := SysInfo(@si) = 0;
+end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
