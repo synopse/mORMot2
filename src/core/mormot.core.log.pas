@@ -219,8 +219,8 @@ type
     aplDebug);
 
 const
-  /// up to 16 TSynLogFamily, i.e. TSynLog children classes can be defined
-  MAX_SYNLOGFAMILY = 15;
+  /// up to 16 TSynLogFamily, i.e. TSynLog sub-classes can be defined
+  MAX_SYNLOGFAMILY = 16;
 
   /// constant with all TSynLogFamily.Level items, as set by LOG_VERBOSE
   LOG_ALL = [succ(sllNone) .. high(TSynLogLevel)];
@@ -646,7 +646,7 @@ type
     fSynLogClass: TSynLogClass;
     fDestinationPath: TFileName;
     fDefaultExtension: TFileName;
-    fIdent: integer;
+    fIdent: byte;
     fBufferSize: integer;
     fPerThreadLog: TSynLogPerThreadMode;
     fIncludeComputerNameInFileName: boolean;
@@ -823,7 +823,8 @@ type
     property SynLogClassName: string
       read GetSynLogClassName;
     /// index in global SynLogFileFamily[] and SynLogLookupThreadVar[] lists
-    property Ident: integer
+    // - value is always < MAX_SYNLOGFAMILY, i.e. in 0 .. 15 range
+    property Ident: byte
       read fIdent;
     /// the current level of logging information for this family
     // - can be set e.g. to LOG_VERBOSE in order to log every kind of events
@@ -3744,7 +3745,7 @@ end;
 
 type
   /// an array to all available per-thread TSynLog instances
-  TSynLogFileLookup = array[0..MAX_SYNLOGFAMILY] of TSynLog;
+  TSynLogFileLookup = array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
 
 var
   /// internal list of registered TSynLogFamily instances
@@ -3935,6 +3936,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext); forward;
 threadvar // do not publish for compilation within Delphi packages
   /// each thread can have exceptions interception disabled
   // - as set by TSynLogFamily.ExceptionIgnoreCurrentThread property
+  // - need a threadvar to avoid dead lock on exceptions raised during logging
   ExceptionIgnorePerThread: boolean;
 
 {$endif NOEXCEPTIONINTERCEPT}
@@ -4003,6 +4005,8 @@ end;
 constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
+  if length(SynLogFamily) >= MAX_SYNLOGFAMILY then
+    ESynLogException.RaiseUtf8('%.Create(%): too many classes', [self, aSynLog]);
   fIdent := ObjArrayAdd(SynLogFamily, self);
   fDestinationPath := Executable.ProgramFilePath;
   // use .exe path by default - no [idwExcludeWinSys] needed here
@@ -4029,7 +4033,7 @@ end;
 
 function TSynLogFamily.GetExceptionIgnoreCurrentThread: boolean;
 begin
-  result := ExceptionIgnorePerThread;
+  result := ExceptionIgnorePerThread; // private threadvar access
 end;
 
 procedure TSynLogFamily.SetExceptionIgnoreCurrentThread(
@@ -4059,8 +4063,7 @@ begin
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and
          (fRotateFileSizeKB = 0) and
-         (fRotateFileDailyAtHour < 0) and
-         (fIdent <= MAX_SYNLOGFAMILY) then
+         (fRotateFileDailyAtHour < 0) then
         SynLogLookupThreadVar[fIdent] := result
       else
       begin
@@ -4201,8 +4204,7 @@ begin
     if (fPerThreadLog = ptOneFilePerThread) and
        (fRotateFileCount = 0) and
        (fRotateFileSizeKB = 0) and
-       (fRotateFileDailyAtHour < 0) and
-       (fIdent <= MAX_SYNLOGFAMILY) then
+       (fRotateFileDailyAtHour < 0) then
     begin
       // unrotated ptOneFilePerThread
       result := SynLogLookupThreadVar[fIdent];
@@ -4791,8 +4793,7 @@ begin
   try
     CloseLogFile;
     ObjArrayDelete(SynLogFile, self);
-    if (fFamily.fPerThreadLog = ptOneFilePerThread) and
-       (fFamily.fIdent <= MAX_SYNLOGFAMILY) then
+    if fFamily.fPerThreadLog = ptOneFilePerThread then
       SynLogLookupThreadVar[fFamily.fIdent] := nil;
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -6108,7 +6109,7 @@ begin
   if SynLogFile = nil then
   begin
     // no log content yet -> check from family
-    for i := 0 to high(SynLogFamily) do
+    for i := 0 to length(SynLogFamily) - 1 do
       if SynLogFamily[i].fHandleExceptions then
       begin
         result := SynLogFamily[i].Add;
@@ -6119,7 +6120,7 @@ begin
   begin
     // check from active per-thread TSynLog instances
     lookup := @SynLogLookupThreadVar; // access TLS slot once
-    for i := 0 to MAX_SYNLOGFAMILY do
+    for i := 1 to MAX_SYNLOGFAMILY do
     begin
       result := lookup^;
       if (result <> nil) and
@@ -6423,7 +6424,7 @@ begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     ps^ := ''; // for LogThreadName(name) to appear once
-    for i := 0 to high(SynLogFamily) do
+    for i := 0 to length(SynLogFamily) - 1 do
       with SynLogFamily[i] do
         if (sllInfo in Level) and
            (PerThreadLog = ptIdentifiedInOneFile) and
