@@ -1103,7 +1103,7 @@ type
     procedure LogFileHeader; virtual;
     procedure AddMemoryStats; virtual;
     procedure AddErrorMessage(Error: cardinal);
-    procedure AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
+    procedure AddStackTrace(Stack: PPtrUInt);
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
@@ -3749,7 +3749,7 @@ type
 
 var
   /// internal list of registered TSynLogFamily instances
-  // - up to MAX_SYNLOGFAMILY+1 families may be defined
+  // - up to MAX_SYNLOGFAMILY TSynLog sub-classes may be defined
   // - protected by GlobalThreadLock
   SynLogFamily: array of TSynLogFamily;
 
@@ -4519,7 +4519,7 @@ end;
 procedure TSynLog.LogTrailer(Level: TSynLogLevel);
 begin
   if Level in fFamily.fLevelStackTrace then
-    AddStackTrace(Level, nil);
+    AddStackTrace(nil);
   fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
   if (fFileRotationDailyAtHourTix <> 0) and
      (GetTickCount64 >= fFileRotationDailyAtHourTix) then
@@ -5936,7 +5936,7 @@ end;
 
 {$ifdef FPC}
 
-procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
+procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 var
   frames: array[0..61] of pointer; // on Win64, RtlCaptureStackBackTrace < 62
   i, depth: PtrInt;
@@ -5962,7 +5962,7 @@ end;
 
 {$else not FPC}
 
-procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
+procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
 {$ifdef CPU64}
 
@@ -6238,7 +6238,7 @@ adr:  // regular exception context log with its stack trace
         {$else}
         {$ifdef CPUX86}
         // stack frame OK only for RTLUnwindProc by now
-        log.AddStackTrace(Ctxt.ELevel, pointer(Ctxt.EStack));
+        log.AddStackTrace(pointer(Ctxt.EStack));
         {$endif CPUX86}
         {$endif FPC}
       except // paranoid
