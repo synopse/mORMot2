@@ -3837,7 +3837,7 @@ begin
   if self = nil then
     result := ''
   else
-    result := InputCookies^.GetCookie(CookieName);
+    InputCookies^.RetrieveCookie(CookieName, result);
 end;
 
 procedure TRestUriContext.SetInCookie(const CookieName, CookieValue: RawUtf8);

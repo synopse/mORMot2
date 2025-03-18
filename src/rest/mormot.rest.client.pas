@@ -1087,9 +1087,6 @@ type
       read fSession.HeartbeatSeconds write SetSessionHeartbeatSeconds;
   end;
 
-const
-  REST_COOKIE_SESSION = 'mORMot_session_signature';
-
 
 function ToText(a: TRestAuthenticationSignedUriAlgo): PShortString; overload;
 
@@ -1244,12 +1241,13 @@ class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
   const aNameValueParameters: array of const): RawUtf8;
 var
-  resp: RawUtf8;
+  resp, hdr: RawUtf8;
   values: array[0..high(AUTH_N)] of TValuePUtf8Char;
+  cookie: PUtf8Char;
   a: integer;
-  algo: TRestAuthenticationSignedUriAlgo absolute a;
 begin
-  if (Sender.CallBackGet('auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
+  if (Sender.CallBackGet('auth',
+        aNameValueParameters, resp, nil, 0, @hdr) <> HTTP_SUCCESS) or
      (JsonDecode(pointer({%H-}resp), @AUTH_N, length(AUTH_N), @values) = nil) then
   begin
     Sender.fSession.Data := ''; // reset temporary 'data' field
@@ -1268,11 +1266,25 @@ begin
     Sender.fSession.ServerTimeout := values[8].ToInteger;
     if Sender.fSession.ServerTimeout <= 0 then
       Sender.fSession.ServerTimeout := 60; // default 1 hour if not suppplied
-    a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
-      values[9].Text, values[9].Len);
-    if a >= 0 then
-      Sender.fComputeSignature :=
-        TRestClientAuthenticationSignedUri.GetComputeSignature(algo);
+    Sender.fSession.IDHexa8 := '';
+    if values[9].Text <> nil then
+    begin
+      a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
+        values[9].Text, values[9].Len);
+      if a >= 0 then
+        Sender.fComputeSignature := TRestClientAuthenticationSignedUri.
+          GetComputeSignature(TRestAuthenticationSignedUriAlgo(a))
+    end
+    else
+    begin
+      cookie := FindNameValue(pointer(hdr), 'SET-COOKIE: ');
+      if cookie = nil then
+        exit;
+      cookie := GotoNextNotSpace(cookie);
+      if IdemPChar(cookie, '__SECURE-') then
+        inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
+      GetNextItem(cookie, ';', Sender.fSession.IDHexa8); // use first cookie
+    end;
   end;
 end;
 
@@ -1549,8 +1561,8 @@ begin
   if (Sender <> nil) and
      (Sender.Session.ID <> 0) and
      (Sender.Session.User <> nil) then
-    AppendLine(Call.InHead, [('Cookie: ' + REST_COOKIE_SESSION + '='),
-      Sender.Session.IDHexa8]); // session ID transmitted as HTTP cookie
+    // session ID transmitted as HTTP cookie
+    AppendLine(Call.InHead, ['Cookie: ', Sender.Session.IDHexa8]);
 end;
 
 class function TRestClientAuthenticationHttpAbstract.ClientSetUser(
@@ -2125,10 +2137,13 @@ begin
   fSession.ID := GetCardinal(pointer(aSessionKey));
   if fSession.ID = 0 then
     exit;
-  fSession.IDHexa8 := CardinalToHexLower(fSession.ID);
-  fSession.PrivateKey := crc32(crc32(0,
-    pointer(aSessionKey), length(aSessionKey)),
-    pointer(aUser.PasswordHashHexa), length(aUser.PasswordHashHexa));
+  if fSession.IDHexa8 = '' then // may have been retrieved from 'SetCookie:'
+  begin
+    fSession.IDHexa8 := CardinalToHexLower(fSession.ID);
+    fSession.PrivateKey := crc32(crc32(0,
+      pointer(aSessionKey), length(aSessionKey)),
+      pointer(aUser.PasswordHashHexa), length(aUser.PasswordHashHexa));
+  end;
   fSession.User := aUser;
   fSession.Authentication := aAuth;
   aUser := nil; // now owned by this instance
