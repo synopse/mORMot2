@@ -2211,7 +2211,15 @@ type
 const
   /// server can use this cookie value to delete a cookie on the browser side
   COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
-
+var
+  /// maximum number of cookies allowed by THttpCookies.ParseServer
+  // - used as Deny-Of-Service (DOS) Attack detection threshold
+  // - typically no more than 50 cookies per domain
+  COOKIE_MAXCOUNT_DOSATTACK: integer = 128;
+  /// maximum total size of cookies allowed by THttpCookies.ParseServer
+  // - used asDeny-Of-Service (DOS) Attack detection threshold
+  // - usually no more than 4KB per cookie, but seems to be 4KB in total for IE
+  COOKIE_MAXSIZE_DOSATTACK: integer = 4096;
 
 /// retrieve the HTTP reason text from its integer code as PRawUtf8
 // - e.g. StatusCodeToText(200)^='OK'
@@ -10131,10 +10139,6 @@ end;
 
 { THttpCookies }
 
-const
-  // Deny-Of-Service (DOS) Attack detection threshold
-  COOKIE_MAXCOUNT_DOSATTACK = 128;
-
 procedure THttpCookies.Clear;
 begin
   fCookies := nil;
@@ -10142,14 +10146,14 @@ end;
 
 procedure THttpCookies.ParseServer(const InHead: RawUtf8);
 var
-  count, plen: PtrInt;
+  count, plen, total: PtrInt;
   h, p: PUtf8Char;
   name, value: RawUtf8;
   new: PHttpCookie;
 begin
-  fParsed := true;
   fCookies := nil; // first Clear any previous cookie
   count := 0;
+  total := 0;
   h := pointer(InHead);
   while h <> nil do
   begin
@@ -10157,6 +10161,10 @@ begin
     p := FindNameValuePointer(h, 'COOKIE:', plen, #0);
     if p = nil then
       break;
+    inc(total, plen);
+    if total > COOKIE_MAXSIZE_DOSATTACK then
+      ESynException.RaiseUtf8('RetrieveCookies got % cookies (>%) in % headers',
+        [KB(total), KB(COOKIE_MAXSIZE_DOSATTACK), KB(InHead)]);
     h := GotoNextLine(p + plen);
     // parse each line pairs
     repeat
