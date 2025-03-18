@@ -4787,16 +4787,18 @@ function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
 begin
   result := (self <> nil) and
             ((status = HTTP_BADREQUEST) or     // disallow 400,402..xxx
-             (status > HTTP_UNAUTHORIZED)) and // allow 401 response
-            BanIP(ip4)
+             ((status > HTTP_UNAUTHORIZED) and
+              (status <> HTTP_CLIENTERROR))) and // allow 401 and 666 response
+            BanIP(ip4);
 end;
 
 function THttpAcceptBan.ShouldBan(status: cardinal; const ip4: RawUtf8): boolean;
 begin
   result := (self <> nil) and
             ((status = HTTP_BADREQUEST) or     // disallow 400,402..xxx
-             (status > HTTP_UNAUTHORIZED)) and // allow 401 response
-            BanIP(ip4)
+             ((status > HTTP_UNAUTHORIZED) and
+              (status <> HTTP_CLIENTERROR))) and // allow 401 and 666 response
+            BanIP(ip4);
 end;
 
 function THttpAcceptBan.DoRotate: integer;
