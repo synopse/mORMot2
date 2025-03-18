@@ -3708,7 +3708,8 @@ begin
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
       EAsyncConnections.RaiseUtf8(
-        '%.WaitStarted timeout after % seconds', [self, seconds]);
+        '%.WaitStarted % timeout after % seconds',
+          [self, ToText(fExecuteState)^, seconds]);
   until false;
 end;
 
@@ -3781,6 +3782,7 @@ begin
       SleepHiRes(1); // wait for Execute to be finalized (unlikely)
     until (fExecuteState <> esRunning) or
           (mormot.core.os.GetTickCount64 > endtix);
+    DoLog(sllTrace, 'Destroy waited until %', [ToText(fExecuteState)^], self);
   end;
   FreeAndNilSafe(fServer);
   FreeAndNil(fBanned);
@@ -3811,8 +3813,7 @@ end;
 procedure TAsyncServer.SetExecuteState(State: THttpServerExecuteState);
 begin
   fExecuteState := State;
-  DoLog(sllInfo, 'Execute: State=%',
-    [GetEnumName(TypeInfo(THttpServerExecuteState), ord(State))^], self);
+  DoLog(sllInfo, 'Execute: State=%', [ToText(State)^], self);
 end;
 
 {$ifdef USE_WINIOCP}

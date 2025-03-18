@@ -1381,6 +1381,7 @@ const
   THREADPOOL_BIGBODYSIZE = 16 * 1024 * 1024;
 
 function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
+function ToText(state: THttpServerExecuteState): PShortString; overload;
 
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
@@ -4100,8 +4101,8 @@ begin
     end;
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > endtix then
-      EHttpServer.RaiseUtf8('%.WaitStarted timeout after % seconds [%]',
-        [self, Seconds, fExecuteMessage]);
+      EHttpServer.RaiseUtf8('%.WaitStarted timeout % after % seconds [%]',
+        [self, ToText(GetExecuteState)^, Seconds, fExecuteMessage]);
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
@@ -5390,7 +5391,10 @@ begin
   result := GetEnumName(TypeInfo(THttpServerSocketGetRequestResult), ord(res));
 end;
 
-
+function ToText(state: THttpServerExecuteState): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpServerExecuteState), ord(state));
+end;
 
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
