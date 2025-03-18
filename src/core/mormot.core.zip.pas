@@ -3063,7 +3063,7 @@ begin
         deflate := TSynZipDecompressor.Create(aDest, szcfRaw);
       try
         len := aInfo.f64.zzipSize;
-        tmpLen := 1 shl 20;
+        tmpLen := 1 shl 20; // use a 1MB temporary buffer
         if len < tmpLen then
           tmpLen := len;
         pointer(tmp) := FastNewString(tmpLen);
@@ -3149,7 +3149,7 @@ function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var
   FS: TStream;
-  LocalZipName, Dest: TFileName;
+  LocalZipName, LocalPath, Dest: TFileName;
   info: TFileInfoFull;
 begin
   result := false;
@@ -3161,15 +3161,22 @@ begin
   begin
     LocalZipName := Entry[aIndex].zipName;
     if fZipNamePathDelim <> PathDelim then
-      LocalZipName := StringReplace(
-        LocalZipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
+      LocalZipName := NormalizeFileName(LocalZipName);
     if not SafeFileName(LocalZipName) then
       ESynZip.RaiseUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
-    Dest := EnsureDirectoryExists([DestDir, LocalZipName]);
+    Dest := EnsureDirectoryExists(DestDir);
     if Dest = '' then
+      exit;
+    LocalPath := ExtractFilePath(LocalZipName);
+    if LocalPath <> '' then
+    begin
+      LocalZipName := ExtractFileName(LocalZipName);
+      Dest := EnsureDirectoryExists([Dest, LocalPath]);
+    end;
+    if not FileIsWritable(Dest) then
       exit; // impossible to write in this folder
-    Dest := Dest + ExtractFileName(LocalZipName);
+    Dest := Dest + LocalZipName;
   end;
   if IsFolder(Entry[aIndex].zipName) then
     result := EnsureDirectoryExists(Dest) <> ''
