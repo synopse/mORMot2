@@ -2194,6 +2194,9 @@ type
     // - should always previously check "if not ###Parsed then Parse()"
     function GetCookie(const CookieName: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
+    /// retrieve a cookie value from its name
+    // - should always previously check "if not ###Parsed then Parse()"
+    function RetrieveCookie(const CookieName: RawUtf8; var Value: RawUtf8): boolean;
     /// set or change a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
     procedure SetCookie(const CookieName, CookieValue: RawUtf8);
@@ -10227,13 +10230,19 @@ begin
 end;
 
 function THttpCookies.GetCookie(const CookieName: RawUtf8): RawUtf8;
+begin
+  RetrieveCookie(CookieName, result);
+end;
+
+function THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
+  var Value: RawUtf8): boolean;
 var
   c: PHttpCookie;
 begin
-  result := '';
   c := FindCookie(CookieName);
-  if c <> nil then
-    result := c^.Value;
+  result := c <> nil;
+  if result then
+    Value := c^.Value;
 end;
 
 
