@@ -3436,14 +3436,11 @@ procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 begin
   s[0] := #0;
   AppendShortCardinal(ip4addr[0], s);
-  inc(s[0]);
-  s[ord(s[0])] := '.';
+  AppendShortChar('.', @s);
   AppendShortCardinal(ip4addr[1], s);
-  inc(s[0]);
-  s[ord(s[0])] := '.';
+  AppendShortChar('.', @s);
   AppendShortCardinal(ip4addr[2], s);
-  inc(s[0]);
-  s[ord(s[0])] := '.';
+  AppendShortChar('.', @s);
   AppendShortCardinal(ip4addr[3], s);
   PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
 end;
