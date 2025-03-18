@@ -139,15 +139,16 @@ type
     // - if saoUserByLogonOrID is defined in the server Options, aUserName may
     // be a TAuthUser.ID and not a TAuthUser.LogonName
     // - if passClear is used, you may specify aHashSalt and aHashRound,
-    // to enable Pbkdf2HmacSha256() use instead of plain Sha256(), and increase
-    // security on storage side (reducing brute force attack via rainbow tables)
+    // to enable Pbkdf2HmacSha256() use instead of plain Sha256(), or set
+    // aDigestAlgo to use the DIGEST-HA0 algorithm
     // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user
     // - returns true on success
     class function ClientSetUser(Sender: TRestClientUri;
       const aUserName, aPassword: RawUtf8;
       aPasswordKind: TRestClientSetUserPassword = passClear;
-      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): boolean; virtual;
+      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000;
+      aDigestAlgo: TDigestAlgo = daUndefined): boolean; virtual;
     /// class method to be called on client side to sign an URI
     // - used by TRestClientUri.Uri()
     // - shall match the method as expected by RetrieveSession() virtual method
@@ -243,7 +244,8 @@ type
   protected
     /// should be overriden according to the HTTP authentication scheme
     class function ComputeAuthenticateHeader(
-      const aUserName,aPasswordClear: RawUtf8): RawUtf8; virtual; abstract;
+      const aUserName, aPasswordClear, HashSalt: RawUtf8;
+      aHashRound: integer; aDigestAlgo: TDigestAlgo): RawUtf8; virtual; abstract;
   public
     /// class method to be called on client side to sign an URI in Auth Basic
     // resolution is about 256 ms in the current implementation
@@ -258,7 +260,8 @@ type
     class function ClientSetUser(Sender: TRestClientUri;
       const aUserName, aPassword: RawUtf8;
       aPasswordKind: TRestClientSetUserPassword = passClear;
-      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): boolean; override;
+      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000;
+      aDigestAlgo: TDigestAlgo = daUndefined): boolean; override;
     /// class method to be used on client side to force the HTTP header for
     // the corresponding HTTP authentication, without creating any remote session
     // - call virtual protected method ComputeAuthenticateHeader()
@@ -271,7 +274,8 @@ type
     // for a full client + server authentication via HTTP
     // TRestClientAuthenticationHttp*.ClientSetUser()
     class procedure ClientSetUserHttpOnly(Sender: TRestClientUri;
-      const aUserName, aPasswordClear: RawUtf8); virtual;
+      const aUserName, aPasswordClear, aHashSalt: RawUtf8;
+      aHashRound: integer; aDigestAlgo: TDigestAlgo); virtual;
   end;
 
   /// authentication using HTTP Basic scheme
@@ -289,7 +293,8 @@ type
   protected
     /// this overriden method returns "Authorization: Basic ...." HTTP header
     class function ComputeAuthenticateHeader(
-      const aUserName,aPasswordClear: RawUtf8): RawUtf8; override;
+      const aUserName, aPasswordClear, aHashSalt: RawUtf8;
+      aHashRound: integer; aDigestAlgo: TDigestAlgo): RawUtf8; override;
   end;
 
   {$ifdef DOMAINRESTAUTH}
@@ -1274,7 +1279,7 @@ end;
 class function TRestClientAuthentication.ClientSetUser(
   Sender: TRestClientUri; const aUserName, aPassword: RawUtf8;
   aPasswordKind: TRestClientSetUserPassword; const aHashSalt: RawUtf8;
-  aHashRound: integer): boolean;
+  aHashRound: integer; aDigestAlgo: TDigestAlgo): boolean;
 var
   U: TAuthUser;
   key: RawUtf8;
@@ -1289,12 +1294,14 @@ begin
       U.LogonName := TrimU(aUserName);
       U.DisplayName := U.LogonName;
       if aPasswordKind <> passClear then
-        U.PasswordHashHexa := aPassword
-      else if aHashSalt = '' then
-        U.PasswordPlain := aPassword
+        U.PasswordHashHexa := aPassword // stored directly as supplied
       else
-        // compute Sha256() or proper Pbkdf2HmacSha256()
+      begin
+        if aDigestAlgo <> daUndefined then
+          aHashRound := -ord(aDigestalgo);
+        // compute with SHA-256, Pbkdf2HmacSha256() or DIGEST-HA0 hash
         U.SetPassword(aPassword, aHashSalt, aHashRound);
+      end;
       key := ClientComputeSessionKey(Sender, U);
       result := Sender.SessionCreate(self, U, key);
     finally
@@ -1549,7 +1556,7 @@ end;
 class function TRestClientAuthenticationHttpAbstract.ClientSetUser(
   Sender: TRestClientUri; const aUserName, aPassword: RawUtf8;
   aPasswordKind: TRestClientSetUserPassword;
-  const aHashSalt: RawUtf8; aHashRound: integer): boolean;
+  const aHashSalt: RawUtf8; aHashRound: integer; aDigestAlgo: TDigestAlgo): boolean;
 var
   res: RawUtf8;
   U: TAuthUser;
@@ -1563,7 +1570,8 @@ begin
   Sender.SessionClose; // ensure Sender.SessionUser=nil
   try
     // inherited ClientSetUser() won't fit with server's Auth() method
-    ClientSetUserHttpOnly(Sender, aUserName, aPassword);
+    ClientSetUserHttpOnly(Sender,
+      aUserName, aPassword, aHashSalt, aHashRound, aDigestAlgo);
     Sender.fSession.Authentication := self; // to enable ClientSessionSign()
     U := TAuthUser(Sender.fModel.GetTableInherited(TAuthUser).Create);
     try
@@ -1587,16 +1595,19 @@ begin
 end;
 
 class procedure TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnly(
-  Sender: TRestClientUri; const aUserName, aPasswordClear: RawUtf8);
+  Sender: TRestClientUri; const aUserName, aPasswordClear, aHashSalt: RawUtf8;
+  aHashRound: integer; aDigestAlgo: TDigestAlgo);
 begin
-  Sender.fSession.HttpHeader := ComputeAuthenticateHeader(aUserName, aPasswordClear);
+  Sender.fSession.HttpHeader := ComputeAuthenticateHeader(
+    aUserName, aPasswordClear, aHashSalt, aHashRound, aDigestAlgo);
 end;
 
 
 { TRestClientAuthenticationHttpBasic }
 
 class function TRestClientAuthenticationHttpBasic.ComputeAuthenticateHeader(
-  const aUserName, aPasswordClear: RawUtf8): RawUtf8;
+  const aUserName, aPasswordClear, aHashSalt: RawUtf8;
+  aHashRound: integer; aDigestAlgo: TDigestAlgo): RawUtf8;
 begin
   BasicClient(aUserName, aPasswordClear, SpiUtf8(result));
 end;
