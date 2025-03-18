@@ -2180,10 +2180,9 @@ type
   THttpCookies = object
   {$endif USERECORDWITHMETHODS}
   private
-    fParsed: boolean;
     fCookies: THttpCookieDynArray; // only if InCookie[] is used
   public
-    /// reset the internal list and Parsed status
+    /// reset the internal list
     procedure Clear;
     /// parse the cookies from request HTTP headers on server side
     // - e.g. 'Cookie: name=value; name2=value2; name3=value3'
@@ -2192,18 +2191,15 @@ type
     /// retrieve a cookie name/value pair in the internal storage
     function FindCookie(const CookieName: RawUtf8): PHttpCookie;
     /// retrieve a cookie value from its name
-    // - should always previously check "if not Parsed then Parse()"
+    // - should always previously check "if not ###Parsed then Parse()"
     function GetCookie(const CookieName: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     /// set or change a cookie value from its name
-    // - should always previously check "if not Parsed then Parse()"
+    // - should always previously check "if not ###Parsed then Parse()"
     procedure SetCookie(const CookieName, CookieValue: RawUtf8);
-    /// false if ParseServer() should be called with the HTTP header
-    property Parsed: boolean
-      read fParsed;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
-    // - should always previously check "if not Parsed then Parse()"
+    // - should always previously check "if not ###Parsed then Parse()"
     property Cookie[const CookieName: RawUtf8]: RawUtf8
       read GetCookie write SetCookie; default;
     /// direct access to the internal name/value pairs list
@@ -10141,7 +10137,6 @@ const
 
 procedure THttpCookies.Clear;
 begin
-  fParsed := false;
   fCookies := nil;
 end;
 
@@ -10172,15 +10167,15 @@ begin
       if (name = '') and
          (value = '') then
         break;
+      if count >= COOKIE_MAXCOUNT_DOSATTACK then
+        ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
+          [KB(InHead)]);
       if count = length(fCookies) then
         SetLength(fCookies, NextGrow(count));
       new := @fCookies[count];
       new^.Name := name;
       new^.Value := value;
       inc(count);
-      if count > COOKIE_MAXCOUNT_DOSATTACK then
-        ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
-          [KB(InHead)]);
     until p = nil; // next 'name2=value2; ...' pair
   end;
   if count <> 0 then
