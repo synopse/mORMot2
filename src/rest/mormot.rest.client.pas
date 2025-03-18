@@ -1342,12 +1342,12 @@ begin
   if aServerNonce = '' then
     exit;
   SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
-  aClientNonce := CardinalToHexLower(OSVersionInt32) + '_' +
-                  BinToHexLower(@rnd, SizeOf(rnd)); // 160-bit nonce
+  Make([CardinalToHexShort(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
+    aClientNonce); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [
     'username',   User.LogonName,
-    'password',   Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
-                         User.LogonName + User.PasswordHashHexa),
+    'password',   Sha256(Make([Sender.fModel.Root, aServerNonce, aClientNonce,
+                         User.LogonName, User.PasswordHashHexa])),
     'clientnonce', aClientNonce]);
 end;
 
@@ -1502,29 +1502,29 @@ begin
   end;
 end;
 
+const
+  _PARAM: array[boolean] of RawUtf8 = (
+    '&session_signature=', '?session_signature=');
+
 class procedure TRestClientAuthenticationSignedUri.ClientSessionSign(
   Sender: TRestClientUri; var Call: TRestUriParams);
 var
-  nonce, blankURI: RawUtf8;
+  nonce: RawUtf8;
   sign: cardinal;
+  session: ^TRestClientSession;
 begin
-  if (Sender = nil) or
-     (Sender.Session.ID = 0) or
-     (Sender.Session.User = nil) then
+  if Sender = nil then
     exit;
-  blankURI := Call.Url;
-  if PosExChar('?', Call.url) = 0 then
-    Call.url := Call.Url + '?session_signature='
-  else
-    Call.url := Call.Url + '&session_signature=';
-  with Sender do
-  begin
-    fSession.LastTick64 := GetTickCount64;
-    nonce := CardinalToHexLower(fSession.LastTick64 shr 8); // 256 ms resolution
-    sign := Sender.fComputeSignature(fSession.PrivateKey, pointer(nonce),
-      pointer(blankURI), length(blankURI));
-    Call.url := Call.url + fSession.IDHexa8 + nonce + CardinalToHexLower(sign);
-  end;
+  session := @Sender.fSession;
+  if (session^.ID = 0) or
+     (session^.User = nil) then
+    exit;
+  session^.LastTick64 := GetTickCount64;
+  nonce := CardinalToHexLower(session^.LastTick64 shr 8); // 256 ms resolution
+  sign := Sender.fComputeSignature(session^.PrivateKey, pointer(nonce),
+    pointer(Call.Url), length(Call.Url));
+  Append(Call.Url, [_PARAM[PosExChar('?', Call.url) = 0], session^.IDHexa8,
+    nonce, CardinalToHexLower(sign)]);
 end;
 
 
@@ -1536,10 +1536,7 @@ begin
   if (Sender <> nil) and
      (Sender.Session.ID <> 0) and
      (Sender.Session.User <> nil) then
-    if PosExChar('?', Call.url) = 0 then
-      Call.url := Call.url + '?session_signature=' + Sender.Session.IDHexa8
-    else
-      Call.url := Call.url + '&session_signature=' + Sender.Session.IDHexa8;
+    Append(Call.Url, _PARAM[PosExChar('?', Call.url) = 0], Sender.Session.IDHexa8);
 end;
 
 
