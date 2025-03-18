@@ -188,10 +188,9 @@ type
   protected
     fServer: TRestServer;
     fInput: TRawUtf8DynArray; // [nam1,val1, nam2,val2, ...] pairs
-    fInputAllowDouble: boolean;
     fStaticKind: TRestServerKind;
     fNode: TRestNode;
-    fCommand: TRestServerUriContextCommand;
+    fInputAllowDouble: boolean;
     fServiceMethodIndex: integer;
     fUriSessionSignaturePos: integer;
     fMethodIndex: integer;

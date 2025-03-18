@@ -1278,6 +1278,7 @@ type
     fCall: PRestUriParams;
     fMethod: TUriMethod;
     fClientKind: TRestClientKind;
+    fCommand: TRestServerUriContextCommand;
     fInputCookiesParsed: boolean;
     fInputContentType: RawUtf8;
     fInHeaderLastName: RawUtf8;
