@@ -1033,16 +1033,12 @@ type
     // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
     // and use the much safer Pbkdf2HmacSha256 algorithm
-    property PasswordPlain: RawUtf8 write SetPasswordPlain;
+    property PasswordPlain: RawUtf8
+      write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
-    // - use this method to specify aHashSalt/aHashRound values, enabling
-    // Pbkdf2HmacSha256() use instead of plain Sha256(): it will increase
-    // security on storage side (reducing brute force attack via rainbow tables)
-    // - you may use an application specific fixed salt, and/or append the
-    // user LogonName to make the challenge unique for each TAuthUser
-    // - the default aHashRound=20000 is slow but secure - since the hashing
-    // process is expected to be done on client side, you may specify your
-    // own higher/slower value, depending on the security level you expect
+    // - use this method to specify aHashSalt/aHashRound values (see
+    // ComputeHashedPassword method) and increase security on storage side
+    // (reducing brute force attack via rainbow tables)
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
       aHashRound: integer = 20000);
     /// check if the user can authenticate in its current state
@@ -1050,8 +1046,8 @@ type
     // - called by TRestServerAuthentication.GetUser() method
     // - this default implementation will return TRUE, i.e. allow the user
     // to log on
-    // - override this method to disable user authentication, e.g. if the
-    // user is disabled via a custom ORM boolean and date/time field
+    // - override this method to disable user authentication, e.g. if the user
+    // is disabled via a custom ORM boolean or date/time expiration field
     function CanUserLog(Ctxt: TObject): boolean; virtual;
   published
     /// the User identification Name, as entered at log-in

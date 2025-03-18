@@ -1757,7 +1757,7 @@ type
     // - aAddr='IP:port' - bind to specified interface only, e.g.
     // '1.2.3.4:1234'
     // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g.
-    // 'unix:/run/mormot.sock'
+    // 'unix:/run/mymormotapp.sock'
     // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;

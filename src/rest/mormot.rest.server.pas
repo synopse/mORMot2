@@ -860,7 +860,7 @@ type
     fTimeOutTix: cardinal;
     fTimeOutShr10: cardinal;
     fPrivateKey: RawUtf8;
-    fPrivateSalt: RawUtf8;
+    fPrivateSalt: RawUtf8; // 'SessionID+PrivateKey'
     fSentHeaders: RawUtf8;
     fRemoteIP: RawUtf8;
     fConnectionID: TRestConnectionID;
@@ -907,8 +907,10 @@ type
     // - extracted from User.TAuthGroup.OrmAccessRights
     property AccessRights: TOrmAccessRights
       read fAccessRights;
-    /// the hexadecimal private key as returned to the connected client
-    // as 'SessionID+PrivateKey'
+    /// the hexadecimal private key
+    // - once connected, returned to connected client as 'SessionID+PrivateKey'
+    // for digital signature of the URIs
+    // - pre-computed in fPrivateSalt / fPrivateSaltHash protected fields
     property PrivateKey: RawUtf8
       read fPrivateKey;
     /// the transmitted HTTP headers, if any

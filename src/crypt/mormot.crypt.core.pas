@@ -3157,13 +3157,13 @@ type
   end;
 
   TShaContext = packed record
-    // Working hash (TSha256.Init expect this field to be the first)
+    // current hash state (TSha256.Init expect this field to be the first)
     Hash: TShaHash;
-    // 64bit msg length
+    // 64-bit msg length
     MLen: QWord;
-    // Block buffer
+    // 512-bit block buffer
     Buffer: array[0..63] of byte;
-    // Index in buffer
+    // current position in buffer
     Index: integer;
   end;
 
