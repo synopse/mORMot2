@@ -1024,23 +1024,30 @@ type
     /// static function allowing to compute a hashed password
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
-    // - you may specify your own values in aHashSalt/aHashRound, to enable
-    // Pbkdf2HmacSha256() use instead of plain Sha256(): it will increase
-    // security on storage side (reducing brute force attack via rainbow tables)
-    class function ComputeHashedPassword(const aPasswordPlain: RawUtf8;
+    // - aHashRound = 0 uses plain Sha256(), as early mORMot 1 encoding
+    // - aHashRound > 0 triggers Pbkdf2HmacSha256() via aHashSalt, and enable
+    // Pbkdf2HmacSha256() to increase security on storage side (reducing brute
+    // force attack via rainbow tables)
+    // - aHashRound < 0 will use standard DIGEST-HA0 hashing, compatible with
+    // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo)
+    class function ComputeHashedPassword(const aLogonName, aPasswordPlain: RawUtf8;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
-    // and use the much safer Pbkdf2HmacSha256 algorithm
+    // and use the much safer Pbkdf2HmacSha256 or DIGEST-HA0 algorithms
     property PasswordPlain: RawUtf8
       write SetPasswordPlain;
-    /// set the PasswordHashHexa field from a plain password content and salt
+    /// set the PasswordHashHexa field using Pbkdf2HmacSha256
     // - use this method to specify aHashSalt/aHashRound values (see
     // ComputeHashedPassword method) and increase security on storage side
     // (reducing brute force attack via rainbow tables)
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
-      aHashRound: integer = 20000);
+      aHashRound: integer = 20000); overload;
+    /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
+    // - will use the current LogonName as part of the digest
+    procedure SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
+      aAlgo: TDigestAlgo = daSHA256);
     /// check if the user can authenticate in its current state
     // - Ctxt is a TRestServerUriContext instance
     // - called by TRestServerAuthentication.GetUser() method
@@ -3593,32 +3600,51 @@ end;
 
 { TAuthUser }
 
-class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
+class function TAuthUser.ComputeHashedPassword(const aLogonName, aPasswordPlain,
   aHashSalt: RawUtf8; aHashRound: integer): RawUtf8;
 var
-  dig: TSha256Digest;
+  dig: THash512Rec;
+  algo: TDigestAlgo absolute aHashRound;
 begin
-  if aHashSalt = '' then // use Make() to circumvent FPC string issue
-    result := Sha256(Make(['salt', aPasswordPlain]))
+  if (aHashSalt = '') or
+     (aHashRound = 0) then
+    result := Sha256(Make(['salt', aPasswordPlain])) // Make() for FPC
+  else if aHashRound > 0 then
+  begin
+    Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig.Lo);
+    result := Sha256DigestToString(dig.Lo);
+  end
   else
   begin
-    Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig);
-    result := Sha256DigestToString(dig);
-    FillCharFast(dig, SizeOf(dig), 0);
+    aHashRound := -aHashRound; // aHashRound < 0 = - ord(TDigestAlgo)
+    if aHashRound > ord(high(TDigestAlgo)) then
+      algo := daSHA256;
+    BinToHexLower(@dig, // aHashSalt = DIGEST-HA0 realm
+      DigestHA0(algo, aLogonName, aHashSalt, aPasswordPlain, dig), result);
   end;
+  FillCharFast(dig, SizeOf(dig), 0);
 end;
 
 procedure TAuthUser.SetPasswordPlain(const Value: RawUtf8);
 begin
   if self <> nil then
-    PasswordHashHexa := ComputeHashedPassword(Value);
+    fPasswordHashHexa := ComputeHashedPassword(fLogonName, Value);
 end;
 
 procedure TAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
   aHashRound: integer);
 begin
   if self <> nil then
-    PasswordHashHexa := ComputeHashedPassword(aPasswordPlain, aHashSalt, aHashRound);
+    fPasswordHashHexa := ComputeHashedPassword(
+      fLogonName, aPasswordPlain, aHashSalt, aHashRound);
+end;
+
+procedure TAuthUser.SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
+  aAlgo: TDigestAlgo);
+begin
+  if self <> nil then
+    fPasswordHashHexa := ComputeHashedPassword(
+      fLogonName, aPasswordPlain, aRealm, -ord(aAlgo));
 end;
 
 function TAuthUser.CanUserLog(Ctxt: TObject): boolean;
