@@ -4822,7 +4822,8 @@ type
   // so that the current logged user will be able to change its own password
   // - reCheckSessionConnectionID will ensure that a session is accessed only
   // from the same low-level TRestConnectionID which created it - which would
-  // refuse the authentication e.g. after IP reconnection
+  // refuse the authentication e.g. after IP reconnection but avoid Replays or
+  // MiM/impersonification attacks
   // - order of this set does matter, since it will be stored as a byte value
   // e.g. by TOrmAccessRights.ToString: ensure that new items will always be
   // appended to the list, not inserted within

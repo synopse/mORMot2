@@ -8906,7 +8906,7 @@ function JsonDecode(P: PUtf8Char; Names: PPUtf8CharArray; NamesCount: integer;
 var
   v: PValuePUtf8Char;
   name: PUtf8Char;
-  namelen, i: integer;
+  i: integer;
   info: TGetJsonField;
 begin
   result := nil;
@@ -8924,7 +8924,7 @@ begin
       inc(P);
   info.Json := P + 1; // jump {
   repeat
-    name := GetJsonPropName(info.Json, @namelen);
+    name := GetJsonPropName(info.Json);
     if name = nil then
       exit;  // invalid Json content
     info.GetJsonFieldOrObjectOrArray(HandleValuesAsObjectOrArray);
@@ -8936,7 +8936,7 @@ begin
          (StrIComp(Names[i], name) = 0) then // properly inlined
       begin
         v^.Text := info.Value;
-        v^.Len := info.ValueLen;
+        v^.Len  := info.ValueLen;
         break;
       end
       else

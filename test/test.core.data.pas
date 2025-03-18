@@ -7322,6 +7322,8 @@ var
       inc(p2);
     end;
     CheckEqual(siz, 0);
+    CheckEqual(RunUntilSigTerminatedPidFile, Make([
+      Executable.ProgramFilePath, '.', Executable.ProgramName, '.pid']));
     {$endif OSPOSIX}
     if ffoSortByDate in opt then
       exit; // FileNames() knows no date
