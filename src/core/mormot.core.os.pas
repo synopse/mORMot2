@@ -5720,15 +5720,15 @@ function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boo
 
 /// low-level function able to properly run or fork the current process
 // then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
-// - dofork will create e.g. a /run/.[ProgramName]-[ProgramFilePathHash].pid file
+// - dofork will create e.g. a /run/.[ProgramName][ProgramFilePathHash].pid file
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; const onlog: TSynLogProc = nil;
   const servicename: string = '');
 
 /// kill a process previously created by RunUntilSigTerminated(dofork=true)
-// - will lookup a local /run/.[ProgramName]-[ProgramFilePathHash].pid file name to
-// retrieve the actual PID to be killed, then send a SIGTERM, and wait
+// - will lookup a local /run/.[ProgramName][ProgramFilePathHash].pid file
+// to retrieve the actual PID to be killed, then send a SIGTERM, and wait
 // waitseconds for the .pid file to disapear
 // - returns true on success, false on error (e.g. no valid .pid file or
 // the file didn't disappear, which may mean that the daemon is broken)
@@ -5746,7 +5746,7 @@ var
   RunUntilSigTerminatedPidFileName: TFileName;
 
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
-// - typically return /run/.[ProgramName]-[ProgramFilePathHash].pid file name
+// - typically return /run/.[ProgramName][ProgramFilePathHash].pid file name
 function RunUntilSigTerminatedPidFile: TFileName;
 
 /// check the local .pid file to return either ssRunning or ssStopped

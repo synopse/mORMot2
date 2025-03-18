@@ -1807,6 +1807,52 @@ begin
 end;
 
 
+{$ifdef OSLINUXANDROID}
+// https://www.cyberciti.biz/tips/tell-what-filesystems-linux-kernel-can-handle.html
+
+var
+  _ProcFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
+  __ProcFileSystemsTested: boolean;
+
+function IsProcFileSystem(const typ: RawUtf8): boolean; inline;
+begin
+  result := FindNonVoidRawUtf8(pointer(_ProcFileSystems),
+    pointer(typ), length(typ), length(_ProcFileSystems)) >= 0;
+end;
+
+function LoadProcFileSystems: boolean;
+var
+  fs, s: RawUtf8;
+  p: PUtf8Char;
+begin
+  __ProcFileSystemsTested := true;
+  result := false;
+  fs := StringFromFileNoSize('/proc/filesystems');
+  p := pointer(fs);
+  if p = nil then
+    exit;
+  repeat
+    while p^ = ' ' do
+      inc(p);
+    s := _GetNextItem(p);
+    if (s <> '') and
+       (s <> 'nodev') and
+       (s <> 'squashfs') and
+       (s <> 'nullfs') then
+      _AddRawUtf8(_ProcFileSystems, s);
+    p := GotoNextLine(p);
+  until p = nil;
+  if _ProcFileSystems = nil then
+    exit;
+  // add some FS which may be marked as nodev but could be considered as "real"
+  _AddRawUtf8(_ProcFileSystems, 'zfs');
+  _AddRawUtf8(_ProcFileSystems, 'cifs');
+  _AddRawUtf8(_ProcFileSystems, 'drvfs');
+  result := true;
+end;
+
+{$endif OSLINUXANDROID}
+
 {$ifdef OSLINUX} { the systemd API is Linux-specific }
 
 const
@@ -1830,7 +1876,7 @@ const
   // other archs (like aarch64) are properly defined - see https://syscall.sh
 
 var
-  __ProcFileSystemsTested, __LinuxGetRandomFailed, __LinuxEventFdFailed: boolean;
+  __LinuxGetRandomFailed, __LinuxEventFdFailed: boolean;
 
 
 { TSystemD }
@@ -1967,48 +2013,6 @@ end;
 function LinuxEventFDWait(fd: integer; ms: integer): boolean;
 begin
   result := WaitReadPending(fd, ms);
-end;
-
-// https://www.cyberciti.biz/tips/tell-what-filesystems-linux-kernel-can-handle.html
-
-var
-  _ProcFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
-
-function IsProcFileSystem(const typ: RawUtf8): boolean; inline;
-begin
-  result := FindNonVoidRawUtf8(pointer(_ProcFileSystems),
-    pointer(typ), length(typ), length(_ProcFileSystems)) >= 0;
-end;
-
-function LoadProcFileSystems: boolean;
-var
-  fs, s: RawUtf8;
-  p: PUtf8Char;
-begin
-  __ProcFileSystemsTested := true;
-  result := false;
-  fs := StringFromFileNoSize('/proc/filesystems');
-  p := pointer(fs);
-  if p = nil then
-    exit;
-  repeat
-    while p^ = ' ' do
-      inc(p);
-    s := _GetNextItem(p);
-    if (s <> '') and
-       (s <> 'nodev') and
-       (s <> 'squashfs') and
-       (s <> 'nullfs') then
-      _AddRawUtf8(_ProcFileSystems, s);
-    p := GotoNextLine(p);
-  until p = nil;
-  if _ProcFileSystems = nil then
-    exit;
-  // add some FS which may be marked as nodev but could be considered as "real"
-  _AddRawUtf8(_ProcFileSystems, 'zfs');
-  _AddRawUtf8(_ProcFileSystems, 'cifs');
-  _AddRawUtf8(_ProcFileSystems, 'drvfs');
-  result := true;
 end;
 
 {$endif OSLINUX}
@@ -3531,11 +3535,11 @@ end;
 
 function IsRealFileSystem(const typ: RawUtf8): boolean;
 begin
-  {$ifdef OSLINUX}
+  {$ifdef OSLINUXANDROID}
   if _ProcFileSystems <> nil then   // caller made LoadProcFileSystems once
     result := IsProcFileSystem(typ) // from /proc/filesystems
   else
-  {$endif OSLINUX}
+  {$endif OSLINUXANDROID}
     // generic / best guess fallback list
     result := not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS',
       'DEVPTS', 'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
@@ -3642,8 +3646,10 @@ begin
   p := pointer(mounts);
   if p = nil then // e.g. Darwin has no /etc/mtab :(
     exit;
+  {$ifdef OSLINUXANDROID}
   if not __ProcFileSystemsTested then
     LoadProcFileSystems; // read once from /proc/filesystems
+  {$endif OSLINUXANDROID}
   n := 0;
   repeat
     AddDiskPartition(_GetNextItem(p), _GetNextItem(p), _GetNextItem(p), result, n);
