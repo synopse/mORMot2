@@ -1206,6 +1206,12 @@ type
     class function ComputeAuthenticateHeader(
       const aUserName, aPasswordClear: RawUtf8): RawUtf8; virtual; abstract;
   public
+    /// additional salt/realm parameter used for ComputeHashedPassword()
+    HashSalt: RawUtf8;
+    /// additional Pbkdf2HmacSha256() parameter for ComputeHashedPassword()
+    HashRound: integer;
+    /// additional parameter for ComputeHashedPassword() and DIGEST-HA0
+    DigestAlgo: TDigestAlgo;
     /// will check the caller signature
     // - retrieve the session ID from "Cookie: mORMot_session_signature=..." HTTP header
     // - method execution is protected by TRestServer.Sessions.ReadOnlyLock
@@ -5403,8 +5409,8 @@ end;
 function TRestServerAuthenticationHttpAbstract.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
 begin
-  Ctxt.fTemp := Ctxt.InCookie[REST_COOKIE_SESSION];
-  if (length(Ctxt.fTemp) = 8) and
+  if Ctxt.InputCookies^.RetrieveCookie(fServer.Model.Root, Ctxt.fTemp) and
+     (length(Ctxt.fTemp) = 8) and
      HexDisplayToCardinal(pointer(Ctxt.fTemp), Ctxt.fSession) then
     result := fServer.LockedSessionAccess(Ctxt)
   else
@@ -5442,21 +5448,15 @@ begin
      (result.fExpectedHttpAuthentication = Ctxt.InHeader['Authorization']) then
     // already previously authenticated for this session
     exit;
-  if GetUserPassFromInHead(Ctxt, usrpwd, usr, pwd) then
-    if usr = result.User.LogonName then
-      with fServer.AuthUserClass.Create do
-      try
-        PasswordPlain := pwd; // compute SHA-256 hash of the supplied password
-        if PasswordHashHexa = result.User.PasswordHashHexa then
-        begin
-          // match -> store header in result (locked by fSessions.Safe)
-          result.fExpectedHttpAuthentication := usrpwd;
-          exit;
-        end;
-      finally
-        Free;
-      end;
-  result := nil; // identicates authentication error
+  if GetUserPassFromInHead(Ctxt, usrpwd, usr, pwd) and
+     (usr = result.User.LogonName) and
+     CheckPassword(Ctxt, result.User, pwd) then
+    // match -> store header in result (locked by fSessions.Safe)
+    result.fExpectedHttpAuthentication := usrpwd
+  else
+    result := nil; // identicates authentication error
+  FillZero(usrpwd);
+  FillZero(pwd);
 end;
 
 class function TRestServerAuthenticationHttpBasic.ComputeAuthenticateHeader(
@@ -5471,9 +5471,21 @@ function TRestServerAuthenticationHttpBasic.CheckPassword(
 var
   expected: RawUtf8;
 begin
+  result := false;
+  if (self = nil) or
+     (User = nil) then
+    exit;
   expected := User.PasswordHashHexa;
-  User.PasswordPlain := aPassWord; // override with SHA-256 hash from HTTP header
-  result := PropNameEquals(User.PasswordHashHexa, expected);
+  if expected <> '' then
+    try
+      if DigestAlgo <> daUndefined then
+        User.SetPasswordDigest(aPassword, HashSalt, DigestAlgo)
+      else
+        User.SetPassword(aPassword, HashSalt, HashRound);
+      result := PropNameEquals(User.PasswordHashHexa, expected);
+    finally
+      User.PasswordHashHexa := expected; // restore reference hash
+    end;
 end;
 
 function TRestServerAuthenticationHttpBasic.Auth(Ctxt: TRestServerUriContext): boolean;
@@ -5500,8 +5512,8 @@ begin
         if sess <> nil then
         begin
           // see TRestServerAuthenticationHttpAbstract.ClientSessionSign()
-          Ctxt.SetOutSetCookie((REST_COOKIE_SESSION + '=') +
-            CardinalToHexLower(sess.ID));
+          Ctxt.SetOutSetCookie(Make(
+            [fServer.Model.Root, '=', CardinalToHexShort(sess.ID)]));
           if (rsoRedirectForbiddenToAuth in fServer.Options) and
              (Ctxt.ClientKind = ckAjax) then
             Ctxt.Redirect(fServer.Model.Root)
