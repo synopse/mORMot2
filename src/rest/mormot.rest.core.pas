@@ -3824,12 +3824,16 @@ begin
 end;
 
 function TRestUriContext.InputCookies: PHttpCookies;
+var
+  p: PUtf8Char;
 begin
   result := @fInputCookies;
   if fInputCookiesParsed then
     exit;
   fInputCookiesParsed := true;
-  result^.ParseServer(fCall^.InHead);
+  p := FindNameValue(pointer(fCall^.InHead), 'COOKIE: ');
+  if p <> nil then
+    result^.ParseServer(p - 8);
 end;
 
 function TRestUriContext.GetInCookie(const CookieName: RawUtf8): RawUtf8;

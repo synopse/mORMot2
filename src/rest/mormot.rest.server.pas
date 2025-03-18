@@ -866,7 +866,6 @@ type
     fConnectionID: TRestConnectionID;
     fPrivateSaltHash: cardinal;
     fLastTimestamp: cardinal; // client-side generated timestamp
-    fExpectedHttpAuthentication: RawUtf8;
     fAccessRights: TOrmAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
@@ -1000,7 +999,7 @@ type
   // - inherit from this class to implement expected authentication scheme
   // - each TRestServerAuthentication class is associated with a
   // TRestClientAuthentication class from mormot.rest.client.pas
-  TRestServerAuthentication = class(TSynLocked)
+  TRestServerAuthentication = class
   protected
     fServer: TRestServer;
     fOptions: TRestServerAuthenticationOptions;
@@ -1138,6 +1137,8 @@ type
     /// check a supplied password content
     // - will match ClientComputeSessionKey() algorithm as overridden here, i.e.
     // a SHA-256 based signature with a 10 minutes activation window
+    // - you can override this method to provide your own password check
+    // mechanism, for the given TAuthUser instance
     function CheckPassword(Ctxt: TRestServerUriContext;
       User: TAuthUser; const aClientNonce, aPassWord: RawUtf8): boolean; virtual;
   public
@@ -1202,9 +1203,6 @@ type
   // - note that such sessions can not be persisted on disk
   TRestServerAuthenticationHttpAbstract = class(TRestServerAuthentication)
   protected
-    /// should be overriden according to the HTTP authentication scheme
-    class function ComputeAuthenticateHeader(
-      const aUserName, aPasswordClear: RawUtf8): RawUtf8; virtual; abstract;
   public
     /// additional salt/realm parameter used for ComputeHashedPassword()
     HashSalt: RawUtf8;
@@ -1231,14 +1229,6 @@ type
   // ! TRestServerAuthenticationHttpBasic.ClientSetUserHttpOnly(Client,'proxyUser','proxyPass');
   TRestServerAuthenticationHttpBasic = class(TRestServerAuthenticationHttpAbstract)
   protected
-    /// this overriden method returns "Authorization: Basic ...." HTTP header
-    class function ComputeAuthenticateHeader(
-      const aUserName, aPasswordClear: RawUtf8): RawUtf8; override;
-    /// decode "Authorization: Basic ...." header
-    // - you could implement you own password transmission pattern, by
-    // overriding both ComputeAuthenticateHeader and GetUserPassFromInHead methods
-    class function GetUserPassFromInHead(Ctxt: TRestServerUriContext;
-      out userPass, user, pass: RawUtf8): boolean; virtual;
     /// check a supplied password content
     // - this default implementation will use the SHA-256 hash value stored
     // within User.PasswordHashHexa
@@ -1247,11 +1237,6 @@ type
     function CheckPassword(Ctxt: TRestServerUriContext;
       User: TAuthUser; const aPassWord: RawUtf8): boolean; virtual;
   public
-    /// will check URI-level signature
-    // - retrieve the session ID from 'session_signature=...' parameter
-    // - will also check incoming "Authorization: Basic ...." HTTP header
-    // - method execution should be protected by TRestServer.fSessions.Lock
-    function RetrieveSession(Ctxt: TRestServerUriContext): TAuthSession; override;
     /// handle the Auth RESTful method with HTTP Basic
     // - will first return HTTP_UNAUTHORIZED (401), then expect user and password
     // to be supplied as incoming "Authorization: Basic ...." headers
@@ -5421,20 +5406,6 @@ end;
 
 { TRestServerAuthenticationHttpBasic }
 
-class function TRestServerAuthenticationHttpBasic.GetUserPassFromInHead(
-  Ctxt: TRestServerUriContext; out userPass, user, pass: RawUtf8): boolean;
-begin
-  userPass := Ctxt.InHeader['Authorization'];
-  if IdemPChar(pointer(userPass), 'BASIC ') then
-  begin
-    delete(userPass, 1, 6);
-    Split(Base64ToBin(userPass), ':', user, pass);
-    result := user <> '';
-  end
-  else
-    result := false;
-end;
-
 function TRestServerAuthenticationHttpBasic.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
 var
@@ -5457,12 +5428,6 @@ begin
     result := nil; // identicates authentication error
   FillZero(usrpwd);
   FillZero(pwd);
-end;
-
-class function TRestServerAuthenticationHttpBasic.ComputeAuthenticateHeader(
-  const aUserName, aPasswordClear: RawUtf8): RawUtf8;
-begin
-  BasicClient(aUserName, aPasswordClear, SpiUtf8(result));
 end;
 
 function TRestServerAuthenticationHttpBasic.CheckPassword(
@@ -5614,83 +5579,78 @@ begin
     browserauth := true;
   end;
   // SSPI authentication
-  fSafe.Lock;
-  try
-    // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
-    ticks := Ctxt.TickCount64 - 30000; // tokens last for 30 seconds
-    for i := fSspiAuthContextCount - 1  downto 0 do
-      if ticks > fSspiAuthContext[i].CreatedTick64 then
-      begin
-        FreeSecContext(fSspiAuthContext[i]);
-        fSspiAuthContexts.Delete(i);
-      end;
-    // if no auth context specified, create a new one
-    result := true;
-    ndx := fSspiAuthContexts.Find(connectionID);
-    if ndx < 0 then
+  // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
+  ticks := Ctxt.TickCount64 - 30000; // tokens last for 30 seconds
+  for i := fSspiAuthContextCount - 1  downto 0 do
+    if ticks > fSspiAuthContext[i].CreatedTick64 then
     begin
-      // 1st call: create SecCtxId
-      if fSspiAuthContextCount >= MAXSSPIAUTHCONTEXTS then
-      begin
-        fServer.InternalLog('Too many Windows Authenticated session in pending' +
-          ' state: MAXSSPIAUTHCONTEXTS=%', [MAXSSPIAUTHCONTEXTS], sllUserAuth);
-        exit;
-      end;
-      ndx := fSspiAuthContexts.New; // add a new entry to fSspiAuthContext[]
-      InvalidateSecContext(fSspiAuthContext[ndx], connectionID, Ctxt.TickCount64);
+      FreeSecContext(fSspiAuthContext[i]);
+      fSspiAuthContexts.Delete(i);
     end;
-    // call SSPI provider
-    if ServerSspiAuth(fSspiAuthContext[ndx], Base64ToBin(indataenc), outdata) then
+  // if no auth context specified, create a new one
+  result := true;
+  ndx := fSspiAuthContexts.Find(connectionID);
+  if ndx < 0 then
+  begin
+    // 1st call: create SecCtxId
+    if fSspiAuthContextCount >= MAXSSPIAUTHCONTEXTS then
     begin
-      // 1st call: send back outdata to the client
-      if browserauth then
-      begin
-        Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') +
-                               BinToBase64(outdata);
-        Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-        StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
-      end
-      else
-        Ctxt.Returns(['result', '',
-                      'data', BinToBase64(outdata)]);
+      fServer.InternalLog('Too many Windows Authenticated session in pending' +
+        ' state: MAXSSPIAUTHCONTEXTS=%', [MAXSSPIAUTHCONTEXTS], sllUserAuth);
       exit;
     end;
-    // 2nd call: user was authenticated -> release used context
-    ServerSspiAuthUser(fSspiAuthContext[ndx], username);
-    if sllUserAuth in fServer.fLogLevel then
-      fServer.InternalLog('% Authentication success for %',
-        [SecPackageName(fSspiAuthContext[ndx]), username], sllUserAuth);
-    // now client is authenticated -> create a session for aUserName
-    // and send back outdata
+    ndx := fSspiAuthContexts.New; // add a new entry to fSspiAuthContext[]
+    InvalidateSecContext(fSspiAuthContext[ndx], connectionID, Ctxt.TickCount64);
+  end;
+  // call SSPI provider
+  if ServerSspiAuth(fSspiAuthContext[ndx], Base64ToBin(indataenc), outdata) then
+  begin
+    // 1st call: send back outdata to the client
+    if browserauth then
+    begin
+      Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') +
+                             BinToBase64(outdata);
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
+      StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
+    end
+    else
+      Ctxt.Returns(['result', '',
+                    'data', BinToBase64(outdata)]);
+    exit;
+  end;
+  // 2nd call: user was authenticated -> release used context
+  ServerSspiAuthUser(fSspiAuthContext[ndx], username);
+  if sllUserAuth in fServer.fLogLevel then
+    fServer.InternalLog('% Authentication success for %',
+      [SecPackageName(fSspiAuthContext[ndx]), username], sllUserAuth);
+  // now client is authenticated -> create a session for aUserName
+  // and send back outdata
+  try
+    if username = '' then
+      exit;
+    user := GetUser(Ctxt,username);
+    if user <> nil then
     try
-      if username = '' then
-        exit;
-      user := GetUser(Ctxt,username);
-      if user <> nil then
-      try
-        user.PasswordHashHexa := ''; // override with context
-        fServer.SessionCreate(user, Ctxt, session);
-        // SessionCreate would call Ctxt.AuthenticationFailed on error
-        if session <> nil then
-          with session.user do
-            if browserauth then
-              SessionCreateReturns(Ctxt, session, session.fPrivateSalt, '',
-                (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata))
-            else
-              SessionCreateReturns(Ctxt, session,
-                BinToBase64(SecEncrypt(fSspiAuthContext[ndx], session.fPrivateSalt)),
-                BinToBase64(outdata),'');
-      finally
-        user.Free;
-      end
-      else
-        Ctxt.AuthenticationFailed(afUnknownUser);
+      user.PasswordHashHexa := ''; // override with context
+      fServer.SessionCreate(user, Ctxt, session);
+      // SessionCreate would call Ctxt.AuthenticationFailed on error
+      if session <> nil then
+        with session.user do
+          if browserauth then
+            SessionCreateReturns(Ctxt, session, session.fPrivateSalt, '',
+              (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata))
+          else
+            SessionCreateReturns(Ctxt, session,
+              BinToBase64(SecEncrypt(fSspiAuthContext[ndx], session.fPrivateSalt)),
+              BinToBase64(outdata),'');
     finally
-      FreeSecContext(fSspiAuthContext[ndx]);
-      fSspiAuthContexts.Delete(ndx);
-    end;
+      user.Free;
+    end
+    else
+      Ctxt.AuthenticationFailed(afUnknownUser);
   finally
-    fSafe.UnLock; // protect fSspiAuthContext[] process
+    FreeSecContext(fSspiAuthContext[ndx]);
+    fSspiAuthContexts.Delete(ndx);
   end;
 end;
 
@@ -7079,20 +7039,16 @@ var
   tmp: array[0..3] of PtrInt; // store a fake TAuthSessionParent instance
   i: PtrInt;
 begin
-  if (aSessionID < fSessionCounterMin) or
-     (aSessionID > cardinal(fSessionCounter)) then
-    result := nil
-  else
-  begin
-    TAuthSessionParent(@tmp).fID := aSessionID;
-    i := fSessions.IndexOf(@tmp); // use fast O(log(n)) binary search
-    if aIndex <> nil then
-      aIndex^ := i;
-    if i < 0 then
-      result := nil
-    else
-      result := fSessions.List[i];
-  end;
+  result := nil;
+  if (aSessionID >= fSessionCounterMin) and
+     (aSessionID < cardinal(fSessionCounter)) then
+    exit;
+  TAuthSessionParent(@tmp).fID := aSessionID;
+  i := fSessions.IndexOf(@tmp); // use fast O(log(n)) binary search
+  if aIndex <> nil then
+    aIndex^ := i;
+  if i >= 0 then
+    result := fSessions.List[i];
 end;
 
 procedure TRestServer.LockedSessionDelete(aSessionIndex: integer;

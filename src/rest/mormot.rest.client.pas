@@ -249,7 +249,7 @@ type
   public
     /// class method to be called on client side to sign an URI in Auth Basic
     // resolution is about 256 ms in the current implementation
-    // - set "Cookie: mORMot_session_signature=..." HTTP header
+    // - set "Cookie: ModelRoot=..." HTTP header
     class procedure ClientSessionSign(Sender: TRestClientUri;
       var Call: TRestUriParams); override;
     /// class method to be used on client side to create a remote session
