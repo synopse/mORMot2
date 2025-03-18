@@ -1194,15 +1194,19 @@ type
     function Auth(Ctxt: TRestServerUriContext): boolean; override;
   end;
 
-  /// abstract class for implementing HTTP authentication
+  /// abstract class for implementing HTTP authentication using cookies
   // - do not use this abstract class, but e.g. TRestServerAuthenticationHttpBasic
   // - this class will transmit the session_signature as HTTP cookie, not at
   // URI level, so is expected to be used only from browsers or old clients
-  // - security level is very low for this kind of authentication: consider
-  // the other more secure algorithms
+  // - cookie is encrypted using AES-CTR-128, but real security level is as safe
+  // as the cookie secrecy on the client side - even if any replay is avoided
   // - note that such sessions can not be persisted on disk
   TRestServerAuthenticationHttpAbstract = class(TRestServerAuthentication)
   protected
+    fSafe: TLightLock; // RetrieveSession() could append within multi-write lock
+    fAes: TAes;
+    fAesMask: cardinal;
+    procedure DoAes(var iv: THash128Rec; c0: cardinal);
   public
     /// additional salt/realm parameter used for ComputeHashedPassword()
     HashSalt: RawUtf8;
@@ -1210,17 +1214,20 @@ type
     HashRound: integer;
     /// additional parameter for ComputeHashedPassword() and DIGEST-HA0
     DigestAlgo: TDigestAlgo;
+    /// initialize the authentication method to a specified server
+    constructor Create(aServer: TRestServer); override;
     /// will check the caller signature
-    // - retrieve the session ID from "Cookie: mORMot_session_signature=..." HTTP header
+    // - retrieve the session ID from "Cookie: ModelRoot=..." HTTP header
     // - method execution is protected by TRestServer.Sessions.ReadOnlyLock
     function RetrieveSession(Ctxt: TRestServerUriContext): TAuthSession; override;
+    /// compute a cookie as expected by RetrieveSession()
+    function ComputeCookie(aSession: cardinal): RawUtf8;
   end;
 
   /// authentication using HTTP Basic scheme
   // - match TRestClientAuthenticationHttpBasic on Client side
   // - this protocol send both name and password as clear (just Base64 encoded)
   // so should only be used over TLS / HTTPS, or for compatibility reasons
-  // - will rely on TRestServerAuthenticationNone for authorization
   // - on client side, this scheme is not called by TRestClientUri.SetUser()
   // method - so you have to write:
   // ! TRestServerAuthenticationHttpBasic.ClientSetUser(Client,'User','password');
@@ -1265,7 +1272,7 @@ type
     /// Windows built-in authentication
     // - holds information between calls to ServerSspiAuth() for NTLM
     // - such an array seems not needed with Kerberos two-way handshake
-    // - access to this array is made thread-safe thanks to Safe.Lock/Unlock
+    // - this array is thread-safe because Auth() is called within lock
     fSspiAuthContext: TSecContextDynArray;
     fSspiAuthContexts: TDynArray;
     fSspiAuthContextCount: integer;
@@ -5391,44 +5398,60 @@ end;
 
 { TRestServerAuthenticationHttpAbstract }
 
-function TRestServerAuthenticationHttpAbstract.RetrieveSession(
-  Ctxt: TRestServerUriContext): TAuthSession;
+constructor TRestServerAuthenticationHttpAbstract.Create(aServer: TRestServer);
+var
+  rnd: THash128;
 begin
-  if Ctxt.InputCookies^.RetrieveCookie(fServer.Model.Root, Ctxt.fTemp) and
-     (length(Ctxt.fTemp) = 8) and
-     HexDisplayToCardinal(pointer(Ctxt.fTemp), Ctxt.fSession) then
-    result := fServer.LockedSessionAccess(Ctxt)
-  else
-    result := nil;
+  inherited Create(aServer);
+  RandomBytes(@rnd, SizeOf(rnd)); // transient secret which cannot be persisted
+  fAes.EncryptInit(rnd, 128); // AES-128-CTR for safe 96-bit digital signature
+  fAesMask := Random32;
+  FillZero(rnd);
 end;
 
+procedure TRestServerAuthenticationHttpAbstract.DoAes(
+  var iv: THash128Rec; c0: cardinal);
+begin
+  iv.c0 := c0; // 32-bit session sequence is used as genuine IV for AES-CTR
+  iv.c1 := fAesMask; // with 96-bit of fixed but random padding
+  iv.H := fServer.fSessionCounterMin;
+  fSafe.Lock; // Auth() is locked, but RetrieveSession() is multi-read
+  fAes.Encrypt(iv.b, iv.b); // very fast on all platforms
+  fSafe.UnLock;
+end;
+
+function TRestServerAuthenticationHttpAbstract.RetrieveSession(
+  Ctxt: TRestServerUriContext): TAuthSession;
+var
+  iv, v: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
+begin
+  Ctxt.InputCookies^.RetrieveCookie(fServer.Model.Root, Ctxt.fTemp);
+  result := nil;
+  if (length(Ctxt.fTemp) <> SizeOf(v) * 2) or
+     not HexDisplayToBin(pointer(Ctxt.fTemp), @v, SizeOf(v)) then
+    exit;
+  DoAes(iv, v.c0);
+  if (v.c1 <> iv.c1) or
+     (v.H  <> iv.H) then
+    exit; // invalid digital signature
+  Ctxt.fSession := v.c0 xor fAesMask;
+  result := fServer.LockedSessionAccess(Ctxt)
+end;
+
+function TRestServerAuthenticationHttpAbstract.ComputeCookie(
+  aSession: cardinal): RawUtf8;
+var
+  iv: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
+begin
+  aSession := aSession xor fAesMask;
+  DoAes(iv, aSession);
+  iv.c0 := aSession;
+  Make([fServer.Model.Root, '=',
+    BinToHexDisplayLowerShort(@iv, SizeOf(iv))], result);
+end;
 
 
 { TRestServerAuthenticationHttpBasic }
-
-function TRestServerAuthenticationHttpBasic.RetrieveSession(
-  Ctxt: TRestServerUriContext): TAuthSession;
-var
-  usrpwd, usr, pwd: RawUtf8;
-begin
-  result := inherited RetrieveSession(Ctxt); // retrieve cookie
-  if result = nil then
-    // not a valid 'Cookie: mORMot_session_signature=...' header
-    exit;
-  if (result.fExpectedHttpAuthentication <> '') and
-     (result.fExpectedHttpAuthentication = Ctxt.InHeader['Authorization']) then
-    // already previously authenticated for this session
-    exit;
-  if GetUserPassFromInHead(Ctxt, usrpwd, usr, pwd) and
-     (usr = result.User.LogonName) and
-     CheckPassword(Ctxt, result.User, pwd) then
-    // match -> store header in result (locked by fSessions.Safe)
-    result.fExpectedHttpAuthentication := usrpwd
-  else
-    result := nil; // identicates authentication error
-  FillZero(usrpwd);
-  FillZero(pwd);
-end;
 
 function TRestServerAuthenticationHttpBasic.CheckPassword(
   Ctxt: TRestServerUriContext; User: TAuthUser;
@@ -5459,45 +5482,51 @@ var
   U: TAuthUser;
   sess: TAuthSession;
 begin
+  result := false; // allow other schemes to check this request
   if Ctxt.InputExists['UserName'] then
-  begin
-    result := false; // allow other schemes to check this request
     exit;
-  end;
   result := true; // this authentication method is exclusive to any other
-  if GetUserPassFromInHead(Ctxt, usrpwd, usr, pwd) then
+  usrpwd := Ctxt.InHeader['Authorization'];
+  if IdemPChar(pointer(usrpwd), 'BASIC ') then
   begin
-    U := GetUser(Ctxt, usr);
-    if U <> nil then
-    try
-      if CheckPassword(Ctxt, U, pwd) then
-      begin
-        fServer.SessionCreate(U, Ctxt, sess);
-        // SessionCreate would call Ctxt.AuthenticationFailed on error
-        if sess <> nil then
+    delete(usrpwd, 1, 6);
+    Split(Base64ToBin(usrpwd), ':', usr, pwd);
+    if usr <> '' then
+    begin
+      U := GetUser(Ctxt, usr);
+      if U <> nil then
+      try
+        if CheckPassword(Ctxt, U, pwd) then
         begin
-          // see TRestServerAuthenticationHttpAbstract.ClientSessionSign()
-          Ctxt.SetOutSetCookie(Make(
-            [fServer.Model.Root, '=', CardinalToHexShort(sess.ID)]));
-          if (rsoRedirectForbiddenToAuth in fServer.Options) and
-             (Ctxt.ClientKind = ckAjax) then
-            Ctxt.Redirect(fServer.Model.Root)
-          else
-            SessionCreateReturns(Ctxt, sess, '', '', '');
-          exit; // success
-        end;
+          fServer.SessionCreate(U, Ctxt, sess);
+          // SessionCreate would call Ctxt.AuthenticationFailed on error
+          if sess <> nil then
+          begin
+            // see TRestServerAuthenticationHttpAbstract.ClientSessionSign()
+            Ctxt.SetOutSetCookie(ComputeCookie(sess.ID));
+            if (rsoRedirectForbiddenToAuth in fServer.Options) and
+               (Ctxt.ClientKind = ckAjax) then
+              Ctxt.Redirect(fServer.Model.Root)
+            else
+              SessionCreateReturns(Ctxt, sess, '', '', '');
+            exit; // success
+          end;
+        end
+        else
+          Ctxt.AuthenticationFailed(afInvalidPassword);
+      finally
+        U.Free;
       end
       else
-        Ctxt.AuthenticationFailed(afInvalidPassword);
-    finally
-      U.Free;
+        Ctxt.AuthenticationFailed(afUnknownUser);
     end
     else
-      Ctxt.AuthenticationFailed(afUnknownUser);
+      Ctxt.AuthenticationFailed(afUnknownUser)
   end
   else
   begin
-    Ctxt.fCall^.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';
+    Make(['WWW-Authenticate: Basic realm="', fServer.Model.Root, '"'],
+      Ctxt.fCall^.OutHead);
     Ctxt.Error('', HTTP_UNAUTHORIZED); // 401 will popup for credentials in browser
   end;
 end;
