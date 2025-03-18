@@ -4051,31 +4051,30 @@ begin
   pid := GetInteger(pointer(StringFromFile(pidfilename)));
   if pid <= 0 then
     exit;
-  if fpkill(pid, SIGTERM) <> 0 then // polite quit
-    if fpgeterrno <> ESysESRCH then
-      exit
-    else
-      // ESysESRCH = no such process -> try to delete the .pid file
-      if DeleteFile(pidfilename) then
-      begin
-        result := true; // process crashed or hard reboot -> nothing to kill
-        exit;
-      end;
-  if waitseconds <= 0 then
+  if fpkill(pid, SIGTERM) <> 0 then // polite/weak quit failed
   begin
-    result := true;
-    exit;
+    if fpgeterrno = ESysESRCH then // ESysESRCH = no such process
+      result := (GetInteger(pointer(StringFromFile(pidfilename))) <> pid) or
+                DeleteFile(pidfilename); // process crashed or reboot -> clean
+  end
+  else if waitseconds <= 0 then
+    result := true // TERM sent and no wait needed
+  else
+  begin
+    tix := GetTickCount64 + waitseconds * MilliSecsPerSec;
+    repeat
+      // RunUntilSigTerminated() below should eventually delete the .pid file
+      SleepHiRes(10);
+      if not FileExists(pidfilename) then
+        result := true;
+    until result or
+          (GetTickCount64 > tix);
+    if not result then // timeout: murder with finesse
+      if (fpkill(pid, SIGKILL) <> 0) and
+         (fpgeterrno = ESysESRCH) and
+         (GetInteger(pointer(StringFromFile(pidfilename))) = pid) then
+        DeleteFile(pidfilename); // process crashed and not reboot -> clean
   end;
-  tix := GetTickCount64 + waitseconds * MilliSecsPerSec;
-  repeat
-    // RunUntilSigTerminated() below should delete the .pid file
-    SleepHiRes(10);
-    if not FileExists(pidfilename) then
-      result := true;
-  until result or
-        (GetTickCount64 > tix);
-  if not result then
-    fpkill(pid, SIGKILL); // murder with finesse
 end;
 
 procedure CleanAfterFork;
