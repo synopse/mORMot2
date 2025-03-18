@@ -4000,28 +4000,41 @@ begin
             (chroot('.') = 0);
 end;
 
-function RunUntilSigTerminatedPidFile(ensureWritable: boolean): TFileName;
+function RunUntilSigTerminatedPidFile: TFileName;
 var
-  pidpath: TFileName;
+  crc: cardinal;
 begin
-  pidpath := RunUntilSigTerminatedPidFilePath;
-  if pidpath = '' then
-    pidpath := Executable.ProgramFilePath;
-  if not ensureWritable then
+  result := RunUntilSigTerminatedPidFileName;
+  if result <> '' then
+    exit;
+  // guess the folder to use for this daemon
+  result := RunUntilSigTerminatedPidFilePath;
+  if result = '' then
+    if FileIsWritable(Executable.ProgramFilePath) then // fpaccess is enough
+      result := Executable.ProgramFilePath
+    else if FileIsWritable('/run') then
+      result := '/run/' // favor tmpfs for transient file
+    else
+      result := GetSystemPath(spTemp)
+  else
+    result := IncludeTrailingPathDelimiter(result); // fixed user-supplied path
+  // compute the geniune /run/.[ProgramName]-[ProgramFilePathHash].pid name
+  crc := RunUntilSigTerminatedPidFileGenuine;
+  if (crc = 0) and
+     (result = Executable.ProgramFilePath) then // no [ProgramFilePathHash]
+    result := Format('%s.%s.pid', [result, Executable.ProgramName])
+  else
   begin
-    result := Format('%s.%s.pid', [pidpath, Executable.ProgramName]);
-    if FileExists(result) then
-      exit;
+    if crc = 0 then // allow several executable instances in several folders
+      crc := crc32cHash(Executable.ProgramFilePath);
+    result := Format('%s.%s%x.pid', [result, Executable.ProgramName, crc]);
   end;
-  if not FileIsWritable(pidpath) then
-    // if the executable folder is not writable, use the temporary folder
-    pidpath := GetSystemPath(spTemp);
-  result := Format('%s.%s.pid', [pidpath, Executable.ProgramName]);
+  RunUntilSigTerminatedPidFileName := result;
 end;
 
 function RunUntilSigTerminatedState: TServiceState;
 begin
-  if FileExists(RunUntilSigTerminatedPidFile(false)) then
+  if FileExists(RunUntilSigTerminatedPidFile) then
     result := ssRunning
   else
     result := ssStopped;

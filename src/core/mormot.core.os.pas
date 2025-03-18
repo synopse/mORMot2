@@ -5720,14 +5720,14 @@ function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boo
 
 /// low-level function able to properly run or fork the current process
 // then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
-// - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
+// - dofork will create e.g. a /run/.[ProgramName]-[ProgramFilePathHash].pid file
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; const onlog: TSynLogProc = nil;
   const servicename: string = '');
 
 /// kill a process previously created by RunUntilSigTerminated(dofork=true)
-// - will lookup a local /run/[ProgramName]-[ProgramPathHash].pid file name to
+// - will lookup a local /run/.[ProgramName]-[ProgramFilePathHash].pid file name to
 // retrieve the actual PID to be killed, then send a SIGTERM, and wait
 // waitseconds for the .pid file to disapear
 // - returns true on success, false on error (e.g. no valid .pid file or
@@ -5735,13 +5735,19 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
 function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 
 var
-  /// optional folder where the .pid is created
+  /// optional folder where the .pid is created by RunUntilSigTerminatedPidFile()
   // - should include a trailing '/' character
-  // - to be used if the current executable folder is read/only
+  // - will be used insted of /run if the current executable folder is read/only
   RunUntilSigTerminatedPidFilePath: TFileName;
+  /// optional genuine number to identify this executable instance
+  // - is filled with Executable.ProgramFilePath hash by default
+  RunUntilSigTerminatedPidFileGenuine: cardinal;
+  /// the computed RunUntilSigTerminatedPidFile result value, used as cache
+  RunUntilSigTerminatedPidFileName: TFileName;
 
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
-function RunUntilSigTerminatedPidFile(ensureWritable: boolean = false): TFileName;
+// - typically return /run/.[ProgramName]-[ProgramFilePathHash].pid file name
+function RunUntilSigTerminatedPidFile: TFileName;
 
 /// check the local .pid file to return either ssRunning or ssStopped
 function RunUntilSigTerminatedState: TServiceState;
