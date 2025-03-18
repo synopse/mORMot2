@@ -1219,7 +1219,16 @@ type
     function Header(UpperName: PAnsiChar): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// wrap FindNameValue(InHead,UpperName) with a cache store
-    function HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+    procedure HeaderOnce(var Store, Value: RawUtf8; UpperName: PAnsiChar);
+    /// retrieve the "RemoteIP" value from the incoming HTTP header
+    procedure GetRemoteIP(var Value: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the "User-Agent" value from the incoming HTTP headers
+    procedure GetUserAgent(var Value: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
+    procedure GetAuthenticationBearerToken(var Value: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used to map set of parameters for a Client or Server method call
@@ -1278,6 +1287,7 @@ type
     fInputCookies: THttpCookies;
     fOutSetCookie: RawUtf8;
     function GetUserAgent: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetInHeader(const HeaderName: RawUtf8): RawUtf8;
     function InputCookies: PHttpCookies;
       {$ifdef HASINLINE} inline; {$endif}
@@ -3670,21 +3680,36 @@ begin
   FindNameValue(InHead, UpperName, result);
 end;
 
-function TRestUriParams.HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+procedure TRestUriParams.HeaderOnce(var Store, Value: RawUtf8; UpperName: PAnsiChar);
 begin
   if (Store = '') and
      (@self <> nil) then
   begin
-    FindNameValue(InHead, UpperName, result);
-    if result = '' then
+    FindNameValue(InHead, UpperName, Value);
+    if Value = '' then
       Store := NULL_STR_VAR // flag to ensure header is parsed only once
     else
-      Store := result;
+      Store := Value;
   end
   else if pointer(Store) = pointer(NULL_STR_VAR) then
-    result := ''
+    Value := ''
   else
-    result := Store;
+    Value := Store;
+end;
+
+procedure TRestUriParams.GetRemoteIP(var Value: RawUtf8);
+begin
+  HeaderOnce(LowLevelRemoteIP, Value, HEADER_REMOTEIP_UPPER);
+end;
+
+procedure TRestUriParams.GetUserAgent(var Value: RawUtf8);
+begin
+  HeaderOnce(LowLevelUserAgent, Value, 'USER-AGENT: ');
+end;
+
+procedure TRestUriParams.GetAuthenticationBearerToken(var Value: RawUtf8);
+begin
+  HeaderOnce(LowLevelBearerToken, Value, HEADER_BEARER_UPPER);
 end;
 
 
@@ -3694,7 +3719,7 @@ end;
 
 function TRestUriContext.GetUserAgent: RawUtf8;
 begin
-  result := fCall^.HeaderOnce(fCall^.LowLevelUserAgent, 'USER-AGENT: ');
+  fCall^.GetUserAgent(result);
 end;
 
 function TRestUriContext.ClientKind: TRestClientKind;
@@ -3724,7 +3749,7 @@ end;
 
 procedure TRestUriContext.SetRemoteIP(var IP: RawUtf8);
 begin
-  IP := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
+  fCall^.GetRemoteIP(IP);
 end;
 
 function TRestUriContext.RemoteIPNotLocal: PUtf8Char;
@@ -3739,7 +3764,7 @@ end;
 
 function TRestUriContext.AuthenticationBearerToken: RawUtf8;
 begin
-  result := fCall^.HeaderOnce(fCall^.LowLevelBearerToken, HEADER_BEARER_UPPER);
+  fCall^.GetAuthenticationBearerToken(result);
 end;
 
 function TRestUriContext.AuthenticationCheck(jwt: TJwtAbstract): boolean;
@@ -3766,7 +3791,7 @@ begin
   else
   begin
     PWord(UpperCopy255(up{%H-}, HeaderName))^ := ord(':');
-    FindNameValue(fCall.InHead, up, result); // = fCall^.Header(up)
+    FindNameValue(fCall^.InHead, up, result); // = fCall^.Header(up)
     if result <> '' then
     begin
       fInHeaderLastName := HeaderName;
