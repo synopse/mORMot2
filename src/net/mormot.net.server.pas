@@ -5596,6 +5596,7 @@ var
     fLog.Add.Log(sllWarning, 'OnDownload: % %:% % failed as % %',
       [method, ip, fPort, aUrl, StatusCodeToShort(result), E], self);
     if (fInstable <> nil) and // add to RejectInstablePeersMin list
+       (E <> nil) and         // on OpenBind() error
        not aRetry then        // not from partial request before broadcast
       fInstable.BanIP(aResp.IP4); // this peer may have a HTTP firewall issue
     FreeAndNil(fClient);
@@ -6624,7 +6625,7 @@ begin
         result := LocalPeerRequest(req, resp[i], u, OutStream, {aRetry=}false);
         if (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) or
            not ResetOutStreamPosition then
-          exit;
+          exit; // success
       finally
         fClientSafe.UnLock;
       end;
