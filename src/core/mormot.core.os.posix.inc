@@ -3129,6 +3129,9 @@ var
   tmp: TSynTempBuffer;
   n: AnsiChar;
 begin
+  result := '';
+  if PID = 0 then
+    exit;
   fn := '/proc/';
   AppendShortCardinal(PID, fn);
   n := fn[0];
@@ -3147,6 +3150,11 @@ begin
   FastSetString(result, pointer(@tmp), StrLen(pointer(@tmp)));
   if result <> '' then
     tryprocexe := false; // no need to try again next time
+end;
+
+function IsNotCurrentExeDaemonized(PID: cardinal): boolean;
+begin
+  result := PosEx(Executable.ProgramName, EnumProcessName(PID)) = 0;
 end;
 
 function GetParentProcess(PID: cardinal): cardinal;
@@ -4048,20 +4056,25 @@ end;
 
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
 var
-  pid: PtrInt;
-  pidfilename: TFileName;
+  pid, pidnew: PtrInt;
+  pidfile: TFileName;
   tix: Int64;
 begin
   result := false;
-  pidfilename := RunUntilSigTerminatedPidFile;
-  pid := GetInteger(pointer(StringFromFile(pidfilename)));
-  if pid <= 0 then
+  pidfile := RunUntilSigTerminatedPidFile;
+  pid := GetInteger(pointer(StringFromFile(pidfile)));
+  if (pid <= 0) or
+     (pid = PtrInt(FpGetpid)) then
     exit;
-  if fpkill(pid, SIGTERM) <> 0 then // polite/weak quit failed
+  {$ifdef OSLINUX} // BSD does not implement this (yet)
+  if IsNotCurrentExeDaemonized(pid) then
+    result := DeleteFile(pidfile) // this daemon does not exist any more
+  else
+  {$endif OSLINUX}
+  if fpkill(pid, SIGTERM) <> 0 then  // polite/weak quit failed
   begin
-    if fpgeterrno = ESysESRCH then // ESysESRCH = no such process
-      result := (GetInteger(pointer(StringFromFile(pidfilename))) <> pid) or
-                DeleteFile(pidfilename); // process crashed or reboot -> clean
+    if fpgeterrno = ESysESRCH then   // ESysESRCH = no such process
+      result := DeleteFile(pidfile); // crashed and not restarted -> clean
   end
   else if waitseconds <= 0 then
     result := true // TERM sent and no wait needed
@@ -4071,15 +4084,18 @@ begin
     repeat
       // RunUntilSigTerminated() below should eventually delete the .pid file
       SleepHiRes(10);
-      if not FileExists(pidfilename) then
-        result := true;
-    until result or
-          (GetTickCount64 > tix);
-    if not result then // timeout: murder with finesse
-      if (fpkill(pid, SIGKILL) <> 0) and
-         (fpgeterrno = ESysESRCH) and
-         (GetInteger(pointer(StringFromFile(pidfilename))) = pid) then
-        DeleteFile(pidfilename); // process crashed and not reboot -> clean
+      pidnew := GetInteger(pointer(StringFromFile(pidfile)));
+      result := (pidnew = 0) or (pidnew <> pid); // stopped or restarted
+      if result then
+        exit;
+    until GetTickCount64 > tix;
+    // timeout: murder with finesse
+    if {$ifdef OSLINUX}
+       IsNotCurrentExeDaemonized(pid) or
+       {$endif OSLINUX}
+       ((fpkill(pid, SIGKILL) <> 0) and
+        (fpgeterrno = ESysESRCH)) then
+      DeleteFile(pidfile); // process crashed and not reboot -> clean
   end;
 end;
 
