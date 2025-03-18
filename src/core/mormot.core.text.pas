@@ -2187,7 +2187,7 @@ type
     /// parse the cookies from request HTTP headers on server side
     // - e.g. 'Cookie: name=value; name2=value2; name3=value3'
     // - will first clear all existing cookies, then decode from headers
-    procedure ParseServer(const InHead: RawUtf8);
+    procedure ParseServer(Head: PUtf8Char);
     /// retrieve a cookie name/value pair in the internal storage
     function FindCookie(const CookieName: RawUtf8): PHttpCookie;
     /// retrieve a cookie value from its name
@@ -2196,7 +2196,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
-    function RetrieveCookie(const CookieName: RawUtf8; var Value: RawUtf8): boolean;
+    procedure RetrieveCookie(const CookieName: RawUtf8; out Value: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
     /// set or change a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
     procedure SetCookie(const CookieName, CookieValue: RawUtf8);
@@ -10147,28 +10148,27 @@ begin
   fCookies := nil;
 end;
 
-procedure THttpCookies.ParseServer(const InHead: RawUtf8);
+procedure THttpCookies.ParseServer(Head: PUtf8Char);
 var
   count, plen, total: PtrInt;
-  h, p: PUtf8Char;
+  p: PUtf8Char;
   name, value: RawUtf8;
   new: PHttpCookie;
 begin
   fCookies := nil; // first Clear any previous cookie
   count := 0;
   total := 0;
-  h := pointer(InHead);
-  while h <> nil do
+  while Head <> nil do
   begin
     // find all 'Cookie: name=value; name2=value2; name3=value3' lines
-    p := FindNameValuePointer(h, 'COOKIE:', plen, #0);
+    p := FindNameValuePointer(Head, 'COOKIE:', plen, #0);
     if p = nil then
       break;
     inc(total, plen);
     if total > COOKIE_MAXSIZE_DOSATTACK then
-      ESynException.RaiseUtf8('RetrieveCookies got % cookies (>%) in % headers',
-        [KB(total), KB(COOKIE_MAXSIZE_DOSATTACK), KB(InHead)]);
-    h := GotoNextLine(p + plen);
+      ESynException.RaiseUtf8('RetrieveCookies got % cookies (>%)',
+        [KB(total), KB(COOKIE_MAXSIZE_DOSATTACK)]);
+    Head := GotoNextLine(p + plen);
     // parse each line pairs
     repeat
       if IdemPChar(p, '__SECURE-') then
@@ -10179,8 +10179,7 @@ begin
          (value = '') then
         break;
       if count >= COOKIE_MAXCOUNT_DOSATTACK then
-        ESynException.RaiseUtf8('RetrieveCookies overflow (%): DOS attempt?',
-          [KB(InHead)]);
+        raise ESynException.CreateU('RetrieveCookies overflow: DOS attempt?');
       if count = length(fCookies) then
         SetLength(fCookies, NextGrow(count));
       new := @fCookies[count];
@@ -10234,14 +10233,15 @@ begin
   RetrieveCookie(CookieName, result);
 end;
 
-function THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
-  var Value: RawUtf8): boolean;
+procedure THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
+  out Value: RawUtf8);
 var
   c: PHttpCookie;
 begin
+  if @self = nil then
+    exit;
   c := FindCookie(CookieName);
-  result := c <> nil;
-  if result then
+  if c <> nil then
     Value := c^.Value;
 end;
 
