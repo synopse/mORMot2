@@ -3005,8 +3005,8 @@ begin
   end;
   if (len <> info.f64.zfullsize) or
      (mormot.lib.z.crc32(0, pointer(result), len) <> info.f32.zcrc32) then
-    ESynZip.RaiseUtf8('%.UnZip: crc error for % %',
-      [self, e^.zipName, fFileName]);
+    ESynZip.RaiseUtf8('%.UnZip(%): error from % (len=% %)',
+      [self, e^.zipName, fFileName, len, info.f64.zfullSize]);
 end;
 
 function TZipRead.UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
