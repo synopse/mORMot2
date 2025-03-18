@@ -4774,7 +4774,7 @@ begin
   fTimeOutShr10 := User.GroupRights.SessionTimeout * (MilliSecsPerMin shr 10);
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.OrmAccessRights;
-  FormatUtf8('%+%', [fID, fPrivateKey], fPrivateSalt);
+  Make([fID, '+', fPrivateKey], fPrivateSalt);
   fPrivateSaltHash := crc32(crc32(0, pointer(fPrivateSalt), length(fPrivateSalt)),
     pointer(User.PasswordHashHexa), length(User.PasswordHashHexa));
 end;
@@ -6168,10 +6168,10 @@ begin
   result := ''; // just concatenate the counters for logging
   for m := low(fTreeCount) to high(fTreeCount) do
     if fTreeCount[m] <> 0 then
-      result := FormatUtf8('% %=%', [result, ToText(m), fTreeCount[m]]);
+      Append(result, [' ', ToText(m), '=', fTreeCount[m]]);
   for n := low(fNodeCount) to high(fNodeCount) do
     if fNodeCount[n] <> 0 then
-      result := FormatUtf8('% %=%', [result, ToText(n)^, fNodeCount[n]]);
+      Append(result, [' ', ToText(n), '=', fNodeCount[n]]);
 end;
 
 

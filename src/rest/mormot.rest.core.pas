@@ -3074,7 +3074,7 @@ begin
   if aThreadName <> '' then
     aName := aThreadName
   else
-    FormatUtf8('% %', [fRest.Model.Root, ClassType], aName);
+    Make([fRest.Model.Root, ' ', ClassType], aName);
   inherited Create(aName,
     fRest.fRun.BeginCurrentThread, fRest.fRun.EndCurrentThread, aStats);
 end;
@@ -3598,8 +3598,8 @@ class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
 var
   dig: TSha256Digest;
 begin
-  if aHashSalt = '' then // use FormatUtf8() to circumvent FPC string issue
-    result := Sha256(FormatUtf8('salt%', [aPasswordPlain]))
+  if aHashSalt = '' then // use Make() to circumvent FPC string issue
+    result := Sha256(Make(['salt', aPasswordPlain]))
   else
   begin
     Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig);
@@ -4162,7 +4162,7 @@ begin
   fOwnRest := aOwnRest;
   if fThreadName = '' then
     // if thread name has not been set by the overriden constructor
-    FormatUtf8('% %', [self, fRest.Model.Root], fThreadName);
+    Make([self, ' ', fRest.Model.Root], fThreadName);
   fEvent := TSynEvent.Create;
   inherited Create(aCreateSuspended);
 end;
