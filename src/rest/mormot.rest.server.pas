@@ -2552,7 +2552,7 @@ function CurrentServiceContext: TServiceRunningContext;
 
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
-// - this function is very fast, even if cryptographically-level SHA-3 secure
+// - this function is very fast, caching a cryptographically-level SHA-256 hash
 // - Ctxt may be nil (only used for faster GetTickCount64)
 function CurrentNonce(Ctxt: TRestServerUriContext;
   Previous: boolean = false): RawUtf8; overload;
@@ -5194,9 +5194,9 @@ begin
 end;
 
 var
-  ServerNonceSafe: TLightLock;
-  ServerNonceHasher: TSha3; // faster than THmacSha256 on small input
+  ServerNonceHasher: TSha256;
   ServerNonceCache: array[{previous=}boolean] of record
+    safe: TLightLock;
     tix: cardinal;
     res: RawUtf8;
     hash: THash256;
@@ -5206,24 +5206,26 @@ procedure CurrentServerNonceCompute(ticks: cardinal; previous: boolean;
   nonce: PRawUtf8; nonce256: PHash256);
 var
   hex: RawUtf8;
-  sha3: TSha3;
-  tmp: THash256;
+  sha: TSha256;
+  tmp: TSha256Digest;
 begin
-  if ServerNonceHasher.Algorithm <> SHA3_256 then
+  if PInteger(@ServerNonceHasher)^ = 0 then
   begin
     // first time used: initialize the private secret
-    sha3.Init(SHA3_256);
-    TAesPrng.Fill(tmp); // random seed for this process lifetime
-    sha3.Update(@tmp, SizeOf(tmp));
-    ServerNonceSafe.Lock;
-    if ServerNonceHasher.Algorithm <> SHA3_256 then // atomic init
-      ServerNonceHasher := sha3;
-    ServerNonceSafe.UnLock;
+    repeat
+      sha.Init;
+      TAesPrng.Fill(tmp); // random seed for this process lifetime
+      sha.Update(@tmp, SizeOf(tmp));
+    until PInteger(@sha)^ <> 0; // paranoid
+    ServerNonceCache[false].safe.Lock;
+    if PInteger(@ServerNonceHasher)^ = 0 then // atomic set
+      ServerNonceHasher := sha;
+    ServerNonceCache[false].safe.UnLock;
   end;
   // compute and cache the new nonce for this timestamp
-  sha3 := ServerNonceHasher; // thread-safe SHA-3 sponge reuse
-  sha3.Update(@ticks, SizeOf(ticks));
-  sha3.Final(tmp, true);
+  sha := ServerNonceHasher; // thread-safe SHA-256 state reuse
+  sha.Update(@ticks, SizeOf(ticks));
+  sha.Final(tmp, {noinit=}true); // single RawSha256Compress() call
   BinToHexLower(@tmp, SizeOf(tmp), hex);
   if nonce <> nil then
     nonce^ := hex;
@@ -5231,11 +5233,11 @@ begin
     nonce256^ := tmp;
   with ServerNonceCache[previous] do
   begin
-    ServerNonceSafe.Lock; // keep this global lock as short as possible
+    safe.Lock; // keep this global lock as short as possible
     tix := ticks;
     hash := tmp;
     res := hex;
-    ServerNonceSafe.UnLock;
+    safe.UnLock;
   end;
 end;
 
@@ -5245,13 +5247,13 @@ var
   tix32: cardinal;
 begin
   if Tix64 = 0 then
-    Tix64 := Ctxt.TickCount64;
-  tix32 := Tix64 shr 18; // 4.3 minutes resolution - Ctxt may be nil
+    Tix64 := Ctxt.TickCount64; // works even if Ctxt=nil
+  tix32 := Tix64 shr 18; // 4.3 minutes resolution
   if Previous then
     dec(tix32);
   with ServerNonceCache[Previous] do
   begin
-    ServerNonceSafe.Lock;
+    safe.Lock;
     if (tix32 = tix) and
        (res <> '') then  // check for res='' since tix32 may be 0 at startup
     begin
@@ -5260,10 +5262,10 @@ begin
         Nonce256^ := hash;
       if Nonce <> nil then
         Nonce^ := res;
-      ServerNonceSafe.UnLock;
+      safe.UnLock;
       exit;
     end;
-    ServerNonceSafe.UnLock;
+    safe.UnLock;
     // we need to (re)compute this value
     CurrentServerNonceCompute(tix32, Previous, Nonce, Nonce256);
   end;
