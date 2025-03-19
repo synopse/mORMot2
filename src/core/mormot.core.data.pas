@@ -2121,7 +2121,7 @@ type
     // - use internally FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
-    function AddAndMakeUniqueName(aName: RawUtf8): pointer;
+    function AddAndMakeUniqueName(const aName: RawUtf8): pointer;
     /// search for an element value inside the dynamic array using hashing, then
     // update any matching item, or add the item if none matched
     // - by design, hashed field shouldn't have been modified by this update,
@@ -10184,31 +10184,28 @@ begin
     SetCount(result + 1); // reserve space for a void element in array
 end;
 
-function TDynArrayHashed.AddAndMakeUniqueName(aName: RawUtf8): pointer;
+function TDynArrayHashed.AddAndMakeUniqueName(const aName: RawUtf8): pointer;
 var
-  ndx: PtrInt;
-  j: PtrUInt;
+  ndx, j: PtrInt;
   added: boolean;
-  nam: RawUtf8;
+  n: RawUtf8;
 begin
-  if aName = '' then
-    aName := '_';
-  ndx := FindHashedForAdding(aName, added);
-  if not added then
-  begin
-    // force unique column name
-    nam := aName + '_';
-    j := 1;
-    repeat
-      if j > high(SmallUInt32Utf8) then // should never happen - 999 is enough
-        raise EDynArray.Create('TDynArrayHashed.AddAndMakeUniqueName overflow');
-      aName := nam + SmallUInt32Utf8[j];
-      ndx := FindHashedForAdding(aName, added);
-      inc(j);
-    until added;
-  end;
+  n := aName;
+  if n = '' then
+    n := '_';
+  j := 0;
+  repeat
+    ndx := FindHashedForAdding(n, added);
+    if added then
+      break;
+    if j = 9999 then // never loop forever
+      EDynArray.RaiseUtf8(
+        'TDynArrayHashed.AddAndMakeUniqueName(%) overflow', [aName]);
+    inc(j);
+    Make([aName, '_', j], n); // try 'name_1', 'name_2', ... until genuine
+  until false;
   result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
-  PRawUtf8(result)^ := aName; // store unique name at 1st position
+  PRawUtf8(result)^ := n; // store unique name at 1st position
 end;
 
 function TDynArrayHashed.AddUniqueName(const aName: RawUtf8;
