@@ -1341,12 +1341,39 @@ function TSynTests.Run: boolean;
 var
   i, t, m: integer;
   Elapsed, Version, s: RawUtf8;
+  methods: TRawUtf8DynArray;
   dir: TFileName;
   err: string;
   C: TSynTestCase;
   started: boolean;
   {%H-}log: IUnknown;
 begin
+  if Executable.Command.Option('&methods') then
+  begin
+    for m := 0 to Count - 1 do
+      fTests[m].Method();
+    for i := 0 to high(fTestCaseClass) do
+      if (restrict = nil) or
+         (FindPropName(pointer(fRestrict),
+          ToText(fTestCaseClass[i]), length(fRestrict)) >= 0) then
+      begin
+        methods := GetPublishedMethodNames(fTestCaseClass[i]);
+        for m := 0 to high(methods) do
+          Append(s, [fTestCaseClass[i], '.', methods[m], CRLF]);
+      end;
+    DoText(s);
+    exit;
+  end
+  else if Executable.Command.Option(['l', 'tests']) then
+  begin
+    for m := 0 to Count - 1 do
+      fTests[m].Method();
+    for i := 0 to high(fTestCaseClass) do
+      Append(s, [fTestCaseClass[i], CRLF]);
+    DoText(s);
+    exit;
+  end;
+  // main loop processing all TSynTestCase instances
   DoColor(ccLightCyan);
   DoTextLn([CRLF + '   ', Ident,
             CRLF + '  ', RawUtf8OfChar('-', length(Ident) + 2)]);
@@ -1592,9 +1619,14 @@ begin
   {$ifndef OSPOSIX}
   Executable.Command.Option('noenter', 'do not wait for ENTER key on exit');
   {$endif OSPOSIX}
-  redirect := Executable.Command.ArgFile(0, '#filename to redirect the console output');
-  Executable.Command.Get(['test'], restrict,
-    'the #class.method name(s) to restrict the tests');
+  redirect := Executable.Command.ArgFile(0,
+    '#filename to redirect the console output');
+  Executable.Command.Get('&test', restrict,
+    'restrict the tests to a #class[.method] name(s)');
+  Executable.Command.Option(['l', 'tests'],
+    'list all class name(s) as expected by --test');
+  Executable.Command.Option('&methods',
+    'list all method name(s) of #class as specified to --test');
   DescribeCommandLine; // may be overriden to define additional parameters
   err := Executable.Command.DetectUnknown;
   if (err <> '') or
