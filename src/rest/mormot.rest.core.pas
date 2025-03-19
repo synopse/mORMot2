@@ -3872,6 +3872,8 @@ end;
 
 procedure TRestUriContext.SetOutCookie(const aName, aValue: RawUtf8);
 begin
+  if not PropNameValid(pointer(aName)) then
+     ERestException.RaiseUtf8('%.SetOutCookie(%): invalid name', [self, aName]);
   SetOutSetCookie(Concat([aName, '=', aValue]));
 end;
 
@@ -4781,8 +4783,7 @@ begin
       firstNewIndex := fHistoryUncompressedCount - firstOldIndex;
       firstNewOffset := Length(fHistoryUncompressed) - firstOldOffset;
       for i := 0 to fHistoryAddCount - 1 do
-        newOffset[firstNewIndex + i] :=
-          fHistoryAddOffset[i] + firstNewOffset;
+        newOffset[firstNewIndex + i] := fHistoryAddOffset[i] + firstNewOffset;
       // write header
       fHistoryTable.OrmProps.SaveBinaryHeader(W);
       W.WriteVarUInt32Array(newOffset, length(newOffset), wkOffsetU);

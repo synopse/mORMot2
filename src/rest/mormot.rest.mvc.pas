@@ -1515,6 +1515,8 @@ end;
 
 procedure TMvcSessionWithCookies.SetCookieName(const Value: RawUtf8);
 begin
+  if not PropNameValid(pointer(Value)) then
+     EMvcException.RaiseUtf8('%.SetCookieName(%): invalid name', [self, Value]);
   fContext.CookieName := Value;
 end;
 
