@@ -3012,6 +3012,34 @@ begin
     result := -1;
 end;
 
+function StringFromFileNoSize(const FileName: TFileName): RawByteString;
+var
+  h: THandle;
+  pos, read: PtrInt;
+  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
+begin
+  result := '';
+  if FileName = '' then
+    exit;
+  h := FpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
+  if PtrInt(h) <= 0 then
+    exit;
+  pos := 0;
+  repeat
+    read := FileRead(h, tmp[pos], SizeOf(tmp) - pos); // try to fill the buffer
+    if read <= 0 then
+      break; // end of input
+    inc(pos, read);
+    if pos < SizeOf(tmp) then // is likely to flush before 32KB of output
+      continue;
+    AppendBufferToUtf8(@tmp, pos, RawUtf8(result)); // in-place resize
+    pos := 0;
+  until false;
+  if pos <> 0 then
+    AppendBufferToUtf8(@tmp, pos, RawUtf8(result));
+  FileClose(h);
+end;
+
 function LoadProcFile(fn: PAnsiChar; var dest: TSynTempBuffer): PtrInt;
 var
   h: THandle;
@@ -3026,7 +3054,7 @@ begin
   FileClose(h);
 end;
 
-procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
+procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8);
 var
   buf: TSynTempBuffer; // reading up to 4KB of content is enough
   p: PAnsiChar;
@@ -3048,7 +3076,7 @@ begin
     result := '';
 end;
 
-function LoadProcFileTrimed(fn: PAnsiChar): RawUtf8; overload; inline;
+function LoadProcFileTrim(fn: PAnsiChar): RawUtf8;
 begin
   LoadProcFileTrimed(fn, result);
 end;
@@ -4538,8 +4566,8 @@ var
 {$endif OSLINUX}
 begin
   {$ifdef OSLINUX}
-  txt := TrimU(Concat([LoadProcFileTrimed('/sys/class/dmi/id/sys_vendor'),
-                  ' ', LoadProcFileTrimed('/sys/class/dmi/id/product_name')]));
+  txt := TrimU(Concat([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'),
+                  ' ', LoadProcFileTrim('/sys/class/dmi/id/product_name')]));
   if txt <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
     LoadProcFileTrimed('/sys/class/dmi/id/product_version', prod);

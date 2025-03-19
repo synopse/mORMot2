@@ -3452,11 +3452,6 @@ function StreamReadAll(S: TStream; Buffer: pointer; Size: PtrInt): boolean;
 // - uses RawByteString for byte storage, whatever the codepage is
 function StringFromFile(const FileName: TFileName): RawByteString;
 
-/// read a File content into a string, without using FileSize()
-// - result will be filled using a buffer as required e.g. for POSIX char files
-// like /proc/... or /sys/...
-function StringFromFileNoSize(const FileName: TFileName): RawByteString;
-
 /// read a File content from a list of potential files
 // - returns '' if no file was found, or the first matching FileName[] content
 function StringFromFirstFile(const FileName: array of TFileName): RawByteString;
@@ -4054,6 +4049,15 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil;
   ExcludesDir: boolean = false; IncludeHiddenFiles: boolean = false;
   IncludeFolders: boolean = false): TRawUtf8DynArray;
+
+/// read a File content into a string, without using FileSize()
+// - result will be filled using a buffer as required e.g. for POSIX char files
+// like /proc/... or /sys/...
+function StringFromFileNoSize(const FileName: TFileName): RawByteString;
+
+/// read a small File content into a string, without using FileSize()
+// - in respect to StringFromFileNoSize(), this will make a single read()
+procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 
 {$endif OSWINDOWS}
 
@@ -7013,34 +7017,6 @@ begin
       dec(Size, written);
     until Size = 0;
   result := true;
-end;
-
-function StringFromFileNoSize(const FileName: TFileName): RawByteString;
-var
-  h: THandle;
-  pos, read: PtrInt;
-  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
-begin
-  result := '';
-  if FileName = '' then
-    exit;
-  h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
-  if not ValidHandle(h) then
-    exit;
-  pos := 0;
-  repeat
-    read := FileRead(h, tmp[pos], SizeOf(tmp) - pos); // try to fill the buffer
-    if read <= 0 then
-      break; // end of input
-    inc(pos, read);
-    if pos < SizeOf(tmp) then // is likely to flush before 32KB of output
-      continue;
-    AppendBufferToUtf8(@tmp, pos, RawUtf8(result)); // in-place resize
-    pos := 0;
-  until false;
-  if pos <> 0 then
-    AppendBufferToUtf8(@tmp, pos, RawUtf8(result));
-  FileClose(h);
 end;
 
 function StringFromFile(const FileName: TFileName): RawByteString;
