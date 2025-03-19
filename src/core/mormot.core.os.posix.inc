@@ -4524,7 +4524,8 @@ end;
 function _GetSystemMacAddress: TRawUtf8DynArray;
 var
   SR: TSearchRec;
-  fn: TFileName;
+  fn: shortstring;
+  fnl: AnsiChar;
   f: RawUtf8;
 begin
   result := nil;
@@ -4535,12 +4536,17 @@ begin
        not IdemPChar(pointer(SR.Name), 'DOCKER') and
        SearchRecValidFolder(SR) then
     begin
-      Concat(['/sys/class/net/', SR.Name], RawUtf8(fn));
-      f := StringFromFileNoSize(Concat([fn, '/flags']));
+      fn := '/sys/class/net/';
+      AppendShortAnsi7String(SR.Name, fn);
+      fnl := fn[0];
+      AppendShort('/flags'#0, fn);
+      LoadProcFileTrimed(@fn[1], f);
       if (length(f) > 2) and // e.g. '0x40' or '0x1043'
          (ParseHex0x(pointer(f)) and {IFF_LOOPBACK:}8 = 0) then
       begin
-        f := TrimU(StringFromFileNoSize(Concat([fn, '/address'])));
+        fn[0] := fnl;
+        AppendShort('/address'#0, fn);
+        LoadProcFileTrimed(@fn[1], f);
         if f <> '' then
           _AddRawUtf8(result, f);
       end;

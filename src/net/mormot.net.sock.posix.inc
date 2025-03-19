@@ -668,21 +668,34 @@ const
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
-procedure RetrieveEnhancedInfo(var a: TMacAddress);
+procedure RetrieveEnhancedInfo(var a: TMacAddress; var procnetroute: RawUtf8);
 var
-  sysfs: RawUtf8;
+  fn: shortstring;
+  fnlen: AnsiChar;
+  s: RawUtf8;
   p: PUtf8Char;
   l: PtrInt;
   ip: cardinal;
 begin
-  // see https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
-  Concat(['/sys/class/net/', a.Name, '/'], sysfs);
-  a.FriendlyName := TrimU(StringFromFileNoSize(Concat([sysfs, 'ifalias'])));
-  a.Speed := GetCardinal(pointer(StringFromFileNoSize(Concat([sysfs, 'speed']))));
-  a.Mtu := GetCardinal(pointer(StringFromFileNoSize(Concat([sysfs, 'mtu']))));
+  // see https://www.kernel.org/doc/Documentation/ABI/testing/fn-class-net
+  fn := '/sys/class/net/';
+  AppendShortAnsi7String(a.Name, fn);
+  fnlen := fn[0];
+  AppendShort('/ifalias'#0, fn);
+  LoadProcFileTrimed(@fn[1], a.FriendlyName);
+  fn[0] := fnlen;
+  AppendShort('/speed'#0, fn);
+  LoadProcFileTrimed(@fn[1], s);
+  a.Speed := GetCardinal(pointer(s));
+  fn[0] := fnlen;
+  AppendShort('/mtu'#0, fn);
+  LoadProcFileTrimed(@fn[1], s);
+  a.Mtu := GetCardinal(pointer(s));
   // we retrieve the gateway from /proc/net/route
   l := length(a.Name);
-  p := pointer(StringFromFileNoSize('/proc/net/route'));
+  if procnetroute = '' then // get routes list once
+    procnetroute := StringFromFileNoSize('/proc/net/route');
+  p := pointer(procnetroute);
   while p <> nil do
   begin
     if (MemCmp(pointer(p), pointer(a.Name), l) = 0) and
@@ -804,6 +817,9 @@ var
   list, info: pifaddrs;
   i, n: PtrInt;
   mac: RawUtf8;
+  {$ifdef OSLINUX}
+  procnetroute: RawUtf8; // retrieve routes once for all MAC addresses
+  {$endif OSLINUX}
 begin
   // https://github.com/zeromq/czmq/blob/899f81985961513c7f4e/src/ziflist.c#L210
   result := nil;
@@ -907,7 +923,7 @@ begin
           end;
           {$ifdef OSLINUX}
           if info^.ifa_flags and IFF_UP <> 0 then
-            RetrieveEnhancedInfo(result[n]);
+            RetrieveEnhancedInfo(result[n], procnetroute);
           {$endif OSLINUX}
           // on POSIX, there is no such things as per-interface DNS, and
           // no standard way of knowing the Gateway
@@ -964,8 +980,9 @@ function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
   n: integer;
   SR: TSearchRec;
-  fn: TFileName;
-  f: RawUtf8;
+  fn: shortstring;
+  fnlen: AnsiChar;
+  f, procnetroute: RawUtf8;
 begin
   result := nil;
   if FindFirst('/sys/class/net/*', faDirectory, SR) = 0 then
@@ -975,18 +992,23 @@ begin
       if (SR.Name <> 'lo') and
          SearchRecValidFolder(SR) then
       begin
-        fn := '/sys/class/net/' + SR.Name;
-        f := StringFromFileNoSize(Concat([fn, '/flags']));
+        fn := '/sys/class/net/';
+        AppendShortAnsi7String(SR.Name, fn);
+        fnlen := fn[0];
+        AppendShort('/flags'#0, fn);
+        LoadProcFileTrimed(@fn[1], f);
         if (length(f) > 2) and // e.g. '0x40' or '0x1043'
            (ParseHex0x(pointer(f)) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then
         begin
-          f := TrimU(StringFromFileNoSize(Concat([fn, '/address'])));
+          fn[0] := fnlen;
+          AppendShort('/address'#0, fn);
+          LoadProcFileTrimed(@fn[1], f);
           if f <> '' then
           begin
             SetLength(result, n + 1);
             result[n].Name := SR.Name;
             result[n].Address := f;
-            RetrieveEnhancedInfo(result[n]);
+            RetrieveEnhancedInfo(result[n], procnetroute);
             // sadly, retrieving IP and mask from /proc is very complex
             // https://stackoverflow.com/a/14725655/458259
             // a solution may be to use ioctl()
@@ -1041,7 +1063,7 @@ var
 begin
   result := nil;
   if usePosixEnv then
-    resolv := StringFromFileNoSize(GetEnvironmentVariable('ETC'));
+    resolv := StringFromFile(GetEnvironmentVariable('ETC'));
   if resolv = '' then
     // all systems are likely to have or generate this file
     // - even the libc seems to read it when implementing gethostname()
