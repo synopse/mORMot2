@@ -4050,6 +4050,7 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   ExcludesDir: boolean = false; IncludeHiddenFiles: boolean = false;
   IncludeFolders: boolean = false): TRawUtf8DynArray;
 
+{$ifdef OSLINUXANDROID}
 /// read a File content into a string, without using FileSize()
 // - result will be filled using a buffer as required e.g. for POSIX char files
 // like /proc/... or /sys/...
@@ -4058,6 +4059,7 @@ function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 /// read a small File content into a string, without using FileSize()
 // - in respect to StringFromFileNoSize(), this will make a single read()
 procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
+{$endif OSLINUXANDROID}
 
 {$endif OSWINDOWS}
 

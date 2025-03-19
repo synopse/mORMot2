@@ -4580,7 +4580,7 @@ begin
   {$else}
   txt := TrimU(Concat([GetSystemProperty('ro.product.brand'), ' ',
                        GetSystemProperty('ro.product.name'), ' ',
-                       GetSystemProperty('ro.product.device')])));
+                       GetSystemProperty('ro.product.device')]));
   {$endif OSLINUX}
   if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
