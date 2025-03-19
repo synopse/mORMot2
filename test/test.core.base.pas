@@ -742,6 +742,19 @@ begin
 end;
 
 procedure TTestCoreBase.FastStringCompare;
+
+  procedure _HasAnyChar(const text, forbidden: RawUtf8; expected: boolean = true);
+  var
+    any: TSynAnsicharSet;
+    i: PtrInt;
+  begin
+    Check(ContainsChars(text, forbidden) = expected);
+    any := [];
+    for i := 1 to length(forbidden) do
+      include(any, forbidden[i]);
+    Check(HasAnyChar(text, any) = expected);
+  end;
+
 begin
   CheckEqual(CompareText('', ''), 0);
   Check(CompareText('abcd', '') > 0);
@@ -789,6 +802,45 @@ begin
   CheckEqual(strspn(PAnsiChar('baabbaabbaabbabcd'), PAnsiChar('ab')), 15);
   CheckEqual(strspn(PAnsiChar('baabbaabbaabbaabcd'), PAnsiChar('ab')), 16);
   CheckEqual(strspn(PAnsiChar('baabbaabbaababaabcd'), PAnsiChar('ab')), 17);
+  _HasAnyChar('', '', false);
+  _HasAnyChar('', 'a', false);
+  _HasAnyChar('', 'aa', false);
+  _HasAnyChar('a', '', false);
+  _HasAnyChar('abcde', '', false);
+  _HasAnyChar('abdef', 'cg', false);
+  _HasAnyChar('a', 'c', false);
+  _HasAnyChar('a', 'cd', false);
+  _HasAnyChar('a', 'cdef', false);
+  _HasAnyChar('a', 'cdefg', false);
+  _HasAnyChar('a', 'cdefga');
+  _HasAnyChar('abcde', 'a');
+  _HasAnyChar('abcde', 'b');
+  _HasAnyChar('abcde', 'c');
+  _HasAnyChar('abcde', 'e');
+  _HasAnyChar('abcde', 'ga');
+  _HasAnyChar('abcde', 'gb');
+  _HasAnyChar('abcde', 'gc');
+  _HasAnyChar('abcde', 'ge');
+  _HasAnyChar('abcde', 'ihga');
+  _HasAnyChar('abcde', 'ihgb');
+  _HasAnyChar('abcde', 'ihgc');
+  _HasAnyChar('abcde', 'ihge');
+  _HasAnyChar('abcde', 'jihga');
+  _HasAnyChar('abcde', 'jihgb');
+  _HasAnyChar('abcde', 'jihgc');
+  _HasAnyChar('abcde', 'jihge');
+  _HasAnyChar('abcde', 'jihgak');
+  _HasAnyChar('abcde', 'jihgbk');
+  _HasAnyChar('abcde', 'jihgck');
+  _HasAnyChar('abcde', 'jihgek');
+  Check(HasOnlyChar('abab', ['a' .. 'c']));
+  Check(HasOnlyChar('abab', ['a' .. 'c']));
+  Check(HasOnlyChar('abbab', ['a' .. 'c']));
+  Check(HasOnlyChar('abab', ['a' .. 'b']));
+  Check(not HasOnlyChar('abaeb', ['a' .. 'c']));
+  Check(not HasOnlyChar('eabab', ['a' .. 'c']));
+  Check(not HasOnlyChar('ababe', ['a' .. 'c']));
+  Check(HasOnlyChar('ababe', ['a' .. 'e']));
 end;
 
 procedure TTestCoreBase.IniFiles;
