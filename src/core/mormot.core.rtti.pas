@@ -1499,7 +1499,6 @@ function ClassFieldNamesAllPropsAsText(
   ClassType: TClass; IncludePropType: boolean = false;
   Types: TRttiKinds = [low(TRttiKind)..high(TRttiKind)]): RawUtf8;
 
-
 type
   /// information about one method, as returned by GetPublishedMethods
   TPublishedMethodInfo = record
@@ -1516,6 +1515,9 @@ type
 // - will work with FPC and Delphi RTTI
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
+
+/// retrieve all published method names about any class
+function GetPublishedMethodNames(aClass: TClass): TRawUtf8DynArray;
 
 /// copy class published properties via names using RTTI
 // - copy integer, Int64, enumerates (including boolean), variant, records,
@@ -5412,6 +5414,16 @@ begin
     ClassType := GetClassParent(ClassType);
   end;
   result := false;
+end;
+
+function GetPublishedMethodNames(aClass: TClass): TRawUtf8DynArray;
+var
+  m: PtrInt;
+  methods: TPublishedMethodInfoDynArray;
+begin
+  SetLength(result, GetPublishedMethods(nil, methods, aClass));
+  for m := 0 to length(result) - 1 do
+    result[m] := methods[m].Name;
 end;
 
 function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
