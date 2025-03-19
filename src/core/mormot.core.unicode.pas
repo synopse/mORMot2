@@ -8351,31 +8351,30 @@ begin
   result := Source;
 end;
 
-function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
-
-  procedure Process(s, d, t: PAnsiChar; tlen: PtrInt);
-  begin
-    repeat
-      if s^ = #0 then
-        break
-      else if s^ <> #9 then
+procedure StringReplaceTabsProcess(s, d, t: PAnsiChar; tlen: PtrInt);
+begin
+  repeat
+    if s^ = #0 then
+      break
+    else if s^ <> #9 then
+    begin
+      d^ := s^;
+      inc(d);
+      inc(s);
+    end
+    else
+    begin
+      if tlen > 0 then
       begin
-        d^ := s^;
-        inc(d);
-        inc(s);
-      end
-      else
-      begin
-        if tlen > 0 then
-        begin
-          MoveByOne(t, d, tlen);
-          inc(d, tlen);
-        end;
-        inc(s);
+        MoveByOne(t, d, tlen);
+        inc(d, tlen);
       end;
-    until false;
-  end;
+      inc(s);
+    end;
+  until false;
+end;
 
+function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
 var
   len, i, n, ttl: PtrInt;
 begin
@@ -8391,8 +8390,8 @@ begin
     result := Source;
     exit;
   end;
-  FastSetString(result, len + n * pred(ttl));
-  Process(pointer(Source), pointer(result), pointer(TabText), ttl);
+  StringReplaceTabsProcess(pointer(Source),
+    FastSetString(result, len + n * pred(ttl)), pointer(TabText), ttl);
 end;
 
 function RawUtf8OfChar(Ch: AnsiChar; Count: integer): RawUtf8;
