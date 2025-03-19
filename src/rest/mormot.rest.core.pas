@@ -1300,6 +1300,7 @@ type
     procedure SetInCookie(const CookieName, CookieValue: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
+    procedure SetOutCookie(const aName, aValue: RawUtf8);
   public
     /// access to all input/output parameters at TRestServer.Uri() level
     // - process should better call Results() or Success() methods to set the
@@ -1355,6 +1356,10 @@ type
     // $ '; Path=/'+Server.Model.Root+'; HttpOnly'
     property OutSetCookie: RawUtf8
       read fOutSetCookie write SetOutSetCookie;
+    /// define a new 'name=value' cookie to be returned to the client
+    // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
+    property OutCookie[const CookieName: RawUtf8]: RawUtf8
+      write SetOutCookie;
     /// low-level HTTP header merge of the OutSetCookie value
     procedure OutHeadFromCookie; virtual;
     /// low-level wrapper method around GetTickCount64 to cache the value
@@ -3863,6 +3868,11 @@ begin
     ERestException.RaiseUtf8(
       '"name=value" expected for %.SetOutSetCookie("%")', [self, c]);
   fOutSetCookie := c;
+end;
+
+procedure TRestUriContext.SetOutCookie(const aName, aValue: RawUtf8);
+begin
+  SetOutSetCookie(Make([aName, '=', aValue]));
 end;
 
 procedure TRestUriContext.OutHeadFromCookie;
