@@ -5427,15 +5427,21 @@ var
 begin
   Ctxt.InputCookies^.RetrieveCookie(fServer.Model.Root, Ctxt.fTemp);
   result := nil;
-  if (length(Ctxt.fTemp) <> SizeOf(v) * 2) or
-     not HexDisplayToBin(pointer(Ctxt.fTemp), @v, SizeOf(v)) then
-    exit;
-  DoAes(iv, v.c0);
-  if (v.c1 <> iv.c1) or
-     (v.H  <> iv.H) then
-    exit; // invalid digital signature
-  Ctxt.fSession := v.c0 xor fAesMask;
-  result := fServer.LockedSessionAccess(Ctxt)
+  if Ctxt.fTemp = '' then
+    exit; // no cookie
+  if (length(Ctxt.fTemp) = SizeOf(v) * 2) and
+     HexDisplayToBin(pointer(Ctxt.fTemp), @v, SizeOf(v)) then
+  begin
+    DoAes(iv, v.c0);
+    if (v.c1 = iv.c1) and
+       (v.H  = iv.H) then
+    begin // valid digital signature
+      Ctxt.fSession := v.c0 xor fAesMask;
+      result := fServer.LockedSessionAccess(Ctxt)
+    end;
+  end;
+  if result = nil then // invalid cookie should be deleted on client side
+    Ctxt.OutCookie[fServer.Model.Root] := COOKIE_EXPIRED;
 end;
 
 function TRestServerAuthenticationHttpAbstract.ComputeCookieValue(
