@@ -4088,7 +4088,7 @@ procedure THttpServerSocketGeneric.WaitStarted(
 var
   endtix: Int64;
 begin
-  endtix := mormot.core.os.GetTickCount64 + Seconds * MilliSecsPerSecShl;
+  endtix := mormot.core.os.GetTickCount64 + Seconds shl MilliSecsPerSecShl;
   repeat
     if Terminated then
       exit;
