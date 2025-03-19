@@ -5264,9 +5264,9 @@ begin
       exit;
     end;
     safe.UnLock;
-    // we need to (re)compute this value
-    CurrentServerNonceCompute(tix32, Previous, Nonce, Nonce256);
   end;
+  // we need to (re)compute this value
+  CurrentServerNonceCompute(tix32, Previous, Nonce, Nonce256);
 end;
 
 function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
@@ -7069,8 +7069,8 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if (aSessionID >= fSessionCounterMin) and
-     (aSessionID < cardinal(fSessionCounter)) then
+  if (aSessionID <= fSessionCounterMin) or
+     (aSessionID > cardinal(fSessionCounter)) then
     exit;
   TAuthSessionParent(@tmp).fID := aSessionID;
   i := fSessions.IndexOf(@tmp); // use fast O(log(n)) binary search
