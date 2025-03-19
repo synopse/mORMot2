@@ -8647,8 +8647,11 @@ begin
     i := Find(name, clkParam, '', '', first);
     if i < 0 then
       break; // no more occurence
-    _AddRawUtf8(value, fValues[i]);
-    result := true;
+    if fValues[i] <> '' then
+    begin
+      _AddRawUtf8(value, fValues[i]);
+      result := true;
+    end;
     first := i + 1;
   until first >= length(fValues);
 end;
