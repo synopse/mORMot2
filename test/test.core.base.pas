@@ -5965,7 +5965,7 @@ begin
     SetString(Up2, PAnsiChar(pointer(U)), L);
     L := Utf8UpperCopy(pointer(Up), pointer(U), L) - pointer(Up);
     Check(L <= length(U));
-    CheckEqual(ConvertCaseUtf8(Pointer(Up2), NormToUpperByte), L);
+    CheckEqual(ConvertCaseUtf8(pointer(Up2), pointer(Up2), NormToUpperByte), L);
     if Up <> '' then
       Check(EqualBuf(Up, Up2));
     if CurrentAnsiConvert.CodePage = CODEPAGE_US then

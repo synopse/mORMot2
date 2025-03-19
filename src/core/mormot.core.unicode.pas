@@ -1690,12 +1690,12 @@ function UpperCaseU(const S: RawUtf8): RawUtf8;
 function LowerCaseU(const S: RawUtf8): RawUtf8;
 
 /// fast conversion of the supplied text into 8-bit case sensitivity
-// - convert the text in-place, returns the resulting length
+// - convert the text from P into D, returns the resulting length
 // - it will decode the supplied UTF-8 content to handle more than 7-bit
 // of ascii characters during the conversion (leaving not WinAnsi characters
 // untouched)
 // - will not set the last char to #0 (caller must do that if necessary)
-function ConvertCaseUtf8(P: PUtf8Char; const Table: TNormTableByte): PtrInt;
+function ConvertCaseUtf8(P, D: PUtf8Char; const Table: TNormTableByte): PtrInt;
 
 /// check if the supplied text has some case-insentitive 'a'..'z','A'..'Z' chars
 // - will therefore be correct with true UTF-8 content, but only for 7-bit
@@ -6738,9 +6738,9 @@ begin
   result := AnsiICompW(PWideChar(A), PWideChar(B));
 end;
 
-function ConvertCaseUtf8(P: PUtf8Char; const Table: TNormTableByte): PtrInt;
+function ConvertCaseUtf8(P, D: PUtf8Char; const Table: TNormTableByte): PtrInt;
 var
-  d, s: PUtf8Char;
+  s: PUtf8Char;
   c: PtrUInt;
   extra, i: PtrInt;
   {$ifdef CPUX86NOTPIC}
@@ -6755,7 +6755,6 @@ begin
   {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
-  d := P;
   repeat
     c := byte(P[0]);
     inc(P);
@@ -6763,7 +6762,7 @@ begin
       break;
     if c <= 127 then
     begin
-      d[result] := AnsiChar(Table[c]);
+      D[result] := AnsiChar(Table[c]);
       inc(result);
     end
     else
@@ -6787,7 +6786,7 @@ begin
       if (c <= 255) and
          (Table[c] <= 127) then
       begin
-        d[result] := AnsiChar(Table[c]);
+        D[result] := AnsiChar(Table[c]);
         inc(result);
         inc(P, extra);
         continue;
@@ -6795,7 +6794,7 @@ begin
       s := P - 1;
       inc(P, extra);
       inc(extra);
-      MoveByOne(s, d + result, extra);
+      MoveByOne(s, D + result, extra);
       inc(result, extra);
     end;
   until false;
@@ -6806,10 +6805,9 @@ var
   ls, ld: PtrInt;
 begin
   ls := length(S);
-  FastSetString(result, pointer(S), ls);
-  ld := ConvertCaseUtf8(pointer(result), NormToUpperByte);
+  ld := ConvertCaseUtf8(pointer(S), FastSetString(result, ls), NormToUpperByte);
   if ls <> ld then
-    SetLength(result, ld);
+    FakeLength(result, ld);
 end;
 
 function LowerCaseU(const S: RawUtf8): RawUtf8;
@@ -6817,10 +6815,9 @@ var
   ls, ld: PtrInt;
 begin
   ls := length(S);
-  FastSetString(result, pointer(S), ls);
-  ld := ConvertCaseUtf8(pointer(result), NormToLowerByte);
+  ld := ConvertCaseUtf8(pointer(S), FastSetString(result, ls), NormToLowerByte);
   if ls <> ld then
-    SetLength(result, ld);
+    FakeLength(result, ld);
 end;
 
 function Utf8IComp(u1, u2: PUtf8Char): PtrInt;
