@@ -910,6 +910,12 @@ procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUI
 function UniqueRawUtf8(var u: RawUtf8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// concatenate several string arguments into an UTF-8 string
+function Concat(const Args: array of RawByteString): RawUtf8; overload;
+
+/// concatenate several string arguments into an UTF-8 string
+procedure Concat(const Args: array of RawByteString; var Text: RawUtf8); overload;
+
 /// direct conversion of an ANSI-7 ShortString into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUtf8
 function ShortStringToAnsi7String(const source: ShortString): RawByteString; overload;
@@ -5100,6 +5106,29 @@ begin
   UniqueString(u); // @u[1] won't call UniqueString() under FPC :(
   {$endif FPC}
   result := @u[1];
+end;
+
+function Concat(const Args: array of RawByteString): RawUtf8;
+begin
+  Concat(Args, result);
+end;
+
+procedure Concat(const Args: array of RawByteString; var Text: RawUtf8);
+var
+  l, i: PtrInt;
+  p: PUtf8Char;
+begin
+  l := 0;
+  for i := 0 to high(Args) do
+    inc(l, length(Args[i]));
+  FastSetString(Text, l);
+  p := pointer(Text);
+  for i := 0 to high(Args) do
+  begin
+    l := length(Args[i]);
+    MoveFast(pointer(Args[i])^, p^, l);
+    inc(p, l);
+  end;
 end;
 
 function ShortStringToAnsi7String(const source: ShortString): RawByteString;
