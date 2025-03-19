@@ -1085,15 +1085,17 @@ procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
 begin
   if NotifyTask then
     NotifyProgress([TaskName]);
-  if Assigned(OnTask) then
-    if not Threaded then
-      OnTask(Sender) // run in main thread
-    else
-    begin
-      if fBackgroundRun = nil then
-        fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
-      fBackgroundRun.Run(Ontask, Sender, TaskName, ForcedThreaded);
-    end;
+  if not Assigned(OnTask) then
+    exit;
+  if (SystemInfo.dwNumberOfProcessors <= 2) or // avoid timeout e.g. on slow VMs
+     not Threaded then
+    OnTask(Sender) // run in main thread
+  else
+  begin
+    if fBackgroundRun = nil then
+      fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
+    fBackgroundRun.Run(Ontask, Sender, TaskName, ForcedThreaded);
+  end;
 end;
 
 procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer;
