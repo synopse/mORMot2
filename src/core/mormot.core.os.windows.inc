@@ -146,13 +146,14 @@ end;
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
 var
   i: PtrInt;
+  R: PByteArray;
 begin
   if Len > 0 then
     if IsAnsiCompatibleW(P, Len) then
     begin
-      FastSetString(res, Len);
+      R := FastSetString(res, Len);
       for i := 0 to Len - 1 do
-        PByteArray(res)[i] := PWordArray(P)[i]; // fast direct conversion
+        R[i] := PWordArray(P)[i]; // fast direct conversion
     end
     else
       DoWin32PWideCharToUtf8(P, Len, res); // use RTL UnicodeToUtf8()

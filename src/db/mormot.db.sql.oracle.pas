@@ -1407,8 +1407,8 @@ begin
                 ftDate:
                   begin
                     VDBType := SQLT_DAT;
-                    FastNewRawByteString(VData, fParamsArrayCount * SizeOf(TOracleDate));
-                    oData := pointer(VData);
+                    oData := FastNewRawByteString(
+                      VData, fParamsArrayCount * SizeOf(TOracleDate));
                     oLength := SizeOf(TOracleDate);
                   end;
                 ftInt64:
@@ -1416,8 +1416,8 @@ begin
                   begin
                     // starting with 11.2, OCI supports NUMBER conversion to/from Int64
                     VDBType := SQLT_INT;
-                    FastNewRawByteString(VData, fParamsArrayCount * SizeOf(Int64));
-                    oData := pointer(VData);
+                    oData := FastNewRawByteString(
+                      VData, fParamsArrayCount * SizeOf(Int64));
                     oLength := SizeOf(Int64);
                   end;
                   // prior to 11.2, we will stay with the default SQLT_STR type
@@ -1471,8 +1471,7 @@ begin
                 SQLT_STR:
                   begin
                     inc(oLength); // space for #0 terminator
-                    FastNewRawByteString(VData, oLength * fParamsArrayCount);
-                    oData := pointer(VData); // in-place quote removal in text
+                    oData := FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
                     begin
@@ -1482,8 +1481,7 @@ begin
                   end;
                 SQLT_LVB:
                   begin
-                    FastNewRawByteString(VData, oLength * fParamsArrayCount);
-                    oData := pointer(VData);
+                    oData := FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
                     begin
@@ -1537,8 +1535,8 @@ begin
                   ociArrays[ociArraysCount]),
                 fError);
               inc(ociArraysCount);
-              FastNewRawByteString(param.VData, Length(param.VArray) * SizeOf(Int64));
-              oData := pointer(param.VData);
+              oData := FastNewRawByteString(
+                param.VData, Length(param.VArray) * SizeOf(Int64));
               for j := 0 to Length(param.VArray) - 1 do
                 case param.VType of
                   ftInt64:

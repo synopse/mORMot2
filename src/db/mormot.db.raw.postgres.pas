@@ -288,8 +288,7 @@ begin
   else
     exit; // unsupported
   end;
-  FastNewRawByteString(Bin, len);
-  p := pointer(Bin);
+  p := FastNewRawByteString(Bin, len);
   p^ := $01000000;           // dimensions
   inc(p);
   p^ := $00000000;           // has null

@@ -3610,9 +3610,8 @@ begin
     exit;
   end;
   L := L shr 1;
-  FastSetString(result, (L * 3) - 1);
+  m := FastSetString(result, (L * 3) - 1);
   h := pointer(Hex);
-  m := pointer(result);
   repeat
     m[0] := h[0];
     if h[0] in ['A'..'Z'] then
@@ -3637,12 +3636,11 @@ var
 begin
   if maclen < 0 then
     maclen := 0;
-  FastSetString(result, maclen * 2);
+  P := FastSetString(result, maclen * 2);
   if maclen = 0 then
     exit;
   dec(maclen);
   tab := @HexCharsLower;
-  P := pointer(result);
   i := 0;
   repeat
     c := mac[i];
@@ -5848,12 +5846,10 @@ end;
 
 function TCrtSocket.SockInRead(Length: integer; UseOnlySockIn: boolean): RawByteString;
 begin
-  result := '';
   if (self = nil) or
-     (Length <= 0) then
-    exit;
-  FastSetString(RawUtf8(result), Length); // assume CP_UTF8 for FPC RTL bug
-  if SockInRead(pointer(result), Length, UseOnlySockIn) <> Length then
+     (Length <= 0) or
+     (SockInRead(FastSetString(
+       RawUtf8(result), Length), Length, UseOnlySockIn) <> Length) then
     result := '';
 end;
 
@@ -6123,8 +6119,7 @@ end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
 begin
-  FastSetString(RawUtf8(result), Length); // assume CP_UTF8 for FPC RTL bug
-  SockRecv(pointer(result), Length);
+  SockRecv(FastSetString(RawUtf8(result), Length), Length);
 end;
 
 function TCrtSocket.SockReceivePending(TimeOutMS: integer;

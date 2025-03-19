@@ -642,6 +642,8 @@ const
 
 function TServiceComplexCalculator.TestRawJson(
   len, value: integer; const j: RawJson): RawJson;
+var
+  p: PByteArray;
 begin
   if fMethodThread = 0 then
     fMethodThread := GetThreadID;
@@ -652,10 +654,10 @@ begin
     result:= '';
     exit;
   end;
-  FastSetString(RawUtf8(result), nil, len + 2);
-  result[1] := '"';
-  FillcharFast(PByteArray(result)[1], len, value);
-  result[len + 2] := '"';
+  p := FastSetString(RawUtf8(result), len + 2);
+  p[0] := ord('"');
+  FillcharFast(p[1], len, value);
+  p[len + 1] := ord('"');
 end;
 
 function TServiceComplexCalculator.GetCurrentThreadID: PtrUInt;

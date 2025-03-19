@@ -5472,10 +5472,7 @@ function Utf8DecodeToUnicodeRawByteString(P: PUtf8Char; L: integer): RawByteStri
 begin
   if (P <> nil) and
      (L <> 0) then
-  begin
-    FastNewRawByteString(result, L * 3);
-    FakeSetLength(result, Utf8ToWideChar(pointer(result), P, L));
-  end
+    FakeSetLength(result, Utf8ToWideChar(FastNewRawByteString(result, L * 3), P, L))
   else
     result := '';
 end;
@@ -5540,8 +5537,7 @@ begin
   if (c < 0) or
      (z < c) then
     c := z;
-  FastSetString(result, len shl 1);
-  d := pointer(result);
+  d := FastSetString(result, len shl 1);
   MoveFast(s^, d^, c);
   inc(s, c);
   inc(d, c);
@@ -8099,8 +8095,7 @@ begin
     if text[i] <= ' ' then
     begin
       n := i - 1;
-      FastSetString(result, len);
-      p := pointer(result);
+      p := FastSetString(result, len);
       if n > 0 then
         MoveFast(pointer(text)^, p^, n);
       for j := i + 1 to len do
@@ -8125,8 +8120,7 @@ begin
     if text[i] in exclude then
     begin
       n := i - 1;
-      FastSetString(result, len - 1);
-      p := pointer(result);
+      p := FastSetString(result, len - 1);
       if n > 0 then
         MoveFast(pointer(text)^, p^, n);
       for j := i + 1 to len do
@@ -8154,8 +8148,7 @@ begin
     result := text; // no exclude char found
     exit;
   end;
-  FastSetString(result, len - 1);
-  p := pointer(result);
+  p := FastSetString(result, len - 1);
   MoveFast(pointer(text)^, p^, first);
   inc(p, first);
   for i := first + 1 to len do
@@ -8272,10 +8265,9 @@ begin
       break;
     AddInteger(pos, posCount, found);
   until false;
-  FastSetString(result, Length(S) + (newlen - oldlen) * posCount); // alloc once
+  dst := FastSetString(result, Length(S) + (newlen - oldlen) * posCount);
   last := 1;
   src := pointer(S);
-  dst := pointer(result);
   for i := 0 to posCount - 1 do
   begin
     sharedlen := pos[i] - last;
@@ -8411,10 +8403,7 @@ begin
   if Count <= 0 then
     FastAssignNew(result)
   else
-  begin
-    FastSetString(result, Count);
-    FillCharFast(pointer(result)^, Count, byte(Ch));
-  end;
+    FillCharFast(FastSetString(result, Count)^, Count, byte(Ch));
 end;
 
 function QuotedStr(const S: RawUtf8; Quote: AnsiChar): RawUtf8;
@@ -8457,8 +8446,7 @@ begin
     for i := quote1 to PLen - 1 do
       if P[i] = Quote then
         inc(nquote);
-  FastSetString(result, PLen + nquote + 2);
-  r := pointer(result);
+  r := FastSetString(result, PLen + nquote + 2);
   r^ := Quote;
   inc(r);
   if nquote = 0 then
@@ -10653,8 +10641,7 @@ begin
   if (u4 = nil) or
      (L <= 0) then
     exit;
-  FastSetString(u, L * 6); // prepare for the worse (paranoid)
-  p := pointer(u);
+  p := FastSetString(u, L * 6); // prepare for the worse (paranoid)
   repeat
     inc(p, Ucs4ToUtf8(u4^, p));
     inc(u4);

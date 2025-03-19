@@ -7966,8 +7966,7 @@ var
   p: PByte;
 begin
   len := ConsoleStdInputLen;
-  FastNewRawByteString(result, len);
-  p := pointer(result);
+  p := FastNewRawByteString(result, len);
   while len > 0 do
   begin
     n := FileRead(StdInputHandle, p^, len);

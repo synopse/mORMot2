@@ -6548,8 +6548,7 @@ end;
 
 function TCryptRandom.Get(len: PtrInt): RawByteString;
 begin
-  FastNewRawByteString(result, len);
-  Get(pointer(result), len);
+  Get(FastNewRawByteString(result, len), len);
 end;
 
 function TCryptRandom.GetBytes(len: PtrInt): TBytes;
@@ -9664,8 +9663,7 @@ begin
   for i := 0 to high(Content) do
     inc(len, length(Content[i]));
   al := AsnEncLen(len, @tmp);
-  FastNewRawByteString(result, al + len + 1);
-  p := pointer(result);
+  p := FastNewRawByteString(result, al + len + 1);
   p^ := AsnType;         // type
   inc(p);
   MoveFast(tmp, p^, al); // encoded length

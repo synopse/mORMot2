@@ -3089,10 +3089,10 @@ function SearchSBNDMQ2ComputeMask(const Pattern: RawUtf8;
 var
   i: PtrInt;
   p: PAnsiChar absolute Pattern;
-  m: PSBNDMQ2Mask absolute result;
+  m: PSBNDMQ2Mask;
   c: PCardinal;
 begin
-  FastNewRawByteString(result, SizeOf(m^));
+  m := FastNewRawByteString(result, SizeOf(m^));
   FillCharFast(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do
   begin
@@ -4938,8 +4938,7 @@ var
 begin
   PEnd := PAnsiChar(P) + Len - 4;
   DestLen := FromVarUInt32(P);
-  FastNewRawByteString(Dest, DestLen);
-  D := pointer(Dest);
+  D := FastNewRawByteString(Dest, DestLen);
   DEnd := D + DestLen;
   crc := 0;
   while PAnsiChar(P) < PEnd do

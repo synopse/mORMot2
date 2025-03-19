@@ -6701,7 +6701,7 @@ end;
 procedure InternalUnicodeUpper(Context: TSqlite3FunctionContext; argc: integer;
   var argv: TSqlite3ValueArray); cdecl;
 var
-  input: PUtf8Char;
+  input, t: PUtf8Char;
   len: PtrInt;
   tmp: RawUtf8;
 begin
@@ -6711,8 +6711,8 @@ begin
   len := StrLen(input);
   if len <> 0 then
   begin
-    FastSetString(tmp, len * 2); // Unicode Upper may enhance input length
-    len := Utf8UpperReference(input, pointer(tmp), len) - PUtf8Char(pointer(tmp));
+    t := FastSetString(tmp, len * 2); // Unicode Upper may enhance input length
+    len := Utf8UpperReference(input, t, len) - t;
   end;
   // don't call SetLength() but use forcedlen to truncate the value
   RawUtf8ToSQlite3Context(tmp, Context, false, {forced=}len);

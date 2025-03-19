@@ -3455,15 +3455,15 @@ end;
 
 { ***************** PKCS#11 High-Level Wrappers }
 
-procedure UnPad(p: PUtf8Char; max: integer; var text: RawUtf8);
+procedure UnPad(p: PUtf8Char; max: PtrInt; var text: RawUtf8);
 begin
   FastSetString(text, p, max);
   TrimSelf(text);
 end;
 
-function Pad(const text: RawUtf8; max: integer): RawUtf8;
+function Pad(const text: RawUtf8; max: PtrInt): RawUtf8;
 var
-  len: integer;
+  len: PtrInt;
 begin
   FastSetString(result, max);
   len := length(text);

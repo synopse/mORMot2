@@ -6161,8 +6161,7 @@ begin
     inc(p);
     dec(len, SizeOf(p^));
   end;
-  FastSetString(RawUtf8(result), len); // assume CP_UTF8 for FPC RTL bug
-  DecryptCts(p, pointer(result), len);
+  DecryptCts(p, FastSetString(RawUtf8(result), len), len);
 end;
 
 
@@ -7573,8 +7572,7 @@ end;
 
 function TAesPrngAbstract.FillRandom(Len: integer): RawByteString;
 begin
-  FastNewRawByteString(result, Len);
-  FillRandom(pointer(result), Len);
+  FillRandom(FastNewRawByteString(result, Len), Len);
 end;
 
 function TAesPrngAbstract.FillRandomBytes(Len: integer): TBytes;
@@ -7589,10 +7587,9 @@ function TAesPrngAbstract.FillRandomHex(Len: integer): RawUtf8;
 var
   bin: pointer;
 begin
-  FastSetString(result, Len * 2);
+  bin := @PByteArray(FastSetString(result, Len * 2))[Len];
   if Len = 0 then
     exit;
-  bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
   FillRandom(bin, Len);
   BinToHexLower(bin, pointer(result), Len);
 end;
@@ -8166,8 +8163,7 @@ begin
     2:
       inc(blen, 3);
   end;
-  FastSetString(result, blen);
-  RawBase64Uri(pointer(result), P, bdiv, bmod);
+  RawBase64Uri(FastSetString(result, blen), P, bdiv, bmod);
 end;
 
 procedure read_h;
@@ -9397,11 +9393,11 @@ end;
 function TSha3.Cypher(const Key, Source: RawByteString;
   Algo: TSha3Algo): RawByteString;
 var
-  len: integer;
+  len: PtrInt;
 begin
   len := length(Source);
-  FastNewRawByteString(result, len);
-  Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len);
+  Cypher(pointer(Key), pointer(Source),
+    FastNewRawByteString(result, len), length(Key), len);
 end;
 
 procedure TSha3.InitCypher(Key: pointer; KeyLen: integer; Algo: TSha3Algo);
@@ -9424,11 +9420,10 @@ end;
 
 function TSha3.Cypher(const Source: RawByteString): RawByteString;
 var
-  len: integer;
+  len: PtrInt;
 begin
   len := length(Source);
-  FastNewRawByteString(result, len);
-  Cypher(pointer(Source), pointer(result), len);
+  Cypher(pointer(Source), FastNewRawByteString(result, len), len);
 end;
 
 procedure TSha3.Done;
@@ -11075,8 +11070,7 @@ end;
 
 function AesBlockToString(const block: TAesBlock): RawUtf8;
 begin
-  FastSetString(result, 32);
-  mormot.core.text.BinToHex(@block, pointer(result), 16);
+  mormot.core.text.BinToHex(@block, FastSetString(result, 32), 16);
 end;
 
 function Md5(const s: RawByteString): RawUtf8;

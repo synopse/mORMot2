@@ -3766,8 +3766,7 @@ begin
   inc(len, (n - 1) + length(pref) + length(suf));
   if inlin then
     inc(len, n * 4); // :( ): markers
-  FastSetString(result, len);
-  P := pointer(result);
+  P := FastSetString(result, len);
   if pref <> '' then
   begin
     L := length(pref);
@@ -8226,18 +8225,16 @@ end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
 begin
-  FastSetString(result, 3);
-  PCardinal(result)^ := ((Value shr 12) and $3f) or
-                        ((Value shr 6) and $3f) shl 8 or
-                        (Value and $3f) shl 16 + $202020;
+  PCardinal(FastSetString(result, 3))^ := ((Value shr 12) and $3f) or
+                                          ((Value shr 6) and $3f) shl 8 or
+                                          (Value and $3f) shl 16 + $202020;
 end;
 
 procedure Int18ToChars3(Value: cardinal; var result: RawUtf8);
 begin
-  FastSetString(result, 3);
-  PCardinal(result)^ := ((Value shr 12) and $3f) or
-                        ((Value shr 6) and $3f) shl 8 or
-                        (Value and $3f) shl 16 + $202020;
+  PCardinal(FastSetString(result, 3))^ := ((Value shr 12) and $3f) or
+                                          ((Value shr 6) and $3f) shl 8 or
+                                          (Value and $3f) shl 16 + $202020;
 end;
 
 function Chars3ToInt18(P: pointer): cardinal;
@@ -8250,17 +8247,15 @@ end;
 
 function UInt3DigitsToUtf8(Value: cardinal): RawUtf8;
 begin
-  FastSetString(result, 3);
-  PWordArray(result)[0] := TwoDigitLookupW[Value div 10];
+  PWord(FastSetString(result, 3))^ := TwoDigitLookupW[Value div 10];
   PByteArray(result)[2] := (Value mod 10) + 48;
 end;
 
 function UInt4DigitsToUtf8(Value: cardinal): RawUtf8;
 begin
-  FastSetString(result, 4);
   if Value > 9999 then
     Value := 9999;
-  YearToPChar(Value, pointer(result));
+  YearToPChar(Value, FastSetString(result, 4));
 end;
 
 function UInt4DigitsToShort(Value: cardinal): TShort4;
@@ -8458,12 +8453,11 @@ end;
 procedure PrepareTempUtf8(var Res: TTempUtf8; Len: PtrInt);
   {$ifdef FPC} inline; {$endif} // Delphi XE8 fails to inline this anyway :(
 begin
+  if Len > SizeOf(Res.Temp) then // memory allocation needed
+    Res.Text := FastSetString(RawUtf8(Res.TempRawUtf8), Len) // new RawUtf8
+  else
+    Res.Text := @Res.Temp; // use stack buffer
   Res.Len := Len;
-  Res.Text := @Res.Temp;
-  if Len <= SizeOf(Res.Temp) then // no memory allocation needed
-    exit;
-  FastSetString(RawUtf8(Res.TempRawUtf8), Len); // new RawUtf8
-  Res.Text := Res.TempRawUtf8;
 end;
 
 procedure DoubleToTempUtf8(V: double; var Res: TTempUtf8);
@@ -9197,8 +9191,7 @@ begin
   {$ifndef UNICODE}
   if Unicode_CodePage = CP_UTF8 then // e.g. on POSIX or Windows + Lazarus
   begin
-    FastSetString(RawUtf8(result), L);
-    Write(pointer(result)); // here string=UTF8String=RawUtf8
+    Write(FastSetString(RawUtf8(result), L)); // here string=UTF8String=RawUtf8
     exit;
   end;
   {$endif UNICODE}
@@ -9221,8 +9214,7 @@ begin
   else
   begin
     f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
-    FastSetString(result, f.L);
-    f.Write(pointer(result));
+    f.Write(FastSetString(result, f.L));
   end;
 end;
 
@@ -9454,8 +9446,7 @@ begin
     exit;
   end;
   {%H-}f.DoAdd(@Args[0], length(Args));
-  FastSetString(result, f.L);
-  f.Write(pointer(result));
+  f.Write(FastSetString(result, f.L));
 end;
 
 procedure Make(const Args: array of const; var Result: RawUtf8;
@@ -9466,8 +9457,7 @@ begin
   {%H-}f.DoAdd(@Args[0], length(Args));
   if IncludeLast <> '' then
     f.Add(IncludeLast);
-  FastSetString(result, f.L);
-  f.Write(pointer(result));
+  f.Write(FastSetString(result, f.L));
 end;
 
 function MakeString(const Args: array of const): string;
@@ -9560,8 +9550,7 @@ var
   f: TFormatUtf8;
 begin
   f.DoDelim(@Value[0], length(Value), EndWithComma, Comma);
-  FastSetString(result, f.L);
-  f.Write(pointer(result));
+  f.Write(FastSetString(result, f.L));
 end;
 
 function StringToConsole(const S: string): RawByteString;
@@ -10273,14 +10262,12 @@ var
   L: integer;
 begin
   L := length(Bin);
-  FastSetString(result, L * 2);
-  mormot.core.text.BinToHex(pointer(Bin), pointer(result), L);
+  mormot.core.text.BinToHex(pointer(Bin), FastSetString(result, L * 2), L);
 end;
 
 function BinToHex(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
-  FastSetString(result, BinBytes * 2);
-  mormot.core.text.BinToHex(Bin, pointer(result), BinBytes);
+  mormot.core.text.BinToHex(Bin, FastSetString(result, BinBytes * 2), BinBytes);
 end;
 
 function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
@@ -10461,8 +10448,7 @@ end;
 
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
-  FastSetString(result, BinBytes * 2);
-  BinToHexDisplay(Bin, pointer(result), BinBytes);
+  BinToHexDisplay(Bin, FastSetString(result, BinBytes * 2), BinBytes);
 end;
 
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
@@ -10492,8 +10478,7 @@ end;
 
 procedure BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt; var result: RawUtf8);
 begin
-  FastSetString(result, BinBytes * 2);
-  BinToHexLower(Bin, pointer(result), BinBytes);
+  BinToHexLower(Bin, FastSetString(result, BinBytes * 2), BinBytes);
 end;
 
 function BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
@@ -10536,8 +10521,7 @@ end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
-  FastSetString(result, BinBytes * 2);
-  BinToHexDisplayLower(Bin, pointer(result), BinBytes);
+  BinToHexDisplayLower(Bin, FastSetString(result, BinBytes * 2), BinBytes);
 end;
 
 function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): ShortString;
@@ -10593,8 +10577,8 @@ end;
 
 procedure PointerToHex(aPointer: pointer; var result: RawUtf8);
 begin
-  FastSetString(result, SizeOf(pointer) * 2);
-  BinToHexDisplay(@aPointer, pointer(result), SizeOf(pointer));
+  BinToHexDisplay(@aPointer,
+    FastSetString(result, SizeOf(pointer) * 2), SizeOf(pointer));
 end;
 
 function PointerToHex(aPointer: pointer): RawUtf8;
@@ -10604,26 +10588,26 @@ end;
 
 function CardinalToHex(aCardinal: cardinal): RawUtf8;
 begin
-  FastSetString(result, SizeOf(aCardinal) * 2);
-  BinToHexDisplay(@aCardinal, pointer(result), SizeOf(aCardinal));
+  BinToHexDisplay(@aCardinal,
+    FastSetString(result, SizeOf(aCardinal) * 2), SizeOf(aCardinal));
 end;
 
 function CardinalToHexLower(aCardinal: cardinal): RawUtf8;
 begin
-  FastSetString(result, SizeOf(aCardinal) * 2);
-  BinToHexDisplayLower(@aCardinal, pointer(result), SizeOf(aCardinal));
+  BinToHexDisplayLower(@aCardinal,
+    FastSetString(result, SizeOf(aCardinal) * 2), SizeOf(aCardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUtf8;
 begin
-  FastSetString(result, SizeOf(Int64) * 2);
-  BinToHexDisplay(@aInt64, pointer(result), SizeOf(Int64));
+  BinToHexDisplay(@aInt64,
+    FastSetString(result, SizeOf(Int64) * 2), SizeOf(Int64));
 end;
 
 procedure Int64ToHex(aInt64: Int64; var result: RawUtf8);
 begin
-  FastSetString(result, SizeOf(Int64) * 2);
-  BinToHexDisplay(@aInt64, pointer(result), SizeOf(Int64));
+  BinToHexDisplay(@aInt64,
+    FastSetString(result, SizeOf(Int64) * 2), SizeOf(Int64));
 end;
 
 function PointerToHexShort(aPointer: pointer): TShort16;
@@ -10662,8 +10646,7 @@ var
   L: PtrInt;
 begin
   L := DisplayMinChars(@aInt64, SizeOf(Int64));
-  FastSetString(result, L * 2);
-  BinToHexDisplayLower(@aInt64, pointer(result), L);
+  BinToHexDisplayLower(@aInt64, FastSetString(result, L * 2), L);
 end;
 
 procedure Int64ToHexShort(aInt64: Int64; out result: TShort16);
@@ -10957,8 +10940,7 @@ function GuidToRawUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
 var
   P: PUtf8Char;
 begin
-  FastSetString(result, 38);
-  P := pointer(result);
+  P := FastSetString(result, 38);
   P^ := '{';
   GuidToText(P + 1, @guid)^ := '}';
 end;
@@ -10980,8 +10962,7 @@ end;
 procedure ToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid;
   var text: RawUtf8; tab: PWordArray);
 begin
-  FastSetString(text, 36);
-  GuidToText(pointer(text), @guid, tab);
+  GuidToText(FastSetString(text, 36), @guid, tab);
 end;
 
 function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar;
@@ -10995,9 +10976,8 @@ begin
   n := length(guid);
   if n = 0 then
     exit;
-  FastSetString(result, (37 * n) - 1);
+  p := FastSetString(result, (37 * n) - 1);
   g := @guid[0];
-  p := pointer(result);
   repeat
     GuidToText(p, pointer(g), tab);
     dec(n);
@@ -11262,14 +11242,11 @@ function ReadStringFromStream(S: TStream; MaxAllowedSize: integer): RawUtf8;
 var
   L: integer;
 begin
-  result := '';
   L := 0;
   if (S.Read(L, 4) <> 4) or
      (L <= 0) or
-     (L > MaxAllowedSize) then
-    exit;
-  FastSetString(result, L);
-  if not StreamReadAll(S, pointer(result), L) then
+     (L > MaxAllowedSize) or
+     not StreamReadAll(S, FastSetString(result, L), L) then
     result := '';
 end;
 

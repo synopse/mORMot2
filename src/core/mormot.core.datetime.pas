@@ -1557,10 +1557,7 @@ begin
   if Date = 0 then
     result := ''
   else
-  begin
-    FastSetString(result, 10);
-    DateToIso8601PChar(Date, pointer(result), true);
-  end;
+    DateToIso8601PChar(Date, FastSetString(result, 10), true);
 end;
 
 function TimeToIso8601PChar(Time: TDateTime; P: PUtf8Char; Expanded: boolean;
@@ -1623,15 +1620,15 @@ end;
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUtf8;
 // use YYYYMMDD / YYYY-MM-DD date format
 begin
-  FastSetString(result, 8 + 2 * integer(Expanded));
-  DateToIso8601PChar(Date, pointer(result), Expanded);
+  DateToIso8601PChar(Date,
+    FastSetString(result, 8 + 2 * integer(Expanded)), Expanded);
 end;
 
 function DateToIso8601(Y, M, D: cardinal; Expanded: boolean): RawUtf8;
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
-  FastSetString(result, 8 + 2 * integer(Expanded));
-  DateToIso8601PChar(pointer(result), Expanded, Y, M, D);
+  DateToIso8601PChar(
+    FastSetString(result, 8 + 2 * integer(Expanded)), Expanded, Y, M, D);
 end;
 
 function TimeToIso8601(Time: TDateTime; Expanded: boolean;

@@ -3221,9 +3221,8 @@ begin
     exit;
   result := ndx;
   // parse SQL and replace ? into $n $nn $nnn
-  FastSetString(aNewSql, L);
+  d := FastSetString(aNewSql, L);
   s := pointer(aSql);
-  d := pointer(aNewSql);
   ndx := 0;
   repeat
     c := s^;
@@ -3318,8 +3317,7 @@ begin
     dec(n);
   until n = 0;
   // generate the output JSON
-  FastSetString(Result, L);
-  d := pointer(Result);
+  d := FastSetString(Result, L);
   d^ := Open;
   inc(d);
   v := pointer(Values);

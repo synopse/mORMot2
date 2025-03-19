@@ -1193,14 +1193,10 @@ end;
 
 function TGZRead.ToMem: RawByteString;
 begin
-  result := '';
   if (comp = nil) or
      ((uncomplen32 = 0) and
-      (crc32 = 0)) then
-    // 0 length stream
-    exit;
-  FastSetString(RawUtf8(result), uncomplen32); // use CP_UTF8 for FPC
-  if not ToBuffer(pointer(result)) then
+      (crc32 = 0)) or
+     not ToBuffer(FastSetString(RawUtf8(result), uncomplen32)) then
     result := ''; // invalid CRC or truncated uncomplen32
 end;
 
@@ -1344,10 +1340,7 @@ end;
 function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
 begin
   if len > 0 then
-  begin
-    FastNewRawByteString(result, GZWriteLen(len));
-    len := GZWrite(buf, pointer(result), len, level);
-  end;
+    len := GZWrite(buf, FastNewRawByteString(result, GZWriteLen(len)), len, level);
   if len <= 0 then
     result := '' // error
   else
@@ -2723,9 +2716,8 @@ begin
     WorkingMem := Size; // up to 1MB by default
   if WorkingMem < SizeOf(TLastHeader) then // minimal void .zip file is 22 bytes
     ESynZip.RaiseUtf8('%.Create: % is not a zip file', [self, fFileName]);
-  FastNewRawByteString(fSourceBuffer, WorkingMem);
+  P := FastNewRawByteString(fSourceBuffer, WorkingMem);
   // search for the first zip file local header
-  P := pointer(fSourceBuffer);
   if ZipStartOffset = 0 then
   begin
     fSource.Seek(0, soBeginning);
@@ -2749,8 +2741,7 @@ begin
         WorkingMem := centraldirsize + 1024;
         if WorkingMem > Size then
           WorkingMem := Size;
-        FastNewRawByteString(fSourceBuffer, WorkingMem); // alloc bigger
-        P := pointer(fSourceBuffer);
+        P := FastNewRawByteString(fSourceBuffer, WorkingMem); // alloc bigger
         fSource.Seek(Size - WorkingMem, soBeginning);
         fSource.ReadBuffer(P^, WorkingMem);
       end;
@@ -3537,8 +3528,8 @@ begin
   if Compress then
   begin
     max := zlibCompressMax(L);
-    FastNewRawByteString(Data, max);
-    L := CompressMem(pointer(src), pointer(Data), L, max, HTTP_LEVEL, ZLib);
+    L := CompressMem(pointer(src),
+      FastNewRawByteString(Data, max), L, max, HTTP_LEVEL, ZLib);
     if L <= 0 then
       Data := ''
     else

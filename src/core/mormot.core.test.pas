@@ -933,26 +933,26 @@ end;
 class function TSynTestCase.RandomAnsi7(CharCount: integer): RawByteString;
 var
   i: PtrInt;
-  R: PByteArray;
+  R, D: PByteArray;
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(CharCount);
-  FastSetString(RawUtf8(result), CharCount);
+  D := FastSetString(RawUtf8(result), CharCount);
   for i := 0 to CharCount - 1 do
-    PByteArray(result)[i] := 32 + R[i] mod 95; // may include tilde #$7e char
+    D[i] := 32 + R[i] mod 95; // may include tilde #$7e char
   tmp.Done;
 end;
 
 procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawByteString);
 var
   i: PtrInt;
-  R: PByteArray;
+  R, D: PByteArray;
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(count);
-  FastSetString(RawUtf8(result), count);
+  D := FastSetString(RawUtf8(result), count);
   for i := 0 to count - 1 do
-    PByteArray(result)[i] := ord(chars64[PtrInt(R[i]) and 63]);
+    D[i] := ord(chars64[PtrInt(R[i]) and 63]);
   tmp.Done;
 end;
 
@@ -1623,7 +1623,7 @@ begin
   {$endif OSPOSIX}
   redirect := Executable.Command.ArgFile(0,
     '#filename to redirect the console output');
-  Executable.Command.Get('&test', restrict,
+  Executable.Command.Get(['t', 'test'], restrict,
     'restrict the tests to a #class[.method] name(s)');
   Executable.Command.Option(['l', 'tests'],
     'list all class name(s) as expected by --test');

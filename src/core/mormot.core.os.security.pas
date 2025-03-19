@@ -2711,8 +2711,7 @@ end;
 
 function SecAclToBinary(const acl: TSecAcl): RawByteString;
 begin
-  FastNewRawByteString(result, SecAclToBin({dest=}nil, acl)); // allocate
-  SecAclToBin(pointer(result), acl); // fill
+  SecAclToBin(FastNewRawByteString(result, SecAclToBin({dest=}nil, acl)), acl);
 end;
 
 function AclReplaceDomainRaw(old, new: PSid; maxRid: cardinal;
@@ -4673,10 +4672,9 @@ var
   p: PAnsiChar;
   hdr: PRawSD;
 begin
-  FastNewRawByteString(RawByteString(result),
+  p := FastNewRawByteString(RawByteString(result),
     SizeOf(hdr^) + length(Owner) + length(Group) +
     SecAclToBin(nil, Sacl) + SecAclToBin(nil, Dacl));
-  p := pointer(result);
   hdr := pointer(p);
   FillCharFast(hdr^, SizeOf(hdr^), 0);
   hdr^.Revision := 1;

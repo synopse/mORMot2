@@ -4780,8 +4780,7 @@ begin
     // direct allocation if no JSON escape is needed
     Lp := length(aPrefix);
     Ls := length(aSuffix);
-    FastSetString(result, PLen + Lp + Ls + 2);
-    D := pointer(result); // we checked dest result <> source P above
+    D := FastSetString(result, PLen + Lp + Ls + 2);
     if Lp > 0 then
     begin
       MoveFast(pointer(aPrefix)^, D^, Lp);

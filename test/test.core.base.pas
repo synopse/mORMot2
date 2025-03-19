@@ -5023,16 +5023,15 @@ begin
   NotifyTestSpeed('StrInt64', 100000, 0, @Timer);
 end;
 
-function LowerCaseAscii7(const S: RawByteString): RawByteString;
+function LowerCaseAscii7(const S: RawByteString): RawUtf8;
 var
   Ch: AnsiChar;
   L: Integer;
   Source, Dest: PAnsiChar;
 begin
   L := Length(S);
-  SetLength(result, L);
+  Dest := FastSetString(result, L);
   Source := Pointer(S);
-  Dest := Pointer(result);
   while L <> 0 do
   begin
     Ch := Source^;
@@ -8057,7 +8056,7 @@ begin
   Check(IdemPropNameU('', ''));
   for i := 0 to 100 do
     Check(IdemPropNameU(RawUtf8OfChar('a', i), RawUtf8OfChar('A', i)));
-  Check(UpperCaseU('abcd') = 'ABCD');
+  CheckEqual(UpperCaseU('abcd'), 'ABCD');
   Check(IdemPropNameU('abcDe', abcde, 5));
   Check(not IdemPropNameU('abcD', abcde, 5));
   Check(not IdemPropNameU('abcDF', abcde, 5));

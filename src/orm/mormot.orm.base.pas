@@ -7760,8 +7760,7 @@ begin
     result := '';
     exit;
   end;
-  FastSetString(result, len - 1); // allocate once for all
-  p := pointer(result);
+  p := FastSetString(result, len - 1); // allocate once for all
   for f := 0 to Count - 1 do
     if FieldBitGet(Bits, f) then
     begin
@@ -8950,8 +8949,7 @@ begin
   end;
   SepLen := length(Sep);
   inc(L, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
-  FastSetString(result, L);
-  P := AppendRawUtf8ToBuffer(pointer(result), Head);
+  P := AppendRawUtf8ToBuffer(FastSetString(result, L), Head);
   n := fRowCount;
   repeat
     inc(Field, fFieldCount); // next row - ignore first row = field names

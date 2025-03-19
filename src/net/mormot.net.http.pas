@@ -2658,8 +2658,7 @@ begin
       inc(tot, l);
       len[n] := l;
     end;
-    FastSetString(result, tot);
-    P := pointer(result);
+    P := FastSetString(result, tot);
     for i := 0 to n do
     begin
       MoveFast(PByteArray(headers)[pos[i]], P^, len[i]);
@@ -3745,8 +3744,7 @@ begin
                 State := hrsErrorPayloadTooLarge; // avoid memory overflow
                 break;
               end;
-              FastSetString(RawUtf8(Content), ContentLength); // CP_UTF8 for FPC
-              fContentPos := pointer(Content);
+              fContentPos := FastSetString(RawUtf8(Content), ContentLength);
             end;
             MoveFast(st.P^, fContentPos^, st.LineLen);
             inc(fContentPos, st.LineLen);
@@ -3804,10 +3802,8 @@ begin
     else
       aOutStream.CopyFrom(ContentStream, ContentLength)
   else if ContentStream <> nil then
-  begin
-    FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
-    ContentStream.ReadBuffer(pointer(Content)^, ContentLength);
-  end;
+    ContentStream.ReadBuffer(
+      FastSetString(RawUtf8(Content), ContentLength)^, ContentLength);
 end;
 
 function THttpRequestContext.CompressContentAndFinalizeHead(

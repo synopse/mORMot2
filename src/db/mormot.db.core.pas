@@ -2244,8 +2244,7 @@ begin
   result := '';
   if Date <= 0 then
     exit;
-  FastSetString(result, 13);
-  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  PCardinal(FastSetString(result, 13))^ := JSON_SQLDATE_MAGIC_C;
   DateToIso8601PChar(Date, PUtf8Char(pointer(result)) + 3, True);
 end;
 
@@ -2256,8 +2255,7 @@ begin
      (Month - 1 > 11) or
      (Day - 1 > 30) then
     exit;
-  FastSetString(result, 13);
-  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  PCardinal(FastSetString(result, 13))^ := JSON_SQLDATE_MAGIC_C;
   DateToIso8601PChar(PUtf8Char(pointer(result)) + 3, True, Year, Month, Day);
 end;
 
@@ -2266,8 +2264,7 @@ var
   l: PtrInt;
 begin
   l := length(iso);
-  FastSetString(result, l + 3);
-  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  PCardinal(FastSetString(result, l + 3))^ := JSON_SQLDATE_MAGIC_C;
   MoveFast(pointer(iso)^, PByteArray(result)^[3], l);
 end;
 
@@ -2664,9 +2661,8 @@ begin
     exit;
   end;
   // compute GenericSql from SQL, converting :(...): into ?
-  FastSetString(GenericSQL, length(SQL)); // private copy
+  P := FastSetString(GenericSQL, length(SQL)); // private copy
   dec(i);
-  P := pointer(GenericSQL); // in-place string unescape (keep SQL untouched)
   MoveFast(pointer(SQL)^, P^, i);
   Gen := P + i;   // Gen^ just before :(
   P := @PUtf8Char(pointer(SQL))[i + 2];  // P^ just after :(

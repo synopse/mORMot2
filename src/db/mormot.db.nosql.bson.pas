@@ -2113,8 +2113,8 @@ end;
 
 procedure TBsonObjectID.ToText(var result: RawUtf8);
 begin
-  FastSetString(result, SizeOf(self) * 2);
-  mormot.core.text.BinToHex(@self, pointer(result), SizeOf(self));
+  mormot.core.text.BinToHex(@self,
+    FastSetString(result, SizeOf(self) * 2), SizeOf(self));
 end;
 
 

@@ -799,7 +799,8 @@ procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt); overload;
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// faster equivalence to SetString(s,nil,len) function
-procedure FastSetString(var s: RawUtf8; len: PtrInt); overload;
+// - returns the allocated pointer(s) value
+function FastSetString(var s: RawUtf8; len: PtrInt): pointer; overload;
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// equivalence to SetString(s,pansichar,len) function but from a raw pointer
@@ -814,7 +815,7 @@ procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
 
 /// equivalence to SetString(s,nil,len) function to allocate a new RawByteString
 // - faster especially under FPC
-procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
+function FastNewRawByteString(var s: RawByteString; len: PtrInt): pointer;
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// equivalence to SetString(s,pansichar,len) function with a specific code page
@@ -4988,15 +4989,13 @@ begin
     FastAssignNewNotVoid(s, r);
 end;
 
-procedure FastSetString(var s: RawUtf8; len: PtrInt);
-var
-  r: pointer;
+function FastSetString(var s: RawUtf8; len: PtrInt): pointer;
 begin
-  r := FastNewString(len, CP_UTF8);
+  result := FastNewString(len, CP_UTF8);
   if pointer(s) = nil then
-    pointer(s) := r
+    pointer(s) := result
   else
-    FastAssignNewNotVoid(s, r);
+    FastAssignNewNotVoid(s, result);
 end;
 
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
@@ -5013,15 +5012,13 @@ begin
     FastAssignNewNotVoid(s, r);
 end;
 
-procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
-var
-  r: pointer;
+function FastNewRawByteString(var s: RawByteString; len: PtrInt): pointer;
 begin
-  r := FastNewString(len);
+  result := FastNewString(len);
   if pointer(s) = nil then
-    pointer(s) := r
+    pointer(s) := result
   else
-    FastAssignNewNotVoid(s, r);
+    FastAssignNewNotVoid(s, result);
 end;
 
 {$ifdef HASVARUSTRING}
@@ -5057,8 +5054,7 @@ procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
   len: PtrUInt; out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
-  FastNewRawByteString(holder, len + alignment);
-  aligned := pointer(holder);
+  aligned := FastNewRawByteString(holder, len + alignment);
   while PtrUInt(aligned) and alignment <> 0 do
     inc(PByte(aligned));
   if fillwith <> nil then
@@ -5121,8 +5117,7 @@ begin
   l := 0;
   for i := 0 to high(Args) do
     inc(l, length(Args[i]));
-  FastSetString(Text, l);
-  p := pointer(Text);
+  p := FastSetString(Text, l);
   for i := 0 to high(Args) do
   begin
     l := length(Args[i]);

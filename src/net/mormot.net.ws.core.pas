@@ -2269,8 +2269,7 @@ begin
     inc(len, ToVarUInt32LengthWithData(it^.Len));
     inc(it);
   end;
-  FastNewRawByteString(frame.payload, len);
-  P := AppendRawUtf8ToBuffer(pointer(frame.payload), Head);
+  P := AppendRawUtf8ToBuffer(FastNewRawByteString(frame.payload, len), Head);
   P^ := FRAME_HEAD_SEP;
   inc(P);
   it := @item;

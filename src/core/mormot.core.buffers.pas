@@ -581,6 +581,7 @@ const
 
 /// fast concatenation of several AnsiStrings
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
+  {$ifdef FPC}inline;{$endif}
 
 /// creates a TBytes from a RawByteString memory buffer
 procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
@@ -5494,8 +5495,7 @@ begin
   len := DecompressHeader(Comp, CompLen, Load);
   if len = 0 then
     exit;
-  FastSetString(RawUtf8(result), len + BufferOffset); // CP_UTF8 for FPC RTL bug
-  dec := pointer(result);
+  dec := FastSetString(RawUtf8(result), len + BufferOffset); // CP_UTF8 for FPC
   if not DecompressBody(Comp, dec + BufferOffset, CompLen, len, Load) then
     result := '';
 end;
@@ -6174,21 +6174,8 @@ end;
 
 
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
-var
-  i, L: PtrInt;
-  P: PAnsiChar;
 begin
-  L := 0;
-  for i := 0 to high(Values) do
-    inc(L, length(Values[i]));
-  FastNewRawByteString(result{%H-}, L);
-  P := pointer(result);
-  for i := 0 to high(Values) do
-  begin
-    L := length(Values[i]);
-    MoveFast(pointer(Values[i])^, P^, L);
-    inc(P, L);
-  end;
+  Concat(Values, RawUtf8(result)); // better explicit CP_UTF8 for FPC bug
 end;
 
 procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
@@ -6586,10 +6573,8 @@ var
 begin
   result := '';
   len := length(s);
-  if len = 0 then
-    exit;
-  FastSetString(result, BinToBase64Length(len));
-  Base64Encode(pointer(result), pointer(s), len);
+  if len <> 0 then
+    Base64Encode(FastSetString(result, BinToBase64Length(len)), pointer(s), len);
 end;
 
 function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): ShortString;
@@ -6615,8 +6600,7 @@ var
 begin
   outlen := BinToBase64Length(len);
   inc(outlen, 2 * (outlen shr 6) + 2); // one CRLF per line
-  FastSetString(result{%H-}, PtrInt(outlen) + length(Prefix) + length(Suffix));
-  p := pointer(result);
+  p := FastSetString(result{%H-}, PtrInt(outlen) + length(Prefix) + length(Suffix));
   if Prefix <> '' then
   begin
     MoveFast(pointer(Prefix)^, p^, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
@@ -6663,16 +6647,14 @@ end;
 function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
 begin
   result := '';
-  if BinBytes = 0 then
-    exit;
-  FastSetString(result, BinToBase64Length(BinBytes));
-  Base64Encode(pointer(result), Bin, BinBytes);
+  if BinBytes <> 0 then
+    Base64Encode(FastSetString(result, BinToBase64Length(BinBytes)), Bin, BinBytes);
 end;
 
 function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUtf8;
 var
   lendata, lenprefix, lensuffix, len: integer;
-  res: PByteArray absolute result;
+  res: PByteArray;
 begin
   result := '';
   lendata := length(data);
@@ -6683,7 +6665,7 @@ begin
   len := ((lendata + 2) div 3) * 4 + lenprefix + lensuffix;
   if WithMagic then
     inc(len, 3);
-  FastSetString(result, len);
+  res := FastSetString(result, len);
   if lenprefix > 0 then
     MoveFast(pointer(Prefix)^, res^, lenprefix);
   if WithMagic then
@@ -6712,8 +6694,7 @@ begin
   Result := '';
   if DataLen <= 0 then
     exit;
-  FastSetString(Result, ((DataLen + 2) div 3) * 4 + 3);
-  PInteger(pointer(Result))^ := JSON_BASE64_MAGIC_C;
+  PInteger(FastSetString(Result, ((DataLen + 2) div 3) * 4 + 3))^ := JSON_BASE64_MAGIC_C;
   Base64Encode(PAnsiChar(pointer(Result)) + 3, Data, DataLen);
 end;
 
@@ -6839,11 +6820,8 @@ var
 begin
   result := false;
   resultLen := Base64LengthAdjust(sp, len);
-  if resultLen <> 0 then
-  begin
-    FastNewRawByteString(data, resultLen);
-    result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
-  end;
+  if resultLen <> 0 then // may use AVX2
+    result := Base64DecodeMain(sp, FastNewRawByteString(data, resultLen), len);
   if not result then
     data := '';
 end;
@@ -6947,19 +6925,15 @@ var
 begin
   result := '';
   len := length(s);
-  if len = 0 then
-    exit;
-  FastSetString(result, BinToBase64uriLength(len));
-  Base64uriEncode(pointer(result), pointer(s), len);
+  if len <> 0 then
+    Base64uriEncode(FastSetString(result, BinToBase64uriLength(len)), pointer(s), len);
 end;
 
 function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
 begin
   result := '';
-  if BinBytes <= 0 then
-    exit;
-  FastSetString(result, BinToBase64uriLength(BinBytes));
-  Base64uriEncode(pointer(result), Bin, BinBytes);
+  if BinBytes > 0 then
+    Base64uriEncode(FastSetString(result, BinToBase64uriLength(BinBytes)), Bin, BinBytes);
 end;
 
 function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): ShortString;
@@ -7016,10 +6990,8 @@ begin
   result := false;
   resultLen := Base64uriToBinLength(len);
   if resultLen <> 0 then
-  begin
-    FastNewRawByteString(bin, resultLen);
-    result := Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(bin), len);
-  end;
+    result := Base64AnyDecode(ConvertBase64UriToBin, sp,
+      FastNewRawByteString(bin, resultLen), len);
   if not result then
     bin := '';
 end;
@@ -7490,8 +7462,8 @@ begin
   if (B32Len > 0) and
      ((B32Len and 7) = 0) then
   begin
-    FastNewRawByteString(result, (B32Len shr 3) * 5);
-    p := Base32Decode(@ConvertBase32ToBin, B32, pointer(result), B32Len);
+    p := Base32Decode(@ConvertBase32ToBin, B32,
+      FastNewRawByteString(result, (B32Len shr 3) * 5), B32Len);
     if p <> nil then
     begin
       FakeLength(result, p - pointer(result));
@@ -8383,8 +8355,7 @@ begin
     // decode value content
     if len <> 0 then
     begin
-      FastSetString(Value, len);
-      V := pointer(Value);
+      V := FastSetString(Value, len);
       U := Beg;
       repeat
         if (U^ = '%') and
@@ -8454,8 +8425,7 @@ begin
   if len = 0 then
     exit;
   // decode name content
-  FastSetString(Name, len);
-  V := pointer(Name);
+  V := FastSetString(Name, len);
   U := Beg;
   repeat
     if (U^ = '%') and
