@@ -1221,7 +1221,7 @@ type
     // - method execution is protected by TRestServer.Sessions.ReadOnlyLock
     function RetrieveSession(Ctxt: TRestServerUriContext): TAuthSession; override;
     /// compute a cookie as expected by RetrieveSession()
-    function ComputeCookie(aSession: cardinal): RawUtf8;
+    function ComputeCookieValue(aSession: cardinal): RawUtf8;
   end;
 
   /// authentication using HTTP Basic scheme
@@ -2859,7 +2859,7 @@ begin
   inherited OutHeadFromCookie;
   if rsoCookieIncludeRootPath in Server.fOptions then
     // case-sensitive Path=/ModelRoot
-    fCall^.OutHead := fCall^.OutHead + '; Path=/';
+    Append(fCall^.OutHead, '; Path=/');
 end;
 
 procedure TRestServerUriContext.InternalSetTableFromTableIndex(Index: PtrInt);
@@ -3732,8 +3732,8 @@ begin
     begin
       if SameTextU(dir, 'DESC') then
         // allow DESC, default is ASC
-        sort := sort + ' DESC';
-      where := where + ' ORDER BY ' + sort;
+        Append(sort, ' DESC');
+      Append(where, ' ORDER BY ', sort);
     end;
     TrimSelf(where);
     if (results <> 0) and
@@ -3809,9 +3809,9 @@ begin
       fCall^.OutBody := '[]'
     else
       TrimSelf(fCall^.OutBody);
-    fCall^.OutBody := '{"values":' + fCall^.OutBody +
+    fCall^.OutBody := Make(['{"values":', fCall^.OutBody,
       FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
-       [totalrowcount]) + '}';
+       [totalrowcount]), '}']);
   end;
 end;
 
@@ -4578,7 +4578,7 @@ begin
     end;
     nam := met^.InterfaceDotMethodName;
     if rn = rnInterfaceClientID then
-      nam := nam + '/<int:clientid>';
+      Append(nam, '/<int:clientid>');
     // URI sent as /Model/Interface.Method[/ClientDrivenID]
     Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
       ndx, met^.InterfaceService);
@@ -5362,7 +5362,7 @@ function TRestServerAuthenticationDefault.CheckPassword(
 var
   salt: RawUtf8;
 begin
-  salt := aClientNonce + User.LogonName + User.PasswordHashHexa;
+  Make([aClientNonce,  User.LogonName, User.PasswordHashHexa], salt);
   result := IsHex(aPassWord, SizeOf(THash256)) and
     (PropNameEquals(aPassWord,
       Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}false) + salt)) or
@@ -5438,7 +5438,7 @@ begin
   result := fServer.LockedSessionAccess(Ctxt)
 end;
 
-function TRestServerAuthenticationHttpAbstract.ComputeCookie(
+function TRestServerAuthenticationHttpAbstract.ComputeCookieValue(
   aSession: cardinal): RawUtf8;
 var
   iv: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
@@ -5446,8 +5446,7 @@ begin
   aSession := aSession xor fAesMask;
   DoAes(iv, aSession);
   iv.c0 := aSession;
-  Make([fServer.Model.Root, '=',
-    BinToHexDisplayLowerShort(@iv, SizeOf(iv))], result);
+  result := BinToHexDisplayLower(@iv, SizeOf(iv));
 end;
 
 
@@ -5503,7 +5502,7 @@ begin
           if sess <> nil then
           begin
             // see TRestServerAuthenticationHttpAbstract.ClientSessionSign()
-            Ctxt.SetOutSetCookie(ComputeCookie(sess.ID));
+            Ctxt.OutCookie[fServer.Model.Root] := ComputeCookieValue(sess.ID);
             if (rsoRedirectForbiddenToAuth in fServer.Options) and
                (Ctxt.ClientKind = ckAjax) then
               Ctxt.Redirect(fServer.Model.Root)
@@ -5999,7 +5998,7 @@ begin
     fTree[aFrom] := TRadixTreeParams.Create(TRestTreeNode, [rtoCaseInsensitiveUri]);
   uri := fOwner.Model.Root;
   if aUri <> '' then
-    uri := uri + '/' + aUri;
+    Append(uri, '/', aUri);
   result := fTree[aFrom].Setup(uri, names) as TRestTreeNode;
   if result = nil then
     exit;
@@ -7799,7 +7798,7 @@ begin
       json := JsonReformat(json)
     else if PropNameEquals(Ctxt.fUriMethodPath, 'xml') then
     begin
-      JsonBufferToXML(pointer(json), XMLUTF8_HEADER, '<' + name + '>', xml);
+      JsonBufferToXML(pointer(json), XMLUTF8_HEADER, Make(['<', name, '>']), xml);
       Ctxt.Returns(xml, 200, XML_CONTENT_TYPE_HEADER);
       exit;
     end;

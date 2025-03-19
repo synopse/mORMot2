@@ -1599,7 +1599,7 @@ var
   ctxt: TRestServerUriContext;
 begin
   ctxt := ServiceRunningContext.Request;
-  ctxt.OutSetCookie := fContext.CookieName + '=' + cookie;
+  ctxt.OutCookie[fContext.CookieName] := cookie;
   ctxt.InCookie[fContext.CookieName] := cookie;
 end;
 
