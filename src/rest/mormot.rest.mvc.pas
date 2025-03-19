@@ -1803,7 +1803,7 @@ begin
     // regular view page rendering
     fRun.fViews.Render(fMethodIndex, outContext, view);
   fOutput.Content := view.Content;
-  fOutput.Header := HEADER_CONTENT_TYPE + view.ContentType;
+  Concat([HEADER_CONTENT_TYPE, view.ContentType], fOutput.Header);
   if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) and
      (head <> '') then
     AppendLine(fOutput.Header, [head]);
@@ -2280,8 +2280,8 @@ end;
 
 function TMvcRendererReturningData.Redirects(const action: TMvcAction): boolean;
 begin
-  fOutput.Header := 'Location: ' + UrlEncodeJsonObject(action.RedirectToMethodName,
-    action.RedirectToMethodParameters, ['main']);
+  Make(['Location: ', UrlEncodeJsonObject(action.RedirectToMethodName,
+    action.RedirectToMethodParameters, ['main'])], fOutput.Header);
   fOutput.Status := action.ReturnedStatus;
   result := true;
 end;

@@ -4537,8 +4537,7 @@ class procedure TRestServerRoutingRest.UriComputeRoutes(Router: TRestRouter;
   Server: TRestServer);
 var
   services: TServiceContainerServer;
-  i: PtrInt;
-  ndx: integer;
+  i, ndx: integer;
   sic: TServiceInstanceImplementation;
   rn: TRestNode;
   met: PServiceContainerInterfaceMethod;

@@ -1993,7 +1993,8 @@ begin
     exec := TInterfaceMethodExecute.Create(fFactory, @aMethod,
       [optIgnoreException]); // to use exec.ExecutedInstancesFailed
     try
-      result := exec.ExecuteJson(instances, pointer('[' + aParams + ']'), nil);
+      result := exec.ExecuteJson(instances,
+        pointer(Concat(['[', aParams, ']'])), nil);
       if exec.ExecutedInstancesFailed <> nil then
         for i := length(exec.ExecutedInstancesFailed) - 1 downto 0 do
           if exec.ExecutedInstancesFailed[i] <> '' then
@@ -2177,7 +2178,7 @@ begin
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
-      ERestException.RaiseUtf8('%.Destroy: %.RefCount=%',
+      ERestException.RaiseUtf8('%.Destroy: %.RefCount=%: try to fix IRestOrm',
         [self, fOrmInstance, fOrmInstance.RefCount])
     else
       // avoid dubious GPF
@@ -3922,7 +3923,7 @@ begin
   server := ServerHash;
   if server = '' then
     server := crc32cUtf8ToHex(Call^.OutBody);
-  server := '"' + server + '"';
+  server := Concat(['"', server, '"']);
   if client <> server then
     AppendLine(Call^.OutHead, ['ETag: ', server])
   else
@@ -4025,7 +4026,7 @@ begin
     if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
     begin
       if ContentType <> '' then
-        AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE + ContentType])
+        AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE, ContentType])
       else
         AppendLine(fCall^.OutHead, [GetMimeContentTypeHeader('', FileName)]);
     end;
@@ -4057,7 +4058,7 @@ begin
     fCall^.OutStatus := HTTP_MOVEDPERMANENTLY
   else
     fCall^.OutStatus := HTTP_TEMPORARYREDIRECT;
-  fCall^.OutHead := 'Location: ' + NewLocation;
+  Concat(['Location: ', NewLocation], fCall^.OutHead);
 end;
 
 procedure TRestUriContext.Returns(const NameValuePairs: array of const;
