@@ -104,16 +104,16 @@ begin
       {$endif OSWINDOWS}
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
-    Option('ldaps', 'force LDAPS connection + plain auth instead of Kerberos');
-    Param('ntp', 'a NTP/SNTP #server name/IP to use instead of time.google.com');
-    Option('nontp', 'disable the NTP/SNTP server tests');
+    Option('ldaps',  'force LDAPS connection + plain auth instead of Kerberos');
+    Param('ntp',     'a NTP/SNTP #server name/IP instead of time.google.com');
+    Option('nontp',  'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
-    OpenSslDefaultCrypto := ParamS(['libcrypto'], 'the OpenSSL libcrypto #filename');
-    OpenSslDefaultSsl := ParamS(['libssl'], 'the OpenSSL libssl #filename');
+    OpenSslDefaultCrypto := ParamS('lib&crypto', 'the OpenSSL libcrypto #filename');
+    OpenSslDefaultSsl := ParamS('lib&ssl', 'the OpenSSL libssl #filename');
     {$endif USE_OPENSSL}
     {$ifdef OSPOSIX}
-    GssLib_Custom := ParamS(['libkrb5'], 'the Kerberos libgssapi #filename');
+    GssLib_Custom := ParamS('lib&krb5', 'the Kerberos libgssapi #filename');
     {$endif OSPOSIX}
   end;
 end;
