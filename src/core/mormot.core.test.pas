@@ -1278,8 +1278,7 @@ begin
   if fNotifyProgress = '' then
   begin
     DoColor(ccGreen);
-    DoTextLn(['  - ', fCurrentMethodInfo^.TestName, ':']);
-    DoText('     ');
+    DoText(['  - ', fCurrentMethodInfo^.TestName, ':' + CRLF + '     ']);
     fNotifyProgressLineLen := 0;
   end;
   len := length(value);
@@ -1341,7 +1340,7 @@ end;
 function TSynTests.Run: boolean;
 var
   i, t, m: integer;
-  Elapsed, Version: RawUtf8;
+  Elapsed, Version, s: RawUtf8;
   dir: TFileName;
   err: string;
   C: TSynTestCase;
@@ -1429,18 +1428,20 @@ begin
             DoColor(ccLightGreen)
           else
             DoColor(ccLightRed);
+          s := '';
           if C.fRunConsole <> '' then
           begin
-            DoTextLn(['   ', C.fRunConsole]);
+            Make(['   ', C.fRunConsole, CRLF], s);
             C.fRunConsole := '';
           end;
-          DoText(['  Total failed: ', IntToThousandString(C.AssertionsFailed),
-            ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident]);
+          Append(s, ['  Total failed: ', IntToThousandString(C.AssertionsFailed),
+            ' / ', IntToThousandString(C.Assertions), ' - ', C.Ident]);
           if C.AssertionsFailed = 0 then
-            DoText(' PASSED')
+            AppendShortToUtf8(' PASSED', s)
           else
-            DoText(' FAILED');
-          DoTextLn(['  ', TotalTimer.Stop]);
+            AppendShortToUtf8(' FAILED', s);
+          Append(s, ['  ', TotalTimer.Stop, CRLF]);
+          DoText(s); // write at once to the console output
           DoColor(ccLightGray);
           inc(fAssertions, C.fAssertions); // compute global assertions count
           inc(fAssertionsFailed, C.fAssertionsFailed);
@@ -1466,8 +1467,8 @@ begin
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
   if Executable.Version.Major <> 0 then
-    Version := FormatUtf8(CRLF +'Software version tested: % (%)',
-      [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
+    FormatUtf8(CRLF +'Software version tested: % (%)', [Executable.Version.Detailed,
+      Executable.Version.BuildDateTimeString], Version);
   FormatUtf8(CRLF + CRLF + 'Time elapsed for all tests: %' + CRLF +
     'Performed % by % on %',
     [RunTimer.Stop, NowToHuman, Executable.User, Executable.Host], Elapsed);
@@ -1496,6 +1497,7 @@ procedure TSynTests.AfterOneRun;
 var
   Run, Failed: integer;
   C: TSynTestCase;
+  s: RawUtf8;
 begin
   if fCurrentMethodInfo = nil then
     exit;
@@ -1505,44 +1507,45 @@ begin
   if fNotifyProgress <> '' then
   begin
     DoLog(sllMonitoring, '% %', [C, fNotifyProgress]);
-    DoText(CRLF);
+    s := CRLF;
   end;
   if Failed = 0 then
   begin
     DoColor(ccGreen);
     if fNotifyProgress <> '' then
-      DoText('        ')
+      Append(s, '        ')
     else
-      DoText(['  - ', fCurrentMethodInfo^.TestName, ': ']);
+      Append(s, ['  - ', fCurrentMethodInfo^.TestName, ': ']);
     if Run = 0 then
-      DoText('no assertion')
+      Append(s, 'no assertion')
     else if Run = 1 then
-      DoText('1 assertion passed')
+      Append(s, '1 assertion passed')
     else
-      DoText([IntToThousandString(Run), ' assertions passed']);
+      Append(s, [IntToThousandString(Run), ' assertions passed']);
   end
   else
   begin
     DoColor(ccLightRed);   // ! to highlight the line
-    DoText(['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
+    Append(s, ['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
       Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
   fNotifyProgress := '';
-  DoText(['  ', TestTimer.Stop]);
+  Append(s, ['  ', TestTimer.Stop]);
   if C.fRunConsoleOccurrenceNumber > 0 then
-    DoText(['  ', IntToThousandString(TestTimer.PerSec(
+    Append(s, ['  ', IntToThousandString(TestTimer.PerSec(
       C.fRunConsoleOccurrenceNumber)), '/s']);
   if C.fRunConsoleMemoryUsed > 0 then
   begin
-    DoText(['  ', KB(C.fRunConsoleMemoryUsed)]);
+    Append(s, ['  ', KB(C.fRunConsoleMemoryUsed)]);
     C.fRunConsoleMemoryUsed := 0; // display only once
   end;
-  DoTextLn([]);
+  Append(s, CRLF);
   if C.fRunConsole <> '' then
   begin
-    DoTextLn(['     ', C.fRunConsole]);
+    Append(s, ['     ', C.fRunConsole, CRLF]);
     C.fRunConsole := '';
   end;
+  DoText(s); // append whole information at once to the console
   DoColor(ccLightGray);
 end;
 
