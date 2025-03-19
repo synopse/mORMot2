@@ -1879,6 +1879,12 @@ function TrimOneChar(const text: RawUtf8; exclude: AnsiChar): RawUtf8;
 // - specify a custom char set to be included, e.g. as ['A'..'Z']
 function OnlyChar(const text: RawUtf8; const only: TSynAnsicharSet): RawUtf8;
 
+/// check if any of the supplied chars appears in the text
+function HasAnyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean;
+
+/// check if any other than the supplied chars appears in the text
+function HasOnlyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean;
+
 /// returns the supplied text content, without any control char
 // - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= ' '
 function TrimControlChars(const text: RawUtf8): RawUtf8;
@@ -8172,6 +8178,36 @@ begin // reverse bits in local stack copy before calling TrimChar()
   for i := 0 to (SizeOf(only) shr POINTERSHR) - 1 do
     exclude[i] := not PPtrIntArray(@only)[i];
   result := TrimChar(text, TSynAnsicharSet(exclude));
+end;
+
+function HasAnyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean;
+var
+  p: PUtf8Char;
+begin
+  result := true;
+  p := pointer(text);
+  if p <> nil then
+    repeat
+      if p^ in chars then
+        exit;
+      inc(p);
+    until p^ = #0;
+  result := false;
+end;
+
+function HasOnlyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean;
+var
+  p: PUtf8Char;
+begin
+  result := false;
+  p := pointer(text);
+  if p <> nil then
+    repeat
+      if not (p^ in chars) then
+        exit;
+      inc(p);
+    until p^ = #0;
+  result := true;
 end;
 
 procedure FillZero(var secret: RawByteString);
