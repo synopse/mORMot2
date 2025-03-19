@@ -3613,7 +3613,7 @@ var
 begin
   if (aHashSalt = '') or
      (aHashRound = 0) then
-    result := Sha256(Make(['salt', aPasswordPlain])) // Make() for FPC
+    result := Sha256U(['salt', aPasswordPlain])
   else if aHashRound > 0 then
   begin
     Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig.Lo);

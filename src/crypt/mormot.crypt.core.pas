@@ -2887,6 +2887,10 @@ function Sha256(const s: RawByteString): RawUtf8; overload;
 // - result is returned in hexadecimal format
 function Sha256(Data: pointer; Len: integer): RawUtf8; overload;
 
+/// direct SHA-256 hash calculation of some appended string-encoded binary values
+// - result is returned in hexadecimal format
+function Sha256U(const s: array of RawByteString): RawUtf8;
+
 /// compute the hexadecimal representation of a SHA-256 digest
 function Sha256DigestToString(const D: TSha256Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
@@ -11162,6 +11166,20 @@ var
   Digest: TSha256Digest;
 begin
   SHA.Full(Data, Len, Digest);
+  result := Sha256DigestToString(Digest);
+  FillZero(Digest);
+end;
+
+function Sha256U(const s: array of RawByteString): RawUtf8;
+var
+  i: PtrInt;
+  SHA: TSha256;
+  Digest: TSha256Digest;
+begin
+  SHA.Init;
+  for i := 0 to high(s) do
+    SHA.Update(s[i]);
+  SHA.Final(Digest);
   result := Sha256DigestToString(Digest);
   FillZero(Digest);
 end;

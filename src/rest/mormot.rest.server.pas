@@ -5365,10 +5365,10 @@ begin
   Make([aClientNonce,  User.LogonName, User.PasswordHashHexa], salt);
   result := IsHex(aPassWord, SizeOf(THash256)) and
     (PropNameEquals(aPassWord,
-      Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}false) + salt)) or
+      Sha256U([fServer.Model.Root, CurrentNonce(Ctxt, {prev=}false), salt])) or
      // if current nonce failed, tries with previous 5 minutes' nonce
      PropNameEquals(aPassWord,
-       Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}true)  + salt)));
+       Sha256U([fServer.Model.Root, CurrentNonce(Ctxt, {prev=}true), salt])));
 end;
 
 

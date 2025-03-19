@@ -1346,8 +1346,8 @@ begin
     aClientNonce); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [
     'username',   User.LogonName,
-    'password',   Sha256(Make([Sender.fModel.Root, aServerNonce, aClientNonce,
-                         User.LogonName, User.PasswordHashHexa])),
+    'password',   Sha256U([Sender.fModel.Root, aServerNonce, aClientNonce,
+                           User.LogonName, User.PasswordHashHexa]),
     'clientnonce', aClientNonce]);
 end;
 
