@@ -260,6 +260,10 @@ function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean; overload;
 // - supplied input is a RawUtf8 variable
 function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean; overload;
 
+/// check if any forbidden 7-bit char appears in the supplied text
+// - is a wrapper around strcspn()
+function ContainsChars(const text, forbidden: RawUtf8): boolean;
+
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
 // - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
@@ -3289,6 +3293,14 @@ begin
     end;
   end;
   result := true;
+end;
+
+function ContainsChars(const text, forbidden: RawUtf8): boolean;
+begin
+  result := (text <> '') and
+            (forbidden <> '') and
+            (strcspn(pointer(text), pointer(forbidden)) <>
+               PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^);
 end;
 
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
