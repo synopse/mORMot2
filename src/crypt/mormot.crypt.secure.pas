@@ -6289,7 +6289,7 @@ begin
     fSafe.Lock;
     try
       inc(fContext.SessionSequence);
-      result := fContext.SessionSequence;
+      inc(result, fContext.SessionSequence); // inc() to circumvent Delphi hint
       cc.head.session := result;
       fAes.Reset(@cc.head.session, 12); // IV should be unique, not random
       fAes.Add_AAD(@cc.head.session, 3 * SizeOf(cardinal));
