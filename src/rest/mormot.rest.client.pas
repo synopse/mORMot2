@@ -1699,9 +1699,9 @@ class procedure TRestClientRoutingRest.ClientSideInvoke(var uri: RawUtf8;
   out sent, head: RawUtf8);
 begin
   if clientDrivenID <> '' then
-    uri := uri + '.' + method + '/' + clientDrivenID
+    Append(uri, ['.', method, '/', clientDrivenID])
   else
-    uri := uri + '.' + method;
+    Append(uri, '.', method);
   if (csiAsOctetStream in ctxt) and
      (params <> '') then
     if PCardinalArray(params)[0] = JSON_BIN_MAGIC_C then
@@ -1719,7 +1719,7 @@ begin
         exit;
       end;
     end;
-  sent := '[' + params + ']'; // we may also encode them within the URI
+  Make(['[', params, ']'], sent); // we may also encode them within the URI
 end;
 
 
@@ -1729,11 +1729,11 @@ class procedure TRestClientRoutingJsonRpc.ClientSideInvoke(var uri: RawUtf8;
   ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
   out sent, head: RawUtf8);
 begin
-  sent := '{"method":"' + method + '","params":[' + params;
+  Make(['{"method":"', method, '","params":[', params], sent);
   if clientDrivenID = '' then
-    sent := sent + ']}'
+    Append(sent, ']}')
   else
-    sent := sent + '],"id":' + clientDrivenID + '}';
+    Append(sent, ['],"id":', clientDrivenID, '}']);
 end;
 
 
@@ -1850,7 +1850,7 @@ begin
   fSafe.Lock;
   try
     if length(List) >= Count then
-      SetLength(List, Count + 32);
+      SetLength(List, NextGrow(Count));
     with List[Count] do
     begin
       ID := aID;
@@ -2647,7 +2647,7 @@ begin
   begin
     url := fModel.GetUriCallBack(aMethodName, aTable, aID);
     if high(aNameValueParameters) > 0 then
-      url := url + UrlEncode(aNameValueParameters);
+      Append(url, UrlEncode(aNameValueParameters));
     log := fLogClass.Enter('CallBackGet %', [url], self);
     result := Uri(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
