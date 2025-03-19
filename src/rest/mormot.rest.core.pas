@@ -3872,10 +3872,13 @@ begin
 end;
 
 procedure TRestUriContext.SetOutCookie(const aName, aValue: RawUtf8);
+var
+  n: RawUtf8;
 begin
-  if not PropNameValid(pointer(aName)) then
+  n := StringReplaceChars(aName, '/', '_'); // TOrmModel.Root did allow '/'
+  if not PropNameValid(pointer(n)) then
      ERestException.RaiseUtf8('%.SetOutCookie(%): invalid name', [self, aName]);
-  SetOutSetCookie(Concat([aName, '=', aValue]));
+  SetOutSetCookie(Concat([n, '=', aValue]));
 end;
 
 procedure TRestUriContext.OutHeadFromCookie;
