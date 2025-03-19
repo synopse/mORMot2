@@ -3869,7 +3869,7 @@ begin
   for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
   begin
-    InterfaceDotMethodName := fInterfaceUri + '.' + URI;
+    Concat([fInterfaceUri, '.', URI], InterfaceDotMethodName);
     IsInherited := HierarchyLevel <> fAddMethodsLevel;
     ExecutionMethodIndex := m + RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
@@ -4350,7 +4350,7 @@ begin
     if result = '' then
       result := fInterfaceName
     else
-      result := fInterfaceName + '.' + result;
+      result := Concat([fInterfaceName, '.', result]);
   end;
 end;
 
@@ -5502,7 +5502,7 @@ begin
     isUndefined:
       ; // do not overwrite Values for weak rules like ExpectsCount/ExpectsTrace
     isReturns:
-      r^.Values := '[' + aValues + ']';
+      Concat(['[', aValues, ']'], r^.Values);
     isFails:
       FormatUtf8('% returned error: %', [Sender, aValues], r^.Values);
   else

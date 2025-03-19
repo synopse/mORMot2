@@ -2276,7 +2276,7 @@ end;
 function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
 begin
   result := false;
-  folder := EnsureDirectoryExists(parent + sub);
+  folder := EnsureDirectoryExists(Concat([parent, sub]));
   if folder = '' then
     exit;
   if FileIsWritable(folder) then
@@ -2364,7 +2364,7 @@ begin
           if (PosEx('-----BEGIN', files[f]) <> 0) and
              IsAnsiCompatible(files[f]) and
              (PosEx(files[f], result) = 0) then // append PEM files once
-            result := result + #10 + files[f];
+            result := Concat([result, #10, files[f]]);
       end;
   end;
 end;
@@ -2538,7 +2538,7 @@ var
   begin
     // read all the file or directory names of this folder
     subcount := 0;
-    addedpath := root + subpath;
+    Concat([root, subpath], RawUtf8(addedpath));
     dir := FpOpendir(pointer(addedpath)); // faster than FindFirst()
     if dir = nil then
       exit;
@@ -4507,12 +4507,12 @@ begin
        not IdemPChar(pointer(SR.Name), 'DOCKER') and
        SearchRecValidFolder(SR) then
     begin
-      fn := '/sys/class/net/' + SR.Name;
-      f := StringFromFileNoSize(fn + '/flags');
+      Concat(['/sys/class/net/', SR.Name], RawUtf8(fn));
+      f := StringFromFileNoSize(Concat([fn, '/flags']));
       if (length(f) > 2) and // e.g. '0x40' or '0x1043'
          (ParseHex0x(pointer(f)) and {IFF_LOOPBACK:}8 = 0) then
       begin
-        f := TrimU(StringFromFileNoSize(fn + '/address'));
+        f := TrimU(StringFromFileNoSize(Concat([fn, '/address'])));
         if f <> '' then
           _AddRawUtf8(result, f);
       end;
@@ -4538,31 +4538,31 @@ var
 {$endif OSLINUX}
 begin
   {$ifdef OSLINUX}
-  txt := TrimU(LoadProcFileTrimed('/sys/class/dmi/id/sys_vendor') + ' ' +
-               LoadProcFileTrimed('/sys/class/dmi/id/product_name'));
+  txt := TrimU(Concat([LoadProcFileTrimed('/sys/class/dmi/id/sys_vendor'),
+                  ' ', LoadProcFileTrimed('/sys/class/dmi/id/product_name')]));
   if txt <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
     LoadProcFileTrimed('/sys/class/dmi/id/product_version', prod);
     if prod <> '' then
-      txt := txt + ' ' + prod;
+      txt := Concat([txt, ' ', prod]);
   end
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     LoadProcFileTrimed('/proc/device-tree/model', txt);
   {$else}
-  txt := TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
-                       GetSystemProperty('ro.product.name') + ' ' +
-                       GetSystemProperty('ro.product.device')));
+  txt := TrimU(Concat([GetSystemProperty('ro.product.brand'), ' ',
+                       GetSystemProperty('ro.product.name'), ' ',
+                       GetSystemProperty('ro.product.device')])));
   {$endif OSLINUX}
   if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
       txt := __BiosInfoHardwareFromCpuInfo
     else
-      txt := txt + ' (' + __BiosInfoHardwareFromCpuInfo + ')'
+      txt := Concat([txt, ' (', __BiosInfoHardwareFromCpuInfo, ')'])
   else if txt = '' then
     {$ifdef CPUARM3264}
     if CpuArmModel <> '' then
-      txt := 'Unamed ' + CpuArmModel + ' system'
+      Concat(['Unamed ', CpuArmModel, ' system'], txt)
     else
     {$endif CPUARM3264}
       txt := 'Generic ' + CPU_ARCH_TEXT + ' system';
@@ -4741,7 +4741,7 @@ begin
        (FindNext(SR) = 0) then
       release := SR.Name;
     release := Split(release, '-');
-    dist := Split(StringFromFileNoSize('/etc/' + SR.Name), #10);
+    dist := Split(StringFromFileNoSize(Concat(['/etc/', SR.Name])), #10);
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then
@@ -4863,9 +4863,9 @@ begin
   SystemInfo.uts.sysname := uts.SysName;
   SystemInfo.uts.version := uts.Version;
   SystemInfo.uts.nodename := uts.NodeName;
-  OSVersionText := SystemInfo.uts.sysname + ' ' + SystemInfo.uts.release;
+  OSVersionText := Concat([SystemInfo.uts.sysname, ' ', SystemInfo.uts.release]);
   if SystemInfo.release <> '' then
-    OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
+    OSVersionText := Concat([SystemInfo.release, ' - ', OSVersionText]);
   P := @uts.release[0];
   KernelRevision := _GetNextCardinal(P) shl 16 +
                     _GetNextCardinal(P) shl 8 +
@@ -4873,7 +4873,7 @@ begin
   OSVersion32.os := OS_KIND;
   MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
   {$ifdef OSANDROID}
-  OSVersionText := 'Android (' + OSVersionText + ')';
+  OSVersionText := Concat(['Android (', OSVersionText, ')']);
   {$else}
   {$ifdef OSLINUX}
   if SystemInfo.dwNumberOfProcessors = 0 then // e.g. QEMU limited /proc/cpuinfo
@@ -4900,7 +4900,7 @@ begin
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif NODIRECTTHREADMANAGER}
   {$ifdef OSDARWIN}
-  OSVersionText := ToText(OSVersion32) + ' (' + OSVersionText + ')';
+  OSVersionText := Concat([ToText(OSVersion32), ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and

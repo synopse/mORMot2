@@ -3282,10 +3282,10 @@ begin
   op := @SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]];
   if tok = sctNot then
     // inner parenth for '!(..)'
-    u := op^ + '(' + l + ')'
+    Concat([op^, '(', l, ')'], u)
   else
     // e.g. '(Member_of{SID(BA)})'
-    u := '(' + op^ + l + ')';
+    Concat(['(', op^, l, ')'], u);
   FastAssignNew(l); // release param
 end;
 
@@ -3300,13 +3300,13 @@ begin
     if (r <> '') and
        (r[1] <> '{') then
       // e.g. '(@User.Project Any_of @Resource.Project)'
-      u := '(' + l + ' ' + op^ + ' ' + r + ')'
+      Concat(['(', l, ' ', op^, ' ', r, ')'], u)
     else
       // e.g. '(@Resource.dept Any_of{"Sales","HR"})'
-      u := '(' + l + ' ' + op^ + r + ')'
+      Concat(['(', l, ' ', op^, r, ')'], u)
   else
     // e.g. '(Title=="VP")'
-    u := '(' + l + op^ + r + ')';
+    Concat(['(', l, op^, r, ')'], u);
   FastAssignNew(l); // release params
   FastAssignNew(r);
 end;
@@ -5289,7 +5289,7 @@ var
   name, domain: RawUtf8;
 begin
   if LookupToken(tok, name, domain, server) then
-    result := domain + '\' + name
+    Concat([domain, '\', name], result)
   else
     result := '';
 end;

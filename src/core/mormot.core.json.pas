@@ -4441,7 +4441,7 @@ begin
             break;
           end
           else
-            objPath := objPath + objName + '.';
+            Append(objPath, objName, '.');
         until false;
       end;
     until PropPath = nil;

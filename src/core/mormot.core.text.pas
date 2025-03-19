@@ -3212,18 +3212,18 @@ begin
       while (j + 1 < BitsCount) and
             GetBitPtr(@Bits, j + 1) do
         inc(j);
-      result := result + UInt32ToUtf8(i + 1);
+      Append(result, UInt32ToUtf8(i + 1));
       if j = i then
-        result := result + ','
+        AppendShortToUtf8(',', result)
       else if j = i + 1 then
-        result := result + ',' + UInt32ToUtf8(j + 1) + ','
+        Append(result, [',', j + 1, ','])
       else
-        result := result + '-' + UInt32ToUtf8(j + 1) + ',';
+        Append(result, ['-', j + 1, ',']);
       i := j + 1;
     end
     else
       inc(i);
-  result := result + '0'; // '0' marks end of list
+  AppendShortToUtf8('0', result); // '0' marks end of list
 end;
 
 function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar): PtrUInt;
@@ -3595,7 +3595,7 @@ begin
   begin
     GetNextItem(Csv, Sep, s);
     if s <> '' then
-      result := result + ',' + Prefix + s;
+      Append(result, [',', Prefix, s]);
   end;
 end;
 

@@ -1886,8 +1886,8 @@ begin
   if (aFileName = '') or
      (aLine = '') then
     exit;
-  FormatUtf8(CRLF + '% %',
-    [NowToString(true, ' ', aUtcTimeStamp), TrimControlChars(aLine)], line);
+  Concat([
+    NowToString(true, ' ', aUtcTimeStamp), ' ', TrimControlChars(aLine)], line);
   AppendToTextFileSafe.Lock;
   try
     AppendToFile(line, aFileName, aMaxSize);

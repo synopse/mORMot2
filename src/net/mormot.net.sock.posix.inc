@@ -677,9 +677,9 @@ var
 begin
   // see https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
   Concat(['/sys/class/net/', a.Name, '/'], sysfs);
-  a.FriendlyName := TrimU(StringFromFileNoSize(sysfs + 'ifalias'));
-  a.Speed := GetCardinal(pointer(StringFromFileNoSize(sysfs + 'speed')));
-  a.Mtu := GetCardinal(pointer(StringFromFileNoSize(sysfs + 'mtu')));
+  a.FriendlyName := TrimU(StringFromFileNoSize(Concat([sysfs, 'ifalias'])));
+  a.Speed := GetCardinal(pointer(StringFromFileNoSize(Concat([sysfs, 'speed']))));
+  a.Mtu := GetCardinal(pointer(StringFromFileNoSize(Concat([sysfs, 'mtu']))));
   // we retrieve the gateway from /proc/net/route
   l := length(a.Name);
   p := pointer(StringFromFileNoSize('/proc/net/route'));
@@ -976,11 +976,11 @@ begin
          SearchRecValidFolder(SR) then
       begin
         fn := '/sys/class/net/' + SR.Name;
-        f := StringFromFileNoSize(fn + '/flags');
+        f := StringFromFileNoSize(Concat([fn, '/flags']));
         if (length(f) > 2) and // e.g. '0x40' or '0x1043'
            (ParseHex0x(pointer(f)) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then
         begin
-          f := TrimU(StringFromFileNoSize(fn + '/address'));
+          f := TrimU(StringFromFileNoSize(Concat([fn, '/address'])));
           if f <> '' then
           begin
             SetLength(result, n + 1);

@@ -4044,7 +4044,7 @@ begin
   if FindSectionFirstLine(P, UpperSection) then
     ReplaceSection(P, Content, NewSectionContent)
   else
-    Content := Content + '[' + SectionName + ']'#13#10 + NewSectionContent;
+    Append(Content, ['[', SectionName, ']'#13#10, NewSectionContent]);
 end;
 
 function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
@@ -4196,14 +4196,14 @@ begin
        Content, Value, V, P, @UpperName, UpperNameLength) then
       exit;
   // 2. section or Name= entry not found: add Name=Value
-  V := Name + '=' + V;
+  V := Concat([Name, '=', V]);
   if not SectionFound then
     // create not existing [Section]
-    V := '[' + Section + (']' + CRLF) + V;
+    V := Concat(['[', Section, (']' + CRLF), V]);
   // insert Name=Value at P^ (end of file or end of [Section])
   if P = nil then
     // insert at end of file
-    Content := Content + V
+    Append(Content, V)
   else
   begin
     // insert at end of [Section]
@@ -4269,7 +4269,7 @@ begin
         if Level = 0 then
           n := p^.Name
         else
-          n := SectionName + '.' + p^.Name;
+          Concat([SectionName, '.', p^.Name], n);
         if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n,
               DocVariantOptions, Level + 1) then
           result := true;
@@ -4378,7 +4378,7 @@ begin
           if Level = 0 then
             n := p^.Name
           else
-            n := SectionName + '.' + p^.Name;
+            Concat([SectionName, '.', p^.Name], n);
           s := ObjectToIni(p^.Prop^.GetObjProp(Instance), n, Options, Level + 1);
           if s <> '' then
             AddRawUtf8(nested, nestedcount, s);
@@ -11274,7 +11274,7 @@ begin
     // parse static..<param1>..static..<param2>..static into static/param nodes
     repeat
       GetNextItem(u, '<', item);
-      full := full + item;
+      Append(full, item);
       result := Insert(full) as TRadixTreeNodeParams; // static (Names = nil)
       if u = nil then
         break;
@@ -11298,7 +11298,7 @@ begin
         ERadixTree.RaiseUtf8('Duplicated <%> in %.Setup(''%'')',
           [item, self, aFromUri]);
       AddRawUtf8(aNames, item);
-      full := full + '<' + item + '>'; // avoid name collision with static
+      Append(full, ['<', item, '>']); // avoid name collision with static
       result := Insert(full) as TRadixTreeNodeParams; // param (Names <> nil)
       result.Names := copy(aNames); // each node has its own Names copy
       result.Flags := flags;

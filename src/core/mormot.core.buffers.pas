@@ -8295,7 +8295,7 @@ function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 begin
   if (URI <> '') and
      (Uri[length(URI)] <> '/') then
-    result := URI + '/'
+    Concat([URI, '/'], RawUtf8(result))
   else
     result := URI;
 end;
@@ -11578,7 +11578,7 @@ begin
   for e := succ(low(e)) to high(e) do
   begin
     LowerCaseSelf(EMOJI_TEXT[e]);
-    EMOJI_TAG[e] := ':' + EMOJI_TEXT[e] + ':';
+    Concat([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
     SetLength(EMOJI_UTF8[e], 4); // order matches U+1F600 to U+1F64F codepoints
     Ucs4ToUtf8(ord(e) + $1f5ff, pointer(EMOJI_UTF8[e]));
   end;
