@@ -554,10 +554,12 @@ type
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate);
       {$ifdef HASINLINE}inline;{$endif}
-    /// convert the stored time into a timestamped local file name
+    /// convert the stored date and time into a timestamped local file name
     // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits,
     // expecting a date > 1999 (a current date would be fine)
     procedure ToFileShort(out result: TShort16);
+    /// convert the stored date and time into e.g. '19 Mar 2025, 13:56:52'
+    procedure ToHuman(var Text: RawUtf8);
     /// fill the DayOfWeek field from the stored Year/Month/Day
     // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
@@ -611,6 +613,9 @@ function DaysInMonth(Date: TDateTime): cardinal; overload;
 // ready to be displayed
 function NowToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' ';
   UtcDate: boolean = false): RawUtf8;
+
+/// retrieve the current local Date, e.g. as '19 Mar 2025, 13:56:52'
+function NowToHuman(UtcDate: boolean = false; WithMS: boolean = false): RawUtf8;
 
 /// retrieve the current UTC Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -2714,6 +2719,14 @@ begin
   PWord(@result[11])^ := tab[Second];
 end;
 
+procedure TSynSystemTime.ToHuman(var Text: RawUtf8);
+begin
+  FormatUtf8('% % %, %:%:%', [
+    SmallUInt32Utf8[Day], HTML_MONTH_NAMES[Month], UInt4DigitsToShort(Year),
+    UInt2DigitsToShortFast(Hour), UInt2DigitsToShortFast(Minute),
+    UInt2DigitsToShortFast(Second)], Text);
+end;
+
 procedure TSynSystemTime.ComputeDayOfWeek;
 begin
   PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
@@ -2790,6 +2803,14 @@ begin
   else
     bits.FromNow;
   result := bits.Text(Expanded, FirstTimeChar);
+end;
+
+function NowToHuman(UtcDate, WithMS: boolean): RawUtf8;
+var
+  T: TSynSystemTime;
+begin
+  T.FromNow(not UtcDate);
+  T.ToHuman(result);
 end;
 
 function NowUtcToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUtf8;

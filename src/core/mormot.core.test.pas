@@ -1470,7 +1470,7 @@ begin
       [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
   FormatUtf8(CRLF + CRLF + 'Time elapsed for all tests: %' + CRLF +
     'Performed % by % on %',
-    [RunTimer.Stop, NowToString, Executable.User, Executable.Host], Elapsed);
+    [RunTimer.Stop, NowToHuman, Executable.User, Executable.Host], Elapsed);
   DoTextLn([CRLF, Version, CustomVersions, CRLF +'Generated with: ',
     COMPILER_VERSION, ' ' + OS_TEXT + ' compiler', Elapsed]);
   if result then
