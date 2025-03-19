@@ -3872,7 +3872,7 @@ end;
 
 procedure TRestUriContext.SetOutCookie(const aName, aValue: RawUtf8);
 begin
-  SetOutSetCookie(Make([aName, '=', aValue]));
+  SetOutSetCookie(Concat([aName, '=', aValue]));
 end;
 
 procedure TRestUriContext.OutHeadFromCookie;

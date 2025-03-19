@@ -1659,8 +1659,8 @@ begin
     'ip',        fRemoteIP,
     'useragent', fRemoteUserAgent], context, {dontadddef=}true);
   if roDefaultErrorContext in fApplication.fRenderOptions then
-    details := Make([fApplication.fFactory.InterfaceName, ' ', NowToString,
-      ' ', fRemoteIP, ' ', fRemoteUserAgent])
+    Concat([fApplication.fFactory.InterfaceName, ' ', NowToString,
+      ' ', fRemoteIP, ' ', fRemoteUserAgent], details)
   else
     details := JsonReformat(VariantSaveJson(context));
   _ObjAddPropU('originalErrorContext', details, context);
@@ -1981,7 +1981,7 @@ function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
   const aFileContent: RawByteString): RawByteString;
 begin
   if aFileContent <> '' then
-    result := Make([GetMimeContentType(aFileContent, aFileName),
+    result := Concat([GetMimeContentType(aFileContent, aFileName),
       #10, aFileContent]) // also cache content-type
   else
     result := '';
@@ -2258,7 +2258,7 @@ doInput:    if fInput = '' then
         rootCache:
           if fOutput.Status = HTTP_SUCCESS then
           begin
-            Make([fOutput.Header, #0, fOutput.Content], RootValue);
+            Concat([fOutput.Header, #0, fOutput.Content], RootValue);
             RootValueExpirationTime := fCacheCurrentSec;
           end
           else
@@ -2266,7 +2266,7 @@ doInput:    if fInput = '' then
         inputCache:
           if fOutput.Status = HTTP_SUCCESS then
             InputValues.Add(fCacheCurrentInputValueKey,
-              Make([fOutput.Header, #0, fOutput.Content]), fCacheCurrentSec)
+              Concat([fOutput.Header, #0, fOutput.Content]), fCacheCurrentSec)
           else
             InputValues.Add(fCacheCurrentInputValueKey, '');
       end;

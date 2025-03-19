@@ -7629,7 +7629,7 @@ begin
         else
           for altern := 1 to fProperties.StatementCacheReplicates do
           begin
-            cachedsql := Make([aSql, #0, altern]); // not valid SQL
+            Make([aSql, #0, altern], cachedsql); // not valid SQL
             ndx := fCache.IndexOf(cachedsql);
             if ndx >= 0 then
             begin

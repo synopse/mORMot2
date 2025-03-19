@@ -1995,7 +1995,7 @@ begin
   begin
     // compute multipart content type with the main random boundary
     fBound := MultiPartFormDataNewBound(fBounds);
-    fMultipartContentType  := NetConcat(['multipart/form-data; boundary=', fBound]);
+    Concat(['multipart/form-data; boundary=', fBound], fMultipartContentType);
   end;
   if filename = '' then
     // simple form field
@@ -3946,7 +3946,7 @@ begin
     // common headers
     InternalAddHeader(InHeader);
     if InDataType <> '' then
-      InternalAddHeader(NetConcat(['Content-Type: ', InDataType]));
+      InternalAddHeader(Concat(['Content-Type: ', InDataType]));
     // handle custom compression
     aData := InData;
     if integer(fCompressAcceptHeader) <> 0 then
@@ -3954,7 +3954,7 @@ begin
       CompressContent(fCompressAcceptHeader, fCompress, InDataType,
         aData, aDataEncoding);
       if aDataEncoding <> '' then
-        InternalAddHeader(NetConcat(['Content-Encoding: ', aDataEncoding]));
+        InternalAddHeader(Concat(['Content-Encoding: ', aDataEncoding]));
     end;
     if fCompressAcceptEncoding <> '' then
       InternalAddHeader(fCompressAcceptEncoding);
@@ -5708,7 +5708,7 @@ begin
         rec := '<' + rec + '>';
       Exec('RCPT TO:' + rec, '25');
       if {%H-}ToList = '' then
-        ToList := NetConcat([#13#10'To: ', rec])
+        Concat([#13#10'To: ', rec], ToList)
       else
         Append(ToList, ', ', rec);
     until P = nil;

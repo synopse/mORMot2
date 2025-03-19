@@ -676,7 +676,7 @@ var
   ip: cardinal;
 begin
   // see https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
-  sysfs := NetConcat(['/sys/class/net/', a.Name, '/']);
+  Concat(['/sys/class/net/', a.Name, '/'], sysfs);
   a.FriendlyName := TrimU(StringFromFileNoSize(sysfs + 'ifalias'));
   a.Speed := GetCardinal(pointer(StringFromFileNoSize(sysfs + 'speed')));
   a.Mtu := GetCardinal(pointer(StringFromFileNoSize(sysfs + 'mtu')));

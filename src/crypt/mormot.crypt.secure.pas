@@ -4837,7 +4837,7 @@ procedure BasicClient(const UserName: RawUtf8; const Password: SpiUtf8;
 var
   ha: RawUtf8;
 begin
-  Make([UserName, ':', Password], ha);
+  Concat([UserName, ':', Password], ha);
   Result := BinToBase64(ha, Prefix, '', false);
   FillZero(ha);
 end;

@@ -1642,9 +1642,6 @@ function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 /// parse a text input buffer until the end space or EOL
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
-/// RawUtf8-ready result := v + v + ... concatenation (safer and faster on FPC)
-function NetConcat(const v: array of RawUtf8): RawUtf8;
-
 /// IdemPChar() like function, to avoid linking mormot.core.text
 function NetStartWith(p, up: PUtf8Char): boolean;
 
@@ -3790,9 +3787,9 @@ begin
       with addr[i] do
         if Address <> '' then
         begin
-          w := NetConcat([w, Name, '=', Address, ' ']);
+          w := Concat([w, Name, '=', Address, ' ']);
           if Kind <> makSoftware then
-            wo := NetConcat([wo, Address, ' ']);
+            wo := Concat([wo, Address, ' ']);
         end;
     FakeLength(w, length(w) - 1); // trim ending spaces
     FakeLength(wo, length(wo) - 1);
@@ -4945,24 +4942,6 @@ begin
   FastSetString(result, S, P - S);
 end;
 
-function NetConcat(const v: array of RawUtf8): RawUtf8;
-var
-  l, i: PtrInt;
-  p: PUtf8Char;
-begin
-  l := 0;
-  for i := 0 to high(v) do
-    inc(l, length(v[i]));
-  FastSetString(result, l);
-  p := pointer(result);
-  for i := 0 to high(v) do
-  begin
-    l := length(v[i]);
-    MoveFast(pointer(v[i])^, p^, l);
-    inc(p, l);
-  end;
-end;
-
 procedure DoEncode(rp, sp, b64: PAnsiChar; len: cardinal);
 var
   i, c, by3: cardinal;
@@ -5181,19 +5160,19 @@ end;
 
 function TUri.URI: RawUtf8;
 begin
-  result := NetConcat([ServerPort, Address]);
+  Concat([ServerPort, Address], result);
 end;
 
 function TUri.ServerPort: RawUtf8;
 begin
   if layer = nlUnix then
-    result := NetConcat(['http://unix:', Server, ':/'])
+    Concat(['http://unix:', Server, ':/'], result)
   else if (Port = '') or
           (Port = '0') or
           (Port = DEFAULT_PORT[Https]) then
-    result := NetConcat([HTTPS_TEXT[Https], Server, '/'])
+    Concat([HTTPS_TEXT[Https], Server, '/'], result)
   else
-    result := NetConcat([HTTPS_TEXT[Https], Server, ':', Port, '/']);
+    Concat([HTTPS_TEXT[Https], Server, ':', Port, '/'], result);
 end;
 
 function TUri.PortInt: TNetPort;
@@ -5224,7 +5203,7 @@ begin
   if User = '' then
     result := ''
   else
-    result := NetBinToBase64(NetConcat([User, ':', Password]));
+    result := NetBinToBase64(Concat([User, ':', Password]));
 end;
 
 

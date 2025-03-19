@@ -2642,7 +2642,7 @@ begin
   if DistinguishedName <> nil then
     DistinguishedName^ := domain;
   if Spn <> nil then
-    Spn^ := NetConcat(['LDAP/', Split(result, ':'), '@', UpperCase(domain)]);
+    Concat(['LDAP/', Split(result, ':'), '@', UpperCase(domain)], Spn^);
 end;
 
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer;
@@ -3363,7 +3363,7 @@ var
   u8: SpiUtf8;
 begin
   try
-    u8 := NetConcat(['"', aPassword, '"']);
+    u8 := Concat(['"', aPassword, '"']);
     result := Utf8DecodeToUnicodeRawByteString(u8);
   finally
     FillZero(u8);
@@ -5193,11 +5193,11 @@ begin
   if (self = nil) or
      (fTargetHost = '') then
     exit;
-  result := NetConcat([LDAP_DEFAULT_SCHEME[fTls], fTargetHost]);
+  Concat([LDAP_DEFAULT_SCHEME[fTls], fTargetHost], result);
   if fTargetPort <> LDAP_DEFAULT_PORT[fTls] then
-    result := NetConcat([result, ':', fTargetPort]);
+    Append(result, ':', fTargetPort);
   if fKerberosDN <> '' then
-    result := NetConcat([result, '/', fKerberosDN]);
+    Append(result, '/', fKerberosDN);
 end;
 
 procedure TLdapClientSettings.SetTargetUri(const uri: RawUtf8);
@@ -5422,7 +5422,7 @@ begin
     end
   else
     // try the LDAP server as specified in TLdapClient settings
-    AddRawUtf8(dc, NetConcat([fSettings.TargetHost, ':', fSettings.TargetPort]));
+    AddRawUtf8(dc, Concat([fSettings.TargetHost, ':', fSettings.TargetPort]));
   fSeq := 0;
   for i := 0 to high(dc) do
     try
@@ -6910,8 +6910,8 @@ begin
   if not Connected or
      not LdapEscapeName(ComputerName, cSafe) then
     exit;
-  cDn := NormalizeDN(NetConcat(['CN=', cSafe, ',', ComputerParentDN]));
-  cSam := NetConcat([UpperCase(cSafe), '$']); // traditional upper with ending $
+  cDn := NormalizeDN(Concat(['CN=', cSafe, ',', ComputerParentDN]));
+  cSam := Concat([UpperCase(cSafe), '$']); // traditional upper with ending $
   // Search Computer object in the domain
   cExisting := SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [cSam]);
   // If the search failed, we exit with the error message
@@ -7613,9 +7613,9 @@ begin
   u := aUser;
   if PosExChar('@', u) = 0 then
     if fLdapSettings.KerberosDN = '' then
-      u := NetConcat([u, '@', fRealm])
+      Append(u, '@', fRealm)
     else
-      u := NetConcat([u, '@', fLdapSettings.KerberosDN]);
+      Append(u, '@', fLdapSettings.KerberosDN);
   // try to use those credentials to bind to the LDAP server
   client := TLdapClient.Create(fLdapSettings);
   try

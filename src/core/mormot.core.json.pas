@@ -11431,7 +11431,7 @@ begin
     end
   else
     // Value is a number or null/true/false: no TJsonWriter needed
-    Make(['{"', Name, '":', SQLValue, '}'], result);
+    Concat(['{"', Name, '":', SQLValue, '}'], result);
 end;
 
 procedure SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions;

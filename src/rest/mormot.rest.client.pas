@@ -1342,7 +1342,7 @@ begin
   if aServerNonce = '' then
     exit;
   SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
-  Make([CardinalToHexShort(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
+  Concat([CardinalToHex(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
     aClientNonce); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [
     'username',   User.LogonName,
@@ -1719,7 +1719,7 @@ begin
         exit;
       end;
     end;
-  Make(['[', params, ']'], sent); // we may also encode them within the URI
+  Concat(['[', params, ']'], sent); // we may also encode them within the URI
 end;
 
 
@@ -1729,7 +1729,7 @@ class procedure TRestClientRoutingJsonRpc.ClientSideInvoke(var uri: RawUtf8;
   ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
   out sent, head: RawUtf8);
 begin
-  Make(['{"method":"', method, '","params":[', params], sent);
+  Concat(['{"method":"', method, '","params":[', params], sent);
   if clientDrivenID = '' then
     Append(sent, ']}')
   else
