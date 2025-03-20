@@ -4326,6 +4326,10 @@ type
     /// reset the internal DataString content and the current position
     procedure Clear;
       {$ifdef HASINLINE}inline;{$endif}
+    /// will ensure that the DataString storage is a RawUtf8 with CP_UTF8
+    // - is called e.g. from TTextWriter.FlushFinal
+    procedure EnsureDataStringIsUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct low-level access to the internal RawByteString storage
     property DataString: RawByteString
       read fDataString write fDataString;
@@ -13069,10 +13073,15 @@ begin
   end;
 end;
 
+procedure TRawByteStringStream.EnsureDataStringIsUtf8;
+begin
+  EnsureRawUtf8(fDataString);
+end;
+
 procedure TRawByteStringStream.Clear;
 begin
   fPosition := 0;
-  fDataString := '';
+  FastAssignNew(fDataString);
 end;
 
 

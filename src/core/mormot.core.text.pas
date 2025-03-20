@@ -4251,6 +4251,10 @@ begin // don't mess with twoFlushToStreamNoAutoResize: it may not be final
   if len > 0 then
     WriteToStream(fTempBuf, len);
   B := fTempBuf - 1;
+  {$ifdef HASCODEPAGE}
+  if twoStreamIsRawByteString in fCustomOptions then
+    TRawByteStringStream(fStream).EnsureDataStringIsUtf8;
+  {$endif HASCODEPAGE}
 end;
 
 procedure TTextWriter.FlushToStream;
