@@ -6278,7 +6278,8 @@ procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 var
   res: TNetResult;
 begin
-  if not TrySndLow(P, Len, @res) then
+  if (Len <> 0) and
+     not TrySndLow(P, Len, @res) then
     raise ENetSock.CreateLastError('%s.SndLow(%s) len=%d',
       [ClassNameShort(self)^, fServer, Len], res);
 end;
@@ -6295,12 +6296,17 @@ var
   events: TNetEvents;
   res: TNetResult;
 begin
-  if Len = 0 then
+  if fAborted then
+    res := nrClosed
+  else if Len = 0 then
     res := nrOk
-  else if SockIsDefined and
-          (Len > 0) and
-          (P <> nil) and
-          not fAborted then
+  else if not SockIsDefined then
+    res := nrNoSocket
+  else if (Len < 0) or
+          (P = nil) then
+   res := nrInvalidParameter
+  else
+  begin
     repeat
       sent := Len;
       if fSecure <> nil then
@@ -6312,30 +6318,26 @@ begin
         inc(fBytesOut, sent);
         dec(Len, sent);
         if Len <= 0 then
-          break; // data successfully sent
+          break; // all data successfully sent
         inc(PByte(P), sent);
-      end
-      else if not (res in [nrOK, nrRetry]) then
-        break; // fatal socket error
-      if fAborted then
+      end;
+      if fAborted or
+         not (res in [nrOk, nrRetry]) then
         break;
       events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
+      res := nrUnknownError;
       if neError in events then
-      begin
-        res := nrUnknownError;
-        break;
-      end
+        break
       else if neWrite in events then
         continue; // retry Send()
       if Assigned(OnLog) then
         OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
       res := nrTimeout;  // identify write timeout as error
       break;
-    until fAborted
-  else
-    res := nrInvalidParameter;
-  if fAborted then
-    res := nrClosed;
+    until fAborted;
+    if fAborted then
+      res := nrClosed;
+  end;
   if NetResult <> nil then
     NetResult^ := res; // always return a TNetResult
   result := (res = nrOK);
@@ -6387,30 +6389,36 @@ end;
 
 function TCrtSocketStream.Read(var Buffer; Count: Longint): Longint;
 begin
-  if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true, @fLastResult) then
-  begin
-    result := Count;
-    inc(fSize, Count);
-    fPosition := fSize;
-  end
-  else if fLastResult = nrRetry then
-    result := 0
+  if Count > 0 then
+    if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true, @fLastResult) then
+    begin
+      result := Count;
+      inc(fSize, Count);
+      fPosition := fSize;
+    end
+    else if fLastResult = nrRetry then
+      result := 0
+    else
+      result := -1 // fatal error
   else
-    result := -1; // fatal error
+    result := 0; // nothing to receive
 end;
 
 function TCrtSocketStream.Write(const Buffer; Count: Longint): Longint;
 begin
-  if fSocket.TrySndLow(@Buffer, Count, @fLastResult) then
-  begin
-    result := Count;
-    inc(fSize, Count);
-    fPosition := fSize;
-  end
-  else if fLastResult = nrRetry then
-    result := 0
+  if Count > 0 then
+    if fSocket.TrySndLow(@Buffer, Count, @fLastResult) then
+    begin
+      result := Count;
+      inc(fSize, Count);
+      fPosition := fSize;
+    end
+    else if fLastResult = nrRetry then
+      result := 0
+    else
+      result := -1 // fatal error, e.g. timeout
   else
-    result := -1; // fatal error, e.g. timeout
+    result := 0; // nothing to send
 end;
 
 
