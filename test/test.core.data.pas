@@ -1919,6 +1919,9 @@ var
         Check(AA[i, a] = AB[i, a]);
     end;
     J := DynArraySaveJson(AA, TypeInfo(TRawUtf8DynArrayDynArray));
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(J), CP_UTF8);
+    {$endif HASCODEPAGE}
     check(IsValidJson(J));
     Finalize(AB);
     Check(DynArrayLoadJsonInPlace(
@@ -2045,7 +2048,11 @@ var
       Check(JAV.C[3]._Kind = ord(dvObject));
       Check(JAV.C[3]._Count = 1);
       Check(JAV.C[3].Name(0) = 'four');
-      Check(VariantSaveJson(JAV.C[3].four) = '[1,2,3,4]');
+      U := VariantSaveJson(JAV.C[3].four);
+      {$ifdef HASCODEPAGE}
+      CheckEqual(GetCodePage(U), CP_UTF8);
+      {$endif HASCODEPAGE}
+      CheckEqual(U, '[1,2,3,4]');
       with DocVariantData(JAV.C[3])^ do
       begin
         Check(Kind = dvObject);
@@ -2216,6 +2223,9 @@ var
     Cache.Json := 'test';
     Cache.Tag := 12;
     U := RecordSaveJson(Cache, TypeInfo(TEntry));
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(U), CP_UTF8);
+    {$endif HASCODEPAGE}
     CheckEqual(U, '{"ID":10,"Timestamp512":200,"Tag":12,"Json":"test"}');
     check(IsValidJson(U));
     U := '{"ID":210,"Timestamp512":2200,"Json":"test2"}';
@@ -2258,6 +2268,7 @@ var
     FillCharFast(nrtti2, SizeOf(nrtti2), 0);
     Check(RecordLoadJsonInPlace(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
+    CheckEqual(GetCodePage(J), CP_UTF8);
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     nrtti.Number := 1;
     nrtti.StaticArray[1].Name := 'one';
@@ -3305,8 +3316,14 @@ begin
     TestTrans;
   end;
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   FileFromString(U, WorkDir + 'transactions.json');
   SaveJson(Trans, TypeInfo(TTestCustomJson2), [twoNonExpandedArrays], U);
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   TestTrans;
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2Title), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2), '');
@@ -3333,11 +3350,17 @@ begin
     Check(Disco.Releases[i].id > 0);
   TRttiJson(Parser).IncludeWriteOptions := [woHumanReadable];
   U := RecordSaveJson(Disco, TypeInfo(TTestCustomDiscogs));
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U));
   FileFromString(U, WorkDir + 'discoExtract.json');
   TRttiJson(Parser).IncludeWriteOptions := [];
   SaveJson(Disco, TypeInfo(TTestCustomDiscogs), [twoNonExpandedArrays], U);
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U)); 
   FileFromString(U, WorkDir + 'discoExtractNonExp.json');
@@ -3634,6 +3657,9 @@ begin
       Check(lennexp < length(people), 'notexpanded');
     end;
     NotifyTestSpeed('TOrmTableJson save', c, lennexp * ITER, @timer, ONLYLOG);
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(notexpanded), CP_UTF8);
+    {$endif HASCODEPAGE}
     // TOrmTableJson save in 104.15ms i.e. 15M/s, 828.1 MB/s
   finally
     table.Free;
@@ -3883,6 +3909,11 @@ begin
       j1 := JsonReformat(sample, jsonEscapeUnicode);
       j2 := JsonReformat(j1, jsonNoEscapeUnicode);
       j3 := JsonReformat(sample, jsonNoEscapeUnicode);
+      {$ifdef HASCODEPAGE}
+      CheckEqual(GetCodePage(j1), CP_UTF8);
+      CheckEqual(GetCodePage(j2), CP_UTF8);
+      CheckEqual(GetCodePage(j3), CP_UTF8);
+      {$endif HASCODEPAGE}
       //FileFromString(j0, WorkDir + 'sample0.json');
       //FileFromString(j1, WorkDir + 'sample1.json');
       //FileFromString(j2, WorkDir + 'sample2.json');
@@ -6153,6 +6184,9 @@ begin
   s := Doc.ToJson;
   CheckEqual(s, '{"ID":2,"Notation":"ABC","Price":10.1}');
   s := VariantSaveJson(V);
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(s), CP_UTF8);
+  {$endif HASCODEPAGE}
   CheckEqual(s, '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
   {$ifdef HASITERATORS}
   DoEnumerators;
@@ -6499,6 +6533,9 @@ begin
       if i >= 0 then
         SetBit(s, i);
       tmp := SaveJson(s, TypeInfo(TSynLogLevels), astext);
+      {$ifdef HASCODEPAGE}
+      CheckEqual(GetCodePage(tmp), CP_UTF8);
+      {$endif HASCODEPAGE}
       if astext then
         case i of
           -1:
@@ -6542,6 +6579,9 @@ begin
   u := GetSetName(TypeInfo(TEnumPetStore1Set), pss2, {trimmed=}true);
   CheckEqual(u, 'None,Available,Pending,Sold');
   u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(u), CP_UTF8);
+  {$endif HASCODEPAGE}
   CheckEqual(u, '15');
   u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set), {enumastext=}true);
   CheckEqual(u, '["*"]');
