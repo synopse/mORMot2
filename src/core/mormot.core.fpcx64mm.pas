@@ -2820,8 +2820,9 @@ begin
   result.CurrHeapFree := 0;
 end;
 
-function _GetHeapInfo: Utf8String; // mormot.core.log will use RawUtF8
+function _GetHeapInfo: Utf8String;
 begin
+  // RetrieveMemoryManagerInfo from mormot.core.log expects RawUtf8 as result
   result := GetHeapStatus(' - fpcx64mm: ', 16, 16, {flags=}true, {sameline=}true);
 end;
 

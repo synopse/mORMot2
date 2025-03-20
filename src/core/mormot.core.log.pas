@@ -3728,7 +3728,7 @@ begin
   with GetFPCHeapStatus do
     FormatUtf8(' - Heap: Current: used=% size=% free=%   Max: size=% used=%',
       [KBNoSpace(CurrHeapUsed), KBNoSpace(CurrHeapSize), KBNoSpace(CurrHeapFree),
-       KBNoSpace(MaxHeapSize), KBNoSpace(MaxHeapUsed)], result);
+       KBNoSpace(MaxHeapSize),  KBNoSpace(MaxHeapUsed)], result);
 end;
 {$else}
 function RetrieveMemoryManagerInfo: RawUtf8;
@@ -3740,8 +3740,9 @@ begin
          'Free=% FreeSmall=% FreeBig=% Unused=% Overheap=% ',
         [KBNoSpace(TotalAddrSpace), KBNoSpace(TotalUncommitted),
          KBNoSpace(TotalCommitted), KBNoSpace(TotalAllocated),
-         KBNoSpace(TotalFree), KBNoSpace(FreeSmall), KBNoSpace(FreeBig),
-         KBNoSpace(Unused), KBNoSpace(Overhead)], result)
+         KBNoSpace(TotalFree),      KBNoSpace(FreeSmall),
+         KBNoSpace(FreeBig),        KBNoSpace(Unused),
+         KBNoSpace(Overhead)], result)
     else
       result := '';
 end;
@@ -4032,7 +4033,7 @@ begin
   fExceptionIgnore := TSynList.Create;
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS,
                        sllError, sllFail, sllLastError, sllDDDError];
-  fLevelSysInfo := [sllException, sllExceptionOS, sllLastError];
+  fLevelSysInfo := [sllException, sllExceptionOS, sllLastError, sllNewRun];
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -5316,6 +5317,7 @@ end;
 
 procedure TSynLog.LogFileInit;
 begin
+  // setup proper timing for this log instance
   QueryPerformanceMicroSeconds(fStartTimestamp);
   if (fFileRotationSize > 0) or
      (fFileRotationDailyAtHourTix <> 0) then
@@ -5326,6 +5328,22 @@ begin
   else
     fStartTimestampDateTime := NowUtc;
   Include(fInternalFlags, logInitDone);
+  // append a sllNewRun line at the log file opening
+  LogCurrentTime;
+  if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
+    fWriter.AddInt18ToChars3(fThreadIndex);
+  fWriter.AddShorter(LOG_LEVEL_TEXT[sllNewRun]);
+  fWriter.AddString(Executable.ProgramName);
+  fWriter.AddDirect(' ');
+  if Executable.Version.Major <> 0 then
+    fWriter.AddNoJsonEscapeString(Executable.Version.Detailed)
+  else
+    fWriter.AddDateTime(@Executable.Version.BuildDateTime, ' ');
+  fWriter.AddDirect(' ');
+  fWriter.AddShort(ClassNameShort(self)^);
+  fWriter.AddShort(' ' + SYNOPSE_FRAMEWORK_VERSION);
+  AddSysInfo;
+  fWriterEcho.AddEndOfLine(sllNewRun);
 end;
 
 procedure TSynLog.LogFileHeader;
@@ -5482,7 +5500,7 @@ begin
        KBNoSpace(info.filetotal),     KBNoSpace(info.filefree),
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
   // include mormot.core.fpcx64mm raw information if available
-  fWriter.AddNoJsonEscapeUtf8(RetrieveMemoryManagerInfo);
+  fWriter.AddOnSameLine(pointer(RetrieveMemoryManagerInfo));
   fWriter.AddShorter('   ');
 end;
 
