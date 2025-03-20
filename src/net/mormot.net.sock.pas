@@ -1708,10 +1708,8 @@ type
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
     // updated by every SockSend() call
-    fSndBuf: RawByteString;
     fSndBufLen: integer;
-    // updated during UDP connection, accessed via PeerAddress/PeerPort
-    fPeerAddr: PNetAddr;
+    fSndBuf: RawByteString;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
@@ -1939,15 +1937,13 @@ type
     // a custom header value set by a local proxy as retrieved by inherited
     // THttpServerSocket.GetRequest, searching the header named in
     // THttpServerGeneric.RemoteIPHeader (e.g. 'X-Real-IP' for nginx)
+    // - with SocketLayer = nlUdp, InputSock will put here the 'ip:port' of the
+    // received packet during SocketIn^ process
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
     /// the full requested URI, as specified to OpenUri() constructor
     property OpenUriFull: RawUtf8
       read fOpenUriFull;
-    /// remote IP address of the last packet received (SocketLayer=slUDP only)
-    function PeerAddress(LocalAsVoid: boolean = false): RawUtf8;
-    /// remote IP port of the last packet received (SocketLayer=slUDP only)
-    function PeerPort: TNetPort;
     /// compute a TStream compatible class instance from this (secured) socket
     // - return nil if SockIsDefined is false, or a new TSocketStream instance
     // which should be owned and released by the caller, while keeping this
@@ -5739,8 +5735,6 @@ destructor TCrtSocket.Destroy;
 begin
   Close;
   CloseSockIn;
-  if fPeerAddr <> nil then
-    Dispose(fPeerAddr);
   inherited Destroy;
 end;
 
@@ -6363,22 +6357,6 @@ begin
   result := ResultClass.Create(Timeout);
   result.AcceptRequest(client, @addr);
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
-end;
-
-function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawUtf8;
-begin
-  if fPeerAddr = nil then
-    result := ''
-  else
-    fPeerAddr^.IP(result, LocalAsVoid);
-end;
-
-function TCrtSocket.PeerPort: TNetPort;
-begin
-  if fPeerAddr = nil then
-    result := 0
-  else
-    result := fPeerAddr^.Port;
 end;
 
 function TCrtSocket.AsSocketStream: TSocketStream;
