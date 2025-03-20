@@ -845,6 +845,9 @@ type
     /// for ordinal types, get the storage size and sign
     function RttiOrd: TRttiOrd;
       {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// for ordinal types, get the 64-bit integer value from text
+    // - supports integer numbers but also enums and sets as CSV text
+    function OrdFromText(const Text: RawUtf8; out Value: Int64): boolean;
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
     function IsQWord: boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif}
@@ -3967,6 +3970,26 @@ begin
   result := TRttiOrd(GetTypeData(@self)^.OrdType);
 end;
 
+function TRttiInfo.OrdFromText(const Text: RawUtf8; out Value: Int64): boolean;
+begin // caller should have verified that Kind in rkOrdinalTypes
+  result := false;
+  if ToInt64(Text, Value) or // ordinal field from number
+     (IsBoolean and  // also FPC rkBool
+      GetInt64Bool(pointer(Text), Value)) then // boolean from true/false/yes/no
+  else if Text= '' then
+    exit
+  else if Kind = rkEnumeration then // enumerate field from text
+  begin
+    Value := GetEnumNameValue(@self, Text, {trimlowcase=}true);
+    if Value < 0 then
+      exit; // not a text enum
+  end else if Kind = rkSet then
+    Value := GetSetCsvValue(@self, pointer(Text))
+  else
+    exit;
+  result := true;
+end;
+
 function TRttiInfo.IsCurrency: boolean;
 begin
   result := TRttiFloat(GetTypeData(@self)^.FloatType) = rfCurr;
@@ -4510,21 +4533,8 @@ begin
     exit;
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
-    if ToInt64(Value, v) or // ordinal field from number
-       (TypeInfo^.IsBoolean and  // also FPC rkBool
-        GetInt64Bool(pointer(Value), v)) then // boolean from true/false/yes/no
+    if TypeInfo^.OrdFromText(Value, v) then
       SetInt64Value(Instance, v)
-    else if Value = '' then
-      exit
-    else if k = rkEnumeration then // enumerate field from text
-    begin
-      v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
-      if v < 0 then
-        exit; // not a text enum
-      SetOrdProp(Instance, v);
-    end
-    else if k = rkSet then // set field from CSV text
-      SetOrdProp(Instance, GetSetCsvValue(TypeInfo, pointer(Value)))
     else
       exit
   else if k in rkStringTypes then
