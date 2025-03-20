@@ -585,7 +585,7 @@ type
     // - you can customize the default client timeouts by setting appropriate
     // aTimeout parameters (in ms) if you left the 0 default parameters,
     // it would use global HTTP_DEFAULT_RECEIVETIMEOUT variable values
-    constructor Create(aTimeOut: PtrInt = 0); override;
+    constructor Create(aTimeOut: integer = 0); override;
     /// finalize this instance
     destructor Destroy; override;
     /// constructor to create a client connection to a given URI
@@ -2616,7 +2616,7 @@ end;
 
 { THttpClientSocket }
 
-constructor THttpClientSocket.Create(aTimeOut: PtrInt);
+constructor THttpClientSocket.Create(aTimeOut: integer);
 begin
   if aTimeOut = 0 then
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;

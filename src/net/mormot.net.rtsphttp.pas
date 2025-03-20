@@ -270,7 +270,7 @@ begin
     try
       sock.AcceptRequest(aSocket, nil);
       aRemoteIp.IP(sock.fRemoteIP);
-      sock.CreateSockIn; // faster header process (released below once not needed)
+      sock.CreateSockIn; // faster header process (CloseSockIn below once done)
       parse := sock.GetRequest({withBody=}false, {headertix=}0);
       if (parse = grHeaderReceived) and
          (sock.URL <> '') then

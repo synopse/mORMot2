@@ -1703,8 +1703,7 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     fSecure: INetTls;
-    fTimeOut: PtrInt;
-    fSockInEofError: integer;
+    fTimeOut: integer;
     fWasBind, fAborted: boolean;
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
@@ -1738,7 +1737,7 @@ type
     // - if you call it directly, you can setup all the needed parameters (e.g.
     // TLS, Tunnel, THttpClientWebSockets.Settings) then call ConnectUri()
     // - see also Open/OpenUri/Bind other constructors
-    constructor Create(aTimeOut: PtrInt = 10000); reintroduce; virtual;
+    constructor Create(aTimeOut: integer = 10000); reintroduce; virtual;
     /// constructor to create a client connection to aServer:aPort
     // - see also SocketOpen() for a wrapper catching any connection exception
     // - aTunnel could be populated by mormot.net.client GetSystemProxyUri()
@@ -2024,7 +2023,7 @@ type
       read fProxyUrl;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
-    property TimeOut: PtrInt
+    property TimeOut: integer
       read fTimeOut;
     /// total bytes received
     property BytesIn: Int64
@@ -5227,7 +5226,7 @@ begin
   fSock.SetNoDelay(aTcpNoDelay);
 end;
 
-constructor TCrtSocket.Create(aTimeOut: PtrInt);
+constructor TCrtSocket.Create(aTimeOut: integer);
 begin
   fTimeOut := aTimeOut;
 end;
@@ -5526,24 +5525,18 @@ begin
             ({%H-}PtrInt(fSock) > 0);
 end;
 
-const
-  SOCKMINBUFSIZE = 1024; // big enough for headers (content will be read directly)
-
 type
   PTextRec = ^TTextRec;
-  PCrtSocket = ^TCrtSocket;
+  TTextRecUserData = record // consume 8/12 bytes out of 32 in TTextRec.UserData
+    Owner: TCrtSocket;
+    LastError: integer;
+  end;
+  PTextRecUserData = ^TTextRecUserData;
 
-function OutputSock(var F: TTextRec): integer;
+function TextRecUserData(const F: TTextRec): PTextRecUserData;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  if F.BufPos = 0 then
-    result := NO_ERROR
-  else if PCrtSocket(@F.UserData)^.TrySndLow(F.BufPtr, F.BufPos) then
-  begin
-    F.BufPos := 0;
-    result := NO_ERROR;
-  end
-  else
-    result := -1; // on socket error -> raise ioresult error
+  result := @F.UserData; // we have up to 32 bytes to store our context
 end;
 
 function InputSock(var F: TTextRec): integer;
@@ -5552,40 +5545,40 @@ function InputSock(var F: TTextRec): integer;
 // -> very optimized use for readln() in HTTP stream
 var
   size: integer;
-  sock: TCrtSocket;
+  addr: TNetAddr;
+  usr: PTextRecUserData;
 begin
   F.BufEnd := 0;
   F.BufPos := 0;
-  sock := PCrtSocket(@F.UserData)^;
-  if not sock.SockIsDefined then
+  usr := TextRecUserData(F);
+  if not usr^.Owner.SockIsDefined then
   begin
     result := WSAECONNABORTED; // on socket error -> raise ioresult error
     exit; // file closed = no socket -> error
   end;
-  result := sock.fSockInEofError;
+  result := usr^.LastError;
   if result <> 0 then
     exit; // already reached error below
   size := F.BufSize;
-  if sock.SocketLayer = nlUdp then
+  if usr^.Owner.SocketLayer = nlUdp then
   begin
-    if sock.fPeerAddr = nil then
-      New(sock.fPeerAddr); // allocated on demand (may be up to 110 bytes)
-    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr^);
+    size := usr^.Owner.Sock.RecvFrom(F.BufPtr, size, addr);
+    addr.IPWithPort(usr^.Owner.fRemoteIP); // set 'remoteip:port'
   end
   else
     // nlTcp/nlUnix
-    if not sock.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
+    if not usr^.Owner.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
       size := -1; // fatal socket error
   // TrySockRecv() may return size=0 if no data is pending, but no TCP/IP error
   if size >= 0 then
   begin
     F.BufEnd := size;
-    inc(sock.fBytesIn, size);
+    inc(usr^.Owner.fBytesIn, size);
     result := NO_ERROR;
   end
   else
   begin
-    if not sock.SockIsDefined then // socket broken or closed
+    if not usr^.Owner.SockIsDefined then // socket broken or closed
       result := WSAECONNABORTED
     else
     begin
@@ -5593,16 +5586,19 @@ begin
       if result = 0 then
         result := WSAETIMEDOUT;
     end;
-    sock.fSockInEofError := result; // error -> mark end of SockIn
+    usr^.LastError := result; // error -> mark end of SockIn
     // result <0 will update ioresult and raise an exception if {$I+}
   end;
 end;
 
 function CloseSock(var F: TTextRec): integer;
 begin
-  if PCrtSocket(@F.UserData)^ <> nil then
-    PCrtSocket(@F.UserData)^.Close;
-  PCrtSocket(@F.UserData)^ := nil;
+  with TextRecUserData(F)^ do
+    if Owner <> nil then
+    begin
+      Owner.Close;
+      Owner := nil;
+    end;
   result := NO_ERROR;
 end;
 
@@ -5637,44 +5633,48 @@ begin
 end;
 {$endif FPC}
 
+const
+  SOCKMINBUFSIZE = 1024; // big enough for headers (body is read directly)
+
 procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle;
   InputBufferSize: integer);
+var
+  rec: PTextRec;
 begin
-  if (Self = nil) or
-     (SockIn <> nil) then
-    exit; // initialization already occurred
+  if (self = nil) or
+     (fSockIn <> nil) then
+    exit;
   if InputBufferSize < SOCKMINBUFSIZE then
     InputBufferSize := SOCKMINBUFSIZE;
   GetMem(fSockIn, SizeOf(TTextRec) + InputBufferSize);
-  FillCharFast(SockIn^, SizeOf(TTextRec), 0);
-  with TTextRec(SockIn^) do
-  begin
-    PCrtSocket(@UserData)^ := self;
-    Mode := fmClosed;
-    // ignore internal Buffer[], which is not trailing on latest Delphi and FPC
-    BufSize := InputBufferSize;
-    BufPtr := pointer(PAnsiChar(SockIn) + SizeOf(TTextRec));
-    OpenFunc := @OpenSock;
-    Handle := {$ifdef FPC}THandle{$endif}(0); // some invalid handle
-  end;
-  SetLineBreakStyle(SockIn^, LineBreak); // http does break lines with #13#10
-  Reset(SockIn^);
+  rec := pointer(fSockIn);
+  FillCharFast(rec^, SizeOf(rec^), 0);
+  TextRecUserData(rec^)^.Owner := self;
+  rec^.Mode := fmClosed;
+  // ignore internal Buffer[], which is not trailing on latest Delphi and FPC
+  rec^.BufSize := InputBufferSize;
+  rec^.BufPtr := pointer(PAnsiChar(rec) + SizeOf(rec^));
+  rec^.OpenFunc := @OpenSock;
+  rec^.Handle := {$ifdef FPC}THandle{$endif}(0); // some invalid handle
+  SetLineBreakStyle(fSockIn^, LineBreak); // e.g. HTTP or SMTP requires #13#10
+  Reset(fSockIn^);
 end;
 
 procedure TCrtSocket.CloseSockIn;
 begin
-  if (self <> nil) and
-     (fSockIn <> nil) then
-  begin
-    Freemem(fSockIn);
-    fSockIn := nil;
-  end;
+  if (self = nil) or
+     (fSockIn = nil) then
+    exit;
+  Freemem(fSockIn);
+  fSockIn := nil;
 end;
 
 { $define SYNCRTDEBUGLOW2}
 
 procedure TCrtSocket.Close;
 // notice: sequential Close + OpenBind sets should work with the same instance
+var
+  rec: PTextRec;
 {$ifdef SYNCRTDEBUGLOW2}
 var // closesocket() or shutdown() are slow e.g. on Windows with wrong Linger
   start, stop: int64;
@@ -5682,12 +5682,13 @@ var // closesocket() or shutdown() are slow e.g. on Windows with wrong Linger
 begin
   // reset internal state
   fSndBufLen := 0; // always reset (e.g. in case of further Open after error)
-  fSockInEofError := 0;
   ioresult; // reset readln/writeln value
-  if fSockIn <> nil then
+  rec := pointer(fSockIn);
+  if rec <> nil then
   begin
-    PTextRec(fSockIn)^.BufPos := 0;  // reset input buffer, but keep allocated
-    PTextRec(fSockIn)^.BufEnd := 0;
+    rec^.BufPos := 0;  // reset input buffer, but keep allocated
+    rec^.BufEnd := 0;
+    TextRecUserData(rec^).LastError := 0;
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed

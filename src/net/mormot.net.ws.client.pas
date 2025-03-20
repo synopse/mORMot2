@@ -135,7 +135,7 @@ type
       aTLSContext: PNetTlsContext = nil): THttpClientWebSockets; overload;
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
-    constructor Create(aTimeOut: PtrInt = 10000); override;
+    constructor Create(aTimeOut: integer = 10000); override;
     /// finalize the connection
     destructor Destroy; override;
     /// process low-level REST request, either on HTTP/1.1 or via WebSockets
@@ -529,9 +529,9 @@ end;
 
 { THttpClientWebSockets }
 
-constructor THttpClientWebSockets.Create(aTimeOut: PtrInt);
+constructor THttpClientWebSockets.Create(aTimeOut: integer);
 begin
-  inherited;
+  inherited Create(aTimeOut);
   fSettings.SetDefaults;
   fSettings.CallbackAnswerTimeOutMS := aTimeOut;
 end;

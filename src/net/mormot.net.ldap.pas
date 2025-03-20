@@ -2546,7 +2546,7 @@ begin
     FastSetRawByteString(response, @tmp, len);
     if not RawLdapSearchParse(response, id, ['netlogon'], [@v]) then
       exit;
-    Info.IP := addr.IPWithPort;
+    addr.IPWithPort(Info.IP);
     Info.RawLogonType := PCardinalArray(v)[0];
     case Info.RawLogonType of
       23:
