@@ -8001,7 +8001,8 @@ begin
   vt := TVarData(V).VType;
   with TVarData(V) do
     case vt of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         result := NULL_STR_VAR;
       varSmallint:
         Int32ToUtf8(VSmallInt, result);

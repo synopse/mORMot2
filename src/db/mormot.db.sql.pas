@@ -5957,6 +5957,7 @@ var
 begin
   with TVarData(Data) do
     case VType of
+      varEmpty,
       varNull:
         BindNull(Param, IO);
       varBoolean:
