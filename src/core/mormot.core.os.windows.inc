@@ -2374,11 +2374,11 @@ begin
   DefaultHasher128(@e.h0, @ft, SizeOf(ft)); // maybe AesNiHash128
   mem.cb := SizeOf(mem);
   if Assigned(GetProcessMemoryInfo) then // may have been delayed
-    if GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem)) then
-      DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+  DefaultHasher128(@e.h1, @mem, SizeOf(mem));
   memst.dwLength := SizeOf(memst);
-  if GlobalMemoryStatusEx(memst) then
-    DefaultHasher128(@e.h2, @memst, SizeOf(memst));
+  GlobalMemoryStatusEx(memst);
+  DefaultHasher128(@e.h2, @memst, SizeOf(memst));
   GetSystemTimes(ft.usr, ft.p, ft.e);
   DefaultHasher128(@e.h3, @ft, SizeOf(ft));
   for i := 0 to high(e.r) do
@@ -5442,7 +5442,7 @@ begin
     {$endif CPUINTEL}
   QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW'); // Vista+
   GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
-  InitializeSRWLock := GetProcAddress(h, 'InitializeSRWLock'); // Vista+
+  InitializeSRWLock       := GetProcAddress(h, 'InitializeSRWLock'); // Vista+
   AcquireSRWLockExclusive := GetProcAddress(h, 'AcquireSRWLockExclusive');
   ReleaseSRWLockExclusive := GetProcAddress(h, 'ReleaseSRWLockExclusive');
   if not Assigned(InitializeSRWLock) or
@@ -5460,6 +5460,7 @@ begin
     GetNativeSystemInfo(SystemInfo)
   else
     Windows.GetSystemInfo(SystemInfo);
+  crc32c128(@StartupRandom, @SystemInfo, SizeOf(SystemInfo));
   GetMem(P, 10); // ensure that using MIN_PTR_VALUE won't break anything
   if (PtrUInt(P) > MIN_PTR_VALUE) and
      (PtrUInt(SystemInfo.lpMinimumApplicationAddress) <= MIN_PTR_VALUE) then
@@ -5469,8 +5470,10 @@ begin
   mem.dwLength := SizeOf(mem);
   if GlobalMemoryStatusEx(mem) then
     SystemMemorySize := mem.ullTotalPhys;
+  crc32c128(@StartupRandom, @mem, SizeOf(mem));
   OSVersionInfo.dwOSVersionInfoSize := SizeOf(OSVersionInfo);
   GetVersionEx(OSVersionInfo);
+  crc32c128(@StartupRandom, @OSVersionInfo, SizeOf(OSVersionInfo));
   Vers := wUnknown;
   with OSVersionInfo do
     // see https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833
@@ -5615,6 +5618,7 @@ begin
     siz := SizeOf(proc[0]) * length(proc);
     if GetLogicalProcessorInformation(proc[0], @siz) then
     begin
+      crc32c128(@StartupRandom, pointer(proc), siz);
       for i := 0 to (siz div SizeOf(proc[0])) - 1 do
         with proc[i] do
           case Relationship of

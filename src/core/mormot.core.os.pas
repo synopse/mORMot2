@@ -1030,6 +1030,9 @@ var
   // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
   SystemMemorySize: PtrUInt;
 
+  /// 128-bit of entropy as retrieved during unit initialization
+  StartupRandom: THash128Rec;
+
 type
   /// used to retrieve version information from any EXE
   // - under Linux, all version numbers are set to 0 by default, unless
@@ -11102,6 +11105,9 @@ begin
   {$endif ISFPC27}
   GlobalCriticalSection.Init;
   ConsoleCriticalSection.Init;
+  {$ifdef CPUINTELARM}
+  crc32c128(@StartupRandom, @CpuFeatures, SizeOf(CpuFeatures));
+  {$endif CPUINTELARM}
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
