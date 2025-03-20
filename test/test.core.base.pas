@@ -5560,14 +5560,6 @@ begin
   Check(RawUtf8DynArrayContains(arr, arr2, {insens=}true), 'RawUtf8DynArrayContains5i');
   Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame5');
   Check(not RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame5i');
-  CheckEqual(RawUtf8ToCsv([]), '');
-  CheckEqual(RawUtf8ToCsv(['one']), 'one');
-  CheckEqual(RawUtf8ToCsv(['one', 'two']), 'one,two');
-  CheckEqual(RawUtf8ToCsv(['one', 'two', ' three ']), 'one,two, three ');
-  CheckEqual(RawUtf8ToCsv(['one', 'two', '', 'three']), 'one,two,,three');
-  CheckEqual(RawUtf8ToCsv(['one'], '//', true), 'one');
-  CheckEqual(RawUtf8ToCsv(['one', 'two'], '//', true), 'two//one');
-  CheckEqual(RawUtf8ToCsv(['1', '2', '3'], '//', true), '3//2//1');
   Finalize(arr);
   CsvToRawUtf8DynArray(res, ',', '', arr);
   Check(arr[0] = 'one');

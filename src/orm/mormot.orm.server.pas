@@ -1778,7 +1778,7 @@ begin
     sql := '';
   if IndexName = '' then
   begin
-    IndexName := RawUtf8ToCsv(FieldNames, '');
+    IndexName := Join(FieldNames);
     if length(IndexName) + length(props.SqlTableName) > 64 then
       // avoid reaching potential identifier name size limit
       IndexName := crc32cUtf8ToHex(props.SqlTableName) +
@@ -1786,7 +1786,7 @@ begin
   end;
   sql := FormatUtf8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
     [sql, props.SqlTableName, IndexName, props.SqlTableName,
-     RawUtf8ToCsv(FieldNames, ',')]);
+     Join(',', FieldNames)]);
   result := EngineExecute(sql);
 end;
 

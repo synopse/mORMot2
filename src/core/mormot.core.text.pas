@@ -231,17 +231,19 @@ procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
 /// convert the strings in the specified CSV text into a dynamic array of UTF-8 strings
 function CsvToRawUtf8DynArray(const Csv: RawUtf8; const Sep: RawUtf8 = ',';
   const SepEnd: RawUtf8 = ''): TRawUtf8DynArray; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray;
   const Sep: RawUtf8 = ','; Reverse: boolean = false): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return the corresponding CSV text from a dynamic array of UTF-8 strings
-function RawUtf8ToCsv(const Values: array of RawUtf8;
-  const Sep: RawUtf8 = ','; Reverse: boolean = false): RawUtf8;
+/// return the corresponding CSV text from an array of UTF-8 strings
+// - using a Python-like friendly syntax
+function Join(const Sep: RawUtf8; const Values: array of RawUtf8;
+  Reverse: boolean = false): RawUtf8; overload;
 
-/// low-level generate CSV e.g. for RawUtf8ArrayToCsv() and TRawUtf8List.GetText
+/// low-level CSV generator e.g. for Join(), RawUtf8ArrayToCsv() and TRawUtf8List.GetText
 procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
   Reverse: boolean; var result: RawUtf8);
 
@@ -3697,7 +3699,7 @@ begin
   PRawUtf8ToCsv(pointer(Values), length(Values), Sep, Reverse, result);
 end;
 
-function RawUtf8ToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
+function Join(const Sep: RawUtf8; const Values: array of RawUtf8;
   Reverse: boolean): RawUtf8;
 begin
   PRawUtf8ToCsv(@Values[0], length(Values), Sep, Reverse, result);
