@@ -3667,6 +3667,11 @@ begin
   if (v = nil) or
      (n <= 0) then
     exit;
+  if n = 1 then
+  begin
+    result := PRawUtf8(v)^;
+    exit;
+  end;
   seplen := length(sep);
   p := FastNewString(seplen * (n - 1) + SumRawUtf8Length(pointer(v), n), CP_UTF8);
   pointer(result) := p;

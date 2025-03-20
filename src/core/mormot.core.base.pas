@@ -5118,6 +5118,12 @@ var
   l, i: PtrInt;
   p: PUtf8Char;
 begin
+  if high(Args) = 0 then
+  begin
+    text := Args[0];
+    EnsureRawUtf8(text);
+    exit;
+  end;
   l := 0;
   for i := 0 to high(Args) do
     inc(l, length(Args[i]));
