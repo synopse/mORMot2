@@ -201,7 +201,10 @@ type
       /// convert this address into its shortstring IPv4/IPv6 textual representation
     procedure IPShort(out result: ShortString; withport: boolean = false); overload;
     /// convert this address into its 'IPv4/IPv6:port' textual representation
-    function IPWithPort: RawUtf8;
+    function IPWithPort: RawUtf8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert this address into its 'IPv4/IPv6:port' textual representation
+    procedure IPWithPort(var Text: RawUtf8); overload;
     /// returns the network port (0..65535) of this address
     function Port: TNetPort;
     /// set the network port (0..65535) of this address
@@ -2554,12 +2557,17 @@ begin
   AppendShortCardinal(port, result);
 end;
 
-function TNetAddr.IPWithPort: RawUtf8;
+procedure TNetAddr.IPWithPort(var Text: RawUtf8);
 var
   tmp: shortstring;
 begin
   IPShort(tmp, {withport=}true);
-  ShortStringToAnsi7String(tmp, result);
+  ShortStringToAnsi7String(tmp, Text);
+end;
+
+function TNetAddr.IPWithPort: RawUtf8;
+begin
+  IPWithPort(result);
 end;
 
 function TNetAddr.Port: TNetPort;
