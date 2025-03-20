@@ -5614,7 +5614,8 @@ begin
     MessageEncodeBearer(aResp, head);
     // ensure we have the right peer
     if (fClient <> nil) and
-       (fClientIP4 <> aResp.IP4) then
+       ((fClientIP4 <> aResp.IP4) or
+        not fClient.SockConnected) then
       FreeAndNil(fClient);
     // ensure we have the expected HTTP/HTTPS connection
     if fClient = nil then
@@ -6563,6 +6564,7 @@ begin
   // try first the current/last HTTP peer client (if any)
   FormatUtf8('?%=%', [Sender.Server, Url], u); // just <> DIRECTURI_32 (for log)
   if (fClient <> nil) and
+     fClient.SockConnected and
      (fClientIP4 <> 0) and
      ((pcoTryLastPeer in fSettings.Options) or
       (waoTryLastPeer in Params.AlternateOptions)) and
@@ -7120,6 +7122,7 @@ begin
         if (pcoHttpDirectTryLastPeer in fSettings.Options) and
            (fClient <> nil) and
            (fClientIP4 <> 0) and
+           fClient.SockConnected and
            fClientSafe.TryLock then
         try
           SetLength(peers, 1);
