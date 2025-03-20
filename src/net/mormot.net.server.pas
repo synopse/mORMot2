@@ -2538,7 +2538,7 @@ begin
     raise EUdpServer.Create('%s.Create binding error on %s:%s',
       [ClassNameShort(self)^, BindAddress, BindPort], res);
   AfterBind;
-  inherited Create({suspended=}false, LogClass, ident);
+  inherited Create({suspended=}false, nil, nil, LogClass, ident);
 end;
 
 destructor TUdpServerThread.Destroy;

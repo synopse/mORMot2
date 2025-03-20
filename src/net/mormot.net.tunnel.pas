@@ -324,7 +324,7 @@ begin
   end;
   fServerSock := sock;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, TSynLog, FormatUtf8('tun %', [fPort]));
+  inherited Create({suspended=}false, nil, nil, TSynLog, Make(['tun ', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;

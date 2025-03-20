@@ -989,7 +989,7 @@ constructor TWebSocketReconnectClientThread.Create(aClient: TSocketsIOClient);
 begin
   fClient := aClient;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, TSynLog, 'Reconnect');
+  inherited Create({suspended=}false, nil, nil, TSynLog, 'Reconnect');
 end;
 
 procedure TWebSocketReconnectClientThread.DoExecute;

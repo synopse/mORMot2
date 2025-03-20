@@ -1055,24 +1055,27 @@ type
   end;
 
   /// abstract class to implement a thread with logging notifications
-  TLoggedThread = class(TSynThread)
+  // - inherited classes should override the DoExecute method instead of Execute
+  TLoggedThread = class(TNotifiedThread)
   protected
-    fProcessName: RawUtf8;
     fLogClass: TSynLogClass;
     fLog: TSynLog; // the logging instance within the DoExecute thread context
     fProcessing: boolean;
     procedure Execute; override;
-    // inherited classes should override this method with proper process
-    procedure DoExecute; virtual; abstract;
+    procedure DoExecute; virtual; abstract; // overriden for background process
   public
     /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: boolean; Logger: TSynLogClass;
+    constructor Create(CreateSuspended: boolean;
+      const OnStart, OnStop: TOnNotifyThread; Logger: TSynLogClass;
       const ProcName: RawUtf8); reintroduce; virtual;
     /// notify the thread to be terminated, and wait for DoExecute to finish
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); virtual;
     /// the associated logging class
     property LogClass: TSynLogClass
       read fLogClass;
+    /// internal flag set by Execute, and used e.g. by TerminateAndWaitFinished
+    property Processing: boolean
+      read fProcessing;
   published
     /// the name of this thread, as supplied to SetCurrentThreadName()
     property ProcessName: RawUtf8
@@ -1102,14 +1105,15 @@ type
     procedure DoExecute; override;
   public
     /// this constructor will directly start the thread in background
-    // - with the context as a regular TNotifyEvent
+    // - with the context supplied to OnExecute() as a regular Sender: TObject
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       Sender: TObject; const OnExecute: TNotifyEvent;
       const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
-    // - with the context as a TDocVariantData object supplied as name/value pairs
+    // - with the context supplied to OnExecute() as a TDocVariantData object
+    // initialized from name/value pairs from this constructor
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
@@ -1125,7 +1129,8 @@ type
   /// execute tasks in a pool of runtime-adjusted TLoggedWorkThread
   // - as used e.g. by TSynTestCase.Run/RunWait methods
   // - in respect to TSynThreadPool, threads will be created and released on need
-  // - tasks should better take at least some dozen milliseconds
+  // - tasks should better take at least some dozen milliseconds to leverage the
+  // cost of creating a thread by the Operating System
   TLoggedWorker = class(TSynPersistent)
   protected
     fSafe: TLightLock;
@@ -3234,13 +3239,13 @@ end;
 { TLoggedThread }
 
 constructor TLoggedThread.Create(CreateSuspended: boolean;
+  const OnStart, OnStop: TOnNotifyThread;
   Logger: TSynLogClass; const ProcName: RawUtf8);
 begin
   if Logger = nil then
     Logger := TSynLog;
   fLogClass := Logger;
-  fProcessName := ProcName;
-  inherited Create(CreateSuspended);
+  inherited Create(CreateSuspended, OnStart, OnStop, ProcName);
 end;
 
 procedure TLoggedThread.Execute;
@@ -3250,9 +3255,10 @@ begin
   fLog := nil;
   try
     SetCurrentThreadName(fProcessName);
+    NotifyThreadStart(self);
     if fLogClass <> nil then
     begin
-      ilog := fLogClass.Enter('Execute %', [fProcessName], self);
+      ilog := fLogClass.Enter('Execute % %', [fProcessName, fLogClass], self);
       if Assigned(ilog) then
         fLog := ilog.Instance;
     end;
@@ -3261,16 +3267,18 @@ begin
   except
     // ignore any exception during processing method
     on E: Exception do
-      if iLog <> nil then
-        iLog.Log(sllDebug, 'Execute aborted by %', [E], self);
+      if fLog <> nil then
+      try
+        fLog.Log(sllDebug, 'Execute aborted by %', [E], self);
+      except
+      end;
   end;
   fProcessing := false;
-  if fLog <> nil then
-  begin
-    ilog := nil; // leave Enter() above
-    fLog.NotifyThreadEnded;
-    fLog := nil;
-  end;
+  if fLog = nil then
+    exit;
+  ilog := nil; // leave Enter() above before removing the thread from TSynLog
+  fLog.NotifyThreadEnded;
+  fLog := nil;
 end;
 
 procedure TLoggedThread.TerminateAndWaitFinished(TimeOutMs: integer);
@@ -3333,7 +3341,7 @@ begin
   fWork := Work;
   fOnDone := OnExecuted;
   FreeOnTerminate := true;
-  inherited Create(Suspended, Logger, Work.Name);
+  inherited Create(Suspended, nil, nil, Logger, Work.Name);
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;

@@ -191,6 +191,8 @@ var
 
 constructor TTftpConnectionThread.Create(
   const Source: TTftpContext; Owner: TTftpServerThread);
+var
+  name: RawUtf8;
 begin
   fContext := Source;
   fOwner := Owner;
@@ -205,9 +207,10 @@ begin
   MoveFast(Source.Frame^, fLastSent^, Source.FrameLen);
   fLastSentLen := Source.FrameLen;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, fOwner.LogClass, FormatUtf8('%#% % %',
-    [TFTP_OPCODE[Source.OpCode], InterlockedIncrement(TTftpConnectionThreadCounter),
-     fContext.FileName, KB(fFileSize)]));
+  FormatUtf8('%#% % %', [TFTP_OPCODE[Source.OpCode],
+    InterlockedIncrement(TTftpConnectionThreadCounter), fContext.FileName,
+    KB(fFileSize)], name);
+  inherited Create({suspended=}false, nil, nil, fOwner.LogClass, name);
 end;
 
 destructor TTftpConnectionThread.Destroy;
