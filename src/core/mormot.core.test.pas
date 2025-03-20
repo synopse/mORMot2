@@ -1350,6 +1350,7 @@ var
   started: boolean;
   {%H-}log: IUnknown;
 begin
+  result := true;
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do
