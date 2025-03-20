@@ -3854,8 +3854,8 @@ function RetrieveLoadAvg: TShort23;
   {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
 /// a shorter version of GetSystemInfoText
-// - 'avg1 avg5 avg15 [updays] used/totalram [used/totalswap] osint32' on POSIX,
-// or 'user kern [updays] used/totalram [used/totalswap] osint32' on Windows
+// - 'ncores avg1 avg5 avg15 [updays] used/totalram [used/totalswap] osint32' on POSIX,
+// or 'ncores user kern [updays] used/totalram [used/totalswap] osint32' on Windows
 procedure RetrieveSysInfoText(out text: shortstring);
 
 /// retrieve low-level information about current memory usage
@@ -7925,8 +7925,10 @@ var
   si: TSysInfo;  // Linuxism
 begin
   text[0] := #0;
+  AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text);
   if not RetrieveSysInfo(si) then // single syscall on Linux/Android
     exit;
+  AppendShortChar(' ', @text);
   AppendShortCurr64((Int64(si.loads[0]) * CURR_RES + 5000) shr 16, text, 2);
   AppendShortChar(' ', @text);
   AppendShortCurr64((Int64(si.loads[1]) * CURR_RES + 5000) shr 16, text, 2);
