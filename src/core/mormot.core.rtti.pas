@@ -9151,14 +9151,18 @@ var
   f: double;
 begin
   result := true;
-  if rcfHasRttiOrd in Cache.Flags then
-    if ToInt64(Text, v) then
-      RTTI_TO_ORD[Cache.RttiOrd](Data, v)
+  if Cache.Kind in rkOrdinalTypes then
+    if Cache.Info^.OrdFromText(Text, v) then // integer but also enum/set idents
+      if rcfHasRttiOrd in Cache.Flags then
+        RTTI_TO_ORD[Cache.RttiOrd](Data, v)
+      else if rcfGetInt64Prop in Cache.Flags then
+        PInt64(Data)^ := v
+      else
+        result := false
     else
       result := false
-  else if rcfGetInt64Prop in Cache.Flags then
-    result := ToInt64(Text, PInt64(Data)^)
-  else case Parser of
+  else
+  case Parser of
     ptCurrency:
       PInt64(Data)^ := StrToCurr64(pointer(Text)); // no temp Double conversion
     ptRawUtf8:
