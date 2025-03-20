@@ -4699,7 +4699,8 @@ var
   act, aci: TIntegerDynArray;
   i: PtrInt;
   {$endif CPUARM3264}
-  tp: timespec;
+  tpfail: byte;
+  tp: array[0..2] of timespec;
   {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
   temp1, temp2: ShortString;
@@ -4945,22 +4946,24 @@ begin
                          (mach_timeinfo.Denom = 1);
   {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
-  if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
-    CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
-  if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
-    CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
+  tpfail := 0;
+  if clock_gettime(CLOCK_REALTIME_COARSE, @tp[0]) = 0 then
+    CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE
+  else if clock_gettime(CLOCK_REALTIME_FAST, @tp[0]) <> 0 then
+    tpfail := 1;
+  if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp[1]) = 0 then
+    CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE
+  else if clock_gettime(CLOCK_MONOTONIC_FAST,  @tp[1]) <> 0 then
+    tpfail := 2;
   {$ifdef OSLINUX}
-  if clock_gettime(CLOCK_MONOTONIC_RAW, @tp) = 0 then
-    CLOCK_MONOTONIC_HIRES := CLOCK_MONOTONIC_RAW;
+  if clock_gettime(CLOCK_MONOTONIC_RAW, @tp[2]) = 0 then
+    CLOCK_MONOTONIC_HIRES := CLOCK_MONOTONIC_RAW
+  else if clock_gettime(CLOCK_MONOTONIC_HIRES, @tp[2]) <> 0 then
+    tpfail := 3;
   {$endif OSLINUX}
-  if clock_gettime(CLOCK_BOOTTIME, @tp) = 0 then
-    CLOCK_UPTIME := CLOCK_BOOTTIME;
-  if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
-     (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) or
-     (clock_gettime(CLOCK_MONOTONIC_HIRES, @tp) <> 0) then
-    raise EOSException.CreateFmt(
-      'clock_gettime() not supported by %s kernel - errno=%d',
-      [PAnsiChar(@uts.release), fpgeterrno]);
+  if tpfail <> 0 then
+    raise EOSException.CreateFmt('clock_gettime(%d) failed on %s - errno=%d',
+      [tpfail, OSVersionText, fpgeterrno]);
   crc32c128(@StartupRandom, @tp, SizeOf(tp)); // 3 nanoseconds timestamps
   // direct access to the pthread library if possible (Linux only)
   {$ifdef OSPTHREADSLIB}
