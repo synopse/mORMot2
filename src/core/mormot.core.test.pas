@@ -1630,6 +1630,13 @@ begin
     'list all class name(s) as expected by --test');
   Executable.Command.Option('&methods',
     'list all method name(s) of #class as specified to --test');
+  if Executable.Command.Option('&verbose',
+       'run logs in verbose mode: enabled only with --test') and
+     (restrict <> nil) then
+    withLogs := LOG_VERBOSE;
+  if options = [] then
+    SetValueFromExecutableCommandLine(options, TypeInfo(TSynTestOptions),
+      '&options', 'refine logs output content');
   DescribeCommandLine; // may be overriden to define additional parameters
   err := Executable.Command.DetectUnknown;
   if (err <> '') or
@@ -1675,7 +1682,7 @@ begin
     tests.Free;
   end;
   {$ifndef OSPOSIX}
-  if ParamCount = 0 then
+  if ParamCount = 0 then // Executable.Command.Option('noenter') not needed
   begin
     // direct exit if an external file was generated
     ConsoleWrite(CRLF + 'Done - Press ENTER to Exit');
