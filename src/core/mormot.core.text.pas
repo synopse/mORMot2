@@ -240,8 +240,9 @@ function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray;
 
 /// return the corresponding CSV text from an array of UTF-8 strings
 // - using a Python-like friendly syntax
-function Join(const Sep: RawUtf8; const Values: array of RawUtf8;
-  Reverse: boolean = false): RawUtf8; overload;
+// - we could not use plain Join() overload due to a Delphi compiler limitation
+function JoinCsv(const Sep: RawUtf8; const Values: array of RawUtf8;
+  Reverse: boolean = false): RawUtf8;
 
 /// low-level CSV generator e.g. for Join(), RawUtf8ArrayToCsv() and TRawUtf8List.GetText
 procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
@@ -3704,7 +3705,7 @@ begin
   PRawUtf8ToCsv(pointer(Values), length(Values), Sep, Reverse, result);
 end;
 
-function Join(const Sep: RawUtf8; const Values: array of RawUtf8;
+function JoinCsv(const Sep: RawUtf8; const Values: array of RawUtf8;
   Reverse: boolean): RawUtf8;
 begin
   PRawUtf8ToCsv(@Values[0], length(Values), Sep, Reverse, result);

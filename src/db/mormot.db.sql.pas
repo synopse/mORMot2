@@ -5137,7 +5137,7 @@ begin
        not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dMariaDB, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
       Join([owner, '.'], indexname);
-    fieldscsv := Join(aFieldNames);
+    fieldscsv := JoinCsv('', aFieldNames);
     if length(fieldscsv) + length(table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
       Append(indexname,
@@ -5152,10 +5152,10 @@ begin
       posGlobalBefore:
         AppendShortToUtf8('DESC ', result);
       posWithColumn:
-        coldesc := Join(' DESC,', aFieldNames) + ' DESC';
+        coldesc := JoinCsv(' DESC,', aFieldNames) + ' DESC';
     end;
   if {%H-}coldesc = '' then
-    coldesc := Join(',', aFieldNames);
+    coldesc := JoinCsv(',', aFieldNames);
   result := FormatUtf8('CREATE %INDEX %% ON %(%)', [result,
     CREATNDXIFNE[GetDbms in DB_HANDLECREATEINDEXIFNOTEXISTS],
     indexname, aTableName, coldesc]);
