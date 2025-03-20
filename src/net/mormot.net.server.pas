@@ -5737,7 +5737,7 @@ begin
     if not HashDetect(aRemoteHash, msg.Hash) then
       exit;
     if uri.Port <> DEFAULT_PORT[uri.Https] then
-      Concat(['_', uri.Port], p); // '_' is ok for URI, but not for domain
+      Join(['_', uri.Port], p); // '_' is ok for URI, but not for domain
     FormatUtf8('/%/%%/%', [uri.Scheme, uri.Server, p, uri.Address], aDirectUri);
     msg.Opaque := crc63c(pointer(aDirectUri), length(aDirectUri)); // no replay
     c.MessageEncodeBearer(msg, aDirectHeaderBearer);
@@ -7330,7 +7330,7 @@ begin
     if err <> oreOK then
       errtxt := GetEnumNameUnCamelCase(TypeInfo(TOnRequestError), ord(err));
     if not StatusCodeIsSuccess(result) then
-      Ctxt.OutContent := Concat([StatusCodeToErrorMsg(result), ' - ', errtxt]);
+      Ctxt.OutContent := Join([StatusCodeToErrorMsg(result), ' - ', errtxt]);
     fLog.Add.Log(sllDebug, 'OnRequest=% % % % fn=% progsiz=% progid=% %',
       [result, Ctxt.Method, Ctxt.RemoteIP, Ctxt.Url, fn, progsize,
        http^.ProgressiveID, errtxt], self);

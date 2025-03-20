@@ -3785,9 +3785,9 @@ begin
       with addr[i] do
         if Address <> '' then
         begin
-          w := Concat([w, Name, '=', Address, ' ']);
+          w := Join([w, Name, '=', Address, ' ']);
           if Kind <> makSoftware then
-            wo := Concat([wo, Address, ' ']);
+            wo := Join([wo, Address, ' ']);
         end;
     FakeLength(w, length(w) - 1); // trim ending spaces
     FakeLength(wo, length(wo) - 1);
@@ -5158,19 +5158,19 @@ end;
 
 function TUri.URI: RawUtf8;
 begin
-  Concat([ServerPort, Address], result);
+  Join([ServerPort, Address], result);
 end;
 
 function TUri.ServerPort: RawUtf8;
 begin
   if layer = nlUnix then
-    Concat(['http://unix:', Server, ':/'], result)
+    Join(['http://unix:', Server, ':/'], result)
   else if (Port = '') or
           (Port = '0') or
           (Port = DEFAULT_PORT[Https]) then
-    Concat([HTTPS_TEXT[Https], Server, '/'], result)
+    Join([HTTPS_TEXT[Https], Server, '/'], result)
   else
-    Concat([HTTPS_TEXT[Https], Server, ':', Port, '/'], result);
+    Join([HTTPS_TEXT[Https], Server, ':', Port, '/'], result);
 end;
 
 function TUri.PortInt: TNetPort;
@@ -5201,7 +5201,7 @@ begin
   if User = '' then
     result := ''
   else
-    result := NetBinToBase64(Concat([User, ':', Password]));
+    result := NetBinToBase64(Join([User, ':', Password]));
 end;
 
 

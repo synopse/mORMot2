@@ -4196,10 +4196,10 @@ begin
        Content, Value, V, P, @UpperName, UpperNameLength) then
       exit;
   // 2. section or Name= entry not found: add Name=Value
-  V := Concat([Name, '=', V]);
+  V := Join([Name, '=', V]);
   if not SectionFound then
     // create not existing [Section]
-    V := Concat(['[', Section, (']' + CRLF), V]);
+    V := Join(['[', Section, (']' + CRLF), V]);
   // insert Name=Value at P^ (end of file or end of [Section])
   if P = nil then
     // insert at end of file
@@ -4269,7 +4269,7 @@ begin
         if Level = 0 then
           n := p^.Name
         else
-          Concat([SectionName, '.', p^.Name], n);
+          Join([SectionName, '.', p^.Name], n);
         if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n,
               DocVariantOptions, Level + 1) then
           result := true;
@@ -4378,7 +4378,7 @@ begin
           if Level = 0 then
             n := p^.Name
           else
-            Concat([SectionName, '.', p^.Name], n);
+            Join([SectionName, '.', p^.Name], n);
           s := ObjectToIni(p^.Prop^.GetObjProp(Instance), n, Options, Level + 1);
           if s <> '' then
             AddRawUtf8(nested, nestedcount, s);

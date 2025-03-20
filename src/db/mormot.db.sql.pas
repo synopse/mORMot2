@@ -4481,7 +4481,7 @@ begin
   if (aTableName <> '') and
      (fForcedSchemaName <> '') and
      (PosExChar('.', aTableName) = 0) then
-    Concat([fForcedSchemaName, '.', aTableName], result)
+    Join([fForcedSchemaName, '.', aTableName], result)
   else
     result := aTableName;
 end;
@@ -4513,7 +4513,7 @@ begin
         ' where UPPER(TABLE_SCHEMA) = ''%'' and UPPER(TABLE_NAME) = ''%''';
     dFirebird:
       begin
-        Concat([// see http://edn.embarcadero.com/article/25259
+        Join([// see http://edn.embarcadero.com/article/25259
           'select a.rdb$field_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
           ' b.rdb$field_length, b.rdb$field_length, abs(b.rdb$field_scale) as rdb$field_scale,' +
           ' (select count(*) from rdb$indices i, rdb$index_segments s' +
@@ -4526,7 +4526,7 @@ begin
       end;
     dNexusDB:
       begin
-        Concat([
+        Join([
           'select FIELD_NAME, FIELD_TYPE_SQL, FIELD_LENGTH, FIELD_UNITS,' +
           ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = ''',
           aTableName, ''''], result);
@@ -4610,7 +4610,7 @@ begin
   SqlSplitProcedureName(aProcName, owner, package, proc);
   case GetDbms of
     dOracle:
-      Concat([
+      Join([
         'select a.argument_name, a.data_type, a.char_length, a.data_precision, a.data_scale, a.in_out ' +
         'from   sys.all_arguments a where  a.owner like ''%''' +
         '  and  a.package_name like ''', UpperCase(package), '''' +
@@ -4627,7 +4627,7 @@ begin
     dFirebird:
       begin
         if package = '' then
-          Concat([
+          Join([
             'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
             ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
             ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
@@ -4635,7 +4635,7 @@ begin
             'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''',
             UpperCase(proc), ''' order by a.rdb$parameter_number'], result)
         else
-          Concat([
+          Join([
             'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
             ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
             ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
@@ -4648,7 +4648,7 @@ begin
     dNexusDB:
       begin
         // NOT TESTED !!!
-        Concat([
+        Join([
           'select PROCEDURE_ARGUMENT_NAME, PROCEDURE_ARGUMENT_TYPE, PROCEDURE_ARGUMENT_UNITS,' +
           ' PROCEDURE_ARGUMENT_UNITS, PROCEDURE_ARGUMENT_DECIMALS, PROCEDURE_ARGUMENT_KIND,' +
           ' from #procedure_arguments where PROCEDURE_NAME = ''', aProcName,
@@ -4708,7 +4708,7 @@ begin
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
     dMySQL,
     dMariaDB:
-      result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
+      result := 'select CONCAT(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
     dPostgreSQL:
       result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name ' +
@@ -4737,7 +4737,7 @@ begin
         'from INFORMATION_SCHEMA.VIEWS order by name';
     dMySQL,
     dMariaDB:
-      result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
+      result := 'select CONCAT(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.VIEWS order by name';
     dPostgreSQL:
       result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name ' +
@@ -4989,7 +4989,7 @@ begin
     fForeignKeys.Init(false);
     GetForeignKeys;
   end;
-  result := fForeignKeys.Value(Concat([aTableName, '.', aColumnName]));
+  result := fForeignKeys.Value(Join([aTableName, '.', aColumnName]));
 end;
 
 function TSqlDBConnectionProperties.GetForeignKeysData: RawByteString;
@@ -5019,15 +5019,15 @@ begin
     dSQLite:
       ; // use date without 'T'
     dOracle:
-      result := Concat(['to_date(''', result, ''',''YYYY-MM-DD HH24:MI:SS'')']);
+      result := Join(['to_date(''', result, ''',''YYYY-MM-DD HH24:MI:SS'')']);
     dNexusDB:
-      Concat(['DATE ', Iso8601], result);
+      Join(['DATE ', Iso8601], result);
     dDB2:
-      result := Concat(['TIMESTAMP ''', result, '''']);
+      result := Join(['TIMESTAMP ''', result, '''']);
     dPostgreSQL:
-      result := Concat(['''', result, '''']);
+      result := Join(['''', result, '''']);
   else
-    Concat(['''', Iso8601, ''''], result); // default to use ISO-8601 format with 'T'
+    Join(['''', Iso8601, ''''], result); // default to use ISO-8601 format with 'T'
   end;
 end;
 
@@ -5055,7 +5055,7 @@ begin
     col.Unique := true;
     col.NonNullable := true;
     col.PrimaryKey := true;
-    Concat([SqlFieldCreate(col, addprimarykey), ','], result);
+    Join([SqlFieldCreate(col, addprimarykey), ','], result);
   end;
   for i := 0 to high(aFields) do
   begin
@@ -5066,7 +5066,7 @@ begin
   end;
   if addprimarykey <> '' then
     Append(result, [', PRIMARY KEY(', addprimarykey, ')']);
-  result := Concat(['CREATE TABLE ', aTableName, ' (', result, ')']);
+  result := Join(['CREATE TABLE ', aTableName, ' (', result, ')']);
   case GetDbms of
     dDB2:
       AppendShortToUtf8(' CCSID Unicode', result);
@@ -5102,7 +5102,7 @@ begin
       dMariaDB:
         aAddPrimaryKey := aField.Name;
     end;
-  result := Concat([aField.Name, result]);
+  result := Join([aField.Name, result]);
 end;
 
 function TSqlDBConnectionProperties.SqlAddColumn(const aTableName: RawUtf8;
@@ -5136,7 +5136,7 @@ begin
     if (owner <> '') and
        not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dMariaDB, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
-      Concat([owner, '.'], indexname);
+      Join([owner, '.'], indexname);
     fieldscsv := RawUtf8ToCsv(aFieldNames, '');
     if length(fieldscsv) + length(table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
@@ -5194,7 +5194,7 @@ begin
   end;
   if needquote and
      (PosEx(beginquote, aTableName) = 0) then
-    Concat([beginquote, aTableName, endquote], result)
+    Join([beginquote, aTableName, endquote], result)
   else
     result := aTableName;
 end;
@@ -5634,7 +5634,7 @@ begin
      (aTableName = '') then
     result := ''
   else
-    Concat(['select ', FieldsFromList(aFields, aExcludeTypes),
+    Join(['select ', FieldsFromList(aFields, aExcludeTypes),
       ' from ', SqlTableName(aTableName)], result);
 end;
 
@@ -7234,7 +7234,7 @@ begin
   SetLength(Fields, ColumnCount);
   if Fields = nil then
     exit;
-  Concat(['insert into ', TableName, ' ('], result);
+  Join(['insert into ', TableName, ' ('], result);
   for F := 0 to high(Fields) do
   begin
     Fields[F].Name := ColumnName(F);
@@ -8376,7 +8376,7 @@ begin
               ftCurrency:
                 VArray[fParamsArrayCount] := CurrencyToStr(Rows.ColumnCurrency(F));
               ftDate:
-                Concat(['''', DateTimeToSql(Rows.ColumnDateTime (F)), ''''],
+                Join(['''', DateTimeToSql(Rows.ColumnDateTime (F)), ''''],
                   VArray[fParamsArrayCount]);
               ftUtf8:
                 begin

@@ -3809,7 +3809,7 @@ begin
       fCall^.OutBody := '[]'
     else
       TrimSelf(fCall^.OutBody);
-    fCall^.OutBody := Concat(['{"values":', fCall^.OutBody,
+    fCall^.OutBody := Join(['{"values":', fCall^.OutBody,
       FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
        [totalrowcount]), '}']);
   end;
@@ -5361,7 +5361,7 @@ function TRestServerAuthenticationDefault.CheckPassword(
 var
   salt: RawUtf8;
 begin
-  Concat([aClientNonce,  User.LogonName, User.PasswordHashHexa], salt);
+  Join([aClientNonce,  User.LogonName, User.PasswordHashHexa], salt);
   result := IsHex(aPassWord, SizeOf(THash256)) and
     (PropNameEquals(aPassWord,
       Sha256U([fServer.Model.Root, CurrentNonce(Ctxt, {prev=}false), salt])) or
@@ -5529,7 +5529,7 @@ begin
   end
   else
   begin
-    Concat(['WWW-Authenticate: Basic realm="', fServer.Model.Root, '"'],
+    Join(['WWW-Authenticate: Basic realm="', fServer.Model.Root, '"'],
       Ctxt.fCall^.OutHead);
     Ctxt.Error('', HTTP_UNAUTHORIZED); // 401 will popup for credentials in browser
   end;
@@ -7803,7 +7803,7 @@ begin
       json := JsonReformat(json)
     else if PropNameEquals(Ctxt.fUriMethodPath, 'xml') then
     begin
-      JsonBufferToXML(pointer(json), XMLUTF8_HEADER, Concat(['<', name, '>']), xml);
+      JsonBufferToXML(pointer(json), XMLUTF8_HEADER, Join(['<', name, '>']), xml);
       Ctxt.Returns(xml, 200, XML_CONTENT_TYPE_HEADER);
       exit;
     end;
@@ -8017,7 +8017,7 @@ begin
      (HeadLen <> 0) then
   begin
     LibraryRequestString(h, Head, HeadLen);
-    call.InHead := Concat([h, call.InHead, #13#10]);
+    call.InHead := Join([h, call.InHead, #13#10]);
   end;
   LibraryRequestString(call.InBody, SendData, SendDataLen);
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;

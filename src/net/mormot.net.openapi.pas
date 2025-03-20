@@ -829,7 +829,7 @@ begin
             Append(t, r.PascalName, ' ');
         end;
         if t <> '' then
-          Data.U['description'] := Concat(['From the JSON of ', t]);
+          Data.U['description'] := Join(['From the JSON of ', t]);
       end
       else
         for i := 1 to oo^.Count - 1 do
@@ -1374,7 +1374,7 @@ begin
         Append(err, ['    ', code, ':', fParser.LineEnd,
                      '      e := ',e.PascalName, ';', fParser.LineEnd])
       else if status = 'default' then
-        Concat(['  else', fParser.LineEnd,
+        Join(['  else', fParser.LineEnd,
               '    e := ', e.PascalName, ';', fParser.LineEnd], deferr);
     end;
   end;
@@ -1433,7 +1433,7 @@ begin
       p := fParameters[i];
       if p.Location = oplBody then
         continue; // fRequestBodySchema is handled below
-      Concat(['- [', p.fParameter^._In, '] ', p.PascalName], line);
+      Join(['- [', p.fParameter^._In, '] ', p.PascalName], line);
       if p.Location in [oplUnsupported, oplFormData] then
         Append(line, ' (unsupported)')
       else
@@ -1464,7 +1464,7 @@ begin
       code := Utf8ToInteger(status, 0);
       r := @v^.Values[i];
       rs := r^.Schema(fParser);
-      Concat(['- ', status], line);
+      Join(['- ', status], line);
       if code = fSuccessResponseCode then
         Append(line, ' (main)')
       else if Assigned(rs) and
@@ -1526,7 +1526,7 @@ begin
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, decl)
         else
-          AddRawUtf8(def, Concat([decl, ' = ', p.fType.ToDefaultParameterValue(p)]))
+          AddRawUtf8(def, Join([decl, ' = ', p.fType.ToDefaultParameterValue(p)]))
       else
         AddParam([decl]);
     end;
@@ -1957,7 +1957,7 @@ begin
       Append(result, 'DynArray'); // use mormot.core.base arrays
     end
     else
-      result := Concat(['array of ', result]);
+      result := Join(['array of ', result]);
   end;
 end;
 
@@ -2530,7 +2530,7 @@ begin
       if i = 0 then
         break;
       if feed = '' then
-        Concat([LineEnd, fLineIndent, '//'], feed);
+        Join([LineEnd, fLineIndent, '//'], feed);
       insert(feed, line, i);
       o := i + length(feed);
     end;
@@ -2827,7 +2827,7 @@ var
   w: TTextWriter;
 begin
   if fDtoUnitName = '' then
-    Concat([LowerCaseU(fName), '.dto'], fDtoUnitName);
+    Join([LowerCaseU(fName), '.dto'], fDtoUnitName);
   w := TTextWriter.CreateOwnedStream(temp);
   try
     // header section
@@ -2882,9 +2882,9 @@ begin
   else
     desc := '.client';
   if fClientUnitName = '' then
-    Concat([LowerCase(fName), desc], fClientUnitName);
+    Join([LowerCase(fName), desc], fClientUnitName);
   if fClientClassName = '' then
-    Concat(['T', fName, 'Client'], fClientClassName);
+    Join(['T', fName, 'Client'], fClientClassName);
   w := TTextWriter.CreateOwnedStream(temp);
   try
     // unit common definitions

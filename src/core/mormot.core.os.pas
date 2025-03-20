@@ -6179,12 +6179,12 @@ begin
   case osv.os of
     osWindows:
       begin
-        Concat(['Windows ', WINDOWS_NAME[osv.win]], result);
+        Join(['Windows ', WINDOWS_NAME[osv.win]], result);
         AppendShortToUtf8(WinOsBuild(osv, ' '), result);
       end;
     osOSX:
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
-        Concat(['macOS ', MACOS_NAME[osv.utsrelease[2]]], result);
+        Join(['macOS ', MACOS_NAME[osv.utsrelease[2]]], result);
   end;
 end;
 
@@ -6779,10 +6779,10 @@ begin
   begin
     SetLength(u, length(Title) + 1);
     FillCharFast(pointer(u)^, length(u), ord('-'));
-    u := Concat([CRLF, title, CRLF, u, CRLF + CRLF, msg, CRLF]);
+    u := Join([CRLF, title, CRLF, u, CRLF + CRLF, msg, CRLF]);
   end
   else
-    Concat([msg, CRLF], u);
+    Join([msg, CRLF], u);
   ConsoleErrorWrite(u);
 end;
 
@@ -8009,7 +8009,7 @@ begin
       RaiseExceptionOnFailure := nil;
       delete(name, 1, 1);
     end;
-    Concat([Prefix, name], search);
+    Join([Prefix, name], search);
     Entry^ := LibraryResolve(fHandle, pointer(search));
     if (Entry^ = nil) and
        (Prefix <> '') then // try without the prefix
@@ -8372,7 +8372,7 @@ end;
 
 function TExecutableCommandLine.SwitchAsText(const v: RawUtf8): RawUtf8;
 begin
-  Concat([fSwitch[length(v) > 1], v], result);
+  Join([fSwitch[length(v) > 1], v], result);
 end;
 
 procedure TExecutableCommandLine.Describe(const v: array of RawUtf8;
@@ -8390,9 +8390,9 @@ begin
       exit;
     desc := SwitchAsText(v[0]);
     if length(v[0]) <> 1 then
-      desc := Concat(['    ', desc]); // right align --#
+      desc := Join(['    ', desc]); // right align --#
     for i := 1 to high(v) do
-      desc := Concat([desc, ', ', SwitchAsText(v[i])]);
+      desc := Join([desc, ', ', SwitchAsText(v[i])]);
   end;
   if k <> clkOption then
   begin
@@ -8441,13 +8441,13 @@ begin
               j := i;
               break;
             end;
-          insert(Concat([fLineFeed, '         ']), param, j + 1);
+          insert(Join([fLineFeed, '         ']), param, j + 1);
         end;
       end
       else
         param := 'value';
     end;
-    desc := Concat([desc, ' <', param, '>']);
+    desc := Join([desc, ' <', param, '>']);
     if (k = clkArg) and
        (argindex > 0) then
     begin
@@ -8456,7 +8456,7 @@ begin
       fDescArg[argindex - 1] := param;
     end;
   end;
-  fDesc[k] := Concat([fDesc[k], ' ', desc]);
+  fDesc[k] := Join([fDesc[k], ' ', desc]);
   j := 1;
   if fSwitch[true] <> '--' then
     repeat
@@ -8468,8 +8468,8 @@ begin
       j := i;
     until false;
   if def <> '' then
-    def := Concat([' (default ', def, ')']);
-  _fmt('  %0:-20s', [Concat([desc + def])], pnames);
+    def := Join([' (default ', def, ')']);
+  _fmt('  %0:-20s', [Join([desc + def])], pnames);
   if (length(pnames) > 22) or
      (length(d) > 80) then
   begin
@@ -8491,14 +8491,14 @@ begin
             j := i;
             break;
           end;
-      pnames := Concat([pnames, sp, copy(d, 1, j)]);
+      pnames := Join([pnames, sp, copy(d, 1, j)]);
       delete(d, 1, j);
     end;
-    pnames := Concat([pnames, sp, d]);
+    pnames := Join([pnames, sp, d]);
   end
   else
     pnames := pnames + d; // we can put everything on the same line
-  fDescDetail[k] := Concat([fDescDetail[k], pnames, fLineFeed]);
+  fDescDetail[k] := Join([fDescDetail[k], pnames, fLineFeed]);
 end;
 
 function TExecutableCommandLine.Find(const v: array of RawUtf8;
@@ -8814,7 +8814,7 @@ var
 begin
   if customexedescription <> '' then
     fExeDescription := customexedescription;
-  result := Concat([fExeDescription, fLineFeed, fLineFeed, 'Usage: ']);
+  result := Join([fExeDescription, fLineFeed, fLineFeed, 'Usage: ']);
   if exename = '' then
     result := result + Executable.ProgramName
   else
@@ -8831,9 +8831,9 @@ begin
       if fDescDetail[clk] <> '' then
       begin
         if clk in [low(CLK_DESCR) .. high(CLK_DESCR)] then
-          result := Concat([result,
+          result := Join([result,
                     fLineFeed, CLK_DESCR[clk], CASE_DESCR[CaseSensitiveNames]]);
-        result := Concat([result, fLineFeed, fDescDetail[clk]]);
+        result := Join([result, fLineFeed, fDescDetail[clk]]);
       end;
 end;
 
@@ -8848,17 +8848,17 @@ begin
       if not fRetrieved[clk][i] then
         if clk = clkArg then
           if fDescArg = nil then
-            result := Concat([result, 'Unexpected "', fRawParams[i], '" argument', fLineFeed])
+            result := Join([result, 'Unexpected "', fRawParams[i], '" argument', fLineFeed])
           else
-            result := Concat([result, 'Missing <', fDescArg[i], '> argument', fLineFeed])
+            result := Join([result, 'Missing <', fDescArg[i], '> argument', fLineFeed])
         else
         begin
-          result := Concat([result, 'Unexpected ', SwitchAsText(fNames[clk][i]), ' ']);
+          result := Join([result, 'Unexpected ', SwitchAsText(fNames[clk][i]), ' ']);
           case clk of
             clkOption:
-              result := Concat([result, 'option']);
+              result := Join([result, 'option']);
             clkParam:
-              result := Concat([result, fValues[i], ' parameter']);
+              result := Join([result, fValues[i], ' parameter']);
           end;
           result := result + fLineFeed;
         end;
@@ -9088,7 +9088,7 @@ begin
       begin
         v := GetOneSystemStoreAsPem(s, FlushCache, now); // may use its cache
         if v <> '' then
-          result := Concat([result, v, #13#10]);
+          result := Join([result, v, #13#10]);
       end;
   if result = '' then
     exit;

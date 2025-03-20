@@ -1926,7 +1926,7 @@ begin
   end
   else
     aRoot := '/'; // allow for instance 'http://*:2869/'
-  aRoot := Concat([HTTPS_TEXT[Https], aDomainName, ':', aPort, aRoot]);
+  aRoot := Join([HTTPS_TEXT[Https], aDomainName, ':', aPort, aRoot]);
   Utf8ToSynUnicode(aRoot, result);
 end;
 

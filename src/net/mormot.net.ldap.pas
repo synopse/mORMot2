@@ -2642,7 +2642,7 @@ begin
   if DistinguishedName <> nil then
     DistinguishedName^ := domain;
   if Spn <> nil then
-    Concat(['LDAP/', Split(result, ':'), '@', UpperCase(domain)], Spn^);
+    Join(['LDAP/', Split(result, ':'), '@', UpperCase(domain)], Spn^);
 end;
 
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer;
@@ -3363,7 +3363,7 @@ var
   u8: SpiUtf8;
 begin
   try
-    u8 := Concat(['"', aPassword, '"']);
+    u8 := Join(['"', aPassword, '"']);
     result := Utf8DecodeToUnicodeRawByteString(u8);
   finally
     FillZero(u8);
@@ -5193,7 +5193,7 @@ begin
   if (self = nil) or
      (fTargetHost = '') then
     exit;
-  Concat([LDAP_DEFAULT_SCHEME[fTls], fTargetHost], result);
+  Join([LDAP_DEFAULT_SCHEME[fTls], fTargetHost], result);
   if fTargetPort <> LDAP_DEFAULT_PORT[fTls] then
     Append(result, ':', fTargetPort);
   if fKerberosDN <> '' then
@@ -5422,7 +5422,7 @@ begin
     end
   else
     // try the LDAP server as specified in TLdapClient settings
-    AddRawUtf8(dc, Concat([fSettings.TargetHost, ':', fSettings.TargetPort]));
+    AddRawUtf8(dc, Join([fSettings.TargetHost, ':', fSettings.TargetPort]));
   fSeq := 0;
   for i := 0 to high(dc) do
     try
@@ -6910,8 +6910,8 @@ begin
   if not Connected or
      not LdapEscapeName(ComputerName, cSafe) then
     exit;
-  cDn := NormalizeDN(Concat(['CN=', cSafe, ',', ComputerParentDN]));
-  cSam := Concat([UpperCase(cSafe), '$']); // traditional upper with ending $
+  cDn := NormalizeDN(Join(['CN=', cSafe, ',', ComputerParentDN]));
+  cSam := Join([UpperCase(cSafe), '$']); // traditional upper with ending $
   // Search Computer object in the domain
   cExisting := SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [cSam]);
   // If the search failed, we exit with the error message

@@ -6175,7 +6175,7 @@ end;
 
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
 begin
-  Concat(Values, RawUtf8(result)); // better explicit CP_UTF8 for FPC bug
+  Join(Values, RawUtf8(result)); // better explicit CP_UTF8 for FPC bug
 end;
 
 procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
@@ -7656,8 +7656,8 @@ var
     if (boundary <> '') and
        (boundary[1] = '"') then
       TrimChars(boundary, 1, 1); // "boundary" -> boundary
-    Concat(['--', boundary, '--'#13#10], endBoundary);
-    boundary := Concat(['--', boundary, #13#10]);
+    Join(['--', boundary, '--'#13#10], endBoundary);
+    boundary := Join(['--', boundary, #13#10]);
     result := true;
   end;
 
@@ -8267,7 +8267,7 @@ function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 begin
   if (URI <> '') and
      (Uri[length(URI)] <> '/') then
-    Concat([URI, '/'], RawUtf8(result))
+    Join([URI, '/'], RawUtf8(result))
   else
     result := URI;
 end;
@@ -11548,7 +11548,7 @@ begin
   for e := succ(low(e)) to high(e) do
   begin
     LowerCaseSelf(EMOJI_TEXT[e]);
-    Concat([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
+    Join([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
     SetLength(EMOJI_UTF8[e], 4); // order matches U+1F600 to U+1F64F codepoints
     Ucs4ToUtf8(ord(e) + $1f5ff, pointer(EMOJI_UTF8[e]));
   end;

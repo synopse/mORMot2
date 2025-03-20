@@ -1094,7 +1094,7 @@ begin
             if Dns = '' then
               Dns := one
             else
-              Dns := Concat([Dns, ',', one]);
+              Dns := Join([Dns, ',', one]);
           end;
           r := r^.Next;
         end;

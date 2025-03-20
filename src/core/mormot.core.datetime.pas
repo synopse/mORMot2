@@ -1888,7 +1888,7 @@ begin
   if (aFileName = '') or
      (aLine = '') then
     exit;
-  Concat([
+  Join([
     NowToString(true, ' ', aUtcTimeStamp), ' ', TrimControlChars(aLine)], line);
   AppendToTextFileSafe.Lock;
   try

@@ -912,10 +912,10 @@ function UniqueRawUtf8(var u: RawUtf8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// concatenate several string arguments into an UTF-8 string
-function Concat(const Args: array of RawByteString): RawUtf8; overload;
+function Join(const Args: array of RawByteString): RawUtf8; overload;
 
 /// concatenate several string arguments into an UTF-8 string
-procedure Concat(const Args: array of RawByteString; var Text: RawUtf8); overload;
+procedure Join(const Args: array of RawByteString; var Text: RawUtf8); overload;
 
 /// direct conversion of an ANSI-7 ShortString into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUtf8
@@ -5104,12 +5104,12 @@ begin
   result := @u[1];
 end;
 
-function Concat(const Args: array of RawByteString): RawUtf8;
+function Join(const Args: array of RawByteString): RawUtf8;
 begin
-  Concat(Args, result);
+  Join(Args, result);
 end;
 
-procedure Concat(const Args: array of RawByteString; var Text: RawUtf8);
+procedure Join(const Args: array of RawByteString; var Text: RawUtf8);
 var
   l, i: PtrInt;
   p: PUtf8Char;

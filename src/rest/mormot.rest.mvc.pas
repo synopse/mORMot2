@@ -1661,7 +1661,7 @@ begin
     'ip',        fRemoteIP,
     'useragent', fRemoteUserAgent], context, {dontadddef=}true);
   if roDefaultErrorContext in fApplication.fRenderOptions then
-    Concat([fApplication.fFactory.InterfaceName, ' ', NowToString,
+    Join([fApplication.fFactory.InterfaceName, ' ', NowToString,
       ' ', fRemoteIP, ' ', fRemoteUserAgent], details)
   else
     details := JsonReformat(VariantSaveJson(context));
@@ -1803,7 +1803,7 @@ begin
     // regular view page rendering
     fRun.fViews.Render(fMethodIndex, outContext, view);
   fOutput.Content := view.Content;
-  Concat([HEADER_CONTENT_TYPE, view.ContentType], fOutput.Header);
+  Join([HEADER_CONTENT_TYPE, view.ContentType], fOutput.Header);
   if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) and
      (head <> '') then
     AppendLine(fOutput.Header, [head]);
@@ -1983,7 +1983,7 @@ function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
   const aFileContent: RawByteString): RawByteString;
 begin
   if aFileContent <> '' then
-    result := Concat([GetMimeContentType(aFileContent, aFileName),
+    result := Join([GetMimeContentType(aFileContent, aFileName),
       #10, aFileContent]) // also cache content-type
   else
     result := '';
@@ -2260,7 +2260,7 @@ doInput:    if fInput = '' then
         rootCache:
           if fOutput.Status = HTTP_SUCCESS then
           begin
-            Concat([fOutput.Header, #0, fOutput.Content], RootValue);
+            Join([fOutput.Header, #0, fOutput.Content], RootValue);
             RootValueExpirationTime := fCacheCurrentSec;
           end
           else
@@ -2268,7 +2268,7 @@ doInput:    if fInput = '' then
         inputCache:
           if fOutput.Status = HTTP_SUCCESS then
             InputValues.Add(fCacheCurrentInputValueKey,
-              Concat([fOutput.Header, #0, fOutput.Content]), fCacheCurrentSec)
+              Join([fOutput.Header, #0, fOutput.Content]), fCacheCurrentSec)
           else
             InputValues.Add(fCacheCurrentInputValueKey, '');
       end;

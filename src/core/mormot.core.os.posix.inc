@@ -2276,7 +2276,7 @@ end;
 function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
 begin
   result := false;
-  folder := EnsureDirectoryExists(Concat([parent, sub]));
+  folder := EnsureDirectoryExists(Join([parent, sub]));
   if folder = '' then
     exit;
   if FileIsWritable(folder) then
@@ -2364,7 +2364,7 @@ begin
           if (PosEx('-----BEGIN', files[f]) <> 0) and
              IsAnsiCompatible(files[f]) and
              (PosEx(files[f], result) = 0) then // append PEM files once
-            result := Concat([result, #10, files[f]]);
+            result := Join([result, #10, files[f]]);
       end;
   end;
 end;
@@ -2538,7 +2538,7 @@ var
   begin
     // read all the file or directory names of this folder
     subcount := 0;
-    Concat([root, subpath], RawUtf8(addedpath));
+    Join([root, subpath], RawUtf8(addedpath));
     dir := FpOpendir(pointer(addedpath)); // faster than FindFirst()
     if dir = nil then
       exit;
@@ -4572,19 +4572,19 @@ var
 {$endif OSLINUX}
 begin
   {$ifdef OSLINUX}
-  txt := TrimU(Concat([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'),
+  txt := TrimU(Join([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'),
                   ' ', LoadProcFileTrim('/sys/class/dmi/id/product_name')]));
   if txt <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
     LoadProcFileTrimed('/sys/class/dmi/id/product_version', prod);
     if prod <> '' then
-      txt := Concat([txt, ' ', prod]);
+      txt := Join([txt, ' ', prod]);
   end
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     LoadProcFileTrimed('/proc/device-tree/model', txt);
   {$else}
-  txt := TrimU(Concat([GetSystemProperty('ro.product.brand'), ' ',
+  txt := TrimU(Join([GetSystemProperty('ro.product.brand'), ' ',
                        GetSystemProperty('ro.product.name'), ' ',
                        GetSystemProperty('ro.product.device')]));
   {$endif OSLINUX}
@@ -4592,11 +4592,11 @@ begin
     if txt = '' then
       txt := __BiosInfoHardwareFromCpuInfo
     else
-      txt := Concat([txt, ' (', __BiosInfoHardwareFromCpuInfo, ')'])
+      txt := Join([txt, ' (', __BiosInfoHardwareFromCpuInfo, ')'])
   else if txt = '' then
     {$ifdef CPUARM3264}
     if CpuArmModel <> '' then
-      Concat(['Unamed ', CpuArmModel, ' system'], txt)
+      Join(['Unamed ', CpuArmModel, ' system'], txt)
     else
     {$endif CPUARM3264}
       txt := 'Generic ' + CPU_ARCH_TEXT + ' system';
@@ -4775,7 +4775,7 @@ begin
        (FindNext(SR) = 0) then
       release := SR.Name;
     release := Split(release, '-');
-    dist := Split(StringFromFileNoSize(Concat(['/etc/', SR.Name])), #10);
+    dist := Split(StringFromFileNoSize(Join(['/etc/', SR.Name])), #10);
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then
@@ -4897,9 +4897,9 @@ begin
   SystemInfo.uts.sysname := uts.SysName;
   SystemInfo.uts.version := uts.Version;
   SystemInfo.uts.nodename := uts.NodeName;
-  OSVersionText := Concat([SystemInfo.uts.sysname, ' ', SystemInfo.uts.release]);
+  OSVersionText := Join([SystemInfo.uts.sysname, ' ', SystemInfo.uts.release]);
   if SystemInfo.release <> '' then
-    OSVersionText := Concat([SystemInfo.release, ' - ', OSVersionText]);
+    OSVersionText := Join([SystemInfo.release, ' - ', OSVersionText]);
   P := @uts.release[0];
   KernelRevision := _GetNextCardinal(P) shl 16 +
                     _GetNextCardinal(P) shl 8 +
@@ -4907,7 +4907,7 @@ begin
   OSVersion32.os := OS_KIND;
   MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
   {$ifdef OSANDROID}
-  OSVersionText := Concat(['Android (', OSVersionText, ')']);
+  OSVersionText := Join(['Android (', OSVersionText, ')']);
   {$else}
   {$ifdef OSLINUX}
   if SystemInfo.dwNumberOfProcessors = 0 then // e.g. QEMU limited /proc/cpuinfo
@@ -4934,7 +4934,7 @@ begin
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif NODIRECTTHREADMANAGER}
   {$ifdef OSDARWIN}
-  OSVersionText := Concat([ToText(OSVersion32), ' (', OSVersionText, ')']);
+  OSVersionText := Join([ToText(OSVersion32), ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and

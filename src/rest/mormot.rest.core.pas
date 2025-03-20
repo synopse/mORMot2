@@ -1994,7 +1994,7 @@ begin
       [optIgnoreException]); // to use exec.ExecutedInstancesFailed
     try
       result := exec.ExecuteJson(instances,
-        pointer(Concat(['[', aParams, ']'])), nil);
+        pointer(Join(['[', aParams, ']'])), nil);
       if exec.ExecutedInstancesFailed <> nil then
         for i := length(exec.ExecutedInstancesFailed) - 1 downto 0 do
           if exec.ExecutedInstancesFailed[i] <> '' then
@@ -3878,7 +3878,7 @@ begin
   n := StringReplaceChars(aName, '/', '_'); // TOrmModel.Root did allow '/'
   if not PropNameValid(pointer(n)) then
      ERestException.RaiseUtf8('%.SetOutCookie(%): invalid name', [self, aName]);
-  SetOutSetCookie(Concat([n, '=', aValue]));
+  SetOutSetCookie(Join([n, '=', aValue]));
 end;
 
 procedure TRestUriContext.OutHeadFromCookie;
@@ -3926,7 +3926,7 @@ begin
   server := ServerHash;
   if server = '' then
     server := crc32cUtf8ToHex(Call^.OutBody);
-  server := Concat(['"', server, '"']);
+  server := Join(['"', server, '"']);
   if client <> server then
     AppendLine(Call^.OutHead, ['ETag: ', server])
   else
@@ -4061,7 +4061,7 @@ begin
     fCall^.OutStatus := HTTP_MOVEDPERMANENTLY
   else
     fCall^.OutStatus := HTTP_TEMPORARYREDIRECT;
-  Concat(['Location: ', NewLocation], fCall^.OutHead);
+  Join(['Location: ', NewLocation], fCall^.OutHead);
 end;
 
 procedure TRestUriContext.Returns(const NameValuePairs: array of const;
