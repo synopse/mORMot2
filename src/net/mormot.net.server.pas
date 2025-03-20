@@ -2529,8 +2529,8 @@ begin
   ident := ProcessName;
   if ident = '' then
     FormatUtf8('udp%srv', [BindPort], ident);
-   LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
-     [BindAddress, BindPort, ident], self);
+  LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
+    [BindAddress, BindPort, ident], self);
   res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
     TimeoutMS, TimeoutMS, TimeoutMS, 10, fSock, @fSockAddr);
   if res <> nrOk then
@@ -2575,7 +2575,7 @@ end;
 
 function TUdpServerThread.GetIPWithPort: RawUtf8;
 begin
-  result := fSockAddr.IPWithPort;
+  fSockAddr.IPWithPort(result);
 end;
 
 procedure TUdpServerThread.AfterBind;
@@ -5833,7 +5833,7 @@ begin
   fOwner := Owner;
   fBroadcastSafe.Init;
   fBroadcastAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
-  fBroadcastIpPort := fBroadcastAddr.IPWithPort;
+  fBroadcastAddr.IPWithPort(fBroadcastIpPort);
   fBroadcastEvent := TSynEvent.Create;
   // POSIX requires to bind to the broadcast address to receive brodcasted frames
   inherited Create(fOwner.fLog,
@@ -6123,7 +6123,7 @@ begin
   fLog := aLogClass;
   if fLog = nil then
     fLog := TSynLog;
-  log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
+  log := fLog.Enter('Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
   if (fSettings = nil) or

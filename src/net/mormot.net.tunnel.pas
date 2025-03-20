@@ -398,7 +398,7 @@ begin
          not Terminated then
       begin
         fLog.Log(sllTrace,
-          'DoExecute: accepted %', [fClientAddr.IPWithPort], self);
+          'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
         if (toAcceptNonLocal in fOwner.Options) or
            (fClientAddr.IP4 = cLocalhost32) then
          fState := stProcessing // start background process
@@ -561,7 +561,7 @@ begin
       TimeOutMS, TimeOutMS, TimeOutMS, {retry=}0, sock, @addr), 'Open');
     result := addr.Port;
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: bound to %', [addr.IPWithPort], self);
+      log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
     fOpenBind := true;
   end
   else
