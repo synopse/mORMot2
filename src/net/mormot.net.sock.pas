@@ -2061,6 +2061,11 @@ function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean = false;
   aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil;
   aTLSIgnoreCertError: boolean = false): TCrtSocket;
 
+var
+  /// maximum chunk size for each TCrtSocket.TrySndLow/TrySockRecv syscall
+  // - 256KB seems fair enough, safer and not slower in practice
+  CrtSocketSendRecvMaxBytes: PtrInt = 256 shl 10;
+
 
 { ********* NTP / SNTP Protocol Client }
 
@@ -6133,7 +6138,7 @@ begin
     repeat
       // first check for any available data
       // - some may be available at fSecure/TLS level, but not from fSock/TCP
-      read := expected - Length;
+      read := MinPtrInt(CrtSocketSendRecvMaxBytes, expected - Length);
       if fSecure <> nil then
         res := fSecure.Receive(Buffer, read)
       else
@@ -6146,7 +6151,7 @@ begin
       {$endif SYNCRTDEBUGLOW}
       case res of
         nrOk:
-          ;
+          ; // Buffer^ was filled with read bytes
         nrRetry:
           begin
             read := 0; // call RecvPending/WaitFor and retry Recv
@@ -6161,12 +6166,14 @@ begin
       end;
       inc(fBytesIn, read);
       inc(Length, read);
-      if StopBeforeLength or
-         (Length = expected) then
+      if fAborted or
+         (Length = expected) or
+         (StopBeforeLength and (read < CrtSocketSendRecvMaxBytes)) then
         break; // good enough for now
       inc(PByte(Buffer), read);
-      if (fSock.RecvPending(pending) = nrOk) and
-         (pending > 0) then
+      if (res = nrOk) or
+         ((fSock.RecvPending(pending) = nrOk) and
+          (pending > 0)) then
         continue; // no need to call WaitFor()
       if fAborted then
         break;
@@ -6308,7 +6315,7 @@ begin
   else
   begin
     repeat
-      sent := Len;
+      sent := MinPtrInt(CrtSocketSendRecvMaxBytes, Len);
       if fSecure <> nil then
         res := fSecure.Send(P, sent)
       else
@@ -6320,6 +6327,8 @@ begin
         if Len <= 0 then
           break; // all data successfully sent
         inc(PByte(P), sent);
+        if res = nrOk then
+          continue;
       end;
       if fAborted or
          not (res in [nrOk, nrRetry]) then
