@@ -11871,22 +11871,25 @@ procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 var
   blocks: cardinal;
 begin
+  if len = 0 then
+    exit;
   blocks := len shr 4; // from bytes to blocks
   if blocks <> 0 then
   begin
     crcblocks(pointer(hash), pointer(buf), blocks);
     blocks := blocks shl 4; // from blocks to bytes
-    inc(buf, blocks);
     dec(len, blocks);
+    if len = 0 then
+      exit;
+    inc(buf, blocks);
   end;
-  if len <> 0 then
-    with PHash128Rec(hash)^ do
-    begin
-      c0 := crc32c(c0, buf, len);
-      c1 := crc32c(c1, buf, len);
-      c2 := crc32c(c2, buf, len);
-      c3 := crc32c(c3, buf, len);
-    end;
+  with PHash128Rec(hash)^ do
+  begin
+    c0 := crc32c(c0, buf, len);
+    c1 := crc32c(c1, buf, len);
+    c2 := crc32c(c2, buf, len);
+    c3 := crc32c(c3, buf, len);
+  end;
 end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
