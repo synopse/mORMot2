@@ -139,13 +139,13 @@ begin
     fOwner.LogVerbose(self, 'Frame forwarded', [], fRd);
   if fGetBlocking.TrySndLow(fRd.Buffer, fRd.Len) then
   begin
-    fOwner.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
+    fOwner.LogClass.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
       [Handle, fRd.Len], self);
     result := soContinue;
   end
   else
   begin
-    fOwner.Log.Add.Log(sllDebug,
+    fOwner.LogClass.Add.Log(sllDebug,
       'OnRead % RTSP failed send to GET -> close % connection',
       [Handle, RemoteIP], self);
     result := soClose;
@@ -178,14 +178,14 @@ begin
   if rtsp <> nil then
   try
     fOwner.WriteString(rtsp, decoded); // async sending to RTSP server
-    fOwner.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
+    fOwner.LogClass.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
     fOwner.ConnectionLock.ReadOnlyUnLock;
   end
   else
   begin
-    fOwner.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
+    fOwner.LogClass.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
       [Handle, fRtspTag], self);
     result := soClose;
   end;
@@ -208,7 +208,6 @@ constructor TRtspOverHttpServer.Create(
   const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsyncConnectionsOptions;
   aThreadPoolCount: integer);
 begin
-  fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
   fPendingGet := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fThreadSafe]);
@@ -220,7 +219,7 @@ destructor TRtspOverHttpServer.Destroy;
 var
   {%H-}log: ISynLog;
 begin
-  log := fLog.Enter(self, 'Destroy');
+  log := fLogClass.Enter(self, 'Destroy');
   inherited Destroy;
   fPendingGet.Free;
 end;
@@ -260,7 +259,7 @@ begin
   aConnection := nil;
   get := nil;
   result := false;
-  log := fLog.Enter('ConnectionCreate(%)', [pointer(aSocket)], self);
+  log := fLogClass.Enter('ConnectionCreate(%)', [pointer(aSocket)], self);
   try
     res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails
     if (res <> nrOK) and
