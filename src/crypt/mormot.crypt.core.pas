@@ -7850,6 +7850,7 @@ begin
     // XOR with some userland entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
+    sha3.Update(@StartupRandom, SizeOf(StartupRandom));
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
@@ -7858,9 +7859,6 @@ begin
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     sha3.Update(RawSmbios.Data); // may be '' if has not been retrieved yet
     sha3.Update(@CpuCache, SizeOf(CpuCache));
-    {$ifdef CPUINTELARM}
-    sha3.Update(@CpuFeatures, SizeOf(CpuFeatures));
-    {$endif CPUINTELARM}
     // 256 random bytes salt, set at startup to avoid hash flooding of AesNiHash
     {$ifdef USEAESNIHASH}
     sha3.Update(AESNIHASHKEYSCHED_);
@@ -11838,6 +11836,7 @@ begin
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
+    XorBlock16(AESNIHASHKEYSCHED, @StartupRandom); // some mormot.core.os salt
     RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // genuine to avoid hash flooding
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
