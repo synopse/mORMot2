@@ -417,12 +417,14 @@ procedure TTestCoreCrypto._SHA512;
       '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
     {$ifdef USE_OPENSSL}
     if TOpenSslHash.IsAvailable then
+    begin
       CheckEqual(TOpenSslHash.Hash('sha512', ''),
         'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
         '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
       CheckEqual(TOpenSslHash.Hash('sha512', FOX),
         '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
         '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+    end;
     {$endif USE_OPENSSL}
     c := 'a';
     sha.Init;
@@ -1690,13 +1692,16 @@ begin
     '382576a7841021cc28fc4c0948753fb8312090cea942ea4c4e73' +
     '5d10dc724b155f9f6069f289d61daca0cb814502ef04eae1');
   {$ifdef USE_OPENSSL}
-  CheckEqual(BigNumHexFromDecimal('0'), '');
-  CheckEqual(BigNumHexFromDecimal('1'), '01');
-  CheckEqual(BigNumHexFromDecimal('15'), '0f');
-  CheckEqual(BigNumHexFromDecimal('255'), 'ff');
-  CheckEqual(BigNumHexFromDecimal('65534'), 'fffe');
-  CheckEqual(BigNumHexFromDecimal('65535'), 'ffff');
-  CheckEqual(BigNumHexFromDecimal('12345678901234567890'), 'ab54a98ceb1f0ad2');
+  if OpenSslIsAvailable then
+  begin
+    CheckEqual(BigNumHexFromDecimal('0'), '');
+    CheckEqual(BigNumHexFromDecimal('1'), '01');
+    CheckEqual(BigNumHexFromDecimal('15'), '0f');
+    CheckEqual(BigNumHexFromDecimal('255'), 'ff');
+    CheckEqual(BigNumHexFromDecimal('65534'), 'fffe');
+    CheckEqual(BigNumHexFromDecimal('65535'), 'ffff');
+    CheckEqual(BigNumHexFromDecimal('12345678901234567890'), 'ab54a98ceb1f0ad2');
+  end;
   {$endif USE_OPENSSL}
 end;
 
