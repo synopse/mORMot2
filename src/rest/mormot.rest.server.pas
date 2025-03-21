@@ -4542,6 +4542,16 @@ var
   rn: TRestNode;
   met: PServiceContainerInterfaceMethod;
   nam: RawUtf8;
+
+  procedure SetupNam;
+  begin
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
+      ndx, met^.InterfaceService);
+    if rn <> rnInterfaceClientID then
+      Router.Setup([mGET, mPOST, mPUT, mDELETE], nam + '/', rn, nil, nil,
+        ndx, met^.InterfaceService); // /Model/Interface/Method/
+  end;
+
 begin
   services := Server.Services as TServiceContainerServer;
   // methods could be POST + JSON body but also GET + URI encoded parameters
@@ -4578,19 +4588,18 @@ begin
     nam := met^.InterfaceDotMethodName;
     if rn = rnInterfaceClientID then
       Append(nam, '/<int:clientid>');
-    // URI sent as /Model/Interface.Method[/ClientDrivenID]
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
-      ndx, met^.InterfaceService);
-    if rn <> rnInterfaceClientID then
-      Router.Setup([mGET, mPOST, mPUT, mDELETE], nam + '/', rn, nil, nil,
-        ndx, met^.InterfaceService); // /Model/Interface.Method/
-    // URI sent as /Model/Interface/Method[/ClientDrivenID]
+    // /Model/Interface.Method[/ClientDrivenID] by IInterface.Method
+    SetupNam;
+    // /Model/Interface/Method[/ClientDrivenID] by IInterface.Method
     nam := StringReplaceChars(nam, '.', '/');
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
-      ndx, met^.InterfaceService);
-    if rn <> rnInterfaceClientID then
-      Router.Setup([mGET, mPOST, mPUT, mDELETE], nam + '/', rn, nil, nil,
-        ndx, met^.InterfaceService); // /Model/Interface/Method/
+    SetupNam;
+    // /Model/calculator/swap could also be processed by ICalculator._Swap()
+    if nam[1] = '_' then
+    begin
+      delete(nam, 1, 1);
+      if nam <> '' then
+        SetupNam;
+    end;
   end;
 end;
 
