@@ -4541,14 +4541,17 @@ var
   sic: TServiceInstanceImplementation;
   rn: TRestNode;
   met: PServiceContainerInterfaceMethod;
-  nam: RawUtf8;
+  fact: TInterfaceFactory;
+  _name: RawUtf8;
 
-  procedure SetupNam;
+  procedure SetupOne(aName: RawUtf8);
   begin
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
+    if rn = rnInterfaceClientID then
+      Append(aName, '/<int:clientid>');
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], aName, rn, nil, nil,
       ndx, met^.InterfaceService);
     if rn <> rnInterfaceClientID then
-      Router.Setup([mGET, mPOST, mPUT, mDELETE], nam + '/', rn, nil, nil,
+      Router.Setup([mGET, mPOST, mPUT, mDELETE], aName + '/', rn, nil, nil,
         ndx, met^.InterfaceService); // /Model/Interface/Method/
   end;
 
@@ -4580,26 +4583,26 @@ begin
         else
           // imFree can make early release, e.g. from sicThread
           rn := rnInterfaceClientID; // free requires a <clientid>
-    else
-      // interface methods need a /ClientDrivenID only if sicClientDriven
-      if sic = sicClientDriven then
-        rn := rnInterfaceClientID;
+    else // real/regular interface method
+      begin
+        // interface methods need a /ClientDrivenID only if sicClientDriven
+        if sic = sicClientDriven then
+          rn := rnInterfaceClientID;
+        // ICalculator._Swap() should be routed also from /Model/calculator/swap
+        fact := met^.InterfaceService.InterfaceFactory;
+        _name := fact.Methods[ndx - SERVICE_PSEUDO_METHOD_COUNT].Uri;
+        if _name[1] = '_' then
+        begin
+          delete(_name, 1, 1);
+          if fact.FindMethodIndexExact(_name) < 0 then
+            SetupOne(Join([fact.InterfaceUri, '/', _name]));
+        end;
+      end;
     end;
-    nam := met^.InterfaceDotMethodName;
-    if rn = rnInterfaceClientID then
-      Append(nam, '/<int:clientid>');
     // /Model/Interface.Method[/ClientDrivenID] by IInterface.Method
-    SetupNam;
+    SetupOne(met^.InterfaceDotMethodName);
     // /Model/Interface/Method[/ClientDrivenID] by IInterface.Method
-    nam := StringReplaceChars(nam, '.', '/');
-    SetupNam;
-    // /Model/calculator/swap could also be processed by ICalculator._Swap()
-    if nam[1] = '_' then
-    begin
-      delete(nam, 1, 1);
-      if nam <> '' then
-        SetupNam;
-    end;
+    SetupOne(StringReplaceChars(met^.InterfaceDotMethodName, '.', '/'));
   end;
 end;
 
