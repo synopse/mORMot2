@@ -541,22 +541,21 @@ type
   TInterfaceFactory = class
   protected
     fInterfaceRtti: TRttiJson;
-    fMethodsCount: integer;
-    fAddMethodsLevel: integer;
     fMethods: TInterfaceMethodDynArray;
-    fMethod: TDynArrayHashed;
-    // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
-    fContract: RawUtf8;
     fInterfaceName: RawUtf8;
     fInterfaceUri: RawUtf8;
-    fDocVariantOptions: TDocVariantOptions;
-    fJsonParserOptions: TJsonParserOptions;
+    fDocVariantOptions: TDocVariantOptions; // (16-bit)
+    fJsonParserOptions: TJsonParserOptions; // (16-bit)
+    fMethodsCount: byte;
+    fAddMethodsLevel: byte;
+    fMethodIndexCallbackReleased: ShortInt; // (8-bit)
+    fMethodIndexCurrentFrameCallback: ShortInt;
+    fArgUsed: TInterfaceFactoryPerArgumentDynArray;
+    // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
+    fContract: RawUtf8;
     {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
     fFakeVTable: TPointerDynArray;
     {$endif CPUX86}
-    fMethodIndexCallbackReleased: integer;
-    fMethodIndexCurrentFrameCallback: integer;
-    fArgUsed: TInterfaceFactoryPerArgumentDynArray;
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); virtual; abstract;
     // low-level JIT redirection of the VMT to TInterfacedObjectFake.FakeCall
     function GetMethodsVirtualTable: pointer;
@@ -653,7 +652,7 @@ type
     // - does not include the default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods: so you should
     // add SERVICE_PSEUDO_METHOD_COUNT to compute the regular MethodIndex
-    property MethodsCount: integer
+    property MethodsCount: byte
       read fMethodsCount;
     /// reference all known interface arguments per value type
     property ArgUsed: TInterfaceFactoryPerArgumentDynArray
@@ -665,7 +664,7 @@ type
     // a callback is released on the client side so that you may be able e.g. to
     // unsubscribe the callback from an interface list (via InterfaceArrayDelete)
     // - contains -1 if no such method do exist in the interface definition
-    property MethodIndexCallbackReleased: integer
+    property MethodIndexCallbackReleased: ShortInt
       read fMethodIndexCallbackReleased;
     /// identifies a CurrentFrame() method in this interface
     // - i.e. the index in Methods[] of the following signature:
@@ -674,7 +673,7 @@ type
     // for interface callbacks in case of WebSockets jumbo frames, to allow e.g.
     // faster database access via a batch
     // - contains -1 if no such method do exist in the interface definition
-    property MethodIndexCurrentFrameCallback: integer
+    property MethodIndexCurrentFrameCallback: ShortInt
       read fMethodIndexCurrentFrameCallback;
     /// the interface name, without its initial 'I'
     // - e.g. ICalculator -> 'Calculator'
@@ -3856,8 +3855,6 @@ begin
     // as in TServiceFactory.Create
     delete(fInterfaceUri, 1, 1);
   // retrieve all interface methods (recursively including ancestors)
-  fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, ptRawUtf8,
-    @fMethodsCount, {caseinsens=}true);
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
     EInterfaceFactory.RaiseUtf8('%.Create(%): interface has ' +
@@ -4290,35 +4287,48 @@ begin
   end;
 end;
 
-function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
+function FastFindName(m: PInterfaceMethod; pn: PUtf8Char; n: PtrInt): PtrInt;
 var
-  m: PInterfaceMethod;
-begin
-  if (self <> nil) and
-     (aMethodName <> '') then
-  begin
-    if MethodsCount < 10 then
+  pm: PUtf8Char;
+  lm, ln: PtrInt;
+begin // very efficient O(n) search sub-function
+  result := 0;
+  ln := PStrLen(pn - _STRLEN)^;
+  repeat
+    pm := pointer(m^.Uri);              // method name
+    lm := PStrLen(pm - _STRLEN)^ - ln;  // method name length
+    if lm = 0 then // same length
     begin
-      m := pointer(fMethods);
-      for result := 0 to MethodsCount - 1 do
-        if IdemPropNameU(m^.Uri, aMethodName) then // inlined
-          exit
-        else
-          inc(m);
+      if IdemPropNameUSameLenNotNull(pm, pn, ln) then // inlined on FPC
+        exit;
     end
-    else
+    else if pm^ = '_' then // IService._Start() will match /service/start
     begin
-      result := fMethod.FindHashed(aMethodName);
-      exit;
+      dec(lm);
+      if lm = 0 then
+        if IdemPropNameUSameLenNotNull(pm + 1, pn, ln) then // inlined on FPC
+          exit;
     end;
-  end;
-  result := -1
+    inc(m);
+    inc(result);
+  until result = n;
+  result := -1;
+end;
+
+function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
+begin // called during service registration phase, or TRestServerRoutingJsonRpc
+  if (self <> nil) and
+     (aMethodName <> '') and
+     (fMethodsCount <> 0) then
+    result := FastFindName(pointer(fMethods), pointer(aMethodName), fMethodsCount)
+  else
+    result := -1
 end;
 
 function TInterfaceFactory.FindMethod(const aMethodName: RawUtf8): PInterfaceMethod;
 var
   i: PtrInt;
-begin
+begin // this method is not called by the framework in normal use
   i := FindMethodIndex(aMethodName);
   if i < 0 then
     result := nil
@@ -4330,7 +4340,7 @@ function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUtf8;
   alsoSearchExactMethodName: boolean): integer;
 begin
   if PosExChar('.', aFullMethodName) <> 0 then
-    for result := 0 to MethodsCount - 1 do
+    for result := 0 to fMethodsCount - 1 do
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName, aFullMethodName) then
         exit;
   if alsoSearchExactMethodName then
@@ -4784,12 +4794,20 @@ var
   sa: PInterfaceMethodArgument;
 begin
   nm := GetRttiInterface(aInterface, info); // call mormot.core.rtti logic
-  fMethod.Capacity := nm;
+  if (fMethods <> nil) or
+     (fMethodsCount <> 0) or
+     (nm > 255) then
+    EInterfaceFactory.RaiseUtf8('%.AddMethodsFromTypeInfo(%)', [self, info.Name]);
+  if nm = 0 then
+    exit;
+  SetLength(fMethods, nm);
+  sm := pointer(fMethods);
   m := pointer(info.Methods);
-  while nm > 0 do
-  begin
-    sm := fMethod.AddUniqueName(m^.Name, '%.% method: duplicated name for %',
-      [info.Name, m^.Name, self]);
+  repeat
+    if FindMethodIndex(m^.Name) >= 0 then
+      EInterfaceFactory.RaiseUtf8('%.AddMethodsFromTypeInfo: duplicated %.%',
+        [self, info.Name, m^.Name]);
+    sm^.Uri := m^.Name;
     sm^.HierarchyLevel := m^.HierarchyLevel;
     na := length(m^.Args);
     SetLength(sm^.Args, na);
@@ -4810,8 +4828,10 @@ begin
       dec(na);
     end;
     inc(m);
+    inc(sm);
+    inc(fMethodsCount); // update one by one for FindMethodIndex() above
     dec(nm);
-  end;
+  until nm = 0;
 end;
 
 {$endif HASINTERFACERTTI}
@@ -4830,10 +4850,17 @@ var
   u: RawUtf8;
 begin
   if Length(aParams) mod ARGPERARG <> 0 then
-    EInterfaceFactory.RaiseUtf8(
-      '%: invalid aParams count for %.AddMethod("%")', [fInterfaceName, self, aName]);
-  meth := fMethod.AddUniqueName(aName, '%.% method: duplicated generated name for %',
-    [fInterfaceName, aName, self]);
+    EInterfaceFactory.RaiseUtf8('%: invalid aParams count for %.AddMethod("%")',
+      [fInterfaceName, self, aName]);
+  if FindMethodIndex(aName) >= 0 then
+    EInterfaceFactory.RaiseUtf8('%.AddMethod: duplicated generated name %.%',
+      [self, fInterfaceName, aName]);
+  if fMethodsCount > MAX_METHOD_COUNT then
+    exit; // caller would raise exception, but not exceed 255
+  SetLength(fMethods, fMethodsCount + 1);
+  meth := @fMethods[fMethodsCount];
+  inc(fMethodsCount);
+  meth^.Uri := aName;
   na := length(aParams) div ARGPERARG;
   SetLength(meth^.Args, na + 1); // always include Args[0]=self
   arg := @meth^.Args[0];
