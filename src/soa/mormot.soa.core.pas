@@ -1091,17 +1091,20 @@ end;
 
 function TServiceFactory.ServiceMethodIndex(const Name: RawUtf8): PtrInt;
 begin
-  result := fInterface.FindMethodIndex(Name);
-  if result >= 0 then
-    inc(result, SERVICE_PSEUDO_METHOD_COUNT)
-  else
+  if Name <> '' then
   begin
+    result := fInterface.FindMethodIndex(Name);
+    if result >= 0 then
+    begin
+      inc(result, SERVICE_PSEUDO_METHOD_COUNT);
+      exit;
+    end;
     for result := 0 to SERVICE_PSEUDO_METHOD_COUNT - 1 do
       if IdemPropNameU(Name,
            SERVICE_PSEUDO_METHOD[TServiceInternalMethod(result)]) then
         exit;
-    result := -1;
   end;
+  result := -1;
 end;
 
 function TServiceFactory.GetInterfaceTypeInfo: PRttiInfo;

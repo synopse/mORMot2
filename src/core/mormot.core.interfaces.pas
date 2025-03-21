@@ -4251,20 +4251,28 @@ begin
 end;
 
 function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
+var
+  m: PInterfaceMethod;
 begin
   if (self <> nil) and
      (aMethodName <> '') then
+  begin
     if MethodsCount < 10 then
     begin
+      m := pointer(fMethods);
       for result := 0 to MethodsCount - 1 do
-        if IdemPropNameU(fMethods[result].Uri, aMethodName) then // inlined
-          exit;
-      result := -1;
+        if IdemPropNameU(m^.Uri, aMethodName) then // inlined
+          exit
+        else
+          inc(m);
     end
     else
-      result := fMethod.FindHashed(aMethodName)
-  else
-    result := -1
+    begin
+      result := fMethod.FindHashed(aMethodName);
+      exit;
+    end;
+  end;
+  result := -1
 end;
 
 function TInterfaceFactory.FindMethod(const aMethodName: RawUtf8): PInterfaceMethod;
