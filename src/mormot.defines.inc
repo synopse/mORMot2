@@ -788,8 +788,8 @@
   // - even if those AES engines are slower and closed source (so should better
   // be avoided), we use it for TAesPrng.GetEntropy, as it can't hurt
   {$define USE_PROV_RSA_AES}
-  // define at your own risk, if you have the good libraries ;)
-  {.$define USE_OPENSSL}
+  // define at your own risk, praying you have the good libraries ;)
+  {$define USE_OPENSSL}
 {$else}
   {$ifndef OSANDROID}
     // try OpenSSL on POSIX systems where likely to be unique and maintained
@@ -799,6 +799,10 @@
 {$ifdef FORCE_OPENSSL}
   {$define USE_OPENSSL} // if you think you are a lucky enough guy
 {$endif FORCE_OPENSSL}
+{$ifdef DISABLE_OPENSSL} // global conditional
+  {$undef USE_OPENSSL}
+  {$undef FORCE_OPENSSL}
+{$endif DISABLE_OPENSSL}
 
 
 // -----------
