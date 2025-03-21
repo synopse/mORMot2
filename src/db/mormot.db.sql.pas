@@ -5878,76 +5878,79 @@ end;
 procedure TSqlDBStatement.Bind(const Params: array of const;
   IO: TSqlDBParamInOutType);
 var
-  i: PtrInt;
-  c: integer;
-begin
-  for i := 1 to high(Params) + 1 do
-    with Params[i - 1] do // bind parameter index starts at 1
-      case VType of
-        vtString:     // expect WinAnsi String for ShortString
-          BindTextU(i, WinAnsiToUtf8(@VString^[1], ord(VString^[0])), IO);
-        vtAnsiString:
-          if VAnsiString = nil then
-            BindTextU(i, '', IO)
+  arg, c: integer;
+  p: PVarRec;
+ begin
+  p := @Params[0];
+  for arg := 1 to high(Params) + 1 do // bind parameter index starts at 1
+  begin
+    case p^.VType of
+      vtString:     // expect WinAnsi String for ShortString
+        BindTextU(arg, WinAnsiToUtf8(@p^.VString^[1], ord(p^.VString^[0])), IO);
+      vtAnsiString:
+        if p^.VAnsiString = nil then
+          BindTextU(arg, '', IO)
+        else
+        begin
+          c := PInteger(p^.VAnsiString)^ and $00ffffff;
+          if c = JSON_BASE64_MAGIC_C then
+            BindBlob(arg, Base64ToBin(p^.VPChar + 3,
+                          length(RawUtf8(p^.VAnsiString)) - 3))
+          else if c = JSON_SQLDATE_MAGIC_C then
+            BindDateTime(arg, Iso8601ToDateTimePUtf8Char(
+              PUtf8Char(p^.VAnsiString) + 3, length(RawUtf8(p^.VAnsiString)) - 3))
           else
-          begin
-            c := PInteger(VAnsiString)^ and $00ffffff;
-            if c = JSON_BASE64_MAGIC_C then
-              BindBlob(i, Base64ToBin(PAnsiChar(VAnsiString) + 3,
-                length(RawUtf8(VAnsiString)) - 3))
-            else if c = JSON_SQLDATE_MAGIC_C then
-              BindDateTime(i, Iso8601ToDateTimePUtf8Char(PUtf8Char(VAnsiString) + 3,
-                length(RawUtf8(VAnsiString)) - 3))
-            else
-              BindTextU(i, AnyAnsiToUtf8(RawByteString(VAnsiString)), IO);
-          end;
-        vtPChar:
-          BindTextP(i, PUtf8Char(VPChar), IO);
-        vtChar:
-          BindTextU(i, RawUtf8(VChar), IO);
-        vtWideChar:
-          BindTextU(i, RawUnicodeToUtf8(@VWideChar, 1), IO);
-        vtPWideChar:
-          BindTextU(i, RawUnicodeToUtf8(VPWideChar, StrLenW(VPWideChar)), IO);
-        vtWideString:
-          BindTextW(i, WideString(VWideString), IO);
-        {$ifdef HASVARUSTRING}
-        {$ifdef UNICODE}
-        vtUnicodeString:
-          BindTextS(i, string(VUnicodeString), IO);
-        {$else}
-        vtUnicodeString:
-          BindTextU(i, UnicodeStringToUtf8(UnicodeString(VUnicodeString)), IO);
-        {$endif UNICODE}
-        {$endif HASVARUSTRING}
-        vtBoolean:
-          if VBoolean then // normalize
-            Bind(i, 1, IO)
-          else
-            Bind(i, 0, IO);
-        vtInteger:
-          Bind(i, VInteger, IO);
-        vtInt64:
-          Bind(i, VInt64^, IO);
-        {$ifdef FPC}
-        vtQWord:
-          Bind(i, VQWord^, IO);
-        {$endif FPC}
-        vtCurrency:
-          BindCurrency(i, VCurrency^, IO);
-        vtExtended:
-          Bind(i, VExtended^, IO);
-        vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec) or VarRecToVariant()
-          if VPointer = nil then
-            BindNull(i, IO)
-          else
-            Bind(i, PtrInt(VPointer), IO);
-        vtVariant:
-          BindVariant(i, VVariant^, VariantIsBlob(VVariant^), IO);
-      else
-        ESqlDBException.RaiseUtf8(
-          '%.BindArrayOfConst(Param=%,Type=%)', [self, i, VType]);
-      end;
+            BindTextU(arg, AnyAnsiToUtf8(RawByteString(p^.VAnsiString)), IO);
+        end;
+      vtPChar:
+        BindTextP(arg, PUtf8Char(p^.VPChar), IO);
+      vtChar:
+        BindTextU(arg, RawUtf8(p^.VChar), IO);
+      vtWideChar:
+        BindTextU(arg, RawUnicodeToUtf8(@p^.VWideChar, 1), IO);
+      vtPWideChar:
+        BindTextU(arg, RawUnicodeToUtf8(p^.VPWideChar, StrLenW(p^.VPWideChar)), IO);
+      vtWideString:
+        BindTextW(arg, WideString(p^.VWideString), IO);
+      {$ifdef HASVARUSTRING}
+      {$ifdef UNICODE}
+      vtUnicodeString:
+        BindTextS(arg, string(p^.VUnicodeString), IO);
+      {$else}
+      vtUnicodeString:
+        BindTextU(arg, UnicodeStringToUtf8(UnicodeString(p^.VUnicodeString)), IO);
+      {$endif UNICODE}
+      {$endif HASVARUSTRING}
+      vtBoolean:
+        if p^.VBoolean then // normalize
+          Bind(arg, 1, IO)
+        else
+          Bind(arg, 0, IO);
+      vtInteger:
+        Bind(arg, p^.VInteger, IO);
+      vtInt64:
+        Bind(arg, p^.VInt64^, IO);
+      {$ifdef FPC}
+      vtQWord:
+        Bind(arg, p^.VInt64^, IO);
+      {$endif FPC}
+      vtCurrency:
+        BindCurrency(arg, p^.VCurrency^, IO);
+      vtExtended:
+        Bind(arg, p^.VExtended^, IO);
+      vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec) or VarRecToVariant()
+        if p^.VPointer = nil then
+          BindNull(arg, IO)
+        else
+          Bind(arg, PtrInt(p^.VPointer), IO);
+      vtVariant:
+        BindVariant(arg, p^.VVariant^, VariantIsBlob(p^.VVariant^), IO);
+    else
+      ESqlDBException.RaiseUtf8(
+        '%.BindArrayOfConst(Param=%,Type=%)', [self, arg, p^.VType]);
+    end;
+    inc(p);
+  end;
 end;
 
 procedure TSqlDBStatement.BindVariant(Param: integer; const Data: Variant;
