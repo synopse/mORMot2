@@ -95,7 +95,8 @@ type
     function ToTextFunc(Value: double): string;
     /// swap two by-reference floating-point values
     // - would validate pointer use instead of XMM1/XMM2 registers on x86-64
-    procedure Swap(var n1, n2: double);
+    // - also that /calculator/swap would be processed by ICalculator._Swap()
+    procedure _Swap(var n1, n2: double);
     /// test unaligned stack access
     function StackIntMultiply(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10: integer): Int64;
     /// test float stack access
@@ -325,7 +326,7 @@ type
   public
     function Add(n1, n2: integer): integer;
     function Subtract(n1, n2: double): double;
-    procedure Swap(var n1, n2: double);
+    procedure _Swap(var n1, n2: double);
     function Multiply(n1, n2: Int64): Int64;
     procedure ToText(Value: Currency; var Result: RawUtf8);
     function ToTextFunc(Value: double): string;
@@ -445,7 +446,7 @@ begin
   result := n1 - n2;
 end;
 
-procedure TServiceCalculator.Swap(var n1, n2: double);
+procedure TServiceCalculator._Swap(var n1, n2: double);
 var
   tmp: double;
 begin
@@ -935,7 +936,7 @@ const
     TRestServerRoutingRest, TRestServerRoutingJsonRpc);
 const
   ExpectedURI: array[0..5] of RawUtf8 = (
-    'Add', 'Multiply', 'Subtract', 'ToText', 'ToTextFunc', 'Swap');
+    'Add', 'Multiply', 'Subtract', 'ToText', 'ToTextFunc', '_Swap');
   ExpectedParCount: array[0..5] of Integer = (
     4, 4, 4, 3, 3, 3);
   ExpectedArgs: array[0..5] of TInterfaceMethodValueTypes = (
@@ -981,6 +982,9 @@ begin
   Check(GuidToString(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
   Check(GuidToRawUtf8(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
   Check(S.InterfaceMangledURI = '7chgmrLOCU6H1EoW9Jbl_g');
+  i := S.ServiceMethodIndex('swap');
+  Check(i > 0);
+  CheckEqual(S.ServiceMethodIndex('_swap'), i); // /calc/swap -> ICalc._Swap
   result.Server.Services.ExpectMangledURI := true;
   Check(result.Server.Services[S.InterfaceMangledURI] = S);
   result.Server.Services.ExpectMangledURI := false;
@@ -991,7 +995,7 @@ begin
     exit;
   //JsonReformatToFile(S.Contract, 'contract.json');
   //FileFromString(S.ContractHash, 'contract.hash');
-  CheckEqual(S.ContractHash, '"8AB8C2407CD836D7"');
+  CheckEqual(S.ContractHash, '"F8E920FC746C9E88"');
   Check(TServiceCalculator(nil).Test(1, 2) = '3');
   Check(TServiceCalculator(nil).ToTextFunc(777) = '777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
@@ -1127,7 +1131,7 @@ procedure TTestServiceOrientedArchitecture.Test(
       s2 := n2;
       CheckSame(s1, n1);
       CheckSame(s2, n2);
-      I.Swap(s1, s2);
+      I._Swap(s1, s2);
       CheckSame(s1, n2);
       CheckSame(s2, n1);
       cu := i1 * 0.01;
