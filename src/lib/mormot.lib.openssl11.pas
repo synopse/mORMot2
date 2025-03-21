@@ -35,8 +35,12 @@ unit mormot.lib.openssl11;
    On POSIX, this unit will always try to load OpenSSL at startup, as if
      FORCE_OPENSSL conditional was defined.
    On Darwin/MacOS, the .dylib supplied by the system are unstable and should
-     not be used. Try e.g. from https://synopse.info/files/OpenSSLMacX64.tgz
-     (for x64) or https://synopse.info/files/OpenSSLMacA64.tgz (for Arm).
+     not be used. Try instead e.g. https://synopse.info/files/OpenSSLMacX64.tgz
+     (for x64) or https://synopse.info/files/OpenSSLMacA64.tgz (for arm).
+
+   This unit will only enable direct low-level OpenSSL APIs and TLS: you need
+     to call explicitly RegisterOpenSsl to enable mormot.crypt.openssl.pas
+     algorithms in mORMot high-level classes and wrappers.
 
    Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
      to any restriction about the use of cryptographic software in your country.
@@ -47,7 +51,7 @@ unit mormot.lib.openssl11;
 // define this conditional to publish the whole (huge) OpenSSL API - unsupported
 // - as stored in mormot.lib.openssl11.full.inc separated file
 // - by default, only the API features needed by mORMot are published
-// - full API increases compilation time, but is kept as reference
+// - full API increases compilation time, is unsupported, but kept as reference
 // - the full API libraries will be directly/statically linked, not dynamically:
 // if you have "cannot find -lcrypto" errors at linking, run e.g. the following:
 //     cd /usr/lib/x86_64-linux-gnu
@@ -60,11 +64,10 @@ unit mormot.lib.openssl11;
 // you may try to define it if you don't check memory leaks (at you own risk)
 
 {.$define NOOPENSSL1}
-// define this to disable OpenSSL 1.1 API
+// define this to disable OpenSSL 1.1 API - safer on any recent system
 
 {.$define NOOPENSSL3}
-// define this to disable OpenSSL 3.x API - only Linux and Windows by now
-// on dynamic linking, will fallback to 1.1 if 3.x is not available
+// define this to disable OpenSSL 3.x API - not a good idea
 
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
