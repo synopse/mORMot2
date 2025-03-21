@@ -210,6 +210,9 @@ type
     procedure AesGcmReset; override; // from fIV/CTR_POS
     function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; override;
   public
+    /// wrapper around function OpenSslIsAvailable
+    // - actual cipher won't be checked until Create() since we need the keysize
+    class function IsAvailable: boolean; override;
     /// compute a class instance similar to this one, for performing the
     // reverse encryption/decryption process
     // - will return self to avoid creating two instances
@@ -952,6 +955,11 @@ begin
 end;
 
 { TAesGcmOsl }
+
+class function TAesGcmOsl.IsAvailable: boolean;
+begin
+  result := OpenSslIsAvailable;
+end;
 
 function TAesGcmOsl.AesGcmInit: boolean;
 var
