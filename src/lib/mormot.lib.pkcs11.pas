@@ -1995,7 +1995,7 @@ type
     function(Sender: TPkcs11; Slot: TPkcs11SlotID): boolean of object;
 
   /// can load and use a PKCS#11 library
-  // - need to explicitely call Safe.Lock/UnLock in a multi-thread context
+  // - need to explicitly call Safe.Lock/UnLock in a multi-thread context
   TPkcs11 = class(TSynLocked)
   protected
     fC: CK_FUNCTION_LIST_PTR;

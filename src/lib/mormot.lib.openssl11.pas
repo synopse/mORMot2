@@ -15,23 +15,31 @@ unit mormot.lib.openssl11;
    - TLS / HTTPS Encryption Layer using OpenSSL for mormot.net.sock / TCrtSocket
 
     In respect to OpenSSL 1.0.x, the new 1.1 API hides most structures
-   behind getter/setter functions, and doesn't require complex initialization.
-    OpenSSL 1.1 features TLS 1.3, and is a LTS revision (until 2023-09-11).
-    OpenSSL 3.x is also supported on some platforms, as the next major version.
+   behind getter/setter functions, and does not require complex initialization.
+    OpenSSL 1.1 features TLS 1.3, but is now deprecated.
+    OpenSSL 3.x is supported as the current major version.
     OpenSSL 1.1 / 3.x API adaptation is done at runtime by dynamic loading.
 
   *****************************************************************************
 
-  Warning: on Windows, you need to define the USE_OPENSSL conditional in YOUR
-   project options to have this code actually link the OpenSSL library, or
-   FORCE_OPENSSL if you want to enable OpenSSL automatic loading.
-   Otherwise, it will fallback to the SChannel layer for TLS support.
-  We did not enable OpenSSL by default, because it is very likely that your
-   executable may find some obsolete dll in your Windows path, if it can't find
-   any suitable dll in its own folder.
+  Warning:
+   On Windows, the USE_OPENSSL conditional is defined, but the OpenSSL
+     lib*.dll will be loaded at runtime, only if needed, and silently fail if
+     they are not available or in an unexpected version.
+   Therefore, the SChannel layer will be used for TLS support by default, until
+     OpenSslInitialize or OpenSslIsAvailable are called and succeeded.
+   We did not enable OpenSSL by default on Windows, because from experience,
+     it is very likely that your executable may find some obsolete dll in your
+     Windows path, if it can't find any suitable dll in its own folder.
 
-  Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
-   to any restriction about the use of cryptographic software in your country.
+   On POSIX, this unit will always try to load OpenSSL at startup, as if
+     FORCE_OPENSSL conditional was defined.
+   On Darwin/MacOS, the .dylib supplied by the system are unstable and should
+     not be used. Try e.g. from https://synopse.info/files/OpenSSLMacX64.tgz
+     (for x64) or https://synopse.info/files/OpenSSLMacA64.tgz (for Arm).
+
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+     to any restriction about the use of cryptographic software in your country.
 }
 
 
@@ -281,10 +289,12 @@ const
   {$endif NOOPENSSL3}
 
 /// return TRUE if OpenSSL 1.1 / 3.x library can be used
-// - will load and initialize it, calling OpenSslInitialize if necessary,
-// catching any exception during the process
-// - return always true if OPENSSLFULLAPI or OPENSSLSTATIC conditionals have
-// been defined, since they link the library at compile or startup time
+// - will load and initialize it, calling OpenSslInitialize if necessary with
+// the global/default search paths, catching any exception during the process
+// - always return true if OPENSSLFULLAPI or OPENSSLSTATIC conditionals are set
+// - on success, returns true and register OpenSSL for TLS support - but
+// you need to call explicitly RegisterOpenSsl to enable mormot.crypt.openssl
+// algorithms in mORMot high-level wrappers
 // - you should never call any OpenSSL function if false is returned
 function OpenSslIsAvailable: boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -303,7 +313,9 @@ function OpenSslIsLoaded: boolean;
 // then within the executable folder, and then in the system path
 // - do nothing if the library has already been loaded or if
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
-// - you would typically call RegisterOpenSsl after this lower level function
+// - on success, returns true and register OpenSSL for TLS support - but
+// you need to call explicitly RegisterOpenSsl to enable mormot.crypt.openssl
+// algorithms in mORMot high-level wrappers
 function OpenSslInitialize(
    const libcryptoname: TFileName = '';
    const libsslname: TFileName = '';
@@ -1315,7 +1327,7 @@ type
     function Extract(index: integer): pointer;
     /// low-level method needing an explicit result typecast e.g. to PX509DynArray
     function ToDynArray: TPointerDynArray;
-    /// note: instances should be released explicitely before or call e.g. FreeX509
+    /// note: instances should be released explicitly before or call e.g. FreeX509
     procedure Free;
     /// make PX509/_CRL/_EXTENSION.Free to all items, then free the stack
     procedure FreeX509;
@@ -2722,8 +2734,7 @@ type
 /// OpenSSL TLS layer communication factory - as expected by mormot.net.sock.pas
 // - on non-Windows systems, this unit initialization will register OpenSSL for TLS
 // - on Windows systems, SChannel will be kept as default so you would need to
-// set the FORCE_OPENSSL conditional, or register OpenSSL for TLS mannually:
-// ! @NewNetTls := @NewOpenSslNetTls;
+// set the FORCE_OPENSSL conditional, or call OpenSslInitialize() explicitly
 function NewOpenSslNetTls: INetTls;
 
 var
@@ -5940,7 +5951,10 @@ begin
     end;
   finally
     if result then
-      openssl_initialized := osslAvailable // flag should be set the last
+    begin
+      @NewNetTls := @NewOpenSslNetTls; // favor OpenSSL for TLS from now on
+      openssl_initialized := osslAvailable; // flag should be set the last
+    end
     else
     begin
       FreeAndNil(libcrypto);
@@ -11113,7 +11127,6 @@ function OpenSslInitialize(const libcryptoname: string = '';
   const libsslname: string = ''; const libprefix: Utf8String = ''): boolean;
 function OpenSslIsAvailable: boolean;
 function OpenSslIsLoaded: boolean;
-procedure RegisterOpenSsl;
 
 
 implementation
@@ -11132,10 +11145,6 @@ end;
 function OpenSslIsLoaded: boolean;
 begin
   result := false;
-end;
-
-procedure RegisterOpenSsl;
-begin
 end;
 
 {$endif USE_OPENSSL}

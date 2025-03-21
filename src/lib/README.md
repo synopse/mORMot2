@@ -61,13 +61,16 @@ Cross-Platform and Cross-Compiler `OpenSSL` 1.1/ 3.x API
 - TLS / HTTPS Encryption Layer using OpenSSL for `mormot.net.sock` / `TCrtSocket`
 
 Implementation notes:
-- In respect to OpenSSL 1.0.x, the new 1.1 / 3.x API hide most structures behind getter/setter functions, and doesn't require complex initialization.
-- OpenSSL 1.1 features TLS 1.3, and is a LTS revision (until 2023-09-11).
-- OpenSSL 3.x is also supported on some platforms (currently Windows and Linux), as the next major version.
+- In respect to OpenSSL 1.0.x, the new 1.1 / 3.x API hide most structures behind getter/setter functions, and does not require complex initialization.
+- OpenSSL 1.1 features TLS 1.3, but is now deprecated.
+- OpenSSL 3.x is supported as the current major version.
 - OpenSSL 1.1 / 3.x API adaptation is done at runtime by dynamic loading.
-- The Full OpenSSL 1.1 API can be defined if `OPENSSLFULLAPI` conditional is set (untested).
 
-**Warning**: on Windows, you need to define the `USE_OPENSSL` conditional in YOUR project options to have this code actually link to the OpenSSL library.
+**Warning:**
+- On Windows, the USE_OPENSSL conditional is defined, but the OpenSSL lib*.dll will be loaded at runtime, only if needed, and silently fail if they are not available or in an unexpected version. Therefore, the SChannel layer will be used for TLS support by default, until OpenSslInitialize or OpenSslIsAvailable are called and succeeded.
+- We did not enable OpenSSL by default on Windows, because from experience, it is very likely that your executable may find some obsolete dll in your Windows path, if it can't find any suitable dll in its own folder.
+- On POSIX, this unit will always try to load OpenSSL at startup, as if FORCE_OPENSSL conditional was defined.
+- On Darwin/MacOS, the .dylib supplied by the system are unstable and should not be used. Try e.g. from https://synopse.info/files/OpenSSLMacX64.tgz (for x64) or https://synopse.info/files/OpenSSLMacA64.tgz (for Arm).
 
 **Legal Notice**: as stated by our LICENSE.md terms, make sure that you comply to any restriction about the use of cryptographic software in your country.
 

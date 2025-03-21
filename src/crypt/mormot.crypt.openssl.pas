@@ -3472,7 +3472,15 @@ finalization
 
 {$else}
 
+// void definition to avoid most $ifdef USE_OPENSSL ... $endif
+
+procedure RegisterOpenSsl;
+
 implementation
+
+procedure RegisterOpenSsl;
+begin
+end;
 
 {$endif USE_OPENSSL}
 

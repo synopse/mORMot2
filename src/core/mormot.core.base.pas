@@ -4368,7 +4368,7 @@ function RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
 type
   /// the available logging events, as handled by mormot.core.log
   // - defined in mormot.core.base so that it may be used by the core units,
-  // even if mormot.core.log is not explicitely linked
+  // even if mormot.core.log is not explicitly linked
   // - limited to 32 items, to efficiently fit in a 32-bit set
   // - sllInfo will log general information events
   // - sllDebug will log detailed debugging information
