@@ -4114,7 +4114,7 @@ type
     // alternate API names (e.g. for OpenSSL 1.1.1/3.x compatibility)
     // - if ProcName starts with '?' then RaiseExceptionOnFailure = nil is set
     function Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
-      RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
+      RaiseExceptionOnFailure: ExceptionClass = nil; SilentError: PString = nil): boolean;
     /// cross-platform resolution of all function entries in this library
     // - will search and fill Entry^ for all ProcName^ until ProcName^=nil
     // - return true on success, false and call FreeLib if any entry is missing
@@ -4124,7 +4124,8 @@ type
     procedure FreeLib;
     /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
     function TryLoadLibrary(const aLibrary: array of TFileName;
-      aRaiseExceptionOnFailure: ExceptionClass): boolean; virtual;
+      aRaiseExceptionOnFailure: ExceptionClass = nil;
+      aSilentError: PString = nil): boolean; virtual;
     /// release associated memory and linked library
     destructor Destroy; override;
     /// return TRUE if the library and all procedures were found
@@ -7991,10 +7992,12 @@ var
 { TSynLibrary }
 
 function TSynLibrary.Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
-  RaiseExceptionOnFailure: ExceptionClass): boolean;
+  RaiseExceptionOnFailure: ExceptionClass; SilentError: PString): boolean;
 var
   p: PAnsiChar;
   name, search: RawUtf8;
+  ignoremissing: boolean;
+  error: string;
   {$ifdef OSPOSIX}
   dlinfo: dl_info;
   {$endif OSPOSIX}
@@ -8004,6 +8007,7 @@ begin
      (fHandle = 0) or
      (ProcName = '') then
     exit; // avoid GPF
+  ignoremissing := false;
   p := pointer(ProcName);
   repeat
     name := _GetNextItem(p); // try all alternate names
@@ -8011,7 +8015,7 @@ begin
       break;
     if name[1] = '?' then
     begin
-      RaiseExceptionOnFailure := nil;
+      ignoremissing := true;
       delete(name, 1, 1);
     end;
     Join([Prefix, name], search);
@@ -8032,14 +8036,16 @@ begin
       fLibraryPath := dlinfo.dli_fname;
   end;
   {$endif OSPOSIX}
-  if (RaiseExceptionOnFailure <> nil) and
-     not result then
-  begin
-    FreeLib;
-    raise RaiseExceptionOnFailure.CreateFmt(
-      '%s.Resolve(''%s%s''): not found in %s',
-      [ClassNameShort(self)^, Prefix, ProcName, LibraryPath]);
-  end;
+  result := result or ignoremissing;
+  if result then
+    exit;
+  FreeLib; // abort loading
+  error := Format('%s.Resolve(''%s%s''): not found in %s',
+    [ClassNameShort(self)^, Prefix, ProcName, LibraryPath]);
+  if RaiseExceptionOnFailure <> nil then
+    raise RaiseExceptionOnFailure.Create(error)
+  else if SilentError <> nil then
+    SilentError^:= error;
 end;
 
 function TSynLibrary.ResolveAll(ProcName: PPAnsiChar; Entry: PPointer): boolean;
@@ -8077,7 +8083,7 @@ begin
 end;
 
 function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
-  aRaiseExceptionOnFailure: ExceptionClass): boolean;
+  aRaiseExceptionOnFailure: ExceptionClass; aSilentError: PString): boolean;
 var
   i, j: PtrInt;
   {$ifdef OSWINDOWS}
@@ -8110,11 +8116,16 @@ begin
       lib := Executable.ProgramFilePath + lib;
       nwd := Executable.ProgramFilePath;
     end;
+    if {%H-}libs = '' then
+      libs := lib
+    else
+      libs := libs + ', ' + lib; // include path
     {$ifdef OSWINDOWS}
     if nwd <> '' then
     begin
       cwd := GetCurrentDir;
       SetCurrentDir(nwd); // change the current folder at loading on Windows
+      lib := ExtractFileName(lib); // seems more stable that way
     end;
     fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box 
     if nwd <> '' then
@@ -8122,7 +8133,7 @@ begin
     {$else}
     fHandle := LibraryOpen(lib); // use regular .so loading behavior
     {$endif OSWINDOWS}
-    if fHandle <> 0 then
+    if fHandle <> 0 then // found this library
     begin
       {$ifdef OSWINDOWS} // on POSIX, will call dladdr() in Resolve()
       fLibraryPath := GetModuleName(fHandle);
@@ -8132,18 +8143,17 @@ begin
       exit;
     end;
     // handle any error
-    if {%H-}libs = '' then
-      libs := lib
-    else
-      libs := libs + ', ' + lib;
     err := LibraryError;
     if err <> '' then
       libs := libs + ' [' + err + ']';
   end;
-  result := false;
+  libs := Format('%s.TryLoadLibray failed - searched in %s',
+    [ClassNameShort(self)^, libs]);
   if aRaiseExceptionOnFailure <> nil then
-    raise aRaiseExceptionOnFailure.CreateFmt('%s.TryLoadLibray failed' +
-      ' - searched in %s', [ClassNameShort(self)^, libs]);
+    raise aRaiseExceptionOnFailure.Create(libs)
+  else if aSilentError <> nil then
+    aSilentError^ := libs;
+  result := false;
 end;
 
 function TSynLibrary.Exists: boolean;
