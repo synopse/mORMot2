@@ -115,11 +115,13 @@ type
   // - vIsQword is set for ValueType=imvInt64 over a QWord unsigned 64-bit value
   // - vIsDynArrayString is set for ValueType=imvDynArray of string values
   // - vIsInterfaceJson is set for an interface with custom JSON serializers
+  // - vIsOnStack is set when the Value is to be located on stack
   TInterfaceMethodValueAsm = set of (
     vPassedByReference,
     vIsQword,
     vIsDynArrayString,
-    vIsInterfaceJson);
+    vIsInterfaceJson,
+    vIsOnStack);
 
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
@@ -156,7 +158,7 @@ type
     // - AARCH64: 1=X0 2=X1, ..., 8=X7, with a backing store on the stack
     RegisterIdent: byte;
     /// specify if a floating-point argument is passed as register
-    // - i386/x87: contains always 0
+    // - i386/x87: contains always 0 - the HAS_FPREG conditional is not defined
     // - x86_64: 1 for XMM0, 2 for XMM1, , ..., 8 for XMM7
     // - ARMHF: 1 for D0, 2 for D1, ..., 8 for D7
     // - AARCH64: 1 for V0, 2 for V1, ..., 8 for V7
@@ -167,7 +169,9 @@ type
     SizeInStack: byte;
     /// byte offset in the CPU stack of this argument (16-bit)
     // - may be -1 if pure register parameter with no backup on stack (x86)
-    InStackOffset: smallint;
+    InStackOffset: SmallInt;
+    /// how TInterfaceMethodExecuteRaw.RawExecute should handle this value
+    RawExecute: (reValReg, reValStack, reRefReg, reRefStack, reValFpReg, reNone);
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
     OffsetAsValue: cardinal;
     /// serialize the argument into the TServiceContainer.Contract JSON format
@@ -3216,9 +3220,10 @@ var
   arg: integer;
 begin
   FillCharFast(ctxt.I64s, ctxt.Method^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
-  a := @ctxt.Method^.Args[1];
-  for arg := 1 to length(ctxt.Method^.Args) - 1 do
+  a := pointer(ctxt.Method^.Args);
+  for arg := 1 to PDALen(PAnsiChar(a) - _DALEN)^ + (_DAOFF - 1) do
   begin
+    inc(a);
     V := nil;
     {$ifdef CPUX86}
     case a^.RegisterIdent of
@@ -3239,20 +3244,17 @@ begin
         V := @ctxt.Stack.ParamRegs[a^.RegisterIdent + (PARAMREG_FIRST - 1)];
     if a^.RegisterIdent = PARAMREG_FIRST then
       FakeCallRaiseError(ctxt, 'unexpected self', []);
+    if V = nil then
+    begin
     {$endif CPUX86}
-      if V = nil then
-        if (a^.SizeInStack > 0) and
-           (a^.InStackOffset >= 0) then
-          V := @ctxt.Stack.Stack[a^.InStackOffset] // value is on stack
-        else
-          V := @ctxt.I64s[a^.IndexVar]; // for results in registers
-    {$ifdef CPUX86}
-    end; // case RegisterIdent of
-    {$endif CPUX86}
+      if vIsOnStack in a^.ValueKindAsm then
+        V := @ctxt.Stack.Stack[a^.InStackOffset] // value is on stack
+      else
+        V := @ctxt.I64s[a^.IndexVar]; // for results in registers
+    end;
     if vPassedByReference in a^.ValueKindAsm then
       V := PPointer(V)^;
     ctxt.Value[arg] := V;
-    inc(a);
   end;
   if imfResultIsServiceCustomAnswer in ctxt.Method^.Flags then
     ctxt.ServiceCustomAnswerPoint := ctxt.Value[ctxt.Method^.ArgsResultIndex]
@@ -4051,13 +4053,11 @@ begin
         imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
             include(ValueKindAsm, vIsQword);
+        {$ifdef HAS_FPREG}
         imvDouble,
         imvDateTime:
-          begin
-            {$ifdef HAS_FPREG}
-            ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
-            {$endif HAS_FPREG}
-          end;
+          ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
+        {$endif HAS_FPREG}
         imvDynArray:
           if (ArgRtti.ArrayRtti <> nil) and
              ((rcfBinary in ArgRtti.ArrayRtti.Flags) or
@@ -4189,6 +4189,45 @@ begin
           {$endif CPUARM}
         end;
       end;
+    end;
+    // pre-compute the TInterfaceMethodExecuteRaw.RawExecute expectations
+    for a := 0 to high(Args) do
+    with Args[a] do
+    begin
+      {$ifdef HAS_FPREG}
+      if FPRegisterIdent > 0 then
+        if (RegisterIdent > 0) or
+           (vPassedByReference in ValueKindAsm) then
+          EInterfaceFactory.RaiseUtf8('Unexpected I% % Reg=% FPReg=%',
+            [InterfaceDotMethodName, ParamName^, RegisterIdent, FPRegisterIdent]);
+      {$endif HAS_FPREG}
+      if (RegisterIdent = 0) and
+         (FPRegisterIdent = 0) and
+         (SizeInStack > 0) then
+        include(ValueKindAsm, vIsOnStack);
+      if vPassedByReference in ValueKindAsm then
+        if vIsOnStack in ValueKindAsm then
+          if SizeInStack <> POINTERBYTES then
+            EInterfaceFactory.RaiseUtf8('Unexpected I% % ref with no pointer',
+              [InterfaceDotMethodName, ParamName^])
+          else
+            RawExecute := reRefStack
+        else if RegisterIdent > 0 then
+          RawExecute := reRefReg
+        else
+          EInterfaceFactory.RaiseUtf8('Unexpected I% % reference with no slot',
+            [InterfaceDotMethodName, ParamName^])
+      else // pass by value
+        if vIsOnStack in ValueKindAsm then
+          RawExecute := reValStack
+        else if RegisterIdent > 0 then
+          RawExecute := reValReg
+        {$ifdef HAS_FPREG}
+        else if FPRegisterIdent > 0 then
+          RawExecute := reValFpReg
+        {$endif HAS_FPREG}
+        else
+          RawExecute := reNone; // e.g. for a result register
     end;
     {$ifdef OSDARWINARM}
     // the Mac M1 does NOT follow the ARM ABI standard on stack :(
@@ -6991,7 +7030,7 @@ constructor TInterfaceMethodExecuteRaw.Create(aFactory: TInterfaceFactory;
 var
   a: PtrInt;
   arg: PInterfaceMethodArgument;
-  V: PPointer;
+  pv: PPointer;
 begin
   // set parameters
   fFactory := aFactory;
@@ -7001,14 +7040,14 @@ begin
   SetLength(fStorage, integer(fMethod^.ArgsSizeAsValue) +
                       length(aMethod^.Args) shl POINTERSHR);
   // assign the parameters storage to the fValues[] pointers
-  fValues := @fStorage[fMethod^.ArgsSizeAsValue];
-  V := @fValues[1];
-  arg := @fMethod^.Args[1];
+  pv := @fStorage[fMethod^.ArgsSizeAsValue];
+  fValues := pointer(pv);
+  arg := pointer(fMethod^.Args);
   for a := 1 to length(fMethod^.Args) - 1 do
   begin
-    V^ := @fStorage[arg^.OffsetAsValue];
-    inc(V);
     inc(arg);
+    inc(pv);
+    pv^ := @fStorage[arg^.OffsetAsValue];
   end;
 end;
 
@@ -7071,13 +7110,13 @@ procedure TInterfaceMethodExecuteRaw.RawExecute(
   const Instances: PPointerArray; InstancesLast: integer);
 var
   pv: PPointer;
-  a, e, i: PtrInt;
-  call: TCallMethodArgs;
   arg: PInterfaceMethodArgument;
+  e, i: PtrInt;
+  call: TCallMethodArgs;
   Stack: packed array[0 .. MAX_EXECSTACK - 1] of byte;
 begin
   FillCharFast(call, SizeOf(call), 0);
-  // create the stack and register content from fValues[]
+  // create the stack layout with proper alignment
   {$ifdef CPUX86}
   call.StackAddr := PtrInt(@Stack[0]);
   call.StackSize := fMethod^.ArgsSizeInStack;
@@ -7106,57 +7145,34 @@ begin
   {$endif CPUAARCH64}
   {$endif CPUINTEL}
   {$endif CPUX86}
-  arg := @fMethod^.Args[1];
-  pv := @fValues[1];
-  for a := 1 to length(fMethod^.Args) - 1 do
+  // assign content from fValues[] into the stack
+  pv := pointer(fValues);
+  arg := pointer(fMethod^.Args);
+  for i := 1 to PDALen(PAnsiChar(arg) - _DALEN)^ + (_DAOFF - 1) do
   begin
-    if (arg^.ValueDirection <> imdConst) or
-       (arg^.ValueType in [imvRecord, imvVariant]) then
-     begin
-      // pass by reference
-      if (arg^.RegisterIdent = 0) and
-         (arg^.FPRegisterIdent = 0) and
-         (arg^.SizeInStack > 0) then
-        MoveFast(pv^, Stack[arg^.InStackOffset], arg^.SizeInStack)
-      else
-      begin
-        if arg^.RegisterIdent > 0 then
-          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
-        if arg^.FPRegisterIdent > 0 then
-          EInterfaceFactory.RaiseUtf8('Unexpected % FPReg=%',
-            [arg^.ParamName^, arg^.FPRegisterIdent]); // should never happen
-      end;
-    end
-    else
-    begin
-      // pass by value
-      if (arg^.RegisterIdent = 0) and
-         (arg^.FPRegisterIdent = 0) and
-         (arg^.SizeInStack > 0) then
-        MoveFast(pv^^, Stack[arg^.InStackOffset], arg^.SizeInStack)
-      else
-      begin
-        if arg^.RegisterIdent > 0 then
+    inc(arg);
+    inc(pv);
+    case arg^.RawExecute of
+      reValReg:
         begin
           call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv^)^;
           {$ifdef CPUARM}
-          // for e.g. INT64 on 32-bit ARM systems; these are also passed in registers
+          // e.g. Int64 on 32-bit ARM systems are passed in two registers
           if arg^.SizeInStack > POINTERBYTES then
             call.ParamRegs[arg^.RegisterIdent + 1] := PPtrInt(pv^ + POINTERBYTES)^;
           {$endif CPUARM}
         end;
-        {$ifdef HAS_FPREG}
-        if arg^.FPRegisterIdent > 0 then
-          call.FPRegs[arg^.FPRegisterIdent] := unaligned(PDouble(pv^)^);
-        if (arg^.RegisterIdent > 0) and
-           (arg^.FPRegisterIdent > 0) then
-          EInterfaceFactory.RaiseUtf8('Unexpected % reg=% FP=%',
-            [arg^.ParamName^, arg^.RegisterIdent, arg^.FPRegisterIdent]);
-        {$endif HAS_FPREG}
-      end;
+      reValStack:
+        MoveFast(pv^^, Stack[arg^.InStackOffset], arg^.SizeInStack);
+      reRefReg:
+        call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
+      reRefStack:
+        PPointer(@Stack[arg^.InStackOffset])^ := pv^;
+      {$ifdef HAS_FPREG}
+      reValFpReg:
+        call.FPRegs[arg^.FPRegisterIdent] := unaligned(PDouble(pv^)^);
+      {$endif HAS_FPREG}
     end;
-    inc(arg);
-    inc(pv);
   end;
   // execute the method
   for i := 0 to InstancesLast do
