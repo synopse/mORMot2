@@ -324,7 +324,7 @@ type
     property InterfaceFactory: TInterfaceFactory
       read fInterface;
     /// the registered Interface low-level Delphi RTTI type
-    // - just maps InterfaceFactory.InterfaceTypeInfo
+    // - just maps InterfaceFactory.InterfaceRtti.Info
     property InterfaceTypeInfo: PRttiInfo
       read GetInterfaceTypeInfo;
     /// the registered Interface GUID
@@ -1063,7 +1063,8 @@ begin
   if fInterface = nil then // paranoid
     EServiceException.RaiseUtf8('%.Create: no I%', [self, aInterface^.RawName]);
   fInstanceCreation := aInstanceCreation;
-  fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGuid));
+  fInterfaceMangledUri :=
+    BinToBase64Uri(PAnsiChar(fInterface.InterfaceGuid), SizeOf(TGuid));
   fInterfaceUri := fInterface.InterfaceUri;
   if fOrm = nil then
     EServiceException.RaiseUtf8('%.Create: I% has no ORM', [self, fInterfaceUri]);
@@ -1107,14 +1108,14 @@ function TServiceFactory.GetInterfaceTypeInfo: PRttiInfo;
 begin
   if (self <> nil) and
      (fInterface <> nil) then
-    result := fInterface.InterfaceTypeInfo
+    result := fInterface.InterfaceRtti.Info
   else
     result := nil;
 end;
 
 function TServiceFactory.GetInterfaceIID: TGuid;
 begin
-  result := fInterface.InterfaceIID;
+  result := fInterface.InterfaceRtti.Cache.InterfaceGuid^;
 end;
 
 procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUtf8;
@@ -1634,7 +1635,7 @@ begin
       n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
       repeat
         result := p^.Service;
-        if result.fInterface.InterfaceTypeInfo = aTypeInfo then
+        if result.fInterface.InterfaceRtti.Info = aTypeInfo then
           exit;
         inc(p);
         dec(n);
@@ -1660,7 +1661,7 @@ begin
       n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
       repeat
         result := p^.Service;
-        with PHash128Rec(@result.fInterface.InterfaceIID)^ do
+        with PHash128Rec(result.fInterface.InterfaceRtti.Cache.InterfaceGuid)^ do
           if (g.L = L) and
              (g.H = H) then
             exit;
@@ -1681,7 +1682,7 @@ begin
   n := length(fInterface);
   SetLength(Services, n);
   for i := 0 to n - 1 do
-    Services[i] := fInterface[i].Service.fInterface.InterfaceIID;
+    Services[i] := fInterface[i].Service.InterfaceIID;
 end;
 
 procedure TServiceContainer.SetInterfaceNames(out Names: TRawUtf8DynArray);

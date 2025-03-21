@@ -895,7 +895,7 @@ begin
   if WebSockets = nil then
     EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call ' +
       'to enable interface parameter callbacks for %.%(%: %)',
-      [self, Sender.InterfaceTypeInfo ^.Name, Method.Uri,
+      [self, Sender.InterfaceTypeInfo^.RawName, Method.Uri,
        ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
   if ParamValue = nil then
     result := 0
@@ -918,7 +918,7 @@ begin
   end;
   if WebSockets = nil then
     EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call', [self]);
-  FormatUtf8('{"%":%}', [Factory.InterfaceTypeInfo^.RawName, FakeCallbackID], body);
+  FormatUtf8('{"%":%}', [Factory.InterfaceRtti.Name, FakeCallbackID], body);
   CallbackNonBlockingSetHeader(head); // frames gathering + no wait
   result := CallBack(
     mPOST, 'CacheFlush/_callback_', body, resp, nil, 0, @head) = HTTP_SUCCESS;

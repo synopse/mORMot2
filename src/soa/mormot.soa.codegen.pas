@@ -1013,10 +1013,10 @@ begin
           'uri', uri,
           'interfaceUri',         InterfaceUri,
           'interfaceMangledUri',  InterfaceMangledUri,
-          'interfaceName',        InterfaceFactory.InterfaceTypeInfo^.RawName,
+          'interfaceName',        InterfaceFactory.InterfaceRtti.Name,
           'camelName',            LowerCamelCase(InterfaceFactory.InterfaceUri),
           'snakeName',            SnakeCase(InterfaceFactory.InterfaceUri),
-          'GUID',                 GuidToRawUtf8(InterfaceFactory.InterfaceIID),
+          'GUID',                 GuidToRawUtf8(InterfaceFactory.InterfaceGuid^),
           'contractExpected',     UnQuoteSqlString(ContractExpected),
           'instanceCreation',     ord(InstanceCreation),
           'instanceCreationName', GetEnumNameTrimed(
@@ -1060,7 +1060,7 @@ begin
     for i := 0 to interfaces.Count - 1 do
       services.AddItem(_ObjFast([
         'interfaceName',
-          TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
+          TInterfaceFactory(interfaces.List[i]).InterfaceRtti.Name,
         'methods', ContextFromMethods(interfaces.List[i])]));
   finally
     interfaces.Safe.ReadUnLock;
@@ -1198,7 +1198,7 @@ var
   m: PtrInt;
   methods: TDocVariantData; // circumvent FPC -O2 memory leak
 begin
-  AddUnit(int.InterfaceTypeInfo^.InterfaceUnitName^, nil);
+  AddUnit(int.InterfaceRtti.Info^.InterfaceUnitName^, nil);
   {%H-}methods.InitFast;
   for m := 0 to int.MethodsCount - 1 do
     methods.AddItem(ContextFromMethod(int.Methods[m]));

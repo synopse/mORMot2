@@ -528,8 +528,6 @@ type
   // - will use TInterfaceFactoryRtti classes generated from compiler RTTI
   TInterfaceFactory = class
   protected
-    fInterfaceTypeInfo: PRttiInfo;
-    fInterfaceIID: TGuid;
     fInterfaceRtti: TRttiJson;
     fMethodsCount: integer;
     fAddMethodsLevel: integer;
@@ -666,12 +664,6 @@ type
     // - contains -1 if no such method do exist in the interface definition
     property MethodIndexCurrentFrameCallback: integer
       read fMethodIndexCurrentFrameCallback;
-    /// the registered Interface low-level compiler RTTI type
-    property InterfaceTypeInfo: PRttiInfo
-      read fInterfaceTypeInfo;
-    /// the registered Interface Guid
-    property InterfaceIID: TGuid
-      read fInterfaceIID;
     /// the interface name, without its initial 'I'
     // - e.g. ICalculator -> 'Calculator'
     property InterfaceUri: RawUtf8
@@ -679,6 +671,9 @@ type
     /// the registered Interface high-level compiler RTTI type
     property InterfaceRtti: TRttiJson
       read fInterfaceRtti;
+    /// the interface TGUID, as stored in the RTTI
+    function InterfaceGuid: PGuid;
+      {$ifdef HASINLINE} inline; {$endif}
     /// the service contract as a JSON array
     property Contract: RawUtf8
       read fContract;
@@ -1011,7 +1006,6 @@ type
   protected
     fResolver: TInterfaceResolver;
     fResolverOwned: boolean;
-    fRtti: TRttiCustom;
     // DI/IoC resolution protected methods
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean;
     /// this method will resolve all interface published properties
@@ -3338,7 +3332,7 @@ var
   me: TInterfacedObjectFakeRaw; // self may be broken by compiler optimizations
 begin
   me := SelfFromInterface;
-  if IsEqualGuid(@IID, @me.fFactory.fInterfaceIID) then
+  if IsEqualGuid(@IID, @me.fFactory.fInterfaceRtti.Cache.InterfaceGuid^) then
   begin
     pointer(Obj) := @me.fVTable;
     me._AddRef;
@@ -3629,7 +3623,7 @@ begin
   if n <> 0 then
     repeat
       result := F^;
-      if result.fInterfaceTypeInfo = nfo then
+      if result.fInterfaceRtti.Info = nfo then
         exit;
       inc(F);
       dec(n);
@@ -3670,6 +3664,11 @@ begin
   end;
 end;
 
+function TInterfaceFactory.InterfaceGuid: PGuid;
+begin
+  result := fInterfaceRtti.Cache.InterfaceGuid;
+end;
+
 {$ifdef HASINTERFACERTTI}
 
 class procedure TInterfaceFactory.RegisterInterfaces(
@@ -3698,7 +3697,7 @@ begin
   if n > 0 then
     repeat
       result := f^;
-      with PHash128Rec(@result.fInterfaceIID)^ do
+      with PHash128Rec(result.fInterfaceRtti.Cache.InterfaceGuid)^ do
         {$ifdef CPU64}
         if (L = gL) and
            (H = gH) then
@@ -3719,14 +3718,14 @@ class function TInterfaceFactory.Get({$ifdef FPC_HAS_CONSTREF}constref{$else}
   const{$endif}aGuid: TGuid): TInterfaceFactory;
 var
   cache: TSynObjectListLightLocked;
+  h: THash128Rec absolute aGuid;
 begin
   cache := InterfaceFactoryCache;
   if cache <> nil then
   begin
     cache.Safe.ReadLock; // no GPF expected within loop -> no try...finally
     result := FindGuid(pointer(cache.List), cache.Count,
-      {$ifdef CPU64} PHash128Rec(@aGuid)^.L, PHash128Rec(@aGuid)^.H
-      {$else} @aGuid {$endif});
+                {$ifdef CPU64} h.L, h.H {$else} @h{$endif});
     cache.Safe.ReadUnLock;
   end
   else
@@ -3767,7 +3766,7 @@ begin
   if fact = nil then
     EInterfaceFactory.RaiseUtf8('%.Guid2TypeInfo(%): Interface not ' +
       'registered - use %.RegisterInterfaces()', [self, GuidToShort(aGuid), self]);
-  result := fact.fInterfaceTypeInfo;
+  result := fact.fInterfaceRtti.Info;
 end;
 
 class function TInterfaceFactory.Get(const aInterfaceName: RawUtf8): TInterfaceFactory;
@@ -3835,13 +3834,11 @@ begin
   if aInterface^.Kind <> rkInterface then
     EInterfaceFactory.RaiseUtf8('%.Create: % is not an interface',
       [self, aInterface^.RawName]);
-  fDocVariantOptions := JSON_FAST_FLOAT;
-  fJsonParserOptions := JSONPARSER_SERVICE;
-  fInterfaceTypeInfo := aInterface;
-  fInterfaceIID := aInterface^.InterfaceGuid^;
-  if IsNullGuid(fInterfaceIID) then
+  if IsNullGuid(aInterface^.InterfaceGuid^) then
     EInterfaceFactory.RaiseUtf8('%.Create: % has no GUID',
       [self, aInterface^.RawName]);
+  fDocVariantOptions := JSON_FAST_FLOAT;
+  fJsonParserOptions := JSONPARSER_SERVICE;
   fInterfaceRtti := Rtti.RegisterType(aInterface) as TRttiJson;
   fInterfaceName := fInterfaceRtti.Name;
   fInterfaceUri := fInterfaceName;
@@ -4247,11 +4244,8 @@ end;
 
 function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
 begin
-  if (self = nil) or
-     (aMethodName = '') then
-    result := -1
-  else
-  begin
+  if (self <> nil) and
+     (aMethodName <> '') then
     if MethodsCount < 10 then
     begin
       for result := 0 to MethodsCount - 1 do
@@ -4260,11 +4254,9 @@ begin
       result := -1;
     end
     else
-      result := fMethod.FindHashed(aMethodName);
-    if (result < 0) and
-       (aMethodName[1] <> '_') then
-      result := FindMethodIndex('_' + aMethodName);
-  end;
+      result := fMethod.FindHashed(aMethodName)
+  else
+    result := -1
 end;
 
 function TInterfaceFactory.FindMethod(const aMethodName: RawUtf8): PInterfaceMethod;
@@ -4791,7 +4783,7 @@ begin
   arg := @meth^.Args[0];
   arg^.ParamName := @PSEUDO_SELF_NAME;
   arg^.ArgRtti := fInterfaceRtti;
-  arg^.ArgTypeName := fInterfaceTypeInfo^.Name;
+  arg^.ArgTypeName := @fInterfaceRtti.Info^.RawName;
   ns := length(fTempStrings);
   SetLength(fTempStrings, ns + na);
   for a := 0 to na - 1 do
@@ -4849,7 +4841,7 @@ begin
   if fact = nil then
     GuidToShort(aGuid, PGuidShortString(@result)^)
   else
-    result := fact.fInterfaceTypeInfo^.RawName;
+    result := fact.fInterfaceRtti.Info^.RawName;
 end;
 
 
@@ -4884,7 +4876,7 @@ begin
   begin
     known := TInterfaceFactory.Get(aGuid);
     if known <> nil then
-      result := TryResolve(known.fInterfaceTypeInfo, Obj)
+      result := TryResolve(known.fInterfaceRtti.Info, Obj)
     else
       result := false;
   end;
@@ -6345,7 +6337,7 @@ end;
 
 function TInterfaceStub.TryResolve(aInterface: PRttiInfo; out Obj): boolean;
 begin
-  if aInterface <> fInterface.fInterfaceTypeInfo then
+  if aInterface <> fInterface.fInterfaceRtti.Info then
     result := false
   else
   begin
@@ -6356,7 +6348,7 @@ end;
 
 function TInterfaceStub.Implements(aInterface: PRttiInfo): boolean;
 begin
-  result := fInterface.fInterfaceTypeInfo = aInterface;
+  result := fInterface.fInterfaceRtti.Info = aInterface;
 end;
 
 

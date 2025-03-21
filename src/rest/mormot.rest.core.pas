@@ -1885,7 +1885,7 @@ begin
     exit;
   if aCallback = nil then
     EServiceException.RaiseUtf8('%.Redirect(nil)', [self]);
-  if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceIID, dest) then
+  if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceGuid^, dest) then
     EServiceException.RaiseUtf8('%.Redirect [%]: % is not a %',
       [self, fFakeCallback.fName, aCallback, fFakeCallback.Factory.InterfaceName]);
   Redirect(dest, aMethodsNames, aSubscribe);

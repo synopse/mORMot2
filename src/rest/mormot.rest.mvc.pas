@@ -1232,7 +1232,7 @@ begin
             FileName := ViewTemplateFolder + ShortFileName;
             info := ContextFromMethod(fFactory.Methods[m]);
             _ObjAddProp(
-              'interfaceName', fFactory.InterfaceTypeInfo^.RawName, info);
+              'interfaceName', fFactory.InterfaceRtti.Name, info);
             FileFromString(StringReplaceChars(StringReplaceChars(
               TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),
               '<', '{'), '>', '}'), FileName);
@@ -1936,7 +1936,7 @@ begin
   else
     fRestServer := aRestServer;
   if aViews = nil then
-    aViews := TMvcViewsMustache.Create(aApplication.fFactory.InterfaceTypeInfo,
+    aViews := TMvcViewsMustache.Create(aApplication.fFactory.InterfaceRtti.Info,
       aTemplatesFolder, fRestServer.LogClass, '.html')
   else
     aViews.fLogClass := fRestServer.LogClass;
@@ -2353,12 +2353,12 @@ begin
   fFactory := TInterfaceFactory.Get(aInterface);
   fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
   if fFactoryErrorIndex < 0 then
-    EMvcException.RaiseUtf8('% does not implement the IMvcApplication.Error() method',
-      [aInterface.RawName]);
-  entry := GetInterfaceEntry(fFactory.InterfaceIID);
+    EMvcException.RaiseUtf8('% does not implement the ' +
+      'IMvcApplication.Error() method', [aInterface.RawName]);
+  entry := GetInterfaceEntry(fFactory.InterfaceGuid^);
   if entry = nil then
     EMvcException.RaiseUtf8('%.Start(%): this class should implement %',
-      [self, aRestModel, fFactory.InterfaceTypeInfo^.RawName]);
+      [self, aRestModel, aInterface.RawName]);
   fFactoryEntry := PAnsiChar(self) + entry^.IOffset;
   for m := 0 to fFactory.MethodsCount - 1 do
     if not MethodHasView(fFactory.Methods[m]) then
@@ -2366,7 +2366,7 @@ begin
         if ArgsOutFirst <> ArgsResultIndex then
           EMvcException.RaiseUtf8(
             '%.Start(%): %.% var/out param not allowed with TMvcAction result',
-            [self, aRestModel, fFactory.InterfaceTypeInfo^.RawName, URI])
+            [self, aRestModel, aInterface.RawName, URI])
         else
           // maps TMvcAction in TMvcApplication.RunOnRestServer
           ArgsResultIsServiceCustomAnswer := true;
@@ -2435,8 +2435,8 @@ end;
 
 procedure TMvcApplication.GetMvcInfo(out info: variant);
 begin
-  info := _ObjFast(['name',    fFactory.InterfaceTypeInfo^.RawName,
-                    'mORMot',  SYNOPSE_FRAMEWORK_VERSION,
+  info := _ObjFast(['name',    fFactory.InterfaceRtti.Name,
+                    'mORMot',  RawUtf8(SYNOPSE_FRAMEWORK_VERSION),
                     'root',    RestModel.Model.Root,
                     'methods', ContextFromMethods(fFactory)]);
 end;
