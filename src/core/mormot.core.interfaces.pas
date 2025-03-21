@@ -4290,8 +4290,9 @@ end;
 function FastFindName(m: PInterfaceMethod; pn: PUtf8Char; n: PtrInt): PtrInt;
 var
   pm: PUtf8Char;
-  lm, ln: PtrInt;
+  lm, ln, alt: PtrInt;
 begin // very efficient O(n) search sub-function
+  alt := -1;
   result := 0;
   ln := PStrLen(pn - _STRLEN)^;
   repeat
@@ -4307,12 +4308,12 @@ begin // very efficient O(n) search sub-function
       dec(lm);
       if lm = 0 then
         if IdemPropNameUSameLenNotNull(pm + 1, pn, ln) then // inlined on FPC
-          exit;
+          alt := result;
     end;
     inc(m);
     inc(result);
   until result = n;
-  result := -1;
+  result := alt; // use IServer._Method if no IServer.Method
 end;
 
 function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
