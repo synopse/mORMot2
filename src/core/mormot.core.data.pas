@@ -698,7 +698,7 @@ type
     dvoInternNames,
     dvoInternValues);
 
-  /// set of options for a TDocVariant storage
+  /// set of options for a TDocVariant storage (stored in 16-bit)
   // - defined in this unit to avoid circular reference with mormot.core.variants
   // - see JSON_[TDocVariantModel] and all JSON_* constants (e.g. JSON_FAST or
   // JSON_FAST_FLOAT) as potential values

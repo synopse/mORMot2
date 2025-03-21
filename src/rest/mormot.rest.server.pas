@@ -1482,11 +1482,11 @@ type
     Command: TRestServerUriContextCommand;
     /// the static engine kind of this Table ORM class - set at runtime
     TableStaticKind: TRestServerKind;
-    /// the index of the associated method (16-bit is enough, -1 for none)
+    /// the index of the associated method (8-bit is enough, -1 for none)
     // - for rn*Method*, in TRestServer.PublishedMethod[]
     // - for rnInterface*, in Service.InterfaceFactory.Methods[MethodIndex-4] or
     // 0..3 for internal _free_/_contract_/_signature_/_instance_ pseudo-methods
-    MethodIndex: {$ifdef CPU32} SmallInt {$else} integer {$endif};
+    MethodIndex: {$ifdef CPU32} ShortInt {$else} integer {$endif};
     /// the properties of the ORM class in the server TOrmModel for rnTable*
     Table: TOrmModelProperties;
     /// the main engine of this Table ORM class - set at runtime
@@ -1785,7 +1785,7 @@ type
     fSessionCounterMin: cardinal;
     fTimestampInfoCacheTix: cardinal;
     fOnIdleLastTix: cardinal;
-    fPublishedMethodTimestampIndex: ShortInt;
+    fPublishedMethodTimestampIndex: ShortInt; // (8-bit in -1..127 range)
     fPublishedMethodAuthIndex: ShortInt;
     fPublishedMethodBatchIndex: ShortInt;
     fPublishedMethodStatIndex: ShortInt;
@@ -4739,7 +4739,7 @@ begin
     values[0].ToUtf8(method);                  // "method":"methodname"
     ServiceParameters := values[1].Text;       // "params":[....]
     ServiceInstanceID := values[2].ToCardinal; // "id":ClientDrivenID
-    ServiceMethodIndex := Service.ServiceMethodIndex(method);
+    ServiceMethodIndex := Service.ServiceMethodIndex(method); // O(n) lookup
     if ServiceMethodIndex < 0 then
     begin
       Error('Unknown method');

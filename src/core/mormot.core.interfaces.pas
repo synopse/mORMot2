@@ -297,22 +297,22 @@ type
     Args: TInterfaceMethodArgumentDynArray;
     /// the index of the result pseudo-argument in Args[] (signed 8-bit)
     // - is -1 if the method is defined as a procedure (not a function)
-    ArgsResultIndex: shortint;
+    ArgsResultIndex: ShortInt;
     /// the index of the first const / var argument in Args[] (signed 8-bit)
-    ArgsInFirst: shortint;
+    ArgsInFirst: ShortInt;
     /// the index of the last const / var argument in Args[] (signed 8-bit)
-    ArgsInLast: shortint;
+    ArgsInLast: ShortInt;
     /// the index of the first var / out / result argument in Args[] (signed 8-bit)
-    ArgsOutFirst: shortint;
+    ArgsOutFirst: ShortInt;
     /// the index of the last var / out / result argument in Args[] (signed 8-bit)
-    ArgsOutLast: shortint;
+    ArgsOutLast: ShortInt;
     /// the index of the last argument in Args[], excepting result (signed 8-bit)
-    ArgsNotResultLast: shortint;
+    ArgsNotResultLast: ShortInt;
     /// the index of the last var / out argument in Args[] (signed 8-bit)
-    ArgsOutNotResultLast: shortint;
+    ArgsOutNotResultLast: ShortInt;
     /// the index of the first argument expecting manual stack initialization
     // - set for Args[].ValueVar >= imvvRawUtf8
-    ArgsManagedFirst: shortint;
+    ArgsManagedFirst: ShortInt;
     /// how manual stack initialization arguments are defined
     // - set for Args[].ValueVar >= imvvRawUtf8
     ArgsManagedCount: byte;
@@ -449,9 +449,10 @@ const
 
 const
   /// maximum number of methods handled by interfaces
-  // - if you think this constant is too low, you are about to break
+  // - if you think this constant is too low, you are clearing breaking
   // the "Interface Segregation" SOLID principle: so don't ask to increase
   // this value, we won't allow to write obviously un-SOLID code! :)
+  // - indexes would also fit in a signed [-1..127] 8-bit ShortInt
   MAX_METHOD_COUNT = 128;
 
   /// maximum number of method arguments handled by interfaces
