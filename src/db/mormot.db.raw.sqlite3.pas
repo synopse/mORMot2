@@ -7885,7 +7885,7 @@ begin
   for arg := 1 to high(Params) + 1 do
   begin
     case p^.VType of
-      vtString:
+      vtString: // expects UTF-8 encoding for ShortString
         BindU(arg, @p^.VString^[1], ord(p^.VString^[0]));
       vtAnsiString:
         if p^.VAnsiString = nil then
@@ -7903,7 +7903,7 @@ begin
             BindU(arg, PUtf8Char(p^.VAnsiString) + 3,
                      length(RawUtf8(p^.VAnsiString)) - 3)
           else
-            Bind(arg, RawUtf8(p^.VAnsiString));
+            Bind(arg, RawUtf8(p^.VAnsiString)); // assume CP_UTF8
         end;
       vtBoolean:
         if p^.VBoolean then // normalize
@@ -7926,13 +7926,18 @@ begin
       vtExtended:
         Bind(arg, p^.VExtended^);
       {$ifdef UNICODE}
-      vtUnicodeString:
-        BindS(arg, string(p^.VUnicodeString)); // optimize Delphi string constants
+      vtUnicodeString: // optimize Delphi string constants
+        BindS(arg, string(p^.VUnicodeString));
       {$endif UNICODE}
+      vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec) or VarRecToVariant()
+        if p^.VPointer = nil then
+          BindNull(arg)
+        else
+          Bind(arg, PtrInt(p^.VPointer));
     else
       begin
         VarRecToUtf8(p, tmp);
-        Bind(arg, tmp); // bind e.g. vtPChar/vtUnicodeString as UTF-8
+        Bind(arg, tmp); // bind e.g. vtPChar/vtWideString as UTF-8
       end;
     end;
     inc(p);
