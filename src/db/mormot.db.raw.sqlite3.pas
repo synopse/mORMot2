@@ -7875,60 +7875,68 @@ end;
 
 procedure TSqlRequest.Bind(const Params: array of const);
 var
-  i: PtrInt;
+  arg: integer;
   c: integer;
+  p: PVarRec;
   tmp: RawUtf8;
 begin
   // same logic than TSqlDBStatement.Bind(array of const)
-  for i := 1 to high(Params) + 1 do
-    with Params[i - 1] do
-      case VType of
-        vtString:
-          BindU(i, @VString^[1], ord(VString^[0]));
-        vtAnsiString:
-          if VAnsiString = nil then
-            Bind(i, '')
-          else
-          begin
-            c := PInteger(VAnsiString)^ and $00ffffff;
-            if c = JSON_BASE64_MAGIC_C then
-            begin
-              Base64ToBin(PAnsiChar(VAnsiString) + 3,
-                length(RawUtf8(VAnsiString)) - 3, RawByteString(tmp));
-              BindBlob(i, tmp);
-            end
-            else if c = JSON_SQLDATE_MAGIC_C then // store as ISO-8601 text
-              BindU(i, PUtf8Char(VAnsiString) + 3, length(RawUtf8(VAnsiString)) - 3)
-            else
-              Bind(i, RawUtf8(VAnsiString));
-          end;
-        vtBoolean:
-          if VBoolean then // normalize
-            Bind(i, 1)
-          else
-            Bind(i, 0);
-        vtInteger:
-          Bind(i, VInteger);
-        vtInt64:
-          Bind(i, VInt64^);
-        {$ifdef FPC}
-        vtQWord:
-          Bind(i, VQWord^); // SQLite3 may misinterpret huge numbers as negative
-        {$endif FPC}
-        vtCurrency:
-          Bind(i, CurrencyToDouble(VCurrency));
-        vtExtended:
-          Bind(i, VExtended^);
-        {$ifdef UNICODE}
-        vtUnicodeString:
-          BindS(i, string(VUnicodeString)); // optimize Delphi string constants
-        {$endif UNICODE}
-      else
+  p := @Params[0];
+  for arg := 1 to high(Params) + 1 do
+  begin
+    case p^.VType of
+      vtString:
+        BindU(arg, @p^.VString^[1], ord(p^.VString^[0]));
+      vtAnsiString:
+        if p^.VAnsiString = nil then
+          Bind(arg, '')
+        else
         begin
-          VarRecToUtf8(@Params[i], tmp);
-          Bind(i, tmp); // bind e.g. vtPChar/vtUnicodeString as UTF-8
+          c := PInteger(p^.VAnsiString)^ and $00ffffff;
+          if c = JSON_BASE64_MAGIC_C then
+          begin
+            Base64ToBin(p^.VPChar + 3, length(RawUtf8(p^.VAnsiString)) - 3,
+              RawByteString(tmp));
+            BindBlob(arg, tmp);
+          end
+          else if c = JSON_SQLDATE_MAGIC_C then // store as ISO-8601 text
+            BindU(arg, PUtf8Char(p^.VAnsiString) + 3,
+                     length(RawUtf8(p^.VAnsiString)) - 3)
+          else
+            Bind(arg, RawUtf8(p^.VAnsiString));
         end;
+      vtBoolean:
+        if p^.VBoolean then // normalize
+          Bind(arg, 1)
+        else
+          Bind(arg, 0);
+      vtInteger:
+        Bind(arg, p^.VInteger);
+      vtInt64:
+        Bind(arg, p^.VInt64^);
+      {$ifdef FPC}
+      vtQWord:
+        if p^.VInt64^ >= 0 then // safe to use
+          Bind(arg, p^.VInt64^)
+        else
+          Bind(arg, double(p^.VQWord^)); // SQLite3 would misinterpret negative
+      {$endif FPC}
+      vtCurrency:
+        Bind(arg, CurrencyToDouble(p^.VCurrency));
+      vtExtended:
+        Bind(arg, p^.VExtended^);
+      {$ifdef UNICODE}
+      vtUnicodeString:
+        BindS(arg, string(p^.VUnicodeString)); // optimize Delphi string constants
+      {$endif UNICODE}
+    else
+      begin
+        VarRecToUtf8(p, tmp);
+        Bind(arg, tmp); // bind e.g. vtPChar/vtUnicodeString as UTF-8
       end;
+    end;
+    inc(p);
+  end;
 end;
 
 const
