@@ -128,15 +128,15 @@ const
   {$ifdef OSWINDOWS}
     {$ifdef CPU32}
     LIB_CRYPTO1 = 'libcrypto-1_1.dll';
-    LIB_SSL1 = 'libssl-1_1.dll';
+    LIB_SSL1    = 'libssl-1_1.dll';
     LIB_CRYPTO3 = 'libcrypto-3.dll';
-    LIB_SSL3 = 'libssl-3.dll';
+    LIB_SSL3    = 'libssl-3.dll';
     _PU = '';
     {$else}
     LIB_CRYPTO1 = 'libcrypto-1_1-x64.dll';
-    LIB_SSL1 = 'libssl-1_1-x64.dll';
+    LIB_SSL1    = 'libssl-1_1-x64.dll';
     LIB_CRYPTO3 = 'libcrypto-3-x64.dll';
-    LIB_SSL3 = 'libssl-3-x64.dll';
+    LIB_SSL3    = 'libssl-3-x64.dll';
     _PU = '';
     {$endif CPU32}
   {$else}
@@ -144,12 +144,12 @@ const
       {$define NOOPENSSL3} // unsupported yet
       {$ifdef CPU32}
       LIB_CRYPTO1 = 'libcrypto-android32.a';
-      LIB_SSL1 = 'libssl-android32.a';
+      LIB_SSL1    = 'libssl-android32.a';
       _PU = '';
       {$define OPENSSLSTATIC}
       {$else}
       LIB_CRYPTO1 = 'libcrypto-android64.a';
-      LIB_SSL1 = 'libssl-android64.a';
+      LIB_SSL1    = 'libssl-android64.a';
       _PU = '';
       {$define OPENSSLSTATIC}
       {$endif CPU32}
@@ -159,24 +159,24 @@ const
           // from https://github.com/grijjy/DelphiOpenSsl
           {$ifdef CPUX86}
           LIB_CRYPTO1 = 'libssl-merged-osx32.dylib';
-          LIB_SSL1 = 'libssl-merged-osx32.dylib';
+          LIB_SSL1    = 'libssl-merged-osx32.dylib';
           _PU = '_';
           {$endif CPUX86}
           {$ifdef CPUX64}
           LIB_CRYPTO1 = 'libssl-merged-osx64.dylib';
-          LIB_SSL1 = 'libssl-merged-osx64.dylib';
+          LIB_SSL1    = 'libssl-merged-osx64.dylib';
           _PU = '_';
           {$endif CPUX64}
           {$ifdef CPUX64_static}
           LIB_CRYPTO1 = 'libcrypto-osx64.a';
-          LIB_SSL1 = 'libssl-osx64.a';
+          LIB_SSL1    = 'libssl-osx64.a';
           _PU = '';
           {$define OPENSSLSTATIC}
           {$endif CPUX64_static}
         {$else}
           // regular OpenSSL 1.1 dylib - to be supplied
           LIB_CRYPTO1 = 'libcrypto.1.1.dylib'; // typically ARM64
-          LIB_SSL1 = 'libssl.1.1.dylib';
+          LIB_SSL1    = 'libssl.1.1.dylib';
           _PU = '';
         {$endif CPUINTEL}
         // regular OpenSSL 3 from https://synopse.info/files/OpenSSLMacX64.tgz
@@ -185,19 +185,19 @@ const
         // favor of its own "Cryptographic Services", so we won't try to load
         // plain libcrypto/libssl.dylib but search for modern custom .dylib
         LIB_CRYPTO3 = 'libcrypto.3.dylib';
-        LIB_SSL3 = 'libssl.3.dylib';
+        LIB_SSL3    = 'libssl.3.dylib';
       {$else}
         {$ifdef OSLINUX}
         // specific versions on Linux
         LIB_CRYPTO1 = 'libcrypto.so.1.1';
-        LIB_SSL1 = 'libssl.so.1.1';
+        LIB_SSL1    = 'libssl.so.1.1';
         LIB_CRYPTO3 = 'libcrypto.so.3';
-        LIB_SSL3 = 'libssl.so.3';
+        LIB_SSL3    = 'libssl.so.3';
         {$else} // not tested on OpenBSD/FreeBSD yet
         LIB_CRYPTO1 = 'libcrypto.so'; // should redirect to 1.1 or 3
-        LIB_SSL1 = 'libssl.so';
+        LIB_SSL1    = 'libssl.so';
         LIB_CRYPTO3 = 'libcrypto.so.3';
-        LIB_SSL3 = 'libssl.so.3';
+        LIB_SSL3    = 'libssl.so.3';
         {$endif OSLINUX}
         _PU = '';
       {$endif OSDARWIN}

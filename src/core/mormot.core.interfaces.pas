@@ -198,8 +198,8 @@ type
     // - Dest should already have set its Kind to either dvObject or dvArray
     procedure AddAsVariant(var Dest: TDocVariantData; V: pointer);
     /// normalize a value containing one input or output argument
-    // - sets and enumerates will be translated to strings (also in embedded
-    // objects and T*ObjArray)
+    // - sets and enumerates will be translated into text (also in embedded
+    // objects and T*ObjArray), and record/class/arrays into TDocVariantData
     procedure FixValue(var Value: variant);
     /// normalize a value containing one input or output argument, and add
     // it to a destination variant Document
@@ -2806,14 +2806,14 @@ var
 begin
   case ValueType of
     imvEnum:
-      if VariantToInt64(Value, enum) then
+      if VariantToInt64(Value, enum) then // from ordinal to PShortString
         Value := ArgRtti.Cache.EnumInfo.GetEnumNameOrd(enum)^;
     imvSet:
-      if VariantToInt64(Value, enum) then
+      if VariantToInt64(Value, enum) then // to TDocVariantData array
         Value := SetNameToVariant(enum, ArgRtti);
     imvObject:
       begin
-        obj := ArgRtti.ClassNewInstance;
+        obj := ArgRtti.ClassNewInstance; // to TDocVariantData object
         try
           if DocVariantToObject(_Safe(Value)^, obj, ArgRtti) then
             Value := _ObjFast(obj, [woEnumSetsAsText]);
@@ -2822,7 +2822,7 @@ begin
         end;
       end;
     imvDynArray:
-      if _Safe(Value)^.IsArray then
+      if _Safe(Value)^.IsArray then // to TDocVariantData array
       begin
         DocVariantType.ToJson(@Value, json);
         arr := nil; // recreate using a proper dynamic array
@@ -2836,7 +2836,7 @@ begin
         end;
       end;
     imvRecord:
-      if _Safe(Value)^.IsObject then
+      if _Safe(Value)^.IsObject then // to TDocVariantData object
       begin
         DocVariantType.ToJson(@Value, json);
         SetLength(rec, ArgRtti.Size);

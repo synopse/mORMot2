@@ -3784,7 +3784,7 @@ begin
                          '}',
                          'driver',
                          '{',
-                             'name', SYNOPSE_FRAMEWORK_NAME,
+                             'name',    SYNOPSE_FRAMEWORK_NAME,
                              'version', SYNOPSE_FRAMEWORK_VERSION,
                          '}',
                          'os',
