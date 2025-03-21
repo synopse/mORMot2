@@ -4653,7 +4653,7 @@ begin
   begin
     // parameters sent as json array/object (the Delphi/AJAX way) or single blob
     if (ServiceMethod <> nil) and
-       ServiceMethod^.ArgsInputIsOctetStream and
+       (imfInputIsOctetStream in ServiceMethod^.Flags) and
        not ContentTypeIsJson then
     begin
       fake.c := '[';                      // starts like a regular JSON array

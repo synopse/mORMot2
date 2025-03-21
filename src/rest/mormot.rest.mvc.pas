@@ -1687,7 +1687,7 @@ begin
       repeat
         try
           m := @fApplication.fFactory.Methods[fMethodIndex];
-          isAction := m^.ArgsResultIsServiceCustomAnswer;
+          isAction := imfResultIsServiceCustomAnswer in m^.Flags;
           fExecuteCached[fMethodIndex].Acquire([], exec, WR);
           try
             WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
@@ -2369,7 +2369,7 @@ begin
             [self, aRestModel, aInterface.RawName, URI])
         else
           // maps TMvcAction in TMvcApplication.RunOnRestServer
-          ArgsResultIsServiceCustomAnswer := true;
+          include(Flags, imfResultIsServiceCustomAnswer);
   FlushAnyCache;
 end;
 

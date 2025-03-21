@@ -1162,9 +1162,9 @@ begin
       if ArgsOutNotResultLast > 0 then
         _ObjAddProp('hasOutNotResultParams', true, result);
     end;
-    if ArgsResultIsServiceCustomAnswer then
+    if imfResultIsServiceCustomAnswer in Flags then
       _ObjAddProp('resultIsServiceCustomAnswer', true, result);
-    if IsInherited then
+    if imfIsInherited in Flags then
       _ObjAddProp('isInherited', true, result);
   end;
 end;
@@ -2035,7 +2035,8 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
     line, typ: RawUtf8;
   begin
     ToConsole('%', [IN_OUT[input]], ccDarkGray, {nolinefeed=}true);
-    if not input and method^.ArgsResultIsServiceCustomAnswer then
+    if (not input) and
+       (imfResultIsServiceCustomAnswer in method^.Flags) then
       line := ' is undefined'
     else
     begin

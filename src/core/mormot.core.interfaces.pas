@@ -218,7 +218,7 @@ type
   TOnInterfaceMethodExecuteCallback = procedure(var Ctxt: TJsonParserContext;
     ParamInterfaceInfo: TRttiJson; out Obj) of object;
 
-  /// how TInterfaceMethod.TInterfaceMethod method will return the generated document
+  /// how TInterfaceMethod.ArgsValuesAsDocVariant will return the generated document
   // - will return either a dvObject or dvArray TDocVariantData, depending on
   // the expected returned document layout
   // - returned content could be "normalized" (for any set or enumerate) if
@@ -227,6 +227,23 @@ type
     pdvArray,
     pdvObject,
     pdvObjectFixed);
+
+  /// refine one TInterfaceMethod processing
+  // - imfIsInherited if the method is inherited from another parent interface
+  // - imfResultIsServiceCustomAnswer is set if the result is a
+  // TServiceCustomAnswer record and requires specific raw HTTP-level process
+  // - imfResultIsServiceCustomStatus is set if the result is a
+  // TServiceCustomStatus integer, i.e. a custom HTTP status
+  // - imfInputIsOctetStream is set if there is a single input parameter as
+  // RawByteString/RawBlob so that TRestRoutingRest.ExecuteSoaByInterface will
+  // identify binary body input with mime-type 'application/octet-stream'
+  TInterfaceMethodFlag = (
+    imfIsInherited,
+    imfResultIsServiceCustomAnswer,
+    imfResultIsServiceCustomStatus,
+    imfInputIsOctetStream);
+  /// how TInterfaceMethod should implement this service provider method
+  TInterfaceMethodFlags = set of TInterfaceMethodFlag;
 
   /// describe an interface-based service provider method
   {$ifdef USERECORDWITHMETHODS}
@@ -255,12 +272,21 @@ type
     // QueryInterface, _AddRef, and _Release are always defined by default
     // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
     ExecutionMethodIndex: byte;
-    /// TRUE if the method is inherited from another parent interface
-    IsInherited: boolean;
+    /// how this method is defined and should be processed
+    Flags: TInterfaceMethodFlags;
     /// the directions of arguments with SPI parameters defined
     HasSpiParams: TInterfaceMethodValueDirections;
     /// is 0 for the root interface, 1..n for all inherited interfaces
     HierarchyLevel: byte;
+    /// the number of const / var parameters in Args[]
+    // - i.e. the number of elements in the input JSON array
+    ArgsInputValuesCount: byte;
+    /// the number of var / out parameters +  in Args[]
+    // - i.e. the number of elements in the output JSON array or object
+    ArgsOutputValuesCount: byte;
+    /// needed CPU stack size (in bytes) for all arguments
+    // - under x64, does not include the backup space for the four registers
+    ArgsSizeInStack: word;
     /// describe expected method arguments
     // - Args[0] is always imvSelf
     // - if method is a function, an additional imdResult argument is appended
@@ -280,22 +306,6 @@ type
     ArgsNotResultLast: shortint;
     /// the index of the last var / out argument in Args[] (signed 8-bit)
     ArgsOutNotResultLast: shortint;
-    /// the number of const / var parameters in Args[]
-    // - i.e. the number of elements in the input JSON array
-    ArgsInputValuesCount: byte;
-    /// the number of var / out parameters +  in Args[]
-    // - i.e. the number of elements in the output JSON array or object
-    ArgsOutputValuesCount: byte;
-    /// true if the result is a TServiceCustomAnswer record
-    // - that is, a custom Header+Content BLOB transfert, not a JSON object
-    ArgsResultIsServiceCustomAnswer: boolean;
-    /// true if the result is a TServiceCustomStatus 32-bit integer
-    // - that is, a custom HTTP status
-    ArgsResultIsServiceCustomStatus: boolean;
-    /// true if there is a single input parameter as RawByteString/RawBlob
-    // - TRestRoutingRest.ExecuteSoaByInterface will identify binary input
-    // with mime-type 'application/octet-stream' as expected
-    ArgsInputIsOctetStream: boolean;
     /// the index of the first argument expecting manual stack initialization
     // - set for Args[].ValueVar >= imvvRawUtf8
     ArgsManagedFirst: shortint;
@@ -304,9 +314,6 @@ type
     ArgsManagedCount: byte;
     /// contains all used kind of arguments
     ArgsUsed: TInterfaceMethodValueTypes;
-    /// needed CPU stack size (in bytes) for all arguments
-    // - under x64, does not include the backup space for the four registers
-    ArgsSizeInStack: word;
     /// 64-bit aligned cumulative size for all arguments values
     // - follow Args[].OffsetAsValue distribution
     ArgsSizeAsValue: cardinal;
@@ -3247,7 +3254,7 @@ begin
     ctxt.Value[arg] := V;
     inc(a);
   end;
-  if ctxt.Method^.ArgsResultIsServiceCustomAnswer then
+  if imfResultIsServiceCustomAnswer in ctxt.Method^.Flags then
     ctxt.ServiceCustomAnswerPoint := ctxt.Value[ctxt.Method^.ArgsResultIndex]
   else
     ctxt.ServiceCustomAnswerPoint := nil;
@@ -3867,7 +3874,8 @@ begin
   with fMethods[m] do
   begin
     Join([fInterfaceUri, '.', URI], InterfaceDotMethodName);
-    IsInherited := HierarchyLevel <> fAddMethodsLevel;
+    if HierarchyLevel <> fAddMethodsLevel then
+      include(Flags, imfIsInherited);
     ExecutionMethodIndex := m + RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
     ArgsInLast := -2;
@@ -3972,7 +3980,7 @@ begin
             [self, InterfaceDotMethodName, ArgTypeName^]);
         imvCardinal:
           if ArgRtti.Info = TypeInfo(TServiceCustomStatus) then
-            ArgsResultIsServiceCustomStatus := true;
+            include(Flags, imfResultIsServiceCustomStatus);
         imvRecord:
           if ArgRtti.Info = TypeInfo(TServiceCustomAnswer) then
           begin
@@ -3981,7 +3989,7 @@ begin
                 EInterfaceFactory.RaiseUtf8('%.Create: I% var/out ' +
                   'parameter [%] not allowed with TServiceCustomAnswer result',
                   [self, InterfaceDotMethodName, Args[a].ParamName^]);
-            ArgsResultIsServiceCustomAnswer := true;
+            include(Flags, imfResultIsServiceCustomAnswer);
           end
         {$ifdef CPUAARCH64}
         // FPC uses registers for managed records, but follows the ABI otherwise
@@ -3996,7 +4004,7 @@ begin
       end;
     if (ArgsInputValuesCount = 1) and
        (Args[1].ValueType = imvRawByteString) then
-      ArgsInputIsOctetStream := true;
+      include(Flags, imfInputIsOctetStream);
   end;
   for vt := low(vt) to high(vt) do
     SetLength(fArgUsed[vt], used[vt]);
@@ -7455,7 +7463,7 @@ begin
          (optErrorOnMissingParam in Options) then
         exit; // paranoid setting
     end
-    else if fMethod^.ArgsInputIsOctetStream and
+    else if (imfInputIsOctetStream in fMethod^.Flags) and
             (P <> nil) and
             (PCardinal(P)^ = JSON_BIN_MAGIC_C) then
     begin
@@ -7507,7 +7515,7 @@ begin
     if Res <> nil then
     begin
       // handle custom content (not JSON array/object answer)
-      if fMethod^.ArgsResultIsServiceCustomAnswer then
+      if imfResultIsServiceCustomAnswer in fMethod^.Flags then
       begin
         c := fValues[fMethod^.ArgsResultIndex];
         if c^.Header = '' then
@@ -7523,7 +7531,7 @@ begin
         result := true;
         exit;
       end
-      else if fMethod^.ArgsResultIsServiceCustomStatus then
+      else if imfResultIsServiceCustomStatus in fMethod^.Flags then
         fServiceCustomAnswerStatus := PCardinal(fValues[fMethod^.ArgsResultIndex])^;
       // write the '{"result":[...' array or object
       opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
@@ -7743,7 +7751,6 @@ end;
 
 initialization
   InitializeUnit;
-
 
 end.
 

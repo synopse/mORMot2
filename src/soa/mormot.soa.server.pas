@@ -1250,7 +1250,7 @@ begin
         begin
           W.AddShort('},Output:{');
           if not (optNoLogOutput in Sender.Options) then
-            if ArgsResultIsServiceCustomAnswer then
+            if imfResultIsServiceCustomAnswer in Flags then
               with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do
               begin
                 len := length(Content);
