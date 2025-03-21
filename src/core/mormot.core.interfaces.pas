@@ -611,6 +611,9 @@ type
     // - if aMethodName does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
     function FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
+    /// find the index of a particular method in internal Methods[] list
+    // - without accepting /service/start for IService._Start()
+    function FindMethodIndexExact(const aMethodName: RawUtf8): PtrInt;
     /// find a particular method in internal Methods[] list
     // - just a wrapper around FindMethodIndex() returing a PInterfaceMethod
     // - will return nil if the method is not known
@@ -4324,6 +4327,14 @@ begin // called during service registration phase, or TRestServerRoutingJsonRpc
     result := FastFindName(pointer(fMethods), pointer(aMethodName), fMethodsCount)
   else
     result := -1
+end;
+
+function TInterfaceFactory.FindMethodIndexExact(const aMethodName: RawUtf8): PtrInt;
+begin
+  for result := 0 to fMethodsCount - 1 do // no need to be fast
+    if IdemPropNameU(fMethods[result].Uri, aMethodName) then
+      exit;
+  result := -1;
 end;
 
 function TInterfaceFactory.FindMethod(const aMethodName: RawUtf8): PInterfaceMethod;
