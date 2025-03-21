@@ -3809,7 +3809,7 @@ begin
       F := FieldCount;
       if F = MAX_SQLFIELDS then
         raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
-      FieldNames[F] := info.Value;
+      FieldNames[F]  := info.Value;
       FieldNamesL[F] := info.Valuelen;
       ParseSqlValue(info, Params, FieldTypeApproximation[F], FieldValues[F]);
       if FieldIsRowID then
@@ -3996,6 +3996,8 @@ end;
 procedure TJsonObjectDecoder.AddFieldValue(const FieldName, FieldValue: RawUtf8;
   FieldType: TJsonObjectDecoderFieldType);
 begin
+  if FieldName = '' then
+    EJsonObjectDecoder.RaiseUtf8('TJsonObjectDecoder.AddField()', []);
   if FieldCount = MAX_SQLFIELDS then
     EJsonObjectDecoder.RaiseUtf8(
       'Too many fields for TJsonObjectDecoder.AddField(%) max=%',

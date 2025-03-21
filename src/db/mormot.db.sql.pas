@@ -5880,13 +5880,12 @@ procedure TSqlDBStatement.Bind(const Params: array of const;
 var
   arg, c: integer;
   p: PVarRec;
+  tmp: RawUtf8;
  begin
   p := @Params[0];
   for arg := 1 to high(Params) + 1 do // bind parameter index starts at 1
   begin
     case p^.VType of
-      vtString:     // expect WinAnsi String for ShortString
-        BindTextU(arg, WinAnsiToUtf8(@p^.VString^[1], ord(p^.VString^[0])), IO);
       vtAnsiString:
         if p^.VAnsiString = nil then
           BindTextU(arg, '', IO)
@@ -5894,33 +5893,20 @@ var
         begin
           c := PInteger(p^.VAnsiString)^ and $00ffffff;
           if c = JSON_BASE64_MAGIC_C then
-            BindBlob(arg, Base64ToBin(p^.VPChar + 3,
-                          length(RawUtf8(p^.VAnsiString)) - 3))
+          begin
+            Base64ToBin(p^.VPChar + 3, length(RawUtf8(p^.VAnsiString)) - 3,
+              RawByteString(tmp));
+            BindBlob(arg, tmp, IO);
+          end
           else if c = JSON_SQLDATE_MAGIC_C then
             BindDateTime(arg, Iso8601ToDateTimePUtf8Char(
               PUtf8Char(p^.VAnsiString) + 3, length(RawUtf8(p^.VAnsiString)) - 3))
           else
-            BindTextU(arg, AnyAnsiToUtf8(RawByteString(p^.VAnsiString)), IO);
+          begin
+            AnyAnsiToUtf8Var(RawByteString(p^.VAnsiString), tmp);
+            BindTextU(arg, tmp, IO);
+          end;
         end;
-      vtPChar:
-        BindTextP(arg, PUtf8Char(p^.VPChar), IO);
-      vtChar:
-        BindTextU(arg, RawUtf8(p^.VChar), IO);
-      vtWideChar:
-        BindTextU(arg, RawUnicodeToUtf8(@p^.VWideChar, 1), IO);
-      vtPWideChar:
-        BindTextU(arg, RawUnicodeToUtf8(p^.VPWideChar, StrLenW(p^.VPWideChar)), IO);
-      vtWideString:
-        BindTextW(arg, WideString(p^.VWideString), IO);
-      {$ifdef HASVARUSTRING}
-      {$ifdef UNICODE}
-      vtUnicodeString:
-        BindTextS(arg, string(p^.VUnicodeString), IO);
-      {$else}
-      vtUnicodeString:
-        BindTextU(arg, UnicodeStringToUtf8(UnicodeString(p^.VUnicodeString)), IO);
-      {$endif UNICODE}
-      {$endif HASVARUSTRING}
       vtBoolean:
         if p^.VBoolean then // normalize
           Bind(arg, 1, IO)
@@ -5928,12 +5914,11 @@ var
           Bind(arg, 0, IO);
       vtInteger:
         Bind(arg, p^.VInteger, IO);
+      {$ifdef FPC} // won't support huge positive QWord values
+      vtQWord,
+      {$endif FPC}
       vtInt64:
         Bind(arg, p^.VInt64^, IO);
-      {$ifdef FPC}
-      vtQWord:
-        Bind(arg, p^.VInt64^, IO);
-      {$endif FPC}
       vtCurrency:
         BindCurrency(arg, p^.VCurrency^, IO);
       vtExtended:
@@ -5945,9 +5930,15 @@ var
           Bind(arg, PtrInt(p^.VPointer), IO);
       vtVariant:
         BindVariant(arg, p^.VVariant^, VariantIsBlob(p^.VVariant^), IO);
+      {$ifdef UNICODE}
+      vtUnicodeString: // optimize Delphi string constants
+        BindTextS(arg, string(p^.VUnicodeString), IO);
+      {$endif HASVARUSTRING}
     else
-      ESqlDBException.RaiseUtf8(
-        '%.BindArrayOfConst(Param=%,Type=%)', [self, arg, p^.VType]);
+      begin
+        VarRecToUtf8(p, tmp);
+        BindTextU(arg, tmp, IO); // bind e.g. vtPChar/vtWideString as UTF-8
+      end;
     end;
     inc(p);
   end;
