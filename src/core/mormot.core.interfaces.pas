@@ -603,21 +603,21 @@ type
     // and prepare all internal structures for later use
     // - do not call this constructor directly, but TInterfaceFactory.Get()
     constructor Create(aInterface: PRttiInfo);
-    /// find the index of a particular method in internal Methods[] list
+    /// find the index of a particular URI in internal Methods[] list
     // - will search for a match against Methods[].Uri property
     // - won't find the default AddRef/Release/QueryInterface methods,
     // nor the _free_/_instance_/... pseudo-methods
     // - will return -1 if the method is not known
-    // - if aMethodName does not have an exact method match, it will try with a
+    // - if aUrl does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
-    function FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
+    function FindMethodIndex(const aUrl: RawUtf8): PtrInt;
     /// find the index of a particular method in internal Methods[] list
     // - without accepting /service/start for IService._Start()
     function FindMethodIndexExact(const aMethodName: RawUtf8): PtrInt;
     /// find a particular method in internal Methods[] list
     // - just a wrapper around FindMethodIndex() returing a PInterfaceMethod
     // - will return nil if the method is not known
-    function FindMethod(const aMethodName: RawUtf8): PInterfaceMethod;
+    function FindMethod(const aUrl: RawUtf8): PInterfaceMethod;
     /// find the index of a particular interface.method in internal Methods[] list
     // - will search for a match against Methods[].InterfaceDotMethodName property
     // - won't find the default AddRef/Release/QueryInterface methods
@@ -627,19 +627,19 @@ type
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
-    function CheckMethodIndex(const aMethodName: RawUtf8): PtrInt; overload;
+    function CheckMethodIndex(const aUrl: RawUtf8): PtrInt; overload;
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
-    function CheckMethodIndex(aMethodName: PUtf8Char): integer; overload;
+    function CheckMethodIndex(aUrl: PUtf8Char): integer; overload;
     /// returns the method name from its method index
     // - the method index should start at 0 for _free_/_contract_/_signature_
     // pseudo-methods, and start at index 3 for real Methods[]
-    function GetMethodName(MethodIndex: integer): RawUtf8;
+    function GetMethodName(aMethodIndex: integer): RawUtf8;
     /// set the Methods[] indexes bit from some methods names
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
-    procedure CheckMethodIndexes(const aMethodName: array of RawUtf8;
+    procedure CheckMethodIndexes(const aUrl: array of RawUtf8;
       aSetAllIfNone: boolean; out aBits: TInterfaceFactoryMethodBits);
     /// returns the full 'Interface.MethodName' text, from a method index
     // - the method index should start at 0 for _free_/_contract_/_signature_
@@ -4319,29 +4319,30 @@ begin // very efficient O(n) search sub-function
   result := alt; // use IServer._Method if no IServer.Method
 end;
 
-function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
-begin // called during service registration phase, or TRestServerRoutingJsonRpc
+function TInterfaceFactory.FindMethodIndex(const aUrl: RawUtf8): PtrInt;
+begin
+  // called e.g. at startup, or by TServiceFactoryClient or TRestServerRoutingJsonRpc
   if (self <> nil) and
-     (aMethodName <> '') and
+     (aUrl<> '') and
      (fMethodsCount <> 0) then
-    result := FastFindName(pointer(fMethods), pointer(aMethodName), fMethodsCount)
+    result := FastFindName(pointer(fMethods), pointer(aUrl), fMethodsCount)
   else
     result := -1
 end;
 
 function TInterfaceFactory.FindMethodIndexExact(const aMethodName: RawUtf8): PtrInt;
 begin
-  for result := 0 to fMethodsCount - 1 do // no need to be fast
+  for result := 0 to fMethodsCount - 1 do // no need to be fast (seldom called)
     if IdemPropNameU(fMethods[result].Uri, aMethodName) then
       exit;
   result := -1;
 end;
 
-function TInterfaceFactory.FindMethod(const aMethodName: RawUtf8): PInterfaceMethod;
+function TInterfaceFactory.FindMethod(const aUrl: RawUtf8): PInterfaceMethod;
 var
   i: PtrInt;
 begin // this method is not called by the framework in normal use
-  i := FindMethodIndex(aMethodName);
+  i := FindMethodIndex(aUrl);
   if i < 0 then
     result := nil
   else
@@ -4356,55 +4357,54 @@ begin
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName, aFullMethodName) then
         exit;
   if alsoSearchExactMethodName then
-    result := FindMethodIndex(aFullMethodName)
+    result := FindMethodIndexExact(aFullMethodName)
   else
     result := -1;
 end;
 
-function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUtf8): PtrInt;
+function TInterfaceFactory.CheckMethodIndex(const aUrl: RawUtf8): PtrInt;
 begin
   if self = nil then
     raise EInterfaceFactory.Create('TInterfaceFactory(nil).CheckMethodIndex');
-  result := FindMethodIndex(aMethodName);
+  result := FindMethodIndex(aUrl);
   if result < 0 then
     EInterfaceFactory.RaiseUtf8('%.CheckMethodIndex: %.% not found',
-      [self, fInterfaceName, aMethodName]);
+      [self, fInterfaceName, aUrl]);
 end;
 
-function TInterfaceFactory.CheckMethodIndex(aMethodName: PUtf8Char): integer;
+function TInterfaceFactory.CheckMethodIndex(aUrl: PUtf8Char): integer;
 begin
-  result := CheckMethodIndex(RawUtf8(aMethodName));
+  result := CheckMethodIndex(RawUtf8(aUrl));
 end;
 
-procedure TInterfaceFactory.CheckMethodIndexes(
-  const aMethodName: array of RawUtf8; aSetAllIfNone: boolean;
-  out aBits: TInterfaceFactoryMethodBits);
+procedure TInterfaceFactory.CheckMethodIndexes(const aUrl: array of RawUtf8;
+  aSetAllIfNone: boolean; out aBits: TInterfaceFactoryMethodBits);
 var
   i: PtrInt;
 begin
   if aSetAllIfNone and
-     (high(aMethodName) < 0) then
+     (high(aUrl) < 0) then
   begin
     FillCharFast(aBits, SizeOf(aBits), 255);
     exit;
   end;
   FillCharFast(aBits, SizeOf(aBits), 0);
-  for i := 0 to high(aMethodName) do
-    include(aBits, CheckMethodIndex(aMethodName[i]));
+  for i := 0 to high(aUrl) do
+    include(aBits, CheckMethodIndex(aUrl[i]));
 end;
 
-function TInterfaceFactory.GetMethodName(MethodIndex: integer): RawUtf8;
+function TInterfaceFactory.GetMethodName(aMethodIndex: integer): RawUtf8;
 begin
-  if (MethodIndex < 0) or
+  if (aMethodIndex < 0) or
      (self = nil) then
     result := ''
-  else if MethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
-    result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(MethodIndex)]
+  else if aMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
+    result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(aMethodIndex)]
   else
   begin
-    dec(MethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
-    if cardinal(MethodIndex) < cardinal(fMethodsCount) then
-      result := fMethods[MethodIndex].Uri
+    dec(aMethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
+    if cardinal(aMethodIndex) < cardinal(fMethodsCount) then
+      result := fMethods[aMethodIndex].Uri
     else
       result := '';
   end;

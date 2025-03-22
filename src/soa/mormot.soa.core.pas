@@ -319,7 +319,7 @@ type
     /// search for a method name within this Interface RTTI and pseudo-methods
     // - will return -1 if not found, im* pseudo-methods as 0..3, or the index
     // in InterfaceFactory.Methods[] incremented by SERVICE_PSEUDO_METHOD_COUNT
-    function ServiceMethodIndex(const Name: RawUtf8): PtrInt;
+    function ServiceMethodIndex(const aUri: RawUtf8): PtrInt;
     /// access to the registered Interface RTTI information
     property InterfaceFactory: TInterfaceFactory
       read fInterface;
@@ -1089,18 +1089,18 @@ begin
     fContractExpected := fContractHash; // for security
 end;
 
-function TServiceFactory.ServiceMethodIndex(const Name: RawUtf8): PtrInt;
+function TServiceFactory.ServiceMethodIndex(const aUri: RawUtf8): PtrInt;
 begin
-  if Name <> '' then
+  if aUri <> '' then
   begin
-    result := fInterface.FindMethodIndex(Name);
+    result := fInterface.FindMethodIndex(aUri);
     if result >= 0 then
     begin
       inc(result, SERVICE_PSEUDO_METHOD_COUNT);
       exit;
     end;
     for result := 0 to SERVICE_PSEUDO_METHOD_COUNT - 1 do
-      if IdemPropNameU(Name,
+      if IdemPropNameU(aUri,
            SERVICE_PSEUDO_METHOD[TServiceInternalMethod(result)]) then
         exit;
   end;

@@ -1482,11 +1482,11 @@ type
     Command: TRestServerUriContextCommand;
     /// the static engine kind of this Table ORM class - set at runtime
     TableStaticKind: TRestServerKind;
-    /// the index of the associated method (8-bit is enough, -1 for none)
+    /// the index of the associated method (16-bit is enough, -1 for none)
     // - for rn*Method*, in TRestServer.PublishedMethod[]
     // - for rnInterface*, in Service.InterfaceFactory.Methods[MethodIndex-4] or
     // 0..3 for internal _free_/_contract_/_signature_/_instance_ pseudo-methods
-    MethodIndex: {$ifdef CPU32} ShortInt {$else} integer {$endif};
+    MethodIndex: {$ifdef CPU32} SmallInt {$else} integer {$endif};
     /// the properties of the ORM class in the server TOrmModel for rnTable*
     Table: TOrmModelProperties;
     /// the main engine of this Table ORM class - set at runtime
@@ -4588,20 +4588,20 @@ begin
         // interface methods need a /ClientDrivenID only if sicClientDriven
         if sic = sicClientDriven then
           rn := rnInterfaceClientID;
-        // ICalculator._Swap() should be routed also from /Model/calculator/swap
+        // ICalculator._Swap() could be routed also from /model/calculator/swap
         fact := met^.InterfaceService.InterfaceFactory;
         _name := fact.Methods[ndx - SERVICE_PSEUDO_METHOD_COUNT].Uri;
         if _name[1] = '_' then
         begin
           delete(_name, 1, 1);
-          if fact.FindMethodIndexExact(_name) < 0 then
+          if fact.FindMethodIndexExact(_name) < 0 then // if Swap() not exists
             SetupOne(Join([fact.InterfaceUri, '/', _name]));
         end;
       end;
     end;
-    // /Model/Interface.Method[/ClientDrivenID] by IInterface.Method
+    // IInterface.Method from /Model/Interface.Method[/ClientDrivenID]
     SetupOne(met^.InterfaceDotMethodName);
-    // /Model/Interface/Method[/ClientDrivenID] by IInterface.Method
+    // IInterface.Method from /Model/Interface/Method[/ClientDrivenID]
     SetupOne(StringReplaceChars(met^.InterfaceDotMethodName, '.', '/'));
   end;
 end;
