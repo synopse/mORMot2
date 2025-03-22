@@ -4816,7 +4816,7 @@ begin
   sm := pointer(fMethods);
   m := pointer(info.Methods);
   repeat
-    if FindMethodIndex(m^.Name) >= 0 then
+    if FindMethodIndexExact(m^.Name) >= 0 then
       EInterfaceFactory.RaiseUtf8('%.AddMethodsFromTypeInfo: duplicated %.%',
         [self, info.Name, m^.Name]);
     sm^.Uri := m^.Name;
@@ -4841,7 +4841,7 @@ begin
     end;
     inc(m);
     inc(sm);
-    inc(fMethodsCount); // update one by one for FindMethodIndex() above
+    inc(fMethodsCount); // update one by one for FindMethodIndexExact() above
     dec(nm);
   until nm = 0;
 end;
@@ -4864,7 +4864,7 @@ begin
   if Length(aParams) mod ARGPERARG <> 0 then
     EInterfaceFactory.RaiseUtf8('%: invalid aParams count for %.AddMethod("%")',
       [fInterfaceName, self, aName]);
-  if FindMethodIndex(aName) >= 0 then
+  if FindMethodIndexExact(aName) >= 0 then
     EInterfaceFactory.RaiseUtf8('%.AddMethod: duplicated generated name %.%',
       [self, fInterfaceName, aName]);
   if fMethodsCount > MAX_METHOD_COUNT then
