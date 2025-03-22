@@ -4669,7 +4669,7 @@ begin
           inc(P);
           {$ifdef OSPOSIX}        // align code by 4 bytes
           inc(PByte(P));
-          {$endif OSPOSIX}
+          {$endif OSPOSIX}        // VMTSTUBSIZE = 24 (OSPOSIX: + 4 )
         end;
         ReserveExecutableMemoryPageAccess(
           fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
@@ -4723,7 +4723,7 @@ begin
     P^ := $66e2ff41;   // jmp r10  (faster than push + ret)
     inc(P);
     P^ := $00441f0f;   // multi-byte nop
-    inc(PByte(P), 5);
+    inc(PByte(P), 5);  // VMTSTUBSIZE = 24
     {$endif CPUX64}
     {$ifdef CPUARM}
     {$ifdef ASMORIG}
@@ -4738,7 +4738,7 @@ begin
       ((PtrUInt(@TInterfacedObjectFakeRaw.ArmFakeStub) - PtrUInt(P)) shr 2) - 2;
     P^ := ($ea shl 24) + (stub and $00ffffff); // note: stub may be < 0
     inc(P);
-    P^ := $e320f000;
+    P^ := $e320f000;  // VMTSTUBSIZE = 16
     inc(P);
     {$endif CPUARM}
     {$ifdef CPUAARCH64}
@@ -4765,7 +4765,7 @@ begin
     P^ := $d61f0140;
     inc(P);
     P^ := $d503201f;
-    inc(P);
+    inc(P); // VMTSTUBSIZE = 28
     {$endif CPUAARCH64}
   end;
   // reenable execution permission of JITed memory as expected by the VMT
