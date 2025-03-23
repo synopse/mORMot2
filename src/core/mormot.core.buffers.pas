@@ -839,7 +839,7 @@ type
   // - big speed up if data is written in small blocks
   // - also handle optimized storage of any integer/Int64/RawUtf8 values
   // - use TFileBufferReader or TFastReader for decoding of the stored binary
-  TBufferWriter = class
+  TBufferWriter = class(TSynPersistent)
   protected
     fPos: PtrInt;
     fBufLen, fBufLen16: PtrInt;
