@@ -1869,14 +1869,14 @@ type
     function SockSendRemainingSize: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the Buffer with Length bytes
-    // - use TimeOut milliseconds wait for incoming data
+    // - wait TimeOut milliseconds until Length bytes are actually received
     // - bypass the SockIn^ buffers
-    // - raise ENetSock exception on socket error
+    // - raise ENetSock exception on socket error, or if Length was not reached
     procedure SockRecv(Buffer: pointer; Length: integer); overload;
     /// fill a RawByteString Buffer with Length bytes
-    // - use TimeOut milliseconds wait for incoming data
+    // - wait TimeOut milliseconds until Length bytes are actually received
     // - bypass the SockIn^ buffers
-    // - raise ENetSock exception on socket error
+    // - raise ENetSock exception on socket error, or if Length was not reached
     function SockRecv(Length: integer): RawByteString; overload;
     /// check if there are some pending bytes in the input sockets API buffer
     // - returns cspSocketError/cspSocketClosed if the connection is broken/closed
@@ -1891,7 +1891,8 @@ type
     function SockReceiveHasData: integer;
     /// returns the socket input stream as a string
     // - returns up to 64KB from the OS or TLS buffers within TimeOut
-    function SockReceiveString: RawByteString;
+    function SockReceiveString(NetResult: PNetResult = nil;
+      RawError: system.PInteger = nil): RawByteString;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
@@ -5580,12 +5581,10 @@ begin
       else
         addr.IPWithPort(usr^.Owner.fRemoteIP); // set 'remoteip:port'
     end
-    else
-      // nlTcp/nlUnix
+    else // nlTcp/nlUnix: TrySockRecv() return size=0 on nrRetry
       if not usr^.Owner.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true,
-                                    @usr^.LastNetResult, @usr^.LastRawError) then
+                          @usr^.LastNetResult, @usr^.LastRawError) then
         size := -1; // fatal socket error
-    // TrySockRecv() may return size=0 if no data is pending, but no TCP/IP error
     if size >= 0 then
     begin
       F.BufEnd := size;
@@ -6127,13 +6126,14 @@ begin
     result := 0;
 end;
 
-function TCrtSocket.SockReceiveString: RawByteString;
+function TCrtSocket.SockReceiveString(
+  NetResult: PNetResult; RawError: system.PInteger): RawByteString;
 var
   read: integer;
   tmp: array[word] of byte; // 64KB is big enough for INetTls or the socket API
 begin
   read := SizeOf(tmp);
-  if TrySockRecv(@tmp, read, {StopBeforeLength=}true) and
+  if TrySockRecv(@tmp, read, {StopBeforeLength=}true, NetResult, RawError) and
      (read <> 0) then
     FastSetRawByteString(result, @tmp, read)
   else
@@ -6173,10 +6173,14 @@ begin
       {$endif SYNCRTDEBUGLOW}
       case res of
         nrOk:
-          ; // Buffer^ was filled with read bytes
+          begin // Buffer^ was filled with read bytes
+            inc(fBytesIn, read);
+            inc(Length, read);
+            inc(PByte(Buffer), read);
+          end;
         nrRetry:
           begin
-            read := 0; // call RecvPending/WaitFor and retry Recv
+            read := 0; // caller should make RecvPending/WaitFor and retry Recv
             res := nrOk;
           end
       else
@@ -6186,13 +6190,10 @@ begin
           break;
         end;
       end;
-      inc(fBytesIn, read);
-      inc(Length, read);
       if fAborted or
          (Length = expected) or
          (StopBeforeLength and (read < CrtSocketSendRecvMaxBytes)) then
         break; // good enough for now
-      inc(PByte(Buffer), read);
       if (res = nrOk) or
          ((fSock.RecvPending(pending) = nrOk) and
           (pending > 0)) then
