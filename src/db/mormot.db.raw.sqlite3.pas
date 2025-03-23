@@ -6024,7 +6024,7 @@ end;
 const
   // warning: those entry should follow EXACTLY the order in TSqlite3Library
   // methods, from @initialize() to the last one
-  SQLITE3_ENTRIES: array[0 .. 172] of RawUtf8 = (
+  SQLITE3_ENTRIES: array[0 .. 173] of PAnsiChar = (
     'initialize',
     'shutdown',
     'open',
@@ -6197,7 +6197,8 @@ const
     'snapshot_open',
     'snapshot_recover',
     'snapshot_cmp',
-    'snapshot_free'); // WARNING: check 'sqlite3_snapshot_free' in Create below
+    'snapshot_free', // WARNING: check 'sqlite3_snapshot_free' in Create below
+    nil);
 
 
 function TSqlite3LibraryDynamic.GetLibraryName: TFileName;
@@ -6211,8 +6212,6 @@ end;
 
 constructor TSqlite3LibraryDynamic.Create(const LibraryName: TFileName);
 var
-  P: PPointerArray;
-  i: PtrInt;
   l1: TFileName;
   vers: PUtf8Char;
 begin
@@ -6221,10 +6220,10 @@ begin
     // first search for the standard library in the executable folder
     l1 := Executable.ProgramFilePath + LibraryName;
   try
+    // try to load the SQLite3 library, raising ESqlite3Exception if missing
     fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
-    P := @@initialize;
-    for i := 0 to High(SQLITE3_ENTRIES) do
-      fLoader.Resolve('sqlite3_', SQLITE3_ENTRIES[i], @P^[i]); // no except, set nil
+    // load all API entries, just ignoring any missing function
+    fLoader.ResolveAll(@SQLITE3_ENTRIES, @@initialize, 'sqlite3_');
   except
     on E: Exception do
     begin
@@ -6234,9 +6233,9 @@ begin
   end;
   if (Assigned(limit) and
       (LibraryResolve(fLoader.Handle, 'sqlite3_limit') <> @limit)) or
-     (Assigned(P^[High(SQLITE3_ENTRIES)]) and
+     (Assigned(SQLITE3_ENTRIES[High(SQLITE3_ENTRIES)]) and
       (LibraryResolve(fLoader.Handle, 'sqlite3_snapshot_free') <>
-         P^[High(SQLITE3_ENTRIES)])) then
+         SQLITE3_ENTRIES[High(SQLITE3_ENTRIES)])) then
     ESqlite3Exception.RaiseUtf8( // paranoid check
       '%.Create: please check SQLITE3_ENTRIES[] order for %', [self, LibraryName]);
   if (not Assigned(initialize)) or

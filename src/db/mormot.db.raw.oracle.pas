@@ -785,7 +785,7 @@ type
 type
   /// direct access to the native Oracle Client Interface (OCI)
   TSqlDBOracleLib = class(TSynLibrary)
-  protected
+  protected // internal wrapper functions
     procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogLevel = sllNone);
@@ -801,6 +801,7 @@ type
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
       csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
   public
+    // all needed API entries
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
     EnvNlsCreate: function(var envhpp: pointer; mode: ub4; ctxp: pointer;
@@ -1280,7 +1281,7 @@ const
     Text: 'WE8ISO8859P1'
   ));
 
-  OCI_ENTRIES: array[0..40] of RawUtf8 = (
+  OCI_ENTRIES: array[0..41] of PAnsiChar = (
     'ClientVersion',
     'EnvNlsCreate',
     'HandleAlloc',
@@ -1321,7 +1322,8 @@ const
     'StringAssignText',
     'CollAppend',
     'BindObject',
-    'PasswordChange');
+    'PasswordChange',
+    nil);
 
 
 { TSqlDBOracleLib }
@@ -1661,8 +1663,6 @@ const
 
 constructor TSqlDBOracleLib.Create(LibraryFileName: TFileName);
 var
-  P: PPointerArray;
-  i: PtrInt;
   l1, l2, l3: TFileName;
 begin
   if LibraryFileName = '' then
@@ -1682,10 +1682,8 @@ begin
   if l3 <> '' then
     l3 := MakePath([l3, 'bin', LibraryFileName]);
   try
-    TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
-    P := @@ClientVersion;
-    for i := 0 to High(OCI_ENTRIES) do
-      Resolve('OCI', OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
+    TryLoadResolve([{%H-}l1, l2, l3, LibraryFileName, LIBNAME],
+      'OCI', @OCI_ENTRIES, @@ClientVersion, ESqlDBOracle);
     ClientVersion(
       major_version, minor_version, update_num, patch_num, port_update_num);
     SupportsInt64Params := (major_version > 11) or

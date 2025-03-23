@@ -336,7 +336,7 @@ end;
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..36] of RawUtf8 = (
+  PQ_ENTRIES: array[0..36] of PAnsiChar = (
     'libVersion',
     'isthreadsafe',
     'setdbLogin',
@@ -408,7 +408,7 @@ begin
     raiseonfailure := ESqlDBPostgres;
     for i := 0 to High(PQ_ENTRIES) do
     begin
-      if PQ_ENTRIES[i] = 'enterPipelineMode' then
+      if StrComp(PQ_ENTRIES[i], PAnsiChar('enterPipelineMode')) = 0 then
         raiseonfailure := nil; // allow old libpq with no pipelining API
       Resolve('PQ', PQ_ENTRIES[i], @P[I], raiseonfailure);
     end;

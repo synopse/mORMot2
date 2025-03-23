@@ -1364,17 +1364,9 @@ begin
   result := AllocMem(size * nmemb);
 end;
 
-
-procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
-
-var
-  res: TCurlResult;
 {$ifndef LIBCURLSTATIC}
-  P: PPointerArray;
-  api: PtrInt;
-
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 39 {$else} 25 {$endif}] of RawUtf8 = (
+  CURL_ENTRIES: array[0 .. {$ifdef LIBCURLMULTI} 40 {$else} 26 {$endif}] of PAnsiChar = (
     'global_init',
     'global_init_mem',
     'global_cleanup',
@@ -1400,7 +1392,7 @@ const
     'mime_addpart',
     'mime_data',
     'mime_name',
-    'mime_type'
+    'mime_type',
     {$ifdef LIBCURLMULTI},
     'multi_add_handle',
     'multi_assign',
@@ -1415,11 +1407,15 @@ const
     'multi_socket_all',
     'multi_strerror',
     'multi_timeout',
-    'multi_wait'
-    {$endif LIBCURLMULTI} );
-
+    'multi_wait',
+    {$endif LIBCURLMULTI}
+    nil);
 {$endif LIBCURLSTATIC}
 
+
+procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
+var
+  res: TCurlResult;
 begin
   if curl_initialized
      {$ifndef LIBCURLSTATIC} and
@@ -1481,7 +1477,7 @@ begin
 
     curl := TLibCurl.Create;
     try
-      curl.TryLoadLibrary([
+      curl.TryLoadResolve([
       {$ifdef OSWINDOWS}
         // first try the libcurl.dll in the local executable folder
         Executable.ProgramFilePath + dllname,
@@ -1499,10 +1495,7 @@ begin
         , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
         {$endif OSPOSIX}
       {$endif OSDARWIN}
-        ], ECurl);
-      P := @@curl.global_init;
-      for api := low(NAMES) to high(NAMES) do
-        curl.Resolve('curl_', NAMES[api], @P[api], {onfailure=}ECurl);
+        ], 'curl_', @CURL_ENTRIES, @@curl.global_init, ECurl);
     except
       FreeAndNil(curl); // ECurl raised during initialization above
       exit;

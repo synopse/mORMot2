@@ -651,7 +651,7 @@ begin
 end;
 
 const
-  GSS_NAMES: array[0 .. 17] of RawUtf8 = (
+  GSS_ENTRIES: array[0 .. 18] of PAnsiChar = (
     'gss_import_name',
     'gss_display_name',
     'gss_release_name',
@@ -669,15 +669,14 @@ const
     'gss_indicate_mechs',
     'gss_release_oid_set',
     'gss_display_status',
-    'krb5_gss_register_acceptor_identity');
+    'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
+    nil);
 
 var
   GssApiTried: TFileName;
 
 procedure LoadGssApi(const LibraryName: TFileName);
 var
-  i: PtrInt;
-  P: PPointerArray;
   api: TGssApi; // local instance for thread-safe load attempt
   tried: TFileName;
 begin
@@ -691,16 +690,10 @@ begin
   GssApiTried := tried;
   api := TGssApi.Create;
   api.TryFromExecutableFolder := true; // good idea to check local first
-  if api.TryLoadLibrary(
-      [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS], nil) then
+  if api.TryLoadResolve(
+      [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS],
+      '', @GSS_ENTRIES, @@api.gss_import_name) then
   begin
-    P := @@api.gss_import_name;
-    for i := 0 to high(GSS_NAMES) do
-      api.Resolve('', GSS_NAMES[i], @P^[i]); // no exception, set nil on failure
-    if not Assigned(api.krb5_gss_register_acceptor_identity) then
-      // try alternate function name
-      api.Resolve('', 'gsskrb5_register_acceptor_identity',
-        @api.krb5_gss_register_acceptor_identity);
     if Assigned(api.gss_acquire_cred) and
        Assigned(api.gss_accept_sec_context) and
        Assigned(api.gss_release_buffer) and

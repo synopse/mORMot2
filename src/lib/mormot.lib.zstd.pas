@@ -232,7 +232,7 @@ end;
 { TSynZSTDDynamic }
 
 const
-  ZSTD_ENTRIES: array[0..13] of RawUtf8 = (
+  ZSTD_ENTRIES: array[0 .. 14] of PAnsiChar = (
     'versionNumber',
     'versionString',
     'isError',
@@ -246,37 +246,31 @@ const
     'getFrameContentSize',
     'createDCtx',
     'freeDCtx',
-    'decompressDCtx');
+    'decompressDCtx',
+    nil);
 
 constructor TSynZSTDDynamic.Create(const aLibraryFile: TFileName;
   aRaiseNoException: boolean);
-var
-  P: PPointer;
-  i: PtrInt;
 begin
   fLibrary := TSynLibrary.Create;
-  if fLibrary.TryLoadLibrary(
-    [aLibraryFile, ZSTD_LIB_NAME], nil) then
+  if fLibrary.TryLoadLibrary([aLibraryFile, ZSTD_LIB_NAME], nil) then
   begin
-    P := @@versionNumber;
-    for i := 0 to High(ZSTD_ENTRIES) do
-      if fLibrary.Resolve('ZSTD_', ZSTD_ENTRIES[i], P, EAlgoCompress) then
-        inc(P);
+    fLibrary.ResolveAll(@ZSTD_ENTRIES, @@versionNumber, 'ZSTD_', EAlgoCompress);
     if versionNumber div 10000 <> 1 then
       if aRaiseNoException then
         exit
       else
-        EAlgoCompress.RaiseUtf8('% has unexpected versionNumber=%',
-          [fLibrary.LibraryPath, versionNumber]);
+        EAlgoCompress.RaiseUtf8('%.Create: % has unexpected versionNumber=%',
+          [self, fLibrary.LibraryPath, versionNumber]);
     // register TAlgoZSTD
     inherited Create;
     // if we reached here, the external library has been properly setup
     fLoaded := true;
   end
   else if not aRaiseNoException then
-    EAlgoCompress.RaiseUtf8('Unable to load % - %/'#13#10 +
+    EAlgoCompress.RaiseUtf8('%.Create: Unable to load % - %/'#13#10 +
       'Please download from https://synopse.info/files/XXX', //Todo: Set to correct value
-      [aLibraryFile, GetErrorText(GetLastError)]);
+      [self, aLibraryFile, GetErrorText(GetLastError)]);
 end;
 
 destructor TSynZSTDDynamic.Destroy;

@@ -2922,7 +2922,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..55] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..56] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2978,7 +2978,8 @@ const
     'SSL_get_verify_result',
     'SSL_set_hostflags',
     'SSL_set1_host',
-    'SSL_add1_host');
+    'SSL_add1_host',
+    nil);
 
 var
   libssl: TLibSsl;
@@ -3626,7 +3627,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..336] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..337] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3963,7 +3964,8 @@ const
     'PEM_write_bio_PUBKEY',
     'OpenSSL_version_num',
     'OpenSSL_version',
-    'X509_print');
+    'X509_print',
+    nil);
 
 var
   libcrypto: TLibCrypto;
@@ -5826,8 +5828,6 @@ end;
 function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
   const libprefix: RawUtf8): boolean;
 var
-  P: PPointerArray;
-  api: PtrInt;
   error: string;
   libenv, libsys1, libsys3, libexe1, libexe3, libpath, libexact, libname: TFileName;
 begin
@@ -5871,7 +5871,7 @@ begin
         {$endif NOOPENSSL3}
       end;
       // attempt to load libcrypto
-      if not libcrypto.TryLoadLibrary([
+      if not libcrypto.TryLoadResolve([
         // first try the exact supplied crypto library name
         libcryptoname,
         // try with the global variable
@@ -5888,16 +5888,10 @@ begin
         , 'libcrypto.so'
         {$endif OSDARWIN}
         {$endif OSPOSIX}
-        ], nil, @error) then
-        exit; // silent failure on missing library unless FORCE_OPENSSL was set
-      P := @@libcrypto.CRYPTO_malloc;
-      // resolve libcrypto entrypoints
-      for api := low(LIBCRYPTO_ENTRIES) to high(LIBCRYPTO_ENTRIES) do
-        if not libcrypto.Resolve(libprefix,
-                 LIBCRYPTO_ENTRIES[api], @P[api], nil, @error) then
-          exit;
+        ], libprefix, @LIBCRYPTO_ENTRIES, @@libcrypto.CRYPTO_malloc, nil, @error) then
+        exit; // silent failure on missing library or entry
       // validate the loaded libcrypto
-      if not Assigned(libcrypto.X509_print) then // last known entry
+      if not Assigned(libcrypto.X509_print) then // last known entry (paranoid)
         raise EOpenSsl.Create('OpenSslInitialize: incorrect libcrypto API');
       OpenSslVersion := libcrypto.OpenSSL_version_num;
       OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
@@ -5917,7 +5911,7 @@ begin
       libname := libpath + StringReplace(ExtractFileName(libcrypto.LibraryPath),
         'libcrypto', 'libssl', [rfReplaceAll {$ifdef OSWINDOWS}, rfIgnoreCase{$endif}]);
       // attempt to load libssl
-      if not libssl.TryLoadLibrary([
+      if not libssl.TryLoadResolve([
         // first try the exact supplied ssl library name
         libsslname,
         // try with the global variable
@@ -5931,15 +5925,9 @@ begin
         , 'libssl.so'
         {$endif OSDARWIN}
         {$endif OSPOSIX}
-        ], nil, @error) then
-        exit;
-      // resolve libssl entrypoints
-      P := @@libssl.SSL_CTX_new;
-      for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
-        if not libssl.Resolve(libprefix,
-                 LIBSSL_ENTRIES[api], @P[api], nil, @error) then
-          exit;
-      if not Assigned(libssl.SSL_add1_host) then // last known entry
+        ], libprefix, @LIBSSL_ENTRIES, @@libssl.SSL_CTX_new, nil, @error) then
+        exit; // silent failure on missing library or entry
+      if not Assigned(libssl.SSL_add1_host) then // last known entry (paranoid)
         raise EOpenSsl.Create('OpenSslInitialize: incorrect libssl API');
       // nothing is to be initialized with OpenSSL 1.1.*
       {$ifdef OPENSSLUSERTLMM}
