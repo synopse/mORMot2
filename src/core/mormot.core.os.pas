@@ -8037,7 +8037,9 @@ begin
   end;
   {$endif OSPOSIX}
   result := result or ignoremissing;
-  if result then
+  if result or
+     ((RaiseExceptionOnFailure = nil) and
+      (SilentError = nil)) then
     exit;
   FreeLib; // abort loading
   error := Format('%s.Resolve(''%s%s''): not found in %s',
