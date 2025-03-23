@@ -4113,12 +4113,16 @@ type
     // - ProcName can be a space-separated list of procedure names, to try
     // alternate API names (e.g. for OpenSSL 1.1.1/3.x compatibility)
     // - if ProcName starts with '?' then RaiseExceptionOnFailure = nil is set
-    function Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
+    function Resolve(const Prefix: RawUtf8; ProcName: PAnsiChar; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil; SilentError: PString = nil): boolean;
     /// cross-platform resolution of all function entries in this library
     // - will search and fill Entry^ for all ProcName^ until ProcName^=nil
-    // - return true on success, false and call FreeLib if any entry is missing
-    function ResolveAll(ProcName: PPAnsiChar; Entry: PPointer): boolean;
+    // - return true on success
+    // - if any entry is missing, raise RaiseExceptionOnFailure or return false
+    // and continue if SilentError = nil, or exit if SilentError <> nil
+    function ResolveAll(ProcName: PPAnsiChar; Entry: PPointer;
+      const Prefix: RawUtf8 = ''; RaiseExceptionOnFailure: ExceptionClass = nil;
+      SilentError: PString = nil): boolean;
     /// cross-platform call to FreeLibrary() + set fHandle := 0
     // - as called by Destroy, but you can use it directly to reload the library
     procedure FreeLib;
@@ -4126,6 +4130,10 @@ type
     function TryLoadLibrary(const aLibrary: array of TFileName;
       aRaiseExceptionOnFailure: ExceptionClass = nil;
       aSilentError: PString = nil): boolean; virtual;
+    /// wrap TryLoadLibrary() and Resolve() with optional exception call
+    function TryLoadResolve(const aLibrary: array of TFileName;
+      const Prefix: RawUtf8; ProcName: PPAnsiChar; Entry: PPointer;
+      RaiseExceptionOnFailure: ExceptionClass = nil; SilentError: PString = nil): boolean;
     /// release associated memory and linked library
     destructor Destroy; override;
     /// return TRUE if the library and all procedures were found
@@ -5997,7 +6005,7 @@ begin
   Values[n] := Value;
 end;
 
-function _GetNextItem(var P: PAnsiChar): RawUtf8;
+function _GetNextItem(var P: PAnsiChar): RawUtf8; // separated by space or feed
 var
   S: PAnsiChar;
 begin
@@ -7991,8 +7999,8 @@ var
 
 { TSynLibrary }
 
-function TSynLibrary.Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
-  RaiseExceptionOnFailure: ExceptionClass; SilentError: PString): boolean;
+function TSynLibrary.Resolve(const Prefix: RawUtf8; ProcName: PAnsiChar;
+  Entry: PPointer; RaiseExceptionOnFailure: ExceptionClass; SilentError: PString): boolean;
 var
   p: PAnsiChar;
   name, search: RawUtf8;
@@ -8005,12 +8013,12 @@ begin
   result := false;
   if (Entry = nil) or
      (fHandle = 0) or
-     (ProcName = '') then
+     (ProcName = nil) then
     exit; // avoid GPF
+  p := ProcName;
   ignoremissing := false;
-  p := pointer(ProcName);
   repeat
-    name := _GetNextItem(p); // try all alternate names
+    name := _GetNextItem(p); // try all alternate 'name1 name2 ... name#'
     if name = '' then
       break;
     if name[1] = '?' then
@@ -8050,24 +8058,30 @@ begin
     SilentError^:= error;
 end;
 
-function TSynLibrary.ResolveAll(ProcName: PPAnsiChar; Entry: PPointer): boolean;
-var
-  tmp: RawUtf8;
+function TSynLibrary.ResolveAll(ProcName: PPAnsiChar; Entry: PPointer;
+  const Prefix: RawUtf8; RaiseExceptionOnFailure: ExceptionClass;
+  SilentError: PString): boolean;
 begin
-  repeat
-    if ProcName^ = nil then
-      break;
-    FastSetString(tmp, ProcName^, StrLen(ProcName^));
-    if not Resolve('', tmp, Entry) then
+  result := true;
+  while ProcName^ <> nil do
+  begin
+    if not Resolve(Prefix, ProcName^, Entry, RaiseExceptionOnFailure, SilentError) then
     begin
-      FreeLib;
       result := false;
-      exit;
+      if SilentError <> nil then
+        exit; // Resolve() made FreeLib anyway
     end;
     inc(ProcName);
     inc(Entry);
-  until false;
-  result := true;
+  end;
+end;
+
+function TSynLibrary.TryLoadResolve(const aLibrary: array of TFileName;
+  const Prefix: RawUtf8; ProcName: PPAnsiChar; Entry: PPointer;
+  RaiseExceptionOnFailure: ExceptionClass; SilentError: PString): boolean;
+begin
+  result := TryLoadLibrary(aLibrary, RaiseExceptionOnFailure) and
+      ResolveAll(ProcName, Entry, Prefix, RaiseExceptionOnFailure, SilentError);
 end;
 
 destructor TSynLibrary.Destroy;
