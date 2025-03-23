@@ -740,7 +740,7 @@ const
   UNIXTIMEMS_MINIMAL = QWord(UNIXTIME_MINIMAL) * MSecsPerSec;
 
 /// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue
-function UnixTimeMinimalUtc: cardinal;
+function UnixTimeMinimalUtc: TUnixTimeMinimal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a second-based c-encoded time as TDateTime
@@ -3060,7 +3060,7 @@ end;
 
 { ************ TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time }
 
-function UnixTimeMinimalUtc: cardinal;
+function UnixTimeMinimalUtc: TUnixTimeMinimal;
 begin
   result := UnixTimeUtc - UNIXTIME_MINIMAL;
 end;

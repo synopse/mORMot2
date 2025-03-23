@@ -393,7 +393,6 @@ type
   /// points to a 64-bit integer identifier, as computed by TSynUniqueIdentifierGenerator
   // - may be used to access the identifier internals, from its stored
   // Int64 or TSynUniqueIdentifier value
-
   PSynUniqueIdentifierBits = ^TSynUniqueIdentifierBits;
 
   /// a 24 chars cyphered hexadecimal string, mapping a TSynUniqueIdentifier
@@ -1450,7 +1449,8 @@ type
     // adding it into an internal in-memory list, and avoid cookie replay attacks
     function Validate(const Cookie: RawUtf8; PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
-      PIssued: PUnixTime = nil; Invalidate: boolean = false; Now32: cardinal = 0): TBinaryCookieGeneratorSessionID;
+      PIssued: PUnixTime = nil; Invalidate: boolean = false;
+      Now32: TUnixTimeMinimal = 0): TBinaryCookieGeneratorSessionID;
     /// allow currently available cookies to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
@@ -6248,11 +6248,11 @@ type
   // map the binary layout of our Base64 serialized cookies
   TCookieContent = packed record
     head: packed record   // 256-bit header (minimum cookie size if no record)
-      crc: cardinal;      // = 32-bit naive anti-fuzzing crc32c
-      session: cardinal;  // = jti claim sequence (genuine number)
-      expires: cardinal;  // = exp claim - just after session for Invalidate[]
-      issued: cardinal;   // = iat claim (UnixTimeMinimalUtc)
-      gmac: THash128;     // = 128-bit AES-GCM tag
+      crc: cardinal;             // = 32-bit naive anti-fuzzing crc32c
+      session: cardinal;         // = jti claim sequence (genuine number)
+      expires: TUnixTimeMinimal; // = exp claim - after session for Invalidate[]
+      issued: TUnixTimeMinimal;  // = iat claim (UnixTimeMinimalUtc)
+      gmac: THash128;            // = 128-bit AES-GCM tag
     end;
     data: array[0..2047] of byte; // optional AES-CTR record serialization
   end;
@@ -6309,7 +6309,7 @@ end;
 
 function TBinaryCookieGenerator.Validate(const Cookie: RawUtf8;
   PRecordData: pointer; PRecordTypeInfo: PRttiInfo; PExpires, PIssued: PUnixTime;
-  Invalidate: boolean; Now32: cardinal): TBinaryCookieGeneratorSessionID;
+  Invalidate: boolean; Now32: TUnixTimeMinimal): TBinaryCookieGeneratorSessionID;
 var
   clen, len: integer;
   ccend: PAnsiChar;

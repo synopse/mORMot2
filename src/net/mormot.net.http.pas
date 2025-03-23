@@ -2013,7 +2013,7 @@ type
   {$endif USERECORDWITHMETHODS}
     /// the timestamp of the data consolidation - from UnixTimeMinimalUtc()
     // - use the DateTime method to retrieve an usable value
-    Date: cardinal;
+    Date: TUnixTimeMinimal;
     /// the resolution time period in hapMinute..hapMonth range
     Period: THttpAnalyzerPeriod;
     /// the corresponding counter

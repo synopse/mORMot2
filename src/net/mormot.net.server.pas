@@ -1442,7 +1442,7 @@ type
     /// the hardware model of this network interface
     Hardware: TMacAddressKind;
     /// the local UnixTimeMinimalUtc value
-    Timestamp: cardinal;
+    Timestamp: TUnixTimeMinimal;
     /// number of background download connections currently on this server
     Connections: word;
     /// up to 512-bit of binary Hash (and algo) of the requested file content

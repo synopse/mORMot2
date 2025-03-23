@@ -4486,6 +4486,11 @@ type
   /// dynamic array of timestamps stored as second-based Unix Time
   TUnixTimeDynArray = array of TUnixTime;
 
+  /// 32-bit seconds, as returnd by mormot.core.datetime. UnixTimeMinimalUtc
+  TUnixTimeMinimal = type cardinal;
+  /// pointer to a timestamp stored as 32-bit seconds
+  PUnixTimeMinimal = ^TUnixTimeMinimal;
+
   /// timestamp stored as millisecond-based Unix Time
   // - see Unix Time helper functions and types in mormot.core.datetime
   // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
