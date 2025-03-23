@@ -1059,15 +1059,20 @@ type
   /// abstract parent class of both TSocketStream and TCrtSocketStream
   TSocketStreamAbstract = class(TStreamWithNoSeek)
   protected
+    fLastRawError: integer;
     fLastResult: TNetResult;
     fOwned: TObject;
   public
-    /// the low-level result code of the last Read() or Write() method call
-    property LastResult: TNetResult
-      read fLastResult;
     /// optional class instance for which Destroy will call Owned.Free
     property Owned: TObject
       read fOwned write fOwned;
+  published
+    /// the low-level result code of the last Read() or Write() method call
+    property LastResult: TNetResult
+      read fLastResult;
+    /// the raw socket error code of the last Read() or Write() method call
+    property LastRawError: integer
+      read fLastRawError;
   end;
 
   /// encapsulate a raw (TLS-encrypted) Socket to a TStream class
@@ -2052,6 +2057,7 @@ type
     function Read(var Buffer; Count: Longint): Longint; override;
     /// send some data calling the associated TCrtSocket.SockSend()
     function Write(const Buffer; Count: Longint): Longint; override;
+  published
     /// access to the underlying TCrtSocket instance
     property Socket: TCrtSocket
       read fSocket;
@@ -4041,7 +4047,7 @@ begin
   if Assigned(fSecure) then
     fLastResult := fSecure.Receive(@Buffer, Count)
   else
-    fLastResult := fSocket.Recv(@Buffer, Count);
+    fLastResult := fSocket.Recv(@Buffer, Count, @fLastRawError);
   case fLastResult of
     nrOk:
       begin
@@ -4061,7 +4067,7 @@ begin
   if Assigned(fSecure) then
     fLastResult := fSecure.Send(@Buffer, Count)
   else
-    fLastResult := fSocket.Send(@Buffer, Count);
+    fLastResult := fSocket.Send(@Buffer, Count, @fLastRawError);
   case fLastResult of
     nrOk:
       begin
@@ -6419,7 +6425,8 @@ end;
 function TCrtSocketStream.Read(var Buffer; Count: Longint): Longint;
 begin
   if Count > 0 then
-    if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true, @fLastResult) then
+    if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true,
+                 @fLastResult, @fLastRawError) then
     begin
       result := Count;
       inc(fSize, Count);
@@ -6436,7 +6443,7 @@ end;
 function TCrtSocketStream.Write(const Buffer; Count: Longint): Longint;
 begin
   if Count > 0 then
-    if fSocket.TrySndLow(@Buffer, Count, @fLastResult) then
+    if fSocket.TrySndLow(@Buffer, Count, @fLastResult, @fLastRawError) then
     begin
       result := Count;
       inc(fSize, Count);
