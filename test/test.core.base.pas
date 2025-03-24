@@ -8924,6 +8924,7 @@ const
 var
   gen: TSynUniqueIdentifierGenerator;
   i1, i2: TSynUniqueIdentifierBits;
+  js: TSynUnique53;
   i3: TSynUniqueIdentifier;
   rounds, i: integer;
   json, obfusc: RawUtf8;
@@ -8981,6 +8982,19 @@ begin
       gen.ComputeNew(i2);
     end;
     NotifyTestSpeed('ComputeNew', gen.ComputedCount, 0, @timer);
+    check(i1.Value <> 0);
+    check(i2.Value <> 0);
+    js := i1.JavaScriptID;
+    check(js < MAX_SAFE_JS_INTEGER);
+    check(i1.Value <> 0);
+    check(i2.Value <> 0);
+    CheckEqual(js, i1.JavaScriptID);
+    CheckEqual(i1.Value, i2.Value);
+    i2.Value := 0;
+    CheckNotEqual(i1.Value, i2.Value);
+    CheckNotEqual(js, i2.JavaScriptID);
+    i2.JavaScriptID := js;
+    CheckEqual(i1.Value, i2.Value);
   finally
     gen.Free;
   end;

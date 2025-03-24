@@ -308,6 +308,9 @@ type
   // - they are increasing over time (so are much easier to store/shard/balance
   // than UUID/GUID), and contain generation time and a 16-bit process ID
   // - mapped by TSynUniqueIdentifierBits memory structure
+  // - bits 0..14 map a 15-bit increasing counter (collision-free)
+  // - bits 15..30 map a 16-bit process identifier
+  // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
   // - may be used on client side for something similar to a MongoDB ObjectID,
   // but compatible with TOrm.ID: TID properties
   TSynUniqueIdentifier = type TID;
@@ -315,9 +318,17 @@ type
   /// 16-bit unique process identifier, used to compute TSynUniqueIdentifier
   // - each TSynUniqueIdentifierGenerator instance is expected to have
   // its own unique process identifier, stored as a 16-bit integer 0..65535 value
+  // - when used with TSynUnique53, should be kept in [0..255] range
   TSynUniqueIdentifierProcess = type word;
 
-  {$A-}
+  /// 53-bit integer unique identifier, as computed by TSynUniqueIdentifierGenerator
+  // - could be used as JavaScript-compatible TID value e.g. for TOrm.ID
+  // - bits 0..14 map a 15-bit increasing counter (collision-free)
+  // - bits 15..22 map a 8-bit process identifier (0..255)
+  // - bits 23..53 map a 31-bit UTC time, encoded as seconds since 1/1/2025,
+  // therefore valid until 2093
+  TSynUnique53 = type Int53;
+
   /// map 64-bit integer unique identifier internal memory structure
   // - as stored in TSynUniqueIdentifier = TID = Int64 values, and computed by
   // TSynUniqueIdentifierGenerator
@@ -329,6 +340,9 @@ type
   {$else}
   TSynUniqueIdentifierBits = object
   {$endif USERECORDWITHMETHODS}
+  private
+    function GetJavaScriptID: TSynUnique53;
+    procedure SetJavaScriptID(const aJavaScriptID: TSynUnique53);
   public
     /// the actual 64-bit storage value
     // - in practice, only first 63 bits are used
@@ -338,6 +352,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// extract the 16-bit unique process identifier
     // - as specified to TSynUniqueIdentifierGenerator constructor
+    // - will be in range (0..255) when stored in a TSynUnique53 identifier
     function ProcessID: TSynUniqueIdentifierProcess;
       {$ifdef HASINLINE}inline;{$endif}
     /// extract the UTC generation timestamp as seconds since the Unix epoch
@@ -387,8 +402,11 @@ type
     // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
     // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
     procedure ToVariant(out Result: variant);
+    /// convert to/from a JavaScript-compatible 53-bit integer value
+    // - would accept only ProcessID in (0..255) range, or raise ESynCrypto
+    property JavaScriptID: TSynUnique53
+      read GetJavaScriptID write SetJavaScriptID;
   end;
-  {$A+}
 
   /// points to a 64-bit integer identifier, as computed by TSynUniqueIdentifierGenerator
   // - may be used to access the identifier internals, from its stored
@@ -5874,6 +5892,23 @@ procedure TSynUniqueIdentifierBits.FromUnixTime(const aUnixTime: TUnixTime);
 begin
   Value := aUnixTime shl 31;
 end;
+
+const
+  SYNID_53_UNIXMINIMAL = 1735689600; // Wed Jan 01 2025 00:00:00 UTC
+
+function TSynUniqueIdentifierBits.GetJavaScriptID: TSynUnique53;
+begin
+  if ProcessID > 255 then
+    ESynCrypto.RaiseUtf8('TSynUniqueIdentifierBits.AsJavaScriptID: ProcessID=%',
+      [ProcessID]);
+  result := (Value and $7fffff) + Int64((Value shr 31) - SYNID_53_UNIXMINIMAL) shl 23;
+end;
+
+procedure TSynUniqueIdentifierBits.SetJavaScriptID(const aJavaScriptID: TSynUnique53);
+begin
+  Value := (aJavaScriptID and $7fffff) +
+           ((aJavaScriptID shr 23) + SYNID_53_UNIXMINIMAL) shl 31;
+end; // in the far future, may overlap to go upon year 2093 (as was done for Y2K)
 
 
 { TSynUniqueIdentifierGenerator }
