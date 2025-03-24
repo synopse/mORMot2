@@ -119,8 +119,7 @@ type
     // - will detect most used compressible content (like 'text/*' or
     // 'application/json') from OutContentType
     function CompressContent(const Accepted: THttpSocketCompressSet;
-      const OutContentType: RawUtf8; var OutContent: RawByteString;
-      OutContentEncoding: PRawUtf8): PHttpSocketCompressRec;
+      const OutContentType: RawUtf8; var OutContent: RawByteString): PHttpSocketCompressRec;
     /// adjust HTTP body decompression according to the supplied 'CONTENT-ENCODING'
     function UncompressContent(const ContentEncoding: RawUtf8;
       var Data: RawByteString): PHttpSocketCompressRec;
@@ -356,7 +355,7 @@ type
   private
     fContentLeft, fProgressivePosition: Int64;
     fContentPos: PByte;
-    fOutContentEncoding, fLastHost: RawUtf8;
+    fLastHost: RawUtf8;
     procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
@@ -2950,8 +2949,7 @@ begin
   result := false;
 end;
 
-{$ifdef OSPOSIX}
-
+{$ifdef OSPOSIX} // mormot.core.os.pas implements this on Windows with its API
 function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 var
   u: TUri;
@@ -2968,7 +2966,6 @@ begin
       insert('/', result, 1);
   end;
 end;
-
 {$endif OSPOSIX}
 
 function GetNextRange(var P: PUtf8Char): Qword;
@@ -3057,15 +3054,12 @@ begin
 end;
 
 function THttpSocketCompressList.CompressContent(const Accepted: THttpSocketCompressSet;
-  const OutContentType: RawUtf8; var OutContent: RawByteString;
-  OutContentEncoding: PRawUtf8): PHttpSocketCompressRec;
+  const OutContentType: RawUtf8; var OutContent: RawByteString): PHttpSocketCompressRec;
 var
   i, len: integer;
   compressible: boolean;
 begin
   result := nil;
-  if OutContentEncoding <> nil then
-    OutContentEncoding^ := '';
   if (integer(Accepted) = 0) or
      (OutContentType = '') or
      (Algo = nil) then
@@ -3082,8 +3076,6 @@ begin
       begin
         // in-place compression of the OutContent body + update header
         result^.Func(OutContent, {compress=}true);
-        if OutContentEncoding <> nil then
-          OutContentEncoding^ := result^.Name;
         exit; // first in fCompress[] is prefered
       end;
     inc(result);
@@ -3164,15 +3156,13 @@ begin
   if Referer <> '' then
     FastAssignNew(Referer);
   RangeOffset := 0;
-  RangeLength := -1;
   FastAssignNew(Content);
+  RangeLength := -1;
   ContentLength := -1; // -1 = no Content-Length: header
   ContentLastModified := 0;
   ContentStream := nil;
   ServerInternalState := 0;
   ContentEncoding := nil;
-  if fOutContentEncoding <> '' then
-    FastAssignNew(fOutContentEncoding);
   integer(CompressAcceptHeader) := 0;
   ProgressiveID := 0;
   ProgressiveTix := 0;
@@ -3622,13 +3612,13 @@ begin // caller checked that ContentEncoding <> nil
     // invalid content
     EHttpSocket.RaiseUtf8('% UncompressData failed', [ContentEncoding^.Name]);
   ContentLength := length(Content); // uncompressed Content-Length
+  ContentEncoding := nil; // field will be used for output encoding now
 end;
 
 procedure THttpRequestContext.ProcessInit;
-begin
+begin // all other fields are expected to be filled with 0/nil/''
   RangeLength := -1;
   ContentLength := -1; // not yet parsed
-  ContentEncoding := nil;
   State := hrsGetCommand;
 end;
 
@@ -3815,8 +3805,8 @@ begin
   if rfRange in ResponseFlags then
     AppendLine(Headers, ['Content-Range: bytes ', RangeOffset, '-',
       RangeOffset + ContentLength - 1, '/', RangeLength]);
-  if fOutContentEncoding <> '' then
-    AppendLine(Headers, ['Content-Encoding: ', fOutContentEncoding]);
+  if ContentEncoding <> nil then
+    AppendLine(Headers, ['Content-Encoding: ', ContentEncoding^.Name]);
   // compute response body
   if (PCardinal(CommandMethod)^ = _HEAD32) or
      (ContentLength = 0) then
@@ -3841,8 +3831,8 @@ begin
   if (integer(CompressAcceptHeader) <> 0) and
      (CompressList <> nil) and
      (ContentStream = nil) then // no stream compression (yet)
-    CompressList^.CompressContent(CompressAcceptHeader, ContentType, Content,
-      @fOutContentEncoding);
+    ContentEncoding := CompressList^.CompressContent(
+                         CompressAcceptHeader, ContentType, Content);
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
   // handle response body with optional range support
@@ -3874,11 +3864,11 @@ begin
     result^.AppendCRLF;
   end;
   // finalize headers
-  if (fOutContentEncoding <> '') and
+  if (ContentEncoding <> nil) and
      not (hhContentEncoding in HeadCustom) then
   begin
     result^.AppendShort('Content-Encoding: ');
-    result^.Append(fOutContentEncoding);
+    result^.Append(ContentEncoding^.Name);
     result^.AppendCRLF;
   end;
   if not (hhContentLength in HeadCustom) then
@@ -4061,6 +4051,7 @@ begin
   // try if there is an already-compressed .gz file to send away
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
+     (CompressList <> nil) and
      (PCardinal(CommandMethod)^ <> _HEAD32) and
      not (rfWantRange in ResponseFlags) then
   begin
@@ -4070,7 +4061,7 @@ begin
     begin
       ContentStream := TFileStreamEx.CreateRead(gz);
       include(ResponseFlags, rfContentStreamNeedFree);
-      fOutContentEncoding := 'gzip';
+      ContentEncoding := @CompressList.Algo[CompressGz];
       result := HTTP_SUCCESS;
       exit; // force ContentStream of raw .gz file to bypass recompression
     end;
@@ -4161,7 +4152,7 @@ begin
      (OutStream = nil) then // no stream compression (yet)
   begin
     comp := Http.CompressList^.CompressContent(
-              Http.CompressAcceptHeader, OutContentType, OutContent, nil);
+              Http.CompressAcceptHeader, OutContentType, OutContent);
     if comp <> nil then
       SockSendLine(['Content-Encoding: ', comp^.Name]);
   end;

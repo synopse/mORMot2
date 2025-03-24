@@ -3192,7 +3192,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
             [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
         end
         else
-          fRespStatus := HTTP_NOTFOUND
+          fRespStatus := HTTP_NOTFOUND;
       end
       else
         fRespStatus := HTTP_RANGENOTSATISFIABLE
@@ -7845,7 +7845,7 @@ var
           if RawValueLength = 0 then // no previous encoding -> try compression
           begin
             comprec := fCompressList.CompressContent(
-              compressset, ctxt.OutContentType, ctxt.fOutContent, nil);
+              compressset, ctxt.OutContentType, ctxt.fOutContent);
             if comprec <> nil then
             begin
               pRawValue := pointer(comprec^.Name);

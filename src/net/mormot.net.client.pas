@@ -3969,7 +3969,7 @@ begin
     if integer(fCompressAcceptHeader) <> 0 then
     begin
       comp := fCompressList.CompressContent(
-        fCompressAcceptHeader, InDataType, data, nil);
+        fCompressAcceptHeader, InDataType, data);
       if comp <> nil then
         InternalAddHeader(Join(['Content-Encoding: ', comp^.Name]));
     end;
