@@ -5717,26 +5717,33 @@ end;
 
 procedure TLdapClient.ReceivePacketFillSockBuffer;
 var
-  saslLen: integer;
+  saslLen, len, err: integer;
   ciphered: RawByteString;
+  res: TNetResult;
 begin
   fSockBufferPos := 0;
+  fSockBuffer := '';
   if fSecContextEncrypt in fFlags then
   begin
     // through Kerberos encryption (sealing)
     saslLen := 0;
-    fSock.SockRecv(@saslLen, 4); // SASL Buffer Length prefix
-    ciphered := fSock.SockRecv(bswap32(saslLen));
-    fSockBuffer := SecDecrypt(fSecContext, ciphered);
+    len := SizeOf(saslLen);
+    if fSock.TrySockRecv(@saslLen, len, {stopbeforelen=}false, @res, @err) then
+    begin
+      saslLen := bswap32(saslLen); // SASL Buffer Length prefix
+      if saslLen > 16 shl 20 then  // 16MB chunk seems big enough: usually 64KB
+        res := nrTooManyConnections
+      else if fSock.TrySockRecv(FastNewRawByteString(ciphered, saslLen),
+                saslLen, {stopbeforelen=}false, @res, @err) then
+        fSockBuffer := SecDecrypt(fSecContext, ciphered);
+    end;
   end
   else
-  begin
     // get as much as possible unciphered data from socket
-    fSockBuffer := fSock.SockReceiveString;
-    if fSockBuffer = '' then
-      ELdap.RaiseUtf8('%.ReceivePacket: no response from %:%',
-        [self, fSettings.TargetHost, fSettings.TargetPort]);
-  end;
+    fSockBuffer := fSock.SockReceiveString(@res, @err);
+  if fSockBuffer = '' then
+    ELdap.RaiseUtf8('%.ReceivePacket: error #% % from %:%', [self,
+      err, ToText(res)^, fSettings.TargetHost, fSettings.TargetPort]);
   {$ifdef ASNDEBUG}
   writeln('Packet received bytes = ', length(fSockBuffer));
   {$endif ASNDEBUG}
