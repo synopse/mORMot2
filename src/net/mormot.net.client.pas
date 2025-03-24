@@ -45,15 +45,15 @@ uses
   wininet,
   mormot.lib.winhttp,
   {$ifdef FORCE_OPENSSL}
-  mormot.lib.openssl11, // bypass SChannel for a given project
+  mormot.lib.openssl11, // ensure bypass SChannel for a given project
   {$endif FORCE_OPENSSL}
   {$endif USEWININET}
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
   mormot.lib.curl,
   {$endif USELIBCURL}
   {$ifdef DOMAINRESTAUTH}
-  mormot.lib.sspi, // do-nothing units on non compliant systems
-  mormot.lib.gssapi,
+  mormot.lib.sspi,   // void unit on POSIX
+  mormot.lib.gssapi, // void unit on Windows
   {$endif DOMAINRESTAUTH}
   mormot.crypt.core,
   mormot.crypt.secure;

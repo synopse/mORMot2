@@ -40,8 +40,8 @@ uses
   mormot.core.variants,
   mormot.core.data,
   mormot.core.log,
-  mormot.lib.sspi, // do-nothing units on non compliant OS
-  mormot.lib.gssapi,
+  mormot.lib.sspi,   // void unit on POSIX
+  mormot.lib.gssapi, // void unit on Windows
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.net.sock,
