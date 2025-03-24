@@ -42,7 +42,7 @@ function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
 procedure _fmt(const Fmt: string; const Args: array of const;
   var result: RawUtf8); overload; forward;
 procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
-function _GetNextItem(var P: PAnsiChar): RawUtf8; forward;
+function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
@@ -1834,7 +1834,7 @@ begin
   repeat
     while p^ = ' ' do
       inc(p);
-    s := _GetNextItem(p);
+    s := _GetNextSpaced(p);
     if (s <> '') and
        (s <> 'nodev') and
        (s <> 'squashfs') and
@@ -3688,7 +3688,8 @@ begin
   {$endif OSLINUXANDROID}
   n := 0;
   repeat
-    AddDiskPartition(_GetNextItem(p), _GetNextItem(p), _GetNextItem(p), result, n);
+    AddDiskPartition(
+      _GetNextSpaced(p), _GetNextSpaced(p), _GetNextSpaced(p), result, n);
     p := GotoNextLine(p);
   until p = nil;
   SetLength(result, n);

@@ -6005,7 +6005,7 @@ begin
   Values[n] := Value;
 end;
 
-function _GetNextItem(var P: PAnsiChar): RawUtf8; // separated by space or feed
+function _GetNextSpaced(var P: PAnsiChar): RawUtf8; // separated by space/feed
 var
   S: PAnsiChar;
 begin
@@ -8015,10 +8015,10 @@ begin
      (fHandle = 0) or
      (ProcName = nil) then
     exit; // avoid GPF
-  p := ProcName;
+  p := ProcName; // transient copy to keep ProcName for error message below
   ignoremissing := false;
   repeat
-    name := _GetNextItem(p); // try all alternate 'name1 name2 ... name#'
+    name := _GetNextSpaced(p); // try all alternate 'name1 name2 ... name#'
     if name = '' then
       break;
     if name[1] = '?' then
