@@ -2712,8 +2712,7 @@ end;
 function THttpClientSocket.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize, aPriority: integer): boolean;
 begin
-  result := RegisterCompressFunc(fCompressList,
-              aFunction, aCompressMinSize, aPriority) <> nil;
+  result := fCompressList.RegisterFunc(aFunction, aCompressMinSize, aPriority) <> nil;
   if (fCompressList.Algo <> nil) and
      (Http.CompressList = nil) then
     Http.CompressList := @fCompressList; // enable compression for the requests
@@ -3969,8 +3968,8 @@ begin
     data := InData;
     if integer(fCompressAcceptHeader) <> 0 then
     begin
-      comp := CompressContent(fCompressAcceptHeader, fCompressList.Algo,
-        InDataType, data, nil);
+      comp := fCompressList.CompressContent(
+        fCompressAcceptHeader, InDataType, data, nil);
       if comp <> nil then
         InternalAddHeader(Join(['Content-Encoding: ', comp^.Name]));
     end;
@@ -3997,11 +3996,10 @@ begin
     if OutData <> '' then
     begin
       if contentEnc <> '' then
-        if UncompressContent(fCompressList.Algo, contentEnc, OutData) = nil then
+        if fCompressList.UncompressContent(contentEnc, OutData) = nil then
           EHttpSocket.RaiseUtf8('%.Request: % uncompress error', [self, contentEnc]);
       if acceptEnc <> '' then
-        DecodeAcceptEncoding(fCompressList.Algo,
-          pointer(acceptEnc), fCompressAcceptHeader);
+        fCompressList.DecodeAcceptEncoding(pointer(acceptEnc), fCompressAcceptHeader);
     end;
   finally
     InternalCloseRequest;
@@ -4043,8 +4041,7 @@ end;
 function THttpRequest.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize, aPriority: integer): boolean;
 begin
-  result := RegisterCompressFunc(fCompressList,
-    aFunction, aCompressMinSize, aPriority) <> nil;
+  result := fCompressList.RegisterFunc(aFunction, aCompressMinSize, aPriority) <> nil;
 end;
 
 

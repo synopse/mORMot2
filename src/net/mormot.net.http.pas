@@ -65,6 +65,10 @@ type
   /// set of HTTP headers e.g. as used in THttpRequestContext.HeadCustom
   THttpHeaders = set of THttpHeader;
 
+  /// identify some items in a list of known compression algorithms
+  // - filled from ACCEPT-ENCODING: header value
+  THttpSocketCompressSet = set of 0..31;
+
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
   // e.g. 'gzip' or 'deflate' for standard HTTP format, but you can add
@@ -74,7 +78,7 @@ type
   // - as used e.g. by THttpClientSocket/THttpServerGeneric.RegisterCompress
   THttpSocketCompress = function(var Data: RawByteString; Compress: boolean): RawUtf8;
 
-  /// used to maintain a list of known compression algorithms
+  /// used to identify one known compression algorithm
   THttpSocketCompressRec = record
     /// the compression name, as in ACCEPT-ENCODING: header (gzip,deflate,synlz)
     Name: RawUtf8;
@@ -93,15 +97,37 @@ type
   THttpSocketCompressRecDynArray = array of THttpSocketCompressRec;
 
   /// store a list of known compression algorithms and its associated header
+  {$ifdef USERECORDWITHMETHODS}
   THttpSocketCompressList = record
+  {$else}
+  THttpSocketCompressList = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// the compression algorithms currently registered
     Algo: THttpSocketCompressRecDynArray;
+    /// the 'Accept-Encoding:' header value corresponding to Algo[]
     AcceptEncoding: RawUtf8;
+    /// enable a give compression function for a HTTP link
+    // - returns the newly added record in the Compress.Algo[] list
+    // - returns nil if this algorithm was already defined, updating existing
+    // CompressMinSize and Priority fields from supplied values
+    function RegisterFunc(CompFunction: THttpSocketCompress;
+      CompMinSize, CompPriority: integer): PHttpSocketCompressRec;
+    /// decode 'ACCEPT-ENCODING: ' parameter against registered compression list
+    procedure DecodeAcceptEncoding(P: PUtf8Char; out Accepted: THttpSocketCompressSet);
+    /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
+    // - will detect most used compressible content (like 'text/*' or
+    // 'application/json') from OutContentType
+    function CompressContent(const Accepted: THttpSocketCompressSet;
+      const OutContentType: RawUtf8; var OutContent: RawByteString;
+      OutContentEncoding: PRawUtf8): PHttpSocketCompressRec;
+    /// adjust HTTP body decompression according to the supplied 'CONTENT-ENCODING'
+    function UncompressContent(const ContentEncoding: RawUtf8;
+      var Data: RawByteString): PHttpSocketCompressRec;
+    /// search for a given compression function by name
+    function CompressIndex(const Name: RawUtf8): integer;
   end;
   PHttpSocketCompressList = ^THttpSocketCompressList;
-
-  /// identify some items in a list of known compression algorithms
-  // - filled from ACCEPT-ENCODING: header value
-  THttpSocketCompressSet = set of 0..31;
 
   /// tune the 'synopsebin' protocol
   // - pboCompress will compress all frames payload using SynLZ
@@ -119,34 +145,6 @@ type
 /// efficiently recognize most known HTTP header variables
 // - as used e.g. by THttpRequestContext.ParseHeader
 function KnownHttpHeader(P: PUtf8Char): THttpHeader;
-
-/// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
-// - will detect most used compressible content (like 'text/*' or
-// 'application/json') from OutContentType
-function CompressContent(const Accepted: THttpSocketCompressSet;
-  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString; OutContentEncoding: PRawUtf8): PHttpSocketCompressRec;
-
-/// adjust HTTP body decompression according to the supplied 'CONTENT-ENCODING'
-function UncompressContent(const Compress: THttpSocketCompressRecDynArray;
-  const ContentEncoding: RawUtf8; var Data: RawByteString): PHttpSocketCompressRec;
-
-/// enable a give compression function for a HTTP link
-// - returns the newly added record in the Compress.Algo[] list
-// - returns nil if this algorithm was already defined, updating existing
-// CompressMinSize and Priority fields from supplied values
-function RegisterCompressFunc(var Compress: THttpSocketCompressList;
-  CompFunction: THttpSocketCompress;
-  CompMinSize, CompPriority: integer): PHttpSocketCompressRec;
-
-/// decode 'ACCEPT-ENCODING: ' parameter against registered compression list
-procedure DecodeAcceptEncoding(const Compress: THttpSocketCompressRecDynArray;
-  P: PUtf8Char; out Accepted: THttpSocketCompressSet);
-
-/// search for a given compression function by name
-function CompressIndex(const Compress: THttpSocketCompressRecDynArray;
-  const Name: RawUtf8): integer;
-
 
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
@@ -2880,151 +2878,6 @@ begin
   end;
 end;
 
-function ByPriority(const A, B): integer;
-begin
-  result := CompareInteger(THttpSocketCompressRec(A).Priority,
-                           THttpSocketCompressRec(B).Priority);
-end;
-
-function FoundCompress(comp: PHttpSocketCompressRec; p: pointer; len: PtrInt;
-  Index: PInteger = nil): PHttpSocketCompressRec;
-var
-  i: integer;
-begin
-  if (len <> 0) and
-     (comp <> nil) then
-    for i := 0 to PDALen(PAnsiChar(comp) - _DALEN)^ + (_DAOFF - 1) do
-      if IdemPropNameU(comp^.Name, p, len) then
-      begin
-        if Index <> nil then
-          Index^ := i; // to handle e.g. gzip directly or set Accepted item(s)
-        result := comp;
-        exit;
-      end
-      else
-        inc(comp);
-  result := nil;
-end;
-
-function RegisterCompressFunc(var Compress: THttpSocketCompressList;
-  CompFunction: THttpSocketCompress;
-  CompMinSize, CompPriority: integer): PHttpSocketCompressRec;
-var
-  n: PtrInt;
-  dummy: RawByteString;
-  algo: RawUtf8;
-begin
-  result := nil;
-  if @CompFunction = nil then
-    exit;
-  algo := CompFunction(dummy, {compress}true); // just retrieve algo name
-  result := FoundCompress(pointer(Compress.Algo), pointer(algo), length(algo));
-  if result <> nil then  // already registered
-  begin
-    if @result^.Func = @CompFunction then
-    begin
-      result^.CompressMinSize := CompMinSize; // update size parameter
-      result^.Priority := CompPriority;
-      DynArray(TypeInfo(THttpSocketCompressRecDynArray), Compress.Algo).Sort(ByPriority);
-    end;
-    result := nil; // mark already existing
-    exit;
-  end;
-  n := length(Compress.Algo);
-  if n = SizeOf(THttpSocketCompressSet) * 8 then
-    exit; // CompressAcceptHeader has 0..31 bits so supports up to 32 algorithms
-  SetLength(Compress.Algo, n + 1);
-  result := @Compress.Algo[n];
-  result^.Name := algo;
-  result^.Func := @CompFunction;
-  result^.CompressMinSize := CompMinSize;
-  result^.Priority := (CompPriority shl 14) or n; // by CompPriority, then call order
-  if Compress.AcceptEncoding = '' then
-    Join(['Accept-Encoding: ', algo], Compress.AcceptEncoding)
-  else
-    Append(Compress.AcceptEncoding, ',', algo);
-  DynArray(TypeInfo(THttpSocketCompressRecDynArray), Compress.Algo).Sort(ByPriority);
-end;
-
-function CompressContent(const Accepted: THttpSocketCompressSet;
-  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString; OutContentEncoding: PRawUtf8): PHttpSocketCompressRec;
-var
-  i, len: integer;
-  compressible: boolean;
-begin
-  result := nil;
-  if OutContentEncoding <> nil then
-    OutContentEncoding^ := '';
-  if (integer(Accepted) = 0) or
-     (OutContentType = '') or
-     (Handled = nil) then
-    exit;
-  compressible := IsContentTypeCompressible(pointer(OutContentType));
-  len := length(OutContent);
-  result := pointer(Handled);
-  for i := 0 to PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1) do
-  begin
-    if i in Accepted then
-      if (result^.CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
-         (compressible and
-          (len >= result^.CompressMinSize)) then
-      begin
-        // compression of the OutContent + update header
-        result^.Func(OutContent, {compress=}true);
-        if OutContentEncoding <> nil then
-          OutContentEncoding^ := result^.Name;
-        exit; // first in fCompress[] is prefered
-      end;
-    inc(result);
-  end;
-  result := nil;
-end;
-
-function UncompressContent(const Compress: THttpSocketCompressRecDynArray;
-  const ContentEncoding: RawUtf8; var Data: RawByteString): PHttpSocketCompressRec;
-begin
-  result := FoundCompress(pointer(Compress),
-    pointer(ContentEncoding), length(ContentEncoding));
-  if result = nil then
-    exit;
-  result^.Func(Data, {compress=}false);
-  if Data = '' then
-      result := nil; // error during decompression
-end;
-
-procedure DecodeAcceptEncoding(const Compress: THttpSocketCompressRecDynArray;
-  P: PUtf8Char; out Accepted: THttpSocketCompressSet);
-var
-  len: PtrInt;
-  found: integer;
-  Beg: PUtf8Char;
-begin
-  integer(Accepted) := 0;
-  if (P <> nil) and
-     (Compress <> nil) then
-    repeat
-      while P^ in [' ', ','] do
-        inc(P);
-      Beg := P; // 'gzip;q=1.0, deflate' -> Name='gzip' then 'deflate'
-      while not (P^ in [';', ',', #0]) do
-        inc(P);
-      len := P - Beg;
-      if FoundCompress(pointer(Compress), Beg, len, @found) <> nil then
-        include(Accepted, found);
-      while not (P^ in [',', #0]) do
-        inc(P);
-    until P^ = #0;
-end;
-
-function CompressIndex(const Compress: THttpSocketCompressRecDynArray;
-  const Name: RawUtf8): integer;
-begin
-  if (Compress = nil) or
-     (FoundCompress(pointer(Compress), pointer(Name), length(Name), @result) = nil) then
-    result := -1;
-end;
-
 function HttpChunkToHex32(p: PAnsiChar): integer;
 var
   v0, v1: byte;
@@ -3132,6 +2985,154 @@ begin
         result := result * 10 + Qword(c);
       inc(P);
     until false;
+end;
+
+
+{ THttpSocketCompressList }
+
+function ByPriority(const A, B): integer;
+begin
+  result := CompareInteger(THttpSocketCompressRec(A).Priority,
+                           THttpSocketCompressRec(B).Priority);
+end;
+
+function FoundCompress(comp: PHttpSocketCompressRec; p: pointer; len: PtrInt;
+  Index: PInteger = nil): PHttpSocketCompressRec;
+var
+  i: integer;
+begin
+  if (len <> 0) and
+     (comp <> nil) then
+    for i := 0 to PDALen(PAnsiChar(comp) - _DALEN)^ + (_DAOFF - 1) do
+      if IdemPropNameU(comp^.Name, p, len) then
+      begin
+        if Index <> nil then
+          Index^ := i; // to handle e.g. gzip directly or set Accepted item(s)
+        result := comp;
+        exit;
+      end
+      else
+        inc(comp);
+  result := nil;
+end;
+
+function THttpSocketCompressList.RegisterFunc(CompFunction: THttpSocketCompress;
+  CompMinSize, CompPriority: integer): PHttpSocketCompressRec;
+var
+  n: PtrInt;
+  dummy: RawByteString;
+  name: RawUtf8;
+begin
+  result := nil;
+  if (@self = nil) or
+     (@CompFunction = nil) then
+    exit;
+  name := CompFunction(dummy, {compress}true); // just retrieve algo name
+  result := FoundCompress(pointer(Algo), pointer(name), length(name));
+  if result <> nil then  // already registered
+  begin
+    if @result^.Func = @CompFunction then
+    begin
+      result^.CompressMinSize := CompMinSize; // update size parameter
+      result^.Priority := CompPriority;
+      DynArray(TypeInfo(THttpSocketCompressRecDynArray), Algo).Sort(ByPriority);
+    end;
+    result := nil; // mark already existing
+    exit;
+  end;
+  n := length(Algo);
+  if n = SizeOf(THttpSocketCompressSet) * 8 then
+    exit; // CompressAcceptHeader has 0..31 bits so supports up to 32 algorithms
+  SetLength(Algo, n + 1);
+  result := @Algo[n];
+  result^.Name := name;
+  result^.Func := @CompFunction;
+  result^.CompressMinSize := CompMinSize;
+  result^.Priority := (CompPriority shl 14) or n; // by CompPriority, then call order
+  if AcceptEncoding = '' then
+    Join(['Accept-Encoding: ', name], AcceptEncoding)
+  else
+    Append(AcceptEncoding, ',', name);
+  DynArray(TypeInfo(THttpSocketCompressRecDynArray), Algo).Sort(ByPriority);
+end;
+
+function THttpSocketCompressList.CompressContent(const Accepted: THttpSocketCompressSet;
+  const OutContentType: RawUtf8; var OutContent: RawByteString;
+  OutContentEncoding: PRawUtf8): PHttpSocketCompressRec;
+var
+  i, len: integer;
+  compressible: boolean;
+begin
+  result := nil;
+  if OutContentEncoding <> nil then
+    OutContentEncoding^ := '';
+  if (integer(Accepted) = 0) or
+     (OutContentType = '') or
+     (Algo = nil) then
+    exit;
+  compressible := IsContentTypeCompressible(pointer(OutContentType));
+  len := length(OutContent);
+  result := pointer(Algo);
+  for i := 0 to PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1) do
+  begin
+    if i in Accepted then
+      if (result^.CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
+         (compressible and
+          (len >= result^.CompressMinSize)) then
+      begin
+        // in-place compression of the OutContent body + update header
+        result^.Func(OutContent, {compress=}true);
+        if OutContentEncoding <> nil then
+          OutContentEncoding^ := result^.Name;
+        exit; // first in fCompress[] is prefered
+      end;
+    inc(result);
+  end;
+  result := nil;
+end;
+
+function THttpSocketCompressList.UncompressContent(const ContentEncoding: RawUtf8;
+  var Data: RawByteString): PHttpSocketCompressRec;
+begin
+  result := FoundCompress(pointer(Algo),
+    pointer(ContentEncoding), length(ContentEncoding));
+  if result = nil then
+    exit;
+  result^.Func(Data, {compress=}false);
+  if Data = '' then
+      result := nil; // error during decompression
+end;
+
+procedure THttpSocketCompressList.DecodeAcceptEncoding(P: PUtf8Char;
+  out Accepted: THttpSocketCompressSet);
+var
+  len: PtrInt;
+  found: integer;
+  Beg: PUtf8Char;
+begin
+  integer(Accepted) := 0;
+  if (P <> nil) and
+     (Algo <> nil) then
+    repeat
+      while P^ in [' ', ','] do
+        inc(P);
+      Beg := P; // 'gzip;q=1.0, deflate' -> Name='gzip' then 'deflate'
+      while not (P^ in [';', ',', #0]) do
+        inc(P);
+      len := P - Beg;
+      if FoundCompress(pointer(Algo), Beg, len, @found) <> nil then
+        include(Accepted, found);
+      while not (P^ in [',', #0]) do
+        inc(P);
+    until P^ = #0;
+end;
+
+function THttpSocketCompressList.CompressIndex(const Name: RawUtf8): integer;
+begin
+  if (@self = nil) or
+     (Algo = nil) or
+     (FoundCompress(pointer(Algo), pointer(Name), length(Name), @result) = nil) then
+    result := -1;
 end;
 
 
@@ -3455,7 +3456,7 @@ begin
   Head.Reset; // set Len := 0
   if (CompressList <> nil) and
      (AcceptEncoding <> '') then
-    DecodeAcceptEncoding(CompressList^.Algo, pointer(AcceptEncoding), CompressAcceptHeader);
+    CompressList^.DecodeAcceptEncoding(pointer(AcceptEncoding), CompressAcceptHeader);
 end;
 
 function THttpRequestContext.ParseAll(aInStream: TStream;
@@ -3840,7 +3841,7 @@ begin
   if (integer(CompressAcceptHeader) <> 0) and
      (CompressList <> nil) and
      (ContentStream = nil) then // no stream compression (yet)
-    CompressContent(CompressAcceptHeader, CompressList^.Algo, ContentType, Content,
+    CompressList^.CompressContent(CompressAcceptHeader, ContentType, Content,
       @fOutContentEncoding);
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
@@ -4159,8 +4160,8 @@ begin
      (Http.CompressList <> nil) and
      (OutStream = nil) then // no stream compression (yet)
   begin
-    comp := CompressContent(Http.CompressAcceptHeader, Http.CompressList^.Algo,
-      OutContentType, OutContent, nil);
+    comp := Http.CompressList^.CompressContent(
+              Http.CompressAcceptHeader, OutContentType, OutContent, nil);
     if comp <> nil then
       SockSendLine(['Content-Encoding: ', comp^.Name]);
   end;

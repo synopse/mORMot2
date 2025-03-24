@@ -3464,7 +3464,7 @@ end;
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize: integer; aPriority: integer);
 begin
-  RegisterCompressFunc(fCompressList, aFunction, aCompressMinSize, aPriority);
+  fCompressList.RegisterFunc(aFunction, aCompressMinSize, aPriority);
 end;
 
 procedure THttpServerGeneric.Shutdown;
@@ -4056,7 +4056,7 @@ end;
 procedure THttpServerSocketGeneric.SetRegisterCompressGzStatic(Value: boolean);
 begin
   if Value then
-    fCompressGz := CompressIndex(fCompressList.Algo, 'gzip')
+    fCompressGz := fCompressList.CompressIndex('gzip')
   else
     fCompressGz := -1;
 end;
@@ -7675,11 +7675,12 @@ var
   i: PtrInt;
   bytesread, bytessent, flags: cardinal;
   compressset: THttpSocketCompressSet;
+  comprec: PHttpSocketCompressRec;
   err: HRESULT;
   incontlen: Qword;
   incontlenchunk, incontlenread: cardinal;
   incontenc, inaccept, host, range, referer: RawUtf8;
-  outcontenc, outstat: RawUtf8;
+  outstat: RawUtf8;
   outstatcode, afterstatcode: cardinal;
   respsent: boolean;
   urirouter: TUriRouter;
@@ -7838,18 +7839,19 @@ var
       // response is in OutContent -> send it from memory
       if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
         ctxt.OutContentType := ''; // true HTTP always expects a response
-      if fCompressList.Algo <> nil then
-      begin
+      if (integer(compressset) <> 0) and
+         (fCompressList.Algo <> nil) then
         with resp^.headers.KnownHeaders[reqContentEncoding] do
-          if RawValueLength = 0 then
+          if RawValueLength = 0 then // no previous encoding -> try compression
           begin
-            // no previous encoding -> try if any compression
-            CompressContent(compressset, fCompressList.Algo, ctxt.OutContentType,
-              ctxt.fOutContent, @outcontenc);
-            pRawValue := pointer(outcontenc);
-            RawValueLength := length(outcontenc);
+            comprec := fCompressList.CompressContent(
+              compressset, ctxt.OutContentType, ctxt.fOutContent, nil);
+            if comprec <> nil then
+            begin
+              pRawValue := pointer(comprec^.Name);
+              RawValueLength := length(comprec^.Name);
+            end;
           end;
-      end;
       resp^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
       flags := GetSendResponseFlags(ctxt);
       EHttpApiServer.RaiseOnError(hSendHttpResponse,
@@ -7921,7 +7923,7 @@ begin
               FastSetString(inaccept, pRawValue, RawValueLength);
             with req^.headers.KnownHeaders[reqReferrer] do
               FastSetString(referer, pRawValue, RawValueLength);
-            DecodeAcceptEncoding(fCompressList.Algo, pointer(inaccept), compressset);
+            fCompressList.DecodeAcceptEncoding(pointer(inaccept), compressset);
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
               req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
               {out} ctxt.fRemoteIP, PQWord(@ctxt.fConnectionID)^);
@@ -8017,7 +8019,7 @@ begin
                 end;
                 // optionally uncompress input body
                 if incontenc <> '' then
-                  UncompressContent(fCompressList.Algo, incontenc, ctxt.fInContent);
+                  fCompressList.UncompressContent(incontenc, ctxt.fInContent);
               end;
             end;
             QueryPerformanceMicroSeconds(started);
@@ -8309,7 +8311,7 @@ var
 begin
   inherited RegisterCompress(aFunction, aCompressMinSize, aPriority);
   for i := 0 to length(fClones) - 1 do
-    fClones[i].fCompressList := fCompressList;
+    fClones[i].fCompressList := fCompressList; // replicate
 end;
 
 procedure THttpApiServer.SetOnTerminate(const Event: TOnNotifyThread);
