@@ -1757,7 +1757,8 @@ type
     mtPdf,
     mtSQlite3,
     mtXcomp,
-    mtDicom);
+    mtDicom,
+    mtZstd);
   PMimeType = ^TMimeType;
 
 const
@@ -1800,7 +1801,8 @@ const
     'application/pdf',               // mtPdf
     'application/x-sqlite3',         // mtSQlite3
     'application/x-compress',        // mtXcomp
-    'application/dicom');            // mtDicom
+    'application/dicom',             // mtDicom
+    'application/zstd');             // mtZstd RFC 8878
 
 /// retrieve the MIME content type from its file name
 function GetMimeContentTypeFromExt(const FileName: TFileName;
@@ -8683,15 +8685,16 @@ end;
 { *********** Basic MIME Content Types Support }
 
 const
-  MIME_MAGIC: array[0..18] of cardinal = (
+  MIME_MAGIC: array[0 .. 19] of cardinal = (
      $04034b50 + 1, $46445025 + 1, $21726152 + 1, $afbc7a37 + 1,
      $694c5153 + 1, $75b22630 + 1, $9ac6cdd7 + 1, $474e5089 + 1,
      $38464947 + 1, $46464f77 + 1, $a3df451a + 1, $002a4949 + 1,
      $2a004d4d + 1, $2b004d4d + 1, $46464952 + 1, $e011cfd0 + 1,
-     $5367674f + 1, $1c000000 + 1, $4d434944 + 1);
+     $5367674f + 1, $1c000000 + 1, $4d434944 + 1, $fd2fb528 + 1);
   MIME_MAGIC_TYPE: array[0..high(MIME_MAGIC)] of TMimeType = (
      mtZip, mtPdf, mtRar, mt7z, mtSQlite3, mtWma, mtWmv, mtPng, mtGif, mtFont,
-     mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4, mtDicom);
+     mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4,
+     mtDicom, mtZstd);
 
 function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 var
@@ -8906,7 +8909,7 @@ begin
 end;
 
 const
-  MIME_COMPRESSED: array[0..38] of cardinal = ( // may use SSE2
+  MIME_COMPRESSED: array[0..39] of cardinal = ( // may use SSE2
     $04034b50, // 'application/zip' = 50 4B 03 04
     $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
     $e0ffd8ff, $e1ffd8ff, // 'image/jpeg' FF D8 FF E0/E1
@@ -8935,7 +8938,8 @@ const
     $b7010000, $ba010000, // mpeg = 00 00 01 Bx
     $cececece, // jceks = CE CE CE CE
     $dbeeabed, // .rpm package file
-    $e011cfd0); // msi = D0 CF 11 E0 A1 B1 1A E1
+    $e011cfd0, // msi = D0 CF 11 E0 A1 B1 1A E1
+    $fd2fb528); // Zstandard frame
 
 function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 begin
