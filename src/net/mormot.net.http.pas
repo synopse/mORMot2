@@ -2891,7 +2891,8 @@ function FoundCompress(comp: PHttpSocketCompressRec; p: pointer; len: PtrInt;
 var
   i: integer;
 begin
-  if len <> 0 then
+  if (len <> 0) and
+     (comp <> nil) then
     for i := 0 to PDALen(PAnsiChar(comp) - _DALEN)^ + (_DAOFF - 1) do
       if IdemPropNameU(comp^.Name, p, len) then
       begin
