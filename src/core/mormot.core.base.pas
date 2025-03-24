@@ -4517,7 +4517,7 @@ type
 
 const
   /// maximum number stored in a JavaScript-compatible Int53 value
-  MAX_SAFE_JS_INTEGER = (1 shl 53) - 1;
+  MAX_SAFE_JS_INTEGER  = (Int64(1) shl 53) - 1;
 
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
   LOG_TRACEWARNING: array[boolean] of TSynLogLevel = (
