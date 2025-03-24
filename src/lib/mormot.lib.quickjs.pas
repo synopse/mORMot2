@@ -116,6 +116,7 @@ type
   // - you can use e.g. JSValue(somejsvaluevariable).IsObject or JSValue.Raw
   // - JSValueRaw is the low-level type mandatory for QuickJS API calls: using
   // JSValue to call the QuickJS library fails to use registers, so trigger GPF
+  // - number above MAX_SAFE_JS_INTEGER (53-bit) would be stored as double
   {$ifdef USERECORDWITHMETHODS}
   JSValue = record
   {$else}

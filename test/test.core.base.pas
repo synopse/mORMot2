@@ -4018,6 +4018,7 @@ var
   c: integer;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(9007199254740991, MAX_SAFE_JS_INTEGER);
   CheckEqual(NextPowerOfTwo(0), 1);
   CheckEqual(NextPowerOfTwo(1), 1);
   CheckEqual(NextPowerOfTwo(2), 2);

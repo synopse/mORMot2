@@ -5069,9 +5069,9 @@ var
 begin
   // see http://docs.mongodb.org/manual/reference/object-id
   oid.FromText('507f191e810c19729de860ea');
-  Check(oid.UnixCreateTime = bswap32($507f191e));
+  CheckEqual(oid.UnixCreateTime, bswap32($507f191e));
   u := oid.ToText;
-  Check(u = BSONID);
+  CheckEqual(u, BSONID);
   o := ObjectID('507f191e810c19729de860ea');
   Check(TVarData(o).VType = BsonVariantType.VarType);
   u := ToUtf8(string(o));

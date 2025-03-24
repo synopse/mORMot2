@@ -4470,6 +4470,17 @@ type
   /// pointer to a dynamic array of ORM primary keys, i.e. TOrm.ID
   PIDDynArray = ^TIDDynArray;
 
+  /// identify a JavaScript-compatible integer with up to 53-bit of resolution
+  // - numbers above MAX_SAFE_JS_INTEGER (53-bit) would be rounded as double
+  // in JavaScript, so this type is used to identify such values in our code
+  Int53 = type Int64;
+  /// a pointer to a Int53 value, i.e. 64-bit integer <= MAX_SAFE_JS_INTEGER
+  PInt53 = ^Int53;
+  /// used to store a dynamic array of Int53 values
+  TInt53DynArray = array of Int53;
+  /// pointer to a dynamic array of Int53 values
+  PInt53DynArray = ^TInt53DynArray;
+
   /// timestamp stored as second-based Unix Time
   // - see Unix Time helper functions and types in mormot.core.datetime
   // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
@@ -4505,6 +4516,9 @@ type
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
 const
+  /// maximum number stored in a JavaScript-compatible Int53 value
+  MAX_SAFE_JS_INTEGER = (1 shl 53) - 1;
+
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
   LOG_TRACEWARNING: array[boolean] of TSynLogLevel = (
     sllTrace,
