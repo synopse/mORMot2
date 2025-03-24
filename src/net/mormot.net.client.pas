@@ -606,6 +606,17 @@ type
     // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
     function SameOpenOptions(const aUri: TUri;
       const aOptions: THttpRequestExtendedOptions): boolean; virtual;
+    /// will register a compression algorithm
+    // - used e.g. to compress on the fly the data, with standard gzip/deflate
+    // or custom (synlz) protocols
+    // - returns true on success, false if this function or this
+    // ACCEPT-ENCODING: header was already registered
+    // - you can specify a minimal size (in bytes) before which the content won't
+    // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
+    // - the first registered algorithm will be the prefered one for compression
+    // within each priority level (the lower aPriority first)
+    function RegisterCompress(aFunction: THttpSocketCompress;
+      aCompressMinSize: integer = 1024; aPriority: integer = 10): boolean;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
@@ -902,10 +913,7 @@ type
     fLayer: TNetLayer;
     fKeepAlive: cardinal;
     fHttps: boolean;
-    /// used by RegisterCompress method
-    fCompress: THttpSocketCompressRecDynArray;
-    /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawUtf8;
+    fCompressList: THttpSocketCompressList; // used by RegisterCompress method
     /// set index of protocol in fCompress[], from ACCEPT-ENCODING: header
     fCompressAcceptHeader: THttpSocketCompressSet;
     fExtendedOptions: THttpRequestExtendedOptions;
@@ -1172,10 +1180,10 @@ type
     fOnDownload: TWinHttpDownload;
     fOnUpload: TWinHttpUpload;
     fOnDownloadChunkSize: cardinal;
-    /// used for internal connection
-    fSession, fConnection, fRequest: HINTERNET;
     /// do not add "Accept: */*" HTTP header by default
     fNoAllAccept: boolean;
+    /// used for internal connection
+    fSession, fConnection, fRequest: HINTERNET;
     function InternalGetInfo(Info: cardinal): RawUtf8; virtual; abstract;
     function InternalGetInfo32(Info: cardinal): cardinal; virtual; abstract;
     function InternalQueryDataAvailable: cardinal; virtual; abstract;
@@ -2701,6 +2709,16 @@ begin
       result := (Tunnel.Server = '');
 end;
 
+function THttpClientSocket.RegisterCompress(aFunction: THttpSocketCompress;
+  aCompressMinSize, aPriority: integer): boolean;
+begin
+  result := RegisterCompressFunc(fCompressList,
+              aFunction, aCompressMinSize, aPriority) <> nil;
+  if (fCompressList.Algo <> nil) and
+     (Http.CompressList = nil) then
+    Http.CompressList := @fCompressList; // enable compression for the requests
+end;
+
 procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
 
   procedure DoRetry(const Fmt: RawUtf8; const Args: array of const;
@@ -2775,8 +2793,8 @@ begin
         CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
       if ctxt.Header <> '' then
         SockSendHeaders(pointer(ctxt.Header)); // normalizing CRLF
-      if Http.CompressAcceptEncoding <> '' then
-        SockSendHeaders(pointer(Http.CompressAcceptEncoding));
+      if Http.CompressList <> nil then
+        SockSendHeaders(pointer(Http.CompressList^.AcceptEncoding));
       SockSendCRLF;
       // flush headers and Data/InStream body
       SockSendFlush(dat);
@@ -3930,9 +3948,9 @@ function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
   const InHeader: RawUtf8; const InData: RawByteString; const InDataType: RawUtf8;
   out OutHeader: RawUtf8; out OutData: RawByteString): integer;
 var
-  aData: RawByteString;
-  aDataEncoding, aAcceptEncoding, aUrl: RawUtf8;
-  i: integer;
+  data: RawByteString;
+  acceptEnc, contentEnc, aUrl: RawUtf8;
+  comp: PHttpSocketCompressRec;
   upload: boolean;
 begin
   if (url = '') or
@@ -3948,16 +3966,16 @@ begin
     if InDataType <> '' then
       InternalAddHeader(Join(['Content-Type: ', InDataType]));
     // handle custom compression
-    aData := InData;
+    data := InData;
     if integer(fCompressAcceptHeader) <> 0 then
     begin
-      CompressContent(fCompressAcceptHeader, fCompress, InDataType,
-        aData, aDataEncoding);
-      if aDataEncoding <> '' then
-        InternalAddHeader(Join(['Content-Encoding: ', aDataEncoding]));
+      comp := CompressContent(fCompressAcceptHeader, fCompressList.Algo,
+        InDataType, data, nil);
+      if comp <> nil then
+        InternalAddHeader(Join(['Content-Encoding: ', comp^.Name]));
     end;
-    if fCompressAcceptEncoding <> '' then
-      InternalAddHeader(fCompressAcceptEncoding);
+    if fCompressList.AcceptEncoding <> '' then
+      InternalAddHeader(fCompressList.AcceptEncoding);
     upload:= IsPost(method) or IsPut(method);
     // send request to remote server
     if assigned(fOnUpload) and
@@ -3966,9 +3984,9 @@ begin
     else if assigned(fOnDownload) and
             not upload then
       fOnDownload(self, false);
-    InternalSendRequest(method, aData);
+    InternalSendRequest(method, data);
     // retrieve status and headers
-    result := InternalRetrieveAnswer(OutHeader, aDataEncoding, aAcceptEncoding, OutData);
+    result := InternalRetrieveAnswer(OutHeader, contentEnc, acceptEnc, OutData);
     if assigned(fOnUpload) and
        upload then
       fOnUpload(self, true)
@@ -3978,17 +3996,12 @@ begin
     // handle incoming answer compression
     if OutData <> '' then
     begin
-      if aDataEncoding <> '' then
-        for i := 0 to high(fCompress) do
-          with fCompress[i] do
-            if Name = aDataEncoding then
-              if Func(OutData, false) = '' then
-                EHttpSocket.RaiseUtf8('%.Request: % uncompress error', [self, Name])
-              else
-                break; // successfully uncompressed content
-      if aAcceptEncoding <> '' then
-        fCompressAcceptHeader := ComputeContentEncoding(
-          fCompress, pointer(aAcceptEncoding));
+      if contentEnc <> '' then
+        if UncompressContent(fCompressList.Algo, contentEnc, OutData) = nil then
+          EHttpSocket.RaiseUtf8('%.Request: % uncompress error', [self, contentEnc]);
+      if acceptEnc <> '' then
+        DecodeAcceptEncoding(fCompressList.Algo,
+          pointer(acceptEnc), fCompressAcceptHeader);
     end;
   finally
     InternalCloseRequest;
@@ -4030,8 +4043,8 @@ end;
 function THttpRequest.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize, aPriority: integer): boolean;
 begin
-  result := RegisterCompressFunc(fCompress, aFunction,
-    fCompressAcceptEncoding, aCompressMinSize, aPriority) <> '';
+  result := RegisterCompressFunc(fCompressList,
+    aFunction, aCompressMinSize, aPriority) <> nil;
 end;
 
 

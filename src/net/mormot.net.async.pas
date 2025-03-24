@@ -4105,8 +4105,9 @@ procedure THttpAsyncClientConnection.AfterCreate;
 begin
   if fOwner.InheritsFrom(THttpAsyncConnections) then
     fServer := THttpAsyncConnections(fOwner).fAsyncServer;
-  if fServer <> nil then
-    fHttp.Compress := fServer.fCompress;
+  if (fServer <> nil) and
+     (fServer.fCompressList.Algo <> nil) then
+    fHttp.CompressList := @fServer.fCompressList;
   fHttp.ProcessInit; // ready to process this HTTP request
   fHttp.State := hrsConnect;
   // inherited AfterCreate; // void parent method
@@ -4390,8 +4391,8 @@ procedure THttpAsyncServerConnection.AfterCreate;
 begin
   fServer := (fOwner as THttpAsyncConnections).fAsyncServer;
   fHttp.Interning := fServer.fInterning;
-  fHttp.Compress := fServer.fCompress;
-  fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
+  if fServer.fCompressList.Algo <> nil then
+    fHttp.CompressList := @fServer.fCompressList;
   fHttp.Options := fServer.fDefaultRequestOptions;
   if fServer.fServerKeepAliveTimeOutSec <> 0 then // 0 = no keep alive
     fKeepAliveMaxSec := fServer.Async.fLastOperationSec +
@@ -4756,7 +4757,7 @@ begin
         exit; // rejected or upgraded to WebSockets
     end;
   // optionaly uncompress content
-  if fHttp.CompressContentEncoding >= 0 then
+  if fHttp.ContentEncoding <> nil then
     fHttp.UncompressData;
   // prepare the HTTP/REST process reusing the THttpServerRequest instance
   if Assigned(fServer.OnAfterResponse) then

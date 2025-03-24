@@ -3847,7 +3847,7 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
   {$ifndef CPUINTEL} inline; {$endif}
 
 /// compress a data content using the SynLZ algorithm
-// - as expected by THttpSocket.RegisterCompress
+// - as expected by THttpClientSocket/THttpServerGeneric.RegisterCompress
 // - will return 'synlz' as ACCEPT-ENCODING: header parameter
 // - will store a hash of both compressed and uncompressed stream: if the
 // data is corrupted during transmission, will instantly return ''

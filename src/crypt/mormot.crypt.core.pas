@@ -1550,7 +1550,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString;
 
 /// encrypt data content using the DEPRECATED AES-256/CFB algorithm, after SynLZ
 // - DO NOT USE: since HTTP compression is optional, this scheme is not safe
-// - as expected by THttpSocket.RegisterCompress()
+// - as expected by THttpClientSocket/THttpServerGeneric.RegisterCompress
 // - will return 'synshaaes' as ACCEPT-ENCODING: header parameter
 // - will use global CompressShaAesKey / CompressShaAesClass variables to be set
 // according to the expected algorithm and Key e.g. via a call to CompressShaAesSetKey()
