@@ -5877,10 +5877,16 @@ var
     fOwner.MessageEncode(resp, frame);
     // respond on main UDP port and on broadcast (POSIX) or local (Windows) IP
     if fMsg.Os.os = osWindows then
-      remote.SetPort(fBroadcastAddr.Port) // local IP is good enough on Windows
+    begin // local IP is good enough on Windows
+      remote.SetPort(fBroadcastAddr.Port);
+      sock := remote.NewSocket(nlUdp);
+    end
     else
-      remote.SetIP4Port(fOwner.fBroadcastIP4, fBroadcastAddr.Port); // need to broadcast
-    sock := remote.NewSocket(nlUdp);
+    begin // need to broadcast
+      remote.SetIP4Port(fOwner.fBroadcastIP4, fBroadcastAddr.Port);
+      sock := remote.NewSocket(nlUdp);
+      sock.SetBroadcast(true);
+    end;
     res := sock.SendTo(@frame, SizeOf(frame), remote);
     sock.Close;
     if fOwner.fVerboseLog then
