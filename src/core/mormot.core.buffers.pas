@@ -8980,10 +8980,9 @@ const
     'SVG',
     'X-ICO',
     nil);
-  _CONTENT_APP: array[0..4] of PUtf8Char = (
+  _CONTENT_APP: array[0..3] of PUtf8Char = (
     'JSON',
     'JAVASCRIPT',
-    'VND.API+JSON',
     'XML',
     nil);
 
@@ -8992,10 +8991,19 @@ begin
   case IdemPPChar(ContentType, @_CONTENT) of
     0: // text/*
       result := true;
-    1: // image/*
+    1: // image/[svg/x-ico]
       result := IdemPPChar(ContentType + 6, @_CONTENT_IMG) >= 0;
-    2: // application/*
-      result := IdemPPChar(ContentType + 12, @_CONTENT_APP) >= 0;
+    2: // application/[json/javascript/xml]
+      begin
+        result := true;
+        inc(ContentType, 12);
+        if IdemPPChar(ContentType, @_CONTENT_APP) >= 0 then
+          exit;
+        // detect e.g. application/atom+xml or application/vnd.api+json
+        ContentType := PosChar(ContentType, '+');
+        result := (ContentType <> nil) and
+                  (IdemPPChar(ContentType + 1, @_CONTENT_APP) >= 0);
+      end
   else
     result := false;
   end;

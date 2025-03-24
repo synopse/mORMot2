@@ -8624,6 +8624,8 @@ begin
   Check(IsContentTypeCompressible('application/xml'));
   Check(IsContentTypeCompressible('application/javascript'));
   Check(IsContentTypeCompressible('application/VND.API+JSON'));
+  Check(IsContentTypeCompressible('application/atom+xml'));
+  Check(not IsContentTypeCompressible('applications/atom+xml'));
   Check(not IsContentTypeCompressible('application/plain'));
   Check(IsContentTypeCompressible('image/svg'));
   Check(IsContentTypeCompressible('image/X-ico'));
