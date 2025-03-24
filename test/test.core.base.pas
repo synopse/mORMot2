@@ -8936,8 +8936,12 @@ begin
     try
       for i := 1 to 50000 do
       begin
+        i1.Value := 0;
+        i2.Value := 0;
         gen.ComputeNew(i1);
         gen.ComputeNew(i2);
+        check(i1.Value <> 0);
+        check(i2.Value <> 0);
         check(i1.ProcessID = 10);
         check(i2.ProcessID = 10);
         check(i1.CreateTimeUnix > JAN2015_UNIX);
@@ -8974,12 +8978,15 @@ begin
   try
     i3 := 0;
     check(gen.FromObfuscated(obfusc, i3), 'SharedObfuscationKey');
-    check(i1.Value = i3, 'FromObfuscated');
+    checkEqual(i1.Value, i3, 'FromObfuscated');
+    i1.Value := 0;
     timer.Start;
     for i := 1 to 100000 do
     begin
-      gen.ComputeNew(i1);
       gen.ComputeNew(i2);
+      check(i2.Value <> 0);
+      Check(i1.Value <> i2.Value, 'ComputeNew');
+      i1 := i2;
     end;
     NotifyTestSpeed('ComputeNew', gen.ComputedCount, 0, @timer);
     check(i1.Value <> 0);

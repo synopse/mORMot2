@@ -430,8 +430,7 @@ type
   TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
     fSafe: TLightLock;
-    fUnixCreateTime: cardinal;
-    fLatestCounterOverflowUnixCreateTime: cardinal;
+    fLastUnixCreateTime: cardinal;
     fIdentifier: TSynUniqueIdentifierProcess;
     fIdentifierShifted: cardinal;
     fLastCounter: cardinal;
@@ -488,6 +487,10 @@ type
     // - may be called at server shutdown, if you expect a lot of collisions,
     // and want to ensure the "fake" timestamp match the time at server restart
     procedure WaitForSafeCreateTime(TimeOutSeconds: integer = 30);
+    /// persist the current state (counter and create time) into a single value
+    function SaveTo: Int64;
+    /// read the current state (counter and create time) from a SaveTo value
+    procedure LoadFrom(aSaved: Int64);
     /// some 32-bit value, derivated from aSharedObfuscationKey as supplied
     // to the class constructor
     // - FromObfuscated and ToObfuscated methods will validate their hexadecimal
@@ -510,10 +513,11 @@ type
     property Collisions: cardinal
       read fCollisions;
     /// low-level access to the last generated timestamp
-    // - you may need to persist this value if a lot of Collisions happened, and
-    // the timestamp was faked - you may also call WaitForSafeCreateTime
     property LastUnixCreateTime: cardinal
-      read fUnixCreateTime write fUnixCreateTime;
+      read fLastUnixCreateTime;
+    /// low-level access to the last generated counter
+    property LastCounter: cardinal
+      read fLastCounter;
   end;
 
   /// hold a dynamic array of TSynUniqueIdentifierGenerator instances
@@ -5925,22 +5929,22 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    if currentTime > fUnixCreateTime then // time may have been tweaked: compare
+    if currentTime > fLastUnixCreateTime then // time may have been tweaked
     begin
-      fUnixCreateTime := currentTime;
+      fLastUnixCreateTime := currentTime;
       fLastCounter := 0; // reset
     end;
     if fLastCounter = $7fff then
     begin
       // collide if more than 32768 per second (unlikely) -> tweak the timestamp
-      inc(fUnixCreateTime);
+      inc(fLastUnixCreateTime);
       inc(fCollisions);
       fLastCounter := 0;
     end
     else
       inc(fLastCounter);
     result.Value := Int64(fLastCounter or fIdentifierShifted) or
-                    (Int64(fUnixCreateTime) shl 31);
+                    (Int64(fLastUnixCreateTime) shl 31);
     inc(fComputedCount);
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -6028,8 +6032,8 @@ end;
 
 type // compute a 24 hexadecimal chars (96 bits) obfuscated pseudo file name
   TSynUniqueIdentifierObfuscatedBits = packed record
-    crc: cardinal;
-    id: TSynUniqueIdentifierBits;
+    crc: cardinal;                 // 32-bit
+    id: TSynUniqueIdentifierBits;  // 64-bit
   end;
 
 function TSynUniqueIdentifierGenerator.ToObfuscated(
@@ -6114,10 +6118,21 @@ var
 begin
   tix := GetTickCount64 + TimeOutSeconds * 1000;
   repeat
-    if UnixTimeUtc >= fUnixCreateTime then
+    if UnixTimeUtc >= fLastUnixCreateTime then
       break;
     SleepHiRes(100);
   until GetTickCount64 > tix;
+end;
+
+function TSynUniqueIdentifierGenerator.SaveTo: Int64;
+begin
+  result := (Int64(fLastUnixCreateTime) shl 15) + fLastCounter;
+end;
+
+procedure TSynUniqueIdentifierGenerator.LoadFrom(aSaved: Int64);
+begin
+  fLastCounter := aSaved and $7fff;
+  fLastUnixCreateTime := aSaved shr 15;
 end;
 
 
