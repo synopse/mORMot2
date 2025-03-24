@@ -352,12 +352,12 @@ type
 
 constructor TSynLizardStatic.Create;
 begin
-  versionNumber := Lizard_versionNumber;
-  compressbound := Lizard_compressbound;
-  compress := Lizard_compress;
-  sizeofState := Lizard_sizeofState;
-  compress_extState := Lizard_compress_extState;
-  decompress_safe := Lizard_decompress_safe;
+  versionNumber           := Lizard_versionNumber;
+  compressbound           := Lizard_compressbound;
+  compress                := Lizard_compress;
+  sizeofState             := Lizard_sizeofState;
+  compress_extState       := Lizard_compress_extState;
+  decompress_safe         := Lizard_decompress_safe;
   decompress_safe_partial := Lizard_decompress_safe_partial;
   inherited Create; // register AlgoLizard/AlgoLizardFast/AlgoLizardHuff
 end;

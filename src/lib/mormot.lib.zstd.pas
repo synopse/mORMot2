@@ -1,4 +1,4 @@
-/// low-level access to the Zstandard/ZSTD API
+/// low-level access to the Zstandard/zstd API
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.zstd;
@@ -7,13 +7,13 @@ unit mormot.lib.zstd;
 {
   *****************************************************************************
 
-   Cross-Platform and Cross-Compiler Zstandard (ZSTD) API
+   Cross-Platform and Cross-Compiler Zstandard (zstd) API
    - Low-Level Zstandard API Process
-   - TAlgoZSTD High-Level Algorithms
+   - TAlgoZstd High-Level Algorithms
 
   *****************************************************************************
 
-
+  WARNING: unfinished and untested unit - FPC-only, from external contributor
   Some numbers: Todo
 
 }
@@ -34,7 +34,7 @@ uses
   mormot.core.buffers; // for TAlgoCompress
 
 
-  { ****************** Low-Level ZSTD Process }
+  { ****************** Low-Level Zstandard Process }
 
 type
   TZSTD_CCtx = type pointer;
@@ -68,7 +68,7 @@ const
   ZSTD_CONTENTSIZE_UNKNOWN = UInt64(-1);
   ZSTD_CONTENTSIZE_ERROR = UInt64(-2);
 
-  /// default TSynZSTDDynamic file name
+  /// default TSynZstdDynamic file name
   // - mainly for Delphi, since FPC will use static linked .o files under
   // Windows and Linux Intel 32/64 bits
   // - to be downloaded from from https://synopse.info/files/XXX  //Todo: Set to correct value
@@ -83,55 +83,59 @@ const
   {$endif OSPOSIX}
 
 type
-  /// ZSTD lossless compression algorithm
+  /// zstd lossless compression algorithm
   // - provides fast real-time compression algorithm
-  // - this class implements direct low-level access to the ZSTD API - consider
+  // - this class implements direct low-level access to the zstd API - consider
   // using AlgoZSTD global instances for easier use
-  TSynZSTD = class
+  TSynZstd = class
   public
     //// will initialize the library
     constructor Create; virtual;
   public
-    /// version number of the linked ZSTD library
+    /// version number of the linked zstd library
     versionNumber: function: cardinal; cdecl;
-    /// version string of the linked ZSTD library
+    /// version string of the linked zstd library
     versionString: function: PAnsiChar; cdecl;
-    /// tells if a `size_t` function result is an error code
-    isError: function(code: size_t): cardinal; cdecl;
-    /// maximum size that ZSTD compression may output in a "worst case" scenario
-    compressBound: function(srcSize: size_t): size_t; cdecl;
+    /// tells if a size_t function result is an error code
+    isError: function(code: PtrUInt): cardinal; cdecl;
+    /// maximum size that zstd compression may output in a "worst case" scenario
+    compressBound: function(srcSize: PtrUInt): PtrUInt; cdecl;
     /// create a new instance of a compression context
     // re-use it for each successive compression operation
     createCCtx: function: TZSTD_CCtx; cdecl;
     /// free an instance of a compression context
-    freeCCtx: function(cctx: TZSTD_CCtx): size_t; cdecl;
+    freeCCtx: function(cctx: TZSTD_CCtx): PtrUInt; cdecl;
     /// set one compression parameter
-    // providing a value beyond bound will either clamp it, or trigger an error (depending on parameter).
-    CCtx_setParameter: function(cctx: TZSTD_CCtx; param: integer; value: integer): size_t; cdecl;
+    // - providing a value beyond bound will either clamp it, or trigger an
+    // error (depending on the actual parameter)
+    CCtx_setParameter: function(cctx: TZSTD_CCtx; param, value: integer): PtrUInt; cdecl;
     /// get the requested compression parameter value
-    CCtx_getParameter: function(cctx: TZSTD_CCtx; param: integer; out value: integer): size_t; cdecl;
-    /// compresses `src` content as a single zstd compressed frame into already allocated `dst`
-    compress2: function(cctx: TZSTD_CCtx; dst: pointer; dstCapacity: size_t; src: pointer; srcSize: size_t): size_t; cdecl;
-    /// tells if the content of `buffer` starts with a valid Frame Identifier
-    isFrame: function(buffer: pointer; size: size_t): cardinal; cdecl;
-    /// decompressed size of `src` frame content, if known
-    // returns ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
-    // returnsZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic number, srcSize too small)
-    getFrameContentSize: function(src: pointer; srcSize: size_t): UInt64; cdecl;
+    CCtx_getParameter: function(cctx: TZSTD_CCtx; param: integer;
+      out value: integer): PtrUInt; cdecl;
+    /// compresses src content as a single zstd compressed frame into already allocated dst
+    compress2: function(cctx: TZSTD_CCtx; dst: pointer; dstCapacity: PtrUInt;
+      src: pointer; srcSize: PtrUInt): PtrUInt; cdecl;
+    /// tells if the content of buffer starts with a valid Frame Identifier
+    isFrame: function(buffer: pointer; size: PtrUInt): cardinal; cdecl;
+    /// decompressed size of src frame content, if known
+    // - returns ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
+    // - returns ZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic
+    // number, srcSize too small)
+    getFrameContentSize: function(src: pointer; srcSize: PtrUInt): UInt64; cdecl;
     /// create a new instance of a decompression context
-    // re-use it for each successive decompression operation
+    // - re-use it for each successive decompression operation
     createDCtx: function: TZSTD_DCtx; cdecl;
-    // free an instance of a decompression context
-    freeDCtx: function(dctx: TZSTD_DCtx): size_t; cdecl;
-    // compresses `src` content as a single zstd compressed frame into already allocated `dst`.
-    decompressDCtx: function(dctx: TZSTD_DCtx; dst: pointer; dstCapacity: size_t; src: pointer;
-      srcSize: size_t): size_t; cdecl;
+    /// free an instance of a decompression context
+    freeDCtx: function(dctx: TZSTD_DCtx): PtrUInt; cdecl;
+    // compresses src content as a single zstd compressed frame into already allocated dst
+    decompressDCtx: function(dctx: TZSTD_DCtx; dst: pointer; dstCapacity: PtrUInt;
+      src: pointer; srcSize: PtrUInt): PtrUInt; cdecl;
   end;
 
 
 type
-  /// try to load ZSTD as an external library
-  TSynZSTDDynamic = class(TSynZSTD)
+  /// try to load zstd as an external library
+  TSynZstdDynamic = class(TSynZstd)
   protected
     // mormot.core.os.pas cross-platform support external library support
     fLibrary: TSynLibrary;
@@ -144,8 +148,8 @@ type
       aRaiseNoException: boolean = false); reintroduce;
     /// unload the external library
     destructor Destroy; override;
-    /// ensure ZSTD compression is available
-    // - returns TRUE if ZSTD compression is available
+    /// ensure zstd compression is available
+    // - returns TRUE if zstd compression is available
     // - if there is a local libzstd.dll file, try to load it
     class function AlgoRegister: boolean;
     /// set to TRUE if Create successed
@@ -157,21 +161,21 @@ type
 
 
 var
-  /// direct access to the low-level ZSTD library API
-  // - is defined by default if ZSTD was statically linked
+  /// direct access to the low-level zstd library API
+  // - is defined by default if zstd was statically linked
   // - otherwise, you should execute explicitly:
-  // ! if ZSTD = nil then
-  // !   ZSTD := TSynZSTDDynamic.Create;
-  ZSTD: TSynZSTD;
+  // ! if Zstd = nil then
+  // !   Zstd := TSynZstdDynamic.Create;
+  Zstd: TSynZstd;
 
 
-  { ****************** TAlgoZSTD High-Level Algorithms }
+  { ****************** TAlgoZstd High-Level Algorithms }
 
 var
-  /// implement ZSTD compression in level 3 (ZSTD_CLEVEL_DEFAULT)
-  // - is set by TSynZSTD.Create, so available e.g. if library is statically
-  // linked, or once TSynZSTDDynamic.Create has been successfully called
-  AlgoZSTD: TAlgoCompress;
+  /// implement Zstandard compression in level 3 (ZSTD_CLEVEL_DEFAULT)
+  // - is set by TSynZstd.Create, so available e.g. if library is statically
+  // linked, or once TSynZstdDynamic.Create has been successfully called
+  AlgoZstd: TAlgoCompress;
 
 implementation
 
@@ -179,36 +183,36 @@ implementation
     Zstandard is dual-licensed under BSD OR GPLv2.
 }
 
-{ ****************** Low-Level ZSTD Process }
+{ ****************** Low-Level Zstandard Process }
 
 {$ifndef ZSTD_EXTERNALONLY}
 
 function ZSTD_versionNumber: cardinal; cdecl; external;
 function ZSTD_versionString: PAnsiChar; cdecl; external;
-function ZSTD_isError(code: size_t): cardinal; cdecl; external;
-function ZSTD_compressBound(srcSize: size_t): size_t; cdecl; external;
+function ZSTD_isError(code: PtrUInt): cardinal; cdecl; external;
+function ZSTD_compressBound(srcSize: PtrUInt): PtrUInt; cdecl; external;
 function ZSTD_createCCtx: TZSTD_CCtx; cdecl; external;
-function ZSTD_freeCCtx(cctx: TZSTD_CCtx): size_t; cdecl; external;
-function ZSTD_CCtx_setParameter(cctx: TZSTD_CCtx; param: integer; value: integer): size_t; cdecl; external;
-function ZSTD_CCtx_getParameter(cctx: TZSTD_CCtx; param: integer; out value: integer): size_t; cdecl; external;
-function ZSTD_compress2(cctx: TZSTD_CCtx; dst: pointer; dstCapacity: size_t; src: pointer; srcSize: size_t): size_t; cdecl; external;
-function ZSTD_isFrame(buffer: pointer; size: size_t): cardinal; cdecl; external;
-function ZSTD_getFrameContentSize(src: pointer; srcSize: size_t): UInt64; cdecl; external;
+function ZSTD_freeCCtx(cctx: TZSTD_CCtx): PtrUInt; cdecl; external;
+function ZSTD_CCtx_setParameter(cctx: TZSTD_CCtx; param: integer; value: integer): PtrUInt; cdecl; external;
+function ZSTD_CCtx_getParameter(cctx: TZSTD_CCtx; param: integer; out value: integer): PtrUInt; cdecl; external;
+function ZSTD_compress2(cctx: TZSTD_CCtx; dst: pointer; dstCapacity: PtrUInt; src: pointer; srcSize: PtrUInt): PtrUInt; cdecl; external;
+function ZSTD_isFrame(buffer: pointer; size: PtrUInt): cardinal; cdecl; external;
+function ZSTD_getFrameContentSize(src: pointer; srcSize: PtrUInt): UInt64; cdecl; external;
 function ZSTD_createDCtx: TZSTD_DCtx; cdecl; external;
-function ZSTD_freeDCtx(dctx: TZSTD_DCtx): size_t; cdecl; external;
-function ZSTD_decompressDCtx(dctx: TZSTD_DCtx; dst: pointer; dstCapacity: size_t; src: pointer; srcSize: size_t): size_t; cdecl; external;
+function ZSTD_freeDCtx(dctx: TZSTD_DCtx): PtrUInt; cdecl; external;
+function ZSTD_decompressDCtx(dctx: TZSTD_DCtx; dst: pointer; dstCapacity: PtrUInt; src: pointer; srcSize: PtrUInt): PtrUInt; cdecl; external;
 
 //Todo: Compile static
 
-{ TSynZSTDStatic }
+{ TSynZstdStatic }
 
 type
-  TSynZSTDStatic = class(TSynZSTD)
+  TSynZstdStatic = class(TSynZstd)
   public
     constructor Create; override;
   end;
 
-constructor TSynZSTDStatic.Create;
+constructor TSynZstdStatic.Create;
 begin
   versionNumber := ZSTD_versionNumber;
   versionString := ZSTD_versionString;
@@ -224,12 +228,12 @@ begin
   createDCtx := ZSTD_createDCtx;
   freeDCtx := ZSTD_freeDCtx;
   decompressDCtx := ZSTD_decompressDCtx;
-  inherited Create; // register AlgoZSTD
+  inherited Create; // register AlgoZstd
 end;
 
 {$endif ZSTD_EXTERNALONLY}
 
-{ TSynZSTDDynamic }
+{ TSynZstdDynamic }
 
 const
   ZSTD_ENTRIES: array[0 .. 14] of PAnsiChar = (
@@ -249,7 +253,7 @@ const
     'decompressDCtx',
     nil);
 
-constructor TSynZSTDDynamic.Create(const aLibraryFile: TFileName;
+constructor TSynZstdDynamic.Create(const aLibraryFile: TFileName;
   aRaiseNoException: boolean);
 begin
   fLibrary := TSynLibrary.Create;
@@ -262,7 +266,7 @@ begin
       else
         EAlgoCompress.RaiseUtf8('%.Create: % has unexpected versionNumber=%',
           [self, fLibrary.LibraryPath, versionNumber]);
-    // register TAlgoZSTD
+    // register TAlgoZstd
     inherited Create;
     // if we reached here, the external library has been properly setup
     fLoaded := true;
@@ -273,38 +277,41 @@ begin
       [self, aLibraryFile, GetErrorText(GetLastError)]);
 end;
 
-destructor TSynZSTDDynamic.Destroy;
+destructor TSynZstdDynamic.Destroy;
 begin
   fLibrary.Free;
   inherited;
 end;
 
-class function TSynZSTDDynamic.AlgoRegister: boolean;
+class function TSynZstdDynamic.AlgoRegister: boolean;
 var
-  lib: TSynZSTDDynamic;
+  lib: TSynZstdDynamic;
 begin
-  result := ZSTD <> nil;
+  result := Zstd <> nil;
   if result then
-    // already registered (maybe as TSynZSTDStatic)
+    // already registered (maybe as TSynZstdStatic)
     exit;
-  lib := TSynZSTDDynamic.Create('', true);
+  lib := TSynZstdDynamic.Create('', true);
   result := lib.Loaded;
   if result then
-    ZSTD := lib
+    Zstd := lib
   else
     lib.Free;
 end;
 
-function TSynZSTDDynamic.LibraryName: TFileName;
+function TSynZstdDynamic.LibraryName: TFileName;
 begin
   result := fLibrary.LibraryPath;
 end;
 
 
-{ ****************** TAlgoZSTD High-Level Algorithms }
+{ ****************** TAlgoZstd High-Level Algorithms }
 
 type
-  TAlgoZSTD = class(TAlgoCompress)
+  /// implement the AlgoZstd global variable
+  // - since .gz is a file-level algorithm, this class won't use the regular
+  // TAlgoCompress file layout and only support raw buffer and file methods
+  TAlgoZstd = class(TAlgoCompress)
   protected
     fCompressionLevel: integer;
     fCompressionContext: TZSTD_CCtx;
@@ -312,7 +319,7 @@ type
     fDecompressionContext: TZSTD_DCtx;
     fDecompressionContextSafe: TLightLock;
   public
-    /// set AlgoID = 11 as genuine byte identifier for ZSTD (even if not used)
+    /// set AlgoID = 11 as genuine byte identifier for zstd (even if not used)
     constructor Create; override;
     destructor Destroy; override;
     function AlgoCompressDestLen(PlainLen: integer): integer; override;
@@ -325,9 +332,9 @@ type
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
-  { TAlgoZSTD }
+  { TAlgoZstd }
 
-constructor TAlgoZSTD.Create;
+constructor TAlgoZstd.Create;
 begin
   if fAlgoID = 0 then
     fAlgoID := 11; //Todo: Check and note in TAlgoCompress
@@ -336,89 +343,92 @@ begin
   fCompressionLevel := ZSTD_CLEVEL_DEFAULT;
 end;
 
-destructor TAlgoZSTD.Destroy;
+destructor TAlgoZstd.Destroy;
 begin
   if fCompressionContext <> nil then
-    ZSTD.freeCCtx(fCompressionContext);
+    Zstd.freeCCtx(fCompressionContext);
   if fDecompressionContext <> nil then
-    ZSTD.freeDCtx(fDecompressionContext);
+    Zstd.freeDCtx(fDecompressionContext);
   inherited Destroy;
 end;
 
-function TAlgoZSTD.AlgoCompressDestLen(PlainLen: integer): integer;
+function TAlgoZstd.AlgoCompressDestLen(PlainLen: integer): integer;
 begin
-  if ZSTD = nil then
+  if Zstd = nil then
     result := 0
   else
-    result := ZSTD.compressBound(PlainLen);
+    result := Zstd.compressBound(PlainLen);
 end;
 
-function TAlgoZSTD.AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer;
+function TAlgoZstd.AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer;
 begin
-  if ZSTD = nil then
+  if Zstd = nil then
     result := 0
   else
   begin
     fCompressionContextSafe.Lock;
     try
       if fCompressionContext = nil then
-        fCompressionContext := ZSTD.createCCtx;
-      ZSTD.CCtx_setParameter(fCompressionContext, ZSTD_c_compressionLevel, fCompressionLevel);
-      result := zstd.compress2(fCompressionContext, Comp, ZSTD.compressBound(PlainLen) {Todo}, Plain, PlainLen);
+        fCompressionContext := Zstd.createCCtx;
+      Zstd.CCtx_setParameter(fCompressionContext,
+        ZSTD_c_compressionLevel, fCompressionLevel);
+      result := zstd.compress2(fCompressionContext,
+        Comp, Zstd.compressBound(PlainLen) {Todo}, Plain, PlainLen);
     finally
       fCompressionContextSafe.UnLock;
     end;
   end;
 end;
 
-function TAlgoZSTD.AlgoDecompressDestLen(Comp: pointer): integer;
+function TAlgoZstd.AlgoDecompressDestLen(Comp: pointer): integer;
 begin
-  if ZSTD = nil then
+  if Zstd = nil then
     result := 0
   else
-    result := ZSTD.getFrameContentSize(Comp, MemSize(Comp) {Todo});
+    result := Zstd.getFrameContentSize(Comp, MemSize(Comp) {Todo});
 end;
 
-function TAlgoZSTD.AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer;
+function TAlgoZstd.AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer;
 begin
-  if ZSTD = nil then
+  if Zstd = nil then
     result := 0
   else
   begin
     fDecompressionContextSafe.Lock;
     try
       if fDecompressionContext = nil then
-        fDecompressionContext := ZSTD.createDCtx;
-      result := zstd.decompressDCtx(fDecompressionContext, Plain, ZSTD.getFrameContentSize(Comp, CompLen)
-        {Todo}, Comp, CompLen);
+        fDecompressionContext := Zstd.createDCtx;
+      result := zstd.decompressDCtx(fDecompressionContext, Plain,
+        Zstd.getFrameContentSize(Comp, CompLen) {Todo}, Comp, CompLen);
     finally
       fDecompressionContextSafe.UnLock;
     end;
   end;
 end;
 
-function TAlgoZSTD.AlgoDecompressPartial(Comp: pointer; CompLen: integer; Partial: pointer; PartialLen,
-  PartialLenMax: integer): integer;
+function TAlgoZstd.AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+  Partial: pointer; PartialLen, PartialLenMax: integer): integer;
 begin
-  result := 0; //Not supported by ZSTD
+  result := 0; // not supported by our zstd wrapper
 end;
 
-// this constructor uses TAlgoZSTD* classes so is defined hereafter
 
-{ TSynZSTD }
+// this constructor uses TAlgoZstd* classes so is defined hereafter
 
-constructor TSynZSTD.Create;
+{ TSynZstd }
+
+constructor TSynZstd.Create;
 begin
-  if AlgoZSTD = nil then
-    AlgoZSTD := TAlgoZSTD.Create;
+  if AlgoZstd = nil then
+    AlgoZstd := TAlgoZstd.Create;
 end;
 
 initialization
   {$ifndef ZSTD_EXTERNALONLY}
-  ZSTD := TSynZSTDStatic.Create;
+  Zstd := TSynZstdStatic.Create;
   {$endif ZSTD_EXTERNALONLY}
 
 finalization
-  ZSTD.Free;
+  Zstd.Free;
 
 end.
