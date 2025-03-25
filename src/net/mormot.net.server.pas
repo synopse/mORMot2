@@ -6447,7 +6447,7 @@ begin
   for i := 1 to length(dir) do
   begin
     fn := fTempFilesPath + d^.Name;
-    if not fPartials.FindFile(fn) then // if not currently downloading
+    if not fPartials.HasFile(fn) then // if not currently downloading
       if DeleteFile(fn) then
       begin
         dec(result, d^.Size);
@@ -6805,11 +6805,11 @@ begin
       if localsize = sourcesize then
       begin
         Params.SetStep(wgsAlternateAlreadyInCache, [local]);
-        localok := true; // switch to the local file via fPartials.ChangeFile()
+        fPartials.ChangeFile(Partial, local); // switch to final local file
       end
       else
         Params.SetStep(wgsAlternateWrongSizeInCache,
-          [local, ' ', localsize, '<>', sourcesize]); // paranaoid
+          [local, ' ', localsize, '<>', sourcesize]); // paranoid
       exit;
     end;
     QueryPerformanceMicroSeconds(start);
@@ -6829,19 +6829,26 @@ begin
       end;
       // actually copy the source file into the local cache folder
       localok := CopyFile(Partial, local, {failsifexists=}false);
-      Params.SetStep(wgsAlternateCopiedInCache, [local]);
-      if localok and istemp then
+      if localok then
       begin
-        // force timestamp = now within the temporary folder
-        FileSetDateFromUnixUtc(local, UnixTimeUtc);
-        inc(fTempCurrentSize, localsize);
-      end;
+        Params.SetStep(wgsAlternateCopiedInCache, [local]);
+        if istemp then
+        begin
+          // force timestamp = now within the temporary folder
+          FileSetDateFromUnixUtc(local, UnixTimeUtc);
+          inc(fTempCurrentSize, localsize);
+        end;
+        fPartials.ChangeFile(Partial, local); // switch to final file in cache
+      end
+      else
+        Params.SetStep(wgsAlternateFailedCopyInCache, [Partial, ' into ', local]);
     finally
       fFilesSafe.UnLock;
     end;
     QueryPerformanceMicroSeconds(stop);
-    fLog.Add.Log(LOG_TRACEWARNING[not localok], 'OnDownloaded: copy % into % in %',
-      [Partial, local, MicroSecToString(stop - start)], self);
+    fLog.Add.Log(LOG_TRACEWARNING[not localok],
+      'OnDownloaded: % copied % into % in %', [KBNoSpace(sourcesize),
+      Partial, local, MicroSecToString(stop - start)], self);
   finally
     // optional rename *.partial to final WGet() file name
     if ToRename <> '' then
@@ -6851,11 +6858,9 @@ begin
         if RenameFile(Partial, ToRename) then
         begin
           Params.SetStep(wgsAlternateRename, [ToRename]);
-          if not localok then
-          begin
-            local := ToRename; // fallback to the renamed file for partials
-            localok := true;   // it would work as long as it remains available
-          end;
+          if not localok then // if we can't use the cached local file
+            // switch to renamed file - it will work for as long as it can
+            fPartials.ChangeFile(Partial, ToRename);
         end;
       finally
         fPartials.Safe.WriteUnLock;
@@ -6864,11 +6869,7 @@ begin
     // always eventually notify or finalize any associated partial
     if PartialID <> 0 then
       if sourcesize = 0 then
-        OnDownloadingFailed(PartialID) // clearly something went wrong
-      else if localok then
-        fPartials.ChangeFile(PartialID, local) // switch to final local file
-      else
-        fPartials.ChangeFile(PartialID, Partial); // fallback to downloaded file
+        OnDownloadingFailed(PartialID); // clearly something went wrong
   end;
 end;
 
@@ -7116,14 +7117,14 @@ begin
           exit; // paranoid: existing cached files should have been checked
         cs.DestStream := HASH_STREAMREDIRECT[aMessage.Hash.Algo].Create(
           TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
+        // mimics THttpPeerCache.OnDownloading() for progressive mode
+        cs.DestFileName := aFileName;
+        cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
       finally
         fFilesSafe.UnLock;
       end;
-      // mimics THttpPeerCache.OnDownloading() for progressive mode
-      cs.DestFileName := aFileName;
-      cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
-      cs.ExpectedHash := ToText(aMessage.Hash);
       // ask the local peers for this resource (enabled by default above 64KB)
+      cs.ExpectedHash := ToText(aMessage.Hash);
       if (aSize > fSettings.BroadCastDirectMinBytes) and
          not (pcoHttpDirectNoBroadcast in fSettings.Options) then
       begin

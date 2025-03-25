@@ -371,6 +371,7 @@ type
     wgsAlternateAlreadyInCache,
     wgsAlternateWrongSizeInCache,
     wgsAlternateCopiedInCache,
+    wgsAlternateFailedCopyInCache,
     wgsProgressive,
     wgsProgressiveFailed,
     wgsGet,
