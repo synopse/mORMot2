@@ -1072,16 +1072,16 @@ type
     procedure IdleEverySecond; virtual;
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
     // the main thread will Send output packets in the background
-    procedure Execute; override;
+    procedure DoExecute; override;
     {$ifdef OSWINDOWS}
     function GetApiVersion: RawUtf8; override; // 'WinIocp'
     {$endif OSWINDOWS}
   public
     /// create an event-driven HTTP Server
-    constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-      ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
-      ProcessOptions: THttpServerOptions = []); override;
+    constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
+      KeepAliveTimeOut: integer = 30000; ProcessOptions: THttpServerOptions = [];
+      aLog: TSynLogClass = nil); override;
     /// finalize the HTTP Server
     destructor Destroy; override;
     /// send an asynchronous response to the client, e.g. after slow DB process
@@ -4932,7 +4932,7 @@ end;
 constructor THttpAsyncServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  ProcessOptions: THttpServerOptions);
+  ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 var
   aco: TAsyncConnectionsOptions;
 begin
@@ -4981,8 +4981,8 @@ begin
   if hsoBan40xIP in ProcessOptions then
     fAsync.fBanned := THttpAcceptBan.Create;
   // launch this TThread instance
-  inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, ProcessOptions);
+  inherited Create(aPort, OnStart, OnStop, fProcessName,
+    ServerThreadPoolCount, KeepAliveTimeOut, ProcessOptions, aLog);
 end;
 
 destructor THttpAsyncServer.Destroy;
@@ -5141,7 +5141,7 @@ begin
   result := fAsync.ConnectionCount;
 end;
 
-procedure THttpAsyncServer.Execute;
+procedure THttpAsyncServer.DoExecute;
 var
   {$ifndef USE_WINIOCP}
   notif: TPollSocketResult;
@@ -5152,8 +5152,7 @@ var
   msidle: integer;
 begin
   // call ProcessIdleTix - and POSIX Send() output packets in the background
-  SetCurrentThreadName('=M:%', [fAsync.fProcessName]);
-  NotifyThreadStart(self);
+  //SetCurrentThreadName('=M:%', [fAsync.fProcessName]);
   WaitStarted(10); // wait for fAsync.Execute to bind and start
   if fAsync <> nil then
     try
@@ -5222,8 +5221,6 @@ begin
   if fAsync = nil then
     exit;
   fAsync.DoLog(sllInfo, 'Execute: done W %', [fAsync.fProcessName], self);
-  if fAsync.fLog <> nil then
-    fAsync.fLog.Add.NotifyThreadEnded;
 end;
 
 

@@ -3587,7 +3587,7 @@ begin
     // try to setup sspi/gssapi -> SECPKGNAMEHTTP
     DoSspi(Sender, Context, Authenticate,
       'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-      'Authorization: ' + SECPKGNAMEHTTP + ' ');
+      'Authorization: '    + SECPKGNAMEHTTP + ' ');
   result := false; // final RequestInternal() was done within DoSspi()
 end;
 
@@ -3612,7 +3612,7 @@ begin
   if InitializeDomainAuth then
     // try to setup sspi/gssapi -> SECPKGNAMEHTTP
     DoSspi(Sender, Context, Authenticate,
-      'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+      'PROXY-AUTHENTICATE: '  + SECPKGNAMEHTTP_UPPER + ' ',
       'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
   result := false; // final RequestInternal() was done within DoSspi()
 end;
@@ -3665,7 +3665,7 @@ begin
     status := Http.Get(url, 0, inHeaders);
     if outStatus <> nil then
       outStatus^ := status;
-    if status in [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
+    if status in [HTTP_SUCCESS .. HTTP_PARTIALCONTENT] then
     begin
       result := Http.Http.Content;
       if outHeaders <> nil then
@@ -4086,9 +4086,9 @@ var
   tmp: RawByteString;
 begin
   // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHttp
-  result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
-  Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
-  Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
+  result         := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
+  Header         := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
+  Encoding       := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
   AcceptEncoding := InternalGetInfo(HTTP_QUERY_ACCEPT_ENCODING);
   // retrieve received content (if any)
   Read := 0;

@@ -488,7 +488,7 @@ type
 
   /// abstract parent class to implement a HTTP server
   // - do not use it, but rather THttpServer/THttpAsyncServer or THttpApiServer
-  THttpServerGeneric = class(TNotifiedThread)
+  THttpServerGeneric = class(TLoggedThread)
   protected
     fShutdownInProgress, fFavIconRouted: boolean;
     fOptions: THttpServerOptions;
@@ -542,7 +542,8 @@ type
   public
     /// initialize the server instance
     constructor Create(const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions); reintroduce; virtual;
+      const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions;
+      aLog: TSynLogClass); reintroduce; virtual;
     /// release all memory and handlers used by this server
     destructor Destroy; override;
     /// specify URI routes for internal URI rewrites or callback execution
@@ -1094,10 +1095,10 @@ type
     // - this constructor won't actually do the port binding, which occurs in
     // the background thread: caller should therefore call WaitStarted after
     // THttpServer.Create()
-    constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-      ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
-      ProcessOptions: THttpServerOptions = []); reintroduce; virtual;
+    constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
+      KeepAliveTimeOut: integer = 30000; ProcessOptions: THttpServerOptions = [];
+      aLog: TSynLogClass = nil); reintroduce; virtual;
     /// defines the WebSockets protocols to be used for this Server
     // - this default implementation will raise an exception
     // - returns the associated PWebSocketProcessSettings reference on success
@@ -1313,7 +1314,7 @@ type
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
     /// server main loop - don't change directly
-    procedure Execute; override;
+    procedure DoExecute; override;
     /// this method is called on every new client connection, i.e. every time
     // a THttpServerResp thread is created with a new incoming socket
     procedure OnConnect; virtual;
@@ -1332,7 +1333,7 @@ type
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
       ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
-      ProcessOptions: THttpServerOptions = []); override;
+      ProcessOptions: THttpServerOptions = []; aLog: TSynLogClass = nil); override;
     /// release all memory and handlers
     destructor Destroy; override;
     /// low-level callback called before OnBeforeBody and allow quick execution
@@ -2036,7 +2037,7 @@ type
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
-    procedure Execute; override;
+    procedure DoExecute; override;
     /// retrieve flags for SendHttpResponse
    // - if response content type is not STATICFILE_CONTENT_TYPE
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; virtual;
@@ -2053,8 +2054,8 @@ type
     // order to start the server
     constructor Create(QueueName: SynUnicode = '';
       const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;
-      const ProcessName: RawUtf8 = ''; ProcessOptions: THttpServerOptions = []);
-        reintroduce;
+      const ProcessName: RawUtf8 = ''; ProcessOptions: THttpServerOptions = [];
+      aLog: TSynLogClass = nil); reintroduce;
     /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); virtual;
@@ -3350,7 +3351,8 @@ end;
 { THttpServerGeneric }
 
 constructor THttpServerGeneric.Create(const OnStart, OnStop: TOnNotifyThread;
-  const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions);
+  const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions;
+  aLog: TSynLogClass);
 begin
   fOptions := ProcessOptions; // should be set before SetServerName
   SetServerName('mORMot2 (' + OS_TEXT + ')');
@@ -4031,7 +4033,7 @@ end;
 constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  ProcessOptions: THttpServerOptions);
+  ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 begin
   fSockPort := aPort;
   fCompressGz := -1;
@@ -4040,7 +4042,7 @@ begin
   fOnThreadStart := OnStart;
   SetOnTerminate(OnStop);
   fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
-  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
+  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions, aLog);
 end;
 
 function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
@@ -4486,7 +4488,7 @@ end;
 constructor THttpServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  ProcessOptions: THttpServerOptions);
+  ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 begin
   if fThreadPool <> nil then
     fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
@@ -4497,7 +4499,7 @@ begin
     fSocketClass := THttpServerSocket;
   fServerSendBufferSize := 256 shl 10; // 256KB seems fine on Windows + POSIX
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, ProcessOptions);
+    KeepAliveTimeOut, ProcessOptions, aLog);
   if hsoBan40xIP in ProcessOptions then
     fBanned := THttpAcceptBan.Create;
   if ServerThreadPoolCount > 0 then
@@ -4590,7 +4592,7 @@ begin
   result := fServerConnectionActive;
 end;
 
-procedure THttpServer.Execute;
+procedure THttpServer.DoExecute;
 var
   cltsock: TNetSocket;
   cltaddr: TNetAddr;
@@ -4601,8 +4603,6 @@ var
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
-  SetCurrentThreadName('=httpA-%', [fSockPort]);
-  NotifyThreadStart(self);
   bansec := 0;
   // main server process loop
   try
@@ -4728,7 +4728,6 @@ begin
   fSafe.Lock;
   fExecuteState := esFinished;
   fSafe.UnLock;
-  TSynLog.Add.NotifyThreadEnded;
 end;
 
 procedure THttpServer.OnConnect;
@@ -5290,8 +5289,10 @@ procedure THttpServerResp.Execute;
 
 var
   netsock: TNetSocket;
+  logclass: TSynLogClass;
 begin
   SetCurrentThreadName('=conn-%', [fServerSock.RemoteConnectionID]);
+  logclass := fServer.LogClass;
   fServer.NotifyThreadStart(self);
   try
     try
@@ -5337,7 +5338,7 @@ begin
     on Exception do
       ; // just ignore unexpected exceptions here, especially during clean-up
   end;
-  TSynLog.Add.NotifyThreadEnded;
+  logclass.Add.NotifyThreadEnded; // manual TSynThread notification
 end;
 
 
@@ -6219,8 +6220,8 @@ begin
   if fServerTls.Enabled or
      (pcoSelfSignedHttps in fSettings.Options) then
     include(opt, hsoEnableTls);
-  fHttpServer := aHttpServerClass.Create(aIP, nil,
-    fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
+  fHttpServer := aHttpServerClass.Create(aIP, nil, nil, 'PeerCache',
+    aHttpServerThreadCount, 30000, opt, fLog);
   if aHttpServerClass.InheritsFrom(THttpServerSocketGeneric) then
   begin
     srv := fHttpServer as THttpServerSocketGeneric;
@@ -7524,12 +7525,13 @@ end;
 
 constructor THttpApiServer.Create(QueueName: SynUnicode;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-  ProcessOptions: THttpServerOptions);
+  ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 var
   binding: HTTP_BINDING_INFO;
 begin
   SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA)); // should be done 1st
-  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions + [hsoCreateSuspended]);
+  inherited Create(OnStart, OnStop, ProcessName,
+    ProcessOptions + [hsoCreateSuspended], aLog);
   fOptions := ProcessOptions;
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
@@ -7581,7 +7583,7 @@ begin
   SetRemoteConnIDHeader(From.fRemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
   inherited Create(From.fOnThreadStart, From.fOnThreadTerminate,
-    From.fProcessName, From.fOptions - [hsoCreateSuspended]);
+    From.fProcessName, From.fOptions - [hsoCreateSuspended], fLogClass);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
@@ -7673,7 +7675,7 @@ const
 var
   global_verbs: TVerbText; // to avoid memory allocation on Delphi
 
-procedure THttpApiServer.Execute;
+procedure THttpApiServer.DoExecute;
 var
   req: PHTTP_REQUEST;
   reqid: HTTP_REQUEST_ID;
@@ -7871,8 +7873,6 @@ begin
     exit;
   ctxt := nil;
   try
-    // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
-    NotifyThreadStart(self);
     // reserve working buffers
     SetLength(heads, 64);
     SetLength(respbuf, SizeOf(HTTP_RESPONSE));
