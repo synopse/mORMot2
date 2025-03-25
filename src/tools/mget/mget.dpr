@@ -165,7 +165,6 @@ begin
   if p.Log <> nil then
     with p.Log.Family do
     begin
-      Level := LOG_VERBOSE;
       if logfolder <> '' then
       begin
         PerThreadLog := ptIdentifiedInOneFile;
@@ -176,6 +175,7 @@ begin
         LogCompressAlgo := AlgoGZFast; // rotate as mget.1.gz every 2MB
         DestinationPath := EnsureDirectoryExists(logfolder);
       end;
+      Level := LOG_VERBOSE; // should be set last
     end;
 end;
 

@@ -285,7 +285,7 @@ begin
   end
   else
     f.HighResolutionTimestamp := true;
-  f.Level := fLog;
+  f.Level := fLog; // should be set last if exception interception is needed
 end;
 
 

@@ -2525,7 +2525,7 @@ begin
   if PSockAddr(@Addr)^.sa_family = AF_INET then
     mormot.net.sock.IP4Short(@PSockAddr(@Addr)^.sin_addr, result)
   else
-    result[0] := #0; // AF_INET6 or AF_UNIX return 0
+    result[0] := #0; // AF_INET6 or AF_UNIX return ''
 end;
 
 function TNetAddr.IPShort(withport: boolean): ShortString;

@@ -1652,7 +1652,6 @@ begin
   RunFromSynTests := true; // set mormot.core.os.pas global flag
   with TSynLogTestLog.Family do
   begin
-    Level := withLogs;
     PerThreadLog := ptIdentifiedInOneFile;
     HighResolutionTimestamp := not (tcoLogNotHighResolution in options);
     if (tcoLogVerboseRotate in options) and
@@ -1663,6 +1662,7 @@ begin
     end;
     if tcoLogInSubFolder in options then
       DestinationPath := EnsureDirectoryExists([Executable.ProgramFilePath, 'log']);
+    Level := withLogs; // better be set last
   end;
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
