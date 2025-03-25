@@ -219,8 +219,10 @@ type
     aplDebug);
 
 const
-  /// up to 16 TSynLogFamily, i.e. TSynLog sub-classes can be defined
-  MAX_SYNLOGFAMILY = 16;
+  /// up to 7 TSynLogFamily, i.e. TSynLog sub-classes can be defined
+  MAX_SYNLOGFAMILY = 7;
+  /// up to 64K threads per TSynLog instance
+  MAX_SYNLOGTHREADS = 65500;
 
   /// constant with all TSynLogFamily.Level items, as set by LOG_VERBOSE
   LOG_ALL = [succ(sllNone) .. high(TSynLogLevel)];
@@ -475,6 +477,7 @@ type
   /// an exception which wouldn't be logged and intercepted by this unit
   // - only this exact class will be recognized by TSynLog: inheriting it
   // will trigger the interception, as any other regular exception
+  // - you may consider also TSynLog.Family.ExceptionIgnore.Add()
   ESynLogSilent = class(ESynException);
 
   {$M+}
@@ -822,7 +825,7 @@ type
     property SynLogClassName: string
       read GetSynLogClassName;
     /// index in global SynLogFileFamily[] and PerThreadInfo.FileLookup[] lists
-    // - value is always < MAX_SYNLOGFAMILY, i.e. in 0 .. 15 range
+    // - value is always < MAX_SYNLOGFAMILY, i.e. in 0 .. 6 range
     property Ident: byte
       read fIdent;
     /// the current level of logging information for this family
@@ -1020,12 +1023,11 @@ type
   end;
   PSynLogThreadRecursion = ^TSynLogThreadRecursion;
 
-  /// an array to all available per-thread TSynLog instances
-  TSynLogFileLookup = array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
-
   /// thread-specific internal threadvar definition used for fast lookup
+  // - consumes 32/64 bytes per thread on CPU32/CPU64
   TSynLogPerThreadInfo = record
-    /// 0 if void, or fThreadContexts[] index + 1
+    /// implements TSynLogFamily.PerThreadLog = ptIdentifiedInOneFile option
+    // - 0 if void (e.g. at startup), or TSynLog.fThreadContexts[] index + 1
     Index: HalfUInt;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
@@ -1033,7 +1035,7 @@ type
     {$endif NOEXCEPTIONINTERCEPT}
     /// each thread can access to its own TSynLog instance
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
-    FileLookup: TSynLogFileLookup;
+    FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
   end;
   PSynLogPerThreadInfo = ^TSynLogPerThreadInfo;
 
@@ -1127,7 +1129,7 @@ type
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogLevel);
     function GetThreadContext: PSynLogThreadContext;
-      {$ifdef FPC}inline;{$endif} // Delphi can't access a threadvar
+      {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
     procedure GetThreadContextAndDisableExceptions;
       {$ifdef HASINLINE}inline;{$endif}
     function InitThreadContext: PSynLogThreadContext;
@@ -4520,7 +4522,11 @@ begin
       // we need a new entry in the internal list
       ndx := fThreadContextCount;
       if ndx >= length(fThreadContexts) then
-        SetLength(fThreadContexts, ndx + 128);
+        if ndx >= MAX_SYNLOGTHREADS then
+          ESynLogException.RaiseUtf8('%.InitThreadContext: too many threads ' +
+            '= % - ensure %.NotifyThreadEnded is called', [self, ndx, self])
+        else
+          SetLength(fThreadContexts, MinPtrInt(NextGrow(ndx), MAX_SYNLOGTHREADS));
       inc(ndx);
       fThreadContextCount := ndx;
     end;
@@ -4671,7 +4677,7 @@ begin
   if aFamily = nil then
     aFamily := Family;
   fFamily := aFamily;
-  SetLength(fThreadContexts, 128); // generous initial
+  SetLength(fThreadContexts, 128); // generous initial size
 end;
 
 destructor TSynLog.Destroy;
