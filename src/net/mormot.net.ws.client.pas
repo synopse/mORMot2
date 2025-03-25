@@ -94,11 +94,11 @@ type
 
   /// WebSockets processing thread used on client side
   // - will handle any incoming callback
-  TWebSocketProcessClientThread = class(TSynThread)
+  TWebSocketProcessClientThread = class(TLoggedThread)
   protected
     fThreadState: TWebSocketProcessClientThreadState;
     fProcess: TWebSocketProcessClient;
-    procedure Execute; override;
+    procedure DoExecute; override;
   public
     constructor Create(aProcess: TWebSocketProcessClient); reintroduce;
   end;
@@ -455,10 +455,11 @@ constructor TWebSocketProcessClientThread.Create(aProcess: TWebSocketProcessClie
 begin
   fProcess := aProcess;
   fProcess.fOwnerThread := self;
-  inherited Create({suspended=}false); // eventually launch the thread
+  inherited Create({suspended=}false, nil, nil, WebSocketLog, FormatUtf8(
+    '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]));
 end;
 
-procedure TWebSocketProcessClientThread.Execute;
+procedure TWebSocketProcessClientThread.DoExecute;
 var
   log: TSynLog;
   retry: string;
@@ -468,8 +469,6 @@ begin
   try
     fThreadState := sRun;
     maxwaitms := 10000 + Random32(5000); // wait up to 10-15 seconds pace
-    SetCurrentThreadName(
-      '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
     repeat
       // main processing loop
       log := WebSocketLog.Add;

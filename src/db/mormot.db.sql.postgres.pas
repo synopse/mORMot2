@@ -1551,7 +1551,7 @@ begin
   end;
   fProcessing := false;
   log := nil;
-  TSynLog.Add.NotifyThreadEnded;
+  SynDBLog.Add.NotifyThreadEnded;
 end;
 
 
