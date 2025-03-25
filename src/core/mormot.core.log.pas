@@ -4625,6 +4625,48 @@ begin
     LogThreadName('');
 end;
 
+function TSynLog.GetExistingThreadContext: PSynLogThreadContext;
+var
+  id: TThreadID;
+  hash, ndx: PtrUInt;
+  secondpass: boolean;
+begin // see GetThreadContext/GetThreadContextInternal/ThreadContextRehash
+  result := nil;
+  if (self = nil) or
+     (fFamily.fPerThreadLog = ptNoThreadProcess) then
+    exit;
+  id := GetCurrentThreadId;
+  if id = fThreadID then
+  begin
+    result := fThreadContext;
+    if result <> nil then
+      exit; // most obvious path
+  end;
+  result := nil;
+  secondpass := false;
+  hash := cardinal(cardinal(id) * KNUTH_HASH32_MUL) shr (32 - MAXLOGTHREADBITS);
+  repeat
+    ndx := fThreadHash[hash];
+    if ndx = 0 then
+      exit; // void slot = this thread is not there for sure
+    result := @fThreadContexts[ndx - 1];
+    if result^.ID = id then
+      exit; // we found this thread
+    // hash collision: try next slots until found or void
+    if hash = MAXLOGTHREAD - 1 then
+      if secondpass then // avoid endless loop
+        break
+      else
+      begin
+        hash := 0;
+        secondpass := true;
+      end
+    else
+      inc(hash);
+  until false;
+  result := nil;
+end;
+
 procedure TSynLog.ThreadContextRehash;
 var
   i: integer;
