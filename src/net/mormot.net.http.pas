@@ -4239,6 +4239,7 @@ begin
       Http.ContentType], self);
 end;
 
+{$I-}
 procedure THttpSocket.GetBody(DestStream: TStream);
 var
   line: RawUtf8;
@@ -4253,7 +4254,6 @@ begin
     if Http.ContentEncoding <> nil then
       EHttpSocket.RaiseUtf8('%.GetBody: % doesn''t support compression (set: %)',
         [self, DestStream, Http.ContentEncoding^.Name]);
-  {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked (RFC2616 #4.3)
   if hfTransferChunked in Http.HeaderFlags then
   begin
@@ -4324,21 +4324,23 @@ begin
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
     if SockIn <> nil then // client loop for compatibility with oldest servers
+    begin
       while not eof(SockIn^) do
       begin
         readln(SockIn^, line);
         AppendLine(RawUtf8(Http.Content), [line]);
       end;
+      CloseSockIn; // we have hfConnectionClose anyway
+    end;
     Http.ContentLength := length(Http.Content); // update Content-Length
     if DestStream <> nil then
     begin
       DestStream.WriteBuffer(pointer(Http.Content)^, Http.ContentLength);
       Http.Content := '';
     end;
-    exit;
   end;
   // optionaly uncompress content
-  if Http.ContentEncoding <> nil then
+  if Http.ContentEncoding <> nil then // DestStream=nil was ensured above
     Http.UncompressData;
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
@@ -4348,8 +4350,8 @@ begin
     if err <> 0 then
       EHttpSocket.RaiseUtf8('%.GetBody ioresult2=%', [self, err]);
   end;
-  {$I+}
 end;
+{$I+}
 
 procedure THttpSocket.HeaderAdd(const aValue: RawUtf8);
 begin
