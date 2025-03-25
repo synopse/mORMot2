@@ -6806,6 +6806,7 @@ begin
       begin
         Params.SetStep(wgsAlternateAlreadyInCache, [local]);
         fPartials.ChangeFile(Partial, local); // switch to final local file
+        localok := true;
       end
       else
         Params.SetStep(wgsAlternateWrongSizeInCache,
@@ -6858,10 +6859,16 @@ begin
         if RenameFile(Partial, ToRename) then
         begin
           Params.SetStep(wgsAlternateRename, [ToRename]);
-          if not localok then // if we can't use the cached local file
+          if not localok then
+          begin
+            // if we can't use the cached local file,
             // switch to renamed file - it will work for as long as it can
             fPartials.ChangeFile(Partial, ToRename);
-        end;
+            localok := true;
+          end;
+        end
+        else
+          Params.SetStep(wgsAlternateFailedRename, [Partial, ' into ', ToRename]);
       finally
         fPartials.Safe.WriteUnLock;
       end;

@@ -371,13 +371,14 @@ type
     wgsAlternateAlreadyInCache,
     wgsAlternateWrongSizeInCache,
     wgsAlternateCopiedInCache,
-    wgsAlternateFailedCopyInCache,
     wgsProgressive,
     wgsProgressiveFailed,
     wgsGet,
     wgsSetDate,
     wgsLastMod,
-    wgsAlternateRename);
+    wgsAlternateRename,
+    wgsAlternateFailedRename,
+    wgsAlternateFailedCopyInCache);
   /// which steps have been performed during THttpClientSocket.WGet() process
   TWGetSteps = set of TWGetStep;
 
