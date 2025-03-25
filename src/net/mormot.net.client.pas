@@ -280,10 +280,10 @@ type
     fUsed: cardinal;
     /// store (a few) partial download states
     fDownload: array of THttpPartial;
-    /// retrieve a Partial[] for a given sequence ID
+    /// retrieve a Partial[] for a given sequence ID, hash or filename
     function FromID(aID: THttpPartialID): PHttpPartial;
-    /// retrieve a Partial[] for a given hash
     function FromHash(const Hash: THashDigest): PHttpPartial;
+    function FromFile(const FileName: TFileName): PHttpPartial;
   public
     /// thread-safe access to the list of partial downloads
     // - concurrent ReadLock is used during background rfProgressiveStatic process
@@ -304,11 +304,11 @@ type
     // - caller should eventually run Safe.ReadUnLock
     function FindReadLocked(ID: THttpPartialID): TFileName;
     /// search for a given partial file name
-    function FindFile(const FileName: TFileName): boolean;
+    function HasFile(const FileName: TFileName): boolean;
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// notify a partial file name change, e.g. when download is complete
-    function ChangeFile(ID: THttpPartialID; const NewFile: TFileName): boolean;
+    function ChangeFile(const OldFile, NewFile: TFileName): boolean;
     /// fill Dest buffer from up to MaxSize bytes from Ctxt.ProgressiveID
     function ProcessBody(var Ctxt: THttpRequestContext;
       var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
@@ -2178,6 +2178,20 @@ begin
   result := nil;
 end;
 
+function THttpPartials.FromFile(const FileName: TFileName): PHttpPartial;
+var
+  i: PtrInt;
+begin
+  result := pointer(fDownload);
+  for i := 1 to length(fDownload) do
+    if (result^.ID <> 0) and // not a recycled slot
+       (result^.PartFile = FileName) then
+      exit
+    else
+      inc(result);
+  result := nil;
+end;
+
 function THttpPartials.IsVoid: boolean;
 begin
   result := (self = nil) or
@@ -2268,24 +2282,15 @@ begin
   end;
 end;
 
-function THttpPartials.FindFile(const FileName: TFileName): boolean;
-var
-  p: PHttpPartial;
-  i: integer;
+function THttpPartials.HasFile(const FileName: TFileName): boolean;
 begin
   result := false;
-  if IsVoid then
+  if IsVoid or
+     (FileName = '') then
     exit;
-  result := true;
   Safe.ReadLock;
   try
-    p := pointer(fDownload);
-    for i := 1 to length(fDownload) do
-      if (p^.ID <> 0) and
-         (p^.PartFile = FileName) then // fast enough O(n) search
-        exit
-      else
-         inc(p);
+    result := FromFile(FileName) <> nil;
   finally
     Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
@@ -2329,7 +2334,7 @@ begin
   tix := GetTickCount64 shr MilliSecsPerSecShl;
   if Ctxt.ProgressiveTix = 0 then
     Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first seen
-  // retrieve the file name to be processed
+  // retrieve the file name to be processed and access it within the read lock
   fn := FindReadLocked(Ctxt.ProgressiveID);
   if fn <> '' then
     try
@@ -2365,19 +2370,17 @@ begin
     end;
 end;
 
-function THttpPartials.ChangeFile(ID: THttpPartialID;
-  const NewFile: TFileName): boolean;
+function THttpPartials.ChangeFile(const OldFile, NewFile: TFileName): boolean;
 var
   p: PHttpPartial;
 begin
   result := false;
   if IsVoid or
-     (ID = 0) or
-     (cardinal(ID) > fLastID) then
+     (OldFile = '') then
     exit;
   Safe.WriteLock;
   try
-    p := FromID(ID);
+    p := FromFile(OldFile);
     if p <> nil then
     begin
       p^.PartFile := NewFile;
@@ -2388,7 +2391,7 @@ begin
   end;
   if Assigned(OnLog) then
     OnLog(LOG_TRACEWARNING[not result], 'ChangeFile(%,%)=%',
-      [ID, NewFile, result], self);
+      [OldFile, NewFile, result], self);
 end;
 
 function THttpPartials.Abort(ID: THttpPartialID): integer;
