@@ -6805,7 +6805,6 @@ begin
       if localsize = sourcesize then
       begin
         Params.SetStep(wgsAlternateAlreadyInCache, [local]);
-        fPartials.ChangeFile(Partial, local); // switch to final local file
         localok := true;
       end
       else
@@ -6839,7 +6838,6 @@ begin
           FileSetDateFromUnixUtc(local, UnixTimeUtc);
           inc(fTempCurrentSize, localsize);
         end;
-        fPartials.ChangeFile(Partial, local); // switch to final file in cache
       end
       else
         Params.SetStep(wgsAlternateFailedCopyInCache, [Partial, ' into ', local]);
@@ -6851,32 +6849,34 @@ begin
       'OnDownloaded: % copied % into % in %', [KBNoSpace(sourcesize),
       Partial, local, MicroSecToString(stop - start)], self);
   finally
-    // optional rename *.partial to final WGet() file name
-    if ToRename <> '' then
-    begin
-      fPartials.Safe.WriteLock; // safely move file without background access
-      try
+    fPartials.Safe.WriteLock; // safely move file without background access
+    try
+      if ToRename <> '' then
+      begin
+        // optional rename *.partial to final WGet() file name
         if RenameFile(Partial, ToRename) then
         begin
           Params.SetStep(wgsAlternateRename, [ToRename]);
           if not localok then
-          begin
-            // if we can't use the cached local file,
-            // switch to renamed file - it will work for as long as it can
-            fPartials.ChangeFile(Partial, ToRename);
-            localok := true;
-          end;
+            // if we can't use the cached local file, switch to renamed file
+            // - it will work as long as it can (usually just fine)
+            if fPartials.DoneLocked(Partial, ToRename) then
+              PartialID := 0;
         end
         else
-          Params.SetStep(wgsAlternateFailedRename, [Partial, ' into ', ToRename]);
-      finally
-        fPartials.Safe.WriteUnLock;
+          Params.SetStep(wgsAlternateFailedRename, [Partial, ' as ', ToRename]);
       end;
+      if localok then
+        fPartials.DoneLocked(Partial, local)
+      else if (PartialID <> 0) and
+              (sourcesize <> 0) then
+          fPartials.DoneLocked(PartialID);
+    finally
+      fPartials.Safe.WriteUnLock;
     end;
-    // always eventually notify or finalize any associated partial
-    if PartialID <> 0 then
-      if sourcesize = 0 then
-        OnDownloadingFailed(PartialID); // clearly something went wrong
+    if (PartialID <> 0) and
+       (sourcesize = 0) then
+      OnDownloadingFailed(PartialID); // clearly something went wrong
   end;
 end;
 
