@@ -1117,6 +1117,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextAndDisableExceptions;
       {$ifdef HASINLINE}inline;{$endif}
+    function GetExistingThreadContext: PSynLogThreadContext;
     procedure GetThreadContextInternal(id: PtrUInt);
     procedure ThreadContextRehash;
     function NewRecursion: PSynLogThreadRecursion;
@@ -4499,7 +4500,7 @@ begin
   else
     fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   // caller should always perform in its finally ... end block an eventual:
-  // fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
+  //   fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
   fExceptionIgnoreThreadVar^ := true;
   // any exception within logging process will be ignored from now on
   {$endif NOEXCEPTIONINTERCEPT}
@@ -4554,58 +4555,51 @@ const
 procedure TSynLog.GetThreadContextInternal(id: PtrUInt);
 var
   secondpass: boolean;
+  ctx: PSynLogThreadContext;
   ndx: PtrUInt;
 begin
   // method called when the thread context was changed
+  secondpass := false;
   fThreadID := TThreadID(id);
   {$ifndef NOEXCEPTIONINTERCEPT}
   fExceptionIgnoreThreadVar := @ExceptionIgnorePerThread;
   fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   {$endif NOEXCEPTIONINTERCEPT}
   if fFamily.fPerThreadLog = ptNoThreadProcess then
-    fThreadIndex := 1 // reuse the first context
+    ndx := 1 // reuse the first context
   else
   begin
     // efficient TThreadID hash on all architectures using Knuth magic number
     id := cardinal(cardinal(id) * KNUTH_HASH32_MUL) shr (32 - MAXLOGTHREADBITS);
-    // warning: hashing algorithm should match TSynLog.ThreadContextRehash below
-    ndx := fThreadHash[id];
-    // fast O(1) loookup of the associated thread context
-    if ndx <> 0 then
-    begin
+    repeat
+      // warning: hashing algorithm should match TSynLog.ThreadContextRehash below
+      ndx := fThreadHash[id];
+      // fast O(1) loookup of the associated thread context
+      if ndx = 0 then
+        break; // void slot = first time this thread is seen
       fThreadIndex := ndx;
-      fThreadContext := @fThreadContexts[ndx - 1];
-      if fThreadContext^.ID = fThreadID then
-        // ThreadID found (very likely)
-        exit;
-      // hash collision -> try next item in fThreadHash[] if possible
-      secondpass := false;
-      repeat
-        if id = MAXLOGTHREAD - 1 then
-          if secondpass then // avoid endless loop -> reuse last fThreadHash[]
-            exit
-          else
-          begin
-            id := 0;
-            secondpass := true;
-          end
+      ctx := @fThreadContexts[ndx - 1];
+      fThreadContext := ctx;
+      if ctx^.ID = fThreadID then
+        exit; // ThreadID found
+      // hash collision: try next slots until found or void
+      if id = MAXLOGTHREAD - 1 then
+        if secondpass then // avoid endless loop -> reuse last fThreadHash[]
+          exit
         else
-          inc(id);
-        ndx := fThreadHash[id];
-        if ndx = 0 then
-          break; // not known yet
-        fThreadIndex := ndx;
-        fThreadContext := @fThreadContexts[ndx - 1];
-        if fThreadContext^.ID = fThreadID then
-          exit; // found after collision
-      until false;
-    end;
+        begin
+          id := 0;
+          secondpass := true;
+        end
+      else
+        inc(id);
+    until false;
     // first time for this thread -> register into fThreadHash[id]
     if fThreadIndexReleasedCount > 0 then
     begin
       // reuse an available NotifyThreadEnded() index
       dec(fThreadIndexReleasedCount);
-      fThreadIndex := fThreadIndexReleased[fThreadIndexReleasedCount];
+      ndx := fThreadIndexReleased[fThreadIndexReleasedCount];
     end
     else
     begin
@@ -4613,16 +4607,18 @@ begin
       if fThreadContextCount >= length(fThreadContexts) then
         SetLength(fThreadContexts, fThreadContextCount + 128);
       inc(fThreadContextCount);
-      fThreadIndex := fThreadContextCount;
+      ndx := fThreadContextCount;
     end;
-    fThreadHash[id] := fThreadIndex;
+    fThreadHash[id] := ndx;
   end;
   // if we reach here, this is either the first time for this thread,
   // or we have a single context (ptNoThreadProcess) which needs to be updated
-  fThreadContext := @fThreadContexts[fThreadIndex - 1];
-  fThreadContext^.ID := fThreadID;
+  fThreadIndex := ndx;
+  ctx := @fThreadContexts[ndx - 1];
+  fThreadContext := ctx;
+  ctx^.ID := fThreadID;
   if (fFamily.fPerThreadLog = ptIdentifiedInOneFile) and
-     (fThreadContext^.ThreadName = '') and
+     (ctx^.ThreadName = '') and
      (sllInfo in fFamily.fLevel) and
      (CurrentThreadNameShort^[0] <> #0) then
     // set a default fThreadContext^.ThreadName, and log it (if not already)
