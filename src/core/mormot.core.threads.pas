@@ -1036,6 +1036,7 @@ type
     fOnThreadStart: TOnNotifyThread;
     procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
     procedure NotifyThreadStart(Sender: TSynThread);
+    procedure NotifyThreadStop(Sender: TSynThread);
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean;
@@ -1063,6 +1064,7 @@ type
     fProcessing: boolean;
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
+    procedure DoTerminate; override; // overriden for fLog.NotifyThreadEnded
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean;
@@ -3190,6 +3192,12 @@ begin
   fOnThreadTerminate := Event;
 end;
 
+procedure TNotifiedThread.NotifyThreadStop(Sender: TSynThread);
+begin
+  if Assigned(fOnThreadTerminate) then
+    fOnThreadTerminate(Sender);
+end;
+
 procedure TNotifiedThread.SetServerThreadsAffinityPerCpu(
   const log: ISynLog; const threads: TThreadDynArray);
 var
@@ -3274,10 +3282,14 @@ begin
       end;
   end;
   fProcessing := false;
+end;
+
+procedure TLoggedThread.DoTerminate;
+begin
+  inherited DoTerminate; // may call an user callback which makes TSynLog.Add()
   if fLog = nil then
     exit;
-  ilog := nil; // leave Enter() above before removing the thread from TSynLog
-  fLog.NotifyThreadEnded;
+  fLog.NotifyThreadEnded; // eventual call at the very end of the thread process
   fLog := nil;
 end;
 
