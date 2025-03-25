@@ -1783,7 +1783,6 @@ type
   THttpPeerCacheThread = class(TUdpServerThread)
   protected
     fOwner: THttpPeerCache;
-    fMsg: THttpPeerCacheMessage;
     fSent, fResponses: integer;
     fRespSafe: TLightLock;
     fResp: THttpPeerCacheMessageDynArray;
@@ -5861,15 +5860,29 @@ const
 procedure THttpPeerCacheThread.OnFrameReceived(len: integer;
   var remote: TNetAddr);
 var
-  resp: THttpPeerCacheMessage;
+  msg, resp: THttpPeerCacheMessage;
 
   procedure DoLog(const Fmt: RawUtf8; const Args: array of const);
   var
-    ip, msg: shortstring;
+    txt: shortstring;
+    us: TShort16;
+    stop: Int64;
   begin
-    remote.IPShort(ip, {port=}true);
-    FormatShort(Fmt, Args, msg);
-    fOwner.fLog.Add.Log(sllTrace, 'OnFrameReceived: % %', [ip, msg], self)
+    if (fOwner.fLog = nil) or
+       not (sllTrace in fOwner.fLog.Family.Level) then
+      exit;
+    FormatShort(Fmt, Args, txt);
+    us[0] := #0;
+    if (fOwner.fBroadcastStart <> 0) and
+       (msg.Kind in PCF_RESPONSE) then
+    begin
+      QueryPerformanceMicroSeconds(stop);
+      dec(stop, fOwner.fBroadcastStart);
+      if stop > 0 then
+        MicroSecToString(stop, us);
+    end;
+    fOwner.fLog.Add.Log(sllTrace, 'OnFrameReceived: % % %',
+      [remote.IP4Short, txt, us], self);
   end;
 
   procedure DoSendResponse;
@@ -5882,7 +5895,7 @@ var
     resp.DestIP4 := remote.IP4; // notify actual source IP (over broadcast)
     fOwner.MessageEncode(resp, frame);
     // respond on main UDP port and on broadcast (POSIX) or local (Windows) IP
-    if fMsg.Os.os = osWindows then
+    if msg.Os.os = osWindows then
     begin // local IP is good enough on Windows
       remote.SetPort(fBroadcastAddr.Port);
       sock := remote.NewSocket(nlUdp);
@@ -5896,7 +5909,7 @@ var
     res := sock.SendTo(@frame, SizeOf(frame), remote);
     sock.Close;
     if fOwner.fVerboseLog then
-      DoLog('send=% %', [ToText(res)^, ToText(resp)]);
+      DoLog('send %=%', [ToText(resp.Kind)^, ToText(res)^]);
     inc(fSent);
   end;
 
@@ -5919,45 +5932,45 @@ begin
     exit;
   end;
   // validate the input frame content
-  ok := fOwner.MessageDecode(pointer(fFrame), len, fMsg);
-  if fOwner.Check(ok, 'OnFrameReceived', fMsg) then
-    if (fMsg.Kind in PCF_RESPONSE) and    // responses are broadcasted on POSIX
-       (fMsg.DestIP4 <> fOwner.fIP4) then // will also detect any unexpected NAT
+  ok := fOwner.MessageDecode(pointer(fFrame), len, msg);
+  if fOwner.Check(ok, 'OnFrameReceived', msg) then
+    if (msg.Kind in PCF_RESPONSE) and    // responses are broadcasted on POSIX
+       (msg.DestIP4 <> fOwner.fIP4) then // will also detect any unexpected NAT
      begin
        if fOwner.fVerboseLog then
-         DoLog('ignored % %<>%', [ToText(fMsg.Kind)^,
-           IP4ToShort(@fMsg.DestIP4), IP4ToShort(@fOwner.fIP4)]);
+         DoLog('ignored % %<>%', [ToText(msg.Kind)^,
+           IP4ToShort(@msg.DestIP4), fOwner.fIpPort]);
        exit;
      end;
-  late := (fMsg.Kind in PCF_RESPONSE) and
-          (fMsg.Seq <> fBroadcastCurrentSeq);
+  late := (msg.Kind in PCF_RESPONSE) and
+          (msg.Seq <> fBroadcastCurrentSeq);
   if fOwner.fVerboseLog then
     if ok = mdOk then
-      DoLog('%%', [_LATE[late], ToText(fMsg.Kind)^])
+      DoLog('%%', [_LATE[late], ToText(msg)])
     else if ok <= mdAes then // decoding error
       DoLog('unexpected % len=% [%]',
         [ToText(ok)^, len, EscapeToShort(pointer(fFrame), len)]);
   // process the frame message
   if ok = mdOk then
-    case fMsg.Kind of
+    case msg.Kind of
       pcfPing:
         begin
-          fOwner.MessageInit(pcfPong, fMsg.Seq, resp);
+          fOwner.MessageInit(pcfPong, msg.Seq, resp);
           DoSendResponse;
         end;
       pcfRequest:
         begin
-          fOwner.MessageInit(pcfResponseNone, fMsg.Seq, resp);
-          resp.Hash := fMsg.Hash;
+          fOwner.MessageInit(pcfResponseNone, msg.Seq, resp);
+          resp.Hash := msg.Hash;
           if not (pcoNoServer in fOwner.Settings.Options) then
             if integer(fOwner.fHttpServer.ConnectionsActive) >
                         fOwner.Settings.LimitClientCount then
               resp.Kind := pcfResponseOverloaded
             else if fOwner.LocalFileName(
-                             fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
+                             msg, [], nil, @resp.Size) = HTTP_SUCCESS then
               resp.Kind := pcfResponseFull
             else if fOwner.PartialFileName(
-                             fMsg, nil, nil, @resp.Size) = HTTP_SUCCESS then
+                             msg, nil, nil, @resp.Size) = HTTP_SUCCESS then
               resp.Kind := pcfResponsePartial;
           DoSendResponse;
         end;
@@ -5967,7 +5980,7 @@ begin
         if not late then
         begin
           inc(fResponses);
-          if AddResponseAndDone(fMsg) then
+          if AddResponseAndDone(msg) then
           begin
             fBroadcastCurrentSeq := 0;   // ignore next responses
             fBroadcastEvent.SetEvent;    // notify MessageBroadcast
@@ -5980,7 +5993,8 @@ begin
     end
   else // not ok = this UDP packet is invalid
     if fOwner.fInstable <> nil then // RejectInstablePeersMin
-      fOwner.fInstable.BanIP(remote.IP4);
+      if fOwner.fInstable.BanIP(remote.IP4) then
+        DoLog('ban IP after %', [ToText(ok)^]);
 end;
 
 function SortMessagePerPriority(const VA, VB): integer;
@@ -6710,8 +6724,9 @@ begin
     result := HTTP_FORBIDDEN;
   if fVerboseLog or
      (err <> []) then
-    fLog.Add.Log(sllTrace, 'OnBeforeBody=% % % % [%]', [result, aRemoteIP,
-      aMethod, aUrl, GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err)], self);
+    fLog.Add.Log(sllTrace, 'OnBeforeBody %=% % % % [%]',
+      [aMethod, result, aRemoteIP, ToText(msg.Kind)^, aUrl,
+       GetSetNameShort(TypeInfo(TOnBeforeBodyErr), @err)], self);
 end;
 
 procedure THttpPeerCache.OnIdle(tix64: Int64);
