@@ -2373,7 +2373,7 @@ begin
   result := false;
   if IsVoid or
      (ID = 0) or
-     (cardinal(ID) >= fLastID) then
+     (cardinal(ID) > fLastID) then
     exit;
   Safe.WriteLock;
   try
@@ -2400,7 +2400,7 @@ begin
   result := 0; // returns the number of changed entries
   if IsVoid or
      (ID = 0) or
-     (cardinal(ID) >= fLastID) then
+     (cardinal(ID) > fLastID) then
     exit;
   Safe.WriteLock;
   try
