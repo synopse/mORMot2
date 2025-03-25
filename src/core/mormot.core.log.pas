@@ -1116,7 +1116,7 @@ type
     function GetThreadContext: PSynLogThreadContext;
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextAndDisableExceptions;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     function GetExistingThreadContext: PSynLogThreadContext;
     procedure GetThreadContextInternal(id: PtrUInt);
     procedure ThreadContextRehash;

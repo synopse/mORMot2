@@ -197,7 +197,7 @@ type
       {$ifdef FPC}inline;{$endif}
     /// convert an IPv4 value into text, or '' for AF_INET6 or AF_UNIX
     function IP4Short: TShort16;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// convert this address into its shortstring IPv4/IPv6 textual representation
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
