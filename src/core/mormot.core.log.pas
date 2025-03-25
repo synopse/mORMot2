@@ -4712,6 +4712,8 @@ begin
 end;
 
 procedure TSynLog.NotifyThreadEnded;
+var
+  ctx: PSynLogThreadContext;
 begin
   CurrentThreadNameShort^[0] := #0; // reset threadvar
   if (self = nil) or
@@ -4719,6 +4721,9 @@ begin
     exit; // nothing to release
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    ctx := GetExistingThreadContext;
+    if ctx = nil then
+      exit; // cleanup already done
     // reset the current thread context
     Finalize(GetThreadContext^);
     FillcharFast(fThreadContext^, SizeOf(fThreadContext^), 0);
