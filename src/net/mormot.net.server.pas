@@ -5502,6 +5502,7 @@ var
 begin
   // quickly reject any naive fuzzing attempt against length and 32-bit checksum
   result := mdLen;
+  PByte(@aMsg.Kind)^ := 255; // so that ToText(aMsg) = ToText(aMsg.Kind)^ = ''
   if aFrameLen <> PEER_CACHE_MESSAGELEN then
     exit;
   result := mdCrc;
@@ -5608,7 +5609,10 @@ begin
   try
     // compute the call parameters and the request bearer
     IP4Text(@aResp.IP4, ip);
-    fLog.Add.Log(sllDebug, 'OnDownload: request %:% %', [ip, fPort, aUrl], self);
+    fLog.Add.Log(LOG_DEBUGERROR[ip = ''], 'OnDownload: request %:% %',
+      [ip, fPort, aUrl], self);
+   if ip = '' then
+      exit; // clearly invalid (sllError logged above)
     aResp.Kind := pcfBearer; // authorize OnBeforeBody with response message
     MessageEncodeBearer(aResp, head);
     // ensure we have the right peer
@@ -5907,6 +5911,7 @@ begin
      (remote.IP4 = fOwner.fIP4) then // Windows broadcasts to self :)
     exit;
   // RejectInstablePeersMin option: validate the input frame IP
+  PByte(@msg.Kind)^ := 255; // ToText(msg.Kind)^ = ''
   if fOwner.fInstable.IsBanned(remote) then
   begin
     if fOwner.fVerboseLog then
@@ -6277,30 +6282,16 @@ function THttpPeerCache.Check(Status: THttpPeerCryptMessageDecode;
   const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
 var
   msgtxt: shortstring;
-  microsec: TShort16;
-  stop: Int64;
 begin
   result := (Status = mdOk);
-  if fLog <> nil then
-    with fLog.Family do
-      if sllTrace in Level then
-      begin
-        msgtxt[0] := #0;
-        if fVerboseLog and
-           (Status > mdAes) then // decrypt ok: log the content
-          MsgToShort(Msg, msgtxt);
-        microsec[0] := #0;
-        if fBroadcastStart <> 0 then
-        begin
-          QueryPerformanceMicroSeconds(stop);
-          dec(stop, fBroadcastStart);
-          if stop > 0 then
-            MicroSecToString(stop, microsec);
-        end;
-        Add.Log(sllTrace, '% decode=% #%<=#% % %',
-          [Ctxt, ToText(Status)^, CardinalToHexShort(fFrameSeqLow),
-           CardinalToHexShort(fFrameSeq), microsec, msgtxt], self);
-      end;
+  if result or
+     (fLog = nil) or
+     not (sllTrace in fLog.Family.Level) then
+    exit;
+  msgtxt[0] := #0;
+  if Status > mdAes then // decrypt ok but wrong content: log msg
+    MsgToShort(Msg, msgtxt);
+  fLog.Add.Log(sllTrace, '%: decode=% %', [Ctxt, ToText(Status)^, msgtxt], self);
 end;
 
 function THttpPeerCache.ComputeFileName(const aHash: THashDigest): TFileName;
@@ -6663,6 +6654,7 @@ begin
   // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code to reject the request immediately as a "TeaPot", close the
   // socket and ban this IP for a few seconds at accept() level
+  PByte(@msg.Kind)^ := 255; // ToText(msg.Kind)^ = ''
   err := [];
   if fSettings = nil then
     include(err, eShutdown);
@@ -6774,7 +6766,7 @@ begin
      (pcoNoServer in fSettings.Options) then
     exit;
   sourcesize := FileSize(Partial);
-  localok := false; // for proper PartialID cleanup on abort
+  localok := false; // for proper THttpPartials cleanup on abort
   try
     // the supplied downloaded source file should be big enough
     if (sourcesize = 0) or // paranoid
@@ -6891,7 +6883,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownloading') then
     result := 0
   else
-    result := fPartials.Add(Partial, ExpectedFullSize, h);
+    result := fPartials.Add(Partial, ExpectedFullSize, h, {http=}nil);
 end;
 
 function THttpPeerCache.PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -7366,6 +7358,9 @@ var
   algoext: PUtf8Char;
   algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
 begin
+  result[0] := #0;
+  if msg.Kind > high(msg.Kind) then
+    exit; // clearly invalid message
   algoext := nil;
   algohex[0] := #0;
   if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
