@@ -894,7 +894,7 @@ type
     fKeepAliveClient: boolean;
     fAuthorized: THttpServerRequestAuthentication;
     fRequestFlags: THttpServerRequestFlags;
-    fAuthSec: cardinal;
+    fAuthTix32: cardinal; // 403 reject for 4 seconds, then 401 and retry login
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fResponseHeader: RawUtf8;
     // from TSynThreadPoolTHttpServer.Task
@@ -5055,7 +5055,7 @@ begin
         else
         begin
           tix32 := mormot.core.os.GetTickCount64 shr 12;
-          if fAuthSec = tix32 then
+          if fAuthTix32 = tix32 then
           begin
             // 403 HTTP error if not authorized (and close connection)
             fServer.SetRejectInCommandUri(Http, 0, HTTP_FORBIDDEN);
@@ -5066,7 +5066,7 @@ begin
           else
             // 401 HTTP error to ask for credentials and renew after 4 seconds
             // (ConnectionID may have changed in-between)
-            fAuthSec := tix32;
+            fAuthTix32 := tix32;
         end;
       end;
       // allow OnBeforeBody callback for quick response
