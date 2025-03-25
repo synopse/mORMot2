@@ -195,6 +195,9 @@ type
     // - returns 0 (i.e. 0.0.0.0) for AF_INET6 or AF_UNIX
     function IP4: cardinal;
       {$ifdef FPC}inline;{$endif}
+    /// convert an IPv4 value into text, or '' for AF_INET6 or AF_UNIX
+    function IP4Short: TShort16;
+      {$ifdef HASINLINE} inline; {$endif}
     /// convert this address into its shortstring IPv4/IPv6 textual representation
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2511,11 +2514,18 @@ end;
 
 function TNetAddr.IP4: cardinal;
 begin
-  with PSockAddr(@Addr)^ do
-    if sa_family = AF_INET then
-      result := cardinal(sin_addr) // may return cLocalhost32 = 127.0.0.1
-    else
-      result := 0; // AF_INET6 or AF_UNIX return 0
+  if PSockAddr(@Addr)^.sa_family = AF_INET then
+    result := PCardinal(@PSockAddr(@Addr)^.sin_addr)^ // may be cLocalhost32
+  else
+    result := 0; // AF_INET6 or AF_UNIX return 0
+end;
+
+function TNetAddr.IP4Short: TShort16;
+begin
+  if PSockAddr(@Addr)^.sa_family = AF_INET then
+    mormot.net.sock.IP4Short(@PSockAddr(@Addr)^.sin_addr, result)
+  else
+    result[0] := #0; // AF_INET6 or AF_UNIX return 0
 end;
 
 function TNetAddr.IPShort(withport: boolean): ShortString;
@@ -2528,7 +2538,7 @@ begin
   result[0] := #0;
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
+      mormot.net.sock.IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
     AF_INET6:
       IP6Short(@PSockAddrIn6(@Addr)^.sin6_addr, result);
     {$ifdef OSPOSIX}
