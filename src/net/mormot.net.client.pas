@@ -4944,7 +4944,7 @@ begin
   if u.From(Uri) then
     result := Request(u, Method, Header, Data, DataMimeType, KeepAlive)
   else
-    result := HTTP_NOTFOUND;
+    result := HTTP_CLIENTERROR; // not 404 because no server was involved
   fStatus := result;
 end;
 
