@@ -265,7 +265,7 @@ type
     PartFile: TFileName;
     /// up to 512-bit of raw binary hash, precessed by hash algo byte
     Digest: THashDigest;
-    /// the HTTP requests which are waiting for data on this partial download
+    /// background HTTP requests which are waiting for data on this download
     HttpContext: array of PHttpRequestContext;
   end;
   PHttpPartial = ^THttpPartial;
@@ -280,6 +280,8 @@ type
     fUsed: cardinal;
     /// store (a few) partial download states
     fDownload: array of THttpPartial;
+    procedure ReleaseSlot(p: PHttpPartial);
+    procedure DoLog(const Fmt: RawUtf8; const Args: array of const);
     /// retrieve a Partial[] for a given sequence ID, hash or filename
     function FromID(aID: THttpPartialID): PHttpPartial;
     function FromHash(const Hash: THashDigest): PHttpPartial;
@@ -307,11 +309,15 @@ type
     function HasFile(const FileName: TFileName): boolean;
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
-    /// notify a partial file name change, e.g. when download is complete
-    function ChangeFile(const OldFile, NewFile: TFileName): boolean;
     /// fill Dest buffer from up to MaxSize bytes from Ctxt.ProgressiveID
     function ProcessBody(var Ctxt: THttpRequestContext;
       var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
+    /// notify a partial file name change, when download is complete
+    // - should be nested by caller within Safe.WriteLock / Safe.WriteUnLock
+    function DoneLocked(const OldFile, NewFile: TFileName): boolean; overload;
+    /// notify a partial file download finalization from its ID
+    // - should be nested by caller within Safe.WriteLock / Safe.WriteUnLock
+    function DoneLocked(ID: THttpPartialID): boolean; overload;
     /// notify a partial file download failure, e.g. on invalid hash
     // - returns the number of removed HTTP requests
     function Abort(ID: THttpPartialID): integer;
@@ -2200,6 +2206,16 @@ begin
             (fUsed = 0);
 end;
 
+procedure THttpPartials.DoLog(const Fmt: RawUtf8; const Args: array of const);
+var
+  txt: shortstring;
+begin
+  if not Assigned(OnLog) then
+    exit;
+  FormatShort(Fmt, Args, txt);
+  OnLog(sllTrace, '% used=%/%', [txt, fUsed, length(fDownload)], self);
+end;
+
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
   const Hash: THashDigest; Http: PHttpRequestContext): THttpPartialID;
 var
@@ -2215,13 +2231,12 @@ begin
     inc(fLastID);
     inc(fUsed);
     result := fLastID; // returns 1,2,3... THttpPartialID (process specific)
-    n := length(fDownload);
     p := FromID(0); // try to reuse an empty slot
     if p = nil then
     begin
+      n := length(fDownload);
       SetLength(fDownload, n + 1); // need a new slot
       p := @fDownload[n];
-      inc(n); // for OnLog() below
     end;
     p^.ID := result;
     p^.Digest := Hash;
@@ -2236,9 +2251,7 @@ begin
   finally
     Safe.WriteUnLock;
   end;
-  if Assigned(OnLog) then
-    OnLog(sllTrace, 'Add(%,%)=% used=%/%',
-      [Partial, ExpectedFullSize, result, Fused, n], self);
+  DoLog('Add(%,%)=%', [Partial, ExpectedFullSize, result]);
 end;
 
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
@@ -2296,7 +2309,6 @@ begin
   finally
     Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
-  result := false;
 end;
 
 function THttpPartials.Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
@@ -2336,43 +2348,56 @@ begin
   tix := GetTickCount64 shr MilliSecsPerSecShl;
   if Ctxt.ProgressiveTix = 0 then
     Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first seen
-  // retrieve the file name to be processed and access it within the read lock
+  // retrieve the file name to be processed
   fn := FindReadLocked(Ctxt.ProgressiveID);
-  if fn <> '' then
+  if fn = '' then // e.g. after THttpPartials.DoneLocked()
+    exit;
+  // process this file within the read lock
+  try
+    src := FileOpen(fn, fmOpenReadShared); // partial file access
+    if ValidHandle(src) then
     try
-      src := FileOpen(fn, fmOpenReadShared); // partial file access
-      if ValidHandle(src) then
-      try
-        // fill up to MaxSize bytes of src file into Dest buffer
-        result := Ctxt.ProcessBody(src, Dest, MaxSize);
-        case result of
-          hrpSend:
-            Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset
-          hrpWait:
-            if tix > Ctxt.ProgressiveTix then
-            begin
-              if Assigned(OnLog) then
-                OnLog(sllWarning, 'ProcessBody: ProgressiveID=% timeout % at %/%',
-                  [Ctxt.ProgressiveID, fn, FileSize(src), Ctxt.ContentLength], self);
-              result := hrpAbort; // never wait forever: abort after 10 seconds
-            end;
-        else // hrpAbort (hrpDone in THttpServerSocketGeneric.DoProcessBody)
-          if Assigned(OnLog) then
-            OnLog(sllTrace, 'ProcessBody=% id=% fn=%',
-              [ToText(result)^, Ctxt.ProgressiveID], self);
-        end;
-      finally
-        FileClose(src); // the lock protects the file itself
-      end
-      else if Assigned(OnLog) then
-        OnLog(sllLastError, 'ProcessBody: ProgressiveID=% FileOpen % failed',
-          [Ctxt.ProgressiveID, fn], self);
+      // fill up to MaxSize bytes of src file into Dest buffer
+      result := Ctxt.ProcessBody(src, Dest, MaxSize);
+      case result of
+        hrpSend:
+          Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset
+        hrpWait:
+          if tix > Ctxt.ProgressiveTix then
+          begin
+            if Assigned(OnLog) then
+              OnLog(sllWarning, 'ProcessBody: ProgressiveID=% timeout % at %/%',
+                [Ctxt.ProgressiveID, fn, FileSize(src), Ctxt.ContentLength], self);
+            result := hrpAbort; // never wait forever: abort after 10 seconds
+          end;
+      else // hrpAbort (hrpDone in THttpServerSocketGeneric.DoProcessBody)
+        if Assigned(OnLog) then
+          OnLog(sllTrace, 'ProcessBody=% id=% fn=%',
+            [ToText(result)^, Ctxt.ProgressiveID], self);
+      end;
     finally
-      Safe.ReadUnLock;
-    end;
+      FileClose(src); // the lock protects the file itself
+    end
+    else if Assigned(OnLog) then
+      OnLog(sllLastError, 'ProcessBody: ProgressiveID=% FileOpen % failed',
+        [Ctxt.ProgressiveID, fn], self);
+  finally
+    Safe.ReadUnLock;
+  end;
 end;
 
-function THttpPartials.ChangeFile(const OldFile, NewFile: TFileName): boolean;
+procedure THttpPartials.ReleaseSlot(p: PHttpPartial);
+begin
+  p^.ID := 0; // reuse this slot at next Add()
+  p^.PartFile := '';
+  p^.HttpContext := nil;
+  dec(fUsed);
+  if (fUsed = 0) and
+     (length(fDownload) > 16) then
+    fDownload := nil; // worth releasing the memory
+end;
+
+function THttpPartials.DoneLocked(const OldFile, NewFile: TFileName): boolean;
 var
   p: PHttpPartial;
 begin
@@ -2380,25 +2405,41 @@ begin
   if IsVoid or
      (OldFile = '') then
     exit;
-  Safe.WriteLock;
-  try
-    p := FromFile(OldFile);
-    if p <> nil then
-    begin
-      p^.PartFile := NewFile;
-      result := true;
-    end;
-  finally
-    Safe.WriteUnLock;
+  p := FromFile(OldFile);
+  if p <> nil then
+  begin
+    result := true;
+    if p^.HttpContext = nil then
+      ReleaseSlot(p)
+    else
+      p^.PartFile := NewFile; // notify any pending background process
   end;
-  if Assigned(OnLog) then
-    OnLog(LOG_TRACEWARNING[not result], 'ChangeFile(%,%)=%',
-      [OldFile, NewFile, result], self);
+  DoLog('Done(%,%)=%', [OldFile, NewFile, result]);
+end;
+
+function THttpPartials.DoneLocked(ID: THttpPartialID): boolean;
+var
+  p: PHttpPartial;
+begin
+  result := false;
+  if IsVoid or
+     (ID = 0) or
+     (cardinal(ID) > fLastID) then
+    exit;
+  p := FromID(ID);
+  if p <> nil then
+  begin
+    result := true;
+    if p^.HttpContext = nil then
+      ReleaseSlot(p); // associated to no background download
+    // keep p^.PartFile which may still be available
+  end;
+  DoLog('Done(%)=%', [ID, result]);
 end;
 
 function THttpPartials.Abort(ID: THttpPartialID): integer;
 var
-  i, n: PtrInt;
+  i: PtrInt;
   p: PHttpPartial;
 begin
   // called on aborted partial retrieval
@@ -2412,8 +2453,6 @@ begin
     p := FromID(ID);
     if p <> nil then
     begin
-      p^.ID := 0; // reuse this slot at next Add()
-      p^.PartFile := '';
       if p^.HttpContext <> nil then
       begin
         for i := 0 to length(p^.HttpContext) - 1 do
@@ -2427,23 +2466,17 @@ begin
           end;
         p^.HttpContext := nil;
       end;
-      dec(fUsed);
-      if fUsed = 0 then
-        fDownload := nil;
+      ReleaseSlot(p);
     end;
-    n := length(fDownload);
   finally
     Safe.WriteUnLock;
   end;
-  if Assigned(OnLog) then
-    OnLog(LOG_TRACEWARNING[p = nil], 'Abort(%)=% used=%/%',
-      [ID, result, fUsed, n], self);
+  DoLog('Abort(%)=%', [ID, result]);
 end;
 
 procedure THttpPartials.Remove(Sender: PHttpRequestContext);
 var
   p: PHttpPartial;
-  n: integer;
 begin
   // nominal case, when the partial retrieval has eventually successed
   if IsVoid or
@@ -2452,29 +2485,17 @@ begin
     exit;
   Safe.WriteLock;
   try
-    n := length(fDownload);
     p := FromID(Sender.ProgressiveID);
     if p <> nil then
     begin
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
-      begin
-        p^.ID := 0; // reuse this slot at next Add()
-        dec(fUsed);
-        if (fUsed = 0) and
-           (n > 16) then // worth releasing the memory
-        begin
-          fDownload := nil;
-          n := 0;
-        end;
-      end;
+        ReleaseSlot(p);
     end;
   finally
     Safe.WriteUnLock;
   end;
-  if Assigned(OnLog) then
-    OnLog(LOG_TRACEWARNING[p = nil], 'Remove(%) used=%/%',
-      [Sender.ProgressiveID, fUsed, n], self);
+  DoLog('Remove(%)=%', [Sender.ProgressiveID, (p <> nil)]);
 end;
 
 
