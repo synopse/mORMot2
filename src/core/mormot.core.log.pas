@@ -4494,15 +4494,17 @@ begin
   id := GetCurrentThreadId;
   // most of the time, the thread didn't change so this method is inlined
   if id <> fThreadID then
-    // quickly switch fThreadContext/fThreadIndex to the new thread
-    GetThreadContextInternal(PtrUInt(id))
   {$ifndef NOEXCEPTIONINTERCEPT}
-  else
-    fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
+    // quickly switch fThreadContext/fThreadIndex to the new thread
+    GetThreadContextInternal(PtrUInt(id));
+  fExceptionIgnoreThreadVar := @ExceptionIgnorePerThread;
+  fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   // caller should always perform in its finally ... end block an eventual:
   //   fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
   fExceptionIgnoreThreadVar^ := true;
   // any exception within logging process will be ignored from now on
+  {$else}
+    GetThreadContextInternal(PtrUInt(id));
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
@@ -4561,10 +4563,6 @@ begin
   // method called when the thread context was changed
   secondpass := false;
   fThreadID := TThreadID(id);
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  fExceptionIgnoreThreadVar := @ExceptionIgnorePerThread;
-  fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
-  {$endif NOEXCEPTIONINTERCEPT}
   if fFamily.fPerThreadLog = ptNoThreadProcess then
     ndx := 1 // reuse the first context
   else
