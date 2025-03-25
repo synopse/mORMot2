@@ -6624,7 +6624,7 @@ begin
           (waoTryAllPeers in Params.AlternateOptions)) then
     exit;
   // try up to the best TryAllPeersCount peers of our broadcast response
-  for i := 1 to MinPtrInt(length(resp), fSettings.TryAllPeersCount) do
+  for i := 1 to MinPtrInt(length(resp), fSettings.TryAllPeersCount) - 1 do
     if not fInstable.IsBanned(resp[i].IP4) then // banned in-between (unlikely)
       if fClientSafe.TryLock then
       try
