@@ -484,7 +484,7 @@ type
   {$endif USE_WINIOCP}
 
   /// used to implement a thread poll to process TAsyncConnection instances
-  TAsyncConnectionsThread = class(TSynThread)
+  TAsyncConnectionsThread = class(TLoggedThread)
   protected
     fOwner: TAsyncConnections;
     fProcess: TAsyncConnectionsThreadProcess;
@@ -492,7 +492,6 @@ type
     fWakeUpFromSlowProcess: boolean;
     fExecuteState: THttpServerExecuteState;
     fIndex: integer;
-    fName: RawUtf8;
     fCustomObject: TObject;
     {$ifndef USE_WINIOCP}
     fEvent: TSynEvent;
@@ -501,7 +500,7 @@ type
     function GetNextRead(out notif: TPollSocketResult): boolean;
     procedure ReleaseEvent; {$ifdef HASINLINE} inline; {$endif}
     {$endif USE_WINIOCP}
-    procedure Execute; override;
+    procedure DoExecute; override;
   public
     /// initialize the thread
     constructor Create(aOwner: TAsyncConnections;
@@ -521,9 +520,6 @@ type
     /// when used as a thread pool, the number of this thread
     property Index: integer
       read fIndex;
-    /// the low-level thread name
-    property Name: RawUtf8
-      read fName;
   end;
   PAsyncConnectionsThread = ^TAsyncConnectionsThread;
 
@@ -2439,7 +2435,9 @@ begin
   fEvent := TSynEvent.Create;
   {$endif USE_WINIOCP}
   fOnThreadTerminate := fOwner.fOnThreadTerminate;
-  inherited Create({suspended=}false);
+  inherited Create({suspended=}false, fOwner.fOnThreadStart,
+    fOwner.fOnThreadTerminate, fOwner.fLogClass, FormatUtf8('R%:%',
+    [fIndex, SplitRight(fOwner.fProcessName, '=')]));
 end;
 
 destructor TAsyncConnectionsThread.Destroy;
@@ -2465,7 +2463,7 @@ end;
 function TAsyncConnectionsThread.GetNextRead(
   out notif: TPollSocketResult): boolean;
 begin
-  result := fOwner.fSockets.fRead.GetOnePending(notif, fName) and
+  result := fOwner.fSockets.fRead.GetOnePending(notif, fProcessName) and
             not Terminated;
   if result then
     if (acoThreadSmooting in fOwner.Options) and
@@ -2482,7 +2480,7 @@ end;
 
 {$endif USE_WINIOCP}
 
-procedure TAsyncConnectionsThread.Execute;
+procedure TAsyncConnectionsThread.DoExecute;
 var
   {$ifdef USE_WINIOCP}
   e: TWinIocpEvent;
@@ -2493,9 +2491,6 @@ var
   {$endif USE_WINIOCP}
   notif: TPollSocketResult;
 begin
-  FormatUtf8('R%:%', [fIndex, SplitRight(fOwner.fProcessName, '=')], fName);
-  SetCurrentThreadName('=%', [fName]);
-  fOwner.NotifyThreadStart(self);
   try
     fExecuteState := esRunning;
     // implement parallel client connections for TAsyncClient
@@ -2548,7 +2543,7 @@ begin
       case fProcess of
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
-          if fOwner.fSockets.fRead.GetOne(ms, fName, notif) then
+          if fOwner.fSockets.fRead.GetOne(ms, fProcessName, notif) then
             if not Terminated then
               fOwner.fSockets.ProcessRead(self, notif);
         atpReadPoll:
@@ -2608,12 +2603,12 @@ begin
           [self, ord(fProcess)]);
       end;
     {$endif USE_WINIOCP}
-    fOwner.DoLog(sllInfo, 'Execute: done %', [fName], self);
+    fOwner.DoLog(sllInfo, 'Execute: done %', [fProcessName], self);
   except
     on E: Exception do
       if fOwner <> nil then
         fOwner.DoLog(sllWarning, 'Execute raised a % -> terminate % thread %',
-          [PClass(E)^, fOwner.fConnectionClass, fName], self);
+          [PClass(E)^, fOwner.fConnectionClass, fProcessName], self);
   end;
   fExecuteState := esFinished;
 end;
@@ -2909,7 +2904,7 @@ begin
         with fThreads[i] do
           if fExecuteState = esRunning then
           begin
-            DoLog(sllTrace, 'Shutdown unfinished=%', [Name], self);
+            DoLog(sllTrace, 'Shutdown unfinished=%', [fProcessName], self);
             inc(n);
           end;
     until (n = 0) or
