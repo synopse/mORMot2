@@ -869,8 +869,9 @@ begin
     // create one instance of our pure socket servers
     // (on Windows, may be used as fallback if http.sys was unsuccessful)
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
-      fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, TrimU(fRestServerNames), aThreadPoolCount, 30000, hso)
+      fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(
+        fPort, HttpThreadStart, HttpThreadTerminate, TrimU(fRestServerNames),
+        aThreadPoolCount, 30000, hso, fLog)
     else
       ERestHttpServer.RaiseUtf8('%.Create(% ): unsupported %',
         [self, fRestServerNames, ToText(aUse)^]);
@@ -1518,11 +1519,8 @@ begin
   OnWSClose(Sender.Handle, Sender.GetConnectionOpaque);
 end;
 
-constructor TRestHttpServer.Create(aServer: TRestServer;
-  aDefinition: TRestHttpServerDefinition; aForcedUse: TRestHttpServerUse;
-  aWebSocketsLoopDelay: integer);
 const
-  AUTH: array[TRestHttpServerRestAuthentication] of
+  AUTH_CLASS: array[TRestHttpServerRestAuthentication] of
     TRestServerAuthenticationClass = (
     // adDefault, adHttpBasic, adWeak, adSspi
     TRestServerAuthenticationDefault,
@@ -1534,6 +1532,10 @@ const
     {$else}
     nil
     {$endif DOMAINRESTAUTH});
+
+constructor TRestHttpServer.Create(aServer: TRestServer;
+  aDefinition: TRestHttpServerDefinition; aForcedUse: TRestHttpServerUse;
+  aWebSocketsLoopDelay: integer);
 var
   a: TRestHttpServerRestAuthentication;
   P: PUtf8Char;
@@ -1580,13 +1582,13 @@ begin
   end;
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then
-    if AUTH[a] = nil then
+    if AUTH_CLASS[a] = nil then
       fLog.Add.Log(sllWarning, 'Create: Ignored unsupported',
         TypeInfo(TRestHttpServerRestAuthentication), a, self)
     else
     begin
       aServer.AuthenticationUnregisterAll;
-      aServer.AuthenticationRegister(AUTH[a]);
+      aServer.AuthenticationRegister(AUTH_CLASS[a]);
     end;
   if aDefinition.WebSocketPassword <> '' then
     WebSocketsEnable(aServer, aDefinition.PasswordPlain)^.

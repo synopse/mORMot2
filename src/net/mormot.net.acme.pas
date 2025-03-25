@@ -1319,7 +1319,7 @@ begin
   // start a basic HTTP server on port 80
   log := aLog.Enter('Create: start THttpServer on %', [p], self);
   fHttpServer := THttpServer.Create(p, nil, nil, 'Acme Server',
-    aHttpServerThreadCount, 30000, opt);
+    aHttpServerThreadCount, 30000, opt, aLog);
   // retrieve some parameters from the main HTTPS server
   if fHttpsServer <> nil then
   begin

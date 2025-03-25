@@ -5423,7 +5423,7 @@ begin
     include(hso, hsoEnableTls);
   // launch the HTTP(S) server
   fServer := THttpAsyncServer.Create(fSettings.Server.Port, nil, nil, '',
-    fSettings.Server.ThreadCount, 30000, hso);
+    fSettings.Server.ThreadCount, 30000, hso, fLog);
   if fSettings.Server.ServerName <> '' then
     fServer.ServerName := fSettings.Server.ServerName; // override 'mORMot (OS)'
   if fServer.Logger <> nil then

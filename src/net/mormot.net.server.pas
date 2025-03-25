@@ -3376,7 +3376,8 @@ begin
     if hsoTelemetryJson in fOptions then
       THttpAnalyzerPersistJson.CreateOwned(fAnalyzer);
   end;
-  inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
+  inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop,
+    aLog, ProcessName);
 end;
 
 destructor THttpServerGeneric.Destroy;

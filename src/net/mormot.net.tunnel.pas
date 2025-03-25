@@ -291,7 +291,7 @@ type
     // - if publicUri is not set, '127.0.0.1:localPort' is used, but you can
     // use a reverse proxy URI like 'publicdomain.com/websockgateway'
     constructor Create(const localPort: RawUtf8; const publicUri: RawUtf8 = '';
-      expirationMinutes: integer = 1); reintroduce;
+      expirationMinutes: integer = 1; aLog: TSynLogClass = nil); reintroduce;
     /// finalize this Relay Server
     destructor Destroy; override;
     /// generate a new WebSockets connection URI and its associated session ID
@@ -807,13 +807,14 @@ end;
 { TTunnelRelayServer }
 
 constructor TTunnelRelayServer.Create(const localPort, publicUri: RawUtf8;
-  expirationMinutes: integer);
+  expirationMinutes: integer; aLog: TSynLogClass);
 var
   uri: RawUtf8;
 begin
   fLinks := TSynDictionary.Create(TypeInfo(TTunnelRelayIDs),
     TypeInfo(TTunnelRelayLinks), false, {timeout=} expirationMinutes * 60);
-  inherited Create(localPort, nil, nil, 'relaysrv');
+  inherited Create(localPort, nil, nil, 'relaysrv',
+    {threadpool=}2, {keepalive=}30000, {options=}[], aLog);
   if publicUri = '' then
     uri := '127.0.0.1:' + localPort
   else
