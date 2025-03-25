@@ -1658,7 +1658,7 @@ begin
        (Level = LOG_VERBOSE) then
     begin
       RotateFileCount := 10;
-      RotateFileSizeKB := 100*1024; // rotate verbose logs by 100MB files
+      RotateFileSizeKB := 100 shl 10; // rotate verbose logs by 100MB files
     end;
     if tcoLogInSubFolder in options then
       DestinationPath := EnsureDirectoryExists([Executable.ProgramFilePath, 'log']);

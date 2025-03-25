@@ -3120,7 +3120,7 @@ type
   TOnRawLogException = procedure(const Ctxt: TSynLogExceptionContext);
 
 /// setup Exception interception for the whole process
-// - call RawExceptionIntercept(nil) to disable custom exception handling
+// - the first to call this procedure will be elected until the process ending
 procedure RawExceptionIntercept(const Handler: TOnRawLogException);
 
 {$endif NOEXCEPTIONINTERCEPT}

@@ -1407,11 +1407,6 @@ const
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
-var
-  /// low-level variable used internally by this unit
-  // - do not access this variable in your code: defined here to allow inlining
-  GlobalCurrentHandleExceptionSynLog: TSynLog;
-
 type
   /// storage of the information associated with an intercepted exception
   // - as returned by GetLastException() function
@@ -3950,6 +3945,28 @@ threadvar // do not publish for compilation within Delphi packages
 {$ifndef NOEXCEPTIONINTERCEPT}
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext); forward;
+
+var
+  // local cache containing TSynLogFamily with fHandleExceptions = true
+  HandleExceptionFamily: TSynLogFamily;
+
+function SearchHandleException(f: PPointer): TSynLogFamily;
+var
+  n: integer;
+begin
+  if f <> nil then
+  begin
+    n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
+    repeat
+      result := f^;
+      if result.fHandleExceptions then
+        exit;
+      inc(f);
+      dec(n);
+    until n = 0;
+  end;
+  result := nil;
+end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
@@ -3975,12 +3992,16 @@ begin
   // intercept exceptions, if necessary
   fHandleExceptions := (sllExceptionOS in aLevel) or
                        (sllException in aLevel);
-  if fHandleExceptions and
-     (GlobalCurrentHandleExceptionSynLog = nil) then
+  if fHandleExceptions then
   begin
-    GetLog; // force GlobalCurrentHandleExceptionSynLog assignment
-    RawExceptionIntercept(SynLogException);
-  end;
+    if HandleExceptionFamily = nil then
+    begin
+      HandleExceptionFamily := self;
+      RawExceptionIntercept(SynLogException);
+    end;
+  end
+  else if HandleExceptionFamily = self then // remove self and find next
+    HandleExceptionFamily := SearchHandleException(pointer(SynLogFamily));
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
@@ -4135,6 +4156,10 @@ end;
 
 destructor TSynLogFamily.Destroy;
 begin
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  if HandleExceptionFamily = self then
+    HandleExceptionFamily := nil;
+  {$endif NOEXCEPTIONINTERCEPT}
   fDestroying := true;
   EchoRemoteStop;
   ExceptionIgnore.Free;
@@ -4221,12 +4246,6 @@ begin
     else
       // new ptMergedInOneFile or ptIdentifiedInOneFile
       result := CreateSynLog;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    // we should check this now, so that any exception is handled in this log
-    if fHandleExceptions and
-       (GlobalCurrentHandleExceptionSynLog <> result) then
-      GlobalCurrentHandleExceptionSynLog := result;
-    {$endif NOEXCEPTIONINTERCEPT}
   end
   else
     result := nil;
@@ -4682,11 +4701,6 @@ end;
 
 destructor TSynLog.Destroy;
 begin
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  if fFamily.fHandleExceptions and
-     (GlobalCurrentHandleExceptionSynLog = self) then
-    GlobalCurrentHandleExceptionSynLog := nil;
-  {$endif NOEXCEPTIONINTERCEPT}
   Flush({forcediskwrite=}true);
   fWriterEcho.Free;
   fWriter.Free;
@@ -6050,50 +6064,6 @@ var
   GlobalLastExceptionStackCount: integer;
   GlobalLastExceptionStack: array[0 .. MAX_EXCEPTHISTORY - 1] of PtrUInt;
 
-function GetHandleExceptionSynLog: TSynLog;
-var
-  lookup: ^TSynLog;
-  i: PtrInt;
-begin
-  result := nil;
-  if SynLogFile = nil then
-  begin
-    // no log content yet -> check from family
-    for i := 0 to length(SynLogFamily) - 1 do
-      if SynLogFamily[i].fHandleExceptions then
-      begin
-        result := SynLogFamily[i].Add;
-        exit;
-      end;
-  end
-  else
-  begin
-    // check from active per-thread TSynLog instances
-    lookup := @PerThreadInfo.FileLookup; // access TLS slot once
-    for i := 1 to MAX_SYNLOGFAMILY do
-    begin
-      result := lookup^;
-      if (result <> nil) and
-         result.fFamily.fHandleExceptions then
-        exit;
-      inc(lookup);
-    end;
-    // check from global list of TSynLog instances
-    mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-    try
-      for i := 0 to high(SynLogFile) do
-      begin
-        result := SynLogFile[i];
-        if result.fFamily.fHandleExceptions then
-          exit;
-      end;
-    finally
-      mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-    end;
-    result := nil;
-  end;
-end;
-
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var
@@ -6105,9 +6075,10 @@ var
 label
   adr, fin;
 begin
-  if PerThreadInfo.ExceptionIgnore or
+  if (HandleExceptionFamily = nil) or  // no TSynLogFamily.fHandleExceptions set
+     PerThreadInfo.ExceptionIgnore or  // disabled for this thread
      (Ctxt.EClass = ESynLogSilent) or
-     SynLogFileFreeing  then
+     HandleExceptionFamily.ExceptionIgnore.Exists(Ctxt.EClass) then
     exit;
   {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
@@ -6117,21 +6088,11 @@ begin
     exit;
   {$endif ISDELPHIXE6}
   {$endif CPU64DELPHI}
-  log := GlobalCurrentHandleExceptionSynLog;
+  log := HandleExceptionFamily.Add;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     try
       // retrieve the logging context
-      if (log = nil) or
-         not log.fFamily.fHandleExceptions then
-        log := GetHandleExceptionSynLog;
-      if (log = nil) or
-         not (Ctxt.ELevel in log.fFamily.Level) or
-         (log.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass) >= 0) then
-      begin
-        log := nil; // no GetThreadContextAndDisableExceptions -> no restore
-        exit;
-      end;
       log.GetThreadContextAndDisableExceptions;
       if Assigned(log.fFamily.OnBeforeException) then
         if log.fFamily.OnBeforeException(Ctxt, log.fThreadContext^.ThreadName) then
@@ -7980,7 +7941,8 @@ procedure FinalizeUnit;
 var
   files: TSynLogDynArray; // thread-safe local copy
 begin
-  SynLogFileFreeing := true; // to avoid GPF at shutdown
+  HandleExceptionFamily := nil; // disable exception interception
+  SynLogFileFreeing := true;    // to avoid GPF at shutdown
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   files := SynLogFile;
   SynLogFile := nil; // would break any background process
