@@ -3667,8 +3667,6 @@ begin
   fProcessName := Join(['=AW:', ProcessName]); // for DoExecute main thread
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
-  if acoEnableTls in aOptions then
-    fSockets.OnFirstRead := OnFirstReadDoTls;
   // binding will be done in Execute
 end;
 
@@ -3689,7 +3687,7 @@ begin
       esFinished:
         EAsyncConnections.RaiseUtf8('%.Execute aborted as %',
           [self, fExecuteMessage]);
-    end;
+    end; // loop during esNotStarted / esBinding states
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
       EAsyncConnections.RaiseUtf8(
@@ -3834,11 +3832,12 @@ begin
   try
     // create and bind fServer to the expected TCP port
     SetExecuteState(esBinding);
+    if acoEnableTls in fOptions then
+      fSockets.OnFirstRead := OnFirstReadDoTls;
     // BIND + LISTEN (TLS is done later)
     fServer := TCrtSocket.Bind(fSockPort, nlTcp, 5000, acoReusePort in Options);
     if not fServer.SockIsDefined then // paranoid check
       EAsyncConnections.RaiseUtf8('%.Execute: bind failed', [self]);
-    SetExecuteState(esRunning);
     {$ifdef USE_WINIOCP}
     fIocpAccept := fIocp.Subscribe(fServer.Sock, 0);
     if not fIocp.PrepareNext(fIocpAccept, wieAccept) then
@@ -3857,6 +3856,7 @@ begin
         EAsyncConnections.RaiseUtf8('%.Execute: accept subscribe', [self]);
     {$endif USE_WINIOCP}
     // main socket accept/send processing loop
+    SetExecuteState(esRunning);
     start := 0;
     while not Terminated do
     begin
