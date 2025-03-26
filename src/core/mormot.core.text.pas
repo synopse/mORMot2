@@ -748,6 +748,7 @@ type
     /// append some chars to the buffer in one line
     // - P should be ended with a #0
     // - will write #1..#31 chars as spaces (so content will stay on the same line)
+    // - this method is slightly faster than its overload with explicit Len param
     procedure AddOnSameLine(P: PUtf8Char); overload;
     /// append some chars to the buffer in one line
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
@@ -5154,58 +5155,49 @@ end;
 
 procedure TTextWriter.AddOnSameLine(P: PUtf8Char);
 var
-  D: PUtf8Char;
-  c: AnsiChar;
-begin
-  if P = nil then
-    exit;
-  D := B + 1;
-  if P^ <> #0 then
+  l: PtrInt;
+begin // mostly used for TSynLog RawUtf8 append
+  if (P <> nil) and
+     (P^ <> #0) then
     repeat
-      if D >= BEnd then
+      if P^ >= ' ' then
       begin
-        B := D - 1;
-        FlushToStream;
-        D := B + 1;
+        l := 0;
+        repeat
+          inc(l);
+        until P[l] < ' ';
+        AddNoJsonEscape(P, l); // efficient MoveFast()
+        inc(P, l);
+        if P^ = #0 then
+          exit; // most common case
       end;
-      c := P^;
-      if c < ' ' then
-        if c = #0 then
-          break
-        else
-          c := ' ';
-      D^ := c;
+      Add(' '); // properly inlined
       inc(P);
-      inc(D);
     until false;
-  B := D - 1;
 end;
 
 procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
 var
-  D: PUtf8Char;
-  c: AnsiChar;
-begin
-  if (P = nil) or
-     (Len <= 0) then
-    exit;
-  D := B + 1;
-  repeat
-    if D >= BEnd then
-    begin
-      B := D - 1;
-      FlushToStream;
-      D := B + 1;
-    end;
-    c := P^;
-    if c < ' ' then
-      c := ' ';
-    D^ := c;
-    inc(D);
-    inc(P);
-    dec(Len);
-  until Len = 0;
-  B := D - 1;
+  i, s: PtrInt;
+begin // mostly used for TSynLog shortstring append
+  i := 0;
+  if (P <> nil) and
+     (i < Len) then
+    repeat
+      if P[i] >= ' ' then
+      begin
+        s := i;
+        repeat
+          inc(i);
+        until (i = Len) or
+              (P[i] < ' ');
+        AddNoJsonEscape(P + s, i - s); // efficient MoveFast()
+        if i = Len then
+          exit; // most common case
+      end;
+      Add(' ');
+      inc(i);
+    until i = Len;
 end;
 
 procedure TTextWriter.AddOnSameLineW(P: PWord; Len: PtrInt);
@@ -5221,7 +5213,7 @@ begin
     PEnd := PtrUInt(P) + PtrUInt(Len) * SizeOf(WideChar);
   while (Len = 0) or
         (PtrUInt(P) < PEnd) do
-  begin
+  begin // AddNoJsonEscapeW() is actually not faster than this loop
     if B >= BEnd then
       FlushToStream;
     // escape chars, so that all content will stay on the same text line
@@ -5252,7 +5244,7 @@ begin
   {$ifdef UNICODE}
   AddOnSameLineW(pointer(Text), length(Text));
   {$else}
-  AddOnSameLine(pointer(Text), length(Text));
+  AddOnSameLine(pointer(Text)); // faster with no Len
   {$endif UNICODE}
 end;
 
