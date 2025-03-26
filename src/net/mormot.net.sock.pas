@@ -6202,7 +6202,9 @@ begin
       end;
       if fAborted or
          (Length = expected) or
-         (StopBeforeLength and (read < CrtSocketSendRecvMaxBytes)) then
+         (StopBeforeLength and
+          (read <> 0) and
+          (read < CrtSocketSendRecvMaxBytes)) then
         break; // good enough for now
       if (res = nrOk) or
          ((fSock.RecvPending(pending) = nrOk) and
