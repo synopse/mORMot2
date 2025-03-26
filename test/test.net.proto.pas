@@ -344,6 +344,8 @@ begin
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
+    if SystemInfo.dwNumberOfProcessors = 1 then
+      Sleep(50); // seems mandatory from LUTI regression tests
     rmax := clientcount - 1;
     streamer := TCrtSocket.Bind(proxy.RtspPort);
     try
@@ -363,12 +365,13 @@ begin
                      'Cache-Control: no-cache'#13#10#13#10);
           get.CreateSockIn; // much faster process
           get.SockRecvLn(text);
-          test.Check(text = 'HTTP/1.0 200 OK');
+          test.CheckEqual(text, 'HTTP/1.0 200 OK');
           get.GetHeader(false);
-          get.CloseSockIn; // buffer not needed now
-          test.Check(hfConnectionClose in get.Http.HeaderFlags);
-          test.Check(get.SockConnected);
-          test.Check(get.Http.ContentType = RTSP_MIME);
+          get.CloseSockIn; // buffer not needed from now on
+          test.CheckUtf8(hfConnectionClose in get.Http.HeaderFlags,
+            'flags=%', [ToText(get.Http.HeaderFlags)]);
+          test.Check(get.SockConnected, 'conn');
+          test.CheckEqual(get.Http.ContentType, RTSP_MIME);
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);
