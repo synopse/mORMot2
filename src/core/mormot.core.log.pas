@@ -4616,7 +4616,9 @@ begin
       exit;
     // reset the current thread context
     nfo^.Index := 0;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     nfo^.ExceptionIgnore := false;
+    {$endif NOEXCEPTIONINTERCEPT}
     ctx := @fThreadContexts[ndx - 1];
     Finalize(ctx^);
     FillcharFast(ctx^, SizeOf(ctx^), 0);
@@ -7941,7 +7943,9 @@ procedure FinalizeUnit;
 var
   files: TSynLogDynArray; // thread-safe local copy
 begin
+  {$ifndef NOEXCEPTIONINTERCEPT}
   HandleExceptionFamily := nil; // disable exception interception
+  {$endif NOEXCEPTIONINTERCEPT}
   SynLogFileFreeing := true;    // to avoid GPF at shutdown
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   files := SynLogFile;
