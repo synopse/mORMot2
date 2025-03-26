@@ -6365,7 +6365,7 @@ begin
         twJsonEscape:
           AddJsonEscape(PUtf8Char(P), 0); // faster with no Len
         twOnSameLine:
-          AddOnSameLine(PUtf8Char(P), Len);
+          AddOnSameLine(PUtf8Char(P), 0); // faster with no Len
       end;
     CP_RAWBYTESTRING: // direct write of RawByteString content as UTF-8
       Add(PUtf8Char(P), Len, Escape);
@@ -7391,7 +7391,14 @@ begin
       AddW(pointer(V^.VPWideChar), StrLenW(V^.VPWideChar), Escape);
     vtAnsiString:
       if V^.VAnsiString <> nil then // expect RawUtf8
-        Add(V^.VAnsiString, PStrLen(PAnsiChar(V^.VAnsiString) - _STRLEN)^, Escape);
+        case Escape of
+          twNone:
+            AddNoJsonEscape(V^.VAnsiString, PStrLen(PAnsiChar(V^.VAnsiString) - _STRLEN)^);
+          twJsonEscape:
+            AddJsonEscape(V^.VAnsiString, 0); // faster with no len
+          twOnSameLine:
+            AddOnSameLine(V^.VAnsiString); // faster with no len
+        end;
     vtWideString:
       if V^.VWideString <> nil then
         AddW(V^.VWideString, length(WideString(V^.VWideString)), Escape);
