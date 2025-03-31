@@ -2103,7 +2103,8 @@ begin
             CloseConnection(connection, ToText(res)^);
             exit;
           end;
-          if recved < 1024 then
+          if (recved < 1024) and
+             (connection.fRd.Len = 0) then
             connection.fRd.Reserve(1024); // minimal reusable fRd.Buffer
           connection.fRd.Append(@temp, recved);
           inc(added, recved);
