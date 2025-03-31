@@ -1483,13 +1483,19 @@ end;
 function TPollAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
 begin
   // caller made fRWSafe[0].TryLock
-  result := fRd.Clear; // returns number of bytes released
+  if fRd.Len <> 0 then
+    result := 0
+  else
+    result := fRd.Clear; // returns number of bytes released
 end;
 
 function TPollAsyncConnection.ReleaseWriteMemoryOnIdle: PtrInt;
 begin
   // caller made fRWSafe[0/1].TryLock
-  result := fWr.Clear;
+  if fWr.Len <> 0 then
+    result := 0
+  else
+    result := fWr.Clear;
 end;
 
 function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
