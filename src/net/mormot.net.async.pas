@@ -1497,16 +1497,19 @@ begin
   // called now and then to reduce temp memory consumption on Idle connections
   result := 0;
   if (fRd.Buffer <> nil) and
+     (fRd.Len = 0) and
      fRWSafe[0].TryLock then // direct call to leave fWasActive flag untouched
   begin
     inc(result, ReleaseReadMemoryOnIdle);
     if (fWr.Buffer <> nil) and
+       (fWr.Len = 0) and
        not (ifSeparateWLock in fInternalFlags) then
       inc(result, ReleaseWriteMemoryOnIdle); // do it within the same lock
     fRWSafe[0].UnLock;
   end;
   if (ifSeparateWLock in fInternalFlags) and
      (fWr.Buffer <> nil) and
+     (fWr.Len = 0) and
      fRWSafe[1].TryLock then
   begin
     inc(result, ReleaseWriteMemoryOnIdle);
