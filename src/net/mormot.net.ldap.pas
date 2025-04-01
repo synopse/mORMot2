@@ -5503,6 +5503,8 @@ begin
     'supportedExtension',
     'vendorName',
     'ldapServiceName']);
+  if root = nil then
+    exit;
   fRootDN         := root.Attributes.GetByName('rootDomainNamingContext');
   fDefaultDN      := root.Attributes.GetByName('defaultNamingContext');
   fNamingContexts := root.Attributes.Find('namingContexts').GetAllReadable;
