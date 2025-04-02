@@ -1765,8 +1765,20 @@ begin
       cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
       SetMatchs(Mask, {caseinsens=}false, m, ';');
     end;
+    {$IFDEF DELPHIANDROID}
+    begin
+      var rawUTF8Result: TRawUtf8DynArray;
+      var i: integer;
+      rawUTF8Result := PosixFileNames(Directory,
+                                      ffoSubFolder in Options, cb, pointer(m), ffoExcludesDir in Options);
+      SetLength(result, length(rawUTF8Result));
+      for i := 0 to length(result) - 1 do
+          result[i]:= rawUTF8Result[i];
+    end;
+    {$ELSE}
     result := PosixFileNames(Directory,
       ffoSubFolder in Options, cb, pointer(m), ffoExcludesDir in Options);
+    {$ENDIF}
     if result = nil then
       exit;
     if IgnoreFileName <> '' then

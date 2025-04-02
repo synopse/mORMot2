@@ -2242,6 +2242,13 @@ function FindRawUtf8(const Values: TRawUtf8DynArray; const Value: RawUtf8;
 function FindRawUtf8(const Values: array of RawUtf8; const Value: RawUtf8;
   CaseSensitive: boolean = true): integer; overload;
 
+{$IFDEF DELPHIANDROID}
+/// return the index of Value in Values[], -1 if not found
+// - CaseSensitive=false will use StrICmp() for A..Z / a..z equivalence
+function FindRawUtf8(const Values: TFileNameDynArray; const Value: TFileName;
+  CaseSensitive: boolean = true): integer; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+{$ENDIF}
 /// true if Value was added successfully in Values[]
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
   NoDuplicates: boolean; CaseSensitive: boolean = true): boolean; overload;
@@ -2372,12 +2379,21 @@ function DeleteRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
 function DeleteRawUtf8(var Values: TRawUtf8DynArray;
   Index: PtrInt): boolean; overload;
 
+{$IFDEF DELPHIANDROID}
+function DeleteRawUtf8(var Values: TFileNameDynArray;
+  Index: PtrInt): boolean; overload;
+{$ENDIF}
 /// sort a dynamic array of RawUtf8 items
 // - if CoValues is set, the integer items are also synchronized
 // - by default, exact (case-sensitive) match is used; you can specify a custom
 // compare function if needed in Compare optional parameter
 procedure QuickSortRawUtf8(var Values: TRawUtf8DynArray; ValuesCount: integer;
   CoValues: PIntegerDynArray = nil; Compare: TUtf8Compare = nil); overload;
+
+{$IFDEF DELPHIANDROID}
+procedure QuickSortRawUtf8(var Values: TFilenameDynArray; ValuesCount: integer;
+  CoValues: PIntegerDynArray = nil; Compare: TUtf8Compare = nil); overload;
+{$ENDIF}
 
 /// sort a RawUtf8 array, low values first
 procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
@@ -9186,6 +9202,20 @@ begin
   result := FindRawUtf8(pointer(Values), Value, length(Values), CaseSensitive);
 end;
 
+{$IFDEF DELPHIANDROID}
+function FindRawUtf8(const Values: TFileNameDynArray; const Value: TFileName;
+  CaseSensitive: boolean = true): integer;
+var rawUTF8Values: TRawUtf8DynArray;
+    i: integer;
+begin
+  SetLength(rawUTF8Values, length(values));
+  for i := 0 to length(values) do
+      rawUTF8Values[i]:= values[i];
+  result:= FindRawUtf8(rawUTF8Values, RawUtf8(Value), CaseSensitive);
+end;
+{$ENDIF}
+
+
 function FindRawUtf8(const Values: array of RawUtf8; const Value: RawUtf8;
   CaseSensitive: boolean): integer;
 begin
@@ -9690,6 +9720,22 @@ begin
   qs.Sort(pointer(Values), 0, ValuesCount - 1);
 end;
 
+{$IFDEF DELPHIANDROID}
+procedure QuickSortRawUtf8(var Values: TFilenameDynArray; ValuesCount: integer;
+  CoValues: PIntegerDynArray = nil; Compare: TUtf8Compare = nil);
+var rawUTF8Values: TRawUtf8DynArray;
+    i: integer;
+begin
+  setLength(rawUTF8Values, length(Values));
+  for i := 0 to High(Values) do
+       rawUTF8Values[i]:= UnicodeStringToUtf8(Values[i]);
+  QuickSortRawUtf8(rawUTF8Values, ValuesCount, CoValues, Compare);
+  for i := 0 to High(Values) do
+      Values[i]:= Utf8DecodeToUnicodeString(rawUTF8Values[i]);
+end;
+{$ENDIF}
+
+
 procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
   caseInsensitive: boolean);
 var
@@ -9773,6 +9819,20 @@ begin
     result := true;
   end;
 end;
+
+{$IFDEF DELPHIANDROID}
+function DeleteRawUtf8(var Values: TFileNameDynArray; Index: PtrInt): boolean;
+var i: integer;
+begin
+  result:= false;
+  if (index < 0) or (index > High(values)) then
+     Exit;
+  for i := Index to High(Values) - 1 do
+      Values[i]:= Values[i + 1];
+  SetLength(Values, length(Values) - 1);
+end;
+{$ENDIF}
+
 
 function DeleteRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
   Index: integer; CoValues: PIntegerDynArray): boolean;
