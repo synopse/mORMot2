@@ -1202,31 +1202,33 @@ type
 
 var
   /// lookup table used for fast case conversion to uppercase
-  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. accents)
+  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. 'e' with
+  // or without accents will be translated into plain 'E' without accent)
   // - is defined globally, since may be used from an inlined function
   NormToUpper: TNormTable;
   NormToUpperByte: TNormTableByte absolute NormToUpper;
 
   /// lookup table used for fast case conversion to lowercase
-  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. accents)
+  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. 'e' with
+  // or without accents will be translated into plain 'e' without accent)
   // - is defined globally, since may be used from an inlined function
   NormToLower: TNormTable;
   NormToLowerByte: TNormTableByte absolute NormToLower;
 
   /// this table will convert 'a'..'z' into 'A'..'Z'
   // - so it will work with UTF-8 without decoding, whereas NormToUpper[] expects
-  // WinAnsi encoding
+  // WinAnsi encoding to handle accents
   NormToUpperAnsi7: TNormTable;
   NormToUpperAnsi7Byte: TNormTableByte absolute NormToUpperAnsi7;
 
   /// this table will convert 'A'..'Z' into 'a'..'z'
   // - so it will work with UTF-8 without decoding, whereas NormToUpper[] expects
-  // WinAnsi encoding
+  // WinAnsi encoding to handle accents
   NormToLowerAnsi7: TNormTable;
   NormToLowerAnsi7Byte: TNormTableByte absolute NormToLowerAnsi7;
 
   /// case sensitive NormToUpper[]/NormToLower[]-like table
-  // - i.e. NormToNorm[c] = c
+  // - i.e. every item is itself, as NormToNorm[c] = c
   NormToNorm: TNormTable;
   NormToNormByte: TNormTableByte absolute NormToNorm;
 
@@ -1386,7 +1388,7 @@ function IdemPCharArrayBy2(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt
 // - ignore case - up^ must be already Upper
 // - this version will decode the UTF-8 content before using NormToUpper[], so
 // it will be slower than the IdemPChar() function above, but will handle
-// WinAnsi accentuated characters (e.g. 'e' acute will be matched as 'E')
+// WinAnsi accentuated characters (e.g. 'e' acute will be matched as plain 'E')
 function IdemPCharU(p, up: PUtf8Char): boolean;
 
 /// returns true if the beginning of p^ is same as up^
@@ -1445,7 +1447,7 @@ function StrPosI(uppersubstr, str: PUtf8Char): PUtf8Char;
 /// a non case-sensitive RawUtf8 version of Pos()
 // - substr is expected to be already in upper case
 // - this version will decode the UTF-8 content before using NormToUpper[],
-// so will support only WinAnsi (Code Page 1252) codepoints
+// and will remove WinAnsi (Code Page 1252) accents during its search
 // - see PosI() for a non-accentuated, but faster version
 function PosIU(substr: PUtf8Char; const str: RawUtf8): integer;
 
@@ -1528,7 +1530,8 @@ function Utf8CompareOS(P1, P2: PUtf8Char): PtrInt;
 function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
 
 /// retrieve the next UCS-4 CodePoint stored in U, then update the U pointer
-// - this function will decode the UTF-8 content before using NormToUpper[]
+// - this function will decode the UTF-8 content before using NormToUpper[],
+// and will remove WinAnsi (Code Page 1252) accents during its conversion
 // - will return '?' if the UCS-4 CodePoint is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUtf8 function)
@@ -1615,7 +1618,8 @@ function UpperCopyShort(dest: PAnsiChar; const source: ShortString): PAnsiChar;
 
 /// fast UTF-8 comparison handling WinAnsi CP-1252 case folding
 // - this version expects u1 and u2 to be zero-terminated
-// - decode the UTF-8 content before using NormToUpper[] lookup table
+// - decode the UTF-8 content before using NormToUpper[] lookup table,
+// and will remove WinAnsi (Code Page 1252) accents during its comparison
 // - match the our SYSTEMNOCASE custom (and default) SQLite 3 collation
 // - consider Utf8ICompReference() for Unicode 10.0 support
 function Utf8IComp(u1, u2: PUtf8Char): PtrInt;
@@ -1623,7 +1627,8 @@ function Utf8IComp(u1, u2: PUtf8Char): PtrInt;
 /// fast UTF-8 comparison handling WinAnsi CP-1252 case folding
 // - this version expects u1 and u2 not to be necessary zero-terminated, but
 // uses L1 and L2 as length for u1 and u2 respectively
-// - decode the UTF-8 content before using NormToUpper[] lookup table
+// - decode the UTF-8 content before using NormToUpper[] lookup table,
+// and will remove WinAnsi (Code Page 1252) accents during its comparison
 // - consider Utf8ILCompReference() for Unicode 10.0 support
 function Utf8ILComp(u1, u2: PUtf8Char; L1, L2: cardinal): PtrInt;
 
@@ -1635,7 +1640,7 @@ function Utf8UpperCopy(Dest, Source: PUtf8Char; SourceChars: cardinal): PUtf8Cha
 /// copy UTF-8 buffer into dest^ handling WinAnsi CP-1252 NormToUpper[] folding
 // - returns the final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
-// AnsiChar), with UTF-8 encoding
+// AnsiChar), with UTF-8 encoding and WinAnsi accents removal
 function Utf8UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1669,22 +1674,23 @@ var
 
 /// SameText() overloaded function with proper UTF-8 decoding
 // - fast version using NormToUpper[] array for all WinAnsi characters
-// - this version will decode each UTF-8 glyph before using NormToUpper[]
+// - this version will decode each UTF-8 glyph before using NormToUpper[],
+// so will remove WinAnsi (Code Page 1252) accents during its comparison
 // - current implementation handles UTF-16 surrogates as Utf8IComp()
 function SameTextU(const S1, S2: RawUtf8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of the supplied text into 8-bit uppercase
-// - this will not only convert 'a'..'z' into 'A'..'Z', but also WinAnsi
-// accentuated latin characters ('e' acute into 'E' e.g.), using NormToUpper[]
+// - this will not only convert 'a'..'z' into 'A'..'Z', but also remove WinAnsi
+// latin accents ('e' acute into plain 'E' e.g.), using NormToUpper[]
 // - it will therefore decode the supplied UTF-8 content to handle more than
 // 7-bit of ascii characters (so this function is dedicated to WinAnsi code page
 // 1252 characters set)
 function UpperCaseU(const S: RawUtf8): RawUtf8;
 
 /// fast conversion of the supplied text into 8-bit lowercase
-// - this will not only convert 'A'..'Z' into 'a'..'z', but also WinAnsi
-// accentuated latin characters ('E' acute into 'e' e.g.), using NormToLower[]
+// - this will not only convert 'a'..'z' into 'A'..'Z', but also remove WinAnsi
+// latin accents ('e' acute into plain 'e' e.g.), using NormToLower[]
 // - it will therefore decode the supplied UTF-8 content to handle more than
 // 7-bit of ascii characters
 function LowerCaseU(const S: RawUtf8): RawUtf8;
@@ -1791,6 +1797,7 @@ function UpperCaseSynUnicode(const S: SynUnicode): SynUnicode;
 function LowerCaseSynUnicode(const S: SynUnicode): SynUnicode;
 
 /// fast WinAnsi comparison using the NormToUpper[] array for all 8-bit values
+// - i.e. will remove WinAnsi (Code Page 1252) accents during its comparison
 function AnsiIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
