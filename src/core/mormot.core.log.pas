@@ -1967,6 +1967,13 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
   trimmsgfromlog: boolean): PtrInt;
 
+{$ifdef OSLINUX}
+/// send a TSynLog formatted text to the systemd library
+// - expected input text should alread be in "20200615 08003008 xxxx" format
+// - as used e.g. during TSynLogFamily.EchoToConsoleUseJournal process
+procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
+{$endif OSLINUX}
+
 
 implementation
 
