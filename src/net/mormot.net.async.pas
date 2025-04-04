@@ -1522,16 +1522,20 @@ begin
   // called now and then to reduce temp memory consumption on Idle connections
   result := 0;
   if (fRd.Buffer <> nil) and
+     (fRd.Len = 0) and
      TryLock({wr=}false) then
   begin
-    inc(result, ReleaseReadMemoryOnIdle);
+    if fRd.Len = 0 then
+      inc(result, ReleaseReadMemoryOnIdle);
     UnLock(false);
   end;
   if (fWr.Buffer <> nil) and
+     (fWr.Len = 0) and
      TryLock({wr=}true) then
   begin
     inc(result, fWr.Capacity);
-    fWr.Clear;
+    if fWr.Len = 0 then
+      fWr.Clear;
     UnLock({wr=}true);
   end;
   exclude(fFlags, fWasActive); // TryLock() was with no true activity here
