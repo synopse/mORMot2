@@ -661,9 +661,22 @@ begin
     exit; // no nested properties
   end;
   TDocVariant.NewFast(result);
-  for i := 0 to rtti.Props.Count - 1 do
-    TDocVariantData(result).AddItem(
-      ContextOneProperty(rtti.Props.List[i], parentName));
+
+  { rtti may be nil, if "rtti := rtti.ArrayRtti" was executed above
+    for an array inside a record defined like this:
+
+    type
+      TMyRecord =
+        packed record
+          SomeUnimportantData1: Integer;
+          SomeUnimportantData2: Integer;
+          Res          : array [1..66] of AnsiChar;
+        end;
+  }
+  if rtti <> nil then
+    for i := 0 to rtti.Props.Count - 1 do
+      TDocVariantData(result).AddItem(
+        ContextOneProperty(rtti.Props.List[i], parentName));
 end;
 
 function ClassToWrapperType(c: TClass): TWrapperType;
