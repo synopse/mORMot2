@@ -655,24 +655,12 @@ begin
     ptClass:
       ; // use rtti.Props
     ptArray,
-    ptDynArray:
-      rtti := rtti.ArrayRtti; // use array item
+    ptDynArray:  // use array item (may be nil for static unmanaged)
+      rtti := rtti.ArrayRtti;
   else
     exit; // no nested properties
   end;
   TDocVariant.NewFast(result);
-
-  { rtti may be nil, if "rtti := rtti.ArrayRtti" was executed above
-    for an array inside a record defined like this:
-
-    type
-      TMyRecord =
-        packed record
-          SomeUnimportantData1: Integer;
-          SomeUnimportantData2: Integer;
-          Res          : array [1..66] of AnsiChar;
-        end;
-  }
   if rtti <> nil then
     for i := 0 to rtti.Props.Count - 1 do
       TDocVariantData(result).AddItem(
