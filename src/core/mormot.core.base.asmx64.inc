@@ -159,8 +159,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     rax, SSE2MAXSIZE
         jb      @bsse2 // 97/129..255 bytes is not worth AVX context transition
         {$ifdef FPC_PIC}
-        mov     r10b, byte ptr [X64CpuFeatures wrt..gotpcrel]
-        test    r10b, 1 shl cpuAVX
+        test    byte ptr [X64CpuFeatures wrt..gotpcrel], 1 shl cpuAVX
         {$else}
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         {$endif FPC_PIC}
@@ -168,8 +167,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jmp     @bavx
 @lrgfwd:// forward SSE2/AVX move
         {$ifdef FPC_PIC}
-        mov     r10b, byte ptr [X64CpuFeatures wrt..gotpcrel]
-        test    r10b, 1 shl cpuAVX
+        test    byte ptr [X64CpuFeatures wrt..gotpcrel], 1 shl cpuAVX
         {$else}
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         {$endif FPC_PIC}
@@ -492,8 +490,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         jmp     @reg
         {$ifdef ASMX64AVXNOCONST}
 @avx:   {$ifdef FPC_PIC}
-        mov     al, byte ptr [X64CpuFeatures wrt..gotpcrel]
-        test    al, 1 shl cpuAVX
+        test    byte ptr [X64CpuFeatures wrt..gotpcrel], 1 shl cpuAVX
         {$else}
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         {$endif FPC_PIC}
@@ -845,8 +842,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jmp     @align
 @ok:    {$ifdef ASMX64AVXNOCONST}
         {$ifdef FPC_PIC}
-        mov     al, byte ptr [X64CpuFeatures wrt..gotpcrel]
-        test    al, 1 shl cpuAVX2
+        test    byte ptr [X64CpuFeatures wrt..gotpcrel], 1 shl cpuAVX2
         {$else}
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX2
         {$endif FPC_PIC}
