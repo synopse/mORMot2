@@ -1635,6 +1635,7 @@ type
     fTls: boolean;
     fAllowUnsafePasswordBind: boolean;
     fKerberosDisableChannelBinding: boolean;
+    fAutoReconnect: boolean;
     function GetTargetUri: RawUtf8;
     procedure SetTargetUri(const uri: RawUtf8);
   public
@@ -1686,6 +1687,12 @@ type
     // - won't affect BindSaslKerberos which hides the password during handshake
     property AllowUnsafePasswordBind: boolean
       read fAllowUnsafePasswordBind write fAllowUnsafePasswordBind;
+    /// by default, a disconnect Server socket would raise a ELdap exception
+    // - you can set this property to TRUE to try auto-reconnection with the
+    // previous authentication method
+    // - default value is TRUE
+    property AutoReconnect: boolean
+      read fAutoReconnect write fAutoReconnect;
     /// milliseconds timeout for socket operations
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
@@ -1790,6 +1797,8 @@ type
     procedure SearchMissingAttributes; overload;
     procedure RetrieveRootDseInfo;
     procedure RetrieveDefaultDNInfo;
+    procedure Reset;
+    function Reconnect: boolean;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -5112,6 +5121,7 @@ constructor TLdapClientSettings.Create(const aUri: RawUtf8);
 begin
   inherited Create;
   fTimeout := 5000;
+  fAutoReconnect := true; // sounds fair enough
   SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
 end;
 
@@ -5722,13 +5732,38 @@ begin
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
+var
+  packet: RawByteString;
+  res: TNetResult;
+  raw: integer;
 begin
   {$ifdef ASNDEBUG}
   {$I-} write('------'#10'Sending ');
   if fSecContextEncrypt in fFlags then writeln('(encrypted) =') else writeln('=');
   writeln(AsnDump(Asn1Data));
   {$endif ASNDEBUG}
-  fSock.SndLow(BuildPacket(Asn1Data));
+  packet := BuildPacket(Asn1Data);
+  if fSock.TrySndLow(pointer(packet), length(packet), @res, @raw) then
+    exit; // success
+  case res of
+    nrNoSocket:
+      ELdap.RaiseUtf8('%.SendPacket: not connected', [self]);
+    nrClosed: // it is usual for most LDAP servers to close any idle socket
+      begin
+        if Assigned(fOnDisconnect) then
+          fOnDisconnect(self)
+        else if fSettings.AutoReconnect then // is TRUE by default
+          if not Reconnect then
+            ELdap.RaiseUtf8('%.SendPacket: AutoReconnect failed as %',
+              [self, fResultString]);
+        if fSock.SockConnected then
+          if fSock.TrySndLow(pointer(packet), length(packet), @res, @raw) then
+            exit; // success after re-connection
+      end;
+  end;
+  // a non-recoverable socket error occured at sending the request
+  raise ENetSock.Create('%s.SendPacket(%s) failed',
+    [ClassNameShort(self)^, fSock.Server], res, @raw);
 end;
 
 procedure TLdapClient.ReceivePacketFillSockBuffer;
@@ -6214,6 +6249,11 @@ begin
       result := false;
     end;
   FreeAndNil(fSock);
+  Reset;
+end;
+
+procedure TLdapClient.Reset;
+begin
   if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
   fFlags := [];
@@ -6222,6 +6262,29 @@ begin
   fRootDN := '';
   fDefaultDN := '';
   fConfigDN := '';
+end;
+
+function TLdapClient.Reconnect: boolean;
+begin
+  result := false;
+  if (self = nil) or
+     (fBoundAs = lcbNone) or
+     (fSock = nil) then
+    exit; // no server to reconnect
+  // reset the client state and close any current socket
+  Reset;
+  fSock.Close;
+  // re-create the client socket with previous valid TCP parameters
+  fSock.OpenBind(fSettings.TargetHost, fSettings.TargetPort, fSettings.Tls);
+  // re-bound with the previous mean of authentication
+  case fBoundAs of
+    lcbPlain:
+      result := Bind;
+    lcbDigest:
+      result := BindSaslDigest(fBoundDigestAlgo);
+    lcbKerberos:
+      result := BindSaslKerberos(fBoundKerberosAuthIdentify);
+  end;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
