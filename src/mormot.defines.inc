@@ -325,12 +325,15 @@
       {$define FPC_CPUX64}
       {$ifndef OSDARWIN}       // MachOS has troubles with our asm
         {$define FPC_ASMX64}
-        {$define ASMX64}       // supports asm with globals
-        {$define ASMINTEL}     // either ASMX86 or ASMX64
-        {$define ASMX64AVX}    // supports AVX/AVX2/AVX512
+        {$define ASMX64}     // supports asm with globals
+        {$define ASMINTEL}   // either ASMX86 or ASMX64
+        {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
         {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
-        {$define CPUX64ASM}    // FPC has no problem (not Delphi prior XE7)
-        {$define HASAESNI}     // mormot.crypt.core rejected by Darwin asm
+        {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
+        {$define HASAESNI}   // mormot.crypt.core AES-NI rejected by Darwin asm
+        {$ifdef FPC_PIC}     // avoid weird linking issues
+          {$define FPC_PICX64}
+        {$endif FPC_PIC}
       {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}

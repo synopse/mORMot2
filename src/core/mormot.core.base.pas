@@ -3007,6 +3007,10 @@ var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   X64CpuFeatures: TX64CpuFeatures;
 
+const
+  // identify Intel/AMD AVX2+BMI support at Haswell level
+  CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
+
 {$ifdef ASMX64AVXNOCONST}
 /// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt):  boolean;
@@ -3023,18 +3027,26 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 // - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
 // and on x86_64, ERMS is wrongly used even for small blocks
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
+{$ifdef FPC_PICX64}
+var FillcharFast: procedure(var dst; cnt: PtrInt; value: byte) = FillChar;
+{$else}
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
+{$endif FPC_PICX64}
 
 /// our fast version of move() on Intel/AMD
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available)
 // - FPC i386 has fastmove.inc which is faster than our SSE2/ERMS version
-// - FPC x86_64 RTL is slower than our SSE2/AVX asm
+// - FPC x86_64 RTL is slower than our SSE2/AVX asm but supports PIC (.so)
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef FPC_X86}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 {$else}
-procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$ifdef FPC_PIC}
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+{$else}
+procedure MoveFast(const src; var dst; cnt: PtrInt); { use our AVX-ready asm }
+{$endif FPC_PIC}
 {$endif FPC_X86}
 
 {$else}

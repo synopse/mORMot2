@@ -8,7 +8,6 @@
 {$ifdef FPC}
   // disabled some FPC paranoid warnings
   {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here }
-  {$WARN 7119 off : Exported/global symbols should be accessed via the GOT }
   {$WARN 7121 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits]" }
   {$WARN 7122 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits + $4 byte offset]" }
   {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte" }
