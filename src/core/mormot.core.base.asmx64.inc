@@ -449,7 +449,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @sml10: movups  oword ptr [r8 - 16], xmm0 // last 16 bytes (may be overlapping)
         ret
 @abv255:{$ifdef WITH_ERMS}
-        cmp     rax, r9                   // non-temporal move > 512KB
+        cmp     r10, r9                   // non-temporal move > 512KB
         {$ifdef ASMX64AVXNOCONST}
         jae     @avx
         {$else}
