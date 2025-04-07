@@ -3005,6 +3005,7 @@ type
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
+  // - published here mainly for testing/regression purposes
   X64CpuFeatures: TX64CpuFeatures;
 
 const
@@ -10168,12 +10169,12 @@ begin
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
-    [cfSSE3, cfSSE42, cfPOPCNT, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfFMA];
+    [cfSSE3, cfSSE42, cfPOPCNT, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfAVX10, cfFMA];
   {$else}
   if not (cfOSXS in CpuFeatures) or
      not IsXmmYmmOSEnabled then
     // AVX is available on the CPU, but not supported at OS context switch
-    CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
+    CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfAVX10, cfFMA];
   {$endif DISABLE_SSE42}
   if cfRAND in CpuFeatures then
     try

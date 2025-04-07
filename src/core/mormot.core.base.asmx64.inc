@@ -14,11 +14,11 @@
 
 {$ifdef ASMX64}
 
-{$ifndef FPC_PIC}
+{$ifndef FPC_PIC} // MoveFast/FillCharFast use non-PIC compatible @jmptab
 
 {
  FillCharFast/MoveFast implementation notes:
- - assume ERBMS is available (cpuid flag may not be propagated within VMs)
+ - assume ERMSB is available (cpuid flag may not be propagated within VMs)
  - use branchless sub-functions for smallest buffers, then SSE2 up to 255 bytes
  - use "rep movsb" for 256..512K input (should work on all CPUs, even oldest)
  - don't use backward "std rep movsb" since it is not involved by ERMBS (slow)
@@ -28,6 +28,8 @@
  - regarding benchmark, run TTestLowLevelCommon.CustomRTL on x86_64
   -> FillCharFast/MoveFast seems faster, especially for small lengths (strings)
   -> Delphi RTL is slower than FPC's, and it does not support AVX assembly yet
+  -> about the weird "byte ptr [X64CpuFeatures wrt..gotpcrel]" syntax, see
+     http://www.tortall.net/projects/yasm/manual/html/objfmt-elf64.html
 }
 
 const
