@@ -1357,6 +1357,7 @@ procedure FreeSecContext(var aSecContext: TSecContext);
 begin
   FreeSecurityContext(aSecContext.CtxHandle);
   FreeCredentialsContext(aSecContext.CredHandle);
+  InvalidateSecContext(aSecContext);
 end;
 
 function SecEncrypt(var aSecContext: TSecContext;
