@@ -145,10 +145,8 @@ interface
 {$undef FPCX64MM_AVAILABLE}  // global conditional to enable this unit
 {$ifdef FPC}
   {$ifdef CPUX64}            // this unit is for FPC + x86_64 only
-    {$ifndef FPCMM_DISABLE}  // disabled on some targets
-      {$ifndef FPC_PIC}      // only direct RIP register usage by now
-        {$define FPCX64MM_AVAILABLE}
-      {$endif FPC_PIC}
+    {$ifndef FPCMM_DISABLE}  // disabled on some targets/projects
+      {$define FPCX64MM_AVAILABLE}
     {$endif FPCMM_DISABLE}
   {$endif CPUX64}
 {$endif FPC}
@@ -994,6 +992,7 @@ const
   // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
   {$endif FPCMM_LARGEBIGALIGN}
 
+// all T*BlockInfo variables are local to this unit, so are FPC_PIC compatible
 var
   SmallBlockInfo: TSmallBlockInfo;
   MediumBlockInfo: TMediumBlockInfo;
