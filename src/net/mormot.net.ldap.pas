@@ -1607,6 +1607,13 @@ type
     lctPlain,
     lctEncrypted);
 
+  /// how a TLdapClient is authenticated to its associated LDAP Server
+  TLdapClientBound = (
+    lcbNone,
+    lcbPlain,
+    lcbDigest,
+    lcbKerberos);
+
   /// define possible values for TLdapClient.SearchSDFlags
   // - LDAP_SERVER_SD_FLAGS_OID control
   TLdapSearchSDFlags = set of (
@@ -1734,8 +1741,10 @@ type
     fResponseDN: RawUtf8;
     fReferals: TRawUtf8List;
     fBound: boolean;
-    fResultError: TLdapError;
+    fBoundAs: TLdapClientBound;
+    fBoundDigestAlgo: TDigestAlgo; // for Reconnect
     fFlags: set of (fSecContextEncrypt, fRetrievedDefaultDNInfo);
+    fResultError: TLdapError;
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
     fSearchSDFlags: TLdapSearchSDFlags;
@@ -1751,6 +1760,7 @@ type
     fMechanisms, fControls, fExtensions, fNamingContexts: TRawUtf8DynArray;
     fSecContext: TSecContext;
     fBoundUser: RawUtf8;
+    fBoundKerberosAuthIdentify: RawUtf8; // for Reconnect
     fSockBuffer: RawByteString;
     fFullResult: TAsnObject;
     fDomainSid: RawSid;
@@ -2276,6 +2286,10 @@ type
     /// the authentication and connection settings of a this instance
     property Settings: TLdapClientSettings
       read fSettings;
+    /// how the previous successful Bind*() method has been performed
+    // - Bound follows the actual connection state, whereas this property won't
+    property BoundAs: TLdapClientBound
+      read fBoundAs;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
@@ -5914,6 +5928,7 @@ begin
   if fResultCode <> LDAP_RES_SUCCESS then
     exit; // binding error
   fBound := true;
+  fBoundAs := lcbPlain;
   fBoundUser := fSettings.UserName;
   result := true;
 end;
@@ -5970,6 +5985,8 @@ begin
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // binding error
     fBound := true;
+    fBoundAs := lcbDigest;
+    fBoundDigestAlgo := Algo;
     fBoundUser := fSettings.UserName;
     result := true;
   end;
@@ -6154,6 +6171,8 @@ begin
     if KerberosUser <> nil then
       KerberosUser^ := fBoundUser;
     fBound := true;
+    fBoundAs := lcbKerberos;
+    fBoundKerberosAuthIdentify := AuthIdentify;
     if needencrypt then
       include(fFlags, fSecContextEncrypt);
     result := true;
@@ -6198,7 +6217,7 @@ begin
   if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
   fFlags := [];
-  fBound := false;
+  fBound := false; // fBoundAs should be kept as it is
   fBoundUser := '';
   fRootDN := '';
   fDefaultDN := '';
