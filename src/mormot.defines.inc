@@ -331,9 +331,9 @@
         {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
         {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
         {$define HASAESNI}   // mormot.crypt.core AES-NI rejected by Darwin asm
-        {$ifdef FPC_PIC}     // avoid weird linking issues
-          {$define FPC_PICX64}
-        {$endif FPC_PIC}
+        {.$define FPC_PICX64}
+        // FPC_PIC seems always defined on Linux x86_64: define this to use GOT
+        // in our custom asm when generating a .so library on such platform
       {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}

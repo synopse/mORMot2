@@ -3043,11 +3043,11 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC_X86}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 {$else}
-{$ifdef FPC_PIC}
+{$ifdef FPC_PICX64}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 {$else}
 procedure MoveFast(const src; var dst; cnt: PtrInt); { use our AVX-ready asm }
-{$endif FPC_PIC}
+{$endif FPC_PICX64}
 {$endif FPC_X86}
 
 {$else}
