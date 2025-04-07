@@ -3136,8 +3136,7 @@ begin
        (e.d_name[0] in ['1'..'9']) then
     begin
       pid := GetCardinal(@e.d_name[0]);
-      if (pid <> 0) and
-         IsValidPid(pid) then
+      if IsValidPid(pid) then
         AddInteger(TIntegerDynArray(result), n, pid);
     end;
   until false;
