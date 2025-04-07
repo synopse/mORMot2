@@ -1732,6 +1732,11 @@ type
       read fKerberosDisableChannelBinding write fKerberosDisableChannelBinding;
   end;
 
+  TLdapClient = class;
+
+  /// callback signature used e.g. for TLdapClient.OnDisconnect event
+  TOnLdapClientEvent = procedure(Sender: TLdapClient) of object;
+
   /// implementation of LDAP client version 2 and 3
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
@@ -1775,6 +1780,7 @@ type
     fSearchBeginBak: TIntegerDynArray; // SearchPageSize (recursive) backup
     fSearchBeginCount: integer; // usually = only 0..1
     fSockBufferPos: integer;
+    fOnDisconnect: TOnLdapClientEvent;
     fWellKnownObjects: TLdapKnownCommonNames;
     // protocol methods
     function GetTlsContext: PNetTlsContext;
@@ -2316,6 +2322,10 @@ type
     // - see also ResultCode raw integer and ResultError enumerate
     property ResultString: RawUtf8
       read fResultString;
+    /// callback raised when a TLdapClient instance is disconnected at socket level
+    // - if not defined, will follow Settings.AutoReconnect property
+    property OnDisconnect: TOnLdapClientEvent
+      read fOnDisconnect write fOnDisconnect;
   end;
 
 const
