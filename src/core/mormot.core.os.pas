@@ -4071,10 +4071,15 @@ procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
 procedure AppendKb(Size: Int64; var Dest: shortstring; WithSpace: boolean = false);
 
-/// internal function to avoid linking mormot.core.buffers.pas
-// - will output the value as one number with one decimal and KB/MB/GB/TB suffix
-// - defined here for regression tests purposes
-function _oskb(Size: QWord): shortstring;
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol with preceding space
+function KB(Size: Int64): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol without preceding space
+function KBNoSpace(Size: Int64): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 type
   /// function prototype for AppendShortUuid()
@@ -6082,7 +6087,13 @@ begin
   AppendShortChar('B', @Dest);
 end;
 
-function _oskb(Size: QWord): shortstring;
+function KB(Size: Int64): TShort16;
+begin
+  result[0] := #0;
+  AppendKb(Size, result, {withspace=}true);
+end;
+
+function KBNoSpace(Size: Int64): TShort16;
 begin
   result[0] := #0;
   AppendKb(Size, result, {withspace=}false);
@@ -7932,7 +7943,7 @@ begin
        'Current disk free: %s/%s'+ CRLF +'Load: %s'+ CRLF +
        'Exe: %s'+ CRLF +'OS: %s'+ CRLF +'Cpu: %s'+ CRLF +'Bios: %s'+ CRLF,
     [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
-     GetMemoryInfoText, _oskb(avail), _oskb(total), RetrieveLoadAvg,
+     GetMemoryInfoText, KB(avail), KB(total), RetrieveLoadAvg,
      Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText],
      result);
 end;

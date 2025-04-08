@@ -3600,7 +3600,7 @@ begin
     exit;
   fn := mnt;
   //writeln('GetDiskInfo=',GetDiskInfo(fn, av, fr, tot));
-  //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',_oskb(av),' fr=',_oskb(fr),' tot=',_oskb(tot));
+  //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
   if not (GetDiskInfo(fn, av, fr, tot)) or
      (tot < 1 shl 20) then
     exit;
@@ -4746,8 +4746,8 @@ begin
   if CpuCacheSize = 0 then
     CpuCacheSize := CpuCache[1].Size;
   if CpuCacheSize <> 0 then
-    _fmt('L1=%s L2=%s L3=%s', [_oskb(CpuCache[1].Size),
-      _oskb(CpuCache[2].Size), _oskb(CpuCache[3].Size)], CpuCacheText);
+    _fmt('L1=%s L2=%s L3=%s', [KBNoSpace(CpuCache[1].Size),
+      KBNoSpace(CpuCache[2].Size), KBNoSpace(CpuCache[3].Size)], CpuCacheText);
   SystemMemorySize := fpsysctlhwint(HW_MEMSIZE);
   {$else}
   SystemMemorySize := fpsysctlhwint(HW_PHYSMEM);
@@ -4892,7 +4892,7 @@ begin
   {$endif OSBSDDARWIN}
   SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
-    _fmt('[%s]', [_oskb(CpuCacheSize)], CpuInfoText);
+    _fmt('[%s]', [KBNoSpace(CpuCacheSize)], CpuInfoText);
   if CpuSockets = 0 then
     CpuSockets := 1;
   if fpuname(uts) < 0 then
