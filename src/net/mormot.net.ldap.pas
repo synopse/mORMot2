@@ -26,6 +26,9 @@ interface
 
 {$I ..\mormot.defines.inc}
 
+{$define ASNDEBUG}
+// enable low-level debugging of the LDAP transmitted frames on the console
+
 uses
   sysutils,
   classes,
@@ -2539,11 +2542,6 @@ type
 
 
 implementation
-
-
-{.$define ASNDEBUG}
-// enable low-level debugging of the LDAP transmitted frames on the console
-
 
 { **************** CLDAP Client Functions }
 
@@ -5532,15 +5530,16 @@ begin
   if not EnsureConnected then
     exit;
   root := SearchObject('', '*', [
-    'rootDomainNamingContext',
-    'defaultNamingContext',
-    'namingContexts',
-    'configurationNamingContext',
-    'supportedSASLMechanisms',
-    'supportedControl',
-    'supportedExtension',
-    'vendorName',
-    'ldapServiceName']);
+    'rootDomainNamingContext'
+    //'defaultNamingContext',
+    //'namingContexts',
+    //'configurationNamingContext',
+    //'supportedSASLMechanisms',
+    //'supportedControl',
+    //'supportedExtension',
+    //'vendorName',
+    //'ldapServiceName'
+    ]);
   if root = nil then
     exit;
   fRootDN         := root.Attributes.GetByName('rootDomainNamingContext');
