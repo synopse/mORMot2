@@ -524,7 +524,7 @@ const
 
 var
   gen, ref: TLecuyer;
-  Bits: array[byte] of byte;
+  Bits: TByteToByte;
   Bits64: Int64 absolute Bits;
   Si, i: integer;
   c: cardinal;
@@ -4320,7 +4320,7 @@ var
   vj, vs: variant;
   a, a2: ShortString;
   u: string;
-  varint: array[0..255] of byte;
+  varint: TByteToByte;
   st: TFastReader;
   PB, PC: PByte;
   P: PUtf8Char;
@@ -5113,7 +5113,7 @@ procedure TTestCoreBase._UTF8;
   var
     i, j: PtrInt;
     up, lo, up2: array[0..10] of AnsiChar;
-    src, dst: array[byte] of AnsiChar;
+    src, dst: TByteToAnsiChar;
   begin
     CheckEqual('A', UpperCaseReference('a'));
     CheckEqual('ABC', UpperCaseReference('aBc'));
