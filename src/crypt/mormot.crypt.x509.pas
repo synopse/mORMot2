@@ -1814,7 +1814,7 @@ begin
                  AsnSeq(ComputeExtensions)
                ]);
       fCachedDer := Asn(ASN1_SEQ, [
-                      AsnTyped({%H-}Asn(Version - 1), ASN1_CTC0),
+                      AsnTyped(Asn(Int64(Version) - 1), ASN1_CTC0),
                       AsnTyped(SerialNumber, ASN1_INT),
                       XsaToSeq(Signature),
                       Issuer.ToBinary,
