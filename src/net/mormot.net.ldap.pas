@@ -3125,8 +3125,8 @@ var
   begin
     if TrimAttr then
       result := Asn(ctc, [
-        Asn(attr),
-        Asn(UnescapeHex(value))]);
+        AsnOctStr(attr),
+        AsnOctStr(UnescapeHex(value))]);
   end;
 
   procedure SubFetch(asn: integer);
@@ -3163,7 +3163,7 @@ begin
   end;
   if PWord(text)^ = ord('*') then
     // Present Filter Type
-    result := Asn('*', ASN1_CTX7)
+    result := AsnTyped('*', ASN1_CTX7)
   else
   case text[1] of
     '&':
@@ -3175,7 +3175,7 @@ begin
               exit;
             AsnAdd(result, expr);
           until text = '';
-        result := Asn(result, ASN1_CTC0);
+        result := AsnTyped(result, ASN1_CTC0);
       end;
     '|':
       // OR Filter Type (recursive call)
@@ -3186,12 +3186,12 @@ begin
               exit;
             AsnAdd(result, expr);
           until text = '';
-        result := Asn(result, ASN1_CTC1);
+        result := AsnTyped(result, ASN1_CTC1);
       end;
     '!':
       // NOT Filter Type (recursive call)
       if GetNextRecursiveExpr then
-        result := Asn(expr, ASN1_CTC2);
+        result := AsnTyped(expr, ASN1_CTC2);
     else
       begin
         // extract the (attr=value) pair
@@ -3230,26 +3230,26 @@ begin
                 until false;
                 if TrimSplit(attr, attr, rule, ':') then
                   if rule <> '' then
-                    expr := Asn(rule, ASN1_CTX1);
+                    expr := AsnTyped(rule, ASN1_CTX1);
                 if attr <> '' then
                   AsnAdd(expr, attr, ASN1_CTX2);
                 AsnAdd(expr, UnescapeHex(value), ASN1_CTX3);
                 if dn then // dnAttributes flag - default is FALSE
                   AsnAdd(expr, RawByteString(#$01#$ff), ASN1_CTX4);
-                result := Asn(expr, ASN1_CTC9);
+                result := AsnTyped(expr, ASN1_CTC9);
               end;
           else
             if value = '*' then
               // (attr=*) present Filter Type
-              result := Asn(attr, ASN1_CTX7)
+              result := AsnTyped(attr, ASN1_CTX7)
             else
             begin
               i := PosExChar('*', value);
               if i = 0 then
                 // (attr=value) equalityMatch Filter Type
                 result := Asn(ASN1_CTC3, [
-                   Asn(attr),
-                   Asn(UnescapeHex(value))])
+                   AsnOctStr(attr),
+                   AsnOctStr(UnescapeHex(value))])
               else
               begin
                 // (attr=value*value*) substrings Filter Type
@@ -3260,8 +3260,8 @@ begin
                 if value <> '' then
                   AsnAdd(expr, UnescapeHex(value), ASN1_CTX2);
                 result := Asn(ASN1_CTC4, [
-                   Asn(attr),
-                   Asn(ASN1_SEQ, [expr])]);
+                   AsnOctStr(attr),
+                   AsnSeq(expr)]);
               end;
             end;
           end;
@@ -3280,16 +3280,17 @@ begin
     Filter := '(objectclass=*)';
   encodedfilter := RawLdapTranslateFilter(Filter);
   if encodedfilter = '' then
-    encodedfilter := Asn('', ASN1_NULL);
+    encodedfilter := AsnTyped('', ASN1_NULL);
   result := Asn(LDAP_ASN1_SEARCH_REQUEST, [
-              Asn(BaseDN),
-              Asn(ord(Scope),   ASN1_ENUM),
-              Asn(ord(Aliases), ASN1_ENUM),
+              AsnOctStr(BaseDN),
+              AsnEnum(ord(Scope)),
+              AsnEnum(ord(Aliases)),
               Asn(Sizelimit),
               Asn(TimeLimit),
               ASN1_BOOLEAN_VALUE[TypesOnly],
               encodedfilter,
-              Asn(ASN1_SEQ, [AsnArr(Attributes)])]);
+              AsnSeq(AsnArr(Attributes))
+            ]);
 end;
 
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
@@ -3949,8 +3950,8 @@ end;
 function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject;
 begin
   result := Asn(ASN1_SEQ, [
-              Asn(ord(Op), ASN1_ENUM), // modification type as enum
-              Sequence]);              // attribute(s) sequence
+              AsnEnum(ord(Op)), // modification type as enum
+              Sequence]);       // attribute(s) sequence
 end;
 
 function Modifier(Op: TLdapModifyOp; AttrType: TLdapAttributeType;
@@ -3964,8 +3965,8 @@ function Modifier(Op: TLdapModifyOp; const AttrName: RawUtf8;
 begin
   result := Modifier(Op,
               Asn(ASN1_SEQ, [                   // attribute sequence
-                Asn(AttrName),                  // attribute description
-                Asn(Asn(AttrValue), ASN1_SETOF) // attribute value set
+                AsnOctStr(AttrName),            // attribute description
+                AsnSetOf(AsnOctStr(AttrValue))  // attribute value set
               ]));
 end;
 
@@ -3985,11 +3986,11 @@ begin
     begin
       VarRecToUtf8(@Values[i], v); // Values[] are typically RawUtf8 or integer
       Append(result,
-        Asn(AttrTypeName[Types[i]]), // attribute description
-        Asn(Asn(v), ASN1_SETOF));    // attribute value set
+        AsnOctStr(AttrTypeName[Types[i]]), // attribute description
+        AsnSetOf(AsnOctStr(v)));           // attribute value set
     end;
   if result <> '' then
-    result := Modifier(Op, Asn(result, ASN1_SEQ));
+    result := Modifier(Op, AsnSeq(result));
 end;
 
 function Modifier(Op: TLdapModifyOp;
@@ -4004,9 +4005,9 @@ begin
     exit;
   for i := 0 to (n shr 1) - 1 do
     Append(result,
-      Asn(NameValuePairs[i * 2]),                       // attribute description
-      Asn(Asn(NameValuePairs[i * 2 + 1]), ASN1_SETOF)); // attribute value set
-  result := Modifier(Op, Asn(result, ASN1_SEQ));
+      AsnOctStr(NameValuePairs[i * 2]),                // attribute description
+      AsnSetOf(AsnOctStr(NameValuePairs[i * 2 + 1]))); // attribute value set
+  result := Modifier(Op, AsnSeq(result));
 end;
 
 
@@ -4325,10 +4326,10 @@ begin
      (fCount = 0) then
     exit;
   for i := 0 to fCount - 1 do
-    AsnAdd(result, Asn(fList[i]));
-  result := Asn(ASN1_SEQ, [            // attribute(s) sequence
-              Asn(fAttributeName),     // attribute description
-              Asn(result, ASN1_SETOF)  // attribute value set
+    AsnAdd(result, AsnOctStr(fList[i]));
+  result := Asn(ASN1_SEQ, [              // attribute(s) sequence
+              AsnOctStr(fAttributeName), // attribute description
+              AsnSetOf(result)           // attribute value set
             ]);
 end;
 
@@ -5971,8 +5972,8 @@ begin
     ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
-                   Asn(fSettings.UserName),
-                   Asn(fSettings.Password, ASN1_CTX0)]));
+                   AsnOctStr(fSettings.UserName),
+                   AsnTyped(fSettings.Password, ASN1_CTX0)]));
   if fResultCode <> LDAP_RES_SUCCESS then
     exit; // binding error
   fBound := true;
@@ -6012,9 +6013,9 @@ begin
   begin
     digreq := Asn(LDAP_ASN1_BIND_REQUEST, [
                 Asn(fVersion),
-                Asn(''),
+                AsnOctStr(''),
                 Asn(ASN1_CTC3, [
-                  Asn(DIGEST_ALGONAME[Algo])])]);
+                  AsnOctStr(DIGEST_ALGONAME[Algo])])]);
     s := SendAndReceive(digreq);
     if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
       exit;
@@ -6024,10 +6025,10 @@ begin
       fSettings.UserName, fSettings.Password, 'digest-uri');
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
-                     Asn(''),
+                     AsnOctStr(''),
                      Asn(ASN1_CTC3, [
-                       Asn(DIGEST_ALGONAME[Algo]),
-                       Asn(dig)])]));
+                       AsnOctStr(DIGEST_ALGONAME[Algo]),
+                       AsnOctStr(dig)])]));
     if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
       SendAndReceive(digreq);
     if fResultCode <> LDAP_RES_SUCCESS then
@@ -6099,9 +6100,9 @@ begin
                              '@' + UpperCase(fSettings.KerberosDN);
   req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
             Asn(fVersion),
-            Asn(''),
+            AsnOctStr(''),
             Asn(ASN1_CTC3, [
-              Asn('GSSAPI')])]);
+              AsnOctStr('GSSAPI')])]);
   t := SendAndReceive(req1);
   if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
     exit;
@@ -6206,10 +6207,10 @@ begin
       end;
       req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
                 Asn(fVersion),
-                Asn(''),
+                AsnOctStr(''),
                 Asn(ASN1_CTC3, [
-                  Asn('GSSAPI'),
-                  Asn(dataout)])]);
+                  AsnOctStr('GSSAPI'),
+                  AsnOctStr(dataout)])]);
       t := SendAndReceive(req2);
     until not (fResultCode in [LDAP_RES_SUCCESS, LDAP_RES_SASL_BIND_IN_PROGRESS]);
     if fResultCode <> LDAP_RES_SUCCESS then
@@ -6265,7 +6266,7 @@ begin
   result := true;
   if fSock.SockConnected then
     try
-      SendPacket(Asn('', LDAP_ASN1_UNBIND_REQUEST));
+      SendPacket(AsnTyped('', LDAP_ASN1_UNBIND_REQUEST));
     except
       result := false;
     end;
@@ -6318,10 +6319,10 @@ begin
   result := false;
   if not Connected then
     exit;
-  query := Asn(Oid, ASN1_CTX0);
+  query := AsnTyped(Oid, ASN1_CTX0);
   if Value <> '' then
-    AsnAdd(query, Asn(Value, ASN1_CTX1));
-  decoded := SendAndReceive(Asn(query, LDAP_ASN1_EXT_REQUEST));
+    AsnAdd(query, AsnTyped(Value, ASN1_CTX1));
+  decoded := SendAndReceive(AsnTyped(query, LDAP_ASN1_EXT_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
   if not result then
     exit;
@@ -6389,24 +6390,24 @@ begin
   if fSearchPageSize > 0 then // https://www.rfc-editor.org/rfc/rfc2696
     controls :=
       Asn(ASN1_SEQ, [
-         Asn(LDAP_PAGED_RESULT_OID_STRING), // controlType: pagedresultsControl
-         ASN1_BOOLEAN_VALUE[false],         // criticality: false
-         Asn(Asn(ASN1_SEQ, [
+         AsnOctStr(LDAP_PAGED_RESULT_OID_STRING), // controlType: pagedresultsControl
+         ASN1_BOOLEAN_VALUE[false],               // criticality: false
+         AsnOctStr(Asn(ASN1_SEQ, [
                Asn(fSearchPageSize),
-               Asn(fSearchCookie)
+               AsnOctStr(fSearchCookie)
              ]))
       ]);
   if fSearchSDFlags <> [] then
     Append(controls,
       Asn(ASN1_SEQ, [
-         Asn(LDAP_SERVER_SD_FLAGS_OID), // controlType: SDFlagsRequestValue
-         ASN1_BOOLEAN_VALUE[false],     // criticality: false
-         Asn(Asn(ASN1_SEQ, [
+         AsnOctStr(LDAP_SERVER_SD_FLAGS_OID), // controlType: SDFlagsRequestValue
+         ASN1_BOOLEAN_VALUE[false],           // criticality: false
+         AsnOctStr(Asn(ASN1_SEQ, [
                Asn(byte(fSearchSDFlags))
              ]))
       ]));
   if controls <> '' then
-    Append(s, Asn(controls, LDAP_ASN1_CONTROLS));
+    Append(s, AsnTyped(controls, LDAP_ASN1_CONTROLS));
   // actually send the request
   SendPacket(s);
   // receive and parse the response
@@ -6786,10 +6787,10 @@ begin
   if not Connected(false) then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
-                   Asn(obj),
+                   AsnOctStr(obj),
                    Asn(ASN1_SEQ, [
-                     Asn(AttrName),
-                     Asn(AttrValue)
+                     AsnOctStr(AttrName),
+                     AsnOctStr(AttrValue)
                    ])
                  ]));
   result := fResultCode = LDAP_RES_COMPARE_TRUE;
@@ -6812,8 +6813,8 @@ begin
   for i := 0 to Value.Count - 1 do
     Append(query, Value.Items[i].ExportToAsnSeq);
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
-                   Asn(Obj),
-                   Asn(ASN1_SEQ, query)]));
+                   AsnOctStr(Obj),
+                   AsnSeq(query)]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -6828,8 +6829,8 @@ begin
       (Modifications[0] = '')) then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
-                   Asn(Obj),                    // the DN of the entry to modify
-                   Asn(ASN1_SEQ, Modifications) // sequence of modifications
+                   AsnOctStr(Obj),       // the DN of the entry to modify
+                   AsnSeq(Modifications) // sequence of modifications
                  ]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
@@ -6873,11 +6874,11 @@ begin
   result := false;
   if not Connected then
     exit;
-  query := Asn(Obj);
-  Append(query, Asn(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]);
+  query := AsnOctStr(Obj);
+  Append(query, AsnOctStr(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]);
   if NewSuperior <> '' then
-    AsnAdd(query, Asn(NewSuperior, ASN1_CTX0));
-  SendAndReceive(Asn(query, LDAP_ASN1_MODIFYDN_REQUEST));
+    AsnAdd(query, AsnTyped(NewSuperior, ASN1_CTX0));
+  SendAndReceive(AsnTyped(query, LDAP_ASN1_MODIFYDN_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -6893,7 +6894,7 @@ begin
   if not Connected then
     exit;
   bak := SearchScope;
-  SendAndReceive(Asn(Obj, LDAP_ASN1_DEL_REQUEST));
+  SendAndReceive(AsnTyped(Obj, LDAP_ASN1_DEL_REQUEST));
   if (fResultCode = LDAP_RES_NOT_ALLOWED_ON_NON_LEAF) and
      DeleteChildren then
     // Obj had children and DeleteChildren is True
@@ -6906,7 +6907,7 @@ begin
           break; // stop on error
       if fResultCode = LDAP_RES_SUCCESS then
         // retry Obj deletion after children have been successfully removed
-        SendAndReceive(Asn(Obj, LDAP_ASN1_DEL_REQUEST));
+        SendAndReceive(AsnTyped(Obj, LDAP_ASN1_DEL_REQUEST));
     finally
       SearchScope := bak;
     end;
@@ -7297,13 +7298,13 @@ begin
     ELdap.RaiseUtf8('%.ExtModifyUserPassword requires encryption', [self]);
   if BoundUser = '' then
     ELdap.RaiseUtf8('%.ExtModifyUserPassword cannot be anonymous', [self]);
-  req := Asn(UserDN, ASN1_CTX0);
+  req := AsnTyped(UserDN, ASN1_CTX0);
   if OldPassword <> '' then
-    Append(req, Asn(OldPassword, ASN1_CTX1));
+    Append(req, AsnTyped(OldPassword, ASN1_CTX1));
   if NewPassword <> '' then
-    Append(req, Asn(NewPassword, ASN1_CTX2));
+    Append(req, AsnTyped(NewPassword, ASN1_CTX2));
   pos := 1;
-  if Extended(ASN1_OID_PASSWDMODIFY, Asn(ASN1_SEQ, [req]), nil, @v) then
+  if Extended(ASN1_OID_PASSWDMODIFY, AsnSeq(req), nil, @v) then
     if NewPassword <> '' then
       result := NewPassword     // password supplied by the client
     else if AsnNext(pos, v) = ASN1_SEQ then
