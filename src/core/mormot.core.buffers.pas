@@ -8636,7 +8636,7 @@ end;
 
 function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   L: integer;
   Beg: PUtf8Char;
 // UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where') will

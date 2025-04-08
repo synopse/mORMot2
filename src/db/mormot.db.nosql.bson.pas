@@ -53,7 +53,7 @@ type
       1:
         (l, h: Int64);
       2:
-        (b: array[0..15] of byte);
+        (b: THash128);
       3:
         (c: array[0..3] of cardinal);
   end;

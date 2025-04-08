@@ -3811,7 +3811,7 @@ end;
 
 function TRestUriContext.GetInHeader(const HeaderName: RawUtf8): RawUtf8;
 var
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   if self = nil then
     result := ''

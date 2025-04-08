@@ -625,7 +625,7 @@ var
   nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
   ColumnSize: SqlULen;
   c, siz: integer;
-  Name: array[byte] of WideChar;
+  Name: TByteToWideChar;
 begin
   ReleaseRows;
   with ODBC do

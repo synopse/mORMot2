@@ -3016,7 +3016,7 @@ var
   th: PAsyncConnectionsThread;
   t: TAsyncConnectionsThread;
   c, tix: integer; // 32-bit is enough to check for
-  ndx: array[byte] of byte; // wake up to 256 threads at once
+  ndx: TByteToByte; // wake up to 256 threads at once
 begin
   if Events > high(ndx) then
     Events := high(ndx); // avoid ndx[] buffer overflow (parnoid)

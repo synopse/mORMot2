@@ -606,7 +606,7 @@ type
     fWords: array of TExprNodeWordAbstract;
     fWordCount: integer;
     fNoWordIsAnd: boolean;
-    fFoundStack: array[byte] of AnsiChar; // simple stack-based virtual machine
+    fFoundStack: TByteToAnsiChar; // simple stack-based virtual machine
     procedure ParseNextCurrentWord; virtual; abstract;
     function ParseExpr: TExprNode;
     function ParseFactor: TExprNode;

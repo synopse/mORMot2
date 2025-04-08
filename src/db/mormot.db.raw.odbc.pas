@@ -1055,7 +1055,7 @@ procedure TOdbcLib.GetInfoString(ConnectionHandle: SqlHDbc;
   InfoType: SqlUSmallint; var Dest: RawUtf8);
 var
   Len: SqlSmallint;
-  Info: array[byte] of WideChar;
+  Info: TByteToWideChar;
 begin
   Len := 0;
   Check(nil, nil,

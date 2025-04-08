@@ -3964,7 +3964,7 @@ end;
 function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
-  UpperSection: array[byte] of AnsiChar;
+  UpperSection: TByteToAnsiChar;
 begin
   P := pointer(Content);
   PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
@@ -3978,7 +3978,7 @@ function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
   EraseSectionHeader: boolean): boolean;
 var
   P: PUtf8Char;
-  UpperSection: array[byte] of AnsiChar;
+  UpperSection: TByteToAnsiChar;
 begin
   result := false; // no modification
   P := pointer(Content);
@@ -4036,7 +4036,7 @@ end;
 
 procedure ReplaceSection(var Content: RawUtf8; const SectionName, NewSectionContent: RawUtf8);
 var
-  UpperSection: array[byte] of AnsiChar;
+  UpperSection: TByteToAnsiChar;
   P: PUtf8Char;
 begin
   P := pointer(Content);
@@ -4069,7 +4069,7 @@ end;
 function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
-  UpperSection, UpperName: array[byte] of AnsiChar;
+  UpperSection, UpperName: TByteToAnsiChar;
 begin
   result := DefaultValue;
   P := pointer(Content);
@@ -4175,7 +4175,7 @@ var
   SectionFound: boolean;
   i, UpperNameLength: PtrInt;
   V: RawUtf8;
-  UpperSection, UpperName: array[byte] of AnsiChar;
+  UpperSection, UpperName: TByteToAnsiChar;
 begin
   UpperNameLength := length(Name);
   PWord(UpperCopy255Buf(
@@ -4248,7 +4248,7 @@ var
   section, nested, json: PUtf8Char;
   name: PAnsiChar;
   n, v: RawUtf8;
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   result := false; // true when at least one property has been read
   if (Ini = '') or
@@ -4462,7 +4462,7 @@ end;
 
 function HashInternI(P: PUtf8Char; L: PtrUInt): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if (P <> nil) and
      (L <> 0) then
@@ -5368,7 +5368,7 @@ end;
 
 function TRawUtf8List.IndexOfName(const Name: RawUtf8): PtrInt;
 var
-  UpperName: array[byte] of AnsiChar;
+  UpperName: TByteToAnsiChar;
   table: PNormTable;
 begin
   if self <> nil then
@@ -6549,7 +6549,7 @@ function BinarySaveLength(Data: pointer; Info: PRttiInfo; Len: PInteger;
 var
   size: integer;
   W: TBufferWriter; // not very fast, but good enough (RecordSave don't use it)
-  temp: array[byte] of byte; // will use mostly TFakeWriterStream.Write()
+  temp: TByteToByte; // will use mostly TFakeWriterStream.Write()
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
@@ -9031,7 +9031,7 @@ end;
 
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid any slow heap allocation
+  tmp: TByteToAnsiChar; // avoid any slow heap allocation
 begin
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
@@ -9062,7 +9062,7 @@ end;
 
 function HashSynUnicodeI(Item: PSynUnicode; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
     result := Hasher(HashSeed, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp)
@@ -9081,7 +9081,7 @@ end;
 
 function HashWideStringI(Item: PWideString; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
     result := Hasher(HashSeed, tmp{%H-},
@@ -9101,7 +9101,7 @@ end;
 
 function HashPUtf8CharI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   Item := PPointer(Item)^; // passed as non-nil PPUtf8Char reference
   if Item <> nil then
@@ -9154,7 +9154,7 @@ end;
 function VariantHash(const value: variant; CaseInsensitive: boolean;
   Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid heap allocation
+  tmp: TByteToAnsiChar; // avoid heap allocation
   vt: cardinal;
   S: TStream;
   W: TTextWriter;

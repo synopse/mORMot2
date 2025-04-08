@@ -54,7 +54,7 @@ type
     /// the number of extra bytes in addition to the first UTF-8 byte
     // - since RFC 3629, only values within the 0..3 range should appear, i.e.
     // up to UTF8_MAXUTF16 within the UTF-16 surrogates range
-    Lookup: array[byte] of byte;
+    Lookup: TByteToByte;
     /// retrieve a >127 UCS-4 CodePoint from an UTF-8 sequence
     function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
   end;
@@ -1187,12 +1187,12 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 
 type
   /// lookup table used for fast case conversion
-  TNormTable = packed array[AnsiChar] of AnsiChar;
+  TNormTable = TAnsiCharToAnsiChar;
   /// pointer to a lookup table used for fast case conversion
   PNormTable = ^TNormTable;
 
   /// lookup table used for fast case conversion
-  TNormTableByte = packed array[byte] of byte;
+  TNormTableByte = TByteToByte;
   /// pointer to a lookup table used for fast case conversion
   PNormTableByte = ^TNormTableByte;
 
@@ -1572,7 +1572,7 @@ function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
-// array[byte] of AnsiChar on the caller stack)
+// TByteToAnsiChar on the caller stack)
 function UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1580,7 +1580,7 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PAnsiChar; overlo
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
-// array[byte] of AnsiChar on the caller stack)
+// TByteToAnsiChar on the caller stack)
 function UpperCopy255Buf(dest: PAnsiChar; source: PUtf8Char; sourceLen: PtrInt): PAnsiChar;
 
 /// copy source into dest^ with WinAnsi 8-bit upper case conversion
@@ -9129,7 +9129,7 @@ procedure CamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; const isWord: TSy
 var
   i: PtrInt;
   d: PAnsiChar;
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
 begin
   if len > SizeOf(tmp) then
     len := SizeOf(tmp);
@@ -9198,7 +9198,7 @@ var
 
 procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8);
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   d: PAnsiChar;
   flags, last: TSnakeCase;
 begin
@@ -9247,7 +9247,7 @@ end;
 
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 var
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
   result := FastFindPUtf8CharSorted(
@@ -9267,7 +9267,7 @@ end;
 
 procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
 begin
   if P = nil then
     exit;
@@ -9679,7 +9679,7 @@ end;
 function FastFindUpperPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
   Value: PUtf8Char; ValueLen: PtrInt): PtrInt;
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
 begin
   UpperCopy255Buf(@tmp, Value, ValueLen)^ := #0;
   result := FastFindPUtf8CharSorted(P, R, @tmp);

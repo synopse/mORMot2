@@ -8272,7 +8272,7 @@ function TDocVariantData.FlattenAsNestedObject(
   const aObjectPropName: RawUtf8; aSepChar: AnsiChar): boolean;
 var
   ndx, len: PtrInt;
-  Up: array[byte] of AnsiChar;
+  Up: TByteToAnsiChar;
   nested: TDocVariantData;
 begin
   // {"p.a1":5,"p.a2":"dfasdfa"} into {"p":{"a1":5,"a2":"dfasdfa"}}
@@ -8551,7 +8551,7 @@ function TDocVariantData.DeleteByStartName(
   aStartName: PUtf8Char; aStartNameLen: integer): integer;
 var
   ndx: PtrInt;
-  upname: array[byte] of AnsiChar;
+  upname: TByteToAnsiChar;
 begin
   result := 0;
   if aStartNameLen = 0 then
@@ -9023,7 +9023,7 @@ end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUtf8): RawUtf8;
 var
-  Up: array[byte] of AnsiChar;
+  Up: TByteToAnsiChar;
   temp: TTextWriterStackBuffer;
   n: integer;
   checkExtendedPropName: boolean;
@@ -9064,7 +9064,7 @@ end;
 function TDocVariantData.GetValuesByStartName(const aStartName: RawUtf8;
   TrimLeftStartName: boolean): variant;
 var
-  Up: array[byte] of AnsiChar;
+  Up: TByteToAnsiChar;
   ndx: PtrInt;
   name: RawUtf8;
 begin

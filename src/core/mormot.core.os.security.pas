@@ -1016,10 +1016,10 @@ type
         Int: TRawAceOperandInt);
       sctOctetString: (
         OctetBytes: cardinal;
-        Octet: array[byte] of byte);
+        Octet: TByteToByte);
       sctComposite: (
         CompositeBytes: cardinal;
-        Composite: array[byte] of byte);
+        Composite: TByteToByte);
       sctSid: (
         SidBytes: cardinal;
         Sid: TSid);
@@ -1030,7 +1030,7 @@ type
       sctResourceAttribute,
       sctDeviceAttribute: (
         UnicodeBytes: cardinal;
-        Unicode: array[byte] of WideChar);
+        Unicode: TByteToWideChar);
   end;
   PRawAceOperand = ^TRawAceOperand;
 
@@ -5237,7 +5237,7 @@ end;
 function LookupSid(sid: PSid; out name, domain: RawUtf8;
   const server: RawUtf8): TSidType;
 var
-  n, d: array[byte] of WideChar;
+  n, d: TByteToWideChar;
   s: TSynTempBuffer;
   nl, dl, use: cardinal;
 begin

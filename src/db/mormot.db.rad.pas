@@ -498,7 +498,7 @@ end;
 {$ifdef UNICODE}
 function TryStringToBcd(const Text: string; out Bcd: TBcd): boolean;
 var
-  tmp: array[byte] of byte; // no memory allocation needed
+  tmp: TByteToByte; // no memory allocation needed
   i, L: PtrInt;
 begin
   result := false;

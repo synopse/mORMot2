@@ -2262,14 +2262,6 @@ function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
 
 { **************** Hexadecimal Text And Binary Conversion }
 
-type
-  /// type of a lookup table used for fast two-digit chars conversion
-  TAnsiCharToWord = array[AnsiChar] of word;
-  PAnsiCharToWord = ^TAnsiCharToWord;
-  /// type of a lookup table used for fast two-digit chars conversion
-  TByteToWord = array[byte] of word;
-  PByteToWord = ^TByteToWord;
-
 var
   /// conversion table from hexa chars into 0..15 binary data
   // - returns 255 for any character out of 0..9,A..Z,a..z range

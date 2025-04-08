@@ -5645,7 +5645,7 @@ end;
 function TOrmPropInfoRttiAnsi.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // temp stack buffer (no heap allocation)
+  Up: TByteToAnsiChar; // temp stack buffer (no heap allocation)
   p, tmp: pointer;
   l: PtrInt;
 begin
@@ -5947,7 +5947,7 @@ end;
 function TOrmPropInfoRttiRawUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
+  Up: TByteToAnsiChar; // avoid slow heap allocation
   Value: RawByteString;
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
@@ -6155,7 +6155,7 @@ end;
 function TOrmPropInfoRttiWide.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
+  Up: TByteToAnsiChar; // avoid slow heap allocation
   Value: WideString;
 begin
   fPropInfo.GetWideStrProp(Instance, Value);
@@ -6260,7 +6260,7 @@ end;
 function TOrmPropInfoRttiUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid heap allocation - 255 chars is enough
+  Up: TByteToAnsiChar; // avoid heap allocation - 255 chars is enough
   Value: UnicodeString;
 begin
   fPropInfo.GetUnicodeStrProp(Instance, Value);

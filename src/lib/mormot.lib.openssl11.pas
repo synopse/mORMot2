@@ -7297,7 +7297,7 @@ end;
 
 function SSL_CIPHER.Description: RawUtf8;
 var
-  cipher: array[byte] of AnsiChar;
+  cipher: TByteToAnsiChar;
   s, d: PtrInt;
 begin
   if (@self = nil) or
@@ -10308,7 +10308,7 @@ const
 
 function NewCertificate: PX509;
 var
-  rnd: array[0..19] of byte;
+  rnd: THash160;
   bn: PBIGNUM;
   ai: PASN1_INTEGER;
   x: PX509;
@@ -10317,8 +10317,8 @@ begin
   result := nil;
   x := X509_new();
   EOpenSsl.Check(X509_set_version(x, X509v3));
-  // compute a random serial from OpenSSL PRNG
-  RAND_bytes(@rnd, 20);
+  // compute a 160-bit random serial from OpenSSL PRNG
+  RAND_bytes(@rnd, SizeOf(rnd));
   rnd[0] := rnd[0] and $7f; // ensure > 0
   bn := BN_bin2bn(@rnd, 20, nil);
   ai := BN_to_ASN1_INTEGER(bn, nil);

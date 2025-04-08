@@ -3592,7 +3592,7 @@ procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
   UsedValuesBits: pointer);
 var
   i, L: PtrInt;
-  Line: array[byte] of AnsiChar;
+  Line: TByteToAnsiChar;
   P: PAnsiChar;
   V: PShortString;
   s: string;
@@ -6319,7 +6319,7 @@ end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   L: integer;
 begin
   L := ord(PS^[0]);

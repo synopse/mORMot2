@@ -484,6 +484,17 @@ type
   PObjectArray = ^TObjectArray;
   TPtrIntArray = array[ 0 .. MaxInt div SizeOf(PtrInt) - 1 ] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
+  TByteToByte = array[byte] of byte;
+  TByteToAnsiChar = array[byte] of AnsiChar;
+  TByteToWideChar = array[byte] of WideChar;
+  /// type of mormot.core.unicode TNormTable lookup table
+  TAnsiCharToAnsiChar = array[AnsiChar] of AnsiChar;
+  /// type of a lookup table used for fast two-digit chars conversion
+  TAnsiCharToWord = array[AnsiChar] of word;
+  PAnsiCharToWord = ^TAnsiCharToWord;
+  /// type of a lookup table used for fast two-digit chars conversion
+  TByteToWord = array[byte] of word;
+  PByteToWord = ^TByteToWord;
   PInt64Rec = ^Int64Rec;
   PLongRec = ^LongRec;
   PPShortString = ^PShortString;

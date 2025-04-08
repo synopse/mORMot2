@@ -2727,7 +2727,7 @@ end;
 
 function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean;
 var
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   result := false;
   if (Name = '') or

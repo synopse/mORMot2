@@ -1708,7 +1708,7 @@ var
   d100: Qword;
   minus: boolean; // True, if the sign is positive
   Size, i: PtrInt;
-  Mant: array[0..19] of byte;
+  Mant: THash160;
 begin
   FillcharFast(Mant, SizeOf(Mant), 0);
   Exp := 0;

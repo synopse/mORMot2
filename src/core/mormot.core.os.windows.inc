@@ -1066,7 +1066,7 @@ const
 
 function GetExecutableName(aAddress: pointer): TFileName;
 var
-  tmp: array[byte] of WideChar;
+  tmp: TByteToWideChar;
   hm: HMODULE;
 begin
   result := '';
@@ -2892,7 +2892,7 @@ end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
 var
-  tmp: array[byte] of WideChar;
+  tmp: TByteToWideChar;
   tmpsize: cardinal;
 begin
   tmpsize := SizeOf(tmp);

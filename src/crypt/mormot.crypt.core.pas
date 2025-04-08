@@ -2367,7 +2367,7 @@ type
     {$ifdef CPUINTEL}
     state: array[byte] of PtrInt; // PtrInt=270MB/s  byte=240MB/s on x86
     {$else}
-    state: array[byte] of byte; // on ARM, keep the CPU cache usage low
+    state: TByteToByte; // on ARM, keep the CPU cache usage low
     {$endif CPUINTEL}
     currI, currJ: PtrInt;
   public
@@ -3200,7 +3200,7 @@ const
 var
   // AES computed tables - don't change the order below! (used for weak Xor)
   Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: array[byte] of cardinal;
-  SBox, InvSBox: array[byte] of byte;
+  SBox, InvSBox: TByteToByte;
 
 {$ifdef CPUX64}
   {$include mormot.crypt.core.asmx64.inc}
@@ -4078,7 +4078,7 @@ procedure ComputeAesStaticTables;
 var
   i, x, y: byte;
   j: PtrInt;
-  pow, log: array[byte] of byte;
+  pow, log: TByteToByte;
   c: cardinal;
 begin
   // 744 bytes of x86_64 code to compute 4.5 KB of tables
@@ -10925,7 +10925,7 @@ end;
 procedure TRC4.InitSha3(const aKey; aKeyLen: integer);
 var
   sha: TSha3;
-  dig: array[byte] of byte; // max RC4 state size is 256 bytes
+  dig: TByteToByte; // max RC4 state size is 256 bytes
 begin
   sha.Full(SHAKE_128, @aKey, aKeyLen, @dig, SizeOf(dig) shl 3); // XOF mode
   Init(dig, SizeOf(dig));
@@ -11765,7 +11765,7 @@ var
   L: integer;
   SHA: TSha256;
   p: PAnsiChar;
-  tmp: array[0..255] of byte;
+  tmp: TByteToByte;
 begin
   L := length(s);
   p := pointer(s);

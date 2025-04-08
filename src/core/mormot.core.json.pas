@@ -118,14 +118,14 @@ var
   // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
   // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
   // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
-  JSON_ESCAPE: array[byte] of byte;
+  JSON_ESCAPE: TByteToByte;
 
   /// 256-byte lookup table for fast branchless JSON text un-escaping
   // - #0 = JSON_UNESCAPE_UNEXPECTED for unexpected #0 or control char
   // - #1 = JSON_UNESCAPE_UTF16 for '\u0123' UTF-16 pattern
   // - #8,#9,#10,#12,#13 as unescaped char from b,t,n,f,r
   // - other characters are litterals and should be written as such
-  JSON_UNESCAPE: array[AnsiChar] of AnsiChar;
+  JSON_UNESCAPE: TAnsiCharToAnsiChar;
 
   /// how many initial chars of a JSON array are parsed for intial capacity
   // - used e.g. by _JL_DynArray() and TDocVariantData.InitJsonInPlace()
@@ -4298,7 +4298,7 @@ function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
   PropNameFound: PRawUtf8): PUtf8Char;
 var
   name: ShortString; // no memory allocation nor P^ modification
-  PropNameUpper: array[byte] of AnsiChar;
+  PropNameUpper: TByteToAnsiChar;
   parser: TJsonGotoEndParser;
 begin
   if P <> nil then

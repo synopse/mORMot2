@@ -2767,7 +2767,7 @@ function kenv(action: integer; name, value: PAnsiChar; len: integer): integer;
 
 function GetSmbEfiMem: RawByteString;
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   xaddr: PtrUInt;
 begin
   result := '';
@@ -2803,7 +2803,7 @@ const
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
 begin
   for i := 0 to high(_KNOWN) do
     with _KNOWN[i] do
