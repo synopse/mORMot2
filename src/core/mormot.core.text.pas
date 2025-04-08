@@ -1947,23 +1947,6 @@ procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean = tru
 
 { ************ Resource and Time Functions }
 
-/// convert a size to a human readable value power-of-two metric value
-// - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
-// - for EB, PB, TB, GB, MB and KB, add one fractional digit
-procedure KB(bytes: Int64; out result: TShort16; nospace: boolean); overload;
-
-/// convert a size to a human readable value
-// - append EB, PB, TB, GB, MB, KB or B symbol with preceding space
-// - for EB, PB, TB, GB, MB and KB, add one fractional digit
-function KB(bytes: Int64): TShort16; overload;
-  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
-
-/// convert a size to a human readable value
-// - append EB, PB, TB, GB, MB, KB or B symbol without preceding space
-// - for EB, PB, TB, GB, MB and KB, add one fractional digit
-function KBNoSpace(bytes: Int64): TShort16;
-  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
-
 /// convert a size to a human readable value
 // - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
@@ -9597,108 +9580,31 @@ end;
 
 { ************ Resource and Time Functions }
 
-procedure KB(bytes: Int64; out result: TShort16; nospace: boolean);
-type
-  TUnits = (kb, mb, gb, tb, pb, eb, b);
-const
-  TXT: array[{nospace:}boolean, TUnits] of RawUtf8 = (
-    (' KB', ' MB', ' GB', ' TB', ' PB', ' EB', '% B'),
-    ( 'KB',  'MB',  'GB',  'TB',  'PB',  'EB', '%B'));
-var
-  hi, rem: cardinal;
-  u: TUnits;
-begin
-  if bytes < 0 then
-  begin
-    result[0] := #0;
-    exit;
-  end;
-  if bytes < 1 shl 10 - (1 shl 10) div 10 then
-  begin
-    FormatShort16(TXT[nospace, b], [integer(bytes)], result);
-    exit;
-  end;
-  if bytes < 1 shl 20 - (1 shl 20) div 10 then
-  begin
-    u := kb;
-    rem := bytes;
-    hi  := bytes shr 10;
-  end
-  else if bytes < 1 shl 30 - (1 shl 30) div 10 then
-  begin
-    u := mb;
-    rem := bytes shr 10;
-    hi  := bytes shr 20;
-  end
-  else if bytes < Int64(1) shl 40 - (Int64(1) shl 40) div 10 then
-  begin
-    u := gb;
-    rem := bytes shr 20;
-    hi  := bytes shr 30;
-  end
-  else if bytes < Int64(1) shl 50 - (Int64(1) shl 50) div 10 then
-  begin
-    u := tb;
-    rem := bytes shr 30;
-    hi  := bytes shr 40;
-  end
-  else if bytes < Int64(1) shl 60 - (Int64(1) shl 60) div 10 then
-  begin
-    u := pb;
-    rem := bytes shr 40;
-    hi  := bytes shr 50;
-  end
-  else
-  begin
-    u := eb;
-    rem := bytes shr 50;
-    hi  := bytes shr 60;
-  end;
-  rem := rem and 1023;
-  if rem <> 0 then
-    rem := rem div 102;
-  if rem = 10 then
-  begin
-    rem := 0;
-    inc(hi); // round up as expected by (most) human beings
-  end;
-  if rem <> 0 then
-    FormatShort16('%.%%', [hi, rem, TXT[nospace, u]], result)
-  else
-    FormatShort16('%%', [hi, TXT[nospace, u]], result);
-end;
-
-function KB(bytes: Int64): TShort16;
-begin
-  KB(bytes, result, {nospace=}false);
-end;
-
-function KBNoSpace(bytes: Int64): TShort16;
-begin
-  KB(bytes, result, {nospace=}true);
-end;
-
 function KB(bytes: Int64; nospace: boolean): TShort16;
 begin
-  KB(bytes, result, nospace);
+  result[0] := #0;
+  AppendKb(bytes, result, not nospace);
 end;
 
 function KB(const buffer: RawByteString): TShort16;
 begin
-  KB(length(buffer), result, {nospace=}false);
+  result[0] := #0;
+  AppendKb(length(buffer), result, {withspace=}true);
 end;
 
 procedure KBU(bytes: Int64; var result: RawUtf8);
 var
   tmp: TShort16;
 begin
-  KB(bytes, tmp, {nospace=}false);
+  tmp[0] := #0;
+  AppendKb(bytes, tmp, {withspace=}true);
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
 procedure K(value: Int64; out result: TShort16);
 begin
-  KB(Value, result, {nospace=}true);
+  result[0] := #0;
+  AppendKb(value, result, {withspace=}false);
   if result[0] <> #0 then
     dec(result[0]); // just trim last 'B' ;)
 end;

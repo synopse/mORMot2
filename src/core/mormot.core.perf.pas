@@ -2595,21 +2595,22 @@ end;
 
 function TSynMonitorSize.GetAsText: TShort16;
 begin
-  KB(fBytes, result, fTextNoSpace);
+  AppendKB(fBytes, result, not fTextNoSpace);
 end;
 
 { TSynMonitorOneSize }
 
 function TSynMonitorOneSize.GetAsText: TShort16;
 begin
-  KB(fBytes, result, fTextNoSpace);
+  AppendKB(fBytes, result, not fTextNoSpace);
 end;
 
 { TSynMonitorThroughput }
 
 function TSynMonitorThroughput.GetAsText: TShort16;
 begin
-  FormatShort16('%/s', [KB(fBytesPerSec, fTextNoSpace)], result);
+  AppendKB(fBytesPerSec, result, not fTextNoSpace);
+  AppendShortTwoChars('/s', @result);
 end;
 
 
