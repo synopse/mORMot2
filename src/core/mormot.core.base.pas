@@ -957,6 +957,9 @@ procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
+/// simple concatenation of no banker rounding floating point value as TwoDigits()
+procedure AppendShortTwoDigits(const Value: double; var Dest: shortstring);
+
 /// simple concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar = #255);
@@ -4686,13 +4689,9 @@ begin
 end;
 
 function TwoDigits(const d: double): TShort23;
-var
-  v: Int64;
 begin
-  DoubleToCurrency(d, PCurrency(@v)^); // specific code for x87
-  SimpleRoundTo2DigitsCurr64(v);
   result[0] := #0;
-  AppendShortCurr64(v, result, {decimals=}2);
+  AppendShortTwoDigits(d, result);
 end;
 
 function TruncTo2Digits(const Value: Currency): Currency;
@@ -5341,6 +5340,15 @@ begin
     else if PWord(@p[l - 2])^ = $3030 then
       dec(l, 2); // x.xx00 -> x.xx
   AppendShortBuffer(p, l, @dest);
+end;
+
+procedure AppendShortTwoDigits(const Value: double; var Dest: shortstring);
+var
+  v: Int64;
+begin
+  DoubleToCurrency(Value, PCurrency(@v)^); // specific code for x87
+  SimpleRoundTo2DigitsCurr64(v);
+  AppendShortCurr64(v, Dest, {decimals=}2);
 end;
 
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
