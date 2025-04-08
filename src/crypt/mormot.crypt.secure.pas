@@ -3626,15 +3626,14 @@ procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
 
 /// encode the len of a ASN.1 binary item
-function AsnEncLen(Len: cardinal; dest: PByte): PtrInt;
+function AsnEncLen(Len: cardinal; dest: PHash128): PtrInt;
 
 /// create an ASN.1 binary from the aggregation of several binaries
 function Asn(AsnType: integer;
   const Content: array of TAsnObject): TAsnObject; overload;
 
-/// create an ASN.1 binary from some raw data - as OCTSTR by default
-function Asn(const Data: RawByteString; AsnType: integer = ASN1_OCTSTR): TAsnObject;
-  overload; {$ifdef HASINLINE} inline; {$endif}
+/// create an ASN.1 binary from some raw data
+function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
 
 /// create an ASN.1 binary from several raw data - as OCTSTR by default
 function AsnArr(const Data: array of RawUtf8;
@@ -3656,9 +3655,29 @@ function AsnBigInt(const BigInt: RawByteString;
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// create an ASN.1 OCTetSTRing from some raw data
+function AsnOctStr(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// create an ASN.1 SEQuence from the aggregation of several binaries
 function AsnSeq(const Content: array of TAsnObject): TAsnObject; overload;
   {$ifdef FPC} inline; {$endif}
+
+/// create an ASN.1 ObjectID from some raw binary data
+function AsnObjId(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 SETOF from some raw binary data
+function AsnSetOf(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 BITSTRing from some raw binary data
+function AsnBitStr(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 ENUMerate from some raw integer
+function AsnEnum(Data: PtrInt): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// create an ASN.1 ObjectID from 'x.x.x.x.x' text
 function AsnOid(OidText: PUtf8Char): TAsnObject;
@@ -9529,7 +9548,7 @@ end;
 
 procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
 var
-  tmp: array[0..15] of byte; // written in reverse order (big endian)
+  tmp: THash128; // written in reverse order (big endian)
   vl, rl: PtrInt;
   r: PByte;
 begin
@@ -9573,30 +9592,24 @@ begin
   FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
 end;
 
-function AsnEncLen(Len: cardinal; dest: PByte): PtrInt;
-var
-  n: PtrInt;
-  tmp: array[0..7] of byte;
+function AsnEncLen(Len: cardinal; dest: PHash128): PtrInt;
 begin
   if Len <= $7f then
   begin
-    dest^ := Len; // most simple case
+    dest^[0] := Len; // most simple case
     result := 1;
     exit;
   end;
-  n := 0;
+  result := 0;
   repeat
-    tmp[n] := byte(Len); // prepare big endian storage
-    inc(n);
+    dest^[high(dest^) - result] := byte(Len); // prepare big endian storage
+    inc(result);
     Len := Len shr 8;
   until Len = 0;
-  result := n + 1;
-  dest^ := byte(n) or $80; // first byte is number of following bytes + $80
-  repeat
-    inc(dest);
-    dec(n);
-    dest^ := tmp[n]; // stored as big endian
-  until n = 0;
+  dest^[0] := byte(result) or $80; // first byte is following bytes count + $80
+  inc(PByte(dest));
+  MoveFast(dest^[high(dest^) - result], dest^[0], result);
+  inc(result);
 end;
 
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
@@ -9625,7 +9638,7 @@ var
   neg: boolean;
   n: PtrInt;
   p: PByte;
-  tmp: array[0..15] of byte;
+  tmp: THash128;
 begin
   result := '';
   neg := Value < 0;
@@ -9705,7 +9718,7 @@ end;
 
 function Asn(AsnType: integer; const Content: array of TAsnObject): TAsnObject;
 var
-  tmp: array[0..7] of byte;
+  tmp: THash128;
   i, len, al: PtrInt;
   p: PByte;
 begin
@@ -9731,9 +9744,25 @@ begin
   end;
 end;
 
-function Asn(const Data: RawByteString; AsnType: integer): TAsnObject;
+function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
+var
+  tmp: THash128;
+  len, al: PtrInt;
+  p: PByte;
 begin
-  result := Asn(AsnType, [Data]);
+  len := ord(AsnType = ASN1_BITSTR) + length(Data);
+  al := AsnEncLen(len, @tmp);
+  p := FastNewRawByteString(result, al + len + 1);
+  p^ := AsnType;         // type
+  inc(p);
+  MoveFast(tmp, p^, al); // encoded length
+  inc(p, al);
+  if AsnType = ASN1_BITSTR then
+  begin
+    p^ := 0; // leading unused bit length
+    inc(p);
+  end;
+  MoveFast(pointer(Data)^, p^, length(Data)); // content
 end;
 
 function AsnArr(const Data: array of RawUtf8; AsnType: integer): TAsnObject;
@@ -9742,12 +9771,12 @@ var
 begin
   result := '';
   for i := 0 to high(Data) do
-    Append(result, Asn(AsnType, [Data[i]]));
+    Append(result, AsnTyped(Data[i], AsnType));
 end;
 
 function Asn(Value: Int64; AsnType: integer): TAsnObject;
 begin
-  result := Asn(AsnType, [AsnEncInt(Value)]);
+  result := AsnTyped(AsnEncInt(Value), AsnType);
 end;
 
 function AsnBigInt(const BigInt: RawByteString; AsnType: integer): TAsnObject;
@@ -9769,13 +9798,18 @@ begin
        (ord(v[1]) and $80 <> 0) then
       Prepend(v, #0); // prepend 0 to ensure not parsed as negative number
   end;
-  result := Asn(AsnType, [v]);
+  result := AsnTyped(v, AsnType);
   FillZero(v); // anti-forensic
 end;
 
 function AsnSeq(const Data: TAsnObject): TAsnObject;
 begin
-  result := Asn(ASN1_SEQ, [Data]);
+  result := AsnTyped(Data, ASN1_SEQ);
+end;
+
+function AsnOctStr(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_OCTSTR);
 end;
 
 function AsnSeq(const Content: array of TAsnObject): TAsnObject;
@@ -9783,9 +9817,29 @@ begin
   result := Asn(ASN1_SEQ, Content);
 end;
 
+function AsnObjId(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_OBJID);
+end;
+
+function AsnSetOf(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_SETOF);
+end;
+
+function AsnBitStr(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_BITSTR);
+end;
+
+function AsnEnum(Data: PtrInt): TAsnObject;
+begin
+  result := Asn(Data, ASN1_ENUM);
+end;
+
 function AsnOid(OidText: PUtf8Char): TAsnObject;
 begin
-  result := Asn(ASN1_OBJID, [AsnEncOid(OidText)]);
+  result := AsnTyped(AsnEncOid(OidText), ASN1_OBJID);
 end;
 
 function AsnTypeText(p: PUtf8Char): integer;
@@ -9811,7 +9865,7 @@ end;
 
 function AsnText(const Text: RawUtf8): TAsnObject;
 begin
-  result := Asn(AsnTypeText(pointer(Text)), [Text]);
+  result := AsnTyped(Text, AsnTypeText(pointer(Text)));
 end;
 
 function AsnTime(dt: TDateTime): TAsnObject;
@@ -9820,7 +9874,7 @@ var
 {%H-}begin
   if dt = 0 then
   begin
-    result := Asn(ASN1_GENTIME, ['99991231235959Z']);
+    result := AsnTyped('99991231235959Z', ASN1_GENTIME);
     exit;
   end;
   t.FromDateTime(dt);
@@ -9853,8 +9907,8 @@ var
   i: PtrInt;
   seq: RawByteString;
 begin
-  seq := Asn(ASN1_SEQ, Content);
-  result := Asn(ASN1_OCTSTR, [seq]);
+  seq := AsnSeq(Content);
+  result := AsnOctStr(seq);
   FillZero(seq);
   for i := 0 to high(Content) do // wipe temporary "const" memory buffers
     FillCharFast(pointer(Content[i])^, length(Content[i]), 0);
@@ -9867,7 +9921,7 @@ end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject; AsnType: integer);
 begin
-  Append(Data, Asn(AsnType, [Buffer]));
+  Append(Data, AsnTyped(Buffer, AsnType));
 end;
 
 function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
