@@ -1911,6 +1911,9 @@ type
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successful bind request has been made
     function Connected(AndBound: boolean = true): boolean;
+    /// test whether the client is connected to the server and try re-connect
+    // - follows Settings.AutoReconnect property and OnDisconnect event
+    function EnsureConnected: boolean;
     /// test whether the client is connected with TLS or Kerberos Signing-Sealing
     // - it is unsafe to send e.g. a plain Password without lctEncrypted
     function Transmission: TLdapClientTransmission;
@@ -5512,8 +5515,8 @@ end;
 function TLdapClient.NetbiosDN: RawUtf8;
 begin
   if (fNetbiosDN = '') and
-     fBound and
-     fSock.SockConnected then
+     EnsureConnected and
+     fBound then
     fNetbiosDN := SearchObject('CN=Partitions,' + ConfigDN,
       FormatUtf8('(&(nETBIOSName=*)(nCName=%))', [DefaultDN]),
       'nETBIOSName', lssWholeSubtree).GetReadable;
@@ -5525,7 +5528,7 @@ var
   root: TLdapResult;
 begin
   // retrieve all needed Root DSE attributes in a single call
-  if not fSock.SockConnected then
+  if not EnsureConnected then
     exit;
   root := SearchObject('', '*', [
     'rootDomainNamingContext',
@@ -6235,6 +6238,14 @@ begin
     result := fBound;
 end;
 
+function TLdapClient.EnsureConnected: boolean;
+begin
+  result := (self <> nil) and
+            (fSock.SockConnected or
+             ((fBoundAs <> lcbNone) and
+              Reconnect)); // try re-connect and re-bind if possible
+end;
+
 function TLdapClient.Transmission: TLdapClientTransmission;
 begin
   if (self = nil) or
@@ -6366,7 +6377,7 @@ var
   a: TLdapAttribute;
 begin
   result := false;
-  if not fSock.SockConnected then
+  if not EnsureConnected then
     exit;
   // compute the main request
   QueryPerformanceMicroSeconds(start);
