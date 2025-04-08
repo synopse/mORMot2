@@ -4066,6 +4066,11 @@ procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 
 {$endif OSWINDOWS}
 
+/// will append the value as one-decimal number text and B/KB/MB/GB/TB suffix
+// - append EB, PB, TB, GB, MB, KB or B symbol with or without a preceding space
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+procedure AppendKb(Size: Int64; var Dest: shortstring; WithSpace: boolean = false);
+
 /// internal function to avoid linking mormot.core.buffers.pas
 // - will output the value as one number with one decimal and KB/MB/GB/TB suffix
 // - defined here for regression tests purposes
@@ -6050,33 +6055,37 @@ begin
   P := S;
 end;
 
-procedure __oskb(Size: QWord; var text: shortstring);
+procedure AppendKb(Size: Int64; var Dest: shortstring; WithSpace: boolean);
 const
-  _U: array[0..3] of AnsiChar = 'TGMK';
+  _U: array[1..5] of AnsiChar = 'KMGTE';
 var
   u: PtrInt;
-  b: QWord;
+  b: Int64;
 begin
+  if Size < 0 then
+    exit;
   u := 0;
-  b := Qword(1) shl 40;
+  b := 1 shl 10;
   repeat
-    if Size > b shr 1 then
+    if Size < b - (b shr 3) then
       break;
-    b := b shr 10;
+    b := b shl 10;
     inc(u);
   until u = high(_u);
-  str(Size / b : 1 : 1, text); // let the FPU + RTL do the conversion for us
-  if (text[0] <= #2) or
-     (text[ord(text[0]) - 1] <> '.') or
-     (text[ord(text[0])] <> '0') then
-    inc(text[0], 2);
-  text[ord(text[0]) - 1] := _U[u];
-  text[ord(text[0])] := 'B';
+  Size := (Size * 10000) shr (u * 10);
+  SimpleRoundTo2DigitsCurr64(Size);
+  AppendShortCurr64(Size, Dest, 1);
+  if WithSpace then
+    AppendShortChar(' ', @Dest);
+  if u <> 0 then
+    AppendShortChar(_U[u], @Dest);
+  AppendShortChar('B', @Dest);
 end;
 
 function _oskb(Size: QWord): shortstring;
 begin
-  __oskb(Size, result);
+  result[0] := #0;
+  AppendKb(Size, result, {withspace=}false);
 end;
 
 {$ifdef ISDELPHI} // missing convenient RTL function in Delphi
@@ -7885,16 +7894,12 @@ begin // return 'U:usr K:krn' percents on windows
   AppendShortCurr64(K, result, {fixeddecimals=}2);
 end;
 
-procedure AppendShortKB(free, total: QWord; out text: shortstring);
-var
-  tmp: shortstring;
+procedure AppendShortKB(free, total: QWord; var dest: shortstring);
 begin
-  __oskb(free, tmp);
-  AppendShort(tmp, text);
-  AppendShortChar('/', @text);
-  __oskb(total, tmp);
-  AppendShort(tmp, text);
-  AppendShortChar(' ', @text);
+  AppendKb(free, dest);
+  AppendShortChar('/', @dest);
+  AppendKb(total, dest);
+  AppendShortChar(' ', @dest);
 end;
 
 function GetMemoryInfoText: TShort31;
