@@ -5335,10 +5335,19 @@ begin
      (p[l - 5] = '.') then
     if PCardinal(@p[l - 4])^ = $30303030 then
       dec(l, 5)  // x.0000 -> x
-    else if fixeddecimals <> 0 then
-      dec(l, 4 - fixeddecimals)
-    else if PWord(@p[l - 2])^ = $3030 then
-      dec(l, 2); // x.xx00 -> x.xx
+    else
+      case fixeddecimals of
+        0:
+          if PWord(@p[l - 2])^ = $3030 then
+            dec(l, 2); // x.xx00 -> x.xx
+        1:
+          if p[l - 4] = '0' then
+            dec(l, 5) // x.0 -> x (not truly fixed to 1 decimal)
+          else
+            dec(l, 3);
+      else
+        dec(l, 4 - fixeddecimals); // keep x.00 x.000
+      end;
   AppendShortBuffer(p, l, @dest);
 end;
 
