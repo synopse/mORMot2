@@ -2347,25 +2347,25 @@ type
   /// map a 128-bit hash as an array of lower bit size values
   // - consumes 16 bytes of memory
   THash128Rec = packed record
-  case integer of
-  0: (
-      Lo, Hi: Int64);
-  1: (
-      L, H: QWord);
-  2: (
-      i0, i1, i2, i3: integer);
-  3: (
-      c0, c1, c2 ,c3: cardinal);
-  4: (
-      c: TBlock128);
-  5: (
-      b: THash128);
-  6: (
-      w: array[0..7] of word);
-  7: (
-      l64, h64: Int64Rec);
-  8: (
-      guid: TGuid);
+    case integer of
+      0: (
+          Lo, Hi: Int64);
+      1: (
+          L, H: QWord);
+      2: (
+          i0, i1, i2, i3: integer);
+      3: (
+          c0, c1, c2 ,c3: cardinal);
+      4: (
+          c: TBlock128);
+      5: (
+          b: THash128);
+      6: (
+          w: array[0..7] of word);
+      7: (
+          l64, h64: Int64Rec);
+      8: (
+          guid: TGuid);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -2383,27 +2383,27 @@ type
   /// map a 256-bit hash as an array of lower bit size values
   // - consumes 32 bytes of memory
   THash256Rec = packed record
-  case integer of
-  0: (
-      Lo, Hi: THash128);
-  1: (
-      d0, d1, d2, d3: Int64);
-  2: (
-      i0, i1, i2, i3, i4, i5, i6, i7: integer);
-  3: (
-      c0, c1: TBlock128);
-  4: (
-      b: THash256);
-  5: (
-      q: array[0..3] of QWord);
-  6: (
-      c: array[0..7] of cardinal);
-  7: (
-      w: array[0..15] of word);
-  8: (
-     l, h: THash128Rec);
-  9: (
-     sha1: THash160);
+    case integer of
+      0: (
+          Lo, Hi: THash128);
+      1: (
+          d0, d1, d2, d3: Int64);
+      2: (
+          i0, i1, i2, i3, i4, i5, i6, i7: integer);
+      3: (
+          c0, c1: TBlock128);
+      4: (
+          b: THash256);
+      5: (
+          q: array[0..3] of QWord);
+      6: (
+          c: array[0..7] of cardinal);
+      7: (
+          w: array[0..15] of word);
+      8: (
+         l, h: THash128Rec);
+      9: (
+         sha1: THash160);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
@@ -2426,36 +2426,36 @@ type
   /// map a 512-bit hash as an array of lower bit size values
   // - consumes 64 bytes of memory
   THash512Rec = packed record
-  case integer of
-  0: (
-      Lo, Hi: THash256);
-  1: (
-      h0, h1, h2, h3: THash128);
-  2: (
-      d0, d1, d2, d3, d4, d5, d6, d7: Int64);
-  3: (
-      i0, i1, i2, i3, i4, i5, i6, i7,
-      i8, i9, i10, i11, i12, i13, i14, i15: integer);
-  4: (
-      c0, c1, c2, c3: TBlock128);
-  5: (
-      b: THash512);
-  6: (
-      b160: THash160);
-  7: (
-      b384: THash384);
-  8: (
-      w: array[0..31] of word);
-  9: (
-      c: array[0..15] of cardinal);
-  10: (
-       i: array[0..7] of Int64);
-  11: (
-       q: array[0..7] of QWord);
-  12: (
-       r: array[0..3] of THash128Rec);
-  13: (
-       l, h: THash256Rec);
+    case integer of
+      0: (
+          Lo, Hi: THash256);
+      1: (
+          h0, h1, h2, h3: THash128);
+      2: (
+          d0, d1, d2, d3, d4, d5, d6, d7: Int64);
+      3: (
+          i0, i1, i2, i3, i4, i5, i6, i7,
+          i8, i9, i10, i11, i12, i13, i14, i15: integer);
+      4: (
+          c0, c1, c2, c3: TBlock128);
+      5: (
+          b: THash512);
+      6: (
+          b160: THash160);
+      7: (
+          b384: THash384);
+      8: (
+          w: array[0..31] of word);
+      9: (
+          c: array[0..15] of cardinal);
+      10: (
+           i: array[0..7] of Int64);
+      11: (
+           q: array[0..7] of QWord);
+      12: (
+           r: array[0..3] of THash128Rec);
+      13: (
+           l, h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;

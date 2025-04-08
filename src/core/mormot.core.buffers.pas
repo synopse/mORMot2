@@ -8010,7 +8010,7 @@ begin
   result := PtrUInt(d);
   if d = nil then
     exit;
-  hex := @TwoDigitsHexWB;
+  hex := @TwoDigitsHex;
   repeat
     c := s^;
     inc(s);
@@ -9364,7 +9364,7 @@ begin
   if (slen > 0) and
      (dmax > 7) then
   begin
-    tab := @TwoDigitsHexWBLower;
+    tab := @TwoDigitsHexLower;
     repeat
       c := s^;
       inc(s);

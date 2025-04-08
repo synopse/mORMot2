@@ -660,7 +660,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-    // - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+    // - you can set tab = @TwoDigitsHexLower to force a lowercase output
     procedure Add(Value: PGuid; QuotedChar: AnsiChar = #0; tab: PWordArray = nil); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
@@ -2274,13 +2274,11 @@ var
   /// fast lookup table for converting hexadecimal numbers from 0 to 15
   // into their ASCII equivalence
   // - is local for better code generation
-  TwoDigitsHex: array[byte] of array[1..2] of AnsiChar;
+  TwoDigitsHex: TByteToWord;
   TwoDigitsHexW: TAnsiCharToWord absolute TwoDigitsHex;
-  TwoDigitsHexWB: TByteToWord absolute TwoDigitsHex;
   /// lowercase hexadecimal lookup table
-  TwoDigitsHexLower: array[byte] of array[1..2] of AnsiChar;
+  TwoDigitsHexLower: TByteToWord;
   TwoDigitsHexWLower: TAnsiCharToWord absolute TwoDigitsHexLower;
-  TwoDigitsHexWBLower: TByteToWord absolute TwoDigitsHexLower;
 
 /// fast conversion from hexa chars into binary data
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -2536,7 +2534,7 @@ function OctToBin(const Oct: RawUtf8): RawByteString; overload;
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
-// - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+// - you can set tab = @TwoDigitsHexLower to force a lowercase output
 function GuidToText(P: PUtf8Char; guid: PByteArray; tab: PWordArray = nil): PUtf8Char;
 
 /// convert a TGuid into 38 chars encoded { text } as RawUtf8
@@ -2558,14 +2556,14 @@ function NotNullGuidToUtf8(
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
-// - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+// - you can set tab = @TwoDigitsHexLower to force a lowercase output
 procedure ToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid;
   var text: RawUtf8; tab: PWordArray = nil); overload;
 
 /// convert one or several TGuid into 36 chars encoded CSV text
 // - will return e.g.
 // ! '3F2504E0-4F89-11D3-9A0C-0305E82C3301,C595476E-73D1-4B9C-9725-308C4A72DEC8'
-// - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+// - you can set tab = @TwoDigitsHexLower to force a lowercase output
 function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ',';
   tab: PWordArray = nil): RawUtf8;
 
@@ -5296,7 +5294,7 @@ procedure TTextWriter.AddByteToHex(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
-  PCardinal(B + 1)^ := TwoDigitsHexWB[Value];
+  PCardinal(B + 1)^ := TwoDigitsHex[Value];
   inc(B, 2);
 end;
 
@@ -5304,7 +5302,7 @@ procedure TTextWriter.AddByteToHexLower(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
-  PCardinal(B + 1)^ := TwoDigitsHexWBLower[Value];
+  PCardinal(B + 1)^ := TwoDigitsHexLower[Value];
   inc(B, 2);
 end;
 
@@ -5896,7 +5894,7 @@ var
   c: AnsiChar;
   hex: PByteToWord; // better code generation on x86_64 and arm
 begin
-  hex := @TwoDigitsHexWB;
+  hex := @TwoDigitsHex;
   result := dest;
   if srclen > 0 then
     repeat
@@ -5943,7 +5941,7 @@ var
   c: AnsiChar;
   hex: PByteToWord; // better code generation on x86_64 and arm
 begin
-  hex := @TwoDigitsHexWB;
+  hex := @TwoDigitsHex;
   result := dest;
   if srclen > 0 then
     repeat
@@ -10418,7 +10416,7 @@ end;
 
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 begin
-  PWord(P)^ := TwoDigitsHexWB[Value];
+  PWord(P)^ := TwoDigitsHex[Value];
   result := P + 2;
 end;
 
@@ -10903,7 +10901,7 @@ var
 begin
   // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   if tab = nil then
-    tab := @TwoDigitsHexWB; // uppercased hexa by default (as for GUID)
+    tab := @TwoDigitsHex; // uppercased hexa by default (as for GUID)
   for i := 3 downto 0 do
   begin
     PWord(P)^ := tab[guid[i]];
@@ -11005,7 +11003,7 @@ function UuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid: TGuid): TGuidShortString;
 begin
   result[0] := #36;
-  GuidToText(@result[1], @guid, @TwoDigitsHexWBLower);
+  GuidToText(@result[1], @guid, @TwoDigitsHexLower);
 end;
 
 {$ifdef UNICODE}
@@ -11171,7 +11169,7 @@ procedure _AppendShortUuid(const u: TGuid; var s: ShortString);
 begin // much more efficient than default GUIDToString() in mormot.core.os
   if ord(s[0]) > 255 - 36 then
     exit;
-  GuidToText(@s[ord(s[0]) + 1], @u, @TwoDigitsHexWBLower);
+  GuidToText(@s[ord(s[0]) + 1], @u, @TwoDigitsHexLower);
   inc(s[0], 36);
 end;
 
@@ -11263,9 +11261,18 @@ begin
     {$endif FPC}
 end;
 
-const // should be local for better code generation
-  HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+procedure HexLookup(lookup, hex: PAnsiChar);
+var
+  h, l: PtrInt;
+begin
+  for h := 0 to 15 do
+    for l := 0 to 15 do
+    begin
+      lookup[0] := hex[h];
+      lookup[1] := hex[l];
+      inc(lookup, 2);
+    end;
+end;
 
 procedure InitializeUnit;
 var
@@ -11278,13 +11285,8 @@ var
   tmp: array[0..15] of AnsiChar;
 begin
   // initialize internal lookup tables for various text conversions
-  for i := 0 to 255 do
-  begin
-    TwoDigitsHex[i][1]      := HexChars[i shr 4];
-    TwoDigitsHex[i][2]      := HexChars[i and $f];
-    TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
-    TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
-  end;
+  HexLookup(@TwoDigitsHex, '0123456789ABCDEF');
+  HexLookup(@TwoDigitsHexLower, '0123456789abcdef');
   {$ifdef DOUBLETOSHORT_USEGRISU}
   MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));
   for i := 0 to 199 do

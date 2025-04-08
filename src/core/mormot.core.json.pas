@@ -6325,7 +6325,7 @@ begin // a dedicated method using a TSynAnsiFixedWidth lookup table
       JSON_ESCAPE_UNICODEHEX: // characters below ' ', #7 e.g. -> \u0007
         begin
           PCardinal(W.B + 1)^ := JSON_UHEXC;
-          PCardinal(W.B + 5)^ := TwoDigitsHexWB[P^];
+          PCardinal(W.B + 5)^ := TwoDigitsHex[P^];
           inc(W.B, 6);
         end;
     else // escaped as \ + b,t,n,f,r,\,"
@@ -7071,7 +7071,7 @@ noesc:
         begin
           PCardinal(B + 1)^ := JSON_UHEXC;
           inc(B, 4);
-          PCardinal(B + 1)^ := TwoDigitsHexWB[c^];
+          PCardinal(B + 1)^ := TwoDigitsHex[c^];
         end;
     else
       // escaped as \ + b,t,n,f,r,\,"
@@ -7282,7 +7282,7 @@ nxt:if Len = 0 then
     if (Len < 0) or
        (c = 0) then
       break;
-    tab := @TwoDigitsHexWBLower;
+    tab := @TwoDigitsHexLower;
     if c <= $ffff then
       Utf16ToJsonUnicodeEscape(B, c, tab)
     else
