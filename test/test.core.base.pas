@@ -4336,16 +4336,6 @@ begin
   for i := 11 to 150 do
     AppendShortCardinal(i, a);
   CheckHash(a, $1CDCEE09, 'AppendShortCardinal');
-  Check(_oskb(0)            = '0KB', 'oskb0');
-  Check(_oskb(1 shl 10 - 1) = '1KB', 'oskb1');
-  Check(_oskb(1 shl 10)     = '1KB', 'oskb2');
-  Check(_oskb(1 shl 10 + 1) = '1KB', 'oskb3');
-  Check(_oskb(1 shl 20 - 1) = '1MB', 'oskb4');
-  Check(_oskb(1 shl 20)     = '1MB', 'oskb5');
-  Check(_oskb(1 shl 20 + 1) = '1MB', 'oskb6');
-  Check(_oskb(1 shl 30 - 1) = '1GB', 'oskb7');
-  Check(_oskb(1 shl 30)     = '1GB', 'oskb8');
-  Check(_oskb(1 shl 30 + 1) = '1GB', 'oskb9');
   Check(TwoDigits(0) = '0');
   Check(TwoDigits(1) = '1');
   Check(TwoDigits(10) = '10');
@@ -4504,6 +4494,17 @@ begin
   Check(MicroSecToString(1000001) = '1s');
   Check(MicroSecToString(2030001) = '2.03s');
   Check(MicroSecToString(200000070001) = '2d');
+  Check(KbNoSpace(0)            = '0B' , 'kb0');
+  Check(KbNoSpace(99)           = '99B', 'kb99');
+  Check(KbNoSpace(1 shl 10 - 1) = '1KB', 'kb1');
+  Check(KbNoSpace(1 shl 10)     = '1KB', 'kb2');
+  Check(KbNoSpace(1 shl 10 + 1) = '1KB', 'kb3');
+  Check(KbNoSpace(1 shl 20 - 1) = '1MB', 'kb4');
+  Check(KbNoSpace(1 shl 20)     = '1MB', 'kb5');
+  Check(KbNoSpace(1 shl 20 + 1) = '1MB', 'kb6');
+  Check(KbNoSpace(1 shl 30 - 1) = '1GB', 'kb7');
+  Check(KbNoSpace(1 shl 30)     = '1GB', 'kb8');
+  Check(KbNoSpace(1 shl 30 + 1) = '1GB', 'kb9');
   Check(KB(-123) = '');
   Check(KB(0) = '0 B');
   Check(KB(123) = '123 B');
@@ -4515,6 +4516,7 @@ begin
   Check(KB(16385) = '16 KB');
   Check(KB(3 * 1024 * 1024 - 800 * 1024) = '2.2 MB');
   Check(KB(3 * 1024 * 1024) = '3 MB');
+  Check(KB(3 * 1024 * 1024 + 511 * 1024) = '3.5 MB');
   Check(KB(3 * 1024 * 1024 + 512 * 1024) = '3.5 MB');
   Check(KB(3 * 1024 * 1024 + 1024) = '3 MB');
   Check(KB(maxInt) = '2 GB');
