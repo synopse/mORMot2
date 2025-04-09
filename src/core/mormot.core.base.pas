@@ -1095,7 +1095,7 @@ function DateTimeToIsoString(dt: TDateTime): string;
 /// parse a '0x#####' buffer context into a 32-bit binary
 // - jump trailing '0x', then ends at first non hexadecimal character
 // - internal function to avoid linking mormot.core.buffers.pas
-function ParseHex0x(p: PAnsiChar): cardinal;
+function ParseHex0x(p: PAnsiChar; no0x: boolean = false): cardinal;
 
 /// parse an hexadecimal buffer into its raw binary
 // - parse up to n chars from p^, ending in case of not hexadecimal char
@@ -5600,18 +5600,21 @@ begin
   end;
 end;
 
-function ParseHex0x(p: PAnsiChar): cardinal;
+function ParseHex0x(p: PAnsiChar; no0x: boolean): cardinal;
 var
   v0, v1: integer;
 begin
   result := 0;
   if p = nil then
     exit;
-  while p^ <> 'x' do
-    if p^ = #0 then
-      exit
-    else
-      inc(p);
+  if no0x then
+    dec(p)
+  else
+    while p^ <> 'x' do
+      if p^ = #0 then
+        exit
+      else
+        inc(p);
   repeat
     inc(p); // points to trailing 'x' at start
     v0 := Hex2Dec(p^);
