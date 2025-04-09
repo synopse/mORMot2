@@ -5536,7 +5536,7 @@ begin
     exit;
   include(fFlags, fRetrieveRootDseInfo);
   // note: root DSE distinguished name is the zero-length string
-  root := SearchObject('', '', [
+  root := SearchObject('', '(objectClass=top)', [
     'rootDomainNamingContext',
     'defaultNamingContext',
     'namingContexts',
@@ -6755,8 +6755,8 @@ function TLdapClient.SearchAllRaw(const BaseDN: RawUtf8;
   MaxCount: integer): variant;
 begin
   VarClear(result);
-  SearchAllDocRaw(TDocVariantData(result), BaseDN, Filter, Attributes, Options,
-    ObjectAttributeField, MaxCount);
+  SearchAllDocRaw(TDocVariantData(result), DefaultDN(BaseDN), Filter,
+    Attributes, Options, ObjectAttributeField, MaxCount);
 end;
 
 function TLdapClient.Search(const Attributes: TLdapAttributeTypes;
