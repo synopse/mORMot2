@@ -3636,7 +3636,8 @@ procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
   Reverse: boolean; var result: RawUtf8);
 var
   len, seplen: PtrInt;
-  p, s: PAnsiChar;
+  p: PAnsiChar;
+  s: PUtf8Char;
 begin
   result := '';
   if (v = nil) or
