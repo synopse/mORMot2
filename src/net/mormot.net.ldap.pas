@@ -2023,6 +2023,8 @@ type
       const ObjectAttributeField: RawUtf8 = '*'; MaxCount: integer = 0): variant;
     /// retrieve all pages of entries into a TDocVariant instance
     // - as used by overloaded SearchAll*() functions
+    // - Dest.Init will be called first, so Dest should be un-initialized or
+    // caller should have properly made Dest.Clear before executing this method
     function SearchAllDocRaw(out Dest: TDocVariantData;
       const BaseDN, Filter: RawUtf8; const Attributes: array of RawUtf8;
       Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '*';
@@ -5521,6 +5523,7 @@ begin
   if not EnsureConnected then
     exit;
   include(fFlags, fRetrieveRootDseInfo);
+  // note: root DSE distinguished name is the zero-length string
   root := SearchObject('', '', [
     'rootDomainNamingContext',
     'defaultNamingContext',
