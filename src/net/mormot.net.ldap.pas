@@ -1758,7 +1758,8 @@ type
     fBound: boolean;
     fBoundAs: TLdapClientBound;
     fBoundDigestAlgo: TDigestAlgo; // for Reconnect
-    fFlags: set of (fSecContextEncrypt, fRetrievedDefaultDNInfo);
+    fFlags: set of (
+      fSecContextEncrypt, fRetrieveRootDseInfo, fRetrievedDefaultDNInfo);
     fResultError: TLdapError;
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
@@ -5529,19 +5530,20 @@ begin
   // retrieve all needed Root DSE attributes in a single call
   if not EnsureConnected then
     exit;
+  include(fFlags, fRetrieveRootDseInfo);
   root := SearchObject('', '*', [
     'rootDomainNamingContext'
-    //'defaultNamingContext',
-    //'namingContexts',
-    //'configurationNamingContext',
-    //'supportedSASLMechanisms',
-    //'supportedControl',
-    //'supportedExtension',
-    //'vendorName',
-    //'ldapServiceName'
+    'defaultNamingContext',
+    'namingContexts',
+    'configurationNamingContext',
+    'supportedSASLMechanisms',
+    'supportedControl',
+    'supportedExtension',
+    'vendorName',
+    'ldapServiceName'
     ]);
   if root = nil then
-    exit;
+    exit; // no Root DSE (won't retry again)
   fRootDN         := root.Attributes.GetByName('rootDomainNamingContext');
   fDefaultDN      := root.Attributes.GetByName('defaultNamingContext');
   fNamingContexts := root.Attributes.Find('namingContexts').GetAllReadable;
@@ -5557,7 +5559,7 @@ end;
 
 function TLdapClient.RootDN: RawUtf8;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fRootDN;
 end;
@@ -5568,7 +5570,7 @@ begin
     result := BaseDN
   else
   begin
-    if fRootDN = '' then
+    if not (fRetrieveRootDseInfo in fFlags) then
       RetrieveRootDseInfo;
     result := fDefaultDN;
   end;
@@ -5576,49 +5578,49 @@ end;
 
 function TLdapClient.NamingContexts: TRawUtf8DynArray;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fNamingContexts;
 end;
 
 function TLdapClient.ConfigDN: RawUtf8;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fConfigDN;
 end;
 
 function TLdapClient.VendorName: RawUtf8;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fVendorName;
 end;
 
 function TLdapClient.ServiceName: RawUtf8;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fServiceName;
 end;
 
 function TLdapClient.Mechanisms: TRawUtf8DynArray;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fMechanisms;
 end;
 
 function TLdapClient.Controls: TRawUtf8DynArray;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fControls;
 end;
 
 function TLdapClient.Extensions: TRawUtf8DynArray;
 begin
-  if fRootDN = '' then
+  if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fExtensions;
 end;
