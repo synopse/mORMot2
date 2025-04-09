@@ -3636,7 +3636,7 @@ procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
   Reverse: boolean; var result: RawUtf8);
 var
   len, seplen: PtrInt;
-  p: PAnsiChar;
+  p, s: PAnsiChar;
 begin
   result := '';
   if (v = nil) or
@@ -3653,10 +3653,11 @@ begin
   if Reverse then
     v := @PPointerArray(v)[n - 1];
   repeat
-    if v^ <> nil then
+    s := v^;
+    if s <> nil then
     begin
-      len := PStrLen(v^ - _STRLEN)^;
-      MoveFast(v^^, p^, len);
+      len := PStrLen(s - _STRLEN)^;
+      MoveFast(s^, p^, len);
       inc(p, len);
     end;
     dec(n);
