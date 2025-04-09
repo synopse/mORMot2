@@ -6300,8 +6300,9 @@ begin
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   if Value < 0 then
     exit;
-  // quickly jump over Kind + NameLen + Name + Min + Max + EnumBaseType
-  Info := @Info[ord(Info[1]) + (2 + 9 + SizeOf(pointer))];
+  // quickly jump over Kind + NameLen + Name +  OrdType + Min + Max + EnumBaseType
+  Info := @Info[ord(Info[1]) + (1 + 1 + 1 + 4 + 4 + SizeOf(pointer)
+    {$ifdef FPC_PROVIDE_ATTR_TABLE} + SizeOf(pointer) {$endif} )];
   if Value > 0 then
     repeat
       Info := @Info[ord(Info^) + 1]; // next shortstring
