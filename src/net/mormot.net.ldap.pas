@@ -5909,6 +5909,8 @@ var
   x, asntype, seqend: integer;
   s, t: TAsnObject;
   errmsg: RawUtf8;
+  hex: PAnsiChar;
+  wintxt: PShortString;
 begin
   result := '';
   fResultCode := -1;
@@ -5930,6 +5932,17 @@ begin
     if not (fResultCode in LDAP_RES_NOERROR) then
     begin
       errmsg := RawLdapErrorString(fResultCode, fResultError);
+      if fResultCode = LDAP_RES_INVALID_CREDENTIALS then
+      begin
+// https://ldapwiki.com/wiki/Wiki.jsp?page=Common%20Active%20Directory%20Bind%20Errors
+        hex := pointer(StrPosI(', DATA ', pointer(fResultString)));
+        if hex <> nil then
+        begin
+         wintxt := WinErrorConstant(ParseHex0x(hex + 7, {no0x=}true));
+         if wintxt^[0] <> #0 then
+            Append(errmsg, [' ERROR_', wintxt^]);
+        end;
+      end;
       if fResultString = '' then
         fResultString := errmsg
       else
