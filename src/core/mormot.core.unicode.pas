@@ -5871,13 +5871,15 @@ function IdemPCharAnsi(
   p: PUtf8Char; up: PAnsiChar): boolean; {$ifdef HASINLINE}inline;{$endif}
 begin
   // in this local IdemPChar() version, p and up are expected to be <> nil
-  result := false;
   dec(PtrUInt(p), PtrUInt(up));
   while true do
     if up^ = #0 then
       break
     else if table[up[PtrUInt(p)]] <> up^ then
-      exit
+    begin
+      result := false;
+      exit;
+    end
     else
       inc(up);
   result := true;
@@ -5892,13 +5894,15 @@ function IdemPCharByte(
   p: PUtf8Char; up: PAnsiChar): boolean; {$ifdef HASINLINE}inline;{$endif}
 begin
   // in this local IdemPChar() version, p and up are expected to be <> nil
-  result := false;
   dec(PtrUInt(p), PtrUInt(up));
   while true do
     if up^ = #0 then
       break
     else if table[PtrInt(up[PtrUInt(p)])] <> PByte(up)^ then
-      exit
+    begin
+      result := false;
+      exit;
+    end
     else
       inc(up);
   result := true;
