@@ -5548,6 +5548,13 @@ begin
   fRootDN         := root.Attributes.GetByName('rootDomainNamingContext');
   fDefaultDN      := root.Attributes.GetByName('defaultNamingContext');
   fNamingContexts := root.Attributes.Find('namingContexts').GetAllReadable;
+  if length(fNamingContexts) = 1 then
+  begin
+    if fRootDN = '' then
+      fRootDN := fNamingContexts[0];
+    if fDefaultDN = '' then
+      fDefaultDN := fNamingContexts[0];
+  end;
   fConfigDN       := root.Attributes.GetByName('configurationNamingContext');
   fMechanisms     := root.Attributes.Find('supportedSASLMechanisms').GetAllReadable;
   fControls       := root.Attributes.Find('supportedControl').GetAllReadable;
