@@ -4681,7 +4681,7 @@ type
     Qop: RawUtf8;
     AuthzID: RawUtf8;
     Opaque: RawUtf8;
-    AlgResp: RawUtf8;
+    Algorithm: RawUtf8;
     Url: RawUtf8;
     HA1: RawUtf8;
     HA2: RawUtf8;
@@ -4699,6 +4699,7 @@ type
 procedure TDigestProcess.Init(DigestAlgo: TDigestAlgo);
 begin
   Algo := DigestAlgo;
+  Algorithm := DIGEST_NAME[DigestAlgo];
   Hash := DIGEST_ALGO[DigestAlgo]; // caller ensured DigestAlgo <> daUndefined
   HashLen := HASH_SIZE[Hash];
 end;
