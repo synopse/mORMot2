@@ -1385,7 +1385,6 @@ type
     procedure SetObjectName(const Value: RawUtf8);
     function GetAttr(AttributeType: TLdapAttributeType): RawUtf8;
     function AppendToLocate(var Dvo: TDocVariantData;
-      var last: PDocVariantData; var lastdc: TRawUtf8DynArray;
       Options: TLdapResultOptions): PDocVariantData;
   public
     /// initialize the instance
@@ -4742,7 +4741,6 @@ begin
 end;
 
 function TLdapResult.AppendToLocate(var Dvo: TDocVariantData;
-  var last: PDocVariantData; var lastdc: TRawUtf8DynArray;
   Options: TLdapResultOptions): PDocVariantData;
 var
   dc, ou, cn: TRawUtf8DynArray;
@@ -4768,14 +4766,7 @@ begin
   begin
     if dc <> nil then
       if not (roNoDCAtRoot in Options) then
-        if RawUtf8DynArrayEquals(dc, lastdc) then
-          result := last // no need to re-check this DC path
-        else
-        begin
-          result := result^.O_[RawUtf8ArrayToCsv(dc, '.')];
-          lastdc := dc;
-          last := result;
-        end;
+        result := result^.O_[RawUtf8ArrayToCsv(dc, '.')];
     for j := high(ou) downto 0 do
       result := result^.O_[ou[j]];
     for j := high(cn) downto 0 do
@@ -5013,8 +5004,7 @@ var
   res: TLdapResult;
   attr: ^TLdapAttribute;
   uuid: TAppendShortUuid;
-  lastdc: TRawUtf8DynArray;
-  v, last: PDocVariantData;
+  v: PDocVariantData;
   a: TDocVariantData;
 begin
   if ord(roNoDCAtRoot in Options) +
@@ -5030,13 +5020,12 @@ begin
     ELdap.RaiseUtf8('%.AppendTo: roRawValues and other roRaw* options ' +
       'are exclusive', [self]);
   uuid := KnownUuid(Options);
-  last := nil;
   for i := 0 to Count - 1 do
   begin
     res := Items[i];
     if res.ObjectName = '' then
       continue; // malformed data - a primary key is required
-    v := res.AppendToLocate(Dvo, last, lastdc, Options);
+    v := res.AppendToLocate(Dvo, Options);
     if ObjectAttributeField = '' then
       continue; // no attribute
     a.Init(mFast, dvObject);
@@ -5058,7 +5047,7 @@ begin
       inc(k);
     end;
     if roNoSddlDomainRid in Options then
-      Dom := nil // don't recognize known RID in this context
+      Dom := nil // won't recognize known RID in this context
     else if Dom = nil then // if not specified e.g. from TLdapClient.DomainSid
       Dom := res.Attributes.Domain; // guess RID from atObjectSid
     attr := pointer(res.Attributes.Items);
@@ -6583,8 +6572,7 @@ var
   res: TLdapResult;
   att: TLdapAttribute;
   bak: TLdapSearchScope;
-  lastdc: TRawUtf8DynArray;
-  v, last: PDocVariantData;
+  v: PDocVariantData;
 begin
   // consolidate into TDocVariantData
   if (ObjectAttributeField = '') or
@@ -6605,8 +6593,7 @@ begin
         if SearchMissing(res.ObjectName, att) = 0 then
           continue;
         // merge with existing TDocVariant resultset
-        last := nil;
-        v := res.AppendToLocate(Result, last, lastdc, Options);
+        v := res.AppendToLocate(Result, Options);
         if ObjectAttributeField <> '*' then
           v := v^.O_[ObjectAttributeField];
         v := v^.A_[att.AttributeName];
