@@ -1305,6 +1305,7 @@ const
    '',                                              // ofNone
    '(objectClass=*)',                               // ofAll
    '(sAMAccountType=805306368)',                    // ofUsers
+   // note: '(objectCategory=person)(objectClass=user)' is possible but slower
    '(objectCategory=group)',                        // ofGroups
    '(objectClass=contact)',                         // ofContacts
    '(objectCategory=computer)',                     // ofComputers
@@ -3276,7 +3277,7 @@ var
   encodedfilter: RawUtf8;
 begin
   if Filter = '' then
-    Filter := '(objectclass=*)';
+    Filter := OBJECT_FILTER[ofAll];
   encodedfilter := RawLdapTranslateFilter(Filter);
   if encodedfilter = '' then
     encodedfilter := AsnTyped('', ASN1_NULL);
@@ -5531,8 +5532,8 @@ begin
   if not EnsureConnected then
     exit;
   include(fFlags, fRetrieveRootDseInfo);
-  root := SearchObject('', '*', [
-    'rootDomainNamingContext'
+  root := SearchObject('', '', [
+    'rootDomainNamingContext',
     'defaultNamingContext',
     'namingContexts',
     'configurationNamingContext',
@@ -6555,7 +6556,7 @@ begin
     // request '###;range=...' paged attribute values
     FormatUtf8('%;range=%-%', [Attribute.AttributeName,
       Attribute.Count, Attribute.Count + result - 1], atts);
-    if not Search(ObjectName, false, '(objectClass=*)', atts) then
+    if not Search(ObjectName, false, '', atts) then
       break;
     inc(fSearchRange.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
     new := fSearchResult.Find(ObjectName).
