@@ -26,7 +26,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$define ASNDEBUG}
+{.$define ASNDEBUG}
 // enable low-level debugging of the LDAP transmitted frames on the console
 
 uses
