@@ -5889,7 +5889,7 @@ end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUtf8): integer;
 begin
-  result := GetValueIndex(pointer(aName), Length(aName), IsCaseSensitive);
+  result := GetValueIndex(pointer(aName), Length(aName), Has(dvoNameCaseSensitive));
 end;
 
 function TDocVariantData.GetCapacity: integer;
@@ -7410,15 +7410,22 @@ procedure TDocVariantData.AddOrUpdateFrom(const aDocVariant: Variant;
 var
   src: PDocVariantData;
   n: integer;
-  v: PVariant;
   k: PRawUtf8;
+  v: PVariant;
 begin
   src := _Safe(aDocVariant, dvObject);
   n := src^.Count;
   if n = 0 then
     exit; // nothing to add
+  if Count = 0 then
+  begin
+    VCount := n;
+    VValue := src^.VValue; // no need to lookup names: just assign by reference
+    VName  := src^.VName;
+    exit;
+  end;
+  k := pointer(src^.VName); // need to merge values by property name
   v := pointer(src^.VValue);
-  k := pointer(src^.VName);
   repeat
     AddOrUpdateValue(k^, v^, nil, aOnlyAddMissing);
     inc(k);
