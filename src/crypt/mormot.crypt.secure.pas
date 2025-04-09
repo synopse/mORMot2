@@ -4719,16 +4719,6 @@ const
     'AUTHZID=',   // 10
     nil);
 
-  DIGEST_NAME_RESP: array[daMD5.. high(TDigestAlgo)] of RawUtf8 = (
-    'algorithm=MD5,',                // daMD5
-    'algorithm=MD5-sess,',           // daMD5_Sess
-    'algorithm=SHA-256,',            // daSHA256
-    'algorithm=SHA-256-sess,',       // daSHA256_Sess
-    'algorithm=SHA-512-256,',        // daSHA512_256
-    'algorithm=SHA-512-256-sess,',   // daSHA512_256_Sess
-    'algorithm=SHA3-256,',           // daSHA3_256
-    'algorithm=SHA3-256-sess,');     // daSHA3_256_Sess
-
 function TDigestProcess.Parse(var p: PUtf8Char): boolean;
 var
   n: PUtf8Char;
@@ -4751,7 +4741,7 @@ begin
       FastAssignUtf8(Url, tmp);
     3: // algorithm=MD5
       if PropNameEquals(DIGEST_NAME[Algo], tmp) then
-        AlgResp := DIGEST_NAME_RESP[Algo]
+        FastAssignUtf8(Algorithm, tmp) // reuse exact name from server
       else
         exit;
     4: // nonce="xxx"
@@ -4807,9 +4797,9 @@ end;
 function TDigestProcess.ClientResponse(const UriName: RawUtf8): RawUtf8;
 begin
   FormatUtf8('username="%",realm=%,nonce="%",cnonce="%",nc=%,qop=%,' +
-    '%%="%",response="%"',
+    'algorithm=%,%="%",response=%',
     [UserName, QuotedStr(Realm, '"'), Nonce, CNonce, NC, Qop,
-     AlgResp, UriName, Url, Response], result);
+     Algorithm, UriName, Url, Response], result);
   if Opaque <> '' then
     Append(result, [',opaque="', Opaque, '"']);
 end;
@@ -4915,8 +4905,8 @@ begin
   DefaultHasher128(@h, @Opaque, SizeOf(Opaque)); // likely to be AesNiHash128()
   opaquehex[0] := #32;
   BinToHexLower(@h, @opaquehex[1], SizeOf(h));
-  FormatUtf8('%realm=%,qop="auth",%nonce="%",opaque="%"%',
-    [Prefix, QuotedRealm, DIGEST_NAME_RESP[Algo], noncehex, opaquehex, Suffix],
+  FormatUtf8('%realm=%,qop="auth",algorithm=%,nonce="%",opaque="%"%',
+    [Prefix, QuotedRealm, DIGEST_NAME[Algo], noncehex, opaquehex, Suffix],
     result);
 end;
 
