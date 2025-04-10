@@ -798,8 +798,11 @@ begin
       CheckUtf8(one.Connect, 'connect=%', [one.ResultString]);
       CheckUtf8(one.Bind, 'bind=%', [one.ResultString]);
       CheckEqual(one.BoundUser, one.Settings.UserName);
-      CheckEqual(one.ExtWhoAmI, 'dn:' + one.Settings.UserName);
-      dv := one.SearchAllRaw(one.Settings.UserName, '', [], []);
+      CheckEqual(one.ExtWhoAmI, 'dn:uid=einstein,dc=example,dc=com');
+      Check(one.Connected, 'before close');
+      one.Sock.Close; // simulate socket disconnection
+      Check(not one.Connected, 'closed'); // validate Reconnect
+      dv := one.SearchAllRaw('uid=einstein,dc=example,dc=com', '', [], []);
       CheckHash(_Safe(dv)^.ToHumanJson, $39B7C7F1, one.Settings.UserName);
     finally
       one.Free;
