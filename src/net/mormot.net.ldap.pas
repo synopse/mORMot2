@@ -1801,6 +1801,7 @@ type
     fSearchBeginBak: TIntegerDynArray; // SearchPageSize (recursive) backup
     fSearchBeginCount: integer; // usually = only 0..1
     fSockBufferPos: integer;
+    fLog: TSynLogClass;
     fOnDisconnect: TOnLdapClientEvent;
     fWellKnownObjects: TLdapKnownCommonNames;
     // protocol methods
@@ -1825,6 +1826,7 @@ type
     procedure RetrieveRootDseInfo;
     procedure RetrieveDefaultDNInfo;
     procedure Reset;
+    procedure SetResultString(const msg: RawUtf8);
     function DoBind(Mode: TLdapClientBound): boolean;
     function Reconnect: boolean;
   public
@@ -2324,6 +2326,9 @@ type
     /// raw TCP socket used by all LDAP operations
     property Sock: TCrtSocket
       read fSock;
+    /// can add some logs to the LDAP client process
+    property Log: TSynLogClass
+      read fLog write fLog;
   published
     /// the authentication and connection settings of a this instance
     property Settings: TLdapClientSettings
@@ -2364,6 +2369,7 @@ const
              lsfDaclSecurityInformation];
 
 function ToText(mode: TLdapClientBound): PShortString; overload;
+function ToText(lct: TLdapClientTransmission): PShortString; overload;
 
 
 { **************** Dedicated TLdapCheckMember Class }
@@ -5443,22 +5449,32 @@ end;
 
 // **** TLdapClient connection methods
 
+procedure TLdapClient.SetResultString(const msg: RawUtf8);
+begin
+  fResultString := msg;
+  if Assigned(fLog) then
+    fLog.Add.Log(sllDebug, msg, self);
+end;
+
 function TLdapClient.Connect(DiscoverMode: TLdapClientConnect;
   DelayMS: integer): boolean;
 var
   dc: TRawUtf8DynArray;
   h, p: RawUtf8;
   i: PtrInt;
+  log: ISynLog;
 begin
   result := fSock <> nil;
   if result then
     exit; // socket was already connected
+  if fLog.HasLevel([sllEnter]) then
+    log := fLog.Enter(self, 'Connect');
   fResultError := leUnknown;
   fResultString := '';
   if fSettings.TargetHost = '' then
     if lccNoDiscovery in DiscoverMode then
     begin
-      fResultString := 'Connect: no TargetHost supplied';
+      SetResultString('Connect: no TargetHost supplied');
       exit;
     end
     else
@@ -5482,9 +5498,11 @@ begin
       end;
       if dc = nil then
       begin
-        fResultString := 'Connect: no LDAP server found on this network';
+        SetResultString('Connect: no LDAP server found on this network');
         exit;
       end;
+      if Assigned(log) then
+        log.Log(sllTrace, 'cldap', TypeInfo(TRawUtf8DynArray), dc, self);
     end
   else
     // try the LDAP server as specified in TLdapClient settings
@@ -5526,6 +5544,8 @@ begin
         fSettings.TargetHost := h;
         fSettings.TargetPort := p;
         fSettings.Tls := fSock.TLS.Enabled;
+        if Assigned(log) then
+          log.Log(sllTrace, 'Connected to %', [fSettings.TargetUri], self);
         exit;
       end;
     except
@@ -5536,7 +5556,7 @@ begin
       end;
     end;
   if fResultString = '' then
-    fResultString := 'Connect: failed';
+    SetResultString('Connect: failed');
 end;
 
 function TLdapClient.GetTlsContext: PNetTlsContext;
@@ -5971,6 +5991,8 @@ begin
         fResultString := errmsg
       else
         fResultString := FormatUtf8('% [%]', [errmsg, fResultString]);
+      if Assigned(fLog) then
+        fLog.Add.Log(sllDebug, 'DecodeResponse: %', [fResultString], self);
     end;
     if fResultCode = LDAP_RES_REFERRAL then
       if AsnNext(Pos, Asn1Response, @s) = ASN1_CTC3 then
@@ -6011,6 +6033,8 @@ end;
 // see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
 function TLdapClient.Bind: boolean;
+var
+  log: ISynLog;
 begin
   result := false;
   if fBound or
@@ -6020,16 +6044,23 @@ begin
      not fSettings.Tls and
      not fSettings.AllowUnsafePasswordBind then
     ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
-  SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
-                   Asn(fVersion),
-                   AsnOctStr(fSettings.UserName),
-                   AsnTyped(fSettings.Password, ASN1_CTX0)]));
-  if fResultCode <> LDAP_RES_SUCCESS then
-    exit; // binding error
-  fBound := true;
-  fBoundAs := lcbPlain;
-  fBoundUser := fSettings.UserName;
-  result := true;
+  log := fLog.Enter('Bind as %', [fSettings.UserName], self);
+  try
+    SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
+                     Asn(fVersion),
+                     AsnOctStr(fSettings.UserName),
+                     AsnTyped(fSettings.Password, ASN1_CTX0)]));
+    if fResultCode <> LDAP_RES_SUCCESS then
+      exit; // binding error
+    fBound := true;
+    fBoundAs := lcbPlain;
+    fBoundUser := fSettings.UserName;
+    result := true;
+  finally
+    if Assigned(log) then
+      log.Log(LOG_DEBUGERROR[not result], 'Bind=% % %',
+        [result, fResultCode, fResultString], self);
+  end;
 end;
 
 const
@@ -6049,18 +6080,21 @@ var
   x: integer;
   dig: RawUtf8;
   s, t, digreq: TAsnObject;
+  log: ISynLog;
 begin
   result := false;
   if fBound or
      not Connect then
     exit;
+  log := fLog.Enter('BindSalsDigest(%) as %',
+    [DIGEST_NAME[Algo], fSettings.UserName], self);
   if DIGEST_ALGONAME[Algo] = '' then
     ELdap.RaiseUtf8('Unsupported %.BindSaslDigest(%) algorithm',
       [self, DIGEST_NAME[Algo]]);
   if fSettings.Password = '' then
     result := Bind
   else
-  begin
+  try
     digreq := Asn(LDAP_ASN1_BIND_REQUEST, [
                 Asn(fVersion),
                 AsnOctStr(''),
@@ -6088,6 +6122,10 @@ begin
     fBoundDigestAlgo := Algo;
     fBoundUser := fSettings.UserName;
     result := true;
+  finally
+    if Assigned(log) then
+      log.Log(LOG_DEBUGERROR[not result], 'BindSaslDigest=% % %',
+        [result, fResultCode, fResultString], self);
   end;
 end;
 
@@ -6115,6 +6153,7 @@ var
   needencrypt: boolean;
   seclayers: TKerbSecLayer;
   secmaxsize: integer;
+  log: ISynLog;
 
   procedure ParseInput;
   var
@@ -6137,147 +6176,155 @@ begin
   if fBound or
      not Connect then
     exit;
+  // initiate GSSAPI bind request
   if not InitializeDomainAuth then
   begin
-    fResultString := 'Kerberos: Error initializing the library';
+    SetResultString('Kerberos: Error initializing the library');
     exit;
   end;
-  // initiate GSSAPI bind request
-  needencrypt := false;
   if (fSettings.KerberosSpn = '') and
      (fSettings.KerberosDN <> '') then
     fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost + {noport}
                              '@' + UpperCase(fSettings.KerberosDN);
-  req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
-            Asn(fVersion),
-            AsnOctStr(''),
-            Asn(ASN1_CTC3, [
-              AsnOctStr('GSSAPI')])]);
-  t := SendAndReceive(req1);
-  if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
-    exit;
-  // setup GSSAPI / Kerberos context
-  InvalidateSecContext(fSecContext);
-  if fSock.TLS.Enabled and
-     Assigned(fSock.Secure) and
-     not fSettings.KerberosDisableChannelBinding then
-  begin
-    // Kerberos + TLS now requires tls-server-end-point channel binding
-    cert := fSock.Secure.GetRawCert(@certhashname);
-    if cert <> '' then
-    begin
-      fSecContext.ChannelBindingsHashLen :=
-        HashForChannelBinding(cert, certhashname, channelbindinghash);
-      if fSecContext.ChannelBindingsHashLen <> 0 then
-        fSecContext.ChannelBindingsHash := @channelbindinghash;
-    end;
-  end;
-  // main GSSAPI / Kerberos loop
+  log := fLog.Enter('BindSaslKerberos(%) on %',
+    [fSettings.UserName, fSettings.KerberosSpn], self);
+  needencrypt := false;
   try
-    repeat
-      ParseInput;
-      if (datain = '') and
-         (fResultCode = LDAP_RES_SUCCESS) then
-        break;
-      try
-        if fSettings.UserName <> '' then
-          ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
-            fSettings.Password, fSettings.KerberosSpn, dataout)
-        else
-          ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
-      except
-        on E: Exception do
-        begin
-          FormatUtf8('Kerberos %: %', [E, E.Message], fResultString);
-          // keep ResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS (14)
-          exit; // catch SSPI/GSSAPI errors and return false
-        end;
-      end;
-      if dataout = '' then
+    req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
+              Asn(fVersion),
+              AsnOctStr(''),
+              Asn(ASN1_CTC3, [
+                AsnOctStr('GSSAPI')])]);
+    t := SendAndReceive(req1);
+    if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+      exit;
+    // setup GSSAPI / Kerberos context
+    InvalidateSecContext(fSecContext);
+    if fSock.TLS.Enabled and
+       Assigned(fSock.Secure) and
+       not fSettings.KerberosDisableChannelBinding then
+    begin
+      // Kerberos + TLS now requires tls-server-end-point channel binding
+      cert := fSock.Secure.GetRawCert(@certhashname);
+      if cert <> '' then
       begin
-        // last step of SASL handshake - see RFC 4752 section 3.1
-        if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
-          break; // perform if only needed (e.g. not on MS AD)
-        t := SendAndReceive(req1);
-        if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
-        begin
-          if fResultCode = LDAP_RES_SUCCESS then // paranoid
-            fResultString := 'Kerberos: aborted SASL handshake';
-          exit;
-        end;
+        fSecContext.ChannelBindingsHashLen :=
+          HashForChannelBinding(cert, certhashname, channelbindinghash);
+        if fSecContext.ChannelBindingsHashLen <> 0 then
+          fSecContext.ChannelBindingsHash := @channelbindinghash;
+      end;
+    end;
+    // main GSSAPI / Kerberos loop
+    try
+      repeat
         ParseInput;
-        datain := SecDecrypt(fSecContext, datain);
-        if length(datain) <> 4 then
-        begin
-          fResultString := 'Kerberos: Unexpected SecLayer response';
-          exit; // expected format is #0=SecLayer #1#2#3=MaxMsgSizeInNetOrder
-        end;
-        seclayers := TKerbSecLayer(datain[1]);
-        secmaxsize := bswap32(PCardinal(datain)^) and $00ffffff;
-        if seclayers = [] then
-          // the server requires no additional security layer
-          if secmaxsize <> 0 then
+        if (datain = '') and
+           (fResultCode = LDAP_RES_SUCCESS) then
+          break;
+        try
+          if fSettings.UserName <> '' then
+            ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
+              fSettings.Password, fSettings.KerberosSpn, dataout)
+          else
+            ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
+        except
+          on E: Exception do
           begin
-            // invalid answer (as stated by RFC 4752)
-            FormatUtf8('Kerberos: Unexpected secmaxsize=%',
-              [secmaxsize], fResultString);
+            FormatUtf8('Kerberos %: %', [E, E.Message], fResultString);
+            // keep ResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS (14)
+            exit; // catch SSPI/GSSAPI errors and return false
+          end;
+        end;
+        if dataout = '' then
+        begin
+          // last step of SASL handshake - see RFC 4752 section 3.1
+          if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+            break; // perform if only needed (e.g. not on MS AD)
+          t := SendAndReceive(req1);
+          if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+          begin
+            if fResultCode = LDAP_RES_SUCCESS then // paranoid
+              SetResultString('Kerberos: aborted SASL handshake');
+            exit;
+          end;
+          ParseInput;
+          datain := SecDecrypt(fSecContext, datain);
+          if length(datain) <> 4 then
+          begin
+            fResultString := 'Kerberos: Unexpected SecLayer response';
+            exit; // expected format is #0=SecLayer #1#2#3=MaxMsgSizeInNetOrder
+          end;
+          seclayers := TKerbSecLayer(datain[1]);
+          secmaxsize := bswap32(PCardinal(datain)^) and $00ffffff;
+          if seclayers = [] then
+            // the server requires no additional security layer
+            if secmaxsize <> 0 then
+            begin
+              // invalid answer (as stated by RFC 4752)
+              FormatUtf8('Kerberos: Unexpected secmaxsize=%',
+                [secmaxsize], fResultString);
+              exit;
+            end
+            else
+            begin
+              // #0: noseclayer, #1#2#3: maxmsgsize=0
+              PCardinal(datain)^ := 0;
+              needencrypt := false; // fSecContextEncrypt = false by default
+            end
+          else if seclayers * KLS_EXPECTED = [] then
+          begin
+            // we only support signing+sealing
+            FormatUtf8('Kerberos: Unsupported [%] method(s)',
+              [GetSetName(TypeInfo(TKerbSecLayer), seclayers)], fResultString);
             exit;
           end
           else
+          // if we reached here, the server asked for signing+sealing
+          if needencrypt or             // from MS AD
+             not fSock.TLS.Enabled then // ldap_require_strong_auth on OpenLDAP
           begin
-            // #0: noseclayer, #1#2#3: maxmsgsize=0
-            PCardinal(datain)^ := 0;
-            needencrypt := false; // fSecContextEncrypt = false by default
+            // return the supported algorithm, with a 64KB maximum message size
+            if secmaxsize > 64 shl 10 then
+              secmaxsize := 64 shl 10;
+              // note: calling gss_wrap_size_limit is pointless due to 16bit limit
+            PCardinal(datain)^ := bswap32(secmaxsize) + byte(KLS_EXPECTED);
+            needencrypt := true; // fSecContextEncrypt = true = sign and seal
           end
-        else if seclayers * KLS_EXPECTED = [] then
-        begin
-          // we only support signing+sealing
-          FormatUtf8('Kerberos: Unsupported [%] method(s)',
-            [GetSetName(TypeInfo(TKerbSecLayer), seclayers)], fResultString);
-          exit;
-        end
-        else
-        // if we reached here, the server asked for signing+sealing
-        if needencrypt or             // from MS AD
-           not fSock.TLS.Enabled then // ldap_require_strong_auth on OpenLDAP
-        begin
-          // return the supported algorithm, with a 64KB maximum message size
-          if secmaxsize > 64 shl 10 then
-            secmaxsize := 64 shl 10;
-            // note: calling gss_wrap_size_limit is pointless due to 16bit limit
-          PCardinal(datain)^ := bswap32(secmaxsize) + byte(KLS_EXPECTED);
-          needencrypt := true; // fSecContextEncrypt = true = sign and seal
-        end
-        else
-          // needed for OpenLDAP over TLS to avoid LDAP_RES_UNWILLING_TO_PERFORM
-          PCardinal(datain)^ := 0;
-        if AuthIdentify <> '' then
-          Append(datain, AuthIdentify);
-        dataout := SecEncrypt(fSecContext, datain);
-      end;
-      req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
-                Asn(fVersion),
-                AsnOctStr(''),
-                Asn(ASN1_CTC3, [
-                  AsnOctStr('GSSAPI'),
-                  AsnOctStr(dataout)])]);
-      t := SendAndReceive(req2);
-    until not (fResultCode in [LDAP_RES_SUCCESS, LDAP_RES_SASL_BIND_IN_PROGRESS]);
-    if fResultCode <> LDAP_RES_SUCCESS then
-      exit; // error
-    // we are successfully authenticated (and probably encrypted)
-    ServerSspiAuthUser(fSecContext, fBoundUser);
-    if KerberosUser <> nil then
-      KerberosUser^ := fBoundUser;
-    fBound := true;
-    fBoundAs := lcbKerberos;
-    fBoundKerberosAuthIdentify := AuthIdentify;
-    if needencrypt then
-      include(fFlags, fSecContextEncrypt);
-    result := true;
+          else
+            // needed for OpenLDAP over TLS to avoid LDAP_RES_UNWILLING_TO_PERFORM
+            PCardinal(datain)^ := 0;
+          if AuthIdentify <> '' then
+            Append(datain, AuthIdentify);
+          dataout := SecEncrypt(fSecContext, datain);
+        end;
+        req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
+                  Asn(fVersion),
+                  AsnOctStr(''),
+                  Asn(ASN1_CTC3, [
+                    AsnOctStr('GSSAPI'),
+                    AsnOctStr(dataout)])]);
+        t := SendAndReceive(req2);
+      until not (fResultCode in [LDAP_RES_SUCCESS, LDAP_RES_SASL_BIND_IN_PROGRESS]);
+      if fResultCode <> LDAP_RES_SUCCESS then
+        exit; // error
+      // we are successfully authenticated (and probably encrypted)
+      ServerSspiAuthUser(fSecContext, fBoundUser);
+      if KerberosUser <> nil then
+        KerberosUser^ := fBoundUser;
+      fBound := true;
+      fBoundAs := lcbKerberos;
+      fBoundKerberosAuthIdentify := AuthIdentify;
+      if needencrypt then
+        include(fFlags, fSecContextEncrypt);
+      result := true;
+    finally
+      if not result then
+        FreeSecContext(fSecContext);
+    end;
   finally
-    if not result then
-      FreeSecContext(fSecContext);
+    if Assigned(log) then
+      log.Log(LOG_DEBUGERROR[not result], 'BindSaslKerberos=% % % signseal=% as %',
+        [result, fResultCode, ToText(Transmission)^, needencrypt, fBoundUser], self);
   end;
 end;
 
@@ -6314,6 +6361,7 @@ end;
 function TLdapClient.Close: boolean;
 begin
   result := true;
+  fLog.Add.Log(sllTrace, 'Close', self);
   if fSock.SockConnected then
     try
       SendPacket(AsnTyped('', LDAP_ASN1_UNBIND_REQUEST));
@@ -6326,6 +6374,7 @@ end;
 
 procedure TLdapClient.Reset;
 begin
+  fLog.Add.Log(sllTrace, 'Reset', self);
   if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
   fFlags := [];
@@ -6351,16 +6400,21 @@ begin
 end;
 
 function TLdapClient.Reconnect: boolean;
+var
+  log: ISynLog;
 begin
   result := false;
   if (self = nil) or
      (fBoundAs = lcbNone) or
      (fSock = nil) then
     exit; // no server to reconnect
+  log := fLog.Enter(self, 'Reconnect');
   // reset the client state and close any current socket
   Reset;
   fSock.Close;
   // re-create the client socket with previous valid TCP parameters
+  if Assigned(log) then
+    log.Log(sllTrace, 'Reconnect to %', [fSettings.TargetUri], self);
   fSock.OpenBind(fSettings.TargetHost, fSettings.TargetPort, fSettings.Tls);
   // re-bound with the previous mean of authentication
   result := DoBind(fBoundAs);
@@ -6376,24 +6430,29 @@ begin
   result := false;
   if not Connected then
     exit;
-  query := AsnTyped(Oid, ASN1_CTX0);
-  if Value <> '' then
-    AsnAdd(query, AsnTyped(Value, ASN1_CTX1));
-  decoded := SendAndReceive(AsnTyped(query, LDAP_ASN1_EXT_REQUEST));
-  result := fResultCode = LDAP_RES_SUCCESS;
-  if not result then
-    exit;
-  // https://www.rfc-editor.org/rfc/rfc2251#section-4.12
-  pos := 1;
-  while pos < length(decoded) do
-    case AsnNext(pos, decoded, @v) of
-      ASN1_CTX10:
-        if RespName <> nil then
-          RespName^ := v;
-      ASN1_CTX11:
-        if RespValue <> nil then
-          RespValue^ := v;
-    end;
+  try
+    query := AsnTyped(Oid, ASN1_CTX0);
+    if Value <> '' then
+      AsnAdd(query, AsnTyped(Value, ASN1_CTX1));
+    decoded := SendAndReceive(AsnTyped(query, LDAP_ASN1_EXT_REQUEST));
+    result := fResultCode = LDAP_RES_SUCCESS;
+    if not result then
+      exit;
+    // https://www.rfc-editor.org/rfc/rfc2251#section-4.12
+    pos := 1;
+    while pos < length(decoded) do
+      case AsnNext(pos, decoded, @v) of
+        ASN1_CTX10:
+          if RespName <> nil then
+            RespName^ := v;
+        ASN1_CTX11:
+          if RespValue <> nil then
+            RespValue^ := v;
+      end;
+  finally
+    fLog.Add.Log(LOG_DEBUGERROR[not result], 'Extended(%)=% % % %',
+      [result, Oid, fResultCode, fResultString, v], self);
+  end;
 end;
 
 function TLdapClient.ExtWhoAmI: RawUtf8;
@@ -6654,7 +6713,9 @@ begin
      (fSearchRange = nil) or
      (fSearchRange.Count = 0) then
     exit;
-  fSearchRange.fSearchTimeMicroSec := fSearchResult.fSearchTimeMicroSec;
+  fSearchRange.fMicroSec := fSearchResult.fMicroSec;
+  fSearchRange.fIn  := fSearchResult.fIn;
+  fSearchRange.fOut := fSearchResult.fOut;
   bak := fSearchScope;
   try
     fSearchScope := lssBaseObject;
@@ -6871,6 +6932,10 @@ begin
                    ])
                  ]));
   result := fResultCode = LDAP_RES_COMPARE_TRUE;
+  if Assigned(fLog) then
+    fLog.Add.Log(LOG_DEBUGERROR[not (fResultCode in LDAP_RES_NOERROR)],
+      'Compare(''%'',%,%)=% % %',
+      [Obj, AttrName, AttrValue, result, fResultCode, fResultString], self);
 end;
 
 
@@ -6893,6 +6958,9 @@ begin
                    AsnOctStr(Obj),
                    AsnSeq(query)]));
   result := fResultCode = LDAP_RES_SUCCESS;
+  if Assigned(fLog) then
+    fLog.Add.Log(LOG_DEBUGERROR[not result], 'Add(%)=% % %',
+      [Obj, result, fResultCode, fResultString], self);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify
@@ -6910,6 +6978,9 @@ begin
                    AsnSeq(Modifications) // sequence of modifications
                  ]));
   result := fResultCode = LDAP_RES_SUCCESS;
+  if Assigned(fLog) then
+    fLog.Add.Log(LOG_DEBUGERROR[not result], 'Modify(%)=% % %',
+      [Obj, result, fResultCode, fResultString], self);
 end;
 
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
@@ -6957,6 +7028,9 @@ begin
     AsnAdd(query, AsnTyped(NewSuperior, ASN1_CTX0));
   SendAndReceive(AsnTyped(query, LDAP_ASN1_MODIFYDN_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
+  if Assigned(fLog) then
+    fLog.Add.Log(LOG_DEBUGERROR[not result], 'ModifyDN(%)=% % %',
+      [Obj, result, fResultCode, fResultString], self);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-delete
@@ -6989,6 +7063,9 @@ begin
       SearchScope := bak;
     end;
   result := fResultCode = LDAP_RES_SUCCESS;
+  if Assigned(fLog) then
+    fLog.Add.Log(LOG_DEBUGERROR[not result], 'Delete(%)=% % %',
+      [Obj, result, fResultCode, fResultString], self);
 end;
 
 
@@ -7393,6 +7470,12 @@ function ToText(mode: TLdapClientBound): PShortString;
 begin
   result := GetEnumName(TypeInfo(TLdapClientBound), ord(mode));
 end;
+
+function ToText(lct: TLdapClientTransmission): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TLdapClientTransmission), ord(lct));
+end;
+
 
 
 { **************** Dedicated TLdapCheckMember Class }
