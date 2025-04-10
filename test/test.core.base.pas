@@ -4753,6 +4753,12 @@ begin
   CheckEqual(length(a), SizeOf(Int64) * 2);
   for i := 1 to length(a) do
     Check(a[1] = 'f');
+  CheckEqual(ParseHex0x('0x3f',   {no0x=}false), $3f, '3f');
+  CheckEqual(ParseHex0x('0x3ff',  {no0x=}false), $3ff, '3ff');
+  CheckEqual(ParseHex0x(' 0x3ff', {no0x=}false), $3ff, '3ff2');
+  CheckEqual(ParseHex0x('0x3ff ', {no0x=}false), $3ff, '3ff3');
+  CheckEqual(ParseHex0x('0x3ff'#13#10,  {no0x=}false), $3ff, '3ff4');
+  CheckEqual(ParseHex0x(' 0x3ff'#13#10, {no0x=}false), $3ff, '3ff4');
   for i := -10000 to 10000 do
     Check(GetInteger(Pointer(Int32ToUtf8(i))) = i);
   for i := 0 to 10000 do
@@ -4875,13 +4881,14 @@ begin
     begin
       a[0] := #0;
       AppendShortIntHex(j, a); // with DisplayMinChars() trimming
-      CheckUtf8(a = PointerToHexShort(pointer(PtrInt(j))), 'p2hex %=%', [j, a]);
+      CheckUtf8(PointerToHexShort(pointer(PtrInt(j))) = a, 'p2hex %=%', [j, a]);
       CheckUtf8(IdemPropName(a, ToHexShort(@j, 4)), '2hex %=%', [j, a]);
       CheckUtf8(IdemPropNameU(Int64ToHexLower(j), @a[1], ord(a[0])), 'i2hex %', [a]);
-      a[ord(a[0]) + 1] := #0;
+      a[ord(a[0]) + 1] := #0; // make valid PAnsiChar
       CheckEqual(ParseHex0x(@a[1], {no0x=}true), j, '8-bit hex');
       if a[1] = '0' then
         CheckEqual(ParseHex0x(@a[2], {no0x=}true), j, '4-bit hex');
+      CheckEqual(ParseHex0x(@a[1], {no0x=}false), 0, '0x');
     end;
     case i of
       9990:
