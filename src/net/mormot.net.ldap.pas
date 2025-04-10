@@ -1435,6 +1435,7 @@ type
     fCount: integer;
     fMicroSec, fIn, fOut: Int64;
     procedure AssignTo(Dest: TClonable); override;
+    function GetElapsed: RawUtf8;
     procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
       ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
     procedure ExtractPagedAttributes(Source: TLdapResultList);
@@ -1507,6 +1508,8 @@ type
       read fCount;
     /// the time elapsed in microseconds on client side
     // - including command sending, receiving and result parsing
+    property Elapsed: RawUtf8
+      read GetElapsed;
     /// how many bytes have been sent on the raw socket for these results
     property Sent: Int64
       read fOut;
@@ -4833,6 +4836,14 @@ begin
   d.fMicroSec := fMicroSec;
   d.fIn := fIn;
   d.fOut := fOut;
+end;
+
+function TLdapResultList.GetElapsed: RawUtf8;
+var
+  tmp: TShort16;
+begin
+  MicroSecToString(fMicroSec, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
 function TLdapResultList.ObjectNames(asCN, noSort: boolean): TRawUtf8DynArray;
