@@ -225,7 +225,7 @@
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
-    // on WinGetEnumName() error in mormot.core.rtti, undefine the above conditional
+    // on WinGetEnumName() error in mormot.core.os, undefine the above conditional
     // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
     {$define STRCNT32} // new trunk feature: 32-bit TAnsiRec.Ref even on 64-bit CPU
   {$ifend}

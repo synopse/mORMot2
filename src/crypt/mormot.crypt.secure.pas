@@ -4797,7 +4797,7 @@ end;
 function TDigestProcess.ClientResponse(const UriName: RawUtf8): RawUtf8;
 begin
   FormatUtf8('username="%",realm=%,nonce="%",cnonce="%",nc=%,qop=%,' +
-    'algorithm=%,%="%",response=%',
+    'algorithm=%,%="%",response="%"',
     [UserName, QuotedStr(Realm, '"'), Nonce, CNonce, NC, Qop,
      Algorithm, UriName, Url, Response], result);
   if Opaque <> '' then
