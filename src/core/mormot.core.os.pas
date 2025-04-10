@@ -2915,9 +2915,6 @@ function GetErrorText(error: integer): RawUtf8;
 // - replace SysErrorMessagePerModule() and SysErrorMessage() from mORMot 1
 function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 
-/// minimal GetEnumName() for Delphi + FPC on base enum type with no Min/Max
-function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
-
 /// raise an EOSException from the last system error using WinErrorText()
 // - if Code is kept to its default 0, GetLastError is called
 procedure RaiseLastError(const Context: shortstring;

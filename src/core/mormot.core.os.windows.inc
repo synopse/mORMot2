@@ -1696,7 +1696,7 @@ begin
   for e := low(e) to high(e) do
     // manual loop: the same error code can appear several times
     if DOTNET_EXCEPTIONHRESULT[e] = code then
-      PtrArrayAdd(names, WinGetEnumName(TypeInfo(TDotNetException), ord(e)));
+      PtrArrayAdd(names, GetEnumNameRtti(TypeInfo(TDotNetException), ord(e)));
 end;
 
 function TSynLogExceptionContext.AdditionalInfo(
