@@ -1779,7 +1779,7 @@ type
     wspIncreaseQuota,
     wspUnsolicitedInput,
     wspMachineAccount,
-    wspTCP,
+    wspTCB,
     wspSecurity,
     wspTakeOwnership,
     wspLoadDriver,

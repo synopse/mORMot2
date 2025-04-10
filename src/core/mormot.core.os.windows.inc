@@ -3038,7 +3038,7 @@ const
     'SeIncreaseQuotaPrivilege',        // wspIncreaseQuota
     'SeUnsolicitedInputPrivilege',     // wspUnsolicitedInput
     'SeMachineAccountPrivilege',       // wspMachineAccount
-    'SeTcbPrivilege',                  // wspTCP
+    'SeTcbPrivilege',                  // wspTCB
     'SeSecurityPrivilege',             // wspSecurity
     'SeTakeOwnershipPrivilege',        // wspTakeOwnership
     'SeLoadDriverPrivilege',           // wspLoadDriver
