@@ -5765,9 +5765,7 @@ var
   raw: integer;
 begin
   {$ifdef ASNDEBUG}
-  {$I-} write('------'#10'Sending ');
-  if fSecContextEncrypt in fFlags then writeln('(encrypted) =') else writeln('=');
-  writeln(AsnDump(Asn1Data));
+  ConsoleWrite('------%Sending=%', [CRLF, AsnDump(Asn1Data)]);
   {$endif ASNDEBUG}
   packet := BuildPacket(Asn1Data);
   if fSock.TrySndLow(pointer(packet), length(packet), @res, @raw) then
@@ -5823,7 +5821,7 @@ begin
     ELdap.RaiseUtf8('%.ReceivePacket: error #% % from %:%', [self,
       err, ToText(res)^, fSettings.TargetHost, fSettings.TargetPort]);
   {$ifdef ASNDEBUG}
-  writeln('Packet received bytes = ', length(fSockBuffer));
+  ConsoleWrite('Packet received bytes = %', [length(fSockBuffer)]);
   {$endif ASNDEBUG}
 end;
 
@@ -5895,9 +5893,7 @@ begin
   end;
   fFullResult := result;
   {$ifdef ASNDEBUG}
-  {$I-} write('------'#10'Received ');
-  if fSecContextEncrypt in fFlags then writeln('(encrypted) =') else writeln('=');
-  writeln(AsnDump(result));
+  ConsoleWrite('------%Received=%', [CRLF, AsnDump(result)]);
   {$endif ASNDEBUG}
 end;
 
