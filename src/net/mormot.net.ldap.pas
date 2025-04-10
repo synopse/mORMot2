@@ -5739,9 +5739,9 @@ var
   p: PUtf8Char;
   res: TLdapResult;
 begin
-  include(fFlags, fRetrievedDefaultDNInfo);
-  if not Connected then
+  if not EnsureConnected('RetrieveDefaultDNInfo') then
     exit;
+  include(fFlags, fRetrievedDefaultDNInfo);
   res := SearchObject(DefaultDN, '',
     ['wellKnownObjects', 'otherWellKnownObjects', 'objectSid']);
   if res = nil then
@@ -6368,6 +6368,7 @@ begin
     end;
   FreeAndNil(fSock);
   Reset;
+  fFlags := [];
 end;
 
 procedure TLdapClient.Reset;
@@ -6375,7 +6376,7 @@ begin
   fLog.Add.Log(sllTrace, 'Reset', self);
   if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
-  fFlags := [];
+  fFlags := fFlags * [fRetrieveRootDseInfo, fRetrievedDefaultDNInfo];
   fBound := false; // fBoundAs should be kept as it is
   fBoundUser := '';
   fRootDN := '';
@@ -6438,8 +6439,7 @@ var
   pos: integer;
 begin
   result := false;
-  if not Connected then
-    exit;
+  if EnsureConnected('Extended') then
   try
     query := AsnTyped(Oid, ASN1_CTX0);
     if Value <> '' then
@@ -6461,7 +6461,7 @@ begin
       end;
   finally
     fLog.Add.Log(LOG_DEBUGERROR[not result], 'Extended(%)=% % % %',
-      [BOOL_STR[result], Oid, fResultCode, fResultString, v], self);
+      [Oid, BOOL_STR[result], fResultCode, fResultString, v], self);
   end;
 end;
 
@@ -6960,7 +6960,7 @@ var
 begin
   result := false;
   if (Value = nil) or
-     not Connected then
+     not EnsureConnected('Add') then
     exit;
   for i := 0 to Value.Count - 1 do
     Append(query, Value.Items[i].ExportToAsnSeq);
@@ -6981,7 +6981,8 @@ begin
   result := false;
   if (high(Modifications) < 0) or
      ((high(Modifications) = 0) and
-      (Modifications[0] = '')) then
+      (Modifications[0] = '')) or
+     not EnsureConnected('Modify') then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
                    AsnOctStr(Obj),       // the DN of the entry to modify
@@ -7030,7 +7031,7 @@ var
   query: TAsnObject;
 begin
   result := false;
-  if not Connected then
+  if not EnsureConnected('ModifyDN') then
     exit;
   query := AsnOctStr(Obj);
   Append(query, AsnOctStr(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]);
@@ -7052,7 +7053,7 @@ var
   i: PtrInt;
 begin
   result := false;
-  if not Connected then
+  if not EnsureConnected('Delete') then
     exit;
   bak := SearchScope;
   SendAndReceive(AsnTyped(Obj, LDAP_ASN1_DEL_REQUEST));
@@ -7184,7 +7185,7 @@ var
   cExisting: TLdapResult;
 begin
   result := false;
-  if not Connected or
+  if not EnsureConnected('AddComputer') or
      not LdapEscapeName(ComputerName, cSafe) then
     exit;
   cDn := NormalizeDN(Join(['CN=', cSafe, ',', ComputerParentDN]));
@@ -7574,12 +7575,8 @@ begin
         if fLastConnectedTix32 <> tix shr 12 then
         begin
           fLastConnectedTix32 := tix shr 12; // retry every 4 seconds only
-          if fSettings.KerberosSpn <> '' then
-            BindSaslKerberos
-          else if fSettings.Password = '' then
-            exit // anonymous binding would fail the search for sure
-          else
-            Bind;
+          if not Reconnect('Authorize') then
+            exit;
         end
         else
           exit; // too soon to retry
@@ -7627,11 +7624,11 @@ begin
     end;
   except
     on Exception do
-      begin
-        // there was an error connecting with the LDAP server
-        result := false; // assume failed
-        Close;  // but will try to reconnect
-      end;
+    begin
+      // there was an error connecting with the LDAP server
+      result := false; // assume failed
+      fSock.Close; // close the socket, but will try to reconnect
+    end;
   end;
 end;
 
