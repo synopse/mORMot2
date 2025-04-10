@@ -9694,7 +9694,9 @@ end;
 procedure MicroSecToString(Micro: QWord; out result: TShort16);
 begin
   result[0] := #0;
-  if Micro < 1000 then
+  if Int64(Micro) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
+    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('u') shl 16 + ord('s') shl 24
+  else if Int64(Micro) < 1000 then
   begin
     AppendShortCardinal(Micro, result);
     AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
@@ -9720,7 +9722,9 @@ end;
 procedure NanoSecToString(Nano: QWord; out result: TShort16);
 begin
   result[0] := #0;
-  if Nano < 1000 then
+  if Int64(Nano) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
+    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('n') shl 16 + ord('s') shl 24
+  else if Nano < 1000 then
   begin
     AppendShortCardinal(Nano, result);
     AppendShortTwoChars(ord('n') + ord('s') shl 8, @result);

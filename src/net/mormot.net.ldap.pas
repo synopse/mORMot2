@@ -5502,7 +5502,7 @@ begin
         exit;
       end;
       if Assigned(log) then
-        log.Log(sllTrace, 'cldap', TypeInfo(TRawUtf8DynArray), dc, self);
+        log.Log(sllTrace, 'Connect: cldap', TypeInfo(TRawUtf8DynArray), dc, self);
     end
   else
     // try the LDAP server as specified in TLdapClient settings
@@ -6059,7 +6059,7 @@ begin
   finally
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result], 'Bind=% % %',
-        [result, fResultCode, fResultString], self);
+        [BOOL_STR[result], fResultCode, fResultString], self);
   end;
 end;
 
@@ -6125,7 +6125,7 @@ begin
   finally
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result], 'BindSaslDigest=% % %',
-        [result, fResultCode, fResultString], self);
+        [BOOL_STR[result], fResultCode, fResultString], self);
   end;
 end;
 
@@ -6323,8 +6323,9 @@ begin
     end;
   finally
     if Assigned(log) then
-      log.Log(LOG_DEBUGERROR[not result], 'BindSaslKerberos=% % % signseal=% as %',
-        [result, fResultCode, ToText(Transmission)^, needencrypt, fBoundUser], self);
+      log.Log(LOG_DEBUGERROR[not result],
+        'BindSaslKerberos=% % % signseal=% as %', [BOOL_STR[result],
+        fResultCode, ToText(Transmission)^, needencrypt, fBoundUser], self);
   end;
 end;
 
@@ -6451,7 +6452,7 @@ begin
       end;
   finally
     fLog.Add.Log(LOG_DEBUGERROR[not result], 'Extended(%)=% % % %',
-      [result, Oid, fResultCode, fResultString, v], self);
+      [BOOL_STR[result], Oid, fResultCode, fResultString, v], self);
   end;
 end;
 
@@ -6612,11 +6613,11 @@ begin
   finally
     if Assigned(fLog) then
       if result then
-        fLog.Add.Log(sllDebug, 'Search dn=% filter=%: %',
+        fLog.Add.Log(sllDebug, 'Search dn="%" filter="%" %',
           [BaseDN, Filter, fSearchResult], self)
       else
-        fLog.Add.Log(sllError, '%.Search dn=% filter=%: %',
-          [BaseDN, Filter, fResultString]);
+        fLog.Add.Log(sllError, 'Search dn="%" filter="%" failed as %',
+          [BaseDN, Filter, fResultString], self);
   end;
 end;
 
@@ -6934,8 +6935,8 @@ begin
   result := fResultCode = LDAP_RES_COMPARE_TRUE;
   if Assigned(fLog) then
     fLog.Add.Log(LOG_DEBUGERROR[not (fResultCode in LDAP_RES_NOERROR)],
-      'Compare(''%'',%,%)=% % %',
-      [Obj, AttrName, AttrValue, result, fResultCode, fResultString], self);
+      'Compare("%",%,%)=% % %', [Obj, AttrName, AttrValue,
+      BOOL_STR[result], fResultCode, fResultString], self);
 end;
 
 
@@ -6960,7 +6961,7 @@ begin
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
     fLog.Add.Log(LOG_DEBUGERROR[not result], 'Add(%)=% % %',
-      [Obj, result, fResultCode, fResultString], self);
+      [Obj, BOOL_STR[result], fResultCode, fResultString], self);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify
@@ -6980,7 +6981,7 @@ begin
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
     fLog.Add.Log(LOG_DEBUGERROR[not result], 'Modify(%)=% % %',
-      [Obj, result, fResultCode, fResultString], self);
+      [Obj, BOOL_STR[result], fResultCode, fResultString], self);
 end;
 
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
@@ -7030,7 +7031,7 @@ begin
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
     fLog.Add.Log(LOG_DEBUGERROR[not result], 'ModifyDN(%)=% % %',
-      [Obj, result, fResultCode, fResultString], self);
+      [Obj, BOOL_STR[result], fResultCode, fResultString], self);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-delete
@@ -7065,7 +7066,7 @@ begin
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
     fLog.Add.Log(LOG_DEBUGERROR[not result], 'Delete(%)=% % %',
-      [Obj, result, fResultCode, fResultString], self);
+      [Obj, BOOL_STR[result], fResultCode, fResultString], self);
 end;
 
 
@@ -7754,8 +7755,7 @@ begin
     end;
   if fLog <> nil then
     fLog.Add.Log(sllTrace, 'CheckCredential(%)=% in %',
-      [aUser, GetEnumName(TypeInfo(TAuthServerResult), ord(result)),
-       MicroSecFrom(start)], self);
+      [aUser, ToText(result)^, MicroSecFrom(start)], self);
 end;
 
 
