@@ -10530,12 +10530,12 @@ begin
   result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
 end;
 
-procedure TPersistentCopyObject(Dest, Source: TObject);
+procedure CopyTPersistent(Dest, Source: TObject);
 begin
   TPersistent(Dest).Assign(TPersistent(Source)); // works e.g. for TStrings
 end;
 
-procedure TCollectionCopyObject(Dest, Source: TObject);
+procedure CopyTCollection(Dest, Source: TObject);
 begin
   CopyCollection(TCollection(Source), TCollection(Dest)); // inversed order
 end;
@@ -10591,11 +10591,11 @@ begin
   case fCache.ValueRtlClass of
     vcPersistent:
       if fProps.CountNonVoid = 0 then // use TPersistent.Assign() if no props
-        fCopyObject := @TPersistentCopyObject;
+        fCopyObject := @CopyTPersistent;
     vcStrings:
       begin
         new := @_New_Strings; // call non-virtual TStrings.Create
-        fCopyObject := @TPersistentCopyObject;
+        fCopyObject := @CopyTPersistent;
         fJsonSave := @_JS_TStrings;
         fJsonLoad := @_JL_TStrings;
       end;
@@ -10614,7 +10614,7 @@ begin
       begin
         if @new = @_New_Object then
           new := @_New_Collection; // no TInterfacedCollection above
-        fCopyObject := @TCollectionCopyObject;
+        fCopyObject := @CopyTCollection;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;
       end;
@@ -10636,8 +10636,7 @@ begin
     vcObjectWithID: // also accepts "RowID" field in JSON input
       fJsonLoad := @_JL_RttiObjectWithID;
     vcClonable:
-      if fProps.CountNonVoid = 0 then // TClonable.AssignTo() if no props
-        fCopyObject := @CopyClonable;
+      fCopyObject := @CopyTClonable; // always use TClonable.AssignTo()
   end;
   fCache.NewInstance := @new;
 end;

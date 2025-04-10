@@ -1964,6 +1964,7 @@ type
 
   /// internal function handler for copying a class instance
   // - use TRttiCustom.Props.CopyProperties but may be overriden e.g. for TOrm
+  // or TClonable
   TRttiClassCopier = procedure(Dest, Source: TObject);
 
 
@@ -3383,7 +3384,7 @@ function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
 function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 
 // internal wrappers to publish protected methods to mormot.core.json
-procedure CopyClonable(Dest, Source: TObject);
+procedure CopyTClonable(Dest, Source: TObject);
 procedure RttiSetParserTObjectWithRttiMethods(
   O: TObjectWithRttiMethodsClass; Rtti: TRttiCustom);
 
@@ -10652,9 +10653,9 @@ begin
     d[i] := TClonable(s[i]).Clone;
 end;
 
-procedure CopyClonable(Dest, Source: TObject);
+procedure CopyTClonable(Dest, Source: TObject);
 begin
-  TClonable(Source).AssignTo(TClonable(Dest));
+  TClonable(Source).AssignTo(TClonable(Dest)); // AssignTo is a protected method
 end;
 
 
