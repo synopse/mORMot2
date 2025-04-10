@@ -9685,10 +9685,12 @@ end;
 
 procedure MicroSecToString(Micro: QWord; out result: TShort16);
 begin
-  if Int64(Micro) <= 0 then
-    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('u') shl 16 + ord('s') shl 24
-  else if Micro < 1000 then
-    FormatShort16('%us', [Micro], result)
+  result[0] := #0;
+  if Micro < 1000 then
+  begin
+    AppendShortCardinal(Micro, result);
+    AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
+  end
   else if Micro < 1000000 then
     By100ToTwoDigitString(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)

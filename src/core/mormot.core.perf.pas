@@ -2610,7 +2610,7 @@ end;
 function TSynMonitorThroughput.GetAsText: TShort16;
 begin
   AppendKB(fBytesPerSec, result, not fTextNoSpace);
-  AppendShortTwoChars('/s', @result);
+  AppendShortTwoChars(ord('/') + ord('s') shl 8, @result);
 end;
 
 

@@ -8079,7 +8079,7 @@ begin
   AppendShortKB(info.memtotal - info.memfree, info.memtotal, result);
   AppendShortChar('(', @result);
   AppendShortCardinal(info.percent, result);
-  AppendShortTwoChars('%)', @result);
+  AppendShortTwoChars(ord('%') + ord(')') shl 8, @result);
 end;
 
 function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;

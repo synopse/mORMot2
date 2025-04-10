@@ -3192,7 +3192,7 @@ begin
     AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
   else if mask - samWithSddl <> [] then
   begin
-    AppendShortTwoChars('0x', @s);        // we don't have all tokens it needs
+    AppendShortTwoChars('0x', @s);        // we don't have all needed tokens
     AppendShortIntHex(cardinal(mask), s); // store as @x##### hexadecimal
   end
   else
@@ -4792,9 +4792,9 @@ begin
   if SCOPE_P[scope] in Flags then
     AppendShortChar('P', @tmp);
   if SCOPE_AR[scope] in Flags then
-    AppendShortTwoChars('AR', @tmp);
+    AppendShortTwoChars(ord('A') + ord('R') shl 8, @tmp);
   if SCOPE_AI[scope] in Flags then
-    AppendShortTwoChars('AI', @tmp);
+    AppendShortTwoChars(ord('A') + ord('I') shl 8, @tmp);
   acl := @Dacl;
   if scope = sasSacl then
     acl := @Sacl;
@@ -4878,12 +4878,12 @@ begin
   tmp[0] := #0;
   if Owner <> '' then
   begin
-    tmp := 'O:';
+    AppendShortTwoChars(ord('O') + ord(':') shl 8, @tmp);
     SddlAppendSid(tmp, pointer(Owner), dom);
   end;
   if Group <> '' then
   begin
-    AppendShortTwoChars('G:', @tmp);
+    AppendShortTwoChars(ord('G') + ord(':') shl 8, @tmp);
     SddlAppendSid(tmp, pointer(Group), dom);
   end;
   sddl.AddShort(tmp);
