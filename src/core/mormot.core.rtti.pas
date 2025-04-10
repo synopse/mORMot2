@@ -10941,7 +10941,9 @@ begin
   PT_DYNARRAY[ptPUtf8Char]     := TypeInfo(TPUtf8CharDynArray);
   // prepare global thread-safe TRttiCustomList
   Rtti := RegisterGlobalShutdownRelease(TRttiCustomList.Create);
-  ClassUnit := _ClassUnit;
+  // replace mormot.core.base/mormot.core.os limited implementation
+  ClassUnit := @_ClassUnit;
+  GetEnumNameRtti := @GetEnumName;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
   RedirectRtl;

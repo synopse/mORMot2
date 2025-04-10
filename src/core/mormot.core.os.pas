@@ -4096,6 +4096,10 @@ var
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
   AppendShortUuid: TAppendShortUuid;
 
+  /// return the RTTI text of a given enumerate as mormot.core.rtti GetEnumName()
+  // - this unit defaults to minimal code, but overriden by mormot.core.rtti.pas
+  GetEnumNameRtti: function(Info: pointer; Value: integer): PShortString;
+
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use GetConsoleOutputCP() codepage, following CP_OEM
 // - under Linux, will expect the console to be defined with UTF-8 encoding
@@ -6292,23 +6296,34 @@ end;
 const
   NULL_STR: string[1] = '';
 
-function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  _GetEnumNameRttiTmp: string[127]; // output 'TEnumTypeName#value'
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
+function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
 begin
-  // minimal version with no Kind, EnumBaseType nor Value min/max check
-  result := @NULL_STR;
-  // no Windows arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
-  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   if Value < 0 then
+  begin
+    result := @NULL_STR;
     exit;
+  end;
+  // minimal version with no Kind, EnumBaseType nor Value min/max check
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  // no arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
+  result := @_GetEnumNameRttiTmp;
+  result^ := PShortString(@PByteArray(Info)[1])^;
+  AppendShortChar('#', pointer(result));
+  AppendShortCardinal(Value, result^);
+  {$else}
   // quickly jump over Kind + NameLen + Name +  OrdType + Min + Max + EnumBaseType
-  Info := @Info[ord(Info[1]) + (1 + 1 + 1 + 4 + 4 + SizeOf(pointer)
-    {$ifdef FPC_PROVIDE_ATTR_TABLE} + SizeOf(pointer) {$endif} )];
+  result := @PAnsiChar(Info)[PByteArray(Info)[1] + (1 + 1 + 1 + 4 + 4 +
+    SizeOf(pointer) {$ifdef FPC_PROVIDE_ATTR_TABLE} + SizeOf(pointer) {$endif})];
   if Value > 0 then
     repeat
-      Info := @Info[ord(Info^) + 1]; // next shortstring
+      inc(PByte(result), ord(result^[0]) + 1); // next shortstring
       dec(Value);
     until Value = 0;
-  result := pointer(Info);
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 
@@ -6408,23 +6423,23 @@ function WinErrorConstant(Code: cardinal): PShortString;
 begin
   case Code of // split into TWinError* types (faster and cross-platform)
     0 .. ord(high(TWinError0)):
-      result := WinGetEnumName(TypeInfo(TWinError0), Code);
+      result := GetEnumNameRtti(TypeInfo(TWinError0), Code);
     50 .. 50 + ord(high(TWinError50)):
-      result := WinGetEnumName(TypeInfo(TWinError50), Code - 50);
+      result := GetEnumNameRtti(TypeInfo(TWinError50), Code - 50);
     80 .. 80 + ord(high(TWinError80)):
-      result := WinGetEnumName(TypeInfo(TWinError80), Code - 80);
+      result := GetEnumNameRtti(TypeInfo(TWinError80), Code - 80);
     108 .. 108 + ord(high(TWinError108)):
-      result := WinGetEnumName(TypeInfo(TWinError108), Code - 108);
+      result := GetEnumNameRtti(TypeInfo(TWinError108), Code - 108);
     995 .. 995 + ord(high(TWinError995)):
-      result := WinGetEnumName(TypeInfo(TWinError995), Code - 995);
+      result := GetEnumNameRtti(TypeInfo(TWinError995), Code - 995);
     1051 .. 1051 + ord(high(TWinError1051)):
-      result := WinGetEnumName(TypeInfo(TWinError1051), Code - 1051);
+      result := GetEnumNameRtti(TypeInfo(TWinError1051), Code - 1051);
     1200 .. 1200 + ord(high(TWinError1200)):
-      result := WinGetEnumName(TypeInfo(TWinError1200), Code - 1200);
+      result := GetEnumNameRtti(TypeInfo(TWinError1200), Code - 1200);
     1315 .. 1315 + ord(high(TWinError1315)):
-      result := WinGetEnumName(TypeInfo(TWinError1315), Code - 1315);
+      result := GetEnumNameRtti(TypeInfo(TWinError1315), Code - 1315);
   else
-    result := WinGetEnumName(TypeInfo(TWinErrorOne),
+    result := GetEnumNameRtti(TypeInfo(TWinErrorOne),
       FastFindIntegerSorted(@WINERR_ONE, ord(high(WINERR_ONE)), Code));
   end;
 end;
@@ -11311,6 +11326,7 @@ begin
   SetThreadName := _SetThreadName;
   ShortToUuid := _ShortToUuid;                     // mormot.core.text.pas
   AppendShortUuid := _AppendShortUuid;
+  GetEnumNameRtti := _GetEnumNameRtti;
 end;
 
 procedure FinalizeUnit;

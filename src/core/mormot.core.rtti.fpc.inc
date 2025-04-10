@@ -183,7 +183,6 @@ begin // is very efficiently inlined by FPC
   result := aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex);
 end;
 
-
 function TRttiInterfaceTypeData.IntfGuid: PGuid;
 begin
   result := @PTypeData(@self)^.Guid;
