@@ -49,7 +49,7 @@ type
     four: Int64;
     // for _TTunnelLocal
     session: Int64;
-    appsec: RawUtf8;
+    appsec, synopsednsip: RawUtf8;
     options: TTunnelOptions;
     tunnelexecutedone: boolean;
     tunnelexecuteremote, tunnelexecutelocal: TNetPort;
@@ -58,6 +58,7 @@ type
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelExecuted(Sender: TObject);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
+    procedure RunLdapClient(Sender: TObject);
     // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -777,6 +778,51 @@ begin
   end;
 end;
 
+procedure TNetworkProtocols.RunLdapClient(Sender: TObject);
+var
+  rev: RawUtf8;
+  endtix: Int64;
+  one: TLdapClient;
+  dv: variant;
+begin
+  // async validate actual LDAP client on public ldap.forumsys.com server
+  try
+    one := TLdapClient.Create;
+    try
+      if TSynLogTestLog.HasLevel([sllTrace, sllDebug, sllError]) then
+        one.Log := TSynLogTestLog;
+      one.Settings.TargetUri := 'ldap://ldap.forumsys.com';
+      one.Settings.UserName := 'uid=einstein,dc=example,dc=com';
+      one.Settings.Password := 'password';
+      one.Settings.AllowUnsafePasswordBind := true;
+      CheckUtf8(one.Connect, 'connect=%', [one.ResultString]);
+      CheckUtf8(one.Bind, 'bind=%', [one.ResultString]);
+      CheckEqual(one.BoundUser, one.Settings.UserName);
+      CheckEqual(one.ExtWhoAmI, 'dn:' + one.Settings.UserName);
+      dv := one.SearchAllRaw(one.Settings.UserName, '', [], []);
+      CheckHash(_Safe(dv)^.ToHumanJson, $39B7C7F1, one.Settings.UserName);
+    finally
+      one.Free;
+    end;
+  except
+    on E: Exception do
+      Check(false, E.Message);
+  end;
+  // retry reverse lookup DNS after some time
+  if synopsednsip <> '' then
+  begin
+    endtix := GetTickCount64 + 2000; // never wait forever
+    repeat
+      inc(fAssertions);
+      rev := DnsReverseLookup(synopsednsip);
+      if rev <> '' then
+        break; // success
+      Sleep(100); // wait a little and retry up to 2 seconds
+    until GetTickCount64 > endtix;
+    CheckEqual(rev, '62-210-254-173.rev.poneytelecom.eu')
+  end;
+end;
+
 procedure TNetworkProtocols.DNSAndLDAP;
 var
   ip, rev, u, v, json, sid: RawUtf8;
@@ -873,14 +919,14 @@ begin
       Sleep(100); // some DNS servers may fail at first: wait a little
     until GetTickCount64 > endtix;
     CheckEqual(ip, rev, 'dns2');
-    repeat
-      inc(fAssertions);
-      rev := DnsReverseLookup(ip);
-      if rev <> '' then
-        break; // success
-      Sleep(100); // wait a little and retry up to 2 seconds
-    until GetTickCount64 > endtix;
-    CheckEqual(rev, '62-210-254-173.rev.poneytelecom.eu');
+    inc(fAssertions);
+    rev := DnsReverseLookup(ip);
+    if rev <> '' then
+      CheckEqual(rev, '62-210-254-173.rev.poneytelecom.eu')
+    else
+      synopsednsip := ip; // we will retry in the background thread
+    // async validate actual LDAP client on public ldap.forumsys.com server
+    Run(RunLdapClient, self, 'ldap', true, false);
   end;
   // validate LDAP distinguished name conversion (no client)
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
