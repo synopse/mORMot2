@@ -10230,6 +10230,14 @@ begin
             w.AddShorter('ENUM');
           ASN1_UTF8STRING:
             w.AddShorter('UTF8');
+          ASN1_PRINTSTRING:
+            w.AddShorter('PRINT');
+          ASN1_IA5STRING:
+            w.AddShorter('IA5');
+          ASN1_UTCTIME:
+            w.AddShorter('UTC');
+          ASN1_GENTIME:
+            w.AddShorter('GEN');
         else
           DumpClass(at, w);
         end;
