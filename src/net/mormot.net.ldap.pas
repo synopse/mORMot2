@@ -1932,9 +1932,9 @@ type
     // - can optionally return the KerberosUser which made the authentication
     function BindSaslKerberos(const AuthIdentify: RawUtf8 = '';
       KerberosUser: PRawUtf8 = nil): boolean;
-    /// test whether the client is connected to the server
-    // - if AndBound is set, it also checks that a successful bind request has been made
-    function Connected(AndBound: boolean = true): boolean;
+    /// test whether the client socket is connected to the server
+    function Connected: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// test whether the client is connected to the server and try re-connect
     // - follows Settings.AutoReconnect property and OnDisconnect event
     function EnsureConnected: boolean;
@@ -6329,12 +6329,9 @@ begin
   end;
 end;
 
-function TLdapClient.Connected(AndBound: boolean): boolean;
+function TLdapClient.Connected: boolean;
 begin
   result := fSock.SockConnected;
-  if result and
-     AndBound then
-    result := fBound;
 end;
 
 function TLdapClient.EnsureConnected: boolean;
@@ -7561,7 +7558,7 @@ begin
             exit;
         end;
       // re-create the connection to the LDAP server if needed
-      if not Connected({andbound=}true) then
+      if not (Connected and Bound) then
         if fLastConnectedTix32 <> tix shr 12 then
         begin
           fLastConnectedTix32 := tix shr 12; // retry every 4 seconds only
