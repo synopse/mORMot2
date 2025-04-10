@@ -10170,7 +10170,7 @@ end;
 
 function AsnDump(const Value: TAsnObject): RawUtf8;
 var
-  i, at, x, n, indent: integer;
+  i, at, x, n, indent, ilcount: integer;
   s: RawByteString;
   il: TIntegerDynArray;
   w: TTextWriter;
@@ -10179,18 +10179,16 @@ begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
     i := 1;
+    ilcount := 0;
     indent := 0;
     while i < length(Value) do
     begin
-      for n := length(il) - 1 downto 0 do
-      begin
-        x := il[n];
-        if x <= i then
+      for n := ilcount - 1 downto 0 do
+        if il[n] <= i then
         begin
-          DeleteInteger(il, n);
+          DeleteInteger(il, ilcount, n);
           dec(indent, 2);
         end;
-      end;
       at := AsnNext(i, Value, @s);
       w.AddChars(' ', indent);
       w.Add('$');
@@ -10209,7 +10207,7 @@ begin
         x := length(s);
         w.Add(' CTR: length %', [x]);
         inc(indent, 2);
-        AddInteger(il, x + i - 1);
+        AddInteger(il, ilcount, x + i - 1);
       end
       else
       begin
