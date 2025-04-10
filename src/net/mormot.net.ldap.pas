@@ -1433,7 +1433,7 @@ type
   protected
     fItems: TLdapResultObjArray;
     fCount: integer;
-    fSearchTimeMicroSec: Int64;
+    fMicroSec, fIn, fOut: Int64;
     procedure AssignTo(Dest: TClonable); override;
     procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
       ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
@@ -1497,13 +1497,22 @@ type
     // - you can write e.g. "for res in Items do writeln(res.ObjectName)"
     property Items: TLdapResultObjArray
       read fItems;
+    /// the time elapsed in microseconds on client side
+    // - including command sending, receiving and result parsing
+    property MicroSec: Int64
+      read fMicroSec;
+  published
     /// number of TLdapResult objects in list
     property Count: integer
       read fCount;
     /// the time elapsed in microseconds on client side
     // - including command sending, receiving and result parsing
-    property SearchTimeMicroSec: Int64
-      read fSearchTimeMicroSec;
+    /// how many bytes have been sent on the raw socket for these results
+    property Sent: Int64
+      read fOut;
+    /// how many bytes have been received on the raw socket for these results
+    property Recv: Int64
+      read fIn;
   end;
 
 
@@ -4811,7 +4820,9 @@ procedure TLdapResultList.Clear;
 begin
   ObjArrayClear(fItems, fCount);
   fCount := 0;
-  fSearchTimeMicroSec := 0;
+  fMicroSec := 0;
+  fIn := 0;
+  fOut := 0;
 end;
 
 procedure TLdapResultList.AssignTo(Dest: TClonable);
@@ -4819,7 +4830,9 @@ var
   d: TLdapResultList absolute Dest;
 begin
   TLdapResult.CloneObjArray(fItems, d.fItems, @fCount, @d.fCount);
-  d.fSearchTimeMicroSec := fSearchTimeMicroSec;
+  d.fMicroSec := fMicroSec;
+  d.fIn := fIn;
+  d.fOut := fOut;
 end;
 
 function TLdapResultList.ObjectNames(asCN, noSort: boolean): TRawUtf8DynArray;
@@ -4977,7 +4990,11 @@ begin
     if not NoTime then
     begin
       w.AddShorter(' in ');
-      w.AddShort(MicroSecToString(fSearchTimeMicroSec));
+      w.AddShort(MicroSecToString(fMicroSec));
+      w.AddShorter(' sent=');
+      w.AddShort(KBNoSpace(fOut));
+      w.AddShorter(' recv=');
+      w.AddShort(KBNoSpace(fIn));
     end;
     w.AddCR;
     for i := 0 to Count - 1 do
@@ -6400,7 +6417,7 @@ function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
   const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
 var
   s, resp, packet, controls: TAsnObject;
-  start, stop: Int64;
+  start, stop, bytesIn, bytesOut: Int64;
   u: RawUtf8;
   x, n, seqend: integer;
   r: TLdapResult;
@@ -6437,86 +6454,100 @@ begin
       ]));
   if controls <> '' then
     Append(s, AsnTyped(controls, LDAP_ASN1_CONTROLS));
-  // actually send the request
-  SendPacket(s);
-  // receive and parse the response
-  x := 1;
-  repeat
-    if x >= length(packet) then
-    begin
-      packet := ReceiveResponse;
-      x := 1;
-    end;
-    resp := DecodeResponse(x, packet);
-    case fResponseCode of
-      LDAP_ASN1_SEARCH_DONE:
-        break;
-      LDAP_ASN1_SEARCH_ENTRY:
-        begin
-          r := fSearchResult.Add;
-          n := 1;
-          AsnNext(n, resp, @r.fObjectName);
-          if AsnNext(n, resp) = ASN1_SEQ then
+  try
+    // actually send the request
+    bytesIn := fSock.BytesIn;
+    bytesOut := fSock.BytesOut;
+    SendPacket(s);
+    // receive and parse the response
+    x := 1;
+    repeat
+      if x >= length(packet) then
+      begin
+        packet := ReceiveResponse;
+        x := 1;
+      end;
+      resp := DecodeResponse(x, packet);
+      case fResponseCode of
+        LDAP_ASN1_SEARCH_DONE:
+          break;
+        LDAP_ASN1_SEARCH_ENTRY:
           begin
-            while n < length(resp) do
+            r := fSearchResult.Add;
+            n := 1;
+            AsnNext(n, resp, @r.fObjectName);
+            if AsnNext(n, resp) = ASN1_SEQ then
             begin
-              if AsnNext(n, resp, nil, @seqend) = ASN1_SEQ then
+              while n < length(resp) do
               begin
-                AsnNext(n, resp, @u);
-                a := r.Attributes.Add(u);
-                if AsnNext(n, resp) = ASN1_SETOF then
+                if AsnNext(n, resp, nil, @seqend) = ASN1_SEQ then
                 begin
-                  while n < seqend do
+                  AsnNext(n, resp, @u);
+                  a := r.Attributes.Add(u);
+                  if AsnNext(n, resp) = ASN1_SETOF then
                   begin
-                    AsnNext(n, resp, @u);
-                    a.Add(u, aoAlwaysFast); // with eventual AfterAdd
+                    while n < seqend do
+                    begin
+                      AsnNext(n, resp, @u);
+                      a.Add(u, aoAlwaysFast); // with eventual AfterAdd
+                    end;
+                    a.AfterAdd; // allow "for a in attr.List do"
                   end;
-                  a.AfterAdd; // allow "for a in attr.List do"
                 end;
               end;
             end;
           end;
-        end;
-      LDAP_ASN1_SEARCH_REFERENCE:
-        begin
-          n := 1;
-          while n < length(resp) do
+        LDAP_ASN1_SEARCH_REFERENCE:
           begin
-            AsnNext(n, resp, @u);
-            fReferals.Add(u);
+            n := 1;
+            while n < length(resp) do
+            begin
+              AsnNext(n, resp, @u);
+              fReferals.Add(u);
+            end;
+          end;
+      else
+        exit; // unexpected block
+      end;
+    until false;
+    n := 1;
+    if AsnNext(n, resp) = LDAP_ASN1_CONTROLS then
+      if AsnNext(n, resp) = ASN1_SEQ then
+      begin
+        AsnNext(n, resp, @s);
+        if s = LDAP_PAGED_RESULT_OID_STRING then
+        begin
+          AsnNext(n, resp, @s); // searchControlValue
+          n := 1;
+          if AsnNext(n, s) = ASN1_SEQ then
+          begin
+            // total number of result records, if known, otherwise 0
+            AsnNext(n, s);
+            // active search cookie, empty when done
+            AsnNext(n, s, @fSearchCookie);
           end;
         end;
-    else
-      exit; // unexpected block
-    end;
-  until false;
-  n := 1;
-  if AsnNext(n, resp) = LDAP_ASN1_CONTROLS then
-    if AsnNext(n, resp) = ASN1_SEQ then
-    begin
-      AsnNext(n, resp, @s);
-      if s = LDAP_PAGED_RESULT_OID_STRING then
-      begin
-        AsnNext(n, resp, @s); // searchControlValue
-        n := 1;
-        if AsnNext(n, s) = ASN1_SEQ then
-        begin
-          // total number of result records, if known, otherwise 0
-          AsnNext(n, s);
-          // active search cookie, empty when done
-          AsnNext(n, s, @fSearchCookie);
-        end;
       end;
-    end;
-  fSearchResult.AfterAdd; // allow "for res in ldap.SearchResult.Items do"
-  result := fResultCode = LDAP_RES_SUCCESS;
-  if result and
-     (fSearchRange <> nil) then // within SearchRangeBegin .. SearchRangeEnd
-    fSearchRange.ExtractPagedAttributes(fSearchResult);
-  QueryPerformanceMicroSeconds(stop);
-  if fSearchBeginCount <> 0 then
-    inc(fSearchPageCount, fSearchResult.Count);
-  fSearchResult.fSearchTimeMicroSec := stop - start;
+    fSearchResult.AfterAdd; // allow "for res in ldap.SearchResult.Items do"
+    result := fResultCode = LDAP_RES_SUCCESS;
+    if result and
+       (fSearchRange <> nil) then // within SearchRangeBegin .. SearchRangeEnd
+      fSearchRange.ExtractPagedAttributes(fSearchResult);
+    if fSearchBeginCount <> 0 then
+      inc(fSearchPageCount, fSearchResult.Count);
+    QueryPerformanceMicroSeconds(stop);
+    fSearchResult.fMicroSec := stop - start;
+    fSearchResult.fIn := fSock.BytesIn - bytesIn;
+    fSearchResult.fOut := fSock.BytesOut - bytesOut;
+  finally
+    if Assigned(fLog) then
+      if result then
+        fLog.Add.Log(sllDebug, 'Search dn=% filter=%: %',
+          [BaseDN, Filter, fSearchResult], self)
+      else
+        fLog.Add.Log(sllError, '%.Search dn=% filter=%: %',
+          [BaseDN, Filter, fResultString]);
+  end;
 end;
 
 function TLdapClient.SearchFmt(const BaseDN: RawUtf8; TypesOnly: boolean;
@@ -6585,7 +6616,9 @@ begin
       Attribute.Count, Attribute.Count + result - 1], atts);
     if not Search(ObjectName, false, '', atts) then
       break;
-    inc(fSearchRange.fSearchTimeMicroSec, fSearchResult.fSearchTimeMicroSec);
+    inc(fSearchRange.fMicroSec, fSearchResult.fMicroSec);
+    inc(fSearchRange.fIn, fSearchResult.fIn);
+    inc(fSearchRange.fOut, fSearchResult.fOut);
     new := fSearchResult.Find(ObjectName).
                          Find(Attribute.AttributeName, {ignorerange=}true);
     if new = nil then
@@ -6634,7 +6667,9 @@ begin
     end;
   finally
     fSearchScope := bak;
-    fSearchResult.fSearchTimeMicroSec := fSearchRange.fSearchTimeMicroSec;
+    fSearchResult.fMicroSec := fSearchRange.fMicroSec;
+    fSearchResult.fIn := fSearchRange.fIn;
+    fSearchResult.fOut := fSearchRange.fOut;
   end;
 end;
 
@@ -6650,7 +6685,9 @@ begin
      (fSearchRange.Count = 0) then
     exit;
   all := fSearchResult; // consolidate into self
-  fSearchRange.fSearchTimeMicroSec := all.fSearchTimeMicroSec;
+  fSearchRange.fMicroSec := all.fMicroSec;
+  fSearchRange.fIn := all.fIn;
+  fSearchRange.fOut := all.fOut;
   fSearchResult := TLdapResultList.Create; // use a new temporary instance
   bak := fSearchScope;
   try
@@ -6667,7 +6704,9 @@ begin
     end;
   finally
     fSearchScope := bak;
-    all.fSearchTimeMicroSec := fSearchRange.fSearchTimeMicroSec;
+    all.fMicroSec := fSearchRange.fMicroSec;
+    all.fIn := fSearchRange.fIn;
+    all.fOut := fSearchRange.fOut;
     fSearchResult.Free;
     fSearchResult := all; // back to consolidated results
   end;
