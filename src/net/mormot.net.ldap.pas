@@ -1828,7 +1828,7 @@ type
     procedure Reset;
     procedure SetResultString(const msg: RawUtf8);
     function DoBind(Mode: TLdapClientBound): boolean;
-    function Reconnect: boolean;
+    function Reconnect(const context: shortstring): boolean;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1937,7 +1937,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// test whether the client is connected to the server and try re-connect
     // - follows Settings.AutoReconnect property and OnDisconnect event
-    function EnsureConnected: boolean;
+    function EnsureConnected(const context: shortstring): boolean;
     /// test whether the client is connected with TLS or Kerberos Signing-Sealing
     // - it is unsafe to send e.g. a plain Password without lctEncrypted
     function Transmission: TLdapClientTransmission;
@@ -5567,7 +5567,7 @@ end;
 function TLdapClient.NetbiosDN: RawUtf8;
 begin
   if (fNetbiosDN = '') and
-     EnsureConnected and
+     EnsureConnected('NetbiosDN') and
      fBound then
     fNetbiosDN := SearchObject('CN=Partitions,' + ConfigDN,
       FormatUtf8('(&(nETBIOSName=*)(nCName=%))', [DefaultDN]),
@@ -5580,7 +5580,7 @@ var
   root: TLdapResult;
 begin
   // retrieve all needed Root DSE attributes in a single call
-  if not EnsureConnected then
+  if not EnsureConnected('RetrieveRootDseInfo') then
     exit;
   include(fFlags, fRetrieveRootDseInfo);
   // note: root DSE distinguished name is the zero-length string
@@ -5826,7 +5826,7 @@ begin
         if Assigned(fOnDisconnect) then
           fOnDisconnect(self)
         else if fSettings.AutoReconnect then // is TRUE by default
-          if not Reconnect then
+          if not Reconnect('SendPacket') then
             ELdap.RaiseUtf8('%.SendPacket: AutoReconnect failed as %',
               [self, fResultString]);
         if fSock.SockConnected then
@@ -6334,12 +6334,12 @@ begin
   result := fSock.SockConnected;
 end;
 
-function TLdapClient.EnsureConnected: boolean;
+function TLdapClient.EnsureConnected(const context: shortstring): boolean;
 begin
   result := (self <> nil) and
             (fSock.SockConnected or
              ((fBoundAs <> lcbNone) and
-              Reconnect)); // try re-connect and re-bind if possible
+              Reconnect(context))); // try re-connect and re-bind if possible
 end;
 
 function TLdapClient.Transmission: TLdapClientTransmission;
@@ -6397,25 +6397,37 @@ begin
   end;
 end;
 
-function TLdapClient.Reconnect: boolean;
+function TLdapClient.Reconnect(const context: shortstring): boolean;
 var
   log: ISynLog;
+  step: PUtf8Char;
 begin
   result := false;
   if (self = nil) or
      (fBoundAs = lcbNone) or
      (fSock = nil) then
     exit; // no server to reconnect
-  log := fLog.Enter(self, 'Reconnect');
+  log := fLog.Enter('Reconnect from %', [context], self);
   // reset the client state and close any current socket
   Reset;
   fSock.Close;
   // re-create the client socket with previous valid TCP parameters
   if Assigned(log) then
-    log.Log(sllTrace, 'Reconnect to %', [fSettings.TargetUri], self);
-  fSock.OpenBind(fSettings.TargetHost, fSettings.TargetPort, fSettings.Tls);
-  // re-bound with the previous mean of authentication
-  result := DoBind(fBoundAs);
+    log.Log(sllTrace, 'Reconnect: OpenBind(%)', [fSettings.TargetUri], self);
+  step := 'OpenBind';
+  try
+    fSock.OpenBind(fSettings.TargetHost, fSettings.TargetPort, fSettings.Tls);
+    // re-bound with the previous mean of authentication
+    step := 'DoBind';
+    result := DoBind(fBoundAs);
+  except
+    on E: Exception do
+    begin
+      FormatUtf8('% raised %', [step, E], fResultString);
+      if Assigned(log) then
+        log.Log(sllError, 'Reconnect: %', [fResultString], self);
+    end;
+  end;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
@@ -6492,7 +6504,7 @@ var
   a: TLdapAttribute;
 begin
   result := false;
-  if not EnsureConnected then
+  if not EnsureConnected('Search') then
     exit;
   // compute the main request
   QueryPerformanceMicroSeconds(start);
@@ -6920,7 +6932,7 @@ end;
 function TLdapClient.Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
 begin
   result := false;
-  if not Connected(false) then
+  if not EnsureConnected('Compare') then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    AsnOctStr(obj),
