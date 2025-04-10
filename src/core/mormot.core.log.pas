@@ -1248,6 +1248,9 @@ type
     /// retrieve the family of this TSynLog class type
     class function Family: TSynLogFamily; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// check some specific level(s) in the family of this TSynLog class type
+    class function HasLevel(levels: TSynLogLevels): boolean;
+      {$ifndef NOPATCHVMT} {$ifdef HASINLINE}inline;{$endif} {$endif}
     /// returns a logging class which will never log anything
     // - i.e. a TSynLog sub-class with Family.Level := []
     class function Void: TSynLogClass;
@@ -4422,6 +4425,12 @@ begin
   else
     LastFamily := result;
   {$endif NOPATCHVMT}
+end;
+
+class function TSynLog.HasLevel(levels: TSynLogLevels): boolean;
+begin
+  result := (self <> nil) and
+            (levels * Family.Level <> []);
 end;
 
 class function TSynLog.Add: TSynLog;

@@ -412,8 +412,7 @@ var
 begin
   start := 0;
   elapsed := 0;
-  if Assigned(fLog) and
-     (sllTrace in fLog.Family.Level) then
+  if fLog.HasLevel([sllTrace]) then
     QueryPerformanceMicroSeconds(start); // we monitor frame sending timing
   fOutgoingSafe.Lock;
   try

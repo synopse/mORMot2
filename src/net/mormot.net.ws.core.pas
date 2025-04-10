@@ -2201,10 +2201,11 @@ begin
       inc(P, enc[i].Encode(Frames[i], P));
     result := Owner.SendBytes(tmp.buf, len); // directly send at once
     if (WebSocketLog <> nil) and
-       (logTextFrameContent in Owner.Settings.LogDetails) and
-       (sllTrace in WebSocketLog.Family.Level) then
-      WebSocketLog.Add.Log(sllTrace, 'SendFrames=% len=% %',
-        [FramesCount * ord(result), len, EscapeToShort(tmp.buf, len)], self);
+       (logTextFrameContent in Owner.Settings.LogDetails) then
+      with WebSocketLog.Family do
+        if sllTrace in Level then
+          Add.Log(sllTrace, 'SendFrames=% len=% %',
+            [FramesCount * ord(result), len, EscapeToShort(tmp.buf, len)], self);
   except
     result := false;
   end;

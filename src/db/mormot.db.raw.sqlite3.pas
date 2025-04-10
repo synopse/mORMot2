@@ -6853,14 +6853,9 @@ end;
 
 function TSqlDataBase.SqlShouldBeLogged(const aSql: RawUtf8): boolean;
 begin
-  result := false;
-  if (self = nil) or
-     (fLog = nil) or
-     not (sllSQL in fLog.Family.Level) then
-    exit;
-  if not IdemPChar(pointer(aSql), 'PRAGMA ') or
-     (PosEx('=', aSql) > 0) then
-    result := true;
+  result := fLog.HasLevel([sllSQL]) and
+            ((not IdemPChar(pointer(aSql), 'PRAGMA ')) or
+             (PosEx('=', aSql) <> 0));
 end;
 
 procedure TSqlDataBase.ExecuteAll(const aSql: RawUtf8);
@@ -6870,7 +6865,8 @@ var
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  if SqlShouldBeLogged(aSql) then
+  if (fLog <> nil) and
+     SqlShouldBeLogged(aSql) then
   begin
     log := fLog.Enter(self, 'ExecuteAll');
     if log <> nil then
@@ -6913,7 +6909,8 @@ begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
-  if SqlShouldBeLogged(aSql) then
+  if (fLog <> nil) and
+     SqlShouldBeLogged(aSql) then
   begin
     log := fLog.Enter(self, 'Execute');
     if log <> nil then

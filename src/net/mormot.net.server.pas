@@ -5868,8 +5868,7 @@ var
     us: TShort16;
     stop: Int64;
   begin
-    if (fOwner.fLog = nil) or
-       not (sllTrace in fOwner.fLog.Family.Level) then
+    if not fOwner.fLog.HasLevel([sllTrace]) then
       exit;
     FormatShort(Fmt, Args, txt);
     us[0] := #0;
@@ -6166,7 +6165,7 @@ begin
   else
     fSettings := aSettings;
   fVerboseLog := (pcoVerboseLog in fSettings.Options) and
-                 (sllTrace in fLog.Family.Level);
+                 fLog.HasLevel([sllTrace]);
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
@@ -6299,8 +6298,7 @@ var
 begin
   result := (Status = mdOk);
   if result or
-     (fLog = nil) or
-     not (sllTrace in fLog.Family.Level) then
+     not fLog.HasLevel([sllTrace]) then
     exit;
   msgtxt[0] := #0;
   if Status > mdAes then // decrypt ok but wrong content: log msg
