@@ -7856,7 +7856,7 @@ begin
       fTimestampInfoCacheTix := tix;
       {%H-}info.InitFast;
       InternalInfo(Ctxt, info);
-      fTimestampInfoCache := info.ToJson('', '', jsonHumanReadable);
+      fTimestampInfoCache := info.ToHumanJson;
     end;
     Ctxt.Returns(fTimestampInfoCache);
   end

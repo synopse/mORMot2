@@ -1506,6 +1506,8 @@ type
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around DocVariantType.ToJson()
     function ToJson: RawUtf8; overload;
+    /// save a document as human-readable UTF-8 encoded JSON
+    function ToHumanJson: RawUtf8;
     /// save a document as UTF-8 encoded JSON
     function ToJson(const Prefix, Suffix: RawUtf8;
       Format: TTextWriterJsonFormat): RawUtf8; overload;
@@ -9269,6 +9271,11 @@ end;
 function TDocVariantData.ToJson: RawUtf8;
 begin // note: FPC has troubles inlining this, but it is a slow method anyway
   DocVariantType.ToJson(@self, result, '', '', jsonCompact);
+end;
+
+function TDocVariantData.ToHumanJson: RawUtf8;
+begin
+  DocVariantType.ToJson(@self, result, '', '', jsonHumanReadable);
 end;
 
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;

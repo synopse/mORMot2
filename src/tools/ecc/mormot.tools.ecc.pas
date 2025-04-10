@@ -517,7 +517,7 @@ begin
                       'rounds', DEFAULT_ECCROUNDS], JSON_FAST);
     authpass  := doc.U['pass'];
     authround := doc.I['rounds'];
-    result := doc.ToJson('', '', jsonHumanReadable);
+    result := doc.ToHumanJson;
   finally
     master.Free;
     FillZero(json);
