@@ -5607,27 +5607,28 @@ begin
   result := 0;
   if p = nil then
     exit;
-  if no0x then
-    dec(p)
-  else
+  if not no0x then
+  begin
     while p^ <> 'x' do
       if p^ = #0 then
         exit
       else
         inc(p);
-  repeat
     inc(p); // points to trailing 'x' at start
+  end;
+  repeat
     v0 := Hex2Dec(p^);
     if v0 < 0 then
-      break; // not in '0'..'9','a'..'f'
+      break; // not in '0'..'9','a'..'f' -> trim right
     inc(p);
     v1 := Hex2Dec(p^);
     if v1 < 0 then
     begin
-      result := (result shl 4) or cardinal(v0); // only one char left
+      result := (result shl 4) or cardinal(v0); // only one char left = 4-bit
       break;
     end;
-    result := (result shl 8) or (cardinal(v0) shl 4) or cardinal(v1);
+    result := (result shl 8) or (cardinal(v0) shl 4) or cardinal(v1); // 8-bit
+    inc(p);
   until false;
 end;
 
