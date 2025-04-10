@@ -2010,8 +2010,8 @@ procedure NanoSecToString(Nano: QWord; out result: TShort16);
 
 /// convert "valueunit" values into x or x.xx text with up to 2 digits
 // - supplied value should be the actual unit value * 100
-procedure By100ToTwoDigitString(value: cardinal; const valueunit: ShortString;
-  var result: TShort16);
+procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
+  var result: ShortString);
 
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
@@ -9656,31 +9656,39 @@ begin
   MicroSecToString(stop - Int64(Start), result);
 end;
 
-procedure By100ToTwoDigitString(value: cardinal; const valueunit: ShortString;
-  var result: TShort16);
+procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
+  var result: ShortString);
 var
   d100: TDiv100Rec;
 begin
   if value < 100 then
-    FormatShort16('0.%%', [UInt2DigitsToShortFast(value), valueunit], result)
+  begin
+    PCardinal(PAnsiChar(@result) + ord(result[0]) + 1)^ := ord('0') + ord('.') shl 8 +
+      cardinal(TwoDigitLookupW[value]) shl 16;
+    inc(result[0], 4);
+  end
   else
   begin
     Div100(value, d100{%H-});
-    if d100.m = 0 then
-      FormatShort16('%%', [d100.d, valueunit], result)
-    else
-      FormatShort16('%.%%', [d100.d, UInt2DigitsToShortFast(d100.m), valueunit], result);
+    AppendShortCardinal(d100.d, result);
+    if d100.m <> 0 then
+    begin
+      AppendShortChar('.', @result);
+      AppendShortTwoChars(TwoDigitLookupW[d100.m], @result);
+    end;
   end;
+  AppendShort(valueunit, result)
 end;
 
-procedure _TimeToString(value: cardinal; const u: ShortString;
-  var result: TShort16);
+procedure AppendShortTime(value: cardinal; const u: ShortString;
+  var result: ShortString);
 var
   d: cardinal;
 begin
   d := value div 60;
-  FormatShort16('%%%',
-    [d, u, UInt2DigitsToShortFast(value - (d * 60))], result);
+  AppendShortCardinal(d, result);
+  AppendShort(u, result);
+  AppendShortTwoChars(TwoDigitLookupW[value - (d * 60)], @result);
 end;
 
 procedure MicroSecToString(Micro: QWord; out result: TShort16);
@@ -9692,32 +9700,36 @@ begin
     AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
   end
   else if Micro < 1000000 then
-    By100ToTwoDigitString(
+    AppendShortBy100(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)
   else if Micro < 60000000 then
-    By100ToTwoDigitString(
+    AppendShortBy100(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10000, 's', result)
   else if Micro < QWord(3600000000) then
-    _TimeToString(
+    AppendShortTime(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 1000000, 'm', result)
   else if Micro < QWord(86400000000 * 2) then
-    _TimeToString(Micro div 60000000, 'h', result)
+    AppendShortTime(Micro div 60000000, 'h', result)
   else
-    FormatShort16('%d', [Micro div QWord(86400000000)], result)
+  begin
+    AppendShortCardinal(Micro div QWord(86400000000), result);
+    AppendShortChar('d', @result);
+  end;
 end;
 
 procedure NanoSecToString(Nano: QWord; out result: TShort16);
 begin
-  if Int64(Nano) <= 0 then
-    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('n') shl 16 + ord('s') shl 24
-  else if Nano > 9900 then
-    MicroSecToString(Nano div NanoSecsPerMicroSec, result)
-  else if Nano >= 1000 then
-    By100ToTwoDigitString(
+  result[0] := #0;
+  if Nano < 1000 then
+  begin
+    AppendShortCardinal(Nano, result);
+    AppendShortTwoChars(ord('n') + ord('s') shl 8, @result);
+  end
+  else if Nano < 1000000 then
+    AppendShortBy100(
       {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} div 10, 'us', result)
   else
-    By100ToTwoDigitString(
-      {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} * 100, 'ns', result);
+    MicroSecToString(Nano div NanoSecsPerMicroSec, result);
 end;
 
 
