@@ -2586,7 +2586,6 @@ type
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fPrivateSlotsSafe: TLightLock; // topmost position to force aarch64 alignment
-    fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     fSetRandom: TRttiCustomRandom;
     // used by mormot.core.json.pas
     fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
@@ -2871,6 +2870,7 @@ type
     // used to release memory used by registered customizations
     fInstances: array of TRttiCustom;
     fGlobalClass: TRttiCustomClass;
+    fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     function GetByClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
@@ -8915,7 +8915,6 @@ end;
 destructor TRttiCustom.Destroy;
 begin
   inherited Destroy;
-  ObjArrayClear(fOwnedRtti);
   TObject(fPrivateSlot).Free;
   ObjArrayClear(fPrivateSlots);
 end;
@@ -9543,7 +9542,7 @@ begin
       nested.SetPropsFromText(P, ee, NoRegister); // before NoRttiSetAndRegister()
       nested.NoRttiSetAndRegister(ptRecord, '', NoRegister);
       if NoRegister then
-        ObjArrayAdd(fOwnedRtti, nested);
+        ObjArrayAdd(Rtti.fOwnedRtti, nested);
       if pt = ptRecord then
         // rec: record .. end  or  rec: { ... }
         c := nested
@@ -9561,7 +9560,7 @@ begin
       c.fArrayRtti := ac; // before NoRttiSetAndRegister()
       c.NoRttiSetAndRegister(ptDynArray, typname, NoRegister);
       if NoRegister then
-        ObjArrayAdd(fOwnedRtti, c);
+        ObjArrayAdd(Rtti.fOwnedRtti, c);
     end;
     // set type for all prop[]
     for i := 0 to propcount - 1 do
@@ -9682,6 +9681,7 @@ var
 begin
   for i := Count - 1 downto 0 do
     fInstances[i].Free;
+  ObjArrayClear(fOwnedRtti);
   inherited Destroy;
   RegisterSafe.Done;
 end;
