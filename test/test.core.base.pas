@@ -4768,7 +4768,8 @@ begin
     if s <> '' then
       Check(xxhash32(0, pointer(s), length(s)) = xxHash32reference(pointer(s),
         length(s)));
-    j := Random32;
+    if i <> 0 then
+      j := Random32; // always validate j=0 value
     str(j, a);
     s := RawUtf8(a);
     u := string(a);
@@ -4843,6 +4844,10 @@ begin
     l := GetInt64(pointer(s), err);
     Check(err <> 0);
     case i of // validate some explicit ToVarUInt32/64 boundaries
+      8999:
+        j := $0000000f;
+      9990:
+        j := $000000ff;
       9991:
         j := $00003fff;
       9992:
@@ -4869,8 +4874,14 @@ begin
     if j >= 0 then
     begin
       a[0] := #0;
-      AppendShortIntHex(j, a);
-      CheckEqual(RawUtf8(a), RawUtf8(PointerToHexShort(pointer(PtrInt(j)))));
+      AppendShortIntHex(j, a); // with DisplayMinChars() trimming
+      CheckUtf8(a = PointerToHexShort(pointer(PtrInt(j))), 'p2hex %=%', [j, a]);
+      CheckUtf8(IdemPropName(a, ToHexShort(@j, 4)), '2hex %=%', [j, a]);
+      CheckUtf8(IdemPropNameU(Int64ToHexLower(j), @a[1], ord(a[0])), 'i2hex %', [a]);
+      a[ord(a[0]) + 1] := #0;
+      CheckEqual(ParseHex0x(@a[1], {no0x=}true), j, '8-bit hex');
+      if a[1] = '0' then
+        CheckEqual(ParseHex0x(@a[2], {no0x=}true), j, '4-bit hex');
     end;
     case i of
       9990:
