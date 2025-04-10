@@ -392,6 +392,9 @@ const
   /// the maximum known RID value of S-1-5-21-xx-xx-xx-RID patterns
   WKR_RID_MAX = 584;
 
+function ToText(w: TWellKnownSid): PShortString; overload;
+function ToText(w: TWellKnownRid): PShortString; overload;
+
 
 { ****************** Security Descriptor Self-Relative Binary Structures }
 
@@ -1307,6 +1310,8 @@ const
     'Private-Information',                     // kaPrivateInformation
     'ms-DS-Allowed-To-Act-On-Behalf-Of-Other-Identity',  // kaMsDsAllowedToActOnBehalfOfOtherIdentity
     'RAS-Information');                        // kaRasInformation
+
+function ToText(a: TAdsKnownAttribute): PShortString; overload;
 
 /// search a known AD schema attribute from its ObjectID
 // - is implemented via O(log(n)) binary search within ordered ATTR_UUID[]
@@ -2629,6 +2634,16 @@ begin
   KnownRidSid(wkr, dom, PSid(result)^);
 end;
 
+function ToText(w: TWellKnownSid): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(TWellKnownSid), ord(w));
+end;
+
+function ToText(w: TWellKnownRid): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(TWellKnownRid), ord(w));
+end;
+
 
 { ****************** Security Descriptor Self-Relative Binary Structures }
 
@@ -2750,6 +2765,11 @@ end;
 
 
 { ****************** Active Directory Definitions }
+
+function ToText(a: TAdsKnownAttribute): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(TAdsKnownAttribute), ord(a));
+end;
 
 function UuidToKnownAttribute(const u: TGuid): TAdsKnownAttribute;
 begin

@@ -48,7 +48,6 @@ uses
   typinfo,  // use official RTL for accurate layouts (especially FPC unaligned)
   mormot.core.base,
   mormot.core.os,
-  mormot.core.os.security,
   mormot.core.unicode,
   mormot.core.text; // ESynException, and text process (e.g. for enums)
 
@@ -1752,11 +1751,6 @@ function GetCaptionFromClass(C: TClass): string;
 
 { defined here to avoid circular dependency in mormot.core.os.pas }
 function ToText(cmd: TParseCommands): ShortString; overload;
-
-{ defined here to avoid circular dependency in mormot.core.os.security.pas }
-function ToText(w: TWellKnownSid): PShortString; overload;
-function ToText(w: TWellKnownRid): PShortString; overload;
-function ToText(a: TAdsKnownAttribute): PShortString; overload;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -5353,21 +5347,6 @@ end;
 function ToText(t: TRttiParserType): PShortString;
 begin
   result := GetEnumName(TypeInfo(TRttiParserType), ord(t));
-end;
-
-function ToText(w: TWellKnownSid): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TWellKnownSid), ord(w));
-end;
-
-function ToText(w: TWellKnownRid): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TWellKnownRid), ord(w));
-end;
-
-function ToText(a: TAdsKnownAttribute): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TAdsKnownAttribute), ord(a));
 end;
 
 

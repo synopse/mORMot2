@@ -11323,10 +11323,10 @@ begin
   BOOL_UTF8[true]  := 'true';
   // minimal stubs which will be properly implemented in other mormot.core units
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
-  SetThreadName := _SetThreadName;
-  ShortToUuid := _ShortToUuid;                     // mormot.core.text.pas
-  AppendShortUuid := _AppendShortUuid;
-  GetEnumNameRtti := _GetEnumNameRtti;
+  SetThreadName         := _SetThreadName;
+  ShortToUuid           := _ShortToUuid;           // mormot.core.text
+  AppendShortUuid       := _AppendShortUuid;
+  GetEnumNameRtti       := _GetEnumNameRtti;       // mormot.core.rtti
 end;
 
 procedure FinalizeUnit;
