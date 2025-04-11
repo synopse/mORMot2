@@ -1287,6 +1287,7 @@ procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 /// no banker rounding into text, with two digits after the decimal point
 // - i.e. SimpleRoundTo2DigitsCurr64() as text
 function TwoDigits(const d: double): TShort23;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// truncate a currency value to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
@@ -6491,41 +6492,6 @@ begin
 end;
 
 {$endif CPU64}
-
-function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
-var
-  c: QWord;
-  d: cardinal;
-begin
-  if Value = 0 then
-  begin
-    result := P - 1;
-    result^ := '0';
-    exit;
-  end;
-  if Value < 0 then
-    c := -Value
-  else
-    c := Value;
-  if c < 10000 then
-  begin
-    result := P - 6; // only decimals -> append '0.xxxx'
-    PCardinal(result)^ := ord('0') + ord('.') shl 8;
-    YearToPChar(c, PUtf8Char(P) - 4);
-  end
-  else
-  begin
-    result := StrUInt64(P - 1, c);
-    d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
-    PCardinal(P - 4)^ := d;
-    P[-5] := '.'; // insert '.' just before last 4 decimals
-  end;
-  if Value < 0 then
-  begin
-    dec(result);
-    result^ := '-';
-  end;
-end;
 
 function ToShort(const val: Int64): TShort23;
 var
@@ -12160,6 +12126,41 @@ begin
 end;
 
 {$endif ASMX86}
+
+function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
+var
+  c: QWord;
+  d: cardinal;
+begin
+  if Value = 0 then
+  begin
+    result := P - 1;
+    result^ := '0';
+    exit;
+  end;
+  if Value < 0 then
+    c := -Value
+  else
+    c := Value;
+  if c < 10000 then
+  begin
+    result := P - 6; // only decimals -> append '0.xxxx'
+    PCardinal(result)^ := ord('0') + ord('.') shl 8;
+    YearToPChar(c, PUtf8Char(P) - 4);
+  end
+  else
+  begin
+    result := StrUInt64(P - 1, c);
+    d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
+    PCardinal(P - 4)^ := d;
+    P[-5] := '.'; // insert '.' just before last 4 decimals
+  end;
+  if Value < 0 then
+  begin
+    dec(result);
+    result^ := '-';
+  end;
+end;
 
 function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
 begin
