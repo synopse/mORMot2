@@ -9545,6 +9545,8 @@ procedure ConsoleWrite(const Fmt: RawUtf8; const Args: array of const;
 var
   tmp: RawUtf8;
 begin
+  if not HasConsole then
+    exit;
   FormatUtf8(Fmt, Args, tmp);
   ConsoleWrite(tmp, Color, NoLineFeed);
 end;
@@ -9554,6 +9556,8 @@ procedure ConsoleWrite(const Args: array of const;
 var
   tmp: RawUtf8;
 begin
+  if not HasConsole then
+    exit;
   Make(Args, tmp);
   ConsoleWrite(tmp, Color, NoLineFeed);
 end;
@@ -9562,13 +9566,17 @@ procedure ConsoleWriteRaw(const Args: array of const; NoLineFeed: boolean);
 var
   tmp: RawUtf8;
 begin
+  if not HasConsole then
+    exit;
   Make(Args, tmp);
   ConsoleWrite(tmp, ccLightGray, NoLineFeed, {nocolor=}true);
 end;
 
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
-  ConsoleWrite(CRLF + 'Fatal exception ', ccLightRed, true);
+  if not HasConsole then
+    exit;
+  ConsoleWrite(CRLF + 'Fatal exception ', ccLightRed, {nolinefeed=}true);
   ConsoleWrite('%', [E], ccWhite, true);
   ConsoleWrite(' raised with message ', ccLightRed);
   ConsoleWrite('  %', [E.Message], ccLightMagenta);
