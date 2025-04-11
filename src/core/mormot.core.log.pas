@@ -1256,9 +1256,12 @@ type
     class function Void: TSynLogClass;
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
-    // - will force a manual breakpoint if tests are run from the IDE
+    // - will force a manual breakpoint if tests are run from the Delphi IDE, or
+    // will output the message to the current console
     class procedure DebuggerNotify(Level: TSynLogLevel; const Format: RawUtf8;
-      const Args: array of const);
+      const Args: array of const); overload;
+    /// low-level method helper which can be called to make debugging easier
+    class procedure DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8); overload;
     /// call this method to add some information to the log at the specified level
     // - will use TTextWriter.Add(...,twOnSameLine) to append its content
     // - % = #37 indicates a string, integer, floating-point, class parameter
@@ -5237,28 +5240,34 @@ asm
 end;
 {$endif CPU64DELPHI}
 
+class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
+begin
+  if Text = '' then
+    exit;
+  Add.LogInternalText(Level, Text, nil, maxInt);
+  {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
+  if IsDebuggerPresent then
+    {$ifdef CPU64DELPHI}
+    DebugBreak
+    {$else}
+    asm
+      int  3
+    end
+    {$endif CPU64DELPHI}
+  else
+  {$endif ISDELPHI}
+    ConsoleWrite('%  ', [Text], LOG_CONSOLE_COLORS[Level], {noLF=}true);
+end;
+
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel;
   const Format: RawUtf8; const Args: array of const);
 var
-  Msg: RawUtf8;
+  txt: RawUtf8;
 begin
-  if Format <> '' then
-  begin
-    FormatUtf8(Format, Args, Msg);
-    Add.LogInternalText(Level, Msg, nil, maxInt);
-    {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
-    if IsDebuggerPresent then
-      {$ifdef CPU64DELPHI}
-      DebugBreak;
-      {$else}
-      asm
-        int  3
-      end;
-      {$endif CPU64DELPHI}
-    {$else not ISDELPHI}
-    ConsoleWrite('%  ', [Msg], LOG_CONSOLE_COLORS[Level], {noLF=}true);
-    {$endif ISDELPHI}
-  end;
+  if Format = '' then
+    exit;
+  FormatUtf8(Format, Args, txt);
+  DebuggerNotify(Level, txt);
 end;
 
 procedure TSynLog.LogFileInit;
