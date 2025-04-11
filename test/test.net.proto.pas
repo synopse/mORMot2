@@ -26,6 +26,10 @@ uses
   mormot.core.search,
   mormot.crypt.core,
   mormot.crypt.secure,
+  {$ifdef OSPOSIX}
+  mormot.net.tftp.server,
+  mormot.lib.curl, // client code for TFTP server validation
+  {$endif OSPOSIX}
   mormot.net.sock,
   mormot.net.http,
   mormot.net.client,
@@ -97,6 +101,10 @@ type
     procedure _TTunnelLocal;
     /// validate IP processing functions
     procedure IPAddresses;
+    {$ifdef OSPOSIX}
+    /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
+    procedure TFTPServer;
+    {$endif OSPOSIX}
   end;
 
 
@@ -2129,6 +2137,49 @@ begin
   TryOne('p*', 'p*', ['', 'pas', 'pas/12', '/12'],
     [[], [pckForce, pckIgnore]]);
 end;
+
+{$ifdef OSPOSIX}
+procedure TNetworkProtocols.TFTPServer;
+var
+  srv: TTftpServerThread;
+  res: TCurlResult;
+  tmp: TFileName;
+  uri: RawUtf8;
+  timer: TPrecisionTimer;
+  orig, rd: RawByteString;
+begin
+  if not CurlIsAvailable then
+  begin
+    AddConsole('libcurl is not available on this system -> skip test');
+    exit;
+  end;
+  orig := RandomAnsi7(256 shl 10 + Random32(100)); // 256KB of random data
+  tmp := TemporaryFileName;
+  if not CheckFailed(FileFromString(orig, tmp), 'tmp file') then
+  try
+    srv := TTftpServerThread.Create(ExtractFilePath(tmp),
+      [ttoRrq , {ttoLowLevelLog,} ttoCaseInsensitiveFileName, ttoAllowSubFolders],
+      TSynLogTestLog, '127.0.0.1', '6969', '');
+    try
+      timer.Start;
+      StringToUtf8(ExtractFileName(tmp), uri); // .tmp file
+      res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
+      Check(res = crOK, 'tftp exact case');
+      CheckEqual(rd, orig, 'tftp1');
+      UpperCaseSelf(uri);  // .TMP file to validate case-insensitive URI
+      rd := ''; // paranoid
+      res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
+      Check(res = crOK, 'tftp upper case');
+      CheckEqual(rd, orig, 'tftp2');
+      NotifyTestSpeed('TFTP request', 2, length(rd) * 2, @timer);
+    finally
+      srv.Free;
+    end;
+  finally
+    Check(DeleteFile(tmp), 'delete tmp');
+  end;
+end;
+{$endif OSPOSIX}
 
 
 end.
