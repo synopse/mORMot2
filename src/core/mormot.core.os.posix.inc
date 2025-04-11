@@ -2024,11 +2024,6 @@ procedure AllocConsole;
 begin
 end;
 
-function HasConsole: boolean;
-begin
-  result := true;
-end;
-
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup

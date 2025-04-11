@@ -3930,7 +3930,8 @@ type
 var
   /// low-level handle used for console writing
   // - may be overriden when console is redirected
-  // - on Windows, is initialized when AllocConsole or TextColor() are called
+  // - on Windows, is initialized when AllocConsole, HasConsole or TextColor()
+  // are actually called
   StdOut: THandle;
 
   /// global flag to modify the code behavior at runtime when run from TSynTests
@@ -3943,15 +3944,16 @@ var
 procedure AllocConsole;
 
 /// always true on POSIX, may be false for a plain Windows GUI application
+{$ifdef OSWINDOWS}
 function HasConsole: boolean;
-  {$ifdef OSPOSIX} inline; {$endif OSPOSIX}
+{$else}
+const HasConsole = true; // assume POSIX has always a console somewhere
 
-{$ifdef OSPOSIX}
-/// true if StdOut has the TTY flag and env has a known TERM
+/// POSIX only: true if StdOut has the TTY flag and env has a known TERM
 // - equals false if the console does not support colors, e.g. piped to a file
 // or from the Lazarus debugger
 function StdOutIsTTY: boolean; inline;
-{$endif OSPOSIX}
+{$endif OSWINDOWS}
 
 /// change the console text writing color
 procedure TextColor(Color: TConsoleColor);
