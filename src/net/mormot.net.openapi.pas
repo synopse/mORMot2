@@ -1756,13 +1756,14 @@ begin
     end;
   LowerCaseSelf(fPrefix); // TUserRole -> 'ur'
   AddRawUtf8(fParser.fEnumPrefix, fPrefix);
-  FormatUtf8('%_TXT', [UpperCase(copy(fPascalName, 2, 100))], fConstTextArrayName);
+  Join(['_', fPascalName], fConstTextArrayName);
 end;
 
 procedure TPascalEnum.ToTypeDefinition(W: TTextWriter);
 var
   line, item: RawUtf8;
   items: TRawUtf8DynArray;
+  itemscount: integer;
   i: PtrInt;
 begin
   if fSchema^.HasDescription and
@@ -1770,6 +1771,7 @@ begin
     fParser.Comment(W, [fSchema^.Description]);
   w.AddStrings([fParser.fLineIndent, PascalName, ' = (', fParser.LineEnd,
     fParser.fLineIndent, '  ']);
+  itemscount := 0;
   for i := 0 to fChoices.Count - 1 do
   begin
     if i = 0 then
@@ -1781,10 +1783,10 @@ begin
       if item <> '' then
         item[1] := UpCase(item[1]);
       if (item = '') or
-         (FindPropName(items, item) >= 0) then
+         (FindPropName(pointer(items), item, itemscount) >= 0) then
         Append(item, [i]); // duplicated, or no ascii within -> make unique
     end;
-    AddRawUtf8(items, item);
+    AddRawUtf8(items, itemscount, item);
     fParser.Code(w, line, [fPrefix, item]);
   end;
   w.AddStrings([line, ');', fParser.LineEnd,
@@ -2000,7 +2002,7 @@ begin
   else if IsEnum then
   begin
     e := fCustomType as TPascalEnum;
-    func := e.fConstTextArrayName; // ###_TXT[]
+    func := e.fConstTextArrayName; // _TSomeEnum[]
     if IsArray then
       if e.fDynArrayEnum then
         FormatUtf8('GetEnumArrayNameCustom(%, %, @%)',

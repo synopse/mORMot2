@@ -6191,7 +6191,7 @@ begin
      (customText = nil) then
     exit;
   tmp.InitOnStack;
-  if valueLength <= 256 then
+  if valueLength <= 256 then // stored as an array of 8-bit values
   begin
     for i := 0 to length(b) - 1 do
       if b[i] < valueLength then
@@ -6201,7 +6201,7 @@ begin
       end;
   end
   else
-    for i := 0 to length(w) - 1 do
+    for i := 0 to length(w) - 1 do // stored as an array of 16-bit values
       if w[i] < valueLength then
       begin
         tmp.Add(customText^[w[i]]);
