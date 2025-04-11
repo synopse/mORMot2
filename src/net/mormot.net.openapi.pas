@@ -576,7 +576,8 @@ type
     procedure Description(W: TTextWriter; const Described: RawUtf8);
     procedure Comment(W: TTextWriter; const Args: array of const;
       const Desc: RawUtf8 = '');
-    procedure Code(W: TTextWriter; var Line: RawUtf8; const Args: array of const);
+    procedure Code(W: TTextWriter; var Line: RawUtf8; Separator: AnsiChar;
+      const Args: array of const);
     // main internal parsing function
     procedure ParseSpecs;
     // main internal code generation methods
@@ -1497,7 +1498,7 @@ var
       Append(line, '; ')
     else
       prev := true;
-    fParser.Code(W, line, Args);
+    fParser.Code(W, line, ';', Args);
   end;
 
 begin
@@ -1539,7 +1540,7 @@ begin
     AddParam([def[i]]);
   // function result
   if Assigned(fSuccessResponseType) then
-    Append(line, ['): ', fSuccessResponseType.ToPascalName, ';'])
+    fParser.Code(w, Line, ';', ['): ', fSuccessResponseType.ToPascalName, ';'])
   else
     Append(line, ');');
   w.AddString(Line);
@@ -1763,8 +1764,7 @@ procedure TPascalEnum.ToTypeDefinition(W: TTextWriter);
 var
   line, item: RawUtf8;
   items: TRawUtf8DynArray;
-  itemscount: integer;
-  i: PtrInt;
+  itemscount, i: integer;
 begin
   if fSchema^.HasDescription and
      not (opoDtoNoDescription in fParser.Options) then
@@ -1787,7 +1787,7 @@ begin
         Append(item, [i]); // duplicated, or no ascii within -> make unique
     end;
     AddRawUtf8(items, itemscount, item);
-    fParser.Code(w, line, [fPrefix, item]);
+    fParser.Code(w, line, ',', [fPrefix, item]);
   end;
   w.AddStrings([line, ');', fParser.LineEnd,
     ToArrayTypeDefinition]);
@@ -1828,7 +1828,7 @@ begin
     item := mormot.core.unicode.QuotedStr(VariantToUtf8(fChoices.Values[i]));
     if i < fChoices.Count - 1 then
       Append(item, ', ');
-    fParser.Code(w, line, [item]);
+    fParser.Code(w, line, ',', [item]);
   end;
   w.AddStrings([line, ');', fParser.LineEnd]);
 end;
@@ -2541,14 +2541,29 @@ begin
 end;
 
 procedure TOpenApiParser.Code(W: TTextWriter; var Line: RawUtf8;
-  const Args: array of const);
+  Separator: AnsiChar; const Args: array of const);
+var
+  i, l: PtrInt;
 begin
-  if length(Line) > 70 then
-  begin
-    W.AddStrings([TrimRight(Line), LineEnd]);
-    Line := fLineIndent + '  ';
-  end;
   Append(Line, Args);
+  while length(Line) > 85 do
+  begin
+    l := 0;
+    for i := 85 downto 1 do
+      if Line[i] in [Separator, '('] then
+      begin
+        W.AddNoJsonEscape(pointer(Line), i);
+        W.AddString(LineEnd);
+        l := i;
+        while Line[l + 1] = ' ' do
+          inc(l);
+        delete(Line, 1, l);
+        Prepend(Line, [fLineIndent, '  ']);
+        break;
+      end;
+    if l = 0 then
+      break;
+  end;
 end;
 
 procedure TOpenApiParser.Description(W: TTextWriter; const Described: RawUtf8);
