@@ -2742,6 +2742,11 @@ var
   rec: TPascalRecordDynArray;
   i: PtrInt;
 begin
+  // retrieve all DTO context
+  rec := GetOrderedRecords;
+  if (rec = nil) and
+     (fEnums.Count = 0) then
+    exit;
   // append all enumeration types
   fLineIndent := '  ';
   w.AddStrings(['type', LineEnd, LineEnd]);
@@ -2753,10 +2758,12 @@ begin
     w.AddStrings([LineEnd, LineEnd]);
   end;
   // append all records
-  w.AddStrings(['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
-  rec := GetOrderedRecords;
-  for i := 0 to high(rec) do
-    rec[i].ToTypeDefinition(w);
+  if rec <> nil then
+  begin
+    w.AddStrings(['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
+    for i := 0 to high(rec) do
+      rec[i].ToTypeDefinition(w);
+  end;
   // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
@@ -2772,12 +2779,16 @@ var
   rec: TPascalRecordDynArray;
   i: PtrInt;
 begin
+  // retrieve all DTO context
+  rec := GetOrderedRecords;
+  if (rec = nil) and
+     (fEnums.Count = 0) then
+    exit;
   w.AddStrings([LineEnd,
     '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
   fLineIndent := '  ';
   // output the text representation of all records
   // with proper json names (overriding the RTTI definitions)
-  rec := GetOrderedRecords;
   if rec <> nil then
   begin
     w.AddStrings(['const', LineEnd,
@@ -2813,14 +2824,13 @@ begin
           w.AddStrings([',', LineEnd]);
         w.AddStrings(['    ', rec[i].ToRttiRegisterDefinitions]);
       end;
-    w.AddStrings([']);', LineEnd,
-      'end;', LineEnd, LineEnd]);
+    w.AddStrings([']);', LineEnd]);
   end;
-  // initialization
+  w.AddStrings(['end;', LineEnd, LineEnd]);
+  // eventual initialization section
   w.AddStrings([
     'initialization', LineEnd,
-    '  RegisterRtti;', LineEnd, LineEnd,
-    'end.', LineEnd]);
+    '  RegisterRtti;', LineEnd]);
 end;
 
 function TOpenApiParser.GenerateDtoUnit: RawUtf8;
@@ -2861,6 +2871,8 @@ begin
     w.AddStrings([LineEnd, LineEnd,
       'implementation', LineEnd]);
     GenerateDtoImplementation(w);
+    w.AddStrings([LineEnd,
+      'end.', LineEnd]);
     w.SetText(result);
   finally
     w.Free;
@@ -3076,9 +3088,9 @@ begin
       Operations[i].Body(w, fClientClassName, fSpecs.BasePath);
     // include DTOs registration for single API unit
     if opoGenerateSingleApiUnit in fOptions then
-      GenerateDtoImplementation(w)
-    else
-      w.AddStrings([LineEnd, 'end.']);
+      GenerateDtoImplementation(w);
+    w.AddStrings([LineEnd,
+      'end.', LineEnd]);
     w.SetText(result);
   finally
     w.Free;
