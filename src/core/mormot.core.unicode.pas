@@ -1202,28 +1202,28 @@ type
 
 var
   /// lookup table used for fast case conversion to uppercase
-  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. 'e' with
-  // or without accents will be translated into plain 'E' without accent)
+  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. 'e' or 'E'
+  // with or without accents will be translated into plain 'E' without accent)
   // - is defined globally, since may be used from an inlined function
   NormToUpper: TNormTable;
   NormToUpperByte: TNormTableByte absolute NormToUpper;
 
   /// lookup table used for fast case conversion to lowercase
-  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. 'e' with
-  // or without accents will be translated into plain 'e' without accent)
+  // - handle 8-bit upper chars as in WinAnsi / code page 1252 (e.g. 'e' or 'E'
+  // with or without accents will be translated into plain 'e' without accent)
   // - is defined globally, since may be used from an inlined function
   NormToLower: TNormTable;
   NormToLowerByte: TNormTableByte absolute NormToLower;
 
   /// this table will convert 'a'..'z' into 'A'..'Z'
-  // - so it will work with UTF-8 without decoding, whereas NormToUpper[] expects
-  // WinAnsi encoding to handle accents
+  // - so it will work with UTF-8 without decoding, whereas NormToUpper[]
+  // expects WinAnsi encoding to handle accents
   NormToUpperAnsi7: TNormTable;
   NormToUpperAnsi7Byte: TNormTableByte absolute NormToUpperAnsi7;
 
   /// this table will convert 'A'..'Z' into 'a'..'z'
-  // - so it will work with UTF-8 without decoding, whereas NormToUpper[] expects
-  // WinAnsi encoding to handle accents
+  // - so it will work with UTF-8 without decoding, whereas NormToLower[]
+  // expects WinAnsi encoding to handle accents
   NormToLowerAnsi7: TNormTable;
   NormToLowerAnsi7Byte: TNormTableByte absolute NormToLowerAnsi7;
 
@@ -1805,8 +1805,8 @@ function AnsiIComp(Str1, Str2: pointer): PtrInt;
 function PosExIPas(Sub, P: PUtf8Char; Offset: PtrUInt; Lookup: PNormTable): PtrInt;
 
 /// a ASCII-7 case-insensitive version of PosEx()
-// - will use the NormToUpperAnsi7 lookup table for character conversion
-function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt; overload;
+// - use NormToUpperAnsi7 lookup table, i.e. compare 'a'..'z' as 'A'..'Z'
+function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt = 1): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// a case-insensitive version of PosEx() with a specified lookup table
