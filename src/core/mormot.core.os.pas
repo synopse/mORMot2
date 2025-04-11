@@ -8063,7 +8063,7 @@ begin // return 'U:usr K:krn' percents on windows
   AppendShortCurr64(K, result, {fixeddecimals=}2);
 end;
 
-procedure AppendShortKB(free, total: QWord; var dest: shortstring);
+procedure AppendFreeTotalKB(free, total: QWord; var dest: shortstring);
 begin
   AppendKb(free, dest);
   AppendShortChar('/', @dest);
@@ -8078,7 +8078,7 @@ begin
   result[0] := #0;
   if not GetMemoryInfo(info, false) then
     exit;
-  AppendShortKB(info.memtotal - info.memfree, info.memtotal, result);
+  AppendFreeTotalKB(info.memtotal - info.memfree, info.memtotal, result);
   AppendShortChar('(', @result);
   AppendShortCardinal(info.percent, result);
   AppendShortTwoChars(ord('%') + ord(')') shl 8, @result);
@@ -8129,11 +8129,11 @@ begin
     AppendShortCardinal(cardinal(si.uptime) div SecsPerDay, text);
     AppendShortChar(' ', @text);
   end;
-  AppendShortKB(QWord(si.totalram - si.freeram) * si.mem_unit,
-                QWord(si.totalram) * si.mem_unit, text);
+  AppendFreeTotalKB(QWord(si.totalram - si.freeram) * si.mem_unit,
+                    QWord(si.totalram) * si.mem_unit, text);
   if si.freeswap < si.totalswap shr 2 then // include swap if free below 25%
-    AppendShortKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
-                  QWord(si.totalswap) * si.mem_unit, text);
+    AppendFreeTotalKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
+                      QWord(si.totalswap) * si.mem_unit, text);
   AppendShortIntHex(OSVersionInt32, text); // identify OS version
 end;
 
