@@ -42,15 +42,20 @@ type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
+    // for DNSAndLDAP
+    synopsednsip: RawUtf8;
+    hasinternet: boolean;
+    // for _THttpPeerCache
+    peercacheopt: THttpRequestExtendedOptions;
     // for _TUriTree
-    one, two: RawUtf8;
-    three: boolean;
+    reqone, reqtwo: RawUtf8;
     request: integer;
-    four: Int64;
+    reqthree: boolean;
+    reqfour: Int64;
     // for _TTunnelLocal
-    session: Int64;
-    appsec, synopsednsip: RawUtf8;
-    options: TTunnelOptions;
+    tunnelsession: Int64;
+    tunnelappsec: RawUtf8;
+    tunneloptions: TTunnelOptions;
     tunnelexecutedone: boolean;
     tunnelexecuteremote, tunnelexecutelocal: TNetPort;
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
@@ -59,6 +64,7 @@ type
     procedure TunnelExecuted(Sender: TObject);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
     procedure RunLdapClient(Sender: TObject);
+    procedure RunPeerCacheDirect(Sender: TObject);
     // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -73,14 +79,16 @@ type
     procedure _SocketIO;
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
+    /// validate DNS and LDAP clients (and NTP/SNTP)
+    procedure DNSAndLDAP;
+    /// validate THttpPeerCache process
+    procedure _THttpPeerCache;
     /// some HTTP shared/low-level process
     procedure HTTP;
     /// validate THttpProxyCache process
     procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
-    /// validate DNS and LDAP clients (and NTP/SNTP)
-    procedure DNSAndLDAP;
     /// RTSP over HTTP, as implemented in mormot.net.rtsphttp unit
     procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
@@ -89,8 +97,6 @@ type
     procedure _TTunnelLocal;
     /// validate IP processing functions
     procedure IPAddresses;
-    /// validate THttpPeerCache process
-    procedure _THttpPeerCache;
   end;
 
 
@@ -489,11 +495,11 @@ end;
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  one := Ctxt['one'];
-  Ctxt.RouteUtf8('two', two);
-  three := Ctxt.RouteEquals('three', '3');
-  if not Ctxt.RouteInt64('four', four) then
-    four := -1;
+  reqone := Ctxt['one'];
+  Ctxt.RouteUtf8('two', reqtwo);
+  reqthree := Ctxt.RouteEquals('three', '3');
+  if not Ctxt.RouteInt64('four', reqfour) then
+    reqfour := -1;
   result := HTTP_SUCCESS;
 end;
 
@@ -547,17 +553,17 @@ var
     const met: RawUtf8 = 'GET');
   begin
     request := -1;
-    one := '';
-    two := '';
-    three := false;
-    four := -1;
+    reqone := '';
+    reqtwo := '';
+    reqthree := false;
+    reqfour := -1;
     ctxt.Method := met;
     ctxt.Url := uri;
     CheckEqual(router.Process(ctxt), expstatus);
-    CheckEqual(one, exp1);
-    CheckEqual(two, exp2);
-    Check(three = exp3);
-    CheckEqual(four, exp4);
+    CheckEqual(reqone, exp1);
+    CheckEqual(reqtwo, exp2);
+    Check(reqthree = exp3);
+    CheckEqual(reqfour, exp4);
   end;
 
   procedure Compute(const uri, expected: RawUtf8; const met: RawUtf8 = 'POST';
@@ -859,7 +865,6 @@ var
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   dn: TNameValueDNs;
-  hasinternet: boolean;
   endtix: Int64;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
@@ -1422,7 +1427,8 @@ procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
 begin
   // one of the two handshakes should be done in another thread
   tunnelexecutelocal := (Sender as TTunnelLocal).Open(
-    session, options, 1000, appsec, cLocalhost, tunnelexecuteremote);
+    tunnelsession, tunneloptions, 1000, tunnelappsec,
+    cLocalhost, tunnelexecuteremote);
   Check(tunnelexecutelocal <> 0);
   Check(tunnelexecuteremote <> 0);
 end;
@@ -1456,11 +1462,12 @@ begin
   clienttunnel.SetTransmit(servercb); // set before Open()
   servertunnel.SetTransmit(clientcb);
   // validate handshaking
-  session := Random64;
-  appsec := RandomAnsi7(10);
+  tunnelsession := Random64;
+  tunnelappsec := RandomAnsi7(10);
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
-  local := clienttunnel.Open(session, options, 1000, appsec, clocalhost, remote);
+  local := clienttunnel.Open(
+    tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost, remote);
   Check(local <> 0);
   Check(remote <> 0);
   SleepHiRes(1000, tunnelexecutedone);
@@ -1471,8 +1478,8 @@ begin
   Check(clienttunnel.LocalPort <> '');
   Check(servertunnel.LocalPort <> '');
   Check(servertunnel.LocalPort <> clienttunnel.LocalPort, 'ports');
-  Check(clienttunnel.Encrypted = (toEncrypted * options <> []), 'cEncrypted');
-  Check(servertunnel.Encrypted = (toEncrypted * options <> []), 'cEncrypted');
+  Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
+  Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
   Check(NewSocket('127.0.0.1', clienttunnel.LocalPort, nlTcp, {bind=}false,
     1000, 1000, 1000, 0, clientsock) = nrOk);
   Check(NewSocket('127.0.0.1', servertunnel.LocalPort, nlTcp, {bind=}false,
@@ -1521,19 +1528,19 @@ begin
   // plain tunnelling
   TunnelTest(nil, nil);
   // symmetric secret encrypted tunnelling
-  options := [toEncrypt];
+  tunneloptions := [toEncrypt];
   TunnelTest(nil, nil);
   // ECDHE encrypted tunnelling
-  options := [toEcdhe];
+  tunneloptions := [toEcdhe];
   TunnelTest(nil, nil);
   // tunnelling with mutual authentication
-  options := [];
+  tunneloptions := [];
   TunnelTest(c, s);
   // symmetric secret encrypted tunnelling with mutual authentication
-  options := [toEncrypt];
+  tunneloptions := [toEncrypt];
   TunnelTest(c, s);
   // ECDHE encrypted tunnelling with mutual authentication
-  options := [toEcdhe];
+  tunneloptions := [toEcdhe];
   TunnelTest(c, s);
 end;
 
@@ -1636,6 +1643,118 @@ const
     '4d950e49fe18379a2b81fc531794ecedfa0f10fa21a2fc5fe2ba2e33ac660c99');
   HTTP_TIMEOUT = 30000;
 
+procedure TNetworkProtocols.RunPeerCacheDirect(Sender: TObject);
+var
+  hpc: THttpPeerCacheHook absolute Sender;
+  msg2: THttpPeerCacheMessage;
+  dUri, dBearer, dTok, dAddr, ctyp, params: RawUtf8;
+  cache: TFileName;
+  i: PtrInt;
+  status, len: integer;
+  res: THttpPeerCryptMessageDecode;
+  hcs: THttpClientSocket;
+  decoded: TUri;
+  tls: TNetTlsContext;
+  popt: PHttpRequestExtendedOptions;
+begin
+  hcs := nil;
+  try
+    hpc.OnDirectOptions := OnPeerCacheDirect;
+    try
+      // validate all resources
+      popt := @peercacheopt;
+      for i := 0 to high(HTTP_LINK) do
+      begin
+        // test according to local cache status
+        cache := MakeString([hpc.TempFilesPath, '02', HTTP_HASH[i], '.cache']);
+        DeleteFile(cache);
+        // compute the direct proxy URI and bearer
+        Check(hpc.Settings.HttpDirectUri('secret', HTTP_LINK[i], HTTP_HASH[i],
+          dUri, dBearer, false, false, popt));
+        popt := nil; // ext parameters only for the first
+        Check(PosEx(':8008', dUri) <> 0);
+        Check(dBearer <> '');
+        Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
+        Check(decoded.From(dUri));
+        // decode dBearer
+        dTok := '';
+        Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
+        params := '';
+        FillCharFast(msg2, SizeOf(msg2), 0);
+        res := hpc.BearerDecode(dTok, pcfBearerDirect, msg2, @params);
+        if i = 0 then
+          Check(params <> '')
+        else
+          CheckEqual(params, '');
+        Check(res = mdOk, 'directDecode');
+        Check(msg2.Kind = pcfBearerDirect);
+        // first GET request to download from reference website
+        if hcs = nil then
+        begin
+          InitNetTlsContext(tls);
+          tls.IgnoreCertificateErrors := true;
+          hcs := THttpClientSocket.OpenUri(dUri, dAddr, '', 10000, @tls);
+          hcs.OnLog := TSynLog.DoLog;
+          CheckEqual(dAddr, decoded.Address);
+        end;
+        status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
+        CheckEqual(status, HTTP_SUCCESS);
+        CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+        CheckEqual(HashFileSha256(cache), HTTP_HASH[i]);
+        ctyp := hcs.ContentType;
+        CheckUtf8(IdemPChar(pointer(ctyp), 'IMAGE/'), ctyp);
+        len := hcs.ContentLength;
+        CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+        // GET twice to retrieve from cache
+        status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
+        CheckEqual(status, HTTP_SUCCESS);
+        CheckEqual(hcs.ContentLength, len);
+        CheckEqual(hcs.ContentType, ctyp);
+        CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+        // HEAD should work with cache
+        status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
+        CheckEqual(status, HTTP_SUCCESS);
+        CheckEqual(hcs.ContentLength, len);
+        CheckEqual(hcs.ContentType, ctyp);
+        CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+        // prepare local requests on cache in pcfBearer mode (like a peer)
+        hpc.MessageInit(pcfBearer, 0, msg2);
+        CheckEqual(msg2.IP4, hpc.IP4);
+        Check(msg2.Hash.Algo = low(THashAlgo), 'hfMD5');
+        hpc.MessageEncodeBearer(msg2, dTok);
+        Check(dTok <> dBearer);
+        // GET on cache in pcfBearer mode
+        status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
+        CheckEqual(status, HTTP_NOTFOUND, 'no hash');
+        msg2.Hash.Algo := hfSHA256;
+        Check(Sha256StringToDigest(HTTP_HASH[i], msg2.Hash.Bin.Lo), 'sha');
+        hpc.MessageEncodeBearer(msg2, dTok);
+        status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
+        CheckEqual(status, HTTP_SUCCESS);
+        CheckEqual(hcs.ContentLength, len);
+        CheckEqual(hcs.ContentType, ctyp, 'ctyp from content');
+        CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+        // HEAD on cache in pcfBearer mode
+        status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
+        CheckEqual(status, HTTP_SUCCESS);
+        CheckEqual(hcs.ContentLength, len);
+        CheckEqual(hcs.ContentType, '');
+        // HEAD should work without cache and call directly ictuswin.com
+        Check(DeleteFile(cache));
+        status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
+        CheckEqual(status, HTTP_SUCCESS);
+        CheckEqual(hcs.ContentLength, len);
+        CheckEqual(hcs.ContentType, ctyp);
+      end;
+    finally
+      hcs.Free;
+    end;
+  finally
+    hpc.Settings.Free;
+    hpc.Free;
+  end;
+end;
+
 procedure TNetworkProtocols._THttpPeerCache;
 var
   hpc: THttpPeerCacheHook;
@@ -1644,58 +1763,53 @@ var
   msg, msg2: THttpPeerCacheMessage;
   m, m2: RawUtf8;
   res: THttpPeerCryptMessageDecode;
-  i, n, alter, status, len: integer;
+  i, n, alter: integer;
   tmp: THttpPeerCacheMessageEncoded;
-  cache: TFileName;
-  dUri, dBearer, dTok, dAddr, ctyp, params: RawUtf8;
-  hcs: THttpClientSocket;
+  dUri, dBearer, dTok, params: RawUtf8;
   decoded: TUri;
-  tls: TNetTlsContext;
   timer: TPrecisionTimer;
-  opt: THttpRequestExtendedOptions;
-  popt: PHttpRequestExtendedOptions;
 begin
   CheckEqual(SizeOf(msg), 192);
   CheckEqual(PEER_CACHE_MESSAGELEN, SizeOf(msg) + 4 + SizeOf(TAesBlock) * 3);
   CheckEqual(Base64uriToBinLength(PEER_CACHE_BEARERLEN), PEER_CACHE_MESSAGELEN);
   // validate THttpRequestExtendedOptions serialization
-  opt.Init;
-  Check(not opt.TLS.IgnoreCertificateErrors);
-  Check(VarIsEmptyOrNull(opt.ToDocVariant));
-  CheckEqual(opt.ToUrlEncode('/root'), '/root');
-  opt.TLS.IgnoreCertificateErrors := true;
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
-  CheckEqual(opt.ToUrlEncode('/root'), '/root?ti=1');
-  opt.Auth.Scheme := wraNegotiate;
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true,"as":3}');
-  CheckEqual(opt.ToUrlEncode('/root'), '/root?ti=1&as=3');
-  opt.Init;
-  Check(not opt.TLS.IgnoreCertificateErrors);
-  Check(VarIsEmptyOrNull(opt.ToDocVariant));
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), 'null');
-  Check(opt.InitFromUrl('ti=1&as=3'));
-  Check(opt.TLS.IgnoreCertificateErrors);
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true,"as":3}');
-  Check(opt.InitFromUrl('ti=1'));
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
-  Check(opt.TLS.IgnoreCertificateErrors);
-  opt.TLS.PrivatePassword := 'password';
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
-  Check(opt.InitFromUrl('pp=RGUUac6iP4Y&ti=1'));
-  Check(opt.TLS.IgnoreCertificateErrors);
-  CheckEqual(opt.TLS.PrivatePassword, '', 'missing pf');
-  CheckEqual(VariantSaveJson(opt.ToDocVariant), '{"ti":true}');
-  opt.TLS.PrivateKeyFile := '/p/f';
-  opt.TLS.PrivatePassword := 'password'; // also for OnPeerCacheDirect() below
-  CheckEqual(VariantSaveJson(opt.ToDocVariant),
+  peercacheopt.Init;
+  Check(not peercacheopt.TLS.IgnoreCertificateErrors);
+  Check(VarIsEmptyOrNull(peercacheopt.ToDocVariant));
+  CheckEqual(peercacheopt.ToUrlEncode('/root'), '/root');
+  peercacheopt.TLS.IgnoreCertificateErrors := true;
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true}');
+  CheckEqual(peercacheopt.ToUrlEncode('/root'), '/root?ti=1');
+  peercacheopt.Auth.Scheme := wraNegotiate;
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true,"as":3}');
+  CheckEqual(peercacheopt.ToUrlEncode('/root'), '/root?ti=1&as=3');
+  peercacheopt.Init;
+  Check(not peercacheopt.TLS.IgnoreCertificateErrors);
+  Check(VarIsEmptyOrNull(peercacheopt.ToDocVariant));
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), 'null');
+  Check(peercacheopt.InitFromUrl('ti=1&as=3'));
+  Check(peercacheopt.TLS.IgnoreCertificateErrors);
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true,"as":3}');
+  Check(peercacheopt.InitFromUrl('ti=1'));
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true}');
+  Check(peercacheopt.TLS.IgnoreCertificateErrors);
+  peercacheopt.TLS.PrivatePassword := 'password';
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true}');
+  Check(peercacheopt.InitFromUrl('pp=RGUUac6iP4Y&ti=1'));
+  Check(peercacheopt.TLS.IgnoreCertificateErrors);
+  CheckEqual(peercacheopt.TLS.PrivatePassword, '', 'missing pf');
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true}');
+  peercacheopt.TLS.PrivateKeyFile := '/p/f';
+  peercacheopt.TLS.PrivatePassword := 'password'; // also for OnPeerCacheDirect() below
+  CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant),
     '{"ti":true,"pf":"/p/f","pp":"Y7rINao7mcc"}');
-  params := opt.ToUrlEncode('/root');
+  params := peercacheopt.ToUrlEncode('/root');
   CheckEqual(params, '/root?ti=1&pf=%2Fp%2Ff&pp=Y7rINao7mcc');
-  opt.Init;
-  CheckEqual(opt.TLS.PrivatePassword, '');
-  Check(opt.InitFromUrl(params));
-  CheckEqual(opt.TLS.PrivatePassword, 'password');
-  opt.TLS.IgnoreCertificateErrors := true;
+  peercacheopt.Init;
+  CheckEqual(peercacheopt.TLS.PrivatePassword, '');
+  Check(peercacheopt.InitFromUrl(params));
+  CheckEqual(peercacheopt.TLS.PrivatePassword, 'password');
+  peercacheopt.TLS.IgnoreCertificateErrors := true;
   params := '';
   // for further tests, use the dedicated "mORMot GET" (mget) sample
   hps := THttpPeerCacheSettings.Create;
@@ -1790,7 +1904,7 @@ begin
           Check(res in [mdCrc, mdB64], 'altered');
           Check(THttpPeerCrypt.HttpDirectUri('secret',
             'https://synopse.info:123/forum', ToText(msg.Hash), dUri, dBearer,
-            {permanent=}true, @opt));
+            {permanent=}true, @peercacheopt));
           CheckEqual(dUri, '/https/synopse.info_123/forum');
           Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
           CheckEqual(decoded.URI, 'https://synopse.info:123/forum');
@@ -1807,103 +1921,12 @@ begin
           hpc2.Free;
         end;
         // validate pcoHttpDirect proxy mode with some constant web resources
+        // in a background thread due to remote http://ictuswin.com access
         // (will also validate rfProgressiveStatic process of our web server)
-        hcs := nil;
-        hpc.OnDirectOptions := OnPeerCacheDirect;
-        // ensure we can access the reference resources over Internet
-        status := 0;
-        CheckEqual(Sha256(HttpGet(HTTP_LINK[0], '', nil, false, @status,
-          1000, true, true)), HTTP_HASH[0], HTTP_LINK[0]);
-        if status = HTTP_SUCCESS then
-        try
-          // validate all resources
-          popt := @opt;
-          for i := 0 to high(HTTP_LINK) do
-          begin
-            // test according to local cache status
-            cache := MakeString([hpc.TempFilesPath, '02', HTTP_HASH[i], '.cache']);
-            DeleteFile(cache);
-            // compute the direct proxy URI and bearer
-            Check(hps.HttpDirectUri('secret', HTTP_LINK[i], HTTP_HASH[i],
-              dUri, dBearer, false, false, popt));
-            popt := nil; // ext parameters only for the first
-            Check(PosEx(':8008', dUri) <> 0);
-            Check(dBearer <> '');
-            Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
-            Check(decoded.From(dUri));
-            // decode dBearer
-            dTok := '';
-            Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
-            params := '';
-            FillCharFast(msg2, SizeOf(msg2), 0);
-            res := hpc.BearerDecode(dTok, pcfBearerDirect, msg2, @params);
-            if i = 0 then
-              Check(params <> '')
-            else
-              CheckEqual(params, '');
-            Check(res = mdOk, 'directDecode');
-            Check(msg2.Kind = pcfBearerDirect);
-            // first GET request to download from reference website
-            if hcs = nil then
-            begin
-              InitNetTlsContext(tls);
-              tls.IgnoreCertificateErrors := true;
-              hcs := THttpClientSocket.OpenUri(dUri, dAddr, '', 10000, @tls);
-              hcs.OnLog := TSynLog.DoLog;
-              CheckEqual(dAddr, decoded.Address);
-            end;
-            status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
-            CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
-            CheckEqual(HashFileSha256(cache), HTTP_HASH[i]);
-            ctyp := hcs.ContentType;
-            CheckUtf8(IdemPChar(pointer(ctyp), 'IMAGE/'), ctyp);
-            len := hcs.ContentLength;
-            CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-            // GET twice to retrieve from cache
-            status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
-            CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(hcs.ContentLength, len);
-            CheckEqual(hcs.ContentType, ctyp);
-            CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
-            // HEAD should work with cache
-            status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
-            CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(hcs.ContentLength, len);
-            CheckEqual(hcs.ContentType, ctyp);
-            CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-            // prepare local requests on cache in pcfBearer mode (like a peer)
-            hpc.MessageInit(pcfBearer, 0, msg2);
-            CheckEqual(msg2.IP4, hpc.IP4);
-            Check(msg2.Hash.Algo = low(THashAlgo), 'hfMD5');
-            hpc.MessageEncodeBearer(msg2, dTok);
-            Check(dTok <> dBearer);
-            // GET on cache in pcfBearer mode
-            status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
-            CheckEqual(status, HTTP_NOTFOUND, 'no hash');
-            msg2.Hash.Algo := hfSHA256;
-            Check(Sha256StringToDigest(HTTP_HASH[i], msg2.Hash.Bin.Lo), 'sha');
-            hpc.MessageEncodeBearer(msg2, dTok);
-            status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
-            CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(hcs.ContentLength, len);
-            CheckEqual(hcs.ContentType, ctyp, 'ctyp from content');
-            CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
-            // HEAD on cache in pcfBearer mode
-            status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
-            CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(hcs.ContentLength, len);
-            CheckEqual(hcs.ContentType, '');
-            // HEAD should work without cache and call directly ictuswin.com
-            Check(DeleteFile(cache));
-            status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
-            CheckEqual(status, HTTP_SUCCESS);
-            CheckEqual(hcs.ContentLength, len);
-            CheckEqual(hcs.ContentType, ctyp);
-          end;
-        finally
-          hcs.Free;
-        end;
+        if hasinternet then // checked by above DNSAndLDAP method
+          Run(RunPeerCacheDirect, hpc, 'peercachedirect', true, false, false);
+        hpc := nil; // will be owned and freed by RunPeerCacheDirect from now on
+        hps := nil;
       finally
         hpc.Free;
       end;
