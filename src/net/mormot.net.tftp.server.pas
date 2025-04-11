@@ -471,8 +471,7 @@ begin
     if Assigned(fPosixFileNames) then
     begin
       fn := fPosixFileNames.Find(fn, @readms);
-      if (readms <> 0) and
-         (ttoLowLevelLog in fOptions) then
+      if readms <> 0 then
         // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
         fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
           [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
