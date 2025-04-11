@@ -89,7 +89,6 @@ type
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
     fWorkDir: TFileName;
-    fRestrict: TRawUtf8DynArray;
     function GetCount: integer;
     function GetIdent: string;
     procedure SetWorkDir(const Folder: TFileName);
@@ -129,10 +128,6 @@ type
     // - when set, will ensure it contains a trailing path delimiter (\ or /)
     property WorkDir: TFileName
       read fWorkDir write SetWorkDir;
-    /// list of 'class.method' names to restrict the tests for Run
-    // - as retrieved from "--test class.method" command line switch
-    property Restrict: TRawUtf8DynArray
-      read fRestrict write fRestrict;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
@@ -391,8 +386,10 @@ type
     fNotifyProgressLineLen: integer;
     fNotifyProgress: RawUtf8;
     fSaveToFileBeforeExternal: THandle;
+    fRestrict: TRawUtf8DynArray;
     fCurrentMethodInfo: PSynTestMethodInfo;
     procedure EndSaveToFileExternal;
+    function IsRestricted(const name: RawUtf8): boolean;
     function GetFailedCount: integer;
     function GetFailed(Index: integer): TSynTestFailed;
     /// low-level output on the console - use TSynTestCase.AddConsole instead
@@ -500,6 +497,10 @@ type
     /// retrieve the information associated with a failure
     property Failed[Index: integer]: TSynTestFailed
       read GetFailed;
+    /// list of 'class.method' names to restrict the tests for Run
+    // - as retrieved from "--test class.method" command line switch
+    property Restrict: TRawUtf8DynArray
+      read fRestrict write fRestrict;
   published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
@@ -1347,6 +1348,20 @@ begin
     result := fFailedCount;
 end;
 
+function TSynTests.IsRestricted(const name: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if (fRestrict = nil) or
+     (FindPropName(pointer(fRestrict), name, length(fRestrict)) >= 0) then
+    exit;
+  for i := 0 to length(fRestrict) - 1 do
+    if PosExI(fRestrict[i], name) <> 0 then
+      exit;
+  result := true;
+end;
+
 function TSynTests.Run: boolean;
 var
   i, t, m: integer;
@@ -1364,9 +1379,7 @@ begin
     for m := 0 to Count - 1 do
       fTests[m].Method();
     for i := 0 to high(fTestCaseClass) do
-      if (restrict = nil) or
-         (FindPropName(pointer(fRestrict),
-          ToText(fTestCaseClass[i]), length(fRestrict)) >= 0) then
+      if not IsRestricted(ToText(fTestCaseClass[i])) then
       begin
         methods := GetPublishedMethodNames(fTestCaseClass[i]);
         for m := 0 to high(methods) do
@@ -1408,14 +1421,9 @@ begin
           for t := 0 to c.Count - 1 do
           try
             fCurrentMethodInfo := @c.fTests[t];
-            if (fRestrict <> nil) and
-              ((FindPropName(pointer(fRestrict),
-                  FormatUtf8('%.%', [c, fCurrentMethodInfo^.MethodName]),
-                  // e.g. --test TNetworkProtocols.DNSAndLDAP
-                  length(fRestrict)) < 0) and
-               (FindPropName(pointer(fRestrict),
-                  // e.g. --test TNetworkProtocols
-                  ToText(c.ClassType), length(fRestrict)) < 0)) then
+            // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
+            if IsRestricted(ToText(c.ClassType)) and
+               IsRestricted(FormatUtf8('%.%', [c, fCurrentMethodInfo^.MethodName])) then
               continue;
             if not started then
             begin
