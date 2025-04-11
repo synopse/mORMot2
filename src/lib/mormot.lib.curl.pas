@@ -1014,8 +1014,6 @@ type
   public
     /// global TCurlShare object, created by CurlEnableGlobalShare
     globalShare: TCurlShare;
-    /// hold CurlEnableGlobalShare mutexes
-    share_cs: array[curl_lock_data] of TRTLCriticalSection;
     /// initialize the library
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
     /// initialize the library and specify a memory manager
@@ -1104,6 +1102,8 @@ type
     multi_wait: function(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl;
     {$endif LIBCURLMULTI}
 
+    /// hold CurlEnableGlobalShare mutexes
+    share_cs: array[curl_lock_data] of TRTLCriticalSection;
     /// contains numerical information about the initialized libcurl instance
     // - this is a direct access to the static struct returned by curl_version_info
     info: PCurlVersionInfo;
@@ -1172,6 +1172,11 @@ function CurlEnableGlobalShare: boolean;
 // and prevent csrIN_USE error
 // - you can re-enable the libcurl global share by CurlEnableGlobalShare
 function CurlDisableGlobalShare: TCurlShareResult;
+
+/// just execute a request using libcurl and return the raw data
+// - could be used e.g. for a TFTP or FTP ponctual client request
+function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
+  timeoutMs: integer = 1000; responseCode: PInteger = nil): TCurlResult;
 
 
 implementation 
@@ -1297,7 +1302,7 @@ begin
     n := length(storage^);
     result := size * nitems;
     SetLength(storage^, n + result);
-    MoveFast(buffer^, PPAnsiChar(opaque)^[n], result);
+    MoveFast(buffer^, PByteArray(storage^)[n], result);
   end;
 end;
 
@@ -1576,6 +1581,35 @@ begin
   for d := low(d) to high(d) do
     DeleteCriticalSection(curl.share_cs[d]);
 end;
+
+function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
+  timeoutMs: integer; responseCode: PInteger): TCurlResult;
+var
+  h: pointer;
+begin
+  if responseCode <> nil then
+    responseCode^ := 0;
+  result := crURLMalformat;
+  if uri = '' then
+    exit;
+  result := crFailedInit;
+  if not CurlIsAvailable then
+    exit;
+  h := curl.easy_init;
+  if h = nil then
+    exit;
+  if curl.globalShare <> nil then
+    curl.easy_setopt(h, coShare, curl.globalShare);
+  curl.easy_setopt(h, coConnectTimeoutMs, timeoutMs);
+  curl.easy_setopt(h, coURL, pointer(uri));
+  curl.easy_setopt(h, coWriteFunction, @CurlWriteRawByteString);
+  curl.easy_setopt(h, coWriteData, @data);
+  result := curl.easy_perform(h);
+  if responseCode <> nil then
+    curl.easy_getinfo(h, ciResponseCode, responseCode^); // e.g. for HTTP
+  curl.easy_cleanup(h);
+end;
+
 
 {$ifndef LIBCURLSTATIC}
 destructor TLibCurl.Destroy;
