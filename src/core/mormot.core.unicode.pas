@@ -8458,7 +8458,7 @@ begin
   inc(r);
   if nquote = 0 then
   begin
-    MoveFast(P^, r^, PLen);
+    MoveFast(P^, r^, PLen); // most common case is "some text" with no " within
     r[PLen] := Quote;
   end
   else

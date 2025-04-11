@@ -3398,7 +3398,8 @@ begin
   fTerminated := true; // notify RunDone to abort
   if AndWait and
      (fRunning <> 0) then
-    with fSynLog.Enter(self, 'Terminate') do
+    with fSynLog.Enter('Terminate: wait for %',
+           [Plural('pending task', fRunning)], self) do
       RunWait(60, {synchro=}true);
 end;
 
