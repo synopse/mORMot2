@@ -10047,13 +10047,12 @@ begin
   begin
     fSafe.WriteLock;
     try
-      if fFiles = nil then
+      if fFiles = nil then // use efficient getdents64() syscall
       begin
         if aReadMs <> nil then
           QueryPerformanceMicroSeconds(start);
-        fFiles := PosixFileNames(fFolder, fSubFolders); // fast syscall
+        fFiles := PosixFileNames(fFolder, fSubFolders, nil, nil, {excldir=}true);
         QuickSortRawUtf8(fFiles, length(fFiles), nil, @StrIComp);
-        // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
         if aReadMs <> nil then
         begin
           QueryPerformanceMicroSeconds(stop);
