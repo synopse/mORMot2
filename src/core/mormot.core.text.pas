@@ -8434,7 +8434,10 @@ procedure PrepareTempUtf8(var Res: TTempUtf8; Len: PtrInt);
   {$ifdef FPC} inline; {$endif} // Delphi XE8 fails to inline this anyway :(
 begin
   if Len > SizeOf(Res.Temp) then // memory allocation needed
-    Res.Text := FastSetString(RawUtf8(Res.TempRawUtf8), Len) // new RawUtf8
+  begin
+    Res.TempRawUtf8 := FastNewString(Len, CP_UTF8); // new RawUtf8
+    Res.Text := Res.TempRawUtf8;
+  end
   else
     Res.Text := @Res.Temp; // use stack buffer
   Res.Len := Len;
@@ -8541,7 +8544,7 @@ begin
       varEmpty,
       varNull:
         begin
-          Res.Text := pointer(NULL_STR_VAR);
+          Res.Text := pointer(NULL_STR_VAR); // 'null' + wasString=false
           Res.Len := 4;
         end;
       varSmallint:
@@ -8565,12 +8568,12 @@ begin
       varBoolean:
         if VBoolean then
         begin
-          Res.Text := @BOOL_STR[true][1];
+          Res.Text := @BOOL_STR[true][1]; // 'false' + wasString=false
           Res.Len := 4;
         end
         else
         begin
-          Res.Text := @BOOL_STR[false][1];
+          Res.Text := @BOOL_STR[false][1]; // 'true' + wasString=false
           Res.Len := 5;
         end;
       varInteger:
@@ -8641,7 +8644,7 @@ begin
       else
       {$endif HASVARUSTRING}
       begin
-        // not recognizable vt -> seralize as JSON to handle also custom types
+        // not recognizable vt -> serialize as JSON to handle also custom types
         wasString := true;
         _VariantSaveJson(V, twJsonEscape, RawUtf8(Res.TempRawUtf8));
         Res.Text := pointer(Res.TempRawUtf8);
@@ -9512,10 +9515,9 @@ begin
        VarRecToUtf8IsString(Part[hipart], ext) then
       dec(hipart)
     else
-      LastIsExt := false;
+      ext := '';
   f.DoDelim(@Part[0], hipart + 1, false, PathDelim);
-  if LastIsExt and
-     (ext <> '') then
+  if ext <> '' then
   begin
     if ext[1] <> '.' then
       f.Add('.');
