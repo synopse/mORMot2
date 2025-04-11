@@ -2153,7 +2153,7 @@ begin
     AddConsole('libcurl is not available on this system -> skip test');
     exit;
   end;
-  orig := RandomAnsi7(256 shl 10 + Random32(100)); // 256KB of random data
+  orig := RandomAnsi7(256 shl 10 + Random32(100)); // 256.1KB of random data
   tmp := TemporaryFileName;
   if not CheckFailed(FileFromString(orig, tmp), 'tmp file') then
   try
@@ -2168,8 +2168,9 @@ begin
       CheckEqual(rd, orig, 'tftp1');
       UpperCaseSelf(uri);  // .TMP file to validate case-insensitive URI
       rd := ''; // paranoid
-      res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
-      Check(res = crOK, 'tftp upper case');
+      res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd, 1000, nil,
+        {tftpblocksize=}1468);
+      Check(res = crOK, 'tftp uppercase and custom blocksize');
       CheckEqual(rd, orig, 'tftp2');
       NotifyTestSpeed('TFTP request', 2, length(rd) * 2, @timer);
     finally

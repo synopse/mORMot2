@@ -1176,7 +1176,8 @@ function CurlDisableGlobalShare: TCurlShareResult;
 /// just execute a request using libcurl and return the raw data
 // - could be used e.g. for a TFTP or FTP ponctual client request
 function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
-  timeoutMs: integer = 1000; responseCode: PInteger = nil): TCurlResult;
+  timeoutMs: integer = 1000; responseCode: PInteger = nil;
+  tftpBlockSize: integer = 512): TCurlResult;
 
 
 implementation 
@@ -1583,7 +1584,7 @@ begin
 end;
 
 function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
-  timeoutMs: integer; responseCode: PInteger): TCurlResult;
+  timeoutMs: integer; responseCode: PInteger; tftpBlockSize: integer): TCurlResult;
 var
   h: pointer;
 begin
@@ -1604,6 +1605,8 @@ begin
   curl.easy_setopt(h, coURL, pointer(uri));
   curl.easy_setopt(h, coWriteFunction, @CurlWriteRawByteString);
   curl.easy_setopt(h, coWriteData, @data);
+  if tftpBlockSize <> 512 then
+    curl.easy_setopt(h, coTFtpBlkSize, tftpBlockSize);
   result := curl.easy_perform(h);
   if responseCode <> nil then
     curl.easy_getinfo(h, ciResponseCode, responseCode^); // e.g. for HTTP
