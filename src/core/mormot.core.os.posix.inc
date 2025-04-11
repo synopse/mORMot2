@@ -3199,11 +3199,11 @@ begin
   result[0] := #0;
   if SysInfo(@si) <> 0 then // one syscall is faster than /proc/loadavg access
     exit;
-  AppendShort(TwoDigits(si.loads[0] / 65536.0), result);
+  AppendShort(TwoDigits(si.loads[0] / double(65536.0)), result);
   AppendShortChar(' ', @result);
-  AppendShort(TwoDigits(si.loads[1] / 65536.0), result);
+  AppendShort(TwoDigits(si.loads[1] / double(65536.0)), result);
   AppendShortChar(' ', @result);
-  AppendShort(TwoDigits(si.loads[2] / 65536.0), result);
+  AppendShort(TwoDigits(si.loads[2] / double(65536.0)), result);
 end; // we didn't use AppendShortCurr64() because of expected rounding
 
 function RetrieveSysInfo(var si: TSysInfo): boolean;
