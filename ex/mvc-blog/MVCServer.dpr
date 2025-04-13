@@ -41,7 +41,7 @@ var
 begin
   LogFamily := TSynLog.Family;
   LogFamily.Level := LOG_VERBOSE;
-  LogFamily.PerThreadLog := ptIdentifiedInOnFile;
+  LogFamily.PerThreadLog := ptIdentifiedInOneFile;
   LogFamily.AutoFlushTimeOut := 5;
   LogFamily.HighResolutionTimestamp := true;
   //LogFamily.EchoToConsole := LOG_VERBOSE;
