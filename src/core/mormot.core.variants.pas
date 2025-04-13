@@ -8311,7 +8311,7 @@ end;
 function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar;
   aHandleNestedArray: boolean): boolean;
 var
-  c, i: PtrInt;
+  c, n2: PtrInt;
   n: PRawUtf8;
   prefix, newname: RawUtf8;
   v, v2: PVariant;
@@ -8329,7 +8329,8 @@ begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
   v := pointer(VValue);
   c := VCount;
   repeat
-    if _Safe(v^, obj) then
+    if _Safe(v^, obj) and
+       (obj^.VCount <> 0) then
     begin
       nestedkind := obj^.Kind;
       if (nestedkind = dvArray) and
@@ -8347,12 +8348,12 @@ begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
       if aSepChar <> #0 then
         Append(prefix, aSepChar); // #0 = no char appended
       v2 := pointer(obj^.VValue);
-      for i := 0 to obj^.Count - 1 do
+      for n2 := 0 to obj^.Count - 1 do
       begin
         if nestedkind = dvArray then
-          Make([prefix, i], newname)
+          Make([prefix, n2], newname)
         else
-          Join([prefix, obj^.Names[i]], newname);
+          Join([prefix, obj^.Names[n2]], newname);
         nested.AddValue(nested.EnsureUniqueName(newname), v2^);
         inc(v2);
       end;
