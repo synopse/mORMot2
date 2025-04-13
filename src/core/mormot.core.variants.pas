@@ -2138,9 +2138,12 @@ type
     /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     // - any name collision will append a counter to make it unique
     // - if aSepChar is #0, no separation dot/character will be appended
+    // - aHandleNestedArray=TRUE would allow to convert {"arr":["a","b"]} into
+    // {"arr.0":"a","arr.1":"b"}
     // - return FALSE if the TDocVariant did not change
-    // - return TRUE if the TDocVariant has been flattened
-    function FlattenFromNestedObjects(aSepChar: AnsiChar = '.'): boolean;
+    // - return TRUE if the TDocVariant has been flattened at least for some fields
+    function FlattenFromNestedObjects(aSepChar: AnsiChar = '.';
+      aHandleNestedArray: boolean = false): boolean;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -8305,41 +8308,59 @@ begin
   result := true;
 end;
 
-function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar): boolean;
+function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar;
+  aHandleNestedArray: boolean): boolean;
 var
-  n1, n2: PtrInt;
+  c, i: PtrInt;
   n: PRawUtf8;
-  prefix: RawUtf8;
-  v: PVariant;
+  prefix, newname: RawUtf8;
+  v, v2: PVariant;
   obj: PDocVariantData;
   nested: TDocVariantData;
-begin
-  // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
+  nestedkind: TDocVariantKind;
+begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
   result := false;
   if (VCount = 0) or
-     (not IsObject) then
+     not IsObject then
     exit;
   nested.InitClone(self);
   nested.Capacity := VCount;
   n := pointer(VName);
   v := pointer(VValue);
-  for n1 := 1 to Count do
-  begin
-    if _SafeObject(v^, obj) then
+  c := VCount;
+  repeat
+    if _Safe(v^, obj) then
     begin
-      result := true; // was flattened
+      nestedkind := obj^.Kind;
+      if (nestedkind = dvArray) and
+         not aHandleNestedArray then
+        nestedkind := dvUndefined; // default behavior
+    end
+    else
+      nestedkind := dvUndefined;
+    if nestedkind = dvUndefined then
+      nested.AddValue(n^, v^) // just insert regular name:value pair
+    else
+    begin
+      result := true; // was somewhat flattened
       prefix := n^;
       if aSepChar <> #0 then
         Append(prefix, aSepChar); // #0 = no char appended
-      for n2 := 0 to obj^.Count - 1 do
-        nested.AddValue(nested.EnsureUniqueName(prefix + obj^.Names[n2]),
-          obj^.Values[n2]);
-    end
-    else
-      nested.AddValue(n^, v^); // just insert regular functions
+      v2 := pointer(obj^.VValue);
+      for i := 0 to obj^.Count - 1 do
+      begin
+        if nestedkind = dvArray then
+          Make([prefix, i], newname)
+        else
+          Join([prefix, obj^.Names[i]], newname);
+        nested.AddValue(nested.EnsureUniqueName(newname), v2^);
+        inc(v2);
+      end;
+    end;
     inc(n);
     inc(v);
-  end;
+    dec(c);
+  until c = 0;
   if not result then
     exit; // nothing changed
   ClearFast;

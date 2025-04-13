@@ -1174,7 +1174,7 @@ function CurlEnableGlobalShare: boolean;
 function CurlDisableGlobalShare: TCurlShareResult;
 
 /// just execute a request using libcurl and return the raw data
-// - could be used e.g. for a TFTP or FTP ponctual client request
+// - could be used e.g. for a TFTP or FTP occasional client request
 function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
   timeoutMs: integer = 1000; responseCode: PInteger = nil;
   tftpBlockSize: integer = 512): TCurlResult;

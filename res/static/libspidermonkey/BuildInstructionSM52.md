@@ -18,7 +18,7 @@ At the moment of writing this instruction, version 52 was absent in this page, s
   - Download directly from [repository](https://hg.mozilla.org/releases) *(the version may be unstable)*. It is placed at folder `mozilla-esr<version_number>`
 
 ### Modification of SpiderMonkey source code for Delphi compability
-Our main task is to translate everything that will be imported to Delphi into `extern “C”` mode, and to write wrappers to things which cannot be translated
+Our main task is to translate everything that will be imported to Delphi into `extern "C"` mode, and to write wrappers to things which cannot be translated
 
 Usually it is enough to edit this files:
  - js\public\Initialization.h
