@@ -1278,7 +1278,16 @@ begin
     CheckHash(rl.GetJson([roRawValues]), $DF03674D);
     CheckHash(rl.GetJson([roNoDCAtRoot]), $DB4EF1DC);
     CheckEqual(rl.GetJson([roNoObjectName, roNoDCAtRoot]), v);
-    CheckHash(rl.ExportToLdifContent, $31A4283C, 'hashLdif');
+    CheckHash(rl.ExportToLdifContent, $31A4283C, 'hashLdif4');
+    o := RandomWinAnsi(200 + Random32(300));
+    r.Attributes.Add('jpegphoto', o);
+    o := RandomIdentifier(50 + Random32(200));
+    r.Attributes.Add('longname', o); //.KnownType := atAlias;
+    u := rl.ExportToLdifContent({human=}false, {maxline=}80);
+    CheckEqual(rl.ExportToLdifContent({human=}true, {maxline=}80), u);
+    u := StringReplaceAll(u, #10' ', ''); // mimics maxline=0
+    CheckEqual(rl.ExportToLdifContent({human=}false, {maxline=}0), u);
+    CheckEqual(rl.ExportToLdifContent({human=}true,  {maxline=}0), u);
   finally
     rl.Free;
     rl2.Free;
