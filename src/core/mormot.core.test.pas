@@ -1303,9 +1303,10 @@ procedure TSynTests.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
 var
   txt: RawUtf8;
 begin
-  if (TSynLogTestLog = nil) or
-     not (Level in TSynLogTestLog.Family.Level) then
-    exit;
+  if Level <> sllFail then
+    if (TSynLogTestLog = nil) or
+       not (Level in TSynLogTestLog.Family.Level) then
+      exit;
   FormatUtf8(TextFmt, TextArgs, txt);
   if fCurrentMethodInfo <> nil then
     Prepend(txt, [fCurrentMethodInfo^.TestName, ': ']);
