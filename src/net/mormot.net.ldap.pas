@@ -218,12 +218,13 @@ const
   /// some default maximum line for our LDIF output
   MAX_LDIF_LINE = 80;
 
-/// append the supplied buffer value as specified by RFC 2849
+/// raw append of the supplied buffer value as specified by RFC 2849
 // - humanfriendly=true will add '# attname: <utf-8 content>' comment line
 // e.g. if base-64 encoding was involved, for human-friendly file export
-procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: PtrInt;
+// - as used e.g. by TLdapAttribute.ExportToLdif and TLdapResult.ExportToLdif
+procedure AddLdif(w: TTextWriter; const v: RawByteString;
   forcebase64, humanfriendly: boolean; att: pointer{TLdapAttribute};
-  maxlen: PtrInt = 0);
+  maxlen: PtrInt);
 
 
 { **************** LDAP Protocol Definitions }
@@ -2933,7 +2934,7 @@ begin // here maxlen > 0
   until false;
 end;
 
-procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: PtrInt;
+procedure AddLdif(w: TTextWriter; const v: RawByteString;
   forcebase64, humanfriendly: boolean; att: pointer; maxlen: PtrInt);
 var
   a: TLdapAttribute absolute att;
@@ -2942,16 +2943,16 @@ var
 begin
   dec(maxlen);
   if forcebase64 or
-     not IsLdifSafe(p, l) then
+     not IsLdifSafe(pointer(v), length(v)) then
   begin
     // UTF-8 or binary content are stored as 'attributename:: <base64>'
     w.AddDirect(':', ' ');
     if (att = nil) or
        (maxlen <= 0) then
-      w.WrBase64(pointer(p), l, {withmagic=}false) // line feeds are optionals
+      w.WrBase64(pointer(v), length(v), {withmagic=}false) // line feeds optional
     else
     begin
-      tmp := BinToBase64(pointer(p), l);
+      tmp := BinToBase64(v);
       AddWrapLine(w, pointer(tmp), length(tmp), length(a.AttributeName) + 2, maxlen);
     end;
     if forcebase64 or
@@ -2959,7 +2960,7 @@ begin
        (a = nil) or
        (a.fKnownTypeStorage in [atsAny, atsInteger]) then
       exit;
-    humanfriendly := false; // skip CompareBuf() below
+    humanfriendly := false; // skip AttributeValueMakeReadable() below
   end
   else
   begin
@@ -2967,19 +2968,19 @@ begin
     w.AddDirect(' ');
     if (att = nil) or
        (maxlen <= 0) then
-      w.AddNoJsonEscape(p, l)
+      w.AddString(v)
     else
-      AddWrapLine(w, p, l, length(a.AttributeName) + 1, maxlen);
+      AddWrapLine(w, pointer(v), length(v), length(a.AttributeName) + 1, maxlen);
     if (not humanfriendly) or
        (a = nil) or
        (a.fKnownTypeStorage = atsRawUtf8) then
       exit;
   end;
   // optionally append the human-friendly value as comment
-  FastSetString(tmp, p, l);
+  tmp := v;
   if humanfriendly then
     if AttributeValueMakeReadable(tmp, a.fKnownTypeStorage) or
-       (CompareBuf(tmp, p, l) = 0) then
+       (pointer(tmp) = pointer(v)) then
       exit; // don't put hexadecimal or identical content in comment
   w.AddShorter(#10'# ');
   w.AddString(a.AttributeName); // is either OID or plain alphanum
@@ -4468,9 +4469,8 @@ begin
   begin
     w.AddString(fAttributeName); // is either OID or plain alphanum
     w.AddDirect(':');
-    AddLdif(w, pointer(fList[i]), length(fList[i]),
-         {forcebase64:} fKnownTypeStorage in ATS_BINARY,
-         aHumanFriendly, self, aMaxLineLen);
+    AddLdif(w, fList[i], {forcebase64:} fKnownTypeStorage in ATS_BINARY,
+      aHumanFriendly, self, aMaxLineLen);
     w.AddDirect(#10);
   end;
 end;
@@ -4902,7 +4902,7 @@ begin
   w.AddDirect('#', ' ');
   w.AddString(DNToCN(fObjectName, {NoRaise=}true));
   w.AddShorter(#10'dn:');
-  AddLdif(w, pointer(fObjectName), length(fObjectName), false, false, nil, 0);
+  AddLdif(w, fObjectName, false, false, nil, 0);
   w.AddDirect(#10);
   for i := 0 to fAttributes.Count - 1 do
     fAttributes.Items[i].ExportToLdif(w, aHumanFriendly, aMaxLineLen);

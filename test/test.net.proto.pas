@@ -1273,20 +1273,22 @@ begin
     v := rl.GetJson([roNoObjectName]);
     CheckEqual(v, '{"bar":{"foo":{"objectClass":"person","sn":"Doe"}}}');
     r.ObjectName := 'cn=foo, ou=bar, dc=toto, dc=it';
-    //writeln(rl.GetJson([roNoDCAtRoot, roNoObjectName]));
     CheckHash(rl.GetJson([]), $DF03674D);
     CheckHash(rl.GetJson([roRawValues]), $DF03674D);
     CheckHash(rl.GetJson([roNoDCAtRoot]), $DB4EF1DC);
     CheckEqual(rl.GetJson([roNoObjectName, roNoDCAtRoot]), v);
     CheckHash(rl.ExportToLdifContent, $31A4283C, 'hashLdif4');
-    o := RandomWinAnsi(200 + Random32(300));
+    o := RandomWinAnsi(200 + Random32(300));   // force not UTF-8
+    Check(not IsValidUtf8(o), 'utf8');
     r.Attributes.Add('jpegphoto', o);
-    o := RandomIdentifier(50 + Random32(200));
+    o := RandomUri(50 + Random32(200)); // force pure US-ASCII
     r.Attributes.Add('longname', o); //.KnownType := atAlias;
     u := rl.ExportToLdifContent({human=}false, {maxline=}80);
     CheckEqual(rl.ExportToLdifContent({human=}true, {maxline=}80), u);
+    v := rl.ExportToLdifContent({human=}false, {maxline=}0);
+    CheckNotEqual(v, u);
     u := StringReplaceAll(u, #10' ', ''); // mimics maxline=0
-    CheckEqual(rl.ExportToLdifContent({human=}false, {maxline=}0), u);
+    CheckEqual(v, u);
     CheckEqual(rl.ExportToLdifContent({human=}true,  {maxline=}0), u);
   finally
     rl.Free;
