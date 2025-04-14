@@ -1228,7 +1228,7 @@ begin
   rl := TLdapResultList.Create;
   try
     u := rl.Dump({noTime=}true);
-    CheckEqual(u, 'results: 0'#13#10);
+    CheckEqual(u, 'results: 0' + CRLF);
     rl2 := CopyObject(rl);
     Check(rl2 <> nil);
     Check(rl2.ClassType = TLdapResultList);
@@ -1267,6 +1267,7 @@ begin
     CopyObject(rl, rl2);
     CheckHash(rl2.Dump({noTime=}true), c, 'hashDump2');
     CheckHash(rl2.ExportToLdifContent, $4A97B4B2, 'hashLdif2');
+    CheckHash(rl2.ExportToLdifContent({human=}true), $E6C54523, 'hashLdif3');
     r.Attributes.Delete(atCommonName);
     CheckEqual(r.Attributes.Count, 2);
     v := rl.GetJson([roNoObjectName]);
