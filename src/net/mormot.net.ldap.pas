@@ -214,11 +214,16 @@ function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 // also to dn/rdn values
 function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean;
 
+const
+  /// some default maximum line for our LDIF output
+  MAX_LDIF_LINE = 80;
+
 /// append the supplied buffer value as specified by RFC 2849
 // - humanfriendly=true will add '# attname: <utf-8 content>' comment line
 // e.g. if base-64 encoding was involved, for human-friendly file export
 procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: PtrInt;
-  forcebase64, humanfriendly: boolean; att: pointer{TLdapAttribute});
+  forcebase64, humanfriendly: boolean; att: pointer{TLdapAttribute};
+  maxlen: PtrInt = 0);
 
 
 { **************** LDAP Protocol Definitions }
@@ -1101,10 +1106,11 @@ type
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
     /// search for a given value within this list
     function FindIndex(const aValue: RawByteString): PtrInt;
-    /// add all attributes to a "dn: ###" entry of a ldif-content buffer
+    /// add all attributes as LDIF "dn: ###" entry, as specified by RFC 2849
     // - aHumanFriendly = TRUE will also append '# dn: <utf-8 content>' e.g. if
     // base-64 encoded was involved for human-friendly export
-    procedure ExportToLdif(w: TTextWriter; aHumanFriendly: boolean);
+    procedure ExportToLdif(w: TTextWriter; aHumanFriendly: boolean;
+      aMaxLineLen: PtrInt);
     /// save all attributes into a Modifier() / TLdapClient.Modify() ASN1_SEQ
     function ExportToAsnSeq: TAsnObject;
     /// how many values have been added to this attribute
@@ -1429,7 +1435,8 @@ type
     /// add a "dn: ###" entry to a ldif-content buffer
     // - aHumanFriendly=true will add '# attname: <utf-8 content>' comment line
     // e.g. if base-64 encoding was involved, for human-friendly file export
-    procedure ExportToLdif(w: TTextWriter; aHumanFriendly: boolean);
+    procedure ExportToLdif(w: TTextWriter; aHumanFriendly: boolean;
+      aMaxLineLen: PtrInt);
   end;
   /// just a dynamic array of TLdapResult instances
   TLdapResultObjArray = array of TLdapResult;
@@ -1496,10 +1503,11 @@ type
     function GetJson(Options: TLdapResultOptions = [];
       const ObjectAttributeField: RawUtf8 = '*';
       Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
-    /// export all results in the RFC 2234 ldif-content output
+    /// export all results as LDIF text, as specified by RFC 2849
     // - aHumanFriendly=true will add '# attname: <utf-8 content>' comment line
     // e.g. if base-64 encoding was involved, for human-friendly file export
-    function ExportToLdifContent(aHumanFriendly: boolean = false): RawUtf8;
+    function ExportToLdifContent(aHumanFriendly: boolean = false;
+      aMaxLineLen: PtrInt = MAX_LDIF_LINE): RawUtf8;
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump(NoTime: boolean = false): RawUtf8;
@@ -2908,33 +2916,65 @@ begin
   result := true;
 end;
 
+procedure AddWrapLine(w: TTextWriter; p: PUtf8Char; len, pos, maxlen: PtrInt);
+var
+  perline: PtrInt;
+begin // here maxlen > 0
+  perline := MinPtrInt(len, maxlen - pos);
+  repeat
+    w.AddNoJsonEscape(p, perline);
+    dec(len, perline);
+    if len = 0 then
+      exit;
+    w.AddDirect(#10, ' ');
+    inc(p, perline);
+    perline := MinPtrInt(len, maxlen);
+  until false;
+end;
+
 procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: PtrInt;
-  forcebase64, humanfriendly: boolean; att: pointer);
+  forcebase64, humanfriendly: boolean; att: pointer; maxlen: PtrInt);
 var
   a: TLdapAttribute absolute att;
+  truncated: boolean;
   tmp: RawUtf8;
 begin
+  dec(maxlen);
   if forcebase64 or
      not IsLdifSafe(p, l) then
   begin
-    // UTF-8 or binary content is just stored as name:: <base64>
+    // UTF-8 or binary content are stored as 'attributename:: <base64>'
     w.AddDirect(':', ' ');
-    w.WrBase64(pointer(p), l, {withmagic=}false); // line feeds are optionals
-    if (not humanfriendly) or
+    if (att = nil) or
+       (maxlen <= 0) then
+      w.WrBase64(pointer(p), l, {withmagic=}false) // line feeds are optionals
+    else
+    begin
+      tmp := BinToBase64(pointer(p), l);
+      AddWrapLine(w, pointer(tmp), length(tmp), length(a.AttributeName) + 2, maxlen);
+    end;
+    if forcebase64 or
+       (not humanfriendly) or
        (a = nil) or
-       (a.fKnownTypeStorage = atsInteger) then
+       (a.fKnownTypeStorage in [atsAny, atsInteger]) then
       exit;
-    humanfriendly := false; // force CompareBuf() below to fail
+    humanfriendly := false; // skip CompareBuf() below
   end
   else
   begin
+    // simple 'attributename: <us-ascii>' form
     w.AddDirect(' ');
-    w.AddNoJsonEscape(p, l);
+    if (att = nil) or
+       (maxlen <= 0) then
+      w.AddNoJsonEscape(p, l)
+    else
+      AddWrapLine(w, p, l, length(a.AttributeName) + 1, maxlen);
     if (not humanfriendly) or
        (a = nil) or
        (a.fKnownTypeStorage = atsRawUtf8) then
       exit;
   end;
+  // optionally append the human-friendly value as comment
   FastSetString(tmp, p, l);
   if humanfriendly then
     if AttributeValueMakeReadable(tmp, a.fKnownTypeStorage) or
@@ -2943,8 +2983,15 @@ begin
   w.AddShorter(#10'# ');
   w.AddString(a.AttributeName); // is either OID or plain alphanum
   w.AddShorter(': <');
+  truncated := (maxlen > 0) and
+               (length(tmp) + length(a.AttributeName) > maxlen - 6);
+  if truncated then
+    FakeLength(tmp, Utf8TruncatedLength(tmp, maxlen - 9));
   w.AddString(tmp);             // human-readable text as comment
-  w.AddDirect('>');
+  if truncated then
+    w.AddShorter('...>')
+  else
+    w.AddDirect('>');
 end;
 
 
@@ -4407,7 +4454,7 @@ begin
 end;
 
 procedure TLdapAttribute.ExportToLdif(w: TTextWriter;
-  aHumanFriendly: boolean);
+  aHumanFriendly: boolean; aMaxLineLen: PtrInt);
 var
   i: PtrInt;
 begin
@@ -4417,7 +4464,7 @@ begin
     w.AddDirect(':');
     AddLdif(w, pointer(fList[i]), length(fList[i]),
          {forcebase64:} fKnownTypeStorage in ATS_BINARY,
-         aHumanFriendly, self);
+         aHumanFriendly, self, aMaxLineLen);
     w.AddDirect(#10);
   end;
 end;
@@ -4841,17 +4888,18 @@ begin
   end;
 end;
 
-procedure TLdapResult.ExportToLdif(w: TTextWriter; aHumanFriendly: boolean);
+procedure TLdapResult.ExportToLdif(w: TTextWriter; aHumanFriendly: boolean;
+  aMaxLineLen: PtrInt);
 var
   i: PtrInt;
 begin
   w.AddDirect('#', ' ');
   w.AddString(DNToCN(fObjectName, {NoRaise=}true));
   w.AddShorter(#10'dn:');
-  AddLdif(w, pointer(fObjectName), length(fObjectName), false, false, nil);
+  AddLdif(w, pointer(fObjectName), length(fObjectName), false, false, nil, 0);
   w.AddDirect(#10);
   for i := 0 to fAttributes.Count - 1 do
-    fAttributes.Items[i].ExportToLdif(w, aHumanFriendly);
+    fAttributes.Items[i].ExportToLdif(w, aHumanFriendly, aMaxLineLen);
   w.AddDirect(#10);
 end;
 
@@ -5013,7 +5061,8 @@ begin
   result := FindOrAdd(ObjectName).FindOrAdd(AttributeName);
 end;
 
-function TLdapResultList.ExportToLdifContent(aHumanFriendly: boolean): RawUtf8;
+function TLdapResultList.ExportToLdifContent(aHumanFriendly: boolean;
+  aMaxLineLen: PtrInt): RawUtf8;
 var
   tmp: TTextWriterStackBuffer;
   w: TTextWriter;
@@ -5023,7 +5072,7 @@ begin
   try
     W.AddShort('version: 1'#10);
     for i := 0 to Count - 1 do
-      Items[i].ExportToLdif(w, aHumanFriendly);
+      Items[i].ExportToLdif(w, aHumanFriendly, aMaxLineLen);
     W.Add('# total number of entries: %'#10, [Count]);
     w.SetText(result);
   finally

@@ -1659,6 +1659,7 @@ function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 function NetStartWith(p, up: PUtf8Char): boolean;
 
 /// BinToBase64() like function, to avoid linking mormot.core.buffers
+// - only used for TUri.UserPasswordBase64, so is not performance sensitive
 function NetBinToBase64(const s: RawByteString): RawUtf8;
 
 /// IsPem() like function, to avoid linking mormot.crypt.secure
