@@ -879,7 +879,11 @@ begin
   if not Executable.Command.Get('ntp', ntp) then
     ntp := NTP_DEFAULT_SERVER;
   withntp := not Executable.Command.Option('nontp');
-  hasinternet := DnsLookups('yahoo.com', '', 500) <> nil; // avoid abusive wait
+  if Executable.Command.Has('dns') and
+     Executable.Command.Has(['t', 'test']) then
+    hasinternet := false // once is enough (e.g. from LUTI)
+  else
+    hasinternet := DnsLookups('yahoo.com', '', 500) <> nil; // avoid abusive wait
   if hasinternet then
   begin
     utc1 := GetSntpTime(ntp);
