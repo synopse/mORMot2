@@ -6159,8 +6159,12 @@ begin
   CheckEqual(Doc.ToJson, '{"arr":["a","b","c"]}');
   Doc.Clear;
   Doc.InitJson('{"arr":["a","b","c"]}');
-  Check(Doc.FlattenFromNestedObjects('.', {nestedarray=}true));
+  Check(Doc.FlattenFromNestedObjects('.', {nestedarray=}0));
   CheckEqual(Doc.ToJson, '{"arr.0":"a","arr.1":"b","arr.2":"c"}');
+  Doc.Clear;
+  Doc.InitJson('{"arr":["a","b","c"]}');
+  Check(Doc.FlattenFromNestedObjects('.', {nestedarray=}1));
+  CheckEqual(Doc.ToJson, '{"arr.1":"a","arr.2":"b","arr.3":"c"}');
   Doc.Clear;
   Doc.InitJson('{a:{b:1,b:10},d:3}');
   Check(Doc.FlattenFromNestedObjects(#0));

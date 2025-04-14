@@ -2138,12 +2138,12 @@ type
     /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     // - any name collision will append a counter to make it unique
     // - if aSepChar is #0, no separation dot/character will be appended
-    // - aHandleNestedArray=TRUE would allow to convert {"arr":["a","b"]} into
-    // {"arr.0":"a","arr.1":"b"}
+    // - aNestedArrayStartIndex=0 would allow to convert e.g. {"arr":["a","b"]}
+    // into {"arr.0":"a","arr.1":"b"}
     // - return FALSE if the TDocVariant did not change
     // - return TRUE if the TDocVariant has been flattened at least for some fields
     function FlattenFromNestedObjects(aSepChar: AnsiChar = '.';
-      aHandleNestedArray: boolean = false): boolean;
+      aNestedArrayStartIndex: PtrInt = -1): boolean;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -8309,7 +8309,7 @@ begin
 end;
 
 function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar;
-  aHandleNestedArray: boolean): boolean;
+  aNestedArrayStartIndex: PtrInt): boolean;
 var
   c, n2: PtrInt;
   n: PRawUtf8;
@@ -8334,7 +8334,7 @@ begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     begin
       nestedkind := obj^.Kind;
       if (nestedkind = dvArray) and
-         not aHandleNestedArray then
+         (aNestedArrayStartIndex < 0) then
         nestedkind := dvUndefined; // default behavior
     end
     else
@@ -8351,7 +8351,7 @@ begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
       for n2 := 0 to obj^.Count - 1 do
       begin
         if nestedkind = dvArray then
-          Make([prefix, n2], newname)
+          Make([prefix, n2 + aNestedArrayStartIndex], newname)
         else
           Join([prefix, obj^.Names[n2]], newname);
         nested.AddValue(nested.EnsureUniqueName(newname), v2^);
