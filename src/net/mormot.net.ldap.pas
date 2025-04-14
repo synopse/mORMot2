@@ -881,8 +881,9 @@ procedure AttributeNameNormalize(var AttrName: RawUtf8);
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
 // - will detect SID, GUID, FileTime and text date/time known fields
 // - if s is not truly UTF-8 encoded, will return its hexadecimal representation
-procedure AttributeValueMakeReadable(var s: RawUtf8;
-  ats: TLdapAttributeTypeStorage; dom: PSid = nil; uuid: TAppendShortUuid = nil);
+// - returns TRUE if s was converted into hexadecimal
+function AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage;
+  dom: PSid = nil; uuid: TAppendShortUuid = nil): boolean;
 
 /// convert a set of common Attribute Types into their array text representation
 // - by design, atUndefined would be excluded from the list
@@ -3601,8 +3602,8 @@ begin
     AttrName := RawUtf8(existing); // replace with existing interned name
 end;
 
-procedure AttributeValueMakeReadable(var s: RawUtf8;
-  ats: TLdapAttributeTypeStorage; dom: PSid; uuid: TAppendShortUuid);
+function AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage;
+  dom: PSid; uuid: TAppendShortUuid): boolean;
 var
   ft: QWord;
   guid: TGuid;
@@ -3610,6 +3611,7 @@ var
   ts: TTimeLogBits absolute guid;
 begin
   // handle the storage kind of our recognized attribute types
+  result := false;
   case ats of
     atsRawUtf8, // most used - LDAP v3 requires UTF-8 encoding
     atsInteger,
@@ -3662,6 +3664,7 @@ begin
     atsUnicodePwd:
       begin
         s := 'xxxxxxxx'; // anti-forensic measure
+        result := true;
         exit;
       end;
   end;
@@ -3669,7 +3672,10 @@ begin
   if IsValidUtf8(s) then
     EnsureRawUtf8(s)
   else
+  begin
     BinToHexLowerSelf(RawByteString(s));
+    result := true;
+  end;
 end;
 
 function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray;
