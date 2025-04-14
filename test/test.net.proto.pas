@@ -1261,10 +1261,11 @@ begin
     CheckHash(rl.GetJson([roObjectNameWithoutDCAtRoot, roNoObjectName]), $F41233F2);
     CheckHash(rl.GetJson([roWithCanonicalName]), $C4BA2ED3);
     CheckHash(rl.GetJson([roNoObjectName, roWithCanonicalName]), $0BCFC3BC);
-    CheckHash(rl.Dump({noTime=}true), $DF59A0A9, 'hashDump');
+    c := {$ifdef OSWINDOWS}$8D553E5D{$else}$D74DDA27{$endif};
+    CheckHash(rl.Dump({noTime=}true), c, 'hashDump');
     CheckHash(rl.ExportToLdifContent, $4A97B4B2, 'hashLdif');
     CopyObject(rl, rl2);
-    CheckHash(rl2.Dump({noTime=}true), $DF59A0A9, 'hashDump2');
+    CheckHash(rl2.Dump({noTime=}true), c, 'hashDump2');
     CheckHash(rl2.ExportToLdifContent, $4A97B4B2, 'hashLdif2');
     r.Attributes.Delete(atCommonName);
     CheckEqual(r.Attributes.Count, 2);

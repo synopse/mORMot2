@@ -5013,27 +5013,27 @@ begin
       w.AddShorter(' recv=');
       w.AddShort(KBNoSpace(fIn));
     end;
-    w.AddCR;
+    w.AddShorter(CRLF);
     for i := 0 to Count - 1 do
     begin
       res := Items[i];
-      w.Add('%: %'#10, [i, DNToCN(res.ObjectName, {NoRaise=}true)]);
-      w.Add('  objectName : %'#10, [res.ObjectName]);
+      w.Add('%: %' + CRLF, [i, DNToCN(res.ObjectName, {NoRaise=}true)]);
+      w.Add('  objectName : %' + CRLF, [res.ObjectName]);
       for j := 0 to res.Attributes.Count - 1 do
       begin
         attr := res.Attributes.Items[j];
         w.Add('  % : ', [attr.AttributeName]);
         if attr.Count <> 1 then
-          w.AddCR;
+          w.AddShorter(CRLF);
         for k := 0 to attr.Count - 1 do
         begin
           if attr.Count <> 1 then
             w.AddShorter('    - ');
           w.AddString(attr.GetReadable(k));
-          w.AddCR;
+          w.AddShorter(CRLF);
         end;
       end;
-      w.AddCR;
+      w.AddShorter(CRLF);
     end;
     w.SetText(result);
   finally
