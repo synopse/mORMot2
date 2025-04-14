@@ -1062,6 +1062,7 @@ type
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
     procedure SetVariantArray(var v: TDocVariantData;
       options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
+    procedure SetKnownType(AttrType: TLdapAttributeType);
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType); overload;
@@ -1123,7 +1124,7 @@ type
       read fAttributeName;
     /// the common LDAP Attribute Type corresponding to this AttributeName
     property KnownType: TLdapAttributeType
-      read fKnownType;
+      read fKnownType write SetKnownType;
     /// the common LDAP Attribute Type Storage corresponding to this AttributeName
     property KnownTypeStorage: TLdapAttributeTypeStorage
       read fKnownTypeStorage;
@@ -4129,8 +4130,7 @@ constructor TLdapAttribute.Create(
 begin
   inherited Create;
   fAttributeName := AttrName;
-  fKnownType := AttrType;
-  fKnownTypeStorage := AttrTypeStorage[AttrType];
+  SetKnownType(AttrType);
   SetLength(fList, 1); // optimized for a single value (most used case)
 end;
 
@@ -4138,6 +4138,12 @@ destructor TLdapAttribute.Destroy;
 begin
   Clear;
   inherited Destroy;
+end;
+
+procedure TLdapAttribute.SetKnownType(AttrType: TLdapAttributeType);
+begin
+  fKnownType := AttrType;
+  fKnownTypeStorage := AttrTypeStorage[AttrType];
 end;
 
 procedure TLdapAttribute.Clear;
