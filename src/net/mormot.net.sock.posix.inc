@@ -108,7 +108,7 @@ const
 
 type
   /// a socket is always cint = 32-bit integer sized on POSIX
-  // - we extend it to PtrInt for our TNetSocketWrap cast
+  // - but we use PtrInt on POSIX to cast it as TNetSocket = ^PNetSocketWrap
   TSocket = PtrInt;
 
   PSockAddrIn6 = ^sockaddr_in6;

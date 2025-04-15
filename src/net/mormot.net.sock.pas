@@ -1424,8 +1424,7 @@ type
     wieCustom1,
     wieCustom2,
     wieCustom3,
-    wieCustom4,
-    wieCustom5);
+    wieCustom4);
 
   /// opaque pointer to one TWinIocp.Subscribe state
   PWinIocpSubscription = ^TWinIocpSubscription;
@@ -1483,7 +1482,8 @@ type
     function Subscribe(socket: TNetSocket;
       tag: TPollSocketTag): PWinIocpSubscription;
     /// unsubscribe for events on a given socket
-    function Unsubscribe(one: PWinIocpSubscription): boolean;
+    // - will also set one := nil to avoid any dangling pointer
+    function Unsubscribe(var one: PWinIocpSubscription): boolean;
     /// notify IOCP that it needs to track the next event on this subscription
     // - typically called after socket recv/send to re-subscribe for events
     // - for wieRecv events, you should better not supply any buf/buflen to

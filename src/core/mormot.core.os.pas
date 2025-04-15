@@ -4549,6 +4549,7 @@ type
     /// release all stored memory
     procedure Done;
     /// allocate a new PLockedListOne data instance in threadsafe O(1) process
+    // - returned buffer is filled with Size zero bytes
     function New: pointer;
     /// release one PLockedListOne used data instance in threadsafe O(1) process
     function Free(one: pointer): boolean;

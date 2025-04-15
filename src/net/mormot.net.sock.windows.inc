@@ -31,7 +31,7 @@ const
 
 type
   /// a socket is always pointer-sized on Windows
-  // - and we also use PtrInt for our TNetSocketWrap cast
+  // - we also use PtrInt on POSIX to cast it as TNetSocket = ^PNetSocketWrap
   TSocket = PtrInt;
 
   TSockLen = integer;
@@ -43,9 +43,9 @@ type
   end;
 
 const
-  FIONREAD     = $4004667f;
-  FIONBIO      = $8004667e;
-  FIOASYNC     = $8004667d;
+  FIONREAD = $4004667f;
+  FIONBIO  = $8004667e;
+  FIOASYNC = $8004667d;
 
 type
   PTimeVal = ^TTimeVal;
@@ -352,9 +352,9 @@ const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
 
-  SHUT_RD   = 0;
-  SHUT_WR   = 1;
-  SHUT_RDWR = 2;
+  SHUT_RD   = 0;  // = SD_RECEIVE
+  SHUT_WR   = 1;  // = SD_SEND
+  SHUT_RDWR = 2;  // = SD_BOTH
 
 type
   PWSAData = ^TWSAData;
@@ -1417,7 +1417,7 @@ type
   TOverlappedEvent = record // should NOT be packed
     prepared: TLightLock;   // used if wioLockEvent is set in fOptions
     overlapped: TOverlapped;
-    event: TWinIocpEvent;   // should appear just after the TOverlapped
+    event: TWinIocpEvent;   // should appear just after the TOverlapped struct
     buf: TWsaBuf;
   end;
   POverlappedEvent = ^TOverlappedEvent;
@@ -1585,7 +1585,7 @@ begin
     exit;
   if socket = nil then
     raise EWinIocp.Create('Unexpected TWinIocp.Subscribe(nil)');
-  o := fOne.New;
+  o := fOne.New; // returned o^ is filled with zeros
   o^.tag := tag;
   o^.socket := TSocket(socket);
   for e := low(e) to high(e) do
@@ -1608,7 +1608,7 @@ begin
 end;
 
 const
-  IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWAC12345';
+  IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWAC1234';
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
 function TWinIocp.PrepareNext(one: PWinIocpSubscription;
@@ -1844,7 +1844,7 @@ begin
       [pointer(one^.socket), Remote.IPShort], self);
 end;
 
-function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;
+function TWinIocp.Unsubscribe(var one: PWinIocpSubscription): boolean;
 var
   res: TNetResult;
   o: PIocpSubscription absolute one;
@@ -1862,6 +1862,7 @@ begin
       [pointer(o^.socket), pointer(o^.head.sequence), Count - 1,
        ToText(res)^], self);
   result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
+  one := nil;
 end;
 
 
