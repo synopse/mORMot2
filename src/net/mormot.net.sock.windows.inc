@@ -1818,8 +1818,10 @@ begin
       else
         fOnLog(sll, 'GetNext=%% %=%', [IOCP_EVENT[event],
           pointer(one^.socket), pointer(one^.head.sequence), seq], self);
-  until sll = sllTrace;
-  result := o; // got valid event
+    if sll = sllTrace then
+      break; // got valid event
+  until false;
+  result := o;
 end;
 
 function TWinIocp.GetNextAccept(one: PWinIocpSubscription;
