@@ -339,7 +339,7 @@ type
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
     function Available(loerr: system.PInteger = nil): boolean;
     /// finalize a socket, calling Close after shutdown() if needed
-    function ShutdownAndClose(rdwr: boolean): TNetResult;
+    function ShutdownAndClose(rdwr: boolean; waitms: integer = 0): TNetResult;
     /// close the socket - consider ShutdownAndClose() for clean closing
     function Close: TNetResult;
     /// access to the raw socket handle, i.e. @self
@@ -3264,7 +3264,7 @@ begin
   result := false; // e.g. neError or neClosed with no neRead
 end;
 
-function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
+function TNetSocketWrap.ShutdownAndClose(rdwr: boolean; waitms: integer): TNetResult;
 const
   SHUT_: array[boolean] of integer = (
     SHUT_RD, SHUT_RDWR);
@@ -3278,7 +3278,12 @@ begin
     if rdwr then
     {$endif OSLINUX}
       shutdown(TSocket(@self), SHUT_[rdwr]);
-    result := Close;
+    {$ifdef OSWINDOWS}
+    if waitms <> 0 then
+      // try to close the socket as documented by Microsoft (with rdwr=true)
+      WaitFor(waitms, [neRead, neError]); //
+    {$endif OSWINDOWS}
+    result := Close; // eventual closesocket()
   end;
 end;
 
