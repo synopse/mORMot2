@@ -387,7 +387,6 @@ type
     fNotifyProgress: RawUtf8;
     fSaveToFileBeforeExternal: THandle;
     fRestrict: TRawUtf8DynArray;
-    fCurrentMethodInfo: PSynTestMethodInfo;
     procedure EndSaveToFileExternal;
     function IsRestricted(const name: RawUtf8): boolean;
     function GetFailedCount: integer;
@@ -412,7 +411,7 @@ type
     /// this method is called during the run, after every testcase
     // - this implementation just report some minimal data to the console
     // by default, but may be overridden to update a real UI or reporting system
-    // - method implementation can use fCurrentMethodInfo^ to get run context
+    // - method implementation can use CurrentMethodInfo^ to get run context
     procedure AfterOneRun; virtual;
     /// could be overriden to add some custom command-line parameters
     class procedure DescribeCommandLine; virtual;
@@ -487,13 +486,12 @@ type
     /// could be overriden to redirect the content to proper TSynLog.Log()
     procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const); virtual;
+    /// method information currently running
+    // - is set by Run and available within TTestCase methods
+    function CurrentMethodInfo: PSynTestMethodInfo;
     /// number of failed tests after the last call to the Run method
     property FailedCount: integer
       read GetFailedCount;
-    /// method information currently running
-    // - is set by Run and available within TTestCase methods
-    property CurrentMethodInfo: PSynTestMethodInfo
-      read fCurrentMethodInfo;
     /// retrieve the information associated with a failure
     property Failed[Index: integer]: TSynTestFailed
       read GetFailed;
@@ -1079,6 +1077,9 @@ begin
   end;
 end;
 
+threadvar
+  _CurrentMethodInfo: PSynTestMethodInfo;
+
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
 begin
@@ -1274,14 +1275,24 @@ begin
   DoText(s);
 end;
 
+function TSynTests.CurrentMethodInfo: PSynTestMethodInfo;
+begin
+  result := _CurrentMethodInfo;
+end;
+
 procedure TSynTests.DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
 var
   len: integer;
+  nfo: PSynTestMethodInfo;
 begin
   if fNotifyProgress = '' then
   begin
     DoColor(ccGreen);
-    DoText(['  - ', fCurrentMethodInfo^.TestName, ':' + CRLF + '     ']);
+    nfo := _CurrentMethodInfo;
+    if nfo <> nil then
+      DoText(['  - ', nfo^.TestName, ':' + CRLF + '     '])
+    else
+      DoText('     ');
     fNotifyProgressLineLen := 0;
   end;
   len := length(value);
@@ -1308,8 +1319,8 @@ begin
        not (Level in TSynLogTestLog.Family.Level) then
       exit;
   FormatUtf8(TextFmt, TextArgs, txt);
-  if fCurrentMethodInfo <> nil then
-    Prepend(txt, [fCurrentMethodInfo^.TestName, ': ']);
+  if _CurrentMethodInfo <> nil then
+    Prepend(txt, [_CurrentMethodInfo^.TestName, ': ']);
   if Level = sllFail then
     TSynLogTestLog.DebuggerNotify(Level, txt)
   else
@@ -1317,16 +1328,19 @@ begin
 end;
 
 procedure TSynTests.AddFailed(const msg: string);
+var
+  nfo: PSynTestMethodInfo;
 begin
   if fFailedCount = length(fFailed) then
     SetLength(fFailed, NextGrow(fFailedCount));
   with fFailed[fFailedCount] do
   begin
     Error := msg;
-    if fCurrentMethodInfo <> nil then
+    nfo := _CurrentMethodInfo;
+    if nfo <> nil then
     begin
-      TestName := fCurrentMethodInfo^.TestName;
-      IdentTestName := fCurrentMethodInfo^.IdentTestName;
+      TestName := nfo^.TestName;
+      IdentTestName := nfo^.IdentTestName;
     end;
   end;
   inc(fFailedCount);
@@ -1368,6 +1382,7 @@ var
   i, t, m: integer;
   Elapsed, Version, s: RawUtf8;
   methods: TRawUtf8DynArray;
+  nfo: PSynTestMethodInfo;
   dir: TFileName;
   err: string;
   started: boolean;
@@ -1421,10 +1436,11 @@ begin
         try
           for t := 0 to c.Count - 1 do
           try
-            fCurrentMethodInfo := @c.fTests[t];
+            nfo := @c.fTests[t];
+            _CurrentMethodInfo := nfo;
             // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
             if IsRestricted(ToText(c.ClassType)) and
-               IsRestricted(FormatUtf8('%.%', [c, fCurrentMethodInfo^.MethodName])) then
+               IsRestricted(FormatUtf8('%.%', [c, nfo^.MethodName])) then
               continue;
             if not started then
             begin
@@ -1446,7 +1462,7 @@ begin
             TestTimer.Start;
             c.MethodSetup;
             try
-              fCurrentMethodInfo^.Method(); // run tests + Check()
+              nfo^.Method(); // run tests + Check()
               AfterOneRun;
             finally
               c.MethodCleanUp;
@@ -1457,7 +1473,7 @@ begin
             begin
               DoColor(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
-              DoTextLn(['! ', fCurrentMethodInfo^.IdentTestName]);
+              DoTextLn(['! ', nfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
               {$ifndef NOEXCEPTIONINTERCEPT}
@@ -1466,10 +1482,11 @@ begin
               DoColor(ccLightGray);
             end;
           end;
+          _CurrentMethodInfo := nil;
           if not started then
             continue;
           if c.fBackgroundRun.Waiting then
-            c.fBackgroundRun.Terminate({andwait=}true); // clean finish
+            c.RunWait({notify=}true, {timeout=}120, {synchronize=}true);
           c.CleanUp; // should be done before Destroy call
           if c.AssertionsFailed = 0 then
             DoColor(ccLightGreen)
@@ -1497,7 +1514,7 @@ begin
         end;
       end;
     finally
-      fCurrentMethodInfo := nil;
+      _CurrentMethodInfo := nil;
       fTestCaseClass := nil; // unregister the test classes once run
     end;
   except
@@ -1543,12 +1560,14 @@ end;
 procedure TSynTests.AfterOneRun;
 var
   Run, Failed: integer;
+  nfo: PSynTestMethodInfo;
   C: TSynTestCase;
   s: RawUtf8;
 begin
-  if fCurrentMethodInfo = nil then
+  nfo := _CurrentMethodInfo;
+  if nfo = nil then
     exit;
-  C := fCurrentMethodInfo^.Test as TSynTestCase;
+  C := nfo^.Test as TSynTestCase;
   Run := C.Assertions - C.fAssertionsBeforeRun;
   Failed := C.AssertionsFailed - C.fAssertionsFailedBeforeRun;
   if fNotifyProgress <> '' then
@@ -1562,7 +1581,7 @@ begin
     if fNotifyProgress <> '' then
       Append(s, '        ')
     else
-      Append(s, ['  - ', fCurrentMethodInfo^.TestName, ': ']);
+      Append(s, ['  - ', nfo^.TestName, ': ']);
     if Run = 0 then
       Append(s, 'no assertion')
     else if Run = 1 then
@@ -1573,7 +1592,7 @@ begin
   else
   begin
     DoColor(ccLightRed);   // ! to highlight the line
-    Append(s, ['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
+    Append(s, ['!  - ', nfo^.TestName, ': ', IntToThousandString(
       Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
   fNotifyProgress := '';
@@ -1714,7 +1733,7 @@ end;
 
 function TSynTestsLogged.BeforeRun: IUnknown;
 begin
-  with fCurrentMethodInfo^ do
+  with _CurrentMethodInfo^ do
     result := TSynLogTestLog.Enter(Test, pointer(MethodName));
 end;
 
@@ -1748,11 +1767,13 @@ begin
 end;
 
 procedure TSynTestsLogged.AddFailed(const msg: string);
+var
+  nfo: PSynTestMethodInfo;
 begin
   inherited AddFailed(msg);
-  if fCurrentMethodInfo <> nil then
-    with fCurrentMethodInfo^ do
-      fLogFile.Log(sllFail, '% [%]', [IdentTestName, msg], Test)
+  nfo := _CurrentMethodInfo;
+  if nfo <> nil then
+    fLogFile.Log(sllFail, '% [%]', [nfo^.IdentTestName, msg], nfo^.Test)
   else
     fLogFile.Log(sllFail, 'no context', self)
 end;
