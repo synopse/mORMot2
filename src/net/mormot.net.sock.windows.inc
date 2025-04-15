@@ -1429,6 +1429,7 @@ type
     over: array[TWinIocpEvent] of TOverlappedEvent;
     tag: TPollSocketTag;
     socket: TSocket;
+    recvclosing: boolean;
   end;
 
 
@@ -1560,7 +1561,7 @@ begin
            tmplen, RawSocketErrNo], self);
       end;
       if wioUnsubscribeShutdownSocket in fOptions then
-        TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
+        closesocket(sub^.socket); // brutal abort
       sub := sub.head.next;
     end;
   end;
@@ -1744,6 +1745,7 @@ var
   o, seq: pointer;
   e: PtrUInt;
   sll: TSynLogLevel;
+  res: TNetResult;
   one: PIocpSubscription absolute o;
   oe: POverlappedEvent;
 begin
@@ -1790,6 +1792,24 @@ begin
         oe^.prepared.UnLock
       else
         sll := sllError; // this TOverlappedEvent should be locked/prepared
+    end;
+    if one^.recvclosing then
+    begin
+      // delayed wioUnsubscribeShutdownSocket clean closing
+      if event <> wieRecv then
+        sll := sllWarning; // paranoid debug info
+      res := nrOk;
+      if closesocket(one^.socket) <> NOERROR then
+      begin
+        sll := sllError;
+        res := NetLastError;
+      end;
+      if not fOne.Free(one) then // eventually release this slot
+        sll := sllWarning;
+      if Assigned(fOnLog) then
+        fOnLog(sll, 'GetNext=%% recvclosing: eventual closesocket=%',
+          [IOCP_EVENT[event], pointer(one^.socket), ToText(res)^], self);
+      continue;
     end;
     if Assigned(fOnLog) then
       if sll = sllTrace then
@@ -1855,12 +1875,28 @@ begin
      fTerminated then
     exit;
   res := nrOK;
-  if wioUnsubscribeShutdownSocket in fOptions then
-    res := TNetSocket(o^.socket).ShutdownAndClose({rdwr=}false);
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'UnSubscribe(socket=% seq=%) cnt=% %',
       [pointer(o^.socket), pointer(o^.head.sequence), Count - 1,
        ToText(res)^], self);
+  if wioUnsubscribeShutdownSocket in fOptions then
+  begin
+    // on Windows, ShutdownAndClose() would prematurely abort the socket
+    // because closesocket() is aborting any pending task
+    // https://lenholgate.com/blog/2008/04/socket-connection-termination.html
+    // https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-shutdown
+    shutdown(o^.socket, SHUT_WR); // = SD_SEND
+    o^.recvclosing := true; // flag for GetNext() to call closesocket()
+    if PrepareNext(one, wieRecv) then
+    begin
+      // delay WSARecv() until the function completes with success
+      result := true;
+      one := nil;
+      exit;
+    end
+    else // if WSARecv() failed, graceful disconnect is not possible
+      closesocket(o^.socket);
+  end;
   result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
   one := nil;
 end;

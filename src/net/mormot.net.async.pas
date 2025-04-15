@@ -1749,7 +1749,8 @@ begin
       // unsubscribe and close the socket
       {$ifdef USE_WINIOCP}
       if connection.fIocpSub <> nil then
-        fIocpRecvSend.Unsubscribe(connection.fIocpSub) // with wioUnsubscribeShutdownSocket
+        fIocpRecvSend.Unsubscribe(connection.fIocpSub)
+        // with wioUnsubscribeShutdownSocket for final wieRecv + closesocket()
       else
         // close the socket even if not subscribed (e.g. HTTP/1.0)
         sock.ShutdownAndClose({rdwr=}true, {waitms=}100); // ensure sent
