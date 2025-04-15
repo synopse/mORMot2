@@ -172,6 +172,7 @@ type
     procedure AddLog(condition: boolean; const msg: string);
     procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const);
+    procedure OnBeforeEachBackgroundTask(Sender: TObject);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -1080,6 +1081,12 @@ end;
 threadvar
   _CurrentMethodInfo: PSynTestMethodInfo;
 
+procedure TSynTestCase.OnBeforeEachBackgroundTask(Sender: TObject);
+begin
+  // executed in the context of the background thread
+  _CurrentMethodInfo := fOwner.CurrentMethodInfo;
+end;
+
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
 begin
@@ -1093,7 +1100,10 @@ begin
   else
   begin
     if fBackgroundRun = nil then
+    begin
       fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
+      fBackgroundRun.OnBeforeEachTask := OnBeforeEachBackgroundTask;
+    end;
     fOwner.DoLog(sllDebug, 'Run(%,%) using %',
       [TaskName, ForcedThreaded, fBackgroundRun]);
     fBackgroundRun.Run(OnTask, Sender, TaskName, ForcedThreaded);
