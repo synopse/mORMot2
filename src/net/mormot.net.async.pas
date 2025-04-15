@@ -1750,6 +1750,9 @@ begin
       {$ifdef USE_WINIOCP}
       if connection.fIocpSub <> nil then
         fIocpRecvSend.Unsubscribe(connection.fIocpSub) // with wioUnsubscribeShutdownSocket
+      else
+        // close the socket even if not subscribed (e.g. HTTP/1.0)
+        sock.ShutdownAndClose({rdwr=}true, {waitms=}100); // ensure sent
       {$else}
       if fSubWrite in connection.fFlags then
         // write first because of fRead.UnsubscribeShouldShutdownSocket=true
@@ -1758,10 +1761,10 @@ begin
         // note: fRead.UnsubscribeShouldShutdownSocket=true, so ShutdownAndClose
         // is done now on Epoll/TWinIocp, or at next PollForPendingEvents()
         fRead.Unsubscribe(sock, TPollSocketTag(connection))
-      {$endif USE_WINIOCP}
       else
         // close the socket even if not subscribed (e.g. HTTP/1.0)
         sock.ShutdownAndClose({rdwr=}false);
+      {$endif USE_WINIOCP}
       result := true;
     end
     {$ifdef USE_WINIOCP}

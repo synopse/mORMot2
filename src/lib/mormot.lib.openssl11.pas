@@ -11085,7 +11085,7 @@ begin
       c.Free;
     end;
   finally
-    ns.ShutdownAndClose(true);
+    ns.ShutdownAndClose(false);
   end;
 end;
 

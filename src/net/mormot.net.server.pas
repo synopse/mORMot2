@@ -4664,7 +4664,7 @@ begin
       begin
         banlen := ord(HTTP_BANIP_RESPONSE[0]);
         cltsock.Send(@HTTP_BANIP_RESPONSE[1], banlen); // 418 I'm a teapot
-        cltsock.ShutdownAndClose({rdwr=}false);
+        cltsock.ShutdownAndClose({rdwr=}true, {waitms=}10);
         continue; // abort even before TLS or HTTP start
       end;
       OnConnect;
