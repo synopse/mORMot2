@@ -305,7 +305,7 @@ type
       ForcedThreaded: boolean = false);
     /// wait for background thread started by Run() to finish
     procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60;
-      CallSynchronize: boolean = false);
+      CallSynchronize: boolean = true);
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
@@ -1112,13 +1112,20 @@ end;
 
 procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer;
   CallSynchronize: boolean);
+var
+  timer: TPrecisionTimer;
 begin
   if not fBackgroundRun.Waiting then
     exit;
   if NotifyThreadCount then
-    NotifyProgress(['(waiting for ', Plural('thread', fBackgroundRun.Running), ')']);
+  begin
+    timer.Start;
+    NotifyProgress(['waiting for ', Plural('thread', fBackgroundRun.Running), ':']);
+  end;
   if not fBackgroundRun.RunWait(TimeoutSec, CallSynchronize) then
-    TestFailed('RunWait timeout after % sec', [TimeoutSec]);
+    TestFailed(' error: timeout after % sec' + CRLF, [TimeoutSec])
+  else if NotifyThreadCount then
+    NotifyProgress([timer.Stop, CRLF]);
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
