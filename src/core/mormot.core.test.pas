@@ -1451,6 +1451,7 @@ begin
         started := false;
         c := fTestCaseClass[i].Create(self); // add all published methods
         try
+          nfo := nil;
           for t := 0 to c.Count - 1 do
           try
             nfo := @c.fTests[t];
@@ -1490,7 +1491,8 @@ begin
             begin
               DoColor(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
-              DoTextLn(['! ', nfo^.IdentTestName]);
+              if nfo <> nil then
+                DoTextLn(['! ', nfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
               {$ifndef NOEXCEPTIONINTERCEPT}

@@ -7156,7 +7156,7 @@ begin
     // Obj had children and DeleteChildren is True
     try
       SearchScope := lssSingleLevel;
-      Search([], '', Obj);
+      Search([], {filter=}'', {dn=}Obj);
       children := fSearchResult.ObjectNames;
       for i := 0 to high(children) do
         if not Delete(children[i], {DeleteChildren=}true) then

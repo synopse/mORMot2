@@ -3352,13 +3352,15 @@ end;
 
 procedure DoWork(const One: TLoggedWork; Owner: TLoggedWorker);
 begin
-  if Assigned(Owner.fOnBeforeEachTask) then
+  if Assigned(Owner) and
+     Assigned(Owner.fOnBeforeEachTask) then
     Owner.fOnBeforeEachTask(One.Sender);
   if One.Data.VarType = 0 then
     One.Task(One.Sender)
   else
     TOnLoggedWorkProcessData(One.Task)(One.Data);
-  if Assigned(Owner.fOnAfterEachTask) then
+  if Assigned(Owner) and
+     Assigned(Owner.fOnAfterEachTask) then
     Owner.fOnAfterEachTask(One.Sender);
 end;
 
