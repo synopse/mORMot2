@@ -688,6 +688,7 @@ end;
 {$ifndef ONLYUSEHTTPSOCKET}
 procedure TTestMultiThreadProcess.WindowsAPI;
 begin
+  sleep(50); // seems enough to avoid ERROR_SHARING_VIOLATION in AddUrl() on XP
   Test(TRestHttpClientWinHTTP, useHttpApi);
 end;
 {$endif ONLYUSEHTTPSOCKET}
