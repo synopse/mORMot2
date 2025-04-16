@@ -1871,7 +1871,7 @@ function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
 // positive recognition, and no waranty that the memory buffer is a valid JPEG
 // - returns FALSE if the buffer does not have any expected SOI/SOF markers
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
-  out Height, Width, Bits: integer): boolean; overload;
+  out Width, Height, Bits: integer): boolean; overload;
 
 
 { ************* Text Memory Buffers and Files }
@@ -9026,7 +9026,7 @@ begin
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
-  out Height, Width, Bits: integer): boolean;
+  out Width, Height, Bits: integer): boolean;
 var
   je: PAnsiChar;
 begin
