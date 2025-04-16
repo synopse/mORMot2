@@ -1494,7 +1494,8 @@ type
     // will allocate one in the method)
     // - for wieConnect, you need to specify a TNetSocket (not already bound) in
     // netsock and a TNetAddr in buf/buflen
-    function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
+    function PrepareNext(const ctxt: shortstring;
+      one: PWinIocpSubscription; event: TWinIocpEvent;
       buf: pointer = nil; buflen: integer = 0; netsock: TNetSocket = nil): boolean;
     /// add manually an event to the IOCP queue
     // - it won't make any actual access to a socket, just append an event to

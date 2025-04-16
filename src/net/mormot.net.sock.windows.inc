@@ -1612,11 +1612,11 @@ const
   IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWAC1234';
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
-function TWinIocp.PrepareNext(one: PWinIocpSubscription;
+function TWinIocp.PrepareNext(const ctxt: shortstring; one: PWinIocpSubscription;
   event: TWinIocpEvent; buf: pointer; buflen: integer;
   netsock: TNetSocket): boolean;
 var
-  bytes, flags, e: cardinal;
+  bytes, flags: cardinal;
   o: PIocpSubscription absolute one;
   oe: POverlappedEvent;
   err: PUtf8Char;
@@ -1703,21 +1703,18 @@ begin
   begin
     if wioLockEvent in fOptions then
       oe^.prepared.UnLock;
-    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s): %s on %x',
-      [IOCP_EVENT[event], err, integer(o^.socket)]);
+    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s) %s: %s on %x',
+      [IOCP_EVENT[event], ctxt, err, integer(o^.socket)]);
   end;
   if result then
     LockedInc32(@fPosted);
   if Assigned(fOnLog) then
     if result then
-      fOnLog(sllTrace, 'PrepareNext(%%,%)',
-        [IOCP_EVENT[event], pointer(o^.socket), buflen], self)
+      fOnLog(sllTrace, 'PrepareNext(%%,%) %',
+        [IOCP_EVENT[event], pointer(o^.socket), buflen, ctxt], self)
     else
-    begin
-      e := GetLastError;
-      fOnLog(sllDebug, 'PrepareNext(%%) error % %',
-        [IOCP_EVENT[event], pointer(o^.socket), e, WinErrorConstant(e)^], self);
-    end;
+      fOnLog(sllDebug, 'PrepareNext(%%) %: error % %', [IOCP_EVENT[event],
+        pointer(o^.socket), ctxt, WinErrorConstantText(RawSocketErrNo)], self);
 end;
 
 function TWinIocp.Enqueue(one: PWinIocpSubscription; event: TWinIocpEvent;
@@ -1889,7 +1886,7 @@ begin
     // https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-shutdown
     shutdown(o^.socket, SHUT_WR); // = SD_SEND
     o^.recvclosing := true; // flag for GetNext() to call closesocket()
-    if PrepareNext(one, wieRecv) then
+    if PrepareNext('Unsub', one, wieRecv) then
     begin
       // delay WSARecv() until the function completes with success
       result := true;

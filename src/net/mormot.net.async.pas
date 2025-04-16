@@ -1586,10 +1586,10 @@ begin
   else if fSecure = nil then
     // try to send some plain data asynchronously
     // otherwise GetNext() would return with no delay
-    result := queue.PrepareNext(fIocpSub, wieSend, fWr.Buffer, fWr.len)
+    result := queue.PrepareNext('NextWrite', fIocpSub, wieSend, fWr.Buffer, fWr.len)
   else
     // on TLS, don't send any plain buffer but let INetTls handle the socket
-    result := queue.PrepareNext(fIocpSub, wieSend);
+    result := queue.PrepareNext('NextWriteTls', fIocpSub, wieSend);
 end;
 
 {$else}
@@ -1954,9 +1954,9 @@ begin
   if result then
     case sub of
       pseRead:
-        result := fIocpRecvSend.PrepareNext(connection.fIocpSub, wieRecv);
+        result := fIocpRecvSend.PrepareNext('Sub', connection.fIocpSub, wieRecv);
       pseWrite:
-        result := fIocpRecvSend.PrepareNext(connection.fIocpSub, wieSend);
+        result := fIocpRecvSend.PrepareNext('Sub', connection.fIocpSub, wieSend);
     end;
   {$else}
   if sub = pseRead then
@@ -2139,7 +2139,7 @@ begin
         begin
           {$ifdef USE_WINIOCP}
           // IOCP requires per-notification subscription
-          if not fIocpRecvSend.PrepareNext(connection.fIocpSub, wieRecv) then
+          if not fIocpRecvSend.PrepareNext('Next', connection.fIocpSub, wieRecv) then
           {$else}
           if not (fSubRead in connection.fFlags) then
             // it is time to subscribe for any future read on this connection
@@ -2161,7 +2161,7 @@ begin
         SleepHiRes(0); // avoid switch threads for nothing
         {$ifdef USE_WINIOCP}
         // IOCP requires per-notification subscription
-        if not fIocpRecvSend.PrepareNext(connection.fIocpSub, wieRecv) then
+        if not fIocpRecvSend.PrepareNext('Next', connection.fIocpSub, wieRecv) then
           CloseConnection(connection, 'ProcessRead waitlock iocp');
         {$endif USE_WINIOCP}
         result := false; // retry later
@@ -3856,7 +3856,7 @@ begin
       EAsyncConnections.RaiseUtf8('%.Execute: bind failed', [self]);
     {$ifdef USE_WINIOCP}
     fIocpAcceptSub := fIocpAccept.Subscribe(fServer.Sock, 0);
-    if not fIocpAccept.PrepareNext(fIocpAcceptSub, wieAccept) then
+    if not fIocpAccept.PrepareNext('First', fIocpAcceptSub, wieAccept) then
       RaiseLastError('TAsyncServer.Execute: acceptex', EWinIocp);
     {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
     sockets := NewRawSockets(fServer.SocketFamily, nlTcp, 10000);
@@ -3900,7 +3900,7 @@ begin
                 inc(socketsalloc);
               end;
               {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-              if not fIocpAccept.PrepareNext(sub, wieAccept, nil, 0, s) then
+              if not fIocpAccept.PrepareNext('Next', sub, wieAccept, nil, 0, s) then
                 res := nrFatalError;
             end;
           end;
@@ -4363,7 +4363,7 @@ begin
     include(aConnection.fInternalFlags, ifWriteWait);
     if aConnection.fIocpSub = nil then
       aConnection.fIocpSub := fOwner.fIocpAccept.Subscribe(aConnection.fSocket, tag);
-    if fOwner.fIocpAccept.PrepareNext(aConnection.fIocpSub, wieConnect) then
+    if fOwner.fIocpAccept.PrepareNext('Client', aConnection.fIocpSub, wieConnect) then
       result := nrOk;
     {$else}
     result := addr.SocketConnect(aConnection.fSocket, -1);
