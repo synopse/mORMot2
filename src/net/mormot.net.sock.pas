@@ -1415,7 +1415,7 @@ type
   EWinIocp = class(ExceptionWithProps);
 
   /// define the events TWinIocp can monitor
-  // - all wieCustom* events are user-triggered events via EnqueueCustom()
+  // - all wieCustom* events are user-triggered events via TWinIocp.Enqueue()
   TWinIocpEvent = (
     wieRecv,
     wieSend,
@@ -1499,7 +1499,7 @@ type
       buf: pointer = nil; buflen: integer = 0; netsock: TNetSocket = nil): boolean;
     /// add manually an event to the IOCP queue
     // - it won't make any actual access to a socket, just append an event to
-    // the queue, as regular wieRecv/wieSend/wieAccept/wieConnect or any wieCustom*
+    // the queue, as regular wieRecv .. wieConnect event or any wieCustom*
     function Enqueue(one: PWinIocpSubscription; event: TWinIocpEvent;
       bytes: cardinal = 0): boolean;
     /// pick a pending task from the internal queue within a specified timeout

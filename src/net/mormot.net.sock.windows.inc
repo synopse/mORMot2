@@ -330,17 +330,17 @@ const
 
   // Error return codes from gethostbyname and gethostbyaddr
   // Authoritative Answer: Host not found
-  WSAHOST_NOT_FOUND       = WSABASEERR + 1001;
+  WSAHOST_NOT_FOUND   = WSABASEERR + 1001;
   // Non-Authoritative: Host not found, or SERVERFAIL
-  WSATRY_AGAIN            = WSABASEERR + 1002;
+  WSATRY_AGAIN        = WSABASEERR + 1002;
   // Non recoverable errors, FORMERR, REFUSED, NOTIMP
-  WSANO_RECOVERY          = WSABASEERR + 1003;
+  WSANO_RECOVERY      = WSABASEERR + 1003;
   // Valid name, no data record of requested type
-  WSANO_DATA              = WSABASEERR + 1004;
+  WSANO_DATA          = WSABASEERR + 1004;
   // no address, look for MX record
-  WSANO_ADDRESS           = WSANO_DATA;
+  WSANO_ADDRESS       = WSANO_DATA;
 
-  // WinSock 2 extension
+  // regular error codes as returned by the WinSock 2 extension
   WSAIOPENDING        = ERROR_IO_PENDING;
   WSAIOINCOMPLETE     = ERROR_IO_INCOMPLETE;
   WSAINVALIDHANDLE    = ERROR_INVALID_HANDLE;
@@ -349,8 +349,8 @@ const
   WSAOPERATIONABORTED = ERROR_OPERATION_ABORTED;
 
 const
-  WSADESCRIPTION_LEN     =   256;
-  WSASYS_STATUS_LEN      =   128;
+  WSADESCRIPTION_LEN  =   256;
+  WSASYS_STATUS_LEN   =   128;
 
   SHUT_RD   = 0;  // = SD_RECEIVE
   SHUT_WR   = 1;  // = SD_SEND
@@ -488,6 +488,10 @@ function WSAIoctl(s: TSocket; dwIoControlCode: cardinal; lpvInBuffer: pointer;
    lpcbBytesReturned: PCardinal; lpOverlapped: POverlapped;
    lpCompletionRoutine: pointer): integer; stdcall;
   external ws2 name 'WSAIoctl';
+
+function WSAGetOverlappedResult(s: TSocket; lpOverlapped: POverlapped;
+   var lpcbTransfer: cardinal; fWait: cardinal; var lpdwFlags: cardinal): cardinal;
+  stdcall; external ws2 name 'WSAGetOverlappedResult';
 
 function recvfrom(s: TSocket; Buf: pointer; len, flags: integer;
    from: PSockAddr; fromlen: Pinteger): integer; stdcall;
@@ -1412,6 +1416,9 @@ end;
 
 { *************************** Windows IOCP sockets support }
 
+// good IOCP reference litterature and code is available at
+// https://www.winsocketdotnetworkprogramming.com/winsock2programming/winsock2advancedscalableapp6chap.html
+
 type
   // one overlapped structure for each TWinIocpEvent
   TOverlappedEvent = record // should NOT be packed
@@ -1764,11 +1771,12 @@ end;
 function TWinIocp.GetNext(timeoutms: cardinal;
   out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
 var
-  o, completionkey, sock: pointer;
+  ov, completionkey, sock: pointer;
   e: PtrUInt;
   sll: TSynLogLevel;
   res: TNetResult;
-  one: PIocpSubscription absolute o;
+  err, flags: cardinal;
+  one: PIocpSubscription;
   oe: POverlappedEvent;
 begin
   result := nil;
@@ -1777,18 +1785,22 @@ begin
     exit;
   repeat
     bytes := 0;
-    o := nil;
+    ov := nil;
     completionkey := nil;
     sll := sllTrace;
     // retrieve the next pending event from the IOCP queue
     LockedInc32(@fWaiting);
-    IocpGetQueuedStatus(fIocp, bytes, completionkey, o, timeoutms);
+    err := NO_ERROR;
+    if not IocpGetQueuedStatus(fIocp, bytes, completionkey, ov, timeoutms) then
+      if ov <> nil then
+        err := GetLastError;
     LockedDec32(@fWaiting);
     if fTerminated or
-       (o = nil) or // fIocp handle is likely to be closed
+       (ov = nil) or // fIocp handle is likely to be closed
        (completionkey = nil) then // nil from Terminate
       exit;
     LockedDec32(@fPosted);
+    one := ov;
     e := PtrUInt(completionkey) - 1;
     if e <= PtrUInt(ord(high(event))) then
     begin
@@ -1796,25 +1808,35 @@ begin
       PByte(@event)^ := e;
       if Assigned(fOnLog) then
         if bytes = 0 then
-          fOnLog(sllTrace, 'GetNextEnqueue=%%',
+          fOnLog(sllTrace, 'GetNext=Enqueue %%',
             [IOCP_EVENT[event], pointer(one^.socket)], self)
         else
-          fOnLog(sllTrace, 'GetNextEnqueue=%% bytes=%',
+          fOnLog(sllTrace, 'GetNext=Enqueue %% bytes=%',
             [IOCP_EVENT[event], pointer(one^.socket), bytes], self);
-      result := o;
+      result := ov; // Enqueue()  used pointer(one) as overlapped parameter
       exit;
     end;
     // O(1) decode overlapped socket notification from PrepareNext()
-    inc(POverlapped(o));
-    PByte(@event)^ := PByte(o)^; // TOverlappedEvent.event just after overlapped
+    inc(POverlapped(one));
+    PByte(@event)^ := PByte(one)^; // TOverlappedEvent.event just after overlapped
     if event > high(one^.over) then
       raise EWinIocp.Create('TWinIocp.GetNext: corrupted overlapped structure');
-    dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
-    // now o/one points to PWinIocpSubscription/PIocpSubscription
+    dec(PByte(one), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
+    // now one^ points to PWinIocpSubscription/PIocpSubscription
     if pointer(one^.head.sequence) <> completionkey then
       sll := sllWarning // detect and ignore ABA race condition
     else
     begin
+      if (err <> NO_ERROR) and
+         Assigned(fOnLog) then
+      begin
+        // try to translate the overlapped status to the Winsock error code
+        if WSAGetOverlappedResult(one^.socket, ov, bytes, {wait=}0, flags) <> 0 then
+          err := RawSocketErrNo;
+        // log error for debugging, but let recv() or send() intercept the state
+        fOnLog(sllWarning, 'GetNext: %% returned % % bytes=%', [IOCP_EVENT[event],
+          pointer(one^.socket), err, WinErrorConstant(err)^, bytes], self);
+      end;
       if wioLockEvent in fOptions then
       begin
         oe := @one^.over[event];
@@ -1847,7 +1869,7 @@ begin
         continue;
       end;
       if sll = sllTrace then
-        result := o; // notify caller of a valid event
+        result := pointer(one); // notify caller of a valid event
     end;
     if Assigned(fOnLog) then
       if sll = sllTrace then
