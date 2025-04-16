@@ -1443,6 +1443,7 @@ type
 { TWinIocpSubscription }
 
 const
+  STATUS_LOCAL_DISCONNECT  = $C000013B;
   STATUS_REMOTE_DISCONNECT = $C000013C;
 
 function TWinIocpSubscription.Tag: TPollSocketTag;
@@ -1461,35 +1462,24 @@ begin
     result := TNetSocket(PIocpSubscription(@self)^.socket);
 end;
 
-function TWinIocpSubscription.CurrentStatus: TPollSocketEvents;
+function TWinIocpSubscription.CurrentStatus(event: TWinIocpEvent): TPollSocketEvents;
 var
   o: PIocpSubscription;
 begin
   result := [];
   o := @self;
-  if o = nil then
+  if (o = nil) or
+     (event > high(o^.over)) then
     exit;
-  case cardinal(PtrUInt(o^.over[wieRecv].overlapped.Internal)) of
+  case cardinal(PtrUInt(o^.over[event].overlapped.Internal)) of
     STATUS_WAIT_0:
       ; // most common case
     STATUS_PENDING:
-      include(result, pseRead);
-    STATUS_REMOTE_DISCONNECT:
-      include(result, pseClosed);
-  end;
-  case cardinal(PtrUInt(o^.over[wieSend].overlapped.Internal)) of
-    STATUS_WAIT_0:
-      ; // most common case
-    STATUS_PENDING:
-      include(result, pseWrite);
-    STATUS_REMOTE_DISCONNECT:
-      include(result, pseClosed);
-  end;
-  case cardinal(PtrUInt(o^.over[wieAccept].overlapped.Internal)) of
-    STATUS_WAIT_0:
-      ; // most common case
-    STATUS_PENDING:
-      include(result, pseRead); // as select/poll/epoll
+      if event in [wieRecv, wieAccept] then // as select() / poll()
+        include(result, pseRead)
+      else
+        include(result, pseWrite);
+    STATUS_LOCAL_DISCONNECT,
     STATUS_REMOTE_DISCONNECT:
       include(result, pseClosed);
   end;

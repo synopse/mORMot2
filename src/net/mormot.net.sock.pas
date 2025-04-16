@@ -1443,7 +1443,7 @@ type
     /// return the TNetSocket associated with a Subscribe() call
     function Socket: TNetSocket;
     /// check the overlapped status of a Subscribe() call
-    function CurrentStatus: TPollSocketEvents;
+    function CurrentStatus(event: TWinIocpEvent): TPollSocketEvents;
   end;
 
   /// allow to customize TWinIocp process
