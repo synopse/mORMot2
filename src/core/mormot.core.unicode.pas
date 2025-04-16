@@ -7974,26 +7974,21 @@ end;
 
 function SplitRights(const Str, SepChar: RawUtf8): RawUtf8;
 var
-  i, j, sep: PtrInt;
-  c: AnsiChar;
+  i: PtrInt;
 begin
-  sep := length(SepChar);
-  if sep > 0 then
-    if sep = 1 then
-      result := SplitRight(Str, SepChar[1])
-    else
+  if SepChar <> '' then
+    if length(SepChar) = 1 then
     begin
+      result := SplitRight(Str, SepChar[1]);
+      exit;
+    end
+    else
       for i := length(Str) downto 1 do
-      begin
-        c := Str[i];
-        for j := 1 to sep do
-          if c = SepChar[j] then
-          begin
-            FastSetString(result, @PByteArray(Str)[i], length(Str) - i);
-            exit;
-          end;
-      end;
-    end;
+        if PosExChar(Str[i], SepChar) <> 0 then
+        begin
+          FastSetString(result, @PByteArray(Str)[i], length(Str) - i);
+          exit;
+        end;
   result := Str;
 end;
 

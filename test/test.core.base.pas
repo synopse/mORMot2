@@ -5509,10 +5509,14 @@ begin
   CheckEqual(TrimControlChars('a  '), 'a');
   CheckEqual(TrimControlChars('a  b'), 'ab');
   CheckEqual(TrimControlChars('synopse.info, www.synopse.info'), 'synopse.info,www.synopse.info');
-  Check(split(res, ',') = 'one');
-  Check(split(res, '*') = res);
-  Check(split(res, ',', 5) = 'two');
-  Check(split(res, '*', 6) = 'wo,three');
+  CheckEqual(Split(res, ','), 'one', 'sp1');
+  CheckEqual(Split(res, ',', s1), 'two,three', 'sp2');
+  CheckEqual(s1, 'one');
+  CheckEqual(Split(res, ',', s1, {toupper=}true), 'TWO,THREE');
+  CheckEqual(s1, 'ONE');
+  Check(Split(res, '*') = res);
+  Check(Split(res, ',', 5) = 'two');
+  Check(Split(res, '*', 6) = 'wo,three');
   CheckEqual(Split('titi-tata-toto', ['-'], [@s1, @s2, @s3]), 3, 'split3');
   CheckEqual(s1, 'titi', 'split3a');
   CheckEqual(s2, 'tata', 'split3b');
@@ -5533,6 +5537,12 @@ begin
   CheckEqual(s1, 'a', 'split4a');
   CheckEqual(s2, 'b', 'split4b');
   CheckEqual(s3, '', 'split4c');
+  CheckEqual(SplitRight(res, ','), 'three');
+  CheckEqual(SplitRight(res, 'r'), 'ee');
+  CheckEqual(SplitRights(res, ','), 'three');
+  CheckEqual(SplitRights(res, '!,'), 'three');
+  CheckEqual(SplitRights(res, ',!'), 'three');
+  CheckEqual(SplitRights(res, '!thr'), 'ee');
   Check(mormot.core.base.StrLen(nil) = 0);
   for i := length(res) + 1 downto 1 do
     Check(mormot.core.base.StrLen(Pointer(@res[i])) = length(res) - i + 1);
