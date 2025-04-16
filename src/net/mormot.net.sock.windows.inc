@@ -1518,10 +1518,10 @@ end;
 
 destructor TWinIocp.Destroy;
 var
-  tix, endtix: cardinal;
-  sub: PIocpSubscription;
-  tmp: cardinal;
+  tix, endtix, tmp, err: cardinal;
   tmplen: integer;
+  txt: PAnsiChar;
+  sub: PIocpSubscription;
 begin
   if Assigned(fOnLog) then
     fOnLog(sllDebug, 'Destroy count=%', [fOne.Count], self);
@@ -1554,14 +1554,35 @@ begin
     begin
       if Assigned(fOnLog) then
       begin
-        tmplen := 4; // is usually recv=-1 + WSAEWOULDBLOCK so not recoverable
-        tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
-        fOnLog(sllWarning, 'leak sock=% over=% recv=% %',
-          [pointer(sub^.socket), PtrUInt(sub^.over[wieRecv].overlapped.Internal),
-           tmplen, RawSocketErrNo], self);
+        tmplen := 0;
+        err := NO_ERROR;
+        if sub^.recvclosing then  // expected behavior - not a leak
+          txt := 'eventual close' // shutdown() was made: no recv()
+        else
+        begin
+          if wioUnsubscribeShutdownSocket in fOptions then
+            txt := 'close'
+          else
+            txt := 'leak';
+          // check the socket state
+          tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
+          // return usually recv=-1 + WSAEWOULDBLOCK so not recoverable
+          if tmplen < 0 then
+            err := RawSocketErrNo;
+        end;
+        if (err = NO_ERROR) or
+           (err = WSAEWOULDBLOCK) then
+          fOnLog(sllTrace, 'Destroy: % sock=%', [txt, pointer(sub^.socket)], self)
+        else
+          fOnLog(sllWarning, 'Destroy: % sock=% unexpected recv=% %', [txt,
+            pointer(sub^.socket), tmplen, WinErrorConstantText(err)], self);
       end;
       if wioUnsubscribeShutdownSocket in fOptions then
-        closesocket(sub^.socket); // brutal abort
+      begin
+        if closesocket(sub^.socket) <> NO_ERROR then // brutal abort
+          fOnLog(sllWarning, 'Destroy: closesocket(%)=%', [
+            pointer(sub^.socket), WinErrorConstantText(RawSocketErrNo)], self);
+      end;
       sub := sub.head.next;
     end;
   end;
