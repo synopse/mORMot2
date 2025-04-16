@@ -202,19 +202,19 @@ const
   NI_DGRAM         = $10;
 
 const
-  SOCK_STREAM     = 1;               // stream socket
-  SOCK_DGRAM      = 2;               // datagram socket
-  SOCK_RAW        = 3;               // raw-protocol interface
-  SOCK_RDM        = 4;               // reliably-delivered message
-  SOCK_SEQPACKET  = 5;               // sequenced packet stream
+  SOCK_STREAM     = 1;         // stream socket
+  SOCK_DGRAM      = 2;         // datagram socket
+  SOCK_RAW        = 3;         // raw-protocol interface
+  SOCK_RDM        = 4;         // reliably-delivered message
+  SOCK_SEQPACKET  = 5;         // sequenced packet stream
 
   // TCP options
   TCP_NODELAY     = $0001;
 
   // Address families
-  AF_UNSPEC       = 0;               // unspecified
-  AF_INET         = 2;               // internetwork: UDP, TCP, etc
-  AF_INET6        = 23;              // Internetwork Version 6
+  AF_UNSPEC       = 0;         // unspecified
+  AF_INET         = 2;         // internetwork: UDP, TCP, etc
+  AF_INET6        = 23;        // Internetwork Version 6
   AF_MAX          = 24;
 
   // Protocol families, same as address families for now
@@ -1884,6 +1884,9 @@ begin
     // because closesocket() is aborting any pending task
     // https://lenholgate.com/blog/2008/04/socket-connection-termination.html
     // https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-shutdown
+    // - user code may call send() directly without wieSend IOCP (e.g.
+    // mormot.net.async) so we need more than a flag
+    // - follow documented pattern: shutdown(SD_SEND) + recv()=0 + closesocket
     shutdown(o^.socket, SHUT_WR); // = SD_SEND
     o^.recvclosing := true; // flag for GetNext() to call closesocket()
     if PrepareNext('Unsub', one, wieRecv) then

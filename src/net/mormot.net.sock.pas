@@ -3254,7 +3254,7 @@ begin
   if events = [] then
     exit; // the socket seems stable with no pending input
   if neRead in events then
-    // - on Windows, may be because of WSACONNRESET (nrClosed)
+    // - on Windows, may be WSACONNRESET (nrClosed), with recv() returning 0
     // - on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
     // - no need to MakeAsync: recv() should not block after neRead
     // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
@@ -3282,7 +3282,8 @@ begin
     {$ifdef OSWINDOWS}
     if waitms <> 0 then
       // try to close the socket as documented by Microsoft (with rdwr=true)
-      WaitFor(waitms, [neRead, neError]); //
+      // - documented pattern is: shutdown(SD_SEND) + recv()=0 + closesocket
+      WaitFor(waitms, [neRead, neError]); // typically neRead = WSACONNRESET
     {$endif OSWINDOWS}
     result := Close; // eventual closesocket()
   end;
