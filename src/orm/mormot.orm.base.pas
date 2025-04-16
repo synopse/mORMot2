@@ -4085,15 +4085,13 @@ begin
   fPropertyIndex := aPropertyIndex;
 end;
 
-const
-  NULL_SHORTSTRING: string[1] = '';
 var
   OrmHashSeed: cardinal; // random seed to avoid hash flooding
 
 function TOrmPropInfo.GetOrmFieldTypeName: PShortString;
 begin
   if self = nil then
-    result := @NULL_SHORTSTRING
+    result := @NULCHAR
   else
     result := ToText(fOrmFieldType);
 end;
