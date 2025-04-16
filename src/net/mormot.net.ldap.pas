@@ -6511,7 +6511,8 @@ begin
     log.Log(sllTrace, 'Reconnect: OpenBind(%)', [fSettings.TargetUri], self);
   step := 'OpenBind';
   try
-    fSock.OpenBind(fSettings.TargetHost, fSettings.TargetPort, fSettings.Tls);
+    fSock.OpenBind(fSettings.TargetHost, fSettings.TargetPort,
+                   {bind=}false, fSettings.Tls);
     // re-bound with the previous mean of authentication
     step := 'DoBind';
     result := DoBind(fBoundAs);
