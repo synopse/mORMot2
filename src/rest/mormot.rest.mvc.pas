@@ -1536,7 +1536,8 @@ begin
     exit; // no cookie -> no session
   result := fContext.Validate(
     cookie, PRecordData, PRecordTypeInfo, PExpires, nil, Invalidate);
-  if result <= 0 then
+  if (result <= 0) and
+     not Invalidate then
     // delete any invalid/expired cookie on server side
     Finalize;
 end;
