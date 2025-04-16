@@ -1426,7 +1426,7 @@ type
   PIocpSubscription = ^TIocpSubscription;
   TIocpSubscription = packed record
     head: TLockedListOne; // should be the first for TLockedList to work
-    over: array[TWinIocpEvent] of TOverlappedEvent;
+    over: array[wieRecv .. wieConnect] of TOverlappedEvent;
     tag: TPollSocketTag;
     socket: TSocket;
     recvclosing: boolean;
@@ -1610,7 +1610,7 @@ begin
   o := fOne.New; // returned o^ is filled with zeros
   o^.tag := tag;
   o^.socket := TSocket(socket);
-  for e := low(e) to high(e) do
+  for e := low(o^.over) to high(o^.over) do
     o^.over[e].event := e; // marker to convert POverlapped to PIocpSubscription
   sll := sllTrace;
   res := nrOk;
@@ -1648,10 +1648,13 @@ begin
      (one = nil) or
      fTerminated then
     exit;
+  if event > high(o^.over) then
+    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext: unexpected %s on %x',
+      [IOCP_EVENT[event], integer(o^.socket)]); // fatal logic error
   oe := @o^.over[event]; // each event has its own TOverlappedEvent buffer
   if (wioLockEvent in fOptions) and
      not oe^.prepared.TryLock then
-    raise EWinIocp.CreateFmt('TWinIocp.PrepareGetNet: concurrent %s on %x',
+    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext: concurrent %s on %x',
       [IOCP_EVENT[event], integer(o^.socket)]);
   err := nil;
   bytes := 0;
@@ -1804,7 +1807,7 @@ begin
     // O(1) decode overlapped socket notification from PrepareNext()
     inc(POverlapped(o));
     PByte(@event)^ := PByte(o)^; // TOverlappedEvent.event just after overlapped
-    if event > high(event) then
+    if event > high(one^.over) then
       raise EWinIocp.Create('TWinIocp.GetNext: corrupted overlapped structure');
     dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
     // now o/one points to PWinIocpSubscription/PIocpSubscription
