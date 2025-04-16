@@ -1831,7 +1831,7 @@ begin
          Assigned(fOnLog) then
       begin
         // try to translate the overlapped status to the Winsock error code
-        if WSAGetOverlappedResult(one^.socket, ov, bytes, {wait=}0, flags) <> 0 then
+        if WSAGetOverlappedResult(one^.socket, ov, bytes, {wait=}0, flags) = 0 then
           err := RawSocketErrNo;
         // log error for debugging, but let recv() or send() intercept the state
         fOnLog(sllWarning, 'GetNext: %% returned % % bytes=%', [IOCP_EVENT[event],
