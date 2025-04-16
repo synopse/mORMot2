@@ -775,6 +775,9 @@ function MatchOS(os: TOperatingSystem): boolean;
 // - as used by WinErrorText() and some low-level Windows API wrappers
 function WinErrorConstant(Code: cardinal): PShortString;
 
+/// return the error code number, and its ERROR_* constant (if known)
+function WinErrorConstantText(Code: cardinal): shortstring;
+
 type
   /// the recognized ARM/AARCH64 CPU types
   // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
@@ -6442,6 +6445,19 @@ begin
     result := GetEnumNameRtti(TypeInfo(TWinErrorOne),
       FastFindIntegerSorted(@WINERR_ONE, ord(high(WINERR_ONE)), Code));
   end;
+end;
+
+function WinErrorConstantText(Code: cardinal): shortstring;
+var
+  txt: PShortString;
+begin
+  result[0] := #0;
+  AppendShortCardinal(Code, result);
+  txt := WinErrorConstant(Code);
+  if txt^[0] = #0 then
+    exit;
+  AppendShort(' ERROR_', result);
+  AppendShort(txt^, result);
 end;
 
 const

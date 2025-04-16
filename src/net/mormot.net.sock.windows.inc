@@ -1981,7 +1981,8 @@ begin
   if tofree <> nil then
     CheckSEC_E_OK(ctx, FreeContextBuffer(tofree)); // avoid leak id raised
   if res = SOCKET_ERROR then
-    raise ESChannel.CreateFmt('%s: Socket Error %d', [ctx, RawSocketErrNo]);
+    raise ESChannel.CreateFmt('%s: Socket Error %s',
+      [ctx, WinErrorConstantText(RawSocketErrNo)]);
   if res = 0 then
     raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
   result := res;

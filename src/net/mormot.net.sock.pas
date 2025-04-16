@@ -3802,9 +3802,9 @@ begin
       with addr[i] do
         if Address <> '' then
         begin
-          w := Join([w, Name, '=', Address, ' ']);
+          w := Join([{%H-}w, Name, '=', Address, ' ']);
           if Kind <> makSoftware then
-            wo := Join([wo, Address, ' ']);
+            wo := Join([{%H-}wo, Address, ' ']);
         end;
     FakeLength(w, length(w) - 1); // trim ending spaces
     FakeLength(wo, length(wo) - 1);
