@@ -1063,8 +1063,8 @@ begin
     aDomainName, aRegisterUri);
   if err = NO_ERROR then
     exit;
-  FormatUtf8('http.sys URI registration error #% for http%://%:%/%',
-    [err, TLS_TEXT[https], aDomainName, fPublicPort, aRoot], result);
+  result := FormatUtf8('http.sys URI registration error % for http%://%:%/%',
+    [WinErrorConstantText(err), TLS_TEXT[https], aDomainName, fPublicPort, aRoot]);
   if err = ERROR_ACCESS_DENIED then
     if aRegisterUri then
       result := result +
@@ -1072,9 +1072,10 @@ begin
     else
       result := result +
         ' (you need to register the URI - try to use useHttpApiRegisteringURI)';
-  fLog.Add.Log(sllLastError, result, self);
   if aRaiseExceptionOnError then
-    ERestHttpServer.RaiseUtf8('%: %', [self, result]);
+    ERestHttpServer.RaiseUtf8('%: %', [self, result])
+  else
+    fLog.Add.Log(sllError, result, self);
 end;
 {$else}
 begin
