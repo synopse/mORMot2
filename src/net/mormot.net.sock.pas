@@ -384,6 +384,9 @@ function NetLastError(AnotherNonFatal: integer = NO_ERROR;
 /// internal low-level function retrieving the latest socket error message
 function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
 
+/// internal low-level function using known operating system error
+function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
+
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
@@ -2156,19 +2159,15 @@ const
     'Connect Timeout',
     'Invalid Parameter');
 
-function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
-var
-  err: integer;
+function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
 begin
-  err := RawSocketErrNo;
-  if Error <> nil then
-    Error^ := err;
-  case err of
+  case SystemError of
     NO_ERROR:
       result := nrOK;
     {$ifdef OSWINDOWS}
     WSAETIMEDOUT,
     WSAEWOULDBLOCK,
+    WSAIOPENDING,
     {$endif OSWINDOWS}
     WSAEINPROGRESS,
     WSATRY_AGAIN:
@@ -2186,11 +2185,21 @@ begin
     WSAECONNABORTED:
       result := nrClosed;
   else
-    if err = AnotherNonFatal then
+    if SystemError = AnotherNonFatal then
       result := nrRetry
     else
       result := nrFatalError;
   end;
+end;
+
+function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
+var
+  err: integer;
+begin
+  err := RawSocketErrNo;
+  if Error <> nil then
+    Error^ := err;
+  result := NetErrorFromSystem(err, AnotherNonFatal);
 end;
 
 function NetLastErrorMsg(AnotherNonFatal: integer): ShortString;
