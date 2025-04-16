@@ -7411,7 +7411,7 @@ function THttpApiServer.AddUrl(const aRoot, aPort: RawUtf8; Https: boolean;
   const aDomainName: RawUtf8; aRegisterUri: boolean; aContext: Int64): integer;
 var
   uri: SynUnicode;
-  n: integer;
+  n: PtrInt;
 begin
   result := -1;
   if (Self = nil) or
@@ -7427,12 +7427,11 @@ begin
     result := Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext)
   else
     result := Http.AddUrl(fReqQueue, pointer(uri));
-  if result = NO_ERROR then
-  begin
-    n := length(fRegisteredUnicodeUrl);
-    SetLength(fRegisteredUnicodeUrl, n + 1);
-    fRegisteredUnicodeUrl[n] := uri;
-  end;
+  if result <> NO_ERROR then
+    exit;
+  n := length(fRegisteredUnicodeUrl);
+  SetLength(fRegisteredUnicodeUrl, n + 1);
+  fRegisteredUnicodeUrl[n] := uri;
 end;
 
 function THttpApiServer.RemoveUrl(const aRoot, aPort: RawUtf8; Https: boolean;
@@ -7457,7 +7456,7 @@ begin
         result := Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0)
       else
         result := Http.RemoveUrl(fReqQueue, pointer(uri));
-      if result <> 0 then
+      if result <> NO_ERROR then
         exit; // shall be handled by caller
       for j := i to n - 1 do
         fRegisteredUnicodeUrl[j] := fRegisteredUnicodeUrl[j + 1];
