@@ -6060,10 +6060,18 @@ begin
   fResultString := '';
   fResponseCode := LDAP_ASN1_ERROR;
   fResponseDN := '';
-  if (AsnNext(Pos, Asn1Response) <> ASN1_SEQ) or
-     (AsnNextInteger(Pos, Asn1Response, asntype) <> fSeq) or
-     (asntype <> ASN1_INT) then
+  if AsnNext(Pos, Asn1Response) <> ASN1_SEQ then
+  begin
+    fResultString := 'Malformated response: missing ASN.1 SEQ';
     exit;
+  end;
+  seqend := AsnNextInteger(Pos, Asn1Response, asntype);
+  if (seqend <> fSeq) or
+     (asntype <> ASN1_INT) then
+   begin
+     FormatUtf8('Unexpected SEQ=% expected=%', [seqend, fSeq], fResultString);
+     exit;
+   end;
   fResponseCode := AsnNext(Pos, Asn1Response, nil, @seqend);
   if fResponseCode in LDAP_ASN1_RESPONSES then
   begin
