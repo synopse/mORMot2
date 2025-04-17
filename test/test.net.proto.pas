@@ -2181,14 +2181,18 @@ begin
       timer.Start;
       StringToUtf8(ExtractFileName(tmp), uri); // .tmp file
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
-      Check(res = crOK, 'tftp exact case');
-      CheckEqual(rd, orig, 'tftp1');
+      CheckUtf8(res = crOK, 'tftp exact case %', [ToText(res)^]);
+      if res <> crOk then
+        exit;
+      CheckEqual(length(rd), length(orig), 'tftp1a');
+      CheckEqual(rd, orig, 'tftp1b');
       UpperCaseSelf(uri);  // .TMP file to validate case-insensitive URI
       rd := ''; // paranoid
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd, 1000, nil,
         {tftpblocksize=}1468);
       Check(res = crOK, 'tftp uppercase and custom blocksize');
-      CheckEqual(rd, orig, 'tftp2');
+      if res = crOk then
+        CheckEqual(rd, orig, 'tftp2');
       NotifyTestSpeed('TFTP request', 2, length(rd) * 2, @timer);
     finally
       srv.Free;

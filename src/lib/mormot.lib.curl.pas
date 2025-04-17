@@ -983,6 +983,9 @@ const
   coFtpResponseTimeout = coServerResponseTimeout;
   coFtpSsl             = coUseSsl;
 
+function ToText(res: TCurlResult): PShortString; overload;
+
+
 { ************ CURL Functions API }
 
 const
@@ -1181,6 +1184,15 @@ function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
 
 
 implementation 
+
+
+{ ************ CURL Low-Level Constants and Types }
+
+function ToText(res: TCurlResult): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(TCurlResult), ord(res));
+end;
+
 
 { ************ CURL Functions API }
 
