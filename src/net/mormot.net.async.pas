@@ -5671,7 +5671,7 @@ begin
       case met of
         urmGet,
         urmHead:
-          OnExecuteLocal(Ctxt, one, uri);
+          result := OnExecuteLocal(Ctxt, one, uri);
       end;
     sRemoteUri:
       begin
