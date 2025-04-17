@@ -6470,6 +6470,7 @@ begin
   fLog.Add.Log(sllTrace, 'Reset', self);
   if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
+  fSeq := 0;
   fFlags := fFlags * [fRetrieveRootDseInfo, fRetrievedDefaultDNInfo];
   fBound := false; // fBoundAs should be kept as it is
   fBoundUser := '';
