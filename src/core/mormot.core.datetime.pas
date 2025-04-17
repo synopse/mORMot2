@@ -511,7 +511,8 @@ type
     procedure AddIsoDateTime(WR: TTextWriter; WithMS: boolean;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = '');
     /// append the stored date and time, in a log-friendly format
-    // - e.g. append '20110325 19241502' - with no trailing space nor tab
+    // - e.g. append '20110325 19241502' - with no trailing space nor tab, and
+    // the last 2 digits rounded in 0..62 fake sub-second range (1000 ms / 16)
     // - as called by TJsonWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
     /// append the stored date and time, in apache-like format, to a TJsonWriter
@@ -2528,7 +2529,7 @@ begin
   PWord(p + 9)^  := tab[PtrUInt(Hour)];
   PWord(p + 11)^ := tab[PtrUInt(Minute)];
   PWord(p + 13)^ := tab[PtrUInt(Second)];
-  PWord(p + 15)^ := tab[PtrUInt(Millisecond) shr 4];
+  PWord(p + 15)^ := tab[PtrUInt(Millisecond) shr 4]; // rounded in 0..62 range
   inc(WR.B, 17);
 end;
 
