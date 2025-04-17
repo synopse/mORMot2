@@ -1948,14 +1948,14 @@ begin
     // - follow documented pattern: shutdown(SD_SEND) + recv()=0 + closesocket
     shutdown(o^.socket, SHUT_WR); // = SD_SEND
     o^.recvclosing := true; // flag for GetNext() to call closesocket()
-    if PrepareNext('Unsub', one, wieRecv) then
+    if PrepareNext('unsub', one, wieRecv) then
     begin
-      // delay WSARecv() until the function completes with success
+      // started async WSARecv() until the function completes with success
       result := true;
       one := nil;
       exit;
     end
-    else // if WSARecv() failed, graceful disconnect is not possible
+    else // if failed, graceful disconnect is not possible (already closed)
       closesocket(o^.socket);
   end;
   result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
