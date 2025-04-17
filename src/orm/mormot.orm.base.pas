@@ -8897,7 +8897,7 @@ end;
 function TOrmTableAbstract.GetRowLengths(Field: PtrInt; LenStore: PSynTempBuffer): integer;
 var
   len: PInteger;
-  i, l: integer;
+  c, l: integer;
   n: PtrInt;
 begin
   result := 0;
@@ -8912,10 +8912,10 @@ begin
   if LenStore = nil then
     len := nil
   else
-    len := LenStore.Init(fRowCount * SizeOf(integer));
+    len := LenStore^.Init(fRowCount * SizeOf(integer));
   n := fFieldCount;
-  for i := 1 to fRowCount do
-  begin
+  c := fRowCount;
+  repeat
     inc(Field, n); // next row - ignore first row = field names
     {$ifdef NOTORMTABLELEN}
     l := StrLen(GetResults(Field));
@@ -8928,26 +8928,27 @@ begin
       inc(len);
     end;
     inc(result, l);
-  end;
+    dec(c);
+  until c = 0;
 end;
 
 function TOrmTableAbstract.GetRowValues(Field: PtrInt; const Sep, Head, Trail: RawUtf8): RawUtf8;
 var
-  n, L, SepLen: integer;
+  n, l, SepLen: integer;
   i: PtrInt;
   P, U: PUtf8Char;
 begin
-  L := 0;
+  l := 0;
   for i := 1 to fRowCount do
-    inc(L, ResultsLen[i]);
-  if L = 0 then
+    inc(l, ResultsLen[i]);
+  if l = 0 then
   begin
     result := Head + Trail;
     exit;
   end;
   SepLen := length(Sep);
-  inc(L, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
-  P := AppendRawUtf8ToBuffer(FastSetString(result, L), Head);
+  inc(l, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
+  P := AppendRawUtf8ToBuffer(FastSetString(result, l), Head);
   n := fRowCount;
   repeat
     inc(Field, fFieldCount); // next row - ignore first row = field names
