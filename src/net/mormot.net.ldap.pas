@@ -5548,7 +5548,7 @@ procedure TLdapClient.SetResultString(const msg: RawUtf8);
 begin
   fResultString := msg;
   if Assigned(fLog) then
-    fLog.Add.Log(sllDebug, msg, self);
+    fLog.Add.Log(sllTrace, msg, self);
 end;
 
 function TLdapClient.Connect(DiscoverMode: TLdapClientConnect;
@@ -6098,7 +6098,7 @@ begin
       else
         fResultString := FormatUtf8('% [%]', [errmsg, fResultString]);
       if Assigned(fLog) then
-        fLog.Add.Log(sllDebug, 'DecodeResponse: %', [fResultString], self);
+        fLog.Add.Log(sllTrace, 'DecodeResponse: %', [fResultString], self);
     end;
     if fResultCode = LDAP_RES_REFERRAL then
       if AsnNext(Pos, Asn1Response, @s) = ASN1_CTC3 then
@@ -6568,7 +6568,7 @@ begin
             RespValue^ := v;
       end;
   finally
-    fLog.Add.Log(LOG_DEBUGERROR[not result], 'Extended(%)=% % % %',
+    fLog.Add.Log(LOG_TRACEERROR[not result], 'Extended(%)=% % % %',
       [Oid, BOOL_STR[result], fResultCode, fResultString, v], self);
   end;
 end;
@@ -6730,7 +6730,7 @@ begin
   finally
     if Assigned(fLog) then
       if result then
-        fLog.Add.Log(sllDebug, 'Search dn="%" filter="%" %',
+        fLog.Add.Log(sllTrace, 'Search dn="%" filter="%" %',
           [BaseDN, Filter, fSearchResult], self)
       else
         fLog.Add.Log(sllError, 'Search dn="%" filter="%" failed as %',
@@ -6860,6 +6860,8 @@ begin
     fSearchResult.fMicroSec := fSearchRange.fMicroSec;
     fSearchResult.fIn := fSearchRange.fIn;
     fSearchResult.fOut := fSearchRange.fOut;
+    if Assigned(fLog) then
+      fLog.Add.Log(sllTrace, 'SearchMissingAttributes: %', [fSearchResult], self);
   end;
 end;
 
@@ -6937,15 +6939,19 @@ function TLdapClient.SearchAllDocRaw(out Dest: TDocVariantData;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
   MaxCount, PerPage: integer): boolean;
 var
-  n: integer;
+  n, recv: integer;
   dom: PSid;
+  l: ISynLog;
 begin
   // setup context and resultset
+  if Assigned(fLog) then
+    l := fLog.Enter('SearchAllDocRaw max=% perpage=%', [MaxCount, PerPage], self);
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID
   Dest.Init(mFast, dvObject);
   n := 0;
+  recv := 0;
   // check for "paging attributes" auto-range results
   if (roAutoRange in Options) and
      (ObjectAttributeField <> '') and
@@ -6961,6 +6967,7 @@ begin
         break;
       fSearchResult.AppendTo(Dest, Options, ObjectAttributeField, dom);
       inc(n, fSearchResult.Count);
+      inc(recv, fSearchResult.Recv);
     until (SearchCookie = '') or
           ((MaxCount > 0) and
            (n > MaxCount));
@@ -6970,6 +6977,9 @@ begin
     // additional requests to fill any "paging attributes" auto-range results
     if fSearchRange <> nil then
       SearchRangeEnd(Dest, Options, ObjectAttributeField); // as TDocVariant
+    if Assigned(l) then
+      l.Log(sllDebug, 'SearchAllDocRaw=% count=% recv=%',
+        [BOOL_STR[result], n, KBNoSpace(recv)], self)
   end;
   // eventually sort by field names (if specified)
   if roSortByName in Options then
@@ -7053,7 +7063,7 @@ begin
                  ]));
   result := fResultCode = LDAP_RES_COMPARE_TRUE;
   if Assigned(fLog) then
-    fLog.Add.Log(LOG_DEBUGERROR[not (fResultCode in LDAP_RES_NOERROR)],
+    fLog.Add.Log(LOG_TRACEERROR[not (fResultCode in LDAP_RES_NOERROR)],
       'Compare("%",%,%)=% % %', [Obj, AttrName, AttrValue,
       BOOL_STR[result], fResultCode, fResultString], self);
 end;
