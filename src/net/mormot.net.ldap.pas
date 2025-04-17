@@ -1859,7 +1859,8 @@ type
 
     { connection methods }
 
-    /// try to connect to LDAP server
+    /// try to connect to LDAP server at socket level
+    // - without any authentication: rather use Bind/BindSaslKerberos instead
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
     // DnsLdapControlers() hosts (from mormot.net.dns) following DiscoverMode
     // - do nothing if was already connected
@@ -5640,7 +5641,7 @@ begin
         fSettings.Tls := fSock.TLS.Enabled;
         if Assigned(log) then
           log.Log(sllTrace, 'Connected to %', [fSettings.TargetUri], self);
-        exit;
+        exit; // success
       end;
     except
       on E: Exception do
@@ -5924,8 +5925,11 @@ begin
             ELdap.RaiseUtf8('%.SendPacket: AutoReconnect failed as %',
               [self, fResultString]);
         if fSock.SockConnected then
+        begin
+          packet := BuildPacket(Asn1Data); // rebuild with new fSeq + encryption
           if fSock.TrySndLow(pointer(packet), length(packet), @res, @raw) then
             exit; // success after re-connection
+        end;
       end;
   end;
   // a non-recoverable socket error occured at sending the request
@@ -6115,7 +6119,7 @@ var
   x: integer;
 begin
   fReferals.Clear;
-  SendPacket(Asn1Data);
+  SendPacket(Asn1Data); // raise exception on failure
   resp := ReceiveResponse;
   x := 1;
   result := DecodeResponse(x, resp);
@@ -6456,7 +6460,7 @@ begin
   fLog.Add.Log(sllTrace, 'Close', self);
   if fSock.SockConnected then
     try
-      SendPacket(AsnTyped('', LDAP_ASN1_UNBIND_REQUEST));
+      SendPacket(AsnTyped('', LDAP_ASN1_UNBIND_REQUEST)); // may raise exception
     except
       result := false;
     end;
@@ -6634,7 +6638,7 @@ begin
     // actually send the request
     bytesIn := fSock.BytesIn;
     bytesOut := fSock.BytesOut;
-    SendPacket(s);
+    SendPacket(s); // raise exception on failure
     // receive and parse the response
     x := 1;
     repeat
