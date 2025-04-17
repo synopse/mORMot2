@@ -2068,7 +2068,7 @@ type
     function SearchAllDocRaw(out Dest: TDocVariantData;
       const BaseDN, Filter: RawUtf8; const Attributes: array of RawUtf8;
       Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8 = '*';
-      MaxCount: integer = 0): boolean; 
+      MaxCount: integer = 0; PerPage: integer = 1000): boolean;
     /// retrieve all entries that match a given set of criteria
     // - may return false and ResultError = leSizeLimitExceeded if too many
     // items were found: in this case, the first page is available in SearchResult
@@ -6935,7 +6935,7 @@ end;
 function TLdapClient.SearchAllDocRaw(out Dest: TDocVariantData;
   const BaseDN, Filter: RawUtf8; const Attributes: array of RawUtf8;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
-  MaxCount: integer): boolean;
+  MaxCount, PerPage: integer): boolean;
 var
   n: integer;
   dom: PSid;
@@ -6951,7 +6951,9 @@ begin
      (ObjectAttributeField <> '') and
      not (roTypesOnly in Options) then
     SearchRangeBegin;
-  SearchBegin(1000); // force pagination for the loop below
+  if PerPage <= 100 then
+    PerPage := 100;
+  SearchBegin(PerPage); // force pagination for the loop below
   try
     // retrieve all result pages
     repeat
