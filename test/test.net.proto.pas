@@ -211,18 +211,42 @@ const
   MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('', 'one', 'and 2');
 
 const
-  // some reference from https://github.com/OAI/OpenAPI-Specification
-  OpenApiRef: array[0..1] of RawUtf8 = (
+  // some reference from https://github.com/OAI/OpenAPI-Specification and other
+  OpenApiRef: array[0..9] of RawUtf8 = (
+    'https://srvultravisor.ad.tranquil.it/api/swagger.json',
     'v2.0/json/petstore-simple.json',
-    'v3.0/petstore.json');
+    'v3.0/petstore.json',
+    'https://petstore.swagger.io/v2/swagger.json',
+    'https://raw.githubusercontent.com/paolo-rossi/OpenAPI-Delphi/master/Demos/' +
+      'Data/samples/authentiqio.json',
+    'https://github.com/user-attachments/files/16852539/apigrpc.swagger.json',
+    '',
+    'https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json',
+    'https://gist.githubusercontent.com/georgkeller/' +
+      'ad9312be8134cf580245b1d913081301/raw/' +
+      '3f273eac7e8c43c7d1868b2dfa705178b22f6bc0/testapi.json',
+    'https://platform-api-staging.vas.com/api/v1/swagger.json');
+  OpenApiName: array[0..high(OpenApiRef)] of RawUtf8 = (
+    'Ultravisor',
+    'Pets2',
+    'Pets3',
+    'PetStore',
+    'Auth',
+    'Nakama',
+    'FinTrack',
+    'Qdrant',
+    'Recursive',
+    'VAS');
 
 procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  u, ud, uc, url: RawUtf8;
-  pets: TRawUtf8DynArray;
+  u, url, dto, client: RawUtf8;
+  api: TRawUtf8DynArray;
   oa: TOpenApiParser;
+  timer: TPrecisionTimer;
+  //start: Int64;
 begin
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 2'), 2);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'one'), 1);
@@ -244,39 +268,56 @@ begin
     Check(not IsReservedKeyWord(u));
     Check(not IsReservedKeyWord(UInt32ToUtf8(i)));
   end;
-  SetLength(pets, length(OpenApiRef));
+  SetLength(api, length(OpenApiRef));
   for i := 0 to high(OpenApiRef) do
-  begin
-    fn := FormatString('%petstore%.json', [WorkDir, i + 1]);
-    pets[i] := StringFromFile(fn);
-    if pets[i] = '' then
+    if OpenApiRef[i] <> '' then
     begin
+      fn := FormatString('%OpenApi%.json', [WorkDir, OpenApiName[i]]);
+      api[i] := StringFromFile(fn);
+      if api[i] <> '' then
+        continue;
       url := OpenApiRef[i];
       if not IdemPChar(pointer(url), 'HTTP') then
         url := 'https://raw.githubusercontent.com/OAI/' +
                  'OpenAPI-Specification/main/examples/' + url;
        JsonBufferReformat(pointer(
-        HttpGet(url, nil, false, nil, 0, {forcesock:}false, {igncerterr:}true)),
-        pets[i]);
-      if pets[i] <> '' then
-        FileFromString(pets[i], fn);
+         HttpGet(url, nil, false, nil, 0, {forcesock:}false, {igncerterr:}true)),
+         api[i]);
+      if api[i] <> '' then
+        FileFromString(api[i], fn);
     end;
-  end;
-  for i := 0 to high(pets) do
-    if pets[i] <> '' then
+  //for i := 0 to 6 do
+  //
+  for i := 0 to high(api) do
+    if api[i] <> '' then
     begin
-      oa := TOpenApiParser.Create(FormatUtf8('Pets%', [i + 1]));
+      timer.Start;
+      oa := TOpenApiParser.Create(OpenApiName[i]);
       try
-        oa.ParseJson(pets[i]);
-        ud := oa.GenerateDtoUnit;
-        Check(ud <> '', 'DTO');
-        uc := oa.GenerateClientUnit;
-        Check(uc <> '', 'CLIENT');
-        //ConsoleWrite(ud);
-        //ConsoleWrite(uc);
+        //oa.Options := oa.Options + [opoGenerateStringType];
+        //oa.Options := oa.Options + OPENAPI_CONCISE;
+        //oa.Options := oa.Options + [opoNoEnum];
+        //oa.Options := oa.Options + [opoGenerateOldDelphiCompatible];
+        //oa.Options := oa.Options + [opoClientOnlySummary];
+        //oa.Options := oa.Options + [opoDtoNoDescription, opoClientNoDescription];
+        //QueryPerformanceMicroSeconds(start);
+        oa.ParseJson(api[i]);
+        //write(OpenApiName[i],' load in ',MicroSecFrom(start));
+        //QueryPerformanceMicroSeconds(start);
+        dto := oa.GenerateDtoUnit;
+        client := oa.GenerateClientUnit;
+        Check((opoGenerateSingleApiUnit in oa.Options) or (dto <> ''), 'dto');
+        Check(client <> '', 'client');
+        {$ifdef OSLINUX}
+        oa.ExportToDirectory('/home/ab/dev/lib2/test/');
+        {$endif OSLINUX}
+        //writeln(', export in ',MicroSecFrom(start));
+        //ConsoleWrite(dto);
+        //ConsoleWrite(client);
       finally
         oa.Free;
       end;
+      NotifyTestSpeed('%', [OpenApiName[i]], 0, length(dto) + length(client), @timer);
     end;
 end;
 
@@ -1290,6 +1331,7 @@ begin
     u := StringReplaceAll(u, #10' ', ''); // mimics maxline=0
     CheckEqual(v, u);
     CheckEqual(rl.ExportToLdifContent({human=}true,  {maxline=}0), u);
+//sleep(1010); consolewrite(rl.ExportToLdifContent(true));
   finally
     rl.Free;
     rl2.Free;
@@ -2165,7 +2207,11 @@ var
   timer: TPrecisionTimer;
   orig, rd: RawByteString;
 begin
+  {$ifdef OSDARWINARM}
+  if true then // mac M1 libcurl seems not tftp compatible
+  {$else}
   if not CurlIsAvailable then
+  {$endif OSDARWINARM}
   begin
     AddConsole('libcurl is not available on this system -> skip test');
     exit;
