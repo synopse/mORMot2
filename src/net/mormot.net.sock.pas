@@ -338,6 +338,8 @@ type
     // - i.e. check if it is likely to be accept Send() and Recv() calls
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
     function Available(loerr: system.PInteger = nil): boolean;
+    /// call shutdown() on this socket - may be used to simulate a disconnection
+    procedure RawShutdown;
     /// finalize a socket, calling Close after shutdown() if needed
     function ShutdownAndClose(rdwr: boolean; waitms: integer = 0): TNetResult;
     /// close the socket - consider ShutdownAndClose() for clean closing
@@ -3272,6 +3274,12 @@ begin
        (NetLastError(NO_ERROR, loerr) = nrRetry) then
       exit;
   result := false; // e.g. neError or neClosed with no neRead
+end;
+
+procedure TNetSocketWrap.RawShutdown;
+begin
+  if @self <> nil then
+    shutdown(TSocket(@self), SHUT_RDWR);
 end;
 
 function TNetSocketWrap.ShutdownAndClose(rdwr: boolean; waitms: integer): TNetResult;
