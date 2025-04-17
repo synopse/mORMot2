@@ -538,7 +538,6 @@ var
   bak: integer;
   flags, len: PtrUInt;
   src: pointer;
-  cod: PShortString;
   tmp: array[0..511] of WideChar;
   tmps: shortstring absolute tmp;
 begin
@@ -548,12 +547,10 @@ begin
   if ModuleName = nil then
   begin
     // system error codes
-    cod := WinErrorConstant(Code);
-    if cod^[0] <> #0 then
+    tmps[0] := #0;
+    if AppendWinErrorText(Code, tmps, #0) then
     begin
       // we can return directly the standard system error code constant
-      tmps := 'ERROR_';
-      AppendShort(cod^, tmps);
       FastSetString(result, @tmps[1], ord(tmps[0]));
       SetLastError(bak);
       exit;

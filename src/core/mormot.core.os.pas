@@ -777,6 +777,12 @@ function WinErrorConstant(Code: cardinal): PShortString;
 
 /// return the error code number, and its ERROR_* constant (if known)
 function WinErrorConstantText(Code: cardinal): shortstring;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append the error as ' ERROR_*' constant and return TRUE if known
+// - append nothing and return FALSE if Code is not known
+function AppendWinErrorText(Code: cardinal; var Dest: shortstring;
+  Sep: AnsiChar): boolean;
 
 type
   /// the recognized ARM/AARCH64 CPU types
@@ -6450,16 +6456,28 @@ begin
 end;
 
 function WinErrorConstantText(Code: cardinal): shortstring;
-var
-  txt: PShortString;
 begin
   result[0] := #0;
   AppendShortCardinal(Code, result);
+  AppendWinErrorText(Code, result, ' ');
+end;
+
+function AppendWinErrorText(Code: cardinal; var Dest: shortstring;
+  Sep: AnsiChar): boolean;
+var
+  txt: PShortString;
+begin
+  result := false;
   txt := WinErrorConstant(Code);
   if txt^[0] = #0 then
     exit;
-  AppendShort(' ERROR_', result);
-  AppendShort(txt^, result);
+  if Sep <> #0 then
+    AppendShortChar(Sep, @Dest);
+  if (Code < 10000) or
+     (Code > 11999) then
+    AppendShort('ERROR_', Dest); // if not WSA*
+  AppendShort(txt^, Dest);
+  result := true;
 end;
 
 const
