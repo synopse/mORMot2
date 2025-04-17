@@ -1787,36 +1787,39 @@ begin
     err := NO_ERROR;
     if not IocpGetQueuedStatus(fIocp, bytes, completionkey, ov, timeoutms) then
       if ov <> nil then
-        err := GetLastError;
+        err := GetLastError; // decoded by WSAGetOverlappedResult() below
     LockedDec32(@fWaiting);
     if fTerminated or
-       (ov = nil) or // fIocp handle is likely to be closed
+       (ov = nil) or // no overlapped: fIocp handle is likely to be closed
        (completionkey = nil) then // nil from Terminate
       exit;
     LockedDec32(@fPosted);
-    one := ov;
+    // check first if was not a direct event from Enqueue()
     e := PtrUInt(completionkey) - 1;
     if e <= PtrUInt(ord(high(event))) then
     begin
       // completionkey was pointer(ord(event) + 1) from Enqueue()
       PByte(@event)^ := e;
-      if Assigned(fOnLog) then
-        if bytes = 0 then
-          fOnLog(sllTrace, 'GetNext=Enqueue %%',
-            [IOCP_EVENT[event], pointer(one^.socket)], self)
-        else
-          fOnLog(sllTrace, 'GetNext=Enqueue %% bytes=%',
-            [IOCP_EVENT[event], pointer(one^.socket), bytes], self);
-      result := ov; // Enqueue()  used pointer(one) as overlapped parameter
+      result := ov; // Enqueue() used pointer(one) as overlapped parameter
+      if not Assigned(fOnLog) then
+        exit;
+      sock := pointer(PIocpSubscription(result)^.socket);
+      if bytes = 0 then
+        fOnLog(sllTrace, 'GetNext=Enqueue %%', [IOCP_EVENT[event], sock], self)
+      else
+        fOnLog(sllTrace, 'GetNext=Enqueue %% bytes=%',
+          [IOCP_EVENT[event], sock, bytes], self);
       exit;
     end;
     // O(1) decode overlapped socket notification from PrepareNext()
+    one := ov;
     inc(POverlapped(one));
     PByte(@event)^ := PByte(one)^; // TOverlappedEvent.event just after overlapped
     if event > high(one^.over) then
       raise EWinIocp.Create('TWinIocp.GetNext: corrupted overlapped structure');
     dec(PByte(one), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
     // now one^ points to PWinIocpSubscription/PIocpSubscription
+    sock := pointer(one^.socket);
     if pointer(one^.head.sequence) <> completionkey then
       sll := sllWarning // detect and ignore ABA race condition
     else
@@ -1828,8 +1831,8 @@ begin
         if WSAGetOverlappedResult(one^.socket, ov, bytes, {wait=}0, flags) = 0 then
           err := RawSocketErrNo;
         // log error for debugging, but let recv() or send() intercept the state
-        fOnLog(sllWarning, 'GetNext: %% returned % % bytes=%', [IOCP_EVENT[event],
-          pointer(one^.socket), err, WinErrorConstant(err)^, bytes], self);
+        fOnLog(sllWarning, 'GetNext: %% returned % % bytes=%',
+          [IOCP_EVENT[event], sock, err, WinErrorConstant(err)^, bytes], self);
       end;
       if wioLockEvent in fOptions then
       begin
@@ -1843,7 +1846,6 @@ begin
       begin
         // delayed wioUnsubscribeShutdownSocket clean closing
         // - documented pattern: shutdown(SD_SEND) + WSARecv()=0 + closesocket
-        sock := pointer(one^.socket);
         res := nrOk;
         if event = wieRecv then
         begin
@@ -1858,7 +1860,7 @@ begin
         else
           sll := sllWarning; // continue: closesocket() on very last wieRecv
         if Assigned(fOnLog) then
-          fOnLog(sll, 'GetNext=%% recvclosing: eventual closesocket=%',
+          fOnLog(sll, 'GetNext=%% unsub closesocket=%',
             [IOCP_EVENT[event], sock, ToText(res)^], self);
         continue;
       end;
@@ -1868,14 +1870,13 @@ begin
     if Assigned(fOnLog) then
       if sll = sllTrace then
         if bytes = 0 then
-          fOnLog(sllTrace, 'GetNext=%%',
-            [IOCP_EVENT[event], pointer(one^.socket)], self)
+          fOnLog(sllTrace, 'GetNext=%%', [IOCP_EVENT[event], sock], self)
         else
           fOnLog(sllTrace, 'GetNext=%% bytes=%',
-            [IOCP_EVENT[event], pointer(one^.socket), bytes], self)
+            [IOCP_EVENT[event], sock, bytes], self)
       else
         fOnLog(sll, 'GetNext=%% %=%', [IOCP_EVENT[event],
-          pointer(one^.socket), pointer(one^.head.sequence), completionkey], self);
+          sock, pointer(one^.head.sequence), completionkey], self);
   until result <> nil;
 end;
 
