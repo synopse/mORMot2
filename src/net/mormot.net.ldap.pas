@@ -1860,7 +1860,7 @@ type
     { connection methods }
 
     /// try to connect to LDAP server at socket level
-    // - without any authentication: rather use Bind/BindSaslKerberos instead
+    // - without any authentication: consider using Bind/BindSaslKerberos instead
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
     // DnsLdapControlers() hosts (from mormot.net.dns) following DiscoverMode
     // - do nothing if was already connected
@@ -6048,11 +6048,10 @@ end;
 function TLdapClient.DecodeResponse(
   var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
 var
-  x, asntype, seqend: integer;
+  x, asntype, seqend, winerr: integer;
   s, t: TAsnObject;
   errmsg: RawUtf8;
   hex: PAnsiChar;
-  wintxt: PShortString;
 begin
   result := '';
   fResultCode := -1;
@@ -6088,9 +6087,9 @@ begin
         hex := pointer(StrPosI(', DATA ', pointer(fResultString)));
         if hex <> nil then
         begin
-         wintxt := WinErrorConstant(ParseHex0x(hex + 7, {no0x=}true));
-         if wintxt^[0] <> #0 then
-            Append(errmsg, [' ERROR_', wintxt^]);
+          winerr := ParseHex0x(hex + 7, {no0x=}true);
+          if winerr <> 0 then
+            Append(errmsg, [' ', WinErrorConstantText(winerr)]);
         end;
       end;
       if fResultString = '' then
@@ -6430,8 +6429,8 @@ begin
   finally
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result],
-        'BindSaslKerberos=% % % signseal=% as %', [BOOL_STR[result],
-        fResultCode, ToText(Transmission)^, needencrypt, fBoundUser], self);
+        'BindSaslKerberos=% % % signseal=% as %', [BOOL_STR[result], fResultCode,
+        ToText(Transmission)^, BOOL_STR[needencrypt], fBoundUser], self);
   end;
 end;
 
@@ -6977,10 +6976,10 @@ begin
     // additional requests to fill any "paging attributes" auto-range results
     if fSearchRange <> nil then
       SearchRangeEnd(Dest, Options, ObjectAttributeField); // as TDocVariant
-    if Assigned(l) then
-      l.Log(sllDebug, 'SearchAllDocRaw=% count=% recv=%',
-        [BOOL_STR[result], n, KBNoSpace(recv)], self)
   end;
+  if Assigned(l) then
+    l.Log(sllDebug, 'SearchAllDocRaw=% count=% recv=%',
+      [BOOL_STR[result], n, KBNoSpace(recv)], self);
   // eventually sort by field names (if specified)
   if roSortByName in Options then
     Dest.SortByName(nil, {reverse=}false, {nested=}true);
