@@ -3799,7 +3799,7 @@ begin
   end;
   if tmp.Size= 0 then
     exit;
-  dec(tmp.Store.added); // cancel last comma
+  tmp.CancelLastChar; // cancel last comma
   tmp.Done(result);
 end;
 
@@ -6171,7 +6171,7 @@ begin
     end;
   if tmp.Size = 0 then
     exit;
-  dec(tmp.Store.added); // cancel last comma
+  tmp.CancelLastChar; // cancel last comma
   tmp.Done(result);
 end;
 
@@ -6209,7 +6209,7 @@ begin
       end;
   if tmp.Size = 0 then
     exit;
-  dec(tmp.Store.added); // cancel last comma
+  tmp.CancelLastChar; // cancel last comma
   tmp.Done(result);
 end;
 

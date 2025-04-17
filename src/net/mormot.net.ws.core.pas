@@ -4046,7 +4046,7 @@ begin
   result := SIO_NO_ACK;
   if Assigned(aOnack) then
     result := GenerateAckId(aOnAck);
-  tmp.Store.Init(length(aEventName) + length(aDataArray) + 8); // pre-allocate
+  tmp.Init(length(aEventName) + length(aDataArray) + 8); // pre-allocate
   try
     tmp.AddDirect('[', '"');
     tmp.Add(aEventName);
@@ -4254,7 +4254,7 @@ begin
   if (aWebSockets = nil) or
      not aWebSockets.Protocol.InheritsFrom(TWebSocketEngineIOProtocol) then
     ESocketIO.RaiseUtf8('Unexpected SendSocketPacket(%)', [aWebSockets]);
-  tmp.Store.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
+  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
   try
     tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
     if (aNameSpace <> '') and
