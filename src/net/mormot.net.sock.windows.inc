@@ -1635,10 +1635,22 @@ function TWinIocp.PrepareNext(const ctxt: shortstring; one: PWinIocpSubscription
   event: TWinIocpEvent; buf: pointer; buflen: integer;
   netsock: TNetSocket): boolean;
 var
-  bytes, flags: cardinal;
+  bytes, flags, err: cardinal;
   o: PIocpSubscription absolute one;
   oe: POverlappedEvent;
-  err: PUtf8Char;
+  fatal: PUtf8Char;
+
+  procedure DoCheck(noerror: boolean);
+  begin
+    if noerror then
+      result := true // the operation has completed immediately
+    else
+    begin
+      err := RawSocketErrNo;
+      result := err = WSAIOPENDING; // if operation was sucessfully initiated
+    end;
+  end;
+
 begin
   result := false;
   if (self = nil) or
@@ -1653,7 +1665,8 @@ begin
      not oe^.prepared.TryLock then
     raise EWinIocp.CreateFmt('TWinIocp.PrepareNext: concurrent %s on %x',
       [IOCP_EVENT[event], integer(o^.socket)]);
-  err := nil;
+  err := NO_ERROR;
+  fatal := nil;
   bytes := 0;
   flags := 0;
   if buflen <= 0 then
@@ -1667,15 +1680,11 @@ begin
     wieRecv:
       // from mormot.net.async: overlapped read with buflen=0 to avoid WSAENOBUFS
       // and work with regular sockets recv() calls like TPollSocketAbstract
-      result := // WSARecv=NO_ERROR if there is something to recv()
-        (WSARecv(o^.socket, oe^.buf, 1, bytes, flags, @oe^.overlapped) = NO_ERROR) or
-        (RawSocketErrNo = WSAIOPENDING); // WSAIOPENDING = wait for incoming data
+      DoCheck(WSARecv(o^.socket, oe^.buf, 1, bytes, flags, @oe^.overlapped) = NO_ERROR);
     wieSend:
       // from mormot.net.async: overlapped write with buf/buflen = connection.fWr
       // to avoid GetNext returning with no delay (and save a syscall)
-      result :=
-        (WSASend(o^.socket, oe^.buf, 1, bytes, 0, @oe^.overlapped) = NO_ERROR) or
-        (RawSocketErrNo = WSAIOPENDING);
+      DoCheck(WSASend(o^.socket, oe^.buf, 1, bytes, 0, @oe^.overlapped) = NO_ERROR);
     wieAccept:
       // overlapped AcceptEx() to be followed by GetNextAcceptAndPrepare()
       // from mormot.net.async: not used, unless IOCP_ACCEPTEX is defined
@@ -1689,15 +1698,15 @@ begin
           if netsock = nil then
             netsock := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
           fAcceptSocket := netsock;
-          result := acceptex(
-                     o^.Socket, TSocket(netsock), pointer(fAcceptExBuf), 0,
-                     ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @oe^.overlapped) or
-                    (RawSocketErrNo = WSAIOPENDING)
+          DoCheck(acceptex(o^.Socket, TSocket(netsock), pointer(fAcceptExBuf),
+            0, ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @oe^.overlapped));
+          if not result then
+            fAcceptExUsed.UnLock; // release AcceptEx() lock on failure
         end
         else
-          err := 'concurrent wieAccept'
+          fatal := 'concurrent wieAccept'
       else
-         err := 'no acceptex() API';
+         fatal := 'no acceptex() API';
     wieConnect:
       // overlapped ConnextEx()
       // from mormot.net.async: used by THttpAsyncClientConnections.StartRequest
@@ -1705,38 +1714,33 @@ begin
         if Assigned(buf) and
            (PNetAddr(buf)^.Size = buflen) then
           if Assigned(netsock) then
-            // connectex() requires an explicit bind (which is done by connect)
-            if bind(TSocket(netsock), PSockAddr(buf), buflen) = NO_ERROR then
-              result := connectex(TSocket(netsock), PSockAddr(buf), buflen,
-                          nil, 0, bytes, @oe^.overlapped) or
-                        (RawSocketErrNo = WSAIOPENDING)
-            else
-              err := 'bind error'
+            // connectex() requires an explicit bind (implicit in plain connect)
+            DoCheck((bind(TSocket(netsock), PSockAddr(buf), buflen) = NO_ERROR) and
+                     connectex(TSocket(netsock), PSockAddr(buf), buflen,
+                       nil, 0, bytes, @oe^.overlapped))
           else
-            err := 'no supplied netsock'
+            fatal := 'no supplied netsock'
         else
-          err := 'no supplied netaddr/buf'
+          fatal := 'no supplied netaddr/buf'
       else
-         err := 'no connectex() API';
+         fatal := 'no connectex() API';
     else
-       err := 'unexpected event';
+       fatal := 'unexpected event';
     end;
-  if err <> nil then // fatal error: need to fix the code -> raise EWinIocp
-  begin
-    if wioLockEvent in fOptions then
-      oe^.prepared.UnLock;
-    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s) %s: %s on %x',
-      [IOCP_EVENT[event], ctxt, err, integer(o^.socket)]);
-  end;
   if result then
-    LockedInc32(@fPosted);
+    LockedInc32(@fPosted)
+  else if wioLockEvent in fOptions then // release lock on failure
+    oe^.prepared.UnLock;
+  if fatal <> nil then // logic error: need to fix the code -> raise EWinIocp
+    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s) %s: %s on %x',
+      [IOCP_EVENT[event], ctxt, fatal, integer(o^.socket)]);
   if Assigned(fOnLog) then
     if result then
       fOnLog(sllTrace, 'PrepareNext(%%,%) %',
         [IOCP_EVENT[event], pointer(o^.socket), buflen, ctxt], self)
     else
       fOnLog(sllDebug, 'PrepareNext(%%) %: error % %', [IOCP_EVENT[event],
-        pointer(o^.socket), ctxt, WinErrorConstantText(RawSocketErrNo)], self);
+        pointer(o^.socket), ctxt, err, WinErrorConstant(err)^], self);
 end;
 
 function TWinIocp.Enqueue(one: PWinIocpSubscription; event: TWinIocpEvent;
