@@ -4041,12 +4041,12 @@ end;
 function TSocketIORemoteNamespace.SendEvent(const aEventName, aDataArray: RawUtf8;
   const aOnAck: TOnSocketIOAck): TSocketIOAckID;
 var
-  tmp: TSynTempBuffer;
+  tmp: TSynTempAdder;
 begin
   result := SIO_NO_ACK;
   if Assigned(aOnack) then
     result := GenerateAckId(aOnAck);
-  tmp.Init(length(aEventName) + length(aDataArray) + 8); // pre-allocate
+  tmp.Store.Init(length(aEventName) + length(aDataArray) + 8); // pre-allocate
   try
     tmp.AddDirect('[', '"');
     tmp.Add(aEventName);
@@ -4058,9 +4058,9 @@ begin
     end;
     tmp.AddDirect(']');
     SocketIOSendPacket(fOwner.fWebSockets,
-      sioEvent, fNameSpace, tmp.buf, tmp.added, result);
+      sioEvent, fNameSpace, tmp.Buffer, tmp.Size, result);
   finally
-    tmp.Done;
+    tmp.Store.Done;
   end;
 end;
 
@@ -4249,12 +4249,12 @@ procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
   aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
   aPayload: pointer; aPayloadLen: PtrInt; ackId: TSocketIOAckID);
 var
-  tmp: TSynTempBuffer;
+  tmp: TSynTempAdder;
 begin
   if (aWebSockets = nil) or
      not aWebSockets.Protocol.InheritsFrom(TWebSocketEngineIOProtocol) then
     ESocketIO.RaiseUtf8('Unexpected SendSocketPacket(%)', [aWebSockets]);
-  tmp.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
+  tmp.Store.Init(length(aNameSpace) + aPayloadLen + 32); // pre-allocate (unlikely)
   try
     tmp.AddDirect(AnsiChar(ord(aOperation) + ord('0')));
     if (aNameSpace <> '') and
@@ -4267,9 +4267,9 @@ begin
       tmp.AddU(ackID);
     if aPayloadLen <> 0 then
       tmp.Add(aPayload, aPayloadLen);
-    EngineIOSendPacket(aWebSockets, tmp.buf, tmp.added, {binary=}false);
+    EngineIOSendPacket(aWebSockets, tmp.Buffer, tmp.Size, {binary=}false);
   finally
-    tmp.Done;
+    tmp.Store.Done;
   end;
 end;
 

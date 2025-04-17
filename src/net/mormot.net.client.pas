@@ -5329,9 +5329,9 @@ var
   a: PtrInt;
   name, value: RawUtf8;
   p: PVarRec;
-  tmp: TSynTempBuffer;
+  tmp: TSynTempAdder;
 begin
-  {%H-}tmp.InitOnStack;
+  {%H-}tmp.Init;
   p := @NameValuePairs[0];
   for a := 0 to high(NameValuePairs) shr 1 do
   begin
@@ -5349,8 +5349,8 @@ begin
     tmp.AddDirect(#13, #10); // use CR+LF in HTTP headers
     inc(p);
   end;
-  if tmp.added <> 0 then
-    tmp.Done(OutHeaders, CP_UTF8);
+  if tmp.Size <> 0 then
+    tmp.Done(OutHeaders);
 end;
 
 function HeadersEncode(const NameValuePairs: array of const): RawUtf8;

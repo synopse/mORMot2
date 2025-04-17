@@ -3772,14 +3772,14 @@ function TRttiEnumType.GetSetName(const value; trimmed: boolean; sep: AnsiChar):
 var
   j: PtrInt;
   PS, v: PShortString;
-  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   tmp2: shortstring;
 begin
   result := '';
   if (@self = nil) or
      (@value = nil) then
     exit;
-  tmp.InitOnStack;
+  tmp.Init;
   PS := NameList;
   for j := MinValue to MaxValue do
   begin
@@ -3797,10 +3797,10 @@ begin
     end;
     inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
-  if tmp.added = 0 then
+  if tmp.Size= 0 then
     exit;
-  dec(tmp.added); // cancel last comma
-  tmp.Done(result, CP_UTF8);
+  dec(tmp.Store.added); // cancel last comma
+  tmp.Done(result);
 end;
 
 procedure TRttiEnumType.GetSetNameArray(const value;
@@ -6153,7 +6153,7 @@ function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
   customText: PRawUtf8Array; sepChar: AnsiChar): RawUtf8;
 var
   info: PRttiEnumType;
-  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
   result := '';
@@ -6162,17 +6162,17 @@ begin
      (@value = nil) or
      (customText = nil) then
     exit;
-  tmp.InitOnStack;
+  tmp.Init;
   for i := info^.MinValue to info^.MaxValue do
     if GetBitPtr(@value, i) then
     begin
       tmp.Add(customText^[i]);
       tmp.AddDirect(sepChar);
     end;
-  if tmp.added = 0 then
+  if tmp.Size = 0 then
     exit;
-  dec(tmp.added); // cancel last comma
-  tmp.Done(result, CP_UTF8);
+  dec(tmp.Store.added); // cancel last comma
+  tmp.Done(result);
 end;
 
 function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
@@ -6180,7 +6180,7 @@ function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
 var
   b: TByteDynArray absolute value;
   w: TWordDynArray absolute value;
-  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
   result := '';
@@ -6190,7 +6190,7 @@ begin
      (b = nil) or
      (customText = nil) then
     exit;
-  tmp.InitOnStack;
+  tmp.Init;
   if valueLength <= 256 then // stored as an array of 8-bit values
   begin
     for i := 0 to length(b) - 1 do
@@ -6207,10 +6207,10 @@ begin
         tmp.Add(customText^[w[i]]);
         tmp.AddDirect(sepChar);
       end;
-  if tmp.added = 0 then
+  if tmp.Size = 0 then
     exit;
-  dec(tmp.added); // cancel last comma
-  tmp.Done(result, CP_UTF8);
+  dec(tmp.Store.added); // cancel last comma
+  tmp.Done(result);
 end;
 
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
