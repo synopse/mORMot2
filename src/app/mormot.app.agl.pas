@@ -957,7 +957,9 @@ begin
     else
     begin
       Utf8ToFileName(ExtractExecutableName(n), fn);
-      if FileIsExecutable(fn) then
+      if fn = '' then
+        res := -1 // this parametr seems invalid
+      else if FileIsExecutable(fn) then
         res := RunCommand(Utf8ToString(n), {waitfor=}true)
       else
       begin // append to text log file
