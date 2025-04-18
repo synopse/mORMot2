@@ -1997,7 +1997,8 @@ type
     // INetTls methods
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterBind(var Context: TNetTlsContext);
+    procedure AfterBind(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
     function GetCipherName: RawUtf8;
@@ -2205,7 +2206,8 @@ begin
   end;
 end;
 
-procedure TSChannelNetTls.AfterBind(var Context: TNetTlsContext);
+procedure TSChannelNetTls.AfterBind(Socket: TNetSocket;
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   pfx: RawByteString;
   blob: TCryptDataBlob;
@@ -2216,6 +2218,8 @@ var
   freeprov: BOOL;
 begin
   // method called once the socket has been bound on server side
+  if ServerAddress <> '' then
+    fServerAddressW := SynUnicode(ServerAddress); // for exceptions
   pfx := Context.CertificateBin;
   if (pfx = '') and
      (Context.CertificateFile <> '') then

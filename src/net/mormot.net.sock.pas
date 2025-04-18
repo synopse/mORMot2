@@ -988,7 +988,8 @@ type
       const ServerAddress: RawUtf8);
     /// method called once the socket has been bound on server side
     // - will set Context.AcceptCert with reusable server certificates info
-    procedure AfterBind(var Context: TNetTlsContext);
+    procedure AfterBind(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
     /// method called for each new connection accepted on server side
     // - should make the proper server-side TLS handshake and create a session
     // - should raise an exception on error
@@ -5408,7 +5409,7 @@ begin
       cstaConnect:
         fSecure.AfterConnection(fSock, TLS, fServer);
       cstaBind:
-        fSecure.AfterBind(TLS);
+        fSecure.AfterBind(fSock, TLS, fServer);
       cstaAccept:
         fSecure.AfterAccept(fSock, TLS, @TLS.LastError, @TLS.CipherName)
     end;

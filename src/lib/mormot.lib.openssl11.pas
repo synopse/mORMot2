@@ -10557,7 +10557,8 @@ type
     // INetTls methods
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterBind(var Context: TNetTlsContext);
+    procedure AfterBind(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
     function GetCipherName: RawUtf8;
@@ -10905,10 +10906,12 @@ begin
       result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
 end;
 
-procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
+procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 begin
   // we don't store fSocket/fContext bound socket
   Context.LastError := '';
+  fServerAddress := ServerAddress;
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new(TLS_server_method);
   SetupCtx(Context, {bind=}true);
