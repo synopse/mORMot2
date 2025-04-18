@@ -3427,7 +3427,7 @@ begin
     case fKeyAlgo of
       ckaRsa,
       ckaRsaPss:
-        result := fRsa.Seal(Cipher, Message);
+        result := fRsa.Seal(Message, Cipher);
     end;
 end;
 
