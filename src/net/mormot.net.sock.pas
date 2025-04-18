@@ -1767,6 +1767,10 @@ type
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
       aTLSContext: PNetTlsContext = nil); virtual;
     /// constructor to bind to an address
+    // - just a wrapper around Create(aTimeOut) and BindPort()
+    constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
+      aTimeOut: integer = 10000; aReusePort: boolean = false);
+    /// address binding processing method, as called by the Bind() constructor
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
     // '1.2.3.4:1234'
@@ -1774,8 +1778,8 @@ type
     // 'unix:/run/mymormotapp.sock'
     // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
-      aTimeOut: integer = 10000; aReusePort: boolean = false);
+    procedure BindPort(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
+      aReusePort: boolean = false);
     /// after Create(), create a client connection to a given server URI
     // - optionally returns TUri.Address as parsed from aUri
     // - raise an ENetSock exception on error
@@ -5323,6 +5327,13 @@ begin
   Open(u.Server, u.Port, nlTcp, aTimeOut, u.Https, aTLSContext, @t);
 end;
 
+constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
+  aTimeOut: integer; aReusePort: boolean);
+begin
+  Create(aTimeOut);
+  BindPort(aAddress, aLayer, aReusePort);
+end;
+
 const
   BINDTXT: array[boolean] of string[4] = (
     'open', 'bind');
@@ -5330,13 +5341,12 @@ const
     'Is a server available on this address:port?',
     'Port may be invalid or already bound by another process!');
 
-constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
-  aTimeOut: integer; aReusePort: boolean);
+procedure TCrtSocket.BindPort(const aAddress: RawUtf8; aLayer: TNetLayer;
+  aReusePort: boolean);
 var
   s, p: RawUtf8;
   aSock: integer;
 begin
-  Create(aTimeOut);
   if aAddress = '' then
   begin
     {$ifdef OSLINUX} // try systemd activation
