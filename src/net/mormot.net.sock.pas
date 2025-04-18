@@ -296,6 +296,8 @@ type
       async: boolean): TNetResult;
     /// retrieve the current address associated on this connected socket
     function GetName(out addr: TNetAddr): TNetResult;
+    /// retrieve this connected socket address as 'ip[:port]' text
+    function GetIP(out ip: RawUtf8; withport: boolean = true): TNetResult;
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
     /// change the socket state to non-blocking
@@ -3058,6 +3060,15 @@ begin
     len := SizeOf(addr);
     result := NetCheck(getsockname(TSocket(@self), @addr, len));
   end;
+end;
+
+function TNetSocketWrap.GetIP(out ip: RawUtf8; withport: boolean): TNetResult;
+var
+  addr: TNetAddr;
+begin
+  result := GetName(addr);
+  if result = nrOK then
+    ShortStringToAnsi7String(addr.IPShort(withport), ip);
 end;
 
 function TNetSocketWrap.GetPeer(out addr: TNetAddr): TNetResult;
