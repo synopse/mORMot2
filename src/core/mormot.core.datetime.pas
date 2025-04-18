@@ -1893,7 +1893,7 @@ begin
     NowToString(true, ' ', aUtcTimeStamp), ' ', TrimControlChars(aLine)], line);
   AppendToTextFileSafe.Lock;
   try
-    AppendToFile(line, aFileName, aMaxSize);
+    result := AppendToFile(line, aFileName, aMaxSize);
   finally
     AppendToTextFileSafe.UnLock;
   end;

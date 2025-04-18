@@ -9647,7 +9647,7 @@ begin
     ctx[0] := #33; // truncate to keep information on a single line
     PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
   end;
-  persec := '';
+  persec[0] := #0;
   if PerSecond <> 0 then
     FormatShort16(' %/s', [KBNoSpace(PerSecond)], persec);
   curr[0] := #0;
