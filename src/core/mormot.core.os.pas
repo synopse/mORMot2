@@ -5840,7 +5840,10 @@ type
   PParseCommands = ^TParseCommands;
 
   /// used to store references of arguments recognized by ParseCommandArgs()
-  TParseCommandsArgs = array[0..31] of PAnsiChar;
+  // - up to 255 arguments are usually stored on the stack as function result
+  // - POSIX has almost no limit (since command line is intensively used in scripts),
+  // but some Windows versions seemed to limit to 8KB total as a whole
+  TParseCommandsArgs = array[byte] of PAnsiChar;
   PParseCommandsArgs = ^TParseCommandsArgs;
 
 const
