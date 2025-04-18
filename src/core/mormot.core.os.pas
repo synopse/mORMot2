@@ -5877,6 +5877,7 @@ function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
 
 /// high-level extraction of the executable of a RunCommand() execution command
 // - returns the first parameter returned by ParseCommandArgs()
+// - returns '' if cmd is incorrectly formatted
 function ExtractExecutableName(const cmd: RawUtf8;
   posix: boolean = PARSCOMMAND_POSIX): RawUtf8;
 
@@ -11163,7 +11164,10 @@ begin
             include(result, pcUnbalancedDoubleQuote);
           exclude(result, pcInvalidCommand);
           if argv <> nil then
-            argv^[n] := nil; // always end with a last argv^[] = nil
+            if n <= high(argv^) then
+              argv^[n] := nil // always end with a last argv^[] = nil
+            else
+              include(result, pcTooManyArguments);
           if argc <> nil then
             argc^ := n;
           exit;
@@ -11236,11 +11240,10 @@ begin
           end
           else if state = [] then
           begin
-            if argv <> nil then
+            if (argv <> nil) and
+               (n <= high(argv^)) then
               argv^[n] := d;
             inc(n);
-            if n = high(argv^) then
-              exit;
             state := [sInSQ, sInArg];
             continue;
           end
@@ -11258,11 +11261,10 @@ begin
           end
           else if state = [] then
           begin
-            if argv <> nil then
+            if (argv <> nil) and
+               (n <= high(argv^)) then
               argv^[n] := d;
             inc(n);
-            if n = high(argv^) then
-              exit;
             state := [sInDQ, sInArg];
             continue;
           end
@@ -11309,11 +11311,10 @@ begin
     exclude(state, sBslash);
     if state = [] then
     begin
-      if argv <> nil then
+      if (argv <> nil) and
+         (n <= high(argv^)) then
         argv^[n] := d;
       inc(n);
-      if n = high(argv^) then
-        exit;
       state := [sInArg];
     end;
     if d <> nil then
