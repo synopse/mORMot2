@@ -4607,7 +4607,13 @@ begin
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
-    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 5000, hsoReusePort in fOptions);
+    fSock := TCrtSocket.Create(5000);
+    if fLogClass <> nil  then
+      fSock.OnLog := fLogClass.DoLog; // bind + TLS process
+    fSock.BindPort(fSockPort, nlTcp, hsoReusePort in fOptions);
+    if (fLogClass <> nil) and
+       not (hsoLogVerbose in fOptions) then
+      fSock.OnLog := nil;
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       EHttpServer.RaiseUtf8('%.Execute: %.Bind failed', [self, fSock]);

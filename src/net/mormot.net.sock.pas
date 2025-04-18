@@ -5393,6 +5393,9 @@ begin
   {$endif OSLINUX}
 end;
 
+const
+  CSTA_TXT: array[TCrtSocketTlsAfter] of AnsiChar = 'CBA';
+
 procedure TCrtSocket.DoTlsAfter(caller: TCrtSocketTlsAfter);
 begin
   if fSecure = nil then // ignore duplicated calls
@@ -5413,6 +5416,10 @@ begin
       cstaAccept:
         fSecure.AfterAccept(fSock, TLS, @TLS.LastError, @TLS.CipherName)
     end;
+    if Assigned(OnLog) and
+       (caller <> cstaBind) then
+      OnLog(sllTrace, 'DoTlsAfter(%%:%): %',
+        [CSTA_TXT[caller], fServer, fPort, TLS.CipherName], self);
     TLS.Enabled := true; // set the flag AFTER fSecure has been initialized
   except
     on E: Exception do

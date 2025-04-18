@@ -101,9 +101,9 @@ type
     /// the associated 32-bit sequence number
     // - equals 0 after TPollAsyncSockets.Stop
     fHandle: TConnectionAsyncHandle;
-    /// low-level flags used by the state machine about this connection
+    /// low-level 8-bit flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    /// used internally e.g. for fRW[] or IOCP or to mark AddGC()
+    /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
     fInternalFlags: set of (ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
@@ -3807,6 +3807,9 @@ begin
   Sender.fSecure := NewNetTls;  // should work since DoTlsAfter() was fine
   Sender.fSecure.AfterAccept(Sender.fSocket, fServer.TLS, nil, nil);
   Sender.fSocket.MakeAsync;     // as expected by our asynchronous code
+  if acoVerboseLog in fOptions then
+    DoLog(sllTrace, 'AfterAccept % %',
+      [Sender.fSocket, Sender.fSecure.GetCipherName], Sender);
 end;
 
 procedure TAsyncServer.SetExecuteState(State: THttpServerExecuteState);
@@ -3851,9 +3854,12 @@ begin
     if acoEnableTls in fOptions then
       fSockets.OnFirstRead := OnFirstReadDoTls;
     // BIND + LISTEN (TLS is done later)
-    fServer := TCrtSocket.Bind(fSockPort, nlTcp, 5000, acoReusePort in Options);
+    fServer := TCrtSocket.Create(5000);
+    if fLogClass <> nil  then
+      fServer.OnLog := fLogClass.DoLog;
+    fServer.BindPort(fSockPort, nlTcp, acoReusePort in fOptions);
     if not fServer.SockIsDefined then // paranoid check
-      EAsyncConnections.RaiseUtf8('%.Execute: bind failed', [self]);
+      EAsyncConnections.RaiseUtf8('%.Execute: bind % failed', [self, fSockPort]);
     {$ifdef USE_WINIOCP}
     fIocpAcceptSub := fIocpAccept.Subscribe(fServer.Sock, 0);
     if not fIocpAccept.PrepareNext('first', fIocpAcceptSub, wieAccept) then
