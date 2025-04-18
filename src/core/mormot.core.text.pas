@@ -5148,7 +5148,7 @@ begin // mostly used for TSynLog RawUtf8 append
       end;
       Add(' '); // properly inlined
       inc(P);
-    until false;
+    until P^ = #0;
 end;
 
 procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
