@@ -103,7 +103,8 @@ type
     class function GetOpenSsl: string;
     /// wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
     class procedure CheckFailed(caller: TObject; const method: shortstring;
-      errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0);
+      errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0;
+      const context: RawUtf8 = '');
     class procedure TryNotAvailable(caller: TClass; const method: shortstring);
   public
     /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
@@ -2779,7 +2780,7 @@ begin
 end;
 
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: shortstring;
-  errormsg: PRawUtf8; ssl: pointer; sslretcode: integer);
+  errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8);
 var
   res: integer;
   msg: RawUtf8;
@@ -2801,9 +2802,11 @@ begin
   if errormsg <> nil then
   begin
     if errormsg^ <> '' then // caller may have set additional information
-      msg := msg + errormsg^;
+      msg := Join([msg, errormsg^]);
     errormsg^ := msg;
   end;
+  if context <> '' then
+    msg := Join([msg, ' ', context]);
   if caller = nil then
     exc := CreateFmt('OpenSSL %s error %d [%s]', [OpenSslVersionHexa, res, msg])
   else
@@ -7663,7 +7666,7 @@ begin
   result := '';
   for u := low(KU_) to high(KU_) do
     if u in usages then
-      result := result + KU_[u];
+      result := Join([result, KU_[u]]);
 end;
 
 function XuText(usages: TX509Usages): RawUtf8;
@@ -7673,7 +7676,7 @@ begin
   result := '';
   for u := low(XU_) to high(XU_) do
     if u in usages then
-      result := result + XU_[u];
+      result := Join([result, XU_[u]]);
 end;
 
 function X509_REQ.SetUsageAndAltNames(
@@ -7707,7 +7710,7 @@ begin
     v := KuText(usages);
     if v <> '' then
     begin
-      v := 'critical' + v; // heading comma included
+      v := Join(['critical', v]); // heading comma included
       if not Add(NID_key_usage, pointer(v)) then
         exit;
     end;
@@ -9076,7 +9079,7 @@ begin
     begin
       result := RawUtf8(format('%d %s', [bits, result]));
       if nid = NID_rsassaPss then // only PS256/PS384/PS512 don't supply the MD
-        result := result + '-' + RawUtf8(OBJ_nid2sn(md));
+        result := Join([result, '-', RawUtf8(OBJ_nid2sn(md))]);
     end;
   end;
 end;
@@ -9381,7 +9384,7 @@ begin
       exit;
   v := KuText(usages);
   if v <> '' then
-    if not SetExtension(NID_key_usage, 'critical' + v) then
+    if not SetExtension(NID_key_usage, Join(['critical', v])) then
       exit;
   v := XuText(usages);
   if v <> '' then
@@ -9670,9 +9673,9 @@ begin
   begin
     s := Subjects[i];
     if PosExChar(':', s) = 0 then
-      s := 'DNS:' + s; // e.g. DNS: email: IP: URI:
+      s := Join(['DNS:', s]); // e.g. DNS: email: IP: URI:
     if result <> '' then
-      result := result + ',' + s
+      result := Join([result, ',', s])
     else
       result := s;
   end;
@@ -10068,7 +10071,7 @@ begin
   end
   else
     str(get_error, AnsiString(result)); // paranoid / undocumented
-  result := 'SSL_ERROR_' + result;
+  result := Join(['SSL_ERROR_', result]);
 end;
 
 function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
@@ -10516,7 +10519,7 @@ var
 begin
   result := '';
   for i := 0 to length(X509) - 1 do
-    result := result +  X509[i].PeerInfo + '---------'#13#10;
+    result := Join([result, X509[i].PeerInfo, '---------'#13#10]);
 end;
 
 procedure PX509DynArrayFree(var X509: PX509DynArray);
@@ -10543,7 +10546,7 @@ type
     fCtx: PSSL_CTX;
     fSsl: PSSL;
     fPeer: PX509;
-    fCipherName: RawUtf8;
+    fCipherName, fServerAddress: RawUtf8;
     fDoSslShutdown: boolean;
     procedure Check(const method: shortstring; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
@@ -10631,7 +10634,7 @@ end;
 procedure TOpenSslNetTls.Check(const method: shortstring; res: integer);
 begin
   if res <> OPENSSLSUCCESS then
-    EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res);
+    EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res, fServerAddress);
 end;
 
 const
@@ -10671,6 +10674,7 @@ begin
   // reset output information
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
+  fServerAddress := ServerAddress;
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   SetupCtx(Context, {bind=}false);
@@ -10842,7 +10846,8 @@ begin
         pk^.Free;
       end
     else
-      EOpenSslNetTls.CheckFailed(self, 'SetupCtx: unsupported Certificate');
+      EOpenSslNetTls.CheckFailed(self, 'SetupCtx: unsupported Certificate',
+        nil, nil, 0, fServerAddress);
   end
   else if Context.CertificateRaw <> nil then
     EOpenSslNetTls.Check(self, 'SetupCtx CertificateRaw',
