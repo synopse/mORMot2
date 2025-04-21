@@ -7612,7 +7612,7 @@ end;
 
 { TLdapCheckMember }
 
-// checking group membership on a LDAP server is really a complex task
+// proper group membership on a LDAP server is really a complex task
 // - so a dedicated TLdapCheckMember class is worth the effort :)
 // - we follow the pattern as implemented in the best reference code we found:
 // https://www.gabescode.com/active-directory/2018/09/13/one-user-is-member-of-a-group.html

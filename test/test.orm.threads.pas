@@ -654,7 +654,7 @@ begin
   end;
   // 3. Cleanup for this protocol (but reuse the same threadpool)
   AddConsole('%', [msg]);
-  DatabaseClose;
+  DatabaseClose; // shutdown also fHttpServer
   Check(fDatabase = nil);
   if longstandingclient <> nil then
   begin
@@ -688,7 +688,7 @@ end;
 {$ifndef ONLYUSEHTTPSOCKET}
 procedure TTestMultiThreadProcess.WindowsAPI;
 begin
-  sleep(50); // seems enough to avoid ERROR_SHARING_VIOLATION in AddUrl() on XP
+  sleep(100); // sometimes needed to avoid ERROR_SHARING_VIOLATION
   Test(TRestHttpClientWinHTTP, useHttpApi);
 end;
 {$endif ONLYUSEHTTPSOCKET}

@@ -500,6 +500,7 @@ begin
         log.Log(sllCustom1, 'RegressionTests % SHUTDOWN', [clientcount], proxy);
     finally
       Shutdown;
+      //sleep(1000); // ensure all client sockets are detected as closed
     end;
   except
     on E: Exception do

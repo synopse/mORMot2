@@ -199,15 +199,15 @@ const
     '-9.999999999999999999999999999999999E+6144', // dsvMin
     '9.999999999999999999999999999999999E+6144'); // dsvMax
 
-  BSON_DECIMAL128_HI_NAN = $7c00000000000000;
-  BSON_DECIMAL128_HI_INT64POS = $3040000000000000; // 0 fixed decimals
-  BSON_DECIMAL128_HI_INT64NEG = $b040000000000000;
-  BSON_DECIMAL128_HI_CURRPOS = $3038000000000000;  // 4 fixed decimals
-  BSON_DECIMAL128_HI_CURRNEG = $b038000000000000;
-  BSON_DECIMAL128_EXPONENT_MAX = 6111;
-  BSON_DECIMAL128_EXPONENT_MIN = -6176;
+  BSON_DECIMAL128_HI_NAN        = $7c00000000000000;
+  BSON_DECIMAL128_HI_INT64POS   = $3040000000000000; // 0 fixed decimals
+  BSON_DECIMAL128_HI_INT64NEG   = $b040000000000000;
+  BSON_DECIMAL128_HI_CURRPOS    = $3038000000000000;  // 4 fixed decimals
+  BSON_DECIMAL128_HI_CURRNEG    = $b038000000000000;
+  BSON_DECIMAL128_EXPONENT_MAX  = 6111;
+  BSON_DECIMAL128_EXPONENT_MIN  = -6176;
   BSON_DECIMAL128_EXPONENT_BIAS = 6176;
-  BSON_DECIMAL128_MAX_DIGITS = 34;
+  BSON_DECIMAL128_MAX_DIGITS    = 34;
 
 /// ready-to-be displayed text of a TDecimal128SpecialValue
 function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
@@ -393,7 +393,7 @@ type
       betDeprecatedSymbol:
         (
         /// store here a RawUtf8 with the associated text
-        // - you have to use RawUF8(VText) when accessing this field
+        // - you have to use RawUtf8(VText) when accessing this field
         VText: pointer;);
   end;
   
@@ -1309,31 +1309,30 @@ end;
 
 const
   D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
-    // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
     (
     lo: 0;
-    hi: BSON_DECIMAL128_HI_NAN
+    hi: BSON_DECIMAL128_HI_NAN         // dsvError
   ), (
     lo: 0;
-    hi: BSON_DECIMAL128_HI_NAN
+    hi: BSON_DECIMAL128_HI_NAN         // dsvValue
   ), (
     lo: 0;
-    hi: BSON_DECIMAL128_HI_NAN
+    hi: BSON_DECIMAL128_HI_NAN         // dsvNan
   ), (
     lo: 0;
-    hi: BSON_DECIMAL128_HI_INT64POS
+    hi: BSON_DECIMAL128_HI_INT64POS    // dsvZero
   ), (
     lo: 0;
-    hi: $7800000000000000
+    hi: $7800000000000000              // dsvPosInf
   ), (
     lo: 0;
-    hi: QWord($f800000000000000)
+    hi: QWord($f800000000000000)       // dsvNegInf
   ), (
     lo: $378d8e63ffffffff;
-    hi: QWord($dfffed09bead87c0)
+    hi: QWord($dfffed09bead87c0)       // dsvMin
   ), (
     lo: $378d8e63ffffffff;
-    hi: $5fffed09bead87c0
+    hi: $5fffed09bead87c0             // dsvMax
   ));
 
 procedure TDecimal128.SetSpecial(special: TDecimal128SpecialValue);
