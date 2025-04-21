@@ -1238,6 +1238,7 @@ type
   TWinINet = class(TWinHttpApi)
   protected
     // those internal methods will raise an EWinINet exception on error
+    procedure RaiseFromLastError;
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
@@ -1259,9 +1260,6 @@ type
   EWinINet = class(EHttpSocket)
   protected
     fLastError: integer;
-  public
-    /// create and raise a WinINet exception, with the error message as text
-    class procedure RaiseFromLastError;
   published
     /// the associated WSAGetLastError value
     property LastError: integer
@@ -4478,22 +4476,20 @@ begin
 end;
 
 
-{ EWinINet }
+{ TWinINet }
 
-class procedure EWinINet.RaiseFromLastError;
+procedure TWinINet.RaiseFromLastError;
 var
   err: integer;
   E: EWinINet;
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   err := GetLastError;
-  E := CreateUtf8('% (%)', [SysErrorMessageWinInet(err), err]);
+  E := EWinINet.CreateUtf8(
+    '% (%) on %:%', [SysErrorMessageWinInet(err), err, fServer, fPort]);
   E.fLastError := err;
   raise E;
 end;
-
-
-{ TWinINet }
 
 procedure TWinINet.InternalConnect(
   ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
@@ -4509,7 +4505,7 @@ begin
   fSession := InternetOpenA(pointer(fExtendedOptions.UserAgent), OpenType,
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession = nil then
-    EWinINet.RaiseFromLastError;
+    RaiseFromLastError;
   InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
     @ConnectionTimeOut, SizeOf(ConnectionTimeOut));
   InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT,
@@ -4519,7 +4515,7 @@ begin
   fConnection := InternetConnectA(fSession, pointer(fServer), fPort,
     nil, nil, INTERNET_SERVICE_HTTP, 0, 0);
   if fConnection = nil then
-    EWinINet.RaiseFromLastError;
+    RaiseFromLastError;
 end;
 
 procedure TWinINet.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
@@ -4540,7 +4536,7 @@ begin
   FRequest := HttpOpenRequestA(FConnection, pointer(aMethod), pointer(aUrl),
     nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
   if FRequest = nil then
-    EWinINet.RaiseFromLastError;
+    RaiseFromLastError;
 end;
 
 procedure TWinINet.InternalCloseRequest;
@@ -4557,7 +4553,7 @@ begin
   if (hdr <> '') and
      not HttpAddRequestHeadersA(fRequest, pointer(hdr), length(hdr),
        HTTP_ADDREQ_FLAG_COALESCE) then
-    EWinINet.RaiseFromLastError;
+    RaiseFromLastError;
 end;
 
 procedure TWinINet.InternalSendRequest(const aMethod: RawUtf8; const aData:
@@ -4574,7 +4570,7 @@ begin
     buff.dwStructSize := SizeOf(buff);
     buff.dwBufferTotal := Length(aData);
     if not HttpSendRequestExA(fRequest, @buff, nil, 0, 0) then
-      EWinINet.RaiseFromLastError;
+      RaiseFromLastError;
     datapos := 0;
     while datapos < datalen do
     begin
@@ -4586,18 +4582,18 @@ begin
         Bytes := max;
       if not InternetWriteFile(fRequest,
          @PByteArray(aData)[datapos], Bytes, BytesWritten) then
-        EWinINet.RaiseFromLastError;
+        RaiseFromLastError;
       inc(datapos, BytesWritten);
       if not fOnUpload(Self, datapos, datalen) then
         raise EWinINet.CreateFmt('OnUpload Canceled %s', [aMethod]);
     end;
     if not HttpEndRequest(fRequest, nil, 0, 0) then
-      EWinINet.RaiseFromLastError;
+      RaiseFromLastError;
   end
   else
     // blocking send with no callback
     if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
-      EWinINet.RaiseFromLastError;
+      RaiseFromLastError;
 end;
 
 function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;
@@ -4638,14 +4634,14 @@ end;
 function TWinINet.InternalQueryDataAvailable: cardinal;
 begin
   if not InternetQueryDataAvailable(fRequest, result, 0, 0) then
-    EWinINet.RaiseFromLastError;
+    RaiseFromLastError;
 end;
 
 function TWinINet.InternalReadData(var Data: RawByteString;
   Read: PtrInt; Size: cardinal): cardinal;
 begin
   if not InternetReadFile(fRequest, @PByteArray(Data)[Read], Size, result) then
-    EWinINet.RaiseFromLastError;
+    RaiseFromLastError;
 end;
 
 destructor TWinINet.Destroy;
