@@ -1125,7 +1125,7 @@ begin
   if not fBackgroundRun.RunWait(TimeoutSec, CallSynchronize) then
     TestFailed(' error: timeout after % sec' + CRLF, [TimeoutSec])
   else if NotifyThreadCount then
-    NotifyProgress([timer.Stop, CRLF]);
+    NotifyProgress([timer.Stop]);
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
@@ -1505,7 +1505,7 @@ begin
           if not started then
             continue;
           if c.fBackgroundRun.Waiting then
-            c.RunWait({notify=}true, {timeout=}120, {synchronize=}true);
+            c.RunWait({notify=}false, {timeout=}120, {synchronize=}true);
           c.CleanUp; // should be done before Destroy call
           if c.AssertionsFailed = 0 then
             DoColor(ccLightGreen)
