@@ -834,6 +834,14 @@ begin
   end;
 end;
 
+procedure CheckSynopseReverse(test: TNetworkProtocols; const ip: RawUtf8);
+begin
+  if ip = 'blog.synopse.info' then // occurs on some weird DNS servers
+    test.Check(true)
+  else
+    test.CheckEqual(ip, '62-210-254-173.rev.poneytelecom.eu');
+end;
+
 procedure TNetworkProtocols.RunLdapClient(Sender: TObject);
 var
   rev: RawUtf8;
@@ -884,7 +892,7 @@ begin
         break; // success
       Sleep(100); // wait a little and retry up to 2 seconds
     until GetTickCount64 > endtix;
-    CheckEqual(rev, '62-210-254-173.rev.poneytelecom.eu')
+    CheckSynopseReverse(self, rev);
   end;
 end;
 
@@ -989,10 +997,10 @@ begin
     CheckEqual(ip, rev, 'dns2');
     inc(fAssertions);
     rev := DnsReverseLookup(ip);
-    if rev <> '' then
-      CheckEqual(rev, '62-210-254-173.rev.poneytelecom.eu')
+    if rev = '' then
+      synopsednsip := ip // we will retry in the background thread
     else
-      synopsednsip := ip; // we will retry in the background thread
+      CheckSynopseReverse(self, rev);
     // async validate actual LDAP client on public ldap.forumsys.com server
     Run(RunLdapClient, self, 'ldap', true, false);
   end;
