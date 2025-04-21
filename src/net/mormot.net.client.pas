@@ -4363,8 +4363,8 @@ begin
         wraNegotiate,
         wraNegotiateChannelBinding:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
-      else
-        EWinHttp.RaiseUtf8('%: unsupported AuthScheme=% on % %:%',
+      else // no RaiseUtf8 to avoid "winAUth not initialized" error on Delphi
+        raise EWinHttp.CreateUtf8('%: unsupported AuthScheme=% on % %:%',
           [self, ToText(AuthScheme)^, aMethod, fServer, fPort]);
       end;
       Utf8ToSynUnicode(AuthUserName, usr);
