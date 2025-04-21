@@ -1289,7 +1289,7 @@ type
   protected
     // you can override this method e.g. to disable/enable some protocols
     function InternalGetProtocols: cardinal; virtual;
-    // those internal methods will raise an EOSError exception on error
+    // those internal methods will raise an EWinHttp exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
@@ -1302,17 +1302,14 @@ type
     function InternalQueryDataAvailable: cardinal; override;
     function InternalReadData(var Data: RawByteString;
       Read: PtrInt; Size: cardinal): cardinal; override;
+    procedure RaiseFromLastError(const ctxt: shortstring);
   public
     /// relase the connection
     destructor Destroy; override;
   end;
 
   /// WinHttp exception type
-  EWinHttp = class(ESynException)
-  public
-    /// create and raise a EWinHttp exception, with the error message as text
-    class procedure RaiseFromLastError;
-  end;
+  EWinHttp = class(ESynException);
 
 var
   /// global flag to enable HTTP proxy detection at OS level for TWinHttp
@@ -4245,26 +4242,26 @@ begin
       WinHttpForceProxyDetection := false; // flag was the culprit
   end;
   if fSession = nil then
-    EWinHttp.RaiseFromLastError;
+    RaiseFromLastError('Open');
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
      ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
-    EWinHttp.RaiseFromLastError;
+    RaiseFromLastError('SetTimeouts');
   if fHttps then
   begin
     protocols := InternalGetProtocols;
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
-      EWinHttp.RaiseFromLastError;
+      RaiseFromLastError('SetOption(tls)');
     Callback := WinHttpApi.SetStatusCallback(fSession,
       WinHttpSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
     if CallbackRes = WINHTTP_INVALID_STATUS_CALLBACK then
-      EWinHttp.RaiseFromLastError;
+      RaiseFromLastError('SetStatusCallback');
   end;
   fConnection := WinHttpApi.Connect(
     fSession, pointer(Utf8ToSynUnicode(fServer)), fPort, 0);
   if fConnection = nil then
-    EWinHttp.RaiseFromLastError;
+    RaiseFromLastError('Connect');
 end;
 
 procedure TWinHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
@@ -4282,13 +4279,13 @@ begin
   fRequest := WinHttpApi.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
     pointer(Utf8ToSynUnicode(aUrl)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
   if fRequest = nil then
-    EWinHttp.RaiseFromLastError;
+    RaiseFromLastError('OpenRequest');
   if fKeepAlive = 0 then
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
     if not WinHttpApi.SetOption(
        fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags, SizeOf(Flags)) then
-      EWinHttp.RaiseFromLastError;
+      RaiseFromLastError('SetOption(keepalive)');
   end;
 end;
 
@@ -4306,7 +4303,7 @@ begin
   if (hdr <> '') and
      not WinHttpApi.AddRequestHeaders(FRequest,
      pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
-    EWinHttp.RaiseFromLastError;
+    RaiseFromLastError('AddRequestHeaders');
 end;
 
 procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
@@ -4335,10 +4332,11 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
             Bytes := Max;
           if not WinHttpApi.WriteData(fRequest, @PByteArray(aData)[Current],
              Bytes, BytesWritten) then
-            EWinHttp.RaiseFromLastError;
+            RaiseFromLastError('WriteData');
           inc(Current, BytesWritten);
           if not fOnUpload(Self, Current, L) then
-            EWinHttp.RaiseUtf8('%: OnUpload canceled %', [self, aMethod]);
+            EWinHttp.RaiseUtf8('%: OnUpload cancel % on %:%',
+              [self, aMethod, fServer, fPort]);
         end;
       end;
     end
@@ -4366,15 +4364,15 @@ begin
         wraNegotiateChannelBinding:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
       else
-        raise EWinHttp.CreateUtf8(
-          '%: unsupported AuthScheme=%', [self, ToText(AuthScheme)^]);
+        EWinHttp.RaiseUtf8('%: unsupported AuthScheme=% on % %:%',
+          [self, ToText(AuthScheme)^, aMethod, fServer, fPort]);
       end;
       Utf8ToSynUnicode(AuthUserName, usr);
       Utf8ToSynUnicode(AuthPassword, pwd);
       try
         if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
            winAuth, pointer(usr), pointer(pwd), nil) then
-          EWinHttp.RaiseFromLastError;
+          RaiseFromLastError('SetCredentials');
       finally
         FillZero(pwd);
       end;
@@ -4383,7 +4381,7 @@ begin
      IgnoreTlsCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) then
-      EWinHttp.RaiseFromLastError;
+      RaiseFromLastError('SetOption');
   if fExtendedOptions.RedirectMax > 0 then
     if WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_REDIRECT_POLICY,
          @REDIRECT_POLICY_ALWAYS, SizeOf(cardinal)) then
@@ -4404,7 +4402,7 @@ begin
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success with no certificate validation
   // if we reached here, an error occurred
-  EWinHttp.RaiseFromLastError;
+  RaiseFromLastError('SendRequest');
 end;
 
 function TWinHttp.InternalGetInfo(Info: cardinal): RawUtf8;
@@ -4448,14 +4446,14 @@ begin
     if GetLastError = ERROR_WINHTTP_OPERATION_CANCELLED then
       result := 0 // connection may be closed by the server e.g. on 30x redirect
     else
-      EWinHttp.RaiseFromLastError;
+      RaiseFromLastError('QueryDataAvailable');
 end;
 
 function TWinHttp.InternalReadData(var Data: RawByteString;
   Read: PtrInt; Size: cardinal): cardinal;
 begin
   if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
-    EWinHttp.RaiseFromLastError;
+    RaiseFromLastError('ReadData');
 end;
 
 destructor TWinHttp.Destroy;
@@ -4467,12 +4465,13 @@ begin
   inherited Destroy;
 end;
 
-
-{ EWinHttp }
-
-class procedure EWinHttp.RaiseFromLastError;
+procedure TWinHttp.RaiseFromLastError(const ctxt: shortstring);
+var
+  err: integer;
 begin
-  RaiseLastModuleError(winhttpdll, EWinHttp);
+  err := GetLastError;
+  EWinHttp.RaiseUtf8('%: % error [%] (%) on %:%',
+    [self, ctxt, WinErrorText(err, winhttpdll), err, fServer, fPort]);
 end;
 
 
@@ -4485,8 +4484,8 @@ var
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   err := GetLastError;
-  E := EWinINet.CreateUtf8(
-    '% (%) on %:%', [SysErrorMessageWinInet(err), err, fServer, fPort]);
+  E := EWinINet.CreateUtf8('%: % (%) on %:%',
+    [self, SysErrorMessageWinInet(err), err, fServer, fPort]);
   E.fLastError := err;
   raise E;
 end;
