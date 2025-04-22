@@ -8,9 +8,9 @@ unit mormot.net.ldap;
 
    Simple LDAP Protocol Client
     - CLDAP Client Functions
-    - LDIF Data Interchange Format
     - LDAP Protocol Definitions
     - LDAP Attributes Definitions
+    - LDIF Data Interchange Format
     - LDAP Response Storage
     - Main TLdapClient Class
     - Dedicated TLdapCheckMember Class
@@ -204,27 +204,6 @@ procedure CldapSortHosts(var Hosts: TRawUtf8DynArray;
 function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
   const NameServer: RawUtf8 = ''; UsePosixEnv: boolean = false;
   DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
-
-
-{ **************** LDIF Data Interchange Format }
-
-/// check if the supplied buffer requires base-64 encoding as RFC 2849 value
-// - i.e. if p[0..l-1] contains SAFE-STRING = [SAFE-INIT-CHAR *SAFE-CHAR]
-// - note that https://www.rfc-editor.org/errata/eid3646 states it applied to
-// also to dn/rdn values
-function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean;
-
-const
-  /// some default maximum line for our LDIF output
-  MAX_LDIF_LINE = 80;
-
-/// raw append of the supplied buffer value as specified by RFC 2849
-// - humanfriendly=true will add '# attname: <utf-8 content>' comment line
-// e.g. if base-64 encoding was involved, for human-friendly file export
-// - as used e.g. by TLdapAttribute.ExportToLdif and TLdapResult.ExportToLdif
-procedure AddLdif(w: TTextWriter; const v: RawByteString;
-  forcebase64, humanfriendly: boolean; att: pointer{TLdapAttribute};
-  maxlen: PtrInt);
 
 
 { **************** LDAP Protocol Definitions }
@@ -1238,7 +1217,7 @@ type
       read Get write SetAttr; default;
     /// access to the internal list of TLdapAttribute objects
     // - note that length(Items) may be <> Count for this class, so you should
-    // NEVER use an enumerate "for a in list.Items do" loop
+    // NEVER use an enumerate "for a in list.Items do" loop, but rely on Count
     property Items: TLdapAttributeDynArray
       read fItems;
     /// number of TLdapAttribute objects in this list
@@ -1383,6 +1362,75 @@ function Modifier(Op: TLdapModifyOp; const Types: array of TLdapAttributeType;
 function Modifier(Op: TLdapModifyOp;
   const NameValuePairs: array of RawUtf8): TAsnObject; overload;
 
+
+
+{ **************** LDIF Data Interchange Format }
+
+/// check if the supplied buffer requires base-64 encoding as RFC 2849 value
+// - i.e. if p[0..l-1] contains SAFE-STRING = [SAFE-INIT-CHAR *SAFE-CHAR]
+// - note that https://www.rfc-editor.org/errata/eid3646 states it applied to
+// also to dn/rdn values
+function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean;
+
+const
+  /// some default maximum line for our LDIF output
+  MAX_LDIF_LINE = 80;
+
+/// raw append of the supplied buffer value as specified by RFC 2849
+// - humanfriendly=true will add '# attname: <utf-8 content>' comment line
+// e.g. if base-64 encoding was involved, for human-friendly file export
+// - as used e.g. by TLdapAttribute.ExportToLdif and TLdapResult.ExportToLdif
+procedure AddLdif(w: TTextWriter; const v: RawByteString;
+  forcebase64, humanfriendly: boolean; att: pointer{TLdapAttribute};
+  maxlen: PtrInt);
+
+type
+  /// store a set of name/value attributes, for a given LDIF change type
+  TLdifChange = class(TLdapAttributeList)
+  protected
+    fChangeType: TLdapModifyOp;
+    procedure AssignTo(Dest: TClonable); override;
+  public
+    /// how the associated attributes should be applied
+    // - by default, if not specified in the LDIF file, plain lmoAdd is assumed
+    property ChangeType: TLdapModifyOp
+      read fChangeType;
+  end;
+  /// dynamic array of LDIF changes, as stored in TLdifEntry
+  TLdifChangeDynArray = array of TLdifChange;
+
+  /// store a LDIF entry, associated with a given dn
+  // - will reflect the exact content of a LDIF file section
+  TLdifEntry = class(TClonable)
+  protected
+    fDn: RawUtf8;
+    fItems: TLdifChangeDynArray;
+    procedure AssignTo(Dest: TClonable); override;
+  public
+    /// finalize the list
+    destructor Destroy; override;
+    /// access to the internal list of TLdifChange objects
+    property Items: TLdifChangeDynArray
+      read fItems;
+    property Dn: RawUtf8
+      read fDn write fDn;
+  end;
+  /// dynamic array of LDIF entries, as stored in TLdifFile
+  TLdifEntryDynArray = array of TLdifEntry;
+
+  /// store all decoded LDIF content in memory
+  // - will reflect the exact content of a LDIF file
+  TLdifFile = class(TClonable)
+  protected
+    fItems: TLdifEntryDynArray;
+    procedure AssignTo(Dest: TClonable); override;
+  public
+    /// finalize the list
+    destructor Destroy; override;
+    /// access to the internal list of TLdifChange objects
+    property Items: TLdifEntryDynArray
+      read fItems;
+  end;
 
 
 { **************** LDAP Response Storage }
@@ -2890,111 +2938,6 @@ begin
   result := DnsLdapControlers(NameServer, UsePosixEnv, DomainName);
   if UdpFirstDelayMS > 0 then
     CldapSortHosts(result, UdpFirstDelayMS, MinimalUdpCount);
-end;
-
-
-{ **************** LDIF Data Interchange Format }
-
-// we follow https://www.rfc-editor.org/rfc/rfc2849 specs
-
-function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean; // RFC 2849
-begin
-  if (p <> nil) and
-     (l > 0) then
-  begin
-    result := false;
-    if p^ in [#0, #10, #13, ' ', ':', '<', #128 .. #255] then
-      exit; // SAFE-INIT-CHAR: <= 127, not NUL, LF, CR, SPACE, COLON, LESS-THAN
-    dec(l);
-    if p[l] = ' ' then
-      exit; // "should not end with a space" RFC 2849 point 8)
-    if l <> 0 then
-      repeat
-        inc(p);
-        if p^ in [#0, #10, #13, #128 .. #255] then
-          exit; // SAFE-CHAR: <= 127 not NUL, LF, CR
-        dec(l);
-      until l = 0;
-  end;
-  result := true;
-end;
-
-procedure AddWrapLine(w: TTextWriter; p: PUtf8Char; len, pos, maxlen: PtrInt);
-var
-  perline: PtrInt;
-begin // here maxlen > 0
-  perline := MinPtrInt(len, maxlen - pos);
-  repeat
-    w.AddNoJsonEscape(p, perline);
-    dec(len, perline);
-    if len = 0 then
-      exit;
-    w.AddDirect(#10, ' ');
-    inc(p, perline);
-    perline := MinPtrInt(len, maxlen);
-  until false;
-end;
-
-procedure AddLdif(w: TTextWriter; const v: RawByteString;
-  forcebase64, humanfriendly: boolean; att: pointer; maxlen: PtrInt);
-var
-  a: TLdapAttribute absolute att;
-  truncated: boolean;
-  tmp: RawUtf8;
-begin
-  dec(maxlen);
-  if forcebase64 or
-     not IsLdifSafe(pointer(v), length(v)) then
-  begin
-    // UTF-8 or binary content are stored as 'attributename:: <base64>'
-    w.AddDirect(':', ' ');
-    if (att = nil) or
-       (maxlen <= 0) then
-      w.WrBase64(pointer(v), length(v), {withmagic=}false) // line feeds optional
-    else
-    begin
-      tmp := BinToBase64(v);
-      AddWrapLine(w, pointer(tmp), length(tmp), length(a.AttributeName) + 2, maxlen);
-    end;
-    if forcebase64 or
-       (not humanfriendly) or
-       (a = nil) or
-       (a.fKnownTypeStorage in [atsAny, atsInteger]) then
-      exit;
-    humanfriendly := false; // skip AttributeValueMakeReadable() below
-  end
-  else
-  begin
-    // simple 'attributename: <us-ascii>' form
-    w.AddDirect(' ');
-    if (att = nil) or
-       (maxlen <= 0) then
-      w.AddString(v)
-    else
-      AddWrapLine(w, pointer(v), length(v), length(a.AttributeName) + 1, maxlen);
-    if (not humanfriendly) or
-       (a = nil) or
-       (a.fKnownTypeStorage = atsRawUtf8) then
-      exit;
-  end;
-  // optionally append the human-friendly value as comment
-  tmp := v;
-  if humanfriendly then
-    if AttributeValueMakeReadable(tmp, a.fKnownTypeStorage) or
-       (pointer(tmp) = pointer(v)) then
-      exit; // don't put hexadecimal or identical content in comment
-  w.AddShorter(#10'# ');
-  w.AddString(a.AttributeName); // is either OID or plain alphanum
-  w.AddShorter(': <');
-  truncated := (maxlen > 0) and
-               (length(tmp) + length(a.AttributeName) > maxlen - 6);
-  if truncated then
-    FakeLength(tmp, Utf8TruncatedLength(tmp, maxlen - 9));
-  w.AddString(tmp);             // human-readable text as comment
-  if truncated then
-    w.AddShorter('...>')
-  else
-    w.AddDirect('>');
 end;
 
 
@@ -4765,6 +4708,156 @@ begin
   else
     result := pointer(a.fList[0]);
 end;
+
+
+{ **************** LDIF Data Interchange Format }
+
+// we follow https://www.rfc-editor.org/rfc/rfc2849 specs
+
+function IsLdifSafe(p: PUtf8Char; l: PtrInt): boolean; // RFC 2849
+begin
+  if (p <> nil) and
+     (l > 0) then
+  begin
+    result := false;
+    if p^ in [#0, #10, #13, ' ', ':', '<', #128 .. #255] then
+      exit; // SAFE-INIT-CHAR: <= 127, not NUL, LF, CR, SPACE, COLON, LESS-THAN
+    dec(l);
+    if p[l] = ' ' then
+      exit; // "should not end with a space" RFC 2849 point 8)
+    if l <> 0 then
+      repeat
+        inc(p);
+        if p^ in [#0, #10, #13, #128 .. #255] then
+          exit; // SAFE-CHAR: <= 127 not NUL, LF, CR
+        dec(l);
+      until l = 0;
+  end;
+  result := true;
+end;
+
+procedure AddWrapLine(w: TTextWriter; p: PUtf8Char; len, pos, maxlen: PtrInt);
+var
+  perline: PtrInt;
+begin // here maxlen > 0
+  perline := MinPtrInt(len, maxlen - pos);
+  repeat
+    w.AddNoJsonEscape(p, perline);
+    dec(len, perline);
+    if len = 0 then
+      exit;
+    w.AddDirect(#10, ' ');
+    inc(p, perline);
+    perline := MinPtrInt(len, maxlen);
+  until false;
+end;
+
+procedure AddLdif(w: TTextWriter; const v: RawByteString;
+  forcebase64, humanfriendly: boolean; att: pointer; maxlen: PtrInt);
+var
+  a: TLdapAttribute absolute att;
+  truncated: boolean;
+  tmp: RawUtf8;
+begin
+  dec(maxlen);
+  if forcebase64 or
+     not IsLdifSafe(pointer(v), length(v)) then
+  begin
+    // UTF-8 or binary content are stored as 'attributename:: <base64>'
+    w.AddDirect(':', ' ');
+    if (att = nil) or
+       (maxlen <= 0) then
+      w.WrBase64(pointer(v), length(v), {withmagic=}false) // line feeds optional
+    else
+    begin
+      tmp := BinToBase64(v);
+      AddWrapLine(w, pointer(tmp), length(tmp), length(a.AttributeName) + 2, maxlen);
+    end;
+    if forcebase64 or
+       (not humanfriendly) or
+       (a = nil) or
+       (a.fKnownTypeStorage in [atsAny, atsInteger]) then
+      exit;
+    humanfriendly := false; // skip AttributeValueMakeReadable() below
+  end
+  else
+  begin
+    // simple 'attributename: <us-ascii>' form
+    w.AddDirect(' ');
+    if (att = nil) or
+       (maxlen <= 0) then
+      w.AddString(v)
+    else
+      AddWrapLine(w, pointer(v), length(v), length(a.AttributeName) + 1, maxlen);
+    if (not humanfriendly) or
+       (a = nil) or
+       (a.fKnownTypeStorage = atsRawUtf8) then
+      exit;
+  end;
+  // optionally append the human-friendly value as comment
+  tmp := v;
+  if humanfriendly then
+    if AttributeValueMakeReadable(tmp, a.fKnownTypeStorage) or
+       (pointer(tmp) = pointer(v)) then
+      exit; // don't put hexadecimal or identical content in comment
+  w.AddShorter(#10'# ');
+  w.AddString(a.AttributeName); // is either OID or plain alphanum
+  w.AddShorter(': <');
+  truncated := (maxlen > 0) and
+               (length(tmp) + length(a.AttributeName) > maxlen - 6);
+  if truncated then
+    FakeLength(tmp, Utf8TruncatedLength(tmp, maxlen - 9));
+  w.AddString(tmp);             // human-readable text as comment
+  if truncated then
+    w.AddShorter('...>')
+  else
+    w.AddDirect('>');
+end;
+
+
+{ TLdifChange }
+
+procedure TLdifChange.AssignTo(Dest: TClonable);
+var
+  d: TLdifChange absolute Dest;
+begin
+  inherited AssignTo(Dest); // copy all TLdapAttribute
+  d.fChangeType := fChangeType;
+end;
+
+
+{ TLdifEntry }
+
+procedure TLdifEntry.AssignTo(Dest: TClonable);
+var
+  d: TLdifEntry absolute Dest;
+begin
+  d.fDn := fDn;
+  TLdifChange.CloneObjArray(fItems, d.fItems);
+end;
+
+destructor TLdifEntry.Destroy;
+begin
+  ObjArrayClear(fItems);
+  inherited Destroy;
+end;
+
+
+{ TLdifFile }
+
+procedure TLdifFile.AssignTo(Dest: TClonable);
+var
+  d: TLdifFile absolute Dest;
+begin
+  TLdifEntry.CloneObjArray(fItems, d.fItems);
+end;
+
+destructor TLdifFile.Destroy;
+begin
+  ObjArrayClear(fItems);
+  inherited Destroy;
+end;
+
 
 
 { **************** LDAP Response Storage }
