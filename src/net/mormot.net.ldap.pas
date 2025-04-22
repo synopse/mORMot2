@@ -7109,8 +7109,11 @@ begin
                  ]));
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
-    fLog.Add.Log(LOG_DEBUGERROR[not result], 'Modify(%)=% % %',
-      [Obj, BOOL_STR[result], fResultCode, fResultString], self);
+    if result then
+      fLog.Add.Log(sllDebug, 'Modify(%) n=%', [Obj, length(Modifications)], self)
+    else
+      fLog.Add.Log(sllError, 'Modify(%)=% % %',
+        [Obj, BOOL_STR[result], fResultCode, fResultString], self);
 end;
 
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
