@@ -2316,8 +2316,8 @@ type
   TNetHostCache = object
   {$endif USERECORDWITHMETHODS}
   public
-    Host: TRawUtf8DynArray;
     Safe: TLightLock;
+    Host: TRawUtf8DynArray;
     Tix, TixShr: cardinal;
     Count, Capacity: integer;
     IP: TCardinalDynArray;
@@ -2373,7 +2373,7 @@ begin
   if (Count = 0) or
      (hostname = '') then
     exit;
-  i := FindPropName(pointer(Host), hostname, Count);
+  i := FindPropName(pointer(Host), hostname, Count); // case insensitive lookup
   if i < 0 then
     exit;
   ip4 := IP[i];
@@ -2421,7 +2421,7 @@ begin
     begin
       i := FindPropName(pointer(Host), hostname, Count);
       if i < 0 then
-        exit;
+        exit; // case insensitive Host not found
       n := Count - 1;
       Count := n;
       Host[i] := '';
