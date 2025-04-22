@@ -2555,9 +2555,11 @@ type
     /// ensure the supplied RawUtf8 value is interned and unique
     procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
     /// return the interned value reference, or nil if aText did not appear yet
+    // - reference is pointer(fHash.Value[]) with no ref-count involved
     function Existing(const aText: RawUtf8; aTextHash: cardinal): pointer; overload;
     /// return the interned value reference, with no pre-computed hash
     function Existing(const aText: RawUtf8): pointer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// delete all stored RawUtf8 values
     procedure Clear;
     /// reclaim any unique RawUtf8 values
