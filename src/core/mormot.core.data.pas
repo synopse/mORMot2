@@ -45,7 +45,7 @@ uses
 { ************ RTL TPersistent or Root Classes with Custom Constructor }
 
 type
-    /// abstract parent class with a virtual constructor, ready to be overridden
+  /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
   // - you can specify such a class if you need an object including published
   // properties (like TPersistent) with a virtual constructor (e.g. to
@@ -165,9 +165,12 @@ type
     // !var
     // !  myVar: TMyClass;
     // !begin
-    // !  TAutoFree.One(myVar,TMyClass.Create);
+    // !  with TAutoFree.One(myVar,TMyClass.Create) do
+    // !  begin
     // !  ... use myVar
-    // !end; // here myVar will be released
+    // !  end; // Delphi 10.4 and later: myVar will be released here
+    // !  ... some other code
+    // !end; // Delphi 10.3 and sooner: myVar will be released here
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     // - Delphi 10.4 also did change it and release the IAutoFree before the
@@ -182,16 +185,19 @@ type
     // !var
     // !  var1, var2: TMyClass;
     // !begin
-    // !  TAutoFree.Several([
+    // !  with TAutoFree.Several([
     // !    @var1,TMyClass.Create,
-    // !    @var2,TMyClass.Create]);
+    // !    @var2,TMyClass.Create]) do
+    // !  begin
     // !  ... use var1 and var2
-    // !end; // here var1 and var2 will be released
+    // !  end;
+    // !  ... some other code
+    // !end;
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     // - Delphi 10.4 also did change it and release the IAutoFree before the
     // end of the current method, and an "array of pointer" cannot be inlined
-    // by the Delphi compiler, so you should explicitly call ForMethod:
+    // by the Delphi compiler, so you could explicitly call ForMethod:
     // !  TAutoFree.Several([
     // !    @var1,TMyClass.Create,
     // !    @var2,TMyClass.Create]).ForMethod;
@@ -206,7 +212,7 @@ type
     // !  .... do something
     // !  auto.Another(var2,TMyClass.Create);
     // !  ... use var1 and var2
-    // !end; // here var1 and var2 will be released
+    // !end; // here var1 and var2 will be released since local auto is explicit
     procedure Another(var localVariable; obj: TObject);
     /// will finalize the associated TObject instances
     // - note that releasing the TObject instances won't be protected, so
