@@ -113,10 +113,6 @@ procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
 procedure SidAppendShort(sid: PSid; var s: ShortString);
 
 /// convert a Security IDentifier as text, following the standard representation
-procedure SidToTextShort(sid: PSid; var result: ShortString);
-  {$ifdef FPC}inline;{$endif} // Delphi doesn't suppport inlining shortstring :(
-
-/// convert a Security IDentifier as text, following the standard representation
 function SidToText(sid: PSid): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2099,12 +2095,6 @@ begin // faster than ConvertSidToStringSidA(), and cross-platform
   end;
 end;
 
-procedure SidToTextShort(sid: PSid; var result: ShortString);
-begin
-  result[0] := #0;
-  SidAppendShort(sid, result);
-end;
-
 function SidToText(sid: PSid): RawUtf8;
 begin
   SidToText(sid, result);
@@ -2338,14 +2328,18 @@ begin
   result := 0;
 end;
 
+procedure SddlInitialize; forward;
 var
-  KNOWN_SID_SAFE: TLightLock; // lighter than GlobalLock/GlobalUnLock
+  SddlInitialized: boolean; // delayed initialization of those lookup constants
   KNOWN_SID: array[TWellKnownSid] of RawSid;
   KNOWN_SID_TEXT: array[TWellKnownSid] of string[23];
 
 const
-  INTEGRITY_SID: array[0..7] of word = ( // S-1-16-x known values
-    0, 4096, 8192, 8448, 12288, 16384, 20480, 28672);
+  INTEGRITY_SID:
+      array[wksIntegrityUntrusted .. wksIntegritySecureProcess] of word = (
+    0, 4096, 8192, 8448, 12288, 16384, 20480, 28672); // S-1-16-x known values
+  AUTH_SID: array[wksNtlmAuthentication .. wksDigestAuthentication] of byte = (
+    10, 14, 21); // S-1-5-64-x
 
 procedure ComputeKnownSid(wks: TWellKnownSid);
 var
@@ -2367,10 +2361,10 @@ begin
     sid.IdentifierAuthority[5] := 3;
     sid.SubAuthority[0] := ord(wks) - ord(wksCreatorOwner);
   end
-  else if wks <= wksIntegritySecureProcess then
+  else if wks <= high(INTEGRITY_SID) then
   begin
     sid.IdentifierAuthority[5] := 16; // S-1-16-x
-    sid.SubAuthority[0] := INTEGRITY_SID[ord(wks) - ord(wksIntegrityUntrusted)];
+    sid.SubAuthority[0] := INTEGRITY_SID[wks];
   end
   else if wks <= wksAuthenticationKeyPropertyAttestation then
   begin // S-1-18-1
@@ -2424,28 +2418,16 @@ begin
           sid.SubAuthority[0] := 2;
           sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinAnyPackage) - 1)
         end
-        else if wks <= wksDigestAuthentication then
+        else if wks <= high(AUTH_SID) then
         begin
           sid.SubAuthority[0] := 64;
-          case wks of
-            wksNtlmAuthentication:
-              sid.SubAuthority[1] := 10; // S-1-5-64-10
-            wksSChannelAuthentication:
-              sid.SubAuthority[1] := 14;
-            wksDigestAuthentication:
-              sid.SubAuthority[1] := 21;
-          end;
+          sid.SubAuthority[1] := AUTH_SID[wks]; // S-1-5-64-x
         end;
       end;
     end;
   end;
-  KNOWN_SID_SAFE.Lock;
-  if KNOWN_SID[wks] = '' then
-  begin
-    SidToTextShort(@sid, KNOWN_SID_TEXT[wks]);
-    ToRawSid(@sid, KNOWN_SID[wks]); // to be set last
-  end;
-  KNOWN_SID_SAFE.UnLock;
+  ToRawSid(@sid, KNOWN_SID[wks]);
+  SidAppendShort(@sid, KNOWN_SID_TEXT[wks]);
 end;
 
 function KnownRawSid(wks: TWellKnownSid): RawSid;
@@ -2455,9 +2437,8 @@ end;
 
 procedure KnownRawSid(wks: TWellKnownSid; var sid: RawSid);
 begin
-  if (wks <> wksNull) and
-     (KNOWN_SID[wks] = '') then
-    ComputeKnownSid(wks);
+  if not SddlInitialized then
+    SddlInitialize;
   sid := KNOWN_SID[wks];
 end;
 
@@ -2465,18 +2446,16 @@ procedure KnownRawSid(wks: TWellKnownSid; var sid: TSid);
 var
   s: PSid;
 begin
-  if (wks <> wksNull) and
-     (KNOWN_SID[wks] = '') then
-    ComputeKnownSid(wks);
+  if not SddlInitialized then
+    SddlInitialize;
   s := pointer(KNOWN_SID[wks]);
   MoveFast(s^, sid, SidLength(s));
 end;
 
 function KnownSidToText(wks: TWellKnownSid): PShortString;
 begin
-  if (wks <> wksNull) and
-     (KNOWN_SID[wks] = '') then
-    ComputeKnownSid(wks);
+  if not SddlInitialized then
+    SddlInitialize;
   result := @KNOWN_SID_TEXT[wks];
 end;
 
@@ -2910,7 +2889,6 @@ const
     // TWellKnownRid in SDDL_WKR[] order
     'ROLALGDADUDGDCDDCASAEAPACNAPKAEKRSHO';
 var
-  SddlInitialized: boolean; // delayed initialization of those lookup constants
   SDDL_WKS_INDEX: array[TWellKnownSid] of byte; // into 1..48
   SDDL_WKR_INDEX: array[TWellKnownRid] of byte; // into 49..66
   SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
@@ -2926,7 +2904,8 @@ begin
   try
     if SddlInitialized then
       exit;
-    SddlInitialized := true;
+    for wks := succ(low(wks)) to high(wks) do
+      ComputeKnownSid(wks);
     for i := low(SDDL_WKS) to high(SDDL_WKS) do
     begin
       wks := SDDL_WKS[i];
@@ -2944,6 +2923,7 @@ begin
     for sam := low(sam) to high(sam) do
       if SAM_SDDL[sam][0] <> #0  then
         include(samWithSddl, sam);
+    SddlInitialized := true; // should be last
   finally
     GlobalUnLock;
   end;
