@@ -6550,24 +6550,25 @@ begin
     result := nil;
 end;
 {$else}
+type
+  // in-place decompilation of Delphi 7/2007 interface VMT redirection asm
+  TObjectFromInterfaceStub = packed record
+    Stub: cardinal;
+    case integer of
+      0:
+        (ShortJmp: shortint);
+      1:
+        (LongJmp:  integer)
+  end;
+  PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
+
 function ObjectFromInterface(const aValue: IInterface): TObject;
-  type
-    // in-place decompilation of Delphi 7/2007 interface VMT redirection asm
-    TObjectFromInterfaceStub = packed record
-      Stub: cardinal;
-      case integer of
-        0:
-          (ShortJmp: shortint);
-        1:
-          (LongJmp:  integer)
-    end;
-    PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
 begin
   result := nil;
   if aValue <> nil then
     with PObjectFromInterfaceStub(PPPointer(aValue)^^)^ do
       case Stub of
-        // check first asm opcodes of VMT[0] entry, i.e. QueryInterface()
+        // decode first x86 asm opcodes of VMT[0] entry, i.e. QueryInterface()
         $04244483:
           result := pointer(PtrInt(aValue) + ShortJmp);
         $04244481:
