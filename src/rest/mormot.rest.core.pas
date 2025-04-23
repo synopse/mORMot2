@@ -1341,7 +1341,8 @@ type
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - but rather call RemoteIP or UserAgent properties instead of
-    // InHeader['remoteip'] or InHeader['User-Agent']
+    // InHeader['RemoteIP'] or InHeader['User-Agent'] since those values may
+    // have been set directly from the socket layer and not within headers
     property InHeader[const HeaderName: RawUtf8]: RawUtf8
       read GetInHeader;
     /// retrieve an incoming HTTP cookie value

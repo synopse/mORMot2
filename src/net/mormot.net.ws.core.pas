@@ -375,7 +375,7 @@ type
     /// associated low-level opaque pointer maintained during the connection
     property ConnectionOpaque: PHttpServerConnectionOpaque
       read fConnectionOpaque;
-    /// if the associated 'Remote-IP' HTTP header value maps the local host
+    /// quickly check if the known remote IP maps the local host
     property RemoteLocalhost: boolean
       read fRemoteLocalhost write fRemoteLocalhost;
   published
@@ -387,8 +387,8 @@ type
     // - leave to '' if any URI should match
     property URI: RawUtf8
       read fUri;
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if self=nil or RemoteLocalhost=true
+    /// the associated Remote IP as set by the raw socket layer
+    // - returns '' if self=nil or RemoteLocalhost=true on localhost
     property RemoteIP: RawUtf8
       read GetRemoteIP write fRemoteIP;
     /// the URI on which this protocol has been upgraded
@@ -840,8 +840,8 @@ type
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
       {$ifdef HASINLINE}inline;{$endif}
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
+      /// the associated Remote IP as set by the raw socket layer
+    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true on localhost
     function RemoteIP: RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// the settings currently used during the WebSockets process

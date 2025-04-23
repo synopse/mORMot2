@@ -54,6 +54,7 @@ type
     hhUserAgent,
     hhServer,
     hhServerInternalState,
+    hhRemoteIp,
     hhExpect100,
     hhAuthorization,
     hhRangeBytes,
@@ -2548,6 +2549,12 @@ begin
       if PCardinal(P + 4)^ or mask_lower =
           ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
         result := hhUpgrade;
+    // 'REMOTEIP:'
+    ord('r') + ord('e') shl 8 + ord('m') shl 16 + ord('o') shl 24:
+      if (PCardinal(P + 4)^ or mask_lower =
+          ord('t') + ord('e') shl 8 + ord('i') shl 16 + ord('p') shl 24) and
+         (P[8] = ':') then
+        result := hhRemoteIp;
     // 'REFERER:'
     ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
       if PCardinal(P + 4)^ or mask_lower =
@@ -3316,6 +3323,8 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    hhRemoteIP:
+      exit; // 'REMOTEIP:' has an internal usage and is ignored when transmitted
     hhExpect100:
       begin
         // 'Expect: 100-continue'

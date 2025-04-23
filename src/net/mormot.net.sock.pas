@@ -460,8 +460,8 @@ var
   DefaultListenBacklog: integer;
 
   /// defines if a connection from the loopback should be reported as ''
-  // - loopback connection will have no Remote-IP - for the default true
-  // - or loopback connection will be explicitly '127.0.0.1' - if equals false
+  // - with default true, loopback connection will have no RemoteIP address ('')
+  // - or it will be explicitly '127.0.0.1' - if equals false
   // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
