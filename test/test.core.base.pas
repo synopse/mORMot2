@@ -528,7 +528,7 @@ var
   Bits64: Int64 absolute Bits;
   Si, i: integer;
   c: cardinal;
-  s: shortstring;
+  s: ShortString;
   txt: RawUtf8;
   ip: THash128Rec;
   {$ifdef FPC}
@@ -4273,16 +4273,16 @@ end;
 
 procedure TTestCoreBase.NumericalConversions;
 
-  procedure CheckDoubleToShort(v: double; const expected: ShortString);
+  procedure CheckDoubleToShort(v: double; const expected: RawUtf8);
   var
     a: ShortString;
     d: double;
     err: integer;
   begin
     ExtendedToShort(@a, v, DOUBLE_PRECISION);
-    CheckEqual(a, expected, 'ExtendedToShort');
+    CheckEqual(ShortStringToUtf8(a), expected, 'ExtendedToShort');
     DoubleToShort(@a, v);
-    CheckEqual(a, expected, 'DoubleToShort');
+    CheckEqual(ShortStringToUtf8(a), expected, 'DoubleToShort');
     a[ord(a[0]) + 1] := #0;
     d := GetExtended(@a[1], err);
     CheckEqual(err, 0);
