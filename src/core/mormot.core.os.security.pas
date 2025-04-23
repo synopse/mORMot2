@@ -2341,7 +2341,7 @@ end;
 var
   KNOWN_SID_SAFE: TLightLock; // lighter than GlobalLock/GlobalUnLock
   KNOWN_SID: array[TWellKnownSid] of RawSid;
-  KNOWN_SID_TEXT: array[TWellKnownSid] of string[15];
+  KNOWN_SID_TEXT: array[TWellKnownSid] of string[23];
 
 const
   INTEGRITY_SID: array[0..7] of word = ( // S-1-16-x known values
