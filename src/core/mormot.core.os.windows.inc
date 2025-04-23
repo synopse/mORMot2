@@ -4391,7 +4391,7 @@ var
 begin
   status := ToText(CurrentStateToServiceState(dwState));
   DoLog(sllTrace, '% ReportStatus(%,%)=%', [ServiceName,
-    WinErrorConstantText(dwExitCode), dwWait, status^], self);
+    WinErrorShort(dwExitCode), dwWait, status^], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
   else
@@ -4818,7 +4818,7 @@ begin
       [ctxt], nil)
   else
     TService.DoLog(sllDebug, 'RunCommand: % AssignProcessToJobObject failed as %',
-      [ctxt, WinErrorConstantText(GetLastError)], nil);
+      [ctxt, WinErrorShort(GetLastError)], nil);
 end;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
@@ -5010,7 +5010,7 @@ begin
   begin
     TService.DoLog(sllTrace,
       'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = %',
-      [WinErrorConstantText(GetLastError)], nil);
+      [WinErrorShort(GetLastError)], nil);
     flags := flags and (not CREATE_BREAKAWAY_FROM_JOB);
     wcmd := SynUnicode(cmd); // CreateProcesW() modified wcmd content: recreate
     UniqueString(wcmd);
@@ -5021,7 +5021,7 @@ begin
   begin
     err := GetLastError;
     TService.DoLog(sllTrace,  'RunCommand: CreateProcess = %',
-      [WinErrorConstantText(err)], nil);
+      [WinErrorShort(err)], nil);
     result := -err; // returns CreateProcessW() error as negative number
     exit;
   end;

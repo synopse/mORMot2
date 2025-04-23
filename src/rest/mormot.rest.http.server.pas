@@ -1064,7 +1064,7 @@ begin
   if err = NO_ERROR then
     exit;
   result := FormatUtf8('http.sys URI registration error % for http%://%:%/%',
-    [WinErrorConstantText(err), TLS_TEXT[https], aDomainName, fPublicPort, aRoot]);
+    [WinErrorShort(err), TLS_TEXT[https], aDomainName, fPublicPort, aRoot]);
   if err = ERROR_ACCESS_DENIED then
     if aRegisterUri then
       result := result +

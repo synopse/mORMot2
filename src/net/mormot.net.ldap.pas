@@ -6182,7 +6182,7 @@ begin
         begin
           winerr := ParseHex0x(hex + 7, {no0x=}true);
           if winerr <> 0 then
-            Append(errmsg, [' ', WinErrorConstantText(winerr)]);
+            Append(errmsg, [' ', WinErrorShort(winerr)]);
         end;
       end;
       if fResultString = '' then

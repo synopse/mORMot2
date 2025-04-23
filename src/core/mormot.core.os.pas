@@ -776,7 +776,7 @@ function MatchOS(os: TOperatingSystem): boolean;
 function WinErrorConstant(Code: cardinal): PShortString;
 
 /// return the error code number, and its ERROR_* constant (if known)
-function WinErrorConstantText(Code: cardinal): shortstring;
+function WinErrorShort(Code: cardinal): ShortString;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// append the error as ' ERROR_*' constant and return TRUE if known
@@ -6459,7 +6459,7 @@ begin
   end;
 end;
 
-function WinErrorConstantText(Code: cardinal): shortstring;
+function WinErrorShort(Code: cardinal): ShortString;
 begin
   result[0] := #0;
   AppendShortCardinal(Code, result);

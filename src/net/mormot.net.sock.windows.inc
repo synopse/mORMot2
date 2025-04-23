@@ -1572,13 +1572,13 @@ begin
           fOnLog(sllTrace, 'Destroy: % sock=%', [txt, pointer(sub^.socket)], self)
         else
           fOnLog(sllWarning, 'Destroy: % sock=% unexpected recv=% %', [txt,
-            pointer(sub^.socket), tmplen, WinErrorConstantText(err)], self);
+            pointer(sub^.socket), tmplen, WinErrorShort(err)], self);
       end;
       if wioUnsubscribeShutdownSocket in fOptions then
       begin
         if closesocket(sub^.socket) <> NO_ERROR then // brutal abort
           fOnLog(sllWarning, 'Destroy: closesocket(%)=%', [
-            pointer(sub^.socket), WinErrorConstantText(RawSocketErrNo)], self);
+            pointer(sub^.socket), WinErrorShort(RawSocketErrNo)], self);
       end;
       sub := sub.head.next;
     end;
@@ -2042,7 +2042,7 @@ begin
     CheckSEC_E_OK(ctx, FreeContextBuffer(tofree)); // avoid leak id raised
   if res = SOCKET_ERROR then
     raise ESChannel.CreateFmt('%s: Socket Error %s',
-      [ctx, WinErrorConstantText(RawSocketErrNo)]);
+      [ctx, WinErrorShort(RawSocketErrNo)]);
   if res = 0 then
     raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
   result := res;
