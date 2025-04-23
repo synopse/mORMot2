@@ -3267,7 +3267,7 @@ end;
 procedure SddlAppendOpaque(var s: TSynTempAdder; const ace: TSecAce; dom: PSid);
 var
   tree: TAceBinaryTree;
-  tmp: shortstring absolute tree;
+  tmp: ShortString absolute tree;
 begin
   if ace.Opaque <> '' then
     if (ace.AceType in satConditional) and
@@ -3332,7 +3332,7 @@ end;
 
 function SddlAppendOperand(var s: ShortString; v: PRawAceOperand; dom: PSid): boolean;
 var
-  utf8: shortstring;
+  utf8: ShortString;
   c: PRawAceOperand;
   singleComposite: boolean;
   i, comp, clen: PtrUInt;

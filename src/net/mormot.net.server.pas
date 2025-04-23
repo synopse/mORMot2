@@ -1855,7 +1855,7 @@ type
     function DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
       const aHash: THashDigest; const aParams: RawUtf8): cardinal;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
-      aSize: Int64; const aCaller: shortstring): boolean;
+      aSize: Int64; const aCaller: ShortString): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
       aHttp: PHttpRequestContext; aFileName: PFileName; aSize: PInt64): integer;
     function TempFolderEstimateNewSize(aAddingSize: Int64): Int64;
@@ -1965,10 +1965,10 @@ const
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(md: THttpPeerCryptMessageDecode): PShortString; overload;
-function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
+function ToText(const msg: THttpPeerCacheMessage): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
+procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 
 
 {$ifdef USEWININET}
@@ -5870,7 +5870,7 @@ var
 
   procedure DoLog(const Fmt: RawUtf8; const Args: array of const);
   var
-    txt: shortstring;
+    txt: ShortString;
     us: TShort16;
     stop: Int64;
   begin
@@ -6300,7 +6300,7 @@ end;
 function THttpPeerCache.Check(Status: THttpPeerCryptMessageDecode;
   const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
 var
-  msgtxt: shortstring;
+  msgtxt: ShortString;
 begin
   result := (Status = mdOk);
   if result or
@@ -6466,7 +6466,7 @@ begin
 end;
 
 function THttpPeerCache.TooSmallFile(const aParams: THttpClientSocketWGet;
-  aSize: Int64; const aCaller: shortstring): boolean;
+  aSize: Int64; const aCaller: ShortString): boolean;
 var
   minsize: Int64;
 begin
@@ -7375,12 +7375,12 @@ begin
   result := GetEnumName(TypeInfo(THttpPeerCryptMessageDecode), ord(md));
 end;
 
-function ToText(const msg: THttpPeerCacheMessage): shortstring;
+function ToText(const msg: THttpPeerCacheMessage): ShortString;
 begin
   MsgToShort(msg, result);
 end;
 
-procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
+procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 var
   algoext: PUtf8Char;
   algohex: string[SizeOf(msg.Hash.Bin.b) * 2];

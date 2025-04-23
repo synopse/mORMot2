@@ -1495,7 +1495,7 @@ var
   a: TXAttr;
   first: boolean;
   p: PUtf8Char;
-  n, v: shortstring;
+  n, v: ShortString;
 begin
   fSafe.Lock;
   try
@@ -3769,7 +3769,7 @@ function TCryptCertAlgoX509.CreateSelfSignedCsr(const Subjects: RawUtf8;
   const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 
-  procedure RaiseError(const msg: shortstring);
+  procedure RaiseError(const msg: ShortString);
   begin
     raise ECryptCertX509.CreateUtf8(
       '%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);

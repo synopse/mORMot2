@@ -538,7 +538,7 @@ function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
 
 /// compute a subnet value from a 32-bit IP4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
-function IP4Subnet(ip4, netmask4: cardinal): shortstring; overload;
+function IP4Subnet(ip4, netmask4: cardinal): ShortString; overload;
 
 /// compute a subnet value from an IP4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
@@ -1502,7 +1502,7 @@ type
     // will allocate one in the method)
     // - for wieConnect, you need to specify a TNetSocket (not already bound) in
     // netsock and a TNetAddr in buf/buflen
-    function PrepareNext(const ctxt: shortstring;
+    function PrepareNext(const ctxt: ShortString;
       one: PWinIocpSubscription; event: TWinIocpEvent;
       buf: pointer = nil; buflen: integer = 0; netsock: TNetSocket = nil): boolean;
     /// add manually an event to the IOCP queue
@@ -2580,7 +2580,7 @@ end;
 
 procedure TNetAddr.IPWithPort(var Text: RawUtf8);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   IPShort(tmp, {withport=}true);
   ShortStringToAnsi7String(tmp, Text);
@@ -3432,7 +3432,7 @@ begin
     result := 0;
 end;
 
-function IP4Subnet(ip4, netmask4: cardinal): shortstring;
+function IP4Subnet(ip4, netmask4: cardinal): ShortString;
 var
   w: integer;
 begin

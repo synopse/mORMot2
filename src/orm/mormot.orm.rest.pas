@@ -1074,7 +1074,7 @@ var
   T: TOrmTable;
   V: Int64;
   P: PUtf8Char;
-  field: shortstring;
+  field: ShortString;
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10

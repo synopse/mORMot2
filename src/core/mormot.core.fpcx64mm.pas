@@ -2985,7 +2985,7 @@ var
   WrStrPos: PtrInt;
   WrStrOnSameLine: boolean;
 
-procedure W(const txt: shortstring);
+procedure W(const txt: ShortString);
 var
   p, n: PtrInt;
 begin
@@ -3004,11 +3004,11 @@ const
   K_: array[0..4] of string[1] = (
     'P', 'T', 'G', 'M', 'K');
 
-procedure K(const txt: shortstring; i: PtrUInt);
+procedure K(const txt: ShortString; i: PtrUInt);
 var
   j, n: PtrUInt;
   kk: PShortString;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   W(txt);
   kk := nil;
@@ -3028,16 +3028,16 @@ begin
     W(kk^);
 end;
 
-procedure S(const txt: shortstring; i: PtrUInt);
+procedure S(const txt: ShortString; i: PtrUInt);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   W(txt);
   str(i, tmp);
   W(tmp);
 end;
 
-procedure LF(const txt: shortstring = '');
+procedure LF(const txt: ShortString = '');
 begin
   if txt[0] <> #0 then
     W(txt);
@@ -3048,7 +3048,7 @@ begin
 end;
 
 procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-  const name: shortstring);
+  const name: ShortString);
 begin
   K(name, arena.CurrentBytes);
   K('B/', arena.CumulativeBytes);
@@ -3063,7 +3063,7 @@ begin
   LF;
 end;
 
-function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+function GetHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 var
   res: TResArray; // no heap allocation involved
@@ -3160,7 +3160,7 @@ begin
   result := @WrStrBuf;
 end;
 
-procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
+procedure WriteHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean);
 begin
   GetHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,

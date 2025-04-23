@@ -1716,7 +1716,7 @@ procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 function GetSetNameShort(aTypeInfo: PRttiInfo; value: pointer;
-  trimlowercase: boolean = false): shortstring; overload;
+  trimlowercase: boolean = false): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// low-level function parsing Value/ValueLen into a set, returned as 64-bit
@@ -3773,7 +3773,7 @@ var
   j: PtrInt;
   PS, v: PShortString;
   tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
-  tmp2: shortstring;
+  tmp2: ShortString;
 begin
   result := '';
   if (@self = nil) or
@@ -6237,7 +6237,7 @@ begin
 end;
 
 function GetSetNameShort(aTypeInfo: PRttiInfo; value: pointer;
-  trimlowercase: boolean): shortstring;
+  trimlowercase: boolean): ShortString;
 begin
   GetSetNameShort(aTypeInfo, value^, result, trimlowercase);
 end;

@@ -5480,7 +5480,7 @@ end;
 
 procedure TSynLog.AddSysInfo;
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   fWriter.AddDirect(' ', '{');
   RetrieveSysInfoText(tmp);

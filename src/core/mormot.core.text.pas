@@ -520,7 +520,7 @@ type
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
-    procedure RaiseUnimplemented(const Method: shortstring);
+    procedure RaiseUnimplemented(const Method: ShortString);
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -1872,7 +1872,7 @@ procedure Prepend(var Text: RawByteString; const Args: array of const); overload
 /// append some text to a RawUtf8, ensuring previous text is separated with CRLF
 // - could be used e.g. to update HTTP headers
 procedure AppendLine(var Text: RawUtf8; const Args: array of const;
-  const Separator: shortstring = #13#10);
+  const Separator: ShortString = #13#10);
 
 /// append some path parts into a single file name with proper path delimiters
 // - set EndWithDelim=true if you want to create e.g. a full folder name
@@ -4032,7 +4032,7 @@ begin
   inc(B, 2); // with proper constant propagation above when inlined
 end;
 
-procedure TTextWriter.RaiseUnimplemented(const Method: shortstring);
+procedure TTextWriter.RaiseUnimplemented(const Method: ShortString);
 begin
   raise ESynException.CreateUtf8(
     '%.% unimplemented: use TJsonWriter', [self, Method]);
@@ -8445,7 +8445,7 @@ end;
 
 procedure DoubleToTempUtf8(V: double; var Res: TTempUtf8);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   PrepareTempUtf8(Res, DoubleToShort(@tmp, V));
   MoveFast(tmp[1], Res.Text^, ord(tmp[0]));
@@ -8910,7 +8910,7 @@ type
     procedure DoAdd(Arg: PVarRec; ArgCount: integer);
       {$ifdef HASINLINE} inline; {$endif}
     procedure DoAppendLine(var Text: RawUtf8; Arg: PVarRec; ArgCount: PtrInt;
-      const Separator: shortstring);
+      const Separator: ShortString);
     procedure DoPrepend(var Text: RawUtf8; Arg: PVarRec;
       ArgCount, CodePage: PtrInt);
     procedure Write(Dest: PUtf8Char);
@@ -9043,7 +9043,7 @@ begin
 end;
 
 procedure TFormatUtf8.DoAppendLine(var Text: RawUtf8;
-  Arg: PVarRec; ArgCount: PtrInt; const Separator: shortstring);
+  Arg: PVarRec; ArgCount: PtrInt; const Separator: ShortString);
 var
   c: PTempUtf8;
 begin
@@ -9277,7 +9277,7 @@ begin
 end;
 
 procedure AppendLine(var Text: RawUtf8; const Args: array of const;
-  const Separator: shortstring);
+  const Separator: ShortString);
 var
   f: TFormatUtf8;
 begin

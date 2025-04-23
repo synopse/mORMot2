@@ -1631,7 +1631,7 @@ const
   IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWAC1234';
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
-function TWinIocp.PrepareNext(const ctxt: shortstring; one: PWinIocpSubscription;
+function TWinIocp.PrepareNext(const ctxt: ShortString; one: PWinIocpSubscription;
   event: TWinIocpEvent; buf: pointer; buflen: integer;
   netsock: TNetSocket): boolean;
 var
@@ -1985,9 +1985,9 @@ type
     fAcceptCert: mormot.core.os.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     fPeerInfo: TWinCertInfo;
-    procedure ESChannelRaiseLastError(const ctx: shortstring; res: cardinal);
-    function CheckSEC_E_OK(const ctx: shortstring; res: integer): cardinal;
-    function FreeAndCheckSocket(const ctx: shortstring; res: integer;
+    procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
+    function CheckSEC_E_OK(const ctx: ShortString; res: integer): cardinal;
+    function FreeAndCheckSocket(const ctx: ShortString; res: integer;
       tofree: pointer): cardinal;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
     procedure HandshakeLoop;
@@ -2013,7 +2013,7 @@ type
 { TSChannelNetTls }
 
 procedure TSChannelNetTls.ESChannelRaiseLastError(
-  const ctx: shortstring; res: cardinal);
+  const ctx: ShortString; res: cardinal);
 var
   sys: integer;
   msg: string;
@@ -2026,7 +2026,7 @@ begin
 end;
 
 function TSChannelNetTls.CheckSEC_E_OK(
-  const ctx: shortstring; res: integer): cardinal;
+  const ctx: ShortString; res: integer): cardinal;
 begin
   fLastCheckSecError := res;
   if res <> SEC_E_OK then
@@ -2034,7 +2034,7 @@ begin
   result := res;
 end;
 
-function TSChannelNetTls.FreeAndCheckSocket(const ctx: shortstring;
+function TSChannelNetTls.FreeAndCheckSocket(const ctx: ShortString;
   res: integer; tofree: pointer): cardinal;
 begin
   //writeln(fSocket.Socket,' ',ctx,'=',res);

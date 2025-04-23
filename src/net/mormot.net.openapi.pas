@@ -2979,7 +2979,7 @@ begin
         w.AddStrings([
           '    procedure OnError', SmallUInt32Utf8[i + 1],
           '(const Sender: IJsonClient;', LineEnd,
-          '      const Response: TJsonResponse; const ErrorMsg: shortstring);', LineEnd]);
+          '      const Response: TJsonResponse; const ErrorMsg: ShortString);', LineEnd]);
     end;
     w.AddStrings([
       '  public', LineEnd, LineEnd,
@@ -3071,7 +3071,7 @@ begin
       w.AddStrings([
         'procedure ', fClientClassName, '.OnError', SmallUInt32Utf8[i + 1],
             '(const Sender: IJsonClient;', LineEnd,
-        '  const Response: TJsonResponse; const ErrorMsg: shortstring);', LineEnd]);
+        '  const Response: TJsonResponse; const ErrorMsg: ShortString);', LineEnd]);
       err := fErrorHandler[i];
       j := PosEx('  else', err);
       if j = 1 then

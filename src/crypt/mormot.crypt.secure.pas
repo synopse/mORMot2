@@ -2368,10 +2368,10 @@ type
   protected
     fLastLoadFromFileName: TFileName;
     fIndexer: TObject; // a TCryptCertAbstractList owner for EnsureCanWrite
-    procedure RaiseError(const Msg: shortstring); overload; virtual;
+    procedure RaiseError(const Msg: ShortString); overload; virtual;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
     procedure RaiseErrorGenerate(const api: ShortString);
-    procedure EnsureCanWrite(const Context: shortstring); virtual;
+    procedure EnsureCanWrite(const Context: ShortString); virtual;
     // used by TCryptCertList.Find and TCryptCertCache.Find
     class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
       Method: TCryptCertComparer; Count, MaxCount: integer;
@@ -3620,7 +3620,7 @@ function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject; overload;
 
 /// encode a 64-bit unsigned OID integer value into ASN.1 binary
 // - append the encoded value into the Result shortstring existing content
-procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
+procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
 
 /// create an ASN.1 ObjectID from '1.x.x.x.x' text
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
@@ -7590,7 +7590,7 @@ end;
 
 { TCryptCert }
 
-procedure TCryptCert.RaiseError(const Msg: shortstring);
+procedure TCryptCert.RaiseError(const Msg: ShortString);
 begin
   ECryptCert.RaiseUtf8('%.%', [self, Msg]);
 end;
@@ -7598,7 +7598,7 @@ end;
 procedure TCryptCert.RaiseError(const Fmt: RawUtf8;
   const Args: array of const);
 var
-  msg: shortstring;
+  msg: ShortString;
 begin
   FormatShort(Fmt, Args, msg);
   RaiseError(msg);
@@ -7609,7 +7609,7 @@ begin
   RaiseError('Generate: % error', [api]); // raise ECryptCert
 end;
 
-procedure TCryptCert.EnsureCanWrite(const Context: shortstring);
+procedure TCryptCert.EnsureCanWrite(const Context: ShortString);
 begin
   if (fIndexer <> nil) and
      not IsVoid then
@@ -9537,7 +9537,7 @@ end;
 // the greatest number for an OID arc has 39 digits, but we limit to 32-bit
 // see https://oid-base.com/faq.htm#size-limitations
 
-procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
+procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
 var
   tmp: THash128; // written in reverse order (big endian)
   vl, rl: PtrInt;
@@ -10302,7 +10302,7 @@ end;
 
 procedure _JS_RawSid(Data: PSid; const Ctxt: TJsonSaveContext);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   Ctxt.W.Add('"');
   Data := PPointer(Data)^;
@@ -10353,7 +10353,7 @@ end;
 
 procedure _JS_Mask(Data: PSecAccessMask; const Ctxt: TJsonSaveContext);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   Ctxt.W.Add('"');
   tmp[0] := #0;

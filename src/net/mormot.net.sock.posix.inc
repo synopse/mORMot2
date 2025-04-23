@@ -670,7 +670,7 @@ const
 {$ifdef OSLINUX}
 procedure RetrieveEnhancedInfo(var a: TMacAddress; var procnetroute: RawUtf8);
 var
-  fn: shortstring;
+  fn: ShortString;
   fnlen: AnsiChar;
   s: RawUtf8;
   p: PUtf8Char;
@@ -980,7 +980,7 @@ function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
   n: integer;
   SR: TSearchRec;
-  fn: shortstring;
+  fn: ShortString;
   fnlen: AnsiChar;
   f, procnetroute: RawUtf8;
 begin

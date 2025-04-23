@@ -527,7 +527,7 @@ type
     // - returns the number of chars added to P, i.e. always 21
     function ToNcsaText(P: PUtf8Char): PtrInt;
     /// convert the stored date and time to its text in apache-like format
-    procedure ToNcsaShort(var text: shortstring; const tz: RawUtf8 = 'GMT');
+    procedure ToNcsaShort(var text: ShortString; const tz: RawUtf8 = 'GMT');
     /// convert the stored date and time to its text in HTTP-like format
     // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // "Date", "Expires" or "Last-Modified" HTTP header
@@ -536,12 +536,12 @@ type
       const prefix: RawUtf8 = '');
     /// convert the stored date and time to its text in HTTP-like format
     // - e.g. "Tue, 15 Nov 1994 12:45:26 GMT"
-    procedure ToHttpDateShort(var text: shortstring; const tz: RawUtf8 = 'GMT';
+    procedure ToHttpDateShort(var text: ShortString; const tz: RawUtf8 = 'GMT';
       const prefix: RawUtf8 = '');
     /// convert the stored date into its '19 Sep 2023' English-readable date text
     procedure ToTextDateShort(var text: TShort15);
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
-    procedure ToIsoDateTimeShort(var text: shortstring; FirstTimeChar: AnsiChar = 'T');
+    procedure ToIsoDateTimeShort(var text: ShortString; FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
     procedure ToIsoDateTime(out text: RawUtf8; FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date into its Iso-8601 text with no time part
@@ -2544,7 +2544,7 @@ end;
 
 procedure TSynSystemTime.AddHttpDate(WR: TTextWriter; const TZD: RawUtf8);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   ToHttpDateShort(tmp, TZD);
   WR.AddShort(tmp);
@@ -2580,7 +2580,7 @@ begin
   result := 21;
 end;
 
-procedure TSynSystemTime.ToNcsaShort(var text: shortstring; const tz: RawUtf8);
+procedure TSynSystemTime.ToNcsaShort(var text: ShortString; const tz: RawUtf8);
 begin
   text[0] := AnsiChar(ToNcsaText(@text[1]));
   AppendShortAnsi7String(tz, text);
@@ -2588,14 +2588,14 @@ end;
 
 procedure TSynSystemTime.ToHttpDate(out text: RawUtf8; const tz, prefix: RawUtf8);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   ToHttpDateShort(tmp, tz, prefix);
   FastSetString(text, @tmp[1], ord(tmp[0]));
 end;
 
 procedure TSynSystemTime.ToHttpDateShort(
-  var text: shortstring; const tz, prefix: RawUtf8);
+  var text: ShortString; const tz, prefix: RawUtf8);
 begin
   if DayOfWeek = 0 then
     PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
@@ -2620,13 +2620,13 @@ end;
 
 procedure TSynSystemTime.ToIsoDateTime(out text: RawUtf8; FirstTimeChar: AnsiChar);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   ToIsoDateTimeShort(tmp, FirstTimeChar);
   ShortStringToAnsi7String(tmp, text);
 end;
 
-procedure TSynSystemTime.ToIsoDateTimeShort(var text: shortstring;
+procedure TSynSystemTime.ToIsoDateTimeShort(var text: ShortString;
   FirstTimeChar: AnsiChar);
 begin
   FormatShort('%-%-%%%:%:%', [
@@ -2945,7 +2945,7 @@ function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
   c: cardinal;
   T: TSynSystemTime;
-  now: shortstring; // use a temp variable for _HttpDateNowUtc atomic set
+  now: ShortString; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   if Tix64 = 0 then
     Tix64 := GetTickCount64;

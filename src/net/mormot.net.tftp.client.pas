@@ -278,7 +278,7 @@ type
     function SendFrame: TNetResult;
     /// generate and send an ERR packet, then close Sock and FileStream
     procedure SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-      obj: TObject; const caller: shortstring);
+      obj: TObject; const caller: ShortString);
     /// close Sock and FileStream
     procedure Shutdown;
   end;
@@ -291,7 +291,7 @@ function ToOpcode(const frame: TTftpFrame): TTftpOpcode;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert TFTP frame Opcode + Sequence to text, ready for logging
-function ToText(const frame: TTftpFrame; len: integer = 0): shortstring; overload;
+function ToText(const frame: TTftpFrame; len: integer = 0): ShortString; overload;
 
 function ToText(e: TTftpError): PShortString; overload;
 
@@ -311,7 +311,7 @@ begin
     result := toUndefined;
 end;
 
-function ToText(const frame: TTftpFrame; len: integer): shortstring;
+function ToText(const frame: TTftpFrame; len: integer): ShortString;
 var
   c: TTftpOpcode;
   seq: integer;
@@ -735,7 +735,7 @@ begin
 end;
 
 procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-  obj: TObject; const caller: shortstring);
+  obj: TObject; const caller: ShortString);
 begin
   GenerateErrorFrame(err, '');
   log.Log(sllTrace, '%: % % failed as %',

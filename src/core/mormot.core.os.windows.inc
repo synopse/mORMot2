@@ -539,7 +539,7 @@ var
   flags, len: PtrUInt;
   src: pointer;
   tmp: array[0..511] of WideChar;
-  tmps: shortstring absolute tmp;
+  tmps: ShortString absolute tmp;
 begin
   bak := GetLastError;
   src := nil;
@@ -597,7 +597,7 @@ begin
     [ModuleName, string(WinErrorText(code, ModuleName)), code]);
 end;
 
-function WinLastError(const Context: shortstring; Code: integer): string;
+function WinLastError(const Context: ShortString; Code: integer): string;
 begin
   if Code = 0 then
     Code := GetLastError;
@@ -605,7 +605,7 @@ begin
     [Context, string(WinErrorText(Code, nil)), code]);
 end;
 
-procedure RaiseLastError(const Context: shortstring;
+procedure RaiseLastError(const Context: ShortString;
   RaisedException: ExceptClass; Code: integer);
 begin
   if RaisedException = nil then
@@ -613,7 +613,7 @@ begin
   raise RaisedException.Create(WinLastError(Context, Code))
 end;
 
-procedure WinCheck(const Context: shortstring; Code: integer;
+procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass);
 begin
   if Code <> NO_ERROR then

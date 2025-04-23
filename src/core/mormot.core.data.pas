@@ -1883,7 +1883,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
-    function RaiseFatalCollision(const caller: shortstring; aHashCode: cardinal): integer;
+    function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): integer;
     procedure RaiseNoHasher;
     procedure HashTableInit(aHasher: THasher);
     procedure SetEventCompare(const Value: TOnDynArraySortCompare);
@@ -9793,7 +9793,7 @@ begin
     result := -1;
 end;
 
-function TDynArrayHasher.RaiseFatalCollision(const caller: shortstring;
+function TDynArrayHasher.RaiseFatalCollision(const caller: ShortString;
   aHashCode: cardinal): integer;
 begin   // a dedicated sub-procedure reduces code size
   result := 0; // make compiler happy

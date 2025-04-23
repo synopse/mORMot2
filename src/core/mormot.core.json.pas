@@ -4618,7 +4618,7 @@ function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   info: TGetJsonField;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   result := 0;
   if (P = nil) or
@@ -11705,7 +11705,7 @@ begin
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions, Interning);
 end;
 
-function EnsureDynArray(const Ctxt: shortstring;
+function EnsureDynArray(const Ctxt: ShortString;
   TypeInfo: PRttiInfo; Tolerant, GuessCount: boolean): TJsonParserOptions;
 begin
   if (TypeInfo = nil) or

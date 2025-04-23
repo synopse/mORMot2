@@ -192,7 +192,7 @@ type
     fCaa: TCryptAsymAlgo;
     fSlot: TPkcs11Slot;
     fToken: TPkcs11Token;
-    procedure RaiseError(const Msg: shortstring); overload; override;
+    procedure RaiseError(const Msg: ShortString); overload; override;
     // if true then caller should make try ... finally fEngine.Close
     function OpenPrivateKey: CK_OBJECT_HANDLE;
   public
@@ -757,7 +757,7 @@ end;
 
 { TCryptCertPkcs11 }
 
-procedure TCryptCertPkcs11.RaiseError(const Msg: shortstring);
+procedure TCryptCertPkcs11.RaiseError(const Msg: ShortString);
 begin
   ECryptCertPkcs11.RaiseUtf8('% (slot=#%, CKA_ID=%) %',
     [self, fSlotID, fStorageID, Msg]);

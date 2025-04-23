@@ -215,7 +215,7 @@ type
     fAlgoID: byte;
     fAlgoHasForcedFormat: boolean;
     fAlgoFileExt: TFileName;
-    procedure EnsureAlgoHasNoForcedFormat(const caller: shortstring);
+    procedure EnsureAlgoHasNoForcedFormat(const caller: ShortString);
   public
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
@@ -691,7 +691,7 @@ type
     /// raise a EFastReader with "Incorrect Data: ...." error message
     procedure ErrorData(const fmt: RawUtf8; const args: array of const); overload;
     /// raise a EFastReader with "Incorrect Data: ...." error message
-    procedure ErrorData(const msg: shortstring); overload;
+    procedure ErrorData(const msg: ShortString); overload;
     /// read the next 32-bit signed value from the buffer
     function VarInt32: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2784,7 +2784,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// add some number as text content to the Buffer, resizing it if needed
     procedure Append(Value: QWord); overload;
-    /// add some UTF-8 shortstring content to the Buffer, resizing it if needed
+    /// add some UTF-8 ShortString content to the Buffer, resizing it if needed
     procedure AppendShort(const Text: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
     /// just after Append/AppendShort, append a #13#10 end of line
@@ -3554,7 +3554,7 @@ begin
     raise EFastReader.CreateUtf8('Incorrect Data: ' + fmt, args);
 end;
 
-procedure TFastReader.ErrorData(const msg: shortstring);
+procedure TFastReader.ErrorData(const msg: ShortString);
 begin
   ErrorData('%', [msg]);
 end;
@@ -5300,7 +5300,7 @@ begin
   end;
 end;
 
-procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: shortstring);
+procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: ShortString);
 begin
   if fAlgoHasForcedFormat then
     EAlgoCompress.RaiseUtf8('%.% is unsupported', [self, caller]);

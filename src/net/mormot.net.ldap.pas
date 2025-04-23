@@ -1895,7 +1895,7 @@ type
     procedure Reset;
     procedure SetResultString(const msg: RawUtf8);
     function DoBind(Mode: TLdapClientBound): boolean;
-    function Reconnect(const context: shortstring): boolean;
+    function Reconnect(const context: ShortString): boolean;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -2005,7 +2005,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// test whether the client is connected to the server and try re-connect
     // - follows Settings.AutoReconnect property and OnDisconnect event
-    function EnsureConnected(const context: shortstring): boolean;
+    function EnsureConnected(const context: ShortString): boolean;
     /// test whether the client is connected with TLS or Kerberos Signing-Sealing
     // - it is unsafe to send e.g. a plain Password without lctEncrypted
     function Transmission: TLdapClientTransmission;
@@ -6532,7 +6532,7 @@ begin
   result := fSock.SockConnected;
 end;
 
-function TLdapClient.EnsureConnected(const context: shortstring): boolean;
+function TLdapClient.EnsureConnected(const context: ShortString): boolean;
 begin
   result := (self <> nil) and
             (fSock.SockConnected or
@@ -6597,7 +6597,7 @@ begin
   end;
 end;
 
-function TLdapClient.Reconnect(const context: shortstring): boolean;
+function TLdapClient.Reconnect(const context: ShortString): boolean;
 var
   log: ISynLog;
   step: PUtf8Char;

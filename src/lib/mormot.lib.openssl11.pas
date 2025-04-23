@@ -102,21 +102,21 @@ type
     fLastError: integer;
     class function GetOpenSsl: string;
     /// wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
-    class procedure CheckFailed(caller: TObject; const method: shortstring;
+    class procedure CheckFailed(caller: TObject; const method: ShortString;
       errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0;
       const context: RawUtf8 = '');
-    class procedure TryNotAvailable(caller: TClass; const method: shortstring);
+    class procedure TryNotAvailable(caller: TClass; const method: ShortString);
   public
     /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
-    class procedure Check(caller: TObject; const method: shortstring;
+    class procedure Check(caller: TObject; const method: ShortString;
       res: integer; errormsg: PRawUtf8 = nil; ssl: pointer = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
       /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
-    class procedure Check(res: integer; const method: shortstring = '';
+    class procedure Check(res: integer; const method: ShortString = '';
       ssl: pointer = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
-    class procedure CheckAvailable(caller: TClass; const method: shortstring);
+    class procedure CheckAvailable(caller: TClass; const method: ShortString);
       {$ifdef HASINLINE} inline; {$endif}
   published
     /// the last error code from OpenSSL, after Check() failure
@@ -2765,21 +2765,21 @@ implementation
 
 { EOpenSsl }
 
-class procedure EOpenSsl.Check(caller: TObject; const method: shortstring;
+class procedure EOpenSsl.Check(caller: TObject; const method: ShortString;
   res: integer; errormsg: PRawUtf8; ssl: pointer);
 begin
   if res <> OPENSSLSUCCESS then
     CheckFailed(caller, method, errormsg, ssl, res);
 end;
 
-class procedure EOpenSsl.Check(res: integer; const method: shortstring;
+class procedure EOpenSsl.Check(res: integer; const method: ShortString;
   ssl: pointer);
 begin
   if res <> OPENSSLSUCCESS then
     CheckFailed(nil, method, nil, ssl, res);
 end;
 
-class procedure EOpenSsl.CheckFailed(caller: TObject; const method: shortstring;
+class procedure EOpenSsl.CheckFailed(caller: TObject; const method: ShortString;
   errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8);
 var
   res: integer;
@@ -2818,19 +2818,19 @@ end;
 
 {$ifdef OPENSSLSTATIC} // OpenSSL is always available when statically linked
 
-class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: shortstring);
+class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: ShortString);
 begin
 end;
 
-class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: shortstring);
+class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: ShortString);
 begin
 end;
 
 {$else}
 
-class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: shortstring);
+class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: ShortString);
 var
-  name: shortstring;
+  name: ShortString;
 begin
   if OpenSslIsAvailable then
     exit;
@@ -2842,7 +2842,7 @@ begin
     [name, openssl_initialize_errormsg])
 end;
 
-class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: shortstring);
+class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: ShortString);
 begin
   if openssl_initialized <> osslAvailable then
     TryNotAvailable(caller, method);
@@ -10548,7 +10548,7 @@ type
     fPeer: PX509;
     fCipherName, fServerAddress: RawUtf8;
     fDoSslShutdown: boolean;
-    procedure Check(const method: shortstring; res: integer);
+    procedure Check(const method: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
     function CheckSsl(res: integer): TNetResult;
     procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
@@ -10632,7 +10632,7 @@ begin
   end;
 end;
 
-procedure TOpenSslNetTls.Check(const method: shortstring; res: integer);
+procedure TOpenSslNetTls.Check(const method: ShortString; res: integer);
 begin
   if res <> OPENSSLSUCCESS then
     EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res, fServerAddress);

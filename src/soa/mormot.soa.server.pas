@@ -2432,7 +2432,7 @@ end;
 
 procedure TServiceRecordVersionCallback.CurrentFrame(isLast: boolean);
 
-  procedure Error(const msg: shortstring);
+  procedure Error(const msg: ShortString);
   begin
     fRest.InternalLog('%.CurrentFrame(%) on %: %',
       [self, isLast, fTable, msg], sllError);

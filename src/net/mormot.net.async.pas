@@ -283,13 +283,13 @@ type
       events: TPollSocketEvents): boolean; virtual; abstract;
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
     procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
-    function SubscribeConnection(const caller: shortstring;
+    function SubscribeConnection(const caller: ShortString;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection;
-      const caller: shortstring); // set connection:=nil and close+GC
+      const caller: ShortString); // set connection:=nil and close+GC
     function RawWrite(connection: TPollAsyncConnection;
       var data: PByte; var datalen: integer): boolean;
-    function DoAfterWrite(const caller: shortstring;
+    function DoAfterWrite(const caller: ShortString;
       connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
     procedure ProcessWaitingWrite; // pending soWaitWrite
   public
@@ -315,7 +315,7 @@ type
     // the connection (and its socket) is to be shutdown
     // - this method won't call OnClosed, since it is initiated by the class
     function Stop(connection: TPollAsyncConnection;
-      const caller: shortstring): boolean; virtual;
+      const caller: ShortString): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
     // - this method may block if the connection is currently writing from
     // another thread (which is not possible from TPollAsyncSockets.Write),
@@ -612,7 +612,7 @@ type
       Address, Port: RawUtf8;
     end;
     function AllThreadsStarted: boolean; virtual;
-    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
+    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
     procedure DoGC;
     procedure FreeGC(var conn: TPollAsyncConnections);
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
@@ -1712,7 +1712,7 @@ const
 {$endif USE_WINIOCP}
 
 function TPollAsyncSockets.Stop(connection: TPollAsyncConnection;
-  const caller: shortstring): boolean;
+  const caller: ShortString): boolean;
 var
   sock: TNetSocket;
 begin
@@ -1937,7 +1937,7 @@ begin
   //DoLog('Write: done fProcessingWrite=%', [fProcessingWrite]);
 end;
 
-function TPollAsyncSockets.SubscribeConnection(const caller: shortstring;
+function TPollAsyncSockets.SubscribeConnection(const caller: ShortString;
   connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
 var
   tag: TPollSocketTag absolute connection;
@@ -1984,7 +1984,7 @@ begin
 end;
 
 procedure TPollAsyncSockets.CloseConnection(
-  var connection: TPollAsyncConnection; const caller: shortstring);
+  var connection: TPollAsyncConnection; const caller: ShortString);
 var
   c: TPollAsyncConnection;
 begin
@@ -2277,7 +2277,7 @@ begin
   end;
 end;
 
-function TPollAsyncSockets.DoAfterWrite(const caller: shortstring;
+function TPollAsyncSockets.DoAfterWrite(const caller: ShortString;
   connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
 begin
   try
@@ -2732,7 +2732,7 @@ end;
 
 {.$define GCVERBOSE} // help debugging
 
-procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
+procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
 begin
   if Terminated or
      (aConnection = nil) or
@@ -5105,7 +5105,7 @@ procedure THttpAsyncServer.IdleEverySecond;
 var
   tix, cleaned: cardinal;
   T: TSynSystemTime;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   // no need to use the global HttpDateNowUtc and its GetTickCount64 API call
   if hsoIncludeDateHeader in fOptions then

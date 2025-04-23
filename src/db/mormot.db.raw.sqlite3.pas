@@ -4141,11 +4141,11 @@ procedure sqlite3InternalFreeRawByteString({%H-}p: pointer); cdecl;
 
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
 procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext;
-  const caller: shortstring);
+  const caller: ShortString);
 
 /// wrapper around sqlite3.result_error() validating the expected number of arguments
 function CheckNumberOfArgs(Context: TSqlite3FunctionContext;
-  expected, sent: integer; const caller: shortstring): boolean;
+  expected, sent: integer; const caller: ShortString): boolean;
 
 /// create a TSqlite3Module.pzErr UTF-8 text buffer according to the given
 // Exception class
@@ -5678,7 +5678,7 @@ begin
 end;
 
 procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext;
-  const caller: shortstring);
+  const caller: ShortString);
 var
   msg: ShortString;
 begin
@@ -5687,7 +5687,7 @@ begin
 end;
 
 function CheckNumberOfArgs(Context: TSqlite3FunctionContext;
-  expected, sent: integer; const caller: shortstring): boolean;
+  expected, sent: integer; const caller: ShortString): boolean;
 var
   msg: ShortString;
 begin

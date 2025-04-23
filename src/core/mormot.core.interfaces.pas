@@ -2582,7 +2582,7 @@ const
     [optExecInMainThread, optFreeInMainThread]);
 
 /// return the interface execution options set as text
-function ToText(opt: TInterfaceMethodOptions): shortstring; overload;
+function ToText(opt: TInterfaceMethodOptions): ShortString; overload;
 
 
 { ************ SetWeak and SetWeakZero Weak Interface Reference }
@@ -6624,7 +6624,7 @@ begin
   result := @PerThreadRunningContext;
 end;
 
-function ToText(opt: TInterfaceMethodOptions): shortstring;
+function ToText(opt: TInterfaceMethodOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TInterfaceMethodOptions), opt, result);
 end;

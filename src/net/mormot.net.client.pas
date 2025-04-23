@@ -1302,7 +1302,7 @@ type
     function InternalQueryDataAvailable: cardinal; override;
     function InternalReadData(var Data: RawByteString;
       Read: PtrInt; Size: cardinal): cardinal; override;
-    procedure RaiseFromLastError(const ctxt: shortstring);
+    procedure RaiseFromLastError(const ctxt: ShortString);
   public
     /// relase the connection
     destructor Destroy; override;
@@ -1585,7 +1585,7 @@ type
 
   /// event signature for error callbacks during IJsonClient.Request()
   TOnJsonClientError = procedure(const Sender: IJsonClient;
-    const Response: TJsonResponse; const ErrorMsg: shortstring) of object;
+    const Response: TJsonResponse; const ErrorMsg: ShortString) of object;
 
   /// event signature for a callback run before each IJsonClient.Request()
   TOnJsonClientBefore = procedure(const Sender: IJsonClient;
@@ -2203,7 +2203,7 @@ end;
 
 procedure THttpPartials.DoLog(const Fmt: RawUtf8; const Args: array of const);
 var
-  txt: shortstring;
+  txt: ShortString;
 begin
   if not Assigned(OnLog) then
     exit;
@@ -4465,7 +4465,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TWinHttp.RaiseFromLastError(const ctxt: shortstring);
+procedure TWinHttp.RaiseFromLastError(const ctxt: ShortString);
 var
   err: integer;
 begin

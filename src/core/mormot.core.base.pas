@@ -958,7 +958,7 @@ procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
 /// simple concatenation of no banker rounding floating point value as TwoDigits()
-procedure AppendShortTwoDigits(const Value: double; var Dest: shortstring);
+procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 
 /// simple concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
@@ -4418,7 +4418,7 @@ type
   end;
 
 /// raise a EStreamError exception - e.g. from TSynMemoryStream.Write
-function RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
+function RaiseStreamError(Caller: TObject; const Context: ShortString): PtrInt;
 
 
 { ************ Raw Shared Constants / Types Definitions }
@@ -5392,7 +5392,7 @@ begin
   AppendShortBuffer(p, l, @dest);
 end;
 
-procedure AppendShortTwoDigits(const Value: double; var Dest: shortstring);
+procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 var
   v: Int64;
 begin
@@ -12920,8 +12920,8 @@ end;
 
 function SortDynArrayShortString(const A, B): integer;
 var
-  sa: shortstring absolute A;
-  sb: shortstring absolute B;
+  sa: ShortString absolute A;
+  sb: ShortString absolute B;
   la, lb: PtrInt;
 begin
   la := ord(sa[0]);
@@ -13051,7 +13051,7 @@ end;
 
 { ************ Some Convenient TStream descendants }
 
-function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
+function {%H-}RaiseStreamError(Caller: TObject; const Context: ShortString): PtrInt;
 begin
   raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
 end;

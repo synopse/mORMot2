@@ -46,7 +46,7 @@ function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
-procedure WrDeb(const t: shortstring; const p; l: PtrInt); // internal use below
+procedure WrDeb(const t: ShortString; const p; l: PtrInt); // internal use below
 var
   tmp: RawUtf8;
 begin
@@ -2929,7 +2929,7 @@ end;
 
 {$else} // Linux (and Android) specific code
 
-procedure FindNameValue(p: PUtf8Char; const up: shortstring; var res: RawUtf8);
+procedure FindNameValue(p: PUtf8Char; const up: ShortString; var res: RawUtf8);
 var
   L: PtrInt;
 begin
@@ -2953,7 +2953,7 @@ begin
   FastAssignNew(res);
 end;
 
-function FindNameValueCardinal(p: PUtf8Char; const up: shortstring): PtrUInt;
+function FindNameValueCardinal(p: PUtf8Char; const up: ShortString): PtrUInt;
 begin
   while p <> nil do
     if IdemPChar(p, @up[1]) then // agressively inlined on FPC
@@ -3076,7 +3076,7 @@ begin
   LoadProcFileTrimed(fn, result);
 end;
 
-procedure FindFileValue(fn: PAnsiChar; const up: shortstring; var res: RawUtf8);
+procedure FindFileValue(fn: PAnsiChar; const up: ShortString; var res: RawUtf8);
 var
   buf: TSynTempBuffer; // reading up to 4KB of content is enough
 begin
@@ -3084,7 +3084,7 @@ begin
   FindNameValue(@buf, up, res);
 end;
 
-function FindFileCardinal(fn: PAnsiChar; const up: shortstring): PtrUInt;
+function FindFileCardinal(fn: PAnsiChar; const up: ShortString): PtrUInt;
 var
   buf: TSynTempBuffer; // reading up to 4KB of content is enough
 begin
@@ -3092,9 +3092,9 @@ begin
   result := FindNameValueCardinal(@buf, up)
 end;
 
-function FindPidStatus(pid: cardinal; const up: shortstring): cardinal;
+function FindPidStatus(pid: cardinal; const up: ShortString): cardinal;
 var
-  fn: shortstring; // avoid any memory allocation
+  fn: ShortString; // avoid any memory allocation
 begin
   fn := '/proc/';
   AppendShortCardinal(pid, fn);
@@ -3147,7 +3147,7 @@ var
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 var
-  fn: shortstring;
+  fn: ShortString;
   tmp: TSynTempBuffer;
   n: AnsiChar;
 begin
@@ -3329,7 +3329,7 @@ const
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
-  n: shortstring;
+  n: ShortString;
 begin
   n := '/sys/class/dmi/id/';
   for i := 0 to high(_KNOWN) do
@@ -4519,7 +4519,7 @@ end;
 function _GetSystemMacAddress: TRawUtf8DynArray;
 var
   SR: TSearchRec;
-  fn: shortstring;
+  fn: ShortString;
   fnl: AnsiChar;
   f: RawUtf8;
 begin
