@@ -1603,7 +1603,7 @@ end;
 procedure TNetworkProtocols.IPAddresses;
 var
   i: PtrInt;
-  s: shortstring;
+  s: ShortString;
   txt: RawUtf8;
   ip: THash128Rec;
 begin

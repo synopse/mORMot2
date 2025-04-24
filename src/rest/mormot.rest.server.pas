@@ -6190,7 +6190,7 @@ begin
       Append(result, [' ', ToText(m), '=', fTreeCount[m]]);
   for n := low(fNodeCount) to high(fNodeCount) do
     if fNodeCount[n] <> 0 then
-      Append(result, [' ', ToText(n), '=', fNodeCount[n]]);
+      Append(result, [' ', ToText(n)^, '=', fNodeCount[n]]);
 end;
 
 
