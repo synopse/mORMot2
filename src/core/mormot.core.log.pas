@@ -695,7 +695,7 @@ type
     fRotateFileDailyAtHour: integer;
     function GetLog: TSynLog; // from inlined Add (calls CreateSynLog if needed)
     function CreateSynLog: TSynLog;
-    procedure EnsureAutoFlushRunning;
+    procedure EnsureAutoFlushThreadRunning;
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogLevels);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
@@ -1061,7 +1061,7 @@ type
     fThreadIndexReleasedCount: integer;
     fStreamPositionAfterHeader: cardinal;
     fThreadIndexReleased: TWordDynArray;
-    fWriterClass: TBaseWriterClass;
+    fWriterClass: TJsonWriterClass;
     fThreadIdent: array of record // for ptIdentifiedInOneFile
       ThreadName: RawUtf8;
       ThreadID: PtrUInt;
@@ -5251,6 +5251,7 @@ end;
 
 procedure TSynLog.LogFileInit;
 begin
+  Include(fInternalFlags, logInitDone);
   // setup proper timing for this log instance
   QueryPerformanceMicroSeconds(fStartTimestamp);
   if (fFileRotationSize > 0) or
@@ -5261,7 +5262,6 @@ begin
     fStartTimestampDateTime := Now
   else
     fStartTimestampDateTime := NowUtc;
-  Include(fInternalFlags, logInitDone);
   // append a sllNewRun line at the log file opening
   LogCurrentTime;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
@@ -5489,22 +5489,20 @@ end;
 
 procedure TSynLog.LogHeader(Level: TSynLogLevel);
 var
-  i: integer;
+  indent: PtrInt;
 begin
   if fWriter = nil then
     CreateLogWriter; // file creation should be thread-safe
   if not (logHeaderWritten in fInternalFlags) then
-    LogFileHeader
-  else if not (logInitDone in fInternalFlags) then
-    LogFileInit;
+    LogFileHeader;
   LogCurrentTime;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     fWriter.AddInt18ToChars3(fThreadInfo^.ThreadNumber);
   fCurrentLevel := Level;
   fWriter.AddShorter(LOG_LEVEL_TEXT[Level]);
-  i := fThreadInfo^.RecursionCount - byte(Level = sllEnter);
-  if i > 0 then
-    fWriter.AddChars(#9, i);
+  indent := fThreadInfo^.RecursionCount - byte(Level = sllEnter);
+  if indent > 0 then
+    fWriter.AddChars(#9, indent);
   case Level of // handle additional information for some special error levels
     sllMemory:
       AddMemoryStats;
@@ -5763,13 +5761,12 @@ begin
     if fWriterStream = nil then
       fWriterStream := TFakeWriterStream.Create; // don't write anything
   end;
-  if fWriterClass = nil then
-    // use TJsonWriter since mormot.core.json.pas is linked
-    fWriterClass := TJsonWriter;
   // create fWriter instance
   if fWriter = nil then
   begin
-    fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
+    if fWriterClass = nil then // may be overriden by an inherited class
+      fWriterClass := TJsonWriter; // mormot.core.json.pas is linked
+    fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions
       + [twoEnumSetsAsTextInRecord, // debug-friendly text output
          twoFullSetsAsStar,
