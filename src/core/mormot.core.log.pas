@@ -1238,16 +1238,8 @@ type
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
-      const TextArgs: array of const; aInstance: TObject = nil); overload;
-    /// same as Log(Level,TextFmt,[]) but with one RawUtf8 parameter
-    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
-      const TextArg: RawUtf8; aInstance: TObject = nil); overload;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// same as Log(Level,TextFmt,[]) but with one Int64 parameter
-    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
-      const TextArg: Int64; aInstance: TObject = nil); overload;
-      {$ifdef HASINLINE} inline; {$endif}
+    procedure Log(Level: TSynLogLevel; const Fmt: RawUtf8;
+      const Args: array of const; aInstance: TObject = nil); overload;
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
     // class name and address (to be used e.g. if you didn't call TSynLog.Enter()
@@ -4960,28 +4952,12 @@ begin
   end;
 end;
 
-procedure TSynLog.Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
-  const TextArgs: array of const; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogLevel; const Fmt: RawUtf8;
+  const Args: array of const; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, TextFmt, TextArgs, aInstance);
-end;
-
-procedure TSynLog.Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
-  const TextArg: RawUtf8; aInstance: TObject);
-begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
-end;
-
-procedure TSynLog.Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
-  const TextArg: Int64; aInstance: TObject);
-begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
+    LogInternalFmt(Level, pointer(Fmt), @Args[0], length(Args), aInstance);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
@@ -4994,10 +4970,15 @@ end;
 
 {$ifdef UNICODE}
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: string; aInstance: TObject);
+var
+  vr: TVarRec;
 begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, '%', [Text], aInstance);
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  vr.VType := vtUnicodeString;
+  vr.VUnicodeString := pointer(Text);
+  LogInternalFmt(Level, '%', @vr, 1, aInstance);
 end;
 {$endif UNICODE}
 
@@ -5032,11 +5013,11 @@ begin
       exit;
     LogHeader(sllInfo);
     fWriter.AddShort('SetThreadName ');
-    fWriter.AddPointer(ThreadID); // as hexadecimal
+    fWriter.AddPointer(ThreadID);  // as hexadecimal
     fWriter.AddDirect(' ');
-    fWriter.AddU(ThreadID);       // as decimal
+    fWriter.AddU(ThreadID);        // as decimal
     fWriter.AddDirect('=');
-    fWriter.AddString(ThreadName);    // as text name
+    fWriter.AddString(ThreadName); // as text name
   end;
   LogTrailer(sllInfo);
 end;
@@ -5090,7 +5071,7 @@ begin
   log := Add;
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
-    log.LogInternalFmt(Level, Fmt, Args, Instance);
+    log.LogInternalFmt(Level, pointer(Fmt), @Args[0], length(Args), Instance);
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
@@ -5571,8 +5552,8 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; const TextFmt: RawUtf8;
-  const TextArgs: array of const; Instance: TObject);
+procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
+  Values: PVarRec; ValuesCount: integer; Instance: TObject);
 var
   lasterror: cardinal;
 begin
@@ -5586,7 +5567,7 @@ begin
     if Instance <> nil then
       fWriter.AddInstancePointer(Instance, ' ', fFamily.WithUnitName,
         fFamily.WithInstancePointer);
-    fWriter.Add(TextFmt, TextArgs, twOnSameLine,
+    fWriter.AddFmt(Format, Values, ValuesCount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
