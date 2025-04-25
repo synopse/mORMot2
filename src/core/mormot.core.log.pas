@@ -221,7 +221,9 @@ type
 const
   /// up to 7 TSynLogFamily, i.e. TSynLog sub-classes can be defined
   MAX_SYNLOGFAMILY = 7;
-  /// up to 64K threads per TSynLog instance
+  /// we handle up to 64K threads per TSynLog instance
+  // - there is no technical reason to such limitation, but it would allow to
+  // detect missing TSynLog.NotifyThreadEnded calls in your code logic
   MAX_SYNLOGTHREADS = 65500;
 
   /// constant with all TSynLogFamily.Level items, as set by LOG_VERBOSE
@@ -1194,36 +1196,30 @@ type
     // - as a benefit, it is convenient to define a local variable to store
     // the returned ISynLog and use it for any specific logging within
     // the method execution
-    // - on Delphi earlier than 10.4 (and not FPC), you could just call Enter()
+    // - on Delphi earlier than 10.4 (but not FPC), you could just call Enter()
     // inside the method block, without any ISynLog interface variable - but
     // it is not very future-proof to write the following code:
     // ! procedure TMyDB.SQLFlush;
     // ! begin
-    // !   TSynLogDB.Enter(self,'SQLFlush');
+    // !   TSynLogDB.Enter(self, 'SQLFlush');
     // !   // do some stuff
     // ! end;
-    // - if no Method name is supplied, it will use the caller address, and
-    // will write it as hexa and with full unit and symbol name, if the debugging
-    // information is available (i.e. if TDebugFile retrieved the .map/.dbg content;
-    // note that this is not available yet on FPC):
+    // - on Delphi, if no aMethodName is supplied, it will use the caller address,
+    // and write it as hexa and with full unit and symbol name, if the debugging
+    // information is available from TDebugFile, i.e. there is .map/.mab content
     // ! procedure TMyDB.SQLFlush;
     // ! var log: ISynLog;
     // ! begin
     // !   log := TSynLogDB.Enter(self);
     // !   // do some stuff
     // ! end;
-    // - note that supplying a method name is faster than using the .map/.dbg content:
-    // if you want accurate profiling, or expect to support FPC, it's better to
-    // use a method name or not to relying on the .map/.dbg file - note that this
-    // method name shall be a constant, and not a locally computed variable,
-    // since it may trigger some random GPF at runtime - if it is a local
-    // variable, you can set aMethodNameLocal=true
+    // - note that supplying aMethodName is faster than using the .map content,
+    // and is what FPC requires, so it should be preferred for most projects
     // - if TSynLogFamily.HighResolutionTimestamp is TRUE, high-resolution
     // time stamp will be written instead of ISO 8601 date and time: this will
     // allow performance profiling of the application on the customer side
-    // - Enter() will write the class name (and the unit name for classes with
-    // published properties, if TSynLogFamily.WithUnitName is true) for both
-    // enter (+) and leave (-) events:
+    // - Enter() will write the class name - and the unit name for classes with
+    // published properties, if TSynLogFamily.WithUnitName is true:
     //  $ 20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
     //  $ 20110325 19325801 info   SQL=SELECT * FROM Table;
     //  $ 20110325 19325801  -    01.512.320
@@ -1333,7 +1329,7 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char; aInstance: TObject = nil;
       const IgnoreWhenStartWith: PAnsiChar = nil);
-    /// manual low-level TSynLog.Enter execution without the ISynLog
+    /// manual low-level TSynLog.Enter execution without the ISynLog overhead
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
     // - aMethodName should be a not nil constant text
@@ -6256,7 +6252,7 @@ begin
           EStackCount := GlobalLastExceptionStackCount;
         end
         else
-          EStack := nil;
+          EStack := nil; // avoid any GPF
       end;
   end;
 end;
