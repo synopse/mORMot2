@@ -1020,7 +1020,7 @@ type
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
     FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
     /// used by TSynLog.Enter methods to handle recursive calls tracing
-    // - stores ISynLog.RefCnt in lowest 8-bit, then fCurrentTimestamp shl 8
+    // - stores ISynLog.RefCnt in lowest 8-bit, then CurrentTimestamp shl 8
     // (microseconds as 56-bit do cover 2284 years before overflow)
     // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
@@ -1049,7 +1049,7 @@ type
     fExceptionIgnoredBackup: boolean;
     {$endif NOEXCEPTIONINTERCEPT}
     fISynLogOffset: integer;
-    fCurrentTimestamp: Int64;
+    fLogTimestamp: Int64;
     fStartTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
     fWriterEcho: TEchoWriter;
@@ -1067,6 +1067,7 @@ type
       ThreadID: PtrUInt;
     end;
     fSharedThreadInfo: TSynLogThreadInfo; // for ptNoThreadProcess
+    class function FamilyCreate: TSynLogFamily;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGuid; out obj): TIntQry;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -1074,7 +1075,8 @@ type
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     function _Release: TIntCnt;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
-    class function FamilyCreate: TSynLogFamily;
+    function CurrentTimestamp: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
@@ -1084,8 +1086,8 @@ type
     procedure DoThreadName(ndx: PtrInt);
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
-    procedure LogInternalFmt(Level: TSynLogLevel; const TextFmt: RawUtf8;
-      const TextArgs: array of const; Instance: TObject);
+    procedure LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
+      Values: PVarRec; ValuesCount: integer; Instance: TObject);
     procedure LogInternalText(Level: TSynLogLevel; const Text: RawUtf8;
       Instance: TObject; TextTruncateAtLength: integer);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
@@ -1093,7 +1095,6 @@ type
     // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
     procedure LogHeader(Level: TSynLogLevel);
     procedure LogTrailer(Level: TSynLogLevel);
-      {$ifdef HASINLINE}inline;{$endif}
     procedure LogCurrentTime; virtual;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
@@ -4607,11 +4608,19 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
     ESynLogException.RaiseUtf8('Too many %._AddRef', [self]);
 end;
 
+function TSynLog.CurrentTimestamp: Int64;
+begin
+  result := fLogTimestamp;
+  if result <> 0 then // was set by TSynLog.LogCurrentTime
+    exit;
+  QueryPerformanceMicroSeconds(result);
+  dec(result, fStartTimestamp);
+end;
+
 function TSynLog._Release: TIntCnt;
 var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
-  ms: Int64;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
   // no EnterCriticalSection(GlobalThreadLock) needed here
@@ -4631,14 +4640,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   try
     fThreadInfo := nfo;
     LogHeader(sllLeave);
-    if fFamily.HighResolutionTimestamp then
-      ms := fCurrentTimestamp
-    else // no previous TSynLog.LogCurrentTime call: get current microsec
-    begin
-      QueryPerformanceMicroSeconds(ms);
-      dec(ms, fStartTimestamp);
-    end;
-    fWriter.AddMicroSec(ms - nfo^.Recursion[nfo^.RecursionCount] shr 8);
+    fWriter.AddMicroSec(CurrentTimestamp - nfo^.Recursion[nfo^.RecursionCount] shr 8);
     fWriterEcho.AddEndOfLine(sllLeave);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -4766,14 +4768,7 @@ begin
     fWriterEcho.AddEndOfLine(sllEnter);
     // setup recursive sllLeave timing and RefCnt=1 like with _AddRef
     if sllLeave in fFamily.Level then
-    begin
-      if not fFamily.HighResolutionTimestamp then
-      begin // fCurrentTimeStamp was not filled in TSynLog.LogCurrentTime
-        QueryPerformanceMicroSeconds(rec);
-        fCurrentTimestamp := rec - fStartTimestamp;
-      end;
-      rec := fCurrentTimestamp shl 8 + {refcnt=}1;
-    end
+      rec := CurrentTimestamp shl 8 + {refcnt=}1
     else
       rec := {refcnt=}1; // no timestamp needed if no sllLeave
     nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with refcnt = 1
@@ -4887,10 +4882,10 @@ end;
 function TSynLog.LastQueryPerformanceMicroSeconds: Int64;
 begin
   if (self = nil) or
-     (fCurrentTimestamp = 0) then
+     (fLogTimestamp = 0) then
     result := 0
   else
-    result := fCurrentTimestamp + fStartTimestamp;
+    result := fLogTimestamp + fStartTimestamp;
 end;
 
 type
@@ -5475,8 +5470,9 @@ begin
   if fFamily.HighResolutionTimestamp then
   begin
     QueryPerformanceMicroSeconds(ms);
-    fCurrentTimestamp := ms - fStartTimestamp;
-    fWriter.AddBinToHexDisplay(@fCurrentTimestamp, SizeOf(fCurrentTimestamp));
+    dec(ms, fStartTimestamp);
+    fLogTimestamp := ms;
+    fWriter.AddBinToHexDisplay(@ms, SizeOf(ms));
   end
   else
   begin
