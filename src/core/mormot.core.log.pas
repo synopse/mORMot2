@@ -1200,6 +1200,7 @@ type
     // - may return nil if sllEnter is not enabled for the TSynLog class
     class function Enter(aInstance: TObject = nil;
       aMethodName: PUtf8Char = nil): ISynLog; overload;
+      {$ifdef FPC} inline; {$endif}
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - this overloaded method would not write the method name, but the supplied
     // text content, after expanding the parameters like FormatUtf8()
@@ -1207,6 +1208,16 @@ type
     // - warning: may return nil if sllEnter is not enabled for the TSynLog class
     class function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog; overload;
+    /// handle method enter / auto-leave tracing, with some custom text arguments
+    // - expects the ISynLog to be a void variable on stack
+    // - slightly more efficient - especially on FPC - than plain Enter()
+    class procedure EnterLocal(var Local: ISynLog; aInstance: TObject;
+      aMethodName: PUtf8Char); overload;
+    /// handle method enter / auto-leave tracing, with some custom text arguments
+    // - expects the ISynLog to be a void variable on stack
+    // - slightly more efficient - especially on FPC - than plain Enter()
+    class procedure EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
+      const TextArgs: array of const; aInstance: TObject = nil); overload;
     /// retrieve the current instance of this TSynLog class
     // - to be used for direct logging, without any Enter/Leave:
     // ! TSynLogDB.Add.Log(llError,'The % statement didn''t work',[SQL]);
@@ -4785,69 +4796,90 @@ begin
   LogEnter(nfo, inst, @tmp[1]);
 end;
 
-{$ifdef ISDELPHI}
-  {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-  {$ifdef CPU64}
-    {$define USERTLCAPTURESTACKBACKTRACE}
-  {$else}
-    {$define USEASMX86STACKBACKTRACE}
-  {$endif CPU64}
-{$endif ISDELPHI}
+{$ifdef ISDELPHI} // specific to Delphi: fast get the caller method name
+
+{$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
+{$ifdef CPU64}
+  {$define USERTLCAPTURESTACKBACKTRACE}
+{$else}
+  {$define USEASMX86STACKBACKTRACE}
+{$endif CPU64}
 
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
 var
   log: TSynLog;
   nfo: PSynLogThreadInfo;
-  {$ifdef ISDELPHI}
   addr: PtrUInt;
-  {$endif ISDELPHI}
 begin
   result := nil;
   log := Add;
   nfo := log.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  {$ifdef ISDELPHI}
   addr := 0;
   if aMethodName = nil then
   begin
     {$ifdef USERTLCAPTURESTACKBACKTRACE}
     if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
       addr := 0;
-    {$endif USERTLCAPTURESTACKBACKTRACE}
-    {$ifdef USEASMX86STACKBACKTRACE}
+    {$else}
     asm
       mov  eax, [ebp + 4] // retrieve caller EIP from push ebp; mov ebp,esp
       mov  addr, eax
     end;
-    {$endif USEASMX86STACKBACKTRACE}
+    {$endif USERTLCAPTURESTACKBACKTRACE}
     if addr <> 0 then
       dec(addr, 5);
   end;
   log.LogEnter(nfo, aInstance, aMethodName, addr);
-  {$else}
-  log.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
-  {$endif ISDELPHI}
   pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
-{$ifdef ISDELPHI}
-  {$STACKFRAMES OFF}
+{$STACKFRAMES OFF}
+
+{$else}
+
+class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
+begin
+  result := nil;
+  EnterLocal(result, aInstance, aMethodName);
+end;
+
 {$endif ISDELPHI}
 
 class function TSynLog.Enter(const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
+begin
+  result := nil;
+  EnterLocal(result, TextFmt, TextArgs, aInstance);
+end;
+
+class procedure TSynLog.EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
+  const TextArgs: array of const; aInstance: TObject);
 var
   log: TSynLog;
   nfo: PSynLogThreadInfo;
-begin
-  result := nil;
+begin // expects the caller to have set Local = nil
   log := Add;
   nfo := log.DoEnter;
   if nfo = nil then
     exit; // nothing to log
   log.LogEnter(nfo, aInstance, TextFmt, TextArgs); // with refcnt = 1
-  pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
+  pointer(Local) := PAnsiChar(log) + log.fISynLogOffset; // result := self
+end;
+
+class procedure TSynLog.EnterLocal(var Local: ISynLog; aInstance: TObject;
+  aMethodName: PUtf8Char);
+var
+  log: TSynLog;
+  nfo: PSynLogThreadInfo;
+begin // expects the caller to have set Local = nil
+  log := Add;
+  nfo := log.DoEnter;
+  if nfo = nil then
+    exit; // nothing to log
+  log.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
+  pointer(Local) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
 procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
