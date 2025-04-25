@@ -961,22 +961,6 @@ begin
             ((fa.dwFileAttributes and faDirectory <> 0) = CheckAsDir);
 end;
 
-function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
-var
-  len: PtrInt;
-begin
-  len := length(FileName);
-  if len = 0 then
-    result := false
-  else if (len = 1) and
-          (FileName[1] = '.') then
-    result := true
-  else if FileName[len] <> '\' then
-    result := FileExists(FileName, FollowLink, {checkasdir=}true)
-  else
-    result := FileExists(copy(FileName, 1, len - 1), FollowLink, true);
-end;
-
 function FileSize(const FileName: TFileName): Int64;
 var
   fa: WIN32_FILE_ATTRIBUTE_DATA;

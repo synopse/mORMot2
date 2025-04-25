@@ -1316,22 +1316,21 @@ begin
     result := st.st_size;
 end;
 
-function FileExists(const FileName: TFileName): boolean;
+function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
   st: TStat;
 begin
-  result := (FileName <> '') and
-            (fpStat(pointer(FileName), st) = 0) and
-            not FpS_ISDIR(st.st_mode);
-end;
-
-function DirectoryExists(const FolderName: TFileName): boolean;
-var
-  st: TStat;
-begin
-  result := (FolderName <> '') and
-            (fpStat(pointer(FolderName), st) = 0) and
-            FpS_ISDIR(st.st_mode);
+  result := false;
+  if FileName = '' then
+    exit;
+  if FollowLink then
+  begin
+    if fpStat(pointer(FileName), st) <> 0 then
+      exit;
+  end
+  else if fpLStat(pointer(FileName), st) <> 0 then
+    exit;
+  result := (FpS_ISDIR(st.st_mode) = CheckAsDir);
 end;
 
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;

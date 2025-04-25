@@ -2394,16 +2394,6 @@ function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 procedure FileClose(F: THandle); stdcall;
 
-/// redefined here to support FileName longer than MAX_PATH
-// - as our FileOpen/FileCreate redefinitions
-// - CheckAsDir = true is used by DirectoryExists()
-function FileExists(const FileName: TFileName; FollowLink: boolean = true;
-  CheckAsDir: boolean = false): boolean;
-
-/// redefined here to support FileName longer than MAX_PATH
-function DirectoryExists(const FileName: TFileName;
-  FollowLink: boolean = true): boolean; {$ifdef HASINLINE} inline; {$endif}
-
 /// redefined here to avoid warning to include "Windows" in uses clause
 // and support FileName longer than MAX_PATH
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
@@ -2421,14 +2411,6 @@ function FileSetTime(const FileName: TFileName;
 function ExpandFileName(const FileName: TFileName): TFileName;
 
 {$else}
-
-/// faster cross-platform alternative to sysutils homonymous function
-// - will directly use fpstat() so is slightly faster than default FPC RTL
-function FileExists(const FileName: TFileName): boolean;
-
-/// faster cross-platform alternative to sysutils homonymous function
-// - will directly use fpstat() so is slightly faster than default FPC RTL
-function DirectoryExists(const FolderName: TFileName): boolean;
 
 /// redefined from FPC RTL sysutils for consistency
 // - warning: this function replaces ALL SysUtils.FileCreate() overloads,
@@ -3140,6 +3122,17 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 /// cross-platform check if the supplied THandle is not invalid
 function ValidHandle(Handle: THandle): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, will support FileName longer than MAX_PATH
+// - CheckAsDir = true is used by DirectoryExists()
+function FileExists(const FileName: TFileName; FollowLink: boolean = true;
+  CheckAsDir: boolean = false): boolean;
+
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, will support FileName longer than MAX_PATH
+function DirectoryExists(const FileName: TFileName;
+  FollowLink: boolean = true): boolean;
 
 /// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a path
 function SafePathName(const Path: TFileName): boolean;
@@ -6899,6 +6892,22 @@ begin
      inc(result, DirectorySize(dir + sr.Name, true));
   until FindNext(sr) <> 0;
   FindClose(sr);
+end;
+
+function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
+var
+  len: PtrInt;
+begin
+  len := length(FileName);
+  if len = 0 then
+    result := false
+  else if (len = 1) and
+          (FileName[1] = '.') then
+    result := true
+  else if FileName[len] <> PathDelim then
+    result := FileExists(FileName, FollowLink, {checkasdir=}true)
+  else
+    result := FileExists(copy(FileName, 1, len - 1), FollowLink, true);
 end;
 
 function SafePathName(const Path: TFileName): boolean;
