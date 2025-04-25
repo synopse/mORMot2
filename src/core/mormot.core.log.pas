@@ -4517,15 +4517,20 @@ begin
   nfo^.ThreadNumber := 0;
   if self = nil then
     exit;
-  // reset this thread name for ptIdentifiedInOneFile
-  if num <= PtrUInt(length(fThreadIdent)) then
-    with fThreadIdent[num - 1] do
-    begin
-      ThreadName := '';
-      ThreadID := 0;
-    end;
-  // mark to be recycled by InitThreadInfo
-  AddWord(fThreadIndexReleased, fThreadIndexReleasedCount, num);
+  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  try
+    // reset this thread name for ptIdentifiedInOneFile
+    if num <= PtrUInt(length(fThreadIdent)) then
+      with fThreadIdent[num - 1] do
+      begin
+        ThreadName := '';
+        ThreadID := 0;
+      end;
+    // mark to be recycled by InitThreadInfo
+    AddWord(fThreadIndexReleased, fThreadIndexReleasedCount, num);
+  finally
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 procedure TSynLog.InitThreadInfo(nfo: PSynLogThreadInfo);
