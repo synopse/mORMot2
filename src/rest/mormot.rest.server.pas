@@ -2804,7 +2804,6 @@ procedure TRestServerUriContext.Prepare(aServer: TRestServer;
   const aCall: TRestUriParams);
 var
   fam: TSynLogFamily;
-  tmp: pointer;
 begin
   // setup the state machine
   fCall := @aCall;
@@ -2821,10 +2820,8 @@ begin
      not (sllEnter in fam.Level) then
     exit;
   fLog := fam.Add; // TSynLog instance for the current thread
-  tmp := nil; // same logic than Enter() but with no ISynLog involved
-  FormatUtf8('URI % % in=%', [aCall.Method, aCall.Url, KB(aCall.InBody)],
-    RawUtf8(tmp));
-  fLog.ManualEnter(tmp, fServer, mnEnterOwnMethodName);
+  fLog.ManualEnter(fServer,
+    'URI % % in=%', [aCall.Method, aCall.Url, KB(aCall.InBody)]);
   if fServer.StatLevels <> [] then // get start timestamp from log
     fMicroSecondsStart := fLog.LastQueryPerformanceMicroSeconds;
 end;
@@ -7730,7 +7727,7 @@ begin
         if (Call.OutStatus = HTTP_SUCCESS) and
            (rsoHttp200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTTP_NOCONTENT;
-      if ctxt.fMicroSecondsStart <> 0 then
+      if StatLevels <> [] then
         fStats.ProcessSuccess(outcomingfile);
     end
     else if (Call.OutStatus < 200) or
@@ -7763,7 +7760,7 @@ begin
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally
     // 9. gather statistics and log execution
-    if ctxt.fMicroSecondsStart <> 0 then
+    if StatLevels <> [] then
       ctxt.ComputeStatsAfterCommand;
     if ctxt.fLog <> nil then
       ctxt.LogFromContext;
