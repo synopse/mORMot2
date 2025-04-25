@@ -2966,7 +2966,7 @@ begin
   else if not fConnectionCloseWasSent then
   begin
     if log = nil then
-      log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
+      WebSocketLog.EnterLocal(log, 'Destroy %', [ToText(fState)^], self);
     if log <> nil then
       log.Log(sllTrace, 'Destroy: send focConnectionClose', self);
     Shutdown({waitforpong=}true);
@@ -2976,7 +2976,7 @@ begin
      not fProcessEnded then
   begin
     if log = nil then
-      log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
+      WebSocketLog.EnterLocal(log, 'Destroy %', [ToText(fState)^], self);
     if log <> nil then
       log.Log(sllDebug, 'Destroy: wait for fProcessCount=% fProcessEnded=%',
         [fProcessCount, fProcessEnded], self);

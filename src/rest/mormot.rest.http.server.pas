@@ -609,7 +609,7 @@ begin
      (aServer = nil) or
      (aServer.Model = nil) then
     exit;
-  log := fLog.Enter(self, 'AddServer');
+  fLog.EnterLocal(log, self, 'AddServer');
   fSafe.WriteLock; // protect fRestServers[]
   try
     n := length(fRestServers);
@@ -668,7 +668,7 @@ begin
      (aServer = nil) or
      (aServer.Model = nil) then
     exit;
-  log := fLog.Enter(self, 'RemoveServer');
+  fLog.EnterLocal(log, self, 'RemoveServer');
   fSafe.WriteLock; // protect fRestServers[]
   try
     n := high(fRestServers);
@@ -758,7 +758,7 @@ begin
     fLog := TSynLog
   else
     fLog := aServers[0].LogClass;
-  log := fLog.Enter('Create % (%) on port %',
+  fLog.EnterLocal(log, 'Create % (%) on port %',
     [ToText(aUse)^, ToText(aSecurity)^, aPort], self);
   fOptions := aOptions;
   inherited Create; // may have been overriden
@@ -924,7 +924,7 @@ destructor TRestHttpServer.Destroy;
 var
   log: ISynLog;
 begin
-  log := fLog.Enter(self, 'Destroy');
+  fLog.EnterLocal(log, self, 'Destroy');
   if log <> nil then
     log.Log(sllHttp, '% finalized for %',
       [fHttpServer, Plural('server', length(fRestServers))], self);
@@ -939,25 +939,24 @@ var
   i: PtrInt;
   {%H-}log: ISynLog;
 begin
-  if (self <> nil) and
-     not fShutdownInProgress then
-  begin
-    log := fLog.Enter('Shutdown(%)', [BOOL_STR[noRestServerShutdown]], self);
-    fShutdownInProgress := true;
-    fHttpServer.Shutdown;
-    fSafe.WriteLock; // protect fRestServers[]
-    try
-      for i := 0 to high(fRestServers) do
-      begin
-        if not noRestServerShutdown then
-          fRestServers[i].Server.Shutdown;
-        if TMethod(fRestServers[i].Server.OnNotifyCallback).Data = self then
-          // avoid unexpected GPF, and proper TRestServer reuse
-          fRestServers[i].Server.OnNotifyCallback := nil;
-      end;
-    finally
-      fSafe.WriteUnLock;
+  if (self = nil) or
+     fShutdownInProgress then
+    exit;
+  fLog.EnterLocal(log, 'Shutdown(%)', [BOOL_STR[noRestServerShutdown]], self);
+  fShutdownInProgress := true;
+  fHttpServer.Shutdown;
+  fSafe.WriteLock; // protect fRestServers[]
+  try
+    for i := 0 to high(fRestServers) do
+    begin
+      if not noRestServerShutdown then
+        fRestServers[i].Server.Shutdown;
+      if TMethod(fRestServers[i].Server.OnNotifyCallback).Data = self then
+        // avoid unexpected GPF, and proper TRestServer reuse
+        fRestServers[i].Server.OnNotifyCallback := nil;
     end;
+  finally
+    fSafe.WriteUnLock;
   end;
 end;
 

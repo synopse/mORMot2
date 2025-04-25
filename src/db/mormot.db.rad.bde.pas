@@ -208,7 +208,7 @@ begin
      (fDatabase = nil) then
     ESqlDBBDE.RaiseUtf8('%.Connect() on % failed: Database=nil',
       [self, fProperties.ServerName]);
-  Log := SynDBLog.Enter('Connect to Alias=%', [fDatabase.AliasName], self);
+  SynDBLog.EnterLocal(Log, 'Connect to Alias=%', [fDatabase.AliasName], self);
   try
     fSession.Open;
     fDatabase.Open;

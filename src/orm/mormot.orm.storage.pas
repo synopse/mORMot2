@@ -3076,7 +3076,7 @@ begin
         if IsAllFields(b^) then
         begin
           if log = nil then // only start logging if something is to be written
-            log := logclass.Enter(self, 'TrackChangesAndFlush Add');
+            logclass.EnterLocal(log, self, 'TrackChangesAndFlush Add');
           batch.Add(p^, {senddata=}true, {forceid=}true, ALL_FIELDS, true);
           FillZero(b^); // flush
         end;
@@ -3090,7 +3090,7 @@ begin
         if not IsZero(b^) then
         begin
           if log = nil then
-            log := logclass.Enter(self, 'TrackChangesAndFlush Update');
+            logclass.EnterLocal(log, self, 'TrackChangesAndFlush Update');
           batch.Update(p^, b^, {DoNotAutoComputeFields=}true);
           FillZero(b^); // flush
         end;

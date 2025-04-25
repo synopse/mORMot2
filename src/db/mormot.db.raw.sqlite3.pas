@@ -6820,7 +6820,7 @@ destructor TSqlDataBase.Destroy;
 var
   {%H-}log: ISynLog;
 begin
-  log := fLog.Enter('Destroy %', [fFileNameWithoutPath], self);
+  fLog.EnterLocal(log, 'Destroy %', [fFileNameWithoutPath], self);
   if DB <> 0 then
   try
     Rollback; // any unfinished transaction is rollbacked
@@ -6868,7 +6868,7 @@ begin
   if (fLog <> nil) and
      SqlShouldBeLogged(aSql) then
   begin
-    log := fLog.Enter(self, 'ExecuteAll');
+    fLog.EnterLocal(log, self, 'ExecuteAll');
     if log <> nil then
       log.Log(sllSQL, aSql, self, 4096);
   end;
@@ -6912,7 +6912,7 @@ begin
   if (fLog <> nil) and
      SqlShouldBeLogged(aSql) then
   begin
-    log := fLog.Enter(self, 'Execute');
+    fLog.EnterLocal(log, self, 'Execute');
     if log <> nil then
       log.Log(sllSQL, aSql, self, 2048);
   end;
@@ -7291,7 +7291,7 @@ function TSqlDataBase.Backup(const BackupFileName: TFileName): boolean;
 var
   log: ISynLog;
 begin
-  log := fLog.Enter('Backup % -> %',
+  fLog.EnterLocal(log, 'Backup % -> %',
     [fFileNameWithoutPath, BackupFileName], self);
   if self = nil then
   begin
@@ -7484,7 +7484,7 @@ begin
   if (self = nil) or
      (fDB = 0) then
     exit;
-  log := fLog.Enter(self, 'DBClose');
+  fLog.EnterLocal(log, self, 'DBClose');
   if log <> nil then
     log.Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
   if (sqlite3 = nil) or
@@ -7522,7 +7522,7 @@ var
   i: integer;
   log: ISynLog;
 begin
-  log := fLog.Enter('DBOpen %', [fFileNameWithoutPath], self);
+  fLog.EnterLocal(log, 'DBOpen %', [fFileNameWithoutPath], self);
   if fDB <> 0 then
     raise ESqlite3Exception.Create('DBOpen called twice');
   // open the database with the proper API call
@@ -9081,7 +9081,7 @@ var
 begin
   fn := fDestDB.FileName;
   SetCurrentThreadName('% [%] [%]', [self, fSourceDB.FileName, fn]);
-  log := SQLite3Log.Enter(self, 'Execute');
+  SQLite3Log.EnterLocal(log, self, 'Execute');
   try
     try
       try

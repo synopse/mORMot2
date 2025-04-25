@@ -3298,7 +3298,7 @@ begin
     NotifyThreadStart(self);
     if fLogClass <> nil then
     begin
-      ilog := fLogClass.Enter('Execute % %', [fProcessName, fLogClass], self);
+      fLogClass.EnterLocal(ilog, 'Execute % %', [fProcessName, fLogClass], self);
       if Assigned(ilog) then
         fLog := ilog.Instance;
     end;
@@ -3314,7 +3314,7 @@ begin
       end;
   end;
   fProcessing := false;
-end;
+end; // don't reset fLog := nil here - done in DoTerminate
 
 procedure TLoggedThread.DoTerminate;
 begin
@@ -3553,7 +3553,7 @@ begin
     if next.Name <> '' then
       SetCurrentThreadName(next.Name);
     if fSynLog <> nil then
-      log := fSynLog.Enter('RunDone: next task [%]', [next.Name], self);
+      fSynLog.EnterLocal(log, 'RunDone: next task [%]', [next.Name], self);
     try
       DoWork(next, self);
     except

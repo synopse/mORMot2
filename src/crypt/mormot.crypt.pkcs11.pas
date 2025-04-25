@@ -442,7 +442,7 @@ var
   seq: TAsnObject;
   log: ISynLog; // seldom called, and better be traced (and profiled)
 begin
-  log := fCert.Log.Enter('SignDigest % %', [ToText(DigAlgo)^, fCert], self);
+  fCert.Log.EnterLocal(log, 'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   result := '';
   hf := CAA_HF[DigAlgo];
   if HASH_SIZE[hf] <> DigLen then

@@ -1221,7 +1221,7 @@ var
   end;
 
 begin
-  log := SynDBLog.Enter(self, 'Connect');
+  SynDBLog.EnterLocal(log, self, 'Connect');
   if fAttachment<>nil then
      ESqlDBIbx.RaiseUtf8(
        '%.Connect() on % failed: Attachment<>nil',
@@ -1292,7 +1292,7 @@ procedure TSqlDBIbxConnection.StartTransaction;
 var
   log: ISynLog;
 begin
-  log := SynDBLog.Enter(self, 'StartTransaction');
+  SynDBLog.EnterLocal(log, self, 'StartTransaction');
   if TransactionCount > 0 then
     ESqlDBIbx.RaiseUtf8('Invalid %.StartTransaction: nested ' +
       'transactions are not supported/implemented', [self]);

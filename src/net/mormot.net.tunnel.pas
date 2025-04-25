@@ -540,7 +540,7 @@ var
   sha3: TSha3;
   log: ISynLog;
 begin
-  log := TSynLog.Enter('Open(%)', [Session], self);
+  TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
   // validate input parameters
   if (fPort <> 0) or
      (not Assigned(fTransmit)) then

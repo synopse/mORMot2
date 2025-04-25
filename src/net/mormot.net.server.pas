@@ -6153,7 +6153,7 @@ begin
   fLog := aLogClass;
   if fLog = nil then
     fLog := TSynLog;
-  log := fLog.Enter('Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
+  fLog.EnterLocal(log, 'Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
   if (fSettings = nil) or
@@ -6528,7 +6528,7 @@ begin
   outStreamInitialPos := OutStream.Position;
   // prepare a request frame
   l := nil;
-  log := fLog.Enter('OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
+  fLog.EnterLocal(log, 'OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
     Params.Hasher.GetHashName, Params.Hash, Url], self);
   if Assigned(log) then // log=nil if fLog=nil or sllEnter is not enabled
     l := log.Instance;

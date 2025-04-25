@@ -320,7 +320,7 @@ var
     log: ISynLog;
     timer, one: TPrecisionTimer;
   begin
-    log := proxy.LogClass.Enter(proxy, 'Shutdown');
+    proxy.LogClass.EnterLocal(log, proxy, 'Shutdown');
     // first half deletes POST first, second half deletes GET first
     timer.Start;
     rmax := clientcount - 1;
@@ -374,7 +374,7 @@ var
   log: ISynLog;
 begin
   // here we follow the steps and content stated by https://goo.gl/CX6VA3
-  log := proxy.LogClass.Enter(proxy, 'Tests');
+  proxy.LogClass.EnterLocal(log, proxy, 'Tests');
   if (proxy = nil) or
      (proxy.RtspServer <> '127.0.0.1') then
     test.Check(false, 'expect a running proxy on 127.0.0.1')

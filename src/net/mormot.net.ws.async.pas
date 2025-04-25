@@ -626,7 +626,7 @@ var
   n: integer;
   log: ISynLog;
 begin
-  log := TSynLog.Enter(self, 'Destroy');
+  TSynLog.EnterLocal(log, self, 'Destroy');
   // notify at once all client connections - don't wait for answer
   closing.opcode := focConnectionClose;
   closing.content := [];

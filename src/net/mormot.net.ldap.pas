@@ -5656,7 +5656,7 @@ begin
   if result then
     exit; // socket was already connected
   if fLog.HasLevel([sllEnter]) then
-    log := fLog.Enter(self, 'Connect');
+    fLog.EnterLocal(log, self, 'Connect');
   fResultError := leUnknown;
   fResultString := '';
   if fSettings.TargetHost = '' then
@@ -6242,7 +6242,7 @@ begin
      not fSettings.Tls and
      not fSettings.AllowUnsafePasswordBind then
     ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
-  log := fLog.Enter('Bind as %', [fSettings.UserName], self);
+  fLog.EnterLocal(log, 'Bind as %', [fSettings.UserName], self);
   try
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
@@ -6284,7 +6284,7 @@ begin
   if fBound or
      not Connect then
     exit;
-  log := fLog.Enter('BindSalsDigest(%) as %',
+  fLog.EnterLocal(log, 'BindSalsDigest(%) as %',
     [DIGEST_NAME[Algo], fSettings.UserName], self);
   if DIGEST_ALGONAME[Algo] = '' then
     ELdap.RaiseUtf8('Unsupported %.BindSaslDigest(%) algorithm',
@@ -6384,7 +6384,7 @@ begin
      (fSettings.KerberosDN <> '') then
     fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost + {noport}
                              '@' + UpperCase(fSettings.KerberosDN);
-  log := fLog.Enter('BindSaslKerberos(%) on %',
+  fLog.EnterLocal(log, 'BindSaslKerberos(%) on %',
     [fSettings.UserName, fSettings.KerberosSpn], self);
   needencrypt := false;
   try
@@ -6607,7 +6607,7 @@ begin
      (fBoundAs = lcbNone) or
      (fSock = nil) then
     exit; // no server to reconnect
-  log := fLog.Enter('Reconnect from %', [context], self);
+  fLog.EnterLocal(log, 'Reconnect from %', [context], self);
   // reset the client state and close any current socket
   Reset;
   fSock.Close;
@@ -7037,7 +7037,7 @@ var
 begin
   // setup context and resultset
   if Assigned(fLog) then
-    l := fLog.Enter('SearchAllDocRaw max=% perpage=%', [MaxCount, PerPage], self);
+    fLog.EnterLocal(l, 'SearchAllDocRaw max=% perpage=%', [MaxCount, PerPage], self);
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID

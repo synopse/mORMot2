@@ -3839,7 +3839,7 @@ begin
     if Enabled then
     try
       if fLog <> nil then
-        log := fLog.Enter(self, 'ReOpen: graceful reconnect');
+        fLog.EnterLocal(log, self, 'ReOpen: graceful reconnect');
       fConnections[0].Open;
       if EncryptedDigest <> '' then
       try
@@ -4168,7 +4168,7 @@ end;
 function TMongoCollection.Drop: RawUtf8;
 var
   res: Variant;
-  {%H-}log: ISynLog;
+  log: ISynLog;
 begin
   if self = nil then
   begin
@@ -4176,9 +4176,10 @@ begin
     exit;
   end;
   if Database.Client.Log <> nil then
-    log := Database.Client.Log.Enter('Drop %', [fName], self);
+    Database.Client.Log.EnterLocal(log, 'Drop %', [fName], self);
   result := fDatabase.RunCommand(BsonVariant('{drop:?}', [], [fName]), res);
-  Database.Client.Log.Log(sllTrace, 'Drop("%")->%', [fName, res], self);
+  if Assigned(log) then
+    log.Log(sllTrace, 'Drop("%")->%', [fName, res], self);
   if result = '' then
     Database.fCollections.Delete(fName);
 end;
@@ -4189,13 +4190,13 @@ var
   indexName: RawUtf8;
   ndx, order: integer;
   useCommand: boolean;
-  {%H-}log: ISynLog;
+  log: ISynLog;
 begin
   if (self = nil) or
      (Database = nil) then
     exit;
   if Database.Client.Log <> nil then
-    log := Database.Client.Log.Enter('EnsureIndex %', [fName], self);
+    Database.Client.Log.EnterLocal(log, 'EnsureIndex %', [fName], self);
   if DocVariantData(Keys)^.kind <> dvObject then
     EMongoException.RaiseUtf8('%[%].EnsureIndex(Keys?)',
       [self,
@@ -4234,7 +4235,8 @@ begin
       [], [fName, doc]), res)
   else
     fDatabase.GetCollectionOrCreate('system.indexes').Insert([doc]);
-  Database.Client.Log.Log(sllTrace, 'EnsureIndex("%",%)->%', [fName, doc, res], self);
+  if Assigned(log) then
+    log.Log(sllTrace, 'EnsureIndex("%",%)->%', [fName, doc, res], self);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUtf8;

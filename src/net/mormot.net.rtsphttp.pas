@@ -219,7 +219,7 @@ destructor TRtspOverHttpServer.Destroy;
 var
   {%H-}log: ISynLog;
 begin
-  log := fLogClass.Enter(self, 'Destroy');
+  fLogClass.EnterLocal(log, self, 'Destroy');
   inherited Destroy;
   fPendingGet.Free;
 end;
@@ -259,7 +259,7 @@ begin
   aConnection := nil;
   get := nil;
   result := false;
-  log := fLogClass.Enter('ConnectionCreate(%)', [pointer(aSocket)], self);
+  fLogClass.EnterLocal(log, 'ConnectionCreate(%)', [pointer(aSocket)], self);
   try
     res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails
     if (res <> nrOK) and

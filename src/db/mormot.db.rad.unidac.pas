@@ -546,7 +546,7 @@ begin
   if fDatabase = nil then
     ESqlDBUniDAC.RaiseUtf8('%.Connect(%): Database=nil', [self,
       fProperties.ServerName]);
-  Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
+  SynDBLog.EnterLocal(Log, 'Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
   try
     case fProperties.Dbms of

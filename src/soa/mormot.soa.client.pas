@@ -670,7 +670,7 @@ begin
   if withinput then
     // include non-sensitive input in log
     p := aParams;
-  log := fClient.LogClass.Enter('InternalInvoke I%.%(%) %',
+  fClient.LogClass.EnterLocal(log, 'InternalInvoke I%.%(%) %',
     [fInterfaceUri, aMethod, {%H-}p, clientDrivenID], self);
   // call remote server according to current routing scheme
   if fForcedUri <> '' then

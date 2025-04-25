@@ -2648,7 +2648,7 @@ begin
     url := fModel.GetUriCallBack(aMethodName, aTable, aID);
     if high(aNameValueParameters) > 0 then
       Append(url, UrlEncode(aNameValueParameters));
-    log := fLogClass.Enter('CallBackGet %', [url], self);
+    fLogClass.EnterLocal(log, 'CallBackGet %', [url], self);
     result := Uri(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
       aResponseHead^ := header;
@@ -2695,7 +2695,7 @@ begin
   else
   begin
     u := fModel.GetUriCallBack(aMethodName, aTable, aID);
-    log := fLogClass.Enter('Callback %', [u], self);
+    fLogClass.EnterLocal(log, 'Callback %', [u], self);
     m := RawUtf8(ToText(method));
     result := Uri(u, m, @aResponse, aResponseHead, @aSentData);
     InternalLog('% result=% resplen=%',

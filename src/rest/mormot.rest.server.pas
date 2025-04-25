@@ -6334,10 +6334,10 @@ begin
     exit;
   if (fModel <> nil) and
      (fStats <> nil) then
-    log := fLogClass.Enter('Shutdown(%) % CurrentRequestCount=%',
+    fLogClass.EnterLocal(log, 'Shutdown(%) % CurrentRequestCount=%',
       [aStateFileName, fModel.Root, fStats.CurrentRequestCount], self)
   else
-    log := fLogClass.Enter('Shutdown(%)', [aStateFileName], self);
+    fLogClass.EnterLocal(log, 'Shutdown(%)', [aStateFileName], self);
   OnNotifyCallback := nil;
   fSessions.Safe.WriteLock;
   try
@@ -6592,7 +6592,7 @@ var
   retry: integer;
   {%H-}log: ISynLog;
 begin
-  log := fLogClass.Enter('RecordVersionSynchronizeSlaveStart % over %',
+  fLogClass.EnterLocal(log, 'RecordVersionSynchronizeSlaveStart % over %',
     [Table, MasterRemoteAccess], self);
   callback := nil; // weird fix for FPC/ARM
   result := false;
@@ -6930,7 +6930,7 @@ var
   b: TOrmPropInfoRttiRawBlob;
   log: ISynLog;
 begin
-  log := fLogClass.Enter(self, 'ComputeRoutes');
+  fLogClass.EnterLocal(log, self, 'ComputeRoutes');
   fRouterSafe.WriteLock;
   try
     if fRouter <> nil then
@@ -7163,7 +7163,7 @@ begin
       begin
         if result = 0 then
         begin
-          log := fLogClass.Enter(self, 'SessionDeleteDeprecated');
+          fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
           fSessions.Safe.WriteLock; // upgrade the lock (hardly)
         end;
         LockedSessionDelete(i, nil);

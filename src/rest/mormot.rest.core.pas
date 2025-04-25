@@ -2068,15 +2068,13 @@ end;
 function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 begin
-  if (self <> nil) and
-     (sllEnter in fLogLevel) then
-  begin
-    if aInstance = nil then
-      aInstance := self;
-    result := fLogClass.Enter(TextFmt, TextArgs, aInstance);
-  end
-  else
-    result := nil;
+  result := nil;
+  if (self = nil) or
+     not (sllEnter in fLogLevel) then
+    exit;
+  if aInstance = nil then
+    aInstance := self;
+  fLogClass.EnterLocal(result, TextFmt, TextArgs, aInstance);
 end;
 
 function TRest.GetServerTimestamp(tix64: Int64): TTimeLog;
@@ -3173,7 +3171,7 @@ begin
         try
           if ({%H-}log = nil) and
              (fRest.fLogClass <> nil) then
-            log := fRest.fLogClass.Enter('AsyncBatchExecute % count=%',
+            fRest.fLogClass.EnterLocal(log, 'AsyncBatchExecute % count=%',
               [table, count], self);
           batch.PrepareForSending(json);
         finally
@@ -3252,7 +3250,7 @@ begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
     exit;
-  log := fRest.fLogClass.Enter('AsyncBatchStop(%)', [Table], self);
+  fRest.fLogClass.EnterLocal(log, 'AsyncBatchStop(%)', [Table], self);
   start := GetTickCount64;
   timeout := start + 5000;
   if Table = nil then
@@ -3393,7 +3391,7 @@ var
 begin
   if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)
-  log := fRest.fLogClass.Enter('AsyncBackgroundExecute I% %',
+  fRest.fLogClass.EnterLocal(log, 'AsyncBackgroundExecute I% %',
     [call.Method^.InterfaceDotMethodName, call.Params], self);
   exec := TInterfaceMethodExecute.Create(call.Factory, call.Method, []);
   try

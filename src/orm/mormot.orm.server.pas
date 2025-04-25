@@ -897,7 +897,7 @@ var
   status: integer;
   {%H-}log: ISynLog;
 begin
-  log := fRest.LogClass.Enter('RecordVersionSynchronizeSlave %', [Table], self);
+  fRest.LogClass.EnterLocal(log, 'RecordVersionSynchronizeSlave %', [Table], self);
   t := fModel.GetTableIndexExisting(Table);
   result := -1; // error
   if (PtrUInt(length(fRecordVersionMax)) <= t) or
@@ -964,7 +964,7 @@ var
   opt: TRestBatchOptions;
   {%H-}log: ISynLog;
 begin
-  log := fRest.LogClass.Enter(
+  fRest.LogClass.EnterLocal(log,
     'RecordVersionSynchronizeSlaveToBatch % vers=% maxrow=%',
     [Table, RecordVersion, MaxRowLimit], self);
   result := nil;
@@ -1306,7 +1306,7 @@ var
   T: TOrmTable;
   {%H-}log: ISynLog;
 begin
-  log := fRest.LogClass.Enter('TrackChangesFlush(%)', [aTableHistory], self);
+  fRest.LogClass.EnterLocal(log, 'TrackChangesFlush(%)', [aTableHistory], self);
   if (aTableHistory = nil) or
      not aTableHistory.InheritsFrom(TOrmHistory) then
     EOrmException.RaiseUtf8('%.TrackChangesFlush: % is not a TOrmHistory',

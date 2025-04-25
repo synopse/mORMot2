@@ -367,7 +367,7 @@ var
   Log: ISynLog;
   Len: SqlSmallint;
 begin
-  Log := SynDBLog.Enter(self, 'Connect');
+  SynDBLog.EnterLocal(Log, self, 'Connect');
   Disconnect; // force fDbc=nil
   if fEnv = nil then
     if (ODBC = nil) or
@@ -438,7 +438,7 @@ constructor TSqlDBOdbcConnection.Create(aProperties: TSqlDBConnectionProperties)
 var
   {%H-}Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Create');
+  SynDBLog.EnterLocal(Log, self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOdbcConnectionProperties) then
     EOdbcException.RaiseUtf8('Invalid %.Create(%)', [self, aProperties]);
   fOdbcProperties := TSqlDBOdbcConnectionProperties(aProperties);
@@ -464,7 +464,7 @@ begin
        (fDbc <> nil) then
       with ODBC do
       begin
-        log := SynDBLog.Enter(self, 'Disconnect');
+        SynDBLog.EnterLocal(log, self, 'Disconnect');
         Disconnect(fDbc);
         FreeHandle(SQL_HANDLE_DBC, fDbc);
         fDbc := nil;
@@ -517,7 +517,7 @@ procedure TSqlDBOdbcConnection.StartTransaction;
 var
   {%H-}log: ISynLog;
 begin
-  log := SynDBLog.Enter(self, 'StartTransaction');
+  SynDBLog.EnterLocal(log, self, 'StartTransaction');
   if TransactionCount > 0 then
     EOdbcException.RaiseUtf8('% do not support nested transactions', [self]);
   inherited StartTransaction;

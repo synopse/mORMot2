@@ -2313,7 +2313,7 @@ var
 begin
   if fWaitingWrite.Count = 0 then
     exit; // no connection in pending rfProgressiveStatic mode
-  log := fDebugLog.Enter('ProcessWaitingWrite %', [fWaitingWrite.Count], self);
+  fDebugLog.EnterLocal(log, 'ProcessWaitingWrite %', [fWaitingWrite.Count], self);
   with fWaitingWrite do
   begin
     Safe.Lock;
@@ -2640,7 +2640,7 @@ var
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
 begin
-  log := aLog.Enter('Create(%,%,%)',
+  aLog.EnterLocal(log, 'Create(%,%,%)',
     [aConnectionClass, ProcessName, aThreadPoolCount], self);
   if (aConnectionClass = TAsyncConnection) or
      (aConnectionClass = nil) then
@@ -5418,7 +5418,7 @@ var
   tls: TNetTlsContext;
   fav: RawByteString;
 begin
-  log := fLog.Enter('Start %', [fSettings], self);
+  fLog.EnterLocal(log, 'Start %', [fSettings], self);
   if fServer <> nil then
     EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
   // compute options from settings

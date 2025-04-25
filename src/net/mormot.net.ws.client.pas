@@ -418,7 +418,7 @@ var
   {%H-}log: ISynLog;
 begin
   t := fOwnerThread as TWebSocketProcessClientThread;
-  log := WebSocketLog.Enter('Destroy: ThreadState=%', [ToText(t.fThreadState)^], self);
+  WebSocketLog.EnterLocal(log, 'Destroy: ThreadState=%', [ToText(t.fThreadState)^], self);
   try
     // focConnectionClose would be handled in this thread -> close client thread
     t.Terminate;

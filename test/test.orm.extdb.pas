@@ -668,7 +668,7 @@ var
     var
       log: ISynLog;
     begin
-      log := TSynLogTestLog.Enter(proxy, msg);
+      TSynLogTestLog.EnterLocal(log, proxy, msg);
       if proxy <> Props then
         Check(proxy.UserID = 'user');
       proxy.ExecuteNoResult('delete from people where ID>=?', [50000]);

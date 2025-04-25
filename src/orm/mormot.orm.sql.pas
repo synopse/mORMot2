@@ -763,7 +763,7 @@ var
 begin
   if aServer = nil then
     ERestStorage.RaiseUtf8('%.Create(%): aServer=%', [self, aClass, aServer]);
-  log := aServer.LogClass.Enter('Create %', [aClass], self);
+  aServer.LogClass.EnterLocal(log, 'Create %', [aClass], self);
   inherited Create(aClass, aServer);
   // initialize external DB process: setup ORM mapping, and create table/columns
   InitializeExternalDB(log);

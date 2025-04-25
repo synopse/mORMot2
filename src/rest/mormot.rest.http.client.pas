@@ -545,7 +545,7 @@ var
   res: Int64Rec;
   log: ISynLog;
 begin
-  log := fLogClass.Enter('InternalUri %', [Call.Method], self);
+  fLogClass.EnterLocal(log, 'InternalUri %', [Call.Method], self);
   if IsOpen then
   begin
     Head := Call.InHead;
@@ -999,7 +999,7 @@ var
   prevconn: THttpServerConnectionID;
   log: ISynLog;
 begin
-  log := fLogFamily.Add.Enter(self, 'WebSocketsUpgrade');
+  fLogClass.EnterLocal(log, self, 'WebSocketsUpgrade');
   sockets := WebSockets; // call IsOpen if necessary
   if sockets = nil then
     result := 'Impossible to connect to the Server'
