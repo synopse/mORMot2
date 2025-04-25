@@ -5471,7 +5471,9 @@ begin
   if fWriter = nil then
     CreateLogWriter; // file creation should be thread-safe
   if not (logHeaderWritten in fInternalFlags) then
-    LogFileHeader;
+    LogFileHeader
+  else if not (logInitDone in fInternalFlags) then
+    LogFileInit;
   LogCurrentTime;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     fWriter.AddInt18ToChars3(fThreadInfo^.ThreadNumber);
