@@ -1197,12 +1197,14 @@ type
     //  $ 20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
     //  $ 20110325 19325801 info   SQL=SELECT * FROM Table;
     //  $ 20110325 19325801  -    01.512.320
+    // - may return nil if sllEnter is not enabled for the TSynLog class
     class function Enter(aInstance: TObject = nil;
       aMethodName: PUtf8Char = nil): ISynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - this overloaded method would not write the method name, but the supplied
     // text content, after expanding the parameters like FormatUtf8()
     // - it will append the corresponding sllLeave log entry when the method ends
+    // - warning: may return nil if sllEnter is not enabled for the TSynLog class
     class function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog; overload;
     /// retrieve the current instance of this TSynLog class
@@ -5146,42 +5148,41 @@ var
   addr: PtrUInt;
   {$endif ISDELPHI}
 begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-  begin
-    if Level = sllLastError then
-      lasterror := GetLastError
-    else
-      lasterror := 0;
-    LockAndDisableExceptions;
-    try
-      LogHeader(Level);
-      if lasterror <> 0 then
-        AddErrorMessage(lasterror);
-      {$ifdef ISDELPHI}
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  if Level = sllLastError then
+    lasterror := GetLastError
+  else
+    lasterror := 0;
+  LockAndDisableExceptions;
+  try
+    LogHeader(Level);
+    if lasterror <> 0 then
+      AddErrorMessage(lasterror);
+    {$ifdef ISDELPHI}
+    addr := 0;
+    {$ifdef USERTLCAPTURESTACKBACKTRACE}
+    if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
       addr := 0;
-      {$ifdef USERTLCAPTURESTACKBACKTRACE}
-      if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-        addr := 0;
-      {$endif USERTLCAPTURESTACKBACKTRACE}
-      {$ifdef USEASMX86STACKBACKTRACE}
-      asm
-        mov  eax, [ebp + 4]  // retrieve caller EIP from push ebp; mov ebp,esp
-        mov  addr, eax
-      end;
-      {$endif USEASMX86STACKBACKTRACE}
-      if addr <> 0 then
-        TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
-      {$endif ISDELPHI}
-      LogTrailer(Level);
-    finally
-      {$ifndef NOEXCEPTIONINTERCEPT}
-      fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-      {$endif NOEXCEPTIONINTERCEPT}
-      mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-      if lasterror <> 0 then
-        SetLastError(lasterror);
+    {$endif USERTLCAPTURESTACKBACKTRACE}
+    {$ifdef USEASMX86STACKBACKTRACE}
+    asm
+      mov  eax, [ebp + 4]  // retrieve caller EIP from push ebp; mov ebp,esp
+      mov  addr, eax
     end;
+    {$endif USEASMX86STACKBACKTRACE}
+    if addr <> 0 then
+      TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
+    {$endif ISDELPHI}
+    LogTrailer(Level);
+  finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    {$endif NOEXCEPTIONINTERCEPT}
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    if lasterror <> 0 then
+      SetLastError(lasterror);
   end;
 end;
 
@@ -5599,20 +5600,17 @@ begin
     if Text = '' then
     begin
       if Instance <> nil then
-        if PClass(fWriter)^ = TTextWriter then
-          // WriteObject() requires TJsonWriter from mormot.core.json.pas
-          fWriter.AddInstancePointer(Instance, #0, {unit=}true, {ptr=}true)
-        else
-          // by definition, a JSON object is serialized on the same line
-          fWriter.WriteObject(Instance, [woFullExpand]);
+        // by definition, a JSON object is serialized on the same line
+        fWriter.WriteObject(Instance, [woFullExpand]);
     end
     else
     begin
       if Instance <> nil then
         fWriter.AddInstancePointer(Instance, ' ', fFamily.WithUnitName,
           fFamily.WithInstancePointer);
-      textlen := length(Text);
-      if textlen > TextTruncateAtLength then
+      textlen := PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^;
+      if (TextTruncateAtLength <> 0) and
+         (textlen > TextTruncateAtLength) then
       begin
         fWriter.AddOnSameLine(pointer(Text),
           Utf8TruncatedLength(pointer(Text), textlen, TextTruncateAtLength));
