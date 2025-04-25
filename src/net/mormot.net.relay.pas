@@ -934,7 +934,8 @@ var
 begin
   log := fLog.Enter(self, 'Destroy');
   fStatTix := 0; // force GetStats recomputation
-  log.Log(sllDebug, 'Destroying %', [self], self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'Destroying %', [self], self);
   fClients.Free;
   fServerConnected := nil;
   fServer.Free;
