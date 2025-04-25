@@ -785,6 +785,10 @@ type
     procedure Add(const Format: RawUtf8; const Values: array of const;
       Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
+    /// raw append strings or integers with a specified format
+    procedure AddFmt(Format: PUtf8Char; Values: PVarRec; ValuesCount: integer;
+      Escape: TTextWriterKind = twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]);
     /// append a variant content as number or string
     // - this overriden version will properly handle JSON escape
     // - properly handle varAny from TRttiCustomProp.GetRttiVarData
@@ -949,6 +953,8 @@ type
     // - used e.g. by TSynDictionary.SaveToJson
     procedure AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
   end;
+  /// meta-class of TJsonWriter
+  TJsonWriterClass = class of TJsonWriter;
 
 
 { ************ JSON-aware TSynNameValue TObjectStoreJson }
@@ -6459,30 +6465,35 @@ end;
 
 procedure TJsonWriter.Add(const Format: RawUtf8; const Values: array of const;
   Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
-var
-  ValuesIndex: integer;
-  S, F: PUtf8Char;
 begin
-  if Format = '' then
-    exit;
-  ValuesIndex := 0;
-  F := pointer(Format);
+  if Format <> '' then
+    AddFmt(pointer(Format), @Values[0], length(Values), Escape, WriteObjectOptions);
+end;
+
+procedure TJsonWriter.AddFmt(Format: PUtf8Char; Values: PVarRec; ValuesCount: integer;
+  Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
+var
+  start: PUtf8Char;
+begin
+  if Format <> nil then
   repeat
-    S := F;
+    start := Format;
     repeat
-      if (F^ = #0) or
-         (F^ = '%') then
+      if (Format^ = #0) or
+         (Format^ = '%') then
         break;
-      inc(F);
+      inc(Format);
     until false;
-    AddNoJsonEscape(S, F - S); // append Format content with no escaping
-    if F^ = #0 then
+    AddNoJsonEscape(start, Format - start); // append Format with no escaping
+    if Format^ = #0 then
       exit;
     // add next value as text instead of F^='%' placeholder
-    if ValuesIndex <= high(Values) then // missing value will display nothing
-      AddVarRec(@Values[ValuesIndex], Escape, WriteObjectOptions);
-    inc(F);
-    inc(ValuesIndex);
+    inc(Format);
+    if ValuesCount <= 0 then
+      continue; // missing value will display nothing
+    AddVarRec(Values, Escape, WriteObjectOptions);
+    inc(Values);
+    dec(ValuesCount);
   until false;
 end;
 
