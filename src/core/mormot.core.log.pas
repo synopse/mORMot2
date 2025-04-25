@@ -526,7 +526,7 @@ type
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogLevel; const Text: RawUtf8;
-      Instance: TObject = nil; TextTruncateAtLength: integer = maxInt); overload;
+      Instance: TObject = nil; TextTruncateAtLength: integer = 0); overload;
     {$ifdef UNICODE}
     /// call this method to add some RTL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
@@ -1056,11 +1056,10 @@ type
     fWriterStream: TStream;
     fFileName: TFileName;
     fThreadCount: integer;
-    fStreamPositionAfterHeader: cardinal;
     fFileRotationSize: cardinal;
-    fNextFlushTix10: cardinal;
+    fNextFlushTix10, fNextFileRotateDailyTix10: cardinal;
     fThreadIndexReleasedCount: integer;
-    fFileRotationDailyAtHourTix: Int64;
+    fStreamPositionAfterHeader: cardinal;
     fThreadIndexReleased: TWordDynArray;
     fWriterClass: TBaseWriterClass;
     fThreadIdent: array of record // for ptIdentifiedInOneFile
@@ -3854,6 +3853,7 @@ var
   i: PtrInt;
   tmp: TFileName;
   waitms, tix10: cardinal;
+  log: TSynLog;
   files: TSynLogDynArray;
 begin
   waitms := MilliSecsPerSec;
@@ -3895,16 +3895,31 @@ begin
       begin
         tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
         for i := 0 to high(files) do
-          with files[i] do
+          begin
             if Terminated or
-               SynLogFileFreeing then
-              // avoid GPF
-              break
-            else if (fNextFlushTix10 <> 0) and
-                    (tix10 >= fNextFlushTix10) and
-                    (fWriter <> nil) and
-                    (fWriter.PendingBytes > 1) then
-                Flush({forcediskwrite=}false); // write pending data
+               SynLogFileFreeing then // avoid GPF
+              break;
+            log := files[i];
+            if (log.fNextFlushTix10 <> 0) and
+               (tix10 >= log.fNextFlushTix10) and
+               (log.fWriter <> nil) and
+               (log.fWriter.PendingBytes > 1) then
+              // write pending data
+              log.Flush({forcediskwrite=}false);
+            if (log.fNextFileRotateDailyTix10 <> 0) and
+               (tix10 >= log.fNextFileRotateDailyTix10) then
+            begin
+              // perform daily rotation
+              mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+              try
+                log.fNextFileRotateDailyTix10 := // next day, same hour
+                  ((log.fNextFileRotateDailyTix10 shl 10) + MilliSecsPerDay) shr 10;
+                log.PerformRotation;
+              finally
+                mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+              end;
+            end;
+          end;
       end;
     except
       // on stability issue, start identifying this thread
@@ -4089,7 +4104,7 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.EnsureAutoFlushRunning;
+procedure TSynLogFamily.EnsureAutoFlushThreadRunning;
 begin
   if (AutoFlushThread = nil) and
      not SynLogFileFreeing and
@@ -4562,10 +4577,12 @@ begin
   if Level in fFamily.fLevelSysInfo then
     AddSysInfo;
   fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
-  if (fFileRotationDailyAtHourTix <> 0) and
-     (GetTickCount64 >= fFileRotationDailyAtHourTix) then
+  if (fNextFileRotateDailyTix10 <> 0) and
+     (AutoFlushThread = nil) and
+     (GetTickCount64 shr 10 >= fNextFileRotateDailyTix10) then
   begin
-    inc(fFileRotationDailyAtHourTix, MilliSecsPerDay); // next day, same hour
+    fNextFileRotateDailyTix10 := // next day, same hour
+      ((fNextFileRotateDailyTix10 shl 10) + MilliSecsPerDay) shr 10;
     PerformRotation;
   end
   else if (fFileRotationSize > 0) and
@@ -5237,7 +5254,7 @@ begin
   // setup proper timing for this log instance
   QueryPerformanceMicroSeconds(fStartTimestamp);
   if (fFileRotationSize > 0) or
-     (fFileRotationDailyAtHourTix <> 0) then
+     (fNextFileRotateDailyTix10 <> 0) then
     fFamily.HighResolutionTimestamp := false;
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
   if fFamily.LocalTimestamp then
@@ -5692,13 +5709,13 @@ begin
       if hourRotate < timeNow then
         hourRotate := hourRotate + 1; // will happen tomorrow
       timeBeforeRotate := hourRotate - timeNow;
-      fFileRotationDailyAtHourTix :=
-        GetTickCount64 + trunc(timeBeforeRotate * MilliSecsPerDay);
+      fNextFileRotateDailyTix10 := (GetTickCount64 +
+        trunc(timeBeforeRotate * MilliSecsPerDay)) shr MilliSecsPerSecShl;
     end;
   end;
   // file name should include current timestamp if no rotation is involved
   if (fFileRotationSize = 0) and
-     (fFileRotationDailyAtHourTix = 0) then
+     (fNextFileRotateDailyTix10 = 0) then
     fFileName := FormatString('% %',
       [fFileName, NowToFileShort(fFamily.LocalTimestamp)]);
   {$ifdef OSWINDOWS}
@@ -5770,12 +5787,12 @@ begin
     fWriterEcho.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
-  // enable background writing
+  // enable background writing in its own TAutoFlushThread
   if fFamily.AutoFlushTimeOut <> 0 then
   begin
     fWriter.OnFlushToStream := OnFlushToStream;
     OnFlushToStream(nil, 0);
-    fFamily.EnsureAutoFlushRunning;
+    fFamily.EnsureAutoFlushThreadRunning;
   end;
 end;
 
