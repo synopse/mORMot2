@@ -223,9 +223,10 @@ const
   MAX_SYNLOGFAMILY = 7;
   /// we store up to 56 recursion levels of Enter/Leave information
   // - above this limit, no error would be raised at runtime, but no associated
-  // information would be stored - therefore logged - either
-  // - typical value of recursion calls number is below a dozen
-  // - note that indentation in the log file would make anything big unreadable
+  // information would be stored - therefore logged (TSynLog.Enter returns nil)
+  // - typical value of recursive calls number is below a dozen: indentation in
+  // the log file would make any bigger value clearly unreadable
+  // - this number has been defined to keep TSynLogThreadInfo < 512 bytes
   MAX_SYNLOGRECURSION = 56;
   /// we handle up to 64K threads per TSynLog instance
   // - there is no technical reason to such limitation, but it would allow to
@@ -1003,13 +1004,13 @@ type
   end;
 
   /// thread-specific internal threadvar definition used for fast process
-  // - consumes up to 512 bytes per thread
+  // - consumes up to 512 bytes per thread on CPU64
   TSynLogThreadInfo = record
     /// the internal number of this thread, used for AddInt18ToChars3()
     // - also used to properly setup this thread when ThreadNumber = 0
     ThreadNumber: HalfUInt;
-    /// number of levels stored in Recursion[]
-    // - nothing is logged above MAX_SYNLOGRECURSION = 55
+    /// number of recursive calls currently stored in Recursion[]
+    // - nothing is logged above MAX_SYNLOGRECURSION=55 to keep this record small
     RecursionCount: byte;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
@@ -1020,6 +1021,8 @@ type
     FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
     /// used by TSynLog.Enter methods to handle recursive calls tracing
     // - stores ISynLog.RefCnt in lowest 8-bit, then fCurrentTimestamp shl 8
+    // (microseconds as 56-bit do cover 2284 years before overflow)
+    // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
@@ -1039,24 +1042,25 @@ type
   protected
     fFamily: TSynLogFamily;
     fWriter: TJsonWriter;
-    fWriterEcho: TEchoWriter;
     fThreadInfo: PSynLogThreadInfo;
     fCurrentLevel: TSynLogLevel;
     fInternalFlags: set of (logHeaderWritten, logInitDone, logRemoteDisable);
     {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoredBackup: boolean;
     {$endif NOEXCEPTIONINTERCEPT}
-    fThreadCount: integer;
+    fISynLogOffset: integer;
     fCurrentTimestamp: Int64;
     fStartTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
+    fWriterEcho: TEchoWriter;
     fWriterStream: TStream;
     fFileName: TFileName;
+    fThreadCount: integer;
     fStreamPositionAfterHeader: cardinal;
     fFileRotationSize: cardinal;
-    fFileRotationDailyAtHourTix: Int64;
     fNextFlushTix10: cardinal;
     fThreadIndexReleasedCount: integer;
+    fFileRotationDailyAtHourTix: Int64;
     fThreadIndexReleased: TWordDynArray;
     fWriterClass: TBaseWriterClass;
     fThreadIdent: array of record // for ptIdentifiedInOneFile
@@ -1079,7 +1083,6 @@ type
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject;
       const fmt: RawUtf8; const args: array of const); overload;
     procedure DoThreadName(ndx: PtrInt);
-    procedure DoLeave(nfo: PSynLogThreadInfo);
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure LogInternalFmt(Level: TSynLogLevel; const TextFmt: RawUtf8;
@@ -1106,7 +1109,7 @@ type
     function GetThreadInfo: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
     procedure LockAndDisableExceptions;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
@@ -3965,10 +3968,8 @@ end;
 
 procedure TSynLogFamily.SetLevel(aLevel: TSynLogLevels);
 begin
-  // ensure BOTH Enter+Leave are always selected at once, if any is set
-  if sllEnter in aLevel then
-    include(aLevel, sllLeave)
-  else if sllLeave in aLevel then
+  // ensure Leave has its matching Enter - but allow Enter without Leave
+  if sllLeave in aLevel then
     include(aLevel, sllEnter);
   fLevel := aLevel;
   {$ifndef NOEXCEPTIONINTERCEPT}
@@ -4572,14 +4573,17 @@ begin
     PerformRotation;
 end;
 
-function TSynLog._AddRef: TIntCnt; // for ISynLog
+function TSynLog._AddRef: TIntCnt; // for ISynLog - note that FPC always calls it
 var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
   // no EnterCriticalSection(GlobalThreadLock) needed here
-  nfo := GetThreadInfo;
+  if fFamily.fPerThreadLog = ptNoThreadProcess then
+    nfo := @fSharedThreadInfo // same context for all threads
+  else
+    nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo already done
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   inc(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ = 0 then
@@ -4589,44 +4593,35 @@ end;
 function TSynLog._Release: TIntCnt;
 var
   nfo: PSynLogThreadInfo;
-  ndx: PtrUInt;
   refcnt: PByte;
-begin
-  result := 1; // should never be 0 (would release TSynLog instance)
-  if not (sllEnter in fFamily.Level) then
-    exit;
-  // no EnterCriticalSection(GlobalThreadLock) needed here
-  nfo := GetThreadInfo;
-  ndx := nfo^.RecursionCount - 1;
-  if ndx > high(nfo^.Recursion) then
-    exit;
-  refcnt := @nfo^.Recursion[ndx]; // stores ISynLog.RefCnt in lowest 8-bit
-  dec(refcnt^);
-  if refcnt^ = 0 then
-    if sllLeave in fFamily.Level then
-      DoLeave(nfo);
-end;
-
-procedure TSynLog.DoLeave(nfo: PSynLogThreadInfo);
-var
   ms: Int64;
-begin
+begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
+  result := 1; // should never be 0 (would release TSynLog instance)
+  // no EnterCriticalSection(GlobalThreadLock) needed here
+  if fFamily.fPerThreadLog = ptNoThreadProcess then
+    nfo := @fSharedThreadInfo // same context for all threads
+  else
+    nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo already done
+  refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
+  dec(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
+  if refcnt^ <> 0 then
+    exit;
   dec(nfo^.RecursionCount);
-  if nfo^.RecursionCount > high(nfo^.Recursion) then
-    exit; // nothing logged above MAX_SYNLOGRECURSION
+  if not (sllLeave in fFamily.Level) then
+    exit;
   // append e.g. 00000000001FFF23  %  -    02.096.658
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     fThreadInfo := nfo;
     LogHeader(sllLeave);
-    if not fFamily.HighResolutionTimestamp then
+    if fFamily.HighResolutionTimestamp then
+      ms := fCurrentTimestamp
+    else // no previous TSynLog.LogCurrentTime call: get current microsec
     begin
-      // no previous TSynLog.LogCurrentTime call
       QueryPerformanceMicroSeconds(ms);
-      fCurrentTimestamp := ms - fStartTimestamp;
+      dec(ms, fStartTimestamp);
     end;
-    fWriter.AddMicroSec(
-      fCurrentTimestamp - nfo^.Recursion[nfo^.RecursionCount] shr 8);
+    fWriter.AddMicroSec(ms - nfo^.Recursion[nfo^.RecursionCount] shr 8);
     fWriterEcho.AddEndOfLine(sllLeave);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -4634,10 +4629,18 @@ begin
 end;
 
 constructor TSynLog.Create(aFamily: TSynLogFamily);
+var
+  entry: PInterfaceEntry;
 begin
   if aFamily = nil then
     aFamily := Family;
   fFamily := aFamily;
+  entry := GetInterfaceEntry(ISynLog);
+  if (entry = nil) or
+     not InterfaceEntryIsStandard(entry) {$ifdef FPC} or
+     (entry^.IOffset > high(fISynLogOffset)) {$endif FPC} then
+    ESynLogException.RaiseUtf8('%.Create: unexpected ISynLog entry', [self]);
+  fISynLogOffset := entry^.IOffset;
 end;
 
 destructor TSynLog.Destroy;
@@ -4702,7 +4705,7 @@ function TSynLog.QueryInterface(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid: TGuid;
   out obj): TIntQry;
 begin
-  result := E_NOINTERFACE;
+  result := E_NOINTERFACE; // never used
 end;
 
 function TSynLog.DoEnter: PSynLogThreadInfo;
@@ -4726,7 +4729,7 @@ end;
 procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
   {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
 var
-  ms: Int64;
+  rec: Int64;
 begin
   // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -4744,14 +4747,19 @@ begin
       TDebugFile.Log(fWriter, addr, {notcode=}false, {symbol=}true)
     {$endif ISDELPHI};
     fWriterEcho.AddEndOfLine(sllEnter);
-    if not (sllLeave in fFamily.Level) then
-      exit; // keep nfo^.Recursion[] = 0
-    if not fFamily.HighResolutionTimestamp then // no TSynLog.LogCurrentTime
+    // setup recursive sllLeave timing and RefCnt=1 like with _AddRef
+    if sllLeave in fFamily.Level then
     begin
-      QueryPerformanceMicroSeconds(ms);
-      fCurrentTimestamp := ms - fStartTimestamp;
-    end;
-    nfo^.Recursion[nfo^.RecursionCount - 1] := fCurrentTimestamp shl 8;
+      if not fFamily.HighResolutionTimestamp then
+      begin // fCurrentTimeStamp was not filled in TSynLog.LogCurrentTime
+        QueryPerformanceMicroSeconds(rec);
+        fCurrentTimestamp := rec - fStartTimestamp;
+      end;
+      rec := fCurrentTimestamp shl 8 + {refcnt=}1;
+    end
+    else
+      rec := {refcnt=}1; // no timestamp needed if no sllLeave
+    nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with refcnt = 1
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -4786,13 +4794,11 @@ var
   addr: PtrUInt;
   {$endif ISDELPHI}
 begin
+  result := nil;
   log := Add;
   nfo := log.DoEnter;
   if nfo = nil then
-  begin
-    result := nil; // nothing to log
-    exit;
-  end;
+    exit; // nothing to log
   {$ifdef ISDELPHI}
   addr := 0;
   if aMethodName = nil then
@@ -4812,10 +4818,9 @@ begin
   end;
   log.LogEnter(nfo, aInstance, aMethodName, addr);
   {$else}
-  log.LogEnter(nfo, aInstance, aMethodName);
+  log.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
   {$endif ISDELPHI}
-  // copy to ISynLog interface -> will call TSynLog._AddRef
-  result := log;
+  pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
 {$ifdef ISDELPHI}
@@ -4828,14 +4833,13 @@ var
   log: TSynLog;
   nfo: PSynLogThreadInfo;
 begin
+  result := nil;
   log := Add;
   nfo := log.DoEnter;
   if nfo = nil then
-    log := nil // nothing to log
-  else
-    log.LogEnter(nfo, aInstance, TextFmt, TextArgs);
-  // copy to ISynLog interface -> will call TSynLog._AddRef
-  result := log;
+    exit; // nothing to log
+  log.LogEnter(nfo, aInstance, TextFmt, TextArgs); // with refcnt = 1
+  pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
 procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
@@ -4843,10 +4847,8 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := DoEnter;
-  if nfo = nil then
-    exit; // self=nil, no sllEnter of nfo^.Recursion > MAX_SYNLOGRECURSION
-  LogEnter(nfo, aInstance, aMethodName);
-  PByte(@nfo^.Recursion[nfo^.RecursionCount - 1])^ := 1; // = _AddRef
+  if nfo <> nil then
+    LogEnter(nfo, aInstance, aMethodName);
 end;
 
 procedure TSynLog.ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
@@ -4855,10 +4857,8 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := DoEnter;
-  if nfo = nil then
-    exit; // self=nil, no sllEnter of nfo^.Recursion > MAX_SYNLOGRECURSION
-  LogEnter(nfo, aInstance, TextFmt, TextArgs);
-  PByte(@nfo^.Recursion[nfo^.RecursionCount - 1])^ := 1; // = _AddRef
+  if nfo <> nil then
+    LogEnter(nfo, aInstance, TextFmt, TextArgs);
 end;
 
 procedure TSynLog.ManualLeave;
