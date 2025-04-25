@@ -4603,12 +4603,14 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
 end;
 
 function TSynLog.CurrentTimestamp: Int64;
+var
+  ms: Int64; // some targets may require an explicit variable on stack
 begin
   result := fLogTimestamp;
   if result <> 0 then // was set by TSynLog.LogCurrentTime
     exit;
-  QueryPerformanceMicroSeconds(result);
-  dec(result, fStartTimestamp);
+  QueryPerformanceMicroSeconds(ms);
+  result := ms - fStartTimestamp;
 end;
 
 function TSynLog._Release: TIntCnt;
