@@ -517,7 +517,7 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - if Instance is set, it will log the corresponding class name and address
     // (to be used if you didn't call TSynLog.Enter() method first)
-    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
+    procedure Log(Level: TSynLogLevel; TextFmt: PUtf8Char;
       const TextArgs: array of const; Instance: TObject = nil); overload;
     /// call this method to add some information to the log at a specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -1251,7 +1251,7 @@ type
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogLevel; const Fmt: RawUtf8;
+    procedure Log(Level: TSynLogLevel; Fmt: PUtf8Char;
       const Args: array of const; aInstance: TObject = nil); overload;
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -4993,12 +4993,12 @@ begin
   end;
 end;
 
-procedure TSynLog.Log(Level: TSynLogLevel; const Fmt: RawUtf8;
+procedure TSynLog.Log(Level: TSynLogLevel; Fmt: PUtf8Char;
   const Args: array of const; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, pointer(Fmt), @Args[0], length(Args), aInstance);
+    LogInternalFmt(Level, Fmt, @Args[0], length(Args), aInstance);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;

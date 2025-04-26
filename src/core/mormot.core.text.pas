@@ -8962,10 +8962,10 @@ begin
       if F^ = #0 then
         break;
     end
-    else // no more available Args -> add all remaining text
+    else
     if F^ = #0 then
       break
-    else
+    else // no more available Args -> add all remaining text
     begin
       c^.Text := F;
       c^.Len := length(Format) - (F - pointer(Format));
