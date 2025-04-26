@@ -4176,7 +4176,7 @@ end;
 
 { TService }
 
-class procedure TService.DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+class procedure TService.DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
   const Args: array of const; Instance: TObject);
 begin
   if Assigned(WindowsServiceLog) then

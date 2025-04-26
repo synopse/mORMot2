@@ -5238,7 +5238,7 @@ begin
 end;
 
 const
-  FMT_REQ: array[{full=}boolean] of RawUtf8 = (
+  FMT_REQ: array[{full=}boolean] of PUtf8Char = (
     'Request % %', 'Request % % %');
 
 procedure TJsonClientAbstract.RttiRequest(const Method, Action, Headers: RawUtf8;

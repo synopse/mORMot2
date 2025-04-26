@@ -5581,7 +5581,7 @@ type
     procedure ServiceProc(ArgCount: integer; Args: PPWideChar);
   public
     /// internal method redirecting to WindowsServiceLog global variable
-    class procedure DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+    class procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
       const Args: array of const; Instance: TObject);
     /// Creates the service
     // - the service is added to the internal registered services

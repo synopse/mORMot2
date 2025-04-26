@@ -1342,7 +1342,7 @@ type
     // signature, or used instead of Add.Log
     // - will flush the content to disk and avoid any memory reallocation
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
-    class procedure DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+    class procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
       const Args: array of const; Instance: TObject = nil);
     /// low-level class method which can be assigned to a TOnInfoProgress callback
     // - as used e.g. by TStreamRedirect.OnInfoProgress or TZipAbstract.OnProgress
@@ -5104,7 +5104,7 @@ begin
     result := PPointer(self)^;
 end;
 
-class procedure TSynLog.DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+class procedure TSynLog.DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
@@ -5112,7 +5112,7 @@ begin
   log := Add;
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
-    log.LogInternalFmt(Level, pointer(Fmt), @Args[0], length(Args), Instance);
+    log.LogInternalFmt(Level, Fmt, @Args[0], length(Args), Instance);
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
