@@ -276,7 +276,7 @@ type
     fOnFirstRead, fOnStop: TOnPollAsyncProc;
     fWaitingWrite: TPollAsyncConnections; // to implement soWaitWrite
     function GetCount: integer;
-    procedure DoLog(const TextFmt: RawUtf8; const TextArgs: array of const;
+    procedure DoLog(TextFmt: PUtf8Char; const TextArgs: array of const;
       Level: TSynLogLevel = sllTrace);
     // pseError: return false to close socket and connection
     function OnError(connection: TPollAsyncConnection;
@@ -624,7 +624,7 @@ type
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
     procedure ConnectionAdd(conn: TAsyncConnection);
-    procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
+    procedure DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
       const TextArgs: array of const; Instance: TObject);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
@@ -1788,7 +1788,7 @@ begin
     result := {$ifdef USE_WINIOCP} fIocpRecvSend {$else} fRead {$endif}.Count;
 end;
 
-procedure TPollAsyncSockets.DoLog(const TextFmt: RawUtf8;
+procedure TPollAsyncSockets.DoLog(TextFmt: PUtf8Char;
   const TextArgs: array of const; Level: TSynLogLevel);
 begin
   fDebugLog.Add.Log(Level, TextFmt, TextArgs, self);
@@ -3088,7 +3088,7 @@ begin
 end;
 {$endif USE_WINIOCP}
 
-procedure TAsyncConnections.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
+procedure TAsyncConnections.DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
   const TextArgs: array of const; Instance: TObject);
 begin
   if (self <> nil) and

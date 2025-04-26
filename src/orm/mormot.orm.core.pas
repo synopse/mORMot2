@@ -1222,7 +1222,7 @@ type
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
     /// log the corresponding text (if logging is enabled)
-    procedure InternalLog(const Format: RawUtf8; const Args: array of const;
+    procedure InternalLog(Format: PUtf8Char; const Args: array of const;
       Level: TSynLogLevel = sllTrace); overload;
     /// access to the associate TSynLog class type
     function LogClass: TSynLogClass;

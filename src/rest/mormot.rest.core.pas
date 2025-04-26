@@ -533,7 +533,7 @@ type
     procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// ease logging of some text in the context of the current TRest
-    procedure InternalLog(const Format: RawUtf8; const Args: array of const;
+    procedure InternalLog(Format: PUtf8Char; const Args: array of const;
       Level: TSynLogLevel = sllTrace); overload;
     /// ease logging of method enter/leave in the context of the current TRest
     function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
@@ -2057,7 +2057,7 @@ begin
     fLogFamily.Add.Log(Level, Text, self);
 end;
 
-procedure TRest.InternalLog(const Format: RawUtf8; const Args: array of const;
+procedure TRest.InternalLog(Format: PUtf8Char; const Args: array of const;
   Level: TSynLogLevel);
 begin
   if (self <> nil) and
