@@ -440,7 +440,7 @@ type
       var contentType, content: RawUtf8): boolean; virtual; abstract;
     /// convert the input information of REST request to a WebSocket frame
     procedure InputToFrame(Ctxt: THttpServerRequestAbstract; aNoAnswer: boolean;
-      out request: TWebSocketFrame; out head: RawUtf8); virtual;
+      var request: TWebSocketFrame; out head: RawUtf8); virtual;
     /// convert a WebSocket frame to the input information of a REST request
     function FrameToInput(var request: TWebSocketFrame; out aNoAnswer: boolean;
       Ctxt: THttpServerRequestAbstract): boolean; virtual;
@@ -449,7 +449,7 @@ type
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// convert the output information of REST request to a WebSocket frame
     procedure OutputToFrame(Ctxt: THttpServerRequestAbstract; Status: cardinal;
-      var outhead: RawUtf8; out answer: TWebSocketFrame); virtual;
+      var outhead: RawUtf8; var answer: TWebSocketFrame); virtual;
   end;
 
   /// used to store the class of a TWebSocketProtocol type
@@ -1919,33 +1919,35 @@ begin
 end;
 
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequestAbstract;
-  aNoAnswer: boolean; out request: TWebSocketFrame; out head: RawUtf8);
+  aNoAnswer: boolean; var request: TWebSocketFrame; out head: RawUtf8);
 var
-  Method, InContentType: RawByteString;
+  Method, InContentType: pointer; // weak RawUtf8 reference
   seq: integer;
+  p: PAnsiChar;
 begin
   // by convention, defaults are POST and JSON, to reduce frame size for SOA
-  if not PropNameEquals(Ctxt.Method, 'POST') then
-    Method := Ctxt.Method;
+  Method := nil;
+  if not IsPost(Ctxt.Method) then
+    Method := pointer(Ctxt.Method);
+  InContentType := nil;
   if (Ctxt.InContent <> '') and
-     (Ctxt.InContentType <> '') and
-     not PropNameEquals(Ctxt.InContentType, JSON_CONTENT_TYPE) then
-    InContentType := Ctxt.InContentType;
+     not IsContentTypeJsonU(Ctxt.InContentType) then
+    InContentType := pointer(Ctxt.InContentType);
   // compute the WebSockets frame and corresponding response header
   if fSequencing then
-  begin
+  begin // head = rxxxxxx = safe overlap after 16,777,216 frames
     seq := InterlockedIncrement(fSequence);
-    SetLength(head, 7); // rxxxxxx = safe overlap after 16,777,216 frames
-    PAnsiChar(pointer(head))^ := 'r';
-    BinToHexDisplayLower(@seq, PAnsiChar(pointer(head)) + 1, 3);
+    p := FastSetString(head, 7);
+    p^ := 'r';
+    BinToHexDisplayLower(@seq, p + 1, 3);
   end
   else
     head := 'request';
-  FrameCompress(head, [{%H-}Method, Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
-    Ctxt.InContent, InContentType{%H-}, request);
+  FrameCompress(head, [RawUtf8(Method), Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
+    Ctxt.InContent, RawUtf8(InContentType), request);
   if fSequencing then
     // 'r000001' -> 'a000001'
-    head[1] := 'a'
+    PByte(head)^ := ord('a')
   else
     head := 'answer';
 end;
@@ -1973,21 +1975,22 @@ begin
 end;
 
 procedure TWebSocketProtocolRest.OutputToFrame(Ctxt: THttpServerRequestAbstract;
-  Status: cardinal; var outhead: RawUtf8; out answer: TWebSocketFrame);
+  Status: cardinal; var outhead: RawUtf8; var answer: TWebSocketFrame);
 var
-  OutContentType: RawByteString;
+  OutContentType: pointer; // weak RawUtf8
 begin
+  OutContentType := nil;
   if (Ctxt.OutContent <> '') and
-     not PropNameEquals(Ctxt.OutContentType, JSON_CONTENT_TYPE) then
-    OutContentType := Ctxt.OutContentType;
+     not IsContentTypeJsonU(Ctxt.OutContentType) then
+    OutContentType := pointer(Ctxt.OutContentType);
   if NormToUpperAnsi7[outhead[3]] = 'Q' then
-    // 'request' -> 'answer'
+    // 'reQuest' -> 'answer'
     outhead := 'answer'
   else
     // 'r000001' -> 'a000001'
-    outhead[1] := 'a';
+    PByte(outhead)^ := ord('a');
   FrameCompress(outhead, [Status, Ctxt.OutCustomHeaders], Ctxt.OutContent,
-    OutContentType{%H-}, answer);
+    RawUtf8(OutContentType), answer);
 end;
 
 function TWebSocketProtocolRest.FrameToOutput(var answer: TWebSocketFrame;
@@ -2140,7 +2143,7 @@ begin
   begin
     info.GetJsonField;
     if not Base64MagicCheckAndDecode(info.Value, info.ValueLen,
-        RawByteString(content)) then
+        RawByteString(content)) then // e.g. IsValidUtf8() in FrameCompress()
       FastSetString(content, info.Value, info.ValueLen);
   end;
   result := true;
@@ -2286,24 +2289,23 @@ var
   len: PtrInt;
   P: PUtf8Char;
 begin
-  P := pointer(frame.payload);
+  result := nil;
+  if frame.opcode <> focBinary then
+    exit;
   len := length(Head);
-  if (frame.opcode = focBinary) and
-     (length(frame.payload) >= len + 6) and
-     CompareMemFast(pointer(Head), P, len) then
-  begin
-    result := PosChar(P + len, FRAME_HEAD_SEP);
-    if result <> nil then
-    begin
-      if PMax <> nil then
-        PMax^ := pointer(P + length(frame.payload));
-      if HeadFound <> nil then
-        FastSetString(HeadFound^, P, PAnsiChar(result) - P);
-      inc(PByte(result));
-    end;
-  end
-  else
-    result := nil;
+  if length(frame.payload) < len + 6 then
+    exit;
+  P := pointer(frame.payload);
+  if not CompareMemFast(pointer(Head), P, len) then
+    exit;
+  result := PosChar(P + len, FRAME_HEAD_SEP);
+  if result = nil then
+    exit;
+  if PMax <> nil then
+    PMax^ := pointer(P + PStrLen(P - _STRLEN)^);
+  if HeadFound <> nil then
+    FastSetString(HeadFound^, P, PAnsiChar(result) - P);
+  inc(PByte(result));
 end;
 
 function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): TShort31;
