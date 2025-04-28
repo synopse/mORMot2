@@ -301,14 +301,14 @@ function Utf8TruncateToLength(var text: RawUtf8; maxBytes: PtrUInt): boolean;
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxBytes if text was not truncated, or the number of fitting bytes
 function Utf8TruncatedLength(const text: RawUtf8; maxBytes: PtrUInt): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the truncated length of the supplied UTF-8 value if it exceeds the
 // specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxBytes if text was not truncated, or the number of fitting bytes
-function Utf8TruncatedLength(text: PAnsiChar;
-  textlen, maxBytes: PtrUInt): PtrInt; overload;
+function Utf8TruncatedLength(text: PAnsiChar; textlen, maxBytes: PtrUInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
 // - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
@@ -3469,33 +3469,27 @@ end;
 
 function Utf8TruncatedLength(const text: RawUtf8; maxBytes: PtrUInt): PtrInt;
 begin
-  result := Length(text);
-  if PtrUInt(result) < maxBytes then
-    exit;
-  result := maxBytes;
-  if (result = 0) or
-     (ord(text[result]) <= $7f) then
-    exit; 
-  while (result > 0) and
-        (ord(text[result]) and $c0 = $80) do
-    dec(result);
-  if (result > 0) and
-     (ord(text[result]) > $7f) then
-    dec(result);
+  result := length(text);
+  if PtrUInt(result) > maxBytes then
+    result := Utf8TruncatedLength(pointer(text), result, maxBytes);
 end;
 
 function Utf8TruncatedLength(text: PAnsiChar; textlen, maxBytes: PtrUInt): PtrInt;
 begin
   result := textlen;
-  if textlen < maxBytes then
+  if textlen <= maxBytes then
     exit;
+  dec(text);
   result := maxBytes;
+  if (result = 0) or
+     (text[result] <= #$7f) then // next byte is a new UTF-8 codepoint
+    exit;
   while (result > 0) and
         (ord(text[result]) and $c0 = $80) do
-    dec(result);
+    dec(result); // go just after the extra bytes
   if (result > 0) and
-     (ord(text[result]) > $7f) then
-    dec(result);
+     (text[result] > #$7f) then
+    dec(result); // go the end of previous UTF-8 codepoint
 end;
 
 function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
