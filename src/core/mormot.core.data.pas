@@ -2497,12 +2497,12 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// search if the WebSocketUpgrade() header is present
 // - consider checking the hsrConnectionUpgrade flag instead
-function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
 
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
@@ -4232,9 +4232,14 @@ begin
   FileFromString(Content, FileName);
 end;
 
-function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
+var
+  ct: PUtf8Char;
+  len: PtrInt;
 begin
-  result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER, @CONTENT_TYPE_TEXTUAL);
+  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len, #0);
+  result := (ct <> nil) and
+            IsContentTypeCompressible(ct, len, {onlytext=}true);
 end;
 
 const
@@ -4243,7 +4248,7 @@ const
     'KEEP-ALIVE, UPGRADE',
     nil);
 
-function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
 begin
   result := ExistsIniNameValue(pointer(headers), 'CONNECTION: ', @WS_UPGRADE);
 end;
