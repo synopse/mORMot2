@@ -1851,7 +1851,9 @@ const
 function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 
 /// recognize e.g. 'text/css' or 'application/json' as compressible
-function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
+// - as used by THttpSocketCompressList.CompressContent
+function IsContentTypeCompressible(ContentType: PUtf8Char; ContentTypeLen: PtrInt;
+  OnlyText: boolean = false): boolean;
 
 /// recognize e.g. 'text/css' or 'application/json' as compressible
 function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
@@ -8971,47 +8973,50 @@ begin
 end;
 
 const
-  _CONTENT: array[0..3] of PUtf8Char = (
-    'TEXT/',
-    'IMAGE/',
-    'APPLICATION/',
-    nil);
-  _CONTENT_IMG: array[0..2] of PUtf8Char = (
-    'SVG',
-    'X-ICO',
-    nil);
-  _CONTENT_APP: array[0..3] of PUtf8Char = (
+  _CONTENT_APP: array[0..4] of PUtf8Char = (
     'JSON',
     'JAVASCRIPT',
     'XML',
+    'RTF',
     nil);
 
-function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
+function IsContentTypeCompressible(ContentType: PUtf8Char;
+  ContentTypeLen: PtrInt; OnlyText: boolean): boolean;
 begin
-  case IdemPPChar(ContentType, @_CONTENT) of
-    0: // text/*
-      result := true;
-    1: // image/[svg/x-ico]
-      result := IdemPPChar(ContentType + 6, @_CONTENT_IMG) >= 0;
-    2: // application/[json/javascript/xml]
-      begin
-        result := true;
-        inc(ContentType, 12);
-        if IdemPPChar(ContentType, @_CONTENT_APP) >= 0 then
-          exit;
-        // detect e.g. application/atom+xml or application/vnd.api+json
-        ContentType := PosChar(ContentType, '+');
-        result := (ContentType <> nil) and
-                  (IdemPPChar(ContentType + 1, @_CONTENT_APP) >= 0);
-      end
-  else
-    result := false;
-  end;
+  result := false;
+  if ContentType <> nil then
+    case PCardinalArray(ContentType)[0] or $20202020 of
+      ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24:
+        result := ContentType[4] = '/'; // text/*
+      ord('i') + ord('m') shl 8 + ord('a') shl 16 + ord('g') shl 24:
+        if PWord(ContentType + 4)^ or $0020 = ord('e') + ord('/') shl 8 then
+          result := (ContentTypeLen > 8) and
+                    IdemPChar(ContentType + 6, 'SVG') or   // image/svg is XML
+                    ((not OnlyText) and
+                     IdemPChar(ContentType + 6, 'X-ICO')); // image/x-ico is bin
+      ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24:
+        if (ContentTypeLen > 12) and
+           (PCardinalArray(ContentType)[1] or $20202020 =
+             ord('i') + ord('c') shl 8 + ord('a') shl 16 + ord('t') shl 24) and
+           (PCardinalArray(ContentType)[2] or $00202020 =
+             ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('/') shl 24) then
+        begin // application/[json/javascript/xml]
+          result := true;
+          inc(ContentType, 12);
+          if IdemPPChar(ContentType, @_CONTENT_APP) >= 0 then
+            exit; // application/[json/javascript/xml]
+          ContentType := PosChar(ContentType, ContentTypeLen, '+');
+          result := (ContentType <> nil) and // e.g. application/atom+xml
+                    (IdemPPChar(ContentType + 1, @_CONTENT_APP) >= 0);
+        end;
+    end;
 end;
 
 function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
 begin
-  result := IsContentTypeCompressible(pointer(ContentType));
+  result := (ContentType <> '') and
+    IsContentTypeCompressible(pointer(ContentType),
+      PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^, {onlytext=}false);
 end;
 
 function IsContentTypeJson(ContentType: PUtf8Char): boolean;
