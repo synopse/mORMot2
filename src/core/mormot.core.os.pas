@@ -213,15 +213,6 @@ const
   // - i.e. 'Content-Type: application/json'
   JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
 
-  /// MIME content type used for plain JSON, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_UPPER = 'APPLICATION/JSON';
-
-  /// HTTP header for MIME content type used for plain JSON, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_HEADER_UPPER =
-    HEADER_CONTENT_TYPE_UPPER + JSON_CONTENT_TYPE_UPPER;
-
   /// MIME content type used for plain UTF-8 text - see RFC 7231 section-3.1.1
   TEXT_CONTENT_TYPE = 'text/plain;charset=utf-8';
 
@@ -251,18 +242,6 @@ const
 
   /// MIME content type used for a JPEG picture
   JPEG_CONTENT_TYPE = 'image/jpeg';
-
-  /// a IdemPPChar() compatible array of textual MIME content types
-  // - as used e.g. by IsHtmlContentTypeTextual()
-  CONTENT_TYPE_TEXTUAL: array[0..7] of PAnsiChar = (
-    JSON_CONTENT_TYPE_UPPER,
-    'TEXT/',
-    'APPLICATION/XML',
-    'APPLICATION/JSON',
-    'APPLICATION/JAVASCRIPT',
-    'APPLICATION/X-JAVASCRIPT',
-    'IMAGE/SVG+XML',
-    nil);
 
   /// internal HTTP content-type for efficient static file sending
   // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX

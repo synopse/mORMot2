@@ -1165,7 +1165,7 @@ begin
   if (Ctxt.InContent <> '') and
      (rsoOnlyValidUtf8 in fOptions) and
      IsContentUtf8(Ctxt.InContent, Ctxt.InContentType) and
-     not IsValidUtf8(Ctxt.InContent) then // may use AVX2
+     not IsValidUtf8NotVoid(Ctxt.InContent) then // may use AVX2
   begin
     // rsoOnlyValidUtf8 rejection
     result := HTTP_NOTACCEPTABLE;

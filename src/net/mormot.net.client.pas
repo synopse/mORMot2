@@ -5399,7 +5399,7 @@ begin
   fBaseUri := IncludeTrailingUriDelimiter(aBaseUri);
   fKeepAlive := aKeepAlive;
   fHttp := TSimpleHttpClient.Create;
-  fDefaultHeaders := 'Accept: ' + JSON_CONTENT_TYPE;
+  fDefaultHeaders := ('Accept: ' + JSON_CONTENT_TYPE);
   fOptions := [jcoParseTolerant, jcoHttpErrorRaise];
   fUrlEncoder := [ueEncodeNames, ueSkipVoidString];
 end;

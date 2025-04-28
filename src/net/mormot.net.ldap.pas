@@ -3393,7 +3393,7 @@ begin
   result := (Text <> '') and
             (PosExChar('*', Text) = 0) and
             (PosExChar('\', Text) = 0) and
-            IsValidUtf8(Text);
+            IsValidUtf8Small(Text); // AVX2 not worth it
 end;
 
 function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean): RawUtf8;
@@ -3422,7 +3422,7 @@ function LdapIsValidDistinguishedName(const Text: RawUtf8): boolean;
 begin
   result := (Text <> '') and
             (PosExChar('*', Text) = 0) and // but allows \ within DN
-            IsValidUtf8(Text);
+            IsValidUtf8Small(Text); // AVX2 not worth it
 end;
 
 function LdapValidDistinguishedName(const Text: RawUtf8): RawUtf8;
@@ -3693,7 +3693,7 @@ begin
       end;
   end;
   // atsAny or not expected format: check valid UTF-8, or fallback to hexa
-  if IsValidUtf8(s) then
+  if IsValidUtf8Small(s) then // AVX2 not worth it
     EnsureRawUtf8(s)
   else
   begin

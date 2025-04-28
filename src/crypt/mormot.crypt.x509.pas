@@ -1581,7 +1581,7 @@ begin
       if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
          (oid = '') or
          not (AsnNext(posone, one, @v) in ASN1_TEXT) or
-         not IsValidUtf8(v) then
+         not IsValidUtf8Small(v) then
         exit
       else
       begin
