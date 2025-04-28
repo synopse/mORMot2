@@ -4642,6 +4642,7 @@ end;
 function TSynLog._Release: TIntCnt;
 var
   nfo: PSynLogThreadInfo;
+  ms: cardinal;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
@@ -4658,11 +4659,12 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   if not (sllLeave in fFamily.Level) then
     exit;
   // append e.g. 00000000001FFF23  %  -    02.096.658
+  ms := CurrentTimestamp - (nfo^.Recursion[nfo^.RecursionCount - 1] shr 8);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     fThreadInfo := nfo;
     LogHeader(sllLeave);
-    fWriter.AddMicroSec(CurrentTimestamp - nfo^.Recursion[nfo^.RecursionCount] shr 8);
+    fWriter.AddMicroSec(ms);
     fWriterEcho.AddEndOfLine(sllLeave);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -4772,6 +4774,12 @@ procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
 var
   rec: Int64;
 begin
+  // setup recursive sllLeave timing and RefCnt=1 like with _AddRef
+  if sllLeave in fFamily.Level then
+    rec := CurrentTimestamp shl 8 + {refcnt=}1 // outside lock
+  else
+    rec := {refcnt=}1; // no timestamp needed if no sllLeave
+  nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with refcnt = 1
   // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
@@ -4788,12 +4796,6 @@ begin
       TDebugFile.Log(fWriter, addr, {notcode=}false, {symbol=}true)
     {$endif ISDELPHI};
     fWriterEcho.AddEndOfLine(sllEnter);
-    // setup recursive sllLeave timing and RefCnt=1 like with _AddRef
-    if sllLeave in fFamily.Level then
-      rec := CurrentTimestamp shl 8 + {refcnt=}1
-    else
-      rec := {refcnt=}1; // no timestamp needed if no sllLeave
-    nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with refcnt = 1
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
