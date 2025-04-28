@@ -207,6 +207,7 @@ type
     fService: TServiceFactory;
     fServiceMethod: PInterfaceMethod;
     fServiceParameters: PUtf8Char;
+    fServiceParametersLen: PtrInt; // used for logging only
     fServiceInstanceID: TID;
     fServiceExecution: PServiceFactoryExecution;
     fServiceExecutionOptions: TInterfaceMethodOptions;
@@ -809,7 +810,7 @@ type
   // client driven session will be signed individualy
   TRestServerRoutingRest = class(TRestServerUriContext)
   protected
-    /// encode fInput[] as a JSON array for regular execution
+    /// encode fInput[] as a JSON array into InBody for regular execution
     procedure DecodeUriParametersIntoJson;
     /// register the interface-based SOA URIs to Server.Router multiplexer
     // - this overridden implementation register URI encoded as
@@ -3156,18 +3157,19 @@ procedure TRestServerUriContext.LogFromContext;
 const
   COMMANDTEXT: array[TRestServerUriContextCommand] of string[15] = (
     '?', 'Method', 'Interface', 'Read', 'Write');
+var
+  cmd: PShortString;
 begin
+  cmd := @COMMANDTEXT[fCommand];
   if sllServer in fServer.LogLevel then
     fLog.Log(sllServer, '% % % % %=% out=% in %', [SessionUserName,
-      RemoteIPNotLocal, COMMANDTEXT[fCommand], fCall.Method,
+      RemoteIPNotLocal, cmd^, fCall.Method,
       fCall.Url, fCall.OutStatus, KB(fCall.OutBody),
-      MicroSecToString(fMicroSecondsElapsed)]);
-  if (sllServiceReturn in fServer.LogLevel) and
-     (fCall.OutBody <> '') and
-     not (optNoLogOutput in fServiceExecutionOptions) and
-     ((fCall.OutHead = '') or
-      IsHtmlContentTypeTextual(pointer(fCall.OutHead))) then
-    fLog.Log(sllServiceReturn, fCall.OutBody, self, MAX_SIZE_RESPONSE_LOG);
+      MicroSecToString(fMicroSecondsElapsed)], self);
+  if (fCall.OutBody <> '') and
+     (sllServiceReturn in fServer.LogLevel) and
+     not (optNoLogOutput in fServiceExecutionOptions) then
+    fServer.InternalLogResponse(fCall.OutBody, cmd^);
 end;
 
 procedure TRestServerUriContext.ExecuteCallback(var Ctxt: TJsonParserContext;
@@ -3396,6 +3398,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
 var
   m: PtrInt;
   spi: TInterfaceMethodValueDirections;
+  tmp: ShortString;
 begin
   // expects Service, ServiceParameters, ServiceMethod(Index) to be set
   m := fServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
@@ -3405,7 +3408,7 @@ begin
       fServiceMethod := @Service.InterfaceFactory.Methods[m];
     fServiceExecution := @Service.Execution[m];
     fServiceExecutionOptions := ServiceExecution.Options;
-    // un-log SPI into Ctxt.ServiceExecutionOptions
+    // un-log SPI into Ctxt.ServiceExecutionOptions (for TSynLog and DB log)
     spi := fServiceMethod^.HasSpiParams;
     if spi <> [] then
     begin
@@ -3417,14 +3420,13 @@ begin
     // log method call and parameter values (if worth it)
     if Assigned(fLog) and
        (sllServiceCall in fServer.LogLevel) and
-       (ServiceParameters <> nil) and
-       (PWord(ServiceParameters)^ <> ord('[') + ord(']') shl 8) then
-     if optNoLogInput in fServiceExecutionOptions then
-       fLog.Log(sllServiceCall, '%{}',
-         [fServiceMethod^.InterfaceDotMethodName], Server)
-     else
-       fLog.Log(sllServiceCall, '%%',
-         [fServiceMethod^.InterfaceDotMethodName, ServiceParameters], Server);
+       (fServiceParametersLen > 2) and
+       not (optNoLogInput in fServiceExecutionOptions) then
+    begin
+      ContentToShort(pointer(fServiceParameters), fServiceParametersLen, tmp);
+      fLog.Log(sllServiceCall, '%%',
+        [fServiceMethod^.InterfaceDotMethodName, tmp], Server);
+    end;
     // OnMethodExecute() callback event
     if Assigned(TServiceFactoryServer(Service).OnMethodExecute) then
       if not TServiceFactoryServer(Service).
@@ -4668,7 +4670,7 @@ begin
       fake.c := '[';                      // starts like a regular JSON array
       fake.marker := JSON_BIN_MAGIC_C;    // internal identifier
       fake.bin := pointer(fCall^.InBody); // pass by reference (not base-64)
-      ServiceParameters := @fake;
+      fServiceParameters := @fake;        // keep fServiceParametersLen=0
       InternalExecuteSoaByInterface;
       exit;
     end;
@@ -4691,11 +4693,12 @@ begin
         FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
         if (fInput <> nil) and
            (ServiceMethod <> nil) then
-          DecodeUriParametersIntoJson;
+          DecodeUriParametersIntoJson; // fill fCall^.InBody from Input[]
       end;
     end;
   end;
-  ServiceParameters := pointer(fCall^.InBody);
+  fServiceParameters := pointer(fCall^.InBody);
+  fServiceParametersLen := length(fCall^.InBody);
   // now Service, ServiceParameters, ServiceMethod(Index) are set
   InternalExecuteSoaByInterface;
 end;
@@ -4745,10 +4748,11 @@ begin
     JsonDecode(tmp.buf, @RPC_NAMES, length(RPC_NAMES), @values, true);
     if values[0].Text = nil then // Method name required
       exit;
-    values[0].ToUtf8(method);                  // "method":"methodname"
-    ServiceParameters := values[1].Text;       // "params":[....]
-    ServiceInstanceID := values[2].ToCardinal; // "id":ClientDrivenID
-    ServiceMethodIndex := Service.ServiceMethodIndex(method); // O(n) lookup
+    values[0].ToUtf8(method);                   // "method":"methodname"
+    fServiceParameters    := values[1].Text;    // "params":[....]
+    fServiceParametersLen := values[1].Len;
+    fServiceInstanceID    := values[2].ToCardinal; // "id":ClientDrivenID
+    fServiceMethodIndex := Service.ServiceMethodIndex(method); // O(n) lookup
     if ServiceMethodIndex < 0 then
     begin
       Error('Unknown method');
@@ -7762,7 +7766,8 @@ begin
     // 9. gather statistics and log execution
     if StatLevels <> [] then
       ctxt.ComputeStatsAfterCommand;
-    if ctxt.fLog <> nil then
+    if (ctxt.fLog <> nil) and
+       (fLogLevel * [sllServer, sllServiceReturn] <> []) then
       ctxt.LogFromContext;
     // 10. finalize execution context
     if Assigned(OnAfterUri) then
