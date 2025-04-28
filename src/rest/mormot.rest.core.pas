@@ -103,9 +103,6 @@ type
 
 
 const
-  /// size in bytes, to log up to 2 KB of JSON response, to save space
-  MAX_SIZE_RESPONSE_LOG = 2 shl 10;
-
   CONTENT_TYPE_WEBFORM: PAnsiChar = 'APPLICATION/X-WWW-FORM-URLENCODED';
   CONTENT_TYPE_MULTIPARTFORM: PAnsiChar = 'MULTIPART/FORM-DATA';
 
@@ -535,6 +532,9 @@ type
     /// ease logging of some text in the context of the current TRest
     procedure InternalLog(Format: PUtf8Char; const Args: array of const;
       Level: TSynLogLevel = sllTrace); overload;
+    /// ease logging of some response in the context of the current TRest
+    procedure InternalLogResponse(const aContent: RawByteString;
+      const aContext: shortstring; Level: TSynLogLevel = sllServiceReturn);
     /// ease logging of method enter/leave in the context of the current TRest
     function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
@@ -1185,8 +1185,8 @@ type
     LowLevelConnectionID: TRestConnectionID;
     /// low-level properties of the current connection
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
-    /// most HTTP servers support a per-connection pointer storage
-    // - may be nil if unsupported, e.g. by the http.sys servers
+    /// efficient per-connection pointer storage at HTTP server level
+    // - nil if unsupported, e.g. by the http.sys servers
     // - map to THttpAsyncServerConnection or THttpServerSocket fConnectionOpaque
     // of type THttpServerConnectionOpaque as defined in mormot.net.http
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
@@ -2063,6 +2063,12 @@ begin
   if (self <> nil) and
      (Level in fLogLevel) then
     fLogFamily.Add.Log(Level, Format, Args, self);
+end;
+
+procedure TRest.InternalLogResponse(const aContent: RawByteString;
+  const aContext: shortstring; Level: TSynLogLevel);
+begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
+  fLogFamily.Add.Log(Level, '%=%', [aContext, ContentToShort(aContent)], self);
 end;
 
 function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;

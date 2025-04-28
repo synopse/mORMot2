@@ -2652,13 +2652,8 @@ begin
     result := Uri(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
       aResponseHead^ := header;
-    if (log <> nil) and
-       (aResponse <> '') and
-       (sllServiceReturn in fLogLevel) then
-      if IsHtmlContentTypeTextual(pointer(header)) then
-        log.Log(sllServiceReturn, aResponse, self, MAX_SIZE_RESPONSE_LOG)
-      else
-        log.Log(sllServiceReturn, '% bytes [%]', [length(aResponse), header], self);
+    if sllServiceReturn in fLogLevel then
+      InternalLogResponse(aResponse, 'CallBackGet');
   end;
 end;
 
@@ -2698,8 +2693,8 @@ begin
     fLogClass.EnterLocal(log, 'Callback %', [u], self);
     m := RawUtf8(ToText(method));
     result := Uri(u, m, @aResponse, aResponseHead, @aSentData);
-    InternalLog('% result=% resplen=%',
-      [m, result, length(aResponse)], sllServiceReturn);
+    if sllServiceReturn in fLogLevel then
+      InternalLogResponse(aResponse, 'CallBack');
   end;
 end;
 
