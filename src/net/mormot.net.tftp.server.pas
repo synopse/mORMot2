@@ -315,9 +315,8 @@ begin
   // Destroy will call fContext.Shutdown and remove the connection
   tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
-    fLog.Log(sllDebug, 'DoExecute: % finished at %/s - connections=%/%',
-      [fContext.FileName, KB((fFileSize * 1000) div tix),
-       fOwner.ConnectionCount, fOwner.ConnectionTotal], self);
+    fLog.Log(sllDebug, 'DoExecute: % finished at %/s',
+      [fn, KB((fFileSize * 1000) div tix)], self);
 end;
 
 procedure TTftpConnectionThread.NotifyShutdown;
