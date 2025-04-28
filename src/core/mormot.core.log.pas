@@ -219,7 +219,7 @@ type
     aplDebug);
 
 const
-  /// up to 7 TSynLogFamily, i.e. TSynLog sub-classes can be defined
+  /// up to 7 TSynLogFamily, i.e. TSynLog sub-classes can be defined at once
   MAX_SYNLOGFAMILY = 7;
   /// we store up to 56 recursion levels of Enter/Leave information
   // - above this limit, no error would be raised at runtime, but no associated
@@ -1092,9 +1092,9 @@ type
       Instance: TObject; TextTruncateAtLength: integer);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
-    // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
     procedure LogHeader(Level: TSynLogLevel);
-    procedure LogTrailer(Level: TSynLogLevel);
+    procedure LogTrailer;
+      {$ifdef FPC}inline;{$endif}
     procedure LogCurrentTime; virtual;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
@@ -4598,7 +4598,20 @@ begin
     PerformRotation;
 end;
 
-function TSynLog._AddRef: TIntCnt; // for ISynLog - note that FPC always calls it
+procedure TSynLog.LogTrailer;
+begin
+  if fCurrentLevel in fFamily.fLevelStackTrace then
+    AddStackTrace(nil);
+  if fCurrentLevel in fFamily.fLevelSysInfo then
+    AddSysInfo;
+  fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
+  if AutoFlushThread = nil then
+    if (fNextFileRotateDailyTix10 <> 0) or
+       (fFileRotationSize <> 0) then
+      CheckRotation;
+end;
+
+function TSynLog._AddRef: TIntCnt; // for ISynLog
 var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
@@ -5057,7 +5070,7 @@ begin
     fWriter.AddDirect('=');
     fWriter.AddString(ThreadName); // as text name
   end;
-  LogTrailer(sllInfo);
+  fWriterEcho.AddEndOfLine(sllInfo);
 end;
 
 procedure TSynLog.LogThreadName(const Name: RawUtf8);
@@ -5211,7 +5224,7 @@ begin
     if addr <> 0 then
       TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
     {$endif ISDELPHI}
-    LogTrailer(Level);
+    LogTrailer;
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -5519,10 +5532,8 @@ begin
   indent := fThreadInfo^.RecursionCount - byte(Level = sllEnter);
   if indent > 0 then
     fWriter.AddChars(#9, indent);
-  case Level of // handle additional information for some special error levels
-    sllMemory:
-      AddMemoryStats;
-  end;
+  if Level = sllMemory then // handle additional information
+    AddMemoryStats;
 end;
 
 procedure TSynLog.PerformRotation;
@@ -5610,7 +5621,7 @@ begin
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer(Level);
+    LogTrailer;
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -5658,7 +5669,7 @@ begin
     end;
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer(Level);
+    LogTrailer;
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -5681,7 +5692,7 @@ begin
     fWriter.AddOnSameLine(pointer(aName));
     fWriter.AddDirect('=');
     fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
-    LogTrailer(Level);
+    LogTrailer;
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
