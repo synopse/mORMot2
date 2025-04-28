@@ -3705,8 +3705,15 @@ begin
 end;
 
 function TRestUriParams.OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
+var
+  ct: PUtf8Char;
+  len: PtrInt;
 begin
-  result := IdemPChar(pointer(OutBodyType(GuessJsonIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  ct := FindNameValuePointer(pointer(OutHead), HEADER_CONTENT_TYPE_UPPER, len, #0);
+  if ct = nil then
+    result := GuessJsonIfNoneSet
+  else
+    result := IsContentTypeJson(ct, len);
 end;
 
 function TRestUriParams.Header(UpperName: PAnsiChar): RawUtf8;
