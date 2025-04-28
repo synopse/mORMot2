@@ -301,6 +301,7 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
         C1.OutCustomHeaders := 'outheaders';
         frame.opcode := focContinuation;
         head := 'answer';
+        UniqueRawUtf8(head);
         TWebSocketProtocolRestHook(protocol).OutputToFrame(C1, 200, head, frame);
         check(frame.opcode = opcode);
         check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame, C2) = 200);

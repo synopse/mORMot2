@@ -5195,7 +5195,7 @@ procedure TTestCoreBase._UTF8;
 
 var
   i, j, k, len, len120, lenup100, CP, L: integer;
-  bak: AnsiChar;
+  bak, bakj: AnsiChar;
   W: WinAnsiString;
   WS: WideString;
   SU, SU2: SynUnicode;
@@ -5885,15 +5885,18 @@ begin
         end;
       end;
     end;
-    if len > 120 then
-      len120 := Utf8TruncatedLength(P, 120)
+    if length(U) > 120 then
+      len120 := Utf8TruncatedLength(U, 120)
     else
       len120 := 0;
     Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer truncated');
     {$ifdef ASMX64AVXNOCONST}
     HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
     if HasValidUtf8Avx2 then
-      Check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas');
+    begin
+      check(IsValidUtf8Small(U), 'IsValidUtf8Pas');
+      Check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas120');
+    end;
     {$else}
     HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
     {$endif ASMX64AVXNOCONST}
@@ -5914,14 +5917,21 @@ begin
       begin
         bak := P[len120];
         P[len120] := #0; // no need to go any further
-        P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // always invalidate the UTF-8 content
+        bakj := P[j - 1];
+        P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // invalidate the UTF-8 content
         check(not IsValidUtf8Buffer(P, len120), 'IsValidUtf8 up100');
         if HasValidUtf8Avx2 then
           check(not IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas up100');
-        P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // restore
+        P[j - 1] := bakj;
         check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8 restored');
         if HasValidUtf8Avx2 then
           check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas restored');
+        P[j - 1] := #0;
+        check(not IsValidUtf8NotVoid(P, len120), 'IsValidUtf8 0');
+        if HasValidUtf8Avx2 then
+          check(not IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas 0');
+        P[j - 1] := bakj;
+        check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8 final');
         P[len120] := bak;
       end;
     end;
@@ -8663,24 +8673,47 @@ begin
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
   s := '["json",'#0'123]';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
-  Check(not IsContentTypeCompressible('anything'));
-  Check(not IsContentTypeCompressible('toto/plain'));
-  Check(IsContentTypeCompressible('text/plain'));
-  Check(IsContentTypeCompressible('text/xml'));
-  Check(IsContentTypeCompressible('text/css'));
-  Check(not IsContentTypeCompressible('texto/xml'));
-  Check(IsContentTypeCompressible('application/json'));
+  Check(not IsContentTypeCompressibleU('anything'));
+  Check(not IsContentTypeCompressibleU('toto/plain'));
+  Check(IsContentTypeCompressibleU('text/plain'));
+  Check(IsContentTypeCompressibleU('text/xml'));
+  Check(IsContentTypeCompressibleU('text/css'));
+  Check(not IsContentTypeCompressibleU('texto/xml'));
+  Check(IsContentTypeCompressibleU('application/json'));
   Check(IsContentTypeCompressibleU('APPLICATION/JSON'));
-  Check(IsContentTypeCompressible('application/xml'));
-  Check(IsContentTypeCompressible('application/javascript'));
-  Check(IsContentTypeCompressible('application/VND.API+JSON'));
-  Check(IsContentTypeCompressible('application/atom+xml'));
-  Check(not IsContentTypeCompressible('applications/atom+xml'));
-  Check(not IsContentTypeCompressible('application/plain'));
-  Check(IsContentTypeCompressible('image/svg'));
-  Check(IsContentTypeCompressible('image/X-ico'));
-  Check(IsContentTypeCompressible('image/X-ICO'));
-  Check(not IsContentTypeCompressible('image/png'));
+  Check(IsContentTypeCompressibleU('application/xml'));
+  Check(IsContentTypeCompressibleU('application/javascript'));
+  Check(IsContentTypeCompressibleU('application/VND.API+JSON'));
+  Check(IsContentTypeCompressibleU('application/vnd.mysoft.v1+json'));
+  Check(IsContentTypeCompressibleU('application/atom+xml'));
+  Check(not IsContentTypeCompressibleU('applications/atom+xml'));
+  Check(not IsContentTypeCompressibleU('application/plain'));
+  Check(IsContentTypeCompressibleU('image/svg'));
+  Check(IsContentTypeCompressibleU('image/X-ico'));
+  Check(IsContentTypeCompressibleU('image/X-ICO'));
+  Check(not IsContentTypeCompressibleU('image/png'));
+  Check(IsContentTypeJsonU('ApplicatioN/JSON'));
+  Check(IsContentTypeJsonU('application/json; charset=utf8'));
+  Check(IsContentTypeJsonU('application/Json;CharSet=Utf-8'));
+  Check(IsContentTypeJsonU('application/VND.API+JSON;CharSet=Utf-8'));
+  Check(IsContentTypeJsonU('application/vnd.mysoft.v1+json'));
+  Check(not IsContentTypeJsonU('application/xml'));
+  Check(IsContentTypeTextU('text/plain'));
+  Check(IsContentTypeTextU('text/xml'));
+  Check(IsContentTypeTextU('text/css'));
+  Check(not IsContentTypeTextU('texto/xml'));
+  Check(IsContentTypeTextU('application/json'));
+  Check(IsContentTypeTextU('APPLICATION/JSON'));
+  Check(IsContentTypeTextU('application/xml'));
+  Check(IsContentTypeTextU('application/javascript'));
+  Check(IsContentTypeTextU('application/VND.API+JSON'));
+  Check(IsContentTypeTextU('application/vnd.mysoft.v1+json'));
+  Check(IsContentTypeTextU('application/atom+xml'));
+  Check(not IsContentTypeTextU('applications/atom+xml'));
+  Check(not IsContentTypeTextU('application/plain'));
+  Check(IsContentTypeTextU('image/svg'));
+  Check(not IsContentTypeTextU('image/X-ico'));
+  Check(not IsContentTypeTextU('image/X-ICO'));
   // mime multipart encoding
   for rfc2388 := false to true do
   begin

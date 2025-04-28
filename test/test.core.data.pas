@@ -3355,6 +3355,7 @@ begin
   {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U));
+  Check(IsValidUtf8Small(U));
   FileFromString(U, WorkDir + 'discoExtract.json');
   TRttiJson(Parser).IncludeWriteOptions := [];
   SaveJson(Disco, TypeInfo(TTestCustomDiscogs), [twoNonExpandedArrays], U);
@@ -3363,6 +3364,7 @@ begin
   {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U)); 
+  Check(IsValidUtf8Small(U));
   FileFromString(U, WorkDir + 'discoExtractNonExp.json');
   FillCharFast(Disco2, SizeOf(Disco), 0);
   RecordLoadJsonInPlace(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
@@ -3919,6 +3921,7 @@ begin
       //FileFromString(j2, WorkDir + 'sample2.json');
       //FileFromString(j3, WorkDir + 'sample3.json');
       Check(IsValidUtf8(sample), 'sample.json utf8');
+      Check(IsValidUtf8Small(sample), 'sample.json utf8small');
       Check(IsValidUtf8(j0), 'sample0.json utf8');
       Check(IsValidUtf8(j1), 'sample1.json utf8');
       Check(IsValidUtf8(j2), 'sample2.json utf8');
@@ -6304,6 +6307,8 @@ begin
   if J <> '' then
   begin
     check(IsValidUtf8(J));
+    check(IsValidUtf8NotVoid(J));
+    check(IsValidUtf8Small(J));
     check(IsValidJson(J));
     _Json(J, v, [dvoReturnNullForUnknownProperty,
       dvoAllowDoubleValue, dvoValueCopiedByReference]);
