@@ -2054,10 +2054,10 @@ begin
     else if (ContentType = '') or
             IsContentTypeJsonU(ContentType) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
-    else if IdemPChar(pointer(ContentType), 'TEXT/') then
+    else if IsValidUtf8NotVoid(Content) then
       WR.AddJsonString(Content)
     else
-      WR.WrBase64(pointer(Content), length(Content), true);
+      WR.WrBase64(pointer(Content), length(Content), {withMagic=}true);
     WR.AddDirect(']', '}');
     WR.SetText(RawUtf8(frame.payload));
   finally
