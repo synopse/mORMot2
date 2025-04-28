@@ -631,8 +631,8 @@ begin
     else
       block := wscBlockWithAnswer;
     result := fProcess.NotifyCallback(Ctxt, block);
-    if IdemPChar(pointer(Ctxt.OutContentType), JSON_CONTENT_TYPE_UPPER) then
-      HeaderSetText(Ctxt.OutCustomHeaders)
+    if IsContentTypeJsonU(Ctxt.OutContentType) then
+      HeaderSetText(Ctxt.OutCustomHeaders) // OutContentType='' means JSON
     else
       HeaderSetText(Ctxt.OutCustomHeaders, Ctxt.OutContentType);
     Http.ContentLength := length(Ctxt.OutContent);

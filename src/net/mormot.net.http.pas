@@ -3044,7 +3044,7 @@ begin
      (OutContentType = '') or
      (Algo = nil) then
     exit;
-  compressible := IsContentTypeCompressible(pointer(OutContentType));
+  compressible := IsContentTypeCompressibleU(OutContentType);
   len := length(OutContent);
   result := pointer(Algo);
   for i := 0 to PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1) do

@@ -931,7 +931,7 @@ var
 begin
   if (Ctxt = nil) or
      ((Ctxt.InContentType <> '') and
-      not PropNameEquals(Ctxt.InContentType, JSON_CONTENT_TYPE)) then
+      not IsContentTypeJsonU(Ctxt.InContentType)) then
   begin
     result := HTTP_BADREQUEST;
     exit;

@@ -7735,8 +7735,8 @@ begin
         if (part.ContentType = '') or
            (PosEx('-8', part.ContentType) > 0) then
         begin
-          if IdemPChar(pointer(part.ContentType), JSON_CONTENT_TYPE_UPPER) then
-            part.ContentType := JSON_CONTENT_TYPE
+          if IsContentTypeJsonU(part.ContentType) then
+            part.ContentType := JSON_CONTENT_TYPE_VAR
           else
             part.ContentType := TEXT_CONTENT_TYPE;
           FakeCodePage(part.Content, CP_UTF8); // ensure value is UTF-8

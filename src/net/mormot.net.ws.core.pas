@@ -1480,7 +1480,7 @@ begin
   frame.opcode := opcode;
   if (ContentType <> '') and
      (Content <> '') and
-     not IdemPChar(pointer(ContentType), 'TEXT/') and
+     not IsContentTypeTextU(ContentType) and
      IsContentCompressed(pointer(Content), length(Content)) then
     frame.content := [fopAlreadyCompressed]
   else
@@ -2001,11 +2001,10 @@ begin
     exit;
   result := GetInteger(pointer(status));
   Ctxt.OutCustomHeaders := outHeaders;
-  if (outContentType = '') and
-     (outContent <> '') then
-    Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR
-  else
-    Ctxt.OutContentType := outContentType;
+  if outContentType <> '' then
+    Ctxt.OutContentType := outContentType
+  else if outContent <> '' then
+    Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
   Ctxt.OutContent := outContent;
 end;
 
@@ -2050,7 +2049,7 @@ begin
     if Content = '' then
       WR.AddDirect('"', '"')
     else if (ContentType = '') or
-            PropNameEquals(ContentType, JSON_CONTENT_TYPE) then
+            IsContentTypeJsonU(ContentType) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
     else if IdemPChar(pointer(ContentType), 'TEXT/') then
       WR.AddJsonString(Content)
@@ -2135,10 +2134,8 @@ begin
   if info.Json = nil then
     exit;
   if (contentType = '') or
-     PropNameEquals(contentType, JSON_CONTENT_TYPE) then
+     IsContentTypeJsonU(contentType) then
     GetJsonItemAsRawJson(info.Json, RawJson(content))
-  else if IdemPChar(pointer(contentType), 'TEXT/') then
-    info.GetJsonValue(content)
   else
   begin
     info.GetJsonField;

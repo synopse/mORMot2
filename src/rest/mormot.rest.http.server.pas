@@ -1146,7 +1146,7 @@ begin
   if (Ctxt.Method = '') or
      ((rsoOnlyJsonRequests in fOptions) and
       not IsGet(Ctxt.Method) and
-      not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
+      not IsContentTypeJsonU(Ctxt.InContentType)) then
   begin
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST;
@@ -1164,8 +1164,7 @@ begin
   end;
   if (Ctxt.InContent <> '') and
      (rsoOnlyValidUtf8 in fOptions) and
-     (IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER) or
-      IdemPChar(pointer(Ctxt.InContentType), 'TEXT/')) and
+     IsContentUtf8(Ctxt.InContent, Ctxt.InContentType) and
      not IsValidUtf8(Ctxt.InContent) then // may use AVX2
   begin
     // rsoOnlyValidUtf8 rejection
