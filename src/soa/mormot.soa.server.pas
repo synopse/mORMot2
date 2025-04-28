@@ -1966,7 +1966,7 @@ begin
     Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex + SERVICE_PSEUDO_METHOD_COUNT;
     FormatUtf8('[%,"%"]',
       [PtrInt(PtrUInt(fake.fFakeInterface)), fake.Factory.InterfaceName], params);
-    Ctxt.ServiceParameters := pointer(params);
+    Ctxt.ServiceParameters := pointer(params); // keep ServiceParametersLen=0
     withlog := (sllDebug in fRestServer.LogLevel) and
                fake.CanLog; // before ExcuteMethod which may free fake instance
     fake._AddRef; // ExecuteMethod() calls fake._Release on its parameter
