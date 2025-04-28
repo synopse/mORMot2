@@ -917,6 +917,7 @@ type
     /// write a Int18 value (0..262143) as 3 chars
     // - this encoding is faster than Base64, and has spaces on the left side
     // - use function Chars3ToInt18() to decode the textual content
+    // - used e.g. to efficiently encode the TSynLog ThreadNumber as text
     procedure AddInt18ToChars3(Value: cardinal);
 
     /// append strings or integers with a specified format
@@ -1605,6 +1606,7 @@ type
 /// revert the value as encoded by TTextWriter.AddInt18ToChars3() or Int18ToChars3()
 // - no range check is performed: you should ensure that the incoming text
 // follows the expected 3-chars layout
+// - used e.g. to efficiently decode the TSynLog ThreadNumber text
 function Chars3ToInt18(P: pointer): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2348,6 +2350,7 @@ function BinToHex(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 // - using this function with Bin^ as an integer value will encode it
 // in big-endian order (most-signignifican byte first): use it for display
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into hexa chars, ready to be displayed
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
@@ -2358,6 +2361,7 @@ function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 // - using this function with BinBytes^ as an integer value will encode it
 // in low-endian order (less-signignifican byte first): don't use it for display
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexLower(const Bin: RawByteString): RawUtf8; overload;
@@ -3882,6 +3886,50 @@ begin
   result := false; // return false if any invalid char
 end;
 
+procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: PtrInt); // for inlining
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TAnsiCharToWord absolute TwoDigitsHexW;
+  {$else}
+  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
+begin
+  if BinBytes <= 0 then
+    exit;
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitsHexW;
+  {$endif CPUX86NOTPIC}
+  inc(Hex, BinBytes * 2);
+  repeat
+    dec(Hex, 2);
+    PWord(Hex)^ := tab[Bin^];
+    inc(Bin);
+    dec(BinBytes);
+  until BinBytes = 0;
+end;
+
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
+  {$else}
+  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
+begin
+  if BinBytes <= 0 then
+    exit;
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitsHexWLower;
+  {$endif CPUX86NOTPIC}
+  inc(Hex, BinBytes * 2);
+  repeat
+    dec(Hex, 2);
+    PWord(Hex)^ := tab[Bin^];
+    inc(Bin);
+    dec(BinBytes);
+  until BinBytes = 0;
+end;
+
 
 { TTextWriter }
 
@@ -5403,11 +5451,15 @@ begin
 end;
 
 procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: PtrInt);
+var
+  max: PtrInt;
 begin
-  if cardinal(BinBytes * 2 - 1) >= cardinal(fTempBufSize) then
-    exit;
-  if BEnd - B <= BinBytes * 2 then
-    FlushToStream;
+  max := BinBytes * 2 + 1;
+  if BEnd - B <= max then // note: PtrInt(BEnd - B) could be < 0
+    if PtrUInt(max) >= PtrUInt(fTempBufSize) then
+      exit // too big for a single call
+    else
+      FlushToStream;
   BinToHexDisplay(Bin, PAnsiChar(B + 1), BinBytes);
   inc(B, BinBytes * 2);
 end;
@@ -5417,6 +5469,8 @@ procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
 var
   max: PtrInt;
 begin
+  if Bin = nil then
+    exit;
   max := BinBytes * 2 + 1;
   if BEnd - B <= max then // note: PtrInt(BEnd - B) could be < 0
     if PtrUInt(max) >= PtrUInt(fTempBufSize) then
@@ -10356,27 +10410,6 @@ begin
   result := P + 2;
 end;
 
-procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
-var
-  {$ifdef CPUX86NOTPIC}
-  tab: TAnsiCharToWord absolute TwoDigitsHexW;
-  {$else}
-  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
-begin
-  {$ifndef CPUX86NOTPIC}
-  tab := @TwoDigitsHexW;
-  {$endif CPUX86NOTPIC}
-  inc(Hex, BinBytes * 2);
-  if BinBytes > 0 then
-    repeat
-      dec(Hex, 2);
-      PWord(Hex)^ := tab[Bin^];
-      inc(Bin);
-      dec(BinBytes);
-    until BinBytes = 0;
-end;
-
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
   BinToHexDisplay(Bin, FastSetString(result, BinBytes * 2), BinBytes);
@@ -10424,30 +10457,6 @@ begin
   FastSetString(hexa, length(Bin) * 2);
   BinToHexLower(pointer(Bin), length(Bin), hexa);
   Bin := hexa;
-end;
-
-procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
-var
-  {$ifdef CPUX86NOTPIC}
-  tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
-  {$else}
-  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
-begin
-  if (Bin = nil) or
-     (Hex = nil) or
-     (BinBytes <= 0) then
-    exit;
-  {$ifndef CPUX86NOTPIC}
-  tab := @TwoDigitsHexWLower;
-  {$endif CPUX86NOTPIC}
-  inc(Hex, BinBytes * 2);
-  repeat
-    dec(Hex, 2);
-    PWord(Hex)^ := tab[Bin^];
-    inc(Bin);
-    dec(BinBytes);
-  until BinBytes = 0;
 end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
