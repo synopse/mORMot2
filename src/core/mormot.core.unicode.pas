@@ -220,20 +220,38 @@ procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will also refuse #0 characters within the buffer
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
+// - warning: AVX2 version won't refuse #0 characters within the buffer
 // - follows RFC 3629 requirements, i.e. up to 4-bytes UTF-8 sequences, to
 // stay within U+0000..U+10FFFF UTF-16 accessible range with surrogates
 var
   IsValidUtf8Buffer: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
 
-function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean; // test only
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding
+// - could be called directly on small input, if #0 characters should be refused
+function IsValidUtf8Pas(source: PUtf8Char; len: PtrInt): boolean;
+
+/// returns TRUE if the supplied RawUtf8 has valid UTF-8 encoding
+// - could be called directly on small input, if #0 characters should be refused
+function IsValidUtf8Small(const source: RawByteString): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will also refuse #0 characters within the buffer
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM, reaching e.g.
 // 21 GB/s parsing speed on a Core i5-13500
-function IsValidUtf8(const source: RawUtf8): boolean; overload;
+// - warning: AVX2 version won't refuse #0 characters within the buffer - use
+// IsValidUtf8NotVoid() if you are not sure that your input is pure text
+function IsValidUtf8(const source: RawByteString): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding and no #0 within
+// - will also refuse #0 characters within the buffer even on AVX2
+function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean; overload;
+  {$ifdef HASINLINE}{$ifndef ASMX64AVXNOCONST}inline;{$endif}{$endif}
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding and no #0 within
+// - will also refuse #0 characters within the buffer even on AVX2
+function IsValidUtf8NotVoid(const source: RawByteString): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
@@ -3216,10 +3234,40 @@ begin
   result := IsValidUtf8Buffer(source, StrLen(source));
 end;
 
-function IsValidUtf8(const source: RawUtf8): boolean;
+function IsValidUtf8Small(const source: RawByteString): boolean;
 begin
-  result := IsValidUtf8Buffer(pointer(source), length(source));
+  result := (source = '') or
+    IsValidUtf8Pas(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
 end;
+
+function IsValidUtf8(const source: RawByteString): boolean;
+begin
+  result := (source = '') or
+    IsValidUtf8Buffer(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
+end;
+
+function IsValidUtf8NotVoid(const source: RawByteString): boolean;
+begin
+  result := (source = '') or
+    IsValidUtf8NotVoid(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
+end;
+
+{$ifdef ASMX64AVXNOCONST}
+function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean;
+begin
+  if (len >= 128) and // main AVX2 loop iterates on 64 bytes
+     (cpuHaswell in X64CpuFeatures) then
+    result := (ByteScanIndex(pointer(source), len, 0) < 0) and // detect #0
+              IsValidUtf8Avx2(source, len)
+  else
+    result := IsValidUtf8Pas(source, len);
+end;
+{$else}
+function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean;
+begin
+  result := IsValidUtf8Pas(source, len);
+end;
+{$endif ASMX64AVXNOCONST}
 
 procedure DetectRawUtf8(var source: RawByteString);
 begin
