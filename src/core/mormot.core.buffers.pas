@@ -1859,11 +1859,19 @@ function IsContentTypeCompressible(ContentType: PUtf8Char; ContentTypeLen: PtrIn
 function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// recognize e.g. 'application/json' or 'application/vnd.api+json'
-function IsContentTypeJson(ContentType: PUtf8Char): boolean;
+/// recognize e.g. 'application/json' or 'application/vnd.####+json'
+function IsContentTypeJson(ContentType: PUtf8Char; ContentTypeLen: PtrInt): boolean;
 
-/// recognize e.g. 'application/json' or 'application/vnd.api+json'
+/// recognize e.g. 'application/[...+]json' or 'text/*'
+function IsContentTypeTextU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// recognize e.g. 'application/json' or 'application/vnd.####+json'
 function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// recognize e.g. 'text/*' or 'application/json' patterns
+function IsContentUtf8(const Content, ContentType: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// fast guess of the size, in pixels, of a JPEG memory buffer
@@ -9019,15 +9027,58 @@ begin
       PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^, {onlytext=}false);
 end;
 
-function IsContentTypeJson(ContentType: PUtf8Char): boolean;
+function IsContentTypeTextU(const ContentType: RawUtf8): boolean;
 begin
-  result := IdemPChar(ContentType, pointer(_CONTENT[2])) and
-            (PtrUInt(IdemPPChar(ContentType + 12, @_CONTENT_APP)) <= 2);
+  result := (ContentType <> '') and
+    IsContentTypeCompressible(pointer(ContentType),
+      PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^, {onlytext=}true);
+end;
+
+function IsContentTypeJson(ContentType: PUtf8Char; ContentTypeLen: PtrInt): boolean;
+begin
+  result := false;
+  dec(ContentTypeLen, 12);
+  if (ContentTypeLen <= 0) or
+     (PCardinalArray(ContentType)[0] or $20202020 <>
+       ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24) or
+     (PCardinalArray(ContentType)[1] or $20202020 <>
+       ord('i') + ord('c') shl 8 + ord('a') shl 16 + ord('t') shl 24) or
+     (PCardinalArray(ContentType)[2] or $00202020 <>
+       ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('/') shl 24) then
+    exit; // not application/*
+  case PCardinalArray(ContentType)[3] or $20202020 of
+    ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24:
+      ; // found
+    ord('o') + ord('c') shl 8 + ord('t') shl 16 + ord('e') shl 24:
+      exit; // application/octet-stream is very common
+  else
+    begin // try application/vnd.####+json
+      ContentType := PosChar(ContentType + 12, ContentTypeLen, '+');
+      if (ContentType = nil) or
+         (PCardinal(ContentType + 1)^ or $20202020 <>
+            ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24) then
+        exit;
+    end;
+  end;
+  result := true; // application/[...+]json
 end;
 
 function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
 begin
-  result := IsContentTypeJson(pointer(ContentType));
+  result := (ContentType <> '') and
+            IsContentTypeJson(pointer(ContentType),
+              PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^);
+end;
+
+function IsContentUtf8(const Content, ContentType: RawUtf8): boolean;
+begin
+  result := (Content <> '') and
+            (ContentType <> '') and
+            (IsContentTypeJson(pointer(ContentType),
+               PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^) or
+             ((PCardinal(ContentType)^ or $20202020 =
+                 ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24) and
+              (ContentType[5] = '/')));
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
