@@ -1209,11 +1209,12 @@ type
     fEchoStart: PtrInt;
     fEchoBuf: RawUtf8;
     fEchos: array of TOnTextWriterEcho;
-    fBack: TEchoWriterBack;
+    fWriteCRLF, fEchoPendingExecuteBackground: boolean;
     fBackSafe: TLightLock; // protect fBack.Level/Text
-    fEchoPendingExecuteBackground: boolean;
+    fBack: TEchoWriterBack;
     function EchoFlush: PtrInt;
     procedure EchoPendingToBackground(aLevel: TSynLogLevel);
+    procedure EchoAddEndOfLine(aLevel: TSynLogLevel);
     function GetEndOfLineCRLF: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
@@ -1233,6 +1234,7 @@ type
     // current thread, or calling EchoPendingExecute from a background thread
     // - used e.g. by TSynLog for console output, as stated by Level parameter
     procedure AddEndOfLine(aLevel: TSynLogLevel = sllNone);
+      {$ifdef HASINLINE}inline;{$endif}
     /// add a callback to echo each line written by this class
     // - this class expects AddEndOfLine to mark the end of each line
     procedure EchoAdd(const aEcho: TOnTextWriterEcho);
@@ -3585,7 +3587,7 @@ begin
   if Csv = '' then
     Csv := Value
   else
-    Csv := Csv + Sep + Value;
+    Append(Csv, Sep, Value);
 end;
 
 function RenameInCsv(const OldValue, NewValue: RawUtf8; var Csv: RawUtf8;
@@ -4720,20 +4722,20 @@ procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
 var
   n: PtrInt;
 begin
-  while aCount > 0 do
-  begin
-    n := BEnd - B; // note: PtrInt(BEnd - B) could be < 0
-    if n <= aCount then
-    begin
-      FlushToStream;
-      n := BEnd - B;
-    end;
-    if aCount < n then
-      n := aCount;
-    FillCharFast(B[1], n, ord(aChar));
-    inc(B, n);
-    dec(aCount, n);
-  end;
+  if aCount > 0 then
+    repeat
+      n := BEnd - B; // note: PtrInt(BEnd - B) could be < 0
+      if n <= aCount then
+      begin
+        FlushToStream;
+        n := BEnd - B;
+      end;
+      if aCount < n then
+        n := aCount;
+      FillCharFast(B[1], n, ord(aChar));
+      inc(B, n);
+      dec(aCount, n);
+    until aCount = 0;
 end;
 
 procedure TTextWriter.Add2(Value: PtrUInt);
@@ -4789,21 +4791,22 @@ end;
 procedure TTextWriter.AddMicroSec(MicroSec: cardinal);
 var
   W: PWordArray;
-begin
-  // in 00.000.000 TSynLog format
+  P: PUtf8Char;
+begin // append in 00.000.000 TSynLog format
   if B >= BEnd then
     FlushToStream;
-  B[3] := '.';
-  B[7] := '.';
-  inc(B);
+  P := B;
+  P[3] := '.';
+  P[7] := '.';
+  inc(P);
   W := @TwoDigitLookupW;
-  MicroSec := Value3Digits(Value3Digits(MicroSec, B + 7, W), B + 3, W);
+  MicroSec := Value3Digits(Value3Digits(MicroSec, P + 7, W), P + 3, W);
   if MicroSec > 99 then
     MicroSec := $3939
   else
     MicroSec := W[MicroSec];
-  PWord(B)^ := MicroSec;
-  inc(B, 9);
+  PWord(P)^ := MicroSec;
+  B := P + 9;
 end;
 
 procedure TTextWriter.AddCsvStrings(const Values: array of RawUtf8;
@@ -6104,6 +6107,7 @@ begin
   if Assigned(fWriter.OnFlushToStream) then
     ESynException.RaiseUtf8('Unexpected %.Create', [self]);
   fWriter.OnFlushToStream := FlushToStream; // register
+  fWriteCRLF := twoEndOfLineCRLF in fWriter.CustomOptions;
 end;
 
 destructor TEchoWriter.Destroy;
@@ -6134,16 +6138,10 @@ begin
   end;
 end;
 
-procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogLevel);
+procedure TEchoWriter.EchoAddEndOfLine(aLevel: TSynLogLevel);
 var
   e: PtrInt;
 begin
-  if twoEndOfLineCRLF in fWriter.CustomOptions then
-    fWriter.AddCR
-  else
-    fWriter.Add(#10);
-  if fEchos = nil then
-    exit; // no redirection yet
   fEchoStart := EchoFlush;
   if fEchoPendingExecuteBackground then
     EchoPendingToBackground(aLevel)
@@ -6155,6 +6153,15 @@ begin
         MultiEventRemove(fEchos, e);
       end;
   fEchoBuf := '';
+end;
+
+procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogLevel);
+begin
+  if fWriteCRLF then
+    fWriter.AddDirect(#13);
+  fWriter.AddDirect(#10);
+  if fEchos <> nil then
+    EchoAddEndOfLine(aLevel); // redirection
 end;
 
 procedure TEchoWriter.EchoPendingExecute;
