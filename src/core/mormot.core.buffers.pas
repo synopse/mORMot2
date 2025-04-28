@@ -2070,7 +2070,11 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 function EscapeToShort(const source: RawByteString): ShortString; overload;
 
 /// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
-function ContentToShort(const source: RawByteString): ShortString;
+function ContentToShort(const source: RawByteString): ShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
+procedure ContentToShort(source: PAnsiChar; len: PtrInt; var txt: ShortString); overload;
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -9491,16 +9495,30 @@ begin
 end;
 
 function ContentToShort(const source: RawByteString): ShortString;
+begin
+  ContentToShort(pointer(source), length(source), result);
+end;
+
+procedure ContentToShort(source: PAnsiChar; len: PtrInt; var txt: ShortString);
 var
   l: PtrInt;
 begin
-  l := length(source);
-  if (l = 0) or
-     IsValidUtf8(source) then
-    SetString(result, PAnsiChar(pointer(source)), l)
+  if len <= 255 then
+    l := len
   else
-    result[0] := AnsiChar(
-      EscapeBuffer(pointer(source), l, @result[1], 255) - @result[1]);
+    l := Utf8TruncatedLength(source, len, 255); // test only what is needed
+  if l = 0 then
+    txt[0] := #0
+  else if IsValidUtf8Pas(pointer(source), l) then // AVX2 doesn't filter #0
+  begin
+    txt[0] := AnsiChar(l); // we know that l <= 255
+    MoveFast(source^, txt[1], l);
+    if len > 255 then
+      for l := Utf8TruncatedLength(source, len, 254) to 255 do
+        txt[l] := '.';  // mark truncated, but keep valid UTF-8
+  end
+  else
+    txt[0] := AnsiChar(EscapeBuffer(source, l, @txt[1], 255) - @txt[1]);
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
