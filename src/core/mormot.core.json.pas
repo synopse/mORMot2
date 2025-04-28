@@ -4099,12 +4099,14 @@ procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
   EndOfObject: PAnsiChar);
 var
   B: PUtf8Char;
+  parser: TJsonGotoEndParser;
 begin
   result := '';
   if P = nil then
     exit;
   B := GotoNextNotSpace(P);
-  P := GotoEndJsonItem(B);
+  parser.Init({strict=}false, {pmax=}nil);
+  P := parser.GotoEnd(B);
   if P = nil then
     exit;
   FastSetString(RawUtf8(result), B, P - B);
