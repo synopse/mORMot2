@@ -1111,6 +1111,7 @@ type
     procedure LockAndDisableExceptions;
       {$ifdef FPC}inline;{$endif}
     function Instance: TSynLog;
+    procedure CheckRotation;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
   public
@@ -3858,11 +3859,12 @@ procedure TAutoFlushThread.Execute;
 var
   i: PtrInt;
   tmp: TFileName;
-  waitms, tix10: cardinal;
+  waitms, tix10, lasttix10: cardinal;
   log: TSynLog;
   files: TSynLogDynArray;
 begin
   waitms := MilliSecsPerSec;
+  lasttix10 := 0;
   repeat
     fEvent.WaitFor(waitms);
     if Terminated then
@@ -3887,7 +3889,10 @@ begin
       end
       else if waitms = 111 then
         waitms := 500;
-      // 3. eventually flush log content to disk after AutoFlushTimeOut
+      // 3. regularly flush or rotate log content on disk
+      tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
+      if lasttix10 = tix10 then
+        continue; // checking once per second is enough
       mormot.core.os.EnterCriticalSection(GlobalThreadLock);
       try
         if Terminated or
@@ -3897,36 +3902,34 @@ begin
       finally
         mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
       end;
-      if files <> nil then
+      for i := 0 to high(files) do
       begin
-        tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
-        for i := 0 to high(files) do
-          begin
+        if Terminated or
+           SynLogFileFreeing then // avoid GPF
+          break;
+        log := files[i];
+        if (log.fNextFlushTix10 <> 0) and
+           (tix10 >= log.fNextFlushTix10) and
+           (log.fWriter <> nil) and
+           (log.fWriter.PendingBytes > 1) then
+          // write pending data
+          log.Flush({forcediskwrite=}false);
+        if (tix10 shr 2 <> lasttix10 shr 2) and // check rotation every 4 seconds
+           ((log.fNextFileRotateDailyTix10 <> 0) or
+            (log.fFileRotationSize <> 0)) then
+        begin
+          mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+          try
             if Terminated or
-               SynLogFileFreeing then // avoid GPF
-              break;
-            log := files[i];
-            if (log.fNextFlushTix10 <> 0) and
-               (tix10 >= log.fNextFlushTix10) and
-               (log.fWriter <> nil) and
-               (log.fWriter.PendingBytes > 1) then
-              // write pending data
-              log.Flush({forcediskwrite=}false);
-            if (log.fNextFileRotateDailyTix10 <> 0) and
-               (tix10 >= log.fNextFileRotateDailyTix10) then
-            begin
-              // perform daily rotation
-              mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-              try
-                log.fNextFileRotateDailyTix10 := // next day, same hour
-                  ((log.fNextFileRotateDailyTix10 shl 10) + MilliSecsPerDay) shr 10;
-                log.PerformRotation;
-              finally
-                mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-              end;
-            end;
+               SynLogFileFreeing then
+            break;
+            log.CheckRotation;
+          finally
+            mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
           end;
+        end;
       end;
+      lasttix10 := tix10;
     except
       // on stability issue, start identifying this thread
       if not Terminated then
@@ -4581,16 +4584,10 @@ begin
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
-procedure TSynLog.LogTrailer(Level: TSynLogLevel);
+procedure TSynLog.CheckRotation;
 begin
-  if Level in fFamily.fLevelStackTrace then
-    AddStackTrace(nil);
-  if Level in fFamily.fLevelSysInfo then
-    AddSysInfo;
-  fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
   if (fNextFileRotateDailyTix10 <> 0) and
-     (AutoFlushThread = nil) and
-     (GetTickCount64 shr 10 >= fNextFileRotateDailyTix10) then
+     (GetTickCount64 shr MilliSecsPerSecShl >= fNextFileRotateDailyTix10) then
   begin
     fNextFileRotateDailyTix10 := // next day, same hour
       ((fNextFileRotateDailyTix10 shl 10) + MilliSecsPerDay) shr 10;
