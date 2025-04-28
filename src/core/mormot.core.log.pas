@@ -4540,9 +4540,9 @@ procedure TSynLog.InitThreadInfo(nfo: PSynLogThreadInfo);
 begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
-    if fThreadIndexReleasedCount <> 0 then // reuse after NotifyThreadEnded()
+    if fThreadIndexReleasedCount <> 0 then
     begin
-      dec(fThreadIndexReleasedCount);
+      dec(fThreadIndexReleasedCount); // we can reuse after NotifyThreadEnded()
       nfo^.ThreadNumber := fThreadIndexReleased[fThreadIndexReleasedCount];
     end
     else
@@ -5826,17 +5826,16 @@ end;
 
 function TSynLog.GetFileSize: Int64;
 begin
-  if fWriterStream <> nil then
-  begin
-    mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-    try
+  result := 0;
+  if fWriterStream = nil then
+    exit;
+  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  try
+    if fWriterStream <> nil then
       result := fWriterStream.Size;
-    finally
-      mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-    end;
-  end
-  else
-    result := 0;
+  finally
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 {$ifdef FPC}
@@ -6112,14 +6111,12 @@ end;
 
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
 begin
+  result := false;
   if GlobalLastExceptionIndex < 0 then
-  begin
-    result := false;
     exit; // no exception intercepted yet
-  end;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
-    info := GlobalLastException[GlobalLastExceptionIndex];
+    info := GlobalLastException[GlobalLastExceptionIndex]; // copy
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -6135,6 +6132,7 @@ var
   infos: TSynLogExceptionInfos; // use thread-safe local copy of static array
   index, last, n, i: PtrInt;
 begin
+  // thread-safe retrieve last exceptions
   if GlobalLastExceptionIndex < 0 then
     exit; // no exception intercepted yet
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -6144,6 +6142,7 @@ begin
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
+  // generate an ordered array of exception infos
   n := MAX_EXCEPTHISTORY + 1;
   if (Depth > 0) and
      (n > Depth) then
