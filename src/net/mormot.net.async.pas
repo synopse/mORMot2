@@ -4703,31 +4703,36 @@ function THttpAsyncServerConnection.DoReject(
 var
   len: integer; // should not be PtrInt
 begin
-  if fServer.ComputeRejectBody(fHttp.CommandUri, fConnectionID, status) then
-    result := soContinue
-  else
-    result := soClose;
-  len := length(fHttp.CommandUri);
-  Send(pointer(fHttp.CommandUri), len); // no polling nor ProcessWrite
-  if result = soContinue then
+  result := soClose;
+  if status = HTTP_TEAPOT then // from hsoRejectBotUserAgent
   begin
-    fServer.IncStat(grWwwAuthenticate);
-    fHttp.State := hrsResponseDone;
-    result := AfterWrite;
+    len := ord(HTTP_BANIP_RESPONSE[0]);
+    Send(@HTTP_BANIP_RESPONSE[1], len); // 418 I'm a teapot
   end
   else
   begin
-    fServer.IncStat(grRejected);
-    fHttp.State := hrsErrorRejected;
-    if (fServer.Async.Banned <> nil) and
-       not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
-       fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
+    if fServer.ComputeRejectBody(fHttp.Content, fConnectionID, status) then
+      result := soContinue; // for grWwwAuthenticate
+    len := length(fHttp.Content);
+    Send(pointer(fHttp.Content), len); // no polling nor ProcessWrite
+    if result = soContinue then
     begin
-      if acoVerboseLog in fOwner.fOptions then
-        fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
-          [status, fRemoteIP, fServer.Async.Banned], self);
-      fServer.IncStat(grBanned);
+      fServer.IncStat(grWwwAuthenticate);
+      fHttp.State := hrsResponseDone;
+      result := AfterWrite;
+      exit;
     end;
+  end;
+  fServer.IncStat(grRejected);
+  fHttp.State := hrsErrorRejected;
+  if (fServer.Async.Banned <> nil) and
+     not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
+     fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
+  begin
+    if acoVerboseLog in fOwner.fOptions then
+      fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
+        [status, fRemoteIP, fServer.Async.Banned], self);
+    fServer.IncStat(grBanned);
   end;
 end;
 
