@@ -1075,7 +1075,7 @@ type
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
-    function SetRejectInCommandUri(var Http: THttpRequestContext;
+    function ComputeRejectBody(var Body: RawByteString;
       Opaque: Int64; Status: integer): boolean; // true for grWwwAuthenticate
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
@@ -4464,25 +4464,25 @@ begin
   end
 end;
 
-function THttpServerSocketGeneric.SetRejectInCommandUri(
-  var Http: THttpRequestContext; Opaque: Int64; Status: integer): boolean;
+function THttpServerSocketGeneric.ComputeRejectBody(
+  var Body: RawByteString; Opaque: Int64; Status: integer): boolean;
 var
-  reason, auth, body: RawUtf8;
+  reason: PRawUtf8;
+  auth, html: RawUtf8;
 begin
-  StatusCodeToReason(status, reason);
+  reason := StatusCodeToText(status);
   FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
              '<body style="font-family:verdana"><h1>%</h1>' +
-             '<p>Server rejected % request as % %.</body></html>',
-    [reason, reason, Http.CommandUri, status, reason], body);
+             '<p>Server rejected this request as % %.</body></html>',
+    [reason^, reason^, status, reason^], html);
   result := (status = HTTP_UNAUTHORIZED) and
             (fAuthorize <> hraNone);
   if result then // don't close the connection but set grWwwAuthenticate
-    auth := ComputeWwwAuthenticate(Opaque);
+    auth := ComputeWwwAuthenticate(Opaque); // includes #13#10 trailer
   FormatUtf8('HTTP/1.% % %'#13#10'%' + HTML_CONTENT_TYPE_HEADER +
-    #13#10'Content-Length: %'#13#10#13#10'%',
-    [ord(result), status, reason, auth, length(body), body], Http.CommandUri);
+    #13#10'Content-Length: %'#13#10#13#10'%', [ord(result), status, reason^,
+    auth, length(html), html], RawUtf8(Body));
 end;
-
 
 
 { THttpServer }
@@ -5042,8 +5042,8 @@ begin
          (Http.ContentLength > fServer.MaximumAllowedContentLength) then
       begin
         // 413 HTTP error (and close connection)
-        fServer.SetRejectInCommandUri(Http, 0, HTTP_PAYLOADTOOLARGE);
-        SockSendFlush(Http.CommandUri);
+        fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
+        SockSendFlush(Http.Content);
         result := grOversizedPayload;
         exit;
       end;
@@ -5075,8 +5075,8 @@ begin
           if fAuthTix32 = tix32 then
           begin
             // 403 HTTP error if not authorized (and close connection)
-            fServer.SetRejectInCommandUri(Http, 0, HTTP_FORBIDDEN);
-            SockSendFlush(Http.CommandUri);
+            fServer.ComputeRejectBody(Http.Content, 0, HTTP_FORBIDDEN);
+            SockSendFlush(Http.Content);
             result := grRejected;
             exit;
           end
@@ -5100,11 +5100,11 @@ begin
         {$endif SYNCRTDEBUGLOW}
         if status <> HTTP_SUCCESS then
         begin
-          if fServer.SetRejectInCommandUri(Http, fRemoteConnectionID, status) then
+          if fServer.ComputeRejectBody(Http.Content, fRemoteConnectionID, status) then
             result := grWwwAuthenticate
           else
             result := grRejected;
-          SockSendFlush(Http.CommandUri);
+          SockSendFlush(Http.Content);
           exit;
         end;
       end;
@@ -7750,14 +7750,14 @@ var
       FormatUtf8('<!DOCTYPE html><html><body style="font-family:verdana;">' +
         '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], msg);
       if E <> nil then
-        msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
-      msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
+        Append(msg, [E, ' Exception raised:<br>']);
+      Append(msg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
       resp^.SetContent(datachunkmem, msg, HTML_CONTENT_TYPE);
       Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
         bytessent, nil, 0, nil, fLogData);
     except
       on Exception do
-        ; // ignore any HttpApi level errors here (client may crashed)
+        ; // ignore any HttpApi level errors here (client may have crashed)
     end;
   end;
 

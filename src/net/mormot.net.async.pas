@@ -4703,7 +4703,7 @@ function THttpAsyncServerConnection.DoReject(
 var
   len: integer; // should not be PtrInt
 begin
-  if fServer.SetRejectInCommandUri(fHttp, fConnectionID, status) then
+  if fServer.ComputeRejectBody(fHttp.CommandUri, fConnectionID, status) then
     result := soContinue
   else
     result := soClose;
