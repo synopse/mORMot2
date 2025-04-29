@@ -4378,16 +4378,16 @@ end;
 
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
 begin
-  // return the expected 'WWW-Authenticate: ####' header content
+  // return the expected 'WWW-Authenticate: ####'#13#10 header content
   result := '';
   case fAuthorize of
     hraBasic:
-      result := fAuthorizeBasicRealm;
+      result := fAuthorizeBasicRealm; // includes trailing #13#10
     hraDigest:
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
     hraNegotiate:
-      result := 'WWW-Authenticate: Negotiate'; // with no NTLM support
+      result := 'WWW-Authenticate: Negotiate'#13#10; // with no NTLM support
   end;
 end;
 
