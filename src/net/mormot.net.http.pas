@@ -938,6 +938,11 @@ type
   end;
   {$M-}
 
+  THttpAcceptBan = class;
+
+  /// callback event when THttpAcceptBan BanIP() or IsBanned() methods are called
+  TOnHttpAcceptBan = procedure(Sender: THttpAcceptBan; ip4: cardinal) of object;
+
   /// store a list of IPv4 which should be rejected at connection
   // - more tuned than TIPBan for checking just after accept()
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
@@ -949,6 +954,7 @@ type
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
+    fOnBanIp, fOnBanned: TOnHttpAcceptBan;
     function IsBannedRaw(ip4: cardinal): boolean;
     function DoRotateRaw: integer;
     procedure SetMax(Value: cardinal);
@@ -1000,6 +1006,12 @@ type
     // - if set, any previous banned IP will be flushed
     property Max: cardinal
       read fMax write SetMax;
+    /// event called by BanIp() method, e.g. to notify security audit systems
+    property OnBanIp: TOnHttpAcceptBan
+      read fOnBanIp write fOnBanIp;
+    /// event called when IsBanned() method returns true
+    property OnBanned: TOnHttpAcceptBan
+      read fOnBanned write fOnBanned;
   published
     /// total number of accept() rejected by IsBanned()
     property Rejected: Int64
@@ -4735,6 +4747,8 @@ begin
       {$endif HASFASTTRYFINALLY}
         fSafe.UnLock;
       end;
+    if Assigned(fOnBanIp) then
+      fOnBanIp(self, ip4);
     result := true;
   end;
 end;
@@ -4809,6 +4823,9 @@ begin
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
+  if result and
+     Assigned(fOnBanned) then
+    fOnBanned(self, ip4);
 end;
 
 function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
@@ -5169,7 +5186,7 @@ begin
   try
     // force write to disk at least every second
     if fWriterSingle <> nil then
-      fWriterSingle.FlushFinal
+      fWriterSingle.FlushFinal // plain TTextDateWriter with no tix10
     else if (fWriterHost <> nil) and
             fWriterHostSafe.TryLock then
       try
