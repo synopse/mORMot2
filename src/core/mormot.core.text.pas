@@ -9960,7 +9960,7 @@ end;
 
 const
   // sorted by actual usage order for WordScanIndex() in matching HTTP_CODE[]
-  HTTP_REASON: array[0 .. 45] of RawUtf8 = (
+  HTTP_REASON: array[0 .. 46] of RawUtf8 = (
    'OK',                                // HTTP_SUCCESS - should be first
    'No Content',                        // HTTP_NOCONTENT
    'Temporary Redirect',                // HTTP_TEMPORARYREDIRECT
@@ -9989,7 +9989,7 @@ const
    'Proxy Authentication Required',     // HTTP_PROXYAUTHREQUIRED
    'Request Timeout',                   // HTTP_TIMEOUT
    'Conflict',                          // HTTP_CONFLICT
-   'Gone',                              // 410
+   'Gone',                              // HTTP_GONE
    'Length Required',                   // HTTP_LENGTHREQUIRED
    'Precondition Failed',               // 412
    'URI Too Long',                      // 414
@@ -9997,7 +9997,8 @@ const
    'Requested Range Not Satisfiable',   // HTTP_RANGENOTSATISFIABLE
    'I''m a teapot',                     // HTTP_TEAPOT
    'Unprocessable Content',             // HTTP_UNPROCESSABLE_CONTENT
-   'Upgrade Required',                  // 426
+   'Upgrade Required',                  // HTTP_UPGRADE_REQUIRED
+   'Too Many Requests',                 // HTTP_TOO_MANY_REQUESTS
    'Internal Server Error',             // HTTP_SERVERERROR
    'Not Implemented',                   // HTTP_NOTIMPLEMENTED
    'Bad Gateway',                       // HTTP_BADGATEWAY
@@ -10037,7 +10038,7 @@ const
     HTTP_PROXYAUTHREQUIRED,
     HTTP_TIMEOUT,
     HTTP_CONFLICT,
-    410,
+    HTTP_GONE,
     HTTP_LENGTHREQUIRED,
     412,
     414,
@@ -10045,7 +10046,8 @@ const
     HTTP_RANGENOTSATISFIABLE,
     HTTP_TEAPOT,
     HTTP_UNPROCESSABLE_CONTENT,
-    426,
+    HTTP_UPGRADE_REQUIRED,
+    HTTP_TOO_MANY_REQUESTS,
     HTTP_SERVERERROR,
     HTTP_NOTIMPLEMENTED,
     HTTP_BADGATEWAY,

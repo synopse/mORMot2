@@ -153,6 +153,8 @@ const
   HTTP_TIMEOUT = 408;
   /// HTTP Status Code for "Conflict"
   HTTP_CONFLICT = 409;
+  /// HTTP Status Code for "Gone"
+  HTTP_GONE = 410;
   /// HTTP Status Code for "Length Required"
   HTTP_LENGTHREQUIRED = 411;
   /// HTTP Status Code for "Payload Too Large"
@@ -161,8 +163,12 @@ const
   HTTP_RANGENOTSATISFIABLE = 416;
   /// HTTP Status Code for "I'm a teapot"
   HTTP_TEAPOT = 418;
- /// HTTP Status Code for "Unprocessable Content"
+  /// HTTP Status Code for "Unprocessable Content"
   HTTP_UNPROCESSABLE_CONTENT = 422;
+  /// HTTP Status Code for "Upgrade Required"
+  HTTP_UPGRADE_REQUIRED = 426;
+  /// HTTP Status Code for "Too Many Requests"
+  HTTP_TOO_MANY_REQUESTS = 429;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -177,7 +183,7 @@ const
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
   /// a fake response code, generated for client side panic failure/exception
-  // - for it is the number of a man
+  // - for it is the number of a man, and that number is 666
   HTTP_CLIENTERROR = 666;
   /// a fake response code, usedfor internal THttpAsyncServer asynchronous process
   HTTP_ASYNCRESPONSE = 777;
@@ -266,8 +272,8 @@ const
   // response from the other endpoint
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
-  /// HTTP body following RFC 2324 standard e.g. for banned IP
-  HTTP_BANIP_RESPONSE: string[201] =
+  /// HTTP body from RFC 2324 e.g. for banned IP
+  HTTP_BANIP_RESPONSE: string[207] =
     'HTTP/1.0 418 I''m a teapot'#13#10 +
     'Content-Length: 125'#13#10 +
     'Content-Type: text/plain'#13#10#13#10 +
