@@ -8580,8 +8580,8 @@ begin
     'Googlebot/2.1 (+http://www.google.com/bot.html)'));
   Check(IsHttpUserAgentBot(
     'Googlebot/2.1 (+http://www.google.org/bot.html)'));
-  Check(not IsHttpUserAgentBot(
-    'Googlebot/2.1 (+http://www.google.cam/bot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Y!J-BRW/1.0 crawler (http://help.yahoo.co.jp/help/jp/search/indexing/indexing-15.html'));
   Check(IsHttpUserAgentBot(
     'Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)'));
   Check(IsHttpUserAgentBot(
@@ -8593,7 +8593,10 @@ begin
   Check(IsHttpUserAgentBot(
     'Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)'));
   Check(IsHttpUserAgentBot(
-    'Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)'));
+    'Mozilla/5.0 (compatible; coccoc:1.0; +http://help.coccoc.com/searchengine)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (Linux; Android 5.0; SM-G920A) AppleWebKit (KHTML, like Gecko) ' +
+    'Chrome Mobile Safari (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)'));
   Check(IsHttpUserAgentBot(
     'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)'));
   Check(IsHttpUserAgentBot(
@@ -8601,7 +8604,31 @@ begin
   Check(IsHttpUserAgentBot(
     'Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)'));
   Check(IsHttpUserAgentBot(
-   'serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;'));
+    'serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; TinEye-bot/1.31; +http://www.tineye.com/crawler.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Yeti/1.1; +http://naver.me/bot)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)'));
+  Check(IsHttpUserAgentBot(
+    'LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)'));
+  Check(IsHttpUserAgentBot(
+    'Twitterbot/1.0 Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) '));
+  Check(IsHttpUserAgentBot(
+    'Wget/1.14 (linux-gnu)'));
+  Check(IsHttpUserAgentBot(
+    'CCBot/2.0 (https://commoncrawl.org/faq/'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; MegaIndex.ru/2.0; +http://megaindex.com/crawler)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Exabot-Images/3.0; +http://www.exabot.com/go/robot'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; GPTBot/1.0; +https://openai.com/gptbot'));
+  Check(IsHttpUserAgentBot(
+    'Feedfetcher-Google; (+http://www.google.com/feedfetcher.html; 1 subscribers; feed-id=728742641706423)'));
+  Check(IsHttpUserAgentBot(
+    'Python-urllib/3.4'));
   // some HTTP methods
   CheckEqual(PurgeHeaders(''), '');
   CheckEqual(PurgeHeaders('toto'), 'toto');

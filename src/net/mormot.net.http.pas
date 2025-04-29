@@ -2842,43 +2842,76 @@ end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
 var
-  url, i: PtrInt;
+  i, l: PtrInt;
+  p: PAnsiChar;
 begin
-  // we used https://github.com/monperrus/crawler-user-agents as starting reference
+  // we used https://github.com/monperrus/crawler-user-agents as reference
   result := false;
-  url := PosEx('//', UserAgent);
-  if url = 0 then // a browser usually has no http://... reference within
+  p := pointer(UserAgent);
+  l := length(UserAgent);
+  if l < 10 then
     exit;
-  i := PosEx('.com/', UserAgent, url); // start searching after http:// pattern
-  if i = 0 then
-    i := PosEx('.org/', UserAgent, url);
-  if i = 0 then
-    exit;
-  case PCardinal(@PByteArray(UserAgent)[i + 4])^ and $00ffffff of
-    // Googlebot/2.1 (+http://www.google.com/bot.html)
-    ord('b') + ord('o') shl 8 + ord('t') shl 16,
-    // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
-    ord('b') + ord('i') shl 8 + ord('n') shl 16,
-    // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
-    ord('h') + ord('e') shl 8 + ord('l') shl 16,
-    // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
-    ord('m') + ord('s') shl 8 + ord('n') shl 16,
-    // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
-    ord('a') + ord('b') shl 8 + ord('o') shl 16,
-    // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
-    // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
-    ord('s') + ord('e') shl 8 + ord('a') shl 16,
-    // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
-    ord('d') + ord('u') shl 8 + ord('c') shl 16,
-    // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
-    ord('g') + ord('o') shl 8 + ord('/') shl 16,
-    // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
-    ord('r') + ord('o') shl 8 + ord('b') shl 16:
+  case PCardinal(p)^ or $20202020 of
+    // Twitterbot/1.0
+    ord('t') + ord('w') shl 8 + ord('i') shl 16 + ord('t') shl 24,
+    // facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)
+    ord('f') + ord('a') shl 8 + ord('c') shl 16 + ord('e') shl 24,
+    // LinkedInBot/1.0 (Jakarta Commons-HttpClient/3.1 +http://www.linkedin.com
+    ord('l') + ord('i') shl 8 + ord('n') shl 16 + ord('k') shl 24,
+    // Sogou News Spider/4.0(+http://www.sogou.com/docs/help/webmasters.htm
+    ord('s') + ord('o') shl 8 + ord('g') shl 16 + ord('o') shl 24,
+    // Googlebot-Image/1.0
+    ord('g') + ord('o') shl 8 + ord('o') shl 16 + ord('g') shl 24,
+    // Feedfetcher-Google; (+http://www.google.com/feedfetcher.html; 1 subscribers; feed-id=728742641706423)
+    ord('f') + ord('e') shl 8 + ord('e') shl 16 + ord('d') shl 24,
+    // CCBot/2.0 (https://commoncrawl.org/faq/
+    ord('c') + ord('c') shl 8 + ord('b') shl 16 + ord('o') shl 24,
+    // Python-urllib/3.4
+    ord('p') + ord('y') shl 8 + ord('t') shl 16 + ord('h') shl 24,
+    // Wget/1.14 (linux-gnu)
+    ord('w') + ord('g') shl 8 + ord('e') shl 16 + ord('t') shl 24,
+    // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
+    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('p') shl 24:
       result := true;
   else
-    case PCardinal(@PByteArray(UserAgent)[i - 4])^ and $00ffffff of
-      // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
-      ord('b') + ord('o') shl 8 + ord('t') shl 16:
+    repeat
+      i := ByteScanIndex(pointer(p), l, ord(':')); // fast on all platforms
+      if i < 0 then
+        exit;
+      inc(i);
+      inc(p, i);
+      dec(l, i);
+    until PWord(p)^ = ord('/') + ord('/') shl 8; // found http://xxxxx
+    i := ByteScanIndex(pointer(p + 2), l - 2, ord('/'));
+    if i < 0 then
+      exit;
+    p := @p[i + 3]; // p^ = bot.html in http://www.google.com/bot.html
+    case PCardinal(p)^ and $00ffffff of
+      // Googlebot/2.1 (+http://www.google.com/bot.html)
+      ord('b') + ord('o') shl 8 + ord('t') shl 16,
+      // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
+      ord('b') + ord('i') shl 8 + ord('n') shl 16,
+      // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
+      ord('h') + ord('e') shl 8 + ord('l') shl 16,
+      // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
+      ord('m') + ord('s') shl 8 + ord('n') shl 16,
+      // Mozilla/5.0 (AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)
+      ord('m') + ord('o') shl 8 + ord('b') shl 16,
+      // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
+      ord('a') + ord('b') shl 8 + ord('o') shl 16,
+      // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
+      // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
+      ord('s') + ord('e') shl 8 + ord('a') shl 16,
+      // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
+      ord('d') + ord('u') shl 8 + ord('c') shl 16,
+      // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
+      ord('g') + ord('o') shl 8 + ord('/') shl 16,
+      // Mozilla/5.0 (KHTML, like Gecko; GPTBot/1.0; +https://openai.com/gptbot)
+      ord('g') + ord('p') shl 8 + ord('t') shl 16,
+      // TinEye/1.1 (http://tineye.com/crawler.html)
+      ord('c') + ord('r') shl 8 + ord('a') shl 16,
+      // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
+      ord('r') + ord('o') shl 8 + ord('b') shl 16:
         result := true;
     end;
   end;
@@ -6014,7 +6047,7 @@ begin
       if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
         mob := hasMobile;
     if hasBot in fTracked then
-      // bots detection is not easier, but our naive patterns seem good enough
+      // bots detection is not easy, but our naive patterns seem good enough
       if IsHttpUserAgentBot(RawUtf8(Context.UserAgent)) then
         bot := hasBot;
   end;
