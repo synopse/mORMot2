@@ -1333,6 +1333,12 @@ begin
   result := (FpS_ISDIR(st.st_mode) = CheckAsDir);
 end;
 
+function SetCurrentDir(const NewDir: TFileName): boolean;
+begin
+  result := (NewDir <> '') and
+            (fpChdir(pointer(NewDir)) = 0);
+end;
+
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
 begin
   if aFileName = '' then

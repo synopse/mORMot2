@@ -3104,6 +3104,11 @@ function ValidHandle(Handle: THandle): boolean;
 
 /// faster cross-platform alternative to sysutils homonymous function
 // - on Windows, will support FileName longer than MAX_PATH
+// - FPC on Windows is not consistent with Delphi and the expected low-level API
+function SetCurrentDir(const NewDir: TFileName): boolean;
+
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, will support FileName longer than MAX_PATH
 // - CheckAsDir = true is used by DirectoryExists()
 function FileExists(const FileName: TFileName; FollowLink: boolean = true;
   CheckAsDir: boolean = false): boolean;

@@ -1027,14 +1027,20 @@ begin
     result := r.V;
 end;
 
+function SetCurrentDir(const NewDir: TFileName): boolean;
+var
+  tmp: TW32Temp;
+begin
+  result := (NewDir <> '') and
+            SetCurrentDirectoryW(W32(NewDir, tmp));
+end;
+
 function DeleteFile(const aFileName: TFileName): boolean;
 var
   tmp: TW32Temp;
 begin
-  if aFileName = '' then
-    result := false
-  else
-    result := DeleteFileW(W32(aFileName, tmp));
+  result := (aFileName <> '') and
+            DeleteFileW(W32(aFileName, tmp));
 end;
 
 function FileShare(aMode: integer): DWord;
