@@ -4659,7 +4659,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   if not (sllLeave in fFamily.Level) then
     exit;
   // append e.g. 00000000001FFF23  %  -    02.096.658
-  ms := CurrentTimestamp - (nfo^.Recursion[nfo^.RecursionCount - 1] shr 8);
+  ms := CurrentTimestamp - (PInt64(refcnt)^ shr 8);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     fThreadInfo := nfo;
