@@ -273,12 +273,12 @@ const
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
   /// HTTP body from RFC 2324 e.g. for banned IP or hsoRejectBotUserAgent
-  HTTP_BANIP_RESPONSE: string[207] =
+  HTTP_BANIP_RESPONSE: string[191] =
     'HTTP/1.0 418 I''m a teapot'#13#10 +
-    'Content-Length: 125'#13#10 +
+    'Content-Length: 111'#13#10 +
     'Content-Type: text/plain'#13#10#13#10 +
     'Server refuses to brew coffee because it is currently a teapot.'#13#10 +
-    'Do not mess with it and retry from this IP in a few seconds.';
+    'Botbusters message: "I ain''t ''fraid of no bot"';
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a ShortString
