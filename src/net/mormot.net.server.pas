@@ -463,6 +463,7 @@ type
   // per-minute metrics logging via an associated THttpServerGeneric.Analyzer
   // - hsoContentTypeNoGuess will disable content-type detection from small
   // content buffers via GetMimeContentTypeFromBuffer()
+  // - hsoRejectBotUserAgent identifis and reject Bots via IsHttpUserAgentBot()
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -481,7 +482,8 @@ type
     hsoEnableLogging,
     hsoTelemetryCsv,
     hsoTelemetryJson,
-    hsoContentTypeNoGuess);
+    hsoContentTypeNoGuess,
+    hsoRejectBotUserAgent);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -5045,6 +5047,16 @@ begin
         result := grOversizedPayload;
         exit;
       end;
+      // implement early hsoRejectBotUserAgent detection as 418 I'm a teapot
+      if (hsoRejectBotUserAgent in fServer.Options) and
+         (Http.UserAgent <> '') and
+         IsHttpUserAgentBot(Http.UserAgent) then
+      begin
+        SockSend(@HTTP_BANIP_RESPONSE[1], ord(HTTP_BANIP_RESPONSE[0]));
+        SockSendFlush;
+        result := grRejected;
+        exit;
+      end;
       // support optional Basic/Digest authentication
       fRequestFlags := HTTP_TLS_FLAGS[TLS.Enabled] +
                        HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags] +
@@ -7989,6 +8001,13 @@ begin
                (incontlen > QWord(fMaximumAllowedContentLength)) then
             begin
               SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
+              continue;
+            end;
+            if (hsoRejectBotUserAgent in fOptions) and
+               (ctxt.fUserAgent <> '') and
+               IsHttpUserAgentBot(ctxt.fUserAgent) then
+            begin
+              SendError(HTTP_TEAPOT, 'We don''t need no bot');
               continue;
             end;
             if Assigned(OnBeforeBody) then

@@ -4683,6 +4683,14 @@ begin
     result := HTTP_PAYLOADTOOLARGE;
     fServer.IncStat(grOversizedPayload);
   end
+  else if (hsoRejectBotUserAgent in fServer.Options) and
+          (fHttp.UserAgent <> '') and
+          IsHttpUserAgentBot(fHttp.UserAgent) then
+  begin
+    // implement early hsoRejectBotUserAgent detection as 418 I'm a teapot
+    result := HTTP_TEAPOT;
+    fServer.IncStat(grRejected);
+  end
   else if Assigned(fServer.OnBeforeBody) then
     // custom validation (e.g. missing/invalid URL or BearerToken)
     result := fServer.OnBeforeBody(

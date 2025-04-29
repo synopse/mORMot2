@@ -272,7 +272,7 @@ const
   // response from the other endpoint
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
-  /// HTTP body from RFC 2324 e.g. for banned IP
+  /// HTTP body from RFC 2324 e.g. for banned IP or hsoRejectBotUserAgent
   HTTP_BANIP_RESPONSE: string[207] =
     'HTTP/1.0 418 I''m a teapot'#13#10 +
     'Content-Length: 125'#13#10 +
