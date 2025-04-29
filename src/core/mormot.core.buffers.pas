@@ -2070,11 +2070,11 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 function EscapeToShort(const source: RawByteString): ShortString; overload;
 
 /// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
-function ContentToShort(const source: RawByteString): ShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+procedure ContentToShortVar(source: PAnsiChar; len: PtrInt; var txt: ShortString); 
 
 /// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
-procedure ContentToShort(source: PAnsiChar; len: PtrInt; var txt: ShortString); overload;
+function ContentToShort(const source: RawByteString): ShortString;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -9496,10 +9496,10 @@ end;
 
 function ContentToShort(const source: RawByteString): ShortString;
 begin
-  ContentToShort(pointer(source), length(source), result);
+  ContentToShortVar(pointer(source), length(source), result);
 end;
 
-procedure ContentToShort(source: PAnsiChar; len: PtrInt; var txt: ShortString);
+procedure ContentToShortVar(source: PAnsiChar; len: PtrInt; var txt: ShortString);
 var
   l: PtrInt;
 begin

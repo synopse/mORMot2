@@ -3423,7 +3423,7 @@ begin
        (fServiceParametersLen > 2) and
        not (optNoLogInput in fServiceExecutionOptions) then
     begin
-      ContentToShort(pointer(fServiceParameters), fServiceParametersLen, tmp);
+      ContentToShortVar(pointer(fServiceParameters), fServiceParametersLen, tmp);
       fLog.Log(sllServiceCall, '%%',
         [fServiceMethod^.InterfaceDotMethodName, tmp], Server);
     end;
