@@ -189,20 +189,24 @@ type
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
+    /// test the TDynArrayHashed object and methods (dictionary features)
+    // - this test will create an array of 200,000 items to test speed
+    procedure TDynArrayHashedSlow(Context: TObject);
+    /// test the TSynDictionary class
+    procedure TSynDictionarySlow(Context: TObject);
+    /// test UTF-8 and Win-Ansi conversion (from or to, through RawUnicode)
+    procedure Utf8Slow(Context: TObject);
+    /// test the TSynTimeZone class and its cross-platform local time process
+    procedure TimeZonesSlow(Context: TObject);
+    /// test the TRawUtf8List class
+    procedure TRawUtf8ListSlow(Context: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
     /// test the TSynList class
     procedure _TSynList;
-    /// test the TRawUtf8List class
-    procedure _TRawUtf8List;
     /// test the TDynArray object and methods
     procedure _TDynArray;
-    /// test the TDynArrayHashed object and methods (dictionary features)
-    // - this test will create an array of 200,000 items to test speed
-    procedure _TDynArrayHashed;
-    /// test the TSynDictionary class
-    procedure _TSynDictionary;
     /// validate the TSynQueue class
     procedure _TSynQueue;
     /// test TSynNameValue class
@@ -251,8 +255,6 @@ type
     procedure Bits;
     /// the fast .ini file content direct access
     procedure IniFiles;
-    /// test UTF-8 and Win-Ansi conversion (from or to, through RawUnicode)
-    procedure _UTF8;
     /// validate Unicode / Ansi Charset conversion methods
     procedure Charsets;
     /// test UrlEncode() and UrlDecode() functions
@@ -265,8 +267,6 @@ type
     /// the ISO-8601 date and time encoding
     // - test especially the conversion to/from text
     procedure Iso8601DateAndTime;
-    /// test the TSynTimeZone class and its cross-platform local time process
-    procedure TimeZones;
     /// test the SMBIOS decoding features
     procedure DmiSmbios;
     /// test Security IDentifier (SID) process
@@ -971,7 +971,7 @@ begin
   Check(not Soundex.Utf8('moi rechercher mouette'));
 end;
 
-procedure TTestCoreBase._TRawUtf8List;
+procedure TTestCoreBase.TRawUtf8ListSlow(Context: TObject);
 const
   MAX = 20000;
 var
@@ -1076,7 +1076,7 @@ type
   end;
   TAmountIDynArray = array of TAmountI;
 
-procedure TTestCoreBase._TDynArrayHashed;
+procedure TTestCoreBase.TDynArrayHashedSlow(Context: TObject);
 var
   ACities: TDynArrayHashed;
   Cities: TCityDynArray;
@@ -1093,7 +1093,6 @@ var
 const
   CITIES_MAX = 200000;
 begin
-//FIXME - too slow on FullDebugMode exit;
   // default Init() will hash and compare binary content before string, i.e. firmID
   AmountDA.Init(TypeInfo(TAmountDynArray), AmountCollection);
   Check(AmountDA.Info.Parser = ptDynArray);
@@ -1399,7 +1398,12 @@ const
   end;
 
 begin
-//FIXME - too slow on FullDebugMode exit;
+  // run the slowest tests in a background thread
+  Run(TDynArrayHashedSlow, self, 'TDynArrayHashed', true, false);
+  Run(TSynDictionarySlow, self, 'TSynDictionary', true, false);
+  Run(Utf8Slow, self, 'UTF-8', true, false);
+  Run(TimeZonesSlow, self, 'TimeZones', true, false);
+  Run(TRawUtf8ListSlow, self, 'TRawUtf8List', true, false);
   { TODO : implement TypeInfoToHash() if really needed }
   {
   h := TypeInfoToHash(TypeInfo(TAmount));
@@ -5123,7 +5127,7 @@ begin
   FastSetRawByteString(result, pointer(S), Length(S));
 end;
 
-procedure TTestCoreBase._UTF8;
+procedure TTestCoreBase.Utf8Slow(Context: TObject);
 
   procedure CaseFoldingTest;
   const
@@ -7095,7 +7099,7 @@ end;
 
 {$R ..\src\mormot.tz.res} // validate our Win10-generated resource file
 
-procedure TTestCoreBase.TimeZones;
+procedure TTestCoreBase.TimeZonesSlow(Context: TObject);
 var
   tz: TSynTimeZone;
   d: TTimeZoneData;
@@ -9288,7 +9292,7 @@ type
 {.$define DYNARRAYHASHCOLLISIONCOUNT}
 // should also be defined in mormot.core.data.pas to have detailed information
 
-procedure TTestCoreBase._TSynDictionary;
+procedure TTestCoreBase.TSynDictionarySlow(Context: TObject);
 type
   tvalue = variant;
   tvalues = TVariantDynArray;

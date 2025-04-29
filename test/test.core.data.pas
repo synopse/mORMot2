@@ -147,6 +147,7 @@ type
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
     /// variant-based JSON/BSON document process
+    // - note: we can't run this in a background thread due to interning tests
     procedure _TDocVariant;
     /// IDocList / IDocDict wrappers
     procedure _IDocAny;
