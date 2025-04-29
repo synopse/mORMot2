@@ -7435,6 +7435,7 @@ procedure TJsonWriter.AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
 var
   k, v: PUtf8Char;
   parser: TJsonGotoEndParser;
+  needquotes: boolean;
 begin
   if (keys = nil) or
      (keys[0] <> '[') or
@@ -7446,7 +7447,8 @@ begin
     AddNull;
     exit;
   end;
-  inc(keys); // jump initial [
+  keys := GotoNextNotSpace(keys + 1);
+  needquotes := keys^ <> '"'; // keys may be e.g. TIntegerDynArray
   inc(values);
   Add('{');
   {%H-}parser.Init({strict=}false, nil);
@@ -7456,8 +7458,13 @@ begin
     if (k = nil) or
        (v = nil) then
       break; // invalid JSON input
+    if needquotes then
+      AddDirect('"'); // ensure keys are "strings" are required by JSON
     AddNoJsonEscape(keys, k - keys);
-    AddDirect(':');
+    if needquotes then
+      AddDirect('"', ':')
+    else
+      AddDirect(':');
     AddNoJsonEscape(values, v - values);
     AddComma;
     if (k^ <> ',') or
@@ -7893,9 +7900,9 @@ procedure _JL_Int64(Data: PInt64; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if Ctxt.WasString and
+       (jpoAllowInt64Hex in Ctxt.Options) and
        (Ctxt.ValueLen = SizeOf(Data^) * 2) then
-      Ctxt.Valid := (jpoAllowInt64Hex in Ctxt.Options) and
-        HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
+      Ctxt.Valid := HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
     else
       SetInt64(Ctxt.Value, Data^);
 end;
@@ -7904,9 +7911,9 @@ procedure _JL_QWord(Data: PQWord; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if Ctxt.WasString and
+       (jpoAllowInt64Hex in Ctxt.Options) and
        (Ctxt.ValueLen = SizeOf(Data^) * 2) then
-      Ctxt.Valid := (jpoAllowInt64Hex in Ctxt.Options) and
-        HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
+      Ctxt.Valid := HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
     else
       SetQWord(Ctxt.Value, Data^);
 end;
