@@ -9389,8 +9389,9 @@ var
 
 var
   v: tvalue;
-  s, k, key, val, u: RawUtf8;
+  s, k, key, val, u, json: RawUtf8;
   i, n: integer;
+  i64: Int64;
   exists: boolean;
   sdk: TSDKey;
 begin
@@ -9419,13 +9420,13 @@ begin
     val := 'lol';
     dict.AddOrUpdate(key, val);
     CheckEqual(dict.Count, 1);
-    s := dict.SaveToJson;
-    CheckEqual(s, '{"Foobar":"lol"}');
+    json := dict.SaveToJson;
+    CheckEqual(json, '{"Foobar":"lol"}');
     key := 'foobar';
     val := 'xxx';
     dict.AddOrUpdate(key, val);
-    s := dict.SaveToJson;
-    CheckEqual(s, '{"Foobar":"xxx"}');
+    json := dict.SaveToJson;
+    CheckEqual(json, '{"Foobar":"xxx"}');
     CheckEqual(dict.Count, 1);
     key := 'FooBar';
     dict.FindAndCopy(key, val, False);
@@ -9463,12 +9464,12 @@ begin
       check(dict.Add(k, v) = i - 1);
     end;
     Test;
-    s := dict.SaveToJson;
+    json := dict.SaveToJson;
     check(dict.Exists(k));
     dict.DeleteAll;
     check(dict.Count = 0);
     check(not dict.Exists(k));
-    check(dict.LoadFromJson(s));
+    check(dict.LoadFromJson(json));
     Test;
     s := dict.SaveToBinary;
     u := '{"a":1,"b":2}';
@@ -9510,6 +9511,42 @@ begin
           check(GetInteger(pointer(k)) = i);
         end;
       end;
+    end;
+  finally
+    dict.Free;
+  end;
+  // keys which are not serialized as JSON string
+  dict := TSynDictionary.Create(TypeInfo(TInt64DynArray), TypeInfo(tvalues));
+  try
+    for i := 1 to MAX do
+    begin
+      i64 := i;
+      v := i;
+      check(dict.Add(i64, v) = i - 1);
+    end;
+    json := dict.SaveToJson;
+    Check(IsValidUtf8(json));
+    Check(IsValidJson(json));
+    CheckHash(json, $F67B5FA8, 'dict.savetojson');
+    for i := 1 to MAX do
+    begin
+      i64 := i;
+      check(dict.FindAndCopy(i64, v));
+      check(v = i);
+    end;
+  finally
+    dict.Free;
+  end;
+  dict := TSynDictionary.Create(TypeInfo(TInt64DynArray), TypeInfo(tvalues));
+  try
+    check(dict.LoadFromJson(json));
+    CheckHash(json, $F67B5FA8, 'untouched after loadfromjson');
+    checkEqual(json, dict.SaveToJson);
+    for i := 1 to MAX do
+    begin
+      i64 := i;
+      check(dict.FindAndCopy(i64, v));
+      check(v = i);
     end;
   finally
     dict.Free;
