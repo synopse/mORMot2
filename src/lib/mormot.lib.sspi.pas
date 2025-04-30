@@ -1220,7 +1220,7 @@ end;
 
 procedure TSecBufferDesc.Add(aType: cardinal; aData: pointer; aSize: cardinal);
 begin
-  if cBuffers = cardinal(length(Data)) then
+  if cBuffers >= cardinal(length(Data)) then
     raise ESynSspi.Create('TSecBufferDesc overflow)');
   Data[cBuffers].Init(aType, aData, aSize);
   inc(cBuffers);
@@ -1313,10 +1313,15 @@ end;
 class procedure ESynSspi.RaiseLastOSError(const aContext: TSecContext);
 var
   error: integer;
+  text: string;
 begin
   error := GetLastError;
-  raise CreateFmt('SSPI API Error %x [%s] for ConnectionID=%d',
-    [error, string(WinErrorText(error, nil)), aContext.ID]);
+  text := string(WinErrorText(error));
+  if aContext.ID = 0 then
+    raise CreateFmt('SSPI API Error %d [%s]', [error, text])
+  else
+    raise CreateFmt('SSPI API Error %d [%s] for ConnectionID=%d',
+      [error, text, aContext.ID]);
 end;
 
 
