@@ -3709,7 +3709,7 @@ var
   ct: PUtf8Char;
   len: PtrInt;
 begin
-  ct := FindNameValuePointer(pointer(OutHead), HEADER_CONTENT_TYPE_UPPER, len, #0);
+  ct := FindNameValuePointer(pointer(OutHead), HEADER_CONTENT_TYPE_UPPER, len);
   if ct = nil then
     result := GuessJsonIfNoneSet
   else

@@ -4237,7 +4237,7 @@ var
   ct: PUtf8Char;
   len: PtrInt;
 begin
-  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len, #0);
+  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len);
   result := (ct <> nil) and
             IsContentTypeCompressible(ct, len, {onlytext=}true);
 end;

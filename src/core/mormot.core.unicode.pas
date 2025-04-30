@@ -2113,7 +2113,7 @@ function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
 // - as called when inlining FindNameValue()
 // - won't make any memory allocation, so could be fine for a quick lookup
 function FindNameValuePointer(NameValuePairs: PUtf8Char; UpperName: PAnsiChar;
-  out FoundLen: PtrInt; UpperNameSeparator: AnsiChar): PUtf8Char;
+  out FoundLen: PtrInt; UpperNameSeparator: AnsiChar = #0): PUtf8Char;
 
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10

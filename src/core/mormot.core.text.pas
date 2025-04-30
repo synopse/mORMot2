@@ -10144,7 +10144,7 @@ begin
   while Head <> nil do
   begin
     // find all 'Cookie: name=value; name2=value2; name3=value3' lines
-    p := FindNameValuePointer(Head, 'COOKIE:', plen, #0);
+    p := FindNameValuePointer(Head, 'COOKIE:', plen);
     if p = nil then
       break;
     inc(total, plen);
