@@ -515,6 +515,10 @@ type
     // the last 2 digits rounded in 0..62 fake sub-second range (1000 ms / 16)
     // - as called by TJsonWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
+    /// append the stored date and time, in a log-friendly format, to a memory buffer
+    // - e.g. '20110325 19241502' 17 bytes - with no trailing space nor tab, and
+    // the last 2 digits rounded in 0..62 fake sub-second range (1000 ms / 16)
+    procedure ToLogTime(Dest: PUtf8Char);
     /// append the stored date and time, in apache-like format, to a TJsonWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     procedure AddNcsaText(WR: TTextWriter; const TZD: RawUtf8 = '');
@@ -2504,32 +2508,35 @@ begin
     WR.AddString(TZD);
 end;
 
-procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
+procedure TSynSystemTime.ToLogTime(Dest: PUtf8Char);
 var
   d100: TDiv100Rec;
-  p: PUtf8Char;
   {$ifdef CPUX86NOTPIC}
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
 begin
-  if WR.BEnd - WR.B <= 18 then
-    WR.FlushToStream;
-  p := WR.B + 1;
+  Div100(Year, d100{%H-});
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitLookupW;
   {$endif CPUX86NOTPIC}
-  Div100(Year, d100{%H-});
-  PWord(p)^     := tab[d100.D];
-  PWord(p + 2)^ := tab[d100.M];
-  PWord(p + 4)^ := tab[PtrUInt(Month)];
-  PWord(p + 6)^ := tab[PtrUInt(Day)];
-  p[8] := ' ';
-  PWord(p + 9)^  := tab[PtrUInt(Hour)];
-  PWord(p + 11)^ := tab[PtrUInt(Minute)];
-  PWord(p + 13)^ := tab[PtrUInt(Second)];
-  PWord(p + 15)^ := tab[PtrUInt(Millisecond) shr 4]; // rounded in 0..62 range
+  PWord(Dest)^     := tab[d100.D];
+  PWord(Dest + 2)^ := tab[d100.M];
+  PWord(Dest + 4)^ := tab[PtrUInt(Month)];
+  PWord(Dest + 6)^ := tab[PtrUInt(Day)];
+  Dest[8] := ' ';
+  PWord(Dest + 9)^  := tab[PtrUInt(Hour)];
+  PWord(Dest + 11)^ := tab[PtrUInt(Minute)];
+  PWord(Dest + 13)^ := tab[PtrUInt(Second)];
+  PWord(Dest + 15)^ := tab[PtrUInt(Millisecond) shr 4]; // rounded in 0..62 range
+end;
+
+procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
+begin
+  if WR.BEnd - WR.B <= 18 then
+    WR.FlushToStream;
+  ToLogTime(WR.B + 1);
   inc(WR.B, 17);
 end;
 
