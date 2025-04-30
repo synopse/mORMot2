@@ -166,6 +166,9 @@ type
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
   public
+    /// fill the meaningful bytes of the internal data structure with zeros
+    procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
     // - calls NewSocketIP4Lookup if available from mormot.net.dns (with a 32
     // seconds cache) or the proper getaddrinfo/gethostbyname OS API
@@ -210,6 +213,7 @@ type
     procedure IPWithPort(var Text: RawUtf8); overload;
     /// returns the network port (0..65535) of this address
     function Port: TNetPort;
+      {$ifdef FPC}inline;{$endif}
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
@@ -3057,7 +3061,7 @@ function TNetSocketWrap.GetName(out addr: TNetAddr): TNetResult;
 var
   len: TSockLen;
 begin
-  FillCharFast(addr, SizeOf(addr), 0);
+  addr.Clear;
   if @self = nil then
     result := nrNoSocket
   else
@@ -3080,7 +3084,7 @@ function TNetSocketWrap.GetPeer(out addr: TNetAddr): TNetResult;
 var
   len: TSockLen;
 begin
-  FillCharFast(addr, SizeOf(addr), 0);
+  addr.Clear;
   if @self = nil then
     result := nrNoSocket
   else

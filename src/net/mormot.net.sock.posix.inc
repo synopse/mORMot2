@@ -424,6 +424,13 @@ var
   // gethostbyname() result is NOT thread-safe: we need to protect its calls;
   // since this may take some time, we use a pthread mutex, not a TLightLock
 
+procedure TNetAddr.Clear;
+var
+  ad4: sockaddr absolute Addr;
+begin
+  PInteger(@ad4.sin_family)^ := 0; // sin_family and sin_port = 0
+end; // other fields are not supposed/required to be initialized on POSIX
+
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var

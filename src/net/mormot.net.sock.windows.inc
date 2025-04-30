@@ -561,12 +561,17 @@ begin
     freeaddrinfo(res);
 end;
 
+procedure TNetAddr.Clear;
+begin
+  FillCharFast(Addr, SizeOf(Addr), 0);
+end; // some obscure Windows docs seem to state that zeroing is expected
+
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   p: cardinal;
 begin
-  FillCharFast(Addr, SizeOf(Addr), 0);
+  Clear;
   result := nrNotImplemented;
   if layer = nlUnix then
     exit;
@@ -1891,7 +1896,7 @@ begin
      (one = nil) or
      fTerminated then
     exit;
-  FillCharFast(Remote, SizeOf(Remote), 0);
+  Remote.Clear;
   if (fAcceptExBuf = nil) or
      (fAcceptSocket = nil) or
      not fAcceptExUsed.IsLocked or
