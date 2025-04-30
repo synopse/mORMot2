@@ -7843,12 +7843,13 @@ begin // caller ensured Ctxt.WasString is false
     Valid := jpoIgnoreUnknownEnum in Options; // keep existing Data^
 end;
 
-
 procedure _JL_Boolean(Data: PBoolean; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     Data^ := GetBoolean(Ctxt.Value);
 end;
+
+// note: we accept "1" and "2" as valid input, when used as TSynDictionary keys
 
 procedure _JL_Byte(Data: PByte; var Ctxt: TJsonParserContext);
 begin
@@ -7883,6 +7884,12 @@ begin
     unaligned(Data^) := GetExtended(Ctxt.Value, err);
     Ctxt.Valid := (Ctxt.Value = nil) or (err = 0);
   end;
+end;
+
+procedure _JL_Single(Data: PSingle; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    Data^ := GetExtended(Ctxt.Value);
 end;
 
 procedure _JL_Extended(Data: PSynExtended; var Ctxt: TJsonParserContext);
@@ -7948,12 +7955,6 @@ begin
       Ctxt.Valid := false // paranoid check (RawByteString should handle it)
     else
       Ctxt.Info.Cache.Engine.Utf8BufferToAnsi(Ctxt.Value, Ctxt.ValueLen, Data^);
-end;
-
-procedure _JL_Single(Data: PSingle; var Ctxt: TJsonParserContext);
-begin
-  if Ctxt.ParseNext then
-    Data^ := GetExtended(Ctxt.Value);
 end;
 
 procedure _JL_String(Data: PString; var Ctxt: TJsonParserContext);
