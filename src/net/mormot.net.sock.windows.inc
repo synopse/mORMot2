@@ -102,7 +102,7 @@ type
   PInAddr6 = ^in6_addr;
   in6_addr = packed record
     case integer of
-      0: (S6_addr:   packed array [0..15] of byte);
+      0: (S6_addr:   THash128);
       1: (u6_addr8:  packed array [0..15] of byte);
       2: (u6_addr16: packed array [0..7]  of word);
       3: (u6_addr32: packed array [0..3]  of integer);
@@ -227,6 +227,7 @@ type
   // Structure used by kernel to store most addresses
   PSockAddr = ^TSockAddr;
   TSockAddr = sockaddr_in;
+  sockaddr = sockaddr_in; // as in POSIX
 
 type
   PAddrInfo = ^TAddrInfo;
@@ -561,12 +562,17 @@ begin
     freeaddrinfo(res);
 end;
 
+procedure TNetAddr.Clear;
+begin
+  FillCharFast(Addr, SizeOf(Addr), 0);
+end; // some obscure Windows docs seem to state that zeroing is expected
+
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   p: cardinal;
 begin
-  FillCharFast(Addr, SizeOf(Addr), 0);
+  Clear;
   result := nrNotImplemented;
   if layer = nlUnix then
     exit;
@@ -1891,7 +1897,7 @@ begin
      (one = nil) or
      fTerminated then
     exit;
-  FillCharFast(Remote, SizeOf(Remote), 0);
+  Remote.Clear;
   if (fAcceptExBuf = nil) or
      (fAcceptSocket = nil) or
      not fAcceptExUsed.IsLocked or

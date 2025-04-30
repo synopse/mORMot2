@@ -769,6 +769,7 @@ const
 Type
     pSocklen = PSocklen_t;
     PSockAddr = posix.NetinetIn.Psockaddr_in;
+    sockAddr = posix.NetinetIn.sockaddr_in;
 
     TTimeVal = posix.SysTime.timeval;
     TLinger = posix.SysSocket.linger;

@@ -166,6 +166,9 @@ type
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
   public
+    /// fill the meaningful bytes of the internal data structure with zeros
+    procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
     // - calls NewSocketIP4Lookup if available from mormot.net.dns (with a 32
     // seconds cache) or the proper getaddrinfo/gethostbyname OS API
@@ -210,6 +213,7 @@ type
     procedure IPWithPort(var Text: RawUtf8); overload;
     /// returns the network port (0..65535) of this address
     function Port: TNetPort;
+      {$ifdef FPC}inline;{$endif}
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
@@ -2454,16 +2458,20 @@ end;
 
 function TNetAddr.SetFromIP4(const address: RawUtf8;
   noNewSocketIP4Lookup: boolean): boolean;
+var
+  ad4: sockaddr absolute Addr;
 begin
   // allow to bind to any IPv6 address
+  with PSockaddr(@Addr)^ do
   if address = c6AnyHost then // ::
   begin
-    PSockAddrIn6(@Addr)^.sin6_family := AF_INET6; // keep all sin6_addr[] = 0
+    ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} := AF_INET6;
+    FillZero(PHash128(@PSockAddrIn6(@Addr)^.sin6_addr)^); // all sin6_addr[] = 0
     result := true;
     exit;
   end;
-  // caller did set addr4.sin_port and other fields to 0
   result := false;
+(*  --- old
   with PSockaddr(@Addr)^ do
     if (address = cLocalhost) or
        (address = c6Localhost) or // ::1
@@ -2483,17 +2491,41 @@ begin
             NewSocketIP4Lookup(address, PCardinal(@sin_addr)^)) then
       // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
       NetAddrCache.SafeAdd(address, PCardinal(@sin_addr)^, {tixshr=}15)
-    else
-      // return result=false if unknown
-      exit;
+--- new*)
+  ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} := 0; // keep sin_port
+  ad4.sin_addr.s_addr := 0; // reset
+  PInt64(@ad4.sin_zero)^ := 0; // seems mandatory on Windows
+  if (address = cLocalhost) or
+     (address = c6Localhost) or // ::1
+     PropNameEquals(address, 'localhost') then
+    ad4.sin_addr.s_addr := cLocalhost32 // 127.0.0.1
+  else if (address = cBroadcast) or
+          (address = c6Broadcast) then
+    ad4.sin_addr.s_addr := cardinal(-1) // 255.255.255.255
+  else if address = cAnyHost then
+    // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
+  else if NetIsIP4(pointer(address), @ad4.sin_addr) or
+          GetKnownHost(address, ad4.sin_addr.s_addr) or
+          NetAddrCache.SafeFind(address, ad4.sin_addr.s_addr) then
+    // numerical IPv4, /etc/hosts, or cached entry
+  else if (Assigned(NewSocketIP4Lookup) and
+          not noNewSocketIP4Lookup and
+          NewSocketIP4Lookup(address, ad4.sin_addr.s_addr)) then
+    // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
+    NetAddrCache.SafeAdd(address, ad4.sin_addr.s_addr, {tixshr=}15)
+  else
+    // return result=false if unknown
+    exit;
   // we found the IPv4 matching this address
-  PSockaddr(@Addr)^.sin_family := AF_INET;
+  ad4.sin_family := AF_INET;
   result := true;
 end;
 
 function TNetAddr.Family: TNetFamily;
+var
+  ad4: sockaddr absolute Addr;
 begin
-  case PSockAddr(@Addr)^.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
+  case ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
     AF_INET:
       result := nfIP4;
     AF_INET6:
@@ -2508,14 +2540,15 @@ begin
 end;
 
 procedure TNetAddr.IP(var res: RawUtf8; localasvoid: boolean);
+var
+  ad4: sockaddr absolute Addr;
 begin
   res := '';
-  case PSockAddr(@Addr)^.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
+  case ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
     AF_INET:
-      with PSockAddr(@Addr)^ do
-        if (not localasvoid) or
-           (cardinal(sin_addr) <> cLocalhost32) then
-          IP4Text(@sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
+      if (not localasvoid) or
+         (ad4.sin_addr.s_addr <> cLocalhost32) then
+        IP4Text(@ad4.sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
     AF_INET6:
       begin
         IP6Text(@PSockAddrIn6(@Addr)^.sin6_addr, res); // detect :: and ::1
@@ -2537,17 +2570,21 @@ begin
 end;
 
 function TNetAddr.IP4: cardinal;
+var
+  ad4: sockaddr absolute Addr;
 begin
-  if PSockAddr(@Addr)^.{$ifdef FPC} sa_family {$else} sin_family {$endif} = AF_INET then
-    result := PCardinal(@PSockAddr(@Addr)^.sin_addr)^ // may be cLocalhost32
+  if ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} = AF_INET then
+    result := ad4.sin_addr.s_addr // may be cLocalhost32
   else
     result := 0; // AF_INET6 or AF_UNIX return 0
 end;
 
 function TNetAddr.IP4Short: TShort16;
+var
+  ad4: sockaddr absolute Addr;
 begin
-  if PSockAddr(@Addr)^.{$ifdef FPC} sa_family {$else} sin_family {$endif} = AF_INET then
-    mormot.net.sock.IP4Short(@PSockAddr(@Addr)^.sin_addr, result)
+  if ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} = AF_INET then
+    mormot.net.sock.IP4Short(@ad4.sin_addr, result)
   else
     result[0] := #0; // AF_INET6 or AF_UNIX return ''
 end;
@@ -2558,18 +2595,20 @@ begin
 end;
 
 procedure TNetAddr.IPShort(out result: ShortString; withport: boolean);
+var
+  ad4: sockaddr absolute Addr;
 begin
   result[0] := #0;
-  case PSockAddr(@Addr)^.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
+  case ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
     AF_INET:
-      mormot.net.sock.IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
+      mormot.net.sock.IP4Short(@ad4.sin_addr, result);
     AF_INET6:
       IP6Short(@PSockAddrIn6(@Addr)^.sin6_addr, result);
     {$ifdef OSPOSIX}
     AF_UNIX:
+      with psockaddr_un(@Addr)^ do
       begin
-        SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
-          mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
+        SetString(result, PAnsiChar(@sun_path), mormot.core.base.StrLen(@sun_path));
         exit; // no port
       end;
     {$endif OSPOSIX}
@@ -2579,7 +2618,7 @@ begin
   if not withport then
     exit;
   AppendShortChar(':', @result);
-  AppendShortCardinal(port, result);
+  AppendShortCardinal(Port, result);
 end;
 
 procedure TNetAddr.IPWithPort(var Text: RawUtf8);
@@ -2596,33 +2635,41 @@ begin
 end;
 
 function TNetAddr.Port: TNetPort;
+var
+  ad4: sockaddr absolute Addr;
 begin
-  with PSockAddr(@Addr)^ do
-    if {$ifdef FPC} sa_family {$else} sin_family {$endif} in [AF_INET, AF_INET6] then
-      result := bswap16(sin_port)
-    else
-      result := 0;
+  if ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} in [AF_INET, AF_INET6] then
+    result := bswap16(ad4.sin_port)
+  else
+    result := 0;
 end;
 
 function TNetAddr.SetPort(p: TNetPort): TNetResult;
+var
+  ad4: sockaddr absolute Addr;
 begin
-  with PSockAddr(@Addr)^ do
-    if ({$ifdef FPC} sa_family {$else} sin_family {$endif} in [AF_INET, AF_INET6]) and
-       (p <= 65535) then // p may equal 0 to set ephemeral port
-    begin
-      sin_port := bswap16(p);
-      result := nrOk;
-    end
-    else
-      result := nrNotFound;
+  if (ad4.{$ifdef FPC} sa_family {$else} sin_family {$endif} in [AF_INET, AF_INET6]) and
+     (p <= 65535) then // p may equal 0 to set ephemeral port
+  begin
+    ad4.sin_port := bswap16(p);
+    result := nrOk;
+  end
+  else
+    result := nrNotFound;
 end;
 
 function TNetAddr.SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
+var
+  ad4: sockaddr absolute Addr;
 begin
-  PSockAddr(@Addr)^.sin_family := AF_INET;
-  PCardinal(@PSockAddr(@Addr)^.sin_addr)^ := ipv4;
-  PInt64(@PSockAddr(@Addr)^.sin_zero)^ := 0;
-  result := SetPort(netport);
+  ad4.sin_family := AF_INET;
+  ad4.sin_addr.s_addr := ipv4;
+  PInt64(@ad4.sin_zero)^ := 0; // seems needed on Windows
+  ad4.sin_port := bswap16(netport);
+  if netport > 65535 then
+    result := nrNotFound
+  else
+    result := nrOk;
 end;
 
 function TNetAddr.Size: integer;
@@ -2641,8 +2688,8 @@ function TNetAddr.IPEqual(const another: TNetAddr): boolean;
 begin
   case PSockAddr(@Addr)^.{$ifdef FPC} sa_family {$else} sin_family {$endif} of
     AF_INET:
-      result := cardinal(PSockAddr(@Addr)^.sin_addr) =
-                cardinal(PSockAddr(@another)^.sin_addr);
+      result := PSockAddr(@Addr)^.sin_addr.s_addr =
+                PSockAddr(@another)^.sin_addr.s_addr;
     AF_INET6:
       result := (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Lo =
                  PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Lo) and
@@ -2710,7 +2757,8 @@ begin
   tobecached := false;
   if layer = nlUnix then
     result := addr.SetFrom(address, '', nlUnix)
-  else if not ToCardinal(port, p, {minimal=}1) then
+  else if not ToCardinal(port, p, {minimal=}1) or
+          (p > 65535) then
     result := nrNotFound
   else if (address = '') or
           IsLocalHost(pointer(address)) or
@@ -2779,7 +2827,10 @@ begin
       continue;
     connect(s.Socket, @addr[n], addr[n].Size); // non-blocking connect() once
     if s.MakeBlocking <> nrOk then
+    begin
+      closesocket(s.Socket); // release handle
       continue;
+    end;
     sock[n] := s;
     inc(n);
   end;
@@ -3061,7 +3112,7 @@ function TNetSocketWrap.GetName(out addr: TNetAddr): TNetResult;
 var
   len: TSockLen;
 begin
-  FillCharFast(addr, SizeOf(addr), 0);
+  addr.Clear;
   if @self = nil then
     result := nrNoSocket
   else
@@ -3084,7 +3135,7 @@ function TNetSocketWrap.GetPeer(out addr: TNetAddr): TNetResult;
 var
   len: TSockLen;
 begin
-  FillCharFast(addr, SizeOf(addr), 0);
+  addr.Clear;
   if @self = nil then
     result := nrNoSocket
   else

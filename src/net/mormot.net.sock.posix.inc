@@ -7,7 +7,6 @@
 }
 
 uses
-  {$ifdef FPC}
   baseunix,
   termio,
   sockets,
@@ -15,16 +14,6 @@ uses
   linux,   // for epoll
   {$endif OSLINUXANDROID}
   initc;  // link clib='c' for our socket purpose
-  {$else}
-  Posix.Termios,
-  Posix.Errno,
-  Posix.Unistd,
-  Posix.SysSocket,
-  Posix.NetinetIn,
-  System.Net.Socket,
-  mormot.core.posix.delphi
-  ;
-  {$endif}
 
 {$ifdef OSLINUX}
   {$define HASACCEPT4} // use Linux-specific accept4() enhanced API call
@@ -72,13 +61,8 @@ const
   NI_NUMERICSERV = 2;
   {$endif OSFREEBSD}
 
-  {$ifdef FPC}
   FIONREAD = termio.FIONREAD;
   FIONBIO  = termio.FIONBIO;
-  {$else}
-  FIONREAD = mormot.core.posix.delphi.FIONREAD;
-  FIONBIO  = mormot.core.posix.delphi.FIONBIO;
-  {$endif FPC}
 
   {$ifdef OSBSDDARWIN}
 
@@ -101,11 +85,7 @@ const
     {$ifdef SUNOS}
     MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
-    {$ifdef FPC}
     MSG_NOSIGNAL =  sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
-    {$else}
-    MSG_NOSIGNAL =  Posix.SysSocket.MSG_NOSIGNAL; // Do not generate SIGPIPE
-    {$endif FPC}
     {$endif SUNOS}
 
   {$endif OSBSDDARWIN}
@@ -449,13 +429,20 @@ var
   // gethostbyname() result is NOT thread-safe: we need to protect its calls;
   // since this may take some time, we use a pthread mutex, not a TLightLock
 
+procedure TNetAddr.Clear;
+var
+  ad4: sockaddr absolute Addr;
+begin
+  PInteger(@ad4.sin_family)^ := 0; // sin_family and sin_port = 0
+end; // other fields are not supposed/required to be initialized on POSIX
+
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  addr4: sockaddr absolute Addr;
+  ad4: sockaddr absolute Addr;
 begin
-  FillCharFast(Addr, SizeOf(Addr), 0);
+  PInteger(@ad4.sin_family)^ := 0; // sin_family and sin_port = 0 are enough
   result := nrNotFound;
   if address = '' then
     exit;
@@ -470,14 +457,14 @@ begin
       with psockaddr_un(@Addr)^ do
       begin
         sun_family := AF_UNIX;
-        MoveFast(pointer(address)^, sun_path, length(address));
+        MoveFast(pointer(address)^, sun_path, length(address) + 1); // +1 for #0
         result := nrOK;
       end;
     exit;
   end;
   // check supplied IP port
-  addr4.sin_port := bswap16(GetCardinal(pointer(addrport)));
-  if (addr4.sin_port = 0) and
+  ad4.sin_port := bswap16(GetCardinal(pointer(addrport)));
+  if (ad4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
   // check most simple IPv4 resolution (maybe using mormot.net.dns)
@@ -492,10 +479,10 @@ begin
       result := nrNotFound
     else
     begin
-      addr4.sin_family := h^.h_addrtype;
+      ad4.sin_family := h^.h_addrtype;
       case h^.h_addrtype of
         AF_INET:
-           addr4.sin_addr := h^.h_addr^^;
+           ad4.sin_addr.s_addr := h^.h_addr^^.s_addr;
         AF_INET6:
            psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else

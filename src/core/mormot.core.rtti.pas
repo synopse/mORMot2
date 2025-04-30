@@ -700,7 +700,7 @@ type
   /// as returned by TRttiInfo.RecordAllFields
   TRttiRecordAllFields = array of TRttiRecordAllField;
 
-  /// some basic classes as recognized in TRttiCustom.ValueRtlClass
+  /// some known basic classes as recognized in TRttiCustom.ValueRtlClass
   TRttiValueClass = (
     vcNone,
     vcPersistent,
