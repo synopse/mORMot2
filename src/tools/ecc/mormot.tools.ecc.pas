@@ -620,7 +620,7 @@ function EccCommand(cmd: TEccCommand; const sw: ICommandLine): TEccCommandError;
     sw.Text('Corresponding TObjectWithPassword.ComputePassword:', []);
     sw.Text(' encryption %',
       [TObjectWithPassword.ComputePassword(pass)], ccLightBlue);
-    privkey := StringToUtf8(copy(GetFileNameWithoutExt(privfile), 1, 8));
+    StringToUtf8(copy(GetFileNameWithoutExt(privfile), 1, 8), privkey);
     for a := low(a) to high(a) do
       sw.Text(' % %', [ToText(a)^,
         TEcdheProtocol.FromKeyCompute(privkey, pass, rounds, '', a)],

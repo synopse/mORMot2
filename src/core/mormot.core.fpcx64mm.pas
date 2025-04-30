@@ -347,13 +347,13 @@ procedure WriteHeapStatus(const context: ShortString = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
   compilationflags: boolean = false);
 
-/// convenient debugging function into a string
+/// convenient debugging function of the heap details into a text buffer
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurrences
 // - see also RetrieveMemoryManagerInfo from mormot.core.log for more details
-// - warning: this function is not thread-safe
+// - warning: this function is not thread-safe, and return a global static buffer
 function GetHeapStatus(const context: ShortString; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 
 
 const
@@ -472,7 +472,7 @@ const
 type
   // VirtualQuery() API result structure
   TMemInfo = record
-    BaseAddress, AllocationBase: pointer;
+    BaseAddress, AllocationBase: PtrUInt;
     AllocationProtect: cardinal;
     PartitionId: word;
     RegionSize: PtrUInt;
@@ -527,7 +527,8 @@ begin
     next := addr + old_len;
     if (VirtualQuery(next, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
        (meminfo.State = MEM_FREE) and
-       (meminfo.RegionSize >= nextsize) and // enough space?
+       (meminfo.BaseAddress <= PtrUInt(next)) and // enough space?
+       (meminfo.BaseAddress + meminfo.RegionSize >= PtrUInt(next) + nextsize) and
        // set the address space in two reserve + commit steps for thread safety
        (VirtualAlloc(next, nextsize, MEM_RESERVE, PAGE_READWRITE) <> nil) and
        (VirtualAlloc(next, nextsize, MEM_COMMIT, PAGE_READWRITE) <> nil) then
@@ -1394,7 +1395,7 @@ begin
     LargeBlocksCircularList.NextLargeBlockHeader := new;
     new.NextLargeBlockHeader := old;
     old.PreviousLargeBlockHeader := new;
-    LargeBlocksLocked := False;
+    LargeBlocksLocked := false;
     inc(new);
   end;
   result := new;
@@ -1427,7 +1428,7 @@ begin
   next := header.NextLargeBlockHeader;
   next.PreviousLargeBlockHeader := prev;
   prev.NextLargeBlockHeader := next;
-  LargeBlocksLocked := False;
+  LargeBlocksLocked := false;
   result := DropMediumAndLargeFlagsMask and header.BlockSizeAndFlags;
   FreeLarge(header, result);
 end;
@@ -1485,7 +1486,7 @@ begin
       next := header^.NextLargeBlockHeader;
       next.PreviousLargeBlockHeader := prev;
       prev.NextLargeBlockHeader := next;
-      LargeBlocksLocked := False;
+      LargeBlocksLocked := false;
       // on Linux, call Kernel mremap() and its TLB magic
       // on Windows, try to reserve the memory block just after the existing
       // otherwise, use Alloc/Move/Free pattern, with asm/AVX move
@@ -1816,7 +1817,7 @@ asm
         bsf     ecx, ecx
         lea     rcx, [rcx + r9 * 8]
         // Set rdi = @bin, rsi = free block
-        lea     rsi, [rcx * 8] // SizeOf(TMediumBlockBin) = 16
+        lea     rsi, [rcx * 8] // SizeOf(TMediumBlockInfo.Bins[]) = 16
         lea     rdi, [r10 + TMediumBlockInfo.Bins + rsi * 2]
         mov     rsi, TMediumFreeBlock[rdi].NextFreeBlock
         // Remove the first block from the linked list (LIFO)
@@ -1830,12 +1831,10 @@ asm
         // r9 = bin group number * 4, rcx = bin number, rdi = @bin, rsi = free block
         // Flag this bin (and the group if needed) as empty
         mov     edx,  - 2
-        mov     r11d, [r10 + TMediumBlockInfo.BinGroupBitmap]
         rol     edx, cl
-        btr     r11d, eax // btr reg,reg is faster than btr [mem],reg
         and     [r10 + TMediumBlockInfo.BinBitmaps + r9], edx
         jnz     @MediumBinNotEmpty
-        mov     [r10 + TMediumBlockInfo.BinGroupBitmap], r11d
+        btr     [r10 + TMediumBlockInfo.BinGroupBitmap], eax
 @MediumBinNotEmpty:
         // rsi = free block, rbx = block type
         // Get the size of the available medium block in edi
@@ -2041,14 +2040,12 @@ asm
         cmp     rdi, rax
         jne     @MediumBinNotEmptyForMedium
         // edx=bingroupnumber, ecx=binnumber, rdi=@bin, rsi=freeblock, ebx=blocksize
-        // Flag this bin and group as empty
+        // Flag this bin (and the group if needed) as empty
         mov     eax,  - 2
-        mov     r11d, [r10 + TMediumBlockInfo.BinGroupBitmap]
         rol     eax, cl
-        btr     r11d, edx // btr reg,reg is faster than btr [mem],reg
         and     [r10 + TMediumBlockInfo.BinBitmaps + rdx * 4], eax
         jnz     @MediumBinNotEmptyForMedium
-        mov     [r10 + TMediumBlockInfo.BinGroupBitmap], r11d
+        btr     [r10 + TMediumBlockInfo.BinGroupBitmap], edx
 @MediumBinNotEmptyForMedium:
         // rsi = free block, ebx = block size
         // Get rdi = size of the available medium block, rdx = second split size
@@ -2823,8 +2820,9 @@ begin
   result.CurrHeapFree := 0;
 end;
 
-function _GetHeapInfo: string;
+function _GetHeapInfo: Utf8String;
 begin
+  // RetrieveMemoryManagerInfo from mormot.core.log expects RawUtf8 as result
   result := GetHeapStatus(' - fpcx64mm: ', 16, 16, {flags=}true, {sameline=}true);
 end;
 
@@ -2981,91 +2979,132 @@ begin
     result := maxcount;
 end;
 
+var
+  WrStrBuf: array[0 .. 1023] of AnsiChar; // typically less than 600 bytes
+  WrStrPos: PtrInt;
+  WrStrOnSameLine: boolean;
+
+procedure W(const txt: shortstring);
+var
+  p, n: PtrInt;
+begin
+  n := ord(txt[0]);
+  if n = 0 then
+    exit;
+  p := WrStrPos;
+  inc(n, p);
+  if n >= high(WrStrBuf) then
+    exit; // paranoid
+  Move(txt[1], WrStrBuf[p], ord(txt[0]));
+  WrStrPos := n;
+end;
+
 const
   K_: array[0..4] of string[1] = (
     'P', 'T', 'G', 'M', 'K');
 
-function K(i: PtrUInt): ShortString;
+procedure K(const txt: shortstring; i: PtrUInt);
 var
   j, n: PtrUInt;
-  tmp: PShortString;
+  kk: PShortString;
+  tmp: shortstring;
 begin
-  tmp := nil;
+  W(txt);
+  kk := nil;
   n := 1 shl 50;
   for j := 0 to high(K_) do
     if i >= n then
     begin
       i := i div n;
-      tmp := @K_[j];
+      kk := @K_[j];
       break;
     end
     else
       n := n shr 10;
-  str(i, result);
-  if tmp <> nil then
-    result := result + tmp^;
+  str(i, tmp);
+  W(tmp);
+  if kk <> nil then
+    W(kk^);
 end;
 
-function S(i: PtrUInt): ShortString;
+procedure S(const txt: shortstring; i: PtrUInt);
+var
+  tmp: shortstring;
 begin
-  str(i, result);
+  W(txt);
+  str(i, tmp);
+  W(tmp);
 end;
 
-type
-  // allow to write into a temp string or the console
-  TGetHeapStatusWrite =
-    procedure(const V: array of ShortString; CRLF: boolean = true);
+procedure LF(const txt: shortstring = '');
+begin
+  if txt[0] <> #0 then
+    W(txt);
+  if WrStrOnSameLine then
+    W(' ')
+  else
+    W({$ifdef OSWINDOWS} #13#10 {$else} #10 {$endif});
+end;
 
 procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-  const name: ShortString; Wr: TGetHeapStatusWrite);
+  const name: shortstring);
 begin
-  Wr([name, K(arena.CurrentBytes),
-      'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
+  K(name, arena.CurrentBytes);
+  K('B/', arena.CumulativeBytes);
+  W('B ');
   {$ifdef FPCMM_DEBUG}
-  Wr([  '   peak=', K(arena.PeakBytes),
-      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
-         ' alloc=', K(arena.CumulativeAlloc),
-          ' free=', K(arena.CumulativeFree)], false);
+  K('   peak=', arena.PeakBytes);
+  K('B current=', arena.CumulativeAlloc - arena.CumulativeFree);
+  K(' alloc=', arena.CumulativeAlloc);
+  K(' free=', arena.CumulativeFree);
   {$endif FPCMM_DEBUG}
-  Wr([' sleep=', K(arena.SleepCount)]);
+  K(' sleep=', arena.SleepCount);
+  LF;
 end;
 
-procedure ComputeHeapStatus(const context: ShortString; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags: boolean;
-  Wr: TGetHeapStatusWrite);
+function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 var
   res: TResArray; // no heap allocation involved
   i, n: PtrInt;
   t, b: PtrUInt;
   small, tiny: cardinal;
 begin
+  WrStrOnSameLine := onsameline;
+  WrStrPos := 0;
   if context[0] <> #0 then
-    Wr([context]);
+    LF(context);
   if compilationflags then
-    Wr([' Flags:' + FPCMM_FLAGS]);
+    LF(' Flags:' + FPCMM_FLAGS);
   with CurrentHeapStatus do
   begin
-    Wr([' Small:  ', K(SmallBlocks),
-                '/', K(SmallBlocksSize),
-        'B  including tiny<=', K(SmallBlockSizes[NumTinyBlockTypes - 1]),
-        'B arenas=', S(NumTinyBlockArenas + 1),
-       {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
-       {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-        ' pools=', S(length(SmallMediumBlockInfo))
-       {$else}
-        ' fed from its own pool'
-       {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-       {$else}
-        ' fed from Medium'
-       {$endif FPCMM_SMALLNOTWITHMEDIUM}
-       ]);
-    WriteHeapStatusDetail(Medium, ' Medium: ', Wr);
-    WriteHeapStatusDetail(Large,  ' Large:  ', Wr);
+    K(' Small:  ', SmallBlocks);
+    K('/', SmallBlocksSize);
+    K('B  including tiny<=', SmallBlockSizes[NumTinyBlockTypes - 1]);
+    S('B arenas=', NumTinyBlockArenas + 1);
+    {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
+    {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+    S(' pools=', length(SmallMediumBlockInfo));
+    {$else}
+    W(' fed from its own pool');
+    {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+    {$else}
+    W(' fed from Medium');
+    {$endif FPCMM_SMALLNOTWITHMEDIUM}
+    LF;
+    WriteHeapStatusDetail(Medium, ' Medium: ');
+    WriteHeapStatusDetail(Large,  ' Large:  ');
     if SleepCount <> 0 then
-      Wr([' Total Sleep: count=', K(SleepCount)
-        {$ifdef FPCMM_SLEEPTSC} , ' rdtsc=', K(SleepCycles) {$endif}]);
+    begin
+      K(' Total Sleep: count=', SleepCount);
+      {$ifdef FPCMM_SLEEPTSC} K(' rdtsc=', SleepCycles); {$endif}
+      LF;
+    end;
     if SmallGetmemSleepCount <> 0 then
-      Wr([' Small Getmem Sleep: count=', K(SmallGetmemSleepCount)]);
+    begin
+      K(' Small Getmem Sleep: count=', SmallGetmemSleepCount);
+      LF;
+    end;
   end;
   if (smallblockcontentioncount > 0) and
      (CurrentHeapStatus.SmallGetmemSleepCount <> 0) then
@@ -3074,83 +3113,65 @@ begin
     for i := 0 to n - 1 do
       with TSmallBlockContention(res[i]) do
       begin
-        Wr([' ', S(GetmemBlockSize), '=' , K(GetmemSleepCount)], {crlf=}false);
+        S(' ', GetmemBlockSize);
+        K('=' , GetmemSleepCount);
         if (i and 7 = 7) or
            (i = n - 1) then
-          Wr([]);
+          LF;
       end;
   end;
   if smallblockstatuscount > 0 then
   begin
     SetSmallBlockStatus(res, small, tiny);
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal), @t, @b) - 1;
-    Wr([' Small Blocks since beginning: ', K(t), '/', K(b),
-        'B (as small=', K(small), '/', S(NumSmallBlockTypes),
-        ' tiny=', K(tiny), '/', S(NumTinyBlockArenas * NumTinyBlockTypes), ')']);
+    K(' Small Blocks since beginning: ', t);
+    K('/', b);
+    K('B (as small=', small);
+    S('/', NumSmallBlockTypes);
+    K(' tiny=', tiny);
+    S('/', NumTinyBlockArenas * NumTinyBlockTypes);
+    LF(')');
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
-        Wr(['  ', S(BlockSize), '=', K(Total)], false);
+        S('  ', BlockSize);
+        K('=', Total);
         if (i and 7 = 7) or
            (i = n) then
-          Wr([]);
+          LF;
       end;
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent), @t, @b) - 1;
-    Wr([' Small Blocks current: ', K(t), '/', K(b), 'B']);
+    K(' Small Blocks current: ', t);
+    K('/', b);
+    LF('B');
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
-        Wr(['  ', S(BlockSize), '=', K(Current)], false);
+        S('  ', BlockSize);
+        K('=', Current);
         if (i and 7 = 7) or
            (i = n) then
-          Wr([]);
+          LF;
       end;
   end;
+  LF;
+  WrStrBuf[WrStrPos] := #0; // makes PAnsiChar
+  result := @WrStrBuf;
 end;
 
-var
-  WrStrTemp: string; // we don't require thread safety here
-  WrStrOnSameLine: boolean;
-
-procedure WrStr(const V: array of ShortString; CRLF: boolean);
-var
-  i: PtrInt;
-begin // we don't have format() nor formatutf8() -> this is good enough
-  for i := 0 to high(V) do
-    WrStrTemp := WrStrTemp + string(V[i]); // fast enough
-  if CRLF and
-     not WrStrOnSameLine then
-    WrStrTemp := WrStrTemp + #13#10;
-end;
-
-function GetHeapStatus(const context: ShortString; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
-begin
-  WrStrOnSameLine := onsameline;
-  ComputeHeapStatus(context, smallblockstatuscount, smallblockcontentioncount,
-    compilationflags, WrStr);
-  result := WrStrTemp;
-  WrStrTemp := '';
-end;
-
-procedure WrConsole(const V: array of ShortString; CRLF: boolean);
-var
-  i: PtrInt;
-begin // direct write to the console with no memory heap allocation
-  {$I-}
-  for i := 0 to high(V) do
-    write(V[i]);
-  if CRLF then
-    writeln;
-  ioresult;
-  {$I+}
-end;
-
-procedure WriteHeapStatus(const context: ShortString; smallblockstatuscount,
+procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean);
 begin
-  ComputeHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,
-    compilationflags, WrConsole);
+  GetHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,
+    compilationflags, {onsameline=}false);
+  {$ifdef MSWINDOWS} // write all text at once
+  {$I-}
+  write(PAnsiChar(@WrStrBuf));
+  ioresult;
+  {$I+}
+  {$else}
+  fpwrite(StdOutputHandle, @WrStrBuf, WrStrPos); // POSIX
+  {$endif MSWINDOWS}
 end;
 
 function GetSmallBlockStatus(maxcount: integer; orderby: TSmallBlockOrderBy;
@@ -3341,32 +3362,44 @@ end;
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 var
-  ObjectLeaksCount: integer;
+  ObjectLeaksCount, ObjectLeaksRaiseCount: integer;
+{$ifdef MSWINDOWS}
+  LastMemInfo: TMemInfo; // simple cache
 
 function SeemsRealPointer(p: pointer): boolean;
-{$ifdef MSWINDOWS}
 var
   meminfo: TMemInfo;
-{$endif MSWINDOWS}
 begin
   result := false;
   if PtrUInt(p) <= 65535 then
-    exit;
-  {$ifdef MSWINDOWS}
-  // VirtualQuery API is slow but better than raising an exception
-  // see https://stackoverflow.com/a/37547837/458259
-  FillChar(meminfo, SizeOf(meminfo), 0);
-  result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
-            (meminfo.RegionSize >= SizeOf(pointer)) and
-            (meminfo.State = MEM_COMMIT) and
-            (meminfo.Protect and PAGE_VALID <> 0) and
-            (meminfo.Protect and PAGE_GUARD = 0);
-  {$else}
-  // let the GPF happen silently in the kernel
-  result := (fpaccess(p, F_OK) <> 0) and
-            (fpgeterrno <> ESysEFAULT);
-  {$endif MSWINDOWS}
+    exit; // first 64KB is not a valid pointer by definition
+  if (LastMemInfo.State <> 0) and
+     (PtrUInt(p) - LastMemInfo.BaseAddress < LastMemInfo.RegionSize) then
+    result := true // quick check against last valid memory region
+  else
+  begin
+    // VirtualQuery API is slow but better than raising an exception
+    // see https://stackoverflow.com/a/37547837/458259
+    FillChar(meminfo, SizeOf(meminfo), 0);
+    result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
+              (meminfo.State = MEM_COMMIT) and
+              (PtrUInt(p) - meminfo.BaseAddress < meminfo.RegionSize) and
+              (meminfo.Protect and PAGE_VALID <> 0) and
+              (meminfo.Protect and PAGE_GUARD = 0);
+    if result then
+      LastMemInfo := meminfo;
+  end;
 end;
+{$else}
+function SeemsRealPointer(p: pointer): boolean;
+begin
+  // let the GPF happen silently in the kernel
+  result := (PtrUInt(p) > 65535) and
+            (fpaccess(p, F_OK) <> 0) and
+            (fpgeterrno <> ESysEFAULT);
+end;
+{$endif MSWINDOWS}
+
 {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 
 procedure MediumMemoryLeakReport(
@@ -3377,7 +3410,8 @@ var
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   first, last: PByte;
   vmt: PAnsiChar;
-  exceptcount: integer;
+  instancesize, blocksize: PtrInt;
+  classname: PShortString;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 begin
   if (Info.SequentialFeedBytesLeft = 0) or
@@ -3389,9 +3423,6 @@ begin
       block := Info.LastSequentiallyFed
     else
       exit;
-  {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-  exceptcount := 0;
-  {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   repeat
     header := PPtrUInt(block - BlockHeaderSize)^;
     size := header and DropMediumAndLargeFlagsMask;
@@ -3401,8 +3432,9 @@ begin
       if header and IsSmallBlockPoolInUseFlag <> 0 then
       begin
         {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-        if PSmallBlockPoolHeader(block).BlocksInUse > 0 then
+        if PSmallBlockPoolHeader(block).BlocksInUse > 0 then // some leaks
         begin
+          blocksize := PSmallBlockPoolHeader(block).BlockType.BlockSize;
           first := PByte(block) + SmallBlockPoolHeaderSize;
           with PSmallBlockPoolHeader(block).BlockType^ do
             if (CurrentSequentialFeedPool <> pointer(block)) or
@@ -3413,7 +3445,7 @@ begin
             else
               last := Pointer(PByte(NextSequentialFeedBlockAddress) - 1);
           while (first <= last) and
-                (exceptcount < 64) do
+                (ObjectLeaksRaiseCount < 64) do
           begin
             if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) then
             begin
@@ -3421,29 +3453,35 @@ begin
               if (vmt <> nil) and
                  {$ifdef FPCMM_REPORTMEMORYLEAKS}
                  (PtrUInt(vmt) <> REPORTMEMORYLEAK_FREEDHEXSPEAK) and
-                 // FreeMem marked freed blocks with 00000000 BLOODLESS marker
+                 // FreeMem marked freed blocks with BLOODLESS hexspeak magic
                  {$endif FPCMM_REPORTMEMORYLEAKS}
                  SeemsRealPointer(vmt) then
               try
                 // try to access the TObject VMT
-                if (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
-                   (PPtrInt(vmt + vmtInstanceSize)^ <=
-                    PSmallBlockPoolHeader(block).BlockType.BlockSize) and
-                   SeemsRealPointer(PPointer(vmt + vmtClassName)^) then
+                instancesize := PPtrInt(vmt + vmtInstanceSize)^;
+                if (instancesize >= sizeof(vmt)) and
+                   (instancesize <= blocksize) then
                 begin
-                   StartReport;
-                   writeln(' probable ', PShortString(PPointer(vmt + vmtClassName)^)^,
-                     ' leak (', PPtrInt(vmt + vmtInstanceSize)^, '/',
-                     PSmallBlockPoolHeader(block).BlockType.BlockSize,
-                     ' bytes) at $', HexStr(first));
-                   inc(ObjectLeaksCount);
+                  classname := PPointer(vmt + vmtClassName)^;
+                  if SeemsRealPointer(classname) and
+                     (classname^[0] <> #0) and
+                     (classname^[1] in ['A' .. 'z']) then
+                  begin
+                     StartReport;
+                     writeln(' probable ', classname^, ' leak (', instancesize,
+                       '/', blocksize, ' bytes) at $', HexStr(first));
+                     inc(ObjectLeaksCount);
+                  end;
                 end;
               except
-                // intercept and ignore any GPF - SeemsRealPointer() not enough?
-                inc(exceptcount);
+                // intercept and ignore any GPF - SeemsRealPointer() not enough
+                inc(ObjectLeaksRaiseCount);
+                {$ifdef MSWINDOWS}
+                LastMemInfo.State := 0; // reset VirtualQuery() cache
+                {$endif MSWINDOWS}
               end;
             end;
-            inc(first, PSmallBlockPoolHeader(block).BlockType.BlockSize);
+            inc(first, blocksize);
           end;
         end;
         {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
@@ -3451,7 +3489,7 @@ begin
       else
       begin
         StartReport;
-        writeln(' medium block leak of ', size, ' bytes (', K(size), 'B)');
+        writeln(' medium block leak of ', size, ' bytes');
       end;
     inc(block, size);
   until false;
@@ -3574,7 +3612,7 @@ begin
     size := large.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
     {$ifdef FPCMM_REPORTMEMORYLEAKS}
     StartReport;
-    writeln(' large block leak of ', size, ' bytes (', K(size), 'B)');
+    writeln(' large block leak of ', size, ' bytes');
     {$endif FPCMM_REPORTMEMORYLEAKS}
     nextlarge := large.NextLargeBlockHeader;
     FreeLarge(large, size);

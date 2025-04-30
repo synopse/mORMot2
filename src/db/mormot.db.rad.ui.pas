@@ -365,18 +365,16 @@ begin
         PAnsiChar(dest)[len] := #0;
       end;
     ftWideString:
-      begin
-        {$ifdef ISDELPHI2007ANDUP}
-        // here dest = PWideChar[] of DataSize bytes
-        if len = 0 then
-          PWideChar(dest)^ := #0
-        else
-          Utf8ToWideChar(dest, data, Field.DataSize shr 1, len);
-        {$else}
-        // here dest is PWideString
-        Utf8ToWideString(data, len, WideString(dest^));
-        {$endif ISDELPHI2007ANDUP}
-      end;
+      {$ifdef HASDBFTWIDE}
+      // here dest = PWideChar[] of DataSize bytes
+      if len = 0 then
+        PWideChar(dest)^ := #0
+      else
+        Utf8ToWideChar(dest, data, Field.DataSize shr 1, len);
+      {$else}
+      // on Delphi 7, dest is PWideString
+      Utf8ToWideString(data, len, PWideString(dest)^);
+      {$endif HASDBFTWIDE}
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
   else
     EVirtualDataSet.RaiseUtf8('%.GetFieldData unhandled DataType=% (%)',
@@ -473,7 +471,7 @@ begin
   if DefaultFields then
   {$endif ISDELPHIXE6}
     DestroyFields;
-  fIsCursorOpen := False;
+  fIsCursorOpen := false;
 end;
 
 procedure TVirtualDataSet.InternalFirst;
@@ -516,7 +514,7 @@ begin
     CreateFields;
   BindFields(true);
   fCurrentRow := -1;
-  fIsCursorOpen := True;
+  fIsCursorOpen := true;
 end;
 
 procedure TVirtualDataSet.InternalSetToRecord(Buffer: TRecordBuffer);
@@ -709,7 +707,8 @@ end;
 function DataSetToJson(Data: TDataSet): RawJson;
 var
   W: TResultsWriter;
-  f: PtrInt;
+  c: PtrInt;
+  f: TField;
   blob: TRawByteStringStream;
 begin
   result := 'null';
@@ -722,105 +721,117 @@ begin
   try
     // get col names and types
     SetLength(W.ColNames, Data.FieldCount);
-    for f := 0 to high(W.ColNames) do
-      StringToUtf8(Data.FieldDefs[f].Name, W.ColNames[f]);
+    for c := 0 to high(W.ColNames) do
+      StringToUtf8(Data.FieldDefs[c].Name, W.ColNames[c]);
     W.AddColumns;
     W.AddDirect('[');
     repeat
       W.AddDirect('{');
-      for f := 0 to Data.FieldCount - 1 do
+      for c := 0 to Data.FieldCount - 1 do
       begin
-        W.AddString(W.ColNames[f]);
-        with Data.Fields[f] do
-          if IsNull then
-            W.AddNull
+        W.AddString(W.ColNames[c]);
+        f := Data.Fields[c];
+        if f.IsNull then
+          W.AddNull
+        else
+          case f.DataType of
+            ftBoolean:
+              W.Add(f.AsBoolean);
+            ftSmallint,
+            ftInteger,
+            ftWord,
+            ftAutoInc:
+              W.Add(f.AsInteger);
+            ftLargeInt:
+              W.Add(TLargeIntField(f).AsLargeInt);
+            ftFloat,
+            ftCurrency: // TCurrencyField is sadly a TFloatField (even on FPC)
+              W.Add(f.AsFloat, TFloatField(f).Precision);
+            ftBcd:
+              W.AddCurr(f.AsCurrency);
+            ftFMTBcd:
+              AddBcd(W, f.AsBcd);
+            ftTimeStamp,
+            ftDate,
+            ftTime,
+            ftDateTime:
+              begin
+                W.AddDirect('"');
+                W.AddDateTime(f.AsDateTime);
+                W.AddDirect('"');
+              end;
+            ftString,
+            ftFixedChar,
+            ftMemo,
+            ftGuid:
+              begin
+                W.AddDirect('"');
+                {$ifdef UNICODE}
+                W.AddAnsiString(f.AsAnsiString, twJsonEscape);
+                {$else}
+                W.AddAnsiString(f.AsString, twJsonEscape);
+                {$endif UNICODE}
+                W.AddDirect('"');
+              end;
+            ftWideString:
+              begin
+                W.AddDirect('"');
+                {$ifdef FPC} // Value is still WideString on FPC
+                W.AddJsonEscapeW(pointer(TWideStringField(f).AsUnicodeString));
+                {$else}
+                // Value: string on Delphi 2009+ or WideString on Delphi 7/2007
+                W.AddJsonEscapeW(pointer(TWideStringField(f).Value));
+                {$endif FPC}
+                W.AddDirect('"');
+              end;
+            ftVariant:
+              W.AddVariant(f.AsVariant);
+            ftBytes,
+            ftVarBytes,
+            ftBlob,
+            ftGraphic,
+            ftOraBlob,
+            ftOraClob:
+              begin
+                blob := TRawByteStringStream.Create;
+                try
+                  (f as TBlobField).SaveToStream(blob);
+                  W.WrBase64(pointer(blob.DataString), length(blob.DataString),
+                   {withmagic=}true);
+                finally
+                  blob.Free;
+                end;
+              end;
+            {$ifdef HASDBFTWIDE}
+            ftWideMemo,
+            ftFixedWideChar:
+              begin
+                W.AddDirect('"');
+                {$ifdef FPC} // AsWideString is still WideString on FPC
+                W.AddJsonEscapeW(pointer(f.AsUnicodeString));
+                {$else}
+                // AsWideString: string on Delphi 2009+, WideString Delphi 7/2007
+                W.AddJsonEscapeW(pointer(f.AsWideString));
+                {$endif FPC}
+                W.AddDirect('"');
+              end;
+            {$endif HASDBFTWIDE}
+            {$ifdef HASDBFNEW}
+            ftShortint,
+            ftByte:
+              W.Add(f.AsInteger);
+            ftLongWord:
+              W.AddU(TLongWordField(f).Value);
+            ftExtended:
+              W.AddDouble(f.AsFloat);
+            {$endif HASDBFNEW}
+            {$ifdef HASDBFSINGLE}
+            ftSingle:
+              W.Add(f.AsFloat, SINGLE_PRECISION);
+            {$endif HASDBFSINGLE}
           else
-            case DataType of
-              ftBoolean:
-                W.Add(AsBoolean);
-              ftSmallint,
-              ftInteger,
-              ftWord,
-              ftAutoInc:
-                W.Add(AsInteger);
-              ftLargeInt:
-                W.Add(TLargeIntField(Data.Fields[f]).AsLargeInt);
-              ftFloat,
-              ftCurrency: // TCurrencyField is sadly a TFloatField
-                W.Add(AsFloat, TFloatField(Data.Fields[f]).Precision);
-              ftBcd:
-                W.AddCurr(AsCurrency);
-              ftFMTBcd:
-                AddBcd(W, AsBcd);
-              ftTimeStamp,
-              ftDate,
-              ftTime,
-              ftDateTime:
-                begin
-                  W.AddDirect('"');
-                  W.AddDateTime(AsDateTime);
-                  W.AddDirect('"');
-                end;
-              ftString,
-              ftFixedChar,
-              ftMemo,
-              ftGuid:
-                begin
-                  W.AddDirect('"');
-                  {$ifdef UNICODE}
-                  W.AddAnsiString(AsAnsiString, twJsonEscape);
-                  {$else}
-                  W.AddAnsiString(AsString, twJsonEscape);
-                  {$endif UNICODE}
-                  W.AddDirect('"');
-                end;
-              ftWideString:
-                begin
-                  W.AddDirect('"');
-                  W.AddJsonEscapeW(pointer(TWideStringField(Data.Fields[f]).Value));
-                  W.AddDirect('"');
-                end;
-              ftVariant:
-                W.AddVariant(AsVariant);
-              ftBytes,
-              ftVarBytes,
-              ftBlob,
-              ftGraphic,
-              ftOraBlob,
-              ftOraClob:
-                begin
-                  blob := TRawByteStringStream.Create;
-                  try
-                    (Data.Fields[f] as TBlobField).SaveToStream(blob);
-                    W.WrBase64(pointer(blob.DataString), length(blob.DataString),
-                     {withmagic=}true);
-                  finally
-                    blob.Free;
-                  end;
-                end;
-              {$ifdef HASDBFTWIDE}
-              ftWideMemo,
-              ftFixedWideChar:
-                begin
-                  W.AddDirect('"');
-                  W.AddJsonEscapeW(pointer(AsWideString));
-                  W.AddDirect('"');
-                end;
-              {$endif HASDBFTWIDE}
-              {$ifdef UNICODE}
-              ftShortint,
-              ftByte:
-                W.Add(AsInteger);
-              ftLongWord:
-                W.AddU(TLongWordField(Data.Fields[f]).Value);
-              ftExtended:
-                W.AddDouble(AsFloat);
-              ftSingle:
-                W.Add(AsFloat, SINGLE_PRECISION);
-              {$endif UNICODE}
-            else
-              W.AddNull; // unhandled field type
-            end;
+            W.AddNull; // unhandled field type
+          end;
         W.AddComma;
       end;
       W.CancelLastComma;

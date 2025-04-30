@@ -70,14 +70,18 @@ type
   /// result list, as returned by FindFiles()
   TFindFilesDynArray = array of TFindFiles;
 
-  /// one optional feature of FindFiles()
+  /// each optional feature of FindFiles()
   // - ffoSortByName will sort the result files by extension then name
+  // - ffoSortByFullName will sort the result files by name but not extension
+  // - ffoSortByDate will sort the result files by increasing timestamp
   // - ffoExcludesDir won't include the path in TFindFiles.Name
-  // - ffoSubFolder will search within nested folders
-  // - ffoIncludeFolder will add the nested folders
-  // - ffoIncludeHiddenFiles will add any hidden file (on Windows)
+  // - ffoSubFolder will recursively search within nested folders
+  // - ffoIncludeFolder will add the nested folder names with Size=-1
+  // - ffoIncludeHiddenFiles will add also hidden file to the results
   TFindFilesOption = (
     ffoSortByName,
+    ffoSortByFullName,
+    ffoSortByDate,
     ffoExcludesDir,
     ffoSubFolder,
     ffoIncludeFolder,
@@ -86,29 +90,51 @@ type
   TFindFilesOptions = set of TFindFilesOption;
 
 /// search for matching files by names
-// - just an enhanced wrapper around FindFirst/FindNext with some options
+// - on Windows, will just call FindFirst/FindNext, i.e. FindFilesRtl()
+// - on POSIX, calls PosixFileNames() than fpStat() and avoid slower TSearchRec
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
 function FindFiles(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; const IgnoreFileName: TFileName = '';
   Options: TFindFilesOptions = []): TFindFilesDynArray;
 
+/// internal function using TSearchRec - published for regression tests only
+procedure FindFilesRtl(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions; out Files: TFindFilesDynArray);
+
 /// search for matching file names
 // - on Windows, just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
 // - on POSIX, calls PosixFileNames() if possible, with fast TMatch mask lookup
+// - by design, will ignore ffoSortByDate option (because not POSIX compatible)
 function FileNames(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = [];
   const IgnoreFileName: TFileName = ''): TFileNameDynArray; overload;
 
 /// search for matching file names from path-delimited content
-// - is a wrapper around FindFileNames(MakePath())
+// - just wrap FindFileNames(MakePath(Path))
 function FileNames(const Path: array of const; const Mask: TFileName = FILES_ALL;
   Options: TFindFilesOptions = []): TFileNameDynArray; overload;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
-/// sort a FindFiles() result list by its TFindFiles[].Timestamp field
+/// sort a FindFiles() result list by increasing TFindFiles[].Timestamp field
+// - could be done if not already via ffoSortByDate
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
+
+/// compute the sum of all Files[].Size file sizes in bytes
+function FindFilesSize(const Files: TFindFilesDynArray): Int64;
+
+/// compare two TFindFilesDynArray elements by file extension then name
+// - folders will be put in front of all files, as with ffoSortByName
+function SortFindFileName(const A, B): integer;
+
+/// compare two TFindFilesDynArray elements by full name
+// - folders won't be put in front of all files, as with ffoSortByFullName
+function SortFindFileFullName(const A, B): integer;
+
+/// compare two TFindFilesDynArray elements by date
+// - folders will be put in front of all files, as with ffoSortByDate
+function SortFindFileTimestamp(const A, B): integer;
 
 /// compute the HTML index page corresponding to a local folder
 procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
@@ -1021,6 +1047,8 @@ type
     /// children must override this method in order to parse the JSON-encoded
     // parameters, and store it in protected field values
     procedure SetParameters(const Value: RawUtf8); virtual;
+    function DoApply(Data: pointer; Prop: PRttiCustomProp;
+      ErrMsg: PString): boolean; virtual; abstract;
   public
     /// add the filter or validation process to a list, checking if not present
     // - if an instance with the same class type and parameters is already
@@ -1044,9 +1072,12 @@ type
 
   /// will define a validation to be applied to a Record (typically a TOrm)
   // field content
-  // - a typical usage is to validate an email or IP address e.g.
+  // - a typical usage is e.g. to validate an email or IP address
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynValidate = class(TSynFilterOrValidate)
+  protected
+    function DoApply(Data: pointer; Prop: PRttiCustomProp;
+      ErrMsg: PString): boolean; override;
   public
     /// perform the validation action to the specified value
     // - the value is expected by be UTF-8 text, as generated by
@@ -1060,6 +1091,9 @@ type
     // - if the validation passed, will return TRUE
     function Process(aFieldIndex: integer; const Value: RawUtf8;
       var ErrorMsg: string): boolean; virtual; abstract;
+    /// instantiate a TSynValidate instance of this class, and apply it to the value
+    // - returns '' if aValue does match the requirements, or an error message
+    class function Execute(const aParameters, aValue: RawUtf8): string;
   end;
 
   /// points to a TSynValidate variable
@@ -1070,7 +1104,6 @@ type
   // (typically a TOrm)
   // - this versions expect no parameter
   TSynValidateIPAddress = class(TSynValidate)
-  protected
   public
     /// perform the IP Address validation action to the specified value
     function Process(aFieldIndex: integer; const Value: RawUtf8;
@@ -1305,11 +1338,15 @@ type
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynFilter = class(TSynFilterOrValidate)
   protected
+    function DoApply(Data: pointer; Prop: PRttiCustomProp;
+      ErrMsg: PString): boolean; override;
   public
     /// perform the transformation to the specified value
     // - the value is converted into UTF-8 text, as expected by
     // TPropInfo.GetValue / TPropInfo.SetValue e.g.
     procedure Process(aFieldIndex: integer; var Value: RawUtf8); virtual; abstract;
+    /// instantiate a TSynValidate instance of this class, and apply it to the value
+    class procedure Execute(const aParameters: RawUtf8; var aValue: RawUtf8);
   end;
 
   /// class-reference type (metaclass) for a TSynFilter or a TSynValidate
@@ -1409,6 +1446,64 @@ const
   sValidationFailed = '"%s" rule failed';
   sValidationFieldVoid = 'An unique key field must not be void';
   sValidationFieldDuplicate = 'Value already used for this unique key field';
+
+type
+  /// exception class raised by TRttiFilter
+  ERttiFilter = class(ESynException);
+
+  /// register and apply TSynFilter and TSynValidate to a class or record
+  // - could be used in conjuction with TRttiMap for client-side DTO validation
+  TRttiFilter = class(TSynPersistent)
+  protected
+    fRtti: TRttiCustom;
+    fRules: TSynFilterOrValidateObjArrayArray; // follows fRtti.Props.List[]
+    fCount: integer;
+    procedure DoApply(aData: pointer; aClass: TSynFilterOrValidateClass;
+      aErrMsg: PString);
+  public
+    /// initialize a list of TSynFilter and TSynValidate to apply to a class
+    constructor Create(aClass: TClass); reintroduce; overload;
+    /// initialize a list of TSynFilter and TSynValidate to apply to a record
+    constructor Create(aRtti: PRttiInfo); reintroduce; overload;
+    /// finalize this instance and all its stored rules
+    destructor Destroy; override;
+    /// delete all stored rules
+    procedure Clear;
+    /// register some rules instances to this list
+    // - raise ERttiFilter if aFieldName does not match the main Rtti class/record
+    procedure Add(const aFieldName: RawUtf8;
+      const aRules: array of TSynFilterOrValidate);
+    /// register some class rules to this list
+    // - will call aRules[].Create then Add() - and own - the instances
+    // - raise ERttiFilter if aFieldName does not match the main Rtti class/record
+    procedure AddClass(const aFieldName: RawUtf8;
+      const aRules: array of TSynFilterOrValidateClass);
+    /// apply all registered TSynFilter rules to a class instance or record pointer
+    procedure Filter(aData: pointer);
+    /// apply all registered TSynValidate rules to a class instance or record pointer
+    // - returns '' on success, or an error message on validation failure
+    function Validate(aData: pointer): string;
+    /// apply all registered TSynFilter or TSynValidate rules to a class instance
+    // or record pointer
+    // - can optionally specify which parent class are to be executed
+    // - returns '' on success, or an error message on validation failure
+    function Apply(aData: pointer; aClass: TSynFilterOrValidateClass = nil): string;
+    /// apply all registered TSynFilter or TSynValidate rules to a class instance
+    // or record pointer and raise ERttiFilter on broken TSynValidate
+    procedure ApplyOrRaise(aData: pointer);
+    /// retrieve the registered TSynFilter or TSynValidate rules of a given field
+    function GetRules(const aFieldName: RawUtf8): TSynFilterOrValidateObjArray;
+  published
+    /// low-level access to the associated RTTI information of this class/record
+    property Rtti: TRttiCustom
+      read fRtti;
+    /// low-level access to the associated TSynFilter / TSynValidate rules
+    property Rules: TSynFilterOrValidateObjArrayArray
+      read fRules;
+    /// total number of rules stored in this instance
+    property Count: integer
+      read fCount;
+  end;
 
 
 /// return TRUE if the supplied content is a valid IP v4 address
@@ -1626,7 +1721,9 @@ implementation
 
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
-  Name := Directory + TFileName(F.Name);
+  Name := TFileName(F.Name);
+  if Directory <> '' then
+    insert(Directory, Name, 1);
   Attr := F.Attr;
   if Attr and faDirectory <> 0 then // may happen with ffoIncludeFolder option
     Size := -1
@@ -1651,26 +1748,81 @@ begin
   FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
 end;
 
-function SortDynArrayFindFiles(const A, B): integer;
+function SortFindFileName(const A, B): integer;
+var
+  fa: TFindFiles absolute A;
+  fb: TFindFiles absolute B;
 begin
-  if TFindFiles(A).Size < 0 then
-    if TFindFiles(B).Size < 0 then
-      result := SortDynArrayFileName(A, B) // both are folders
+  result := 0;
+  if @A = @B then
+    exit;
+  if fa.Size < 0 then
+    if fb.Size < 0 then
+      result := 0 // both are folders
     else
-      result := -1                         // folders first
-  else if TFindFiles(B).Size < 0 then
-    result := 1                           // files last
+      dec(result) // folders first
+  else if fb.Size < 0 then
+    inc(result)   // files last
   else
-    result := SortDynArrayFileName(A, B); // both are files
+    result := 0;  // both are files
+  if result = 0 then
+    result := SortDynArrayFileName(fa.Name, fb.Name)
 end;
 
-function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
-  Options: TFindFilesOptions): TFindFilesDynArray;
+function SortFindFileFullName(const A, B): integer;
 var
-  m, count: integer;
-  dir: TFileName;
+  fa: TFindFiles absolute A;
+  fb: TFindFiles absolute B;
+begin
+  if @A = @B then
+    result := 0
+  else
+    {$ifdef OSPOSIX}
+    result := SortDynArrayString(fa.Name, fb.Name);
+    {$else}
+    result := SortDynArrayStringI(fa.Name, fb.Name);
+    {$endif}
+end;
+
+function SortFindFileTimestamp(const A, B): integer;
+var
+  fa: TFindFiles absolute A;
+  fb: TFindFiles absolute B;
+begin
+  result := 0;
+  if @A = @B then
+    exit;
+  if fa.Size < 0 then
+    if fb.Size < 0 then
+      result := CompareFloat(fa.Timestamp, fb.Timestamp) // both are folders
+    else
+      dec(result) // folders first
+  else if fb.Size < 0 then
+    inc(result)   // files last
+  else
+    result := CompareFloat(fa.Timestamp, fb.Timestamp); // both are files
+  if result = 0 then
+    result := SortDynArrayFileName(fa.Name, fb.Name); // for consistency
+end;
+
+procedure FindFilesSort(var da: TDynArray; Options: TFindFilesOptions);
+begin
+  if da.count > 1 then
+    if ffoSortByName in Options then
+      da.Sort(SortFindFileName) // use RTL and "natural" order
+    else if ffoSortByFullName in Options then
+      da.Sort(SortFindFileFullName)
+    else if ffoSortByDate in Options then
+      da.Sort(SortFindFileTimestamp);
+end;
+
+procedure FindFilesRtl(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions; out Files: TFindFilesDynArray);
+var
+  count: integer;
+  m: PChar;
+  dir, onemask: TFileName;
   da: TDynArray;
-  masks: TRawUtf8DynArray;
   masked: TFindFilesDynArray;
 
   procedure SearchFolder(const folder: TFileName);
@@ -1707,91 +1859,139 @@ var
         if SearchRecValidFolder(F, ffoIncludeHiddenFiles in Options) and
            ((IgnoreFileName = '') or
             (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
-          SearchFolder(IncludeTrailingPathDelimiter(folder + F.Name));
+          SearchFolder(MakePath([folder, F.Name], true));
       until FindNext(F) <> 0;
       FindClose(F);
     end;
   end;
 
 begin
-  Finalize(result);
-  da.Init(TypeInfo(TFindFilesDynArray), result, @count);
-  if Pos(';', Mask) > 0 then
-    CsvToRawUtf8DynArray(pointer(StringToUtf8(Mask)), masks, ';');
-  if masks <> nil then
-  begin
-    // recursive calls for each masks[], optionally sorted by mask
-    if ffoSortByName in Options then
-      QuickSortRawUtf8(masks, length(masks), nil,
-        {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
-    for m := 0 to length(masks) - 1 do
-    begin
-      masked := FindFiles(
-        Directory, Utf8ToString(masks[m]), IgnoreFileName, Options);
-      da.AddArray(masked);
-    end;
-  end
+  da.Init(TypeInfo(TFindFilesDynArray), Files, @count);
+  if Directory <> '' then
+    dir := IncludeTrailingPathDelimiter(Directory);
+  if Pos(';', Mask) = 0 then
+    // single mask search
+    SearchFolder('')
   else
   begin
-    // single mask search
-    if Directory <> '' then
-      dir := IncludeTrailingPathDelimiter(Directory);
-    SearchFolder('');
-    if (ffoSortByName in Options) and
-       (da.Count > 1) then
-      da.Sort(SortDynArrayFindFiles);
+    m := pointer(Mask); // e.g. '*.txt;*.json'
+    repeat
+      onemask := GetNextItemString(m, ';');
+      if onemask = '' then
+        break;
+      FindFilesRtl(dir, onemask, IgnoreFileName, Options, masked);
+      da.AddArray(masked);
+    until false;
   end;
-  if count <> 0 then
-    DynArrayFakeLength(result, count);
+  if count = 0 then
+    exit;
+  FindFilesSort(da, Options);
+  DynArrayFakeLength(Files, count);
 end;
 
-function FileNames(const Directory, Mask: TFileName;
-  Options: TFindFilesOptions; const IgnoreFileName: TFileName): TFileNameDynArray;
 {$ifdef OSPOSIX}
+
+function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions): TFindFilesDynArray;
+var
+  dir: TFileName;
+  names: {$ifdef ISDELPHI} TFilenameDynArray {$else} TRawUtf8DynArray {$endif};
+  n, r, i: PtrInt;
+  d: PFindFiles;
+  ts, tolocal: TUnixMSTime;
+  da: TDynArray;
+begin
+  result := nil;
+  dir := IncludeTrailingPathDelimiter(Directory);
+  if not DirectoryExists(dir) then
+    exit;
+  // call PosixFileNames() i.e. efficient getdents/getdents64 syscall
+  names := FileNames(dir, Mask, Options, IgnoreFileName);
+  n := length(names);
+  if n = 0 then
+    exit;
+  // compute TFindFilesDynArray from names[]
+  if not (ffoExcludesDir in Options) then
+    dir := '';
+  tolocal := TimeZoneLocalBias * 60000; // local TSearchRec: use TZSeconds * 60
+  SetLength(result, n);
+  r := 0;
+  d := pointer(result);
+  for i := 0 to n - 1 do
+  begin
+    d^.Name := names[i];
+    if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
+    begin
+      d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal);
+      inc(d); // will leave d^.Attr = 0
+      inc(r);
+    end;
+  end;
+  if r <> n then
+    DynArrayFakeLength(result, r);
+  if not (ffoSortByDate in Options) then
+    exit;
+  da.Init(TypeInfo(TFindFilesDynArray), result);
+  FindFilesSort(da, Options);
+end;
+
+function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
+  const IgnoreFileName: TFileName): TFileNameDynArray;
 var
   m: TMatchDynArray;
   cb: TOnPosixFileName;
-{$endif OSPOSIX}
 begin
-  {$ifdef OSPOSIX}
-  if (Options * [ffoIncludeFolder] = []) and
-     ((Options * [ffoSortByName] = []) or
-      (PosExChar(';', Mask) = 0)) then // sort on multi-mask not yet implemented
+  // use much faster PosixFileNames() low-level function over TMatchDynArray
+  cb := nil;
+  if Mask <> FILES_ALL then
   begin
-    // use much faster PosixFileNames() low-level function over TMatchDynArray
-    cb := nil;
-    if Mask <> FILES_ALL then
-    begin
-      cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
-      SetMatchs(Mask, {caseinsens=}false, m, ';');
-    end;
-    {$IFDEF DELPHIANDROID}
-    begin
-      var rawUTF8Result: TRawUtf8DynArray;
-      var i: integer;
-      rawUTF8Result := PosixFileNames(Directory,
-                                      ffoSubFolder in Options, cb, pointer(m), ffoExcludesDir in Options);
-      SetLength(result, length(rawUTF8Result));
-      for i := 0 to length(result) - 1 do
-          result[i]:= rawUTF8Result[i];
-    end;
-    {$ELSE}
-    result := PosixFileNames(Directory,
-      ffoSubFolder in Options, cb, pointer(m), ffoExcludesDir in Options);
-    {$ENDIF}
-    if result = nil then
-      exit;
-    if IgnoreFileName <> '' then
-      DeleteRawUtf8(result, FindRawUtf8(result, IgnoreFileName));
-    if ffoSortByName in Options then
-      QuickSortRawUtf8(result, length(result));
-  end
-  else
-  {$endif OSPOSIX}
-    // use regular FindFirst/FindNext and transient TFindFilesDynArray resultset
-    result := FindFilesDynArrayToFileNames(
-      FindFiles(Directory, Mask, IgnoreFileName, Options));
+    cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
+    SetMatchs(Mask, {caseinsens=}false, m, ';');
+  end;
+  {$ifdef DELPHIANDROID}
+  begin
+    var rawUTF8Result: TRawUtf8DynArray;
+    var i: integer;
+    rawUTF8Result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
+      ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options,
+      ffoIncludeFolder in Options);
+    SetLength(result, length(rawUTF8Result));
+    for i := 0 to length(result) - 1 do
+        result[i]:= rawUTF8Result[i];
+  end;
+  {$else}
+  result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
+    ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options,
+    ffoIncludeFolder in Options);
+  {$endif}
+  if result = nil then
+    exit;
+  if IgnoreFileName <> '' then
+    DeleteRawUtf8(result, FindRawUtf8(result, IgnoreFileName));
+  if ffoSortByName in Options then
+    QuickSortRawUtf8(result, length(result), nil, StrCompPosixFileName)
+  else if ffoSortByFullName in Options then
+    QuickSortRawUtf8(result, length(result));
 end;
+
+{$else} // Windows can just call FindFiles() and RTL FindFirst/FindNext
+
+function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions): TFindFilesDynArray;
+begin
+  FindFilesRtl(Directory, Mask, IgnoreFileName, Options, result);
+end;
+
+function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
+  const IgnoreFileName: TFileName): TFileNameDynArray;
+var
+  files: TFindFilesDynArray;
+begin
+  FindFilesRtl(Directory, Mask, IgnoreFileName, Options, files);
+  result := FindFilesDynArrayToFileNames(files);
+end;
+
+  {$endif OSPOSIX}
 
 function FileNames(const Path: array of const; const Mask: TFileName;
   Options: TFindFilesOptions): TFileNameDynArray;
@@ -1804,25 +2004,48 @@ end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 var
-  i, n: PtrInt;
+  n: integer;
+  r: PFileName;
+  f: PFindFiles;
 begin
   Finalize(result);
   if Files = nil then
     exit;
   n := length(Files);
   SetLength(result, n);
-  for i := 0 to n - 1 do
-    result[i] := Files[i].Name;
-end;
-
-function SortFindFileTimestamp(const A, B): integer;
-begin
-  result := CompareFloat(TFindFiles(A).Timestamp, TFindFiles(B).Timestamp);
+  f := pointer(Files);
+  r := pointer(result);
+  repeat
+    r^ := f^.Name;
+    inc(f);
+    inc(r);
+    dec(n);
+  until n = 0;
 end;
 
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 begin
   DynArray(TypeInfo(TFindFilesDynArray), Files).Sort(SortFindFileTimestamp);
+end;
+
+function FindFilesSize(const Files: TFindFilesDynArray): Int64;
+var
+  n: integer;
+  f: PFindFiles;
+begin
+  result := 0;
+  f := pointer(Files);
+  if f = nil then
+    exit;
+  n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
+  repeat
+    if f^.Size > 0 then // folder f^.Size = -1
+      inc(result, f^.Size);
+    dec(n);
+    if n = 0 then
+      break;
+    inc(f);
+  until false;
 end;
 
 function SynchFolders(const Reference, Dest: TFileName;
@@ -2879,10 +3102,10 @@ function SearchSBNDMQ2ComputeMask(const Pattern: RawUtf8;
 var
   i: PtrInt;
   p: PAnsiChar absolute Pattern;
-  m: PSBNDMQ2Mask absolute result;
+  m: PSBNDMQ2Mask;
   c: PCardinal;
 begin
-  FastNewRawByteString(result, SizeOf(m^));
+  m := FastNewRawByteString(result, SizeOf(m^));
   FillCharFast(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do
   begin
@@ -3156,9 +3379,9 @@ function TUriMatch.Check(const csv: RawUtf8;
 begin
   if Init.TryLock then // thread-safe init once from supplied csv
     DoInit(pointer(csv), caseinsensitive);
-  result := ((Names <> nil) and
+  result := ((Names <> nil) and // check 'file.ext' pattern
              MatchAnyP(pointer(Names), uri.Name.Text, uri.Name.Len)) or
-            ((Paths <> nil) and
+            ((Paths <> nil) and // check 'path/to/file.ext' pattern
              MatchAnyP(pointer(Paths), uri.Path.Text, uri.Path.Len));
 end;
 
@@ -3334,20 +3557,18 @@ procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TRawUtf8DynArray; CsvSep: AnsiChar);
 var
   match: TMatchDynArray;
-  m, n, i: PtrInt;
+  n, i: PtrInt;
 begin
   if SetMatchs(CsvPattern, CaseInsensitive, match, CsvSep) = 0 then
     exit;
   n := 0;
   for i := 0 to high(Values) do
-    for m := 0 to high(match) do
-      if match[m].Match(Values[i]) then
-      begin
-        if i <> n then
-          Values[n] := Values[i];
-        inc(n);
-        break;
-      end;
+    if MatchAnyP(pointer(match), pointer(Values[i]), length(Values[i])) then
+    begin
+      if i <> n then
+        Values[n] := Values[i];
+      inc(n);
+    end;
   if n <> length(Values) then
     SetLength(Values, n);
 end;
@@ -4322,8 +4543,8 @@ end;
 procedure TSynBloomFilter.Insert(aValue: pointer; aValueLen: integer);
 var
   h: integer;
-  h1, h2: cardinal; // https://goo.gl/Pls5wi
-begin
+  h1, h2: cardinal;
+begin // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
   if (self = nil) or
      (aValueLen <= 0) or
      (fBits = 0) then
@@ -4355,7 +4576,7 @@ end;
 function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
 var
   h: integer;
-  h1, h2: cardinal; // adding h2 is enough and safe - see https://goo.gl/Pls5wi
+  h1, h2: cardinal; // adding h2 is enough and safe - see pdf above
 begin
   result := false;
   if (self = nil) or
@@ -4730,8 +4951,7 @@ var
 begin
   PEnd := PAnsiChar(P) + Len - 4;
   DestLen := FromVarUInt32(P);
-  FastNewRawByteString(Dest, DestLen);
-  D := pointer(Dest);
+  D := FastNewRawByteString(Dest, DestLen);
   DEnd := D + DestLen;
   crc := 0;
   while PAnsiChar(P) < PEnd do
@@ -5739,6 +5959,63 @@ begin
   result := self;
 end;
 
+{ TSynValidate }
+
+function TSynValidate.DoApply(Data: pointer; Prop: PRttiCustomProp;
+  ErrMsg: PString): boolean;
+var
+  err: string;
+begin
+  result := Process(-1, Prop^.GetValueText(Data), err);
+  if not result then
+    err := FormatString('%: %', [Prop^.Name, err]);
+  if ErrMsg <> nil then
+    ErrMsg^ := err
+  else if not result then
+    ERttiFilter.RaiseUtf8('% failed on %', [self, err]);
+end;
+
+class function TSynValidate.Execute(const aParameters, aValue: RawUtf8): string;
+var
+  v: TSynValidate;
+begin
+  result := '';
+  v := Create(aParameters);        // instantiate
+  try
+    v.Process(-1, aValue, result); // apply validation rules
+  finally
+    v.Free;
+  end;
+end;
+
+
+{ TSynFilter }
+
+function TSynFilter.DoApply(Data: pointer; Prop: PRttiCustomProp;
+  ErrMsg: PString): boolean;
+var
+  v, vref: RawUtf8;
+begin
+  v := Prop^.GetValueText(Data); // works for both classes or records
+  vref := v;
+  Process(-1, v);
+  if v <> vref then
+    Prop^.SetValueText(Data, v);
+  result := true; // a filter always return true to continue the process
+end;
+
+class procedure TSynFilter.Execute(const aParameters: RawUtf8; var aValue: RawUtf8);
+var
+  v: TSynFilter;
+begin
+  v := Create(aParameters); // instantiate
+  try
+    v.Process(-1, aValue);  // apply filtering rules
+  finally
+    v.Free;
+  end;
+end;
+
 
 { TSynFilterUpperCase }
 
@@ -5809,8 +6086,8 @@ end;
 
 { TSynValidateIPAddress }
 
-function TSynValidateIPAddress.Process(aFieldIndex: integer; const value:
-  RawUtf8; var ErrorMsg: string): boolean;
+function TSynValidateIPAddress.Process(aFieldIndex: integer;
+  const value: RawUtf8; var ErrorMsg: string): boolean;
 begin
   result := IsValidIP4Address(pointer(value));
   if not result then
@@ -5823,7 +6100,7 @@ end;
 function TSynValidateEmail.Process(aFieldIndex: integer; const value: RawUtf8;
   var ErrorMsg: string): boolean;
 var
-  TLD, DOM: RawUtf8;
+  tld, dom: RawUtf8;
   i: integer;
 const
   TopLevelTLD: array[0..20] of PUtf8Char = (
@@ -5834,26 +6111,26 @@ const
 begin
   if IsValidEmail(pointer(value)) then
     repeat
-      DOM := lowercase(copy(value, PosExChar('@', value) + 1, 100));
-      if length(DOM) > 63 then
+      dom := lowercase(copy(value, PosExChar('@', value) + 1, 100));
+      if length(dom) > 63 then
         break; // exceeded 63-character limit of a DNS name
       if (ForbiddenDomains <> '') and
-         CsvContains(ForbiddenDomains, DOM) then
+         CsvContains(ForbiddenDomains, dom) then
         break;
       i := length(value);
       while (i > 0) and
             (value[i] <> '.') do
         dec(i);
-      TLD := lowercase(copy(value, i + 1, 100));
+      tld := lowercase(copy(value, i + 1, 100));
       if (AllowedTLD <> '') and
-         not CsvContains(AllowedTLD, TLD) then
+         not CsvContains(AllowedTLD, tld) then
         break;
       if (ForbiddenTLD <> '') and
-         CsvContains(ForbiddenTLD, TLD) then
+         CsvContains(ForbiddenTLD, tld) then
         break;
       if not fAnyTLD then
-        if FastFindPUtf8CharSorted(@TopLevelTLD, high(TopLevelTLD), pointer(TLD)) < 0 then
-          if length(TLD) <> 2 then
+        if FastFindPUtf8CharSorted(@TopLevelTLD, high(TopLevelTLD), pointer(tld)) < 0 then
+          if length(tld) <> 2 then
             break; // assume a two chars string is a ISO 3166-1 alpha-2 code
       result := true;
       exit;
@@ -5922,8 +6199,8 @@ begin
   result := Format(sInvalidTextLengthMin, [min, Character01n(min)]);
 end;
 
-function TSynValidateNonVoidText.Process(aFieldIndex: integer; const value:
-  RawUtf8; var ErrorMsg: string): boolean;
+function TSynValidateNonVoidText.Process(aFieldIndex: integer;
+  const value: RawUtf8; var ErrorMsg: string): boolean;
 begin
   if value = '' then
   begin
@@ -6057,7 +6334,7 @@ const
     maxInt); //  MaxSpaceCount
 begin
   if (MinLength = 0) and
-     (MaxLength = 0) then  // if not previously set
+     (MaxLength = 0) then  // if not previously set e.g. by TSynValidatePassWord
     fProps := DEFAULT;
   inherited SetParameters(value);
   if value = '' then
@@ -6083,9 +6360,10 @@ begin
       'MaxSpaceCount',
       'Utf8Length'], @V);
     for i := 0 to high(fProps) do
-      fProps[i] := V[i].ToCardinal(fProps[i]);
-    with V[high(V)] do
-      fUtf8Length := ToBoolean;
+      if V[i].Len <> 0 then // override default if supplied
+        fProps[i] := V[i].ToCardinal;
+    if V[high(V)].Len <> 0 then
+      fUtf8Length := V[high(V)].ToBoolean;
   finally
     tmp.Done;
   end;
@@ -6118,9 +6396,136 @@ begin
   fProps := DEFAULT;
   fUtf8Length := false;
   // read custom parameters
-  inherited;
+  inherited SetParameters(value);
 end;
 
+
+{ TRttiFilter }
+
+constructor TRttiFilter.Create(aClass: TClass);
+begin
+  fRtti := mormot.core.rtti.Rtti.RegisterClass(aClass);
+  if fRtti = nil then
+    ERttiFilter.RaiseUtf8('Unexpected %.Create(aClass=%)', [self, aClass]);
+  SetLength(fRules, fRtti.Props.Count);
+end;
+
+constructor TRttiFilter.Create(aRtti: PRttiInfo);
+begin
+  fRtti := mormot.core.rtti.Rtti.RegisterType(aRtti);
+  if fRtti = nil then
+    ERttiFilter.RaiseUtf8('Unexpected %.Create(aRtti=%)', [self, aRtti]);
+  SetLength(fRules, fRtti.Props.Count);
+end;
+
+destructor TRttiFilter.Destroy;
+begin
+  inherited Destroy;
+  ObjArrayObjArrayClear(fRules);
+end;
+
+procedure TRttiFilter.Clear;
+begin
+  ObjArrayObjArrayClear(fRules);
+  SetLength(fRules, fRtti.Props.Count);
+  fCount := 0;
+end;
+
+function TRttiFilter.GetRules(const aFieldName: RawUtf8): TSynFilterOrValidateObjArray;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  i := fRtti.Props.FindIndex(aFieldName);
+  if i >= 0 then
+    result := fRules[i];
+end;
+
+procedure TRttiFilter.Add(const aFieldName: RawUtf8;
+  const aRules: array of TSynFilterOrValidate);
+var
+  i, r: PtrInt;
+begin
+  i := fRtti.Props.FindIndex(aFieldName);
+  if i < 0 then
+    ERttiFilter.RaiseUtf8('Invalid %.Add(%)', [self, aFieldName]);
+  for r := 0 to high(aRules) do
+    if aRules[r] <> nil then
+    begin
+      PtrArrayAdd(fRules[i], aRules[r]);
+      inc(fCount);
+    end;
+end;
+
+procedure TRttiFilter.AddClass(const aFieldName: RawUtf8;
+  const aRules: array of TSynFilterOrValidateClass);
+var
+  i, r: PtrInt;
+begin
+  i := fRtti.Props.FindIndex(aFieldName);
+  if i < 0 then
+    ERttiFilter.RaiseUtf8('Invalid %.Add(%)', [self, aFieldName]);
+  for r := 0 to high(aRules) do
+    if aRules[r] <> nil then
+    begin
+      PtrArrayAdd(fRules[i], aRules[r].Create); // new with default params
+      inc(fCount);
+    end;
+end;
+
+procedure TRttiFilter.DoApply(aData: pointer; aClass: TSynFilterOrValidateClass;
+  aErrMsg: PString);
+var
+  f, r, n: PtrInt;
+  o: ^TSynFilterOrValidateObjArray;
+  p: PRttiCustomProp;
+begin
+  if (self = nil) or
+     (aData = nil) or
+     (fCount = 0) then
+    exit;
+  n := fCount;
+  o := pointer(fRules);
+  p := pointer(fRtti.Props.List); // fRules[] follows fRtti.Props.List[]
+  for r := 1 to length(fRules) do
+  begin
+    for f := 0 to length(o^) - 1 do
+    begin
+      if (aClass = nil) or
+         o^[f].InheritsFrom(aClass) then
+        if not o^[f].DoApply(aData, p, aErrMsg) then
+          exit; // stop at first failing TSynValidate rule
+      dec(n);
+      if n = 0 then
+        exit; // no more rules to process
+    end;
+    inc(o);
+    inc(p);
+  end;
+end;
+
+procedure TRttiFilter.Filter(aData: pointer);
+begin
+  DoApply(aData, TSynFilter, nil);
+end;
+
+function TRttiFilter.Validate(aData: pointer): string;
+begin
+  result := Apply(aData, TSynValidate);
+end;
+
+function TRttiFilter.Apply(aData: pointer; aClass: TSynFilterOrValidateClass): string;
+begin
+  result := '';
+  DoApply(aData, aClass, @result);
+end;
+
+procedure TRttiFilter.ApplyOrRaise(aData: pointer);
+begin
+  DoApply(aData, nil, nil); // ErrMsg=nil will trigger ERttiFilter on error
+end;
 
 
 { ***************** Cross-Platform TSynTimeZone Time Zones }

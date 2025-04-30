@@ -1431,7 +1431,7 @@ var
             else
               name := fStoredClassRecordProps.Fields.List[Field - 1].Name;
             if SubField <> '' then // 'field.subfield1.subfield2'
-              name := name + SubField;
+              Append(name, SubField);
             if FunctionName <> '' then
               if FunctionKnown = funcDistinct then
               begin
@@ -1756,15 +1756,15 @@ begin
       include(o, mcoTls);
     client := TMongoClient.Create(server, p, o);
     try
-      with aDefinition do
-        if (User <> '') and
-           (Password <> '') then
-        begin
-          pwd := PasswordPlain;
-          database := client.OpenAuth(DatabaseName, User, pwd);
-        end
-        else
-          database := client.Open(DatabaseName);
+      if (aDefinition.User <> '') and
+         (aDefinition.Password <> '') then
+      begin
+        pwd := aDefinition.PasswordPlain;
+        database := client.OpenAuth(
+          aDefinition.DatabaseName, aDefinition.User, pwd);
+      end
+      else
+        database := client.Open(aDefinition.DatabaseName);
       result := CreateInMemoryServer(aModel, aHandleAuthentication);
       OrmMapMongoDBAll(
         (result as TRestServer).OrmInstance as TRestOrmServer,

@@ -37,6 +37,7 @@ type
   TTestCoreCollections = class(TSynTestCase)
   protected
     procedure TestOne<T>(const li: IList<T>);
+    procedure RunBenchmark(Sender: TObject);
   published
     procedure _IList;
     procedure _IKeyValue;
@@ -67,7 +68,7 @@ const
   ONLYLOG = true; // set to FALSE for verbose benchmarking console output
 var
   cop: TArray<T>;
-  i, j: T;
+  i: T;
   n: integer;
   v: PVariantArray;
   p: ^T;
@@ -446,7 +447,9 @@ var
   vi: Int64;
   di: IKeyValue<integer, Int64>;
   ei: TPair<integer, Int64>;
+  ui: IKeyValue<SynUnicode, integer>;
   u: RawUtf8;
+  s: SynUnicode;
   pu: PRawUtf8Array;
   vu: double;
   du: IKeyValue<RawUtf8, double>;
@@ -569,6 +572,24 @@ begin
     du.Clear;
     Check(du.Count = 0);
   end;
+  // manual IKeyValue<SynUnicode, integer> validation
+  ui := Collections.NewKeyValue<SynUnicode, integer>;
+  Utf8ToSynUnicode(RawUtf8OfChar('x', 300), s); // used to trigger GPF
+  CheckEqual(length(s), 300);
+  CheckEqual(ui.Count, 0);
+  Check(not ui.TryGetValue(s, i));
+  i := 100;
+  ui.Add(s, i);
+  CheckEqual(ui.Count, 1);
+  i := 0;
+  Check(ui.TryGetValue(s, i));
+  CheckEqual(i, 100);
+  CheckEqual(ui.Count, 1);
+  Check(not ui.TryGetValue('abc', i));
+  ui.Add('abc', 10);
+  Check(ui.TryGetValue('abc', i));
+  CheckEqual(i, 10);
+  CheckEqual(ui.Count, 2);
 end;
 
 
@@ -832,37 +853,45 @@ const
     mORMotKeyValue2);
   {$endif RTL_BENCH}
 
-procedure TTestCoreCollections.Benchmark;
+procedure TTestCoreCollections.RunBenchmark(Sender: TObject);
 const
   REP = 4;
 var
+  func: TBenchMark;
   timer1, timer2: TPrecisionTimer;
   name: string;
-  b, i, j, mul, n, max, tot: PtrInt;
+  i, j, mul, n, max, tot: PtrInt;
+begin
+  func := BENCHS[PtrInt(Sender)];
+  max := 10;
+  for i := 1 to REP - 1 do
+    max := max * 20;
+  timer1.Start;
+  tot := 0;
+  n := 10;
+  for i := 1 to REP do
+  begin
+    timer2.Start;
+    mul := max div n; // to have big enough time
+    for j := 1 to mul do
+    begin
+      name := func(n);
+      Check(name <> '');
+    end;
+    NotifyTestSpeed('size=%', [n], n * mul, 0, @timer2, {onlylog=}true);
+    inc(tot, n * mul);
+    n := n * 20;
+  end;
+  NotifyTestSpeed(name, tot, 0, @timer1);
+end;
+
+procedure TTestCoreCollections.Benchmark;
+var
+  b: PtrInt;
 begin
   for b := low(BENCHS) to high(BENCHS) do
-  begin
-    max := 10;
-    for i := 1 to REP - 1 do
-      max := max * 20;
-    timer1.Start;
-    tot := 0;
-    n := 10;
-    for i := 1 to REP do
-    begin
-      timer2.Start;
-      mul := max div n; // to have big enough time
-      for j := 1 to mul do
-      begin
-        name := BENCHS[b](n);
-        Check(name <> '');
-      end;
-      NotifyTestSpeed('size=%', [n], n * mul, 0, @timer2, {onlylog=}true);
-      inc(tot, n * mul);
-      n := n * 20;
-    end;
-    NotifyTestSpeed(name, tot, 0, @timer1);
-  end;
+    Run(RunBenchmark, pointer(b), '', {threaded=}true, {notify=}false);
+  RunWait({notify=}false);
 end;
 
 {$else}

@@ -392,19 +392,19 @@ end;
 procedure TTftpContext.SetDefaultOptions(
   op: TTftpOpcode; opt: TTftpContextOptions);
 begin
-  OpCode := op;
+  OpCode             := op;
   HasExtendedOptions := false;
-  RetryCount := 0;
-  TimeoutSec := TFTP_TIMEOUT_DEFAULT;    // = 5 seconds
-  BlockSize := TFTP_BLKSIZE_DEFAULT;     // = 512 as before RFC7440
-  TransferSize := TFTP_TSIZE_UNKNOWN;    // = -1 meaning no tsize option
-  WindowSize := TFTP_WINDOWSIZE_DEFAULT; // = 1 as before RFC7440
-  Options := opt;
-  LastWindowCounter := WindowSize;
-  LastReceivedSequence := 0;
-  LastReceivedSequenceHi := 0;
+  RetryCount         := 0;
+  TimeoutSec         := TFTP_TIMEOUT_DEFAULT;    // = 5 seconds
+  BlockSize          := TFTP_BLKSIZE_DEFAULT;    // = 512 as before RFC7440
+  TransferSize       := TFTP_TSIZE_UNKNOWN;      // = -1 meaning no tsize option
+  WindowSize         := TFTP_WINDOWSIZE_DEFAULT; // = 1 as before RFC7440
+  CurrentSize        := 0;
+  Options            := opt;
+  LastWindowCounter  := WindowSize;
+  LastReceivedSequence     := 0;
+  LastReceivedSequenceHi   := 0;
   LastAcknowledgedSequence := 0;
-  CurrentSize := 0;
 end;
 
 procedure TTftpContext.AppendTextToFrame(const Text: RawUtf8);

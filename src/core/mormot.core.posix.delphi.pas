@@ -74,10 +74,15 @@ uses
   Posix.Dirent,
   Posix.Signal,
   Posix.SysUtsname,
+  Posix.SysSocket,
+  Posix.SysTime,
+  Posix.NetinetIn,
+  System.Net.Socket,
   {$ifndef HASRTLCRITICALSECTION}
   SyncObjs,
   {$endif}
-  System.SysUtils;
+  System.SysUtils,
+  System.Math;
 
 (*
 // Windows Consts
@@ -94,6 +99,8 @@ type
      cUChar = byte;
      cInt = int32;
      cUInt = longword;
+     cuint32 = uint32;
+     cuint64 = uint64;
      cShort = smallint;
      cUShort = word;
      {$ifdef cpu64}
@@ -154,7 +161,6 @@ type
   end;
 
   TTimeSpec = timespec;
-
 
 
 (*
@@ -490,15 +496,26 @@ type TStat = _stat;
      TIOCtlRequest = DWord;
 
 function fpStat(AFileName: Pointer; var AStatBuffer: TStat): integer; inline;
+function fpLStat(AFileName: Pointer; var AStatBuffer: TStat): integer; inline;
 function fpFStat(AFileHandle: THandle; var AStatBuffer: TStat): integer; inline;
 function FpUtime(AFileName: Pointer; ATimBuf: PUTimBuf): integer; inline;
 function FpS_ISDIR(AAttributes: integer): boolean; inline;
+Function FpS_ISCHR(AAttributes: integer): boolean; inline;
+Function FpS_ISBLK(AAttributes: integer): boolean; inline;
+Function FpS_ISREG(AAttributes: integer): boolean; inline;
+Function FpS_ISFIFO(AAttributes: integer): boolean; inline;
+// The following two are very common, but not POSIX.
 function fpS_ISLNK(AAttributes: integer): boolean; inline;
+Function FpS_ISSOCK(AAttributes: integer): boolean; inline;
+
+
+
 function fpaccess(AFileName: Pointer; AMode: integer): integer; inline;
 function fpchmod(AFileName: Pointer; AMode: integer): integer; inline; overload;
 function fpchmod(AFileName: TFileName; AMode: integer): integer; inline; overload;
 function FpLSeek(AFileHandle: THandle; const Offset: Int64; Origin: cardinal): Int64; inline;
 function FpSymlink(AFileName: Pointer; ATarget: Pointer): integer; inline;
+function FpUnlink(AFileName: Pointer): integer; inline;
 
 function FpOpen(AFileName: Pointer; Flags: Integer): integer; inline; overload;
 function FpOpen(AFileName: Pointer; Flags: Integer; Mode: mode_t): integer; inline; overload;
@@ -511,7 +528,8 @@ function FpRead(fd: cint; buf: PAnsiChar; nbytes: TSize): TSSize; inline; overlo
 function FpRead(fd: cint; var buf: AnsiChar; nbytes: TSize): TSSize; inline; overload;
 function FpRead(fd: cint; var buf; nbytes: TSize): TSSize; inline; overload;
 function FpWrite(fd: cint; buf: PAnsiChar; nbytes: TSize): TSSize; inline;
-function FpOpendir(aDirname: TFilename): pdir; inline;
+function FpOpendir(const aDirname: TFilename): pdir; inline; overload;
+function FpOpendir(const aDirname: Pointer): pdir; inline; overload;
 function FpClosedir(dirp: pdir): cint; inline; overload;
 function FpClosedir(var dir: Dir): cint; inline; overload;
 function FpReaddir(var dirp: Dir) : pDirent; inline;
@@ -520,6 +538,7 @@ function FpReadLink(const ALinkName: RawByteString): RawByteString; overload;
 function FpChdir(path: pointer): cint; inline;
 
 const
+  FIONBIO         = $5421;
   FIONREAD        = $541B;
   TIOCINQ         = FIONREAD;
 
@@ -572,6 +591,8 @@ type
   tpollfd = pollfd;
   ppollfd = ^pollfd;
 
+  TSockLen = socklen_t;
+
 // int poll(struct pollfd* _Nullable __fds, nfds_t __count, int __timeout_ms);
 Function  FpPoll(fds: ppollfd; nfds: cuint; timeout: clong): cint; cdecl; external libc name 'poll';
 
@@ -581,6 +602,17 @@ const
      ESysE2BIG = E2BIG;
      ESysEPERM = EPERM;
      ESysESRCH = ESRCH;
+     ESysEAGAIN = EAGAIN;
+     ESysEADDRNOTAVAIL = EADDRNOTAVAIL;
+     ESysECONNABORTED = ECONNABORTED;
+     ESysECONNRESET = ECONNRESET;
+     ESysETIMEDOUT = ETIMEDOUT;
+     ESysEINVAL = EINVAL;
+     ESysEMFILE = EMFILE;
+     ESysECONNREFUSED = ECONNREFUSED;
+     ESysEINPROGRESS = EINPROGRESS;
+     ESysEINTR = EINTR;
+     ESysEPIPE = EPIPE;
 
 Function StrError(err: cint): string;
 
@@ -663,7 +695,8 @@ type
               end;
      PStatfs = ^TStatfs;
 
-function fpStatFS(const aDriveFolderOrFile: TFileName; aFS: PStatfs): integer;
+function fpStatFS(const aDriveFolderOrFile: TFileName; aFS: PStatfs): integer; overload; // inline not possible, since use of locally imported function
+function fpStatFS(const aDriveFolderOrFile: pointer; aFS: PStatfs): integer; overload;
 
 type
     PSigInfo = Psiginfo_t;
@@ -718,16 +751,51 @@ function __system_property_get(name: PAnsiChar; value: PAnsiChar): longint; cdec
 
 function GetSystemProperty(Name: PAnsiChar): shortstring; inline;
 function FpUname(var name: utsname): cint; inline;
+function FPgetenv(Name: PAnsiChar): PAnsiChar; inline;
+
+// Processor Exception masks from FPC
+type
+    TFPUException = TArithmeticException;
+    TFPUExceptionMask = set of TFPUException;
+
+const
+    exInvalidOp =  TArithmeticException.exInvalidOp;
+    exDenormalized =  TArithmeticException.exDenormalized;
+    exZeroDivide =  TArithmeticException.exZeroDivide;
+    exOverflow =  TArithmeticException.exOverflow;
+    exUnderflow =  TArithmeticException.exUnderflow;
+    exPrecision =  TArithmeticException.exPrecision;
+
+Type
+    pSocklen = PSocklen_t;
+    PSockAddr = posix.NetinetIn.Psockaddr_in;
+
+    TTimeVal = posix.SysTime.timeval;
+    TLinger = posix.SysSocket.linger;
+
+const
+  EPOLLIN  = $01; { The associated file is available for read(2) operations. }
+  EPOLLPRI = $02; { There is urgent data available for read(2) operations. }
+  EPOLLOUT = $04; { The associated file is available for write(2) operations. }
+  EPOLLERR = $08; { Error condition happened on the associated file descriptor. }
+  EPOLLHUP = $10; { Hang up happened on the associated file descriptor. }
+  EPOLLONESHOT = $40000000; { Sets the One-Shot behaviour for the associated file descriptor. }
+  EPOLLET  = $80000000; { Sets  the  Edge  Triggered  behaviour  for  the  associated file descriptor. }
+  { Valid opcodes ( "op" parameter ) to issue to epoll_ctl }
+  EPOLL_CTL_ADD = 1;
+  EPOLL_CTL_DEL = 2;
+  EPOLL_CTL_MOD = 3;
 
 implementation
 
 uses
   Posix.Stdio,
+  Posix.Stdlib,
   Posix.fcntl,
   Posix.StrOpts,
   System.TimeSpan,
   System.IOUtils,
-  DateUtils,
+  System.DateUtils,
   Classes;
 
 {$ifndef HASRTLCRITICALSECTION}
@@ -1777,6 +1845,16 @@ begin
   result := stat(LFileName, AStatBuffer);
 end;
 
+function fpLStat(AFileName: Pointer; var AStatBuffer: TStat): integer;
+var
+  LFileName: Pointer;
+  M: TMarshaller;
+begin
+  LFileName := M.AsAnsi(TFileName(aFileName), CP_UTF8).ToPointer;
+  result := lstat(LFileName, AStatBuffer);
+end;
+
+
 function fpFStat(AFileHandle: THandle; var AStatBuffer: TStat): integer;
 begin
   result := fstat(AFileHandle, AStatBuffer);
@@ -1784,13 +1862,53 @@ end;
 
 function FpS_ISDIR(AAttributes: integer): boolean;
 begin
-  result:= TFileAttribute.faDirectory in TFile.IntegerToFileAttributes(AAttributes);
+   result:= AAttributes and S_IFMT =  S_IFDIR;
+end;
+
+//  case Attributes and S_IFMT of
+//    S_IFIFO: Include(Result, TFileAttribute.faNamedPipe);
+//    S_IFCHR: Include(Result, TFileAttribute.faCharacterDevice);
+//    S_IFDIR: Include(Result, TFileAttribute.faDirectory);
+//    S_IFBLK: Include(Result, TFileAttribute.faBlockDevice);
+//    S_IFREG: Include(Result, TFileAttribute.faNormal);
+//    S_IFLNK: Include(Result, TFileAttribute.faSymLink);
+//    S_IFSOCK: Include(Result, TFileAttribute.faSocket);
+//{$IFNDEF ANDROID}
+//    S_IFWHT: Include(Result, TFileAttribute.faWhiteout);
+//{$ENDIF}
+//  end;
+
+Function FpS_ISCHR(AAttributes: integer): boolean;
+begin
+   result:= AAttributes and S_IFMT =  S_IFCHR;
+end;
+
+Function FpS_ISBLK(AAttributes: integer): boolean;
+begin
+   result:= AAttributes and S_IFMT =  S_IFBLK;
+end;
+
+Function FpS_ISREG(AAttributes: integer): boolean;
+begin
+   result:= AAttributes and S_IFMT =  S_IFREG;
+end;
+
+Function FpS_ISFIFO(AAttributes: integer): boolean;
+begin
+   result:= AAttributes and S_IFMT =  S_IFIFO;
 end;
 
 function FpS_ISLNK(AAttributes: integer): boolean;
 begin
-  result:= TFileAttribute.faSymLink in TFile.IntegerToFileAttributes(AAttributes);
+//  result:= TFileAttribute.faSymLink in TFile.IntegerToFileAttributes(AAttributes);
+   result:= AAttributes and S_IFMT =  S_IFLNK;
 end;
+
+Function FpS_ISSOCK(AAttributes: integer): boolean;
+begin
+   result:= AAttributes and S_IFMT =  S_IFSOCK;
+end;
+
 
 function FpUtime(AFileName: Pointer; ATimBuf: PUTimBuf): integer;
 var
@@ -1840,6 +1958,48 @@ begin
   LTarget:= M.AsAnsi(TFileName(ATarget), CP_UTF8).ToPointer;
   result:= symlink(LFileName, LTarget);
 end;
+
+function FpUnlink(AFileName: Pointer): integer;
+var
+  LFileName: Pointer;
+  M: TMarshaller;
+begin
+  LFileName:= M.AsAnsi(TFileName(AFileName), CP_UTF8).ToPointer;
+  result:= unlink(LFileName);
+end;
+
+{
+           S_IFMT     0170000   bit mask for the file type bit field
+
+           S_IFSOCK   0140000   socket
+           S_IFLNK    0120000   s     ymbolic link
+           S_IFREG    0100000   regular file
+           S_IFBLK    0060000   block device
+           S_IFDIR    0040000   directory
+           S_IFCHR    0020000   character device
+           S_IFIFO    0010000   FIFO
+           S_ISREG(m)
+                  is it a regular file?
+
+           S_ISDIR(m)
+                  directory?
+
+           S_ISCHR(m)
+                  character device?
+
+           S_ISBLK(m)
+                  block device?
+
+           S_ISFIFO(m)
+                  FIFO (named pipe)?
+
+           S_ISLNK(m)
+                  symbolic link?  (Not in POSIX.1-1996.)
+
+           S_ISSOCK(m)
+                  socket?  (Not in POSIX.1-1996.)
+
+}
 
 function fpOpen(AFileName: Pointer; Flags: Integer): integer;
 var
@@ -1909,10 +2069,17 @@ begin
   FpIOCtl:= IOCtl(Handle, Ndx, Data);
 end;
 
-function Fpopendir(aDirname: TFilename): pdir;
+function Fpopendir(const aDirname: TFilename): pdir;
 var M: TMarshaller;
 begin
-  result:= opendir(M.AsAnsi(aDirname).toPointer);
+  result:= opendir(M.AsUTF8(aDirname).toPointer);
+end;
+
+function FpOpendir(const aDirname: Pointer): pdir;
+var
+  M: TMarshaller;
+begin
+  result:= opendir(M.AsAnsi(TFileName(aDirname), CP_UTF8).ToPointer);
 end;
 
 function Fpclosedir(dirp: pdir): cint;
@@ -1933,7 +2100,7 @@ end;
 Function FpReadLink(name: PChar; linkname: PAnsiChar; maxlen: size_t): cint;
 var M: TMarshaller;
 begin
-  result:= ReadLink(M.AsAnsi(name).toPointer, linkName, maxlen);
+  result:= ReadLink(M.AsUTF8(name).toPointer, linkName, maxlen);
 end;
 
 Function fpReadLink(const ALinkName: RawByteString): RawByteString;
@@ -2199,8 +2366,15 @@ function _statfs(__file: MarshaledAString; var __buf: TStatfs): Integer; cdecl; 
 function fpStatFS(const aDriveFolderOrFile: TFileName; aFS: PStatfs): integer;
 var M: TMarshaller;
 begin
-  result:= _statfs(M.AsAnsi(aDriveFolderOrFile, CP_UTF8).ToPointer, aFS^);
+  result:= _statfs(M.AsUTF8(aDriveFolderOrFile).ToPointer, aFS^);
 end;
+
+function fpStatFS(const aDriveFolderOrFile: pointer; aFS: PStatfs): integer;
+var M: TMarshaller;
+begin
+  result:= _statfs(M.AsUTF8(TFilename(aDriveFolderOrFile)).ToPointer, aFS^);
+end;
+
 
 function FpSigaction (sig: cInt; act: pSigActionRec; oact: pSigActionRec): cint;
 begin
@@ -2242,6 +2416,10 @@ begin
   result:= uname(name);
 end;
 
+function FPgetenv(Name: PAnsiChar): PAnsiChar;
+begin
+  result:= getenv(Name);
+end;
 
 
 initialization

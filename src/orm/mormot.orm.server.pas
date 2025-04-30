@@ -444,9 +444,9 @@ type
     // execute a CREATE INDEX IF NOT EXISTS on the main engine
     // - note that with SQLite3, your database schema should never contain two
     // indices where one index is a prefix of the other, e.g. if you defined:
-    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], True);
+    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], true);
     // Then the following index is not mandatory for SQLite3:
-    // ! aServer.CreateSqlIndex(TEmails, 'Email', False);
+    // ! aServer.CreateSqlIndex(TEmails, 'Email', false);
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
     function CreateSqlMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUtf8;
@@ -829,9 +829,9 @@ begin
       Int64(TableIndex) shl ORMVERSION_DELETEID_SHIFT;
     deleted.Deleted := ID;
     if Batch <> nil then
-      Batch.Add(deleted, True, True)
+      Batch.Add(deleted, true, true)
     else
-      Add(deleted, True, True);
+      Add(deleted, true, true);
     if (fOwner <>nil) and
        (fOwner.Services <> nil) then
       (fOwner.Services as TServiceContainerServer).
@@ -1778,7 +1778,7 @@ begin
     sql := '';
   if IndexName = '' then
   begin
-    IndexName := RawUtf8ArrayToCsv(FieldNames, '');
+    IndexName := JoinCsv('', FieldNames);
     if length(IndexName) + length(props.SqlTableName) > 64 then
       // avoid reaching potential identifier name size limit
       IndexName := crc32cUtf8ToHex(props.SqlTableName) +
@@ -1786,7 +1786,7 @@ begin
   end;
   sql := FormatUtf8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
     [sql, props.SqlTableName, IndexName, props.SqlTableName,
-     RawUtf8ArrayToCsv(FieldNames, ',')]);
+     JoinCsv(',', FieldNames)]);
   result := EngineExecute(sql);
 end;
 
@@ -2362,18 +2362,20 @@ begin
       if fRunTableTrans[i] <> nil then
         fRunTableTrans[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
     UniqueRawUtf8ZeroToTilde(fData, 1 shl 16);
-    fLog.Log(sllWarning, '% -> PARTIAL rollback of latest auto-committed ' +
-      'transaction data=%', [E, fData]);
+    if Assigned(fLog) then
+      fLog.Log(sllWarning, '% -> PARTIAL rollback of latest auto-committed ' +
+        'transaction data=%', [E, fData]);
   end;
 end;
 
 procedure TRestOrmServerBatchSend.DoLog;
 begin
-  fLog.Log(LOG_TRACEERROR[fErrors <> 0], 'EngineBatchSend json=% count=% ' +
-    'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
-    [KB(fData), fCount, fErrors, fCounts[encPost], fCounts[encSimple],
-     fCounts[encPostHex], fCounts[encPostHexID], fCounts[encPut],
-     fCounts[encDelete], fTimer.Stop, fTimer.PerSec(fCount)], self);
+  if Assigned(fLog) then
+    fLog.Log(LOG_TRACEERROR[fErrors <> 0], 'EngineBatchSend json=% count=% ' +
+      'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
+      [KB(fData), fCount, fErrors, fCounts[encPost], fCounts[encSimple],
+       fCounts[encPostHex], fCounts[encPostHexID], fCounts[encPut],
+       fCounts[encDelete], fTimer.Stop, fTimer.PerSec(fCount)], self);
 end;
 
 procedure TRestOrmServerBatchSend.ParseHeader;
@@ -2428,7 +2430,8 @@ begin
   fLog := fOrm.LogClass.Enter('EngineBatchSend % inlen=%',
     [fTable, length(fData)], self);
   //log.Log(sllCustom2, Data, self, 100 shl 10);
-  fTimer.Start(fLog.Instance.LastQueryPerformanceMicroSeconds);
+  if Assigned(fLog) then // nil if fOrm.LogClass=nil or sllEnter is not enabled
+    fTimer.Start(fLog.Instance.LastQueryPerformanceMicroSeconds); // for DoLog
   ParseHeader;
   // try..except to intercept any error
   try
@@ -2463,7 +2466,8 @@ begin
       finally
         if fAcquiredExecutionWrite in fFlags then
           fOrm.Owner.AcquireExecution[execOrmWrite].Safe.UnLock;
-        if LOG_TRACEERROR[fErrors <> 0] in fLog.Instance.Family.Level then
+        if Assigned(fLog) and
+           (LOG_TRACEERROR[fErrors <> 0] in fLog.Instance.Family.Level) then
           DoLog;
       end;
     end;

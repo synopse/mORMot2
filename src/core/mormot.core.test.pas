@@ -19,6 +19,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.data,
   mormot.core.os,
@@ -28,7 +29,8 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.perf,
-  mormot.core.log;
+  mormot.core.log,
+  mormot.core.threads;
 
 
 { ************ Unit-Testing classes and functions }
@@ -152,6 +154,7 @@ type
     fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
+    fBackgroundRun: TLoggedWorker;
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -191,7 +194,7 @@ type
     // - condition must equals TRUE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
     // caller to stop testing with such code:
-    // ! if CheckFailed(A=10) then exit;
+    // ! if CheckFailed(A = 10) then exit;
     function CheckFailed(condition: boolean; const msg: string = ''): boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion
@@ -205,12 +208,13 @@ type
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: Int64; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
-    /// used by the published methods to run test assertion against UTF-8 strings
+    /// used by the published methods to run test assertion against UTF-8/Ansi strings
+    // - will ignore the a+b string codepages, and call SortDynArrayRawByteString()
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
-    /// used by the published methods to run test assertion against UTF-8 strings
+    function CheckEqual(const a, b: RawByteString; const msg: RawUtf8 = ''): boolean; overload;
+    /// used by the published methods to run test assertion against UTF-8/Ansi strings
     // - if Trim(a)<>Trim(b), will fail and include '#<>#' text before the supplied msg
-    function CheckEqualTrim(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean;
+    function CheckEqualTrim(const a, b: RawByteString; const msg: RawUtf8 = ''): boolean;
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
@@ -268,9 +272,15 @@ type
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
     /// create a temporary string random content, WinAnsi (code page 1252) content
+    class function RandomWinAnsi(CharCount: integer): WinAnsiString;
+    {$ifndef PUREMORMOT2}
     class function RandomString(CharCount: integer): WinAnsiString;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif PUREMORMOT2}
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
+    // - CharCount is the number of random WinAnsi chars, so it is possible that
+    // length(result) > CharCount once encoded into UTF-8
     class function RandomUtf8(CharCount: integer): RawUtf8;
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
@@ -288,8 +298,22 @@ type
     class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
+    /// execute a method possibly in a dedicated TLoggedWorkThread
+    // - OnTask() should take some time running, to be worth a thread execution
+    // - won't create more background threads than currently available CPU cores,
+    // to avoid resource exhaustion and unexpected timeouts on smaller computers,
+    // unless ForcedThreaded is used and then an internal queue is used to
+    // force all taks to be executed in their own thread
+    procedure Run(const OnTask: TNotifyEvent; Sender: TObject;
+      const TaskName: RawUtf8; Threaded: boolean = true; NotifyTask: boolean = true;
+      ForcedThreaded: boolean = false);
+    /// wait for background thread started by Run() to finish
+    procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60;
+      CallSynchronize: boolean = false);
     /// this method is triggered internally - e.g. by Check() - when a test failed
-    procedure TestFailed(const msg: string);
+    procedure TestFailed(const msg: string); overload;
+    /// this method can be triggered directly - e.g. after CheckFailed() = true
+    procedure TestFailed(const msg: RawUtf8; const args: array of const); overload;
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
@@ -356,13 +380,13 @@ type
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
   protected
-    /// any number not null assigned to this field will display a "../sec" stat
     fTestCaseClass: array of TSynTestCaseClass;
     fAssertions: integer;
     fAssertionsFailed: integer;
+    fSafe: TSynLocker;
+    /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
     fCurrentMethodInfo: PSynTestMethodInfo;
-    fSafe: TSynLocker;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
     fNotifyProgressLineLen: integer;
@@ -651,6 +675,7 @@ end;
 destructor TSynTestCase.Destroy;
 begin
   CleanUp;
+  fBackgroundRun.Free;
   inherited;
 end;
 
@@ -760,7 +785,7 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(const a, b, msg: RawUtf8): boolean;
+function TSynTestCase.CheckEqual(const a, b: RawByteString; const msg: RawUtf8): boolean;
 begin
   inc(fAssertions);
   result := SortDynArrayRawByteString(a, b) = 0;
@@ -769,7 +794,7 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqualTrim(const a, b, msg: RawUtf8): boolean;
+function TSynTestCase.CheckEqualTrim(const a, b: RawByteString; const msg: RawUtf8): boolean;
 begin
   result := CheckEqual(TrimU(a), TrimU(b), msg);
 end;
@@ -885,7 +910,7 @@ begin
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
 
-class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
+class function TSynTestCase.RandomWinAnsi(CharCount: integer): WinAnsiString;
 var
   i: PtrInt;
   R: PByteArray;
@@ -898,29 +923,36 @@ begin
   tmp.Done;
 end;
 
+{$ifndef PUREMORMOT2}
+class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
+begin
+  result := RandomWinAnsi(CharCount);
+end;
+{$endif PUREMORMOT2}
+
 class function TSynTestCase.RandomAnsi7(CharCount: integer): RawByteString;
 var
   i: PtrInt;
-  R: PByteArray;
+  R, D: PByteArray;
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(CharCount);
-  FastSetString(RawUtf8(result), CharCount);
+  D := FastSetString(RawUtf8(result), CharCount);
   for i := 0 to CharCount - 1 do
-    PByteArray(result)[i] := 32 + R[i] mod 95; // may include tilde #$7e char
+    D[i] := 32 + R[i] mod 95; // may include tilde #$7e char
   tmp.Done;
 end;
 
 procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawByteString);
 var
   i: PtrInt;
-  R: PByteArray;
+  R, D: PByteArray;
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(count);
-  FastSetString(RawUtf8(result), count);
+  D := FastSetString(RawUtf8(result), count);
   for i := 0 to count - 1 do
-    PByteArray(result)[i] := ord(chars64[PtrInt(R[i]) and 63]);
+    D[i] := ord(chars64[PtrInt(R[i]) and 63]);
   tmp.Done;
 end;
 
@@ -942,12 +974,12 @@ end;
 
 class function TSynTestCase.RandomUtf8(CharCount: integer): RawUtf8;
 begin
-  result := WinAnsiToUtf8(RandomString(CharCount));
+  result := WinAnsiToUtf8(RandomWinAnsi(CharCount));
 end;
 
 class function TSynTestCase.RandomUnicode(CharCount: integer): SynUnicode;
 begin
-  result := WinAnsiConvert.AnsiToUnicodeString(RandomString(CharCount));
+  result := WinAnsiConvert.AnsiToUnicodeString(RandomWinAnsi(CharCount));
 end;
 
 class function TSynTestCase.RandomTextParagraph(WordCount: integer;
@@ -1048,6 +1080,35 @@ begin
   end;
 end;
 
+procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
+  const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
+begin
+  if NotifyTask then
+    NotifyProgress([TaskName]);
+  if not Assigned(OnTask) then
+    exit;
+  if (SystemInfo.dwNumberOfProcessors <= 2) or // avoid timeout e.g. on slow VMs
+     not Threaded then
+    OnTask(Sender) // run in main thread
+  else
+  begin
+    if fBackgroundRun = nil then
+      fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
+    fBackgroundRun.Run(Ontask, Sender, TaskName, ForcedThreaded);
+  end;
+end;
+
+procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer;
+  CallSynchronize: boolean);
+begin
+  if not fBackgroundRun.Waiting then
+    exit;
+  if NotifyThreadCount then
+    NotifyProgress(['(waiting for ', Plural('thread', fBackgroundRun.Running), ')']);
+  if not fBackgroundRun.RunWait(TimeoutSec, CallSynchronize) then
+    TestFailed('RunWait timeout after % sec', [TimeoutSec]);
+end;
+
 procedure TSynTestCase.TestFailed(const msg: string);
 begin
   fOwner.fSafe.Lock; // protect when Check() is done from multiple threads
@@ -1059,6 +1120,11 @@ begin
   finally
     fOwner.fSafe.UnLock;
   end;
+end;
+
+procedure TSynTestCase.TestFailed(const msg: RawUtf8; const args: array of const);
+begin
+  fOwner.DoLog(sllFail, msg, Args);
 end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
@@ -1159,7 +1225,7 @@ end;
 constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
-  fSafe.Init;
+  fSafe.InitFromClass;
 end;
 
 procedure TSynTests.EndSaveToFileExternal;
@@ -1214,8 +1280,7 @@ begin
   if fNotifyProgress = '' then
   begin
     DoColor(ccGreen);
-    DoTextLn(['  - ', fCurrentMethodInfo^.TestName, ':']);
-    DoText('     ');
+    DoText(['  - ', fCurrentMethodInfo^.TestName, ':' + CRLF + '     ']);
     fNotifyProgressLineLen := 0;
   end;
   len := length(value);
@@ -1277,18 +1342,45 @@ end;
 function TSynTests.Run: boolean;
 var
   i, t, m: integer;
-  Elapsed, Version: RawUtf8;
+  Elapsed, Version, s: RawUtf8;
+  methods: TRawUtf8DynArray;
   dir: TFileName;
   err: string;
   C: TSynTestCase;
   started: boolean;
   {%H-}log: IUnknown;
 begin
+  result := true;
+  if Executable.Command.Option('&methods') then
+  begin
+    for m := 0 to Count - 1 do
+      fTests[m].Method();
+    for i := 0 to high(fTestCaseClass) do
+      if (restrict = nil) or
+         (FindPropName(pointer(fRestrict),
+          ToText(fTestCaseClass[i]), length(fRestrict)) >= 0) then
+      begin
+        methods := GetPublishedMethodNames(fTestCaseClass[i]);
+        for m := 0 to high(methods) do
+          Append(s, [fTestCaseClass[i], '.', methods[m], CRLF]);
+      end;
+    DoText(s);
+    exit;
+  end
+  else if Executable.Command.Option(['l', 'tests']) then
+  begin
+    for m := 0 to Count - 1 do
+      fTests[m].Method();
+    for i := 0 to high(fTestCaseClass) do
+      Append(s, [fTestCaseClass[i], CRLF]);
+    DoText(s);
+    exit;
+  end;
+  // main loop processing all TSynTestCase instances
   DoColor(ccLightCyan);
   DoTextLn([CRLF + '   ', Ident,
             CRLF + '  ', RawUtf8OfChar('-', length(Ident) + 2)]);
   RunTimer.Start;
-  Randomize;
   fFailed := nil;
   fAssertions := 0;
   fAssertionsFailed := 0;
@@ -1359,23 +1451,27 @@ begin
           end;
           if not started then
             continue;
+          if C.fBackgroundRun.Waiting then
+            C.fBackgroundRun.Terminate({andwait=}true); // paranoid
           C.CleanUp; // should be done before Destroy call
           if C.AssertionsFailed = 0 then
             DoColor(ccLightGreen)
           else
             DoColor(ccLightRed);
+          s := '';
           if C.fRunConsole <> '' then
           begin
-            DoTextLn(['   ', C.fRunConsole]);
+            Make(['   ', C.fRunConsole, CRLF], s);
             C.fRunConsole := '';
           end;
-          DoText(['  Total failed: ', IntToThousandString(C.AssertionsFailed),
-            ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident]);
+          Append(s, ['  Total failed: ', IntToThousandString(C.AssertionsFailed),
+            ' / ', IntToThousandString(C.Assertions), ' - ', C.Ident]);
           if C.AssertionsFailed = 0 then
-            DoText(' PASSED')
+            AppendShortToUtf8(' PASSED', s)
           else
-            DoText(' FAILED');
-          DoTextLn(['  ', TotalTimer.Stop]);
+            AppendShortToUtf8(' FAILED', s);
+          Append(s, ['  ', TotalTimer.Stop, CRLF]);
+          DoText(s); // write at once to the console output
           DoColor(ccLightGray);
           inc(fAssertions, C.fAssertions); // compute global assertions count
           inc(fAssertionsFailed, C.fAssertionsFailed);
@@ -1401,11 +1497,11 @@ begin
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
   if Executable.Version.Major <> 0 then
-    Version := FormatUtf8(CRLF +'Software version tested: % (%)',
-      [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
+    FormatUtf8(CRLF +'Software version tested: % (%)', [Executable.Version.Detailed,
+      Executable.Version.BuildDateTimeString], Version);
   FormatUtf8(CRLF + CRLF + 'Time elapsed for all tests: %' + CRLF +
     'Performed % by % on %',
-    [RunTimer.Stop, NowToString, Executable.User, Executable.Host], Elapsed);
+    [RunTimer.Stop, NowToHuman, Executable.User, Executable.Host], Elapsed);
   DoTextLn([CRLF, Version, CustomVersions, CRLF +'Generated with: ',
     COMPILER_VERSION, ' ' + OS_TEXT + ' compiler', Elapsed]);
   if result then
@@ -1431,6 +1527,7 @@ procedure TSynTests.AfterOneRun;
 var
   Run, Failed: integer;
   C: TSynTestCase;
+  s: RawUtf8;
 begin
   if fCurrentMethodInfo = nil then
     exit;
@@ -1440,44 +1537,45 @@ begin
   if fNotifyProgress <> '' then
   begin
     DoLog(sllMonitoring, '% %', [C, fNotifyProgress]);
-    DoText(CRLF);
+    s := CRLF;
   end;
   if Failed = 0 then
   begin
     DoColor(ccGreen);
     if fNotifyProgress <> '' then
-      DoText('        ')
+      Append(s, '        ')
     else
-      DoText(['  - ', fCurrentMethodInfo^.TestName, ': ']);
+      Append(s, ['  - ', fCurrentMethodInfo^.TestName, ': ']);
     if Run = 0 then
-      DoText('no assertion')
+      Append(s, 'no assertion')
     else if Run = 1 then
-      DoText('1 assertion passed')
+      Append(s, '1 assertion passed')
     else
-      DoText([IntToThousandString(Run), ' assertions passed']);
+      Append(s, [IntToThousandString(Run), ' assertions passed']);
   end
   else
   begin
     DoColor(ccLightRed);   // ! to highlight the line
-    DoText(['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
+    Append(s, ['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
       Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
   fNotifyProgress := '';
-  DoText(['  ', TestTimer.Stop]);
+  Append(s, ['  ', TestTimer.Stop]);
   if C.fRunConsoleOccurrenceNumber > 0 then
-    DoText(['  ', IntToThousandString(TestTimer.PerSec(
+    Append(s, ['  ', IntToThousandString(TestTimer.PerSec(
       C.fRunConsoleOccurrenceNumber)), '/s']);
   if C.fRunConsoleMemoryUsed > 0 then
   begin
-    DoText(['  ', KB(C.fRunConsoleMemoryUsed)]);
+    Append(s, ['  ', KB(C.fRunConsoleMemoryUsed)]);
     C.fRunConsoleMemoryUsed := 0; // display only once
   end;
-  DoTextLn([]);
+  Append(s, CRLF);
   if C.fRunConsole <> '' then
   begin
-    DoTextLn(['     ', C.fRunConsole]);
+    Append(s, ['     ', C.fRunConsole, CRLF]);
     C.fRunConsole := '';
   end;
+  DoText(s); // append whole information at once to the console
   DoColor(ccLightGray);
 end;
 
@@ -1524,9 +1622,21 @@ begin
   {$ifndef OSPOSIX}
   Executable.Command.Option('noenter', 'do not wait for ENTER key on exit');
   {$endif OSPOSIX}
-  redirect := Executable.Command.ArgFile(0, '#filename to redirect the console output');
-  Executable.Command.Get(['test'], restrict,
-    'the #class.method name(s) to restrict the tests');
+  redirect := Executable.Command.ArgFile(0,
+    '#filename to redirect the console output');
+  Executable.Command.Get(['t', 'test'], restrict,
+    'restrict the tests to a #class[.method] name(s)');
+  Executable.Command.Option(['l', 'tests'],
+    'list all class name(s) as expected by --test');
+  Executable.Command.Option('&methods',
+    'list all method name(s) of #class as specified to --test');
+  if Executable.Command.Option('&verbose',
+       'run logs in verbose mode: enabled only with --test') and
+     (restrict <> nil) then
+    withLogs := LOG_VERBOSE;
+  if options = [] then
+    SetValueFromExecutableCommandLine(options, TypeInfo(TSynTestOptions),
+      '&options', 'refine logs output content');
   DescribeCommandLine; // may be overriden to define additional parameters
   err := Executable.Command.DetectUnknown;
   if (err <> '') or
@@ -1542,17 +1652,17 @@ begin
   RunFromSynTests := true; // set mormot.core.os.pas global flag
   with TSynLogTestLog.Family do
   begin
-    Level := withLogs;
     PerThreadLog := ptIdentifiedInOneFile;
     HighResolutionTimestamp := not (tcoLogNotHighResolution in options);
     if (tcoLogVerboseRotate in options) and
        (Level = LOG_VERBOSE) then
     begin
       RotateFileCount := 10;
-      RotateFileSizeKB := 100*1024; // rotate verbose logs by 100MB files
+      RotateFileSizeKB := 100 shl 10; // rotate verbose logs by 100MB files
     end;
     if tcoLogInSubFolder in options then
-      DestinationPath := EnsureDirectoryExists(Executable.ProgramFilePath + 'log');
+      DestinationPath := EnsureDirectoryExists([Executable.ProgramFilePath, 'log']);
+    Level := withLogs; // better be set last
   end;
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
@@ -1572,7 +1682,7 @@ begin
     tests.Free;
   end;
   {$ifndef OSPOSIX}
-  if ParamCount = 0 then
+  if ParamCount = 0 then // Executable.Command.Option('noenter') not needed
   begin
     // direct exit if an external file was generated
     ConsoleWrite(CRLF + 'Done - Press ENTER to Exit');

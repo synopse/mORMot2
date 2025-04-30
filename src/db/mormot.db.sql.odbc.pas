@@ -393,7 +393,7 @@ begin
           'Missing ServerName=DataSourceName or DataBaseName=FullConnectString')
       else
       begin
-        FastSetString(fSqlDriverFullString, nil, 1024);
+        FastSetString(fSqlDriverFullString, 1024);
         fSqlDriverFullString[1] := #0;
         Len := 0;
         Check(self, nil,

@@ -124,10 +124,10 @@ type
     // requests, and one thread will be maintained per keep-alive/websockets client
     // - by design, the KeepAliveTimeOut value is ignored with this server
     // once it has been upgraded to WebSockets
-    constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-      ServerThreadPoolCount: integer = 2; KeepAliveTimeOut: integer = 30000;
-      ProcessOptions: THttpServerOptions = []); override;
+    constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 2;
+      KeepAliveTimeOut: integer = 30000; ProcessOptions: THttpServerOptions = [];
+      aLog: TSynLogClass = nil); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -199,7 +199,7 @@ type
     // for actual port binding in the background thread
     constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
       const aProcessName, aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-      aWebSocketsAjax: boolean = false); reintroduce; overload;
+      aWebSocketsAjax: boolean = false; aLog: TSynLogClass = nil); reintroduce; overload;
     /// defines the WebSockets protocols to be used for this Server
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
@@ -259,7 +259,7 @@ end;
 constructor TWebSocketServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
-  ProcessOptions: THttpServerOptions);
+  ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 begin
   // override with custom processing classes
   fSocketClass := TWebSocketServerSocket;
@@ -276,8 +276,8 @@ begin
   if ServerThreadPoolCount > 4 then
     ServerThreadPoolCount := 4; // don't loose threads for nothing
   // start the server
-  inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, ProcessOptions);
+  inherited Create(aPort, OnStart, OnStop, ProcessName,
+    ServerThreadPoolCount, KeepAliveTimeOut, ProcessOptions, aLog);
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(
@@ -516,9 +516,10 @@ end;
 
 constructor TWebSocketServerRest.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const aProcessName, aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean);
+  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean; aLog: TSynLogClass);
 begin
-  Create(aPort, OnStart, OnStop, aProcessName);
+  Create(aPort, OnStart, OnStop, aProcessName, {threadpool=}2, {keepalive=}30000,
+    {options=}[], aLog);
   WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax);
 end;
 

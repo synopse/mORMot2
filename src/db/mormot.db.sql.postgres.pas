@@ -193,7 +193,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBPostgres on any error
-    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = False); overload; override;
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false); overload; override;
     /// execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this implementation will also handle bound array of values (if any)
@@ -236,7 +236,7 @@ type
     // is not a SELECT but an UPDATE or INSERT command)
     // - if SeekFirst is TRUE, will put the cursor on the first row of results
     // - raise an ESqlDBPostgres on any error
-    function Step(SeekFirst: boolean = False): boolean; override;
+    function Step(SeekFirst: boolean = false): boolean; override;
     /// clear(fRes) when ISqlDBStatement is back in cache
     procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
@@ -735,7 +735,7 @@ constructor TSqlDBPostgresConnectionProperties.Create(
 begin
   PostgresLibraryInitialize; // raise an ESqlDBPostgres on loading failure
   if PQ.IsThreadSafe <> 1 then
-    raise ESqlDBPostgres.Create('libpq should be compiled in threadsafe mode');
+    raise ESqlDBPostgres.CreateU('libpq should be compiled in threadsafe mode');
   fDbms := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -1478,7 +1478,7 @@ var
   {%H-}log: ISynLog;
 begin
   fProcessing := true;
-  SetCurrentThreadName(fName);
+  SetCurrentThreadName('=%', [fName]);
   log := SynDBLog.Enter(self, 'Execute');
   try
     repeat
@@ -1551,7 +1551,7 @@ begin
   end;
   fProcessing := false;
   log := nil;
-  TSynLog.Add.NotifyThreadEnded;
+  SynDBLog.Add.NotifyThreadEnded;
 end;
 
 

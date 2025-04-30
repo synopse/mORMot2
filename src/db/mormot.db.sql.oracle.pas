@@ -248,10 +248,10 @@ type
     // to retrieve the data rows
     // - raise an ESqlDBOracle on any error
     // - if aSql requires a trailing ';', you should end it with ';;' e.g. for
-    // $ DB.ExecuteNoResult(
-    // $  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
-    // $  ' AS LANGUAGE JAVA' +
-    // $  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
+    // ! DB.ExecuteNoResult(
+    // !  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
+    // !  ' AS LANGUAGE JAVA' +
+    // !  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
     procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
@@ -1278,7 +1278,7 @@ begin
       on E: Exception do
       begin
         fStatement := nil; // do not release the statement in constructor
-        FreeHandles(True);
+        FreeHandles(true);
         raise;
       end;
     end;
@@ -1407,8 +1407,8 @@ begin
                 ftDate:
                   begin
                     VDBType := SQLT_DAT;
-                    FastNewRawByteString(VData, fParamsArrayCount * SizeOf(TOracleDate));
-                    oData := pointer(VData);
+                    oData := FastNewRawByteString(
+                      VData, fParamsArrayCount * SizeOf(TOracleDate));
                     oLength := SizeOf(TOracleDate);
                   end;
                 ftInt64:
@@ -1416,8 +1416,8 @@ begin
                   begin
                     // starting with 11.2, OCI supports NUMBER conversion to/from Int64
                     VDBType := SQLT_INT;
-                    FastNewRawByteString(VData, fParamsArrayCount * SizeOf(Int64));
-                    oData := pointer(VData);
+                    oData := FastNewRawByteString(
+                      VData, fParamsArrayCount * SizeOf(Int64));
                     oLength := SizeOf(Int64);
                   end;
                   // prior to 11.2, we will stay with the default SQLT_STR type
@@ -1471,8 +1471,7 @@ begin
                 SQLT_STR:
                   begin
                     inc(oLength); // space for #0 terminator
-                    FastNewRawByteString(VData, oLength * fParamsArrayCount);
-                    oData := pointer(VData); // in-place quote removal in text
+                    oData := FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
                     begin
@@ -1482,8 +1481,7 @@ begin
                   end;
                 SQLT_LVB:
                   begin
-                    FastNewRawByteString(VData, oLength * fParamsArrayCount);
-                    oData := pointer(VData);
+                    oData := FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
                     begin
@@ -1533,12 +1531,12 @@ begin
               ociArrays[ociArraysCount] := nil;
               OCI.Check(nil, self,
                 OCI.ObjectNew(Env, fError, Context, OCI_TYPECODE_VARRAY,
-                  Type_List, nil, OCI_DURATION_SESSION, True,
+                  Type_List, nil, OCI_DURATION_SESSION, true,
                   ociArrays[ociArraysCount]),
                 fError);
               inc(ociArraysCount);
-              FastNewRawByteString(param.VData, Length(param.VArray) * SizeOf(Int64));
-              oData := pointer(param.VData);
+              oData := FastNewRawByteString(
+                param.VData, Length(param.VArray) * SizeOf(Int64));
               for j := 0 to Length(param.VArray) - 1 do
                 case param.VType of
                   ftInt64:
@@ -1685,7 +1683,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                           {$ifdef FPC_64}
                           // in case of FPC+CPU64 TSqlDBParam.VData is a RawByteString and
                           // length is stored as SizeInt = Int64 (not int32) -> patch
-                          // (no patch needed for Delphi, in which len is always longint)
+                          // (no patch needed for Delphi, in which len is always 32-bit)
                           if Length(VData) > MaxInt then
                             ESqlDBOracle.RaiseUtf8('%.ExecutePrepared: % ' +
                               'blob length exceeds max size for parameter #%',
@@ -2358,7 +2356,7 @@ begin
     except
       on E: Exception do
       begin
-        FreeHandles(True);
+        FreeHandles(true);
         raise;
       end;
     end;

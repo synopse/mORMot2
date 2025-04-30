@@ -132,7 +132,7 @@ type
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
     procedure _RTTI;
-    /// validate some internal data structures
+    /// validate some internal data structures like TLockedList
     procedure DataStructures;
     /// some low-level Url encoding from parameters
     procedure UrlEncoding;
@@ -162,6 +162,8 @@ type
     procedure _TSelectStatement;
     /// test advanced statistics monitoring
     procedure _TSynMonitorUsage;
+    /// validate some folder-level functions
+    procedure Folders;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -430,17 +432,20 @@ var
 begin
   TextToVariant('1E629839-D230-4EEE-BA04-BE1258EB3AF6', {allowdouble=}true, v);
   Check(VarIsStr(v));
+  Check(VarIsString(v));
   Check(VariantTypeName(v)^ = 'String');
   TextToVariant('261E306F', true, v);
   Check(VarIsStr(v));
+  Check(VarIsString(v));
   TextToVariant('1e-324', true, v);
   Check(VarIsStr(v));
+  Check(VarIsString(v));
   TextToVariant('1e308', true, v);
   Check(VarIsStr(v));
+  Check(VarIsString(v));
   t := nil; // makes the compiler happy
   ValueVarToVariant(nil, 0, oftBoolean, vd, false, t);
-  Check(not boolean(v));
-  Check(VariantTypeName(v)^ = 'Boolean');
+  CheckEqual(TVarData(v).VType, varNull);
   ValueVarToVariant('0', 1, oftBoolean, vd, false, t);
   Check(not boolean(v));
   Check(VariantTypeName(v)^ = 'Boolean');
@@ -940,7 +945,7 @@ begin
        '', nil, false, nil, 0, {forcesocket:}false, {ignorecerterror:}true);
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
-    RecordLoadJson(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
+    RecordLoadJsonInPlace(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
     Check(length(mus.tests) > 5, 'mustacheJson load');
     for i := 0 to high(mus.tests) do
       with mus.Tests[i] do
@@ -1649,7 +1654,7 @@ var
     FillCharFast(git2, SizeOf(git2), 0);
     U := zendframeworkJson; // need unique string for procedure re-entrance
     check(IsValidJson(U));
-    Check(DynArrayLoadJson(
+    Check(DynArrayLoadJsonInPlace(
       git, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonGitHubs)) <> nil);
     U := DynArraySaveJson(git, TypeInfo(TTestCustomJsonGitHubs));
     check(IsValidJson(U));
@@ -1695,7 +1700,7 @@ var
         check(JsonReformat(s, jsonCompact) =
           FormatUtf8('{"login":"%","id":%}', [owner.login, owner.id]));
       end;
-    Check(DynArrayLoadJson(
+    Check(DynArrayLoadJsonInPlace(
       git2, pointer(U), TypeInfo(TTestCustomJsonGitHubs)) <> nil);
     if not CheckFailed(length(git) = Length(git2)) then
       for i := 0 to high(git) do
@@ -1715,7 +1720,7 @@ var
     Check(IsValidJson(U));
     RecordZero(@Trans, TypeInfo(TTestCustomJson2));
     Check(length(Trans.Transactions) = 0);
-    RecordLoadJson(Trans, UniqueRawUtf8(U), TypeInfo(TTestCustomJson2));
+    RecordLoadJsonInPlace(Trans, UniqueRawUtf8(U), TypeInfo(TTestCustomJson2));
     Check(length(Trans.Transactions) = 1);
     Check(Trans.Transactions[0].TRTYPE = 'INCOME');
     Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
@@ -1836,7 +1841,7 @@ var
     JR2.D := '**';
     JR2.F := 1;
     JR := JR2;
-    RecordLoadJson(JR2, pointer(U), TypeInfo(TTestCustomJsonRecord));
+    RecordLoadJsonInPlace(JR2, pointer(U), TypeInfo(TTestCustomJsonRecord));
     Check(JR2.A = 0);
     Check(JR2.D = '');
     Check(JR2.F = 0);
@@ -1850,7 +1855,7 @@ var
     JA2.D := '**';
     SetLength(JA2.E, 2);
     JA2.F := 1;
-    RecordLoadJson(JA2, pointer(J), TypeInfo(TTestCustomJsonArray));
+    RecordLoadJsonInPlace(JA2, pointer(J), TypeInfo(TTestCustomJsonArray));
     Check(JA2.A = 0);
     Check(JA2.D = '');
     check(Length(JA2.E) = 0);
@@ -1875,12 +1880,12 @@ var
     X := JsonToXML(J, '');
     Check(X =
       '<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
-    RecordLoadJson(JA, pointer(J), TypeInfo(TTestCustomJsonArray));
+    RecordLoadJsonInPlace(JA, pointer(J), TypeInfo(TTestCustomJsonArray));
     Check(RecordSave(JA, TypeInfo(TTestCustomJsonArray)) = RecordSave(JA2,
       TypeInfo(TTestCustomJsonArray)));
     J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
     check(IsValidJson(J));
-    RecordLoadJson(JA, UniqueRawUtf8(J), TypeInfo(TTestCustomJsonArray));
+    RecordLoadJsonInPlace(JA, UniqueRawUtf8(J), TypeInfo(TTestCustomJsonArray));
     U := RecordSaveJson(JA, TypeInfo(TTestCustomJsonArray));
     Check(length(JA.E) = 1);
     CheckEqual(U, '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
@@ -1914,9 +1919,12 @@ var
         Check(AA[i, a] = AB[i, a]);
     end;
     J := DynArraySaveJson(AA, TypeInfo(TRawUtf8DynArrayDynArray));
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(J), CP_UTF8);
+    {$endif HASCODEPAGE}
     check(IsValidJson(J));
     Finalize(AB);
-    Check(DynArrayLoadJson(
+    Check(DynArrayLoadJsonInPlace(
       AB, pointer(J), TypeInfo(TRawUtf8DynArrayDynArray)) <> nil);
     Check(length(AA) = length(AB));
     for i := 0 to high(AA) do
@@ -1949,7 +1957,7 @@ var
     check(IsValidJson(U));
     J := RecordSaveJson(agg, TypeInfo(TAggregate));
     CheckEqual(J, U);
-    RecordLoadJson(agg2, UniqueRawUtf8(U), TypeInfo(TAggregate));
+    RecordLoadJsonInPlace(agg2, UniqueRawUtf8(U), TypeInfo(TAggregate));
     J := RecordSaveJson(agg2, TypeInfo(TAggregate));
     CheckHash(J, $E3AC9C44);
     check(IsValidJson(J));
@@ -2004,7 +2012,7 @@ var
     U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",' +
       '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
     J := U;
-    Check(RecordLoadJson(JAS, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArraySimple)) <> nil);
+    Check(RecordLoadJsonInPlace(JAS, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArraySimple)) <> nil);
     Check(JAS.A = 1);
     Check(JAS.B = 2);
     Check(length(JAS.C) = 2);
@@ -2029,7 +2037,7 @@ var
     assert(DocVariantType <> nil);
     U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
     check(IsValidJson(U));
-    RecordLoadJson(JAV, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArrayVariant));
+    RecordLoadJsonInPlace(JAV, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArrayVariant));
     Check(JAV.A = 1);
     Check(JAV.B = 2);
     if not CheckFailed(length(JAV.C) = 4) then
@@ -2040,7 +2048,11 @@ var
       Check(JAV.C[3]._Kind = ord(dvObject));
       Check(JAV.C[3]._Count = 1);
       Check(JAV.C[3].Name(0) = 'four');
-      Check(VariantSaveJson(JAV.C[3].four) = '[1,2,3,4]');
+      U := VariantSaveJson(JAV.C[3].four);
+      {$ifdef HASCODEPAGE}
+      CheckEqual(GetCodePage(U), CP_UTF8);
+      {$endif HASCODEPAGE}
+      CheckEqual(U, '[1,2,3,4]');
       with DocVariantData(JAV.C[3])^ do
       begin
         Check(Kind = dvObject);
@@ -2211,18 +2223,21 @@ var
     Cache.Json := 'test';
     Cache.Tag := 12;
     U := RecordSaveJson(Cache, TypeInfo(TEntry));
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(U), CP_UTF8);
+    {$endif HASCODEPAGE}
     CheckEqual(U, '{"ID":10,"Timestamp512":200,"Tag":12,"Json":"test"}');
     check(IsValidJson(U));
     U := '{"ID":210,"Timestamp512":2200,"Json":"test2"}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
+    RecordLoadJsonInPlace(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
     Check(Cache.ID = 210);
     Check(Cache.Timestamp512 = 2200);
     Check(Cache.Json = 'test2');
     Check(Cache.Tag = 12);
     U := '{ID:220,Json:"test3",Timestamp512:2300}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
+    RecordLoadJsonInPlace(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
     Check(Cache.ID = 220);
     Check(Cache.Timestamp512 = 2300);
     Check(Cache.Json = 'test3');
@@ -2237,7 +2252,7 @@ var
     U := RecordSaveJson(nav, TypeInfo(TConsultaNav));
     J := RecordSaveJson(nav2, TypeInfo(TConsultaNav));
     Check(U <> J);
-    RecordLoadJson(nav2, UniqueRawUtf8(U), TypeInfo(TConsultaNav));
+    RecordLoadJsonInPlace(nav2, UniqueRawUtf8(U), TypeInfo(TConsultaNav));
     Check(nav2.MaxRows = 0);
     check(not nav2.EOF);
     J := RecordSaveJson(nav2, TypeInfo(TConsultaNav));
@@ -2251,8 +2266,9 @@ var
       '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
     Finalize(nrtti2);
     FillCharFast(nrtti2, SizeOf(nrtti2), 0);
-    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
+    Check(RecordLoadJsonInPlace(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
+    CheckEqual(GetCodePage(J), CP_UTF8);
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     nrtti.Number := 1;
     nrtti.StaticArray[1].Name := 'one';
@@ -2272,12 +2288,12 @@ var
       '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
     Finalize(nrtti2);
     FillCharFast(nrtti2, SizeOf(nrtti2), 0);
-    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
+    Check(RecordLoadJsonInPlace(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     U :=
       '{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
-    RecordLoadJson(book, UniqueRawUtf8(U), TypeInfo(TBookRecord));
+    RecordLoadJsonInPlace(book, UniqueRawUtf8(U), TypeInfo(TBookRecord));
     check(book.name = 'Book the First');
     check(book.author.first_name = 'Bob');
     Check(book.author.last_name = 'White');
@@ -2435,6 +2451,9 @@ begin
   Check(uct('123.1a') = oftUtf8Text);
   Check(uct('123.1234a') = oftUtf8Text);
   Check(uct('123-2') = oftUtf8Text);
+  J := JsonEncode([]);
+  CheckEqual(J, '{}');
+  check(IsValidJson(J));
   J := JsonEncode(['name', 'john', 'year', 1982, 'pi', 3.14159]);
   CheckEqual(J, '{"name":"john","year":1982,"pi":3.14159}');
   check(IsValidJson(J));
@@ -3209,7 +3228,7 @@ begin
   U := '{"B":0,"C":0,"A":10,"D":"**","E":{"E1":0,"E2":20}}';
   JR2.A := 100;
   JR2.F := 10;
-  RecordLoadJson(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
+  RecordLoadJsonInPlace(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
   Check(JR2.A = 10);
   Check(JR2.D = '**');
   Check(JR2.E.E2 = 20);
@@ -3217,7 +3236,7 @@ begin
   TRttiJson(Parser).IncludeReadOptions := JSONPARSER_TOLERANTOPTIONS;
   U := '{ "A" : 1 , "B" : 2 , "C" : 3 , "D" : "A" , "tobeignored":null,"E": '#13#10 +
        '{ "E1" : 4, "E2" : 5 } , "tbi" : { "b" : 0 } }';
-  RecordLoadJson(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
+  RecordLoadJsonInPlace(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
   Check(JR2.A = 1);
   Check(JR2.D = 'A');
   Check(JR2.E.E1 = 4);
@@ -3233,7 +3252,7 @@ begin
     '{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
   Finalize(JA);
   FillCharFast(JA, SizeOf(JA), 0);
-  RecordLoadJson(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
+  RecordLoadJsonInPlace(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
   Check(JA.A = 100);
   Check(JA.D = '');
   U := RecordSaveJson(JA, TypeInfo(TTestCustomJsonArrayWithoutF));
@@ -3247,7 +3266,7 @@ begin
   Check(length(JA.E) = 2);
   Finalize(JA);
   FillCharFast(JA, SizeOf(JA), 0);
-  RecordLoadJson(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
+  RecordLoadJsonInPlace(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
   Check(length(JA.E) = 2);
   Check(JA.D = '1234');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayWithoutF), '');
@@ -3297,8 +3316,14 @@ begin
     TestTrans;
   end;
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   FileFromString(U, WorkDir + 'transactions.json');
   SaveJson(Trans, TypeInfo(TTestCustomJson2), [twoNonExpandedArrays], U);
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   TestTrans;
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2Title), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2), '');
@@ -3319,29 +3344,35 @@ begin
   Check(JsonReformat(JsonReformat(discogsJson, jsonHumanReadable), jsonCompact) = U);
   Check(JsonReformat(JsonReformat(discogsJson, jsonUnquotedPropName), jsonCompact) = U);
   Check(JsonReformat(JsonReformat(U, jsonUnquotedPropName), jsonCompact) = U);
-  RecordLoadJson(Disco, pointer(discogsJson), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, pointer(discogsJson), TypeInfo(TTestCustomDiscogs));
   Check(length(Disco.releases) <= Disco.pagination.items);
   for i := 0 to high(Disco.Releases) do
     Check(Disco.Releases[i].id > 0);
   TRttiJson(Parser).IncludeWriteOptions := [woHumanReadable];
   U := RecordSaveJson(Disco, TypeInfo(TTestCustomDiscogs));
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U));
   FileFromString(U, WorkDir + 'discoExtract.json');
   TRttiJson(Parser).IncludeWriteOptions := [];
   SaveJson(Disco, TypeInfo(TTestCustomDiscogs), [twoNonExpandedArrays], U);
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U)); 
   FileFromString(U, WorkDir + 'discoExtractNonExp.json');
   FillCharFast(Disco2, SizeOf(Disco), 0);
-  RecordLoadJson(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
   Check(RecordEquals(Disco, Disco2, TypeInfo(TTestCustomDiscogs)), 'disco2');
   Finalize(Disco2);
   Finalize(Disco);
   FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
   Check(IsValidJson(U));
-  RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 1);
   Check(Disco.pagination.page = 0);
   if not CheckFailed(length(Disco.releases) = 1) then
@@ -3353,7 +3384,7 @@ begin
   FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{},"releases":[{"Id":10},{"TITle":"blabla"}]}';
   Check(IsValidJson(U));
-  RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 0);
   Check(Disco.pagination.page = 0);
   if not CheckFailed(length(Disco.releases) = 2) then
@@ -3365,7 +3396,7 @@ begin
   end;
   U := '{"pagination":{"page":1},"releases":[{"title":"abc","id":2}]}';
   Check(IsValidJson(U));
-  RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
+  RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 0);
   Check(Disco.pagination.page = 1);
   if not CheckFailed(length(Disco.releases) = 1) then
@@ -3455,7 +3486,8 @@ end;
      jsontools in 51.41ms, 38.1 MB/s
      SuperObject in 187.79ms, 10.4 MB/s
 
-  - Test is to parse our 1 MB People.json array of 8227 TOrmPeople objects.
+  - Test is to parse our 1 MB People.json array of 8227 TOrmPeople objects,
+    so jpoDynArrayGuessCount is actually slightly slower.
   - IsValidUtf8() has very efficient AVX2 asm on FPC + x86_64.
   - TDocVariant dvoInternNames will recognize and intern the nested object
     field names, so memory consumption is likely to be reduced and unfragmented.
@@ -3590,6 +3622,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant', c, len, @timer, ONLYLOG);
+  // TDocVariant in 726.51ms i.e. 2.1M/s, 269.8 MB/s (Core i5 13400 FPC x86_64)
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3598,6 +3631,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant no guess', c, len, @timer, ONLYLOG);
+  // TDocVariant no guess in 691.16ms i.e. 2.2M/s, 283.6 MB/s
   CheckEqual(DocVariantType.InternNames.Count, interned, 'no intern');
   DocVariantType.InternNames.Clean;
   timer.Start;
@@ -3608,6 +3642,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant dvoIntern', c, len, @timer, ONLYLOG);
+  // TDocVariant dvoIntern in 695.79ms i.e. 2.2M/s, 281.8 MB/s
   CheckEqual(DocVariantType.InternNames.Count - interned, 6, 'intern');
   CheckEqual(DocVariantType.InternNames.Clean, 6, 'clean');
   CheckEqual(DocVariantType.InternNames.Count, interned, 'cleaned');
@@ -3622,6 +3657,10 @@ begin
       Check(lennexp < length(people), 'notexpanded');
     end;
     NotifyTestSpeed('TOrmTableJson save', c, lennexp * ITER, @timer, ONLYLOG);
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(notexpanded), CP_UTF8);
+    {$endif HASCODEPAGE}
+    // TOrmTableJson save in 104.15ms i.e. 15M/s, 828.1 MB/s
   finally
     table.Free;
   end;
@@ -3636,6 +3675,7 @@ begin
     end;
   end;
   NotifyTestSpeed('TOrmTableJson exp', c, len, @timer, ONLYLOG);
+  // TOrmTableJson exp in 164.82ms i.e. 9.5M/s, 1.1 GB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3647,6 +3687,7 @@ begin
     end;
   end;
   NotifyTestSpeed('TOrmTableJson not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // TOrmTableJson not exp in 89.90ms i.e. 17.4M/s, 0.9 GB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3655,6 +3696,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant FromResults exp', c, len, @timer, ONLYLOG);
+  // TDocVariant FromResults exp in 311.52ms i.e. 5M/s, 629.4 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3663,6 +3705,7 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant FromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // TDocVariant FromResults not exp in 242.29ms i.e. 6.4M/s, 355.9 MB/s
   Check(dv.InitArrayFromResults(people));
   CheckEqual(peoplehash, Hash32(dv.ToJson));
   dv.Clear; // to reuse dv
@@ -3672,19 +3715,28 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
-    // default serialization (with ID=0) TOrmPeopleObjArray in 79.14ms, 247.6 MB/s
     Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray)));
-    Check(length(rec) = count);
+    CheckEqual(length(rec), count);
   end;
-  NotifyTestSpeed('DynArrayLoadJson exp', c, len, @timer, ONLYLOG);
+  NotifyTestSpeed('DynArrayLoadJson exp no guess', c, len, @timer, ONLYLOG);
+  // DynArrayLoadJson exp no guess in 303.41ms i.e. 5.1M/s, 646.2 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
-    // default serialization (with ID=0) TOrmPeopleObjArray in 79.14ms, 247.6 MB/s
+    Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray),
+      {opt=}nil, {tolerant=}true, {int=}nil, {guess=}true));
+    CheckEqual(length(rec), count);
+  end;
+  NotifyTestSpeed('DynArrayLoadJson exp guess', c, len, @timer, ONLYLOG);
+  // DynArrayLoadJson exp guess in 313.06ms i.e. 5M/s, 626.3 MB/s
+  timer.Start;
+  for i := 1 to ITER do
+  begin
     Check(DynArrayLoadJson(rec, notexpanded, TypeInfo(TRecordPeopleDynArray)));
-    Check(length(rec) = count);
+    CheckEqual(length(rec), count);
   end;
   NotifyTestSpeed('DynArrayLoadJson non exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // DynArrayLoadJson non exp in 221.33ms i.e. 7M/s, 389.6 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3694,6 +3746,7 @@ begin
     ObjArrayClear(objarr);
   end;
   NotifyTestSpeed('TOrmPeopleObjArray exp', c, len, @timer, ONLYLOG);
+  // TOrmPeopleObjArray exp in 421.65ms i.e. 3.7M/s, 465 MB/s
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3702,6 +3755,7 @@ begin
     ObjArrayClear(objarr);
   end;
   NotifyTestSpeed('TOrmPeopleObjArray non exp', c, lennexp * ITER, @timer, ONLYLOG);
+  // TOrmPeopleObjArray non exp in 266.61ms i.e. 5.8M/s, 323.5 MB/s
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower
@@ -3716,6 +3770,7 @@ begin
       end;
   end;
   NotifyTestSpeed('fpjson', c div 10, len div 10, @timer, ONLYLOG);
+  // fpjson in 385.54ms i.e. 416.7K/s, 50.8 MB/s
   {$endif JSONBENCHMARK_FPJSON}
   {$ifdef JSONBENCHMARK_JSONTOOLS}
   timer.Start;
@@ -3854,6 +3909,11 @@ begin
       j1 := JsonReformat(sample, jsonEscapeUnicode);
       j2 := JsonReformat(j1, jsonNoEscapeUnicode);
       j3 := JsonReformat(sample, jsonNoEscapeUnicode);
+      {$ifdef HASCODEPAGE}
+      CheckEqual(GetCodePage(j1), CP_UTF8);
+      CheckEqual(GetCodePage(j2), CP_UTF8);
+      CheckEqual(GetCodePage(j3), CP_UTF8);
+      {$endif HASCODEPAGE}
       //FileFromString(j0, WorkDir + 'sample0.json');
       //FileFromString(j1, WorkDir + 'sample1.json');
       //FileFromString(j2, WorkDir + 'sample2.json');
@@ -4005,7 +4065,9 @@ type
     ['{C9AB0B6F-0418-4CE8-914A-F75521F36E33}']
     function Data: TDocTest;
   end;
-  TDocTest = class(TInterfacedSerializableAutoCreateFields, IDocTest)
+  IDocTests = array of IDocTest;
+
+  TDocTest = class(TSerializableAutoCreateFields, IDocTest)
   protected
     fAny: TDocAnyTest;
     fName: RawUtf8;
@@ -4033,11 +4095,12 @@ var
   l, l2, l3: IDocList;
   i, n, num: integer;
   d, d2, d3: IDocDict;
-  darr: IDocDictDynArray;
-  json, key: RawUtf8;
+  darr: IDocDicts;
+  json, json2, json3, key: RawUtf8;
   one: variant;
   any: TDocAnyTest;
-  dt: IDocTest;
+  dt, dt2: IDocTest;
+  dts: IDocTests;
   {$ifdef HASIMPLICITOPERATOR}
   f: TDocDictFields;
   v: TDocValue;
@@ -4075,9 +4138,9 @@ begin
   CheckEqual(l.V[0], 1);
   CheckEqual(l.V[1], 2);
   CheckEqual(l.V[2], 3);
-  CheckEqual(l.V[3], '4');
+  CheckEqual(RawUtf8(l.V[3]), '4');
   CheckEqual(l.V[4], 5);
-  CheckEqual(l.V[5], '6');
+  CheckEqual(RawUtf8(l.V[5]), '6');
   {$endif HASIMPLICITOPERATOR}
   CheckEqual(l.Json, '[1,2,3,"4",5,"6"]');
   Check(l.Exists(1));
@@ -4316,7 +4379,7 @@ begin
   l2 := DocList('[{b:1},{b:2},{b:3}]');
   CheckEqual(d.Json, '{"a":2,"b":4}');
   CheckEqual(l2.len, 3);
-  darr := l2.ObjectsDictDynArray;
+  darr := l2.ObjectsDicts;
   CheckEqual(length(darr), 3, 'darr');
   n := 0;
   for i := 0 to high(darr) do
@@ -4379,9 +4442,17 @@ begin
     CheckEqual(d.I['b'], i + 20, 'darr10');
     if d.Get('b', num) then
       checkEqual(num, i + 20, 'darr11');
+    CheckEqual(SaveJson(d, TypeInfo(IDocDict)), d.Json);
+    CheckEqual(SaveJson(d, TypeInfo(ISerializable)), d.Json);
   end;
   l2 := DocListFrom(darr);
-  CheckEqual(l2.Json, '[{"a":0,"b":20},{"a":1,"b":21},{"a":2,"b":22}]');
+  json2 := '[{"a":0,"b":20},{"a":1,"b":21},{"a":2,"b":22}]';
+  CheckEqual(l2.Json, json2);
+  darr := nil;
+  Check(LoadJson(darr, json2, TypeInfo(IDocDicts)), 'enough RTTI');
+  CheckEqual(length(darr), 3);
+  CheckEqual(SaveJson(darr, TypeInfo(IDocDicts)), json2);
+  CheckEqual(SaveJson(darr, TypeInfo(ISerializables)), json2);
   d := l2.D[1];
   d.PathDelim := '.';
   d.U['c'] := 'C';
@@ -4595,12 +4666,13 @@ begin
   finally
     any.Free;
   end;
-  // validate TInterfacedSerializableAutoCreateFields
+  // validate TSerializableAutoCreateFields
   TDocTest.RegisterToRtti(TypeInfo(IDocTest));
   Check(IsEqualGuid(TDocTest.Guid^, IDocTest));
   Check(dt = nil);
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), 'null');
   Check(LoadJson(dt, '{name:"abc",list:[1,2,3],info:123}', TypeInfo(IDocTest)));
+  dt2 := dt;
   Check(dt <> nil);
   Check(dt.Data.Any <> nil);
   CheckEqual(dt.Data.Any.List.Json, '[]');
@@ -4609,9 +4681,11 @@ begin
   CheckEqual(dt.Data.List.Json, '[1,2,3]');
   Check(dt.Data.Info = 123);
   json := dt.Json;
+  json2 := json;
   CheckEqual(json,
     '{"Any":{"List":[],"Dict":{}},"Name":"abc","List":[1,2,3],"Info":123}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
+  CheckEqual(SaveJson(dt, TypeInfo(ISerializable)), json);
   TDocTest.NewInterface(dt);
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)),
     '{"Any":{"List":[],"Dict":{}},"Name":"","List":[],"Info":null}');
@@ -4624,6 +4698,57 @@ begin
   CheckEqual(json, '{"Any":{"List":[1,2,3],"Dict":{"a":4}},' +
     '"Name":"doe","List":["zero"],"Info":["zero"]}');
   CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
+  // validate InterfaceArray*() wrapper functions with plain ISerializables
+  Check(dts = nil);
+  CheckEqual(length(dts), 0);
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json + ']');
+  InterfaceArrayAdd(dts, dt2);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json + ',' +  json2 + ']');
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 3);
+  json3 := '[' + json + ',' +  json2 + ',' + json + ']';
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), json3);
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json2 + ',' + json + ']');
+  InterfaceArrayDelete(dts, 1);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[' + json2 + ']');
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 0);
+  CheckEqual(SaveJson(dts, TypeInfo(ISerializables)), '[]');
+  Check(dts = nil);
+  Check(not LoadJson(dts, json3, TypeInfo(ISerializables)), 'not enough RTTI');
+  CheckEqual(length(dts), 0);
+  // validate InterfaceArray*() and JSON serialization with IDocTests
+  Check(dts = nil);
+  CheckEqual(length(dts), 0);
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json + ']');
+  InterfaceArrayAdd(dts, dt2);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json + ',' +  json2 + ']');
+  InterfaceArrayAdd(dts, dt);
+  CheckEqual(length(dts), 3);
+  json3 := '[' + json + ',' +  json2 + ',' + json + ']';
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), json3);
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 2);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json2 + ',' + json + ']');
+  InterfaceArrayDelete(dts, 1);
+  CheckEqual(length(dts), 1);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[' + json2 + ']');
+  InterfaceArrayDelete(dts, 0);
+  CheckEqual(length(dts), 0);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), '[]');
+  Check(dts = nil);
+  Check(LoadJson(dts, json3, TypeInfo(IDocTests)), 'enough RTTI');
+  CheckEqual(length(dts), 3);
+  CheckEqual(SaveJson(dts, TypeInfo(IDocTests)), json3);
   // validate some user-reported issues
   {$ifdef HASIMPLICITOPERATOR}
   l := DocList('[{"id":"f7518487-6e95-4c90-8438-a6b48d6a8b5f",' +
@@ -4944,9 +5069,9 @@ var
 begin
   // see http://docs.mongodb.org/manual/reference/object-id
   oid.FromText('507f191e810c19729de860ea');
-  Check(oid.UnixCreateTime = bswap32($507f191e));
+  CheckEqual(oid.UnixCreateTime, bswap32($507f191e));
   u := oid.ToText;
-  Check(u = BSONID);
+  CheckEqual(u, BSONID);
   o := ObjectID('507f191e810c19729de860ea');
   Check(TVarData(o).VType = BsonVariantType.VarType);
   u := ToUtf8(string(o));
@@ -5596,6 +5721,7 @@ var
   i, ndx: PtrInt;
   V, V1, V2: variant;
   s, j: RawUtf8;
+  p: PUtf8Char;
   d, a: TDocVariantData;
   vd: double;
   vs: single;
@@ -5603,6 +5729,9 @@ var
   lRefreshed: boolean;
   uu: TRawUtf8DynArray;
 begin
+  Check(pointer(uu) = nil);
+  a.InitArrayFrom(uu, JSON_FAST); // ensure no GPF
+  CheckEqual(a.Count, 0);
   uu := CsvToRawUtf8DynArray('0,1,2,3');
   a.InitArrayFrom(uu, TypeInfo(TRawUtf8DynArray), JSON_FAST);
   CheckEqual(a.Count, 4);
@@ -5751,6 +5880,8 @@ begin
   Doc.ToArrayOfConst(vr);
   s := FormatJson('[?,?,?]', [], vr);
   CheckEqual(s, '["one",2,3]');
+  s := FormatUtf8('[%,%,%]', vr);
+  CheckEqual(s, '[one,2,3]');
   s := FormatJson('[%,%,%]', vr, []);
   CheckEqual(s, '[one,2,3]');
   s := FormatJson('[?,?,?]', [], Doc.ToArrayOfConst);
@@ -5929,6 +6060,10 @@ begin
         (j[1] = #$E2) and
         (j[2] = #$80) and
         (j[3] = #$9D), 'e2809d');
+  vd := _JsonFast('{"price": 0.156}').price;
+  CheckSame(vd, 0.156);
+  vd := _JsonFastFloat('{"price": 0.156}').price; // 0.156 is a varCurrency here
+  CheckSame(vd, 0.156);
   V1 := _Arr([]);
   vs := 1.5;
   _Safe(V1)^.AddItem(vs);
@@ -5937,21 +6072,22 @@ begin
   _Safe(V1)^.AddItem(vd);
   CheckEqual(VariantSaveJson(V1), '[1.5,1.7]');
   V2 := _obj(['id', 0]);
-  Check(VariantSaveJson(V2) = '{"id":0}');
+  CheckEqual(VariantSaveJson(V2), '{"id":0}');
   Check(_Safe(V2)^.SetValueByPath('id', 1) <> nil);
-  Check(VariantSaveJson(V2) = '{"id":1}');
+  CheckEqual(VariantSaveJson(V2), '{"id":1}');
   Check(_Safe(V2)^.SetValueByPath('id.name', 'toto') = nil);
   V1.Add(V2);
-  Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1}]');
+  CheckEqual(VariantSaveJson(V1), '[1.5,1.7,{"id":1}]');
   s := 'abc';
   V1.Add(s);
-  Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1},"abc"]');
+  CheckEqual(VariantSaveJson(V1), '[1.5,1.7,{"id":1},"abc"]');
   RawUtf8ToVariant('def', V2);
   _Safe(V1)^.AddItem(V2);
-  Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1},"abc","def"]');
+  CheckEqual(VariantSaveJson(V1), '[1.5,1.7,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name', 'toto');
   CheckEqual(Doc.ToJson, '{"name":"toto"}');
+  CheckEqual(Doc.ToUrlEncode('/root'), '/root?name=toto');
   Doc.Clear;
   Doc.InitObjectFromPath('people.age', 30);
   CheckEqual(Doc.ToJson, '{"people":{"age":30}}');
@@ -6021,6 +6157,15 @@ begin
   Doc.InitJson('{a:{b:1,b:10},d:3}');
   Check(Doc.FlattenFromNestedObjects(#0));
   CheckEqual(Doc.ToJson, '{"ab":1,"ab2":10,"d":3}');
+  s := Doc.ToUrlEncode('/root');
+  CheckEqual(s, '/root?ab=1&ab2=10&d=3');
+  Doc.Clear;
+  CheckEqual(Doc.Count, 0);
+  p := PosChar(pointer(s), '?');
+  if not CheckFailed(p <> nil) then
+    Doc.InitFromUrl(p + 1, JSON_FAST);
+  CheckEqual(Doc.Count, 3);
+  CheckEqual(Doc.ToJson, '{"ab":1,"ab2":10,"d":3}');
   s := '[{"Val1":"blabla","Val2":"bleble"},{"Val1":"blibli","Val2":"bloblo"}]';
   V := _Json(s);
   V1 := _Copy(V._(0)); // expect a true instance for v1.Val1 := ... below
@@ -6039,6 +6184,9 @@ begin
   s := Doc.ToJson;
   CheckEqual(s, '{"ID":2,"Notation":"ABC","Price":10.1}');
   s := VariantSaveJson(V);
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(s), CP_UTF8);
+  {$endif HASCODEPAGE}
   CheckEqual(s, '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
   {$ifdef HASITERATORS}
   DoEnumerators;
@@ -6197,6 +6345,13 @@ type
     property arr: TRawUtf8DynArray
       read GetArray write SetArray;
   end;
+  TLocalClass = class(TInterfacedPersistent)
+  protected
+    fValue: RawUtf8;
+  published
+    property Value: RawUtf8
+      read fValue;
+  end;
 
 const
   ENUMPETSTORE1_TXT: array[TEnumPetStore1] of RawUtf8 = (
@@ -6213,9 +6368,11 @@ begin
   csv := RawUtf8ArrayToCsv(AValue);
 end;
 
-
 {$ifdef HASEXTRECORDRTTI} // Delphi 2010+ enhanced RTTI
 type
+  TTest = packed record
+    d: TDate;
+  end;
   TCat = packed record
     Name: RawUtf8
   end;
@@ -6233,8 +6390,10 @@ type
 procedure TTestCoreProcess._RTTI;
 var
   i: Integer;
-  tmp, u: RawUtf8;
+  tmp, u, json: RawUtf8;
   auto: TPersistentAutoCreateFieldsTest;
+  local: TLocalClass;
+  int: IUnknown;
   s: TSynLogLevels;
   ps: TEnumPetStore1;
   pss, pss2: TEnumPetStore1Set;
@@ -6248,6 +6407,7 @@ var
   v: variant;
   {$ifdef HASEXTRECORDRTTI}
   r: TRttiCustom;
+  d: TTest;
   {$endif HASEXTRECORDRTTI}
 begin
   {$ifdef HASEXTRECORDRTTI}
@@ -6258,7 +6418,14 @@ begin
   checkEqual(r.Props.List[1].Name, 'CatNested');
   checkEqual(r.Props.List[2].Name, 'Cats');
   checkEqual(r.Props.List[3].Name, 'CatsNested');
+  u := '{D:"2025-01-01"}';
+  d.d := 0;
+  Check(RecordLoadJson(d, u, TypeInfo(TTest)));
+  check(d.d <> 0);
   {$endif HASEXTRECORDRTTI}
+  CheckEqual(SizeOf(TRttiVarData), SizeOf(TVarData));
+  CheckEqual(SizeOf(TSynVarData), SizeOf(TVarData));
+  Check(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
   // CSV to set
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'none'), 0, 'TSetMyEnum?');
@@ -6366,6 +6533,9 @@ begin
       if i >= 0 then
         SetBit(s, i);
       tmp := SaveJson(s, TypeInfo(TSynLogLevels), astext);
+      {$ifdef HASCODEPAGE}
+      CheckEqual(GetCodePage(tmp), CP_UTF8);
+      {$endif HASCODEPAGE}
       if astext then
         case i of
           -1:
@@ -6409,6 +6579,9 @@ begin
   u := GetSetName(TypeInfo(TEnumPetStore1Set), pss2, {trimmed=}true);
   CheckEqual(u, 'None,Available,Pending,Sold');
   u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(u), CP_UTF8);
+  {$endif HASCODEPAGE}
   CheckEqual(u, '15');
   u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set), {enumastext=}true);
   CheckEqual(u, '["*"]');
@@ -6417,8 +6590,8 @@ begin
   u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
   CheckEqual(u, '["available","pending","sold"]');
   TRttiJson.UnRegisterCustomSerializer(TypeInfo(TEnumPetStore1Set));
-  u := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
-  CheckEqual(u, '15');
+  json := SaveJson(pss2, TypeInfo(TEnumPetStore1Set));
+  CheckEqual(json, '15');
   // class RTTI
   with PRttiInfo(TypeInfo(TOrmTest))^ do
   begin
@@ -6438,16 +6611,68 @@ begin
     TRestServer.MethodAddress('STAT'));
   Check(GetPublishedMethodAddr(TRestServer, 'timestamp') =
     TRestServer.MethodAddress('TIMEstamp'));
+  Check(not SeemsRealObject(nil));
   auto := TPersistentAutoCreateFieldsTest.CreateFake;
   try
+    Check(SeemsRealObject(auto));
     Check(auto.Value1 <> nil);
     Check(auto.Value2 <> nil);
     tmp := ObjectToJson(auto);
-    Check(tmp = '{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},' +
+    CheckEqual(tmp, '{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},' +
       '"Value2":{"Real":1.7,"Imaginary":2.7}}');
+    Check(SeemsRealObject(auto));
+    {$ifdef FPC}
+    u := 'TPersistentAutoCreateFieldsTest';
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, tmp);
+    u := '';
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, '');
+    u := 'TUnknown'; // wrong name
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, '');
+    u := 'TLocalClass'; // wrong name but same fields
+    JsonForDebug(@auto, u, json);
+    CheckEqual(json, '');
+    {$endif FPC}
   finally
     auto.Free;
   end;
+  Check(ClassInheritsFromName(TLocalClass, 'TLocalClass'));
+  Check(ClassInheritsFromName(TLocalClass, 'TInterfacedPersistent'));
+  Check(ClassInheritsFromName(TLocalClass, 'TInterfacedObject'));
+  Check(ClassInheritsFromName(TLocalClass, 'TObject'));
+  Check(not ClassInheritsFromName(TLocalClass, 'TSynPersistent'));
+  Check(not ClassInheritsFromName(TLocalClass, 'TPersistent'));
+  local := TLocalClass.Create;
+  int := local; // will do local.Free
+  local.fValue := 'test';
+  tmp := '{"Value":"test"}';
+  Check(Rtti.FindClass(TLocalClass) = nil, 'check before registered to the Rtti');
+  {$ifdef FPC}
+  u := 'TLocalClass';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, tmp);
+  u := '';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, '');
+  u := 'TUnknown'; // wrong name
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, '');
+  {$endif FPC}
+  CheckEqual(ObjectToJson(local), tmp);
+  Check(Rtti.FindClass(TLocalClass) <> nil, 'check after registered to the Rtti');
+  {$ifdef FPC}
+  u := 'TLocalClass';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, tmp, 'exact class');
+  u := 'TObject';
+  JsonForDebug(@local, u, json);
+  CheckEqual(json, tmp, 'sub-class');
+  u := 'IUnknown';
+  JsonForDebug(@int, u, json);
+  CheckEqual(json, tmp, 'as IUnknown');
+  {$endif FPC}
   cc := TComplexClass.Create;
   try
     CheckEqual(RawUtf8ArrayToCsv(cc.arr), '');
@@ -6457,6 +6682,7 @@ begin
     CheckEqual(RawUtf8ArrayToCsv(cc.arr), 'win32,win64');
     Check(GetValueObject(cc, 'arr', v));
     CheckEqual(_Safe(v)^.ToJson, '["win32","win64"]');
+    Check(SeemsRealObject(cc));
   finally
     cc.Free;
   end;
@@ -6561,7 +6787,6 @@ var
   str: string;
   P: PUtf8Char;
   Guid2: TGuid;
-  U: TUri;
 const
   guid: TGuid = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 
@@ -6575,41 +6800,43 @@ const
     CheckEqual(res, expected);
   end;
 
-  procedure Test(const decoded, encoded: RawUtf8);
+  procedure Test(decoded, encoded: RawUtf8);
   begin
     CheckEqual(UrlEncode(decoded), encoded);
     Check(UrlDecode(encoded) = decoded);
     Check(UrlDecode(PUtf8Char(encoded)) = decoded);
+    if decoded[1] <> '/' then
+      insert('/', decoded, 1); // as AddUrlNameNormalize() does
     DoOne(StringReplaceChars(encoded, '+', ' '), decoded); // + only after ?
   end;
 
 begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
-    DoOne('', '');
-    DoOne('a', 'a');
-    DoOne('ab', 'ab');
-    DoOne('a%20b', 'a b');
-    DoOne('a% b', 'a% b');
+    DoOne('', '/');
+    DoOne('a', '/a');
+    DoOne('ab', '/ab');
+    DoOne('a%20b', '/a b');
+    DoOne('a% b', '/a% b');
     DoOne('/', '/');
     DoOne('//', '/');
-    DoOne('a/b', 'a/b');
-    DoOne('a//b', 'a/b');
-    DoOne('a///b', 'a/b');
+    DoOne('a/b', '/a/b');
+    DoOne('a//b', '/a/b');
+    DoOne('a///b', '/a/b');
     DoOne('/ab', '/ab');
     DoOne('//ab', '/ab');
     DoOne('///ab', '/ab');
-    DoOne('ab/', 'ab/');
-    DoOne('ab//', 'ab/');
-    DoOne('ab///', 'ab/');
-    DoOne('a/b/', 'a/b/');
+    DoOne('ab/', '/ab/');
+    DoOne('ab//', '/ab/');
+    DoOne('ab///', '/ab/');
+    DoOne('a/b/', '/a/b/');
     DoOne('/ab//', '/ab/');
     DoOne('//ab///', '/ab/');
-    DoOne('ab'#0, 'ab');
-    DoOne('ab'#0'c', 'ab');
+    DoOne('ab'#0, '/ab');
+    DoOne('ab'#0'c', '/ab');
     DoOne('/ab'#0'c', '/ab');
     DoOne('/ab//'#0'c', '/ab/');
-    DoOne(#0'c', '');
+    DoOne(#0'c', '/');
     Test('abcdef', 'abcdef');
     Test('where=name like :(''Arnaud%'')', 'where%3Dname+like+%3A%28%27Arnaud%25%27%29');
     Test('"Aardvarks lurk, OK?"', '%22Aardvarks+lurk%2C+OK%3F%22');
@@ -6660,42 +6887,6 @@ begin
   Check(Base64uriToBin(utf, @Guid2, SizeOf(Guid2)));
   Check(IsEqualGuid(Guid2, Guid));
   Check(IsEqualGuid(@Guid2, @Guid));
-  Check(U.From('toto.com'));
-  CheckEqual(U.Uri, 'http://toto.com/');
-  Check(not U.Https);
-  Check(U.From('toto.com:123'));
-  CheckEqual(U.Uri, 'http://toto.com:123/');
-  Check(not U.Https);
-  Check(U.From('https://toto.com:123/tata/titi'));
-  CheckEqual(U.Uri, 'https://toto.com:123/tata/titi');
-  Check(U.Https);
-  CheckEqual(u.Address, 'tata/titi');
-  Check(U.From('https://toto.com:123/tata/tutu:tete'));
-  CheckEqual(u.Address, 'tata/tutu:tete');
-  CheckEqual(U.Uri, 'https://toto.com:123/tata/tutu:tete');
-  Check(U.From('http://user:password@server:port/address'));
-  Check(not U.Https);
-  CheckEqual(U.Uri, 'http://server:port/address');
-  CheckEqual(U.User, 'user');
-  CheckEqual(U.Password, 'password');
-  CheckEqual(u.Address, 'address');
-  Check(U.From('https://user@server:port/address'));
-  Check(U.Https);
-  CheckEqual(U.Uri, 'https://server:port/address');
-  CheckEqual(U.User, 'user');
-  CheckEqual(U.Password, '');
-  Check(U.From('toto.com/tata/tutu:tete'));
-  CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
-  CheckEqual(U.User, '');
-  CheckEqual(U.Password, '');
-  Check(U.From('file://server/path/to%20image.jpg'));
-  CheckEqual(U.Scheme, 'file');
-  CheckEqual(U.Server, 'server');
-  CheckEqual(u.Address, 'path/to%20image.jpg');
-  Check(not U.From('file:///path/to%20image.jpg'), 'false if valid');
-  CheckEqual(U.Scheme, 'file');
-  CheckEqual(U.Server, '');
-  CheckEqual(u.Address, 'path/to%20image.jpg');
   CheckEqual(UrlEncode(''), '');
   CheckEqual(UrlDecode(''), '');
   CheckEqual(UrlEncodeName(''), '');
@@ -7132,6 +7323,100 @@ begin
   end;
 end;
 
+procedure TTestCoreProcess.Folders;
+var
+  folder, subfolder: TFileName;
+
+  procedure DoOne(opt: TFindFilesOptions; const mask: TFileName);
+  var
+    f1: TFindFilesDynArray;
+    {$ifdef OSPOSIX}
+    f2: TFindFilesDynArray;
+    p1, p2: PFindFiles;
+    siz: Int64;
+    {$endif}
+    n1, n2: TFileNameDynArray;
+    i: PtrInt;
+  begin
+    f1 := FindFiles(folder, mask, '', opt);
+    {$ifdef OSPOSIX} // not needed on Windows where FindFiles=FindFilesRtl
+    siz := FindFilesSize(f1);
+    FindFilesRtl(folder, mask, '', opt, f2); // use TSearchRec on POSIX
+    CheckEqual(length(f1), length(f2));
+    CheckEqual(FindFilesSize(f2), siz);
+    p1 := pointer(f1);
+    p2 := pointer(f2);
+    for i := 1 to length(f1) do
+    begin
+      Check(p1 <> p2);
+      if not (ffoSortByDate in opt) then // only dates are identical after sort
+      begin
+        Check(p1^.Name = p2^.Name);
+        CheckEqual(p1^.Size, p2^.Size);
+        CheckEqual(p1^.Attr, p2^.Attr);
+      end;
+      CheckSameTime(p1^.Timestamp, p2^.Timestamp);
+      if p1^.Size > 0 then
+        dec(siz, p1^.Size);
+      inc(p1);
+      inc(p2);
+    end;
+    CheckEqual(siz, 0);
+    CheckEqual(RunUntilSigTerminatedPidFile, Make([
+      Executable.ProgramFilePath, '.', Executable.ProgramName, '.pid']));
+    {$endif OSPOSIX}
+    if ffoSortByDate in opt then
+      exit; // FileNames() knows no date
+    n1 := FileNames(folder, mask, opt);
+    CheckEqual(length(f1), length(n1));
+    for i := 0 to high(f1) do
+      Check(f1[i].Name = n1[i]);
+    n2 := FindFilesDynArrayToFileNames(f1);
+    CheckEqual(length(n1), length(n2));
+    for i := 0 to high(n1) do
+      Check(n1[i] = n2[i]);
+  end;
+
+  procedure DoOptions(opt: TFindFilesOptions);
+  begin
+    DoOne(opt + [ffoExcludesDir], FILES_ALL);
+    DoOne(opt, FILES_ALL);
+    DoOne(opt + [ffoExcludesDir], '*.txt');
+    DoOne(opt, '*.txt');
+  end;
+
+  procedure DoFolder(const one: TFileName);
+  begin
+    folder := one;
+    DoOptions([]);
+    DoOptions([ffoIncludeHiddenFiles]);
+    DoOptions([ffoSortByName]); // "human" sort by extension then name
+    DoOptions([ffoSortByFullName]); // name-only sort
+    DoOptions([ffoSortByDate]);
+    DoOptions([ffoIncludeFolder]);
+    DoOptions([ffoIncludeFolder, ffoSortByName]);
+    DoOptions([ffoIncludeFolder, ffoSortByFullName]);
+    DoOptions([ffoSubFolder]);
+    DoOptions([ffoSubFolder, ffoSortByName]);
+    DoOptions([ffoSubFolder, ffoSortByFullName]);
+    DoOne([ffoSubFolder, ffoSortByName], '*.txt;*.json');
+    DoOne([ffoSubFolder, ffoSortByName, ffoExcludesDir], '*.txt;*.json');
+    DoOne([ffoSubFolder, ffoSortByFullName], '*.txt;*.json');
+    DoOne([ffoSubFolder, ffoSortByDate], '*.txt;*.json');
+  end;
+
+begin
+  // create at least two sub-folder levels to validate proper recursive process
+  subfolder := EnsureDirectoryExists([
+    Executable.ProgramFilePath, 'data', 'synecc', 'level2']);
+  Check(subfolder <> '', 'subfolder');
+  Check(FileFromString('non void folder', subfolder + 'test.txt'));
+  // we can't use Executable.ProgramFilePath because of its live mormot*.log
+  DoFolder(Executable.ProgramFilePath + 'data');
+  DoFolder(Executable.ProgramFilePath + 'log');
+  Check(DirectoryDelete(subfolder), subfolder);
+end;
+
 
 { TTestCoreCompression }
 
@@ -7532,15 +7817,14 @@ end;
 
 function By1(pattern: byte; n: integer): RawUtf8;
 begin
-  FastSetString(result, nil, n);
-  FillCharFast(pointer(result)^, n, pattern);
+  FillCharFast(FastSetString(result, n)^, n, pattern);
 end;
 
 function By4(pattern, n: integer): RawUtf8;
 var
   i: PtrInt;
 begin
-  FastSetString(result, nil, n * 4);
+  FastSetString(result, n * 4);
   for i := 0 to n - 1 do
     PIntegerArray(result)[i] := pattern;
 end;

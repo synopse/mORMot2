@@ -21,6 +21,7 @@ uses
   mormot.core.base,
   mormot.core.data,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.json,
   mormot.core.variants,
   mormot.core.os,
@@ -103,8 +104,11 @@ type
     procedure MonthToText(const Value: variant; out result: variant);
     procedure TagToText(const Value: variant; out result: variant);
   public
-    procedure Start(aServer: TRest); reintroduce;
+    procedure Start(aServer: TRest; const aTemplatesFolder: TFileName); reintroduce;
+    property HasFts: boolean
+      read fHasFts write fHasFts;
   public
+    // IBlogApplication methods - one per URI and its associated view
     procedure Default(
       var Scope: variant);
     procedure ArticleView(
@@ -135,8 +139,6 @@ type
     function ArticleCommit(
       ID: TID;
       const Title, Content: RawUtf8): TMvcAction;
-    property HasFts: boolean
-      read fHasFts write fHasFts;
   end;
 
 
@@ -152,7 +154,7 @@ resourcestring
 
 { TBlogApplication }
 
-procedure TBlogApplication.Start(aServer: TRest);
+procedure TBlogApplication.Start(aServer: TRest; const aTemplatesFolder: TFileName);
 begin
   fDefaultData := TLockedDocVariant.Create;
   inherited Start(aServer, TypeInfo(IBlogApplication));
@@ -160,7 +162,7 @@ begin
   // TRestOrmServer(TRestServer(aServer).Server).StaticVirtualTable[TOrmArticle]=nil;
   fTagsLookup.Init(RestModel.Orm);
   // publish IBlogApplication using Mustache Views (TMvcRunOnRestServer default)
-  fMainRunner := TMvcRunOnRestServer.Create(Self).
+  fMainRunner := TMvcRunOnRestServer.Create(self, aTemplatesFolder).
     SetCache('Default', cacheRootIfNoSession, 15).
     SetCache('ArticleView', cacheWithParametersIfNoSession, 60).
     SetCache('AuthorView', cacheWithParametersIgnoringSession, 60);
@@ -173,7 +175,8 @@ begin
     RegisterExpressionHelpers(['MonthToText'], [MonthToText]).
     RegisterExpressionHelpers(['TagToText'],   [TagToText]);
   // data setup
-  ComputeMinimalData;
+  if not RestModel.Orm.TableHasRows(TOrmArticle) then
+    ComputeMinimalData;
   aServer.Orm.Cache.SetCache(TOrmAuthor);
   aServer.Orm.Cache.SetCache(TOrmArticle);
   aServer.Orm.Cache.SetCache(TOrmComment);
@@ -188,26 +191,15 @@ begin
 end;
 
 procedure TBlogApplication.MonthToText(const Value: variant; out result: variant);
-const
-  MONTHS: array[0..11] of RawUtf8 = (
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December');
 var
-  month: integer;
+  m, y: integer;
 begin
-  if VariantToInteger(Value, month) and
-     (month > 0) then
-    RawUtf8ToVariant(MONTHS[month mod 12] + ' ' + UInt32ToUTF8(month div 12), result)
+  if VariantToInteger(Value, m) and
+     (m > 0) then
+  begin
+    y := m div 12;
+    RawUtf8ToVariant(Make([MONTH_NAMES[m - y * 12 + 1], ' ', y]), result);
+  end
   else
     SetVariantNull(result);
 end;
@@ -300,7 +292,7 @@ begin
         200, '.', 'https://synopse.info');
       article.Tags := nil;
       for t := 1 to Random32(6) do
-        article.TagsAddOrdered(tags[random(length(tags))], fTagsLookup);
+        article.TagsAddOrdered(tags[Random32(length(tags))], fTagsLookup);
       batch.Add(article, true);
     end;
     if RestModel.Orm.BatchSend(batch, articles) = HTTP_SUCCESS then
@@ -311,7 +303,7 @@ begin
       batch.Reset(TOrmComment, 20000);
       for n := 1 to FAKEDATA_ARTICLESCOUNT * 2 do
       begin
-        comment.Article := CastID(articles[random(length(articles))]);
+        comment.Article := CastID(articles[Random32(length(articles))]);
         comment.Title := TSynTestCase.RandomTextParagraph(5, ' ');
         comment.Content :=
           TSynTestCase.RandomTextParagraph(30, '.', 'http://mormot.net');
@@ -482,7 +474,7 @@ begin
     end;
   end
   else
-    raise EMvcApplication.CreateGotoError(HTTP_NOTFOUND);
+    EMvcApplication.GotoError(HTTP_NOTFOUND);
 end;
 
 procedure TBlogApplication.AuthorView(var ID: TID; var Author: TOrmAuthor;
@@ -494,7 +486,7 @@ begin
     Articles := RestModel.Orm.RetrieveDocVariantArray(TOrmArticle, '',
       'Author=? order by RowId desc limit 50', [ID], ARTICLE_FIELDS)
   else
-    raise EMvcApplication.CreateGotoError(HTTP_NOTFOUND);
+    EMvcApplication.GotoError(HTTP_NOTFOUND);
 end;
 
 function TBlogApplication.Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
@@ -583,12 +575,12 @@ var
 begin
   AuthorID := GetLoggedAuthorID(canPost, Article);
   if AuthorID = 0 then
-    raise EMvcApplication.CreateGotoError(sErrorNeedValidAuthorSession);
+    EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
   if ID <> 0 then
     if not RestModel.Orm.Retrieve(ID, Article) then
-      raise EMvcApplication.CreateGotoError(HTTP_UNAVAILABLE)
+      EMvcApplication.GotoError(HTTP_UNAVAILABLE)
     else if Article.Author <> CastID(AuthorID) then
-      raise EMvcApplication.CreateGotoError(sErrorNeedValidAuthorSession);
+      EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
   if Title <> '' then
     Article.Title := Title;
   if Content <> '' then

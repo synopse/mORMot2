@@ -785,7 +785,7 @@ type
 type
   /// direct access to the native Oracle Client Interface (OCI)
   TSqlDBOracleLib = class(TSynLibrary)
-  protected
+  protected // internal wrapper functions
     procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogLevel = sllNone);
@@ -801,6 +801,7 @@ type
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
       csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
   public
+    // all needed API entries
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
     EnvNlsCreate: function(var envhpp: pointer; mode: ub4; ctxp: pointer;
@@ -1138,12 +1139,12 @@ begin
     PInteger(PtrUInt(@self) + 3)^ := 0;  // set Day=Hour=Min=Sec to 0
     exit; // invalid ISO-8601 text -> store as null date
   end;
-  Y := Value shr (6 + 6 + 5 + 5 + 4);
+  Y := Value shr SHR_YY;
   C := Y div 100;
   Cent := C + 100;
   Year := (Y - C * 100) + 100;
-  Month := ((Value32 shr (6 + 6 + 5 + 5)) and 15) + 1;
-  Day := ((Value32 shr (6 + 6 + 5)) and 31) + 1;
+  Month := ((Value32 shr SHR_MM) and AND_MM) + 1;
+  Day := ((Value32 shr SHR_DD) and AND_DD) + 1;
   if NoTime then
   begin
     Hour := 1;
@@ -1151,9 +1152,9 @@ begin
     Sec := 1;
     exit;
   end;
-  Hour := ((Value32 shr (6 + 6)) and 31) + 1;
-  Min := ((Value32 shr 6) and 63) + 1;
-  Sec := (Value32 and 63) + 1;
+  Hour := ((Value32 shr SHR_H) and AND_H) + 1;
+  Min := ((Value32 shr SHR_M) and AND_M) + 1;
+  Sec := (Value32 and AND_S) + 1;
 end;
 
 
@@ -1280,7 +1281,7 @@ const
     Text: 'WE8ISO8859P1'
   ));
 
-  OCI_ENTRIES: array[0..40] of RawUtf8 = (
+  OCI_ENTRIES: array[0..41] of PAnsiChar = (
     'ClientVersion',
     'EnvNlsCreate',
     'HandleAlloc',
@@ -1321,7 +1322,8 @@ const
     'StringAssignText',
     'CollAppend',
     'BindObject',
-    'PasswordChange');
+    'PasswordChange',
+    nil);
 
 
 { TSqlDBOracleLib }
@@ -1381,7 +1383,7 @@ begin
   if UseLobChunks then
   begin
     Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
-    pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount, CP_RAWBYTESTRING);
+    pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount);
     result := 0;
     repeat
       Read := BlobLen;
@@ -1394,7 +1396,7 @@ begin
   end
   else
   begin
-    pointer(tmp) := FastNewString(BlobLen, CP_RAWBYTESTRING);
+    pointer(tmp) := FastNewString(BlobLen);
     Check(nil, Stmt, LobRead(svchp, errhp, locp, result, 1, pointer(tmp), result,
       nil, nil, csid, csfrm), errhp);
     stream.WriteBuffer(pointer(tmp)^, result);
@@ -1409,7 +1411,7 @@ var
 begin
   Len := BlobOpen(Stmt, svchp, errhp, locp);
   try
-    pointer(result) := FastNewString(Len, CP_RAWBYTESTRING);
+    pointer(result) := FastNewString(Len);
     Read := BlobRead(Stmt, svchp, errhp, locp, pointer(result), Len);
     if Read <> Len then
       SetLength(result, Read);
@@ -1461,7 +1463,7 @@ var
   tmp: RawByteString;
 begin
   Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
-  pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount, CP_RAWBYTESTRING);
+  pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount);
   l_Offset := 1;
   while stream.Position < stream.Size do
   begin
@@ -1661,42 +1663,40 @@ const
 
 constructor TSqlDBOracleLib.Create(LibraryFileName: TFileName);
 var
-  P: PPointerArray;
-  i: PtrInt;
   l1, l2, l3: TFileName;
 begin
   if LibraryFileName = '' then
     LibraryFileName := LIBNAME;
   if (SynDBOracleOCIpath <> '') and
      DirectoryExists(SynDBOracleOCIpath) then
-    l1 := ExtractFilePath(ExpandFileName(
-      SynDBOracleOCIpath + PathDelim)) + LibraryFileName;
+    l1 := MakePath([SynDBOracleOCIpath, LibraryFileName]);
   l2 := Executable.ProgramFilePath + LibraryFileName;
   if not FileExists(l2) then
   begin
-    l2 := Executable.ProgramFilePath + 'OracleInstantClient';
-    if not DirectoryExists(l2) then
-    begin
-      l2 := Executable.ProgramFilePath + 'OCI';
-      if not DirectoryExists(l2) then
-        l2 := Executable.ProgramFilePath + 'Oracle';
-    end;
+    if not DirectoryExistsMake([Executable.ProgramFilePath, 'Oracle'], @l2) then
+      if not DirectoryExistsMake([Executable.ProgramFilePath, 'OCI'], @l2) then
+        l2 := Executable.ProgramFilePath + 'OracleInstantClient';
     l2 := l2 + PathDelim + LibraryFileName;
   end;
   l3 := GetEnvironmentVariable('ORACLE_HOME');
   if l3 <> '' then
-    l3 := IncludeTrailingPathDelimiter(l3) +
-            'bin' + PathDelim + LibraryFileName;
-  TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
-  P := @@ClientVersion;
-  for i := 0 to High(OCI_ENTRIES) do
-    Resolve('OCI', OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
-  ClientVersion(
-    major_version, minor_version, update_num, patch_num, port_update_num);
-  SupportsInt64Params := (major_version > 11) or
-                         ((major_version = 11) and
-                          (minor_version > 1));
-  UseLobChunks := true; // by default
+    l3 := MakePath([l3, 'bin', LibraryFileName]);
+  try
+    TryLoadResolve([{%H-}l1, l2, l3, LibraryFileName, LIBNAME],
+      'OCI', @OCI_ENTRIES, @@ClientVersion, ESqlDBOracle);
+    ClientVersion(
+      major_version, minor_version, update_num, patch_num, port_update_num);
+    SupportsInt64Params := (major_version > 11) or
+                           ((major_version = 11) and
+                            (minor_version > 1));
+    UseLobChunks := true; // by default
+  except
+    on E: Exception do
+    begin
+      SetDbError(E);
+      raise;
+    end;
+  end;
 end;
 
 
@@ -1765,7 +1765,7 @@ begin
     exit;
   for i1 := 0 to high(CODEPAGES) do
     if CODEPAGES[i1].Charset = aCharset1 then
-      for i2 := 0 to High(CODEPAGES) do
+      for i2 := 0 to high(CODEPAGES) do
         if (CODEPAGES[i2].Charset = aCharset2) and
            (CODEPAGES[i1].Num = CODEPAGES[i2].Num) then
           exit; // aliases are allowed

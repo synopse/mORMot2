@@ -18,6 +18,7 @@ uses
 
   sysutils,
   mormot.core.base,
+  mormot.core.text,
   mormot.core.rtti,
   mormot.core.os,
   mormot.db.raw.sqlite3,
@@ -34,6 +35,7 @@ var
   aServer: TRestServerDB;
   aApplication: TBlogApplication;
   aHTTPServer: TRestHttpServer;
+  aTemplatesFolder: TFileName;
   LogFamily: TSynLogFamily;
 
 begin
@@ -53,19 +55,24 @@ begin
       aServer.Server.CreateMissingTables;
       aApplication := TBlogApplication.Create;
       try
-        aApplication.Start(aServer);
+        if not DirectoryExistsMake(
+            [Executable.ProgramFilePath, 'Views'], @aTemplatesFolder) then
+          // circumvent if was not compiled into 'exe' sub-folder
+          DirectoryExistsMake(
+            [Executable.ProgramFilePath, 'exe', 'Views'], @aTemplatesFolder);
+        aApplication.Start(aServer, aTemplatesFolder);
         aHTTPServer := TRestHttpServer.Create('8092', aServer, '+',
           HTTP_DEFAULT_MODE, nil, 16, secNone, '', '', HTTPSERVER_DEBUG_OPTIONS);
         try
           aHTTPServer.RootRedirectToURI('blog/default'); // redirect / to blog/default
           aServer.RootRedirectGet := 'blog/default';     // redirect blog to blog/default
-          writeln('"MVC Blog Server" launched on port 8092 using ',
-            aHttpServer.HttpServer.ClassName);
-          writeln(#10'You can check http://localhost:8092/blog/mvc-info for information');
-          writeln('or point to http://localhost:8092 to access the web app.');
-          writeln(#10'Press [Enter] or ^C to close the server.'#10);
+          ConsoleWrite(['"MVC Blog Server" launched on port 8092 using ',
+            aHttpServer.HttpServer], ccLightCyan);
+          ConsoleWrite(#10'You can point to http://localhost:8092 to access the web app.');
+          ConsoleWrite('Or check http://localhost:8092/blog/mvc-info for information.');
+          ConsoleWrite(#10'Press [Enter] or ^C to close the server.'#10, ccCyan);
           ConsoleWaitForEnterKey;
-          writeln('HTTP server shutdown...');
+          ConsoleWrite('HTTP server shutdown...', ccMagenta);
         finally
           aHTTPServer.Free;
         end;
@@ -78,7 +85,7 @@ begin
   finally
     aModel.Free;
   end;
-  writeln('HTTP server finalized. Bye!');
+  ConsoleWrite('HTTP server finalized. Bye!');
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

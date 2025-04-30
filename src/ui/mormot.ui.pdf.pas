@@ -878,8 +878,8 @@ type
   /// a PDF object, storing a textual value
   // - the value is specified as a PdfString
   // - this object is stored as '(escapedValue)'
-  // - in case of MBCS, conversion is made into Unicode before writing, and
-  // stored as '<FEFFHexUnicodeEncodedValue>'
+  // - in case of MBCS, conversion is made into UTF-16 before writing, and
+  // stored as '<FEFFHexUnicodeEncodedValue>' with an initial BOM_UTF16LE
   TPdfText = class(TPdfObject)
   private
     fValue: RawByteString;
@@ -896,7 +896,8 @@ type
   // - the value is specified as an UTF-8 encoded string
   // - this object is stored as '(escapedValue)'
   // - in case characters with ANSI code higher than 8 Bits, conversion is made
-  // into Unicode before writing, and '<FEFFHexUnicodeEncodedValue>'
+  // into UTF-16 before writing, and '<FEFFHexUnicodeEncodedValue>'  with an
+  // initial BOM_UTF16LE
   TPdfTextUtf8 = class(TPdfObject)
   private
     fValue: RawUtf8;
@@ -1562,7 +1563,7 @@ type
       read GetDefaultPageLandscape write SetDefaultPageLandscape;
     /// the default page size, used for every new page creation (i.e. AddPage method call)
     // - a write to this property this will reset the default paper orientation
-    // to Portrait: you must explicitely set DefaultPageLandscape to true, if needed
+    // to Portrait: you must explicitly set DefaultPageLandscape to true, if needed
     property DefaultPaperSize: TPdfPaperSize
       read fDefaultPaperSize write SetDefaultPaperSize;
     /// the compression method used for page content storage
@@ -2463,7 +2464,7 @@ type
   protected
     // we use TWordDynArray for auto garbage collection and generic handling
     // - since the Ttf file is big endian, we swap all words at loading, to
-    // be used directly by the Intel x86 code; integer (longint) values
+    // be used directly by the Intel x86 code; integer (32-bit) values
     // must take care of this byte swapping
     fcmap, fhead, fhhea, fhmtx: TWordDynArray;
   public
@@ -4871,14 +4872,14 @@ end;
 
 function TPdfWrite.AddHex(const Bin: PdfString): TPdfWrite;
 var
-  L, len: integer;
+  L, len: PtrInt;
   PW: pointer;
 begin
   len := length(Bin);
   PW := pointer(Bin);
   repeat
     L := len;
-    if BEnd - B <= L * 2 then
+    if PtrInt(BEnd - B) <= L * 2 then // note: PtrInt(BEnd - B) could be < 0
     begin
       Save;
       if L > high(fTmp) shr 1 then
@@ -5039,7 +5040,7 @@ function TPdfWrite.AddUnicodeHex(PW: PWideChar; WideCharCount: integer): TPdfWri
   end;
 
 var
-  L: integer;
+  L: PtrInt;
   {$ifdef USE_PDFSECURITY}
   sectmp: TSynTempBuffer;
   {$endif USE_PDFSECURITY}
@@ -7157,7 +7158,7 @@ begin
   end;
   if needFileID then
   begin
-    RandomBytes(@fFileID, SizeOf(fFileID));
+    SharedRandom.Fill(@fFileID, SizeOf(fFileID));
     SetLength(hexFileID, SizeOf(fFileID) * 2 + 2);
     P := pointer(hexFileID);
     P[0] := '<';
@@ -7852,7 +7853,7 @@ begin
   buf := StringFromFile(AttachFile);
   if buf <> '' then
     result := CreateFileAttachmentFromBuffer(buf, ExtractFileName(AttachFile),
-      Description, '', UnixMSTimeToDateTimeZ(lw), UnixMSTimeToDateTimeZ(fc));
+      Description, '', UnixMSTimeToDateTimeZ(fc), UnixMSTimeToDateTimeZ(lw));
 end;
 
 function TPdfDocument.CreateFileAttachmentFromBuffer(const Buffer: RawByteString;
@@ -7870,10 +7871,10 @@ begin
   str.Attributes.AddItem('Type', 'EmbeddedFile');
   if MimeType <> '' then
     StringToUtf8(MimeType, mime)
-  else if Pos('.', Description) <> 0 then      
-    mime := GetMimeContentType(pointer(Buffer), length(Buffer), Description)
+  else if Pos('.', Description) <> 0 then
+    mime := GetMimeContentType(Buffer, Description)
   else
-    mime := GetMimeContentType(pointer(Buffer), length(Buffer));
+    mime := GetMimeContentType(Buffer);
   str.Attributes.AddItem('Subtype', mime);
   // file Params attribute
   parms := TPdfDictionary.Create(fXref);
@@ -7895,20 +7896,29 @@ begin
   ef.AddItem('F', str);
   ef.AddItem('UF', str);
   fs.AddItem('EF', ef);
-  // set title and Filespec as Names array 
-  arr := TPdfArray.Create(fXref);
+  // ensure we have the needed Names and EmbeddedFiles dictionaries
+  ndic := Root.Data.PdfDictionaryByName('Names');
+  if ndic = nil then
+  begin
+    ndic := TPdfDictionary.Create(fXref);
+    root.Data.AddItem('Names', ndic);
+  end;
+  efdic := ndic.PdfDictionaryByName('EmbeddedFiles');
+  if efdic = nil then
+  begin
+    efdic := TPdfDictionary.Create(fXref);
+    ndic.AddItem('EmbeddedFiles', efdic);
+    arr := TPdfArray.Create(fXref);
+    efdic.AddItem('Names', arr);
+  end
+  else
+    arr := efdic.PdfArrayByName('Names');
+  // add title and Filespec in Names array
   txt := TPdfTextString.Create(Title);
   arr.AddItem(txt);
   arr.AddItem(fs);
-  // create EmbeddedFiles with Names 
-  ndic := TPdfDictionary.Create(fXref);
-  ndic.AddItem('Names', arr);
-  // create the main returned dictionary
-  efdic := TPdfDictionary.Create(fXref);
-  efdic.AddItem('EmbeddedFiles', ndic);
-  result := efdic;
-  // register to the main catalog
-  Root.Data.AddItem('Names', efdic);
+  // return the newly created Filespec dictionary
+  result := fs;
 end;
 
 procedure TPdfDocument.SetUseOptionalContent(Value: boolean);
@@ -9018,7 +9028,7 @@ begin
   if PW <> nil then
     if fPage.fFont.FTrueTypeFontsIndex = 0 then
     begin
-      s := fDoc.Engine.UnicodeBufferToAnsi(PW, StrLenW(PW));
+      fDoc.Engine.UnicodeBufferToAnsiVar(PW, StrLenW(PW), s);
       i := 1;
       while i <= length(s) do
       begin // loop is MBCS ready
@@ -11942,7 +11952,7 @@ begin
   begin
     Canvas.GSave;
     Canvas.NewPath;
-    DC[nDC].ClipRgnNull := False;
+    DC[nDC].ClipRgnNull := false;
     d := @Data^.RgnData;
     pr := @d^.Buffer;
     for i := 1 to d^.rdh.nCount do

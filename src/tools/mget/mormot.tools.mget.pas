@@ -49,17 +49,18 @@ type
     fHashAlgo: TMGetProcessHash;
     fPeerRequest: TWGetAlternateOptions;
     fLimitBandwidthMB, fWholeRequestTimeoutSec: integer;
-    fHeader, fHashValue: RawUtf8;
+    fHeader, fHashValue, fPeerCacheInterface: RawUtf8;
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
     fOnProgress: TOnStreamProgress;
+    fOnPeerCacheDirectOptions: TOnHttpPeerCacheDirectOptions;
     fOnStep: TOnWGetStep;
     fOutSteps: TWGetSteps;
     fPeerCache: IWGetAlternate;
     function GetTcpTimeoutSec: integer;
     procedure SetTcpTimeoutSec(Seconds: integer);
     // could be overriden to change the behavior of this class
-    procedure PeerCacheStarted; virtual;
+    procedure PeerCacheStarted(PeerInstance: THttpPeerCache); virtual;
     procedure PeerCacheStopping; virtual;
     procedure BeforeClientConnect(var Uri: TUri); virtual;
     procedure AfterClientConnect; virtual;
@@ -85,13 +86,26 @@ type
     function Execute(const Url: RawUtf8): TFileName;
     /// write some message to the console, if Silent flag is false
     procedure ToConsole(const Fmt: RawUtf8; const Args: array of const);
+    /// encode a remote URI for pcoHttpDirect download at localhost
+    // - returns aDirectUri e.g. as 'http://1.2.3.4:8099/https/microsoft.com/...'
+    // (if peer cache runs on 1.2.3.4:8099) and its associated aDirectHeaderBearer
+    function HttpDirectUri(const aRemoteUri, aRemoteHash: RawUtf8;
+      out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean = false;
+      aOptions: PHttpRequestExtendedOptions = nil): boolean;
     /// access to the associated THttpPeerCache instance
-    // - a single peer-cache run in the background between Execute() calls
+    // - a single peer-cache is run in the background between Execute() calls
+    // - equals nil if this instance Peer property is false
     property PeerCache: IWGetAlternate
       read fPeerCache;
+    /// the 'ip:port' of the running THttpPeerCache instance, '' if none
+    property PeerCacheInterface: RawUtf8
+      read fPeerCacheInterface;
     /// optional callback event called during download process
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
+    /// optional event to customize the access of a given URI in pcoHttpDirect mode
+    property OnPeerCacheDirectOptions: TOnHttpPeerCacheDirectOptions
+      read fOnPeerCacheDirectOptions write fOnPeerCacheDirectOptions;
     /// optional callback event raised during WGet() process
     // - if OutSteps: TWGetSteps field and LogSteps boolean flag are not enough
     // - alternative for business logic tracking: the OnProgress callback is
@@ -186,6 +200,7 @@ end;
 procedure TMGetProcess.StartPeerCache;
 var
   l: ISynLog;
+  peerinstance: THttpPeerCache;
 begin
   if not Peer then
     exit;
@@ -197,6 +212,7 @@ begin
       l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
       PeerCacheStopping;
       fPeerCache := nil; // force re-create just below
+      fPeerCacheInterface := '';
     end;
   // (re)create the peer-cache background process if necessary
   if fPeerCache = nil then
@@ -206,10 +222,13 @@ begin
        (fPeerSecretHexa <> '') then
       fPeerSecret := HexToBin(fPeerSecretHexa);
     try
-      fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
+      peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
         nil, 2, self.Log, @ServerTls, @ClientTls);
+      fPeerCache := peerinstance;
+      fPeerCacheInterface := peerinstance.IpPort;
+      peerinstance.OnDirectOptions := fOnPeerCacheDirectOptions;
       // THttpAsyncServer could also be tried with rfProgressiveStatic
-      PeerCacheStarted; // may be overriden
+      PeerCacheStarted(peerinstance); // may be overriden
     except
       // don't disable Peer: we would try on next Execute()
       on E: Exception do
@@ -220,7 +239,7 @@ begin
   end;
 end;
 
-procedure TMGetProcess.PeerCacheStarted;
+procedure TMGetProcess.PeerCacheStarted(PeerInstance: THttpPeerCache);
 begin
   // do nothing
 end;
@@ -339,6 +358,26 @@ procedure TMGetProcess.ToConsole(const Fmt: RawUtf8;
 begin
   if not Silent then
     ConsoleWrite(Fmt, Args);
+end;
+
+function TMGetProcess.HttpDirectUri(const aRemoteUri, aRemoteHash: RawUtf8;
+  out aDirectUri, aDirectHeaderBearer: RawUtf8; aPermanent: boolean;
+  aOptions: PHttpRequestExtendedOptions): boolean;
+var
+  secret: RawUtf8;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  secret := fPeerSecret;
+  if secret = '' then
+    if fPeerSecretHexa = '' then
+      exit
+    else
+      secret := HexToBin(fPeerSecretHexa);
+  result := fPeerSettings.HttpDirectUri(secret, aRemoteUri, aRemoteHash,
+    aDirectUri, aDirectHeaderBearer, ServerTls.Enabled, aPermanent, aOptions);
+  FillZero(secret);
 end;
 
 

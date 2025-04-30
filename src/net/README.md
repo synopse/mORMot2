@@ -17,11 +17,14 @@ Cross-Platform Raw Sockets API Definition
 - MAC and IP Addresses Support
 - TLS / HTTPS Encryption Abstract Layer
 - Efficient Multiple Sockets Polling
+- `TSocketStream` Socket Wrapper
+- Windows IOCP sockets support
 - `TUri` parsing/generating URL wrapper
 - `TCrtSocket` Buffered Socket Read/Write Class
 - NTP / SNTP Protocol Client
 
-The Low-Level Sockets API is encapsultated into a single set of functions, and wrapped around a `TNetSocket` abstract helper, and never made public.
+The Low-Level Sockets API, which is complex and inconsistent among OS, is not made public and shouldn't be used in end-user code. This unit encapsultates all Sockets features into a single set of functions, e.g. around the TNetSocket abstract wrapper.
+
 
 ### mormot.net.http
 
@@ -108,7 +111,7 @@ A Private Relay client should connect to a Public Relay Server, probably behind 
 
 ### mormot.net.rtsphttp
 
-RTSP Stream Tunnelling over HTTP as defined by Apple at https://goo.gl/CX6VA3
+RTSP Stream Tunnelling over HTTP as defined by Apple at https://web.archive.org/web/20090706123224/developer.apple.com/quicktime/icefloe/dispatch028.html
 - Low-level HTTP and RTSP Connections
 - RTSP over HTTP Tunnelling 
 

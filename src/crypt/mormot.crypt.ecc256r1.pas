@@ -194,6 +194,12 @@ function Ecc256r1DoVerify(const pub: TEccPublicKey; unc: PEccPublicKeyUncompress
 
 
 /// pascal function to create a secp256r1 public/private key pair
+// - is not optimized for performance, but for secrecy: the private key is
+// generated with a very safe SHA-256 diffusion of 1024-bit of randomness from
+// the Operating System and our TAesPrng
+// - our idea was to minimize the chances that two consecutive key generations
+// have any similarity, even if performance is not the ultimate goal
+// - ephemeral keys (e.g. in ECDHE) could use faster OpenSSL instead
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 
@@ -743,12 +749,19 @@ const
 
   _1: THash256Rec = (q: (1, 0, 0, 0));
 
-  _3: THash256Rec = (q: (3, 0, 0, 0));
+  {$ifndef FPC}
+  C_3: // Delphi 11.3 compilation for Android gives an internal Compilererror, if _3 is there
+  {$else}
+  _3:
+  {$endif}
+      THash256Rec = (q: (3, 0, 0, 0));
 
   _11: THash256Rec = (q: (QWord($0101010101010101),
                           QWord($0101010101010101),
                           QWord($0101010101010101),
                           QWord($0101010101010101)));
+
+
 
 procedure _set1(out V: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
@@ -1188,7 +1201,7 @@ procedure EccPointDecompress(out Point: TEccPoint; const Compressed: TEccPublicK
 begin
   _bswap256(@Point.x, @Compressed[1]);
   _modSquareP(Point.y, Point.x);           // y = x^2
-  _modSubP(Point.y, Point.y, _3);          // y = x^2 - 3
+  _modSubP(Point.y, Point.y, {$ifndef FPC} C_3 {$else} _3 {$endif}); // y = x^2 - 3
   _modMultP(Point.y, Point.y, Point.x);    // y = x^3 - 3x
   _modAddP(Point.y, Point.y, Curve_B_32);  // y = x^3 - 3x + b
   ModSqrt(Point.y);
@@ -1205,6 +1218,7 @@ var
   priv: THash256Rec;
   pub: TEccPoint;
   tries: integer;
+  sha: TSha256;
 begin
   result := false;
   tries := MAX_TRIES;
@@ -1212,7 +1226,14 @@ begin
     dec(tries);
     if tries = 0 then
       exit;
-    TAesPrng.Fill(THash256(priv));
+    // generate a 256-bit secret key using TAesPrng + OS and SHA-256 diffusion
+    sha.Init;
+    sha.Update(@tries, SizeOf(tries));
+    TAesPrng.Fill(@pub, SizeOf(pub));  // 512-bit from our AES-PRNG
+    sha.Update(@pub, SizeOf(pub));
+    XorOSEntropy(THash512Rec(pub));    // 512-bit from OS entropy sources
+    sha.Update(@pub, SizeOf(pub));
+    sha.Final(priv.b);                 // diffused with three SHA-256 rounds
     if _isZero(priv) or
        _equals(priv, _1) or
        _equals(priv, _11) then
@@ -1320,7 +1341,7 @@ var
   product: TEccPoint;
   rnd: THash256Rec;
 begin
-  TAesPrng.Fill(THash256(rnd));
+  TAesPrng.Fill(rnd.b); // no SHA-256 diffusion needed if ephemeral
   _bswap256(@priv, @PrivateKey);
   EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
   _bswap256(@Secret, @product.x);
@@ -1412,7 +1433,7 @@ begin
   tries := 0;
   repeat
     inc(tries);
-    TAesPrng.Fill(THash256(k));
+    TAesPrng.Fill(k.b);
     if tries >= MAX_TRIES then
       exit; // the random generator seems broken
     if _isZero(k) or
@@ -1920,7 +1941,7 @@ begin
       // include Info content from the stream
       result := (s.Read(Info, 4) = 4) and
                 (Info.DataLen <= SizeOf(Info.Data)) and
-                (s.Read(Info.Data, Info.DataLen) = Info.DataLen);
+                StreamReadAll(s, @Info.Data, Info.DataLen);
 end;
 
 

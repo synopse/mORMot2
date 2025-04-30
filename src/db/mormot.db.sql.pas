@@ -766,7 +766,7 @@ type
     // - warning: FieldSize^ should be a 32-bit "integer" variable, not a PtrInt
     function ColumnType(Col: integer; FieldSize: PInteger = nil): TSqlDBFieldType;
     /// returns TRUE if the column contains NULL, first Col is 0
-    function ColumnNull(Col: integer): boolean;
+    function ColumnNull(Col: integer): boolean; overload;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -822,6 +822,8 @@ type
     // - see also BoundCursor() if you want to access a CURSOR out parameter
     function ColumnCursor(Col: integer): ISqlDBRows; overload;
 
+    /// returns TRUE if the column contains NULL, from a supplied column name
+    function ColumnNull(const ColName: RawUtf8): boolean; overload;
     /// return a Column integer value of the current Row, from a supplied column name
     function ColumnInt(const ColName: RawUtf8): Int64; overload;
     /// return a Column floating point value of the current Row, from a supplied column name
@@ -2478,7 +2480,7 @@ type
     function ColumnType(Col: integer;
       FieldSize: PInteger = nil): TSqlDBFieldType; virtual; abstract;
     /// returns TRUE if the column contains NULL, first Col is 0
-    function ColumnNull(Col: integer): boolean; virtual; abstract;
+    function ColumnNull(Col: integer): boolean; overload; virtual; abstract;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload; virtual; abstract;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -2542,6 +2544,8 @@ type
     // one giving access to the data rows
     // - this default method will raise an exception about unexpected behavior
     function ColumnCursor(Col: integer): ISqlDBRows; overload; virtual;
+    /// returns TRUE if the column contains NULL, from a supplied column name
+    function ColumnNull(const ColName: RawUtf8): boolean; overload;
     /// return a Column integer value of the current Row, from a supplied column name
     function ColumnInt(const ColName: RawUtf8): Int64; overload;
     /// return a Column floating point value of the current Row, from a supplied column name
@@ -3217,9 +3221,8 @@ begin
     exit;
   result := ndx;
   // parse SQL and replace ? into $n $nn $nnn
-  FastSetString(aNewSql, L);
+  d := FastSetString(aNewSql, L);
   s := pointer(aSql);
-  d := pointer(aNewSql);
   ndx := 0;
   repeat
     c := s^;
@@ -3314,8 +3317,7 @@ begin
     dec(n);
   until n = 0;
   // generate the output JSON
-  FastSetString(Result, L);
-  d := pointer(Result);
+  d := FastSetString(Result, L);
   d^ := Open;
   inc(d);
   v := pointer(Values);
@@ -3426,7 +3428,7 @@ begin
   {$ifndef SYNDB_SILENCE}
   if high(Args) >= 0 then
   begin
-    fStatement := VarRecAs(Args[0], TSqlDBStatement);
+    fStatement := VarRecAs(@Args[0], TSqlDBStatement);
     if (fStatement <> nil) and
        fStatement.Connection.Properties.LogSqlStatementOnException then
       try
@@ -3921,9 +3923,9 @@ begin
       result := FormatUtf8('% % % %]',
         [result, ColumnLength, ColumnPrecision, ColumnScale])
     else
-      result := result + ']';
+      AppendShortToUtf8(']', result);
     if ColumnIndexed then
-      result := result + ' *';
+      AppendShortToUtf8(' *', result);
   end;
 end;
 
@@ -4154,7 +4156,7 @@ begin
     begin
       ref := GetForeignKey(aTableName, f[i].ColumnName);
       if ref <> '' then
-        Fields[i] := Fields[i] + ' % ' + ref;
+        Append(Fields[i], ' % ', ref);
     end;
   end;
 end;
@@ -4479,7 +4481,7 @@ begin
   if (aTableName <> '') and
      (fForcedSchemaName <> '') and
      (PosExChar('.', aTableName) = 0) then
-    result := fForcedSchemaName + '.' + aTableName
+    Join([fForcedSchemaName, '.', aTableName], result)
   else
     result := aTableName;
 end;
@@ -4511,7 +4513,7 @@ begin
         ' where UPPER(TABLE_SCHEMA) = ''%'' and UPPER(TABLE_NAME) = ''%''';
     dFirebird:
       begin
-        result := // see http://edn.embarcadero.com/article/25259
+        Join([// see http://edn.embarcadero.com/article/25259
           'select a.rdb$field_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
           ' b.rdb$field_length, b.rdb$field_length, abs(b.rdb$field_scale) as rdb$field_scale,' +
           ' (select count(*) from rdb$indices i, rdb$index_segments s' +
@@ -4519,15 +4521,15 @@ begin
           ' and i.rdb$relation_name=a.rdb$relation_name) as index_count ' +
           'from rdb$relation_fields a left join rdb$fields b on a.rdb$field_source=b.rdb$field_name' +
           ' left join rdb$relations c on a.rdb$relation_name=c.rdb$relation_name ' +
-          'where a.rdb$relation_name=''' + UpperCase(aTableName) + '''';
+          'where a.rdb$relation_name=''', UpperCase(aTableName), ''''], result);
         exit;
       end;
     dNexusDB:
       begin
-        result :=
+        Join([
           'select FIELD_NAME, FIELD_TYPE_SQL, FIELD_LENGTH, FIELD_UNITS,' +
-          ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = ''' +
-          aTableName + '''';
+          ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = ''',
+          aTableName, ''''], result);
         exit;
       end;
   else
@@ -4550,7 +4552,7 @@ begin
         ' max(index_type) as type_desc, 0 as is_primary_key, 0 as unique_constraint, ' +
         ' cast(null as varchar(100)) as index_filter, ' +
         ' ltrim(max(sys_connect_by_path(column_name, '', '')), '', '') as key_columns, ' +
-        ' cast(null as varchar(100)) as included_columns ' + 'from ' +
+        ' cast(null as varchar(100)) as included_columns from ' +
         '( select c.index_name as index_name, i.index_type, i.uniqueness, c.column_name, ' +
         '   row_number() over (partition by c.table_name, c.index_name order by c.column_position) as rn ' +
         '  from user_ind_columns c inner join user_indexes i on c.table_name = i.table_name and c.index_name = i.index_name ' +
@@ -4561,14 +4563,14 @@ begin
       fmt :=
         'select i.name as index_name, i.is_unique, i.type_desc, is_primary_key, is_unique_constraint, ' +
         '  i.filter_definition as index_filter, key_columns, included_columns as included_columns, ' +
-        '  t.name as table_name ' + 'from ' +
+        '  t.name as table_name from ' +
         ' sys.tables t inner join sys.indexes i on i.object_id = t.object_id ' +
         ' cross apply(select STUFF(' +
         '   (select '',''+c.name from sys.index_columns ic ' +
         '   inner join sys.columns c on c.object_id = t.object_id and c.column_id = ic.column_id ' +
         '   where i.index_id = ic.index_id and i.object_id = ic.object_id and ic.is_included_column = 0 ' +
         '   order by ic.key_ordinal for xml path('''') ' +
-        '   ),1,1,'''') as key_columns) AS c ' + ' cross apply(select STUFF( ' +
+        '   ),1,1,'''') as key_columns) AS c cross apply(select STUFF( ' +
         '   (select '','' + c.name  from sys.index_columns ic ' +
         '   inner join	sys.columns c on	c.object_id = t.object_id	and c.column_id = ic.column_id ' +
         '   where i.index_id = ic.index_id and i.object_id = ic.object_id and ic.is_included_column = 1 ' +
@@ -4608,11 +4610,11 @@ begin
   SqlSplitProcedureName(aProcName, owner, package, proc);
   case GetDbms of
     dOracle:
-      fmt :=
+      Join([
         'select a.argument_name, a.data_type, a.char_length, a.data_precision, a.data_scale, a.in_out ' +
-        'from   sys.all_arguments a ' + 'where  a.owner like ''%''' +
-        '  and  a.package_name like ''' + UpperCase(package) + '''' +
-        '  and  a.object_name like ''%''' + ' order by position';
+        'from   sys.all_arguments a where  a.owner like ''%''' +
+        '  and  a.package_name like ''', UpperCase(package), '''' +
+        '  and  a.object_name like ''%'' order by position'], fmt);
     dMSSQL,
     dMySQL,
     dMariaDB,
@@ -4625,32 +4627,32 @@ begin
     dFirebird:
       begin
         if package = '' then
-          result :=
+          Join([
             'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
             ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
             ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
             'from rdb$procedure_parameters a, rdb$fields b ' +
-            'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''' +
-            UpperCase(proc) + ''' ' + 'order by a.rdb$parameter_number'
+            'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''',
+            UpperCase(proc), ''' order by a.rdb$parameter_number'], result)
         else
-          result :=
+          Join([
             'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
             ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
             ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
             'from rdb$procedure_parameters a, rdb$fields b ' +
-            'where b.rdb$field_name = a.rdb$field_source and a.rdb$package_name = ''' +
-            UpperCase(package) + ''' ' + '  and a.rdb$procedure_name = ''' +
-            UpperCase(proc) + ''' ' + 'order by a.rdb$parameter_number';
+            'where b.rdb$field_name = a.rdb$field_source and a.rdb$package_name = ''',
+            UpperCase(package), '''  and a.rdb$procedure_name = ''',
+            UpperCase(proc), ''' order by a.rdb$parameter_number'], result);
         exit;
       end;
     dNexusDB:
       begin
         // NOT TESTED !!!
-        result :=
+        Join([
           'select PROCEDURE_ARGUMENT_NAME, PROCEDURE_ARGUMENT_TYPE, PROCEDURE_ARGUMENT_UNITS,' +
           ' PROCEDURE_ARGUMENT_UNITS, PROCEDURE_ARGUMENT_DECIMALS, PROCEDURE_ARGUMENT_KIND,' +
-          ' from #procedure_arguments where PROCEDURE_NAME = ''' + aProcName +
-          '''' + ' order by PROCEDURE_ARGUMENT_INDEX';
+          ' from #procedure_arguments where PROCEDURE_NAME = ''', aProcName,
+          ''' order by PROCEDURE_ARGUMENT_INDEX'], result);
         exit;
       end;
   else
@@ -4666,20 +4668,20 @@ begin
   result := '';
   case GetDbms of
     dOracle:
-      fmt := 'select' + '  case P.OBJECT_TYPE' +
+      fmt := 'select case P.OBJECT_TYPE' +
         '  when ''PACKAGE'' then P.OBJECT_NAME || ''.'' || P.PROCEDURE_NAME' +
-        '  else P.OBJECT_NAME end NAME_ROUTINE ' + 'from SYS.ALL_PROCEDURES P ' +
-        'where P.owner = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
+        '  else P.OBJECT_NAME end NAME_ROUTINE from SYS.ALL_PROCEDURES P ' +
+        'where P.owner = ''%'' and P.SUBPROGRAM_ID > 0 order by NAME_ROUTINE';
     dMSSQL,
     dMySQL,
     dMariaDB,
     dPostgreSQL:
       fmt := 'select R.SPECIFIC_NAME NAME_ROUTINE ' +
         'from INFORMATION_SCHEMA.ROUTINES R ' +
-        'where UPPER(R.SPECIFIC_SCHEMA) = ''%'' ' + 'order by NAME_ROUTINE';
+        'where UPPER(R.SPECIFIC_SCHEMA) = ''%'' order by NAME_ROUTINE';
     dFirebird:
       fmt := 'select P.RDB$PROCEDURE_NAME NAME_ROUTINE ' +
-        'from RDB$PROCEDURES P ' + 'where P.RDB$OWNER_NAME = ''%'' ' +
+        'from RDB$PROCEDURES P where P.RDB$OWNER_NAME = ''%'' ' +
         'order by NAME_ROUTINE';
     dNexusDB:
       begin
@@ -4706,7 +4708,7 @@ begin
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
     dMySQL,
     dMariaDB:
-      result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
+      result := 'select CONCAT(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
     dPostgreSQL:
       result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name ' +
@@ -4735,7 +4737,7 @@ begin
         'from INFORMATION_SCHEMA.VIEWS order by name';
     dMySQL,
     dMariaDB:
-      result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
+      result := 'select CONCAT(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.VIEWS order by name';
     dPostgreSQL:
       result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name ' +
@@ -4794,7 +4796,7 @@ const
     'DECFLOAT',
     'CURR',
     'DECIMAL',  // warning: see COL_DECIMAL above in synch with this item
-    'NUMERIC',
+    'NUMERIC',  // warning: see COL_NUMERIC above in synch with this item
     'BLOB SUB_TYPE 1',
     'BLOB',
     'DATE',
@@ -4987,7 +4989,7 @@ begin
     fForeignKeys.Init(false);
     GetForeignKeys;
   end;
-  result := fForeignKeys.Value(aTableName + '.' + aColumnName);
+  result := fForeignKeys.Value(Join([aTableName, '.', aColumnName]));
 end;
 
 function TSqlDBConnectionProperties.GetForeignKeysData: RawByteString;
@@ -5008,29 +5010,24 @@ begin
 end;
 
 function TSqlDBConnectionProperties.SqlIso8601ToDate(const Iso8601: RawUtf8): RawUtf8;
-
-  function DoTrimT: RawUtf8;
-  begin
-    result := Iso8601;
-    if (length(result) > 10) and
-       (result[11] = 'T') then
-      result[11] := ' '; // 'T' -> ' '
-  end;
-
 begin
+  result := Iso8601;
+  if (length(result) > 10) and
+     (result[11] = 'T') then
+    result[11] := ' '; // 'T' -> ' '
   case GetDbms of
     dSQLite:
-      result := DoTrimT;
+      ; // use date without 'T'
     dOracle:
-      result := 'to_date(''' + DoTrimT + ''',''YYYY-MM-DD HH24:MI:SS'')';
+      result := Join(['to_date(''', result, ''',''YYYY-MM-DD HH24:MI:SS'')']);
     dNexusDB:
-      result := 'DATE ' + Iso8601;
+      Join(['DATE ', Iso8601], result);
     dDB2:
-      result := 'TIMESTAMP ''' + DoTrimT + '''';
+      result := Join(['TIMESTAMP ''', result, '''']);
     dPostgreSQL:
-      result := '''' + DoTrimT + '''';
+      result := Join(['''', result, '''']);
   else
-    result := '''' + Iso8601 + '''';
+    Join(['''', Iso8601, ''''], result); // default to use ISO-8601 format with 'T'
   end;
 end;
 
@@ -5058,21 +5055,21 @@ begin
     col.Unique := true;
     col.NonNullable := true;
     col.PrimaryKey := true;
-    result := SqlFieldCreate(col, addprimarykey) + ',';
+    Join([SqlFieldCreate(col, addprimarykey), ','], result);
   end;
   for i := 0 to high(aFields) do
   begin
     f := SqlFieldCreate(aFields[i], addprimarykey);
     if i <> high(aFields) then
-      f := f + ',';
-    result := result + f;
+      AppendShortToUtf8(',', f);
+    Append(result, f);
   end;
   if addprimarykey <> '' then
-    result := result + ', PRIMARY KEY(' + addprimarykey + ')';
-  result := 'CREATE TABLE ' + aTableName + ' (' + result + ')';
+    Append(result, [', PRIMARY KEY(', addprimarykey, ')']);
+  result := Join(['CREATE TABLE ', aTableName, ' (', result, ')']);
   case GetDbms of
     dDB2:
-      result := result + ' CCSID Unicode';
+      AppendShortToUtf8(' CCSID Unicode', result);
   end;
 end;
 
@@ -5085,10 +5082,10 @@ begin
   else
     result := fSqlCreateField[aField.DBType];
   if aField.NonNullable or aField.Unique or aField.PrimaryKey then
-    result := result + ' NOT NULL';
+    AppendShortToUtf8(' NOT NULL', result);
   if aField.Unique and
      not aField.PrimaryKey then
-    result := result + ' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
+    AppendShortToUtf8(' UNIQUE', result); // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
     case GetDbms of
       dSQLite,
@@ -5099,13 +5096,13 @@ begin
       dFirebird,
       dNexusDB,
       dInformix:
-        result := result + ' PRIMARY KEY';
+        AppendShortToUtf8(' PRIMARY KEY', result);
       dDB2,
       dMySQL,
       dMariaDB:
         aAddPrimaryKey := aField.Name;
     end;
-  result := aField.Name + result;
+  result := Join([aField.Name, result]);
 end;
 
 function TSqlDBConnectionProperties.SqlAddColumn(const aTableName: RawUtf8;
@@ -5139,26 +5136,26 @@ begin
     if (owner <> '') and
        not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dMariaDB, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
-      indexname := owner + '.';
-    fieldscsv := RawUtf8ArrayToCsv(aFieldNames, '');
+      Join([owner, '.'], indexname);
+    fieldscsv := JoinCsv('', aFieldNames);
     if length(fieldscsv) + length(table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
-      indexname := {%H-}indexname + 'INDEX' + crc32cUtf8ToHex(table) +
-        crc32cUtf8ToHex(fieldscsv)
+      Append(indexname,
+        ['INDEX', crc32cUtf8ToHex(table), crc32cUtf8ToHex(fieldscsv)])
     else
-      indexname := indexname + 'NDX' + table + fieldscsv;
+      Append(indexname, ['NDX', table, fieldscsv]);
   end
   else
     indexname := aIndexName;
   if aDescending then
     case DB_SQLDESENDINGINDEXPOS[GetDbms] of
       posGlobalBefore:
-        result := result + 'DESC ';
+        AppendShortToUtf8('DESC ', result);
       posWithColumn:
-        coldesc := RawUtf8ArrayToCsv(aFieldNames, ' DESC,') + ' DESC';
+        coldesc := JoinCsv(' DESC,', aFieldNames) + ' DESC';
     end;
   if {%H-}coldesc = '' then
-    coldesc := RawUtf8ArrayToCsv(aFieldNames, ',');
+    coldesc := JoinCsv(',', aFieldNames);
   result := FormatUtf8('CREATE %INDEX %% ON %(%)', [result,
     CREATNDXIFNE[GetDbms in DB_HANDLECREATEINDEXIFNOTEXISTS],
     indexname, aTableName, coldesc]);
@@ -5197,7 +5194,7 @@ begin
   end;
   if needquote and
      (PosEx(beginquote, aTableName) = 0) then
-    result := beginquote + aTableName + endquote
+    Join([beginquote, aTableName, endquote], result)
   else
     result := aTableName;
 end;
@@ -5447,8 +5444,7 @@ begin
     else
       batchRowCount := RowCount;
   if batchRowCount = 0 then
-    ESqlDBException.RaiseUtf8(
-      '%.MultipleValuesInsert(%) with # params = %>%',
+    ESqlDBException.RaiseUtf8('%.MultipleValuesInsert(%) with # params = %>%',
       [self, TableName, RowCount * maxf, paramCountLimit]);
   dec(maxf);
   prevrowcount := 0;
@@ -5621,7 +5617,7 @@ begin
           if result = '' then
             result := ColumnName
           else
-            result := result + ',' + ColumnName;
+            Append(result, ',', ColumnName);
         end;
     if n = 0 then
       result := '*';
@@ -5638,8 +5634,8 @@ begin
      (aTableName = '') then
     result := ''
   else
-    result := 'select ' + FieldsFromList(aFields, aExcludeTypes) +
-               ' from ' + SqlTableName(aTableName);
+    Join(['select ', FieldsFromList(aFields, aExcludeTypes),
+      ' from ', SqlTableName(aTableName)], result);
 end;
 
 {$ifdef ISDELPHI20062007}
@@ -5865,8 +5861,7 @@ begin
           BindTextU(Param, tmp, IO);
         end;
     else
-      ESqlDBException.RaiseUtf8(
-        'Invalid %.Bind(%,TSqlDBFieldType(%),%)',
+      ESqlDBException.RaiseUtf8('Invalid %.Bind(%,TSqlDBFieldType(%),%)',
         [self, Param, ord(ParamType), Value]);
     end;
 end;
@@ -5883,82 +5878,70 @@ end;
 procedure TSqlDBStatement.Bind(const Params: array of const;
   IO: TSqlDBParamInOutType);
 var
-  i: PtrInt;
-  c: integer;
-begin
-  for i := 1 to high(Params) + 1 do
-    with Params[i - 1] do // bind parameter index starts at 1
-      case VType of
-        vtString:     // expect WinAnsi String for ShortString
-          BindTextU(i, WinAnsiToUtf8(@VString^[1], ord(VString^[0])), IO);
-        vtAnsiString:
-          if VAnsiString = nil then
-            BindTextU(i, '', IO)
+  arg, c: integer;
+  p: PVarRec;
+  tmp: RawUtf8;
+ begin
+  p := @Params[0];
+  for arg := 1 to high(Params) + 1 do // bind parameter index starts at 1
+  begin
+    case p^.VType of
+      vtAnsiString:
+        if p^.VAnsiString = nil then
+          BindTextU(arg, '', IO)
+        else
+        begin
+          c := PInteger(p^.VAnsiString)^ and $00ffffff;
+          if c = JSON_BASE64_MAGIC_C then
+          begin
+            Base64ToBin(p^.VPChar + 3, length(RawUtf8(p^.VAnsiString)) - 3,
+              RawByteString(tmp));
+            BindBlob(arg, tmp, IO);
+          end
+          else if c = JSON_SQLDATE_MAGIC_C then
+            BindDateTime(arg, Iso8601ToDateTimePUtf8Char(
+              PUtf8Char(p^.VAnsiString) + 3, length(RawUtf8(p^.VAnsiString)) - 3))
           else
           begin
-            c := PInteger(VAnsiString)^ and $00ffffff;
-            if c = JSON_BASE64_MAGIC_C then
-              BindBlob(i, Base64ToBin(PAnsiChar(VAnsiString) + 3,
-                length(RawUtf8(VAnsiString)) - 3))
-            else if c = JSON_SQLDATE_MAGIC_C then
-              BindDateTime(i, Iso8601ToDateTimePUtf8Char(PUtf8Char(VAnsiString) + 3,
-                length(RawUtf8(VAnsiString)) - 3))
-            else
-              {$ifdef HASCODEPAGE}
-              BindTextU(i, AnyAnsiToUtf8(RawByteString(VAnsiString)), IO);
-              {$else}
-              // expect UTF-8 content only for AnsiString, i.e. RawUtf8 values
-              BindTextU(i, RawUtf8(VAnsiString), IO);
-              {$endif HASCODEPAGE}
+            AnyAnsiToUtf8Var(RawByteString(p^.VAnsiString), tmp);
+            BindTextU(arg, tmp, IO);
           end;
-        vtPChar:
-          BindTextP(i, PUtf8Char(VPChar), IO);
-        vtChar:
-          BindTextU(i, RawUtf8(VChar), IO);
-        vtWideChar:
-          BindTextU(i, RawUnicodeToUtf8(@VWideChar, 1), IO);
-        vtPWideChar:
-          BindTextU(i, RawUnicodeToUtf8(VPWideChar, StrLenW(VPWideChar)), IO);
-        vtWideString:
-          BindTextW(i, WideString(VWideString), IO);
-        {$ifdef HASVARUSTRING}
-        {$ifdef UNICODE}
-        vtUnicodeString:
-          BindTextS(i, string(VUnicodeString), IO);
-        {$else}
-        vtUnicodeString:
-          BindTextU(i, UnicodeStringToUtf8(UnicodeString(VUnicodeString)), IO);
-        {$endif UNICODE}
-        {$endif HASVARUSTRING}
-        vtBoolean:
-          if VBoolean then // normalize
-            Bind(i, 1, IO)
-          else
-            Bind(i, 0, IO);
-        vtInteger:
-          Bind(i, VInteger, IO);
-        vtInt64:
-          Bind(i, VInt64^, IO);
-        {$ifdef FPC}
-        vtQWord:
-          Bind(i, VQWord^, IO);
-        {$endif FPC}
-        vtCurrency:
-          BindCurrency(i, VCurrency^, IO);
-        vtExtended:
-          Bind(i, VExtended^, IO);
-        vtPointer:
-          if VPointer = nil then
-            BindNull(i, IO)
-          else
-            ESqlDBException.RaiseUtf8(
-              'Unexpected %.Bind() pointer', [self]);
-        vtVariant:
-          BindVariant(i, VVariant^, VariantIsBlob(VVariant^), IO);
-      else
-        ESqlDBException.RaiseUtf8(
-          '%.BindArrayOfConst(Param=%,Type=%)', [self, i, VType]);
+        end;
+      vtBoolean:
+        if p^.VBoolean then // normalize
+          Bind(arg, 1, IO)
+        else
+          Bind(arg, 0, IO);
+      vtInteger:
+        Bind(arg, p^.VInteger, IO);
+      {$ifdef FPC} // won't support huge positive QWord values
+      vtQWord,
+      {$endif FPC}
+      vtInt64:
+        Bind(arg, p^.VInt64^, IO);
+      vtCurrency:
+        BindCurrency(arg, p^.VCurrency^, IO);
+      vtExtended:
+        Bind(arg, p^.VExtended^, IO);
+      vtPointer: // see TJsonWriter.AddJsonEscape(TVarRec) or VarRecToVariant()
+        if p^.VPointer = nil then
+          BindNull(arg, IO)
+        else
+          Bind(arg, PtrInt(p^.VPointer), IO);
+      vtVariant:
+        BindVariant(arg, p^.VVariant^, VariantIsBlob(p^.VVariant^), IO);
+      {$ifdef UNICODE}
+      vtUnicodeString: // optimize Delphi string constants
+        BindTextS(arg, string(p^.VUnicodeString), IO);
+      {$endif HASVARUSTRING}
+    else
+      begin
+        VarRecToUtf8(p, tmp);
+        BindTextU(arg, tmp, IO); // bind e.g. vtPChar/vtWideString as UTF-8
       end;
+    end;
+    inc(p);
+  end;
 end;
 
 procedure TSqlDBStatement.BindVariant(Param: integer; const Data: Variant;
@@ -5968,6 +5951,7 @@ var
 begin
   with TVarData(Data) do
     case VType of
+      varEmpty,
       varNull:
         BindNull(Param, IO);
       varBoolean:
@@ -6025,11 +6009,7 @@ begin
             BindBlob(Param, RawByteString(VAny), IO)
         else
           // direct bind of AnsiString as UTF-8 value
-          {$ifdef HASCODEPAGE}
           BindTextU(Param, AnyAnsiToUtf8(RawByteString(VAny)), IO);
-          {$else} // on older Delphi, we assume AnsiString = RawUtf8
-          BindTextU(Param, RawUtf8(VAny), IO);
-          {$endif HASCODEPAGE}
     else
       if VType = varVariantByRef then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
@@ -6051,8 +6031,7 @@ begin
      (fConnection = nil) or
      (fConnection.fProperties.BatchSendingAbilities *
       [cCreate, cUpdate, cDelete] = []) then
-    ESqlDBException.RaiseUtf8(
-      'Invalid call to %.BindArray(Param=%,Type=%)',
+    ESqlDBException.RaiseUtf8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(ParamType)^]);
 end;
 
@@ -6098,8 +6077,7 @@ end;
 
 procedure TSqlDBStatement.CheckColInvalid(Col: integer);
 begin
-  ESqlDBException.RaiseUtf8(
-    'Invalid call to %.Column*(Col=%)', [self, Col]);
+  ESqlDBException.RaiseUtf8('Invalid call to %.Column*(Col=%)', [self, Col]);
 end;
 
 function TSqlDBStatement.GetForceBlobAsNull: boolean;
@@ -6159,8 +6137,7 @@ end;
 
 procedure TSqlDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
 begin
-  ESqlDBException.RaiseUtf8(
-    '%.ColumnBlobFromStream not implemented', [self]);
+  ESqlDBException.RaiseUtf8('%.ColumnBlobFromStream not implemented', [self]);
 end;
 
 function TSqlDBStatement.ColumnVariant(Col: integer; ForceUtf8: boolean): Variant;
@@ -6364,8 +6341,7 @@ begin // default implementation (never called in practice)
           W.WrBase64(pointer(blob), length(blob), {withMagic=}true);
         end;
     else
-      ESqlDBException.RaiseUtf8(
-        '%.ColumnToJson: invalid ColumnType(%)=%',
+      ESqlDBException.RaiseUtf8('%.ColumnToJson: invalid ColumnType(%)=%',
         [self, col, ord(ColumnType(col))]);
     end;
 end;
@@ -6669,8 +6645,7 @@ begin
         ftBlob:
           W.Write(ColumnBlob(f));
       else
-        ESqlDBException.RaiseUtf8(
-          '%.ColumnsToBinary: Invalid ColumnType(%)=%',
+        ESqlDBException.RaiseUtf8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
           [self, ColumnName(f), ord(ft)]);
       end;
     end;
@@ -6878,6 +6853,11 @@ end;
 function TSqlDBStatement.ColumnDouble(const ColName: RawUtf8): double;
 begin
   result := ColumnDouble(ColumnIndex(ColName));
+end;
+
+function TSqlDBStatement.ColumnNull(const ColName: RawUtf8): boolean;
+begin
+  result := ColumnNull(ColumnIndex(ColName));
 end;
 
 function TSqlDBStatement.ColumnInt(const ColName: RawUtf8): Int64;
@@ -7249,7 +7229,7 @@ begin
   SetLength(Fields, ColumnCount);
   if Fields = nil then
     exit;
-  result := 'insert into ' + TableName + ' (';
+  Join(['insert into ', TableName, ' ('], result);
   for F := 0 to high(Fields) do
   begin
     Fields[F].Name := ColumnName(F);
@@ -7265,12 +7245,12 @@ begin
           exit;
         end;
     end;
-    result := result + Fields[F].Name + ',';
+    Append(result, Fields[F].Name, ',');
   end;
   result[length(result)] := ')';
-  result := result + ' values (';
+  AppendShortToUtf8(' values (', result);
   for F := 0 to high(Fields) do
-    result := result + '?,'; // MUCH faster with a prepared statement
+    AppendShortToUtf8('?,', result); // MUCH faster with a prepared statement
   result[length(result)] := ')';
 end;
 
@@ -7637,7 +7617,7 @@ begin
         else
           for altern := 1 to fProperties.StatementCacheReplicates do
           begin
-            cachedsql := Make([aSql, #0, altern]); // not valid SQL
+            Make([aSql, #0, altern], cachedsql); // not valid SQL
             ndx := fCache.IndexOf(cachedsql);
             if ndx >= 0 then
             begin
@@ -8047,8 +8027,7 @@ begin
      (fConnection = nil) or
      (fConnection.fProperties.BatchSendingAbilities *
        [cCreate, cUpdate, cDelete] = []) then
-    ESqlDBException.RaiseUtf8(
-      'Invalid call to %.BindArray(Param=%,Type=%)',
+    ESqlDBException.RaiseUtf8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(NewType)^]);
   SetLength(result^.VArray, ArrayCount);
   result^.VInt64 := ArrayCount;
@@ -8349,7 +8328,7 @@ begin
           Connection.Properties.SqlDateToIso8601Quoted(aValues[i].VExtended^)
       else
       begin
-        VarRecToUtf8(aValues[i], VArray[fParamsArrayCount]);
+        VarRecToUtf8(@aValues[i], VArray[fParamsArrayCount]);
         case VType of
           ftUtf8:
             if StoreVoidStringAsNull and
@@ -8386,14 +8365,14 @@ begin
               ftNull:
                 VArray[fParamsArrayCount] := 'null';
               ftInt64:
-                VArray[fParamsArrayCount] := Int64ToUtf8(Rows.ColumnInt(F));
+                Int64ToUtf8(Rows.ColumnInt(F), VArray[fParamsArrayCount]);
               ftDouble:
-                VArray[fParamsArrayCount] := DoubleToStr(Rows.ColumnDouble(F));
+                DoubleToStr(Rows.ColumnDouble(F), VArray[fParamsArrayCount]);
               ftCurrency:
                 VArray[fParamsArrayCount] := CurrencyToStr(Rows.ColumnCurrency(F));
               ftDate:
-                VArray[fParamsArrayCount] :=
-                  '''' + DateTimeToSql(Rows.ColumnDateTime (F)) + '''';
+                Join(['''', DateTimeToSql(Rows.ColumnDateTime (F)), ''''],
+                  VArray[fParamsArrayCount]);
               ftUtf8:
                 begin
                   U := Rows.ColumnUtf8(F);
@@ -8402,7 +8381,7 @@ begin
                      fConnection.Properties.StoreVoidStringAsNull then
                     VArray[fParamsArrayCount] := 'null'
                   else
-                    VArray[fParamsArrayCount] := QuotedStr(U, '''');
+                    QuotedStr(U, '''', VArray[fParamsArrayCount]);
                 end;
               ftBlob:
                 VArray[fParamsArrayCount] := Rows.ColumnBlob(F);

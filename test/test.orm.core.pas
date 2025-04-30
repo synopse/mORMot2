@@ -141,7 +141,6 @@ procedure TTestOrmCore._TOrmModel;
 var
   M: TOrmModel;
   U: TRestServerUri;
-  met: TUriMethod;
 begin
   M := TOrmModel.Create([TOrmTest, TOrmJson]);
   try
@@ -169,28 +168,6 @@ begin
   Check(U.Address = 'addr');
   Check(U.Port = '');
   Check(U.Root = '');
-  Check(ToMethod('') = mNone);
-  Check(ToMethod('toto') = mNone);
-  Check(ToMethod('get') = mGET);
-  Check(ToMethod('Patch') = mPATCH);
-  Check(ToMethod('OPTIONS') = mOPTIONS);
-  Check(not IsGet('get'));
-  Check(IsGet('GET'));
-  Check(not IsPost('Post'));
-  Check(IsPost('POST'));
-  for met := low(met) to high(met) do
-    Check(ToMethod(RawUtf8(ToText(met))) = met);
-  Check(IsOptions('OPTIONS'));
-  Check(not IsOptions('opTIONS'));
-  Check(IsUrlFavIcon('/favicon.ico'));
-  Check(not IsUrlFavIcon('/favicon.ice'));
-  Check(not IsHttp('http:'));
-  Check(IsHttp('https:'));
-  Check(IsHttp('http://toto'));
-  Check(IsHttp('https://titi'));
-  Check(not IsHttp('c:\'));
-  Check(not IsHttp('c:\toto'));
-  Check(not IsHttp('file://toto'));
 end;
 
 procedure TTestOrmCore._TRestServerFullMemory;
@@ -651,6 +628,9 @@ begin
       T.Test + ''',''' + T.Test + ''',''' + T.Test +
       ''',3.141592653,1203,''2009-03-10T21:19:36'',0,''3.1416'')');
     s := T.GetJsonValues(false, true, ooSelect);
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(s), CP_UTF8);
+    {$endif HASCODEPAGE}
     s1 := '{"fieldCount":10' +
       ',"values":["RowID","Int","Test","Unicode","Ansi",' +
       '"ValFloat","ValWord","ValDate","Next","ValVariant",0,0,"' +
@@ -684,6 +664,9 @@ begin
     Check(T.SameValues(T2));
     T.Int := 1234567890123456;
     s := T.GetJsonValues(true, true, ooSelect);
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(s), CP_UTF8);
+    {$endif HASCODEPAGE}
     CheckEqual(s, '{"RowID":10,"Int":1234567890123456,"Test":"' + T.Test +
       '","Unicode":"' + T.Test + '","Ansi":"' + T.Test +
       '","ValFloat":3.141592653,"ValWord":1203,' +
@@ -692,10 +675,13 @@ begin
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
     Check(T.SameValues(T2));
-    Check(T2.GetJsonValues(true, true, ooSelect) = s);
+    CheckEqual(T2.GetJsonValues(true, true, ooSelect), s);
     Check(T2.Int = 1234567890123456);
     T.ValVariant := Utf8ToSynUnicode(T.Test);
     s := T.GetJsonValues(true, true, ooSelect);
+    {$ifdef HASCODEPAGE}
+    CheckEqual(GetCodePage(s), CP_UTF8);
+    {$endif HASCODEPAGE}
     s1 := '{"RowID":10,"Int":1234567890123456,"Test":"' + T.Test +
       '","Unicode":"' + T.Test + '","Ansi":"' + T.Test +
       '","ValFloat":3.141592653,"ValWord":1203,' +

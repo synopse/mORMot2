@@ -1585,7 +1585,7 @@ begin
       // handle optimized primary key direct access
       if fCache.IsCached(Table) and
          (length(BoundsSqlWhere) = 1) and
-         VarRecToInt64(BoundsSqlWhere[0], Int64(ID)) and
+         VarRecToInt64(@BoundsSqlWhere[0], Int64(ID)) and
          FieldBitsFromCsv(FieldsCsv, bits) and
          (PropNameEquals('RowID=?', FormatSqlWhere) or
           PropNameEquals('ID=?', FormatSqlWhere)) then
@@ -2250,10 +2250,9 @@ begin
      (aID <= 0) then
     exit;
   blob := Table.OrmProps.BlobFieldPropFromRawUtf8(BlobFieldName);
-  if blob = nil then
-    exit;
-  result := EngineRetrieveBlob(
-    fModel.GetTableIndexExisting(Table), aID, blob, BlobData);
+  if blob <> nil then
+    result := EngineRetrieveBlob(
+      fModel.GetTableIndexExisting(Table), aID, blob, BlobData);
 end;
 
 function TRestOrm.RetrieveBlob(Table: TOrmClass; aID: TID;
@@ -2290,22 +2289,12 @@ end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUtf8; BlobData: TStream): boolean;
-var
-  data: RawBlob;
-  L: Int64;
 begin
-  result := false;
-  if (self = nil) or
-     (BlobData = nil) then
-    exit;
-  L := BlobData.Seek(0, soEnd);
-  if L > maxInt then
-    EOrmException.RaiseUtf8('%.UpdateBlob: %.Size=%', [self, BlobData, L]);
-  SetLength(data, L);
-  BlobData.Seek(0, soBeginning);
-  if BlobData.Read(pointer(data)^, L) <> L then
-    exit;
-  result := UpdateBlob(Table, aID, BlobFieldName, data);
+  result := (self <> nil) and
+            (aID > 0) or
+            (BlobData <> nil) and
+            UpdateBlob(Table, aID, BlobFieldName,
+              StreamToRawByteString(BlobData, -1, CP_RAWBLOB));
 end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
@@ -2314,6 +2303,7 @@ var
   tmp: RawByteString;
 begin
   if (self = nil) or
+     (aID <= 0) or
      (BlobData = nil) or
      (BlobSize < 0) then
     result := false
@@ -2652,7 +2642,7 @@ begin
   fJsonData := nil;
   {$ifndef NOTORMTABLELEN}
   prevlen := fLen;
-  fLen := nil; // SetResultsSafe() won't try to set fLen[]
+  fLen := nil; // now to ensure SetResultsSafe() won't try to set fLen[]
   {$endif NOTORMTABLELEN}
   n := (fRowCount + 1) * fFieldCount;
   // adjust data rows

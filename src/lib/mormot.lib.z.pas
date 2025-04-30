@@ -1,4 +1,4 @@
-/// low-level access to the zlib/libdeflate API
+﻿/// low-level access to the zlib/libdeflate API
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.z;
@@ -43,12 +43,11 @@ interface
       {$endif OSANDROID}
     {$endif OSWINDOWS}
   {$else not FPC}
+    {$define ZLIBRTL}  // DELPHI RTL should word by defaul
     {$ifdef WIN32}
       {$define ZLIBSTATIC} // Delphi Win32: our static .obj
+      {$undef ZLIBRTL}
     {$endif WIN32}
-    {$ifdef WIN64}
-      {$define ZLIBRTL}    // Delphi Win64: system.zlib.pas from Delphi RTL
-    {$endif WIN64}
   {$endif FPC}
 
 {$ifend}

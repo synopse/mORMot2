@@ -93,6 +93,7 @@ Text Processing functions shared by all framework units
 - Numbers (integers or floats) and Variants to Text Conversion
 - Text Formatting functions
 - Resource and Time Functions
+- HTTP/REST Common Headers Parsing (e.g. cookies)
 - `ESynException` class
 - Hexadecimal Text And Binary Conversion
 

@@ -580,6 +580,8 @@ var
 
 const
   CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
+  // statically allocated TAes in lib/static/libsqlite3/sqlite3mc.c
+  KEYLENGTH = 300;
 
 procedure CodecGenerateKey(var aes: TAes;
   userPassword: pointer; passwordLength: integer);
@@ -587,6 +589,8 @@ var
   s: TSynSigner;
   k: THash512Rec;
 begin
+  if SizeOf(TAes) > KEYLENGTH then
+    ESqlite3Exception.RaiseUtf8('CodecGenerateKey: TAes=%', [SizeOf(TAes)]);
   // userPassword may be TSynSignerParams JSON content
   s.Pbkdf2(userPassword, passwordLength, k, CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);

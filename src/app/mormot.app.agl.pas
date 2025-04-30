@@ -621,7 +621,7 @@ begin
   sn := fService.Name;
   se := fService.AbortExitCodes;
   notifytix := false;
-  SetCurrentThreadName('run %', [sn]);
+  SetCurrentThreadName('=run %', [sn]);
   try
     lastunstable := 0;
     repeat
@@ -785,7 +785,7 @@ begin
         for i := textlen downto 1 do
           if PByteArray(text)[i - 1] in [10, 13] then
           begin
-            fRedirect.Write(pointer(text)^, i); // write up to last LF
+            fRedirect.WriteBuffer(pointer(text)^, i); // write up to last LF
             textstart := i;
             dec(textlen, i);
             break;
@@ -796,7 +796,7 @@ begin
           result := true; // aborted during rotation
       end;
       // text output to log file
-      fRedirect.Write(PByteArray(text)[textstart], textlen);
+      fRedirect.WriteBuffer(PByteArray(text)[textstart], textlen);
       //TODO: optional TSynLog format with timestamps
     except
       on E: Exception do
@@ -960,11 +960,11 @@ begin
       if FileIsExecutable(fn) then
         res := RunCommand(Utf8ToString(n), {waitfor=}true)
       else
-      begin
+      begin // append to text log file
         GetMemoryInfo(mem, false);
-        res := ord(AppendToTextFile(FormatUtf8('% %: % [mem=%/%] %',
+        res := ord(AppendToTextFile(FormatUtf8('% %: % [mem=%/%] [cpu=%]',
           [w, Name, msg, KBNoSpace(mem.memfree), KBNoSpace(mem.memtotal),
-           RetrieveLoadAvg]), fn));
+           RetrieveLoadAvg]), fn)); // POSIX loadavg or Windows 'U:xx K:xx' %
       end;
     end;
     fOwner.fSettings.LogClass.Add.Log(sllTrace,
@@ -1090,7 +1090,7 @@ constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
   fHttpTimeoutMS := 200;
-  fFolder := IncludeTrailingPathDelimiter(Executable.ProgramFilePath + 'services');
+  fFolder := MakePath([Executable.ProgramFilePath, 'services'], true);
   fExt := '.service';
   fCommandFile := 'cmd';
 end;
@@ -1597,7 +1597,7 @@ begin
       end;
     aaSleep:
       if ToInteger(Param, ms) then
-        Sleep(ms)
+        sysutils.Sleep(ms) // would retry on ESysEINTR
       else
         exit;
     {$ifdef OSWINDOWS}
@@ -1847,11 +1847,10 @@ var
   log: ISynLog;
   one: TSynLog;
 begin
+  one := nil;
   log := fSettings.LogClass.Enter(self, 'StartServices');
-  if Assigned(log) then
-    one := log.Instance
-  else
-    one := nil;
+  if Assigned(log) then // log=nil if LogClass=nil or sllEnter is not enabled
+    one := log.Instance;
   {$ifdef OSWINDOWS}
   // initialize a main Windows Job to kill all sub-process when main is killed
   if fRunJob = 0 then
@@ -1922,11 +1921,10 @@ var
   log: ISynLog;
   one: TSynLog;
 begin
+  one := nil;
   log := fSas.LogClass.Enter(self, 'StopServices');
-  if Assigned(log) then
-    one := log.Instance
-  else
-    one := nil;
+  if Assigned(log) then // log=nil if LogClass=nil or sllEnter is not enabled
+    one := log.Instance;
   // stop sub-services following their reverse Level order
   for l := high(fSet.Levels) downto 0 do
     for i := 0 to high(fSet.Service) do

@@ -586,11 +586,7 @@ begin
   begin
     strm := f.DataSet.CreateBlobStream(f, bmRead);
     try
-      if strm.Size > 0 then
-      begin
-        SetLength(result, strm.Size);
-        strm.Read(pointer(result)^, strm.Size);
-      end;
+      result := StreamToRawByteString(strm);
     finally
       strm.Free;
     end;
@@ -670,7 +666,11 @@ begin
     else
       {$ifndef UNICODE}
       if ColumnValueDBType = IsTWideStringField then
+      {$ifdef FPC}
+        result := UnicodeStringToUtf8(TWideStringField(ColumnAttr).AsUnicodeString)
+      {$else}
         result := WideStringToUtf8(TWideStringField(ColumnAttr).Value)
+      {$endif FPC}
       else
       {$endif UNICODE}
         result := StringToUtf8(TField(ColumnAttr).AsString);
@@ -795,7 +795,8 @@ end;
 
 procedure TSqlDBDatasetStatementAbstract.ReleaseRows;
 begin
-  if (fQuery <> nil) and fQuery.Active then
+  if (fQuery <> nil) and
+     fQuery.Active then
     fQuery.Close;
   inherited ReleaseRows;
 end;
@@ -819,11 +820,11 @@ function TSqlDBDatasetStatementAbstract.ColumnTypeNativeToDB(
   aNativeType: TFieldType): TSqlDBFieldType;
 begin
   case aNativeType of
-  {$ifdef UNICODE}
+  {$ifdef HASDBFNEW}
     ftLongWord,
     ftShortint,
     ftByte,
-  {$endif UNICODE}
+  {$endif HASDBFNEW}
     ftAutoInc,
     ftBoolean,
     ftSmallint,
@@ -831,20 +832,22 @@ begin
     ftLargeint,
     ftWord:
       result := mormot.db.core.ftInt64;
-  {$ifdef UNICODE}
-    ftSingle,
+  {$ifdef HASDBFNEW}
     ftExtended,
-  {$endif UNICODE}
+  {$endif HASDBFNEW}
+  {$ifdef HASDBFSINGLE}
+    ftSingle,
+  {$endif HASDBFSINGLE}
     ftFloat:
       result := mormot.db.core.ftDouble;
     ftCurrency,
     ftBCD,
     ftFMTBcd:
       result := mormot.db.core.ftCurrency;
-  {$ifdef UNICODE}
+  {$ifdef HASDBFNEW}
     ftOraTimeStamp,
     ftOraInterval,
-  {$endif UNICODE}
+  {$endif HASDBFNEW}
     ftDate,
     ftTime,
     ftDateTime,
@@ -928,8 +931,12 @@ begin
             W.Add('"');
           {$ifndef UNICODE}
             if ColumnValueDBType = IsTWideStringField then
+              {$ifdef FPC}
+              W.AddJsonEscapeW(pointer(TWideStringField(ColumnAttr).AsUnicodeString))
+              {$else}
               W.AddJsonEscapeW(pointer(TWideStringField(ColumnAttr).Value))
-            else
+             {$endif FPC}
+          else
           {$endif UNICODE}
               W.AddJsonEscapeString(f.AsString);
             W.AddDirect('"');
@@ -1116,4 +1123,5 @@ initialization
     {$endif HASNOSTATICRTTI}
 
 end.
+
 

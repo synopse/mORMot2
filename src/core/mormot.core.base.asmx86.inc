@@ -1195,7 +1195,7 @@ asm
 @no:    mov     eax, -1
         pop     ebx
         ret
-        // 16bit-unaligned loop (seldom called)
+        // 16bit-unaligned loop (hardly called)
 @unal:  lea     ecx, [ecx + edx * 2]
         neg     edx
 @unals: cmp     word ptr [ecx + edx * 2], ax
@@ -1254,7 +1254,7 @@ asm
 @no:    mov     eax, -1
         pop     ebx
         ret
-        // 32bit-unaligned loop (seldom called)
+        // 32bit-unaligned loop (hardly called)
 @unal:  lea     ecx, [ecx + edx * 4]
         neg     edx
 @unals: cmp     dword ptr [ecx + edx * 4], eax
@@ -2345,17 +2345,29 @@ asm
         rdtsc
 end;
 
+{$ifdef ISDELPHI}
+procedure FastStringAddRef(str: pointer); // will call compilerproc on FPC
+asm
+        test    str, str
+        jz      @z
+        cmp     dword ptr [str - _STRCNT], 0 // = 32-bit on Delphi 32-bit
+        jl      @z
+   lock inc     dword ptr [str - _STRCNT]
+@z:
+end;
+{$endif ISDELPHI}
+
 function StrCntDecFree(var refcnt: TStrCnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-   lock dec dword ptr [refcnt]  // =longint on Delphi and FPC 32-bit
+   lock dec dword ptr [refcnt]  // = 32-bit on Delphi and FPC 32-bit
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
 function DACntDecFree(var refcnt: TDACnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-   lock dec dword ptr [refcnt]  // =longint on Delphi and FPC 32-bit
+   lock dec dword ptr [refcnt]  // = 32-bit on Delphi and FPC 32-bit
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 

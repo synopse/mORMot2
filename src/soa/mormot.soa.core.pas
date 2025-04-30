@@ -319,12 +319,12 @@ type
     /// search for a method name within this Interface RTTI and pseudo-methods
     // - will return -1 if not found, im* pseudo-methods as 0..3, or the index
     // in InterfaceFactory.Methods[] incremented by SERVICE_PSEUDO_METHOD_COUNT
-    function ServiceMethodIndex(const Name: RawUtf8): PtrInt;
+    function ServiceMethodIndex(const aUri: RawUtf8): PtrInt;
     /// access to the registered Interface RTTI information
     property InterfaceFactory: TInterfaceFactory
       read fInterface;
     /// the registered Interface low-level Delphi RTTI type
-    // - just maps InterfaceFactory.InterfaceTypeInfo
+    // - just maps InterfaceFactory.InterfaceRtti.Info
     property InterfaceTypeInfo: PRttiInfo
       read GetInterfaceTypeInfo;
     /// the registered Interface GUID
@@ -703,11 +703,8 @@ type
     // - can be used as such to resolve an I: ICalculator interface
     // ! if fClient.Services.Info(ICalculator).Get(I) then
     // !   ... use I
-    {$ifdef FPC_HAS_CONSTREF}
-    function Info(constref aGuid: TGuid): TServiceFactory; overload;
-    {$else}
-    function Info(const aGuid: TGuid): TServiceFactory; overload;
-    {$endif FPC_HAS_CONSTREF}
+    function Info({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      aGuid: TGuid): TServiceFactory; overload;
     /// retrieve a service provider from its type information
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the type information does not match any registered interface
@@ -1066,7 +1063,8 @@ begin
   if fInterface = nil then // paranoid
     EServiceException.RaiseUtf8('%.Create: no I%', [self, aInterface^.RawName]);
   fInstanceCreation := aInstanceCreation;
-  fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGuid));
+  fInterfaceMangledUri :=
+    BinToBase64Uri(PAnsiChar(fInterface.InterfaceGuid), SizeOf(TGuid));
   fInterfaceUri := fInterface.InterfaceUri;
   if fOrm = nil then
     EServiceException.RaiseUtf8('%.Create: I% has no ORM', [self, fInterfaceUri]);
@@ -1091,33 +1089,36 @@ begin
     fContractExpected := fContractHash; // for security
 end;
 
-function TServiceFactory.ServiceMethodIndex(const Name: RawUtf8): PtrInt;
+function TServiceFactory.ServiceMethodIndex(const aUri: RawUtf8): PtrInt;
 begin
-  result := fInterface.FindMethodIndex(Name);
-  if result >= 0 then
-    inc(result, SERVICE_PSEUDO_METHOD_COUNT)
-  else
+  if aUri <> '' then
   begin
+    result := fInterface.FindMethodIndex(aUri);
+    if result >= 0 then
+    begin
+      inc(result, SERVICE_PSEUDO_METHOD_COUNT);
+      exit;
+    end;
     for result := 0 to SERVICE_PSEUDO_METHOD_COUNT - 1 do
-      if IdemPropNameU(Name,
+      if IdemPropNameU(aUri,
            SERVICE_PSEUDO_METHOD[TServiceInternalMethod(result)]) then
         exit;
-    result := -1;
   end;
+  result := -1;
 end;
 
 function TServiceFactory.GetInterfaceTypeInfo: PRttiInfo;
 begin
   if (self <> nil) and
      (fInterface <> nil) then
-    result := fInterface.InterfaceTypeInfo
+    result := fInterface.InterfaceRtti.Info
   else
     result := nil;
 end;
 
 function TServiceFactory.GetInterfaceIID: TGuid;
 begin
-  result := fInterface.InterfaceIID;
+  result := fInterface.InterfaceRtti.Cache.InterfaceGuid^;
 end;
 
 procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUtf8;
@@ -1637,7 +1638,7 @@ begin
       n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
       repeat
         result := p^.Service;
-        if result.fInterface.InterfaceTypeInfo = aTypeInfo then
+        if result.fInterface.InterfaceRtti.Info = aTypeInfo then
           exit;
         inc(p);
         dec(n);
@@ -1647,11 +1648,8 @@ begin
   result := nil;
 end;
 
-{$ifdef FPC_HAS_CONSTREF}
-function TServiceContainer.Info(constref aGuid: TGuid): TServiceFactory;
-{$else}
-function TServiceContainer.Info(const aGuid: TGuid): TServiceFactory;
-{$endif FPC_HAS_CONSTREF}
+function TServiceContainer.Info({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+  aGuid: TGuid): TServiceFactory;
 var
   n: TDALen;
   p: PServiceContainerInterface;
@@ -1666,7 +1664,7 @@ begin
       n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
       repeat
         result := p^.Service;
-        with PHash128Rec(@result.fInterface.InterfaceIID)^ do
+        with PHash128Rec(result.fInterface.InterfaceRtti.Cache.InterfaceGuid)^ do
           if (g.L = L) and
              (g.H = H) then
             exit;
@@ -1687,7 +1685,7 @@ begin
   n := length(fInterface);
   SetLength(Services, n);
   for i := 0 to n - 1 do
-    Services[i] := fInterface[i].Service.fInterface.InterfaceIID;
+    Services[i] := fInterface[i].Service.InterfaceIID;
 end;
 
 procedure TServiceContainer.SetInterfaceNames(out Names: TRawUtf8DynArray);
@@ -1957,7 +1955,7 @@ begin
   if P^ = '[' then
     // when transmitted as [params] in a _contract_ HTTP body content
     inc(P);
-  if (RecordLoadJson(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
+  if (RecordLoadJsonInPlace(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
      (nfo.PublicUri.Address = '') then
     // invalid supplied JSON content
     exit;

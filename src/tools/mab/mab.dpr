@@ -42,7 +42,7 @@ var
   Ext, Count: integer;
   AllOk: boolean;
 begin
-  AllOk := True;
+  AllOk := true;
   Ext := GetFileNameExtIndex(FileName, 'map,dbg,exe,dll,ocx,bpl');
   if (Ext >= 0) and
      (FindFirst(FileName, faAnyFile, SR) = 0) then
@@ -70,7 +70,7 @@ begin
           if not HasDebugInfo then
           begin
             ConsoleWrite('Error: no Debug Info found on %', [FN]);
-            AllOk := False;
+            AllOk := false;
           end
           else if Ext > 1 then // has debug info and is not a map/dbg
             SaveToExe(FN);     // embedd into the executable
@@ -91,7 +91,7 @@ begin
         begin
           // ignore any problem here: just print it and process next file
           ConsoleWrite('Error: % %', [E, E.Message]);
-          AllOk := False;
+          AllOk := false;
         end;
       end;
     until FindNext(SR) <> 0;

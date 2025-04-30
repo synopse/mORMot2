@@ -44,6 +44,11 @@ type
     priv: array of TEccPrivateKey;
     sign: array of TEccSignature;
     hash: TEccHash;
+    {$ifdef USE_OPENSSL}
+    procedure RunOpenSsl(Context: TObject);
+    procedure StartOpenSssl(aEvpType, aBitsOrCurve, aCount: integer;
+      const aDigest, aName: RawUtf8);
+    {$endif USE_OPENSSL}
   published
     /// avoid regression among platforms and compilers
     procedure ReferenceVectors;
@@ -692,51 +697,77 @@ end;
 
 {$ifdef USE_OPENSSL}
 
-procedure TTestCoreEcc._OpenSSL;
-
-  procedure Test(EvpType, BitsOrCurve, Count: integer; const Digest, Name: RawUtf8);
-  var
-    timer: TPrecisionTimer;
-    priv, pub: RawUtf8;
-    msg, sig: RawByteString;
-    i: integer;
-  begin
-    if not OpenSslSupports(EvpType) then
-      exit; // on oldest OpenSSL
-    timer.Start;
-    for i := 1 to Count do
-      OpenSslGenerateKeys(EvpType, BitsOrCurve, priv, pub);
-    Check({%H-}priv <> '');
-    Check({%H-}pub <> '');
-    NotifyTestSpeed('% Generation', [Name], Count, 0, @timer);
-//writeln(Name, ':'#10);
-//writeln(priv);
-//writeln(pub);
-    msg := RandomUtf8(100);
-    if IdemPChar(pointer(Name), 'RSA') then
-      Count := Count * 10;
-    timer.Start;
-    for i := 1 to Count do
-      CheckUtf8(OpenSslSign(Digest, pointer(msg), pointer(priv),
-        length(msg), length(priv), sig) <> 0, 'sign %', [Name]);
-    NotifyTestSpeed('% Sign', [Name], Count, 0, @timer);
-    timer.Start;
-    for i := 1 to Count do
-      CheckUtf8(OpenSslVerify(Digest, '', pointer(msg), pointer(pub), pointer({%H-}sig),
-        length(msg), length(pub), length({%H-}sig)), 'verify %', [Name]);
-    NotifyTestSpeed('% Verify', [Name], Count, 0, @timer);
-    inc(msg[10]);
-    CheckUtf8(not OpenSslVerify(Digest, '', pointer(msg), pointer(pub), pointer(sig),
-      length(msg), length(pub), length(sig)), 'detect %', [Name]);
+type
+  TOpenSslEcc = class
+    EvpType, BitsOrCurve, Count: integer;
+    Digest, Name: RawUtf8;
   end;
 
+procedure TTestCoreEcc.StartOpenSssl(aEvpType, aBitsOrCurve, aCount: integer;
+  const aDigest, aName: RawUtf8);
+var
+  c: TOpenSslEcc;
+begin
+  if not OpenSslSupports(aEvpType) then
+    exit; // oldest OpenSSL may not support e.g. ED25519
+  c := TOpenSslEcc.Create;
+  c.EvpType := aEvpType;
+  c.BitsOrCurve := aBitsOrCurve;
+  c.Count := aCount;
+  c.Digest := aDigest;
+  c.Name := aName;
+  Run(RunOpenSsl, c, aName);
+end;
+
+procedure TTestCoreEcc.RunOpenSsl(Context: TObject);
+var
+  c: TOpenSslEcc absolute Context;
+  priv, pub: RawUtf8;
+  msg, sig: RawByteString;
+  i: integer;
+  timer: TPrecisionTimer;
+begin
+  timer.Start;
+  for i := 1 to c.Count do
+  begin
+    OpenSslGenerateKeys(c.EvpType, c.BitsOrCurve, priv, pub);
+    Check({%H-}priv <> '');
+    Check({%H-}pub <> '');
+  end;
+  NotifyTestSpeed('% Generation', [c.Name], c.Count, 0, @timer);
+//writeln(c.Name, ':'#10);
+//writeln(priv);
+//writeln(pub);
+  msg := RandomUtf8(100);
+  if IdemPChar(pointer(c.Name), 'RSA') then
+    c.Count := c.Count * 10;
+  timer.Start;
+  for i := 1 to c.Count do
+    CheckUtf8(OpenSslSign(c.Digest, pointer(msg), pointer(priv),
+               length(msg), length(priv), sig) <> 0, 'sign %', [c.Name]);
+  NotifyTestSpeed('% Sign', [c.Name], c.Count, 0, @timer);
+  timer.Start;
+  for i := 1 to c.Count do
+    CheckUtf8(OpenSslVerify(c.Digest, '',
+      pointer(msg), pointer(pub), pointer({%H-}sig),
+      length(msg),  length(pub),  length({%H-}sig)), 'verify %', [c.Name]);
+  NotifyTestSpeed('% Verify', [c.Name], c.Count, 0, @timer);
+  inc(msg[10]);
+  CheckUtf8(not OpenSslVerify(c.Digest, '',
+    pointer(msg), pointer(pub), pointer(sig),
+    length(msg),  length(pub),  length(sig)), 'detect %', [c.Name]);
+  c.Free;
+end;
+
+procedure TTestCoreEcc._OpenSSL;
 begin
   if not OpenSslIsAvailable then
     exit;
-  Test(EVP_PKEY_RSA, 2048, 3, '', 'RSA 2048');
-  Test(EVP_PKEY_RSA_PSS, 2048, 3, '', 'RSA-PSS 2048');
-  Test(EVP_PKEY_EC, NID_X9_62_prime256v1, 100, '', 'prime256v1');
-  Test(EVP_PKEY_ED25519, 0, 100, 'null', 'ed25519');
+  StartOpenSssl(EVP_PKEY_RSA, 2048, 3, '', 'RSA 2048');
+  StartOpenSssl(EVP_PKEY_RSA_PSS, 2048, 3, '', 'RSA-PSS 2048');
+  StartOpenSssl(EVP_PKEY_EC, NID_X9_62_prime256v1, 100, '', 'prime256v1');
+  StartOpenSssl(EVP_PKEY_ED25519, 0, 100, 'null', 'ed25519');
+  RunWait;
 end;
 
 {$endif USE_OPENSSL}

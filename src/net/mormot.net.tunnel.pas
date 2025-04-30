@@ -291,7 +291,7 @@ type
     // - if publicUri is not set, '127.0.0.1:localPort' is used, but you can
     // use a reverse proxy URI like 'publicdomain.com/websockgateway'
     constructor Create(const localPort: RawUtf8; const publicUri: RawUtf8 = '';
-      expirationMinutes: integer = 1); reintroduce;
+      expirationMinutes: integer = 1; aLog: TSynLogClass = nil); reintroduce;
     /// finalize this Relay Server
     destructor Destroy; override;
     /// generate a new WebSockets connection URI and its associated session ID
@@ -324,7 +324,7 @@ begin
   end;
   fServerSock := sock;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, TSynLog, FormatUtf8('tun %', [fPort]));
+  inherited Create({suspended=}false, nil, nil, TSynLog, Make(['tun ', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;
@@ -398,7 +398,7 @@ begin
          not Terminated then
       begin
         fLog.Log(sllTrace,
-          'DoExecute: accepted %', [fClientAddr.IPWithPort], self);
+          'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
         if (toAcceptNonLocal in fOwner.Options) or
            (fClientAddr.IP4 = cLocalhost32) then
          fState := stProcessing // start background process
@@ -561,7 +561,7 @@ begin
       TimeOutMS, TimeOutMS, TimeOutMS, {retry=}0, sock, @addr), 'Open');
     result := addr.Port;
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: bound to %', [addr.IPWithPort], self);
+      log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
     fOpenBind := true;
   end
   else
@@ -611,7 +611,7 @@ begin
         // optional ECDHE ephemeral encryption
         FastNewRawByteString(frame, SizeOf(TTunnelEcdhFrame));
         with PTunnelEcdhFrame(frame)^ do
-          RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
+          SharedRandom.Fill(@rnd, SizeOf(rnd)); // enough for public randomness
         if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
           if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
             ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
@@ -807,13 +807,14 @@ end;
 { TTunnelRelayServer }
 
 constructor TTunnelRelayServer.Create(const localPort, publicUri: RawUtf8;
-  expirationMinutes: integer);
+  expirationMinutes: integer; aLog: TSynLogClass);
 var
   uri: RawUtf8;
 begin
   fLinks := TSynDictionary.Create(TypeInfo(TTunnelRelayIDs),
     TypeInfo(TTunnelRelayLinks), false, {timeout=} expirationMinutes * 60);
-  inherited Create(localPort, nil, nil, 'relaysrv');
+  inherited Create(localPort, nil, nil, 'relaysrv',
+    {threadpool=}2, {keepalive=}30000, {options=}[], aLog);
   if publicUri = '' then
     uri := '127.0.0.1:' + localPort
   else

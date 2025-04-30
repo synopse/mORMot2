@@ -24,9 +24,16 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.mac,
+  mormot.core.os.security,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
+  mormot.core.data,
+  mormot.core.rtti,
+  mormot.core.json,
   mormot.core.datetime,
+  mormot.core.search,
+  mormot.core.threads,
   mormot.core.log,
   mormot.core.test,
   mormot.db.raw.sqlite3, // for the SQLite3 version below
@@ -35,6 +42,7 @@ uses
   mormot.db.sql.zeos,
   {$endif USEZEOS}
   {$ifdef FPC}
+  mormot.tools.mget,
   //jsontools in '.\3party\jsontools.pas',
   //superobject in '.\3party\superobject.pas',
   //supertypes in '.\3party\supertypes.pas',
@@ -96,16 +104,16 @@ begin
       {$endif OSWINDOWS}
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
-    Option('ldaps', 'force LDAPS connection + plain auth instead of Kerberos');
-    Param('ntp', 'a NTP/SNTP #server name/IP to use instead of time.google.com');
-    Option('nontp', 'disable the NTP/SNTP server tests');
+    Option('ldaps',  'force LDAPS connection + plain auth instead of Kerberos');
+    Param('ntp',     'a NTP/SNTP #server name/IP instead of time.google.com');
+    Option('nontp',  'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
-    OpenSslDefaultCrypto := ParamS(['libcrypto'], 'the OpenSSL libcrypto #filename');
-    OpenSslDefaultSsl := ParamS(['libssl'], 'the OpenSSL libssl #filename');
+    OpenSslDefaultCrypto := ParamS('lib&crypto', 'the OpenSSL libcrypto #filename');
+    OpenSslDefaultSsl := ParamS('lib&ssl', 'the OpenSSL libssl #filename');
     {$endif USE_OPENSSL}
     {$ifdef OSPOSIX}
-    GssLib_Custom := ParamS(['libkrb5'], 'the Kerberos libgssapi #filename');
+    GssLib_Custom := ParamS('lib&krb5', 'the Kerberos libgssapi #filename');
     {$endif OSPOSIX}
   end;
 end;
@@ -122,12 +130,15 @@ begin
   if OpenSslIsAvailable then
     FormatShort(' and %', [OpenSslVersionText], ssl);
   {$endif USE_OPENSSL}
+  // add addition version information about the system and the executable
   CustomVersions := Format(CRLF + CRLF + '%s [%s %s %x]'+ CRLF +
     '    %s' + CRLF + '    on %s'+ CRLF + 'Using mORMot %s %s%s'+ CRLF + '    %s',
     [OSVersionText, CodePageToText(Unicode_CodePage), KBNoSpace(SystemMemorySize),
      OSVersionInt32, CpuInfoText, BiosInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
-     UnixTimeToTextDateShort(FileAgeToUnixTimeUtc(Executable.ProgramFileName)),
-     ssl, sqlite3.Version]);
+     // get compilation date of this executable: if moved to mormot.core.os, will
+     // return the compilation timestamp of this unit, not of the project itself
+     DateToTextDateShort({$ifdef FPC} Iso8601ToDateTime({$I %DATE%}) {$else}
+       Executable.Version.BuildDateTime {$endif}), ssl, sqlite3.Version]);
   result := inherited Run;
 end;
 

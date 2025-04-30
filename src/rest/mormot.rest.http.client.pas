@@ -569,12 +569,11 @@ begin
       P := GotoNextLine(P);
     end;
     if Content <> '' then // always favor content type from binary
-      ContentType := GetMimeContentTypeFromBuffer(
-        pointer(Content), Length(Content), ContentType);
+      GetMimeContentTypeFromBuffer(Content, ContentType);
     if fUriPrefix <> '' then
       Call.Url := fUriPrefix + Call.Url;
     if fCustomHeader <> '' then
-      AppendLine(Call.InHead, [fCustomHeader]);
+      AppendLine(Head, [fCustomHeader]);
     fSafe.Enter;
     try
       res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);
@@ -896,7 +895,7 @@ begin
   if WebSockets = nil then
     EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call ' +
       'to enable interface parameter callbacks for %.%(%: %)',
-      [self, Sender.InterfaceTypeInfo ^.Name, Method.Uri,
+      [self, Sender.InterfaceTypeInfo^.RawName, Method.Uri,
        ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
   if ParamValue = nil then
     result := 0
@@ -919,7 +918,7 @@ begin
   end;
   if WebSockets = nil then
     EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call', [self]);
-  FormatUtf8('{"%":%}', [Factory.InterfaceTypeInfo^.RawName, FakeCallbackID], body);
+  FormatUtf8('{"%":%}', [Factory.InterfaceRtti.Name, FakeCallbackID], body);
   CallbackNonBlockingSetHeader(head); // frames gathering + no wait
   result := CallBack(
     mPOST, 'CacheFlush/_callback_', body, resp, nil, 0, @head) = HTTP_SUCCESS;

@@ -283,15 +283,14 @@ var
 label
   txt;
 begin
-  result := nil;
   f := Field.Index;
   inc(RowIndex); // first TOrmTable row are field names
-  P := fTable.Get(RowIndex, f, ResultLen);
-  if P = nil then // null field or out-of-range RowIndex/f -> result := nil
+  result := fTable.GetWithLen(RowIndex, f, ResultLen);
+  if OnlyCheckNull or
+     (result = nil) then // null field or out-of-range RowIndex/Field -> nil
     exit;
-  result := @fTemp64; // let result point to Int64, Double or TDatetime
-  if OnlyCheckNull then
-    exit;
+  P := result;
+  result := @fTemp64; // default point to transient Int64, Double or TDateTime
   case fTable.FieldType(f, info) of
     oftBoolean,
     oftInteger,
@@ -430,10 +429,12 @@ begin
               end;
             end;
           oftUtf8Text:
+            {$ifndef HASVARUSTRING} // Value is WideString on Delphi 7/2007
             if aField.DataType = ftWideString then
-              TWideStringField(aField).Value :=
-                aTable.GetSynUnicode(aRow, SqlIndex)
+              TWideStringField(aField).Value := aTable.GetSynUnicode(aRow, SqlIndex)
             else
+            {$endif HASVARUSTRING}
+              // AsString is UnicodeString on Delphi 2009+, and CP_UTF8 on Lazarus
               aField.AsString := aTable.GetString(aRow, SqlIndex);
         else
           aField.AsVariant := aTable.GetVariant(aRow, SqlIndex);

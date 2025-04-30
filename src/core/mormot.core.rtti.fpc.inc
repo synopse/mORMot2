@@ -43,7 +43,7 @@ type
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
 begin
-  // jump over Kind+Name - compiles as 2 asm opcodes on x86_64
+  // jump over Kind+RawName - compiles as 2 asm opcodes on x86_64
   result := @PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2];
 end;
 
@@ -355,12 +355,12 @@ end;
 
 
 const
+  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
+  UTF8_NAME: string[7] = 'RawUtf8';
   // FPC RTTI names integer type as "longint"
   INTEGER_NAME:  string[7] = 'Integer';
   // FPC RTTI names cardinal type as "longword"
   CARDINAL_NAME: string[8] = 'Cardinal';
-  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
-  UTF8_NAME: string[7] = 'RawUtf8';
 
 function TRttiInfo.Name: PShortString;
 begin
@@ -378,7 +378,7 @@ begin
     else
       result := @INTEGER_NAME    // instead of 'longint'
   else
-    result := @NULCHAR;
+    result := @NULCHAR;          // instead of a GPF
 end;
 
 function TRttiInfo.RecordSize: PtrInt;
@@ -547,33 +547,33 @@ function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
-  type
-    TMethodInfo = packed record
-      Name: PShortString;
-      Addr: pointer;
-    end;
   var
-    Table: PIntegerArray;
-    M: ^TMethodInfo;
-    i: integer;
+    info: PIntegerArray; // PVmtMethodTable is wrong (GPF on aarch64-linux) :(
+    m: PVmtMethodEntry;
+    r: ^TPublishedMethodInfo;
+    n: integer;
   begin
     if C = nil then
       exit;
     AddParentsFirst(GetClassParent(C)); // put children methods afterwards
-    Table := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
-    if Table = nil then
-      exit;
-    SetLength(Methods, result + Table^[0]);
-    M := @Table^[1];
-    for i := 1 to Table^[0] do  // Table^[0] = methods count
-      with Methods[result] do
-      begin
-        ShortStringToAnsi7String(M^.Name^, Name);
-        Method.Data := Instance;
-        Method.Code := M^.Addr;
-        inc(M);
-        inc(result);
-      end;
+    info := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
+    if info = nil then
+      exit; // no published method for this class level
+    n := info[0];
+    if n = 0 then
+      exit; // paranoid
+    SetLength(Methods, result + n);
+    r := @Methods[result];
+    inc(result, n);
+    m := @info[1];
+    repeat
+      ShortStringToAnsi7String(m^.Name^, r^.Name);
+      r^.Method.Data := Instance;
+      r^.Method.Code := m^.CodeAddress;
+      inc(r);
+      inc(m);
+      dec(n);
+    until n = 0;
   end;
 
 begin
@@ -657,7 +657,7 @@ end;
 
 const
   // gather rk* to reduce number of TRttiCustomListPairs hash slots in memory
-  RK_TOSLOT_MAX = 14;
+  RK_TOSLOT_MAX = {$ifdef NOPATCHVMT} 11 {$else} 10 {$endif NOPATCHVMT};
   RK_TOSLOT: array[TRttiKind] of byte = (
     0,   // rkUnknown
     1,   // rkInteger
@@ -670,21 +670,25 @@ const
     6,   // rkLStringOld
     6,   // rkLString
     7,   // rkWString
-    8,   // rkVariant
+    7,   // rkVariant
     2,   // rkArray
-    9,   // rkRecord
-    8,   // rkInterface
-    10,  // rkClass
-    11,  // rkObject
-    7,   // rkWChar
+    8,   // rkRecord
+    7,   // rkInterface
+    {$ifdef NOPATCHVMT}
+    11,  // rkClass
+    {$else}
+    4,   // vmtAutoTable is used instead of rkClass slot
+    {$endif NOPATCHVMT}
+    8,  // rkObject
+    2,   // rkWChar
     3,   // rkBool
-    12,  // rkInt64
-    13,  // rkQWord
-    14,  // rkDynArray
+    9,   // rkInt64
+    9,   // rkQWord
+    10,  // rkDynArray
     0,   // rkInterfaceRaw
     0,   // rkProcVar
     7,   // rkUString
-    7,   // rkUChar
+    2,   // rkUChar
     0,   // rkHelper
     0,   // rkFile
     0,   // rkClassRef
@@ -1083,7 +1087,7 @@ begin
       p := pointer(s[i]);
       if p <> nil then
         // use mormot.core.unicode efficient conversion
-        t.AddNoJsonEscape(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
+        t.AddNoJsonEscapeCP(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
     end;
     t.SetText(u);
   finally

@@ -175,6 +175,7 @@ type
     property values: TComplexNumberObjArray read fValues write fValues;
   end;
 
+// sorting function to order by StrIComp(TOrmPeople.FirstName)
 function TOrmPeopleCompareByFirstName(const A, B): integer;
 
 
@@ -189,8 +190,8 @@ type
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
   published
-    /// test the new RecordCopy() using our fast RTTI
-    procedure _RecordCopy;
+    /// test RecordCopy(), TRttiMap and TRttiFilter
+    procedure _Records;
     /// test the TSynList class
     procedure _TSynList;
     /// test the TRawUtf8List class
@@ -252,6 +253,8 @@ type
     procedure IniFiles;
     /// test UTF-8 and Win-Ansi conversion (from or to, through RawUnicode)
     procedure _UTF8;
+    /// validate Unicode / Ansi Charset conversion methods
+    procedure Charsets;
     /// test UrlEncode() and UrlDecode() functions
     // - this method use some ISO-8601 encoded dates and times for the testing
     procedure UrlDecoding;
@@ -282,6 +285,10 @@ type
     procedure _TSynLogFile;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
+    {$ifdef OSWINDOWS}
+    /// some Windows-specific tests
+    procedure WindowsSpecificApi;
+    {$endif OSWINDOWS}
   end;
 
 
@@ -725,16 +732,29 @@ begin
       V1 := -V1;
     v := Curr64ToStr(PInt64(@V1)^);
     tmp[0] := AnsiChar(Curr64ToPChar(PInt64(@V1)^, @tmp[1]));
-    Check(RawUtf8(tmp) = v);
+    CheckEqual(RawUtf8(tmp), v);
     V2 := GetExtended(pointer(v), err);
     Check(err = 0);
     CheckSame(V1, V2, 1E-4);
     i64 := StrToCurr64(pointer(v));
-    Check(PInt64(@V1)^ = i64);
+    CheckEqual(PInt64(@V1)^, i64);
   end;
 end;
 
 procedure TTestCoreBase.FastStringCompare;
+
+  procedure _HasAnyChar(const text, forbidden: RawUtf8; expected: boolean = true);
+  var
+    any: TSynAnsicharSet;
+    i: PtrInt;
+  begin
+    Check(ContainsChars(text, forbidden) = expected);
+    any := [];
+    for i := 1 to length(forbidden) do
+      include(any, forbidden[i]);
+    Check(HasAnyChar(text, any) = expected);
+  end;
+
 begin
   CheckEqual(CompareText('', ''), 0);
   Check(CompareText('abcd', '') > 0);
@@ -782,6 +802,45 @@ begin
   CheckEqual(strspn(PAnsiChar('baabbaabbaabbabcd'), PAnsiChar('ab')), 15);
   CheckEqual(strspn(PAnsiChar('baabbaabbaabbaabcd'), PAnsiChar('ab')), 16);
   CheckEqual(strspn(PAnsiChar('baabbaabbaababaabcd'), PAnsiChar('ab')), 17);
+  _HasAnyChar('', '', false);
+  _HasAnyChar('', 'a', false);
+  _HasAnyChar('', 'aa', false);
+  _HasAnyChar('a', '', false);
+  _HasAnyChar('abcde', '', false);
+  _HasAnyChar('abdef', 'cg', false);
+  _HasAnyChar('a', 'c', false);
+  _HasAnyChar('a', 'cd', false);
+  _HasAnyChar('a', 'cdef', false);
+  _HasAnyChar('a', 'cdefg', false);
+  _HasAnyChar('a', 'cdefga');
+  _HasAnyChar('abcde', 'a');
+  _HasAnyChar('abcde', 'b');
+  _HasAnyChar('abcde', 'c');
+  _HasAnyChar('abcde', 'e');
+  _HasAnyChar('abcde', 'ga');
+  _HasAnyChar('abcde', 'gb');
+  _HasAnyChar('abcde', 'gc');
+  _HasAnyChar('abcde', 'ge');
+  _HasAnyChar('abcde', 'ihga');
+  _HasAnyChar('abcde', 'ihgb');
+  _HasAnyChar('abcde', 'ihgc');
+  _HasAnyChar('abcde', 'ihge');
+  _HasAnyChar('abcde', 'jihga');
+  _HasAnyChar('abcde', 'jihgb');
+  _HasAnyChar('abcde', 'jihgc');
+  _HasAnyChar('abcde', 'jihge');
+  _HasAnyChar('abcde', 'jihgak');
+  _HasAnyChar('abcde', 'jihgbk');
+  _HasAnyChar('abcde', 'jihgck');
+  _HasAnyChar('abcde', 'jihgek');
+  Check(HasOnlyChar('abab', ['a' .. 'c']));
+  Check(HasOnlyChar('abab', ['a' .. 'c']));
+  Check(HasOnlyChar('abbab', ['a' .. 'c']));
+  Check(HasOnlyChar('abab', ['a' .. 'b']));
+  Check(not HasOnlyChar('abaeb', ['a' .. 'c']));
+  Check(not HasOnlyChar('eabab', ['a' .. 'c']));
+  Check(not HasOnlyChar('ababe', ['a' .. 'c']));
+  Check(HasOnlyChar('ababe', ['a' .. 'e']));
 end;
 
 procedure TTestCoreBase.IniFiles;
@@ -955,7 +1014,7 @@ begin
   try // with hash table
     for i := 1 to MAX do
     begin
-      Rec := TSynFilterOrValidate.Create;
+      Rec := TSynFilterLowerCase.Create; // any TSynPersistent would have done
       Rec.Parameters := Int32ToUtf8(i);
       CheckEqual(L.AddObject(Rec.Parameters, Rec), i - 1);
       CheckEqual(L.IndexOf(Rec.Parameters), i - 1);
@@ -2037,8 +2096,9 @@ begin
   Check(ACities.Count = Length(Province.Cities));
   Check(ACities.Count = 10001);
   TestCities;
+  count := 7;
   ACities.Init(TypeInfo(TCityDynArray), Province.Cities, @count);
-  ACities.Clear;
+  CheckEqual(count, 0);
   for i := 0 to 100000 do
   begin
     City.Name := IntToString(i);
@@ -2046,7 +2106,8 @@ begin
     City.Longitude := i * 6.13;
     Check(ACities.Add(City) = i);
   end;
-  Check(ACities.Count = count);
+  CheckEqual(count, 100001);
+  CheckEqual(ACities.Count, count);
   TestCities;
 end;
 
@@ -2341,7 +2402,7 @@ begin
   fEnum := Value;
 end;
 
-procedure TTestCoreBase._RecordCopy;
+procedure TTestCoreBase._Records;
 var
   A, B, C: TR;
   i, j: PtrInt;
@@ -2351,13 +2412,18 @@ var
   r: TPeopleR;
   p: TRecordPeople;
   m: TRttiMap;
+  fo, fr: TRttiFilter;
+  err, err2: string;
 begin
+  // FillZeroRtti()
   CheckEqual(lic.CustomerName, '');
+  lic.CustomerName := 'Toto';
   FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
   lic.CustomerName := '1234';
   FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
+  // validate RecordCopy()
   FillCharFast(A, SizeOf(A), 0);
   FillCharFast(B, SizeOf(B), 0);
   FillCharFast(C, SizeOf(C), 0);
@@ -2432,119 +2498,191 @@ begin
   // TPeople2 <--> TOrmPeople class mapping
   o1 := TOrmPeople.Create;
   o2 := TPeople2.Create;
-  o1.FirstName := 'toto';
-  o1.LastName := 'titi';
-  o1.YearOfBirth := 1926;
-  o1.YearOfDeath := 2010;
-  CopyObject(o1, o2);
-  CheckEqual(o1.FirstName, 'toto');
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o1.LastName, 'titi');
-  CheckEqual(o1.LastName, o2.LastName);
-  CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
-  // TRecordPeople <--> TOrmPeople record/class mapping
-  p.YearOfBirth := -1;
-  CheckEqual(p.YearOfBirth, -1);
-  RecordZero(@p, TypeInfo(TRecordPeople));
-  CheckEqual(p.FirstName, '');
-  CheckEqual(p.LastName, '');
-  CheckEqual(p.YearOfBirth, 0);
-  CheckEqual(p.YearOfDeath, 0);
-  ObjectToRecord(o2, p, TypeInfo(TRecordPeople));
-  CheckEqual(p.FirstName, 'toto');
-  CheckEqual(p.LastName, 'titi');
-  CheckEqual(p.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(p.YearOfDeath, o2.YearOfDeath);
-  o2.Enum := e1;
-  ClearObject(o2);
-  Check(o2.FirstName = '');
-  CheckEqual(o2.LastName, '');
-  CheckEqual(o2.YearOfBirth, 0);
-  CheckEqual(o2.YearOfDeath, 0);
-  Check(o2.Enum = e0);
-  RecordToObject(p, o2, TypeInfo(TRecordPeople));
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o2.LastName, 'titi');
-  CheckEqual(o2.YearOfBirth, p.YearOfBirth);
-  CheckEqual(o2.YearOfDeath, p.YearOfDeath);
-  // TPeopleR <--> TOrmPeople record/class mapping
-  o2.Enum := e4;
-  {$ifndef HASEXTRECORDRTTI} // oldest Delphi or FPC
-  Rtti.RegisterType(TypeInfo(TEnum));
-  Rtti.RegisterFromText(TypeInfo(TPeopleR),
-    'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
-  {$endif HASEXTRECORDRTTI}
-  r.YearOfBirth := -1;
-  CheckEqual(r.YearOfBirth, -1);
-  RecordZero(@r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, '');
-  CheckEqual(r.LastName, '');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e0);
-  ObjectToRecord(o2, r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, 'toto');
-  CheckEqual(r.LastName, 'titi');
-  CheckEqual(r.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e4);
-  ClearObject(o2);
-  Check(o2.FirstName = '');
-  CheckEqual(o2.LastName, '');
-  CheckEqual(o2.YearOfBirth, 0);
-  CheckEqual(o2.YearOfDeath, 0);
-  Check(o2.Enum = e0);
-  RecordToObject(r, o2, TypeInfo(TPeopleR));
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o2.LastName, 'titi');
-  CheckEqual(o2.YearOfBirth, r.YearOfBirth);
-  CheckEqual(o2.YearOfDeath, 0);
-  Check(o2.Enum = e4);
-  // TPeople2 <--> TPeopleR class/record mapping with TRttiMap
-  m.Init(TPeople2, TypeInfo(TPeopleR)).AutoMap;
-  RecordZero(@r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, '');
-  CheckEqual(r.LastName, '');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e0);
-  m.ToB(o2, @r); // from class to DTO
-  CheckEqual(r.FirstName, 'toto');
-  CheckEqual(r.LastName, 'titi');
-  CheckEqual(r.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(r.Unused, 0);
-  Check(r.Enum = e4);
-  // TPeople2 <--> TPeopleR class/record custom fields mapping with TRttiMap
-  m.Init(TPeople2, TypeInfo(TPeopleR)).Map([
-    'firstName',   'lastname', // inverted
-    'lastname',    'firstName',
-    'YearOfBirth', 'Unused']); // moved
-  RecordZero(@r, TypeInfo(TPeopleR));
-  CheckEqual(r.FirstName, '');
-  CheckEqual(r.LastName, '');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, 0);
-  m.ToB(o2, @r); // from class to DTO
-  CheckEqual(r.LastName, 'toto');
-  CheckEqual(r.FirstName, 'titi');
-  CheckEqual(r.YearOfBirth, 0);
-  CheckEqual(r.Unused, o2.YearOfBirth);
-  Check(r.Enum = e0);
-  // TOrmPeople <--> TRecordPeople class/record fields mapping with TRttiMap
-  m.Init(TOrmPeople, TypeInfo(TRecordPeople)).AutoMap;
-  CheckEqual(p.FirstName, 'toto');
-  CheckEqual(p.LastName, 'titi');
-  CheckEqual(p.YearOfBirth, o1.YearOfBirth);
-  CheckEqual(p.YearOfDeath, o1.YearOfDeath);
-  o1.Free;
-  o1 := m.ToA(@p); // from DTO to class
-  CheckEqual(o1.FirstName, 'toto');
-  CheckEqual(o1.LastName, 'titi');
-  CheckEqual(p.YearOfBirth, o1.YearOfBirth);
-  CheckEqual(p.YearOfDeath, o1.YearOfDeath);
-  o1.Free;
-  o2.Free;
+  try
+    o1.FirstName := 'toto';
+    o1.LastName := 'titi';
+    o1.YearOfBirth := 1926;
+    o1.YearOfDeath := 2010;
+    CopyObject(o1, o2);
+    CheckEqual(o1.FirstName, 'toto');
+    Check(o2.FirstName = 'toto');
+    CheckEqual(o1.LastName, 'titi');
+    CheckEqual(o1.LastName, o2.LastName);
+    CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
+    // TRecordPeople <--> TOrmPeople record/class mapping
+    p.YearOfBirth := -1;
+    CheckEqual(p.YearOfBirth, -1);
+    RecordZero(@p, TypeInfo(TRecordPeople));
+    CheckEqual(p.FirstName, '');
+    CheckEqual(p.LastName, '');
+    CheckEqual(p.YearOfBirth, 0);
+    CheckEqual(p.YearOfDeath, 0);
+    ObjectToRecord(o2, p, TypeInfo(TRecordPeople));
+    CheckEqual(p.FirstName, 'toto');
+    CheckEqual(p.LastName, 'titi');
+    CheckEqual(p.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(p.YearOfDeath, o2.YearOfDeath);
+    o2.Enum := e1;
+    ClearObject(o2);
+    Check(o2.FirstName = '');
+    CheckEqual(o2.LastName, '');
+    CheckEqual(o2.YearOfBirth, 0);
+    CheckEqual(o2.YearOfDeath, 0);
+    Check(o2.Enum = e0);
+    RecordToObject(p, o2, TypeInfo(TRecordPeople));
+    Check(o2.FirstName = 'toto');
+    CheckEqual(o2.LastName, 'titi');
+    CheckEqual(o2.YearOfBirth, p.YearOfBirth);
+    CheckEqual(o2.YearOfDeath, p.YearOfDeath);
+    // TPeopleR <--> TOrmPeople record/class mapping
+    o2.Enum := e4;
+    {$ifndef HASEXTRECORDRTTI} // oldest Delphi or FPC
+    Rtti.RegisterType(TypeInfo(TEnum));
+    Rtti.RegisterFromText(TypeInfo(TPeopleR),
+      'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
+    {$endif HASEXTRECORDRTTI}
+    r.YearOfBirth := -1;
+    CheckEqual(r.YearOfBirth, -1);
+    RecordZero(@r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, '');
+    CheckEqual(r.LastName, '');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e0);
+    ObjectToRecord(o2, r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, 'toto');
+    CheckEqual(r.LastName, 'titi');
+    CheckEqual(r.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e4);
+    ClearObject(o2);
+    Check(o2.FirstName = '');
+    CheckEqual(o2.LastName, '');
+    CheckEqual(o2.YearOfBirth, 0);
+    CheckEqual(o2.YearOfDeath, 0);
+    Check(o2.Enum = e0);
+    RecordToObject(r, o2, TypeInfo(TPeopleR));
+    Check(o2.FirstName = 'toto');
+    CheckEqual(o2.LastName, 'titi');
+    CheckEqual(o2.YearOfBirth, r.YearOfBirth);
+    CheckEqual(o2.YearOfDeath, 0);
+    Check(o2.Enum = e4);
+    // TPeople2 <--> TPeopleR class/record mapping with TRttiMap
+    m.Init(TPeople2, TypeInfo(TPeopleR)).AutoMap;
+    RecordZero(@r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, '');
+    CheckEqual(r.LastName, '');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e0);
+    m.ToB(o2, @r); // from class to DTO
+    CheckEqual(r.FirstName, 'toto');
+    CheckEqual(r.LastName, 'titi');
+    CheckEqual(r.YearOfBirth, o2.YearOfBirth);
+    CheckEqual(r.Unused, 0);
+    Check(r.Enum = e4);
+    // TPeople2 <--> TPeopleR class/record custom fields mapping with TRttiMap
+    m.Init(TPeople2, TypeInfo(TPeopleR)).Map([
+      'firstName',   'lastname', // inverted
+      'lastname',    'firstName',
+      'YearOfBirth', 'Unused']); // moved
+    RecordZero(@r, TypeInfo(TPeopleR));
+    CheckEqual(r.FirstName, '');
+    CheckEqual(r.LastName, '');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, 0);
+    m.ToB(o2, @r); // from class to DTO
+    CheckEqual(r.LastName, 'toto');
+    CheckEqual(r.FirstName, 'titi');
+    CheckEqual(r.YearOfBirth, 0);
+    CheckEqual(r.Unused, o2.YearOfBirth);
+    Check(r.Enum = e0);
+    // TOrmPeople <--> TRecordPeople class/record fields mapping with TRttiMap
+    m.Init(TOrmPeople, TypeInfo(TRecordPeople)).AutoMap;
+    CheckEqual(p.FirstName, 'toto');
+    CheckEqual(p.LastName, 'titi');
+    CheckEqual(p.YearOfBirth, o1.YearOfBirth);
+    CheckEqual(p.YearOfDeath, o1.YearOfDeath);
+    o1.Free;
+    o1 := m.ToA(@p); // from DTO to class
+    CheckEqual(o1.FirstName, 'toto');
+    CheckEqual(o1.LastName, 'titi');
+    CheckEqual(p.YearOfBirth, o1.YearOfBirth);
+    CheckEqual(p.YearOfDeath, o1.YearOfDeath);
+    // TRttiFilter validation with o1 TOrmPeople instance
+    fo := TRttiFilter.Create(o1.ClassType);
+    try
+      CheckEqual(fo.Count, 0);
+      fo.Filter(nil);
+      fo.Filter(o1);
+      CheckEqual(fo.Count, 0);
+      Check(fo.Validate(nil) = '');
+      Check(fo.Validate(o1) = '');
+      fo.Add('firstname', [TSynValidateNonVoidText.Create]);
+      CheckEqual(fo.Count, 1);
+      err := '???';
+      err := fo.Validate(nil);
+      Check(err = '', err);
+      CheckEqual(o1.FirstName, 'toto');
+      Check(fo.Validate(o1) = '');
+      o1.FirstName := '';
+      Check(fo.Validate(nil) = '');
+      err2 := fo.Validate(o1);
+      Check(err2 = 'FirstName: Expect at least 1 character', err2);
+    finally
+      fo.Free;
+    end;
+  finally
+    o1.Free;
+    o2.Free;
+  end;
+  // TRttiFilter validation with p record
+  fr := TRttiFilter.Create(TypeInfo(TRecordPeople));
+  try
+    CheckEqual(fr.Count, 0);
+    fr.Filter(nil);
+    fr.Filter(@p);
+    Check(fr.Validate(@p) = '');
+    fr.AddClass('firstName', [TSynFilterUpperCase, TSynValidateNonVoidText]);
+    CheckEqual(fr.Count, 2);
+    CheckEqual(p.FirstName, 'toto');
+    Check(fr.Validate(@p) = '');
+    CheckEqual(p.FirstName, 'toto');
+    Check(fr.Apply(@p) = '');
+    CheckEqual(p.FirstName, 'TOTO');
+    p.FirstName := '';
+    err := fr.Validate(@p);
+    Check(err = err2, err);
+    err := fr.Apply(@p);
+    Check(err = err2, err);
+    CheckEqual(fr.Count, 2);
+    fr.Clear;
+    CheckEqual(fr.Count, 0);
+    Check(fr.Validate(@p) = '');
+    CheckEqual(p.FirstName, '');
+    Check(fr.Apply(@p) = '');
+    CheckEqual(p.FirstName, '');
+    fr.AddClass('firstName', [TSynFilterLowerCase, TSynValidateNonVoidText]);
+    CheckEqual(fr.Count, 2);
+    fr.AddClass('lastNAME', [TSynValidateNonVoidText]);
+    CheckEqual(fr.Count, 3);
+    err := fr.Apply(@p);
+    Check(err = err2, err);
+    p.FirstName := 'TOTO';
+    Check(fr.Validate(@p) = '');
+    CheckEqual(p.FirstName, 'TOTO');
+    Check(fr.Apply(@p) = '');
+    CheckEqual(p.FirstName, 'toto');
+    p.LastName := '';
+    err := fr.Apply(@p);
+    Check(err = 'LastName: Expect at least 1 character', err);
+    p.FirstName := '';
+    err := fr.Apply(@p);
+    Check(err = err2, err);
+  finally
+    fr.Free;
+  end;
 end;
 
 procedure TTestCoreBase._TSynList;
@@ -2711,7 +2849,7 @@ begin
   // oldest Delphi can't compile TypeInfo(TGuid) -> use PT_INFO[ptGuid]
   s := RecordSaveJson(g, PT_INFO[ptGuid]);
   FillCharFast(g2, SizeOf(g2), 0);
-  Check(RecordLoadJson(g2, pointer(s), PT_INFO[ptGuid]) <> nil);
+  Check(RecordLoadJsonInPlace(g2, pointer(s), PT_INFO[ptGuid]) <> nil);
   Check(IsEqualGuid(g2, g));
   FillCharFast(h, SizeOf(h), 1);
   for pt := ptGuid to ptHash512 do
@@ -2878,45 +3016,6 @@ begin
   finally
     c.Free;
   end;
-  {$ifdef OSWINDOWS}
-  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
-  Check(WinErrorConstant(ERROR_OPERATION_ABORTED)^ = 'OPERATION_ABORTED', 'wecb');
-  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
-  Check(WinErrorConstant(ERROR_MORE_DATA)^ = 'MORE_DATA', 'wecd');
-  Check(WinErrorConstant(ERROR_ACCESS_DENIED)^ = 'ACCESS_DENIED', 'wece');
-  Check(WinErrorConstant(ERROR_WINHTTP_TIMEOUT)^ = 'WINHTTP_TIMEOUT', 'wecf');
-  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecg');
-  Check(WinErrorConstant($800b010d)^ = '', 'wech');
-  Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
-  Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
-  Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
-    'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
-  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
-  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
-  Check(IsSystemFolder('c:\program files'));
-  Check(IsSystemFolder('c:\program Files\toto'));
-  Check(IsSystemFolder('c:\Program files (x86)'));
-  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
-  Check(IsSystemFolder('c:\windows'));
-  Check(IsSystemFolder('c:\windows\toto'));
-  Check(not IsSystemFolder('c:\program file'));
-  Check(not IsSystemFolder('c:\program files other\toto'));
-  Check(not IsSystemFolder('c:\windowstorage'));
-  if IsUacVirtualizationEnabled then
-  begin
-    Check(IsUacVirtualFolder('c:\program files'));
-    Check(IsUacVirtualFolder('c:\program Files\toto'));
-    Check(IsUacVirtualFolder('c:\Program files (x86)'));
-    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
-    Check(IsUacVirtualFolder('c:\windows'));
-    Check(IsUacVirtualFolder('c:\windows\toto'));
-    Check(not IsUacVirtualFolder('c:\program file'));
-    Check(not IsUacVirtualFolder('c:\program files other\toto'));
-    Check(not IsUacVirtualFolder('c:\windowstorage'));
-  end
-  else
-    Check(not IsUacVirtualFolder('c:\program files'));
-  {$endif OSWINDOWS}
 end;
 
 procedure TTestCoreBase._IsMatch;
@@ -3341,8 +3440,11 @@ begin
   for i := 0 to high(c) do
     c[i] := Random32;
   QuickSortInteger(@c, 0, high(c));
+  n := 0;
   for i := 0 to high(c) - 1 do
-    Check(c[i + 1] <> c[i], 'unique Random32');
+    if c[i + 1] = c[i] then
+      inc(n);
+  Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
   Check(Random32(0) = 0);
   for i := 1 to 100000 do
@@ -3383,6 +3485,7 @@ var
   tmp: RawUtf8;
   vs: TRawUtf8DynArray;
   timer: TPrecisionTimer;
+  caseinsensitive: boolean;
 
   procedure DoOne(const u: RawUtf8);
   var
@@ -3398,61 +3501,71 @@ const
   DIRSIZE = ONESIZE * (MAX + 1);
   INTSIZE = ONESIZE * 512;
 begin
-  int := TRawUtf8Interning.Create(1);
-  try
-    CheckEqual(int.Count, 0);
-    DoOne('test');
-    CheckEqual(int.Count, 1);
-    DoOne('test');
-    CheckEqual(int.Count, 1);
-    CheckEqual(int.Clean, 1);
-    DoOne('single');
-    CheckEqual(int.Count, 1);
-    CheckEqual(int.Clean, 1);
-    CheckEqual(int.Count, 0);
-    CheckEqual(int.Clean, 0);
-    CheckEqual(int.Count, 0);
-    DoOne('single1');
-    CheckEqual(int.Count, 1);
-    DoOne('single1');
-    CheckEqual(int.Count, 1);
-    DoOne('test2');
-    CheckEqual(int.Count, 2);
-    DoOne('test2');
-    CheckEqual(int.Count, 2);
-    DoOne('single2');
-    CheckEqual(int.Count, 3);
-    CheckEqual(int.Clean, 3);
-    CheckEqual(int.Count, 0);
-    int.Unique(tmp, 'kept', 4);
-    CheckEqual(tmp, 'kept');
-    CheckEqual(GetRefCount(tmp), 2);
-    CheckEqual(int.Count, 1);
-    CheckEqual(int.Clean, 0);
-    CheckEqual(int.Count, 1);
-    tmp := '';
-    CheckEqual(int.Clean, 1);
-    CheckEqual(int.Count, 0);
-    int.Clear;
-    CheckEqual(int.Count, 0);
-    CheckEqual(int.Clean, 0);
-    CheckEqual(int.Count, 0);
-  finally
-    int.Free;
-  end;
-  int := TRawUtf8Interning.Create(16);
-  try
-    for i := 0 to MAX do
-    begin
-      v := i and 511;
-      int.Unique(tmp, SmallUInt32Utf8[v]);
-      check(Utf8ToInteger(tmp) = v);
+  for caseinsensitive := false to true do
+  begin
+    int := TRawUtf8Interning.Create(1, caseinsensitive);
+    try
+      CheckEqual(int.Count, 0);
+      DoOne('test');
+      CheckEqual(int.Count, 1);
+      DoOne('test');
+      CheckEqual(int.Count, 1);
+      CheckEqual(int.Clean, 1);
+      DoOne('single');
+      CheckEqual(int.Count, 1);
+      CheckEqual(int.Clean, 1);
+      CheckEqual(int.Count, 0);
+      CheckEqual(int.Clean, 0);
+      CheckEqual(int.Count, 0);
+      DoOne('single1');
+      CheckEqual(int.Count, 1);
+      DoOne('single1');
+      CheckEqual(int.Count, 1);
+      DoOne('test2');
+      CheckEqual(int.Count, 2);
+      DoOne('test2');
+      CheckEqual(int.Count, 2);
+      DoOne('single2');
+      CheckEqual(int.Count, 3);
+      CheckEqual(int.Clean, 3);
+      CheckEqual(int.Count, 0);
+      int.Unique(tmp, 'kept', 4);
+      CheckEqual(tmp, 'kept');
+      CheckEqual(GetRefCount(tmp), 2);
+      tmp := '';
+      if caseinsensitive then
+        int.Unique(tmp, 'KEPT', 4) // should be identified as previous 'kept'
+      else
+        int.Unique(tmp, 'kept', 4);
+      CheckEqual(tmp, 'kept');
+      CheckEqual(GetRefCount(tmp), 2);
+      CheckEqual(int.Count, 1);
+      CheckEqual(int.Clean, 0);
+      CheckEqual(int.Count, 1);
+      tmp := '';
+      CheckEqual(int.Clean, 1);
+      CheckEqual(int.Count, 0);
+      int.Clear;
+      CheckEqual(int.Count, 0);
+      CheckEqual(int.Clean, 0);
+      CheckEqual(int.Count, 0);
+    finally
+      int.Free;
     end;
-    checkEqual(int.Count, 512);
-    checkEqual(int.Clean, 0);
-    checkEqual(int.Count, 512);
-  finally
-    int.Free;
+    int := TRawUtf8Interning.Create(16, caseinsensitive);
+    try
+      for i := 0 to MAX do
+      begin
+        v := i and 511;
+        int.Unique(tmp, SmallUInt32Utf8[v]);
+        check(Utf8ToInteger(tmp) = v);
+      end;
+      checkEqual(int.Count, 512);
+      checkEqual(int.Clean, 0);
+      checkEqual(int.Count, 512);
+    finally
+      int.Free;
+    end;
   end;
   int := TRawUtf8Interning.Create(4);
   try
@@ -3763,7 +3876,7 @@ begin
     with {%H-}crc[i] do
     begin
       j := i shr 3 + 1; // circumvent weird FPC code generation bug in -O2 mode
-      S := RandomString(j);
+      S := RandomWinAnsi(j);
       crc := crc32creference(0, pointer(S), length(S));
       inc(totallen, length(S));
       c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
@@ -3823,14 +3936,14 @@ procedure TTestCoreBase.Integers;
   var
     o, n: TIntegerDynArray;
   begin
-    CsvToIntegerDynArray(Pointer(old), o);
-    CsvToIntegerDynArray(Pointer(new), n);
+    CsvToIntegerDynArray(pointer(old), o);
+    CsvToIntegerDynArray(pointer(new), n);
     fAdd := '';
     fDel := '';
     NotifySortedIntegerChanges(pointer(o), pointer(n), length(o), length(n),
       intadd, intdel, self);
-    Check(fAdd = added, 'added');
-    Check(fDel = deleted, 'deleted');
+    CheckEqual(fAdd, added, 'added');
+    CheckEqual(fDel, deleted, 'deleted');
   end;
 
   procedure includes(const values, includes, excludes, included, excluded: RawUtf8);
@@ -3899,11 +4012,13 @@ procedure TTestCoreBase.Integers;
 var
   i8: TByteDynArray;
   i16: TWordDynArray;
-  i32: TIntegerDynArray;
+  i32, i32_: TIntegerDynArray;
   i64: TInt64DynArray;
   i, n: PtrInt;
+  c: integer;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(9007199254740991, MAX_SAFE_JS_INTEGER);
   CheckEqual(NextPowerOfTwo(0), 1);
   CheckEqual(NextPowerOfTwo(1), 1);
   CheckEqual(NextPowerOfTwo(2), 2);
@@ -3973,40 +4088,51 @@ begin
   CheckEqual(IntegerScanIndex(@i32[1], 100, 0), -1, 'aligned read');
   CheckEqual(IntegerScanIndex(@i32[1], 100, 1), 0, 'unaligned read');
   for i := 0 to n - 1 do
-    Check(IntegerScanIndex(pointer(i32), n, i) = i);
+    CheckEqual(IntegerScanIndex(pointer(i32), n, i), i);
   i32 := nil;
   DeduplicateInteger(i32);
-  check(i32 = nil);
+  CheckEqual(i32, nil);
   SetLength(i32, 2);
   i32[0] := 1;
   QuickSortInteger(i32);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
   DeduplicateInteger(i32);
-  check(length(i32) = 2);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
+  CheckEqual(length(i32), 2);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
   i32[0] := 1;
   DeduplicateInteger(i32);
-  check(length(i32) = 1);
-  check(i32[0] = 1);
+  CheckEqual(length(i32), 1);
+  CheckEqual(i32[0], 1);
   SetLength(i32, 6);
   i32[4] := 1;
   i32[5] := 2;
   DeduplicateInteger(i32); // (1, 0, 0, 0, 1, 2)
-  check(length(i32) = 3);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
-  check(i32[2] = 2);
+  CheckEqual(length(i32), 3);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
+  CheckEqual(i32[2], 2);
   SetLength(i32, 6);
   i32[4] := 3;
   i32[5] := 3;
   DeduplicateInteger(i32); // (0, 1, 2, 0, 3, 3)
-  check(length(i32) = 4);
-  check(i32[0] = 0);
-  check(i32[1] = 1);
-  check(i32[2] = 2);
-  check(i32[3] = 3);
+  CheckEqual(length(i32), 4);
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
+  CheckEqual(i32[2], 2);
+  CheckEqual(i32[3], 3);
+  i32_ := i32;
+  DeleteInteger(i32_, 2);
+  CheckEqual(length(i32), 4, 'unique');
+  CheckEqual(i32[0], 0);
+  CheckEqual(i32[1], 1);
+  CheckEqual(i32[2], 2);
+  CheckEqual(i32[3], 3);
+  CheckEqual(length(i32_), 3, 'copied');
+  CheckEqual(i32_[0], 0);
+  CheckEqual(i32_[1], 1);
+  CheckEqual(i32_[2], 3);
   for n := 1 to 1000 do
   begin
     SetLength(i32, n);
@@ -4014,11 +4140,11 @@ begin
       i32[i] := i and 15;
     DeduplicateInteger(i32);
     if n < 16 then
-      check(Length(i32) = n)
+      CheckEqual(Length(i32), n)
     else
-      check(Length(i32) = 16);
+      CheckEqual(Length(i32), 16);
     for i := 0 to high(i32) do
-      check(i32[i] = i);
+      CheckEqual(i32[i], i);
   end;
   changes('', '', '', '');
   changes('1', '1', '', '');
@@ -4073,6 +4199,31 @@ begin
   check(i64[1] = 1);
   check(i64[2] = 2);
   check(i64[3] = 3);
+  c := 4;
+  AddSortedInt64(i64, c, 10);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10');
+  AddSortedInt64(i64, c, 20);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,20');
+  AddSortedInt64(i64, c, 15);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, -100);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 0);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '0,1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 1);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '1,2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 2);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '2,3,10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 9);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '10,15,20');
+  RemoveSortedInt64SmallerThan(i64, c, 17);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '20');
+  RemoveSortedInt64SmallerThan(i64, c, 20);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '20');
+  RemoveSortedInt64SmallerThan(i64, c, 170);
+  Check(i64 = nil);
+  CheckEqual(c, 0);
+  CheckEqual(Int64DynArrayToCsv(pointer(i64), c), '');
   for n := 1 to 1000 do
   begin
     SetLength(i64, n);
@@ -4147,11 +4298,11 @@ procedure TTestCoreBase.NumericalConversions;
   begin
     s := DoubleToString(v);
     val(s, d, err);
-    Check(err = 0);
+    CheckEqual(err, 0);
     CheckSame(d, v);
     StringToUtf8(s, u);
     d := GetExtended(pointer(u), err);
-    Check(err = 0);
+    CheckEqual(err, 0);
     CheckSame(d, v);
   end;
 
@@ -4195,6 +4346,29 @@ begin
   Check(_oskb(1 shl 30 - 1) = '1GB', 'oskb7');
   Check(_oskb(1 shl 30)     = '1GB', 'oskb8');
   Check(_oskb(1 shl 30 + 1) = '1GB', 'oskb9');
+  Check(TwoDigits(0) = '0');
+  Check(TwoDigits(1) = '1');
+  Check(TwoDigits(10) = '10');
+  Check(TwoDigits(100) = '100');
+  Check(TwoDigits(1000) = '1000');
+  Check(TwoDigits(0.1) = '0.10');
+  Check(TwoDigits(0.12) = '0.12');
+  Check(TwoDigits(0.123) = '0.12');
+  Check(TwoDigits(0.124) = '0.12');
+  Check(TwoDigits(0.125) = '0.12');
+  Check(TwoDigits(0.1251) = '0.13');
+  Check(TwoDigits(0.126) = '0.13');
+  Check(TwoDigits(0.129) = '0.13');
+  Check(TwoDigits(70.131) = '70.13');
+  Check(TwoDigits(70.135) = '70.13');
+  Check(TwoDigits(70.1351) = '70.14');
+  Check(TwoDigits(0.01) = '0.01');
+  Check(TwoDigits(0.05) = '0.05');
+  Check(TwoDigits(0.051) = '0.05');
+  Check(TwoDigits(0.055) = '0.05');
+  Check(TwoDigits(0.0551) = '0.06');
+  Check(TwoDigits(0.0015) = '0');
+  Check(TwoDigits(0.0055) = '0.01');
   n := 100000;
   Timer.Start;
   crc := 0;
@@ -4493,6 +4667,17 @@ begin
   Check(UInt32ToUtf8(1599638299) = '1599638299');
   Check(Int32ToUtf8(-1599638299) = '-1599638299');
   Check(Int64ToUtf8(-1271083787498396012) = '-1271083787498396012');
+  CheckEqual(Int64ToUtf8(242161819595454762), '242161819595454762');
+  // detect 64-bit integer overflow in GetExtended()
+  CheckDoubleToShort(95.0290695380, '95.029069538');
+  Check(ToDouble('95.0290695380', d), '95.02');
+  CheckSame(d, 95.029069538);
+  Check(ToDouble('95.02906953800000000000', d), '95.x');
+  CheckSame(d, 95.029069538);
+  Check(ToDouble('184467440737095514', d), '184467440737095514');
+  CheckSame(d, 184467440737095514);
+  Check(ToDouble('1844674407370955148', d), '1844674407370955148');
+  CheckSame(d, 1844674407370955148);
   //  SQLite text-to-float converter routine failed with this number
   Check(ToDouble('18446744073709551488', d), '18446744073709551488');
   CheckSame(d, 1.8446744074e+19, 1e+10);
@@ -4501,9 +4686,11 @@ begin
   CheckDoubleToShortSame(d);
   CheckDoubleToShort(1234567890123456789, '1.2345678901234568E18');
   CheckDoubleToShortSame(1234567890123456789);
+  CheckDoubleToShortSame(18446744073709551);
+  CheckDoubleToShortSame(184467440737095514);
+  CheckDoubleToShortSame(1844674407370955148);
   {$endif FPC}
-  s := Int64ToUtf8(242161819595454762);
-  Check(s = '242161819595454762');
+  // validate ScanUtf8()
   Check(ScanUtf8('1 2 3', '  %', [@i, @j, @d]) = 0);
   Check(ScanUtf8('', '%d%d%f', [@i, @j, @d]) = 0);
   Check(ScanUtf8('1 2 7', '%d%d%f', [@i, @j, @d]) = 3);
@@ -4837,16 +5024,15 @@ begin
   NotifyTestSpeed('StrInt64', 100000, 0, @Timer);
 end;
 
-function LowerCaseAscii7(const S: RawByteString): RawByteString;
+function LowerCaseAscii7(const S: RawByteString): RawUtf8;
 var
   Ch: AnsiChar;
   L: Integer;
   Source, Dest: PAnsiChar;
 begin
   L := Length(S);
-  SetLength(result, L);
+  Dest := FastSetString(result, L);
   Source := Pointer(S);
-  Dest := Pointer(result);
   while L <> 0 do
   begin
     Ch := Source^;
@@ -4975,9 +5161,7 @@ procedure TTestCoreBase._UTF8;
     CheckEqual(CP, C.CodePage, 'cpb');
     CheckEqual(CP, GetCodePage(A), 'cpc');
     {$endif HASCODEPAGE}
-    if CP = CP_UTF16 then
-      exit;
-    Check(length(W) = length(A));
+    CheckEqual(length(W), length(A));
     CheckUtf8(EqualBuf(W, A), 'CP%', [CP]);
   end;
 
@@ -5005,6 +5189,7 @@ var
   Unic: RawByteString;
   WA, HasValidUtf8Avx2: Boolean;
   rb1, rb2, rb3: RawByteString;
+  eng: TSynAnsiConvert;
 const
   ROWIDS: array[0..17] of PUtf8Char = ('id', 'ID', 'iD', 'rowid', 'ROWid',
     'ROWID', 'rowiD', 'ROWId', // ok
@@ -5368,11 +5553,40 @@ begin
   Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame4');
   Check(RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame4i');
   arr := CsvToRawUtf8DynArray('two,one,one');
+  CheckEqual(RawUtf8ArrayToCsv(arr), 'two,one,one');
+  CheckEqual(RawUtf8ArrayToCsv(arr, ''), 'twooneone');
+  CheckEqual(RawUtf8ArrayToCsv(arr, '/', {rev=}true), 'one/one/two');
   Check(not RawUtf8DynArrayEquals(arr, arr2), 'RawUtf8DynArrayEquals5');
   Check(RawUtf8DynArrayContains(arr, arr2), 'RawUtf8DynArrayContains5');
   Check(RawUtf8DynArrayContains(arr, arr2, {insens=}true), 'RawUtf8DynArrayContains5i');
   Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame5');
   Check(not RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame5i');
+  CheckEqual(Join([]), '');
+  CheckEqual(Join(['one']), 'one');
+  CheckEqual(Join(['one', 'two']), 'onetwo');
+  CheckEqual(Join(['', 'one', 'two']), 'onetwo');
+  CheckEqual(Join(['one', 'two', ' three ']), 'onetwo three ');
+  CheckEqual(Join(['one', 'two', '', 'three']), 'onetwothree');
+  CheckEqual(JoinCsv('', []), '');
+  CheckEqual(JoinCsv('', ['one']), 'one');
+  CheckEqual(JoinCsv('', ['one', 'two']), 'onetwo');
+  CheckEqual(JoinCsv('', ['', 'one', 'two']), 'onetwo');
+  CheckEqual(JoinCsv('', ['one', 'two', ' three ']), 'onetwo three ');
+  CheckEqual(JoinCsv('', ['one', 'two', '', 'three']), 'onetwothree');
+  CheckEqual(JoinCsv(',', []), '');
+  CheckEqual(JoinCsv(',', ['', '']), ',');
+  CheckEqual(JoinCsv(',', ['one']), 'one');
+  CheckEqual(JoinCsv(',', ['one', 'two']), 'one,two');
+  CheckEqual(JoinCsv(',', ['one', 'two', ' three ']), 'one,two, three ');
+  CheckEqual(JoinCsv(',', ['one', 'two', '', 'three']), 'one,two,,three');
+  CheckEqual(JoinCsv('//', ['one'], true), 'one');
+  CheckEqual(JoinCsv('//', ['one', 'two'], true), 'two//one');
+  CheckEqual(JoinCsv('//', ['1', '2', '3'], true), '3//2//1');
+  CheckEqual(JoinCsv(',', ['one', 'two'], {reverse=}true), 'two,one');
+  CheckEqual(JoinCsv(',', ['one', 'two', 'three '], true), 'three ,two,one');
+  CheckEqual(JoinCsv(',', ['one', 'two', ''], true), ',two,one');
+  CheckEqual(JoinCsv(',', ['one'], true), 'one');
+  CheckEqual(JoinCsv(',', ['', ''], true), ',');
   Finalize(arr);
   CsvToRawUtf8DynArray(res, ',', '', arr);
   Check(arr[0] = 'one');
@@ -5466,30 +5680,42 @@ begin
   Check(MakePath([1], false, '/') = '1');
   Check(MakePath([1], true, '/') = '1/');
   Check(MakePath([1, 2, '3'], false, '/') = '1/2/3');
+  Check(MakePath([1, '2/', 3], false, '/') = '1/2/3');
+  Check(MakePath(['1/', 2, 3], false, '/') = '1/2/3');
+  Check(MakePath([1, 2, '3/'], false, '/') = '1/2/3/');
+  Check(MakePath([1, '', 2, '3/'], false, '/') = '1/2/3/');
   Check(MakePath([1, 2, 3], true, '/') = '1/2/3/');
+  Check(MakePath([1, 2, '3'], true, '/') = '1/2/3/');
+  Check(MakePath([1, '2/', 3], true, '/') = '1/2/3/');
+  Check(MakePath(['1/', 2, 3], true, '/') = '1/2/3/');
+  Check(MakePath([1, 2, '3/'], true, '/') = '1/2/3/');
+  Check(MakePath([1, '', 2, '3/'], true, '/') = '1/2/3/');
   Check(MakeFileName([]) = '');
   Check(MakeFileName(['toto', 'doc']) = 'toto.doc');
   {$ifdef OSWINDOWS}
   Check(MakeFileName([1, 2, 'doc'], false) = '1\2\doc');
   Check(MakeFileName([1, 2, 'doc'], true) = '1\2.doc');
-  Check(MakeFileName([1, 2, '.doc'], true) = '1\2.doc');
+  Check(MakeFileName([1, '', 2, '.doc'], true) = '1\2.doc');
   {$else}
   Check(MakeFileName([1, 2, 'doc'], false) = '1/2/doc');
   Check(MakeFileName([1, 2, 'doc'], true) = '1/2.doc');
-  Check(MakeFileName([1, 2, '.doc'], true) = '1/2.doc');
+  Check(MakeFileName([1, '', 2, '.doc'], true) = '1/2.doc');
   {$endif OSWINDOWS}
-  Check(MakeCsv([]) = '');
-  Check(MakeCsv([], true) = '');
-  Check(MakeCsv([1]) = '1');
-  Check(MakeCsv([1], true, '+') = '1+');
-  Check(MakeCsv([1, 2, 3]) = '1,2,3');
-  Check(MakeCsv([1, '2', 3], true) = '1,2,3,');
-  Check(MakeCsv([1, '2 ,', 3]) = '1,2 ,3');
-  Check(Make([]) = '');
-  Check(Make([1]) = '1');
-  Check(Make([1, 2, 3]) = '123');
-  Check(Make([1, '2', 3]) = '123');
-  Check(Make([1, '2 ,', 3]) = '12 ,3');
+  CheckEqual(MakeCsv([]), '');
+  CheckEqual(MakeCsv([], true), '');
+  CheckEqual(MakeCsv([1]), '1');
+  CheckEqual(MakeCsv([1], true, '+'), '1+');
+  CheckEqual(MakeCsv([1, 2, 3]), '1,2,3');
+  CheckEqual(MakeCsv([1, '2', 3], true), '1,2,3,');
+  CheckEqual(MakeCsv([1, '2,', 3]), '1,2,3');
+  CheckEqual(MakeCsv([1, '2,', 3], true), '1,2,3,');
+  CheckEqual(MakeCsv([1, '2 ,', 3]), '1,2 ,3');
+  CheckEqual(Make([]), '');
+  CheckEqual(Make([1]), '1');
+  CheckEqual(Make([1, 2, 3]), '123');
+  CheckEqual(Make([1, '', 2, 3]), '123');
+  CheckEqual(Make([1, '2', 3]), '123');
+  CheckEqual(Make([1, '2 ,', 3]), '12 ,3');
   Check(MakeString([]) = '');
   Check(MakeString([1]) = '1');
   Check(MakeString([1, 2, 3]) = '123');
@@ -5561,30 +5787,30 @@ begin
   begin
     len := i * 5;
     W := RandomAnsi7(len);
-    Check(length(W) = len);
+    CheckEqual(length(W), len);
     lenup100 := len;
     if lenup100 > 100 then
       lenup100 := 100;
     str := Ansi7ToString(W); // should be fine on any code page
     if len > 0 then
     begin
-      Check(length(str) = len);
-      check(PosExString(str[1], str) = 1);
+      CheckEqual(length(str), len);
+      CheckEqual(PosExString(str[1], str), 1);
       if str[1] <> str[2] then
       begin
-        check(PosExString(str[2], str) = 2);
+        CheckEqual(PosExString(str[2], str), 2);
         if (str[1] <> str[2]) and
            (str[2] <> str[3]) and
            (str[1] <> str[3]) then
-          check(PosExString(str[3], str) = 3);
+          CheckEqual(PosExString(str[3], str), 3);
       end;
       for j := 1 to lenup100 do
       begin
-        check(PosExString(#13, str, j) = 0);
-        check(PosExString(str[j], str, j) = j);
+        CheckEqual(PosExString(#13, str, j), 0);
+        CheckEqual(PosExString(str[j], str, j), j);
         if (j > 1) and
            (str[j - 1] <> str[j]) then
-          check(PosExString(str[j], str, j - 1) = j);
+          CheckEqual(PosExString(str[j], str, j - 1), j);
         k := PosExString(str[j], str);
         check((k > 0) and
              (str[k] = str[j]));
@@ -5597,12 +5823,11 @@ begin
     Test(932, W);
     Test(949, W);
     Test(874, W);
-    Test(CP_UTF8, W);
+    Test(CP_UTF8, W); // note: CP_UTF16 is not a true ANSI charset for Test()
     L := Length(W);
     if L and 1 <> 0 then
       SetLength(W, L - 1); // force exact UTF-16 buffer length
-    Test(CP_UTF16, W);
-    W := WinAnsiString(RandomString(len));
+    W := RandomWinAnsi(len);
     U := WinAnsiToUtf8(W);
     check(IsValidUtf8(U), 'IsValidUtf8U');
     P := UniqueRawUtf8(U);
@@ -5610,22 +5835,22 @@ begin
     check(PosChar(P, #10) = nil);
     if len > 0 then
     begin
-      check(PosEx(U[1], U) = 1);
-      check(PosExChar(U[1], U) = 1);
+      CheckEqual(PosEx(U[1], U), 1);
+      CheckEqual(PosExChar(U[1], U), 1);
       check(PosChar(P, P[0]) = @P[0], 'PosChar0');
       if (len > 1) and
          (U[1] <> U[2]) then
       begin
-        check(PosEx(U[2], U) = 2);
-        check(PosExChar(U[2], U) = 2);
+        CheckEqual(PosEx(U[2], U), 2);
+        CheckEqual(PosExChar(U[2], U), 2);
         check(PosChar(P, P[1]) = @P[1], 'PosChar1');
         if (len > 2) and
            (U[1] <> U[2]) and
            (U[2] <> U[3]) and
            (U[1] <> U[3]) then
         begin
-          check(PosEx(U[3], U) = 3);
-          check(PosExChar(U[3], U) = 3);
+          CheckEqual(PosEx(U[3], U), 3);
+          CheckEqual(PosExChar(U[3], U), 3);
           check(PosChar(P, P[2]) = @P[2], 'PosChar2');
         end;
       end;
@@ -5634,7 +5859,7 @@ begin
       len120 := Utf8TruncatedLength(P, 120)
     else
       len120 := 0;
-    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer');
+    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer truncated');
     {$ifdef ASMX64AVXNOCONST}
     HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
     if HasValidUtf8Avx2 then
@@ -5646,15 +5871,15 @@ begin
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
       // validates with offset parameter
-      check(PosEx(#13, U, j) = 0);
-      check(PosEx(U[j], U, j) = j);
+      CheckEqual(PosEx(#13, U, j), 0);
+      CheckEqual(PosEx(U[j], U, j), j);
       if (j > 1) and
          (U[j - 1] <> U[j]) then
-        check(PosEx(U[j], U, j - 1) = j);
+        CheckEqual(PosEx(U[j], U, j - 1), j);
       k := PosEx(U[j], U);
       check((k > 0) and
             (U[k] = U[j]));
-      check(PosExChar(U[j], U) = k);
+      CheckEqual(PosExChar(U[j], U), k);
       if len120 <> 0 then
       begin
         bak := P[len120];
@@ -5676,28 +5901,27 @@ begin
     Check(IsValidJson(json1, true));
     Check(IsAnsiCompatible(U) or (PosEx('\u', json1) > 0));
     json2 := JsonReformat(json1, jsonNoEscapeUnicode);
-    Check(json2 = json, 'jeu2');
+    CheckEqual(json2, json, 'jeu2');
     Unic := Utf8DecodeToUnicodeRawByteString(U);
-    {$ifndef FPC_HAS_CPSTRING} // buggy FPC
-    Check(Utf8ToWinAnsi(U) = W);
-    Check(WinAnsiConvert.Utf8ToAnsi(WinAnsiConvert.AnsiToUtf8(W)) = W);
-    Check(WinAnsiConvert.UnicodeStringToAnsi(WinAnsiConvert.AnsiToUnicodeString(W)) = W);
+    CheckEqual(Utf8ToWinAnsi(U), W);
+    CheckEqual(WinAnsiConvert.Utf8ToAnsi(WinAnsiConvert.AnsiToUtf8(W)), W);
+    CheckEqual(WinAnsiConvert.UnicodeStringToAnsi(WinAnsiConvert.AnsiToUnicodeString(W)), W);
     if CurrentAnsiConvert.InheritsFrom(TSynAnsiFixedWidth) then
     begin
-      Check(CurrentAnsiConvert.Utf8ToAnsi(CurrentAnsiConvert.AnsiToUtf8(W)) = W);
-      Check(CurrentAnsiConvert.UnicodeStringToAnsi(CurrentAnsiConvert.AnsiToUnicodeString(W)) = W);
+      CheckEqual(CurrentAnsiConvert.Utf8ToAnsi(CurrentAnsiConvert.AnsiToUtf8(W)), W);
+      CheckEqual(CurrentAnsiConvert.UnicodeStringToAnsi(CurrentAnsiConvert.AnsiToUnicodeString(W)), W);
     end;
     res := RawUnicodeToUtf8(pointer(Unic), length(Unic) shr 1);
-    Check(res = U);
-    Check(WinAnsiConvert.UnicodeBufferToAnsi(pointer(Unic), length(Unic) shr 1) = W);
-    {$endif FPC_HAS_CPSTRING}
+    CheckEqual(res, U);
+    WinAnsiConvert.UnicodeBufferToAnsiVar(pointer(Unic), length(Unic) shr 1, rb1);
+    CheckEqual(rb1, W);
     WS := Utf8ToWideString(U);
-    Check(length(WS) = length(Unic) shr 1);
+    CheckEqual(length(WS), length(Unic) shr 1);
     if WS <> '' then
       Check(CompareMem(pointer(WS), pointer(Unic), length(WS) * SizeOf(WideChar)));
-    Check(integer(Utf8ToUnicodeLength(Pointer(U))) = length(WS));
+    CheckEqual(integer(Utf8ToUnicodeLength(Pointer(U))), length(WS));
     SU := Utf8ToSynUnicode(U);
-    Check(length(SU) = length(Unic) shr 1);
+    CheckEqual(length(SU), length(Unic) shr 1);
     if SU <> '' then
       Check(CompareMem(pointer(SU), pointer(Unic), length(Unic)), 'Utf8ToSU');
     WA := IsWinAnsi(pointer(Unic));
@@ -5722,7 +5946,7 @@ begin
       CheckEqual(Utf8CompareIOS(pointer(U), pointer(Up)), 0);
     //for j := 1 to 5000 do
     try
-      //W := WinAnsiString(RandomString(len));
+      //W := RandomWinAnsi(len);
       //U := WinAnsiToUtf8(W);
       //check(IsValidUtf8(U), 'IsValidUtf8U');
       //Up := mormot.core.unicode.UpperCase(U);
@@ -5760,7 +5984,7 @@ begin
     SetString(Up2, PAnsiChar(pointer(U)), L);
     L := Utf8UpperCopy(pointer(Up), pointer(U), L) - pointer(Up);
     Check(L <= length(U));
-    CheckEqual(ConvertCaseUtf8(Pointer(Up2), NormToUpperByte), L);
+    CheckEqual(ConvertCaseUtf8(pointer(Up2), pointer(Up2), NormToUpperByte), L);
     if Up <> '' then
       Check(EqualBuf(Up, Up2));
     if CurrentAnsiConvert.CodePage = CODEPAGE_US then
@@ -5834,7 +6058,8 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
-  U := TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsi(pointer(SU), length(SU));
+  TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsiVar(
+    pointer(SU), length(SU), RawByteString(U));
   Check(length(U) = 4);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
@@ -5851,15 +6076,55 @@ begin
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
-  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312_CHARSET
-  CheckEqual(length(rb1), 7);
-  SU2 := TSynAnsiConvert.Engine(936).AnsiToUnicodeString(rb1);
+  eng := TSynAnsiConvert.Engine(936);
+  Check(eng <> nil, 'Engine(936)');
+  rb1 := eng.UnicodeStringToAnsi(SU); // GB2312
+  CheckEqual(length(rb1), 7, 'cp936a');
+  SU2 := eng.AnsiToUnicodeString(rb1);
   Check(SU = SU2);
   rb1 := '';
-  rb1 := TSynAnsiConvert.Engine(936).Utf8ToAnsi(U);
+  rb1 := eng.Utf8ToAnsi(U);
   CheckEqual(length(rb1), 7);
-  U2 := TSynAnsiConvert.Engine(936).AnsiToUtf8(rb1);
+  U2 := eng.AnsiToUtf8(rb1);
   CheckEqual(U, U2);
+  eng := TSynAnsiConvert.Engine(54936);
+  Check(eng <> nil, 'Engine(54936)');
+  rb1 := eng.UnicodeStringToAnsi(SU); // GB18030
+  if rb1 <> '' then // some Windows versions won't support this code page
+  begin
+    CheckEqual(length(rb1), 7, 'cp54936a');
+    SU2 := eng.AnsiToUnicodeString(rb1);
+    Check(SU = SU2, 'cp54936b');
+    rb1 := '';
+    rb1 := eng.Utf8ToAnsi(U);
+    CheckEqual(length(rb1), 7, 'cp54936c');
+    U2 := eng.AnsiToUtf8(rb1);
+    CheckEqual(U, U2, 'cp54936d');
+    {$ifdef HASCODEPAGE}
+    rb2 := U;
+    CheckEqual(length(rb2), 9);
+    SetCodePage(rb2, 54936, {convert=}true);
+    CheckEqual(length(u), 9);
+    CheckEqual(length(rb1), 7);
+    CheckEqual(length(rb2), 7);
+    Check(rb1 = rb2, 'setcodepage');
+    Check(SortDynArrayRawByteString(rb1, rb2) = 0);
+    {$endif HASCODEPAGE}
+    SetLength(U, 4);
+    PCardinal(U)^ := $A59AAAF0; // valid in GB18030 only
+    SU := Utf8ToSynUnicode(U);  // 69 D8 A5 DE , UTF16, Code Point: \uD869\uDEA5
+    CheckEqual(PCardinal(SU)^, $DEA5D869);
+    RB1 := eng.Utf8ToAnsi(U);
+    Check((RB1 <> '') and (PCardinal(RB1)^ = $37EE3598), 'Utf8ToAnsi');
+    RB2 := eng.UnicodeStringToAnsi(SU);
+    Check(SortDynArrayRawByteString(rb1, rb2) = 0, 'UnicodeStringToAnsi');
+    U2 := eng.AnsiToUtf8(RB1);
+    CheckEqual(U2, U, 'AnsiToUtf8');
+  end;
+  Check(CodePageToText(CP_UTF8) = 'utf8');
+  Check(CodePageToText(CP_UTF16) = 'utf16le');
+  Check(CodePageToText(CP_WINANSI) = 'ms1252');
+  Check(CodePageToText(54936) = 'gb18030');
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
@@ -5978,6 +6243,547 @@ begin
       CheckTrimCopy(' 234 67 ', i, j);
       CheckTrimCopy(' 234 67 ', i, maxInt);
     end;
+end;
+
+procedure TTestCoreBase.Charsets;
+
+  procedure CheckCodePage(const name, utf, ref: RawUtf8; cp: cardinal);
+  // see https://github.com/python/cpython/tree/main/Lib/test/cjkencodings
+  var
+    msg: string;
+    su, su2: SynUnicode;
+    ra, a, a2: RawByteString;
+    ru, u, u2: RawUtf8;
+    eng: TSynAnsiConvert;
+    {$ifdef HASCODEPAGE}
+    w: WideString;
+    {$endif HASCODEPAGE}
+  begin
+    FormatString('% (cp=%)', [name, cp], msg);
+    ru := Base64ToBin(utf);
+    ra := Base64ToBin(ref);
+    {
+    u := StringFromFile('/home/ab/dev/lib2/backup/cjkencodings/' + name + '-utf8.txt');
+    CheckEqual(u, ru, name);
+    a := StringFromFile('/home/ab/dev/lib2/backup/cjkencodings/' + name + '.txt');
+    CheckEqual(a, ra, name);
+    }
+    FakeCodePage(RawByteString(ru), CP_UTF8);
+    FakeCodePage(ra, cp);
+    if CheckFailed(ru <> '', msg) or
+       CheckFailed(ra <> '', msg) then
+      exit;
+    Check(length(ru) > length(ra), 'utf8 oversize');
+    // validate UTF-8 to/from UTF-16 conversion
+    su := Utf8ToSynUnicode(ru);
+    Check(su <> '', msg);
+    CheckEqual(SynUnicodeToUtf8(su), ru, 'utf8');
+    {$ifdef HASCODEPAGE} // old Delphi RTL does not decode UTF-16 surrogates
+    w := UTF8Decode(ru);
+    CheckEqual(length(w), length(su), 'rtl1');
+    Check(CompareMem(pointer(w), pointer(su), length(w)), 'rtl2');
+    {$endif HASCODEPAGE}
+    {$ifdef OSWINDOWS}
+    // skip old Windows (XP/Vista/Seven) which may miss some/most encodings
+    if OSVersion < wTen then
+      exit; // seems not available without a specific language pack
+    {$endif OSWINDOWS}
+    // validate mORMot conversion
+    eng := TSynAnsiConvert.Engine(cp);
+    Check(eng <> nil, 'eng1');
+    CheckEqual(eng.CodePage, cp, 'eng2');
+    // with ASCII-7 chars
+    su2 := eng.AnsiToUnicodeString('abcd efgh');
+    Check(su2 = 'abcd efgh', msg);
+    a := eng.UnicodeStringToAnsi(su2);
+    {$ifdef OSPOSIX}
+    if cp = 50225 then // iso2022_kr
+      {$ifdef OSDARWIN}
+      exit;  // MacOS ICU seems to be not as expected with escape chars
+      {$else}
+      if not CheckFailed(a <> '', 'kr1') then
+        if not CheckFailed(PCardinal(a)^ = 1126769691, 'kr2') then
+          delete(a, 1, 4); // delete IEC 2022 escape char
+      {$endif OSDARWIN}
+    {$endif OSPOSIX}
+    CheckEqual(a, 'abcd efgh');
+    // don't even try on unsupported charsets
+    case cp of
+      951, // big5hkscs seems unstandardized on Windows: no matching code page
+      50220, 50222, 51949:
+        // those codepages fail on both Windows and Debian ICU
+        // -> some inacurracy in Unicode_CodePageName() ?
+        exit;
+      // mORMot is therefore currently validated against:
+      // hz (cp=52936) gb18030 (cp=54936) big5 (cp=950) cp949 (cp=949)
+      // euc_jp (cp=20932) gb2312 (cp=936) gbk (cp=936) iso2022_kr (cp=50225)
+      // johab (cp=1361) shift_jis (cp=932)
+      // -> we would need some input from native speakers of missing charsets
+    end;
+    {$ifdef OSPOSIX}
+    if (name = 'hz') and
+       not icu.IsAvailable then // FPC RTL iconv is not enough about HZ-GB2312
+      exit;
+    {$endif OSPOSIX}
+    // validate Unicode RTL conversion
+    {$ifdef HASCODEPAGE}
+    {$ifdef OSPOSIX}
+    if name <> 'hz' then // HZ-GB2312 requires ICU - skip FPC RTL iconv
+    {$endif OSPOSIX}
+    begin
+      CheckEqual(GetCodePage(ru), CP_UTF8);
+      a := ru;
+      SetCodePage(a, cp, {convert=}true);
+      CheckEqual(a, ra, name);
+    end;
+    {$endif HASCODEPAGE}
+    // with variable-length encoding
+    a := eng.Utf8ToAnsi(ru);
+    CheckEqual(a, ra, name);
+    {$ifdef OSWINDOWS}
+    if cp = 1361 then
+      exit; // some casing issue to investigate on Windows (not with ICU)
+    {$endif OSWINDOWS}
+    su2 := eng.AnsiToUnicodeString(ra);
+    Check(su = su2, msg);
+    eng := TSynAnsiConvert.Engine(cp); // validate "last" cache
+    Check(eng <> nil, 'eng3');
+    CheckEqual(eng.CodePage, cp, 'eng4');
+    u2 := eng.AnsiToUtf8(a);
+    Check(u2 = ru, msg);
+    a2 := eng.UnicodeStringToAnsi(su);
+    CheckEqual(a2, a, name);
+    u := eng.AnsiToUtf8(ra);
+    CheckEqual(u, ru, name);
+  end;
+
+begin
+  // from https://github.com/python/cpython/tree/main/Lib/test/cjkencodings
+  // - base-64 encoded reference as 7-bit text to please all Delphi/FPC versions
+  // - note that python code page naming may be inconsistent with ICU
+  CheckCodePage('hz',
+    'VGhpcyBzZW50ZW5jZSBpcyBpbiBBU0NJSS4KVGhlIG5leHQgc2VudGVuY2UgaXMg' +
+    'aW4gR0Iu5bex5omA5LiN5qyy77yM5Yu/5pa95pa85Lq644CCQnllLgo=',
+    'VGhpcyBzZW50ZW5jZSBpcyBpbiBBU0NJSS4KVGhlIG5leHQgc2VudGVuY2UgaXMg' +
+    'aW4gR0Iufns8Okt5MjtTeyMsTnBKKWw2SEshI359QnllLgo=', 52936);
+  CheckCodePage('gb18030',
+    'UHl0aG9u77yI5rS+5qOu77yJ6K+t6KiA5piv5LiA56eN5Yqf6IO95by65aSn6ICM' +
+    '5a6M5ZaE55qE6YCa55So5Z6L6K6h566X5py656iL5bqP6K6+6K6h6K+t6KiA77yM' +
+    'CuW3sue7j+WFt+acieWNgeWkmuW5tOeahOWPkeWxleWOhuWPsu+8jOaIkOeGn+S4' +
+    'lOeos+WumuOAgui/meenjeivreiogOWFt+aciemdnuW4uOeugOaNt+iAjOa4heaZ' +
+    'sArnmoTor63ms5XnibnngrnvvIzpgILlkIjlrozmiJDlkITnp43pq5jlsYLku7vl' +
+    'iqHvvIzlh6DkuY7lj6/ku6XlnKjmiYDmnInnmoTmk43kvZzns7vnu5/kuK0K6L+Q' +
+    '6KGM44CC6L+Z56eN6K+t6KiA566A5Y2V6ICM5by65aSn77yM6YCC5ZCI5ZCE56eN' +
+    '5Lq65aOr5a2m5Lmg5L2/55So44CC55uu5YmN77yM5Z+65LqO6L+ZCuenjeivreio' +
+    'gOeahOebuOWFs+aKgOacr+ato+WcqOmjnumAn+eahOWPkeWxle+8jOeUqOaIt+aV' +
+    'sOmHj+aApeWJp+aJqeWkp++8jOebuOWFs+eahOi1hOa6kOmdnuW4uOWkmuOAggrl' +
+    'poLkvZXlnKggUHl0aG9uIOS4reS9v+eUqOaXouacieeahCBDIGxpYnJhcnk/CuOA' +
+    'gOWcqOizh+ioiuenkeaKgOW/q+mAn+eZvOWxleeahOS7iuWkqSwg6ZaL55m85Y+K' +
+    '5ris6Kmm6Luf6auU55qE6YCf5bqm5piv5LiN5a655b+96KaW55qECuiqsumhjC4g' +
+    '54K65Yqg5b+r6ZaL55m85Y+K5ris6Kmm55qE6YCf5bqmLCDmiJHlgJHkvr/luLjl' +
+    'uIzmnJvog73liKnnlKjkuIDkupvlt7Lplovnmbzlpb3nmoQKbGlicmFyeSwg5Lim' +
+    '5pyJ5LiA5YCLIGZhc3QgcHJvdG90eXBpbmcg55qEIHByb2dyYW1taW5nIGxhbmd1' +
+    'YWdlIOWPrwrkvpvkvb/nlKguIOebruWJjeacieioseioseWkmuWkmueahCBsaWJy' +
+    'YXJ5IOaYr+S7pSBDIOWvq+aIkCwg6ICMIFB5dGhvbiDmmK/kuIDlgIsKZmFzdCBw' +
+    'cm90b3R5cGluZyDnmoQgcHJvZ3JhbW1pbmcgbGFuZ3VhZ2UuIOaVheaIkeWAkeW4' +
+    'jOacm+iDveWwh+aXouacieeahApDIGxpYnJhcnkg5ou/5YiwIFB5dGhvbiDnmoTn' +
+    'krDlooPkuK3muKzoqablj4rmlbTlkIguIOWFtuS4reacgOS4u+imgeS5n+aYr+aI' +
+    'keWAkeaJgAropoHoqI7oq5bnmoTllY/poYzlsLHmmK86Cu2MjOydtOyNrOydgCDq' +
+    'sJXroKXtlZwg6riw64ql7J2EIOyngOuLjCDrspTsmqkg7Lu07ZOo7YSwIO2UhOuh' +
+    'nOq3uOuemOuwjSDslrjslrTri6QuCgo=',
+    'UHl0aG9uo6jFycmto6nT79HUysfSu9bWuabE3Me/tPO2+M3qyca1xM2o08PQzbzG' +
+    'y+O7+rPM0PLJ6LzG0+/R1KOsCtLRvq2+39PQyq624MTqtcS3otW5wPrKt6Oss8nK' +
+    '7MfSzsi2qKGj1eLW1tPv0dS+39PQt8ezo7zyvd22+MflzvoKtcTT77eozNi146Os' +
+    'ysq6z83qs8m499bWuN+y48jOzvGjrLy4uvW/ydLU1NrL+dPQtcSy2df3z7XNs9bQ' +
+    'CtTL0NCho9Xi1tbT79HUvPK1pbb4x7+086Osysq6z7j31tbIy8q/0afPsMq508Oh' +
+    'o8S/x7CjrLv509rV4grW1tPv0dS1xM/gudi8vMr11f3U2rfJy9m1xLei1bmjrNPD' +
+    'u6fK/cG/vLG+58CptPOjrM/gudi1xNfK1LS3x7OjtuChowrI57rO1NogUHl0aG9u' +
+    'INbQyrnTw7zI09C1xCBDIGxpYnJhcnk/CqGh1NrZWdONv8a8vL/sy9mwbNW5tcS9' +
+    '8czsLCDpX7BsvLCcedSH3Jvzd7XEy9m2yMrHsrvI3br20pW1xArVbu59LiCe6bzT' +
+    'v+zpX7BsvLCcedSHtcTL2bbILCDO0oKDseOzo8+jzfvE3MD708PSu9Cp0tHpX7Bs' +
+    'usO1xApsaWJyYXJ5LCCBS9PQ0ruCgCBmYXN0IHByb3RvdHlwaW5nILXEIHByb2dy' +
+    'YW1taW5nIGxhbmd1YWdlIL/JCrmpyrnTwy4gxL/HsNPQ1FPUU7bgtuC1xCBsaWJy' +
+    'YXJ5IMrH0tQgQyCMkbPJLCC2+CBQeXRob24gysfSu4KACmZhc3QgcHJvdG90eXBp' +
+    'bmcgtcQgcHJvZ3JhbW1pbmcgbGFuZ3VhZ2UuILnKztKCg8+jzfvE3IyivMjT0LXE' +
+    'CkMgbGlicmFyeSDEw7W9IFB5dGhvbiC1xK1ovrPW0Jx51Ie8sNX7us8uIMbk1tDX' +
+    '7tb30qrSssrHztKCg8v5CtKq05HVk7XEhpbufb7Nysc6CoM1xzGDM5ozgzKxMYMz' +
+    'lTEggjfRNoMwjDSDNoQzIII4iTWCOPs2gzOVNSCDM9UxgjmBNSCDMP05gzOGMCCD' +
+    'NNwzgzX2N4M1lzUggzX5NYMwkTmCOIM5gjn8M4Mw8DQggzLrOYMy6zWCOYM5LgoK', 54936);
+  CheckCodePage('big5',
+    '5aaC5L2V5ZyoIFB5dGhvbiDkuK3kvb/nlKjml6LmnInnmoQgQyBsaWJyYXJ5Pwrj' +
+    'gIDlnKjos4foqIrnp5HmioDlv6vpgJ/nmbzlsZXnmoTku4rlpKksIOmWi+eZvOWP' +
+    'iua4rOippui7n+mrlOeahOmAn+W6puaYr+S4jeWuueW/veimlueahAroqrLpoYwu' +
+    'IOeCuuWKoOW/q+mWi+eZvOWPiua4rOippueahOmAn+W6piwg5oiR5YCR5L6/5bi4' +
+    '5biM5pyb6IO95Yip55So5LiA5Lqb5bey6ZaL55m85aW955qECmxpYnJhcnksIOS4' +
+    'puacieS4gOWAiyBmYXN0IHByb3RvdHlwaW5nIOeahCBwcm9ncmFtbWluZyBsYW5n' +
+    'dWFnZSDlj68K5L6b5L2/55SoLiDnm67liY3mnInoqLHoqLHlpJrlpJrnmoQgbGli' +
+    'cmFyeSDmmK/ku6UgQyDlr6vmiJAsIOiAjCBQeXRob24g5piv5LiA5YCLCmZhc3Qg' +
+    'cHJvdG90eXBpbmcg55qEIHByb2dyYW1taW5nIGxhbmd1YWdlLiDmlYXmiJHlgJHl' +
+    'uIzmnJvog73lsIfml6LmnInnmoQKQyBsaWJyYXJ5IOaLv+WIsCBQeXRob24g55qE' +
+    '55Kw5aKD5Lit5ris6Kmm5Y+K5pW05ZCILiDlhbbkuK3mnIDkuLvopoHkuZ/mmK/m' +
+    'iJHlgJHmiYAK6KaB6KiO6KuW55qE5ZWP6aGM5bCx5pivOgoK',
+    'pnCm86ZiIFB5dGhvbiCkpKjPpc6sSqazqrogQyBsaWJyYXJ5PwqhQKZiuOqwVKzs' +
+    'p96n1rN0tW+uaaq6pLWk0Swgtn21b6TOtPq41bNuxemqurN0q9esT6SjrmWpv7X4' +
+    'qroKvdLDRC4grLClW6fWtn21b6TOtPq41aq6s3Sr1ywgp9qtzKtLsWCnxrHmr+Cn' +
+    'UaXOpECox6R3tn21b6ZuqroKbGlicmFyeSwgqMOms6RArdMgZmFzdCBwcm90b3R5' +
+    'cGluZyCquiBwcm9ncmFtbWluZyBsYW5ndWFnZSClaQqo0ajPpc4uIKXYq2Wms7Nc' +
+    's1ymaKZoqrogbGlicmFyeSCsT6VIIEMgvGemqCwgptMgUHl0aG9uIKxPpECt0wpm' +
+    'YXN0IHByb3RvdHlwaW5nIKq6IHByb2dyYW1taW5nIGxhbmd1YWdlLiCsR6farcyn' +
+    'xrHmr+CxTqxKprOqugpDIGxpYnJhcnkgrrOo7CBQeXRob24gqrrA9LnSpKS0+rjV' +
+    'pM6+46ZYLiCo5KSks8ylRK1upF2sT6farcyp0gqtbrBRvdequrDdw0S0TqxPOgoK',  950);
+  CheckCodePage('big5hkscs',
+    '8KCEjMSa6bWu572T5rSGCsOKw4rMhMOqIMOqw6rMhAo=',
+    'iEWIXIpzi9qN2AqIZohiiKcgiKeIowo=', 951);
+  CheckCodePage('cp949', // with Python, this means
+    '65ig67Cp6rCB7ZWYIO2OsuyLnOy9nOudvAoK44mv44mv64KpISEg5Zug5Lmd5pyI' +
+    '7Yyo66+k66aU6raIIOKToeKTlu2bgMK/wr/CvyDquI3rkpkg4pOU646oIOOJry4g' +
+    'Lgrkup7smIHik5TriqXtmrkgLiAuIC4gLiDshJzsmrjrpIQg646Q7ZWZ5LmZIOWu' +
+    'tu2bgCAhICEgIeOFoC7jhaAK7Z2Q7Z2Q7Z2QIOOEseOEseOEseKYhuOFoF/jhaAg' +
+    '7Ja066aoIO2DuOy9sOq4kCDrjozsnZEg7LmR5Lmd65Ok5LmZIOOJr+uTnOq4kArs' +
+    'hKTrpowg5a627ZuAIC4gLiAuIC4g6rW07JWg7ImMIOKTlOq2iCDik6HrppjjibHq' +
+    'uJAg5Zug5LuB5bed76aB5Lit6rmM7Ka8CuyZgOySgO2bgCAhICEg5Lqe7JiB4pOU' +
+    'IOWutuuKpeq2iCDimIbkuIrqtIAg7JeG64ql6raI64qlIOS6nuuKpeuSiO2bgCDq' +
+    'uIDslaDrk7QK4pOh66Ck65OA5LmdIOyLgO2SlOyItO2bgCDslrTrpqgg5Zug5LuB' +
+    '5bed76aB5Lit7IuB4pGo65Ok7JWcISEg44mv44mv64Kp4pmhIOKMkuKMkioKCg==',
+    'jGO55rCix88gvIS9w8TdtvMKCqjAqMCzsyEhIOzXzvrqxcbQkuaQcLHFIKjeqNPE' +
+    'UqKvoq+iryCx4IqWIKjRtbMgqMAuIC4K5Ky/tajRtMnIwiAuIC4gLiAuILytv++3' +
+    '7yC1r8fQ6+AgyqvEUiAhICEgIaTQLqTQCsjlyOXI5SCkoaShpKGh2aTQX6TQIL7u' +
+    'kIogxcvE4oNPILWuwMAgr2jO+rXp6+AgqMC15YNPCryzkGogyqvEUiAuIC4gLiAu' +
+    'ILG8vtaaZiCo0bHFIKjekHSowoNPIOzX7NL0ueX88emx7qOOCr/NvqzEUiAhICEg' +
+    '5Ky/tajRIMqrtMmxxSCh2d++sPwgvvi0ybHFtMkg5Ky0ybXYxFIgsdu+1orbCqje' +
+    't8G14M76IJrDx7S9pMRSIL7ukIog7Nfs0vS55fzx6ZrEqO+16Z3aISEgqMCowLOz' +
+    'or0godKh0ioKCg==', 949);
+  CheckCodePage('euc_jp',
+    'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
+    '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
+    'c3VtIOOBr+aVmeiCsueUqOOBruODl+ODreOCsOODqeODn+ODs+OCsOiogOiqnuOA' +
+    'jEFCQ+OAjeOBrumWi+eZuuOBq+WPguWKoOOBl+OBpuOBhOOBvuOBl+OBn+OBjOOA' +
+    'gUFCQyDjga/lrp/nlKjkuIrjga7nm67nmoTjgavjga/jgYLjgb7jgorpganjgZfj' +
+    'gabjgYTjgb7jgZvjgpPjgafjgZfjgZ/jgIIK44GT44Gu44Gf44KB44CBR3VpZG8g' +
+    '44Gv44KI44KK5a6f55So55qE44Gq44OX44Ot44Kw44Op44Of44Oz44Kw6KiA6Kqe' +
+    '44Gu6ZaL55m644KS6ZaL5aeL44GX44CB6Iux5Zu9IEJCUyDmlL7pgIHjga7jgrPj' +
+    'g6Hjg4fjgqPnlarntYTjgIzjg6Ljg7Pjg4bjgqMg44OR44Kk44K944Oz44CN44Gu' +
+    '44OV44Kh44Oz44Gn44GC44KLIEd1aWRvIOOBr+OBk+OBruiogOiqnuOCkuOAjFB5' +
+    'dGhvbuOAjeOBqOWQjeOBpeOBkeOBvuOBl+OBn+OAggrjgZPjga7jgojjgYbjgaro' +
+    'g4zmma/jgYvjgonnlJ/jgb7jgozjgZ8gUHl0aG9uIOOBruiogOiqnuioreioiOOB' +
+    'r+OAgeOAjOOCt+ODs+ODl+ODq+OAjeOBp+OAjOe/kuW+l+OBjOWuueaYk+OAjeOB' +
+    'qOOBhOOBhuebruaomeOBq+mHjeeCueOBjOe9ruOBi+OCjOOBpuOBhOOBvuOBmeOA' +
+    'ggrlpJrjgY/jga7jgrnjgq/jg6rjg5fjg4jns7voqIDoqp7jgafjga/jg6bjg7zj' +
+    'grbjga7nm67lhYjjga7liKnkvr/mgKfjgpLlhKrlhYjjgZfjgaboibLjgIXjgarm' +
+    'qZ/og73jgpLoqIDoqp7opoHntKDjgajjgZfjgablj5bjgorlhaXjgozjgovloLTl' +
+    'kIjjgYzlpJrjgYTjga7jgafjgZnjgYzjgIFQeXRob24g44Gn44Gv44Gd44GG44GE' +
+    '44Gj44Gf5bCP57Sw5bel44GM6L+95Yqg44GV44KM44KL44GT44Go44Gv44GC44G+' +
+    '44KK44GC44KK44G+44Gb44KT44CCCuiogOiqnuiHquS9k+OBruapn+iDveOBr+ac' +
+    'gOWwj+mZkOOBq+aKvOOBleOBiOOAgeW/heimgeOBquapn+iDveOBr+aLoeW8teOD' +
+    'ouOCuOODpeODvOODq+OBqOOBl+OBpui/veWKoOOBmeOCi+OAgeOBqOOBhOOBhuOB' +
+    'ruOBjCBQeXRob24g44Gu44Od44Oq44K344O844Gn44GZ44CCCgo=',
+    'UHl0aG9uIKTOs6vIr6TPoaIxOTkwIMevpLSk7aSrpOmzq7vPpLWk7KTGpKSk3qS5' +
+    'oaMKs6vIr7zUpM4gR3VpZG8gdmFuIFJvc3N1bSCkz7a1sOnN0aTOpdel7aWwpeml' +
+    '36XzpbC4wLjsodZBQkOh16TOs6vIr6TLu7Kyw6S3pMakpKTepLekv6SsoaJBQkMg' +
+    'pM+8ws3RvuWkzszcxaqky6TPpKKk3qTqxaykt6TGpKSk3qS7pPOkx6S3pL+howqk' +
+    's6TOpL+k4aGiR3VpZG8gpM+k6KTqvMLN0cWqpMql16XtpbCl6aXfpfOlsLjAuOyk' +
+    'zrOryK+k8rOru8+kt6GisdG58SBCQlMgyvzB96TOpbOl4aXHpaPI1sHIodal4qXz' +
+    'pcaloyCl0aWkpb2l86HXpM6l1aWhpfOkx6SipOsgR3VpZG8gpM+ks6TOuMC47KTy' +
+    'odZQeXRob26h16TIzL6kxaSxpN6kt6S/oaMKpLOkzqTopKakysfYt8qkq6TpwLik' +
+    '3qTspL8gUHl0aG9uIKTOuMC47MDft9ekz6Giodalt6Xzpdel66HXpMeh1r2sxsCk' +
+    'rM3GsNeh16TIpKSkpszcybiky73FxcCkrMPWpKuk7KTGpKSk3qS5oaMKwr+kr6TO' +
+    'pbmlr6XqpdelyLfPuMC47KTHpM+l5qG8pbakzszcwOikzs34ytjAraTyzaXA6KS3' +
+    'pMa/p6G5pMq1oce9pPK4wLjszdfBx6TIpLekxrzopOrG/qTspOu+7LnnpKzCv6Sk' +
+    'pM6kx6S5pKyholB5dGhvbiCkx6TPpL2kpqSkpMOkv76uutm5qaSsxMmyw6S1pOyk' +
+    '66SzpMikz6SipN6k6qSipOqk3qS7pPOhowq4wLjsvKvCzqTOtaHHvaTPuse+rrjC' +
+    'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
+    'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCg==', 20932);
+  CheckCodePage('euc_jisx0213',
+    'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
+    '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
+    'c3VtIOOBr+aVmeiCsueUqOOBruODl+ODreOCsOODqeODn+ODs+OCsOiogOiqnuOA' +
+    'jEFCQ+OAjeOBrumWi+eZuuOBq+WPguWKoOOBl+OBpuOBhOOBvuOBl+OBn+OBjOOA' +
+    'gUFCQyDjga/lrp/nlKjkuIrjga7nm67nmoTjgavjga/jgYLjgb7jgorpganjgZfj' +
+    'gabjgYTjgb7jgZvjgpPjgafjgZfjgZ/jgIIK44GT44Gu44Gf44KB44CBR3VpZG8g' +
+    '44Gv44KI44KK5a6f55So55qE44Gq44OX44Ot44Kw44Op44Of44Oz44Kw6KiA6Kqe' +
+    '44Gu6ZaL55m644KS6ZaL5aeL44GX44CB6Iux5Zu9IEJCUyDmlL7pgIHjga7jgrPj' +
+    'g6Hjg4fjgqPnlarntYTjgIzjg6Ljg7Pjg4bjgqMg44OR44Kk44K944Oz44CN44Gu' +
+    '44OV44Kh44Oz44Gn44GC44KLIEd1aWRvIOOBr+OBk+OBruiogOiqnuOCkuOAjFB5' +
+    'dGhvbuOAjeOBqOWQjeOBpeOBkeOBvuOBl+OBn+OAggrjgZPjga7jgojjgYbjgaro' +
+    'g4zmma/jgYvjgonnlJ/jgb7jgozjgZ8gUHl0aG9uIOOBruiogOiqnuioreioiOOB' +
+    'r+OAgeOAjOOCt+ODs+ODl+ODq+OAjeOBp+OAjOe/kuW+l+OBjOWuueaYk+OAjeOB' +
+    'qOOBhOOBhuebruaomeOBq+mHjeeCueOBjOe9ruOBi+OCjOOBpuOBhOOBvuOBmeOA' +
+    'ggrlpJrjgY/jga7jgrnjgq/jg6rjg5fjg4jns7voqIDoqp7jgafjga/jg6bjg7zj' +
+    'grbjga7nm67lhYjjga7liKnkvr/mgKfjgpLlhKrlhYjjgZfjgaboibLjgIXjgarm' +
+    'qZ/og73jgpLoqIDoqp7opoHntKDjgajjgZfjgablj5bjgorlhaXjgozjgovloLTl' +
+    'kIjjgYzlpJrjgYTjga7jgafjgZnjgYzjgIFQeXRob24g44Gn44Gv44Gd44GG44GE' +
+    '44Gj44Gf5bCP57Sw5bel44GM6L+95Yqg44GV44KM44KL44GT44Go44Gv44GC44G+' +
+    '44KK44GC44KK44G+44Gb44KT44CCCuiogOiqnuiHquS9k+OBruapn+iDveOBr+ac' +
+    'gOWwj+mZkOOBq+aKvOOBleOBiOOAgeW/heimgeOBquapn+iDveOBr+aLoeW8teOD' +
+    'ouOCuOODpeODvOODq+OBqOOBl+OBpui/veWKoOOBmeOCi+OAgeOBqOOBhOOBhuOB' +
+    'ruOBjCBQeXRob24g44Gu44Od44Oq44K344O844Gn44GZ44CCCgrjg47jgYvjgpog' +
+    '44OI44KaIOODiOOCre+otu+ouSDwoZq08KqOjCDpuoDpvYHwqZuwCg==',
+    'UHl0aG9uIKTOs6vIr6TPoaIxOTkwIMevpLSk7aSrpOmzq7vPpLWk7KTGpKSk3qS5' +
+    'oaMKs6vIr7zUpM4gR3VpZG8gdmFuIFJvc3N1bSCkz7a1sOnN0aTOpdel7aWwpeml' +
+    '36XzpbC4wLjsodZBQkOh16TOs6vIr6TLu7Kyw6S3pMakpKTepLekv6SsoaJBQkMg' +
+    'pM+8ws3RvuWkzszcxaqky6TPpKKk3qTqxaykt6TGpKSk3qS7pPOkx6S3pL+howqk' +
+    's6TOpL+k4aGiR3VpZG8gpM+k6KTqvMLN0cWqpMql16XtpbCl6aXfpfOlsLjAuOyk' +
+    'zrOryK+k8rOru8+kt6GisdG58SBCQlMgyvzB96TOpbOl4aXHpaPI1sHIodal4qXz' +
+    'pcaloyCl0aWkpb2l86HXpM6l1aWhpfOkx6SipOsgR3VpZG8gpM+ks6TOuMC47KTy' +
+    'odZQeXRob26h16TIzL6kxaSxpN6kt6S/oaMKpLOkzqTopKakysfYt8qkq6TpwLik' +
+    '3qTspL8gUHl0aG9uIKTOuMC47MDft9ekz6Giodalt6Xzpdel66HXpMeh1r2sxsCk' +
+    'rM3GsNeh16TIpKSkpszcybiky73FxcCkrMPWpKuk7KTGpKSk3qS5oaMKwr+kr6TO' +
+    'pbmlr6XqpdelyLfPuMC47KTHpM+l5qG8pbakzszcwOikzs34ytjAraTyzaXA6KS3' +
+    'pMa/p6G5pMq1oce9pPK4wLjszdfBx6TIpLekxrzopOrG/qTspOu+7LnnpKzCv6Sk' +
+    'pM6kx6S5pKyholB5dGhvbiCkx6TPpL2kpqSkpMOkv76uutm5qaSsxMmyw6S1pOyk' +
+    '66SzpMikz6SipN6k6qSipOqk3qS7pPOhowq4wLjsvKvCzqTOtaHHvaTPuse+rrjC' +
+    'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
+    'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCqXOpPcgpf4g' +
+    'pcilra+sr9ogz+OP/tggj/7Uj/7oj/zWCg==', 50220);
+  CheckCodePage('euc_kr',
+    '4peOIO2MjOydtOyNrChQeXRob24p7J2AIOuwsOyasOq4sCDsib3qs6AsIOqwleug' +
+    'pe2VnCDtlITroZzqt7jrnpjrsI0g7Ja47Ja07J6F64uI64ukLiDtjIzsnbTsjazs' +
+    'nYAK7Zqo7Jyo7KCB7J24IOqzoOyImOykgCDrjbDsnbTthLAg6rWs7KGw7JmAIOqw' +
+    'hOuLqO2VmOyngOunjCDtmqjsnKjsoIHsnbgg6rCd7LK07KeA7Zal7ZSE66Gc6re4' +
+    '656Y67CN7J2ECuyngOybkO2VqeuLiOuLpC4g7YyM7J207I2s7J2YIOyasOyVhCjl' +
+    'hKrpm4Up7ZWcIOusuOuyleqzvCDrj5nsoIEg7YOA7J207ZWRLCDqt7jrpqzqs6Ag' +
+    '7J247YSw7ZSE66as7YyFCu2ZmOqyveydgCDtjIzsnbTsjazsnYQg7Iqk7YGs66a9' +
+    '7YyF6rO8IOyXrOufrCDrtoTslbzsl5DshJzsmYAg64yA67aA67aE7J2YIO2UjOue' +
+    'q+2PvOyXkOyEnOydmCDruaDrpbgK7JWg7ZSM66as7LyA7J207IWYIOqwnOuwnOyd' +
+    'hCDtlaAg7IiYIOyeiOuKlCDsnbTsg4HsoIHsnbgg7Ja47Ja066GcIOunjOuTpOyW' +
+    'tOykjeuLiOuLpC4KCuKYhuyyq+qwgOuBnTog64Kg7JWE6528IOyTlOyTlOyTqX4g' +
+    '64uB7YG8ISDrnL3quIjsl4bsnbQg7KCE7Zml64uI64ukLiDrt4EuIOq3uOufsOqx' +
+    'sCDsnY7ri6QuCg==',
+    'od0gxsTAzL3jKFB5dGhvbinAuiC56L/sseIgvbGw7SwgsK23wsfRIMfBt86x17eh' +
+    'udYgvvC+7sDUtM+02S4gxsTAzL3jwLoKyL/AssD7wM4gsO289sHYILWlwMzFzSCx' +
+    'uMG2v80gsKO03MfPwfa4uCDIv8CywPvAziCwtMO8wfbH4sfBt86x17ehudbAuwrB' +
+    '9r/4x9W0z7TZLiDGxMDMvePAxyC/7L7GKOnQ5Lopx9Egua65/bD6ILW/wPsgxbjA' +
+    'zMfOLCCx17iusO0gwM7FzcfBuK7GwwrIr7DmwLogxsTAzL3jwLsgvbrFqbizxsOw' +
+    '+iC/qbevILrQvt+/obytv80gtOu6zrrQwMcgx8O3p8b7v6G8rcDHILr8uKUKvtbH' +
+    'w7iuxMnAzLzHILCzud/AuyDH0iC89iDA1rTCIMDMu/PA+8DOIL7wvu63ziC4uLXp' +
+    'vu7B3bTPtNkuCgqh2cO5sKGzoTogs6++xrbzIKTUpLak0KTUpNSktqTQpNS+sX4g' +
+    'pNSkpKTSpLfFrSEgpNSkqKTRpLex3b74wMwgwPyk1KS+pMiksrTPtNkuIKTUpLKk' +
+    'zqSqLiCx17exsMUgpNSkt6TRpLS02S4K', 51949);
+  CheckCodePage('gb2312',
+    'UHl0aG9u77yI5rS+5qOu77yJ6K+t6KiA5piv5LiA56eN5Yqf6IO95by65aSn6ICM' +
+    '5a6M5ZaE55qE6YCa55So5Z6L6K6h566X5py656iL5bqP6K6+6K6h6K+t6KiA77yM' +
+    'CuW3sue7j+WFt+acieWNgeWkmuW5tOeahOWPkeWxleWOhuWPsu+8jOaIkOeGn+S4' +
+    'lOeos+WumuOAgui/meenjeivreiogOWFt+aciemdnuW4uOeugOaNt+iAjOa4heaZ' +
+    'sArnmoTor63ms5XnibnngrnvvIzpgILlkIjlrozmiJDlkITnp43pq5jlsYLku7vl' +
+    'iqHvvIzlh6DkuY7lj6/ku6XlnKjmiYDmnInnmoTmk43kvZzns7vnu5/kuK0K6L+Q' +
+    '6KGM44CC6L+Z56eN6K+t6KiA566A5Y2V6ICM5by65aSn77yM6YCC5ZCI5ZCE56eN' +
+    '5Lq65aOr5a2m5Lmg5L2/55So44CC55uu5YmN77yM5Z+65LqO6L+ZCuenjeivreio' +
+    'gOeahOebuOWFs+aKgOacr+ato+WcqOmjnumAn+eahOWPkeWxle+8jOeUqOaIt+aV' +
+    'sOmHj+aApeWJp+aJqeWkp++8jOebuOWFs+eahOi1hOa6kOmdnuW4uOWkmuOAggoK',
+    'UHl0aG9uo6jFycmto6nT79HUysfSu9bWuabE3Me/tPO2+M3qyca1xM2o08PQzbzG' +
+    'y+O7+rPM0PLJ6LzG0+/R1KOsCtLRvq2+39PQyq624MTqtcS3otW5wPrKt6Oss8nK' +
+    '7MfSzsi2qKGj1eLW1tPv0dS+39PQt8ezo7zyvd22+MflzvoKtcTT77eozNi146Os' +
+    'ysq6z83qs8m499bWuN+y48jOzvGjrLy4uvW/ydLU1NrL+dPQtcSy2df3z7XNs9bQ' +
+    'CtTL0NCho9Xi1tbT79HUvPK1pbb4x7+086Osysq6z7j31tbIy8q/0afPsMq508Oh' +
+    'o8S/x7CjrLv509rV4grW1tPv0dS1xM/gudi8vMr11f3U2rfJy9m1xLei1bmjrNPD' +
+    'u6fK/cG/vLG+58CptPOjrM/gudi1xNfK1LS3x7OjtuChowoK', 936);
+  CheckCodePage('gbk',
+    'UHl0aG9u77yI5rS+5qOu77yJ6K+t6KiA5piv5LiA56eN5Yqf6IO95by65aSn6ICM' +
+    '5a6M5ZaE55qE6YCa55So5Z6L6K6h566X5py656iL5bqP6K6+6K6h6K+t6KiA77yM' +
+    'CuW3sue7j+WFt+acieWNgeWkmuW5tOeahOWPkeWxleWOhuWPsu+8jOaIkOeGn+S4' +
+    'lOeos+WumuOAgui/meenjeivreiogOWFt+aciemdnuW4uOeugOaNt+iAjOa4heaZ' +
+    'sArnmoTor63ms5XnibnngrnvvIzpgILlkIjlrozmiJDlkITnp43pq5jlsYLku7vl' +
+    'iqHvvIzlh6DkuY7lj6/ku6XlnKjmiYDmnInnmoTmk43kvZzns7vnu5/kuK0K6L+Q' +
+    '6KGM44CC6L+Z56eN6K+t6KiA566A5Y2V6ICM5by65aSn77yM6YCC5ZCI5ZCE56eN' +
+    '5Lq65aOr5a2m5Lmg5L2/55So44CC55uu5YmN77yM5Z+65LqO6L+ZCuenjeivreio' +
+    'gOeahOebuOWFs+aKgOacr+ato+WcqOmjnumAn+eahOWPkeWxle+8jOeUqOaIt+aV' +
+    'sOmHj+aApeWJp+aJqeWkp++8jOebuOWFs+eahOi1hOa6kOmdnuW4uOWkmuOAggrl' +
+    'poLkvZXlnKggUHl0aG9uIOS4reS9v+eUqOaXouacieeahCBDIGxpYnJhcnk/CuOA' +
+    'gOWcqOizh+ioiuenkeaKgOW/q+mAn+eZvOWxleeahOS7iuWkqSwg6ZaL55m85Y+K' +
+    '5ris6Kmm6Luf6auU55qE6YCf5bqm5piv5LiN5a655b+96KaW55qECuiqsumhjC4g' +
+    '54K65Yqg5b+r6ZaL55m85Y+K5ris6Kmm55qE6YCf5bqmLCDmiJHlgJHkvr/luLjl' +
+    'uIzmnJvog73liKnnlKjkuIDkupvlt7Lplovnmbzlpb3nmoQKbGlicmFyeSwg5Lim' +
+    '5pyJ5LiA5YCLIGZhc3QgcHJvdG90eXBpbmcg55qEIHByb2dyYW1taW5nIGxhbmd1' +
+    'YWdlIOWPrwrkvpvkvb/nlKguIOebruWJjeacieioseioseWkmuWkmueahCBsaWJy' +
+    'YXJ5IOaYr+S7pSBDIOWvq+aIkCwg6ICMIFB5dGhvbiDmmK/kuIDlgIsKZmFzdCBw' +
+    'cm90b3R5cGluZyDnmoQgcHJvZ3JhbW1pbmcgbGFuZ3VhZ2UuIOaVheaIkeWAkeW4' +
+    'jOacm+iDveWwh+aXouacieeahApDIGxpYnJhcnkg5ou/5YiwIFB5dGhvbiDnmoTn' +
+    'krDlooPkuK3muKzoqablj4rmlbTlkIguIOWFtuS4reacgOS4u+imgeS5n+aYr+aI' +
+    'keWAkeaJgAropoHoqI7oq5bnmoTllY/poYzlsLHmmK86Cgo=',
+    'UHl0aG9uo6jFycmto6nT79HUysfSu9bWuabE3Me/tPO2+M3qyca1xM2o08PQzbzG' +
+    'y+O7+rPM0PLJ6LzG0+/R1KOsCtLRvq2+39PQyq624MTqtcS3otW5wPrKt6Oss8nK' +
+    '7MfSzsi2qKGj1eLW1tPv0dS+39PQt8ezo7zyvd22+MflzvoKtcTT77eozNi146Os' +
+    'ysq6z83qs8m499bWuN+y48jOzvGjrLy4uvW/ydLU1NrL+dPQtcSy2df3z7XNs9bQ' +
+    'CtTL0NCho9Xi1tbT79HUvPK1pbb4x7+086Osysq6z7j31tbIy8q/0afPsMq508Oh' +
+    'o8S/x7CjrLv509rV4grW1tPv0dS1xM/gudi8vMr11f3U2rfJy9m1xLei1bmjrNPD' +
+    'u6fK/cG/vLG+58CptPOjrM/gudi1xNfK1LS3x7OjtuChowrI57rO1NogUHl0aG9u' +
+    'INbQyrnTw7zI09C1xCBDIGxpYnJhcnk/CqGh1NrZWdONv8a8vL/sy9mwbNW5tcS9' +
+    '8czsLCDpX7BsvLCcedSH3Jvzd7XEy9m2yMrHsrvI3br20pW1xArVbu59LiCe6bzT' +
+    'v+zpX7BsvLCcedSHtcTL2bbILCDO0oKDseOzo8+jzfvE3MD708PSu9Cp0tHpX7Bs' +
+    'usO1xApsaWJyYXJ5LCCBS9PQ0ruCgCBmYXN0IHByb3RvdHlwaW5nILXEIHByb2dy' +
+    'YW1taW5nIGxhbmd1YWdlIL/JCrmpyrnTwy4gxL/HsNPQ1FPUU7bgtuC1xCBsaWJy' +
+    'YXJ5IMrH0tQgQyCMkbPJLCC2+CBQeXRob24gysfSu4KACmZhc3QgcHJvdG90eXBp' +
+    'bmcgtcQgcHJvZ3JhbW1pbmcgbGFuZ3VhZ2UuILnKztKCg8+jzfvE3IyivMjT0LXE' +
+    'CkMgbGlicmFyeSDEw7W9IFB5dGhvbiC1xK1ovrPW0Jx51Ie8sNX7us8uIMbk1tDX' +
+    '7tb30qrSssrHztKCg8v5CtKq05HVk7XEhpbufb7Nysc6Cgo=', 936);
+  CheckCodePage('iso2022_jp',
+    'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
+    '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
+    'c3VtIOOBr+aVmeiCsueUqOOBruODl+ODreOCsOODqeODn+ODs+OCsOiogOiqnuOA' +
+    'jEFCQ+OAjeOBrumWi+eZuuOBq+WPguWKoOOBl+OBpuOBhOOBvuOBl+OBn+OBjOOA' +
+    'gUFCQyDjga/lrp/nlKjkuIrjga7nm67nmoTjgavjga/jgYLjgb7jgorpganjgZfj' +
+    'gabjgYTjgb7jgZvjgpPjgafjgZfjgZ/jgIIK44GT44Gu44Gf44KB44CBR3VpZG8g' +
+    '44Gv44KI44KK5a6f55So55qE44Gq44OX44Ot44Kw44Op44Of44Oz44Kw6KiA6Kqe' +
+    '44Gu6ZaL55m644KS6ZaL5aeL44GX44CB6Iux5Zu9IEJCUyDmlL7pgIHjga7jgrPj' +
+    'g6Hjg4fjgqPnlarntYTjgIzjg6Ljg7Pjg4bjgqMg44OR44Kk44K944Oz44CN44Gu' +
+    '44OV44Kh44Oz44Gn44GC44KLIEd1aWRvIOOBr+OBk+OBruiogOiqnuOCkuOAjFB5' +
+    'dGhvbuOAjeOBqOWQjeOBpeOBkeOBvuOBl+OBn+OAggrjgZPjga7jgojjgYbjgaro' +
+    'g4zmma/jgYvjgonnlJ/jgb7jgozjgZ8gUHl0aG9uIOOBruiogOiqnuioreioiOOB' +
+    'r+OAgeOAjOOCt+ODs+ODl+ODq+OAjeOBp+OAjOe/kuW+l+OBjOWuueaYk+OAjeOB' +
+    'qOOBhOOBhuebruaomeOBq+mHjeeCueOBjOe9ruOBi+OCjOOBpuOBhOOBvuOBmeOA' +
+    'ggrlpJrjgY/jga7jgrnjgq/jg6rjg5fjg4jns7voqIDoqp7jgafjga/jg6bjg7zj' +
+    'grbjga7nm67lhYjjga7liKnkvr/mgKfjgpLlhKrlhYjjgZfjgaboibLjgIXjgarm' +
+    'qZ/og73jgpLoqIDoqp7opoHntKDjgajjgZfjgablj5bjgorlhaXjgozjgovloLTl' +
+    'kIjjgYzlpJrjgYTjga7jgafjgZnjgYzjgIFQeXRob24g44Gn44Gv44Gd44GG44GE' +
+    '44Gj44Gf5bCP57Sw5bel44GM6L+95Yqg44GV44KM44KL44GT44Go44Gv44GC44G+' +
+    '44KK44GC44KK44G+44Gb44KT44CCCuiogOiqnuiHquS9k+OBruapn+iDveOBr+ac' +
+    'gOWwj+mZkOOBq+aKvOOBleOBiOOAgeW/heimgeOBquapn+iDveOBr+aLoeW8teOD' +
+    'ouOCuOODpeODvOODq+OBqOOBl+OBpui/veWKoOOBmeOCi+OAgeOBqOOBhOOBhuOB' +
+    'ruOBjCBQeXRob24g44Gu44Od44Oq44K344O844Gn44GZ44CCCgo=',
+    'UHl0aG9uIBskQiROMytILyRPISIbKEIxOTkwIBskQkcvJDQkbSQrJGkzKztPJDUk' +
+    'bCRGJCQkXiQ5ISMbKEIKGyRCMytILzxUJE4bKEIgR3VpZG8gdmFuIFJvc3N1bSAb' +
+    'JEIkTzY1MGlNUSROJVclbSUwJWklXyVzJTA4QDhsIVYbKEJBQkMbJEIhVyROMytI' +
+    'LyRLOzIyQyQ3JEYkJCReJDckPyQsISIbKEJBQkMgGyRCJE88Qk1RPmUkTkxcRSok' +
+    'SyRPJCIkXiRqRSwkNyRGJCQkXiQ7JHMkRyQ3JD8hIxsoQgobJEIkMyROJD8kYSEi' +
+    'GyhCR3VpZG8gGyRCJE8kaCRqPEJNUUUqJEolVyVtJTAlaSVfJXMlMDhAOGwkTjMr' +
+    'SC8kcjMrO08kNyEiMVE5cRsoQiBCQlMgGyRCSnxBdyROJTMlYSVHJSNIVkFIIVYl' +
+    'YiVzJUYlIxsoQiAbJEIlUSUkJT0lcyFXJE4lVSUhJXMkRyQiJGsbKEIgR3VpZG8g' +
+    'GyRCJE8kMyROOEA4bCRyIVYbKEJQeXRob24bJEIhVyRITD4kRSQxJF4kNyQ/ISMb' +
+    'KEIKGyRCJDMkTiRoJCYkSkdYN0okKyRpQDgkXiRsJD8bKEIgUHl0aG9uIBskQiRO' +
+    'OEA4bEBfN1ckTyEiIVYlNyVzJVclayFXJEchVj0sRkAkLE1GMFchVyRIJCQkJkxc' +
+    'STgkSz1FRUAkLENWJCskbCRGJCQkXiQ5ISMbKEIKGyRCQj8kLyROJTklLyVqJVcl' +
+    'SDdPOEA4bCRHJE8lZiE8JTYkTkxcQGgkTk14SlhALSRyTSVAaCQ3JEY/JyE5JEo1' +
+    'IUc9JHI4QDhsTVdBRyRIJDckRjxoJGpGfiRsJGs+bDlnJCxCPyQkJE4kRyQ5JCwh' +
+    'IhsoQlB5dGhvbiAbJEIkRyRPJD0kJiQkJEMkPz4uOlk5KSQsREkyQyQ1JGwkayQz' +
+    'JEgkTyQiJF4kaiQiJGokXiQ7JHMhIxsoQgobJEI4QDhsPCtCTiRONSFHPSRPOkc+' +
+    'LjhCJEsyISQ1JCghIkksTVckSjUhRz0kTzNIRCUlYiU4JWUhPCVrJEgkNyRGREky' +
+    'QyQ5JGshIiRIJCQkJiROJCwbKEIgUHl0aG9uIBskQiROJV0laiU3ITwkRyQ5ISMb' +
+    'KEIKCg==', 50222);
+  CheckCodePage('iso2022_kr',
+    '4peOIO2MjOydtOyNrChQeXRob24p7J2AIOuwsOyasOq4sCDsib3qs6AsIOqwleug' +
+    'pe2VnCDtlITroZzqt7jrnpjrsI0g7Ja47Ja07J6F64uI64ukLiDtjIzsnbTsjazs' +
+    'nYAK7Zqo7Jyo7KCB7J24IOqzoOyImOykgCDrjbDsnbTthLAg6rWs7KGw7JmAIOqw' +
+    'hOuLqO2VmOyngOunjCDtmqjsnKjsoIHsnbgg6rCd7LK07KeA7Zal7ZSE66Gc6re4' +
+    '656Y67CN7J2ECuyngOybkO2VqeuLiOuLpC4g7YyM7J207I2s7J2YIOyasOyVhCjl' +
+    'hKrpm4Up7ZWcIOusuOuyleqzvCDrj5nsoIEg7YOA7J207ZWRLCDqt7jrpqzqs6Ag' +
+    '7J247YSw7ZSE66as7YyFCu2ZmOqyveydgCDtjIzsnbTsjazsnYQg7Iqk7YGs66a9' +
+    '7YyF6rO8IOyXrOufrCDrtoTslbzsl5DshJzsmYAg64yA67aA67aE7J2YIO2UjOue' +
+    'q+2PvOyXkOyEnOydmCDruaDrpbgK7JWg7ZSM66as7LyA7J207IWYIOqwnOuwnOyd' +
+    'hCDtlaAg7IiYIOyeiOuKlCDsnbTsg4HsoIHsnbgg7Ja47Ja066GcIOunjOuTpOyW' +
+    'tOykjeuLiOuLpC4KCuKYhuyyq+qwgOuBnTog64Kg7JWE6528IOyTqX4g7YG8ISDq' +
+    'uIjsl4bsnbQg7KCE64uI64ukLiDqt7jrn7DqsbAg64ukLgo=',
+    'GyQpQw4hXQ8gDkZEQEw9Yw8oUHl0aG9uKQ5AOg8gDjloP2wxYg8gDj0xMG0PLCAO' +
+    'MC03QkdRDyAOR0E3TjFXNyE5Vg8gDj5wPm5AVDRPNFkPLiAORkRATD1jQDoPCg5I' +
+    'P0AyQHtATg8gDjBtPHZBWA8gDjUlQExFTQ8gDjE4QTY/TQ8gDjAjNFxHT0F2ODgP' +
+    'IA5IP0AyQHtATg8gDjA0QzxBdkdiR0E3TjFXNyE5VkA7DwoOQXY/eEdVNE80WQ8u' +
+    'IA5GREBMPWNARw8gDj9sPkYPKA5pUGQ6DykOR1EPIA45Ljl9MHoPIA41P0B7DyAO' +
+    'RThATEdODywgDjFXOC4wbQ8gDkBORU1HQTguRkMPCg5ILzBmQDoPIA5GREBMPWNA' +
+    'Ow8gDj06RSk4M0ZDMHoPIA4/KTcvDyAOOlA+Xz8hPC0/TQ8gDjRrOk46UEBHDyAO' +
+    'R0M3J0Z7PyE8LUBHDyAOOnw4JQ8KDj5WR0M4LkRJQEw8Rw8gDjAzOV9AOw8gDkdS' +
+    'DyAOPHYPIA5AVjRCDyAOQEw7c0B7QE4PIA4+cD5uN04PIA44ODVpPm5BXTRPNFkP' +
+    'LgoKDiFZQzkwITMhDzogDjMvPkY2cw8gDj4xD34gDkUtDyEgDjFdPnhATA8gDkB8' +
+    'NE80WQ8uIA4xVzcxMEUPIA40WQ8uCg==', 50225);
+  CheckCodePage('johab',
+    '65ig67Cp6rCB7ZWYIO2OsuyLnOy9nOudvAoK44mv44mv64KpISEg5Zug5Lmd5pyI' +
+    '7Yyo66+k66aU6raIIOKToeKTlu2bgMK/wr/CvyDquI3rkpkg4pOU646oIOOJry4g' +
+    'Lgrkup7smIHik5TriqXtmrkgLiAuIC4gLiDshJzsmrjrpIQg646Q7ZWZ5LmZIOWu' +
+    'tu2bgCAhICEgIeOFoC7jhaAK7Z2Q7Z2Q7Z2QIOOEseOEseOEseKYhuOFoF/jhaAg' +
+    '7Ja066aoIO2DuOy9sOq4kCDrjozsnZEg7LmR5Lmd65Ok5LmZIOOJr+uTnOq4kArs' +
+    'hKTrpowg5a627ZuAIC4gLiAuIC4g6rW07JWg7ImMIOKTlOq2iCDik6HrppjjibHq' +
+    'uJAg5Zug5LuB5bed76aB5Lit6rmM7Ka8CuyZgOySgO2bgCAhICEg5Lqe7JiB4pOU' +
+    'IOWutuuKpeq2iCDimIbkuIrqtIAg7JeG64ql6raI64qlIOS6nuuKpeuSiO2bgCDq' +
+    'uIDslaDrk7QK4pOh66Ck65OA5LmdIOyLgO2SlOyItO2bgCDslrTrpqgg5Zug5LuB' +
+    '5bed76aB5Lit7IuB4pGo65Ok7JWcISEg44mv44mv64Kp4pmhIOKMkuKMkioKCg==',
+    'mbGkd4hi0GEgzVyvocWpnGEKCtzA3MCQcyEhIPFn4pzwVcyBo4mfhYqhINze3NPS' +
+    'etmv2a/ZryCLd5bTINzRlYEg3MAuIC4K7Ty1d9zRk3fScyAuIC4gLiAuIKzhtome' +
+    'oSCVZdBi8OAg4DvSeiAhICEgIYdBLodBCtNh02HTYSCIQYhBiEHZaYdBX4dBILTh' +
+    'n5ogyKHFwYt6IJVht3cgw5finJdp8OAg3MCXYYt6Cqzpn3og4DvSeiAuIC4gLiAu' +
+    'IIqJtIGuuiDc0YqhINzen4ncwot6IPFn8WL1Se388+mMYbuaCrXBsqHSeiAhICEg' +
+    '7Ty1d9zRIOA7k3eKoSDZaeq+icUgtPSTd4qhk3cg7TyTd5bB0nogi2m0gZd6Ctze' +
+    'nWGXQeKcIK+BzqGuodJ6ILThn5og8WfxYvVJ7fzz6a+C3O+XabR6ISEg3MDcwJBz' +
+    '2b0g2WLZYioKCg==', 1361);
+  CheckCodePage('shift_jisx0213',
+    'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
+    '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
+    'c3VtIOOBr+aVmeiCsueUqOOBruODl+ODreOCsOODqeODn+ODs+OCsOiogOiqnuOA' +
+    'jEFCQ+OAjeOBrumWi+eZuuOBq+WPguWKoOOBl+OBpuOBhOOBvuOBl+OBn+OBjOOA' +
+    'gUFCQyDjga/lrp/nlKjkuIrjga7nm67nmoTjgavjga/jgYLjgb7jgorpganjgZfj' +
+    'gabjgYTjgb7jgZvjgpPjgafjgZfjgZ/jgIIK44GT44Gu44Gf44KB44CBR3VpZG8g' +
+    '44Gv44KI44KK5a6f55So55qE44Gq44OX44Ot44Kw44Op44Of44Oz44Kw6KiA6Kqe' +
+    '44Gu6ZaL55m644KS6ZaL5aeL44GX44CB6Iux5Zu9IEJCUyDmlL7pgIHjga7jgrPj' +
+    'g6Hjg4fjgqPnlarntYTjgIzjg6Ljg7Pjg4bjgqMg44OR44Kk44K944Oz44CN44Gu' +
+    '44OV44Kh44Oz44Gn44GC44KLIEd1aWRvIOOBr+OBk+OBruiogOiqnuOCkuOAjFB5' +
+    'dGhvbuOAjeOBqOWQjeOBpeOBkeOBvuOBl+OBn+OAggrjgZPjga7jgojjgYbjgaro' +
+    'g4zmma/jgYvjgonnlJ/jgb7jgozjgZ8gUHl0aG9uIOOBruiogOiqnuioreioiOOB' +
+    'r+OAgeOAjOOCt+ODs+ODl+ODq+OAjeOBp+OAjOe/kuW+l+OBjOWuueaYk+OAjeOB' +
+    'qOOBhOOBhuebruaomeOBq+mHjeeCueOBjOe9ruOBi+OCjOOBpuOBhOOBvuOBmeOA' +
+    'ggrlpJrjgY/jga7jgrnjgq/jg6rjg5fjg4jns7voqIDoqp7jgafjga/jg6bjg7zj' +
+    'grbjga7nm67lhYjjga7liKnkvr/mgKfjgpLlhKrlhYjjgZfjgaboibLjgIXjgarm' +
+    'qZ/og73jgpLoqIDoqp7opoHntKDjgajjgZfjgablj5bjgorlhaXjgozjgovloLTl' +
+    'kIjjgYzlpJrjgYTjga7jgafjgZnjgYzjgIFQeXRob24g44Gn44Gv44Gd44GG44GE' +
+    '44Gj44Gf5bCP57Sw5bel44GM6L+95Yqg44GV44KM44KL44GT44Go44Gv44GC44G+' +
+    '44KK44GC44KK44G+44Gb44KT44CCCuiogOiqnuiHquS9k+OBruapn+iDveOBr+ac' +
+    'gOWwj+mZkOOBq+aKvOOBleOBiOOAgeW/heimgeOBquapn+iDveOBr+aLoeW8teOD' +
+    'ouOCuOODpeODvOODq+OBqOOBl+OBpui/veWKoOOBmeOCi+OAgeOBqOOBhOOBhuOB' +
+    'ruOBjCBQeXRob24g44Gu44Od44Oq44K344O844Gn44GZ44CCCgrjg47jgYvjgpog' +
+    '44OI44KaIOODiOOCre+otu+ouSDwoZq08KqOjCDpuoDpvYHwqZuwCg==',
+    'UHl0aG9uIILMikqUrYLNgUExOTkwIJROgrKC64KpgueKSo5ugrOC6oLEgqKC3IK3' +
+    'gUIKikqUrY7SgswgR3VpZG8gdmFuIFJvc3N1bSCCzYuziOeXcILMg3aDjYNPg4mD' +
+    'foOTg0+MvozqgXVBQkOBdoLMikqUrYLJjlGJwYK1gsSCooLcgrWCvYKqgUFBQkMg' +
+    'gs2OwJdwj+OCzJbak0mCyYLNgqCC3ILok0uCtYLEgqKC3IK5gvGCxYK1gr2BQgqC' +
+    'sYLMgr2C34FBR3VpZG8ggs2C5oLojsCXcJNJgsiDdoONg0+DiYN+g5ODT4y+jOqC' +
+    'zIpKlK2C8IpKjm6CtYFBiXCNkSBCQlMglfqRl4LMg1KDgYNmg0KU1JFngXWDgoOT' +
+    'g2WDQiCDcINDg1yDk4F2gsyDdINAg5OCxYKggukgR3VpZG8ggs2CsYLMjL6M6oLw' +
+    'gXVQeXRob26BdoLGlryCw4KvgtyCtYK9gUIKgrGCzILmgqSCyJR3jGmCqYLnkLaC' +
+    '3ILqgr0gUHl0aG9uIILMjL6M6pDdjHaCzYFBgXWDVoOTg3aDi4F2gsWBdY9Lk76C' +
+    'qpdliNWBdoLGgqKCpJbalVeCyY9kk1+CqpJ1gqmC6oLEgqKC3IK3gUIKkb2CrYLM' +
+    'g1iDToOKg3aDZ4xujL6M6oLFgs2DhoFbg1WCzJbakOaCzJeYldaQq4Lwl0SQ5oK1' +
+    'gsSQRoFYgsiLQJRcgvCMvozql3aRZoLGgrWCxI7mguiT/ILqgumP6o2HgqqRvYKi' +
+    'gsyCxYK3gqqBQVB5dGhvbiCCxYLNgruCpIKigsGCvY+sjdeNSIKqkseJwYKzguqC' +
+    '6YKxgsaCzYKggtyC6IKgguiC3IK5gvGBQgqMvozqjqmRzILMi0CUXILNjcWPrIzA' +
+    'gsmJn4KzgqaBQZVLl3aCyItAlFyCzYpnkqODgoNXg4WBW4OLgsaCtYLEkseJwYK3' +
+    'gumBQYLGgqKCpILMgqogUHl0aG9uIILMg3yDioNWgVuCxYK3gUIKCoNtgvUgg54g' +
+    'g2eDTIhLiHkgmIP81iD80vzm+9QK', 50220);
+  CheckCodePage('shift_jis',
+    'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
+    '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
+    'c3VtIOOBr+aVmeiCsueUqOOBruODl+ODreOCsOODqeODn+ODs+OCsOiogOiqnuOA' +
+    'jEFCQ+OAjeOBrumWi+eZuuOBq+WPguWKoOOBl+OBpuOBhOOBvuOBl+OBn+OBjOOA' +
+    'gUFCQyDjga/lrp/nlKjkuIrjga7nm67nmoTjgavjga/jgYLjgb7jgorpganjgZfj' +
+    'gabjgYTjgb7jgZvjgpPjgafjgZfjgZ/jgIIK44GT44Gu44Gf44KB44CBR3VpZG8g' +
+    '44Gv44KI44KK5a6f55So55qE44Gq44OX44Ot44Kw44Op44Of44Oz44Kw6KiA6Kqe' +
+    '44Gu6ZaL55m644KS6ZaL5aeL44GX44CB6Iux5Zu9IEJCUyDmlL7pgIHjga7jgrPj' +
+    'g6Hjg4fjgqPnlarntYTjgIzjg6Ljg7Pjg4bjgqMg44OR44Kk44K944Oz44CN44Gu' +
+    '44OV44Kh44Oz44Gn44GC44KLIEd1aWRvIOOBr+OBk+OBruiogOiqnuOCkuOAjFB5' +
+    'dGhvbuOAjeOBqOWQjeOBpeOBkeOBvuOBl+OBn+OAggrjgZPjga7jgojjgYbjgaro' +
+    'g4zmma/jgYvjgonnlJ/jgb7jgozjgZ8gUHl0aG9uIOOBruiogOiqnuioreioiOOB' +
+    'r+OAgeOAjOOCt+ODs+ODl+ODq+OAjeOBp+OAjOe/kuW+l+OBjOWuueaYk+OAjeOB' +
+    'qOOBhOOBhuebruaomeOBq+mHjeeCueOBjOe9ruOBi+OCjOOBpuOBhOOBvuOBmeOA' +
+    'ggrlpJrjgY/jga7jgrnjgq/jg6rjg5fjg4jns7voqIDoqp7jgafjga/jg6bjg7zj' +
+    'grbjga7nm67lhYjjga7liKnkvr/mgKfjgpLlhKrlhYjjgZfjgaboibLjgIXjgarm' +
+    'qZ/og73jgpLoqIDoqp7opoHntKDjgajjgZfjgablj5bjgorlhaXjgozjgovloLTl' +
+    'kIjjgYzlpJrjgYTjga7jgafjgZnjgYzjgIFQeXRob24g44Gn44Gv44Gd44GG44GE' +
+    '44Gj44Gf5bCP57Sw5bel44GM6L+95Yqg44GV44KM44KL44GT44Go44Gv44GC44G+' +
+    '44KK44GC44KK44G+44Gb44KT44CCCuiogOiqnuiHquS9k+OBruapn+iDveOBr+ac' +
+    'gOWwj+mZkOOBq+aKvOOBleOBiOOAgeW/heimgeOBquapn+iDveOBr+aLoeW8teOD' +
+    'ouOCuOODpeODvOODq+OBqOOBl+OBpui/veWKoOOBmeOCi+OAgeOBqOOBhOOBhuOB' +
+    'ruOBjCBQeXRob24g44Gu44Od44Oq44K344O844Gn44GZ44CCCgo=',
+    'UHl0aG9uIILMikqUrYLNgUExOTkwIJROgrKC64KpgueKSo5ugrOC6oLEgqKC3IK3' +
+    'gUIKikqUrY7SgswgR3VpZG8gdmFuIFJvc3N1bSCCzYuziOeXcILMg3aDjYNPg4mD' +
+    'foOTg0+MvozqgXVBQkOBdoLMikqUrYLJjlGJwYK1gsSCooLcgrWCvYKqgUFBQkMg' +
+    'gs2OwJdwj+OCzJbak0mCyYLNgqCC3ILok0uCtYLEgqKC3IK5gvGCxYK1gr2BQgqC' +
+    'sYLMgr2C34FBR3VpZG8ggs2C5oLojsCXcJNJgsiDdoONg0+DiYN+g5ODT4y+jOqC' +
+    'zIpKlK2C8IpKjm6CtYFBiXCNkSBCQlMglfqRl4LMg1KDgYNmg0KU1JFngXWDgoOT' +
+    'g2WDQiCDcINDg1yDk4F2gsyDdINAg5OCxYKggukgR3VpZG8ggs2CsYLMjL6M6oLw' +
+    'gXVQeXRob26BdoLGlryCw4KvgtyCtYK9gUIKgrGCzILmgqSCyJR3jGmCqYLnkLaC' +
+    '3ILqgr0gUHl0aG9uIILMjL6M6pDdjHaCzYFBgXWDVoOTg3aDi4F2gsWBdY9Lk76C' +
+    'qpdliNWBdoLGgqKCpJbalVeCyY9kk1+CqpJ1gqmC6oLEgqKC3IK3gUIKkb2CrYLM' +
+    'g1iDToOKg3aDZ4xujL6M6oLFgs2DhoFbg1WCzJbakOaCzJeYldaQq4Lwl0SQ5oK1' +
+    'gsSQRoFYgsiLQJRcgvCMvozql3aRZoLGgrWCxI7mguiT/ILqgumP6o2HgqqRvYKi' +
+    'gsyCxYK3gqqBQVB5dGhvbiCCxYLNgruCpIKigsGCvY+sjdeNSIKqkseJwYKzguqC' +
+    '6YKxgsaCzYKggtyC6IKgguiC3IK5gvGBQgqMvozqjqmRzILMi0CUXILNjcWPrIzA' +
+    'gsmJn4KzgqaBQZVLl3aCyItAlFyCzYpnkqODgoNXg4WBW4OLgsaCtYLEkseJwYK3' +
+    'gumBQYLGgqKCpILMgqogUHl0aG9uIILMg3yDioNWgVuCxYK3gUIKCg==', 932);
 end;
 
 procedure TTestCoreBase.Iso8601DateAndTime;
@@ -6178,7 +6984,7 @@ begin
   Check(b.Month = 5);
   Check(b.Day = 4);
   tmp := b.Text(false);
-  Check(tmp = '20150504');
+  CheckEqual(tmp, '20150504');
   IntervalTextToDateTimeVar('+0 06:03:20', D);
   CheckSame(D, 0.252314, 1e-5);
   D := IntervalTextToDateTime('+1 06:03:20');
@@ -6188,9 +6994,9 @@ begin
   CheckSame(IntervalTextToDateTime('-20 06:03:20'), -20.252314, 1e-6);
   Check(DateTimeToIso8601Text(IntervalTextToDateTime('+0 06:03:20')) = 'T06:03:20');
   tmp := DateTimeToIso8601Text(IntervalTextToDateTime('+1 06:03:20'));
-  Check(tmp = '1899-12-31T06:03:20');
+  CheckEqual(tmp, '1899-12-31T06:03:20');
   tmp := DateTimeToIso8601Text(IntervalTextToDateTime('-2 06:03:20'));
-  Check(tmp = '1899-12-28T06:03:20');
+  CheckEqual(tmp, '1899-12-28T06:03:20');
   CheckSame(TimeLogToDateTime(135131870949), 41578.477512, 1e-5);
   tmp := '1982-10-30T06:03:20';
   Check(Iso8601CheckAndDecode(Pointer(tmp), length(tmp), D));
@@ -6209,23 +7015,31 @@ begin
   check(Iso8601ToDateTime(tmp) = 0);
   check(Iso8601ToTimelog(tmp) = 0);
   tmp := UnixTimePeriodToString(0);
-  check(tmp = 'T00:00:00');
+  CheckEqual(tmp, 'T00:00:00');
   tmp := UnixTimePeriodToString(30);
-  check(tmp = 'T00:00:30');
+  CheckEqual(tmp, 'T00:00:30');
   tmp := UnixTimePeriodToString(SecsPerMin);
-  check(tmp = 'T00:01:00');
+  CheckEqual(tmp, 'T00:01:00');
   tmp := UnixTimePeriodToString(SecsPerMin * MinsPerHour);
-  check(tmp = 'T01:00:00');
+  CheckEqual(tmp, 'T01:00:00');
   tmp := UnixTimePeriodToString(SecsPerDay);
-  check(tmp = '0000-00-01');
+  CheckEqual(tmp, '0000-00-01');
   tmp := UnixTimePeriodToString(SecsPerDay * 15);
-  check(tmp = '0000-00-15');
+  CheckEqual(tmp, '0000-00-15');
+  tmp := UnixTimePeriodToString(SecsPerDay * 31);
+  CheckEqual(tmp, '0000-00-31');
+  tmp := UnixTimePeriodToString(SecsPerDay * (31 + 4));
+  CheckEqual(tmp, '0000-01-04');
+  tmp := UnixTimePeriodToString(SecsPerDay * (31 + 28 + 7));
+  CheckEqual(tmp, '0000-02-07');
   tmp := UnixTimePeriodToString(SecsPerDay * 365);
-  check(tmp = '0000-12-31');
+  CheckEqual(tmp, '0001-00-00');
+  tmp := UnixTimePeriodToString(SecsPerDay * 365 + 1);
+  CheckEqual(tmp, '0001-00-00');
   tmp := UnixTimePeriodToString(SecsPerDay * 366);
-  check(tmp = '0001-00-00');
-  tmp := UnixTimePeriodToString(SecsPerDay * 732);
-  check(tmp = '0002-00-00');
+  CheckEqual(tmp, '0001-00-01');
+  tmp := UnixTimePeriodToString(SecsPerDay * 365 * 2);
+  CheckEqual(tmp, '0002-00-00');
 end;
 
 function LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;
@@ -6488,6 +7302,8 @@ var
   end;
 
 begin
+  CheckEqual(ord(arm64DCPODP), 64);
+  CheckEqual(ord(arm32AES), 32);
   CheckEqual(SizeOf(TSmbiosBiosFlags), 8);
   CheckEqual(SizeOf(TSmbiosMemory) - 7 * SizeOf(RawUtf8), 11);
   CheckEqual(SizeOf(TSmbiosMemoryArray) - 2 * SizeOf(pointer), 5);
@@ -7259,7 +8075,7 @@ begin
   Check(IdemPropNameU('', ''));
   for i := 0 to 100 do
     Check(IdemPropNameU(RawUtf8OfChar('a', i), RawUtf8OfChar('A', i)));
-  Check(UpperCaseU('abcd') = 'ABCD');
+  CheckEqual(UpperCaseU('abcd'), 'ABCD');
   Check(IdemPropNameU('abcDe', abcde, 5));
   Check(not IdemPropNameU('abcD', abcde, 5));
   Check(not IdemPropNameU('abcDF', abcde, 5));
@@ -7370,7 +8186,7 @@ type
 
   procedure Test(Filter: TSynFilterClass; Proc: TFilterProcess);
   var
-    V, Old: RawUtf8;
+    V, Old, New: RawUtf8;
     i: integer;
   begin
     with Filter.Create do
@@ -7379,8 +8195,12 @@ type
       begin
         V := RandomUtf8(i);
         Old := V;
+        New := Proc(Old);
         Process(0, V);
-        CheckEqual(V, Proc(Old));
+        CheckEqual(V, New);
+        V := Old;
+        Filter.Execute('', V);
+        CheckEqual(V, New);
       end;
     finally
       Free;
@@ -7417,6 +8237,8 @@ procedure TTestCoreBase._TSynValidate;
         ok := (i >= aMin) and
               (i <= aMax);
         Check(valid.Process(0, V, Msg) = ok, Msg);
+        Check((Msg = '') = ok, Msg);
+        Msg := TSynValidateText.Execute(Params, V);
         Check((Msg = '') = ok, Msg);
       end;
     finally
@@ -7580,14 +8402,6 @@ var
   s, t, d: RawUtf8;
   U: PUtf8Char;
 begin
-  CheckEqual(StatusCodeToText(100)^, 'Continue');
-  CheckEqual(StatusCodeToText(200)^, 'OK');
-  CheckEqual(StatusCodeToText(206)^, 'Partial Content');
-  CheckEqual(StatusCodeToText(300)^, 'Multiple Choices');
-  CheckEqual(StatusCodeToText(503)^, 'Service Unavailable');
-  CheckEqual(StatusCodeToText(513)^, 'Invalid Request');
-  CheckEqual(StatusCodeToText(514)^, 'Invalid Request');
-  CheckEqual(StatusCodeToText(499)^, 'Invalid Request');
   for i := 1 to 100 do
   begin
     s := DateTimeToIso8601(Now / 20 + RandomDouble * 20, true);
@@ -7663,7 +8477,7 @@ var
   fu: TUnixMSTime;
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
-  s, mpc, mpct: RawUtf8;
+  s, ct, mpc, mpct: RawUtf8;
   st: THttpMultiPartStream;
   rfc2388: boolean;
 
@@ -7700,6 +8514,8 @@ begin
     '605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'));
   Check(not IsHttpUserAgentBot(
     'Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko'));
+  Check(not IsHttpUserAgentBot(DefaultUserAgent(self)),
+    'Mozilla/5.0 (Linux x64; mORMot) TCB/2 mormot2tests');
   Check(IsHttpUserAgentBot(
     'Googlebot/2.1 (+http://www.google.com/bot.html)'));
   Check(IsHttpUserAgentBot(
@@ -7759,19 +8575,23 @@ begin
   Check(not HttpMethodWithNoBody('PUT'));
   Check(not HttpMethodWithNoBody('OPT'));
   // mime content types
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.', 'def2'), 'def2');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.a', 'def3'), 'application/a');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.1', 'def4'), 'def4');
-  CheckEqual(GetMimeContentType(nil, 0, 'toto.ab', 'def5'), 'application/ab');
+  CheckEqual(GetMimeContentType('', 'toto.h264'), 'video/H264');
+  CheckEqual(GetMimeContentType('', 'toto', 'def1'), 'def1');
+  CheckEqual(GetMimeContentType('', 'toto.', 'def2'), 'def2');
+  CheckEqual(GetMimeContentType('', 'toto.a', 'def3'), 'application/a');
+  CheckEqual(GetMimeContentType('', 'toto.1', 'def4'), 'def4');
+  CheckEqual(GetMimeContentType('', 'toto.ab', 'def5'), 'application/ab');
   for i := 0 to high(MIMES) shr 1 do
-    CheckEqual(GetMimeContentType(nil, 0, 'toto.' + MIMES[i * 2]),
+    CheckEqual(GetMimeContentType('', 'toto.' + MIMES[i * 2]),
       ToUtf8(MIMES[i * 2 + 1]));
+  FastSetString(s, 34);
   for i := 0 to high(BIN) do
   begin
-    CheckEqual(GetMimeContentType(@BIN[i], 34, ''), BIN_MIME[i]);
-    CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i], 34, ''), BIN_MIME[i]);
+    PCardinal(s)^ := BIN[i];
+    CheckEqual(GetMimeContentType(s), BIN_MIME[i]);
+    ct := '';
+    Check(GetMimeContentTypeFromBuffer(s, ct) <> mtUnknown);
+    CheckEqual(ct, BIN_MIME[i]);
   end;
   s := '<?xml';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
@@ -7787,6 +8607,12 @@ begin
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '<!DocType HTML<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  s := '{"json":123}';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
+  s := '["json",123]';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
+  s := '["json",'#0'123]';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
   Check(not IsContentTypeCompressible('anything'));
   Check(not IsContentTypeCompressible('toto/plain'));
   Check(IsContentTypeCompressible('text/plain'));
@@ -7798,6 +8624,8 @@ begin
   Check(IsContentTypeCompressible('application/xml'));
   Check(IsContentTypeCompressible('application/javascript'));
   Check(IsContentTypeCompressible('application/VND.API+JSON'));
+  Check(IsContentTypeCompressible('application/atom+xml'));
+  Check(not IsContentTypeCompressible('applications/atom+xml'));
   Check(not IsContentTypeCompressible('application/plain'));
   Check(IsContentTypeCompressible('image/svg'));
   Check(IsContentTypeCompressible('image/X-ico'));
@@ -7957,6 +8785,7 @@ var
   tmp: array[0..512] of AnsiChar;
   msg, n, v: RawUtf8;
   os: TOperatingSystem;
+  osv: TOperatingSystemVersion;
   len: integer;
 begin
   Check(not UserAgentParse('toto (mozilla)', n, v, os));
@@ -7972,6 +8801,32 @@ begin
   Check(n = 'myprogram');
   Check(v = '3.1.2');
   check(os = osWindows);
+  osv.os := osWindows;
+  osv.win := wSeven;
+  osv.winbuild := 0;
+  CheckEqual(ToText(osv), 'Windows 7');
+  osv.win := wTen_64;
+  CheckEqual(ToText(osv), 'Windows 10 64bit');
+  osv.winbuild := 10240;
+  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  osv.winbuild := 10241;
+  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  osv.win := wTen;
+  osv.winbuild := 19045;
+  CheckEqual(ToText(osv), 'Windows 10 22H2');
+  osv.win := wEleven;
+  osv.winbuild := 22000;
+  CheckEqual(ToText(osv), 'Windows 11 21H2');
+  osv.winbuild := 22621;
+  CheckEqual(ToText(osv), 'Windows 11 22H2');
+  osv.win := wEleven_64;
+  osv.winbuild := 26100;
+  CheckEqual(ToText(osv), 'Windows 11 64bit 24H2');
+  osv.winbuild := 26100;
+  CheckEqual(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
+  osv.win := wServer2022_64;
+  osv.winbuild := 20349;
+  CheckEqual(ToTextOS(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
   FillcharFast(tmp, SizeOf(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences
@@ -8010,6 +8865,7 @@ const
 var
   nv: TSynNameValue;
   i: integer;
+  v: RawUtf8;
   tmp: TSynTempBuffer;
 begin
   nv.Init(false);
@@ -8018,46 +8874,48 @@ begin
     nv.Add(UInt32ToUtf8(i), UInt32ToUtf8(i + MAX));
   check(nv.Count = MAX);
   for i := 1 to MAX do
-    check(nv.Find(UInt32ToUtf8(i)) = i - 1);
+    checkEqual(nv.Find(UInt32ToUtf8(i)), i - 1);
   for i := MAX + 1 to MAX * 2 do
     check(nv.Find(UInt32ToUtf8(i)) < 0);
   for i := 1 to MAX do
-    check(nv.Value(UInt32ToUtf8(i)) = UInt32ToUtf8(i + MAX));
-  for i := 1 to MAX do
-    check(nv.Str[UInt32ToUtf8(i)] = UInt32ToUtf8(i + MAX));
+  begin
+    UInt32ToUtf8(i + MAX, v);
+    checkEqual(nv.Value(UInt32ToUtf8(i)), v);
+    checkEqual(nv.Str[UInt32ToUtf8(i)], v);
+  end;
   nv.InitFromNamesValues(['a', 'b'], ['1', 'be']);
-  check(nv.Count = 2);
-  check(nv.Str['a'] = '1');
-  check(nv.Str['b'] = 'be');
-  check(nv.Str['c'] = '');
-  check(nv.ValueInt('a') = 1);
-  check(nv.ValueInt('b') = 0);
-  check(nv.ValueInt('c') = 0);
-  check(nv.AsCsv('=', ';') = 'a=1;b=be;');
-  check(nv.AsJson = '{"a":"1","b":"be"}');
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.Str['a'], '1');
+  checkEqual(nv.Str['b'], 'be');
+  checkEqual(nv.Str['c'], '');
+  checkEqual(nv.ValueInt('a'), 1);
+  checkEqual(nv.ValueInt('b'), 0);
+  checkEqual(nv.ValueInt('c'), 0);
+  checkEqual(nv.AsCsv('=', ';'), 'a=1;b=be;');
+  checkEqual(nv.AsJson, '{"a":"1","b":"be"}');
   tmp.Init('{a:10,b:"bee"}');
   check(nv.InitFromJson(tmp.buf));
-  check(nv.Count = 2);
-  check(nv.Str['a'] = '10');
-  check(nv.Str['b'] = 'bee');
-  check(nv.Str['c'] = '');
-  check(nv.Int['a'] = 10);
-  check(nv.Int['b'] = 0);
-  check(nv.Int['c'] = 0);
-  check(nv.AsCsv('=', ';') = 'a=10;b=bee;');
-  check(nv.AsJson = '{"a":"10","b":"bee"}');
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.Str['a'], '10');
+  checkEqual(nv.Str['b'], 'bee');
+  checkEqual(nv.Str['c'], '');
+  checkEqual(nv.Int['a'], 10);
+  checkEqual(nv.Int['b'], 0);
+  checkEqual(nv.Int['c'], 0);
+  checkEqual(nv.AsCsv('=', ';'), 'a=10;b=bee;');
+  checkEqual(nv.AsJson, '{"a":"10","b":"bee"}');
   check(nv.Delete('b'));
-  check(nv.ValueInt('a') = 10);
-  check(nv.Str['b'] = '');
+  checkEqual(nv.ValueInt('a'), 10);
+  checkEqual(nv.Str['b'], '');
   check(not nv.Delete('b'));
-  check(nv.DeleteByValue('10') = 1);
-  check(nv.ValueInt('a') = 0);
-  check(nv.DeleteByValue('10') = 0);
-  check(nv.Count = 0);
-  check(nv.AsCsv('=', ';') = '');
+  checkEqual(nv.DeleteByValue('10'), 1);
+  checkEqual(nv.ValueInt('a'), 0);
+  checkEqual(nv.DeleteByValue('10'), 0);
+  checkEqual(nv.Count, 0);
+  checkEqual(nv.AsCsv('=', ';'), '');
   tmp.Init('{"a":20,b:"bi"]');
   check(not nv.InitFromJson(tmp.buf));
-  check(nv.Count = 0);
+  checkEqual(nv.Count, 0);
 end;
 
 procedure TTestCoreBase._TSynUniqueIdentifier;
@@ -8066,6 +8924,7 @@ const
 var
   gen: TSynUniqueIdentifierGenerator;
   i1, i2: TSynUniqueIdentifierBits;
+  js: TSynUnique53;
   i3: TSynUniqueIdentifier;
   rounds, i: integer;
   json, obfusc: RawUtf8;
@@ -8077,8 +8936,12 @@ begin
     try
       for i := 1 to 50000 do
       begin
+        i1.Value := 0;
+        i2.Value := 0;
         gen.ComputeNew(i1);
         gen.ComputeNew(i2);
+        check(i1.Value <> 0);
+        check(i2.Value <> 0);
         check(i1.ProcessID = 10);
         check(i2.ProcessID = 10);
         check(i1.CreateTimeUnix > JAN2015_UNIX);
@@ -8115,14 +8978,30 @@ begin
   try
     i3 := 0;
     check(gen.FromObfuscated(obfusc, i3), 'SharedObfuscationKey');
-    check(i1.Value = i3, 'FromObfuscated');
+    checkEqual(i1.Value, i3, 'FromObfuscated');
+    i1.Value := 0;
     timer.Start;
     for i := 1 to 100000 do
     begin
-      gen.ComputeNew(i1);
       gen.ComputeNew(i2);
+      check(i2.Value <> 0);
+      Check(i1.Value <> i2.Value, 'ComputeNew');
+      i1 := i2;
     end;
     NotifyTestSpeed('ComputeNew', gen.ComputedCount, 0, @timer);
+    check(i1.Value <> 0);
+    check(i2.Value <> 0);
+    js := i1.JavaScriptID;
+    check(js < MAX_SAFE_JS_INTEGER);
+    check(i1.Value <> 0);
+    check(i2.Value <> 0);
+    CheckEqual(js, i1.JavaScriptID);
+    CheckEqual(i1.Value, i2.Value);
+    i2.Value := 0;
+    CheckNotEqual(i1.Value, i2.Value);
+    CheckNotEqual(js, i2.JavaScriptID);
+    i2.JavaScriptID := js;
+    CheckEqual(i1.Value, i2.Value);
   finally
     gen.Free;
   end;
@@ -8385,22 +9264,47 @@ var
     end;
   end;
 
+  procedure SetDict;
+  begin
+    {$ifdef HASGENERICS}
+    dict := TSynDictionary.New<RawUtf8, RawUtf8>(True);
+    {$else}
+    dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
+    {$endif HASGENERICS}
+  end;
+
 var
   v: tvalue;
-  s, k, key, val: RawUtf8;
+  s, k, key, val, u: RawUtf8;
   i, n: integer;
   exists: boolean;
   sdk: TSDKey;
 begin
-  {$ifdef HASGENERICS}
-  dict := TSynDictionary.New<RawUtf8, RawUtf8>(True);
-  {$else}
-  dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
-  {$endif HASGENERICS}
+  SetDict;
   try
+    CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
+  finally
+    dict.Free;
+  end;
+  SetDict;
+  try
+    CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
+    dict.Capacity := 64;
+    CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 64);
+  finally
+    dict.Free;
+  end;
+  SetDict;
+  try
+    CheckEqual(dict.Count, 0);
+    CheckEqual(dict.Capacity, 0);
     key := 'Foobar';
     val := 'lol';
     dict.AddOrUpdate(key, val);
+    CheckEqual(dict.Count, 1);
     s := dict.SaveToJson;
     CheckEqual(s, '{"Foobar":"lol"}');
     key := 'foobar';
@@ -8408,6 +9312,7 @@ begin
     dict.AddOrUpdate(key, val);
     s := dict.SaveToJson;
     CheckEqual(s, '{"Foobar":"xxx"}');
+    CheckEqual(dict.Count, 1);
     key := 'FooBar';
     dict.FindAndCopy(key, val, False);
     CheckEqual(val, 'xxx');
@@ -8452,6 +9357,13 @@ begin
     check(dict.LoadFromJson(s));
     Test;
     s := dict.SaveToBinary;
+    u := '{"a":1,"b":2}';
+    check(dict.LoadFromJson(u));
+    CheckEqual(dict.SaveToJson, u);
+    check(dict.LoadFromJson('{a:1,b:2}'), 'extended syntax');
+    CheckEqual(dict.SaveToJson, u);
+    check(dict.LoadFromJson('{a:1,2:{b:3,c:4}}'));
+    CheckEqual(dict.SaveToJson, '{"a":1,"2":{"b":3,"c":4}}');
   finally
     dict.Free;
   end;
@@ -8877,7 +9789,7 @@ begin
     tmp := DynArraySaveJson(arr, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     ObjArrayClear(arr);
     CheckEqual(length(arr), 0);
-    DynArrayLoadJson(arr, pointer(tmp), TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    DynArrayLoadJsonInPlace(arr, pointer(tmp), TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     CheckEqual(length(arr), MAX + 1);
     for i := 0 to MAX do
     begin
@@ -8942,6 +9854,84 @@ begin
   result := StrIComp(
     pointer(TOrmPeople(A).FirstName), pointer(TOrmPeople(B).FirstName));
 end;
+
+{$ifdef OSWINDOWS}
+
+procedure TTestCoreBase.WindowsSpecificApi;
+
+  procedure Win32DotNetException(code: cardinal; const expected: RawUtf8);
+  var
+    e: TPShortStringDynArray;
+    i: PtrInt;
+    v: RawUtf8;
+  begin
+    Check(e = nil);
+    Win32DotNetExceptions(code, e);
+    CheckEqual(v, '');
+    for i := 0 to high(e) do
+      Append(v, [e[i]^, ' ']);
+    CheckEqual(v, expected);
+  end;
+
+var
+  nfo: TWinProcessInfo;
+begin
+  // validate Windows API error code recognition
+  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
+  Check(WinErrorConstant(ERROR_OPERATION_ABORTED)^ = 'OPERATION_ABORTED', 'wecb');
+  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
+  Check(WinErrorConstant(ERROR_MORE_DATA)^ = 'MORE_DATA', 'wecd');
+  Check(WinErrorConstant(ERROR_ACCESS_DENIED)^ = 'ACCESS_DENIED', 'wece');
+  Check(WinErrorConstant(ERROR_WINHTTP_TIMEOUT)^ = 'WINHTTP_TIMEOUT', 'wecf');
+  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecg');
+  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant(ERROR_CONNECTION_INVALID)^  = 'CONNECTION_INVALID', 'weci');
+  Check(WinErrorConstant(ERROR_INSUFFICIENT_BUFFER)^ = 'INSUFFICIENT_BUFFER', 'wecj');
+  Check(WinErrorConstant(ERROR_WINHTTP_INVALID_SERVER_RESPONSE)^ =
+    'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  Check(WinErrorConstant(ERROR_INVALID_PARAMETER)^ = 'INVALID_PARAMETER', 'wecl');
+  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
+  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
+  // validate DotNet exceptions error code recognition
+  Win32DotNetException(0, '');
+  Win32DotNetException(9234, '');
+  Win32DotNetException($800703E9, '_StackOverflow ');
+  Win32DotNetException($80131500, '_ _SUDSGenerator _SUDSParser ');
+  // validate UAC specific functions
+  Check(IsSystemFolder('c:\program files'));
+  Check(IsSystemFolder('c:\program Files\toto'));
+  Check(IsSystemFolder('c:\Program files (x86)'));
+  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
+  Check(IsSystemFolder('c:\windows'));
+  Check(IsSystemFolder('c:\windows\toto'));
+  Check(not IsSystemFolder('c:\program file'));
+  Check(not IsSystemFolder('c:\program files other\toto'));
+  Check(not IsSystemFolder('c:\windowstorage'));
+  if IsUacVirtualizationEnabled then
+  begin
+    Check(IsUacVirtualFolder('c:\program files'));
+    Check(IsUacVirtualFolder('c:\program Files\toto'));
+    Check(IsUacVirtualFolder('c:\Program files (x86)'));
+    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
+    Check(IsUacVirtualFolder('c:\windows'));
+    Check(IsUacVirtualFolder('c:\windows\toto'));
+    Check(not IsUacVirtualFolder('c:\program file'));
+    Check(not IsUacVirtualFolder('c:\program files other\toto'));
+    Check(not IsUacVirtualFolder('c:\windowstorage'));
+  end
+  else
+    Check(not IsUacVirtualFolder('c:\program files'));
+  // validate raw Windows process access
+  FillCharFast(nfo, SizeOf(nfo), 0);
+  GetProcessInfo(GetCurrentProcessId, nfo);
+  Check(nfo.CommandLine <> '', 'Cmd0');
+  Check(PosEx(Executable.ProgramName, SynUnicodeToUtf8(nfo.CommandLine)) > 0, 'Cmd1');
+  Check(nfo.AvailableInfo = [wpaiPID..wpaiImagePath], 'AvailableInfo');
+  CheckEqual(nfo.PID, GetCurrentProcessId, 'PID');
+  Check(nfo.AffinityMask <> 0, 'AffinityMask');
+end;
+
+{$endif OSWINDOWS}
 
 
 initialization

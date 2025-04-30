@@ -998,6 +998,7 @@ type
   TCryptStoreAlgoX509 = class(TCryptStoreAlgo)
   public
     function New: ICryptStore; override; // = TCryptStoreX509.Create(self)
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
   /// 'x509-pki' ICryptStore using TX509 and TX509Crl as a full featured PKI
@@ -1045,7 +1046,6 @@ type
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    function DefaultCertAlgo: TCryptCertAlgo; override;
   public
     /// how many levels IsValid() should iterate over the trusted certificates
     // before finding a self-signed "root anchor"
@@ -1697,7 +1697,7 @@ function HumanRandomID: RawUtf8;
 var
   rnd: THash256;
 begin
-  RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
+  SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
   rnd[0] := rnd[0] and $7f;     // ensure > 0
   ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
 end;
@@ -3930,7 +3930,7 @@ begin
             FreeAndNil(fX509);
         end;
       cccCertWithPrivateKey:
-        // unconcatenate certificate PEM and private key PEM - no PKCS#12 yet
+        // unconcatenate cert PEM and private key PEM - no PKCS#12/.PFX yet
         result := PemToCertAndPrivKey(Saved, der, bin) and
                   Load(der, cccCertOnly, '') and
                   Load(bin, cccPrivateKeyOnly, PrivatePassword)
@@ -3965,7 +3965,7 @@ begin
           if HasPrivateSecret then
           try
             // save as concatenated PEM, even if ccfBinary was requested
-            // (no PKCS#12 support yet)
+            // (no PKCS#12/.PFX support yet)
             pem := Save(cccPrivateKeyOnly, PrivatePassword, ccfPem);
             result := Save(cccCertOnly, '', ccfPem) + RawUtf8(#13#10) + pem;
           finally
@@ -4145,6 +4145,11 @@ end;
 function TCryptStoreAlgoX509.New: ICryptStore;
 begin
   result := TCryptStoreX509.Create(self);
+end;
+
+function TCryptStoreAlgoX509.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertX509[CryptAlgoDefault];
 end;
 
 
@@ -4475,12 +4480,6 @@ function TCryptStoreX509.CrlCount: integer;
 begin
   result := fSignedCrl.Count + fUnsignedCrl.Count;
 end;
-
-function TCryptStoreX509.DefaultCertAlgo: TCryptCertAlgo;
-begin
-  result := CryptCertX509[CryptAlgoDefault];
-end;
-
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }

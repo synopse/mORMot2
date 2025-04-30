@@ -73,6 +73,8 @@ type
     CredHandle: TSecHandle;
     CtxHandle: TSecHandle;
     CreatedTick64: Int64;
+    ChannelBindingsHash: pointer;
+    ChannelBindingsHashLen: cardinal;
   end;
   PSecContext = ^TSecContext;
 
@@ -90,10 +92,12 @@ type
     cbBuffer: cardinal;
     BufferType: cardinal;
     pvBuffer: pointer;
-    procedure Init(aType: cardinal; aData: pointer; aSize: cardinal);
+    procedure Init(aType: cardinal; aData: pointer = nil; aSize: cardinal = 0);
       {$ifdef HASINLINE} inline; {$endif}
   end;
   PSecBuffer = ^TSecBuffer;
+  TSecBufferArray = array[byte] of TSecBuffer;
+  PSecBufferArray = ^TSecBufferArray;
 
   /// describes a SSPI buffer
   {$ifdef USERECORDWITHMETHODS}
@@ -104,10 +108,11 @@ type
   public
     ulVersion: cardinal;
     cBuffers: cardinal;
-    pBuffers: PSecBuffer;
-    procedure Init(aVersion: cardinal;
-      aBuffers: PSecBuffer; aBuffersCount: cardinal);
-      {$ifdef HASINLINE} inline; {$endif}
+    pBuffers: PSecBufferArray;
+    Data: array[0..2] of TSecBuffer;
+    procedure Init;
+    procedure Add(aType: cardinal; aData: pointer = nil; aSize: cardinal = 0); overload;
+    procedure Add(aType: cardinal; const aData: RawByteString); overload;
   end;
   PSecBufferDesc = ^TSecBufferDesc;
 
@@ -222,18 +227,32 @@ type
     AccessToken: pointer;
   end;
 
+  /// SEC_CHANNEL_BINDINGS to specify channel binding information for a security context
+  TSecChannelBindings = record
+    dwInitiatorAddrType: cardinal;
+    cbInitiatorLength: cardinal;
+    dwInitiatorOffset: cardinal;
+    dwAcceptorAddrType: cardinal;
+    cbAcceptorLength: cardinal;
+    dwAcceptorOffset: cardinal;
+    cbApplicationDataLength: cardinal;
+    dwApplicationDataOffset: cardinal;
+  end;
+  PSecChannelBindings = ^TSecChannelBindings;
+
 const
   SECBUFFER_VERSION = 0;
 
-  SECBUFFER_EMPTY          = 0;
-  SECBUFFER_DATA           = 1;
-  SECBUFFER_TOKEN          = 2;
-  SECBUFFER_EXTRA          = 5;
-  SECBUFFER_STREAM_TRAILER = 6;
-  SECBUFFER_STREAM_HEADER  = 7;
-  SECBUFFER_PADDING        = 9;
-  SECBUFFER_STREAM         = 10;
-  SECBUFFER_ALERT          = 17;
+  SECBUFFER_EMPTY            = 0;
+  SECBUFFER_DATA             = 1;
+  SECBUFFER_TOKEN            = 2;
+  SECBUFFER_EXTRA            = 5;
+  SECBUFFER_STREAM_TRAILER   = 6;
+  SECBUFFER_STREAM_HEADER    = 7;
+  SECBUFFER_PADDING          = 9;
+  SECBUFFER_STREAM           = 10;
+  SECBUFFER_CHANNEL_BINDINGS = 14;
+  SECBUFFER_ALERT            = 17;
 
   SECPKG_CRED_INBOUND  = 1;
   SECPKG_CRED_OUTBOUND = 2;
@@ -656,6 +675,9 @@ type
     // - contains e.g. 'C=FR, O=Certplus, CN=Class 3P Primary CA'
     // - you can use ExtractX500() to retrieve one actual field value
     SubjectName: RawUtf8;
+    /// the certificate Alternate Subject names as a CSV array
+    // - contains e.g. 'synopse.info, www.synopse.info'
+    SubjectAltNames: RawUtf8;
     /// the certificate Issuer ID, stored as 'xx:xx:xx:xx...' hexa text
     IssuerID: RawUtf8;
     /// the certificate Subject ID, stored as 'xx:xx:xx:xx...' hexa text
@@ -687,7 +709,7 @@ type
     KeyContainer: RawUtf8;
     /// the key container provider name
     KeyProvider: RawUtf8;
-    /// the X509 extensions of this certificate
+    /// the raw X509 extensions of this certificate
     Extension: array of TWinCertExtension;
   end;
   PWinCertInfo = ^TWinCertInfo;
@@ -702,8 +724,8 @@ const
     CERT_NON_REPUDIATION_KEY_USAGE,     // wkuNonRepudiation
     CERT_DIGITAL_SIGNATURE_KEY_USAGE);  // wkuDigitalSignature
 
-/// return the whole algorithm name from a OID text
-procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
+/// return the whole algorithm name from a OID text using Windows API
+procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
 
 /// decode a CERT_NAME_BLOB binary blob into RFC 1779 text, with X500 key names
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
@@ -724,10 +746,14 @@ function ExtractX500(const Pattern, Text: RawUtf8): RawUtf8;
 /// retrieve the end certificate information of a given TLS connection
 function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
 
+/// retrieve the raw end certificate binary of a given TLS connection
+// - and optionally its signature algorithm OID as text
+function TlsCertRaw(var Ctxt: TCtxtHandle; SignOid: PRawUtf8 = nil): RawByteString;
+
 /// return some multi-line text of the main TWinCertInfo fields
 // - in a layout similar to X509_print() OpenSSL formatting
 // - fully implemented by mormot.crypt.secure - a cut-down version is set by
-// this unit
+// this unit, missing some less-used fields
 var
   WinCertInfoToText: function(const c: TWinCertInfo): RawUtf8;
 
@@ -1185,12 +1211,24 @@ end;
 
 { TSecBufferDesc }
 
-procedure TSecBufferDesc.Init(aVersion: cardinal; aBuffers: PSecBuffer;
-  aBuffersCount: cardinal);
+procedure TSecBufferDesc.Init;
 begin
-  ulVersion := aVersion;
-  pBuffers := aBuffers;
-  cBuffers := aBuffersCount;
+  ulVersion := SECBUFFER_VERSION;
+  pBuffers := @Data;
+  cBuffers := 0;
+end;
+
+procedure TSecBufferDesc.Add(aType: cardinal; aData: pointer; aSize: cardinal);
+begin
+  if cBuffers = cardinal(length(Data)) then
+    raise ESynSspi.Create('TSecBufferDesc overflow)');
+  Data[cBuffers].Init(aType, aData, aSize);
+  inc(cBuffers);
+end;
+
+procedure TSecBufferDesc.Add(aType: cardinal; const aData: RawByteString);
+begin
+  Add(aType, pointer(aData), length(aData));
 end;
 
 
@@ -1291,6 +1329,8 @@ begin
   aSecContext.CtxHandle.dwLower := -1;
   aSecContext.CtxHandle.dwUpper := -1;
   aSecContext.CreatedTick64 := aTick64;
+  aSecContext.ChannelBindingsHash := nil;
+  aSecContext.ChannelBindingsHashLen := 0;
 end;
 
 procedure FreeSecurityContext(var handle: TSecHandle);
@@ -1323,10 +1363,9 @@ function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;
 var
   Sizes: TSecPkgContext_Sizes;
-  SrcLen, EncLen: cardinal;
+  EncLen: cardinal;
   Token: array [0..127] of byte; // Usually 60 bytes
   Padding: array [0..63] of byte; // Usually 1 byte
-  InBuf: array[0..2] of TSecBuffer;
   InDesc: TSecBufferDesc;
   EncBuffer: RawByteString;
   Status: integer;
@@ -1340,6 +1379,10 @@ begin
   if (Sizes.cbSecurityTrailer > SizeOf(Token)) or
      (Sizes.cbBlockSize > SizeOf(Padding)) then
     raise ESynSspi.Create('SecEncrypt: invalid ATTR_SIZES');
+  FillCharFast(Token, Sizes.cbSecurityTrailer, 0);
+  FillCharFast(Padding, Sizes.cbBlockSize, 0);
+  // Encoding done in-place, so we copy the data into local EncBuffer
+  FastSetRawByteString(EncBuffer, pointer(aPlain), Length(aPlain));
   // Encrypted data buffer structure:
   //
   // SSPI/Kerberos Interoperability with GSSAPI
@@ -1354,24 +1397,21 @@ begin
   // +-------------------------+----------------+--------------------------+
   // | Trailer                 | Data           | Padding                  |
   // +-------------------------+----------------+--------------------------+
-  {%H-}InBuf[0].Init(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
-  // Encoding done in-place, so we copy the data
-  SrcLen := Length(aPlain);
-  FastSetRawByteString(EncBuffer, pointer(aPlain), SrcLen);
-  InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
-  InBuf[2].Init(SECBUFFER_PADDING, @Padding[0], Sizes.cbBlockSize);
-  {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
+  {%H-}InDesc.Init;
+  InDesc.Add(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
+  InDesc.Add(SECBUFFER_DATA, EncBuffer);
+  InDesc.Add(SECBUFFER_PADDING, @Padding, Sizes.cbBlockSize);
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  EncLen := InBuf[0].cbBuffer + InBuf[1].cbBuffer + InBuf[2].cbBuffer;
+  EncLen := InDesc.Data[0].cbBuffer + InDesc.Data[1].cbBuffer + InDesc.Data[2].cbBuffer;
   SetLength(result, EncLen);
   BufPtr := pointer(result);
-  MoveFast(PByte(InBuf[0].pvBuffer)^, BufPtr^, InBuf[0].cbBuffer);
-  Inc(BufPtr, InBuf[0].cbBuffer);
-  MoveFast(PByte(InBuf[1].pvBuffer)^, BufPtr^, InBuf[1].cbBuffer);
-  Inc(BufPtr, InBuf[1].cbBuffer);
-  MoveFast(PByte(InBuf[2].pvBuffer)^, BufPtr^, InBuf[2].cbBuffer);
+  MoveFast(InDesc.Data[0].pvBuffer^, BufPtr^, InDesc.Data[0].cbBuffer);
+  inc(BufPtr, InDesc.Data[0].cbBuffer);
+  MoveFast(InDesc.Data[1].pvBuffer^, BufPtr^, InDesc.Data[1].cbBuffer);
+  inc(BufPtr, InDesc.Data[1].cbBuffer);
+  MoveFast(InDesc.Data[2].pvBuffer^, BufPtr^, InDesc.Data[2].cbBuffer);
 end;
 
 function SecDecrypt(var aSecContext: TSecContext;
@@ -1379,7 +1419,6 @@ function SecDecrypt(var aSecContext: TSecContext;
 var
   EncLen, SigLen: cardinal;
   BufPtr: PByte;
-  InBuf: array [0..1] of TSecBuffer;
   InDesc: TSecBufferDesc;
   Status: integer;
   QOP: cardinal;
@@ -1399,16 +1438,16 @@ begin
   if (SigLen = 16) or
      (SigLen = 60) then
   begin
-    Inc(BufPtr, SizeOf(cardinal));
-    Dec(EncLen, SizeOf(cardinal));
+    inc(BufPtr, SizeOf(cardinal));
+    dec(EncLen, SizeOf(cardinal));
   end;
-  {%H-}InBuf[0].Init(SECBUFFER_STREAM, BufPtr, EncLen);
-  InBuf[1].Init(SECBUFFER_DATA, nil, 0);
-  {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
+  {%H-}InDesc.Init;
+  InDesc.Add(SECBUFFER_STREAM, BufPtr, EncLen);
+  InDesc.Add(SECBUFFER_DATA);
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(result, InBuf[1].pvBuffer, InBuf[1].cbBuffer);
+  FastSetRawByteString(result, InDesc.Data[1].pvBuffer, InDesc.Data[1].cbBuffer);
 end;
 
 function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
@@ -1443,54 +1482,47 @@ begin
   result := false;
   nfo := nil;
   if QueryContextAttributesW(
-      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) <> SEC_E_OK then
-    exit;
-  result := WinCertCtxtDecode(nfo, Info);
-  CertFreeCertificateContext(nfo);
+      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) = SEC_E_OK then
+    try
+      result := WinCertCtxtDecode(nfo, Info);
+    finally
+      CertFreeCertificateContext(nfo);
+    end;
 end;
 
-const
-  RSA_PREFIX: PAnsiChar = '1.2.840.113549.1.1.'; // len=19
-  ECC_PREFIX: PAnsiChar = '1.2.840.10045.';      // len=14
-  ENU_PREFIX: PAnsiChar = '1.3.6.1.5.5.7.3.';    // len=16
+function TlsCertRaw(var Ctxt: TCtxtHandle; SignOid: PRawUtf8): RawByteString;
+var
+  nfo: PCCERT_CONTEXT;
+begin
+  result := '';
+  if SignOid <> nil then
+    SignOid^ := '';
+  nfo := nil;
+  if QueryContextAttributesW(
+      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) = SEC_E_OK then
+    try
+      FastSetRawByteString(result, nfo.pbCertEncoded, nfo.cbCertEncoded);
+      if (SignOid <> nil) and
+         (nfo^.pCertInfo <> nil) then
+        SignOid^ := nfo^.pCertInfo^.SignatureAlgorithm.pszObjId;
+    finally
+      CertFreeCertificateContext(nfo);
+    end;
+end;
 
-procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
+procedure WinCertAlgoName(const OID: RawUtf8; out Name: RawUtf8);
 var
   nfo: PCRYPT_OID_INFO;
 begin
-  nfo := CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, OID, 0);
+  if OID = '' then
+    exit;
+  nfo := CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, pointer(OID), 0);
   if nfo <> nil then
-    Win32PWideCharToUtf8(nfo^.pwszName, Text)
-  else if OID <> nil then
+    // from Windows API
+    Win32PWideCharToUtf8(nfo^.pwszName, Name)
+  else
     // minimal decoding fallback for Windows XP
-    if CompareMemSmall(OID, RSA_PREFIX, 19) then
-    begin
-      inc(OID, 19);
-      if StrComp(OID, PAnsiChar('4'#0)) = 0 then
-        Text := 'md5RSA'
-      else if StrComp(OID, PAnsiChar('5'#0)) = 0 then
-        Text := 'sha1RSA'
-      else if StrComp(OID, PAnsiChar('11')) = 0 then
-        Text := 'sha256RSA'
-      else if StrComp(OID, PAnsiChar('12')) = 0 then
-        Text := 'sha384RSA'
-      else if StrComp(OID, PAnsiChar('13')) = 0 then
-        Text := 'sha512RSA'
-      else if StrComp(OID, PAnsiChar('14')) = 0 then
-        Text := 'sha224RSA'
-      else
-        Text := 'RSA';
-    end
-    else if CompareMemSmall(OID, ECC_PREFIX, 14) then
-    begin
-      inc(OID, 14);
-      if StrComp(OID, PAnsiChar('4.1')) = 0 then
-        Text := 'sha1ECDSA'
-      else if StrComp(OID, PAnsiChar('4.2')) = 0 then
-        Text := 'sha2ECDSA'
-      else
-        Text := 'ECC';
-    end;
+    Name := CertAlgoName(OID);
 end;
 
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
@@ -1500,7 +1532,8 @@ var
   tmp: array[0..4095] of WideChar;
 begin
   len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, @tmp, SizeOf(tmp));
-  Win32PWideCharToUtf8(@tmp, len - 1, Text);
+  if len <> 0 then
+    Win32PWideCharToUtf8(@tmp, len - 1, Text);
 end;
 
 function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
@@ -1553,8 +1586,41 @@ begin
   TrimCopy(t, i, j - i, result);
 end;
 
+function ParseAltNames(P: PByteArray; L: PtrInt): RawUtf8;
+begin // rough parsing, but works with most simple content
+  result := '';
+  { 2.5.29.17 = 30:20:
+                  82:0c: 73:79:6e:6f:70:73:65:2e:69:6e:66:6f:
+                  82:10: 77:77:77:2e:73:79:6e:6f:70:73:65:2e:69:6e:66:6f
+    into 'synopse.info, www.synopse.info' }
+  dec(L, 2);
+  if (L <= 0) or
+     (P[0] <> $30) or
+     (P[1] and $80 <> 0) or
+     (P[1] <> L) then
+    exit;
+  P := @P[2]; // 30:xx initial sequence
+  repeat
+    if (L <= 2) or
+       (P[1] and $80 <> 0) then
+      exit;
+    dec(L, P[1] + 2);
+    if L < 0 then
+      exit;
+    if P[0] = $82 then // CHOICE dNSName [2] IA5String
+    begin
+      AppendBufferToUtf8(pointer(@P[2]), P[1], result);
+      if L = 0 then
+        break;
+      AppendShortToUtf8(', ', result);
+    end;
+    P := @P[P[1] + 2]; // next choice
+  until L = 0;
+end;
+
 const
-  WIN_CERT_EXT: array[wkuTlsServer..wkuTimestamp] of PAnsiChar = (
+  ENU_PREFIX: PAnsiChar = '1.3.6.1.5.5.7.3.';    // len=16
+  ENU_SUFFIX: array[wkuTlsServer..wkuTimestamp] of AnsiChar = (
     '1',  // wkuTlsServer
     '2',  // wkuTlsClient
     '4',  // wkuEmail
@@ -1566,13 +1632,15 @@ function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal): boolean;
 var
   nfo: PCERT_INFO;
-  i, o: PtrInt;
+  i, j, o: PtrInt;
   oid: PAnsiChar;
-  ku: byte;
   u: TWinCertUsage;
+  ku: byte;
   len: cardinal;
   sub: RawUtf8;
   h: THash160;
+  e: PCERT_EXTENSION;
+  c: PWinCertExtension;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -1597,9 +1665,12 @@ begin
         if not CompareMemSmall(oid, ENU_PREFIX, 16) then
           continue;
         inc(oid, 16);
-        for u := low(WIN_CERT_EXT) to high(WIN_CERT_EXT) do
-          if StrComp(oid, WIN_CERT_EXT[u]) = 0 then
-            include(Cert.Usage, u);
+        if oid[1] = #0 then
+        begin
+          j := ByteScanIndex(@ENU_SUFFIX, length(ENU_SUFFIX), ord(oid[0]));
+          if j >= 0 then
+            include(Cert.Usage, TWinCertUsage(j + ord(low(ENU_SUFFIX))));
+        end;
       end;
   WinCertName(nfo^.Issuer, Cert.IssuerName, StrType);
   WinCertName(nfo^.Subject, Cert.SubjectName, StrType);
@@ -1624,10 +1695,9 @@ begin
   Cert.NotBefore := FileTimeToDateTime(nfo^.NotBefore);
   Cert.NotAfter  := FileTimeToDateTime(nfo^.NotAfter);
   Cert.Algorithm := nfo^.SignatureAlgorithm.pszObjId;
-  WinCertAlgoName(nfo^.SignatureAlgorithm.pszObjId, Cert.AlgorithmName);
+  WinCertAlgoName(Cert.Algorithm, Cert.AlgorithmName);
   Cert.PublicKeyAlgorithm := nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId;
-  WinCertAlgoName(nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId,
-    Cert.PublicKeyAlgorithmName);
+  WinCertAlgoName(Cert.PublicKeyAlgorithm, Cert.PublicKeyAlgorithmName);
   with nfo^.SubjectPublicKeyInfo.PublicKey do
     FastSetRawByteString(Cert.PublicKeyContent, pbData, cbData);
   len := tmp.Init;
@@ -1642,29 +1712,41 @@ begin
   if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
     ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
-  for i := 0 to integer(nfo^.cExtension) - 1 do
-    with nfo^.rgExtension[i],
-         Cert.Extension[i] do
+  c := pointer(Cert.Extension);
+  e := @nfo^.rgExtension[0];
+  for i := 1 to nfo^.cExtension do
+  begin
+    // store the raw extension content as hexadecimal
+    c^.OID := e^.pszObjId;
+    c^.Critical := e^.fCritical;
+    ToHumanHex(c^.Value, pointer(e^.Blob.pbData), e^.Blob.cbData);
+    // decode most needed information
+    if c^.OID = '2.5.29.17' then // e.g. 'synopse.info, www.synopse.info'
+      Cert.SubjectAltNames := ParseAltNames(e^.Blob.pbData, e^.Blob.cbData)
+    else if c^.OID = '2.5.29.19' then
     begin
-      OID := pszObjId;
-      Critical := fCritical;
-      ToHumanHex(Value, pointer(Blob.pbData), Blob.cbData);
-      if (OID = '2.5.29.19') and
-         (PosEx('01:ff', Value) <> 0) then
-        include(Cert.Usage, wkuCA) // X509v3 Basic Constraints: CA:TRUE
-      else if (Cert.SubjectID = '') and
-              (OID = '2.5.29.14') and
-              (copy(Value, 1, 6) = '04:14:') then
-        Cert.SubjectID := copy(Value, 7, 2000) // rough parsing of 20-byte IDs
-      else if (Cert.IssuerID = '') and
-              (OID = '2.5.29.35') and // authorityKeyIdentifier
-              (length(Value) > 60) then
+      if PosEx('01:ff', c^.Value) <> 0 then
+        include(Cert.Usage, wkuCA); // X509v3 Basic Constraints: CA:TRUE
+    end
+    else if c^.OID = '2.5.29.14' then
+    begin
+     if (Cert.SubjectID = '') and
+        (copy(c^.Value, 1, 6) = '04:14:') then // rough parsing of 20-byte IDs
+       Cert.SubjectID := copy(c^.Value, 7, 59)
+    end
+    else if c^.OID = '2.5.29.35' then // authorityKeyIdentifier
+    begin
+      if (Cert.IssuerID = '') and
+         (length(c^.Value) > 60) then
       begin
-        o := PosEx('80:14:', Value); // rough detection of 20-byte IDs
+        o := PosEx('80:14:', c^.Value); // rough detection of 20-byte IDs
         if o <> 0 then
-          Cert.IssuerID := copy(Value, o + 6, 59);
+          Cert.IssuerID := copy(c^.Value, o + 6, 59);
       end;
     end;
+    inc(c);
+    inc(e);
+  end;
   result := true;
 end;
 
@@ -1683,8 +1765,18 @@ begin
     '  Subject: ' + c.SubjectName + #13#10 +
     '  Subject Public Key Info:'#13#10 +
     '    Public Key Algorithm: ' + c.PublicKeyAlgorithmName + #13#10 +
-    '    OID: ' + c.PublicKeyAlgorithm + #13#10;
-  // known extensions will be properly written by mormot.crypt.secure code
+    '    OID: ' + c.PublicKeyAlgorithm + #13#10 +
+    '  X509v3 extensions:'#13#10;
+  if c.SubjectID <> '' then
+    result := result + '    X509v3 Subject Key Identifier:'#13#10 +
+                       '      ' + c.SubjectID + #13#10;
+  if c.IssuerID <> '' then
+    result := result + '    X509v3 Authority Key Identifier:'#13#10 +
+                       '      ' + c.IssuerID + #13#10;
+  if c.SubjectAltNames <> '' then
+    result := result + '    X509v3 Subject Alternative Name:'#13#10 +
+                       '      ' + c.SubjectAltNames + #13#10;
+  // other extensions will be properly written by mormot.crypt.secure code
 end;
 
 
@@ -1694,50 +1786,67 @@ var
   ForceSecKerberosSpn: SynUnicode;
   NtlmName, NegotiateName: SynUnicode;
 
+type
+  TGssBindIdent = array[0..20] of AnsiChar;
+  TGssBind = packed record
+    head: TSecChannelBindings;
+    ident: TGssBindIdent;
+    hash: THash512;
+  end;
+
+const
+  GSS_SERVERENDPOINT: TGssBindIdent = 'tls-server-end-point:';
+
+procedure SetBind(const SC: TSecContext; var Desc: TSecBufferDesc; var Bind: TGssBind);
+begin
+  if OSVersion < wSeven then
+    exit; // this API is not available on XP and Vista
+  if SC.ChannelBindingsHashLen > SizeOf(Bind.hash) then
+     raise ESynSspi.CreateFmt('ClientSspi: ChannelBindingsHashLen=%d>%d',
+       [SC.ChannelBindingsHashLen, SizeOf(Bind.hash)]);
+  FillCharFast(Bind.head, SizeOf(Bind.head), 0);
+  Bind.ident := GSS_SERVERENDPOINT;
+  MoveFast(SC.ChannelBindingsHash^, Bind.hash, SC.ChannelBindingsHashLen);
+  Bind.head.dwApplicationDataOffset := SizeOf(Bind.head);
+  Bind.head.cbApplicationDataLength := SizeOf(Bind.Ident) + SC.ChannelBindingsHashLen;
+  Desc.Add(SECBUFFER_CHANNEL_BINDINGS,
+    @Bind, SizeOf(Bind.head) + Bind.head.cbApplicationDataLength);
+end;
+
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
   pAuthData: PSecWinntAuthIdentityW;
   out aOutData: RawByteString): boolean;
 var
-  InBuf: TSecBuffer;
-  InDesc: TSecBufferDesc;
+  InDesc, OutDesc: TSecBufferDesc;
   LInCtxPtr: PSecHandle;
-  OutBuf: TSecBuffer;
-  OutDesc: TSecBufferDesc;
-  CtxReqAttr: cardinal;
-  CtxAttr: cardinal;
+  CtxReqAttr, CtxAttr: cardinal;
   Status: integer;
+  Bind: TGssBind;
 begin
-  InBuf.BufferType := SECBUFFER_TOKEN;
-  InBuf.cbBuffer := Length(aInData);
-  InBuf.pvBuffer := PByte(aInData);
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.pBuffers := @InBuf;
+  {%H-}InDesc.Init;
+  {%H-}OutDesc.Init;
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
     if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
         nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-    InDesc.cBuffers := 0;
     LInCtxPtr := nil;
   end
   else
   begin
-    InDesc.cBuffers := 1;
+    InDesc.Add(SECBUFFER_TOKEN, aInData);
     LInCtxPtr := @aSecContext.CtxHandle;
   end;
+  if aSecContext.ChannelBindingsHash <> nil then
+    SetBind(aSecContext, InDesc, Bind);
+  OutDesc.Add(SECBUFFER_TOKEN);
   CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or
                 ISC_REQ_CONFIDENTIALITY or
                 ISC_REQ_INTEGRITY;
   if pszTargetName <> nil then
     CtxReqAttr := CtxReqAttr or ISC_REQ_MUTUAL_AUTH;
-  OutBuf.BufferType := SECBUFFER_TOKEN;
-  OutBuf.cbBuffer := 0;
-  OutBuf.pvBuffer := nil;
-  OutDesc.ulVersion := SECBUFFER_VERSION;
-  OutDesc.cBuffers := 1;
-  OutDesc.pBuffers := @OutBuf;
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
     pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, @InDesc, 0,
     @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
@@ -1748,8 +1857,8 @@ begin
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(aOutData, OutBuf.pvBuffer, OutBuf.cbBuffer);
-  FreeContextBuffer(OutBuf.pvBuffer);
+  FastSetRawByteString(aOutData, OutDesc.Data[0].pvBuffer, OutDesc.Data[0].cbBuffer);
+  FreeContextBuffer(OutDesc.Data[0].pvBuffer);
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
@@ -1818,21 +1927,16 @@ end;
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
-  InBuf: TSecBuffer;
-  InDesc: TSecBufferDesc;
+  InDesc, OutDesc: TSecBufferDesc;
   PkgName: PWideChar;
   LInCtxPtr: PSecHandle;
-  OutBuf: TSecBuffer;
-  OutDesc: TSecBufferDesc;
   CtxAttr: cardinal;
   Status: integer;
+  Bind: TGssBind;
 begin
-  InBuf.BufferType := SECBUFFER_TOKEN;
-  InBuf.cbBuffer := Length(aInData);
-  InBuf.pvBuffer := PByte(aInData);
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.cBuffers := 1;
-  InDesc.pBuffers := @InBuf;
+  {%H-}InDesc.Init;
+  {%H-}OutDesc.Init;
+  InDesc.Add(SECBUFFER_TOKEN, aInData);
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
@@ -1849,12 +1953,9 @@ begin
   end
   else
     LInCtxPtr := @aSecContext.CtxHandle;
-  OutBuf.BufferType := SECBUFFER_TOKEN;
-  OutBuf.cbBuffer := 0;
-  OutBuf.pvBuffer := nil;
-  OutDesc.ulVersion := SECBUFFER_VERSION;
-  OutDesc.cBuffers := 1;
-  OutDesc.pBuffers := @OutBuf;
+  if aSecContext.ChannelBindingsHash <> nil then
+    SetBind(aSecContext, InDesc, Bind);
+  OutDesc.Add(SECBUFFER_TOKEN);
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
     ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
     SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
@@ -1865,8 +1966,8 @@ begin
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(aOutData, OutBuf.pvBuffer, OutBuf.cbBuffer);
-  FreeContextBuffer(OutBuf.pvBuffer);
+  FastSetRawByteString(aOutData, OutDesc.Data[0].pvBuffer, OutDesc.Data[0].cbBuffer);
+  FreeContextBuffer(OutDesc.Data[0].pvBuffer);
 end;
 
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;

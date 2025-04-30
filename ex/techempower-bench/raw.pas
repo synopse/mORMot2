@@ -414,8 +414,7 @@ var
   msgRec: TMessageRec;
 begin
   msgRec.message := pointer(HELLO_WORLD);
-  ctxt.SetOutJson(@msgRec, TypeInfo(TMessageRec));
-  result := HTTP_SUCCESS;
+  result := ctxt.SetOutJson(@msgRec, TypeInfo(TMessageRec));
 end;
 
 function TRawAsyncServer.db(ctxt: THttpServerRequest): cardinal;
@@ -424,8 +423,7 @@ var
 begin
   w := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(Lecuyer));
   try
-    ctxt.SetOutJson(w);
-    result := HTTP_SUCCESS;
+    result := ctxt.SetOutJson(w);
   finally
     w.Free;
   end;
@@ -441,9 +439,8 @@ begin
   gen := Lecuyer;
   for i := 0 to length(res) - 1 do
     res[i] := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(gen));
-  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
+  result := ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   ObjArrayClear(res);
-  result := HTTP_SUCCESS;
 end;
 
 function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
@@ -456,8 +453,7 @@ begin
   gen := Lecuyer;
   for i := 0 to length(res) - 1 do
     res[i] := fOrmCache.Get(ComputeRandomWorld(gen));
-  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
-  result := HTTP_SUCCESS;
+  result := ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
 end;
 
 function OrmFortuneCompareByMessage(const A, B): integer;
@@ -531,9 +527,8 @@ begin
   stmt.ExecutePrepared;
   if stmt.Step then
   begin
-    ctxt.SetOutJson(
+    result := ctxt.SetOutJson(
       '{"id":%,"randomNumber":%}', [stmt.ColumnInt(0), stmt.ColumnInt(1)]);
-    result := HTTP_SUCCESS;
     stmt.ReleaseRows;
   end;
   stmt := nil;
@@ -545,8 +540,7 @@ var
 begin
   if not GetRawRandomWorlds(GetQueriesParamValue(ctxt), res) then
     exit(HTTP_SERVERERROR);
-  ctxt.SetOutJson(@res, TypeInfo(TWorlds));
-  result := HTTP_SUCCESS;
+  result := ctxt.SetOutJson(@res, TypeInfo(TWorlds));
 end;
 
 function TRawAsyncServer.rawcached(ctxt: THttpServerRequest): cardinal;
@@ -559,8 +553,7 @@ begin
   gen := Lecuyer;
   for i := 0 to length(res) - 1 do
     res[i] := fRawCache[ComputeRandomWorld(gen) - 1];
-  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
-  result := HTTP_SUCCESS;
+  result := ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
 end;
 
 function TRawAsyncServer.rawfortunes(ctxt: THttpServerRequest): cardinal;
@@ -650,8 +643,7 @@ begin
     end;
   end;
   stmt.ExecutePrepared;
-  ctxt.SetOutJson(@res, TypeInfo(TWorlds));
-  result := HTTP_SUCCESS;
+  result := ctxt.SetOutJson(@res, TypeInfo(TWorlds));
 end;
 
 {$ifndef USE_SQLITE3} // asynchronous PostgreSQL pipelined DB access

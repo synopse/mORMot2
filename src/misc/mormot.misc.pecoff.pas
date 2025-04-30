@@ -1143,7 +1143,7 @@ begin
         // read original signature
         dec(certlen, SizeOf(wc));
         SetLength(result, certlen);
-        if cardinal(M.Read(pointer(result)^, certlen)) <> certlen then
+        if not StreamReadAll(M, pointer(result), certlen) then
           EStuffExe.RaiseUtf8('% certificate reading', [MainFile]);
         // note: don't remove ending #0 padding because some may be needed
         if lenoffs <> nil then
@@ -1256,7 +1256,7 @@ var
 begin
   // limitation: CertName is ignored and 'Dummy Cert' is forced
   result := '';
-  FastNewRawByteString(dummy, _DUMMYLEN);
+  pointer(dummy) := FastNewString(_DUMMYLEN);
   if RleUnCompress(@_DUMMY, pointer(dummy), SizeOf(_DUMMY)) <> _DUMMYLEN then
     exit;
   p := pointer(dummy);

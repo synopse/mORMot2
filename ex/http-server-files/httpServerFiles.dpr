@@ -8,7 +8,7 @@ program httpServerFiles;
 
 {$ifdef OSWINDOWS}
   {$apptype console}
-  //{$R mormot.win.default.manifest.res}
+  {$R ..\..\src\mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 uses

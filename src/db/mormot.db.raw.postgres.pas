@@ -288,8 +288,7 @@ begin
   else
     exit; // unsupported
   end;
-  FastNewRawByteString(Bin, len);
-  p := pointer(Bin);
+  p := FastNewRawByteString(Bin, len);
   p^ := $01000000;           // dimensions
   inc(p);
   p^ := $00000000;           // has null
@@ -329,7 +328,7 @@ begin
       dec(ValueCount)
     until ValueCount = 0;
   //if PAnsiChar(p) - pointer(Bin) <> length(Bin) then
-  //  raise ESqlDBPostgres.Create('ToIntArrayOid');
+  //  raise ESqlDBPostgres.CreateU('ToIntArrayOid');
   result := true;
 end;
 
@@ -337,7 +336,7 @@ end;
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..36] of RawUtf8 = (
+  PQ_ENTRIES: array[0..36] of PAnsiChar = (
     'libVersion',
     'isthreadsafe',
     'setdbLogin',
@@ -401,16 +400,24 @@ var
   raiseonfailure: ExceptionClass;
   i: PtrInt;
 begin
-  TryFromExecutableFolder := true;
-  TryLoadLibrary([
-    SynDBPostgresLibrary, LIBNAME, LIBNAME2], ESqlDBPostgres);
-  P := @@LibVersion;
-  raiseonfailure := ESqlDBPostgres;
-  for i := 0 to High(PQ_ENTRIES) do
-  begin
-    if PQ_ENTRIES[i] = 'enterPipelineMode' then
-      raiseonfailure := nil; // old libpq with no pipelining API
-    Resolve('PQ', PQ_ENTRIES[i], @P[I], raiseonfailure);
+  try
+    TryFromExecutableFolder := true;
+    TryLoadLibrary([
+      SynDBPostgresLibrary, LIBNAME, LIBNAME2], ESqlDBPostgres);
+    P := @@LibVersion;
+    raiseonfailure := ESqlDBPostgres;
+    for i := 0 to High(PQ_ENTRIES) do
+    begin
+      if StrComp(PQ_ENTRIES[i], PAnsiChar('enterPipelineMode')) = 0 then
+        raiseonfailure := nil; // allow old libpq with no pipelining API
+      Resolve('PQ', PQ_ENTRIES[i], @P[I], raiseonfailure);
+    end;
+  except
+    on E: Exception do
+    begin
+      SetDbError(E);
+      raise;
+    end;
   end;
 end;
 
@@ -425,16 +432,16 @@ procedure TSqlDBPostgresLib.RaiseError(conn: PPGconn; const ctxt: ShortString;
   res: PPGresult);
 var
   errMsg, errCode: PUtf8Char;
-  msg: string;
+  msg: RawUtf8;
 begin
   errMsg := ErrorMessage(conn);
   errCode := nil;
   if res <> nil then
     errCode := ResultErrorField(res, PG_DIAG_SQLSTATE);
-  FormatString('% % failed: % [%]', [self, ctxt, errCode, errMsg], msg);
+  FormatUtf8('% % failed: % [%]', [self, ctxt, errCode, errMsg], msg);
   if res <> nil then
     Clear(res);
-  raise ESqlDBPostgres.Create(msg);
+  raise ESqlDBPostgres.CreateU(msg); // will properly call SetDbError()
 end;
 
 procedure TSqlDBPostgresLib.Check(conn: PPGconn; const ctxt: ShortString;

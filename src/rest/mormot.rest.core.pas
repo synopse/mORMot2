@@ -106,9 +106,6 @@ const
   /// size in bytes, to log up to 2 KB of JSON response, to save space
   MAX_SIZE_RESPONSE_LOG = 2 shl 10;
 
-  /// you can use this cookie value to delete a cookie on the browser side
-  COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
-
   CONTENT_TYPE_WEBFORM: PAnsiChar = 'APPLICATION/X-WWW-FORM-URLENCODED';
   CONTENT_TYPE_MULTIPARTFORM: PAnsiChar = 'MULTIPART/FORM-DATA';
 
@@ -1027,34 +1024,37 @@ type
     /// static function allowing to compute a hashed password
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
-    // - you may specify your own values in aHashSalt/aHashRound, to enable
-    // Pbkdf2HmacSha256() use instead of plain Sha256(): it will increase
-    // security on storage side (reducing brute force attack via rainbow tables)
-    class function ComputeHashedPassword(const aPasswordPlain: RawUtf8;
+    // - aHashRound = 0 uses plain Sha256(), as early mORMot 1 encoding
+    // - aHashRound > 0 triggers Pbkdf2HmacSha256() via aHashSalt, and enable
+    // Pbkdf2HmacSha256() to increase security on storage side (reducing brute
+    // force attack via rainbow tables)
+    // - aHashRound < 0 will use standard DIGEST-HA0 hashing, compatible with
+    // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo)
+    class function ComputeHashedPassword(const aLogonName, aPasswordPlain: RawUtf8;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
-    // and use the much safer Pbkdf2HmacSha256 algorithm
-    property PasswordPlain: RawUtf8 write SetPasswordPlain;
-    /// set the PasswordHashHexa field from a plain password content and salt
-    // - use this method to specify aHashSalt/aHashRound values, enabling
-    // Pbkdf2HmacSha256() use instead of plain Sha256(): it will increase
-    // security on storage side (reducing brute force attack via rainbow tables)
-    // - you may use an application specific fixed salt, and/or append the
-    // user LogonName to make the challenge unique for each TAuthUser
-    // - the default aHashRound=20000 is slow but secure - since the hashing
-    // process is expected to be done on client side, you may specify your
-    // own higher/slower value, depending on the security level you expect
+    // and use the much safer Pbkdf2HmacSha256 or DIGEST-HA0 algorithms
+    property PasswordPlain: RawUtf8
+      write SetPasswordPlain;
+    /// set the PasswordHashHexa field using Pbkdf2HmacSha256
+    // - use this method to specify aHashSalt/aHashRound values (see
+    // ComputeHashedPassword method) and increase security on storage side
+    // (reducing brute force attack via rainbow tables)
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
-      aHashRound: integer = 20000);
+      aHashRound: integer = 20000); overload;
+    /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
+    // - will use the current LogonName as part of the digest
+    procedure SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
+      aAlgo: TDigestAlgo = daSHA256);
     /// check if the user can authenticate in its current state
     // - Ctxt is a TRestServerUriContext instance
     // - called by TRestServerAuthentication.GetUser() method
     // - this default implementation will return TRUE, i.e. allow the user
     // to log on
-    // - override this method to disable user authentication, e.g. if the
-    // user is disabled via a custom ORM boolean and date/time field
+    // - override this method to disable user authentication, e.g. if the user
+    // is disabled via a custom ORM boolean or date/time expiration field
     function CanUserLog(Ctxt: TObject): boolean; virtual;
   published
     /// the User identification Name, as entered at log-in
@@ -1206,14 +1206,14 @@ type
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
     procedure InBodyType(var ContentType: RawUtf8;
-      GuessJsonIfNoneSet: boolean = True);
+      GuessJsonIfNoneSet: boolean = true);
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
-    function OutBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
+    function OutBodyType(GuessJsonIfNoneSet: boolean = true): RawUtf8;
     /// check if the "Content-Type" value from OutHead is JSON
     // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
-    function OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
+    function OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean = true): boolean;
     /// just a wrapper around FindNameValue(InHead,UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
@@ -1222,7 +1222,16 @@ type
     function Header(UpperName: PAnsiChar): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// wrap FindNameValue(InHead,UpperName) with a cache store
-    function HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+    procedure HeaderOnce(var Store, Value: RawUtf8; UpperName: PAnsiChar);
+    /// retrieve the "RemoteIP" value from the incoming HTTP header
+    procedure GetRemoteIP(var Value: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the "User-Agent" value from the incoming HTTP headers
+    procedure GetUserAgent(var Value: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
+    procedure GetAuthenticationBearerToken(var Value: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used to map set of parameters for a Client or Server method call
@@ -1263,7 +1272,7 @@ type
   TRestClientKind = (
     ckUnknown,
     ckFramework,
-    ckAJAX);
+    ckAjax);
 
   /// abstract calling context for any Server-Side REST process
   // - is inherited e.g. by TRestServerUriContext for TRestServer.Uri processing
@@ -1271,23 +1280,27 @@ type
   protected
     fCall: PRestUriParams;
     fMethod: TUriMethod;
-    fInputCookiesRetrieved: boolean;
     fClientKind: TRestClientKind;
+    fCommand: TRestServerUriContextCommand;
+    fInputCookiesParsed: boolean;
     fInputContentType: RawUtf8;
     fInHeaderLastName: RawUtf8;
     fInHeaderLastValue: RawUtf8;
-    fOutSetCookie: RawUtf8;
-    fInputCookies: array of record
-      Name, Value: RawUtf8; // only computed if InCookie[] is used
-    end;
     fJwtContent: PJwtContent;
     fTix64: Int64;
+    fInputCookies: THttpCookies;
+    fOutSetCookie: RawUtf8;
     function GetUserAgent: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetInHeader(const HeaderName: RawUtf8): RawUtf8;
-    procedure RetrieveCookies;
-    function GetInCookie(CookieName: RawUtf8): RawUtf8;
-    procedure SetInCookie(CookieName, CookieValue: RawUtf8);
+    function InputCookies: PHttpCookies;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetInCookie(const CookieName: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure SetInCookie(const CookieName, CookieValue: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
+    procedure SetOutCookie(const aName, aValue: RawUtf8);
   public
     /// access to all input/output parameters at TRestServer.Uri() level
     // - process should better call Results() or Success() methods to set the
@@ -1333,7 +1346,7 @@ type
       read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
-    property InCookie[CookieName: RawUtf8]: RawUtf8
+    property InCookie[const CookieName: RawUtf8]: RawUtf8
       read GetInCookie write SetInCookie;
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'
@@ -1343,6 +1356,10 @@ type
     // $ '; Path=/'+Server.Model.Root+'; HttpOnly'
     property OutSetCookie: RawUtf8
       read fOutSetCookie write SetOutSetCookie;
+    /// define a new 'name=value' cookie to be returned to the client
+    // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
+    property OutCookie[const CookieName: RawUtf8]: RawUtf8
+      write SetOutCookie;
     /// low-level HTTP header merge of the OutSetCookie value
     procedure OutHeadFromCookie; virtual;
     /// low-level wrapper method around GetTickCount64 to cache the value
@@ -1868,7 +1885,7 @@ begin
     exit;
   if aCallback = nil then
     EServiceException.RaiseUtf8('%.Redirect(nil)', [self]);
-  if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceIID, dest) then
+  if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceGuid^, dest) then
     EServiceException.RaiseUtf8('%.Redirect [%]: % is not a %',
       [self, fFakeCallback.fName, aCallback, fFakeCallback.Factory.InterfaceName]);
   Redirect(dest, aMethodsNames, aSubscribe);
@@ -1976,7 +1993,8 @@ begin
     exec := TInterfaceMethodExecute.Create(fFactory, @aMethod,
       [optIgnoreException]); // to use exec.ExecutedInstancesFailed
     try
-      result := exec.ExecuteJson(instances, pointer('[' + aParams + ']'), nil);
+      result := exec.ExecuteJson(instances,
+        pointer(Join(['[', aParams, ']'])), nil);
       if exec.ExecutedInstancesFailed <> nil then
         for i := length(exec.ExecutedInstancesFailed) - 1 downto 0 do
           if exec.ExecutedInstancesFailed[i] <> '' then
@@ -2160,7 +2178,7 @@ begin
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
-      ERestException.RaiseUtf8('%.Destroy: %.RefCount=%',
+      ERestException.RaiseUtf8('%.Destroy: %.RefCount=%: try to fix IRestOrm',
         [self, fOrmInstance, fOrmInstance.RefCount])
     else
       // avoid dubious GPF
@@ -3069,7 +3087,7 @@ begin
   if aThreadName <> '' then
     aName := aThreadName
   else
-    FormatUtf8('% %', [fRest.Model.Root, ClassType], aName);
+    Make([fRest.Model.Root, ' ', ClassType], aName);
   inherited Create(aName,
     fRest.fRun.BeginCurrentThread, fRest.fRun.EndCurrentThread, aStats);
 end;
@@ -3552,7 +3570,7 @@ begin
         G.Free;
       end;
       if not (itoNoAutoCreateUsers in Options) and
-         (Server.TableRowCount(UC) = 0) then
+         not Server.TableHasRows(UC) then
       begin
         U := UC.Create;
         try
@@ -3588,32 +3606,51 @@ end;
 
 { TAuthUser }
 
-class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
+class function TAuthUser.ComputeHashedPassword(const aLogonName, aPasswordPlain,
   aHashSalt: RawUtf8; aHashRound: integer): RawUtf8;
 var
-  dig: TSha256Digest;
+  dig: THash512Rec;
+  algo: TDigestAlgo absolute aHashRound;
 begin
-  if aHashSalt = '' then // use FormatUtf8() to circumvent FPC string issue
-    result := Sha256(FormatUtf8('salt%', [aPasswordPlain]))
+  if (aHashSalt = '') or
+     (aHashRound = 0) then
+    result := Sha256U(['salt', aPasswordPlain])
+  else if aHashRound > 0 then
+  begin
+    Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig.Lo);
+    result := Sha256DigestToString(dig.Lo);
+  end
   else
   begin
-    Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig);
-    result := Sha256DigestToString(dig);
-    FillCharFast(dig, SizeOf(dig), 0);
+    aHashRound := -aHashRound; // aHashRound < 0 = - ord(TDigestAlgo)
+    if aHashRound > ord(high(TDigestAlgo)) then
+      algo := daSHA256;
+    BinToHexLower(@dig, // aHashSalt = DIGEST-HA0 realm
+      DigestHA0(algo, aLogonName, aHashSalt, aPasswordPlain, dig), result);
   end;
+  FillCharFast(dig, SizeOf(dig), 0);
 end;
 
 procedure TAuthUser.SetPasswordPlain(const Value: RawUtf8);
 begin
   if self <> nil then
-    PasswordHashHexa := ComputeHashedPassword(Value);
+    fPasswordHashHexa := ComputeHashedPassword(fLogonName, Value);
 end;
 
 procedure TAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
   aHashRound: integer);
 begin
   if self <> nil then
-    PasswordHashHexa := ComputeHashedPassword(aPasswordPlain, aHashSalt, aHashRound);
+    fPasswordHashHexa := ComputeHashedPassword(
+      fLogonName, aPasswordPlain, aHashSalt, aHashRound);
+end;
+
+procedure TAuthUser.SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
+  aAlgo: TDigestAlgo);
+begin
+  if self <> nil then
+    fPasswordHashHexa := ComputeHashedPassword(
+      fLogonName, aPasswordPlain, aRealm, -ord(aAlgo));
 end;
 
 function TAuthUser.CanUserLog(Ctxt: TObject): boolean;
@@ -3672,21 +3709,36 @@ begin
   FindNameValue(InHead, UpperName, result);
 end;
 
-function TRestUriParams.HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+procedure TRestUriParams.HeaderOnce(var Store, Value: RawUtf8; UpperName: PAnsiChar);
 begin
   if (Store = '') and
      (@self <> nil) then
   begin
-    FindNameValue(InHead, UpperName, result);
-    if result = '' then
+    FindNameValue(InHead, UpperName, Value);
+    if Value = '' then
       Store := NULL_STR_VAR // flag to ensure header is parsed only once
     else
-      Store := result;
+      Store := Value;
   end
   else if pointer(Store) = pointer(NULL_STR_VAR) then
-    result := ''
+    Value := ''
   else
-    result := Store;
+    Value := Store;
+end;
+
+procedure TRestUriParams.GetRemoteIP(var Value: RawUtf8);
+begin
+  HeaderOnce(LowLevelRemoteIP, Value, HEADER_REMOTEIP_UPPER);
+end;
+
+procedure TRestUriParams.GetUserAgent(var Value: RawUtf8);
+begin
+  HeaderOnce(LowLevelUserAgent, Value, 'USER-AGENT: ');
+end;
+
+procedure TRestUriParams.GetAuthenticationBearerToken(var Value: RawUtf8);
+begin
+  HeaderOnce(LowLevelBearerToken, Value, HEADER_BEARER_UPPER);
 end;
 
 
@@ -3696,7 +3748,7 @@ end;
 
 function TRestUriContext.GetUserAgent: RawUtf8;
 begin
-  result := fCall^.HeaderOnce(fCall^.LowLevelUserAgent, 'USER-AGENT: ');
+  fCall^.GetUserAgent(result);
 end;
 
 function TRestUriContext.ClientKind: TRestClientKind;
@@ -3726,7 +3778,7 @@ end;
 
 procedure TRestUriContext.SetRemoteIP(var IP: RawUtf8);
 begin
-  IP := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
+  fCall^.GetRemoteIP(IP);
 end;
 
 function TRestUriContext.RemoteIPNotLocal: PUtf8Char;
@@ -3741,7 +3793,7 @@ end;
 
 function TRestUriContext.AuthenticationBearerToken: RawUtf8;
 begin
-  result := fCall^.HeaderOnce(fCall^.LowLevelBearerToken, HEADER_BEARER_UPPER);
+  fCall^.GetAuthenticationBearerToken(result);
 end;
 
 function TRestUriContext.AuthenticationCheck(jwt: TJwtAbstract): boolean;
@@ -3768,7 +3820,7 @@ begin
   else
   begin
     PWord(UpperCopy255(up{%H-}, HeaderName))^ := ord(':');
-    FindNameValue(fCall.InHead, up, result); // = fCall^.Header(up)
+    FindNameValue(fCall^.InHead, up, result); // = fCall^.Header(up)
     if result <> '' then
     begin
       fInHeaderLastName := HeaderName;
@@ -3777,80 +3829,31 @@ begin
   end;
 end;
 
-const
-  // Deny-Of-Service (DOS) Attack detection threshold
-  COOKIE_MAXCOUNT_DOSATTACK = 128;
-
-procedure TRestUriContext.RetrieveCookies;
+function TRestUriContext.InputCookies: PHttpCookies;
 var
-  n: PtrInt;
-  P: PUtf8Char;
-  cookie, cn, cv: RawUtf8;
+  p: PUtf8Char;
 begin
-  fInputCookiesRetrieved := true;
-  FindNameValue(fCall.InHead, 'COOKIE:', cookie);
-  P := pointer(cookie);
-  n := 0;
-  while P <> nil do
-  begin
-    GetNextItemTrimed(P, '=', cn);
-    GetNextItemTrimed(P, ';', cv);
-    if (cn = '') and
-       (cv = '') then
-      break;
-    if n = length(fInputCookies) then
-      SetLength(fInputCookies, NextGrow(n));
-    fInputCookies[n].Name := cn;
-    fInputCookies[n].Value := cv;
-    inc(n);
-    if n > COOKIE_MAXCOUNT_DOSATTACK then
-      ERestException.RaiseUtf8('%.RetrieveCookies overflow (%): DOS attempt?',
-        [self, KB(cookie)]);
-  end;
-  if n <> 0 then
-    DynArrayFakeLength(fInputCookies, n);
+  result := @fInputCookies;
+  if fInputCookiesParsed then
+    exit;
+  fInputCookiesParsed := true;
+  p := FindNameValue(pointer(fCall^.InHead), 'COOKIE: ');
+  if p <> nil then
+    result^.ParseServer(p - 8);
 end;
 
-procedure TRestUriContext.SetInCookie(CookieName, CookieValue: RawUtf8);
-var
-  i, n: PtrInt;
+function TRestUriContext.GetInCookie(const CookieName: RawUtf8): RawUtf8;
 begin
-  TrimSelf(CookieName);
-  if (self = nil) or
-     (CookieName = '') then
-    exit;
-  if not fInputCookiesRetrieved then
-    RetrieveCookies;
-  n := length(fInputCookies);
-  for i := 0 to n - 1 do
-    if fInputCookies[i].Name = CookieName then // cookies are case-sensitive
-    begin
-      fInputCookies[i].Value := CookieValue; // in-place update
-      exit;
-    end;
-  SetLength(fInputCookies, n + 1);
-  fInputCookies[n].Name := CookieName;
-  fInputCookies[n].Value := CookieValue;
+  if self = nil then
+    result := ''
+  else
+    InputCookies^.RetrieveCookie(CookieName, result);
 end;
 
-function TRestUriContext.GetInCookie(CookieName: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
+procedure TRestUriContext.SetInCookie(const CookieName, CookieValue: RawUtf8);
 begin
-  result := '';
-  TrimSelf(CookieName);
-  if (self = nil) or
-     (CookieName = '') then
-    exit;
-  if not fInputCookiesRetrieved then
-    RetrieveCookies;
-  for i := 0 to length(fInputCookies) - 1 do
-    if fInputCookies[i].Name = CookieName then
-    begin
-      // cookies are case-sensitive
-      result := fInputCookies[i].Value;
-      exit;
-    end;
+  if self <> nil then
+    InputCookies^.SetCookie(CookieName, CookieValue);
 end;
 
 procedure TRestUriContext.SetOutSetCookie(const aOutSetCookie: RawUtf8);
@@ -3866,6 +3869,16 @@ begin
     ERestException.RaiseUtf8(
       '"name=value" expected for %.SetOutSetCookie("%")', [self, c]);
   fOutSetCookie := c;
+end;
+
+procedure TRestUriContext.SetOutCookie(const aName, aValue: RawUtf8);
+var
+  n: RawUtf8;
+begin
+  n := StringReplaceChars(aName, '/', '_'); // TOrmModel.Root did allow '/'
+  if not PropNameValid(pointer(n)) then
+     ERestException.RaiseUtf8('%.SetOutCookie(%): invalid name', [self, aName]);
+  SetOutSetCookie(Join([n, '=', aValue]));
 end;
 
 procedure TRestUriContext.OutHeadFromCookie;
@@ -3913,7 +3926,7 @@ begin
   server := ServerHash;
   if server = '' then
     server := crc32cUtf8ToHex(Call^.OutBody);
-  server := '"' + server + '"';
+  server := Join(['"', server, '"']);
   if client <> server then
     AppendLine(Call^.OutHead, ['ETag: ', server])
   else
@@ -4016,7 +4029,7 @@ begin
     if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
     begin
       if ContentType <> '' then
-        AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE + ContentType])
+        AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE, ContentType])
       else
         AppendLine(fCall^.OutHead, [GetMimeContentTypeHeader('', FileName)]);
     end;
@@ -4036,7 +4049,7 @@ var
   fileName: TFileName;
 begin
   if DefaultFileName <> '' then
-    fileName := IncludeTrailingPathDelimiter(FolderName) + DefaultFileName;
+    fileName := MakePath([FolderName, DefaultFileName]);
   ReturnFile(fileName,
     Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;
@@ -4048,7 +4061,7 @@ begin
     fCall^.OutStatus := HTTP_MOVEDPERMANENTLY
   else
     fCall^.OutStatus := HTTP_TEMPORARYREDIRECT;
-  fCall^.OutHead := 'Location: ' + NewLocation;
+  Join(['Location: ', NewLocation], fCall^.OutHead);
 end;
 
 procedure TRestUriContext.Returns(const NameValuePairs: array of const;
@@ -4075,14 +4088,14 @@ begin
       AddShort('{"result":');
       if h = 0 then
         // result is one value
-        AddJsonEscape(Values[0])
+        AddJsonEscapeVarRec(@Values[0])
       else
       begin
         // result is one array of values
         AddDirect('[');
         i := 0;
         repeat
-          AddJsonEscape(Values[i]);
+          AddJsonEscapeVarRec(@Values[i]);
           if i = h then
             break;
           AddComma;
@@ -4190,12 +4203,12 @@ constructor TRestThread.Create(aRest: TRest; aOwnRest, aCreateSuspended: boolean
 begin
   if aRest = nil then
     EOrmException.RaiseUtf8('%.Create(aRest=nil)', [self]);
-  fSafe.Init;
+  fSafe.InitFromClass;
   fRest := aRest;
   fOwnRest := aOwnRest;
   if fThreadName = '' then
     // if thread name has not been set by the overriden constructor
-    FormatUtf8('% %', [self, fRest.Model.Root], fThreadName);
+    Make([self, ' ', fRest.Model.Root], fThreadName);
   fEvent := TSynEvent.Create;
   inherited Create(aCreateSuspended);
 end;
@@ -4774,8 +4787,7 @@ begin
       firstNewIndex := fHistoryUncompressedCount - firstOldIndex;
       firstNewOffset := Length(fHistoryUncompressed) - firstOldOffset;
       for i := 0 to fHistoryAddCount - 1 do
-        newOffset[firstNewIndex + i] :=
-          fHistoryAddOffset[i] + firstNewOffset;
+        newOffset[firstNewIndex + i] := fHistoryAddOffset[i] + firstNewOffset;
       // write header
       fHistoryTable.OrmProps.SaveBinaryHeader(W);
       W.WriteVarUInt32Array(newOffset, length(newOffset), wkOffsetU);
@@ -4789,7 +4801,7 @@ begin
       begin
         Server.UpdateField(RecordClass,
           'Timestamp', Int64ToUtf8(Server.GetServerTimestamp),
-          ROWID_TXT, Int64ToUtf8(fID));
+          ROWID_TXT,   Int64ToUtf8(fID));
         Server.UpdateBlob(RecordClass, fID, Orm.BlobFields[0].Name, fHistory);
       end;
       result := true;

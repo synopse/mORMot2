@@ -73,7 +73,6 @@ begin
   // some good enough general default values
   p.CacheFolder := MakePath([Executable.ProgramFilePath, 'cache'], true);
   p.tcpTimeoutSec := 10;
-  logfolder := StringToUtf8(Executable.ProgramFilePath);
   p.peerSecret := 'secret';
   p.PeerSettings.Options := [pcoVerboseLog, pcoTryLastPeer, pcoTryAllPeers];
   p.PeerSettings.CacheTempPath := p.CacheFolder + 'temp';
@@ -102,7 +101,7 @@ begin
   p.Cache := c.Option('&cache', 'enable local Cache in --cachePath');
   p.Peer := c.Option('&peer', 'enable peer Cache process - see --peer* params');
   logfolder := c.ParamS('logFolder',
-     '#folder to be used for --log output', logfolder);
+     '#folder to be used for --log or --debug output', Executable.ProgramFilePath);
   p.CacheFolder := c.ParamS('cachePath',
      '#folder to be used for local (not peer) --cache', p.CacheFolder);
   if c.Option('&log', 'enable logging in --logFolder') then
@@ -166,7 +165,6 @@ begin
   if p.Log <> nil then
     with p.Log.Family do
     begin
-      Level := LOG_VERBOSE;
       if logfolder <> '' then
       begin
         PerThreadLog := ptIdentifiedInOneFile;
@@ -177,6 +175,7 @@ begin
         LogCompressAlgo := AlgoGZFast; // rotate as mget.1.gz every 2MB
         DestinationPath := EnsureDirectoryExists(logfolder);
       end;
+      Level := LOG_VERBOSE; // should be set last
     end;
 end;
 

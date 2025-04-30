@@ -483,7 +483,7 @@ end;
 procedure TInterfacedObjectFakeClient.FakeCallGetJsonFromStack(
   var ctxt: TFakeCallContext; var Json: RawUtf8);
 begin
-  if ctxt.Method^.ArgsInputIsOctetStream and
+  if (imfInputIsOctetStream in ctxt.Method^.Flags) and
      not fClient.ParamsAsJsonObject and
      (fClient.fClient <> nil) and
      (csiAsOctetStream in
@@ -682,7 +682,7 @@ begin
   ctxt := [];
   if (service <> nil) and
      not ParamsAsJsonObject and
-     service^.ArgsInputIsOctetStream then
+     (imfInputIsOctetStream in service^.Flags) then
     include(ctxt, csiAsOctetStream);
   status := 0;
   DoClientCall;
@@ -702,7 +702,7 @@ begin
   begin
     // handle errors at REST level
     if ((service = nil) or
-        not service^.ArgsResultIsServiceCustomStatus) and
+        not (imfResultIsServiceCustomStatus in service^.Flags)) and
        not StatusCodeIsSuccess(status) then
     begin
       if aErrorMsg <> nil then
@@ -715,8 +715,12 @@ begin
             error := ' - ' + error;
           if not withinput then
             sent := ''; // exclude sensitive input in error text
-          FormatUtf8('URI % % returned status ''%'' (%%)',
-            [{%H-}uri, {%H-}sent, resp, status, error], aErrorMsg^);
+          if status = HTTP_CLIENTERROR then // no 666 misleading number
+            FormatUtf8('URI % % returned ''%'' (%%)',
+              [{%H-}uri, {%H-}sent, resp, error], aErrorMsg^)
+          else
+            FormatUtf8('URI % % returned status ''%'' (%%)',
+              [{%H-}uri, {%H-}sent, resp, status, error], aErrorMsg^);
         end
         else
           aErrorMsg^ := resp;

@@ -177,6 +177,7 @@ type
     function AllowEmptyValues: boolean;
     function Default: PVariant;
     function Required: boolean;
+    function Explode: boolean;
     function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
@@ -828,7 +829,7 @@ begin
             Append(t, r.PascalName, ' ');
         end;
         if t <> '' then
-          Data.U['description'] := Make(['From the JSON of ', t]);
+          Data.U['description'] := Join(['From the JSON of ', t]);
       end
       else
         for i := 1 to oo^.Count - 1 do
@@ -964,6 +965,12 @@ end;
 function TOpenApiParameter.Required: boolean;
 begin
   result := Data.B['required'];
+end;
+
+function TOpenApiParameter.Explode: boolean;
+begin
+  if not Data.GetAsBoolean('explode', result) then
+    result := true; // default is true
 end;
 
 function TOpenApiParameter.Schema(Parser: TOpenApiParser): POpenApiSchema;
@@ -1367,7 +1374,7 @@ begin
         Append(err, ['    ', code, ':', fParser.LineEnd,
                      '      e := ',e.PascalName, ';', fParser.LineEnd])
       else if status = 'default' then
-        Make(['  else', fParser.LineEnd,
+        Join(['  else', fParser.LineEnd,
               '    e := ', e.PascalName, ';', fParser.LineEnd], deferr);
     end;
   end;
@@ -1426,7 +1433,7 @@ begin
       p := fParameters[i];
       if p.Location = oplBody then
         continue; // fRequestBodySchema is handled below
-      Make(['- [', p.fParameter^._In, '] ', p.PascalName], line);
+      Join(['- [', p.fParameter^._In, '] ', p.PascalName], line);
       if p.Location in [oplUnsupported, oplFormData] then
         Append(line, ' (unsupported)')
       else
@@ -1457,7 +1464,7 @@ begin
       code := Utf8ToInteger(status, 0);
       r := @v^.Values[i];
       rs := r^.Schema(fParser);
-      Make(['- ', status], line);
+      Join(['- ', status], line);
       if code = fSuccessResponseCode then
         Append(line, ' (main)')
       else if Assigned(rs) and
@@ -1519,7 +1526,7 @@ begin
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, decl)
         else
-          AddRawUtf8(def, Make([decl, ' = ', p.fType.ToDefaultParameterValue(p)]))
+          AddRawUtf8(def, Join([decl, ' = ', p.fType.ToDefaultParameterValue(p)]))
       else
         AddParam([decl]);
     end;
@@ -1564,7 +1571,8 @@ var
         w.AddShorter('    ''');
         case p.Location of
           oplQuery:
-            if p.ParamType.IsArray then
+            if p.ParamType.IsArray and
+               p.Parameter^.Explode then
               w.AddDirect('*'); // ueStarNameIsCsv for UrlEncodeFull()
           // oplHeader uses natively CSV in OpenAPI default "simple" style
           oplCookie:
@@ -1623,7 +1631,7 @@ begin
     if urlParam[i] < 0 then
       EOpenApi.RaiseUtf8('%.Body: missing {%} in [%]', [self, urlName[i], fPath]);
   // emit the body block with its declaration and Request() call
-  Declaration(w, ClassName, {implemtation=}true);
+  Declaration(w, ClassName, {implementation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
          '  fClient.Request(''', UpperCase(fMethod), ''', ''', url, '''']);
   // Path parameters
@@ -1949,7 +1957,7 @@ begin
       Append(result, 'DynArray'); // use mormot.core.base arrays
     end
     else
-      result := Make(['array of ', result]);
+      result := Join(['array of ', result]);
   end;
 end;
 
@@ -2522,7 +2530,7 @@ begin
       if i = 0 then
         break;
       if feed = '' then
-        Make([LineEnd, fLineIndent, '//'], feed);
+        Join([LineEnd, fLineIndent, '//'], feed);
       insert(feed, line, i);
       o := i + length(feed);
     end;
@@ -2819,7 +2827,7 @@ var
   w: TTextWriter;
 begin
   if fDtoUnitName = '' then
-    Make([LowerCaseU(fName), '.dto'], fDtoUnitName);
+    Join([LowerCaseU(fName), '.dto'], fDtoUnitName);
   w := TTextWriter.CreateOwnedStream(temp);
   try
     // header section
@@ -2874,9 +2882,9 @@ begin
   else
     desc := '.client';
   if fClientUnitName = '' then
-    Make([LowerCase(fName), desc], fClientUnitName);
+    Join([LowerCase(fName), desc], fClientUnitName);
   if fClientClassName = '' then
-    Make(['T', fName, 'Client'], fClientClassName);
+    Join(['T', fName, 'Client'], fClientClassName);
   w := TTextWriter.CreateOwnedStream(temp);
   try
     // unit common definitions

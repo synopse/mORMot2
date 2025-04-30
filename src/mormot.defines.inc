@@ -194,6 +194,8 @@
     {$endif VER3_2_2}
     {$ifdef VER3_2_3}
       {$define HASTTHREADTERMINATESET}
+      {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+      // https://gitlab.com/freepascal.org/fpc/source/-/commit/254c175b9f7627c92
     {$endif VER3_2_3}
   {$endif VER3_2}
   {$ifdef VER3_3} // trunk before 3.4
@@ -203,6 +205,8 @@
     {$define ISFPC33}
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$define HASEXTRECORDRTTI}       // latest trunk has extended record RTTI
+    {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+    // https://gitlab.com/freepascal.org/fpc/source/-/commit/d68ce429ab6d94c8ffb
   {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}
@@ -215,6 +219,9 @@
     // see https://gitlab.com/freepascal.org/fpc/source/-/issues/38018
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$define HASEXTRECORDRTTI}       // extended record RTTI
+    {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+    {$define HASDBFSINGLE}  // ftSingle
+    // https://gitlab.com/freepascal.org/fpc/source/-/commit/b907920ef392d6b3a2a
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
@@ -328,6 +335,7 @@
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
       {$define CPUARM3264}
+      {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
     {$endif CPUAARCH64}
   {$else}
     // 32-bit Architecture
@@ -348,6 +356,7 @@
     {$endif CPUX86}
     {$ifdef CPUARM}
       {$define CPUARM3264}
+      {$define FPC_CPUARM}
     {$endif CPUARM}
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
@@ -403,12 +412,13 @@
   {$define HASRTLCRITICALSECTION}
 
   // note: you may remove all unexpexted hints by setting in your project options
-  // -vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+  // -vm11047,3187,3123,3124,4055,4079,4081,5023,5024,5027,5028,5036,5037,5058,5059,5060,5089,5090,5091,5092,5093,5094,6018,6058
 
   // disable some no-brainer warnings - let FPC align with Delphi in that matter
   {$WARN 5027 off} // local assigned variable never used
   {$WARN 5036 off} // uninitialized local variable 1
   {$WARN 5037 off} // uninitialized local variable 2
+  {$WARN 5059 off} // function result variable does not seem to be initialized
   {$WARN 5089 off} // uninitialized managed variables 1
   {$WARN 5090 off} // uninitialized managed variables 2
   {$WARN 5091 off} // uninitialized managed variables 3
@@ -481,6 +491,7 @@
           {$ifdef CPUAARCH64}
             {$define OSANDROIDARM64}
           {$endif CPUAARCH64}
+		  {$define NOSQLITE3STATIC} // Static linking on Android with some non portable features for FPC
         {$else}
         'Unsupported Operating System - yet'
         {$endif ANDROID}
@@ -533,6 +544,14 @@
   {$else CPUX64}
     {$ifdef CPUARM}
        {$define CPUARM3264}
+	   {$ifdef CPUARM32}
+	      {$define CPU32} // CPU32BITS 
+   		  {$undef CPU64}
+	   {$endif}
+	   {$ifdef CPUARM64}
+	      {$undef CPU32}
+   		  {$define CPU64} // CPU64BITS
+	   {$endif}
     {$else}
       {$define CPU32}           // Delphi compiler for 32 bit CPU
       {$undef CPU64}
@@ -579,7 +598,7 @@
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // = Delphi 2007 or newer
       {$define HASITERATORS}
-      {$define HASDBFTWIDE}
+      {$define HASDBFTWIDE}       // ftWideMemo,ftFixedWideChar
     {$ifend}
     {$if CompilerVersion = 20}    // = Delphi 2009
       {$define ISDELPHI2009}      // to circumvent some specific bugs
@@ -598,7 +617,9 @@
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
-      {$ifdef NEWRTTINOTUSED}     // to reduce EXE size by disabling some RTTI
+      {$define HASDBFNEW}     // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+      {$define HASDBFSINGLE}  // ftSingle
+      {$ifdef NEWRTTINOTUSED} // to reduce EXE size by disabling some RTTI
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
       {$endif NEWRTTINOTUSED}
@@ -846,8 +867,8 @@
   // - even if those AES engines are slower and closed source (so should better
   // be avoided), we use it for TAesPrng.GetEntropy, as it can't hurt
   {$define USE_PROV_RSA_AES}
-  // define at your own risk, if you have the good libraries ;)
-  {.$define USE_OPENSSL}
+  // define at your own risk, praying you have the good libraries ;)
+  {$define USE_OPENSSL}
 {$else}
   {$ifndef OSANDROID}
     // try OpenSSL on POSIX systems where likely to be unique and maintained
@@ -857,6 +878,10 @@
 {$ifdef FORCE_OPENSSL}
   {$define USE_OPENSSL} // if you think you are a lucky enough guy
 {$endif FORCE_OPENSSL}
+{$ifdef DISABLE_OPENSSL} // global conditional
+  {$undef USE_OPENSSL}
+  {$undef FORCE_OPENSSL}
+{$endif DISABLE_OPENSSL}
 
 
 // -----------

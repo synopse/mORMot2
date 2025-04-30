@@ -412,13 +412,13 @@ begin
   if (con.Transaction = nil) or
      not con.Transaction.GetInTransaction then
   begin
-    fAutoStartCommitTrans := True;
+    fAutoStartCommitTrans := true;
     InternalStartTransaction;
     tr := fInternalTransaction;
   end
   else
   begin
-    fAutoStartCommitTrans := False;
+    fAutoStartCommitTrans := false;
     tr := con.Transaction;
   end;
   fStatement := con.Attachment.Prepare(
@@ -554,10 +554,10 @@ var
           case VType of
             ftUnknown,
             ftNull:
-              farrParams[iP].SetIsNull(True);
+              farrParams[iP].SetIsNull(true);
           else
             if VArray[iA]='null' then
-              farrParams[iP].SetIsNull(True)
+              farrParams[iP].SetIsNull(true)
             else
             begin
               case VType of
@@ -802,7 +802,7 @@ begin
         case VType of
           ftUnknown,
           ftNull:
-            farrParams[i].SetIsNull(True);
+            farrParams[i].SetIsNull(true);
           ftDate:
             farrParams[i].SetAsDateTime(PDateTime(@VInt64)^);
           ftInt64:

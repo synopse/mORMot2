@@ -772,7 +772,7 @@ type
     /// factory of the main I7zReader high-level archive file decompressor
     // - will guess the file format from its existing content by default
     function NewReader(const name: TFileName;
-      fmt: T7zFormatHandler = fhUndefined): I7zReader; overload;
+      fmt: T7zFormatHandler = fhUndefined; const pw: RawUtf8 = ''): I7zReader; overload;
     /// factory of the main I7zWriter high-level archive compressor
     function NewWriter(fmt: T7zFormatHandler): I7zWriter; overload;
     /// factory of the main I7zWriter high-level archive compressor
@@ -815,8 +815,8 @@ type
     /// I7zLib methods
     function FileName: TFileName;
     function NewReader(fmt: T7zFormatHandler): I7zReader; overload;
-    function NewReader(const name: TFileName;
-      fmt: T7zFormatHandler = fhUndefined): I7zReader; overload;
+    function NewReader(const name: TFileName; fmt: T7zFormatHandler = fhUndefined;
+      const pw: RawUtf8 = ''): I7zReader; overload;
     function NewWriter(fmt: T7zFormatHandler): I7zWriter; overload;
     function NewWriter(const name: TFileName;
       fmt: T7zFormatHandler = fhUndefined): I7zWriter; overload;
@@ -827,7 +827,7 @@ type
 // - will guess the file format from its existing content
 // - will own its own TZlib instance to access the 7z.dll library
 function New7zReader(const name: TFileName; fmt: T7zFormatHandler = fhUndefined;
-  const lib: TFileName = ''): I7zReader;
+  const lib: TFileName = '';  const pw: RawUtf8 = ''): I7zReader;
 
 /// global factory of the main I7zWriter high-level archive compressor
 // - will own its own TZlib instance to access the 7z.dll library
@@ -1377,9 +1377,9 @@ begin
         result := fhZip;
       $21726152:
         if h.c[1] = $0001071a then
-          result := fhRar
+          result := fhRar5
         else
-          result := fhRar5;
+          result := fhRar;
       $afbc7a37:
         result := fh7z;
       $28635349:
@@ -1566,12 +1566,14 @@ begin
   result := T7zReader.Create(self, fmt, {libowned=}false);
 end;
 
-function T7zLib.NewReader(const name: TFileName;
-  fmt: T7zFormatHandler): I7zReader;
+function T7zLib.NewReader(const name: TFileName; fmt: T7zFormatHandler;
+  const pw: RawUtf8): I7zReader;
 begin
   if fmt = fhUndefined then
     fmt := FormatDetect(name);
   result := T7zReader.Create(self, fmt, {libowned=}false);
+  if pw <> '' then
+    result.SetPassword(pw); // to be set before OpenFile()
   result.OpenFile(name);
 end;
 
@@ -1585,12 +1587,15 @@ begin
   result := T7zWriter.Create(self, NewReader(name, fmt), {libowned=}false);
 end;
 
+
 function New7zReader(const name: TFileName; fmt: T7zFormatHandler;
-  const lib: TFileName): I7zReader;
+  const lib: TFileName; const pw: RawUtf8): I7zReader;
 begin
   if fmt = fhUndefined then
     fmt := T7zLib.FormatDetect(name);
   result := T7zReader.Create(T7zLib.Create(lib), fmt, {libowned=}true);
+  if pw <> '' then
+    result.SetPassword(pw); // before OpenFile()
   result.OpenFile(name);
 end;
 

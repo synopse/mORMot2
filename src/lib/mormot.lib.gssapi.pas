@@ -78,12 +78,22 @@ type
   end;
   gss_buffer_t = ^gss_buffer_desc;
 
+  gss_channel_bindings_struct = record
+    initiator_addrtype: cardinal;
+    initiator_address: gss_buffer_desc;
+    acceptor_addrtype: cardinal;
+    acceptor_address: gss_buffer_desc;
+    application_data: gss_buffer_desc;
+  end;
+  gss_channel_bindings_t = ^gss_channel_bindings_struct;
+
   {$A+} // back to usual class/record alignment
 
 
 const
   GSS_C_NO_NAME = nil;
   GSS_C_NO_OID  = nil;
+  GSS_C_NO_CHANNEL_BINDINGS = nil;
 
   GSS_C_GSS_CODE  = 1;
   GSS_C_MECH_CODE = 2;
@@ -249,7 +259,7 @@ type
       mech_type: gss_OID;
       req_flags: cardinal;
       time_req: cardinal;
-      input_chan_bindings: pointer;
+      input_chan_bindings: gss_channel_bindings_t;
       input_token: gss_buffer_t;
       actual_mech_type: gss_OID_ptr;
       output_token: gss_buffer_t;
@@ -260,7 +270,7 @@ type
       var context_handle: pointer;
       acceptor_cred_handle: pointer;
       input_token_buffer: gss_buffer_t;
-      input_chan_bindings: pointer;
+      input_chan_bindings: gss_channel_bindings_t;
       src_name: gss_name_t;
       mech_type: gss_OID_ptr;
       output_token: gss_buffer_t;
@@ -414,6 +424,8 @@ type
     CredHandle: pointer;
     CtxHandle: pointer;
     CreatedTick64: Int64;
+    ChannelBindingsHash: pointer;
+    ChannelBindingsHashLen: cardinal;
   end;
   PSecContext = ^TSecContext;
 
@@ -639,7 +651,7 @@ begin
 end;
 
 const
-  GSS_NAMES: array[0 .. 17] of RawUtf8 = (
+  GSS_ENTRIES: array[0 .. 18] of PAnsiChar = (
     'gss_import_name',
     'gss_display_name',
     'gss_release_name',
@@ -657,15 +669,14 @@ const
     'gss_indicate_mechs',
     'gss_release_oid_set',
     'gss_display_status',
-    'krb5_gss_register_acceptor_identity');
+    'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
+    nil);
 
 var
   GssApiTried: TFileName;
 
 procedure LoadGssApi(const LibraryName: TFileName);
 var
-  i: PtrInt;
-  P: PPointerArray;
   api: TGssApi; // local instance for thread-safe load attempt
   tried: TFileName;
 begin
@@ -679,16 +690,10 @@ begin
   GssApiTried := tried;
   api := TGssApi.Create;
   api.TryFromExecutableFolder := true; // good idea to check local first
-  if api.TryLoadLibrary(
-      [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS], nil) then
+  if api.TryLoadResolve(
+      [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS],
+      '', @GSS_ENTRIES, @@api.gss_import_name) then
   begin
-    P := @@api.gss_import_name;
-    for i := 0 to high(GSS_NAMES) do
-      api.Resolve('', GSS_NAMES[i], @P^[i]); // no exception, set nil on failure
-    if not Assigned(api.krb5_gss_register_acceptor_identity) then
-      // try alternate function name
-      api.Resolve('', 'gsskrb5_register_acceptor_identity',
-        @api.krb5_gss_register_acceptor_identity);
     if Assigned(api.gss_acquire_cred) and
        Assigned(api.gss_accept_sec_context) and
        Assigned(api.gss_release_buffer) and
@@ -777,6 +782,8 @@ begin
   aSecContext.CredHandle := nil;
   aSecContext.CtxHandle := nil;
   aSecContext.CreatedTick64 := aTick64;
+  aSecContext.ChannelBindingsHash := nil;
+  aSecContext.ChannelBindingsHashLen := 0;
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -867,6 +874,33 @@ end;
 var
   ForceSecKerberosSpn: RawUtf8;
 
+type
+  TGssBindIdent = array[0..20] of AnsiChar;
+  TGssBind = packed record
+    head: gss_channel_bindings_struct;
+    ident: TGssBindIdent;
+    hash: THash512;
+  end;
+
+const
+  GSS_SERVERENDPOINT: TGssBindIdent = 'tls-server-end-point:';
+
+function SetBind(const SC: TSecContext; var Bind: TGssBind): gss_channel_bindings_t;
+begin
+  result := nil;
+  if SC.ChannelBindingsHash = nil then
+    exit;
+  if SC.ChannelBindingsHashLen > SizeOf(Bind.hash) then
+    raise EGssApi.CreateFmt('ClientSspi: ChannelBindingsHashLen=%d>%d',
+      [SC.ChannelBindingsHashLen, SizeOf(Bind.hash)]);
+  FillCharFast(Bind.head, SizeOf(Bind.head), 0);
+  Bind.ident := GSS_SERVERENDPOINT;
+  MoveFast(SC.ChannelBindingsHash^, Bind.hash, SC.ChannelBindingsHashLen);
+  Bind.head.application_data.value := @Bind.ident;
+  Bind.head.application_data.length := SC.ChannelBindingsHashLen + SizeOf(Bind.ident);
+  result := @Bind;
+end;
+
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString; aMech: gss_OID): boolean;
@@ -877,6 +911,7 @@ var
   OutBuf: gss_buffer_desc;
   CtxReqAttr: cardinal;
   CtxAttr: cardinal;
+  Bind: TGssBind;
 begin
   TargetName := nil;
   if aSecKerberosSpn <> '' then
@@ -897,8 +932,8 @@ begin
     OutBuf.length := 0;
     OutBuf.value := nil;
     MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
-      aSecContext.CtxHandle, TargetName, aMech,
-      CtxReqAttr, GSS_C_INDEFINITE, nil, @InBuf, nil, @OutBuf, @CtxAttr, nil);
+      aSecContext.CtxHandle, TargetName, aMech, CtxReqAttr, GSS_C_INDEFINITE,
+        SetBind(aSecContext, Bind), @InBuf, nil, @OutBuf, @CtxAttr, nil);
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to initialize security context');
     result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
@@ -1017,6 +1052,7 @@ var
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
   CtxAttr: cardinal;
+  Bind: TGssBind;
 begin
   RequireGssApi;
   if aSecContext.CredHandle = nil then // initial call
@@ -1034,7 +1070,8 @@ begin
   OutBuf.length := 0;
   OutBuf.value := nil;
   MajStatus := GssApi.gss_accept_sec_context(MinStatus, aSecContext.CtxHandle,
-    aSecContext.CredHandle, @InBuf, nil, nil, nil, @OutBuf, @CtxAttr, nil, nil);
+    aSecContext.CredHandle, @InBuf, SetBind(aSecContext, Bind), nil, nil,
+    @OutBuf, @CtxAttr, nil, nil);
   GccCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
   result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
   FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);

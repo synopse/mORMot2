@@ -96,7 +96,7 @@ type
     bidMod,
     bidModNorm);
 
-  /// store one Big Integer value with proper COW support
+  /// store one Big Integer value with proper Copy-On-Write (RefCnt) support
   // - each value is owned as PBigInt by an associated TRsaContext instance
   // - you should call TBigInt.Release() once done with any instance
   {$ifdef USERECORDWITHMETHODS}
@@ -140,7 +140,7 @@ type
       {$ifdef HASSAFEINLINE} inline; {$endif}
     /// allocate a new Big Integer value with the same data as an existing one
     function Clone: PBigInt;
-    /// mark the value with a RefCnt < 0
+    /// mark the value with a RefCnt < 0, i.e. as constant until Owner is freed
     function SetPermanent: PBigInt;
     /// mark the value with a RefCnt = 1
     function ResetPermanent: PBigInt;
@@ -235,14 +235,16 @@ type
     // - will eventually release the m instance
     function ModInverse(m: PBigInt): PBigInt;
     /// check if this value is divisable by a small prime
-    // - detection coverage can be customized from default primes < 2000
+    // - prime detection range is bspFast<256, bspMost<2000 or bspAll<18000
+    // - usually called with default RSA_DEFAULT_GENERATION_KNOWNPRIME = bspMost
     function MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
     /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 10): boolean;
     /// guess a random prime number of the exact current size
-    // - loop over TAesPrng.Fill and IsPrime method within a timeout period
+    // - a secret is generated from several audited sources (OS, cpu RdRand),
+    // then looped over TAesPrng.Fill and IsPrime method within a timeout period
     // - if Iterations is too low, FIPS 4.48 recommendation will be forced
     function FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
       EndTix: Int64): boolean;
@@ -356,96 +358,11 @@ const
   RSA_DEFAULT_GENERATION_TIMEOUTMS = 10000;
   {$endif CPUARM}
 
-  /// 2KB table of iterative differences of all known prime numbers < 18,000
+var
+  /// runtime-computed 4KB table of all known 2, 3, 5, 7, ... 17989 prime numbers
   // - as used by TBigInt.MatchKnownPrime
   // - published in interface section for TTestCoreCrypto._RSA validation
-  BIGINT_PRIMES_DELTA: array[0 .. 258 * 8 - 1] of byte = (
-    2, 1, 2, 2, 4, 2, 4, 2, 4, 6, 2, 6, 4, 2, 4, 6, 6, 2, 6, 4, 2, 6, 4, 6,
-    8, 4, 2, 4, 2, 4,14, 4, 6, 2,10, 2, 6, 6, 4, 6, 6, 2,10, 2, 4, 2,12,12,
-    4, 2, 4, 6, 2,10, 6, 6, 6, 2, 6, 4, 2,10,14, 4, 2, 4,14, 6,10, 2, 4, 6,
-    8, 6, 6, 4, 6, 8, 4, 8,10, 2,10, 2, 6, 4, 6, 8, 4, 2, 4,12, 8, 4, 8, 4,
-    6,12, 2,18, 6,10, 6, 6, 2, 6,10, 6, 6, 2, 6, 6, 4, 2,12,10, 2, 4, 6, 6,
-    2,12, 4, 6, 8,10, 8,10, 8, 6, 6, 4, 8, 6, 4, 8, 4,14,10,12, 2,10, 2, 4,
-    2,10,14, 4, 2, 4,14, 4, 2, 4,20, 4, 8,10, 8, 4, 6, 6,14, 4, 6, 6, 8, 6,
-   12, 4, 6, 2,10, 2, 6,10, 2,10, 2, 6,18, 4, 2, 4, 6, 6, 8, 6, 6,22, 2,10,
-    8,10, 6, 6, 8,12, 4, 6, 6, 2, 6,12,10,18, 2, 4, 6, 2, 6, 4, 2, 4,12, 2,
-    6,34, 6, 6, 8,18,10,14, 4, 2, 4, 6, 8, 4, 2, 6,12,10, 2, 4, 2, 4, 6,12,
-   12, 8,12, 6, 4, 6, 8, 4, 8, 4,14, 4, 6, 2, 4, 6, 2, 6,10,20, 6, 4, 2,24,
-    4, 2,10,12, 2,10, 8, 6, 6, 6,18, 6, 4, 2,12,10,12, 8,16,14, 6, 4, 2, 4,
-    2,10,12, 6, 6,18, 2,16, 2,22, 6, 8, 6, 4, 2, 4, 8, 6,10, 2,10,14,10, 6,
-   12, 2, 4, 2,10,12, 2,16, 2, 6, 4, 2,10, 8,18,24, 4, 6, 8,16, 2, 4, 8,16,
-    2, 4, 8, 6, 6, 4,12, 2,22, 6, 2, 6, 4, 6,14, 6, 4, 2, 6, 4, 6,12, 6, 6,
-   14, 4, 6,12, 8, 6, 4,26,18,10, 8, 4, 6, 2, 6,22,12, 2,16, 8, 4,12,14,10,
-    2, 4, 8, 6, 6, 4, 2, 4, 6, 8, 4, 2, 6,10, 2,10, 8, 4,14,10,12, 2, 6, 4,
-    2,16,14, 4, 6, 8, 6, 4,18, 8,10, 6, 6, 8,10,12,14, 4, 6, 6, 2,28, 2,10,
-    8, 4,14, 4, 8,12, 6,12, 4, 6,20,10, 2,16,26, 4, 2,12, 6, 4,12, 6, 8, 4,
-    8,22, 2, 4, 2,12,28, 2, 6, 6, 6, 4, 6, 2,12, 4,12, 2,10, 2,16, 2,16, 6,
-   20,16, 8, 4, 2, 4, 2,22, 8,12, 6,10, 2, 4, 6, 2, 6,10, 2,12,10, 2,10,14,
-    6, 4, 6, 8, 6, 6,16,12, 2, 4,14, 6, 4, 8,10, 8, 6, 6,22, 6, 2,10,14, 4,
-    6,18, 2,10,14, 4, 2,10,14, 4, 8,18, 4, 6, 2, 4, 6, 2,12, 4,20,22,12, 2,
-    4, 6, 6, 2, 6,22, 2, 6,16, 6,12, 2, 6,12,16, 2, 4, 6,14, 4, 2,18,24,10,
-    6, 2,10, 2,10, 2,10, 6, 2,10, 2,10, 6, 8,30,10, 2,10, 8, 6,10,18, 6,12,
-   12, 2,18, 6, 4, 6, 6,18, 2,10,14, 6, 4, 2, 4,24, 2,12, 6,16, 8, 6, 6,18,
-   16, 2, 4, 6, 2, 6, 6,10, 6,12,12,18, 2, 6, 4,18, 8,24, 4, 2, 4, 6, 2,12,
-    4,14,30,10, 6,12,14, 6,10,12, 2, 4, 6, 8, 6,10, 2, 4,14, 6, 6, 4, 6, 2,
-   10, 2,16,12, 8,18, 4, 6,12, 2, 6, 6, 6,28, 6,14, 4, 8,10, 8,12,18, 4, 2,
-    4,24,12, 6, 2,16, 6, 6,14,10,14, 4,30, 6, 6, 6, 8, 6, 4, 2,12, 6, 4, 2,
-    6,22, 6, 2, 4,18, 2, 4,12, 2, 6, 4,26, 6, 6, 4, 8,10,32,16, 2, 6, 4, 2,
-    4, 2,10,14, 6, 4, 8,10, 6,20, 4, 2, 6,30, 4, 8,10, 6, 6, 8, 6,12, 4, 6,
-    2, 6, 4, 6, 2,10, 2,16, 6,20, 4,12,14,28, 6,20, 4,18, 8, 6, 4, 6,14, 6,
-    6,10, 2,10,12, 8,10, 2,10, 8,12,10,24, 2, 4, 8, 6, 4, 8,18,10, 6, 6, 2,
-    6,10,12, 2,10, 6, 6, 6, 8, 6,10, 6, 2, 6, 6, 6,10, 8,24, 6,22, 2,18, 4,
-    8,10,30, 8,18, 4, 2,10, 6, 2, 6, 4,18, 8,12,18,16, 6, 2,12, 6,10, 2,10,
-    2, 6,10,14, 4,24, 2,16, 2,10, 2,10,20, 4, 2, 4, 8,16, 6, 6, 2,12,16, 8,
-    4, 6,30, 2,10, 2, 6, 4, 6, 6, 8, 6, 4,12, 6, 8,12, 4,14,12,10,24, 6,12,
-    6, 2,22, 8,18,10, 6,14, 4, 2, 6,10, 8, 6, 4, 6,30,14,10, 2,12,10, 2,16,
-    2,18,24,18, 6,16,18, 6, 2,18, 4, 6, 2,10, 8,10, 6, 6, 8, 4, 6, 2,10, 2,
-   12, 4, 6, 6, 2,12, 4,14,18, 4, 6,20, 4, 8, 6, 4, 8, 4,14, 6, 4,14,12, 4,
-    2,30, 4,24, 6, 6,12,12,14, 6, 4, 2, 4,18, 6,12, 8, 6, 4,12, 2,12,30,16,
-    2, 6,22,14, 6,10,12, 6, 2, 4, 8,10, 6, 6,24,14, 6, 4, 8,12,18,10, 2,10,
-    2, 4, 6,20, 6, 4,14, 4, 2, 4,14, 6,12,24,10, 6, 8,10, 2,30, 4, 6, 2,12,
-    4,14, 6,34,12, 8, 6,10, 2, 4,20,10, 8,16, 2,10,14, 4, 2,12, 6,16, 6, 8,
-    4, 8, 4, 6, 8, 6, 6,12, 6, 4, 6, 6, 8,18, 4,20, 4,12, 2,10, 6, 2,10,12,
-    2, 4,20, 6,30, 6, 4, 8,10,12, 6, 2,28, 2, 6, 4, 2,16,12, 2, 6,10, 8,24,
-   12, 6,18, 6, 4,14, 6, 4,12, 8, 6,12, 4, 6,12, 6,12, 2,16,20, 4, 2,10,18,
-    8, 4,14, 4, 2, 6,22, 6,14, 6, 6,10, 6, 2,10, 2, 4, 2,22, 2, 4, 6, 6,12,
-    6,14,10,12, 6, 8, 4,36,14,12, 6, 4, 6, 2,12, 6,12,16, 2,10, 8,22, 2,12,
-    6, 4, 6,18, 2,12, 6, 4,12, 8, 6,12, 4, 6,12, 6, 2,12,12, 4,14, 6,16, 6,
-    2,10, 8,18, 6,34, 2,28, 2,22, 6, 2,10,12, 2, 6, 4, 8,22, 6, 2,10, 8, 4,
-    6, 8, 4,12,18,12,20, 4, 6, 6, 8, 4, 2,16,12, 2,10, 8,10, 2, 4, 6,14,12,
-   22, 8,28, 2, 4,20, 4, 2, 4,14,10,12, 2,12,16, 2,28, 8,22, 8, 4, 6, 6,14,
-    4, 8,12, 6, 6, 4,20, 4,18, 2,12, 6, 4, 6,14,18,10, 8,10,32, 6,10, 6, 6,
-    2, 6,16, 6, 2,12, 6,28, 2,10, 8,16, 6, 8, 6,10,24,20,10, 2,10, 2,12, 4,
-    6,20, 4, 2,12,18,10, 2,10, 2, 4,20,16,26, 4, 8, 6, 4,12, 6, 8,12,12, 6,
-    4, 8,22, 2,16,14,10, 6,12,12,14, 6, 4,20, 4,12, 6, 2, 6, 6,16, 8,22, 2,
-   28, 8, 6, 4,20, 4,12,24,20, 4, 8,10, 2,16, 2,12,12,34, 2, 4, 6,12, 6, 6,
-    8, 6, 4, 2, 6,24, 4,20,10, 6, 6,14, 4, 6, 6, 2,12, 6,10, 2,10, 6,20, 4,
-   26, 4, 2, 6,22, 2,24, 4, 6, 2, 4, 6,24, 6, 8, 4, 2,34, 6, 8,16,12, 2,10,
-    2,10, 6, 8, 4, 8,12,22, 6,14, 4,26, 4, 2,12,10, 8, 4, 8,12, 4,14, 6,16,
-    6, 8, 4, 6, 6, 8, 6,10,12, 2, 6, 6,16, 8, 6, 6,12,10, 2, 6,18, 4, 6, 6,
-    6,12,18, 8, 6,10, 8,18, 4,14, 6,18,10, 8,10,12, 2, 6,12,12,36, 4, 6, 8,
-    4, 6, 2, 4,18,12, 6, 8, 6, 6, 4,18, 2, 4, 2,24, 4, 6, 6,14,30, 6, 4, 6,
-   12, 6,20, 4, 8, 4, 8, 6, 6, 4,30, 2,10,12, 8,10, 8,24, 6,12, 4,14, 4, 6,
-    2,28,14,16, 2,12, 6, 4,20,10, 6, 6, 6, 8,10,12,14,10,14,16,14,10,14, 6,
-   16, 6, 8, 6,16,20,10, 2, 6, 4, 2, 4,12, 2,10, 2, 6,22, 6, 2, 4,18, 8,10,
-    8,22, 2,10,18,14, 4, 2, 4,18, 2, 4, 6, 8,10, 2,30, 4,30, 2,10, 2,18, 4,
-   18, 6,14,10, 2, 4,20,36, 6, 4, 6,14, 4,20,10,14,22, 6, 2,30,12,10,18, 2,
-    4,14, 6,22,18, 2,12, 6, 4, 8, 4, 8, 6,10, 2,12,18,10,14,16,14, 4, 6, 6,
-    2, 6, 4, 2,28, 2,28, 6, 2, 4, 6,14, 4,12,14,16,14, 4, 6, 8, 6, 4, 6, 6,
-    6, 8, 4, 8, 4,14,16, 8, 6, 4,12, 8,16, 2,10, 8, 4, 6,26, 6,10, 8, 4, 6,
-   12,14,30, 4,14,22, 8,12, 4, 6, 8,10, 6,14,10, 6, 2,10,12,12,14, 6, 6,18,
-   10, 6, 8,18, 4, 6, 2, 6,10, 2,10, 8, 6, 6,10, 2,18,10, 2,12, 4, 6, 8,10,
-   12,14,12, 4, 8,10, 6, 6,20, 4,14,16,14,10, 8,10,12, 2,18, 6,12,10,12, 2,
-    4, 2,12, 6, 4, 8, 4,44, 4, 2, 4, 2,10,12, 6, 6,14, 4, 6, 6, 6, 8, 6,36,
-   18, 4, 6, 2,12, 6, 6, 6, 4,14,22,12, 2,18,10, 6,26,24, 4, 2, 4, 2, 4,14,
-    4, 6, 6, 8,16,12, 2,42, 4, 2, 4,24, 6, 6, 2,18, 4,14, 6,28,18,14, 6,10,
-   12, 2, 6,12,30, 6, 4, 6, 6,14, 4, 2,24, 4, 6, 6,26,10,18, 6, 8, 6, 6,30,
-    4,12,12, 2,16, 2, 6, 4,12,18, 2, 6, 4,26,12, 6,12, 4,24,24,12, 6, 2,12,
-   28, 8, 4, 6,12, 2,18, 6, 4, 6, 6,20,16, 2, 6, 6,18,10, 6, 2, 4, 8, 6, 6,
-   24,16, 6, 8,10, 6,14,22, 8,16, 6, 2,12, 4, 2,22, 8,18,34, 2, 6,18, 4, 6,
-    6, 8,10, 8,18, 6, 4, 2, 4, 8,16, 2,12,12, 6,18, 4, 6, 6, 6, 2, 6,12,10,
-   20,12,18, 4, 6, 2,16, 2,10,14, 4,30, 2,10,12, 2,24, 6,16, 8,10, 2,12,22,
-    6, 2,16,20,10, 2,12,12,18,10,12, 6, 2,10, 2, 6,10,18, 2,12, 6, 4, 6, 2);
+  BIGINT_PRIMES: array[0 .. 2063] of word;
 
 /// compute the base-10 decimal text from a Big Integer binary buffer
 // - wrap PBigInt.ToText from LoadPermanent(der) in a temporary TRsaContext
@@ -549,10 +466,12 @@ type
   public
     /// initialize the RSA key context
     constructor Create; override;
-    /// initialize and generate a new RSA key context
+    /// factory method to initialize and generate a new RSA key context
     // - this is the main factory to generate a new RSA keypair
     // - will call Create and Generate() with proper retry on rgrWeakBitsMayRetry
     // - returns nil on generation error (with a silent exception)
+    // - generating a RSA keypair could take some time, more than one second on
+    // 32-bit or slower systems - consider the much faster ECC-256 if possible
     class function GenerateNew(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
       Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
       Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
@@ -571,10 +490,13 @@ type
     /// compute a genuine RSA public/private key pair of a given bit size
     // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096 and 7680;
     // today's minimal is 2048-bit, but you may consider 3072-bit for security
-    // beyond 2030, and 4096-bit have a much higher computational cost and
-    // 7680-bit is highly impractical (e.g. generation can be more than 30 secs)
+    // beyond 2030; note that 4096-bit have a much higher computational cost
+    // with almost the same security than 3072-bit, and 7680-bit is highly
+    // impractical (e.g. generation can be more than 30 secs)
     // - since our generator is not yet officially validated by any agency,
     // anything above default 2048 would not make much sense
+    // - our main goal is to have "secure enough" results with default params,
+    // to ensure the end-user won't be tempted to naively change these defaults
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
@@ -1167,13 +1089,11 @@ end;
 
 function TBigInt.Save(andrelease: boolean): RawByteString;
 begin
+  result := '';
   if @self = nil then
-    result := ''
-  else
-  begin
-    FastNewRawByteString(result, Size * HALF_BYTES);
-    Save(pointer(result), length(result), andrelease);
-  end;
+    exit;
+  pointer(result) := FastNewString(Size * HALF_BYTES);
+  Save(pointer(result), length(result), andrelease);
 end;
 
 function TBigInt.Add(b: PBigInt): PBigInt;
@@ -1406,28 +1326,109 @@ end;
 
 const
   BIGINT_PRIMES_LAST: array[TBigIntSimplePrime] of integer = (
-    53,                         // bspFast < 256
-    302,                        // bspMost < 2000
-    high(BIGINT_PRIMES_DELTA)); // bspAll  < 18000
+    53,                   // bspFast < 256
+    302,                  // bspMost < 2000
+    high(BIGINT_PRIMES)); // bspAll  < 18000
+  // 4-bit differences between all primes BIGINT_PRIMES[] - stored in only 1KB
+  BIGINT_PRIMES_DELTA: array[0..259] of cardinal = (
+    $32121211, $13321231, $24323123, $13272121, $13323315, $12661215, $13335132,
+    $21275123, $34321537, $15424323, $12432315, $63242462, $31335391, $12331335,
+    $61332156, $34545432, $72423423, $51215165, $21272127, $3324542a, $26343327,
+    $51531513, $33212931, $5451b334, $13326433, $13219563, $03162123, $27594332,
+    $63124321, $66321215, $42432364, $13213272, $2c123a53, $33451651, $65612393,
+    $12123784, $18193365, $4212343b, $63575153, $18165121, $2c945123, $18421843,
+    $b1623342, $23732313, $73363231, $9d234632, $6b313245, $15762481, $32123342,
+    $45153124, $12316572, $92343278, $76543354, $451e1332, $26364272, $12d815a3,
+    $42436236, $31e6121b, $62613233, $a3818151, $4b121248, $31321536, $37515615,
+    $16833432, $34542372, $327513b3, $75127519, $32132942, $216ba261, $831b3133,
+    $21863163, $35c91273, $13515151, $15f43515, $66395345, $19332391, $1c212375,
+    $89334836, $35331321, $49231966, $2613212c, $537635f7, $15343216, $51323372,
+    $63294681, $273e3331, $21296454, $7338136c, $4333f275, $31236123, $6219213b,
+    $4233d231, $12318105, $54237512, $42f312a3, $32634335, $81513231, $a3e762a3,
+    $37323492, $15465153, $421c5645, $13359423, $33351653, $33313534, $291b3c45,
+    $51294f54, $96492313, $51536138, $81c27531, $212a5151, $48613384, $23151f32,
+    $43623433, $63c56726, $73594b13, $32345312, $8156157f, $39839c91, $54513291,
+    $15132433, $72613326, $2342a329, $26723724, $6633c2f1, $63921237, $8f616234,
+    $36537b31, $7c335421, $51596423, $2723a321, $35c63721, $6132f154, $34620372,
+    $1845a215, $38361275, $33432424, $29433236, $5135162a, $23f3a216, $31e13654,
+    $45316812, $3723936c, $63263462, $512a8163, $b3127249, $51353373, $3321b121,
+    $24365736, $13236730, $b4518636, $61932361, $32634623, $37266136, $03945138,
+    $513b1e12, $13b42316, $96243245, $124332a6, $21545168, $21e4b673, $1657212a,
+    $24b4e186, $33642733, $236192a2, $10545973, $38313353, $8451e361, $15ac5343,
+    $12a32615, $a2151596, $362342d8, $1b423664, $37663578, $331362a2, $234e1b48,
+    $542ac62a, $12066181, $23433632, $335a2c31, $53613327, $12d2a351, $2132c1b3,
+    $201243c3, $51516843, $73b64243, $245612d2, $43837264, $16534332, $56334833,
+    $63332931, $72945349, $31654593, $24323066, $34369213, $2c121923, $6323f733,
+    $334242a3, $454651f2, $1327263c, $a236187e, $76543335, $83757875, $315a8343,
+    $31516212, $4549213b, $2127951b, $f1543219, $929151f2, $30a21573, $75a27323,
+    $1956f13b, $3619b372, $61534242, $33278759, $3e1e1231, $87627321, $33234327,
+    $48724243, $45184623, $32453d32, $64b72f76, $35735432, $93376651, $31329435,
+    $15334515, $54326159, $33542676, $5457872a, $16563916, $02423612, $36512127,
+    $34333273, $36132930, $916b7233, $1212cd35, $68433272, $3c212601, $9e372913,
+    $f6316537, $c1273323, $4395d332, $81662f33, $23196231, $6cc2636d, $6324e613,
+    $8a332391, $21359331, $5438c334, $61384b73, $12094b12, $45433293, $18421239,
+    $33329366, $296a5631, $f2751813, $483c1651, $a813b615, $36596615, $61953151,
+    $00001323); // e.g. $1323 is decoded as 6,4,6,2
+
+procedure ComputeAllPrimes; // 128 bytes of code to generate 4KB BIGINT_PRIMES[]
+var
+  i: PtrUInt;
+  c, v, odd: cardinal;
+  p: PByte;
+  w: PWordArray;
+begin
+  odd := 0;
+  p := @BIGINT_PRIMES_DELTA;
+  w := @BIGINT_PRIMES;
+  PCardinal(w)^ := $00030002; // store 2,3 as first primes (to avoid delta = 1)
+  v := 3;
+  for i := 2 to high(BIGINT_PRIMES) do // uncompress BIGINT_PRIMES_DELTA[]
+  begin
+    c := p^; // retrieve the next 4-bit nibble
+    if odd = 0 then
+      c := c and 15
+    else
+    begin
+      c := c shr 4;
+      inc(p);
+    end;
+    odd := not odd;
+    c := c shl 1; // deltas are all >= 2, so stored "shr 1"
+    if c = 0 then
+    begin
+      c := p^; // delta > 15 -> stored as two 4-bit nibbles (0, delta-15)
+      if odd = 0 then
+        c := c and 15
+      else
+      begin
+        c := c shr 4;
+        inc(p);
+      end;
+      odd := not odd;
+      c := (c + 15) shl 1; // 2nd nibble was delta-15
+    end;
+    inc(v, c);
+    w[i] := v;
+  end;
+  assert(v = 17989);
+end;
 
 // profiling shows that Miller-Rabin takes 150 times more than bspMost
 
 function TBigInt.MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
 var
-  i, v: PtrInt;
+  i: PtrInt;
 begin
+  if BIGINT_PRIMES[high(BIGINT_PRIMES)] = 0 then // should equal 17989
+    ComputeAllPrimes; // delayed initialization
   if not IsZero then
   begin
     result := true;
     if IsEven then // same as IntMod(2) = 0
       exit;
-    v := 2; // start after 2, i.e. at 3
     for i := 1 to BIGINT_PRIMES_LAST[Extend] do
-    begin
-      inc(v, BIGINT_PRIMES_DELTA[i]);
-      if IntMod(v) = 0 then
+      if IntMod(BIGINT_PRIMES[i]) = 0 then // 3, 5, 7, 11, ...
         exit;
-    end;
   end;
   result := false;
 end;
@@ -1531,33 +1532,38 @@ end;
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   EndTix: Int64): boolean;
 var
-  n, min: integer;
+  min, bytes: integer;
   last32: PCardinal;
+  rnd: RawByteString;
 begin
   // ensure it is worth searching (paranoid)
-  n := Size;
-  if n <= 2 then
+  if Size <= 2 then
     raise ERsaException.Create('TBigInt.FillPrime: unsupported size');
   // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
   if EndTix <= 0 then
     EndTix := GetTickCount64 + MilliSecsPerMin; // time on Intel is around 1 sec
   // compute number of Miller-Rabin rounds for 2^-112 error probability
-  min := FipsMinIterations(n shl HALF_SHR);
+  min := FipsMinIterations(Size shl HALF_SHR);
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
   min := 16;
-  last32 := @Value[n - 1 {$ifdef CPU32} - 1 {$endif}];
+  last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
   // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
-  FillSystemRandom(pointer(Value), n * HALF_BYTES, false); // slow but approved
+  // note that RSA-2048 requires only 128-bit of true cryptographic randomness
+  bytes := Size * HALF_BYTES;
+  pointer(rnd) := FastNewString(bytes);
+  FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
   {$ifdef CPUINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU prng
+  RdRand32(pointer(Value), bytes shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
+  AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
+  FillZero(rnd);
   repeat
-    // xor the original trusted sources with our CSPRNG
-    TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
-    if GetBitsCount(Value^, n * HALF_BITS) < n * (HALF_BITS div 3) then
+    // xor the original trusted sources with our CSPRNG until we get enough bits
+    TAesPrng.Main.XorRandom(Value, bytes);
+    if GetBitsCount(Value^, Size * HALF_BITS) < Size * (HALF_BITS div 3) then
     begin
       // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
       // - with our TAesPrng, it never occurred after 1,000,000,000 trials
@@ -1570,7 +1576,7 @@ begin
     Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
     if last32^ < FIPS_MIN then
       last32^ := last32^ or $b5050000; // let's grow up
-    if (Value[n - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
+    if (Value[Size - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
        (last32^ >= FIPS_MIN) then
       break;
     raise ERsaException.Create('TBigInt.FillPrime FIPS_MIN'); // paranoid
@@ -1584,7 +1590,7 @@ begin
     while last32^ < FIPS_MIN do
     begin
       // handle IntAdd overflow - paranoid but safe
-      TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
+      TAesPrng.Main.XorRandom(Value, bytes);
       Value[0] := Value[0] or 1;
     end;
     // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
@@ -2484,7 +2490,7 @@ begin
   fModulusBits := Bits;
   fModulusLen := Bits shr 3;
   _e := LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
-  _p := Allocate(ValuesSize(ModulusLen shr 1));
+  _p := Allocate(ValuesSize(ModulusLen shr 1)); // p,q size = half Bits
   _q := Allocate(_p.Size);
   _d := nil;
   try
@@ -2810,7 +2816,7 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    RandomBytes(@r[2], padding); // Lecuyer is enough for public padding
+    SharedRandom.Fill(@r[2], padding); // Lecuyer is enough for public padding
     inc(padding, 2);
     for i := 2 to padding - 1 do
       if r[i] = 0 then
@@ -3020,7 +3026,7 @@ begin
      not HasPublicKey then
     exit;
   // generate the ephemeral secret key and IV within the corresponding header
-  RandomBytes(@head.iv, SizeOf(head.iv)); // use Lecuyer for public random
+  SharedRandom.Fill(@head.iv, SizeOf(head.iv)); // use Lecuyer for public random
   try
     TAesPrng.Main.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
@@ -3036,7 +3042,7 @@ begin
     end;
     // concatenate the header, encrypted key and message
     msgpos := SizeOf(head) + length(enckey);
-    FastNewRawByteString(result, msgpos + length(encmsg));
+    pointer(result) := FastNewString(msgpos + length(encmsg));
     PRsaSealHeader(result)^ := head;
     MoveFast(pointer(enckey)^, PByteArray(result)[SizeOf(head)], length(enckey));
     MoveFast(pointer(encmsg)^, PByteArray(result)[msgpos], length(encmsg));
@@ -3076,8 +3082,7 @@ begin
       a := Cipher.Create(pointer(key)^, AesBits);
       try
         a.IV := head^.iv;
-        result := a.DecryptPkcs7Buffer(@input[msgpos], msglen - msgpos,
-          {ivatbeg=}false, {raiseerror=}false);
+        a.DecryptPkcs7Var(@input[msgpos], msglen - msgpos, {iv=}false, result);
       finally
         a.Free;
       end;
@@ -3196,7 +3201,7 @@ begin
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
-  RandomBytes(@salt, hlen); // Lecuyer is good enough for public salt
+  SharedRandom.Fill(@salt, hlen); // Lecuyer is good enough for public salt
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
   if pslen < 0 then
@@ -3229,6 +3234,7 @@ type
   public
     constructor Create(const name: RawUtf8); overload; override;
     constructor Create(const name, hasher: RawUtf8); reintroduce; overload;
+    function KeyAlgo: TCryptKeyAlgo; override;
     procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -3263,6 +3269,14 @@ begin
   if fDefaultHasher = nil then
     ECrypt.RaiseUtf8('%.Create: unknown hasher=%', [self, hasher]);
   Create(name);
+end;
+
+function TCryptAsymRsa.KeyAlgo: TCryptKeyAlgo;
+begin
+  if fRsaClass = TRsa then
+    result := ckaRsa
+  else
+    result := ckaRsaPss;
 end;
 
 procedure TCryptAsymRsa.GenerateDer(out pub, priv: RawByteString;
@@ -3528,8 +3542,8 @@ begin
   // but RS256-int PS256-int will stil be available to use this unit if needed
 end;
 
+
 initialization
   InitializeUnit;
-
 
 end.

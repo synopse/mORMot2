@@ -7,28 +7,29 @@
 }
 
 uses
-  {$ifdef FPC}
-  baseunix,
-  termio,
-  sockets,
-  {$ifdef OSLINUXANDROID}
-  linux,   // for epoll
-  {$endif OSLINUXANDROID}
-  initc;  // link clib='c' for our socket purpose
-  {$else}
+  Posix.Base,
   Posix.Termios,
   Posix.Errno,
   Posix.Unistd,
   Posix.SysSocket,
+  Posix.SysSelect,
+  Posix.NetDB,
+  Posix.StrOpts,
+  Posix.SysTime,
+  Posix.StdDef,
+  Posix.SysTypes,
+  Posix.SysUn,
   Posix.NetinetIn,
-  System.Net.Socket,
-  mormot.core.posix.delphi
-  ;
-  {$endif}
+  Posix.NetinetTCP,
+  mormot.core.posix.delphi;
 
 {$ifdef OSLINUX}
   {$define HASACCEPT4} // use Linux-specific accept4() enhanced API call
   // define OLDLIBC conditional to disable this feature and fallback to accept()
+{$endif OSLINUX}
+
+{$ifdef OSANDROID}
+  {$undef HASACCEPT4} // to be verified, if this API exists
 {$endif OSLINUX}
 
 {$ifdef OSBSDDARWIN}
@@ -72,13 +73,8 @@ const
   NI_NUMERICSERV = 2;
   {$endif OSFREEBSD}
 
-  {$ifdef FPC}
-  FIONREAD = termio.FIONREAD;
-  FIONBIO  = termio.FIONBIO;
-  {$else}
   FIONREAD = mormot.core.posix.delphi.FIONREAD;
   FIONBIO  = mormot.core.posix.delphi.FIONBIO;
-  {$endif FPC}
 
   {$ifdef OSBSDDARWIN}
 
@@ -101,11 +97,7 @@ const
     {$ifdef SUNOS}
     MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
-    {$ifdef FPC}
-    MSG_NOSIGNAL =  sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
-    {$else}
     MSG_NOSIGNAL =  Posix.SysSocket.MSG_NOSIGNAL; // Do not generate SIGPIPE
-    {$endif FPC}
     {$endif SUNOS}
 
   {$endif OSBSDDARWIN}
@@ -138,20 +130,20 @@ type
 
   PSockAddrIn6 = ^sockaddr_in6;
 
-  THostEnt = record
-    h_name: PAnsiChar;
-    h_aliases: PPAnsiChar;
-    h_addrtype: integer;
-    h_length: socklen_t;
-    case integer of
-       0: (
-          h_addr_list: PPAnsiChar);
-       1: (
-          h_addr: ^pin_addr);
-       2: (
-          h_addr6: ^pin6_addr);
-  end;
-  PHostEnt = ^THostEnt;
+//  THostEnt = record
+//    h_name: PAnsiChar;
+//    h_aliases: PPAnsiChar;
+//    h_addrtype: integer;
+//    h_length: socklen_t;
+//    case integer of
+//       0: (
+//          h_addr_list: PPAnsiChar);
+//       1: (
+//          h_addr: ^pin_addr);
+//       2: (
+//          h_addr6: ^pin6_addr);
+//  end;
+//  PHostEnt = ^THostEnt;
 
 const
   // poll() flag when there is data to read
@@ -197,117 +189,123 @@ type
 // note: POSIX sockets are fd = C int = 32-bit integer, not our TSocket = PtrInt
 //       so we use plain integer in the Sockets API calls below
 
+
+
 {$ifdef OLDLIBC}
   {$undef HASACCEPT4}
 {$endif OLDLIBC}
 
-{.$define SOCKDIRECTSYSCALL} // no noticeable performance or stability change
-
+{$define SOCKDIRECTSYSCALL} // no noticeable performance or stability change
 {$ifdef SOCKDIRECTSYSCALL}
 
-function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
-  external clib name 'gethostbyname' + LIBC_SUFFIX;
-  // no syscall available from FPC -> use libc wrapper anyway
+//  external clib name 'gethostbyname' + LIBC_SUFFIX;
+//  // no syscall available from FPC -> use libc wrapper anyway
+function gethostbyname(name: PAnsiChar): PHostEnt; inline;
+begin
+  result:= posix.netdb.gethostbyname(name);
+end;
 
 function socket(af, struct, protocol: integer): integer; inline;
 begin
-  result := fpsocket(af, struct, protocol);
+  result :=  posix.syssocket.socket(af, struct, protocol);
 end;
 
 function setsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: integer): integer; inline;
 begin
-  result := fpsetsockopt(s, level, optname, optval, optlen);
+  result := posix.syssocket.setsockopt(s, level, optname, optval, optlen);
 end;
 
 function getsockopt(s: integer; level, optname: integer;
-   optval: pointer; optlen: pSocklen): integer; inline;
+   optval: pointer; var optlen: socklen_t): integer; inline;
 begin
-  result := fpgetsockopt(s, level, optname, optval, optlen);
+  result := posix.syssocket.getsockopt(s, level, optname, optval, optlen);
 end;
 
 function ioctlsocket(s: integer; cmd: cardinal; arg: PCardinal): integer; inline;
 begin
-  result := fpioctl(s, cmd, arg);
+  result := Posix.StrOpts.ioctl(s, cmd, arg);
 end;
 
 function shutdown(s: integer; how: integer): integer; inline;
 begin
-  result := fpshutdown(s, how);
+  result := posix.syssocket.shutdown(s, how);
 end;
 
 function closesocket(s: integer): integer; inline;
 begin
-  result := fpclose(s);
+  result :=  posix.unistd.__close(s);
 end;
 
-function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
-   hostlen: TSockLen; serv: PAnsiChar; servlen: TSockLen; flags: integer): integer; cdecl;
-  external clib name 'getnameinfo' + LIBC_SUFFIX;
-  // no syscall available from FPC
-
-function bind(s: integer; addr: PSockAddr; namelen: TSockLen): integer; inline;
+function getnameinfo(addr: Posix.SysSocket.PSockAddr; namelen: TSockLen; host: PAnsiChar;
+                     hostlen: TSockLen; serv: PAnsiChar; servlen: TSockLen; flags: integer): integer; inline;
+//  external clib name 'getnameinfo' + LIBC_SUFFIX;
+//  // no syscall available from FPC
 begin
-  result := fpbind(s, addr, namelen);
+  result:= posix.netdb.getnameinfo(addr^, namelen, host, hostlen, serv, servlen, flags);
 end;
 
-function getsockname(s: integer; name: PSockAddr; var namelen: TSockLen): integer; inline;
+function bind(s: integer; addr: Posix.SysSocket.PSockAddr; namelen: TSockLen): integer; inline;
 begin
-  result := fpgetsockname(s, name, @namelen);
+  result := posix.syssocket.bind(s, addr^, namelen);
+end;
+
+function getsockname(s: integer; name: Posix.SysSocket.PSockAddr; var namelen: TSockLen): integer; inline;
+begin
+  result := posix.syssocket.getsockname(s, name^, namelen);
 end;
 
 function listen(s: integer; backlog: integer): integer; inline;
 begin
-  result := fplisten(s, backlog);
+  result := posix.syssocket.listen(s, backlog);
 end;
 
-function accept(s: integer; addr: PSockAddr; var addrlen: TSockLen): integer; inline;
+function accept(s: integer; addr: Posix.SysSocket.PSockAddr; var addrlen: TSockLen): integer; inline;
 begin
-  result := fpaccept(s, addr, @addrlen);
+  result := posix.syssocket.accept(s, addr^, addrlen);
 end;
 
 {$ifdef HASACCEPT4}
-function accept4(s: integer; addr: PSockAddr; var addrlen: TSockLen; flags: integer): integer; cdecl;
+function accept4(s: integer; addr: Posix.SysSocket.PSockAddr; var addrlen: TSockLen; flags: integer): integer; cdecl;
   external clib name 'accept4';
   // no syscall available from FPC
 {$endif HASACCEPT4}
 
-function connect(s: integer; name: PSockAddr; namelen: TSockLen): integer; inline;
+function connect(s: integer; name: Posix.SysSocket.PSockAddr; namelen: TSockLen): integer; inline;
   begin
-    result := fpconnect(s, name, namelen);
+    result := posix.syssocket.connect(s, name^, namelen);
   end;
 
-function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
-   timeout: PTimeVal): integer; inline;
+function select(nfds: integer; readfds, writefds, exceptfds: PFD_Set; timeout: PTimeVal): integer; inline;
 begin
-  result := fpselect(nfds, readfds, writefds, exceptfds, timeout);
+  result := posix.sysselect.select(nfds, readfds, writefds, exceptfds, timeout);
 end;
 
 function recv(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; inline;
 begin
-  result := fprecv(s, Buf, len, flags);
+  result := posix.syssocket.recv(s, Buf, len, flags);
 end;
 
 function recvfrom(s: integer; Buf: pointer; len: size_t; flags: integer;
-   from: PSockAddr; fromlen: pSocklen): ssize_t; inline;
+   from: Posix.SysSocket.PSockAddr; fromlen: pSocklen): ssize_t; inline;
 begin
- result := fprecvfrom(s, Buf, len, flags, from, fromlen);
+ result := posix.syssocket.recvfrom(s, Buf, len, flags, from^, fromlen^);
 end;
 
 function send(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; inline;
 begin
-  result := fpsend(s, Buf, len, flags);
+  result := posix.syssocket.send(s, Buf, len, flags);
 end;
 
 function sendto(s: integer; Buf: pointer; len: size_t; flags: integer;
-   addrto: PSockAddr; tolen: integer): ssize_t; inline;
+   addrto: Posix.SysSocket.PSockAddr; tolen: integer): ssize_t; inline;
 begin
- result := fpsendto(s, Buf, len, flags, addrto, tolen);
+ result := posix.syssocket.sendto(s, Buf, len, flags, addrto^, tolen);
 end;
 
-function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): integer; inline;
+function getpeername(s: integer; name: Posix.SysSocket.PSockAddr; var namelen: TSockLen): integer; inline;
 begin
-  result := fpgetpeername(s, name, @namelen);
+  result := posix.syssocket.getpeername(s, name^, namelen);
 end;
 
 {$else}
@@ -398,13 +396,41 @@ begin
   result := fppoll(pointer(fds), nfds, timeout);
 end;
 {$else}
-function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
-  external clib name 'poll' + LIBC_SUFFIX;
+
+function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl; external libc name _PU + 'poll' + LIBC_SUFFIX;
+
+type
+  EPoll_Data = record
+    case integer of
+      0: (ptr: pointer);
+      1: (fd: cint);
+      2: (u32: cuint);
+      3: (u64: cuint64);
+  end;
+  TEPoll_Data =  Epoll_Data;
+  PEPoll_Data = ^Epoll_Data;
+
+  { x86_64 uses a packed record so it is compatible with i386 }
+  EPoll_Event = {$ifdef cpux86_64} packed {$endif} record
+    Events: cuint32;
+    Data  : TEpoll_Data;
+  end;
+
+  TEPoll_Event =  Epoll_Event;
+  PEpoll_Event = ^Epoll_Event;
+
+
+{ open an epoll file descriptor }
+function epoll_create(size: cint): cint; cdecl; external libc name _PU + 'epoll_create' + LIBC_SUFFIX;
+{ control interface for an epoll descriptor }
+function epoll_ctl(epfd, op, fd: cint; event: pepoll_event): cint; cdecl; external libc name 'epoll_ctl' + LIBC_SUFFIX;
+{ wait for an I/O event on an epoll file descriptor }
+function epoll_wait(epfd: cint; events: pepoll_event; maxevents, timeout: cint): cint; cdecl; external libc name 'epoll_wait' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
 function RawSocketErrNo: integer;
 begin
-  result := cerrno; // thread-locale variable from libc
+  result := errno; // thread-locale variable from libc
 end;
 
 {$ifdef HASACCEPT4}
@@ -412,7 +438,7 @@ var
   Accept4Unsupported: boolean;
 {$endif HASACCEPT4}
 
-function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): integer;
+function doaccept(s: TSocket; addr: Posix.SysSocket.PSockAddr; var async: boolean): integer;
 var
   len: TSockLen;
 begin
@@ -453,7 +479,8 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  addr4: sockaddr absolute Addr;
+  addr4: posix.NetinetIn.sockaddr_in absolute Addr;
+  addr6: posix.NetinetIn.sockaddr_in6 absolute Addr;
 begin
   FillCharFast(Addr, SizeOf(Addr), 0);
   result := nrNotFound;
@@ -495,9 +522,9 @@ begin
       addr4.sin_family := h^.h_addrtype;
       case h^.h_addrtype of
         AF_INET:
-           addr4.sin_addr := h^.h_addr^^;
+           addr4.sin_addr := Pin_addr(h^.h_addr_list^)^;
         AF_INET6:
-           psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
+           Addr6.sin6_addr := Pin6_addr(h^.h_addr_list^)^;
       else
         result := nrNotImplemented;
       end;
@@ -594,7 +621,7 @@ begin
   {$endif OSLINUXANDROID}
 end;
 
-{$ifdef OSLINUXANDROID}
+{$ifdef OSLINUX}
 procedure TNetSocketWrap.SetLowPriority;
 var
   v: integer;
@@ -606,7 +633,7 @@ end;
 procedure TNetSocketWrap.SetLowPriority;
 begin
 end;
-{$endif OSLINUXANDROID}
+{$endif OSLINUX}
 
 function TNetSocketWrap.HasLowPriority: boolean;
 begin
@@ -753,11 +780,11 @@ type
     // mainly IFF_UP, IFF_BROADCAST and IFF_LOOPBACK
     ifa_flags: cardinal;
     // Address of interface
-    ifa_addr: Psockaddr;
+    ifa_addr: Posix.SysSocket.Psockaddr;
     // netmask associated with ifa_addr (may be nil)
-    ifa_netmask: Psockaddr;
+    ifa_netmask: Posix.SysSocket.Psockaddr;
     // if IFF_BROADCAST is set, the broadcast address associated with ifa_addr
-    ifa_broadaddr: Psockaddr;
+    ifa_broadaddr: Posix.SysSocket.Psockaddr;
     // address-family-specific data - e.g. statistics on AF_PACKET
     ifa_data: pointer;
   end;
@@ -1268,10 +1295,10 @@ end;
 function PollEventToPse(r: integer): TPollSocketEvents; inline;
 begin
   if r = POLLIN then
-    byte(result) := byte([pseRead]) // optimized for the most common case
+    result:= [pseRead]
   else
   begin
-    byte(result) := 0;
+    result:= [];
     if r and (POLLIN or POLLPRI) <> 0 then
       include(result, pseRead);
     if r and POLLOUT <> 0 then
@@ -1560,11 +1587,11 @@ begin
   er := pointer(results.Events);
   repeat
     ev := ee^.events;
-    byte(e) := byte([pseRead]); // optimized for the most common case
+    e:= [pseRead]; // optimized for the most common case
     if ev <> EPOLLIN then
     begin
       if ev and (EPOLLIN or EPOLLPRI) = 0 then
-        byte(e) := 0;
+        e := [];
       if ev and EPOLLOUT <> 0 then
         include(e, pseWrite);
       if ev and EPOLLERR <> 0 then

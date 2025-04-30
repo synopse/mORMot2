@@ -373,7 +373,7 @@ end;
 constructor TSynLabeledEdit.Create(AOwner: TComponent);
 begin
   inherited;
-  ShowHint := True;
+  ShowHint := true;
   MaxValue := 100;
   MinValue := 1;
   Text := '';

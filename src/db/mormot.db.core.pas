@@ -395,10 +395,14 @@ type
     procedure SetCapacity(max: integer);
   end;
 
-/// set an error message for the current thread
+/// set a database error message for the current thread
 // - using an internal TLastError store and an associated TLastErrorID threadvar
 // since we can't create any string/RawUtf8 threadvar
-procedure SetDbError(const text: RawUtf8);
+procedure SetDbError(const text: RawUtf8); overload;
+
+/// set a database error message for the current thread from an exception
+// - could be used when E was not created via CreateU/CreateUtf8/RaiseUtf8
+procedure SetDbError(E: Exception); overload;
 
 /// unset the error message for the current thread
 procedure ClearDbError;
@@ -1988,6 +1992,11 @@ begin
   LastDbErrorID := LastDbError.NewMsg(text); // store in current threadvar
 end;
 
+procedure SetDbError(E: Exception);
+begin
+  SetDbError(FormatUtf8('%.%', [E, E.Message]));
+end;
+
 procedure ClearDbError;
 begin
   LastDbErrorID := 0; // reset
@@ -2235,8 +2244,7 @@ begin
   result := '';
   if Date <= 0 then
     exit;
-  FastSetString(result, 13);
-  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  PCardinal(FastSetString(result, 13))^ := JSON_SQLDATE_MAGIC_C;
   DateToIso8601PChar(Date, PUtf8Char(pointer(result)) + 3, True);
 end;
 
@@ -2247,8 +2255,7 @@ begin
      (Month - 1 > 11) or
      (Day - 1 > 30) then
     exit;
-  FastSetString(result, 13);
-  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  PCardinal(FastSetString(result, 13))^ := JSON_SQLDATE_MAGIC_C;
   DateToIso8601PChar(PUtf8Char(pointer(result)) + 3, True, Year, Month, Day);
 end;
 
@@ -2257,8 +2264,7 @@ var
   l: PtrInt;
 begin
   l := length(iso);
-  FastSetString(result, l + 3);
-  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  PCardinal(FastSetString(result, l + 3))^ := JSON_SQLDATE_MAGIC_C;
   MoveFast(pointer(iso)^, PByteArray(result)^[3], l);
 end;
 
@@ -2655,9 +2661,8 @@ begin
     exit;
   end;
   // compute GenericSql from SQL, converting :(...): into ?
-  FastSetString(GenericSQL, length(SQL)); // private copy
+  P := FastSetString(GenericSQL, length(SQL)); // private copy
   dec(i);
-  P := pointer(GenericSQL); // in-place string unescape (keep SQL untouched)
   MoveFast(pointer(SQL)^, P^, i);
   Gen := P + i;   // Gen^ just before :(
   P := @PUtf8Char(pointer(SQL))[i + 2];  // P^ just after :(
@@ -2978,14 +2983,14 @@ var
   P, PBegin, PEnd: PUtf8Char;
 begin
   if (self = nil) or
-     not fStream.InheritsFrom(TMemoryStream) or
+     not fStream.InheritsFrom(TCustomMemoryStream) or
      fExpand or
      (fStartDataPosition = 0) then
     exit;
   // go to begin of first row
   FlushToStream; // we need the data to be in fStream memory
   // PBegin^=val11 in { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-  PBegin := TMemoryStream(fStream).Memory;
+  PBegin := TCustomMemoryStream(fStream).Memory;
   PEnd := PBegin + fStream.Position;
   PEnd^ := #0; // mark end of current values
   inc(PBegin, fStartDataPosition + 1); // +1 to include ',' of ',val11'
@@ -3804,7 +3809,7 @@ begin
       F := FieldCount;
       if F = MAX_SQLFIELDS then
         raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
-      FieldNames[F] := info.Value;
+      FieldNames[F]  := info.Value;
       FieldNamesL[F] := info.Valuelen;
       ParseSqlValue(info, Params, FieldTypeApproximation[F], FieldValues[F]);
       if FieldIsRowID then
@@ -3978,7 +3983,7 @@ begin
     try
       for i := 0 to FieldCount - 1 do
       begin
-        AddShort(FieldNames[i], FieldNamesL[i]);
+        AddShort(FieldNames[i], FieldNamesL[i]); // FieldNamesL[] are bytes
         AddComma;
       end;
       CancelLastComma;
@@ -3991,6 +3996,8 @@ end;
 procedure TJsonObjectDecoder.AddFieldValue(const FieldName, FieldValue: RawUtf8;
   FieldType: TJsonObjectDecoderFieldType);
 begin
+  if FieldName = '' then
+    EJsonObjectDecoder.RaiseUtf8('TJsonObjectDecoder.AddField()', []);
   if FieldCount = MAX_SQLFIELDS then
     EJsonObjectDecoder.RaiseUtf8(
       'Too many fields for TJsonObjectDecoder.AddField(%) max=%',

@@ -869,8 +869,9 @@ begin
     // create one instance of our pure socket servers
     // (on Windows, may be used as fallback if http.sys was unsuccessful)
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
-      fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, TrimU(fRestServerNames), aThreadPoolCount, 30000, hso)
+      fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(
+        fPort, HttpThreadStart, HttpThreadTerminate, TrimU(fRestServerNames),
+        aThreadPoolCount, 30000, hso, fLog)
     else
       ERestHttpServer.RaiseUtf8('%.Create(% ): unsupported %',
         [self, fRestServerNames, ToText(aUse)^]);
@@ -1091,7 +1092,7 @@ begin
   if (Call.OutStatus = HTTP_MOVEDPERMANENTLY) or
      (Call.OutStatus = HTTP_TEMPORARYREDIRECT) then
   begin
-    loc := FindIniNameValue(pointer(Call.OutHead), 'LOCATION: ');
+    loc := FindNameValue(pointer(Call.OutHead), 'LOCATION: ');
     if (loc <> '') and
        (loc[1] = '/') then
       delete(loc, 1, 1); // what is needed for real URI doesn't help here
@@ -1187,13 +1188,12 @@ begin
   else
     // no AdjustHostUrl() below
     Ctxt.Host := '';
-  if call.Url = '' then
-  begin
-    call.Url := Ctxt.Url;
-    if (call.Url <> '') and
-       (call.Url[1] = '/') then
-      delete(call.Url, 1, 1); // normalize URI
-  end;
+  if (call.Url = '') and
+     (Ctxt.Url <> '') then
+    if Ctxt.Url[1] = '/' then // trim any initial '/'
+      FastSetString(call.Url, @PByteArray(Ctxt.Url)[1], length(Ctxt.Url) - 1)
+    else
+      call.Url := Ctxt.Url;
   call.Method := Ctxt.Method;
   call.InHead := Ctxt.InHeaders;
   call.InBody := Ctxt.InContent;
@@ -1264,17 +1264,23 @@ begin
   end;
   // set output content
   result := call.OutStatus;
+  Ctxt.Url := call.Url;
   Ctxt.OutContent := call.OutBody;
   P := pointer(call.OutHead);
-  if IdemPChar(P, 'CONTENT-TYPE: ') then
-  begin
-    // TRestServer.Uri is expected to customize the content-type
-    // as FIRST header (e.g. when returning GET blob fields)
-    Ctxt.OutContentType := GetNextLine(P + 14, P);
-    FastSetString(call.OutHead, P, StrLen(P));
-  end
-  else
-    // default content type is JSON
+  if P <> nil then
+    if P = pointer(JSON_CONTENT_TYPE_HEADER_VAR) then
+      FastAssignNew(call.OutHead) // most common case (e.g. mormot.soa.server)
+    else if IdemPChar(P, 'CONTENT-TYPE: ') then
+    begin
+      // TRestServer.Uri is expected to customize the content-type
+      // as FIRST header (e.g. when returning GET blob fields)
+      Ctxt.OutContentType := GetNextLine(P + 14, P, {trim=}true);
+      if P = nil then
+        FastAssignNew(call.OutHead)
+      else
+        FastSetString(call.OutHead, P, StrLen(P));
+    end;
+  if Ctxt.OutContentType = '' then // set JSON by default
     Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
   // handle HTTP redirection and cookies over virtual hosts
   if Ctxt.Host <> '' then
@@ -1513,11 +1519,8 @@ begin
   OnWSClose(Sender.Handle, Sender.GetConnectionOpaque);
 end;
 
-constructor TRestHttpServer.Create(aServer: TRestServer;
-  aDefinition: TRestHttpServerDefinition; aForcedUse: TRestHttpServerUse;
-  aWebSocketsLoopDelay: integer);
 const
-  AUTH: array[TRestHttpServerRestAuthentication] of
+  AUTH_CLASS: array[TRestHttpServerRestAuthentication] of
     TRestServerAuthenticationClass = (
     // adDefault, adHttpBasic, adWeak, adSspi
     TRestServerAuthenticationDefault,
@@ -1529,6 +1532,10 @@ const
     {$else}
     nil
     {$endif DOMAINRESTAUTH});
+
+constructor TRestHttpServer.Create(aServer: TRestServer;
+  aDefinition: TRestHttpServerDefinition; aForcedUse: TRestHttpServerUse;
+  aWebSocketsLoopDelay: integer);
 var
   a: TRestHttpServerRestAuthentication;
   P: PUtf8Char;
@@ -1575,13 +1582,13 @@ begin
   end;
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then
-    if AUTH[a] = nil then
+    if AUTH_CLASS[a] = nil then
       fLog.Add.Log(sllWarning, 'Create: Ignored unsupported',
         TypeInfo(TRestHttpServerRestAuthentication), a, self)
     else
     begin
       aServer.AuthenticationUnregisterAll;
-      aServer.AuthenticationRegister(AUTH[a]);
+      aServer.AuthenticationRegister(AUTH_CLASS[a]);
     end;
   if aDefinition.WebSocketPassword <> '' then
     WebSocketsEnable(aServer, aDefinition.PasswordPlain)^.

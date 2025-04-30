@@ -29,6 +29,9 @@ interface
 uses
   SysUtils,
   math,
+  {$ifdef DELPHIANDROID}
+  mormot.core.posix.delphi,
+  {$endif}
   mormot.core.base,
   mormot.core.os;
 
@@ -200,7 +203,6 @@ implementation
 { ****************** Link Dependencies }
 
 {$ifdef FPC}
-
 {$ifdef OSWINDOWS}
   {$ifdef CPU64}
     {$linklib ..\..\static\x86_64-win64\libkernel32.a}
@@ -229,7 +231,11 @@ implementation
     {$linklib ..\..\static\arm-linux\libgcc.a}
   {$endif CPUARM}
 {$endif OSLINUX}
-
+{$else FPC}
+  {$ifdef POSIX}
+//  Uses mormot.core.posix.delphi;
+   Uses posix.Base;
+  {$endif}
 {$endif FPC}
 
 
@@ -701,7 +707,11 @@ function setlocale(category: integer; locale: PAnsiChar): PAnsiChar; cdecl;
   // NetBSD has a new setlocale function defined in /usr/include/locale.h
   external 'c' name '__setlocale_mb_len_max_32';
   {$else}
+  {$ifdef FPC}
   external 'c' name 'setlocale' + LIBC_SUFFIX; // regular libc POSIX call
+  {$else}
+  external libc name _PU + 'setlocale' + LIBC_SUFFIX;
+  {$endif FPC}
   {$endif NETBSD}
 {$endif OSWINDOWS}
 
@@ -718,13 +728,21 @@ end;
 {$ifdef OSLINUXX64}
 
 // some definitions dedicated to avoid libc name versioning for sqlite3.o
-
+{$ifdef FPC}
 function __fxstat64(ver: integer; f: integer; st: pointer): integer;
   cdecl; external 'c' name '__fxstat64' + LIBC_SUFFIX;
 function __xstat64(ver: integer; fn, st: pointer): integer;
   cdecl; external 'c' name '__xstat64' + LIBC_SUFFIX;
 function __lxstat64(ver: integer; fn, st: pointer): integer;
   cdecl; external 'c' name '__lxstat64' + LIBC_SUFFIX;
+{$else}
+function __fxstat64(ver: integer; f: integer; st: pointer): integer;
+  cdecl; external libc name '__fxstat64' + LIBC_SUFFIX;
+function __xstat64(ver: integer; fn, st: pointer): integer;
+  cdecl; external libc name '__xstat64' + LIBC_SUFFIX;
+function __lxstat64(ver: integer; fn, st: pointer): integer;
+  cdecl; external libc name '__lxstat64' + LIBC_SUFFIX;
+{$endif FPC}
 
 const
   STAT_VER = {$ifdef CPUX86} 3 {$else} 1 {$endif}; // see xstatver.h
@@ -763,6 +781,8 @@ var
   _pthread_mutex_lock: function(__mutex: pointer): integer; cdecl;
   _pthread_mutex_unlock: function(__mutex: pointer): integer; cdecl;
 
+
+{$ifdef FPC}
 function _dlopen(Name: PAnsiChar; Flags: integer): pointer;
   cdecl; external 'dl' name 'dlopen' + LIBC_SUFFIX;
 function _dlsym(Lib: pointer; Name : PAnsiChar): pointer;
@@ -771,6 +791,16 @@ function _dlclose(Lib: pointer): integer;
   cdecl; external 'dl' name 'dlclose' + LIBC_SUFFIX;
 function _dlerror() : PAnsiChar;
   cdecl; external 'dl' name 'dlerror' + LIBC_SUFFIX;
+{$else}
+function _dlopen(Name: PAnsiChar; Flags: integer): pointer;
+  cdecl; external libdl name 'dlopen' + LIBC_SUFFIX;
+function _dlsym(Lib: pointer; Name : PAnsiChar): pointer;
+  cdecl; external libdl name 'dlsym' + LIBC_SUFFIX;
+function _dlclose(Lib: pointer): integer;
+  cdecl; external libdl name 'dlclose' + LIBC_SUFFIX;
+function _dlerror() : PAnsiChar;
+  cdecl; external libdl name 'dlerror' + LIBC_SUFFIX;
+{$endif FPC}
 
 procedure _pthread_load;
 begin
@@ -2082,6 +2112,28 @@ end;
 const
   _FPUFLAGSIDEM = cardinal(-1); // fake value used for faster nested calls
 
+{$ifndef CPUINTEL}
+{$ifndef FPC}
+function ExceptionMaskToCardinal(aMask: TFPUExceptionMask): Cardinal;
+var exception: TFPUException;
+begin
+  result:= 0;
+  for exception:= Low(TFPUException) to High(TFPUException) do
+      if exception in aMask  then
+         result:= Result or (1 shl Ord(exception));
+end;
+
+function CardinalToExceptionMask(aMask: Cardinal): TFPUExceptionMask;
+var exception: TFPUException;
+begin
+  result:= [];
+  for exception:= Low(TFPUException) to High(TFPUException) do
+      if aMask and (1 shl Ord(exception)) <> 0 then
+         result:= Result + [exception];
+end;
+{$endif FPC}
+{$endif CPUINTEL}
+
 function _GetFlags: cardinal;
   {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -2092,7 +2144,11 @@ begin
     result := Get8087CW;
     {$endif CPU64}
   {$else}
+    {$ifndef FPC}
+    result := ExceptionMaskToCardinal(GetExceptionMask);
+    {$else}
     result := cardinal(GetExceptionMask);
+    {$endif FPC}
   {$endif CPUINTEL}
 end;
 
@@ -2106,7 +2162,11 @@ begin
     Set8087CW(flags);
     {$endif CPU64}
   {$else}
+    {$ifndef FPC}
+    SetExceptionMask(CardinalToExceptionMask(flags));
+    {$else}
     SetExceptionMask(TFPUExceptionMask(flags));
+    {$endif FPC}
   {$endif CPUINTEL}
 end;
 
@@ -2115,7 +2175,15 @@ var
   new: cardinal;
 begin
   result := _GetFlags;
-  new := cardinal(_FPUFLAGS[flags]);
+  {$ifndef CPUINTEL}
+    {$ifndef FPC}
+    new := ExceptionMaskToCardinal(_FPUFLAGS[flags]);
+    {$else}
+    new := cardinal(_FPUFLAGS[flags]);
+    {$endif FPC}
+  {$else}
+    new := cardinal(_FPUFLAGS[flags]);
+  {$endif CPUINTEL}
   if new <> result then
     _SetFlags(new)
   else
@@ -2143,6 +2211,10 @@ initialization
   {$endif CPU32}
   {$endif NOLIBCSTATIC}
 {$endif OSWINDOWS}
+{$ifdef OSLINUXX64}
+  _pthread_load;
+{$endif OSLINUXX64}
+{$else}
 {$ifdef OSLINUXX64}
   _pthread_load;
 {$endif OSLINUXX64}

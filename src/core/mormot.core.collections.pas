@@ -571,11 +571,15 @@ type
   // TCriticalSection for the thread safety
   // - kvoDefaultIfNotFound will let IKeyValue<TKey, TValue>.Items[] return the
   // default TValue (e.g. 0 or '') and raise no exception if TKey is not found
+  // - by default, managed values and T*ObjArray will delete their content unless
+  // kvoKeyNoFinalize/kvoValueNoFinalize options are set (handle with care)
   TKeyValueOptions = set of (
     kvoKeyCaseInsensitive,
     kvoThreadSafe,
     kvoThreadCriticalSection,
-    kvoDefaultIfNotFound);
+    kvoDefaultIfNotFound,
+    kvoKeyNoFinalize,
+    kvoValueNoFinalize);
 
   /// stack parameters to ease TIKeyValue<TKey, TValue> creation
   TNewKeyValueContext = record
@@ -703,7 +707,7 @@ type
     {.$define SPECIALIZE_SMALL}
 
     // enable cold compilation of THash128/TGuid and THash256/THash612
-    // - those types are seldom used, so not cold compiled by default
+    // - those types are hardly used, so not cold compiled by default
     {.$define SPECIALIZE_HASH}
 
     // WideString are slow - RawUtf8 or UnicodeString are to be used instead -
@@ -1324,9 +1328,9 @@ end;
 constructor TIKeyValueParent.Create(const aContext: TNewKeyValueContext);
 begin
   fOptions := aContext.Options;
-  // validate or recognize most simple dynamic arrays from its TKey/TValue types
+  // we need dynamic arrays RTTI for our TKey/TValue types
   if (aContext.KeyArrayTypeInfo = nil) or
-     (aContext.KeyArrayTypeInfo ^.Kind <> rkDynArray) then
+     (aContext.KeyArrayTypeInfo^.Kind <> rkDynArray) then
      EIKeyValue.RaiseUtf8('%.Create: % should be an array of TKey',
        [self, aContext.KeyArrayTypeInfo^.Name^]);
   if (aContext.ValueArrayTypeInfo = nil) or
@@ -1344,14 +1348,16 @@ begin
   else if not (kvoThreadCriticalSection in fOptions) then
     fData.ThreadUse := uRWLock;
   fHasLock := fData.ThreadUse <> uNoLock;
+  if kvoKeyNoFinalize in fOptions then
+    fData.Keys.NoFinalize := true; // force weak references
+  if kvoValueNoFinalize in fOptions then
+    fData.Values.NoFinalize := true;
   if (fData.Keys.Info.ArrayRtti = nil) or
-     ((aContext.KeyArrayTypeInfo <> nil) and
-      (fData.Keys.Info.ArrayRtti.Info <> aContext.KeyItemTypeInfo)) then
+     (fData.Keys.Info.ArrayRtti.Kind <> aContext.KeyItemTypeInfo^.Kind) then
     EIKeyValue.RaiseUtf8('%.Create: TKey does not match %',
       [self, aContext.KeyArrayTypeInfo^.RawName]);
   if (fData.Values.Info.ArrayRtti = nil) or
-     ((aContext.ValueArrayTypeInfo <> nil) and
-      (fData.Values.Info.ArrayRtti.Info <> aContext.ValueItemTypeInfo)) then
+     (fData.Values.Info.ArrayRtti.Kind <> aContext.ValueItemTypeInfo^.Kind) then
     EIKeyValue.RaiseUtf8('%.Create: TValue does not match %',
       [self, aContext.ValueArrayTypeInfo^.RawName]);
 end;
@@ -1399,7 +1405,7 @@ begin
   else
   begin
     if fHasLock then
-      fData.Safe^.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
+      fData.Safe.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
     EIKeyValue.RaiseUtf8('%.GetItem: key not found', [self]);
   end;
 end;
@@ -1448,13 +1454,13 @@ end;
 procedure TIKeyValueParent.ReadLock;
 begin
   if fHasLock then
-    fData.Safe^.ReadLock;
+    fData.Safe.ReadLock;
 end;
 
 procedure TIKeyValueParent.ReadUnLock;
 begin
   if fHasLock then
-    fData.Safe^.ReadUnLock;
+    fData.Safe.ReadUnLock;
 end;
 
 
@@ -1471,14 +1477,14 @@ var
   ndx: PtrInt; // slightly more verbose but faster than plain FindAndCopy
 begin
   if fHasLock then
-    fData.Safe^.ReadLock;
+    fData.Safe.ReadLock;
   ndx := fData.Find(key, fHasTimeout);
   if ndx < 0 then
     GetDefaultOrUnlockAndRaise(@result) // may ReadUnLock and raise EIKeyValue
   else
     result := TArray<TValue>(fData.Values.Value^)[ndx]; // more efficient
   if fHasLock then
-    fData.Safe^.ReadUnLock;
+    fData.Safe.ReadUnLock;
 end;
 {$endif SMALLGENERICS}
 
@@ -1521,7 +1527,7 @@ var
   ndx: PtrInt;
 begin
   if fHasLock then
-    fData.Safe^.ReadLock;
+    fData.Safe.ReadLock;
   ndx := fData.Find(key, fHasTimeout);
   if ndx >= 0 then
   begin
@@ -1531,7 +1537,7 @@ begin
   else
     result := false;
   if fHasLock then
-    fData.Safe^.ReadUnLock;
+    fData.Safe.ReadUnLock;
 end;
 {$endif SMALLGENERICS}
 

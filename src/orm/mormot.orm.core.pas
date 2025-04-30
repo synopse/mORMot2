@@ -1464,9 +1464,9 @@ type
     // execute a CREATE INDEX IF NOT EXISTS on the main engine
     // - note that with SQLite3, your database schema should never contain two
     // indices where one index is a prefix of the other, e.g. if you defined:
-    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], True);
+    // ! aServer.CreateSqlMultiIndex(TEmails, ['Email','GroupID'], true);
     // Then the following index is not mandatory for SQLite3:
-    // ! aServer.CreateSqlIndex(TEmails, 'Email', False);
+    // ! aServer.CreateSqlIndex(TEmails, 'Email', false);
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
     function CreateSqlMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUtf8; Unique: boolean; IndexName: RawUtf8 = ''): boolean;
@@ -3055,6 +3055,8 @@ type
     /// contain the hash value of the last JSON data sent to ContentChanged()
     // - used to don't repeat parsing if data has not been changed
     fPrivateCopyHash: cardinal;
+    /// void the whole content
+    procedure InternalReset;
     /// fill the result table content from a JSON-formated Data message
     // - returns TRUE on parsing success
     // - returns FALSE if no valid JSON data was found
@@ -4820,7 +4822,8 @@ type
   // so that the current logged user will be able to change its own password
   // - reCheckSessionConnectionID will ensure that a session is accessed only
   // from the same low-level TRestConnectionID which created it - which would
-  // refuse the authentication e.g. after IP reconnection
+  // refuse the authentication e.g. after IP reconnection but avoid Replays or
+  // MiM/impersonification attacks
   // - order of this set does matter, since it will be stored as a byte value
   // e.g. by TOrmAccessRights.ToString: ensure that new items will always be
   // appended to the list, not inserted within
@@ -5452,7 +5455,7 @@ type
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
   r: integer;
-  fid, f, o, nmap: PtrInt;
+  fid, f, o, i, nmap: PtrInt;
   map: ^TOrmTableFillOrm;
   fields: TOrmPropInfoList;
   u: PUtf8Char;
@@ -5474,19 +5477,25 @@ begin // inlined FillPrepare/TOrmFill process
       inc(map);
       inc(nmap);
     end;
+  if nmap = 0 then
+    exit;
   r := fRowCount;
   o := 0;
   repeat
-    inc(o, fFieldCount);
+    inc(o, fFieldCount); // next row (first is field names)
     P^ := RecordType.Create;
     if fid >= 0 then
       P^.IDValue := GetInt64(GetResults(o + fid));
     map := @maps;
     for f := 1 to nmap do
     begin
-      u := GetResults(o + map^.map);
-      map^.prop.SetValue(P^, u, {$ifdef NOTORMTABLELEN} StrLen(u)
-            {$else} fLen[o + map^.map] {$endif}, map^.ws);
+      i := o + map^.map;
+      u := GetResults(i);
+      if u = nil then
+        map^.prop.SetValue(P^, nil, 0, {wasString=}false) // null
+      else
+        map^.prop.SetValue(P^, u,
+          {$ifdef NOTORMTABLELEN} StrLen(u) {$else} fLen[i] {$endif}, map^.ws);
       inc(map);
     end;
     P^.fInternalState := fInternalState;
@@ -5926,7 +5935,7 @@ end;
 
 constructor TOrmTableJson.Create(const aSql, aJson: RawUtf8);
 var
-  len: integer;
+  len: PtrInt;
 begin
   len := length(aJson);
   PrivateCopyChanged(pointer(aJson), len, {updatehash=}false);
@@ -5994,18 +6003,36 @@ begin
   FastSetString(fPrivateCopy, pointer(aJson), aLen);
 end;
 
+procedure TOrmTableJson.InternalReset;
+begin
+  fJsonData := nil;
+  {$ifndef NOTORMTABLELEN}
+  fLen := nil;
+  {$endif NOTORMTABLELEN}
+  {$ifndef NOPOINTEROFFSET}
+  fDataStart := nil;
+  {$endif NOPOINTEROFFSET}
+  fFieldIndexID := -1;
+  fFieldCount := 0;
+  fRowCount := 0;
+end;
+
 function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): boolean;
 var
   i, max, resmax, f: PtrInt;
   P: PUtf8Char;
+  datavoid: TOrmTableData; // used for all JSON "" values
   info: TGetJsonField;
 begin
   result := false; // error on parsing
-  fFieldIndexID := -1;
-  if (self = nil) or
-     (Buffer = nil) then
+  if self = nil then
+    exit;
+  InternalReset;
+  if (Buffer = nil) or
+     (BufferLen <= 0) then
     exit;
   // go to start of object
+  datavoid := TOrmTableData(0);
   {$ifndef NOPOINTEROFFSET}
   fDataStart := Buffer; // before first value, to ensure offset=0 means nil
   {$endif NOPOINTEROFFSET}
@@ -6040,12 +6067,17 @@ begin
          IsRowID(info.Value) then
         fFieldIndexID := i;
     end;
+    datavoid := TOrmTableData(PtrUInt(info.Value) + PtrUInt(info.ValueLen)
+      {$ifndef NOPOINTEROFFSET} - PtrUInt(fDataStart) {$endif}); // ^ = #0
     f := 0;
     for i := fFieldCount to max do
     begin
       // get a field value
       info.GetJsonFieldOrObjectOrArray({handleobjarr=}true, {normbool=}false);
-      SetResults(i, info.Value, info.ValueLen);
+      if info.Value <> nil then
+        SetResults(i, info.Value, info.ValueLen)
+      else if info.WasString then // JSON null -> Value=nil
+        fData[i] := datavoid; // JSON "" -> Value^=#0, ValueLen=0
       if (info.Json = nil) and
          (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
@@ -6098,7 +6130,10 @@ begin
              IsRowID(info.Value) then
             fFieldIndexID := f;
           SetResults(f, info.Value, info.ValueLen);
-          if P = nil then
+          if datavoid = TOrmTableData(0) then
+            datavoid := TOrmTableData(PtrUInt(info.Value) + PtrUInt(info.ValueLen)
+              {$ifndef NOPOINTEROFFSET} - PtrUInt(fDataStart) {$endif}); // ^ = #0
+          if info.Json = nil then
             break;
         end
         else
@@ -6119,7 +6154,10 @@ begin
           fData := pointer(fJsonData);
         end;
         info.GetJsonFieldOrObjectOrArray({objarray=}true, {normbool=}false);
-        SetResults(max, info.Value, info.ValueLen);
+        if info.Value <> nil then
+          SetResults(max, info.Value, info.ValueLen)
+        else if info.WasString then  // JSON null -> Value=nil
+          fData[max] := datavoid;    // JSON ""   -> Value^=#0, ValueLen=0
         if info.Json = nil then
         begin
           // unexpected end
@@ -6156,12 +6194,7 @@ begin
     if max <> (fRowCount + 1) * fFieldCount then
     begin
       // field count must be the same for all objects
-      fJsonData := nil;
-      {$ifndef NOTORMTABLELEN}
-      fLen := nil;
-      {$endif NOTORMTABLELEN}
-      fFieldCount := 0;
-      fRowCount := 0;
+      InternalReset;
       exit; // data field layout is not consistent: should never happen
     end;
   end;
@@ -6734,7 +6767,7 @@ begin
         f := D.IndexByNameU(pointer(SP.Name));
       if f >= 0 then
       begin
-        SP.GetValueVar(aRecord, False, tmp, @wasString);
+        SP.GetValueVar(aRecord, false, tmp, @wasString);
         D.List[f].SetValueVar(self, tmp, wasString);
       end;
     end;
@@ -7662,7 +7695,7 @@ begin
       begin
         for i := 0 to high(aSimpleFields) do
         begin
-          VarRecToUtf8(aSimpleFields[i], tmp); // will work for every type
+          VarRecToUtf8(@aSimpleFields[i], tmp); // will work for every type
           SimpleFields[i].SetValueVar(self, tmp, false);
         end;
         result := true;
@@ -7771,7 +7804,7 @@ begin
   if T = nil then
     exit;
   fFill := TOrmFill.Create;
-  fFill.fJoinedFields := True;
+  fFill.fJoinedFields := true;
   fFill.fTable := T;
   fFill.fTable.OwnerMustFree := true;
   n := 0;
@@ -8330,7 +8363,7 @@ begin
     exit;
   P := Orm.Fields.ByName(pointer(PropName)); // fast O(log(n)) binary search
   if P <> nil then
-    P.GetValueVar(self, False, result, nil);
+    P.GetValueVar(self, false, result, nil);
 end;
 
 procedure TOrm.SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char; ValueLen: PtrInt);
@@ -8417,10 +8450,8 @@ var
   P: TOrmPropInfo;
 begin
   if self = nil then
-    P := nil
-  else
-    P := Orm.Fields.ByRawUtf8Name(
-      {$ifdef UNICODE}StringToUtf8{$endif}(PropName));
+    exit;
+  P := Orm.Fields.ByRawUtf8Name({$ifdef UNICODE}StringToUtf8{$endif}(PropName));
   if P <> nil then
     P.SetVariant(self, Source);
 end;
@@ -8790,11 +8821,9 @@ end;
 function TOrmMany.ManyAdd(const aClient: IRestOrm; aDestID: TID;
   NoDuplicates: boolean): boolean;
 begin
-  if (self = nil) or
-     (fSourceID = nil) then
-    result := false
-  else // avoid GPF
-    result := ManyAdd(aClient, fSourceID^, aDestID, NoDuplicates);
+  result := (self <> nil) and
+            (fSourceID <> nil) and
+            ManyAdd(aClient, fSourceID^, aDestID, NoDuplicates);
 end;
 
 function TOrmMany.DestGet(const aClient: IRestOrm; aSourceID: TID;
@@ -8802,12 +8831,9 @@ function TOrmMany.DestGet(const aClient: IRestOrm; aSourceID: TID;
 var
   where: RawUtf8;
 begin
-  where := IDWhereSql(aClient, aSourceID, False);
-  if where = '' then
-    result := false
-  else
-    result := aClient.OneFieldValues(RecordClass, 'Dest', where,
-      TInt64DynArray(DestIDs));
+  where := IDWhereSql(aClient, aSourceID, false);
+  result := (where <> '') and
+    aClient.OneFieldValues(RecordClass, 'Dest', where, TInt64DynArray(DestIDs));
 end;
 
 function TOrmMany.DestGetJoined(const aClient: IRestOrm;
@@ -8856,7 +8882,7 @@ var
   begin
     for i := 0 to high(Classes) do
     begin
-      select := select + Classes[i].sql.TableSimpleFields[True, True];
+      select := select + Classes[i].sql.TableSimpleFields[true, true];
       if i < high(Classes) then
         select := select + ',';
     end;
@@ -9052,7 +9078,7 @@ function TOrmMany.SourceGet(const aClient: IRestOrm; aDestID: TID;
 var
   where: RawUtf8;
 begin
-  where := IDWhereSql(aClient, aDestID, True);
+  where := IDWhereSql(aClient, aDestID, true);
   if where = '' then
     result := false
   else
@@ -9751,8 +9777,9 @@ var
   i: PtrInt;
 begin
   fRootLen := length(aRoot);
-  for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment
-    if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
+  for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment (exclude ~)
+    if (aRoot[i] <> '/') and
+       not (tcUriUnreserved in TEXT_CHARS[aRoot[i]]) then
       EModelException.RaiseUtf8(
         '%.Root=[%] contains URI unfriendly char #% [%]',
         [self, aRoot, ord(aRoot[i]), aRoot[i]]);
@@ -11668,9 +11695,9 @@ constructor TRestBatchLocked.CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
   InternalBufferSize: cardinal);
 begin
+  fSafe.InitFromClass;
   inherited CreateNoRest(
     aModel, aTable, AutomaticTransactionPerRow, Options, InternalBufferSize);
-  fSafe.Init;
 end;
 
 destructor TRestBatchLocked.Destroy;
@@ -11752,7 +11779,7 @@ var
 begin
   tmp.Init(Value);
   try
-    JsonDecode(tmp.buf, ['FieldNames'], @V, True);
+    JsonDecode(tmp.buf, ['FieldNames'], @V, true);
     Finalize(fFieldNames);
     CsvToRawUtf8DynArray(V[0].Text, fFieldNames);
   finally

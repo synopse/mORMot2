@@ -9,6 +9,7 @@ uses
   mormot.app.daemon,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.text,
   mormot.core.log,
   mormot.db.raw.sqlite3,
   mormot.orm.core,
@@ -104,8 +105,8 @@ begin
   LogFamily.PerThreadLog := ptIdentifiedInOnFile;
   LogFamily.EchoToConsole := LOG_VERBOSE;
   ApplicationPath := Executable.ProgramFilePath;
-  DataPath := ExpandFileName(ApplicationPath + 'data\');
-  LogPath := ExpandFileName(ApplicationPath + 'log\');
+  DataPath := MakeExpandedPath([ApplicationPath, 'data'], true);
+  LogPath  := MakeExpandedPath([ApplicationPath, 'log', true);
   LogFamily.DestinationPath := LogPath;
   SQLite3Log.Add.Log(sllInfo, DataPath);
   SQLite3Log.Add.Log(sllInfo, LogPath);

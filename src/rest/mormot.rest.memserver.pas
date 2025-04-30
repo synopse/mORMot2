@@ -132,7 +132,7 @@ type
     procedure CreateMissingTables(user_version: cardinal = 0;
       Options: TOrmInitializeTableOptions = []); override;
     /// load the content from the specified file name
-    // - do nothing if file name was not assigned
+    // - do nothing if file name was not assigned or the file does not exist yet
     procedure LoadFromFile; virtual;
     /// load the content from the supplied resource
     procedure LoadFromStream(aStream: TStream); virtual;
@@ -387,12 +387,13 @@ begin
     not FileExists(fFileName) then
     exit;
   DropDatabase;
-  S := FileStreamSequentialRead(FileName);
-  try
-    LoadFromStream(S);
-  finally
-    S.Free;
-  end;
+  S := FileStreamSequentialRead(fFileName);
+    if S <> nil then
+    try
+      LoadFromStream(S);
+    finally
+      S.Free;
+    end;
 end;
 
 procedure TRestOrmServerFullMemory.UpdateToFile;

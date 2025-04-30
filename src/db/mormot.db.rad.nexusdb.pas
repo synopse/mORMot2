@@ -334,8 +334,8 @@ var
 begin
   Log := SynDBLog.Enter;
   try
-    ServerEngine.Active := True;
-    ServerEngine.Connected := True;
+    ServerEngine.Active := true;
+    ServerEngine.Connected := true;
     fDatabase.Name := ClassName;
     fDatabase.Connect;
     inherited Connect; // notify any re-connection

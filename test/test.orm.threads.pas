@@ -209,7 +209,7 @@ implementation
 { TTestMultiThreadProcessThread }
 
 type
-  TTestMultiThreadProcessThread = class(TSynThread)
+  TTestMultiThreadProcessThread = class(TLoggedThread)
   protected
     fTest: TTestMultiThreadProcess;
     fID: integer;
@@ -217,7 +217,7 @@ type
     fIterationCount: integer;
     fProcessFinished: boolean;
     fIDs: TIntegerDynArray;
-    procedure Execute; override;
+    procedure DoExecute; override;
     procedure LaunchProcess;
   public
     constructor Create(aTest: TTestMultiThreadProcess; aID: integer); reintroduce;
@@ -232,7 +232,8 @@ begin
   fEvent := TSynEvent.Create;
   fTest := aTest;
   fID := aID;
-  inherited Create(False);
+  inherited Create({suspend=}false, nil, nil, TSynLog,
+    FormatUtf8('% #%', [self, fID]));
 end;
 
 destructor TTestMultiThreadProcessThread.Destroy;
@@ -244,7 +245,7 @@ begin
   FreeAndNil(fEvent);
 end;
 
-procedure TTestMultiThreadProcessThread.Execute;
+procedure TTestMultiThreadProcessThread.DoExecute;
 var
   Rest: array of TRest;
   Rec: TOrmPeople;
@@ -254,7 +255,6 @@ var
   id: TID;
   log: ISynLog;
 begin
-  SetCurrentThreadName('% #%', [self, fID]);
   Rec := TOrmPeople.Create;
   try
     Rec.LastName := 'Thread ' + CardinalToHex(PtrUInt(GetCurrentThreadId));

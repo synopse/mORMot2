@@ -890,7 +890,7 @@ const
   ODBC_LIB = 'libodbc.so.1';
   {$endif OSWINDOWS}
 
-  ODBC_ENTRIES: array[0..66] of RawUtf8 = (
+  ODBC_ENTRIES: array[0..67] of PAnsiChar = (
     'AllocEnv',
     'AllocHandle',
     'AllocStmt',
@@ -957,7 +957,8 @@ const
     'DriverConnectW',
     'ProcedureColumnsA',
     'ProcedureColumnsW',
-    'Procedures');
+    'Procedures',
+    nil);
 
 
 {$ifdef OSWINDOWS}
@@ -1026,14 +1027,16 @@ begin
 end;
 
 constructor TOdbcLib.Create;
-var
-  P: PPointerArray;
-  i: PtrInt;
 begin
-  TryLoadLibrary([ODBC_LIB], EOdbcException);
-  P := @@AllocEnv;
-  for i := 0 to High(ODBC_ENTRIES) do
-    Resolve('SQL', ODBC_ENTRIES[i], @P[i], {raiseonfailure=}EOdbcException);
+  try
+    TryLoadResolve([ODBC_LIB], 'SQL', @ODBC_ENTRIES, @@AllocEnv, EOdbcException);
+  except
+    on E: Exception do
+    begin
+      SetDbError(E);
+      raise;
+    end;
+  end;
 end;
 
 function TOdbcLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;

@@ -583,7 +583,7 @@ begin
         // EH: hooking a mormot.db.sql limitation. Void strings are not
         // accepted by SQLServer if: fixed-width columns are used and
         // option ANSI_PADDING is set to !off!.
-        StoreVoidStringAsNull := False;
+        StoreVoidStringAsNull := false;
       end;
   end;
   if fDbms in [dOracle, dPostgreSQL, dMySQL, dMariaDB, dMSSQL] then
@@ -654,7 +654,7 @@ begin
       fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
     end;
     OnBatchInsert := nil;
-    fSupportsArrayBindings := True;
+    fSupportsArrayBindings := true;
   end;
   {$endif ZEOS72UP}
 end;
@@ -1021,7 +1021,7 @@ begin
             begin
               // handle null column
               for j := 0 to fParamsArrayCount - 1 do
-                fNullArray[p][j] := True;
+                fNullArray[p][j] := true;
               fStatement.SetDataArray(p + FirstDbcIndex, '', stString, vtUTF8String);
             end;
         else

@@ -607,14 +607,14 @@ begin
       EServiceException.RaiseUtf8('%.Create: no Shared Instance for %/I%',
         [self, fImplementationClass, fInterfaceUri]);
     if (aSharedInstance as TInterfacedObjectFake).
-        Factory.InterfaceTypeInfo <> aInterface then
+        Factory.InterfaceRtti.Info <> aInterface then
       EServiceException.RaiseUtf8(
         '%.Create: shared % instance does not implement I%',
         [self, fImplementationClass, fInterfaceUri]);
   end
   else
   begin
-    if aRestServer.Services.Implements(fInterface.InterfaceTypeInfo) then
+    if aRestServer.Services.Implements(fInterface.InterfaceRtti.Info) then
       fImplementationClassKind := ickFromInjectedResolver
     else if fImplementationClass.InheritsFrom(TInjectableObjectRest) then
       fImplementationClassKind := ickInjectableRest
@@ -623,7 +623,7 @@ begin
     else if fImplementationClass.InheritsFrom(TInterfacedPersistent) then
       fImplementationClassKind := ickPersistent;
     fImplementationClassInterfaceEntry := fImplementationClass.
-      GetInterfaceEntry(fInterface.InterfaceIID);
+      GetInterfaceEntry(fInterface.InterfaceGuid^);
     if fImplementationClassInterfaceEntry = nil then
       EServiceException.RaiseUtf8('%.Create: % does not implement I%',
         [self, fImplementationClass, fInterfaceUri]);
@@ -1190,7 +1190,7 @@ begin
       begin
         dummyObj := nil;
         if not TServiceContainerServer(fResolver).TryResolve(
-            fInterface.InterfaceTypeInfo, dummyObj) then
+            fInterface.InterfaceRtti.Info, dummyObj) then
           EInterfaceFactory.RaiseUtf8(
            'ickFromInjectedResolver: TryResolve(%) failed', [fInterface.InterfaceName]);
         result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
@@ -1250,7 +1250,7 @@ begin
         begin
           W.AddShort('},Output:{');
           if not (optNoLogOutput in Sender.Options) then
-            if ArgsResultIsServiceCustomAnswer then
+            if imfResultIsServiceCustomAnswer in Flags then
               with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do
               begin
                 len := length(Content);
@@ -1445,7 +1445,7 @@ begin
         entry := fImplementationClassInterfaceEntry
       else
       begin
-        entry := Inst.Instance.GetInterfaceEntry(fInterface.InterfaceIID);
+        entry := Inst.Instance.GetInterfaceEntry(fInterface.InterfaceGuid^);
         if entry = nil then
           exit;
       end;
@@ -1650,7 +1650,7 @@ end;
 
 function TInterfacedObjectFakeServer.CanLog: boolean;
 begin
-  result := not IdemPropName(fFactory.InterfaceTypeInfo^.RawName, 'ISynLogCallback');
+  result := not IdemPropNameU(fFactory.InterfaceRtti.Name, 'ISynLogCallback');
 end;
 
 function TInterfacedObjectFakeServer.CallbackInvoke(
@@ -1676,7 +1676,7 @@ begin
     if CanLog then
       fServer.InternalLog('%.CallbackInvoke: % instance has been released on ' +
         'the client side, so I% callback notification was NOT sent', [self,
-        fFactory.InterfaceTypeInfo^.RawName, aMethod.InterfaceDotMethodName], sllWarning);
+        fFactory.InterfaceRtti.Name, aMethod.InterfaceDotMethodName], sllWarning);
     if fRaiseExceptionOnInvokeError or
        ((fServer.Services <> nil) and
         (coRaiseExceptionIfReleasedByClient in
@@ -1774,8 +1774,8 @@ begin
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then
   begin
     // TInterfacedObjectFake has no RTTI
-    if IsEqualGuid(uid[0],
-        @TInterfacedObjectFake(aSharedImplementation).Factory.InterfaceIID) then
+    if IsEqualGuid(uid[0], @TInterfacedObjectFake(aSharedImplementation).
+                              Factory.InterfaceGuid^) then
       uid[0] := nil; // mark TGuid implemented by this fake interface
   end
   else
@@ -2075,7 +2075,7 @@ begin
     instance := ObjectFromInterface(SlaveCallback);
     if (instance <> nil) and
        (PClass(instance)^ = TInterfacedObjectFakeServer) then
-      TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := True;
+      TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := true;
   finally
     fRestServer.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;

@@ -352,12 +352,12 @@ type
 
 constructor TSynLizardStatic.Create;
 begin
-  versionNumber := Lizard_versionNumber;
-  compressbound := Lizard_compressbound;
-  compress := Lizard_compress;
-  sizeofState := Lizard_sizeofState;
-  compress_extState := Lizard_compress_extState;
-  decompress_safe := Lizard_decompress_safe;
+  versionNumber           := Lizard_versionNumber;
+  compressbound           := Lizard_compressbound;
+  compress                := Lizard_compress;
+  sizeofState             := Lizard_sizeofState;
+  compress_extState       := Lizard_compress_extState;
+  decompress_safe         := Lizard_decompress_safe;
   decompress_safe_partial := Lizard_decompress_safe_partial;
   inherited Create; // register AlgoLizard/AlgoLizardFast/AlgoLizardHuff
 end;
@@ -369,44 +369,38 @@ end;
 { TSynLizardDynamic }
 
 const
-  LIZARD_ENTRIES: array[0..6] of RawUtf8 = (
+  LIZARD_ENTRIES: array[0 .. 7] of PAnsiChar = (
    'versionNumber',
    'compressBound',
    'compress',
    'sizeofState',
    'compress_extState',
    'decompress_safe',
-   'decompress_safe_partial');
+   'decompress_safe_partial',
+   nil);
 
 constructor TSynLizardDynamic.Create(const aLibraryFile: TFileName;
   aRaiseNoException: boolean);
-var
-  P: PPointer;
-  i: PtrInt;
 begin
   fLibrary := TSynLibrary.Create;
-  if fLibrary.TryLoadLibrary(
-    [aLibraryFile, LIZARD_LIB_NAME], nil) then
+  if fLibrary.TryLoadLibrary([aLibraryFile, LIZARD_LIB_NAME], nil) then
   begin
-    P := @@versionNumber;
-    for i := 0 to High(LIZARD_ENTRIES) do
-      if fLibrary.Resolve('Lizard_', LIZARD_ENTRIES[i], P, EAlgoCompress) then
-        inc(P);
+    fLibrary.ResolveAll(@LIZARD_ENTRIES, @@versionNumber, 'Lizard_', EAlgoCompress);
     if versionNumber div 10000 <> 1 then
       if aRaiseNoException then
         exit
       else
-        EAlgoCompress.RaiseUtf8('% has unexpected versionNumber=%',
-          [fLibrary.LibraryPath, versionNumber]);
+        EAlgoCompress.RaiseUtf8('%.Create: % has unexpected versionNumber=%',
+          [self, fLibrary.LibraryPath, versionNumber]);
     // register TAlgoLizard/TAlgoLizardFast/TAlgoLizardHuffman
     inherited Create;
     // if we reached here, the external library has been properly setup
     fLoaded := true;
   end
   else if not aRaiseNoException then
-    EAlgoCompress.RaiseUtf8('Unable to load % - %/'#13#10 +
+    EAlgoCompress.RaiseUtf8('%.Create: Unable to load % - %/'#13#10 +
       'Please download from https://synopse.info/files/SynLizardLibs.7z',
-      [aLibraryFile, GetErrorText(GetLastError)]);
+      [self, aLibraryFile, GetErrorText(GetLastError)]);
 end;
 
 destructor TSynLizardDynamic.Destroy;

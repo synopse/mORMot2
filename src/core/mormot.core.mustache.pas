@@ -1393,12 +1393,12 @@ begin
             // tag starts on a new line -> check if ends on the same line
             if (fPos > fPosMax) or
                (fPos^ = #$0A) or
-               (PWord(fPos)^ = $0A0D) then
+               (PWord(fPos)^ = CRLFW) then
             begin
               if fPos <= fPosMax then
                 if fPos^ = #$0A then
                   inc(fPos)
-                else if PWord(fPos)^ = $0A0D then
+                else if PWord(fPos)^ = CRLFW then
                   inc(fPos, 2);
               if fTagCount > 0 then
                 // remove any indentation chars from previous text

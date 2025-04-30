@@ -491,7 +491,7 @@ begin
               for i := 1 to 100 do
               begin
                 R.ClearProperties;
-                Check(Client.Retrieve(res[Random(n)], R));
+                Check(Client.Retrieve(res[Random32(n)], R));
                 Check(R.ID <> 0);
                 Check(res[R.YearOfBirth] = R.ID);
               end;
@@ -685,7 +685,7 @@ var
         Check(res.ColumnInt('YearOfDeath') = 1519);
         inc(n);
       end;
-      Check(n = DoCount);
+      CheckEqual(n, DoCount);
       n1 := n;
       n := 0;
       Row := res.RowData;
@@ -699,7 +699,7 @@ var
           inc(n);
         until not res.Step;
       Check(res <> nil);
-      Check(n = n1);
+      CheckEqual(n, n1);
       Check(res.Step({first=}true), 'rewind');
       all := res.FetchAllToDocVariantArray; // makes ReleaseRows
       r := _Safe(all);
@@ -715,14 +715,14 @@ var
       proxy.ThreadSafeConnection.StartTransaction;
       DoInsert;
       proxy.ThreadSafeConnection.Rollback;
-      Check(DoCount = n);
+      CheckEqual(DoCount, n);
       proxy.ThreadSafeConnection.StartTransaction;
       DoInsert;
       proxy.ThreadSafeConnection.Commit;
       n1 := DoCount;
-      Check(n1 = n + length(IDs));
+      CheckEqual(n1, n + length(IDs));
       proxy.ExecuteNoResult('delete from people where ID>=?', [50000]);
-      Check(DoCount = n);
+      CheckEqual(DoCount, n);
     end;
 
   begin
