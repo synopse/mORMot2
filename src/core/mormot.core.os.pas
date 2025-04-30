@@ -2889,7 +2889,7 @@ function GetErrorText(error: integer): RawUtf8;
 // ENGLISH_LANGID flag first
 // - if ModuleName does support this Code, will try it as system error
 // - replace SysErrorMessagePerModule() and SysErrorMessage() from mORMot 1
-function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
+function WinErrorText(Code: cardinal; ModuleName: PChar = nil): RawUtf8;
 
 /// raise an EOSException from the last system error using WinErrorText()
 // - if Code is kept to its default 0, GetLastError is called
@@ -6392,7 +6392,7 @@ type
     LUIDS_EXHAUSTED, INVALID_SUB_AUTHORITY, INVALID_ACL, INVALID_SID,
     INVALID_SECURITY_DESCR, _1339, BAD_INHERITANCE_ACL, SERVER_DISABLED,
     SERVER_NOT_DISABLED);
-  // O(log(n)) binary search in WINERR_ONE[] constants
+  // O(log(n)) binary search in WINERR_SORTED[] constants
   TWinErrorOne = (
     CRYPT_E_BAD_ENCODE, CRYPT_E_SELF_SIGNED, CRYPT_E_BAD_MSG, CRYPT_E_REVOKED,
     CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE, TRUST_E_BAD_DIGEST,
@@ -6405,7 +6405,7 @@ type
     WINHTTP_TIMEOUT, WINHTTP_OPERATION_CANCELLED, WINHTTP_CANNOT_CONNECT,
     WINHTTP_CLIENT_AUTH_CERT_NEEDED, WINHTTP_INVALID_SERVER_RESPONSE);
 const
-  WINERR_ONE: array[TWinErrorOne] of cardinal = (
+  WINERR_SORTED: array[TWinErrorOne] of cardinal = (
     // some security-related HRESULT errors (negative 32-bit values first)
     $80092002, $80092007, $8009200d, $80092010, $80092012, $80092013, $80096010,
     $800b0100, $800b0101, $800b010a, $800b010c,
@@ -6438,7 +6438,7 @@ begin
       result := GetEnumNameRtti(TypeInfo(TWinError1315), Code - 1315);
   else
     result := GetEnumNameRtti(TypeInfo(TWinErrorOne),
-      FastFindIntegerSorted(@WINERR_ONE, ord(high(WINERR_ONE)), Code));
+      FastFindIntegerSorted(@WINERR_SORTED, ord(high(WINERR_SORTED)), Code));
   end;
 end;
 

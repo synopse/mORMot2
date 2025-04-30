@@ -10038,8 +10038,8 @@ var
   nfo: TWinProcessInfo;
 begin
   // validate Windows API error code recognition
-  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
-  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
+  CheckEqual(WinErrorText(1246), 'ERROR__CONTINUE');
+  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER), 'ERROR_INSUFFICIENT_BUFFER');
   // validate DotNet exceptions error code recognition
   Win32DotNetException(0, '');
   Win32DotNetException(9234, '');

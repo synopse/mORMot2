@@ -7820,7 +7820,7 @@ var
       filehandle := FileOpen(Utf8ToString(ctxt.OutContent), fmOpenReadShared);
       if not ValidHandle(filehandle)  then
       begin
-        SendError(HTTP_NOTFOUND, WinErrorText(GetLastError, nil));
+        SendError(HTTP_NOTFOUND, WinErrorText(GetLastError));
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel

@@ -541,22 +541,18 @@ var
   tmp: array[0..511] of WideChar;
   tmps: ShortString absolute tmp;
 begin
+  tmps[0] := #0;
+  if (ModuleName = nil) and
+     AppendWinErrorText(Code, tmps, #0) then
+  begin
+    // return directly the known standard system error code constant
+    FastSetString(result, @tmps[1], ord(tmps[0]));
+    exit;
+  end;
   bak := GetLastError;
   src := nil;
   flags := FORMAT_MESSAGE_FROM_SYSTEM;
-  if ModuleName = nil then
-  begin
-    // system error codes
-    tmps[0] := #0;
-    if AppendWinErrorText(Code, tmps, #0) then
-    begin
-      // we can return directly the standard system error code constant
-      FastSetString(result, @tmps[1], ord(tmps[0]));
-      SetLastError(bak);
-      exit;
-    end;
-  end
-  else
+  if ModuleName <> nil then
   begin
     // module specific error codes
     src := pointer(GetModuleHandle(ModuleName));
@@ -572,10 +568,11 @@ begin
      (src <> nil) then
   begin
     // fallback to the system error message if this module as no such code
+    result := WinErrorText(Code);
     SetLastError(bak);
-    result := WinErrorText(Code, nil);
     exit;
   end;
+  // return the formatted error message as trimmed UTF-8
   while (len > 0) and
         (ord(tmp[len - 1]) in [0..32, ord('.')]) do
     dec(len); // trim right
@@ -585,7 +582,7 @@ end;
 
 function GetErrorText(error: integer): RawUtf8;
 begin
-  result := WinErrorText(error, nil);
+  result := WinErrorText(error);
 end;
 
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
@@ -602,7 +599,7 @@ begin
   if Code = 0 then
     Code := GetLastError;
   result := Format('%s error [%s] (0x%x)',
-    [Context, string(WinErrorText(Code, nil)), code]);
+    [Context, string(WinErrorText(Code)), code]);
 end;
 
 procedure RaiseLastError(const Context: ShortString;
