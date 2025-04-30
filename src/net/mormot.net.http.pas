@@ -54,6 +54,7 @@ type
     hhUserAgent,
     hhServer,
     hhServerInternalState,
+    hhRemoteIp,
     hhExpect100,
     hhAuthorization,
     hhRangeBytes,
@@ -937,6 +938,11 @@ type
   end;
   {$M-}
 
+  THttpAcceptBan = class;
+
+  /// callback event when THttpAcceptBan BanIP() or IsBanned() methods are called
+  TOnHttpAcceptBan = procedure(Sender: THttpAcceptBan; ip4: cardinal) of object;
+
   /// store a list of IPv4 which should be rejected at connection
   // - more tuned than TIPBan for checking just after accept()
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
@@ -948,6 +954,7 @@ type
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
+    fOnBanIp, fOnBanned: TOnHttpAcceptBan;
     function IsBannedRaw(ip4: cardinal): boolean;
     function DoRotateRaw: integer;
     procedure SetMax(Value: cardinal);
@@ -999,6 +1006,12 @@ type
     // - if set, any previous banned IP will be flushed
     property Max: cardinal
       read fMax write SetMax;
+    /// event called by BanIp() method, e.g. to notify security audit systems
+    property OnBanIp: TOnHttpAcceptBan
+      read fOnBanIp write fOnBanIp;
+    /// event called when IsBanned() method returns true
+    property OnBanned: TOnHttpAcceptBan
+      read fOnBanned write fOnBanned;
   published
     /// total number of accept() rejected by IsBanned()
     property Rejected: Int64
@@ -2548,6 +2561,12 @@ begin
       if PCardinal(P + 4)^ or mask_lower =
           ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
         result := hhUpgrade;
+    // 'REMOTEIP:'
+    ord('r') + ord('e') shl 8 + ord('m') shl 16 + ord('o') shl 24:
+      if (PCardinal(P + 4)^ or mask_lower =
+          ord('t') + ord('e') shl 8 + ord('i') shl 16 + ord('p') shl 24) and
+         (P[8] = ':') then
+        result := hhRemoteIp;
     // 'REFERER:'
     ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
       if PCardinal(P + 4)^ or mask_lower =
@@ -2727,7 +2746,7 @@ end;
 
 function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean;
 var
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   result := false;
   if (Name = '') or
@@ -2835,72 +2854,78 @@ end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
 var
-  url, i: PtrInt;
+  i, l: PtrInt;
+  p: PAnsiChar;
 begin
-  // we used https://github.com/monperrus/crawler-user-agents as starting reference
+  // we used https://github.com/monperrus/crawler-user-agents as reference
   result := false;
-  url := PosEx('//', UserAgent);
-  if url = 0 then // a browser usually has no http://... reference within
+  p := pointer(UserAgent);
+  l := length(UserAgent);
+  if l < 10 then
     exit;
-  i := PosEx('.com/', UserAgent, url); // start searching after http:// pattern
-  if i = 0 then
-    i := PosEx('.org/', UserAgent, url);
-  if i = 0 then
-    exit;
-  case PCardinal(@PByteArray(UserAgent)[i + 4])^ and $00ffffff of
-    // Googlebot/2.1 (+http://www.google.com/bot.html)
-    ord('b') + ord('o') shl 8 + ord('t') shl 16,
-    // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
-    ord('b') + ord('i') shl 8 + ord('n') shl 16,
-    // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
-    ord('h') + ord('e') shl 8 + ord('l') shl 16,
-    // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
-    ord('m') + ord('s') shl 8 + ord('n') shl 16,
-    // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
-    ord('a') + ord('b') shl 8 + ord('o') shl 16,
-    // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
-    // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
-    ord('s') + ord('e') shl 8 + ord('a') shl 16,
-    // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
-    ord('d') + ord('u') shl 8 + ord('c') shl 16,
-    // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
-    ord('g') + ord('o') shl 8 + ord('/') shl 16,
-    // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
-    ord('r') + ord('o') shl 8 + ord('b') shl 16:
+  case PCardinal(p)^ or $20202020 of
+    // Twitterbot/1.0
+    ord('t') + ord('w') shl 8 + ord('i') shl 16 + ord('t') shl 24,
+    // facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)
+    ord('f') + ord('a') shl 8 + ord('c') shl 16 + ord('e') shl 24,
+    // LinkedInBot/1.0 (Jakarta Commons-HttpClient/3.1 +http://www.linkedin.com
+    ord('l') + ord('i') shl 8 + ord('n') shl 16 + ord('k') shl 24,
+    // Sogou News Spider/4.0(+http://www.sogou.com/docs/help/webmasters.htm
+    ord('s') + ord('o') shl 8 + ord('g') shl 16 + ord('o') shl 24,
+    // Googlebot-Image/1.0
+    ord('g') + ord('o') shl 8 + ord('o') shl 16 + ord('g') shl 24,
+    // Feedfetcher-Google; (+http://www.google.com/feedfetcher.html; 1 subscribers; feed-id=728742641706423)
+    ord('f') + ord('e') shl 8 + ord('e') shl 16 + ord('d') shl 24,
+    // CCBot/2.0 (https://commoncrawl.org/faq/
+    ord('c') + ord('c') shl 8 + ord('b') shl 16 + ord('o') shl 24,
+    // Python-urllib/3.4
+    ord('p') + ord('y') shl 8 + ord('t') shl 16 + ord('h') shl 24,
+    // Wget/1.14 (linux-gnu)
+    ord('w') + ord('g') shl 8 + ord('e') shl 16 + ord('t') shl 24,
+    // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
+    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('p') shl 24:
       result := true;
   else
-    case PCardinal(@PByteArray(UserAgent)[i - 4])^ and $00ffffff of
-      // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
-      ord('b') + ord('o') shl 8 + ord('t') shl 16:
+    repeat
+      i := ByteScanIndex(pointer(p), l, ord(':')); // fast on all platforms
+      if i < 0 then
+        exit;
+      inc(i);
+      inc(p, i);
+      dec(l, i);
+    until PWord(p)^ = ord('/') + ord('/') shl 8; // found http://xxxxx
+    i := ByteScanIndex(pointer(p + 2), l - 2, ord('/'));
+    if i < 0 then
+      exit;
+    p := @p[i + 3]; // p^ = bot.html in http://www.google.com/bot.html
+    case PCardinal(p)^ and $00ffffff of
+      // Googlebot/2.1 (+http://www.google.com/bot.html)
+      ord('b') + ord('o') shl 8 + ord('t') shl 16,
+      // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
+      ord('b') + ord('i') shl 8 + ord('n') shl 16,
+      // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
+      ord('h') + ord('e') shl 8 + ord('l') shl 16,
+      // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
+      ord('m') + ord('s') shl 8 + ord('n') shl 16,
+      // Mozilla/5.0 (AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)
+      ord('m') + ord('o') shl 8 + ord('b') shl 16,
+      // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
+      ord('a') + ord('b') shl 8 + ord('o') shl 16,
+      // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
+      // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
+      ord('s') + ord('e') shl 8 + ord('a') shl 16,
+      // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
+      ord('d') + ord('u') shl 8 + ord('c') shl 16,
+      // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
+      ord('g') + ord('o') shl 8 + ord('/') shl 16,
+      // Mozilla/5.0 (KHTML, like Gecko; GPTBot/1.0; +https://openai.com/gptbot)
+      ord('g') + ord('p') shl 8 + ord('t') shl 16,
+      // TinEye/1.1 (http://tineye.com/crawler.html)
+      ord('c') + ord('r') shl 8 + ord('a') shl 16,
+      // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
+      ord('r') + ord('o') shl 8 + ord('b') shl 16:
         result := true;
     end;
-  end;
-end;
-
-function HttpChunkToHex32(p: PAnsiChar): integer;
-var
-  v0, v1: byte;
-begin
-  // note: chunk is not regular two-chars-per-byte hexa since may have odd len
-  result := 0;
-  if p <> nil then
-  begin
-    while p^ = ' ' do
-      inc(p); // trim left
-    repeat
-      v0 := ConvertHexToBin[p[0]];
-      if v0 = 255 then
-        break; // not in '0'..'9','a'..'f' -> trim right
-      v1 := ConvertHexToBin[p[1]];
-      inc(p);
-      if v1 = 255 then
-      begin
-        result := (result shl 4) or v0; // odd number of hexa chars input
-        break;
-      end;
-      result := (result shl 8) or (integer(v0) shl 4) or v1;
-      inc(p);
-    until false;
   end;
 end;
 
@@ -3064,7 +3089,7 @@ begin
      (OutContentType = '') or
      (Algo = nil) then
     exit;
-  compressible := IsContentTypeCompressible(pointer(OutContentType));
+  compressible := IsContentTypeCompressibleU(OutContentType);
   len := length(OutContent);
   result := pointer(Algo);
   for i := 0 to PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1) do
@@ -3343,6 +3368,8 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    hhRemoteIP:
+      exit; // 'REMOTEIP:' has an internal usage and is ignored when transmitted
     hhExpect100:
       begin
         // 'Expect: 100-continue'
@@ -3698,7 +3725,7 @@ begin
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st) then
         begin
-          fContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
+          fContentLeft := ParseHex0x(PAnsiChar(st.Line), {noOx=}true);
           if fContentLeft <> 0 then
           begin
             if ContentStream = nil then
@@ -4262,16 +4289,16 @@ begin
     repeat // chunks decoding loop
       if SockIn <> nil then
       begin
-        readln(SockIn^, chunkline); // use of a static PChar is faster
+        readln(SockIn^, chunkline); // use of a static PChar is convenient
         err := ioresult;
         if err <> 0 then
           EHttpSocket.RaiseUtf8('%.GetBody chunked ioresult=%', [self, err]);
-        len32 := HttpChunkToHex32(chunkline); // get chunk length in hexa
+        len32 := ParseHex0x(chunkline, {noOx=}true); // hexa chunk length
       end
       else
       begin
         SockRecvLn(line);
-        len32 := HttpChunkToHex32(pointer(line)); // get chunk length in hexa
+        len32 := ParseHex0x(pointer(line), {noOx=}true); // hexa chunk length
       end;
       if len32 = 0 then
       begin
@@ -4720,6 +4747,8 @@ begin
       {$endif HASFASTTRYFINALLY}
         fSafe.UnLock;
       end;
+    if Assigned(fOnBanIp) then
+      fOnBanIp(self, ip4);
     result := true;
   end;
 end;
@@ -4794,6 +4823,9 @@ begin
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
+  if result and
+     Assigned(fOnBanned) then
+    fOnBanned(self, ip4);
 end;
 
 function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
@@ -5154,7 +5186,7 @@ begin
   try
     // force write to disk at least every second
     if fWriterSingle <> nil then
-      fWriterSingle.FlushFinal
+      fWriterSingle.FlushFinal // plain TTextDateWriter with no tix10
     else if (fWriterHost <> nil) and
             fWriterHostSafe.TryLock then
       try
@@ -6032,7 +6064,7 @@ begin
       if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
         mob := hasMobile;
     if hasBot in fTracked then
-      // bots detection is not easier, but our naive patterns seem good enough
+      // bots detection is not easy, but our naive patterns seem good enough
       if IsHttpUserAgentBot(RawUtf8(Context.UserAgent)) then
         bot := hasBot;
   end;

@@ -529,7 +529,7 @@ type
     /// should be called before any access to the storage content
     // - and protected with a try ... finally StorageUnLock; end section
     procedure StorageLock(WillModifyContent: boolean
-        {$ifdef DEBUGSTORAGELOCK}; const msg: shortstring{$endif}); virtual;
+        {$ifdef DEBUGSTORAGELOCK}; const msg: ShortString{$endif}); virtual;
     /// should be called after any StorageLock-protected access to the content
     // - e.g. protected with a try ... finally StorageUnLock; end section
     procedure StorageUnLock;
@@ -1114,7 +1114,7 @@ type
     // tables could flush the database content without proper notification
     // - this overridden implementation will call Owner.FlushInternalDBCache
     procedure StorageLock(WillModifyContent: boolean
-      {$ifdef DEBUGSTORAGELOCK}; const msg: shortstring {$endif}); override;
+      {$ifdef DEBUGSTORAGELOCK}; const msg: ShortString {$endif}); override;
   end;
 
 
@@ -1492,7 +1492,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// raise ERestStorageMulti if the supplied database ID is out of range
     procedure EnsureDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID;
-      const aCaller: shortstring);
+      const aCaller: ShortString);
     /// access to the associated TSynLog instances
     property Log: TSynLogFamily
       read fLog;
@@ -1972,7 +1972,7 @@ begin
 end;
 
 procedure TRestStorage.StorageLock(WillModifyContent: boolean
-  {$ifdef DEBUGSTORAGELOCK}; const msg: shortstring {$endif});
+  {$ifdef DEBUGSTORAGELOCK}; const msg: ShortString {$endif});
 begin
   {$ifdef DEBUGSTORAGELOCK}
   if true or //fStorageLockLogTrace or
@@ -3076,7 +3076,7 @@ begin
         if IsAllFields(b^) then
         begin
           if log = nil then // only start logging if something is to be written
-            log := logclass.Enter(self, 'TrackChangesAndFlush Add');
+            logclass.EnterLocal(log, self, 'TrackChangesAndFlush Add');
           batch.Add(p^, {senddata=}true, {forceid=}true, ALL_FIELDS, true);
           FillZero(b^); // flush
         end;
@@ -3090,7 +3090,7 @@ begin
         if not IsZero(b^) then
         begin
           if log = nil then
-            log := logclass.Enter(self, 'TrackChangesAndFlush Update');
+            logclass.EnterLocal(log, self, 'TrackChangesAndFlush Update');
           batch.Update(p^, b^, {DoNotAutoComputeFields=}true);
           FillZero(b^); // flush
         end;
@@ -4460,7 +4460,7 @@ begin
 end;
 
 procedure TRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean
-   {$ifdef DEBUGSTORAGELOCK}; const msg: shortstring {$endif});
+   {$ifdef DEBUGSTORAGELOCK}; const msg: ShortString {$endif});
 begin
   inherited StorageLock(WillModifyContent {$ifdef DEBUGSTORAGELOCK}, msg {$endif});
   if WillModifyContent and
@@ -5444,7 +5444,7 @@ begin
 end;
 
 procedure TRestStorageMulti.EnsureDatabaseIDCorrect(
-  aID: TRestStorageMultiDatabaseID; const aCaller: shortstring);
+  aID: TRestStorageMultiDatabaseID; const aCaller: ShortString);
 begin
   if not IsDatabaseIDCorrect(aID) then
     ERestStorageMulti.RaiseUtf8('Invalid %.%(%)',

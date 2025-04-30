@@ -1185,7 +1185,7 @@ begin
 end;
 
 function Asn1Next(var p: PAnsiChar; expected: byte; moveafter: boolean;
-  const Ctxt: shortstring): PtrInt;
+  const Ctxt: ShortString): PtrInt;
 begin
   if p^ <> AnsiChar(expected) then
     EStuffExe.RaiseUtf8('Parsing %: % instead of %',

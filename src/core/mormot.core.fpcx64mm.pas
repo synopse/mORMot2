@@ -142,51 +142,51 @@ unit mormot.core.fpcx64mm;
 
 interface
 
+{$undef FPCX64MM_AVAILABLE}  // global conditional to enable this unit
 {$ifdef FPC}
-  // cut-down version of mormot.defines.inc to make this unit standalone
-  {$mode Delphi}
-  {$inline on}
-  {$R-} // disable Range checking
-  {$S-} // disable Stack checking
-  {$W-} // disable stack frame generation
-  {$Q-} // disable overflow checking
-  {$B-} // expect short circuit boolean
-  {$ifdef CPUX64}
-    {$define FPCX64MM} // this unit is for FPC + x86_64 only
-    {$asmmode Intel}
+  {$ifdef CPUX64}            // this unit is for FPC + x86_64 only
+    {$ifndef FPCMM_DISABLE}  // disabled on some targets/projects
+      {$define FPCX64MM_AVAILABLE}
+    {$endif FPCMM_DISABLE}
   {$endif CPUX64}
-  {$ifdef OLDLINUXKERNEL}
-    {$define FPCMM_NOMREMAP}
-  {$endif OLDLINUXKERNEL}
-
-  {$ifdef FPCMM_BOOSTER}
-    {$define FPCMM_BOOST}
-    {$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-    {$define FPCMM_TINYPERTHREAD}
-  {$endif FPCMM_BOOSTER}
-  {$ifdef FPCMM_BOOST}
-    {$define FPCMM_SERVER}
-    {$define FPCMM_SMALLNOTWITHMEDIUM}
-    {$define FPCMM_LARGEBIGALIGN} // bigger blocks implies less reallocation
-  {$endif FPCMM_BOOST}
-  {$ifdef FPCMM_SERVER}
-    {$define FPCMM_DEBUG}
-    {$define FPCMM_ASSUMEMULTITHREAD}
-    {$define FPCMM_ERMS}
-  {$endif FPCMM_SERVER}
-  {$ifdef FPCMM_BOOSTER}
-    {$undef FPCMM_DEBUG} // when performance matters more than stats
-  {$endif FPCMM_BOOSTER}
 {$endif FPC}
 
-{$ifdef FPCMM_DISABLE}
-  {$undef FPCX64MM} // e.g. when compiled as Design-Time Lazarus package
-{$endif FPCMM_DISABLE}
-
-
-{$ifdef FPCX64MM}
+{$ifdef FPCX64MM_AVAILABLE}
 // this unit is available only for FPC + X86_64 CPU
 // other targets would compile as a void unit
+
+// cut-down version of mormot.defines.inc to make this unit standalone
+{$mode Delphi}
+{$inline on}
+{$asmmode Intel}
+{$R-} // disable Range checking
+{$S-} // disable Stack checking
+{$W-} // disable stack frame generation
+{$Q-} // disable overflow checking
+{$B-} // expect short circuit boolean
+
+{$ifdef OLDLINUXKERNEL}
+  {$define FPCMM_NOMREMAP}
+{$endif OLDLINUXKERNEL}
+
+{$ifdef FPCMM_BOOSTER}
+  {$define FPCMM_BOOST}
+  {$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+  {$define FPCMM_TINYPERTHREAD}
+{$endif FPCMM_BOOSTER}
+{$ifdef FPCMM_BOOST}
+  {$define FPCMM_SERVER}
+  {$define FPCMM_SMALLNOTWITHMEDIUM}
+  {$define FPCMM_LARGEBIGALIGN} // bigger blocks implies less reallocation
+{$endif FPCMM_BOOST}
+{$ifdef FPCMM_SERVER}
+  {$define FPCMM_DEBUG}
+  {$define FPCMM_ASSUMEMULTITHREAD}
+  {$define FPCMM_ERMS}
+{$endif FPCMM_SERVER}
+{$ifdef FPCMM_BOOSTER}
+  {$undef FPCMM_DEBUG} // when performance matters more than stats
+{$endif FPCMM_BOOSTER}
 
 type
   /// Arena (middle/large) heap information as returned by CurrentHeapStatus
@@ -380,7 +380,7 @@ const
 
 {$endif FPCMM_STANDALONE}
 
-{$endif FPCX64MM}
+{$endif FPCX64MM_AVAILABLE}
 
 
 
@@ -429,7 +429,7 @@ implementation
 
 }
 
-{$ifdef FPCX64MM}
+{$ifdef FPCX64MM_AVAILABLE}
 // this unit is available only for FPC + X86_64 CPU
 
 {$ifndef FPCMM_NOPAUSE}
@@ -992,6 +992,7 @@ const
   // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
   {$endif FPCMM_LARGEBIGALIGN}
 
+// all T*BlockInfo variables are local to this unit, so are FPC_PIC compatible
 var
   SmallBlockInfo: TSmallBlockInfo;
   MediumBlockInfo: TMediumBlockInfo;
@@ -2984,7 +2985,7 @@ var
   WrStrPos: PtrInt;
   WrStrOnSameLine: boolean;
 
-procedure W(const txt: shortstring);
+procedure W(const txt: ShortString);
 var
   p, n: PtrInt;
 begin
@@ -3003,11 +3004,11 @@ const
   K_: array[0..4] of string[1] = (
     'P', 'T', 'G', 'M', 'K');
 
-procedure K(const txt: shortstring; i: PtrUInt);
+procedure K(const txt: ShortString; i: PtrUInt);
 var
   j, n: PtrUInt;
   kk: PShortString;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   W(txt);
   kk := nil;
@@ -3027,16 +3028,16 @@ begin
     W(kk^);
 end;
 
-procedure S(const txt: shortstring; i: PtrUInt);
+procedure S(const txt: ShortString; i: PtrUInt);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   W(txt);
   str(i, tmp);
   W(tmp);
 end;
 
-procedure LF(const txt: shortstring = '');
+procedure LF(const txt: ShortString = '');
 begin
   if txt[0] <> #0 then
     W(txt);
@@ -3047,7 +3048,7 @@ begin
 end;
 
 procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-  const name: shortstring);
+  const name: ShortString);
 begin
   K(name, arena.CurrentBytes);
   K('B/', arena.CumulativeBytes);
@@ -3062,7 +3063,7 @@ begin
   LF;
 end;
 
-function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+function GetHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 var
   res: TResArray; // no heap allocation involved
@@ -3159,7 +3160,7 @@ begin
   result := @WrStrBuf;
 end;
 
-procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
+procedure WriteHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean);
 begin
   GetHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,
@@ -3656,7 +3657,7 @@ finalization
 
 {$endif FPCMM_STANDALONE}
 
-{$endif FPCX64MM}
+{$endif FPCX64MM_AVAILABLE}
 
 end.
 

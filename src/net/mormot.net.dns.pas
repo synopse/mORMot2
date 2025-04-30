@@ -550,7 +550,7 @@ var
   w: TBufferWriter;
   h: TDnsHeader;
   n: PUtf8Char;
-  one: shortstring;
+  one: ShortString;
 begin
   w := TBufferWriter.Create(tmp{%H-});
   try

@@ -2582,7 +2582,7 @@ const
     [optExecInMainThread, optFreeInMainThread]);
 
 /// return the interface execution options set as text
-function ToText(opt: TInterfaceMethodOptions): shortstring; overload;
+function ToText(opt: TInterfaceMethodOptions): ShortString; overload;
 
 
 { ************ SetWeak and SetWeakZero Weak Interface Reference }
@@ -6636,7 +6636,7 @@ begin
   result := @PerThreadRunningContext;
 end;
 
-function ToText(opt: TInterfaceMethodOptions): shortstring;
+function ToText(opt: TInterfaceMethodOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TInterfaceMethodOptions), opt, result);
 end;
@@ -6926,7 +6926,10 @@ procedure CallMethod(var Args: TCallMethodArgs);
 begin
   raise Exception.Create('mormot CallMethod not implemented');
 end;
-{$endif CPUARM}{$endif FPC}
+{$endif CPUARM}
+{$endif FPC}
+
+
 {$ifdef CPUX64}
 
 procedure CallMethod(var Args: TCallMethodArgs); assembler;

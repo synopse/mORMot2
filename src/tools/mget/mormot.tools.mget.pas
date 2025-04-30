@@ -209,33 +209,33 @@ begin
     if TrackNetwork and
        fPeerCache.NetworkInterfaceChanged then
     begin
-      l := Log.Enter(self, 'StartPeerCache: NetworkInterfaceChanged');
+      Log.EnterLocal(l, self, 'StartPeerCache: NetworkInterfaceChanged');
       PeerCacheStopping;
       fPeerCache := nil; // force re-create just below
       fPeerCacheInterface := '';
+      l := nil;
     end;
   // (re)create the peer-cache background process if necessary
-  if fPeerCache = nil then
-  begin
-    l := Log.Enter(self, 'StartPeerCache: THttpPeerCache.Create');
-    if (fPeerSecret = '') and
-       (fPeerSecretHexa <> '') then
-      fPeerSecret := HexToBin(fPeerSecretHexa);
-    try
-      peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
-        nil, 2, self.Log, @ServerTls, @ClientTls);
-      fPeerCache := peerinstance;
-      fPeerCacheInterface := peerinstance.IpPort;
-      peerinstance.OnDirectOptions := fOnPeerCacheDirectOptions;
-      // THttpAsyncServer could also be tried with rfProgressiveStatic
-      PeerCacheStarted(peerinstance); // may be overriden
-    except
-      // don't disable Peer: we would try on next Execute()
-      on E: Exception do
-        if Assigned(l) then
-          l.Log(sllTrace,
-            'StartPeerCache raised %: will retry next time', [E.ClassType]);
-    end;
+  if fPeerCache <> nil then
+    exit;
+  Log.EnterLocal(l, self, 'StartPeerCache: THttpPeerCache.Create');
+  if (fPeerSecret = '') and
+     (fPeerSecretHexa <> '') then
+    fPeerSecret := HexToBin(fPeerSecretHexa);
+  try
+    peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
+      nil, 2, self.Log, @ServerTls, @ClientTls);
+    fPeerCache := peerinstance;
+    fPeerCacheInterface := peerinstance.IpPort;
+    peerinstance.OnDirectOptions := fOnPeerCacheDirectOptions;
+    // THttpAsyncServer could also be tried with rfProgressiveStatic
+    PeerCacheStarted(peerinstance); // may be overriden
+  except
+    // don't disable Peer: we would try on next Execute()
+    on E: Exception do
+      if Assigned(l) then
+        l.Log(sllTrace,
+          'StartPeerCache raised %: will retry next time', [E.ClassType]);
   end;
 end;
 
@@ -278,7 +278,7 @@ var
   l: ISynLog;
 begin
   // prepare the process
-  l := Log.Enter('Execute %', [Url], self);
+  Log.EnterLocal(l, 'Execute %', [Url], self);
   // (re)start background THttpPeerCache process if needed
   StartPeerCache;
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'

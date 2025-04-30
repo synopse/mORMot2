@@ -412,8 +412,7 @@ var
 begin
   start := 0;
   elapsed := 0;
-  if Assigned(fLog) and
-     (sllTrace in fLog.Family.Level) then
+  if fLogClass.HasLevel([sllTrace]) then
     QueryPerformanceMicroSeconds(start); // we monitor frame sending timing
   fOutgoingSafe.Lock;
   try
@@ -627,7 +626,7 @@ var
   n: integer;
   log: ISynLog;
 begin
-  log := TSynLog.Enter(self, 'Destroy');
+  TSynLog.EnterLocal(log, self, 'Destroy');
   // notify at once all client connections - don't wait for answer
   closing.opcode := focConnectionClose;
   closing.content := [];

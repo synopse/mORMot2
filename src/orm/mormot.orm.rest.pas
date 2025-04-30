@@ -492,7 +492,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InternalLog(const Format: RawUtf8; const Args: array of const;
+    procedure InternalLog(Format: PUtf8Char; const Args: array of const;
       Level: TSynLogLevel = sllTrace); overload;
     function GetServerTimestamp: TTimeLog;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1074,7 +1074,7 @@ var
   T: TOrmTable;
   V: Int64;
   P: PUtf8Char;
-  field: shortstring;
+  field: ShortString;
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10
@@ -2555,7 +2555,7 @@ begin
   result := true; // always worth caching by default
 end;
 
-procedure TRestOrm.InternalLog(const Format: RawUtf8; const Args: array of const;
+procedure TRestOrm.InternalLog(Format: PUtf8Char; const Args: array of const;
   Level: TSynLogLevel);
 begin
   fRest.InternalLog(Format, Args, Level);

@@ -48,7 +48,6 @@ uses
   typinfo,  // use official RTL for accurate layouts (especially FPC unaligned)
   mormot.core.base,
   mormot.core.os,
-  mormot.core.os.security,
   mormot.core.unicode,
   mormot.core.text; // ESynException, and text process (e.g. for enums)
 
@@ -1717,7 +1716,7 @@ procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 function GetSetNameShort(aTypeInfo: PRttiInfo; value: pointer;
-  trimlowercase: boolean = false): shortstring; overload;
+  trimlowercase: boolean = false): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// low-level function parsing Value/ValueLen into a set, returned as 64-bit
@@ -1752,11 +1751,6 @@ function GetCaptionFromClass(C: TClass): string;
 
 { defined here to avoid circular dependency in mormot.core.os.pas }
 function ToText(cmd: TParseCommands): ShortString; overload;
-
-{ defined here to avoid circular dependency in mormot.core.os.security.pas }
-function ToText(w: TWellKnownSid): PShortString; overload;
-function ToText(w: TWellKnownRid): PShortString; overload;
-function ToText(a: TAdsKnownAttribute): PShortString; overload;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -1970,6 +1964,7 @@ type
 
   /// internal function handler for copying a class instance
   // - use TRttiCustom.Props.CopyProperties but may be overriden e.g. for TOrm
+  // or TClonable
   TRttiClassCopier = procedure(Dest, Source: TObject);
 
 
@@ -2591,7 +2586,6 @@ type
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fPrivateSlotsSafe: TLightLock; // topmost position to force aarch64 alignment
-    fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     fSetRandom: TRttiCustomRandom;
     // used by mormot.core.json.pas
     fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
@@ -2876,6 +2870,7 @@ type
     // used to release memory used by registered customizations
     fInstances: array of TRttiCustom;
     fGlobalClass: TRttiCustomClass;
+    fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     function GetByClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
@@ -3389,7 +3384,7 @@ function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
 function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 
 // internal wrappers to publish protected methods to mormot.core.json
-procedure CopyClonable(Dest, Source: TObject);
+procedure CopyTClonable(Dest, Source: TObject);
 procedure RttiSetParserTObjectWithRttiMethods(
   O: TObjectWithRttiMethodsClass; Rtti: TRttiCustom);
 
@@ -3592,7 +3587,7 @@ procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
   UsedValuesBits: pointer);
 var
   i, L: PtrInt;
-  Line: array[byte] of AnsiChar;
+  Line: TByteToAnsiChar;
   P: PAnsiChar;
   V: PShortString;
   s: string;
@@ -3777,14 +3772,14 @@ function TRttiEnumType.GetSetName(const value; trimmed: boolean; sep: AnsiChar):
 var
   j: PtrInt;
   PS, v: PShortString;
-  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
-  tmp2: shortstring;
+  tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
+  tmp2: ShortString;
 begin
   result := '';
   if (@self = nil) or
      (@value = nil) then
     exit;
-  tmp.InitOnStack;
+  tmp.Init;
   PS := NameList;
   for j := MinValue to MaxValue do
   begin
@@ -3802,10 +3797,10 @@ begin
     end;
     inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
-  if tmp.added = 0 then
+  if tmp.Size= 0 then
     exit;
-  dec(tmp.added); // cancel last comma
-  tmp.Done(result, CP_UTF8);
+  tmp.CancelLastChar; // cancel last comma
+  tmp.Done(result);
 end;
 
 procedure TRttiEnumType.GetSetNameArray(const value;
@@ -5355,21 +5350,6 @@ begin
   result := GetEnumName(TypeInfo(TRttiParserType), ord(t));
 end;
 
-function ToText(w: TWellKnownSid): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TWellKnownSid), ord(w));
-end;
-
-function ToText(w: TWellKnownRid): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TWellKnownRid), ord(w));
-end;
-
-function ToText(a: TAdsKnownAttribute): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TAdsKnownAttribute), ord(a));
-end;
-
 
 { **************** Published Class Properties and Methods RTTI }
 
@@ -6173,7 +6153,7 @@ function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
   customText: PRawUtf8Array; sepChar: AnsiChar): RawUtf8;
 var
   info: PRttiEnumType;
-  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
   result := '';
@@ -6182,17 +6162,17 @@ begin
      (@value = nil) or
      (customText = nil) then
     exit;
-  tmp.InitOnStack;
+  tmp.Init;
   for i := info^.MinValue to info^.MaxValue do
     if GetBitPtr(@value, i) then
     begin
       tmp.Add(customText^[i]);
       tmp.AddDirect(sepChar);
     end;
-  if tmp.added = 0 then
+  if tmp.Size = 0 then
     exit;
-  dec(tmp.added); // cancel last comma
-  tmp.Done(result, CP_UTF8);
+  tmp.CancelLastChar; // cancel last comma
+  tmp.Done(result);
 end;
 
 function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
@@ -6200,7 +6180,7 @@ function GetEnumArrayNameCustom(const value; valueLength: PtrInt;
 var
   b: TByteDynArray absolute value;
   w: TWordDynArray absolute value;
-  tmp: TSynTempBuffer; // no temp allocation up to 4KB of output text
+  tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
   result := '';
@@ -6210,8 +6190,8 @@ begin
      (b = nil) or
      (customText = nil) then
     exit;
-  tmp.InitOnStack;
-  if valueLength <= 256 then
+  tmp.Init;
+  if valueLength <= 256 then // stored as an array of 8-bit values
   begin
     for i := 0 to length(b) - 1 do
       if b[i] < valueLength then
@@ -6221,16 +6201,16 @@ begin
       end;
   end
   else
-    for i := 0 to length(w) - 1 do
+    for i := 0 to length(w) - 1 do // stored as an array of 16-bit values
       if w[i] < valueLength then
       begin
         tmp.Add(customText^[w[i]]);
         tmp.AddDirect(sepChar);
       end;
-  if tmp.added = 0 then
+  if tmp.Size = 0 then
     exit;
-  dec(tmp.added); // cancel last comma
-  tmp.Done(result, CP_UTF8);
+  tmp.CancelLastChar; // cancel last comma
+  tmp.Done(result);
 end;
 
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
@@ -6257,7 +6237,7 @@ begin
 end;
 
 function GetSetNameShort(aTypeInfo: PRttiInfo; value: pointer;
-  trimlowercase: boolean): shortstring;
+  trimlowercase: boolean): ShortString;
 begin
   GetSetNameShort(aTypeInfo, value^, result, trimlowercase);
 end;
@@ -6319,7 +6299,7 @@ end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   L: integer;
 begin
   L := ord(PS^[0]);
@@ -6570,24 +6550,25 @@ begin
     result := nil;
 end;
 {$else}
+type
+  // in-place decompilation of Delphi 7/2007 interface VMT redirection asm
+  TObjectFromInterfaceStub = packed record
+    Stub: cardinal;
+    case integer of
+      0:
+        (ShortJmp: shortint);
+      1:
+        (LongJmp:  integer)
+  end;
+  PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
+
 function ObjectFromInterface(const aValue: IInterface): TObject;
-  type
-    // in-place decompilation of Delphi 7/2007 interface VMT redirection asm
-    TObjectFromInterfaceStub = packed record
-      Stub: cardinal;
-      case integer of
-        0:
-          (ShortJmp: shortint);
-        1:
-          (LongJmp:  integer)
-    end;
-    PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
 begin
   result := nil;
   if aValue <> nil then
     with PObjectFromInterfaceStub(PPPointer(aValue)^^)^ do
       case Stub of
-        // check first asm opcodes of VMT[0] entry, i.e. QueryInterface()
+        // decode first x86 asm opcodes of VMT[0] entry, i.e. QueryInterface()
         $04244483:
           result := pointer(PtrInt(aValue) + ShortJmp);
         $04244481:
@@ -8935,7 +8916,6 @@ end;
 destructor TRttiCustom.Destroy;
 begin
   inherited Destroy;
-  ObjArrayClear(fOwnedRtti);
   TObject(fPrivateSlot).Free;
   ObjArrayClear(fPrivateSlots);
 end;
@@ -9563,7 +9543,7 @@ begin
       nested.SetPropsFromText(P, ee, NoRegister); // before NoRttiSetAndRegister()
       nested.NoRttiSetAndRegister(ptRecord, '', NoRegister);
       if NoRegister then
-        ObjArrayAdd(fOwnedRtti, nested);
+        ObjArrayAdd(Rtti.fOwnedRtti, nested);
       if pt = ptRecord then
         // rec: record .. end  or  rec: { ... }
         c := nested
@@ -9581,7 +9561,7 @@ begin
       c.fArrayRtti := ac; // before NoRttiSetAndRegister()
       c.NoRttiSetAndRegister(ptDynArray, typname, NoRegister);
       if NoRegister then
-        ObjArrayAdd(fOwnedRtti, c);
+        ObjArrayAdd(Rtti.fOwnedRtti, c);
     end;
     // set type for all prop[]
     for i := 0 to propcount - 1 do
@@ -9702,6 +9682,7 @@ var
 begin
   for i := Count - 1 downto 0 do
     fInstances[i].Free;
+  ObjArrayClear(fOwnedRtti);
   inherited Destroy;
   RegisterSafe.Done;
 end;
@@ -10673,9 +10654,9 @@ begin
     d[i] := TClonable(s[i]).Clone;
 end;
 
-procedure CopyClonable(Dest, Source: TObject);
+procedure CopyTClonable(Dest, Source: TObject);
 begin
-  TClonable(Source).AssignTo(TClonable(Dest));
+  TClonable(Source).AssignTo(TClonable(Dest)); // AssignTo is a protected method
 end;
 
 
@@ -10941,7 +10922,9 @@ begin
   PT_DYNARRAY[ptPUtf8Char]     := TypeInfo(TPUtf8CharDynArray);
   // prepare global thread-safe TRttiCustomList
   Rtti := RegisterGlobalShutdownRelease(TRttiCustomList.Create);
-  ClassUnit := _ClassUnit;
+  // replace mormot.core.base/mormot.core.os limited implementation
+  ClassUnit := @_ClassUnit;
+  GetEnumNameRtti := @GetEnumName;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
   RedirectRtl;

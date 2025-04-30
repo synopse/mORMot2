@@ -315,9 +315,8 @@ begin
   // Destroy will call fContext.Shutdown and remove the connection
   tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
-    fLog.Log(sllDebug, 'DoExecute: % finished at %/s - connections=%/%',
-      [fContext.FileName, KB((fFileSize * 1000) div tix),
-       fOwner.ConnectionCount, fOwner.ConnectionTotal], self);
+    fLog.Log(sllDebug, 'DoExecute: % finished at %/s',
+      [fn, KB((fFileSize * 1000) div tix)], self);
 end;
 
 procedure TTftpConnectionThread.NotifyShutdown;
@@ -471,8 +470,7 @@ begin
     if Assigned(fPosixFileNames) then
     begin
       fn := fPosixFileNames.Find(fn, @readms);
-      if (readms <> 0) and
-         (ttoLowLevelLog in fOptions) then
+      if readms <> 0 then
         // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
         fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
           [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);

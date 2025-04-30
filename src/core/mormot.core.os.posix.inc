@@ -72,8 +72,7 @@ begin
 end;
 {$endif}
 
-
-procedure WrDeb(const t: shortstring; const p; l: PtrInt); // internal use below
+procedure WrDeb(const t: ShortString; const p; l: PtrInt); // internal use below
 var
   tmp: RawUtf8;
 begin
@@ -92,11 +91,11 @@ begin
     if u = #0 then
       break;
     c := p^;
-      if (c >= 'a') and
-         (c <= 'z') then
-        dec(c, 32);
-        if c <> u then
-          exit;
+    if (c >= 'a') and
+       (c <= 'z') then
+      dec(c, 32);
+    if c <> u then
+      exit;
     inc(up);
     inc(p);
   until false;
@@ -646,7 +645,7 @@ begin
     if cnv <> nil then
     begin
       result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
-  icu.ucnv_close(cnv);
+      icu.ucnv_close(cnv);
     end
     else // fallback to cwstring/iconv (less complete than ICU)
       result := WideToAnsiRTL(CodePage, W, A, LW, LA);
@@ -912,24 +911,26 @@ function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_getres';
 
 {$else}
-  const
-    CLOCK_REALTIME         = 0;
-    CLOCK_MONOTONIC        = 1;
-    CLOCK_REALTIME_COARSE  = 5; // see http://lwn.net/Articles/347811
-    CLOCK_MONOTONIC_COARSE = 6;
-    CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
 
-  {$ifndef ISDELPHI}
-  // libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
-  // is compiled without FPC_USE_LIBC defined and do a syscall each time
-  //   GetTickCount64 fpc    2 494 563 op/sec
-  //   GetTickCount64 libc 119 919 893 op/sec
-  function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
-    cdecl external clib name 'clock_gettime'; // LIBC_SUFFIX fails on CentOS 7
+const
+  CLOCK_REALTIME         = 0;
+  CLOCK_MONOTONIC        = 1;
+  CLOCK_REALTIME_COARSE  = 5; // see http://lwn.net/Articles/347811
+  CLOCK_MONOTONIC_COARSE = 6;
+  CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
 
-  function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-    cdecl external clib name 'gettimeofday' + LIBC_SUFFIX;
-  {$endif ISDELPHI}
+{$ifndef ISDELPHI}
+// libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
+// is compiled without FPC_USE_LIBC defined and do a syscall each time
+//   GetTickCount64 fpc    2 494 563 op/sec
+//   GetTickCount64 libc 119 919 893 op/sec
+function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
+  cdecl external clib name 'clock_gettime'; // LIBC_SUFFIX fails on CentOS 7
+
+function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+  cdecl external clib name 'gettimeofday' + LIBC_SUFFIX;
+
+{$endif ISDELPHI}
 {$endif OSBSD}
 
 var
@@ -966,7 +967,7 @@ end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
-  r : {$ifdef ISDELPHI} timespec {$else} TTimeSpec {$endif ISDELPHI} ;
+  r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @r);
   // convert from nanoseconds into microseconds
@@ -1428,26 +1429,27 @@ begin
   else
     result := st.st_size;
 end;
-
-// function FileExists(const FileName: TFileName): boolean;
-function FileExists(const FileName: TFileName; FollowLink: boolean = true;
-  CheckAsDir: boolean = false): boolean;
+function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
   st: TStat;
 begin
-  result := (FileName <> '') and
-            ((FollowLink and (fpStat(pointer(FileName), st) = 0)) or
-             (not FollowLink and (fpLStat(pointer(FileName), st) = 0))) and
-            (FpS_ISDIR(st.st_mode) = CheckAsDir);
+  result := false;
+  if FileName = '' then
+    exit;
+  if FollowLink then
+  begin
+    if fpStat(pointer(FileName), st) <> 0 then
+      exit;
+  end
+  else if fpLStat(pointer(FileName), st) <> 0 then
+    exit;
+  result := (FpS_ISDIR(st.st_mode) = CheckAsDir);
 end;
 
-function DirectoryExists(const FolderName: TFileName): boolean;
-var
-  st: TStat;
+function SetCurrentDir(const NewDir: TFileName): boolean;
 begin
-  result := (FolderName <> '') and
-            (fpStat(pointer(FolderName), st) = 0) and
-            FpS_ISDIR(st.st_mode);
+  result := (NewDir <> '') and
+            (fpChdir(pointer(NewDir)) = 0);
 end;
 
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
@@ -2095,17 +2097,17 @@ begin
     exit;
   if KernelRevision >= $02061b then // not available prior to Kernel 2.6.27
   begin
-  flags := 0;
-  if nonblocking then
-    flags := EFD_NONBLOCK;
-  if semaphore then
-    flags := flags or EFD_SEMAPHORE;
+    flags := 0;
+    if nonblocking then
+      flags := EFD_NONBLOCK;
+    if semaphore then
+      flags := flags or EFD_SEMAPHORE;
     result := do_syscall(syscall_nr_eventfd2, 0, flags);
     if ValidHandle(result) then
       exit;
   end;
   __LinuxEventFdFailed := true; // don't retry next type
-    result := 0;
+  result := 0;
 end;
 {$else}
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
@@ -2146,11 +2148,6 @@ end;
 
 procedure AllocConsole;
 begin
-end;
-
-function HasConsole: boolean;
-begin
-  result := true;
 end;
 
 var
@@ -2198,7 +2195,7 @@ begin
   if c[0] = #0 then
     exit;
   ConsoleCriticalSection.Lock;
-    fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
+  fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
   ConsoleCriticalSection.UnLock;
 end;
 
@@ -2712,10 +2709,6 @@ var
             continue;
         DT_DIR:
           begin
-//          if Recursive and
-//             ({$ifdef ISDELPHI}AnsiChar({$endif}ent^.d_name[0]{$ifdef ISDELPHI}){$endif} <> '.') then
-//            withsub := true // DoFolder(fn) requires full nested path
-//          else
           if (ent^.d_name[0] = {$ifdef ISDELPHI} ord('.') {$else} '.' {$endif}) and
                ((not IncludeHiddenFiles) or
                 (ent^.d_name[1] = {$ifdef ISDELPHI} 0 {$else} #0 {$endif}) or
@@ -2743,13 +2736,13 @@ var
       else
         continue; // not a real file (e.g. link, sysproc or blockdev)
       end;
-        if n = 0 then // generous initial result capacity
-          SetLength(result, 128)
-        else if n = length(result) then
-          SetLength(result, NextGrow(n));
+      if n = 0 then // generous initial result capacity
+        SetLength(result, 128)
+      else if n = length(result) then
+        SetLength(result, NextGrow(n));
       MakeFileName(addedpath);
       pointer(result[n]) := fn;
-        inc(n);
+      inc(n);
     until false;
     FpClosedir(dir^);
     // now process the sub-folders recursively outside of FpOpendir/FpCLoseDir
@@ -2922,7 +2915,7 @@ function kenv(action: integer; name, value: PAnsiChar; len: integer): integer;
 
 function GetSmbEfiMem: RawByteString;
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   xaddr: PtrUInt;
 begin
   result := '';
@@ -2958,7 +2951,7 @@ const
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
 begin
   for i := 0 to high(_KNOWN) do
     with _KNOWN[i] do
@@ -3064,7 +3057,7 @@ var
   times: TBsdProcTimes absolute mem.filefree;
   {$endif OSDARWIN}
 begin
-  //some minimal OS entropy we could get for BSD/Darwin
+  // some minimal OS entropy we could get for BSD/Darwin
   QueryPerformanceMicroSeconds(us);
   getloadavg(avg, 3); // cpu stats and random stack data in mem
   DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // may be AesNiHash128
@@ -3089,7 +3082,7 @@ end;
 
 {$else} // Linux (and Android) specific code
 
-procedure FindNameValue(p: PUtf8Char; const up: shortstring; var res: RawUtf8);
+procedure FindNameValue(p: PUtf8Char; const up: ShortString; var res: RawUtf8);
 var
   L: PtrInt;
 begin
@@ -3113,7 +3106,7 @@ begin
   FastAssignNew(res);
 end;
 
-function FindNameValueCardinal(p: PUtf8Char; const up: shortstring): PtrUInt; {$ifdef ISDELPHI} overload; {$endif}
+function FindNameValueCardinal(p: PUtf8Char; const up: ShortString): PtrUInt; {$ifdef ISDELPHI} overload {$endif ISDELPHI}
 begin
   while p <> nil do
     if IdemPChar(p, @up[1]) then // agressively inlined on FPC
@@ -3132,7 +3125,7 @@ function FindNameValueCardinal(p: PAnsiChar; const up: shortstring): PtrUInt; in
 begin
   result:= FindNameValueCardinal(PUtf8Char(P), up);
 end;
-{$endif}
+{$endif ISDELPHI}
 
 procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
 var
@@ -3247,7 +3240,7 @@ begin
   LoadProcFileTrimed(fn, result);
 end;
 
-procedure FindFileValue(fn: PAnsiChar; const up: shortstring; var res: RawUtf8);
+procedure FindFileValue(fn: PAnsiChar; const up: ShortString; var res: RawUtf8);
 var
   buf: TSynTempBuffer; // reading up to 4KB of content is enough
 begin
@@ -3255,7 +3248,7 @@ begin
   FindNameValue(@buf, up, res);
 end;
 
-function FindFileCardinal(fn: PAnsiChar; const up: shortstring): PtrUInt;
+function FindFileCardinal(fn: PAnsiChar; const up: ShortString): PtrUInt;
 var
   buf: TSynTempBuffer; // reading up to 4KB of content is enough
 begin
@@ -3263,9 +3256,9 @@ begin
   result := FindNameValueCardinal(PUtf8Char(@buf), up) // Cast for delphi compatibility
 end;
 
-function FindPidStatus(pid: cardinal; const up: shortstring): cardinal;
+function FindPidStatus(pid: cardinal; const up: ShortString): cardinal;
 var
-  fn: shortstring; // avoid any memory allocation
+  fn: ShortString; // avoid any memory allocation
 begin
   fn := '/proc/';
   AppendShortCardinal(pid, fn);
@@ -3302,8 +3295,7 @@ begin
        (AnsiChar(e.d_name[0]) in ['1'..'9']) then
     begin
       pid := GetCardinal(@e.d_name[0]);
-      if (pid <> 0) and
-         IsValidPid(pid) then
+      if IsValidPid(pid) then
         AddInteger(TIntegerDynArray(result), n, pid);
     end;
   until false;
@@ -3319,7 +3311,7 @@ var
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 var
-  fn: shortstring;
+  fn: ShortString;
   tmp: TSynTempBuffer;
   n: AnsiChar;
 begin
@@ -3371,11 +3363,11 @@ begin
   result[0] := #0;
   if SysInfo(@si) <> 0 then // one syscall is faster than /proc/loadavg access
     exit;
-  AppendShort(TwoDigits(si.loads[0] / 65536.0), result);
+  AppendShort(TwoDigits(si.loads[0] / double(65536.0)), result);
   AppendShortChar(' ', @result);
-  AppendShort(TwoDigits(si.loads[1] / 65536.0), result);
+  AppendShort(TwoDigits(si.loads[1] / double(65536.0)), result);
   AppendShortChar(' ', @result);
-  AppendShort(TwoDigits(si.loads[2] / 65536.0), result);
+  AppendShort(TwoDigits(si.loads[2] / double(65536.0)), result);
 end; // we didn't use AppendShortCurr64() because of expected rounding
 
 function RetrieveSysInfo(var si: TSysInfo): boolean;
@@ -3502,7 +3494,7 @@ const
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
-  n: shortstring;
+  n: ShortString;
 begin
   n := '/sys/class/dmi/id/';
   for i := 0 to high(_KNOWN) do
@@ -3684,14 +3676,14 @@ begin
   {$endif OSLINUX}
   begin
     dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
-  if (dev <= 0) and
+    if (dev <= 0) and
        AllowBlocking then // paranoid: any decent POSIX system has /dev/urandom
     begin
       if rd > 16 then
         rd := 16; // better to get only 128-bit from old blocking /dev/random
       dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
     end;
-  if dev > 0 then
+    if dev > 0 then
     begin
       result := (FileRead(dev, Buffer[0], rd) = rd);
       FileClose(dev);
@@ -3768,7 +3760,7 @@ begin
     exit;
   fn := mnt;
   //writeln('GetDiskInfo=',GetDiskInfo(fn, av, fr, tot));
-  //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',_oskb(av),' fr=',_oskb(fr),' tot=',_oskb(tot));
+  //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
   if not (GetDiskInfo(fn, av, fr, tot)) or
      (tot < 1 shl 20) then
     exit;
@@ -3838,7 +3830,7 @@ end;
 function GetDiskPartitions: TDiskPartitions;
 var
   mounts: RawUtf8;
-  p:  PUtf8Char;
+  p: PUtf8Char;
   n: PtrInt;
 begin
   // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
@@ -4218,7 +4210,7 @@ var
 begin
   result := RunUntilSigTerminatedPidFileName;
   if result <> '' then
-      exit;
+    exit;
   // guess the folder to use for this daemon
   result := RunUntilSigTerminatedPidFilePath;
   if result = '' then
@@ -4267,10 +4259,10 @@ begin
   {$ifdef OSLINUX} // BSD does not implement this (yet)
   if IsNotCurrentExeDaemonized(pid) then
     result := DeleteFile(pidfile) // this daemon does not exist any more
-    else
+  else
   {$endif OSLINUX}
   if fpkill(pid, SIGTERM) <> 0 then  // polite/weak quit failed
-      begin
+  begin
     if fpgeterrno = ESysESRCH then   // ESysESRCH = no such process
       result := DeleteFile(pidfile); // crashed and not restarted -> clean
   end
@@ -4285,7 +4277,7 @@ begin
       pidnew := GetInteger(pointer(StringFromFile(pidfile)));
       result := (pidnew = 0) or (pidnew <> pid); // stopped or restarted
       if result then
-    exit;
+        exit;
     until GetTickCount64 > tix;
     // timeout: murder with finesse
     if {$ifdef OSLINUX}
@@ -4402,13 +4394,7 @@ begin
   pid := FpFork;
   {$ifend}
   {$else}
-  {$ifdef ISDELPHI}
-    {_$ifndef ANDROID  ???}
-    pid := FpFork;
-    {_$endif ANDROID}
-  {$else}
-   'only FPC/DELPHI is supported yet';
-  {$endif ISDELPHI}
+  'only FPC is supported yet';
   {$endif FPC}
   if pid < 0 then
   begin
@@ -4518,10 +4504,9 @@ function RunRedirect(const cmd: TFileName; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal;
   setresult: boolean; const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
 {$ifdef ISDELPHI}
-  begin
-    result:= '';
-  end;
-  {$Message WARN 'Run commands in Delphi not supported yet!'}
+begin
+  result:= '';
+end;
 {$else}
 var
   // notes: - FPC popen() allows access to the pid whereas clib popen() won't
@@ -4717,7 +4702,7 @@ end;
 function _GetSystemMacAddress: TRawUtf8DynArray;
 var
   SR: TSearchRec;
-  fn: shortstring;
+  fn: ShortString;
   fnl: AnsiChar;
   f: RawUtf8;
 begin
@@ -4941,8 +4926,8 @@ begin
   if CpuCacheSize = 0 then
     CpuCacheSize := CpuCache[1].Size;
   if CpuCacheSize <> 0 then
-    _fmt('L1=%s L2=%s L3=%s', [_oskb(CpuCache[1].Size),
-      _oskb(CpuCache[2].Size), _oskb(CpuCache[3].Size)], CpuCacheText);
+    _fmt('L1=%s L2=%s L3=%s', [KBNoSpace(CpuCache[1].Size),
+      KBNoSpace(CpuCache[2].Size), KBNoSpace(CpuCache[3].Size)], CpuCacheText);
   SystemMemorySize := fpsysctlhwint(HW_MEMSIZE);
   {$else}
   SystemMemorySize := fpsysctlhwint(HW_PHYSMEM);
@@ -5087,7 +5072,7 @@ begin
   {$endif OSBSDDARWIN}
   SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
-    _fmt('[%s]', [_oskb(CpuCacheSize)], CpuInfoText);
+    _fmt('[%s]', [KBNoSpace(CpuCacheSize)], CpuInfoText);
   if CpuSockets = 0 then
     CpuSockets := 1;
   if fpuname(uts) < 0 then
@@ -5196,12 +5181,12 @@ begin
          (crc32carm64(0, @SystemInfo, SizeOf(SystemInfo)) =
            crc32cfast(0, @SystemInfo, SizeOf(SystemInfo))) then
       begin
-        crc32c := @crc32carm64;
-        DefaultHasher := @crc32carm64;
+        crc32c          := @crc32carm64;
+        DefaultHasher   := @crc32carm64;
         InterningHasher := @crc32carm64;
-        crc32cby4 := @crc32cby4arm64;
-        crcblock := @crc32blockarm64;
-        crcblocks := @crc32blocksarm64;
+        crc32cby4       := @crc32cby4arm64;
+        crcblock        := @crc32blockarm64;
+        crcblocks       := @crc32blocksarm64;
       end;
       if crc32arm64(0, @SystemInfo, SizeOf(SystemInfo)) =
           crc32fast(0, @SystemInfo, SizeOf(SystemInfo)) then

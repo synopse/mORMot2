@@ -484,6 +484,17 @@ type
   PObjectArray = ^TObjectArray;
   TPtrIntArray = array[ 0 .. MaxInt div SizeOf(PtrInt) - 1 ] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
+  TByteToByte = array[byte] of byte;
+  TByteToAnsiChar = array[byte] of AnsiChar;
+  TByteToWideChar = array[byte] of WideChar;
+  /// type of mormot.core.unicode TNormTable lookup table
+  TAnsiCharToAnsiChar = array[AnsiChar] of AnsiChar;
+  /// type of a lookup table used for fast two-digit chars conversion
+  TAnsiCharToWord = array[AnsiChar] of word;
+  PAnsiCharToWord = ^TAnsiCharToWord;
+  /// type of a lookup table used for fast two-digit chars conversion
+  TByteToWord = array[byte] of word;
+  PByteToWord = ^TByteToWord;
   PInt64Rec = ^Int64Rec;
   PLongRec = ^LongRec;
   PPShortString = ^PShortString;
@@ -946,6 +957,9 @@ procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
+/// simple concatenation of no banker rounding floating point value as TwoDigits()
+procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
+
 /// simple concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar = #255);
@@ -958,7 +972,12 @@ procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
 
 /// simple concatenation of two characters into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
-procedure AppendShortTwoChars(twochars, dest: PAnsiChar);
+procedure AppendShortTwoChars(twochars, dest: PAnsiChar); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// simple concatenation of two characters (as 16-bit integer) into a @shorstring
+// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// simple concatenation of a #0 ending text into a @shorstring
@@ -1081,7 +1100,7 @@ function DateTimeToIsoString(dt: TDateTime): string;
 /// parse a '0x#####' buffer context into a 32-bit binary
 // - jump trailing '0x', then ends at first non hexadecimal character
 // - internal function to avoid linking mormot.core.buffers.pas
-function ParseHex0x(p: PAnsiChar): cardinal;
+function ParseHex0x(p: PAnsiChar; no0x: boolean = false): cardinal;
 
 /// parse an hexadecimal buffer into its raw binary
 // - parse up to n chars from p^, ending in case of not hexadecimal char
@@ -1268,6 +1287,7 @@ procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 /// no banker rounding into text, with two digits after the decimal point
 // - i.e. SimpleRoundTo2DigitsCurr64() as text
 function TwoDigits(const d: double): TShort23;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// truncate a currency value to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
@@ -2336,25 +2356,25 @@ type
   /// map a 128-bit hash as an array of lower bit size values
   // - consumes 16 bytes of memory
   THash128Rec = packed record
-  case integer of
-  0: (
-      Lo, Hi: Int64);
-  1: (
-      L, H: QWord);
-  2: (
-      i0, i1, i2, i3: integer);
-  3: (
-      c0, c1, c2 ,c3: cardinal);
-  4: (
-      c: TBlock128);
-  5: (
-      b: THash128);
-  6: (
-      w: array[0..7] of word);
-  7: (
-      l64, h64: Int64Rec);
-  8: (
-      guid: TGuid);
+    case integer of
+      0: (
+          Lo, Hi: Int64);
+      1: (
+          L, H: QWord);
+      2: (
+          i0, i1, i2, i3: integer);
+      3: (
+          c0, c1, c2 ,c3: cardinal);
+      4: (
+          c: TBlock128);
+      5: (
+          b: THash128);
+      6: (
+          w: array[0..7] of word);
+      7: (
+          l64, h64: Int64Rec);
+      8: (
+          guid: TGuid);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -2372,27 +2392,27 @@ type
   /// map a 256-bit hash as an array of lower bit size values
   // - consumes 32 bytes of memory
   THash256Rec = packed record
-  case integer of
-  0: (
-      Lo, Hi: THash128);
-  1: (
-      d0, d1, d2, d3: Int64);
-  2: (
-      i0, i1, i2, i3, i4, i5, i6, i7: integer);
-  3: (
-      c0, c1: TBlock128);
-  4: (
-      b: THash256);
-  5: (
-      q: array[0..3] of QWord);
-  6: (
-      c: array[0..7] of cardinal);
-  7: (
-      w: array[0..15] of word);
-  8: (
-     l, h: THash128Rec);
-  9: (
-     sha1: THash160);
+    case integer of
+      0: (
+          Lo, Hi: THash128);
+      1: (
+          d0, d1, d2, d3: Int64);
+      2: (
+          i0, i1, i2, i3, i4, i5, i6, i7: integer);
+      3: (
+          c0, c1: TBlock128);
+      4: (
+          b: THash256);
+      5: (
+          q: array[0..3] of QWord);
+      6: (
+          c: array[0..7] of cardinal);
+      7: (
+          w: array[0..15] of word);
+      8: (
+         l, h: THash128Rec);
+      9: (
+         sha1: THash160);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
@@ -2415,36 +2435,36 @@ type
   /// map a 512-bit hash as an array of lower bit size values
   // - consumes 64 bytes of memory
   THash512Rec = packed record
-  case integer of
-  0: (
-      Lo, Hi: THash256);
-  1: (
-      h0, h1, h2, h3: THash128);
-  2: (
-      d0, d1, d2, d3, d4, d5, d6, d7: Int64);
-  3: (
-      i0, i1, i2, i3, i4, i5, i6, i7,
-      i8, i9, i10, i11, i12, i13, i14, i15: integer);
-  4: (
-      c0, c1, c2, c3: TBlock128);
-  5: (
-      b: THash512);
-  6: (
-      b160: THash160);
-  7: (
-      b384: THash384);
-  8: (
-      w: array[0..31] of word);
-  9: (
-      c: array[0..15] of cardinal);
-  10: (
-       i: array[0..7] of Int64);
-  11: (
-       q: array[0..7] of QWord);
-  12: (
-       r: array[0..3] of THash128Rec);
-  13: (
-       l, h: THash256Rec);
+    case integer of
+      0: (
+          Lo, Hi: THash256);
+      1: (
+          h0, h1, h2, h3: THash128);
+      2: (
+          d0, d1, d2, d3, d4, d5, d6, d7: Int64);
+      3: (
+          i0, i1, i2, i3, i4, i5, i6, i7,
+          i8, i9, i10, i11, i12, i13, i14, i15: integer);
+      4: (
+          c0, c1, c2, c3: TBlock128);
+      5: (
+          b: THash512);
+      6: (
+          b160: THash160);
+      7: (
+          b384: THash384);
+      8: (
+          w: array[0..31] of word);
+      9: (
+          c: array[0..15] of cardinal);
+      10: (
+           i: array[0..7] of Int64);
+      11: (
+           q: array[0..7] of QWord);
+      12: (
+           r: array[0..3] of THash128Rec);
+      13: (
+           l, h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -3011,7 +3031,12 @@ type
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
+  // - published here mainly for testing/regression purposes
   X64CpuFeatures: TX64CpuFeatures;
+
+const
+  // identify Intel/AMD AVX2+BMI support at Haswell level
+  CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
 
 {$ifdef ASMX64AVXNOCONST}
 /// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
@@ -3029,18 +3054,26 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 // - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
 // and on x86_64, ERMS is wrongly used even for small blocks
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
+{$ifdef FPC_PICX64}
+var FillcharFast: procedure(var dst; cnt: PtrInt; value: byte) = FillChar;
+{$else}
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
+{$endif FPC_PICX64}
 
 /// our fast version of move() on Intel/AMD
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available)
 // - FPC i386 has fastmove.inc which is faster than our SSE2/ERMS version
-// - FPC x86_64 RTL is slower than our SSE2/AVX asm
+// - FPC x86_64 RTL is slower than our SSE2/AVX asm but supports PIC (.so)
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef FPC_X86}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 {$else}
-procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$ifdef FPC_PICX64}
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+{$else}
+procedure MoveFast(const src; var dst; cnt: PtrInt); { use our AVX-ready asm }
+{$endif FPC_PICX64}
 {$endif FPC_X86}
 
 {$else}
@@ -3419,7 +3452,7 @@ type
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of data
-  // - can be used as string/buffer generator via Add/AddShort/Done methods
+  // - see also TSynTempAdder string/buffer generator with its Add*() methods
   // - all Init() methods will allocate 16 more bytes, for a #0 terminator and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
@@ -3428,13 +3461,11 @@ type
   {$else}
   TSynTempBuffer = object
   {$endif USERECORDWITHMETHODS}
-  private
-    procedure AddRealloc(new: PtrInt);
   public
     /// the text/binary length, in bytes, excluding the #0 terminator
-    // - is the current capacity when Add()/AddShort() are used
+    // - is the current buffer capacity when TSynTempAdder is used
     len: integer;
-    /// how many bytes have been stored with Add()/AddShort() overloaded methods
+    /// how many bytes have been stored from TSynTempAdder associated methods
     added: integer;
     /// where the text/binary is available (and any Source has been copied)
     // - equals nil if len=0
@@ -3479,6 +3510,26 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUtf8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUtf8); overload;
+  end;
+  PSynTempBuffer = ^TSynTempBuffer;
+
+  /// implements a content appender, based on TSynTempBuffer
+  // - will avoid temporary memory allocation via the heap for up to 4KB of data
+  // - use Init, then Add/AddShort/AddDirect, and eventually Done() methods
+  {$ifdef USERECORDWITHMETHODS}
+  TSynTempAdder = record
+  {$else}
+  TSynTempAdder = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    procedure AddRealloc(new: PtrInt);
+  public
+    /// direct access to the internal temporary buffer
+    Store: TSynTempBuffer;
+    /// initialize a local buffer from stack, as Temp.InitOnStack
+    procedure Init; overload;
+    /// initialize a local buffer from stack or with a minimum capacity
+    procedure Init(StartupCapacity: PtrInt); overload;
     /// prepare to append some bytes to the internal buffer
     // - returns the destination buffer where l bytes should be written
     function Add(l: PtrInt): pointer; overload;
@@ -3503,10 +3554,21 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an unsigned number as text to the internal buffer
     procedure AddU(v: PtrUInt);
-    /// finalize the Add() temporary storage, and create a RawByteString from it
-    procedure Done(var Dest; CodePage: cardinal = CP_RAWBYTESTRING); overload;
+    /// finalize the Add() temporary storage into a new RawUtf8 (or AnsiString)
+    procedure Done(var Dest: RawUtf8; CodePage: cardinal = CP_UTF8);
+    /// could be called if Size > 0 to remove the last char in the output buffer
+    procedure CancelLastChar;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// access of the whole content buffer, as generated by Add*() methods
+    property Buffer: pointer
+      read Store.buf;
+    /// how many bytes have been stored via Add*() methods
+    property Size: integer
+      read Store.added;
+    /// the current allocated/allowed size in bytes in the internal Buffer
+    property Capacity: integer
+      read Store.len;
   end;
-  PSynTempBuffer = ^TSynTempBuffer;
 
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:
@@ -4362,7 +4424,7 @@ type
   end;
 
 /// raise a EStreamError exception - e.g. from TSynMemoryStream.Write
-function RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
+function RaiseStreamError(Caller: TObject; const Context: ShortString): PtrInt;
 
 
 { ************ Raw Shared Constants / Types Definitions }
@@ -4430,7 +4492,7 @@ type
   // - match class procedure TSynLog.DoLog
   // - used e.g. by global variables like WindowsServiceLog in mormot.core.os
   // or TCrtSocket.OnLog in mormot.net.sock
-  TSynLogProc = procedure(Level: TSynLogLevel; const Fmt: RawUtf8;
+  TSynLogProc = procedure(Level: TSynLogLevel; Fmt: PUtf8Char;
      const Args: array of const; Instance: TObject = nil) of object;
 
 {$ifndef PUREMORMOT2}
@@ -4672,13 +4734,9 @@ begin
 end;
 
 function TwoDigits(const d: double): TShort23;
-var
-  v: Int64;
 begin
-  DoubleToCurrency(d, PCurrency(@v)^); // specific code for x87
-  SimpleRoundTo2DigitsCurr64(v);
   result[0] := #0;
-  AppendShortCurr64(v, result, {decimals=}2);
+  AppendShortTwoDigits(d, result);
 end;
 
 function TruncTo2Digits(const Value: Currency): Currency;
@@ -5202,6 +5260,12 @@ begin
   inc(dest[0], 2);
 end;
 
+procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar);
+begin
+  PWord(dest + ord(dest[0]) + 1)^ := twochars;
+  inc(dest[0], 2);
+end;
+
 procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
 begin
   if len + ord(dest[0]) > 255 then
@@ -5322,11 +5386,29 @@ begin
      (p[l - 5] = '.') then
     if PCardinal(@p[l - 4])^ = $30303030 then
       dec(l, 5)  // x.0000 -> x
-    else if fixeddecimals <> 0 then
-      dec(l, 4 - fixeddecimals)
-    else if PWord(@p[l - 2])^ = $3030 then
-      dec(l, 2); // x.xx00 -> x.xx
+    else
+      case fixeddecimals of
+        0:
+          if PWord(@p[l - 2])^ = $3030 then
+            dec(l, 2); // x.xx00 -> x.xx
+        1:
+          if p[l - 4] = '0' then
+            dec(l, 5) // x.0 -> x (not truly fixed to 1 decimal)
+          else
+            dec(l, 3);
+      else
+        dec(l, 4 - fixeddecimals); // keep x.00 x.000
+      end;
   AppendShortBuffer(p, l, @dest);
+end;
+
+procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
+var
+  v: Int64;
+begin
+  DoubleToCurrency(Value, PCurrency(@v)^); // specific code for x87
+  SimpleRoundTo2DigitsCurr64(v);
+  AppendShortCurr64(v, Dest, {decimals=}2);
 end;
 
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
@@ -5569,31 +5651,35 @@ begin
   end;
 end;
 
-function ParseHex0x(p: PAnsiChar): cardinal;
+function ParseHex0x(p: PAnsiChar; no0x: boolean): cardinal;
 var
   v0, v1: integer;
 begin
   result := 0;
   if p = nil then
     exit;
-  while p^ <> 'x' do
-    if p^ = #0 then
-      exit
-    else
-      inc(p);
-  repeat
+  if not no0x then
+  begin
+    while p^ <> 'x' do
+      if p^ = #0 then
+        exit
+      else
+        inc(p);
     inc(p); // points to trailing 'x' at start
+  end;
+  repeat
     v0 := Hex2Dec(p^);
     if v0 < 0 then
-      break; // not in '0'..'9','a'..'f'
+      break; // not in '0'..'9','a'..'f' -> trim right
     inc(p);
     v1 := Hex2Dec(p^);
     if v1 < 0 then
     begin
-      result := (result shl 4) or cardinal(v0); // only one char left
+      result := (result shl 4) or cardinal(v0); // only one char left = 4-bit
       break;
     end;
-    result := (result shl 8) or (cardinal(v0) shl 4) or cardinal(v1);
+    result := (result shl 8) or (cardinal(v0) shl 4) or cardinal(v1); // 8-bit
+    inc(p);
   until false;
 end;
 
@@ -6445,41 +6531,6 @@ begin
 end;
 
 {$endif CPU64}
-
-function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
-var
-  c: QWord;
-  d: cardinal;
-begin
-  if Value = 0 then
-  begin
-    result := P - 1;
-    result^ := '0';
-    exit;
-  end;
-  if Value < 0 then
-    c := -Value
-  else
-    c := Value;
-  if c < 10000 then
-  begin
-    result := P - 6; // only decimals -> append '0.xxxx'
-    PCardinal(result)^ := ord('0') + ord('.') shl 8;
-    YearToPChar(c, PUtf8Char(P) - 4);
-  end
-  else
-  begin
-    result := StrUInt64(P - 1, c);
-    d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
-    PCardinal(P - 4)^ := d;
-    P[-5] := '.'; // insert '.' just before last 4 decimals
-  end;
-  if Value < 0 then
-  begin
-    dec(result);
-    result^ := '-';
-  end;
-end;
 
 function ToShort(const val: Int64): TShort23;
 var
@@ -10176,12 +10227,12 @@ begin
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
-    [cfSSE3, cfSSE42, cfPOPCNT, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfFMA];
+    [cfSSE3, cfSSE42, cfPOPCNT, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfAVX10, cfFMA];
   {$else}
   if not (cfOSXS in CpuFeatures) or
      not IsXmmYmmOSEnabled then
     // AVX is available on the CPU, but not supported at OS context switch
-    CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
+    CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfAVX10, cfFMA];
   {$endif DISABLE_SSE42}
   if cfRAND in CpuFeatures then
     try
@@ -11565,10 +11616,10 @@ end;
 
 function TSynTempBuffer.InitOnStack: pointer;
 begin
-  buf := @tmp;
-  len := SizeOf(tmp);
+  len := SizeOf(tmp) - SYNTEMPTRAIL;
   added := 0;
   result := @tmp;
+  buf := result;
 end;
 
 procedure TSynTempBuffer.Init(const Source: RawByteString);
@@ -11652,36 +11703,49 @@ begin
     FreeMem(buf);
 end;
 
-procedure TSynTempBuffer.AddRealloc(new: PtrInt);
+
+{ TSynTempAdder }
+
+procedure TSynTempAdder.Init;
 begin
-  len := NextGrow(new);
-  if buf = @tmp then
+  Store.InitOnStack;
+end;
+
+procedure TSynTempAdder.Init(StartupCapacity: PtrInt);
+begin
+  Store.Init(StartupCapacity);
+end;
+
+procedure TSynTempAdder.AddRealloc(new: PtrInt);
+begin
+  Store.len := NextGrow(new);
+  if Store.buf = @Store.tmp then
   begin
-    GetMem(buf, len + SYNTEMPTRAIL);
-    MoveFast(tmp, buf^, added);
+    GetMem(Store.buf, Store.len + SYNTEMPTRAIL);
+    MoveFast(Store.tmp, Store.buf^, Store.added);
   end
   else
-    ReAllocMem(buf, len + SYNTEMPTRAIL);
+    ReAllocMem(Store.buf, Store.len + SYNTEMPTRAIL);
 end;
 
-function TSynTempBuffer.Add(l: PtrInt): pointer;
+function TSynTempAdder.Add(l: PtrInt): pointer;
 var
-  new: PtrInt;
+  new: integer;
 begin
-  new := added + l;
-  if new > len then // len is capacity here
+  new := l + Store.added;
+  if new > Store.len then // len is capacity here
     AddRealloc(new);
-  result := PAnsiChar(buf) + added;
-  inc(added, l);
+  result := PAnsiChar(Store.buf) + Store.added;
+  inc(Store.added, l);
 end;
 
-procedure TSynTempBuffer.Add(p: pointer; l: PtrInt);
+procedure TSynTempAdder.Add(p: pointer; l: PtrInt);
 begin
   if l > 0 then
     MoveFast(p^, Add(l)^, l);
 end;
 
-procedure TSynTempBuffer.Add(const s: RawByteString);
+procedure TSynTempAdder.Add(const s: RawByteString);
 var
   l: PtrInt;
 begin
@@ -11691,25 +11755,25 @@ begin
   MoveFast(pointer(s)^, Add(l)^, l);
 end;
 
-procedure TSynTempBuffer.AddShort(const s: ShortString);
+procedure TSynTempAdder.AddShort(const s: ShortString);
 begin
   if s[0] <> #0 then
     MoveFast(s[1], Add(ord(s[0]))^, ord(s[0]));
 end;
 
-procedure TSynTempBuffer.AddDirect(c: AnsiChar);
+procedure TSynTempAdder.AddDirect(c: AnsiChar);
 begin
-  PUtf8Char(buf)[added] := c;
-  inc(added); // append directly within SYNTEMPTRAIL bytes
+  PUtf8Char(Store.buf)[Store.added] := c;
+  inc(Store.added); // append directly within SYNTEMPTRAIL bytes
 end;
 
-procedure TSynTempBuffer.AddDirect(const c1, c2: AnsiChar);
+procedure TSynTempAdder.AddDirect(const c1, c2: AnsiChar);
 begin
-  PWord(PUtf8Char(buf) + added)^ := ord(c1) + ord(c2) shl 8;
-  inc(added, 2); // append directly within SYNTEMPTRAIL bytes
+  PWord(PUtf8Char(Store.buf) + Store.added)^ := ord(c1) + ord(c2) shl 8;
+  inc(Store.added, 2); // append directly within SYNTEMPTRAIL bytes
 end;
 
-procedure TSynTempBuffer.AddU(v: PtrUint);
+procedure TSynTempAdder.AddU(v: PtrUint);
 var
   t: array[0..23] of AnsiChar;
   P: PAnsiChar;
@@ -11718,14 +11782,16 @@ begin
   Add(P, @t[23] - P);
 end;
 
-procedure TSynTempBuffer.Done(var Dest; CodePage: cardinal);
+procedure TSynTempAdder.Done(var Dest: RawUtf8; CodePage: cardinal);
 begin
-  FastSetStringCP(Dest, buf, added, CodePage);
-  if (buf <> @tmp) and
-     (buf <> nil) then
-    FreeMem(buf);
+  FastSetStringCP(Dest, Store.buf, Store.added, CodePage);
+  Store.Done;
 end;
 
+procedure TSynTempAdder.CancelLastChar;
+begin
+  dec(Store.added); // caller should have tested that Size = Store.added > 0
+end;
 
 procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
 begin
@@ -12170,6 +12236,41 @@ begin
 end;
 
 {$endif ASMX86}
+
+function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
+var
+  c: QWord;
+  d: cardinal;
+begin
+  if Value = 0 then
+  begin
+    result := P - 1;
+    result^ := '0';
+    exit;
+  end;
+  if Value < 0 then
+    c := -Value
+  else
+    c := Value;
+  if c < 10000 then
+  begin
+    result := P - 6; // only decimals -> append '0.xxxx'
+    PCardinal(result)^ := ord('0') + ord('.') shl 8;
+    YearToPChar(c, PUtf8Char(P) - 4);
+  end
+  else
+  begin
+    result := StrUInt64(P - 1, c);
+    d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
+    PCardinal(P - 4)^ := d;
+    P[-5] := '.'; // insert '.' just before last 4 decimals
+  end;
+  if Value < 0 then
+  begin
+    dec(result);
+    result^ := '-';
+  end;
+end;
 
 function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
 begin
@@ -12885,8 +12986,8 @@ end;
 
 function SortDynArrayShortString(const A, B): integer;
 var
-  sa: shortstring absolute A;
-  sb: shortstring absolute B;
+  sa: ShortString absolute A;
+  sb: ShortString absolute B;
   la, lb: PtrInt;
 begin
   la := ord(sa[0]);
@@ -13016,7 +13117,7 @@ end;
 
 { ************ Some Convenient TStream descendants }
 
-function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
+function {%H-}RaiseStreamError(Caller: TObject; const Context: ShortString): PtrInt;
 begin
   raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
 end;

@@ -20,9 +20,9 @@
  - use SS2 and not FPU fld/fst which may trigger unexpected exceptions (Agner)
  - use dedicated branchless sub-functions for small buffers of 0..32 bytes
  - use simple SSE2 loop for 33..255 bytes
- - assume ERBMS is available (cpuid flag may not be propagated within VMs)
+ - assume ERMSB is available (cpuid flag may not be propagated within VMs)
  - use "rep movsb" for 256..512K input (should work on all CPUs, even older with
- no ERBMS), or as fallback if no SSE2 CPU is used
+   no ERMSB), or as fallback if no SSE2 CPU is used
  - use non volatile SSE2 loop when >= 512KB (to not pollute the CPU cache)
  - don't use backward "std rep movsb" since it is not involved by ERMBS (slow)
  - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated

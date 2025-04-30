@@ -89,7 +89,6 @@ type
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
     fWorkDir: TFileName;
-    fRestrict: TRawUtf8DynArray;
     function GetCount: integer;
     function GetIdent: string;
     procedure SetWorkDir(const Folder: TFileName);
@@ -129,10 +128,6 @@ type
     // - when set, will ensure it contains a trailing path delimiter (\ or /)
     property WorkDir: TFileName
       read fWorkDir write SetWorkDir;
-    /// list of 'class.method' names to restrict the tests for Run
-    // - as retrieved from "--test class.method" command line switch
-    property Restrict: TRawUtf8DynArray
-      read fRestrict write fRestrict;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
@@ -177,6 +172,7 @@ type
     procedure AddLog(condition: boolean; const msg: string);
     procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const);
+    procedure OnBeforeEachBackgroundTask(Sender: TObject);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -309,7 +305,7 @@ type
       ForcedThreaded: boolean = false);
     /// wait for background thread started by Run() to finish
     procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60;
-      CallSynchronize: boolean = false);
+      CallSynchronize: boolean = true);
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
@@ -386,13 +382,15 @@ type
     fSafe: TSynLocker;
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
-    fCurrentMethodInfo: PSynTestMethodInfo;
+    fMainThread: boolean;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
     fNotifyProgressLineLen: integer;
     fNotifyProgress: RawUtf8;
     fSaveToFileBeforeExternal: THandle;
+    fRestrict: TRawUtf8DynArray;
     procedure EndSaveToFileExternal;
+    function IsRestricted(const name: RawUtf8): boolean;
     function GetFailedCount: integer;
     function GetFailed(Index: integer): TSynTestFailed;
     /// low-level output on the console - use TSynTestCase.AddConsole instead
@@ -415,7 +413,7 @@ type
     /// this method is called during the run, after every testcase
     // - this implementation just report some minimal data to the console
     // by default, but may be overridden to update a real UI or reporting system
-    // - method implementation can use fCurrentMethodInfo^ to get run context
+    // - method implementation can use CurrentMethodInfo^ to get run context
     procedure AfterOneRun; virtual;
     /// could be overriden to add some custom command-line parameters
     class procedure DescribeCommandLine; virtual;
@@ -490,16 +488,19 @@ type
     /// could be overriden to redirect the content to proper TSynLog.Log()
     procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const); virtual;
+    /// method information currently running
+    // - is set by Run and available within TTestCase methods
+    function CurrentMethodInfo: PSynTestMethodInfo;
     /// number of failed tests after the last call to the Run method
     property FailedCount: integer
       read GetFailedCount;
-    /// method information currently running
-    // - is set by Run and available within TTestCase methods
-    property CurrentMethodInfo: PSynTestMethodInfo
-      read fCurrentMethodInfo;
     /// retrieve the information associated with a failure
     property Failed[Index: integer]: TSynTestFailed
       read GetFailed;
+    /// list of 'class.method' names to restrict the tests for Run
+    // - as retrieved from "--test class.method" command line switch
+    property Restrict: TRawUtf8DynArray
+      read fRestrict write fRestrict;
   published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
@@ -701,9 +702,7 @@ begin
   end
   else
     fCheckLastMsg := 0;
-  if fOwner.fCurrentMethodInfo <> nil then
-    fOwner.DoLog(LEV[condition], '% % [%]', [ClassType,
-      fOwner.fCurrentMethodInfo^.TestName, msg]);
+  fOwner.DoLog(LEV[condition], '%', [msg]);
 end;
 
 procedure TSynTestCase.Check(condition: boolean; const msg: string);
@@ -1080,33 +1079,56 @@ begin
   end;
 end;
 
+threadvar
+  _CurrentMethodInfo: PSynTestMethodInfo;
+
+procedure TSynTestCase.OnBeforeEachBackgroundTask(Sender: TObject);
+begin
+  // executed in the context of the background thread
+  _CurrentMethodInfo := fOwner.CurrentMethodInfo;
+end;
+
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
 begin
-  if NotifyTask then
+  if NotifyTask or
+     fOwner.fMainThread or
+     not Threaded then
     NotifyProgress([TaskName]);
   if not Assigned(OnTask) then
     exit;
-  if (SystemInfo.dwNumberOfProcessors <= 2) or // avoid timeout e.g. on slow VMs
+  if fOwner.fMainThread or // avoid timeout e.g. on slow VMs
      not Threaded then
     OnTask(Sender) // run in main thread
   else
   begin
     if fBackgroundRun = nil then
+    begin
       fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
-    fBackgroundRun.Run(Ontask, Sender, TaskName, ForcedThreaded);
+      fBackgroundRun.OnBeforeEachTask := OnBeforeEachBackgroundTask;
+    end;
+    fOwner.DoLog(sllDebug, 'Run(%,%) using %',
+      [TaskName, ForcedThreaded, fBackgroundRun]);
+    fBackgroundRun.Run(OnTask, Sender, TaskName, ForcedThreaded);
   end;
 end;
 
 procedure TSynTestCase.RunWait(NotifyThreadCount: boolean; TimeoutSec: integer;
   CallSynchronize: boolean);
+var
+  timer: TPrecisionTimer;
 begin
   if not fBackgroundRun.Waiting then
     exit;
   if NotifyThreadCount then
-    NotifyProgress(['(waiting for ', Plural('thread', fBackgroundRun.Running), ')']);
+  begin
+    timer.Start;
+    NotifyProgress(['waiting for ', Plural('thread', fBackgroundRun.Running), ':']);
+  end;
   if not fBackgroundRun.RunWait(TimeoutSec, CallSynchronize) then
-    TestFailed('RunWait timeout after % sec', [TimeoutSec]);
+    TestFailed(' error: timeout after % sec' + CRLF, [TimeoutSec])
+  else if NotifyThreadCount then
+    NotifyProgress([timer.Stop]);
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
@@ -1129,7 +1151,7 @@ end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
 begin
-  fOwner.DoLog(sllMonitoring, '% %', [self, msg]);
+  fOwner.DoLog(sllMonitoring, '%', [msg]);
   if OnlyLog then
     exit;
   fOwner.fSafe.Lock;
@@ -1226,6 +1248,7 @@ constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
   fSafe.InitFromClass;
+  fMainThread := (SystemInfo.dwNumberOfProcessors <= 2);
 end;
 
 procedure TSynTests.EndSaveToFileExternal;
@@ -1273,14 +1296,24 @@ begin
   DoText(s);
 end;
 
+function TSynTests.CurrentMethodInfo: PSynTestMethodInfo;
+begin
+  result := _CurrentMethodInfo;
+end;
+
 procedure TSynTests.DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
 var
   len: integer;
+  nfo: PSynTestMethodInfo;
 begin
   if fNotifyProgress = '' then
   begin
     DoColor(ccGreen);
-    DoText(['  - ', fCurrentMethodInfo^.TestName, ':' + CRLF + '     ']);
+    nfo := _CurrentMethodInfo;
+    if nfo <> nil then
+      DoText(['  - ', nfo^.TestName, ':' + CRLF + '     '])
+    else
+      DoText('     ');
     fNotifyProgressLineLen := 0;
   end;
   len := length(value);
@@ -1299,24 +1332,36 @@ end;
 
 procedure TSynTests.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArgs: array of const);
+var
+  txt: RawUtf8;
 begin
+  if Level <> sllFail then
+    if (TSynLogTestLog = nil) or
+       not (Level in TSynLogTestLog.Family.Level) then
+      exit;
+  FormatUtf8(TextFmt, TextArgs, txt);
+  if _CurrentMethodInfo <> nil then
+    Prepend(txt, [_CurrentMethodInfo^.TestName, ': ']);
   if Level = sllFail then
-    TSynLogTestLog.DebuggerNotify(Level, TextFmt, TextArgs)
+    TSynLogTestLog.DebuggerNotify(Level, txt)
   else
-    TSynLogTestLog.Add.Log(level, TextFmt, TextArgs, self);
+    TSynLogTestLog.Add.Log(Level, txt)
 end;
 
 procedure TSynTests.AddFailed(const msg: string);
+var
+  nfo: PSynTestMethodInfo;
 begin
   if fFailedCount = length(fFailed) then
     SetLength(fFailed, NextGrow(fFailedCount));
   with fFailed[fFailedCount] do
   begin
     Error := msg;
-    if fCurrentMethodInfo <> nil then
+    nfo := _CurrentMethodInfo;
+    if nfo <> nil then
     begin
-      TestName := fCurrentMethodInfo^.TestName;
-      IdentTestName := fCurrentMethodInfo^.IdentTestName;
+      TestName := nfo^.TestName;
+      IdentTestName := nfo^.IdentTestName;
     end;
   end;
   inc(fFailedCount);
@@ -1339,26 +1384,41 @@ begin
     result := fFailedCount;
 end;
 
+function TSynTests.IsRestricted(const name: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if (fRestrict = nil) or
+     (FindPropName(pointer(fRestrict), name, length(fRestrict)) >= 0) then
+    exit;
+  for i := 0 to length(fRestrict) - 1 do
+    if PosExI(fRestrict[i], name) <> 0 then
+      exit;
+  result := true;
+end;
+
 function TSynTests.Run: boolean;
 var
   i, t, m: integer;
   Elapsed, Version, s: RawUtf8;
   methods: TRawUtf8DynArray;
+  nfo: PSynTestMethodInfo;
   dir: TFileName;
   err: string;
-  C: TSynTestCase;
   started: boolean;
-  {%H-}log: IUnknown;
+  c: TSynTestCase;
+  log: IUnknown;
 begin
   result := true;
+  if Executable.Command.Option('mainthread') then
+    fMainThread := true;
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do
       fTests[m].Method();
     for i := 0 to high(fTestCaseClass) do
-      if (restrict = nil) or
-         (FindPropName(pointer(fRestrict),
-          ToText(fTestCaseClass[i]), length(fRestrict)) >= 0) then
+      if not IsRestricted(ToText(fTestCaseClass[i])) then
       begin
         methods := GetPublishedMethodNames(fTestCaseClass[i]);
         for m := 0 to high(methods) do
@@ -1395,52 +1455,50 @@ begin
       for i := 0 to high(fTestCaseClass) do
       begin
         started := false;
-        C := fTestCaseClass[i].Create(self); // add all published methods
+        c := fTestCaseClass[i].Create(self); // add all published methods
         try
-          for t := 0 to C.Count - 1 do
+          nfo := nil;
+          for t := 0 to c.Count - 1 do
           try
-            fCurrentMethodInfo := @C.fTests[t];
-            if (fRestrict <> nil) and
-              ((FindPropName(pointer(fRestrict),
-                  FormatUtf8('%.%', [C, fCurrentMethodInfo^.MethodName]),
-                  // e.g. --test TNetworkProtocols.DNSAndLDAP
-                  length(fRestrict)) < 0) and
-               (FindPropName(pointer(fRestrict),
-                  // e.g. --test TNetworkProtocols
-                  ToText(C.ClassType), length(fRestrict)) < 0)) then
+            nfo := @c.fTests[t];
+            _CurrentMethodInfo := nfo;
+            // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
+            if IsRestricted(ToText(c.ClassType)) and
+               IsRestricted(FormatUtf8('%.%', [c, nfo^.MethodName])) then
               continue;
             if not started then
             begin
-              C.fAssertions := 0; // reset assertions count
-              C.fAssertionsFailed := 0;
-              C.fWorkDir := fWorkDir;
+              c.fAssertions := 0; // reset assertions count
+              c.fAssertionsFailed := 0;
+              c.fWorkDir := fWorkDir;
               SetCurrentDir(fWorkDir);
               TotalTimer.Start;
-              C.Setup;
+              c.Setup;
               DoColor(ccWhite);
-              DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', C.Ident, ': ']);
+              DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', c.Ident, ': ']);
               DoColor(ccLightGray);
               started := true;
             end;
-            C.fAssertionsBeforeRun := C.fAssertions;
-            C.fAssertionsFailedBeforeRun := C.fAssertionsFailed;
-            C.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
+            c.fAssertionsBeforeRun := c.fAssertions;
+            c.fAssertionsFailedBeforeRun := c.fAssertionsFailed;
+            c.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
             log := BeforeRun;
             TestTimer.Start;
-            C.MethodSetup;
+            c.MethodSetup;
             try
-              fCurrentMethodInfo^.Method(); // run tests + Check()
+              nfo^.Method(); // run tests + Check()
               AfterOneRun;
             finally
-              C.MethodCleanUp;
+              c.MethodCleanUp;
+              log := nil; // will trigger logging leave method e.g.
             end;
-            log := nil; // will trigger logging leave method e.g.
           except
             on E: Exception do
             begin
               DoColor(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
-              DoTextLn(['! ', fCurrentMethodInfo^.IdentTestName]);
+              if nfo <> nil then
+                DoTextLn(['! ', nfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
               {$ifndef NOEXCEPTIONINTERCEPT}
@@ -1449,39 +1507,40 @@ begin
               DoColor(ccLightGray);
             end;
           end;
+          _CurrentMethodInfo := nil;
           if not started then
             continue;
-          if C.fBackgroundRun.Waiting then
-            C.fBackgroundRun.Terminate({andwait=}true); // paranoid
-          C.CleanUp; // should be done before Destroy call
-          if C.AssertionsFailed = 0 then
+          if c.fBackgroundRun.Waiting then
+            c.RunWait({notify=}false, {timeout=}120, {synchronize=}true);
+          c.CleanUp; // to be done before Destroy call and after RunWait()
+          if c.AssertionsFailed = 0 then
             DoColor(ccLightGreen)
           else
             DoColor(ccLightRed);
           s := '';
-          if C.fRunConsole <> '' then
+          if c.fRunConsole <> '' then
           begin
-            Make(['   ', C.fRunConsole, CRLF], s);
-            C.fRunConsole := '';
+            Make(['   ', c.fRunConsole, CRLF], s);
+            c.fRunConsole := '';
           end;
-          Append(s, ['  Total failed: ', IntToThousandString(C.AssertionsFailed),
-            ' / ', IntToThousandString(C.Assertions), ' - ', C.Ident]);
-          if C.AssertionsFailed = 0 then
+          Append(s, ['  Total failed: ', IntToThousandString(c.AssertionsFailed),
+            ' / ', IntToThousandString(c.Assertions), ' - ', c.Ident]);
+          if c.AssertionsFailed = 0 then
             AppendShortToUtf8(' PASSED', s)
           else
             AppendShortToUtf8(' FAILED', s);
           Append(s, ['  ', TotalTimer.Stop, CRLF]);
           DoText(s); // write at once to the console output
           DoColor(ccLightGray);
-          inc(fAssertions, C.fAssertions); // compute global assertions count
-          inc(fAssertionsFailed, C.fAssertionsFailed);
+          inc(fAssertions, c.fAssertions); // compute global assertions count
+          inc(fAssertionsFailed, c.fAssertionsFailed);
         finally
-          C.Free;
+          FreeAndNil(c);
         end;
       end;
     finally
-      fTestCaseClass := nil;
-      fCurrentMethodInfo := nil;
+      _CurrentMethodInfo := nil;
+      fTestCaseClass := nil; // unregister the test classes once run
     end;
   except
     on E: Exception do
@@ -1526,12 +1585,14 @@ end;
 procedure TSynTests.AfterOneRun;
 var
   Run, Failed: integer;
+  nfo: PSynTestMethodInfo;
   C: TSynTestCase;
   s: RawUtf8;
 begin
-  if fCurrentMethodInfo = nil then
+  nfo := _CurrentMethodInfo;
+  if nfo = nil then
     exit;
-  C := fCurrentMethodInfo^.Test as TSynTestCase;
+  C := nfo^.Test as TSynTestCase;
   Run := C.Assertions - C.fAssertionsBeforeRun;
   Failed := C.AssertionsFailed - C.fAssertionsFailedBeforeRun;
   if fNotifyProgress <> '' then
@@ -1545,7 +1606,7 @@ begin
     if fNotifyProgress <> '' then
       Append(s, '        ')
     else
-      Append(s, ['  - ', fCurrentMethodInfo^.TestName, ': ']);
+      Append(s, ['  - ', nfo^.TestName, ': ']);
     if Run = 0 then
       Append(s, 'no assertion')
     else if Run = 1 then
@@ -1556,7 +1617,7 @@ begin
   else
   begin
     DoColor(ccLightRed);   // ! to highlight the line
-    Append(s, ['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
+    Append(s, ['!  - ', nfo^.TestName, ': ', IntToThousandString(
       Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
   fNotifyProgress := '';
@@ -1630,6 +1691,8 @@ begin
     'list all class name(s) as expected by --test');
   Executable.Command.Option('&methods',
     'list all method name(s) of #class as specified to --test');
+  Executable.Command.Option('mainthread',
+    'ensure no sub-thread are created for tests');
   if Executable.Command.Option('&verbose',
        'run logs in verbose mode: enabled only with --test') and
      (restrict <> nil) then
@@ -1697,7 +1760,7 @@ end;
 
 function TSynTestsLogged.BeforeRun: IUnknown;
 begin
-  with fCurrentMethodInfo^ do
+  with _CurrentMethodInfo^ do
     result := TSynLogTestLog.Enter(Test, pointer(MethodName));
 end;
 
@@ -1731,11 +1794,13 @@ begin
 end;
 
 procedure TSynTestsLogged.AddFailed(const msg: string);
+var
+  nfo: PSynTestMethodInfo;
 begin
   inherited AddFailed(msg);
-  if fCurrentMethodInfo <> nil then
-    with fCurrentMethodInfo^ do
-      fLogFile.Log(sllFail, '% [%]', [IdentTestName, msg], Test)
+  nfo := _CurrentMethodInfo;
+  if nfo <> nil then
+    fLogFile.Log(sllFail, '% [%]', [nfo^.IdentTestName, msg], nfo^.Test)
   else
     fLogFile.Log(sllFail, 'no context', self)
 end;

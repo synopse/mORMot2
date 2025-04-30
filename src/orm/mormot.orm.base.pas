@@ -4085,15 +4085,13 @@ begin
   fPropertyIndex := aPropertyIndex;
 end;
 
-const
-  NULL_SHORTSTRING: string[1] = '';
 var
   OrmHashSeed: cardinal; // random seed to avoid hash flooding
 
 function TOrmPropInfo.GetOrmFieldTypeName: PShortString;
 begin
   if self = nil then
-    result := @NULL_SHORTSTRING
+    result := @NULCHAR
   else
     result := ToText(fOrmFieldType);
 end;
@@ -5645,7 +5643,7 @@ end;
 function TOrmPropInfoRttiAnsi.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // temp stack buffer (no heap allocation)
+  Up: TByteToAnsiChar; // temp stack buffer (no heap allocation)
   p, tmp: pointer;
   l: PtrInt;
 begin
@@ -5947,7 +5945,7 @@ end;
 function TOrmPropInfoRttiRawUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
+  Up: TByteToAnsiChar; // avoid slow heap allocation
   Value: RawByteString;
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
@@ -6155,7 +6153,7 @@ end;
 function TOrmPropInfoRttiWide.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
+  Up: TByteToAnsiChar; // avoid slow heap allocation
   Value: WideString;
 begin
   fPropInfo.GetWideStrProp(Instance, Value);
@@ -6260,7 +6258,7 @@ end;
 function TOrmPropInfoRttiUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid heap allocation - 255 chars is enough
+  Up: TByteToAnsiChar; // avoid heap allocation - 255 chars is enough
   Value: UnicodeString;
 begin
   fPropInfo.GetUnicodeStrProp(Instance, Value);
@@ -8899,7 +8897,7 @@ end;
 function TOrmTableAbstract.GetRowLengths(Field: PtrInt; LenStore: PSynTempBuffer): integer;
 var
   len: PInteger;
-  i, l: integer;
+  c, l: integer;
   n: PtrInt;
 begin
   result := 0;
@@ -8914,10 +8912,10 @@ begin
   if LenStore = nil then
     len := nil
   else
-    len := LenStore.Init(fRowCount * SizeOf(integer));
+    len := LenStore^.Init(fRowCount * SizeOf(integer));
   n := fFieldCount;
-  for i := 1 to fRowCount do
-  begin
+  c := fRowCount;
+  repeat
     inc(Field, n); // next row - ignore first row = field names
     {$ifdef NOTORMTABLELEN}
     l := StrLen(GetResults(Field));
@@ -8930,26 +8928,27 @@ begin
       inc(len);
     end;
     inc(result, l);
-  end;
+    dec(c);
+  until c = 0;
 end;
 
 function TOrmTableAbstract.GetRowValues(Field: PtrInt; const Sep, Head, Trail: RawUtf8): RawUtf8;
 var
-  n, L, SepLen: integer;
+  n, l, SepLen: integer;
   i: PtrInt;
   P, U: PUtf8Char;
 begin
-  L := 0;
+  l := 0;
   for i := 1 to fRowCount do
-    inc(L, ResultsLen[i]);
-  if L = 0 then
+    inc(l, ResultsLen[i]);
+  if l = 0 then
   begin
     result := Head + Trail;
     exit;
   end;
   SepLen := length(Sep);
-  inc(L, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
-  P := AppendRawUtf8ToBuffer(FastSetString(result, L), Head);
+  inc(l, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
+  P := AppendRawUtf8ToBuffer(FastSetString(result, l), Head);
   n := fRowCount;
   repeat
     inc(Field, fFieldCount); // next row - ignore first row = field names

@@ -110,7 +110,8 @@ begin
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
     OpenSslDefaultCrypto := ParamS('lib&crypto', 'the OpenSSL libcrypto #filename');
-    OpenSslDefaultSsl := ParamS('lib&ssl', 'the OpenSSL libssl #filename');
+    OpenSslDefaultSsl    := ParamS('lib&ssl',    'the OpenSSL libssl #filename');
+    OpenSslDefaultPath   := ParamS('openssl&path', 'the OpenSSL library #path');
     {$endif USE_OPENSSL}
     {$ifdef OSPOSIX}
     GssLib_Custom := ParamS('lib&krb5', 'the Kerberos libgssapi #filename');

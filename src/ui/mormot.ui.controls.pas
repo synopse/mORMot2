@@ -587,7 +587,7 @@ procedure TUIComponentsPersist.SaveToFile;
 var
   json: RawUtf8;
 begin
-  json := _Safe(SaveToVariant)^.ToJson('', '', jsonHumanReadable);
+  json := _Safe(SaveToVariant)^.ToHumanJson;
   if json <> fLoadedJson then
   begin
     FileFromString(json, FileName);

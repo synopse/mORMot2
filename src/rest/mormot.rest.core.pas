@@ -103,9 +103,6 @@ type
 
 
 const
-  /// size in bytes, to log up to 2 KB of JSON response, to save space
-  MAX_SIZE_RESPONSE_LOG = 2 shl 10;
-
   CONTENT_TYPE_WEBFORM: PAnsiChar = 'APPLICATION/X-WWW-FORM-URLENCODED';
   CONTENT_TYPE_MULTIPARTFORM: PAnsiChar = 'MULTIPART/FORM-DATA';
 
@@ -533,8 +530,11 @@ type
     procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// ease logging of some text in the context of the current TRest
-    procedure InternalLog(const Format: RawUtf8; const Args: array of const;
+    procedure InternalLog(Format: PUtf8Char; const Args: array of const;
       Level: TSynLogLevel = sllTrace); overload;
+    /// ease logging of some response in the context of the current TRest
+    procedure InternalLogResponse(const aContent: RawByteString;
+      const aContext: shortstring; Level: TSynLogLevel = sllServiceReturn);
     /// ease logging of method enter/leave in the context of the current TRest
     function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
@@ -1185,8 +1185,8 @@ type
     LowLevelConnectionID: TRestConnectionID;
     /// low-level properties of the current connection
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
-    /// most HTTP servers support a per-connection pointer storage
-    // - may be nil if unsupported, e.g. by the http.sys servers
+    /// efficient per-connection pointer storage at HTTP server level
+    // - nil if unsupported, e.g. by the http.sys servers
     // - map to THttpAsyncServerConnection or THttpServerSocket fConnectionOpaque
     // of type THttpServerConnectionOpaque as defined in mormot.net.http
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
@@ -1341,7 +1341,8 @@ type
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - but rather call RemoteIP or UserAgent properties instead of
-    // InHeader['remoteip'] or InHeader['User-Agent']
+    // InHeader['RemoteIP'] or InHeader['User-Agent'] since those values may
+    // have been set directly from the socket layer and not within headers
     property InHeader[const HeaderName: RawUtf8]: RawUtf8
       read GetInHeader;
     /// retrieve an incoming HTTP cookie value
@@ -2056,7 +2057,7 @@ begin
     fLogFamily.Add.Log(Level, Text, self);
 end;
 
-procedure TRest.InternalLog(const Format: RawUtf8; const Args: array of const;
+procedure TRest.InternalLog(Format: PUtf8Char; const Args: array of const;
   Level: TSynLogLevel);
 begin
   if (self <> nil) and
@@ -2064,18 +2065,22 @@ begin
     fLogFamily.Add.Log(Level, Format, Args, self);
 end;
 
+procedure TRest.InternalLogResponse(const aContent: RawByteString;
+  const aContext: shortstring; Level: TSynLogLevel);
+begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
+  fLogFamily.Add.Log(Level, '%=%', [aContext, ContentToShort(aContent)], self);
+end;
+
 function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 begin
-  if (self <> nil) and
-     (sllEnter in fLogLevel) then
-  begin
-    if aInstance = nil then
-      aInstance := self;
-    result := fLogClass.Enter(TextFmt, TextArgs, aInstance);
-  end
-  else
-    result := nil;
+  result := nil;
+  if (self = nil) or
+     not (sllEnter in fLogLevel) then
+    exit;
+  if aInstance = nil then
+    aInstance := self;
+  fLogClass.EnterLocal(result, TextFmt, TextArgs, aInstance);
 end;
 
 function TRest.GetServerTimestamp(tix64: Int64): TTimeLog;
@@ -3172,7 +3177,7 @@ begin
         try
           if ({%H-}log = nil) and
              (fRest.fLogClass <> nil) then
-            log := fRest.fLogClass.Enter('AsyncBatchExecute % count=%',
+            fRest.fLogClass.EnterLocal(log, 'AsyncBatchExecute % count=%',
               [table, count], self);
           batch.PrepareForSending(json);
         finally
@@ -3251,7 +3256,7 @@ begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
     exit;
-  log := fRest.fLogClass.Enter('AsyncBatchStop(%)', [Table], self);
+  fRest.fLogClass.EnterLocal(log, 'AsyncBatchStop(%)', [Table], self);
   start := GetTickCount64;
   timeout := start + 5000;
   if Table = nil then
@@ -3392,7 +3397,7 @@ var
 begin
   if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)
-  log := fRest.fLogClass.Enter('AsyncBackgroundExecute I% %',
+  fRest.fLogClass.EnterLocal(log, 'AsyncBackgroundExecute I% %',
     [call.Method^.InterfaceDotMethodName, call.Params], self);
   exec := TInterfaceMethodExecute.Create(call.Factory, call.Method, []);
   try
@@ -3700,8 +3705,15 @@ begin
 end;
 
 function TRestUriParams.OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
+var
+  ct: PUtf8Char;
+  len: PtrInt;
 begin
-  result := IdemPChar(pointer(OutBodyType(GuessJsonIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  ct := FindNameValuePointer(pointer(OutHead), HEADER_CONTENT_TYPE_UPPER, len, #0);
+  if ct = nil then
+    result := GuessJsonIfNoneSet
+  else
+    result := IsContentTypeJson(ct, len);
 end;
 
 function TRestUriParams.Header(UpperName: PAnsiChar): RawUtf8;
@@ -3811,7 +3823,7 @@ end;
 
 function TRestUriContext.GetInHeader(const HeaderName: RawUtf8): RawUtf8;
 var
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   if self = nil then
     result := ''
@@ -3889,7 +3901,8 @@ end;
 function TRestUriContext.ContentTypeIsJson: boolean;
 begin
   result := (fInputContentType = '') or
-            IdemPChar(pointer(fInputContentType), JSON_CONTENT_TYPE_UPPER);
+            IsContentTypeJson(pointer(fInputContentType),
+              PStrLen(PAnsiChar(pointer(fInputContentType)) - _STRLEN)^);
 end;
 
 function TRestUriContext.InputAsMultiPart(

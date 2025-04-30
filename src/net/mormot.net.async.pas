@@ -101,9 +101,9 @@ type
     /// the associated 32-bit sequence number
     // - equals 0 after TPollAsyncSockets.Stop
     fHandle: TConnectionAsyncHandle;
-    /// low-level flags used by the state machine about this connection
+    /// low-level 8-bit flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    /// used internally e.g. for fRW[] or IOCP or to mark AddGC()
+    /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
     fInternalFlags: set of (ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
@@ -121,7 +121,7 @@ type
     fBytesRecv, fBytesSend: Int64;
     {$ifdef USE_WINIOCP}
     // opaque Windows IOCP instances returned by TWinIocp.Subscribe()
-    fIocp: PWinIocpSubscription; // a single IOCP queue for wieRecv+wieSend
+    fIocpSub: PWinIocpSubscription; // from the main fIocpRecvSend IOCP queue
     function IocpPrepareNextWrite(queue: TWinIocp): boolean;
     {$endif USE_WINIOCP}
     /// called when the instance is connected to a poll, after Create or Recycle
@@ -257,7 +257,7 @@ type
   TPollAsyncSockets = class
   protected
     {$ifdef USE_WINIOCP}
-    fIocp: TWinIocp; // process both wieRecv and wieSend notifications
+    fIocpRecvSend: TWinIocp; // process both wieRecv and wieSend notifications
     {$else}
     fRead: TPollReadSockets;
     fWrite: TPollWriteSockets; // separated fWrite
@@ -276,20 +276,20 @@ type
     fOnFirstRead, fOnStop: TOnPollAsyncProc;
     fWaitingWrite: TPollAsyncConnections; // to implement soWaitWrite
     function GetCount: integer;
-    procedure DoLog(const TextFmt: RawUtf8; const TextArgs: array of const;
+    procedure DoLog(TextFmt: PUtf8Char; const TextArgs: array of const;
       Level: TSynLogLevel = sllTrace);
     // pseError: return false to close socket and connection
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; virtual; abstract;
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
     procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
-    function SubscribeConnection(const caller: shortstring;
+    function SubscribeConnection(const caller: ShortString;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection;
-      const caller: shortstring); // set connection:=nil and close+GC
+      const caller: ShortString); // set connection:=nil and close+GC
     function RawWrite(connection: TPollAsyncConnection;
       var data: PByte; var datalen: integer): boolean;
-    function DoAfterWrite(const caller: shortstring;
+    function DoAfterWrite(const caller: ShortString;
       connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
     procedure ProcessWaitingWrite; // pending soWaitWrite
   public
@@ -315,7 +315,7 @@ type
     // the connection (and its socket) is to be shutdown
     // - this method won't call OnClosed, since it is initiated by the class
     function Stop(connection: TPollAsyncConnection;
-      const caller: shortstring): boolean; virtual;
+      const caller: ShortString): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
     // - this method may block if the connection is currently writing from
     // another thread (which is not possible from TPollAsyncSockets.Write),
@@ -377,8 +377,8 @@ type
       read fReadWaitMs write fReadWaitMs;
     {$ifdef USE_WINIOCP}
     /// low-level access to the IOCP polling class used for all events
-    property Iocp: TWinIocp
-      read fIocp;
+    property IocpRecvSend: TWinIocp
+      read fIocpRecvSend;
     {$else}
     /// low-level access to the polling class used for recv() data
     property PollRead: TPollReadSockets
@@ -590,8 +590,8 @@ type
     fLastOperationMS: Int64; // = GetTickCount64 as set by ProcessIdleTix()
     {$ifdef USE_WINIOCP}
     // in IOCP mode, Execute does wieSend (and wieAccept for TAsyncServer)
-    fIocp: TWinIocp; // wieAccept/wieSend events in their its own IOCP queue
-    fIocpAccept: PWinIocpSubscription;
+    fIocpAccept: TWinIocp; // wieAccept in their own IOCP queue
+    fIocpAcceptSub: PWinIocpSubscription;
     {$else}
     fThreadReadPoll: TAsyncConnectionsThread;
     fThreadPollingWakeupLoad: integer;
@@ -612,7 +612,7 @@ type
       Address, Port: RawUtf8;
     end;
     function AllThreadsStarted: boolean; virtual;
-    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
+    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
     procedure DoGC;
     procedure FreeGC(var conn: TPollAsyncConnections);
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
@@ -624,7 +624,7 @@ type
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
     procedure ConnectionAdd(conn: TAsyncConnection);
-    procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
+    procedure DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
       const TextArgs: array of const; Instance: TObject);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
@@ -1586,10 +1586,10 @@ begin
   else if fSecure = nil then
     // try to send some plain data asynchronously
     // otherwise GetNext() would return with no delay
-    result := queue.PrepareNext(fIocp, wieSend, fWr.Buffer, fWr.len)
+    result := queue.PrepareNext('next', fIocpSub, wieSend, fWr.Buffer, fWr.len)
   else
     // on TLS, don't send any plain buffer but let INetTls handle the socket
-    result := queue.PrepareNext(fIocp, wieSend);
+    result := queue.PrepareNext('tls', fIocpSub, wieSend);
 end;
 
 {$else}
@@ -1641,7 +1641,7 @@ begin
   fOptions := aOptions;
   inherited Create;
   {$ifdef USE_WINIOCP}
-  fIocp := TWinIocp.Create(aThreadCount, [wioUnsubscribeShutdownSocket]);
+  fIocpRecvSend := TWinIocp.Create(aThreadCount, [wioUnsubscribeShutdownSocket]);
   {$else}
   fRead := TPollReadSockets.Create;
   fRead.UnsubscribeShouldShutdownSocket := true;
@@ -1654,7 +1654,7 @@ begin
   if not fTerminated then
     Terminate(5000);
   {$ifdef USE_WINIOCP}
-  fIocp.Free;
+  fIocpRecvSend.Free;
   {$else}
   fRead.Free;
   fWrite.Free;
@@ -1712,7 +1712,7 @@ const
 {$endif USE_WINIOCP}
 
 function TPollAsyncSockets.Stop(connection: TPollAsyncConnection;
-  const caller: shortstring): boolean;
+  const caller: ShortString): boolean;
 var
   sock: TNetSocket;
 begin
@@ -1748,8 +1748,12 @@ begin
         end;
       // unsubscribe and close the socket
       {$ifdef USE_WINIOCP}
-      if connection.fIocp <> nil then
-        fIocp.Unsubscribe(connection.fIocp) // with wioUnsubscribeShutdownSocket
+      if connection.fIocpSub <> nil then
+        fIocpRecvSend.Unsubscribe(connection.fIocpSub)
+        // with wioUnsubscribeShutdownSocket for final wieRecv + closesocket()
+      else
+        // close the socket even if not subscribed (e.g. HTTP/1.0)
+        sock.ShutdownAndClose({rdwr=}true, {waitms=}100); // ensure sent
       {$else}
       if fSubWrite in connection.fFlags then
         // write first because of fRead.UnsubscribeShouldShutdownSocket=true
@@ -1758,15 +1762,15 @@ begin
         // note: fRead.UnsubscribeShouldShutdownSocket=true, so ShutdownAndClose
         // is done now on Epoll/TWinIocp, or at next PollForPendingEvents()
         fRead.Unsubscribe(sock, TPollSocketTag(connection))
-      {$endif USE_WINIOCP}
       else
         // close the socket even if not subscribed (e.g. HTTP/1.0)
         sock.ShutdownAndClose({rdwr=}false);
+      {$endif USE_WINIOCP}
       result := true;
     end
     {$ifdef USE_WINIOCP}
-    else if connection.fIocp <> nil then
-      fIocp.Unsubscribe(connection.fIocp);
+    else if connection.fIocpSub <> nil then
+      fIocpRecvSend.Unsubscribe(connection.fIocpSub); // paranoid
     {$endif USE_WINIOCP}
   finally
     LockedDec32(@fProcessingRead);
@@ -1781,10 +1785,10 @@ begin
   if self = nil then
     result := 0
   else
-    result := {$ifdef USE_WINIOCP} fIocp {$else} fRead {$endif}.Count;
+    result := {$ifdef USE_WINIOCP} fIocpRecvSend {$else} fRead {$endif}.Count;
 end;
 
-procedure TPollAsyncSockets.DoLog(const TextFmt: RawUtf8;
+procedure TPollAsyncSockets.DoLog(TextFmt: PUtf8Char;
   const TextArgs: array of const; Level: TSynLogLevel);
 begin
   fDebugLog.Add.Log(Level, TextFmt, TextArgs, self);
@@ -1800,7 +1804,7 @@ begin
   fTerminated := true;
   // abort receive/send polling engines
   {$ifdef USE_WINIOCP}
-  fIocp.Terminate; // will notify all pending threads
+  fIocpRecvSend.Terminate; // will notify all pending threads
   {$else}
   fRead.Terminate;
   fWrite.Terminate;
@@ -1933,7 +1937,7 @@ begin
   //DoLog('Write: done fProcessingWrite=%', [fProcessingWrite]);
 end;
 
-function TPollAsyncSockets.SubscribeConnection(const caller: shortstring;
+function TPollAsyncSockets.SubscribeConnection(const caller: ShortString;
   connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
 var
   tag: TPollSocketTag absolute connection;
@@ -1944,15 +1948,15 @@ begin
   if not (sub in [pseRead, pseWrite]) then
     exit;
   {$ifdef USE_WINIOCP}
-  if connection.fIocp = nil then
-    connection.fIocp := fIocp.Subscribe(connection.fSocket, tag);
-  result := connection.fIocp <> nil;
+  if connection.fIocpSub = nil then
+    connection.fIocpSub := fIocpRecvSend.Subscribe(connection.fSocket, tag);
+  result := connection.fIocpSub <> nil;
   if result then
     case sub of
       pseRead:
-        result := fIocp.PrepareNext(connection.fIocp, wieRecv);
+        result := fIocpRecvSend.PrepareNext('sub', connection.fIocpSub, wieRecv);
       pseWrite:
-        result := fIocp.PrepareNext(connection.fIocp, wieSend);
+        result := fIocpRecvSend.PrepareNext('sub', connection.fIocpSub, wieSend);
     end;
   {$else}
   if sub = pseRead then
@@ -1980,7 +1984,7 @@ begin
 end;
 
 procedure TPollAsyncSockets.CloseConnection(
-  var connection: TPollAsyncConnection; const caller: shortstring);
+  var connection: TPollAsyncConnection; const caller: ShortString);
 var
   c: TPollAsyncConnection;
 begin
@@ -2135,7 +2139,7 @@ begin
         begin
           {$ifdef USE_WINIOCP}
           // IOCP requires per-notification subscription
-          if not fIocp.PrepareNext(connection.fIocp, wieRecv) then
+          if not fIocpRecvSend.PrepareNext('next', connection.fIocpSub, wieRecv) then
           {$else}
           if not (fSubRead in connection.fFlags) then
             // it is time to subscribe for any future read on this connection
@@ -2157,7 +2161,7 @@ begin
         SleepHiRes(0); // avoid switch threads for nothing
         {$ifdef USE_WINIOCP}
         // IOCP requires per-notification subscription
-        if not fIocp.PrepareNext(connection.fIocp, wieRecv) then
+        if not fIocpRecvSend.PrepareNext('next', connection.fIocpSub, wieRecv) then
           CloseConnection(connection, 'ProcessRead waitlock iocp');
         {$endif USE_WINIOCP}
         result := false; // retry later
@@ -2238,7 +2242,7 @@ begin
         res := DoAfterWrite('ProcessWrite', connection);
       {$ifdef USE_WINIOCP}
       if res = soContinue then
-        if not connection.IocpPrepareNextWrite(fIocp) then
+        if not connection.IocpPrepareNextWrite(fIocpRecvSend) then
           res := soClose;
       {$else}
       if connection.fWr.Len = 0 then
@@ -2264,8 +2268,8 @@ begin
         DoLog('ProcessWrite: WaitLock failed % -> will retry later',
           [pointer(connection)]);
       SleepHiRes(0); // avoid switch threads for nothing
-      {$ifdef USE_WINIOCP}
-      fIocp.Enqueue(connection.fIocp, wieSend, sent); // not PrepareNextWrite
+      {$ifdef USE_WINIOCP} // add to main IOCP queue, but no PrepareNextWrite
+      fIocpRecvSend.Enqueue(connection.fIocpSub, wieSend, sent);
       {$endif USE_WINIOCP}
     end;
   finally
@@ -2273,7 +2277,7 @@ begin
   end;
 end;
 
-function TPollAsyncSockets.DoAfterWrite(const caller: shortstring;
+function TPollAsyncSockets.DoAfterWrite(const caller: ShortString;
   connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
 begin
   try
@@ -2309,7 +2313,7 @@ var
 begin
   if fWaitingWrite.Count = 0 then
     exit; // no connection in pending rfProgressiveStatic mode
-  log := fDebugLog.Enter('ProcessWaitingWrite %', [fWaitingWrite.Count], self);
+  fDebugLog.EnterLocal(log, 'ProcessWaitingWrite %', [fWaitingWrite.Count], self);
   with fWaitingWrite do
   begin
     Safe.Lock;
@@ -2376,7 +2380,7 @@ begin
   fSecure := nil;
   fLastOperation := 0;
   {$ifdef USE_WINIOCP}
-  fIocp := nil;
+  fIocpSub := nil;
   {$endif USE_WINIOCP}
   fRemoteIP4 := aRemoteIP.IP4;
   aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
@@ -2511,9 +2515,9 @@ begin
     {$ifdef USE_WINIOCP} // TWinIocp needs only atpReadPending threads
     while not Terminated and
           (fOwner.fSockets <> nil) and
-          (fOwner.fSockets.fIocp <> nil) do
+          (fOwner.fSockets.fIocpRecvSend <> nil) do
     begin
-      sub := fOwner.fSockets.fIocp.GetNext(INFINITE, e, bytes);
+      sub := fOwner.fSockets.fIocpRecvSend.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // Terminated
       case e of
@@ -2526,8 +2530,9 @@ begin
           end;
         wieSend:
           // writes are done in the single (and main) fOwner.Execute thread
-          // -> just relay this event to the proper IOCP queue
-          fOwner.fIocp.Enqueue(sub, e, bytes);
+          // -> just relay this event to the IOCP queue handling acceptex()
+          // process, i.e. TAsyncServer.DoExecute
+          fOwner.fIocpAccept.Enqueue(sub, e, bytes);
         wieConnect: // from THttpAsyncClientConnections.StartRequest
           begin
             SetRes(notif, sub^.Tag, [pseWrite]);
@@ -2635,7 +2640,7 @@ var
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
 begin
-  log := aLog.Enter('Create(%,%,%)',
+  aLog.EnterLocal(log, 'Create(%,%,%)',
     [aConnectionClass, ProcessName, aThreadPoolCount], self);
   if (aConnectionClass = TAsyncConnection) or
      (aConnectionClass = nil) then
@@ -2667,7 +2672,7 @@ begin
   begin
     fSockets.fDebugLog := aLog;
   {$ifdef USE_WINIOCP}
-    fSockets.fIocp.OnLog := aLog.DoLog;
+    fSockets.fIocpRecvSend.OnLog := aLog.DoLog;
   end;
   {$else}
     fSockets.fRead.OnLog := aLog.DoLog;
@@ -2684,8 +2689,9 @@ begin
   {$ifdef USE_WINIOCP}
   for i := 0 to aThreadPoolCount - 1 do
     fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
-  fIocp := TWinIocp.Create({processing=}1);
-  fIocp.OnLog := fSockets.fIocp.OnLog;
+  // prepare an IOCP queue only for wieAccept of fServer.Sock
+  fIocpAccept := TWinIocp.Create({processing=}1);
+  fIocpAccept.OnLog := fSockets.fIocpRecvSend.OnLog;
   {$else}
   fSocketsEpoll := fSockets.fRead.PollClass.FollowEpoll;
   if aThreadPoolCount = 1 then
@@ -2726,7 +2732,7 @@ end;
 
 {.$define GCVERBOSE} // help debugging
 
-procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
+procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
 begin
   if Terminated or
      (aConnection = nil) or
@@ -2876,8 +2882,8 @@ var
   endtix: Int64;
 begin
   {$ifdef USE_WINIOCP}
-  fIocp.Unsubscribe(fIocpAccept);
-  fIocp.Terminate;
+  fIocpAccept.Unsubscribe(fIocpAcceptSub);
+  fIocpAccept.Terminate;
   {$endif USE_WINIOCP}
   Terminate;
   // terminate the main clients asynchronous logic
@@ -2932,7 +2938,7 @@ begin
   Shutdown;
   inherited Destroy;
   {$ifdef USE_WINIOCP}
-  FreeAndNil(fIocp);
+  FreeAndNil(fIocpAccept);
   {$endif USE_WINIOCP}
   if (acoNoConnectionTrack in fOptions) or
      (fConnectionCount = 0) then
@@ -3016,7 +3022,7 @@ var
   th: PAsyncConnectionsThread;
   t: TAsyncConnectionsThread;
   c, tix: integer; // 32-bit is enough to check for
-  ndx: array[byte] of byte; // wake up to 256 threads at once
+  ndx: TByteToByte; // wake up to 256 threads at once
 begin
   if Events > high(ndx) then
     Events := high(ndx); // avoid ndx[] buffer overflow (parnoid)
@@ -3082,7 +3088,7 @@ begin
 end;
 {$endif USE_WINIOCP}
 
-procedure TAsyncConnections.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
+procedure TAsyncConnections.DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
   const TextArgs: array of const; Instance: TObject);
 begin
   if (self <> nil) and
@@ -3801,6 +3807,9 @@ begin
   Sender.fSecure := NewNetTls;  // should work since DoTlsAfter() was fine
   Sender.fSecure.AfterAccept(Sender.fSocket, fServer.TLS, nil, nil);
   Sender.fSocket.MakeAsync;     // as expected by our asynchronous code
+  if acoVerboseLog in fOptions then
+    DoLog(sllTrace, 'AfterAccept % %',
+      [Sender.fSocket, Sender.fSecure.GetCipherName], Sender);
 end;
 
 procedure TAsyncServer.SetExecuteState(State: THttpServerExecuteState);
@@ -3845,12 +3854,15 @@ begin
     if acoEnableTls in fOptions then
       fSockets.OnFirstRead := OnFirstReadDoTls;
     // BIND + LISTEN (TLS is done later)
-    fServer := TCrtSocket.Bind(fSockPort, nlTcp, 5000, acoReusePort in Options);
+    fServer := TCrtSocket.Create(5000);
+    if fLogClass <> nil  then
+      fServer.OnLog := fLogClass.DoLog;
+    fServer.BindPort(fSockPort, nlTcp, acoReusePort in fOptions);
     if not fServer.SockIsDefined then // paranoid check
-      EAsyncConnections.RaiseUtf8('%.Execute: bind failed', [self]);
+      EAsyncConnections.RaiseUtf8('%.Execute: bind % failed', [self, fSockPort]);
     {$ifdef USE_WINIOCP}
-    fIocpAccept := fIocp.Subscribe(fServer.Sock, 0);
-    if not fIocp.PrepareNext(fIocpAccept, wieAccept) then
+    fIocpAcceptSub := fIocpAccept.Subscribe(fServer.Sock, 0);
+    if not fIocpAccept.PrepareNext('first', fIocpAcceptSub, wieAccept) then
       RaiseLastError('TAsyncServer.Execute: acceptex', EWinIocp);
     {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
     sockets := NewRawSockets(fServer.SocketFamily, nlTcp, 10000);
@@ -3872,13 +3884,13 @@ begin
     begin
       PQWord(@notif)^ := 0; // direct blocking accept() by default
       {$ifdef USE_WINIOCP}
-      sub := fIocp.GetNext(INFINITE, e, bytes);
+      sub := fIocpAccept.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // terminated
       res := nrFatalError;
       case e of
         wieAccept:
-          if fIocp.GetNextAccept(sub, client, sin) then
+          if fIocpAccept.GetNextAccept(sub, client, sin) then
           begin
             if acoEnableTls in fOptions then
               res := nrOk
@@ -3894,14 +3906,14 @@ begin
                 inc(socketsalloc);
               end;
               {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-              if not fIocp.PrepareNext(sub, wieAccept, nil, 0, s) then
+              if not fIocpAccept.PrepareNext('next', sub, wieAccept, nil, 0, s) then
                 res := nrFatalError;
             end;
           end;
         wieSend:
           begin
-            // redirected from TAsyncConnectionsThread.Execute
-            SetRes(notif, sub^.Tag, [pseWrite]);
+            // not from a socket, but relayed from TAsyncConnectionsThread.Execute
+            SetRes(notif, sub^.Tag, [pseWrite]); // ProcessWrite() in this thread
             res := nrOk;
           end;
       end;
@@ -3957,7 +3969,7 @@ begin
         end;
         // ensure we don't have too many connections on this server instance
         {$ifdef USE_WINIOCP}
-        if fSockets.fIocp.Count > fMaxConnections then
+        if fSockets.fIocpRecvSend.Count > fMaxConnections then
         {$else}
         if (fSockets.fRead.Count > fMaxConnections) or
            (fSockets.fRead.PendingCount > fMaxPending) then
@@ -4059,7 +4071,7 @@ begin
     while not Terminated do
     begin
       {$ifdef USE_WINIOCP}
-      sub := fIocp.GetNext(INFINITE, e, bytes);
+      sub := fIocpAccept.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // terminated
       if e <> wieSend then
@@ -4355,9 +4367,9 @@ begin
     // start async events subscription and connection
     {$ifdef USE_WINIOCP}
     include(aConnection.fInternalFlags, ifWriteWait);
-    if aConnection.fIocp = nil then
-      aConnection.fIocp := fOwner.fIocp.Subscribe(aConnection.fSocket, tag);
-    if fOwner.fIocp.PrepareNext(aConnection.fIocp, wieConnect) then
+    if aConnection.fIocpSub = nil then
+      aConnection.fIocpSub := fOwner.fIocpAccept.Subscribe(aConnection.fSocket, tag);
+    if fOwner.fIocpAccept.PrepareNext('client', aConnection.fIocpSub, wieConnect) then
       result := nrOk;
     {$else}
     result := addr.SocketConnect(aConnection.fSocket, -1);
@@ -4671,6 +4683,14 @@ begin
     result := HTTP_PAYLOADTOOLARGE;
     fServer.IncStat(grOversizedPayload);
   end
+  else if (hsoRejectBotUserAgent in fServer.Options) and
+          (fHttp.UserAgent <> '') and
+          IsHttpUserAgentBot(fHttp.UserAgent) then
+  begin
+    // implement early hsoRejectBotUserAgent detection as 418 I'm a teapot
+    result := HTTP_TEAPOT;
+    fServer.IncStat(grRejected);
+  end
   else if Assigned(fServer.OnBeforeBody) then
     // custom validation (e.g. missing/invalid URL or BearerToken)
     result := fServer.OnBeforeBody(
@@ -4683,31 +4703,36 @@ function THttpAsyncServerConnection.DoReject(
 var
   len: integer; // should not be PtrInt
 begin
-  if fServer.SetRejectInCommandUri(fHttp, fConnectionID, status) then
-    result := soContinue
-  else
-    result := soClose;
-  len := length(fHttp.CommandUri);
-  Send(pointer(fHttp.CommandUri), len); // no polling nor ProcessWrite
-  if result = soContinue then
+  result := soClose;
+  if status = HTTP_TEAPOT then // from hsoRejectBotUserAgent
   begin
-    fServer.IncStat(grWwwAuthenticate);
-    fHttp.State := hrsResponseDone;
-    result := AfterWrite;
+    len := ord(HTTP_BANIP_RESPONSE[0]);
+    Send(@HTTP_BANIP_RESPONSE[1], len); // 418 I'm a teapot
   end
   else
   begin
-    fServer.IncStat(grRejected);
-    fHttp.State := hrsErrorRejected;
-    if (fServer.Async.Banned <> nil) and
-       not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
-       fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
+    if fServer.ComputeRejectBody(fHttp.Content, fConnectionID, status) then
+      result := soContinue; // for grWwwAuthenticate
+    len := length(fHttp.Content);
+    Send(pointer(fHttp.Content), len); // no polling nor ProcessWrite
+    if result = soContinue then
     begin
-      if acoVerboseLog in fOwner.fOptions then
-        fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
-          [status, fRemoteIP, fServer.Async.Banned], self);
-      fServer.IncStat(grBanned);
+      fServer.IncStat(grWwwAuthenticate);
+      fHttp.State := hrsResponseDone;
+      result := AfterWrite;
+      exit;
     end;
+  end;
+  fServer.IncStat(grRejected);
+  fHttp.State := hrsErrorRejected;
+  if (fServer.Async.Banned <> nil) and
+     not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
+     fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
+  begin
+    if acoVerboseLog in fOwner.fOptions then
+      fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
+        [status, fRemoteIP, fServer.Async.Banned], self);
+    fServer.IncStat(grBanned);
   end;
 end;
 
@@ -5093,7 +5118,7 @@ procedure THttpAsyncServer.IdleEverySecond;
 var
   tix, cleaned: cardinal;
   T: TSynSystemTime;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   // no need to use the global HttpDateNowUtc and its GetTickCount64 API call
   if hsoIncludeDateHeader in fOptions then
@@ -5186,7 +5211,7 @@ begin
           else if (fAsync.fGC1.Count = 0) or
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
             msidle := 500 // idle server
-          else
+          else // default fKeepConnectionInstanceMS is 100ms
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
           fExecuteEvent.WaitFor(msidle);
           if fShutdownInProgress or
@@ -5406,7 +5431,7 @@ var
   tls: TNetTlsContext;
   fav: RawByteString;
 begin
-  log := fLog.Enter('Start %', [fSettings], self);
+  fLog.EnterLocal(log, 'Start %', [fSettings], self);
   if fServer <> nil then
     EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
   // compute options from settings
@@ -5665,7 +5690,7 @@ begin
       case met of
         urmGet,
         urmHead:
-          OnExecuteLocal(Ctxt, one, uri);
+          result := OnExecuteLocal(Ctxt, one, uri);
       end;
     sRemoteUri:
       begin

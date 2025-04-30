@@ -382,7 +382,7 @@ type
     /// associated low-level opaque pointer maintained during the connection
     property ConnectionOpaque: PHttpServerConnectionOpaque
       read fConnectionOpaque;
-    /// if the associated 'Remote-IP' HTTP header value maps the local host
+    /// quickly check if the known remote IP maps the local host
     property RemoteLocalhost: boolean
       read fRemoteLocalhost write fRemoteLocalhost;
   published
@@ -394,8 +394,8 @@ type
     // - leave to '' if any URI should match
     property URI: RawUtf8
       read fUri;
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if self=nil or RemoteLocalhost=true
+    /// the associated Remote IP as set by the raw socket layer
+    // - returns '' if self=nil or RemoteLocalhost=true on localhost
     property RemoteIP: RawUtf8
       read GetRemoteIP write fRemoteIP;
     /// the URI on which this protocol has been upgraded
@@ -447,7 +447,7 @@ type
       var contentType, content: RawUtf8): boolean; virtual; abstract;
     /// convert the input information of REST request to a WebSocket frame
     procedure InputToFrame(Ctxt: THttpServerRequestAbstract; aNoAnswer: boolean;
-      out request: TWebSocketFrame; out head: RawUtf8); virtual;
+      var request: TWebSocketFrame; out head: RawUtf8); virtual;
     /// convert a WebSocket frame to the input information of a REST request
     function FrameToInput(var request: TWebSocketFrame; out aNoAnswer: boolean;
       Ctxt: THttpServerRequestAbstract): boolean; virtual;
@@ -456,7 +456,7 @@ type
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// convert the output information of REST request to a WebSocket frame
     procedure OutputToFrame(Ctxt: THttpServerRequestAbstract; Status: cardinal;
-      var outhead: RawUtf8; out answer: TWebSocketFrame); virtual;
+      var outhead: RawUtf8; var answer: TWebSocketFrame); virtual;
   end;
 
   /// used to store the class of a TWebSocketProtocol type
@@ -847,8 +847,8 @@ type
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
       {$ifdef HASINLINE}inline;{$endif}
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
+      /// the associated Remote IP as set by the raw socket layer
+    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true on localhost
     function RemoteIP: RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// the settings currently used during the WebSockets process
@@ -1113,7 +1113,7 @@ type
     /// retrieve the NameSpace value as a new RawUtf8
     procedure NameSpaceGet(out Dest: RawUtf8);
     /// retrieve the NameSpace value as a shortstring (used e.g. for RaiseESockIO)
-    function NameSpaceShort: shortstring;
+    function NameSpaceShort: ShortString;
       {$ifdef HASINLINE} inline; {$endif}
     /// quickly check if the Data content does match (mainly used for testing)
     function DataIs(const Content: RawUtf8): boolean;
@@ -1487,7 +1487,7 @@ begin
   frame.opcode := opcode;
   if (ContentType <> '') and
      (Content <> '') and
-     not IdemPChar(pointer(ContentType), 'TEXT/') and
+     not IsContentTypeTextU(ContentType) and
      IsContentCompressed(pointer(Content), length(Content)) then
     frame.content := [fopAlreadyCompressed]
   else
@@ -1926,33 +1926,35 @@ begin
 end;
 
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequestAbstract;
-  aNoAnswer: boolean; out request: TWebSocketFrame; out head: RawUtf8);
+  aNoAnswer: boolean; var request: TWebSocketFrame; out head: RawUtf8);
 var
-  Method, InContentType: RawByteString;
+  Method, InContentType: pointer; // weak RawUtf8 reference
   seq: integer;
+  p: PAnsiChar;
 begin
   // by convention, defaults are POST and JSON, to reduce frame size for SOA
-  if not PropNameEquals(Ctxt.Method, 'POST') then
-    Method := Ctxt.Method;
+  Method := nil;
+  if not IsPost(Ctxt.Method) then
+    Method := pointer(Ctxt.Method);
+  InContentType := nil;
   if (Ctxt.InContent <> '') and
-     (Ctxt.InContentType <> '') and
-     not PropNameEquals(Ctxt.InContentType, JSON_CONTENT_TYPE) then
-    InContentType := Ctxt.InContentType;
+     not IsContentTypeJsonU(Ctxt.InContentType) then
+    InContentType := pointer(Ctxt.InContentType);
   // compute the WebSockets frame and corresponding response header
   if fSequencing then
-  begin
+  begin // head = rxxxxxx = safe overlap after 16,777,216 frames
     seq := InterlockedIncrement(fSequence);
-    SetLength(head, 7); // rxxxxxx = safe overlap after 16,777,216 frames
-    PAnsiChar(pointer(head))^ := 'r';
-    BinToHexDisplayLower(@seq, PAnsiChar(pointer(head)) + 1, 3);
+    p := FastSetString(head, 7);
+    p^ := 'r';
+    BinToHexDisplayLower(@seq, p + 1, 3);
   end
   else
     head := 'request';
-  FrameCompress(head, [{%H-}Method, Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
-    Ctxt.InContent, InContentType{%H-}, request);
+  FrameCompress(head, [RawUtf8(Method), Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
+    Ctxt.InContent, RawUtf8(InContentType), request);
   if fSequencing then
     // 'r000001' -> 'a000001'
-    head[1] := 'a'
+    PByte(head)^ := ord('a')
   else
     head := 'answer';
 end;
@@ -1980,21 +1982,22 @@ begin
 end;
 
 procedure TWebSocketProtocolRest.OutputToFrame(Ctxt: THttpServerRequestAbstract;
-  Status: cardinal; var outhead: RawUtf8; out answer: TWebSocketFrame);
+  Status: cardinal; var outhead: RawUtf8; var answer: TWebSocketFrame);
 var
-  OutContentType: RawByteString;
+  OutContentType: pointer; // weak RawUtf8
 begin
+  OutContentType := nil;
   if (Ctxt.OutContent <> '') and
-     not PropNameEquals(Ctxt.OutContentType, JSON_CONTENT_TYPE) then
-    OutContentType := Ctxt.OutContentType;
+     not IsContentTypeJsonU(Ctxt.OutContentType) then
+    OutContentType := pointer(Ctxt.OutContentType);
   if NormToUpperAnsi7[outhead[3]] = 'Q' then
-    // 'request' -> 'answer'
+    // 'reQuest' -> 'answer'
     outhead := 'answer'
   else
     // 'r000001' -> 'a000001'
-    outhead[1] := 'a';
+    PByte(outhead)^ := ord('a');
   FrameCompress(outhead, [Status, Ctxt.OutCustomHeaders], Ctxt.OutContent,
-    OutContentType{%H-}, answer);
+    RawUtf8(OutContentType), answer);
 end;
 
 function TWebSocketProtocolRest.FrameToOutput(var answer: TWebSocketFrame;
@@ -2008,11 +2011,10 @@ begin
     exit;
   result := GetInteger(pointer(status));
   Ctxt.OutCustomHeaders := outHeaders;
-  if (outContentType = '') and
-     (outContent <> '') then
-    Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR
-  else
-    Ctxt.OutContentType := outContentType;
+  if outContentType <> '' then
+    Ctxt.OutContentType := outContentType
+  else if outContent <> '' then
+    Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
   Ctxt.OutContent := outContent;
 end;
 
@@ -2057,12 +2059,12 @@ begin
     if Content = '' then
       WR.AddDirect('"', '"')
     else if (ContentType = '') or
-            PropNameEquals(ContentType, JSON_CONTENT_TYPE) then
+            IsContentTypeJsonU(ContentType) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
-    else if IdemPChar(pointer(ContentType), 'TEXT/') then
+    else if IsValidUtf8NotVoid(Content) then
       WR.AddJsonString(Content)
     else
-      WR.WrBase64(pointer(Content), length(Content), true);
+      WR.WrBase64(pointer(Content), length(Content), {withMagic=}true);
     WR.AddDirect(']', '}');
     WR.SetText(RawUtf8(frame.payload));
   finally
@@ -2142,15 +2144,13 @@ begin
   if info.Json = nil then
     exit;
   if (contentType = '') or
-     PropNameEquals(contentType, JSON_CONTENT_TYPE) then
+     IsContentTypeJsonU(contentType) then
     GetJsonItemAsRawJson(info.Json, RawJson(content))
-  else if IdemPChar(pointer(contentType), 'TEXT/') then
-    info.GetJsonValue(content)
   else
   begin
     info.GetJsonField;
     if not Base64MagicCheckAndDecode(info.Value, info.ValueLen,
-        RawByteString(content)) then
+        RawByteString(content)) then // e.g. IsValidUtf8() in FrameCompress()
       FastSetString(content, info.Value, info.ValueLen);
   end;
   result := true;
@@ -2208,10 +2208,11 @@ begin
       inc(P, enc[i].Encode(Frames[i], P));
     result := Owner.SendBytes(tmp.buf, len); // directly send at once
     if (WebSocketLog <> nil) and
-       (logTextFrameContent in Owner.Settings.LogDetails) and
-       (sllTrace in WebSocketLog.Family.Level) then
-      WebSocketLog.Add.Log(sllTrace, 'SendFrames=% len=% %',
-        [FramesCount * ord(result), len, EscapeToShort(tmp.buf, len)], self);
+       (logTextFrameContent in Owner.Settings.LogDetails) then
+      with WebSocketLog.Family do
+        if sllTrace in Level then
+          Add.Log(sllTrace, 'SendFrames=% len=% %',
+            [FramesCount * ord(result), len, EscapeToShort(tmp.buf, len)], self);
   except
     result := false;
   end;
@@ -2295,24 +2296,23 @@ var
   len: PtrInt;
   P: PUtf8Char;
 begin
-  P := pointer(frame.payload);
+  result := nil;
+  if frame.opcode <> focBinary then
+    exit;
   len := length(Head);
-  if (frame.opcode = focBinary) and
-     (length(frame.payload) >= len + 6) and
-     CompareMemFast(pointer(Head), P, len) then
-  begin
-    result := PosChar(P + len, FRAME_HEAD_SEP);
-    if result <> nil then
-    begin
-      if PMax <> nil then
-        PMax^ := pointer(P + length(frame.payload));
-      if HeadFound <> nil then
-        FastSetString(HeadFound^, P, PAnsiChar(result) - P);
-      inc(PByte(result));
-    end;
-  end
-  else
-    result := nil;
+  if length(frame.payload) < len + 6 then
+    exit;
+  P := pointer(frame.payload);
+  if not CompareMemFast(pointer(Head), P, len) then
+    exit;
+  result := PosChar(P + len, FRAME_HEAD_SEP);
+  if result = nil then
+    exit;
+  if PMax <> nil then
+    PMax^ := pointer(P + PStrLen(P - _STRLEN)^);
+  if HeadFound <> nil then
+    FastSetString(HeadFound^, P, PAnsiChar(result) - P);
+  inc(PByte(result));
 end;
 
 function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): TShort31;
@@ -2972,7 +2972,7 @@ begin
   else if not fConnectionCloseWasSent then
   begin
     if log = nil then
-      log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
+      WebSocketLog.EnterLocal(log, 'Destroy %', [ToText(fState)^], self);
     if log <> nil then
       log.Log(sllTrace, 'Destroy: send focConnectionClose', self);
     Shutdown({waitforpong=}true);
@@ -2982,7 +2982,7 @@ begin
      not fProcessEnded then
   begin
     if log = nil then
-      log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
+      WebSocketLog.EnterLocal(log, 'Destroy %', [ToText(fState)^], self);
     if log <> nil then
       log.Log(sllDebug, 'Destroy: wait for fProcessCount=% fProcessEnded=%',
         [fProcessCount, fProcessEnded], self);
@@ -3849,7 +3849,7 @@ begin
   FastSetString(Dest, fNameSpace, fNameSpaceLen);
 end;
 
-function TSocketIOMessage.NameSpaceShort: shortstring;
+function TSocketIOMessage.NameSpaceShort: ShortString;
 begin
   SetString(result, PAnsiChar(fNameSpace), fNameSpaceLen);
 end;
@@ -4047,7 +4047,7 @@ end;
 function TSocketIORemoteNamespace.SendEvent(const aEventName, aDataArray: RawUtf8;
   const aOnAck: TOnSocketIOAck): TSocketIOAckID;
 var
-  tmp: TSynTempBuffer;
+  tmp: TSynTempAdder;
 begin
   result := SIO_NO_ACK;
   if Assigned(aOnack) then
@@ -4064,9 +4064,9 @@ begin
     end;
     tmp.AddDirect(']');
     SocketIOSendPacket(fOwner.fWebSockets,
-      sioEvent, fNameSpace, tmp.buf, tmp.added, result);
+      sioEvent, fNameSpace, tmp.Buffer, tmp.Size, result);
   finally
-    tmp.Done;
+    tmp.Store.Done;
   end;
 end;
 
@@ -4255,7 +4255,7 @@ procedure SocketIOSendPacket(aWebSockets: TWebCrtSocketProcess;
   aOperation: TSocketIOPacket; const aNamespace: RawUtf8;
   aPayload: pointer; aPayloadLen: PtrInt; ackId: TSocketIOAckID);
 var
-  tmp: TSynTempBuffer;
+  tmp: TSynTempAdder;
 begin
   if (aWebSockets = nil) or
      not aWebSockets.Protocol.InheritsFrom(TWebSocketEngineIOProtocol) then
@@ -4273,9 +4273,9 @@ begin
       tmp.AddU(ackID);
     if aPayloadLen <> 0 then
       tmp.Add(aPayload, aPayloadLen);
-    EngineIOSendPacket(aWebSockets, tmp.buf, tmp.added, {binary=}false);
+    EngineIOSendPacket(aWebSockets, tmp.Buffer, tmp.Size, {binary=}false);
   finally
-    tmp.Done;
+    tmp.Store.Done;
   end;
 end;
 

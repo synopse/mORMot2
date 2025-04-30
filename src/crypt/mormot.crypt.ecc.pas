@@ -3125,7 +3125,7 @@ begin
     'sign',   sign],
     JSON_FAST);
   result := FileToSign + ECCCERTIFICATESIGN_FILEEXT;
-  FileFromString(doc.ToJson('', '', jsonHumanReadable), result);
+  FileFromString(doc.ToHumanJson, result);
 end;
 
 procedure TEccCertificateSecret.SignCertificate(Dest: TEccCertificate;

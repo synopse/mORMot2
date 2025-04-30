@@ -242,7 +242,7 @@ type
 const
   toEncrypted = [toEcdhe, toEncrypt];
 
-function ToText(opt: TTunnelOptions): shortstring; overload;
+function ToText(opt: TTunnelOptions): ShortString; overload;
 
 
 { ******************** Local NAT Client/Server to Tunnel TCP Streams }
@@ -540,7 +540,7 @@ var
   sha3: TSha3;
   log: ISynLog;
 begin
-  log := TSynLog.Enter('Open(%)', [Session], self);
+  TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
   // validate input parameters
   if (fPort <> 0) or
      (not Assigned(fTransmit)) then
@@ -668,7 +668,7 @@ begin
 end;
 
 
-function ToText(opt: TTunnelOptions): shortstring;
+function ToText(opt: TTunnelOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
 end;

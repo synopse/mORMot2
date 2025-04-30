@@ -10436,7 +10436,7 @@ end;
 function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
   NumObjects: DWord; E: TPdfEnum): LongBool; stdcall;
 var
-  i: integer;
+  i: PtrInt;
   InitTransX: XForm;
   polytypes: PByteArray;
 begin
@@ -10975,18 +10975,14 @@ begin
           with PEMRBitBlt(R)^ do // only handle RGB bitmaps (no palette)
             if (offBmiSrc <> 0) and
                (offBitsSrc <> 0) then
-            begin
               E.DrawBitmap(xSrc, ySrc, cxDest, cyDest, xDest, yDest,
                 cxDest, cyDest, iUsageSrc, pointer(PtrUInt(R) + offBmiSrc),
-                pointer(PtrUInt(R) + offBitsSrc), @PEMRBitBlt(R)^.rclBounds,
-                @PEMRBitBlt(R)^.xformSrc, PEMRBitBlt(R)^.dwRop);
-            end
+                pointer(PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, dwRop)
             else
-              case PEMRBitBlt(R)^.dwRop of // we only handle PATCOPY = fillrect
+              case dwRop of // we only handle PATCOPY = fillrect
                 PATCOPY:
-                  with PEMRBitBlt(R)^ do
-                    E.FillRectangle(Rect(xDest, yDest,
-                      xDest + cxDest, yDest + cyDest), true);
+                  E.FillRectangle(Rect(xDest, yDest,
+                    xDest + cxDest, yDest + cyDest), true);
               end;
         end;
       EMR_STRETCHBLT:
@@ -10994,18 +10990,14 @@ begin
           with PEMRStretchBlt(R)^ do // only handle RGB bitmaps (no palette)
             if (offBmiSrc <> 0) and
                (offBitsSrc <> 0) then
-            begin
               E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest,
                 cyDest, iUsageSrc, pointer(PtrUInt(R) + offBmiSrc),
-                pointer(PtrUInt(R) + offBitsSrc), @PEMRStretchBlt(R)^.rclBounds,
-                @PEMRStretchBlt(R)^.xformSrc, PEMRStretchBlt(R)^.dwRop);
-            end
+                pointer(PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, dwRop)
             else
-              case PEMRStretchBlt(R)^.dwRop of // we only handle PATCOPY = fillrect
+              case dwRop of // we only handle PATCOPY = fillrect
                 PATCOPY:
-                  with PEMRStretchBlt(R)^ do
-                    E.FillRectangle(Rect(
-                      xDest, yDest, xDest + cxDest, yDest + cyDest), true);
+                  E.FillRectangle(Rect(
+                    xDest, yDest, xDest + cxDest, yDest + cyDest), true);
               end;
         end;
       EMR_STRETCHDIBITS:
@@ -11018,8 +11010,7 @@ begin
                 bmiHeader.biHeight := -bmiHeader.biHeight;
             E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
               iUsageSrc, pointer(PtrUInt(R) + offBmiSrc),
-              pointer(PtrUInt(R) + offBitsSrc), @PEMRStretchDIBits(R)^.rclBounds,
-              nil, PEMRStretchDIBits(R)^.dwRop);
+              pointer(PtrUInt(R) + offBitsSrc), @rclBounds, nil, dwRop);
           end;
       EMR_TRANSPARENTBLT:
         with PEMRTransparentBLT(R)^ do // only handle RGB bitmaps (no palette)
@@ -11027,17 +11018,29 @@ begin
              (offBitsSrc <> 0) then
             E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
               iUsageSrc, pointer(PtrUInt(R) + offBmiSrc),
-              pointer(PtrUInt(R) + offBitsSrc), @PEMRTransparentBLT(R)^.rclBounds,
-              @PEMRTransparentBLT(R)^.xformSrc, SRCCOPY,
-              PEMRTransparentBLT(R)^.dwRop); // dwRop stores the transparent color
+              pointer(PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, SRCCOPY,
+              dwRop); // dwRop stores the transparent color
+      EMR_ALPHABLEND:
+        with PEMRAlphaBlend(R)^ do // only handle RGB bitmaps (no palette nor transparency)
+          if (offBmiSrc <> 0) and
+             (offBitsSrc <> 0) then
+            E.DrawBitmap (xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
+              iUsageSrc, pointer(PtrUInt(R) + offBmiSrc), pointer(
+               PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, SRCCOPY, dwRop)
+          else
+            case dwRop of // we only handle PATCOPY = fillrect
+              PATCOPY:
+                E.FillRectangle(Rect(xDest, yDest,
+                  xDest + cxDest, yDest + cyDest), true);
+            end;
       EMR_GDICOMMENT:
-        with PEMRGDICOMMENT(R)^ do
+        with PEMRGDIComment(R)^ do
           if cbData >= 1  then
             E.HandleComment(
               TPdfGdiComment(Data[0]), PAnsiChar(@Data) + 1, cbData - 1);
       EMR_MODIFYWORLDTRANSFORM:
         with PEMRModifyWorldTransform(R)^ do
-          E.ScaleMatrix(@PEMRModifyWorldTransform(R)^.xform, iMode);
+          E.ScaleMatrix(@xform, iMode);
       EMR_EXTCREATEPEN: // approx. - fast solution
         with PEMRExtCreatePen(R)^ do
           if ihPen - 1 < cardinal(length(E.Obj)) then

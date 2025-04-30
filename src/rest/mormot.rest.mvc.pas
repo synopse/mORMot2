@@ -1469,11 +1469,13 @@ begin
     recsize := 0
   else
   begin
-    // binary decoding of a rkRecord
+    // binary decoding of a record/object
     recsize := PRecordDataTypeInfo^.RecordSize;
-    if recsize > SizeOf(rec) then
-      EMvcException.RaiseUtf8('%.CheckAndRetrieveInfo: recsize=% overflow',
-        [self, recsize]);
+    if (recsize = 0) or // = 0 if not rkRecordTypes
+       (recsize > SizeOf(rec)) then
+      EMvcException.RaiseUtf8('%.CheckAndRetrieveInfo: incorrect % % (size=%)',
+        [self, PRecordDataTypeInfo^.RawName, ToText(PRecordDataTypeInfo^.Kind)^,
+         recsize]);
     FillCharFast(rec, recsize, 0);
   end;
   try
@@ -1536,7 +1538,8 @@ begin
     exit; // no cookie -> no session
   result := fContext.Validate(
     cookie, PRecordData, PRecordTypeInfo, PExpires, nil, Invalidate);
-  if result <= 0 then
+  if (result <= 0) and
+     not Invalidate then
     // delete any invalid/expired cookie on server side
     Finalize;
 end;

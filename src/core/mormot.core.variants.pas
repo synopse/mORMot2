@@ -1506,6 +1506,8 @@ type
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around DocVariantType.ToJson()
     function ToJson: RawUtf8; overload;
+    /// save a document as human-readable UTF-8 encoded JSON
+    function ToHumanJson: RawUtf8;
     /// save a document as UTF-8 encoded JSON
     function ToJson(const Prefix, Suffix: RawUtf8;
       Format: TTextWriterJsonFormat): RawUtf8; overload;
@@ -2136,9 +2138,12 @@ type
     /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     // - any name collision will append a counter to make it unique
     // - if aSepChar is #0, no separation dot/character will be appended
+    // - aNestedArrayStartIndex=0 would allow to convert e.g. {"arr":["a","b"]}
+    // into {"arr.0":"a","arr.1":"b"}
     // - return FALSE if the TDocVariant did not change
-    // - return TRUE if the TDocVariant has been flattened
-    function FlattenFromNestedObjects(aSepChar: AnsiChar = '.'): boolean;
+    // - return TRUE if the TDocVariant has been flattened at least for some fields
+    function FlattenFromNestedObjects(aSepChar: AnsiChar = '.';
+      aNestedArrayStartIndex: PtrInt = -1): boolean;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -4235,7 +4240,7 @@ const
     'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',
     'String', 'UString', 'Any', 'Array', 'DocVariant');
 var
-  _VariantTypeNameAsInt: shortstring; // not thread-safe, but hardly called
+  _VariantTypeNameAsInt: ShortString; // not thread-safe, but hardly called
 
 function VariantTypeName(V: PVarData): PShortString;
 var
@@ -5889,7 +5894,7 @@ end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUtf8): integer;
 begin
-  result := GetValueIndex(pointer(aName), Length(aName), IsCaseSensitive);
+  result := GetValueIndex(pointer(aName), Length(aName), Has(dvoNameCaseSensitive));
 end;
 
 function TDocVariantData.GetCapacity: integer;
@@ -7410,15 +7415,22 @@ procedure TDocVariantData.AddOrUpdateFrom(const aDocVariant: Variant;
 var
   src: PDocVariantData;
   n: integer;
-  v: PVariant;
   k: PRawUtf8;
+  v: PVariant;
 begin
   src := _Safe(aDocVariant, dvObject);
   n := src^.Count;
   if n = 0 then
     exit; // nothing to add
+  if Count = 0 then
+  begin
+    VCount := n;
+    VValue := src^.VValue; // no need to lookup names: just assign by reference
+    VName  := src^.VName;
+    exit;
+  end;
+  k := pointer(src^.VName); // need to merge values by property name
   v := pointer(src^.VValue);
-  k := pointer(src^.VName);
   repeat
     AddOrUpdateValue(k^, v^, nil, aOnlyAddMissing);
     inc(k);
@@ -8272,7 +8284,7 @@ function TDocVariantData.FlattenAsNestedObject(
   const aObjectPropName: RawUtf8; aSepChar: AnsiChar): boolean;
 var
   ndx, len: PtrInt;
-  Up: array[byte] of AnsiChar;
+  Up: TByteToAnsiChar;
   nested: TDocVariantData;
 begin
   // {"p.a1":5,"p.a2":"dfasdfa"} into {"p":{"a1":5,"a2":"dfasdfa"}}
@@ -8296,41 +8308,60 @@ begin
   result := true;
 end;
 
-function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar): boolean;
+function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar;
+  aNestedArrayStartIndex: PtrInt): boolean;
 var
-  n1, n2: PtrInt;
+  c, n2: PtrInt;
   n: PRawUtf8;
-  prefix: RawUtf8;
-  v: PVariant;
+  prefix, newname: RawUtf8;
+  v, v2: PVariant;
   obj: PDocVariantData;
   nested: TDocVariantData;
-begin
-  // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
+  nestedkind: TDocVariantKind;
+begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
   result := false;
   if (VCount = 0) or
-     (not IsObject) then
+     not IsObject then
     exit;
   nested.InitClone(self);
   nested.Capacity := VCount;
   n := pointer(VName);
   v := pointer(VValue);
-  for n1 := 1 to Count do
-  begin
-    if _SafeObject(v^, obj) then
+  c := VCount;
+  repeat
+    if _Safe(v^, obj) and
+       (obj^.VCount <> 0) then
     begin
-      result := true; // was flattened
+      nestedkind := obj^.Kind;
+      if (nestedkind = dvArray) and
+         (aNestedArrayStartIndex < 0) then
+        nestedkind := dvUndefined; // default behavior
+    end
+    else
+      nestedkind := dvUndefined;
+    if nestedkind = dvUndefined then
+      nested.AddValue(n^, v^) // just insert regular name:value pair
+    else
+    begin
+      result := true; // was somewhat flattened
       prefix := n^;
       if aSepChar <> #0 then
         Append(prefix, aSepChar); // #0 = no char appended
+      v2 := pointer(obj^.VValue);
       for n2 := 0 to obj^.Count - 1 do
-        nested.AddValue(nested.EnsureUniqueName(prefix + obj^.Names[n2]),
-          obj^.Values[n2]);
-    end
-    else
-      nested.AddValue(n^, v^); // just insert regular functions
+      begin
+        if nestedkind = dvArray then
+          Make([prefix, n2 + aNestedArrayStartIndex], newname)
+        else
+          Join([prefix, obj^.Names[n2]], newname);
+        nested.AddValue(nested.EnsureUniqueName(newname), v2^);
+        inc(v2);
+      end;
+    end;
     inc(n);
     inc(v);
-  end;
+    dec(c);
+  until c = 0;
   if not result then
     exit; // nothing changed
   ClearFast;
@@ -8551,7 +8582,7 @@ function TDocVariantData.DeleteByStartName(
   aStartName: PUtf8Char; aStartNameLen: integer): integer;
 var
   ndx: PtrInt;
-  upname: array[byte] of AnsiChar;
+  upname: TByteToAnsiChar;
 begin
   result := 0;
   if aStartNameLen = 0 then
@@ -9023,7 +9054,7 @@ end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUtf8): RawUtf8;
 var
-  Up: array[byte] of AnsiChar;
+  Up: TByteToAnsiChar;
   temp: TTextWriterStackBuffer;
   n: integer;
   checkExtendedPropName: boolean;
@@ -9064,7 +9095,7 @@ end;
 function TDocVariantData.GetValuesByStartName(const aStartName: RawUtf8;
   TrimLeftStartName: boolean): variant;
 var
-  Up: array[byte] of AnsiChar;
+  Up: TByteToAnsiChar;
   ndx: PtrInt;
   name: RawUtf8;
 begin
@@ -9262,6 +9293,11 @@ end;
 function TDocVariantData.ToJson: RawUtf8;
 begin // note: FPC has troubles inlining this, but it is a slow method anyway
   DocVariantType.ToJson(@self, result, '', '', jsonCompact);
+end;
+
+function TDocVariantData.ToHumanJson: RawUtf8;
+begin
+  DocVariantType.ToJson(@self, result, '', '', jsonHumanReadable);
 end;
 
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;

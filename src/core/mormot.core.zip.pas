@@ -2595,7 +2595,7 @@ begin
         Utf8ToFileName(tmp, e^.zipName)
       end
       else if h^.fileInfo.GetUtf8FileNameFlag or
-              IsValidUtf8(tmp) then
+              IsValidUtf8Small(tmp) then
         // flag let decode UTF-8 file name into native string/TFileName type
         // also detects UTF-8 without the flag (happens from POSIX zippers)
         Utf8ToFileName(tmp, e^.zipName)

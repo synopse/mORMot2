@@ -957,7 +957,9 @@ begin
     else
     begin
       Utf8ToFileName(ExtractExecutableName(n), fn);
-      if FileIsExecutable(fn) then
+      if fn = '' then
+        res := -1 // this parametr seems invalid
+      else if FileIsExecutable(fn) then
         res := RunCommand(Utf8ToString(n), {waitfor=}true)
       else
       begin // append to text log file
@@ -1747,7 +1749,7 @@ var
   log: ISynLog;
 begin
   // /enable <servicename>   or  /disable <servicename>
-  log := fSettings.LogClass.Enter(self, 'ServiceChangeState');
+  fSettings.LogClass.EnterLocal(log, self, 'ServiceChangeState');
   WriteCopyright;
   if ParamCount < 2 then
     ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
@@ -1783,7 +1785,7 @@ var
   log: ISynLog;
 begin
   // mimics nssm install <servicename> <executable> [<params>]
-  log := fSettings.LogClass.Enter(self, 'NewService');
+  fSettings.LogClass.EnterLocal(log, self, 'NewService');
   WriteCopyright;
   if ParamCount < 3 then
     ESynAngelize.RaiseUtf8(
@@ -1848,7 +1850,7 @@ var
   one: TSynLog;
 begin
   one := nil;
-  log := fSettings.LogClass.Enter(self, 'StartServices');
+  fSettings.LogClass.EnterLocal(log, self, 'StartServices');
   if Assigned(log) then // log=nil if LogClass=nil or sllEnter is not enabled
     one := log.Instance;
   {$ifdef OSWINDOWS}
@@ -1922,7 +1924,7 @@ var
   one: TSynLog;
 begin
   one := nil;
-  log := fSas.LogClass.Enter(self, 'StopServices');
+  fSas.LogClass.EnterLocal(log, self, 'StopServices');
   if Assigned(log) then // log=nil if LogClass=nil or sllEnter is not enabled
     one := log.Instance;
   // stop sub-services following their reverse Level order
@@ -1972,11 +1974,11 @@ var
   log: ISynLog;
   one: TSynLog;
 
-  procedure GetLog;
+  procedure EnsureLogExists;
   begin
     if {%H-}log <> nil then
       exit;
-    log := fSettings.LogClass.Enter(self, 'WatchEverySecond');
+    fSettings.LogClass.EnterLocal(log, self, 'WatchEverySecond');
     if Assigned(log) then
       one := log.Instance;
   end;
@@ -1995,7 +1997,7 @@ begin
        (s.fNextWatch = 0) or
        (tix < s.fNextWatch) then
       continue;
-    GetLog;
+    EnsureLogExists;
     // execute all "Watch":[...,...,...] actions
     for a := 0 to high(s.fWatch) do
       try
@@ -2012,7 +2014,7 @@ begin
   if FileExists(fSas.CommandFile) then
   try
     cmd := TrimU(StringFromFile(fSas.CommandFile));
-    GetLog;
+    EnsureLogExists;
     one.Log(sllTrace, 'WatchEverySecond: [%] from %', [cmd, fSas.CommandFile], self);
     case FindPropName(['reload'], cmd) of
       0: // --reload

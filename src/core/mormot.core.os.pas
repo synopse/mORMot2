@@ -175,6 +175,8 @@ const
   HTTP_TIMEOUT = 408;
   /// HTTP Status Code for "Conflict"
   HTTP_CONFLICT = 409;
+  /// HTTP Status Code for "Gone"
+  HTTP_GONE = 410;
   /// HTTP Status Code for "Length Required"
   HTTP_LENGTHREQUIRED = 411;
   /// HTTP Status Code for "Payload Too Large"
@@ -183,8 +185,12 @@ const
   HTTP_RANGENOTSATISFIABLE = 416;
   /// HTTP Status Code for "I'm a teapot"
   HTTP_TEAPOT = 418;
- /// HTTP Status Code for "Unprocessable Content"
+  /// HTTP Status Code for "Unprocessable Content"
   HTTP_UNPROCESSABLE_CONTENT = 422;
+  /// HTTP Status Code for "Upgrade Required"
+  HTTP_UPGRADE_REQUIRED = 426;
+  /// HTTP Status Code for "Too Many Requests"
+  HTTP_TOO_MANY_REQUESTS = 429;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -199,7 +205,7 @@ const
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
   /// a fake response code, generated for client side panic failure/exception
-  // - for it is the number of a man
+  // - for it is the number of a man, and that number is 666
   HTTP_CLIENTERROR = 666;
   /// a fake response code, usedfor internal THttpAsyncServer asynchronous process
   HTTP_ASYNCRESPONSE = 777;
@@ -235,15 +241,6 @@ const
   // - i.e. 'Content-Type: application/json'
   JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
 
-  /// MIME content type used for plain JSON, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_UPPER = 'APPLICATION/JSON';
-
-  /// HTTP header for MIME content type used for plain JSON, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_HEADER_UPPER =
-    HEADER_CONTENT_TYPE_UPPER + JSON_CONTENT_TYPE_UPPER;
-
   /// MIME content type used for plain UTF-8 text - see RFC 7231 section-3.1.1
   TEXT_CONTENT_TYPE = 'text/plain;charset=utf-8';
 
@@ -274,18 +271,6 @@ const
   /// MIME content type used for a JPEG picture
   JPEG_CONTENT_TYPE = 'image/jpeg';
 
-  /// a IdemPPChar() compatible array of textual MIME content types
-  // - as used e.g. by IsHtmlContentTypeTextual()
-  CONTENT_TYPE_TEXTUAL: array[0..7] of PAnsiChar = (
-    JSON_CONTENT_TYPE_UPPER,
-    'TEXT/',
-    'APPLICATION/XML',
-    'APPLICATION/JSON',
-    'APPLICATION/JAVASCRIPT',
-    'APPLICATION/X-JAVASCRIPT',
-    'IMAGE/SVG+XML',
-    nil);
-
   /// internal HTTP content-type for efficient static file sending
   // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
   // X-Accel-Redirect header's THttpServer.Process (see
@@ -309,13 +294,13 @@ const
   // response from the other endpoint
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
-  /// HTTP body following RFC 2324 standard e.g. for banned IP
-  HTTP_BANIP_RESPONSE: string[201] =
+  /// HTTP body from RFC 2324 e.g. for banned IP or hsoRejectBotUserAgent
+  HTTP_BANIP_RESPONSE: string[191] =
     'HTTP/1.0 418 I''m a teapot'#13#10 +
-    'Content-Length: 125'#13#10 +
+    'Content-Length: 111'#13#10 +
     'Content-Type: text/plain'#13#10#13#10 +
     'Server refuses to brew coffee because it is currently a teapot.'#13#10 +
-    'Do not mess with it and retry from this IP in a few seconds.';
+    'Botbusters message: "I ain''t ''fraid of no bot"';
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a ShortString
@@ -792,6 +777,20 @@ function ToTextOS(osint32: integer): RawUtf8;
 // - osUnknown will always return true
 function MatchOS(os: TOperatingSystem): boolean;
 
+/// return the best known ERROR_* system error message constant texts
+// - without the 'ERROR_' prefix, but in a cross-platform way
+// - as used by WinErrorText() and some low-level Windows API wrappers
+function WinErrorConstant(Code: cardinal): PShortString;
+
+/// return the error code number, and its ERROR_* constant (if known)
+function WinErrorShort(Code: cardinal): ShortString;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append the error as ' ERROR_*' constant and return TRUE if known
+// - append nothing and return FALSE if Code is not known
+function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
+  Sep: AnsiChar): boolean;
+
 type
   /// the recognized ARM/AARCH64 CPU types
   // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
@@ -904,14 +903,14 @@ function ArmCpuType(id: word): TArmCpuType;
 
 /// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
 function ArmCpuTypeName(act: TArmCpuType; id: word;
-  const before: shortstring = ''): shortstring;
+  const before: ShortString = ''): ShortString;
 
 /// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
 
 /// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
 function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word;
-  const after: shortstring = ''): shortstring;
+  const after: ShortString = ''): ShortString;
 
 
 const
@@ -1796,7 +1795,7 @@ type
     wspIncreaseQuota,
     wspUnsolicitedInput,
     wspMachineAccount,
-    wspTCP,
+    wspTCB,
     wspSecurity,
     wspTakeOwnership,
     wspLoadDriver,
@@ -2402,16 +2401,6 @@ function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 procedure FileClose(F: THandle); stdcall;
 
-/// redefined here to support FileName longer than MAX_PATH
-// - as our FileOpen/FileCreate redefinitions
-// - CheckAsDir = true is used by DirectoryExists()
-function FileExists(const FileName: TFileName; FollowLink: boolean = true;
-  CheckAsDir: boolean = false): boolean;
-
-/// redefined here to support FileName longer than MAX_PATH
-function DirectoryExists(const FileName: TFileName;
-  FollowLink: boolean = true): boolean; {$ifdef HASINLINE} inline; {$endif}
-
 /// redefined here to avoid warning to include "Windows" in uses clause
 // and support FileName longer than MAX_PATH
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
@@ -2433,17 +2422,6 @@ function ExpandFileName(const FileName: TFileName): TFileName;
 const
   ENGLISH_LANGID = 'en-US';
 {$endif ISDELPHI}
-
-
-/// faster cross-platform alternative to sysutils homonymous function
-// - will directly use fpstat() so is slightly faster than default FPC RTL
-//function FileExists(const FileName: TFileName): boolean;
-function FileExists(const FileName: TFileName; FollowLink: boolean = true;
-  CheckAsDir: boolean = false): boolean;
-
-/// faster cross-platform alternative to sysutils homonymous function
-// - will directly use fpstat() so is slightly faster than default FPC RTL
-function DirectoryExists(const FolderName: TFileName): boolean;
 
 /// redefined from FPC RTL sysutils for consistency
 // - warning: this function replaces ALL SysUtils.FileCreate() overloads,
@@ -2958,25 +2936,17 @@ function GetErrorText(error: integer): RawUtf8;
 // - replace SysErrorMessagePerModule() and SysErrorMessage() from mORMot 1
 function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 
-/// return the best known ERROR_* system error message constant texts
-// - without the 'ERROR_' prefix
-// - as used by WinErrorText() and some low-level Windows API wrappers
-function WinErrorConstant(Code: cardinal): PShortString;
-
-/// minimal GetEnumName() for Delphi + FPC on base enum type with no Min/Max
-function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
-
 /// raise an EOSException from the last system error using WinErrorText()
 // - if Code is kept to its default 0, GetLastError is called
-procedure RaiseLastError(const Context: shortstring;
+procedure RaiseLastError(const Context: ShortString;
   RaisedException: ExceptClass = nil; Code: integer = 0);
 
 /// return a RaiseLastError-like error message using WinErrorText()
 // - if Code is kept to its default 0, GetLastError is called
-function WinLastError(const Context: shortstring; Code: integer = 0): string;
+function WinLastError(const Context: ShortString; Code: integer = 0): string;
 
 /// call RaiseLastError(Code) if Code <> NO_ERROR = ERROR_SUCCESS
-procedure WinCheck(const Context: shortstring; Code: integer;
+procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass = nil);
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -3058,7 +3028,7 @@ function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
 // - Unicode_CodePageName(932) returns e.g. 'SHIFT_JIS'
 // - Unicode_CodePageName(1251) returns 'MS1251' since 'CP####' is used
 // for IBM code pages by ICU - which do not match Windows code pages
-procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
+procedure Unicode_CodePageName(CodePage: cardinal; var Name: ShortString);
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
@@ -3182,6 +3152,22 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 /// cross-platform check if the supplied THandle is not invalid
 function ValidHandle(Handle: THandle): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, will support FileName longer than MAX_PATH
+// - FPC on Windows is not consistent with Delphi and the expected low-level API
+function SetCurrentDir(const NewDir: TFileName): boolean;
+
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, will support FileName longer than MAX_PATH
+// - CheckAsDir = true is used by DirectoryExists()
+function FileExists(const FileName: TFileName; FollowLink: boolean = true;
+  CheckAsDir: boolean = false): boolean;
+
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, will support FileName longer than MAX_PATH
+function DirectoryExists(const FileName: TFileName;
+  FollowLink: boolean = true): boolean;
 
 /// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a path
 function SafePathName(const Path: TFileName): boolean;
@@ -3907,7 +3893,7 @@ function RetrieveLoadAvg: TShort23;
 /// a shorter version of GetSystemInfoText
 // - 'ncores avg1 avg5 avg15 [updays] used/totalram [used/totalswap] osint32' on POSIX,
 // or 'ncores user kern [updays] used/totalram [used/totalswap] osint32' on Windows
-procedure RetrieveSysInfoText(out text: shortstring);
+procedure RetrieveSysInfoText(out text: ShortString);
 
 /// retrieve low-level information about current memory usage
 // - as used e.g. by TSynMonitorMemory or GetMemoryInfoText
@@ -3981,7 +3967,8 @@ type
 var
   /// low-level handle used for console writing
   // - may be overriden when console is redirected
-  // - on Windows, is initialized when AllocConsole or TextColor() are called
+  // - on Windows, is initialized when AllocConsole, HasConsole or TextColor()
+  // are actually called
   StdOut: THandle;
 
   /// global flag to modify the code behavior at runtime when run from TSynTests
@@ -3994,15 +3981,16 @@ var
 procedure AllocConsole;
 
 /// always true on POSIX, may be false for a plain Windows GUI application
+{$ifdef OSWINDOWS}
 function HasConsole: boolean;
-  {$ifdef OSPOSIX} inline; {$endif OSPOSIX}
+{$else}
+const HasConsole = true; // assume POSIX has always a console somewhere
 
-{$ifdef OSPOSIX}
-/// true if StdOut has the TTY flag and env has a known TERM
+/// POSIX only: true if StdOut has the TTY flag and env has a known TERM
 // - equals false if the console does not support colors, e.g. piped to a file
 // or from the Lazarus debugger
 function StdOutIsTTY: boolean; {$ifndef ISDELPHI} inline; {$endif} // Delphi does not allow hidden unit vars in inline code
-{$endif OSPOSIX}
+{$endif OSWINDOWS}
 
 /// change the console text writing color
 procedure TextColor(Color: TConsoleColor);
@@ -4114,10 +4102,20 @@ procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 
 {$endif OSWINDOWS}
 
-/// internal function to avoid linking mormot.core.buffers.pas
-// - will output the value as one number with one decimal and KB/MB/GB/TB suffix
-// - defined here for regression tests purposes
-function _oskb(Size: QWord): shortstring;
+/// will append the value as one-decimal number text and B/KB/MB/GB/TB suffix
+// - append EB, PB, TB, GB, MB, KB or B symbol with or without a preceding space
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+procedure AppendKb(Size: Int64; var Dest: ShortString; WithSpace: boolean = false);
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol with preceding space
+function KB(Size: Int64): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol without preceding space
+function KBNoSpace(Size: Int64): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 type
   /// function prototype for AppendShortUuid()
@@ -4133,6 +4131,10 @@ var
   /// append a TGuid into lower-cased '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
   AppendShortUuid: TAppendShortUuid;
+
+  /// return the RTTI text of a given enumerate as mormot.core.rtti GetEnumName()
+  // - this unit defaults to minimal code, but overriden by mormot.core.rtti.pas
+  GetEnumNameRtti: function(Info: pointer; Value: integer): PShortString;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use GetConsoleOutputCP() codepage, following CP_OEM
@@ -4584,6 +4586,7 @@ type
     /// release all stored memory
     procedure Done;
     /// allocate a new PLockedListOne data instance in threadsafe O(1) process
+    // - returned buffer is filled with Size zero bytes
     function New: pointer;
     /// release one PLockedListOne used data instance in threadsafe O(1) process
     function Free(one: pointer): boolean;
@@ -5613,7 +5616,7 @@ type
     procedure ServiceProc(ArgCount: integer; Args: PPWideChar);
   public
     /// internal method redirecting to WindowsServiceLog global variable
-    class procedure DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+    class procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
       const Args: array of const; Instance: TObject);
     /// Creates the service
     // - the service is added to the internal registered services
@@ -5865,7 +5868,10 @@ type
   PParseCommands = ^TParseCommands;
 
   /// used to store references of arguments recognized by ParseCommandArgs()
-  TParseCommandsArgs = array[0..31] of PAnsiChar;
+  // - up to 255 arguments are usually stored on the stack as function result
+  // - POSIX has almost no limit (since command line is intensively used in scripts),
+  // but some Windows versions seemed to limit to 8KB total as a whole
+  TParseCommandsArgs = array[byte] of PAnsiChar;
   PParseCommandsArgs = ^TParseCommandsArgs;
 
 const
@@ -5899,6 +5905,7 @@ function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
 
 /// high-level extraction of the executable of a RunCommand() execution command
 // - returns the first parameter returned by ParseCommandArgs()
+// - returns '' if cmd is incorrectly formatted
 function ExtractExecutableName(const cmd: RawUtf8;
   posix: boolean = PARSCOMMAND_POSIX): RawUtf8;
 
@@ -6098,33 +6105,43 @@ begin
   P := S;
 end;
 
-procedure __oskb(Size: QWord; var text: shortstring);
+procedure AppendKb(Size: Int64; var Dest: ShortString; WithSpace: boolean);
 const
-  _U: array[0..3] of AnsiChar = 'TGMK';
+  _U: array[1..5] of AnsiChar = 'KMGTE';
 var
   u: PtrInt;
-  b: QWord;
+  b: Int64;
 begin
+  if Size < 0 then
+    exit;
   u := 0;
-  b := Qword(1) shl 40;
+  b := 1 shl 10;
   repeat
-    if Size > b shr 1 then
+    if Size < b - (b shr 3) then
       break;
-    b := b shr 10;
+    b := b shl 10;
     inc(u);
   until u = high(_u);
-  str(Size / b : 1 : 1, text); // let the FPU + RTL do the conversion for us
-  if (text[0] <= #2) or
-     (text[ord(text[0]) - 1] <> '.') or
-     (text[ord(text[0])] <> '0') then
-    inc(text[0], 2);
-  text[ord(text[0]) - 1] := _U[u];
-  text[ord(text[0])] := 'B';
+  Size := (Size * 10000) shr (u * 10);
+  SimpleRoundTo2DigitsCurr64(Size);
+  AppendShortCurr64(Size, Dest, 1);
+  if WithSpace then
+    AppendShortChar(' ', @Dest);
+  if u <> 0 then
+    AppendShortChar(_U[u], @Dest);
+  AppendShortChar('B', @Dest);
 end;
 
-function _oskb(Size: QWord): shortstring;
+function KB(Size: Int64): TShort16;
 begin
-  __oskb(Size, result);
+  result[0] := #0;
+  AppendKb(Size, result, {withspace=}true);
+end;
+
+function KBNoSpace(Size: Int64): TShort16;
+begin
+  result[0] := #0;
+  AppendKb(Size, result, {withspace=}false);
 end;
 
 {$ifdef ISDELPHI} // missing convenient RTL function in Delphi
@@ -6313,6 +6330,188 @@ begin
     end;
 end;
 
+// PUtf8Char for system error text reduces the executable size vs RawUtf8
+// on Delphi (aligned to 4 bytes), but not on FPC (aligned to 16 bytes), and
+// enumerates allow cross-platform error support outside of the Windows unit
+
+const
+  NULL_STR: string[1] = '';
+
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  _GetEnumNameRttiTmp: string[127]; // output 'TEnumTypeName#value'
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
+function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
+begin
+  if Value < 0 then
+  begin
+    result := @NULL_STR;
+    exit;
+  end;
+  // minimal version with no Kind, EnumBaseType nor Value min/max check
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  // no arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
+  result := @_GetEnumNameRttiTmp;
+  result^ := PShortString(@PByteArray(Info)[1])^;
+  AppendShortChar('#', pointer(result));
+  AppendShortCardinal(Value, result^);
+  {$else}
+  // quickly jump over Kind + NameLen + Name +  OrdType + Min + Max + EnumBaseType
+  result := @PAnsiChar(Info)[PByteArray(Info)[1] + (1 + 1 + 1 + 4 + 4 +
+    SizeOf(pointer) {$ifdef FPC_PROVIDE_ATTR_TABLE} + SizeOf(pointer) {$endif})];
+  if Value > 0 then
+    repeat
+      inc(PByte(result), ord(result^[0]) + 1); // next ShortString
+      dec(Value);
+    until Value = 0;
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+end;
+
+type
+  // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
+  TWinError0 = ( // 0..39
+    SUCCESS, INVALID_FUNCTION, FILE_NOT_FOUND, PATH_NOT_FOUND,
+    TOO_MANY_OPEN_FILES, ACCESS_DENIED, INVALID_HANDLE, ARENA_TRASHED,
+    NOT_ENOUGH_MEMORY, INVALID_BLOCK, BAD_ENVIRONMENT, BAD_FORMAT,
+    INVALID_ACCESS, INVALID_DATA, OUTOFMEMORY, INVALID_DRIVE,
+    CURRENT_DIRECTORY, NOT_SAME_DEVICE, NO_MORE_FILES, WRITE_PROTECT,
+    BAD_UNIT, NOT_READY, BAD_COMMAND, CRC, BAD_LENGTH, SEEK,
+    NOT_DOS_DISK, SECTOR_NOT_FOUND, OUT_OF_PAPER, WRITE_FAULT,
+    READ_FAULT, GEN_FAILURE, SHARING_VIOLATION, LOCK_VIOLATION,
+    WRONG_DISK, FAIL_I35, SHARING_BUFFER_EXCEEDED, FAIL_I37, HANDLE_EOF,
+    HANDLE_DISK_FULL);
+  TWinError50 = ( // 50..55
+    NOT_SUPPORTED, REM_NOT_LIST, DUP_NAME, BAD_NETPATH,
+    NETWORK_BUSY, DEV_NOT_EXIST);
+  TWinError80 = ( // 80..89
+    FILE_EXISTS, FAIL_I81, CANNOT_MAKE, FAIL_I83, OUT_OF_STRUCTURES,
+    ALREADY_ASSIGNED, INVALID_PASSWORD, INVALID_PARAMETER,
+    NET_WRITE_FAULT, NO_PROC_SLOTS);
+  TWinError108 = ( // 108..129
+    DRIVE_LOCKED, BROKEN_PIPE, OPEN_FAILED, BUFFER_OVERFLOW,
+    DISK_FULL, NO_MORE_SEARCH_HANDLES, INVALID_TARGET_HANDLE, FAIL_I115,
+    FAIL_I116, INVALID_CATEGORY, INVALID_VERIFY_SWITCH, BAD_DRIVER_LEVEL,
+    CALL_NOT_IMPLEMENTED, SEM_TIMEOUT, INSUFFICIENT_BUFFER,
+    INVALID_NAME, INVALID_LEVEL, NO_VOLUME_LABEL, MOD_NOT_FOUND,
+    PROC_NOT_FOUND, WAIT_NO_CHILDREN, CHILD_NOT_COMPLETE);
+  TWinError995 = ( // 995..1013
+    OPERATION_ABORTED, IO_INCOMPLETE, IO_PENDING, NOACCESS, SWAPERROR,
+    FAIL_I1000, STACK_OVERFLOW, INVALID_MESSAGE, CAN_NOT_COMPLETE,
+    INVALID_FLAGS, UNRECOGNIZED_VOLUME, FILE_INVALID, FULLSCREEN_MODE,
+    NO_TOKEN, BADDB, BADKEY, CANTOPEN, CANTREAD, CANTWRITE);
+  TWinError1051 = ( // 1051..1079
+    DEPENDENT_SERVICES_RUNNING, INVALID_SERVICE_CONTROL,
+    SERVICE_REQUEST_TIMEOUT, SERVICE_NO_THREAD, SERVICE_DATABASE_LOCKED,
+    SERVICE_ALREADY_RUNNING, INVALID_SERVICE_ACCOUNT, SERVICE_IS_DISABLED,
+    CIRCULAR_DEPENDENCY, SERVICE_DOES_NOT_EXIST, SERVICE_CANNOT_ACCEPT_CTRL,
+    SERVICE_NOT_ACTIVE, FAILED_SERVICE_CONTROLLER_CONNECT,
+    EXCEPTION_IN_SERVICE, DATABASE_DOES_NOT_EXIST, SERVICE_SPECIFIC_ERROR,
+    PROCESS_ABORTED, SERVICE_DEPENDENCY_FAIL, SERVICE_LOGON_FAILED,
+    SERVICE_START_HANG, INVALID_SERVICE_LOCK, SERVICE_MARKED_FOR_DELETE,
+    SERVICE_EXISTS, ALREADY_RUNNING_LKG, SERVICE_DEPENDENCY_DELETED,
+    BOOT_ALREADY_ACCEPTED, SERVICE_NEVER_STARTED, DUPLICATE_SERVICE_NAME,
+    DIFFERENT_SERVICE_ACCOUNT);
+  TWinError1200 = ( // 1200..1246
+    BAD_DEVICE, CONNECTION_UNAVAIL, DEVICE_ALREADY_REMEMBERED,
+    NO_NET_OR_BAD_PATH, BAD_PROVIDER, CANNOT_OPEN_PROFILE, BAD_PROFILE,
+    NOT_CONTAINER, EXTENDED_ERROR, INVALID_GROUPNAME, INVALID_COMPUTERNAME,
+    INVALID_EVENTNAME, INVALID_DOMAINNAME, INVALID_SERVICENAME,
+    INVALID_NETNAME, INVALID_SHARENAME, INVALID_PASSWORDNAME,
+    INVALID_MESSAGENAME, INVALID_MESSAGEDEST, SESSION_CREDENTIAL_CONFLICT,
+    REMOTE_SESSION_LIMIT_EXCEEDED, DUP_DOMAINNAME, NO_NETWORK, CANCELLED,
+    USER_MAPPED_FILE, CONNECTION_REFUSED, GRACEFUL_DISCONNECT,
+    ADDRESS_ALREADY_ASSOCIATED, ADDRESS_NOT_ASSOCIATED, CONNECTION_INVALID,
+    CONNECTION_ACTIVE, NETWORK_UNREACHABLE, HOST_UNREACHABLE,
+    PROTOCOL_UNREACHABLE, PORT_UNREACHABLE, REQUEST_ABORTED,
+    CONNECTION_ABORTED, RETRY, CONNECTION_COUNT_LIMIT,
+    LOGIN_TIME_RESTRICTION, LOGIN_WKSTA_RESTRICTION, INCORRECT_ADDRESS,
+    ALREADY_REGISTERED, SERVICE_NOT_FOUND, NOT_AUTHENTICATED,
+    NOT_LOGGED_ON, _CONTINUE);
+  TWinError1315 = ( // 1315..1342
+    INVALID_ACCOUNT_NAME, USER_EXISTS, NO_SUCH_USER, GROUP_EXISTS,
+    NO_SUCH_GROUP, MEMBER_IN_GROUP, MEMBER_NOT_IN_GROUP, LAST_ADMIN,
+    WRONG_PASSWORD, ILL_FORMED_PASSWORD, PASSWORD_RESTRICTION, LOGON_FAILURE,
+    ACCOUNT_RESTRICTION, INVALID_LOGON_HOURS, INVALID_WORKSTATION,
+    PASSWORD_EXPIRED, ACCOUNT_DISABLED, NONE_MAPPED, TOO_MANY_LUIDS_REQUESTED,
+    LUIDS_EXHAUSTED, INVALID_SUB_AUTHORITY, INVALID_ACL, INVALID_SID,
+    INVALID_SECURITY_DESCR, _1339, BAD_INHERITANCE_ACL, SERVER_DISABLED,
+    SERVER_NOT_DISABLED);
+  // O(log(n)) binary search in WINERR_ONE[] constants
+  TWinErrorOne = (
+    CRYPT_E_BAD_ENCODE, CRYPT_E_SELF_SIGNED, CRYPT_E_BAD_MSG, CRYPT_E_REVOKED,
+    CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE, TRUST_E_BAD_DIGEST,
+    TRUST_E_NOSIGNATURE, CERT_E_EXPIRED, CERT_E_CHAINING, CERT_E_REVOKED,
+    ALREADY_EXISTS, MORE_DATA, ACCOUNT_EXPIRED, NO_SYSTEM_RESOURCES,
+    PASSWORD_MUST_CHANGE, ERROR_ACCOUNT_LOCKED_OUT,
+    WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK, WSAENETDOWN,
+    WSAENETUNREACH, WSAENETRESET, WSAECONNABORTED, WSAECONNRESET, WSAENOBUFS,
+    WSAETIMEDOUT, WSAECONNREFUSED, WSATRY_AGAIN,
+    WINHTTP_TIMEOUT, WINHTTP_OPERATION_CANCELLED, WINHTTP_CANNOT_CONNECT,
+    WINHTTP_CLIENT_AUTH_CERT_NEEDED, WINHTTP_INVALID_SERVER_RESPONSE);
+const
+  WINERR_ONE: array[TWinErrorOne] of cardinal = (
+    // some security-related HRESULT errors (negative 32-bit values first)
+    $80092002, $80092007, $8009200d, $80092010, $80092012, $80092013, $80096010,
+    $800b0100, $800b0101, $800b010a, $800b010c,
+    // sparse system errors
+    183, 234, 701, 1450, 1907, 1909,
+    // main Windows Socket API (WSA) errors
+    10014, 10022, 10024, 10035, 10038, 10050, 10051, 10052, 10053, 10054, 10055,
+    10060, 10061, 11002,
+    // most common WinHttp API errors (in range 12000...12152)
+    12002, 12017, 12029, 12044, 12152);
+
+function WinErrorConstant(Code: cardinal): PShortString;
+begin
+  case Code of // split into TWinError* types (faster and cross-platform)
+    0 .. ord(high(TWinError0)):
+      result := GetEnumNameRtti(TypeInfo(TWinError0), Code);
+    50 .. 50 + ord(high(TWinError50)):
+      result := GetEnumNameRtti(TypeInfo(TWinError50), Code - 50);
+    80 .. 80 + ord(high(TWinError80)):
+      result := GetEnumNameRtti(TypeInfo(TWinError80), Code - 80);
+    108 .. 108 + ord(high(TWinError108)):
+      result := GetEnumNameRtti(TypeInfo(TWinError108), Code - 108);
+    995 .. 995 + ord(high(TWinError995)):
+      result := GetEnumNameRtti(TypeInfo(TWinError995), Code - 995);
+    1051 .. 1051 + ord(high(TWinError1051)):
+      result := GetEnumNameRtti(TypeInfo(TWinError1051), Code - 1051);
+    1200 .. 1200 + ord(high(TWinError1200)):
+      result := GetEnumNameRtti(TypeInfo(TWinError1200), Code - 1200);
+    1315 .. 1315 + ord(high(TWinError1315)):
+      result := GetEnumNameRtti(TypeInfo(TWinError1315), Code - 1315);
+  else
+    result := GetEnumNameRtti(TypeInfo(TWinErrorOne),
+      FastFindIntegerSorted(@WINERR_ONE, ord(high(WINERR_ONE)), Code));
+  end;
+end;
+
+function WinErrorShort(Code: cardinal): ShortString;
+begin
+  result[0] := #0;
+  AppendShortCardinal(Code, result);
+  AppendWinErrorText(Code, result, ' ');
+end;
+
+function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
+  Sep: AnsiChar): boolean;
+var
+  txt: PShortString;
+begin
+  result := false;
+  txt := WinErrorConstant(Code);
+  if txt^[0] = #0 then
+    exit;
+  if Sep <> #0 then
+    AppendShortChar(Sep, @Dest);
+  if (Code < 10000) or
+     (Code > 11999) then
+    AppendShort('ERROR_', Dest); // if not WSA*
+  AppendShort(txt^, Dest);
+  result := true;
+end;
+
 const
   // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
   ARMCPU_ID: array[TArmCpuType] of word = (
@@ -6444,7 +6643,7 @@ begin
   result := actUnknown;
 end;
 
-function ArmCpuTypeName(act: TArmCpuType; id: word; const before: shortstring): shortstring;
+function ArmCpuTypeName(act: TArmCpuType; id: word; const before: ShortString): ShortString;
 begin
   result := before;
   if act = actUnknown then
@@ -6465,7 +6664,7 @@ begin
 end;
 
 function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word;
-  const after: shortstring): shortstring;
+  const after: ShortString): ShortString;
 begin
   if aci = aciUnknown then
   begin
@@ -6602,7 +6801,7 @@ begin
   end;
 end;
 
-procedure Unicode_CodePageName(CodePage: cardinal; var Name: shortstring);
+procedure Unicode_CodePageName(CodePage: cardinal; var Name: ShortString);
 begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
   case codepage of
     932:
@@ -6728,6 +6927,22 @@ begin
      inc(result, DirectorySize(dir + sr.Name, true));
   until FindNext(sr) <> 0;
   FindClose(sr);
+end;
+
+function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
+var
+  len: PtrInt;
+begin
+  len := length(FileName);
+  if len = 0 then
+    result := false
+  else if (len = 1) and
+          (FileName[1] = '.') then
+    result := true
+  else if FileName[len] <> PathDelim then
+    result := FileExists(FileName, FollowLink, {checkasdir=}true)
+  else
+    result := FileExists(copy(FileName, 1, len - 1), FollowLink, true);
 end;
 
 function SafePathName(const Path: TFileName): boolean;
@@ -7933,16 +8148,12 @@ begin // return 'U:usr K:krn' percents on windows
   AppendShortCurr64(K, result, {fixeddecimals=}2);
 end;
 
-procedure AppendShortKB(free, total: QWord; out text: shortstring);
-var
-  tmp: shortstring;
+procedure AppendFreeTotalKB(free, total: QWord; var dest: ShortString);
 begin
-  __oskb(free, tmp);
-  AppendShort(tmp, text);
-  AppendShortChar('/', @text);
-  __oskb(total, tmp);
-  AppendShort(tmp, text);
-  AppendShortChar(' ', @text);
+  AppendKb(free, dest);
+  AppendShortChar('/', @dest);
+  AppendKb(total, dest);
+  AppendShortChar(' ', @dest);
 end;
 
 function GetMemoryInfoText: TShort31;
@@ -7952,10 +8163,10 @@ begin
   result[0] := #0;
   if not GetMemoryInfo(info, false) then
     exit;
-  AppendShortKB(info.memtotal - info.memfree, info.memtotal, result);
+  AppendFreeTotalKB(info.memtotal - info.memfree, info.memtotal, result);
   AppendShortChar('(', @result);
   AppendShortCardinal(info.percent, result);
-  AppendShortTwoChars('%)', @result);
+  AppendShortTwoChars(ord('%') + ord(')') shl 8, @result);
 end;
 
 function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
@@ -7975,12 +8186,12 @@ begin
        'Current disk free: %s/%s'+ CRLF +'Load: %s'+ CRLF +
        'Exe: %s'+ CRLF +'OS: %s'+ CRLF +'Cpu: %s'+ CRLF +'Bios: %s'+ CRLF,
     [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
-     GetMemoryInfoText, _oskb(avail), _oskb(total), RetrieveLoadAvg,
+     GetMemoryInfoText, KB(avail), KB(total), RetrieveLoadAvg,
      Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText],
      result);
 end;
 
-procedure RetrieveSysInfoText(out text: shortstring);
+procedure RetrieveSysInfoText(out text: ShortString);
 var
   si: TSysInfo;  // Linuxism
 begin
@@ -8003,11 +8214,11 @@ begin
     AppendShortCardinal(cardinal(si.uptime) div SecsPerDay, text);
     AppendShortChar(' ', @text);
   end;
-  AppendShortKB(QWord(si.totalram - si.freeram) * si.mem_unit,
-                QWord(si.totalram) * si.mem_unit, text);
+  AppendFreeTotalKB(QWord(si.totalram - si.freeram) * si.mem_unit,
+                    QWord(si.totalram) * si.mem_unit, text);
   if si.freeswap < si.totalswap shr 2 then // include swap if free below 25%
-    AppendShortKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
-                  QWord(si.totalswap) * si.mem_unit, text);
+    AppendFreeTotalKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
+                      QWord(si.totalswap) * si.mem_unit, text);
   AppendShortIntHex(OSVersionInt32, text); // identify OS version
 end;
 
@@ -10997,7 +11208,10 @@ begin
             include(result, pcUnbalancedDoubleQuote);
           exclude(result, pcInvalidCommand);
           if argv <> nil then
-            argv^[n] := nil; // always end with a last argv^[] = nil
+            if n <= high(argv^) then
+              argv^[n] := nil // always end with a last argv^[] = nil
+            else
+              include(result, pcTooManyArguments);
           if argc <> nil then
             argc^ := n;
           exit;
@@ -11070,11 +11284,10 @@ begin
           end
           else if state = [] then
           begin
-            if argv <> nil then
+            if (argv <> nil) and
+               (n <= high(argv^)) then
               argv^[n] := d;
             inc(n);
-            if n = high(argv^) then
-              exit;
             state := [sInSQ, sInArg];
             continue;
           end
@@ -11092,11 +11305,10 @@ begin
           end
           else if state = [] then
           begin
-            if argv <> nil then
+            if (argv <> nil) and
+               (n <= high(argv^)) then
               argv^[n] := d;
             inc(n);
-            if n = high(argv^) then
-              exit;
             state := [sInDQ, sInArg];
             continue;
           end
@@ -11143,11 +11355,10 @@ begin
     exclude(state, sBslash);
     if state = [] then
     begin
-      if argv <> nil then
+      if (argv <> nil) and
+         (n <= high(argv^)) then
         argv^[n] := d;
       inc(n);
-      if n = high(argv^) then
-        exit;
       state := [sInArg];
     end;
     if d <> nil then
@@ -11196,9 +11407,10 @@ begin
   BOOL_UTF8[true]  := 'true';
   // minimal stubs which will be properly implemented in other mormot.core units
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
-  SetThreadName := _SetThreadName;
-  ShortToUuid := _ShortToUuid;                     // mormot.core.text.pas
-  AppendShortUuid := _AppendShortUuid;
+  SetThreadName         := _SetThreadName;
+  ShortToUuid           := _ShortToUuid;           // mormot.core.text
+  AppendShortUuid       := _AppendShortUuid;
+  GetEnumNameRtti       := _GetEnumNameRtti;       // mormot.core.rtti
 end;
 
 procedure FinalizeUnit;

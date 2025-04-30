@@ -108,7 +108,7 @@ type
     procedure Init(aOwner: TAesAbstract; aCipherName: PUtf8Char);
     procedure Done;
     procedure Clone(another: PAesOsl);
-    procedure SetEvp(DoEncrypt: boolean; const method: shortstring);
+    procedure SetEvp(DoEncrypt: boolean; const method: ShortString);
     procedure UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
   end;
 
@@ -334,7 +334,7 @@ type
 /// retrieve a low-level PEVP_MD digest from its algorithm name
 // - raise an EOpenSslHash if this algorithm is not found
 function OpenSslGetMdByName(const Algorithm: RawUtf8;
-  const Caller: shortstring): PEVP_MD; overload;
+  const Caller: ShortString): PEVP_MD; overload;
 
 /// retrieve a low-level PEVP_MD digest from mORMot THashAlgo enum
 // - returns nil if not found, e.g. if OpenSsl is not available
@@ -774,7 +774,7 @@ begin // another^.Owned is set by the caller
     end;
 end;
 
-procedure TAesOsl.SetEvp(DoEncrypt: boolean; const method: shortstring);
+procedure TAesOsl.SetEvp(DoEncrypt: boolean; const method: ShortString);
 var
   c: PEVP_CIPHER_CTX;
 begin
@@ -1204,7 +1204,7 @@ end;
 
 
 function OpenSslGetMdByName(const Algorithm: RawUtf8;
-  const Caller: shortstring): PEVP_MD;
+  const Caller: ShortString): PEVP_MD;
 begin
   EOpenSslHash.CheckAvailable(nil, Caller);
   if Algorithm = 'null' then
@@ -2305,7 +2305,7 @@ function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: RawUtf8;
   const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 
-  procedure RaiseError(const msg: shortstring);
+  procedure RaiseError(const msg: ShortString);
   begin
     ECryptCert.RaiseUtf8('%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
   end;

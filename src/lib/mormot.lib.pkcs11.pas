@@ -303,7 +303,7 @@ type
     ulDeviceError: CK_ULONG;
   end;
 
-function ToText(f: CKT_FLAGS): shortstring; overload;
+function ToText(f: CKT_FLAGS): ShortString; overload;
 
 
 { ---------- 3.4 Object types }
@@ -2228,7 +2228,7 @@ implementation
 
 { ***************** Low-Level PKCS#11 / Cryptoki API Definitions }
 
-function ToText(f: CKT_FLAGS): shortstring;
+function ToText(f: CKT_FLAGS): ShortString;
 begin
   GetSetNameShort(TypeInfo(CKT_FLAGS), f, result);
 end;

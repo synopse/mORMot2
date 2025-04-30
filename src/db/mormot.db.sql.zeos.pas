@@ -868,7 +868,7 @@ begin
   if fDatabase = nil then
     ESqlDBZeos.RaiseUtf8('%.Connect() on % failed: Database=nil', [self,
       fProperties.ServerName]);
-  log := SynDBLog.Enter(self, 'Connect');
+  SynDBLog.EnterLocal(log, self, 'Connect');
   if log <> nil then
     with (fProperties as TSqlDBZeosConnectionProperties).fUrl do
       log.Log(sllTrace, 'Connect to % % for % at %:%',
@@ -916,7 +916,7 @@ procedure TSqlDBZeosConnection.StartTransaction;
 var
   log: ISynLog;
 begin
-  log := SynDBLog.Enter(self, 'StartTransaction');
+  SynDBLog.EnterLocal(log, self, 'StartTransaction');
   inherited StartTransaction;
   {$ifdef ZEOS73UP}
   fDatabase.StartTransaction; //returns the txn level

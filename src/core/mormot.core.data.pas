@@ -45,7 +45,7 @@ uses
 { ************ RTL TPersistent or Root Classes with Custom Constructor }
 
 type
-    /// abstract parent class with a virtual constructor, ready to be overridden
+  /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
   // - you can specify such a class if you need an object including published
   // properties (like TPersistent) with a virtual constructor (e.g. to
@@ -165,9 +165,12 @@ type
     // !var
     // !  myVar: TMyClass;
     // !begin
-    // !  TAutoFree.One(myVar,TMyClass.Create);
+    // !  with TAutoFree.One(myVar,TMyClass.Create) do
+    // !  begin
     // !  ... use myVar
-    // !end; // here myVar will be released
+    // !  end; // Delphi 10.4 and later: myVar will be released here
+    // !  ... some other code
+    // !end; // Delphi 10.3 and sooner: myVar will be released here
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     // - Delphi 10.4 also did change it and release the IAutoFree before the
@@ -182,16 +185,19 @@ type
     // !var
     // !  var1, var2: TMyClass;
     // !begin
-    // !  TAutoFree.Several([
+    // !  with TAutoFree.Several([
     // !    @var1,TMyClass.Create,
-    // !    @var2,TMyClass.Create]);
+    // !    @var2,TMyClass.Create]) do
+    // !  begin
     // !  ... use var1 and var2
-    // !end; // here var1 and var2 will be released
+    // !  end;
+    // !  ... some other code
+    // !end;
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     // - Delphi 10.4 also did change it and release the IAutoFree before the
     // end of the current method, and an "array of pointer" cannot be inlined
-    // by the Delphi compiler, so you should explicitly call ForMethod:
+    // by the Delphi compiler, so you could explicitly call ForMethod:
     // !  TAutoFree.Several([
     // !    @var1,TMyClass.Create,
     // !    @var2,TMyClass.Create]).ForMethod;
@@ -206,7 +212,7 @@ type
     // !  .... do something
     // !  auto.Another(var2,TMyClass.Create);
     // !  ... use var1 and var2
-    // !end; // here var1 and var2 will be released
+    // !end; // here var1 and var2 will be released since local auto is explicit
     procedure Another(var localVariable; obj: TObject);
     /// will finalize the associated TObject instances
     // - note that releasing the TObject instances won't be protected, so
@@ -1877,7 +1883,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
-    function RaiseFatalCollision(const caller: shortstring; aHashCode: cardinal): integer;
+    function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): integer;
     procedure RaiseNoHasher;
     procedure HashTableInit(aHasher: THasher);
     procedure SetEventCompare(const Value: TOnDynArraySortCompare);
@@ -1912,6 +1918,8 @@ type
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
     /// returns position in array, or -1 if not found with an optional custom comparer
     function FindIndex(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare = nil): PtrInt;
+    /// returns pointer in array, or nil if not found
+    function FindHash(aHashCode: cardinal; Item: pointer): pointer;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean; aHashCode: cardinal): PtrInt;
@@ -2489,12 +2497,12 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// search if the WebSocketUpgrade() header is present
 // - consider checking the hsrConnectionUpgrade flag instead
-function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
 
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
@@ -2553,9 +2561,11 @@ type
     /// ensure the supplied RawUtf8 value is interned and unique
     procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
     /// return the interned value reference, or nil if aText did not appear yet
+    // - reference is pointer(fHash.Value[]) with no ref-count involved
     function Existing(const aText: RawUtf8; aTextHash: cardinal): pointer; overload;
     /// return the interned value reference, with no pre-computed hash
     function Existing(const aText: RawUtf8): pointer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// delete all stored RawUtf8 values
     procedure Clear;
     /// reclaim any unique RawUtf8 values
@@ -3969,7 +3979,7 @@ end;
 function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
-  UpperSection: array[byte] of AnsiChar;
+  UpperSection: TByteToAnsiChar;
 begin
   P := pointer(Content);
   PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
@@ -3983,7 +3993,7 @@ function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
   EraseSectionHeader: boolean): boolean;
 var
   P: PUtf8Char;
-  UpperSection: array[byte] of AnsiChar;
+  UpperSection: TByteToAnsiChar;
 begin
   result := false; // no modification
   P := pointer(Content);
@@ -4041,7 +4051,7 @@ end;
 
 procedure ReplaceSection(var Content: RawUtf8; const SectionName, NewSectionContent: RawUtf8);
 var
-  UpperSection: array[byte] of AnsiChar;
+  UpperSection: TByteToAnsiChar;
   P: PUtf8Char;
 begin
   P := pointer(Content);
@@ -4074,7 +4084,7 @@ end;
 function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
-  UpperSection, UpperName: array[byte] of AnsiChar;
+  UpperSection, UpperName: TByteToAnsiChar;
 begin
   result := DefaultValue;
   P := pointer(Content);
@@ -4180,7 +4190,7 @@ var
   SectionFound: boolean;
   i, UpperNameLength: PtrInt;
   V: RawUtf8;
-  UpperSection, UpperName: array[byte] of AnsiChar;
+  UpperSection, UpperName: TByteToAnsiChar;
 begin
   UpperNameLength := length(Name);
   PWord(UpperCopy255Buf(
@@ -4227,9 +4237,14 @@ begin
   FileFromString(Content, FileName);
 end;
 
-function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
+var
+  ct: PUtf8Char;
+  len: PtrInt;
 begin
-  result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER, @CONTENT_TYPE_TEXTUAL);
+  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len, #0);
+  result := (ct <> nil) and
+            IsContentTypeCompressible(ct, len, {onlytext=}true);
 end;
 
 const
@@ -4238,7 +4253,7 @@ const
     'KEEP-ALIVE, UPGRADE',
     nil);
 
-function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
 begin
   result := ExistsIniNameValue(pointer(headers), 'CONNECTION: ', @WS_UPGRADE);
 end;
@@ -4253,7 +4268,7 @@ var
   section, nested, json: PUtf8Char;
   name: PAnsiChar;
   n, v: RawUtf8;
-  up: array[byte] of AnsiChar;
+  up: TByteToAnsiChar;
 begin
   result := false; // true when at least one property has been read
   if (Ini = '') or
@@ -4467,7 +4482,7 @@ end;
 
 function HashInternI(P: PUtf8Char; L: PtrUInt): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if (P <> nil) and
      (L <> 0) then
@@ -5373,7 +5388,7 @@ end;
 
 function TRawUtf8List.IndexOfName(const Name: RawUtf8): PtrInt;
 var
-  UpperName: array[byte] of AnsiChar;
+  UpperName: TByteToAnsiChar;
   table: PNormTable;
 begin
   if self <> nil then
@@ -6554,7 +6569,7 @@ function BinarySaveLength(Data: pointer; Info: PRttiInfo; Len: PInteger;
 var
   size: integer;
   W: TBufferWriter; // not very fast, but good enough (RecordSave don't use it)
-  temp: array[byte] of byte; // will use mostly TFakeWriterStream.Write()
+  temp: TByteToByte; // will use mostly TFakeWriterStream.Write()
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
@@ -9036,7 +9051,7 @@ end;
 
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid any slow heap allocation
+  tmp: TByteToAnsiChar; // avoid any slow heap allocation
 begin
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
@@ -9067,7 +9082,7 @@ end;
 
 function HashSynUnicodeI(Item: PSynUnicode; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
     result := Hasher(HashSeed, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp)
@@ -9086,7 +9101,7 @@ end;
 
 function HashWideStringI(Item: PWideString; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
     result := Hasher(HashSeed, tmp{%H-},
@@ -9106,7 +9121,7 @@ end;
 
 function HashPUtf8CharI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: TByteToAnsiChar; // avoid slow heap allocation
 begin
   Item := PPointer(Item)^; // passed as non-nil PPUtf8Char reference
   if Item <> nil then
@@ -9159,7 +9174,7 @@ end;
 function VariantHash(const value: variant; CaseInsensitive: boolean;
   Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid heap allocation
+  tmp: TByteToAnsiChar; // avoid heap allocation
   vt: cardinal;
   S: TStream;
   W: TTextWriter;
@@ -9637,6 +9652,34 @@ begin // cut-down version of FindOrNew()
   result := RaiseFatalCollision('FindIndex', aHashCode);
 end;
 
+function TDynArrayHasher.FindHash(aHashCode: cardinal; Item: pointer): pointer;
+var
+  first, last, ndx, pos: PtrInt;
+begin // cut-down version of FindIndex()
+  ndx := HashTableIndex(aHashCode);
+  first := ndx;
+  last := fHashTableSize;
+  repeat
+    result := nil;
+    pos := HashTableIndexToIndex(ndx); // Index+1 was stored
+    if pos = 0 then // void slot = not found, or return matching index
+      exit;
+    result := PAnsiChar(fDynArray^.Value^) +
+              (pos - 1) * fDynArray^.fInfo.Cache.ItemSize;
+    if fCompare(result^, Item^) = 0 then
+      exit;
+    inc(ndx); // hash or slot collision -> search next item
+    if ndx = last then
+      if ndx = first then
+        RaiseFatalCollision('FindHash', aHashCode)
+      else
+      begin
+        ndx := 0;
+        last := first;
+      end;
+  until false;
+end;
+
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
 var
   n, ndx: PtrInt;
@@ -9760,7 +9803,7 @@ begin
     result := -1;
 end;
 
-function TDynArrayHasher.RaiseFatalCollision(const caller: shortstring;
+function TDynArrayHasher.RaiseFatalCollision(const caller: ShortString;
   aHashCode: cardinal): integer;
 begin   // a dedicated sub-procedure reduces code size
   result := 0; // make compiler happy

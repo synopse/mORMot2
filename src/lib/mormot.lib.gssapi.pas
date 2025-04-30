@@ -794,6 +794,7 @@ begin
     GssApi.gss_delete_sec_context(MinStatus, aSecContext.CtxHandle, nil);
   if aSecContext.CredHandle <> nil then
     GssApi.gss_release_cred(MinStatus, aSecContext.CredHandle);
+  InvalidateSecContext(aSecContext);
 end;
 
 // see https://learn.microsoft.com/en-us/windows/win32/secauthn/sspi-kerberos-interoperability-with-gssapi

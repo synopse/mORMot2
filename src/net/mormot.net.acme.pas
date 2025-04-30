@@ -870,7 +870,7 @@ var
   cert, pk: RawUtf8;
   log: ISynLog;
 begin
-  log := fLog.Enter(self, 'RegisterAndWait');
+  fLog.EnterLocal(log, self, 'RegisterAndWait');
   fOnChallenges := OnChallenge;
   StartDomainRegistration;
   endtix := GetTickCount64 + WaitForSec * 1000;
@@ -1059,7 +1059,7 @@ var
   fn: TFileName;
   log: ISynLog;
 begin
-  log := fLog.Enter(self, 'LoadFromKeyStoreFolder');
+  fLog.EnterLocal(log, self, 'LoadFromKeyStoreFolder');
   SetCallbackForLoadFromKeyStoreFolder({enabled=}false);
   fSafe.Lock;
   try
@@ -1108,7 +1108,7 @@ var
   log: ISynLog;
 begin
   // this method is run from a transient TLoggedWorkThread
-  log := fLog.Enter(self, 'CheckCertificates');
+  fLog.EnterLocal(log, self, 'CheckCertificates');
   if (self = nil) or
      (fClient = nil) or
      (fRenewBeforeEndDays <= 0) then
@@ -1317,7 +1317,7 @@ begin
       include(opt, hsoEnableLogging);
   end;
   // start a basic HTTP server on port 80
-  log := aLog.Enter('Create: start THttpServer on %', [p], self);
+  aLog.EnterLocal(log, 'Create: start THttpServer on %', [p], self);
   fHttpServer := THttpServer.Create(p, nil, nil, 'Acme Server',
     aHttpServerThreadCount, 30000, opt, aLog);
   // retrieve some parameters from the main HTTPS server

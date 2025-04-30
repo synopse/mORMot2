@@ -256,7 +256,7 @@ type
     // - self will remain untouched unless noclone is set
     function ToText(noclone: boolean = false): RawUtf8;
     /// could be used for low-level console debugging of a raw value
-    procedure Debug(const name: shortstring; full: boolean = false);
+    procedure Debug(const name: ShortString; full: boolean = false);
   end;
 
   /// define Normal, P and Q pre-computed modulos
@@ -1606,7 +1606,7 @@ begin
   result := false; // timed out
 end;
 
-procedure TBigInt.Debug(const name: shortstring; full: boolean);
+procedure TBigInt.Debug(const name: ShortString; full: boolean);
 var
   tmp: RawUtf8;
 begin
@@ -3427,7 +3427,7 @@ begin
     case fKeyAlgo of
       ckaRsa,
       ckaRsaPss:
-        result := fRsa.Seal(Cipher, Message);
+        result := fRsa.Seal(Message, Cipher);
     end;
 end;
 

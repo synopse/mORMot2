@@ -463,6 +463,7 @@ type
   // per-minute metrics logging via an associated THttpServerGeneric.Analyzer
   // - hsoContentTypeNoGuess will disable content-type detection from small
   // content buffers via GetMimeContentTypeFromBuffer()
+  // - hsoRejectBotUserAgent identifis and reject Bots via IsHttpUserAgentBot()
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -481,7 +482,8 @@ type
     hsoEnableLogging,
     hsoTelemetryCsv,
     hsoTelemetryJson,
-    hsoContentTypeNoGuess);
+    hsoContentTypeNoGuess,
+    hsoRejectBotUserAgent);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -1073,7 +1075,7 @@ type
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
-    function SetRejectInCommandUri(var Http: THttpRequestContext;
+    function ComputeRejectBody(var Body: RawByteString;
       Opaque: Int64; Status: integer): boolean; // true for grWwwAuthenticate
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
@@ -1855,7 +1857,7 @@ type
     function DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
       const aHash: THashDigest; const aParams: RawUtf8): cardinal;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
-      aSize: Int64; const aCaller: shortstring): boolean;
+      aSize: Int64; const aCaller: ShortString): boolean;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
       aHttp: PHttpRequestContext; aFileName: PFileName; aSize: PInt64): integer;
     function TempFolderEstimateNewSize(aAddingSize: Int64): Int64;
@@ -1965,10 +1967,10 @@ const
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 function ToText(md: THttpPeerCryptMessageDecode): PShortString; overload;
-function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
+function ToText(const msg: THttpPeerCacheMessage): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
+procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 
 
 {$ifdef USEWININET}
@@ -4376,16 +4378,16 @@ end;
 
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
 begin
-  // return the expected 'WWW-Authenticate: ####' header content
+  // return the expected 'WWW-Authenticate: ####'#13#10 header content
   result := '';
   case fAuthorize of
     hraBasic:
-      result := fAuthorizeBasicRealm;
+      result := fAuthorizeBasicRealm; // includes trailing #13#10
     hraDigest:
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
     hraNegotiate:
-      result := 'WWW-Authenticate: Negotiate'; // with no NTLM support
+      result := 'WWW-Authenticate: Negotiate'#13#10; // with no NTLM support
   end;
 end;
 
@@ -4462,25 +4464,25 @@ begin
   end
 end;
 
-function THttpServerSocketGeneric.SetRejectInCommandUri(
-  var Http: THttpRequestContext; Opaque: Int64; Status: integer): boolean;
+function THttpServerSocketGeneric.ComputeRejectBody(
+  var Body: RawByteString; Opaque: Int64; Status: integer): boolean;
 var
-  reason, auth, body: RawUtf8;
+  reason: PRawUtf8;
+  auth, html: RawUtf8;
 begin
-  StatusCodeToReason(status, reason);
+  reason := StatusCodeToText(status);
   FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
              '<body style="font-family:verdana"><h1>%</h1>' +
-             '<p>Server rejected % request as % %.</body></html>',
-    [reason, reason, Http.CommandUri, status, reason], body);
+             '<p>Server rejected this request as % %.</body></html>',
+    [reason^, reason^, status, reason^], html);
   result := (status = HTTP_UNAUTHORIZED) and
             (fAuthorize <> hraNone);
   if result then // don't close the connection but set grWwwAuthenticate
-    auth := ComputeWwwAuthenticate(Opaque);
+    auth := ComputeWwwAuthenticate(Opaque); // includes #13#10 trailer
   FormatUtf8('HTTP/1.% % %'#13#10'%' + HTML_CONTENT_TYPE_HEADER +
-    #13#10'Content-Length: %'#13#10#13#10'%',
-    [ord(result), status, reason, auth, length(body), body], Http.CommandUri);
+    #13#10'Content-Length: %'#13#10#13#10'%', [ord(result), status, reason^,
+    auth, length(html), html], RawUtf8(Body));
 end;
-
 
 
 { THttpServer }
@@ -4607,7 +4609,13 @@ begin
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
-    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 5000, hsoReusePort in fOptions);
+    fSock := TCrtSocket.Create(5000);
+    if fLogClass <> nil  then
+      fSock.OnLog := fLogClass.DoLog; // bind + TLS process
+    fSock.BindPort(fSockPort, nlTcp, hsoReusePort in fOptions);
+    if (fLogClass <> nil) and
+       not (hsoLogVerbose in fOptions) then
+      fSock.OnLog := nil;
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       EHttpServer.RaiseUtf8('%.Execute: %.Bind failed', [self, fSock]);
@@ -4664,7 +4672,7 @@ begin
       begin
         banlen := ord(HTTP_BANIP_RESPONSE[0]);
         cltsock.Send(@HTTP_BANIP_RESPONSE[1], banlen); // 418 I'm a teapot
-        cltsock.ShutdownAndClose({rdwr=}false);
+        cltsock.ShutdownAndClose({rdwr=}true, {waitms=}10);
         continue; // abort even before TLS or HTTP start
       end;
       OnConnect;
@@ -5034,9 +5042,19 @@ begin
          (Http.ContentLength > fServer.MaximumAllowedContentLength) then
       begin
         // 413 HTTP error (and close connection)
-        fServer.SetRejectInCommandUri(Http, 0, HTTP_PAYLOADTOOLARGE);
-        SockSendFlush(Http.CommandUri);
+        fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
+        SockSendFlush(Http.Content);
         result := grOversizedPayload;
+        exit;
+      end;
+      // implement early hsoRejectBotUserAgent detection as 418 I'm a teapot
+      if (hsoRejectBotUserAgent in fServer.Options) and
+         (Http.UserAgent <> '') and
+         IsHttpUserAgentBot(Http.UserAgent) then
+      begin
+        SockSend(@HTTP_BANIP_RESPONSE[1], ord(HTTP_BANIP_RESPONSE[0]));
+        SockSendFlush;
+        result := grRejected;
         exit;
       end;
       // support optional Basic/Digest authentication
@@ -5057,8 +5075,8 @@ begin
           if fAuthTix32 = tix32 then
           begin
             // 403 HTTP error if not authorized (and close connection)
-            fServer.SetRejectInCommandUri(Http, 0, HTTP_FORBIDDEN);
-            SockSendFlush(Http.CommandUri);
+            fServer.ComputeRejectBody(Http.Content, 0, HTTP_FORBIDDEN);
+            SockSendFlush(Http.Content);
             result := grRejected;
             exit;
           end
@@ -5082,11 +5100,11 @@ begin
         {$endif SYNCRTDEBUGLOW}
         if status <> HTTP_SUCCESS then
         begin
-          if fServer.SetRejectInCommandUri(Http, fRemoteConnectionID, status) then
+          if fServer.ComputeRejectBody(Http.Content, fRemoteConnectionID, status) then
             result := grWwwAuthenticate
           else
             result := grRejected;
-          SockSendFlush(Http.CommandUri);
+          SockSendFlush(Http.Content);
           exit;
         end;
       end;
@@ -5864,12 +5882,11 @@ var
 
   procedure DoLog(const Fmt: RawUtf8; const Args: array of const);
   var
-    txt: shortstring;
+    txt: ShortString;
     us: TShort16;
     stop: Int64;
   begin
-    if (fOwner.fLog = nil) or
-       not (sllTrace in fOwner.fLog.Family.Level) then
+    if not fOwner.fLog.HasLevel([sllTrace]) then
       exit;
     FormatShort(Fmt, Args, txt);
     us[0] := #0;
@@ -6148,7 +6165,7 @@ begin
   fLog := aLogClass;
   if fLog = nil then
     fLog := TSynLog;
-  log := fLog.Enter('Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
+  fLog.EnterLocal(log, 'Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
   if (fSettings = nil) or
@@ -6166,7 +6183,7 @@ begin
   else
     fSettings := aSettings;
   fVerboseLog := (pcoVerboseLog in fSettings.Options) and
-                 (sllTrace in fLog.Family.Level);
+                 fLog.HasLevel([sllTrace]);
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
@@ -6295,12 +6312,11 @@ end;
 function THttpPeerCache.Check(Status: THttpPeerCryptMessageDecode;
   const Ctxt: ShortString; const Msg: THttpPeerCacheMessage): boolean;
 var
-  msgtxt: shortstring;
+  msgtxt: ShortString;
 begin
   result := (Status = mdOk);
   if result or
-     (fLog = nil) or
-     not (sllTrace in fLog.Family.Level) then
+     not fLog.HasLevel([sllTrace]) then
     exit;
   msgtxt[0] := #0;
   if Status > mdAes then // decrypt ok but wrong content: log msg
@@ -6462,7 +6478,7 @@ begin
 end;
 
 function THttpPeerCache.TooSmallFile(const aParams: THttpClientSocketWGet;
-  aSize: Int64; const aCaller: shortstring): boolean;
+  aSize: Int64; const aCaller: ShortString): boolean;
 var
   minsize: Int64;
 begin
@@ -6524,7 +6540,7 @@ begin
   outStreamInitialPos := OutStream.Position;
   // prepare a request frame
   l := nil;
-  log := fLog.Enter('OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
+  fLog.EnterLocal(log, 'OnDownload % % % %', [KBNoSpace(ExpectedFullSize),
     Params.Hasher.GetHashName, Params.Hash, Url], self);
   if Assigned(log) then // log=nil if fLog=nil or sllEnter is not enabled
     l := log.Instance;
@@ -7371,12 +7387,12 @@ begin
   result := GetEnumName(TypeInfo(THttpPeerCryptMessageDecode), ord(md));
 end;
 
-function ToText(const msg: THttpPeerCacheMessage): shortstring;
+function ToText(const msg: THttpPeerCacheMessage): ShortString;
 begin
   MsgToShort(msg, result);
 end;
 
-procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: shortstring);
+procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 var
   algoext: PUtf8Char;
   algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
@@ -7413,7 +7429,7 @@ function THttpApiServer.AddUrl(const aRoot, aPort: RawUtf8; Https: boolean;
   const aDomainName: RawUtf8; aRegisterUri: boolean; aContext: Int64): integer;
 var
   uri: SynUnicode;
-  n: integer;
+  n: PtrInt;
 begin
   result := -1;
   if (Self = nil) or
@@ -7429,12 +7445,11 @@ begin
     result := Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext)
   else
     result := Http.AddUrl(fReqQueue, pointer(uri));
-  if result = NO_ERROR then
-  begin
-    n := length(fRegisteredUnicodeUrl);
-    SetLength(fRegisteredUnicodeUrl, n + 1);
-    fRegisteredUnicodeUrl[n] := uri;
-  end;
+  if result <> NO_ERROR then
+    exit;
+  n := length(fRegisteredUnicodeUrl);
+  SetLength(fRegisteredUnicodeUrl, n + 1);
+  fRegisteredUnicodeUrl[n] := uri;
 end;
 
 function THttpApiServer.RemoveUrl(const aRoot, aPort: RawUtf8; Https: boolean;
@@ -7459,7 +7474,7 @@ begin
         result := Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0)
       else
         result := Http.RemoveUrl(fReqQueue, pointer(uri));
-      if result <> 0 then
+      if result <> NO_ERROR then
         exit; // shall be handled by caller
       for j := i to n - 1 do
         fRegisteredUnicodeUrl[j] := fRegisteredUnicodeUrl[j + 1];
@@ -7735,14 +7750,14 @@ var
       FormatUtf8('<!DOCTYPE html><html><body style="font-family:verdana;">' +
         '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], msg);
       if E <> nil then
-        msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
-      msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
+        Append(msg, [E, ' Exception raised:<br>']);
+      Append(msg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
       resp^.SetContent(datachunkmem, msg, HTML_CONTENT_TYPE);
       Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
         bytessent, nil, 0, nil, fLogData);
     except
       on Exception do
-        ; // ignore any HttpApi level errors here (client may crashed)
+        ; // ignore any HttpApi level errors here (client may have crashed)
     end;
   end;
 
@@ -7986,6 +8001,13 @@ begin
                (incontlen > QWord(fMaximumAllowedContentLength)) then
             begin
               SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
+              continue;
+            end;
+            if (hsoRejectBotUserAgent in fOptions) and
+               (ctxt.fUserAgent <> '') and
+               IsHttpUserAgentBot(ctxt.fUserAgent) then
+            begin
+              SendError(HTTP_TEAPOT, 'We don''t need no bot');
               continue;
             end;
             if Assigned(OnBeforeBody) then

@@ -215,7 +215,7 @@ type
     fAlgoID: byte;
     fAlgoHasForcedFormat: boolean;
     fAlgoFileExt: TFileName;
-    procedure EnsureAlgoHasNoForcedFormat(const caller: shortstring);
+    procedure EnsureAlgoHasNoForcedFormat(const caller: ShortString);
   public
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
@@ -691,7 +691,7 @@ type
     /// raise a EFastReader with "Incorrect Data: ...." error message
     procedure ErrorData(const fmt: RawUtf8; const args: array of const); overload;
     /// raise a EFastReader with "Incorrect Data: ...." error message
-    procedure ErrorData(const msg: shortstring); overload;
+    procedure ErrorData(const msg: ShortString); overload;
     /// read the next 32-bit signed value from the buffer
     function VarInt32: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1851,17 +1851,27 @@ const
 function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 
 /// recognize e.g. 'text/css' or 'application/json' as compressible
-function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
+// - as used by THttpSocketCompressList.CompressContent
+function IsContentTypeCompressible(ContentType: PUtf8Char; ContentTypeLen: PtrInt;
+  OnlyText: boolean = false): boolean;
 
 /// recognize e.g. 'text/css' or 'application/json' as compressible
 function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// recognize e.g. 'application/json' or 'application/vnd.api+json'
-function IsContentTypeJson(ContentType: PUtf8Char): boolean;
+/// recognize e.g. 'application/json' or 'application/vnd.####+json'
+function IsContentTypeJson(ContentType: PUtf8Char; ContentTypeLen: PtrInt): boolean;
 
-/// recognize e.g. 'application/json' or 'application/vnd.api+json'
+/// recognize e.g. 'application/[...+]json' or 'text/*'
+function IsContentTypeTextU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// recognize e.g. 'application/json' or 'application/vnd.####+json'
 function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// recognize e.g. 'text/*' or 'application/json' patterns
+function IsContentUtf8(const Content, ContentType: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// fast guess of the size, in pixels, of a JPEG memory buffer
@@ -1871,7 +1881,7 @@ function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
 // positive recognition, and no waranty that the memory buffer is a valid JPEG
 // - returns FALSE if the buffer does not have any expected SOI/SOF markers
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
-  out Height, Width, Bits: integer): boolean; overload;
+  out Width, Height, Bits: integer): boolean; overload;
 
 
 { ************* Text Memory Buffers and Files }
@@ -2060,7 +2070,11 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 function EscapeToShort(const source: RawByteString): ShortString; overload;
 
 /// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
+procedure ContentToShortVar(source: PAnsiChar; len: PtrInt; var txt: ShortString); 
+
+/// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
 function ContentToShort(const source: RawByteString): ShortString;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -2784,7 +2798,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// add some number as text content to the Buffer, resizing it if needed
     procedure Append(Value: QWord); overload;
-    /// add some UTF-8 shortstring content to the Buffer, resizing it if needed
+    /// add some UTF-8 ShortString content to the Buffer, resizing it if needed
     procedure AppendShort(const Text: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
     /// just after Append/AppendShort, append a #13#10 end of line
@@ -3554,7 +3568,7 @@ begin
     raise EFastReader.CreateUtf8('Incorrect Data: ' + fmt, args);
 end;
 
-procedure TFastReader.ErrorData(const msg: shortstring);
+procedure TFastReader.ErrorData(const msg: ShortString);
 begin
   ErrorData('%', [msg]);
 end;
@@ -5300,7 +5314,7 @@ begin
   end;
 end;
 
-procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: shortstring);
+procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: ShortString);
 begin
   if fAlgoHasForcedFormat then
     EAlgoCompress.RaiseUtf8('%.% is unsupported', [self, caller]);
@@ -7721,8 +7735,8 @@ begin
         if (part.ContentType = '') or
            (PosEx('-8', part.ContentType) > 0) then
         begin
-          if IdemPChar(pointer(part.ContentType), JSON_CONTENT_TYPE_UPPER) then
-            part.ContentType := JSON_CONTENT_TYPE
+          if IsContentTypeJsonU(part.ContentType) then
+            part.ContentType := JSON_CONTENT_TYPE_VAR
           else
             part.ContentType := TEXT_CONTENT_TYPE;
           FakeCodePage(part.Content, CP_UTF8); // ensure value is UTF-8
@@ -8010,7 +8024,7 @@ begin
   result := PtrUInt(d);
   if d = nil then
     exit;
-  hex := @TwoDigitsHexWB;
+  hex := @TwoDigitsHex;
   repeat
     c := s^;
     inc(s);
@@ -8636,7 +8650,7 @@ end;
 
 function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 var
-  tmp: array[byte] of AnsiChar;
+  tmp: TByteToAnsiChar;
   L: integer;
   Beg: PUtf8Char;
 // UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where') will
@@ -8971,62 +8985,108 @@ begin
 end;
 
 const
-  _CONTENT: array[0..3] of PUtf8Char = (
-    'TEXT/',
-    'IMAGE/',
-    'APPLICATION/',
-    nil);
-  _CONTENT_IMG: array[0..2] of PUtf8Char = (
-    'SVG',
-    'X-ICO',
-    nil);
-  _CONTENT_APP: array[0..3] of PUtf8Char = (
+  _CONTENT_APP: array[0..4] of PUtf8Char = (
     'JSON',
     'JAVASCRIPT',
     'XML',
+    'RTF',
     nil);
 
-function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
+function IsContentTypeCompressible(ContentType: PUtf8Char;
+  ContentTypeLen: PtrInt; OnlyText: boolean): boolean;
 begin
-  case IdemPPChar(ContentType, @_CONTENT) of
-    0: // text/*
-      result := true;
-    1: // image/[svg/x-ico]
-      result := IdemPPChar(ContentType + 6, @_CONTENT_IMG) >= 0;
-    2: // application/[json/javascript/xml]
-      begin
-        result := true;
-        inc(ContentType, 12);
-        if IdemPPChar(ContentType, @_CONTENT_APP) >= 0 then
-          exit;
-        // detect e.g. application/atom+xml or application/vnd.api+json
-        ContentType := PosChar(ContentType, '+');
-        result := (ContentType <> nil) and
-                  (IdemPPChar(ContentType + 1, @_CONTENT_APP) >= 0);
-      end
-  else
-    result := false;
-  end;
+  result := false;
+  if ContentType <> nil then
+    case PCardinalArray(ContentType)[0] or $20202020 of
+      ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24:
+        result := ContentType[4] = '/'; // text/*
+      ord('i') + ord('m') shl 8 + ord('a') shl 16 + ord('g') shl 24:
+        if PWord(ContentType + 4)^ or $0020 = ord('e') + ord('/') shl 8 then
+          result := (ContentTypeLen > 8) and
+                    IdemPChar(ContentType + 6, 'SVG') or   // image/svg is XML
+                    ((not OnlyText) and
+                     IdemPChar(ContentType + 6, 'X-ICO')); // image/x-ico is bin
+      ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24:
+        if (ContentTypeLen > 12) and
+           (PCardinalArray(ContentType)[1] or $20202020 =
+             ord('i') + ord('c') shl 8 + ord('a') shl 16 + ord('t') shl 24) and
+           (PCardinalArray(ContentType)[2] or $00202020 =
+             ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('/') shl 24) then
+        begin // application/[json/javascript/xml]
+          result := true;
+          inc(ContentType, 12);
+          if IdemPPChar(ContentType, @_CONTENT_APP) >= 0 then
+            exit; // application/[json/javascript/xml]
+          ContentType := PosChar(ContentType, ContentTypeLen, '+');
+          result := (ContentType <> nil) and // e.g. application/atom+xml
+                    (IdemPPChar(ContentType + 1, @_CONTENT_APP) >= 0);
+        end;
+    end;
 end;
 
 function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
 begin
-  result := IsContentTypeCompressible(pointer(ContentType));
+  result := (ContentType <> '') and
+    IsContentTypeCompressible(pointer(ContentType),
+      PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^, {onlytext=}false);
 end;
 
-function IsContentTypeJson(ContentType: PUtf8Char): boolean;
+function IsContentTypeTextU(const ContentType: RawUtf8): boolean;
 begin
-  result := IdemPChar(ContentType, pointer(_CONTENT[2])) and
-            (PtrUInt(IdemPPChar(ContentType + 12, @_CONTENT_APP)) <= 2);
+  result := (ContentType <> '') and
+    IsContentTypeCompressible(pointer(ContentType),
+      PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^, {onlytext=}true);
+end;
+
+function IsContentTypeJson(ContentType: PUtf8Char; ContentTypeLen: PtrInt): boolean;
+begin
+  result := false;
+  dec(ContentTypeLen, 12);
+  if (ContentTypeLen <= 0) or
+     (PCardinalArray(ContentType)[0] or $20202020 <>
+       ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24) or
+     (PCardinalArray(ContentType)[1] or $20202020 <>
+       ord('i') + ord('c') shl 8 + ord('a') shl 16 + ord('t') shl 24) or
+     (PCardinalArray(ContentType)[2] or $00202020 <>
+       ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('/') shl 24) then
+    exit; // not application/*
+  case PCardinalArray(ContentType)[3] or $20202020 of
+    ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24:
+      ; // found
+    ord('o') + ord('c') shl 8 + ord('t') shl 16 + ord('e') shl 24:
+      exit; // application/octet-stream is very common
+  else
+    begin // try application/vnd.####+json
+      ContentType := PosChar(ContentType + 12, ContentTypeLen, '+');
+      if (ContentType = nil) or
+         (PCardinal(ContentType + 1)^ or $20202020 <>
+            ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24) then
+        exit;
+    end;
+  end;
+  result := true; // application/[...+]json
 end;
 
 function IsContentTypeJsonU(const ContentType: RawUtf8): boolean;
 begin
-  result := IsContentTypeJson(pointer(ContentType));
+  result := (ContentType <> '') and
+            IsContentTypeJson(pointer(ContentType),
+              PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^);
+end;
+
+function IsContentUtf8(const Content, ContentType: RawUtf8): boolean;
+begin
+  result := (Content <> '') and
+            (ContentType <> '') and
+            (IsContentTypeJson(pointer(ContentType),
+               PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^) or
+             ((PCardinal(ContentType)^ or $20202020 =
+                 ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24) and
+              (ContentType[5] = '/')));
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
-  out Height, Width, Bits: integer): boolean;
+  out Width, Height, Bits: integer): boolean;
 var
   je: PAnsiChar;
 begin
@@ -9364,7 +9424,7 @@ begin
   if (slen > 0) and
      (dmax > 7) then
   begin
-    tab := @TwoDigitsHexWBLower;
+    tab := @TwoDigitsHexLower;
     repeat
       c := s^;
       inc(s);
@@ -9435,16 +9495,30 @@ begin
 end;
 
 function ContentToShort(const source: RawByteString): ShortString;
+begin
+  ContentToShortVar(pointer(source), length(source), result);
+end;
+
+procedure ContentToShortVar(source: PAnsiChar; len: PtrInt; var txt: ShortString);
 var
   l: PtrInt;
 begin
-  l := length(source);
-  if (l = 0) or
-     IsValidUtf8(source) then
-    SetString(result, PAnsiChar(pointer(source)), l)
+  if len <= 255 then
+    l := len
   else
-    result[0] := AnsiChar(
-      EscapeBuffer(pointer(source), l, @result[1], 255) - @result[1]);
+    l := Utf8TruncatedLength(source, len, 255); // test only what is needed
+  if l = 0 then
+    txt[0] := #0
+  else if IsValidUtf8Pas(pointer(source), l) then // AVX2 doesn't filter #0
+  begin
+    txt[0] := AnsiChar(l); // we know that l <= 255
+    MoveFast(source^, txt[1], l);
+    if len > 255 then
+      for l := Utf8TruncatedLength(source, len, 254) to 255 do
+        txt[l] := '.';  // mark truncated, but keep valid UTF-8
+  end
+  else
+    txt[0] := AnsiChar(EscapeBuffer(source, l, @txt[1], 255) - @txt[1]);
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
@@ -9647,16 +9721,18 @@ begin
     ctx[0] := #33; // truncate to keep information on a single line
     PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
   end;
-  persec := '';
+  persec[0] := #0;
   if PerSecond <> 0 then
     FormatShort16(' %/s', [KBNoSpace(PerSecond)], persec);
-  KB(CurrentSize, curr, {nospace=}true);
+  curr[0] := #0;
+  AppendKB(CurrentSize, curr, {withspace=}false);
   if ExpectedSize = 0 then
     // size may not be known (e.g. server-side chunking)
     FormatUtf8('% % read% ...', [ctx, curr, persec], result)
   else
   begin
-    KB(ExpectedSize, expect, {nospace=}true);
+    expect[0] := #0;
+    AppendKB(ExpectedSize, expect, {withspace=}false);
     if CurrentSize < ExpectedSize then
     begin
       // we can state the current progression ratio

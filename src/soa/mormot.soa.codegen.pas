@@ -655,15 +655,16 @@ begin
     ptClass:
       ; // use rtti.Props
     ptArray,
-    ptDynArray:
-      rtti := rtti.ArrayRtti; // use array item
+    ptDynArray:  // use array item (may be nil for static unmanaged)
+      rtti := rtti.ArrayRtti;
   else
     exit; // no nested properties
   end;
   TDocVariant.NewFast(result);
-  for i := 0 to rtti.Props.Count - 1 do
-    TDocVariantData(result).AddItem(
-      ContextOneProperty(rtti.Props.List[i], parentName));
+  if rtti <> nil then
+    for i := 0 to rtti.Props.Count - 1 do
+      TDocVariantData(result).AddItem(
+        ContextOneProperty(rtti.Props.List[i], parentName));
 end;
 
 function ClassToWrapperType(c: TClass): TWrapperType;

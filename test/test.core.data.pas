@@ -147,6 +147,7 @@ type
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
     /// variant-based JSON/BSON document process
+    // - note: we can't run this in a background thread due to interning tests
     procedure _TDocVariant;
     /// IDocList / IDocDict wrappers
     procedure _IDocAny;
@@ -3355,6 +3356,7 @@ begin
   {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U));
+  Check(IsValidUtf8Small(U));
   FileFromString(U, WorkDir + 'discoExtract.json');
   TRttiJson(Parser).IncludeWriteOptions := [];
   SaveJson(Disco, TypeInfo(TTestCustomDiscogs), [twoNonExpandedArrays], U);
@@ -3363,6 +3365,7 @@ begin
   {$endif HASCODEPAGE}
   Check(IsValidJson(U));
   Check(IsValidUtf8(U)); 
+  Check(IsValidUtf8Small(U));
   FileFromString(U, WorkDir + 'discoExtractNonExp.json');
   FillCharFast(Disco2, SizeOf(Disco), 0);
   RecordLoadJsonInPlace(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
@@ -3919,6 +3922,7 @@ begin
       //FileFromString(j2, WorkDir + 'sample2.json');
       //FileFromString(j3, WorkDir + 'sample3.json');
       Check(IsValidUtf8(sample), 'sample.json utf8');
+      Check(IsValidUtf8Small(sample), 'sample.json utf8small');
       Check(IsValidUtf8(j0), 'sample0.json utf8');
       Check(IsValidUtf8(j1), 'sample1.json utf8');
       Check(IsValidUtf8(j2), 'sample2.json utf8');
@@ -6147,12 +6151,24 @@ begin
   CheckEqual(Doc.ToJson, '{"p":{"a1":5,"a2":"dfasdfa"}}');
   Doc.Clear;
   Doc.InitJson('{"a":{"b":1,"c":1},d:3}');
-  Check(Doc.FlattenFromNestedObjects('.'));
+  Check(Doc.FlattenFromNestedObjects);
   CheckEqual(Doc.ToJson, '{"a.b":1,"a.c":1,"d":3}');
   Doc.Clear;
   Doc.InitJson('{a:{b:1,b:10},d:3}');
   Check(Doc.FlattenFromNestedObjects('.'));
   CheckEqual(Doc.ToJson, '{"a.b":1,"a.b2":10,"d":3}');
+  Doc.Clear;
+  Doc.InitJson('{"arr":["a","b","c"]}');
+  Check(not Doc.FlattenFromNestedObjects('.'));
+  CheckEqual(Doc.ToJson, '{"arr":["a","b","c"]}');
+  Doc.Clear;
+  Doc.InitJson('{"arr":["a","b","c"]}');
+  Check(Doc.FlattenFromNestedObjects('.', {nestedarray=}0));
+  CheckEqual(Doc.ToJson, '{"arr.0":"a","arr.1":"b","arr.2":"c"}');
+  Doc.Clear;
+  Doc.InitJson('{"arr":["a","b","c"]}');
+  Check(Doc.FlattenFromNestedObjects('.', {nestedarray=}1));
+  CheckEqual(Doc.ToJson, '{"arr.1":"a","arr.2":"b","arr.3":"c"}');
   Doc.Clear;
   Doc.InitJson('{a:{b:1,b:10},d:3}');
   Check(Doc.FlattenFromNestedObjects(#0));
@@ -6292,6 +6308,8 @@ begin
   if J <> '' then
   begin
     check(IsValidUtf8(J));
+    check(IsValidUtf8NotVoid(J));
+    check(IsValidUtf8Small(J));
     check(IsValidJson(J));
     _Json(J, v, [dvoReturnNullForUnknownProperty,
       dvoAllowDoubleValue, dvoValueCopiedByReference]);

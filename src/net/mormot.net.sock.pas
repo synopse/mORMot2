@@ -296,6 +296,8 @@ type
       async: boolean): TNetResult;
     /// retrieve the current address associated on this connected socket
     function GetName(out addr: TNetAddr): TNetResult;
+    /// retrieve this connected socket address as 'ip[:port]' text
+    function GetIP(out ip: RawUtf8; withport: boolean = true): TNetResult;
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
     /// change the socket state to non-blocking
@@ -338,8 +340,10 @@ type
     // - i.e. check if it is likely to be accept Send() and Recv() calls
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
     function Available(loerr: system.PInteger = nil): boolean;
+    /// call shutdown() on this socket - may be used to simulate a disconnection
+    procedure RawShutdown;
     /// finalize a socket, calling Close after shutdown() if needed
-    function ShutdownAndClose(rdwr: boolean): TNetResult;
+    function ShutdownAndClose(rdwr: boolean; waitms: integer = 0): TNetResult;
     /// close the socket - consider ShutdownAndClose() for clean closing
     function Close: TNetResult;
     /// access to the raw socket handle, i.e. @self
@@ -383,6 +387,9 @@ function NetLastError(AnotherNonFatal: integer = NO_ERROR;
 
 /// internal low-level function retrieving the latest socket error message
 function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
+
+/// internal low-level function using known operating system error
+function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
 
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
@@ -453,8 +460,8 @@ var
   DefaultListenBacklog: integer;
 
   /// defines if a connection from the loopback should be reported as ''
-  // - loopback connection will have no Remote-IP - for the default true
-  // - or loopback connection will be explicitly '127.0.0.1' - if equals false
+  // - with default true, loopback connection will have no RemoteIP address ('')
+  // - or it will be explicitly '127.0.0.1' - if equals false
   // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
@@ -531,7 +538,7 @@ function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
 
 /// compute a subnet value from a 32-bit IP4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
-function IP4Subnet(ip4, netmask4: cardinal): shortstring; overload;
+function IP4Subnet(ip4, netmask4: cardinal): ShortString; overload;
 
 /// compute a subnet value from an IP4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
@@ -981,7 +988,8 @@ type
       const ServerAddress: RawUtf8);
     /// method called once the socket has been bound on server side
     // - will set Context.AcceptCert with reusable server certificates info
-    procedure AfterBind(var Context: TNetTlsContext);
+    procedure AfterBind(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
     /// method called for each new connection accepted on server side
     // - should make the proper server-side TLS handshake and create a session
     // - should raise an exception on error
@@ -1415,7 +1423,7 @@ type
   EWinIocp = class(ExceptionWithProps);
 
   /// define the events TWinIocp can monitor
-  // - all wieCustom* events are user-triggered events via EnqueueCustom()
+  // - all wieCustom* events are user-triggered events via TWinIocp.Enqueue()
   TWinIocpEvent = (
     wieRecv,
     wieSend,
@@ -1424,8 +1432,7 @@ type
     wieCustom1,
     wieCustom2,
     wieCustom3,
-    wieCustom4,
-    wieCustom5);
+    wieCustom4);
 
   /// opaque pointer to one TWinIocp.Subscribe state
   PWinIocpSubscription = ^TWinIocpSubscription;
@@ -1441,7 +1448,7 @@ type
     /// return the TNetSocket associated with a Subscribe() call
     function Socket: TNetSocket;
     /// check the overlapped status of a Subscribe() call
-    function CurrentStatus: TPollSocketEvents;
+    function CurrentStatus(event: TWinIocpEvent): TPollSocketEvents;
   end;
 
   /// allow to customize TWinIocp process
@@ -1483,7 +1490,8 @@ type
     function Subscribe(socket: TNetSocket;
       tag: TPollSocketTag): PWinIocpSubscription;
     /// unsubscribe for events on a given socket
-    function Unsubscribe(one: PWinIocpSubscription): boolean;
+    // - will also set one := nil to avoid any dangling pointer
+    function Unsubscribe(var one: PWinIocpSubscription): boolean;
     /// notify IOCP that it needs to track the next event on this subscription
     // - typically called after socket recv/send to re-subscribe for events
     // - for wieRecv events, you should better not supply any buf/buflen to
@@ -1494,11 +1502,12 @@ type
     // will allocate one in the method)
     // - for wieConnect, you need to specify a TNetSocket (not already bound) in
     // netsock and a TNetAddr in buf/buflen
-    function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
+    function PrepareNext(const ctxt: ShortString;
+      one: PWinIocpSubscription; event: TWinIocpEvent;
       buf: pointer = nil; buflen: integer = 0; netsock: TNetSocket = nil): boolean;
     /// add manually an event to the IOCP queue
     // - it won't make any actual access to a socket, just append an event to
-    // the queue, as regular wieRecv/wieSend/wieAccept/wieConnect or any wieCustom*
+    // the queue, as regular wieRecv .. wieConnect event or any wieCustom*
     function Enqueue(one: PWinIocpSubscription; event: TWinIocpEvent;
       bytes: cardinal = 0): boolean;
     /// pick a pending task from the internal queue within a specified timeout
@@ -1659,6 +1668,7 @@ function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 function NetStartWith(p, up: PUtf8Char): boolean;
 
 /// BinToBase64() like function, to avoid linking mormot.core.buffers
+// - only used for TUri.UserPasswordBase64, so is not performance sensitive
 function NetBinToBase64(const s: RawByteString): RawUtf8;
 
 /// IsPem() like function, to avoid linking mormot.crypt.secure
@@ -1758,6 +1768,10 @@ type
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
       aTLSContext: PNetTlsContext = nil); virtual;
     /// constructor to bind to an address
+    // - just a wrapper around Create(aTimeOut) and BindPort()
+    constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
+      aTimeOut: integer = 10000; aReusePort: boolean = false);
+    /// address binding processing method, as called by the Bind() constructor
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
     // '1.2.3.4:1234'
@@ -1765,8 +1779,8 @@ type
     // 'unix:/run/mymormotapp.sock'
     // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
-      aTimeOut: integer = 10000; aReusePort: boolean = false);
+    procedure BindPort(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
+      aReusePort: boolean = false);
     /// after Create(), create a client connection to a given server URI
     // - optionally returns TUri.Address as parsed from aUri
     // - raise an ENetSock exception on error
@@ -2158,19 +2172,15 @@ const
     'Connect Timeout',
     'Invalid Parameter');
 
-function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
-var
-  err: integer;
+function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
 begin
-  err := RawSocketErrNo;
-  if Error <> nil then
-    Error^ := err;
-  case err of
+  case SystemError of
     NO_ERROR:
       result := nrOK;
     {$ifdef OSWINDOWS}
     WSAETIMEDOUT,
     WSAEWOULDBLOCK,
+    WSAIOPENDING,
     {$endif OSWINDOWS}
     WSAEINPROGRESS,
     WSATRY_AGAIN:
@@ -2188,11 +2198,21 @@ begin
     WSAECONNABORTED:
       result := nrClosed;
   else
-    if err = AnotherNonFatal then
+    if SystemError = AnotherNonFatal then
       result := nrRetry
     else
       result := nrFatalError;
   end;
+end;
+
+function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
+var
+  err: integer;
+begin
+  err := RawSocketErrNo;
+  if Error <> nil then
+    Error^ := err;
+  result := NetErrorFromSystem(err, AnotherNonFatal);
 end;
 
 function NetLastErrorMsg(AnotherNonFatal: integer): ShortString;
@@ -2300,8 +2320,8 @@ type
   TNetHostCache = object
   {$endif USERECORDWITHMETHODS}
   public
-    Host: TRawUtf8DynArray;
     Safe: TLightLock;
+    Host: TRawUtf8DynArray;
     Tix, TixShr: cardinal;
     Count, Capacity: integer;
     IP: TCardinalDynArray;
@@ -2357,7 +2377,7 @@ begin
   if (Count = 0) or
      (hostname = '') then
     exit;
-  i := FindPropName(pointer(Host), hostname, Count);
+  i := FindPropName(pointer(Host), hostname, Count); // case insensitive lookup
   if i < 0 then
     exit;
   ip4 := IP[i];
@@ -2405,7 +2425,7 @@ begin
     begin
       i := FindPropName(pointer(Host), hostname, Count);
       if i < 0 then
-        exit;
+        exit; // case insensitive Host not found
       n := Count - 1;
       Count := n;
       Host[i] := '';
@@ -2564,7 +2584,7 @@ end;
 
 procedure TNetAddr.IPWithPort(var Text: RawUtf8);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   IPShort(tmp, {withport=}true);
   ShortStringToAnsi7String(tmp, Text);
@@ -3051,6 +3071,15 @@ begin
   end;
 end;
 
+function TNetSocketWrap.GetIP(out ip: RawUtf8; withport: boolean): TNetResult;
+var
+  addr: TNetAddr;
+begin
+  result := GetName(addr);
+  if result = nrOK then
+    ShortStringToAnsi7String(addr.IPShort(withport), ip);
+end;
+
 function TNetSocketWrap.GetPeer(out addr: TNetAddr): TNetResult;
 var
   len: TSockLen;
@@ -3256,7 +3285,7 @@ begin
   if events = [] then
     exit; // the socket seems stable with no pending input
   if neRead in events then
-    // - on Windows, may be because of WSACONNRESET (nrClosed)
+    // - on Windows, may be WSACONNRESET (nrClosed), with recv() returning 0
     // - on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
     // - no need to MakeAsync: recv() should not block after neRead
     // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
@@ -3267,7 +3296,13 @@ begin
   result := false; // e.g. neError or neClosed with no neRead
 end;
 
-function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
+procedure TNetSocketWrap.RawShutdown;
+begin
+  if @self <> nil then
+    shutdown(TSocket(@self), SHUT_RDWR);
+end;
+
+function TNetSocketWrap.ShutdownAndClose(rdwr: boolean; waitms: integer): TNetResult;
 const
   SHUT_: array[boolean] of integer = (
     SHUT_RD, SHUT_RDWR);
@@ -3281,7 +3316,13 @@ begin
     if rdwr then
     {$endif OSLINUX}
       shutdown(TSocket(@self), SHUT_[rdwr]);
-    result := Close;
+    {$ifdef OSWINDOWS}
+    if waitms <> 0 then
+      // try to close the socket as documented by Microsoft (with rdwr=true)
+      // - documented pattern is: shutdown(SD_SEND) + recv()=0 + closesocket
+      WaitFor(waitms, [neRead, neError]); // typically neRead = WSACONNRESET
+    {$endif OSWINDOWS}
+    result := Close; // eventual closesocket()
   end;
 end;
 
@@ -3395,7 +3436,7 @@ begin
     result := 0;
 end;
 
-function IP4Subnet(ip4, netmask4: cardinal): shortstring;
+function IP4Subnet(ip4, netmask4: cardinal): ShortString;
 var
   w: integer;
 begin
@@ -3800,9 +3841,9 @@ begin
       with addr[i] do
         if Address <> '' then
         begin
-          w := Join([w, Name, '=', Address, ' ']);
+          w := Join([{%H-}w, Name, '=', Address, ' ']);
           if Kind <> makSoftware then
-            wo := Join([wo, Address, ' ']);
+            wo := Join([{%H-}wo, Address, ' ']);
         end;
     FakeLength(w, length(w) - 1); // trim ending spaces
     FakeLength(wo, length(wo) - 1);
@@ -5291,6 +5332,13 @@ begin
   Open(u.Server, u.Port, nlTcp, aTimeOut, u.Https, aTLSContext, @t);
 end;
 
+constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
+  aTimeOut: integer; aReusePort: boolean);
+begin
+  Create(aTimeOut);
+  BindPort(aAddress, aLayer, aReusePort);
+end;
+
 const
   BINDTXT: array[boolean] of string[4] = (
     'open', 'bind');
@@ -5298,13 +5346,12 @@ const
     'Is a server available on this address:port?',
     'Port may be invalid or already bound by another process!');
 
-constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
-  aTimeOut: integer; aReusePort: boolean);
+procedure TCrtSocket.BindPort(const aAddress: RawUtf8; aLayer: TNetLayer;
+  aReusePort: boolean);
 var
   s, p: RawUtf8;
   aSock: integer;
 begin
-  Create(aTimeOut);
   if aAddress = '' then
   begin
     {$ifdef OSLINUX} // try systemd activation
@@ -5350,6 +5397,9 @@ begin
   {$endif OSLINUX}
 end;
 
+const
+  CSTA_TXT: array[TCrtSocketTlsAfter] of AnsiChar = 'CBA';
+
 procedure TCrtSocket.DoTlsAfter(caller: TCrtSocketTlsAfter);
 begin
   if fSecure = nil then // ignore duplicated calls
@@ -5366,10 +5416,14 @@ begin
       cstaConnect:
         fSecure.AfterConnection(fSock, TLS, fServer);
       cstaBind:
-        fSecure.AfterBind(TLS);
+        fSecure.AfterBind(fSock, TLS, fServer);
       cstaAccept:
         fSecure.AfterAccept(fSock, TLS, @TLS.LastError, @TLS.CipherName)
     end;
+    if Assigned(OnLog) and
+       (caller <> cstaBind) then
+      OnLog(sllTrace, 'DoTlsAfter(%%:%): %',
+        [CSTA_TXT[caller], fServer, fPort, TLS.CipherName], self);
     TLS.Enabled := true; // set the flag AFTER fSecure has been initialized
   except
     on E: Exception do

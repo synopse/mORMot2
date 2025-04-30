@@ -533,147 +533,13 @@ begin
   end;
 end;
 
-// PUtf8Char for system error text reduces the executable size vs RawUtf8
-// on Delphi (aligned to 4 bytes), but not on FPC (aligned to 16 bytes)
-// -> use an enumeration and minimal RTTI support
-
-const
-  NULL_STR: string[1] = '';
-
-function WinGetEnumName(Info: PAnsiChar; Value: integer): PShortString;
-begin
-  // minimal version with no Kind, EnumBaseType nor Value min/max check
-  result := @NULL_STR;
-  // no Windows arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
-  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-  if Value < 0 then
-    exit;
-  // quickly jump over Kind + NameLen + Name + Min + Max + EnumBaseType
-  Info := @Info[ord(Info[1]) + (2 + 9 + SizeOf(pointer))];
-  if Value > 0 then
-    repeat
-      Info := @Info[ord(Info^) + 1]; // next shortstring
-      dec(Value);
-    until Value = 0;
-  result := pointer(Info);
-  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-end;
-
-type
-  // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
-  TWinError0 = ( // 0..39
-    SUCCESS, INVALID_FUNCTION, FILE_NOT_FOUND, PATH_NOT_FOUND,
-    TOO_MANY_OPEN_FILES, ACCESS_DENIED, INVALID_HANDLE, ARENA_TRASHED,
-    NOT_ENOUGH_MEMORY, INVALID_BLOCK, BAD_ENVIRONMENT, BAD_FORMAT,
-    INVALID_ACCESS, INVALID_DATA, OUTOFMEMORY, INVALID_DRIVE,
-    CURRENT_DIRECTORY, NOT_SAME_DEVICE, NO_MORE_FILES, WRITE_PROTECT,
-    BAD_UNIT, NOT_READY, BAD_COMMAND, CRC, BAD_LENGTH, SEEK,
-    NOT_DOS_DISK, SECTOR_NOT_FOUND, OUT_OF_PAPER, WRITE_FAULT,
-    READ_FAULT, GEN_FAILURE, SHARING_VIOLATION, LOCK_VIOLATION,
-    WRONG_DISK, FAIL_I35, SHARING_BUFFER_EXCEEDED, FAIL_I37, HANDLE_EOF,
-    HANDLE_DISK_FULL);
-  TWinError50 = ( // 50..55
-    NOT_SUPPORTED, REM_NOT_LIST, DUP_NAME, BAD_NETPATH,
-    NETWORK_BUSY, DEV_NOT_EXIST);
-  TWinError80 = ( // 80..89
-    FILE_EXISTS, FAIL_I81, CANNOT_MAKE, FAIL_I83, OUT_OF_STRUCTURES,
-    ALREADY_ASSIGNED, INVALID_PASSWORD, INVALID_PARAMETER,
-    NET_WRITE_FAULT, NO_PROC_SLOTS);
-  TWinError108 = ( // 108..129
-    DRIVE_LOCKED, BROKEN_PIPE, OPEN_FAILED, BUFFER_OVERFLOW,
-    DISK_FULL, NO_MORE_SEARCH_HANDLES, INVALID_TARGET_HANDLE, FAIL_I115,
-    FAIL_I116, INVALID_CATEGORY, INVALID_VERIFY_SWITCH, BAD_DRIVER_LEVEL,
-    CALL_NOT_IMPLEMENTED, SEM_TIMEOUT, INSUFFICIENT_BUFFER,
-    INVALID_NAME, INVALID_LEVEL, NO_VOLUME_LABEL, MOD_NOT_FOUND,
-    PROC_NOT_FOUND, WAIT_NO_CHILDREN, CHILD_NOT_COMPLETE);
-  TWinError995 = ( // 995..1013
-    OPERATION_ABORTED, IO_INCOMPLETE, IO_PENDING, NOACCESS, SWAPERROR,
-    FAIL_I1000, STACK_OVERFLOW, INVALID_MESSAGE, CAN_NOT_COMPLETE,
-    INVALID_FLAGS, UNRECOGNIZED_VOLUME, FILE_INVALID, FULLSCREEN_MODE,
-    NO_TOKEN, BADDB, BADKEY, CANTOPEN, CANTREAD, CANTWRITE);
-  TWinError1051 = ( // 1051..1079
-    DEPENDENT_SERVICES_RUNNING, INVALID_SERVICE_CONTROL,
-    SERVICE_REQUEST_TIMEOUT, SERVICE_NO_THREAD, SERVICE_DATABASE_LOCKED,
-    SERVICE_ALREADY_RUNNING, INVALID_SERVICE_ACCOUNT, SERVICE_IS_DISABLED,
-    CIRCULAR_DEPENDENCY, SERVICE_DOES_NOT_EXIST, SERVICE_CANNOT_ACCEPT_CTRL,
-    SERVICE_NOT_ACTIVE, FAILED_SERVICE_CONTROLLER_CONNECT,
-    EXCEPTION_IN_SERVICE, DATABASE_DOES_NOT_EXIST, SERVICE_SPECIFIC_ERROR,
-    PROCESS_ABORTED, SERVICE_DEPENDENCY_FAIL, SERVICE_LOGON_FAILED,
-    SERVICE_START_HANG, INVALID_SERVICE_LOCK, SERVICE_MARKED_FOR_DELETE,
-    SERVICE_EXISTS, ALREADY_RUNNING_LKG, SERVICE_DEPENDENCY_DELETED,
-    BOOT_ALREADY_ACCEPTED, SERVICE_NEVER_STARTED, DUPLICATE_SERVICE_NAME,
-    DIFFERENT_SERVICE_ACCOUNT);
-  TWinError1200 = ( // 1200..1246
-    BAD_DEVICE, CONNECTION_UNAVAIL, DEVICE_ALREADY_REMEMBERED,
-    NO_NET_OR_BAD_PATH, BAD_PROVIDER, CANNOT_OPEN_PROFILE, BAD_PROFILE,
-    NOT_CONTAINER, EXTENDED_ERROR, INVALID_GROUPNAME, INVALID_COMPUTERNAME,
-    INVALID_EVENTNAME, INVALID_DOMAINNAME, INVALID_SERVICENAME,
-    INVALID_NETNAME, INVALID_SHARENAME, INVALID_PASSWORDNAME,
-    INVALID_MESSAGENAME, INVALID_MESSAGEDEST, SESSION_CREDENTIAL_CONFLICT,
-    REMOTE_SESSION_LIMIT_EXCEEDED, DUP_DOMAINNAME, NO_NETWORK, CANCELLED,
-    USER_MAPPED_FILE, CONNECTION_REFUSED, GRACEFUL_DISCONNECT,
-    ADDRESS_ALREADY_ASSOCIATED, ADDRESS_NOT_ASSOCIATED, CONNECTION_INVALID,
-    CONNECTION_ACTIVE, NETWORK_UNREACHABLE, HOST_UNREACHABLE,
-    PROTOCOL_UNREACHABLE, PORT_UNREACHABLE, REQUEST_ABORTED,
-    CONNECTION_ABORTED, RETRY, CONNECTION_COUNT_LIMIT,
-    LOGIN_TIME_RESTRICTION, LOGIN_WKSTA_RESTRICTION, INCORRECT_ADDRESS,
-    ALREADY_REGISTERED, SERVICE_NOT_FOUND, NOT_AUTHENTICATED,
-    NOT_LOGGED_ON, _CONTINUE);
-  // searched in WINERR_ONE[] constants
-  TWinErrorOne = (
-    ALREADY_EXISTS, MORE_DATA, NO_SYSTEM_RESOURCES,
-    WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK, WSAECONNABORTED,
-    WSAECONNRESET, WSAENOBUFS, WSAETIMEDOUT, WSAECONNREFUSED, WSATRY_AGAIN,
-    WINHTTP_TIMEOUT, WINHTTP_OPERATION_CANCELLED, WINHTTP_CANNOT_CONNECT,
-    WINHTTP_CLIENT_AUTH_CERT_NEEDED, WINHTTP_INVALID_SERVER_RESPONSE,
-    CRYPT_E_BAD_ENCODE, CRYPT_E_SELF_SIGNED, CRYPT_E_BAD_MSG, CRYPT_E_REVOKED,
-    CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE, TRUST_E_BAD_DIGEST,
-    TRUST_E_NOSIGNATURE, CERT_E_EXPIRED, CERT_E_CHAINING, CERT_E_REVOKED);
-const
-  WINERR_ONE: array[TWinErrorOne] of cardinal = (
-    // sparse system errors (183, 234, 1450)
-    ERROR_ALREADY_EXISTS, ERROR_MORE_DATA, ERROR_NO_SYSTEM_RESOURCES,
-    // main Windows Socket API (WSA) errors
-    10014, 10022, 10024, 10035, 10038, 10053, 10054, 10055, 10060, 10061, 11003,
-    // most common WinHttp API errors (in range 12000...12152)
-    ERROR_WINHTTP_TIMEOUT, ERROR_WINHTTP_OPERATION_CANCELLED,
-    ERROR_WINHTTP_CANNOT_CONNECT, ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED,
-    ERROR_WINHTTP_INVALID_SERVER_RESPONSE,
-    // some security-related HRESULT errors
-    $80092002, $80092007, $8009200d, $80092010, $80092012, $80092013, $80096010,
-    $800b0100, $800b0101, $800b010a, $800b010c);
-
-function WinErrorConstant(Code: cardinal): PShortString;
-begin
-  case Code of // split into TWinError* types (faster and easier to maintain)
-    0 .. ord(high(TWinError0)):
-      result := WinGetEnumName(TypeInfo(TWinError0), Code);
-    50 .. 50 + ord(high(TWinError50)):
-      result := WinGetEnumName(TypeInfo(TWinError50), Code - 50);
-    80 .. 80 + ord(high(TWinError80)):
-      result := WinGetEnumName(TypeInfo(TWinError80), Code - 80);
-    108 .. 108 + ord(high(TWinError108)):
-      result := WinGetEnumName(TypeInfo(TWinError108), Code - 108);
-    995 .. 995 + ord(high(TWinError995)):
-      result := WinGetEnumName(TypeInfo(TWinError995), Code - 995);
-    1051 .. 1051 + ord(high(TWinError1051)):
-      result := WinGetEnumName(TypeInfo(TWinError1051), Code - 1051);
-    1200 .. 1200 + ord(high(TWinError1200)):
-      result := WinGetEnumName(TypeInfo(TWinError1200), Code - 1200);
-  else
-    result := WinGetEnumName(TypeInfo(TWinErrorOne),
-      IntegerScanIndex(@WINERR_ONE, length(WINERR_ONE), Code));
-  end;
-end;
-
 function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 var
   bak: integer;
   flags, len: PtrUInt;
   src: pointer;
-  cod: PShortString;
   tmp: array[0..511] of WideChar;
-  tmps: shortstring absolute tmp;
+  tmps: ShortString absolute tmp;
 begin
   bak := GetLastError;
   src := nil;
@@ -681,12 +547,10 @@ begin
   if ModuleName = nil then
   begin
     // system error codes
-    cod := WinErrorConstant(Code);
-    if cod^[0] <> #0 then
+    tmps[0] := #0;
+    if AppendWinErrorText(Code, tmps, #0) then
     begin
       // we can return directly the standard system error code constant
-      tmps := 'ERROR_';
-      AppendShort(cod^, tmps);
       FastSetString(result, @tmps[1], ord(tmps[0]));
       SetLastError(bak);
       exit;
@@ -733,7 +597,7 @@ begin
     [ModuleName, string(WinErrorText(code, ModuleName)), code]);
 end;
 
-function WinLastError(const Context: shortstring; Code: integer): string;
+function WinLastError(const Context: ShortString; Code: integer): string;
 begin
   if Code = 0 then
     Code := GetLastError;
@@ -741,7 +605,7 @@ begin
     [Context, string(WinErrorText(Code, nil)), code]);
 end;
 
-procedure RaiseLastError(const Context: shortstring;
+procedure RaiseLastError(const Context: ShortString;
   RaisedException: ExceptClass; Code: integer);
 begin
   if RaisedException = nil then
@@ -749,7 +613,7 @@ begin
   raise RaisedException.Create(WinLastError(Context, Code))
 end;
 
-procedure WinCheck(const Context: shortstring; Code: integer;
+procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass);
 begin
   if Code <> NO_ERROR then
@@ -1066,7 +930,7 @@ const
 
 function GetExecutableName(aAddress: pointer): TFileName;
 var
-  tmp: array[byte] of WideChar;
+  tmp: TByteToWideChar;
   hm: HMODULE;
 begin
   result := '';
@@ -1095,22 +959,6 @@ begin
   result := (FileName <> '') and
             GetFileAttributesInternal(FileName, fa, FollowLink) and
             ((fa.dwFileAttributes and faDirectory <> 0) = CheckAsDir);
-end;
-
-function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
-var
-  len: PtrInt;
-begin
-  len := length(FileName);
-  if len = 0 then
-    result := false
-  else if (len = 1) and
-          (FileName[1] = '.') then
-    result := true
-  else if FileName[len] <> '\' then
-    result := FileExists(FileName, FollowLink, {checkasdir=}true)
-  else
-    result := FileExists(copy(FileName, 1, len - 1), FollowLink, true);
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -1179,14 +1027,20 @@ begin
     result := r.V;
 end;
 
+function SetCurrentDir(const NewDir: TFileName): boolean;
+var
+  tmp: TW32Temp;
+begin
+  result := (NewDir <> '') and
+            SetCurrentDirectoryW(W32(NewDir, tmp));
+end;
+
 function DeleteFile(const aFileName: TFileName): boolean;
 var
   tmp: TW32Temp;
 begin
-  if aFileName = '' then
-    result := false
-  else
-    result := DeleteFileW(W32(aFileName, tmp));
+  result := (aFileName <> '') and
+            DeleteFileW(W32(aFileName, tmp));
 end;
 
 function FileShare(aMode: integer): DWord;
@@ -1829,7 +1683,7 @@ begin
   for e := low(e) to high(e) do
     // manual loop: the same error code can appear several times
     if DOTNET_EXCEPTIONHRESULT[e] = code then
-      PtrArrayAdd(names, WinGetEnumName(TypeInfo(TDotNetException), ord(e)));
+      PtrArrayAdd(names, GetEnumNameRtti(TypeInfo(TDotNetException), ord(e)));
 end;
 
 function TSynLogExceptionContext.AdditionalInfo(
@@ -2892,7 +2746,7 @@ end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
 var
-  tmp: array[byte] of WideChar;
+  tmp: TByteToWideChar;
   tmpsize: cardinal;
 begin
   tmpsize := SizeOf(tmp);
@@ -3171,7 +3025,7 @@ const
     'SeIncreaseQuotaPrivilege',        // wspIncreaseQuota
     'SeUnsolicitedInputPrivilege',     // wspUnsolicitedInput
     'SeMachineAccountPrivilege',       // wspMachineAccount
-    'SeTcbPrivilege',                  // wspTCP
+    'SeTcbPrivilege',                  // wspTCB
     'SeSecurityPrivilege',             // wspSecurity
     'SeTakeOwnershipPrivilege',        // wspTakeOwnership
     'SeLoadDriverPrivilege',           // wspLoadDriver
@@ -4328,7 +4182,7 @@ end;
 
 { TService }
 
-class procedure TService.DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+class procedure TService.DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
   const Args: array of const; Instance: TObject);
 begin
   if Assigned(WindowsServiceLog) then
@@ -4526,8 +4380,8 @@ var
   status: PShortString;
 begin
   status := ToText(CurrentStateToServiceState(dwState));
-  DoLog(sllTrace, '% ReportStatus(%=%,%)=%', [ServiceName,
-    WinErrorConstant(dwExitCode)^, dwExitCode, dwWait, status^], self);
+  DoLog(sllTrace, '% ReportStatus(%,%)=%', [ServiceName,
+    WinErrorShort(dwExitCode), dwWait, status^], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
   else
@@ -4953,8 +4807,8 @@ begin
     TService.DoLog(sllTrace, 'RunCommand: % AssignProcessToJobObject success',
       [ctxt], nil)
   else
-    TService.DoLog(sllDebug, 'RunCommand: % AssignProcessToJobObject failed % %',
-      [ctxt, GetLastError, WinErrorConstant(GetLastError)^], nil);
+    TService.DoLog(sllDebug, 'RunCommand: % AssignProcessToJobObject failed as %',
+      [ctxt, WinErrorShort(GetLastError)], nil);
 end;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
@@ -5144,10 +4998,9 @@ begin
   if (not created) and
      (flags and CREATE_BREAKAWAY_FROM_JOB <> 0) then
   begin
-    err := GetLastError;
     TService.DoLog(sllTrace,
-      'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = % %',
-      [err, WinErrorConstant(err)^], nil);
+      'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = %',
+      [WinErrorShort(GetLastError)], nil);
     flags := flags and (not CREATE_BREAKAWAY_FROM_JOB);
     wcmd := SynUnicode(cmd); // CreateProcesW() modified wcmd content: recreate
     UniqueString(wcmd);
@@ -5157,9 +5010,9 @@ begin
   if not created then
   begin
     err := GetLastError;
-    TService.DoLog(sllTrace,  'RunCommand: CreateProcess = % %',
-      [err, WinErrorConstant(err)^], nil);
-    result := -err; // returns CreateProcessW() error as negative
+    TService.DoLog(sllTrace,  'RunCommand: CreateProcess = %',
+      [WinErrorShort(err)], nil);
+    result := -err; // returns CreateProcessW() error as negative number
     exit;
   end;
   // setup the newly created process
@@ -5642,7 +5495,7 @@ begin
         CpuCacheSize := CpuCache[i].Size;
         if CpuCacheSize <> 0 then // append the biggest level Cache size
         begin
-          cpu := _fmt('%s [%s]', [cpu, _oskb(CpuCacheSize)]);
+          cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
           break;
         end;
       end;
@@ -5651,10 +5504,10 @@ begin
           if Count <> 0 then
             if Count = 1 then
               CpuCacheText :=
-                _fmt('%s L%d=%s ', [CpuCacheText, i, _oskb(Size)])
+                _fmt('%s L%d=%s ', [CpuCacheText, i, KBNoSpace(Size)])
             else
               CpuCacheText :=
-                _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
+                _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
       TrimSelf(CpuCacheText);
     end;
   end;

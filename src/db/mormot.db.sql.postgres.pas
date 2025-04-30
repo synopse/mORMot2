@@ -501,7 +501,7 @@ var
   log: ISynLog;
   host, port: RawUtf8;
 begin
-  log := SynDBLog.Enter(self, 'Connect');
+  SynDBLog.EnterLocal(log, self, 'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   try
     Split(Properties.ServerName, ':', host, port);
@@ -566,7 +566,7 @@ procedure TSqlDBPostgresConnection.StartTransaction;
 var
   log: ISynLog;
 begin
-  log := SynDBLog.Enter(self, 'StartTransaction');
+  SynDBLog.EnterLocal(log, self, 'StartTransaction');
   if TransactionCount > 0 then
     ESqlDBPostgres.RaiseUtf8('Invalid %.StartTransaction: nested transactions' +
       ' are not supported by Postgres - use SAVEPOINT instead', [self]);
@@ -1479,7 +1479,7 @@ var
 begin
   fProcessing := true;
   SetCurrentThreadName('=%', [fName]);
-  log := SynDBLog.Enter(self, 'Execute');
+  SynDBLog.EnterLocal(log, self, 'Execute');
   try
     repeat
       // notify if needed

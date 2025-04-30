@@ -463,7 +463,7 @@ begin
   if fDatabase = nil then
     ESqlDBFireDac.RaiseUtf8('%.Connect(%): Database=nil',
       [self, fProperties.ServerName]);
-  Log := SynDBLog.Enter('Connect to DriverID=% Database=%',
+  SynDBLog.EnterLocal(Log, 'Connect to DriverID=% Database=%',
     [FIREDAC_PROVIDER[fProperties.Dbms], fProperties.DatabaseName], self);
   try
     fDatabase.Open;

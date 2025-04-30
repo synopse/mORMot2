@@ -224,8 +224,8 @@
     // https://gitlab.com/freepascal.org/fpc/source/-/commit/b907920ef392d6b3a2a
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
-    {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
-    // on compilation error in mormot.core.Rtti, undefine the above conditional
+    {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
+    // on GetEnumNameRtti() error in mormot.core.os, undefine the above conditional
     // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
     {$define STRCNT32} // new trunk feature: 32-bit TAnsiRec.Ref even on 64-bit CPU
   {$ifend}
@@ -325,12 +325,15 @@
       {$define FPC_CPUX64}
       {$ifndef OSDARWIN}       // MachOS has troubles with our asm
         {$define FPC_ASMX64}
-        {$define ASMX64}       // supports asm with globals
-        {$define ASMINTEL}     // either ASMX86 or ASMX64
-        {$define ASMX64AVX}    // supports AVX/AVX2/AVX512
+        {$define ASMX64}     // supports asm with globals
+        {$define ASMINTEL}   // either ASMX86 or ASMX64
+        {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
         {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
-        {$define CPUX64ASM}    // FPC has no problem (not Delphi prior XE7)
-        {$define HASAESNI}     // mormot.crypt.core rejected by Darwin asm
+        {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
+        {$define HASAESNI}   // mormot.crypt.core AES-NI rejected by Darwin asm
+        {.$define FPC_PICX64}
+        // FPC_PIC seems always defined on Linux x86_64: define this to use GOT
+        // in our custom asm when generating a .so library on such platform
       {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}

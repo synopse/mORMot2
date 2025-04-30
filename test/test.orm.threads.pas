@@ -291,7 +291,8 @@ begin
             SetLength(fIDs, fIterationCount);
             n := 0;
             r := 0;
-            log.Log(sllTrace, 'Execute Add', self);
+            if Assigned(log) then
+              log.Log(sllTrace, 'Execute Add', self);
             for i := 0 to fIterationCount - 1 do
             begin
               Rec.FirstName := FormatUTF8('%/%', [i, fIterationCount - 1]);
@@ -310,7 +311,8 @@ begin
               inc(n);
             end;
             fTest.CheckEqual(n, fIterationCount, 'Rest.Add');
-            log.Log(sllTrace, 'Execute http.Get', self);
+            if Assigned(log) then
+              log.Log(sllTrace, 'Execute http.Get', self);
             if (infoUri <> '') and
                not IdemPChar(pointer(fTest.fClientOnlyPort), 'UNIX:') and
                (fTest.fHttpServer.Use in [useHttpSocket, useHttpAsync]) then
@@ -333,7 +335,8 @@ begin
                   http.Free;
                 end;
             end;
-            log.Log(sllTrace, 'Execute Retrieve', self);
+            if Assigned(log) then
+              log.Log(sllTrace, 'Execute Retrieve', self);
             for i := 0 to n - 1 do
               if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec), 'get') then
                 break
@@ -347,19 +350,22 @@ begin
                 else
                   inc(r);
               end;
-            log.Log(sllTrace, 'Execute wait', self);
+            if Assigned(log) then
+              log.Log(sllTrace, 'Execute wait', self);
           end;
         finally
-          log.Log(sllTrace, 'Execute finally pending=%',
-            [fTest.fPendingThreadCount], self);
+          if Assigned(log) then
+            log.Log(sllTrace, 'Execute finally pending=%',
+              [fTest.fPendingThreadCount], self);
           for i := 0 to high(Rest) do
             if Rest[i] <> fTest.fDatabase then
               FreeAndNil(Rest[i]);
           fProcessFinished := true;
           if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
             fTest.fPendingThreadFinished.SetEvent; // notify all finished
-          log.Log(sllTrace, 'Execute SetEvent pending=%',
-            [fTest.fPendingThreadCount], self);
+          if Assigned(log) then
+            log.Log(sllTrace, 'Execute SetEvent pending=%',
+              [fTest.fPendingThreadCount], self);
           log := nil;
         end;
       except
@@ -654,7 +660,7 @@ begin
   end;
   // 3. Cleanup for this protocol (but reuse the same threadpool)
   AddConsole('%', [msg]);
-  DatabaseClose;
+  DatabaseClose; // shutdown also fHttpServer
   Check(fDatabase = nil);
   if longstandingclient <> nil then
   begin
@@ -688,6 +694,7 @@ end;
 {$ifndef ONLYUSEHTTPSOCKET}
 procedure TTestMultiThreadProcess.WindowsAPI;
 begin
+  sleep(100); // sometimes needed to avoid ERROR_SHARING_VIOLATION
   Test(TRestHttpClientWinHTTP, useHttpApi);
 end;
 {$endif ONLYUSEHTTPSOCKET}

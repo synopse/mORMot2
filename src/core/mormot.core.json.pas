@@ -118,14 +118,14 @@ var
   // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
   // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
   // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
-  JSON_ESCAPE: array[byte] of byte;
+  JSON_ESCAPE: TByteToByte;
 
   /// 256-byte lookup table for fast branchless JSON text un-escaping
   // - #0 = JSON_UNESCAPE_UNEXPECTED for unexpected #0 or control char
   // - #1 = JSON_UNESCAPE_UTF16 for '\u0123' UTF-16 pattern
   // - #8,#9,#10,#12,#13 as unescaped char from b,t,n,f,r
   // - other characters are litterals and should be written as such
-  JSON_UNESCAPE: array[AnsiChar] of AnsiChar;
+  JSON_UNESCAPE: TAnsiCharToAnsiChar;
 
   /// how many initial chars of a JSON array are parsed for intial capacity
   // - used e.g. by _JL_DynArray() and TDocVariantData.InitJsonInPlace()
@@ -785,6 +785,10 @@ type
     procedure Add(const Format: RawUtf8; const Values: array of const;
       Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
+    /// raw append strings or integers with a specified format
+    procedure AddFmt(Format: PUtf8Char; Values: PVarRec; ValuesCount: integer;
+      Escape: TTextWriterKind = twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]);
     /// append a variant content as number or string
     // - this overriden version will properly handle JSON escape
     // - properly handle varAny from TRttiCustomProp.GetRttiVarData
@@ -949,6 +953,8 @@ type
     // - used e.g. by TSynDictionary.SaveToJson
     procedure AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
   end;
+  /// meta-class of TJsonWriter
+  TJsonWriterClass = class of TJsonWriter;
 
 
 { ************ JSON-aware TSynNameValue TObjectStoreJson }
@@ -4093,12 +4099,14 @@ procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
   EndOfObject: PAnsiChar);
 var
   B: PUtf8Char;
+  parser: TJsonGotoEndParser;
 begin
   result := '';
   if P = nil then
     exit;
   B := GotoNextNotSpace(P);
-  P := GotoEndJsonItem(B);
+  parser.Init({strict=}false, {pmax=}nil);
+  P := parser.GotoEnd(B);
   if P = nil then
     exit;
   FastSetString(RawUtf8(result), B, P - B);
@@ -4298,7 +4306,7 @@ function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
   PropNameFound: PRawUtf8): PUtf8Char;
 var
   name: ShortString; // no memory allocation nor P^ modification
-  PropNameUpper: array[byte] of AnsiChar;
+  PropNameUpper: TByteToAnsiChar;
   parser: TJsonGotoEndParser;
 begin
   if P <> nil then
@@ -4618,7 +4626,7 @@ function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   info: TGetJsonField;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   result := 0;
   if (P = nil) or
@@ -6325,7 +6333,7 @@ begin // a dedicated method using a TSynAnsiFixedWidth lookup table
       JSON_ESCAPE_UNICODEHEX: // characters below ' ', #7 e.g. -> \u0007
         begin
           PCardinal(W.B + 1)^ := JSON_UHEXC;
-          PCardinal(W.B + 5)^ := TwoDigitsHexWB[P^];
+          PCardinal(W.B + 5)^ := TwoDigitsHex[P^];
           inc(W.B, 6);
         end;
     else // escaped as \ + b,t,n,f,r,\,"
@@ -6459,30 +6467,35 @@ end;
 
 procedure TJsonWriter.Add(const Format: RawUtf8; const Values: array of const;
   Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
-var
-  ValuesIndex: integer;
-  S, F: PUtf8Char;
 begin
-  if Format = '' then
-    exit;
-  ValuesIndex := 0;
-  F := pointer(Format);
+  if Format <> '' then
+    AddFmt(pointer(Format), @Values[0], length(Values), Escape, WriteObjectOptions);
+end;
+
+procedure TJsonWriter.AddFmt(Format: PUtf8Char; Values: PVarRec; ValuesCount: integer;
+  Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
+var
+  start: PUtf8Char;
+begin
+  if Format <> nil then
   repeat
-    S := F;
+    start := Format;
     repeat
-      if (F^ = #0) or
-         (F^ = '%') then
+      if (Format^ = #0) or
+         (Format^ = '%') then
         break;
-      inc(F);
+      inc(Format);
     until false;
-    AddNoJsonEscape(S, F - S); // append Format content with no escaping
-    if F^ = #0 then
+    AddNoJsonEscape(start, Format - start); // append Format with no escaping
+    if Format^ = #0 then
       exit;
     // add next value as text instead of F^='%' placeholder
-    if ValuesIndex <= high(Values) then // missing value will display nothing
-      AddVarRec(@Values[ValuesIndex], Escape, WriteObjectOptions);
-    inc(F);
-    inc(ValuesIndex);
+    inc(Format);
+    if ValuesCount <= 0 then
+      continue; // missing value will display nothing
+    AddVarRec(Values, Escape, WriteObjectOptions);
+    inc(Values);
+    dec(ValuesCount);
   until false;
 end;
 
@@ -7071,7 +7084,7 @@ noesc:
         begin
           PCardinal(B + 1)^ := JSON_UHEXC;
           inc(B, 4);
-          PCardinal(B + 1)^ := TwoDigitsHexWB[c^];
+          PCardinal(B + 1)^ := TwoDigitsHex[c^];
         end;
     else
       // escaped as \ + b,t,n,f,r,\,"
@@ -7282,7 +7295,7 @@ nxt:if Len = 0 then
     if (Len < 0) or
        (c = 0) then
       break;
-    tab := @TwoDigitsHexWBLower;
+    tab := @TwoDigitsHexLower;
     if c <= $ffff then
       Utf16ToJsonUnicodeEscape(B, c, tab)
     else
@@ -7422,6 +7435,7 @@ procedure TJsonWriter.AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
 var
   k, v: PUtf8Char;
   parser: TJsonGotoEndParser;
+  needquotes: boolean;
 begin
   if (keys = nil) or
      (keys[0] <> '[') or
@@ -7433,7 +7447,8 @@ begin
     AddNull;
     exit;
   end;
-  inc(keys); // jump initial [
+  keys := GotoNextNotSpace(keys + 1);
+  needquotes := keys^ <> '"'; // keys may be e.g. TIntegerDynArray
   inc(values);
   Add('{');
   {%H-}parser.Init({strict=}false, nil);
@@ -7443,8 +7458,13 @@ begin
     if (k = nil) or
        (v = nil) then
       break; // invalid JSON input
+    if needquotes then
+      AddDirect('"'); // ensure keys are "strings" are required by JSON
     AddNoJsonEscape(keys, k - keys);
-    AddDirect(':');
+    if needquotes then
+      AddDirect('"', ':')
+    else
+      AddDirect(':');
     AddNoJsonEscape(values, v - values);
     AddComma;
     if (k^ <> ',') or
@@ -7880,9 +7900,9 @@ procedure _JL_Int64(Data: PInt64; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if Ctxt.WasString and
+       (jpoAllowInt64Hex in Ctxt.Options) and
        (Ctxt.ValueLen = SizeOf(Data^) * 2) then
-      Ctxt.Valid := (jpoAllowInt64Hex in Ctxt.Options) and
-        HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
+      Ctxt.Valid := HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
     else
       SetInt64(Ctxt.Value, Data^);
 end;
@@ -7891,9 +7911,9 @@ procedure _JL_QWord(Data: PQWord; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if Ctxt.WasString and
+       (jpoAllowInt64Hex in Ctxt.Options) and
        (Ctxt.ValueLen = SizeOf(Data^) * 2) then
-      Ctxt.Valid := (jpoAllowInt64Hex in Ctxt.Options) and
-        HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
+      Ctxt.Valid := HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
     else
       SetQWord(Ctxt.Value, Data^);
 end;
@@ -10530,12 +10550,12 @@ begin
   result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
 end;
 
-procedure TPersistentCopyObject(Dest, Source: TObject);
+procedure CopyTPersistent(Dest, Source: TObject);
 begin
   TPersistent(Dest).Assign(TPersistent(Source)); // works e.g. for TStrings
 end;
 
-procedure TCollectionCopyObject(Dest, Source: TObject);
+procedure CopyTCollection(Dest, Source: TObject);
 begin
   CopyCollection(TCollection(Source), TCollection(Dest)); // inversed order
 end;
@@ -10591,11 +10611,11 @@ begin
   case fCache.ValueRtlClass of
     vcPersistent:
       if fProps.CountNonVoid = 0 then // use TPersistent.Assign() if no props
-        fCopyObject := @TPersistentCopyObject;
+        fCopyObject := @CopyTPersistent;
     vcStrings:
       begin
         new := @_New_Strings; // call non-virtual TStrings.Create
-        fCopyObject := @TPersistentCopyObject;
+        fCopyObject := @CopyTPersistent;
         fJsonSave := @_JS_TStrings;
         fJsonLoad := @_JL_TStrings;
       end;
@@ -10614,7 +10634,7 @@ begin
       begin
         if @new = @_New_Object then
           new := @_New_Collection; // no TInterfacedCollection above
-        fCopyObject := @TCollectionCopyObject;
+        fCopyObject := @CopyTCollection;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;
       end;
@@ -10636,8 +10656,7 @@ begin
     vcObjectWithID: // also accepts "RowID" field in JSON input
       fJsonLoad := @_JL_RttiObjectWithID;
     vcClonable:
-      if fProps.CountNonVoid = 0 then // TClonable.AssignTo() if no props
-        fCopyObject := @CopyClonable;
+      fCopyObject := @CopyTClonable; // always use TClonable.AssignTo()
   end;
   fCache.NewInstance := @new;
 end;
@@ -11706,7 +11725,7 @@ begin
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions, Interning);
 end;
 
-function EnsureDynArray(const Ctxt: shortstring;
+function EnsureDynArray(const Ctxt: ShortString;
   TypeInfo: PRttiInfo; Tolerant, GuessCount: boolean): TJsonParserOptions;
 begin
   if (TypeInfo = nil) or

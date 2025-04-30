@@ -99,7 +99,7 @@ type
     fBatchValues: TRawUtf8DynArray;
     // some sub-functions used by Create() during DB initialization
     procedure InitializeExternalDB(const log: ISynLog);
-    procedure LogFields(const log: ISynLog);
+    procedure RetrieveFieldsExternal(const log: ISynLog);
     procedure FieldsInternalInit;
     function FieldsExternalIndexOf(
       const ColName: RawUtf8; CaseSensitive: boolean): PtrInt;
@@ -586,11 +586,12 @@ begin
   result := true;
 end;
 
-procedure TRestStorageExternal.LogFields(const log: ISynLog);
+procedure TRestStorageExternal.RetrieveFieldsExternal(const log: ISynLog);
 begin
   fProperties.GetFields(UnQuotedSQLSymbolName(fTableName), fFieldsExternal);
-  log.Log(sllDebug, 'GetFields', TypeInfo(TSqlDBColumnDefineDynArray),
-    fFieldsExternal, self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'GetFields', TypeInfo(TSqlDBColumnDefineDynArray),
+      fFieldsExternal, self);
 end;
 
 function TRestStorageExternal.FieldsExternalIndexOf(
@@ -624,8 +625,9 @@ begin
   fTableName := fStoredClassMapping^.TableName;
   fProperties :=
     fStoredClassMapping^.ConnectionProperties as TSqlDBConnectionProperties;
-  log.Log(sllInfo, '% as % % Server=%',
-    [StoredClass, fTableName, fProperties, Owner], self);
+  if Assigned(log) then
+    log.Log(sllInfo, '% as % % Server=%',
+      [StoredClass, fTableName, fProperties, Owner], self);
   if fProperties = nil then
     ERestStorage.RaiseUtf8('%.Create: no external DB defined for %',
       [self, StoredClass]);
@@ -640,22 +642,24 @@ begin
         fStoredClassMapping^.MapField(nfo.Name, '"' + s + '"')
       else if fProperties.IsSqlKeyword(s) then
       begin
-        log.Log(sllWarning, '%.%: Field name % is not compatible with %',
-          [fStoredClass, nfo.Name, s, fProperties.DbmsEngineName], self);
+        if Assigned(log) then
+          log.Log(sllWarning, '%.%: Field name % is not compatible with %',
+            [fStoredClass, nfo.Name, s, fProperties.DbmsEngineName], self);
         if rpmAutoMapKeywordFields in options then
         begin
-          log.Log(sllWarning, '-> %.% mapped to %_',
-            [fStoredClass, nfo.Name, s], self);
+          if Assigned(log) then
+            log.Log(sllWarning, '-> %.% mapped to %_',
+              [fStoredClass, nfo.Name, s], self);
           fStoredClassMapping^.MapField(nfo.Name, s + '_');
         end
-        else
+        else if Assigned(log) then
           log.Log(sllWarning, '-> you should better use MapAutoKeywordFields', self);
       end;
     end;
   end;
   // create corresponding external table if necessary, and retrieve its fields info
   TableCreated := false;
-  LogFields(log);
+  RetrieveFieldsExternal(log);
   if not (rpmNoCreateMissingTable in options) then
     if fFieldsExternal = nil then
     begin
@@ -684,7 +688,7 @@ begin
         TableCreated := ExecuteDirect(s, [], [], false) <> nil;
       if TableCreated then
       begin
-        LogFields(log);
+        RetrieveFieldsExternal(log);
         if fFieldsExternal = nil then
           ERestStorage.RaiseUtf8(
             '%.Create: external table creation % failed: GetFields() ' +
@@ -729,7 +733,7 @@ begin
       if TableModified then
       begin
         // retrieve raw field information from DB after ALTER TABLE
-        LogFields(log);
+        RetrieveFieldsExternal(log);
         FieldsInternalInit;
       end;
     end;
@@ -759,7 +763,7 @@ var
 begin
   if aServer = nil then
     ERestStorage.RaiseUtf8('%.Create(%): aServer=%', [self, aClass, aServer]);
-  log := aServer.LogClass.Enter('Create %', [aClass], self);
+  aServer.LogClass.EnterLocal(log, 'Create %', [aClass], self);
   inherited Create(aClass, aServer);
   // initialize external DB process: setup ORM mapping, and create table/columns
   InitializeExternalDB(log);

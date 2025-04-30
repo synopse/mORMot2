@@ -827,7 +827,7 @@ begin
       IUnknown(Obj) := self
     else
     begin
-      result := fUnkInnerSQLNCLIRowset.QueryInterface(IID, Obj);
+      result := fUnkInnerSQLNCLIRowset.QueryInterface(IID, Obj); // delegate
       exit;
     end;
   end;

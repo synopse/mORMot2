@@ -1946,7 +1946,7 @@ var
 begin
   assert(low(HTTP_KNOWNHEADERS) = low(Request.Headers.KnownHeaders));
   assert(high(HTTP_KNOWNHEADERS) = high(Request.Headers.KnownHeaders));
-  // compute remote IP
+  // compute remote IP from 'X-Real-IP' or 'X-Forwarded-For'
   L := length(RemoteIPHeadUp);
   if L <> 0 then
   begin
@@ -2017,17 +2017,22 @@ begin
   P := Request.Headers.pUnknownHeaders;
   if P <> nil then
     for i := 1 to Request.Headers.UnknownHeaderCount do
-    begin
-      MoveFast(P^.pName^, D^, P^.NameLength);
-      inc(D, P^.NameLength);
-      PWord(D)^ := ord(':') + ord(' ') shl 8;
-      inc(D, 2);
-      MoveFast(P^.pRawValue^, D^, P^.RawValueLength);
-      inc(D, P^.RawValueLength);
-      inc(P);
-      PWord(D)^ := 13 + 10 shl 8;
-      inc(D, 2);
-    end;
+      if (P^.NameLength <> 8) or // filter unexpected 'RemoteIP:' from client
+         ((PCardinalArray(P^.pName)[0] or $20202020) <>
+           ord('r') + ord('e') shl 8 + ord('m') shl 16 + ord('o') shl 24) or
+         ((PCardinalArray(P^.pName)[1] or $20202020) <>
+           ord('t') + ord('e') shl 8 + ord('i') shl 16 + ord('p') shl 24) then
+      begin
+        MoveFast(P^.pName^, D^, P^.NameLength);
+        inc(D, P^.NameLength);
+        PWord(D)^ := ord(':') + ord(' ') shl 8;
+        inc(D, 2);
+        MoveFast(P^.pRawValue^, D^, P^.RawValueLength);
+        inc(D, P^.RawValueLength);
+        inc(P);
+        PWord(D)^ := 13 + 10 shl 8;
+        inc(D, 2);
+      end;
   if Lip <> 0 then
   begin
     MoveFast(REMOTEIP_HEADER[1], D^, REMOTEIP_HEADERLEN);
@@ -2035,7 +2040,11 @@ begin
     MoveFast(pointer(RemoteIP)^, D^, Lip);
     inc(D, Lip);
     PWord(D)^ := 13 + 10 shl 8;
+    inc(D, 2);
   end;
+  Lip := D - pointer(result);
+  if Lip <> L then // e.g. if external 'RemoteIP:' was filtered
+    FakeLength(result, Lip);
 end;
 
 procedure HttpApiInitialize;
