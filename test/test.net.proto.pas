@@ -2016,6 +2016,9 @@ var
   s: RawUtf8;
   hc: THttpCookies;
   U: TUri;
+  h: PUtf8Char;
+  l: PtrInt;
+  dig: THash512Rec;
 
   procedure Check4;
   begin
@@ -2127,6 +2130,33 @@ begin
     'cookone: value'#13#10#13#10);
   CheckEqual(length(hc.Cookies), 4, 'malformatted CRLF');
   Check4;
+  h := HttpRequestLength(
+    'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, l);
+  check(h <> nil);
+  checkEqual(l, 4);
+  Check(IdemPropName('3083', h, 4));
+  h := HttpRequestLength('Content-Length: 100'#13#10, l);
+  check(h <> nil);
+  checkEqual(l, 3);
+  Check(IdemPropName('100', h, 3));
+  h := HttpRequestLength('Content-Range: 100-199/2000'#13#10, l);
+  check(h <> nil);
+  checkEqual(l, 4);
+  Check(IdemPropName('2000', h, 4));
+  h := HttpRequestLength('Content-Range: 100-199'#13#10, l);
+  check(h = nil);
+  check(U.From('https://ictuswin.com/toto/titi'));
+  h := HttpRequestLength('Content-Lengths: 100'#13#10, l);
+  check(h = nil);
+  l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig);
+  CheckEqual(l, SizeOf(THash256));
+  CheckEqual(Sha256DigestToString(dig.Lo),
+    'cc991f15d823e419ef45f8b94e6759c4f992056c1c1a64cc79338c49f9720273');
+  l := HttpRequestHash(hfSHA256, U,
+    'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
+  CheckEqual(l, SizeOf(THash256));
+  CheckEqual(Sha256DigestToString(dig.Lo),
+    '9b23e3b9894578f2709eca35aa9afad277ab5aa4afe9344192f59535719ac734');
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;
