@@ -7233,7 +7233,7 @@ begin
     n := length(Metrics);
     d := pointer(Metrics);
     repeat
-      DateTimeToFileShort(d^.DateTime, date);
+      DateTimeToFileShortVar(d^.DateTime, date);
       w.AddSpaced(@date[1], _DATELEN[d^.Period], _WIDTH);
       w.AddComma;
       if not NoPeriod then

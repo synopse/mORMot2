@@ -690,13 +690,13 @@ function UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime): TShort31;
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function DateTimeToFileShort(const DateTime: TDateTime): TShort16; overload;
+function DateTimeToFileShort(const DateTime: TDateTime): TShort16;
   {$ifdef FPC_OR_UNICODE} inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16); overload;
+procedure DateTimeToFileShortVar(const DateTime: TDateTime; out result: TShort16);
 
 /// get the current time a small text layout, perfect e.g. for naming a file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits
@@ -2991,10 +2991,10 @@ end;
 
 function DateTimeToFileShort(const DateTime: TDateTime): TShort16;
 begin
-  DateTimeToFileShort(DateTime, result);
+  DateTimeToFileShortVar(DateTime, result);
 end;
 
-procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16);
+procedure DateTimeToFileShortVar(const DateTime: TDateTime; out result: TShort16);
 var
   T: TSynSystemTime;
 begin
@@ -3090,7 +3090,7 @@ begin
   if UnixTime <= 0 then
     PWord(@result[0])^ := 1 + ord('0') shl 8
   else
-    DateTimeToFileShort(UnixTime / SecsPerDay + UnixDateDelta, result);
+    DateTimeToFileShortVar(UnixTime / SecsPerDay + UnixDateDelta, result);
 end;
 
 function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
