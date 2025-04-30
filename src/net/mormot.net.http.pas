@@ -4637,10 +4637,10 @@ begin
     result := HTTP_NOTMODIFIED;
     exit;
   end;
-  fOutContentType := ContentType;
-  if fOutContentType = '' then
-    fOutContentType := GetMimeContentTypeHeader('', FileName);
-  AppendLine(fOutCustomHeaders, [fOutContentType]);
+  if ContentType = '' then
+    AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, GetMimeContentType('', FileName)])
+  else
+    AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, ContentType]);
   fOutContentType := STATICFILE_CONTENT_TYPE;
   StringToUtf8(FileName, RawUtf8(fOutContent));
   result := HTTP_SUCCESS;

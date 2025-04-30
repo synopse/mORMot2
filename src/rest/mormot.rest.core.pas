@@ -4040,12 +4040,10 @@ begin
     end;
     // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
     if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
-    begin
       if ContentType <> '' then
         AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE, ContentType])
       else
-        AppendLine(fCall^.OutHead, [GetMimeContentTypeHeader('', FileName)]);
-    end;
+        AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE, GetMimeContentType('', FileName)]);
     Prepend(fCall^.OutHead, [STATICFILE_CONTENT_TYPE_HEADER + #13#10]);
     StringToUtf8(FileName, fCall^.OutBody); // body=filename for STATICFILE_CONTENT
     if AttachmentFileName <> '' then

@@ -8913,8 +8913,7 @@ end;
 function GetMimeContentTypeHeader(const Content: RawByteString;
   const FileName: TFileName): RawUtf8;
 begin
-  result := HEADER_CONTENT_TYPE +
-              GetMimeContentType(Content, FileName, BINARY_CONTENT_TYPE);
+  Join([HEADER_CONTENT_TYPE, GetMimeContentType(Content, FileName)], result);
 end;
 
 function ToText(t: TMimeType): PShortString;
