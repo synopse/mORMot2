@@ -1972,6 +1972,13 @@ function ToText(const msg: THttpPeerCacheMessage): ShortString; overload;
 
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 
+/// hash an URL and the "Etag:" or "Content-Length:" and "Last-Modified:" headers
+// - could be used to identify a HTTP resource as a binary hash on a given server
+// - returns 0 if aUrl/aHeaders have not enough information
+// - returns the number of hash bytes written to aDigest
+function HashHttpRequest(aAlgo: THashAlgo; const aUri: TUri;
+  const aHeaders: RawUtf8; out aDigest: THash512Rec): integer;
+
 
 {$ifdef USEWININET}
 
@@ -7418,6 +7425,46 @@ begin
        algohex, algoext, Size, Connections], result);
   AppendShortUuid(msg.Uuid, result);
 end;
+
+function HashHttpRequest(aAlgo: THashAlgo; const aUri: TUri;
+  const aHeaders: RawUtf8; out aDigest: THash512Rec): integer;
+var
+  hasher: TSynHasher;
+  h: PUtf8Char;
+  l: PtrInt;
+begin
+  result := 0;
+  if (aUri.Server = '') or
+     (aUri.Address = '') or
+     (aHeaders = '') or
+     not hasher.Init(aAlgo) then
+    exit;
+  hasher.Update(HTTPS_TEXT[aUri.Https]);
+  hasher.Update(@aAlgo, 1); // separator
+  hasher.Update(aUri.Server);
+  hasher.Update(@aAlgo, 1);
+  hasher.Update(aUri.Port);
+  hasher.Update(@aAlgo, 1);
+  hasher.Update(aUri.Address);
+  hasher.Update(@aAlgo, 1);
+  h := FindNameValuePointer(pointer(aHeaders), 'ETAG: ', l);
+  if h <> nil then
+    hasher.Update(h, l)
+  else
+  begin // fallback to file size and date
+    h := FindNameValuePointer(pointer(aHeaders), 'CONTENT-LENGTH: ', l);
+    if h = nil then
+      exit;
+    hasher.Update(h, l);
+    h := FindNameValuePointer(pointer(aHeaders), 'LAST-MODIFIED: ', l);
+    if h = nil then
+      exit;
+    hasher.Update(h, l);
+  end;
+  result := hasher.Final(aDigest);
+end;
+
+
 
 {$ifdef USEWININET}
 
