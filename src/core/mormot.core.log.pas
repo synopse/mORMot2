@@ -1420,6 +1420,10 @@ function GetLastExceptionText: RawUtf8;
 procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
   Depth: integer = 0); overload;
 
+var
+  /// a run-time alternative to the NOEXCEPTIONINTERCEPT global conditional
+  SynLogNoExceptionIntercept: boolean;
+
 {$endif NOEXCEPTIONINTERCEPT}
 
 
@@ -3997,6 +4001,8 @@ begin
     include(aLevel, sllEnter);
   fLevel := aLevel;
   {$ifndef NOEXCEPTIONINTERCEPT}
+  if SynLogNoExceptionIntercept then
+    exit;
   // intercept exceptions, if necessary
   fHandleExceptions := (sllExceptionOS in aLevel) or
                        (sllException in aLevel);
