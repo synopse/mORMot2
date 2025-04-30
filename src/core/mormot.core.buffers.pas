@@ -8984,28 +8984,48 @@ begin
       end;
 end;
 
-const
-  _CONTENT_APP: array[0..4] of PUtf8Char = (
-    'JSON',
-    'JAVASCRIPT',
-    'XML',
-    'RTF',
-    nil);
+function IsApplicationCompressible(ContentType: PCardinalArray): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  c: cardinal;
+begin
+  c := ContentType^[0] and $dfdfdfdf;
+  if c = ord('J') + ord('S') shl 8 + ord('O') shl 16 + ord('N') shl 24 then
+    result := true // application/json
+  else if c = ord('O') + ord('C') shl 8 + ord('T') shl 16 + ord('E') shl 24 then
+    result := false // application/octet-stream is the 2nd most common
+  else if c = ord('J') + ord('A') shl 8 + ord('V') shl 16 + ord('A') shl 24 then
+    result := (ContentType^[1] and $dfdfdfdf) = // application/javascript
+              ord('S') + ord('C') shl 8 + ord('R') shl 16 + ord('I') shl 24
+  else
+  begin
+    c := c and $00ffffff; // application/xml or application/rtf
+    result := (c = ord('X') + ord('M') shl 8 + ord('L') shl 16) or
+              (c = ord('R') + ord('T') shl 8 + ord('F') shl 16);
+  end;
+end;
 
 function IsContentTypeCompressible(ContentType: PUtf8Char;
   ContentTypeLen: PtrInt; OnlyText: boolean): boolean;
+var
+  i: PtrInt;
 begin
   result := false;
-  if ContentType <> nil then
+  if (ContentType <> nil) and
+     (ContentTypeLen > 4) then
     case PCardinalArray(ContentType)[0] or $20202020 of
       ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24:
         result := ContentType[4] = '/'; // text/*
       ord('i') + ord('m') shl 8 + ord('a') shl 16 + ord('g') shl 24:
-        if PWord(ContentType + 4)^ or $0020 = ord('e') + ord('/') shl 8 then
-          result := (ContentTypeLen > 8) and
-                    IdemPChar(ContentType + 6, 'SVG') or   // image/svg is XML
-                    ((not OnlyText) and
-                     IdemPChar(ContentType + 6, 'X-ICO')); // image/x-ico is bin
+        if ContentTypeLen > 8 then
+          case PCardinalArray(ContentType)[1] or $20202020 of
+            ord('e') + ord('/') shl 8 + ord('s') shl 16 + ord('v') shl 24:
+              result := ord(ContentType[8]) and $df = ord('G'); // image/svg is XML
+            ord('e') + ord('/') shl 8 + ord('x') shl 16 + ord('-') shl 24:
+              result := (not OnlyText) and  // image/x-ico is bin
+                        (PCardinalArray(ContentType)[2] and $00dfdfdf =
+                         ord('I') + ord('C') shl 8 + ord('O') shl 16);
+          end;
       ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24:
         if (ContentTypeLen > 12) and
            (PCardinalArray(ContentType)[1] or $20202020 =
@@ -9015,11 +9035,11 @@ begin
         begin // application/[json/javascript/xml]
           result := true;
           inc(ContentType, 12);
-          if IdemPPChar(ContentType, @_CONTENT_APP) >= 0 then
+          if IsApplicationCompressible(pointer(ContentType)) then
             exit; // application/[json/javascript/xml]
-          ContentType := PosChar(ContentType, ContentTypeLen, '+');
-          result := (ContentType <> nil) and // e.g. application/atom+xml
-                    (IdemPPChar(ContentType + 1, @_CONTENT_APP) >= 0);
+          i := ByteScanIndex(pointer(ContentType), ContentTypeLen - 12, ord('+'));
+          result := (i >= 0) and // e.g. application/atom+xml
+                    IsApplicationCompressible(@ContentType[i + 1]);
         end;
     end;
 end;
@@ -9039,6 +9059,8 @@ begin
 end;
 
 function IsContentTypeJson(ContentType: PUtf8Char; ContentTypeLen: PtrInt): boolean;
+var
+  i: PtrInt;
 begin
   result := false;
   dec(ContentTypeLen, 12);
@@ -9057,9 +9079,10 @@ begin
       exit; // application/octet-stream is very common
   else
     begin // try application/vnd.####+json
-      ContentType := PosChar(ContentType + 12, ContentTypeLen, '+');
-      if (ContentType = nil) or
-         (PCardinal(ContentType + 1)^ or $20202020 <>
+      inc(ContentType, 12);
+      i := ByteScanIndex(pointer(ContentType), ContentTypeLen, ord('+'));
+      if (i < 0) or
+         (PCardinal(@ContentType[i + 1])^ or $20202020 <>
             ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24) then
         exit;
     end;
