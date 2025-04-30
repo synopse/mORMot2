@@ -102,7 +102,7 @@ type
   PInAddr6 = ^in6_addr;
   in6_addr = packed record
     case integer of
-      0: (S6_addr:   packed array [0..15] of byte);
+      0: (S6_addr:   THash128);
       1: (u6_addr8:  packed array [0..15] of byte);
       2: (u6_addr16: packed array [0..7]  of word);
       3: (u6_addr32: packed array [0..3]  of integer);
@@ -227,6 +227,7 @@ type
   // Structure used by kernel to store most addresses
   PSockAddr = ^TSockAddr;
   TSockAddr = sockaddr_in;
+  sockaddr = sockaddr_in; // as in POSIX
 
 type
   PAddrInfo = ^TAddrInfo;

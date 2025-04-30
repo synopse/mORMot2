@@ -435,31 +435,31 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  addr4: sockaddr absolute Addr;
+  ad4: sockaddr absolute Addr;
 begin
-  FillCharFast(Addr, SizeOf(Addr), 0);
+  PInteger(@ad4.sin_family)^ := 0; // sin_family and sin_port = 0 are enough
   result := nrNotFound;
   if address = '' then
     exit;
   // handle domain socket name
   if layer = nlUnix then
   begin
-    if length(address) >= SizeOf(psockaddr_un(@Addr)^.sun_path) then
-      // avoid buffer overflow or truncated socket name
-      result := nrFatalError
-    else
-      // socket file name is just copied to the address struct
-      with psockaddr_un(@Addr)^ do
+    // socket file name is just copied to the address struct
+    with psockaddr_un(@Addr)^ do
+      if length(address) >= SizeOf(sun_path) then
+        // avoid buffer overflow or truncated socket name
+        result := nrFatalError
+      else
       begin
         sun_family := AF_UNIX;
-        MoveFast(pointer(address)^, sun_path, length(address));
+        MoveFast(pointer(address)^, sun_path, length(address) + 1); // +1 for #0
         result := nrOK;
       end;
     exit;
   end;
   // check supplied IP port
-  addr4.sin_port := bswap16(GetCardinal(pointer(addrport)));
-  if (addr4.sin_port = 0) and
+  ad4.sin_port := bswap16(GetCardinal(pointer(addrport)));
+  if (ad4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
   // check most simple IPv4 resolution (maybe using mormot.net.dns)
@@ -474,10 +474,10 @@ begin
       result := nrNotFound
     else
     begin
-      addr4.sin_family := h^.h_addrtype;
+      ad4.sin_family := h^.h_addrtype;
       case h^.h_addrtype of
         AF_INET:
-           addr4.sin_addr := h^.h_addr^^;
+           ad4.sin_addr.s_addr := h^.h_addr^^.s_addr;
         AF_INET6:
            psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else
