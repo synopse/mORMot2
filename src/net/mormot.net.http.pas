@@ -4632,7 +4632,7 @@ begin
   if CacheControlMaxAgeSec <> 0 then
     AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
   if Handle304NotModified and
-     FileHttp304NotModified(fs, ts, fInHeaders, fOutCustomHeaders) then
+     FileHttp304NotModified(fs, ts, pointer(fInHeaders), fOutCustomHeaders) then
   begin
     result := HTTP_NOTMODIFIED;
     exit;
@@ -4654,7 +4654,7 @@ begin
     AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
   result := HTTP_NOTMODIFIED;
   if Handle304NotModified and
-     ContentHttp304NotModified(Content, fInHeaders, fOutCustomHeaders) then
+     ContentHttp304NotModified(Content, pointer(fInHeaders), fOutCustomHeaders) then
     exit;
   fOutContentType := ContentType;
   if fOutContentType = '' then

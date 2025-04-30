@@ -4033,7 +4033,7 @@ begin
       AppendLine(fCall^.OutHead, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
     fCall^.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified and
-       FileHttp304NotModified(size, time, fCall^.InHead, fCall^.OutHead) then
+       FileHttp304NotModified(size, time, pointer(fCall^.InHead), fCall^.OutHead) then
     begin
       fCall^.OutStatus := HTTP_NOTMODIFIED;
       exit;

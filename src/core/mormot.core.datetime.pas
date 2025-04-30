@@ -719,12 +719,12 @@ procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort23);
 // - decode both 'if-none-match' and 'if-modified-since' input headers
 // - returns true if 304 status code is to be returned
 function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
-  const InHeaders: RawUtf8; var OutHeaders: RawUtf8): boolean;
+  InHeaders: PUtf8Char; var OutHeaders: RawUtf8): boolean;
 
 /// handle HTTP_NOTMODIFIED (304) process against raw body content
 // - decode 'if-none-match' input header against the supplied Content
 // - returns true if 304 status code is to be returned
-function ContentHttp304NotModified(const Content, InHeaders: RawUtf8;
+function ContentHttp304NotModified(const Content: RawUtf8; InHeaders: PUtf8Char;
   var OutHeaders: RawUtf8): boolean;
 
 
@@ -3026,36 +3026,48 @@ begin
 end;
 
 function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
-  const InHeaders: RawUtf8; var OutHeaders: RawUtf8): boolean;
+  InHeaders: PUtf8Char; var OutHeaders: RawUtf8): boolean;
 var
   etag: TShort23;
-  hdr: RawUtf8;
+  h: PUtf8Char;
+  l: PtrInt;
 begin
-  result := true; // return true as HTTP_NOTMODIFIED (304) status code
   Int64ToHttpEtag((Size shl 16) xor (Time shr 9), Etag); // 512ms resolution
-  if (FindNameValue(InHeaders, 'IF-NONE-MATCH:', hdr) and
-      IdemPropName(etag, pointer(hdr), length(hdr))) or
-     (FindNameValue(InHeaders, 'IF-MODIFIED-SINCE:', hdr) and
-      IdemPropName(UnixMSTimeUtcToHttpDate(Time), pointer(hdr), length(hdr))) then
-    exit;
-  result := false;
+  if InHeaders <> nil then
+  begin
+    result := true; // return true as HTTP_NOTMODIFIED (304) status code
+    h := FindNameValuePointer(InHeaders, 'IF-NONE-MATCH: ', l);
+    if (h <> nil) and
+       IdemPropName(etag, h, l) then
+      exit;
+    h := FindNameValuePointer(InHeaders, 'IF-MODIFIED-SINCE: ', l);
+    if (h <> nil) and
+       IdemPropName(UnixMSTimeUtcToHttpDate(Time), h, l) then
+      exit;
+  end;
   AppendLine(OutHeaders, ['Etag: ', etag]);
+  result := false;
 end;
 
-function ContentHttp304NotModified(const Content, InHeaders: RawUtf8;
+function ContentHttp304NotModified(const Content: RawUtf8; InHeaders: PUtf8Char;
   var OutHeaders: RawUtf8): boolean;
 var
   etag: TShort23;
-  hdr: RawUtf8;
+  h: PUtf8Char;
+  l: PtrInt;
 begin
-  result := true;
   Int64ToHttpEtag(Int64(crc32c(0, pointer(Content), length(Content))) shl 8
                     xor length(Content), etag);
-  if FindNameValue(InHeaders, 'IF-NONE-MATCH:', hdr) and
-     IdemPropName(etag, pointer(hdr), length(hdr)) then
-    exit;
-  result := false;
+  if InHeaders <> nil then
+  begin
+    result := true; // return true as HTTP_NOTMODIFIED (304) status code
+    h := FindNameValuePointer(InHeaders, 'IF-NONE-MATCH: ', l);
+    if (h <> nil) and
+       IdemPropName(etag, h, l) then
+      exit;
+  end;
   AppendLine(OutHeaders, ['Etag: ', etag]);
+  result := false;
 end;
 
 

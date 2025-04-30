@@ -2732,7 +2732,7 @@ begin
   if layer = nlUnix then
     result := addr.SetFrom(address, '', nlUnix)
   else if not ToCardinal(port, p, {minimal=}1) or
-          (p > 65535) then
+          ({%H-}p > 65535) then
     result := nrNotFound
   else if (address = '') or
           IsLocalHost(pointer(address)) or
