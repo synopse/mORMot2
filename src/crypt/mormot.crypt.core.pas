@@ -8425,7 +8425,8 @@ var
   Data: TShaContext absolute Context;
   aLen: integer;
 begin
-  if Buffer = nil then
+  if (Buffer = nil) or
+     (Len <= 0) then
     exit; // avoid GPF
   inc(Data.MLen, QWord(cardinal(Len)) shl 3);
   while Len > 0 do
@@ -8898,42 +8899,42 @@ begin
   if (cpuAVX2 in X64CpuFeatures) and
      not (daKeccakAvx2 in DisabledAsm) then
   begin
-    B[0] := A[0]; // AVX2 asm has a diverse state order to perform its rotations
-    B[1] := A[1];
-    B[2] := A[2];
-    B[3] := A[3];
-    B[4] := A[4];
-    B[7] := A[5];
+    B[0]  := A[0]; // AVX2 asm has a diverse state order to perform its rotations
+    B[1]  := A[1];
+    B[2]  := A[2];
+    B[3]  := A[3];
+    B[4]  := A[4];
+    B[7]  := A[5];
     B[21] := A[6];
     B[10] := A[7];
     B[15] := A[8];
     B[20] := A[9];
-    B[5] := A[10];
+    B[5]  := A[10];
     B[13] := A[11];
     B[22] := A[12];
     B[19] := A[13];
     B[12] := A[14];
-    B[8] := A[15];
-    B[9] := A[16];
+    B[8]  := A[15];
+    B[9]  := A[16];
     B[18] := A[17];
     B[23] := A[18];
     B[16] := A[19];
-    B[6] := A[20];
+    B[6]  := A[20];
     B[17] := A[21];
     B[14] := A[22];
     B[11] := A[23];
     B[24] := A[24];
     KeccakPermutationAvx2(@B);
-    A[0] := B[0];
-    A[1] := B[1];
-    A[2] := B[2];
-    A[3] := B[3];
-    A[4] := B[4];
-    A[5] := B[7];
-    A[6] := B[21];
-    A[7] := B[10];
-    A[8] := B[15];
-    A[9] := B[20];
+    A[0]  := B[0];
+    A[1]  := B[1];
+    A[2]  := B[2];
+    A[3]  := B[3];
+    A[4]  := B[4];
+    A[5]  := B[7];
+    A[6]  := B[21];
+    A[7]  := B[10];
+    A[8]  := B[15];
+    A[9]  := B[20];
     A[10] := B[5];
     A[11] := B[13];
     A[12] := B[22];

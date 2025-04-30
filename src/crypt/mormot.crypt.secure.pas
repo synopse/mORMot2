@@ -797,7 +797,7 @@ type
   end;
 
   /// the known 32-bit crc algorithms as returned by CryptCrc32()
-  // - ccaAdler32 requires mormot.lib.z.pas to be included
+  // - caAdler32 requires mormot.lib.z.pas to be included
   // - caDefault may be AesNiHash32(), therefore not persistable between
   // executions, since is randomly seeded at process startup
   // - some cryptographic-level hashes are truncated to 32-bit - caSha1/caSha256
