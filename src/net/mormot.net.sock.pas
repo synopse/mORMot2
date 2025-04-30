@@ -2801,7 +2801,10 @@ begin
       continue;
     connect(s.Socket, @addr[n], addr[n].Size); // non-blocking connect() once
     if s.MakeBlocking <> nrOk then
+    begin
+      closesocket(s.Socket); // release handle
       continue;
+    end;
     sock[n] := s;
     inc(n);
   end;
