@@ -1972,12 +1972,15 @@ function ToText(const msg: THttpPeerCacheMessage): ShortString; overload;
 
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 
-/// hash an URL and the "Etag:" or "Content-Length:" and "Last-Modified:" headers
+/// hash an URL and the "Etag:" or "Last-Modified:" headers
 // - could be used to identify a HTTP resource as a binary hash on a given server
 // - returns 0 if aUrl/aHeaders have not enough information
 // - returns the number of hash bytes written to aDigest
-function HashHttpRequest(aAlgo: THashAlgo; const aUri: TUri;
-  const aHeaders: RawUtf8; out aDigest: THash512Rec): integer;
+function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
+  aHeaders: PUtf8Char; out aDigest: THash512Rec): integer;
+
+/// get the content full length, from "Content-Length:" or "Content-Range:"
+function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
 
 
 {$ifdef USEWININET}
@@ -7426,8 +7429,33 @@ begin
   AppendShortUuid(msg.Uuid, result);
 end;
 
-function HashHttpRequest(aAlgo: THashAlgo; const aUri: TUri;
-  const aHeaders: RawUtf8; out aDigest: THash512Rec): integer;
+function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
+var
+  s: PtrInt;
+begin
+  result := FindNameValuePointer(aHeaders, 'CONTENT-RANGE: ', Len);
+  if result = nil then // no range
+    result := FindNameValuePointer(aHeaders, 'CONTENT-LENGTH: ', Len)
+  else
+  begin // content-range: bytes 100-199/3083 -> extract 3083
+    s := Len;
+    while true do
+      case result[s - 1] of
+        '/':
+          break;
+        '0' .. '9':
+          dec(s);
+      else
+        result := nil;
+        exit;
+      end;
+    inc(result, s);
+    dec(Len, s);
+  end;
+end;
+
+function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
+  aHeaders: PUtf8Char; out aDigest: THash512Rec): integer;
 var
   hasher: TSynHasher;
   h: PUtf8Char;
@@ -7436,7 +7464,7 @@ begin
   result := 0;
   if (aUri.Server = '') or
      (aUri.Address = '') or
-     (aHeaders = '') or
+     (aHeaders = nil) or
      not hasher.Init(aAlgo) then
     exit;
   hasher.Update(HTTPS_TEXT[aUri.Https]);
@@ -7447,20 +7475,19 @@ begin
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Address);
   hasher.Update(@aAlgo, 1);
-  h := FindNameValuePointer(pointer(aHeaders), 'ETAG: ', l);
-  if h <> nil then
-    hasher.Update(h, l)
-  else
-  begin // fallback to file size and date
-    h := FindNameValuePointer(pointer(aHeaders), 'CONTENT-LENGTH: ', l);
+  h := FindNameValuePointer(aHeaders, 'ETAG: ', l);
+  if h = nil then
+  begin
+    // fallback to file date and full size
+    h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', l);
     if h = nil then
       exit;
     hasher.Update(h, l);
-    h := FindNameValuePointer(pointer(aHeaders), 'LAST-MODIFIED: ', l);
+    h := HttpRequestLength(aHeaders, l);
     if h = nil then
       exit;
-    hasher.Update(h, l);
   end;
+  hasher.Update(h, l);
   result := hasher.Final(aDigest);
 end;
 
