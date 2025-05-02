@@ -4542,9 +4542,10 @@ procedure TSynLog.InitThreadInfo(nfo: PSynLogThreadInfo);
 begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    // setup this thread number
     if fThreadIndexReleasedCount <> 0 then
     begin
-      dec(fThreadIndexReleasedCount); // we can reuse after NotifyThreadEnded()
+      dec(fThreadIndexReleasedCount); // reuse slot after NotifyThreadEnded()
       nfo^.ThreadNumber := fThreadIndexReleased[fThreadIndexReleasedCount];
     end
     else
@@ -4555,6 +4556,28 @@ begin
       inc(fThreadCount);
       nfo^.ThreadNumber := fThreadCount;
     end;
+    // check if the log file needs to be initialized
+    if fInternalFlags * [logHeaderWritten, logInitDone] <> [] then
+      exit;
+    if not (logInitDone in fInternalFlags) then
+      LogFileInit; // executed once per process - first to setup start time
+    fThreadInfo := nfo;
+    GetCurrentTime(nfo, nil);
+    if not (logHeaderWritten in fInternalFlags) then
+      LogFileHeader; // executed once per file
+    // append a sllNewRun line at the log file opening
+    LogHeader(sllNewRun, nil);
+    fWriter.AddString(Executable.ProgramName);
+    fWriter.AddDirect(' ');
+    if Executable.Version.Major <> 0 then
+      fWriter.AddNoJsonEscapeString(Executable.Version.Detailed)
+    else
+      fWriter.AddDateTime(@Executable.Version.BuildDateTime, ' ');
+    fWriter.AddDirect(' ');
+    fWriter.AddShort(ClassNameShort(self)^);
+    fWriter.AddShort(' ' + SYNOPSE_FRAMEWORK_VERSION);
+    AddSysInfo;
+    fWriterEcho.AddEndOfLine(sllNewRun);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -4563,7 +4586,7 @@ end;
 function TSynLog.GetThreadInfo: PSynLogThreadInfo;
 begin
   result := @PerThreadInfo; // access the threadvar
-  if result^.ThreadNumber = 0 then
+  if PInteger(result)^ = 0 then // first access time
     if fFamily.fPerThreadLog = ptNoThreadProcess then
       result := @fSharedThreadInfo // same context for all threads
     else
@@ -5269,33 +5292,16 @@ end;
 
 procedure TSynLog.LogFileInit;
 begin
-  Include(fInternalFlags, logInitDone);
+  include(fInternalFlags, logInitDone);
   // setup proper timing for this log instance
   QueryPerformanceMicroSeconds(fStartTimestamp);
-  if (fFileRotationSize > 0) or
-     (fNextFileRotateDailyTix10 <> 0) then
-    fFamily.HighResolutionTimestamp := false;
-  fStreamPositionAfterHeader := fWriter.WrittenBytes;
+  if fFamily.FileExistsAction = acAppend then
+    fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
   if fFamily.LocalTimestamp then
     fStartTimestampDateTime := Now
   else
     fStartTimestampDateTime := NowUtc;
-  // append a sllNewRun line at the log file opening
-  LogCurrentTime;
-  if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
-    fWriter.AddInt18ToChars3(GetThreadInfo^.ThreadNumber);
-  fWriter.AddShorter(LOG_LEVEL_TEXT[sllNewRun]);
-  fWriter.AddString(Executable.ProgramName);
-  fWriter.AddDirect(' ');
-  if Executable.Version.Major <> 0 then
-    fWriter.AddNoJsonEscapeString(Executable.Version.Detailed)
-  else
-    fWriter.AddDateTime(@Executable.Version.BuildDateTime, ' ');
-  fWriter.AddDirect(' ');
-  fWriter.AddShort(ClassNameShort(self)^);
-  fWriter.AddShort(' ' + SYNOPSE_FRAMEWORK_VERSION);
-  AddSysInfo;
-  fWriterEcho.AddEndOfLine(sllNewRun);
+  // this method is run before fWriter exists: nothing should be written here
 end;
 
 procedure TSynLog.LogFileHeader;
@@ -5425,20 +5431,16 @@ begin
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' ');
-    if fFamily.LocalTimestamp then
-      AddDateTime(Now)
-    else
-      AddDateTime(NowUtc);
+    AddDateTime(fStartTimestampDateTime);
     if WithinEvents then
       fWriterEcho.AddEndOfLine(sllNone)
     else
       AddDirect(#10, #10);
     FlushToStream;
     fWriterEcho.EchoReset; // header is not to be sent to console
+    fStreamPositionAfterHeader := fWriter.WrittenBytes;
   end;
-  Include(fInternalFlags, logHeaderWritten);
-  if not (logInitDone in fInternalFlags) then
-    LogFileInit;
+  include(fInternalFlags, logHeaderWritten);
 end;
 
 procedure TSynLog.AddMemoryStats;
