@@ -4801,17 +4801,27 @@ var
 begin // append in 00.000.000 TSynLog format
   if B >= BEnd then
     FlushToStream;
-  P := B;
-  P[3] := '.';
-  P[7] := '.';
-  inc(P);
+  P := B + 1;
   W := @TwoDigitLookupW;
-  MicroSec := Value3Digits(Value3Digits(MicroSec, P + 7, W), P + 3, W);
-  if MicroSec > 99 then
-    MicroSec := $3939
+  MicroSec := Value3Digits(MicroSec, P + 7, W);
+  if MicroSec = 0 then // most common case < 1ms
+  begin
+    PCardinal(P)^ := ord('0') + ord('0') shl 8 + ord('.') shl 16;
+    PCardinal(P + 3)^ := ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('.') shl 24;
+  end
   else
-    MicroSec := W[MicroSec];
-  PWord(P)^ := MicroSec;
+  begin
+    MicroSec := Value3Digits(MicroSec, P + 3, W);
+    if MicroSec = 0 then
+      MicroSec := $3030
+    else if MicroSec > 99 then
+      MicroSec := $3939
+    else
+      MicroSec := W[MicroSec];
+    PWord(P)^ := MicroSec;
+    P[2] := '.';
+    P[6] := '.';
+  end;
   B := P + 9;
 end;
 
