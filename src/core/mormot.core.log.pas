@@ -221,13 +221,13 @@ type
 const
   /// up to 7 TSynLogFamily, i.e. TSynLog sub-classes can be defined at once
   MAX_SYNLOGFAMILY = 7;
-  /// we store up to 54 recursion levels of Enter/Leave information
+  /// we store up to 53 recursion levels of Enter/Leave information
   // - above this limit, no error would be raised at runtime, but no associated
   // information would be stored - therefore logged (TSynLog.Enter returns nil)
   // - typical value of recursive calls number is below a dozen: indentation in
   // the log file would make any bigger value clearly unreadable
   // - this number has been defined to keep TSynLogThreadInfo < 512 bytes
-  MAX_SYNLOGRECURSION = 54;
+  MAX_SYNLOGRECURSION = 53;
   /// we handle up to 64K threads per TSynLog instance
   // - there is no technical reason to such limitation, but it would allow to
   // detect missing TSynLog.NotifyThreadEnded calls in your code logic
@@ -1017,8 +1017,9 @@ type
     // - match TSynLog.fThreadIdent[ThreadNumber - 1] for ptIdentifiedInOneFile
     ThreadNumber: word;
     /// ready-to-be-written text timestamp, filled outside GlobalThreadLock
-    // - stores up to 18 chars: padded with previous fields as 24 bytes
-    CurrentTime: string[19];
+    // - may include also the ThreadNumber with Int18ToText() format
+    // - stores up to 27 chars: padded with previous fields as 32 bytes
+    CurrentTime: string[27];
     /// each thread can access to its own TSynLog instance
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
     FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
@@ -1095,6 +1096,7 @@ type
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(Level: TSynLogLevel; Instance: TObject);
+      {$ifdef FPC}inline;{$endif}
     procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
@@ -1266,7 +1268,7 @@ type
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogLevel; const Text: RawUtf8; aInstance: TObject = nil;
-      TextTruncateAtLength: integer = maxInt); overload;
+      TextTruncateAtLength: integer = 0); overload;
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef UNICODE}
     /// call this method to add some RTL string to the log at a specified level
@@ -4516,6 +4518,48 @@ begin
     result := nil;
 end;
 
+procedure TSynLog.LogHeader(Level: TSynLogLevel; Instance: TObject);
+var
+  indent: PtrInt;
+  P: PUtf8Char;
+begin
+  fWriter.AddShort(fThreadInfo^.CurrentTime); // timestamp [+ threadnumber]
+  P := fWriter.B + 1; // AddShort() reserved for 255 bytes
+  PInt64(P)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
+  inc(P, 7);
+  indent := fThreadInfo^.RecursionCount;
+  if Level = sllEnter then
+    dec(indent);
+  if indent > 0 then
+  begin
+    FillCharFast(P^, indent, 9); // inlined AddChars(#9, indent)
+    inc(P, indent);
+  end;
+  if Instance <> nil then
+  begin
+    P := PointerToText(Instance, P, fFamily.WithUnitName, fFamily.WithInstancePointer);
+    P^ := ' ';
+  end
+  else
+    dec(P);
+  fWriter.B := P;
+  if Level = sllMemory then // handle additional information
+    AddMemoryStats;
+end;
+
+procedure TSynLog.LogTrailer(Level: TSynLogLevel);
+begin
+  if Level in fFamily.fLevelStackTrace then
+    AddStackTrace(nil);
+  if Level in fFamily.fLevelSysInfo then
+    AddSysInfo;
+  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
+  if AutoFlushThread = nil then
+    if (fNextFileRotateDailyTix10 <> 0) or
+       (fFileRotationSize <> 0) then
+      CheckRotation;
+end;
+
 procedure TSynLog.NotifyThreadEnded;
 var
   nfo: PSynLogThreadInfo;
@@ -4629,19 +4673,6 @@ begin
   else if (fFileRotationSize > 0) and
           (fWriter.WrittenBytes > fFileRotationSize) then
     PerformRotation;
-end;
-
-procedure TSynLog.LogTrailer(Level: TSynLogLevel);
-begin
-  if Level in fFamily.fLevelStackTrace then
-    AddStackTrace(nil);
-  if Level in fFamily.fLevelSysInfo then
-    AddSysInfo;
-  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
-  if AutoFlushThread = nil then
-    if (fNextFileRotateDailyTix10 <> 0) or
-       (fFileRotationSize <> 0) then
-      CheckRotation;
 end;
 
 function TSynLog.QueryInterface(
@@ -5566,36 +5597,10 @@ begin // this method is usually run outside of GlobalThreadLock
     if fFamily.ZonedTimestamp then
       AppendShortChar('Z', @nfo^.CurrentTime);
   end;
-end;
-
-procedure TSynLog.LogHeader(Level: TSynLogLevel; Instance: TObject);
-var
-  indent: PtrInt;
-  P: PUtf8Char;
-begin
-  fWriter.AddShort(fThreadInfo^.CurrentTime);
-  P := fWriter.B + 1; // AddShort() reserved for 255 bytes
-  if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
-  begin
-    Int18ToText(fThreadInfo^.ThreadNumber, P);
-    inc(P, 3);
-  end;
-  PInt64(P)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
-  inc(P, 7);
-  indent := fThreadInfo^.RecursionCount;
-  if Level = sllEnter then
-    dec(indent);
-  if indent > 0 then
-  begin
-    FillCharFast(P^, indent, 9); // inlined AddChars(#9, indent)
-    inc(P, indent);
-  end;
-  fWriter.B := P - 1;
-  if Instance <> nil then
-    fWriter.AddInstancePointer(Instance, ' ',
-      fFamily.WithUnitName, fFamily.WithInstancePointer);
-  if Level = sllMemory then // handle additional information
-    AddMemoryStats;
+  if fFamily.fPerThreadLog <> ptIdentifiedInOneFile then
+    exit;
+  Int18ToText(nfo^.ThreadNumber, @nfo^.CurrentTime[ord(nfo^.CurrentTime[0]) + 1]);
+  inc(nfo^.CurrentTime[0], 3);
 end;
 
 procedure TSynLog.PerformRotation;

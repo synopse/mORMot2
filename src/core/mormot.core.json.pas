@@ -5896,7 +5896,7 @@ begin
     begin
       if woFullExpand in c.Options then
       begin
-        c.W.AddInstanceName(TObject(Data), ':');
+        c.W.AddInstanceName(TObject(Data));
         c.W.BlockBegin('{', c.Options);
       end;
       if woStoreClassName in c.Options then
