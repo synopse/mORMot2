@@ -2390,6 +2390,7 @@ procedure BinToHexLowerSelf(var Bin: RawByteString);
 // - using this function with Bin^ as an integer value will encode it
 // in big-endian order (most-signignifican byte first): use it for display
 procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
@@ -5505,6 +5506,7 @@ procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 var
   max: PtrInt;
+  P: PUtf8Char;
 begin
   if Bin = nil then
     exit;
@@ -5514,18 +5516,18 @@ begin
       exit // too big for a single call
     else
       FlushToStream;
-  inc(B);
+  P := B + 1;
   if QuotedChar <> #0 then
   begin
-    B^ := QuotedChar;
-    inc(B);
+    P^ := QuotedChar;
+    inc(P);
   end;
-  BinToHexDisplayLower(Bin, pointer(B), BinBytes);
-  inc(B, BinBytes * 2);
-  if QuotedChar <> #0 then
-    B^ := QuotedChar
-  else
-    dec(B);
+  BinToHexDisplayLower(Bin, pointer(P), BinBytes);
+  inc(P, BinBytes * 2);
+  P^ := QuotedChar;
+  if QuotedChar = #0 then
+    dec(P);
+  B := P;
 end;
 
 procedure TTextWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: PtrInt);
