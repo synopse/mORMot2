@@ -2823,8 +2823,6 @@ begin
   fLog := fam.Add; // TSynLog instance for the current thread
   fLog.ManualEnter(fServer,
     'URI % % in=%', [aCall.Method, aCall.Url, KB(aCall.InBody)]);
-  if fServer.StatLevels <> [] then // get start timestamp from log
-    fMicroSecondsStart := fLog.LastQueryPerformanceMicroSeconds;
 end;
 
 destructor TRestServerUriContext.Destroy;

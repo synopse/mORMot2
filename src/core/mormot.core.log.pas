@@ -1052,7 +1052,6 @@ type
     fExceptionIgnoredBackup: boolean;
     {$endif NOEXCEPTIONINTERCEPT}
     fISynLogOffset: integer;
-    fLogTimestamp: Int64;
     fStartTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
     fWriterEcho: TEchoWriter;
@@ -1324,10 +1323,6 @@ type
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualLeave;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// low-level latest value returned by QueryPerformanceMicroSeconds()
-    // - is only accurate after Enter() or if HighResolutionTimestamp is set
-    function LastQueryPerformanceMicroSeconds: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     /// allow to temporary disable remote logging
     // - will enter the GlobalThreadLock - and is NOT reentrant
@@ -4618,6 +4613,13 @@ begin
       CheckRotation;
 end;
 
+function TSynLog.QueryInterface(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid: TGuid;
+  out obj): TIntQry;
+begin
+  result := E_NOINTERFACE; // never used
+end;
+
 function TSynLog._AddRef: TIntCnt; // for ISynLog
 var
   nfo: PSynLogThreadInfo;
@@ -4922,15 +4924,6 @@ procedure TSynLog.ManualLeave;
 begin
   if self <> nil then
     _Release;
-end;
-
-function TSynLog.LastQueryPerformanceMicroSeconds: Int64;
-begin
-  if (self = nil) or
-     (fLogTimestamp = 0) then
-    result := 0
-  else
-    result := fLogTimestamp + fStartTimestamp;
 end;
 
 type
