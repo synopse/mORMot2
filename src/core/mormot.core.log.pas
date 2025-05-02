@@ -1111,7 +1111,7 @@ type
     function GetThreadInfo: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
     procedure LockAndDisableExceptions;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
     function Instance: TSynLog;
     procedure CheckRotation;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
