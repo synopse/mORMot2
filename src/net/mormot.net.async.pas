@@ -2421,7 +2421,7 @@ function TAsyncConnectionsSockets.Write(connection: TPollAsyncConnection;
 begin
   if (acoVerboseLog in fOwner.Options) and
      not (acoNoLogWrite in fOwner.Options) then
-    fOwner.LogVerbose(TAsyncConnection(connection), 'Write', [], data, datalen);
+   fOwner.fLogClass.Add.LogEscape(sllTrace, 'Write', [], data, datalen, connection);
   result := inherited Write(connection, data, datalen, timeout);
 end;
 
@@ -4154,7 +4154,8 @@ begin
   // cut-down version of THttpAsyncServerConnection.OnRead
   if (acoVerboseLog in fOwner.Options) and
      not (acoNoLogRead in fOwner.Options) then
-    fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
+   fOwner.fLogClass.Add.LogEscape(sllTrace,
+     'OnRead %', [HTTP_STATE[fHttp.State]], fRd.Buffer, fRd.Len, self);
   result := soContinue;
   st.P := fRd.Buffer;
   st.Len := fRd.Len;
@@ -4506,7 +4507,8 @@ var
 begin
   if (acoVerboseLog in fOwner.Options) and
      not (acoNoLogRead in fOwner.Options) then
-    fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
+    fOwner.fLogClass.Add.LogEscape(sllTrace,
+      'OnRead %', [HTTP_STATE[fHttp.State]], fRd.Buffer, fRd.Len, self);
   result := soClose;
   if (fServer = nil) or
      (fOwner.fSockets = nil) then

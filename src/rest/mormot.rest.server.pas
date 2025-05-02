@@ -3423,7 +3423,7 @@ begin
     begin
       Ansi7StringToShortString(fServiceMethod^.InterfaceDotMethodName, tmp);
       ContentToShortAppend(pointer(fServiceParameters), fServiceParametersLen, tmp);
-      fLog.Log(sllServiceCall, '%', [PUtf8Char(@tmp[1])], Server);
+      fLog.LogText(sllServiceCall, @tmp[1], Server);
     end;
     // OnMethodExecute() callback event
     if Assigned(TServiceFactoryServer(Service).OnMethodExecute) then

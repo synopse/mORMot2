@@ -2431,7 +2431,7 @@ begin
     [fTable, length(fData)], self);
   //log.Log(sllCustom2, Data, self, 100 shl 10);
   if Assigned(fLog) then // nil if fOrm.LogClass=nil or sllEnter is not enabled
-    fTimer.Start(fLog.Instance.LastQueryPerformanceMicroSeconds); // for DoLog
+    fTimer.Start; // for DoLog
   ParseHeader;
   // try..except to intercept any error
   try

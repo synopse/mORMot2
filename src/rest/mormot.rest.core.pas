@@ -2054,7 +2054,7 @@ procedure TRest.InternalLog(const Text: RawUtf8; Level: TSynLogLevel);
 begin
   if (self <> nil) and
      (Level in fLogLevel) then
-    fLogFamily.Add.Log(Level, Text, self);
+    fLogFamily.Add.LogText(Level, pointer(Text), self);
 end;
 
 procedure TRest.InternalLog(Format: PUtf8Char; const Args: array of const;
@@ -2068,7 +2068,8 @@ end;
 procedure TRest.InternalLogResponse(const aContent: RawByteString;
   const aContext: shortstring; Level: TSynLogLevel);
 begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
-  fLogFamily.Add.Log(Level, '%=%', [aContext, ContentToShort(aContent)], self);
+  fLogFamily.Add.LogEscape(
+    Level, '%', [aContext], pointer(aContent), length(aContent), self);
 end;
 
 function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;

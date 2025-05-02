@@ -2204,8 +2204,8 @@ begin
        (logTextFrameContent in Owner.Settings.LogDetails) then
       with WebSocketLog.Family do
         if sllTrace in Level then
-          Add.Log(sllTrace, 'SendFrames=% len=% %',
-            [FramesCount * ord(result), len, EscapeToShort(tmp.buf, len)], self);
+          Add.LogEscape(sllTrace, 'SendFrames=%',
+            [FramesCount * ord(result)], tmp.buf, len, self);
   except
     result := false;
   end;
