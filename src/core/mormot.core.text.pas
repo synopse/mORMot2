@@ -1201,12 +1201,12 @@ type
   // better follow the SOLID principles
   TEchoWriter = class
   protected
+    fBackSafe: TLightLock; // protect fBack.Level/Text
     fWriter: TTextWriter;
     fEchoStart: PtrInt;
     fEchoBuf: RawUtf8;
     fEchos: array of TOnTextWriterEcho;
     fWriteCRLF, fEchoPendingExecuteBackground: boolean;
-    fBackSafe: TLightLock; // protect fBack.Level/Text
     fBack: TEchoWriterBack;
     function EchoFlush: PtrInt;
     procedure EchoPendingToBackground(aLevel: TSynLogLevel);
@@ -6131,7 +6131,11 @@ var
   n, cap: PtrInt;
 begin
   fBackSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     n := fBack.Count;
     if length(fBack.Level) = n then
     begin
@@ -6141,7 +6145,9 @@ begin
     end;
     fBack.Level[n] := aLevel;
     fBack.Text[n] := fEchoBuf;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     fBackSafe.UnLock;
   end;
 end;
@@ -6218,7 +6224,7 @@ end;
 
 function TEchoWriter.EchoFlush: PtrInt;
 var
-  L, LI: PtrInt;
+  L: PtrInt;
   P: PUtf8Char;
 begin
   P := fWriter.fTempBuf;
@@ -6230,9 +6236,10 @@ begin
     dec(L);
   if L = 0 then
     exit;
-  LI := length(fEchoBuf); // fast append to fEchoBuf
-  SetLength(fEchoBuf, LI + L);
-  MoveFast(P^, PByteArray(fEchoBuf)[LI], L);
+  if fEchoBuf = '' then
+    FastSetString(fEchoBuf, P, L)
+  else
+    Append(fEchoBuf, P, L);
 end;
 
 procedure TEchoWriter.EchoReset;
