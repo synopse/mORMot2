@@ -2045,7 +2045,7 @@ end;
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
 const
-  TERM_CTRL: string[8] = '04261537';
+  TERM_CTRL: PUtf8Char = '04261537';
 begin
   s[0] := #0;
   if (ord(Color) = TextAttr) or
@@ -2055,10 +2055,11 @@ begin
   s := #27'[0;3#m';
   if ord(Color) >= 8 then
     s[3] := '1';
-  s[6] := TERM_CTRL[(ord(Color) and 7) + 1];
+  s[6] := TERM_CTRL[(ord(Color) and 7)];
 end;
 
 procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
 var
   c: TShort8;
 begin
