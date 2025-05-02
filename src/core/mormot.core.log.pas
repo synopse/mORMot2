@@ -5005,23 +5005,20 @@ function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
   const Text: RawUtf8): boolean;
 begin
   result := true;
-  if not (Level in fFamily.fEchoToConsole) then
-    exit;
-  {$ifdef OSLINUX}
-  if Family.EchoToConsoleUseJournal then
-  begin
-    SystemdEcho(Level, Text);
-    exit;
-  end;
-  {$endif OSLINUX}
-  if fFamily.EchoToConsoleBackground and
-     Assigned(AutoFlushThread) then
-    AutoFlushThread.AddToConsole(Text, LOG_CONSOLE_COLORS[Level])
-  else
-  begin
-    ConsoleWrite(Text, LOG_CONSOLE_COLORS[Level]);
-    TextColor(ccLightGray);
-  end;
+  if Level in fFamily.fEchoToConsole then
+    {$ifdef OSLINUX}
+    if Family.EchoToConsoleUseJournal then
+      SystemdEcho(Level, Text)
+    else
+    {$endif OSLINUX}
+    if fFamily.EchoToConsoleBackground and
+       Assigned(AutoFlushThread) then
+      AutoFlushThread.AddToConsole(Text, LOG_CONSOLE_COLORS[Level])
+    else
+    begin
+      ConsoleWrite(Text, LOG_CONSOLE_COLORS[Level]);
+      TextColor(ccLightGray);
+    end;
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; Fmt: PUtf8Char;
