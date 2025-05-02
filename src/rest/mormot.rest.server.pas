@@ -3423,9 +3423,9 @@ begin
        (fServiceParametersLen > 2) and
        not (optNoLogInput in fServiceExecutionOptions) then
     begin
-      ContentToShortVar(pointer(fServiceParameters), fServiceParametersLen, tmp);
-      fLog.Log(sllServiceCall, '%%',
-        [fServiceMethod^.InterfaceDotMethodName, tmp], Server);
+      Ansi7StringToShortString(fServiceMethod^.InterfaceDotMethodName, tmp);
+      ContentToShortAppend(pointer(fServiceParameters), fServiceParametersLen, tmp);
+      fLog.Log(sllServiceCall, '%', [PUtf8Char(@tmp[1])], Server);
     end;
     // OnMethodExecute() callback event
     if Assigned(TServiceFactoryServer(Service).OnMethodExecute) then
