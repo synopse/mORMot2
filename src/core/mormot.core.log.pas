@@ -1094,8 +1094,8 @@ type
       Instance: TObject; TextTruncateAtLength: integer);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
-    procedure LogHeader(Level: TSynLogLevel);
-    procedure LogTrailer;
+    procedure LogHeader(Level: TSynLogLevel; Instance: TObject);
+    procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit; virtual;
@@ -1111,7 +1111,7 @@ type
     function GetThreadInfo: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
     procedure LockAndDisableExceptions;
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     function Instance: TSynLog;
     procedure CheckRotation;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
@@ -4598,6 +4598,7 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := GetThreadInfo;
+  GetCurrentTime(nfo, nil); // syscall outside of GlobalThreadLock
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   fThreadInfo := nfo;
   {$ifndef NOEXCEPTIONINTERCEPT}
@@ -4623,13 +4624,13 @@ begin
     PerformRotation;
 end;
 
-procedure TSynLog.LogTrailer;
+procedure TSynLog.LogTrailer(Level: TSynLogLevel);
 begin
-  if fCurrentLevel in fFamily.fLevelStackTrace then
+  if Level in fFamily.fLevelStackTrace then
     AddStackTrace(nil);
-  if fCurrentLevel in fFamily.fLevelSysInfo then
+  if Level in fFamily.fLevelSysInfo then
     AddSysInfo;
-  fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
+  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
   if AutoFlushThread = nil then
     if (fNextFileRotateDailyTix10 <> 0) or
        (fFileRotationSize <> 0) then
@@ -4695,7 +4696,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     fThreadInfo := nfo;
-    LogHeader(sllLeave);
+    LogHeader(sllLeave, nil);
     fWriter.AddMicroSec(ms);
     fWriterEcho.AddEndOfLine(sllLeave);
   finally
@@ -4809,10 +4810,7 @@ begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     fThreadInfo := nfo;
-    LogHeader(sllEnter);
-    if inst <> nil then
-      fWriter.AddInstancePointer(
-        inst, '.', fFamily.WithUnitName, fFamily.WithInstancePointer);
+    LogHeader(sllEnter, inst);
     if txt <> nil then
       fWriter.AddOnSameLine(txt)
     {$ifdef ISDELPHI}
@@ -5077,7 +5075,7 @@ begin
   begin
     if ThreadID = 0 then
       exit;
-    LogHeader(sllInfo);
+    LogHeader(sllInfo, nil);
     fWriter.AddShort('SetThreadName ');
     fWriter.AddPointer(ThreadID);  // as hexadecimal
     fWriter.AddDirect(' ');
@@ -5221,7 +5219,7 @@ begin
     lasterror := 0;
   LockAndDisableExceptions;
   try
-    LogHeader(Level);
+    LogHeader(Level, nil);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
     {$ifdef ISDELPHI}
@@ -5239,7 +5237,7 @@ begin
     if addr <> 0 then
       TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
     {$endif ISDELPHI}
-    LogTrailer;
+    LogTrailer(Level);
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -5319,8 +5317,7 @@ var
     if WithinEvents then
     begin
       fWriterEcho.AddEndOfLine(sllNewRun);
-      LogCurrentTime;
-      fWriter.AddShorter(LOG_LEVEL_TEXT[sllNewRun]);
+      LogHeader(sllNewRun, nil);
     end
     else
       fWriter.AddDirect(#10);
@@ -5331,8 +5328,7 @@ begin
   // array of const is buggy under Delphi 5 :( -> use fWriter.Add*() below
   if WithinEvents then
   begin
-    LogCurrentTime;
-    fWriter.AddShorter(LOG_LEVEL_TEXT[sllNewRun]);
+    LogHeader(sllNewRun, nil);
     fWriter.AddChars('=', 50);
     NewLine;
   end;
@@ -5513,24 +5509,32 @@ begin // this method is usually run outside of GlobalThreadLock
   end;
 end;
 
-procedure TSynLog.LogHeader(Level: TSynLogLevel);
+procedure TSynLog.LogHeader(Level: TSynLogLevel; Instance: TObject);
 var
   indent: PtrInt;
+  P: PUtf8Char;
 begin
-  if fWriter = nil then
-    CreateLogWriter; // file creation should be thread-safe
-  if not (logHeaderWritten in fInternalFlags) then
-    LogFileHeader
-  else if not (logInitDone in fInternalFlags) then
-    LogFileInit;
-  LogCurrentTime;
+  fWriter.AddShort(fThreadInfo^.CurrentTime);
+  P := fWriter.B + 1; // AddShort() reserved for 255 bytes
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
-    fWriter.AddInt18ToChars3(fThreadInfo^.ThreadNumber);
-  fCurrentLevel := Level;
-  fWriter.AddShorter(LOG_LEVEL_TEXT[Level]);
-  indent := fThreadInfo^.RecursionCount - byte(Level = sllEnter);
+  begin
+    Int18ToText(fThreadInfo^.ThreadNumber, P);
+    inc(P, 3);
+  end;
+  PInt64(P)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
+  inc(P, 7);
+  indent := fThreadInfo^.RecursionCount;
+  if Level = sllEnter then
+    dec(indent);
   if indent > 0 then
-    fWriter.AddChars(#9, indent);
+  begin
+    FillCharFast(P^, indent, 9); // inlined AddChars(#9, indent)
+    inc(P, indent);
+  end;
+  fWriter.B := P - 1;
+  if Instance <> nil then
+    fWriter.AddInstancePointer(Instance, ' ',
+      fFamily.WithUnitName, fFamily.WithInstancePointer);
   if Level = sllMemory then // handle additional information
     AddMemoryStats;
 end;
@@ -5612,15 +5616,12 @@ begin
     lasterror := 0;
   LockAndDisableExceptions;
   try
-    LogHeader(Level);
-    if Instance <> nil then
-      fWriter.AddInstancePointer(Instance, ' ', fFamily.WithUnitName,
-        fFamily.WithInstancePointer);
+    LogHeader(Level, Instance);
     fWriter.AddFmt(Format, Values, ValuesCount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer;
+    LogTrailer(Level);
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -5642,7 +5643,7 @@ begin
     lasterror := 0;
   LockAndDisableExceptions;
   try
-    LogHeader(Level);
+    LogHeader(Level, Instance);
     if Text = '' then
     begin
       if Instance <> nil then
@@ -5651,9 +5652,6 @@ begin
     end
     else
     begin
-      if Instance <> nil then
-        fWriter.AddInstancePointer(Instance, ' ', fFamily.WithUnitName,
-          fFamily.WithInstancePointer);
       textlen := PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^;
       if (TextTruncateAtLength <> 0) and
          (textlen > TextTruncateAtLength) then
@@ -5668,7 +5666,7 @@ begin
     end;
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer;
+    LogTrailer(Level);
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -5684,14 +5682,11 @@ procedure TSynLog.LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
 begin
   LockAndDisableExceptions;
   try
-    LogHeader(Level);
-    if Instance <> nil then
-      fWriter.AddInstancePointer(Instance, ' ', fFamily.WithUnitName,
-        fFamily.WithInstancePointer);
+    LogHeader(Level, Instance);
     fWriter.AddOnSameLine(pointer(aName));
     fWriter.AddDirect('=');
     fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
-    LogTrailer;
+    LogTrailer(Level);
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
@@ -6041,7 +6036,7 @@ begin
           // intercepted by custom callback
           exit;
       // memorize for internal last exceptions list into static arrays
-      log.LogHeader(Ctxt.ELevel);
+      log.LogHeader(Ctxt.ELevel, nil);
       if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
         GlobalLastExceptionIndex := 0
       else
@@ -6097,7 +6092,7 @@ adr:  // regular exception context log with its stack trace
       end;
 fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
         log.AddSysInfo;
-      log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
+      log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
       log.fWriter.FlushToStream; // exceptions available on disk ASAP
     except
       // any nested exception should never be propagated to the OS caller
