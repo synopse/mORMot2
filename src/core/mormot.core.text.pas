@@ -915,11 +915,6 @@ type
     /// write a byte as two hexa chars
     procedure AddByteToHexLower(Value: PtrUInt);
       {$ifdef HASINLINE}inline;{$endif}
-    /// write a Int18 value (0..262143) as 3 chars
-    // - this encoding is faster than Base64, and has spaces on the left side
-    // - use function Chars3ToInt18() to decode the textual content
-    // - used e.g. to efficiently encode the TSynLog ThreadNumber as text
-    procedure AddInt18ToChars3(Value: cardinal);
 
     /// append strings or integers with a specified format
     // - this class implementation will raise an exception for twJsonEscape,
@@ -1602,17 +1597,24 @@ function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
 function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 
 
-/// revert the value as encoded by TTextWriter.AddInt18ToChars3() or Int18ToChars3()
+/// fill a text buffer from a 18-bit integer value (0..262143) as 3 chars
+// - this encoding is faster than Base64, and has spaces on the left side
+// - use function Chars3ToInt18() to decode the textual content
+// - used e.g. to efficiently encode the TSynLog ThreadNumber as text
+procedure Int18ToText(Value: cardinal; Text: PUtf8Char);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// decode the 18-bit integer value as encoded by Int18ToChars3()
 // - no range check is performed: you should ensure that the incoming text
 // follows the expected 3-chars layout
 // - used e.g. to efficiently decode the TSynLog ThreadNumber text
 function Chars3ToInt18(P: pointer): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// compute the value as encoded by TTextWriter.AddInt18ToChars3() method
+/// encode a 18-bit integer following Int18ToText/Chars3ToInt18 3 chars format
 function Int18ToChars3(Value: cardinal): RawUtf8; overload;
 
-/// compute the value as encoded by TTextWriter.AddInt18ToChars3() method
+/// encode a 18-bit integer following Int18ToText/Chars3ToInt18 3 chars format
 procedure Int18ToChars3(Value: cardinal; var result: RawUtf8); overload;
 
 /// creates a 3 digits string from a 0..999 value as '000'..'999'
@@ -3929,6 +3931,13 @@ begin
   until BinBytes = 0;
 end;
 
+procedure Int18ToText(Value: cardinal; Text: PUtf8Char);
+begin
+  PCardinal(Text)^ := PtrUInt(((Value shr 12) and $3f) or
+                              (((Value shr 6) and $3f) shl 8) or
+                              ((Value and $3f) shl 16)) + $202020;
+end;
+
 
 { TTextWriter }
 
@@ -5360,16 +5369,6 @@ begin
     FlushToStream;
   PCardinal(B + 1)^ := TwoDigitsHexLower[Value];
   inc(B, 2);
-end;
-
-procedure TTextWriter.AddInt18ToChars3(Value: cardinal);
-begin
-  if B >= BEnd then
-    FlushToStream;
-  PCardinal(B + 1)^ := ((Value shr 12) and $3f) or
-                       ((Value shr 6) and $3f) shl 8 or
-                       (Value and $3f) shl 16 + $202020;
-  inc(B, 3);
 end;
 
 procedure TTextWriter.AddString(const Text: RawUtf8);
@@ -8275,16 +8274,12 @@ end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
 begin
-  PCardinal(FastSetString(result, 3))^ := ((Value shr 12) and $3f) or
-                                          ((Value shr 6) and $3f) shl 8 or
-                                          (Value and $3f) shl 16 + $202020;
+  Int18ToText(Value, FastSetString(result, 3));
 end;
 
 procedure Int18ToChars3(Value: cardinal; var result: RawUtf8);
 begin
-  PCardinal(FastSetString(result, 3))^ := ((Value shr 12) and $3f) or
-                                          ((Value shr 6) and $3f) shl 8 or
-                                          (Value and $3f) shl 16 + $202020;
+  Int18ToText(Value, FastSetString(result, 3));
 end;
 
 function Chars3ToInt18(P: pointer): cardinal;
