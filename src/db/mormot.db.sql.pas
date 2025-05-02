@@ -6951,7 +6951,10 @@ begin
     if Msg = nil then
     begin
       if not fExpectResults then
-        FormatShort16(' wr=%', [UpdateCount], tmp);
+      begin
+        AppendShort(' wr=', tmp);
+        AppendShortCardinal(UpdateCount, tmp);
+      end;
       Msg := @tmp;
     end;
     if fSqlLogLevel = sllSQL then

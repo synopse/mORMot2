@@ -2419,8 +2419,7 @@ end;
 function TAsyncConnectionsSockets.Write(connection: TPollAsyncConnection;
   data: pointer; datalen: integer; timeout: integer): boolean;
 begin
-  if (fOwner.fLogClass <> nil) and
-     (acoVerboseLog in fOwner.Options) and
+  if (acoVerboseLog in fOwner.Options) and
      not (acoNoLogWrite in fOwner.Options) then
     fOwner.LogVerbose(TAsyncConnection(connection), 'Write', [], data, datalen);
   result := inherited Write(connection, data, datalen, timeout);
@@ -2642,31 +2641,40 @@ var
 begin
   aLog.EnterLocal(log, 'Create(%,%,%)',
     [aConnectionClass, ProcessName, aThreadPoolCount], self);
+  // setup connection class
   if (aConnectionClass = TAsyncConnection) or
      (aConnectionClass = nil) then
     EAsyncConnections.RaiseUtf8('Unexpected %.Create(%)',
       [self, aConnectionClass]);
+  fConnectionClass := aConnectionClass;
+  // setup thread pool parameters
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
-  fLastOperationReleaseMemorySeconds := 60;
-  fLastOperationMS := mormot.core.os.GetTickCount64;
-  fLastOperationSec := Qword(fLastOperationMS) div 1000; // ASAP
-  fKeepConnectionInstanceMS := 100;
-  SetLength(fGC1.Items, 512);
-  SetLength(fGC2.Items, 512);
   {$ifndef USE_WINIOCP}
   fThreadPollingWakeupLoad :=
     (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
   if fThreadPollingWakeupLoad < 4 then
     fThreadPollingWakeupLoad := 4; // below 4, the whole algorithm seems pointless
   {$endif USE_WINIOCP}
-  fConnectionClass := aConnectionClass;
+  // setup internal variables
+  fLastOperationReleaseMemorySeconds := 60;
+  fLastOperationMS := mormot.core.os.GetTickCount64;
+  fLastOperationSec := Qword(fLastOperationMS) div 1000; // ASAP
+  fKeepConnectionInstanceMS := 100;
+  SetLength(fGC1.Items, 512);
+  SetLength(fGC2.Items, 512);
+  // setup associated event-driven sockets polling
   opt := [];
   if acoWritePollOnly in aOptions then
     include(opt, paoWritePollOnly);
   fSockets := TAsyncConnectionsSockets.Create(opt, aThreadPoolCount);
   fSockets.fOwner := self;
   fSockets.OnStart := ProcessClientStart;
+  // setup logs
+  if acoVerboseLog in aOptions then
+    if (aLog = nil) or
+       not (sllTrace in aLog.Family.Level) then
+      exclude(aOptions, acoVerboseLog); // no need to check verbose
   if Assigned(aLog) and
      (acoDebugReadWriteLog in aOptions) then
   begin
@@ -2680,8 +2688,8 @@ begin
   end;
   fSockets.fWrite.OnGetOneIdle := ProcessIdleTix;
   {$endif USE_WINIOCP}
-  fOptions := aOptions;
   // prepare this main thread: fThreads[] requires proper fOwner.OnStart/OnStop
+  fOptions := aOptions;
   inherited Create({suspended=}false, OnStart, OnStop, aLog, ProcessName);
   // initiate the read/receive thread(s)
   fThreadPoolCount := aThreadPoolCount;
@@ -2704,12 +2712,14 @@ begin
       fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   end;
   {$endif USE_WINIOCP}
+  // wait for all threads to be started
   tix := mormot.core.os.GetTickCount64 + 7000;
   repeat
      if AllThreadsStarted then
        break;
      SleepHiRes(1);
   until mormot.core.os.GetTickCount64 > tix;
+  // setup custom threads affinity
   if acoThreadCpuAffinity in aOptions then
     SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
   else if acoThreadSocketAffinity in aOptions then
@@ -4142,8 +4152,7 @@ var
   previous: THttpRequestState;
 begin
   // cut-down version of THttpAsyncServerConnection.OnRead
-  if (fOwner.fLogClass <> nil) and
-     (acoVerboseLog in fOwner.Options) and
+  if (acoVerboseLog in fOwner.Options) and
      not (acoNoLogRead in fOwner.Options) then
     fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
   result := soContinue;
@@ -4495,8 +4504,7 @@ var
   st: TProcessParseLine;
   previous: THttpRequestState;
 begin
-  if (fOwner.fLogClass <> nil) and
-     (acoVerboseLog in fOwner.Options) and
+  if (acoVerboseLog in fOwner.Options) and
      not (acoNoLogRead in fOwner.Options) then
     fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
   result := soClose;
