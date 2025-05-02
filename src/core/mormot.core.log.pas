@@ -221,13 +221,13 @@ type
 const
   /// up to 7 TSynLogFamily, i.e. TSynLog sub-classes can be defined at once
   MAX_SYNLOGFAMILY = 7;
-  /// we store up to 56 recursion levels of Enter/Leave information
+  /// we store up to 54 recursion levels of Enter/Leave information
   // - above this limit, no error would be raised at runtime, but no associated
   // information would be stored - therefore logged (TSynLog.Enter returns nil)
   // - typical value of recursive calls number is below a dozen: indentation in
   // the log file would make any bigger value clearly unreadable
   // - this number has been defined to keep TSynLogThreadInfo < 512 bytes
-  MAX_SYNLOGRECURSION = 56;
+  MAX_SYNLOGRECURSION = 54;
   /// we handle up to 64K threads per TSynLog instance
   // - there is no technical reason to such limitation, but it would allow to
   // detect missing TSynLog.NotifyThreadEnded calls in your code logic
@@ -472,6 +472,8 @@ function RetrieveMemoryManagerInfo: RawUtf8;
 var
   /// low-level variable used internally by this unit
   // - we use a process-wide giant lock to avoid proper multi-threading of logs
+  // - most process (e.g. time retrieval) is done outside of the lock: only
+  // actual log file writing is blocking the threads
   // - do not access this variable in your code: defined here to allow inlining
   GlobalThreadLock: TRTLCriticalSection;
 
@@ -1004,24 +1006,25 @@ type
   end;
 
   /// thread-specific internal threadvar definition used for fast process
-  // - consumes up to 512 bytes per thread on CPU64
-  TSynLogThreadInfo = record
-    /// the internal number of this thread, used for AddInt18ToChars3()
-    // - also used to properly setup this thread when ThreadNumber = 0
-    ThreadNumber: HalfUInt;
+  // - consumes 484/512 bytes per thread on CPU32/CPU64
+  TSynLogThreadInfo = packed record
     /// number of recursive calls currently stored in Recursion[]
-    // - nothing is logged above MAX_SYNLOGRECURSION=55 to keep this record small
+    // - nothing is logged above MAX_SYNLOGRECURSION to keep this record small
     RecursionCount: byte;
-    {$ifndef NOEXCEPTIONINTERCEPT}
     /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
     ExceptionIgnore: boolean;
-    {$endif NOEXCEPTIONINTERCEPT}
+    /// the internal number of this thread, stored as text using Int18ToChars3()
+    // - match TSynLog.fThreadIdent[ThreadNumber - 1] for ptIdentifiedInOneFile
+    ThreadNumber: word;
+    /// ready-to-be-written text timestamp, filled outside GlobalThreadLock
+    // - stores up to 18 chars: padded with previous fields as 24 bytes
+    CurrentTime: string[19];
     /// each thread can access to its own TSynLog instance
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
     FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
     /// used by TSynLog.Enter methods to handle recursive calls tracing
     // - stores ISynLog.RefCnt in lowest 8-bit, then CurrentTimestamp shl 8
-    // (microseconds as 56-bit do cover 2284 years before overflow)
+    // (microseconds as 56-bit do cover 2285 years before overflow)
     // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
   end;
@@ -1095,7 +1098,7 @@ type
     procedure LogHeader(Level: TSynLogLevel);
     procedure LogTrailer;
       {$ifdef FPC}inline;{$endif}
-    procedure LogCurrentTime; virtual;
+    procedure GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
     procedure AddMemoryStats; virtual;
@@ -5494,24 +5497,29 @@ begin
   fWriter.AddDirect('}');
 end;
 
-procedure TSynLog.LogCurrentTime;
+procedure TSynLog.GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64);
 var
-  ms: Int64;
-  time: TSynSystemTime;
-begin
+  st: TSynSystemTime;
+  ms: Int64 absolute st;
+begin // this method is usually run outside of GlobalThreadLock
   if fFamily.HighResolutionTimestamp then
   begin
-    QueryPerformanceMicroSeconds(ms);
-    dec(ms, fStartTimestamp);
-    fLogTimestamp := ms;
-    fWriter.AddBinToHexDisplay(@ms, SizeOf(ms));
+    if MicroSec = nil then
+    begin
+      QueryPerformanceMicroSeconds(ms);
+      dec(ms, fStartTimestamp);
+      MicroSec := @ms;
+    end;
+    nfo^.CurrentTime[0] := #16; // 64-bit microseconds = 584704 years
+    BinToHexDisplayLower(pointer(MicroSec), @nfo^.CurrentTime[1], SizeOf(ms));
   end
   else
   begin
-    time.FromNow(fFamily.LocalTimestamp);
-    time.AddLogTime(fWriter);
+    st.FromNow(fFamily.LocalTimestamp);
+    nfo^.CurrentTime[0] := #17;
+    st.ToLogTime(@nfo^.CurrentTime[1]);
     if fFamily.ZonedTimestamp then
-      fWriter.AddDirect('Z');
+      AppendShortChar('Z', @nfo^.CurrentTime);
   end;
 end;
 
