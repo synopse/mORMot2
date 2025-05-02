@@ -1981,19 +1981,14 @@ var
   ExeInstanceDebugFile: TDebugFile;
 
 function GetInstanceDebugFile: TDebugFile;
-var
-  new: TDebugFile;
 begin
   result := ExeInstanceDebugFile;
   if result <> nil then
     exit;
-  new := TDebugFile.Create;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     if ExeInstanceDebugFile = nil then
-      ExeInstanceDebugFile := new
-    else
-      new.Free;
+      ExeInstanceDebugFile := TDebugFile.Create;
     result := ExeInstanceDebugFile;
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -3516,15 +3511,18 @@ var
 
 begin
   result := false;
-  if (W = nil) or
-     (aAddressAbsolute = 0) then
-    exit;
-  debug := ExeInstanceDebugFile;
-  if debug = nil then
-    debug := GetInstanceDebugFile;
-  if (debug <> nil) and
-     debug.HasDebugInfo then
-  begin
+  if (W <> nil) and
+     (aAddressAbsolute <> 0) then
+  try
+    debug := ExeInstanceDebugFile;
+    if debug = nil then
+      debug := GetInstanceDebugFile;
+    if (debug = nil) or
+       not debug.HasDebugInfo then
+    begin
+      AddHex;
+      exit;
+    end;
     offset := debug.AbsoluteToOffset(aAddressAbsolute);
     s := debug.FindSymbol(offset);
     u := debug.FindUnit(offset, Line);
@@ -3562,9 +3560,9 @@ begin
       W.AddDirect(')', ' ');
     end;
     result := true;
-  end
-  else
-    AddHex;
+  except
+    result := false;
+  end;
 end;
 
 function TDebugFile.FindLocation(aAddressAbsolute: PtrUInt): RawUtf8;
