@@ -1032,7 +1032,7 @@ function GetClassParent(C: TClass): TClass;
 
 var
   /// retrieve the unit name where a given class is implemented
-  // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
+  // - properly implemented in mormot.core.rtti.pas; returns '' otherwise
   // - is needed since Delphi 7-2009 do not define TObject.UnitName (because
   // there is no such information available in RTTI)
   ClassUnit: function(C: TClass): PShortString;
@@ -5430,6 +5430,11 @@ begin
     result := @NULCHAR // avoid GPF
   else
     result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
+end;
+
+function _ClassUnit(C: TClass): PShortString;
+begin
+  result := @NULCHAR; // properly implemented by mormot.core.rtti.pas
 end;
 
 procedure ClassToText(C: TClass; var result: RawUtf8);
@@ -13277,6 +13282,7 @@ begin
   VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
   XorEntropyGetOsRandom256 := @_XorEntropyGetOsRandom256;
+  ClassUnit := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
 end;
