@@ -877,6 +877,7 @@ type
     // - append "void" if Instance = nil
     procedure AddInstanceName(Instance: TObject; SepChar: AnsiChar);
     /// append an Instance name and pointer, as 'TObjectList(00425E68)'+SepChar
+    // - caller should have ensure that Instance <> nil
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
@@ -5128,38 +5129,61 @@ begin
   if Instance = nil then
     AddShorter('void')
   else
-    AddShort(ClassNameShort(Instance)^);
-  AddDirect('(');
-  AddPointer(PtrUInt(Instance));
-  AddDirect(')', '"');
+    AddInstancePointer(Instance, #0, {unitname=}false, {pointer=}true);
+  AddDirect('"');
   if SepChar <> #0 then
     AddDirect(SepChar);
+end;
+
+function DisplayMinChars(Bin: PByteArray; BinBytes: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := BinBytes;
+  repeat // append hexa chars up to the last non zero byte
+    dec(result);
+  until (result = 0) or
+        (Bin[result] <> 0);
+  inc(result);
 end;
 
 procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
 var
-  u: PShortString;
+  P: PUtf8Char;
+  s: PShortString;
+  l: PtrInt;
 begin
-  if IncludeUnitName and
-     Assigned(ClassUnit) then
+  if BEnd - B <= 255 then
+    FlushToStream;
+  P := B + 1;
+  if IncludeUnitName then
   begin
-    u := ClassUnit(PClass(Instance)^);
-    if u^[0] <> #0 then
+    s := ClassUnit(PClass(Instance)^); // we know Instance <> nil
+    if s^[0] <> #0 then
     begin
-      AddShort(u^);
-      AddDirect('.');
+      MoveFast(s^[1], P^, ord(s^[0]));
+      inc(P, ord(s^[0]));
+      P^ := '.';
+      inc(P);
     end;
   end;
-  AddShort(PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^^);
+  s := PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^;
+  MoveFast(s^[1], P^, ord(s^[0]));
+  inc(P, ord(s^[0]));
   if IncludePointer then
   begin
-    AddDirect('(');
-    AddPointer(PtrUInt(Instance));
-    AddDirect(')');
+    P^ := '(';
+    inc(P);
+    l := DisplayMinChars(@Instance, SizeOf(Instance));
+    BinToHexDisplayLower(@Instance, pointer(P), l);
+    inc(P, l * 2);
+    P^ := ')';
+    inc(P);
   end;
-  if SepChar <> #0 then
-    AddDirect(SepChar);
+  P^ := SepChar;
+  if SepChar = #0 then
+    dec(P);
+  B := P;
 end;
 
 procedure TTextWriter.AddLine(const Text: ShortString);
@@ -5497,17 +5521,6 @@ end;
 procedure TTextWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: PtrInt);
 begin
   AddBinToHexDisplayLower(Bin, BinBytes, '"');
-end;
-
-function DisplayMinChars(Bin: PByteArray; BinBytes: PtrInt): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := BinBytes;
-  repeat // append hexa chars up to the last non zero byte
-    dec(result);
-  until (result = 0) or
-        (Bin[result] <> 0);
-  inc(result);
 end;
 
 procedure TTextWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
