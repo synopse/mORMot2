@@ -4337,7 +4337,7 @@ begin
         result := nrInvalidParameter;
         exit;
       end;
-      aConnection.fHttp.ContentStream :=
+      aConnection.fHttp.ContentStream := // raise EOSException on invalid h
         TFileStreamEx.CreateFromHandle(h, aDestFileName);
       include(aConnection.fHttp.ResponseFlags, rfContentStreamNeedFree);
     end;

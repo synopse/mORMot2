@@ -7071,7 +7071,7 @@ begin
     h := FileCreate(aFileName, Mode and $00ff) // fmCreate=$ffff on oldest Delphi
   else
     h := FileOpen(aFileName, Mode);
-  CreateFromHandle(h, aFileName);
+  CreateFromHandle(h, aFileName); // raise EOSException on invalid h
 end;
 
 constructor TFileStreamEx.CreateFromHandle(aHandle: THandle;
@@ -7086,7 +7086,7 @@ begin
 end;
 
 constructor TFileStreamEx.CreateRead(const aFileName: TFileName);
-begin
+begin // raise EOSException on invalid handle/aFileName
   CreateFromHandle(FileOpenSequentialRead(aFileName), aFileName);
 end;
 
@@ -7097,7 +7097,7 @@ begin
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
   if not ValidHandle(h) then // we may need to create the file
     h := FileCreate(aFileName, fmShareRead);
-  CreateFromHandle(h, aFileName);
+  CreateFromHandle(h, aFileName); // raise EOSException on invalid h
 end;
 
 destructor TFileStreamEx.Destroy;
@@ -7156,7 +7156,7 @@ begin
           break;
       end;
     end;
-  CreateFromHandle(h, aFileName);
+  CreateFromHandle(h, aFileName); // raise EOSException on invalid h
 end;
 
 function TFileStreamNoWriteError.Write(const Buffer; Count: Longint): Longint;
@@ -7172,7 +7172,7 @@ var
 begin
   result := nil;
   h := FileOpenSequentialRead(FileName);
-  if ValidHandle(h) then
+  if ValidHandle(h) then // would raise EOSException on invalid h
     result := TFileStreamEx.CreateFromHandle(h, FileName);
 end;
 

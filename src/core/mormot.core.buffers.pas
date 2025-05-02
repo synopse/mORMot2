@@ -4404,7 +4404,7 @@ end;
 { TBufferWriter }
 
 constructor TBufferWriter.Create(aFile: THandle; BufLen: integer);
-begin
+begin // raise EOSException on invalid aFile handle
   Create(TFileStreamEx.CreateFromHandle(aFile, ''), BufLen);
   fInternalStream := true;
 end;
@@ -9941,7 +9941,7 @@ begin
   if GetHashFileExt = '' then
     exit; // no hash function defined
   f := FileOpenSequentialRead(FileName);
-  if not ValidHandle(f) then
+  if not ValidHandle(f) then // would raise EOSException on invalid f
     exit;
   hasher := Create(TFileStreamEx.CreateFromHandle(f, FileName));
   try
