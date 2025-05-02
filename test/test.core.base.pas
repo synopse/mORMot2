@@ -6264,6 +6264,46 @@ begin
   CheckEqual(StringReplaceAll('abcabcabc', 'c', 'C', true), 'abCabCabC');
   CheckEqual(StringReplaceAll('abcabcabc', 'c', '', true), 'ababab');
   CheckEqual(StringReplaceAll('abcabcabc', 'C', '', true), 'ababab');
+  CheckEqual(LogEscapeFull(''), '');
+  CheckEqual(LogEscapeFull(' abc'), ' abc');
+  CheckEqual(LogEscapeFull('abc'), 'abc');
+  u := 'abc'#10;
+  CheckEqual(LogEscapeFull(u), 'abc$0a');
+  u2 := RawUtf8OfChar('-', 10);
+  CheckEqual(u2, '----------');
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 15)^ = #0);
+  CheckEqual(u2, 'abc$0a'#0'---');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 12)^ = #0);
+  CheckEqual(u2, 'abc$0a'#0'---');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 7)^ = #0);
+  CheckEqual(u2, 'abc$0a'#0'---');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 6)^ = #0);
+  CheckEqual(u2, 'abc..'#0'----');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 5)^ = #0);
+  CheckEqual(u2, 'ab..'#0'-----');
+  u := '012345678';
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 10)^ = #0);
+  CheckEqual(u2, '012345678'#$00);
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 9)^ = #0);
+  CheckEqual(u2, '012345..'#0'-');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 5)^ = #0);
+  CheckEqual(u2, '01..'#0'-----');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 4)^ = #0);
+  CheckEqual(u2, '0..'#0'------');
+  for i := 3 downto 0 do
+  begin
+    u2 := RawUtf8OfChar('-', 10);
+    Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 3)^ = #0);
+    CheckEqual(u2, #0'---------');
+  end;
   for i := -10 to 50 do
     for j := -10 to 50 do
     begin

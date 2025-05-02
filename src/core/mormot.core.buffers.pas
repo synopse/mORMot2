@@ -9443,39 +9443,49 @@ var
   c: AnsiChar;
   tab: PWordArray;
 begin
-  if (slen > 0) and
-     (dmax > 7) then
-  begin
-    tab := @TwoDigitsHexLower;
-    repeat
-      c := s^;
-      inc(s);
-      if (c >= ' ') and
-         (c <= #126) then
-      begin
-        d^ := c;
-        inc(d);
-        dec(dmax);
-      end
-      else
-      begin
-        d^ := '$';
-        inc(d);
-        PWord(d)^ := tab[ord(c)];
-        inc(d, 2);
-        dec(dmax, 3);
-      end;
-      if dmax <= 7 then // mark truncated
-      begin
-        PCardinal(d)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
-        inc(d, 3);
-        break;
-      end;
-      dec(slen);
-    until slen = 0;
-  end;
-  d^ := #0;
   result := d;
+  if d = nil then
+    exit;
+  dec(dmax); // for trailing #0
+  if (dmax <= 2) or
+     (slen <= 0) then
+  begin
+    result^ := #0;
+    exit;
+  end;
+  inc(d, dmax);
+  tab := @TwoDigitsHexLower;
+  repeat
+    c := s^;
+    inc(s);
+    if (c < ' ') or
+       (c > #126) then
+    begin
+      if dmax < 3 then
+        break;
+      result^ := '$';
+      PWord(result + 1)^ := tab[ord(c)];
+      inc(result, 3);
+      dec(dmax, 3);
+    end
+    else
+    begin
+      result^ := c;
+      inc(result);
+      dec(dmax);
+    end;
+    dec(slen);
+    if slen <> 0 then
+      if dmax = 0 then
+        break
+      else
+        continue;
+    result^ := #0;
+    exit;
+  until false;
+  result := d;
+  PWord(result - 2)^ := ord('.') + ord('.') shl 8;
+  result^ := #0;
 end;
 
 function LogEscape(source: PAnsiChar; sourcelen: integer;
@@ -9485,10 +9495,10 @@ begin
   begin
     temp[0] := ' ';
     EscapeBuffer(source, sourcelen, @temp[1], SizeOf(temp) - 1);
+    result := @temp;
   end
   else
-    temp[0] := #0;
-  result := @temp;
+    result := nil;
 end;
 
 function LogEscapeFull(const source: RawByteString): RawUtf8;
@@ -9501,7 +9511,7 @@ begin
   FastSetString(result{%H-}, sourcelen * 3); // worse case
   if sourcelen <> 0 then
     FakeLength(result, pointer(EscapeBuffer(
-      pointer(result), sourcelen, pointer(result), sourcelen * 3)));
+      pointer(source), sourcelen, pointer(result), sourcelen * 3 + 4)));
 end;
 
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString;
