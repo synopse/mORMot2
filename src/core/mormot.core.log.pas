@@ -4649,41 +4649,26 @@ var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
-  result := 1; // should never be 0 (would release TSynLog instance)
-  // no EnterCriticalSection(GlobalThreadLock) needed here
-  if fFamily.fPerThreadLog = ptNoThreadProcess then
-    nfo := @fSharedThreadInfo // same context for all threads
-  else
-    nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo already done
+  nfo := @PerThreadInfo; // access the threadvar
+  if PInteger(nfo)^ = 0 then // no InitThreadInfo = ptNoThreadProcess
+    nfo := @fSharedThreadInfo; // same context for all threads
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   inc(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ = 0 then
     ESynLogException.RaiseUtf8('Too many %._AddRef', [self]);
-end;
-
-function TSynLog.CurrentTimestamp: Int64;
-var
-  ms: Int64; // some targets may require an explicit variable on stack
-begin
-  result := fLogTimestamp;
-  if result <> 0 then // was set by TSynLog.LogCurrentTime
-    exit;
-  QueryPerformanceMicroSeconds(ms);
-  result := ms - fStartTimestamp;
+  result := 1; // should never be 0 (would release TSynLog instance)
 end;
 
 function TSynLog._Release: TIntCnt;
 var
   nfo: PSynLogThreadInfo;
-  ms: cardinal;
+  ms: Int64;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
-  // no EnterCriticalSection(GlobalThreadLock) needed here
-  if fFamily.fPerThreadLog = ptNoThreadProcess then
-    nfo := @fSharedThreadInfo // same context for all threads
-  else
-    nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo already done
+  nfo := @PerThreadInfo; // access the threadvar
+  if PInteger(nfo)^ = 0 then // no InitThreadInfo = ptNoThreadProcess
+    nfo := @fSharedThreadInfo; // same context for all threads
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   dec(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ <> 0 then
@@ -4692,14 +4677,23 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   if not (sllLeave in fFamily.Level) then
     exit;
   // append e.g. 00000000001FFF23  %  -    02.096.658
-  ms := CurrentTimestamp - (PInt64(refcnt)^ shr 8);
+  QueryPerformanceMicroSeconds(ms);
+  dec(ms, fStartTimestamp);
+  GetCurrentTime(nfo, @ms);
+  dec(ms, PInt64(refcnt)^ shr 8); // elapsed time since Enter
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     fThreadInfo := nfo;
     LogHeader(sllLeave, nil);
     fWriter.AddMicroSec(ms);
     fWriterEcho.AddEndOfLine(sllLeave);
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
@@ -4798,17 +4792,29 @@ end;
 procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
   {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
 var
-  rec: Int64;
+  ms, rec: Int64;
 begin
-  // setup recursive sllLeave timing and RefCnt=1 like with _AddRef
+  // setup recursive timing and RefCnt=1 like with _AddRef outside lock
   if sllLeave in fFamily.Level then
-    rec := CurrentTimestamp shl 8 + {refcnt=}1 // outside lock
+  begin
+    QueryPerformanceMicroSeconds(ms);
+    dec(ms, fStartTimestamp);
+    GetCurrentTime(nfo, @ms);
+    rec := ms shl 8 + {refcnt=}1;
+  end
   else
+  begin
+    GetCurrentTime(nfo, nil);
     rec := {refcnt=}1; // no timestamp needed if no sllLeave
+  end;
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with refcnt = 1
   // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     fThreadInfo := nfo;
     LogHeader(sllEnter, inst);
     if txt <> nil then
@@ -4819,7 +4825,9 @@ begin
       TDebugFile.Log(fWriter, addr, {notcode=}false, {symbol=}true)
     {$endif ISDELPHI};
     fWriterEcho.AddEndOfLine(sllEnter);
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
