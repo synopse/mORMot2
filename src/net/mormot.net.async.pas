@@ -693,16 +693,12 @@ type
     /// low-level method to connect a client to this server
     // - is called e.g. from fThreadClients
     function ThreadClientsConnect: TAsyncConnection;
-    /// log some binary data with proper escape
-    // - can be executed from an TAsyncConnection.OnRead method to track content:
-    // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
+    /// log some binary data with proper escape as sllTrace
+    // - can be executed e.g. from an TAsyncConnection.OnRead method as such:
+    // $ if acoVerboseLog in fOwner.Options then
+    // $   fOwner.LogVerbose(self, ..., fRd);
     procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
-      const identargs: array of const; frame: pointer; framelen: integer); overload;
-    /// log some binary data with proper escape
-    // - can be executed from an TAsyncConnection.OnRead method to track content:
-    // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(...);
-    procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
-      const identargs: array of const; const frame: TRawByteStringBuffer); overload;
+      const identargs: array of const; const data: TRawByteStringBuffer);
     /// the current monotonic time elapsed, evaluated in seconds
     // - IdleEverySecond will set GetTickCount64 div 1000
     property LastOperationSec: TAsyncConnectionSec
@@ -3498,22 +3494,11 @@ end;
 
 procedure TAsyncConnections.LogVerbose(connection: TPollAsyncConnection;
   const ident: RawUtf8; const identargs: array of const;
-  frame: pointer; framelen: integer);
-var
-  tmp: TLogEscape; // 512 bytes of temp buffer
+  const data: TRawByteStringBuffer);
 begin
-  if (acoVerboseLog in Options) and
-     (fLogClass <> nil) then
-    DoLog(sllTrace, '% len=%%',
-      [FormatToShort(ident, identargs), framelen,
-       LogEscape(frame, framelen, tmp{%H-})], connection);
-end;
-
-procedure TAsyncConnections.LogVerbose(connection: TPollAsyncConnection;
-  const ident: RawUtf8; const identargs: array of const;
-  const frame: TRawByteStringBuffer);
-begin
-  LogVerbose(connection, ident, identargs, frame.Buffer, frame.Len)
+  if acoVerboseLog in Options then
+    fLogClass.Add.LogEscape(
+      sllTrace, ident, identargs, data.Buffer, data.Len, connection);
 end;
 
 procedure TAsyncConnections.IdleEverySecond;
