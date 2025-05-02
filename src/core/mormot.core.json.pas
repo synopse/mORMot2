@@ -6476,6 +6476,7 @@ procedure TJsonWriter.AddFmt(Format: PUtf8Char; Values: PVarRec; ValuesCount: in
   Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
 var
   start: PUtf8Char;
+  Len: PtrInt;
 begin
   if Format <> nil then
   repeat
@@ -6486,10 +6487,17 @@ begin
         break;
       inc(Format);
     until false;
-    AddNoJsonEscape(start, Format - start); // append Format with no escaping
+    Len := Format - start;
+    if Len <> 0 then
+    begin
+      if BEnd - B <= Len then  // note: PtrInt(BEnd - B) could be < 0
+        FlushToStream;
+      MoveFast(start^, B[1], Len); // append Format with no escaping
+      inc(B, Len);
+    end;
     if Format^ = #0 then
       exit;
-    // add next value as text instead of F^='%' placeholder
+    // add next value as text instead of Format^='%' placeholder
     inc(Format);
     if ValuesCount <= 0 then
       continue; // missing value will display nothing
@@ -7360,7 +7368,7 @@ end;
 procedure TJsonWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
-  case V^.VType of
+  case V^.VType of // use efficient jmp table
     vtInteger:
       Add(V^.VInteger);
     vtBoolean:
