@@ -1791,6 +1791,10 @@ procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
 function FormatBuffer(const Format: RawUtf8; const Args: array of const;
   Dest: pointer; DestLen: PtrInt): PtrInt;
 
+/// raw Format() function replacement, tuned for direct memory buffer write
+function FormatBufferRaw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
+  Dest: pointer; DestLen: PtrInt): PUtf8Char;
+
 /// fast Format() function replacement, for UTF-8 content stored in ShortString
 // - use the same single token % (and implementation) than FormatUtf8()
 // - ShortString allows fast stack allocation, so is perfect for small content
@@ -1800,6 +1804,7 @@ procedure FormatShort(const Format: RawUtf8; const Args: array of const;
 
 /// fast Format() function replacement, for UTF-8 content stored in ShortString
 function FormatToShort(const Format: RawUtf8; const Args: array of const): ShortString;
+  {$ifdef FPC}inline;{$endif} // Delphi has trouble with this
 
 /// fast Format() function replacement, tuned for small content
 // - use the same single token % (and implementation) than FormatUtf8()
@@ -9300,26 +9305,29 @@ end;
 
 function FormatBuffer(const Format: RawUtf8; const Args: array of const;
   Dest: pointer; DestLen: PtrInt): PtrInt;
-var
-  f: TFormatUtf8;
 begin
   if (Dest = nil) or
      (DestLen <= 0) then
-  begin
-    result := 0;
-    exit; // avoid buffer overflow
-  end;
-  f.Parse(Format, @Args[0], length(Args));
-  result := PtrUInt(f.WriteMax(Dest, DestLen)) - PtrUInt(Dest);
+    result := 0 // avoid buffer overflow
+  else
+    result := FormatBufferRaw(Format, @Args[0], length(Args),
+                Dest, DestLen) - PUtf8Char(Dest);
+end;
+
+function FormatBufferRaw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
+  Dest: pointer; DestLen: PtrInt): PUtf8Char;
+var
+  f: TFormatUtf8;
+begin
+  f.Parse(Format, Args, ArgsCount);
+  result := f.WriteMax(Dest, DestLen);
 end;
 
 function FormatToShort(const Format: RawUtf8;
   const Args: array of const): ShortString;
-var
-  f: TFormatUtf8;
 begin
-  f.Parse(Format, @Args[0], length(Args));
-  result[0] := AnsiChar(f.WriteMax(@result[1], 255) - @result[1]);
+  result[0] := AnsiChar(FormatBufferRaw(
+    Format, @Args[0], length(Args), @result[1], 255) - @result[1]);
 end;
 
 procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
@@ -9388,7 +9396,7 @@ var
   t: PtrInt;
 begin
   t := length(res);
-  SetLength(res, t + len);
+  SetLength(res, t + len); // realloc
   MoveFast(add^, PByteArray(res)[t], len);
   if cp <> 0 then
     FakeCodePage(RawByteString(res), cp);
