@@ -873,9 +873,10 @@ type
       const VoidPlaceHolder: RawUtf8 = ''); overload;
     /// append the class name of an Object instance as text
     procedure AddClassName(aClass: TClass);
-    /// append an Instance name and pointer, as '"TObjectList(00425E68)"'+SepChar
+    /// append a quoted Instance name and pointer, as "TObjectList(00425E68)"
     // - append "void" if Instance = nil
-    procedure AddInstanceName(Instance: TObject; SepChar: AnsiChar);
+    // - could be used to append an instance reference as JSON object property
+    procedure AddInstanceName(Instance: TObject; SepChar: AnsiChar = ':');
     /// append an Instance name and pointer, as 'TObjectList(00425E68)'+SepChar
     // - caller should have ensure that Instance <> nil
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
@@ -2431,6 +2432,11 @@ procedure PointerToHex(aPointer: pointer; var result: RawUtf8); overload;
 // - use internally DisplayMinChars() and BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
 function PointerToHexShort(aPointer: pointer): TShort16; overload;
+
+/// append an Instance name and pointer, as 'unit.name.TObjectList(00425E68)'
+// - used e.g. by TTextWriter.AddInstancePointer
+function PointerToText(Instance: TObject; Dest: PUtf8Char;
+  IncludeUnitName, IncludePointer: boolean): PUtf8Char;
 
 /// fast conversion from a cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
@@ -5167,40 +5173,47 @@ begin
   inc(result);
 end;
 
-procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-  IncludeUnitName, IncludePointer: boolean);
+function PointerToText(Instance: TObject; Dest: PUtf8Char;
+  IncludeUnitName, IncludePointer: boolean): PUtf8Char;
 var
-  P: PUtf8Char;
   s: PShortString;
   l: PtrInt;
 begin
-  if BEnd - B <= 255 then
-    FlushToStream;
-  P := B + 1;
   if IncludeUnitName then
   begin
     s := ClassUnit(PClass(Instance)^); // we know Instance <> nil
     if s^[0] <> #0 then
     begin
-      MoveFast(s^[1], P^, ord(s^[0]));
-      inc(P, ord(s^[0]));
-      P^ := '.';
-      inc(P);
+      MoveFast(s^[1], Dest^, ord(s^[0]));
+      inc(Dest, ord(s^[0]));
+      Dest^ := '.';
+      inc(Dest);
     end;
   end;
   s := PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^;
-  MoveFast(s^[1], P^, ord(s^[0]));
-  inc(P, ord(s^[0]));
+  MoveFast(s^[1], Dest^, ord(s^[0]));
+  inc(Dest, ord(s^[0]));
   if IncludePointer then
   begin
-    P^ := '(';
-    inc(P);
+    Dest^ := '(';
+    inc(Dest);
     l := DisplayMinChars(@Instance, SizeOf(Instance));
-    BinToHexDisplayLower(@Instance, pointer(P), l);
-    inc(P, l * 2);
-    P^ := ')';
-    inc(P);
+    BinToHexDisplayLower(@Instance, pointer(Dest), l);
+    inc(Dest, l * 2);
+    Dest^ := ')';
+    inc(Dest);
   end;
+  result := Dest;
+end;
+
+procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+  IncludeUnitName, IncludePointer: boolean);
+var
+  P: PUtf8Char;
+begin
+  if BEnd - B <= 255 then
+    FlushToStream;
+  P := PointerToText(Instance, B + 1, IncludeUnitName, IncludePointer);
   P^ := SepChar;
   if SepChar = #0 then
     dec(P);
