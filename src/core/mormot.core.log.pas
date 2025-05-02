@@ -1046,8 +1046,8 @@ type
     fFamily: TSynLogFamily;
     fWriter: TJsonWriter;
     fThreadInfo: PSynLogThreadInfo;
-    fCurrentLevel: TSynLogLevel;
-    fInternalFlags: set of (logHeaderWritten, logInitDone, logRemoteDisable);
+    fInternalFlags: set of (logHeaderWritten, logInitDone);
+    fRemoteDisableEntered: boolean;
     {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoredBackup: boolean;
     {$endif NOEXCEPTIONINTERCEPT}
@@ -5156,19 +5156,19 @@ begin
   if entervalue then
   begin
     mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-    if logRemoteDisable in fInternalFlags then
+    if fRemoteDisableEntered then
     begin
       mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
       ESynLogException.RaiseUtf8('Nested %.DisableRotemoteLog', [self]);
     end;
-    include(fInternalFlags, logRemoteDisable);
+    fRemoteDisableEntered := true;
   end
   else
   begin
-    if not (logRemoteDisable in fInternalFlags) then
+    if not fRemoteDisableEntered then
       ESynLogException.RaiseUtf8('Missing %.DisableRotemoteLog(true)', [self]);
     // DisableRemoteLog(false) -> add to events, and quit the global mutex
-    exclude(fInternalFlags, logRemoteDisable);
+    fRemoteDisableEntered := false;
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
