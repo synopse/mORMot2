@@ -553,7 +553,7 @@ type
   {$M-}
 
 type
-  /// used e.g. to serialize up to 256-bit as hexadecimal
+  /// used e.g. to serialize up to 256-bit binary as hexadecimal
   TShort64 = string[64];
   PShort64 = ^TShort64;
 
@@ -565,7 +565,7 @@ type
   TShort31 = string[31];
   PShort31 = ^TShort31;
 
-  /// used e.g. by Int64ToHttpEtag
+  /// used e.g. by TwoDigits(), ToShort(Int64) or Int64ToHttpEtag()
   TShort23 = string[23];
   PShort23 = ^TShort23;
 
@@ -582,6 +582,10 @@ type
   /// used e.g. for TTextWriter.AddShorter small text constants
   TShort8 = string[8];
   PShort8 = ^TShort8;
+
+  /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
+  // - such result type would avoid a string allocation on heap
+  TShort4 = string[4];
 
   /// stack-allocated ASCII string, used by GuidToShort() function
   TGuidShortString = string[38];
