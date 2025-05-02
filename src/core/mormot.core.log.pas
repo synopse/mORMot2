@@ -5381,6 +5381,8 @@ var
   end;
 
 begin
+  if fWriter = nil then
+    CreateLogWriter; // file creation should be thread-safe
   WithinEvents := fWriter.WrittenBytes > 0;
   // array of const is buggy under Delphi 5 :( -> use fWriter.Add*() below
   if WithinEvents then
@@ -5397,13 +5399,13 @@ begin
     AddString(Host);
     AddShorter(' User=');
     AddString(User);
-    AddShorter(' CPU=');
+    AddShort(' CPU='); // not AddShorter() for AddDirect(CpuInfoText) below
     if CpuInfoText = '' then
       Add(SystemInfo.dwNumberOfProcessors)
     else
       for i := 1 to length(CpuInfoText) do
         if not (ord(CpuInfoText[i]) in [1..32, ord(':')]) then
-          Add(CpuInfoText[i]);
+          AddDirect(CpuInfoText[i]);
     {$ifdef OSWINDOWS}
     with SystemInfo, OSVersionInfo do
     begin
@@ -5815,19 +5817,21 @@ begin
     if not fFamily.NoFile then
       // open write access to the .log file
       try
-        if fFamily.FileExistsAction = acOverwrite then
-        begin
-          DeleteFile(fFileName);
-          fWriterStream :=
-            TFileStreamNoWriteError.Create(fFileName, fmCreate or fmShareRead);
-          exclude(fInternalFlags, logHeaderWritten);
-        end
-        else
-        begin
-          fWriterStream :=
-            TFileStreamNoWriteError.CreateAndRenameIfLocked(fFileName);
-          if fWriterStream.Seek(0, soEnd) <> 0 then
-            include(fInternalFlags, logHeaderWritten); // write headers once
+        case fFamily.FileExistsAction of
+          acOverwrite:
+            begin
+              DeleteFile(fFileName);
+              fWriterStream := TFileStreamNoWriteError.Create(
+                                 fFileName, fmCreate or fmShareRead);
+              exclude(fInternalFlags, logHeaderWritten);
+            end;
+          acAppend:
+            begin
+              fWriterStream :=
+                TFileStreamNoWriteError.CreateAndRenameIfLocked(fFileName);
+              if fWriterStream.Seek(0, soEnd) <> 0 then
+                include(fInternalFlags, logHeaderWritten); // write headers once
+            end;
         end;
       except
         // continue if file creation fails (e.g. R/O folder or disk full)
