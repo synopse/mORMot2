@@ -1082,9 +1082,9 @@ type
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-      {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif}); overload;
-    procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject;
-      const fmt: RawUtf8; const args: array of const); overload;
+      {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
+    procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
+      const fmt: RawUtf8; args: PVarRec; argscount: PtrInt);
     procedure DoThreadName(ndx: PtrInt);
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -4803,16 +4803,13 @@ begin
   end;
 end;
 
-procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject;
-  const fmt: RawUtf8; const args: array of const);
+procedure TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
+  const fmt: RawUtf8; args: PVarRec; argscount: PtrInt);
 var
-  tmp: shortstring; // no heap allocation for Enter message
+  tmp: TLogEscape; // no heap allocation for Enter message (up to 512 bytes)
 begin
-  FormatShort(fmt, args, tmp);
-  if tmp[0] <> #255 then
-    inc(tmp[0]);
-  tmp[ord(tmp[0])] := #0; // ensure PUtf8Char
-  LogEnter(nfo, inst, @tmp[1]);
+  FormatBufferRaw(fmt, args, argscount, @tmp, SizeOf(tmp) - 1)^ := #0;
+  LogEnter(nfo, inst, @tmp);
 end;
 
 {$ifdef ISDELPHI} // specific to Delphi: fast get the caller method name
@@ -4883,7 +4880,7 @@ begin // expects the caller to have set Local = nil
   nfo := log.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  log.LogEnter(nfo, aInstance, TextFmt, TextArgs); // with refcnt = 1
+  log.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs));
   pointer(Local) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
@@ -4917,7 +4914,7 @@ var
 begin
   nfo := DoEnter;
   if nfo <> nil then
-    LogEnter(nfo, aInstance, TextFmt, TextArgs);
+    LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs));
 end;
 
 procedure TSynLog.ManualLeave;
