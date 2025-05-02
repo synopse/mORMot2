@@ -1297,6 +1297,13 @@ type
     // - if the debugging info is available from TDebugFile, will log the
     // unit name, associated symbol and source code line
     procedure Log(Level: TSynLogLevel); overload;
+    /// call this method to add the content of a PUtf8Char buffer
+    // - is slightly more optimized than Log(RawUtf8)
+    procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
+    /// call this method to add the content of a binary buffer with ASCII escape
+    // - will precompute up to 255 bytes of output before writing
+    procedure LogEscape(Level: TSynLogLevel; const Fmt: RawUtf8; const Args: array of const;
+      Data: pointer; DataLen: PtrInt; Instance: TObject);
     /// allows to identify the current thread with a textual representation
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
     // - entry would also be replicated at the begining of any rotated log file
@@ -5252,6 +5259,50 @@ begin
     if lasterror <> 0 then
       SetLastError(lasterror);
   end;
+end;
+
+procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
+begin
+  if (self = nil) or
+     (Text = '') or
+     not (Level in fFamily.fLevel) then
+    exit;
+  LockAndDisableExceptions;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    LogHeader(Level, Instance);
+    fWriter.AddOnSameLine(Text);
+    LogTrailer(Level);
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    {$endif NOEXCEPTIONINTERCEPT}
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  end;
+end;
+
+procedure TSynLog.LogEscape(Level: TSynLogLevel; const Fmt: RawUtf8;
+  const Args: array of const; Data: pointer; DataLen: PtrInt; Instance: TObject);
+var
+  tmp: ShortString; // efficient local buffer
+begin
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  tmp[0] := #0;
+  if Fmt <> '' then
+    tmp[0] := AnsiChar(FormatBufferRaw(Fmt, @Args[0], length(Args),
+      @tmp[1], 200) - @tmp[1]);
+  AppendShort(' len=', tmp);
+  AppendShortCardinal(DataLen, tmp);
+  AppendShortChar(' ', @tmp);
+  ContentToShortAppend(Data, DataLen, tmp); // and makes #0 terminated
+  LogText(Level, @tmp[1], Instance);
 end;
 
 {$STACKFRAMES OFF}
