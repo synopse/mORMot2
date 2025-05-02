@@ -895,7 +895,7 @@ type
     // - this is the number of bytes kept in memory before flushing to the hard
     // drive; you can call TSynLog.Flush method or set AutoFlushTimeOut > 0
     // in order to force the writing to disk
-    // - is set to 4096 by default (4 KB is the standard hard drive cluster size)
+    // - is set to 8192 by default (4KB is the standard hard drive cluster size)
     property BufferSize: integer
       read fBufferSize write fBufferSize;
     /// define how thread will be identified during logging process
@@ -933,7 +933,7 @@ type
       read fWithInstancePointer write fWithInstancePointer;
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
-    // - by default, the log file will be written for every 4 KB of log (see
+    // - by default, the log file will be written for every 8KB of log (see
     // BufferSize property) - this will ensure that the main application won't
     // be slow down by logging
     // - in order not to loose any log, a background thread can be created
@@ -973,10 +973,10 @@ type
     property RotateFileSizeKB: cardinal
       read fRotateFileSizeKB write fRotateFileSizeKB;
     /// fixed hour of the day where logging files rotation should be performed
-    // - by default, equals -1, meaning no rotation
+    // - equals -1 by default, meaning no rotation
     // - you can set a time value between 0 and 23 to force the rotation at this
     // specified local (not UTC) hour
-    // - is not used if RotateFileCount is left to its default 0
+    // - is not used if RotateFileCount is left to its default 0 value
     property RotateFileDailyAtHour: integer
       read fRotateFileDailyAtHour write fRotateFileDailyAtHour;
     /// the recursive depth of stack trace symbol to write
@@ -1068,6 +1068,7 @@ type
     end;
     fSharedThreadInfo: TSynLogThreadInfo; // for ptNoThreadProcess
     class function FamilyCreate: TSynLogFamily;
+    // TInterfacedObject methods for fake per-thread RefCnt
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGuid; out obj): TIntQry;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -1075,8 +1076,7 @@ type
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     function _Release: TIntCnt;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
-    function CurrentTimestamp: Int64;
-      {$ifdef HASINLINE}inline;{$endif}
+    // internal methods
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
@@ -3918,7 +3918,7 @@ begin
            (log.fWriter.PendingBytes > 1) then
           // write pending data
           log.Flush({forcediskwrite=}false);
-        if (tix10 shr 2 <> lasttix10 shr 2) and // check rotation every 4 seconds
+        if (tix10 shr 2 <> lasttix10 shr 2) and // check rotate every 4 seconds
            ((log.fNextFileRotateDailyTix10 <> 0) or
             (log.fFileRotationSize <> 0)) then
         begin
@@ -3926,7 +3926,7 @@ begin
           try
             if Terminated or
                SynLogFileFreeing then
-            break;
+              break;
             log.CheckRotation;
           finally
             mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -4063,7 +4063,7 @@ begin
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
   fRotateFileDailyAtHour := -1;
-  fBufferSize := 4096;
+  fBufferSize := 8192;
   fStackTraceLevel := 30;
   fWithUnitName := true;
   fWithInstancePointer := true;
@@ -4748,13 +4748,6 @@ begin
   end;
   if diskflush <> 0 then
     FlushFileBuffers(diskflush); // slow OS operation outside of the main lock
-end;
-
-function TSynLog.QueryInterface(
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid: TGuid;
-  out obj): TIntQry;
-begin
-  result := E_NOINTERFACE; // never used
 end;
 
 function TSynLog.DoEnter: PSynLogThreadInfo;
@@ -5803,8 +5796,8 @@ begin
       + [twoEnumSetsAsTextInRecord, // debug-friendly text output
          twoFullSetsAsStar,
          twoForceJsonExtended,
-         twoNoWriteToStreamException] // if TFileStreamNoWriteError is not set
-      - [twoFlushToStreamNoAutoResize]; // stick to BufferSize
+         twoNoWriteToStreamException, // if TFileStreamNoWriteError is not set
+         twoFlushToStreamNoAutoResize]; // stick to BufferSize
   end;
   // create fWriterEcho instance
   if fWriterEcho = nil then
