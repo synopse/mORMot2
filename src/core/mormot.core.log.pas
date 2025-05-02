@@ -5106,6 +5106,7 @@ begin
   else
     n := Name;
   nfo := GetThreadInfo;
+  GetCurrentTime(nfo, nil);
   ndx := nfo^.ThreadNumber - 1;
   tid := PtrUInt(GetCurrentThreadId);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -5600,14 +5601,13 @@ begin
   end;
   // initialize a brand new log file
   CreateLogWriter;
+  fThreadInfo := GetThreadInfo;
+  GetCurrentTime(fThreadInfo, nil);
   LogFileHeader;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
-  begin
-    fThreadInfo := GetThreadInfo;
     // write the current thread names as TSynLog.LogThreadName lines
     for i := 0 to fThreadCount - 1 do
       DoThreadName(i);
-  end;
 end;
 
 procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
@@ -7193,7 +7193,8 @@ end;
 
 function TSynLogFile.ThreadRows(ThreadID: integer): cardinal;
 begin
-  if fThreadInfo <> nil then
+  if (fThreadInfo <> nil) and
+     (cardinal(ThreadID) <= fThreadMax) then
     result := fThreadInfo[ThreadID].Rows
   else
     result := 0;
@@ -7242,10 +7243,9 @@ var
 begin
   result := nil;
   SetLength(result, fThreadMax);
-  if fThreadInfo = nil then
-    exit;
-  for i := 1 to fThreadMax do
-    result[i - 1] := ThreadName(i, CurrentLogIndex);
+  if fThreadInfo <> nil then
+    for i := 1 to fThreadMax do
+      result[i - 1] := ThreadName(i, CurrentLogIndex);
 end;
 
 procedure TSynLogFile.GetDays(out Days: TDateTimeDynArray);
