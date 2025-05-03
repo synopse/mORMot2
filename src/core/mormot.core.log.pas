@@ -1017,14 +1017,14 @@ type
     // - match TSynLog.fThreadIdent[ThreadNumber - 1] for ptIdentifiedInOneFile
     ThreadNumber: word;
     /// ready-to-be-written text timestamp, filled outside GlobalThreadLock
-    // - may include also the ThreadNumber with Int18ToText() format
+    // - may include also the ThreadNumber in Int18ToText() format
     // - stores up to 27 chars: padded with previous fields as 32 bytes
     CurrentTime: string[27];
     /// each thread can access to its own TSynLog instance
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
     FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
     /// used by TSynLog.Enter methods to handle recursive calls tracing
-    // - stores ISynLog.RefCnt in lowest 8-bit, then CurrentTimestamp shl 8
+    // - stores ISynLog.RefCnt in lowest 8-bit, then Current Timestamp shl 8
     // (microseconds as 56-bit do cover 2285 years before overflow)
     // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
@@ -4613,7 +4613,7 @@ begin
     if not (logInitDone in fInternalFlags) then
       LogFileInit; // executed once per process - first to setup start time
     fThreadInfo := nfo;
-    GetCurrentTime(nfo, nil);
+    GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
     if not (logHeaderWritten in fInternalFlags) then
       LogFileHeader; // executed once per file
     // append a sllNewRun line at the log file opening
@@ -4717,7 +4717,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   // append e.g. 00000000001FFF23  %  -    02.096.658
   QueryPerformanceMicroSeconds(ms);
   dec(ms, fStartTimestamp);
-  GetCurrentTime(nfo, @ms);
+  GetCurrentTime(nfo, @ms); // timestamp [+ threadnumber]
   dec(ms, PInt64(refcnt)^ shr 8); // elapsed time since Enter
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   {$ifdef HASFASTTRYFINALLY}
@@ -4837,7 +4837,7 @@ begin
   begin
     QueryPerformanceMicroSeconds(ms);
     dec(ms, fStartTimestamp);
-    GetCurrentTime(nfo, @ms);
+    GetCurrentTime(nfo, @ms); // timestamp [+ threadnumber]
     rec := ms shl 8 + {refcnt=}1;
   end
   else
@@ -5144,7 +5144,7 @@ begin
   else
     n := Name;
   nfo := GetThreadInfo;
-  GetCurrentTime(nfo, nil);
+  GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
   ndx := nfo^.ThreadNumber - 1;
   tid := PtrUInt(GetCurrentThreadId);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -5577,7 +5577,7 @@ procedure TSynLog.GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64);
 var
   st: TSynSystemTime;
   ms: Int64 absolute st;
-begin // this method is usually run outside of GlobalThreadLock
+begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   if fFamily.HighResolutionTimestamp then
   begin
     if MicroSec = nil then
@@ -5660,7 +5660,7 @@ begin
   // initialize a brand new log file
   CreateLogWriter;
   fThreadInfo := GetThreadInfo;
-  GetCurrentTime(fThreadInfo, nil);
+  GetCurrentTime(fThreadInfo, nil); // timestamp [+ threadnumber]
   LogFileHeader;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     // write the current thread names as TSynLog.LogThreadName lines
