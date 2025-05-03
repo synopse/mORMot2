@@ -3185,9 +3185,9 @@ begin
   r := c3.Encrypt(n);
   if r <> '' then // not all algorithms support encryption (RSA+ES256 only)
   begin
-    CheckEqual(c3.Decrypt(r), n, 'asym ctr');
+    CheckEqual(c3.Decrypt(r), n, 'asym ctr ' + crt.AlgoName);
     r := c3.Encrypt(n, 'aes-128-cbc');
-    CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding');
+    CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding ' + crt.AlgoName);
   end;
   s2 := GuidToRawUtf8(RandomGuid);
   Check(TrimGuid(s2));
