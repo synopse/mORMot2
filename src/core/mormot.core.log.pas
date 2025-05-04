@@ -5143,7 +5143,7 @@ begin
     n := GetCurrentThreadName
   else
     n := Name;
-  nfo := GetThreadInfo;
+  nfo := GetThreadInfo;     // may call InitThreadInfo() if first access
   GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
   ndx := nfo^.ThreadNumber - 1;
   tid := PtrUInt(GetCurrentThreadId);
@@ -5153,6 +5153,9 @@ begin
       SetLength(fThreadIdent, NextGrow(ndx));
     with fThreadIdent[ndx] do
     begin
+      if (ThreadID = tid) and
+         (ThreadName = n) then
+        exit; // already set: log once multiple identical calls
       ThreadName := n;
       ThreadID := tid;
     end;
