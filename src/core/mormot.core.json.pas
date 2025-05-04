@@ -675,8 +675,9 @@ type
   protected
     // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values
     fBlockComment: RawUtf8;
-    // used by WriteObjectAsString/AddDynArrayJsonAsString methods
+    // used by WriteObjectAsString/AddDynArrayJsonAsString/GetTempJsonWriter
     fInternalJsonWriter: TJsonWriter;
+    fLastRttiType: TRttiCustom; // AddTypedJson cache
     // called for varAny after TRttiCustomProp.GetRttiVarData
     procedure AddRttiVarData(Value: PRttiVarData; Escape: TTextWriterKind;
       WriteOptions: TTextWriterWriteObjectOptions);
@@ -6665,19 +6666,30 @@ procedure TJsonWriter.AddTypedJson(Value, TypeInfo: pointer;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
-  save: TRttiJsonSave;
+  rc: TRttiCustom;
 begin
-  {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(TypeInfo));
-  if ctxt.Info <> nil then
-  begin
-    save := ctxt.Info.JsonSave;
-    if Assigned(save) then
-      save(Value, ctxt)
+  ctxt.W := self; // inlined ctxt.Init()
+  rc := fLastRttiType;
+  repeat
+    if (rc = nil) or
+       (rc.Info <> TypeInfo) then
+    begin
+      rc := Rtti.RegisterType(TypeInfo);
+      if rc = nil then
+        break;
+      fLastRttiType := rc; // naive but efficient cache
+    end;
+    ctxt.Options := WriteOptions + TRttiJson(rc).fIncludeWriteOptions;
+    ctxt.Info := rc;
+    ctxt.Prop := nil;
+    rc := rc.JsonSave;
+    if Assigned(rc) then
+      TRttiJsonSave(rc)(Value, ctxt)
     else
       BinarySaveBase64(Value, TypeInfo, rkRecordTypes, {withMagic=}true);
-  end
-  else
-    AddNull; // paranoid check
+    exit;
+  until false;
+  AddNull; // paranoid check
 end;
 
 procedure TJsonWriter.WriteObject(Value: TObject;
