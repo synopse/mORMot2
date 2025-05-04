@@ -1927,7 +1927,7 @@ begin
           Check(hpc.Ping = nil);
           // validate THttpPeerCrypt.HttpDirectUri request encoding/decoding
           Check(THttpPeerCrypt.HttpDirectUri('secret',
-            'https://synopse.info/forum', ToText(msg.Hash), dUri, dBearer));
+            'https://synopse.info/forum', ToText(msg.Hash), dUri, dBearer), 'direct');
           CheckEqual(dUri, '/https/synopse.info/forum');
           Check(THttpPeerCrypt.HttpDirectUriReconstruct(pointer(dUri), decoded), 'reconst');
           CheckEqual(decoded.URI, 'https://synopse.info/forum');
