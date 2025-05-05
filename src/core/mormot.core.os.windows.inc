@@ -1378,14 +1378,16 @@ begin
   Windows.SetEvent(THandle(fHandle));
 end;
 
-procedure TSynEvent.WaitFor(TimeoutMS: integer);
+function TSynEvent.WaitFor(TimeoutMS: integer): boolean;
 begin
   WaitForSingleObject(THandle(fHandle), TimeoutMS);
+  result := fNotified;
 end;
 
-procedure TSynEvent.WaitForEver;
+function TSynEvent.WaitForEver: boolean;;
 begin
   WaitForSingleObject(THandle(fHandle), INFINITE);
+  result := fNotified;
 end;
 
 function TSynEvent.IsEventFD: boolean;

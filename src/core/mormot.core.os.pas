@@ -4824,13 +4824,13 @@ type
   // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API
   // - on Linux, will use eventfd() in blocking and non-semaphore mode
   // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
-  // - only limitation is that we don't know if WaitFor is signaled or timeout,
-  // but this is not a real problem in practice since most code don't need this
-  // information or has already its own flag in its implementation logic
   TSynEvent = class(TSynPersistent)
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
+    {$ifdef OSLINUX}
     fFD: integer;     // for eventfd()
+    {$endif OSLINUX}
+    fNotified: boolean;
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;
@@ -4843,12 +4843,13 @@ type
     procedure SetEvent;
       {$ifdef OSPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
-    // - does not return if it was signaled or timeout
+    // - returns true if was signaled by SetEvent, or false on timeout
     // - WARNING: you should wait from a single thread at once
-    procedure WaitFor(TimeoutMS: integer);
+    function WaitFor(TimeoutMS: integer): boolean;
       {$ifdef OSPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with no maximum time
-    procedure WaitForEver;
+    // - returns true if was signaled by SetEvent, or false if aborted/destroyed
+    function WaitForEver: boolean;
       {$ifdef OSPOSIX} inline; {$endif}
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
