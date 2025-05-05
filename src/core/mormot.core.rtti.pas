@@ -5259,6 +5259,7 @@ var
   v: PtrInt;
   u: pointer; // to avoid a global hidden try..finally
 begin
+  u := nil;
   result := true;
   case TypeInfo^.Kind of
     rkChar,
@@ -5273,27 +5274,31 @@ begin
         SetOrdProp(Instance, v);
       end;
     rkLString:
-      SetLongStrProp(Instance, Value);
-    rkWString:
-      begin
-        u := nil;
+      if (Value <> '') and
+         (PCardinal(Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
+         Assigned(Base64MagicRawDecode) and // from mormot.core.buffers
+         Base64MagicRawDecode(Value, RawByteString(u)) then
         try
-          Utf8ToWideString(pointer(Value), length(Value), WideString(u));
-          SetWideStrProp(Instance, WideString(u));
-        finally
-          WideString(u) := '';
-        end;
+          SetLongStrProp(Instance, RawByteString(u));
+        finally // a custom setter may raise an exception
+          FastAssignNew(u);
+        end
+      else
+        SetLongStrProp(Instance, Value); // fast direct assignment (common case)
+    rkWString:
+      try
+        Utf8ToWideString(pointer(Value), length(Value), WideString(u));
+        SetWideStrProp(Instance, WideString(u));
+      finally
+        WideString(u) := '';
       end;
     {$ifdef HASVARUSTRING}
     rkUString:
-      begin
-        u := nil;
-        try
-          Utf8DecodeToUnicodeString(pointer(Value), length(Value), UnicodeString(u));
-          SetUnicodeStrProp(Instance, UnicodeString(u));
-        finally
-          UnicodeString(u) := '';
-        end;
+      try
+        Utf8DecodeToUnicodeString(pointer(Value), length(Value), UnicodeString(u));
+        SetUnicodeStrProp(Instance, UnicodeString(u));
+      finally
+        UnicodeString(u) := '';
       end;
     {$endif HASVARUSTRING}
   else
