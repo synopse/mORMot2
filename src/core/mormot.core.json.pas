@@ -6716,12 +6716,14 @@ procedure TJsonWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
   Escape: TTextWriterKind; WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
-  save: TRttiJsonSave;
 begin
-  {%H-}ctxt.Init(self, WriteOptions, TRttiCustom(RttiCustom));
-  save := ctxt.Info.JsonSave;
-  if Assigned(save) then
-    save(Value, ctxt)
+  ctxt.W := self; // / inlined ctxt.Init()
+  ctxt.Options := WriteOptions + TRttiJson(RttiCustom).fIncludeWriteOptions;
+  ctxt.Info := pointer(RttiCustom);
+  ctxt.Prop := nil;
+  RttiCustom := pointer(TRttiCustom(RttiCustom).JsonSave);
+  if Assigned(RttiCustom) then
+    TRttiJsonSave(RttiCustom)(Value, ctxt)
   else
     BinarySaveBase64(Value, ctxt.Info.Info, rkAllTypes,
       {magic=}Escape <> twOnSameLine);
