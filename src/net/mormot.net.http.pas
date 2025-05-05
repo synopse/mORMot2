@@ -775,8 +775,6 @@ type
       var Value: TValuePUtf8Char): boolean;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
-    function EnsureUrlParamPosExists: PUtf8Char;
-      {$ifdef HASINLINE} inline; {$endif}
   public
     /// prepare an incoming request from a parsed THttpRequestContext
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
@@ -842,6 +840,9 @@ type
     /// retrieve and decode an URI-encoded parameter as 64-bit signed Int64
     // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
     function UrlParam(const UpperName: RawUtf8; out Value: Int64): boolean; overload;
+    /// return the raw PUtf8Char value of all URI-encoded parameters
+    function UrlParamPos: PUtf8Char;
+      {$ifdef HASINLINE} inline; {$endif}
     /// set the OutContent and OutContentType fields with the supplied JSON
     function SetOutJson(const Json: RawUtf8): cardinal; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -4560,7 +4561,7 @@ begin
   result := true;
 end;
 
-function THttpServerRequestAbstract.EnsureUrlParamPosExists: PUtf8Char;
+function THttpServerRequestAbstract.UrlParamPos: PUtf8Char;
 begin
   result := fUrlParamPos;
   if (result <> nil) or // may have been set by TUriTreeNode.LookupParam
@@ -4574,19 +4575,19 @@ end;
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: RawUtf8): boolean;
 begin
-  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
+  result := UrlDecodeParam(UrlParamPos, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: cardinal): boolean;
 begin
-  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
+  result := UrlDecodeParam(UrlParamPos, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: Int64): boolean;
 begin
-  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
+  result := UrlDecodeParam(UrlParamPos, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.SetOutJson(const Json: RawUtf8): cardinal;
