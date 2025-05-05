@@ -1011,6 +1011,7 @@ type
     // - nothing is logged above MAX_SYNLOGRECURSION to keep this record small
     RecursionCount: byte;
     /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
+    // - used only if NOEXCEPTIONINTERCEPT conditional is defined
     ExceptionIgnore: boolean;
     /// the internal number of this thread, stored as text using Int18ToChars3()
     // - match TSynLog.fThreadIdent[ThreadNumber - 1] for ptIdentifiedInOneFile
@@ -1048,9 +1049,7 @@ type
     fThreadInfo: PSynLogThreadInfo;
     fInitFlags: set of (logHeaderWritten, logInitDone);
     fRemoteDisableEntered: boolean;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    fExceptionIgnoredBackup: boolean;
-    {$endif NOEXCEPTIONINTERCEPT}
+    fExceptionIgnoredBackup: boolean; // with NOEXCEPTIONINTERCEPT conditional
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
@@ -5291,9 +5290,7 @@ begin
     {$endif ISDELPHI}
     LogTrailer(Level);
   finally
-    {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5318,9 +5315,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
@@ -5696,9 +5691,7 @@ begin
       AddErrorMessage(lasterror);
     LogTrailer(Level);
   finally
-    {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5741,9 +5734,7 @@ begin
       AddErrorMessage(lasterror);
     LogTrailer(Level);
   finally
-    {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5761,9 +5752,7 @@ begin
     fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
     LogTrailer(Level);
   finally
-    {$ifndef NOEXCEPTIONINTERCEPT}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
