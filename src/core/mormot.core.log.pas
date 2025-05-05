@@ -595,9 +595,9 @@ type
   // display per-thread logging, if needed - note that your application shall
   // always better use a thread pool (just like all mORMot servers classes do)
   // - if set to ptNoThreadProcess, no thread information is gathered, and all
-  // Enter/Leave would be merged into a single call - but it may be mandatory
-  // to use this option if TSynLog.NotifyThreadEnded is not called (e.g. from
-  // legacy code), and that your process experiment instability issues
+  // Enter/Leave would be ignored - but it may be mandatory to use this option
+  // if TSynLog.NotifyThreadEnded is not called (e.g. from legacy non-threadsafe
+  // code), and that your process experiment instability issues
   TSynLogPerThreadMode = (
     ptMergedInOneFile,
     ptOneFilePerThread,
@@ -1069,7 +1069,6 @@ type
       ThreadName: RawUtf8;
       ThreadID: PtrUInt;
     end;
-    fSharedThreadInfo: TSynLogThreadInfo; // for ptNoThreadProcess
     class function FamilyCreate: TSynLogFamily;
     // TInterfacedObject methods for fake per-thread RefCnt
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
@@ -4111,7 +4110,7 @@ begin
       if (fRotateFileCount = 0) and
          (fRotateFileSizeKB = 0) and
          (fRotateFileDailyAtHour < 0) then
-        PerThreadInfo.FileLookup[fIdent] := result
+        PerThreadInfo.FileLookup[fIdent] := result // store TSynLog in threadvar
       else
       begin
         fPerThreadLog := ptIdentifiedInOneFile; // rotation requires one file
@@ -4594,7 +4593,9 @@ begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     // setup this thread number
-    if fThreadIndexReleasedCount <> 0 then
+    if fFamily.fPerThreadLog = ptNoThreadProcess then
+      nfo^.ThreadNumber := 1 // no actual thread in this mode
+    else if fThreadIndexReleasedCount <> 0 then
     begin
       dec(fThreadIndexReleasedCount); // reuse slot after NotifyThreadEnded()
       nfo^.ThreadNumber := fThreadIndexReleased[fThreadIndexReleasedCount];
@@ -4638,17 +4639,16 @@ function TSynLog.GetThreadInfo: PSynLogThreadInfo;
 begin
   result := @PerThreadInfo; // access the threadvar
   if PInteger(result)^ = 0 then // first access time
-    if fFamily.fPerThreadLog = ptNoThreadProcess then
-      result := @fSharedThreadInfo // same context for all threads
-    else
-      InitThreadInfo(result);
+    InitThreadInfo(result);
 end;
 
 procedure TSynLog.LockAndDisableExceptions;
 var
   nfo: PSynLogThreadInfo;
 begin
-  nfo := GetThreadInfo;
+  nfo := @PerThreadInfo; // access the threadvar - inlined TSynLog.GetThreadInfo
+  if PInteger(nfo)^ = 0 then // first access time
+    InitThreadInfo(nfo);
   GetCurrentTime(nfo, nil); // syscall outside of GlobalThreadLock
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   fThreadInfo := nfo;
@@ -4682,14 +4682,12 @@ begin
   result := E_NOINTERFACE; // never used
 end;
 
-function TSynLog._AddRef: TIntCnt; // for ISynLog
+function TSynLog._AddRef: TIntCnt; // efficient ISynLog per-thread refcount
 var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
-  nfo := @PerThreadInfo; // access the threadvar
-  if PInteger(nfo)^ = 0 then // no InitThreadInfo = ptNoThreadProcess
-    nfo := @fSharedThreadInfo; // same context for all threads
+  nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo() already done
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   inc(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ = 0 then
@@ -4697,16 +4695,14 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
 end;
 
-function TSynLog._Release: TIntCnt;
+function TSynLog._Release: TIntCnt; // efficient ISynLog per-thread refcount
 var
   nfo: PSynLogThreadInfo;
   ms: Int64;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
-  nfo := @PerThreadInfo; // access the threadvar
-  if PInteger(nfo)^ = 0 then // no InitThreadInfo = ptNoThreadProcess
-    nfo := @fSharedThreadInfo; // same context for all threads
+  nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo() already done
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   dec(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ <> 0 then
@@ -4815,7 +4811,8 @@ var
 begin
   result := nil;
   if (self = nil) or
-     not (sllEnter in fFamily.fLevel) then
+     not (sllEnter in fFamily.fLevel) or
+     (fFamily.fPerThreadLog = ptNoThreadProcess) then
     exit;
   result := GetThreadInfo;
   ndx := result^.RecursionCount;
