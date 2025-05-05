@@ -4779,14 +4779,54 @@ end;
 const
   STATICFILE_PROGWAITMS = 10; // up to 16ms on Windows
 
+procedure SetAfterResponse(var ctx: TOnHttpServerAfterResponseContext;
+  req: THttpServerRequest; cs: THttpServerSocket);
+begin
+  ctx.User := pointer(req.AuthenticatedUser);
+  ctx.Method := pointer(req.Method);
+  ctx.Host := pointer(req.Host);
+  ctx.Url := pointer(req.Url);
+  ctx.Referer := pointer(cs.Http.Referer);
+  ctx.UserAgent := pointer(req.UserAgent);
+  ctx.RemoteIP := pointer(req.RemoteIP);
+  ctx.Connection := req.ConnectionID;
+  ctx.Flags := req.ConnectionFlags;
+  ctx.State := cs.Http.State;
+  ctx.StatusCode := req.RespStatus;
+  ctx.Tix64 := 0;
+  ctx.Received := cs.BytesIn;
+  ctx.Sent := cs.BytesOut;
+end;
+
+procedure DoAfterResponse(req: THttpServerRequest; cs: THttpServerSocket;
+  started: Int64);
+var
+  ctx: TOnHttpServerAfterResponseContext;
+begin
+  SetAfterResponse(ctx, req, cs);
+  QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+  dec(ctx.ElapsedMicroSec, started);
+  try
+    cs.Server.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
+  except
+    on E: Exception do // paranoid
+    begin
+      cs.Server.fOnAfterResponse := nil; // won't try again
+      if Assigned(cs.OnLog) then
+        cs.OnLog(sllWarning,
+          'Process: OnAfterResponse raised % -> disabled', [E], cs.Server);
+    end;
+  end;
+end;
+
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
+var
+  started: Int64;
 var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
-  started: Int64;
-  ctx: TOnHttpServerAfterResponseContext;
 begin
   if (ClientSock = nil) or
      (ClientSock.Http.Headers = '') or
@@ -4846,33 +4886,7 @@ begin
       ClientSock.fKeepAliveClient := false;
     // the response has been sent: handle optional OnAfterResponse event
     if Assigned(fOnAfterResponse) then
-    try
-      QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
-      dec(ctx.ElapsedMicroSec, started);
-      ctx.Connection := req.ConnectionID;
-      ctx.User := pointer(req.AuthenticatedUser);
-      ctx.Method := pointer(req.Method);
-      ctx.Host := pointer(req.Host);
-      ctx.Url := pointer(req.Url);
-      ctx.Referer := pointer(ClientSock.Http.Referer);
-      ctx.UserAgent := pointer(req.UserAgent);
-      ctx.RemoteIP := pointer(req.RemoteIP);
-      ctx.Flags := req.ConnectionFlags;
-      ctx.State := ClientSock.Http.State;
-      ctx.StatusCode := req.RespStatus;
-      ctx.Tix64 := 0;
-      ctx.Received := ClientSock.BytesIn;
-      ctx.Sent := ClientSock.BytesOut;
-      fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
-    except
-      on E: Exception do // paranoid
-      begin
-        fOnAfterResponse := nil; // won't try again
-        if Assigned(ClientSock.OnLog) then
-          ClientSock.OnLog(sllWarning,
-            'Process: OnAfterResponse raised % -> disabled', [E], self);
-      end;
-    end;
+      DoAfterResponse(req, ClientSock, started);
   finally
     req.Free;
     if Assigned(fProgressiveRequests) then
