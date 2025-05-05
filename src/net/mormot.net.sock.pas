@@ -1717,9 +1717,12 @@ type
   // mormot.lib.openssl11 unit to your project) or HTTP Proxy/Tunnel
   TCrtSocket = class
   protected
-    fSock: TNetSocket;
+    fSock: TNetSocket; // wrapper to raw socket, stored as a pointer
     fServer: RawUtf8;
     fPort: RawUtf8;
+    fFlags: set of (fAborted, fWasBind, fBodyRetrieved);
+    fSocketLayer: TNetLayer;
+    fSocketFamily: TNetFamily;
     fProxyUrl: RawUtf8;
     fRemoteIP: RawUtf8;    // set by OpenBind() or AcceptRequest() from TNetAddr
     fOpenUriFull: RawUtf8; // set by OpenUri()
@@ -1728,11 +1731,7 @@ type
     fBytesOut: Int64;
     fSecure: INetTls;
     fTimeOut: integer;
-    fWasBind, fAborted: boolean;
-    fSocketLayer: TNetLayer;
-    fSocketFamily: TNetFamily;
-    // updated by every SockSend() call
-    fSndBufLen: integer;
+    fSndBufLen: integer; // updated by every SockSend() call
     fSndBuf: RawByteString;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
@@ -1742,6 +1741,8 @@ type
     function EnsureSockSend(Len: integer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetRawSocket: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetAborted: boolean;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
@@ -2028,7 +2029,7 @@ type
     /// equals true when the Abort method has been called
     // - could be used to abort any blocking process ASAP
     property Aborted: boolean
-      read fAborted;
+      read GetAborted;
   published
     /// low-level socket type, initialized after Open() with socket
     property SocketLayer: TNetLayer
@@ -2042,7 +2043,7 @@ type
     /// IP port, initialized after Open() with port number
     property Port: RawUtf8
       read fPort;
-    /// contains Sock, but transtyped as number for log display
+    /// contains Sock, but transtyped as number for log display or low-level API
     property RawSocket: PtrInt
       read GetRawSocket;
     /// HTTP Proxy URI used for tunnelling, from Tunnel.Server/Port values
@@ -5290,6 +5291,11 @@ end;
 
 { TCrtSocket }
 
+function TCrtSocket.GetAborted: boolean;
+begin
+  result := fAborted in fFlags;
+end;
+
 function TCrtSocket.GetRawSocket: PtrInt;
 begin
   result := PtrInt(fSock);
@@ -5483,7 +5489,9 @@ begin
   ResetNetTlsContext(TLS); // TLS.Enabled is set at output if aTLS=true
   fSocketLayer := aLayer;
   fSocketFamily := nfUnknown;
-  fWasBind := doBind;
+  fFlags := [];
+  if doBind then
+    include(fFlags, fWasBind);
   if {%H-}PtrInt(aSock) <= 0 then
   begin
     // OPEN or BIND mode -> create the socket
@@ -5594,7 +5602,7 @@ function TCrtSocket.ReOpen(aTimeout: cardinal): string;
 begin
   try
     Close;
-    OpenBind(fServer, fPort, fWasBind, TLS.Enabled);
+    OpenBind(fServer, fPort, fWasBind in fFlags, TLS.Enabled);
     if SockConnected then
       result := '' // success
     else
@@ -5811,10 +5819,10 @@ begin
   QueryPerformanceMicroSeconds(start);
   {$endif SYNCRTDEBUGLOW2}
   {$ifdef OSLINUX}
-  if not fWasBind or
+  if not (fWasBind in fFlags) or
      (fPort <> '') then // no explicit shutdown necessary on Linux server side
   {$endif OSLINUX}
-    fSock.ShutdownAndClose({rdwr=}fWasBind);
+    fSock.ShutdownAndClose({rdwr=}(fWasBind in fFlags));
   {$ifdef SYNCRTDEBUGLOW2}
   QueryPerformanceMicroSeconds(stop);
   TSynLog.Add.Log(sllTrace, 'ShutdownAndClose(%): %', [fWasBind, stop-start], self);
@@ -5831,9 +5839,9 @@ end;
 procedure TCrtSocket.Abort;
 begin
   if (self = nil) or
-     fAborted then
+     (fAborted in fFlags) then
     exit;
-  fAborted := true; // global flag checked within most recv/send loops
+  include(fFlags, fAborted); // global flag checked within most recv/send loops
   if Assigned(OnLog) then
     OnLog(sllTrace, 'Abort socket=%', [fSock.Socket], self);
   if SockIsDefined then
@@ -5878,7 +5886,7 @@ begin
         dec(Length, len);
         inc(result, len);
       end;
-      if fAborted or
+      if (fAborted in fFlags) or
          (Length = 0) then
         exit; // we got everything we wanted
       if not UseOnlySockIn then
@@ -6246,7 +6254,7 @@ begin
   if SockIsDefined and
      (Buffer <> nil) and
      (Length > 0) and
-     not fAborted then
+     not (fAborted in fFlags) then
   begin
     expected := Length;
     Length := 0;
@@ -6283,7 +6291,7 @@ begin
           break;
         end;
       end;
-      if fAborted or
+      if (fAborted in fFlags) or
          (Length = expected) or
          (StopBeforeLength and
           (read <> 0) and
@@ -6293,7 +6301,7 @@ begin
          ((fSock.RecvPending(pending) = nrOk) and
           (pending > 0)) then
         continue; // no need to call WaitFor()
-      if fAborted then
+      if fAborted in fFlags then
         break;
       events := fSock.WaitFor(TimeOut, [neRead, neError], RawError); // select/poll
       if neError in events then
@@ -6308,9 +6316,9 @@ begin
         OnLog(sllTrace, 'TrySockRecv: timeout after %s', [TimeOut div 1000], self);
       res := nrTimeout;  // identify read timeout as error
       break;
-    until fAborted;
+    until fAborted in fFlags;
   end;
-  if fAborted then
+  if fAborted in fFlags then
     res := nrClosed;
   if NetResult <> nil then
     NetResult^ := res;
@@ -6355,7 +6363,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
         end
         else
           inc(P);
-    until fAborted;
+    until fAborted in fFlags;
   end;
 
 var
@@ -6395,7 +6403,7 @@ begin
   else
     repeat
       SockRecv(@c, 1);
-    until fAborted or
+    until (fAborted in fFlags) or
           (c = #10);
 end;
 
@@ -6425,7 +6433,7 @@ var
 begin
   if RawError <> nil then
     RawError^ := NO_ERROR;
-  if fAborted then
+  if fAborted in fFlags then
     res := nrClosed
   else if Len = 0 then
     res := nrOk
@@ -6452,7 +6460,7 @@ begin
         if res = nrOk then
           continue;
       end;
-      if fAborted or
+      if (fAborted in fFlags) or
          not (res in [nrOk, nrRetry]) then
         break;
       events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
@@ -6465,8 +6473,8 @@ begin
         OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
       res := nrTimeout;  // identify write timeout as error
       break;
-    until fAborted;
-    if fAborted then
+    until fAborted in fFlags;
+    if fAborted in fFlags then
       res := nrClosed;
   end;
   if NetResult <> nil then

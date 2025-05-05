@@ -257,7 +257,7 @@ const
 type
   /// maintain one partial download for THttpPartials
   THttpPartial = record
-    /// genuine positive identifier, 0 if empty/recyclable
+    /// genuine 31-bit positive identifier, 0 if empty/recyclable
     ID: THttpPartialID;
     /// the expected full size of this download
     FullSize: Int64;
@@ -274,7 +274,7 @@ type
   // - used e.g. during progressive download in THttpPeerCache
   THttpPartials = class
   protected
-    /// 32-bit monotonic counter sequence to populate THttpPartial.ID
+    /// 31-bit monotonic counter sequence to populate THttpPartial.ID
     fLastID: cardinal;
     /// how many fDownload[] are actually non void (ID <> 0)
     fUsed: cardinal;
@@ -2751,7 +2751,7 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
          [msg, fSock.Socket, FatalErrorCode, BOOL_STR[rMain in ctxt.Retry]], self);
-    if fAborted then
+    if Aborted then
       ctxt.Status := HTTP_CLIENTERROR
     else if rMain in ctxt.Retry then
       // we should retry once -> return error only if failed twice
@@ -2785,7 +2785,7 @@ begin
       fServer, fPort, ctxt.Url, ToText(Http.HeaderFlags), byte(ctxt.Retry)], self);
   end;
   Http.Content := '';
-  if fAborted then
+  if Aborted then
     ctxt.Status := HTTP_CLIENTERROR
   else if (hfConnectionClose in Http.HeaderFlags) or
           not SockIsDefined then
@@ -3050,7 +3050,7 @@ begin
     repeat
       // sub-method to handle the actual request, with proper retrial
       RequestInternal(ctxt);
-      if fAborted then
+      if Aborted then
         break;
       // handle optional (proxy) authentication callbacks
       if (ctxt.Status = HTTP_UNAUTHORIZED) and
@@ -3128,7 +3128,7 @@ begin
       else
         fRedirected := ctxt.Url;
       inc(ctxt.Redirected);
-    until fAborted;
+    until Aborted;
     if Assigned(fOnAfterRequest) then
       fOnAfterRequest(self, ctxt);
   end;

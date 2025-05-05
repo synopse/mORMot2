@@ -367,7 +367,7 @@ type
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
   public
-    // reusable buffers for internal process - do not use
+    // reusable buffers for internal process - do not access directly
     Head, Process: TRawByteStringBuffer;
     /// the current state of this HTTP context
     State: THttpRequestState;
@@ -444,7 +444,7 @@ type
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader()
     // and mapped into Compress.Algo[]
     ContentEncoding: PHttpSocketCompressRec;
-    /// the sequence ID used in rfProgressiveStatic mode
+    /// the 31-bit sequence ID used in rfProgressiveStatic mode
     // - equals 0 if disabled or aborted
     // - several THttpRequestContext could share the same ID
     ProgressiveID: THttpPartialID;
@@ -583,8 +583,7 @@ type
   // standard gzip/deflate or custom (synlz) protocols
   THttpSocket = class(TCrtSocket)
   protected
-    fBodyRetrieved: boolean;  // to call GetBody only once
-    fCompressList: THttpSocketCompressList;
+    fCompressList: THttpSocketCompressList; // two pointers
     procedure HttpStateReset; // Http.Clear + fBodyRetrieved := false
       {$ifdef HASINLINE} inline; {$endif}
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
@@ -4196,7 +4195,7 @@ end;
 procedure THttpSocket.HttpStateReset;
 begin
   Http.Reset;
-  fBodyRetrieved := false;
+  exclude(fFlags, fBodyRetrieved);
   fSndBufLen := 0;
 end;
 
@@ -4275,7 +4274,7 @@ var
   len32, err: integer;
   len64: Int64;
 begin
-  fBodyRetrieved := true;
+  include(fFlags, fBodyRetrieved);
   Http.Content := '';
   if DestStream <> nil then
     if Http.ContentEncoding <> nil then

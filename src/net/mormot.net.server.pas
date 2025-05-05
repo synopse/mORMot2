@@ -5336,7 +5336,7 @@ begin
       else
       begin
         // call from TSynThreadPoolTHttpServer -> handle first request
-        if not fServerSock.fBodyRetrieved and
+        if not (fBodyRetrieved in fServerSock.fFlags) and
            not HttpMethodWithNoBody(fServerSock.Http.CommandMethod) then
           fServerSock.GetBody;
         fServer.Process(fServerSock, ConnectionID, self);
