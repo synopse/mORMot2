@@ -536,7 +536,7 @@ type
     procedure InternalLogResponse(const aContent: RawByteString;
       const aContext: shortstring; Level: TSynLogLevel = sllServiceReturn);
     /// ease logging of method enter/leave in the context of the current TRest
-    function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
+    function Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
     /// internal method to retrieve the current Session TAuthUser.ID
     function GetCurrentSessionUserID: TID; virtual; abstract;
@@ -2072,7 +2072,7 @@ begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
     Level, '%', [aContext], pointer(aContent), length(aContent), self);
 end;
 
-function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
+function TRest.Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 begin
   result := nil;

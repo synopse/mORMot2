@@ -176,7 +176,7 @@ type
     /// milliseconds delay between sending pending frames
     // - allow to gather output frames in ProcessLoopStepSend
     // - GetTickCount64 resolution is around 16ms on Windows and 4ms on Linux,
-    // so default 10 ms value seems fine for a cross-platform similar behavior
+    // so default 10 (ms) value seems fine for a cross-platform similar behavior
     // (resulting in a <16ms period on Windows, and <12ms period on Linux)
     SendDelay: cardinal;
     /// will close the connection after a given number of invalid Heartbeat sent

@@ -1080,10 +1080,14 @@ type
     // internal methods
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
+    procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo);
+      {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
+    procedure LockAndDisableExceptions;
+      {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-      const fmt: RawUtf8; args: PVarRec; argscount: PtrInt);
+      fmt: PUtf8Char; args: PVarRec; argscount: PtrInt);
     procedure DoThreadName(threadnumber: PtrInt);
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -1110,8 +1114,6 @@ type
     procedure InitThreadInfo(nfo: PSynLogThreadInfo);
     function GetThreadInfo: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
-    procedure LockAndDisableExceptions;
-      {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
     function Instance: TSynLog;
     procedure CheckRotation;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
@@ -1209,7 +1211,7 @@ type
     // text content, after expanding the parameters like FormatUtf8()
     // - it will append the corresponding sllLeave log entry when the method ends
     // - warning: may return nil if sllEnter is not enabled for the TSynLog class
-    class function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
+    class function Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
@@ -1219,7 +1221,7 @@ type
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
-    class procedure EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
+    class procedure EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
       const TextArgs: array of const; aInstance: TObject = nil); overload;
     /// retrieve the current instance of this TSynLog class
     // - to be used for direct logging, without any Enter/Leave:
@@ -1325,7 +1327,7 @@ type
     /// manual low-level TSynLog.Enter execution without the ISynLog overhead
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
-    procedure ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
+    procedure ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
       const TextArgs: array of const); overload;
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
@@ -4721,7 +4723,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
-  begin
+  begin // direct AddMicroSec() output should not trigger any exception
   {$endif HASFASTTRYFINALLY}
     fThreadInfo := nfo;
     LogHeader(sllLeave, nil);
@@ -4826,33 +4828,39 @@ begin
     result := nil; // nothing logged above MAX_SYNLOGRECURSION
 end;
 
-procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-  {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
+procedure TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo);
 var
   ms, rec: Int64;
 begin
-  // setup recursive timing and RefCnt=1 like with _AddRef outside lock
+  // setup recursive timing with RefCnt=1 like with _AddRef outside lock
   if sllLeave in fFamily.Level then
   begin
     QueryPerformanceMicroSeconds(ms);
     dec(ms, fStartTimestamp);
     GetCurrentTime(nfo, @ms); // timestamp [+ threadnumber]
-    rec := ms shl 8 + {refcnt=}1;
+    rec := ms shl 8 + {RefCnt=}1;
   end
   else
   begin
     GetCurrentTime(nfo, nil);
-    rec := {refcnt=}1; // no timestamp needed if no sllLeave
+    rec := {RefCnt=}1; // no timestamp needed if no sllLeave
   end;
-  nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with refcnt = 1
-  // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
+  nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
+  // prepare for the actual content logging
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  fThreadInfo := nfo;
+end;
+
+procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
+  {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
+begin
+  LockAndPrepareEnter(nfo);
+  // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
-  begin
+  begin // direct txt output should not trigger any exception
   {$endif HASFASTTRYFINALLY}
-    fThreadInfo := nfo;
     LogHeader(sllEnter, inst);
     if txt <> nil then
       fWriter.AddOnSameLine(txt)
@@ -4870,12 +4878,20 @@ begin
 end;
 
 procedure TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-  const fmt: RawUtf8; args: PVarRec; argscount: PtrInt);
-var
-  tmp: TLogEscape; // no heap allocation for Enter message (up to 512 bytes)
+  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt);
 begin
-  FormatBufferRaw(fmt, args, argscount, @tmp, SizeOf(tmp) - 1)^ := #0;
-  LogEnter(nfo, inst, @tmp); // fmt processed outside of GlobalThreadLock
+  LockAndPrepareEnter(nfo);
+  fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
+  try
+    nfo^.ExceptionIgnore := true;
+    LogHeader(sllEnter, inst);
+    fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
+      [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
+    fWriterEcho.AddEndOfLine(sllEnter);
+  finally
+    nfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 {$ifdef ISDELPHI} // specific to Delphi: fast get the caller method name
@@ -4929,14 +4945,14 @@ end;
 
 {$endif ISDELPHI}
 
-class function TSynLog.Enter(const TextFmt: RawUtf8;
+class function TSynLog.Enter(TextFmt: PUtf8Char;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
 begin
   result := nil;
   EnterLocal(result, TextFmt, TextArgs, aInstance);
 end;
 
-class procedure TSynLog.EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
+class procedure TSynLog.EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
   const TextArgs: array of const; aInstance: TObject);
 var
   log: TSynLog;
@@ -4973,7 +4989,7 @@ begin
     LogEnter(nfo, aInstance, aMethodName);
 end;
 
-procedure TSynLog.ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
+procedure TSynLog.ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
   const TextArgs: array of const);
 var
   nfo: PSynLogThreadInfo;
@@ -5310,7 +5326,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
-  begin
+  begin // direct Text output should not trigger any exception
   {$endif HASFASTTRYFINALLY}
     LogHeader(Level, Instance);
     fWriter.AddOnSameLine(Text);
@@ -5598,7 +5614,7 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   end
   else
   begin
-    st.FromNow(fFamily.LocalTimestamp); // with FromGlobalTime() 16ms cache
+    FromGlobalTime(st, fFamily.LocalTimestamp); // with 16ms cache
     nfo^.CurrentTime[0] := #17;
     st.ToLogTime(@nfo^.CurrentTime[1]); // '20110325 19241502' 17 chars
     if fFamily.ZonedTimestamp then

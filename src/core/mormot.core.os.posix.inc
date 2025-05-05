@@ -798,6 +798,9 @@ const
   CLOCK_MONOTONIC_COARSE = CLOCK_MONOTONIC;
   {$endif OSFREEBSD}
 
+// most BSD systems have VDSO-like implementation via co-evolution of the kernel
+// and C runtime - https://www.freebsd.org/status/report-2021-10-2021-12/vdso/
+
 function clock_gettime(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_gettime';
 
