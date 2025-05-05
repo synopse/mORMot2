@@ -415,7 +415,8 @@ type
   // on client side, e.g. to 53-bit range in JavaScript: you could define
   // woIDAsIDstr to append an additional "ID_str":"##########" field
   // - by default, RawBlob properties are serialized as null, unless
-  // woRawBlobAsBase64 is defined or a custom serialization is used (e.g. TOrm)
+  // woRawBlobAsBase64/woRawByteStringAsBase64Magic are defined or a custom
+  // serialization is used (e.g. TOrm)
   // - if woHideSensitivePersonalInformation is set, rcfSpi types (e.g. the
   // TObjectWithPassword.Password field) will be serialized as "***"
   // to prevent security issues (e.g. in log)
@@ -445,6 +446,7 @@ type
     woTimeLogAsText,
     woIDAsIDstr,
     woRawBlobAsBase64,
+    woRawByteStringAsBase64Magic,
     woHideSensitivePersonalInformation,
     woObjectListWontStoreClassName,
     woDontStoreInherited,
