@@ -37,6 +37,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.datetime,
+  mormot.core.variants,
   mormot.core.zip,
   mormot.core.log,
   mormot.core.search,
@@ -415,6 +416,8 @@ type
     // - to be used in conjunction with a HTTP_ASYNCRESPONSE internal status code
     // - raise an EHttpServer exception if async responses are not available
     function AsyncHandle: TConnectionAsyncHandle;
+    /// save the URI parameters (or POST content) as a TDocVariant
+    procedure ToDocVariant(out Dest: TDocVariantData);
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
@@ -3345,6 +3348,19 @@ begin
     EHttpServer.RaiseUtf8('% has no async response support', [fServer]);
 end;
 
+procedure THttpServerRequest.ToDocVariant(out Dest: TDocVariantData);
+begin
+  if (UrlParamPos = nil) and
+     (fInContent <> '') then
+    Dest.InitJson(fInContent, JSON_FAST)      // values from JSON body
+  else
+    Dest.InitFromUrl(UrlParamPos, JSON_FAST); // values from URI parameters
+  Dest.AddValueFromText('url', fUrl);
+  Dest.AddValueFromText('method', fMethod);
+  if fInContent <> '' then
+    Dest.AddValueFromText('content', fInContent);
+end;
+
 {$ifdef USEWININET}
 
 function THttpServerRequest.GetFullUrl: SynUnicode;
@@ -3496,6 +3512,7 @@ begin
   else
   begin
     if Assigned(Ctxt.ConnectionThread) and
+       Assigned(fOnThreadStart) and
        Ctxt.ConnectionThread.InheritsFrom(TSynThread) and
        (not Assigned(TSynThread(Ctxt.ConnectionThread).StartNotified)) then
       NotifyThreadStart(TSynThread(Ctxt.ConnectionThread));
