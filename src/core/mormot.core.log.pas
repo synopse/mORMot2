@@ -1047,7 +1047,7 @@ type
     fFamily: TSynLogFamily;
     fWriter: TJsonWriter;
     fThreadInfo: PSynLogThreadInfo;
-    fInternalFlags: set of (logHeaderWritten, logInitDone);
+    fInitFlags: set of (logHeaderWritten, logInitDone);
     fRemoteDisableEntered: boolean;
     {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoredBackup: boolean;
@@ -4607,16 +4607,16 @@ begin
       inc(fThreadCount);
       nfo^.ThreadNumber := fThreadCount;
     end;
-    // check if the log file needs to be initialized
-    if fInternalFlags * [logHeaderWritten, logInitDone] <> [] then
-      exit;
-    if not (logInitDone in fInternalFlags) then
-      LogFileInit; // executed once per process - first to setup start time
+    // initialize the associated log file if needed
+    if fInitFlags = [logHeaderWritten, logInitDone] then
+      exit; // most common case
+    if not (logInitDone in fInitFlags) then
+      LogFileInit; // run once per process, to set start time (should be first)
     fThreadInfo := nfo;
     GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
-    if not (logHeaderWritten in fInternalFlags) then
-      LogFileHeader; // executed once per file
-    // append a sllNewRun line at the log file opening
+    if not (logHeaderWritten in fInitFlags) then
+      LogFileHeader; // executed once per file - not needed in acAppend mode
+    // append a sllNewRun line at the log file (re)opening
     LogHeader(sllNewRun, nil);
     fWriter.AddString(Executable.ProgramName);
     fWriter.AddDirect(' ');
@@ -5381,7 +5381,7 @@ end;
 
 procedure TSynLog.LogFileInit;
 begin
-  include(fInternalFlags, logInitDone);
+  include(fInitFlags, logInitDone);
   // setup proper timing for this log instance
   QueryPerformanceMicroSeconds(fStartTimestamp);
   if fFamily.FileExistsAction = acAppend then
@@ -5529,7 +5529,7 @@ begin
     fWriterEcho.EchoReset; // header is not to be sent to console
     fStreamPositionAfterHeader := fWriter.WrittenBytes;
   end;
-  include(fInternalFlags, logHeaderWritten);
+  include(fInitFlags, logHeaderWritten);
 end;
 
 procedure TSynLog.AddMemoryStats;
@@ -5831,14 +5831,14 @@ begin
               DeleteFile(fFileName);
               fWriterStream := TFileStreamNoWriteError.Create(
                                  fFileName, fmCreate or fmShareRead);
-              exclude(fInternalFlags, logHeaderWritten);
+              exclude(fInitFlags, logHeaderWritten);
             end;
           acAppend:
             begin
               fWriterStream :=
                 TFileStreamNoWriteError.CreateAndRenameIfLocked(fFileName);
               if fWriterStream.Seek(0, soEnd) <> 0 then
-                include(fInternalFlags, logHeaderWritten); // write headers once
+                include(fInitFlags, logHeaderWritten); // write headers once
             end;
         end;
       except
