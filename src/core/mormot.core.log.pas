@@ -1014,11 +1014,12 @@ type
     // - used only if NOEXCEPTIONINTERCEPT conditional is defined
     ExceptionIgnore: boolean;
     /// the internal number of this thread, stored as text using Int18ToChars3()
-    // - match TSynLog.fThreadIdent[ThreadNumber - 1] for ptIdentifiedInOneFile
+    // - see TSynLog.fThreadIdent[ThreadNumber - 1] for ptIdentifiedInOneFile
+    // - always equal 1 in ptNoThreadProcess mode
     ThreadNumber: word;
     /// ready-to-be-written text timestamp, filled outside GlobalThreadLock
-    // - may include also the ThreadNumber in Int18ToText() format
-    // - stores up to 27 chars: padded with previous fields as 32 bytes
+    // - ptIdentifiedInOneFile appends the ThreadNumber in Int18ToText() format
+    // - can store up to 27 chars: padded with previous fields as 32 bytes
     CurrentTime: string[27];
     /// each thread can access to its own TSynLog instance
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
@@ -4567,9 +4568,11 @@ begin
   nfo := @PerThreadInfo;
   num := nfo^.ThreadNumber;
   if num = 0 then
-    exit; // not touched by TSynLog, or called twice
+    exit; // not touched yet by TSynLog, or called twice
   nfo^.ThreadNumber := 0;
-  if self = nil then
+  nfo^.ExceptionIgnore := true; // paranoid
+  if (self = nil) or
+     (fFamily.fPerThreadLog = ptNoThreadProcess) then
     exit;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
@@ -4593,7 +4596,7 @@ begin
   try
     // setup this thread number
     if fFamily.fPerThreadLog = ptNoThreadProcess then
-      nfo^.ThreadNumber := 1 // no actual thread in this mode
+      nfo^.ThreadNumber := 1 // no actual thread tracking in this mode
     else if fThreadIndexReleasedCount <> 0 then
     begin
       dec(fThreadIndexReleasedCount); // reuse slot after NotifyThreadEnded()
@@ -4810,7 +4813,7 @@ var
 begin
   result := nil;
   if (self = nil) or
-     not (sllEnter in fFamily.fLevel) or
+     (not (sllEnter in fFamily.fLevel)) or // void operation
      (fFamily.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
     exit;
   result := GetThreadInfo;
