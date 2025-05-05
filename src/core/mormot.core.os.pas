@@ -3845,7 +3845,7 @@ function RetrieveSystemTimesText: TShort23;
 function RetrieveLoadAvg: TShort23;
   {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
-/// a shorter version of GetSystemInfoText
+/// a shorter version of GetSystemInfoText, used e.g. by TSynLogFamily.LevelSysInfo
 // - 'ncores avg1 avg5 avg15 [updays] used/totalram [used/totalswap] osint32' on POSIX,
 // or 'ncores user kern [updays] used/totalram [used/totalswap] osint32' on Windows
 procedure RetrieveSysInfoText(out text: ShortString);

@@ -596,8 +596,8 @@ type
   // always better use a thread pool (just like all mORMot servers classes do)
   // - if set to ptNoThreadProcess, no thread information is gathered, and all
   // Enter/Leave would be ignored - but it may be mandatory to use this option
-  // if TSynLog.NotifyThreadEnded is not called (e.g. from legacy non-threadsafe
-  // code), and that your process experiment instability issues
+  // if TSynLog.NotifyThreadEnded is not properly called (e.g. from legacy code)
+  // and that your process has thread-related instability issues
   TSynLogPerThreadMode = (
     ptMergedInOneFile,
     ptOneFilePerThread,
@@ -901,9 +901,8 @@ type
     property BufferSize: integer
       read fBufferSize write fBufferSize;
     /// define how thread will be identified during logging process
-    // - by default, ptMergedInOneFile will indicate that all threads are logged
-    // in the same file, in occurrence order (so multi-thread process on server
-    // side may be difficult to interpret)
+    // - by default, ptIdentifiedInOneFile will indicate that all threads are
+    // logged in the same file with proper identification after the timestamp
     // - if RotateFileCount and RotateFileSizeKB/RotateFileDailyAtHour are set,
     // will be ignored (internal thread list shall be defined for one process)
     property PerThreadLog: TSynLogPerThreadMode
@@ -4057,7 +4056,7 @@ begin
   fSynLogClass := aSynLog;
   if length(SynLogFamily) >= MAX_SYNLOGFAMILY then
     ESynLogException.RaiseUtf8('%.Create(%): too many classes', [self, aSynLog]);
-  fIdent := ObjArrayAdd(SynLogFamily, self);
+  fIdent := ObjArrayAdd(SynLogFamily, self); // index of this TSynLogClass
   fDestinationPath := Executable.ProgramFilePath;
   // use .exe path by default - no [idwExcludeWinSys] needed here
   if not IsDirectoryWritable(fDestinationPath) then
@@ -4075,6 +4074,7 @@ begin
   fEchoToConsoleBackground := true; // big speed-up on Windows
   {$endif OSWINDOWS}
   fExceptionIgnore := TSynList.Create;
+  fPerThreadLog := ptIdentifiedInOneFile; // most convenient default layout
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS,
                        sllError, sllFail, sllLastError, sllDDDError];
   fLevelSysInfo := [sllException, sllExceptionOS, sllLastError, sllNewRun];
@@ -4812,7 +4812,7 @@ begin
   result := nil;
   if (self = nil) or
      not (sllEnter in fFamily.fLevel) or
-     (fFamily.fPerThreadLog = ptNoThreadProcess) then
+     (fFamily.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
     exit;
   result := GetThreadInfo;
   ndx := result^.RecursionCount;
@@ -5591,7 +5591,7 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   begin
     if MicroSec = nil then
     begin
-      QueryPerformanceMicroSeconds(ms);
+      QueryPerformanceMicroSeconds(ms); // fast syscall or VDSO 
       dec(ms, fStartTimestamp);
       MicroSec := @ms;
     end;
@@ -5600,9 +5600,9 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   end
   else
   begin
-    st.FromNow(fFamily.LocalTimestamp);
+    st.FromNow(fFamily.LocalTimestamp); // with FromGlobalTime() 16ms cache
     nfo^.CurrentTime[0] := #17;
-    st.ToLogTime(@nfo^.CurrentTime[1]);
+    st.ToLogTime(@nfo^.CurrentTime[1]); // '20110325 19241502' 17 chars
     if fFamily.ZonedTimestamp then
       AppendShortChar('Z', @nfo^.CurrentTime);
   end;

@@ -385,7 +385,7 @@ type
     // - on success, move P^ just after the date, and return TRUE
     function ParseFromText(var P: PUtf8Char): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// fill fields with the current UTC/local date, using a 8-16ms thread-safe cache
+    /// fill fields with the current UTC/local date, using a 16ms thread-safe cache
     procedure FromNow(localtime: boolean = false);
     /// fill fields with the supplied date
     procedure FromDate(date: TDate);
@@ -460,13 +460,13 @@ type
     function IsDateEqual(const date: TSynDate): boolean;
     /// internal method used by TSynTimeZone
     function EncodeForTimeChange(const aYear: word): TDateTime;
-    /// fill fields with the current UTC time, using a 8-16ms thread-safe cache
+    /// fill fields with the current UTC time, using a 16ms thread-safe cache
     procedure FromNowUtc;
       {$ifdef HASINLINE}inline;{$endif}
-    /// fill fields with the current Local time, using a 8-16ms thread-safe cache
+    /// fill fields with the current Local time, using a 16ms thread-safe cache
     procedure FromNowLocal;
       {$ifdef HASINLINE}inline;{$endif}
-    /// fill fields with the current UTC or local time, using a 8-16ms thread-safe cache
+    /// fill fields with the current UTC or local time, using a 16ms thread-safe cache
     procedure FromNow(localtime: boolean);
       {$ifdef HASINLINE}inline;{$endif}
     /// fill fields from the given value - but not DayOfWeek
@@ -1933,7 +1933,7 @@ var
   GlobalTime: array[boolean] of packed record
     safe: TLightLock; // better than RCU
     time: TSystemTime;
-    clock: cardinal;  // avoid slower API call with 8-16ms loss of precision
+    clock: cardinal;  // avoid slower API call with 16ms loss of precision
     _pad: array[1 .. 64 - SizeOf(TLightLock) - SizeOf(TSystemTime) - 4] of byte;
   end;
 
@@ -1949,7 +1949,7 @@ begin
   with GlobalTime[LocalTime] do
     if clock <> tix then // recompute every 16 ms
     begin
-      clock := tix;
+      clock := tix; // can be set first thanks to safe.Lock below
       NewTime.Clear;
       if LocalTime then
         GetLocalTime(newtimesys)
@@ -1968,7 +1968,7 @@ begin
     else
     begin
       safe.Lock;
-      newtimesys := time;
+      newtimesys := time; // fast copy last decoded value from cache
       safe.UnLock;
     end;
 end;
