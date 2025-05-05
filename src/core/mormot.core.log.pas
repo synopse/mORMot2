@@ -5113,9 +5113,9 @@ end;
 
 procedure TSynLog.DoThreadName(threadnumber: PtrInt);
 var
-  pthrdnum: PUtf8Char;
+  pthrdnum: PUtf8Char; // to overwrite threadnumber text
   bak: cardinal;
-begin
+begin // called only in ptIdentifiedInOneFile mode
   with fThreadIdent[threadnumber - 1] do
   begin
     if ThreadID = 0 then
@@ -5123,14 +5123,14 @@ begin
     pthrdnum := @fThreadInfo^.CurrentTime; // in two steps for better codegen
     pthrdnum := @pthrdnum[ord(pthrdnum[0]) - 2];
     bak := PCardinal(pthrdnum)^;
-    Int18ToText(threadnumber, pthrdnum); // overwrite threadnumber text
+    Int18ToText(threadnumber, pthrdnum);
     LogHeader(sllInfo, nil);
     fWriter.AddShort('SetThreadName ');
     fWriter.AddPointer(ThreadID);  // as hexadecimal
     fWriter.AddDirect(' ');
     fWriter.AddU(ThreadID);        // as decimal
     fWriter.AddDirect('=');
-    fWriter.AddString(ThreadName); // as text name
+    fWriter.AddOnSameLine(pointer(ThreadName)); // as text name
   end;
   fWriterEcho.AddEndOfLine(sllInfo);
   PCardinal(pthrdnum)^ := bak;
