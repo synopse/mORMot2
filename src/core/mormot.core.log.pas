@@ -3187,7 +3187,7 @@ begin
   MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
   if not FileExists(MabFile) then
     if not IsDirectoryWritable(ExtractFilePath(MabFile)) then
-      // (do not include [idwExcludeWinSys] because if we can as admin then OK)
+      // (do not include [idwExcludeWinSys] because if we can as admin then fine)
       // read/only exe folder -> store .mab in local non roaming user folder
       MabFile := GetSystemPath(spUserData) + ExtractFileName(Mabfile);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -3196,23 +3196,26 @@ begin
     MabAge := FileAgeToUnixTimeUtc(MabFile);
     if (MapAge > 0) and
        (MabAge < MapAge) then
-    begin
       // recompute from .map/.dbg if no faster-to-load .mab available
-      GenerateFromMapOrDbg(DebugToConsole);
-      fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
-      fUnits.Capacity := fUnitsCount;
-      for i := 0 to fUnitsCount - 2 do
-        if fUnit[i].Symbol.Stop = 0 then
-          fUnit[i].Symbol.Stop := fUnit[i + 1].Symbol.Start - 1;
-      if fUnitsCount <> 0 then // wild guess of the last unit end of code
-        with fUnit[fUnitsCount - 1] do
-          if Symbol.Stop = 0 then
-            if Addr <> nil then
-              // units may overlap with .inc -> use Addr[]
-              Symbol.Stop := Addr[high(Addr)] + 64
-            else
-              Symbol.Stop := Symbol.Start;
-    end;
+      try
+        GenerateFromMapOrDbg(DebugToConsole);
+        fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
+        fUnits.Capacity := fUnitsCount;
+        for i := 0 to fUnitsCount - 2 do
+          if fUnit[i].Symbol.Stop = 0 then
+            fUnit[i].Symbol.Stop := fUnit[i + 1].Symbol.Start - 1;
+        if fUnitsCount <> 0 then // wild guess of the last unit end of code
+          with fUnit[fUnitsCount - 1] do
+            if Symbol.Stop = 0 then
+              if Addr <> nil then
+                // units may overlap with .inc -> use Addr[]
+                Symbol.Stop := Addr[high(Addr)] + 64
+              else
+                Symbol.Stop := Symbol.Start;
+      except
+        fSymbols.ClearSafe;
+        fUnits.ClearSafe;
+      end;
     // search for a .mab file matching the running .exe/.dll name
     if (fSymbolsCount = 0) and
        (MabAge <> 0) then
@@ -3233,8 +3236,8 @@ begin
         if fSymbol[i].Start <= fSymbol[i - 1].Stop then
         begin
           // on Delphi, there should be no overlap
-          fUnits.Clear;
-          fSymbols.Clear;
+          fUnits.ClearSafe;
+          fSymbols.ClearSafe;
           exit;
         end;
       {$endif ISDELPHI}
