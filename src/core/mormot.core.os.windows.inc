@@ -1384,7 +1384,7 @@ begin
   result := fNotified;
 end;
 
-function TSynEvent.WaitForEver: boolean;;
+function TSynEvent.WaitForEver: boolean;
 begin
   WaitForSingleObject(THandle(fHandle), INFINITE);
   result := fNotified;

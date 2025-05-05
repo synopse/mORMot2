@@ -1387,6 +1387,17 @@ const
 function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 function ToText(state: THttpServerExecuteState): PShortString; overload;
 
+/// create an ephemeral socket-based HTTP Server, for a single request
+// - typical usage is for Single-Sign On credential entering
+// - raise an Exception on binding error
+// - returns false on timeout
+// - returns true on success, with encoded parameters as aParams - and the
+// received URI/Method/Content as aParams.U['uri'/'method'/'content']
+function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
+  aTimeOutSecs: integer = 60; const aResponse: RawUtf8 = 'You can close this window.';
+  aMethods: TUriMethods = [mGET, mPOST]): boolean;
+
+
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
 
@@ -5451,6 +5462,79 @@ end;
 function ToText(state: THttpServerExecuteState): PShortString;
 begin
   result := GetEnumName(TypeInfo(THttpServerExecuteState), ord(state));
+end;
+
+
+{ THttpServerEphemeral }
+
+type
+  THttpServerEphemeral = class(THttpServer)
+  protected
+    fResponse: RawUtf8;
+    fParams: PDocVariantData;
+    fMethod: TUriMethods;
+    fDone: TSynEvent;
+    fReceived: TSynEvent;
+    function OnEphemeral(Ctxt: THttpServerRequestAbstract): cardinal;
+    procedure OnResponded(var Context: TOnHttpServerAfterResponseContext);
+  public
+    constructor Create(const aPort, aResponse: RawUtf8; aParams: PDocVariantData;
+      aMethod: TUriMethods); reintroduce;
+    destructor Destroy; override;
+  end;
+
+constructor THttpServerEphemeral.Create(const aPort, aResponse: RawUtf8;
+  aParams: PDocVariantData; aMethod: TUriMethods);
+begin
+  fResponse := aResponse;
+  fParams := aParams;
+  fMethod := aMethod;
+  fOnRequest := OnEphemeral;
+  fOnAfterResponse := OnResponded;
+  fReceived := TSynEvent.Create;
+  inherited Create(aPort, nil, nil, 'ephemeral', {threadpool=}-1);
+end;
+
+destructor THttpServerEphemeral.Destroy;
+begin
+  inherited Destroy;
+  fReceived.Free; 
+end;
+
+function THttpServerEphemeral.OnEphemeral(Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  m: TUriMethod;
+begin
+  m := ToMethod(Ctxt.Method);
+  if m in fMethod then
+  begin
+    if fParams <> nil then
+      THttpServerRequest(Ctxt).ToDocVariant(fParams^);
+    Ctxt.OutContent := fResponse;
+    result := HTTP_SUCCESS;
+  end
+  else
+    result := HTTP_NOTALLOWED;
+end;
+
+procedure THttpServerEphemeral.OnResponded(var Context: TOnHttpServerAfterResponseContext);
+begin
+  fReceived.SetEvent; // response sent: we can shutdown the server
+end;
+
+
+function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
+  aTimeOutSecs: integer; const aResponse: RawUtf8; aMethods: TUriMethods): boolean;
+var
+  server: THttpServerEphemeral;
+begin
+  aParams.Clear;
+  server := THttpServerEphemeral.Create(aPort, aResponse, @aParams, aMethods);
+  try
+    result := server.fReceived.WaitForSafe(aTimeOutSecs shl MilliSecsPerSecShl);
+  finally
+    server.Free;
+  end;
 end;
 
 
