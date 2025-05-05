@@ -5290,7 +5290,7 @@ begin
     Ctxt.W.AddNull
   else
   begin
-    Ctxt.W.Add('"'); // no magic trailer as with mORMot 1
+    Ctxt.W.Add('"'); // woRawBlobAsBase64 has no magic trailer as with mORMot 1
     Ctxt.W.WrBase64(pointer(Data^), length(Data^),
       {withmagic=} woRawByteStringAsBase64Magic in Ctxt.Options);
     Ctxt.W.AddDirect('"');

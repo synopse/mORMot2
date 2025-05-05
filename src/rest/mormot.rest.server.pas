@@ -7586,14 +7586,17 @@ var
 begin
   tc := fStats.NotifyThreadCount(-1);
   id := GetCurrentThreadId;
+  // log thread finalization
   if Sender = nil then
     ERestException.RaiseUtf8('%.EndCurrentThread(nil)', [self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ''%'' ThreadCount=%',
-    [PClass(Sender)^, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
+    [PClass(Sender)^, PointerToHexShort({%H-}pointer(id)),
+     CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
     ERestException.RaiseUtf8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
       [self, Sender, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
+  // cleanup services: remove sicPerThread instances and RunningThread instance
   if Services <> nil then
   begin
     inst.InstanceID := PtrUInt(id);
