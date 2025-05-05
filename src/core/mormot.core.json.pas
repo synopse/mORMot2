@@ -6377,11 +6377,18 @@ begin
         twOnSameLine:
           AddOnSameLine(PUtf8Char(P), 0); // faster with no Len
       end;
-    CP_RAWBYTESTRING: // direct write of RawByteString content as UTF-8
-      Add(PUtf8Char(P), Len, Escape);
-    CP_UTF16:         // direct write of UTF-16 content
+    CP_RAWBYTESTRING:
+      if not IsBase64(P, Len) and
+         IsValidUtf8NotVoid(PUtf8Char(P), Len) then
+        Add(PUtf8Char(P), Len, Escape) // dectected pure UTF-8 content
+      else
+      begin
+        AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
+        WrBase64(P, Len, {withMagic=}false);
+      end;
+    CP_UTF16:   // direct write of UTF-16 content
       AddW(PWord(P), 0, Escape);
-    CP_RAWBLOB:       // RawBlob written with Base64 encoding
+    CP_RAWBLOB: // RawBlob are always written with Base64 encoding
       begin
         AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
         WrBase64(P, Len, {withMagic=}false);
