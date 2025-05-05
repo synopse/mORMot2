@@ -4876,7 +4876,7 @@ var
   tmp: TLogEscape; // no heap allocation for Enter message (up to 512 bytes)
 begin
   FormatBufferRaw(fmt, args, argscount, @tmp, SizeOf(tmp) - 1)^ := #0;
-  LogEnter(nfo, inst, @tmp);
+  LogEnter(nfo, inst, @tmp); // fmt processed outside of GlobalThreadLock
 end;
 
 {$ifdef ISDELPHI} // specific to Delphi: fast get the caller method name
@@ -5588,6 +5588,7 @@ procedure TSynLog.GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64);
 var
   st: TSynSystemTime;
   ms: Int64 absolute st;
+  p: PUtf8Char;
 begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   if fFamily.HighResolutionTimestamp then
   begin
@@ -5610,7 +5611,8 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   end;
   if fFamily.fPerThreadLog <> ptIdentifiedInOneFile then
     exit;
-  Int18ToText(nfo^.ThreadNumber, @nfo^.CurrentTime[ord(nfo^.CurrentTime[0]) + 1]);
+  p := @nfo.CurrentTime;
+  Int18ToText(nfo^.ThreadNumber, @p[ord(p[0]) + 1]);
   inc(nfo^.CurrentTime[0], 3);
 end;
 
