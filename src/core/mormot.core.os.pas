@@ -4851,6 +4851,9 @@ type
     // - returns true if was signaled by SetEvent, or false if aborted/destroyed
     function WaitForEver: boolean;
       {$ifdef OSPOSIX} inline; {$endif}
+    /// wait until SetEvent is called, calling CheckSynchronize() on main thread
+    // - returns true if was signaled by SetEvent, or false on timeout
+    function WaitForSafe(TimeoutMS: integer): boolean;
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
     /// could be used to tune your algorithm if the eventfd() API is used
@@ -10760,6 +10763,23 @@ begin
         exit;
       result := GetTickCount64;
     until result >= endtix;
+end;
+
+function TSynEvent.WaitForSafe(TimeoutMS: integer): boolean;
+var
+  endtix: Int64;
+begin
+  if GetCurrentThreadID = MainThreadID then
+  begin
+    endtix := GetTickCount64 + TimeoutMS shl MilliSecsPerSecShl;
+    repeat
+      CheckSynchronize(1); // make UI responsive enough
+    until WaitFor(10) or
+          (GetTickCount64 > endtix);
+    result := fNotified;
+  end
+  else
+    result := WaitFor(TimeoutMS);
 end;
 
 
