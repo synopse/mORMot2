@@ -1086,7 +1086,7 @@ type
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
       const fmt: RawUtf8; args: PVarRec; argscount: PtrInt);
-    procedure DoThreadName(ndx: PtrInt);
+    procedure DoThreadName(threadnumber: PtrInt);
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
@@ -4582,7 +4582,7 @@ begin
         ThreadName := '';
         ThreadID := 0;
       end;
-    // mark to be recycled by InitThreadInfo
+    // mark number to be recycled by InitThreadInfo
     AddWord(fThreadIndexReleased, fThreadIndexReleasedCount, num);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
@@ -5112,12 +5112,19 @@ begin
     DoLog(LinesToLog);
 end;
 
-procedure TSynLog.DoThreadName(ndx: PtrInt);
+procedure TSynLog.DoThreadName(threadnumber: PtrInt);
+var
+  pthrdnum: PUtf8Char;
+  bak: cardinal;
 begin
-  with fThreadIdent[ndx] do
+  with fThreadIdent[threadnumber - 1] do
   begin
     if ThreadID = 0 then
-      exit;
+      exit; // paranoid
+    pthrdnum := @fThreadInfo^.CurrentTime; // in two steps for better codegen
+    pthrdnum := @pthrdnum[ord(pthrdnum[0]) - 2];
+    bak := PCardinal(pthrdnum)^;
+    Int18ToText(threadnumber, pthrdnum); // overwrite threadnumber text
     LogHeader(sllInfo, nil);
     fWriter.AddShort('SetThreadName ');
     fWriter.AddPointer(ThreadID);  // as hexadecimal
@@ -5127,13 +5134,14 @@ begin
     fWriter.AddString(ThreadName); // as text name
   end;
   fWriterEcho.AddEndOfLine(sllInfo);
+  PCardinal(pthrdnum)^ := bak;
 end;
 
 procedure TSynLog.LogThreadName(const Name: RawUtf8);
 var
   n: RawUtf8;
   nfo: PSynLogThreadInfo;
-  ndx, tid: PtrUInt;
+  num, tid: PtrUInt;
 begin
   if (self = nil) or
      (fFamily.fPerThreadLog <> ptIdentifiedInOneFile) or
@@ -5144,23 +5152,23 @@ begin
   else
     n := Name;
   nfo := GetThreadInfo;     // may call InitThreadInfo() if first access
-  GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
-  ndx := nfo^.ThreadNumber - 1;
+  GetCurrentTime(nfo, nil); // timestamp + threadnumber
+  num := nfo^.ThreadNumber;
   tid := PtrUInt(GetCurrentThreadId);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
-    if ndx >= PtrUInt(length(fThreadIdent)) then
-      SetLength(fThreadIdent, NextGrow(ndx));
-    with fThreadIdent[ndx] do
+    if num > PtrUInt(length(fThreadIdent)) then
+      SetLength(fThreadIdent, NextGrow(num));
+    with fThreadIdent[num - 1] do
     begin
       if (ThreadID = tid) and
          (ThreadName = n) then
-        exit; // already set: log once multiple identical calls
+        exit; // already set: log once identical information
       ThreadName := n;
       ThreadID := tid;
     end;
     fThreadInfo := nfo;
-    DoThreadName(ndx);
+    DoThreadName(num);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -5667,7 +5675,7 @@ begin
   LogFileHeader;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     // write the current thread names as TSynLog.LogThreadName lines
-    for i := 0 to fThreadCount - 1 do
+    for i := 1 to fThreadCount do
       DoThreadName(i);
 end;
 
