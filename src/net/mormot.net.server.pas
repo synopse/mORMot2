@@ -1395,8 +1395,9 @@ function ToText(state: THttpServerExecuteState): PShortString; overload;
 // - returns true on success, with encoded parameters as aParams - and the
 // received URL/Method/Content values as aParams.U['url'/'method'/'content']
 function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
-  aTimeOutSecs: integer = 60; const aResponse: RawUtf8 = 'You can close this window.';
-  aMethods: TUriMethods = [mGET, mPOST]): boolean;
+  aTimeOutSecs: integer = 60; aLogClass: TSynLogClass = nil;
+  const aResponse: RawUtf8 = 'You can close this window.';
+  aMethods: TUriMethods = [mGET, mPOST]; aOptions: THttpServerOptions = []): boolean;
 
 
 
@@ -4727,6 +4728,9 @@ begin
         try
           cltservsock := fSocketClass.Create(self);
           try
+            if (fLogClass <> nil) and
+               (hsoLogVerbose in fOptions) then
+              cltservsock.OnLog := fLogClass.DoLog;
             cltservsock.AcceptRequest(cltsock, @cltaddr);
             if hsoEnableTls in fOptions then
               cltservsock.DoTlsAfter(cstaAccept);
@@ -5482,21 +5486,23 @@ type
     fReceived: TSynEvent;
   public
     constructor Create(const aPort, aResponse: RawUtf8; aParams: PDocVariantData;
-      aMethod: TUriMethods); reintroduce;
+      aLogClass: TSynLogClass; aMethod: TUriMethods; aOptions: THttpServerOptions); reintroduce;
     destructor Destroy; override;
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     procedure OnResponded(var Context: TOnHttpServerAfterResponseContext);
   end;
 
 constructor THttpServerEphemeral.Create(const aPort, aResponse: RawUtf8;
-  aParams: PDocVariantData; aMethod: TUriMethods);
+  aParams: PDocVariantData; aLogClass: TSynLogClass; aMethod: TUriMethods;
+  aOptions: THttpServerOptions);
 begin
   fResponse := aResponse;
   fParams := aParams;
   fMethod := aMethod;
   fOnAfterResponse := OnResponded;
   fReceived := TSynEvent.Create;
-  inherited Create(aPort, nil, nil, 'ephemeral', {threadpool=}-1);
+  inherited Create(
+    aPort, nil, nil, 'ephemeral', {threadpool=}-1, 0, aOptions, aLogClass);
 end;
 
 destructor THttpServerEphemeral.Destroy;
@@ -5528,14 +5534,19 @@ end;
 
 
 function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
-  aTimeOutSecs: integer; const aResponse: RawUtf8; aMethods: TUriMethods): boolean;
+  aTimeOutSecs: integer; aLogClass: TSynLogClass; const aResponse: RawUtf8;
+  aMethods: TUriMethods; aOptions: THttpServerOptions): boolean;
 var
   server: THttpServerEphemeral;
 begin
   aParams.Clear;
-  server := THttpServerEphemeral.Create(aPort, aResponse, @aParams, aMethods);
+  server := THttpServerEphemeral.Create(
+    aPort, aResponse, @aParams, aLogClass, aMethods, aOptions);
   try
     result := server.fReceived.WaitForSafe(aTimeOutSecs shl MilliSecsPerSecShl);
+    if aLogClass <> nil then
+      aLogClass.Add.Log(sllDebug, 'EphemeralHttpServer(%)=% %',
+        [aPort, BOOL_STR[result], variant(aParams)], server);
     if result then
       SleepHiRes(10); // wait for the client connection to gracefully disconnect
   finally
