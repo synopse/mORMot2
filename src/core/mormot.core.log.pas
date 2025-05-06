@@ -578,7 +578,7 @@ type
     aDestinationPath: TFileName): boolean;
 
   /// this event can be set for a TSynLogFamily to customize the file rotation
-  // - will be called by TSynLog.PerformRotation
+  // - will be called by TSynLog.PerformRotation/ForceRotation
   // - should return TRUE if the function did process the file name
   // - should return FALSE if the function did not do anything, so that the
   // caller should perform the rotation as usual
@@ -973,10 +973,10 @@ type
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileSizeKB: cardinal
       read fRotateFileSizeKB write fRotateFileSizeKB;
-    /// fixed hour of the day where logging files rotation should be performed
+    /// local hour of the day where logging files rotation should be performed
     // - equals -1 by default, meaning no rotation
     // - you can set a time value between 0 and 23 to force the rotation at this
-    // specified local (not UTC) hour
+    // specified local/wallclock (not UTC) hour
     // - is not used if RotateFileCount is left to its default 0 value
     property RotateFileDailyAtHour: integer
       read fRotateFileDailyAtHour write fRotateFileDailyAtHour;
@@ -1049,7 +1049,7 @@ type
     fWriter: TJsonWriter;
     fThreadInfo: PSynLogThreadInfo;
     fInitFlags: set of (logHeaderWritten, logInitDone);
-    fRemoteDisableEntered: boolean;
+    fPendingFlags: set of (pendingDisableRemoteLogLeave, pendingRotate);
     fExceptionIgnoredBackup: boolean; // with NOEXCEPTIONINTERCEPT conditional
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
@@ -1058,8 +1058,8 @@ type
     fWriterStream: TStream;
     fFileName: TFileName;
     fThreadCount: integer;
-    fFileRotationSize: cardinal;
-    fNextFlushTix10, fNextFileRotateDailyTix10: cardinal;
+    fFileRotationBytes: cardinal; // see OnFlushToStream
+    fNextFlushTix10, fNextFileRotateDailyTix10: cardinal; // see OnFlushToStream
     fThreadIndexReleasedCount: integer;
     fStreamPositionAfterHeader: cardinal;
     fThreadIndexReleased: TWordDynArray;
@@ -1115,7 +1115,6 @@ type
     function GetThreadInfo: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
     function Instance: TSynLog;
-    procedure CheckRotation;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
   public
@@ -3903,7 +3902,7 @@ begin
       end
       else if waitms = 111 then
         waitms := 500;
-      // 3. regularly flush or rotate log content on disk
+      // 3. regularly flush (and maybe rotate) log content on disk
       tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
       if lasttix10 = tix10 then
         continue; // checking once per second is enough
@@ -3926,29 +3925,15 @@ begin
            (tix10 >= log.fNextFlushTix10) and
            (log.fWriter <> nil) and
            (log.fWriter.PendingBytes > 1) then
-          // write pending data
-          log.Flush({forcediskwrite=}false);
-        if (tix10 shr 2 <> lasttix10 shr 2) and // check rotate every 4 seconds
-           ((log.fNextFileRotateDailyTix10 <> 0) or
-            (log.fFileRotationSize <> 0)) then
-        begin
-          mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-          try
-            if Terminated or
-               SynLogFileFreeing then
-              break;
-            log.CheckRotation;
-          finally
-            mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-          end;
-        end;
+          // write pending data after TSynLogFamily.AutoFlushTimeOut seconds
+          log.Flush({forcediskwrite=}false); // may also set pendingRotate flag
       end;
       lasttix10 := tix10;
     except
       // on stability issue, start identifying this thread
       if not Terminated then
         try
-          SetCurrentThreadName('log autoflush');
+          SetCurrentThreadName('TAutoFlushThread');
         except
           break;
         end;
@@ -4560,10 +4545,6 @@ begin
   if Level in fFamily.fLevelSysInfo then
     AddSysInfo;
   fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
-  if AutoFlushThread = nil then
-    if (fNextFileRotateDailyTix10 <> 0) or
-       (fFileRotationSize <> 0) then
-      CheckRotation;
 end;
 
 procedure TSynLog.NotifyThreadEnded;
@@ -4647,20 +4628,6 @@ begin
   //   fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
   nfo^.ExceptionIgnore := true;
   {$endif NOEXCEPTIONINTERCEPT}
-end;
-
-procedure TSynLog.CheckRotation;
-begin
-  if (fNextFileRotateDailyTix10 <> 0) and
-     (GetTickCount64 shr MilliSecsPerSecShl >= fNextFileRotateDailyTix10) then
-  begin
-    fNextFileRotateDailyTix10 := // next day, same hour
-      ((fNextFileRotateDailyTix10 shl 10) + MilliSecsPerDay) shr 10;
-    PerformRotation;
-  end
-  else if (fFileRotationSize > 0) and
-          (fWriter.WrittenBytes > fFileRotationSize) then
-    PerformRotation;
 end;
 
 function TSynLog.QueryInterface(
@@ -4750,6 +4717,7 @@ begin
     exit;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    exclude(fPendingFlags, pendingRotate);
     if fWriter = nil then
       exit;
     fWriter.FlushFinal;
@@ -4876,6 +4844,8 @@ begin
   fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
   try
     nfo^.ExceptionIgnore := true;
+    if pendingRotate in fPendingFlags then // from OnFlushToStream
+      PerformRotation;
     LogHeader(sllEnter, inst);
     fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
@@ -5227,19 +5197,19 @@ begin
   if entervalue then
   begin
     mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-    if fRemoteDisableEntered then
+    if pendingDisableRemoteLogLeave in fPendingFlags then
     begin
       mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
       ESynLogException.RaiseUtf8('Nested %.DisableRotemoteLog', [self]);
     end;
-    fRemoteDisableEntered := true;
+    include(fPendingFlags, pendingDisableRemoteLogLeave);
   end
   else
   begin
-    if not fRemoteDisableEntered then
+    if not (pendingDisableRemoteLogLeave in fPendingFlags) then
       ESynLogException.RaiseUtf8('Missing %.DisableRotemoteLog(true)', [self]);
     // DisableRemoteLog(false) -> add to events, and quit the global mutex
-    fRemoteDisableEntered := false;
+    exclude(fPendingFlags, pendingDisableRemoteLogLeave);
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -5626,51 +5596,55 @@ var
   FN: array of TFileName;
 begin
   CloseLogFile;
-  currentMaxSynLZ := 0;
-  if not (assigned(fFamily.fOnRotate) and
-     fFamily.fOnRotate(self, fFileName)) then
-  begin
-    if fFamily.fRotateFileCount > 1 then
+  try
+    if not (Assigned(fFamily.fOnRotate) and
+            fFamily.fOnRotate(self, fFileName)) then
     begin
-      // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
-      ext := '.log';
-      if LogCompressAlgo <> nil then
-        ext := LogCompressAlgo.AlgoFileExt;
-      SetLength(FN, fFamily.fRotateFileCount - 1);
-      for i := fFamily.fRotateFileCount - 1 downto 1 do
+      if fFamily.fRotateFileCount > 1 then
       begin
-        FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + ext);
-        if (currentMaxSynLZ = 0) and
-           FileExists(FN[i - 1]) then
-          currentMaxSynLZ := i;
-      end;
-      if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
-        // delete (and archive) xxx.9.synlz
-        fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
-      for i := fFamily.fRotateFileCount - 2 downto 1 do
-        // e.g. xxx.8.synlz -> xxx.9.synlz
-        RenameFile(FN[i - 1], FN[i]);
-      // compress the current FN[0] .log file into xxx.1.log/.synlz
-      if LogCompressAlgo = nil then
-        // no compression: quickly rename FN[0] into xxx.1.log
-        RenameFile(fFileName, FN[0])
-      else if (AutoFlushThread <> nil) and
-              (AutoFlushThread.fToCompress = '') and
-              RenameFile(fFileName, FN[0]) then
-      begin
-        // background compression of FN[0] into xxx.1.synlz
-        AutoFlushThread.fToCompress := FN[0];
-        AutoFlushThread.fEvent.SetEvent;
+        // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
+        ext := '.log';
+        if LogCompressAlgo <> nil then
+          ext := LogCompressAlgo.AlgoFileExt;
+        currentMaxSynLZ := 0;
+        SetLength(FN, fFamily.fRotateFileCount - 1);
+        for i := fFamily.fRotateFileCount - 1 downto 1 do
+        begin
+          FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + ext);
+          if (currentMaxSynLZ = 0) and
+             FileExists(FN[i - 1]) then
+            currentMaxSynLZ := i;
+        end;
+        if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
+          // delete (and archive) xxx.9.synlz
+          fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
+        for i := fFamily.fRotateFileCount - 2 downto 1 do
+          // e.g. xxx.8.synlz -> xxx.9.synlz
+          RenameFile(FN[i - 1], FN[i]);
+        // compress the current FN[0] .log file into xxx.1.log/.synlz
+        if LogCompressAlgo = nil then
+          // no compression: quickly rename FN[0] into xxx.1.log
+          RenameFile(fFileName, FN[0])
+        else if (AutoFlushThread <> nil) and
+                (AutoFlushThread.fToCompress = '') and
+                RenameFile(fFileName, FN[0]) then
+        begin
+          // background compression of FN[0] into xxx.1.synlz
+          AutoFlushThread.fToCompress := FN[0];
+          AutoFlushThread.fEvent.SetEvent;
+        end
+        else
+        begin
+          // blocking compression in the main processing thread
+          LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
+          DeleteFile(fFileName);
+        end;
       end
       else
-      begin
-        // blocking compression in the main processing thread
-        LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
-        DeleteFile(fFileName);
-      end;
-    end
-    else
-      fFamily.ArchiveAndDeleteFile(fFileName);
+        fFamily.ArchiveAndDeleteFile(fFileName);
+    end;
+  except
+    // just ignore any problem during file rotation, and recreate the log file
   end;
   // initialize a brand new log file
   LogFileInit(GetThreadInfo);
@@ -5782,11 +5756,12 @@ begin
       else
         Utf8ToFileName(ProgramName, fFileName);
   // prepare for any file rotation
-  fFileRotationSize := 0;
+  fFileRotationBytes := 0;
+  fNextFileRotateDailyTix10 := 0;
   if fFamily.fRotateFileCount > 0 then
   begin
     if fFamily.fRotateFileSizeKB > 0 then
-      fFileRotationSize := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
+      fFileRotationBytes := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
     if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
       hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
@@ -5799,7 +5774,7 @@ begin
     end;
   end;
   // file name should include current timestamp if no rotation is involved
-  if (fFileRotationSize = 0) and
+  if (fFileRotationBytes = 0) and
      (fNextFileRotateDailyTix10 = 0) then
     fFileName := FormatString('% %',
       [fFileName, NowToFileShort(fFamily.LocalTimestamp)]);
@@ -5883,10 +5858,30 @@ begin
 end;
 
 procedure TSynLog.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+var
+  flushsec, tix10: cardinal;
 begin
-  fNextFlushTix10 := fFamily.AutoFlushTimeOut;
-  if fNextFlushTix10 <> 0 then
-    inc(fNextFlushTix10, GetTickCount64 shr MilliSecsPerSecShl);
+  // compute the next idle timestamp for the background TAutoFlushThread
+  tix10 := 0;
+  flushsec := fFamily.AutoFlushTimeOut;
+  if flushsec <> 0 then
+  begin
+    tix10 := GetTickCount64 shr MilliSecsPerSecShl; // about 1 second resolution
+    fNextFlushTix10 := tix10 + flushsec;
+  end;
+  // check for any PerformRotation (delayed in TSynLog.LogEnterFmt)
+  if not (pendingRotate in fPendingFlags) then
+    if (fFileRotationBytes > 0) and
+       (fWriter.WrittenBytes > fFileRotationBytes) then
+      include(fPendingFlags, pendingRotate)
+    else if fNextFileRotateDailyTix10 <> 0 then
+    begin
+      if tix10 = 0 then
+        tix10 := GetTickCount64 shr MilliSecsPerSecShl;
+      if tix10 >= fNextFileRotateDailyTix10 then
+        include(fPendingFlags, pendingRotate);
+        // PerformRotation will call ComputeFileName to recompute DailyTix10
+    end;
 end;
 
 function TSynLog.GetFileSize: Int64;
