@@ -417,6 +417,7 @@ type
     // - raise an EHttpServer exception if async responses are not available
     function AsyncHandle: TConnectionAsyncHandle;
     /// save the URI parameters (or POST content) as a TDocVariant
+    // - Url/Method/InContent are stored as aParams.U['url'/'method'/'content']
     procedure ToDocVariant(out Dest: TDocVariantData);
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
@@ -1392,7 +1393,7 @@ function ToText(state: THttpServerExecuteState): PShortString; overload;
 // - raise an Exception on binding error
 // - returns false on timeout
 // - returns true on success, with encoded parameters as aParams - and the
-// received URI/Method/Content as aParams.U['uri'/'method'/'content']
+// received URL/Method/Content values as aParams.U['url'/'method'/'content']
 function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
   aTimeOutSecs: integer = 60; const aResponse: RawUtf8 = 'You can close this window.';
   aMethods: TUriMethods = [mGET, mPOST]): boolean;
@@ -3360,12 +3361,15 @@ begin
 end;
 
 procedure THttpServerRequest.ToDocVariant(out Dest: TDocVariantData);
+var
+  p: PUtf8Char;
 begin
-  if (UrlParamPos = nil) and
+  p := UrlParamPos;
+  if (p = nil) and
      (fInContent <> '') then
-    Dest.InitJson(fInContent, JSON_FAST)      // values from JSON body
+    Dest.InitJson(fInContent, JSON_FAST) // try values from JSON body
   else
-    Dest.InitFromUrl(UrlParamPos, JSON_FAST); // values from URI parameters
+    Dest.InitFromUrl(p, JSON_FAST); // values from URI parameters
   Dest.AddValueFromText('url', fUrl);
   Dest.AddValueFromText('method', fMethod);
   if fInContent <> '' then
