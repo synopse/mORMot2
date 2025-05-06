@@ -4569,6 +4569,8 @@ begin
     exit;
   include(fInternalFlags, ifUrlParamPosSet); // call PosChar() once
   result := PosChar(pointer(Url), '?');
+  if result <> nil then
+    inc(result); // point after initial ?aa=xx&bb=yy char
   fUrlParamPos := result;
 end;
 
