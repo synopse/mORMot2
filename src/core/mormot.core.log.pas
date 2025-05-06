@@ -5094,11 +5094,14 @@ begin // called only in ptIdentifiedInOneFile mode
   begin
     if ThreadID = 0 then
       exit; // paranoid
+    // customized LogHeader(sllInfo, nil) for this thread
     pthrdnum := @fThreadInfo^.CurrentTime; // in two steps for better codegen
     pthrdnum := @pthrdnum[ord(pthrdnum[0]) - 2];
     bak := PCardinal(pthrdnum)^;
     Int18ToText(threadnumber, pthrdnum);
-    LogHeader(sllInfo, nil);
+    fWriter.AddShort(fThreadInfo^.CurrentTime); // timestamp [+ threadnumber]
+    PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[sllInfo][1])^;
+    inc(fWriter.B, 7); // TSynLogFile expects no recursion
     fWriter.AddShort('SetThreadName ');
     fWriter.AddPointer(ThreadID);  // as hexadecimal
     fWriter.AddDirect(' ');
@@ -7159,7 +7162,7 @@ begin
   if (fCount <= fLineHeaderCountToIgnore) or
      (LineEnd - LineBeg < 24) then
     exit;
-  if fLineLevelOffset = 0 then
+  if fLineLevelOffset = 0 then // detect the line layout (once)
   begin
     if (fCount > 50) or
        not (LineBeg[0] in ['0'..'9']) then
