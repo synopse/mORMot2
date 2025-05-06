@@ -4770,10 +4770,13 @@ begin
     exit;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    if fWriter = nil then
+      exit;
     fWriter.FlushFinal;
     FreeAndNilSafe(fWriterEcho);
     FreeAndNilSafe(fWriter);
     FreeAndNilSafe(fWriterStream);
+    fInitFlags := [];
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -4802,6 +4805,8 @@ begin
   diskflush := 0;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    if fWriter = nil then
+      exit;
     fWriter.FlushToStream;
     if ForceDiskWrite and
        fWriterStream.InheritsFrom(THandleStream) then
@@ -6195,6 +6200,8 @@ begin
     exit; // no exception intercepted yet
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    if GlobalLastExceptionIndex < 0 then
+      exit;
     info := GlobalLastException[GlobalLastExceptionIndex]; // copy
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
