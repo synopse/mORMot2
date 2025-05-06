@@ -5379,15 +5379,17 @@ begin
       else
         fStartTimestampDateTime := NowUtc;
     end;
-    include(fInitFlags, logInitDone);
+    include(fInitFlags, logInitDone); // eventually
     // initialize fWriter and its optional header - if needed
-    GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
     if fWriter = nil then
       CreateLogWriter; // file creation should be thread-safe
     if not (logHeaderWritten in fInitFlags) then
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
-    LogHeader(sllNewRun, nil);
+    GetCurrentTime(nfo, nil);
+    fWriter.AddShort(nfo^.CurrentTime); // timestamp [+ threadnumber]
+    PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[sllNewRun][1])^;
+    inc(fWriter.B, 7); // initial sllNewRun expects no recursion
     fWriter.AddString(Executable.ProgramName);
     fWriter.AddDirect(' ');
     if Executable.Version.Major <> 0 then
