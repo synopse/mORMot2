@@ -3370,7 +3370,7 @@ begin
     Dest.InitJson(fInContent, JSON_FAST) // try values from JSON body
   else
     Dest.InitFromUrl(p, JSON_FAST); // values from URI parameters
-  Dest.AddValueFromText('url', fUrl);
+  Dest.AddValueFromText('url', Split(fUrl, '?'));
   Dest.AddValueFromText('method', fMethod);
   if fInContent <> '' then
     Dest.AddValueFromText('content', fInContent);
