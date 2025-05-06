@@ -1032,9 +1032,6 @@ type
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
 
-  /// reference pointer to a TSynLog instance
-  PSynLog = ^TSynLog;
-
   /// a per-family and/or per-thread log file content
   // - you should create a sub class per kind of log file
   // ! TSynLogDB = class(TSynLog);
@@ -1219,16 +1216,15 @@ type
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
-    // - optionally return the TSynLog instance (or nil) into a local LogInstance
-    class procedure EnterLocal(var Local: ISynLog; aInstance: TObject;
-      aMethodName: PUtf8Char; LogInstance: PSynLog = nil); overload;
+    // - optionally return the TSynLog instance (or nil) for direct usage
+    class function EnterLocal(var Local: ISynLog; aInstance: TObject;
+      aMethodName: PUtf8Char): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
-    // - optionally return the TSynLog instance (or nil) into a local LogInstance
-    class procedure EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
-      const TextArgs: array of const; aInstance: TObject = nil;
-      LogInstance: PSynLog = nil); overload;
+    // - optionally return the TSynLog instance (or nil) for direct usage
+    class function EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
+      const TextArgs: array of const; aInstance: TObject = nil): TSynLog; overload;
     /// retrieve the current instance of this TSynLog class
     // - to be used for direct logging, without any Enter/Leave:
     // ! TSynLogDB.Add.Log(llError,'The % statement didn''t work',[SQL]);
@@ -4961,36 +4957,30 @@ begin
   EnterLocal(result, TextFmt, TextArgs, aInstance);
 end;
 
-class procedure TSynLog.EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
-  const TextArgs: array of const; aInstance: TObject; LogInstance: PSynLog);
+class function TSynLog.EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
+  const TextArgs: array of const; aInstance: TObject): TSynLog;
 var
-  log: TSynLog;
   nfo: PSynLogThreadInfo;
 begin // expects the caller to have set Local = nil
-  log := Add;
-  if LogInstance <> nil then
-    LogInstance^ := log;
-  nfo := log.DoEnter;
+  result := Add;
+  nfo := result.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  log.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs));
-  pointer(Local) := PAnsiChar(log) + log.fISynLogOffset; // result := self
+  result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs));
+  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
 end;
 
-class procedure TSynLog.EnterLocal(var Local: ISynLog; aInstance: TObject;
-  aMethodName: PUtf8Char; LogInstance: PSynLog);
+class function TSynLog.EnterLocal(var Local: ISynLog; aInstance: TObject;
+  aMethodName: PUtf8Char): TSynLog;
 var
-  log: TSynLog;
   nfo: PSynLogThreadInfo;
 begin // expects the caller to have set Local = nil
-  log := Add;
-  if LogInstance <> nil then
-    LogInstance^ := log;
-  nfo := log.DoEnter;
+  result := Add;
+  nfo := result.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  log.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
-  pointer(Local) := PAnsiChar(log) + log.fISynLogOffset; // result := self
+  result.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
+  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
 end;
 
 procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
