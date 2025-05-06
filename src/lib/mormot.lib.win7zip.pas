@@ -2120,7 +2120,7 @@ begin
     eamExtract:
       if fStream <> nil then
         outStream := T7zStream.Create(fStream, false, index)
-      else if assigned(fExtractCallback) then
+      else if Assigned(fExtractCallback) then
       begin
         result := fExtractCallback(self, index, outStream);
         exit;

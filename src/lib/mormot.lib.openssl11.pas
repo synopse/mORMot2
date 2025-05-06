@@ -9867,7 +9867,7 @@ begin
   if @self = nil then
     exit;
   ctx := EVP_PKEY_CTX_new(@self, nil);
-  if assigned(ctx) then
+  if Assigned(ctx) then
   try
     EOpenSsl.Check(
       EVP_PKEY_encrypt_init(ctx), 'EVP_PKEY_encrypt_init');
@@ -9895,7 +9895,7 @@ begin
   if @self = nil then
     exit;
   ctx := EVP_PKEY_CTX_new(@self, nil);
-  if assigned(ctx) then
+  if Assigned(ctx) then
   try
     EOpenSsl.Check(
       EVP_PKEY_decrypt_init(ctx), 'EVP_PKEY_decrypt_init');

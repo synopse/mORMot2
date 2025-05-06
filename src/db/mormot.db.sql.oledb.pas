@@ -1910,7 +1910,7 @@ var
   {%H-}log: ISynLog;
 begin
   SynDBLog.EnterLocal(log, self, 'Commit');
-  if assigned(fTransaction) then
+  if Assigned(fTransaction) then
   begin
     inherited Commit;
     try
@@ -1927,7 +1927,7 @@ var
   {%H-}log: ISynLog;
 begin
   SynDBLog.EnterLocal(log, self, 'Rollback');
-  if assigned(fTransaction) then
+  if Assigned(fTransaction) then
   begin
     inherited Rollback;
     OleDbCheck(nil, fTransaction.Abort(nil, false, false));
@@ -1939,7 +1939,7 @@ var
   {%H-}log: ISynLog;
 begin
   SynDBLog.EnterLocal(log, self, 'StartTransaction');
-  if assigned(fTransaction) then
+  if Assigned(fTransaction) then
   begin
     inherited StartTransaction;
     OleDbCheck(nil,

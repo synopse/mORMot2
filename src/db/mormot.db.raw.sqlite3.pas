@@ -7521,7 +7521,7 @@ begin
   StringToUtf8(fFileName, u);
   {$ifdef OSPOSIX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
-  if assigned(sqlite3.open_v2) and
+  if Assigned(sqlite3.open_v2) and
      (fPassword = '') then
   begin
     result := sqlite3.open_v2(pointer(u), fDB, fOpenV2Flags, 'unix-excl');

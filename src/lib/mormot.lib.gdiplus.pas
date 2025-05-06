@@ -2036,7 +2036,7 @@ begin
   R.Height := Height;
   FillcharFast(E, SizeOf(E), 0);
   E.gdip := _Gdip;
-  if assigned(E.gdip.ConvertToEmfPlus11) and
+  if Assigned(E.gdip.ConvertToEmfPlus11) and
      not (ecoInternalConvert in ConvertOptions) then
   begin
     // let GDI+ 1.1 make the conversion

@@ -1099,7 +1099,7 @@ begin
     else
     begin
       fblib := IB.LoadFBLibrary(fFbLibraryPathName);
-      if assigned(fblib) then
+      if Assigned(fblib) then
         fFirebirdAPI := fblib.GetFirebirdAPI;
     end;
   end;

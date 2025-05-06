@@ -3040,7 +3040,7 @@ begin
         ctxt.Status := fOnProtocolRequest(Http);
         if StatusCodeIsSuccess(ctxt.Status) then
           ctxt.Status := Http.ContentToOutput(ctxt.Status, ctxt.OutStream);
-        if assigned(OnLog) then
+        if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(%)=% via %.OnRequest',
             [fOpenUriFull, ctxt.Status,
              TObject(TMethod(fOnProtocolRequest).Data)], self);
@@ -3056,7 +3056,7 @@ begin
       if (ctxt.Status = HTTP_UNAUTHORIZED) and
           Assigned(fOnAuthorize) then
       begin
-        if assigned(OnLog) then
+        if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
         if rAuth in ctxt.Retry then
           break; // avoid infinite recursion
@@ -3067,7 +3067,7 @@ begin
       else if (ctxt.Status = HTTP_PROXYAUTHREQUIRED) and
           Assigned(fOnProxyAuthorize) then
       begin
-        if assigned(OnLog) then
+        if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
         if rAuthProxy in ctxt.Retry then
           break;
@@ -3101,7 +3101,7 @@ begin
         OutStream.Size := ctxt.OutStreamInitialPos;     // truncate
         OutStream.Position := ctxt.OutStreamInitialPos; // reset position
       end;
-      if assigned(OnLog) then
+      if Assigned(OnLog) then
         OnLog(sllTrace, 'Request % % redirected to %', [ctxt.Method, url, ctxt.Url], self);
       if Assigned(fOnRedirect) then
         if not fOnRedirect(self, ctxt) then
@@ -3998,19 +3998,19 @@ begin
       InternalAddHeader(fCompressList.AcceptEncoding);
     upload:= IsPost(method) or IsPut(method);
     // send request to remote server
-    if assigned(fOnUpload) and
+    if Assigned(fOnUpload) and
        upload then
       fOnUpload(self, false)
-    else if assigned(fOnDownload) and
+    else if Assigned(fOnDownload) and
             not upload then
       fOnDownload(self, false);
     InternalSendRequest(method, data);
     // retrieve status and headers
     result := InternalRetrieveAnswer(OutHeader, contentEnc, acceptEnc, OutData);
-    if assigned(fOnUpload) and
+    if Assigned(fOnUpload) and
        upload then
       fOnUpload(self, true)
-    else if assigned(fOnDownload) and
+    else if Assigned(fOnDownload) and
             not upload then
       fOnDownload(self, true);
     // handle incoming answer compression
