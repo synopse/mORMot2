@@ -5954,10 +5954,16 @@ var
 
 /// Windows-specific RunCommand() function returning raw TProcessInformation
 function RunCommandWin(const cmd: TFileName; waitfor: boolean;
+  var processinfo: TProcessInformation; out job: THandle; const env: TFileName = '';
+  options: TRunOptions = []; waitfordelayms: cardinal = INFINITE;
+  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
+  const wrkdir: TFileName = ''): integer; overload;
+
+function RunCommandWin(const cmd: TFileName; waitfor: boolean;
   var processinfo: TProcessInformation; const env: TFileName = '';
   options: TRunOptions = []; waitfordelayms: cardinal = INFINITE;
   redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
-  const wrkdir: TFileName = ''): integer;
+  const wrkdir: TFileName = ''): integer; overload;
 
 type
   /// how RunRedirect() or RunCommand() should try to gracefully terminate

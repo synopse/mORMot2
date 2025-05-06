@@ -4857,10 +4857,24 @@ function RunCommandWin(const cmd: TFileName; waitfor: boolean;
   redirected: PRawByteString; const onoutput: TOnRedirect;
   const wrkdir: TFileName): integer;
 var
+  job: THandle;
+begin
+  Result := RunCommandWin(cmd, waitfor, processinfo, job, env, options, waitfordelayms, redirected, onoutput, wrkdir);
+
+  if job <> 0 then
+    CloseHandle(Job);
+end;
+
+function RunCommandWin(const cmd: TFileName; waitfor: boolean;
+  var processinfo: TProcessInformation; out job: THandle; const env: TFileName;
+  options: TRunOptions; waitfordelayms: cardinal;
+  redirected: PRawByteString; const onoutput: TOnRedirect;
+  const wrkdir: TFileName): integer;
+var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   security: TSecurityAttributes;
   exe, path: TFileName;
-  rd, wr, job: THandle;
+  rd, wr: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
   endtix: Int64;
@@ -5109,8 +5123,6 @@ begin
   CloseHandle(processinfo.hThread);
   if rd <> 0 then // CloseHandle(wr) has already be done
     CloseHandle(rd);
-  if job <> 0 then
-    CloseHandle(job);
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
