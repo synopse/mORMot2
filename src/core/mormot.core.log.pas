@@ -4713,11 +4713,8 @@ end;
 
 procedure TSynLog.CloseLogFile;
 begin
-  if fWriter = nil then
-    exit;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
-    exclude(fPendingFlags, pendingRotate);
     if fWriter = nil then
       exit;
     fWriter.FlushFinal;
@@ -4726,6 +4723,7 @@ begin
     FreeAndNilSafe(fWriterStream);
     fInitFlags := [];
   finally
+    exclude(fPendingFlags, pendingRotate); // reset it after FlushFinal
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
@@ -5367,14 +5365,17 @@ begin
     fThreadInfo := nfo;
     if logInitDone in fInitFlags then // paranoid thread safety
       exit;
-    // setup proper timing for this log instance
-    QueryPerformanceMicroSeconds(fStartTimestamp);
-    if fFamily.FileExistsAction = acAppend then
-      fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
-    if fFamily.LocalTimestamp then
-      fStartTimestampDateTime := Now
-    else
-      fStartTimestampDateTime := NowUtc;
+    // setup (once) proper timing for this log instance
+    if fStartTimestamp = 0 then // don't reset after rotation
+    begin
+      QueryPerformanceMicroSeconds(fStartTimestamp);
+      if fFamily.FileExistsAction = acAppend then
+        fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
+      if fFamily.LocalTimestamp then
+        fStartTimestampDateTime := Now
+      else
+        fStartTimestampDateTime := NowUtc;
+    end;
     include(fInitFlags, logInitDone);
     // initialize fWriter and its optional header - if needed
     GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
@@ -5872,7 +5873,7 @@ begin
   // check for any PerformRotation (delayed in TSynLog.LogEnterFmt)
   if not (pendingRotate in fPendingFlags) then
     if (fFileRotationBytes > 0) and
-       (fWriter.WrittenBytes > fFileRotationBytes) then
+       (fWriter.WrittenBytes + Len > fFileRotationBytes) then
       include(fPendingFlags, pendingRotate)
     else if fNextFileRotateDailyTix10 <> 0 then
     begin
