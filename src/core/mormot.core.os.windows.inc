@@ -1370,11 +1370,13 @@ end;
 
 procedure TSynEvent.ResetEvent;
 begin
+  fNotified := false;
   Windows.ResetEvent(THandle(fHandle));
 end;
 
 procedure TSynEvent.SetEvent;
 begin
+  fNotified := true;
   Windows.SetEvent(THandle(fHandle));
 end;
 
