@@ -2857,14 +2857,15 @@ procedure GetLocalTime(out result: TSystemTime);
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// compatibility function, wrapping Win32 API file truncate at current position
+// or FpFtruncate() on POSIX
 procedure SetEndOfFile(F: THandle);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
-/// compatibility function, wrapping Win32 API file flush to disk
+/// compatibility function, wrapping Win32 API file flush to disk or FpFsync()
 procedure FlushFileBuffers(F: THandle);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
-/// compatibility function, wrapping Win32 API last error code
+/// compatibility function, wrapping Win32 API last error code or fpgeterrno
 function GetLastError: integer;
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
