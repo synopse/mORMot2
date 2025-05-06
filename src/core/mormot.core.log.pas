@@ -1102,7 +1102,7 @@ type
     procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
-    procedure LogFileInit; virtual;
+    procedure LogFileInit(nfo: PSynLogThreadInfo);
     procedure LogFileHeader; virtual;
     procedure AddMemoryStats; virtual;
     procedure AddErrorMessage(Error: cardinal);
@@ -4616,28 +4616,6 @@ begin
       inc(fThreadCount);
       result := fThreadCount;
     end;
-    // initialize the associated log file if needed
-    if fInitFlags = [logHeaderWritten, logInitDone] then
-      exit; // most common case
-    if not (logInitDone in fInitFlags) then
-      LogFileInit; // run once per process, to set start time (should be first)
-    fThreadInfo := nfo;
-    GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
-    if not (logHeaderWritten in fInitFlags) then
-      LogFileHeader; // executed once per file - not needed in acAppend mode
-    // append a sllNewRun line at the log file (re)opening
-    LogHeader(sllNewRun, nil);
-    fWriter.AddString(Executable.ProgramName);
-    fWriter.AddDirect(' ');
-    if Executable.Version.Major <> 0 then
-      fWriter.AddNoJsonEscapeString(Executable.Version.Detailed)
-    else
-      fWriter.AddDateTime(@Executable.Version.BuildDateTime, ' ');
-    fWriter.AddDirect(' ');
-    fWriter.AddShort(ClassNameShort(self)^);
-    fWriter.AddShort(' ' + SYNOPSE_FRAMEWORK_VERSION);
-    AddSysInfo;
-    fWriterEcho.AddEndOfLine(sllNewRun);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -4657,6 +4635,8 @@ begin
   nfo := @PerThreadInfo; // access the threadvar - inlined GetThreadInfo
   if PInteger(nfo)^ = 0 then // first access
     nfo^.ThreadNumber := InitThreadNumber;
+  if not (logInitDone in fInitFlags) then
+    LogFileInit(nfo); // run once, to set start time and write headers
   GetCurrentTime(nfo, nil); // syscall outside of GlobalThreadLock
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   fThreadInfo := nfo;
@@ -4841,6 +4821,9 @@ procedure TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo);
 var
   ms, rec: Int64;
 begin
+  // prepare output file if not already done - and compute fStartTimestamp
+  if not (logInitDone in fInitFlags) then
+    LogFileInit(nfo);
   // setup recursive timing with RefCnt=1 like with _AddRef outside lock
   if sllLeave in fFamily.Level then
   begin
@@ -5174,6 +5157,8 @@ begin
   else
     n := Name;
   nfo := GetThreadInfo; // may call InitThreadNumber() if first access
+  if not (logInitDone in fInitFlags) then
+    LogFileInit(nfo);
   GetCurrentTime(nfo, nil); // timestamp + threadnumber
   num := nfo^.ThreadNumber;
   tid := PtrUInt(GetCurrentThreadId);
@@ -5405,18 +5390,44 @@ begin
   DebuggerNotify(Level, txt);
 end;
 
-procedure TSynLog.LogFileInit;
+procedure TSynLog.LogFileInit(nfo: PSynLogThreadInfo);
 begin
-  include(fInitFlags, logInitDone);
-  // setup proper timing for this log instance
-  QueryPerformanceMicroSeconds(fStartTimestamp);
-  if fFamily.FileExistsAction = acAppend then
-    fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
-  if fFamily.LocalTimestamp then
-    fStartTimestampDateTime := Now
-  else
-    fStartTimestampDateTime := NowUtc;
-  // this method is run before fWriter exists: nothing should be written here
+  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  try
+    fThreadInfo := nfo;
+    if logInitDone in fInitFlags then // paranoid thread safety
+      exit;
+    // setup proper timing for this log instance
+    QueryPerformanceMicroSeconds(fStartTimestamp);
+    if fFamily.FileExistsAction = acAppend then
+      fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
+    if fFamily.LocalTimestamp then
+      fStartTimestampDateTime := Now
+    else
+      fStartTimestampDateTime := NowUtc;
+    include(fInitFlags, logInitDone);
+    // initialize fWriter and its optional header - if needed
+    GetCurrentTime(nfo, nil); // timestamp [+ threadnumber]
+    if fWriter = nil then
+      CreateLogWriter; // file creation should be thread-safe
+    if not (logHeaderWritten in fInitFlags) then
+      LogFileHeader; // executed once per file - not needed in acAppend mode
+    // append a sllNewRun line at the log file (re)opening
+    LogHeader(sllNewRun, nil);
+    fWriter.AddString(Executable.ProgramName);
+    fWriter.AddDirect(' ');
+    if Executable.Version.Major <> 0 then
+      fWriter.AddNoJsonEscapeString(Executable.Version.Detailed)
+    else
+      fWriter.AddDateTime(@Executable.Version.BuildDateTime, ' ');
+    fWriter.AddDirect(' ');
+    fWriter.AddShort(ClassNameShort(self)^);
+    fWriter.AddShort(' ' + SYNOPSE_FRAMEWORK_VERSION);
+    AddSysInfo;
+    fWriterEcho.AddEndOfLine(sllNewRun);
+  finally
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 procedure TSynLog.LogFileHeader;
@@ -5689,10 +5700,7 @@ begin
       fFamily.ArchiveAndDeleteFile(fFileName);
   end;
   // initialize a brand new log file
-  CreateLogWriter;
-  fThreadInfo := GetThreadInfo;
-  GetCurrentTime(fThreadInfo, nil); // timestamp [+ threadnumber]
-  LogFileHeader;
+  LogFileInit(GetThreadInfo);
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     // write the current thread names as TSynLog.LogThreadName lines
     for i := 1 to fThreadCount do
