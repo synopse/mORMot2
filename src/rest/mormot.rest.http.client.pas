@@ -1038,12 +1038,11 @@ begin
       inc(fUpgradeCount);
     end;
   end;
-  if log <> nil then
-    if result <> '' then
-      log.Log(sllWarning, '[%] error upgrading %', [result, sockets], self)
-    else
-      log.Log(sllHTTP, 'HTTP link upgraded to WebSockets using %',
-        [sockets], self);
+  if result <> '' then
+    fLogClass.Add.Log(sllWarning, '[%] error upgrading %', [result, sockets], self)
+  else if log <> nil then
+    log.Log(sllHTTP, 'HTTP link upgraded to WebSockets using %',
+      [sockets], self);
   if (aRaiseExceptionOnFailure <> nil) and
      (result <> '') then
     aRaiseExceptionOnFailure.RaiseUtf8('%.WebSocketsUpgrade failed: [%]',

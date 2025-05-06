@@ -291,7 +291,7 @@ begin
   {$endif ZEOSTRANS}
   else
   begin
-    if (fInternalTPB = nil) then
+    if fInternalTPB = nil then
       fInternalTPB := TSqlDBIbxConnection(Connection).GenerateTPB(fReadOnlyTransaction);
     fInternalTransaction := TSqlDBIbxConnection(Connection).Attachment.
       StartTransaction(fInternalTPB);
@@ -1222,7 +1222,7 @@ var
 
 begin
   SynDBLog.EnterLocal(log, self, 'Connect');
-  if fAttachment<>nil then
+  if fAttachment <> nil then
      ESqlDBIbx.RaiseUtf8(
        '%.Connect() on % failed: Attachment<>nil',
        [self, fProperties.ServerName]);

@@ -914,7 +914,7 @@ end;
 
 procedure TSqlDBZeosConnection.StartTransaction;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   SynDBLog.EnterLocal(log, self, 'StartTransaction');
   inherited StartTransaction;

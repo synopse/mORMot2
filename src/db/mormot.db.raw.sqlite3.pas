@@ -6861,17 +6861,13 @@ end;
 procedure TSqlDataBase.ExecuteAll(const aSql: RawUtf8);
 var
   R: TSqlRequest;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   if (fLog <> nil) and
      SqlShouldBeLogged(aSql) then
-  begin
-    fLog.EnterLocal(log, self, 'ExecuteAll');
-    if log <> nil then
-      log.Log(sllSQL, aSql, self, 4096);
-  end;
+    fLog.EnterLocal(log, self, 'ExecuteAll').Log(sllSQL, aSql, self, 4096);
   LockAndFlushCache; // don't trust aSql -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB, aSql);
@@ -6902,7 +6898,7 @@ function TSqlDataBase.Execute(const aSql: RawUtf8;
   var aValues: TInt64DynArray): integer;
 var
   R: TSqlRequest;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if self = nil then
   begin
@@ -6911,11 +6907,7 @@ begin
   end;
   if (fLog <> nil) and
      SqlShouldBeLogged(aSql) then
-  begin
-    fLog.EnterLocal(log, self, 'Execute');
-    if log <> nil then
-      log.Log(sllSQL, aSql, self, 2048);
-  end;
+    fLog.EnterLocal(log, self, 'Execute').Log(sllSQL, aSql, self, 2048);
   Lock(aSql);
   try
     result := R.Execute(DB, aSql, aValues);
@@ -7289,9 +7281,10 @@ end;
 
 function TSqlDataBase.Backup(const BackupFileName: TFileName): boolean;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
+  l: TSynLog;
 begin
-  fLog.EnterLocal(log, 'Backup % -> %',
+  l := fLog.EnterLocal(log, 'Backup % -> %',
     [fFileNameWithoutPath, BackupFileName], self);
   if self = nil then
   begin
@@ -7303,15 +7296,12 @@ begin
   LockAndFlushCache;
   try
     try
-      if log <> nil then
-        log.Log(sllTrace, 'close', self);
+      l.Log(sllTrace, 'close', self);
       DBClose;
-      if log <> nil then
-        log.Log(sllTrace, 'copy file', self);
+      l.Log(sllTrace, 'copy file', self);
       result := CopyFile(fFileName, BackupFileName, false);
     finally
-      if log <> nil then
-        log.Log(sllTrace, 'reopen', self);
+      l.Log(sllTrace, 'reopen', self);
       DBOpen;
     end;
   finally
@@ -7478,15 +7468,14 @@ end;
 
 function TSqlDataBase.DBClose: integer;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   result := SQLITE_OK;
   if (self = nil) or
      (fDB = 0) then
     exit;
-  fLog.EnterLocal(log, self, 'DBClose');
-  if log <> nil then
-    log.Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
+  fLog.EnterLocal(log, self, 'DBClose').
+       Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
   if (sqlite3 = nil) or
      (not Assigned(sqlite3.close)) then
     ESqlite3Exception.RaiseUtf8(
