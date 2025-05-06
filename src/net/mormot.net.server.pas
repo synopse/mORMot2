@@ -4722,7 +4722,8 @@ begin
         // ServerThreadPoolCount < 0 would use a single thread to rule them all
         // - may be defined when the server is expected to have very low usage,
         // e.g. for port 80 to 443 redirection or to implement Let's Encrypt
-        // HTTP-01 challenges (on port 80) using OnHeaderParsed callback
+        // HTTP-01 challenges (on port 80) using OnHeaderParsed callback,
+        // or for EphemeralHttpServer() function
         try
           cltservsock := fSocketClass.Create(self);
           try

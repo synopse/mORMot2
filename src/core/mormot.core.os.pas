@@ -10771,7 +10771,7 @@ var
 begin
   if GetCurrentThreadID = MainThreadID then
   begin
-    endtix := GetTickCount64 + TimeoutMS shl MilliSecsPerSecShl;
+    endtix := GetTickCount64 + TimeoutMS;
     repeat
       CheckSynchronize(1); // make UI responsive enough
     until WaitFor(10) or
