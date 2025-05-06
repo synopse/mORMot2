@@ -5479,12 +5479,12 @@ type
     fMethod: TUriMethods;
     fDone: TSynEvent;
     fReceived: TSynEvent;
-    function OnEphemeral(Ctxt: THttpServerRequestAbstract): cardinal;
-    procedure OnResponded(var Context: TOnHttpServerAfterResponseContext);
   public
     constructor Create(const aPort, aResponse: RawUtf8; aParams: PDocVariantData;
       aMethod: TUriMethods); reintroduce;
     destructor Destroy; override;
+    function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
+    procedure OnResponded(var Context: TOnHttpServerAfterResponseContext);
   end;
 
 constructor THttpServerEphemeral.Create(const aPort, aResponse: RawUtf8;
@@ -5493,7 +5493,6 @@ begin
   fResponse := aResponse;
   fParams := aParams;
   fMethod := aMethod;
-  fOnRequest := OnEphemeral;
   fOnAfterResponse := OnResponded;
   fReceived := TSynEvent.Create;
   inherited Create(aPort, nil, nil, 'ephemeral', {threadpool=}-1);
@@ -5505,7 +5504,7 @@ begin
   fReceived.Free; 
 end;
 
-function THttpServerEphemeral.OnEphemeral(Ctxt: THttpServerRequestAbstract): cardinal;
+function THttpServerEphemeral.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   m: TUriMethod;
 begin
@@ -5536,6 +5535,8 @@ begin
   server := THttpServerEphemeral.Create(aPort, aResponse, @aParams, aMethods);
   try
     result := server.fReceived.WaitForSafe(aTimeOutSecs shl MilliSecsPerSecShl);
+    if result then
+      SleepHiRes(10); // wait for the client connection to gracefully disconnect
   finally
     server.Free;
   end;
