@@ -1111,7 +1111,7 @@ type
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
-    procedure InitThreadInfo(nfo: PSynLogThreadInfo);
+    function InitThreadNumber: PtrUInt;
     function GetThreadInfo: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
     function Instance: TSynLog;
@@ -4590,24 +4590,23 @@ begin
         ThreadName := '';
         ThreadID := 0;
       end;
-    // mark number to be recycled by InitThreadInfo
+    // mark number to be recycled by InitThreadNumber
     AddWord(fThreadIndexReleased, fThreadIndexReleasedCount, num);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
-procedure TSynLog.InitThreadInfo(nfo: PSynLogThreadInfo);
+function TSynLog.InitThreadNumber: PtrUInt;
 begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
-    // setup this thread number
     if fFamily.fPerThreadLog = ptNoThreadProcess then
-      nfo^.ThreadNumber := 1 // no actual thread tracking in this mode
+      result := 1 // no actual thread tracking in this mode
     else if fThreadIndexReleasedCount <> 0 then
     begin
       dec(fThreadIndexReleasedCount); // reuse slot after NotifyThreadEnded()
-      nfo^.ThreadNumber := fThreadIndexReleased[fThreadIndexReleasedCount];
+      result := fThreadIndexReleased[fThreadIndexReleasedCount];
     end
     else
     begin
@@ -4615,7 +4614,7 @@ begin
         ESynLogException.RaiseUtf8(
           'Too many threads: check for missing %.NotifyThreadEnded', [self]);
       inc(fThreadCount);
-      nfo^.ThreadNumber := fThreadCount;
+      result := fThreadCount;
     end;
     // initialize the associated log file if needed
     if fInitFlags = [logHeaderWritten, logInitDone] then
@@ -4647,17 +4646,17 @@ end;
 function TSynLog.GetThreadInfo: PSynLogThreadInfo;
 begin
   result := @PerThreadInfo; // access the threadvar
-  if PInteger(result)^ = 0 then // first access time
-    InitThreadInfo(result);
+  if PInteger(result)^ = 0 then // first access
+    result^.ThreadNumber := InitThreadNumber;
 end;
 
 procedure TSynLog.LockAndDisableExceptions;
 var
   nfo: PSynLogThreadInfo;
 begin
-  nfo := @PerThreadInfo; // access the threadvar - inlined TSynLog.GetThreadInfo
-  if PInteger(nfo)^ = 0 then // first access time
-    InitThreadInfo(nfo);
+  nfo := @PerThreadInfo; // access the threadvar - inlined GetThreadInfo
+  if PInteger(nfo)^ = 0 then // first access
+    nfo^.ThreadNumber := InitThreadNumber;
   GetCurrentTime(nfo, nil); // syscall outside of GlobalThreadLock
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   fThreadInfo := nfo;
@@ -4696,7 +4695,7 @@ var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
-  nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo() already done
+  nfo := @PerThreadInfo; // access the threadvar - InitThreadNumber() already done
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   inc(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ = 0 then
@@ -4711,7 +4710,7 @@ var
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
-  nfo := @PerThreadInfo; // access the threadvar - InitThreadInfo() already done
+  nfo := @PerThreadInfo; // access the threadvar - InitThreadNumber() already done
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   dec(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ <> 0 then
@@ -4823,7 +4822,7 @@ begin
      (not (sllEnter in fFamily.fLevel)) or // void operation
      (fFamily.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
     exit;
-  result := GetThreadInfo;
+  result := GetThreadInfo; // may call InitThreadNumber() if first access
   ndx := result^.RecursionCount;
   inc(ndx);
   if ndx = 0 then
@@ -5169,7 +5168,7 @@ begin
     n := GetCurrentThreadName
   else
     n := Name;
-  nfo := GetThreadInfo;     // may call InitThreadInfo() if first access
+  nfo := GetThreadInfo; // may call InitThreadNumber() if first access
   GetCurrentTime(nfo, nil); // timestamp + threadnumber
   num := nfo^.ThreadNumber;
   tid := PtrUInt(GetCurrentThreadId);
@@ -5875,7 +5874,7 @@ begin
       + [twoEnumSetsAsTextInRecord, // debug-friendly text output
          twoFullSetsAsStar,
          twoForceJsonExtended,
-         twoNoWriteToStreamException, // if TFileStreamNoWriteError is not set
+         twoNoWriteToStreamException,   // if TFileStreamNoWriteError is not set
          twoFlushToStreamNoAutoResize]; // stick to BufferSize
   end;
   // create fWriterEcho instance

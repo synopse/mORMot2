@@ -6511,6 +6511,8 @@ begin
     if ValuesCount <= 0 then
       continue; // missing value will display nothing
     AddVarRec(Values, Escape, WriteObjectOptions);
+    if Format^ = #0 then
+      exit;
     inc(Values);
     dec(ValuesCount);
   until false;
