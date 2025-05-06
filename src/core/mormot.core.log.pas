@@ -5432,111 +5432,88 @@ end;
 
 procedure TSynLog.LogFileHeader;
 var
-  WithinEvents: boolean;
+  w: TJsonWriter;
   i: PtrInt;
   {$ifdef OSWINDOWS}
   Env: PWideChar;
   P: PWideChar;
   L: integer;
   {$endif OSWINDOWS}
-
-  procedure NewLine;
-  begin
-    if WithinEvents then
-    begin
-      fWriterEcho.AddEndOfLine(sllNewRun);
-      LogHeader(sllNewRun, nil);
-    end
-    else
-      fWriter.AddDirect(#10);
-  end;
-
 begin
-  if fWriter = nil then
-    CreateLogWriter; // file creation should be thread-safe
-  WithinEvents := fWriter.WrittenBytes > 0;
-  // array of const is buggy under Delphi 5 :( -> use fWriter.Add*() below
-  if WithinEvents then
+  include(fInitFlags, logHeaderWritten);
+  w := fWriter;
+  if w.WrittenBytes = 0 then // paranoid
   begin
-    LogHeader(sllNewRun, nil);
-    fWriter.AddChars('=', 50);
-    NewLine;
-  end;
-  with Executable, fWriter do
-  begin
-    AddString(ProgramFullSpec);
-    NewLine;
-    AddShorter('Host=');
-    AddString(Host);
-    AddShorter(' User=');
-    AddString(User);
-    AddShort(' CPU='); // not AddShorter() for AddDirect(CpuInfoText) below
+    w.AddString(Executable.ProgramFullSpec);
+    w.AddDirect(#10);
+    w.AddShorter('Host=');
+    w.AddString(Executable.Host);
+    w.AddShorter(' User=');
+    w.AddString(Executable.User);
+    w.AddShort(' CPU='); // not AddShorter() for AddDirect(CpuInfoText) below
     if CpuInfoText = '' then
-      Add(SystemInfo.dwNumberOfProcessors)
+      w.Add(SystemInfo.dwNumberOfProcessors)
     else
       for i := 1 to length(CpuInfoText) do
         if not (ord(CpuInfoText[i]) in [1..32, ord(':')]) then
-          AddDirect(CpuInfoText[i]);
+          w.AddDirect(CpuInfoText[i]);
     {$ifdef OSWINDOWS}
-    with SystemInfo, OSVersionInfo do
-    begin
-      AddDirect('*');
-      Add(wProcessorArchitecture);
-      AddDirect('-');
-      Add(wProcessorLevel);
-      AddDirect('-');
-      Add(wProcessorRevision);
+    w.AddDirect('*');
+    w.Add(SystemInfo.wProcessorArchitecture);
+    w.AddDirect('-');
+    w.Add(SystemInfo.wProcessorLevel);
+    w.AddDirect('-');
+    w.Add(SystemInfo.wProcessorRevision);
     {$endif OSWINDOWS}
     {$ifdef CPUINTEL}
-      AddDirect(':');
-      AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
+    w.AddDirect(':');
+    w.AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
     {$endif CPUINTEL}
     {$ifdef CPUARM3264}
-      Add(':', {$ifdef CPUARM} '-' {$else} '+' {$endif}); // ARM marker
-      AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
+    w.Add(':', {$ifdef CPUARM} '-' {$else} '+' {$endif}); // ARM marker
+    w.AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
     {$endif CPUARM3264}
-      AddShorter(' OS=');
+    w.AddShorter(' OS=');
     {$ifdef OSWINDOWS}
-      AddB(ord(OSVersion));
-      AddDirect('.');
-      AddU(wServicePackMajor);
-      AddDirect('=');
-      AddU(dwMajorVersion);
-      AddDirect('.');
-      AddU(dwMinorVersion);
-      AddDirect('.');
-      AddU(dwBuildNumber);
-    end;
+    w.AddB(ord(OSVersion));
+    w.AddDirect('.');
+    w.AddU(OSVersionInfo.wServicePackMajor);
+    w.AddDirect('=');
+    w.AddU(OSVersionInfo.dwMajorVersion);
+    w.AddDirect('.');
+    w.AddU(OSVersionInfo.dwMinorVersion);
+    w.AddDirect('.');
+    w.AddU(OSVersionInfo.dwBuildNumber);
     {$else}
-    AddString(OS_NAME[OS_KIND]);
-    AddDirect('=');
-    AddTrimSpaces(pointer(SystemInfo.uts.sysname));
-    AddDirect('-');
-    AddTrimSpaces(pointer(SystemInfo.uts.release));
-    AddReplace(pointer(SystemInfo.uts.version), ' ', '-');
+    w.AddString(OS_NAME[OS_KIND]);
+    w.AddDirect('=');
+    w.AddTrimSpaces(pointer(SystemInfo.uts.sysname));
+    w.AddDirect('-');
+    w.AddTrimSpaces(pointer(SystemInfo.uts.release));
+    w.AddReplace(pointer(SystemInfo.uts.version), ' ', '-');
     {$endif OSWINDOWS}
     if OSVersionInfoEx <> '' then
     begin
-      AddDirect('/');
-      AddTrimSpaces(OSVersionInfoEx);
+      w.AddDirect('/');
+      w.AddTrimSpaces(OSVersionInfoEx);
     end;
     {$ifdef OSWINDOWS}
-    AddShorter(' Wow64=');
-    AddB(ord(IsWow64) + ord(IsWow64Emulation) shl 1); // 0, 1, 2 or 3
+    w.AddShorter(' Wow64=');
+    w.AddB(ord(IsWow64) + ord(IsWow64Emulation) shl 1); // 0, 1, 2 or 3
     {$else}
-    AddShorter(' Wow64=0');
+    w.AddShorter(' Wow64=0');
     {$endif OSWINDOWS}
-    AddShort(' Freq=1000000'); // we use QueryPerformanceMicroSeconds()
+    w.AddShort(' Freq=1000000'); // we use QueryPerformanceMicroSeconds()
     if IsLibrary then
     begin
-      AddShort(' Instance=');
-      AddNoJsonEscapeString(InstanceFileName);
+      w.AddShort(' Instance=');
+      w.AddNoJsonEscapeString(Executable.InstanceFileName);
     end;
     {$ifdef OSWINDOWS}
     if not fFamily.fNoEnvironmentVariable then
     begin
-      NewLine;
-      AddShort('Environment variables=');
+      w.AddDirect(#10);
+      w.AddShort('Environment variables=');
       Env := GetEnvironmentStringsW;
       P := pointer(Env);
       while P^ <> #0 do
@@ -5545,28 +5522,24 @@ begin
         if (L > 0) and
            (P^ <> '=') then
         begin
-          AddNoJsonEscapeW(PWord(P), 0);
-          AddDirect(#9);
+          w.AddNoJsonEscapeW(PWord(P), 0);
+          w.AddDirect(#9);
         end;
         inc(P, L + 1);
       end;
       FreeEnvironmentStringsW(Env);
-      CancelLastChar(#9);
+      w.CancelLastChar(#9);
     end;
     {$endif OSWINDOWS}
-    NewLine;
-    AddClassName(self.ClassType);
-    AddShort(' ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' ');
-    AddDateTime(fStartTimestampDateTime);
-    if WithinEvents then
-      fWriterEcho.AddEndOfLine(sllNone)
-    else
-      AddDirect(#10, #10);
-    FlushToStream;
+    w.AddDirect(#10);
+    w.AddClassName(self.ClassType);
+    w.AddShort(' ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' ');
+    w.AddDateTime(fStartTimestampDateTime);
+    w.AddDirect(#10, #10);
+    w.FlushToStream;
     fWriterEcho.EchoReset; // header is not to be sent to console
-    fStreamPositionAfterHeader := fWriter.WrittenBytes;
   end;
-  include(fInitFlags, logHeaderWritten);
+  fStreamPositionAfterHeader := w.WrittenBytes;
 end;
 
 procedure TSynLog.AddMemoryStats;
