@@ -1266,9 +1266,12 @@ begin
                    (len > 0) and
                    (len <= 1024) then
                 begin
-                  // write up to 1KB of result binary as Base64 text
+                  // write up to 1KB of result binary as (Base64) text
                   W.AddShort(',result:"');
-                  W.WrBase64(pointer(content), len, false);
+                  if IsValidUtf8NotVoid(pointer(content), len) then
+                    W.AddJsonEscape(pointer(content), len)
+                  else
+                    W.WrBase64(pointer(content), len, false);
                   W.AddDirect('"');
                 end;
               end
