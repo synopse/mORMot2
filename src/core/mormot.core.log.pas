@@ -5878,7 +5878,7 @@ begin
   // check for any PerformRotation (delayed in TSynLog.LogEnterFmt)
   if not (pendingRotate in fPendingFlags) then
     if (fFileRotationBytes > 0) and
-       (fWriter.WrittenBytes + Len > fFileRotationBytes) then
+       (fWriter.WrittenBytes + PtrUInt(Len) > PtrUInt(fFileRotationBytes)) then
       include(fPendingFlags, pendingRotate)
     else if fNextFileRotateDailyTix10 <> 0 then
     begin
