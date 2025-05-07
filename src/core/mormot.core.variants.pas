@@ -6775,16 +6775,11 @@ function TDocVariantData.InitJson(const Json: RawUtf8;
 var
   tmp: TSynTempBuffer;
 begin
-  if Json = '' then
-    result := false
-  else
-  begin
-    tmp.Init(Json);
-    try
-      result := InitJsonInPlace(tmp.buf, aOptions) <> nil;
-    finally
-      tmp.Done;
-    end;
+  tmp.Init(Json);
+  try
+    result := InitJsonInPlace(tmp.buf, aOptions) <> nil;
+  finally
+    tmp.Done;
   end;
 end;
 
