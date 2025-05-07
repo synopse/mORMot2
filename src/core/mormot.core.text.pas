@@ -5646,25 +5646,25 @@ begin
     TextLen := TextMaxLen - 5
   else
     TextMaxLen := 0;
-  inc(TextLen, PtrUInt(Text)); // PUtf8Char(TextLen)=TextEnd
   if Text <> nil then
   begin
     repeat
-      q := ByteScanIndex(pointer(Text), PUtf8Char(TextLen) - Text, byte(Quote));
+      q := ByteScanIndex(pointer(Text), TextLen, byte(Quote));
       if q < 0 then
       begin
-        AddNoJsonEscape(Text, PUtf8Char(TextLen) - Text); // no double quote
+        AddNoJsonEscape(Text, TextLen); // no double quote
         break;
       end;
       inc(q); // include first Quote
       AddNoJsonEscape(Text, q);
-      Add(Quote); // double Quote
+      AddDirect(Quote); // double Quote
       inc(Text, q); // continue
-    until false;
+      dec(TextLen, q);
+    until TextLen = 0;
     if TextMaxLen <> 0 then
-      AddShorter('...');
+      AddDirect('.', '.', '.');
   end;
-  Add(Quote);
+  AddDirect(Quote);
 end;
 
 procedure TTextWriter.AddUrlNameNormalize(U: PUtf8Char; L: PtrInt);
