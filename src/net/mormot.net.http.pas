@@ -3667,13 +3667,13 @@ var
   P: PUtf8Char;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  if PtrUInt(Len) < PtrUInt(st.Len) then // we just ignore the following #10
+  if PtrUInt(Len) < PtrUInt(st.Len) then // handle st.Len=0 and/or Len=-1
   begin
     P := st.P;
     st.Line := P;
-    P[Len] := #0; // replace ending CRLF by #0
+    P[Len] := #0; // replace ending #13 by #0 - HTTP expects #13#10 not #10
     st.LineLen := Len;
-    inc(Len, 2);  // if 2nd char is not #10, parsing will fail as expected
+    inc(Len, 2);  // if char after #13 is not #10, parsing will fail as expected
     inc(st.P, Len);
     dec(st.Len, Len);
     result := true;
