@@ -3084,6 +3084,7 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 {$endif ASMINTEL}
 
 /// Move() with one-by-one byte copy
+// - expects Source <> nil, Dest <> nil and Count > 0
 // - never redirect to MoveFast() so could be used when data overlaps
 procedure MoveByOne(Source, Dest: pointer; Count: PtrUInt);
   {$ifdef HASINLINE} inline; {$endif}

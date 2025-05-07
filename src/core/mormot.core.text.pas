@@ -4488,16 +4488,17 @@ begin
   if PtrUInt(Value) <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
-    Len := PStrLen(P - _STRLEN)^;
+    PCardinal(B + 1)^ := PCardinal(P)^;
+    inc(B, PStrLen(P - _STRLEN)^);
   end
   else
   {$endif ASMINTEL}
   begin
     P := StrInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
+    MoveFast(P^, B[1], Len);
+    inc(B, Len);
   end;
-  MoveFast(P^, B[1], Len);
-  inc(B, Len);
 end;
 
 {$ifdef CPU32} // Add(Value: PtrInt) already implements it for CPU64
@@ -4519,7 +4520,9 @@ begin
   else if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
-    Len := PStrLen(P - _STRLEN)^;
+    PCardinal(B + 1)^ := PCardinal(P)^;
+    inc(B, PStrLen(P - _STRLEN)^);
+    exit;
   end
   {$endif ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   else
@@ -4575,16 +4578,17 @@ begin
   if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
-    Len := PStrLen(P - _STRLEN)^;
+    PCardinal(B + 1)^ := PCardinal(P)^;
+    inc(B, PStrLen(P - _STRLEN)^);
   end
   else
   {$endif ASMINTEL}
   begin
     P := StrUInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
+    MoveFast(P^, B[1], Len);
+    inc(B, Len);
   end;
-  MoveFast(P^, B[1], Len);
-  inc(B, Len);
 end;
 
 procedure TTextWriter.AddB(Value: PtrUInt);
@@ -4615,16 +4619,17 @@ begin
   if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
-    Len := PStrLen(P - _STRLEN)^;
+    PCardinal(B + 1)^ := PCardinal(P)^;
+    inc(B, PStrLen(P - _STRLEN)^);
   end
   else
   {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
+    MoveFast(P^, B[1], Len);
+    inc(B, Len);
   end;
-  MoveFast(P^, B[1], Len);
-  inc(B, Len);
 end;
 
 procedure TTextWriter.AddQHex(Value: Qword; QuotedChar: AnsiChar);
