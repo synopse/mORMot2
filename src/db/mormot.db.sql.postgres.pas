@@ -1351,6 +1351,7 @@ end;
 procedure TSqlDBPostgresStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   P: pointer;
+  c: PSqlDBColumnProperty;
 begin
   if (fRes = nil) or
      (fResStatus <> PGRES_TUPLES_OK) or
@@ -1361,22 +1362,22 @@ begin
      (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
     W.AddNull
   else
-  with fColumns[Col] do
   begin
-    case ColumnType of
+    c := @fColumns[Col];
+    case c^.ColumnType of
       ftNull:
         W.AddNull;
       ftInt64,
       ftDouble,
       ftCurrency:
-        if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+        if c^.ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
           W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
         else
           // note: StrLen slightly faster than PQ.GetLength for small content
           W.AddShort(P, StrLen(P));
       ftUtf8:
-        if (ColumnAttr = JSONOID) or
-           (ColumnAttr = JSONBOID) then
+        if (c^.ColumnAttr = JSONOID) or
+           (c^.ColumnAttr = JSONBOID) then
           W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
         else
         begin
@@ -1401,7 +1402,7 @@ begin
             PQ.GetLength(fRes, fCurrentRow, Col)), {withmagic=}true);
     else
       ESqlDBPostgres.RaiseUtf8('%.ColumnToJson: ColumnType=%?',
-        [self, ord(ColumnType)]);
+        [self, ord(c^.ColumnType)]);
     end;
   end;
 end;
