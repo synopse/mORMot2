@@ -721,12 +721,11 @@ var
           for iA := iStart to iEnd do
             for iP := 0 to fParamCount - 1 do
             begin
-              W.Add('p');
+              W.AddDirect('p');
               W.AddU(iCnt);
-              W.Add(' ');
+              W.AddDirect(' ');
               W.AddString(aParTyp[iP]);
-              W.Add('=','?');
-              W.AddComma;
+              W.AddDirect('=', '?', ',');
               inc(iCnt);
             end;
           W.CancelLastComma;
@@ -740,9 +739,9 @@ var
               Inc(iCnt);
             end;
             W.Add(oldSQL, DynRawUtf8ArrayToConst(aPar));
-            W.Add(';', #10);
+            W.AddDirect(';', #10);
           end;
-          W.AddShorter('end');
+          W.AddDirect('e', 'n', 'd');
           PrepareBlockStatement;
         end;
         ExecuteBlockStatement;

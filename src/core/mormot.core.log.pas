@@ -5449,7 +5449,7 @@ begin
     w.Add(':', {$ifdef CPUARM} '-' {$else} '+' {$endif}); // ARM marker
     w.AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
     {$endif CPUARM3264}
-    w.AddShorter(' OS=');
+    w.AddDirect(' ', 'O', 'S', '=');
     {$ifdef OSWINDOWS}
     w.AddB(ord(OSVersion));
     w.AddDirect('.');
@@ -5530,7 +5530,7 @@ begin
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
   // include mormot.core.fpcx64mm raw information if available
   fWriter.AddOnSameLine(pointer(RetrieveMemoryManagerInfo));
-  fWriter.AddShorter('   ');
+  fWriter.AddDirect(' ', ' ', ' ');
 end;
 
 procedure TSynLog.AddErrorMessage(Error: cardinal);
@@ -5547,7 +5547,7 @@ begin
   else
   {$endif OSWINDOWS}
     fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
-  fWriter.AddShorter('" (');
+  fWriter.AddDirect('"', ' ', '(');
   fWriter.AddU(Error);
   fWriter.AddDirect(')', ' ');
 end;

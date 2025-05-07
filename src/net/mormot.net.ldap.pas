@@ -4802,16 +4802,16 @@ begin
     if AttributeValueMakeReadable(tmp, a.fKnownTypeStorage) or
        (pointer(tmp) = pointer(v)) then
       exit; // don't put hexadecimal or identical content in comment
-  w.AddShorter(#10'# ');
+  w.AddDirect(#10, '#', ' ');
   w.AddString(a.AttributeName); // is either OID or plain alphanum
-  w.AddShorter(': <');
+  w.AddDirect(':', ' ', '<');
   truncated := (maxlen > 0) and
                (length(tmp) + length(a.AttributeName) > maxlen - 6);
   if truncated then
     FakeLength(tmp, Utf8TruncatedLength(tmp, maxlen - 9));
   w.AddString(tmp);             // human-readable text as comment
   if truncated then
-    w.AddShorter('...>')
+    w.AddDirect('.', '.', '.', '>')
   else
     w.AddDirect('>');
 end;
@@ -4997,7 +4997,7 @@ var
 begin
   w.AddDirect('#', ' ');
   w.AddString(DNToCN(fObjectName, {NoRaise=}true));
-  w.AddShorter(#10'dn:');
+  w.AddDirect(#10, 'd', 'n', ':');
   AddLdif(w, fObjectName, false, false, nil, 0);
   w.AddDirect(#10);
   for i := 0 to fAttributes.Count - 1 do
@@ -5196,7 +5196,7 @@ begin
     w.Add(count);
     if not NoTime then
     begin
-      w.AddShorter(' in ');
+      w.AddDirect(' ', 'i', 'n', ' ');
       w.AddShort(MicroSecToString(fMicroSec));
       w.AddShorter(' sent=');
       w.AddShort(KBNoSpace(fOut));

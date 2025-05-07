@@ -1068,14 +1068,14 @@ begin
       question:
         WR.AddDirect('?', ' ');
       paragraph:
-        WR.AddShorter('.'#13#10);
+        WR.AddDirect('.', #13, #10);
     end;
   end;
   if (LastPunctuation <> ' ') and
      not (last in endKind) then
   begin
-    WR.AddShorter('bla');
-    WR.Add(LastPunctuation);
+    WR.AddDirect('b', 'l', 'a');
+    WR.AddDirect(LastPunctuation);
   end;
 end;
 

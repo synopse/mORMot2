@@ -5182,7 +5182,7 @@ procedure TTextWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
 begin
   Add('"');
   if Instance = nil then
-    AddShorter('void')
+    AddDirect('v', 'o', 'i', 'd')
   else
     AddInstancePointer(Instance, #0, {unitname=}false, {pointer=}true);
   AddDirect('"');
@@ -9949,7 +9949,7 @@ begin
     extcode := Context.AdditionalInfo(extnames);
     if extcode <> 0 then
     begin
-      WR.AddShorter(' 0x');
+      WR.AddDirect(' ', '0', 'x');
       WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
       for i := 0 to high(extnames) do
       begin

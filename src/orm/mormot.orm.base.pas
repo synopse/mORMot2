@@ -3463,7 +3463,7 @@ begin
             for f := 0 to Decoder.FieldCount - 1 do
             begin
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddShorter('=v.');
+              W.AddDirect('=', 'v', '.');
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
@@ -3473,7 +3473,7 @@ begin
             begin
               W.AddShort(' unnest(?::');
               W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
-              W.AddShorter('[]),');
+              W.AddDirect('[', ']', ')', ',');
             end;
             W.AddShort(' unnest(?::int8[]) order by '); // last param is ID
             W.AddU(Decoder.FieldCount + 1); // order by ID to mimimize locks wait
@@ -3486,7 +3486,7 @@ begin
             W.AddString(UpdateIDFieldName);
             W.AddShort(') where t.');
             W.AddString(UpdateIDFieldName);
-            W.AddShorter('=v.');
+            W.AddDirect('=', 'v', '.');
             W.AddString(UpdateIDFieldName);
           end
           else
@@ -3497,7 +3497,7 @@ begin
             begin
               // append 'COL1=?,COL2=?'
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddShorter('=?,');
+              W.AddDirect('=', '?', ',');
             end;
             W.CancelLastComma;
             W.AddShort(' where ');
@@ -3528,7 +3528,7 @@ begin
               begin
                 W.AddShort('unnest(?::');
                 W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
-                W.AddShorter('[]),');
+                W.AddDirect('[', ']', ')', ',');
               end
             else
             begin
@@ -3538,7 +3538,7 @@ begin
               begin
                 // INSERT INTO .. VALUES (..),(..),(..),..
                 W.CancelLastComma;
-                W.AddShorter('),(');
+                W.AddDirect(')', ',', '(');
                 W.AddStrings('?,', Decoder.FieldCount);
                 dec(MultiInsertRowCount);
               end;
@@ -9122,7 +9122,7 @@ begin
   W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
+      W.AddDirect(#$ef, #$bb, #$bf); // add UTF-8 Byte Order Mark
     if Tab then
       CommaSep := #9;
     FMax := FieldCount - 1;
@@ -9314,7 +9314,7 @@ begin
         W.AddShort(XMLUTF8_HEADER);
         W.AddString(ODSContentHeader);
         W.Add(FieldCount);
-        W.AddShorter('" />');
+        W.AddDirect('"', ' ', '/', '>');
         if (self <> nil) and
            ((FieldCount > 0) or
             (fRowCount > 0)) then
@@ -9341,13 +9341,13 @@ begin
                     begin
                       W.AddShort('float" office:value="');
                       W.AddXmlEscape(U);
-                      W.AddShorter('" />');
+                      W.AddDirect('"', ' ', '/', '>');
                     end;
                   ftDate:
                     begin
                       W.AddShort('date" office:date-value="');
                       W.AddXmlEscape(U);
-                      W.AddShorter('" />');
+                      W.AddDirect('"', ' ', '/', '>');
                     end;
                 else
                   begin
@@ -9394,13 +9394,13 @@ begin
   o := 0;
   for r := 0 to fRowCount do
   begin
-    Dest.AddShorter('<tr>');
+    Dest.AddDirect('<', 't', 'r', '>');
     for f := 0 to fFieldCount - 1 do
     begin
       if r = 0 then
-        Dest.AddShorter('<th>') // header
+        Dest.AddDirect('<', 't', 'h', '>') // header
       else
-        Dest.AddShorter('<td>');
+        Dest.AddDirect('<', 't', 'd', '>');
       if Assigned(OnExportValue) and
          (r > 0) then
         Dest.AddHtmlEscapeUtf8(OnExportValue(self, r, f, true), hfOutsideAttributes)

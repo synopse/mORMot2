@@ -2665,7 +2665,7 @@ begin
   WR.AddString(GetSetNameJsonArray(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddDirect('}', ',');
 {$else}
-  WR.AddShorter('"},');
+  WR.AddDirect('"', '}', ',');
 {$endif SOA_DEBUG}
 end;
 
@@ -4277,7 +4277,7 @@ begin
         for a := 0 to High(Args) do
           Args[a].SerializeToContract(WR);
         WR.CancelLastComma;
-        WR.AddShorter(']},');
+        WR.AddDirect(']', '}', ',');
       end;
     WR.CancelLastComma(']');
     WR.SetText(fContract);

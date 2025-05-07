@@ -4190,14 +4190,14 @@ begin
       // detect and append the error message as JSON object
       AddShort(','#13#10'"error":'#13#10);
       AddNoJsonEscape(pointer(msg), length(msg));
-      AddShorter(#13#10'}');
+      AddDirect(#13, #10, '}');
     end
     else
     begin
       // regular error message as JSON text
       AddShort(','#13#10'"errorText":"');
       AddJsonEscape(pointer(msg));
-      AddShorter('"'#13#10'}');
+      AddDirect('"', #13, #10, '}');
     end;
     SetText(fCall^.OutBody);
   finally

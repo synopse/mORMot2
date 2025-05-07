@@ -9617,7 +9617,7 @@ begin
     Dest.AddShorter(#13#10'   ');
     for i := 1 to line do
     begin
-      Dest.Add(' ', '$');
+      Dest.AddDirect(' ', '$');
       Dest.AddByteToHexLower(P^);
       inc(P);
       Dest.AddComma;
@@ -10537,7 +10537,7 @@ begin
   W.AddHtmlEscape(B, P - B, hfWithinAttributes);
   W.AddShort('" rel="nofollow">');
   W.AddHtmlEscape(B, P - B);
-  W.AddShorter('</a>');
+  W.AddDirect('<', '/', 'a', '>');
 end;
 
 function TTextWriterEscape.ProcessLink: boolean;
@@ -10837,7 +10837,7 @@ begin
             else
               W.Add('"', '>');
             W.AddHtmlEscape(B2, P2 - B2, fmt);
-            W.AddShorter('</a>'); // no continune -> need inc(P) over ending )
+            W.AddDirect('<', '/', 'a', '>'); // no inc(P) needed here
           end
           else
             // not a true link -> just append
@@ -10853,7 +10853,7 @@ begin
                 W.AddHtmlEscape(B2, P2 - B2, hfWithinAttributes);
                 W.AddShorter('" src="');
                 W.AddNoJsonEscape(B, P - B);
-                W.AddShorter('">');
+                W.AddDirect('"', '>');
                 inc(P);
                 continue;
               end;

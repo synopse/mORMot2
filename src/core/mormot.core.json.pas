@@ -5527,7 +5527,7 @@ begin
     if ((twoFullSetsAsStar in o) or
         (woHumanReadableFullSetsAsStar in Ctxt.Options)) and
        GetAllBits(Data^, Ctxt.Info.Cache.EnumMax + 1) then
-      Ctxt.W.AddShorter('"*"')
+      Ctxt.W.AddDirect('"', '*', '"')
     else
     with Ctxt.Info.Cache do
     begin
@@ -6198,7 +6198,7 @@ procedure TJsonWriter.AddCRAndIndent;
 begin
   if fBlockComment <> '' then
   begin
-    AddShorter(' // ');
+    AddDirect(' ', '/', '/', ' ');
     AddString(fBlockComment);
     fBlockComment := '';
   end;
@@ -7166,7 +7166,9 @@ begin
       inc(i);
     until i >= Len;
     if i <> s then
-      AddNoJsonEscapeW(@PWordArray(P)[s], i - s);
+      AddNoJsonEscapeW(@PWordArray(P)[s], i - s)
+    else if B >= BEnd then
+      FlushToStream; // for safe AddDirect() below
     if i >= Len then
       exit;
     c := PWordArray(P)[i];
@@ -7178,7 +7180,7 @@ begin
     else if esc = JSON_ESCAPE_UNICODEHEX then
     begin
       // characters below ' ', #7 e.g. -> \u0007
-      AddShorter('\u00');
+      AddDirect('\', 'u', '0', '0');
       AddByteToHex(c);
     end
     else

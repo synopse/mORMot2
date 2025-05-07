@@ -5172,7 +5172,7 @@ begin
       begin
         // INSERT INTO .. VALUES (..),(..),(..),..
         W.CancelLastComma;
-        W.AddShorter('),(');
+        W.AddDirect(')', ',', '(');
         W.AddStrings('?,', FieldCount);
         dec(RowCount);
       end;
@@ -11410,7 +11410,7 @@ begin
       if Encoding in [encPostHex, encPostHexID, encPutHexID] then
         fBatch.AddBinToHexDisplayMinChars(Fields, SizeOf(Fields^));
       if fTable <> nil then
-        fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
+        fBatch.AddDirect('"', ',') // '{"Table":[...,"POST",{object},...]}'
       else
       begin
         fBatch.AddDirect('@'); // '[...,"POST@Table",{object}',...]'

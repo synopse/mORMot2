@@ -3875,7 +3875,7 @@ begin
   if FullSetsAsStar and
      (MinValue = 0) and
      GetAllBits(Value, MaxValue + 1) then
-    W.AddShorter('"*"')
+    W.AddDirect('"', '*', '"')
   else
   begin
     PS := NameList;

@@ -1254,7 +1254,7 @@ begin
               with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do
               begin
                 len := length(Content);
-                W.AddShorter('len:');
+                W.AddDirect('l', 'e', 'n', ':');
                 W.AddU(len);
                 if (Status <> 0) and
                    (Status <> HTTP_SUCCESS) then
@@ -1340,7 +1340,7 @@ begin
   begin
     W.AddShorter(',IP:"');
     W.AddShort(ip, StrLen(ip));
-    W.AddShorter('"},');
+    W.AddDirect('"', '}', ',');
   end;
   with Ctxt.ServiceExecution^ do
     IRestOrm(LogRest).AsyncBatchRawAppend(LogClass, W);

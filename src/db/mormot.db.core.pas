@@ -2503,12 +2503,12 @@ begin
       if n = 1 then
       begin
         if inlined then
-          AddShorter('=:(')
+          AddDirect('=', ':', '(')
         else
           AddDirect('=');
         AddQuotedStr(pointer(Values[0]), length(Values[0]), '''');
         if inlined then
-          AddShorter('):');
+          AddDirect(')', ':');
       end
       else
       begin
@@ -2519,7 +2519,7 @@ begin
             AddDirect(':', '(');
           AddQuotedStr(pointer(Values[i]), length(Values[i]), '''');
           if inlined then
-            AddShorter('):,')
+            AddDirect(')', ':', ',')
           else
             AddComma;
         end;
@@ -2548,12 +2548,12 @@ begin
       if n = 1 then
       begin
         if ValuesInlinedMax > 1 then
-          AddShorter('=:(')
+          AddDirect('=', ':', '(')
         else
           AddDirect('=');
         Add(Values[0]);
         if ValuesInlinedMax > 1 then
-          AddShorter('):');
+          AddDirect(')', ':', ',')
       end
       else
       begin
@@ -2564,7 +2564,7 @@ begin
             AddDirect(':', '(');
           Add(Values[i]);
           if ValuesInlinedMax > n then
-            AddShorter('):,')
+            AddDirect(')', ':', ',')
           else
             AddComma;
         end;
@@ -2893,7 +2893,7 @@ begin
     for i := 0 to length(ColNames) - 1 do
     begin
       AddString(ColNames[i]);
-      AddShorter('","');
+      AddDirect('"', ',', '"')
     end;
     CancelLastChar;
     fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
@@ -2942,7 +2942,7 @@ begin
       fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
     end
     else
-      AddShorter('","');
+      AddDirect('"', ',', '"')
   end;
 end;
 
@@ -3876,10 +3876,10 @@ var
   procedure AddValue;
   begin
     if InlinedParams = pInlined then
-      W.AddShorter(':(');
+      W.AddDirect(':', '(');
     W.AddString(FieldValues[f]);
     if InlinedParams = pInlined then
-      W.AddShorter('):,')
+      W.AddDirect(')', ':', ',')
     else
       W.AddComma;
   end;

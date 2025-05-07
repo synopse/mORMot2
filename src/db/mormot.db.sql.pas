@@ -5318,7 +5318,7 @@ var
                   else
                     W.AddString(DB_FIELDS[dFirebird, FieldTypes[f]]);
                   end;
-                W.AddShorter('=?,');
+                W.AddDirect('=', '?', ',');
               end;
               W.CancelLastComma;
               W.AddDirect(#10, ',');
@@ -5346,9 +5346,9 @@ var
                 W.AddComma;
               end;
               W.CancelLastComma;
-              W.AddShorter(');'#10);
+              W.AddDirect(')', ';', #10);
             end;
-            W.AddShorter('end');
+            W.AddDirect('e', 'n', 'd');
             if W.TextLength > 32700 then
               ESqlDBException.RaiseUtf8(
                 '%.MultipleValuesInsert: Firebird Execute Block length=%',
@@ -5580,10 +5580,10 @@ begin
           W.AddComma;
         end;
         W.CancelLastComma;
-        W.AddShorter(');'#10);
+        W.AddDirect(')', ';', #10);
         inc(r);
       until r = RowCount;
-      W.AddShorter('end');
+      W.AddDirect('e', 'n', 'd');
       with Props.NewThreadSafeStatement do
         try
           Execute(W.Text, false);
@@ -6508,7 +6508,7 @@ begin
   try
     // add optional/deprecated/Windows-centric UTF-8 Byte Order Mark
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf);
+      W.AddDirect(#$ef, #$bb, #$bf);
     // add CSV header
     for F := 0 to FMax do
     begin
@@ -8196,7 +8196,7 @@ begin
       begin
         Dest.Add('[');
         Dest.AddString(VArray[0]); // first item is enough in the logs
-        Dest.AddShorter('...]');
+        Dest.AddDirect('.', '.', ']');
       end;
 end;
 
