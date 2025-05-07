@@ -7053,12 +7053,12 @@ var
   P, B: PUtf8Char;
   num: integer;
   maxSize, maxAllowed: cardinal;
-  W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  W: TJsonWriter; // at least TJsonWriter since W.AddVariant() is needed
+  tmp: TTextWriterStackBuffer; // maxsize is typically 2048 so all on stack
 begin
   fSqlWithInlinedParams := fSql;
   if fConnection = nil then
-    maxSize := 0
+    maxSize := 2048 // LoggedSqlMaxSize default seems fair enough
   else
     maxSize := fConnection.fProperties.fLoggedSqlMaxSize;
   if (integer(maxSize) < 0) or
@@ -7074,7 +7074,7 @@ begin
       P := GotoNextParam(P);
       if W = nil then
         if P^ = #0 then
-          exit
+          exit // no parameter
         else
           W := TJsonWriter.CreateOwnedStream(tmp);
       W.AddNoJsonEscape(B, P - B);

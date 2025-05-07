@@ -177,7 +177,7 @@ type
     fPGParamFormats: TIntegerDynArray;
     // non zero for PGFMT_BIN params
     fPGParamLengths: TIntegerDynArray;
-    /// define the result columns name and content
+    /// define the result columns name and content - called once if cached
     procedure BindColumns;
     /// set parameters as expected by PostgresSQL
     procedure BindParams;
@@ -989,8 +989,8 @@ begin
   end
   else
     SqlLogEnd;
-  // allocate libpq parameter buffers as dynamic arrays
-  SetLength(fPGParams, fPreparedParamsCount);
+  // allocate libpq parameter buffers as dynamic arrays - reused when cached
+  SetLength(fPGParams,       fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
   SetLength(fPGParamLengths, fPreparedParamsCount);
 end;
