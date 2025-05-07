@@ -9747,18 +9747,20 @@ end;
 
 function TProgressInfo.GetProgress: RawUtf8;
 var
-  ctx, remain: ShortString;
+  ctx, remain: TShort47;
   persec, expect, curr: TShort16;
 begin
   result := LastProgress;
   if result <> '' then
     exit;
-  Ansi7StringToShortString(Context, ctx);
-  if ctx[0] > #30 then
+  if length(Context) > 32 then
   begin
     ctx[0] := #32; // truncate to keep information on a single line
+    MoveFast(pointer(Context)^, ctx[1], 29);
     PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
-  end;
+  end
+  else
+    Ansi7StringToShortString(Context, ctx);
   persec[0] := #0;
   if PerSecond <> 0 then
     FormatShort16(' %/s', [KBNoSpace(PerSecond)], persec);
