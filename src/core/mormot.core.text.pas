@@ -613,9 +613,17 @@ type
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append one ASCII char to the buffer with no buffer check
+    /// append two ASCII chars to the buffer with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c1, c2: AnsiChar); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append three ASCII chars to the buffer with no buffer check
+    // - to be called after a regular Add(), within the 16 bytes buffer overhead
+    procedure AddDirect(const c1, c2, c3: AnsiChar); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append four ASCII chars to the buffer with no buffer check
+    // - to be called after a regular Add(), within the 16 bytes buffer overhead
+    procedure AddDirect(const c1, c2, c3, c4: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one comma (',') character
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
@@ -4086,6 +4094,19 @@ procedure TTextWriter.AddDirect(const c1, c2: AnsiChar);
 begin
   PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8;
   inc(B, 2); // with proper constant propagation above when inlined
+end;
+
+procedure TTextWriter.AddDirect(const c1, c2, c3: AnsiChar);
+begin
+  PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8 + PtrUInt(byte(c3)) shl 16;
+  inc(B, 3); // with proper constant propagation above when inlined
+end;
+
+procedure TTextWriter.AddDirect(const c1, c2, c3, c4: AnsiChar);
+begin
+  PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8 +
+                       PtrUInt(byte(c3)) shl 16 + PtrUInt(byte(c4)) shl 24;
+  inc(B, 4); // with proper constant propagation above when inlined
 end;
 
 procedure TTextWriter.AddComma;
