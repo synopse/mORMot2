@@ -4857,7 +4857,7 @@ function RunCommandWin(const cmd: TFileName; waitfor: boolean;
   var processinfo: TProcessInformation; const env: TFileName;
   options: TRunOptions; waitfordelayms: cardinal;
   redirected: PRawByteString; const onoutput: TOnRedirect;
-  const wrkdir: TFileName): integer;
+  const wrkdir: TFileName; jobtoclose: PHandle): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   security: TSecurityAttributes;
@@ -4970,6 +4970,8 @@ begin
   l := 0;
   rd := 0;
   job := 0;
+  if Assigned(jobtoclose) then
+    jobtoclose^ := job;
   if Assigned(onoutput) or
      (redirected <> nil) then
     if CreatePipe(rd, wr, @security, 0) then
@@ -5025,7 +5027,9 @@ begin
     begin
       CloseHandle(job);
       job := 0;
-    end;
+    end
+    else if Assigned(jobtoclose) then
+      jobtoclose^ := job;
   end;
   if Assigned(onoutput) then
     onoutput('', processinfo.dwProcessId);
@@ -5111,8 +5115,9 @@ begin
   CloseHandle(processinfo.hThread);
   if rd <> 0 then // CloseHandle(wr) has already be done
     CloseHandle(rd);
-  if job <> 0 then
-    CloseHandle(job);
+  if (job <> 0) and
+     not Assigned(jobtoclose) then
+      CloseHandle(job); // caller should make CloseHandle(jobtoclose^)
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;

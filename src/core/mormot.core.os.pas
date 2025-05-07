@@ -5958,7 +5958,7 @@ function RunCommandWin(const cmd: TFileName; waitfor: boolean;
   var processinfo: TProcessInformation; const env: TFileName = '';
   options: TRunOptions = []; waitfordelayms: cardinal = INFINITE;
   redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
-  const wrkdir: TFileName = ''): integer;
+  const wrkdir: TFileName = ''; jobtoclose: PHandle = nil): integer;
 
 type
   /// how RunRedirect() or RunCommand() should try to gracefully terminate
