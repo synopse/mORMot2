@@ -9432,7 +9432,7 @@ function ParsedToText(const c: TX509Parsed): RawUtf8;
   begin
     for cu := l to h do
       if cu in c.Usage then
-        begin
+      begin
         if {%H-}usage <> '' then
           usage := usage + ', ';
         usage := usage + CU_FULLTEXT[cu];

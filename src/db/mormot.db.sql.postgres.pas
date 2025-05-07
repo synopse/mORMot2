@@ -709,24 +709,24 @@ end;
 procedure TSqlDBPostgresConnectionProperties.FillOidMapping;
 begin
   // see pg_type.h (most used first)
-  MapOid(INT4OID, ftInt64);
-  MapOid(INT8OID, ftInt64);
-  MapOid(TEXTOID, ftUtf8); // other char types will be ftUtf8 as fallback
-  MapOid(FLOAT8OID, ftDouble);
-  MapOid(TIMESTAMPOID, ftDate);
-  MapOid(BYTEAOID, ftBlob);
-  MapOid(NUMERICOID, ftCurrency); // our ORM uses NUMERIC(19,4) for currency
-  MapOid(BOOLOID, ftInt64);
-  MapOid(INT2OID, ftInt64);
-  MapOid(CASHOID, ftCurrency);
+  MapOid(INT4OID,        ftInt64);
+  MapOid(INT8OID,        ftInt64);
+  MapOid(TEXTOID,        ftUtf8); // other char types will be ftUtf8 as fallback
+  MapOid(FLOAT8OID,      ftDouble);
+  MapOid(TIMESTAMPOID,   ftDate);
+  MapOid(BYTEAOID,       ftBlob);
+  MapOid(NUMERICOID,     ftCurrency); // our ORM uses NUMERIC(19,4) for currency
+  MapOid(BOOLOID,        ftInt64);
+  MapOid(INT2OID,        ftInt64);
+  MapOid(CASHOID,        ftCurrency);
   MapOid(TIMESTAMPTZOID, ftDate);
-  MapOid(ABSTIMEOID, ftDate);
-  MapOid(DATEOID, ftDate);
-  MapOid(TIMEOID, ftDate);
-  MapOid(TIMETZOID, ftDate);
-  MapOid(REGPROCOID, ftInt64);
-  MapOid(OIDOID, ftInt64);
-  MapOid(FLOAT4OID, ftDouble);
+  MapOid(ABSTIMEOID,     ftDate);
+  MapOid(DATEOID,        ftDate);
+  MapOid(TIMEOID,        ftDate);
+  MapOid(TIMETZOID,      ftDate);
+  MapOid(REGPROCOID,     ftInt64);
+  MapOid(OIDOID,         ftInt64);
+  MapOid(FLOAT4OID,      ftDouble);
   // note: any other unregistered OID will be handled as ftUtf8 to keep the data
 end;
 
@@ -806,6 +806,9 @@ begin
   result := main.fAsync;
 end;
 
+
+{ TSqlDBPostgresStatement }
+
 procedure TSqlDBPostgresStatement.BindColumns;
 var
   nCols, c: integer;
@@ -846,7 +849,7 @@ var
   p: PSqlDBParam;
 begin
   // mark parameter as textual by default, with no blob length
-  FillCharFast(pointer(fPGParams)^, fParamCount shl POINTERSHR, 0);
+  FillCharFast(pointer(fPGParams)^,       fParamCount shl POINTERSHR, 0);
   FillCharFast(pointer(fPGParamFormats)^, fParamCount shl 2, PGFMT_TEXT);
   FillCharFast(pointer(fPGParamLengths)^, fParamCount shl 2, 0);
   // bind fParams[] as expected by PostgreSQL - potentially as array

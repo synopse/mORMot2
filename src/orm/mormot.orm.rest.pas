@@ -2785,7 +2785,7 @@ begin
       if FieldIndex(fn) >= 0 then // ensure unique name
         for i := 2 to 100 do
         begin
-          fn := n + SmallUInt32Utf8[i];
+          mormot.core.base.Join([n, SmallUInt32Utf8[i]], fn);
           if FieldIndex(fn) < 0 then
             break;
         end;
