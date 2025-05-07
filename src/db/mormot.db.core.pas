@@ -929,7 +929,7 @@ type
     // to the generated JSON stream (for faster unserialization of huge content)
     procedure AddColumns(aKnownRowsCount: integer = 0);
     /// write or init field names for appropriate JSON Expand later use
-    // - accept a name directly supplied by the DB provider
+    // - accept a name directly supplied by the DB provider - e.g. by SQLite3
     // - if Expand is true, will set ColNames[] with the expected format
     // - on Expand=false format, will directly write aColName to W
     procedure AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
@@ -2856,27 +2856,25 @@ end;
 procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
 var
   i, len: PtrInt;
-  c: PPointer;
-  new: PAnsiChar;
+  c: PPAnsiChar;
 begin
   if fExpand then
   begin
     c := pointer(ColNames);
     for i := 1 to length(ColNames) do
     begin
-      len := PStrLen(PAnsiChar(c^) - _STRLEN)^; // ColNames[] <> ''
+      len := PStrLen(c^ - _STRLEN)^; // ColNames[] <> ''
       if twoForceJsonExtended in CustomOptions then
       begin
-        SetLength(RawUtf8(c^), len + 1); // reallocate in-place
-        PAnsiChar(c^)[len] := ':';
+        SetLength(PRawUtf8(c)^, len + 1); // colname: in-place
+        c^[len] := ':';
       end
       else
       begin
-        new := FastNewString(len + 3, CP_UTF8);
-        new[0] := '"';
-        MoveFast(c^^, new[1], len);
-        PCardinal(new + len + 1)^ := ord('"') + ord(':') shl 8;
-        FastAssignNew(c^, new);
+        SetLength(PRawUtf8(c)^, len + 3); // "colname": in-place
+        MoveFast(c^[0], c^[1], len);
+        c^[0] := '"';
+        PWord(c^ + len + 1)^ := ord('"') + ord(':') shl 8;
       end;
       inc(c);
     end;
@@ -2899,8 +2897,6 @@ begin
     end;
     CancelLastChar;
     fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
-     // B := buf-1 at startup -> need ',val11' position in
-     // "values":["col1","col2",val11,' i.e. current pos without the ','
   end;
 end;
 
