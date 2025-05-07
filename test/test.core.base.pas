@@ -5282,19 +5282,19 @@ begin
   // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
   rb2 := ARawSetString;
   rb1 := rb2 + RawByteString('test');
-  Check(rb1 = '123456test', 'ARawSetString1');
+  CheckEqual(rb1, '123456test', 'ARawSetString1');
   Append(rb2, 'test');
-  Check(rb2 = '123456test', 'ARawSetString2');
+  CheckEqual(rb2, '123456test', 'ARawSetString2');
   rb2 := ARawFastSetString;
   rb3 := 'test';
   {$ifdef FPC} // circumvent FPC RTL oddity on Win32 :(
   SetCodePage(rb3, CP_RAWBYTESTRING, false);
   {$endif FPC}
   rb1 := rb2 + rb3;
-  Check(rb1 = '123456test', 'ARawFastSetString1');
+  CheckEqual(rb1, '123456test', 'ARawFastSetString1');
   rb1 := ARawFastSetString;
   Append(rb1, 'test');
-  Check(rb1 = '123456test', 'ARawFastSetString2');
+  CheckEqual(rb1, '123456test', 'ARawFastSetString2');
   Check(SafeFileName(''));
   Check(SafePathName(''));
   Check(SafeFileName('toto'));

@@ -6266,12 +6266,7 @@ begin
   while (L > 0) and
         (P[L - 1] in [#10, #13]) do // trim right CR/LF chars
     dec(L);
-  if L = 0 then
-    exit;
-  if fEchoBuf = '' then
-    FastSetString(fEchoBuf, P, L)
-  else
-    Append(fEchoBuf, P, L);
+  Append(fEchoBuf, P, L); // very efficient
 end;
 
 procedure TEchoWriter.EchoReset;
@@ -9407,42 +9402,58 @@ begin
     FakeCodePage(Text, CP_RAWBYTESTRING);
 end;
 
-procedure _App1(var res: RawUtf8; add: pointer; len: PtrInt; const cp: integer);
+procedure _App1(res: PPtrUInt; add: pointer; len: PtrUInt; const cp: integer);
   {$ifdef HASINLINE} inline; {$endif}
 var
-  t: PtrInt;
+  t, r: PtrUInt;
 begin
-  t := length(res);
-  SetLength(res, t + len); // realloc
-  MoveFast(add^, PByteArray(res)[t], len);
-  if cp <> 0 then
-    FakeCodePage(RawByteString(res), cp);
+  t := res^;
+  if t = 0 then
+  begin
+    t := PtrUInt(FastNewString(len, cp)); // first time
+    res^ := t;
+  end
+  else
+  begin
+    t := PStrLen(t - _STRLEN)^;
+    SetLength(PRawUtf8(res)^, t + len); // realloc
+    r := res^;
+    inc(t, r);
+    {$ifdef HASCODEPAGE}
+    PStrRec(r - _STRRECSIZE)^.CodePage := cp;
+    {$endif HASCODEPAGE}
+  end;
+  MoveFast(add^, pointer(t)^, len);
 end;
 
 procedure _App2(var res: RawUtf8; const add1, add2: RawByteString; const cp: integer);
   {$ifdef HASINLINE} inline; {$endif}
 var
-  l, a1, a2: PtrInt;
+  l, a, a1, a2: PtrInt;
 begin
-  l := length(res);
   a1 := length(add1); // no automatic UTF-8 conversion involved
   a2 := length(add2);
-  SetLength(res, l + a1 + a2);
+  a := a1 + a2;
+  if a = 0 then
+    exit;
+  l := length(res);
+  SetLength(res, l + a);
+  {$ifdef HASCODEPAGE}
+  PStrRec(PAnsiChar(PtrUInt(res)) - _STRRECSIZE)^.CodePage := cp;
+  {$endif HASCODEPAGE}
   MoveFast(pointer(add1)^, PByteArray(res)[l], a1);
   MoveFast(pointer(add2)^, PByteArray(res)[l + a1], a2);
-  if cp <> 0 then
-    FakeCodePage(RawByteString(res), cp);
 end;
 
 procedure Append(var Text: RawUtf8; const Added: RawByteString);
 begin
   if Added <> '' then
-    _App1(Text, pointer(Added), PStrLen(PtrUInt(Added) - _STRLEN)^, 0);
+    _App1(@Text, pointer(Added), PStrLen(PtrUInt(Added) - _STRLEN)^, CP_UTF8);
 end;
 
 procedure Append(var Text: RawUtf8; const Added1, Added2: RawByteString);
 begin
-  _App2(Text, Added1, Added2, 0);
+  _App2(Text, Added1, Added2, CP_UTF8);
 end;
 
 procedure Append(var Text: RawUtf8; Added: AnsiChar);
@@ -9457,19 +9468,19 @@ end;
 procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt);
 begin
   if (Added <> nil) and (AddedLen > 0) then
-    _App1(Text, Added, AddedLen, 0);
+    _App1(@Text, Added, AddedLen, CP_UTF8);
 end;
 
 procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
 begin
   if Added[0] <> #0 then
-    _App1(Text, @Added[1], ord(Added[0]), 0);
+    _App1(@Text, @Added[1], ord(Added[0]), CP_UTF8);
 end;
 
 procedure Append(var Text: RawByteString; const Added: RawByteString);
 begin
   if Added <> '' then
-    _App1(RawUtf8(Text), pointer(Added), PStrLen(PtrUInt(Added) - _STRLEN)^, CP_RAWBYTESTRING);
+    _App1(@Text, pointer(Added), PStrLen(PtrUInt(Added) - _STRLEN)^, CP_RAWBYTESTRING);
 end;
 
 procedure Append(var Text: RawByteString; const Added1, Added2: RawByteString);
@@ -9480,7 +9491,7 @@ end;
 procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt);
 begin
   if (Added <> nil) and (AddedLen > 0) then
-    _App1(RawUtf8(Text), Added, AddedLen, CP_RAWBYTESTRING);
+    _App1(@Text, Added, AddedLen, CP_RAWBYTESTRING);
 end;
 
 procedure Prepend(var Text: RawUtf8; const Args: array of const);
