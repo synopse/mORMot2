@@ -7098,22 +7098,6 @@ end;
 
 procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TJsonWriter;
   MaxCharCount: integer);
-
-  procedure AppendUnicode(W: PWideChar; WLen: integer);
-  var
-    tmp: TSynTempBuffer;
-  begin
-    if MaxCharCount < WLen then
-      WLen := MaxCharCount;
-    tmp.Init(WLen);
-    try
-      RawUnicodeToUtf8(tmp.buf, tmp.Len, W, WLen, [ccfNoTrailingZero]);
-      Dest.AddQuotedStr(tmp.buf, tmp.Len, '''', MaxCharCount);
-    finally
-      tmp.Done;
-    end;
-  end;
-
 var
   v: variant;
   ft: TSqlDBFieldType;
@@ -7128,10 +7112,12 @@ begin
           Dest.AddQuotedStr(
             VString, length(RawByteString(VString)), '''', MaxCharCount);
       varOleStr:
-        AppendUnicode(VString, length(WideString(VString)));
+        Dest.AddQuotedStrW(
+          VString, length(WideString(VString)), '''', MaxCharCount);
       {$ifdef HASVARUSTRING}
       varUString:
-        AppendUnicode(VString, length(UnicodeString(VString)));
+        Dest.AddQuotedStrW(
+          VString, length(UnicodeString(VString)), '''', MaxCharCount);
       {$endif HASVARUSTRING}
     else
       if (ft = ftDate) and
