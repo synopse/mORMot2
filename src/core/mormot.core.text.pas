@@ -625,6 +625,10 @@ type
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c1, c2, c3, c4: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// append the CRLF constant, i.e. #13#10 on Windows and #10 on POSIX
+    // - to be called after a regular Add(), within the 16 bytes buffer overhead
+    procedure AddDirectNewLine;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append one comma (',') character
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddComma;
@@ -4110,6 +4114,17 @@ begin
   PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8 +
                        PtrUInt(byte(c3)) shl 16 + PtrUInt(byte(c4)) shl 24;
   inc(B, 4); // with proper constant propagation above when inlined
+end;
+
+procedure TTextWriter.AddDirectNewLine;
+begin
+  {$ifdef OSPOSIX} // mimics CRLF = #10 on POSIX
+  B[1] := #10;
+  inc(B);
+  {$else}          // mimics CRLF = #13#10 on Windows
+  PWord(B + 1)^ := $0a0d;
+  inc(B, 2);
+  {$endif OSPOSIX}
 end;
 
 procedure TTextWriter.AddComma;

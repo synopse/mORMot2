@@ -5203,7 +5203,7 @@ begin
       w.AddShorter(' recv=');
       w.AddShort(KBNoSpace(fIn));
     end;
-    w.AddShorter(CRLF);
+    w.AddDirectNewLine; // = #13#10 on Windows, #10 on POSIX
     for i := 0 to Count - 1 do
     begin
       res := Items[i];
@@ -5214,16 +5214,16 @@ begin
         attr := res.Attributes.Items[j];
         w.Add('  % : ', [attr.AttributeName]);
         if attr.Count <> 1 then
-          w.AddShorter(CRLF);
+          w.AddDirectNewLine;
         for k := 0 to attr.Count - 1 do
         begin
           if attr.Count <> 1 then
             w.AddShorter('    - ');
           w.AddString(attr.GetReadable(k));
-          w.AddShorter(CRLF);
+          w.AddDirectNewLine;
         end;
       end;
-      w.AddShorter(CRLF);
+      w.AddDirectNewLine;
     end;
     w.SetText(result);
   finally

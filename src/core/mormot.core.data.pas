@@ -4191,7 +4191,7 @@ begin
   PWord(UpperCopy255Buf(
     UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
   inc(UpperNameLength);
-  V := Value + CRLF;
+  Join([Value, CRLF], V);
   P := pointer(Content);
   // 1. find Section, and try update within it
   if Section = '' then

@@ -10253,16 +10253,16 @@ begin
         begin
           w.Add('"');
           w.AddString(s);
-          w.Add('"');
+          w.AddDirect('"');
         end
         else
         begin
           w.Add('''');
           w.AddString(s); // alternate output layout for quoted text
-          w.Add('''');
+          w.AddDirect('''');
         end;
       end;
-      w.AddShorter(CRLF); // adapted to the current console output
+      w.AddDirectNewLine; // adapted to the current console output
     end;
     w.SetText(result);
   finally
