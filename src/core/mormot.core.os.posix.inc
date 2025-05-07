@@ -2980,6 +2980,7 @@ begin
   result := 0;
 end;
 
+{$ifdef CPUARM3264}
 procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
 var
   v: integer;
@@ -2988,6 +2989,7 @@ begin
   if v <> 0 then
     AddInteger(result, v, {nodup=}true);
 end;
+{$endif CPUARM3264}
 
 function ParseLine(P: PUtf8Char): PUtf8Char;
 begin

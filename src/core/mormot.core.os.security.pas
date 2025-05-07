@@ -3231,7 +3231,7 @@ begin
     end
     else // fallback to hexadecimal output
     begin
-      while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
+      while not (s^ in [#0, ')']) do // retrieve everything until ending ')'
         inc(s);
       FastNewRawByteString(ace.Opaque, (s - p) shr 1);
       result := atpInvalidContent;

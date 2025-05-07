@@ -1865,7 +1865,7 @@ procedure Append(var Text: RawByteString; const Added: RawByteString); overload;
 /// append one text buffer to a RawByteString variable with no code page conversion
 procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt); overload;
 
-/// append two text buffers to a RawByteStirng variable with no code page conversion
+/// append two text buffers to a RawByteString variable with no code page conversion
 procedure Append(var Text: RawByteString; const Added1, Added2: RawByteString); overload;
 
 /// prepend some text to a RawByteString variable with no code page conversion

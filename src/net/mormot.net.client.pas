@@ -3048,7 +3048,7 @@ begin
     end
     else
     repeat
-      // sub-method to handle the actual request, with proper retrial
+      // sub-method to handle the actual request, with proper retry
       RequestInternal(ctxt);
       if Aborted then
         break;

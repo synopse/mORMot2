@@ -1103,14 +1103,14 @@ function DateTimeToIsoString(dt: TDateTime): string;
 
 /// parse a '0x#####' buffer context into a 32-bit binary
 // - jump trailing '0x', then ends at first non hexadecimal character
-// - internal function to avoid linking mormot.core.buffers.pas
+// - internal function to avoid linking mormot.core.buffers.pas for a few bytes
 function ParseHex0x(p: PAnsiChar; no0x: boolean = false): cardinal;
 
 /// parse an hexadecimal buffer into its raw binary
 // - parse up to n chars from p^, ending in case of not hexadecimal char
 // - any '#' char in the input buffer will be handled as '0'
 // - caller should ensure p<>nil and b<>nil and n>0
-// - internal function to avoid linking mormot.core.buffers.pas
+// - internal function to avoid linking mormot.core.buffers.pas for a few bytes
 function ParseHex(p: PAnsiChar; b: PByte; n: integer): PAnsiChar;
 
 /// convert a binary into its human-friendly per-byte hexadecimal lowercase text
@@ -5636,9 +5636,9 @@ end;
 function Hex2Dec(c: AnsiChar): ShortInt; {$ifdef HASINLINE} inline; {$endif}
 begin
   result := ord(c);
-  case c of
+  case c of // fast enough for a few chars
     '#':
-      result := 0; // handle # as 0 char within an hexadecimal buffer
+      result := 0; // handle '#' as '0' within the hexadecimal buffer
     '0'..'9':
       dec(result, ord('0'));
     'A'..'Z':
@@ -5674,7 +5674,7 @@ begin
     v1 := Hex2Dec(p^);
     if v1 < 0 then
     begin
-      result := (result shl 4) or cardinal(v0); // only one char left = 4-bit
+      result := (result shl 4) or cardinal(v0);  // only one char left = 4-bit
       break;
     end;
     result := (result shl 8) or (cardinal(v0) shl 4) or cardinal(v1); // 8-bit
