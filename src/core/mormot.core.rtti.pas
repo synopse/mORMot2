@@ -3464,17 +3464,6 @@ begin
   result := @PTypeData(@self)^.UnitName;
 end;
 
-function _ClassUnit(C: TClass): PShortString;
-var
-  P: PRttiInfo;
-begin
-  P := PPointer(PAnsiChar(C) + vmtTypeInfo)^;
-  if P <> nil then
-    result := P^.RttiNonVoidClass^.UnitName
-  else
-    result := @NULCHAR;
-end;
-
 function TRttiClass.InheritsFrom(AClass: TClass): boolean;
 var
   P: PRttiInfo;
@@ -5411,6 +5400,17 @@ end;
 function GetRttiClass(RttiClass: TClass): PRttiClass;
 begin
   result := PRttiInfo(PPointer(PAnsiChar(RttiClass) + vmtTypeInfo)^)^.RttiClass;
+end;
+
+function _ClassUnit(C: TClass): PShortString;
+var
+  P: PRttiInfo;
+begin
+  P := PPointer(PAnsiChar(C) + vmtTypeInfo)^;
+  if P <> nil then
+    result := P^.RttiNonVoidClass^.UnitName
+  else
+    result := @NULCHAR;
 end;
 
 function ClassHasPublishedFields(ClassType: TClass): boolean;
