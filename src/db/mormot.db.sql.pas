@@ -6942,7 +6942,7 @@ end;
 
 function TSqlDBStatement.DoSqlLogEnd(Msg: PShortString): Int64;
 var
-  tmp: TShort16;
+  tmp, elapsed: TShort16;
 begin
   fSqlLogTimer.Pause;
   tmp[0] := #0;
@@ -6957,12 +6957,13 @@ begin
       end;
       Msg := @tmp;
     end;
+    MicroSecToString(fSqlLogTimer.StopInMicroSec, elapsed);
     if fSqlLogLevel = sllSQL then
       fSqlLogLog.Log(sllSQL, 'Execute t=%% q=%',
-        [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
+        [elapsed, Msg^, fSqlWithInlinedParams], self)
     else // from TSqlDBPostgresStatement.GetPipelineResult
       fSqlLogLog.Log(fSqlLogLevel, 'Return t=%%',
-        [fSqlLogTimer.Time, Msg^], self);
+        [elapsed, Msg^], self);
   end
   else
   begin
