@@ -59,7 +59,7 @@ type
 
   /// a generic REpresentational State Transfer (REST) ORM server
   // - inherit to provide its main storage capabilities, e.g. our in-memory
-  // engine for TRestOrmServerFullMemory or SQlite3 for TRestOrmServerDB
+  // engine for TRestOrmServerFullMemory or SQLite3 for TRestOrmServerDB
   // - is able to register and redirect some TOrm classes to their own
   // dedicated TRestStorage
   TRestOrmServer = class(TRestOrm, IRestOrmServer)
@@ -1522,7 +1522,7 @@ begin
       if result <> nil then
         if result.InheritsFrom(TRestStorage) and
            not TRestStorage(result).AdaptSqlForEngineList(SQL) then
-          // complex request will use SQlite3 virtual engine module
+          // complex request will use SQLite3 virtual engine module
           result := nil;
     end;
   end;
@@ -2024,7 +2024,7 @@ begin
      (fRunStatic = nil) and
      fOrm.InternalBatchStart(fEncoding, fBatchOptions) then
   begin
-    fRunningBatchRest := fOrm; // e.g. multi-insert in main SQlite3 engine
+    fRunningBatchRest := fOrm; // e.g. multi-insert in main SQLite3 engine
     fRunningBatchTable := fRunTable;
     fRunningBatchEncoding := fEncoding;
   end;

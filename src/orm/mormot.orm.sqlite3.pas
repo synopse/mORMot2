@@ -9,8 +9,8 @@ unit mormot.orm.sqlite3;
    ORM SQLite3 Database Access using mormot.db.raw.sqlite3 unit
     - TOrmTableDB as Efficient ORM-Aware TOrmTable
     - TOrmVirtualTableModuleServerDB for SQLite3 Virtual Tables
-    - TRestStorageShardDB for REST Storage Sharded Over SQlite3 Files
-    - TRestStorageMultiDB for REST Storage of Multi-User SQlite3 Files
+    - TRestStorageShardDB for REST Storage Sharded Over SQLite3 Files
+    - TRestStorageMultiDB for REST Storage of Multi-User SQLite3 Files
     - TRestOrmServerDB REST Server ORM Engine over SQLite3
     - TRestOrmClientDB REST Client ORM Engine over SQLite3
 
@@ -137,10 +137,10 @@ function RegisterVirtualTableModule(aModule: TOrmVirtualTableClass;
 
 
 
-{ *********** TRestStorageShardDB for REST Storage Sharded Over SQlite3 Files }
+{ *********** TRestStorageShardDB for REST Storage Sharded Over SQLite3 Files }
 
 type
-    /// REST storage sharded over several SQlite3 instances
+    /// REST storage sharded over several SQLite3 instances
   // - numerotated '*0000.dbs' SQLite3 files would contain the sharded data
   // - here *.dbs is used as extension, to avoid any confusion with regular
   // SQLite3 database files (*.db or *.db3)
@@ -157,7 +157,7 @@ type
     fDBPassword: SpiUtf8;
     procedure InitShards; override;
     function InitNewShard: TRestOrm; override;
-    // you can override those methods to customize the stored SQlite3 files
+    // you can override those methods to customize the stored SQLite3 files
     function DBPassword(ShardIndex: integer): SpiUtf8; virtual;
     function DBFileName(ShardIndex: integer): TFileName; virtual;
   public
@@ -187,13 +187,13 @@ type
   end;
 
 
-{ *********** TRestStorageMultiDB for REST Storage of Multi-User SQlite3 Files }
+{ *********** TRestStorageMultiDB for REST Storage of Multi-User SQLite3 Files }
 
 type
   /// abstract REST storage with several SQLite3 database instances
   TRestStorageMultiDB = class(TRestStorageMultiOnDisk)
   protected
-    // overriden to proper create each SQlite3 database
+    // overriden to proper create each SQLite3 database
     fSynchronous: TSqlSynchronousMode;
     fDefaultCacheSize: integer;
     function NewDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; override;
@@ -239,7 +239,7 @@ type
   end;
   PRestOrmServerDBBatch = ^TRestOrmServerDBBatch;
 
-  /// implements TRestServerDB.ORM process for REST server over SQlite3 storage
+  /// implements TRestServerDB.ORM process for REST server over SQLite3 storage
   // - the main engine will be SQLite3, but specific classes of the model could
   // be redirected to other TRestStorage instances, e.g. external SQL/NoSQL
   TRestOrmServerDB = class(TRestOrmServer)
@@ -410,7 +410,7 @@ type
       aDB: TSqlDataBase; aOwnDB: boolean); reintroduce; overload;
     /// initialize a stand-alone REST ORM server with a given SQLite3 filename
     // - you can specify an associated TOrmModel but no TRest
-    // - the SQlite3 database instance will be createa as lmExclusive/aSynchronous
+    // - the SQLite3 database instance will be createa as lmExclusive/aSynchronous
     constructor CreateStandalone(aModel: TOrmModel; aRest: TRest;
       const aDB: TFileName; const aPassword: SpiUtf8 = '';
       aSynchronous: TSqlSynchronousMode = smOff;
@@ -524,7 +524,7 @@ end;
 
 { *********** TOrmVirtualTableModuleServerDB for SQLite3 Virtual Tables }
 
-// asssociated low-level vt*() SQlite3 wrapper functions
+// asssociated low-level vt*() SQLite3 wrapper functions
 
 procedure Notify(const Format: RawUtf8; const Args: array of const);
 begin
@@ -1046,7 +1046,7 @@ begin
 end;
 
 
-{ *********** TRestStorageShardDB for REST Storage Sharded Over SQlite3 Files }
+{ *********** TRestStorageShardDB for REST Storage Sharded Over SQLite3 Files }
 
 { TRestStorageShardDB }
 
@@ -1174,7 +1174,7 @@ begin
 end;
 
 
-{ *********** TRestStorageMultiDB for REST Storage of Multi-User SQlite3 Files }
+{ *********** TRestStorageMultiDB for REST Storage of Multi-User SQLite3 Files }
 
 { TRestStorageMultiDB }
 
@@ -1369,7 +1369,7 @@ begin
   else
   begin
     sql := 'select rowid from ' + Table.SqlTableName +
-           ' order by rowid desc limit 1'; // faster than max(RowID) on SQlite3
+           ' order by rowid desc limit 1'; // faster than max(RowID) on SQLite3
     if not InternalExecute(sql, true, PInt64(@result)) then
       result := 0;
   end;

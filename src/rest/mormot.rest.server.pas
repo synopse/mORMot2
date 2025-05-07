@@ -119,7 +119,7 @@ type
   end;
 
   /// kind of (static) database server implementation available
-  // - sMainEngine will identify the default main SQlite3 engine
+  // - sMainEngine will identify the default main SQLite3 engine
   // - sStaticDataTable will identify a TRestStorageInMemory - i.e.
   // TRestServer.fStaticData[] which can work without SQLite3
   // - sVirtualTable will identify virtual TRestStorage classes - i.e.

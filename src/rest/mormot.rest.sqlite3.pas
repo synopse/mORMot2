@@ -1,4 +1,4 @@
-/// REpresentation State Tranfer (REST) SQlite3 Server and Client
+/// REpresentation State Tranfer (REST) SQLite3 Server and Client
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.rest.sqlite3;
@@ -6,7 +6,7 @@ unit mormot.rest.sqlite3;
 {
   *****************************************************************************
 
-   REST Server and Client Using an Embedded SQlite3 Database Engine
+   REST Server and Client Using an Embedded SQLite3 Database Engine
     - TRestServerDB REST Server with Direct Access to a SQLite3 Database
     - TRestClientDB REST Client with Direct Access to a SQLite3 Database
 
@@ -227,7 +227,7 @@ constructor TRestServerDB.Create(aModel: TOrmModel; aDB: TSqlDataBase;
   aHandleUserAuthentication: boolean; aOwnDB: boolean);
 begin
   inherited Create(aModel, aHandleUserAuthentication);
-  with TRestOrmServerDB.Create(self, aDB, aOwnDB) do // assign the SQlite3 engine
+  with TRestOrmServerDB.Create(self, aDB, aOwnDB) do // assign the SQLite3 engine
     if DB <> nil then
       // ensure the low-level SQLite3 engine will share the same log
       DB.Log := fLogClass;

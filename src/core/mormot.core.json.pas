@@ -2975,7 +2975,7 @@ type
     JsonFirst: PJsonTokens;
     Max: PUtf8Char; // checking Max after each comma is good enough
     RootCount: integer;
-    // 500 nested documents seem enough in practice (SQlite3 uses 1000)
+    // 500 nested documents seem enough in practice (SQLite3 uses 1000)
     Stack: array[0..500] of TJsonGotoEndParserState;
     procedure Init(Strict: boolean; PMax: PUtf8Char);
       {$ifdef HASINLINE} inline; {$endif}
