@@ -821,6 +821,9 @@ type
     // putting two single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
+    /// append some UTF-16 chars, quoting all " chars
+    procedure AddQuotedStrW(Text: PWideChar; TextLen: PtrUInt; Quote: AnsiChar;
+      TextMaxLen: PtrInt = 0);
     /// append an URI-decoded domain name, also normalizing dual // into /
     // - only parameters - i.e. after '?' - may have ' ' replaced by '+'
     // - will also ensure start with a '/' as requested in HTTP common log format
@@ -5659,6 +5662,38 @@ begin
       AddNoJsonEscape(Text, q);
       AddDirect(Quote); // double Quote
       inc(Text, q); // continue
+      dec(TextLen, q);
+    until TextLen = 0;
+    if TextMaxLen <> 0 then
+      AddDirect('.', '.', '.');
+  end;
+  AddDirect(Quote);
+end;
+
+procedure TTextWriter.AddQuotedStrW(Text: PWideChar; TextLen: PtrUInt;
+  Quote: AnsiChar; TextMaxLen: PtrInt);
+var
+  q: PtrInt;
+begin
+  Add(Quote);
+  if (TextMaxLen > 5) and
+     (TextLen > PtrUInt(TextMaxLen)) then
+    TextLen := TextMaxLen - 5
+  else
+    TextMaxLen := 0;
+  if Text <> nil then
+  begin
+    repeat
+      q := WordScanIndex(pointer(Text), TextLen, byte(Quote));
+      if q < 0 then
+      begin
+        AddNoJsonEscapeW(pointer(Text), TextLen); // no quote
+        break;
+      end;
+      inc(q); // include first Quote
+      AddNoJsonEscapeW(pointer(Text), q);
+      AddDirect(Quote); // double Quote
+      inc(Text, q);
       dec(TextLen, q);
     until TextLen = 0;
     if TextMaxLen <> 0 then
