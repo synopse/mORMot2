@@ -2653,7 +2653,7 @@ type
 
 /// a wrapper calling SystemTimeToTzSpecificLocalTime Windows API
 // - note: FileTimeToLocalFileTime is not to be involved here
-// - only used by mormot.lib.static for proper SQlite3 linking on Windows
+// - only used by mormot.lib.static for proper SQLite3 linking on Windows
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value

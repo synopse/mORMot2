@@ -1206,7 +1206,7 @@ type
   /// defines a callback signature able to handle multiple INSERT
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
   // implementing INSERT with multiple VALUES (like MySQL, PostgreSQL, NexusDB,
-  // MSSQL or SQlite3), as implemented by
+  // MSSQL or SQLite3), as implemented by
   // TSqlDBConnectionProperties.MultipleValuesInsert() :
   // $ INSERT INTO TableName(FieldNames[0],FieldNames[1]) VALUES
   // $   (FieldValues[0][0],FieldValues[1][0]),
@@ -1388,7 +1388,7 @@ type
     function ExceptionIsAboutConnection(aClass: ExceptClass;
       const aMessage: RawUtf8): boolean; virtual;
     /// generic method able to implement OnBatchInsert() with parameters
-    // - for MySQL, PostgreSQL, MSSQL2008, NexusDB or SQlite3, will execute
+    // - for MySQL, PostgreSQL, MSSQL2008, NexusDB or SQLite3, will execute
     // (with parameters) the extended standard syntax:
     // $ INSERT INTO TableName(FieldNames[0],FieldNames[1]) VALUES
     // $   (FieldValues[0][0],FieldValues[1][0]),
@@ -1791,7 +1791,7 @@ type
       read fOnStatementInfo write fOnStatementInfo;
     /// you can define a callback method able to handle multiple INSERT
     // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
-    // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
+    // PostgreSQL or SQLite3), as defined by MultipleValuesInsert() callback
     property OnBatchInsert: TOnBatchInsert
       read fOnBatchInsert write fOnBatchInsert;
 
@@ -5381,7 +5381,7 @@ var
           end;
       else
         begin
-          //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
+          //  e.g. NexusDB/SQLite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
           // INSERT .. VALUES (..),(..),(..),..
           EncodeInsertPrefix(W, BatchOptions, Props.fDbms);
           W.AddString(TableName);

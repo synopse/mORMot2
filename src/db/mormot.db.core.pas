@@ -1064,7 +1064,7 @@ type
   /// the recognized WHERE expressions for TSelectStatement
   TSelectStatementWhereDynArray = array of TSelectStatementWhere;
 
-  /// used to parse a SELECT SQL statement, following the SQlite3 syntax
+  /// used to parse a SELECT SQL statement, following the SQLite3 syntax
   // - handle basic REST commands, i.e. a SELECT over a single table (no JOIN)
   // with its WHERE clause, and result column aliases
   // - handle also aggregate functions like "SELECT Count( * ) FROM TableName"
@@ -4186,14 +4186,14 @@ begin
       dMariaDB:
         W.AddShort('insert ignore into ')
     else
-      W.AddShort('insert or ignore into '); // SQlite3
+      W.AddShort('insert or ignore into '); // SQLite3
     end
   else if boInsertOrReplace in BatchOptions then
     case DB of
       dFirebird:
         W.AddShort('update or insert into ');
     else
-      W.AddShort('replace into '); // SQlite3 and MySQL+MariaDB
+      W.AddShort('replace into '); // SQLite3 and MySQL+MariaDB
     end
   else
     W.AddShort('insert into ');

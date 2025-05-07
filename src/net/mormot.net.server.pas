@@ -3366,11 +3366,10 @@ var
   p: PUtf8Char;
 begin
   p := UrlParamPos;
-  if (p = nil) and
-     (fInContent <> '') then
-    Dest.InitJson(fInContent, JSON_FAST) // try values from JSON body
+  if p = nil then
+    Dest.InitJson(fInContent, JSON_FAST) // try decoding from JSON body
   else
-    Dest.InitFromUrl(p, JSON_FAST); // values from URI parameters
+    Dest.InitFromUrl(p + 1, JSON_FAST);  // parameters from /uri?n1=v1&n2=v2
   Dest.AddValueFromText('url', Split(fUrl, '?'));
   Dest.AddValueFromText('method', fMethod);
   if fInContent <> '' then

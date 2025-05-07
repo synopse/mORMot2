@@ -840,7 +840,8 @@ type
     /// retrieve and decode an URI-encoded parameter as 64-bit signed Int64
     // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
     function UrlParam(const UpperName: RawUtf8; out Value: Int64): boolean; overload;
-    /// return the raw PUtf8Char value of all URI-encoded parameters
+    /// the raw PUtf8Char value of all URI-encoded parameters
+    // - returns nil or the pointer to ? within '/uri?name=value&name2=value2'
     function UrlParamPos: PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
     /// set the OutContent and OutContentType fields with the supplied JSON
@@ -4569,8 +4570,6 @@ begin
     exit;
   include(fInternalFlags, ifUrlParamPosSet); // call PosChar() once
   result := PosChar(pointer(Url), '?');
-  if result <> nil then
-    inc(result); // point after initial ?aa=xx&bb=yy char
   fUrlParamPos := result;
 end;
 

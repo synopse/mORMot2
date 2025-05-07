@@ -90,16 +90,16 @@
 // disable TOrmTable internal fLen[] pre-computed table - slower but less memory
 
 {.$define NOSQLITE3STATIC}
-// disable static SQlite3 linking - to force use external dll/so library
+// disable static SQLite3 linking - to force use external dll/so library
 
 {.$define NOSQLITE3FPUSAVE}
-// disable SetFpuFlags() calls during SQlite3 engine - may enhance performance
+// disable SetFpuFlags() calls during SQLite3 engine - may enhance performance
 
 {.$define DEBUGSTORAGELOCK}
 // could be defined to force verbose log of StorageLock/StorageUnLock
 
 {.$define DEBUGSQLVIRTUALTABLE}
-// could be defined to force verbose log of SQlite3 virtual table query planner costs
+// could be defined to force verbose log of SQLite3 virtual table query planner costs
 
 {.$define ONLYUSEHTTPSOCKET}
 // is defined on POSIX but may be enabled on Windows if socket+SChannel is enough
