@@ -6665,7 +6665,7 @@ function DoubleToString(Value: Double): string;
 var
   tmp: ShortString;
 begin
-  if Value = 0 then
+  if PInt64(@Value)^ = 0 then
     result := '0'
   else
     Ansi7ToString(PWinAnsiChar(@tmp[1]), DoubleToShort(@tmp, Value), result);
@@ -6727,7 +6727,7 @@ function DoubleToString(Value: Double): string;
 var
   tmp: ShortString;
 begin
-  if Value = 0 then
+  if PInt64(@Value)^ = 0 then
     result := '0'
   else
     SetString(result, PAnsiChar(@tmp[1]), DoubleToShort(@tmp, Value));
@@ -7289,8 +7289,6 @@ begin
     factor.c := B^.c;
 end;
 
-procedure d2a_unpack_float(const f: double; out minus: boolean;
-  out result: TDIY_FP);   {$ifdef HASINLINE}inline;{$endif}
 type
   TSplitFloat = packed record
     case byte of
@@ -7300,6 +7298,9 @@ type
       3: (d: array[0..1] of cardinal);
       4: (l: qword);
   end;
+
+procedure d2a_unpack_float(const f: double; out minus: boolean;
+  out result: TDIY_FP);   {$ifdef HASINLINE}inline;{$endif}
 var
   doublebits: TSplitFloat;
 begin
@@ -7329,6 +7330,13 @@ const
 
   C_EXP2_SPECIAL = C_EXP2_BIAS * 2 + 1;
   C_MANT2_INTEGER = qword(1) shl C_FRAC2_BITS;
+  C_EXP_POS = {$ifdef FPC_DOUBLE_HILO_SWAPPED} 0 {$else} 1 {$endif};
+
+function doubleIsSpecial(const f: double): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := ((TSplitFloat(f).d[C_EXP_POS] shr 20) and $7ff) = C_EXP2_SPECIAL;
+end;
 
 type
   TAsciiDigits = array[0..39] of byte;
@@ -7946,7 +7954,8 @@ var
   valueabs: double;
 begin
   valueabs := abs(Value);
-  if (valueabs > {$ifdef FPC}double{$endif}(DOUBLE_HI)) or
+  if doubleIsSpecial(valueabs) or
+     (valueabs > {$ifdef FPC}double{$endif}(DOUBLE_HI)) or
      (valueabs < {$ifdef FPC}double{$endif}(DOUBLE_LO)) then
     // = str(Value,S) for scientific notation outside of 1E-9<Value<1E9 range
     DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, pointer(S))
@@ -7983,7 +7992,7 @@ end;
 function DoubleToJson(tmp: PShortString; Value: double;
   NoExp: boolean): PShortString;
 begin
-  if Value = 0 then
+  if PInt64(@Value)^ = 0 then
     result := @JSON_NAN[fnNumber]
   else
   begin
@@ -8004,7 +8013,7 @@ procedure DoubleToStr(Value: Double; var result: RawUtf8);
 var
   tmp: ShortString;
 begin
-  if Value = 0 then
+  if PInt64(@Value)^ = 0 then
     result := SmallUInt32Utf8[0]
   else
     FastSetString(result, @tmp[1], DoubleToShort(@tmp, Value));

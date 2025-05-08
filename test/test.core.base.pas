@@ -10,6 +10,7 @@ interface
 uses
   sysutils,
   classes,
+  math,
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security,
@@ -4582,6 +4583,22 @@ begin
   d := GetExtended(pointer(s), err);
   CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
   Check(err > 0, 'e400');
+  {$ifndef CPU32DELPHI}
+  s := 'Nan';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  Check(IsNan(d));
+  DoubleToShort(@a, d);
+  Check(a = 'Nan');
+  Check(ShortToFloatNan(a) = fnNan);
+  s := 'INF';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  Check(IsInfinite(d));
+  DoubleToShort(@a, d);
+  Check(a = '+Inf');
+  Check(ShortToFloatNan(a) = fnInf);
+  {$endif CPU32DELPHI}
   Check(IsAnsiCompatible('t'));
   Check(IsAnsiCompatible('te'));
   Check(IsAnsiCompatible('tes'));
