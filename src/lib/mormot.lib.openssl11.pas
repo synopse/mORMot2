@@ -1311,6 +1311,9 @@ type
   PENGINE = type pointer;
   PPENGINE = ^PENGINE;
 
+  POSSL_LIB_CTX = type pointer;
+  POSSL_PROVIDER = type pointer;
+
   PBIO_METHOD = type pointer;
   PPBIO_METHOD = ^PBIO_METHOD;
 
@@ -2413,12 +2416,14 @@ function d2i_PrivateKey_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
 function i2d_PUBKEY_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
 function d2i_PUBKEY_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
+procedure RAND_seed(buf: pointer; num: integer); cdecl;
 function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER; cdecl;
 function EVP_get_digestbyname(name: PUtf8Char): PEVP_MD; cdecl;
 function EVP_CIPHER_CTX_new(): PEVP_CIPHER_CTX; cdecl;
 function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer; cdecl;
 procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
 function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
+function EVP_CIPHER_CTX_set_key_length(x: PEVP_CIPHER_CTX; keylen: integer): integer; cdecl;
 function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer;
   arg: integer; ptr: pointer): integer; cdecl;
 function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
@@ -2517,9 +2522,11 @@ function i2d_PKCS8PrivateKey_bio(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
 function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY;
   cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
 function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
+function EVP_bf_cbc(): PEVP_CIPHER; cdecl;
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
 function OpenSSL_version_num(): cardinal; cdecl;
 function OpenSSL_version(typ: integer): PUtf8Char; cdecl;
+function OSSL_PROVIDER_load(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVIDER; cdecl;
 function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 
@@ -3535,12 +3542,14 @@ type
     i2d_PUBKEY_bio: function(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
     d2i_PUBKEY_bio: function(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
     RAND_bytes: function(buf: PByte; num: integer): integer; cdecl;
+    RAND_seed: procedure(buf: pointer; num: integer); cdecl;
     EVP_get_cipherbyname: function(name: PUtf8Char): PEVP_CIPHER; cdecl;
     EVP_get_digestbyname: function(name: PUtf8Char): PEVP_MD; cdecl;
     EVP_CIPHER_CTX_new: function(): PEVP_CIPHER_CTX; cdecl;
     EVP_CIPHER_CTX_reset: function(c: PEVP_CIPHER_CTX): integer; cdecl;
     EVP_CIPHER_CTX_free: procedure(c: PEVP_CIPHER_CTX); cdecl;
     EVP_CIPHER_CTX_copy: function(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
+    EVP_CIPHER_CTX_set_key_length: function(x: PEVP_CIPHER_CTX; keylen: integer): integer; cdecl;
     EVP_CIPHER_CTX_ctrl: function(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer; ptr: pointer): integer; cdecl;
     EVP_CipherInit_ex: function(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE; key: PByte; iv: PByte; enc: integer): integer; cdecl;
     EVP_CipherInit_ex2: function(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
@@ -3622,15 +3631,17 @@ type
     i2d_PKCS8PrivateKey_bio: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
     d2i_PKCS8PrivateKey_bio: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     EVP_aes_256_cbc: function(): PEVP_CIPHER; cdecl;
+    EVP_bf_cbc: function(): PEVP_CIPHER; cdecl;
     PEM_write_bio_PUBKEY: function(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
     OpenSSL_version_num: function(): cardinal; cdecl;
     OpenSSL_version: function(typ: integer): PUtf8Char; cdecl;
+    OSSL_PROVIDER_load: function(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVIDER; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     X509_print: function(bp: PBIO; x: PX509): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..337] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..341] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3878,12 +3889,14 @@ const
     'i2d_PUBKEY_bio',
     'd2i_PUBKEY_bio',
     'RAND_bytes',
+    'RAND_seed',
     'EVP_get_cipherbyname',
     'EVP_get_digestbyname',
     'EVP_CIPHER_CTX_new',
     'EVP_CIPHER_CTX_reset',
     'EVP_CIPHER_CTX_free',
     'EVP_CIPHER_CTX_copy',
+    'EVP_CIPHER_CTX_set_key_length',
     'EVP_CIPHER_CTX_ctrl',
     'EVP_CipherInit_ex',
     '?EVP_CipherInit_ex2',    // OpenSSL 3.0 only
@@ -3964,9 +3977,11 @@ const
     'i2d_PKCS8PrivateKey_bio',
     'd2i_PKCS8PrivateKey_bio',
     'EVP_aes_256_cbc',
+    'EVP_bf_cbc',
     'PEM_write_bio_PUBKEY',
     'OpenSSL_version_num',
     'OpenSSL_version',
+    '?OSSL_PROVIDER_load',
     'X509_print',
     nil);
 
@@ -5282,6 +5297,11 @@ begin
   result := libcrypto.RAND_bytes(buf, num);
 end;
 
+procedure RAND_seed(buf: pointer; num: integer);
+begin
+  libcrypto.RAND_seed(buf, num);
+end;
+
 function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER;
 begin
   result := libcrypto.EVP_get_cipherbyname(name);
@@ -5310,6 +5330,11 @@ end;
 function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer;
 begin
   result := libcrypto.EVP_CIPHER_CTX_copy(_out, _in);
+end;
+
+function EVP_CIPHER_CTX_set_key_length(x: PEVP_CIPHER_CTX; keylen: integer): integer;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_set_key_length(x, keylen);
 end;
 
 function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
@@ -5738,6 +5763,11 @@ begin
   result := libcrypto.EVP_aes_256_cbc();
 end;
 
+function EVP_bf_cbc(): PEVP_CIPHER;
+begin
+  result := libcrypto.EVP_bf_cbc();
+end;
+
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer;
 begin
   result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
@@ -5751,6 +5781,14 @@ end;
 function OpenSSL_version(typ: integer): PUtf8Char;
 begin
   result := libcrypto.OpenSSL_version(typ);
+end;
+
+function OSSL_PROVIDER_load(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVIDER;
+begin
+  if Assigned(libcrypto.OSSL_PROVIDER_load) then
+    result := libcrypto.OSSL_PROVIDER_load(libctx, name)
+  else
+    result := nil; // unsupported
 end;
 
 function X509_print(bp: PBIO; x: PX509): integer;
@@ -6929,6 +6967,9 @@ function d2i_PUBKEY_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RAND_bytes';
 
+procedure RAND_seed(buf: pointer; num: integer); cdecl;
+  external LIB_CRYPTO name _PU + 'RAND_seed';
+
 function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_get_cipherbyname';
 
@@ -6946,6 +6987,9 @@ procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
 
 function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_copy';
+
+function EVP_CIPHER_CTX_set_key_length(x: PEVP_CIPHER_CTX; keylen: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_key_length';
 
 function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
   ptr: pointer): integer; cdecl;
@@ -7208,6 +7252,9 @@ function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
 function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_aes_256_cbc';
 
+function EVP_bf_cbc(): PEVP_CIPHER; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_bf_cbc';
+
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PUBKEY';
 
@@ -7216,6 +7263,9 @@ function OpenSSL_version_num(): cardinal; cdecl;
 
 function OpenSSL_version(typ: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'OpenSSL_version';
+
+function OSSL_PROVIDER_load(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVIDER; cdecl;
+  external LIB_CRYPTO name _PU + 'OSSL_PROVIDER_load';
 
 function X509_print(bp: PBIO; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print';
