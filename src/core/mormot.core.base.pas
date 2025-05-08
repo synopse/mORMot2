@@ -1537,6 +1537,11 @@ const
   // FPC RTL uses 1E-4 so we are paranoid enough
   DOUBLE_SAME = 1E-11;
 
+  // some constants also available in the Math unit - see ShortToFloatNan()
+  NaN         =  0.0 / 0.0;
+  Infinity    =  1.0 / 0.0;
+  NegInfinity = -1.0 / 0.0;
+
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
 // - the precision is calculated from the A and B value range
@@ -6594,8 +6599,30 @@ begin
   begin
     inc(P);
     c := P^;
+    if (c = 'I') and
+       (PWord(P + 1)^ and $dfdf = ord('N') + ord('F') shl 8) then
+    begin
+      err := 0;
+      result := NegInfinity;
+      exit;
+    end;
     include(flags, fNeg);
-  end;
+  end
+  else if c > '9' then
+   if (c = 'N') and
+      (PWord(P + 1)^ and $dfdf = ord('A') + ord('N') shl 8) then
+    begin
+      err := 0;
+      result := NaN;
+      exit;
+    end
+    else if (c = 'I') and
+            (PWord(P + 1)^ and $dfdf = ord('N') + ord('F') shl 8) then
+    begin
+      err := 0;
+      result := Infinity;
+      exit;
+    end;
   remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
   repeat
     inc(P);
