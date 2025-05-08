@@ -852,7 +852,7 @@ procedure FastAssignNewNotVoid(var d; s: pointer); overload;
 
 /// internal function used by FastSetString/FastSetStringCP
 function FastNewString(len: PtrInt; codepage: PtrInt = CP_RAWBYTESTRING): pointer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEFPCINLINE}inline;{$endif}
 
 /// ensure the supplied variable will have a CP_UTF8 code page
 // - making it unique if needed

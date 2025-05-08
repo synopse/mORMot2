@@ -142,10 +142,11 @@
   {$OBJECTCHECKS OFF} // as expected e.g. when hooking classes
 
   {$define HASINLINE}
-  {$define HASINLINEWINAPI} // Delphi has troubles inlining Windows API calls
-  {$define HASSAFEINLINE}   // Delphi 2007-2009 have troubles inlining
-  {$define NODELPHIASM}     // avoid e.g. low-level System.@LStrFromPCharLen
-  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
+  {$define HASINLINEWINAPI}   // Delphi has troubles inlining Windows API calls
+  {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining
+  {$define HASSAFEFPCINLINE}  // FPC 3.2.0 specific inlining troubles
+  {$define NODELPHIASM}       // avoid e.g. low-level System.@LStrFromPCharLen
+  {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
   {$define HASITERATORS}
   {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
@@ -189,6 +190,9 @@
     {$define ISFPC30}
     {$define ISFPC32}
     {$define HASGETTYPEKIND}
+    {$ifdef VER3_2_0}
+      {$undef HASSAFEFPCINLINE} // synopse.info/forum/viewtopic.php?id=7259
+    {$endif VER3_2_0}
     {$ifdef VER3_2_2}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$endif VER3_2_2}
@@ -534,6 +538,7 @@
     {$ifend}
     {$if CompilerVersion >= 21.0}
       {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
+      {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}     // Delphi 2010 extended RTTI for records
