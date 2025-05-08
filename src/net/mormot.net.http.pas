@@ -584,8 +584,8 @@ type
   THttpSocket = class(TCrtSocket)
   protected
     fCompressList: THttpSocketCompressList; // two pointers
-    procedure HttpStateReset; // Http.Clear + fBodyRetrieved := false
-      {$ifdef HASINLINE} inline; {$endif}
+    procedure HttpStateReset; // Http.Clear + exclude fBodyRetrieved
+      {$ifdef FPC_OR_DELPHIXE} inline; {$endif}
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString; OutStream: TStream);
   public
@@ -4197,7 +4197,7 @@ end;
 procedure THttpSocket.HttpStateReset;
 begin
   Http.Reset;
-  exclude(fFlags, fBodyRetrieved);
+  exclude(fFlags, fBodyRetrieved); // URW1111 on Delphi 2010 if inlined
   fSndBufLen := 0;
 end;
 
