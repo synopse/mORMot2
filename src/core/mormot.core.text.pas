@@ -1397,17 +1397,19 @@ function ExtendedToShort(S: PShortString;
 function ExtendedToShortNoExp(S: PShortString; Value: TSynExtended;
   Precision: integer): integer;
 
+/// raw check if the supplied text buffer is NAN/INF/+INF/-INF, i.e. not a number
+function Utf8ToFloatNan(s: PUtf8Char; len: PtrInt): TFloatNan;
+
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - as returned by ExtendedToShort/DoubleToShort textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
-function FloatToShortNan(const s: ShortString): TFloatNan;
+function ShortToFloatNan(const s: ShortString): TFloatNan;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - as returned e.g. by ExtendedToStr/DoubleToStr textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
-function FloatToStrNan(const s: RawUtf8): TFloatNan;
-  {$ifdef HASINLINE}inline;{$endif}
+function RawUtf8ToFloatNan(const s: RawUtf8): TFloatNan;
 
 /// convert a floating-point value to its numerical text equivalency
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUtf8; overload;
@@ -1451,7 +1453,7 @@ function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
 {$ifdef DOUBLETOSHORT_USEGRISU}
 const
   // special text returned if the double is not a number
-  C_STR_INF: string[3] = 'Inf';
+  C_STR_INF:  string[3] = 'Inf';
   C_STR_QNAN: string[3] = 'Nan';
 
   // min_width parameter special value, as used internally by FPC for str(d,s)
@@ -6939,24 +6941,9 @@ end;
 
 {$endif EXTENDEDTOSHORT_USESTR}
 
-function FloatToShortNan(const s: ShortString): TFloatNan;
+function Utf8ToFloatNan(s: PUtf8Char; len: PtrInt): TFloatNan;
 begin
-  case PInteger(@s)^ and $ffdfdfdf of
-    3 + ord('N') shl 8 + ord('A') shl 16 + ord('N') shl 24:
-      result := fnNan;
-    3 + ord('I') shl 8 + ord('N') shl 16 + ord('F') shl 24,
-    4 + ord('+') shl 8 + ord('I') shl 16 + ord('N') shl 24:
-      result := fnInf;
-    4 + ord('-') shl 8 + ord('I') shl 16 + ord('N') shl 24:
-      result := fnNegInf;
-  else
-    result := fnNumber;
-  end;
-end;
-
-function FloatToStrNan(const s: RawUtf8): TFloatNan;
-begin
-  case length(s) of
+  case len of
     3:
       case PInteger(s)^ and $dfdfdf of
         ord('N') + ord('A') shl 8 + ord('N') shl 16:
@@ -6967,7 +6954,7 @@ begin
         result := fnNumber;
       end;
     4:
-      case PInteger(s)^ and $dfdfdfdf of
+      case PInteger(s)^ and $dfdfdfff of
         ord('+') + ord('I') shl 8 + ord('N') shl 16 + ord('F') shl 24:
           result := fnInf;
         ord('-') + ord('I') shl 8 + ord('N') shl 16 + ord('F') shl 24:
@@ -6978,6 +6965,16 @@ begin
   else
     result := fnNumber;
   end;
+end;
+
+function ShortToFloatNan(const s: ShortString): TFloatNan;
+begin
+  result := Utf8ToFloatNan(@s[1], ord(s[0]));
+end;
+
+function RawUtf8ToFloatNan(const s: RawUtf8): TFloatNan;
+begin
+  result := Utf8ToFloatNan(pointer(s), length(s));
 end;
 
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUtf8;
@@ -7726,7 +7723,6 @@ begin
   // Special text (3 chars)
   PCardinal(str)^ := PCardinal(@spec[1])^;
 end;
-
 
 // Calculates the exp10 of a factor required to bring the binary exponent
 // of the original number into selected [ alpha .. gamma ] range:

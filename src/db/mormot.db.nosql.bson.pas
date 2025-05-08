@@ -1399,7 +1399,7 @@ begin
   else
     tmp[0] := AnsiChar(ExtendedToShort(@tmp, value, precision));
   result := true;
-  case FloatToShortNan(tmp) of
+  case ShortToFloatNan(tmp) of
     fnNan:
       SetSpecial(dsvNan);
     fnInf:
