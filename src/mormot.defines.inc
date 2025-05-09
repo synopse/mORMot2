@@ -358,7 +358,11 @@
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
         {$define HASAESNI}
       {$endif FPC_PIC}
-      {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
+      {$ifdef FPUSSE2}
+        {$undef TSYNEXTENDED80}  // no "extended" if -dFPC_SSE2 was defined
+      {$else}
+        {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
+      {$endif FPUSSE2}
       {$undef FPC_SINGLEABI}   // on i386, cdecl <> register convention
     {$endif CPUX86}
     {$ifdef CPUARM}
