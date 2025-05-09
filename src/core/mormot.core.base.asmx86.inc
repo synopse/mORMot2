@@ -2448,7 +2448,9 @@ end;
 // inspired by ValExt_JOH_PAS_8_a by John O'Harrow - calls Delphi System.@Pow10
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 const
-  Ten: double = 10.0;
+  _Ten:  double = 10.0;
+  _NaN:  double = Nan;
+  _Inf:  double = Infinity;
 asm
         // in: eax=text, edx=@err  out: st(0)=result
         push    ebx                 // save used registers
@@ -2456,7 +2458,6 @@ asm
         push    edi
         mov     esi, eax            // string pointer
         push    eax                 // save for error condition
-        xor     ebx, ebx
         push    eax                 // allocate local storage for loading fpu
         test    esi, esi
         jz      @nil                // nil string
@@ -2465,7 +2466,7 @@ asm
         cmp     bl, ' '
         je      @trim
         xor     ecx, ecx            // clear sign flag
-        fld     qword[Ten]          // load 10 into fpu
+        fld     qword ptr [_Ten]    // load 10.0 into fpu
         xor     eax, eax            // zero number of decimal places
         fldz                        // zero result in fpu
         cmp     bl, '0'
@@ -2495,7 +2496,7 @@ asm
         inc     esi
         jmp     @gdig1
 @frac:  cmp     bl, '.' - '0'
-        jne     @exp                // no decimal point
+        jne     @spec               // no decimal point - maybe Nan/Inf or E
         movzx   ebx, byte ptr [esi] // get next char
         test    bl, bl
         jz      @dotend             // string ends with '.'
@@ -2512,13 +2513,35 @@ asm
         test    bl, bl              // end reached?
         jnz     @fracl              // no, get next digit
         jmp     @finish             // yes, finished (no exponent)
+@spec:  or      bl, $20
+        cmp     bl, 'e' - '0'       // try 'E' or 'e'
+        je      @doexp
+        movzx   eax, word ptr [esi] // next two chars into eax
+        and     eax, $dfdf
+        cmp     bl, 'n' - '0'       // try 'Nan'
+        jne     @speci
+        cmp     eax, $4e41
+        jne     @error
+        lea     eax, [_Nan]         // return Nan constant
+        jmp     @spret
+@speci: cmp     bl, 'i' - '0'       // try 'Inf'
+        jne     @error
+        cmp     eax, $464e
+        jne     @error
+        lea     eax, [_Inf]         // return Infinity constant
+@spret: ffree   st(0)
+        fincstp
+        fld     qword ptr [eax]     // return PDouble(eax)^ constant
+        xor     eax, eax
+        mov     [edx], eax          // result code = 0
+        jmp     @pow                // exit with proper sign flag handling
 @dotend:test    cl, cl              // any digits found before '.'?
         jnz     @finish             // yes, valid
         jmp     @error              // no,invalid
 @exp:   or      bl, $20
         cmp     bl, 'e' - '0'
-        jne     @error              // not 'e' or 'e'
-        movzx   ebx, byte ptr [esi] // get next char
+        jne     @error              // not 'E' nor 'e'
+@doexp: movzx   ebx, byte ptr [esi] // get next char
         inc     esi
         mov     cl, 0               // clear exponent sign flag
         cmp     bl, '-'
