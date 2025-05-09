@@ -6546,7 +6546,6 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 var
   remdigit: integer;
   frac, exp: PtrInt;
-  c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
   d64: TSynExtended;
@@ -6558,106 +6557,84 @@ begin
   frac := 0;
   if P = nil then
     goto e; // will return 0 but err=1
-  c := P^;
-  if c = ' ' then
+  if P^ = ' ' then
     repeat
       inc(P);
-      c := P^;
-    until c <> ' '; // trailing spaces
-  if c = '+' then
+    until P^ <> ' '; // trailing spaces
+  if P^ = '+' then
+    inc(P)
+  else if P^ = '-' then
   begin
     inc(P);
-    c := P^;
-  end
-  else if c = '-' then
-  begin
-    inc(P);
-    c := P^;
-    if (c = 'I') and
-       (PWord(P + 1)^ and $dfdf = ord('N') + ord('F') shl 8) then
-    begin
-      err := 0;
-      result := NegInfinity;
-      exit;
-    end;
     include(flags, fNeg);
-  end
-  else if c > '9' then
-   if (c = 'N') and
-      (PWord(P + 1)^ and $dfdf = ord('A') + ord('N') shl 8) then
-    begin
-      err := 0;
-      result := NaN;
-      exit;
-    end
-    else if (c = 'I') and
-            (PWord(P + 1)^ and $dfdf = ord('N') + ord('F') shl 8) then
-    begin
-      err := 0;
-      result := Infinity;
-      exit;
+  end;
+  if P^ > '9' then
+    case PCardinal(P)^ and $00dfdfdf of
+      ord('N') + ord('A') shl 8 + ord('N') shl 16:
+        begin
+          err := 0;
+          result := NaN;
+          exit;
+        end;
+      ord('I') + ord('N') shl 8 + ord('F') shl 16:
+      begin
+        err := 0;
+        if fNeg in flags then
+          result := NegInfinity
+        else
+          result := Infinity;
+        exit;
+      end;
     end;
   remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
   repeat
-    inc(P);
-    if (c >= '0') and
-       (c <= '9') then
+    if byte(ord(P^) - ord('0')) <= 9 then
     begin
-      if remdigit = 0 then
-        if v64 < 922337203685477580 then // avoid 64-bit overflow
-          inc(remdigit); // but allow up to 19 digits if possible
-      dec(remdigit);
+      if (remdigit <> 0) or // avoid 64-bit overflow, but allow 19 digits
+         (v64 > 922337203685477580) then
+        dec(remdigit);
       if remdigit >= 0 then // over-required digits are just ignored
       begin
-        dec(c, ord('0'));
-        {$ifdef CPU64}
-        v64 := v64 * 10;
-        {$else}
-        v64 := v64 shl 3 + v64 + v64;
-        {$endif CPU64}
-        inc(v64, byte(c));
-        c := P^;
+        v64 := v64 * 10; // FPC generates fast imul + mul on i386
+        inc(v64, Int64(P^) - ord('0'));
         include(flags, fValid);
         if frac <> 0 then
           dec(frac); // digits after '.'
+        inc(P);
         continue;
       end;
       if frac >= 0 then
         inc(frac); // handle #############00000
-      c := P^;
+      inc(P);
       continue;
     end;
-    if c <> '.' then
+    if P^ <> '.' then
       break;
+    inc(P);
     if frac > 0 then
       goto e; // will return partial value but err=1
     dec(frac);
-    c := P^;
   until false;
   if frac < 0 then
     inc(frac); // adjust digits after '.'
-  if (c = 'E') or
-     (c = 'e') then
+  if ord(P^) or $20 = ord('e') then
   begin
     exp := 0;
     exclude(flags, fValid);
-    c := P^;
-    if c = '+' then
+    inc(P);
+    if P^ = '+' then
       inc(P)
-    else if c = '-' then
+    else if P^ = '-' then
     begin
       inc(P);
       include(flags, fNegExp);
     end;
     repeat
-      c := P^;
-      inc(P);
-      if (c < '0') or
-         (c > '9') then
+      if byte(ord(P^) - ord('0')) > 9 then
         break;
-      dec(c, ord('0'));
-      exp := (exp * 10) + byte(c);
+      exp := (exp * 10) + ord(P^) - ord('0');
       include(flags, fValid);
+      inc(P);
     until false;
     if fNegExp in flags then
       dec(frac, exp)
@@ -6671,7 +6648,7 @@ begin
     end;
   end;
   if (fValid in flags) and
-     (c = #0) then
+     (P^ = #0) then
     err := 0
   else
 e:  err := 1; // return the (partial) value even if not ended with #0
