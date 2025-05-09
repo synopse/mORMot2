@@ -6169,7 +6169,7 @@ end;
 
 procedure SetInt64(P: PUtf8Char; var result: Int64);
 var
-  c: cardinal;
+  c, r32: cardinal;
   minus: boolean;
 begin
   result := 0;
@@ -6193,30 +6193,31 @@ begin
         inc(P)
       until P^ <> ' ';
   end;
-  c := byte(P^) - 48;
-  if c > 9 then
+  r32 := byte(P^) - 48;
+  if r32 > 9 then
     exit;
-  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32-bit loop
     c := byte(P^) - 48;
     if c > 9 then
-      break
-    else
-      PCardinal(@result)^ := PCardinal(@result)^ * 10 + c;
-    inc(P);
-    if PCardinal(@result)^ >= high(cardinal) div 10 then
     begin
-      repeat // 64-bit loop
-        c := byte(P^) - 48;
-        if c > 9 then
-          break;
-        result := result shl 3 + result + result; // fast result := result*10
-        inc(result, c);
-        inc(P);
-      until false;
+      result := r32; // reached the end of input digits
       break;
     end;
+    r32 := r32 * 10 + c;
+    inc(P);
+    if r32 < high(cardinal) div 10 then
+      continue;
+    result := r32;
+    repeat // 64-bit loop
+      c := byte(P^) - 48;
+      if c > 9 then
+        break;
+      result := result shl 3 + result + result; // fast result := result*10
+      inc(result, c);
+      inc(P);
+    until false;
+    break;
   until false;
   if minus then
     result := -result;
@@ -6224,7 +6225,7 @@ end;
 
 procedure SetQWord(P: PUtf8Char; var result: QWord);
 var
-  c: cardinal;
+  c, r32: cardinal;
 begin
   result := 0;
   if P = nil then
@@ -6236,30 +6237,31 @@ begin
     repeat
       inc(P)
     until P^ <> ' ';
-  c := byte(P^) - 48;
-  if c > 9 then
+  r32 := byte(P^) - 48;
+  if r32 > 9 then
     exit;
-  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32-bit loop
     c := byte(P^) - 48;
     if c > 9 then
-      break
-    else
-      PCardinal(@result)^ := PCardinal(@result)^ * 10 + c;
-    inc(P);
-    if PCardinal(@result)^ >= high(cardinal) div 10 then
     begin
-      repeat // 64-bit loop
-        c := byte(P^) - 48;
-        if c > 9 then
-          break;
-        result := result shl 3 + result + result; // fast result := result*10
-        inc(result, c);
-        inc(P);
-      until false;
-      break;
+      result := r32; // reached the end of input digits
+      exit;
     end;
+    r32 := r32 * 10 + c;
+    inc(P);
+    if r32 < high(cardinal) div 10 then
+      continue;
+    result := r32;
+    repeat // 64-bit loop
+      c := byte(P^) - 48;
+      if c > 9 then
+        break;
+      result := result shl 3 + result + result; // fast result := result*10
+      inc(result, c);
+      inc(P);
+    until false;
+    break;
   until false;
 end;
 
@@ -6320,7 +6322,7 @@ end;
 
 function GetInt64(P: PUtf8Char; var err: integer): Int64;
 var
-  c: cardinal;
+  c, r32: cardinal;
   minus: boolean;
 begin
   err := 0;
@@ -6346,12 +6348,11 @@ begin
       until P^ <> ' ';
   end;
   inc(err);
-  c := byte(P^) - 48;
-  if c > 9 then
+  r32 := byte(P^) - 48;
+  if r32 > 9 then
     exit;
-  PCardinal(@result)^ := c;
-  inc(P);
   repeat // fast 32-bit loop
+    inc(P);
     c := byte(P^);
     if c <> 0 then
     begin
@@ -6359,40 +6360,36 @@ begin
       inc(err);
       if c > 9 then
         exit;
-      PCardinal(@result)^ := PCardinal(@result)^ * 10 + c;
-      inc(P);
-      if PCardinal(@result)^ >= high(cardinal) div 10 then
-      begin
-        repeat // 64-bit loop
-          c := byte(P^);
-          if c = 0 then
-          begin
-            err := 0; // conversion success without error
-            break;
-          end;
-          dec(c, 48);
-          inc(err);
-          if c > 9 then
-            exit
-          else
-            {$ifdef CPU32DELPHI}
-            result := result shl 3 + result + result;
-            {$else}
-            result := result * 10;
-            {$endif CPU32DELPHI}
-          inc(result, c);
-          if result < 0 then
-            exit; // overflow (>$7FFFFFFFFFFFFFFF)
-          inc(P);
-        until false;
-        break;
-      end;
-    end
-    else
-    begin
-      err := 0; // reached P^=#0 -> conversion success without error
+      r32 := r32 * 10 + c;
+      if r32 < high(cardinal) div 10 then
+        continue;
+      result := r32;
+      repeat // 64-bit loop
+        inc(P);
+        c := byte(P^);
+        if c = 0 then
+        begin
+          err := c; // conversion success without error
+          break;
+        end;
+        dec(c, 48);
+        inc(err);
+        if c > 9 then
+          exit;
+        {$ifdef CPU32DELPHI}
+        result := result shl 3 + result + result;
+        {$else}
+        result := result * 10; // FPC generates fast imul + mul
+        {$endif CPU32DELPHI}
+        inc(result, c);
+        if result < 0 then
+          exit; // overflow (>$7FFFFFFFFFFFFFFF)
+      until false;
       break;
     end;
+    err := c; // reached P^=#0 (c=0) -> 32-bit conversion success without error
+    result := r32;
+    break;
   until false;
   if minus then
     result := -result;
@@ -6400,21 +6397,21 @@ end;
 
 function GetQWord(P: PUtf8Char; var err: integer): QWord;
 var
-  c: PtrUInt;
+  c, r32: PtrUInt;
 begin
-  err := 1; // error
+  err := 0;
   result := 0;
   if P = nil then
     exit;
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  c := byte(P^) - 48;
-  if c > 9 then
+  inc(err);
+  r32 := byte(P^) - 48;
+  if r32 > 9 then
     exit;
-  PByte(@result)^ := c;
-  inc(P);
   repeat // fast 32-bit loop
+    inc(P);
     c := byte(P^);
     if c <> 0 then
     begin
@@ -6422,38 +6419,33 @@ begin
       inc(err);
       if c > 9 then
         exit;
-      PCardinal(@result)^ := PCardinal(@result)^ * 10 + c;
-      inc(P);
-      if PCardinal(@result)^ >= high(cardinal) div 10 then
-      begin
-        repeat // 64-bit loop
-          c := byte(P^);
-          if c = 0 then
-          begin
-            err := 0; // conversion success without error
-            break;
-          end;
-          dec(c, 48);
-          inc(err);
-          if c > 9 then
-            exit
-          else
-            {$ifdef CPU32DELPHI}
-            result := result shl 3 + result + result;
-            {$else}
-            result := result * 10;
-            {$endif CPU32DELPHI}
-          inc(result, c);
-          inc(P);
-        until false;
-        break;
-      end;
-    end
-    else
-    begin
-      err := 0; // reached P^=#0 -> conversion success without error
-      break;
+      r32 := r32 * 10 + c;
+      if r32 < high(cardinal) div 10 then
+        continue;
+      result := r32;
+      repeat // 64-bit loop
+        inc(P);
+        c := byte(P^);
+        if c = 0 then
+        begin
+          err := c; // conversion success without error
+          exit;
+        end;
+        dec(c, 48);
+        inc(err);
+        if c > 9 then
+          exit;
+        {$ifdef CPU32DELPHI}
+        result := result shl 3 + result + result;
+        {$else}
+        result := result * 10; // FPC generates fast imul + mul
+        {$endif CPU32DELPHI}
+        inc(result, c);
+      until false;
     end;
+    err := c; // reached P^=#0 (c=0) -> conversion success without error
+    result := r32;
+    exit;
   until false;
 end;
 
