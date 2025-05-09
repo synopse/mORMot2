@@ -1936,9 +1936,9 @@ type
       Options: pointer{PDocVariantOptions} = nil): PtrInt; override;
     /// unserialize some JSON input into Data^ - warning: Json is modified in-place
     // - as used by LoadJson() and similar high-level functions
-    procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
+    function ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
-      ObjectListItemClass: TClass; Interning: TRawUtf8Interning);
+      ObjectListItemClass: TClass; Interning: TRawUtf8Interning): PUtf8Char;
     /// how many iterations could be done one a given value
     // - returns -1 if the value is not iterable, or length(DynArray) or
     // TRawUtf8List.Count or TList.Count or TSynList.Count
@@ -10877,10 +10877,10 @@ begin
   result := Cache.Size;
 end;
 
-procedure TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;
+function TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; ParserOptions: TJsonParserOptions;
   CustomVariantOptions: PDocVariantOptions; ObjectListItemClass: TClass;
-  Interning: TRawUtf8Interning);
+  Interning: TRawUtf8Interning): PUtf8Char;
 var
   ctxt: TJsonParserContext;
 begin
@@ -10902,9 +10902,13 @@ begin
       Json := ctxt.Json
     else
       Json := nil;
+    result := ctxt.Json;
   end
   else
+  begin
     Json := nil;
+    result := nil;
+  end;
 end;
 
 function TRttiJson.ValueIterateCount(Data: pointer): integer;
@@ -11353,7 +11357,7 @@ procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8InterningAbstract);
 begin
-  (Rtti as TRttiJson).ValueLoadJson(Data, Json, EndOfObject,
+  TRttiJson(Rtti).ValueLoadJson(Data, Json, EndOfObject,
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
     CustomVariantOptions, nil, TRawUtf8Interning(Interning));
 end;
