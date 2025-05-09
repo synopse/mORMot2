@@ -4869,9 +4869,20 @@ begin
     Check(FormatSql('?', [], [k]) = ':(' + s + '):');
     err := 1;
     l := GetInt64(pointer(s), err);
-    Check((err = 0) and
-        (l = k));
+    Check(l = k);
+    Check(err = 0);
+    dec(l);
     SetInt64(pointer(s), l);
+    Check(l = k);
+    if k >= 0 then
+    begin
+      l := GetQWord(pointer(s), err);
+      Check(l = k);
+      Check(err = 0);
+      dec(l);
+      SetQword(pointer(s), QWord(l));
+      Check(l = k);
+    end;
     s := s + 'z';
     l := GetInt64(pointer(s), err);
     Check(err <> 0);
