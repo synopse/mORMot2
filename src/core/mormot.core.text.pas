@@ -7328,14 +7328,14 @@ const
   C_GRISU_ALPHA = -61;
   C_GRISU_GAMMA = 0;
 
-  C_EXP2_SPECIAL = C_EXP2_BIAS * 2 + 1;
+  C_EXP2_SPECIAL = C_EXP2_BIAS * 2 + 1; // $7ff
   C_MANT2_INTEGER = qword(1) shl C_FRAC2_BITS;
   C_EXP_POS = {$ifdef FPC_DOUBLE_HILO_SWAPPED} 0 {$else} 1 {$endif};
 
 function doubleIsSpecial(const f: double): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := ((TSplitFloat(f).d[C_EXP_POS] shr 20) and $7ff) = C_EXP2_SPECIAL;
+  result := ((TSplitFloat(f).d[C_EXP_POS] shr 20) and C_EXP2_SPECIAL) = C_EXP2_SPECIAL;
 end;
 
 type
