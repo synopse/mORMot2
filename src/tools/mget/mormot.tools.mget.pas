@@ -60,12 +60,12 @@ type
     function GetTcpTimeoutSec: integer;
     procedure SetTcpTimeoutSec(Seconds: integer);
     // could be overriden to change the behavior of this class
-    procedure PeerCacheStarted(PeerInstance: THttpPeerCache); virtual;
+    procedure PeerCacheStarted({%H-}PeerInstance: THttpPeerCache); virtual;
     procedure PeerCacheStopping; virtual;
-    procedure BeforeClientConnect(var Uri: TUri); virtual;
+    procedure BeforeClientConnect(var {%H-}Uri: TUri); virtual;
     procedure AfterClientConnect; virtual;
-    procedure BeforeClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet); virtual;
-    procedure AfterClientGet(var Uri: TUri; var WGet: THttpClientSocketWGet); virtual;
+    procedure BeforeClientGet(var {%H-}Uri: TUri; var {%H-}WGet: THttpClientSocketWGet); virtual;
+    procedure AfterClientGet(var {%H-}Uri: TUri; var {%H-}WGet: THttpClientSocketWGet); virtual;
   public
     // input parameters (e.g. from command line) for the MGet process
     Silent, NoResume, Cache, Peer, LogSteps, TrackNetwork: boolean;
