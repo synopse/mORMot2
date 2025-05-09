@@ -10256,11 +10256,11 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
 var
   // logic below is extracted from mormot.core.base.pas' GetExtended()
   remdigit: integer;
-  frac, exp: PtrInt;
+  frac, exp {$ifdef CPUX86NOTPIC}, f {$endif}: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
-  d: double;
+  d, d64: double;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
   result := nil; // return nil to indicate parsing error
@@ -10373,17 +10373,37 @@ begin
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin
     // converted into a double value
+    d64 := v64;
+    {$ifdef CPUX86NOTPIC}
+    f := frac;
+    if f >= -31 then
+      if f <= 31 then
+        d := POW10[f] // -31 .. + 31
+      else if (18 - remdigit) + integer(f) >= 308 then
+        exit          // +308 ..
+      else
+        d := POW10[(f and not 31) shr 5 + 34] * POW10[f and 31] // +32 .. +307
+    else
+    begin
+      f := -f; // .. -32
+      d := POW10[(f and not 31) shr 5 + 45] / POW10[f and 31];
+    end;
+    {$else}
     exp := PtrUInt(@POW10);
     if frac >= -31 then
       if frac <= 31 then
-        d := PPow10(exp)[frac]                 // -31 .. + 31
+        d := PPow10(exp)[frac] // -31 .. + 31
       else if (18 - remdigit) + integer(frac) >= 308 then
-        exit                                   // +308 ..
-      else
-        d := HugePower10Pos(frac, PPow10(exp)) // +32 .. +307
+        exit                   // +308 ..
+      else                     // +32 .. +307
+        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
     else
-      d := HugePower10Neg(frac, PPow10(exp));  // .. -32
-    Value.VDouble := d * v64;
+    begin
+      frac := -frac; // .. -32
+      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+    end;
+    {$endif CPUX86NOTPIC}
+    Value.VDouble := d * d64;
     TSynVarData(Value).VType := varDouble;
   end
   else

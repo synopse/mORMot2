@@ -1436,14 +1436,6 @@ const
     1E160, 1E192, 1E224, 1E256, 1E288, 1E320, 1E-0,{45} 1E-32, 1E-64,
     1E-96, 1E-128, 1E-160, 1E-192, 1E-224, 1E-256, 1E-288, 1E-320);
 
-/// low-level computation of 10 ^ positive exponent, if POW10[] is not enough
-function HugePower10Pos(exponent: PtrInt; pow10: PPow10): TSynExtended;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// low-level computation of 10 ^ negative exponent, if POW10[] is not enough
-function HugePower10Neg(exponent: PtrInt; pow10: PPow10): TSynExtended;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// get the signed 32-bit integer value stored in a RawUtf8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
@@ -6556,18 +6548,7 @@ begin
     result := 0;
 end;
 
-function HugePower10Pos(exponent: PtrInt; pow10: PPow10): TSynExtended;
-begin
-  result := pow10[(exponent and not 31) shr 5 + 34] * pow10[exponent and 31];
-end;
-
-function HugePower10Neg(exponent: PtrInt; pow10: PPow10): TSynExtended;
-begin
-  exponent := -exponent;
-  result := pow10[(exponent and not 31) shr 5 + 45] / pow10[exponent and 31];
-end;
-
-{$ifndef CPU32DELPHI}
+{$ifndef CPU32DELPHI} // Delphi has its own x86/x87 asm version
 
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 var
@@ -6576,6 +6557,7 @@ var
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
+  d64: TSynExtended;
 label
   e;
 begin
@@ -6701,17 +6683,20 @@ begin
     err := 0
   else
 e:  err := 1; // return the (partial) value even if not ended with #0
-  exp := PtrUInt(@POW10);
+  d64 := v64;
   if frac >= -31 then
-    if frac <= 31 then
-      result := PPow10(exp)[frac] // -31 .. + 31
-    else
-      result := HugePower10Pos(frac, PPow10(exp)) // +32 ..
-  else
-    result := HugePower10Neg(frac, PPow10(exp));  // .. -32
+    if frac <= 31 then // -31 .. + 31
+      result := POW10[frac]
+    else // +32 ..
+      result := POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]
+  else  // .. -32
+  begin
+    frac := -frac;
+    result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
+  end;
   if fNeg in flags then
-    result := result * PPow10(exp)[33]; // * -1
-  result := result * v64;
+    result := result * POW10[33]; // * -1
+  result := result * d64;
 end;
 
 {$endif CPU32DELPHI}
