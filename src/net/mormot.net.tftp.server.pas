@@ -84,7 +84,6 @@ type
     fLastSent: pointer;
     fLastSentLen: integer;
     procedure DoExecute; override;
-    procedure NotifyShutdown;
   public
     /// initialize this connection
     constructor Create(const Source: TTftpContext; Owner: TTftpServerThread); reintroduce;
@@ -217,8 +216,7 @@ destructor TTftpConnectionThread.Destroy;
 begin
   Terminate;
   fContext.Shutdown;
-  if fOwner <> nil then
-    fOwner.fConnection.Remove(self);
+  fOwner.fConnection.Remove(self); // ownobject=false: just decrease Count
   inherited Destroy;
   Freemem(fLastSent);
   FreeMem(fContext.Frame);
@@ -319,12 +317,6 @@ begin
       [fn, KB((fFileSize * 1000) div tix)], self);
 end;
 
-procedure TTftpConnectionThread.NotifyShutdown;
-begin
-  fOwner := nil;
-  Terminate;
-end;
-
 
 { ******************** TTftpServerThread Server Class }
 
@@ -399,19 +391,24 @@ begin
   if (self = nil) or
      (fConnection = nil) then
     exit;
-  t := pointer(fConnection.List);
-  for i := 1 to fConnection.Count do
-  begin
-    t^.NotifyShutdown; // also set fOwner=nil to avoid fConnection.Delete()
-    inc(t);
+  fConnection.Safe.WriteLock;
+  try
+    t := pointer(fConnection.List);
+    for i := 1 to fConnection.Count do
+    try
+      t^.Terminate;
+      inc(t);
+    except
+      // ignore any exception here
+    end;
+  finally
+    fConnection.Safe.WriteUnLock;
   end;
 end;
 
 procedure TTftpServerThread.TerminateAndWaitFinished(TimeOutMs: integer);
 var
-  i: integer;
   endtix: Int64;
-  t: ^TTftpConnectionThread;
 begin
   endtix := mormot.core.os.GetTickCount64 + TimeOutMs;
   // first notify all sub threads to terminate
@@ -419,14 +416,11 @@ begin
   // shutdown and wait for main accept() thread
   inherited TerminateAndWaitFinished(TimeOutMs);
   // wait for sub threads finalization
-  if fConnection = nil then
-    exit;
-  t := pointer(fConnection.List);
-  for i := 1 to fConnection.Count do
-  begin
-    t^.TerminateAndWaitFinished(endtix - mormot.core.os.GetTickCount64);
-    inc(t);
-  end;
+  if ConnectionCount <> 0 then
+    repeat
+      SleepHiRes(10);
+    until (ConnectionCount = 0) or
+          (mormot.core.os.GetTickCount64 > endtix);
 end;
 
 function TTftpServerThread.GetConnectionCount: integer;
