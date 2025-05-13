@@ -2553,7 +2553,7 @@ begin
           AddDirect('=');
         Add(Values[0]);
         if ValuesInlinedMax > 1 then
-          AddDirect(')', ':', ',')
+          AddDirect(')', ':');
       end
       else
       begin
