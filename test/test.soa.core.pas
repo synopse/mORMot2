@@ -1116,7 +1116,7 @@ procedure TTestServiceOrientedArchitecture.Test(
     d1, d2: IDocDict;
   begin
     Setlength(Ints, 2);
-    CSVToRawUtf8DynArray('one,two,three', Strs1);
+    CsvToRawUtf8DynArray('one,two,three', Strs1);
     CheckEqual(length(strs1), 3);
     for t := 1 to Iterations do
     begin

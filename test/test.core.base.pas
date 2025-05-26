@@ -5674,14 +5674,14 @@ begin
   Check(arr[1] = '25');
   Check(arr[2] = '0');
   Finalize(arr);
-  CSVToRawUTF8DynArray('AA,BB,CC,DD', ',', ',', arr);
+  CsvToRawUtf8DynArray('AA,BB,CC,DD', ',', ',', arr);
   CheckEqual(length(arr), 4);
   Check(arr[0] = 'AA');
   Check(arr[1] = 'BB');
   Check(arr[2] = 'CC');
   Check(arr[3] = 'DD');
   Finalize(arr);
-  CSVToRawUTF8DynArray('A,B,C,D', ',', ',', arr);
+  CsvToRawUtf8DynArray('A,B,C,D', ',', ',', arr);
   CheckEqual(length(arr), 4);
   Check(arr[0]='A');
   Check(arr[1]='B');
