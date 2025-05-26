@@ -1893,7 +1893,7 @@ type
     procedure SearchMissingAttributes; overload;
     procedure RetrieveRootDseInfo;
     procedure RetrieveDefaultDNInfo;
-    procedure Reset;
+    procedure Reset(reconnect: boolean);
     procedure SetUnknownError(const msg: RawUtf8); overload;
     procedure SetUnknownError(const fmt: RawUtf8; const args: array of const); overload;
     function DoBind(Mode: TLdapClientBound): boolean;
@@ -6575,22 +6575,27 @@ begin
       result := false;
     end;
   FreeAndNil(fSock);
-  Reset;
+  Reset({reconnect=}false);
   fFlags := [];
 end;
 
-procedure TLdapClient.Reset;
+procedure TLdapClient.Reset(reconnect: boolean);
 begin
   fLog.Add.Log(sllTrace, 'Reset', self);
   if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
   fSeq := 0;
-  fFlags := fFlags * [fRetrieveRootDseInfo, fRetrievedDefaultDNInfo];
   fBound := false; // fBoundAs should be kept as it is
   fBoundUser := '';
-  fRootDN := '';
-  fDefaultDN := '';
-  fConfigDN := '';
+  if reconnect then
+    fFlags := fFlags * [fRetrieveRootDseInfo, fRetrievedDefaultDNInfo]
+  else
+  begin
+    fFlags := []; // from Close: full reset
+    fRootDN := '';
+    fDefaultDN := '';
+    fConfigDN := '';
+  end;
 end;
 
 function TLdapClient.DoBind(Mode: TLdapClientBound): boolean;
@@ -6619,7 +6624,7 @@ begin
     exit; // no server to reconnect
   fLog.EnterLocal(log, 'Reconnect from %', [context], self);
   // reset the client state and close any current socket
-  Reset;
+  Reset({reconnect=}true);
   fSock.Close;
   // re-create the client socket with previous valid TCP parameters
   if Assigned(log) then
