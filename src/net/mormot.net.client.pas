@@ -2734,22 +2734,22 @@ begin
   begin
     // plain http:// proxy is implemented in RequestSendHeader not via CONNECT
     bak := Tunnel;
-    Tunnel.Clear;
     try
+      Tunnel.Clear; // no CONNECT
       inherited OpenBind(bak.Server, bak.Port, false, bak.Https, bak.Layer);
-      include(fFlags, fProxyHttp);
-      exclude(fFlags, fServerTlsEnabled); // TLS was about the proxy
       fProxyUrl := bak.URI;
       if bak.User <> '' then
         Join(['Proxy-Authorization: Basic ', bak.UserPasswordBase64], fProxyAuthHeader);
       fSocketLayer := aLayer;
-      fServer := aServer;
-      fPort := aPort; // keep '' for default port 80
+      include(fFlags, fProxyHttp);
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
+        OnLog(sllTrace, 'Open(%:%) via proxy %', [aServer, aPort, fProxyUrl], self);
     finally
-      if bak.Server <> '' then
-        Tunnel := bak;
+      // always restore server and tunnel params for proper retry
+      fServer := aServer;
+      fPort := aPort; // good enough to keep '' for default port 80
+      exclude(fFlags, fServerTlsEnabled); // any TLS was about the proxy
+      Tunnel := bak;
     end;
   end
   else
@@ -3002,7 +3002,7 @@ begin
     SockSend('Host: unix') // not part of the HTTP standard anyway
   else
   {$endif OSPOSIX}
-  if (fPort = '') or // = '' if fProxyHttp in fFlags on port 80
+  if (fPort = '') or // = '' for fProxyHttp on port 80
      (fPort = DEFAULT_PORT[ServerTls]) then
     SockSendLine(['Host: ', fServer])
   else
