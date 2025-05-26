@@ -5063,7 +5063,7 @@ const
 var
   len: cardinal;
 begin
-  result:='';
+  result := '';
   len := length(s);
   if len = 0 then
     exit;
@@ -5477,7 +5477,7 @@ begin
     aAddress^ := u.Address;
 end;
 
-procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
+procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
   aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
 var
   retry: integer;
@@ -5507,9 +5507,10 @@ begin
             (Tunnel.Server <> fServer) and
             (aLayer = nlTcp) then
     begin
-      // handle client tunnelling via an HTTP(s) proxy
+      // HTTP(S) tunnelling via CONNECT - see also THttpClientSocket.OpenBind
       fProxyUrl := Tunnel.URI;
       if Tunnel.Https and aTLS then
+        // single TLS parameter for either the Tunnel or the destination
         raise ENetSock.Create(
           '%s.Open(%s:%s): %s proxy - unsupported dual TLS layers',
           [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
@@ -5522,6 +5523,8 @@ begin
           fSocketFamily := addr.Family;
           include(fFlags, fProxyConnect);
           res := nrRefused;
+          if Tunnel.Https then
+            DoTlsAfter(cstaConnect); // the proxy requires a TLS connection
           SockSendLine(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
             SockSendLine(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
@@ -5543,9 +5546,10 @@ begin
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy error',
           [ClassNameShort(self)^, fServer, fPort, fProxyUrl], res);
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
+        OnLog(sllTrace, 'Open(%:%) via proxy CONNECT %',
+          [fServer, fPort, fProxyUrl], self);
       if aTLS then
-        DoTlsAfter(cstaConnect);
+        DoTlsAfter(cstaConnect); // raw TLS negotation after CONNECT
       exit;
     end
     else
