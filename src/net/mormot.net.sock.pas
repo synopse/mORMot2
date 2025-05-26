@@ -1720,7 +1720,7 @@ type
     fSock: TNetSocket; // wrapper to raw socket, stored as a pointer
     fServer: RawUtf8;
     fPort: RawUtf8;
-    fFlags: set of (fAborted, fWasBind, fBodyRetrieved, fProxyConnect);
+    fFlags: set of (fAborted, fWasBind, fBodyRetrieved, fProxyConnect, fProxyHttp);
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
     fProxyUrl: RawUtf8;
@@ -1798,7 +1798,7 @@ type
     // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
-      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false);
+      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false); virtual;
     /// a wrapper around Close + OpenBind() with the current settings
     // - could be used to reestablish a broken or closed connection
     // - return '' on success, or an error message on failure

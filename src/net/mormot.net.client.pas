@@ -572,6 +572,7 @@ type
     fAccept: RawUtf8;
     fProcessName: RawUtf8;
     fRedirected: RawUtf8;
+    fProxyAuthHeader: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fAuthDigestAlgo: TDigestAlgo;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
@@ -609,6 +610,11 @@ type
     // - as used e.g. by TSimpleHttpClient
     constructor OpenOptions(const aUri: TUri;
       var aOptions: THttpRequestExtendedOptions; const aOnLog: TSynLogProc = nil);
+    /// after Create(), open or bind to a given server port
+    // - overriden to support HTTP proxy without CONNECT
+    procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
+      aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
+      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false); override;
     /// compare TUri and its options with the actual connection
     // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
     // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
@@ -2714,6 +2720,42 @@ begin
   aOptions.TLS := TLS; // copy back Peer information after connection
 end;
 
+procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
+  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
+var
+  bak: TUri;
+begin
+  if doBind then
+    EHttpSocket.RaiseUtf8('%.OpenBind with doBind=true', [self]);
+  fProxyAuthHeader := '';
+  if (not aTLS) and // proxy to https:// destination requires CONNECT
+     (Tunnel.Server <> '') and
+     (Tunnel.Server <> aServer) then
+  begin
+    // plain http:// proxy is implemented in RequestSendHeader not via CONNECT
+    bak := Tunnel;
+    Tunnel.Clear;
+    try
+      inherited OpenBind(bak.Server, bak.Port, false, bak.Https, bak.Layer);
+      include(fFlags, fProxyHttp);
+      fProxyUrl := bak.URI;
+      if bak.User <> '' then
+        Join(['Proxy-Authorization: Basic ', bak.UserPasswordBase64], fProxyAuthHeader);
+      fSocketLayer := aLayer;
+      fServer := aServer;
+      fPort := aPort; // keep '' for default port 80
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
+    finally
+      if bak.Server <> '' then
+        Tunnel := bak;
+    end;
+  end
+  else
+    // regular socket creation if no proxy or toward https://
+    inherited OpenBind(aServer, aPort, {doBind=}false, aTLS, aLayer);
+end;
+
 function THttpClientSocket.SameOpenOptions(const aUri: TUri;
   const aOptions: THttpRequestExtendedOptions): boolean;
 var
@@ -2959,10 +3001,13 @@ begin
     SockSend('Host: unix') // not part of the HTTP standard anyway
   else
   {$endif OSPOSIX}
-  if Port = DEFAULT_PORT[TLS.Enabled] then
-    SockSendLine(['Host: ', Server])
+  if (fPort = '') or // = '' if fProxyHttp in fFlags on port 80
+     (fPort = DEFAULT_PORT[TLS.Enabled]) then
+    SockSendLine(['Host: ', fServer])
   else
-    SockSendLine(['Host: ', Server, ':', Port]);
+    SockSendLine(['Host: ', fServer, ':', fPort]);
+  if fProxyAuthHeader <> '' then
+    SockSend(fProxyAuthHeader);
   if (fRangeStart > 0) or
      (fRangeEnd > 0) then
     if fRangeEnd > fRangeStart then
