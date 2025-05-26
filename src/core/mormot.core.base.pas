@@ -6572,13 +6572,13 @@ begin
     case PCardinal(P)^ and $00dfdfdf of
       ord('N') + ord('A') shl 8 + ord('N') shl 16:
         begin
-          err := 0;
+          err := frac; // =0 for success
           result := NaN;
           exit;
         end;
       ord('I') + ord('N') shl 8 + ord('F') shl 16:
       begin
-        err := 0;
+        err := frac;
         if fNeg in flags then
           result := NegInfinity
         else
@@ -6598,13 +6598,11 @@ begin
         v64 := v64 * 10; // FPC generates fast imul + mul on i386
         inc(v64, Int64(P^) - ord('0'));
         include(flags, fValid);
-        if frac <> 0 then
-          dec(frac); // digits after '.'
+        dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
         inc(P);
         continue;
       end;
-      if frac >= 0 then
-        inc(frac); // handle #############00000
+      inc(frac, ord(frac >= 0)); // handle #############00000
       inc(P);
       continue;
     end;
@@ -6615,8 +6613,7 @@ begin
       goto e; // will return partial value but err=1
     dec(frac);
   until false;
-  if frac < 0 then
-    inc(frac); // adjust digits after '.'
+  inc(frac, ord(frac < 0)); // adjust digits after '.'
   if ord(P^) or $20 = ord('e') then
   begin
     exp := 0;
