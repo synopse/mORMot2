@@ -2988,7 +2988,7 @@ begin
       log.Log(sllDebug,
         'Destroy: waited fProcessCount=%', [fProcessCount], self);
   end;
-  fProtocol.Free;
+  FreeAndNil(fProtocol);
   fOutgoing.Free;
   fIncoming.Free;
   DeleteCriticalSection(fSafeIn); // to be done lately to avoid GPF
@@ -3033,9 +3033,10 @@ begin
     frame.opcode := focConnectionClose;
     frame.content := [];
     frame.tix := 0;
-    if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
-       (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
-      fProtocol.ProcessIncomingFrame(self, frame, '');
+    if Assigned(fProtocol) then
+      if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+         (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
+        fProtocol.ProcessIncomingFrame(self, frame, '');
     if Assigned(fSettings.OnClientDisconnected) then
     begin
       WebSocketLog.Add.Log(sllTrace, 'ProcessStop: OnClientDisconnected', self);
@@ -3082,9 +3083,10 @@ begin
       ; // nothing to do
     focText,
     focBinary:
-      if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
-         (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
-        fProtocol.ProcessIncomingFrame(self, request, '');
+      if Assigned(fProtocol) then
+        if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+           (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
+          fProtocol.ProcessIncomingFrame(self, request, '');
     focConnectionClose:
       begin
         if (fState = wpsRun) and
@@ -3190,6 +3192,7 @@ begin
       SetLastPingTicks;
       fState := wpsRun;
       while (fOwnerThread = nil) or
+            (fProtocol = nil) or
             not fOwnerThread.Terminated do
         if ProcessLoopStepReceive({nonblockingflag=}nil) and
            ProcessLoopStepSend then
