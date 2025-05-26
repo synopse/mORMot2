@@ -1728,7 +1728,7 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
-    // - don't validate the password, just TargetHost/TargetPort
+    // - don't validate the password nor Kerberos auth, just TargetHost/TargetPort
     function CheckTargetHost: TLdapClientTransmission;
     /// try to setup the LDAP server information from the system
     // - use a temporary TLdapClient.Connect then optionally call BindSaslKerberos
@@ -5381,10 +5381,7 @@ begin
         if test.Bind then // connect and anonymous binding
         begin
           fTls := test.Sock.TLS.Enabled; // may have changed during Connect
-          if fTls then
-            result := lctEncrypted
-          else
-            result := lctPlain;
+          result := test.Transmission; // lctEncrypted or lctPlain
         end;
       finally
         test.Free;
