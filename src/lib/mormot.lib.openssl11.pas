@@ -3983,7 +3983,7 @@ const
     'PEM_write_bio_PUBKEY',
     'OpenSSL_version_num',
     'OpenSSL_version',
-    '?OSSL_PROVIDER_load',
+    '?OSSL_PROVIDER_load',                    // OpenSSL 3 only
     '?OSSL_PROVIDER_set_default_search_path', // OpenSSL 3 only
     'X509_print',
     nil);
@@ -5799,7 +5799,7 @@ begin
   if Assigned(libcrypto.OSSL_PROVIDER_set_default_search_path) then
     result := libcrypto.OSSL_PROVIDER_set_default_search_path(libctx, path)
   else
-    result := 0; // unsupported in openssl 1.1 - Result 0 indicates an error according to openssl docs.
+    result := 0; // unsupported in openssl 1.1 - 0 indicates an OpenSSL error
 end;
 
 function X509_print(bp: PBIO; x: PX509): integer;

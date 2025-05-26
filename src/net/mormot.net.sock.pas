@@ -1746,7 +1746,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
-    // - could have been assigned by a Tunnel.From() call
     // - User/Password would be taken into consideration for authentication
     // - could be populated by mormot.net.client Tunnel.From(GetSystemProxy())
     Tunnel: TUri;
