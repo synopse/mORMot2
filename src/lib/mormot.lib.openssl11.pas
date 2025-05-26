@@ -2528,6 +2528,7 @@ function OpenSSL_version_num(): cardinal; cdecl;
 function OpenSSL_version(typ: integer): PUtf8Char; cdecl;
 function OSSL_PROVIDER_load(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVIDER; cdecl;
 function OSSL_PROVIDER_set_default_search_path(libctx: POSSL_LIB_CTX; path: PAnsiChar): integer; cdecl;
+function OSSL_PROVIDER_available(libctx: POSSL_LIB_CTX; name: PAnsiChar): integer; cdecl;
 function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 
@@ -3638,12 +3639,13 @@ type
     OpenSSL_version: function(typ: integer): PUtf8Char; cdecl;
     OSSL_PROVIDER_load: function(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVIDER; cdecl;
     OSSL_PROVIDER_set_default_search_path: function(libctx: POSSL_LIB_CTX; path: PAnsiChar): integer; cdecl;
+    OSSL_PROVIDER_available: function(libctx: POSSL_LIB_CTX; name: PAnsiChar): integer; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     X509_print: function(bp: PBIO; x: PX509): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..342] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..343] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3985,6 +3987,7 @@ const
     'OpenSSL_version',
     '?OSSL_PROVIDER_load',                    // OpenSSL 3 only
     '?OSSL_PROVIDER_set_default_search_path', // OpenSSL 3 only
+    '?OSSL_PROVIDER_available',               // OpenSSL 3 only
     'X509_print',
     nil);
 
@@ -5802,6 +5805,14 @@ begin
     result := 0; // unsupported in openssl 1.1 - 0 indicates an OpenSSL error
 end;
 
+function OSSL_PROVIDER_available(libctx: POSSL_LIB_CTX; name: PAnsiChar): integer;
+begin
+  if Assigned(libcrypto.OSSL_PROVIDER_available) then
+    result := libcrypto.OSSL_PROVIDER_available(libctx, name)
+  else
+    result := 0; // unsupported in openssl 1.1 - 0 indicates an OpenSSL error
+end;
+
 function X509_print(bp: PBIO; x: PX509): integer;
 begin
   result := libcrypto.X509_print(bp, x);
@@ -7280,6 +7291,9 @@ function OSSL_PROVIDER_load(libctx: POSSL_LIB_CTX; name: PAnsiChar): POSSL_PROVI
 
 function OSSL_PROVIDER_set_default_search_path(libctx: POSSL_LIB_CTX; path: PAnsiChar): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OSSL_PROVIDER_set_default_search_path';
+
+function OSSL_PROVIDER_available(libctx: POSSL_LIB_CTX; name: PAnsiChar): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'OSSL_PROVIDER_available';
 
 function X509_print(bp: PBIO; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print';
