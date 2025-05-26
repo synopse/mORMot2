@@ -2738,6 +2738,7 @@ begin
     try
       inherited OpenBind(bak.Server, bak.Port, false, bak.Https, bak.Layer);
       include(fFlags, fProxyHttp);
+      exclude(fFlags, fServerTlsEnabled); // TLS was about the proxy
       fProxyUrl := bak.URI;
       if bak.User <> '' then
         Join(['Proxy-Authorization: Basic ', bak.UserPasswordBase64], fProxyAuthHeader);
@@ -2762,7 +2763,7 @@ var
   tun: TUri;
 begin
   result := IdemPChar(pointer(aUri.Scheme), 'HTTP') and
-            aUri.Same(Server, Port, TLS.Enabled) and
+            aUri.Same(Server, Port, ServerTls) and
             SameNetTlsContext(TLS, aOptions.TLS) and
             fExtendedOptions.SameAuth(@aOptions.Auth);
   if result then
@@ -2800,9 +2801,9 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
       ctxt.Status := FatalErrorCode
     else
       try
-        // recreate the connection and try again
+        // recreate the connection and try again - like TCrtSocket.ReOpen()
         Close;
-        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
+        OpenBind(fServer, fPort, {bind=}false, ServerTls);
         HttpStateReset;
         include(ctxt.Retry, rMain);
         RequestInternal(ctxt); // retry once
@@ -3002,7 +3003,7 @@ begin
   else
   {$endif OSPOSIX}
   if (fPort = '') or // = '' if fProxyHttp in fFlags on port 80
-     (fPort = DEFAULT_PORT[TLS.Enabled]) then
+     (fPort = DEFAULT_PORT[ServerTls]) then
     SockSendLine(['Host: ', fServer])
   else
     SockSendLine(['Host: ', fServer, ':', fPort]);
@@ -3158,7 +3159,7 @@ begin
         if (hfConnectionClose in Http.HeaderFlags) or
            (newuri.Server <> Server) or
            (newuri.Port <> Port) or
-           (newuri.Https <> TLS.Enabled) then
+           (newuri.Https <> ServerTls) then
         begin
           Close; // relocated to another server -> reset the TCP connection
           try

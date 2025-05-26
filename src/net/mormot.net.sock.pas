@@ -1699,6 +1699,14 @@ type
     cstaBind,
     cstaAccept);
 
+  TCrtSocketFlags = set of (
+    fAborted,
+    fWasBind,
+    fBodyRetrieved,
+    fServerTlsEnabled,
+    fProxyConnect,
+    fProxyHttp);
+
   {$M+}
   /// Fast low-level Socket implementation
   // - direct access to the OS (Windows, Linux) network layer API
@@ -1720,7 +1728,7 @@ type
     fSock: TNetSocket; // wrapper to raw socket, stored as a pointer
     fServer: RawUtf8;
     fPort: RawUtf8;
-    fFlags: set of (fAborted, fWasBind, fBodyRetrieved, fProxyConnect, fProxyHttp);
+    fFlags: TCrtSocketFlags;
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
     fProxyUrl: RawUtf8;
@@ -1752,6 +1760,8 @@ type
     /// direct access to the optional low-level TLS Options and Information
     // - depending on the actual INetTls implementation, some fields may not
     // be used nor populated - currently only supported by mormot.lib.openssl11
+    // - reflect the raw socket layer, so TLS.Enabled may apply to the proxy
+    // connection, to the actual destination: see ServerTls method instead
     TLS: TNetTlsContext;
     /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
@@ -1809,6 +1819,11 @@ type
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
     /// low-level TLS support method
     procedure DoTlsAfter(caller: TCrtSocketTlsAfter);
+    /// check if the Server is accessed using TLS
+    // - TLS.Enabled flag is about the raw socket, probably over a Tunnel/Proxy
+    // - this function reflects the actual aTLS parameter supplied to OpenBind()
+    function ServerTls: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// initialize SockIn for receiving with read[ln](SockIn^,...)
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
@@ -5427,6 +5442,11 @@ begin
   {$endif OSLINUX}
 end;
 
+function TCrtSocket.ServerTls: boolean;
+begin
+  result := (fServerTlsEnabled in fFlags); // properly set by OpenBind()
+end;
+
 const
   CSTA_TXT: array[TCrtSocketTlsAfter] of AnsiChar = 'CBA';
 
@@ -5491,6 +5511,8 @@ begin
   fFlags := [];
   if doBind then
     include(fFlags, fWasBind);
+  if aTLS then
+    include(fFlags, fServerTlsEnabled); // for proper reconnection
   if {%H-}PtrInt(aSock) <= 0 then
   begin
     // OPEN or BIND mode -> create the socket
@@ -5606,7 +5628,7 @@ function TCrtSocket.ReOpen(aTimeout: cardinal): string;
 begin
   try
     Close;
-    OpenBind(fServer, fPort, fWasBind in fFlags, TLS.Enabled);
+    OpenBind(fServer, fPort, fWasBind in fFlags, ServerTls);
     if SockConnected then
       result := '' // success
     else
