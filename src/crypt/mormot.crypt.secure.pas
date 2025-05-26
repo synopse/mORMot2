@@ -9432,11 +9432,7 @@ function ParsedToText(const c: TX509Parsed): RawUtf8;
   begin
     for cu := l to h do
       if cu in c.Usage then
-      begin
-        if {%H-}usage <> '' then
-          usage := usage + ', ';
-        usage := usage + CU_FULLTEXT[cu];
-      end;
+        AddToCsv(CU_FULLTEXT[cu], usage, ', ');
     if usage <> '' then
       result := result +   '    X509v3 ' + ext + #13#10 +
                            '      ' + usage + #13#10;
