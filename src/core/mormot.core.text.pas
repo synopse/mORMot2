@@ -3550,7 +3550,8 @@ begin
       if TrimItems then
         TrimSelf(s);
     end
-    else if TrimItems then
+    else if TrimItems and
+            (Sep > ' ') then
       GetNextItemTrimed(Csv, Sep, s)
     else
       GetNextItem(Csv, Sep, s);
