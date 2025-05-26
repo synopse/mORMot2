@@ -1720,7 +1720,7 @@ type
     fSock: TNetSocket; // wrapper to raw socket, stored as a pointer
     fServer: RawUtf8;
     fPort: RawUtf8;
-    fFlags: set of (fAborted, fWasBind, fBodyRetrieved);
+    fFlags: set of (fAborted, fWasBind, fBodyRetrieved, fProxyConnect);
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
     fProxyUrl: RawUtf8;
@@ -5520,6 +5520,7 @@ begin
         begin
           addr.IP(fRemoteIP, true);
           fSocketFamily := addr.Family;
+          include(fFlags, fProxyConnect);
           res := nrRefused;
           SockSendLine(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
