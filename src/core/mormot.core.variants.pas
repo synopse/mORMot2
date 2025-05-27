@@ -1351,6 +1351,10 @@ type
     // - as encoded e.g. by ToUrlEncode()
     // - Url should point to the first character after '?' in the URI
     procedure InitFromUrl(Url: PUtf8Char; aOptions: TDocVariantOptions);
+    /// initialize an object document, possibly as arrays, from URI parameters
+    // - multiple object field names will be stored as dvArray
+    // - Url should point to the first character after '?' in the URI
+    procedure InitFromUrlArray(Url: PUtf8Char; aOptions: TDocVariantOptions);
 
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
@@ -6928,6 +6932,23 @@ begin
       if Url = nil then
         break;
       AddValueFromText(n, v); // would recognize booleans or numbers
+    until Url^ = #0;
+end;
+
+procedure TDocVariantData.InitFromUrlArray(Url: PUtf8Char; aOptions: TDocVariantOptions);
+var
+  n, v: RawUtf8;
+  val: variant;
+begin
+  Init(aOptions, dvObject);
+  if Url <> nil then
+    repeat
+      Url := UrlDecodeNextNameValue(Url, n, v);
+      if Url = nil then
+        break;
+      VarClear(val);
+      _FromText(aOptions, @val, v); // recognize booleans or numbers
+      AddValueArray(n, val);
     until Url^ = #0;
 end;
 

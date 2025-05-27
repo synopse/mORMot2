@@ -6182,6 +6182,15 @@ begin
     Doc.InitFromUrl(p + 1, JSON_FAST);
   CheckEqual(Doc.Count, 3);
   CheckEqual(Doc.ToJson, '{"ab":1,"ab2":10,"d":3}');
+  s := 'ab=1&ab2=10&ab=3';
+  Doc.Clear;
+  Doc.InitFromUrl(pointer(s), JSON_FAST);
+  CheckEqual(Doc.Count, 2);
+  CheckEqual(Doc.ToJson, '{"ab":3,"ab2":10}');
+  Doc.Clear;
+  Doc.InitFromUrlArray(pointer(s), JSON_FAST);
+  CheckEqual(Doc.Count, 2);
+  CheckEqual(Doc.ToJson, '{"ab":[1,3],"ab2":10}');
   s := '[{"Val1":"blabla","Val2":"bleble"},{"Val1":"blibli","Val2":"bloblo"}]';
   V := _Json(s);
   V1 := _Copy(V._(0)); // expect a true instance for v1.Val1 := ... below
