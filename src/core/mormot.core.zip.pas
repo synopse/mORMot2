@@ -1501,6 +1501,8 @@ const
   INFOZIP_UNIX_EXTRAID = $5855; // Info-ZIP Unix extension
   UNICODEPATH_EXTRA_ID = $7075; // Unicode Path extended information
 
+  ZIP_MAXNAMELEN = 2048; // support file names up to 2048 bytes long (with path)
+
   ZIP_MINSIZE_DEFLATE = 256; // size < 256 bytes -> Z_STORED
 
   ZIP32_MAXSIZE = cardinal(-1);   // > trigger size for ZIP64 format
@@ -2408,7 +2410,7 @@ begin
 end;
 
 const
-  /// direct conversion from code page 437 to UTF-16, as zip appnote requires
+  /// direct conversion from code page 437 to UTF-16, as PKware appnote requires
   // - on POSIX, a constant table is easier and lighter than running external
   // iconv/ICU from mormot.core.os (in UTF-8 POSIX, we don't need code pages)
   CP_437: array[128..255] of word = (
@@ -2425,21 +2427,21 @@ const
     $03B5, $2229, $2261, $00B1, $2265, $2264, $2320, $2321, $00F7, $2248, $00B0,
     $2219, $00B7, $221A, $207F, $00B2, $25A0, $00A0);
 
-procedure Cp437ToFileName(const oem: RawByteString; out filename: TFileName);
+procedure Cp437ToFileName(oem: PByteArray; len: PtrInt; var filename: TFileName);
 var
-  len, i, c: PtrInt;
-  utf16: SynUnicode;
+  i, c: PtrInt;
+  utf16: array[0 .. ZIP_MAXNAMELEN - 1] of word;
 begin
-  len := length(oem);
-  SetLength(utf16, len);
+  if len > high(utf16) then
+    exit; // paranoid - IsZipStart() checked nameLen < ZIP_MAXNAMELEN
   for i := 0 to len - 1 do
   begin
-    c := PByteArray(oem)[i];
+    c := oem[i];
     if c > 127 then
       c := CP_437[c];
-    PWordArray(utf16)[i] := c;
+    utf16[i] := c;
   end;
-  filename := SynUnicodeToString(utf16);
+  RawUnicodeToString(@utf16, len, string(filename));
 end;
 
 function IsZipStart(P: PCardinal): boolean;
@@ -2451,8 +2453,8 @@ begin
       with PLocalFileHeader(P)^.fileInfo do
         result := (ToByte(neededVersion) in [10, 20, 45]) and
                   (zzipMethod in [Z_STORED, Z_DEFLATED]) and
-                  (extraLen < 100) and
-                  (nameLen < 512);
+                  (nameLen  < ZIP_MAXNAMELEN) and
+                  (extraLen < ZIP_MAXNAMELEN); // e.g. UNICODEPATH_EXTRA_ID
     LASTHEADER_SIGNATURE_INC:
       result := PInt64(@PLastHeader(P)^.totalFiles)^ = 0; // *Disk=0
   else
@@ -2605,7 +2607,7 @@ begin
         Utf8ToFileName(tmp, e^.zipName)
       else
         // legacy Windows-OEM-CP437 encoding
-        Cp437ToFileName(tmp, e^.zipName);
+        Cp437ToFileName(pointer(tmp), length(tmp), e^.zipName);
     end;
     // validate entry
     if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) and
