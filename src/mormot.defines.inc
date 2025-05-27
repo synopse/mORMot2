@@ -142,6 +142,7 @@
   {$OBJECTCHECKS OFF} // as expected e.g. when hooking classes
 
   {$define HASINLINE}
+  {$define HASINLINEFPC}      // Delphi can't inline local constants
   {$define HASINLINEWINAPI}   // Delphi has troubles inlining Windows API calls
   {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining
   {$define HASSAFEFPCINLINE}  // FPC 3.2.0 specific inlining troubles
