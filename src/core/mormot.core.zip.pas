@@ -1455,13 +1455,16 @@ end;
 { ************  .ZIP Archive File Support }
 
 const
-  // those constants have +1 to avoid finding it in the exe
-  ENTRY_SIGNATURE_INC = $02014b50 + 1;                 // PK#1#2
-  FIRSTHEADER_SIGNATURE_INC = $04034b50 + 1;           // PK#3#4
-  LASTHEADER_SIGNATURE_INC = $06054b50 + 1;            // PK#5#6
-  LASTHEADER64_SIGNATURE_INC = $06064b50 + 1;          // PK#6#6
-  LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;   // PK#6#7
-  FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1; // as marked by FileAppendSignature
+  // those PK## constants have +1 to avoid finding it in the exe
+  ENTRY_SIGNATURE_INC               = $02014b50 + 1; // PK#1#2
+  FIRSTHEADER_SIGNATURE_INC         = $04034b50 + 1; // PK#3#4
+  LASTHEADER_SIGNATURE_INC          = $06054b50 + 1; // PK#5#6
+  LASTHEADER64_SIGNATURE_INC        = $06064b50 + 1; // PK#6#6
+  LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1; // PK#6#7
+  SPANHEADER_SIGNATURE_INC          = $30304b50 + 1; // PK00
+
+  // custom marker (+1) as written by FileAppendSignature()
+  FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1;
 
   // identify the OS used to forge the .zip - see PKware appnote 4.4.2
   ZIP_OS = (
@@ -2700,7 +2703,7 @@ end;
 constructor TZipRead.Create(aFile: THandle;
   ZipStartOffset, Size, WorkingMem: QWord; DontReleaseHandle: boolean);
 var
-  read, i: PtrInt;
+  read, i, j: PtrInt;
   P: PByteArray;
   local: TLocalFileHeader;
   centraldirsize: Int64;
@@ -2754,7 +2757,7 @@ begin
   fSource.ReadBuffer(P^, WorkingMem);
   for i := WorkingMem - 16 downto WorkingMem - 32 do
     if (i >= 0) and  // expects magic4+offset8+magic4 pattern
-       (PCardinal(@P[i])^ + 1 = FILEAPPEND_SIGNATURE_INC) and
+       (PCardinal(@P[i     ])^ + 1 = FILEAPPEND_SIGNATURE_INC) and
        (PCardinal(@P[i + 12])^ + 1 = FILEAPPEND_SIGNATURE_INC) then
     begin
       fSourceOffset := PQWord(@P[i + 4])^;
@@ -2778,12 +2781,19 @@ begin
       if IsZipStart(@P[i]) then
       begin
         fSourceOffset := ZipStartOffset + Qword(i);
+        j := i;
+        if (i >= 4) and
+           (PCardinal(@P[i - 4])^ + 1 = SPANHEADER_SIGNATURE_INC) then
+        begin
+          dec(j, 4); // PK00 prefix of single zip file from spanning mode
+          dec(fSourceOffset, 4); // all offsets start from this PK00 header
+        end;
         if Size = WorkingMem then
           // small files could reuse the existing buffer
-          Create(@P[i], read - i, 0)
+          Create(@P[j], read - j, 0)
         else
         begin
-          // big files need to read the last WorkingMem
+          // big files just read the last WorkingMem bytes for centraldir lookup
           fSource.Seek(Size - WorkingMem, soBeginning);
           fSource.ReadBuffer(P^, WorkingMem);
           Create(P, WorkingMem, Size - WorkingMem - fSourceOffset);
@@ -3341,9 +3351,9 @@ var
   magic: cardinal;
 begin
   magic := FILEAPPEND_SIGNATURE_INC; // searched by TZipRead() to retrieve APos
-  dec(magic);
+  dec(magic); // is stored as +1 in the executable
   O.WriteBuffer(magic, SizeOf(magic));
-  O.WriteBuffer(APos, SizeOf(APos));
+  O.WriteBuffer(APos,  SizeOf(APos));
   O.WriteBuffer(magic, SizeOf(magic));
 end;
 
