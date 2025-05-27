@@ -9098,7 +9098,7 @@ begin
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
         if clk = clkArg then
-          if fDescArg = nil then
+          if i >= length(fDescArg) then
             result := Join([result, 'Unexpected "', fRawParams[i], '" argument', fLineFeed])
           else
             result := Join([result, 'Missing <', fDescArg[i], '> argument', fLineFeed])
