@@ -4234,7 +4234,7 @@ begin
 end;
 
 const
-  _VARDATATEXT: array[0.. varWord64 + 5] of string[15] = (
+  _VARDATATEXT: array[0.. varWord64 + 5] of string[10] = (
     'Empty', 'Null', 'SmallInt', 'Integer', 'Single', 'Double', 'Currency',
     'Date', 'OleStr', 'Dispatch', 'Error', 'Boolean', 'Variant', 'Unknown',
     'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',
@@ -4249,7 +4249,7 @@ var
   tmp: TVarData;
 begin
   vt := V.VType;
-  if vt > varWord64 then
+  if vt > varWord64 then // simple types returns 'Empty' to 'QWord'
   repeat
     if SetVariantUnRefSimpleValue(PVariant(V)^, tmp{%H-}) then
     begin
@@ -4262,19 +4262,19 @@ begin
       varStrArg,
       varString,
       varStringByRef:
-        vt := varWord64 + 1;
+        vt := varWord64 + 1; // 'String'
       {$ifdef HASVARUSTRARG}
       varUStrArg,
       {$endif HASVARUSTRARG}
       {$ifdef HASVARUSTRING}
       varUString,
       varUStringByRef:
-        vt := varWord64 + 2;
+        vt := varWord64 + 2; // 'UString'
       {$endif HASVARUSTRING}
       varAny:
-        vt := varWord64 + 3;
+        vt := varWord64 + 3; // 'Any'
       varArray:
-        vt := varWord64 + 4;
+        vt := varWord64 + 4; // 'Array'
       varVariantByRef:
         begin
           result := VariantTypeName(V^.VPointer);
@@ -4282,7 +4282,7 @@ begin
         end;
     else
       if vt = DocVariantVType then
-        vt := varWord64 + 5
+        vt := varWord64 + 5 // 'DocVariant'
       else
       begin
         ct := FindSynVariantType(vt);
