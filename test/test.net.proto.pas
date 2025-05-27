@@ -1758,22 +1758,23 @@ begin
         Check(hpc.Settings.HttpDirectUri('secret', 'http://127.0.0.1:8889' + url,
           hash, dUri, dBearer, false, false, popt));
         popt := nil; // ext parameters only for the first
-        Check(PosEx(':8008', dUri) <> 0);
-        Check(dBearer <> '');
+        Check(PosEx(':8008', dUri) <> 0, ':8008');
+        Check(dBearer <> '', 'dBearer');
         Check(IdemPChar(pointer(dBearer), HEADER_BEARER_UPPER));
-        Check(decoded.From(dUri));
+        Check(decoded.From(dUri), 'decoded');
         // decode dBearer
         dTok := '';
-        Check(FindNameValue(PAnsiChar(pointer(dBearer)), HEADER_BEARER_UPPER, dTok));
+        Check(FindNameValue(PAnsiChar(pointer(dBearer)),
+                HEADER_BEARER_UPPER, dTok), 'dTok');
         params := '';
         FillCharFast(msg2, SizeOf(msg2), 0);
         res := hpc.BearerDecode(dTok, pcfBearerDirect, msg2, @params);
         if i = 0 then
-          Check(params <> '')
+          Check(params <> '', 'params')
         else
           CheckEqual(params, '');
         Check(res = mdOk, 'directDecode');
-        Check(msg2.Kind = pcfBearerDirect);
+        Check(msg2.Kind = pcfBearerDirect, 'directKind');
         // first GET request to download from reference website
         if hcs = nil then
         begin
@@ -1861,8 +1862,8 @@ begin
   CheckEqual(Base64uriToBinLength(PEER_CACHE_BEARERLEN), PEER_CACHE_MESSAGELEN);
   // validate THttpRequestExtendedOptions serialization
   peercacheopt.Init;
-  Check(not peercacheopt.TLS.IgnoreCertificateErrors);
-  Check(VarIsEmptyOrNull(peercacheopt.ToDocVariant));
+  Check(not peercacheopt.TLS.IgnoreCertificateErrors, 'tice1');
+  Check(VarIsEmptyOrNull(peercacheopt.ToDocVariant), 'tdv1');
   CheckEqual(peercacheopt.ToUrlEncode('/root'), '/root');
   peercacheopt.TLS.IgnoreCertificateErrors := true;
   CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true}');
@@ -1871,11 +1872,11 @@ begin
   CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true,"as":3}');
   CheckEqual(peercacheopt.ToUrlEncode('/root'), '/root?ti=1&as=3');
   peercacheopt.Init;
-  Check(not peercacheopt.TLS.IgnoreCertificateErrors);
-  Check(VarIsEmptyOrNull(peercacheopt.ToDocVariant));
+  Check(not peercacheopt.TLS.IgnoreCertificateErrors, '2');
+  Check(VarIsEmptyOrNull(peercacheopt.ToDocVariant), 'tdv2');
   CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), 'null');
   Check(peercacheopt.InitFromUrl('ti=1&as=3'));
-  Check(peercacheopt.TLS.IgnoreCertificateErrors);
+  Check(peercacheopt.TLS.IgnoreCertificateErrors, 'tice3');
   CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true,"as":3}');
   Check(peercacheopt.InitFromUrl('ti=1'));
   CheckEqual(VariantSaveJson(peercacheopt.ToDocVariant), '{"ti":true}');
@@ -1932,7 +1933,7 @@ begin
             res := hpc2.MessageDecode(@tmp, SizeOf(tmp), msg2);
             Check(res = mdOk, 'hpc2');
             CheckEqual(msg2.Size, i);
-            Check(CompareMem(@msg, @msg2, SizeOf(msg)));
+            Check(CompareMem(@msg, @msg2, SizeOf(msg)), 'hpc2mem');
           end;
           NotifyTestSpeed('messages', n * 2, n * 2 * SizeOf(msg), @timer);
           m := RawUtf8(ToText(msg));
