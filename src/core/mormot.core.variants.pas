@@ -5448,18 +5448,17 @@ end;
 class procedure TDocVariant.GetSingleOrDefault(
   const docVariantArray, default: variant; var result: variant);
 var
-  vt: cardinal;
+  dv: PDocVariantData;
+  tmp: variant;
 begin
-  vt := TVarData(docVariantArray).VType;
-  if vt = varVariantByRef then
-    GetSingleOrDefault(
-      PVariant(TVarData(docVariantArray).VPointer)^, default, result)
-  else if (vt <> DocVariantVType) or
-          (TDocVariantData(docVariantArray).Count <> 1) or
-          not TDocVariantData(docVariantArray).IsArray then
-    result := default
+  if _SafeArray(docVariantArray, dv) and
+     (dv^.Count = 1) then
+    tmp := dv^.Values[0] // should be assigned in two steps
+  else if @result = @default then
+    exit // TMongoCollection call as GetSingleOrDefault(result, result, result)
   else
-    result := TDocVariantData(docVariantArray).Values[0];
+    tmp := default;
+  result := tmp;
 end;
 
 function DocVariantData(const DocVariant: variant): PDocVariantData;
