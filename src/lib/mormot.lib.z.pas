@@ -1220,7 +1220,7 @@ end;
 {$endif LIBDEFLATESTATIC}
 
 initialization
-  mormot.core.base.crc32 := @crc;
+  mormot.core.base.crc32   := @crc;
   mormot.core.base.adler32 := @adler;
 
 end.

@@ -1851,6 +1851,9 @@ type
     // - returns the index of the corresponding value, which may be just added
     function AddOrUpdateValue(const aName: RawUtf8; const aValue: variant;
       wasAdded: PBoolean = nil; OnlyAddMissing: boolean = false): integer;
+    /// add a value in this document, creating a dvArray if aName already exists
+    // - returns the index of the corresponding value, which may be just added
+    procedure AddValueArray(const aName: RawUtf8; const aValue: variant);
     /// add a value in this document, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
@@ -7313,6 +7316,37 @@ var
 begin
   FastSetString(tmp, aName, aNameLen);
   result := AddValue(tmp, aValue, aValueOwned, aIndex);
+end;
+
+procedure TDocVariantData.AddValueArray(const aName: RawUtf8; const aValue: variant);
+var
+  ndx: PtrInt;
+  v: PVariant;
+  dv: PDocVariantData;
+  tmp: TVarData;
+begin
+  if aName = '' then
+    exit;
+  ndx := GetValueIndex(aName);
+  if ndx < 0 then
+  begin
+    ndx := InternalAdd(aName); // first time seen this aName
+    v := @VValue[ndx];
+  end
+  else
+  begin
+    v := @VValue[ndx];
+    if not _SafeArray(v^, dv) then // convert this aName into a dvArray
+    begin
+      tmp := PVarData(v)^; // weak copy
+      dv := pointer(v);
+      dv^.InitFast(4, dvArray);
+      dv^.VCount := 1; // store previous value as first item
+      PVarData(@dv^.Values[0])^ := tmp;
+    end;
+    v := dv^.NewItem; // append as item in this array
+  end;
+  SetVariantByValue(aValue, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
