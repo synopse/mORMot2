@@ -2516,6 +2516,18 @@ end;
 
 { TZipRead }
 
+function IsAscii7(P: PAnsiChar; rev, new: AnsiChar): boolean;
+begin
+  result := true;
+  repeat
+    if P^ = rev then // normalize path delimiter
+      P^ := new
+    else if P^ > #127 then
+      result := false;
+    inc(P);
+  until P^ = #0;
+end;
+
 constructor TZipRead.Create(BufZip: PByteArray; Size: PtrInt; Offset: Int64);
 var
   lh32: PLastHeader;
@@ -2525,8 +2537,6 @@ var
   extraname: PFileInfoExtraName;
   e, prev: PZipReadEntry;
   i: PtrInt;
-  isascii7: boolean;
-  P: PAnsiChar;
   p64: PQWord;
   tmp: RawByteString;
 begin
@@ -2575,17 +2585,8 @@ begin
     e^.dir := h;
     e^.storedName := PAnsiChar(h) + SizeOf(h^);
     SetString(tmp, e^.storedName, h^.fileInfo.nameLen); // better for FPC
-    isascii7 := true;
-    P := pointer(tmp);
-    repeat
-      if P^ = fZipNamePathDelimReversed then // normalize path delimiter
-        P^ := fZipNamePathDelim
-      else if P^ > #127 then
-        isascii7 := false;
-      inc(P);
-    until P^ = #0;
-    if isascii7 then
-      // plain ASCII file name need no conversion
+    if IsAscii7(pointer(tmp), fZipNamePathDelimReversed, fZipNamePathDelim) then
+      // plain ASCII file name needs no conversion
       e^.zipName := Ansi7ToString(tmp)
     else
     begin
@@ -2782,8 +2783,8 @@ begin
       begin
         fSourceOffset := ZipStartOffset + Qword(i);
         j := i;
-        if (i >= 4) and
-           (PCardinal(@P[i - 4])^ + 1 = SPANHEADER_SIGNATURE_INC) then
+        if (j >= 4) and
+           (PCardinal(@P[j - 4])^ + 1 = SPANHEADER_SIGNATURE_INC) then
         begin
           dec(j, 4); // PK00 prefix of single zip file from spanning mode
           dec(fSourceOffset, 4); // all offsets start from this PK00 header
