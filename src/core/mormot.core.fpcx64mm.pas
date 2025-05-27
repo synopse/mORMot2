@@ -522,7 +522,7 @@ function OsRemapLarge(addr: pointer; old_len: size_t; var new_len: size_t): poin
 var
   nfo: TMemInfo;
   next: pointer;
-  nextsize: PtrUInt;
+  nextsize, tomove: PtrUInt;
 const
   LargeBlockIsSegmented = 8; // forward definition
 begin
@@ -548,9 +548,11 @@ begin
   end;
   // we need to use the slower but safe Alloc/Move/Free pattern
   result := OsAllocLarge(new_len);
-  if new_len > old_len then
-    new_len := old_len; // handle size up or down
-  Move(addr^, result^, new_len); // RTL non-volatile asm or our AVX MoveFast()
+  if new_len > old_len then // handle size up or down
+    tomove := old_len
+  else
+    tomove := new_len;
+  Move(addr^, result^, tomove); // RTL non-volatile asm or our AVX MoveFast()
   OsFreeLarge(addr, old_len);
 end;
 
