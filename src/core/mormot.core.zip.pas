@@ -212,7 +212,7 @@ type
   TFileInfo = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// ZIP_VERSION[] is either 20 for regular .zip or 45 for Zip64/4.5
+    /// ZIP_VERSION[] is either 20 for regular .zip or 45 for zip64/4.5
     // - use ToByte() for the format version - high 8-bit may identify the OS
     neededVersion: word;
     /// 0
@@ -223,9 +223,9 @@ type
     zlastMod: integer;
     /// crc32 checksum of uncompressed data
     zcrc32: cardinal;
-    /// 32-bit size of compressed data - may equal ZIP32_MAXSIZE on Zip64
+    /// 32-bit size of compressed data - may equal ZIP32_MAXSIZE on zip64
     zzipSize: cardinal;
-    /// 32-bit size of uncompressed data - may equal ZIP32_MAXSIZE on Zip64
+    /// 32-bit size of uncompressed data - may equal ZIP32_MAXSIZE on zip64
     zfullSize: cardinal;
     /// length(name) as appended just after this block
     nameLen: word;
@@ -319,7 +319,7 @@ type
   public
     /// $02014b50 PK#1#2 = ENTRY_SIGNATURE_INC - 1
     signature: cardinal;
-    /// ZIP_VERSION[] is either 20 for regular .zip or 45 for Zip64/4.5
+    /// ZIP_VERSION[] is either 20 for regular .zip or 45 for zip64/4.5
     madeBy: word;
     /// file information - copied from the TLocalFileHeader before each data
     fileInfo: TFileInfo;
@@ -382,9 +382,9 @@ type
     thisDisk: word;
     /// 0
     headerDisk: word;
-    /// 1
+    /// 1 - may equal ZIP32_MAXFILE on zip64
     thisFiles: word;
-    /// 1
+    /// 1 - may equal ZIP32_MAXFILE on zip64
     totalFiles: word;
     /// SizeOf(TFileHeaders + names)
     headerSize: cardinal;
@@ -402,9 +402,9 @@ type
     signature: cardinal;
     /// length in bytes of this header
     recordsize: QWord;
-    /// ZIP_VERSION[true] i.e. 45 for Zip64/4.5
+    /// ZIP_VERSION[true] i.e. 45 for zip64/4.5
     madeBy: word;
-    /// ZIP_VERSION[true] i.e. 45 for Zip64/4.5
+    /// ZIP_VERSION[true] i.e. 45 for zip64/4.5
     neededVersion: word;
     /// 0
     thisDisk: cardinal;
@@ -454,7 +454,7 @@ type
     /// name of the file inside the .zip archive
     // - converted from DOS/OEM or UTF-8 into generic (Unicode) string
     zipName: TFileName;
-    /// parsed file information, zip64-ready
+    /// decoded file information, zip64-ready
     fileinfo: TFileInfoExtra64;
     /// name of the file inside the .zip archive
     // - not ASCIIZ: length = dir^.fileInfo.nameLen
@@ -1483,7 +1483,7 @@ const
       {$endif OSWINDOWS}
       {$endif OSDARWIN}) shl 8;
 
-  // regular .zip format is version 2.0, Zip64 format has version 4.5
+  // regular .zip format is version 2.0, zip64 format has version 4.5
   ZIP_VERSION: array[{zip64:}boolean] of cardinal = (
     20 + ZIP_OS,
     45 + ZIP_OS);
@@ -1494,7 +1494,7 @@ const
   // from PKware appnote, Bit 11: Language encoding flag (EFS)
   FLAG_UTF8ENCODING   = 1 shl 11;
 
-  ZIP64_EXTRA_ID       = $0001; // Zip64 extended information
+  ZIP64_EXTRA_ID       = $0001; // zip64 extended information
   NTFS_EXTRA_ID        = $000a; // NTFS
   UNIX_EXTRA_ID        = $000d; // UNIX
   EXT_TIME_EXTRA_ID    = $5455; // Extended timestamp
@@ -1503,10 +1503,10 @@ const
 
   ZIP_MAXNAMELEN = 2048; // support file names up to 2048 bytes long (with path)
 
-  ZIP_MINSIZE_DEFLATE = 256; // size < 256 bytes -> Z_STORED
+  ZIP_MINSIZE_DEFLATE = 256; // size < 256 bytes -> always Z_STORED
 
-  ZIP32_MAXSIZE = cardinal(-1);   // > trigger size for ZIP64 format
-  ZIP32_MAXFILE = (1 shl 16) - 1; // > trigger file count for ZIP64 format
+  ZIP32_MAXSIZE = cardinal(-1);   // > 4GB trigger size for ZIP64 format
+  ZIP32_MAXFILE = (1 shl 16) - 1; // > 64K trigger file count for ZIP64 format
 
 
 { TLocalFileHeader }
@@ -1909,28 +1909,28 @@ begin
     // and h32.zzipMethod/zcrc32/zlastMod - e.g. with NewEntry()
     h64.offset := QWord(fDest.Position) - fAppendOffset;
     if ForceZip64 or
-       (h64.zzipSize >= ZIP32_MAXSIZE) or
+       (h64.zzipSize  >= ZIP32_MAXSIZE) or
        (h64.zfullSize >= ZIP32_MAXSIZE) or
-       (h64.offset >= ZIP32_MAXSIZE) then
+       (h64.offset    >= ZIP32_MAXSIZE) then
       // big files requires the zip64 format with h64 extra information
       include(flags, zweZip64);
     h32.SetVersion(zweZip64 in flags);
     if zweZip64 in flags then
     begin
       fNeedZip64 := true;
-      h32.fileInfo.zzipSize := ZIP32_MAXSIZE;
+      h32.fileInfo.zzipSize  := ZIP32_MAXSIZE;
       h32.fileInfo.zfullSize := ZIP32_MAXSIZE;
-      h32.fileInfo.extraLen := SizeOf(h64) - SizeOf(h64.offset);
-      h32.localHeadOff := ZIP32_MAXSIZE;
+      h32.fileInfo.extraLen  := SizeOf(h64) - SizeOf(h64.offset);
+      h32.localHeadOff       := ZIP32_MAXSIZE;
       h64.zip64id := ZIP64_EXTRA_ID;
-      h64.size := SizeOf(h64.zzipSize) + SizeOf(h64.zfullSize);
+      h64.size    := SizeOf(h64.zzipSize) + SizeOf(h64.zfullSize);
     end
     else
     begin
-      h32.fileInfo.zzipSize := h64.zzipSize;
+      h32.fileInfo.zzipSize  := h64.zzipSize;
       h32.fileInfo.zfullSize := h64.zfullSize;
-      h32.localHeadOff := h64.offset;
-      h32.fileInfo.extraLen := 0; // AddFromZip() source may have something here
+      h32.localHeadOff       := h64.offset;
+      h32.fileInfo.extraLen  := 0; // AddFromZip() source may have something here
     end;
     {$ifdef UNICODE}
     if IsAnsiCompatibleW(pointer(zipName)) then
@@ -2137,7 +2137,7 @@ begin
             h32.fileInfo.zcrc32 := deflate.CRC;
           end;
           if h32.fileInfo.extraLen = 0 then
-            h32.fileInfo.zzipSize := h64.zzipSize; // Zip64 store ZIP32_MAXSIZE
+            h32.fileInfo.zzipSize := h64.zzipSize; // zip64 store ZIP32_MAXSIZE
         finally
           deflate.Free;
         end;
@@ -2174,15 +2174,15 @@ begin
   // set final zip entry state
   with fOwner.Entry[fOwner.Count] do
   begin
-    if h32.fileInfo.extraLen = 0 then // not Zip64 format
+    if h32.fileInfo.extraLen = 0 then // not zip64 format
     begin
       if (fSizeIn shr 32 <> 0) or
          (fSizeOut shr 32 <> 0) then
         ESynZip.RaiseUtf8(
           '%.AddDeflatedStream: too much data in % - try ForceZip64=true',
           [fOwner, intName]);
-      h32.fileInfo.zfullSize := fSizeIn; // Zip64 store ZIP32_MAXSIZE here
-      h32.fileInfo.zzipSize := fSizeOut;
+      h32.fileInfo.zfullSize := fSizeIn; // zip64 store ZIP32_MAXSIZE here
+      h32.fileInfo.zzipSize  := fSizeOut;
     end;
     h32.fileInfo.zcrc32 := fCrc;
     h64.zfullSize := fSizeIn; // h64 is always set
@@ -2389,9 +2389,9 @@ begin
     inc(P, SizeOf(lh64));
     MoveFast(loc64, P^, SizeOf(loc64));
     inc(P, SizeOf(loc64));
-    lh.thisFiles := ZIP32_MAXFILE;
-    lh.totalFiles := ZIP32_MAXFILE;
-    lh.headerSize := ZIP32_MAXSIZE;
+    lh.thisFiles    := ZIP32_MAXFILE;
+    lh.totalFiles   := ZIP32_MAXFILE;
+    lh.headerSize   := ZIP32_MAXSIZE;
     lh.headerOffset := ZIP32_MAXSIZE;
   end
   else
@@ -2617,13 +2617,13 @@ begin
     // proper zip64 support
     { TFileInfoExtra64 is the layout of the zip64 extended info "extra" block.
       If one of the size or offset fields in the Local or Central directory
-      record is too small to hold the required data, a Zip64 extended information
+      record is too small to hold the required data, a zip64 extended information
       record is created. The order of the fields in the zip64 extended information
       record is fixed, but the fields **MUST only appear** if the corresponding
       Local or Central directory record field is set to 0xFFFF or 0xFFFFFFFF. }
-    if (h^.localHeadOff = ZIP32_MAXSIZE) or
+    if (h^.localHeadOff       = ZIP32_MAXSIZE) or
        (h^.fileInfo.zfullSize = ZIP32_MAXSIZE) or
-       (h^.fileInfo.zzipSize = ZIP32_MAXSIZE) then
+       (h^.fileInfo.zzipSize  = ZIP32_MAXSIZE) then
       // zip64 format: retrieve TFileInfoExtra64 position in dir64
       if h^.fileInfo.IsZip64 then
       begin
@@ -2935,7 +2935,7 @@ var
         if (desc^.fullSize = 0) or
            (desc^.zipSize  = ZIP32_MAXSIZE) or
            (desc^.fullSize = ZIP32_MAXSIZE) then
-          // we expect 32-bit sizes only (no Zip64 support from MacOS)
+          // we expect 32-bit sizes only (no zip64 support from MacOS)
           break;
         Info.f32.zcrc32    := desc^.crc32;
         Info.f32.zzipSize  := desc^.zipSize;
