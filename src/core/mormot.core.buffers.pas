@@ -8929,7 +8929,7 @@ const
     $184d2204, // LZ4 stream format = 04 22 4D 18
     $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
     $28635349, // cab = 49 53 63 28
-    $38464947, // 'image/gif' = 47 49 46 38
+    $38464947, // 'image/gif' = 47 49 46 38 = GIF89a
     $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
     $4643534d, // cab = 4D 53 43 46 [MSCF]
     $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]

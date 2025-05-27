@@ -62,13 +62,14 @@ type
     tunneloptions: TTunnelOptions;
     tunnelexecutedone: boolean;
     tunnelexecuteremote, tunnelexecutelocal: TNetPort;
-    function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
-      var aOptions: THttpRequestExtendedOptions): integer;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelExecuted(Sender: TObject);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
+    function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
+      var aOptions: THttpRequestExtendedOptions): integer;
+    function OnPeerCacheRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -1686,24 +1687,46 @@ begin
   Check(not IP4Match('193.168.1.1', '192.168.1.0/24'), 'match9');
 end;
 
+const
+  HTTP_TIMEOUT = 30000;
+
 type
   THttpPeerCacheHook = class(THttpPeerCache); // to test protected methods
   THttpPeerCryptHook = class(THttpPeerCrypt);
 
-const
-  HTTP_LINK: array[0 .. 1] of RawUtf8 = ( // some constant images on our website
-    'http://bouchez.info/_wp_generated/wpacaa94d5.gif', // plain HTTP is easier
-    'http://bouchez.info/_wp_generated/wp5e714672.jpg');
-  HTTP_HASH: array[0 .. high(HTTP_LINK)] of RawUtf8 = (
-    'af33fb8c84461b3e0893b88ef6a2fdecc79fe7de4170f13566edaf4d190d8a9d',
-    '4d950e49fe18379a2b81fc531794ecedfa0f10fa21a2fc5fe2ba2e33ac660c99');
-  HTTP_TIMEOUT = 30000;
+function TNetworkProtocols.OnPeerCacheDirect(var aUri: TUri;
+  var aHeader: RawUtf8; var aOptions: THttpRequestExtendedOptions): integer;
+begin
+  // ext parameters only for the first resource
+  CheckUtf8((aUri.Address = '0') = aOptions.TLS.IgnoreCertificateErrors, aUri.Address);
+  if aOptions.TLS.IgnoreCertificateErrors then
+    CheckEqual(aOptions.TLS.PrivatePassword, 'password')
+  else
+    CheckEqual(aOptions.TLS.PrivatePassword, '');
+  // it is time to setup our custom parameters, needed e.g. with https
+  aOptions.TLS.IgnoreCertificateErrors := true;
+  // continue
+  result := HTTP_SUCCESS;
+end;
+
+function FakeGif(const Url: RawUtf8): RawByteString;
+begin // not a true GIF, but enough for GetMimeContentType()
+  result := Join(['GIF89a', Url]);
+end;
+
+function TNetworkProtocols.OnPeerCacheRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // a local web server is safer than an Internet resource
+  result := HTTP_SUCCESS;
+  Ctxt.OutContent := FakeGif(Ctxt.Url);
+  Ctxt.OutContentType := 'image/gif';
+end;
 
 procedure TNetworkProtocols.RunPeerCacheDirect(Sender: TObject);
 var
   hpc: THttpPeerCacheHook absolute Sender;
   msg2: THttpPeerCacheMessage;
-  dUri, dBearer, dTok, dAddr, ctyp, params: RawUtf8;
+  dUri, dBearer, dTok, dAddr, ctyp, params, url, gif, hash: RawUtf8;
   cache: TFileName;
   i: PtrInt;
   status, len: integer;
@@ -1712,21 +1735,28 @@ var
   decoded: TUri;
   tls: TNetTlsContext;
   popt: PHttpRequestExtendedOptions;
+  localserver: THttpServer;
 begin
   hcs := nil;
+  localserver := THttpServer.Create('8889', nil, nil, 'local', 2);
   try
+    localserver.OnRequest := OnPeerCacheRequest; // return the URL
     hpc.OnDirectOptions := OnPeerCacheDirect;
     try
       // validate all resources
       popt := @peercacheopt;
-      for i := 0 to high(HTTP_LINK) do
+      for i := 0 to 2 do
       begin
         // test according to local cache status
-        cache := MakeString([hpc.TempFilesPath, '02', HTTP_HASH[i], '.cache']);
+        url := '/' + SmallUInt32Utf8[i];
+        gif := FakeGif(url);
+        CheckEqual(GetMimeContentType(gif), 'image/gif');
+        hash := Sha256(gif);
+        cache := MakeString([hpc.TempFilesPath, '02', hash, '.cache']);
         DeleteFile(cache);
         // compute the direct proxy URI and bearer
-        Check(hpc.Settings.HttpDirectUri('secret', HTTP_LINK[i], HTTP_HASH[i],
-          dUri, dBearer, false, false, popt));
+        Check(hpc.Settings.HttpDirectUri('secret', 'http://127.0.0.1:8889' + url,
+          hash, dUri, dBearer, false, false, popt));
         popt := nil; // ext parameters only for the first
         Check(PosEx(':8008', dUri) <> 0);
         Check(dBearer <> '');
@@ -1755,10 +1785,10 @@ begin
         end;
         status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
-        CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
-        CheckEqual(HashFileSha256(cache), HTTP_HASH[i]);
+        CheckEqual(Sha256(hcs.Content), hash);
+        CheckEqual(HashFileSha256(cache), hash);
         ctyp := hcs.ContentType;
-        CheckUtf8(IdemPChar(pointer(ctyp), 'IMAGE/'), ctyp);
+        CheckEqual(ctyp, 'image/gif');
         len := hcs.ContentLength;
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
         // GET twice to retrieve from cache
@@ -1766,7 +1796,7 @@ begin
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
-        CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+        CheckEqual(Sha256(hcs.Content), hash);
         // HEAD should work with cache
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
@@ -1783,19 +1813,19 @@ begin
         status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
         CheckEqual(status, HTTP_NOTFOUND, 'no hash');
         msg2.Hash.Algo := hfSHA256;
-        Check(Sha256StringToDigest(HTTP_HASH[i], msg2.Hash.Bin.Lo), 'sha');
+        Check(Sha256StringToDigest(hash, msg2.Hash.Bin.Lo), 'sha');
         hpc.MessageEncodeBearer(msg2, dTok);
         status := hcs.Get('dummy', HTTP_TIMEOUT, dTok);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
-        CheckEqual(hcs.ContentType, ctyp, 'ctyp from content');
-        CheckEqual(Sha256(hcs.Content), HTTP_HASH[i]);
+        CheckEqual(hcs.ContentType, ctyp, 'ctyp from cached content');
+        CheckEqual(Sha256(hcs.Content), hash);
         // HEAD on cache in pcfBearer mode
         status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, '');
-        // HEAD should work without cache and call directly ictuswin.com
+        // HEAD should work without cache and call directly the http server
         Check(DeleteFile(cache));
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
@@ -1808,6 +1838,7 @@ begin
   finally
     hpc.Settings.Free;
     hpc.Free;
+    localserver.Free;
   end;
 end;
 
@@ -1992,22 +2023,6 @@ begin
   finally
     hps.Free;
   end;
-end;
-
-function TNetworkProtocols.OnPeerCacheDirect(var aUri: TUri;
-  var aHeader: RawUtf8; var aOptions: THttpRequestExtendedOptions): integer;
-begin
-  // ext parameters only for the first resource
-  CheckUtf8((aUri.Address = '_wp_generated/wpacaa94d5.gif') =
-            aOptions.TLS.IgnoreCertificateErrors, aUri.Address);
-  if aOptions.TLS.IgnoreCertificateErrors then
-    CheckEqual(aOptions.TLS.PrivatePassword, 'password')
-  else
-    CheckEqual(aOptions.TLS.PrivatePassword, '');
-  // it is time to setup our custom parameters, needed e.g. with https
-  aOptions.TLS.IgnoreCertificateErrors := true;
-  // continue
-  result := HTTP_SUCCESS;
 end;
 
 procedure TNetworkProtocols.HTTP;
