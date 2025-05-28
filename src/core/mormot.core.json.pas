@@ -5206,11 +5206,8 @@ end;
 
 
 procedure _JS_Null(Data: PBoolean; const Ctxt: TJsonSaveContext);
-var
-  W: TJsonWriter;
 begin
-  W := Ctxt.W;
-  W.AddNull;
+  Ctxt.W.AddShort(NULL_LOW, 4);
 end;
 
 procedure _JS_Boolean(Data: PBoolean; const Ctxt: TJsonSaveContext);
@@ -5288,7 +5285,7 @@ begin
   if (Data^ = '') or
      ((rcfIsRawBlob in Ctxt.Info.Cache.Flags) and
       (Ctxt.Options * [woRawBlobAsBase64, woRawByteStringAsBase64Magic] = [])) then
-    Ctxt.W.AddNull
+    Ctxt.W.AddShort(NULL_LOW, 4)
   else
   begin
     Ctxt.W.Add('"'); // woRawBlobAsBase64 has no magic trailer as with mORMot 1
@@ -5853,7 +5850,7 @@ begin
       Data := PPointer(Data)^; // class instances are accessed by reference
     if Data = nil then
     begin
-      c.W.AddNull; // append 'null' for nil class instance
+      c.W.AddShort(NULL_LOW, 4); // append 'null' for nil class instance
       exit;
     end;
     t := PClass(Data)^; // actual class of this instance
@@ -6421,7 +6418,7 @@ begin
   if withMagic then
     if Len <= 0 then
     begin
-      AddNull; // JSON null is better than "" for BLOBs
+      AddShort(NULL_LOW, 4); // JSON null is better than "" for BLOBs
       exit;
     end
     else
@@ -6723,7 +6720,7 @@ begin
       exit;
     end;
   end;
-  AddNull;
+  AddShort(NULL_LOW, 4);
 end;
 
 procedure TJsonWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
@@ -7198,7 +7195,7 @@ begin
   case V^.VType of
     vtPointer: // see VarRecToVariant()
       if V^.VPointer = nil then
-        AddNull
+        AddShort(NULL_LOW, 4)
       else // raw pointer <> nil will be serialized as PtrInt
         Add(PtrInt(V^.VPointer));
     vtString:
@@ -7427,7 +7424,7 @@ begin
     vtPointer,
     vtInterface:
       if V^.VPointer = nil then
-        AddNull
+        AddShort(NULL_LOW, 4)
       else
         Add(PtrInt(V^.VPointer)); // as VarRecToVariant()
     vtPChar:

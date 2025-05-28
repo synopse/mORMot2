@@ -797,7 +797,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append 'null' as text
     procedure AddNull;
-      {$ifdef HASINLINE}inline;{$endif}
     /// append a sub-part of an UTF-8 String
     // - emulates AddString(copy(Text,start,len))
     procedure AddStringCopy(const Text: RawUtf8; start, len: PtrInt);
@@ -4250,10 +4249,7 @@ end;
 
 procedure TTextWriter.AddNull;
 begin
-  if B >= BEnd then
-    FlushToStream;
-  PCardinal(B + 1)^ := NULL_LOW;
-  inc(B, 4);
+  AddShort(NULL_LOW, 4);
 end;
 
 function TTextWriter.AddPrepare(Len: PtrInt): pointer;
@@ -5063,7 +5059,7 @@ end;
 procedure TTextWriter.AddRawJson(const json: RawJson);
 begin
   if json = '' then
-    AddNull
+    AddShort(NULL_LOW, 4)
   else
     AddNoJsonEscape(pointer(json), length(json));
 end;
