@@ -40,17 +40,8 @@ const
   // expected by the TExtractInlineParameters decoder
   JSON_SQLDATE_MAGIC_C = $b1bfef;
 
-  /// UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
-  // - e.g. '"\uFFF12012-05-04"' pattern
-  JSON_SQLDATE_MAGIC_STR: string[3] = #$ef#$bf#$b1;
-
   /// '"' + UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
   JSON_SQLDATE_MAGIC_QUOTE_C = ord('"') + cardinal(JSON_SQLDATE_MAGIC_C) shl 8;
-
-  /// '"' +  UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
-  // - defined as a ShortString constant to be used as:
-  // ! AddShorter(JSON_SQLDATE_MAGIC_QUOTE_STR);
-  JSON_SQLDATE_MAGIC_QUOTE_STR: string[4] = '"'#$ef#$bf#$b1;
 
 /// Date/Time conversion from ISO-8601
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format

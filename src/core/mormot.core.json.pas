@@ -5183,7 +5183,7 @@ var
   d: double;
 begin
   if woDateTimeWithMagic in Options then
-    W.AddShorter(JSON_SQLDATE_MAGIC_QUOTE_STR)
+    W.AddShort(JSON_SQLDATE_MAGIC_QUOTE_C, 4)
   else
     W.Add('"');
   d := unaligned(Value^);
