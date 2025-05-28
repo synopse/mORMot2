@@ -6383,14 +6383,14 @@ utf8: case Escape of // inline Add(PUtf8Char(P), Len, Escape);
         goto utf8 // dectected pure UTF-8 content
       else
       begin
-        AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
-        WrBase64(P, Len, {withMagic=}false);
+        AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
+        WrBase64(P, Len, {withMagicQuote=}false);
       end;
     CP_UTF16:   // direct write of UTF-16 content
       AddW(PWord(P), 0, Escape);
     CP_RAWBLOB: // RawBlob are always written with Base64 encoding
       begin
-        AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
+        AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0
         WrBase64(P, Len, {withMagic=}false);
       end;
   else if IsAnsiCompatible(P, Len) then
@@ -6422,7 +6422,7 @@ begin
       exit;
     end
     else
-      AddShorter(JSON_BASE64_MAGIC_QUOTE_S); // "\uFFF0
+      AddShort(JSON_BASE64_MAGIC_QUOTE_C, 4); // "\uFFF0
   if Len > 0 then
   begin
     n := Len div 3;

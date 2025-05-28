@@ -2140,6 +2140,9 @@ const
   // - used e.g. when transmitting TDynArray.SaveTo() content
   JSON_BASE64_MAGIC_C = $b0bfef;
 
+  /// '"' + UTF-8 encoded \uFFF0 special code to mark Base64 binary as JSON string
+  JSON_BASE64_MAGIC_QUOTE_C = ord('"') + cardinal(JSON_BASE64_MAGIC_C) shl 8;
+
   /// simple lookup to the TRttiParserType of a complex type
   PTC_PT: array[TRttiParserComplexType] of TRttiParserType = (
     ptNone,      // pctNone
