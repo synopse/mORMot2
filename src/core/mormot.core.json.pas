@@ -5216,35 +5216,23 @@ begin
 end;
 
 procedure _JS_Byte(Data: PByte; const Ctxt: TJsonSaveContext);
-var
-  W: TJsonWriter;
 begin
-  W := Ctxt.W;
-  W.AddB(Data^);
+  Ctxt.W.AddB(Data^);
 end;
 
 procedure _JS_SmallInt(Data: PSmallInt; const Ctxt: TJsonSaveContext);
-var
-  W: TJsonWriter;
 begin
-  W := Ctxt.W;
-  W.Add(Data^);
+  Ctxt.W.Add(Data^);
 end;
 
 procedure _JS_ShortInt(Data: PShortInt; const Ctxt: TJsonSaveContext);
-var
-  W: TJsonWriter;
 begin
-  W := Ctxt.W;
-  W.Add(Data^);
+  Ctxt.W.Add(Data^);
 end;
 
 procedure _JS_Cardinal(Data: PCardinal; const Ctxt: TJsonSaveContext);
-var
-  W: TJsonWriter;
 begin
-  W := Ctxt.W;
-  W.AddU(Data^);
+  Ctxt.W.AddU(Data^);
 end;
 
 procedure _JS_Currency(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -5268,11 +5256,8 @@ begin
 end;
 
 procedure _JS_Integer(Data: PInteger; const Ctxt: TJsonSaveContext);
-var
-  W: TJsonWriter;
 begin
-  W := Ctxt.W;
-  W.Add(Data^);
+  Ctxt.W.Add(Data^);
 end;
 
 procedure _JS_QWord(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -6360,7 +6345,7 @@ procedure TJsonWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
 var
   eng: TSynAnsiConvert;
 label
-  utf8;
+  utf8, b64;
 begin
   if (P = nil) or
      (Len <= 0) then
@@ -6369,7 +6354,7 @@ begin
     CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
   case CodePage of
     CP_UTF8: // direct write of UTF-8 content
-utf8: case Escape of // inline Add(PUtf8Char(P), Len, Escape);
+utf8: case Escape of // inlined Add(PUtf8Char(P), Len, Escape);
         twNone:
           AddNoJsonEscape(PUtf8Char(P), Len);
         twJsonEscape:
@@ -6383,16 +6368,13 @@ utf8: case Escape of // inline Add(PUtf8Char(P), Len, Escape);
         goto utf8 // dectected pure UTF-8 content
       else
       begin
-        AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
+b64:    AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
         WrBase64(P, Len, {withMagicQuote=}false);
       end;
     CP_UTF16:   // direct write of UTF-16 content
       AddW(PWord(P), 0, Escape);
     CP_RAWBLOB: // RawBlob are always written with Base64 encoding
-      begin
-        AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0
-        WrBase64(P, Len, {withMagic=}false);
-      end;
+      goto b64;
   else if IsAnsiCompatible(P, Len) then
       goto utf8
     else if (Escape = twNone) or
