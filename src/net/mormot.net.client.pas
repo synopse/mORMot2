@@ -2613,7 +2613,12 @@ end;
 
 function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
 begin
-  if IsNone(proxy) then
+  if IsNone(proxy) or
+     (not temp.From(uri)) or
+     (temp.Address = '') or
+     IsLocalHost(pointer(temp.Address)) or // no proxy for "127.x.x.x"
+     ((temp.Scheme <> '') and
+      not IdemPChar(pointer(temp.Scheme), 'HTTP')) then
     result := nil
   else if (proxy <> '') and
           temp.From(proxy) then
