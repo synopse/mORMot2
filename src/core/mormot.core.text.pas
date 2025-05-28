@@ -790,6 +790,11 @@ type
     // for appending simple UTF-8 constant text
     procedure AddShorter(const Short8: TShort8);
       {$ifdef HASINLINE}inline;{$endif}
+    /// append up to 4 chars, encoded as 32-bit constant
+    // - called e.g. as (JSON_BASE64_MAGIC_C, 3) / (JSON_BASE64_MAGIC_QUOTE_C, 4)
+    // or (JSON_SQLDATE_MAGIC_C, 3) / (JSON_SQLDATE_MAGIC_QUOTE_C, 4)
+    procedure AddShort(Text4Chars: cardinal; const TextLen: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 'null' as text
     procedure AddNull;
       {$ifdef HASINLINE}inline;{$endif}
@@ -4233,6 +4238,14 @@ begin
     FlushToStream;
   PInt64(B + 1)^ := PInt64(@Short8[1])^;
   inc(B, ord(Short8[0]));
+end;
+
+procedure TTextWriter.AddShort(Text4Chars: cardinal; const TextLen: PtrInt);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  PCardinal(B + 1)^ := Text4Chars;
+  inc(B, TextLen);
 end;
 
 procedure TTextWriter.AddNull;
