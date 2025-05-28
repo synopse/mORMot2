@@ -1224,6 +1224,11 @@ type
     // - optionally return the TSynLog instance (or nil) for direct usage
     class function EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
       const TextArgs: array of const; aInstance: TObject = nil): TSynLog; overload;
+    /// handle method enter / auto-leave tracing, with some custom string arguments
+    // - the logged text is supplied as generic string value, not RawUtf8/PUtf8Char
+    // - expects the ISynLog to be a void variable on stack
+    class function EnterLocalString(var Local: ISynLog; aInstance: TObject;
+      const aMethodName: string): TSynLog;
     /// retrieve the current instance of this TSynLog class
     // - to be used for direct logging, without any Enter/Leave:
     // ! TSynLogDB.Add.Log(llError,'The % statement didn''t work',[SQL]);
@@ -4936,6 +4941,27 @@ begin // expects the caller to have set Local = nil
     exit; // nothing to log
   result.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
   pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
+end;
+
+class function TSynLog.EnterLocalString(var Local: ISynLog; aInstance: TObject;
+  const aMethodName: string): TSynLog;
+var
+  tmp: TSynTempBuffer;
+begin
+  if (aMethodName = '')
+  {$ifndef UNICODE} or
+     {$ifdef HASCODEPAGE}
+     (GetCodePage(aMethodName) = CP_UTF8) or
+     {$endif HASCODEPAGE}
+     IsAnsiCompatible(aMethodName)
+  {$endif UNICODE} then
+    result := EnterLocal(Local, aInstance, pointer(aMethodName))
+  else
+  begin
+    StringToUtf8(aMethodName, tmp);
+    result := EnterLocal(Local, aInstance, tmp.buf);
+    tmp.Done;
+  end;
 end;
 
 procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
