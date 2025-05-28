@@ -737,6 +737,7 @@ type
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - use the current system code page for AnsiString parameter
     procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from any AnsiString value
     // - if CodePage is left to its default value of -1, it will assume
     // CurrentAnsiConvert.CodePage prior to Delphi 2009, but newer UNICODE
@@ -6295,7 +6296,7 @@ begin
   AddAnyAnsiBuffer(pointer(s), sr^.length, Escape, CodePage);
 end;
 
-procedure AddFixed(W: TJsonWriter; P: PByte; AnsiToWide: PWordArray);
+procedure _JsonFixed(W: TJsonWriter; P: PByte; AnsiToWide: PWordArray);
 var
   c: cardinal;
   d: PByteArray;
@@ -6361,6 +6362,8 @@ procedure TJsonWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
   Escape: TTextWriterKind; CodePage: integer);
 var
   eng: TSynAnsiConvert;
+label
+  utf8;
 begin
   if (P = nil) or
      (Len <= 0) then
@@ -6369,7 +6372,7 @@ begin
     CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
   case CodePage of
     CP_UTF8: // direct write of UTF-8 content
-      case Escape of // inline Add(PUtf8Char(P), Len, Escape);
+utf8: case Escape of // inline Add(PUtf8Char(P), Len, Escape);
         twNone:
           AddNoJsonEscape(PUtf8Char(P), Len);
         twJsonEscape:
@@ -6380,7 +6383,7 @@ begin
     CP_RAWBYTESTRING:
       if not IsBase64(P, Len) and
          IsValidUtf8NotVoid(PUtf8Char(P), Len) then
-        Add(PUtf8Char(P), Len, Escape) // dectected pure UTF-8 content
+        goto utf8 // dectected pure UTF-8 content
       else
       begin
         AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
@@ -6393,15 +6396,16 @@ begin
         AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
         WrBase64(P, Len, {withMagic=}false);
       end;
-  else if (Escape = twNone) or
+  else if IsAnsiCompatible(P, Len) then
+      goto utf8
+    else if (Escape = twNone) or
           ((Escape = twJsonEscape) and not NeedsJsonEscape(pointer(P))) then
       AddNoJsonEscapeCP(P, Len, CodePage) // write directly as UTF-8
-    else
-    begin
+    else begin
       eng := TSynAnsiConvert.Engine(CodePage);
       if (Escape = twJsonEscape) and
          (PClass(eng)^ = TSynAnsiFixedWidth) then // use fast lookup table
-        AddFixed(self, pointer(P), pointer(TSynAnsiFixedWidth(eng).AnsiToWide))
+        _JsonFixed(self, pointer(P), pointer(TSynAnsiFixedWidth(eng).AnsiToWide))
       else
         AddEngine(self, eng, P, Len, Escape); // UTF-16 conversion
     end;

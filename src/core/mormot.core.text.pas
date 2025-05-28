@@ -773,6 +773,7 @@ type
     /// append some RTL string to the buffer in one line
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
     procedure AddOnSameLineString(const Text: string);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append an UTF-8 String, with no JSON escaping
     procedure AddString(const Text: RawUtf8);
     /// append several UTF-8 strings
