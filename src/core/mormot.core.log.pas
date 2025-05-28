@@ -1080,6 +1080,7 @@ type
     // internal methods
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
+    procedure RaiseDoEnter;
     procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo);
       {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
     procedure LockAndDisableExceptions;
@@ -4769,6 +4770,11 @@ begin
     FlushFileBuffers(diskflush); // slow OS operation outside of the main lock
 end;
 
+procedure TSynLog.RaiseDoEnter;
+begin
+  ESynLogException.RaiseUtf8('Too many %.Enter', [self]);
+end;
+
 function TSynLog.DoEnter: PSynLogThreadInfo;
 var
   ndx: byte;
@@ -4782,7 +4788,7 @@ begin
   ndx := result^.RecursionCount;
   inc(ndx);
   if ndx = 0 then
-    ESynLogException.RaiseUtf8('Too many %.Enter', [self]);
+    RaiseDoEnter;
   result^.RecursionCount := ndx;
   if ndx > high(result^.Recursion) then
     result := nil; // nothing logged above MAX_SYNLOGRECURSION
@@ -4994,7 +5000,9 @@ type
 
 class function TSynLog.Void: TSynLogClass;
 begin
-  TSynLogVoid.Family.Level := [];
+  with TSynLogVoid.Family do
+    if fLevel <> [] then
+      SetLevel([]); // paranoid (if user did change the family settings)
   result := TSynLogVoid;
 end;
 
