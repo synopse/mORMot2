@@ -852,6 +852,9 @@ var
   /// force GetProxyForUri(fromSystem=true) in GetSystemProxyUri() function
   DefaultHttpClientSocketProxyAuto: boolean;
 
+  /// disable proxy for any IPv4 '1.2.3.4' address in GetSystemProxyUri() function
+  DefaultHttpClientSocketProxyNotForIp4: boolean;
+
 
 /// ask the Operating System to return the Tunnel/Proxy settings for a given URI
 // - as used internally by OpenHttp/OpenHttpGet and TSimpleHttpClient to call
@@ -2617,6 +2620,8 @@ begin
      (not temp.From(uri)) or
      (temp.Address = '') or
      IsLocalHost(pointer(temp.Address)) or // no proxy for "127.x.x.x"
+     (DefaultHttpClientSocketProxyNotForIp4 and
+      NetIsIP4(pointer(temp.Address))) or // plain "1.2.3.4" IP has no proxy
      ((temp.Scheme <> '') and
       not IdemPChar(pointer(temp.Scheme), 'HTTP')) then
     result := nil
