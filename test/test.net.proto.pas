@@ -304,16 +304,14 @@ end;
 
 procedure RtspRegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
   clientcount, steps: integer);
-type
-  TReq = record
+var
+  streamer: TCrtSocket;
+  req: array of record
     get: THttpSocket;
     post: TCrtSocket;
     stream: TCrtSocket;
     session: RawUtf8;
   end;
-var
-  streamer: TCrtSocket;
-  req: array of TReq;
 
   procedure Shutdown;
   var
