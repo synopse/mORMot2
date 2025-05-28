@@ -44,13 +44,14 @@ uses
 { ******************** Socket Process High-Level Encapsulation }
 
 const
-  cLocalhost = '127.0.0.1';
-  cAnyHost = '0.0.0.0';
-  cBroadcast = '255.255.255.255';
+  cLocalhost  = '127.0.0.1';
+  cAnyHost    = '0.0.0.0';
+  cBroadcast  = '255.255.255.255';
   c6Localhost = '::1';
-  c6AnyHost = '::';
+  c6AnyHost   = '::';
   c6Broadcast = 'ffff::1';
-  cAnyPort = '0';
+  cAnyPort    = '0';
+
   cLocalhost32 = $0100007f;
 
   {$ifdef OSWINDOWS}
@@ -614,7 +615,9 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
-/// check if Host is in 127.0.0.0/8 range - warning: Host should be not nil
+/// check if Host is in 127.0.0.0/8 range (e.g. cLocalhost or c6Localhost)
+// - warning: Host should be not nil
+// - would detect both IPv4 '127.x.x.x' pattern and plain IPv6 '::1' constant
 function IsLocalHost(Host: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -3751,9 +3754,12 @@ begin
 end;
 
 function IsLocalHost(Host: PUtf8Char): boolean;
+var
+  c: cardinal;
 begin
-  result := (PCardinal(Host)^ =
-     ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24);
+  c := PCardinal(Host)^;
+  result := (c = ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24) or
+            (c = ord(':') + ord(':') shl 8 + ord('1') shl 16); // c6Localhost
 end;
 
 procedure NetAddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
