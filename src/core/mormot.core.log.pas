@@ -4952,22 +4952,19 @@ end;
 class function TSynLog.EnterLocalString(var Local: ISynLog; aInstance: TObject;
   const aMethodName: string): TSynLog;
 var
-  tmp: TSynTempBuffer;
-begin
-  if (aMethodName = '')
-  {$ifndef UNICODE} or
-     {$ifdef HASCODEPAGE}
-     (GetCodePage(aMethodName) = CP_UTF8) or
-     {$endif HASCODEPAGE}
-     IsAnsiCompatible(aMethodName)
-  {$endif UNICODE} then
-    result := EnterLocal(Local, aInstance, pointer(aMethodName))
-  else
-  begin
-    StringToUtf8(aMethodName, tmp);
-    result := EnterLocal(Local, aInstance, tmp.buf);
-    tmp.Done;
-  end;
+  nfo: PSynLogThreadInfo;
+begin // expects the caller to have set Local = nil
+  result := Add;
+  nfo := result.DoEnter;
+  if nfo = nil then
+    exit; // nothing to log
+  result.LockAndPrepareEnter(nfo); // inlined result.LogEnter()
+  result.LogHeader(sllEnter, aInstance);
+  if aMethodName <> '' then // direct string output with no temp conversion
+    result.fWriter.AddOnSameLineString(aMethodName);
+  result.fWriterEcho.AddEndOfLine(sllEnter);
+  mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
 end;
 
 procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
