@@ -2564,8 +2564,8 @@ const
   /// marker used internally to pass ServiceMethod^.ArgsInputIsOctetStream
   // - used by both TRestServerRoutingRest.ExecuteSoaByInterface and
   // TInterfaceMethodExecute.ExecuteJson, followed by a RawByteString pointer
-  // - is a UTF-8 marker, ending with a #0 so to be identified within JSON
-  JSON_BIN_MAGIC_C = $00b2bfef;
+  // - is U+FFF2 UTF-8 marker, ending with a #0 so to be identified within JSON
+  JSON_BIN_MAGIC_C = $b2bfef;
 
   /// the TInterfaceMethodOptions which are related to custom thread execution
   INTERFACEMETHOD_THREADOPTIONS = [
