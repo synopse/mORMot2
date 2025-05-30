@@ -4158,6 +4158,15 @@ type
       read fTryFromExecutableFolder write fTryFromExecutableFolder;
   end;
 
+  /// used to track e.g. a library or API availability at runtime
+  TLibraryState = (
+    lsUnTested,
+    lsAvailable,
+    lsNotAvailable);
+
+/// call once Init if State is in its default lsUntested (0) value
+function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
+
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
@@ -8396,6 +8405,22 @@ function TSynLibrary.Exists: boolean;
 begin
   result := (self <> nil) and
             (fHandle <> 0);
+end;
+
+
+function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
+begin
+  if State = lsUnTested then
+  begin
+    GlobalLock; // thread-safe check and initialization
+    try
+      if State = lsUntested then
+        Init; // should eventually set State
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  result := State = lsAvailable;
 end;
 
 

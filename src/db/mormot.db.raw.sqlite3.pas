@@ -9197,7 +9197,7 @@ begin
   result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
             // header bytes 8..15 are encrypted bytes 16..23
             // header bytes 16..23 are stored unencrypted
-            (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
+            (Header.d0 =  SQLITE_FILE_HEADER128.Lo) and
             (Header.d1 <> SQLITE_FILE_HEADER128.Hi) and
             (Header.b[21] = 64) and
             (Header.b[22] = 32) and
