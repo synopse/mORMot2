@@ -955,6 +955,8 @@ type
     fResolversToBeReleased: TInterfaceResolverObjArray;
     fDependencies: TInterfacedObjectObjArray;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
+    // internal function matching Implements() for ickFromInjectedResolver
+    function TryResolveImplements(aInterface: PRttiInfo; out Obj): boolean;
   public
     /// define a global class type for interface resolution
     // - most of the time, you will need a local DI/IoC resolution list; but
@@ -998,6 +1000,8 @@ type
     procedure InjectInstance(const aDependencies: array of TInterfacedObject);
       overload; virtual;
     /// check if a given interface can be resolved, from its RTTI
+    // - will only check internal InjectResolver() list, not InjectInstance()
+    // nor RegisterGlobal() resolution
     function Implements(aInterface: PRttiInfo): boolean; override;
     /// delete a previously registered resolver
     // - aResolver can be re-registered afterwards
@@ -5325,6 +5329,22 @@ begin
     if GlobalInterfaceResolver.TryResolve(aInterface, Obj) then
       exit;
   end;
+  result := false;
+end;
+
+function TInterfaceResolverInjected.TryResolveImplements(aInterface: PRttiInfo;
+  out Obj): boolean;
+var
+  i: PtrInt;
+begin
+  // only check local resolvers, as Implements() does
+  result := true;
+  if (self <> nil) and
+     (aInterface <> nil) and
+     (fResolvers <> nil) then
+    for i := 0 to length(fResolvers) - 1 do
+      if fResolvers[i].TryResolve(aInterface, Obj) then
+        exit;
   result := false;
 end;
 
