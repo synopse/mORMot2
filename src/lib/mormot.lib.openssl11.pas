@@ -5873,7 +5873,7 @@ end;
 
 procedure _OpenSslInitialize;
 begin
-  OpenSslInitialize;
+  OpenSslInitialize; // call with default parameters
 end;
 
 function OpenSslIsAvailable: boolean;

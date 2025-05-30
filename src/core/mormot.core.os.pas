@@ -8415,7 +8415,7 @@ begin
     GlobalLock; // thread-safe check and initialization
     try
       if State = lsUntested then
-        Init; // should eventually set State
+        Init; // should eventually set State as lsAvailable or lsNotAvailable
     finally
       GlobalUnLock;
     end;
