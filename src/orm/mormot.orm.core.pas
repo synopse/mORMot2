@@ -1597,15 +1597,22 @@ type
     // - returns a newly created TRestStorageRemote instance
     function RemoteDataCreate(aClass: TOrmClass;
       aRemoteRest: TRestOrmParent): TRestOrmParent; 
-    /// get the non-virtual TRestStorage instance for one TOrm class
+    /// low-level access to the non-virtual TRestStorage instance of one TOrm class
     // - set e.g. after OrmMapMongoDB(), OrmMapInMemory(),
     // TRestStorageShardDB.Create or TRestOrmServer.RemoteDataCreate
+    // - raise an EModelException if aClass is not part of the database Model
+    // - returns nil if this TOrmClass is handled by the main engine
     function GetStaticStorage(aClass: TOrmClass): TRestOrmParent;
-    /// get the virtual TRestStorage instance for one TOrm class
+    /// low-level access to the virtual TRestStorage instance for one TOrm class
     // - i.e. in-memory or external SQL tables declared as SQLite3 virtual tables
+    // - raise an EModelException if aClass is not part of the database Model
+    // - returns nil if this TOrmClass is not a virtual table
     function GetVirtualStorage(aClass: TOrmClass): TRestOrmParent;
-    /// get the in-memory or virtual TRestStorage instance for one TOrm class
+    /// low-level access to the in-memory or virtual TRestStorage instance
+    // for one TOrm class
     // - will also follow TRestOrmServer.StaticVirtualTableDirect property
+    // - raise an EModelException if aClass is not part of the database Model
+    // - same as a dual call to GetStaticStorage() + GetStaticVirtualTable()
     function GetStorage(aClass: TOrmClass): TRestOrmParent;
   end;
 
