@@ -776,31 +776,50 @@ type
   /// low-level version information for libcurl library (in its cv11 layout)
   // - you need to check the actual version before accessing any of its members
   TCurlVersionInfo = record
+    /// define the actual available fields
     age: TCurlVersion;
+    /// human readable string of the library version
     version: PAnsiChar;
+    /// numerical representation of the library version
     version_num: cardinal;
+    /// human readable string of the recognized running system
     host: PAnsiChar;
+    /// flags to identify the main library features
     features: TCurlVersionFeatures;
+    /// human readable string of the associated OpenSSL library version
     ssl_version: PAnsiChar;
+    /// not used, always nil
     ssl_version_num: PAnsiChar;
+    /// human readable string of the associated libz library version
     libz_version: PAnsiChar;
+    /// list of known protocols
     protocols: PPAnsiCharArray;
+    // requires age >= cv2
     ares: PAnsiChar;
     ares_num: integer;
+    // requires age >= cv3
     libidn: PAnsiChar;
+    // requires age >= cv4
     iconv_ver_num: integer;
     libssh_version: PAnsiChar;
+    // requires age >= cv5
     brotli_ver_num: cardinal;
     brotli_version: PAnsiChar;
+    // requires age >= cv6
     nghttp2_ver_num: cardinal;
     nghttp2_version: PAnsiChar;
     quic_version: PAnsiChar;
+    // requires age >= cv7
     cainfo: PAnsiChar;
     capath: PAnsiChar;
+    // requires age >= cv8
     zstd_ver_num: integer;
     zstd_version: PAnsiChar;
+    // requires age >= cv9
     hyper_version: PAnsiChar;
+    // requires age >= cv10
     gsasl_version: PAnsiChar;
+    // requires age >= cv11
     feature_names: PPAnsiCharArray;
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
