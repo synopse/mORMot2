@@ -1148,12 +1148,15 @@ var
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
 // - you can specify the libcurl library name to load
+// - this method is not thread safe and should be executed e.g. at startup or
+// within GlobalLock/GlobalUnlock - or via CurlIsAvailable wrapper
 procedure LibCurlInitialize(engines: TCurlGlobalInit = [giAll];
   const dllname: TFileName = LIBCURL_DLL);
 
 /// return TRUE if a curl library is available
 // - will load and initialize it, calling LibCurlInitialize if necessary,
 // catching any exception during the process
+// - this method is thread safe, using function LibraryAvailable/GlobalLock
 function CurlIsAvailable: boolean;
 
 /// Callback used by libcurl to write data, e.g. when downloading a resource
@@ -1358,14 +1361,20 @@ begin
 end;
 
 var
-  curl_initialized: boolean;
+  curl_initialized: TLibraryState;
+
+procedure _LibCurlInitialize;
+begin
+  try
+    LibCurlInitialize; // try to initialize with the default library name
+  except;
+    curl_initialized := lsNotAvailable; // paranoid (already set)
+  end;
+end;
 
 function CurlIsAvailable: boolean;
 begin
-  if not curl_initialized then
-    // try to initialize with the default library name
-    LibCurlInitialize;
-  result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
+  result := LibraryAvailable(curl_initialized, _LibCurlInitialize);
 end;
 
 // ensure libcurl will call our RTL MM, not the libc heap
@@ -1454,17 +1463,8 @@ procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 var
   res: TCurlResult;
 begin
-  if curl_initialized
-     {$ifndef LIBCURLSTATIC} and
-     (curl <> nil)
-     {$endif LIBCURLSTATIC} then
-    exit; // set it once, but allow to retry a given dllname
-
-  GlobalLock;
-  try
-    if curl_initialized then
-      exit;
-
+  if curl_initialized <> lsAvailable then
+  try // set it once, but can retry with specific alternate libnames
     {$ifdef LIBCURLSTATIC}
 
     curl.global_init := @curl_global_init;
@@ -1513,50 +1513,53 @@ begin
     {$else}
 
     curl := TLibCurl.Create;
-    try
-      curl.TryLoadResolve([
-      {$ifdef OSWINDOWS}
-        // first try the libcurl.dll in the local executable folder
-        Executable.ProgramFilePath + dllname,
-      {$endif OSWINDOWS}
-        // search standard library in path
-        dllname
-      {$ifdef OSDARWIN}
-        // another common names on MacOS
-        , 'libcurl.4.dylib', 'libcurl.3.dylib'
-      {$else}
-        {$ifdef OSPOSIX}
-        // another common names on POSIX
-        , 'libcurl.so.4', 'libcurl.so.3'
-        // for latest Linux Mint and other similar distros using gnutls
-        , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
-        {$endif OSPOSIX}
-      {$endif OSDARWIN}
-        ], 'curl_', @CURL_ENTRIES, @@curl.global_init, ECurl);
-    except
-      FreeAndNil(curl); // ECurl raised during initialization above
-      exit;
-    end;
+    curl.TryLoadResolve([
+    {$ifdef OSWINDOWS}
+      // first try the libcurl.dll in the local executable folder
+      Executable.ProgramFilePath + dllname,
+    {$endif OSWINDOWS}
+      // search standard library in path
+      dllname
+    {$ifdef OSDARWIN}
+      // another common names on MacOS
+      , 'libcurl.4.dylib', 'libcurl.3.dylib'
+    {$else}
+      {$ifdef OSPOSIX}
+      // another common names on POSIX
+      , 'libcurl.so.4', 'libcurl.so.3'
+      // for latest Linux Mint and other similar distros using gnutls
+      , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
+      {$endif OSPOSIX}
+    {$endif OSDARWIN}
+      ], 'curl_', @CURL_ENTRIES, @@curl.global_init, ECurl);
 
     {$endif LIBCURLSTATIC}
 
     // if we reached here, the library has been successfully loaded
-    res := curl.global_init_mem(engines, @curl_malloc_callback, @curl_free_callback,
+    res := curl.global_init_mem(engines,
+      @curl_malloc_callback, @curl_free_callback,
       @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
     if res <> crOK then
-      raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
+      raise ECurl.CreateFmt('curl_global_init_mem() failed as %d %s',
+        [ord(res), ToText(res)^]);
     curl.info := curl.version_info(cv11); // direct static assign
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info^.version]);
     if curl.info^.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info^.ssl_version]);
-    curl_initialized := true; // should be set last but before CurlEnableGlobalShare
 
+    curl_initialized := lsAvailable; // set last but before CurlEnableGlobalShare
     curl.globalShare := nil;
     CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
+
     // api := 0; with curl.info^ do while protocols[api]<>nil do
     // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
-  finally
-    GlobalUnLock;
+  except
+    // code above has trigerred a ECurl during its loading/initialization phase
+    curl_initialized := lsNotAvailable;
+    {$ifndef LIBCURLSTATIC}
+    FreeAndNilSafe(curl); // ECurl raised during initialization above
+    {$endif LIBCURLSTATIC}
+    raise; // propagate
   end;
 end;
 
