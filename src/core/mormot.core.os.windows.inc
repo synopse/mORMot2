@@ -3101,19 +3101,19 @@ end;
 
 {$ifdef CPU32}
 var
-  IsUacEnabled: (iueUntested, iueDisabled, iueEnabled);
+  IsUacEnabled: TLibraryState;
 
 function IsUacVirtualizationEnabled: boolean;
 var
   token: THandle;
   enabled, len: DWORD;
 begin
-  if IsUacEnabled = iueUntested then
+  if IsUacEnabled = lsUntested then
     if OSVersion < wVista then
-      IsUacEnabled := iueDisabled // no UAC on Windows XP
+      IsUacEnabled := lsNotAvailable // no UAC on Windows XP
     else
     begin
-      IsUacEnabled := iueEnabled; // enabled by default
+      IsUacEnabled := lsAvailable; // enabled by default
       if OpenProcessToken(GetCurrentProcess, TOKEN_QUERY, token) then
       begin
         enabled := 1;
@@ -3122,11 +3122,11 @@ begin
              @enabled, SizeOf(enabled), len) and
            (enabled = 0) then
           // returns enabled=0 if mormot.win.default.manifest.res is included
-          IsUacEnabled := iueDisabled;
+          IsUacEnabled := lsNotAvailable;
         CloseHandle(token);
       end;
     end;
-  result := IsUacEnabled = iueEnabled;
+  result := IsUacEnabled = lsAvailable;
 end;
 
 function IsUacVirtualFolder(const Folder: TFileName): boolean;
