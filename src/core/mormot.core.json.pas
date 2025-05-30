@@ -10536,37 +10536,6 @@ begin
   result := Rtti.ValueClass.Create; // non-virtual TObject.Create constructor
 end;
 
-{ TRttiJson }
-
-function _BC_RawByteString(A, B: PPUtf8Char; Info: PRttiInfo;
-  out Compared: integer): PtrInt;
-begin
-  {$ifdef CPUINTEL}
-  compared := SortDynArrayAnsiString(A^, B^); // i386/x86_64 asm uses length
-  {$else}
-  compared := SortDynArrayRawByteString(A^, B^); // will use length not #0
-  {$endif CPUINTEL}
-  result := SizeOf(pointer);
-end;
-
-function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
-begin
-  compared := StrComp(A^, B^);
-  result := SizeOf(pointer);
-end;
-
-function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
-begin
-  compared := StrIComp(A^, B^);
-  result := SizeOf(pointer);
-end;
-
-function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
-begin
-  Compared := ComparePointer(A, B); // weak fallback
-  result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
-end;
-
 procedure CopyTPersistent(Dest, Source: TObject);
 begin
   TPersistent(Dest).Assign(TPersistent(Source)); // works e.g. for TStrings
@@ -10576,6 +10545,9 @@ procedure CopyTCollection(Dest, Source: TObject);
 begin
   CopyCollection(TCollection(Source), TCollection(Dest)); // inversed order
 end;
+
+
+{ TRttiJson }
 
 procedure TRttiJson.SetParserClassType;
 var
@@ -10717,8 +10689,8 @@ begin
   else if Kind = rkLString then // override default StrComp/StrIComp
     if Cache.CodePage >= CP_RAWBLOB then
     begin
-      fCompare[true]  := @_BC_RawByteString; // ignore #0 or CaseInsensitive
-      fCompare[false] := @_BC_RawByteString;
+      fCompare[true]  := @_BC_LString; // ignore #0 or CaseInsensitive
+      fCompare[false] := @_BC_LString;
     end
     else if Cache.CodePage = CP_UTF16 then
     begin

@@ -858,6 +858,10 @@ function _BC_SQWord(A, B: PInt64; Info: PRttiInfo; out Compared: integer): PtrIn
 function _BC_UQWord(A, B: PQWord; Info: PRttiInfo; out Compared: integer): PtrInt;
 function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 function _BCI_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_LString(A, B: PRawByteString; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 
 /// check equality of two values by content, using RTTI
 // - optionally returns the known in-memory PSize of the value
@@ -5843,6 +5847,24 @@ begin
   else
     Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
   result := 8;
+end;
+
+function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrComp(A^, B^);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrIComp(A^, B^);
+  result := SizeOf(pointer);
+end;
+
+function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ComparePointer(A, B); // weak fallback
+  result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
 end;
 
 function _BC_LString(A, B: PRawByteString; Info: PRttiInfo;
