@@ -256,10 +256,7 @@ const
 
 var
   /// internal flag used by OpenSslIsAvailable function for dynamic loading
-  openssl_initialized: (
-    osslUnTested,
-    osslAvailable,
-    osslNotAvailable);
+  openssl_initialized: TLibraryState;
 
   /// the error message triggerred by OpenSslIsAvailable when loading OpenSSL
   // - is replicated as a global variable to allow early initialization before
@@ -300,8 +297,8 @@ const
 // you need to call explicitly RegisterOpenSsl to enable mormot.crypt.openssl
 // algorithms in mORMot high-level wrappers
 // - you should never call any OpenSSL function if false is returned
+// - this method is thread safe, using function LibraryAvailable/GlobalLock
 function OpenSslIsAvailable: boolean;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if OpenSSL 1.1 / 3.x library has been initialized
 // - don't try to load it if was not already done
@@ -320,6 +317,8 @@ function OpenSslIsLoaded: boolean;
 // - on success, returns true and register OpenSSL for TLS support - but
 // you need to call explicitly RegisterOpenSsl to enable mormot.crypt.openssl
 // algorithms in mORMot high-level wrappers
+// - this method is not thread safe and should be executed e.g. at startup or
+// within GlobalLock/GlobalUnlock - or via OpenSslIsAvailable wrapper
 function OpenSslInitialize(
    const libcryptoname: TFileName = '';
    const libsslname: TFileName = '';
@@ -2853,7 +2852,7 @@ end;
 
 class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: ShortString);
 begin
-  if openssl_initialized <> osslAvailable then
+  if openssl_initialized <> lsAvailable then
     TryNotAvailable(caller, method);
 end;
 
@@ -5872,21 +5871,19 @@ end;
 
 {$endif OPENSSLUSERTLMM}
 
+procedure _OpenSslInitialize;
+begin
+  OpenSslInitialize;
+end;
+
 function OpenSslIsAvailable: boolean;
 begin
-  case openssl_initialized of
-    osslUnTested:
-      result := OpenSslInitialize;
-    osslAvailable:
-      result := true;
-  else
-    result := false;
-  end;
+  result := LibraryAvailable(openssl_initialized, _OpenSslInitialize);
 end;
 
 function OpenSslIsLoaded: boolean;
 begin
-  result := openssl_initialized = osslAvailable;
+  result := openssl_initialized = lsAvailable;
 end;
 
 function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
@@ -5895,15 +5892,12 @@ var
   error: string;
   libenv, libsys1, libsys3, libexe1, libexe3, libpath, libexact, libname: TFileName;
 begin
-  result := true;
-  if openssl_initialized = osslAvailable then
-    // set it once, but allow to retry with specific alternate libnames
-    exit;
-  result := false;
-  GlobalLock;
+  // not thread-safe: use manual GlobalLock/GlobalUnLock or OpenSslIsAvailable
+  result := openssl_initialized = lsAvailable;
+  if not result then // set it once, but can retry with specific alternate libnames
   try
     // paranoid thread-safe double check
-    if openssl_initialized = osslAvailable then
+    if openssl_initialized = lsAvailable then
       exit;
     // read and validate OPENSSL_LIBPATH environment variable
     libenv := OpenSslDefaultPath; // priority to the global variable
@@ -6008,15 +6002,14 @@ begin
     if result then
     begin
       @NewNetTls := @NewOpenSslNetTls; // favor OpenSSL for TLS from now on
-      openssl_initialized := osslAvailable; // flag should be set the last
+      openssl_initialized := lsAvailable; // flag should be set the last
     end
     else
     begin
       FreeAndNil(libcrypto);
       FreeAndNil(libssl);
-      openssl_initialized := osslNotAvailable
+      openssl_initialized := lsNotAvailable
     end;
-    GlobalUnLock;
     openssl_initialize_errormsg := error;
   end;
 end;
