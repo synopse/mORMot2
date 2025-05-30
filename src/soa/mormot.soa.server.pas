@@ -614,7 +614,7 @@ begin
   end
   else
   begin
-    if aRestServer.Services.Implements(fInterface.InterfaceRtti.Info) then
+    if fRestServer.Services.Implements(fInterface.InterfaceRtti.Info) then
       fImplementationClassKind := ickFromInjectedResolver
     else if fImplementationClass.InheritsFrom(TInjectableObjectRest) then
       fImplementationClassKind := ickInjectableRest
@@ -1186,10 +1186,10 @@ begin
     ickInjectableRest:
       result := TInjectableObjectRestClass(fImplementationClass).
         CreateWithResolverAndRest(fResolver, self, fRestServer, true);
-    ickFromInjectedResolver:
+    ickFromInjectedResolver: // from fRestServer.Service.Implements()
       begin
         dummyObj := nil;
-        if not TServiceContainerServer(fResolver).TryResolve(
+        if not TServiceContainerServer(fRestServer.Services).TryResolveImplements(
             fInterface.InterfaceRtti.Info, dummyObj) then
           EInterfaceFactory.RaiseUtf8(
            'ickFromInjectedResolver: TryResolve(%) failed', [fInterface.InterfaceName]);
