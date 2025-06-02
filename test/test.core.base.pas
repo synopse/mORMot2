@@ -5237,6 +5237,7 @@ var
   WS: WideString;
   SU, SU2: SynUnicode;
   str: string;
+  ss: ShortString;
   up4: RawUcs4;
   U, U2, res, Up, Up2, json, json1, json2, s1, s2, s3: RawUtf8;
   arr, arr2: TRawUtf8DynArray;
@@ -6310,6 +6311,7 @@ begin
   CheckEqual(LogEscapeFull(' abc'), ' abc');
   CheckEqual(LogEscapeFull('abc'), 'abc');
   u := 'abc'#10;
+  Check(ContentToShort(u) = 'abc'#10);
   CheckEqual(LogEscapeFull(u), 'abc$0a');
   u2 := RawUtf8OfChar('-', 10);
   CheckEqual(u2, '----------');
@@ -6327,6 +6329,9 @@ begin
   u2 := RawUtf8OfChar('-', 10);
   Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 5)^ = #0);
   CheckEqual(u2, 'ab..'#0'-----');
+  u := 'abcd'#10;
+  u[4] := #129; // not valid UTF-8
+  Check(ContentToShort(u) = 'abc$81$0a');
   u := '012345678';
   u2 := RawUtf8OfChar('-', 10);
   Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 10)^ = #0);
@@ -6369,6 +6374,34 @@ begin
       CheckTrimCopy(' 234 67 ', i, j);
       CheckTrimCopy(' 234 67 ', i, maxInt);
     end;
+  u := RawUtf8OfChar('-', 300);
+  for i := 250 to 260 do
+  begin
+    ss[0] := #0;
+    ContentToShortAppend(pointer(u), i, ss);
+    if i < 255 then
+    begin
+      CheckEqual(ord(ss[0]), i);
+      for j := 1 to i do
+        Check(ss[j] = '-')
+    end
+    else if i = 255 then
+    begin
+      CheckEqual(ord(ss[0]), 255);
+      for j := 1 to 254 do
+        Check(ss[j] = '-');
+      Check(ss[255] = #0);
+    end
+    else
+    begin
+      CheckEqual(ord(ss[0]), 255);
+      for j := 1 to 252 do
+        Check(ss[j] = '-');
+      Check(ss[253] = '.');
+      Check(ss[254] = '.');
+      Check(ss[255] = #0);
+    end;
+  end;
 end;
 
 procedure TTestCoreBase.Charsets;

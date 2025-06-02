@@ -2252,23 +2252,27 @@ begin
     AddConsole('libcurl is not available on this system -> skip test');
     exit;
   end;
+  // create a temporary file to server
   orig := RandomAnsi7(256 shl 10 + Random32(100)); // 256.1KB of random data
-  tmp := TemporaryFileName;
+  tmp := TemporaryFileName; // e.g. '/tmp/mormot2tests_28F3D8C5.tmp'
   if not CheckFailed(FileFromString(orig, tmp), 'tmp file') then
   try
+    // start the TFTP server
     srv := TTftpServerThread.Create(ExtractFilePath(tmp),
       [ttoRrq , {ttoLowLevelLog,} ttoCaseInsensitiveFileName, ttoAllowSubFolders],
       TSynLogTestLog, '127.0.0.1', '6969', '');
     try
+      // request the temporary file using the libcurl client
       timer.Start;
-      StringToUtf8(ExtractFileName(tmp), uri); // .tmp file
+      StringToUtf8(ExtractFileName(tmp), uri); // 'mormot2tests_28F3D8C5.tmp'
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
       CheckUtf8(res = crOK, 'tftp exact case %', [ToText(res)^]);
       if res <> crOk then
         exit;
       CheckEqual(length(rd), length(orig), 'tftp1a');
       CheckEqual(rd, orig, 'tftp1b');
-      UpperCaseSelf(uri);  // .TMP file to validate case-insensitive URI
+      // validate case-insensitive URI as e.g. 'MORMOT2TESTS_28F3D8C5.TMP'
+      UpperCaseSelf(uri);
       rd := ''; // paranoid
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd, 1000, nil,
         {tftpblocksize=}1468);
@@ -2280,6 +2284,7 @@ begin
       srv.Free;
     end;
   finally
+    // remove the temporary file to serve
     Check(DeleteFile(tmp), 'delete tmp');
   end;
 end;
