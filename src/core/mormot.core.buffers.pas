@@ -2046,6 +2046,10 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 /// fill a ShortString with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(const source: RawByteString): ShortString; overload;
 
+/// fill an UTF-8 buffer with the (hexadecimal) chars of the input text/binary
+function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt;
+  txt: PUtf8Char): integer;
+
 /// if source is not UTF-8 calls EscapeToShort, otherwise append it directly
 // - also ensure that txt[] ends with a #0, so that @txt[1] is a valid PUtf8Char
 procedure ContentToShortAppend(source: PAnsiChar; len: PtrInt; var txt: ShortString);
@@ -9509,6 +9513,33 @@ begin
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
 end;
 
+function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt;
+  txt: PUtf8Char): integer;
+var
+  l: PtrInt;
+begin
+  l := max - pos;
+  if len <= l then
+    l := len
+  else
+    l := Utf8TruncatedLength(source, len, l); // test only what is needed
+  if l <> 0 then
+    if IsValidUtf8Pas(pointer(source), l) then // AVX2 doesn't filter #0
+    begin
+      MoveFast(source^, txt[pos], l); // input is UTF-8 and can be copied directly
+      inc(pos, l); // we know that pos + l <= max
+      if l <> len  then
+        for l := Utf8TruncatedLength(pointer(txt), max, max - 3) to max - 2 do
+          txt[l] := '.';  // mark truncated, but keep valid UTF-8
+    end
+    else
+      pos := EscapeBuffer(source, l, pointer(txt + pos), max - pos) - txt;
+  result := pos;
+  if pos = max then
+    dec(pos);     // avoid buffer overflow
+  txt[pos] := #0; // always end with a #0
+end;
+
 function ContentToShort(const source: RawByteString): ShortString;
 begin
   result[0] := #0;
@@ -9516,31 +9547,8 @@ begin
 end;
 
 procedure ContentToShortAppend(source: PAnsiChar; len: PtrInt; var txt: ShortString);
-var
-  t, max, l: PtrInt;
 begin
-  t := PByte(@txt)^;
-  max := 254 - t;
-  inc(t); // short[t] = destination
-  if len <= max then
-    l := len
-  else
-    l := Utf8TruncatedLength(source, len, max); // test only what is needed
-  if l <> 0 then
-    if IsValidUtf8Pas(pointer(source), l) then // AVX2 doesn't filter #0
-    begin
-      inc(txt[0], l); // we know that t + l <= max
-      MoveFast(source^, txt[t], l);
-      if l <> len  then
-        for l := Utf8TruncatedLength(@txt[1], 255, 253) to 254 do
-          PByteArray(@txt)[l] := ord('.');  // mark truncated, but keep valid UTF-8
-    end
-    else
-      PByte(@txt)^ := EscapeBuffer(source, l, @txt[t], max) - @txt[1];
-  l := PByte(@txt)^;
-  if l <> 255 then
-    inc(l);
-  PByteArray(@txt)[l] := 0;
+  txt[0] := AnsiChar(ContentAppend(source, len, ord(txt[0]), 255, @txt[1]));
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
