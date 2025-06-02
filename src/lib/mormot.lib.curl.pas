@@ -1081,6 +1081,7 @@ type
     share_strerror: function(code: TCurlShareResult): PAnsiChar; cdecl;
 
     /// create a mime context and return its handle
+    // - mime_*() functions may be nil e.g. on MacOS
     mime_init: function(curl: TCurl): TCurlMime; cdecl;
     /// release a mime handle and its substructures
     mime_free: procedure(mime: TCurlMime); cdecl;
@@ -1433,12 +1434,12 @@ const
     'share_cleanup',
     'share_setopt',
     'share_strerror',
-    'mime_init',
-    'mime_free',
-    'mime_addpart',
-    'mime_data',
-    'mime_name',
-    'mime_type',
+    '?mime_init', // may be nil e.g. on MacOS
+    '?mime_free',
+    '?mime_addpart',
+    '?mime_data',
+    '?mime_name',
+    '?mime_type',
     {$ifdef LIBCURLMULTI},
     'multi_add_handle',
     'multi_assign',
@@ -1487,7 +1488,7 @@ begin
     curl.share_cleanup := @curl_share_cleanup;
     curl.share_setopt := @curl_share_setopt;
     curl.share_strerror := @curl_share_strerror;
-    curl.mime_init := @curl_mime_init;
+    curl.mime_init := @curl_mime_init; // may be nil e.g. on MacOS
     curl.mime_free := @curl_mime_free;
     curl.mime_addpart := @curl_mime_addpart;
     curl.mime_data := @curl_mime_data;
