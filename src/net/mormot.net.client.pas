@@ -4793,6 +4793,7 @@ begin
     curl.easy_setopt(fHandle, coProxy, pointer(fProxyName));
   if fHttps or
      (fExtendedOptions.RedirectMax > 0) then // may redirect from http to https
+    // see https://curl.haxx.se/libcurl/c/simplessl.html
     if IgnoreTlsCertificateErrors then
     begin
       curl.easy_setopt(fHandle, coSSLVerifyPeer, 0);
@@ -4800,23 +4801,19 @@ begin
       //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,0);
       //curl.easy_setopt(fHandle,coProxySSLVerifyHost,0);
     end
-    else
+    else if fTls.CertFile <> '' then
     begin
-      // see https://curl.haxx.se/libcurl/c/simplessl.html
-      if fTls.CertFile <> '' then
-      begin
-        curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
-        curl.easy_setopt(fHandle, coSSLCert, pointer(fTls.CertFile));
-        if fTls.PassPhrase <> '' then
-          curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fTls.PassPhrase));
-        curl.easy_setopt(fHandle, coSSLKeyType, nil);
-        curl.easy_setopt(fHandle, coSSLKey, pointer(fTls.KeyName));
-        curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
-        curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
-      end
-      else if fTls.CACertFile <> '' then
-        curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
-    end;
+      curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
+      curl.easy_setopt(fHandle, coSSLCert, pointer(fTls.CertFile));
+      if fTls.PassPhrase <> '' then
+        curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fTls.PassPhrase));
+      curl.easy_setopt(fHandle, coSSLKeyType, nil);
+      curl.easy_setopt(fHandle, coSSLKey, pointer(fTls.KeyName));
+      curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
+      curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
+    end
+    else if fTls.CACertFile <> '' then
+      curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
   curl.easy_setopt(fHandle, coUserAgent, pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
   curl.easy_setopt(fHandle, coHeaderFunction, @CurlWriteRawByteString);
