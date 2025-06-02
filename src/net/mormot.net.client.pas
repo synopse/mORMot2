@@ -1249,7 +1249,7 @@ type
   TWinINet = class(TWinHttpApi)
   protected
     // those internal methods will raise an EWinINet exception on error
-    procedure RaiseFromLastError;
+    procedure RaiseFromLastError(const ctxt: ShortString);
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
@@ -4535,15 +4535,15 @@ end;
 
 { TWinINet }
 
-procedure TWinINet.RaiseFromLastError;
+procedure TWinINet.RaiseFromLastError(const ctxt: ShortString);
 var
   err: integer;
   E: EWinINet;
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   err := GetLastError;
-  E := EWinINet.CreateUtf8('%: % (%) on %:%',
-    [self, SysErrorMessageWinInet(err), err, fServer, fPort]);
+  E := EWinINet.CreateUtf8('%: % error [%] (%) on %:%',
+    [self, ctxt, SysErrorMessageWinInet(err), err, fServer, fPort]);
   E.fLastError := err;
   raise E;
 end;
@@ -4562,7 +4562,7 @@ begin
   fSession := InternetOpenA(pointer(fExtendedOptions.UserAgent), OpenType,
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession = nil then
-    RaiseFromLastError;
+    RaiseFromLastError('Open');
   InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
     @ConnectionTimeOut, SizeOf(ConnectionTimeOut));
   InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT,
@@ -4572,7 +4572,7 @@ begin
   fConnection := InternetConnectA(fSession, pointer(fServer), fPort,
     nil, nil, INTERNET_SERVICE_HTTP, 0, 0);
   if fConnection = nil then
-    RaiseFromLastError;
+    RaiseFromLastError('Connect');
 end;
 
 procedure TWinINet.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
@@ -4593,7 +4593,7 @@ begin
   FRequest := HttpOpenRequestA(FConnection, pointer(aMethod), pointer(aUrl),
     nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
   if FRequest = nil then
-    RaiseFromLastError;
+    RaiseFromLastError('OpenRequest');
 end;
 
 procedure TWinINet.InternalCloseRequest;
@@ -4610,7 +4610,7 @@ begin
   if (hdr <> '') and
      not HttpAddRequestHeadersA(fRequest, pointer(hdr), length(hdr),
        HTTP_ADDREQ_FLAG_COALESCE) then
-    RaiseFromLastError;
+    RaiseFromLastError('AddHeader');
 end;
 
 procedure TWinINet.InternalSendRequest(const aMethod: RawUtf8; const aData:
@@ -4627,7 +4627,7 @@ begin
     buff.dwStructSize := SizeOf(buff);
     buff.dwBufferTotal := Length(aData);
     if not HttpSendRequestExA(fRequest, @buff, nil, 0, 0) then
-      RaiseFromLastError;
+      RaiseFromLastError('SendRequest');
     datapos := 0;
     while datapos < datalen do
     begin
@@ -4639,18 +4639,18 @@ begin
         Bytes := max;
       if not InternetWriteFile(fRequest,
          @PByteArray(aData)[datapos], Bytes, BytesWritten) then
-        RaiseFromLastError;
+        RaiseFromLastError('WriteFile');
       inc(datapos, BytesWritten);
       if not fOnUpload(Self, datapos, datalen) then
         raise EWinINet.CreateFmt('OnUpload Canceled %s', [aMethod]);
     end;
     if not HttpEndRequest(fRequest, nil, 0, 0) then
-      RaiseFromLastError;
+      RaiseFromLastError('EndRequest');
   end
   else
     // blocking send with no callback
     if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
-      RaiseFromLastError;
+      RaiseFromLastError('SendRequest');
 end;
 
 function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;
@@ -4691,14 +4691,14 @@ end;
 function TWinINet.InternalQueryDataAvailable: cardinal;
 begin
   if not InternetQueryDataAvailable(fRequest, result, 0, 0) then
-    RaiseFromLastError;
+    RaiseFromLastError('QueryDataAvailable');
 end;
 
 function TWinINet.InternalReadData(var Data: RawByteString;
   Read: PtrInt; Size: cardinal): cardinal;
 begin
   if not InternetReadFile(fRequest, @PByteArray(Data)[Read], Size, result) then
-    RaiseFromLastError;
+    RaiseFromLastError('ReadData');
 end;
 
 destructor TWinINet.Destroy;
