@@ -2786,7 +2786,7 @@ begin
             end;
           UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
             if (PtrInt(PtrUInt(Source)) >= SourceLen) or
-               ((cardinal(Source^) < UTF16_LOSURROGATE_MIN) or
+               ((cardinal(Source^) < UTF16_LOSURROGATE_MIN) or // 2nd surrogate
                 (cardinal(Source^) > UTF16_LOSURROGATE_MAX)) then
             begin
 unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
@@ -2855,14 +2855,11 @@ procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   var result: TSynTempBuffer; Flags: TCharConversionFlags);
 begin
   if (WideChar = nil) or
-     (WideCharCount = 0) then
+     (WideCharCount <= 0) then
     result.Init(0)
   else
-  begin
-    result.Init(WideCharCount * 3);
-    result.Len := RawUnicodeToUtf8(
-      result.buf, result.len, WideChar, WideCharCount, Flags);
-  end;
+    result.Len := RawUnicodeToUtf8(result.Init(WideCharCount * 3),
+      (WideCharCount * 3) + 16, WideChar, WideCharCount, Flags);
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
@@ -2896,6 +2893,13 @@ begin
   if Utf8Length <= 0 then
     result := '';
 end;
+
+{$ifndef FPC_OR_UNICODE} // Delphi 7/2007 RTL don't handle surrogates
+procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
+begin
+  RawUnicodeToUtf8(P, Len, res);
+end;
+{$endif FPC_OR_UNICODE}
 
 procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 var
@@ -11226,6 +11230,9 @@ begin
   Utf8AnsiConvert      := TSynAnsiUtf8.Create(CP_UTF8);
   RawByteStringConvert := TSynAnsiFixedWidth.Create(CP_RAWBYTESTRING);
   CurrentAnsiConvert   := TSynAnsiConvert.Engine(Unicode_CodePage);
+  {$ifndef FPC_OR_UNICODE}
+  DoWin32PWideCharToUtf8 := _DoWin32PWideCharToUtf8; // Delphi 7/2007 weak RTL
+  {$endif FPC_OR_UNICODE}
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
   {$ifdef ASMX64AVXNOCONST}

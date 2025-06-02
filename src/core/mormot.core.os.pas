@@ -3989,6 +3989,12 @@ function ConsoleReadBody: RawByteString;
 /// low-level access to the keyboard state of a given key
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
+var
+  /// internal wrapper using the RTL by default
+  // - overriden by mormot.core.unicode on Delphi 7/2007 to handle surrogates
+  // - called if IsAnsiCompatibleW(P, Len) returned false
+  DoWin32PWideCharToUtf8: procedure(P: PWideChar; Len: PtrInt; var res: RawUtf8);
+
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
   out res: RawUtf8); overload;

@@ -14,7 +14,7 @@ procedure _fmt(const Fmt: string; const Args: array of const;
   var result: RawUtf8); overload; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
-procedure DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
+procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
 var
   tmp: TSynTempBuffer;
 begin
@@ -134,7 +134,7 @@ begin
   end
   {$ifdef FPC}
   else if DefaultRTLFileSystemCodePage = CP_UTF8 then // happens with Lazarus
-    DoWin32PWideCharToUtf8(P, l, RawUtf8(fn)) // use RTL UnicodeToUtf8()
+    DoWin32PWideCharToUtf8(P, l, RawUtf8(fn)) // use RTL or mormot.core.unicode
   {$endif FPC}
   else
     Win32PWideCharToFileNameConv(P, l, fn);
@@ -156,7 +156,7 @@ begin
         R[i] := PWordArray(P)[i]; // fast direct conversion
     end
     else
-      DoWin32PWideCharToUtf8(P, Len, res); // use RTL UnicodeToUtf8()
+      DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode
 end;
 
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
@@ -5263,6 +5263,7 @@ begin
   {$endif HASNOSSE2}
   {$endif ASMX86}
   // late-binding of newest Windows APIs
+  DoWin32PWideCharToUtf8 := @_DoWin32PWideCharToUtf8; // or mormot.core.unicode
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64'); // Vista+
   if not Assigned(GetTickCount64) then
