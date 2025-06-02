@@ -72,6 +72,7 @@ type
     fExecuteMessage: RawUtf8;
     fFrame: PUdpFrame;
     fReceived: integer;
+    fBound: boolean;
     function GetIPWithPort: RawUtf8;
     procedure AfterBind; virtual;
     /// will loop for any pending UDP frame, and execute FrameReceived method
@@ -92,6 +93,8 @@ type
       read GetIPWithPort;
     property Received: integer
       read fReceived;
+    property ExecuteMessage: RawUtf8
+      read fExecuteMessage;
   end;
 
 const
@@ -1225,6 +1228,9 @@ type
     // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
     property ServerKeepAliveTimeOut: cardinal
       read fServerKeepAliveTimeOut write SetServerKeepAliveTimeOut;
+    /// internal error message set by the processing thread, e.g. at binding
+    property ExecuteMessage: RawUtf8
+      read fExecuteMessage;
     /// if we should search for local .gz cached file when serving static files
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
@@ -2557,14 +2563,15 @@ begin
     FormatUtf8('udp%srv', [BindPort], ident);
   LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
     [BindAddress, BindPort, ident], self);
+  inherited Create({suspended=}false, nil, nil, LogClass, ident);
   res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
     TimeoutMS, TimeoutMS, TimeoutMS, 10, fSock, @fSockAddr);
+  fBound := true; // notify DoExecute()
   if res <> nrOk then
     // on binding error, raise exception before the thread is actually created
     raise EUdpServer.Create('%s.Create binding error on %s:%s',
       [ClassNameShort(self)^, BindAddress, BindPort], res);
   AfterBind;
-  inherited Create({suspended=}false, nil, nil, LogClass, ident);
 end;
 
 destructor TUdpServerThread.Destroy;
@@ -2621,45 +2628,48 @@ begin
   lasttix := 0;
   // main server process loop
   try
+    if not fBound then
+      SleepHiRes(100, fBound, {boundDone=}true);
     if fSock = nil then // paranoid check
-      raise EUdpServer.CreateFmt('%s.Execute: Bind failed', [ClassNameShort(self)^]);
-    while not Terminated do
-    begin
-      if fSock.WaitFor(1000, [neRead, neError]) <> [] then
+      FormatUtf8('%.DoExecute: % Bind failed', [self, fProcessName], fExecuteMessage)
+    else
+      while not Terminated do
       begin
-        if Terminated then
+        if fSock.WaitFor(1000, [neRead, neError]) <> [] then
         begin
-          fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
-          break;
-        end;
-        res := fSock.RecvPending(len);
-        if (res = nrOk) and
-           (len >= 4) then
-        begin
-          PInteger(fFrame)^ := 0;
-          len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
           if Terminated then
-            break;
-          if (len >= 0) and // -1=error, 0=shutdown
-             (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
           begin
-            inc(fReceived);
-            OnFrameReceived(len, remote);
+            fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
+            break;
           end;
-        end
-        else if res <> nrRetry then
-          SleepHiRes(100); // don't loop with 100% cpu on failure
+          res := fSock.RecvPending(len);
+          if (res = nrOk) and
+             (len >= 4) then
+          begin
+            PInteger(fFrame)^ := 0;
+            len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
+            if Terminated then
+              break;
+            if (len >= 0) and // -1=error, 0=shutdown
+               (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
+            begin
+              inc(fReceived);
+              OnFrameReceived(len, remote);
+            end;
+          end
+          else if res <> nrRetry then
+            SleepHiRes(100); // don't loop with 100% cpu on failure
+        end;
+        if Terminated then
+          break;
+        tix64 := mormot.core.os.GetTickCount64;
+        tix := tix64 shr 9; // div 512
+        if tix <> lasttix then
+        begin
+          lasttix := tix;
+          OnIdle(tix64); // called every 512 ms at most
+        end;
       end;
-      if Terminated then
-        break;
-      tix64 := mormot.core.os.GetTickCount64;
-      tix := tix64 shr 9; // div 512
-      if tix <> lasttix then
-      begin
-        lasttix := tix;
-        OnIdle(tix64); // called every 512 ms at most
-      end;
-    end;
     OnShutdown; // should close all connections
   except
     on E: Exception do
