@@ -335,7 +335,9 @@ begin
   fMaxConnections := 100; // = 100 threads, good enough for regular TFTP server
   fMaxRetry := 2;
   fOptions := Options;
-  inherited Create(LogClass, BindAddress, BindPort, ProcessName, 5000); // bind
+  // bind and launch the thread to start serving content
+  inherited Create(LogClass, BindAddress, BindPort, ProcessName, 5000);
+  // setup the execution parameters
   {$ifdef OSPOSIX}
   if ttoDropPriviledges in fOptions then
   begin
@@ -369,6 +371,7 @@ destructor TTftpServerThread.Destroy;
 begin
   inherited Destroy;
   fFileCache.Free;
+  FreeAndNil(fConnection); // paranoid
 end;
 
 procedure TTftpServerThread.OnShutdown;
