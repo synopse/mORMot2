@@ -4305,7 +4305,8 @@ begin
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
      ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
     RaiseFromLastError('SetTimeouts');
-  if fHttps then
+  if fHttps or
+     (fExtendedOptions.RedirectMax > 0) then // may redirect from http to https
   begin
     protocols := InternalGetProtocols;
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
@@ -4435,11 +4436,12 @@ begin
         FillZero(pwd);
       end;
     end;
-  if fHttps and
-     IgnoreTlsCertificateErrors then
-    if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
-       @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) then
-      RaiseFromLastError('SetOption');
+  if IgnoreTlsCertificateErrors then
+    if fHttps or
+       (fExtendedOptions.RedirectMax > 0) then // may redirect from http to https
+      if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
+         @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) then
+        RaiseFromLastError('SetOption(ignorecert)');
   if fExtendedOptions.RedirectMax > 0 then
     if WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_REDIRECT_POLICY,
          @REDIRECT_POLICY_ALWAYS, SizeOf(cardinal)) then
@@ -4449,14 +4451,15 @@ begin
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success
-  if fHttps and
+  if (fHttps or
+      (fExtendedOptions.RedirectMax > 0)) and
      (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
      IgnoreTlsCertificateErrors and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
        pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT), 0) and
-     _SendRequest(L) and
+     _SendRequest(L) and // retry
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success with no certificate validation
   // if we reached here, an error occurred
