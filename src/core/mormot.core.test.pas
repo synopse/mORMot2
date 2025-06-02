@@ -501,6 +501,9 @@ type
     // - as retrieved from "--test class.method" command line switch
     property Restrict: TRawUtf8DynArray
       read fRestrict write fRestrict;
+    /// if the "--multithread" switch has been defined at command line
+    property MultiThread: boolean
+      read fMultiThread;
   published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
