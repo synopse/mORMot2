@@ -862,6 +862,7 @@ type
   PCurlHttpPost = ^TCurlHttpPost;
 
   /// defines a multipart/formdata HTTP POST section
+  // - formadd() is deprecated since 7.56 - use mime_init() instead
   TCurlHttpPost = record
     /// next entry in the list
     next: PCurlHttpPost;
@@ -1046,6 +1047,7 @@ type
     global_cleanup: procedure; cdecl;
     /// returns run-time libcurl version info
     version_info: function(age: TCurlVersion): PCurlVersionInfo; cdecl;
+
     // start a libcurl easy session
     easy_init: function: pointer; cdecl;
     /// set options for a curl easy handle
@@ -1066,7 +1068,9 @@ type
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
     /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
+
     /// add a section to a multipart/formdata HTTP POST request
+    // - deprecated in libcurl 7.56 - use mime_init() instead
     formadd: function(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs;
     /// finalize the sections of a multipart/formdata HTTP POST request
     formfree: procedure(first: PCurlHttpPost); cdecl;
@@ -1081,7 +1085,7 @@ type
     share_strerror: function(code: TCurlShareResult): PAnsiChar; cdecl;
 
     /// create a mime context and return its handle
-    // - mime_*() functions may be nil e.g. on MacOS
+    // - mime_*() functions may be nil before 7.56 e.g. on MacOS 10.14 and lower
     mime_init: function(curl: TCurl): TCurlMime; cdecl;
     /// release a mime handle and its substructures
     mime_free: procedure(mime: TCurlMime); cdecl;
@@ -1434,7 +1438,7 @@ const
     'share_cleanup',
     'share_setopt',
     'share_strerror',
-    '?mime_init', // may be nil e.g. on MacOS
+    '?mime_init', // may be nil e.g. on MacOS 10.14 and lower (lib version 7.54)
     '?mime_free',
     '?mime_addpart',
     '?mime_data',

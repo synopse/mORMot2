@@ -1954,8 +1954,8 @@ begin
           Check(res = mdOk, 'hpc');
           Check(CompareMem(@msg, @msg2, SizeOf(msg)));
           // validate the UDP client/server stack is running
-          if hpc.Ping <> nil then
-            Check(true, 'ping<>nil') // multiple VMs may ping - twice may fail
+          if hpc.Ping <> nil then // multiple VMs may ping - twice may fail
+            Check(not fOwner.MultiThread, 'ping<>nil') // LUTI = not multithread
           else
             Check(true, 'ping=nil');
           // validate THttpPeerCrypt.HttpDirectUri request encoding/decoding
