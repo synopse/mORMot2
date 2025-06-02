@@ -6424,7 +6424,8 @@ begin
     // actually start and wait for the local HTTP(S) server to be available
     if fServerTls.Enabled then
     begin
-      fLog.Add.Log(sllTrace, 'StartHttpServer: HTTPS from ServerTls', self);
+      fLog.Add.Log(sllTrace, 'StartHttpServer: HTTPS from ServerTls using %',
+        [fServerTls.PrivateKeyFile], self);
       srv.WaitStarted(10, @fServerTls);
     end
     else if pcoSelfSignedHttps in fSettings.Options then
