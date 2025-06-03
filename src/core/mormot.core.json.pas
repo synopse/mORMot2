@@ -253,7 +253,8 @@ type
     /// decode a JSON field value in-place from an UTF-8 encoded text buffer
     // - warning: will decode in the Json buffer memory itself (no memory copy
     // nor allocation), for faster process - so take care that it is not shared
-    // - Value/ValueLen/WasString is set with the parsed value
+    // - Value/ValueLen/WasString is set with the parsed value - null returns
+    // Value=nil and WasString=false
     // - EndOfObject is set to the JSON ending char (',' ':' or '}' e.g.)
     // - Json points to the next field to be decoded, or nil on parsing error
     procedure GetJsonField;
@@ -753,6 +754,9 @@ type
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
       Escape: TTextWriterKind; CodePage: integer);
+    /// append some binary buffer as ASCCI text or $xx hexadecimal codes
+    // - wrap EscapeBuffer() into the buffer output, up to MaxLen source bytes
+    procedure AddEscapeBuffer(P: pointer; Len, MaxLen: PtrInt);
     /// write some data Base64 encoded
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
     procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); override;
@@ -5184,6 +5188,11 @@ var
 begin
   if woDateTimeWithMagic in Options then
     W.AddShort(JSON_SQLDATE_MAGIC_QUOTE_C, 4)
+  else if PInt64(Value)^ = 0 then
+  begin
+    W.AddShort(NULL_LOW, 4);
+    exit;
+  end
   else
     W.Add('"');
   d := unaligned(Value^);
@@ -8012,7 +8021,7 @@ begin
     if Ctxt.WasString then
       Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
     else
-      UnixTimeOrDoubleToDateTime(Ctxt.Value, Ctxt.ValueLen, Data^);
+      UnixTimeOrDoubleToDateTime(Ctxt.Value, Ctxt.ValueLen, Data^); // also null
 end;
 
 procedure _JL_Guid(Data: PGuid; var Ctxt: TJsonParserContext);
