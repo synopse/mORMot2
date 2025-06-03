@@ -1311,7 +1311,7 @@ type
     procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
     /// call this method to add the content of a binary buffer with ASCII escape
     // - will precompute up to TruncateLen (1024) bytes of output before writing
-    // with a hardcoded limit of 4KB text output
+    // with a hardcoded limit of 4KB text output for pre-rendering on stack
     procedure LogEscape(Level: TSynLogLevel;
       const ContextFmt: RawUtf8; const ContextArgs: array of const; Data: pointer;
       DataLen: PtrInt; Instance: TObject; TruncateLen: PtrInt = 1024);
@@ -5723,7 +5723,7 @@ end;
 procedure TSynLog.LogInternalText(Level: TSynLogLevel; const Text: RawUtf8;
   Instance: TObject; TextTruncateAtLength: integer);
 var
-  lasterror, textlen: integer;
+  lasterror, textlen, trunclen: integer;
 begin
   if Level = sllLastError then
     lasterror := GetLastError
@@ -5741,16 +5741,21 @@ begin
     else
     begin
       textlen := PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^;
+      trunclen := textlen;
       if (TextTruncateAtLength <> 0) and
          (textlen > TextTruncateAtLength) then
-      begin
-        fWriter.AddOnSameLine(pointer(Text),
-          Utf8TruncatedLength(pointer(Text), textlen, TextTruncateAtLength));
-        fWriter.AddShort('... (truncated) length=');
-        fWriter.AddU(textlen);
-      end
-      else
-        fWriter.AddOnSameLine(pointer(Text));
+        trunclen := Utf8TruncatedLength(pointer(Text), textlen, TextTruncateAtLength);
+      if IsValidUtf8Buffer(pointer(Text), trunclen) then
+        if trunclen <> textlen then
+        begin
+          fWriter.AddOnSameLine(pointer(Text), trunclen);
+          fWriter.AddShort('... (truncated) length=');
+          fWriter.AddU(textlen);
+        end
+        else
+          fWriter.AddOnSameLine(pointer(Text)) // faster without textlen
+      else // binary is written as escaped text and $xx binary
+        fWriter.AddEscapeBuffer(pointer(Text), trunclen, TextTruncateAtLength);
     end;
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
