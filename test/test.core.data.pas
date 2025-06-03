@@ -1827,17 +1827,17 @@ var
     FillCharFast(JA, SizeOf(JA), 0);
     FillCharFast(JA2, SizeOf(JA2), 0);
     U := RecordSaveJson(JR, TypeInfo(TTestCustomJsonRecord));
-    CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+    CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":null}');
     check(IsValidJson(U));
     X := JsonToXML(U, '');
     Check(X = '<A>0</A><B>0</B><C>0</C><D></D><E><E1>0</E1><E2>0</E2></E><F></F>');
     J := JsonToXML(U, '', XMLUTF8_NAMESPACE);
     CheckEqual(J, XMLUTF8_NAMESPACE + X + '</contents>');
     J := RecordSaveJson(JA, TypeInfo(TTestCustomJsonArray));
-    CheckEqual(J, '{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+    CheckEqual(J, '{"A":0,"B":0,"C":0,"D":null,"E":[],"F":null}');
     check(IsValidJson(J));
     X := JsonToXML(J, '');
-    Check(X = '<A>0</A><B>0</B><C>0</C><D>null</D><F></F>');
+    CheckEqual(X, '<A>0</A><B>0</B><C>0</C><D></D><F></F>');
     JR2.A := 10;
     JR2.D := '**';
     JR2.F := 1;
@@ -1847,7 +1847,7 @@ var
     Check(JR2.D = '');
     Check(JR2.F = 0);
     U := RecordSaveJson(JR2, TypeInfo(TTestCustomJsonRecord));
-    CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+    CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":null}');
     check(IsValidJson(U));
     U := RecordSaveJson(JR, TypeInfo(TTestCustomJsonRecord));
     CheckEqual(U, '{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
@@ -1862,7 +1862,7 @@ var
     check(Length(JA2.E) = 0);
     Check(JA2.F = 0);
     J := RecordSaveJson(JA2, TypeInfo(TTestCustomJsonArray));
-    CheckEqual(J, '{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+    CheckEqual(J, '{"A":0,"B":0,"C":0,"D":null,"E":[],"F":null}');
     check(IsValidJson(J));
     JA2.A := 100;
     JA2.F := 1;
@@ -1879,22 +1879,22 @@ var
       '{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
     check(IsValidJson(J));
     X := JsonToXML(J, '');
-    Check(X =
-      '<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
+    CheckEqual(X,
+      '<A>100</A><B>0</B><C>0</C><D></D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
     RecordLoadJsonInPlace(JA, pointer(J), TypeInfo(TTestCustomJsonArray));
-    Check(RecordSave(JA, TypeInfo(TTestCustomJsonArray)) = RecordSave(JA2,
-      TypeInfo(TTestCustomJsonArray)));
+    Check(RecordSave(JA, TypeInfo(TTestCustomJsonArray)) =
+          RecordSave(JA2, TypeInfo(TTestCustomJsonArray)));
     J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
     check(IsValidJson(J));
     RecordLoadJsonInPlace(JA, UniqueRawUtf8(J), TypeInfo(TTestCustomJsonArray));
     U := RecordSaveJson(JA, TypeInfo(TTestCustomJsonArray));
     Check(length(JA.E) = 1);
-    CheckEqual(U, '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+    CheckEqual(U, '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":null}');
     check(IsValidJson(U));
     X := JsonToXML(U, '');
-    Check(X = '<A>0</A><B>0</B><C>0</C><D>null</D><E><E1>2</E1><E2>3</E2></E><F></F>');
+    Check(X = '<A>0</A><B>0</B><C>0</C><D></D><E><E1>2</E1><E2>3</E2></E><F></F>');
     X := JsonToXML('[1,2,"three"]');
-    Check(X =
+    CheckEqual(X,
       '<?xml version="1.0" encoding="UTF-8"?>'#$D#$A'<0>1</0><1>2</1><2>three</2>');
 
     SetLength(AA, 100);
@@ -3222,7 +3222,7 @@ begin
     TypeInfo(TTestCustomJsonRecord), __TTestCustomJsonRecord);
   U := RecordSaveJson(JR2, TypeInfo(TTestCustomJsonRecord));
   Check(IsValidJson(U));
-  CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":null}');
   U := RecordSaveJson(JR, TypeInfo(TTestCustomJsonRecord));
   Check(IsValidJson(U));
   CheckEqual(U, '{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');

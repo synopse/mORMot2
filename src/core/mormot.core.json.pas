@@ -7014,9 +7014,7 @@ begin
     begin // unescape the JSON content and write as UTF-8 escaped XML
       info.Json := Json;
       info.GetJsonField;
-      if info.Value = nil then
-        AddNull
-      else
+      if info.Value <> nil then // null or "" would store a void entry
       begin
         c := PInteger(info.Value)^ and $ffffff;
         if (c = JSON_BASE64_MAGIC_C) or
