@@ -440,6 +440,7 @@ type
     fLogFamily: TSynLogFamily;
     fLogLevel: TSynLogLevels;
     fServerTimestampCacheTix: cardinal;
+    fLogResponseMaxBytes: integer;
     fAcquireExecution: TRestAcquireExecutions;
     fPrivateGarbageCollector: TSynObjectList;
     fServerTimestampOffset: TDateTime;
@@ -653,6 +654,10 @@ type
     /// access to the associate TSynLog class events
     property LogLevel: TSynLogLevels
       read fLogLevel;
+    /// tune the InternalLogResponse() output maximum size
+    // - equals 2048 by default - maximum value is 4096
+    property LogResponseMaxBytes: integer
+      read fLogResponseMaxBytes write fLogResponseMaxBytes;
 
   {$ifndef PUREMORMOT2}
     // backward compatibility redirections to the homonymous IRestOrm methods
@@ -2068,8 +2073,8 @@ end;
 procedure TRest.InternalLogResponse(const aContent: RawByteString;
   const aContext: shortstring; Level: TSynLogLevel);
 begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
-  fLogFamily.Add.LogEscape(
-    Level, '%', [aContext], pointer(aContent), length(aContent), self);
+  fLogFamily.Add.LogEscape(Level, '%', [aContext],
+    pointer(aContent), length(aContent), self, fLogResponseMaxBytes);
 end;
 
 function TRest.Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
@@ -2153,7 +2158,8 @@ begin
   for cmd := Low(cmd) to high(cmd) do
     fAcquireExecution[cmd] := TRestAcquireExecution.Create;
   AcquireWriteMode := amLocked;
-  AcquireWriteTimeOut := 5000; // default 5 seconds
+  AcquireWriteTimeOut := 5000;  // default 5 seconds
+  fLogResponseMaxBytes := 2048; // for InternalLogResponse()
   SetLogClass(TSynLog);
   fRun := TRestRunThreads.Create(self);
 end;
