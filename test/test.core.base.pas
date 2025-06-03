@@ -4340,7 +4340,7 @@ begin
   check(a = '012345678910');
   for i := 11 to 150 do
     AppendShortCardinal(i, a);
-  CheckHash(a, $1CDCEE09, 'AppendShortCardinal');
+  CheckHash(a, $6C291F09, 'AppendShortCardinal');
   Check(TwoDigits(0) = '0');
   Check(TwoDigits(1) = '1');
   Check(TwoDigits(10) = '10');
