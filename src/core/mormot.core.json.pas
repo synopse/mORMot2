@@ -6400,6 +6400,19 @@ b64:    AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
   end;
 end;
 
+procedure TJsonWriter.AddEscapeBuffer(P: pointer; Len, MaxLen: PtrInt);
+begin
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  if (MaxLen > 0) and
+     (MaxLen > Len) then
+    Len := MaxLen;
+  if BEnd - B <= Len then // note: PtrInt(BEnd - B) could be < 0
+    FlushToStream;
+  B := PUtf8Char(EscapeBuffer(P, Len, PAnsiChar(B + 1), BEnd - B) + 1);
+end;
+
 procedure TJsonWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 var
   trailing, main, n: PtrUInt;
