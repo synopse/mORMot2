@@ -814,6 +814,7 @@ function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
 /// convert some text encoded as TUnixTime/TUnixMSTime 64-bit integer value or
 // double/COM floating point value into a TDateTime
 // - a used e.g. by _JL_DateTime from mormot.core.json to unserialize TDateTime
+// - P = nil or 'null' would be recognized as V = 0
 procedure UnixTimeOrDoubleToDateTime(P: PUtf8Char; Len: PtrInt; var V: TDateTime);
 
 /// convert some text encoded as a number into a TDateTime
@@ -3168,7 +3169,11 @@ procedure UnixTimeOrDoubleToDateTime(P: PUtf8Char; Len: PtrInt; var V: TDateTime
 var
   u64: QWord;
 begin
-  if ByteScanIndex(pointer(P), Len, ord('.')) >= 0 then
+  if (P = nil) or // null may also be WasString=false and P=nil
+     (Len <= 0) or
+     (PCardinal(P)^ = NULL_LOW) then
+    PInt64(@V)^ := 0 // void TDateTime
+  else if ByteScanIndex(pointer(P), Len, ord('.')) >= 0 then
     V := GetExtended(P) // obviously a floating point / COM double value
   else
   begin
