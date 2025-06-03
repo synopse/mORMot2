@@ -9518,26 +9518,31 @@ function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt;
 var
   l: PtrInt;
 begin
-  l := max - pos;
-  if len <= l then
-    l := len
-  else
-    l := Utf8TruncatedLength(source, len, l); // test only what is needed
-  if l <> 0 then
-    if IsValidUtf8Pas(pointer(source), l) then // AVX2 doesn't filter #0
-    begin
-      MoveFast(source^, txt[pos], l); // input is UTF-8 and can be copied directly
-      inc(pos, l); // we know that pos + l <= max
-      if l <> len  then
-        for l := Utf8TruncatedLength(pointer(txt), max, max - 3) to max - 2 do
-          txt[l] := '.';  // mark truncated, but keep valid UTF-8
-    end
+  if txt <> nil then
+  begin
+    l := max - pos;
+    if len <= l then
+      l := len
     else
-      pos := EscapeBuffer(source, l, pointer(txt + pos), max - pos) - txt;
-  result := pos;
-  if pos = max then
-    dec(pos);     // avoid buffer overflow
-  txt[pos] := #0; // always end with a #0
+      l := Utf8TruncatedLength(source, len, l); // test only what is needed
+    if l > 0 then
+      if IsValidUtf8Pas(pointer(source), l) then // AVX2 doesn't filter #0
+      begin
+        MoveFast(source^, txt[pos], l); // input is UTF-8 and can be copied directly
+        inc(pos, l); // we know that pos + l <= max
+        if l <> len  then
+          for l := Utf8TruncatedLength(pointer(txt), max, max - 3) to max - 2 do
+            txt[l] := '.';  // mark truncated, but keep valid UTF-8
+      end
+      else
+        pos := EscapeBuffer(source, l, pointer(txt + pos), max - pos) - txt;
+    result := pos;
+    if pos = max then
+      dec(pos);     // avoid buffer overflow
+    txt[pos] := #0; // always end with a #0
+  end
+  else
+    result := pos;
 end;
 
 function ContentToShort(const source: RawByteString): ShortString;
