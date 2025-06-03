@@ -1310,9 +1310,11 @@ type
     // - is slightly more optimized than Log(RawUtf8)
     procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
     /// call this method to add the content of a binary buffer with ASCII escape
-    // - will precompute up to 255 bytes of output before writing
-    procedure LogEscape(Level: TSynLogLevel; const Fmt: RawUtf8; const Args: array of const;
-      Data: pointer; DataLen: PtrInt; Instance: TObject);
+    // - will precompute up to TruncateLen (1024) bytes of output before writing
+    // with a hardcoded limit of 4KB text output
+    procedure LogEscape(Level: TSynLogLevel;
+      const ContextFmt: RawUtf8; const ContextArgs: array of const; Data: pointer;
+      DataLen: PtrInt; Instance: TObject; TruncateLen: PtrInt = 1024);
     /// allows to identify the current thread with a textual representation
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
     // - entry would also be replicated at the begining of any rotated log file
@@ -5333,23 +5335,25 @@ begin
   end;
 end;
 
-procedure TSynLog.LogEscape(Level: TSynLogLevel; const Fmt: RawUtf8;
-  const Args: array of const; Data: pointer; DataLen: PtrInt; Instance: TObject);
+procedure TSynLog.LogEscape(Level: TSynLogLevel; const ContextFmt: RawUtf8;
+  const ContextArgs: array of const; Data: pointer; DataLen: PtrInt;
+  Instance: TObject; TruncateLen: PtrInt);
 var
-  tmp: ShortString; // efficient local buffer
+  tmp: array[0..4095] of AnsiChar; // pre-render on local buffer (max 4KB)
+  tmps: ShortString absolute tmp;
 begin
   if (self = nil) or
      not (Level in fFamily.fLevel) then
     exit;
-  tmp[0] := #0;
-  if Fmt <> '' then
-    tmp[0] := AnsiChar(FormatBufferRaw(Fmt, @Args[0], length(Args),
-      @tmp[1], 200) - @tmp[1]);
-  AppendShort(' len=', tmp);
-  AppendShortCardinal(DataLen, tmp);
-  AppendShortChar(' ', @tmp);
-  ContentToShortAppend(Data, DataLen, tmp); // and makes #0 terminated
-  LogText(Level, @tmp[1], Instance);
+  tmps[0] := #0;
+  if ContextFmt <> '' then
+    FormatShort(ContextFmt, ContextArgs, tmps);
+  AppendShort(' len=', tmps);
+  AppendShortCardinal(DataLen, tmps);
+  AppendShortChar(' ', @tmps);
+  ContentAppend(Data, DataLen, ord(tmps[0]),
+    MinPtrInt(high(tmp) - ord(tmps[0]), TruncateLen), @tmp[ord(tmps[0])]);
+  LogText(Level, @tmp[1], Instance); // #0 ended
 end;
 
 {$STACKFRAMES OFF}
