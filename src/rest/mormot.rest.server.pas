@@ -232,7 +232,7 @@ type
     fSessionAccessRights: TOrmAccessRights; // fSession may be deleted meanwhile
     function GetInput(const ParamName: RawUtf8): variant;
     function GetInputOrVoid(const ParamName: RawUtf8): variant;
-    function GetInputNameIndex(const ParamName: RawUtf8): PtrInt;
+    function GetInputValue(const ParamName: RawUtf8): PRawUtf8;
     function GetInputExists(const ParamName: RawUtf8): boolean;
     function GetInputInt(const ParamName: RawUtf8): Int64;
     function GetInputDouble(const ParamName: RawUtf8): Double;
@@ -4185,52 +4185,73 @@ begin
 end;
 
 function TRestServerUriContext.GetInputIntOrVoid(const ParamName: RawUtf8): Int64;
+var
+  v: PRawUtf8;
 begin
-  result := GetInt64(pointer(GetInputUtf8OrVoid(ParamName)));
+  v := GetInputValue(ParamName);
+  if v = nil then
+    result := 0
+  else
+    result := GetInt64(pointer(v^));
 end;
 
 function TRestServerUriContext.GetInputHexaOrVoid(const ParamName: RawUtf8): cardinal;
 var
-  value: RawUtf8;
+  v: PRawUtf8;
 begin
-  value := GetInputUtf8OrVoid(ParamName);
-  if (length(value) <> 8) or
-     not HexDisplayToBin(pointer(value), @result, SizeOf(result)) then
+  v := GetInputValue(ParamName);
+  if (v = nil) or
+     (length(v^) <> 8) or
+     not HexDisplayToBin(pointer(v^), @result, SizeOf(result)) then
     result := 0;
 end;
 
 function TRestServerUriContext.GetInputDoubleOrVoid(const ParamName: RawUtf8): Double;
+var
+  v: PRawUtf8;
 begin
-  result := GetExtended(pointer(GetInputUtf8OrVoid(ParamName)));
+  v := GetInputValue(ParamName);
+  if v = nil then
+    result := 0
+  else
+    result := GetExtended(pointer(v^));
 end;
 
-function TRestServerUriContext.GetInputNameIndex(const ParamName: RawUtf8): PtrInt;
+function TRestServerUriContext.GetInputValue(const ParamName: RawUtf8): PRawUtf8;
 var
-  P: PRawUtf8;
+  n: integer;
 begin
   // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
   if (fInput = nil) and
      (fParameters <> nil) then
     FillInput;
-  P := pointer(fInput);
-  for result := 0 to (length(fInput) shr 1) - 1 do
-    if IdemPropNameU(ParamName, P^) then // efficiently inlined on FPC
-      exit
-    else
-      inc(P, 2);
-  result := -1;
+  result := pointer(fInput);
+  if result = nil then
+    exit;
+  n := (PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF) shr 1;
+  if n <> 0 then
+    repeat
+      if IdemPropNameU(ParamName, result^) then // efficiently inlined on FPC
+      begin
+        inc(result);  // return value = @fInput[i * 2 + 1]
+        exit;
+      end;
+      inc(result, 2); // go to next name = @fInput[i * 2]
+      dec(n);
+    until n = 0;
+  result := nil; // not found
 end;
 
 procedure TRestServerUriContext.GetInputByName(
   const ParamName, InputName: RawUtf8; var result: RawUtf8);
 var
-  i: PtrInt;
+  v: PRawUtf8;
 begin
-  i := GetInputNameIndex(ParamName);
-  if i < 0 then
+  v := GetInputValue(ParamName);
+  if v = nil then
     EParsingException.RaiseUtf8('%: missing Input%[%]',
       [self, InputName, ParamName]);
-  result := fInput[i * 2 + 1];
+  result := v^;
 end;
 
 function TRestServerUriContext.GetInputUtf8(const ParamName: RawUtf8): RawUtf8;
