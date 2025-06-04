@@ -3275,7 +3275,7 @@ const
 begin
   // InternalExecuteSoaByInterface has set ForceServiceResultAsJsonObject
   if ForceServiceResultAsJsonObjectWithoutResult then
-    WR.Add('{')
+    WR.AddDirect('{')
   else
     WR.AddShort(JSONSTART[ForceServiceResultAsJsonObject]);
 end;
@@ -3289,7 +3289,7 @@ const
 begin
   // InternalExecuteSoaByInterface has set ForceServiceResultAsJsonObject
   if ID = 0 then
-    WR.Add(JSONSEND_NOID[ForceServiceResultAsJsonObject])
+    WR.AddDirect(JSONSEND_NOID[ForceServiceResultAsJsonObject])
   else
   begin
     if ForceServiceResultAsJsonObjectWithoutResult then
@@ -3405,7 +3405,16 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
 var
   m: PtrInt;
   spi: TInterfaceMethodValueDirections;
-  tmp: ShortString;
+
+  procedure DoLog;
+  var
+    tmp: ShortString;
+  begin
+    Ansi7StringToShortString(fServiceMethod^.InterfaceDotMethodName, tmp);
+    ContentToShortAppend(pointer(fServiceParameters), fServiceParametersLen, tmp);
+    fLog.LogText(sllServiceCall, @tmp[1], Server);
+  end;
+
 begin
   // expects Service, ServiceParameters, ServiceMethod(Index) to be set
   m := fServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
@@ -3429,11 +3438,7 @@ begin
        (sllServiceCall in fServer.LogLevel) and
        (fServiceParametersLen > 2) and
        not (optNoLogInput in fServiceExecutionOptions) then
-    begin
-      Ansi7StringToShortString(fServiceMethod^.InterfaceDotMethodName, tmp);
-      ContentToShortAppend(pointer(fServiceParameters), fServiceParametersLen, tmp);
-      fLog.LogText(sllServiceCall, @tmp[1], Server);
-    end;
+      DoLog;
     // OnMethodExecute() callback event
     if Assigned(TServiceFactoryServer(Service).OnMethodExecute) then
       if not TServiceFactoryServer(Service).
