@@ -443,7 +443,7 @@ type
     fServerTimestampCacheTix: cardinal;
     fLogResponseMaxBytes: integer;
     fAcquireExecution: TRestAcquireExecutions;
-    fPrivateGarbageCollector: TSynObjectList;
+    fPrivateGarbageCollector: TSynObjectListLocked;
     fServerTimestampOffset: TDateTime;
     fServerTimestampCacheValue: TTimeLogBits;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
@@ -643,7 +643,7 @@ type
     /// a local "Garbage collector" list, for some classes instances which must
     // live during the whole TRestServer process
     // - is used internally by the class, but can be used for business code
-    property PrivateGarbageCollector: TSynObjectList
+    property PrivateGarbageCollector: TSynObjectListLocked
       read fPrivateGarbageCollector;
     /// access to the TSynLog class used for logging
     // - equals TSynLog by default - but you could change it to a custom class
@@ -2155,7 +2155,7 @@ var
 begin
   if PClass(self)^ = TRest then
     ERestException.RaiseUtf8('Abstract %.Create', [self]);
-  fPrivateGarbageCollector := TSynObjectList.Create;
+  fPrivateGarbageCollector := TSynObjectListLocked.Create;
   fModel := aModel;
   for cmd := Low(cmd) to high(cmd) do
     fAcquireExecution[cmd] := TRestAcquireExecution.Create;

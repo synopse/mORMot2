@@ -7275,8 +7275,7 @@ begin
   begin
     if aRemoveBan then
       exit;
-    fIPBan := TIPBan.Create;
-    fPrivateGarbageCollector.Add(fIPBan);
+    fPrivateGarbageCollector.AddOnceInto(TIPBan.Create, @fIPBan); // thread-safe
   end;
   if aRemoveBan then
     result := fIPBan.Delete(aIP)
@@ -7295,8 +7294,7 @@ begin
   begin
     if aRemoveWhite then
       exit;
-    fIPWhiteJwt := TIPBan.Create;
-    fPrivateGarbageCollector.Add(fIPWhiteJwt);
+    fPrivateGarbageCollector.AddOnceInto(TIPBan.Create, @fIPWhiteJwt);
   end;
   if aRemoveWhite then
     result := fIPWhiteJwt.Delete(aIP)
