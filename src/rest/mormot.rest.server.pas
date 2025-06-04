@@ -3027,10 +3027,12 @@ var
   method: TThreadMethod;
   tix, endtix: Int64;
   ms, current: cardinal;
-  exec: PRestAcquireExecution;
+  exec: TRestAcquireExecution;
 begin
-  exec := @fServer.fAcquireExecution[Command];
-  ms := exec^.LockedTimeOut;
+  if Command = execNone then
+    fServer.CheckAcquireExecutionCommand(Command, 'ExecuteCommand');
+  exec := fServer.fAcquireExecution[Command];
+  ms := exec.LockedTimeOut;
   if ms = 0 then
     ms := 10000; // never wait forever = 10 seconds max
   case Command of
@@ -3045,14 +3047,14 @@ begin
         // special behavior to handle transactions at writing
         endtix := TickCount64 + ms;
         while true do
-          if exec^.Safe.TryLockMS(ms, @fServer.fShutdownRequested) then
+          if exec.Safe^.TryLockMS(ms, @fServer.fShutdownRequested) then
             try
               current := TRestOrm(fServer.fOrmInstance).TransactionActiveSession;
               if (current = 0) or
                  (current = Session) then
               begin
                 // avoiding transaction mixups
-                if exec^.Mode = amLocked then
+                if exec.Mode = amLocked then
                 begin
                   ExecuteOrmWrite; // process within the obtained write mutex
                   exit;
@@ -3068,7 +3070,7 @@ begin
               end;
               ms := endtix - tix;
             finally
-              exec^.Safe.UnLock;
+              exec.Safe^.UnLock;
             end
           else
             begin
@@ -3077,23 +3079,20 @@ begin
             end;
         method := ExecuteOrmWrite;
       end;
-  else
-    raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
-      [ord(Command), self]); // RaiseUtf8() makes a Delphi compiler warning
   end;
-  if exec^.Mode = amBackgroundOrmSharedThread then
+  if exec.Mode = amBackgroundOrmSharedThread then
     if (Command = execOrmWrite) and
        (fServer.fAcquireExecution[execOrmGet].Mode = amBackgroundOrmSharedThread) then
       fCommand := execOrmGet; // both ORM read+write will share the read thread
-  case exec^.Mode of
+  case exec.Mode of
     amUnlocked:
       method;
     amLocked:
-      if exec^.Safe.TryLockMS(ms, @fServer.fShutdownRequested) then
+      if exec.Safe^.TryLockMS(ms, @fServer.fShutdownRequested) then
         try
           method;
         finally
-          exec^.Safe.UnLock;
+          exec.Safe^.UnLock;
         end
       else
         TimeOut;
@@ -3102,10 +3101,10 @@ begin
     amBackgroundThread,
     amBackgroundOrmSharedThread:
       begin
-        if exec^.Thread = nil then
-          exec^.Thread := fServer.Run.NewBackgroundThreadMethod('% % %',
+        if exec.Thread = nil then
+          exec.Thread := fServer.Run.NewBackgroundThreadMethod('% % %',
             [self, fServer.fModel.Root, ToText(Command)^]);
-        BackgroundExecuteThreadMethod(method, exec^.Thread);
+        BackgroundExecuteThreadMethod(method, exec.Thread);
       end;
   end;
 end;

@@ -91,11 +91,11 @@ type
     /// finalize the memory structure, and the associated background thread
     destructor Destroy; override;
   end;
-  PRestAcquireExecution = ^TRestAcquireExecution;
 
   /// define how a TRest class may execute its ORM and SOA operations
-  TRestAcquireExecutions =
-    array[TRestServerUriContextCommand] of TRestAcquireExecution;
+  // - by definition, [execNone] if no valid index
+  TRestAcquireExecutions = array[succ(low(TRestServerUriContextCommand)) ..
+    high(TRestServerUriContextCommand)] of TRestAcquireExecution;
 
   /// a genuine identifier for a given client connection on server side
   // - see also THttpServerConnectionID as defined in mormot.net.http: may map
@@ -449,6 +449,8 @@ type
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     procedure SetLogClass(aClass: TSynLogClass); virtual;
     /// wrapper methods to access fAcquireExecution[]
+    procedure CheckAcquireExecutionCommand(Cmd: TRestServerUriContextCommand;
+      const Context: ShortString);
     function GetAcquireExecutionMode(
       Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
     procedure SetAcquireExecutionMode(
@@ -2124,15 +2126,24 @@ begin
     fServerTimestampOffset := 0.000001; // retrieve server date/time only once
 end;
 
+procedure TRest.CheckAcquireExecutionCommand(Cmd: TRestServerUriContextCommand;
+  const Context: ShortString);
+begin
+  if not (Cmd in [low(fAcquireExecution) .. high(fAcquireExecution)]) then
+    ERestException.RaiseUtf8('Unexpected %.%(%)', [self, Context, ToText(Cmd)^]);
+end;
+
 function TRest.GetAcquireExecutionMode(
   Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
 begin
+  CheckAcquireExecutionCommand(Cmd, 'GetAcquireExecutionMode');
   result := fAcquireExecution[Cmd].Mode;
 end;
 
 procedure TRest.SetAcquireExecutionMode(
   Cmd: TRestServerUriContextCommand; Value: TRestServerAcquireMode);
 begin
+  CheckAcquireExecutionCommand(Cmd, 'SetAcquireExecutionMode');
   {$ifdef OSWINDOWS}
   if Assigned(ServiceSingle) and
      (Value = amMainThread) then
@@ -2146,12 +2157,14 @@ end;
 function TRest.GetAcquireExecutionLockedTimeOut(
   Cmd: TRestServerUriContextCommand): cardinal;
 begin
+  CheckAcquireExecutionCommand(Cmd, 'GetAcquireExecutionLockedTimeOut');
   result := fAcquireExecution[Cmd].LockedTimeOut;
 end;
 
 procedure TRest.SetAcquireExecutionLockedTimeOut(
   Cmd: TRestServerUriContextCommand; Value: cardinal);
 begin
+  CheckAcquireExecutionCommand(Cmd, 'SetAcquireExecutionLockedTimeOut');
   fAcquireExecution[Cmd].LockedTimeOut := Value;
 end;
 
@@ -2163,7 +2176,7 @@ begin
     ERestException.RaiseUtf8('Abstract %.Create', [self]);
   fPrivateGarbageCollector := TSynObjectListLocked.Create;
   fModel := aModel;
-  for cmd := Low(cmd) to high(cmd) do
+  for cmd := low(fAcquireExecution) to high(fAcquireExecution) do
     fAcquireExecution[cmd] := TRestAcquireExecution.Create;
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 5000;  // default 5 seconds
@@ -2191,7 +2204,7 @@ begin
     // abort any (unlikely) pending TRestBatch
     fOrm.AsyncBatchStop(nil);
   fRun.Shutdown; // notify ASAP
-  for cmd := Low(cmd) to high(cmd) do
+  for cmd := low(fAcquireExecution) to high(fAcquireExecution) do
     FreeAndNilSafe(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
   FreeAndNilSafe(fServices);
   FreeAndNilSafe(fRun); // after fAcquireExecution+fServices
