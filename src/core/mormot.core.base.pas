@@ -11720,6 +11720,7 @@ begin
   dec(Store.added); // caller should have tested that Size = Store.added > 0
 end;
 
+
 procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
 begin
   while size >= SizeOf(PtrInt) do
@@ -13273,7 +13274,7 @@ begin
   crc32tabInit(2197175160, crc32ctab); // crc32c() reversed polynom
   crc32tabInit(3988292384, crc32tab);  // crc32() = zlib's reversed polynom
   // setup minimalistic global functions - overriden by other core units
-  VariantClearSeveral     := @_VariantClearSeveral;
+  VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
   XorEntropyGetOsRandom256 := @_XorEntropyGetOsRandom256;
   ClassUnit := @_ClassUnit;

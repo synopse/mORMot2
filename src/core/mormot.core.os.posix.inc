@@ -1949,10 +1949,10 @@ begin
   end;
 end;
 
-{$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
+  {$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
   if (KernelRevision < $031100) or // introduced in Kernel 3.17
      __LinuxGetRandomFailed then
     exit;
@@ -1960,13 +1960,8 @@ begin
     result := true // "man getrandom" states to read up to 256 bytes in one call
   else
     __LinuxGetRandomFailed := true; // won't retry on syscall failure
+  {$endif HASGETRANDOM}
 end;
-{$else}
-function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
-begin
-  result := false;
-end;
-{$endif HASGETRANDOM}
 
 {$ifdef HASEVENTFD} // validated on Linux i386, x86_64 and aarch64
 const
@@ -3490,7 +3485,7 @@ end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
 procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
 begin
-  FillSystemRandom(@e, SizeOf(e), {allowblocking=}false);
+  FillSystemRandom(@e, SizeOf(e), {allowblocking=}false); // 256-bit
 end;
 
 const
