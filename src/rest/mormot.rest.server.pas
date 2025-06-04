@@ -3032,7 +3032,7 @@ procedure TRestServerUriContext.ExecuteCommand;
 
 var
   method: TThreadMethod;
-  tix, endtix: Int64;
+  endtix: Int64;
   ms, current: cardinal;
   exec: TRestAcquireExecution;
 begin
@@ -3054,36 +3054,36 @@ begin
         // special behavior to handle transactions at writing
         endtix := TickCount64 + ms;
         while true do
-          if exec.Safe^.TryLockMS(ms, @fServer.fShutdownRequested) then
-            try
-              current := TRestOrm(fServer.fOrmInstance).TransactionActiveSession;
-              if (current = 0) or
-                 (current = Session) then
+          if exec.Safe^.TryLockMS(ms, @fServer.fShutdownRequested, fTix64) then
+          try
+            current := TRestOrm(fServer.fOrmInstance).TransactionActiveSession;
+            if (current = 0) or
+               (current = Session) then
+            begin
+              // avoiding transaction mixups
+              if exec.Mode = amLocked then
               begin
-                // avoiding transaction mixups
-                if exec.Mode = amLocked then
-                begin
-                  ExecuteOrmWrite; // process within the obtained write mutex
-                  exit;
-                end;
-                break;   // will handle Mode<>amLocked below
-              end;
-              // if we reached here, there is a transaction on another session
-              tix := GetTickCount64; // not self.TickCount64 which is cached
-              if tix > endtix then
-              begin
-                TimeOut; // we were not able to acquire the transaction
+                ExecuteOrmWrite; // process within the obtained write mutex
                 exit;
               end;
-              ms := endtix - tix;
-            finally
-              exec.Safe^.UnLock;
-            end
-          else
+              break;   // will handle Mode<>amLocked below
+            end;
+            // if we reached here, there is a transaction on another session
+            fTix64 := GetTickCount64; // update TickCount64 cache
+            ms := endtix - fTix64;
+            if ms <= 0 then
             begin
-              TimeOut;
+              TimeOut; // we were not able to acquire the transaction
               exit;
             end;
+          finally
+            exec.Safe^.UnLock;
+          end
+        else
+          begin
+            TimeOut;
+            exit;
+          end;
         method := ExecuteOrmWrite;
       end;
   end;
