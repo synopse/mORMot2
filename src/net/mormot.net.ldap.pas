@@ -5646,11 +5646,8 @@ begin
 end;
 
 procedure TLdapClient.SetUnknownError(const fmt: RawUtf8; const args: array of const);
-var
-  msg: RawUtf8;
 begin
-  FormatUtf8(fmt, args, msg);
-  SetUnknownError(fmt);
+  SetUnknownError(FormatUtf8(fmt, args));
 end;
 
 function TLdapClient.Connect(DiscoverMode: TLdapClientConnect;
