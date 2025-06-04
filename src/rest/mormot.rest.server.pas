@@ -246,6 +246,8 @@ type
     function GetInputHexaOrVoid(const ParamName: RawUtf8): cardinal;
     function GetInputDoubleOrVoid(const ParamName: RawUtf8): Double;
     function GetInputUtf8OrVoid(const ParamName: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure RetrieveInputUtf8OrVoid(const ParamName: RawUtf8; var Value: RawUtf8);
     function GetInputStringOrVoid(const ParamName: RawUtf8): string;
     function GetResourceFileName: TFileName;
     procedure InternalSetTableFromTableIndex(Index: PtrInt); virtual;
@@ -4117,20 +4119,10 @@ begin
   P := fParameters;
   if (fInput <> nil) or
      (P = nil) then
-    // only do it once
-    exit;
+    exit; // only do it once
   n := 0;
   max := 0;
   repeat
-    if n >= max then
-    begin
-      if n >= MAX_INPUT * 2 then
-        EParsingException.RaiseUtf8(
-          'Security Policy: Accept up to % parameters for %.FillInput',
-          [MAX_INPUT, self]);
-      inc(max, NextGrow(max));
-      SetLength(fInput, max);
-    end;
     if IsSessionSignature(P) then // = IdemPChar(P, 'SESSION_SIGNATURE=')
     begin
       // don't include the TAuthSession signature into Input[]
@@ -4142,6 +4134,15 @@ begin
     else
     begin
       // regular name=value pair, to be decoded into Input[]
+      if n >= max then
+      begin
+        if n >= MAX_INPUT * 2 then
+          EParsingException.RaiseUtf8(
+            'Security Policy: Accept up to % parameters for %.FillInput',
+            [MAX_INPUT, self]);
+        inc(max, NextGrow(max));
+        SetLength(fInput, max);
+      end;
       P := UrlDecodeNextNameValue(P, fInput[n], fInput[n + 1]);
       if P = nil then
         break;
@@ -4261,35 +4262,41 @@ end;
 
 function TRestServerUriContext.GetInputUtf8OrVoid(
   const ParamName: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
 begin
-  i := GetInputNameIndex(ParamName);
-  if i < 0 then
-    result := ''
+  RetrieveInputUtf8OrVoid(ParamName, result);
+end;
+
+procedure TRestServerUriContext.RetrieveInputUtf8OrVoid(
+  const ParamName: RawUtf8; var Value: RawUtf8);
+var
+  v: PRawUtf8;
+begin
+  v := GetInputValue(ParamName);
+  if v = nil then
+    FastAssignNew(Value)
   else
-    result := fInput[i * 2 + 1];
+    Value := v^;
 end;
 
 function TRestServerUriContext.InputUtf8OrDefault(
   const ParamName, DefaultValue: RawUtf8): RawUtf8;
 var
-  i: PtrInt;
+  v: PRawUtf8;
 begin
-  i := GetInputNameIndex(ParamName);
-  if i < 0 then
+  v := GetInputValue(ParamName);
+  if v = nil then
     result := DefaultValue
   else
-    result := fInput[i * 2 + 1];
+    result := v^;
 end;
 
 function TRestServerUriContext.InputUtf8OrError(const ParamName: RawUtf8;
   out Value: RawUtf8; const ErrorMessageForMissingParameter: string): boolean;
 var
-  i: PtrInt;
+  v: PRawUtf8;
 begin
-  i := GetInputNameIndex(ParamName);
-  if i < 0 then
+  v := GetInputValue(ParamName);
+  if v = nil then
   begin
     if ErrorMessageForMissingParameter = '' then
       Error('%: missing ''%'' parameter', [self, ParamName])
@@ -4299,7 +4306,7 @@ begin
   end
   else
   begin
-    Value := fInput[i * 2 + 1];
+    Value := v^;
     result := true;
   end;
 end;
@@ -4315,7 +4322,7 @@ begin
   if (EnumType = nil) or
      (EnumType^.Kind <> rkEnumeration) then
     exit;
-  value := GetInputUtf8OrVoid(ParamName);
+  RetrieveInputUtf8OrVoid(ParamName, value);
   if value <> '' then
   begin
     int := GetInteger(pointer(value), err);
@@ -4337,30 +4344,30 @@ end;
 
 function TRestServerUriContext.GetInputString(const ParamName: RawUtf8): string;
 var
-  i: PtrInt;
+  v: PRawUtf8;
 begin
-  i := GetInputNameIndex(ParamName);
-  if i < 0 then
+  v := GetInputValue(ParamName);
+  if v = nil then
     EParsingException.RaiseUtf8('%: missing InputString[%]',
       [self, ParamName]);
-  Utf8ToStringVar(fInput[i * 2 + 1], result);
+  Utf8ToStringVar(v^, result);
 end;
 
 function TRestServerUriContext.GetInputStringOrVoid(
   const ParamName: RawUtf8): string;
 var
-  i: PtrInt;
+  v: PRawUtf8;
 begin
-  i := GetInputNameIndex(ParamName);
-  if i < 0 then
+  v := GetInputValue(ParamName);
+  if v = nil then
     result := ''
   else
-    Utf8ToStringVar(fInput[i * 2 + 1], result);
+    Utf8ToStringVar(v^, result);
 end;
 
 function TRestServerUriContext.GetInputExists(const ParamName: RawUtf8): boolean;
 begin
-  result := GetInputNameIndex(ParamName) >= 0;
+  result := GetInputValue(ParamName) <> nil;
 end;
 
 function TRestServerUriContext.GetInput(const ParamName: RawUtf8): variant;
@@ -4453,7 +4460,7 @@ begin
   if (result <> '') or
      (rsoAuthenticationUriDisable in Server.Options) then
     exit;
-  result := GetInputUtf8OrVoid('authenticationbearer');
+  RetrieveInputUtf8OrVoid('authenticationbearer', result);
   if result <> '' then
     fCall^.LowLevelBearerToken := result;
 end;
@@ -7816,7 +7823,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    name := Ctxt.InputUtf8OrVoid['findservice'];
+    Ctxt.RetrieveInputUtf8OrVoid('findservice', name);
     if name = '' then
     begin
       InternalStat(Ctxt, W);
