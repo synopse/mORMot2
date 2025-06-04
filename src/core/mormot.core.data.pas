@@ -421,6 +421,10 @@ type
     // - can optionally specify an item class for efficient JSON serialization
     constructor Create(aOwnObjects: boolean = true;
       aItemClass: TClass = nil); reintroduce; virtual;
+    /// add one TObject to the list and a variable slot, or release it
+    // - return true and store item into sharedslot if it is nil
+    // - return false and call item.Free if sharedslot <> nil
+    function AddOnceInto(item: TObject; sharedslot: PObject): boolean; virtual;
     /// delete one object from the list
     // - will also Free the item if OwnObjects was set, and dontfree is false
     procedure Delete(index: integer; dontfree: boolean = false); override;
@@ -504,6 +508,9 @@ type
   public
     /// add one item to the list using Safe.WriteLock
     function Add(item: pointer): PtrInt; override;
+    /// add one TObject to the list and a variable slot using Safe.WriteLock
+    // - can be used e.g. for thread-safe garbage collection of TObject instances
+    function AddOnceInto(item: TObject; sharedslot: PObject): boolean; override;
     /// delete all items of the list using Safe.WriteLock
     procedure Clear; override;
     /// delete all items of the list in reverse order, using Safe.WriteLock
@@ -3399,6 +3406,18 @@ begin
   inherited Create;
 end;
 
+function TSynObjectList.AddOnceInto(item: TObject; sharedslot: PObject): boolean;
+begin
+  result := sharedslot^ = nil;
+  if result then
+  begin
+    sharedslot^ := item; // atomic storage
+    inherited Add(item); // will own this instance
+  end
+  else
+    item.Free; // release of the unused transient instance (paranoid)
+end;
+
 procedure TSynObjectList.Delete(index: integer; dontfree: boolean);
 begin
   if cardinal(index) >= cardinal(fCount) then
@@ -3462,6 +3481,16 @@ begin
   Safe.WriteLock;
   try
     result := inherited Add(item);
+  finally
+    Safe.WriteUnLock;
+  end;
+end;
+
+function TSynObjectListLocked.AddOnceInto(item: TObject; sharedslot: PObject): boolean;
+begin
+  Safe.WriteLock;
+  try
+    result := inherited AddOnceInto(item, sharedslot);
   finally
     Safe.WriteUnLock;
   end;
