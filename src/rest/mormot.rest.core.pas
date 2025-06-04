@@ -1228,15 +1228,20 @@ type
     function Header(UpperName: PAnsiChar): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// wrap FindNameValue(InHead,UpperName) with a cache store
-    procedure HeaderOnce(var Store, Value: RawUtf8; UpperName: PAnsiChar);
+    procedure HeaderOnce(var Store, Dest: RawUtf8; UpperName: PAnsiChar);
     /// retrieve the "RemoteIP" value from the incoming HTTP header
-    procedure GetRemoteIP(var Value: RawUtf8);
+    procedure GetRemoteIP(var Dest: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve the "User-Agent" value from the incoming HTTP headers
-    procedure GetUserAgent(var Value: RawUtf8);
+    /// "RemoteIP" value from existing LowLevelRemoteIP but nil for '127.0.0.1'
+    // - won't scan InHead content, just check current LowLevelRemoteIP value
+    // - returns PUtf8Char and not RawUtf8 to avoid a try..finally e.g. on logging
+    function RemoteIPNotLocal: PUtf8Char;
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
-    procedure GetAuthenticationBearerToken(var Value: RawUtf8);
+    /// retrieve the "User-Agent" Dest from the incoming HTTP headers
+    procedure GetUserAgent(var Dest: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the "Authorization: Bearer <token>" Dest from incoming HTTP headers
+    procedure GetAuthenticationBearerToken(var Dest: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -1328,6 +1333,7 @@ type
     // - won't scan the incoming HTTP headers, but it is usually not needed
     // - returns a PUtf8Char and not a RawUtf8 to avoid a try..finally on logging
     function RemoteIPNotLocal: PUtf8Char;
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve the "User-Agent" value from the incoming HTTP headers
     property UserAgent: RawUtf8
       read GetUserAgent;
@@ -3730,36 +3736,44 @@ begin
   FindNameValue(InHead, UpperName, result);
 end;
 
-procedure TRestUriParams.HeaderOnce(var Store, Value: RawUtf8; UpperName: PAnsiChar);
+procedure TRestUriParams.HeaderOnce(var Store, Dest: RawUtf8; UpperName: PAnsiChar);
 begin
   if (Store = '') and
      (@self <> nil) then
   begin
-    FindNameValue(InHead, UpperName, Value);
-    if Value = '' then
+    FindNameValue(InHead, UpperName, Dest);
+    if Dest = '' then
       Store := NULL_STR_VAR // flag to ensure header is parsed only once
     else
-      Store := Value;
+      Store := Dest;
   end
   else if pointer(Store) = pointer(NULL_STR_VAR) then
-    Value := ''
+    Dest := ''
   else
-    Value := Store;
+    Dest := Store;
 end;
 
-procedure TRestUriParams.GetRemoteIP(var Value: RawUtf8);
+procedure TRestUriParams.GetRemoteIP(var Dest: RawUtf8);
 begin
-  HeaderOnce(LowLevelRemoteIP, Value, HEADER_REMOTEIP_UPPER);
+  HeaderOnce(LowLevelRemoteIP, Dest, HEADER_REMOTEIP_UPPER);
 end;
 
-procedure TRestUriParams.GetUserAgent(var Value: RawUtf8);
+function TRestUriParams.RemoteIPNotLocal: PUtf8Char;
 begin
-  HeaderOnce(LowLevelUserAgent, Value, 'USER-AGENT: ');
+  result := pointer(LowLevelRemoteIP); // usually already set
+  if (result <> nil) and
+     IsLocalHost(result) then // '127.x.x.x' or '::1'
+    result := nil;
 end;
 
-procedure TRestUriParams.GetAuthenticationBearerToken(var Value: RawUtf8);
+procedure TRestUriParams.GetUserAgent(var Dest: RawUtf8);
 begin
-  HeaderOnce(LowLevelBearerToken, Value, HEADER_BEARER_UPPER);
+  HeaderOnce(LowLevelUserAgent, Dest, 'USER-AGENT: ');
+end;
+
+procedure TRestUriParams.GetAuthenticationBearerToken(var Dest: RawUtf8);
+begin
+  HeaderOnce(LowLevelBearerToken, Dest, HEADER_BEARER_UPPER);
 end;
 
 
@@ -3804,10 +3818,8 @@ end;
 
 function TRestUriContext.RemoteIPNotLocal: PUtf8Char;
 begin
-  if (self <> nil) and
-     (fCall^.LowLevelRemoteIP <> '') and
-     (fCall^.LowLevelRemoteIP <> '127.0.0.1') then
-    result := pointer(fCall^.LowLevelRemoteIP)
+  if self <> nil then
+    result := fCall^.RemoteIPNotLocal
   else
     result := nil;
 end;

@@ -3415,7 +3415,7 @@ begin
     inherited Add(item); // will own this instance
   end
   else
-    item.Free; // release of the unused transient instance (paranoid)
+    item.Free; // release of the unused transient instance
 end;
 
 procedure TSynObjectList.Delete(index: integer; dontfree: boolean);
