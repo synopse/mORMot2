@@ -333,6 +333,12 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
   NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;
 
+/// check if Host is in 127.0.0.0/8 range (e.g. cLocalhost or c6Localhost)
+// - warning: Host should be not nil
+// - would detect both IPv4 '127.x.x.x' pattern and plain IPv6 '::1' constant
+function IsLocalHost(Host: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 
 { ****************** Gather Operating System Information }
 
@@ -4411,7 +4417,7 @@ type
     // !   begin
     // !     rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
     // !     try
-    // !       Add(value);
+    // !       Add(value); // safely modify the shared content
     // !     finally
     // !       rwlock.WriteUnLock;
     // !     end;
@@ -4431,7 +4437,7 @@ type
     // - typical usage is the following:
     // ! rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
     // ! try
-    // !   Add(value);
+    // !   Add(value); // safely modify the shared content
     // ! finally
     // !   rwlock.WriteUnLock;
     // ! end;
@@ -6081,45 +6087,6 @@ begin
   P := S;
 end;
 
-procedure AppendKb(Size: Int64; var Dest: ShortString; WithSpace: boolean);
-const
-  _U: array[1..5] of AnsiChar = 'KMGTE';
-var
-  u: PtrInt;
-  b: Int64;
-begin
-  if Size < 0 then
-    exit;
-  u := 0;
-  b := 1 shl 10;
-  repeat
-    if Size < b - (b shr 3) then
-      break;
-    b := b shl 10;
-    inc(u);
-  until u = high(_u);
-  Size := (Size * 10000) shr (u * 10);
-  SimpleRoundTo2DigitsCurr64(Size);
-  AppendShortCurr64(Size, Dest, 1);
-  if WithSpace then
-    AppendShortChar(' ', @Dest);
-  if u <> 0 then
-    AppendShortChar(_U[u], @Dest);
-  AppendShortChar('B', @Dest);
-end;
-
-function KB(Size: Int64): TShort16;
-begin
-  result[0] := #0;
-  AppendKb(Size, result, {withspace=}true);
-end;
-
-function KBNoSpace(Size: Int64): TShort16;
-begin
-  result[0] := #0;
-  AppendKb(Size, result, {withspace=}false);
-end;
-
 {$ifdef ISDELPHI} // missing convenient RTL function in Delphi
 function TryStringToGUID(const s: string; var uuid: TGuid): boolean;
 begin
@@ -6162,6 +6129,27 @@ begin
   tmp[0] := #0;
   AppendShortUuid(u, tmp); // may call mormot.core.text
   FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function KB(Size: Int64): TShort16;
+begin
+  result[0] := #0;
+  AppendKb(Size, result, {withspace=}true);
+end;
+
+function KBNoSpace(Size: Int64): TShort16;
+begin
+  result[0] := #0;
+  AppendKb(Size, result, {withspace=}false);
+end;
+
+function IsLocalHost(Host: PUtf8Char): boolean;
+var
+  c: cardinal;
+begin
+  c := PCardinal(Host)^;
+  result := (c = ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24) or
+            (c = ord(':') + ord(':') shl 8 + ord('1') shl 16); // c6Localhost
 end;
 
 
@@ -7760,6 +7748,32 @@ begin
     result := false;
 end;
 
+procedure AppendKb(Size: Int64; var Dest: ShortString; WithSpace: boolean);
+const
+  _U: array[1..5] of AnsiChar = 'KMGTE';
+var
+  u: PtrInt;
+  b: Int64;
+begin
+  if Size < 0 then
+    exit;
+  u := 0;
+  b := 1 shl 10;
+  repeat
+    if Size < b - (b shr 3) then
+      break;
+    b := b shl 10;
+    inc(u);
+  until u = high(_u);
+  Size := (Size * 10000) shr (u * 10);
+  SimpleRoundTo2DigitsCurr64(Size);
+  AppendShortCurr64(Size, Dest, 1);
+  if WithSpace then
+    AppendShortChar(' ', @Dest);
+  if u <> 0 then
+    AppendShortChar(_U[u], @Dest);
+  AppendShortChar('B', @Dest);
+end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
