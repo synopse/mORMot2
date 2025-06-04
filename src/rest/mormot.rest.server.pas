@@ -1007,7 +1007,8 @@ type
     fOptions: TRestServerAuthenticationOptions;
     fAlgoName: RawUtf8;
     // GET ModelRoot/auth?UserName=...&Session=... -> release session
-    function AuthSessionRelease(Ctxt: TRestServerUriContext): boolean;
+    function AuthSessionRelease(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean;
     /// retrieve an User instance from its logon name
     // - should return nil if not found
     // - this default implementation will retrieve it from ORM, and
@@ -1050,7 +1051,8 @@ type
     // class to try implementing the content
     // - Ctxt.Parameters has been tested to contain an UserName=... value
     // - method execution is protected by TRestServer.Sessions.WriteLock
-    function Auth(Ctxt: TRestServerUriContext): boolean; virtual; abstract;
+    function Auth(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean; virtual; abstract;
     /// called by the Server to check if the execution context match a session
     // - returns a session instance corresponding to the remote request, and
     // fill Ctxt.Session* members according to in-memory session information
@@ -1177,7 +1179,8 @@ type
     // $ GET ModelRoot/auth?UserName=...&Session=...
     // - for a way of computing SHA-256 in JavaScript, see for instance
     // @http://www.webtoolkit.info/javascript-sha256.html
-    function Auth(Ctxt: TRestServerUriContext): boolean; override;
+    function Auth(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean; override;
   end;
 
   /// mORMot weak RESTful authentication scheme
@@ -1193,7 +1196,8 @@ type
     // $ GET ModelRoot/auth?UserName=...
     // $ -> if the specified user name exists, will open the corresponding
     // $    session and return 'SessionID+HexaSessionPrivateKey'
-    function Auth(Ctxt: TRestServerUriContext): boolean; override;
+    function Auth(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean; override;
   end;
 
   /// abstract class for implementing HTTP authentication using cookies
@@ -1249,7 +1253,8 @@ type
     /// handle the Auth RESTful method with HTTP Basic
     // - will first return HTTP_UNAUTHORIZED (401), then expect user and password
     // to be supplied as incoming "Authorization: Basic ...." headers
-    function Auth(Ctxt: TRestServerUriContext): boolean; override;
+    function Auth(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean; override;
   end;
 
   {$ifdef DOMAINRESTAUTH}
@@ -1287,7 +1292,8 @@ type
     // - to be called in a two pass algorithm, used to cypher the password
     // - the client-side logged user will be identified as valid, according
     // to a Windows SSPI API secure challenge
-    function Auth(Ctxt: TRestServerUriContext): boolean; override;
+    function Auth(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean; override;
   end;
 
   {$endif DOMAINRESTAUTH}
@@ -4975,20 +4981,17 @@ begin
 end;
 
 function TRestServerAuthentication.AuthSessionRelease(
-  Ctxt: TRestServerUriContext): boolean;
+  Ctxt: TRestServerUriContext; const aUserName: RawUtf8): boolean;
 var
-  uname: RawUtf8;
   sessid: cardinal;
   ndx: PtrInt;
   s: TAuthSession;
 begin
   // fServer.Auth() method-based service made fServer.Sessions.Safe.WriteLock
   result := false;
-  if (fServer.fSessions = nil) or
+  if (aUserName = '') or
+     (fServer.fSessions = nil) or
      not fServer.fHandleAuthentication then
-    exit;
-  uname := Ctxt.InputUtf8OrVoid['UserName'];
-  if uname = '' then
     exit;
   sessid := Ctxt.InputIntOrVoid['Session'];
   if sessid = 0 then
@@ -5000,7 +5003,7 @@ begin
   s := RetrieveSession(Ctxt); // parse signature
   if (s <> nil) and
      (sessid = s.ID) and
-     (s.User.LogonName = uname) then
+     (s.User.LogonName = aUserName) then
   begin
     Ctxt.fAuthSession := nil; // avoid GPF
     if fServer.LockedSessionFind(sessid, @ndx) = s then
@@ -5334,33 +5337,29 @@ end;
 
 { TRestServerAuthenticationDefault }
 
-function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerUriContext): boolean;
+function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerUriContext;
+  const aUserName: RawUtf8): boolean;
 var
-  uname, pwd, nonce: RawUtf8;
-  usr: TAuthUser;
-  os: TOperatingSystemVersion;
-begin
-  result := true;
-  if AuthSessionRelease(Ctxt) then
-    exit;
-  uname := Ctxt.InputUtf8OrVoid['UserName'];
-  nonce := Ctxt.InputUtf8OrVoid['ClientNonce'];
-  if (uname <> '') and
-     (length(nonce) > 32) then
+  nonce: PRawUtf8;
+
+  procedure DoAuthWithNonce;
+  var
+    pwd: RawUtf8;
+    usr: TAuthUser;
+    os: TOperatingSystemVersion;
   begin
-    // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
-    usr := GetUser(Ctxt, uname);
+    usr := GetUser(Ctxt, aUserName);
     if usr <> nil then
     try
       // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
-      if (length(nonce) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
-         (nonce[9] = '_') and
-         HexDisplayToBin(pointer(nonce), @os, SizeOf(os)) and
+      if (length(nonce^) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
+         (nonce^[9] = '_') and
+         HexDisplayToBin(pointer(nonce^), @os, SizeOf(os)) and
          (os.os <= high(os.os)) then
         Ctxt.fSessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
-      pwd := Ctxt.InputUtf8OrVoid['Password'];
-      if CheckPassword(Ctxt, usr, nonce, pwd) then
+      Ctxt.RetrieveInputUtf8OrVoid('Password', pwd);
+      if CheckPassword(Ctxt, usr, nonce^, pwd) then
       begin
         Ctxt.InputRemoveFromUri('PASSWORD='); // anti-forensic
         // setup a new TAuthSession
@@ -5374,10 +5373,26 @@ begin
     end
     else
       Ctxt.AuthenticationFailed(afUnknownUser);
-  end
-  else if uname <> '' then
+  end;
+
+  procedure DoAuthReturnNonce;
+  begin
+    Ctxt.Results([CurrentNonce(Ctxt)]);
+  end;
+
+begin
+  result := true;
+  if AuthSessionRelease(Ctxt, aUserName) then
+    exit;
+  nonce := Ctxt.GetInputValue('ClientNonce');
+  if (aUserName <> '') and
+     (nonce <> nil) and
+     (length(nonce^) > 32) then
+    // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
+    DoAuthWithNonce
+  else if aUserName <> '' then
     // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
-    Ctxt.Results([CurrentNonce(Ctxt)])
+    DoAuthReturnNonce
   else
     // parameters does not match any expected layout -> try next authentication
     result := false;
@@ -5401,21 +5416,18 @@ end;
 
 { TRestServerAuthenticationNone }
 
-function TRestServerAuthenticationNone.Auth(Ctxt: TRestServerUriContext): boolean;
+function TRestServerAuthenticationNone.Auth(Ctxt: TRestServerUriContext;
+  const aUserName: RawUtf8): boolean;
 var
-  uname: RawUtf8;
   usr: TAuthUser;
 begin
-  uname := Ctxt.InputUtf8OrVoid['UserName'];
-  if uname = '' then
-  begin
-    result := false; // let's try another TRestServerAuthentication class
+  result := aUserName <> '';
+  if not result then // let's try another TRestServerAuthentication class
     exit;
-  end;
-  result := true; // this kind of weak authentication avoid stronger ones
-  if AuthSessionRelease(Ctxt) then
+  // keep result = true: this kind of weak authentication avoid stronger ones
+  if AuthSessionRelease(Ctxt, aUserName) then
     exit;
-  usr := GetUser(Ctxt, uname);
+  usr := GetUser(Ctxt, aUserName);
   if usr = nil then
     Ctxt.AuthenticationFailed(afUnknownUser)
   else
@@ -5508,15 +5520,16 @@ begin
     end;
 end;
 
-function TRestServerAuthenticationHttpBasic.Auth(Ctxt: TRestServerUriContext): boolean;
+function TRestServerAuthenticationHttpBasic.Auth(Ctxt: TRestServerUriContext;
+  const aUserName: RawUtf8): boolean;
 var
   usrpwd, usr, pwd: RawUtf8;
   U: TAuthUser;
   sess: TAuthSession;
 begin
   result := false; // allow other schemes to check this request
-  if Ctxt.InputExists['UserName'] then
-    exit;
+  if aUserName <> '' then
+    exit; // no username=... parameter but stored in the BASIC auth header
   result := true; // this authentication method is exclusive to any other
   usrpwd := Ctxt.InHeader['Authorization'];
   if IdemPChar(pointer(usrpwd), 'BASIC ') then
@@ -5604,11 +5617,12 @@ end;
 // maintain a list of pending contexts in fSspiAuthContext[] for NTLM only
 // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-sip/96a33a84-36cb-41dc-a630-f0c42820ec16
 
-function TRestServerAuthenticationSspi.Auth(Ctxt: TRestServerUriContext): boolean;
+function TRestServerAuthenticationSspi.Auth(Ctxt: TRestServerUriContext;
+  const aUserName: RawUtf8): boolean;
 var
   i, ndx: PtrInt;
-  username, indataenc: RawUtf8;
-  ticks: Int64;
+  usr, indataenc: RawUtf8;
+  tix: Int64;
   connectionID: TRestConnectionID;
   browserauth: boolean;
   outdata: RawByteString;
@@ -5616,9 +5630,9 @@ var
   session: TAuthSession;
 begin
   // GET ModelRoot/auth?username=...&data=... -> SSPI/GSSAPI auth
-  result := AuthSessionRelease(Ctxt);
+  result := AuthSessionRelease(Ctxt, aUserName);
   if result or
-     not Ctxt.InputExists['username'] or
+     (aUserName = '') or
      not Ctxt.InputExists['Data'] then
     exit;
   // use connectionID to find authentication session
@@ -5641,9 +5655,9 @@ begin
   end;
   // SSPI authentication
   // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
-  ticks := Ctxt.TickCount64 - 30000; // tokens last for 30 seconds
-  for i := fSspiAuthContextCount - 1  downto 0 do
-    if ticks > fSspiAuthContext[i].CreatedTick64 then
+  tix := Ctxt.TickCount64 - 30000; // tokens last for 30 seconds
+  for i := fSspiAuthContextCount - 1  downto 0 do // downwards for Delete()
+    if tix > fSspiAuthContext[i].CreatedTick64 then
     begin
       FreeSecContext(fSspiAuthContext[i]);
       fSspiAuthContexts.Delete(i);
@@ -5680,16 +5694,16 @@ begin
     exit;
   end;
   // 2nd call: user was authenticated -> release used context
-  ServerSspiAuthUser(fSspiAuthContext[ndx], username);
+  ServerSspiAuthUser(fSspiAuthContext[ndx], usr);
   if sllUserAuth in fServer.fLogLevel then
     fServer.InternalLog('% Authentication success for %',
-      [SecPackageName(fSspiAuthContext[ndx]), username], sllUserAuth);
+      [SecPackageName(fSspiAuthContext[ndx]), usr], sllUserAuth);
   // now client is authenticated -> create a session for aUserName
   // and send back outdata
   try
-    if username = '' then
+    if usr = '' then
       exit;
-    user := GetUser(Ctxt,username);
+    user := GetUser(Ctxt, usr);
     if user <> nil then
     try
       user.PasswordHashHexa := ''; // override with context
@@ -7744,8 +7758,7 @@ begin
         // detect 'Content-type: !STATICFILE' as first header
         outcomingfile := (length(Call.OutHead) >= 25) and
                          (Call.OutHead[15] = '!') and
-                         IdemPChar(pointer(Call.OutHead),
-                           STATICFILE_CONTENT_TYPE_HEADER_UPPPER)
+          IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER)
       else
         // handle Call.OutBody=''
         if (Call.OutStatus = HTTP_SUCCESS) and
@@ -7847,18 +7860,31 @@ begin
   end;
 end;
 
+const
+  _NIL: pointer = nil; // so that PRawUtf8^ = ''
+
 procedure TRestServer.Auth(Ctxt: TRestServerUriContext);
 var
-  i: PtrInt;
+  n: integer;
+  usr: PRawUtf8;
+  a: ^TRestServerAuthentication;
 begin
   if fSessionAuthentication = nil then
     exit;
+  usr := Ctxt.GetInputValue('UserName');
+  if usr = nil then
+    usr := @_NIL;
   fSessions.Safe.WriteLock;
   try
-    for i := 0 to length(fSessionAuthentication) - 1 do
-      if fSessionAuthentication[i].Auth(Ctxt) then
+    a := pointer(fSessionAuthentication);
+    n := PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF;
+    repeat
+      if a^.Auth(Ctxt, usr^) then
         // found an authentication, which may be successful or not
         break;
+      inc(a);
+      dec(n);
+    until n = 0;
   finally
     fSessions.Safe.WriteUnLock;
   end;
