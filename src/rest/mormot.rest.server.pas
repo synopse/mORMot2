@@ -253,7 +253,6 @@ type
     procedure InternalExecuteSoaByInterfaceComputeResult;
     procedure ComputeStatsAfterCommand;
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); override;
-    function IsRemoteIPBanned: boolean; // as method to avoid temp IP string
     procedure OrmGetNoTable(params: PUtf8Char);
     procedure OrmGetTableID;
     procedure OrmGetTable(params: PUtf8Char);
@@ -2974,7 +2973,7 @@ begin
             if Assigned(fLog) and
                (sllUserAuth in Server.fLogLevel) and
                (s.RemoteIP <> '') and
-               (s.RemoteIP <> '127.0.0.1') then
+               not IsLocalHost(pointer(s.RemoteIP)) then
               fLog.Log(sllUserAuth, '%/% %',
                 [s.User.LogonName, s.ID, s.RemoteIP], self);
             exit;
@@ -4416,17 +4415,6 @@ begin
   end;
 end;
 
-function TRestServerUriContext.IsRemoteIPBanned: boolean;
-begin
-  if Server.fIPBan.Exists(fCall^.LowLevelRemoteIP) then
-  begin
-    Error('Banned IP %', [fCall^.LowLevelRemoteIP]);
-    result := false;
-  end
-  else
-    result := true;
-end;
-
 class procedure TRestServerUriContext.UriComputeRoutes(
   Router: TRestRouter; Server: TRestServer);
 begin
@@ -4455,9 +4443,8 @@ begin
   if result and
      (Server <> nil) and
      (Server.fIPWhiteJwt <> nil) and
-     not Server.fIPWhiteJwt.Exists(fCall^.LowLevelRemoteIP) and
-     (fCall^.LowLevelRemoteIP <> '') and
-     (fCall^.LowLevelRemoteIP <> '127.0.0.1') then
+     (fCall^.RemoteIPNotLocal <> nil) and
+     not Server.fIPWhiteJwt.Exists(fCall^.LowLevelRemoteIP) then
   begin
     Error('Invalid IP [%]', [fCall^.LowLevelRemoteIP], HTTP_FORBIDDEN);
     result := false;
@@ -7619,6 +7606,7 @@ begin
 end;
 
 procedure TRestServer.Uri(var Call: TRestUriParams);
+// this is the main server-side REST processing method
 var
   ctxt: TRestServerUriContext;
   node: TRestTreeNode;
@@ -7626,14 +7614,21 @@ var
   tix32: cardinal;
   outcomingfile: boolean;
 begin
+  // 1. reject ASAP if not worth processing
   if fShutdownRequested then
   begin
-    call.OutStatus := HTTP_UNAVAILABLE; // too late!
+    Call.OutStatus := HTTP_UNAVAILABLE; // too late!
     exit;
   end;
-  // 1. pre-request preparation
-  if fRouter = nil then
-    ComputeRoutes; // thread-safe (re)initialize once if needed
+  if (fIPBan <> nil) and
+     (Call.RemoteIPNotLocal <> nil) and
+     fIPBan.Exists(Call.LowLevelRemoteIP) then
+  begin
+    fLogClass.Add.Log(sllServer, 'Uri: banned %', [Call.LowLevelRemoteIP], self);
+    Call.OutStatus := HTTP_TEAPOT; // I'm a teapot!
+    exit;
+  end;
+  // 2. pre-request callback
   if Assigned(OnStartUri) then
   begin
     Call.OutStatus := OnStartUri(Call);
@@ -7644,25 +7639,21 @@ begin
       exit;
     end;
   end;
-  // 2. request initialization
+  // 3. request initialization
+  if fRouter = nil then
+    ComputeRoutes; // thread-safe (re)initialize once if needed
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   ctxt := fServicesRouting.Create;
   try
     ctxt.Prepare(self, Call);
-    if (fIPBan <> nil) and
-       ctxt.IsRemoteIPBanned then
-    begin
-      ctxt.Error('Banned IP', HTTP_TEAPOT); // not worth looking at
-      exit;
-    end;
-    // 3. setup the statistics
+    // 4. setup the statistics
     if StatLevels <> [] then
     begin
       if ctxt.fMicroSecondsStart = 0 then
         QueryPerformanceMicroSeconds(ctxt.fMicroSecondsStart); // get from OS
       fStats.AddCurrentRequestCount(1);
     end;
-    // 4. decode request URI and validate input
+    // 5. decode request URI and validate input
     fRouterSafe.ReadLock;
     node := fRouter.Lookup(ctxt);
     fRouterSafe.ReadUnLock;
@@ -7680,7 +7671,7 @@ begin
             not IsValidUtf8NotVoid(Call.InBody) then // may use AVX2
       ctxt.Error('Expects valid UTF-8 input')
     else
-    // 5. handle security
+    // 6. handle security
     if (rsoSecureConnectionRequired in fOptions) and
        (ctxt.MethodIndex <> fPublishedMethodTimestampIndex) and
        not (llfSecured in Call.LowLevelConnectionFlags) then
@@ -7701,7 +7692,7 @@ begin
              // HTTPS does not authenticate by itself, WebSockets does
              not (llfHttps in Call.LowLevelConnectionFlags)) or
             ctxt.AuthenticationCheck(fJwtForUnauthenticatedRequest) then
-    // 6. call appropriate ORM / SOA commands in fAcquireExecution[] context
+    // 7. call appropriate ORM / SOA commands in fAcquireExecution[] context
     try
       if (not Assigned(OnBeforeUri)) or
          OnBeforeUri(ctxt) then
@@ -7715,7 +7706,7 @@ begin
           else
             ctxt.Error(E, '', [], HTTP_SERVERERROR);
     end;
-    // 7. return expected result to the client
+    // 8. return expected result to the client
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
       if ctxt.fUriSessionSignaturePos > 0 then // remove session_signature=...
@@ -7741,7 +7732,7 @@ begin
     else if Call.OutBody = '' then // OutStatus is an error code
         // if no custom error message, compute it now as JSON
         ctxt.Error(ctxt.CustomErrorMsg, Call.OutStatus);
-    // 8. compute returned ORM InternalState indicator
+    // 9. compute returned ORM InternalState indicator
     if (fOptions * [rsoNoInternalState, rsoNoTableURI] <> []) and
        (ctxt.Method <> mSTATE) then
       // reduce headers verbosity
@@ -7764,13 +7755,13 @@ begin
       ctxt.Error('Unsafe HTTP header rejected [%]',
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally
-    // 9. gather statistics and log execution
+    // 10. gather statistics and log execution
     if StatLevels <> [] then
       ctxt.ComputeStatsAfterCommand;
     if (ctxt.fLog <> nil) and
        (fLogLevel * [sllServer, sllServiceReturn] <> []) then
       ctxt.LogFromContext;
-    // 10. finalize execution context
+    // 11. finalize execution context
     if Assigned(OnAfterUri) then
       try
         OnAfterUri(ctxt);
@@ -7779,7 +7770,7 @@ begin
     tix := ctxt.TickCount64; // retrieve the (cached) value before Free
     ctxt.Free;
   end;
-  // 11. trigger post-request periodic process
+  // 12. trigger post-request periodic process
   tix32 := tix shr 10;
   if tix32 <> fSessionsDeprecatedTix then
     // check deprecated sessions every second
