@@ -34,6 +34,7 @@ uses
   mormot.core.perf,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.log,
   mormot.core.threads,
   mormot.core.interfaces,
   mormot.db.core,
@@ -153,6 +154,7 @@ type
     fImplementationClassKind: (
       ickBlank, ickPersistent, ickInjectable, ickInjectableRest,
       ickFromInjectedResolver, ickFake);
+    fCanLog: boolean;
     fImplementationClassInterfaceEntry: PInterfaceEntry;
     fSharedInterface: IInterface;
     fBackgroundThread: TSynBackgroundThreadMethod;
@@ -354,18 +356,18 @@ type
   TServiceContainerServer = class(TServiceContainerClientAbstract)
   protected
     fRestServer: TRestServer; // set by Create := fOwner as TRestServer
-    fPublishSignature: boolean;
     fConnectionID: TRestConnectionID;
     fFakeCallbacks: TSynObjectListLocked; // TInterfacedObjectFakeServer instances
     fOnCallbackReleasedOnClientSide: TOnCallbackReleased;
     fOnCallbackReleasedOnServerSide: TOnCallbackReleased;
-    fCallbackOptions: TServiceCallbackOptions;
     fCallbacks: array of record
       Service: TInterfaceFactory;
       Arg: PInterfaceMethodArgument;
     end;
     fRecordVersionCallback: array of IServiceRecordVersionCallbackDynArray;
     fCallbackNamesSorted: TRawUtf8DynArray;
+    fPublishSignature: boolean;
+    fCallbackOptions: TServiceCallbackOptions;
     fSessionTimeout: cardinal;
     procedure ClearServiceList; override;
     function AddServiceInternal(aService: TServiceFactory): PtrInt; override;
@@ -599,6 +601,7 @@ begin
     EServiceException.RaiseUtf8(
       '%.Create: I% URI already exposed by %.% published method',
       [self, InterfaceUri, fRestServer, InterfaceUri]);
+  fCanLog := not IsEqualGuid(fInterface.InterfaceGuid^, ISynLogCallback);
   fImplementationClass := aImplementationClass;
   if fImplementationClass.InheritsFrom(TInterfacedObjectFake) then
   begin
@@ -1023,8 +1026,7 @@ begin
 end;
 
 function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
-  var Inst: TServiceFactoryServerInstance;
-  aMethodIndex, aSession: integer): integer;
+  var Inst: TServiceFactoryServerInstance; aMethodIndex, aSession: integer): integer;
 
   procedure AddNew;
   var
@@ -1604,10 +1606,9 @@ type
     fLowLevelConnectionOpaque: PRestServerConnectionOpaque;
     fService: TServiceFactoryServer;
     fReleasedOnClientSide: boolean;
+    fRaiseExceptionOnInvokeError: boolean;
     fFakeInterface: pointer;
     fOpaque: pointer;
-    fRaiseExceptionOnInvokeError: boolean;
-    function CanLog: boolean;
     function CallbackInvoke(const aMethod: TInterfaceMethod;
       const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
       aFakeID: PInterfacedObjectFakeID;
@@ -1651,11 +1652,6 @@ begin
   inherited Destroy;
 end;
 
-function TInterfacedObjectFakeServer.CanLog: boolean;
-begin
-  result := not IdemPropNameU(fFactory.InterfaceRtti.Name, 'ISynLogCallback');
-end;
-
 function TInterfacedObjectFakeServer.CallbackInvoke(
   const aMethod: TInterfaceMethod; const aParams: RawUtf8;
   aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
@@ -1676,7 +1672,7 @@ begin
   if fReleasedOnClientSide then
   begin
     // there is no client side to call any more
-    if CanLog then
+    if fService.fCanLog then
       fServer.InternalLog('%.CallbackInvoke: % instance has been released on ' +
         'the client side, so I% callback notification was NOT sent', [self,
         fFactory.InterfaceRtti.Name, aMethod.InterfaceDotMethodName], sllWarning);
@@ -1971,7 +1967,7 @@ begin
       [PtrInt(PtrUInt(fake.fFakeInterface)), fake.Factory.InterfaceName], params);
     Ctxt.ServiceParameters := pointer(params); // keep ServiceParametersLen=0
     withlog := (sllDebug in fRestServer.LogLevel) and
-               fake.CanLog; // before ExcuteMethod which may free fake instance
+               fake.fService.fCanLog; // before ExecuteMethod (may free instance)
     fake._AddRef; // ExecuteMethod() calls fake._Release on its parameter
     fake.fService.ExecuteMethod(Ctxt);
     if withlog then

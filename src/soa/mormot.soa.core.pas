@@ -661,11 +661,10 @@ type
   TServiceContainer = class(TInterfaceResolverInjected)
   protected
     fOwner: TInterfaceResolver; // is a TRest instance
-    // list of services ['Calculator',...]
-    fInterface: TServiceContainerInterfaces;
+    fInterface: TServiceContainerInterfaces; // array of InterfaceName/Service
     fInterfaces: TDynArrayHashed;
     // list of service.method ['Calculator.Add','Calculator.Multiply',...]
-    fInterfaceMethod: TServiceContainerInterfaceMethods;
+    fInterfaceMethod: TServiceContainerInterfaceMethods; // dynamic array
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
     procedure SetExpectMangledUri(Mangled: boolean);
