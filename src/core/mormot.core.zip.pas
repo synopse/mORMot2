@@ -2533,12 +2533,12 @@ begin
       '%.Create(%): zip trailer signature not found', [self, fFileName]);
   if lh64 <> nil then
   begin
-    fCentralDirectoryOffset := lh64^.headerOffset;
+    fCentralDirectoryOffset     := lh64^.headerOffset;
     fCentralDirectoryTotalFiles := lh64^.totalFiles;
   end
   else
   begin
-    fCentralDirectoryOffset := lh32^.headerOffset;
+    fCentralDirectoryOffset     := lh32^.headerOffset;
     fCentralDirectoryTotalFiles := lh32^.totalFiles;
   end;
   if (fCentralDirectoryOffset < Offset) or

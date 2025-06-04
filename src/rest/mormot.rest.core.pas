@@ -450,7 +450,7 @@ type
     procedure SetLogClass(aClass: TSynLogClass); virtual;
     /// wrapper methods to access fAcquireExecution[]
     procedure CheckAcquireExecutionCommand(Cmd: TRestServerUriContextCommand;
-      const Context: ShortString);
+      Context: PUtf8Char);
     function GetAcquireExecutionMode(
       Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
     procedure SetAcquireExecutionMode(
@@ -2127,7 +2127,7 @@ begin
 end;
 
 procedure TRest.CheckAcquireExecutionCommand(Cmd: TRestServerUriContextCommand;
-  const Context: ShortString);
+  Context: PUtf8Char);
 begin
   if not (Cmd in [low(fAcquireExecution) .. high(fAcquireExecution)]) then
     ERestException.RaiseUtf8('Unexpected %.%(%)', [self, Context, ToText(Cmd)^]);
@@ -3285,7 +3285,7 @@ begin
      (fBackgroundBatch = nil) then
     exit;
   fRest.fLogClass.EnterLocal(log, 'AsyncBatchStop(%)', [Table], self);
-  start := GetTickCount64;
+  start := mormot.core.os.GetTickCount64;
   timeout := start + 5000;
   if Table = nil then
   begin
@@ -3295,7 +3295,7 @@ begin
     repeat
       SleepHiRes(1); // wait for all batchs to be released
     until (fBackgroundBatch = nil) or
-          (GetTickCount64 > timeout);
+          (mormot.core.os.GetTickCount64 > timeout);
     result := Disable(AsyncBatchExecute);
   end
   else
@@ -4293,13 +4293,13 @@ begin
   if (self = nil) or
      Terminated then
     exit;
-  endtix := GetTickCount64 + MS;
+  endtix := mormot.core.os.GetTickCount64 + MS;
   repeat
     fEvent.WaitFor(MS); // warning: can wait up to 15 ms more on Windows
     if Terminated then
       exit;
   until (MS < 32) or
-        (GetTickCount64 >= endtix);
+        (mormot.core.os.GetTickCount64 >= endtix);
   result := false; // normal delay expiration
 end;
 
