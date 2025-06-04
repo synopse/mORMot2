@@ -823,8 +823,9 @@ procedure TServiceFactoryServer.InstanceFree(Obj: TInterfacedObject);
     timeout: boolean;
   begin
     timeout := (optFreeTimeout in fAnyOptions) and
-               (fRestServer.ServiceReleaseTimeoutMicrosec > 0);
-    if timeout then // release should be fast enough
+               (fRestServer.ServiceReleaseTimeoutMicrosec > 0) and
+               (sllWarning in fRestServer.LogLevel);
+    if timeout then // track any unexpected slow instance release
       QueryPerformanceMicroSeconds(start);
     IInterface(Obj)._Release;
     if not timeout then
@@ -832,8 +833,8 @@ procedure TServiceFactoryServer.InstanceFree(Obj: TInterfacedObject);
     QueryPerformanceMicroSeconds(stop);
     dec(stop, start{%H-});
     if stop > fRestServer.ServiceReleaseTimeoutMicrosec then
-      fRestServer.Internallog('%.InstanceFree: I%._Release took %',
-        [ClassType, InterfaceUri, MicroSecToString(stop)], sllWarning);
+      fRestServer.LogFamily.Add.Log(sllWarning, '%.InstanceFree: I%._Release took %',
+        [ClassType, InterfaceUri, MicroSecToString(stop)], self);
   end;
 
 begin
@@ -867,7 +868,7 @@ begin
       DoRelease;
   except
     on E: Exception do
-      fRestServer.Internallog('%.InstanceFree: ignored % exception ' +
+      fRestServer.InternalLog('%.InstanceFree: ignored % exception ' +
         'during I%._Release', [PClass(self)^, PClass(E)^, InterfaceUri], sllDebug);
   end;
 end;
@@ -1066,7 +1067,7 @@ function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
       fInstances.Safe.WriteUnLock;
     end;
     if sllDebug in fRestServer.LogLevel then
-      fRestServer.InternalLog(
+      fRestServer.LogFamily.Add.Log(sllDebug,
         '%.RetrieveInstance: new I%(%) % instance (id=%) count=%',
         [ClassType, fInterfaceUri, pointer(Inst.Instance),
          ToText(fInstanceCreation)^, Inst.InstanceID, fInstances.Count], self);
@@ -1649,8 +1650,9 @@ begin
   if fServer <> nil then
   begin
     // may be called asynchronously AFTER server is down (fServer=nil)
-    fServer.InternalLog('%(%:%).Destroy I%',
-      [ClassType, pointer(self), fFakeID, fService.InterfaceUri]);
+    if sllTrace in fServer.LogLevel then
+      fServer.LogFamily.Add.Log(sllTrace, '%(%:%).Destroy I%',
+        [ClassType, pointer(self), fFakeID, fService.InterfaceUri], self);
     if fServer.Services <> nil then
       with fServer.Services as TServiceContainerServer do
         if fFakeCallbacks <> nil then
@@ -1978,9 +1980,9 @@ begin
     fake._AddRef; // ExecuteMethod() calls fake._Release on its parameter
     fake.fService.ExecuteMethod(Ctxt);
     if withlog then
-      fRestServer.InternalLog('I%() returned %',
+      fRestServer.LogFamily.Add.Log(sllDebug, 'RemoveFakeCallback: I%() returned %',
         [PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName,
-         Ctxt.Call^.OutStatus], sllDebug);
+         Ctxt.Call^.OutStatus], self);
   end
   else
     Ctxt.Success;
