@@ -4711,7 +4711,8 @@ type
     // !   finally
     // !     Safe.Unlock;
     // !   end;
-    function TryLockMS(retryms: integer; terminated: PBoolean = nil): boolean;
+    function TryLockMS(retryms: integer; terminated: PBoolean = nil;
+      tix64: Int64 = 0): boolean;
     /// release the instance for exclusive access, as RWUnLock(cWrite)
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
@@ -10483,10 +10484,10 @@ begin
     inc(fLockCount);
 end;
 
-function TSynLocker.TryLockMS(retryms: integer; terminated: PBoolean): boolean;
+function TSynLocker.TryLockMS(retryms: integer; terminated: PBoolean;
+  tix64: Int64): boolean;
 var
   ms: integer;
-  endtix: Int64;
 begin
   result := TryLock;
   if result or
@@ -10494,7 +10495,9 @@ begin
      (retryms <= 0) then
     exit;
   ms := 0;
-  endtix := GetTickCount64 + retryms;
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  inc(tix64, retryms);
   repeat
     SleepHiRes(ms);
     result := TryLock;
@@ -10503,7 +10506,7 @@ begin
         terminated^) then
       exit;
     ms := ms xor 1; // 0,1,0,1... seems to be good for scaling
-  until GetTickCount64 > endtix;
+  until GetTickCount64 > tix64;
 end;
 
 function TSynLocker.ProtectMethod: IUnknown;
