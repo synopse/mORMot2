@@ -171,7 +171,7 @@ type
       Ctxt: TRestServerUriContext; MethodIndex: PtrInt): TSynMonitorInputOutput;
     function GetInstanceGCCount: integer;
     procedure InstanceFree(Obj: TInterfacedObject);
-    procedure InstanceFreeGC(Obj: TInterfacedObject);
+    procedure InstanceFreeOrGC(Obj: TInterfacedObject);
     function DoInstanceGC(Force: boolean): PtrInt;
     function DoInstanceGCSession(aSessionID: cardinal): integer;
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
@@ -782,12 +782,14 @@ function TServiceFactoryServer.DoInstanceGC(Force: boolean): PtrInt;
 var
   obj: TInterfacedObject;
   pending: TPointerDynArray;
+  pendingcount: integer; // PtrArrayAdd() expects integer, not PtrInt
   i: PtrInt;
 begin
   // delete when RefCount = 1 (for optFreeInMainThread/PerInterfaceThread)
   result := 0;
   if fInstanceGC.Count = 0 then
     exit;
+  pendingcount := 0;
   fInstanceGC.Safe.WriteLock;
   try
     for i := fInstanceGC.Count - 1 downto 0 do // downto for proper Delete(i)
@@ -796,22 +798,20 @@ begin
       if Force or
          (obj.RefCount = 1) then
       begin
-        if pending = nil then
-          SetLength(pending, i + 1);
-        pending[result] := obj; // free outside GC lock
-        inc(result);
+        PtrArrayAdd(pending, obj, pendingcount); // free outside GC lock
         fInstanceGC.Delete(i); // remove from list
       end;
     end;
   finally
     fInstanceGC.Safe.WriteUnLock;
   end;
+  result := pendingcount;
   if result = 0 then
     exit;
   // the instances are actually released outside of fInstanceGC.Safe lock
   for i := 0 to result - 1 do
-    InstanceFree(pending[i]); // may run in a background thread
-  fRestServer.Internallog('%.DoInstanceGC=% for I% %',
+    InstanceFree(pending[i]); // may run in a background thread - intercept except
+  fRestServer.InternalLog('%.DoInstanceGC=% for I% %',
     [ClassType, result, InterfaceUri, ToText(fInstanceCreation)^]);
 end;
 
@@ -872,7 +872,7 @@ begin
   end;
 end;
 
-procedure TServiceFactoryServer.InstanceFreeGC(Obj: TInterfacedObject);
+procedure TServiceFactoryServer.InstanceFreeOrGC(Obj: TInterfacedObject);
 begin
   if Obj <> nil then
     if (optFreeDelayed in fAnyOptions) or
@@ -885,17 +885,20 @@ end;
 function TServiceFactoryServer.DoInstanceGCSession(aSessionID: cardinal): integer;
 var
   i: PtrInt;
+  p: PServiceFactoryServerInstance;
 begin
   result := 0;
   fInstances.Safe.WriteLock;
   try
     for i := fInstances.Count - 1 downto 0 do // downto for proper Delete(i)
-      if fInstance[i].Session = aSessionID then
-      begin
-        fInstanceGC.Add(fInstance[i].Instance);
-        fInstances.DynArray.Delete(i);
-        inc(result);
-      end;
+    begin
+      p := @fInstance[i];
+      if p^.Session <> aSessionID then
+        continue;
+      fInstanceGC.Add(p^.Instance); // delayed release
+      fInstances.DynArray.Delete(i);
+      inc(result);
+    end;
   finally
     fInstances.Safe.WriteUnLock;
   end;
@@ -1066,12 +1069,42 @@ function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
       fRestServer.InternalLog(
         '%.RetrieveInstance: new I%(%) % instance (id=%) count=%',
         [ClassType, fInterfaceUri, pointer(Inst.Instance),
-         ToText(fInstanceCreation)^, Inst.InstanceID, fInstances.Count], sllDebug);
+         ToText(fInstanceCreation)^, Inst.InstanceID, fInstances.Count], self);
+  end;
+
+  procedure DeleteDeprecated;
+  var
+    i: PtrInt;
+    tix: cardinal;
+    P: PServiceFactoryServerInstance;
+  begin
+    fInstances.Safe.WriteLock;
+    try
+      if fInstanceDeprecatedTix32 = Inst.LastAccess then
+        exit;
+      fInstanceDeprecatedTix32 := Inst.LastAccess;
+      tix := Inst.LastAccess - fInstanceTimeout;
+      if integer(tix) > 0 then // tix<0 when booted sooner than the timeout
+        for i := fInstances.Count - 1 downto 0 do // downto for proper Delete(i)
+        begin
+          P := @fInstance[i]; // fInstance[i] due to Delete(i) below
+          if tix <= P^.LastAccess then
+            continue;
+          if sllInfo in fRestServer.LogLevel then
+            fRestServer.LogFamily.Add.Log(sllInfo, 'RetrieveInstance: ' +
+              'deleted I% % instance (id=%) after % minutes timeout',
+              [ClassType, fInterfaceUri, P^.Instance, P^.InstanceID,
+               fInstanceTimeOut div 60], self);
+          InstanceFreeOrGC(P^.Instance); // Free or fInstanceGC.Add()
+          fInstances.DynArray.Delete(i);
+        end;
+    finally
+      fInstances.Safe.WriteUnLock;
+    end;
   end;
 
 var
-  i: integer; // should be integer for FastLocateSorted(i)
-  tix: cardinal;
+  ndx: integer; // should be integer for FastLocateSorted(i)
   P: PServiceFactoryServerInstance;
 begin
   result := -1;
@@ -1080,33 +1113,7 @@ begin
   if (fInstanceTimeout <> 0) and
      (fInstances.Count > 0) and
      (fInstanceDeprecatedTix32 <> Inst.LastAccess) then
-  begin
-    fInstances.Safe.WriteLock;
-    try
-      if fInstanceDeprecatedTix32 <> Inst.LastAccess then
-      begin
-        fInstanceDeprecatedTix32 := Inst.LastAccess;
-        tix := Inst.LastAccess - fInstanceTimeout;
-        if integer(tix) > 0 then // tix<0 when booted sooner than the timeout
-          for i := fInstances.Count - 1 downto 0 do // downto for proper Delete
-          begin
-            P := @fInstance[i]; // fInstance[i] due to Delete(i) below
-            if tix > P^.LastAccess then
-            begin
-              if sllInfo in fRestServer.LogLevel then
-                fRestServer.InternalLog('%.RetrieveInstance: deleted I% % ' +
-                  'instance (id=%) after % minutes timeout',
-                  [ClassType, fInterfaceUri, P^.Instance, P^.InstanceID,
-                   fInstanceTimeOut div 60], sllInfo);
-              InstanceFreeGC(P^.Instance);
-              fInstances.DynArray.Delete(i);
-            end;
-          end;
-      end;
-    finally
-      fInstances.Safe.WriteUnLock;
-    end;
-  end;
+    DeleteDeprecated;
   if (fInstanceGC.Count > 0) and
      (Inst.LastAccess <> fInstanceGCDeprecatedTix32) then
   begin
@@ -1120,16 +1127,16 @@ begin
     Inst.Instance := nil;
     fInstances.Safe.WriteLock;
     try
-      if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, i) then
+      if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, ndx) then
       begin
-        Inst.Instance := fInstance[i].Instance;
-        fInstances.DynArray.Delete(i);
+        Inst.Instance := fInstance[ndx].Instance;
+        fInstances.DynArray.Delete(ndx);
         result := aMethodIndex; // notify caller
       end;
     finally
       fInstances.Safe.WriteUnLock;
     end;
-    InstanceFreeGC(Inst.Instance);
+    InstanceFreeOrGC(Inst.Instance);
     exit;
   end;
   // now create or retrieve the instance
@@ -1153,9 +1160,9 @@ begin
     {$else}
     begin
     {$endif HASFASTTRYFINALLY}
-      if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, i) then
+      if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, ndx) then
       begin
-        P := @fInstance[i];
+        P := @fInstance[ndx];
         P^.LastAccess := Inst.LastAccess;
         Inst.Instance := P^.Instance;
         result := aMethodIndex; // notify caller
