@@ -2047,8 +2047,8 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 function EscapeToShort(const source: RawByteString): ShortString; overload;
 
 /// fill an UTF-8 buffer with the (hexadecimal) chars of the input text/binary
-function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt;
-  txt: PUtf8Char): integer;
+// - as used e.g. by ContentToShort() or TSynLog.LogEscape()
+function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt; txt: PUtf8Char): integer;
 
 /// if source is not UTF-8 calls EscapeToShort, otherwise append it directly
 // - also ensure that txt[] ends with a #0, so that @txt[1] is a valid PUtf8Char
@@ -9513,8 +9513,7 @@ begin
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
 end;
 
-function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt;
-  txt: PUtf8Char): integer;
+function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt; txt: PUtf8Char): integer;
 var
   l: PtrInt;
 begin

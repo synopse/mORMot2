@@ -269,10 +269,10 @@ type
     // - return FALSE in case of invalid signature, TRUE if authenticated
     function Authenticate: boolean; virtual;
     /// direct launch of a method-based service
-    // - Uri() will ensure that MethodIndex>=0 before calling it
+    // - Uri() did ensure that fServerMethod<>nil and MethodIndex>=0
     procedure ExecuteSoaByMethod; virtual;
     /// direct launch of an interface-based service
-    // - Uri() will ensure that Service<>nil before calling it
+    // - Uri() did ensure that Service<>nil before calling it
     // - abstract implementation which is to be overridden
     procedure ExecuteSoaByInterface; virtual;
     /// handle GET/LOCK/UNLOCK/STATE verbs for ORM/CRUD process

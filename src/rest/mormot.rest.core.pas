@@ -56,6 +56,7 @@ uses
 
 type
   /// all commands which may be executed by TRestServer.Uri() method
+  // - execNone is just used as default to identify unexpected execution logic
   // - execSoaByMethod for method-based services
   // - execSoaByInterface for interface-based services
   // - execOrmGet for ORM reads i.e. Retrieve*() methods
@@ -1320,11 +1321,12 @@ type
       read fMethod;
     /// retrieve the "RemoteIP" value from Call^.LowLevelRemoteIP or from
     // the incoming HTTP headers
-    // - may return '127.0.0.1'
+    // - may return '' or '127.0.0.1'
     procedure SetRemoteIP(var IP: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     /// "RemoteIP" value from Call^.LowLevelRemoteIP but nil for '127.0.0.1'
     // - won't scan the incoming HTTP headers, but it is usually not needed
+    // - returns a PUtf8Char and not a RawUtf8 to avoid a try..finally on logging
     function RemoteIPNotLocal: PUtf8Char;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
     property UserAgent: RawUtf8
