@@ -1668,7 +1668,11 @@ type
     /// decode and register the supplied CIDR address as TIp4SubNet
     // - by definition, private IP like 192.168.x.x are not added
     function Add(const subnet: TIp4SubNet): boolean; overload;
-    /// check if a 32-bit IP4 matches a registered CIDR sub-network
+    /// ensure all length(SubNet[].IP) = IPCount after Add/AddFromText usage
+    // - returns the current total number of stored IP or CIDR
+    function AfterAdd: integer;
+    /// check if a 32-bit IPv4 matches a registered CIDR sub-network
+    // - reach 16M/s per core with spamhaus or firehol databases
     function Match(ip4: cardinal): boolean; overload;
     /// check if a textual IPv4 matches a registered CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
@@ -1678,6 +1682,11 @@ type
     function SaveToBinary: RawByteString;
     /// clear and retrieve from a binary buffer persisted via SaveToBinary
     function LoadFromBinary(const bin: RawByteString): boolean;
+    /// low-level access to the internal storage
+    // - warning: length(IP) may be > IPCount - do not use the "for in IP"
+    // pattern unless you called AfterAdd or LoadFromBinary
+    property SubNet: TIp4SubNetMasks
+      read fSubNet;
   end;
 
 
@@ -5323,6 +5332,24 @@ begin
       p := @p^[p^[2] + 2];
     end;
   result := true;
+end;
+
+function TIp4SubNets.AfterAdd: integer;
+var
+  n: integer;
+  p: PIp4SubNetMask;
+begin
+  result := 0;
+  p := pointer(fSubNet);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // process all masks
+  repeat // SetLength(SubNet[].IP, SubNet[].IPCount) without any realloc
+    PDALen(PAnsiChar(pointer(p^.IP)) - _DALEN)^ := p^.IPCount - _DAOFF;
+    inc(result, p^.IPCount);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 
