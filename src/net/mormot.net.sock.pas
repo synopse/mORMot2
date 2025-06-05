@@ -1690,7 +1690,7 @@ type
     /// clear and retrieve from a binary buffer persisted via SaveToBinary
     function LoadFromBinary(const bin: RawByteString): boolean;
     /// low-level access to the internal storage
-    // - warning: length(IP) may be > IPCount - do not use the "for in IP"
+    // - warning: length(IP) may be > IPCount - do not use "for in SubNet[].IP"
     // pattern unless you called AfterAdd or LoadFromBinary
     property SubNet: TIp4SubNetMasks
       read fSubNet;

@@ -949,7 +949,7 @@ type
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
   // peers list (with a per-minute resolution)
   // - the DoRotate method should be called every second
-  // - can optionally check a public TIp4SubNets non-transient blacklist of IPv4
+  // - can optionally maintain one TIp4SubNets blacklist of IPv4 from Internet
   THttpAcceptBan = class(TObjectOSLightLock)
   protected
     fCount, fLastSec: integer;
@@ -1019,11 +1019,11 @@ type
       read fOnBanned write fOnBanned;
     /// raw access to an associated IPv4/CIDR blacklist storage
     // - could be populated from fixed reference material, in addition to the
-    // transient banishment process done with ShouldBan() method on incorrect errors
-    // - this instance is not thread-safe: this list should be initialized from
-    // text or binary once at startup, before IsBanned() is actually called
+    // transient banishment process set by ShouldBan() method on unexpected errors
     // - typically filled from https://www.spamhaus.org/drop/drop.txt or
     // https://github.com/firehol/blocklist-ipsets/blob/master/firehol_level1.netset
+    // - use Safe.Lock when accessing this instance, e.g. when initializing from
+    // text or binary once at startup, before IsBanned() is actually called
     property BlackList: TIp4SubNets
       read fBlackList;
   published
@@ -4823,7 +4823,8 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    s := pointer(fIP); // fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    // search the transient list of fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    s := pointer(fIP);
     n := fSeconds;
     if n <> 0 then
       repeat
@@ -4833,22 +4834,24 @@ begin
         if (cnt <> 0) and
            IntegerScanExists(@P[1], cnt, ip4) then // O(n) SSE2 asm on Intel
         begin
-          inc(fRejected);
           result := true;
           break;
         end;
         dec(n);
       until n = 0;
+    // also try the public blacklist of IPv4 (if any)
+    if not result and
+       (fBlackList.SubNet <> nil) then
+      result := fBlackList.Match(ip4);
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
-  if not result and
-     (fBlackList.SubNet <> nil) then
-    result := fBlackList.Match(ip4); // also try the public blacklist (if any)
-  if result and
-     Assigned(fOnBanned) then
+  if not result then
+    exit;
+  inc(fRejected);
+  if Assigned(fOnBanned) then
     fOnBanned(self, ip4);
 end;
 
