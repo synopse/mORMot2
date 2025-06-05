@@ -9647,15 +9647,7 @@ begin
 _3: inc(source);
 _2: inc(source);
 _1: inc(source);
-_0: if source[0] = #13 then
-    begin
-      if source[1] = #10 then
-      begin
-        result := source + 2; // most common case is text ending with #13#10
-        exit;
-      end;
-    end
-    else if source[0] = #0 then
+_0: if source[0] = #0 then
     begin
       result := nil; // premature ending
       exit;
