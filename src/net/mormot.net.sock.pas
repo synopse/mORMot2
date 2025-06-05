@@ -1696,6 +1696,13 @@ type
       read fSubNet;
   end;
 
+/// check if a 32-bit IPv4 matches a registered CIDR sub-network binary buffer
+// - directly parse TIp4SubNets.SaveToBinary output for conveniency
+function IP4SubNetMatch(P: PIntegerArray; ip4: cardinal): boolean; overload;
+
+/// check if a textual IPv4 matches a registered CIDR sub-network binary buffer
+function IP4SubNetMatch(const bin: RawByteString; const ip4: RawUtf8): boolean; overload;
+
 
 const
   /// the default TCP port as text, as DEFAULT_PORT[Https]
@@ -5255,7 +5262,8 @@ begin
   begin
     result := true;
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // try all masks
-    repeat // search using O(log(n)) binary search (branchless asm on x86_64)
+    repeat
+      // O(log(n)) binary search (branchless asm on x86_64)
       if FastFindIntegerSorted(pointer(p^.IP), p^.IPCount - 1, ip4 and P^.Mask) >= 0 then
         exit; // not faster to use IntegerScanIndex() for small IPCount
       inc(p);
@@ -5379,6 +5387,33 @@ begin
     inc(p);
     dec(n);
   until n = 0;
+end;
+
+
+function IP4SubNetMatch(P: PIntegerArray; ip4: cardinal): boolean;
+var
+  n: integer;
+begin
+  if P <> nil then
+  begin
+    result := true;
+    n := P^[0]; // try all masks - warning: won't check for buffer overflow
+    repeat
+      if FastFindIntegerSorted(@P^[3], P^[2] - 1, ip4 and P^[1]) >= 0 then
+        exit;
+      P := @P^[P^[2] + 2]; // O(log(n)) search the binary buffer in-place
+      dec(n);
+    until n = 0;
+  end;
+  result := false;
+end;
+
+function IP4SubNetMatch(const bin: RawByteString; const ip4: RawUtf8): boolean;
+var
+  ip32: cardinal;
+begin
+  result := NetIsIP4(pointer(ip4), @ip32) and
+            IP4SubNetMatch(pointer(bin), ip32);
 end;
 
 
