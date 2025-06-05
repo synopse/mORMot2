@@ -1668,6 +1668,13 @@ type
     /// decode and register the supplied CIDR address as TIp4SubNet
     // - by definition, private IP like 192.168.x.x are not added
     function Add(const subnet: TIp4SubNet): boolean; overload;
+    /// decode and add all IP and CIDR listed in a text content
+    // - i.e. netsets as IP or CIDR with # or ; comments e.g. as in
+    // https://www.spamhaus.org/drop/drop.txt or
+    // https://github.com/firehol/blocklist-ipsets/blob/master/firehol_level1.netset
+    // - by definition, private IP like 192.168.x.x are not included
+    // - returns the number of added IP or CIDR, merging with existing content
+    function AddFromText(const text: RawUtf8): integer;
     /// ensure all length(SubNet[].IP) = IPCount after Add/AddFromText usage
     // - returns the current total number of stored IP or CIDR
     function AfterAdd: integer;
@@ -5333,6 +5340,33 @@ begin
       p := @p^[p^[2] + 2];
     end;
   result := true;
+end;
+
+function TIp4SubNets.AddFromText(const text: RawUtf8): integer;
+var
+  p: PUtf8Char;
+  sub: TIp4SubNet;
+begin
+  result := 0;
+  p := pointer(text);
+  while p <> nil do
+  begin
+    while p^ in [#1 .. ' ' ] do
+      inc(p);
+    if NetIsIP4(p, @sub.ip) then // ignore any line starting e.g. with # or ;
+    begin
+      while p^ in ['0' .. '9', '.', ' '] do
+        inc(p);
+      if p^ <> '/' then
+        sub.mask := cardinal(-1) // single IP has 255.255.255.255 mask
+      else
+        sub.mask := IP4Netmask(GetCardinal(p + 1)); // CIDR
+      if (sub.mask <> 0) and
+         Add(sub) then
+        inc(result); // first time seen
+    end;
+    p := GotoNextLine(p);
+  end;
 end;
 
 function TIp4SubNets.AfterAdd: integer;
