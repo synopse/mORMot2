@@ -949,6 +949,7 @@ type
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
   // peers list (with a per-minute resolution)
   // - the DoRotate method should be called every second
+  // - can optionally check a public TIp4SubNets non-transient blacklist of IPv4
   THttpAcceptBan = class(TObjectOSLightLock)
   protected
     fCount, fLastSec: integer;
@@ -956,6 +957,7 @@ type
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
     fOnBanIp, fOnBanned: TOnHttpAcceptBan;
+    fBlackList: TIp4SubNets;
     function IsBannedRaw(ip4: cardinal): boolean;
     function DoRotateRaw: integer;
     procedure SetMax(Value: cardinal);
@@ -967,6 +969,8 @@ type
     // - maxpersecond is the maximum number of banned IPs remembered per second
     constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
       banwhiteip: cardinal = cLocalhost32); reintroduce;
+    /// finalize this process
+    destructor Destroy; override;
     /// register a 32-bit IPv4 to be rejected
     function BanIP(ip4: cardinal): boolean; overload;
     /// register a IPv4 text to be rejected
@@ -1013,6 +1017,15 @@ type
     /// event called when IsBanned() method returns true
     property OnBanned: TOnHttpAcceptBan
       read fOnBanned write fOnBanned;
+    /// raw access to an associated IPv4/CIDR blacklist storage
+    // - could be populated from fixed reference material, in addition to the
+    // transient banishment process done with ShouldBan() method on incorrect errors
+    // - this instance is not thread-safe: this list should be initialized from
+    // text or binary once at startup, before IsBanned() is actually called
+    // - typically filled from https://www.spamhaus.org/drop/drop.txt or
+    // https://github.com/firehol/blocklist-ipsets/blob/master/firehol_level1.netset
+    property BlackList: TIp4SubNets
+      read fBlackList;
   published
     /// total number of accept() rejected by IsBanned()
     property Rejected: Int64
@@ -4679,6 +4692,13 @@ begin
   fMax := maxpersecond;
   SetSeconds(banseconds);
   fWhiteIP := banwhiteip;
+  fBlackList := TIp4SubNets.Create;
+end;
+
+destructor THttpAcceptBan.Destroy;
+begin
+  inherited Destroy;
+  fBlackList.Free;
 end;
 
 procedure THttpAcceptBan.SetMax(Value: cardinal);
@@ -4824,6 +4844,9 @@ begin
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
+  if not result and
+     (fBlackList.SubNet <> nil) then
+    result := fBlackList.Match(ip4); // also try the public blacklist (if any)
   if result and
      Assigned(fOnBanned) then
     fOnBanned(self, ip4);

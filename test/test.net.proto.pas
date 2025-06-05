@@ -1764,7 +1764,9 @@ begin
     if txt <> '' then
     begin
       sub.Clear;
+      timer.Start;
       n := sub.AddFromText(txt);
+      NotifyTestSpeed('parse TIp4SubNets', n, length(txt), @timer);
       Check(n > 4000);
       CheckEqual(sub.AfterAdd, n);
       CheckEqual(length(sub.SubNet), 18);
@@ -1774,17 +1776,27 @@ begin
       Check(not sub.Match('10.18.1.1'), '10');
       Check(not sub.Match('62.210.254.173'), 'synopse.info');
       // 223.254.0.0/16 as https://check.spamhaus.org/results/?query=SBL212803
-      Check(sub.Match('223.254.0.1') ,'a1');
-      Check(sub.Match('223.254.1.1'), 'b1');
-      Check(sub.Match('223.254.200.129'), 'c1');
+      Check(sub.Match('223.254.0.1') ,'a0');
+      Check(sub.Match('223.254.1.1'), 'b0');
+      Check(sub.Match('223.254.200.129'), 'c0');
       CheckEqual(sub.AddFromText(txt), 0, 'twice');
-      // 18 masks, 4471 subnets, 612.950.208 unique IPs: around 16M/s
+      // e.g. 18 masks, 4471 subnets, 612.950.208 unique IPs: around 16M/s
       timer.Start;
       for i := 1 to 20000 do
         Check(not sub.Match($01010101), '1.1.1.1');
-      NotifyTestSpeed('blacklist ip', 20000, 0, @timer);
+      NotifyTestSpeed('blacklist TIp4SubNets', 20000, 0, @timer);
       bin := sub.SaveToBinary;
-      Check(length(bin) < length(txt), 'bin<txt');
+      Check(length(bin) < length(txt), 'bin<txt'); // 18020 < 71138
+      FileFromString(bin, WorkDir + 'firehol-bin.netset');
+      // TSynAlgo.Compress: bin=18020 AlgoSynLZ=16598 AlgoDeflate=11923
+      Check(IP4SubNetMatch(bin, '223.254.0.1') ,'a1');
+      Check(IP4SubNetMatch(bin, '223.254.1.1'), 'b1');
+      Check(IP4SubNetMatch(bin, '223.254.200.129'), 'c1');
+      // IP4SubNetMatch() is actually not faster than sub.Match()
+      timer.Start;
+      for i := 1 to 20000 do
+        Check(not IP4SubNetMatch(pointer(bin), $01010101), 'IP4SubNetMatch');
+      NotifyTestSpeed('blacklist direct', 20000, 0, @timer);
       txt := HttpGetWeak('https://www.spamhaus.org/drop/drop.txt',
         WorkDir + 'spamhaus.netset');
       if txt <> '' then
