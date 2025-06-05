@@ -5303,6 +5303,7 @@ function TIp4SubNets.LoadFromBinary(const bin: RawByteString): boolean;
 var
   i, n: PtrInt;
   p: PIntegerArray;
+  d: PIp4SubNetMask;
 begin
   result := false;
   Clear;
@@ -5322,15 +5323,16 @@ begin
     exit; // decoded size should be an exact match with supplied bin
   p := pointer(bin);
   SetLength(fSubNet, p^[0]);
+  d := pointer(fSubNet);
   for i := 0 to p^[0] - 1 do
-    with fSubNet[i] do
-    begin
-      Mask := p^[1];
-      IPCount := p^[2];
-      SetLength(IP, p^[2]);
-      MoveFast(p^[3], pointer(IP)^, p^[2] * 4);
-      p := @p^[p^[2] + 2];
-    end;
+  begin
+    d^.Mask := p^[1];
+    d^.IPCount := p^[2];
+    SetLength(d^.IP, p^[2]);
+    MoveFast(p^[3], pointer(d^.IP)^, p^[2] * 4);
+    p := @p^[p^[2] + 2];
+    inc(d);
+  end;
   result := true;
 end;
 
