@@ -1903,6 +1903,10 @@ function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outStatus: PInteger = nil; timeout: integer = 0; forceSocket: boolean = false;
   ignoreTlsCertError: boolean = false): RawByteString; overload;
 
+/// retrieve the content of a web page, with ignoreTlsCertError=true for https
+// - typically used to retrieve reference material online for testing
+// - can optionally use a local file as convenient offline cache
+function HttpGetWeak(const aUri: RawUtf8; const aLocalFile: TFileName = ''): RawByteString;
 
 
 { ************** Send Email using the SMTP Protocol }
@@ -5691,6 +5695,20 @@ begin
   {$endif LINUX_RAWDEBUGVOIDHTTPGET}
 end;
 
+function HttpGetWeak(const aUri: RawUtf8; const aLocalFile: TFileName): RawByteString;
+begin
+  if aLocalFile <> '' then // try from local cache
+  begin
+    result := StringFromFile(aLocalFile); // useful e.g. during regression tests
+    if result <> '' then
+      exit;
+  end;
+  result := HttpGet(aUri, {inhead=}'', {outhead=}nil, {notsock=}false,
+    {outstatus=}nil, {timeout=}0, {forcesocket=}false, {ignorecerterror=}true);
+  if (aLocalFile <> '') and
+     (result <> '') then
+    FileFromString(result, aLocalFile);
+end;
 
 
 { ************** Send Email using the SMTP Protocol }
