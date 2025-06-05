@@ -8828,17 +8828,17 @@ begin
 end;
 
 const
-  MIME_EXT: array[0..48] of PUtf8Char = ( // for IdemPPChar() start check
-    'PNG',  'GIF',  'TIF',  'JP',  'BMP', 'DOC',  'HTM',  'CSS',
-    'JSON', 'ICO',  'WOF',  'TXT', 'SVG', 'ATOM', 'RDF',  'RSS',
-    'WEBP', 'APPC', 'MANI', 'XML', 'JS',  'MJS',  'WOFF', 'OGG',
-    'OGV',  'MP4',  'M2V',  'M2P', 'MP3', 'H264', 'TEXT', 'LOG',
-    'GZ',   'WEBM', 'MKV',  'RAR', '7Z',  'BZ2',  'WMA',  'WMV',
-    'AVI',  'PPT',  'XLS',  'PDF', 'DCM', 'DICOM', 'SQLITE', 'DB3', nil);
+  MIME_EXT: array[0..47] of PUtf8Char = ( // for IdemPPChar() start check
+    'PNG',  'GIF',  'TIF',  'JP',  'BMP',  'DOC',  'HTM',  'CSS',
+    'JSON', 'ICO',  'WOF',  'TXT', 'SVG',  'ATOM', 'RDF',  'RSS',
+    'WEBP', 'APPC', 'MANI', 'XML', 'JS',   'MJS',  'OGG',  'OGV',
+    'MP4',  'M2V',  'M2P',  'MP3', 'H264', 'TEXT', 'LOG',  'GZ',
+    'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2',  'WMA',  'WMV',  'AVI',
+    'PPT',  'XLS',  'PDF',  'DCM', 'DICOM', 'SQLITE', 'DB3', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
-    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtFont, mtOgg,
+    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtOgg,
     mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
     mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
     mtAvi,  mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3);
@@ -8909,7 +8909,7 @@ begin
 end;
 
 const
-  MIME_COMPRESSED: array[0..39] of cardinal = ( // may use SSE2
+  MIME_COMPRESSED: array[0..40] of cardinal = ( // may use SSE2
     $04034b50, // 'application/zip' = 50 4B 03 04
     $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
     $e0ffd8ff, $e1ffd8ff, // 'image/jpeg' FF D8 FF E0/E1
@@ -8917,6 +8917,7 @@ const
     $184d2204, // LZ4 stream format = 04 22 4D 18
     $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
     $28635349, // cab = 49 53 63 28
+    $32464f77, // 'application/font-woff2' = wOF2 in BigEndian
     $38464947, // 'image/gif' = 47 49 46 38 = GIF89a
     $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
     $4643534d, // cab = 4D 53 43 46 [MSCF]
