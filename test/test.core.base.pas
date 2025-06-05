@@ -6402,6 +6402,22 @@ begin
       Check(ss[255] = #0);
     end;
   end;
+  P := 'toto';
+  Check(GotoNextLine(P) = nil);
+  P := 'to'#10'po';
+  Check(GotoNextLine(P)^ = 'p');
+  P := 'to'#13#10'po';
+  Check(GotoNextLine(P)^ = 'p');
+  P := 'to'#3#13#10'po';
+  Check(GotoNextLine(P)^ = 'p');
+  P := 'to'#10#10'po';
+  Check(GotoNextLine(P)^ = #10);
+  P := 'to'#13#10#13#10'po';
+  Check(GotoNextLine(P)^ = #13);
+  P := 'to'#3#1'po';
+  Check(GotoNextLine(P) = nil);
+  P := 'to'#3#0'po';
+  Check(GotoNextLine(P) = nil);
 end;
 
 procedure TTestCoreBase.Charsets;
