@@ -7989,46 +7989,47 @@ begin
   result := false;
   n := GetCount;
   if Assigned(fCompare) then
-    if n = 0 then // a void array is always sorted
-      Index := 0
-    else if fSorted then
-    begin
-      P := fValue^;
-      // first compare with the last sorted item (common case, e.g. with IDs)
-      dec(n);
-      cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
-      if cmp >= 0 then
+    if n <> 0 then // a void array is always sorted
+      if fSorted then
       begin
-        Index := n;
-        if cmp = 0 then
-          // was just added: returns true + index of last item
-          result := true
-        else
-          // bigger than last item: returns false + insert after last position
-          inc(Index);
-        exit;
-      end;
-      // O(log(n)) binary search of the sorted position
-      Index := 0; // more efficient code if we use Index and not a local var
-      repeat
-        i := (Index + n) shr 1;
-        cmp := fCompare(Item, P[i * fInfo.Cache.ItemSize]);
-        if cmp = 0 then
+        P := fValue^;
+        // first compare with the last sorted item (common case, e.g. with IDs)
+        dec(n);
+        cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
+        if cmp >= 0 then
         begin
-          // returns true + index of (first found) existing Item
-          Index := i;
-          result := true;
+          Index := n;
+          if cmp = 0 then
+            // was just added: returns true + index of last item
+            result := true
+          else
+            // bigger than last item: returns false + insert after last position
+            inc(Index);
           exit;
-        end
-        else if cmp > 0 then
-          Index := i + 1
-        else
-          n := i - 1;
-      until Index > n;
-      // Item not found: returns false + the index where to insert
-    end
+        end;
+        // O(log(n)) binary search of the sorted position
+        Index := 0; // more efficient code if we use Index and not a local var
+        repeat
+          i := (Index + n) shr 1;
+          cmp := fCompare(Item, P[i * fInfo.Cache.ItemSize]);
+          if cmp = 0 then
+          begin
+            // returns true + index of (first found) existing Item
+            Index := i;
+            result := true;
+            exit;
+          end
+          else if cmp > 0 then
+            Index := i + 1
+          else
+            n := i - 1;
+        until Index > n;
+        // Item not found: returns false + the index where to insert
+      end
+      else
+        Index := -1 // not Sorted
     else
-      Index := -1 // not Sorted
+      Index := 0 // void array
   else
     Index := -1; // no fCompare()
 end;
