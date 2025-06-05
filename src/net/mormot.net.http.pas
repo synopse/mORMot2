@@ -955,9 +955,9 @@ type
     fCount, fLastSec: integer;
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
+    fBlackList: TIp4SubNets;
     fRejected, fTotal: Int64;
     fOnBanIp, fOnBanned: TOnHttpAcceptBan;
-    fBlackList: TIp4SubNets;
     function IsBannedRaw(ip4: cardinal): boolean;
     function DoRotateRaw: integer;
     procedure SetMax(Value: cardinal);
@@ -4791,7 +4791,8 @@ var
 begin
   result := false;
   if (self = nil) or
-     (fCount = 0) then
+     ((fCount = 0) and
+      (fBlackList.SubNet = nil)) then
     exit;
   ip4 := addr.IP4;
   if (ip4 = 0) or
@@ -4803,7 +4804,8 @@ end;
 function THttpAcceptBan.IsBanned(ip4: cardinal): boolean;
 begin
   result := (self <> nil) and
-            (fCount <> 0) and
+            ((fCount <> 0) or
+             (fBlackList.SubNet = nil)) and
             (ip4 <> 0) and
             (ip4 <> fWhiteIP) and
             IsBannedRaw(ip4);
@@ -4890,15 +4892,14 @@ begin
   result := 0;
   fSafe.Lock; // very quick O(1) process
   try
-    if fCount <> 0 then
-    begin
-      n := (fLastSec + 1) and (fSeconds - 1); // per-second round robin
-      fLastSec := n; // the oldest slot becomes the current (no memory move)
-      p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
-      result := p^;
-      p^ := 0; // void the current slot
-      dec(fCount, result);
-    end;
+    if fCount = 0 then
+      exit;
+    n := (fLastSec + 1) and (fSeconds - 1); // per-second round robin
+    fLastSec := n; // the oldest slot becomes the current (no memory move)
+    p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    result := p^;
+    p^ := 0; // void the current slot
+    dec(fCount, result);
   finally
     fSafe.UnLock;
   end;
