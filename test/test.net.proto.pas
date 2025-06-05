@@ -267,9 +267,7 @@ begin
       if not IdemPChar(pointer(url), 'HTTP') then
         url := Join(['https://raw.githubusercontent.com/OAI/' +
                  'OpenAPI-Specification/main/examples/', url]);
-       JsonBufferReformat(pointer(
-         HttpGet(url, nil, false, nil, 0, {forcesock:}false, {igncerterr:}true)),
-         api[i]);
+      JsonBufferReformat(pointer(HttpGetWeak(url)), api[i]);
       if api[i] <> '' then
         FileFromString(api[i], fn);
     end;
