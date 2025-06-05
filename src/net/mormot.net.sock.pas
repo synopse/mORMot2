@@ -541,15 +541,15 @@ function IP4Netmask(prefix: integer): cardinal; overload;
 function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compute a subnet/CIDR value from a 32-bit IP4 and its associated NetMask
+/// compute a subnet/CIDR value from a 32-bit IPv4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
 function IP4Subnet(ip4, netmask4: cardinal): ShortString; overload;
 
-/// compute a subnet/CIDR value from an IP4 and its associated NetMask
+/// compute a subnet/CIDR value from an IPv4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
 function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8; overload;
 
-/// check if an IP4 match a CIDR sub-network
+/// check if an IPv4 text match a CIDR sub-network
 // - e.g. IP4Match('192.168.1.1', '192.168.1.0/24') = true
 function IP4Match(const ip4, subnet: RawUtf8): boolean;
 
@@ -1636,7 +1636,7 @@ type
     // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
     // - plain IP address like '1.2.3.4' will be decoded with mask=255.255.255.255
     function From(const subnet: RawUtf8): boolean;
-    /// check if an 32-bit IP4 matches a decoded CIDR sub-network
+    /// check if an 32-bit IPv4 matches a decoded CIDR sub-network
     function Match(ip4: cardinal): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if a textual IPv4 matches a decoded CIDR sub-network
@@ -3425,7 +3425,7 @@ const // should be local for better code generation
 function IsPublicIP(ip4: cardinal): boolean;
 begin
   result := false;
-  case ToByte(ip4) of // ignore IANA private IP4 address spaces
+  case ToByte(ip4) of // ignore IANA private IPv4 address spaces
     10:
       exit;
     172:
@@ -3447,7 +3447,7 @@ end;
 function IP4Mask(ip4: cardinal): cardinal;
 begin
   result := $ffffffff;
-  case ToByte(ip4) of // detect IANA private IP4 address spaces
+  case ToByte(ip4) of // detect IANA private IPv4 address spaces
     10:
       result := $000000ff;
     172:

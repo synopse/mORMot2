@@ -587,7 +587,7 @@ begin
   PSockAddr(@Addr)^.sin_port := bswap16(p);
   // first check most simple IPv4 resolution (maybe using mormot.net.dns)
   if SetFromIP4(address, false) or
-     // fallback to OS getaddrinfo() resolution, first try as IP4, then IP6
+     // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
      SetWinAddr(address, addrport, AF_INET, layer, Addr) or
      SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
     result := nrOk;

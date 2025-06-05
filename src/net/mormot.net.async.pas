@@ -434,7 +434,7 @@ type
     property Owner: TAsyncConnections
       read fOwner;
   published
-    /// the associated remote IP4/IP6, as text
+    /// the associated remote IPv4/IPv6, as text
     property RemoteIP: RawUtf8
       read fRemoteIP;
   end;
