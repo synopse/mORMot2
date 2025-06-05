@@ -7702,7 +7702,7 @@ end;
 
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L: PtrInt;
+  L {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
   v: integer;
 begin
   L := 0;
@@ -7710,12 +7710,23 @@ begin
     repeat
       result := (L + R) shr 1;
       v := P^[result];
+      {$ifdef CPUX86}   // less registers on good old i386 target
       if v = Value then
         exit
       else if v < Value then
         L := result + 1
       else
         R := result - 1;
+      {$else}
+      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+      ll := result - 1;
+      if v = Value then
+        exit
+      else if v < Value then
+        L := rr
+      else
+        R := ll;
+      {$endif CPUX86}
     until L > R;
   result := -1
 end;
