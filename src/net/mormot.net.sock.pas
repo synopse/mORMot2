@@ -1706,7 +1706,7 @@ const
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
-// - end text input parsing at final #0 or any char <= ' '
+// - end text input parsing at final #0 '/' or any char <= ' '
 function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 
 /// parse a text input buffer until the end space or EOL
@@ -5015,7 +5015,8 @@ begin
   n := 0;
   while true do
     case text^ of
-      #0 .. ' ':
+      #0 .. ' ',
+      '/': // allow CIDR '1.2.3.4/20' decoding
         if (b < 0) or
            (n <> 3) then
           exit
