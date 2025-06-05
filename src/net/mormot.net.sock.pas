@@ -1666,8 +1666,9 @@ type
     /// decode and register the supplied CIDR address text e.g. as '1.2.3.4/24'
     function Add(const subnet: RawUtf8): boolean; overload;
     /// decode and register the supplied CIDR address as TIp4SubNet
-    procedure Add(const subnet: TIp4SubNet); overload;
-    /// check if an 32-bit IP4 matches a registered CIDR sub-network
+    // - by definition, private IP like 192.168.x.x are not added
+    function Add(const subnet: TIp4SubNet): boolean; overload;
+    /// check if a 32-bit IP4 matches a registered CIDR sub-network
     function Match(ip4: cardinal): boolean; overload;
     /// check if a textual IPv4 matches a registered CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
@@ -5199,11 +5200,15 @@ begin
   result := nil;
 end;
 
-procedure TIp4SubNets.Add(const subnet: TIp4SubNet);
+function TIp4SubNets.Add(const subnet: TIp4SubNet): boolean;
 var
   p: PIp4SubNetMask;
   n: PtrInt;
 begin
+  result := false;
+  if (subnet.ip = cardinal(-1)) or  // 255.255.255.255
+     not IsPublicIP(subnet.ip) then // e.g. 192.168.1.1
+    exit;
   p := FindMask(subnet.mask);
   if p = nil then
   begin
@@ -5212,16 +5217,15 @@ begin
     p := @fSubNet[n];
     p^.Mask := subnet.mask;
   end;
-  AddSortedInteger(p^.IP, p^.IPCount, subnet.ip);
+  result := AddSortedInteger(p^.IP, p^.IPCount, subnet.ip) >= 0;
 end;
 
 function TIp4SubNets.Add(const subnet: RawUtf8): boolean;
 var
   sub: TIp4SubNet;
 begin
-  result := sub.From(subnet);
-  if result then
-    Add(sub);
+  result := sub.From(subnet) and
+            Add(sub);
 end;
 
 function TIp4SubNets.Match(ip4: cardinal): boolean;
