@@ -1599,12 +1599,13 @@ end;
 
 procedure TNetworkProtocols.IPAddresses;
 var
-  i: PtrInt;
+  i, n: PtrInt;
   s: ShortString;
   txt: RawUtf8;
   ip: THash128Rec;
   sub: TIp4SubNets;
   bin: RawByteString;
+  timer: TPrecisionTimer;
 begin
   FillZero(ip.b);
   Check(IsZero(ip.b));
@@ -1687,54 +1688,123 @@ begin
   Check(not IP4Match('192.168.1.251', '192.168.1.250'), 'match11');
   sub := TIp4SubNets.Create;
   try
+    CheckEqual(sub.AfterAdd, 0);
     bin := sub.SaveToBinary;
-    CheckEqual(length(bin), 4);
-    CheckEqual(PInteger(bin)^, 0);
-    Check(not sub.Match('192.168.1.1'));
-    Check(not sub.Match('192.168.1.135'));
-    Check(not sub.Match('192.168.1.250'));
-    Check(not sub.Match('192.168.2.135'));
-    Check(sub.Add('192.168.1.0/24'));
-    Check(sub.Match('192.168.1.1'));
-    Check(sub.Match('192.168.1.135'));
-    Check(sub.Match('192.168.1.250'));
+    if CheckEqual(length(bin), 4) then
+      CheckEqual(PInteger(bin)^, 0);
+    Check(not sub.Match('190.16.1.1'));
+    Check(not sub.Match('190.16.1.135'));
+    Check(not sub.Match('190.16.1.250'));
+    Check(not sub.Match('190.16.2.135'));
+    Check(sub.Add('190.16.1.0/24'));
+    Check(sub.Match('190.16.1.1'));
+    Check(sub.Match('190.16.1.135'));
+    Check(sub.Match('190.16.1.250'));
     Check(not sub.Match('193.168.1.1'));
-    Check(not sub.Match('192.168.2.135'));
+    Check(not sub.Match('190.16.2.135'));
     Check(not sub.Match('191.168.1.250'));
+    CheckEqual(sub.AfterAdd, 1);
     bin := sub.SaveToBinary;
     sub.Clear;
-    Check(not sub.Match('192.168.1.1'));
-    Check(not sub.Match('192.168.1.135'));
-    Check(not sub.Match('192.168.1.250'));
+    CheckEqual(sub.AfterAdd, 0);
+    Check(not sub.Match('190.16.1.1'));
+    Check(not sub.Match('190.16.1.135'));
+    Check(not sub.Match('190.16.1.250'));
     Check(sub.LoadFromBinary(bin), 'load1');
-    Check(sub.Match('192.168.1.1'));
-    Check(sub.Match('192.168.1.135'));
-    Check(sub.Match('192.168.1.250'));
+    CheckEqual(sub.AfterAdd, 1);
+    Check(sub.Match('190.16.1.1'));
+    Check(sub.Match('190.16.1.135'));
+    Check(sub.Match('190.16.1.250'));
     Check(not sub.Match('193.168.1.1'));
     sub.Clear;
-    Check(sub.Add('192.168.40.0/21'));
-    Check(sub.Match('192.168.43.1'));
-    Check(sub.Match('192.168.44.1'));
-    Check(sub.Match('192.168.45.1'));
-    Check(not sub.Match('192.168.55.1'));
-    Check(sub.Add('192.168.1.0/24'));
-    Check(sub.Match('192.168.1.1'));
-    Check(sub.Match('192.168.1.135'));
-    Check(sub.Match('192.168.1.250'));
-    Check(sub.Match('192.168.43.1'));
-    Check(sub.Match('192.168.44.1'));
-    Check(sub.Match('192.168.45.1'));
-    Check(not sub.Match('192.168.55.1'));
+    Check(sub.Add('190.16.40.0/21'));
+    Check(sub.Match('190.16.43.1'));
+    Check(sub.Match('190.16.44.1'));
+    Check(sub.Match('190.16.45.1'));
+    Check(not sub.Match('190.16.55.1'));
+    Check(sub.Add('190.16.1.0/24'));
+    Check(sub.Match('190.16.1.1'));
+    Check(sub.Match('190.16.1.135'));
+    Check(sub.Match('190.16.1.250'));
+    Check(sub.Match('190.16.43.1'));
+    Check(sub.Match('190.16.44.1'));
+    Check(sub.Match('190.16.45.1'));
+    Check(not sub.Match('190.16.55.1'));
+    CheckEqual(sub.AfterAdd, 2);
     bin := sub.SaveToBinary;
     sub.Clear;
-    Check(not sub.Match('192.168.43.1'));
+    Check(not sub.Match('190.16.43.1'));
     Check(sub.LoadFromBinary(bin), 'load2');
-    Check(sub.Match('192.168.1.1'));
-    Check(sub.Match('192.168.1.135'));
-    Check(sub.Match('192.168.1.250'));
-    Check(sub.Match('192.168.43.1'));
-    Check(sub.Match('192.168.44.1'));
-    Check(sub.Match('192.168.45.1'));
+    CheckEqual(sub.AfterAdd, 2);
+    Check(sub.Match('190.16.1.1'));
+    Check(sub.Match('190.16.1.135'));
+    Check(sub.Match('190.16.1.250'));
+    Check(sub.Match('190.16.43.1'));
+    Check(sub.Match('190.16.44.1'));
+    Check(sub.Match('190.16.45.1'));
+    Check(sub.SaveToBinary = bin, 'save');
+    sub.Clear;
+    CheckEqual(sub.AddFromText('# test'#10'190.16.40.0/21 # comment'#10 +
+      '190.16.1.0/24'), 2);
+    Check(sub.SaveToBinary = bin, 'loadtext');
+    CheckEqual(sub.AfterAdd, 2);
+    sub.Clear;
+    Check(sub.Add('1.2.3.4'));
+    Check(sub.Match('1.2.3.4'));
+    Check(not sub.Match('1.2.3.5'));
+    bin := sub.SaveToBinary;
+    sub.Clear;
+    CheckEqual(sub.AddFromText('1.2.3.4 ; comment'#10), 1);
+    CheckEqual(sub.AfterAdd, 1);
+    Check(sub.SaveToBinary = bin, 'loadtext');
+    Check(sub.Match('1.2.3.4'));
+    Check(not sub.Match('1.2.3.5'));
+    txt := HttpGetWeak('https://raw.githubusercontent.com/firehol/blocklist-ipsets/' +
+      'refs/heads/master/firehol_level1.netset', WorkDir + 'firehol.netset');
+    if txt <> '' then
+    begin
+      sub.Clear;
+      n := sub.AddFromText(txt);
+      Check(n > 4000);
+      CheckEqual(sub.AfterAdd, n);
+      CheckEqual(length(sub.SubNet), 18);
+      Check(not sub.Match('1.2.3.4'));
+      Check(not sub.Match('1.2.3.5'));
+      Check(not sub.Match('192.168.1.1'), '192'); // only IsPublicIP() was added
+      Check(not sub.Match('10.18.1.1'), '10');
+      Check(not sub.Match('62.210.254.173'), 'synopse.info');
+      // 223.254.0.0/16 as https://check.spamhaus.org/results/?query=SBL212803
+      Check(sub.Match('223.254.0.1') ,'a1');
+      Check(sub.Match('223.254.1.1'), 'b1');
+      Check(sub.Match('223.254.200.129'), 'c1');
+      CheckEqual(sub.AddFromText(txt), 0, 'twice');
+      // 18 masks, 4471 subnets, 612.950.208 unique IPs: around 16M/s
+      timer.Start;
+      for i := 1 to 20000 do
+        Check(not sub.Match($01010101), '1.1.1.1');
+      NotifyTestSpeed('blacklist ip', 20000, 0, @timer);
+      bin := sub.SaveToBinary;
+      Check(length(bin) < length(txt), 'bin<txt');
+      txt := HttpGetWeak('https://www.spamhaus.org/drop/drop.txt',
+        WorkDir + 'spamhaus.netset');
+      if txt <> '' then
+      begin
+        Check(sub.AddFromText(txt) < 1000, 'spamhaus within firehol');
+        sub.Clear;
+        Check(not sub.Match('10.18.1.1'), '10');
+        Check(sub.AddFromText(txt) > 1000, 'spamhaus=1525');
+        Check(sub.Match('223.254.0.1') ,'a2'); // 223.254.0.0/16
+        Check(sub.Match('223.254.1.1'), 'b2');
+        Check(sub.Match('223.254.200.129'), 'c2');
+        CheckEqual(sub.AddFromText(txt), 0, 'twice');
+      end;
+      sub.Clear;
+      Check(sub.LoadFromBinary(bin), 'loadbin');
+      Check(sub.SaveToBinary = bin, 'savebin');
+      Check(sub.Match('223.254.0.1') ,'a3'); // 223.254.0.0/16
+      Check(sub.Match('223.254.1.1'), 'b3');
+      Check(sub.Match('223.254.200.129'), 'c3');
+    end;
   finally
     sub.Free;
   end;

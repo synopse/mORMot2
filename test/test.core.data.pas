@@ -735,7 +735,6 @@ var
   mustacheJson: RawByteString;
   mus: TMustacheTests;
   mustache: TSynMustache;
-  mustacheJsonFileName: TFileName;
   doc: variant;
   html: RawUtf8;
   helpers: TSynMustacheHelpers;
