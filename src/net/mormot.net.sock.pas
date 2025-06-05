@@ -1643,6 +1643,38 @@ type
     function Match(const ip4: RawUtf8): boolean; overload;
   end;
 
+  /// store one TIp4SubNets CIDR mask definition
+  TIp4SubNetMask = record
+    /// 32-bit IP mask, e.g. 255.255.255.0 for '1.2.3.4/24'
+    Mask: cardinal;
+    /// how many 32-bit masked IP are actually stored in IP[]
+    IPCount: integer;
+    /// list of 32-bit masked IPs, e.g. 1.2.3.0 for '1.2.3.4/24'
+    // - sorted to allow efficient O(log(n)) binary search in TIp4SubNets.Match
+    IP: TIntegerDynArray;
+  end;
+  PIp4SubNetMask = ^TIp4SubNetMask;
+  TIp4SubNetMasks = array of TIp4SubNetMask;
+
+  /// store several CIDR sub-network mask definitions for efficient search
+  // - to handle typically a blacklist of IP ranges e.g. from spamhaus.org
+  TIp4SubNets = class(TSynPersistent)
+  protected
+    fSubNet: TIp4SubNetMasks;
+    function FindMask(mask4: cardinal): PIp4SubNetMask;
+  public
+    /// decode and register the supplied CIDR address text e.g. as '1.2.3.4/24'
+    function Add(const subnet: RawUtf8): boolean; overload;
+    /// decode and register the supplied CIDR address as TIp4SubNet
+    procedure Add(const subnet: TIp4SubNet); overload;
+    /// check if an 32-bit IP4 matches a registered CIDR sub-network
+    function Match(ip4: cardinal): boolean; overload;
+    /// check if a textual IPv4 matches a registered CIDR sub-network
+    function Match(const ip4: RawUtf8): boolean; overload;
+    // remove all registered CIDR sub-networks
+    procedure Clear;
+  end;
+
 
 const
   /// the default TCP port as text, as DEFAULT_PORT[Https]
@@ -5141,6 +5173,92 @@ var
 begin
   result := NetIsIP4(pointer(ip4), @ip32) and
             Match(ip32{%H-});
+end;
+
+
+{ TIp4SubNets }
+
+function TIp4SubNets.FindMask(mask4: cardinal): PIp4SubNetMask;
+var
+  n: integer;
+begin
+  result := pointer(fSubNet);
+  if result = nil then
+    exit;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  repeat
+    if result^.Mask = mask4 then
+      exit;
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := nil;
+end;
+
+procedure TIp4SubNets.Add(const subnet: TIp4SubNet);
+var
+  p: PIp4SubNetMask;
+  n: PtrInt;
+begin
+  p := FindMask(subnet.mask);
+  if p = nil then
+  begin
+    n := length(fSubNet);
+    SetLength(fSubNet, n + 1);
+    p := @fSubNet[n];
+    p^.Mask := subnet.mask;
+  end;
+  AddSortedInteger(p^.IP, p^.IPCount, subnet.ip);
+end;
+
+function TIp4SubNets.Add(const subnet: RawUtf8): boolean;
+var
+  sub: TIp4SubNet;
+begin
+  result := sub.From(subnet);
+  if result then
+    Add(sub);
+end;
+
+function TIp4SubNets.Match(ip4: cardinal): boolean;
+var
+  p: PIp4SubNetMask;
+  n: integer;
+begin
+  p := pointer(fSubNet);
+  if p <> nil then
+  begin
+    result := true;
+    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // try all masks
+    repeat
+      {$ifdef CPUINTEL}
+      if p^.IPCount < 32 then // O(n) SSE2 asm brute force search in CPU cache
+      begin
+        if IntegerScanIndex(pointer(p^.IP), p^.IPCount, ip4 and P^.Mask) >= 0 then
+          exit;
+      end
+      else
+      {$endif CPUINTEL}
+      if FastFindIntegerSorted(pointer(p^.IP), p^.IPCount - 1, ip4 and P^.Mask) >= 0 then
+        exit; // found using O(log(n)) binary search (branchless asm on x86_64)
+      inc(p);
+      dec(n);
+    until n = 0;
+  end;
+  result := false;
+end;
+
+function TIp4SubNets.Match(const ip4: RawUtf8): boolean;
+var
+  ip32: cardinal;
+begin
+  result := NetIsIP4(pointer(ip4), @ip32) and
+            Match(ip32{%H-});
+end;
+
+procedure TIp4SubNets.Clear;
+begin
+  fSubNet := nil;
 end;
 
 

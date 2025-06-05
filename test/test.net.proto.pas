@@ -1605,6 +1605,7 @@ var
   s: ShortString;
   txt: RawUtf8;
   ip: THash128Rec;
+  sub: TIp4SubNets;
 begin
   FillZero(ip.b);
   Check(IsZero(ip.b));
@@ -1685,6 +1686,39 @@ begin
   Check(not IP4Match('193.168.1.1',   '192.168.1.0/24'), 'match9');
   Check(IP4Match('192.168.1.250', '192.168.1.250'),     'match10');
   Check(not IP4Match('192.168.1.251', '192.168.1.250'), 'match11');
+  sub := TIp4SubNets.Create;
+  try
+    Check(not sub.Match('192.168.1.1'));
+    Check(not sub.Match('192.168.1.135'));
+    Check(not sub.Match('192.168.1.250'));
+    Check(not sub.Match('192.168.2.135'));
+    Check(sub.Add('192.168.1.0/24'));
+    Check(sub.Match('192.168.1.1'));
+    Check(sub.Match('192.168.1.135'));
+    Check(sub.Match('192.168.1.250'));
+    Check(not sub.Match('193.168.1.1'));
+    Check(not sub.Match('192.168.2.135'));
+    Check(not sub.Match('191.168.1.250'));
+    sub.Clear;
+    Check(not sub.Match('192.168.1.1'));
+    Check(not sub.Match('192.168.1.135'));
+    Check(not sub.Match('192.168.1.250'));
+    Check(sub.Add('192.168.40.0/21'));
+    Check(sub.Match('192.168.43.1'));
+    Check(sub.Match('192.168.44.1'));
+    Check(sub.Match('192.168.45.1'));
+    Check(not sub.Match('192.168.55.1'));
+    Check(sub.Add('192.168.1.0/24'));
+    Check(sub.Match('192.168.1.1'));
+    Check(sub.Match('192.168.1.135'));
+    Check(sub.Match('192.168.1.250'));
+    Check(sub.Match('192.168.43.1'));
+    Check(sub.Match('192.168.44.1'));
+    Check(sub.Match('192.168.45.1'));
+    Check(not sub.Match('192.168.55.1'));
+  finally
+    sub.Free;
+  end;
 end;
 
 const
