@@ -7809,6 +7809,8 @@ begin
         dec(result);
       inc(result); // return the index where to insert
     end
+    else if Value = P[R] then
+      result := -R - 1 // return the last entered item as negative
     else
       result := R + 1 // common case when the new value is bigger than others
   else
@@ -7890,6 +7892,8 @@ begin
         dec(result);
       inc(result); // return the index where to insert
     end
+    else if Value = P[R] then
+      result := -R - 1
     else
       result := R + 1 // common case when the new value is bigger than others
   else
