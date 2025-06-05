@@ -779,7 +779,7 @@ type
     fExecuteAcceptOnly: boolean; // W in other thread (POSIX THttpAsyncServer)
     fExecuteMessage: RawUtf8;
     fSockPort: RawUtf8;
-    fBanned: THttpAcceptBan; // for hsoBan40xIP
+    fBanned: THttpAcceptBan; // for hsoBan40xIP or BlackList
     procedure OnFirstReadDoTls(Sender: TPollAsyncConnection);
     procedure SetExecuteState(State: THttpServerExecuteState); virtual;
     procedure DoExecute; override;
@@ -1001,7 +1001,7 @@ type
     procedure SetExecuteState(State: THttpServerExecuteState); override;
     procedure DoExecute; override;
   published
-    /// set if hsoBan40xIP has been defined
+    /// used for hsoBan40xIP has been defined or via Banned.BlackList
     // - indicates e.g. how many accept() have been rejected from their IP
     // - you can customize its behavior once the server is started by resetting
     // its Seconds/Max/WhiteIP properties, before any connections are made
@@ -3951,9 +3951,7 @@ begin
         if res = nrRetry then // timeout
           continue;
         // check if the remote IP is banned
-        if (fBanned <> nil) and
-           (fBanned.Count <> 0) and
-           fBanned.IsBanned(sin) then // IP filtering from blacklist
+        if fBanned.IsBanned(sin) then // IP filtering from blacklist
         begin
           if acoVerboseLog in fOptions then
             DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);
@@ -4720,7 +4718,7 @@ begin
   end;
   fServer.IncStat(grRejected);
   fHttp.State := hrsErrorRejected;
-  if (fServer.Async.Banned <> nil) and
+  if (hsoBan40xIP in fServer.Options) and
      not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
      fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
   begin
@@ -4820,7 +4818,8 @@ begin
       include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
     end;
   // trigger optional hsoBan40xIP temporary IP4 bans on unexpected request
-  if fServer.fAsync.Banned.ShouldBan(fRequest.RespStatus, fRemoteIP4) then
+  if (hsoBan40xIP in fServer.Options) and
+     fServer.fAsync.Banned.ShouldBan(fRequest.RespStatus, fRemoteIP4) then
   begin
     fOwner.DoLog(sllTrace, 'DoRequest=%: BanIP(%) %',
       [fRequest.RespStatus, fRemoteIP, fServer.fAsync.Banned], self);
@@ -5003,8 +5002,7 @@ begin
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
-  if hsoBan40xIP in ProcessOptions then
-    fAsync.fBanned := THttpAcceptBan.Create;
+  fAsync.fBanned := THttpAcceptBan.Create; // for hsoBan40xIP and BlackList
   // launch this TThread instance
   inherited Create(aPort, OnStart, OnStop, fProcessName,
     ServerThreadPoolCount, KeepAliveTimeOut, ProcessOptions, aLog);

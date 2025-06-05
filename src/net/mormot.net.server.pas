@@ -877,7 +877,7 @@ type
   // - grBodyReceived is returned for GetRequest({withbody=}true)
   // - grWwwAuthenticate is returned if GetRequest() did send a 401 response
   // - grUpgraded indicates that this connection was upgraded e.g. as WebSockets
-  // - grBanned is triggered by the hsoBan40xIP option
+  // - grBanned is triggered by the hsoBan40xIP option or from Banned.BlackList
   THttpServerSocketGetRequestResult = (
     grClosed,
     grException,
@@ -1213,7 +1213,7 @@ type
     // - for THttpAsyncServer inherited class, redirect to TAsyncServer.fServer
     property Sock: TCrtSocket
       read fSock;
-    /// access to the the IPv4 banning list, if hsoBan40xIP was set
+    /// access to the the IPv4 banning list, via hsoBan40xIP option or BlackList
     property Banned: THttpAcceptBan
       read GetBanned;
   published
@@ -1265,6 +1265,7 @@ type
     property StatUpgraded: integer
       index grUpgraded read GetStat;
     /// how many HTTP connections have been not accepted by hsoBan40xIP option
+    // or from Banned.BlackList registered IPv4/CIDR
     property StatBanned: integer
       index grBanned read GetStat;
   end;
@@ -1318,7 +1319,7 @@ type
     fExecuteState: THttpServerExecuteState;
     fMonoThread: boolean;
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
-    fBanned: THttpAcceptBan; // for hsoBan40xIP
+    fBanned: THttpAcceptBan; // for hsoBan40xIP or BlackList
     fOnAcceptIdle: TOnPollSocketsIdle;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetBanned: THttpAcceptBan; override;
@@ -1371,8 +1372,8 @@ type
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer
       read fThreadPool;
-    /// set if hsoBan40xIP has been defined
-    // - indicates e.g. how many accept() have been rejected from their IP
+    /// access Banned.BlackList or if hsoBan40xIP has been defined
+    // - handle efficient accept() IPv4 ASAP filtering
     // - you can customize its behavior once the server is started by resetting
     // its Seconds/Max/WhiteIP properties, before any connections are made
     property Banned: THttpAcceptBan
@@ -4554,8 +4555,7 @@ begin
   fServerSendBufferSize := 256 shl 10; // 256KB seems fine on Windows + POSIX
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions, aLog);
-  if hsoBan40xIP in ProcessOptions then
-    fBanned := THttpAcceptBan.Create;
+  fBanned := THttpAcceptBan.Create; // for hsoBan40xIP or BlackList
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
@@ -4754,7 +4754,8 @@ begin
               grIntercepted: // handled by OnHeaderParsed event -> no ban
                 ;
             else
-              if fBanned.BanIP(cltaddr.IP4) then // e.g. after grTimeout
+              if (hsoBan40xIP in fOptions) and
+                 fBanned.BanIP(cltaddr.IP4) then // e.g. after grTimeout
                 IncStat(grBanned);
             end;
             OnDisconnect;
@@ -4873,7 +4874,8 @@ begin
     DoRequest(req);
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
-    if fBanned.ShouldBan(req.RespStatus, ClientSock.fRemoteIP) then
+    if (hsoBan40xIP in fOptions) and
+       fBanned.ShouldBan(req.RespStatus, ClientSock.fRemoteIP) then
       IncStat(grBanned);
     // send back the response
     if Terminated then
@@ -5012,6 +5014,7 @@ begin
           fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
               [ToText(aHeaderResult)^, fRemoteIP], self);
         if (aHeaderResult <> grClosed) and
+           (hsoBan40xIP in fServer.Options) and
            fServer.fBanned.BanIP(fRemoteIP) then
           fServer.IncStat(grBanned);
       end;
@@ -5349,6 +5352,7 @@ procedure THttpServerResp.Execute;
                 else
                   begin
                     banned := (res <> grClosed) and
+                              (hsoBan40xIP in fServer.Options) and
                               fServer.fBanned.BanIP(fServerSock.RemoteIP);
                     if banned then
                       fServer.IncStat(grBanned);
