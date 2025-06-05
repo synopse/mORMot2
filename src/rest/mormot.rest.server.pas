@@ -3086,6 +3086,8 @@ begin
           end;
         method := ExecuteOrmWrite;
       end;
+  else
+    exit;
   end;
   if exec.Mode = amBackgroundOrmSharedThread then
     if (Command = execOrmWrite) and
