@@ -5255,17 +5255,9 @@ begin
   begin
     result := true;
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // try all masks
-    repeat
-      {$ifdef CPUINTEL}
-      if p^.IPCount < 32 then // O(n) SSE2 asm brute force search in CPU cache
-      begin
-        if IntegerScanIndex(pointer(p^.IP), p^.IPCount, ip4 and P^.Mask) >= 0 then
-          exit;
-      end
-      else
-      {$endif CPUINTEL}
+    repeat // search using O(log(n)) binary search (branchless asm on x86_64)
       if FastFindIntegerSorted(pointer(p^.IP), p^.IPCount - 1, ip4 and P^.Mask) >= 0 then
-        exit; // found using O(log(n)) binary search (branchless asm on x86_64)
+        exit; // not faster to use IntegerScanIndex() for small IPCount
       inc(p);
       dec(n);
     until n = 0;
