@@ -1606,6 +1606,7 @@ var
   txt: RawUtf8;
   ip: THash128Rec;
   sub: TIp4SubNets;
+  bin: RawByteString;
 begin
   FillZero(ip.b);
   Check(IsZero(ip.b));
@@ -1688,6 +1689,9 @@ begin
   Check(not IP4Match('192.168.1.251', '192.168.1.250'), 'match11');
   sub := TIp4SubNets.Create;
   try
+    bin := sub.SaveToBinary;
+    CheckEqual(length(bin), 4);
+    CheckEqual(PInteger(bin)^, 0);
     Check(not sub.Match('192.168.1.1'));
     Check(not sub.Match('192.168.1.135'));
     Check(not sub.Match('192.168.1.250'));
@@ -1699,10 +1703,17 @@ begin
     Check(not sub.Match('193.168.1.1'));
     Check(not sub.Match('192.168.2.135'));
     Check(not sub.Match('191.168.1.250'));
+    bin := sub.SaveToBinary;
     sub.Clear;
     Check(not sub.Match('192.168.1.1'));
     Check(not sub.Match('192.168.1.135'));
     Check(not sub.Match('192.168.1.250'));
+    Check(sub.LoadFromBinary(bin), 'load1');
+    Check(sub.Match('192.168.1.1'));
+    Check(sub.Match('192.168.1.135'));
+    Check(sub.Match('192.168.1.250'));
+    Check(not sub.Match('193.168.1.1'));
+    sub.Clear;
     Check(sub.Add('192.168.40.0/21'));
     Check(sub.Match('192.168.43.1'));
     Check(sub.Match('192.168.44.1'));
@@ -1716,6 +1727,16 @@ begin
     Check(sub.Match('192.168.44.1'));
     Check(sub.Match('192.168.45.1'));
     Check(not sub.Match('192.168.55.1'));
+    bin := sub.SaveToBinary;
+    sub.Clear;
+    Check(not sub.Match('192.168.43.1'));
+    Check(sub.LoadFromBinary(bin), 'load2');
+    Check(sub.Match('192.168.1.1'));
+    Check(sub.Match('192.168.1.135'));
+    Check(sub.Match('192.168.1.250'));
+    Check(sub.Match('192.168.43.1'));
+    Check(sub.Match('192.168.44.1'));
+    Check(sub.Match('192.168.45.1'));
   finally
     sub.Free;
   end;

@@ -1673,6 +1673,10 @@ type
     function Match(const ip4: RawUtf8): boolean; overload;
     // remove all registered CIDR sub-networks
     procedure Clear;
+    /// persist this list as optimized binary
+    function SaveToBinary: RawByteString;
+    /// clear and retrieve from a binary buffer persisted via SaveToBinary
+    function LoadFromBinary(const bin: RawByteString): boolean;
   end;
 
 
@@ -5259,6 +5263,62 @@ end;
 procedure TIp4SubNets.Clear;
 begin
   fSubNet := nil;
+end;
+
+function TIp4SubNets.SaveToBinary: RawByteString;
+var
+  i, n, L: PtrInt;
+  p: PIntegerArray;
+begin
+  n := length(fSubNet);
+  L := n * 8 + 4;
+  for i := 0 to n - 1 do
+    inc(L, fSubNet[i].IPCount * 4);
+  p := FastNewRawByteString(result, L);
+  p^[0] := n;
+  for i := 0 to n - 1 do
+    with fSubNet[i] do
+    begin
+      p^[1] := Mask;
+      p^[2] := IPCount;
+      MoveFast(pointer(IP)^, p^[3], p^[2] * 4);
+      p := @p^[p^[2] + 2];
+    end;
+end;
+
+function TIp4SubNets.LoadFromBinary(const bin: RawByteString): boolean;
+var
+  i, n: PtrInt;
+  p: PIntegerArray;
+begin
+  result := false;
+  Clear;
+  n := length(bin);
+  if (n and 3) <> 0 then
+    exit;
+  n := n shr 2;
+  p := pointer(bin);
+  for i := 0 to p^[0] - 1 do
+  begin
+    if n < 2 then
+      exit; // avoid buffer overflow
+    dec(n, p^[2] + 2);
+    p := @p^[p^[2] + 2];
+  end;
+  if n <> 1 then
+    exit; // decoded size should be an exact match with supplied bin
+  p := pointer(bin);
+  SetLength(fSubNet, p^[0]);
+  for i := 0 to p^[0] - 1 do
+    with fSubNet[i] do
+    begin
+      Mask := p^[1];
+      IPCount := p^[2];
+      SetLength(IP, p^[2]);
+      MoveFast(p^[3], pointer(IP)^, p^[2] * 4);
+      p := @p^[p^[2] + 2];
+    end;
+  result := true;
 end;
 
 
