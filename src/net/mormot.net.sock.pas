@@ -541,15 +541,15 @@ function IP4Netmask(prefix: integer): cardinal; overload;
 function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compute a subnet value from a 32-bit IP4 and its associated NetMask
+/// compute a subnet/CIDR value from a 32-bit IP4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
 function IP4Subnet(ip4, netmask4: cardinal): ShortString; overload;
 
-/// compute a subnet value from an IP4 and its associated NetMask
+/// compute a subnet/CIDR value from an IP4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
 function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8; overload;
 
-/// check if an IP4 match a sub-network
+/// check if an IP4 match a CIDR sub-network
 // - e.g. IP4Match('192.168.1.1', '192.168.1.0/24') = true
 function IP4Match(const ip4, subnet: RawUtf8): boolean;
 
@@ -1622,7 +1622,7 @@ type
   end;
   PUri = ^TUri;
 
-  /// 32-bit binary storage of a IPv4 sub-network for fast comparison
+  /// 32-bit binary storage of a IPv4 CIDR sub-network for fast comparison
   {$ifdef USERECORDWITHMETHODS}
   TIp4SubNet = record
   {$else}
@@ -1632,13 +1632,14 @@ type
     ip: cardinal;
     /// 32-bit IP mask, e.g. 255.255.255.0 for '1.2.3.4/24'
     mask: cardinal;
-    /// check and decode the supplied address text from its format '1.2.3.4/24'
+    /// check and decode the supplied CIDR address text from its format '1.2.3.4/24'
     // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
+    // - plain IP address like '1.2.3.4' will be decoded with mask=255.255.255.255
     function From(const subnet: RawUtf8): boolean;
-    /// check if an 32-bit IP4 matches a decoded sub-network
+    /// check if an 32-bit IP4 matches a decoded CIDR sub-network
     function Match(ip4: cardinal): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// check if a textual IPv4 matches a decoded sub-network
+    /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
   end;
 
@@ -3442,7 +3443,7 @@ begin
   result := (mask <> 0);
 end;
 
-function TIp4SubNet.Match(ip4: cardinal): boolean;
+function TIp4SubNet.Match(ip4: cardinal): boolean; // defined here for inlining
 begin
   // e.g. ip4=172.16.144.160 subip=172.16.144.0 submask=255.255.255.0
   result := (ip4 and mask) = ip;
@@ -5116,14 +5117,21 @@ end;
 function TIp4SubNet.From(const subnet: RawUtf8): boolean;
 var
   ip4, sub4: RawUtf8;
-  ip32, prefix: cardinal; // local temporary ip32 is needed on Delphi XE4
+  ip32, prefix: cardinal; // local temporary ip32 is needed on Delphi XE4 :(
 begin
-  mask := 0;
-  ip32 := 0;
-  result := SplitFromRight(subnet, '/', ip4, sub4) and
-            NetIsIP4(pointer(ip4), @ip32) and
-            ToCardinal(sub4, prefix, 1) and
-            IP4Netmask(prefix{%H-}, mask);
+  if SplitFromRight(subnet, '/', ip4, sub4) then // regular '1.2.3.4/sub' mask
+  begin
+    ip32 := 0;
+    mask := 0;
+    result := NetIsIP4(pointer(ip4), @ip32) and
+              ToCardinal(sub4, prefix, 1) and
+              IP4Netmask(prefix{%H-}, mask);
+  end
+  else
+  begin
+    mask := cardinal(-1); // 255.255.255.255
+    result := NetIsIP4(pointer(subnet), @ip32); // plain '1.2.3.4' IPv4 address
+  end;
   ip := ip32 and mask; // normalize
 end;
 
