@@ -1317,6 +1317,7 @@ type
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerSendBufferSize: integer;
+    fBanSec: integer;
     fExecuteState: THttpServerExecuteState;
     fMonoThread: boolean;
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
@@ -1327,6 +1328,7 @@ type
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
+    procedure DoCallbacks(tix64: Int64; sec32: integer);
     /// server main loop - don't change directly
     procedure DoExecute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -4652,18 +4654,41 @@ begin
   result := fServerConnectionActive;
 end;
 
+procedure THttpServer.DoCallbacks(tix64: Int64; sec32: integer);
+var
+  i: integer;
+begin
+  if Assigned(fOnAcceptIdle) then
+    fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
+  if Assigned(fLogger) then
+    fLogger.OnIdle(tix64) // flush log file(s) on idle server
+  else if Assigned(fAnalyzer) then
+    fAnalyzer.OnIdle(tix64); // consolidate telemetry if needed
+  if Assigned(fBanned) and
+     (fBanned.Count <> 0) then
+  begin
+    if fBanSec <> 0 then
+      for i := fBanSec + 1 to sec32 do // as many DoRotate as elapsed seconds
+        fBanned.DoRotate // update internal THttpAcceptBan lists
+    {$ifdef OSPOSIX} // Windows would require some activity - not an issue
+    else
+      fSock.ReceiveTimeout := 1000 // accept() to exit after one second
+    {$endif OSPOSIX};
+    fBanSec := sec32;
+  end;
+end;
+
 procedure THttpServer.DoExecute;
 var
   cltsock: TNetSocket;
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  banlen, sec, bansec, i: integer;
+  banlen {$ifdef OSWINDOWS}, sec, acceptsec {$endif}: integer;
   tix64: QWord;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
-  bansec := 0;
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
@@ -4678,6 +4703,9 @@ begin
     if not fSock.SockIsDefined then // paranoid check
       EHttpServer.RaiseUtf8('%.Execute: %.Bind failed', [self, fSock]);
     // main ACCEPT loop
+    {$ifdef OSWINDOWS}
+    acceptsec := 0;
+    {$endif OSWINDOWS}
     while not Terminated do
     begin
       res := Sock.Sock.Accept(cltsock, cltaddr, {async=}false);
@@ -4695,37 +4723,24 @@ begin
           cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down, and end thread now
       end;
-      tix64 := 0;
-      if Assigned(fBanned) and
-         {$ifdef OSPOSIX}
-         (res = nrRetry) and // Windows does not implement timeout on accept()
-         {$endif OSPOSIX}
-         (fBanned.Count <> 0) then
+      {$ifdef OSPOSIX}
+      if res = nrRetry then // accept() timeout after 1 or 5 seconds on POSIX
       begin
-        // call fBanned.DoRotate exactly every second
         tix64 := mormot.core.os.GetTickCount64;
-        sec := tix64 div 1000;
-        if bansec <> 0 then
-          for i := bansec + 1 to sec do // as many DoRotate as elapsed seconds
-            fBanned.DoRotate // update internal THttpAcceptBan lists
-        {$ifdef OSPOSIX} // Windows would require some activity - not an issue
-        else
-          fSock.ReceiveTimeout := 1000 // accept() to exit after one second
-        {$endif OSPOSIX};
-        bansec := sec;
-      end;
-      if res = nrRetry then // accept() timeout after 1 or 5 seconds
-      begin
-        if tix64 = 0 then
-          tix64 := mormot.core.os.GetTickCount64;
-        if Assigned(fOnAcceptIdle) then
-          fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
-        if Assigned(fLogger) then
-          fLogger.OnIdle(tix64) // flush log file(s) on idle server
-        else if Assigned(fAnalyzer) then
-          fAnalyzer.OnIdle(tix64); // consolidate telemetry if needed
+        DoCallbacks(tix64, tix64 div 1000);
         continue;
       end;
+      {$else} // Windows accept() does not timeout and return nrRetry
+      tix64 := mormot.core.os.GetTickCount64;
+      sec := tix64 div 1000;
+      if sec <> acceptsec then // trigger the callbacks once per second
+      begin
+        acceptsec := sec;
+        DoCallbacks(tix64, sec);
+      end;
+      if res = nrRetry then
+        continue; // not seen in practice, but won't hurt
+      {$endif OSPOSIX}
       if fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
       begin
         banlen := ord(HTTP_BANIP_RESPONSE[0]);
