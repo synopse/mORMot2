@@ -897,7 +897,7 @@ type
     procedure AddJsonEscape(Source: TJsonWriter); overload;
     /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
-    // ! AddNoJsonEscapeUtf8(Source.Text);
+    // ! AddString(Source.Text);
     procedure AddNoJsonEscape(Source: TJsonWriter); overload;
     /// append a UTF-8 already encoded JSON buffer forcing Unicode escape
     // - don't escapes chars according to the JSON RFC but convert any 8-bit
@@ -6620,7 +6620,7 @@ begin
     AddDirect('"');
   end
   else // was not a quoted string
-    AddNoJsonEscape(pointer(QuotedString), length(QuotedString));
+    AddString(QuotedString);
 end;
 
 procedure TJsonWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
@@ -7091,7 +7091,7 @@ noesc:
         inc(c);
       until (PtrUInt(c) >= PtrUInt(Len)) or
             (tab[c^] <> JSON_ESCAPE_NONE);
-    l := PUtf8Char(c) - P;
+    l := PUtf8Char(c) - P; // inlined AddNoJsonEscape()
     if PtrInt(BEnd - B) < l then // note: PtrInt(BEnd - B) could be < 0
       AddNoJsonEscapeBig(P, l)
     else
@@ -7287,7 +7287,7 @@ begin
   if Source.fTotalFileSize = 0 then
     AddNoJsonEscapeBig(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
   else
-    AddNoJsonEscapeUtf8(Source.Text);
+    AddString(Source.Text);
 end;
 
 procedure TJsonWriter.AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
@@ -9384,10 +9384,10 @@ begin
       if (IgnoreKey = '') or
          (List[i].Name <> IgnoreKey) then
       begin
-        AddNoJsonEscapeUtf8(List[i].Name);
-        AddNoJsonEscapeUtf8(KeySeparator);
-        AddNoJsonEscapeUtf8(List[i].Value);
-        AddNoJsonEscapeUtf8(ValueSeparator);
+        AddString(List[i].Name);
+        AddString(KeySeparator);
+        AddString(List[i].Value);
+        AddString(ValueSeparator);
       end;
     SetText(result);
   finally
@@ -11459,7 +11459,7 @@ begin
     with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddDirect('{', '"');
-      AddNoJsonEscapeUtf8(Name);
+      AddString(Name);
       AddDirect('"', ':');
       AddQuotedStringAsJson(SQLValue);
       AddDirect('}');

@@ -5351,8 +5351,8 @@ begin
         d := fUsers.Values.Value^;
         for i := 0 to fUsers.Count - 1 do
         begin
-          w.AddNoJsonEscapeUtf8(u^);
-          w.AddNoJsonEscapeUtf8(middle);
+          w.AddString(u^);
+          w.AddString(middle);
           w.AddBinToHex(d, fAlgoSize, {lowerhex=}true);
           w.Add(#10);
           inc(u);

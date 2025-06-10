@@ -8555,7 +8555,7 @@ begin
         begin
           if i > 0 then
             AddDirect(',', ' ');
-          AddNoJsonEscapeUtf8(Name);
+          AddString(Name);
           if IncludePropType then
           begin
             AddDirect(':', ' ');

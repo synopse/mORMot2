@@ -736,10 +736,6 @@ type
     // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscape(P: pointer; Len: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 chars to the buffer
-    // - does not escape chars according to the JSON RFC
-    procedure AddNoJsonEscapeUtf8(const text: RawByteString);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from a RTL string type
     // - does not escape chars according to the JSON RFC
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
@@ -5049,11 +5045,6 @@ begin
       end;
     end;
   end;
-end;
-
-procedure TTextWriter.AddNoJsonEscapeUtf8(const text: RawByteString);
-begin
-  AddNoJsonEscape(pointer(text), length(text));
 end;
 
 procedure TTextWriter.AddRawJson(const json: RawJson);

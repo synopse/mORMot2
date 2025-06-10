@@ -10975,7 +10975,7 @@ begin
       B := P;
       c := NextUtf8Ucs4(P) - $1f5ff;
       if c <= cardinal(high(TEmoji)) then
-        W.AddNoJsonEscapeUtf8(EMOJI_TAG[TEmoji(c)])
+        W.AddString(EMOJI_TAG[TEmoji(c)])
       else
         W.AddNoJsonEscape(B, P - B);
     until P^ = #0;
