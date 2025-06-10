@@ -5052,7 +5052,7 @@ begin
   if json = '' then
     AddShort(NULL_LOW, 4)
   else
-    AddNoJsonEscape(pointer(json), length(json));
+    AddString(json);
 end;
 
 procedure TTextWriter.AddNoJsonEscapeString(const s: string);

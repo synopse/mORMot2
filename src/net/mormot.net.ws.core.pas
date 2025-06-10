@@ -2053,7 +2053,7 @@ begin
       WR.AddDirect('"', '"')
     else if (ContentType = '') or
             IsContentTypeJsonU(ContentType) then
-      WR.AddNoJsonEscape(pointer(Content), length(Content))
+      WR.AddString(Content)
     else if IsValidUtf8NotVoid(Content) then
       WR.AddJsonString(Content)
     else

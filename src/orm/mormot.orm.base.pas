@@ -9021,7 +9021,7 @@ begin
     begin
       U := GetResults(o);
       if W.Expand then
-        W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
+        W.AddString(W.ColNames[f]); // '"' + ColNames[] + '":'
       if Assigned(OnExportValue) then
         W.AddString(OnExportValue(self, r, f, false))
       else if (IDBinarySize > 0) and

@@ -11874,7 +11874,7 @@ end;
 procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
   out result: RawUtf8);
 var
-  i, j, L: PtrInt;
+  i, j, namespaceLen: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
   if P = nil then
@@ -11882,16 +11882,16 @@ begin
   else
     with TJsonWriter.CreateOwnedStream(temp) do
     try
-      AddNoJsonEscape(pointer(Header), length(Header));
-      L := length(NameSpace);
-      if L <> 0 then
-        AddNoJsonEscape(pointer(NameSpace), L);
+      AddString(Header);
+      namespaceLen := length(NameSpace);
+      if namespaceLen <> 0 then
+        AddString(NameSpace);
       AddJsonToXML(P);
-      if L <> 0 then
-        for i := 1 to L do
+      if namespaceLen <> 0 then
+        for i := 1 to namespaceLen do
           if NameSpace[i] = '<' then
           begin
-            for j := i + 1 to L do
+            for j := i + 1 to namespaceLen do
               if NameSpace[j] in [' ', '>'] then
               begin
                 AddDirect('<', '/');

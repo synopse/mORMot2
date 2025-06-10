@@ -4227,7 +4227,7 @@ begin
     begin
       // detect and append the error message as JSON object
       AddShort(','#13#10'"error":'#13#10);
-      AddNoJsonEscape(pointer(msg^), length(msg^));
+      AddString(msg^);
       AddDirect(#13, #10, '}');
     end
     else
