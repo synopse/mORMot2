@@ -5413,7 +5413,7 @@ var
   ip32: cardinal;
 begin
   result := NetIsIP4(pointer(ip4), @ip32) and
-            IP4SubNetMatch(pointer(bin), ip32);
+            IP4SubNetMatch(pointer(bin), ip32{%H-});
 end;
 
 

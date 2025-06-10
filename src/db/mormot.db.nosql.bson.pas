@@ -3777,7 +3777,7 @@ begin
     BsonWriteDoc(PDocVariantData(b)^)
   else if (b^.VType = BsonVariantType.VarType) and
           (b^.VKind in [betDoc, betArray]) and
-          (b.^VBlob <> nil) then
+          (b^.VBlob <> nil) then
     WriteBinary(RawByteString(b^.VBlob))
   else
   begin
