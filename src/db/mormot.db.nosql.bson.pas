@@ -280,6 +280,7 @@ type
     procedure ToText(var result: RawUtf8); overload;
     /// convert this ObjectID to its TBsonVariant custom variant value
     function ToVariant: variant; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert this ObjectID to its TBsonVariant custom variant value
     procedure ToVariant(var result: variant); overload;
     /// returns the timestamp portion of the ObjectId() object as a TDateTime
@@ -2070,24 +2071,17 @@ end;
 
 function TBsonObjectID.ToVariant: variant;
 begin
-  VarClear(result);
-  with TBsonVariantData(result) do
-  begin
-    VType := BsonVariantType.VarType;
-    VKind := betObjectID;
-    VObjectID := self;
-  end;
+  ToVariant(result);
 end;
 
 procedure TBsonObjectID.ToVariant(var result: variant);
+var
+  res: TBsonVariantData absolute result;
 begin
   VarClear(result);
-  with TBsonVariantData(result) do
-  begin
-    VType := BsonVariantType.VarType;
-    VKind := betObjectID;
-    VObjectID := self;
-  end;
+  res.VType := BsonVariantType.VarType;
+  res.VKind := betObjectID;
+  res.VObjectID := self;
 end;
 
 function TBsonObjectID.FromText(const Text: RawUtf8): boolean;
@@ -2106,21 +2100,21 @@ end;
 function TBsonObjectID.FromVariant(const value: variant): boolean;
 var
   txt: RawUtf8;
+  b: PBsonVariantData;
   wasString: boolean;
-  bson: PBsonVariantData;
 begin
-  bson := @value;
-  if bson^.VType = varVariantByRef then
-    bson := TVarData(value).VPointer;
-  if (bson^.VType = BsonVariantType.VarType) and
-     (bson^.VKind = betObjectID) then
+  b := @value;
+  if b^.VType = varVariantByRef then
+    b := PVarData(b)^.VPointer;
+  if (b^.VType = BsonVariantType.VarType) and
+     (b^.VKind = betObjectID) then
   begin
-    self := bson^.VObjectID;
+    self := b^.VObjectID; // direct retrieval from 12-byte binary content
     result := true;
   end
   else
   begin
-    VariantToUtf8(value, txt, wasString);
+    VariantToUtf8(PVariant(b)^, txt, wasString);
     result := wasString and FromText(txt);
   end;
 end;
@@ -2145,7 +2139,7 @@ begin
   if Kind = betObjectID then
   begin
     ElementBytes := SizeOf(TBsonObjectID);
-    Element := @PBsonVariantData(aValue)^.VObjectID;
+    Element := @PBsonVariantData(aValue)^.VObjectID; // refers to embedded bytes
   end
   else
     FromBson(PBsonVariantData(aValue)^.VBlob);
