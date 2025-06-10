@@ -1314,6 +1314,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
     procedure SetOutCookie(const aName, aValue: RawUtf8);
+    procedure StatusCodeToText(Code: cardinal; var Reason: RawUtf8); virtual;
   public
     /// access to all input/output parameters at TRestServer.Uri() level
     // - process should better call Results() or Success() methods to set the
@@ -4191,6 +4192,11 @@ begin
   end;
 end;
 
+procedure TRestUriContext.StatusCodeToText(Code: cardinal; var Reason: RawUtf8);
+begin
+  Reason := mormot.core.text.StatusCodeToText(Code)^; // standard English
+end;
+
 procedure TRestUriContext.Error(const ErrorMessage: RawUtf8;
   Status, CacheControlMaxAgeSec: integer);
 var
@@ -4209,7 +4215,7 @@ begin
     exit;
   end;
   if ErrorMessage = '' then
-    StatusCodeToReason(Status, msg)
+    StatusCodeToText(Status, msg) // customizable method (also in fServer)
   else
     msg := ErrorMessage;
   with TJsonWriter.CreateOwnedStream(temp) do
