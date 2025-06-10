@@ -4956,7 +4956,7 @@ var
 begin
   if (P <> nil) and
      (Len > 0) then
-    if Len < fTempBufSize * 2 then
+    if Len < fTempBufSize * 2 then // also happen when FlushToStream is needed
       repeat
         D := B + 1;
         direct := BEnd - D; // guess biggest size available in fTempBuf at once
@@ -4964,8 +4964,7 @@ begin
         begin
           if Len < direct then
             direct := Len;
-          // append UTF-8 bytes to fTempBuf
-          if direct > 0 then
+          if direct > 0 then // fill fTempBuf as much as possible
           begin
             MoveFast(P^, D^, direct);
             inc(B, direct);
@@ -4993,15 +4992,13 @@ procedure TTextWriter.AddNoJsonEscape(P: pointer; Len: PtrInt);
 begin
   if (P <> nil) and
      (Len > 0) then
-    if Len < fTempBufSize then // can be inlined for small chunk
+    if BEnd - B >= Len then // note: PtrInt(BEnd - B) could be < 0
     begin
-      if BEnd - B <= Len then  // note: PtrInt(BEnd - B) could be < 0
-        FlushToStream;
-      MoveFast(P^, B[1], Len);
+      MoveFast(P^, B[1], Len); // efficient inlining for small chunks
       inc(B, Len);
     end
     else
-      AddNoJsonEscapeBig(P, Len); // big chunks (hardly the case)
+      AddNoJsonEscapeBig(P, Len); // big chunks or need flush (hardly the case)
 end;
 
 procedure TTextWriter.AddNoJsonEscape(P: pointer);
