@@ -547,6 +547,7 @@ type
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
       {$ifdef HASINLINE}inline;{$endif}
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); virtual;
+    function StatusCodeToText(Code: cardinal): PRawUtf8; virtual; // e.g. i18n
     function GetFavIcon(Ctxt: THttpServerRequestAbstract): cardinal;
   public
     /// initialize the server instance
@@ -1082,8 +1083,8 @@ type
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
-    function ComputeRejectBody(var Body: RawByteString;
-      Opaque: Int64; Status: integer): boolean; // true for grWwwAuthenticate
+    function ComputeRejectBody(var Body: RawByteString; Opaque: Int64;
+      Status: integer): boolean; virtual; // return true for grWwwAuthenticate
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
   public
@@ -3248,17 +3249,20 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   end;
 
   procedure ProcessErrorMessage;
+  var
+    reason: PRawUtf8;
   begin
-    HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere);
+    reason := fServer.StatusCodeToText(fRespStatus); // may be customized (i18n)
+    HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere); // safety
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
       '<h1>% Server Error %</h1><hr>' +
-      '<p>HTTP %</p><p>%</p><small>%</small></body></html>',
-      [fServer.ServerName, fRespStatus, StatusCodeToShort(fRespStatus),
+      '<p>HTTP % %</p><p>%</p><small>%</small></body></html>',
+      [fServer.ServerName, fRespStatus, fRespStatus, reason^,
        fOutContentType, XPOWEREDVALUE],
       RawUtf8(fOutContent));
     fOutCustomHeaders := '';
-    fOutContentType := HTML_CONTENT_TYPE; // create message to display
+    fOutContentType := HTML_CONTENT_TYPE; // body = HTML message to display
   end;
 
 var
@@ -3295,7 +3299,7 @@ begin
       status := 999; // avoid SmallUInt32Utf8[] overflow
     h^.Append(SmallUInt32Utf8[status]);
     h^.Append(' ');
-    h^.Append(StatusCodeToText(fRespStatus)^);
+    h^.Append(mormot.core.text.StatusCodeToText(fRespStatus)^); // English
     h^.AppendCRLF;
   end;
   // append (and sanitize CRLF) custom headers from Request() method
@@ -3613,6 +3617,11 @@ procedure THttpServerGeneric.AppendHttpDate(var Dest: TRawByteStringBuffer);
 begin
   // overriden in THttpAsyncServer.AppendHttpDate with its own per-second cache
   Dest.AppendShort(HttpDateNowUtc);
+end;
+
+function THttpServerGeneric.StatusCodeToText(Code: cardinal): PRawUtf8;
+begin
+  result := mormot.core.text.StatusCodeToText(Code); // default English text
 end;
 
 procedure THttpServerGeneric.SetTlsServerNameCallback(
@@ -4523,7 +4532,7 @@ var
   reason: PRawUtf8;
   auth, html: RawUtf8;
 begin
-  reason := StatusCodeToText(status);
+  reason := StatusCodeToText(status); // customizable method
   FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
              '<body style="font-family:verdana"><h1>%</h1>' +
              '<p>Server rejected this request as % %.</body></html>',
@@ -5766,7 +5775,7 @@ var
   procedure LocalPeerRequestFailed(E: TClass);
   begin
     fLog.Add.Log(sllWarning, 'OnDownload: % %:% % failed as % %',
-      [method, ip, fPort, aUrl, StatusCodeToShort(result), E], self);
+      [method, ip, fPort, aUrl, StatusCodeToText(result)^, E], self);
     if (fInstable <> nil) and // add to RejectInstablePeersMin list
        (E <> nil) and         // on OpenBind() error
        not aRetry then        // not from partial request before broadcast
