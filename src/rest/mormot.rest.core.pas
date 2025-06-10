@@ -658,7 +658,8 @@ type
     property LogLevel: TSynLogLevels
       read fLogLevel;
     /// tune the InternalLogResponse() output maximum size
-    // - equals 2048 by default - maximum value is 4096
+    // - equals 2048 by default - you could use e.g. MaxInt for no size limit
+    // of valid UTF-8 response content
     property LogResponseMaxBytes: integer
       read fLogResponseMaxBytes write fLogResponseMaxBytes;
 
@@ -2083,9 +2084,35 @@ end;
 
 procedure TRest.InternalLogResponse(const aContent: RawByteString;
   const aContext: shortstring; Level: TSynLogLevel);
+var
+  len, max: PtrInt;
+  bak: AnsiChar;
+  p: PUtf8Char;
 begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
-  fLogFamily.Add.LogEscape(Level, '%', [aContext],
-    pointer(aContent), length(aContent), self, fLogResponseMaxBytes);
+  p := pointer(aContent);
+  if p = nil then
+    exit;
+  len := PStrLen(p - _STRLEN)^;
+  max := fLogResponseMaxBytes;
+  if (max < MAX_LOGESCAPE) or
+     not IsValidUtf8Buffer(p, len) then // may use AVX2 on Haswell
+    // safe ouput of the content, with proper escape if needed (e.g. binary)
+    fLogFamily.Add.LogEscape(Level, '%', [aContext], p, len, self, max)
+  else
+  begin
+    // direct huge UTF-8 content write without response
+    bak := #0;
+    if max > len then
+      try
+        bak := p[max];
+        p[max] := #0; // truncate
+      except
+        bak := #0; // paranoid
+      end;
+    fLogFamily.Add.LogText(Level, p, self);
+    if bak <> #0 then
+      p[max] := bak;
+  end;
 end;
 
 function TRest.Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
