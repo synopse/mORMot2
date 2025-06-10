@@ -3249,17 +3249,14 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   end;
 
   procedure ProcessErrorMessage;
-  var
-    reason: PRawUtf8;
   begin
-    reason := fServer.StatusCodeToText(fRespStatus); // may be customized (i18n)
     HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere); // safety
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
       '<h1>% Server Error %</h1><hr>' +
       '<p>HTTP % %</p><p>%</p><small>%</small></body></html>',
-      [fServer.ServerName, fRespStatus, fRespStatus, reason^,
-       fOutContentType, XPOWEREDVALUE],
+      [fServer.ServerName, fRespStatus, fRespStatus,
+       fServer.StatusCodeToText(fRespStatus)^, fOutContentType, XPOWEREDVALUE],
       RawUtf8(fOutContent));
     fOutCustomHeaders := '';
     fOutContentType := HTML_CONTENT_TYPE; // body = HTML message to display
@@ -3299,7 +3296,7 @@ begin
       status := 999; // avoid SmallUInt32Utf8[] overflow
     h^.Append(SmallUInt32Utf8[status]);
     h^.Append(' ');
-    h^.Append(mormot.core.text.StatusCodeToText(fRespStatus)^); // English
+    h^.Append(mormot.core.text.StatusCodeToText(fRespStatus)^); // need English
     h^.AppendCRLF;
   end;
   // append (and sanitize CRLF) custom headers from Request() method

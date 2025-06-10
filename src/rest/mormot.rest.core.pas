@@ -1314,7 +1314,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
     procedure SetOutCookie(const aName, aValue: RawUtf8);
-    procedure StatusCodeToText(Code: cardinal; var Reason: RawUtf8); virtual;
+    function StatusCodeToText(Code: cardinal): PRawUtf8; virtual;
   public
     /// access to all input/output parameters at TRestServer.Uri() level
     // - process should better call Results() or Success() methods to set the
@@ -4192,15 +4192,15 @@ begin
   end;
 end;
 
-procedure TRestUriContext.StatusCodeToText(Code: cardinal; var Reason: RawUtf8);
+function TRestUriContext.StatusCodeToText(Code: cardinal): PRawUtf8;
 begin
-  Reason := mormot.core.text.StatusCodeToText(Code)^; // standard English
+  result := mormot.core.text.StatusCodeToText(Code); // standard English
 end;
 
 procedure TRestUriContext.Error(const ErrorMessage: RawUtf8;
   Status, CacheControlMaxAgeSec: integer);
 var
-  msg: RawUtf8;
+  msg: PRawUtf8;
   temp: TTextWriterStackBuffer;
 begin
   fCall^.OutStatus := Status;
@@ -4210,32 +4210,31 @@ begin
     fCall^.OutBody := ErrorMessage;
     if CacheControlMaxAgeSec <> 0 then
       // Cache-Control is ignored for errors
-      fCall^.OutHead := 'Cache-Control: max-age=' +
-        UInt32ToUtf8(CacheControlMaxAgeSec);
+      FormatUtf8('Cache-Control: max-age=%', [CacheControlMaxAgeSec], fCall^.OutHead);
     exit;
   end;
   if ErrorMessage = '' then
-    StatusCodeToText(Status, msg) // customizable method (also in fServer)
+    msg := StatusCodeToText(Status) // customizable method (also in fServer)
   else
-    msg := ErrorMessage;
+    msg := @ErrorMessage;
   with TJsonWriter.CreateOwnedStream(temp) do
   try
     AddShort('{'#13#10'"errorCode":');
-    Add(fCall^.OutStatus);
-    if (msg <> '') and
-       (msg[1] = '{') and
-       (msg[length(msg)] = '}') then
+    Add(Status);
+    if (msg^ <> '') and
+       (msg^[1] = '{') and
+       (msg^[length(msg^)] = '}') then
     begin
       // detect and append the error message as JSON object
       AddShort(','#13#10'"error":'#13#10);
-      AddNoJsonEscape(pointer(msg), length(msg));
+      AddNoJsonEscape(pointer(msg^), length(msg^));
       AddDirect(#13, #10, '}');
     end
     else
     begin
       // regular error message as JSON text
       AddShort(','#13#10'"errorText":"');
-      AddJsonEscape(pointer(msg));
+      AddJsonEscape(pointer(msg^));
       AddDirect('"', #13, #10, '}');
     end;
     SetText(fCall^.OutBody);

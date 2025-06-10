@@ -436,7 +436,7 @@ begin
   begin
     err := JsonDecode(pointer(fBody), 'detail', nil, {handlejsonobjarr=} false);
     if err = '' then
-      StatusCodeToReason(fStatus, err);
+      err := StatusCodeToText(fStatus)^;
     EJwsHttp.RaiseUtf8('Error % [%] while querying %', [fStatus, err, fUri]);
   end;
   result := fBody;
