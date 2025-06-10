@@ -1310,8 +1310,8 @@ type
     // - is slightly more optimized than Log(RawUtf8)
     procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
     /// call this method to add the content of a binary buffer with ASCII escape
-    // - will precompute up to TruncateLen (1024) bytes of output before writing
-    // with a hardcoded limit of 4KB text output for pre-rendering on stack
+    // - precompute up to TruncateLen (1024) bytes of output before writing with a
+    // hardcoded limit of MAX_LOGESCAPE = 4KB text output for pre-rendering on stack
     procedure LogEscape(Level: TSynLogLevel;
       const ContextFmt: RawUtf8; const ContextArgs: array of const; Data: pointer;
       DataLen: PtrInt; Instance: TObject; TruncateLen: PtrInt = 1024);
@@ -1392,6 +1392,10 @@ type
   end;
 
   TSynLogDynArray = array of TSynLog;
+
+const
+  /// maximum content size for TSynLog.LogEscape
+  MAX_LOGESCAPE = 4096;
 
 {$ifdef NOPATCHVMT}
 var
@@ -5325,7 +5329,7 @@ begin
   begin // direct Text output should not trigger any exception
   {$endif HASFASTTRYFINALLY}
     LogHeader(Level, Instance);
-    fWriter.AddOnSameLine(Text);
+    fWriter.AddOnSameLine(Text); // end with #0
     LogTrailer(Level);
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -5339,7 +5343,7 @@ procedure TSynLog.LogEscape(Level: TSynLogLevel; const ContextFmt: RawUtf8;
   const ContextArgs: array of const; Data: pointer; DataLen: PtrInt;
   Instance: TObject; TruncateLen: PtrInt);
 var
-  tmp: array[0..4095] of AnsiChar; // pre-render on local buffer (max 4KB)
+  tmp: array[0 .. MAX_LOGESCAPE - 1] of AnsiChar; // pre-render on local buffer
   tmps: ShortString absolute tmp;
 begin
   if (self = nil) or
