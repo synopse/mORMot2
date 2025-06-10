@@ -7868,11 +7868,15 @@ var
 begin
   for i := 0 to 200 do
     TestOne(RawUtf8OfChar(AnsiChar(i), i));
-  TestOne('hello' + by1(32, 10000) + 'hello' + by1(32, 1000) + 'world');
-  TestOne('hello' + by1($33, 10000) + 'hello' + by1($33, 1000) + 'world');
+  TestOne('hello' + by1(32, 10000) +
+          'hello' + by1(32, 1000) + 'world');
+  TestOne('hello' + by1($33, 10000) +
+          'hello' + by1($33, 1000) + 'world');
   for i := 1 to 150 do
-    TestOne('hello' + by1(i, Random32(200)) + 'hello' + by1(i + 100, Random32(200)) + 'world');
-  TestOne('hello' + by4($3031333, 10000) + 'hello' + by4($3031333, 1000) + 'world');
+    TestOne('hello' + by1(i, Random32(200)) +
+            'hello' + by1(i + 100, Random32(200)) + 'world');
+  TestOne('hello' + by4($3031333, 10000) +
+          'hello' + by4($3031333, 1000) + 'world');
   for i := 0 to 1000 do
   begin
     s := RawUtf8OfChar(' ', 20);
