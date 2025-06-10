@@ -3962,12 +3962,13 @@ type
       0: (
         VType: cardinal;
         case padding: cardinal of // access the most used TVarData value members
-          varInteger: (VInteger: integer);
-          varDouble:  (VDouble:  double);
-          varDate:    (VDate:    TDateTime);
-          varInt64:   (VInt64:   Int64);
-          varString:  (VString:  pointer);
-          varAny:     (VAny:     pointer);
+          varInteger:  (VInteger:  integer);
+          varDouble:   (VDouble:   double);
+          varCurrency: (VCurrency: currency);
+          varDate:     (VDate:     TDateTime);
+          varInt64:    (VInt64:    Int64);
+          varString:   (VString:   pointer);
+          varAny:      (VAny:      pointer);
           );
       1: (
         Data: TVarData); // access to all standard value members
@@ -13275,8 +13276,8 @@ end;
 
 procedure InitializeUnit;
 begin
-  assert(ord(high(TSynLogLevel)) = 31);
-  assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
+  Assert(ord(high(TSynLogLevel)) = 31);
+  Assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
   // initialize internal constants
   crc32tabInit(2197175160, crc32ctab); // crc32c() reversed polynom
   crc32tabInit(3988292384, crc32tab);  // crc32() = zlib's reversed polynom
