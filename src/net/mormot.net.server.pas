@@ -1064,6 +1064,9 @@ type
     fAuthorizeBasic: TOnHttpServerBasicAuth;
     fAuthorizeBasicRealm: RawUtf8;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
+    fBlackListUriReloadMin: integer;
+    fBlackListUriNextTix, fBlackListUriCrc: cardinal;
+    fBlackListUri: RawUtf8;
     fProgressiveRequests: THttpPartials;
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean; // fRoute or Request()
@@ -1087,6 +1090,10 @@ type
       Status: integer): boolean; virtual; // return true for grWwwAuthenticate
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
+    procedure SetBlackListUri(const Uri: RawUtf8);
+    procedure SetBlackListUriReloadMin(Minutes: integer);
+    procedure RefreshBlackListUri(tix32: cardinal);
+    procedure RefreshBlackListUriExecute(Sender: TObject);
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -1217,6 +1224,16 @@ type
     /// access to the the IPv4 banning list, via hsoBan40xIP option or BlackList
     property Banned: THttpAcceptBan
       read GetBanned;
+    /// a public URI containing a black list of IP or CIDR as text
+    // - typically set to 'https://www.spamhaus.org/drop/drop.txt' or
+    // 'https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_level1.netset'
+    // - would be assigned to Banned.BlackList, and checked daily
+    property BlackListUri: RawUtf8
+      read fBlackListUri write SetBlackListUri;
+    /// the period to reload and activate a remote BlackListUri list
+    // - default is 1440 minutes, i.e. get and refresh on a daily basis
+    property BlaclListUriReloadMin: integer
+      read fBlackListUriReloadMin write SetBlackListUriReloadMin;
   published
     /// the bound TCP port, as specified to Create() constructor
     property SockPort: RawUtf8
@@ -4100,6 +4117,7 @@ constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
 begin
   fSockPort := aPort;
   fCompressGz := -1;
+  fBlackListUriReloadMin := MinsPerDay; // 1440 minutes = daily by default
   SetServerKeepAliveTimeOut(KeepAliveTimeOut); // 30 seconds by default
   // event handlers set before inherited Create to be visible in childs
   fOnThreadStart := OnStart;
@@ -4371,6 +4389,91 @@ procedure THttpServerSocketGeneric.SetTlsServerNameCallback(
 begin
   if Assigned(fSock) then
     fSock.TLS.OnAcceptServerName := OnAccept;
+end;
+
+procedure THttpServerSocketGeneric.SetBlackListUri(const Uri: RawUtf8);
+var
+  ban: THttpAcceptBan;
+begin
+  ban := GetBanned;
+  if (ban = nil) or
+     (Uri = fBlackListUri) then
+    exit; // unchanged or unsupported
+  fBlackListUri := Uri;
+  if Uri = '' then // disable the whole blacklist process
+  begin
+    fBlackListUriNextTix := 0; // disable BlackListUriReloadMin
+    ban.Safe.Lock; // protect ban.BlackList access
+    try
+      ban.BlackList.Clear;
+    finally
+      ban.Safe.UnLock;
+    end;
+  end
+  else
+    fBlackListUriNextTix := 1; // force (re)load once on next idle
+end;
+
+procedure THttpServerSocketGeneric.RefreshBlackListUriExecute(Sender: TObject);
+var
+  ban: THttpAcceptBan;
+  status, n: integer;
+  crc, tix32: cardinal;
+  list: RawUtf8;
+  log: TSynLog;
+begin
+  // remote HTTP/HTTPS GET blacklist request in its own TLoggedWorkThread
+  ban := GetBanned;
+  if ban = nil then
+    exit;
+  log := fLogClass.Add;
+  log.Log(sllTrace, 'RefreshBlackListUriExecute %', [fBlackListUri], self);
+  status := 0;
+  list := HttpGetWeak(fBlackListUri, '', @status);
+  log.Log(sllTrace, 'RefreshBlackListUriExecute=% %', [status, KB(list)], self);
+  if list = '' then
+  begin
+    log.Log(sllTrace, 'RefreshBlackListUriExecute will retry soon enough', self);
+    tix32 := mormot.core.os.GetTickCount64 div 1000 + SecsPerMin * 30;
+    if tix32 < fBlackListUriNextTix then
+      fBlackListUriNextTix := tix32; // retry at least twice an hour
+    exit;
+  end;
+  crc := DefaultHash(list);
+  if crc = fBlackListUriCrc then
+  begin
+    log.Log(sllTrace, 'RefreshBlackListUriExecute: unchanged', self);
+    exit;
+  end;
+  fBlackListUriCrc := crc;
+  ban.Safe.Lock; // protect ban.BlackList access
+  try
+    ban.BlackList.Clear;
+    n := ban.BlackList.AddFromText(list);
+  finally
+    ban.Safe.UnLock;
+  end;
+  log.Log(sllDebug, 'RefreshBlackListUriExecute: set % rules', [n], self);
+end;
+
+procedure THttpServerSocketGeneric.RefreshBlackListUri(tix32: cardinal);
+begin // caller ensured tix32 >= fBlackListUriNextTix
+  fBlackListUriNextTix := fBlackListUriReloadMin * 60;
+  if fBlackListUriNextTix <> 0 then
+    inc(fBlackListUriNextTix, tix32);
+  TLoggedWorkThread.Create(fLogClass, 'blacklist', self, RefreshBlackListUriExecute);
+end;
+
+procedure THttpServerSocketGeneric.SetBlackListUriReloadMin(Minutes: integer);
+var
+  olduri: RawUtf8;
+begin
+  if Minutes = fBlackListUriReloadMin then
+    exit;
+  fBlackListUriReloadMin := Minutes;
+  olduri := fBlackListUri;
+  fBlackListUri := ''; // force reset
+  SetBlackListUri(olduri);
 end;
 
 procedure THttpServerSocketGeneric.SetAuthorizeNone;
@@ -4676,6 +4779,9 @@ begin
     {$endif OSPOSIX};
     fBanSec := sec32;
   end;
+  if (fBlackListUriNextTix <> 0) and
+     (cardinal(sec32) >= fBlackListUriNextTix) then
+    RefreshBlackListUri(sec32);
 end;
 
 procedure THttpServer.DoExecute;

@@ -5142,6 +5142,10 @@ begin
       fInterningTix := tix;
     end;
   end;
+  // BlackListUri regular refresh support
+  if (fBlackListUriNextTix <> 0) and
+     (fAsync.LastOperationSec >= fBlackListUriNextTix) then
+    RefreshBlackListUri(fAsync.LastOperationSec);
 end;
 
 procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);
