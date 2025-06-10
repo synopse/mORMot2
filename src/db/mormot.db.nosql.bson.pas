@@ -2642,6 +2642,7 @@ procedure TBsonVariant.CastTo(var Dest: TVarData; const Source: TVarData;
 var
   tmp: RawUtf8;
   wasString: boolean;
+  src: TBsonVariantData absolute Source;
 begin
   if AVarType = VarType then
   begin
@@ -2663,27 +2664,30 @@ begin
   end
   else
   begin
-    if Source.VType <> VarType then
+    if src.VType <> VarType then
       RaiseCastError;
-    with TBsonVariantData(Source) do
-      if (VKind = betObjectID) and
-         (AVarType in [varDate, varDouble]) then
-      begin
-        // convert an ObjectID to its TDateTime part
-        Dest.VType := AVarType;
-        Dest.VDate := VObjectID.CreateDateTime;
-        exit;
-      end
-      else
-      begin
-        if VKind = betObjectID then
+    if (src.VKind = betObjectID) and
+       (AVarType in [varDate, varDouble]) then
+    begin
+      // convert an ObjectID to its TDateTime part
+      Dest.VType := AVarType;
+      Dest.VDate := src.VObjectID.CreateDateTime;
+    end
+    else if src.VKind = betDecimal128 then
+      // convert a TDecimal128 to its best possible variant representation
+      PDecimal128(src.VBlob)^.ToVarData(AVarType, Dest)
+    else
+    begin
+      case src.VKind of
+        betObjectID:
           // convert an ObjectID to its text representation
-          VObjectID.ToText(tmp)
-        else
-          // convert other values to JSON
-          tmp := VariantSaveMongoJson(variant(Source), modMongoShell);
-        RawUtf8ToVariant(tmp, Dest, AVarType);
+          src.VObjectID.ToText(tmp);
+      else
+        // convert other values to JSON
+        tmp := VariantSaveMongoJson(variant(src), modMongoShell);
       end;
+      RawUtf8ToVariant(tmp, Dest, AVarType);
+    end;
   end;
 end;
 
