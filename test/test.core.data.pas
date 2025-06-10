@@ -5056,6 +5056,8 @@ var
   end;
 
 begin
+  Check(@PBsonVariantData(nil)^.VBlob = @PVarData(nil)^.VAny);
+  Check(@PBsonVariantData(nil)^.VText = @PVarData(nil)^.VAny);
   // see http://docs.mongodb.org/manual/reference/object-id
   oid.FromText('507f191e810c19729de860ea');
   CheckEqual(oid.UnixCreateTime, bswap32($507f191e));

@@ -4739,6 +4739,8 @@ initialization
   Assert(ord(bbtUser) = $80);
   Assert(SizeOf(TBsonObjectID) = 12);
   Assert(SizeOf(TBsonVariantData) = SizeOf(variant));
+  Assert(@PBsonVariantData(nil)^.VBlob = @PVarData(nil)^.VAny);
+  Assert(@PBsonVariantData(nil)^.VText = @PVarData(nil)^.VAny);
   BsonVariantType := SynRegisterCustomVariantType(TBsonVariant) as TBsonVariant;
   InitBsonObjectIDComputeNew;
 
