@@ -5023,6 +5023,8 @@ type
     // Operating System (Win32 API or ICU) - so may not be consistent when you
     // move the SQLite3 database file: consider SYSTEMNOCASE or UNICODENOCASE
     // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
+    // - those collations are available stand-alone as an extension, for third-party
+    // programs like SQliteStudio, via https://github.com/zedxxx/sqlite3-mormot-collate
     // - some additional SQL functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
     // RANK, CONCAT, TIMELOG, TIMELOGUNIX, JSONGET/JSONHAS/JSONSET and TDynArray-Blob
     // Byte/Word/Integer/Cardinal/Int64/Currency/RawUtf8DynArrayContains
@@ -6279,8 +6281,9 @@ end;
 
   2. Some collations (WIN32CASE/WIN32NOCASE) may not be consistent depenging
      on the system/libray they run on: if you expect to move the SQLite3 file,
-     consider SYSTEMNOCASE or UNICODENOCASE safer (and faster) functions.
-  }
+     consider SYSTEMNOCASE or UNICODENOCASE safer (and faster) functions,
+     os use an extension e.g. https://github.com/zedxxx/sqlite3-mormot-collate
+}
 
 function Utf16_WIN32CASE(CollateParam: pointer; s1Len: integer; S1: pointer;
   s2Len: integer; S2: pointer): integer; cdecl;
