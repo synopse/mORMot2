@@ -374,10 +374,10 @@ type
     /// the kind of element stored
     case VKind: TBsonElementType of
       betObjectID:
-        (
-        VObjectID: TBsonObjectID;
-        VPaddingToVarData: array[1..SizeOf(TVarData) - SizeOf(TVarType)
-          - SizeOf(TBsonElementType) - SizeOf(TBsonObjectID)] of byte;);
+        /// store 12-byte of TBsonObjectID raw binary with no memory allocation
+        (VObjectID: TBsonObjectID;
+         VPaddingToVarData: array[1 .. SizeOf(TVarData) - SizeOf(TVarType) 
+           - SizeOf(TBsonElementType) - SizeOf(TBsonObjectID) ] of byte;);
       betBinary,
       betDoc,
       betArray,
@@ -386,7 +386,8 @@ type
       betTimestamp,
       betJSScope,
       betDecimal128:
-        (
+        (// to match TVarData.VAny alignment
+        VBlobPad: array[0 .. 4] of byte;
         /// store the raw binary content as a RawByteString (or TBsonDocument for
         // betDoc/betArray, i.e. the "int32 e_list #0" standard layout)
         // - you have to use RawByteString(VBlob) when accessing this field
@@ -394,7 +395,8 @@ type
         VBlob: pointer;);
       betJS,
       betDeprecatedSymbol:
-        (
+        (// to match TVarData.VAny alignment
+        VTextPad: array[0 .. 4] of byte;
         /// store here a RawUtf8 with the associated text
         // - you have to use RawUtf8(VText) when accessing this field
         VText: pointer;);
