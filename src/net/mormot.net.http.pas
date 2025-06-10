@@ -4844,7 +4844,7 @@ begin
     // also try the public blacklist of IPv4 (if any)
     if not result and
        (fBlackList.SubNet <> nil) then
-      result := fBlackList.Match(ip4);
+      result := fBlackList.Match(ip4); // - done within the main TOSLightLock
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}

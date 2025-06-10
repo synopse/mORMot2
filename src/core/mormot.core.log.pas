@@ -5749,7 +5749,7 @@ begin
       if (TextTruncateAtLength <> 0) and
          (textlen > TextTruncateAtLength) then
         trunclen := Utf8TruncatedLength(pointer(Text), textlen, TextTruncateAtLength);
-      if IsValidUtf8Buffer(pointer(Text), trunclen) then
+      if IsValidUtf8Buffer(pointer(Text), trunclen) then // may use AVX2
         if trunclen <> textlen then
         begin
           fWriter.AddOnSameLine(pointer(Text), trunclen);

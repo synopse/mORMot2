@@ -2086,33 +2086,19 @@ procedure TRest.InternalLogResponse(const aContent: RawByteString;
   const aContext: shortstring; Level: TSynLogLevel);
 var
   len, max: PtrInt;
-  bak: AnsiChar;
   p: PUtf8Char;
-begin // caller checked that self<>nil and sllServiceReturn in fLogLevel
+begin // caller checked that (self <> nil) and (Level in fLogLevel)
   p := pointer(aContent);
   if p = nil then
     exit;
   len := PStrLen(p - _STRLEN)^;
   max := fLogResponseMaxBytes;
-  if (max < MAX_LOGESCAPE) or
-     not IsValidUtf8Buffer(p, len) then // may use AVX2 on Haswell
+  if max < MAX_LOGESCAPE then
     // safe ouput of the content, with proper escape if needed (e.g. binary)
     fLogFamily.Add.LogEscape(Level, '%', [aContext], p, len, self, max)
   else
-  begin
-    // direct huge UTF-8 content write without response
-    bak := #0;
-    if max > len then
-      try
-        bak := p[max];
-        p[max] := #0; // truncate
-      except
-        bak := #0; // paranoid
-      end;
-    fLogFamily.Add.LogText(Level, p, self);
-    if bak <> #0 then
-      p[max] := bak;
-  end;
+    // direct huge UTF-8 or escaped content output - without aContext
+    fLogFamily.Add.Log(Level, aContent, self, max);
 end;
 
 function TRest.Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
