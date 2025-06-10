@@ -164,6 +164,8 @@ type
     function ToVariant: variant; overload;
     /// convert this Decimal128 value to its TBsonVariant custom variant value
     procedure ToVariant(out Result: variant); overload;
+    /// convert this Decimal128 value to its TBsonVariant custom variant value
+    procedure ToVarData(Typed: cardinal; out Result: TVarData);
     /// converts this Decimal128 value to a floating-point value
     // - by design, some information may be lost during conversion
     // - note that it doesn't make much sense to use this method: you should
@@ -1647,14 +1649,28 @@ begin
 end;
 
 procedure TDecimal128.ToVariant(out Result: variant);
+var
+  res: TBsonVariantData absolute Result;
 begin
-  with TBsonVariantData(Result) do
+  res.VType := BsonVariantType.VarType;
+  res.VKind := betDecimal128;
+  res.VBlob := nil;
+  FastSetRawByteString(RawByteString(res.VBlob), @Bits, SizeOf(TDecimal128));
+end;
+
+procedure TDecimal128.ToVarData(Typed: cardinal; out Result: TVarData);
+var
+  tmp: TDecimal128Str;
+begin
+  if Typed = varCurrency then
   begin
-    VType := BsonVariantType.VarType;
-    VKind := betDecimal128;
-    VBlob := nil;
-    FastSetRawByteString(RawByteString(VBlob), @Bits, SizeOf(TDecimal128));
+    Result.VType := varCurrency;
+    ToCurr(Result.VCurrency); // direct efficient conversion
+    exit;
   end;
+  Result.VType := varEmpty;
+  tmp[ToText(tmp)] := #0; // makes ASCIIZ temporary text conversion
+  TextBufferToVariant(@tmp, {allowDouble=}true, variant(Result));
 end;
 
 function TDecimal128.ToFloat: TSynExtended;
@@ -1675,13 +1691,14 @@ var
   tmp: TDecimal128Str;
   res64: Int64 absolute result;
 begin
+  // first try fast direct assignment with the matching precision
   if Bits.hi = QWord(BSON_DECIMAL128_HI_CURRNEG) then // was e.g. FromCurr
     res64 := -Bits.lo
   else if Bits.hi = BSON_DECIMAL128_HI_CURRPOS then
     res64 := Bits.lo
   else
-  begin
-    tmp[ToText(tmp)] := #0; // makes ASCIIZ temporary text conversion
+  begin // makes ASCIIZ temporary text conversion
+    tmp[ToText(tmp)] := #0;
     res64 := StrToCurr64(@tmp);
   end;
 end;
@@ -1908,27 +1925,25 @@ end;
 function TDecimal128.FromVariant(const value: variant): boolean;
 var
   txt: RawUtf8;
-  wasString: boolean;
-  bson: TBsonVariantData absolute value;
+  b: PBsonVariantData;
   v64: Int64;
+  wasString: boolean;
 begin
-  if bson.VType = varVariantByRef then
-  begin
-    result := FromVariant(PVariant(TVarData(value).VPointer)^);
-    exit;
-  end;
-  if (bson.VType = BsonVariantType.VarType) and
-     (bson.VKind = betDecimal128) then
-    Bits := PDecimal128(bson.VBlob)^.Bits
-  else if bson.VType = varWord64 then
-    FromQWord(TVarData(value).VInt64)
-  else if VariantToInt64(value, v64) then
+  b := @value;
+  if b^.VType = varVariantByRef then
+    b := PVarData(b)^.VPointer;
+  if (b^.VType = BsonVariantType.VarType) and
+     (b^.VKind = betDecimal128) then
+    Bits := PDecimal128(b^.VBlob)^.Bits
+  else if b^.VType = varWord64 then
+    FromQWord(PVarData(b)^.VInt64)
+  else if VariantToInt64(PVariant(b)^, v64) then
     FromInt64(v64)
-  else if bson.VType = varCurrency then
-    FromCurr(TVarData(value).VCurrency)
+  else if b^.VType = varCurrency then
+    FromCurr(PVariant(b)^.VCurrency)
   else
   begin
-    VariantToUtf8(value, txt, wasString);
+    VariantToUtf8(PVariant(b)^, txt, wasString);
     result := FromText(txt) <> dsvError;
     exit;
   end;
