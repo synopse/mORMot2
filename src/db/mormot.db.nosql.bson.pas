@@ -202,7 +202,7 @@ const
   BSON_DECIMAL128_HI_NAN        = $7c00000000000000;
   BSON_DECIMAL128_HI_INT64POS   = $3040000000000000; // 0 fixed decimals
   BSON_DECIMAL128_HI_INT64NEG   = $b040000000000000;
-  BSON_DECIMAL128_HI_CURRPOS    = $3038000000000000;  // 4 fixed decimals
+  BSON_DECIMAL128_HI_CURRPOS    = $3038000000000000; // 4 fixed decimals
   BSON_DECIMAL128_HI_CURRNEG    = $b038000000000000;
   BSON_DECIMAL128_EXPONENT_MAX  = 6111;
   BSON_DECIMAL128_EXPONENT_MIN  = -6176;
@@ -354,19 +354,19 @@ type
   {$A-}
 
   /// memory structure used for some special BSON storage as variant
-  // - betObjectID kind will store a TBsonObjectID
-  // - betBinary kind will store a BLOB content as RawByteString
+  // - betObjectID kind will embed a TBsonObjectID without any memory allocation
+  // - betBinary kind will store a BLOB content as RawByteString in VBlob
   // - betDoc and betArray kind will store a BSON document, in its original
-  // binary format as RawByteString (TBsonDocument)
+  // binary format as RawByteString (TBsonDocument) in VBlob
   // - betDeprecatedDbptr, betJSScope, betTimestamp and betRegEx will store the
-  // raw original BSON content as RawByteString
+  // raw original BSON content as RawByteString in VBlob
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
-  // as a RawUtf8
+  // as a RawUtf8 in VBlob
   // - betDeprecatedUndefined or betMinKey/betMaxKey do not contain any data
-  // - betDecimal128 will store the TDecimal128 16 bytes binary buffer
+  // - betDecimal128 will store the TDecimal128 16 bytes binary buffer in VBlob
   // - warning: VBlob/VText use should match BSON_ELEMENTVARIANTMANAGED constant
   TBsonVariantData = packed record
-    /// the variant type
+    /// the TBsonVariant custom variant type integer, i.e. BsonVariantType.VarType
     VType: TVarType;
     /// the kind of element stored
     case VKind: TBsonElementType of
@@ -425,8 +425,8 @@ type
 
   /// custom variant type used to store some special BSON elements
   // - internal layout will follow TBsonVariantData
-  // - handled kind of item are complex BSON types, like betObjectID, betBinary
-  // or betDoc/betArray
+  // - handled kind of item are complex BSON types, like betObjectID, betBinary,
+  // betDecimal128 or betDoc/betArray
   // - it will allow conversion to/from string (and to date for ObjectID)
   TBsonVariant = class(TSynInvokeableVariantType)
   protected
