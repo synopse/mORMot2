@@ -3663,82 +3663,82 @@ begin
 end;
 
 procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant);
+var
+  v: TVarData absolute value;
 
-  procedure WriteComplex;
+  procedure WriteComplex; // use a local temp: RawUtf8
   var
     temp: RawUtf8;
     json: PUtf8Char;
   begin
-    with TVarData(value) do
-      case VType of
-      {$ifdef HASVARUSTRING}
-        varUString:
-          begin
-            RawUnicodeToUtf8(VAny, length(UnicodeString(VAny)), temp);
-            BsonWriteText(name, pointer(temp), length(temp));
-          end;
-      {$endif HASVARUSTRING}
-        varOleStr:
-          begin
-            RawUnicodeToUtf8(VAny, length(WideString(VAny)), temp);
-            BsonWriteText(name, pointer(temp), length(temp));
-          end;
-      else
+    case v.VType of
+    {$ifdef HASVARUSTRING}
+      varUString:
         begin
-          _VariantSaveJson(value, twJsonEscape, temp);
-          json := pointer(temp);
-          BsonWriteFromJson(name, json, nil);
-          if json = nil then
-            EBsonException.RaiseUtf8(
-              '%.BsonWriteVariant(VType=%)', [self, VType]);
+          RawUnicodeToUtf8(v.VAny, length(UnicodeString(v.VAny)), temp);
+          BsonWriteText(name, pointer(temp), length(temp));
         end;
+    {$endif HASVARUSTRING}
+      varOleStr:
+        begin
+          RawUnicodeToUtf8(v.VAny, length(WideString(v.VAny)), temp);
+          BsonWriteText(name, pointer(temp), length(temp));
+        end;
+    else
+      begin
+        _VariantSaveJson(value, twJsonEscape, temp);
+        json := pointer(temp);
+        BsonWriteFromJson(name, json, nil);
+        if json = nil then
+          EBsonException.RaiseUtf8(
+            '%.BsonWriteVariant(VType=%)', [self, v.VType]);
       end;
+    end;
   end;
 
 begin
-  with TVarData(value) do
-    case VType of
-      varEmpty,
-      varNull:
-        BsonWrite(name, betNull);
-      varSmallint:
-        BsonWrite(name, VSmallInt);
-      varShortInt:
-        BsonWrite(name, VShortInt);
-      varWord:
-        BsonWrite(name, VWord);
-      varLongWord:
-        BsonWrite(name, VLongWord);
-      varByte:
-        BsonWrite(name, VByte);
-      varBoolean:
-        BsonWrite(name, VBoolean);
-      varInteger:
-        BsonWrite(name, VInteger);
-      varWord64,
-      varInt64:
-        BsonWrite(name, VInt64);
-      varSingle:
-        BsonWrite(name, VSingle);
-      varDouble:
-        BsonWrite(name, VDouble);
-      varDate:
-        BsonWriteDateTime(name, VDate);
-      varCurrency:
-        BsonWrite(name, VCurrency);
-      varString:
-        // will recognize TJsonWriter.AddDateTime/WrBase64 patterns
-        BsonWriteUtf8OrDecode(name, VAny, length(RawUtf8(VAny)));
+  case v.VType of
+    varEmpty,
+    varNull:
+      BsonWrite(name, betNull);
+    varSmallint:
+      BsonWrite(name, v.VSmallInt);
+    varShortInt:
+      BsonWrite(name, v.VShortInt);
+    varWord:
+      BsonWrite(name, v.VWord);
+    varLongWord:
+      BsonWrite(name, v.VLongWord);
+    varByte:
+      BsonWrite(name, v.VByte);
+    varBoolean:
+      BsonWrite(name, v.VBoolean);
+    varInteger:
+      BsonWrite(name, v.VInteger);
+    varWord64,
+    varInt64:
+      BsonWrite(name, v.VInt64);
+    varSingle:
+      BsonWrite(name, v.VSingle);
+    varDouble:
+      BsonWrite(name, v.VDouble);
+    varDate:
+      BsonWriteDateTime(name, v.VDate);
+    varCurrency:
+      BsonWrite(name, v.VCurrency);
+    varString:
+      // will recognize TJsonWriter.AddDateTime/WrBase64 patterns
+      BsonWriteUtf8OrDecode(name, v.VAny, length(RawUtf8(v.VAny)));
+  else
+    if v.VType = varVariantByRef then
+      BsonWriteVariant(name, PVariant(v.VPointer)^)
+    else if v.VType = BsonVariantType.VarType then
+      BsonWrite(name, TBsonVariantData(v))
+    else if v.VType = DocVariantType.VarType then
+      BsonWrite(name, TDocVariantData(v))
     else
-      if VType = varVariantByRef then
-        BsonWriteVariant(name, PVariant(VPointer)^)
-      else if VType = BsonVariantType.VarType then
-        BsonWrite(name, TBsonVariantData(value))
-      else if VType = DocVariantType.VarType then
-        BsonWrite(name, TDocVariantData(value))
-      else
-        WriteComplex;
-    end;
+      WriteComplex;
+  end;
 end;
 
 procedure TBsonWriter.BsonWriteDoc(const doc: TDocVariantData);
@@ -3768,17 +3768,17 @@ end;
 
 procedure TBsonWriter.BsonWriteDoc(const doc: variant);
 var
-  v: PBsonVariantData;
+  b: PBsonVariantData;
 begin
-  v := @doc;
-  while v.VType = varVariantByRef do
-    v := PVarData(v)^.VPointer;
-  if v.VType = DocVariantType.VarType then
-    BsonWriteDoc(PDocVariantData(v)^)
-  else if (v.VType = BsonVariantType.VarType) and
-          (v.VKind in [betDoc, betArray]) and
-          (v.VBlob <> nil) then
-    WriteBinary(RawByteString(v.VBlob))
+  b := @doc;
+  while b^.VType = varVariantByRef do
+    b := PVarData(b)^.VPointer;
+  if b^.VType = DocVariantType.VarType then
+    BsonWriteDoc(PDocVariantData(b)^)
+  else if (b^.VType = BsonVariantType.VarType) and
+          (b^.VKind in [betDoc, betArray]) and
+          (b.^VBlob <> nil) then
+    WriteBinary(RawByteString(b^.VBlob))
   else
   begin
     BsonDocumentBegin; // void int32 e_list "\x00"
