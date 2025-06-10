@@ -2170,69 +2170,69 @@ begin
 end;
 
 function TBsonVariant.IsOfKind(const V: variant; Kind: TBsonElementType): boolean;
+var
+  b: PBsonVariantData;
 begin
-  with TBsonVariantData(V) do
-    if VType = varVariantByRef then
-      result := IsOfKind(PVariant(TVarData(V).VPointer)^, Kind)
-    else
-      result := (self <> nil) and
-                (VType = VarType) and
-                (VKind = Kind);
+  b := @V;
+  if b^.VType = varVariantByRef then
+    b := PVarData(b)^.VPointer;
+  result := (self <> nil) and
+            (b^.VType = VarType) and
+            (b^.VKind = Kind);
 end;
 
 function TBsonVariant.IsVoid(const V: TVarData): boolean;
+var
+  b: TBsonVariantData absolute V;
 begin
-  with TBsonVariantData(V) do
-    result := (VKind in [betDoc, betArray]) and
-              (length(RawByteString(VBlob)) <= 5);
+  result := (b.VKind in [betDoc, betArray]) and
+            (length(RawByteString(b.VBlob)) <= 5);
 end;
 
 function TBsonVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;
+var
+  b: PBsonVariantData;
 begin
-  with TVarData(V) do
-    if VType = varVariantByRef then
-    begin
-      result := ToBlob(PVariant(VPointer)^, Blob);
-      exit;
-    end;
-  with TBsonVariantData(V) do
-  begin
-    result := (VType = VarType) and
-              (VKind = betBinary);
-    if result then
-      if (VBlob = nil) or
-         (PInteger(VBlob)^ <> Length(RawByteString(VBlob)) - (SizeOf(integer) + 1)) then
-        Blob := ''
-      else
-        FastSetRawByteString(Blob,
-          PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
-  end;
+  b := @V;
+  if b^.VType = varVariantByRef then
+    b := PVarData(b)^.VPointer;
+  result := (b^.VType = VarType) and
+            (b^.VKind = betBinary);
+  if result then
+    if (b^.VBlob = nil) or
+       (PInteger(b^.VBlob)^ <> Length(RawByteString(b^.VBlob)) - (SizeOf(integer) + 1)) then
+      Blob := ''
+    else
+      FastSetRawByteString(Blob,
+        PAnsiChar(b^.VBlob) + (SizeOf(integer) + 1), PInteger(b^.VBlob)^);
 end;
 
 procedure TBsonVariant.AddItem(var V: variant;
   const NameValuePairs: array of const);
 var
   doc: TBsonDocument;
+  b: PBsonVariantData;
 begin
-  if TVarData(V).VType = varVariantByRef then
-    AddItem(PVariant(TVarData(V).VPointer)^, NameValuePairs)
-  else if (TVarData(V).VType = VarType) and
-          (TBsonVariantData(V).VKind = betDoc) then
+  b := @V;
+  if b^.VType = varVariantByRef then
+    b := PVarData(b)^.VPointer;
+  if (b^.VType = VarType) and
+     (b^.VKind = betDoc) then
     // in-place add the new fields to the TBsonVariant document
-    BsonAddItem(TBsonDocument(TBsonVariantData(V).VBlob), NameValuePairs)
+    BsonAddItem(TBsonDocument(b^.VBlob), NameValuePairs)
   else
   begin
-    if (TVarData(V).VType = DocVariantVType) and
-       TDocVariantData(V).IsObject then
+    if (b^.VType = DocVariantVType) and
+       PDocVariantData(b)^.IsObject then
     begin
       // use the existing TDocVariant object content
-      TDocVariantData(V).AddNameValuesToObject(NameValuePairs);
-      doc := Bson(TDocVariantData(V));
+      PDocVariantData(b)^.AddNameValuesToObject(NameValuePairs);
+      doc := Bson(PDocVariantData(b)^);
     end
     else
       // create a new TBsonVariant document
       doc := Bson(NameValuePairs);
-    FromBsonDocument(doc, V, betDoc);
+    FromBsonDocument(doc, PVariant(b)^, betDoc);
   end;
 end;
 
@@ -2240,13 +2240,15 @@ function TBsonVariant.GetItem(const V: variant; const Name: RawUtf8;
   out Value: variant; ValueAs: TBsonDocArrayConversion): boolean;
 var
   item: TBsonElement;
+  b: PBsonVariantData;
 begin
-  if TVarData(V).VType = varVariantByRef then
-    result := GetItem(PVariant(TVarData(V).VPointer)^, Name, Value)
-  else if (TVarData(V).VType = VarType) and
-          (TBsonVariantData(V).VKind in [betDoc, betArray]) then
+  b := @V;
+  if b^.VType = varVariantByRef then
+    b := PVarData(b)^.VPointer;
+  if (b^.VType = VarType) and
+     (b^.VKind in [betDoc, betArray]) then
   begin
-    {%H-}item.FromBsonVariant(@V);
+    {%H-}item.FromBsonVariant(PVarData(b));
     result := item.DocItemToVariant(Name, Value, ValueAs);
   end
   else
@@ -2819,7 +2821,7 @@ var
   resBSON: TBsonVariantData absolute result;
 begin
   VarClear(result);
-  res.VAny := nil; // avoid GPF below
+  res.VAny := nil; // avoid GPF below in res.VAny or resBSON.VBlob/VText
   case Kind of
     betFloat:
       res.VDouble := unaligned(PDouble(Element)^);
@@ -3070,7 +3072,7 @@ end;
 procedure TBsonElement.FromVariant(const aName: RawUtf8; const aValue: Variant;
   var aTemp: RawByteString);
 const
-  ELEMKIND: array[varEmpty..varWord64] of TBsonElementType = (
+  ELEMKIND: array[varEmpty .. varWord64] of TBsonElementType = (
     betEOF, betNull,
     betInt32, betInt32, betFloat, betFloat, betFloat, betDateTime, betString,
     betEOF, betEOF, betBoolean, betEof, betEOF, betEOF, betEOF, betInt32,
@@ -3091,8 +3093,8 @@ begin
   NameLen := length(aName);
   vt := v.VType;
   case vt of
-    0..varDate,
-    varBoolean..high(ELEMKIND):
+    varEmpty .. varDate,
+    varBoolean .. high(ELEMKIND):
       begin
         // simple types will be inlined in 64-bit InternalStorage
         Element := @Data.InternalStorage;
