@@ -5448,9 +5448,19 @@ begin
 end;
 
 procedure TTextWriter.AddString(const Text: RawUtf8);
-begin
-  if Text <> '' then
-    AddNoJsonEscape(pointer(Text), PStrLen(PtrInt(Text) - _STRLEN)^);
+var
+  l: PtrInt;
+begin // inlined AddNoJsonEscape(pointer(text), length(text))
+  if pointer(Text) = nil then
+    exit;
+  l := PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^;
+  if BEnd - B >= l then // note: PtrInt(BEnd - B) could be < 0
+  begin
+    MoveFast(pointer(Text)^, B[1], l); // efficient inlining for small chunks
+    inc(B, l);
+  end
+  else
+    AddNoJsonEscapeBig(pointer(Text), l);
 end;
 
 procedure TTextWriter.AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt);
