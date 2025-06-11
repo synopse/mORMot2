@@ -216,7 +216,8 @@ destructor TTftpConnectionThread.Destroy;
 begin
   Terminate;
   fContext.Shutdown;
-  fOwner.fConnection.Remove(self); // ownobject=false: just decrease Count
+  if Assigned(fOwner.fConnection) then
+    fOwner.fConnection.Remove(self); // ownobject=false: just decrease Count
   inherited Destroy;
   Freemem(fLastSent);
   FreeMem(fContext.Frame);
