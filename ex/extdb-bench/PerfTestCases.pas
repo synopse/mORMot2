@@ -448,7 +448,7 @@ procedure TTestDatabaseAbstract.MethodSetup;
 begin
   Flags := [];
   Stat := TStat.Create;
-  Stat.fEngine := ToUTF8(Owner.CurrentMethodInfo^.TestName);
+  Stat.fEngine := ToUtf8(Owner.CurrentMethodInfo^.TestName);
 end;
 
 procedure TTestDatabaseAbstract.MethodCleanup;
@@ -1063,15 +1063,15 @@ var
     for j := 2 to length(v) do
       fmt := fmt + '%,';
     fmt := fmt + '%|';
-    txt := txt + FormatUTF8(fmt, v);
+    txt := txt + FormatUtf8(fmt, v);
     fmt := '';
     for j := 1 to length(v) do
       fmt := fmt + '<td>%</td>';
-    Rows := Rows + FormatUTF8(fmt, v);
+    Rows := Rows + FormatUtf8(fmt, v);
     fmt := eng + RawUtf8OfChar(' ', col1len - length(eng) + 2);
     for j := 0 to high(v) do
     begin
-      VarRecToUTF8(v[j], s);
+      VarRecToUtf8(@v[j], s);
       if j <> high(v) then
         s := s + RawUtf8OfChar(' ', 12 - length(s));
       fmt := fmt + s;
@@ -1111,10 +1111,10 @@ var
 begin
   // introducting text
   Stat := pointer(Stats.List);
-  s := FormatUTF8('Running tests using Synopse mORMot framework %, ' +
+  FormatUtf8('Running tests using Synopse mORMot framework %, ' +
     'compiled with %, against SQLite %, on %, at %.',
     [SYNOPSE_FRAMEWORK_VERSION, COMPILER_VERSION, SQLite3.libversion,
-     OSVersionText, NowToString]);
+     OSVersionText, NowToString], s);
   Cons := '[code]'#13#10 + s + #13#10#13#10;
   s := '<p>' + s + '</p>';
   // compute max Insertion rate value for charts
