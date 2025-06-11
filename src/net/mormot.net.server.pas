@@ -2671,7 +2671,7 @@ begin
             len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
             if Terminated then
               break;
-            if (len >= 0) and // -1=error, 0=shutdown
+            if (len >= 0) and // -1=error
                (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
             begin
               inc(fReceived);

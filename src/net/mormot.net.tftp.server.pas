@@ -216,7 +216,7 @@ destructor TTftpConnectionThread.Destroy;
 begin
   Terminate;
   fContext.Shutdown;
-  if Assigned(fOwner.fConnection) then
+  if Assigned(fOwner.fConnection) then // may be nil from fOwner.Destroy
     fOwner.fConnection.Remove(self); // ownobject=false: just decrease Count
   inherited Destroy;
   Freemem(fLastSent);
@@ -381,7 +381,7 @@ begin
   if fConnection = nil then
     exit;
   NotifyShutdown;
-  FreeAndNil(fConnection);
+  FreeAndNil(fConnection); // nil for TTftpConnectionThread.Destroy
   {$ifdef OSPOSIX}
   FreeAndNil(fPosixFileNames);
   {$endif OSPOSIX}

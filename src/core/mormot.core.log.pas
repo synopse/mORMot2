@@ -1053,7 +1053,6 @@ type
     fExceptionIgnoredBackup: boolean; // with NOEXCEPTIONINTERCEPT conditional
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
-    fStartTimestampDateTime: TDateTime;
     fWriterEcho: TEchoWriter;
     fWriterStream: TStream;
     fFileName: TFileName;
@@ -1062,6 +1061,7 @@ type
     fNextFlushTix10, fNextFileRotateDailyTix10: cardinal; // see OnFlushToStream
     fThreadIndexReleasedCount: integer;
     fStreamPositionAfterHeader: cardinal;
+    fStartTimestampDateTime: TDateTime;
     fThreadIndexReleased: TWordDynArray;
     fWriterClass: TJsonWriterClass;
     fThreadIdent: array of record // for ptIdentifiedInOneFile
