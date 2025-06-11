@@ -4411,7 +4411,7 @@ begin
     end;
   end
   else
-    fBlackListUriNextTix := 1; // force (re)load once on next idle
+    fBlackListUriNextTix := 1; // force (re)load once on next idle in a thread
 end;
 
 procedure THttpServerSocketGeneric.RefreshBlackListUriExecute(Sender: TObject);
@@ -4461,6 +4461,7 @@ begin // caller ensured tix32 >= fBlackListUriNextTix
   fBlackListUriNextTix := fBlackListUriReloadMin * 60;
   if fBlackListUriNextTix <> 0 then
     inc(fBlackListUriNextTix, tix32);
+  // use a dedicated thread since idle methods should not be blocking
   TLoggedWorkThread.Create(fLogClass, 'blacklist', self, RefreshBlackListUriExecute);
 end;
 

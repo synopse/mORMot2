@@ -3611,6 +3611,9 @@ begin
     sec := Qword(NowTix) div 1000; // when 32-bit second resolution is fine
     if sec <> fLastOperationSec then
     begin
+      if sec < fLastOperationSec then // should append once every 136 years :)
+        DoLog(sllError, 'ProcessIdleTix 32-bit overflow: %<%',
+          [sec, fLastOperationSec], self);
       fLastOperationSec := sec;
       IdleEverySecond;
     end;
@@ -3626,7 +3629,8 @@ begin
       DoLog(sllWarning, 'ProcessIdleTix catched %', [E], self);
   end;
   // note: this method should be non-blocking and return quickly
-  // e.g. overriden in TWebSocketAsyncConnections to send pending frames
+  // e.g. overriden in TWebSocketAsyncConnections to send pending frames, or
+  // start a TLoggedWorkThread in THttpServerSocketGeneric.RefreshBlackListUri
 end;
 
 procedure TAsyncConnections.SetOnIdle(
