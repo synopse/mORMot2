@@ -372,7 +372,10 @@ destructor TTftpServerThread.Destroy;
 begin
   inherited Destroy;
   fFileCache.Free;
-  FreeAndNil(fConnection); // paranoid
+  FreeAndNil(fConnection); // paranoid (usually done in OnShutdown)
+  {$ifdef OSPOSIX}
+  FreeAndNil(fPosixFileNames);
+  {$endif OSPOSIX}
 end;
 
 procedure TTftpServerThread.OnShutdown;
@@ -382,9 +385,6 @@ begin
     exit;
   NotifyShutdown;
   FreeAndNil(fConnection); // nil for TTftpConnectionThread.Destroy
-  {$ifdef OSPOSIX}
-  FreeAndNil(fPosixFileNames);
-  {$endif OSPOSIX}
 end;
 
 procedure TTftpServerThread.NotifyShutdown;
