@@ -3712,7 +3712,7 @@ procedure TObjectStore.SaveTo(out aBuffer: RawByteString;
   BufferOffset: integer);
 var
   writer: TBufferWriter;
-  temp: array[word] of byte;
+  temp: TBuffer64K;
 begin
   if BufLen <= SizeOf(temp) then
     writer := TBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))

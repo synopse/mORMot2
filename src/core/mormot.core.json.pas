@@ -4823,7 +4823,7 @@ end;
 procedure JsonBufferReformat(P: PUtf8Char; out result: RawUtf8;
   Format: TTextWriterJsonFormat);
 var
-  temp: array[word] of byte; // 64KB buffer
+  temp: TBuffer64K;
 begin
   if P <> nil then
     with TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp)) do

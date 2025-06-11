@@ -501,7 +501,7 @@ end;
 function TServiceCalculator.RepeatJsonArray(
   const item: RawUtf8; count: integer): RawJson;
 var
-  buf: array[word] of byte;
+  buf: TBuffer64K;
 begin
   with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try
@@ -523,7 +523,7 @@ end;
 function TServiceCalculator.RepeatTextArray(
   const item: RawUtf8; count: integer): RawUtf8;
 var
-  buf: array[word] of byte; // 64KB temp buffer
+  buf: TBuffer64K;
 begin
   with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try

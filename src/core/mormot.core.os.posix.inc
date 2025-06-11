@@ -4345,7 +4345,7 @@ var
   n, l: TSsize;
   wait: cardinal;
   endtix: Int64;
-  tmp: array[word] of byte; // 64KB stack buffer
+  tmp: TBuffer64K;
 
   function RedirectOutput(flush: boolean; var redir: RawByteString): boolean;
   var

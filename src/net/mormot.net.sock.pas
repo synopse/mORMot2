@@ -333,6 +333,7 @@ type
     // RecvPending() to check for the actual state of the connection
     function HasData: integer;
     /// wrapper around WaitFor / RecvPending / Recv methods for a given time
+    // - will return up to 64KB of pending data in the socket receiving queue
     function RecvWait(ms: integer; out data: RawByteString;
       terminated: PTerminated = nil): TNetResult;
     /// low-level receiving of some data of known length from this socket
@@ -3295,7 +3296,7 @@ function TNetSocketWrap.RecvWait(ms: integer;
   out data: RawByteString; terminated: PTerminated): TNetResult;
 var
   read: integer;
-  tmp: array[word] of byte; // use a buffer to avoid RecvPending() syscall
+  tmp: TBuffer64K; // use stack buffer to avoid RecvPending() syscall
 begin
   result := NetEventsToNetResult(WaitFor(ms, [neRead, neError]));
   if Assigned(terminated) and
@@ -6529,7 +6530,7 @@ function TCrtSocket.SockReceiveString(
   NetResult: PNetResult; RawError: system.PInteger): RawByteString;
 var
   read: integer;
-  tmp: array[word] of byte; // 64KB is big enough for INetTls or the socket API
+  tmp: TBuffer64K; // big enough for INetTls or the socket API
 begin
   read := SizeOf(tmp);
   if TrySockRecv(@tmp, read, {StopBeforeLength=}true, NetResult, RawError) and

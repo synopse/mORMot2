@@ -5700,7 +5700,7 @@ var
   var
     t: PAlgoCompressTrailer;
     tmplen: PtrInt;
-    tmp: array[word] of byte;
+    tmp: TBuffer64K;
     Trailer: TAlgoCompressTrailer absolute tmp;
   begin
     result := false;

@@ -838,7 +838,7 @@ procedure OldSqlEncryptTablePassWordToPlain(const FileName: TFileName;
 var
   F: THandle;
   R: integer;
-  buf: array[word] of byte; // temp buffer for read/write (64KB seems enough)
+  buf: TBuffer64K; // temp buffer for read/write (64KB seems enough)
   size, posi: Int64;
   oldtable: array[0..OLDENCRYPTTABLESIZE - 1] of byte; // 2x16KB tables
 begin

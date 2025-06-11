@@ -4608,7 +4608,7 @@ function TSynBloomFilter.SaveTo(aMagic: cardinal): RawByteString;
 var
   W: TBufferWriter;
   BufLen: integer;
-  temp: array[word] of byte;
+  temp: TBuffer64K;
 begin
   BufLen := length(fStore) + 100;
   if BufLen <= SizeOf(temp) then
@@ -4752,7 +4752,7 @@ function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteStr
 var
   head: TBloomDiffHeader;
   W: TBufferWriter;
-  temp: array[word] of byte;
+  temp: TBuffer64K;
 begin
   fSafe.ReadWriteLock; // DiffSnapshot makes a WriteLock
   try

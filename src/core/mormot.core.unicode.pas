@@ -549,7 +549,7 @@ type
     // - use this array like AnsiToWide: array[byte] of word
     property AnsiToWide: TWordDynArray
       read fAnsiToWide;
-    /// direct access to the Unicode-To-Ansi lookup table
+    /// direct access to the UTF-16 to Ansi lookup table
     // - use this array like WideToAnsi: array[word] of byte
     // - any unhandled WideChar will return ord('?')
     property WideToAnsi: TByteDynArray

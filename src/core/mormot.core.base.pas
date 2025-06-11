@@ -3444,6 +3444,11 @@ function EventEquals(const eventA, eventB): boolean;
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
 type
+  /// define a buffer of 4KB of data
+  TBuffer4K = array[0..4095] of AnsiChar;
+  /// define a buffer of 64KB of data
+  TBuffer64K = array[word] of AnsiChar;
+
   /// implements a 4KB stack-based storage of some (UTF-8 or binary) content
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
@@ -3469,7 +3474,7 @@ type
     /// default 4KB buffer allocated on stack - after the len/buf main fields
     // - 16 last bytes are reserved to prevent potential buffer overflow,
     // so usable length is 4080 bytes
-    tmp: array[0..4095] of AnsiChar;
+    tmp: TBuffer4K;
     /// initialize a temporary copy of the content supplied as RawByteString
     // - will also allocate and copy the ending #0 (even for binary)
     procedure Init(const Source: RawByteString); overload;
