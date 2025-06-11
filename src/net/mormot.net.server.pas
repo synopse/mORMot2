@@ -4439,7 +4439,7 @@ begin
       fBlackListUriNextTix := tix32; // retry at least twice an hour
     exit;
   end;
-  crc := DefaultHash(list);
+  crc := DefaultHash(list); // may be AesNiHash32()
   if crc = fBlackListUriCrc then
   begin
     log.Log(sllTrace, 'RefreshBlackListUriExecute: unchanged', self);

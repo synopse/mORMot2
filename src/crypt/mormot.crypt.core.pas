@@ -184,7 +184,7 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 procedure RawSha512Compress(var Hash; Data: pointer);
 
 var
-  /// 32-bit truncation of Go runtime aeshash, using aesni opcode
+  /// 32-bit truncation of GoLang runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing
   // - only defined if AES-NI and SSE 4.1 are available on this CPU
   // - faster than our SSE4.2+pclmulqdq crc32c() function, with less collision
@@ -193,7 +193,7 @@ var
   // - DefaultHasher() is assigned to this function, when available on the CPU
   AesNiHash32: THasher;
 
-  /// 64-bit aeshash as implemented in Go runtime, using aesni opcode
+  /// 64-bit aeshash as implemented in GoLang runtime, using aesni opcode
   // - is the fastest and probably one of the safest non-cryptographic hash
   // - just a wrapper around AesNiHash128() with proper 64-bit zeroing
   // - only defined if AES-NI and SSE 4.1 are available on this CPU, so you
@@ -203,7 +203,7 @@ var
   // - DefaultHasher64() is assigned to this function, when available on the CPU
   AesNiHash64: function(seed: QWord; data: pointer; len: PtrUInt): QWord;
 
-  /// 128-bit aeshash as implemented in Go runtime, using aesni opcode
+  /// 128-bit aeshash as implemented in GoLang runtime, using aesni opcode
   // - access to the raw function implementing both AesNiHash64 and AesNiHash32
   // - only defined if AES-NI and SSE 4.1 are available on this CPU
   // - warning: the hashes will be consistent only during a process: at startup,
