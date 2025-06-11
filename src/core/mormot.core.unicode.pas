@@ -3210,7 +3210,7 @@ begin
     end
     else if PtrUInt(source) >= PtrUInt(len) + 4 then
       break;
-    c := utf8[source^]; // number of expected extra bytes
+    c := utf8[source^]; // number of expected extra bytes (1..6)
     inc(source);
     if c = UTF8_ASCII then
       continue // last 1..3 chars

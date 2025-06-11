@@ -5343,8 +5343,9 @@ procedure TSynLog.LogEscape(Level: TSynLogLevel; const ContextFmt: RawUtf8;
   const ContextArgs: array of const; Data: pointer; DataLen: PtrInt;
   Instance: TObject; TruncateLen: PtrInt);
 var
-  tmp: array[0 .. MAX_LOGESCAPE - 1] of AnsiChar; // pre-render on local buffer
+  tmp: array[0 .. MAX_LOGESCAPE + 256] of AnsiChar; // pre-render on local buffer
   tmps: ShortString absolute tmp;
+  L: PtrInt;
 begin
   if (self = nil) or
      not (Level in fFamily.fLevel) then
@@ -5355,8 +5356,8 @@ begin
   AppendShort(' len=', tmps);
   AppendShortCardinal(DataLen, tmps);
   AppendShortChar(' ', @tmps);
-  ContentAppend(Data, DataLen, ord(tmps[0]),
-    MinPtrInt(high(tmp) - ord(tmps[0]), TruncateLen), @tmp[ord(tmps[0])]);
+  L := ord(tmps[0]);
+  ContentAppend(Data, DataLen, L, MinPtrInt(high(tmp) - L, TruncateLen), @tmp[L]);
   LogText(Level, @tmp[1], Instance); // #0 ended
 end;
 
