@@ -569,7 +569,7 @@ type
   protected
     fName: RawUtf8;
     fReader: TFastReader;
-    fReaderTemp: PRawByteString;
+    fReaderTemp: PRawByteString; // could be pre-assigned to reuse a big buffer
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     fLoadFromLastAlgo: TAlgoCompress;
     /// low-level virtual methods implementing the persistence reading

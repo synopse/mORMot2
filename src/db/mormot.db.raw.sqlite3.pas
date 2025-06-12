@@ -597,7 +597,7 @@ const
 
   /// DestroyPtr set to SQLITE_TRANSIENT_VIRTUALTABLE for setting results to
   // SQLite3 virtual tables columns
-  // - due to a bug of the SQLite3 engine under Win64
+  // - due to a bug (?) of the SQLite3 engine under Win64
   SQLITE_TRANSIENT_VIRTUALTABLE = pointer(integer(-1));
 
   /// pseudo database file name used to create an in-memory database

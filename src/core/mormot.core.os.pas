@@ -4948,7 +4948,7 @@ type
   protected
     fSafe: TRWLock;
   public
-    /// access to the associated upgradable TRWLock instance
+    /// access to the associated upgradable and reentrant TRWLock instance
     // - call Safe methods to protect multi-thread access on this storage
     property Safe: TRWLock
       read fSafe;
