@@ -2172,7 +2172,7 @@ var
   U: TUri;
   h: PUtf8Char;
   l: PtrInt;
-  dig: THash512Rec;
+  dig: THashDigest;
 
   procedure Check4;
   begin
@@ -2302,14 +2302,19 @@ begin
   check(U.From('https://ictuswin.com/toto/titi'));
   h := HttpRequestLength('Content-Lengths: 100'#13#10, l);
   check(h = nil);
+  FillCharFast(dig, SizeOf(dig), 0);
+  CheckEqual(ord(dig.Algo), 0);
   l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig);
   CheckEqual(l, SizeOf(THash256));
-  CheckEqual(Sha256DigestToString(dig.Lo),
+  Check(dig.Algo = hfSHA256);
+  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
     'cc991f15d823e419ef45f8b94e6759c4f992056c1c1a64cc79338c49f9720273');
+  FillCharFast(dig, SizeOf(dig), 0);
   l := HttpRequestHash(hfSHA256, U,
     'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
   CheckEqual(l, SizeOf(THash256));
-  CheckEqual(Sha256DigestToString(dig.Lo),
+  Check(dig.Algo = hfSHA256);
+  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
     '9b23e3b9894578f2709eca35aa9afad277ab5aa4afe9344192f59535719ac734');
 end;
 

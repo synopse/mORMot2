@@ -2018,9 +2018,9 @@ procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 /// hash an URL and the "Etag:" or "Last-Modified:" headers
 // - could be used to identify a HTTP resource as a binary hash on a given server
 // - returns 0 if aUrl/aHeaders have not enough information
-// - returns the number of hash bytes written to aDigest
+// - returns the number of hash bytes written to aDigest.Bin
 function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
-  aHeaders: PUtf8Char; out aDigest: THash512Rec): integer;
+  aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
 
 /// get the content full length, from "Content-Length:" or "Content-Range:"
 function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
@@ -7729,7 +7729,7 @@ begin
 end;
 
 function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
-  aHeaders: PUtf8Char; out aDigest: THash512Rec): integer;
+  aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
 var
   hasher: TSynHasher;
   h: PUtf8Char;
@@ -7762,7 +7762,8 @@ begin
       exit;
   end;
   hasher.Update(h, l);
-  result := hasher.Final(aDigest);
+  result := hasher.Final(aDigest.Bin);
+  aDigest.Algo := aAlgo;
 end;
 
 
