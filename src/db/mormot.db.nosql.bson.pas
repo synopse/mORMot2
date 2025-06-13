@@ -1978,7 +1978,7 @@ begin
   with GlobalBsonObjectID.DefaultValues do
   begin
     repeat
-      Counter := Random32 and COUNTER_MASK;
+      Counter := SharedRandom.Generator.Next and COUNTER_MASK;
     until Counter <> 0;
     with Executable do
       PCardinal(@MachineID)^ := crc32c(crc32c(

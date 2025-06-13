@@ -11490,7 +11490,7 @@ begin
     end;
   // setup internal function wrappers
   GetDataFromJson := _GetDataFromJson;
-  HashSeed := Random32Not0; // random at startup, to avoid hash flooding
+  HashSeed := SharedRandom.Generator.Next; // avoid hash flooding
 end;
 
 
