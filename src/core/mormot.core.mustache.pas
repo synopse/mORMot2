@@ -941,6 +941,16 @@ begin
              (ListCurrent and 1 = 0));
 end;
 
+function IsVoidSimpleVariant(c: cardinal; const Value: TVarData): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := (c <= varNull) or
+            ((c = varBoolean) and
+             (not Value.VBoolean)); // empty/null or false are falsey values
+  // note: '' or 0 are NOT falsey - https://github.com/mustache/spec/issues/28
+  // TL&WR: "official" solution is to use an explicit boolean value in the data
+end;
+
 function TSynMustacheContextVariant.AppendSection(ValueSpace: integer;
   const ValueName: RawUtf8): TSynMustacheSectionType;
 var
@@ -961,9 +971,7 @@ begin
       end;
   result := GetVarDataFromContext(ValueSpace, ValueName, Value);
   c := Value.VType;
-  void := (c <= varNull) or
-          ((c = varBoolean) and
-           (Value.VWord = 0));
+  void := IsVoidSimpleVariant(c, Value); // empty/null or false
   if (result <> msNothing) and // helper?
      (c < varFirstCustom) then // simple helper values are not pushed
   begin
@@ -1162,29 +1170,23 @@ begin
   end;
 end;
 
-function IsVoidContext(d: pointer; rc: TRttiCustom): boolean;
-var
-  c: cardinal;
+function IsVoidRtti(d: pointer; rc: TRttiCustom): boolean;
 begin
-  result := true;
+  result := true; // empty/null or false are falsey values
   if d = nil then
     exit;
-  if rc.Kind = rkClass then
-  begin
-    if PPointer(d)^ = nil then
-      exit;
-  end
-  else if rc.Kind = rkVariant then
-  begin
-    c := PVarData(d)^.VType;
-    if (c <= varNull) or
-       ((c = varBoolean) and
-        (PVarData(d)^.VWord = 0)) then
-      exit;
-  end
+  case rc.Kind of
+    rkClass,
+    rkInterface:
+      if PPointer(d)^ = nil then
+        exit; // a nil TObject is null
+    rkVariant:
+      if IsVoidSimpleVariant(PVarData(d)^.VType, PVarData(d)^) then
+        exit; // empty/null or false variants
   else if rcfBoolean in rc.Cache.Flags then
-    if PByte(d)^ = 0 then
-      exit;
+         if PByte(d)^ = 0 then
+           exit; // false value
+  end;
   result := false; // not void context, in the Mustache terms
 end;
 
@@ -1215,7 +1217,7 @@ begin
     else
       rc := PT_RTTI[ptVariant]; // use temp variant value from helper
   end;
-  void := IsVoidContext(d, rc);
+  void := IsVoidRtti(d, rc);
   if (result <> msNothing) and // helper?
      (tmp.VType < varFirstCustom) then // simple helper values are not pushed
   begin
