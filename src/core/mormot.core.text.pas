@@ -4964,11 +4964,8 @@ begin
         begin
           if Len < direct then
             direct := Len;
-          if direct > 0 then // fill fTempBuf as much as possible
-          begin
-            MoveFast(P^, D^, direct);
-            inc(B, direct);
-          end;
+          MoveFast(P^, D^, direct); // fill fTempBuf as much as possible
+          inc(B, direct);
           dec(Len, direct);
           if Len = 0 then
             break;
