@@ -947,6 +947,12 @@ begin
   Check(NetIsIP4('1.2.3.4', @c));
   CheckEqual(c, $04030201);
   // validate DNS client with some known values
+  CheckEqual(ord(drrOPT), 41);
+  CheckEqual(ord(drrHTTPS), 65);
+  CheckEqual(ord(drrSPF), 99);
+  CheckEqual(ord(drrEUI64), 109);
+  CheckEqual(ord(drrTKEY), 249);
+  CheckEqual(ord(drrAMTRELAY), 260);
   CheckEqual(DnsLookup(''), '');
   CheckEqual(DnsLookup('localhost'), '127.0.0.1');
   CheckEqual(DnsLookup('LocalHost'), '127.0.0.1');

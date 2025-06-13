@@ -713,6 +713,7 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
   var Dest: TDnsAnswer; QClass: cardinal): boolean;
 var
   len: PtrInt;
+  qc: cardinal;
   p: PByteArray;
 begin
   result := false;
@@ -722,9 +723,11 @@ begin
      (Pos + 10 > length(Answer)) then
     exit;
   word(Dest.QType) := DnsParseWord(p, Pos);
-  if DnsParseWord(p, Pos) <> QClass then
+  qc := DnsParseWord(p, Pos);
+  if (qc <> QClass) and  // https://www.rfc-editor.org/rfc/rfc6891#section-6.1.2
+     (Dest.QType <> drrOPT) then // OPT stores the UDP payload size here :(
     exit;
-  Dest.TTL := DnsParseCardinal(p, Pos);
+  Dest.TTL := DnsParseCardinal(p, Pos); // RCODE and flags for drrOPT
   len := DnsParseWord(p, Pos);
   if Pos + len > length(Answer) then
     exit;
@@ -901,6 +904,7 @@ end;
 
 
 initialization
+  assert(ord(drrOPT) = 41);
   assert(ord(drrHTTPS) = 65);
   assert(ord(drrSPF) = 99);
   assert(ord(drrEUI64) = 109);
