@@ -3983,17 +3983,17 @@ begin
     exit;
   // was called as arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare)
   byte(filter) := PtrInt(self);
-  // sort by kind
-  if not (mafIgnoreKind in filter) then
-  begin
-    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
-    if result <> 0 then
-      exit;
-  end;
   // sort with gateway first
   if not (mafIgnoreGateway in filter) then
   begin
     result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
+    if result <> 0 then
+      exit;
+  end;
+  // sort by kind
+  if not (mafIgnoreKind in filter) then
+  begin
+    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
     if result <> 0 then
       exit;
   end;
@@ -7741,7 +7741,7 @@ begin
      (aHeaders = nil) or
      not hasher.Init(aAlgo) then
     exit;
-  hasher.Update(HTTPS_TEXT[aUri.Https]);
+  hasher.Update(HTTPS_TEXT[aUri.Https]); // hash normalized URI
   hasher.Update(@aAlgo, 1); // separator
   hasher.Update(aUri.Server);
   hasher.Update(@aAlgo, 1);
@@ -7749,7 +7749,7 @@ begin
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Address);
   hasher.Update(@aAlgo, 1);
-  h := FindNameValuePointer(aHeaders, 'ETAG: ', l);
+  h := FindNameValuePointer(aHeaders, 'ETAG: ', l); // ETAG + URI are genuine
   if h = nil then
   begin
     // fallback to file date and full size
