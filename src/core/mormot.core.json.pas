@@ -1958,7 +1958,7 @@ type
     // - ResultRtti holds the type of the resolved result pointer
     // - note that TStrings values are not supported, because they require a
     // temporary string variable for their getter method
-    function ValueIterate(Data: pointer; Index: PtrUInt;
+    function ValueIterate(Data: pointer; Index: PtrUInt; var Temp: TVarData;
       out ResultRtti: TRttiCustom): pointer; override;
     /// lookup a value by a path name e.g. 'one.two.three' nested values
     // - for a record/class, will search for a property name
@@ -10915,7 +10915,7 @@ begin
 end;
 
 function TRttiJson.ValueIterate(Data: pointer; Index: PtrUInt;
-  out ResultRtti: TRttiCustom): pointer;
+  var Temp: TVarData; out ResultRtti: TRttiCustom): pointer;
 begin
   result := nil;
   if Data <> nil then

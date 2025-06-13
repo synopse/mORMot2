@@ -2702,7 +2702,7 @@ type
     // - note that TStrings values are not supported, because they require a
     // temporary string variable for their getter method
     // - implemented in TRttiJson for proper knowledge of TSynList/TRawUtf8List
-    function ValueIterate(Data: pointer; Index: PtrUInt;
+    function ValueIterate(Data: pointer; Index: PtrUInt; var Temp: TVarData;
       out ResultRtti: TRttiCustom): pointer; virtual;
     /// lookup a value by a path name e.g. 'one.two.three' nested values
     // - for a record/class, will search for a property name
@@ -9169,7 +9169,7 @@ begin
 end;
 
 function TRttiCustom.ValueIterate(Data: pointer; Index: PtrUInt;
-  out ResultRtti: TRttiCustom): pointer;
+  var Temp: TVarData; out ResultRtti: TRttiCustom): pointer;
 begin
   result := nil;
 end;

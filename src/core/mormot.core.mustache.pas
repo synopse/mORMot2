@@ -1100,9 +1100,9 @@ begin
           rc := PT_RTTI[ptInteger];
           exit;
         end
-        else
-          // the current context is the current list item
-          d := rc.ValueIterate(d, ListCurrent, rc); // rkClass is dereferenced
+        else // the current context is the current list item
+          d := rc.ValueIterate(d, ListCurrent, Temp.Data, rc);
+          // note: rkClass is de-referenced by ValueIterate
       if d <> nil then
       begin
         // we found a value in this context
