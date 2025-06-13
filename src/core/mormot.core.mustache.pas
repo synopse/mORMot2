@@ -1343,10 +1343,10 @@ end;
 type
   TSynMustacheParser = class
   protected
+    fTemplate: TSynMustache;
     fTagStartChars, fTagStopChars: word;
     fTagCount: integer;
     fPos, fPosMin, fPosMax, fPosTagStart: PUtf8Char;
-    fTemplate: TSynMustache;
     fScanStart, fScanEnd: PUtf8Char;
     function Scan(ExpectedTag: cardinal): boolean;
     procedure AddTag(aKind: TSynMustacheTagKind;

@@ -4598,13 +4598,13 @@ begin
       if P[Len - 2] = '0' then
         if P[Len - 3] = '0' then
           if P[Len - 4] = '0' then
-            dec(Len, 5) // 'xxx.0000' -> 'xxx'
+            dec(Len, 5)   // 'xxx.0000' -> 'xxx'
           else
             dec(Len, 3) // 'xxx.1000' -> 'xxx.1'
         else
           dec(Len, 2) // 'xxx.1200' -> 'xxx.12'
       else
-        dec(Len); // 'xxx.1220' -> 'xxx.123'
+        dec(Len);  // 'xxx.1220' -> 'xxx.123'
   MoveFast(P^, B[1], Len);
   inc(B, Len);
 end;
