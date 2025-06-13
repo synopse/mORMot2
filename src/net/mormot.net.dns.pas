@@ -32,7 +32,7 @@ uses
 
 
 type
-  /// Dns Resource Record (RR) Types
+  /// most known Dns Resource Record (RR) Types
   // - from http://www.iana.org/assignments/dns-parameters
   // - main values are e.g. drrA for a host address, drrNS for an authoritative
   // name server, or drrCNAME for the alias canonical name
@@ -508,36 +508,42 @@ var
   s1, s2: RawUtf8;
 begin
   p := @PByteArray(Answer)[Pos];
-  case RR of
+  case RR of // see https://www.rfc-editor.org/rfc/rfc1035#section-3.3
     drrA:
-      // IPv4 binary address
+      // 32-bit IPv4 binary address
       if Len = 4 then
         IP4Text(p, Text);
     drrAAAA:
-      // IPv6 binary address
+      // 128-bit IPv6 binary address
       if Len = 16 then
         IP6Text(p, Text);
     drrCNAME,
+    drrMB,
+    drrMD,
+    drrMG,
     drrTXT,
     drrNS,
     drrPTR:
       // single text Value
       DnsParseString(Answer, Pos, Text);
     drrMX:
-      // Priority / Value
+      // Priority:W / Value
       if Len > 2 then
         DnsParseString(Answer, Pos + 2, Text);
+    drrHINFO,
     drrSOA:
+      // several values, first two as TEXT
       begin
-        // MName / RName / Serial / Refresh / Retry / Expire / TTL
+        // HINFO: CPU / OS
+        // SOA: MName / RName / Serial:I / Refresh:I / Retry:I / Expire:I / TTL:I
         Pos := DnsParseString(Answer, Pos, s1);
         if (Pos <> 0) and
            (DnsParseString(Answer, Pos, s2) <> 0) then
           Text := s1 + ' ' + s2;
       end;
-    drrSRV:
-      // Priority / Weight / Port / QName
+    drrSRV: // see https://www.rfc-editor.org/rfc/rfc2782
       if Len > 6 then
+        // Priority:W / Weight:W / Port:W / QName
         if DnsParseString(Answer, Pos + 6, Text) <> 0 then
           Text := Text + ':' + UInt32ToUtf8(bswap16(PWordArray(p)[2])); // :port
   end;
