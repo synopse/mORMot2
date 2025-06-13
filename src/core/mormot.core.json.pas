@@ -10887,6 +10887,8 @@ begin
 end;
 
 function TRttiJson.ValueIterateCount(Data: pointer): integer;
+var
+  vt: TSynInvokeableVariantType;
 begin
   result := -1; // unsupported
   if Data <> nil then
@@ -10897,25 +10899,30 @@ begin
         begin
           Data := PPointer(Data)^; // TObject are stored by reference
           if Data <> nil then
-           case ValueRtlClass of
-             // vcStrings can't be supported since TStrings.Items[] is a getter
-             vcCollection:
-               result := TCollection(Data).Count;
-             vcList,
-             vcObjectList:
-               result := TList(Data).Count;
-             vcSynList,
-             vcSynObjectList:
-               result := TSynList(Data).Count;
-             vcRawUtf8List:
-               result := TRawUtf8List(Data).Count;
-           end;
+            case ValueRtlClass of
+              // vcStrings can't be supported since TStrings.Items[] is a getter
+              vcCollection:
+                result := TCollection(Data).Count;
+              vcList,
+              vcObjectList:
+                result := TList(Data).Count;
+              vcSynList,
+              vcSynObjectList:
+                result := TSynList(Data).Count;
+              vcRawUtf8List:
+                result := TRawUtf8List(Data).Count;
+            end;
         end;
+      rkVariant:
+        if DocVariantType.FindSynVariantType(PVarData(Data)^.VType, vt) then
+          result := vt.IterateCount(PVarData(Data)^, {objectasvalues=}false);
     end;
 end;
 
 function TRttiJson.ValueIterate(Data: pointer; Index: PtrUInt;
   var Temp: TVarData; out ResultRtti: TRttiCustom): pointer;
+var
+  vt: TSynInvokeableVariantType;
 begin
   result := nil;
   if Data <> nil then
@@ -10964,6 +10971,13 @@ begin
                  exit;
                end;
            end;
+        end;
+      rkVariant:
+        if DocVariantType.FindSynVariantType(PVarData(Data)^.VType, vt) then
+        begin
+          vt.Iterate(Temp, PVarData(Data)^, Index); // weak copy into Temp
+          result := @Temp;
+          ResultRtti := PT_RTTI[ptVariant];
         end;
     end;
 end;
