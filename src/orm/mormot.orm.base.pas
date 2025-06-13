@@ -10522,7 +10522,7 @@ procedure TOrmTableRowVariant.Iterate(var Dest: TVarData;
   const V: TVarData; Index: integer);
 begin
   if cardinal(Index) < cardinal(TOrmTableRowVariantData(V).VTable.fRowCount) then
-    Dest := V
+    TOrmTableRowVariantData(V).VTable.ToDocVariant(Index, PVariant(@Dest)^)
   else
     TSynVarData(Dest).VType := varEmpty;
 end;
