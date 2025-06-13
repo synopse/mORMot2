@@ -824,6 +824,7 @@ var
   list, info: pifaddrs;
   i, n: PtrInt;
   mac: RawUtf8;
+  m: PMacAddress;
   {$ifdef OSLINUX}
   procnetroute: RawUtf8; // retrieve routes once for all MAC addresses
   {$endif OSLINUX}
@@ -832,6 +833,7 @@ begin
   result := nil;
   if getifaddrs(list) = NO_ERROR then
   try
+    // first loop to identify the main interfaces (AF_LINK/AF_PACKET)
     n := 0;
     info := list;
     repeat
@@ -873,74 +875,73 @@ begin
         begin
           if n = length(result) then
             SetLength(result, NextGrow(n));
-          with result[n] do
+          m := @result[n];
+          m^.Name := info^.ifa_name; // e.g. 'eth0' on Linux
+          m^.AdapterName := m^.Name;
+          m^.Address := mac;
+          if info^.ifa_addr <> nil then
           begin
-            Name := info^.ifa_name; // e.g. 'eth0' on Linux
-            AdapterName := Name;
-            Address := mac;
-            if info^.ifa_addr <> nil then
-            begin
-              {$ifdef OSBSDDARWIN}
-              // BSD/DARWIN do name the networks from their manufacturer
-              // -> parse net.wlan.devices ?
-              IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
-              case psockaddr_dl(info^.ifa_addr)^.sdl_type of
-                IFT_ETHER:
-                  Kind := makEthernet;
-                IFT_PPP:
-                  Kind := makPpp;
-                IFT_CELLULAR:
-                  Kind := makCellular;
-              {$else}
-              IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
-              case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
-                ARPHRD_ETHER:
-                  begin
-                    Kind := makEthernet;
-                    if Name <> '' then
-                      // set also for some wifi adapters
-                      if PWord(Name)^ = ord('w') + ord('l') shl 8 then
-                        Kind := makWifi; // detect by convention
-                  end;
-                ARPHRD_IEEE80211:
-                  Kind := makWifi;
-                ARPHRD_TUNNEL,
-                ARPHRD_TUNNEL6:
-                  Kind := makTunnel;
-                ARPHRD_PPP:
-                  Kind := makPpp;
-            {$endif OSBSDDARWIN}
-              else
-                // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
-                if Name <> '' then
-                  case PWord(Name)^ of
-                    ord('e') + ord('t') shl 8,  // 'ethX'
-                    ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
-                      Kind := makEthernet;
-                    ord('w') + ord('l') shl 8:  // 'wlanX' and systemd v197 'wlX'
-                      Kind := makWifi;
-                  end;
-              end;
-            end
+            {$ifdef OSBSDDARWIN}
+            // BSD/DARWIN do name the networks from their manufacturer
+            // -> parse net.wlan.devices ?
+            m^.IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
+            case psockaddr_dl(info^.ifa_addr)^.sdl_type of
+              IFT_ETHER:
+                m^.Kind := makEthernet;
+              IFT_PPP:
+                m^.Kind := makPpp;
+              IFT_CELLULAR:
+                m^.Kind := makCellular;
+            {$else}
+            m^.IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
+            case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
+              ARPHRD_ETHER:
+                begin
+                  m^.Kind := makEthernet;
+                  if m^.Name <> '' then
+                    // set also for some wifi adapters
+                    if PWord(m^.Name)^ = ord('w') + ord('l') shl 8 then
+                      m^.Kind := makWifi; // detect by convention
+                end;
+              ARPHRD_IEEE80211:
+                m^.Kind := makWifi;
+              ARPHRD_TUNNEL,
+              ARPHRD_TUNNEL6:
+                m^.Kind := makTunnel;
+              ARPHRD_PPP:
+                m^.Kind := makPpp;
+          {$endif OSBSDDARWIN}
             else
-            begin
-              IfIndex := -1; // non physical interface
-              Kind := makSoftware;
-            end
+              // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
+              if m^.Name <> '' then
+                case PWord(m^.Name)^ of
+                  ord('e') + ord('t') shl 8,  // 'ethX'
+                  ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
+                    m^.Kind := makEthernet;
+                  ord('w') + ord('l') shl 8:  // 'wlanX' and systemd v197 'wlX'
+                    m^.Kind := makWifi;
+                end;
+            end;
+          end
+          else
+          begin
+            m^.IfIndex := -1; // non physical interface
+            m^.Kind := makSoftware;
           end;
-          {$ifdef OSLINUX}
+          {$ifdef OSLINUX} // retrieve e.g. m^.Gateway from /proc/net/route
           if info^.ifa_flags and IFF_UP <> 0 then
-            RetrieveEnhancedInfo(result[n], procnetroute);
+            RetrieveEnhancedInfo(m^, procnetroute);
           {$endif OSLINUX}
-          // on POSIX, there is no such things as per-interface DNS, and
-          // no standard way of knowing the Gateway
+          // on POSIX, there is no such things as per-interface DNS
+          // on BSD, there is no standard way of knowing the Gateway
           inc(n);
         end;
       end;
       info := info^.ifa_next;
     until info = nil;
-    SetLength(result, n);
-    // retrieve the IP configuration from a second loop
+    if n <> 0 then
+      DynArrayFakeLength(result, n);
+    // retrieve the IP configuration (AF_INET) from a second loop
     info := list;
     repeat
       if (info^.ifa_addr <> nil) and

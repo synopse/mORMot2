@@ -690,6 +690,7 @@ type
     // - not available on BSD
     Kind: TMacAddressKind;
   end;
+  PMacAddress = ^TMacAddress;
   TMacAddressDynArray = array of TMacAddress;
 
 const
