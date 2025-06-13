@@ -865,7 +865,7 @@ var
   // - can be set to TRUE to use the deprecated and unsafe NTLM protocol instead
   // - use case: SPNs not configured properly in domain
   // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
-  // - note that mormot.lib.gssapi does not tupport NTLM
+  // - note that mormot.lib.gssapi does not support NTLM
   SspiForceNtlmClient: boolean = false;
 
 

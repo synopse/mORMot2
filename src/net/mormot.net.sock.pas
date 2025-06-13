@@ -721,7 +721,7 @@ function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 /// get the local MAC address used to reach a computer, from its IP or Host name
 // - return the local interface as a TMacAddress, with all its available info
 // - under Windows, will call the GetBestInterface() API to retrieve a IfIndex
-// - on POSIX, will call GetLocalIpAddress() to retrive a local IP
+// - on POSIX, will call GetLocalIpAddress() to retrieve a local IP
 // - always eventually makes a lookup to the GetMacAddresses() list per IfIndex
 // (Windows) or IP (POSIX)
 function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolean;
