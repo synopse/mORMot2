@@ -239,17 +239,19 @@ var
 {$A+}
 
 type
-  /// one DNS decoded record as stored by DnsQuery() in TDnsResult
+  /// one decoded DNS record as stored by DnsQuery() in TDnsResult
   TDnsAnswer = record
     /// the Name of this record
     QName: RawUtf8;
-    /// the type of this record
+    /// the known type of this record
     QType: TDnsResourceRecord;
     /// after how many seconds this record information is deprecated
     TTL: cardinal;
     /// 0-based position of the raw binary of the record content
     // - pointing into TDnsResult.RawAnswer binary buffer
     Position: integer;
+    /// encoded length of the raw binary of the record content
+    Len: integer;
     /// main text information decoded from Data binary
     // - only best-known DNS resource record QType are recognized, i.e.
     // A AAAA CNAME TXT NS PTR MX SOA SRV as decoded by DnsParseData()
@@ -370,7 +372,7 @@ const
 
   DNS_RESP_SUCCESS = $00;
 
-  DNS_RELATIVE = $c0; // two high bits set = pointer within the response message
+  DNS_RELATIVE = $c0; // two high bits set = offset within the response message
 
 
 { TDnsHeader }
@@ -448,8 +450,8 @@ var
   len: byte;
   tmp: ShortString;
 begin
-  nextpos := 0;
   result := 0; // indicates error
+  nextpos := 0;
   p := pointer(Answer);
   max := length(Answer);
   tmp[0] := #0;
@@ -462,14 +464,15 @@ begin
       break;
     while (len and DNS_RELATIVE) = DNS_RELATIVE do
     begin
+      // see https://www.rfc-editor.org/rfc/rfc1035.html#section-4.1.4
       if nextpos = 0 then
-        nextpos := Pos + 1; // if compressed, return end of 16-bit offset
+        nextpos := Pos + 1; // if compressed, return end of offset
       if Pos >= max then
         exit;
-      Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos];
+      Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos]; // 14-bit offset
       if Pos >= max then
         exit;
-      len := p[Pos];
+      len := p[Pos]; // 8-bit length from offset
       inc(Pos);
     end;
     if len = 0 then
@@ -732,6 +735,7 @@ begin
   if Pos + len > length(Answer) then
     exit;
   Dest.Position := Pos;
+  Dest.Len := len;
   DnsParseData(Dest.QType, Answer, Pos, len, Dest.Text);
   inc(Pos, len);
   result := true;
