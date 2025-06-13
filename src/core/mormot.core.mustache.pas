@@ -837,10 +837,9 @@ begin
   begin
     Document := aDoc;
     DocumentType := DocVariantType.FindSynVariantType(aDoc.VType);
+    ListCount := -1;
     ListCurrent := -1;
-    if DocumentType = nil then
-      ListCount := -1
-    else
+    if DocumentType <> nil then
     begin
       ListCount := DocumentType.IterateCount(aDoc, {GetObjectAsValues=}false);
       if fContextCount = 0 then
@@ -941,11 +940,11 @@ begin
              (ListCurrent and 1 = 0));
 end;
 
-function IsVoidSimpleVariant(c: cardinal; const Value: TVarData): boolean;
+function IsFalseySimpleVariant(VType: cardinal; const Value: TVarData): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := (c <= varNull) or
-            ((c = varBoolean) and
+  result := (VType <= varNull) or
+            ((VType = varBoolean) and
              (not Value.VBoolean)); // empty/null or false are falsey values
   // note: '' or 0 are NOT falsey - https://github.com/mustache/spec/issues/28
   // TL&WR: "official" solution is to use an explicit boolean value in the data
@@ -971,7 +970,7 @@ begin
       end;
   result := GetVarDataFromContext(ValueSpace, ValueName, Value);
   c := Value.VType;
-  void := IsVoidSimpleVariant(c, Value); // empty/null or false
+  void := IsFalseySimpleVariant(c, Value); // empty/null or false
   if (result <> msNothing) and // helper?
      (c < varFirstCustom) then // simple helper values are not pushed
   begin
@@ -1042,9 +1041,10 @@ begin
   begin
     Data := Value;
     Info := Rtti;
+    ListCount := -1;
+    ListCurrent := -1;
     if Rtti <> nil then
       ListCount := Rtti.ValueIterateCount(Value);
-    ListCurrent := -1;
   end;
   inc(fContextCount);
 end;
@@ -1061,7 +1061,7 @@ begin
       begin
         inc(ListCurrent);
         if ListCurrent >= ListCount then
-          ListCount := -1
+          ListCount := -1 // reached last item
         else
           result := true;
       end;
@@ -1170,22 +1170,23 @@ begin
   end;
 end;
 
-function IsVoidRtti(d: pointer; rc: TRttiCustom): boolean;
+function IsFalseyRtti(d: pointer; rc: TRttiCustom): boolean;
 begin
   result := true; // empty/null or false are falsey values
   if d = nil then
     exit;
-  case rc.Kind of
-    rkClass,
-    rkInterface:
+  case rc.Parser of
+    ptClass,
+    ptInterface,
+    ptPUtf8Char:
       if PPointer(d)^ = nil then
-        exit; // a nil TObject is null
-    rkVariant:
-      if IsVoidSimpleVariant(PVarData(d)^.VType, PVarData(d)^) then
+        exit; // a nil pointer is null
+    ptVariant:
+      if IsFalseySimpleVariant(PVarData(d)^.VType, PVarData(d)^) then
         exit; // empty/null or false variants
-  else if rcfBoolean in rc.Cache.Flags then
-         if PByte(d)^ = 0 then
-           exit; // false value
+    ptBoolean:
+      if PByte(d)^ = 0 then
+        exit; // false value
   end;
   result := false; // not void context, in the Mustache terms
 end;
@@ -1217,7 +1218,7 @@ begin
     else
       rc := PT_RTTI[ptVariant]; // use temp variant value from helper
   end;
-  void := IsVoidRtti(d, rc);
+  void := IsFalseyRtti(d, rc);
   if (result <> msNothing) and // helper?
      (tmp.VType < varFirstCustom) then // simple helper values are not pushed
   begin
