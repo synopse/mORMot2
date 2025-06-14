@@ -8712,7 +8712,16 @@ begin
   Check(not IsHttpUserAgentBot(DefaultUserAgent(self)),
     'Mozilla/5.0 (Linux x64; mORMot) TCB/2 mormot2tests');
   Check(IsHttpUserAgentBot(
-    'Googlebot/2.1 (+http://www.google.com/bot.html)'));
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ' +
+    'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot) ' +
+    'Chrome/119.0.6045.214 Safari/537.36'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ' +
+    'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot)'));
+  Check(IsHttpUserAgentBot(
+    'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot/)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)'));
   Check(IsHttpUserAgentBot(
     'Googlebot/2.1 (+http://www.google.org/bot.html)'));
   Check(IsHttpUserAgentBot(

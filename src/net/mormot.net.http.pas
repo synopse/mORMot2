@@ -2912,6 +2912,7 @@ begin
     if i < 0 then
       exit;
     p := @p[i + 3]; // p^ = bot.html in http://www.google.com/bot.html
+    dec(l, i + 3);
     case PCardinal(p)^ and $00ffffff of
       // Googlebot/2.1 (+http://www.google.com/bot.html)
       ord('b') + ord('o') shl 8 + ord('t') shl 16,
@@ -2939,6 +2940,18 @@ begin
       // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
       ord('r') + ord('o') shl 8 + ord('b') shl 16:
         result := true;
+    else // +https://developer.amazon.com/support/amazonbot) Chrome/119.0.6045
+      begin
+        i := ByteScanIndex(pointer(p), l, ord(')'));
+        if i < 0 then
+          exit;
+        inc(p, i);
+        if p[-1] = '/' then
+          dec(p);
+        if PCardinal(p - 3)^ and $00ffffff =
+             ord('b') + ord('o') shl 8 + ord('t') shl 16 then
+          result := true; // http*://*bot)
+      end;
     end;
   end;
 end;
