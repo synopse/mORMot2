@@ -69,7 +69,6 @@ type
   protected
     fSock: TNetSocket;
     fSockAddr: TNetAddr;
-    fExecuteMessage: RawUtf8;
     fFrame: PUdpFrame;
     fReceived: integer;
     fBound: boolean;
@@ -93,8 +92,6 @@ type
       read GetIPWithPort;
     property Received: integer
       read fReceived;
-    property ExecuteMessage: RawUtf8
-      read fExecuteMessage;
   end;
 
 const
@@ -2618,7 +2615,9 @@ begin
       sock.SetSendTimeout(10);
       sock.SendTo(pointer(UDP_SHUTDOWN), length(UDP_SHUTDOWN), fSockAddr);
       sock.ShutdownAndClose(false);
-    end;
+    end
+    else
+      fLogClass.Add.Log(sllTrace, 'Destroy: error creating final socket', self);
   end;
   // finalize this thread process
   TerminateAndWaitFinished;
@@ -2648,59 +2647,52 @@ var
   remote: TNetAddr;
   res: TNetResult;
 begin
-  fProcessing := true;
   lasttix := 0;
   // main server process loop
-  try
-    if not fBound then
-      SleepHiRes(100, fBound, {boundDone=}true);
-    if fSock = nil then // paranoid check
-      FormatUtf8('%.DoExecute: % Bind failed', [self, fProcessName], fExecuteMessage)
-    else
-      while not Terminated do
+  if not fBound then
+    SleepHiRes(100, fBound, {boundDone=}true);
+  if fSock = nil then // paranoid check
+    FormatUtf8('%.DoExecute: % Bind failed', [self, fProcessName], fExecuteMessage)
+  else
+    while not Terminated do
+    begin
+      if fSock.WaitFor(1000, [neRead, neError]) <> [] then
       begin
-        if fSock.WaitFor(1000, [neRead, neError]) <> [] then
-        begin
-          if Terminated then
-          begin
-            fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
-            break;
-          end;
-          res := fSock.RecvPending(len);
-          if (res = nrOk) and
-             (len >= 4) then
-          begin
-            PInteger(fFrame)^ := 0;
-            len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
-            if Terminated then
-              break;
-            if (len >= 0) and // -1=error
-               (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
-            begin
-              inc(fReceived);
-              OnFrameReceived(len, remote);
-            end;
-          end
-          else if res <> nrRetry then
-            SleepHiRes(100); // don't loop with 100% cpu on failure
-        end;
         if Terminated then
-          break;
-        tix64 := mormot.core.os.GetTickCount64;
-        tix := tix64 shr 9; // div 512
-        if tix <> lasttix then
         begin
-          lasttix := tix;
-          OnIdle(tix64); // called every 512 ms at most
+          fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
+          break;
         end;
+        res := fSock.RecvPending(len);
+        if (res = nrOk) and
+           (len >= 4) then
+        begin
+          PInteger(fFrame)^ := 0;
+          len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
+          if Terminated then
+            break;
+          if (len >= 0) and // -1=error
+             (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
+          begin
+            inc(fReceived);
+            OnFrameReceived(len, remote);
+          end;
+        end
+        else if res <> nrRetry then
+          SleepHiRes(100); // don't loop with 100% cpu on failure
       end;
-    OnShutdown; // should close all connections
-  except
-    on E: Exception do
-      // any exception would break and release the thread
-      FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
-  end;
-  fProcessing := false;
+      if Terminated then
+        break;
+      tix64 := mormot.core.os.GetTickCount64;
+      tix := tix64 shr 9; // div 512
+      if tix <> lasttix then
+      begin
+        lasttix := tix;
+        OnIdle(tix64); // called every 512 ms at most
+      end;
+    end;
+  // notify method to close all connections
+  OnShutdown;
 end;
 
 
