@@ -4682,14 +4682,21 @@ destructor THttpServer.Destroy;
 var
   endtix: Int64;
   i: PtrInt;
+  ilog: ISynLog;
+  l: TSynLog;
   dummy: TNetSocket; // touch-and-go to the server to release main Accept()
 begin
+  l := nil;
+  if hsoLogVerbose in fOptions then
+    l := fLogClass.EnterLocal(ilog, 'Destroy % state=%',
+      [fProcessName, ToText(fExecuteState)^], self);
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool <> nil then
     fThreadPool.fTerminated := true; // notify background process
   if (fExecuteState = esRunning) and
      (Sock <> nil) then
   begin
+    l.Log(sllTrace, 'Destroy: final connection', self);
     if Sock.SocketLayer <> nlUnix then
       Sock.Close; // shutdown TCP/UDP socket to unlock Accept() in Execute
     if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer,
@@ -4699,10 +4706,13 @@ begin
     if Sock.SockIsDefined then
       Sock.Close; // nlUnix expects shutdown after accept() returned
   end;
-  endtix := mormot.core.os.GetTickCount64 + 20000;
   try
-    if fInternalHttpServerRespList <> nil then // HTTP/1.1 long running threads
+    if (fInternalHttpServerRespList <> nil) and // HTTP/1.1 long running threads
+       (fInternalHttpServerRespList.Count <> 0) then
     begin
+      l.Log(sllTrace, 'Destroy RespList=%',
+        [fInternalHttpServerRespList.Count], self);
+      endtix := mormot.core.os.GetTickCount64 + 20000;
       fInternalHttpServerRespList.Safe.ReadOnlyLock; // notify
       for i := 0 to fInternalHttpServerRespList.Count - 1 do
         THttpServerResp(fInternalHttpServerRespList.List[i]).Shutdown;
@@ -4719,13 +4729,17 @@ begin
         end;
         SleepHiRes(10);
       until mormot.core.os.GetTickCount64 > endtix;
-      FreeAndNilSafe(fInternalHttpServerRespList);
     end;
+    FreeAndNilSafe(fInternalHttpServerRespList);
   finally
+    l.Log(sllTrace, 'Destroy: finalize threads', self);
     FreeAndNilSafe(fThreadPool); // release all associated threads
     FreeAndNilSafe(fSock);
+    if (fBanned <> nil) and
+       (fBanned.Total <> 0) then
+      l.Log(sllTrace, 'Destroy %', [fBanned], self);
     FreeAndNil(fBanned);
-    inherited Destroy;       // direct Thread abort, no wait till ended
+    inherited Destroy; // direct Thread abort, no wait till ended
   end;
 end;
 
@@ -6579,7 +6593,10 @@ begin
 end;
 
 destructor THttpPeerCache.Destroy;
+var
+  ilog: ISynLog;
 begin
+  fLog.EnterLocal(ilog, 'Destroy % %', [fUdpServer, fHttpServer], self);
   if fSettingsOwned then
     fSettings.Free;
   fSettings := nil; // notify OnDownload/OnIdle/OnFrameReceived calls
