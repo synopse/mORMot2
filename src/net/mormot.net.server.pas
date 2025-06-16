@@ -6578,7 +6578,8 @@ end;
 
 function THttpPeerCache.CurrentConnections: integer;
 begin
-  if pcoNoServer in fSettings.Options then
+  if Assigned(fSettings) and
+     (pcoNoServer in fSettings.Options) then
     result := 0
   else
     result := fHttpServer.ConnectionsActive;
@@ -6623,7 +6624,8 @@ end;
 function THttpPeerCache.PermFileName(const aFileName: TFileName;
   aFlags: THttpPeerCacheLocalFileName): TFileName;
 begin
-  if pcoCacheTempSubFolders in fSettings.Options then
+  if Assigned(fSettings) and
+     (pcoCacheTempSubFolders in fSettings.Options) then
   begin
     // create sub-folders using the first hash nibble (0..9/a..z), in a way
     // similar to git - aFileName[1..2] is the algorithm, so hash starts at [3]
@@ -6770,7 +6772,8 @@ var
   minsize: Int64;
 begin
   result := false; // continue
-  if waoNoMinimalSize in aParams.AlternateOptions then
+  if (fSettings = nil) or
+     (waoNoMinimalSize in aParams.AlternateOptions) then
     exit;
   if (waoPermanentCache in aParams.AlternateOptions) and
      (fPermFilesPath <> '') then
@@ -6898,6 +6901,8 @@ begin
       fClientSafe.UnLock;
     end;
   // broadcast the request over UDP
+  if not Assigned(fSettings) then
+    exit;
   tix := 0;
   if (pcoBroadcastNotAlone in fSettings.Options) or
      (waoBroadcastNotAlone in Params.AlternateOptions) then
@@ -6908,7 +6913,8 @@ begin
   end;
   Params.SetStep(wgsAlternateBroadcast, [fUdpServer.fBroadcastIpPort]);
   resp := fUdpServer.Broadcast(req, alone);
-  if resp = nil then
+  if (resp = nil) or
+     not Assigned(fSettings) then
   begin
     if (tix <> 0) and // pcoBroadcastNotAlone
        alone then
@@ -6974,7 +6980,7 @@ begin
   PByte(@msg.Kind)^ := 255; // ToText(msg.Kind)^ = ''
   err := [];
   if fSettings = nil then
-    include(err, eShutdown);
+    include(err, eShutdown); // avoid GPF at shutdown
   if length(aBearerToken) < PEER_CACHE_BEARERLEN then // base64uri length
     include(err, eBearer);
   if not (IsGet(aMethod) or
