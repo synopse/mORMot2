@@ -7038,11 +7038,12 @@ function TLdapClient.SearchAllDocRaw(out Dest: TDocVariantData;
 var
   n, recv: integer;
   dom: PSid;
-  l: ISynLog;
+  ilog: ISynLog;
 begin
   // setup context and resultset
   if Assigned(fLog) then
-    fLog.EnterLocal(l, 'SearchAllDocRaw max=% perpage=%', [MaxCount, PerPage], self);
+    fLog.EnterLocal(ilog, 'SearchAllDocRaw max=% perpage=%',
+      [MaxCount, PerPage], self);
   dom := nil;
   if not (roNoSddlDomainRid in Options) then
     dom := pointer(DomainSid); // RID resolution from cached Domain SID
@@ -7075,8 +7076,8 @@ begin
     if fSearchRange <> nil then
       SearchRangeEnd(Dest, Options, ObjectAttributeField); // as TDocVariant
   end;
-  if Assigned(l) then
-    l.Log(sllDebug, 'SearchAllDocRaw=% count=% recv=%',
+  if Assigned(ilog) then
+    ilog.Log(sllDebug, 'SearchAllDocRaw=% count=% recv=%',
       [BOOL_STR[result], n, KBNoSpace(recv)], self);
   // eventually sort by field names (if specified)
   if roSortByName in Options then
