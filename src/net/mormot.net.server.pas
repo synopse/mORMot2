@@ -2598,8 +2598,9 @@ var
 begin
   fLogClass.Add.Log(sllDebug, 'Destroy: ending % - processing=%',
     [fProcessName, fProcessing], self);
-  // try to release fSock.WaitFor(1000) in DoExecute
+  // notify thread termination
   Terminate;
+  // try to release fSock.WaitFor(1000) in DoExecute
   if fProcessing and
      (fSock <> nil) then
   {$ifdef OSPOSIX} // a broadcast address won't reach DoExecute
@@ -6437,13 +6438,13 @@ constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   aHttpServerThreadCount: integer; aLogClass: TSynLogClass;
   aServerTls, aClientTls: PNetTlsContext);
 var
-  log: ISynLog;
+  ilog: ISynLog;
   avail, existing: Int64;
 begin
   fLog := aLogClass;
   if fLog = nil then
     fLog := TSynLog;
-  fLog.EnterLocal(log, 'Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
+  fLog.EnterLocal(ilog, 'Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
   if (fSettings = nil) or
@@ -6473,8 +6474,8 @@ begin
     fTempFilesMaxSize := Int64(fSettings.CacheTempMaxMB) shl 20;
     avail := GetDiskAvailable(fTempFilesPath);
     existing := DirectorySize(fTempFilesPath, false, PEER_CACHE_PATTERN);
-    if Assigned(log) then
-      log.Log(sllDebug, 'Create: % folder has % available, with % existing cache',
+    if Assigned(ilog) then
+      ilog.Log(sllDebug, 'Create: % folder has % available, with % existing cache',
         [fTempFilesPath, KB(avail), KB(existing)], self);
     if (avail <> 0) and
        not (pcoCacheTempNoCheckSize in fSettings.Options) then
@@ -6483,8 +6484,8 @@ begin
       if fTempFilesMaxSize > avail then
       begin
         fTempFilesMaxSize := avail; // allow up to 25% of the folder capacity
-        if Assigned(log) then
-          log.Log(sllDebug, 'Create: trim CacheTempMax=%', [KB(avail)], self);
+        if Assigned(ilog) then
+          ilog.Log(sllDebug, 'Create: trim CacheTempMax=%', [KB(avail)], self);
       end;
     end;
   end;
@@ -6500,8 +6501,8 @@ begin
   AfterSettings; // fSettings should have been defined
   // start the local UDP server on this interface
   fUdpServer := THttpPeerCacheThread.Create(self);
-  if Assigned(log) then
-    log.Log(sllTrace, 'Create: started %', [fUdpServer], self);
+  if Assigned(ilog) then
+    ilog.Log(sllTrace, 'Create: started %', [fUdpServer], self);
   // start the local HTTP/HTTPS server on this interface
   if not (pcoNoServer in fSettings.Options) then
   begin
@@ -6509,8 +6510,8 @@ begin
     fHttpServer.ServerName := Executable.ProgramName;
     fHttpServer.OnBeforeBody := OnBeforeBody;
     fHttpServer.OnRequest := OnRequest;
-    if Assigned(log) then
-      log.Log(sllDebug, 'Create: started %', [fHttpServer], self);
+    if Assigned(ilog) then
+      ilog.Log(sllDebug, 'Create: started %', [fHttpServer], self);
   end;
 end;
 
