@@ -3299,6 +3299,7 @@ procedure TLoggedThread.Execute;
 var
   ilog: ISynLog;
 begin
+  fProcessing := true;
   fLog := nil;
   try
     SetCurrentThreadName(fProcessName);
@@ -3309,7 +3310,6 @@ begin
       if Assigned(ilog) then
         fLog := ilog.Instance;
     end;
-    fProcessing := true;
     DoExecute;
   except
     // ignore any exception during processing method
