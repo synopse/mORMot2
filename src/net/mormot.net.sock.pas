@@ -709,6 +709,7 @@ function GetMacAddressesText(WithoutName: boolean = true;
 /// flush the GetIPAddressesText/GetMacAddresses internal caches
 // - may be called to force detection after HW configuration change (e.g. when
 // wifi has been turned on)
+// - this method is thread-safe about its internal caches
 procedure MacIPAddressFlush;
 
 {$ifdef OSWINDOWS}
@@ -3836,11 +3837,34 @@ var
   end;
 
 procedure MacIPAddressFlush;
+var
+  ip: TIPAddress;
+  ud: boolean;
 begin
-  Finalize(IPAddresses);
-  FillCharFast(IPAddresses, SizeOf(IPAddresses), 0);
-  Finalize(MacAddresses);
-  FillCharFast(MacAddresses, SizeOf(MacAddresses), 0);
+  for ip := low(ip) to high(ip) do
+    with IPAddresses[ip] do
+    begin
+      Safe.Lock;
+      try
+        Text := '';
+        Tix := 0;
+      finally
+        Safe.UnLock;
+      end;
+    end;
+  for ud := low(ud) to high(ud) do
+    with MacAddresses[ud] do
+    begin
+      Safe.Lock;
+      try
+        Addresses := nil;
+        Tix := 0;
+        Text[false] := '';
+        Text[true] := '';
+      finally
+        Safe.UnLock;
+      end;
+    end;
 end;
 
 procedure GetIPCSV(const Sep: RawUtf8; Kind: TIPAddress; out Text: RawUtf8);
