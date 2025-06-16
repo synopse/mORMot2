@@ -1061,6 +1061,7 @@ type
   protected
     fLogClass: TSynLogClass;
     fLog: TSynLog; // the logging instance within the DoExecute thread context
+    fExecuteMessage: RawUtf8;
     fProcessing: boolean;
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
@@ -1084,6 +1085,9 @@ type
     /// the name of this thread, as supplied to SetCurrentThreadName()
     property ProcessName: RawUtf8
       read fProcessName;
+    /// some info at shutdown about any exception raised during DoExecute process
+    property ExecuteMessage: RawUtf8
+      read fExecuteMessage;
   end;
 
   TLoggedWorker = class;
@@ -3309,6 +3313,8 @@ begin
     on E: Exception do
       if fLog <> nil then
       try
+        // any exception would break and release the thread
+        FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
         fLog.Log(sllDebug, 'Execute aborted by %', [E], self);
       except
       end;
