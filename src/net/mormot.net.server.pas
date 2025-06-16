@@ -2599,7 +2599,8 @@ destructor TUdpServerThread.Destroy;
 var
   sock: TNetSocket;
 begin
-  fLogClass.Add.Log(sllDebug, 'Destroy: ending %', [fProcessName], self);
+  fLogClass.Add.Log(sllDebug, 'Destroy: ending % - processing=%',
+    [fProcessName, fProcessing], self);
   // try to release fSock.WaitFor(1000) in DoExecute
   Terminate;
   if fProcessing and
@@ -2621,6 +2622,8 @@ begin
   end;
   // finalize this thread process
   TerminateAndWaitFinished;
+  fLogClass.Add.Log(sllDebug, 'Destroy: TerminateAndWaitFinished Processing=% [%]',
+    [fProcessing, fExecuteMessage], self);
   inherited Destroy;
   if fSock <> nil then
     fSock.ShutdownAndClose({rdwr=}true);
