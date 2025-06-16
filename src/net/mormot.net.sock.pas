@@ -3828,7 +3828,7 @@ var
     Tix: integer;
   end;
 
-  // GetMacAddresses / GetMacAddressesText cache
+  // GetMacAddresses / GetMacAddressesText cache - refreshed every 65 seconds
   MacAddresses: array[{UpAndDown=}boolean] of record
     Safe: TLightLock;
     Tix: integer;

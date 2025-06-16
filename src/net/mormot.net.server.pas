@@ -2584,19 +2584,28 @@ begin
   inherited Create({suspended=}false, nil, nil, LogClass, ident);
   res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
     TimeoutMS, TimeoutMS, TimeoutMS, 10, fSock, @fSockAddr);
-  fBound := true; // notify DoExecute()
+  fBound := true; // notify DoExecute() ASAP that fSock should be set (or not)
   if res <> nrOk then
+  begin
+    // Windows seems to require this to avoid breaking the process on error
+    {$ifdef OSWINDOWS}
+    Resume{%H-}; // force Execute/DoExecute launch
+    SleepHiRes(10);
+    {$endif OSWINDOWS}
     // on binding error, raise exception before the thread is actually created
     raise EUdpServer.Create('%s.Create binding error on %s:%s',
       [ClassNameShort(self)^, BindAddress, BindPort], res);
+  end;
   AfterBind;
 end;
 
 destructor TUdpServerThread.Destroy;
 var
   sock: TNetSocket;
+  ilog: ISynLog;
+  l: TSynLog;
 begin
-  fLogClass.Add.Log(sllDebug, 'Destroy: ending % - processing=%',
+  l := fLogClass.EnterLocal(ilog, 'Destroy: ending % - processing=%',
     [fProcessName, fProcessing], self);
   // notify thread termination (if not already done)
   Terminate;
@@ -2628,6 +2637,10 @@ begin
   if fSock <> nil then
     fSock.ShutdownAndClose({rdwr=}true);
   FreeMem(fFrame);
+  if l = nil then
+    exit;
+  ilog := nil; // append Leave now
+  l.Flush;
 end;
 
 function TUdpServerThread.GetIPWithPort: RawUtf8;
