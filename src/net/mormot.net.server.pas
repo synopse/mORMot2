@@ -6013,7 +6013,7 @@ begin
   if tix = fLastNetworkTix then
     exit;
   fLastNetworkTix := tix;
-  MacIPAddressFlush; // flush mormot.net.sock cache
+  MacIPAddressFlush; // thread-safe flush mormot.net.sock cache
   err := fSettings.GuessInterface(newmac);
   result := (err = '') and
             ((fMac.Name <> newmac.Name) or
