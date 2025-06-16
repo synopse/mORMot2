@@ -1127,7 +1127,7 @@ type
     destructor Destroy; override;
     /// flush all log content to file
     // - if ForceDiskWrite is TRUE, will wait until written on disk (slow)
-    procedure Flush(ForceDiskWrite: boolean);
+    procedure Flush(ForceDiskWrite: boolean = false);
     /// flush all log content to file and close the file
     procedure CloseLogFile;
     /// flush all log content to file, close the file, and release the instance
@@ -4669,7 +4669,7 @@ var
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
-  nfo := @PerThreadInfo; // access the threadvar - InitThreadNumber() already done
+  nfo := @PerThreadInfo; // threadvar access - InitThreadNumber() already done
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   dec(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ <> 0 then
@@ -4758,7 +4758,8 @@ procedure TSynLog.Flush(ForceDiskWrite: boolean);
 var
   diskflush: THandle;
 begin
-  if fWriter = nil then
+  if (self = nil) or
+     (fWriter = nil) then
     exit;
   diskflush := 0;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -5174,7 +5175,7 @@ begin
   try
     if num > PtrUInt(length(fThreadIdent)) then
       SetLength(fThreadIdent, NextGrow(num));
-    with fThreadIdent[num - 1] do
+    with fThreadIdent[num - 1] do // identifiers of this TSynLog instance
     begin
       if (ThreadID = tid) and
          (ThreadName = n) then
