@@ -1068,6 +1068,7 @@ type
     procedure DoTerminate; override; // overriden for fLog.NotifyThreadEnded
   public
     /// initialize the server instance, in non suspended state
+    // - this class won't set FreeAndTerminate := nil at this method level
     constructor Create(CreateSuspended: boolean;
       const OnStart, OnStop: TOnNotifyThread; Logger: TSynLogClass;
       const ProcName: RawUtf8); reintroduce; virtual;
@@ -1108,6 +1109,8 @@ type
   // - a dedicated thread will be initialized and launched for the process, so
   // OnExecute() should better take some time to be worth the thread creation
   // - see TLoggedWorker for a global mechanism to handle a pool of this class
+  // - note: set FreeOnTerminate := true, so never call Free/Destroy to finalize,
+  // but call Terminate with proper cross-dereference in any owner thread
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fOwner: TLoggedWorker;

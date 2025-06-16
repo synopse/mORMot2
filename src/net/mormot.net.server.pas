@@ -2598,7 +2598,7 @@ var
 begin
   fLogClass.Add.Log(sllDebug, 'Destroy: ending % - processing=%',
     [fProcessName, fProcessing], self);
-  // notify thread termination
+  // notify thread termination (if not already done)
   Terminate;
   // try to release fSock.WaitFor(1000) in DoExecute
   if fProcessing and
