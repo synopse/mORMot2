@@ -508,6 +508,7 @@ type
     fOnAfterResponse: TOnHttpServerAfterResponse;
     fMaximumAllowedContentLength: Int64;
     fCurrentConnectionID: integer;  // 31-bit NextConnectionID sequence
+    fCurrentProcess: integer;
     fCompressList: THttpSocketCompressList; /// set by RegisterCompress method
     fServerName: RawUtf8;
     fRequestHeaders: RawUtf8; // pre-computed headers with 'Server: xxxx'
@@ -739,6 +740,13 @@ type
     // - may not include HTTP/1.0 short-living connections
     property ConnectionsActive: cardinal
       read GetConnectionsActive;
+    /// returns the number of HTTP responses currently being transmitted
+    // - is increased when the request is processed on the server side, or
+    // transmitted back to the client
+    // - incoming headers and body retrieval, or idle kept-alive HTTP/1.1
+    // connections won't be included in this number
+    property CurrentProcess: integer
+      read fCurrentProcess;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer/TWebSocketAsyncServer have this ability by now
     function CanNotifyCallback: boolean;
@@ -5015,6 +5023,7 @@ begin
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread, 0,
     ClientSock.fRequestFlags, ClientSock.GetConnectionOpaque);
   try
+    LockedInc32(@fCurrentProcess);
     // compute the response
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP, fAuthorize);
     DoRequest(req);
@@ -5066,6 +5075,7 @@ begin
       DoAfterResponse(req, ClientSock, started);
   finally
     req.Free;
+    LockedDec32(@fCurrentProcess);
     if Assigned(fProgressiveRequests) then
       DoProgressiveRequestFree(ClientSock.Http); // e.g. THttpPartials.Remove
     ClientSock.Http.ProcessDone;   // ContentStream.Free
@@ -5132,7 +5142,7 @@ begin
             // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
             // -> process in dedicated background thread
             fServer.fThreadRespClass.Create(self, fServer);
-            result := false; // freeme=false: THttpServerResp will own self
+            result := false; // freeme = false: THttpServerResp will own self
           end
           else
           begin
@@ -8309,6 +8319,7 @@ begin
       case err of
         NO_ERROR:
           try
+            LockedInc32(@fCurrentProcess);
             // parse method and main headers as ctxt.Prepare() does
             bytessent := 0;
             ctxt.fHttpApiRequest := req;
@@ -8489,6 +8500,7 @@ begin
                     SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
             end;
           finally
+            LockedDec32(@fCurrentProcess);
             reqid := 0; // reset Request ID to handle the next pending request
           end;
         ERROR_MORE_DATA:
