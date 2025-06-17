@@ -9996,39 +9996,9 @@ end;
 
 function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext; WithAdditionalInfo: boolean): boolean;
-
-{$ifdef OSWINDOWS} // void TSynLogExceptionContext.AdditionalInfo() on POSIX
-  procedure DoAdditionalInfo;
-  var
-    extcode: cardinal;
-    extnames: TPShortStringDynArray;
-    extname: PShortString;
-    i: PtrInt;
-  begin
-    extcode := Context.AdditionalInfo(extnames);
-    if extcode = 0 then
-      exit; // no additional error
-    WR.AddDirect(' ', '0', 'x');
-    WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
-    for i := 0 to high(extnames) do
-    begin
-      {$ifdef OSWINDOWS}
-      WR.AddShort(' [.NET/CLR unhandled ');
-      {$else}
-      WR.AddShort(' [unhandled ');
-      {$endif OSWINDOWS}
-      extname := extnames[i];
-      if extname^[0] <> #0 then
-        if extname^[1] = '_' then // trim e.g. TDotNetException initial _ char
-          WR.AddNoJsonEscape(@extname^[2], ord(extname^[0]) - 1)
-        else
-          WR.AddShort(extname^);
-      WR.AddShort('Exception]');
-    end;
-  end;
-
+{$ifdef OSWINDOWS} // no TSynLogExceptionContext.AdditionalInfo() on POSIX
 var
-  s: TShort47;
+  s: shortstring;
 {$endif OSWINDOWS}
 begin
   WR.AddClassName(Context.EClass);
@@ -10037,8 +10007,9 @@ begin
      (Context.EClass <> EExternalException) then
   begin
     {$ifdef OSWINDOWS}
-    if WithAdditionalInfo then
-      DoAdditionalInfo;
+    if WithAdditionalInfo and
+       Context.AdditionalInfo(s) then
+      WR.AddShort(s); // e.g. ' [.NET/CLR unhandled StackOverflowException]'
     {$endif OSWINDOWS}
     WR.AddDirect(' ');
     if PClass(WR)^ = TTextWriter then // no WriteObject() yet
@@ -10050,7 +10021,7 @@ begin
   begin
     WR.AddDirect(' ', '(');
     {$ifdef OSWINDOWS}
-    WinErrorShort(PtrUInt(Context.ECode), s);
+    WinErrorShort(PtrUInt(Context.ECode), @s); // decode most known error codes
     WR.AddShort(s);
     {$else}
     WR.AddPointer(Context.ECode);
