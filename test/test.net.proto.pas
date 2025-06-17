@@ -51,6 +51,7 @@ type
     hasinternet: boolean;
     // for _THttpPeerCache
     peercacheopt: THttpRequestExtendedOptions;
+    peercachedirect: THttpPeerCache;
     // for _TUriTree
     reqone, reqtwo: RawUtf8;
     request: integer;
@@ -1861,6 +1862,9 @@ begin
   result := HTTP_SUCCESS;
   Ctxt.OutContent := FakeGif(Ctxt.Url);
   Ctxt.OutContentType := 'image/gif';
+  Check(Assigned(peercachedirect));
+  CheckEqual(peercachedirect.HttpServer.CurrentProcess, 1);
+  Check(gasProcessing in peercachedirect.State, 'hpcStateRequest');
 end;
 
 procedure TNetworkProtocols.RunPeerCacheDirect(Sender: TObject);
@@ -1881,6 +1885,8 @@ begin
   hcs := nil;
   localserver := THttpServer.Create('8889', nil, nil, 'local', 2);
   try
+    peercachedirect := hpc;
+    Check(hpc.State = [], 'hpcState1');
     localserver.OnRequest := OnPeerCacheRequest; // return the URL
     hpc.OnDirectOptions := OnPeerCacheDirect;
     try
@@ -1933,18 +1939,21 @@ begin
         CheckEqual(ctyp, 'image/gif');
         len := hcs.ContentLength;
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+        Check(hpc.State = [], 'hpcState2');
         // GET twice to retrieve from cache
         status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
         CheckEqual(Sha256(hcs.Content), hash);
+        Check(hpc.State = [], 'hpcState3');
         // HEAD should work with cache
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
+        Check(hpc.State = [], 'hpcState4');
         // prepare local requests on cache in pcfBearer mode (like a peer)
         hpc.MessageInit(pcfBearer, 0, msg2);
         CheckEqual(msg2.IP4, hpc.IP4);
@@ -1962,22 +1971,27 @@ begin
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp, 'ctyp from cached content');
         CheckEqual(Sha256(hcs.Content), hash);
+        Check(hpc.State = [], 'hpcState5');
         // HEAD on cache in pcfBearer mode
         status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, '');
+        Check(hpc.State = [], 'hpcState6');
         // HEAD should work without cache and call directly the http server
         Check(DeleteFile(cache));
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
+        Check(hpc.State = [], 'hpcState7');
       end;
     finally
       hcs.Free;
     end;
   finally
+    Check(hpc.State = [], 'hpcStateFinal');
+    peercachedirect := nil;
     hpc.Settings.Free;
     hpc.Free;
     localserver.Free;

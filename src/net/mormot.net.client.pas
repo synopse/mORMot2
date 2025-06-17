@@ -853,6 +853,7 @@ function WGet(const url: RawUtf8; const destfile: TFileName;
 
 function ToText(wgs: TWGetStep): PShortString; overload;
 function ToText(wgs: TWGetSteps; trimmed: boolean = true): RawUtf8; overload;
+function ToText(st: TWGetAlternateState; trimmed: boolean = true): RawUtf8; overload;
 
 var
   /// global overriden value for the GetSystemProxyUri() function
@@ -2597,6 +2598,11 @@ end;
 function ToText(wgs: TWGetSteps; trimmed: boolean): RawUtf8;
 begin
   result := GetSetName(TypeInfo(TWGetSteps), wgs, trimmed);
+end;
+
+function ToText(st: TWGetAlternateState; trimmed: boolean): RawUtf8;
+begin
+  result := GetSetName(TypeInfo(TWGetAlternateState), st, trimmed);
 end;
 
 var

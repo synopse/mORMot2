@@ -7622,6 +7622,7 @@ begin
   Check(WinErrorShort($80000003) = '80000003 EXCEPTION_BREAKPOINT', 'w3');
   Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
   Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
+  Check(WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
 end;
 
 const
