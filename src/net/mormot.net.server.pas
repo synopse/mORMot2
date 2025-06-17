@@ -1969,6 +1969,8 @@ type
     // actually reading and purging the CacheTempPath folder every minute
     // - could call Instable.DoRotate every minute to refresh IP banishments
     procedure OnIdle(tix64: Int64);
+    /// returns the current state of this PeerCache instance
+    function State: TWGetAlternateState;
     /// event to customize the access of a given URI in pcoHttpDirect mode
     property OnDirectOptions: TOnHttpPeerCacheDirectOptions
       read fOnDirectOptions write fOnDirectOptions;
@@ -6638,6 +6640,19 @@ begin
   if Status > mdAes then // decrypt ok but wrong content: log msg
     MsgToShort(Msg, msgtxt);
   fLog.Add.Log(sllTrace, '%: decode=% %', [Ctxt, ToText(Status)^, msgtxt], self);
+end;
+
+function THttpPeerCache.State: TWGetAlternateState;
+begin
+  result := [];
+  if (self = nil) or
+     not Assigned(fSettings) then // nil at shutdown
+    exit;
+  if Assigned(fHttpServer) and
+     (fHttpServer.fCurrentProcess > 0) then
+    include(result, gasProcessing);
+  if not fPartials.IsVoid then
+    include(result, gasPartials);
 end;
 
 function THttpPeerCache.ComputeFileName(const aHash: THashDigest): TFileName;
