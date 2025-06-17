@@ -767,9 +767,12 @@ function MatchOS(os: TOperatingSystem): boolean;
 // - as used by WinErrorText() and some low-level Windows API wrappers
 function WinErrorConstant(Code: cardinal): PShortString;
 
-/// return the error code number, and its ERROR_* constant (if known)
-function WinErrorShort(Code: cardinal): ShortString;
-  {$ifdef HASINLINE} inline; {$endif}
+/// return the error code number, and its regular constant (if known)
+function WinErrorShort(Code: cardinal): TShort47; overload;
+  {$ifdef HASSAFEINLINE} inline; {$endif}
+
+/// return the error code number, and its regular constant (if known)
+procedure WinErrorShort(Code: cardinal; var Dest: TShort47); overload;
 
 /// append the error as ' ERROR_*' constant and return TRUE if known
 // - append nothing and return FALSE if Code is not known
@@ -6310,6 +6313,7 @@ var
 
 function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
 begin
+  // will properly be implemented in mormot.core.rtti.pas
   if Value < 0 then
   begin
     result := @NULL_STR;
@@ -6404,24 +6408,43 @@ type
     INVALID_SECURITY_DESCR, _1339, BAD_INHERITANCE_ACL, SERVER_DISABLED,
     SERVER_NOT_DISABLED);
   // O(log(n)) binary search in WINERR_SORTED[] constants
-  TWinErrorOne = (
+  TWinErrorSorted = (
+    // some EXCEPTION_* in range $80000000 .. $800000ff
+    DATATYPE_MISALIGNMENT, BREAKPOINT, SINGLE_STEP,
+    // some security-related HRESULT errors (negative 32-bit values first)
     CRYPT_E_BAD_ENCODE, CRYPT_E_SELF_SIGNED, CRYPT_E_BAD_MSG, CRYPT_E_REVOKED,
     CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE, TRUST_E_BAD_DIGEST,
     TRUST_E_NOSIGNATURE, CERT_E_EXPIRED, CERT_E_CHAINING, CERT_E_REVOKED,
+    // some EXCEPTION_* in range $c0000000 .. $c00000ff
+    ACCESS_VIOLATION, IN_PAGE_ERROR, INVALID_HANDLE_,
+    NONCONTINUABLE_EXCEPTION, ILLEGAL_INSTRUCTION,
+    INVALID_DISPOSITION, ARRAY_BOUNDS_EXCEEDED, FLT_DENORMAL_OPERAND,
+    FLT_DIVIDE_BY_ZERO, FLT_INEXACT_RESULT, FLT_INVALID_OPERATION,
+    FLT_OVERFLOW, FLT_STACK_CHECK, FLT_UNDERFLOW, INT_DIVIDE_BY_ZERO,
+    INT_OVERFLOW, PRIV_INSTRUCTION, STACK_OVERFLOW_,
+    // sparse system errors
     ALREADY_EXISTS, MORE_DATA, ACCOUNT_EXPIRED, NO_SYSTEM_RESOURCES,
-    PASSWORD_MUST_CHANGE, ERROR_ACCOUNT_LOCKED_OUT,
-    WSAEFAULT, WSAEINVAL, WSAEMFILE, WSAEWOULDBLOCK, WSAENOTSOCK, WSAENETDOWN,
-    WSAENETUNREACH, WSAENETRESET, WSAECONNABORTED, WSAECONNRESET, WSAENOBUFS,
-    WSAETIMEDOUT, WSAECONNREFUSED, WSATRY_AGAIN,
-    WINHTTP_TIMEOUT, WINHTTP_OPERATION_CANCELLED, WINHTTP_CANNOT_CONNECT,
-    WINHTTP_CLIENT_AUTH_CERT_NEEDED, WINHTTP_INVALID_SERVER_RESPONSE);
+    RPC_S_SERVER_UNAVAILABLE, PASSWORD_MUST_CHANGE, ACCOUNT_LOCKED_OUT,
+    // main Windows Socket API (WSA*) errors
+    EFAULT, EINVAL, EMFILE, EWOULDBLOCK, ENOTSOCK, ENETDOWN,
+    ENETUNREACH, ENETRESET, ECONNABORTED, ECONNRESET, ENOBUFS,
+    ETIMEDOUT, ECONNREFUSED, TRY_AGAIN,
+    // most common WinHttp API errors (in range 12000...12152)
+    TIMEOUT, OPERATION_CANCELLED, CANNOT_CONNECT,
+    CLIENT_AUTH_CERT_NEEDED, INVALID_SERVER_RESPONSE);
 const
-  WINERR_SORTED: array[TWinErrorOne] of cardinal = (
+  WINERR_SORTED: array[TWinErrorSorted] of cardinal = (
+    // some EXCEPTION_* in range $80000000 .. $800000ff
+    $80000002, $80000003, $80000004,
     // some security-related HRESULT errors (negative 32-bit values first)
     $80092002, $80092007, $8009200d, $80092010, $80092012, $80092013, $80096010,
     $800b0100, $800b0101, $800b010a, $800b010c,
+    // some EXCEPTION_* in range $c0000000 .. $c00000ff
+    $c0000005, $c0000006, $c0000008, $c000001d, $c0000025, $c0000026,
+    $c000008c, $c000008d, $c000008e, $c000008f, $c0000090, $c0000091,
+    $c0000092, $c0000093, $c0000094, $c0000095, $c0000096, $c00000fd,
     // sparse system errors
-    183, 234, 701, 1450, 1907, 1909,
+    183, 234, 701, 1450, 1722, 1907, 1909,
     // main Windows Socket API (WSA) errors
     10014, 10022, 10024, 10035, 10038, 10050, 10051, 10052, 10053, 10054, 10055,
     10060, 10061, 11002,
@@ -6448,17 +6471,29 @@ begin
     1315 .. 1315 + ord(high(TWinError1315)):
       result := GetEnumNameRtti(TypeInfo(TWinError1315), Code - 1315);
   else
-    result := GetEnumNameRtti(TypeInfo(TWinErrorOne),
+    result := GetEnumNameRtti(TypeInfo(TWinErrorSorted),
       FastFindIntegerSorted(@WINERR_SORTED, ord(high(WINERR_SORTED)), Code));
   end;
 end;
 
-function WinErrorShort(Code: cardinal): ShortString;
+function WinErrorShort(Code: cardinal): TShort47;
 begin
-  result[0] := #0;
-  AppendShortCardinal(Code, result);
-  AppendWinErrorText(Code, result, ' ');
+  WinErrorShort(Code, result);
 end;
+
+procedure WinErrorShort(Code: cardinal; var Dest: TShort47); overload;
+begin
+  Dest[0] := #0;
+  if integer(Code) < 0 then
+    AppendShortIntHex(Code, Dest) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
+  else
+    AppendShortCardinal(Code, Dest); // e.g. '5 ERROR_ACCESS_DENIED'
+  AppendWinErrorText(Code, Dest, ' ');
+end;
+
+const
+  _PREFIX: array[0..4] of string[15] = (
+    'WSA', 'ERROR_WINHTTP_', '', 'EXCEPTION_', 'ERROR_');
 
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
   Sep: AnsiChar): boolean;
@@ -6468,12 +6503,22 @@ begin
   result := false;
   txt := WinErrorConstant(Code);
   if txt^[0] = #0 then
-    exit;
+    exit; // unknown
   if Sep <> #0 then
     AppendShortChar(Sep, @Dest);
-  if (Code < 10000) or
-     (Code > 11999) then
-    AppendShort('ERROR_', Dest); // if not WSA*
+  case Code of
+    10000 .. 11999:
+      Code := 0;  // main Windows Socket API errors
+    12000 .. 12152:
+      Code := 1;  // most common WinHttp API errors
+    1722, $80092002 .. $800b010c:
+      Code := 2;  // no prefix for security-related HRESULT errors
+    $80000000 .. $800000ff, $c0000000 .. $c00000ff:
+      Code := 3;  // EXCEPTION_* constants
+  else
+    Code := 4;    // regular Windows ERROR_* constant
+  end;
+  AppendShort(_PREFIX[Code], Dest);
   AppendShort(txt^, Dest);
   result := true;
 end;

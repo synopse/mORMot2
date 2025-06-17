@@ -1735,7 +1735,7 @@ type
     case {IsOsException:} boolean of
       true:
         (ExceptionInformation: array[0..14] of PtrUInt);
-      false:
+      false: // ExceptionCode = cRtlException
         (ExceptAddr: PtrUInt;
          ExceptObject: Exception);
   end;

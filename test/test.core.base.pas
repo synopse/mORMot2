@@ -7603,18 +7603,25 @@ begin
   Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
   Check(WinErrorConstant(234)^ = 'MORE_DATA', 'wecd');
   Check(WinErrorConstant(5)^ = 'ACCESS_DENIED', 'wece');
-  Check(WinErrorConstant(12002)^ = 'WINHTTP_TIMEOUT', 'wecf');
+  Check(WinErrorConstant(12002)^ = 'TIMEOUT', 'wecf');
   Check(WinErrorConstant($800b010a)^ = 'CERT_E_CHAINING', 'wecg');
   Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecG');
   Check(WinErrorConstant($800b010d)^ = '', 'wech');
   Check(WinErrorConstant($80092002)^ = 'CRYPT_E_BAD_ENCODE', 'wecH');
   Check(WinErrorConstant(1229)^  = 'CONNECTION_INVALID', 'weci');
   Check(WinErrorConstant(122)^ = 'INSUFFICIENT_BUFFER', 'wecj');
-  Check(WinErrorConstant(12152)^ = 'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  Check(WinErrorConstant(12152)^ = 'INVALID_SERVER_RESPONSE', 'weck');
   Check(WinErrorConstant(87)^ = 'INVALID_PARAMETER', 'wecl');
   Check(WinErrorConstant(1315)^ = 'INVALID_ACCOUNT_NAME', 'wecm');
   Check(WinErrorConstant(1331)^ = 'ACCOUNT_DISABLED', 'wecn');
   Check(WinErrorConstant(1342)^ = 'SERVER_NOT_DISABLED', 'weco');
+  Check(WinErrorShort(0) = '0 ERROR_SUCCESS', 'w0');
+  Check(WinErrorShort(5) = '5 ERROR_ACCESS_DENIED', 'wa');
+  Check(WinErrorShort(12002) = '12002 ERROR_WINHTTP_TIMEOUT', 'w1');
+  Check(WinErrorShort($800b010a) = '800b010a CERT_E_CHAINING', 'w2');
+  Check(WinErrorShort($80000003) = '80000003 EXCEPTION_BREAKPOINT', 'w3');
+  Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
+  Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
 end;
 
 const
