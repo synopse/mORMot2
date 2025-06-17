@@ -9997,7 +9997,7 @@ end;
 function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext; WithAdditionalInfo: boolean): boolean;
 
-  {$ifdef OSWINDOWS} // void TSynLogExceptionContext.AdditionalInfo() on POSIX
+{$ifdef OSWINDOWS} // void TSynLogExceptionContext.AdditionalInfo() on POSIX
   procedure DoAdditionalInfo;
   var
     extcode: cardinal;
@@ -10026,8 +10026,10 @@ function DefaultSynLogExceptionToStr(WR: TTextWriter;
       WR.AddShort('Exception]');
     end;
   end;
-  {$endif OSWINDOWS}
 
+var
+  s: TShort47;
+{$endif OSWINDOWS}
 begin
   WR.AddClassName(Context.EClass);
   if (Context.ELevel = sllException) and
@@ -10047,7 +10049,12 @@ begin
   else if Context.ECode <> 0 then
   begin
     WR.AddDirect(' ', '(');
+    {$ifdef OSWINDOWS}
+    WinErrorShort(PtrUInt(Context.ECode), s);
+    WR.AddShort(s);
+    {$else}
     WR.AddPointer(Context.ECode);
+    {$endif OSWINDOWS}
     WR.AddDirect(')');
   end;
   result := false; // caller should append "at EAddr" and the stack trace

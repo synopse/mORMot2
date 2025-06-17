@@ -6481,7 +6481,7 @@ begin
   WinErrorShort(Code, result);
 end;
 
-procedure WinErrorShort(Code: cardinal; var Dest: TShort47); overload;
+procedure WinErrorShort(Code: cardinal; var Dest: TShort47);
 begin
   Dest[0] := #0;
   if integer(Code) < 0 then
