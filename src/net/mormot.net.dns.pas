@@ -809,7 +809,7 @@ begin
   else if NetIsIP4(pointer(HostName)) then
     Ip := HostName
   else
-    result := false;
+    result := false; // and Ip has been set to ''
 end;
 
 function DnsLookup(const HostName, NameServers: RawUtf8; TimeoutMS: integer): RawUtf8;
@@ -849,7 +849,7 @@ var
   i: PtrInt;
 begin
   result := '';
-  cardinal(b) := 0;
+  PCardinal(@b)^ := 0;
   if NetIsIP4(pointer(IP4), @b) and
      DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa', [b[3], b[2], b[1], b[0]]),
        res, drrPTR, NameServers, TimeoutMS) then
@@ -902,6 +902,7 @@ function _NewSocketIP4Lookup(const HostName: RawUtf8; out IP4: cardinal): boolea
 var
   ip: RawUtf8;
 begin
+  ip4 := 0; // clearly identify failure
   ip := DnsLookup(HostName, NewSocketIP4LookupServer);
   result := NetIsIP4(pointer(ip), @ip4);
 end;
