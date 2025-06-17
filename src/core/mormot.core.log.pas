@@ -1020,7 +1020,7 @@ type
     /// ready-to-be-written text timestamp, filled outside GlobalThreadLock
     // - ptIdentifiedInOneFile appends the ThreadNumber in Int18ToText() format
     // - can store up to 27 chars: padded with previous fields as 32 bytes
-    CurrentTime: string[27];
+    CurrentTimeAndThread: string[27];
     /// each thread can access to its own TSynLog instance
     // - implements TSynLogFamily.PerThreadLog = ptOneFilePerThread option
     FileLookup: array[0 .. MAX_SYNLOGFAMILY - 1] of TSynLog;
@@ -4526,7 +4526,7 @@ var
   indent: PtrInt;
   P: PUtf8Char;
 begin
-  fWriter.AddShort(fThreadInfo^.CurrentTime); // timestamp [+ threadnumber]
+  fWriter.AddShort(fThreadInfo^.CurrentTimeAndThread); // timestamp [+threadnum]
   P := fWriter.B + 1; // AddShort() reserved for 255 bytes
   PInt64(P)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
   inc(P, 7);
@@ -5133,11 +5133,11 @@ begin // called only in ptIdentifiedInOneFile mode
     if ThreadID = 0 then
       exit; // paranoid
     // customized LogHeader(sllInfo, nil) for this thread
-    pthrdnum := @fThreadInfo^.CurrentTime; // in two steps for better codegen
+    pthrdnum := @fThreadInfo^.CurrentTimeAndThread; // in two steps for codegen
     pthrdnum := @pthrdnum[ord(pthrdnum[0]) - 2];
     bak := PCardinal(pthrdnum)^;
     Int18ToText(threadnumber, pthrdnum);
-    fWriter.AddShort(fThreadInfo^.CurrentTime); // timestamp [+ threadnumber]
+    fWriter.AddShort(fThreadInfo^.CurrentTimeAndThread); // timestamp [+ thread]
     PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[sllInfo][1])^;
     inc(fWriter.B, 7); // TSynLogFile expects no recursion
     fWriter.AddShort('SetThreadName ');
@@ -5428,7 +5428,7 @@ begin
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
     GetCurrentTime(nfo, nil);
-    fWriter.AddShort(nfo^.CurrentTime); // timestamp [+ threadnumber]
+    fWriter.AddShort(nfo^.CurrentTimeAndThread); // timestamp [+ threadnumber]
     PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[sllNewRun][1])^;
     inc(fWriter.B, 7); // initial sllNewRun expects no recursion
     fWriter.AddString(Executable.ProgramName);
@@ -5609,6 +5609,7 @@ var
   ms: Int64 absolute st;
   p: PUtf8Char;
 begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
+  p := @nfo^.CurrentTimeAndThread;
   if fFamily.HighResolutionTimestamp then
   begin
     if MicroSec = nil then
@@ -5617,22 +5618,21 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
       dec(ms, fStartTimestamp);
       MicroSec := @ms;
     end;
-    nfo^.CurrentTime[0] := #16; // 64-bit microseconds = 584704 years
-    BinToHexDisplayLower(pointer(MicroSec), @nfo^.CurrentTime[1], SizeOf(ms));
+    p[0] := #16; // 64-bit microseconds = 584704 years
+    BinToHexDisplayLower(pointer(MicroSec), @p[1], SizeOf(ms));
   end
   else
   begin
     FromGlobalTime(st, fFamily.LocalTimestamp); // with 16ms cache
-    nfo^.CurrentTime[0] := #17;
-    st.ToLogTime(@nfo^.CurrentTime[1]); // '20110325 19241502' 17 chars
+    p[0] := #17;
+    st.ToLogTime(@p[1]); // '20110325 19241502' 17 chars
     if fFamily.ZonedTimestamp then
-      AppendShortChar('Z', @nfo^.CurrentTime);
+      AppendShortChar('Z', PAnsiChar(p));
   end;
   if fFamily.fPerThreadLog <> ptIdentifiedInOneFile then
     exit;
-  p := @nfo.CurrentTime;
   Int18ToText(nfo^.ThreadNumber, @p[ord(p[0]) + 1]);
-  inc(nfo^.CurrentTime[0], 3);
+  inc(p[0], 3);
 end;
 
 procedure TSynLog.PerformRotation;
