@@ -2068,7 +2068,7 @@ var
 /// the default Exception handler for logging
 // - defined here to be called e.g. by ESynException.CustomLog() as default
 function DefaultSynLogExceptionToStr(WR: TTextWriter;
-  const Context: TSynLogExceptionContext): boolean;
+  const Context: TSynLogExceptionContext; WithAdditionalInfo: boolean): boolean;
 
 {$endif NOEXCEPTIONINTERCEPT}
 
@@ -9995,7 +9995,7 @@ end;
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 function DefaultSynLogExceptionToStr(WR: TTextWriter;
-  const Context: TSynLogExceptionContext): boolean;
+  const Context: TSynLogExceptionContext; WithAdditionalInfo: boolean): boolean;
 var
   extcode: cardinal;
   extnames: TPShortStringDynArray;
@@ -10007,25 +10007,28 @@ begin
      (Context.EInstance <> nil) and
      (Context.EClass <> EExternalException) then
   begin
-    extcode := Context.AdditionalInfo(extnames);
-    if extcode <> 0 then
+    if WithAdditionalInfo then
     begin
-      WR.AddDirect(' ', '0', 'x');
-      WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
-      for i := 0 to high(extnames) do
+      extcode := Context.AdditionalInfo(extnames);
+      if extcode <> 0 then
       begin
-        {$ifdef OSWINDOWS}
-        WR.AddShort(' [.NET/CLR unhandled ');
-        {$else}
-        WR.AddShort(' [unhandled ');
-        {$endif OSWINDOWS}
-        extname := extnames[i];
-        if extname^[0] <> #0 then
-          if extname^[1] = '_' then // trim e.g. TDotNetException initial _ char
-            WR.AddNoJsonEscape(@extname^[2], ord(extname^[0]) - 1)
-          else
-            WR.AddShort(extname^);
-        WR.AddShort('Exception]');
+        WR.AddDirect(' ', '0', 'x');
+        WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
+        for i := 0 to high(extnames) do
+        begin
+          {$ifdef OSWINDOWS}
+          WR.AddShort(' [.NET/CLR unhandled ');
+          {$else}
+          WR.AddShort(' [unhandled ');
+          {$endif OSWINDOWS}
+          extname := extnames[i];
+          if extname^[0] <> #0 then
+            if extname^[1] = '_' then // trim e.g. TDotNetException initial _ char
+              WR.AddNoJsonEscape(@extname^[2], ord(extname^[0]) - 1)
+            else
+              WR.AddShort(extname^);
+          WR.AddShort('Exception]');
+        end;
       end;
     end;
     WR.AddDirect(' ');
@@ -10053,7 +10056,7 @@ begin
   if Assigned(TSynLogExceptionToStrCustom) then
     result := TSynLogExceptionToStrCustom(WR, Context)
   else
-    result := DefaultSynLogExceptionToStr(WR, Context);
+    result := DefaultSynLogExceptionToStr(WR, Context, {addinfo=}true);
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}

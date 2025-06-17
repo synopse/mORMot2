@@ -3980,7 +3980,7 @@ begin
     n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
     repeat
       result := f^;
-      if result.fHandleExceptions then
+      if result.fHandleExceptions then // main log is the first
         exit;
       inc(f);
       dec(n);
@@ -6119,12 +6119,11 @@ var
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var
-  log: TSynLog;
+  fam: TSynLogFamily;
+  log, log2: TSynLog;
   info: ^TSynLogExceptionInfo;
   thrdnam: PShortString;
-  {$ifdef FPC}
   i: PtrInt;
-  {$endif FPC}
 label
   adr, fin;
 begin
@@ -6185,7 +6184,7 @@ begin
           goto adr; // CustomLog() included DefaultSynLogExceptionToStr()
         end;
       end;
-      if DefaultSynLogExceptionToStr(log.fWriter, Ctxt) then
+      if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
         goto fin;
 adr:  // regular exception context log with its stack trace
       log.fWriter.AddDirect(' ', '['); // fThreadContext^.ThreadName may be ''
@@ -6212,6 +6211,26 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
         log.AddSysInfo;
       log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
       log.fWriter.FlushToStream; // exceptions available on disk ASAP
+      // minimal exception logging to all other TSynLog files (to ease debug)
+      for i := 0 to high(SynLogFamily) do
+      begin
+        fam := SynLogFamily[i];
+        if (fam <> HandleExceptionFamily) and // if not already logged above
+           (Ctxt.ELevel in fam.Level) then
+        try
+          log2 := fam.fGlobalLog;
+          if not Assigned(log2) then
+            continue;
+          log2.GetCurrentTime(log2.GetThreadInfo, nil); // time+threadnum
+          log2.LogHeader(Ctxt.ELevel, nil);
+          DefaultSynLogExceptionToStr(log2.fWriter, Ctxt, {addinfo=}false);
+          // stack trace only in the main thread
+          log2.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+        except
+          // paranoid: don't try family again (without SetLevel)
+          fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
+        end;
+      end;
     except
       // any nested exception should never be propagated to the OS caller
     end;
