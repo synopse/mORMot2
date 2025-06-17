@@ -2603,9 +2603,8 @@ destructor TUdpServerThread.Destroy;
 var
   sock: TNetSocket;
   ilog: ISynLog;
-  l: TSynLog;
 begin
-  l := fLogClass.EnterLocal(ilog, 'Destroy: ending % - processing=%',
+  fLogClass.EnterLocal(ilog, 'Destroy: ending % - processing=%',
     [fProcessName, fProcessing], self);
   // notify thread termination (if not already done)
   Terminate;
@@ -2637,10 +2636,6 @@ begin
   if fSock <> nil then
     fSock.ShutdownAndClose({rdwr=}true);
   FreeMem(fFrame);
-  if l = nil then
-    exit;
-  ilog := nil; // append Leave now
-  l.Flush;
 end;
 
 function TUdpServerThread.GetIPWithPort: RawUtf8;
