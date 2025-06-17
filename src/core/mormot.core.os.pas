@@ -3093,6 +3093,7 @@ type
     ELevel: TSynLogLevel;
     /// retrieve some extended information about a given Exception
     // - on Windows, recognize most DotNet CLR Exception Names
+    // - do nothing and return 0 on POSIX
     function AdditionalInfo(out ExceptionNames: TPShortStringDynArray): cardinal;
   end;
 
@@ -7800,10 +7801,10 @@ begin
         ctxt.EClass := PPointer(Obj)^;
         ctxt.EInstance := Exception(Obj);
         ctxt.EAddr := PtrUInt(Addr);
-        if Obj.InheritsFrom(EExternal) then
+        if Obj.InheritsFrom(EExternal) then // e.g. EDivByZero or EMathError
           ctxt.ELevel := sllExceptionOS
         else
-          ctxt.ELevel := sllException;
+          ctxt.ELevel := sllException; // regular "raise" exception
         ctxt.ETimestamp := UnixTimeUtc;
         ctxt.EStack := pointer(Frame);
         ctxt.EStackCount := FrameCount;

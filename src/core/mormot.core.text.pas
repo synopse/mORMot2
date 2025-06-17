@@ -9996,48 +9996,51 @@ end;
 
 function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext; WithAdditionalInfo: boolean): boolean;
-var
-  extcode: cardinal;
-  extnames: TPShortStringDynArray;
-  extname: PShortString;
-  i: PtrInt;
+
+  {$ifdef OSWINDOWS} // void TSynLogExceptionContext.AdditionalInfo() on POSIX
+  procedure DoAdditionalInfo;
+  var
+    extcode: cardinal;
+    extnames: TPShortStringDynArray;
+    extname: PShortString;
+    i: PtrInt;
+  begin
+    extcode := Context.AdditionalInfo(extnames);
+    if extcode = 0 then
+      exit; // no additional error
+    WR.AddDirect(' ', '0', 'x');
+    WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
+    for i := 0 to high(extnames) do
+    begin
+      {$ifdef OSWINDOWS}
+      WR.AddShort(' [.NET/CLR unhandled ');
+      {$else}
+      WR.AddShort(' [unhandled ');
+      {$endif OSWINDOWS}
+      extname := extnames[i];
+      if extname^[0] <> #0 then
+        if extname^[1] = '_' then // trim e.g. TDotNetException initial _ char
+          WR.AddNoJsonEscape(@extname^[2], ord(extname^[0]) - 1)
+        else
+          WR.AddShort(extname^);
+      WR.AddShort('Exception]');
+    end;
+  end;
+  {$endif OSWINDOWS}
+
 begin
   WR.AddClassName(Context.EClass);
   if (Context.ELevel = sllException) and
      (Context.EInstance <> nil) and
      (Context.EClass <> EExternalException) then
   begin
+    {$ifdef OSWINDOWS}
     if WithAdditionalInfo then
-    begin
-      extcode := Context.AdditionalInfo(extnames);
-      if extcode <> 0 then
-      begin
-        WR.AddDirect(' ', '0', 'x');
-        WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
-        for i := 0 to high(extnames) do
-        begin
-          {$ifdef OSWINDOWS}
-          WR.AddShort(' [.NET/CLR unhandled ');
-          {$else}
-          WR.AddShort(' [unhandled ');
-          {$endif OSWINDOWS}
-          extname := extnames[i];
-          if extname^[0] <> #0 then
-            if extname^[1] = '_' then // trim e.g. TDotNetException initial _ char
-              WR.AddNoJsonEscape(@extname^[2], ord(extname^[0]) - 1)
-            else
-              WR.AddShort(extname^);
-          WR.AddShort('Exception]');
-        end;
-      end;
-    end;
+      DoAdditionalInfo;
+    {$endif OSWINDOWS}
     WR.AddDirect(' ');
-    if PClass(WR)^ = TTextWriter then
-      {$ifdef UNICODE}
-      WR.AddOnSameLineW(pointer(Context.EInstance.Message), 0)
-      {$else}
-      WR.AddOnSameLine(pointer(Context.EInstance.Message))
-      {$endif UNICODE}
+    if PClass(WR)^ = TTextWriter then // no WriteObject() yet
+      WR.AddOnSameLineString(Context.EInstance.Message)
     else
       WR.WriteObject(Context.EInstance); // use RTTI for JSON serialization
   end

@@ -1760,7 +1760,7 @@ begin
   backuphandler := _RawLogException;
   if Assigned(backuphandler) then // paranoid check (tested before calling)
     try
-      _RawLogException := nil; // disable nested exception
+      _RawLogException := nil; // disable nested exception at API level
       ctxt.ECode := Exc.ExceptionCode;
       if (Exc.ExceptionCode = cRtlException) and
          (Exc.ExceptObject <> nil) then
