@@ -10169,16 +10169,11 @@ procedure TTestCoreBase.WindowsSpecificApi;
 
   procedure Win32DotNetException(code: cardinal; const expected: RawUtf8);
   var
-    e: TPShortStringDynArray;
-    i: PtrInt;
-    v: RawUtf8;
+    s: ShortString;
   begin
-    Check(e = nil);
-    Win32DotNetExceptions(code, e);
-    CheckEqual(v, '');
-    for i := 0 to high(e) do
-      Append(v, [e[i]^, ' ']);
-    CheckEqual(v, expected);
+    s[0] := #0;
+    Check(Win32DotNetExceptions(code, s) = (expected <> ''));
+    CheckEqual(ShortStringToAnsi7String(s), expected);
   end;
 
 var
@@ -10190,8 +10185,9 @@ begin
   // validate DotNet exceptions error code recognition
   Win32DotNetException(0, '');
   Win32DotNetException(9234, '');
-  Win32DotNetException($800703E9, '_StackOverflow ');
-  Win32DotNetException($80131500, '_ _SUDSGenerator _SUDSParser ');
+  Win32DotNetException($800703E9, ' [.NET/CLR unhandled StackOverflowException]');
+  Win32DotNetException($80131500,
+    ' [.NET/CLR unhandled Exception SUDSGeneratorException SUDSParserException]');
   // validate UAC specific functions
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));
