@@ -1167,12 +1167,6 @@ end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
-function TSynLogExceptionContext.AdditionalInfo(
-  out ExceptionNames: TPShortStringDynArray): cardinal;
-begin
-  result := 0; // Windows/CLR specific by now
-end;
-
 var
   _RawLogException: TOnRawLogException;
 

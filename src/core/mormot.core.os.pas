@@ -3094,10 +3094,10 @@ type
     /// the logging level corresponding to this exception
     // - may be either sllException or sllExceptionOS
     ELevel: TSynLogLevel;
-    /// retrieve some extended information about a given Exception
-    // - on Windows, recognize most DotNet CLR Exception Names
-    // - do nothing and return 0 on POSIX
-    function AdditionalInfo(out ExceptionNames: TPShortStringDynArray): cardinal;
+    {$ifdef OSWINDOWS}
+    /// retrieve some DotNet CLR extended information about a given Exception
+    function AdditionalInfo(var dest: shortstring): boolean;
+    {$endif OSWINDOWS}
   end;
 
   /// the global function signature expected by RawExceptionIntercept()
@@ -4027,7 +4027,7 @@ function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): bool
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 /// get DotNet exception class names from HRESULT - published for testing purpose
-procedure Win32DotNetExceptions(code: cardinal; var names: TPShortStringDynArray);
+function Win32DotNetExceptions(code: cardinal; var dest: ShortString): boolean;
 {$endif NOEXCEPTIONINTERCEPT}
 
 /// ask the Operating System to convert a file URL to a local file path
