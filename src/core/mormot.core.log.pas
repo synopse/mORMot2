@@ -1102,7 +1102,7 @@ type
       {$ifdef FPC}inline;{$endif}
     procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
-    procedure GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
+    procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
     procedure LogFileHeader; virtual;
     procedure AddMemoryStats; virtual;
@@ -4630,7 +4630,7 @@ begin
     nfo^.ThreadNumber := InitThreadNumber;
   if not (logInitDone in fInitFlags) then
     LogFileInit(nfo); // run once, to set start time and write headers
-  GetCurrentTime(nfo, nil); // syscall outside of GlobalThreadLock
+  FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   fThreadInfo := nfo;
   {$ifndef NOEXCEPTIONINTERCEPT}
@@ -4680,7 +4680,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   // append e.g. 00000000001FFF23  %  -    02.096.658
   QueryPerformanceMicroSeconds(ms);
   dec(ms, fStartTimestamp);
-  GetCurrentTime(nfo, @ms); // timestamp [+ threadnumber]
+  FillInfo(nfo, @ms); // timestamp [+ threadnumber]
   dec(ms, PInt64(refcnt)^ shr 8); // elapsed time since Enter
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   {$ifdef HASFASTTRYFINALLY}
@@ -4813,12 +4813,12 @@ begin
   begin
     QueryPerformanceMicroSeconds(ms);
     dec(ms, fStartTimestamp);
-    GetCurrentTime(nfo, @ms); // timestamp [+ threadnumber]
+    FillInfo(nfo, @ms); // timestamp [+ threadnumber]
     rec := ms shl 8 + {RefCnt=}1;
   end
   else
   begin
-    GetCurrentTime(nfo, nil);
+    FillInfo(nfo, nil);
     rec := {RefCnt=}1; // no timestamp needed if no sllLeave
   end;
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
@@ -5168,7 +5168,7 @@ begin
   nfo := GetThreadInfo; // may call InitThreadNumber() if first access
   if not (logInitDone in fInitFlags) then
     LogFileInit(nfo);
-  GetCurrentTime(nfo, nil); // timestamp + threadnumber
+  FillInfo(nfo, nil); // timestamp [+ threadnumber]
   num := nfo^.ThreadNumber;
   tid := PtrUInt(GetCurrentThreadId);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -5427,7 +5427,7 @@ begin
     if not (logHeaderWritten in fInitFlags) then
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
-    GetCurrentTime(nfo, nil);
+    FillInfo(nfo, nil);
     fWriter.AddShort(nfo^.CurrentTimeAndThread); // timestamp [+ threadnumber]
     PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[sllNewRun][1])^;
     inc(fWriter.B, 7); // initial sllNewRun expects no recursion
@@ -5603,7 +5603,7 @@ begin
   fWriter.AddDirect('}');
 end;
 
-procedure TSynLog.GetCurrentTime(nfo: PSynLogThreadInfo; MicroSec: PInt64);
+procedure TSynLog.FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64);
 var
   st: TSynSystemTime;
   ms: Int64 absolute st;
@@ -6221,13 +6221,13 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
           log2 := fam.fGlobalLog;
           if not Assigned(log2) then
             continue;
-          log2.GetCurrentTime(log2.GetThreadInfo, nil); // time+threadnum
+          log2.FillInfo(log2.GetThreadInfo, nil); // timestamp [+ threadnumber]
           log2.LogHeader(Ctxt.ELevel, nil);
           DefaultSynLogExceptionToStr(log2.fWriter, Ctxt, {addinfo=}false);
           // stack trace only in the main thread
           log2.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
         except
-          // paranoid: don't try family again (without SetLevel)
+          // paranoid: don't try this family again (without SetLevel)
           fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
         end;
       end;
