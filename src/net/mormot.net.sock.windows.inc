@@ -579,18 +579,20 @@ begin
   result := nrNotFound;
   if address = '' then
     exit;
-  // check supplied IP port
+  // check and decode supplied IP port
   p := GetCardinal(pointer(addrport));
   if (p = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
-  PSockAddr(@Addr)^.sin_port := bswap16(p);
   // first check most simple IPv4 resolution (maybe using mormot.net.dns)
   if SetFromIP4(address, false) or
      // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
      SetWinAddr(address, addrport, AF_INET, layer, Addr) or
      SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
+  begin
+    PSockAddr(@Addr)^.sin_port := bswap16(p); // eventually set port
     result := nrOk;
+  end;
 end;
 
 
