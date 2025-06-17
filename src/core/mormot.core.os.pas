@@ -769,10 +769,10 @@ function WinErrorConstant(Code: cardinal): PShortString;
 
 /// return the error code number, and its regular constant (if known)
 function WinErrorShort(Code: cardinal): TShort47; overload;
-  {$ifdef HASSAFEINLINE} inline; {$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return the error code number, and its regular constant (if known)
-procedure WinErrorShort(Code: cardinal; var Dest: TShort47); overload;
+procedure WinErrorShort(Code: cardinal; Dest: PShortString); overload;
 
 /// append the error as ' ERROR_*' constant and return TRUE if known
 // - append nothing and return FALSE if Code is not known
@@ -6478,17 +6478,17 @@ end;
 
 function WinErrorShort(Code: cardinal): TShort47;
 begin
-  WinErrorShort(Code, result);
+  WinErrorShort(Code, @result);
 end;
 
-procedure WinErrorShort(Code: cardinal; var Dest: TShort47);
+procedure WinErrorShort(Code: cardinal; Dest: PShortString);
 begin
-  Dest[0] := #0;
+  Dest^[0] := #0;
   if integer(Code) < 0 then
-    AppendShortIntHex(Code, Dest) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
+    AppendShortIntHex(Code, Dest^) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
   else
-    AppendShortCardinal(Code, Dest); // e.g. '5 ERROR_ACCESS_DENIED'
-  AppendWinErrorText(Code, Dest, ' ');
+    AppendShortCardinal(Code, Dest^); // e.g. '5 ERROR_ACCESS_DENIED'
+  AppendWinErrorText(Code, Dest^, ' ');
 end;
 
 const
