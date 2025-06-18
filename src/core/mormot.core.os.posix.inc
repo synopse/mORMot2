@@ -5,6 +5,8 @@
    POSIX API calls for FPC, as used by mormot.core.os.pas
 }
 
+{$ifdef FPC}
+
 uses
   baseunix,
   unix,
@@ -31,9 +33,17 @@ uses
   initc; // we statically link the libc for some raw calls
 
 {$ifdef UNICODE}
-  'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
+  'mORMot assumes no UNICODE on POSIX FPC, i.e. as TFileName = PChar = PUtf8Char'
 {$endif UNICODE}
 
+{$else}
+
+// rough preparation for Delphi compatibility - not finished at all
+uses
+  System.IOUtils,
+  System.SyncObjs;
+
+{$endif FPC}
 
 // define some raw text functions, to avoid linking mormot.core.text
 
@@ -44,7 +54,7 @@ procedure _fmt(const Fmt: string; const Args: array of const;
 procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
 function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
-function PosExtString(Str: PChar): PChar; forward;
+function PosExtString(Str: PChar): PChar; forward; // to extract extension
 
 procedure WrDeb(const t: ShortString; const p; l: PtrInt); // internal use below
 var
@@ -92,13 +102,14 @@ end;
 { ****************** Unicode, Time, File process }
 
 function SortDynArrayFileName(const A, B): integer;
-begin // case-sensitive extension, then filename comparison on POSIX
+begin // file extension, then file name case-sensitive comparison on POSIX
   result := 0;
-  if @A = @B then
+  if pointer(A) = pointer(B) then
     exit;
-  result := StrComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
+  result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(
+              PosExtString(pointer(A)), PosExtString(pointer(B)));
   if result = 0 then
-    result := StrComp(pointer(A), pointer(B)); // fast case-sensitive order
+    result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(pointer(A), pointer(B));
 end;
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;

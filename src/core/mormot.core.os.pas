@@ -78,7 +78,7 @@ const
   /// human-friendly alias to open a file for exclusive writing ($20)
   fmShareRead      = fmShareDenyWrite;
   /// human-friendly alias to open a file for exclusive reading ($30)
-  fmShareWrite     = fmShareDenyRead;
+  fmShareWrite     = {$ifdef DELPHIPOSIX} fmShareDenyNone {$else} fmShareDenyRead {$endif};
   /// human-friendly alias to open a file with no read/write exclusion ($40)
   fmShareReadWrite = fmShareDenyNone;
 
