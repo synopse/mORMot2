@@ -1863,7 +1863,7 @@ begin
   Ctxt.OutContent := FakeGif(Ctxt.Url);
   Ctxt.OutContentType := 'image/gif';
   Check(Assigned(peercachedirect));
-  CheckEqual(peercachedirect.HttpServer.CurrentProcess, 1);
+  CheckEqual(peercachedirect.HttpServer.CurrentProcess, 1, 'hpcState');
   Check(gasProcessing in peercachedirect.State, 'hpcStateRequest');
 end;
 
@@ -1881,6 +1881,25 @@ var
   tls: TNetTlsContext;
   popt: PHttpRequestExtendedOptions;
   localserver: THttpServer;
+
+  procedure WaitNotProcessing(const Context: string);
+  var
+    endtix: Int64;
+  begin
+    if not (gasProcessing in hpc.State) then
+    begin
+      Check(true, Context); // most common case
+      exit;
+    end;
+    endtix := GetTickCount64 + 500; // never wait forever
+    repeat
+      SleepHiRes(10); // let the HTTP thread finalize its course
+    until (not (gasProcessing in hpc.State)) or
+          (GetTickCount64 > endtix);
+    CheckUtf8(not (gasProcessing in hpc.State),
+      '%=%', [Context, ToText(hpc.State)]);
+  end;
+
 begin
   hcs := nil;
   localserver := THttpServer.Create('8889', nil, nil, 'local', 2);
@@ -1939,21 +1958,21 @@ begin
         CheckEqual(ctyp, 'image/gif');
         len := hcs.ContentLength;
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-        Check(not (gasProcessing in hpc.State), 'hpcState2');
+        WaitNotProcessing('hpcState2');
         // GET twice to retrieve from cache
         status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
         CheckEqual(Sha256(hcs.Content), hash);
-        Check(not (gasProcessing in hpc.State), 'hpcState3');
+        WaitNotProcessing('hpcState3');
         // HEAD should work with cache
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-        Check(not (gasProcessing in hpc.State), 'hpcState4');
+        WaitNotProcessing('hpcState4');
         // prepare local requests on cache in pcfBearer mode (like a peer)
         hpc.MessageInit(pcfBearer, 0, msg2);
         CheckEqual(msg2.IP4, hpc.IP4);
@@ -1971,26 +1990,26 @@ begin
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp, 'ctyp from cached content');
         CheckEqual(Sha256(hcs.Content), hash);
-        Check(not (gasProcessing in hpc.State), 'hpcState5');
+        WaitNotProcessing('hpcState5');
         // HEAD on cache in pcfBearer mode
         status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, '');
-        Check(not (gasProcessing in hpc.State), 'hpcState6');
+        WaitNotProcessing('hpcState6');
         // HEAD should work without cache and call directly the http server
         Check(DeleteFile(cache));
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
-        Check(not (gasProcessing in hpc.State), 'hpcState7');
+        WaitNotProcessing('hpcState7');
       end;
     finally
       hcs.Free;
     end;
   finally
-    Check(not (gasProcessing in hpc.State), 'hpcStateFinal');
+    WaitNotProcessing('hpcStateFinal');
     peercachedirect := nil;
     hpc.Settings.Free;
     hpc.Free;
