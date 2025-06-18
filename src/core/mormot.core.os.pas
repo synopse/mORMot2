@@ -6520,6 +6520,8 @@ begin
   end;
   AppendShort(_PREFIX[Code], Dest);
   AppendShort(txt^, Dest);
+  if Dest[ord(Dest[0])] = '_' then
+    dec(Dest[0]); // 'EXCEPTION_STACK_OVERFLOW_' -> 'EXCEPTION_STACK_OVERFLOW'
   result := true;
 end;
 
