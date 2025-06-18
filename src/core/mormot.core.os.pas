@@ -3136,6 +3136,9 @@ function FileExists(const FileName: TFileName; FollowLink: boolean = true;
 function DirectoryExists(const FileName: TFileName;
   FollowLink: boolean = true): boolean;
 
+/// check if this filename is in the 'c:\...' or '/full/path' pattern
+function IsExpandedPath(const FileName: TFileName): boolean;
+
 /// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a path
 function SafePathName(const Path: TFileName): boolean;
 

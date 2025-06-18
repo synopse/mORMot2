@@ -2282,6 +2282,13 @@ begin
     folder := '';
 end;
 
+function IsExpandedPath(const FileName: TFileName): boolean;
+begin
+  result := (FileName = '') or
+            ((FileName[1] = '/') and
+             (Pos('..', FileName) = 0)); // seems already expanded
+end;
+
 procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 begin
   result := ''; // "out result" param is not enough for FPC

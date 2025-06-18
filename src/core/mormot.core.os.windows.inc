@@ -26,7 +26,7 @@ begin
   tmp.Done;
 end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL doesn't handle surrogates
 
-function IsExtendedPathName(Name: PWideChar): boolean;
+function IsExtendedPathName(Name: PWideChar): boolean; // in '\\?\...' format
 begin
   result := (Name <> nil) and
             (Name[0] = '\') and
@@ -42,7 +42,7 @@ begin
   Len := Len * 2 + 2; // in bytes, +2 to include ending #0
   if (Len <= MAX_PATH * 2) or
      ((Len <= SizeOf(Temp) - 8) and
-      IsExtendedPathName(Name)) then
+      IsExtendedPathName(Name)) then // in '\\?\...' format
   begin
     MoveFast(Name^, Temp[0], Len); // we can use the supplied UTF-16 file name
     exit;
@@ -1197,17 +1197,22 @@ begin
     end;
 end;
 
+function IsExpandedPath(const FileName: TFileName): boolean;
+begin
+  result := (FileName = '') or
+     ((FileName[2] = ':') and
+      (length(FileName) < MAX_PATH) and
+      (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
+      (Pos('..', FileName) = 0)); // seems already expanded
+end;
+
 function ExpandFileName(const FileName: TFileName): TFileName;
 var
   w, fp: PWideChar;
   t1, t2: TW32Temp;
 begin
   result := FileName;
-  if (FileName = '') or
-     ((FileName[2] = ':') and 
-      (length(FileName) < MAX_PATH) and
-      (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
-      (Pos('..', FileName) = 0)) then
+  if IsExpandedPath(FileName) then
     exit; // it seems to be already expanded 
   w := W32(FileName, t1);
   if w = nil then
