@@ -965,10 +965,10 @@ begin
     JSONPARSER_TOLERANTOPTIONS, []);
   for spec := 0 to High(MUSTACHE_SPECS) do
   begin
-    mustacheJson := HttpGetWeak(
+    mustacheJson := DownloadFile(
       'https://raw.githubusercontent.com/mustache/spec/' +
       'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json',
-      WorkDir + MUSTACHE_SPECS[spec] + '.json');
+      MUSTACHE_SPECS[spec] + '.json');
     RecordLoadJsonInPlace(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
     Check(length(mus.tests) > 5, 'mustacheJson load');
     for i := 0 to high(mus.tests) do
@@ -3295,14 +3295,14 @@ begin
   Check(JA.D = '1234');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayWithoutF), '');
 
-  discogsJson := HttpGetWeak(
+  discogsJson := DownloadFile(
     'https://api.discogs.com/artists/45/releases?page=1&per_page=100',
-    WorkDir + discogsFileName);
+    discogsFileName);
   Check(IsValidJson(discogsJson), 'discogsJson');
 
-  zendframeworkJson := HttpGetWeak(
+  zendframeworkJson := DownloadFile(
     'https://api.github.com/users/zendframework/repos',
-    WorkDir + zendframeworkFileName);
+    zendframeworkFileName);
   Check(IsValidJson(zendframeworkJson), 'zendJson');
 
   TestGit([jpoIgnoreUnknownProperty], []);

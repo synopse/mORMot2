@@ -268,7 +268,7 @@ begin
       if not IdemPChar(pointer(url), 'HTTP') then
         url := Join(['https://raw.githubusercontent.com/OAI/' +
                  'OpenAPI-Specification/main/examples/', url]);
-      JsonBufferReformat(pointer(HttpGetWeak(url)), api[i]);
+      JsonBufferReformat(pointer(DownloadFile(url)), api[i]);
       if api[i] <> '' then
         FileFromString(api[i], fn);
     end;
@@ -1766,8 +1766,8 @@ begin
     Check(sub.SaveToBinary = bin, 'loadtext');
     Check(sub.Match('1.2.3.4'));
     Check(not sub.Match('1.2.3.5'));
-    txt := HttpGetWeak('https://raw.githubusercontent.com/firehol/blocklist-ipsets/' +
-      'refs/heads/master/firehol_level1.netset', WorkDir + 'firehol.netset');
+    txt := DownloadFile('https://raw.githubusercontent.com/firehol/blocklist-ipsets/' +
+      'refs/heads/master/firehol_level1.netset', 'firehol.netset');
     if txt <> '' then
     begin
       sub.Clear;
@@ -1804,8 +1804,8 @@ begin
       for i := 1 to 20000 do
         Check(not IP4SubNetMatch(pointer(bin), $01010101), 'IP4SubNetMatch');
       NotifyTestSpeed('blacklist direct', 20000, 0, @timer);
-      txt := HttpGetWeak('https://www.spamhaus.org/drop/drop.txt',
-        WorkDir + 'spamhaus.netset');
+      txt := DownloadFile('https://www.spamhaus.org/drop/drop.txt',
+        'spamhaus.netset');
       if txt <> '' then
       begin
         Check(sub.AddFromText(txt) < 1000, 'spamhaus within firehol');
