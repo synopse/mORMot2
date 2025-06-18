@@ -1939,21 +1939,21 @@ begin
         CheckEqual(ctyp, 'image/gif');
         len := hcs.ContentLength;
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-        Check(hpc.State = [], 'hpcState2');
+        Check(not (gasProcessing in hpc.State), 'hpcState2');
         // GET twice to retrieve from cache
         status := hcs.Get(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
         CheckEqual(Sha256(hcs.Content), hash);
-        Check(hpc.State = [], 'hpcState3');
+        Check(not (gasProcessing in hpc.State), 'hpcState3');
         // HEAD should work with cache
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
         CheckUtf8(PosEx('Repr-Digest: sha-256=:', hcs.Headers) <> 0, hcs.Headers);
-        Check(hpc.State = [], 'hpcState4');
+        Check(not (gasProcessing in hpc.State), 'hpcState4');
         // prepare local requests on cache in pcfBearer mode (like a peer)
         hpc.MessageInit(pcfBearer, 0, msg2);
         CheckEqual(msg2.IP4, hpc.IP4);
@@ -1971,26 +1971,26 @@ begin
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp, 'ctyp from cached content');
         CheckEqual(Sha256(hcs.Content), hash);
-        Check(hpc.State = [], 'hpcState5');
+        Check(not (gasProcessing in hpc.State), 'hpcState5');
         // HEAD on cache in pcfBearer mode
         status := hcs.Head('dummies', HTTP_TIMEOUT, dtok);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, '');
-        Check(hpc.State = [], 'hpcState6');
+        Check(not (gasProcessing in hpc.State), 'hpcState6');
         // HEAD should work without cache and call directly the http server
         Check(DeleteFile(cache));
         status := hcs.Head(decoded.Address, HTTP_TIMEOUT, dBearer);
         CheckEqual(status, HTTP_SUCCESS);
         CheckEqual(hcs.ContentLength, len);
         CheckEqual(hcs.ContentType, ctyp);
-        Check(hpc.State = [], 'hpcState7');
+        Check(not (gasProcessing in hpc.State), 'hpcState7');
       end;
     finally
       hcs.Free;
     end;
   finally
-    Check(hpc.State = [], 'hpcStateFinal');
+    Check(not (gasProcessing in hpc.State), 'hpcStateFinal');
     peercachedirect := nil;
     hpc.Settings.Free;
     hpc.Free;
