@@ -369,7 +369,7 @@ type
   PWordDynArray = ^TWordDynArray;
   {$ifndef FPC_OR_UNICODE}
   TBytes = array of byte;
-  {$endif ISDELPHI2007ANDUP}
+  {$endif FPC_OR_UNICODE}
   PBytes = ^TBytes;
   TByteDynArray = array of byte; // can't reuse TBytes (Delphi XE internal error)
   PByteDynArray = ^TByteDynArray;
@@ -655,6 +655,9 @@ type
   end;
 
   {$else not FPC}
+
+  /// this type is not defined on DELPHI, and may be needed with c APIs
+  SizeInt = PtrInt;
 
   /// map the Delphi/FPC string header (stored before each instance)
   TStrRec = packed record
@@ -2613,7 +2616,8 @@ procedure ReadBarrier; {$ifndef CPUINTEL} inline; {$endif}
 {$ifdef CPUINTEL}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$else}
-procedure mul64x64(constref left, right: QWord; out product: THash128Rec); inline;
+procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
+  out product: THash128Rec); inline;
 {$endif CPUINTEL}
 
 
@@ -2935,13 +2939,13 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}
 
-/// redirect to FPC InterlockedIncrement() on non Intel CPU
+/// redirect to FPC InterlockedIncrement() or Delphi AtomicIncrement() on non Intel CPU
 procedure LockedInc32(int32: PInteger); inline;
 
-/// redirect to FPC InterlockedDecrement() on non Intel CPU
+/// redirect to FPC InterlockedDecrement() or Delphi AtomicDecrement() on non Intel CPU
 procedure LockedDec32(int32: PInteger); inline;
 
-/// redirect to FPC InterlockedIncrement64() on non Intel CPU
+/// redirect to FPC InterlockedIncrement64() or Delphi AtomicIncrement() on non Intel CPU
 procedure LockedInc64(int64: PInt64); inline;
 
 {$endif CPUINTEL}
@@ -3075,8 +3079,8 @@ procedure MoveFast(const src; var dst; cnt: PtrInt); { use our AVX-ready asm }
 
 // fallback to RTL versions on non-INTEL or PIC platforms by default
 // - mormot.core.os.posix.inc will redirect them to libc memset/memmove
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 
 {$endif ASMINTEL}
 
@@ -6387,11 +6391,11 @@ begin
         inc(err);
         if c > 9 then
           exit;
-        {$ifdef CPU32DELPHI}
+        {$ifdef HASSLOWMUL64}
         result := result shl 3 + result + result;
         {$else}
         result := result * 10; // FPC generates fast imul + mul
-        {$endif CPU32DELPHI}
+        {$endif HASSLOWMUL64}
         inc(result, c);
         if result < 0 then
           exit; // overflow (>$7FFFFFFFFFFFFFFF)
@@ -6446,11 +6450,11 @@ begin
         inc(err);
         if c > 9 then
           exit;
-        {$ifdef CPU32DELPHI}
+        {$ifdef HASSLOWMUL64}
         result := result shl 3 + result + result;
         {$else}
         result := result * 10; // FPC generates fast imul + mul
-        {$endif CPU32DELPHI}
+        {$endif HASSLOWMUL64}
         inc(result, c);
       until false;
     end;
@@ -6551,7 +6555,7 @@ begin
     result := 0;
 end;
 
-{$ifndef CPU32DELPHI} // Delphi has its own x86/x87 asm version
+{$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
 
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 var
@@ -6676,7 +6680,7 @@ e:  err := 1; // return the (partial) value even if not ended with #0
   result := result * d64;
 end;
 
-{$endif CPU32DELPHI}
+{$endif WIN32DELPHI}
 
 function Utf8ToInteger(const value: RawUtf8; Default: PtrInt): PtrInt;
 var
@@ -7066,6 +7070,17 @@ begin
 end;
 
 {$else}
+
+{$ifndef CPUINTEL}
+procedure FastStringAddRef(str: pointer);
+begin
+  if str = nil then
+    exit;
+  dec(PAnsiChar(str), _STRCNT);
+  if PStrCnt(str)^ >= 0 then
+    AtomicIncrement(PStrCnt(str)^);
+end;
+{$endif CPUINTEL}
 
 procedure FastStringDecRef(str: pointer);
 begin
@@ -9827,7 +9842,8 @@ begin
   e.r[3].Hi := e.r[3].Hi xor Rdtsc;      // has slightly changed in-between
   {$else}
   FillCharFast(_EntropyGlobal, SizeOf(_EntropyGlobal), 0); // anti-forensic
-  e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
+  e.r[3].Hi := e.r[3].Hi xor
+    {$ifdef ISDELPHI}TThread.{$endif}GetTickCount64; // defined in FPC RTL
   {$endif CPUINTEL}
 end;
 
@@ -10521,7 +10537,8 @@ begin
   {$endif CPU64}
 end;
 
-procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
+procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
+  out product: THash128Rec);
 var
   l: TQWordRec absolute left;
   r: TQWordRec absolute right;
@@ -10548,13 +10565,125 @@ end;
 
 procedure LockedInc32(int32: PInteger);
 begin
-  InterlockedIncrement(int32^);
+  {$ifdef ISDELPHI}AtomicIncrement{$else}InterlockedIncrement{$endif}(int32^);
 end;
 
 procedure LockedDec32(int32: PInteger);
 begin
-  InterlockedDecrement(int32^);
+  {$ifdef ISDELPHI}AtomicDecrement{$else}InterlockedDecrement{$endif}(int32^);
 end;
+
+function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+begin
+  result := {$ifdef ISDELPHI}AtomicCmpExchange{$else}InterlockedCompareExchange{$endif}(
+    pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
+end;
+
+procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
+begin
+  {$ifdef ISDELPHI}AtomicIncrement{$else}InterlockedExchangeAdd{$endif}(
+    Target, Increment);
+end;
+
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+begin
+  LockedAdd(Target, PtrUInt(-PtrInt(Decrement)));
+end;
+
+procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+var
+  i: PtrInt;
+begin
+  for i := 0 to n - 1 do
+    b^[i] := {$ifdef FPC}SwapEndian{$else}bswap64{$endif}(a^[i]);
+end;
+
+{$ifdef ISDELPHI}
+
+procedure LockedInc64(int64: PInt64);
+begin
+  AtomicIncrement(int64^);
+end;
+
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+begin
+  result := AtomicDecrement(refcnt) <= 0; // will use the proper 32-bit overload
+end; // we don't check for ismultithread global
+
+function DACntDecFree(var refcnt: TDACnt): boolean;
+begin
+  result := AtomicDecrement(refcnt) <= 0; // will use the proper 32-bit overload
+end;
+
+procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
+begin
+  AtomicIncrement(Target, Increment);
+end;
+
+function bswap32(a: cardinal): cardinal;
+begin
+  result := (a shr 24) or
+            ((a and cardinal($00ff0000)) shr 8) or
+            ((a and cardinal($0000ff00)) shl 8) or
+            (a shl 24);
+end;
+
+function bswap64(const a: QWord): QWord;
+begin
+  result := (a shr 32) or (a shl 32);
+  result := ((result and QWord($ffff0000ffff0000)) shr 16) or
+            ((result and QWord($0000ffff0000ffff)) shl 16);
+  result:=  ((result and QWord($ff00ff00ff00ff00)) shr 8) or
+            ((result and QWord($00ff00ff00ff00ff)) shl 8);
+end;
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+begin
+  for result := 0 to Count - 1 do
+    if P[result] = Value then
+      exit;
+  result := -1;
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+begin
+  for result := 0 to Count - 1 do
+    if P[result] = Value then
+      exit;
+  result := -1;
+end;
+
+function BSRdword(c: cardinal): cardinal;
+const
+  _debruijn32: array[0..31] of byte = (
+    0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
+    8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31);
+begin
+  if c <> 0 then
+  begin
+    c := c or (c shr 1);
+    c := c or (c shr 2);
+    c := c or (c shr 4);
+    c := c or (c shr 8);
+    c := c or (c shr 16);
+    result := _debruijn32[((c * cardinal($07c4acdd)) shr 27) and 31];
+  end
+  else
+    result := 255
+end;
+
+function BSRqword(const q: Qword): cardinal;
+var
+  c: cardinal;
+begin
+  c := q shr 32;
+  if c = 0  then
+    result := BsrDword(cardinal(q)) // search in lowest 32-bit
+  else
+    result := BsrDword(c) or 32;   // search in highest 32-bit
+end;
+
+{$else}
 
 procedure LockedInc64(int64: PInt64);
 begin
@@ -10587,33 +10716,9 @@ begin
   {$endif DACNT32}
 end;
 
-function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
-begin
-  result := InterlockedCompareExchange(
-    pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
-end;
-
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 begin
   InterlockedExchangeAdd(pointer(Target), pointer(Increment));
-end;
-
-procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
-begin
-  InterlockedExchangeAdd(Target, Increment);
-end;
-
-procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
-begin
-  InterlockedExchangeAdd(pointer(Target), pointer(-PtrInt(Decrement)));
-end;
-
-procedure bswap64array(a,b: PQWordArray; n: PtrInt);
-var
-  i: PtrInt;
-begin
-  for i := 0 to n - 1 do
-    b^[i] := {$ifdef FPC}SwapEndian{$else}bswap64{$endif}(a^[i]);
 end;
 
 function bswap32(a: cardinal): cardinal;
@@ -10635,6 +10740,7 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 begin
   result := IndexWord(P^, Count, Value); // use FPC RTL
 end;
+{$endif ISDELPHI}
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 begin
@@ -10719,13 +10825,15 @@ end;
 
 {$ifdef OSLINUXANDROID} // read CpuFeatures from Linux envp
 
+{$ifdef FPC}
+
 const
   AT_HWCAP  = 16;
   AT_HWCAP2 = 26;
 
 procedure TestCpuFeatures;
 var
-  p: PPChar;
+  p: PPAnsiChar;
   caps: TArmHwCaps;
 begin
   // C library function getauxval() is not always available -> use system.envp
@@ -10748,6 +10856,12 @@ begin
   end;
   CpuFeatures := caps;
 end;
+
+{$else}
+procedure TestCpuFeatures;
+begin
+end;
+{$endif FPC}
 
 {$else}
 
@@ -10876,6 +10990,22 @@ begin
   until false;
   result := P;
 end;
+
+procedure _Fillchar(var Dest; count: PtrInt; Value: byte);
+begin
+  system.FillChar(Dest, Count, Value);
+end;
+
+{$ifndef FPC} // FPC did already define this
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
+var
+  Y100: cardinal;
+begin
+  Y100 := Y div 100; // FPC will use fast reciprocal
+  res.D := Y100;
+  res.M := Y {%H-}- Y100 * 100; // avoid div twice
+end;
+{$endif FPC}
 
 {$endif ASMINTEL}
 
@@ -13293,6 +13423,10 @@ begin
   ClassUnit := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
+  {$ifndef ASMINTEL}
+  MoveFast := @Move;
+  FillCharFast := @_FillChar;
+  {$endif ASMINTEL}
 end;
 
 

@@ -2443,7 +2443,7 @@ asm
         pop     esi
 end;
 
-{$ifdef CPU32DELPHI}
+{$ifdef WIN32DELPHI}
 
 // inspired by ValExt_JOH_PAS_8_a by John O'Harrow - calls Delphi System.@Pow10
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
@@ -2637,6 +2637,6 @@ asm
 @2:
 end;
 
-{$endif CPU32DELPHI}
+{$endif WIN32DELPHI}
 
 
