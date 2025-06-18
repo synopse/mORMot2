@@ -5713,16 +5713,25 @@ end;
 
 function HttpGetWeak(const aUri: RawUtf8; const aLocalFile: TFileName;
   outStatus: PInteger): RawByteString;
+var
+  status: integer;
 begin
   if aLocalFile <> '' then // try from local cache
   begin
     result := StringFromFile(aLocalFile); // useful e.g. during regression tests
     if result <> '' then
+    begin
+      if outStatus <> nil then
+        outStatus^ := HTTP_SUCCESS; // emulates proper download
       exit;
+    end;
   end;
   result := HttpGet(aUri, {inhead=}'', {outhead=}nil, {notsock=}false,
-    outStatus, {timeout=}0, {forcesocket=}false, {ignorecerterror=}true);
-  if (aLocalFile <> '') and
+    @status, {timeout=}0, {forcesocket=}false, {ignorecerterror=}true);
+  if outStatus <> nil then
+    outStatus^ := status;
+  if (status = HTTP_SUCCESS) and
+     (aLocalFile <> '') and
      (result <> '') then
     FileFromString(result, aLocalFile);
 end;
