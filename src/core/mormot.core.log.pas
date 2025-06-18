@@ -5364,13 +5364,13 @@ end;
 
 {$STACKFRAMES OFF}
 
-{$ifdef CPU64DELPHI} // Delphi Win64 has no 64-bit inline assembler
+{$ifdef WIN64DELPHI} // Delphi Win64 has no 64-bit inline assembler
 procedure DebugBreak;
 asm
      .noframe
      int  3
 end;
-{$endif CPU64DELPHI}
+{$endif WIN64DELPHI}
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
 begin
@@ -5378,15 +5378,17 @@ begin
     exit;
   Add.LogInternalText(Level, Text, nil, maxInt);
   {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
+  {$ifdef OSWINDOWS}
   if IsDebuggerPresent then
-    {$ifdef CPU64DELPHI}
+    {$ifdef WIN64DELPHI}
     DebugBreak
     {$else}
     asm
       int  3
     end
-    {$endif CPU64DELPHI}
+    {$endif WIN64DELPHI}
   else
+  {$endif OSWINDOWS}
   {$endif ISDELPHI}
     ConsoleWrite('%  ', [Text], LOG_CONSOLE_COLORS[Level], {noLF=}true);
 end;
@@ -6132,14 +6134,14 @@ begin
      (Ctxt.EClass = ESynLogSilent) or
      HandleExceptionFamily.ExceptionIgnore.Exists(Ctxt.EClass) then
     exit;
-  {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
+  {$ifdef WIN64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
   if (Ctxt.EInstance <> nil) and // Ctxt.EClass is EExternalException
      (PShortString(PPointer(PPtrInt(Ctxt.EInstance)^ + vmtClassName)^)^ =
       '_TExitDllException') then
     exit;
   {$endif ISDELPHIXE6}
-  {$endif CPU64DELPHI}
+  {$endif WIN64DELPHI}
   log := HandleExceptionFamily.Add;
   if log = nil then
    exit;

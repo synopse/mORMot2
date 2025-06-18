@@ -1547,7 +1547,7 @@ begin
         continue;
       for j := 8 downto 0 do
       begin
-        {$ifdef CPU32DELPHI}
+        {$ifdef WIN32DELPHI}
         asm // Delphi compiler is not efficient about division
           mov     eax, leastdig
           mov     fastdiv, eax
@@ -1559,7 +1559,7 @@ begin
         {$else}
         fastdiv := leastdig;
         leastdig := leastdig div 10; // FPC will use reciprocal division
-        {$endif CPU32DELPHI}
+        {$endif WIN32DELPHI}
         digbuffer[k * 9 + j] := fastdiv - leastdig * 10;
         if leastdig = 0 then
           break;
@@ -1865,7 +1865,7 @@ begin
   signhi := 0;
   signlo := 0;
   if signdig <> 0 then // if not zero
-    {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower "call _llmul"
+    {$ifdef HASSLOWMUL64} // use "shl" under x86 to avoid slower "call _llmul"
     if diglast - digfirst < 17 then
       for i := digfirst to diglast do
         inc(signlo, signlo + signlo shl 3 + digits[i])
@@ -1887,7 +1887,7 @@ begin
       for i := diglast - 16 to diglast do
         signlo := signlo * 10 + digits[i];
     end;
-    {$endif CPU32DELPHI}
+    {$endif HASSLOWMUL64}
   if signhi = 0 then
   begin
     sign.L := signlo;

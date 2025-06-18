@@ -6576,11 +6576,11 @@ begin
       c := byte(P^) - 48;
       if c > 9 then
         break;
-      {$ifdef CPU32DELPHI}
+      {$ifdef HASSLOWMUL64}
       result := result shl 3 + result + result;
       {$else}
       result := result * 10;
-      {$endif CPU32DELPHI}
+      {$endif HASSLOWMUL64}
       inc(result, c);
       inc(P);
       if Dec <> 0 then
@@ -6613,7 +6613,7 @@ begin
     case Dec of
       0, 1:
         result := result * 10000;
-      {$ifdef CPU32DELPHI}
+      {$ifdef HASSLOWMUL64}
       2:
         result := result shl 10 - result shl 4 - result shl 3;
       3:
@@ -6627,7 +6627,7 @@ begin
         result := result * 100;
       4:
         result := result * 10;
-      {$endif CPU32DELPHI}
+      {$endif HASSLOWMUL64}
     end;
   if minus then
     result := -result;

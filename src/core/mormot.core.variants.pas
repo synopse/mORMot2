@@ -4691,14 +4691,14 @@ begin
               asize := 0;
             end;
           varVariant:
-            {$ifdef CPU32DELPHI}
+            {$ifdef DISPINVOKEBYVALUE}
             begin
               v^ := PVarData(a)^;
               asize := SizeOf(TVarData); // pushed by value
             end;
             {$else}
             v^ := PPVarData(a)^^; // pushed by reference (as other parameters)
-            {$endif CPU32DELPHI}
+            {$endif DISPINVOKEBYVALUE}
           varDouble,
           varCurrency,
           varDate,
