@@ -3006,12 +3006,12 @@ procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
 
 /// return the position of the leftmost set bit in a 32-bit value
 // - returns 255 if c equals 0
-// - this function is an intrinsic on FPC
+// - mimics the FPC intrinsic, via asm on Intel or optimized pure pascal
 function BSRdword(c: cardinal): cardinal;
 
 /// return the position of the leftmost set bit in a 64-bit value
 // - returns 255 if q equals 0
-// - this function is an intrinsic on FPC
+// - mimics the FPC intrinsic, via asm on Intel or optimized pure pascal
 function BSRqword(const q: Qword): cardinal;
 
 {$endif ISDELPHI}
@@ -10658,7 +10658,7 @@ const
   _debruijn32: array[0..31] of byte = (
     0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
     8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31);
-begin
+begin // http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
   if c <> 0 then
   begin
     c := c or (c shr 1);
@@ -10666,15 +10666,16 @@ begin
     c := c or (c shr 4);
     c := c or (c shr 8);
     c := c or (c shr 16);
-    result := _debruijn32[((c * cardinal($07c4acdd)) shr 27) and 31];
+    c := c * $07c4acdd; // explicit step for 32-bit truncation
+    result := _debruijn32[c shr 27];
   end
   else
-    result := 255
+    result := 255;
 end;
 
 function BSRqword(const q: Qword): cardinal;
 var
-  c: cardinal;
+  c: cardinal; // CPU32 friendly, but fast also on CPU64
 begin
   c := q shr 32;
   if c = 0  then

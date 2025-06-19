@@ -450,6 +450,26 @@ begin
   {$endif CPU64}
 end;
 
+function BSRdwordPurePascal(c: cardinal): cardinal;
+const
+  _debruijn32: array[0..31] of byte = (
+    0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
+    8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31);
+begin // http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
+  if c <> 0 then
+  begin
+    c := c or (c shr 1);
+    c := c or (c shr 2);
+    c := c or (c shr 4);
+    c := c or (c shr 8);
+    c := c or (c shr 16);
+    c := c * $07c4acdd; // explicit step for 32-bit truncation
+    result := _debruijn32[c shr 27];
+  end
+  else
+    result := 255;
+end;
+
 procedure TTestCoreBase.Bits;
 const
   N = 1000000;
@@ -500,13 +520,20 @@ const
       {$ifdef FPC}
       CheckEqual(popcnt(v), c);
       {$endif FPC}
+      c := BSRdwordPurePascal(v);
+      CheckEqual(c, BSRdword(v));
+      CheckEqual(c, BSRqword(v), 'bsrq1');
       v := v * v * 19;
+      CheckEqual(BSRdwordPurePascal(v), BSRdword(v));
       c := GetBitsCount64(v, POINTERBITS);
       CheckEqual(GetBitsCountPtrInt(v), c);
       {$ifdef FPC}
       CheckEqual(popcnt(v), c);
       {$endif FPC}
       v := random32;
+      c := BSRdwordPurePascal(v);
+      CheckEqual(c, BSRdword(v));
+      CheckEqual(c, BSRqword(v), 'bsrq2');
       {$ifdef CPU64}
       v := v or (PtrUInt(Random32) shl 32);
       {$endif CPU64}
@@ -517,6 +544,7 @@ const
       CheckEqual(popcnt(v), c);
       {$endif FPC}
     end;
+    CheckEqual(BSRdwordPurePascal(0), BSRdword(0));
     timer.Start;
     for i := 1 to N do
       GetBitsCountPtrInt(i);
