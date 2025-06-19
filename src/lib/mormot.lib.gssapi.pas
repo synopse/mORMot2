@@ -652,6 +652,7 @@ end;
 
 const
   GSS_ENTRIES: array[0 .. 18] of PAnsiChar = (
+    // GSSAPI entries
     'gss_import_name',
     'gss_display_name',
     'gss_release_name',
@@ -669,6 +670,7 @@ const
     'gss_indicate_mechs',
     'gss_release_oid_set',
     'gss_display_status',
+    // krb5_* entries - potentially with Heimdal alternative names
     'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
     nil);
 
@@ -742,7 +744,8 @@ var
   MsgBuf: gss_buffer_desc;
   MajSt, MinSt: cardinal;
 begin
-  if GssApi = nil then
+  if (GssApi = nil) or
+     not Assigned(GssApi.gss_display_status) then
     exit;
   MsgCtx := 0;
   repeat
