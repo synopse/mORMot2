@@ -9899,7 +9899,7 @@ end;
 procedure TLightLock.Lock;
 begin
   // we tried a dedicated asm but it was slower: inlining is preferred
-  if not LockedExc(Flags, 1, 0) then
+  if not LockedExc(Flags, {to=}1, {from=}0) then
     LockSpin;
 end;
 
@@ -9908,7 +9908,7 @@ begin
   {$ifdef CPUINTEL}
   Flags := 0; // non reentrant locks need no additional thread safety
   {$else}
-  LockedExc(Flags, 0, 1); // ARM can be weak-ordered
+  LockedExc(Flags, {to=}0, {from=}1); // ARM can be weak-ordered
   // https://preshing.com/20121019/this-is-why-they-call-it-a-weakly-ordered-cpu
   {$endif CPUINTEL}
 end;
@@ -9916,7 +9916,7 @@ end;
 function TLightLock.TryLock: boolean;
 begin
   result := (Flags = 0) and // first check without any (slow) atomic opcode
-            LockedExc(Flags, 1, 0);
+            LockedExc(Flags, {to=}1, {from=}0);
 end;
 
 function TLightLock.IsLocked: boolean;
@@ -10019,7 +10019,7 @@ var
 begin
   // if not writing, atomically increase the RD counter in the upper flag bits
   f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
-  if not LockedExc(Flags, f + 2, f) then
+  if not LockedExc(Flags, {to=}f + 2, {from=}f) then
     ReadLockSpin;
 end;
 
@@ -10029,7 +10029,7 @@ var
 begin
   // if not writing, atomically increase the RD counter in the upper flag bits
   f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
-  result := LockedExc(Flags, f + 2, f);
+  result := LockedExc(Flags, {to=}f + 2, {from=}f);
 end;
 
 procedure TRWLightLock.ReadUnLock;
@@ -10053,7 +10053,7 @@ var
 begin
   f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
   result := (Flags = f) and
-            LockedExc(Flags, f + 1, f);
+            LockedExc(Flags, {to=}f + 1, {from=}f);
 end;
 
 procedure TRWLightLock.WriteLock;
@@ -10128,7 +10128,7 @@ var
 begin
   // if not writing, atomically increase the RD counter in the upper flag bits
   f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-  if not LockedExc(Flags, f + 4, f) then
+  if not LockedExc(Flags, {to=}f + 4, {from=}f) then
     ReadOnlyLockSpin;
 end;
 
@@ -10141,7 +10141,7 @@ begin
     spin := DoSpin(spin);
     f := Flags and not 1; // retry ReadOnlyLock
   until (Flags = f) and
-        LockedExc(Flags, f + 4, f);
+        LockedExc(Flags, {to=}f + 4, {from=}f);
 end;
 
 {$endif ASMX64}
@@ -10168,7 +10168,7 @@ begin
   repeat
     f := Flags and not 3; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
     if (Flags = f) and
-       LockedExc(Flags, f + 2, f) then
+       LockedExc(Flags, {to=}f + 2, {from=}f) then
       break;
     spin := DoSpin(spin);
   until false;
@@ -10204,7 +10204,7 @@ begin
   repeat
     f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
     if (Flags = f) and
-       LockedExc(Flags, f + 1, f) then
+       LockedExc(Flags, {to=}f + 1, {from=}f) then
       if (Flags and 2 = 2) and
          (LastReadWriteLockThread <> tid) then
         // there is a pending ReadWriteLock but not on this thread
@@ -11086,7 +11086,7 @@ var
 begin
   spin := SPIN_COUNT;
   while (Target <> Comperand) or
-        not LockedExc(Target, NewValue, Comperand) do
+        not LockedExc(Target, {to=}NewValue, {from=}Comperand) do
     spin := DoSpin(spin);
 end;
 
