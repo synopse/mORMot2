@@ -940,12 +940,10 @@ begin
   result := UnixMSTimeUtc;
 end;
 
-{$undef OSPTHREADS}
 {$undef HAS_PTHREADSETNAMENP}
 {$undef HAS_PTHREADSETAFFINITY}
 
 {$ifdef OSPTHREADSLIB}
-  {$define OSPTHREADS}
 var
   {$ifdef OSLINUX}
   // pthread_setname_np for Linux https://stackoverflow.com/a/7989973/458259
@@ -963,7 +961,6 @@ var
 
 {$ifdef OSPTHREADSSTATIC}
   // note: pthread_setname_np() has no consistent API across POSIX systems
-  {$define OSPTHREADS}
 
 {$ifdef OSDARWIN}
 // we specify link to clib='c' as in rtl/darwin/pthread.inc
@@ -1000,7 +997,7 @@ begin
   {$endif OSLINUX}
 end;
 
-{$ifdef OSPTHREADS}
+{$ifdef HAS_OSPTHREADS}
 
 { TOSLightLock }
 
@@ -1065,7 +1062,7 @@ begin
   LeaveCriticalSection(fMutex);
 end;
 
-{$endif OSPTHREADS}
+{$endif HAS_OSPTHREADS}
 
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);

@@ -2710,13 +2710,7 @@ const
   {$endif OSLINUXX86}
   {$endif OSLINUXX64}
 
-type
-  /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
-  TFileAge = TUnixTime;
-
-  /// system-specific structure holding a non-recursive mutex
-  TOSLightMutex = TRTLCriticalSection;
-
+{$undef HAS_OSPTHREADS}
 {$ifdef OSLINUX}
   {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
@@ -2729,6 +2723,7 @@ type
 
 // some pthread_mutex_*() API defined here for proper inlining
 {$ifdef OSPTHREADSLIB}
+{$define HAS_OSPTHREADS}
 var
   {%H-}pthread: pointer; // access to pthread.so e.g. for mormot.lib.static
   pthread_mutex_lock:    function(mutex: pointer): integer; cdecl;
@@ -2736,10 +2731,20 @@ var
   pthread_mutex_unlock:  function(mutex: pointer): integer; cdecl;
 {$endif OSPTHREADSLIB}
 {$ifdef OSPTHREADSSTATIC}
+{$define HAS_OSPTHREADS}
 function pthread_mutex_lock(mutex: pointer): integer; cdecl;
 function pthread_mutex_trylock(mutex: pointer): integer; cdecl;
 function pthread_mutex_unlock(mutex: pointer): integer; cdecl;
 {$endif OSPTHREADSSTATIC}
+
+type
+  /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
+  TFileAge = TUnixTime;
+
+  {$ifdef FPC}
+  /// system-specific structure holding a non-recursive mutex
+  TOSLightMutex = TRTLCriticalSection;
+  {$endif FPC}
 
 {$endif OSWINDOWS}
 
@@ -4264,8 +4269,8 @@ type
   // - methods are reentrant, i.e. calling Lock twice in a raw would not deadlock
   // - our light locks are expected to be kept a very small amount of time (a
   // few CPU cycles): use TSynLocker or TOSLock if the lock may block too long
-  // - TryLock/UnLock can be used e.g. to thread-safely acquire a shared
-  // resource, in a re-entrant way
+  // - TryLock/UnLock can be used also to thread-safely acquire a shared
+  // resource in a re-entrant way, as e.g. for sockets in TPollAsyncConnection
   {$ifdef USERECORDWITHMETHODS}
   TMultiLightLock = record
   {$else}
@@ -4302,7 +4307,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an exclusive reentrant lock
     procedure UnLock;
-      {$ifdef CPUINTEL}{$ifdef HASINLINE} inline; {$endif}{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   PMultiLightLock = ^TMultiLightLock;
 
@@ -10983,12 +10988,12 @@ end;
 
 procedure GlobalLock;
 begin
-  mormot.core.os.EnterCriticalSection(GlobalCriticalSection.CS);
+  GlobalCriticalSection.Lock;
 end;
 
 procedure GlobalUnLock;
 begin
-  mormot.core.os.LeaveCriticalSection(GlobalCriticalSection.CS);
+  GlobalCriticalSection.UnLock;
 end;
 
 var

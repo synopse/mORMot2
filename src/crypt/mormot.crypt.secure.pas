@@ -1371,7 +1371,7 @@ type
   // and another for decryption, with PKCS7 padding and no MAC/AEAD validation
   TProtocolAes = class(TInterfacedObject, IProtocol)
   protected
-    fSafe: TLightLock; // no need of whole TRTLCriticalSection
+    fSafe: TLightLock; // no need of whole TRTLCriticalSection / TOSLock
     fAheadMode: boolean;
     fAes: array[boolean] of TAesAbstract; // [false]=decrypt [true]=encrypt
   public
