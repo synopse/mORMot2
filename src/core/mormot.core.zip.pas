@@ -422,7 +422,7 @@ type
   PLastHeader64 = ^TLastHeader64;
 
   /// locator structure, as used in zip64 file format
-  // - this header ends the file and is used to find the TFileHeader entries
+  // - this header ends the file and is used to find the TLastHeader64 position
   TLocator64 = record
     /// $07064b50 PK#6#7 = LASTHEADERLOCATOR64_SIGNATURE_INC - 1
     signature: cardinal;
@@ -2479,13 +2479,14 @@ begin
          (result^.headerSize   = ZIP32_MAXSIZE) or
          (result^.headerOffset = ZIP32_MAXSIZE) then
       begin
-        // validate zip64 trailer
+        // validate zip64 locator, stored just before this 32-bit TLastHeader
         loc64 := pointer(result);
         dec(loc64);
         if (PtrUInt(loc64) < PtrUInt(BufZip)) or
            (loc64^.signature + 1 <> LASTHEADERLOCATOR64_SIGNATURE_INC) or
            (loc64^.headerOffset + SizeOf({%H-}head64^) >= QWord(Offset + Size)) then
           break;
+        // validate zip64 last header, stored before the zip64 locator
         head64 := @BufZip[loc64^.headerOffset - QWord(Offset)];
         if head64^.signature + 1 <> LASTHEADER64_SIGNATURE_INC then
           break;
@@ -2541,13 +2542,6 @@ begin
     fCentralDirectoryOffset     := lh32^.headerOffset;
     fCentralDirectoryTotalFiles := lh32^.totalFiles;
   end;
-  if (fCentralDirectoryOffset < Offset) or
-     ((fCentralDirectoryTotalFiles <> 0) and
-      (fCentralDirectoryOffset +
-       (fCentralDirectoryTotalFiles * SizeOf(TFileHeader)) > Offset + Size)) then
-    ESynZip.RaiseUtf8('%.Create(%): corrupted Central Directory ' +
-      'or too small WorkMem=% for % files (Offset=%) %', [self, fFileName,
-      KB(Size), fCentralDirectoryTotalFiles, fCentralDirectoryOffset]);
 end;
 
 constructor TZipRead.Create(BufZip: PByteArray; Size: PtrInt; Offset: Int64);
@@ -2561,8 +2555,17 @@ var
 begin
   Create;
   // locate the central directory in the zip trailer, potentially in zip64 format
-  if fCentralDirectoryOffset = 0 then
-    LocateCentralDirectory(BufZip, Size, Offset); // if not already searched
+  if fCentralDirectoryOffset = 0 then // if not already searched
+  begin
+    LocateCentralDirectory(BufZip, Size, Offset);
+    if (fCentralDirectoryOffset < Offset) or
+       ((fCentralDirectoryTotalFiles <> 0) and
+        (fCentralDirectoryOffset +
+         (fCentralDirectoryTotalFiles * SizeOf(TFileHeader)) > Offset + Size)) then
+      ESynZip.RaiseUtf8('%.Create(BufZip): corrupted Central Directory ' +
+        'or truncated Size=% for % files (Offset=%) %', [self,
+        Size, fCentralDirectoryTotalFiles, fCentralDirectoryOffset]);
+  end;
   if fCentralDirectoryTotalFiles = 0 then
     exit; // a void .zip file has no central directory nor any file header
   fCentralDirectory := @BufZip[fCentralDirectoryOffset - Offset];
