@@ -10585,11 +10585,6 @@ begin
     Target, Increment);
 end;
 
-procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
-begin
-  LockedAdd(Target, PtrUInt(-PtrInt(Decrement)));
-end;
-
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);
 var
   i: PtrInt;
@@ -10603,6 +10598,11 @@ end;
 procedure LockedInc64(int64: PInt64);
 begin
   AtomicIncrement(int64^);
+end;
+
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+begin
+  AtomicDecrement(Target, Decrement);
 end;
 
 function StrCntDecFree(var refcnt: TStrCnt): boolean;
@@ -10685,6 +10685,11 @@ begin
 end;
 
 {$else}
+
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+begin
+  InterlockedExchangeAdd(pointer(Target), pointer(PtrUInt(-PtrInt(Decrement))));
+end;
 
 procedure LockedInc64(int64: PInt64);
 begin
