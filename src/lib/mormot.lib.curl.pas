@@ -1130,7 +1130,7 @@ type
     {$endif LIBCURLMULTI}
 
     /// hold CurlEnableGlobalShare mutexes
-    share_cs: array[curl_lock_data] of TRTLCriticalSection;
+    share_cs: array[curl_lock_data] of TOSLock;
     /// contains numerical information about the initialized libcurl instance
     // - this is a direct access to the static struct returned by curl_version_info
     info: PCurlVersionInfo;
@@ -1571,13 +1571,13 @@ end;
 procedure curlShareLock(handle: TCurl; data: curl_lock_data;
   locktype: curl_lock_access; userptr: pointer); cdecl;
 begin
-  EnterCriticalSection(curl.share_cs[data]);
+  curl.share_cs[data].Lock;
 end;
 
 procedure curlShareUnLock(handle: TCurl; data: curl_lock_data;
   userptr: pointer); cdecl;
 begin
-  LeaveCriticalSection(curl.share_cs[data]);
+  curl.share_cs[data].UnLock;
 end;
 
 function CurlEnableGlobalShare: boolean;
@@ -1594,7 +1594,7 @@ begin
     // the share object was not created
     exit;
   for d := low(d) to high(d) do
-    InitializeCriticalSection(curl.share_cs[d]);
+    curl.share_cs[d].Init;
   curl.share_setopt(curl.globalShare, csoLockFunc, @curlShareLock);
   curl.share_setopt(curl.globalShare, csoUnLockFunc, @curlShareUnLock);
   // share and cache DNS + TLS sessions (but not Connections)
@@ -1622,7 +1622,7 @@ begin
   if result = csrOK then
     curl.globalShare := nil;
   for d := low(d) to high(d) do
-    DeleteCriticalSection(curl.share_cs[d]);
+    curl.share_cs[d].Done;
 end;
 
 function CurlPerform(const uri: RawUtf8; out data: RawByteString;

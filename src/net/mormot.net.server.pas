@@ -2389,7 +2389,7 @@ type
   THttpApiWebSocketServerProtocol = class
   private
     fName: RawUtf8;
-    fSafe: TRTLCriticalSection;
+    fSafe: TOSLock;
     fServer: THttpApiWebSocketServer;
     fConnections: PHttpApiWebSocketConnectionVector;
     fConnectionsCapacity: integer;
@@ -9019,13 +9019,13 @@ function THttpApiWebSocketServerProtocol.Broadcast(
 var
   i: PtrInt;
 begin
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   try
     for i := 0 to fConnectionsCount - 1 do
       if Assigned(fConnections[i]) then
         fConnections[i].Send(aBufferType, aBuffer, aBufferSize);
   finally
-    LeaveCriticalSection(fSafe);
+    fSafe.UnLock;
   end;
   result := true;
 end;
@@ -9061,7 +9061,7 @@ begin
     raise EWebSocketApi.CreateFmt(
       'Error register WebSocket protocol. Protocol %s does not use buffer, ' +
       'but OnFragment handler is not assigned', [aName]);
-  InitializeCriticalSection(fSafe);
+  fSafe.Init;
   fPendingForClose := TSynList.Create;
   fName := aName;
   fManualFragmentManagement := aManualFragmentManagement;
@@ -9082,7 +9082,7 @@ var
   i: PtrInt;
   conn: PHttpApiWebSocketConnection;
 begin
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   try
     for i := 0 to fPendingForClose.Count - 1 do
     begin
@@ -9096,9 +9096,9 @@ begin
     end;
     fPendingForClose.Free;
   finally
-    LeaveCriticalSection(fSafe);
+    fSafe.UnLock;
   end;
-  DeleteCriticalSection(fSafe);
+  fSafe.Done;
   FreeMem(fConnections);
   fConnections := nil;
   inherited;
@@ -9111,7 +9111,7 @@ var
 const
   sReason = 'Server shutdown';
 begin
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   try
     for i := 0 to fConnectionsCount - 1 do
     begin
@@ -9128,7 +9128,7 @@ begin
       end;
     end;
   finally
-    LeaveCriticalSection(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -9403,11 +9403,11 @@ var
 
   procedure CloseConnection;
   begin
-    EnterCriticalSection(fProtocol.fSafe);
+    fProtocol.fSafe.Lock;
     try
       fProtocol.RemoveConnection(fIndex);
     finally
-      LeaveCriticalSection(fProtocol.fSafe);
+      fProtocol.fSafe.UnLock;
     end;
     EWebSocketApi.RaiseOnError(hCompleteAction,
       WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
@@ -9663,7 +9663,7 @@ begin
   if proto = nil then
     exit;
   // add the connection for this protocol
-  EnterCriticalSection(proto.fSafe);
+  proto.fSafe.Lock;
   try
     New(fLastConnection);
     if fLastConnection.TryAcceptConnection(proto, Ctxt, specified) then
@@ -9678,7 +9678,7 @@ begin
       result := HTTP_NOTALLOWED;
     end;
   finally
-    LeaveCriticalSection(proto.fSafe);
+    proto.fSafe.UnLock;
   end;
 end;
 
@@ -9795,11 +9795,11 @@ begin
     if conn.fState = wsClosedByClient then
       conn.Close(conn.fCloseStatus, pointer(conn.fBuffer), length(conn.fBuffer));
     conn.Disconnect;
-    EnterCriticalSection(conn.Protocol.fSafe);
+    conn.Protocol.fSafe.Lock;
     try
       conn.Protocol.fPendingForClose.Remove(conn);
     finally
-      LeaveCriticalSection(conn.Protocol.fSafe);
+      conn.Protocol.fSafe.UnLock;
     end;
     Dispose(conn);
   end;
@@ -9830,7 +9830,7 @@ begin
     for i := 0 to Length(protos) - 1 do
     begin
       proto := protos[i];
-      EnterCriticalSection(proto.fSafe);
+      proto.fSafe.Lock;
       try
         for j := 0 to proto.fConnectionsCount - 1 do
           if Terminated then
@@ -9838,7 +9838,7 @@ begin
           else
             proto.fConnections^[j]^.CheckIsActive(tix);
       finally
-        LeaveCriticalSection(proto.fSafe);
+        proto.fSafe.UnLock;
       end;
     end;
     inc(tix, fServer.PingTimeout shl MilliSecsPerSecShl);

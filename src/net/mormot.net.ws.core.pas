@@ -760,7 +760,7 @@ type
     fProcessCount: integer;
     fInvalidPingSendCount: cardinal;
     fSettings: PWebSocketProcessSettings;
-    fSafeIn, fSafeOut: TRTLCriticalSection;
+    fSafeIn, fSafeOut: TOSLock;
     fLastSocketTicks: Int64;
     fProcessName: RawUtf8;
     procedure MarkAsInvalid;
@@ -2912,8 +2912,8 @@ begin
   fSettings := aSettings;
   fIncoming := TWebSocketFrameList.Create(30 * 60);
   fOutgoing := TWebSocketFrameList.Create(0);
-  InitializeCriticalSection(fSafeIn);
-  InitializeCriticalSection(fSafeOut);
+  fSafeIn.Init;
+  fSafeOut.Init;
   fProtocol.AfterUpgrade(self); // e.g. for TWebSocketSocketIOClientProtocol
 end;
 
@@ -2924,13 +2924,13 @@ var
 begin
   if self = nil then
     exit;
-  EnterCriticalSection(fSafeOut);
+  fSafeOut.Lock;
   try
     if fConnectionCloseWasSent then
       exit;
     fConnectionCloseWasSent := true;
   finally
-    LeaveCriticalSection(fSafeOut);
+    fSafeOut.UnLock;
   end;
   LockedInc32(@fProcessCount);
   try
@@ -2991,8 +2991,8 @@ begin
   FreeAndNil(fProtocol);
   fOutgoing.Free;
   fIncoming.Free;
-  DeleteCriticalSection(fSafeIn); // to be done lately to avoid GPF
-  DeleteCriticalSection(fSafeOut);
+  fSafeIn.Done; // to be done lately to avoid GPF
+  fSafeOut.Done;
   inherited Destroy;
 end;
 
@@ -3051,9 +3051,9 @@ end;
 procedure TWebSocketProcess.MarkAsInvalid;
 begin
   inc(fInvalidPingSendCount);
-  EnterCriticalSection(fSafeOut);
+  fSafeOut.Lock;
   fConnectionCloseWasSent := true;
-  LeaveCriticalSection(fSafeOut);
+  fSafeOut.UnLock;
 end;
 
 procedure TWebSocketProcess.SetLastPingTicks;
@@ -3409,7 +3409,7 @@ var
   f: TWebProcessInFrame;
 begin
   f.Init(self, @Frame);
-  EnterCriticalSection(fSafeIn);
+  fSafeIn.Lock;
   try
     if Blocking then
       repeat
@@ -3420,7 +3420,7 @@ begin
       f.Step(ErrorWithoutException);
     result := f.state = pfsDone;
   finally
-    LeaveCriticalSection(fSafeIn);
+    fSafeIn.UnLock;
   end;
 end;
 
@@ -3428,7 +3428,7 @@ function TWebSocketProcess.SendFrame(var Frame: TWebSocketFrame): boolean;
 var
   tmp: TSynTempBuffer;
 begin
-  EnterCriticalSection(fSafeOut);
+  fSafeOut.Lock;
   try
     Log(Frame, 'SendFrame', sllTrace, true);
     try
@@ -3451,7 +3451,7 @@ begin
     else if not fNoLastSocketTicks then
       SetLastPingTicks;
   finally
-    LeaveCriticalSection(fSafeOut);
+    fSafeOut.UnLock;
   end;
 end;
 

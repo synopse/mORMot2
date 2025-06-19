@@ -475,7 +475,7 @@ var
   // - most process (e.g. time retrieval) is done outside of the lock: only
   // actual log file writing is blocking the threads
   // - do not access this variable in your code: defined here to allow inlining
-  GlobalThreadLock: TRTLCriticalSection;
+  GlobalThreadLock: TOSLock;
 
   /// is set to TRUE before ObjArrayClear(SynLogFile) in unit finalization
   // - defined here to avoid unexpected GPF at shutdown
@@ -1082,9 +1082,9 @@ type
       {$ifdef FPC}inline;{$endif}
     procedure RaiseDoEnter;
     procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo);
-      {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
+      {$ifdef HASINLINE}inline;{$endif}
     procedure LockAndDisableExceptions;
-      {$ifdef FPC}inline;{$endif} // Delphi can't inline EnterCriticalSection()
+      {$ifdef HASINLINE}inline;{$endif}
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
@@ -2002,13 +2002,13 @@ begin
   result := ExeInstanceDebugFile;
   if result <> nil then
     exit;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if ExeInstanceDebugFile = nil then
       ExeInstanceDebugFile := TDebugFile.Create;
     result := ExeInstanceDebugFile;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -3203,7 +3203,7 @@ begin
       // (do not include [idwExcludeWinSys] because if we can as admin then fine)
       // read/only exe folder -> store .mab in local non roaming user folder
       MabFile := GetSystemPath(spUserData) + ExtractFileName(Mabfile);
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     MapAge := FileAgeToUnixTimeUtc(fDebugFile);
     MabAge := FileAgeToUnixTimeUtc(MabFile);
@@ -3261,7 +3261,7 @@ begin
     else
       fDebugFile := '';
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -3918,14 +3918,14 @@ begin
       tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
       if lasttix10 = tix10 then
         continue; // checking once per second is enough
-      mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+      GlobalThreadLock.Lock;
       try
         if Terminated or
            SynLogFileFreeing then
           break;
         files := copy(SynLogFile); // don't slow down main logging process
       finally
-        mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+        GlobalThreadLock.UnLock;
       end;
       for i := 0 to high(files) do
       begin
@@ -4106,7 +4106,7 @@ begin
     result := nil;
     exit;
   end;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     result := fSynLogClass.Create(self);
     ObjArrayAdd(SynLogFile, result);
@@ -4123,7 +4123,7 @@ begin
     else
       fGlobalLog := result;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4282,7 +4282,7 @@ begin
      (SynLogFile = nil) or
      (not Assigned(aEvent)) then
     exit;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     for i := 0 to high(SynLogFile) do
       with SynLogFile[i] do
@@ -4292,7 +4292,7 @@ begin
           else
             fWriterEcho.EchoRemove(aEvent);
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4351,7 +4351,7 @@ begin
   result := '';
   if SynLogFile = nil then
     exit;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     for i := 0 to high(SynLogFile) do
     begin
@@ -4400,7 +4400,7 @@ begin
       break;
     end;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4574,7 +4574,7 @@ begin
   if (self = nil) or
      (fFamily.fPerThreadLog = ptNoThreadProcess) then
     exit;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     // reset this thread name for ptIdentifiedInOneFile
     if num <= PtrUInt(length(fThreadIdent)) then
@@ -4586,13 +4586,13 @@ begin
     // mark number to be recycled by InitThreadNumber
     AddWord(fThreadIndexReleased, fThreadIndexReleasedCount, num);
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
 function TSynLog.InitThreadNumber: PtrUInt;
 begin
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if fFamily.fPerThreadLog = ptNoThreadProcess then
       result := 1 // no actual thread tracking in this mode
@@ -4610,7 +4610,7 @@ begin
       result := fThreadCount;
     end;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4631,7 +4631,7 @@ begin
   if not (logInitDone in fInitFlags) then
     LogFileInit(nfo); // run once, to set start time and write headers
   FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   fThreadInfo := nfo;
   {$ifndef NOEXCEPTIONINTERCEPT}
   // any exception within logging process will be ignored from now on
@@ -4682,7 +4682,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   dec(ms, fStartTimestamp);
   FillInfo(nfo, @ms); // timestamp [+ threadnumber]
   dec(ms, PInt64(refcnt)^ shr 8); // elapsed time since Enter
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -4695,7 +4695,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4725,7 +4725,7 @@ end;
 
 procedure TSynLog.CloseLogFile;
 begin
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if fWriter = nil then
       exit;
@@ -4736,20 +4736,20 @@ begin
     fInitFlags := [];
   finally
     exclude(fPendingFlags, pendingRotate); // reset it after FlushFinal
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
 procedure TSynLog.Release;
 begin
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     CloseLogFile;
     ObjArrayDelete(SynLogFile, self);
     if fFamily.fPerThreadLog = ptOneFilePerThread then
       PerThreadInfo.FileLookup[fFamily.fIdent] := nil;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
   Free;
 end;
@@ -4762,7 +4762,7 @@ begin
      (fWriter = nil) then
     exit;
   diskflush := 0;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if fWriter = nil then
       exit;
@@ -4771,7 +4771,7 @@ begin
        fWriterStream.InheritsFrom(THandleStream) then
       diskflush := THandleStream(fWriterStream).Handle;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
   if diskflush <> 0 then
     FlushFileBuffers(diskflush); // slow OS operation outside of the main lock
@@ -4823,7 +4823,7 @@ begin
   end;
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
   // prepare for the actual content logging
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   fThreadInfo := nfo;
 end;
 
@@ -4849,7 +4849,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4868,7 +4868,7 @@ begin
     fWriterEcho.AddEndOfLine(sllEnter);
   finally
     nfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -4970,7 +4970,7 @@ begin // expects the caller to have set Local = nil
   if aMethodName <> '' then // direct string output with no temp conversion
     result.fWriter.AddOnSameLineString(aMethodName);
   result.fWriterEcho.AddEndOfLine(sllEnter);
-  mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.UnLock;
   pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
 end;
 
@@ -5171,7 +5171,7 @@ begin
   FillInfo(nfo, nil); // timestamp [+ threadnumber]
   num := nfo^.ThreadNumber;
   tid := PtrUInt(GetCurrentThreadId);
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if num > PtrUInt(length(fThreadIdent)) then
       SetLength(fThreadIdent, NextGrow(num));
@@ -5186,7 +5186,7 @@ begin
     fThreadInfo := nfo;
     DoThreadName(num);
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -5221,11 +5221,11 @@ end;
 
 procedure TSynLog.ForceRotation;
 begin
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     PerformRotation;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -5235,10 +5235,10 @@ begin
     exit;
   if entervalue then
   begin
-    mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.Lock;
     if pendingDisableRemoteLogLeave in fPendingFlags then
     begin
-      mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+      GlobalThreadLock.UnLock;
       ESynLogException.RaiseUtf8('Nested %.DisableRotemoteLog', [self]);
     end;
     include(fPendingFlags, pendingDisableRemoteLogLeave);
@@ -5250,7 +5250,7 @@ begin
     // DisableRemoteLog(false) -> add to events, and quit the global mutex
     exclude(fPendingFlags, pendingDisableRemoteLogLeave);
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -5311,7 +5311,7 @@ begin
     LogTrailer(Level);
   finally
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
     if lasterror <> 0 then
       SetLastError(lasterror);
   end;
@@ -5336,7 +5336,7 @@ begin
   finally
   {$endif HASFASTTRYFINALLY}
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -5406,7 +5406,7 @@ end;
 
 procedure TSynLog.LogFileInit(nfo: PSynLogThreadInfo);
 begin
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     fThreadInfo := nfo;
     if logInitDone in fInitFlags then // paranoid thread safety
@@ -5445,7 +5445,7 @@ begin
     AddSysInfo;
     fWriterEcho.AddEndOfLine(sllNewRun);
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -5722,7 +5722,7 @@ begin
     LogTrailer(Level);
   finally
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
     if lasterror <> 0 then
       SetLastError(lasterror);
   end;
@@ -5770,7 +5770,7 @@ begin
     LogTrailer(Level);
   finally
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
     if lasterror <> 0 then
       SetLastError(lasterror);
   end;
@@ -5788,7 +5788,7 @@ begin
     LogTrailer(Level);
   finally
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -5943,12 +5943,12 @@ begin
   result := 0;
   if fWriterStream = nil then
     exit;
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if fWriterStream <> nil then
       result := fWriterStream.Size;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -6221,7 +6221,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
            (Ctxt.ELevel in fam.Level) then
         try
           log2 := fam.fGlobalLog;
-          if not Assigned(log2) then
+          if log2 = nil then
             continue;
           log2.FillInfo(log2.GetThreadInfo, nil); // timestamp [+ threadnumber]
           log2.LogHeader(Ctxt.ELevel, nil);
@@ -6238,7 +6238,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
     end;
   finally
     log.fThreadInfo^.ExceptionIgnore := log.fExceptionIgnoredBackup;
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
 end;
 
@@ -6247,13 +6247,13 @@ begin
   result := false;
   if GlobalLastExceptionIndex < 0 then
     exit; // no exception intercepted yet
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     if GlobalLastExceptionIndex < 0 then
       exit;
     info := GlobalLastException[GlobalLastExceptionIndex]; // copy
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
   info.Context.EInstance := nil; // avoid any GPF
   info.Context.EStack := @GlobalLastExceptionStack;
@@ -6270,12 +6270,12 @@ begin
   // thread-safe retrieve last exceptions
   if GlobalLastExceptionIndex < 0 then
     exit; // no exception intercepted yet
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     infos := GlobalLastException;
     index := GlobalLastExceptionIndex;
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
   end;
   // generate an ordered array of exception infos
   n := MAX_EXCEPTHISTORY + 1;
@@ -6410,7 +6410,7 @@ begin
   if ps^ = n then
     exit; // already set as such
   RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   try
     ps^ := ''; // for LogThreadName(name) to appear once
     for i := 0 to length(SynLogFamily) - 1 do
@@ -6420,7 +6420,7 @@ begin
            (fGlobalLog <> nil) then
           fGlobalLog.LogThreadName(name); // try to put the full name in log
   finally
-    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+    GlobalThreadLock.UnLock;
     ps^ := n; // low-level short name will be used from now
   end;
 end;
@@ -6481,7 +6481,7 @@ begin
   try
     if ReceiveExistingKB > 0 then
     begin
-      mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+      GlobalThreadLock.Lock;
       previousContent := TrackedLog.GetExistingLog(ReceiveExistingKB);
       if TrackedLog.HighResolutionTimestamp and
          (TrackedLog.fGlobalLog <> nil) then
@@ -6500,7 +6500,7 @@ begin
     end;
   finally
     if ReceiveExistingKB > 0 then
-      mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+      GlobalThreadLock.UnLock;
   end;
   result := length(previousContent);
 end;
@@ -7997,7 +7997,7 @@ end;
 
 procedure InitializeUnit;
 begin
-  mormot.core.os.InitializeCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Init;
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';
@@ -8021,10 +8021,10 @@ begin
   HandleExceptionFamily := nil; // disable exception interception
   {$endif NOEXCEPTIONINTERCEPT}
   SynLogFileFreeing := true;    // to avoid GPF at shutdown
-  mormot.core.os.EnterCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Lock;
   files := SynLogFile;
   SynLogFile := nil; // would break any background process
-  mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.UnLock;
   if AutoFlushThread <> nil then
   begin
     AutoFlushThread.Terminate;
@@ -8038,7 +8038,7 @@ begin
     BacktraceStrFunc := SysBacktraceStr; // avoid instability
   {$endif FPC}
   FreeAndNilSafe(ExeInstanceDebugFile);
-  mormot.core.os.DeleteCriticalSection(GlobalThreadLock);
+  GlobalThreadLock.Done;
 end;
 
 

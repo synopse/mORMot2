@@ -4482,14 +4482,14 @@ type
     /// enter an OS lock
     // - notice: this method IS reentrant/recursive
     procedure Lock;
-      {$ifdef FPC} inline; {$endif}
+      {$ifdef FPC} inline; {$endif} { Delphi can't inline EnterCriticalSection }
     /// try to enter an OS lock
     // - if returned true, caller should eventually call UnLock()
     function TryLock: boolean;
-      {$ifdef FPC} inline; {$endif}
+      {$ifdef FPC} inline; {$endif} { Delphi can't inline TryEnterCriticalSection }
     /// leave an OS lock
     procedure UnLock;
-      {$ifdef FPC} inline; {$endif}
+      {$ifdef FPC} inline; {$endif} { Delphi can't inline LeaveCriticalSection }
   end;
   POSLock = ^TOSLock;
 
@@ -4622,7 +4622,7 @@ type
   TSynLocker = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSection: TRTLCriticalSection;
+    fSection: TOSLock;
     fRW: TRWLock;
     fPaddingUsedCount: byte;
     fInitialized: boolean;
@@ -10408,7 +10408,7 @@ end;
 
 procedure TSynLocker.InitFromClass;
 begin
-  InitializeCriticalSection(fSection);
+  fSection.Init;
   fInitialized := true;
 end;
 
@@ -10423,7 +10423,7 @@ begin
   fLockCount := 0;
   fPaddingUsedCount := 0;
   fRW.Init;
-  InitializeCriticalSection(fSection);
+  fSection.Init;
   fInitialized := true;
 end;
 
@@ -10439,7 +10439,7 @@ begin
       VarClearProc(v^.Data); // won't include varAny = SetPointer
     inc(v);
   end;
-  DeleteCriticalSection(fSection);
+  fSection.Done;
   fInitialized := false;
 end;
 
@@ -10466,7 +10466,7 @@ begin
   case fRWUse of
     uSharedLock:
       begin
-        mormot.core.os.EnterCriticalSection(fSection);
+        fSection.Lock;
         inc(fLockCount);
       end;
     uRWLock:
@@ -10480,7 +10480,7 @@ begin
     uSharedLock:
       begin
         dec(fLockCount);
-        mormot.core.os.LeaveCriticalSection(fSection);
+        fSection.UnLock;
       end;
     uRWLock:
       fRW.UnLock(context);
@@ -10520,7 +10520,7 @@ end;
 function TSynLocker.TryLock: boolean;
 begin
   result := (fRWUse = uSharedLock) and
-            (mormot.core.os.TryEnterCriticalSection(fSection) <> 0);
+            fSection.TryLock;
   if result then
     inc(fLockCount);
 end;
