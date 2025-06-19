@@ -11170,6 +11170,8 @@ threadvar // do not publish for compilation within Delphi packages
 function CurrentThreadNameShort: PShortString;
 begin
   result := @_CurrentThreadName;
+  if result^[0] > #31 then
+    result := @NULCHAR; // paranoid range check
 end;
 
 function GetCurrentThreadName: RawUtf8;
