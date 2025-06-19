@@ -3364,7 +3364,8 @@ end;
 
 function TSynList.Exists(item: pointer): boolean;
 begin
-  result := IndexOf(item) >= 0;
+  result := (fCount > 0) and
+            PtrUIntScanExists(pointer(fList), fCount, PtrUInt(item));
 end;
 
 function TSynList.Get(index: integer): pointer;
