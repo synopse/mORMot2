@@ -4264,18 +4264,17 @@ type
   // - methods are reentrant, i.e. calling Lock twice in a raw would not deadlock
   // - our light locks are expected to be kept a very small amount of time (a
   // few CPU cycles): use TSynLocker or TOSLock if the lock may block too long
-  // - TryLock/UnLock can be used to thread-safely acquire a shared resource,
-  // in a re-entrant way
+  // - TryLock/UnLock can be used e.g. to thread-safely acquire a shared
+  // resource, in a re-entrant way
   {$ifdef USERECORDWITHMETHODS}
   TMultiLightLock = record
   {$else}
   TMultiLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: PtrUInt;
+    Flags: PtrUInt;      // is also the reentrant > 0 counter
     ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
-    ReentrantCount: TThreadIDInt;
-    procedure LockSpin; // called by the Lock method when inlined
+    procedure LockSpin;  // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
     // - e.g. not needed if TMultiLightLock is defined as a class field
@@ -4294,7 +4293,8 @@ type
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// acquire this lock for the current thread, ignore any previous state
-    // - could be done to safely acquire and finalize a resource
+    // - could be done to safely acquire and finalize a resource, as used e.g.
+    // in TPollAsyncSockets.CloseConnection
     // - this method is reentrant: you can call Lock/UnLock on this thread
     procedure ForceLock;
     /// check if the reentrant lock has been acquired
@@ -9851,7 +9851,7 @@ end;
 
 { **************** TSynLocker Threading Features }
 
-// as reference, take a look at Linus insight
+// as reference, take a look at Linus insight (TL&WR: better use futex)
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
 {$ifdef CPUINTEL}
 procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
@@ -9941,7 +9941,6 @@ procedure TMultiLightLock.Init;
 begin
   Flags := 0;
   ThreadID := TThreadID(0);
-  ReentrantCount := 0;
 end;
 
 procedure TMultiLightLock.Done;
@@ -9958,16 +9957,9 @@ end;
 
 procedure TMultiLightLock.UnLock;
 begin
-  dec(ReentrantCount);
-  if ReentrantCount <> 0 then
-    exit;
-  {$ifdef CPUINTEL}
-  Flags := 0;
-  {$else}
-  LockedExc(Flags, 0, 1); // ARM can be weak-ordered
-  // https://preshing.com/20121019/this-is-why-they-call-it-a-weakly-ordered-cpu
-  {$endif CPUINTEL}
-  ThreadID := TThreadID(0);
+  if Flags = 1 then
+    ThreadID := TThreadID(0); // paranoid
+  LockedDec(Flags, 1);
 end;
 
 function TMultiLightLock.TryLock: boolean;
@@ -9975,29 +9967,27 @@ var
   tid: TThreadID;
 begin
   tid := GetCurrentThreadId;
-  if Flags = 0 then                // is not locked
-    if LockedExc(Flags, 1, 0) then // atomic acquisition
+  if Flags = 0 then    // is not locked
+    if LockedExc(Flags, {to=}1, {from=}0) then // try atomic acquisition
     begin
       ThreadID := tid;
-      ReentrantCount := 1;
-      result := true;          // acquired this lock
+      result := true;  // acquired the lock
     end
     else
-      result := false          // impossible to acquire this lock
-  else if ThreadID <> tid then // locked by another thread
-    result := false
+      result := false  // impossible to acquire this lock
+  else if ThreadID <> tid then
+    result := false // locked by another thread
   else
   begin
-    inc(ReentrantCount);       // locked by this thread - make it reentrant
-    result := true;
+    inc(Flags);     // make it reentrant
+    result := true; // locked by this thread
   end;
 end;
 
 procedure TMultiLightLock.ForceLock;
 begin
-  Flags := PtrUInt(-1); // forced acquisition, whatever the current state is
+  Flags := MaxInt; // forced acquisition, whatever the current state is
   ThreadID := GetCurrentThreadId;
-  ReentrantCount := MaxInt; // make this method reentrant
 end;
 
 function TMultiLightLock.IsLocked: boolean;
