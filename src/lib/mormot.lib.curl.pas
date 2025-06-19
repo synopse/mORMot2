@@ -1673,7 +1673,7 @@ initialization
 
 finalization
   {$ifdef LIBCURLSTATIC}
-  if curl_initialized then
+  if curl_initialized = lsAvailable then
   begin
     CurlDisableGlobalShare;
     curl.global_cleanup;
