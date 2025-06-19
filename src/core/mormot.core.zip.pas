@@ -2752,7 +2752,7 @@ begin
       centraldirsize := Int64(Size) - fCentralDirectoryOffset;
       if centraldirsize > Int64(WorkingMem) then
       begin
-        // WorkingMem (default 1MB) was not enough (a lot of files indeed!)
+        // WorkingMem (default 1MB) was not enough (e.g. > 40,000 files)
         WorkingMem := centraldirsize + 1024;
         if WorkingMem > Size then
           WorkingMem := Size;

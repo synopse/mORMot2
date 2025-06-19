@@ -6221,7 +6221,8 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
           log2 := fam.fGlobalLog;
           if log2 = nil then
             continue;
-          log2.FillInfo(log2.GetThreadInfo, nil); // timestamp [+ threadnumber]
+          log2.fThreadInfo := log2.GetThreadInfo;
+          log2.FillInfo(log2.fThreadInfo, nil); // timestamp [+ threadnumber]
           log2.LogHeader(Ctxt.ELevel, nil);
           DefaultSynLogExceptionToStr(log2.fWriter, Ctxt, {addinfo=}false);
           // stack trace only in the main thread
