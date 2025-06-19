@@ -2626,15 +2626,14 @@ asm
 end;
 
 function BSRqword(const q: qword): cardinal;
-asm
-        bsr     eax, [esp + 8]
-        jz      @1
-        add     eax, 32
-        ret
-@1:     bsr     eax, [esp + 4]
-        jnz     @2
-        mov     eax, 255
-@2:
+var
+  c: cardinal; // CPU32 and inlining friendly
+begin
+  c := q shr 32;
+  if c = 0  then
+    result := BsrDword(cardinal(q)) // search in lowest 32-bit
+  else
+    result := BsrDword(c) or 32;   // search in highest 32-bit
 end;
 
 {$endif WIN32DELPHI}
