@@ -1995,12 +1995,12 @@ begin
     if c.IsDangling then
       exit;
     // final acquisition of connection's read+write locks for this thread
-    if (not c.WaitLock({writer=}false, 1000)) or
+    if (not c.WaitLock({writer=}false, 500)) or
        ((ifSeparateWLock in c.fInternalFlags) and
-        (not c.WaitLock({writer=}true, 1000))) then
+        (not c.WaitLock({writer=}true, 500))) then
     begin
-      c.fRWSafe[0].ForceLock; // locks should be available within 1000 ms
-      c.fRWSafe[1].ForceLock
+      c.fRWSafe[0].ForceLock; // locks should be available within 0.5 second
+      c.fRWSafe[1].ForceLock;
     end;
     // call OnClose virtual method once
     if not (fClosed in c.fFlags) then
