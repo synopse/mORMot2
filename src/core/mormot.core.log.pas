@@ -1084,7 +1084,7 @@ type
     procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo);
       {$ifdef HASINLINE}inline;{$endif}
     procedure LockAndDisableExceptions;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif} // Delphi can't access PerThreadInfo threadvar
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
@@ -1114,7 +1114,7 @@ type
     procedure PerformRotation; virtual;
     function InitThreadNumber: PtrUInt;
     function GetThreadInfo: PSynLogThreadInfo;
-      {$ifdef FPC}inline;{$endif} // Delphi can't access the threadvar
+      {$ifdef FPC}inline;{$endif} // Delphi can't access PerThreadInfo threadvar
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
@@ -3958,7 +3958,6 @@ begin
     ; // ignore any exception at shutdown
   end;
 end;
-
 
 threadvar // do not publish for compilation within Delphi packages
   PerThreadInfo: TSynLogThreadInfo;
