@@ -4421,7 +4421,7 @@ begin
   result := LastFamily;
   if (result <> nil) and
      (result.SynLogClass = self) then
-    exit;
+    exit; // most common case
   result := pointer(Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^));
   {$else}
   result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
@@ -4459,7 +4459,6 @@ begin
   begin
     lf := pointer(Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^));
   {$else}
-  begin
     lf := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   {$endif NOPATCHVMT}
     if lf = nil then
@@ -4468,10 +4467,10 @@ begin
     lf := TRttiCustom(pointer(lf)).PrivateSlot;
     if lf = nil then
       exit; // FamilyCreate should have been called
-    {$ifdef NOPATCHVMT}
+  {$ifdef NOPATCHVMT}
     LastFamily := lf;
-    {$endif NOPATCHVMT}
   end;
+  {$endif NOPATCHVMT}
   // if we reached here, lf points to the expected TSynLogFamily
   result := lf.fGlobalLog;
   // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
