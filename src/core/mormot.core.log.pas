@@ -1056,18 +1056,11 @@ type
     fWriterEcho: TEchoWriter;
     fWriterStream: TStream;
     fFileName: TFileName;
-    fThreadCount: integer;
     fFileRotationBytes: cardinal; // see OnFlushToStream
     fNextFlushTix10, fNextFileRotateDailyTix10: cardinal; // see OnFlushToStream
-    fThreadIndexReleasedCount: integer;
     fStreamPositionAfterHeader: cardinal;
     fStartTimestampDateTime: TDateTime;
-    fThreadIndexReleased: TWordDynArray;
     fWriterClass: TJsonWriterClass;
-    fThreadIdent: array of record // for ptIdentifiedInOneFile
-      ThreadName: RawUtf8;
-      ThreadID: PtrUInt;
-    end;
     class function FamilyCreate: TSynLogFamily;
     // TInterfacedObject methods for fake per-thread RefCnt
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
@@ -1111,6 +1104,7 @@ type
     procedure AddSysInfo;
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
+    function GetThreadCount: integer;
     procedure PerformRotation; virtual;
     function InitThreadNumber: PtrUInt;
     function GetThreadInfo: PSynLogThreadInfo;
@@ -1379,13 +1373,13 @@ type
     /// the current size, in bytes, of the associated file containing the log
     property FileSize: Int64
       read GetFileSize;
-    /// the current number of thread contexts associated with this instance
+    /// the current number of thread contexts associated with this process
     // - doesn't match necessary the number of threads of the process, but the
-    // threads which are still marked as active for this TSynLog
+    // threads which are still marked as active for any TSynLog
     // - a huge number may therefore not indicate a potential "out of memory"
     // error, but a broken logic with missing NotifyThreadEnded calls
     property ThreadCount: integer
-      read fThreadCount;
+      read GetThreadCount;
     /// the associated logging family
     property GenericFamily: TSynLogFamily
       read fFamily;
@@ -4557,10 +4551,26 @@ begin
   fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
 end;
 
+type
+  TSynLogThreads = record
+    Ident: array of record // for ptIdentifiedInOneFile
+      ThreadName: RawUtf8;
+      ThreadID: PtrUInt;
+    end;
+    Count: integer;
+    IndexReleasedCount: integer;
+    IndexReleased: TWordDynArray;
+  end;
+  PSynLogThreads = ^TSynLogThreads;
+var
+  /// information shared by all TSynLog, protected by GlobalThreadLock
+  SynLogThreads: TSynLogThreads;
+
 procedure TSynLog.NotifyThreadEnded;
 var
   nfo: PSynLogThreadInfo;
   num: PtrUInt;
+  thd: PSynLogThreads;
 begin
   CurrentThreadNameShort^[0] := #0; // reset threadvar for consistency
   nfo := @PerThreadInfo;
@@ -4572,40 +4582,49 @@ begin
   if (self = nil) or
      (fFamily.fPerThreadLog = ptNoThreadProcess) then
     exit;
+  thd := @SynLogThreads;
   GlobalThreadLock.Lock;
   try
     // reset this thread name for ptIdentifiedInOneFile
-    if num <= PtrUInt(length(fThreadIdent)) then
-      with fThreadIdent[num - 1] do
+    if num <= PtrUInt(length(thd^.Ident)) then
+      with thd^.Ident[num - 1] do
       begin
         ThreadName := '';
         ThreadID := 0;
       end;
     // mark number to be recycled by InitThreadNumber
-    AddWord(fThreadIndexReleased, fThreadIndexReleasedCount, num);
+    AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
   finally
     GlobalThreadLock.UnLock;
   end;
 end;
 
-function TSynLog.InitThreadNumber: PtrUInt;
+function TSynLog.GetThreadCount: integer;
 begin
+  result := SynLogThreads.Count; // global counter for the process
+end;
+
+function TSynLog.InitThreadNumber: PtrUInt;
+var
+  thd: PSynLogThreads;
+begin
+  thd := @SynLogThreads;
   GlobalThreadLock.Lock;
   try
     if fFamily.fPerThreadLog = ptNoThreadProcess then
       result := 1 // no actual thread tracking in this mode
-    else if fThreadIndexReleasedCount <> 0 then
+    else if thd^.IndexReleasedCount <> 0 then
     begin
-      dec(fThreadIndexReleasedCount); // reuse slot after NotifyThreadEnded()
-      result := fThreadIndexReleased[fThreadIndexReleasedCount];
+      dec(thd^.IndexReleasedCount); // reuse NotifyThreadEnded() slot
+      result := thd^.IndexReleased[SynLogThreads.IndexReleasedCount];
     end
     else
     begin
-      if fThreadCount = MAX_SYNLOGTHREADS then
+      if thd^.Count = MAX_SYNLOGTHREADS then
         ESynLogException.RaiseUtf8(
           'Too many threads: check for missing %.NotifyThreadEnded', [self]);
-      inc(fThreadCount);
-      result := fThreadCount;
+      inc(thd^.Count);
+      result := thd^.Count;
     end;
   finally
     GlobalThreadLock.UnLock;
@@ -5126,7 +5145,7 @@ var
   pthrdnum: PUtf8Char; // to overwrite threadnumber text
   bak: cardinal;
 begin // called only in ptIdentifiedInOneFile mode
-  with fThreadIdent[threadnumber - 1] do
+  with SynLogThreads.Ident[threadnumber - 1] do
   begin
     if ThreadID = 0 then
       exit; // paranoid
@@ -5154,6 +5173,7 @@ var
   n: RawUtf8;
   nfo: PSynLogThreadInfo;
   num, tid: PtrUInt;
+  thd: PSynLogThreads;
 begin
   if (self = nil) or
      (fFamily.fPerThreadLog <> ptIdentifiedInOneFile) or
@@ -5169,11 +5189,12 @@ begin
   FillInfo(nfo, nil); // timestamp [+ threadnumber]
   num := nfo^.ThreadNumber;
   tid := PtrUInt(GetCurrentThreadId);
+  thd := @SynLogThreads;
   GlobalThreadLock.Lock;
   try
-    if num > PtrUInt(length(fThreadIdent)) then
-      SetLength(fThreadIdent, NextGrow(num));
-    with fThreadIdent[num - 1] do // identifiers of this TSynLog instance
+    if num > PtrUInt(length(thd^.Ident)) then
+      SetLength(thd^.Ident, NextGrow(num));
+    with thd^.Ident[num - 1] do // identifiers of this TSynLog instance
     begin
       if (ThreadID = tid) and
          (ThreadName = n) then
@@ -5697,7 +5718,7 @@ begin
   LogFileInit(GetThreadInfo);
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     // write the current thread names as TSynLog.LogThreadName lines
-    for i := 1 to fThreadCount do
+    for i := 1 to SynLogThreads.Count do
       DoThreadName(i);
 end;
 
