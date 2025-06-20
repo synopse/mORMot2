@@ -529,7 +529,7 @@ type
     B: PUtf8Char;
     /// direct access to the low-level last position in the buffer
     // - you should not use this field directly
-    // - points in fact to 16 bytes before the buffer ending
+    // - points in fact 16 bytes before the actual buffer ending
     BEnd: PUtf8Char;
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -1225,7 +1225,9 @@ type
     fEchoStart: PtrInt;
     fEchoBuf: RawUtf8;
     fEchos: array of TOnTextWriterEcho;
-    fWriteCRLF, fEchoPendingExecuteBackground: boolean;
+    fWriteLineFeed: cardinal;
+    fWriteLineFeedLen: byte;
+    fEchoPendingExecuteBackground: boolean;
     fBack: TEchoWriterBack;
     function EchoFlush: PtrInt;
     procedure EchoPendingToBackground(aLevel: TSynLogLevel);
@@ -6226,7 +6228,16 @@ begin
   if Assigned(fWriter.OnFlushToStream) then
     ESynException.RaiseUtf8('Unexpected %.Create', [self]);
   fWriter.OnFlushToStream := FlushToStream; // register
-  fWriteCRLF := twoEndOfLineCRLF in fWriter.CustomOptions;
+  if twoEndOfLineCRLF in fWriter.CustomOptions then
+  begin
+    fWriteLineFeed := $0a0d; // #13#10 - typical on Windows
+    fWriteLineFeedLen := 2;
+  end
+  else
+  begin
+    fWriteLineFeed := $0a;  // #10 - as on POSIX
+    fWriteLineFeedLen := 1;
+  end
 end;
 
 destructor TEchoWriter.Destroy;
@@ -6282,9 +6293,8 @@ end;
 
 procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogLevel);
 begin
-  if fWriteCRLF then
-    fWriter.AddDirect(#13);
-  fWriter.AddDirect(#10);
+  PCardinal(fWriter.B + 1)^ := fWriteLineFeed; // fast append #13 or #13#10
+  inc(fWriter.B, fWriteLineFeedLen);
   if fEchos <> nil then
     EchoAddEndOfLine(aLevel); // redirection
 end;
