@@ -381,6 +381,8 @@ type
     /// you can call this method to change the default timeout of 10 minutes
     // - is likely to flush the cache
     procedure SetTimeOut(aSeconds: integer);
+    /// you can force a customized IP resolution for this host name
+    procedure Force(const Host, IP: RawUtf8);
   end;
 
 
