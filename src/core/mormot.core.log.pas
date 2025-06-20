@@ -6198,13 +6198,17 @@ const
 
 type
   TSynLogExceptionInfos = array[0 .. MAX_EXCEPTHISTORY] of TSynLogExceptionInfo;
+  TLastException = record
+    Index: integer;
+    StackCount: integer;
+    Infos: TSynLogExceptionInfos;
+    Stack: array[0 .. MAX_EXCEPTHISTORY - 1] of PtrUInt;
+  end;
 
 var
   // some static information about the latest exceptions raised
-  GlobalLastException: TSynLogExceptionInfos;
-  GlobalLastExceptionIndex: integer = -1;
-  GlobalLastExceptionStackCount: integer;
-  GlobalLastExceptionStack: array[0 .. MAX_EXCEPTHISTORY - 1] of PtrUInt;
+  GlobalLastException: TLastException = (
+    Index: -1{%H-});
 
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
@@ -6213,7 +6217,8 @@ var
   log: TSynLog;
   info: ^TSynLogExceptionInfo;
   thrdnam: PShortString;
-  i: PtrInt;
+  last: ^TLastException;
+  i, n: PtrInt;
 label
   adr, fin;
 begin
@@ -6237,31 +6242,32 @@ begin
   log.LockAndDisableExceptions;
   try
     try
-      // retrieve the logging context
+      // ensure we need to log this
       if Assigned(log.fFamily.OnBeforeException) then
         if log.fFamily.OnBeforeException(Ctxt, thrdnam^) then
-          // intercepted by custom callback
-          exit;
-      // memorize for internal last exceptions list into static arrays
-      log.LogHeaderNoRecursion(Ctxt.ELevel);
-      if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
-        GlobalLastExceptionIndex := 0
+          exit; // intercepted by custom callback
+      // memorize last exceptions into an internal round-robin static list
+      last := @GlobalLastException;
+      if last^.Index = high(last^.Infos) then
+        last^.Index := 0
       else
-        inc(GlobalLastExceptionIndex);
-      info := @GlobalLastException[GlobalLastExceptionIndex];
+        inc(last^.Index);
+      info := @last^.Infos[last^.Index];
       info^.Context := Ctxt;
       info^.Message := '';
       if Ctxt.EStack = nil then
-        GlobalLastExceptionStackCount := 0
+        last^.StackCount := 0
       else
       begin
-        GlobalLastExceptionStackCount := Ctxt.EStackCount;
-        if GlobalLastExceptionStackCount > MAX_EXCEPTHISTORY then
-          GlobalLastExceptionStackCount := MAX_EXCEPTHISTORY;
-        MoveFast(Ctxt.EStack[0], GlobalLastExceptionStack[0],
-          GlobalLastExceptionStackCount * SizeOf(PtrUInt));
+        n := Ctxt.EStackCount;
+        if n > high(last^.Stack) + 1 then
+          n := high(last^.Stack) + 1;
+        last^.StackCount := n;
+        MoveFast(Ctxt.EStack[0], last^.Stack[0], n * SizeOf(PtrUInt));
       end;
-      // custom exception log
+      // actual exception log - with potential customization
+      LogHeaderNoRecursion(
+        log.fWriter, Ctxt.ELevel, @log.fThreadInfo^.CurrentTimeAndThread);
       if (Ctxt.ELevel = sllException) and
          (Ctxt.EInstance <> nil) then
       begin
@@ -6271,7 +6277,7 @@ begin
           ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
           if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
             goto fin;
-          goto adr; // CustomLog() included DefaultSynLogExceptionToStr()
+          goto adr; // CustomLog() includes DefaultSynLogExceptionToStr()
         end;
       end;
       if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
@@ -6326,19 +6332,19 @@ end;
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
 begin
   result := false;
-  if GlobalLastExceptionIndex < 0 then
+  if GlobalLastException.Index < 0 then
     exit; // no exception intercepted yet
   GlobalThreadLock.Lock;
   try
-    if GlobalLastExceptionIndex < 0 then
+    if GlobalLastException.Index < 0 then
       exit;
-    info := GlobalLastException[GlobalLastExceptionIndex]; // copy
+    info := GlobalLastException.Infos[GlobalLastException.Index]; // copy
   finally
     GlobalThreadLock.UnLock;
   end;
   info.Context.EInstance := nil; // avoid any GPF
-  info.Context.EStack := @GlobalLastExceptionStack;
-  info.Context.EStackCount := GlobalLastExceptionStackCount;
+  info.Context.EStack := @GlobalLastException.Stack;
+  info.Context.EStackCount := GlobalLastException.StackCount;
   result := info.Context.ELevel <> sllNone;
 end;
 
@@ -6349,12 +6355,12 @@ var
   index, last, n, i: PtrInt;
 begin
   // thread-safe retrieve last exceptions
-  if GlobalLastExceptionIndex < 0 then
+  if GlobalLastException.Index < 0 then
     exit; // no exception intercepted yet
   GlobalThreadLock.Lock;
   try
-    infos := GlobalLastException;
-    index := GlobalLastExceptionIndex;
+    infos := GlobalLastException.Infos;
+    index := GlobalLastException.Index;
   finally
     GlobalThreadLock.UnLock;
   end;
@@ -6385,8 +6391,8 @@ begin
         EInstance := nil; // avoid any GPF
         if i = 0 then
         begin
-          EStack := @GlobalLastExceptionStack; // static copy of last exception
-          EStackCount := GlobalLastExceptionStackCount;
+          EStack := @GlobalLastException.Stack; // static copy of last exception
+          EStackCount := GlobalLastException.StackCount;
         end
         else
           EStack := nil; // avoid any GPF
