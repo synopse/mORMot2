@@ -1008,14 +1008,13 @@ type
   // - consumes 484/512 bytes per thread on CPU32/CPU64
   TSynLogThreadInfo = packed record
     /// number of recursive calls currently stored in Recursion[]
-    // - nothing is logged above MAX_SYNLOGRECURSION to keep this record small
+    // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
     RecursionCount: byte;
     /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
     // - used only if NOEXCEPTIONINTERCEPT conditional is defined
     ExceptionIgnore: boolean;
     /// the internal number of this thread, stored as text using Int18ToChars3()
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
-    // - always equal 1 in ptNoThreadProcess mode
     ThreadNumber: word;
     /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value for SetThreadInfo()
     ThreadBitLo: cardinal;
@@ -1096,8 +1095,6 @@ type
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
       {$ifdef FPC}inline;{$endif}
-    procedure LogHeaderNoRecursion(const Level: TSynLogLevel);
-      {$ifdef HASINLINE}inline;{$endif}
     procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
@@ -4545,11 +4542,13 @@ begin
     AddMemoryStats;
 end;
 
-procedure TSynLog.LogHeaderNoRecursion(const Level: TSynLogLevel);
+procedure LogHeaderNoRecursion(WR: TJsonWriter; const Level: TSynLogLevel;
+  TimeStampAndThreadNum: PShortString);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  fWriter.AddShort(fThreadInfo^.CurrentTimeAndThread); // timestamp [+ thread]
-  PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
-  inc(fWriter.B, 7); // include no recursive indentation nor any Instance
+  WR.AddShort(TimeStampAndThreadNum^); // timestamp [+ threadnumber]
+  PInt64(WR.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
+  inc(WR.B, 7); // include no recursive indentation nor any Instance
 end;
 
 procedure TSynLog.LogTrailer(Level: TSynLogLevel);
@@ -4675,7 +4674,8 @@ begin
   begin
     if ThreadID = 0 then
       exit; // paranoid
-    LogHeaderNoRecursion(sllInfo); // see TSynLogFile.ProcessOneLine()
+    // see TSynLogFile.ProcessOneLine() for the expected format
+    LogHeaderNoRecursion(fWriter, sllInfo, @fThreadInfo^.CurrentTimeAndThread);
     fWriter.AddShort('SetThreadName ');
     fWriter.AddPointer(ThreadID);  // as hexadecimal
     fWriter.AddDirect(' ');
@@ -4718,7 +4718,7 @@ begin
     LogFileInit(nfo); // run once, to set start time and write headers
   FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
   GlobalThreadLock.Lock;
-  SetThreadInfo(self, nfo);
+  SetThreadInfo(self, nfo); // call AddLogThreadName if needed
   {$ifndef NOEXCEPTIONINTERCEPT}
   // any exception within logging process will be ignored from now on
   fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
@@ -4753,6 +4753,7 @@ var
   nfo: PSynLogThreadInfo;
   ms: Int64;
   refcnt: PByte;
+  rec: PtrInt;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
   nfo := @PerThreadInfo; // threadvar access - InitThreadNumber() already done
@@ -4774,8 +4775,13 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   {$else}
   begin // direct AddMicroSec() output should not trigger any exception
   {$endif HASFASTTRYFINALLY}
-    fThreadInfo := nfo;
-    LogHeader(sllLeave, nil);
+    LogHeaderNoRecursion(fWriter, sllLeave, @nfo^.CurrentTimeAndThread);
+    rec := nfo^.RecursionCount;
+    if rec <> 0 then // manual indentation
+    begin
+      FillCharFast(fWriter.B[1], rec, 9);
+      inc(fWriter.B, rec);
+    end;
     fWriter.AddMicroSec(ms);
     fWriterEcho.AddEndOfLine(sllLeave);
   {$ifdef HASFASTTRYFINALLY}
@@ -4910,7 +4916,7 @@ begin
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
   // prepare for the actual content logging
   GlobalThreadLock.Lock;
-  SetThreadInfo(self, nfo);
+  SetThreadInfo(self, nfo); // call AddLogThreadName if needed
 end;
 
 procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
@@ -5482,7 +5488,7 @@ begin
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
     FillInfo(nfo, nil);
-    LogHeaderNoRecursion(sllNewRun);
+    LogHeaderNoRecursion(fWriter, sllNewRun, @nfo^.CurrentTimeAndThread);
     fWriter.AddString(Executable.ProgramName);
     fWriter.AddDirect(' ');
     if Executable.Version.Major <> 0 then
@@ -5695,8 +5701,8 @@ begin // caller made GlobalThreadLock.Lock
     exit;
   nfo := GetThreadInfo;
   FillInfo(nfo, nil); // timestamp [+ threadnumber]
-  SetThreadInfo(self, nfo);
-  LogHeaderNoRecursion(Ctxt.ELevel);
+  SetThreadInfo(self, nfo); // call AddLogThreadName if needed
+  LogHeaderNoRecursion(fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
   DefaultSynLogExceptionToStr(fWriter, Ctxt, {addinfo=}false);
   // stack trace only in the main thread
   fWriterEcho.AddEndOfLine(Ctxt.ELevel);
