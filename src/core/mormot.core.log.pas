@@ -1091,8 +1091,10 @@ type
       Instance: TObject; TextTruncateAtLength: integer);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
-    procedure LogHeader(Level: TSynLogLevel; Instance: TObject);
+    procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
       {$ifdef FPC}inline;{$endif}
+    procedure LogHeaderNoRecursion(const Level: TSynLogLevel);
+      {$ifdef HASINLINE}inline;{$endif}
     procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
@@ -4513,7 +4515,7 @@ begin
     result := nil;
 end;
 
-procedure TSynLog.LogHeader(Level: TSynLogLevel; Instance: TObject);
+procedure TSynLog.LogHeader(const Level: TSynLogLevel; Instance: TObject);
 var
   indent: PtrInt;
   P: PUtf8Char;
@@ -4540,6 +4542,13 @@ begin
   fWriter.B := P;
   if Level = sllMemory then // handle additional information
     AddMemoryStats;
+end;
+
+procedure TSynLog.LogHeaderNoRecursion(const Level: TSynLogLevel);
+begin
+  fWriter.AddShort(fThreadInfo^.CurrentTimeAndThread); // timestamp [+ thread]
+  PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[Level][1])^;
+  inc(fWriter.B, 7); // include no recursive indentation nor any Instance
 end;
 
 procedure TSynLog.LogTrailer(Level: TSynLogLevel);
@@ -5449,9 +5458,7 @@ begin
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
     FillInfo(nfo, nil);
-    fWriter.AddShort(nfo^.CurrentTimeAndThread); // timestamp [+ threadnumber]
-    PInt64(fWriter.B + 1)^ := PInt64(@LOG_LEVEL_TEXT[sllNewRun][1])^;
-    inc(fWriter.B, 7); // initial sllNewRun expects no recursion
+    LogHeaderNoRecursion(sllNewRun);
     fWriter.AddString(Executable.ProgramName);
     fWriter.AddDirect(' ');
     if Executable.Version.Major <> 0 then
@@ -6174,7 +6181,7 @@ begin
           // intercepted by custom callback
           exit;
       // memorize for internal last exceptions list into static arrays
-      log.LogHeader(Ctxt.ELevel, nil);
+      log.LogHeaderNoRecursion(Ctxt.ELevel);
       if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
         GlobalLastExceptionIndex := 0
       else
