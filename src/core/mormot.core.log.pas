@@ -5821,20 +5821,23 @@ end;
 procedure TSynLog.ComputeFileName;
 var
   timeNow, hourRotate, timeBeforeRotate: TDateTime;
+  fn: TFileName;
+  i, j: PtrInt;
+  dup: boolean;
 begin
-  fFileName := fFamily.fCustomFileName;
-  if fFileName = '' then
+  fn := fFamily.fCustomFileName;
+  if fn = '' then
     // compute the default filename as '<exename>(<user>@<host>)'
     with Executable do
       if fFamily.IncludeComputerNameInFileName then
         if fFamily.IncludeUserNameInFileName then
-          fFileName := FormatString('%(%@%)', [ProgramName, User, Host])
+          fn := FormatString('%(%@%)', [ProgramName, User, Host])
         else
-          fFileName := FormatString('%(%)', [ProgramName, Host])
+          fn := FormatString('%(%)', [ProgramName, Host])
       else if fFamily.IncludeUserNameInFileName then
-        fFileName := FormatString('%(%)', [ProgramName, User])
+        fn := FormatString('%(%)', [ProgramName, User])
       else
-        Utf8ToFileName(ProgramName, fFileName);
+        Utf8ToFileName(ProgramName, fn);
   // prepare for any file rotation
   fFileRotationBytes := 0;
   fNextFileRotateDailyTix10 := 0;
@@ -5856,22 +5859,40 @@ begin
   // file name should include current timestamp if no rotation is involved
   if (fFileRotationBytes = 0) and
      (fNextFileRotateDailyTix10 = 0) then
-    fFileName := FormatString('% %',
-      [fFileName, NowToFileShort(fFamily.LocalTimestamp)]);
+    fn := FormatString('% %',
+      [fn, NowToFileShort(fFamily.LocalTimestamp)]);
   {$ifdef OSWINDOWS}
   // include library name
   if IsLibrary and
      (fFamily.fCustomFileName = '') then
-    fFileName := fFileName + ' ' + ExtractFileName(GetModuleName(HInstance));
+    fn := fn + ' ' + ExtractFileName(GetModuleName(HInstance));
   {$else}
   // normalize file name to be more readable and usable on POSIX command line
-  fFileName := StringReplace(fFileName, ' ', '-', [rfReplaceAll]);
+  fn := StringReplace(fn, ' ', '-', [rfReplaceAll]);
   {$endif OSWINDOWS}
   // include thread ID in ptOneFilePerThread mode
   if fFamily.fPerThreadLog = ptOneFilePerThread then
-    fFileName := FormatString('% %',
-      [fFileName, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
-  fFileName := fFamily.fDestinationPath + fFileName + fFamily.fDefaultExtension;
+    fn := FormatString('% %',
+      [fn, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
+  fFileName := FormatString('%%%',
+    [fFamily.fDestinationPath, fn, fFamily.fDefaultExtension]);
+  // ensure this file name is unique among all opened files
+  for j := 2 to 10 do
+  begin
+    dup := false;
+    for i := 0 to high(SynLogFile) do
+      if (SynLogFile[i] <> self) and
+         (SynLogFile[i].fFileName = fFileName) then
+      begin
+        dup := true; // happens with multiple TSynLog classes
+        break;
+      end;
+    if not dup then
+      exit;
+    fFileName := FormatString('%%-%%',
+      [fFamily.fDestinationPath, fn, j, fFamily.fDefaultExtension]);
+  end;
+  ESynLogException.RaiseUtf8('Duplicated %.FileName=%', [self, fFileName]);
 end;
 
 procedure TSynLog.CreateLogWriter;
@@ -6439,7 +6460,7 @@ begin
   RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
   GlobalThreadLock.Lock;
   try
-    ps^ := ''; // for LogThreadName(name) to appear once
+    ps^[0] := #0; // for LogThreadName(name) to appear once
     for i := 0 to length(SynLogFamily) - 1 do
       with SynLogFamily[i] do
         if (sllInfo in Level) and
@@ -7314,8 +7335,9 @@ begin
     end;
     inc(fThreadInfo[thread].Rows);
     if L = sllInfo then
-    begin // fast detect case-insensitive ' info  SetThreadName ' pattern
-      p := pointer(LineBeg + fLineLevelOffset + 5);
+    begin
+      // fast detect the exact TSynLog.AddLogThreadName pattern
+      p := pointer(LineBeg + fLineLevelOffset + 5); // from LogHeaderNoRecursion
       if (p^[0] = ord('S') + ord('e') shl 8 + ord('t') shl 16 + ord('T') shl 24) and
          (p^[1] = ord('h') + ord('r') shl 8 + ord('e') shl 16 + ord('a') shl 24) and
          (p^[2] = ord('d') + ord('N') shl 8 + ord('a') shl 16 + ord('m') shl 24) and
