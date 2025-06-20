@@ -706,7 +706,7 @@ begin
   end;
   if fService <> nil then
     fService.fRunner := nil; // notify ended
-  log.NotifyThreadEnded; // as needed by TSynLog
+  TSynLog.NotifyThreadEnded; // as needed by TSynLog
 end;
 
 procedure TSynAngelizeRunner.PerformRotation;

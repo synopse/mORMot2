@@ -5539,10 +5539,8 @@ procedure THttpServerResp.Execute;
 
 var
   netsock: TNetSocket;
-  logclass: TSynLogClass;
 begin
   SetCurrentThreadName('=conn-%', [fServerSock.RemoteConnectionID]);
-  logclass := fServer.LogClass;
   fServer.NotifyThreadStart(self);
   try
     try
@@ -5588,7 +5586,7 @@ begin
     on Exception do
       ; // just ignore unexpected exceptions here, especially during clean-up
   end;
-  logclass.Add.NotifyThreadEnded; // manual TSynThread notification
+  TSynLog.NotifyThreadEnded; // manual TSynThread notification
 end;
 
 

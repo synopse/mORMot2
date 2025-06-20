@@ -1080,7 +1080,7 @@ type
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
       fmt: PUtf8Char; args: PVarRec; argscount: PtrInt);
-    procedure DoThreadName(threadnumber: PtrInt);
+    procedure AddLogThreadName;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
@@ -1151,7 +1151,7 @@ type
     // in a situation where no other logging may occur from this thread any more
     // - it will release all thread-specific resource used by this TSynLog
     // - called e.g. by TRest.EndCurrentThread, via TSynLogFamily.OnThreadEnded
-    procedure NotifyThreadEnded;
+    class procedure NotifyThreadEnded; {$ifdef HASINLINE} static; {$endif}
     /// handle generic method enter / auto-leave tracing
     // - returning a ISynLog interface will allow you to have an automated
     // sllLeave log created when the method is left (thanks to the hidden
@@ -4400,7 +4400,7 @@ end;
 
 procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
 begin
-  Add.NotifyThreadEnded;
+  TSynLog.NotifyThreadEnded;
 end;
 
 
@@ -4561,35 +4561,32 @@ end;
 
 type
   TSynLogThreads = record
-    Ident: array of record // for ptIdentifiedInOneFile
-      ThreadName: RawUtf8;
+    Ident: array of record // follow Ident[TSynLogThreadInfo.ThreadNumber - 1]
+      ThreadName: RawUtf8; // for ptIdentifiedInOneFile
       ThreadID: PtrUInt;
     end;
-    Count: integer;
+    Count: integer; // as returned by TSynLog.ThreadCount
     IndexReleasedCount: integer;
-    IndexReleased: TWordDynArray;
+    IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
   end;
   PSynLogThreads = ^TSynLogThreads;
 var
   /// information shared by all TSynLog, protected by GlobalThreadLock
   SynLogThreads: TSynLogThreads;
 
-procedure TSynLog.NotifyThreadEnded;
+class procedure TSynLog.NotifyThreadEnded;
 var
   nfo: PSynLogThreadInfo;
   num: PtrUInt;
   thd: PSynLogThreads;
+  i: PtrInt;
 begin
   CurrentThreadNameShort^[0] := #0; // reset threadvar for consistency
   nfo := @PerThreadInfo;
   num := nfo^.ThreadNumber;
-  if num = 0 then
-    exit; // not touched yet by TSynLog, or called twice
-  nfo^.ThreadNumber := 0;
-  nfo^.ExceptionIgnore := true; // paranoid
-  if (self = nil) or
-     (fFamily.fPerThreadLog = ptNoThreadProcess) then
+  if num = 0 then // not touched yet by TSynLog, or called twice
     exit;
+  PInteger(nfo)^ := 0; // force InitThreadNumber
   thd := @SynLogThreads;
   GlobalThreadLock.Lock;
   try
@@ -4600,7 +4597,7 @@ begin
         ThreadName := '';
         ThreadID := 0;
       end;
-    // mark number to be recycled by InitThreadNumber
+    // mark thread number to be recycled by InitThreadNumber
     AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
   finally
     GlobalThreadLock.UnLock;

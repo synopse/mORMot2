@@ -9162,7 +9162,7 @@ begin
     end;
   except
   end;
-  SQLite3Log.Add.NotifyThreadEnded;
+  SQLite3Log.NotifyThreadEnded;
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
