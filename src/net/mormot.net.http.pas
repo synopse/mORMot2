@@ -367,7 +367,7 @@ type
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
   public
-    // reusable buffers for internal process - do not use
+    // reusable buffers for internal process - do not access directly
     Head, Process: TRawByteStringBuffer;
     /// the current state of this HTTP context
     State: THttpRequestState;
@@ -444,7 +444,7 @@ type
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader()
     // and mapped into Compress.Algo[]
     ContentEncoding: PHttpSocketCompressRec;
-    /// the sequence ID used in rfProgressiveStatic mode
+    /// the 31-bit sequence ID used in rfProgressiveStatic mode
     // - equals 0 if disabled or aborted
     // - several THttpRequestContext could share the same ID
     ProgressiveID: THttpPartialID;
@@ -583,10 +583,9 @@ type
   // standard gzip/deflate or custom (synlz) protocols
   THttpSocket = class(TCrtSocket)
   protected
-    fBodyRetrieved: boolean;  // to call GetBody only once
-    fCompressList: THttpSocketCompressList;
-    procedure HttpStateReset; // Http.Clear + fBodyRetrieved := false
-      {$ifdef HASINLINE} inline; {$endif}
+    fCompressList: THttpSocketCompressList; // two pointers
+    procedure HttpStateReset; // Http.Clear + exclude fBodyRetrieved
+      {$ifdef FPC_OR_DELPHIXE} inline; {$endif}
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString; OutStream: TStream);
   public
@@ -776,8 +775,6 @@ type
       var Value: TValuePUtf8Char): boolean;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
-    function EnsureUrlParamPosExists: PUtf8Char;
-      {$ifdef HASINLINE} inline; {$endif}
   public
     /// prepare an incoming request from a parsed THttpRequestContext
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
@@ -843,6 +840,10 @@ type
     /// retrieve and decode an URI-encoded parameter as 64-bit signed Int64
     // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
     function UrlParam(const UpperName: RawUtf8; out Value: Int64): boolean; overload;
+    /// the raw PUtf8Char value of all URI-encoded parameters
+    // - returns nil or the pointer to ? within '/uri?name=value&name2=value2'
+    function UrlParamPos: PUtf8Char;
+      {$ifdef HASINLINE} inline; {$endif}
     /// set the OutContent and OutContentType fields with the supplied JSON
     function SetOutJson(const Json: RawUtf8): cardinal; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -948,11 +949,13 @@ type
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
   // peers list (with a per-minute resolution)
   // - the DoRotate method should be called every second
+  // - can optionally maintain one TIp4SubNets blacklist of IPv4 from Internet
   THttpAcceptBan = class(TObjectOSLightLock)
   protected
     fCount, fLastSec: integer;
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
+    fBlackList: TIp4SubNets;
     fRejected, fTotal: Int64;
     fOnBanIp, fOnBanned: TOnHttpAcceptBan;
     function IsBannedRaw(ip4: cardinal): boolean;
@@ -966,21 +969,23 @@ type
     // - maxpersecond is the maximum number of banned IPs remembered per second
     constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
       banwhiteip: cardinal = cLocalhost32); reintroduce;
-    /// register an IP4 to be rejected
+    /// finalize this process
+    destructor Destroy; override;
+    /// register a 32-bit IPv4 to be rejected
     function BanIP(ip4: cardinal): boolean; overload;
-    /// register an IP4 to be rejected
+    /// register a IPv4 text to be rejected
     function BanIP(const ip4: RawUtf8): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// fast check if this IP4 is to be rejected
+    /// fast check if this IPv4 is to be rejected
     function IsBanned(const addr: TNetAddr): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// fast check if this IP4 is to be rejected
+    /// fast check if this 32-bit IPv4 is to be rejected
     function IsBanned(ip4: cardinal): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// register an IP4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
+    /// register an IPv4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
     function ShouldBan(status, ip4: cardinal): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// register an IP4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
+    /// register an IPv4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
     function ShouldBan(status: cardinal; const ip4: RawUtf8): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// to be called every second to remove deprecated bans from the list
@@ -990,11 +995,11 @@ type
     // - returns the number of freed bans
     function DoRotate: integer;
       {$ifdef HASINLINE} inline; {$endif}
-    /// a 32-bit IP4 which should never be banned
+    /// a 32-bit IPv4 which should never be banned
     // - is set to cLocalhost32, i.e. 127.0.0.1, by default
     property WhiteIP: cardinal
       read fWhiteIP write fWhiteIP;
-    /// how many seconds a banned IP4 should be rejected
+    /// how many seconds a banned IPv4 should be rejected
     // - will set the closest power of two <= 128, with a default of 4
     // - when set, any previous banned IP will be flushed
     property Seconds: cardinal
@@ -1012,14 +1017,23 @@ type
     /// event called when IsBanned() method returns true
     property OnBanned: TOnHttpAcceptBan
       read fOnBanned write fOnBanned;
+    /// raw access to an associated IPv4/CIDR blacklist storage
+    // - could be populated from fixed reference material, in addition to the
+    // transient banishment process set by ShouldBan() method on unexpected errors
+    // - typically filled from https://www.spamhaus.org/drop/drop.txt or
+    // https://github.com/firehol/blocklist-ipsets/blob/master/firehol_level1.netset
+    // - use Safe.Lock when accessing this instance, e.g. when initializing from
+    // text or binary once at startup, before IsBanned() is actually called
+    property BlackList: TIp4SubNets
+      read fBlackList;
   published
     /// total number of accept() rejected by IsBanned()
     property Rejected: Int64
       read fRejected;
-    /// total number of banned IP4 since the beginning
+    /// total number of banned IPv4 since the beginning
     property Total: Int64
       read fTotal;
-    /// current number of banned IP4
+    /// current number of banned IPv4
     property Count: integer
       read fCount;
   end;
@@ -2898,6 +2912,7 @@ begin
     if i < 0 then
       exit;
     p := @p[i + 3]; // p^ = bot.html in http://www.google.com/bot.html
+    dec(l, i + 3);
     case PCardinal(p)^ and $00ffffff of
       // Googlebot/2.1 (+http://www.google.com/bot.html)
       ord('b') + ord('o') shl 8 + ord('t') shl 16,
@@ -2925,6 +2940,18 @@ begin
       // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
       ord('r') + ord('o') shl 8 + ord('b') shl 16:
         result := true;
+    else // +https://developer.amazon.com/support/amazonbot) Chrome/119.0.6045
+      begin
+        i := ByteScanIndex(pointer(p), l, ord(')'));
+        if i < 0 then
+          exit;
+        inc(p, i);
+        if p[-1] = '/' then
+          dec(p);
+        if PCardinal(p - 3)^ and $00ffffff =
+             ord('b') + ord('o') shl 8 + ord('t') shl 16 then
+          result := true; // http*://*bot)
+      end;
     end;
   end;
 end;
@@ -3666,13 +3693,13 @@ var
   P: PUtf8Char;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  if PtrUInt(Len) < PtrUInt(st.Len) then // we just ignore the following #10
+  if PtrUInt(Len) < PtrUInt(st.Len) then // handle st.Len=0 and/or Len=-1
   begin
     P := st.P;
     st.Line := P;
-    P[Len] := #0; // replace ending CRLF by #0
+    P[Len] := #0; // replace ending #13 by #0 - HTTP expects #13#10 not #10
     st.LineLen := Len;
-    inc(Len, 2);  // if 2nd char is not #10, parsing will fail as expected
+    inc(Len, 2);  // if char after #13 is not #10, parsing will fail as expected
     inc(st.P, Len);
     dec(st.Len, Len);
     result := true;
@@ -4196,7 +4223,7 @@ end;
 procedure THttpSocket.HttpStateReset;
 begin
   Http.Reset;
-  fBodyRetrieved := false;
+  exclude(fFlags, fBodyRetrieved); // URW1111 on Delphi 2010 if inlined
   fSndBufLen := 0;
 end;
 
@@ -4275,7 +4302,7 @@ var
   len32, err: integer;
   len64: Int64;
 begin
-  fBodyRetrieved := true;
+  include(fFlags, fBodyRetrieved);
   Http.Content := '';
   if DestStream <> nil then
     if Http.ContentEncoding <> nil then
@@ -4561,7 +4588,7 @@ begin
   result := true;
 end;
 
-function THttpServerRequestAbstract.EnsureUrlParamPosExists: PUtf8Char;
+function THttpServerRequestAbstract.UrlParamPos: PUtf8Char;
 begin
   result := fUrlParamPos;
   if (result <> nil) or // may have been set by TUriTreeNode.LookupParam
@@ -4575,19 +4602,19 @@ end;
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: RawUtf8): boolean;
 begin
-  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
+  result := UrlDecodeParam(UrlParamPos, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: cardinal): boolean;
 begin
-  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
+  result := UrlDecodeParam(UrlParamPos, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: Int64): boolean;
 begin
-  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
+  result := UrlDecodeParam(UrlParamPos, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.SetOutJson(const Json: RawUtf8): cardinal;
@@ -4632,15 +4659,15 @@ begin
   if CacheControlMaxAgeSec <> 0 then
     AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
   if Handle304NotModified and
-     FileHttp304NotModified(fs, ts, fInHeaders, fOutCustomHeaders) then
+     FileHttp304NotModified(fs, ts, pointer(fInHeaders), fOutCustomHeaders) then
   begin
     result := HTTP_NOTMODIFIED;
     exit;
   end;
-  fOutContentType := ContentType;
-  if fOutContentType = '' then
-    fOutContentType := GetMimeContentTypeHeader('', FileName);
-  AppendLine(fOutCustomHeaders, [fOutContentType]);
+  if ContentType = '' then
+    AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, GetMimeContentType('', FileName)])
+  else
+    AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, ContentType]);
   fOutContentType := STATICFILE_CONTENT_TYPE;
   StringToUtf8(FileName, RawUtf8(fOutContent));
   result := HTTP_SUCCESS;
@@ -4654,7 +4681,7 @@ begin
     AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
   result := HTTP_NOTMODIFIED;
   if Handle304NotModified and
-     ContentHttp304NotModified(Content, fInHeaders, fOutCustomHeaders) then
+     ContentHttp304NotModified(Content, pointer(fInHeaders), fOutCustomHeaders) then
     exit;
   fOutContentType := ContentType;
   if fOutContentType = '' then
@@ -4678,6 +4705,13 @@ begin
   fMax := maxpersecond;
   SetSeconds(banseconds);
   fWhiteIP := banwhiteip;
+  fBlackList := TIp4SubNets.Create;
+end;
+
+destructor THttpAcceptBan.Destroy;
+begin
+  inherited Destroy;
+  fBlackList.Free;
 end;
 
 procedure THttpAcceptBan.SetMax(Value: cardinal);
@@ -4770,7 +4804,8 @@ var
 begin
   result := false;
   if (self = nil) or
-     (fCount = 0) then
+     ((fCount = 0) and
+      (fBlackList.SubNet = nil)) then
     exit;
   ip4 := addr.IP4;
   if (ip4 = 0) or
@@ -4782,7 +4817,8 @@ end;
 function THttpAcceptBan.IsBanned(ip4: cardinal): boolean;
 begin
   result := (self <> nil) and
-            (fCount <> 0) and
+            ((fCount <> 0) or
+             (fBlackList.SubNet = nil)) and
             (ip4 <> 0) and
             (ip4 <> fWhiteIP) and
             IsBannedRaw(ip4);
@@ -4802,7 +4838,8 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    s := pointer(fIP); // fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    // search the transient list of fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    s := pointer(fIP);
     n := fSeconds;
     if n <> 0 then
       repeat
@@ -4812,19 +4849,24 @@ begin
         if (cnt <> 0) and
            IntegerScanExists(@P[1], cnt, ip4) then // O(n) SSE2 asm on Intel
         begin
-          inc(fRejected);
           result := true;
           break;
         end;
         dec(n);
       until n = 0;
+    // also try the public blacklist of IPv4 (if any)
+    if not result and
+       (fBlackList.SubNet <> nil) then
+      result := fBlackList.Match(ip4); // - done within the main TOSLightLock
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
-  if result and
-     Assigned(fOnBanned) then
+  if not result then
+    exit;
+  inc(fRejected);
+  if Assigned(fOnBanned) then
     fOnBanned(self, ip4);
 end;
 
@@ -4863,15 +4905,14 @@ begin
   result := 0;
   fSafe.Lock; // very quick O(1) process
   try
-    if fCount <> 0 then
-    begin
-      n := (fLastSec + 1) and (fSeconds - 1); // per-second round robin
-      fLastSec := n; // the oldest slot becomes the current (no memory move)
-      p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
-      result := p^;
-      p^ := 0; // void the current slot
-      dec(fCount, result);
-    end;
+    if fCount = 0 then
+      exit;
+    n := (fLastSec + 1) and (fSeconds - 1); // per-second round robin
+    fLastSec := n; // the oldest slot becomes the current (no memory move)
+    p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    result := p^;
+    p^ := 0; // void the current slot
+    dec(fCount, result);
   finally
     fSafe.UnLock;
   end;
@@ -5464,8 +5505,8 @@ var
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
 const
-  SCHEME: array[boolean] of string[7]  = ('http', 'https');
-  HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
+  _SCHEME: array[boolean] of string[7]  = ('http', 'https');
+  _HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
@@ -5508,7 +5549,7 @@ begin
   v := pointer(fVariable);
   n := length(fVariable);
   poslen := pointer(fUnknownPosLen); // 32-bit array into 16-bit pos,len pairs
-  fSafe.Lock;
+  fSafe.Lock; // fast non-reentrant TOSLightLock
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -5601,7 +5642,7 @@ begin
               wr.AddDirect('/'); // TRestHttpServer may have trimmed it
             wr.AddString(RawUtf8(Context.Url)); // full request = raw Url
             wr.AddDirect(' ');
-            wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
+            wr.AddShorter(_HTTP[hsrHttp10 in Context.Flags]);
           end;
         hlvRequest_Hash:
           wr.AddUHex(reqcrc, #0);
@@ -5612,11 +5653,11 @@ begin
         hlvRequest_Uri:
           wr.AddString(RawUtf8(Context.Url)); // include arguments
         hlvScheme:
-          wr.AddShorter(SCHEME[hsrHttps in Context.Flags]);
+          wr.AddShorter(_SCHEME[hsrHttps in Context.Flags]);
         hlvSent:
           wr.AddShort(KBNoSpace(Context.Sent));
         hlvServer_Protocol:
-           wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
+           wr.AddShorter(_HTTP[hsrHttp10 in Context.Flags]);
         hlvStatus:
           wr.AddU(Context.StatusCode);
         hlvStatus_Text:
@@ -6934,7 +6975,7 @@ var
   last, first: cardinal;
   p: THttpAnalyzerPeriod;
   rd: TFastReader;
-  tmp: array[0..4095] of AnsiChar; // first 4KB should be enough (with metadata)
+  tmp: TBuffer4K; // first 4KB should be enough (with metadata)
   unc: array[0..6143] of AnsiChar; // partially decompressed content
 begin
   RecordZero(@Info, TypeInfo(THttpMetricsHeader));
@@ -7233,7 +7274,7 @@ begin
     n := length(Metrics);
     d := pointer(Metrics);
     repeat
-      DateTimeToFileShort(d^.DateTime, date);
+      DateTimeToFileShortVar(d^.DateTime, date);
       w.AddSpaced(@date[1], _DATELEN[d^.Period], _WIDTH);
       w.AddComma;
       if not NoPeriod then

@@ -16,7 +16,7 @@ At the moment of writing this instruction there was no official release of Spide
 At a later time you whould be able to find official sources of this version at [SpiderMonkey Releases page](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/Releases).
 
 Currently it is possible to download [nightly build from official repository](https://hg.mozilla.org/releases)
- or use source control tools  to retrive sources from any of the Mozilla source control repositories.
+ or use source control tools  to retrieve sources from any of the Mozilla source control repositories.
 The author recommends to use git as a tool to take sources from GitHub.
 Issue the following command in a terminal window to clone GitHub repository:
 
@@ -26,7 +26,7 @@ git clone https://github.com/mozilla/gecko-dev.git
 
 Be prepared for long wait - cloning the repository may take up to half an hour or so depending on build box hardware and the Internet connection speed.
 This retrieves all Mozilla sources. A few different programs can be built using this sources like FireFox or Thunder Bird.
-But there is no way to retrive only part of the sources needed to build Spider Monkey only.
+But there is no way to retrieve only part of the sources needed to build Spider Monkey only.
 Upon finish dive into the root sources directory and checkout branch esr52. Please note - you should _not_ use master branch to build Spider Monkey v52!
 
 ```bash

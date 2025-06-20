@@ -5,7 +5,8 @@
    POSIX API calls for FPC, as used by mormot.core.os.pas
 }
 
-{$ifndef ISDELPHI}
+{$ifdef FPC}
+
 uses
   baseunix,
   unix,
@@ -30,20 +31,20 @@ uses
   termio,
   dl,
   initc; // we statically link the libc for some raw calls
+
+{$ifdef UNICODE}
+  'mORMot assumes no UNICODE on POSIX FPC, i.e. as TFileName = PChar = PUtf8Char'
+{$endif UNICODE}
+
 {$else}
+
+// rough preparation for Delphi compatibility - not finished at all
 uses
   System.IOUtils,
   System.SyncObjs
 ;
-{$endif}
-
-{$ifndef ISDELPHI}
-  {$ifdef UNICODE}
-    'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
-  {$endif UNICODE}
-{$else}
-   {$MESSAGE WARN 'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char - this may not be 100% save for DELPHI!'}
-{$endif}
+  {$MESSAGE WARN 'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char - this may not be 100% save for DELPHI!'}
+{$endif FPC}
 
 
 // define some raw text functions, to avoid linking mormot.core.text
@@ -55,7 +56,7 @@ procedure _fmt(const Fmt: string; const Args: array of const;
 procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
 function _GetNextSpaced(var P: PAnsiChar): RawUtf8; {$ifdef ISDELPHI} overload; {$endif} forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; {$ifdef ISDELPHI} overload; {$endif} forward;
-function PosExtString(Str: PChar): PChar; forward;
+function PosExtString(Str: PChar): PChar; forward;  // to extract extension
 
 {$ifdef ISDELPHI}
 function _GetNextCardinal(var P: PUtf8Char): PtrUInt; inline; overload;
@@ -118,13 +119,14 @@ end;
 { ****************** Unicode, Time, File process }
 
 function SortDynArrayFileName(const A, B): integer;
-begin // case-sensitive extension, then filename comparison on POSIX
+begin // file extension, then file name case-sensitive comparison on POSIX
   result := 0;
-  if @A = @B then
+  if pointer(A) = pointer(B) then
     exit;
-  result := StrComp(PosExtString(pointer(A)), PosExtString(pointer(B)));
+  result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(
+              PosExtString(pointer(A)), PosExtString(pointer(B)));
   if result = 0 then
-    result := StrComp(pointer(A), pointer(B)); // fast case-sensitive order
+    result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(pointer(A), pointer(B));
 end;
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
@@ -926,6 +928,9 @@ const
   CLOCK_MONOTONIC_COARSE = CLOCK_MONOTONIC;
   {$endif OSFREEBSD}
 
+// most BSD systems have VDSO-like implementation via co-evolution of the kernel
+// and C runtime - https://www.freebsd.org/status/report-2021-10-2021-12/vdso/
+
 function clock_gettime(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_gettime';
 
@@ -1060,12 +1065,10 @@ begin
   result := UnixMSTimeUtc;
 end;
 
-{$undef OSPTHREADS}
 {$undef HAS_PTHREADSETNAMENP}
 {$undef HAS_PTHREADSETAFFINITY}
 
 {$ifdef OSPTHREADSLIB}
-  {$define OSPTHREADS}
 var
   {$ifdef OSLINUX}
   // pthread_setname_np for Linux https://stackoverflow.com/a/7989973/458259
@@ -1083,7 +1086,6 @@ var
 
 {$ifdef OSPTHREADSSTATIC}
   // note: pthread_setname_np() has no consistent API across POSIX systems
-  {$define OSPTHREADS}
 
 {$ifdef OSDARWIN}
 // we specify link to clib='c' as in rtl/darwin/pthread.inc
@@ -1120,7 +1122,7 @@ begin
   {$endif OSLINUX}
 end;
 
-{$ifdef OSPTHREADS}
+{$ifdef HAS_OSPTHREADS}
 
 { TOSLightLock }
 
@@ -1185,7 +1187,7 @@ begin
   LeaveCriticalSection(fMutex);
 end;
 
-{$endif OSPTHREADS}
+{$endif HAS_OSPTHREADS}
 
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
@@ -1297,12 +1299,6 @@ end;
 
 
 {$ifndef NOEXCEPTIONINTERCEPT}
-
-function TSynLogExceptionContext.AdditionalInfo(
-  out ExceptionNames: TPShortStringDynArray): cardinal;
-begin
-  result := 0; // Windows/CLR specific by now
-end;
 
 var
   _RawLogException: TOnRawLogException;
@@ -1862,6 +1858,7 @@ end;
 
 procedure TSynEvent.ResetEvent;
 begin
+  fNotified := false;
   {$ifdef HASEVENTFD}
   if fFD = 0 then // no need to reset the eventfd() handle
   {$endif HASEVENTFD}
@@ -1870,6 +1867,7 @@ end;
 
 procedure TSynEvent.SetEvent;
 begin
+  fNotified := true;
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
     LinuxEventFDWrite(fFD, 1)
@@ -1878,7 +1876,7 @@ begin
     RTLEventSetEvent(fHandle);
 end;
 
-procedure TSynEvent.WaitFor(TimeoutMS: integer);
+function TSynEvent.WaitFor(TimeoutMS: integer): boolean;
 begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
@@ -1889,9 +1887,10 @@ begin
   else
   {$endif HASEVENTFD}
     RTLEventWaitFor(fHandle, TimeoutMS);
+  result := fNotified;
 end;
 
-procedure TSynEvent.WaitForEver;
+function TSynEvent.WaitForEver: boolean;
 begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
@@ -1899,6 +1898,7 @@ begin
   else
   {$endif HASEVENTFD}
     RTLEventWaitFor(fHandle);
+  result := fNotified;
 end;
 
 function TSynEvent.IsEventFD: boolean;
@@ -2085,10 +2085,10 @@ begin
   end;
 end;
 
-{$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
+  {$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
   if (KernelRevision < $031100) or // introduced in Kernel 3.17
      __LinuxGetRandomFailed then
     exit;
@@ -2096,13 +2096,8 @@ begin
     result := true // "man getrandom" states to read up to 256 bytes in one call
   else
     __LinuxGetRandomFailed := true; // won't retry on syscall failure
+  {$endif HASGETRANDOM}
 end;
-{$else}
-function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
-begin
-  result := false;
-end;
-{$endif HASGETRANDOM}
 
 {$ifdef HASEVENTFD} // validated on Linux i386, x86_64 and aarch64
 const
@@ -2188,7 +2183,7 @@ end;
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
 const
-  TERM_CTRL: string[8] = '04261537';
+  TERM_CTRL: PUtf8Char = '04261537';
 begin
   s[0] := #0;
   if (ord(Color) = TextAttr) or
@@ -2198,10 +2193,11 @@ begin
   s := #27'[0;3#m';
   if ord(Color) >= 8 then
     s[3] := '1';
-  s[6] := TERM_CTRL[(ord(Color) and 7) + 1];
+  s[6] := TERM_CTRL[(ord(Color) and 7)];
 end;
 
 procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
 var
   c: TShort8;
 begin
@@ -2439,6 +2435,13 @@ begin
     result := true
   else
     folder := '';
+end;
+
+function IsExpandedPath(const FileName: TFileName): boolean;
+begin
+  result := (FileName = '') or
+            ((FileName[1] = '/') and
+             (Pos('..', FileName) = 0)); // seems already expanded
 end;
 
 procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
@@ -3149,6 +3152,7 @@ begin
 end;
 {$endif ISDELPHI}
 
+{$ifdef CPUARM3264}
 procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
 var
   v: integer;
@@ -3157,6 +3161,7 @@ begin
   if v <> 0 then
     AddInteger(result, v, {nodup=}true);
 end;
+{$endif CPUARM3264}
 
 function ParseLine(P: PUtf8Char): PUtf8Char;
 begin
@@ -3662,7 +3667,7 @@ end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
 procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
 begin
-  FillSystemRandom(@e, SizeOf(e), {allowblocking=}false);
+  FillSystemRandom(@e, SizeOf(e), {allowblocking=}false); // 256-bit
 end;
 
 const
@@ -4539,7 +4544,7 @@ var
   n, l: TSsize;
   wait: cardinal;
   endtix: Int64;
-  tmp: array[word] of byte; // 64KB stack buffer
+  tmp: TBuffer64K;
 
   function RedirectOutput(flush: boolean; var redir: RawByteString): boolean;
   var

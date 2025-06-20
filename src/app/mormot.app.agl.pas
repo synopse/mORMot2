@@ -706,7 +706,7 @@ begin
   end;
   if fService <> nil then
     fService.fRunner := nil; // notify ended
-  log.NotifyThreadEnded; // as needed by TSynLog
+  TSynLog.NotifyThreadEnded; // as needed by TSynLog
 end;
 
 procedure TSynAngelizeRunner.PerformRotation;
@@ -1656,7 +1656,8 @@ function TSynAngelize.DoHttpGet(const aUri: RawUtf8): integer;
 begin
   result := 0;
   try
-    HttpGet(aUri, nil, false, @result, fSas.HttpTimeoutMS, {forcesocket:}true);
+    HttpGet(aUri, nil, false, @result, fSas.HttpTimeoutMS,
+      {forcesocket:}true, {ignoretlserror:}true);
   except
     result := -500; // e.g. on TCP or TLS connection error
   end;

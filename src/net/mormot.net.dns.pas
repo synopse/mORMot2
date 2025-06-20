@@ -32,7 +32,7 @@ uses
 
 
 type
-  /// Dns Resource Record (RR) Types
+  /// most known Dns Resource Record (RR) Types
   // - from http://www.iana.org/assignments/dns-parameters
   // - main values are e.g. drrA for a host address, drrNS for an authoritative
   // name server, or drrCNAME for the alias canonical name
@@ -239,17 +239,19 @@ var
 {$A+}
 
 type
-  /// one DNS decoded record as stored by DnsQuery() in TDnsResult
+  /// one decoded DNS record as stored by DnsQuery() in TDnsResult
   TDnsAnswer = record
     /// the Name of this record
     QName: RawUtf8;
-    /// the type of this record
+    /// the known type of this record
     QType: TDnsResourceRecord;
     /// after how many seconds this record information is deprecated
     TTL: cardinal;
     /// 0-based position of the raw binary of the record content
     // - pointing into TDnsResult.RawAnswer binary buffer
     Position: integer;
+    /// encoded length of the raw binary of the record content
+    Len: integer;
     /// main text information decoded from Data binary
     // - only best-known DNS resource record QType are recognized, i.e.
     // A AAAA CNAME TXT NS PTR MX SOA SRV as decoded by DnsParseData()
@@ -370,7 +372,7 @@ const
 
   DNS_RESP_SUCCESS = $00;
 
-  DNS_RELATIVE = $c0; // two high bits set = pointer within the response message
+  DNS_RELATIVE = $c0; // two high bits set = offset within the response message
 
 
 { TDnsHeader }
@@ -448,8 +450,8 @@ var
   len: byte;
   tmp: ShortString;
 begin
-  nextpos := 0;
   result := 0; // indicates error
+  nextpos := 0;
   p := pointer(Answer);
   max := length(Answer);
   tmp[0] := #0;
@@ -462,14 +464,15 @@ begin
       break;
     while (len and DNS_RELATIVE) = DNS_RELATIVE do
     begin
+      // see https://www.rfc-editor.org/rfc/rfc1035.html#section-4.1.4
       if nextpos = 0 then
-        nextpos := Pos + 1; // if compressed, return end of 16-bit offset
+        nextpos := Pos + 1; // if compressed, return end of offset
       if Pos >= max then
         exit;
-      Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos];
+      Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos]; // 14-bit offset
       if Pos >= max then
         exit;
-      len := p[Pos];
+      len := p[Pos]; // 8-bit length from offset
       inc(Pos);
     end;
     if len = 0 then
@@ -508,36 +511,42 @@ var
   s1, s2: RawUtf8;
 begin
   p := @PByteArray(Answer)[Pos];
-  case RR of
+  case RR of // see https://www.rfc-editor.org/rfc/rfc1035#section-3.3
     drrA:
-      // IPv4 binary address
+      // 32-bit IPv4 binary address
       if Len = 4 then
         IP4Text(p, Text);
     drrAAAA:
-      // IPv6 binary address
+      // 128-bit IPv6 binary address
       if Len = 16 then
         IP6Text(p, Text);
     drrCNAME,
+    drrMB,
+    drrMD,
+    drrMG,
     drrTXT,
     drrNS,
     drrPTR:
       // single text Value
       DnsParseString(Answer, Pos, Text);
     drrMX:
-      // Priority / Value
+      // Priority:W / Value
       if Len > 2 then
         DnsParseString(Answer, Pos + 2, Text);
+    drrHINFO,
     drrSOA:
+      // several values, first two as TEXT
       begin
-        // MName / RName / Serial / Refresh / Retry / Expire / TTL
+        // HINFO: CPU / OS
+        // SOA: MName / RName / Serial:I / Refresh:I / Retry:I / Expire:I / TTL:I
         Pos := DnsParseString(Answer, Pos, s1);
         if (Pos <> 0) and
            (DnsParseString(Answer, Pos, s2) <> 0) then
           Text := s1 + ' ' + s2;
       end;
-    drrSRV:
-      // Priority / Weight / Port / QName
+    drrSRV: // see https://www.rfc-editor.org/rfc/rfc2782
       if Len > 6 then
+        // Priority:W / Weight:W / Port:W / QName
         if DnsParseString(Answer, Pos + 6, Text) <> 0 then
           Text := Text + ':' + UInt32ToUtf8(bswap16(PWordArray(p)[2])); // :port
   end;
@@ -707,6 +716,7 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
   var Dest: TDnsAnswer; QClass: cardinal): boolean;
 var
   len: PtrInt;
+  qc: cardinal;
   p: PByteArray;
 begin
   result := false;
@@ -716,13 +726,16 @@ begin
      (Pos + 10 > length(Answer)) then
     exit;
   word(Dest.QType) := DnsParseWord(p, Pos);
-  if DnsParseWord(p, Pos) <> QClass then
+  qc := DnsParseWord(p, Pos);
+  if (qc <> QClass) and  // https://www.rfc-editor.org/rfc/rfc6891#section-6.1.2
+     (Dest.QType <> drrOPT) then // OPT stores the UDP payload size here :(
     exit;
-  Dest.TTL := DnsParseCardinal(p, Pos);
+  Dest.TTL := DnsParseCardinal(p, Pos); // RCODE and flags for drrOPT
   len := DnsParseWord(p, Pos);
   if Pos + len > length(Answer) then
     exit;
   Dest.Position := Pos;
+  Dest.Len := len;
   DnsParseData(Dest.QType, Answer, Pos, len, Dest.Text);
   inc(Pos, len);
   result := true;
@@ -796,7 +809,7 @@ begin
   else if NetIsIP4(pointer(HostName)) then
     Ip := HostName
   else
-    result := false;
+    result := false; // and Ip has been set to ''
 end;
 
 function DnsLookup(const HostName, NameServers: RawUtf8; TimeoutMS: integer): RawUtf8;
@@ -836,7 +849,7 @@ var
   i: PtrInt;
 begin
   result := '';
-  cardinal(b) := 0;
+  PCardinal(@b)^ := 0;
   if NetIsIP4(pointer(IP4), @b) and
      DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa', [b[3], b[2], b[1], b[0]]),
        res, drrPTR, NameServers, TimeoutMS) then
@@ -889,12 +902,14 @@ function _NewSocketIP4Lookup(const HostName: RawUtf8; out IP4: cardinal): boolea
 var
   ip: RawUtf8;
 begin
+  ip4 := 0; // clearly identify failure
   ip := DnsLookup(HostName, NewSocketIP4LookupServer);
   result := NetIsIP4(pointer(ip), @ip4);
 end;
 
 
 initialization
+  assert(ord(drrOPT) = 41);
   assert(ord(drrHTTPS) = 65);
   assert(ord(drrSPF) = 99);
   assert(ord(drrEUI64) = 109);

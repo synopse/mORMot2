@@ -2639,7 +2639,7 @@ function TRestClientUri.CallBackGet(const aMethodName: RawUtf8;
   aTable: TOrmClass; aID: TID; aResponseHead: PRawUtf8): integer;
 var
   url, header: RawUtf8;
-  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
+  {%H-}log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   if self = nil then
     result := HTTP_CLIENTERROR

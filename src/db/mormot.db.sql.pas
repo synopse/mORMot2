@@ -1206,7 +1206,7 @@ type
   /// defines a callback signature able to handle multiple INSERT
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
   // implementing INSERT with multiple VALUES (like MySQL, PostgreSQL, NexusDB,
-  // MSSQL or SQlite3), as implemented by
+  // MSSQL or SQLite3), as implemented by
   // TSqlDBConnectionProperties.MultipleValuesInsert() :
   // $ INSERT INTO TableName(FieldNames[0],FieldNames[1]) VALUES
   // $   (FieldValues[0][0],FieldValues[1][0]),
@@ -1388,7 +1388,7 @@ type
     function ExceptionIsAboutConnection(aClass: ExceptClass;
       const aMessage: RawUtf8): boolean; virtual;
     /// generic method able to implement OnBatchInsert() with parameters
-    // - for MySQL, PostgreSQL, MSSQL2008, NexusDB or SQlite3, will execute
+    // - for MySQL, PostgreSQL, MSSQL2008, NexusDB or SQLite3, will execute
     // (with parameters) the extended standard syntax:
     // $ INSERT INTO TableName(FieldNames[0],FieldNames[1]) VALUES
     // $   (FieldValues[0][0],FieldValues[1][0]),
@@ -1791,7 +1791,7 @@ type
       read fOnStatementInfo write fOnStatementInfo;
     /// you can define a callback method able to handle multiple INSERT
     // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
-    // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
+    // PostgreSQL or SQLite3), as defined by MultipleValuesInsert() callback
     property OnBatchInsert: TOnBatchInsert
       read fOnBatchInsert write fOnBatchInsert;
 
@@ -5318,7 +5318,7 @@ var
                   else
                     W.AddString(DB_FIELDS[dFirebird, FieldTypes[f]]);
                   end;
-                W.AddShorter('=?,');
+                W.AddDirect('=', '?', ',');
               end;
               W.CancelLastComma;
               W.AddDirect(#10, ',');
@@ -5346,9 +5346,9 @@ var
                 W.AddComma;
               end;
               W.CancelLastComma;
-              W.AddShorter(');'#10);
+              W.AddDirect(')', ';', #10);
             end;
-            W.AddShorter('end');
+            W.AddDirect('e', 'n', 'd');
             if W.TextLength > 32700 then
               ESqlDBException.RaiseUtf8(
                 '%.MultipleValuesInsert: Firebird Execute Block length=%',
@@ -5381,7 +5381,7 @@ var
           end;
       else
         begin
-          //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
+          //  e.g. NexusDB/SQLite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
           // INSERT .. VALUES (..),(..),(..),..
           EncodeInsertPrefix(W, BatchOptions, Props.fDbms);
           W.AddString(TableName);
@@ -5580,10 +5580,10 @@ begin
           W.AddComma;
         end;
         W.CancelLastComma;
-        W.AddShorter(');'#10);
+        W.AddDirect(')', ';', #10);
         inc(r);
       until r = RowCount;
-      W.AddShorter('end');
+      W.AddDirect('e', 'n', 'd');
       with Props.NewThreadSafeStatement do
         try
           Execute(W.Text, false);
@@ -6508,7 +6508,7 @@ begin
   try
     // add optional/deprecated/Windows-centric UTF-8 Byte Order Mark
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf);
+      W.AddDirect(#$ef, #$bb, #$bf);
     // add CSV header
     for F := 0 to FMax do
     begin
@@ -6942,7 +6942,7 @@ end;
 
 function TSqlDBStatement.DoSqlLogEnd(Msg: PShortString): Int64;
 var
-  tmp: TShort16;
+  tmp, elapsed: TShort16;
 begin
   fSqlLogTimer.Pause;
   tmp[0] := #0;
@@ -6951,15 +6951,19 @@ begin
     if Msg = nil then
     begin
       if not fExpectResults then
-        FormatShort16(' wr=%', [UpdateCount], tmp);
+      begin
+        AppendShort(' wr=', tmp);
+        AppendShortCardinal(UpdateCount, tmp);
+      end;
       Msg := @tmp;
     end;
+    MicroSecToString(fSqlLogTimer.StopInMicroSec, elapsed);
     if fSqlLogLevel = sllSQL then
       fSqlLogLog.Log(sllSQL, 'Execute t=%% q=%',
-        [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
+        [elapsed, Msg^, fSqlWithInlinedParams], self)
     else // from TSqlDBPostgresStatement.GetPipelineResult
       fSqlLogLog.Log(fSqlLogLevel, 'Return t=%%',
-        [fSqlLogTimer.Time, Msg^], self);
+        [elapsed, Msg^], self);
   end
   else
   begin
@@ -7049,12 +7053,12 @@ var
   P, B: PUtf8Char;
   num: integer;
   maxSize, maxAllowed: cardinal;
-  W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  W: TJsonWriter; // at least TJsonWriter since W.AddVariant() is needed
+  tmp: TTextWriterStackBuffer; // maxsize is typically 2048 so all on stack
 begin
   fSqlWithInlinedParams := fSql;
   if fConnection = nil then
-    maxSize := 0
+    maxSize := 2048 // LoggedSqlMaxSize default seems fair enough
   else
     maxSize := fConnection.fProperties.fLoggedSqlMaxSize;
   if (integer(maxSize) < 0) or
@@ -7070,7 +7074,7 @@ begin
       P := GotoNextParam(P);
       if W = nil then
         if P^ = #0 then
-          exit
+          exit // no parameter
         else
           W := TJsonWriter.CreateOwnedStream(tmp);
       W.AddNoJsonEscape(B, P - B);
@@ -7094,22 +7098,6 @@ end;
 
 procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TJsonWriter;
   MaxCharCount: integer);
-
-  procedure AppendUnicode(W: PWideChar; WLen: integer);
-  var
-    tmp: TSynTempBuffer;
-  begin
-    if MaxCharCount < WLen then
-      WLen := MaxCharCount;
-    tmp.Init(WLen);
-    try
-      RawUnicodeToUtf8(tmp.buf, tmp.Len, W, WLen, [ccfNoTrailingZero]);
-      Dest.AddQuotedStr(tmp.buf, tmp.Len, '''', MaxCharCount);
-    finally
-      tmp.Done;
-    end;
-  end;
-
 var
   v: variant;
   ft: TSqlDBFieldType;
@@ -7124,10 +7112,12 @@ begin
           Dest.AddQuotedStr(
             VString, length(RawByteString(VString)), '''', MaxCharCount);
       varOleStr:
-        AppendUnicode(VString, length(WideString(VString)));
+        Dest.AddQuotedStrW(
+          VString, length(WideString(VString)), '''', MaxCharCount);
       {$ifdef HASVARUSTRING}
       varUString:
-        AppendUnicode(VString, length(UnicodeString(VString)));
+        Dest.AddQuotedStrW(
+          VString, length(UnicodeString(VString)), '''', MaxCharCount);
       {$endif HASVARUSTRING}
     else
       if (ft = ftDate) and
@@ -8193,7 +8183,7 @@ begin
       begin
         Dest.Add('[');
         Dest.AddString(VArray[0]); // first item is enough in the logs
-        Dest.AddShorter('...]');
+        Dest.AddDirect('.', '.', ']');
       end;
 end;
 

@@ -719,7 +719,7 @@ type
   // statement, with = < <= <> != >= > operators, and IS / IS NULL / ID IN (...)
   // - if used within a TOrmVirtualTableJson, you'll be able to handle any kind of
   // SQL statement (even joined SELECT or such) with this memory-stored database
-  // via the SQlite3 virtual tables engine
+  // via the SQLite3 virtual tables engine
   // - data can be stored and retrieved from a file (JSON format is used by
   // default, if BinaryFile parameter is left to false; a proprietary compressed
   // binary format can be used instead) if a file name is supplied at creating
@@ -1455,7 +1455,7 @@ type
   /// abstract REST storage with several database instances
   // - e.g. to maintain a per-User or per-Group (company) storage
   // - inherited class should override the NewStore virtual method, e.g.
-  // TRestStorageMultiDB as defined in mormot.orm.sqlite3.pas for SQlite3 storage
+  // TRestStorageMultiDB as defined in mormot.orm.sqlite3.pas for SQLite3 storage
   // - your custom class should override NewModel to provide the proper data model
   TRestStorageMulti = class(TObjectRWLightLock)
   protected

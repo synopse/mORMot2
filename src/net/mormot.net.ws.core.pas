@@ -183,7 +183,7 @@ type
     /// milliseconds delay between sending pending frames
     // - allow to gather output frames in ProcessLoopStepSend
     // - GetTickCount64 resolution is around 16ms on Windows and 4ms on Linux,
-    // so default 10 ms value seems fine for a cross-platform similar behavior
+    // so default 10 (ms) value seems fine for a cross-platform similar behavior
     // (resulting in a <16ms period on Windows, and <12ms period on Linux)
     SendDelay: cardinal;
     /// will close the connection after a given number of invalid Heartbeat sent
@@ -767,7 +767,7 @@ type
     fProcessCount: integer;
     fInvalidPingSendCount: cardinal;
     fSettings: PWebSocketProcessSettings;
-    fSafeIn, fSafeOut: TRTLCriticalSection;
+    fSafeIn, fSafeOut: TOSLock;
     fLastSocketTicks: Int64;
     fProcessName: RawUtf8;
     procedure MarkAsInvalid;
@@ -2060,7 +2060,7 @@ begin
       WR.AddDirect('"', '"')
     else if (ContentType = '') or
             IsContentTypeJsonU(ContentType) then
-      WR.AddNoJsonEscape(pointer(Content), length(Content))
+      WR.AddString(Content)
     else if IsValidUtf8NotVoid(Content) then
       WR.AddJsonString(Content)
     else
@@ -2211,8 +2211,8 @@ begin
        (logTextFrameContent in Owner.Settings.LogDetails) then
       with WebSocketLog.Family do
         if sllTrace in Level then
-          Add.Log(sllTrace, 'SendFrames=% len=% %',
-            [FramesCount * ord(result), len, EscapeToShort(tmp.buf, len)], self);
+          Add.LogEscape(sllTrace, 'SendFrames=%',
+            [FramesCount * ord(result)], tmp.buf, len, self);
   except
     result := false;
   end;
@@ -2919,8 +2919,8 @@ begin
   fSettings := aSettings;
   fIncoming := TWebSocketFrameList.Create(30 * 60);
   fOutgoing := TWebSocketFrameList.Create(0);
-  InitializeCriticalSection(fSafeIn);
-  InitializeCriticalSection(fSafeOut);
+  fSafeIn.Init;
+  fSafeOut.Init;
   fProtocol.AfterUpgrade(self); // e.g. for TWebSocketSocketIOClientProtocol
 end;
 
@@ -2931,13 +2931,13 @@ var
 begin
   if self = nil then
     exit;
-  EnterCriticalSection(fSafeOut);
+  fSafeOut.Lock;
   try
     if fConnectionCloseWasSent then
       exit;
     fConnectionCloseWasSent := true;
   finally
-    LeaveCriticalSection(fSafeOut);
+    fSafeOut.UnLock;
   end;
   LockedInc32(@fProcessCount);
   try
@@ -2995,11 +2995,11 @@ begin
       log.Log(sllDebug,
         'Destroy: waited fProcessCount=%', [fProcessCount], self);
   end;
-  fProtocol.Free;
+  FreeAndNil(fProtocol);
   fOutgoing.Free;
   fIncoming.Free;
-  DeleteCriticalSection(fSafeIn); // to be done lately to avoid GPF
-  DeleteCriticalSection(fSafeOut);
+  fSafeIn.Done; // to be done lately to avoid GPF
+  fSafeOut.Done;
   inherited Destroy;
 end;
 
@@ -3040,9 +3040,10 @@ begin
     frame.opcode := focConnectionClose;
     frame.content := [];
     frame.tix := 0;
-    if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
-       (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
-      fProtocol.ProcessIncomingFrame(self, frame, '');
+    if Assigned(fProtocol) then
+      if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+         (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
+        fProtocol.ProcessIncomingFrame(self, frame, '');
     if Assigned(fSettings.OnClientDisconnected) then
     begin
       WebSocketLog.Add.Log(sllTrace, 'ProcessStop: OnClientDisconnected', self);
@@ -3057,9 +3058,9 @@ end;
 procedure TWebSocketProcess.MarkAsInvalid;
 begin
   inc(fInvalidPingSendCount);
-  EnterCriticalSection(fSafeOut);
+  fSafeOut.Lock;
   fConnectionCloseWasSent := true;
-  LeaveCriticalSection(fSafeOut);
+  fSafeOut.UnLock;
 end;
 
 procedure TWebSocketProcess.SetLastPingTicks;
@@ -3089,9 +3090,10 @@ begin
       ; // nothing to do
     focText,
     focBinary:
-      if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
-         (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
-        fProtocol.ProcessIncomingFrame(self, request, '');
+      if Assigned(fProtocol) then
+        if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+           (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
+          fProtocol.ProcessIncomingFrame(self, request, '');
     focConnectionClose:
       begin
         if (fState = wpsRun) and
@@ -3197,6 +3199,7 @@ begin
       SetLastPingTicks;
       fState := wpsRun;
       while (fOwnerThread = nil) or
+            (fProtocol = nil) or
             not fOwnerThread.Terminated do
         if ProcessLoopStepReceive({nonblockingflag=}nil) and
            ProcessLoopStepSend then
@@ -3413,7 +3416,7 @@ var
   f: TWebProcessInFrame;
 begin
   f.Init(self, @Frame);
-  EnterCriticalSection(fSafeIn);
+  fSafeIn.Lock;
   try
     if Blocking then
       repeat
@@ -3424,7 +3427,7 @@ begin
       f.Step(ErrorWithoutException);
     result := f.state = pfsDone;
   finally
-    LeaveCriticalSection(fSafeIn);
+    fSafeIn.UnLock;
   end;
 end;
 
@@ -3432,7 +3435,7 @@ function TWebSocketProcess.SendFrame(var Frame: TWebSocketFrame): boolean;
 var
   tmp: TSynTempBuffer;
 begin
-  EnterCriticalSection(fSafeOut);
+  fSafeOut.Lock;
   try
     Log(Frame, 'SendFrame', sllTrace, true);
     try
@@ -3455,7 +3458,7 @@ begin
     else if not fNoLastSocketTicks then
       SetLastPingTicks;
   finally
-    LeaveCriticalSection(fSafeOut);
+    fSafeOut.UnLock;
   end;
 end;
 

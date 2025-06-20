@@ -430,13 +430,13 @@ begin
     fLog.Add.Log(sllTrace, '% = % %',
        [fUri, fStatus, KBNoSpace(length(fBody))], self);
   // the server includes a Replay-Nonce header field in every response
-  fNonce := FindNameValue(pointer(fHeaders), 'REPLAY-NONCE: ');
+  FindNameValue(fHeaders, 'REPLAY-NONCE: ', fNonce);
   // validate the response
   if not (fStatus in [HTTP_SUCCESS, HTTP_CREATED, HTTP_NOCONTENT]) then
   begin
     err := JsonDecode(pointer(fBody), 'detail', nil, {handlejsonobjarr=} false);
     if err = '' then
-      StatusCodeToReason(fStatus, err);
+      err := StatusCodeToText(fStatus)^;
     EJwsHttp.RaiseUtf8('Error % [%] while querying %', [fStatus, err, fUri]);
   end;
   result := fBody;
@@ -492,7 +492,7 @@ begin
   Request(aUrl, 'POST', '', data, 'application/jose+json');
   result := GetNonceAndBody;
   if fKid = '' then
-    fKid := FindNameValue(pointer(fHeaders), 'LOCATION: ');
+    FindNameValue(fHeaders, 'LOCATION: ', fKid);
 end;
 
 function TJwsHttpClient.Post(const aUrl: RawUtf8;

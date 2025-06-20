@@ -1,4 +1,4 @@
-/// Database Framework Direct SQlite3 Connnection
+/// Database Framework Direct SQLite3 Connnection
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.db.sql.sqlite3;
@@ -6,7 +6,7 @@ unit mormot.db.sql.sqlite3;
 {
   *****************************************************************************
 
-   Direct SQlite3 Client Access using our mormot.db.raw.sqlite3 Wrapper
+   Direct SQLite3 Client Access using our mormot.db.raw.sqlite3 Wrapper
     -  TSqlDBSQLite3Connection* and TSqlDBSQlite3Statement Classes
 
   *****************************************************************************
@@ -69,7 +69,7 @@ type
     // multi-thread access)
     // - the caller is responsible of freeing this instance
     function NewConnection: TSqlDBConnection; override;
-    /// direct access to the main SQlite3 DB instance
+    /// direct access to the main SQLite3 DB instance
     // - can be used to tune directly the database properties
     property MainSQLite3DB: TSqlDataBase
       read GetMainDB;
@@ -118,7 +118,7 @@ type
     // - assigned to not nil after successful connection
     property DB: TSqlDataBase
       read fDB;
-    /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
+    /// query or change the SQLite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
     // - default smFull is very slow, but achieve 100% ACID behavior
     // - smNormal is faster, and safe until a catastrophic hardware failure occurs
@@ -126,7 +126,7 @@ type
     // but database file may be corrupted in case of failure at the wrong time
     property Synchronous: TSqlSynchronousMode
       read GetSynchronous write SetSynchronous;
-    /// query or change the SQlite3 file-based locking mode, i.e. the
+    /// query or change the SQLite3 file-based locking mode, i.e. the
     // way it locks the file
     // - default lmNormal is ACID and safe
     // - lmExclusive gives better performance in case of a number of write

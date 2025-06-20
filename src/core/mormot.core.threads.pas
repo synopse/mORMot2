@@ -1061,12 +1061,14 @@ type
   protected
     fLogClass: TSynLogClass;
     fLog: TSynLog; // the logging instance within the DoExecute thread context
+    fExecuteMessage: RawUtf8;
     fProcessing: boolean;
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
     procedure DoTerminate; override; // overriden for fLog.NotifyThreadEnded
   public
     /// initialize the server instance, in non suspended state
+    // - this class won't set FreeAndTerminate := nil at this method level
     constructor Create(CreateSuspended: boolean;
       const OnStart, OnStop: TOnNotifyThread; Logger: TSynLogClass;
       const ProcName: RawUtf8); reintroduce; virtual;
@@ -1084,6 +1086,9 @@ type
     /// the name of this thread, as supplied to SetCurrentThreadName()
     property ProcessName: RawUtf8
       read fProcessName;
+    /// some info at shutdown about any exception raised during DoExecute process
+    property ExecuteMessage: RawUtf8
+      read fExecuteMessage;
   end;
 
   TLoggedWorker = class;
@@ -1104,6 +1109,8 @@ type
   // - a dedicated thread will be initialized and launched for the process, so
   // OnExecute() should better take some time to be worth the thread creation
   // - see TLoggedWorker for a global mechanism to handle a pool of this class
+  // - note: set FreeOnTerminate := true, so never call Free/Destroy to finalize,
+  // but call Terminate with proper cross-dereference in any owner thread
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fOwner: TLoggedWorker;
@@ -3292,6 +3299,7 @@ procedure TLoggedThread.Execute;
 var
   ilog: ISynLog;
 begin
+  fProcessing := true;
   fLog := nil;
   try
     SetCurrentThreadName(fProcessName);
@@ -3302,13 +3310,14 @@ begin
       if Assigned(ilog) then
         fLog := ilog.Instance;
     end;
-    fProcessing := true;
     DoExecute;
   except
     // ignore any exception during processing method
     on E: Exception do
       if fLog <> nil then
       try
+        // any exception would break and release the thread
+        FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
         fLog.Log(sllDebug, 'Execute aborted by %', [E], self);
       except
       end;

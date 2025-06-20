@@ -572,10 +572,10 @@ type
     rmMatchExact,
     rmMatchWithCaseChange);
 
-  /// the kind of SQlite3 (virtual) table
+  /// the kind of SQLite3 (virtual) table
   // - TOrmFts3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
   // TOrmRTree/TOrmRTreeInteger with rRTree/rRTreeInteger, any native
-  // SQlite3 table as vSQLite3, and a TOrmVirtualTable*ID as
+  // SQLite3 table as vSQLite3, and a TOrmVirtualTable*ID as
   // rCustomForcedID/rCustomAutoID
   // - a plain TOrm class can be defined as rCustomForcedID (e.g. for
   // TOrmMany) after registration for an external DB via a call to
@@ -1007,7 +1007,7 @@ type
     // - setter method (write Set*) is called if available
     // - if no setter exists (no write declaration), the getted field address is used
     // - handle UTF-8 SQL to Delphi values conversion
-    // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
+    // - expect BLOB fields encoded as SQLite3 BLOB literals ("x'01234'" e.g.)
     // or Base64 encoded stream for JSON ("\uFFF0base64encodedbinary") - i.e.
     // both format supported by BlobToRawBlob() function
     // - handle TPersistent, TCollection, TRawUtf8List or TStrings with JsonToObject
@@ -1023,7 +1023,7 @@ type
     /// convert the property value into an UTF-8 encoded text
     // - if ToSql is true, result is on SQL form (false->'0' e.g.)
     // - if ToSql is false, result is on JSON form (false->'false' e.g.)
-    // - BLOB field returns SQlite3 BLOB literals ("x'01234'" e.g.) if ToSql is
+    // - BLOB field returns SQLite3 BLOB literals ("x'01234'" e.g.) if ToSql is
     // true, or Base64 encoded stream for JSON ("\uFFF0base64encodedbinary")
     // - getter method (read Get*) is called if available
     // - handle Delphi values into UTF-8 SQL conversion
@@ -1068,14 +1068,14 @@ type
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // OrmFieldType type
-    // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
+    // - BLOB field returns SQLite3 BLOB textual literals ("x'01234'" e.g.)
     // - dynamic array field is returned as a variant array
     procedure GetVariant(Instance: TObject; var Dest: Variant); virtual;
     /// set the property value from a Variant value
     // - dynamic array field must be set from a variant array
     // - will set the Variant type to the best matching kind according to the
     // OrmFieldType type
-    // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
+    // - expect BLOB fields encoded as SQLite3 BLOB literals ("x'01234'" e.g.)
     procedure SetVariant(Instance: TObject; const Source: Variant); virtual;
     /// compare the content of the property of two objects
     // - not all kind of properties are handled: only main types (like GetHash)
@@ -1156,7 +1156,7 @@ type
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // OrmFieldType type
-    // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
+    // - BLOB field returns SQLite3 BLOB textual literals ("x'01234'" e.g.)
     // - dynamic array field is returned as a variant array
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     /// retrieve the property field offset from RTTI
@@ -3064,7 +3064,7 @@ type
     //  adding the specified field
     // - returns something like 'ALTER TABLE tablename ADD COLUMN coldef UNIQUE'
     function SqlAddField(FieldIndex: integer): RawUtf8;
-    /// set a custom SQlite3 text column collation for a specified field
+    /// set a custom SQLite3 text column collation for a specified field
     // - can be used e.g. to override the default COLLATE SYSTEMNOCASE of RawUtf8
     // - collations defined within our mormot.db.raw.sqlite3 unit are the SQLite3
     // standard BINARY, NOCASE, RTRIM and our custom SYSTEMNOCASE, UNICODENOCASE,
@@ -3074,10 +3074,10 @@ type
     // so that it will be common to all database models, for both client and server
     function SetCustomCollation(FieldIndex: integer;
       const aCollationName: RawUtf8): boolean; overload;
-    /// set a custom SQlite3 text column collation for a specified field
+    /// set a custom SQLite3 text column collation for a specified field
     // - overloaded method which expects the field to be named
     function SetCustomCollation(const aFieldName, aCollationName: RawUtf8): boolean; overload;
-    /// set a custom SQlite3 text column collation for a given field type
+    /// set a custom SQLite3 text column collation for a given field type
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
     // or the default COLLATE ISO8601 of TDateTime, and let the generated SQLite3
     // file be available outside the scope of mORMot's SQLite3 engine
@@ -3463,7 +3463,7 @@ begin
             for f := 0 to Decoder.FieldCount - 1 do
             begin
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddShorter('=v.');
+              W.AddDirect('=', 'v', '.');
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
@@ -3473,7 +3473,7 @@ begin
             begin
               W.AddShort(' unnest(?::');
               W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
-              W.AddShorter('[]),');
+              W.AddDirect('[', ']', ')', ',');
             end;
             W.AddShort(' unnest(?::int8[]) order by '); // last param is ID
             W.AddU(Decoder.FieldCount + 1); // order by ID to mimimize locks wait
@@ -3486,7 +3486,7 @@ begin
             W.AddString(UpdateIDFieldName);
             W.AddShort(') where t.');
             W.AddString(UpdateIDFieldName);
-            W.AddShorter('=v.');
+            W.AddDirect('=', 'v', '.');
             W.AddString(UpdateIDFieldName);
           end
           else
@@ -3497,7 +3497,7 @@ begin
             begin
               // append 'COL1=?,COL2=?'
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddShorter('=?,');
+              W.AddDirect('=', '?', ',');
             end;
             W.CancelLastComma;
             W.AddShort(' where ');
@@ -3528,7 +3528,7 @@ begin
               begin
                 W.AddShort('unnest(?::');
                 W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
-                W.AddShorter('[]),');
+                W.AddDirect('[', ']', ')', ',');
               end
             else
             begin
@@ -3538,7 +3538,7 @@ begin
               begin
                 // INSERT INTO .. VALUES (..),(..),(..),..
                 W.CancelLastComma;
-                W.AddShorter('),(');
+                W.AddDirect(')', ',', '(');
                 W.AddStrings('?,', Decoder.FieldCount);
                 dec(MultiInsertRowCount);
               end;
@@ -9021,7 +9021,7 @@ begin
     begin
       U := GetResults(o);
       if W.Expand then
-        W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
+        W.AddString(W.ColNames[f]); // '"' + ColNames[] + '":'
       if Assigned(OnExportValue) then
         W.AddString(OnExportValue(self, r, f, false))
       else if (IDBinarySize > 0) and
@@ -9122,7 +9122,7 @@ begin
   W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
+      W.AddDirect(#$ef, #$bb, #$bf); // add UTF-8 Byte Order Mark
     if Tab then
       CommaSep := #9;
     FMax := FieldCount - 1;
@@ -9314,7 +9314,7 @@ begin
         W.AddShort(XMLUTF8_HEADER);
         W.AddString(ODSContentHeader);
         W.Add(FieldCount);
-        W.AddShorter('" />');
+        W.AddDirect('"', ' ', '/', '>');
         if (self <> nil) and
            ((FieldCount > 0) or
             (fRowCount > 0)) then
@@ -9341,13 +9341,13 @@ begin
                     begin
                       W.AddShort('float" office:value="');
                       W.AddXmlEscape(U);
-                      W.AddShorter('" />');
+                      W.AddDirect('"', ' ', '/', '>');
                     end;
                   ftDate:
                     begin
                       W.AddShort('date" office:date-value="');
                       W.AddXmlEscape(U);
-                      W.AddShorter('" />');
+                      W.AddDirect('"', ' ', '/', '>');
                     end;
                 else
                   begin
@@ -9394,13 +9394,13 @@ begin
   o := 0;
   for r := 0 to fRowCount do
   begin
-    Dest.AddShorter('<tr>');
+    Dest.AddDirect('<', 't', 'r', '>');
     for f := 0 to fFieldCount - 1 do
     begin
       if r = 0 then
-        Dest.AddShorter('<th>') // header
+        Dest.AddDirect('<', 't', 'h', '>') // header
       else
-        Dest.AddShorter('<td>');
+        Dest.AddDirect('<', 't', 'd', '>');
       if Assigned(OnExportValue) and
          (r > 0) then
         Dest.AddHtmlEscapeUtf8(OnExportValue(self, r, f, true), hfOutsideAttributes)
@@ -10522,7 +10522,7 @@ procedure TOrmTableRowVariant.Iterate(var Dest: TVarData;
   const V: TVarData; Index: integer);
 begin
   if cardinal(Index) < cardinal(TOrmTableRowVariantData(V).VTable.fRowCount) then
-    Dest := V
+    TOrmTableRowVariantData(V).VTable.ToDocVariant(Index, PVariant(@Dest)^)
   else
     TSynVarData(Dest).VType := varEmpty;
 end;
@@ -11683,7 +11683,7 @@ procedure InitializeUnit;
 var
   ptc: TRttiParserComplexType;
 begin
-  OrmHashSeed := Random32Not0; // avoid hash flooding
+  OrmHashSeed := SharedRandom.Generator.Next; // avoid hash flooding
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;

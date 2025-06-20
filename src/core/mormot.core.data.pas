@@ -421,6 +421,10 @@ type
     // - can optionally specify an item class for efficient JSON serialization
     constructor Create(aOwnObjects: boolean = true;
       aItemClass: TClass = nil); reintroduce; virtual;
+    /// add one TObject to the list and a variable slot, or release it
+    // - return true and store item into sharedslot if it is nil
+    // - return false and call item.Free if sharedslot <> nil
+    function AddOnceInto(item: TObject; sharedslot: PObject): boolean; virtual;
     /// delete one object from the list
     // - will also Free the item if OwnObjects was set, and dontfree is false
     procedure Delete(index: integer; dontfree: boolean = false); override;
@@ -504,6 +508,9 @@ type
   public
     /// add one item to the list using Safe.WriteLock
     function Add(item: pointer): PtrInt; override;
+    /// add one TObject to the list and a variable slot using Safe.WriteLock
+    // - can be used e.g. for thread-safe garbage collection of TObject instances
+    function AddOnceInto(item: TObject; sharedslot: PObject): boolean; override;
     /// delete all items of the list using Safe.WriteLock
     procedure Clear; override;
     /// delete all items of the list in reverse order, using Safe.WriteLock
@@ -562,7 +569,7 @@ type
   protected
     fName: RawUtf8;
     fReader: TFastReader;
-    fReaderTemp: PRawByteString;
+    fReaderTemp: PRawByteString; // could be pre-assigned to reuse a big buffer
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     fLoadFromLastAlgo: TAlgoCompress;
     /// low-level virtual methods implementing the persistence reading
@@ -858,6 +865,10 @@ function _BC_SQWord(A, B: PInt64; Info: PRttiInfo; out Compared: integer): PtrIn
 function _BC_UQWord(A, B: PQWord; Info: PRttiInfo; out Compared: integer): PtrInt;
 function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 function _BCI_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_LString(A, B: PRawByteString; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 
 /// check equality of two values by content, using RTTI
 // - optionally returns the known in-memory PSize of the value
@@ -1812,14 +1823,14 @@ type
 
 {.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
 
-{$ifndef CPU32DELPHI} // Delphi Win32 compiler doesn't like Lemire algorithm
+{$ifndef HASSLOWMUL64} // Delphi Win32 compiler doesn't like Lemire algorithm
 
   {$define DYNARRAYHASH_LEMIRE}
   // use the Lemire 64-bit multiplication for faster hash reduction
   // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
   // - generate more collisions with crc32c, but is always faster -> enabled
 
-{$endif CPU32DELPHI}
+{$endif HASSLOWMUL64}
 
 // use Power-Of-Two sizes for smallest HashTables[], to reduce the hash with AND
 // - and Delphi Win32 is not efficient at 64-bit multiplication, anyway
@@ -3358,7 +3369,8 @@ end;
 
 function TSynList.Exists(item: pointer): boolean;
 begin
-  result := IndexOf(item) >= 0;
+  result := (fCount > 0) and
+            PtrUIntScanExists(pointer(fList), fCount, PtrUInt(item));
 end;
 
 function TSynList.Get(index: integer): pointer;
@@ -3398,6 +3410,18 @@ begin
   fOwnObjects := aOwnObjects;
   fItemClass := aItemClass;
   inherited Create;
+end;
+
+function TSynObjectList.AddOnceInto(item: TObject; sharedslot: PObject): boolean;
+begin
+  result := sharedslot^ = nil;
+  if result then
+  begin
+    sharedslot^ := item; // atomic storage
+    inherited Add(item); // will own this instance
+  end
+  else
+    item.Free; // release of the unused transient instance
 end;
 
 procedure TSynObjectList.Delete(index: integer; dontfree: boolean);
@@ -3463,6 +3487,16 @@ begin
   Safe.WriteLock;
   try
     result := inherited Add(item);
+  finally
+    Safe.WriteUnLock;
+  end;
+end;
+
+function TSynObjectListLocked.AddOnceInto(item: TObject; sharedslot: PObject): boolean;
+begin
+  Safe.WriteLock;
+  try
+    result := inherited AddOnceInto(item, sharedslot);
   finally
     Safe.WriteUnLock;
   end;
@@ -3684,7 +3718,7 @@ procedure TObjectStore.SaveTo(out aBuffer: RawByteString;
   BufferOffset: integer);
 var
   writer: TBufferWriter;
-  temp: array[word] of byte;
+  temp: TBuffer64K;
 begin
   if BufLen <= SizeOf(temp) then
     writer := TBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
@@ -4196,7 +4230,7 @@ begin
   PWord(UpperCopy255Buf(
     UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
   inc(UpperNameLength);
-  V := Value + CRLF;
+  Join([Value, CRLF], V);
   P := pointer(Content);
   // 1. find Section, and try update within it
   if Section = '' then
@@ -4242,7 +4276,7 @@ var
   ct: PUtf8Char;
   len: PtrInt;
 begin
-  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len, #0);
+  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len);
   result := (ct <> nil) and
             IsContentTypeCompressible(ct, len, {onlytext=}true);
 end;
@@ -5848,6 +5882,24 @@ begin
   else
     Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
   result := 8;
+end;
+
+function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrComp(A^, B^);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrIComp(A^, B^);
+  result := SizeOf(pointer);
+end;
+
+function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ComparePointer(A, B); // weak fallback
+  result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
 end;
 
 function _BC_LString(A, B: PRawByteString; Info: PRttiInfo;
@@ -7943,46 +7995,47 @@ begin
   result := false;
   n := GetCount;
   if Assigned(fCompare) then
-    if n = 0 then // a void array is always sorted
-      Index := 0
-    else if fSorted then
-    begin
-      P := fValue^;
-      // first compare with the last sorted item (common case, e.g. with IDs)
-      dec(n);
-      cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
-      if cmp >= 0 then
+    if n <> 0 then // a void array is always sorted
+      if fSorted then
       begin
-        Index := n;
-        if cmp = 0 then
-          // was just added: returns true + index of last item
-          result := true
-        else
-          // bigger than last item: returns false + insert after last position
-          inc(Index);
-        exit;
-      end;
-      // O(log(n)) binary search of the sorted position
-      Index := 0; // more efficient code if we use Index and not a local var
-      repeat
-        i := (Index + n) shr 1;
-        cmp := fCompare(Item, P[i * fInfo.Cache.ItemSize]);
-        if cmp = 0 then
+        P := fValue^;
+        // first compare with the last sorted item (common case, e.g. with IDs)
+        dec(n);
+        cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
+        if cmp >= 0 then
         begin
-          // returns true + index of (first found) existing Item
-          Index := i;
-          result := true;
+          Index := n;
+          if cmp = 0 then
+            // was just added: returns true + index of last item
+            result := true
+          else
+            // bigger than last item: returns false + insert after last position
+            inc(Index);
           exit;
-        end
-        else if cmp > 0 then
-          Index := i + 1
-        else
-          n := i - 1;
-      until Index > n;
-      // Item not found: returns false + the index where to insert
-    end
+        end;
+        // O(log(n)) binary search of the sorted position
+        Index := 0; // more efficient code if we use Index and not a local var
+        repeat
+          i := (Index + n) shr 1;
+          cmp := fCompare(Item, P[i * fInfo.Cache.ItemSize]);
+          if cmp = 0 then
+          begin
+            // returns true + index of (first found) existing Item
+            Index := i;
+            result := true;
+            exit;
+          end
+          else if cmp > 0 then
+            Index := i + 1
+          else
+            n := i - 1;
+        until Index > n;
+        // Item not found: returns false + the index where to insert
+      end
+      else
+        Index := -1 // not Sorted
     else
-      Index := -1 // not Sorted
+      Index := 0 // void array
   else
     Index := -1; // no fCompare()
 end;
@@ -11443,7 +11496,7 @@ begin
     end;
   // setup internal function wrappers
   GetDataFromJson := _GetDataFromJson;
-  HashSeed := Random32Not0; // random at startup, to avoid hash flooding
+  HashSeed := SharedRandom.Generator.Next; // avoid hash flooding
 end;
 
 

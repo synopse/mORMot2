@@ -1351,6 +1351,10 @@ type
     // - as encoded e.g. by ToUrlEncode()
     // - Url should point to the first character after '?' in the URI
     procedure InitFromUrl(Url: PUtf8Char; aOptions: TDocVariantOptions);
+    /// initialize an object document, possibly as arrays, from URI parameters
+    // - multiple object field names will be stored as dvArray
+    // - Url should point to the first character after '?' in the URI
+    procedure InitFromUrlArray(Url: PUtf8Char; aOptions: TDocVariantOptions);
 
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
@@ -1851,6 +1855,9 @@ type
     // - returns the index of the corresponding value, which may be just added
     function AddOrUpdateValue(const aName: RawUtf8; const aValue: variant;
       wasAdded: PBoolean = nil; OnlyAddMissing: boolean = false): integer;
+    /// add a value in this document, creating a dvArray if aName already exists
+    // - returns the index of the corresponding value, which may be just added
+    procedure AddValueArray(const aName: RawUtf8; const aValue: variant);
     /// add a value in this document, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
@@ -4234,7 +4241,7 @@ begin
 end;
 
 const
-  _VARDATATEXT: array[0.. varWord64 + 5] of string[15] = (
+  _VARDATATEXT: array[0.. varWord64 + 5] of string[10] = (
     'Empty', 'Null', 'SmallInt', 'Integer', 'Single', 'Double', 'Currency',
     'Date', 'OleStr', 'Dispatch', 'Error', 'Boolean', 'Variant', 'Unknown',
     'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',
@@ -4249,7 +4256,7 @@ var
   tmp: TVarData;
 begin
   vt := V.VType;
-  if vt > varWord64 then
+  if vt > varWord64 then // simple types returns 'Empty' to 'QWord'
   repeat
     if SetVariantUnRefSimpleValue(PVariant(V)^, tmp{%H-}) then
     begin
@@ -4262,19 +4269,19 @@ begin
       varStrArg,
       varString,
       varStringByRef:
-        vt := varWord64 + 1;
+        vt := varWord64 + 1; // 'String'
       {$ifdef HASVARUSTRARG}
       varUStrArg,
       {$endif HASVARUSTRARG}
       {$ifdef HASVARUSTRING}
       varUString,
       varUStringByRef:
-        vt := varWord64 + 2;
+        vt := varWord64 + 2; // 'UString'
       {$endif HASVARUSTRING}
       varAny:
-        vt := varWord64 + 3;
+        vt := varWord64 + 3; // 'Any'
       varArray:
-        vt := varWord64 + 4;
+        vt := varWord64 + 4; // 'Array'
       varVariantByRef:
         begin
           result := VariantTypeName(V^.VPointer);
@@ -4282,7 +4289,7 @@ begin
         end;
     else
       if vt = DocVariantVType then
-        vt := varWord64 + 5
+        vt := varWord64 + 5 // 'DocVariant'
       else
       begin
         ct := FindSynVariantType(vt);
@@ -4684,14 +4691,14 @@ begin
               asize := 0;
             end;
           varVariant:
-            {$ifdef CPU32DELPHI}
+            {$ifdef DISPINVOKEBYVALUE}
             begin
               v^ := PVarData(a)^;
               asize := SizeOf(TVarData); // pushed by value
             end;
             {$else}
             v^ := PPVarData(a)^^; // pushed by reference (as other parameters)
-            {$endif CPU32DELPHI}
+            {$endif DISPINVOKEBYVALUE}
           varDouble,
           varCurrency,
           varDate,
@@ -5021,7 +5028,7 @@ begin
     result := false
   else if (NameLen > 4) and
           (Name[0] = '_') and
-          IntGetPseudoProp(IdemPPChar(@Name[1], @_GETMETHOD), dv, variant(Dest)) then
+      IntGetPseudoProp(IdemPPChar(@Name[1], @_GETMETHOD), dv, variant(Dest)) then
     result := true
   else
   begin
@@ -5089,11 +5096,9 @@ end;
 
 procedure TDocVariant.Iterate(var Dest: TVarData;
   const V: TVarData; Index: integer);
-var
-  Data: TDocVariantData absolute V;
 begin // note: IterateCount() may accept IsObject values[]
-  if cardinal(Index) < cardinal(Data.VCount) then
-    Dest := TVarData(Data.VValue[Index]) // make weak value copy
+  if cardinal(Index) < cardinal(TDocVariantData(V).VCount) then
+    Dest := TVarData(TDocVariantData(V).VValue[Index]) // make weak value copy
   else
     TSynVarData(Dest).VType := varEmpty;
 end;
@@ -5448,18 +5453,17 @@ end;
 class procedure TDocVariant.GetSingleOrDefault(
   const docVariantArray, default: variant; var result: variant);
 var
-  vt: cardinal;
+  dv: PDocVariantData;
+  tmp: variant;
 begin
-  vt := TVarData(docVariantArray).VType;
-  if vt = varVariantByRef then
-    GetSingleOrDefault(
-      PVariant(TVarData(docVariantArray).VPointer)^, default, result)
-  else if (vt <> DocVariantVType) or
-          (TDocVariantData(docVariantArray).Count <> 1) or
-          not TDocVariantData(docVariantArray).IsArray then
-    result := default
+  if _SafeArray(docVariantArray, dv) and
+     (dv^.Count = 1) then
+    tmp := dv^.Values[0] // should be assigned in two steps
+  else if @result = @default then
+    exit // TMongoCollection call as GetSingleOrDefault(result, result, result)
   else
-    result := TDocVariantData(docVariantArray).Values[0];
+    tmp := default;
+  result := tmp;
 end;
 
 function DocVariantData(const DocVariant: variant): PDocVariantData;
@@ -6775,16 +6779,11 @@ function TDocVariantData.InitJson(const Json: RawUtf8;
 var
   tmp: TSynTempBuffer;
 begin
-  if Json = '' then
-    result := false
-  else
-  begin
-    tmp.Init(Json);
-    try
-      result := InitJsonInPlace(tmp.buf, aOptions) <> nil;
-    finally
-      tmp.Done;
-    end;
+  tmp.Init(Json);
+  try
+    result := InitJsonInPlace(tmp.buf, aOptions) <> nil;
+  finally
+    tmp.Done;
   end;
 end;
 
@@ -6931,6 +6930,23 @@ begin
       if Url = nil then
         break;
       AddValueFromText(n, v); // would recognize booleans or numbers
+    until Url^ = #0;
+end;
+
+procedure TDocVariantData.InitFromUrlArray(Url: PUtf8Char; aOptions: TDocVariantOptions);
+var
+  n, v: RawUtf8;
+  val: variant;
+begin
+  Init(aOptions, dvObject);
+  if Url <> nil then
+    repeat
+      Url := UrlDecodeNextNameValue(Url, n, v);
+      if Url = nil then
+        break;
+      VarClear(val);
+      _FromText(aOptions, @val, v); // recognize booleans or numbers
+      AddValueArray(n, val);
     until Url^ = #0;
 end;
 
@@ -7319,6 +7335,37 @@ var
 begin
   FastSetString(tmp, aName, aNameLen);
   result := AddValue(tmp, aValue, aValueOwned, aIndex);
+end;
+
+procedure TDocVariantData.AddValueArray(const aName: RawUtf8; const aValue: variant);
+var
+  ndx: PtrInt;
+  v: PVariant;
+  dv: PDocVariantData;
+  tmp: TVarData;
+begin
+  if aName = '' then
+    exit;
+  ndx := GetValueIndex(aName);
+  if ndx < 0 then
+  begin
+    ndx := InternalAdd(aName); // first time seen this aName
+    v := @VValue[ndx];
+  end
+  else
+  begin
+    v := @VValue[ndx];
+    if not _SafeArray(v^, dv) then // convert this aName into a dvArray
+    begin
+      tmp := PVarData(v)^; // weak copy
+      dv := pointer(v);
+      dv^.InitFast(4, dvArray);
+      dv^.VCount := 1; // store previous value as first item
+      PVarData(@dv^.Values[0])^ := tmp;
+    end;
+    v := dv^.NewItem; // append as item in this array
+  end;
+  SetVariantByValue(aValue, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
@@ -10261,11 +10308,11 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
 var
   // logic below is extracted from mormot.core.base.pas' GetExtended()
   remdigit: integer;
-  frac, exp: PtrInt;
+  frac, exp {$ifdef CPUX86NOTPIC}, f {$endif}: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
-  d: double;
+  d, d64: double;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
   result := nil; // return nil to indicate parsing error
@@ -10378,17 +10425,37 @@ begin
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin
     // converted into a double value
+    d64 := v64;
+    {$ifdef CPUX86NOTPIC}
+    f := frac;
+    if f >= -31 then
+      if f <= 31 then
+        d := POW10[f] // -31 .. + 31
+      else if (18 - remdigit) + integer(f) >= 308 then
+        exit          // +308 ..
+      else
+        d := POW10[(f and not 31) shr 5 + 34] * POW10[f and 31] // +32 .. +307
+    else
+    begin
+      f := -f; // .. -32
+      d := POW10[(f and not 31) shr 5 + 45] / POW10[f and 31];
+    end;
+    {$else}
     exp := PtrUInt(@POW10);
     if frac >= -31 then
       if frac <= 31 then
-        d := PPow10(exp)[frac]                 // -31 .. + 31
+        d := PPow10(exp)[frac] // -31 .. + 31
       else if (18 - remdigit) + integer(frac) >= 308 then
-        exit                                   // +308 ..
-      else
-        d := HugePower10Pos(frac, PPow10(exp)) // +32 .. +307
+        exit                   // +308 ..
+      else                     // +32 .. +307
+        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
     else
-      d := HugePower10Neg(frac, PPow10(exp));  // .. -32
-    Value.VDouble := d * v64;
+    begin
+      frac := -frac; // .. -32
+      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+    end;
+    {$endif CPUX86NOTPIC}
+    Value.VDouble := d * d64;
     TSynVarData(Value).VType := varDouble;
   end
   else

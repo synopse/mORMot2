@@ -72,14 +72,14 @@ type
     // - will be stored in JSON_FAST_EXTENDED format, i.e. with
     // shortened field names, for smaller TEXT storage
     // - content may be searched using JsonGet/JsonHas SQL functions on a
-    // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
+    // SQLite3 storage, or with direct document query under MongoDB/PostgreSQL
     property Input: variant
       read fInput write fInput;
     /// the output parameters, as a JSON document, including result: for a function
     // - will be stored in JSON_FAST_EXTENDED format, i.e. with
     // shortened field names, for smaller TEXT storage
     // - content may be searched using JsonGet/JsonHas SQL functions on a
-    // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
+    // SQLite3 storage, or with direct document query under MongoDB/PostgreSQL
     property Output: variant
       read fOutput write fOutput;
     /// the Session ID, if there is any
@@ -661,11 +661,10 @@ type
   TServiceContainer = class(TInterfaceResolverInjected)
   protected
     fOwner: TInterfaceResolver; // is a TRest instance
-    // list of services ['Calculator',...]
-    fInterface: TServiceContainerInterfaces;
+    fInterface: TServiceContainerInterfaces; // array of InterfaceName/Service
     fInterfaces: TDynArrayHashed;
     // list of service.method ['Calculator.Add','Calculator.Multiply',...]
-    fInterfaceMethod: TServiceContainerInterfaceMethods;
+    fInterfaceMethod: TServiceContainerInterfaceMethods; // dynamic array
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
     procedure SetExpectMangledUri(Mangled: boolean);

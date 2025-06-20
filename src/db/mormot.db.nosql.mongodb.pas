@@ -2021,7 +2021,7 @@ begin
   W.AddTypedJson(@fRequestOpCode, TypeInfo(TMongoOperation));
   W.Add(',');
   {$endif MONGO_OLDPROTOCOL}
-  W.AddShorter('req:');
+  W.AddDirect('r', 'e', 'q', ':');
   W.AddPointer(PtrUInt(fRequestID), '"');
   if fResponseTo <> 0 then
   begin
@@ -2316,7 +2316,7 @@ begin
     W.Add(',zlib:%', [fCompressed]);
   W.AddShorter(',cmd:');
   if AddMongoJson(fCommand, W, modMongoShell, 1024) then
-    W.AddShorter('...') // huge Command has been truncated after 1KB
+    W.AddDirect('.', '.', '.') // huge Command has been truncated after 1KB
   else
     W.AddDirect('}')
 end;
@@ -2722,7 +2722,7 @@ begin
     inc(b, SizeOf(integer)); // points to the "e_list" of "int32 e_list #0"
     if BsonListToJson(b, betDoc, W, Mode, MaxSize) then
     begin
-      W.AddShorter('...'); // truncated
+      W.AddDirect('.', '.', '.'); // truncated
       exit;
     end;
     W.AddComma;
@@ -3342,7 +3342,7 @@ begin
   inherited CustomLog(WR, Context);
   if fRequest <> nil then
   begin
-    WR.AddInstanceName(fRequest, ':');
+    WR.AddInstanceName(fRequest);
     if WR.InheritsFrom(TJsonWriter) then
       fRequest.ToJson(TJsonWriter(WR), modMongoShell)
     else

@@ -15,7 +15,7 @@ unit mormot.db.raw.sqlite3.static;
     ensure you downloaded latest https://synopse.info/files/mormot2static.7z
     or https://synopse.info/files/mormot2static.tgz
       If the platform is not supported yet, fallback loading a system library.
-      To patch and compile the official SQlite3 amalgamation file, follow the
+      To patch and compile the official SQLite3 amalgamation file, follow the
     instruction from the res/static/sqlite3 folder.
 
   *****************************************************************************
@@ -83,9 +83,9 @@ type
     constructor Create; override;
     /// unload the static library
     destructor Destroy; override;
-    /// calls ForceToUseSharedMemoryManager after SQlite3 is loaded
+    /// calls ForceToUseSharedMemoryManager after SQLite3 is loaded
     procedure BeforeInitialization; override;
-    /// validates EXPECTED_SQLITE3_VERSION after SQlite3 is initialized
+    /// validates EXPECTED_SQLITE3_VERSION after SQLite3 is initialized
     procedure AfterInitialization; override;
   end;
 
@@ -123,7 +123,7 @@ const
 // - password will use AES-128 (see ForceSQLite3AesCtr) after PBKDF2 SHAKE_128
 // with rounds=1000 or a JSON (extended) serialized TSynSignerParams object like
 // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
-// - please note that this encryption is compatible only with SQlite3 files made
+// - please note that this encryption is compatible only with SQLite3 files made
 // with this mormot.db.raw.sqlite3.static unit (not external/official/wxsqlite3 dll)
 // - implementation is NOT compatible with the official SQLite Encryption Extension
 // (SEE) file format, not the wxsqlite3 extension, but is (much) faster thanks
@@ -497,7 +497,7 @@ var
   { as standard C library documentation states:
   Statically allocated buffer, shared by the functions gmtime() and localtime().
   Each call of these functions overwrites the content of this structure.
-  -> this buffer is shared, but SQlite3 will protect it with a mutex :) }
+  -> this buffer is shared, but SQLite3 will protect it with a mutex :) }
   atm: time_t;
 
 function localtime(t: PCardinal): pointer; cdecl;
@@ -552,7 +552,7 @@ var
 { ************ Encryption-Related Functions }
 
 {
- Our SQlite3 static files includes a SQLite3MultipleCiphers VFS for encryption.
+ Our SQLite3 static files includes a SQLite3MultipleCiphers VFS for encryption.
  See https://github.com/synopse/mORMot2/tree/master/res/static/libsqlite3
  The SQLite3 source is not patched to implement the VFS itself (it is not
  mandatory), but is patched to add some key-related high-level features - see
@@ -838,7 +838,7 @@ procedure OldSqlEncryptTablePassWordToPlain(const FileName: TFileName;
 var
   F: THandle;
   R: integer;
-  buf: array[word] of byte; // temp buffer for read/write (64KB seems enough)
+  buf: TBuffer64K; // temp buffer for read/write (64KB seems enough)
   size, posi: Int64;
   oldtable: array[0..OLDENCRYPTTABLESIZE - 1] of byte; // 2x16KB tables
 begin

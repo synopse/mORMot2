@@ -336,7 +336,7 @@ end;
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..36] of PAnsiChar = (
+  PQ_ENTRIES: array[0..36] of PAnsiChar = ( // will be prefixed by 'PQ' chars
     'libVersion',
     'isthreadsafe',
     'setdbLogin',

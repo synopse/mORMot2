@@ -797,7 +797,7 @@ type
   end;
 
   /// the known 32-bit crc algorithms as returned by CryptCrc32()
-  // - ccaAdler32 requires mormot.lib.z.pas to be included
+  // - caAdler32 requires mormot.lib.z.pas to be included
   // - caDefault may be AesNiHash32(), therefore not persistable between
   // executions, since is randomly seeded at process startup
   // - some cryptographic-level hashes are truncated to 32-bit - caSha1/caSha256
@@ -1371,7 +1371,7 @@ type
   // and another for decryption, with PKCS7 padding and no MAC/AEAD validation
   TProtocolAes = class(TInterfacedObject, IProtocol)
   protected
-    fSafe: TLightLock; // no need of whole TRTLCriticalSection
+    fSafe: TLightLock; // no need of whole TRTLCriticalSection / TOSLock
     fAheadMode: boolean;
     fAes: array[boolean] of TAesAbstract; // [false]=decrypt [true]=encrypt
   public
@@ -5351,8 +5351,8 @@ begin
         d := fUsers.Values.Value^;
         for i := 0 to fUsers.Count - 1 do
         begin
-          w.AddNoJsonEscapeUtf8(u^);
-          w.AddNoJsonEscapeUtf8(middle);
+          w.AddString(u^);
+          w.AddString(middle);
           w.AddBinToHex(d, fAlgoSize, {lowerhex=}true);
           w.Add(#10);
           inc(u);
@@ -9432,11 +9432,7 @@ function ParsedToText(const c: TX509Parsed): RawUtf8;
   begin
     for cu := l to h do
       if cu in c.Usage then
-        begin
-        if {%H-}usage <> '' then
-          usage := usage + ', ';
-        usage := usage + CU_FULLTEXT[cu];
-      end;
+        AddToCsv(CU_FULLTEXT[cu], usage, ', ');
     if usage <> '' then
       result := result +   '    X509v3 ' + ext + #13#10 +
                            '      ' + usage + #13#10;
@@ -10253,16 +10249,16 @@ begin
         begin
           w.Add('"');
           w.AddString(s);
-          w.Add('"');
+          w.AddDirect('"');
         end
         else
         begin
           w.Add('''');
           w.AddString(s); // alternate output layout for quoted text
-          w.Add('''');
+          w.AddDirect('''');
         end;
       end;
-      w.AddShorter(CRLF); // adapted to the current console output
+      w.AddDirectNewLine; // adapted to the current console output
     end;
     w.SetText(result);
   finally

@@ -864,7 +864,7 @@ class procedure E7Zip.RaiseAfterCheck(Caller: TObject;
   const Context: ShortString; Res: HResult);
 begin
   raise CreateFmt('%s.%s error %x (%s)',
-    [ClassNameShort(Caller)^, Context, Res, string(WinErrorText(Res, nil))])
+    [ClassNameShort(Caller)^, Context, Res, string(WinErrorText(Res))])
 end;
 
 class procedure E7Zip.Check(Caller: TObject; const Context: ShortString;
@@ -2120,7 +2120,7 @@ begin
     eamExtract:
       if fStream <> nil then
         outStream := T7zStream.Create(fStream, false, index)
-      else if assigned(fExtractCallback) then
+      else if Assigned(fExtractCallback) then
       begin
         result := fExtractCallback(self, index, outStream);
         exit;

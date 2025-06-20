@@ -1636,7 +1636,7 @@ begin
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
          '  fClient.Request(''', UpperCase(fMethod), ''', ''', url, '''']);
   // Path parameters
-  w.AddShorter(', [');
+  w.AddDirect(',', ' ', '[');
   for i := 0 to Length(urlName) - 1 do
   begin
     j := urlParam[i];
@@ -1644,7 +1644,7 @@ begin
       EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
     p := fParameters[j];
     if i > 0 then
-      w.AddShorter(', ');
+      w.AddDirect(',', ' ');
     w.AddString(p.ParamType.ToFormatUtf8Arg(p.PascalName));
   end;
   w.AddDirect(']');
@@ -1664,7 +1664,7 @@ begin
     if Assigned(fSuccessResponseType) then
       w.AddStrings(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
     else
-      w.AddShorter('nil');
+      w.AddDirect('n', 'i', 'l');
   end
   // result with no Payload
   else if Assigned(fSuccessResponseType) then

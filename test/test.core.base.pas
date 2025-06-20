@@ -10,6 +10,7 @@ interface
 uses
   sysutils,
   classes,
+  math,
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security,
@@ -459,6 +460,26 @@ begin
   {$endif CPU64}
 end;
 
+function BSRdwordPurePascal(c: cardinal): cardinal;
+const
+  _debruijn32: array[0..31] of byte = (
+    0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
+    8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31);
+begin // http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
+  if c <> 0 then
+  begin
+    c := c or (c shr 1);
+    c := c or (c shr 2);
+    c := c or (c shr 4);
+    c := c or (c shr 8);
+    c := c or (c shr 16);
+    c := c * $07c4acdd; // explicit step for 32-bit truncation
+    result := _debruijn32[c shr 27];
+  end
+  else
+    result := 255;
+end;
+
 procedure TTestCoreBase.Bits;
 const
   N = 1000000;
@@ -509,13 +530,20 @@ const
       {$ifdef FPC}
       CheckEqual(popcnt(v), c);
       {$endif FPC}
+      c := BSRdwordPurePascal(v);
+      CheckEqual(c, BSRdword(v));
+      CheckEqual(c, BSRqword(v), 'bsrq1');
       v := v * v * 19;
+      CheckEqual(BSRdwordPurePascal(v), BSRdword(v));
       c := GetBitsCount64(v, POINTERBITS);
       CheckEqual(GetBitsCountPtrInt(v), c);
       {$ifdef FPC}
       CheckEqual(popcnt(v), c);
       {$endif FPC}
       v := random32;
+      c := BSRdwordPurePascal(v);
+      CheckEqual(c, BSRdword(v));
+      CheckEqual(c, BSRqword(v), 'bsrq2');
       {$ifdef CPU64}
       v := v or (PtrUInt(Random32) shl 32);
       {$endif CPU64}
@@ -526,6 +554,7 @@ const
       CheckEqual(popcnt(v), c);
       {$endif FPC}
     end;
+    CheckEqual(BSRdwordPurePascal(0), BSRdword(0));
     timer.Start;
     for i := 1 to N do
       GetBitsCountPtrInt(i);
@@ -4375,7 +4404,7 @@ begin
   check(a = '012345678910');
   for i := 11 to 150 do
     AppendShortCardinal(i, a);
-  CheckHash(a, $1CDCEE09, 'AppendShortCardinal');
+  CheckHash(a, $6C291F09, 'AppendShortCardinal');
   Check(TwoDigits(0) = '0');
   Check(TwoDigits(1) = '1');
   Check(TwoDigits(10) = '10');
@@ -4618,6 +4647,27 @@ begin
   d := GetExtended(pointer(s), err);
   CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
   Check(err > 0, 'e400');
+  s := 'Nan';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0, s);
+  Check(IsNan(d));
+  DoubleToShort(@a, d);
+  Check(IdemPropName(a, 'Nan'));
+  Check(ShortToFloatNan(a) = fnNan);
+  s := 'INF';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0, s);
+  Check(IsInfinite(d));
+  DoubleToShort(@a, d);
+  Check((a = '+Inf') or (a = 'INF'));
+  Check(ShortToFloatNan(a) = fnInf);
+  s := '-INfinity';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0, s);
+  Check(IsInfinite(d));
+  DoubleToShort(@a, d);
+  Check(IdemPropName(a, '-Inf'));
+  Check(ShortToFloatNan(a) = fnNegInf);
   Check(IsAnsiCompatible('t'));
   Check(IsAnsiCompatible('te'));
   Check(IsAnsiCompatible('tes'));
@@ -4883,9 +4933,20 @@ begin
     Check(FormatSql('?', [], [k]) = ':(' + s + '):');
     err := 1;
     l := GetInt64(pointer(s), err);
-    Check((err = 0) and
-        (l = k));
+    Check(l = k);
+    Check(err = 0);
+    dec(l);
     SetInt64(pointer(s), l);
+    Check(l = k);
+    if k >= 0 then
+    begin
+      l := GetQWord(pointer(s), err);
+      Check(l = k);
+      Check(err = 0);
+      dec(l);
+      SetQword(pointer(s), QWord(l));
+      Check(l = k);
+    end;
     s := s + 'z';
     l := GetInt64(pointer(s), err);
     Check(err <> 0);
@@ -5240,6 +5301,7 @@ var
   WS: WideString;
   SU, SU2: SynUnicode;
   str: string;
+  ss: ShortString;
   up4: RawUcs4;
   U, U2, res, Up, Up2, json, json1, json2, s1, s2, s3: RawUtf8;
   arr, arr2: TRawUtf8DynArray;
@@ -5318,19 +5380,19 @@ begin
   // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
   rb2 := ARawSetString;
   rb1 := rb2 + RawByteString('test');
-  Check(rb1 = '123456test', 'ARawSetString1');
+  CheckEqual(rb1, '123456test', 'ARawSetString1');
   Append(rb2, 'test');
-  Check(rb2 = '123456test', 'ARawSetString2');
+  CheckEqual(rb2, '123456test', 'ARawSetString2');
   rb2 := ARawFastSetString;
   rb3 := 'test';
   {$ifdef FPC} // circumvent FPC RTL oddity on Win32 :(
   SetCodePage(rb3, CP_RAWBYTESTRING, false);
   {$endif FPC}
   rb1 := rb2 + rb3;
-  Check(rb1 = '123456test', 'ARawFastSetString1');
+  CheckEqual(rb1, '123456test', 'ARawFastSetString1');
   rb1 := ARawFastSetString;
   Append(rb1, 'test');
-  Check(rb1 = '123456test', 'ARawFastSetString2');
+  CheckEqual(rb1, '123456test', 'ARawFastSetString2');
   Check(SafeFileName(''));
   Check(SafePathName(''));
   Check(SafeFileName('toto'));
@@ -5659,35 +5721,44 @@ begin
   CheckEqual(JoinCsv(',', ['', ''], true), ',');
   Finalize(arr);
   CsvToRawUtf8DynArray(res, ',', '', arr);
+  CheckEqual(length(arr), 3);
   Check(arr[0] = 'one');
   Check(arr[1] = 'two');
   Check(arr[2] = 'three');
   Finalize(arr);
   CsvToRawUtf8DynArray('one=?,two=?,three=?', '=?,', '=?', arr);
+  CheckEqual(length(arr), 3);
   Check(arr[0] = 'one');
   Check(arr[1] = 'two');
   Check(arr[2] = 'three');
   Finalize(arr);
   res := '-1,25,0';
   CsvToRawUtf8DynArray(pointer(res), arr);
-  check(Length(arr) = 3);
+  CheckEqual(length(arr), 3);
   Check(arr[0] = '-1');
   Check(arr[1] = '25');
   Check(arr[2] = '0');
   Finalize(arr);
-  CSVToRawUTF8DynArray('AA,BB,CC,DD', ',', ',', arr);
-  check(Length(arr) = 4);
+  CsvToRawUtf8DynArray('AA,BB,CC,DD', ',', ',', arr);
+  CheckEqual(length(arr), 4);
   Check(arr[0] = 'AA');
   Check(arr[1] = 'BB');
   Check(arr[2] = 'CC');
   Check(arr[3] = 'DD');
   Finalize(arr);
-  CSVToRawUTF8DynArray('A,B,C,D', ',', ',', arr);
-  check(Length(arr)=4);
+  CsvToRawUtf8DynArray('A,B,C,D', ',', ',', arr);
+  CheckEqual(length(arr), 4);
   Check(arr[0]='A');
   Check(arr[1]='B');
   Check(arr[2]='C');
   Check(arr[3]='D');
+  Finalize(arr);
+  CsvToRawUtf8DynArray('item1   item2    item3', arr, {sep=}' ',
+    {TrimItems=}true , {AddVoidItems=}false);
+  CheckEqual(length(arr), 3);
+  Check(arr[0] = 'item1');
+  Check(arr[1] = 'item2');
+  Check(arr[2] = 'item3');
   Check(AddPrefixToCsv('One,Two,Three', 'Pre') = 'PreOne,PreTwo,PreThree');
   Check(CsvOfValue('?', 3) = '?,?,?');
   Check(GetUnQuoteCsvItem('"""one,""","two "', 1, ',', '"') = 'two ');
@@ -6300,6 +6371,50 @@ begin
   CheckEqual(StringReplaceAll('abcabcabc', 'c', 'C', true), 'abCabCabC');
   CheckEqual(StringReplaceAll('abcabcabc', 'c', '', true), 'ababab');
   CheckEqual(StringReplaceAll('abcabcabc', 'C', '', true), 'ababab');
+  CheckEqual(LogEscapeFull(''), '');
+  CheckEqual(LogEscapeFull(' abc'), ' abc');
+  CheckEqual(LogEscapeFull('abc'), 'abc');
+  u := 'abc'#10;
+  Check(ContentToShort(u) = 'abc'#10);
+  CheckEqual(LogEscapeFull(u), 'abc$0a');
+  u2 := RawUtf8OfChar('-', 10);
+  CheckEqual(u2, '----------');
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 15)^ = #0);
+  CheckEqual(u2, 'abc$0a'#0'---');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 12)^ = #0);
+  CheckEqual(u2, 'abc$0a'#0'---');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 7)^ = #0);
+  CheckEqual(u2, 'abc$0a'#0'---');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 6)^ = #0);
+  CheckEqual(u2, 'abc..'#0'----');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 5)^ = #0);
+  CheckEqual(u2, 'ab..'#0'-----');
+  u := 'abcd'#10;
+  u[4] := #129; // not valid UTF-8
+  Check(ContentToShort(u) = 'abc$81$0a');
+  u := '012345678';
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 10)^ = #0);
+  CheckEqual(u2, '012345678'#$00);
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 9)^ = #0);
+  CheckEqual(u2, '012345..'#0'-');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 5)^ = #0);
+  CheckEqual(u2, '01..'#0'-----');
+  u2 := RawUtf8OfChar('-', 10);
+  Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 4)^ = #0);
+  CheckEqual(u2, '0..'#0'------');
+  for i := 3 downto 0 do
+  begin
+    u2 := RawUtf8OfChar('-', 10);
+    Check(EscapeBuffer(pointer(u), length(u), pointer(u2), 3)^ = #0);
+    CheckEqual(u2, #0'---------');
+  end;
   for i := -10 to 50 do
     for j := -10 to 50 do
     begin
@@ -6323,6 +6438,50 @@ begin
       CheckTrimCopy(' 234 67 ', i, j);
       CheckTrimCopy(' 234 67 ', i, maxInt);
     end;
+  u := RawUtf8OfChar('-', 300);
+  for i := 250 to 260 do
+  begin
+    ss[0] := #0;
+    ContentToShortAppend(pointer(u), i, ss);
+    if i < 255 then
+    begin
+      CheckEqual(ord(ss[0]), i);
+      for j := 1 to i do
+        Check(ss[j] = '-')
+    end
+    else if i = 255 then
+    begin
+      CheckEqual(ord(ss[0]), 255);
+      for j := 1 to 254 do
+        Check(ss[j] = '-');
+      Check(ss[255] = #0);
+    end
+    else
+    begin
+      CheckEqual(ord(ss[0]), 255);
+      for j := 1 to 252 do
+        Check(ss[j] = '-');
+      Check(ss[253] = '.');
+      Check(ss[254] = '.');
+      Check(ss[255] = #0);
+    end;
+  end;
+  P := 'toto';
+  Check(GotoNextLine(P) = nil);
+  P := 'to'#10'po';
+  Check(GotoNextLine(P)^ = 'p');
+  P := 'to'#13#10'po';
+  Check(GotoNextLine(P)^ = 'p');
+  P := 'to'#3#13#10'po';
+  Check(GotoNextLine(P)^ = 'p');
+  P := 'to'#10#10'po';
+  Check(GotoNextLine(P)^ = #10);
+  P := 'to'#13#10#13#10'po';
+  Check(GotoNextLine(P)^ = #13);
+  P := 'to'#3#1'po';
+  Check(GotoNextLine(P) = nil);
+  P := 'to'#3#0'po';
+  Check(GotoNextLine(P) = nil);
 end;
 
 procedure TTestCoreBase.Charsets;
@@ -7512,18 +7671,26 @@ begin
   Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
   Check(WinErrorConstant(234)^ = 'MORE_DATA', 'wecd');
   Check(WinErrorConstant(5)^ = 'ACCESS_DENIED', 'wece');
-  Check(WinErrorConstant(12002)^ = 'WINHTTP_TIMEOUT', 'wecf');
+  Check(WinErrorConstant(12002)^ = 'TIMEOUT', 'wecf');
   Check(WinErrorConstant($800b010a)^ = 'CERT_E_CHAINING', 'wecg');
   Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecG');
   Check(WinErrorConstant($800b010d)^ = '', 'wech');
   Check(WinErrorConstant($80092002)^ = 'CRYPT_E_BAD_ENCODE', 'wecH');
   Check(WinErrorConstant(1229)^  = 'CONNECTION_INVALID', 'weci');
   Check(WinErrorConstant(122)^ = 'INSUFFICIENT_BUFFER', 'wecj');
-  Check(WinErrorConstant(12152)^ = 'WINHTTP_INVALID_SERVER_RESPONSE', 'weck');
+  Check(WinErrorConstant(12152)^ = 'INVALID_SERVER_RESPONSE', 'weck');
   Check(WinErrorConstant(87)^ = 'INVALID_PARAMETER', 'wecl');
   Check(WinErrorConstant(1315)^ = 'INVALID_ACCOUNT_NAME', 'wecm');
   Check(WinErrorConstant(1331)^ = 'ACCOUNT_DISABLED', 'wecn');
   Check(WinErrorConstant(1342)^ = 'SERVER_NOT_DISABLED', 'weco');
+  Check(WinErrorShort(0) = '0 ERROR_SUCCESS', 'w0');
+  Check(WinErrorShort(5) = '5 ERROR_ACCESS_DENIED', 'wa');
+  Check(WinErrorShort(12002) = '12002 ERROR_WINHTTP_TIMEOUT', 'w1');
+  Check(WinErrorShort($800b010a) = '800b010a CERT_E_CHAINING', 'w2');
+  Check(WinErrorShort($80000003) = '80000003 EXCEPTION_BREAKPOINT', 'w3');
+  Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
+  Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
+  Check(WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
 end;
 
 const
@@ -8621,7 +8788,16 @@ begin
   Check(not IsHttpUserAgentBot(DefaultUserAgent(self)),
     'Mozilla/5.0 (Linux x64; mORMot) TCB/2 mormot2tests');
   Check(IsHttpUserAgentBot(
-    'Googlebot/2.1 (+http://www.google.com/bot.html)'));
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ' +
+    'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot) ' +
+    'Chrome/119.0.6045.214 Safari/537.36'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ' +
+    'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot)'));
+  Check(IsHttpUserAgentBot(
+    'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot/)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)'));
   Check(IsHttpUserAgentBot(
     'Googlebot/2.1 (+http://www.google.org/bot.html)'));
   Check(IsHttpUserAgentBot(
@@ -8753,10 +8929,15 @@ begin
   Check(IsContentTypeCompressibleU('application/json'));
   Check(IsContentTypeCompressibleU('APPLICATION/JSON'));
   Check(IsContentTypeCompressibleU('application/xml'));
+  Check(IsContentTypeCompressibleU('application/rtf'));
+  Check(not IsContentTypeCompressibleU('application/zrtf'));
+  Check(not IsContentTypeCompressibleU('application/xm'));
   Check(IsContentTypeCompressibleU('application/javascript'));
   Check(IsContentTypeCompressibleU('application/VND.API+JSON'));
   Check(IsContentTypeCompressibleU('application/vnd.mysoft.v1+json'));
-  Check(IsContentTypeCompressibleU('application/atom+xml'));
+  Check(IsContentTypeCompressibleU('application/atom+XMl'));
+  Check(IsContentTypeCompressibleU('application/office+RTf'));
+  Check(not IsContentTypeCompressibleU('application/office+rtl'));
   Check(not IsContentTypeCompressibleU('applications/atom+xml'));
   Check(not IsContentTypeCompressibleU('application/plain'));
   Check(IsContentTypeCompressibleU('image/svg'));
@@ -8767,7 +8948,12 @@ begin
   Check(IsContentTypeJsonU('application/json; charset=utf8'));
   Check(IsContentTypeJsonU('application/Json;CharSet=Utf-8'));
   Check(IsContentTypeJsonU('application/VND.API+JSON;CharSet=Utf-8'));
+  Check(not IsContentTypeJsonU('application/vnd.mysoft.v1+jso'));
   Check(IsContentTypeJsonU('application/vnd.mysoft.v1+json'));
+  Check(not IsContentTypeJsonU('application/vnd.mysoft.v1+j'));
+  Check(IsContentTypeJsonU('application/vnd.mysoft.v1+json2'));
+  Check(not IsContentTypeJsonU('application/vnd.mysoft.v1+'));
+  Check(IsContentTypeJsonU('application/+json'));
   Check(not IsContentTypeJsonU('application/xml'));
   Check(IsContentTypeTextU('text/plain'));
   Check(IsContentTypeTextU('text/xml'));
@@ -10052,29 +10238,25 @@ procedure TTestCoreBase.WindowsSpecificApi;
 
   procedure Win32DotNetException(code: cardinal; const expected: RawUtf8);
   var
-    e: TPShortStringDynArray;
-    i: PtrInt;
-    v: RawUtf8;
+    s: ShortString;
   begin
-    Check(e = nil);
-    Win32DotNetExceptions(code, e);
-    CheckEqual(v, '');
-    for i := 0 to high(e) do
-      Append(v, [e[i]^, ' ']);
-    CheckEqual(v, expected);
+    s[0] := #0;
+    Check(Win32DotNetExceptions(code, s) = (expected <> ''));
+    CheckEqual(ShortStringToAnsi7String(s), expected);
   end;
 
 var
   nfo: TWinProcessInfo;
 begin
   // validate Windows API error code recognition
-  CheckEqual(WinErrorText(1246, nil), 'ERROR__CONTINUE');
-  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER, nil), 'ERROR_INSUFFICIENT_BUFFER');
+  CheckEqual(WinErrorText(1246), 'ERROR__CONTINUE');
+  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER), 'ERROR_INSUFFICIENT_BUFFER');
   // validate DotNet exceptions error code recognition
   Win32DotNetException(0, '');
   Win32DotNetException(9234, '');
-  Win32DotNetException($800703E9, '_StackOverflow ');
-  Win32DotNetException($80131500, '_ _SUDSGenerator _SUDSParser ');
+  Win32DotNetException($800703E9, ' [.NET/CLR unhandled StackOverflowException]');
+  Win32DotNetException($80131500,
+    ' [.NET/CLR unhandled Exception SUDSGeneratorException SUDSParserException]');
   // validate UAC specific functions
   Check(IsSystemFolder('c:\program files'));
   Check(IsSystemFolder('c:\program Files\toto'));

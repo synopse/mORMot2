@@ -733,7 +733,7 @@ type
     /// Execute directly a SQL statement, returning a TOrmTableJson resultset
     // - you should not have to use this method, but the ORM versions instead;
     // it may give expected results only with our direct SQLite3 or our in-memory
-    // engines; with external databases, it may involve SQlite3 virtual tables,
+    // engines; with external databases, it may involve SQLite3 virtual tables,
     // and fields name re-mapping, so the TOrmTable result may be unexpected
     // - return a result table on success, nil on failure
     // - will actually fill a TOrmTableJson from ExecuteJson() results
@@ -742,7 +742,7 @@ type
     /// Execute directly a SQL statement, returning its results as JSON
     // - you should not have to use this method, but the ORM versions instead;
     // it may give expected results only with our direct SQLite3 or our in-memory
-    // engines; with external databases, it may involve SQlite3 virtual tables,
+    // engines; with external databases, it may involve SQLite3 virtual tables,
     // and fields renaming, so the JSON result may not be what you would expect
     // - return a result set as JSON on success, '' on failure
     // - will call EngineList() abstract method to retrieve its JSON content
@@ -1556,7 +1556,7 @@ type
     // - i.e. if the associated TOrmModel contains TAuthUser and
     // TAuthGroup tables (set by constructor)
     function HandleAuthentication: boolean;
-    /// used by tests to set as false and force using SQlite3 virtual tables for
+    /// used by tests to set as false and force using SQLite3 virtual tables for
     // TOrmVirtualTableJson static tables (module JSON or BINARY)
     procedure SetStaticVirtualTableDirect(direct: boolean);
     /// call this method when the internal DB content is known to be invalid
@@ -1597,15 +1597,22 @@ type
     // - returns a newly created TRestStorageRemote instance
     function RemoteDataCreate(aClass: TOrmClass;
       aRemoteRest: TRestOrmParent): TRestOrmParent; 
-    /// get the non-virtual TRestStorage instance for one TOrm class
+    /// low-level access to the non-virtual TRestStorage instance of one TOrm class
     // - set e.g. after OrmMapMongoDB(), OrmMapInMemory(),
     // TRestStorageShardDB.Create or TRestOrmServer.RemoteDataCreate
+    // - raise an EModelException if aClass is not part of the database Model
+    // - returns nil if this TOrmClass is handled by the main engine
     function GetStaticStorage(aClass: TOrmClass): TRestOrmParent;
-    /// get the virtual TRestStorage instance for one TOrm class
+    /// low-level access to the virtual TRestStorage instance for one TOrm class
     // - i.e. in-memory or external SQL tables declared as SQLite3 virtual tables
+    // - raise an EModelException if aClass is not part of the database Model
+    // - returns nil if this TOrmClass is not a virtual table
     function GetVirtualStorage(aClass: TOrmClass): TRestOrmParent;
-    /// get the in-memory or virtual TRestStorage instance for one TOrm class
+    /// low-level access to the in-memory or virtual TRestStorage instance
+    // for one TOrm class
     // - will also follow TRestOrmServer.StaticVirtualTableDirect property
+    // - raise an EModelException if aClass is not part of the database Model
+    // - same as a dual call to GetStaticStorage() + GetStaticVirtualTable()
     function GetStorage(aClass: TOrmClass): TRestOrmParent;
   end;
 
@@ -2433,7 +2440,7 @@ type
     // the ORM approach of the framework; but in some cases (a custom Grid
     // display, for instance), it could be useful to have this method available
     // - won't do anything in case of wrong property name
-    // - expect BLOB and dynamic array fields encoded as SQlite3 BLOB literals
+    // - expect BLOB and dynamic array fields encoded as SQLite3 BLOB literals
     // ("x'01234'" e.g.) or '\uFFF0base64encodedbinary'
     procedure SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char; ValueLen: PtrInt);
     /// retrieve the record content as a TDocVariant custom variant object
@@ -2451,14 +2458,14 @@ type
     // - will set the Variant type to the best matching kind according to the
     // property type
     // - will return a null variant in case of wrong property name
-    // - BLOB fields are returned as SQlite3 BLOB literals ("x'01234'" e.g.)
+    // - BLOB fields are returned as SQLite3 BLOB literals ("x'01234'" e.g.)
     // - dynamic array fields are returned as a Variant array
     function GetFieldVariant(const PropName: string): Variant;
     /// set the published property value from a Variant value
     // - will convert from the variant type into UTF-8 text before setting the
     // value (so will work with any kind of Variant)
     // - won't do anything in case of wrong property name
-    // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
+    // - expect BLOB fields encoded as SQLite3 BLOB literals ("x'01234'" e.g.)
     procedure SetFieldVariant(const PropName: string; const Source: Variant);
 
     /// prepare to get values from a TOrmTable result
@@ -3381,7 +3388,7 @@ type
   // class definition; in both SQL and Where clause, the '_' will be trimmed - note
   // that you should better use the mormot.db.raw.sqlite3.static unit, since an
   // external SQLite3 .dll/.so library as supplied by the system may be outdated
-  // - internally, the SQlite3 R-Tree extension will be implemented as a virtual
+  // - internally, the SQLite3 R-Tree extension will be implemented as a virtual
   // table, storing coordinates/values as 32-bit floating point (single - as
   // TOrmRTree kind of ORM classes) or 32-bit integers (as TOrmRTreeInteger),
   // but will make all R-Tree computation using 64-bit floating point (double)
@@ -4161,7 +4168,7 @@ type
     // table name ('SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.)
     function SqlFromSelectWhere(const Tables: array of TOrmClass;
       const SqlSelect, SqlWhere: RawUtf8): RawUtf8;
-    /// set a custom SQlite3 text column collation for all fields of a given
+    /// set a custom SQLite3 text column collation for all fields of a given
     // type for all TOrm of this model
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
     // or COLLATE ISO8601 for TDateTime, and let the generated SQLite3 file be
@@ -4942,7 +4949,7 @@ type
   // faster and SQLite3 built-in NOCASE collation, handling only 7-bit A-Z chars
   // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
   // your text fields to contain only basic (un)accentued ASCCI characters, and
-  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // to be opened by any standard/ SQLite3 library or tool (outside of
   // mormot.db.raw.sqlite3.pas/SynDBExplorer)
   TOrmNoCase = class(TOrm)
   protected
@@ -4960,7 +4967,7 @@ type
   // faster and SQLite3 built-in BINARY collation, which is case-sensitive
   // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
   // your text fields to contain only basic (un)accentued ASCCI characters, and
-  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // to be opened by any standard/ SQLite3 library or tool (outside of
   // mormot.db.raw.sqlite3.pas/SynDBExplorer)
   TOrmCaseSensitive = class(TOrm)
   protected
@@ -4978,7 +4985,7 @@ type
   // Utf8ILCompReference() function which handles Unicode 10.0
   // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
   // your text fields to contain only basic (un)accentued ASCCI characters, and
-  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // to be opened by any standard/ SQLite3 library or tool (outside of
   // mormot.db.raw.sqlite3.pas/SynDBExplorer)
   TOrmUnicodeNoCase = class(TOrm)
   protected
@@ -5172,7 +5179,7 @@ begin
       begin
         // INSERT INTO .. VALUES (..),(..),(..),..
         W.CancelLastComma;
-        W.AddShorter('),(');
+        W.AddDirect(')', ',', '(');
         W.AddStrings('?,', FieldCount);
         dec(RowCount);
       end;
@@ -7234,7 +7241,7 @@ begin
     if FieldBitGet(Fields, i) then
     begin
       W.AddDirect('"');
-      W.AddNoJsonEscape(pointer(nfo^.Name), length(nfo^.Name));
+      W.AddString(nfo^.Name);
       W.AddDirect('"', ':');
       nfo^.GetJsonValues(self, W);
       W.AddComma;
@@ -7463,7 +7470,7 @@ begin
         begin
           for i := 0 to fields.Count - 1 do
             with fields.List[i] do
-              if aAuxiliaryRTreeField in Attributes then // for SQlite3 >= 3.24.0
+              if aAuxiliaryRTreeField in Attributes then // for SQLite3 >= 3.24.0
                 result := FormatUtf8('%+% %', [result, Name,
                   Props.Props.OrmFieldTypeToSql(i)])
               else
@@ -11410,7 +11417,7 @@ begin
       if Encoding in [encPostHex, encPostHexID, encPutHexID] then
         fBatch.AddBinToHexDisplayMinChars(Fields, SizeOf(Fields^));
       if fTable <> nil then
-        fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
+        fBatch.AddDirect('"', ',') // '{"Table":[...,"POST",{object},...]}'
       else
       begin
         fBatch.AddDirect('@'); // '[...,"POST@Table",{object}',...]'

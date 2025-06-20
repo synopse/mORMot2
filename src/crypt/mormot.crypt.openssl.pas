@@ -2973,7 +2973,7 @@ begin
     for i := 0 to length(x) - 1 do
     begin
       AddString(x[i].ToPem);
-      AddShorter(CRLF);
+      AddDirectNewLine; // = #13#10 on Windows, #10 on POSIX
     end;
     fStore.UnLock;
     // followed by X.509 CRLs
@@ -2981,7 +2981,7 @@ begin
     for i := 0 to length(c) - 1 do
     begin
       AddString(c[i].ToPem); // raise EOpenSsl (not signed)
-      AddShorter(CRLF);
+      AddDirectNewLine;
     end;
     fStore.UnLock;
     SetText(RawUtf8(result));

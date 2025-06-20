@@ -954,19 +954,19 @@ procedure TTestCoreCrypto._JWT;
       t, one.Algorithm, '', 'joe', '', @exp, nil, @sub, @iss, nil) = jwtValid);
     checkEqual(one.ExtractAlgo(t), one.Algorithm);
     checkEqual(one.ExtractAlgo(copy(t, 2, 1000)), '');
-    check(one.CacheTimeoutSeconds = 0);
+    checkEqual(one.CacheTimeoutSeconds, 0);
     one.Options := one.Options + [joHeaderParse];
     one.Verify(t, jwt);
-    check(jwt.result = jwtValid);
-    check(jwt.reg[jrcIssuer] = 'joe');
+    CheckUtf8(jwt.result = jwtValid, 'verify1=%', [ToText(jwt.result)^]);
+    checkEqual(jwt.reg[jrcIssuer], 'joe');
     one.Options := one.Options - [joHeaderParse];
     one.CacheTimeoutSeconds := 60;
-    check(one.CacheTimeoutSeconds = 60);
+    checkEqual(one.CacheTimeoutSeconds, 60);
     one.Verify(t, jwt);
-    check(exp = GetCardinal(pointer(jwt.reg[jrcExpirationTime])));
-    check(jwt.result = jwtValid);
+    checkEqual(exp, GetCardinal(pointer(jwt.reg[jrcExpirationTime])));
+    CheckUtf8(jwt.result = jwtValid, 'verify2=%', [ToText(jwt.result)^]);
     check(jwt.reg[jrcExpirationTime] <> '');
-    check(jwt.reg[jrcIssuer] = 'joe');
+    checkEqual(jwt.reg[jrcIssuer], 'joe');
     check(jwt.data.B['http://example.com/is_root']);
     check((jwt.reg[jrcIssuedAt] <> '') = (jrcIssuedAt in one.Claims));
     check((jwt.reg[jrcJWTID] <> '') = (jrcJWTID in one.Claims));
@@ -975,10 +975,10 @@ procedure TTestCoreCrypto._JWT;
       begin
         Finalize(jwt);
         FillCharFast(jwt, SizeOf(jwt), 0);
-        check(jwt.reg[jrcIssuer] = '');
+        checkEqual(jwt.reg[jrcIssuer], '');
         one.Verify(t, jwt);
         check(jwt.result = jwtValid, 'from cache');
-        check(jwt.reg[jrcIssuer] = 'joe');
+        checkEqual(jwt.reg[jrcIssuer], 'joe');
         check((jwt.reg[jrcJWTID] <> '') = (jrcJWTID in one.Claims));
       end;
     if (one.Algorithm <> 'none') and
@@ -986,7 +986,7 @@ procedure TTestCoreCrypto._JWT;
     begin
       dec(t[length(t)]); // invalidate signature
       one.Verify(t, jwt);
-      check(jwt.result <> jwtValid);
+      check(jwt.result <> jwtValid, 'invalid sig');
     end;
     if not nofree then
       one.Free;
@@ -3195,9 +3195,9 @@ begin
   r := c3.Encrypt(n);
   if r <> '' then // not all algorithms support encryption (RSA+ES256 only)
   begin
-    CheckEqual(c3.Decrypt(r), n, 'asym ctr');
+    CheckEqual(c3.Decrypt(r), n, 'asym ctr ' + crt.AlgoName);
     r := c3.Encrypt(n, 'aes-128-cbc');
-    CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding');
+    CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding ' + crt.AlgoName);
   end;
   s2 := GuidToRawUtf8(RandomGuid);
   Check(TrimGuid(s2));

@@ -291,7 +291,7 @@ begin
   {$endif ZEOSTRANS}
   else
   begin
-    if (fInternalTPB = nil) then
+    if fInternalTPB = nil then
       fInternalTPB := TSqlDBIbxConnection(Connection).GenerateTPB(fReadOnlyTransaction);
     fInternalTransaction := TSqlDBIbxConnection(Connection).Attachment.
       StartTransaction(fInternalTPB);
@@ -721,12 +721,11 @@ var
           for iA := iStart to iEnd do
             for iP := 0 to fParamCount - 1 do
             begin
-              W.Add('p');
+              W.AddDirect('p');
               W.AddU(iCnt);
-              W.Add(' ');
+              W.AddDirect(' ');
               W.AddString(aParTyp[iP]);
-              W.Add('=','?');
-              W.AddComma;
+              W.AddDirect('=', '?', ',');
               inc(iCnt);
             end;
           W.CancelLastComma;
@@ -740,9 +739,9 @@ var
               Inc(iCnt);
             end;
             W.Add(oldSQL, DynRawUtf8ArrayToConst(aPar));
-            W.Add(';', #10);
+            W.AddDirect(';', #10);
           end;
-          W.AddShorter('end');
+          W.AddDirect('e', 'n', 'd');
           PrepareBlockStatement;
         end;
         ExecuteBlockStatement;
@@ -1099,7 +1098,7 @@ begin
     else
     begin
       fblib := IB.LoadFBLibrary(fFbLibraryPathName);
-      if assigned(fblib) then
+      if Assigned(fblib) then
         fFirebirdAPI := fblib.GetFirebirdAPI;
     end;
   end;
@@ -1222,7 +1221,7 @@ var
 
 begin
   SynDBLog.EnterLocal(log, self, 'Connect');
-  if fAttachment<>nil then
+  if fAttachment <> nil then
      ESqlDBIbx.RaiseUtf8(
        '%.Connect() on % failed: Attachment<>nil',
        [self, fProperties.ServerName]);

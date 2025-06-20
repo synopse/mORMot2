@@ -348,7 +348,7 @@ end;
 
 procedure TWebSocketAsyncConnection.OnClose;
 begin
-  inherited OnClose; // set fClosed flag
+  inherited OnClose; // set fClosed flag and check ifProcessing
   if fProcess = nil then
     exit;
   fProcess.Shutdown({waitforpong=}true); // send focConnectionClose

@@ -65,7 +65,7 @@ Standalone REST In-Memory Server Using JSON or Binary Persistence
 
 ### mormot.rest.sqlite3
 
-REST Server and Client Using an Embedded SQlite3 Database Engine
+REST Server and Client Using an Embedded SQLite3 Database Engine
 - `TRestServerDB` REST Server with Direct Access to a SQLite3 Database
 - `TRestClientDB` REST Client with Direct Access to a SQLite3 Database
 

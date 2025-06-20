@@ -929,7 +929,7 @@ type
     // to the generated JSON stream (for faster unserialization of huge content)
     procedure AddColumns(aKnownRowsCount: integer = 0);
     /// write or init field names for appropriate JSON Expand later use
-    // - accept a name directly supplied by the DB provider
+    // - accept a name directly supplied by the DB provider - e.g. by SQLite3
     // - if Expand is true, will set ColNames[] with the expected format
     // - on Expand=false format, will directly write aColName to W
     procedure AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
@@ -1064,7 +1064,7 @@ type
   /// the recognized WHERE expressions for TSelectStatement
   TSelectStatementWhereDynArray = array of TSelectStatementWhere;
 
-  /// used to parse a SELECT SQL statement, following the SQlite3 syntax
+  /// used to parse a SELECT SQL statement, following the SQLite3 syntax
   // - handle basic REST commands, i.e. a SELECT over a single table (no JOIN)
   // with its WHERE clause, and result column aliases
   // - handle also aggregate functions like "SELECT Count( * ) FROM TableName"
@@ -2503,12 +2503,12 @@ begin
       if n = 1 then
       begin
         if inlined then
-          AddShorter('=:(')
+          AddDirect('=', ':', '(')
         else
           AddDirect('=');
         AddQuotedStr(pointer(Values[0]), length(Values[0]), '''');
         if inlined then
-          AddShorter('):');
+          AddDirect(')', ':');
       end
       else
       begin
@@ -2519,7 +2519,7 @@ begin
             AddDirect(':', '(');
           AddQuotedStr(pointer(Values[i]), length(Values[i]), '''');
           if inlined then
-            AddShorter('):,')
+            AddDirect(')', ':', ',')
           else
             AddComma;
         end;
@@ -2548,12 +2548,12 @@ begin
       if n = 1 then
       begin
         if ValuesInlinedMax > 1 then
-          AddShorter('=:(')
+          AddDirect('=', ':', '(')
         else
           AddDirect('=');
         Add(Values[0]);
         if ValuesInlinedMax > 1 then
-          AddShorter('):');
+          AddDirect(')', ':');
       end
       else
       begin
@@ -2564,7 +2564,7 @@ begin
             AddDirect(':', '(');
           Add(Values[i]);
           if ValuesInlinedMax > n then
-            AddShorter('):,')
+            AddDirect(')', ':', ',')
           else
             AddComma;
         end;
@@ -2856,27 +2856,25 @@ end;
 procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
 var
   i, len: PtrInt;
-  c: PPointer;
-  new: PAnsiChar;
+  c: PPAnsiChar;
 begin
   if fExpand then
   begin
     c := pointer(ColNames);
     for i := 1 to length(ColNames) do
     begin
-      len := PStrLen(PAnsiChar(c^) - _STRLEN)^; // ColNames[] <> ''
+      len := PStrLen(c^ - _STRLEN)^; // ColNames[] <> ''
       if twoForceJsonExtended in CustomOptions then
       begin
-        SetLength(RawUtf8(c^), len + 1); // reallocate in-place
-        PAnsiChar(c^)[len] := ':';
+        SetLength(PRawUtf8(c)^, len + 1); // colname: in-place
+        c^[len] := ':';
       end
       else
       begin
-        new := FastNewString(len + 3, CP_UTF8);
-        new[0] := '"';
-        MoveFast(c^^, new[1], len);
-        PCardinal(new + len + 1)^ := ord('"') + ord(':') shl 8;
-        FastAssignNew(c^, new);
+        SetLength(PRawUtf8(c)^, len + 3); // "colname": in-place
+        MoveFast(c^[0], c^[1], len);
+        c^[0] := '"';
+        PWord(c^ + len + 1)^ := ord('"') + ord(':') shl 8;
       end;
       inc(c);
     end;
@@ -2895,12 +2893,10 @@ begin
     for i := 0 to length(ColNames) - 1 do
     begin
       AddString(ColNames[i]);
-      AddShorter('","');
+      AddDirect('"', ',', '"')
     end;
     CancelLastChar;
     fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
-     // B := buf-1 at startup -> need ',val11' position in
-     // "values":["col1","col2",val11,' i.e. current pos without the ','
   end;
 end;
 
@@ -2946,7 +2942,7 @@ begin
       fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
     end
     else
-      AddShorter('","');
+      AddDirect('"', ',', '"')
   end;
 end;
 
@@ -3880,10 +3876,10 @@ var
   procedure AddValue;
   begin
     if InlinedParams = pInlined then
-      W.AddShorter(':(');
+      W.AddDirect(':', '(');
     W.AddString(FieldValues[f]);
     if InlinedParams = pInlined then
-      W.AddShorter('):,')
+      W.AddDirect(')', ':', ',')
     else
       W.AddComma;
   end;
@@ -4190,14 +4186,14 @@ begin
       dMariaDB:
         W.AddShort('insert ignore into ')
     else
-      W.AddShort('insert or ignore into '); // SQlite3
+      W.AddShort('insert or ignore into '); // SQLite3
     end
   else if boInsertOrReplace in BatchOptions then
     case DB of
       dFirebird:
         W.AddShort('update or insert into ');
     else
-      W.AddShort('replace into '); // SQlite3 and MySQL+MariaDB
+      W.AddShort('replace into '); // SQLite3 and MySQL+MariaDB
     end
   else
     W.AddShort('insert into ');

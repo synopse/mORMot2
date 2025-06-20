@@ -782,31 +782,50 @@ type
   /// low-level version information for libcurl library (in its cv11 layout)
   // - you need to check the actual version before accessing any of its members
   TCurlVersionInfo = record
+    /// define the actual available fields
     age: TCurlVersion;
+    /// human readable string of the library version
     version: PAnsiChar;
+    /// numerical representation of the library version
     version_num: cardinal;
+    /// human readable string of the recognized running system
     host: PAnsiChar;
+    /// flags to identify the main library features
     features: TCurlVersionFeatures;
+    /// human readable string of the associated OpenSSL library version
     ssl_version: PAnsiChar;
+    /// not used, always nil
     ssl_version_num: PAnsiChar;
+    /// human readable string of the associated libz library version
     libz_version: PAnsiChar;
+    /// list of known protocols
     protocols: PPAnsiCharArray;
+    // requires age >= cv2
     ares: PAnsiChar;
     ares_num: integer;
+    // requires age >= cv3
     libidn: PAnsiChar;
+    // requires age >= cv4
     iconv_ver_num: integer;
     libssh_version: PAnsiChar;
+    // requires age >= cv5
     brotli_ver_num: cardinal;
     brotli_version: PAnsiChar;
+    // requires age >= cv6
     nghttp2_ver_num: cardinal;
     nghttp2_version: PAnsiChar;
     quic_version: PAnsiChar;
+    // requires age >= cv7
     cainfo: PAnsiChar;
     capath: PAnsiChar;
+    // requires age >= cv8
     zstd_ver_num: integer;
     zstd_version: PAnsiChar;
+    // requires age >= cv9
     hyper_version: PAnsiChar;
+    // requires age >= cv10
     gsasl_version: PAnsiChar;
+    // requires age >= cv11
     feature_names: PPAnsiCharArray;
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
@@ -849,6 +868,7 @@ type
   PCurlHttpPost = ^TCurlHttpPost;
 
   /// defines a multipart/formdata HTTP POST section
+  // - formadd() is deprecated since 7.56 - use mime_init() instead
   TCurlHttpPost = record
     /// next entry in the list
     next: PCurlHttpPost;
@@ -1033,6 +1053,7 @@ type
     global_cleanup: procedure; cdecl;
     /// returns run-time libcurl version info
     version_info: function(age: TCurlVersion): PCurlVersionInfo; cdecl;
+
     // start a libcurl easy session
     easy_init: function: pointer; cdecl;
     /// set options for a curl easy handle
@@ -1053,7 +1074,9 @@ type
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
     /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
+
     /// add a section to a multipart/formdata HTTP POST request
+    // - deprecated in libcurl 7.56 - use mime_init() instead
     formadd: function(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs;
     /// finalize the sections of a multipart/formdata HTTP POST request
     formfree: procedure(first: PCurlHttpPost); cdecl;
@@ -1068,6 +1091,7 @@ type
     share_strerror: function(code: TCurlShareResult): PAnsiChar; cdecl;
 
     /// create a mime context and return its handle
+    // - mime_*() functions may be nil before 7.56 e.g. on MacOS 10.14 and lower
     mime_init: function(curl: TCurl): TCurlMime; cdecl;
     /// release a mime handle and its substructures
     mime_free: procedure(mime: TCurlMime); cdecl;
@@ -1112,7 +1136,7 @@ type
     {$endif LIBCURLMULTI}
 
     /// hold CurlEnableGlobalShare mutexes
-    share_cs: array[curl_lock_data] of TRTLCriticalSection;
+    share_cs: array[curl_lock_data] of TOSLock;
     /// contains numerical information about the initialized libcurl instance
     // - this is a direct access to the static struct returned by curl_version_info
     info: PCurlVersionInfo;
@@ -1135,12 +1159,15 @@ var
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
 // - you can specify the libcurl library name to load
+// - this method is not thread safe and should be executed e.g. at startup or
+// within GlobalLock/GlobalUnlock - or via CurlIsAvailable wrapper
 procedure LibCurlInitialize(engines: TCurlGlobalInit = [giAll];
   const dllname: TFileName = LIBCURL_DLL);
 
 /// return TRUE if a curl library is available
 // - will load and initialize it, calling LibCurlInitialize if necessary,
 // catching any exception during the process
+// - this method is thread safe, using function LibraryAvailable/GlobalLock
 function CurlIsAvailable: boolean;
 
 /// Callback used by libcurl to write data, e.g. when downloading a resource
@@ -1184,7 +1211,7 @@ function CurlDisableGlobalShare: TCurlShareResult;
 
 /// just execute a request using libcurl and return the raw data
 // - could be used e.g. for a TFTP or FTP occasional client request
-function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
+function CurlPerform(const uri: RawUtf8; out data: RawByteString;
   timeoutMs: integer = 1000; responseCode: PInteger = nil;
   tftpBlockSize: integer = 512): TCurlResult;
 
@@ -1359,14 +1386,20 @@ begin
 end;
 
 var
-  curl_initialized: boolean;
+  curl_initialized: TLibraryState;
+
+procedure _LibCurlInitialize;
+begin
+  try
+    LibCurlInitialize; // try to initialize with the default library name
+  except;
+    curl_initialized := lsNotAvailable; // paranoid (already set)
+  end;
+end;
 
 function CurlIsAvailable: boolean;
 begin
-  if not curl_initialized then
-    // try to initialize with the default library name
-    LibCurlInitialize;
-  result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
+  result := LibraryAvailable(curl_initialized, _LibCurlInitialize);
 end;
 
 // ensure libcurl will call our RTL MM, not the libc heap
@@ -1425,12 +1458,12 @@ const
     'share_cleanup',
     'share_setopt',
     'share_strerror',
-    'mime_init',
-    'mime_free',
-    'mime_addpart',
-    'mime_data',
-    'mime_name',
-    'mime_type',
+    '?mime_init', // may be nil e.g. on MacOS 10.14 and lower (lib version 7.54)
+    '?mime_free',
+    '?mime_addpart',
+    '?mime_data',
+    '?mime_name',
+    '?mime_type',
     {$ifdef LIBCURLMULTI},
     'multi_add_handle',
     'multi_assign',
@@ -1455,17 +1488,8 @@ procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 var
   res: TCurlResult;
 begin
-  if curl_initialized
-     {$ifndef LIBCURLSTATIC} and
-     (curl <> nil)
-     {$endif LIBCURLSTATIC} then
-    exit; // set it once, but allow to retry a given dllname
-
-  GlobalLock;
-  try
-    if curl_initialized then
-      exit;
-
+  if curl_initialized <> lsAvailable then
+  try // set it once, but can retry with specific alternate libnames
     {$ifdef LIBCURLSTATIC}
 
     curl.global_init := @curl_global_init;
@@ -1488,7 +1512,7 @@ begin
     curl.share_cleanup := @curl_share_cleanup;
     curl.share_setopt := @curl_share_setopt;
     curl.share_strerror := @curl_share_strerror;
-    curl.mime_init := @curl_mime_init;
+    curl.mime_init := @curl_mime_init; // may be nil e.g. on MacOS
     curl.mime_free := @curl_mime_free;
     curl.mime_addpart := @curl_mime_addpart;
     curl.mime_data := @curl_mime_data;
@@ -1514,63 +1538,66 @@ begin
     {$else}
 
     curl := TLibCurl.Create;
-    try
-      curl.TryLoadResolve([
-      {$ifdef OSWINDOWS}
-        // first try the libcurl.dll in the local executable folder
-        Executable.ProgramFilePath + dllname,
-      {$endif OSWINDOWS}
-        // search standard library in path
-        dllname
-      {$ifdef OSDARWIN}
-        // another common names on MacOS
-        , 'libcurl.4.dylib', 'libcurl.3.dylib'
-      {$else}
-        {$ifdef OSPOSIX}
-        // another common names on POSIX
-        , 'libcurl.so.4', 'libcurl.so.3'
-        // for latest Linux Mint and other similar distros using gnutls
-        , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
-        {$endif OSPOSIX}
-      {$endif OSDARWIN}
-        ], 'curl_', @CURL_ENTRIES, @@curl.global_init, ECurl);
-    except
-      FreeAndNil(curl); // ECurl raised during initialization above
-      exit;
-    end;
+    curl.TryLoadResolve([
+    {$ifdef OSWINDOWS}
+      // first try the libcurl.dll in the local executable folder
+      Executable.ProgramFilePath + dllname,
+    {$endif OSWINDOWS}
+      // search standard library in path
+      dllname
+    {$ifdef OSDARWIN}
+      // another common names on MacOS
+      , 'libcurl.4.dylib', 'libcurl.3.dylib'
+    {$else}
+      {$ifdef OSPOSIX}
+      // another common names on POSIX
+      , 'libcurl.so.4', 'libcurl.so.3'
+      // for latest Linux Mint and other similar distros using gnutls
+      , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
+      {$endif OSPOSIX}
+    {$endif OSDARWIN}
+      ], 'curl_', @CURL_ENTRIES, @@curl.global_init, ECurl);
 
     {$endif LIBCURLSTATIC}
 
     // if we reached here, the library has been successfully loaded
-    res := curl.global_init_mem(engines, @curl_malloc_callback, @curl_free_callback,
+    res := curl.global_init_mem(engines,
+      @curl_malloc_callback, @curl_free_callback,
       @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
     if res <> crOK then
-      raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
+      raise ECurl.CreateFmt('curl_global_init_mem() failed as %d %s',
+        [ord(res), ToText(res)^]);
     curl.info := curl.version_info(cv11); // direct static assign
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info^.version]);
     if curl.info^.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info^.ssl_version]);
-    curl_initialized := true; // should be set last but before CurlEnableGlobalShare
 
+    curl_initialized := lsAvailable; // set last but before CurlEnableGlobalShare
     curl.globalShare := nil;
     CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
+
     // api := 0; with curl.info^ do while protocols[api]<>nil do
     // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
-  finally
-    GlobalUnLock;
+  except
+    // code above has trigerred a ECurl during its loading/initialization phase
+    curl_initialized := lsNotAvailable;
+    {$ifndef LIBCURLSTATIC}
+    FreeAndNilSafe(curl); // ECurl raised during initialization above
+    {$endif LIBCURLSTATIC}
+    raise; // propagate
   end;
 end;
 
 procedure curlShareLock(handle: TCurl; data: curl_lock_data;
   locktype: curl_lock_access; userptr: pointer); cdecl;
 begin
-  EnterCriticalSection(curl.share_cs[data]);
+  curl.share_cs[data].Lock;
 end;
 
 procedure curlShareUnLock(handle: TCurl; data: curl_lock_data;
   userptr: pointer); cdecl;
 begin
-  LeaveCriticalSection(curl.share_cs[data]);
+  curl.share_cs[data].UnLock;
 end;
 
 function CurlEnableGlobalShare: boolean;
@@ -1587,7 +1614,7 @@ begin
     // the share object was not created
     exit;
   for d := low(d) to high(d) do
-    InitializeCriticalSection(curl.share_cs[d]);
+    curl.share_cs[d].Init;
   curl.share_setopt(curl.globalShare, csoLockFunc, @curlShareLock);
   curl.share_setopt(curl.globalShare, csoUnLockFunc, @curlShareUnLock);
   // share and cache DNS + TLS sessions (but not Connections)
@@ -1605,17 +1632,20 @@ var
   d: curl_lock_data;
 begin
   result := csrOK;
-  if {$ifndef LIBCURLSTATIC}(curl = nil) or{$endif}
-     (curl.globalShare = nil) then
+  if {$ifndef LIBCURLSTATIC}
+     (curl = nil) or
+     not Assigned(curl.share_cleanup) or
+     {$endif LIBCURLSTATIC}
+     not Assigned(curl.globalShare) then
     exit; // already disabled
   result := curl.share_cleanup(curl.globalShare);
   if result = csrOK then
     curl.globalShare := nil;
   for d := low(d) to high(d) do
-    DeleteCriticalSection(curl.share_cs[d]);
+    curl.share_cs[d].Done;
 end;
 
-function CurlPerform(const uri: RaWUtf8; out data: RawByteString;
+function CurlPerform(const uri: RawUtf8; out data: RawByteString;
   timeoutMs: integer; responseCode: PInteger; tftpBlockSize: integer): TCurlResult;
 var
   h: pointer;
@@ -1649,9 +1679,10 @@ end;
 {$ifndef LIBCURLSTATIC}
 destructor TLibCurl.Destroy;
 begin
-  CurlDisableGlobalShare;
-  if curl <> nil then
-    curl.global_cleanup;
+  if curl = self then
+    CurlDisableGlobalShare;
+  {$ifndef LIBCURLSTATIC} if Assigned(global_cleanup) then {$endif}
+    global_cleanup;
 end;
 {$endif LIBCURLSTATIC}
 
@@ -1662,7 +1693,7 @@ initialization
 
 finalization
   {$ifdef LIBCURLSTATIC}
-  if curl_initialized then
+  if curl_initialized = lsAvailable then
   begin
     CurlDisableGlobalShare;
     curl.global_cleanup;

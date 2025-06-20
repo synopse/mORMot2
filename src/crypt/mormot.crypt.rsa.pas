@@ -3519,7 +3519,7 @@ begin
       ckaRsa,
       ckaRsaPss:
         if fRsa <> nil then
-          result := fRsa.Open(Cipher, Message);
+          result := fRsa.Open(Message, Cipher);
     end;
 end;
 

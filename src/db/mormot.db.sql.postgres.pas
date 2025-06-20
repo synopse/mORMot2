@@ -177,7 +177,7 @@ type
     fPGParamFormats: TIntegerDynArray;
     // non zero for PGFMT_BIN params
     fPGParamLengths: TIntegerDynArray;
-    /// define the result columns name and content
+    /// define the result columns name and content - called once if cached
     procedure BindColumns;
     /// set parameters as expected by PostgresSQL
     procedure BindParams;
@@ -709,24 +709,24 @@ end;
 procedure TSqlDBPostgresConnectionProperties.FillOidMapping;
 begin
   // see pg_type.h (most used first)
-  MapOid(INT4OID, ftInt64);
-  MapOid(INT8OID, ftInt64);
-  MapOid(TEXTOID, ftUtf8); // other char types will be ftUtf8 as fallback
-  MapOid(FLOAT8OID, ftDouble);
-  MapOid(TIMESTAMPOID, ftDate);
-  MapOid(BYTEAOID, ftBlob);
-  MapOid(NUMERICOID, ftCurrency); // our ORM uses NUMERIC(19,4) for currency
-  MapOid(BOOLOID, ftInt64);
-  MapOid(INT2OID, ftInt64);
-  MapOid(CASHOID, ftCurrency);
+  MapOid(INT4OID,        ftInt64);
+  MapOid(INT8OID,        ftInt64);
+  MapOid(TEXTOID,        ftUtf8); // other char types will be ftUtf8 as fallback
+  MapOid(FLOAT8OID,      ftDouble);
+  MapOid(TIMESTAMPOID,   ftDate);
+  MapOid(BYTEAOID,       ftBlob);
+  MapOid(NUMERICOID,     ftCurrency); // our ORM uses NUMERIC(19,4) for currency
+  MapOid(BOOLOID,        ftInt64);
+  MapOid(INT2OID,        ftInt64);
+  MapOid(CASHOID,        ftCurrency);
   MapOid(TIMESTAMPTZOID, ftDate);
-  MapOid(ABSTIMEOID, ftDate);
-  MapOid(DATEOID, ftDate);
-  MapOid(TIMEOID, ftDate);
-  MapOid(TIMETZOID, ftDate);
-  MapOid(REGPROCOID, ftInt64);
-  MapOid(OIDOID, ftInt64);
-  MapOid(FLOAT4OID, ftDouble);
+  MapOid(ABSTIMEOID,     ftDate);
+  MapOid(DATEOID,        ftDate);
+  MapOid(TIMEOID,        ftDate);
+  MapOid(TIMETZOID,      ftDate);
+  MapOid(REGPROCOID,     ftInt64);
+  MapOid(OIDOID,         ftInt64);
+  MapOid(FLOAT4OID,      ftDouble);
   // note: any other unregistered OID will be handled as ftUtf8 to keep the data
 end;
 
@@ -806,6 +806,9 @@ begin
   result := main.fAsync;
 end;
 
+
+{ TSqlDBPostgresStatement }
+
 procedure TSqlDBPostgresStatement.BindColumns;
 var
   nCols, c: integer;
@@ -846,7 +849,7 @@ var
   p: PSqlDBParam;
 begin
   // mark parameter as textual by default, with no blob length
-  FillCharFast(pointer(fPGParams)^, fParamCount shl POINTERSHR, 0);
+  FillCharFast(pointer(fPGParams)^,       fParamCount shl POINTERSHR, 0);
   FillCharFast(pointer(fPGParamFormats)^, fParamCount shl 2, PGFMT_TEXT);
   FillCharFast(pointer(fPGParamLengths)^, fParamCount shl 2, 0);
   // bind fParams[] as expected by PostgreSQL - potentially as array
@@ -986,8 +989,8 @@ begin
   end
   else
     SqlLogEnd;
-  // allocate libpq parameter buffers as dynamic arrays
-  SetLength(fPGParams, fPreparedParamsCount);
+  // allocate libpq parameter buffers as dynamic arrays - reused when cached
+  SetLength(fPGParams,       fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
   SetLength(fPGParamLengths, fPreparedParamsCount);
 end;
@@ -1348,6 +1351,7 @@ end;
 procedure TSqlDBPostgresStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   P: pointer;
+  c: PSqlDBColumnProperty;
 begin
   if (fRes = nil) or
      (fResStatus <> PGRES_TUPLES_OK) or
@@ -1356,24 +1360,24 @@ begin
   P := PQ.GetValue(fRes, fCurrentRow, Col);
   if ((P = nil) or (PUtf8Char(P)^ = #0)) and
      (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
-    W.AddNull
+    W.AddShort(NULL_LOW, 4)
   else
-  with fColumns[Col] do
   begin
-    case ColumnType of
+    c := @fColumns[Col];
+    case c^.ColumnType of
       ftNull:
         W.AddNull;
       ftInt64,
       ftDouble,
       ftCurrency:
-        if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+        if c^.ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
           W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
         else
           // note: StrLen slightly faster than PQ.GetLength for small content
           W.AddShort(P, StrLen(P));
       ftUtf8:
-        if (ColumnAttr = JSONOID) or
-           (ColumnAttr = JSONBOID) then
+        if (c^.ColumnAttr = JSONOID) or
+           (c^.ColumnAttr = JSONBOID) then
           W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
         else
         begin
@@ -1398,7 +1402,7 @@ begin
             PQ.GetLength(fRes, fCurrentRow, Col)), {withmagic=}true);
     else
       ESqlDBPostgres.RaiseUtf8('%.ColumnToJson: ColumnType=%?',
-        [self, ord(ColumnType)]);
+        [self, ord(c^.ColumnType)]);
     end;
   end;
 end;
@@ -1551,7 +1555,7 @@ begin
   end;
   fProcessing := false;
   log := nil;
-  SynDBLog.Add.NotifyThreadEnded;
+  SynDBLog.NotifyThreadEnded;
 end;
 
 

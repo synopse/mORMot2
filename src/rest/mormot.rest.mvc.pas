@@ -451,6 +451,7 @@ type
     procedure AddErrorContext(var context: variant; error: integer);
     procedure CommandError(const ErrorName: RawUtf8; const ErrorValue: variant;
       ErrorCode: integer); virtual;
+    function StatusCodeToErrorText(Code: integer): RawUtf8; virtual;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     constructor Create(aApplication: TMvcApplication); reintroduce;
@@ -1653,13 +1654,18 @@ begin
   Renders(renderContext, ErrorCode, true);
 end;
 
+function TMvcRendererAbstract.StatusCodeToErrorText(Code: integer): RawUtf8;
+begin
+  result := mormot.core.text.StatusCodeToErrorMsg(Code); // default English
+end;
+
 procedure TMvcRendererAbstract.AddErrorContext(
   var context: variant; error: integer);
 var
   details: RawUtf8;
 begin
   _ObjAddProps([
-    'msg',       StatusCodeToErrorMsg(error),
+    'msg',       StatusCodeToErrorText(error),
     'errorCode', error,
     'ip',        fRemoteIP,
     'useragent', fRemoteUserAgent], context, {dontadddef=}true);

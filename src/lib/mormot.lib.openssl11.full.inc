@@ -13854,9 +13854,6 @@ function EVP_DecodeFinal(ctx: PEVP_ENCODE_CTX; _out: PByte; outl: PInteger): int
 function EVP_DecodeBlock(t: PByte; f: PByte; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DecodeBlock';
 
-function EVP_CIPHER_CTX_set_key_length(x: PEVP_CIPHER_CTX; keylen: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_key_length';
-
 function EVP_CIPHER_CTX_rand_key(ctx: PEVP_CIPHER_CTX; key: PByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_rand_key';
 
@@ -14024,9 +14021,6 @@ function EVP_rc2_ofb(): PEVP_CIPHER; cdecl;
 
 function EVP_bf_ecb(): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_bf_ecb';
-
-function EVP_bf_cbc(): PEVP_CIPHER; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_bf_cbc';
 
 function EVP_bf_cfb64(): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_bf_cfb64';

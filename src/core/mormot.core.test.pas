@@ -30,7 +30,8 @@ uses
   mormot.core.rtti,
   mormot.core.perf,
   mormot.core.log,
-  mormot.core.threads;
+  mormot.core.threads,
+  mormot.net.client;
 
 
 { ************ Unit-Testing classes and functions }
@@ -295,6 +296,10 @@ type
     class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
+    /// safely download some reference material (e.g. from api.github.com)
+    // - with proper retry if the server denies it, due to a rate limit
+    function DownloadFile(const uri: RawUtf8; localfile: TFileName = '';
+      retry: integer = 3): RawByteString;
     /// execute a method possibly in a dedicated TLoggedWorkThread
     // - OnTask() should take some time running, to be worth a thread execution
     // - won't create more background threads than currently available CPU cores,
@@ -383,7 +388,7 @@ type
     fSafe: TSynLocker;
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
-    fMainThread: boolean;
+    fMultiThread: boolean;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
     fNotifyProgressLineLen: integer;
@@ -502,6 +507,9 @@ type
     // - as retrieved from "--test class.method" command line switch
     property Restrict: TRawUtf8DynArray
       read fRestrict write fRestrict;
+    /// if the "--multithread" switch has been defined at command line
+    property MultiThread: boolean
+      read fMultiThread;
   published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
@@ -1069,15 +1077,39 @@ begin
       question:
         WR.AddDirect('?', ' ');
       paragraph:
-        WR.AddShorter('.'#13#10);
+        WR.AddDirect('.', #13, #10);
     end;
   end;
   if (LastPunctuation <> ' ') and
      not (last in endKind) then
   begin
-    WR.AddShorter('bla');
-    WR.Add(LastPunctuation);
+    WR.AddDirect('b', 'l', 'a');
+    WR.AddDirect(LastPunctuation);
   end;
+end;
+
+function TSynTestCase.DownloadFile(const uri: RawUtf8;
+  localfile: TFileName; retry: integer): RawByteString;
+var
+  status: integer;
+  info: string;
+begin
+  if localfile <> '' then
+    if not IsExpandedPath(localfile) then
+      localfile := WorkDir + localfile;
+  repeat
+    result := HttpGetWeak(uri, localfile, @status);
+    FormatString('DownloadFile %=% retry=% [%]',
+      [uri, status, retry, EscapeToShort(result)], info);
+    fOwner.DoLog(sllTrace, '%', [info]);
+    if status = HTTP_SUCCESS then
+      exit;
+    AddConsole(info); // notify something if not as expected (rate limit?)
+    dec(retry);
+    if retry <= 0 then
+      exit;
+    SleepHiRes(10);
+  until false;
 end;
 
 threadvar
@@ -1093,12 +1125,12 @@ procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
 begin
   if NotifyTask or
-     fOwner.fMainThread or
+     not fOwner.fMultiThread or
      not Threaded then
     NotifyProgress([TaskName]);
   if not Assigned(OnTask) then
     exit;
-  if fOwner.fMainThread or // avoid timeout e.g. on slow VMs
+  if not fOwner.fMultiThread or // avoid timeout e.g. on slow VMs
      not Threaded then
     OnTask(Sender) // run in main thread
   else
@@ -1249,7 +1281,6 @@ constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
   fSafe.InitFromClass;
-  fMainThread := (SystemInfo.dwNumberOfProcessors <= 2);
 end;
 
 procedure TSynTests.EndSaveToFileExternal;
@@ -1412,8 +1443,8 @@ var
   log: IUnknown;
 begin
   result := true;
-  if Executable.Command.Option('mainthread') then
-    fMainThread := true;
+  if Executable.Command.Option('multithread') then
+    fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do
@@ -1694,8 +1725,8 @@ begin
     'list all class name(s) as expected by --test');
   Executable.Command.Option('&methods',
     'list all method name(s) of #class as specified to --test');
-  Executable.Command.Option('mainthread',
-    'ensure no sub-thread are created for tests');
+  Executable.Command.Option('multithread',
+    'parallelize tests execution on multi-core CPU');
   if Executable.Command.Option('&verbose',
        'run logs in verbose mode: enabled only with --test') and
      (restrict <> nil) then

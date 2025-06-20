@@ -860,7 +860,7 @@ begin
           end;
           if Alias <> '' then
           begin
-            W.AddShorter(' as ');
+            W.AddDirect(' ', 'a', 's', ' ');
             W.AddString(Alias);
           end
           else if not (Field in fStoredClassMapping^.FieldNamesMatchInternal) then
@@ -870,7 +870,7 @@ begin
             else
               // RowID may be reserved (e.g. for Oracle)
               name := fStoredClassRecordProps.Fields.List[Field - 1].name;
-            W.AddShorter(' as ');
+            W.AddDirect(' ', 'a', 's', ' ');
             if (FunctionName = '') or
                (FunctionKnown in [funcDistinct, funcMax]) then
               W.AddString(name)
@@ -919,11 +919,11 @@ begin
             end;
             if f > 0 then
               if JoinedOR then
-                W.AddShorter(' or ')
+                W.AddDirect(' ', 'o', 'r', ' ')
               else
                 W.AddShorter(' and ');
             if NotClause then
-              W.AddShorter('not ');
+              W.AddDirect('n', 'o', 't', ' ');
             if ParenthesisBefore <> '' then
               W.AddString(ParenthesisBefore);
             W.AddString(fStoredClassMapping^.FieldNameByIndex(Field - 1));

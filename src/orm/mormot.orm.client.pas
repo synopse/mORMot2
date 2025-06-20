@@ -570,7 +570,7 @@ begin
        fForceBlobTransfert[fModel.GetTableIndexExisting(POrmClass(Value)^)] then
       result := UpdateBlobFields(Value);
     if result and
-       assigned(OnRecordUpdate) then
+       Assigned(OnRecordUpdate) then
       OnRecordUpdate(Value);
   end;
 end;

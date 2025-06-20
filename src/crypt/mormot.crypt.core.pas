@@ -184,7 +184,7 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 procedure RawSha512Compress(var Hash; Data: pointer);
 
 var
-  /// 32-bit truncation of Go runtime aeshash, using aesni opcode
+  /// 32-bit truncation of GoLang runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing
   // - only defined if AES-NI and SSE 4.1 are available on this CPU
   // - faster than our SSE4.2+pclmulqdq crc32c() function, with less collision
@@ -193,7 +193,7 @@ var
   // - DefaultHasher() is assigned to this function, when available on the CPU
   AesNiHash32: THasher;
 
-  /// 64-bit aeshash as implemented in Go runtime, using aesni opcode
+  /// 64-bit aeshash as implemented in GoLang runtime, using aesni opcode
   // - is the fastest and probably one of the safest non-cryptographic hash
   // - just a wrapper around AesNiHash128() with proper 64-bit zeroing
   // - only defined if AES-NI and SSE 4.1 are available on this CPU, so you
@@ -203,7 +203,7 @@ var
   // - DefaultHasher64() is assigned to this function, when available on the CPU
   AesNiHash64: function(seed: QWord; data: pointer; len: PtrUInt): QWord;
 
-  /// 128-bit aeshash as implemented in Go runtime, using aesni opcode
+  /// 128-bit aeshash as implemented in GoLang runtime, using aesni opcode
   // - access to the raw function implementing both AesNiHash64 and AesNiHash32
   // - only defined if AES-NI and SSE 4.1 are available on this CPU
   // - warning: the hashes will be consistent only during a process: at startup,
@@ -8425,7 +8425,8 @@ var
   Data: TShaContext absolute Context;
   aLen: integer;
 begin
-  if Buffer = nil then
+  if (Buffer = nil) or
+     (Len <= 0) then
     exit; // avoid GPF
   inc(Data.MLen, QWord(cardinal(Len)) shl 3);
   while Len > 0 do
@@ -8898,42 +8899,42 @@ begin
   if (cpuAVX2 in X64CpuFeatures) and
      not (daKeccakAvx2 in DisabledAsm) then
   begin
-    B[0] := A[0]; // AVX2 asm has a diverse state order to perform its rotations
-    B[1] := A[1];
-    B[2] := A[2];
-    B[3] := A[3];
-    B[4] := A[4];
-    B[7] := A[5];
+    B[0]  := A[0]; // AVX2 asm has a diverse state order to perform its rotations
+    B[1]  := A[1];
+    B[2]  := A[2];
+    B[3]  := A[3];
+    B[4]  := A[4];
+    B[7]  := A[5];
     B[21] := A[6];
     B[10] := A[7];
     B[15] := A[8];
     B[20] := A[9];
-    B[5] := A[10];
+    B[5]  := A[10];
     B[13] := A[11];
     B[22] := A[12];
     B[19] := A[13];
     B[12] := A[14];
-    B[8] := A[15];
-    B[9] := A[16];
+    B[8]  := A[15];
+    B[9]  := A[16];
     B[18] := A[17];
     B[23] := A[18];
     B[16] := A[19];
-    B[6] := A[20];
+    B[6]  := A[20];
     B[17] := A[21];
     B[14] := A[22];
     B[11] := A[23];
     B[24] := A[24];
     KeccakPermutationAvx2(@B);
-    A[0] := B[0];
-    A[1] := B[1];
-    A[2] := B[2];
-    A[3] := B[3];
-    A[4] := B[4];
-    A[5] := B[7];
-    A[6] := B[21];
-    A[7] := B[10];
-    A[8] := B[15];
-    A[9] := B[20];
+    A[0]  := B[0];
+    A[1]  := B[1];
+    A[2]  := B[2];
+    A[3]  := B[3];
+    A[4]  := B[4];
+    A[5]  := B[7];
+    A[6]  := B[21];
+    A[7]  := B[10];
+    A[8]  := B[15];
+    A[9]  := B[20];
     A[10] := B[5];
     A[11] := B[13];
     A[12] := B[22];

@@ -202,13 +202,14 @@ begin
 end;
 
 procedure TSqlDBBDEConnection.Connect;
-var Log: ISynLog;
+var
+  {%H-}log: ISynLog;
 begin
   if (fSession = nil) or
      (fDatabase = nil) then
     ESqlDBBDE.RaiseUtf8('%.Connect() on % failed: Database=nil',
       [self, fProperties.ServerName]);
-  SynDBLog.EnterLocal(Log, 'Connect to Alias=%', [fDatabase.AliasName], self);
+  SynDBLog.EnterLocal(log, 'Connect to Alias=%', [fDatabase.AliasName], self);
   try
     fSession.Open;
     fDatabase.Open;

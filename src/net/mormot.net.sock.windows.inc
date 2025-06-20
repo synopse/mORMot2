@@ -579,18 +579,20 @@ begin
   result := nrNotFound;
   if address = '' then
     exit;
-  // check supplied IP port
+  // check and decode supplied IP port
   p := GetCardinal(pointer(addrport));
   if (p = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
-  PSockAddr(@Addr)^.sin_port := bswap16(p);
   // first check most simple IPv4 resolution (maybe using mormot.net.dns)
   if SetFromIP4(address, false) or
-     // fallback to OS getaddrinfo() resolution, first try as IP4, then IP6
+     // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
      SetWinAddr(address, addrport, AF_INET, layer, Addr) or
      SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
+  begin
+    PSockAddr(@Addr)^.sin_port := bswap16(p); // eventually set port
     result := nrOk;
+  end;
 end;
 
 
@@ -1017,6 +1019,7 @@ var
   p: PIP_ADAPTER_ADDRESSES;
   a: PIP_ADAPTER_UNICAST_ADDRESS;
   r: PIP_ADAPTER;
+  m: PMacAddress;
   tmp: RawByteString;
   one: RawUtf8;
 begin
@@ -1046,91 +1049,92 @@ begin
         (p^.OperStatus = IfOperStatusUp)) and
        (p^.PhysicalAddressLength = 6) then
     begin
-      SetLength(result, n + 1);
-      with result[n] do
+      if n = length(result) then
+        SetLength(result, NextGrow(n));
+      m := @result[n];
+      Win32PWideCharToUtf8(p^.Description, m^.Name);
+      Win32PWideCharToUtf8(p^.FriendlyName, m^.FriendlyName);
+      FastSetString(m^.AdapterName, p^.AdapterName, StrLen(p^.AdapterName));
+      Win32PWideCharToUtf8(p^.DnsSuffix, m^.DnsSuffix);
+      m^.Address := MacToText(@p^.PhysicalAddress);
+      m^.Mtu := p^.Mtu;
+      m^.IfIndex := p^.Union.FlagsOrIfIndex;
+      case p^.IfType of
+        IF_TYPE_ETHERNET_CSMACD:
+          m^.Kind := makEthernet;
+        IF_TYPE_IEEE80211:
+          m^.Kind := makWifi;
+        IF_TYPE_TUNNEL:
+          m^.Kind := makTunnel;
+        IF_TYPE_PPP:
+          m^.Kind := makPpp;
+      end;
+      a := p^.FirstUnicastAddress;
+      while a <> nil do
       begin
-        Win32PWideCharToUtf8(p^.Description, Name);
-        Win32PWideCharToUtf8(p^.FriendlyName, FriendlyName);
-        FastSetString(AdapterName, p^.AdapterName, StrLen(p^.AdapterName));
-        Win32PWideCharToUtf8(p^.DnsSuffix, DnsSuffix);
-        Address := MacToText(@p^.PhysicalAddress);
-        Mtu := p^.Mtu;
-        IfIndex := p^.Union.FlagsOrIfIndex;
-        case p^.IfType of
-          IF_TYPE_ETHERNET_CSMACD:
-            Kind := makEthernet;
-          IF_TYPE_IEEE80211:
-            Kind := makWifi;
-          IF_TYPE_TUNNEL:
-            Kind := makTunnel;
-          IF_TYPE_PPP:
-            Kind := makPpp;
-        end;
-        a := p^.FirstUnicastAddress;
-        while a <> nil do
-        begin
-          case a^.Address.lpSockaddr^.sa_family of
-            AF_INET: // retrieve first IPv4 address and masks
-              begin
-                IP4Text(@a^.Address.lpSockaddr^.sin_addr, IP);
-                if OsVersion >= wVista then
-                  b := a^.OnLinkPrefixLength
-                else if (p^.FirstPrefix <> nil) and
-                        (p^.FirstPrefix^.Address.lpSockaddr^.sin_family = AF_INET) and
-                        (p^.FirstPrefix^.PrefixLength <= 32) then
-                        b := p^.FirstPrefix^.PrefixLength
-                      else
-                        b := 255; // fallback to IP4Mask()
-                if b <= 32 then
-                  b := IP4Netmask(b)
-                else
-                  b := IP4Mask(a^.Address.lpSockaddr^.sin_addr.S_addr);
-                IP4Text(@b, NetMask);
-                b := a^.Address.lpSockaddr^.sin_addr.S_addr or (not b);
-                IP4Text(@b, Broadcast);
-                break; // we found the first IPv4 network information
-              end;
-            AF_INET6: // IPv6 address but no mask - happen
-              IP6Text(@PSockAddrIn6(a^.Address.lpSockaddr)^.sin6_addr, IP);
-          end;
-          a := a^.Next; // IPv4 may be the second
-        end;
-        r := p^.FirstDnsServerAddress;
-        while r <> nil do
-        begin
-          if r.Address.lpSockaddr^.sa_family = AF_INET then
-          begin // retrieve all IPv4 DNS addresses as CSV
-            IP4Text(@r^.Address.lpSockaddr^.sin_addr, one);
-            if Dns = '' then
-              Dns := one
-            else
-              Dns := Join([Dns, ',', one]);
-          end;
-          r := r^.Next;
-        end;
-        if OsVersion >= wVista then
-        begin
-          // some fields are not available on XP
-          r := p^.FirstGatewayAddress;
-          while r <> nil do
-            if r.Address.lpSockaddr^.sa_family = AF_INET then
+        case a^.Address.lpSockaddr^.sa_family of
+          AF_INET: // retrieve first IPv4 address and masks
             begin
-              IP4Text(@r^.Address.lpSockaddr^.sin_addr, Gateway);
-              break;
-            end
-            else
-              r := r^.Next;
-          Speed := p^.TransmitLinkSpeed shr 20; // stored as Mbits/s
-          if p^.ReceiveLinkSpeed < Speed then
-            Speed := p^.ReceiveLinkSpeed; // unlikely
-          if p^.Dhcpv4Server.lpSockaddr <> nil then
-            IP4Text(@p^.Dhcpv4Server.lpSockaddr^.sin_addr, Dhcp);
+              IP4Text(@a^.Address.lpSockaddr^.sin_addr, m^.IP);
+              if OsVersion >= wVista then
+                b := a^.OnLinkPrefixLength
+              else if (p^.FirstPrefix <> nil) and
+                      (p^.FirstPrefix^.Address.lpSockaddr^.sin_family = AF_INET) and
+                      (p^.FirstPrefix^.PrefixLength <= 32) then
+                      b := p^.FirstPrefix^.PrefixLength
+                    else
+                      b := 255; // fallback to IP4Mask()
+              if b <= 32 then
+                b := IP4Netmask(b)
+              else
+                b := IP4Mask(a^.Address.lpSockaddr^.sin_addr.S_addr);
+              IP4Text(@b, m^.NetMask);
+              b := a^.Address.lpSockaddr^.sin_addr.S_addr or (not b);
+              IP4Text(@b, m^.Broadcast);
+              break; // we found the first IPv4 network information
+            end;
+          AF_INET6: // IPv6 address but no mask - happen
+            IP6Text(@PSockAddrIn6(a^.Address.lpSockaddr)^.sin6_addr, m^.IP);
         end;
+        a := a^.Next; // IPv4 may be the second
+      end;
+      r := p^.FirstDnsServerAddress;
+      while r <> nil do
+      begin
+        if r.Address.lpSockaddr^.sa_family = AF_INET then
+        begin // retrieve all IPv4 DNS addresses as CSV (Windows-specific)
+          IP4Text(@r^.Address.lpSockaddr^.sin_addr, one);
+          if m^.Dns = '' then
+            m^.Dns := one
+          else
+            m^.Dns := Join([m^.Dns, ',', one]);
+        end;
+        r := r^.Next;
+      end;
+      if OsVersion >= wVista then
+      begin
+        // some fields are not available on XP
+        r := p^.FirstGatewayAddress;
+        while r <> nil do
+          if r.Address.lpSockaddr^.sa_family = AF_INET then
+          begin
+            IP4Text(@r^.Address.lpSockaddr^.sin_addr, m^.Gateway);
+            break; // a single Gateway is enough
+          end
+          else
+            r := r^.Next;
+        m^.Speed := p^.TransmitLinkSpeed shr 20; // stored as Mbits/s
+        if p^.ReceiveLinkSpeed < m^.Speed then
+          m^.Speed := p^.ReceiveLinkSpeed; // unlikely
+        if p^.Dhcpv4Server.lpSockaddr <> nil then
+          IP4Text(@p^.Dhcpv4Server.lpSockaddr^.sin_addr, m^.Dhcp);
       end;
       inc(n);
     end;
     p := p^.Next;
   until p = nil;
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
 end;
 
 function GetLocalMacAddress(const Remote: RawUtf8;

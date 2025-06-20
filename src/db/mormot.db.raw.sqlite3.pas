@@ -8,7 +8,7 @@ unit mormot.db.raw.sqlite3;
 
    Direct Access to the SQLite3 Database Engine
     - Raw SQLite3 API Constants and Functions
-    - High-Level Classes for SQlite3 Queries
+    - High-Level Classes for SQLite3 Queries
 
   *****************************************************************************
 }
@@ -596,8 +596,8 @@ const
   SQLITE_TRANSIENT = pointer(-1);
 
   /// DestroyPtr set to SQLITE_TRANSIENT_VIRTUALTABLE for setting results to
-  // SQlite3 virtual tables columns
-  // - due to a bug of the SQlite3 engine under Win64
+  // SQLite3 virtual tables columns
+  // - due to a bug (?) of the SQLite3 engine under Win64
   SQLITE_TRANSIENT_VIRTUALTABLE = pointer(integer(-1));
 
   /// pseudo database file name used to create an in-memory database
@@ -3653,7 +3653,7 @@ type
     db_release_memory: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Returns the number of bytes of memory currently outstanding (malloced but not freed)
-    // - our SQlite3 static library is compiled with #define SQLITE_DEFAULT_MEMSTATUS 0
+    // - our SQLite3 static library is compiled with #define SQLITE_DEFAULT_MEMSTATUS 0
     // so this value is not available, unless you override the BeforeInitialization virtual
     // method and set the SQLITE_CONFIG_MEMSTATUS value to 1
     // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
@@ -4067,13 +4067,13 @@ type
 
     /// Initialize the internal version numbers and call AfterInitialization
     constructor Create; override;
-    /// this method is called by Create after SQlite3 is loaded, but before
+    /// this method is called by Create after SQLite3 is loaded, but before
     // sqlite3_initialize is called
     // - will set SQLITE_CONFIG_MULTITHREAD, i.e. application is responsible for
     // serializing access to database connections and prepared statements - as
     // is the case with our TSqlDatabase and its explicit Lock/LockJson/UnLock
     procedure BeforeInitialization; virtual;
-    /// this method is called by Create after SQlite3 is loaded, and after
+    /// this method is called by Create after SQLite3 is loaded, and after
     // sqlite3_initialize is called
     // - do nothing by default, but TSqlite3LibraryStatic will override it
     // to check if the static linked library matches the source expectations
@@ -4151,13 +4151,13 @@ function CheckNumberOfArgs(Context: TSqlite3FunctionContext;
 // Exception class
 procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUtf8Char);
 
-/// set a TSqlVar into a SQlite3 result context
+/// set a TSqlVar into a SQLite3 result context
 // - will call the corresponding sqlite3.result_*() function and return true,
 // or will return false if the TSqlVar type is not handled
 function SqlVarToSQlite3Context(const Res: TSqlVar;
   Context: TSqlite3FunctionContext): boolean;
 
-/// set a UTF-8 string into a SQlite3 result context
+/// set a UTF-8 string into a SQLite3 result context
 // - this function will use copy-on-write assignment of Text, with no memory
 // allocation, then let sqlite3InternalFreeRawByteString release its reference count
 // - ForcedLen can be used if the UTF-8 text is smaller than length(Text)
@@ -4165,13 +4165,13 @@ procedure RawUtf8ToSQlite3Context(const Text: RawUtf8;
   Context: TSqlite3FunctionContext; VoidTextAsNull: boolean;
   ForcedLen: integer = -1);
 
-/// set a variant value into a SQlite3 result context
+/// set a variant value into a SQLite3 result context
 // - will call the corresponding sqlite3.result_*() function, using
 // SqlVarToSQlite3Context() after a call to VariantToSqlVar()
 procedure VariantToSQlite3Context(const Value: Variant;
   Context: TSqlite3FunctionContext);
 
-/// set a JSON value into a SQlite3 result context
+/// set a JSON value into a SQLite3 result context
 // - a JSON object or array would be returned at plain TEXT, or other simple
 // JSON text or number would be returned as the corresponding SQLite3 value
 procedure JsonToSQlite3Context(json: PUtf8Char;
@@ -4337,7 +4337,7 @@ var
   sqlite3: TSqlite3Library;
 
 
-{ ************ High-Level Classes for SQlite3 Queries }
+{ ************ High-Level Classes for SQLite3 Queries }
 
 type
   /// available file-level write access wait mode of the SQLite3 engine
@@ -5023,6 +5023,8 @@ type
     // Operating System (Win32 API or ICU) - so may not be consistent when you
     // move the SQLite3 database file: consider SYSTEMNOCASE or UNICODENOCASE
     // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
+    // - those collations are available stand-alone as an extension, for third-party
+    // programs like SQliteStudio, via https://github.com/zedxxx/sqlite3-mormot-collate
     // - some additional SQL functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
     // RANK, CONCAT, TIMELOG, TIMELOGUNIX, JSONGET/JSONHAS/JSONSET and TDynArray-Blob
     // Byte/Word/Integer/Cardinal/Int64/Currency/RawUtf8DynArrayContains
@@ -5240,16 +5242,16 @@ type
     // - returns TRUE on success, FALSE on failure
     class function BackupUnSynLZ(const SourceSynLZ, DestDB: TFileName;
       Algo: TAlgoCompress = nil): boolean;
-    /// compress a SQlite3 file into a proprietary but efficient .dbsynlz layout
+    /// compress a SQLite3 file into a proprietary but efficient .dbsynlz layout
     // - same format than BackupUnSynLZ() class method or if SynLZCompress
     // parameter is TRUE for BackupBackground() method
     // - the SourceDB file should not be active (e.g. be a backup file), i.e.
-    // not currently opened by the SQlite3 engine, otherwise behavior is unknown
+    // not currently opened by the SQLite3 engine, otherwise behavior is unknown
     // - if SynLZ does not fit you, you can specify another algorithm
     // - returns TRUE on success, FALSE on failure
     class function BackupSynLZ(const SourceDB, DestSynLZ: TFileName;
       EraseSourceDB: boolean; Algo: TAlgoCompress = nil): boolean;
-    /// returns TRUE if the supplied name is a SQlite3 .dbsynlz compressed file
+    /// returns TRUE if the supplied name is a SQLite3 .dbsynlz compressed file
     // - i.e. on the format generated by the BackupUnSynLZ() class method or
     // if SynLZCompress parameter is TRUE for BackupBackground() method
     class function IsBackupSynLZFile(const SynLZFile: TFileName;
@@ -5263,7 +5265,7 @@ type
     /// read-only access to the SQLite3 database handle
     property DB: TSqlite3DB
       read fDB;
-    /// read-only access to the SQlite3 password used for encryption
+    /// read-only access to the SQLite3 password used for encryption
     // - may be a JSON-serialized TSynSignerParams object, or will use AES-128
     // after PBKDF2 SHAKE_128 with rounds=1000 and a fixed salt on its plain text
     property Password: SpiUtf8
@@ -5369,12 +5371,12 @@ type
     // writers and a writer does not block readers. Reading and writing can
     // proceed concurrently. With our SQLite3 framework, it's not needed.
     // - by default, this option is not set: only implement if you really need it,
-    // but our SQlite3 framework use locked access to the databse, so there
+    // but our SQLite3 framework use locked access to the databse, so there
     // should be no benefit of WAL for the framework; but if you call
     // directly TSqlDatabase instances in your code, it may be useful to you
     property WALMode: boolean
       read GetWALMode write SetWALMode;
-    /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
+    /// query or change the SQLite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
     // - default smFull is very slow, but achieve 100% ACID behavior
     // - smNormal is faster, and safe until a catastrophic hardware failure occurs
@@ -5382,7 +5384,7 @@ type
     // but database file may be corrupted in case of failure at the wrong time
     property Synchronous: TSqlSynchronousMode
       read GetSynchronous write SetSynchronous;
-    /// query or change the SQlite3 file-based locking mode, i.e. the
+    /// query or change the SQLite3 file-based locking mode, i.e. the
     // way it locks the file
     // - default lmNormal is ACID and safe
     // - lmExclusive gives better performance in case of a number of write
@@ -5569,7 +5571,7 @@ const
   // - could appear with (TAlgoCompress.AlgoID-1) increment for other algorithms
   SQLITE3_MAGIC = $ABA5A5AB;
 
-  /// the "magic" 16 bytes header stored at the begining of every SQlite3 file
+  /// the "magic" 16 bytes header stored at the begining of every SQLite3 file
   SQLITE_FILE_HEADER: array[0 .. 15] of AnsiChar = 'SQLite format 3';
 
 var
@@ -6280,7 +6282,7 @@ begin
 end;
 
 
-{ ************ High-Level Classes for SQlite3 Queries }
+{ ************ High-Level Classes for SQLite3 Queries }
 
 { Some remarks about our custom SQLite3 functions:
 
@@ -6290,8 +6292,9 @@ end;
 
   2. Some collations (WIN32CASE/WIN32NOCASE) may not be consistent depenging
      on the system/libray they run on: if you expect to move the SQLite3 file,
-     consider SYSTEMNOCASE or UNICODENOCASE safer (and faster) functions.
-  }
+     consider SYSTEMNOCASE or UNICODENOCASE safer (and faster) functions,
+     os use an extension e.g. https://github.com/zedxxx/sqlite3-mormot-collate
+}
 
 function Utf16_WIN32CASE(CollateParam: pointer; s1Len: integer; S1: pointer;
   s2Len: integer; S2: pointer): integer; cdecl;
@@ -6872,17 +6875,13 @@ end;
 procedure TSqlDataBase.ExecuteAll(const aSql: RawUtf8);
 var
   R: TSqlRequest;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   if (fLog <> nil) and
      SqlShouldBeLogged(aSql) then
-  begin
-    fLog.EnterLocal(log, self, 'ExecuteAll');
-    if log <> nil then
-      log.Log(sllSQL, aSql, self, 4096);
-  end;
+    fLog.EnterLocal(log, self, 'ExecuteAll').Log(sllSQL, aSql, self, 4096);
   LockAndFlushCache; // don't trust aSql -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB, aSql);
@@ -6913,7 +6912,7 @@ function TSqlDataBase.Execute(const aSql: RawUtf8;
   var aValues: TInt64DynArray): integer;
 var
   R: TSqlRequest;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if self = nil then
   begin
@@ -6922,11 +6921,7 @@ begin
   end;
   if (fLog <> nil) and
      SqlShouldBeLogged(aSql) then
-  begin
-    fLog.EnterLocal(log, self, 'Execute');
-    if log <> nil then
-      log.Log(sllSQL, aSql, self, 2048);
-  end;
+    fLog.EnterLocal(log, self, 'Execute').Log(sllSQL, aSql, self, 2048);
   Lock(aSql);
   try
     result := R.Execute(DB, aSql, aValues);
@@ -7300,9 +7295,10 @@ end;
 
 function TSqlDataBase.Backup(const BackupFileName: TFileName): boolean;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
+  l: TSynLog;
 begin
-  fLog.EnterLocal(log, 'Backup % -> %',
+  l := fLog.EnterLocal(log, 'Backup % -> %',
     [fFileNameWithoutPath, BackupFileName], self);
   if self = nil then
   begin
@@ -7314,15 +7310,12 @@ begin
   LockAndFlushCache;
   try
     try
-      if log <> nil then
-        log.Log(sllTrace, 'close', self);
+      l.Log(sllTrace, 'close', self);
       DBClose;
-      if log <> nil then
-        log.Log(sllTrace, 'copy file', self);
+      l.Log(sllTrace, 'copy file', self);
       result := CopyFile(fFileName, BackupFileName, false);
     finally
-      if log <> nil then
-        log.Log(sllTrace, 'reopen', self);
+      l.Log(sllTrace, 'reopen', self);
       DBOpen;
     end;
   finally
@@ -7489,15 +7482,14 @@ end;
 
 function TSqlDataBase.DBClose: integer;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   result := SQLITE_OK;
   if (self = nil) or
      (fDB = 0) then
     exit;
-  fLog.EnterLocal(log, self, 'DBClose');
-  if log <> nil then
-    log.Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
+  fLog.EnterLocal(log, self, 'DBClose').
+       Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
   if (sqlite3 = nil) or
      (not Assigned(sqlite3.close)) then
     ESqlite3Exception.RaiseUtf8(
@@ -7543,7 +7535,7 @@ begin
   StringToUtf8(fFileName, u);
   {$ifdef OSPOSIX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
-  if assigned(sqlite3.open_v2) and
+  if Assigned(sqlite3.open_v2) and
      (fPassword = '') then
   begin
     result := sqlite3.open_v2(pointer(u), fDB, fOpenV2Flags, 'unix-excl');
@@ -8235,7 +8227,7 @@ begin
       W.CancelAllVoid;
       exit;
     end;
-    // directly assign column names from SQlite3 API into W
+    // directly assign column names from SQLite3 API into W
     for i := 0 to FieldCount - 1 do
       W.AddColumn(sqlite3.column_name(Request, i), i, FieldCount);
     if Expand then
@@ -9181,7 +9173,7 @@ begin
     end;
   except
   end;
-  SQLite3Log.Add.NotifyThreadEnded;
+  SQLite3Log.NotifyThreadEnded;
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
@@ -9219,7 +9211,7 @@ begin
   result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
             // header bytes 8..15 are encrypted bytes 16..23
             // header bytes 16..23 are stored unencrypted
-            (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
+            (Header.d0 =  SQLITE_FILE_HEADER128.Lo) and
             (Header.d1 <> SQLITE_FILE_HEADER128.Hi) and
             (Header.b[21] = 64) and
             (Header.b[22] = 32) and

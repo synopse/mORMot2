@@ -3162,7 +3162,7 @@ asm
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
 end;
 
-// 128-bit aeshash as implemented in Go runtime, using aesni/sse4.1 opcodes
+// 128-bit aeshash as implemented in GoLang runtime, using aesni/sse4.1 opcodes
 procedure _AesNiHashXmm0;
   {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
