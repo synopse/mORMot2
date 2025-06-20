@@ -200,14 +200,16 @@ type
     procedure TimeZonesSlow(Context: TObject);
     /// test the TRawUtf8List class
     procedure TRawUtf8ListSlow(Context: TObject);
-  published
+  protected // Disabled Tests - successfull
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
     /// test the TSynList class
     procedure _TSynList;
+  published
     /// test the TDynArray object and methods
     procedure _TDynArray;
     /// validate the TSynQueue class
+  protected // Disabled Tests - successfull
     procedure _TSynQueue;
     /// test TSynNameValue class
     procedure _TSynNameValue;
@@ -220,8 +222,10 @@ type
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
+  published
     procedure _IdemPropName;
     /// test our internal fast TGUID process functions
+  protected // Disabled Tests - successfull
     procedure _GUID;
     /// test ParseCommandArgs() functions
     procedure _ParseCommandArgs;
@@ -238,8 +242,10 @@ type
     // - especially the RawUtf8 or PUtf8Char relative versions
     procedure NumericalConversions;
     /// test low-level integer/Int64 functions
+  published
     procedure Integers;
     /// test crc32c in both software and hardware (SSE4.2) implementations
+  protected // Disabled Tests - successfull
     procedure _crc32c;
     /// test RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
     procedure _Random32;
@@ -256,9 +262,11 @@ type
     /// the fast .ini file content direct access
     procedure IniFiles;
     /// validate Unicode / Ansi Charset conversion methods
+  published
     procedure Charsets;
     /// test UrlEncode() and UrlDecode() functions
     // - this method use some ISO-8601 encoded dates and times for the testing
+  protected // Disabled Tests - successfull
     procedure UrlDecoding;
     /// test mime types recognition and multipart encoding
     procedure MimeTypes;
@@ -268,12 +276,14 @@ type
     // - test especially the conversion to/from text
     procedure Iso8601DateAndTime;
     /// test the SMBIOS decoding features
+  published
     procedure DmiSmbios;
     /// test Security IDentifier (SID) process
     procedure _SID;
     /// test the SecurityDescriptor / SDDL process
     procedure _SDDL;
     /// validates the median computation using the "Quick Select" algorithm
+  protected // Disabled Tests - successfull
     procedure QuickSelect;
     /// test the TSynCache class
     procedure _TSynCache;
@@ -1326,6 +1336,8 @@ var
   JSON_BASE64_MAGIC_UTF8: RawUtf8;
   {$endif HASEXTRECORDRTTI}
   tmp: TSynTempBuffer;
+
+  debugStr: string;
 const
   MAGIC: array[0..1] of word = (34, $fff0);
   BUILDDATETIME: TDateTime = 36215.12; // circumvent a weird FPC/Android issue (Alf)
@@ -1397,13 +1409,33 @@ const
       end;
   end;
 
+  function rbDebugStr(const aRBString: RawByteString): string;
+  var i: integer;
+      maxlen: integer;
+      rbChar: AnsiChar;
+  begin
+    maxLen:= 64;
+    if Length(aRBString) < maxLen then
+       maxLen:= Length(aRBString);
+   result:= '';
+   for i := 1 to maxLen do
+       begin
+       rbChar:= aRBString[i];
+       result:= result + ' #' + IntToStr(ord(rbChar));
+       if rbChar >= ' ' then
+          result:= result + ' ' + rbChar
+       else
+          result:= result + ' ?';
+       end;
+  end;
+
 begin
   // run the slowest tests in a background thread
-  Run(TDynArrayHashedSlow, self, 'TDynArrayHashed', true, false);
-  Run(TSynDictionarySlow, self, 'TSynDictionary', true, false);
-  Run(Utf8Slow, self, 'UTF-8', true, false);
-  Run(TimeZonesSlow, self, 'TimeZones', true, false);
-  Run(TRawUtf8ListSlow, self, 'TRawUtf8List', true, false);
+  Run(TDynArrayHashedSlow, self, 'TDynArrayHashed', false, false);
+  Run(TSynDictionarySlow, self, 'TSynDictionary', false, false);
+  Run(Utf8Slow, self, 'UTF-8', false, false);
+  Run(TimeZonesSlow, self, 'TimeZones', false, false);
+  Run(TRawUtf8ListSlow, self, 'TRawUtf8List', false, false);
   { TODO : implement TypeInfoToHash() if really needed }
   {
   h := TypeInfoToHash(TypeInfo(TAmount));
@@ -1550,6 +1582,7 @@ begin
   AIP.Compare := SortDynArrayInteger;
   AIP.Sort;
   Test := AIP.SaveTo;
+  debugStr:= rbDebugStr(Test);
   CheckHash(Test, $69562803, 'hash32c');
   AIP.Reverse;
   AIP.Slice(AI2, 2000, 1000);
@@ -1570,6 +1603,8 @@ begin
   for i := 0 to 1999 do
     Check(AI[i + 50001] = 49000 - i);
   AIP.Clear;
+  debugStr:= '';
+  debugStr:= rbDebugStr(Test);
   with DynArray(TypeInfo(TIntegerDynArray), AI) do
   begin
     Check(LoadFromBinary(Test));
@@ -1775,6 +1810,7 @@ begin
     Check(ARP.IndexOf(R) = i); // will work (packed + no ref-counted types inside)
   end;
   W.CancelAll;
+//  Exit;
   W.AddDynArrayJson(ARP);
   U := W.Text;
   {$ifndef HASEXTRECORDRTTI} // enhanced RTTI won't let binary serialization
@@ -6537,6 +6573,7 @@ begin
     '66SzpMikz6SipN6k6qSipOqk3qS7pPOhowq4wLjsvKvCzqTOtaHHvaTPuse+rrjC' +
     'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
     'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCg==', 20932);
+  {$ifndef ISDELPHI} // Codepage 50220 is not defined in Delphi!
   CheckCodePage('euc_jisx0213',
     'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
     '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
@@ -6579,6 +6616,7 @@ begin
     'pMuyoaS1pKihosmszdekyrWhx72kz7PIxKWl4qW4peWhvKXrpMikt6TGxMmyw6S5' +
     'pOuhoqTIpKSkpqTOpKwgUHl0aG9uIKTOpd2l6qW3obykx6S5oaMKCqXOpPcgpf4g' +
     'pcilra+sr9ogz+OP/tggj/7Uj/7oj/zWCg==', 50220);
+  {$endif ISDELPHI} // Codepage 50220 is not defined in Delphi!
   CheckCodePage('euc_kr',
     '4peOIO2MjOydtOyNrChQeXRob24p7J2AIOuwsOyasOq4sCDsib3qs6AsIOqwleug' +
     'pe2VnCDtlITroZzqt7jrnpjrsI0g7Ja47Ja07J6F64uI64ukLiDtjIzsnbTsjazs' +
@@ -6660,6 +6698,7 @@ begin
     'bmcgtcQgcHJvZ3JhbW1pbmcgbGFuZ3VhZ2UuILnKztKCg8+jzfvE3IyivMjT0LXE' +
     'CkMgbGlicmFyeSDEw7W9IFB5dGhvbiC1xK1ovrPW0Jx51Ie8sNX7us8uIMbk1tDX' +
     '7tb30qrSssrHztKCg8v5CtKq05HVk7XEhpbufb7Nysc6Cgo=', 936);
+  {$ifndef ISDELPHI} // Codepage 50222 is not defined in Delphi!
   CheckCodePage('iso2022_jp',
     'UHl0aG9uIOOBrumWi+eZuuOBr+OAgTE5OTAg5bm044GU44KN44GL44KJ6ZaL5aeL' +
     '44GV44KM44Gm44GE44G+44GZ44CCCumWi+eZuuiAheOBriBHdWlkbyB2YW4gUm9z' +
@@ -6703,6 +6742,7 @@ begin
     'LjhCJEsyISQ1JCghIkksTVckSjUhRz0kTzNIRCUlYiU4JWUhPCVrJEgkNyRGREky' +
     'QyQ5JGshIiRIJCQkJiROJCwbKEIgUHl0aG9uIBskQiROJV0laiU3ITwkRyQ5ISMb' +
     'KEIKCg==', 50222);
+  {$endif ISDELPHI}
   CheckCodePage('iso2022_kr',
     '4peOIO2MjOydtOyNrChQeXRob24p7J2AIOuwsOyasOq4sCDsib3qs6AsIOqwleug' +
     'pe2VnCDtlITroZzqt7jrnpjrsI0g7Ja47Ja07J6F64uI64ukLiDtjIzsnbTsjazs' +

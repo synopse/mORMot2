@@ -7,6 +7,7 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+{$ifdef LIBQUICKJSSTATIC}
 uses
   sysutils,
   mormot.core.base,
@@ -33,9 +34,11 @@ type
     procedure QuickJSLowLevel;
   end;
 
-  
+{$endif}
+
 implementation
 
+{$ifdef LIBQUICKJSSTATIC}
 
 { TTestCoreScript }
 
@@ -223,6 +226,6 @@ begin
   end;
 end;
 
-
+{$endif}
 end.
 

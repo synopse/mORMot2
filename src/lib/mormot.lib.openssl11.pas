@@ -87,7 +87,17 @@ uses
   sysutils,
   mormot.core.base,
   {$ifdef OSPOSIX}
-  unixtype,
+   {$ifndef OSANDROID}
+    unixtype,
+   {$else}
+     {$ifdef ISDELPHI}
+     mormot.core.posix.delphi,
+     posix.SysTypes,
+     posix.SysTime,
+     {$else}
+     unixtype,
+     {$endif}
+   {$endif OSANDROID}
   {$endif OSPOSIX}
   mormot.core.os,
   mormot.net.sock; // for INetTls
@@ -154,17 +164,26 @@ const
   {$else}
     {$ifdef OSANDROID}
       {$define NOOPENSSL3} // unsupported yet
-      {$ifdef CPU32}
-      LIB_CRYPTO1 = 'libcrypto-android32.a';
-      LIB_SSL1    = 'libssl-android32.a';
-      _PU = '';
-      {$define OPENSSLSTATIC}
+      {$ifdef ISDELPHI}
+        LIB_CRYPTO1 = 'libcrypto.so'; // must be provided by the project
+        LIB_SSL1    = 'libssl.so';
+        LIB_CRYPTO3 = 'libcrypto.so.3'; // must be defined for compilataion
+        LIB_SSL3    = 'libssl.so.3';
+        _PU = '';
+        {$undef OPENSSLSTATIC}
       {$else}
-      LIB_CRYPTO1 = 'libcrypto-android64.a';
-      LIB_SSL1    = 'libssl-android64.a';
-      _PU = '';
-      {$define OPENSSLSTATIC}
-      {$endif CPU32}
+        {$ifdef CPU32}
+        LIB_CRYPTO1 = 'libcrypto-android32.a';
+        LIB_SSL1    = 'libssl-android32.a';
+        _PU = '';
+        {$define OPENSSLSTATIC}
+        {$else}
+        LIB_CRYPTO1 = 'libcrypto-android64.a';
+        LIB_SSL1    = 'libssl-android64.a';
+        _PU = '';
+        {$define OPENSSLSTATIC}
+        {$endif CPU32}
+      {$endif ISDELPHI}
     {$else}
       {$ifdef OSDARWIN}
         {$ifdef CPUINTEL}

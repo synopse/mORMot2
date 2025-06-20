@@ -185,7 +185,8 @@ type
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
     procedure Check(condition: boolean; const msg: string = '');
-      {$ifdef HASSAFEINLINE}inline;{$endif} // Delphi 2007 has trouble inlining this
+      {$ifdef HASSAFEINLINE}// inline;
+      {$endif} // Delphi 2007 has trouble inlining this
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
@@ -400,7 +401,7 @@ type
     /// low-level output on the console - use TSynTestCase.AddConsole instead
     procedure DoTextLn(const values: array of const); overload;
     /// low-level set the console text color - use TSynTestCase.AddConsole instead
-    procedure DoColor(aColor: TConsoleColor);
+    procedure DoColor(aColor: TConsoleColor); virtual;
     /// low-level output on the console with automatic formatting
     // - use TSynTestCase.NotifyProgress() instead
     procedure DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
@@ -1486,7 +1487,9 @@ begin
             TestTimer.Start;
             c.MethodSetup;
             try
+              DoTextLn(['Before "', nfo^.MethodName, '"']);
               nfo^.Method(); // run tests + Check()
+              // DoTextLn(['Before AfterOneRun']);
               AfterOneRun;
             finally
               c.MethodCleanUp;
@@ -1498,7 +1501,7 @@ begin
               DoColor(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
               if nfo <> nil then
-                DoTextLn(['! ', nfo^.IdentTestName]);
+                DoTextLn(['! ', nfo^.IdentTestName, E.ClassName + ': ' + E.Message]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
               {$ifndef NOEXCEPTIONINTERCEPT}

@@ -2819,11 +2819,11 @@ type
      {$define NODIRECTTHREADMANAGER}
   {$endif ISDELPHI}
 {$endif OSLINUX}
-{ $ifdef POSIX}
-  { $ifdef ISDELPHI}
-     { $define NODIRECTTHREADMANAGER}
-  { $endif ISDELPHI}
-{ $endif POSIX}
+{$ifdef POSIX}
+  {$ifdef ISDELPHI}
+     {$define NODIRECTTHREADMANAGER}
+  {$endif ISDELPHI}
+{$endif POSIX}
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
 function GetCurrentThreadId: TThreadID; inline;

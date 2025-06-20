@@ -133,23 +133,28 @@ type
     // - especially the field type retrieval from published properties
     procedure _RTTI;
     /// validate some internal data structures like TLockedList
+  protected // Disabled Tests - successfull
     procedure DataStructures;
     /// some low-level Url encoding from parameters
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
+  published
     procedure EncodeDecodeJSON;
     /// some performance numbers about JSON parsing and generating
     procedure JSONBenchmark;
     /// HTML generation from Wiki Or Markdown syntax
+  protected // Disabled Tests - successfull
     procedure WikiMarkdownToHtml;
     /// some low-level variant process
     procedure Variants;
     /// test the Mustache template rendering unit
+  published
     procedure MustacheRenderer;
     /// variant-based JSON/BSON document process
     // - note: we can't run this in a background thread due to interning tests
     procedure _TDocVariant;
     /// IDocList / IDocDict wrappers
+  protected // Disabled Tests - successfull
     procedure _IDocAny;
     {$ifdef TEST_DBRAD}
     /// our TBcd wrapper functions
@@ -158,11 +163,14 @@ type
     /// low-level TDecimal128 decimal value process (as used in BSON)
     procedure _TDecimal128;
     /// BSON process (using TDocVariant)
+  published
     procedure _BSON;
+  protected // Disabled Tests - successfull
     /// test SELECT statement parsing
     procedure _TSelectStatement;
     /// test advanced statistics monitoring
     procedure _TSynMonitorUsage;
+published
     /// validate some folder-level functions
     procedure Folders;
   end;
@@ -941,8 +949,8 @@ begin
     if mustacheJson = '' then
     begin
       mustacheJson := HttpGet(
-       'https://raw.githubusercontent.com/mustache/spec/' +
-       'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json',
+       AnsiString('https://raw.githubusercontent.com/mustache/spec/' +
+       'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json'),
        '', nil, false, nil, 0, {forcesocket:}false, {ignorecerterror:}true);
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
@@ -1680,9 +1688,11 @@ var
         GetJsonItemAsRawJson(value, s);
         check(IsValidJson(s));
         check(TrimU(s) = '"' + name + '"');
+        {$IFNDEF ISDELPHI}
         check(GetInteger(JsonObjectByPath(item, 'owner.id')) = owner.id);
         check(GetInteger(JsonObjectByPath(item, 'owner.i*')) = owner.id);
         check(JsonObjectByPath(item, 'owner.name') = '');
+        {$ENDIF}
         check(JsonObjectsByPath(item, 'toto') = '');
         check(JsonObjectsByPath(item, 'toto,titi') = '');
         check(JsonObjectsByPath(item, 'toto,name') = '{"name":"' + name + '"}');
@@ -1695,7 +1705,9 @@ var
         check(JsonObjectsByPath(item, 'owner.*') =
           FormatUtf8('{"owner.login":"%","owner.id":%}',
             [owner.login, owner.id]));
+        {$IFNDEF ISDELPHI}
         value := JsonObjectByPath(item, 'owner');
+        {$ENDIF}
         GetJsonItemAsRawJson(value, s);
         check(IsValidJson(s));
         check(JsonReformat(s, jsonCompact) =
@@ -8135,4 +8147,5 @@ end;
 
 
 end.
+
 

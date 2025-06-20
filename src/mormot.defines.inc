@@ -488,6 +488,7 @@
           {$define DELPHIANDROID}
           {$define OSLINUXANDROID}
           {$define NOPATCHRTL}  // don't mess with asm stuff
+		  {$define NOPATCHVMT} // seems not to work - deeper inspection of poeple with deeper knowledge of the RTTI may find out, what to adapt
           {$ifdef CPUX86}
             {$define FPC_PIC}
           {$endif CPUX86}

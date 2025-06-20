@@ -3004,7 +3004,7 @@ procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
   {$ifndef CPUINTEL} inline; {$endif}
 
 {$ifdef ISDELPHI}
-{$ifdef CPUX86}
+{$ifdef CPUINTEL}
 /// return the position of the leftmost set bit in a 32-bit value
 // - returns 255 if c equals 0
 // - this function is an intrinsic on FPC
@@ -3014,7 +3014,7 @@ function BSRdword(c: cardinal): cardinal;
 // - returns 255 if q equals 0
 // - this function is an intrinsic on FPC
 function BSRqword(const q: Qword): cardinal;
-{$endif CPUX86}
+{$endif CPUINTEL}
 {$endif ISDELPHI}
 
 {$ifdef ASMINTEL}
@@ -7069,13 +7069,14 @@ end;
 
 {$else}
 
+{$ifndef CPUX64}
 procedure FastStringAddRef(str: pointer);
 begin
   if str = nil then
     exit;
   inc(PStrRec(str));
 end;
-
+{$endif CPUX64}
 
 procedure FastStringDecRef(str: pointer);
 begin
@@ -7089,6 +7090,8 @@ end;
 
 {$endif FPC}
 
+{$ifndef CPUX64}
+{$ifndef CPUX86}
 procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlined
 var
   Y100: cardinal;
@@ -7097,6 +7100,8 @@ begin
   res.D := Y100;
   res.M := Y {%H-}- Y100 * 100; // avoid div twice
 end;
+{$endif CPUX86}
+{$endif CPUX64}
 
 
 
@@ -10751,35 +10756,36 @@ const
   AT_HWCAP2 = 26;
 
 
-{$ifdef _ISDELPHI_dummy}
+{$ifdef ISDELPHI}
 procedure TestCpuFeatures;
-Type PCharArray = array[0..2] of Pchar;
-     PPCharArray = ^PCharArray;
+//Type PCharArray = array[0..2] of Pchar;
+//     PPCharArray = ^PCharArray;
 var
-  p: PPChar;
-  pHelp: PPCharArray;
+//  p: PPChar;
+//  pHelp: PPCharArray;
   caps: TArmHwCaps;
 begin
   // C library function getauxval() is not always available -> use system.envp
   caps := [];
-  try
-    p := system.envp;
-    while p^ <> nil do
-      inc(p);
-    inc(p); // auxv is located after the last textual environment variable
-    pHelp:= PPCharArray(p);
-    repeat
-      if PtrUInt(pHelp^[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
-        PCardinalArray(@caps)[0] := PtrUInt(pHelp^[1])
-      else if PtrUInt(pHelp^[0]) = AT_HWCAP2 then
-        PCardinalArray(@caps)[1] := PtrUInt(pHelp^[1]);
-      p := @(pHelp^[2]);
-      pHelp:= PPCharArray(p);
-    until pHelp^[0] = nil;
-  except
-    // may happen on some untested Operating System
-    caps := []; // is likely to be invalid
-  end;
+//  try
+//    p := system.envp;
+//    // p ist nil, da bei Android nicht intialisiert
+//    while p^ <> nil do
+//      inc(p);
+//    inc(p); // auxv is located after the last textual environment variable
+//    pHelp:= PPCharArray(p);
+//    repeat
+//      if PtrUInt(pHelp^[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
+//        PCardinalArray(@caps)[0] := PtrUInt(pHelp^[1])
+//      else if PtrUInt(pHelp^[0]) = AT_HWCAP2 then
+//        PCardinalArray(@caps)[1] := PtrUInt(pHelp^[1]);
+//      p := @(pHelp^[2]);
+//      pHelp:= PPCharArray(p);
+//    until pHelp^[0] = nil;
+//  except
+//    // may happen on some untested Operating System
+//    caps := []; // is likely to be invalid
+//  end;
   CpuFeatures := caps;
 end;
 {$else}

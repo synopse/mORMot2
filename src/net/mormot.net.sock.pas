@@ -3007,7 +3007,7 @@ begin
     raise ENetSock.Create('GetOptInt(%d,%d) with no socket', [prot, name]);
   result := 0;
   len := SizeOf(result);
-  if getsockopt(TSocket(@self), prot, name, @result, {$ifdef FPC}@{$endif}len) <> NO_ERROR then
+  if getsockopt(TSocket(@self), prot, name, @result, {$ifdef FPC}@ {$else} {$ifdef OSWINDOWS}@{$endif}{$endif}len) <> NO_ERROR then
     raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
 end;
 

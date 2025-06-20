@@ -31,7 +31,13 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.net.sock;
+  mormot.net.sock
+  {$ifdef OSPOSIX}
+    {$ifdef ISDELPHI}
+    , mormot.core.posix.delphi
+    {$endif}
+  {$endif}
+  ;
 
 
 { ************ CURL Low-Level Constants and Types }
@@ -1210,95 +1216,109 @@ end;
     {$endif CPUARM}
     {$linklib libz.so}
   {$endif OSANDROID}
+{$endif FPC}
+
+{$ifdef ISDELPHI}
+  {$ifdef OSANDROID}
+    {$ifdef CPUAARCH64}
+      const C_M_Libcurl = 'libcurl.a';
+      {$link 'libcurl.a'}
+    {$endif CPUAARCH64}
+    {$ifdef CPUARM}
+      const C_M_Libcurl = 'libcurl.a';
+      {$link 'libcurl.a'}
+    {$endif CPUARM}
+    {$link 'libz.so'}
+  {$endif OSANDROID}
+{$endif ISDELPHI}
 
   /// initialize the library
-  function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
+  function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// initialize the library with a custom memory manager
   function curl_global_init_mem(flags: TCurlGlobalInit;
-    m, f, r, s, c: pointer): TCurlResult; cdecl; external;
+    m, f, r, s, c: pointer): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// finalize the library
-  procedure curl_global_cleanup cdecl; external;
+  procedure curl_global_cleanup cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// returns run-time libcurl version info
-  function curl_version_info(age: TCurlVersion): PCurlVersionInfo; cdecl; external;
+  function curl_version_info(age: TCurlVersion): PCurlVersionInfo; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   // start a libcurl easy session
-  function curl_easy_init: pointer; cdecl; external;
+  function curl_easy_init: pointer; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// set options for a curl easy handle
-  function curl_easy_setopt(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs; external;
+  function curl_easy_setopt(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// perform a blocking file transfer
-  function curl_easy_perform(curl: TCurl): TCurlResult; cdecl; external;
+  function curl_easy_perform(curl: TCurl): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// end a libcurl easy handle
-  procedure curl_easy_cleanup(curl: TCurl); cdecl; external;
+  procedure curl_easy_cleanup(curl: TCurl); cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// extract information from a curl handle
-  function curl_easy_getinfo(curl: TCurl; info: TCurlInfo; out value): TCurlResult; cdecl; external;
+  function curl_easy_getinfo(curl: TCurl; info: TCurlInfo; out value): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// clone a libcurl session handle
-  function curl_easy_duphandle(curl: TCurl): pointer; cdecl; external;
+  function curl_easy_duphandle(curl: TCurl): pointer; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// reset all options of a libcurl session handle
-  procedure curl_easy_reset(curl: TCurl); cdecl; external;
+  procedure curl_easy_reset(curl: TCurl); cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// return string describing error code
-  function curl_easy_strerror(code: TCurlResult): PAnsiChar; cdecl; external;
+  function curl_easy_strerror(code: TCurlResult): PAnsiChar; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// add a string to an slist
-  function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external;
+  function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// free an entire slist
-  procedure curl_slist_free_all(list: TCurlSList); cdecl; external;
+  procedure curl_slist_free_all(list: TCurlSList); cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// add a section to a multipart/formdata HTTP POST
-  function curl_formadd(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs; external;
+  function curl_formadd(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// finalize all sections of a multipart/formdata HTTP POST
-  procedure curl_formfree(first: PCurlHttpPost); cdecl; external;
+  procedure curl_formfree(first: PCurlHttpPost); cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
 
   /// create a shared object
-  function curl_share_init: pointer; cdecl; external;
+  function curl_share_init: pointer; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// clean up a shared object
-  function curl_share_cleanup(share_handle: TCurlShare): TCurlShareResult; cdecl; external;
+  function curl_share_cleanup(share_handle: TCurlShare): TCurlShareResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// set options for a shared object
-  function curl_share_setopt(share: TCurlShare; option: TCurlShareOption): TCurlShareResult; cdecl varargs; external;
+  function curl_share_setopt(share: TCurlShare; option: TCurlShareOption): TCurlShareResult; cdecl varargs; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// return string describing error code
-  function curl_share_strerror(code: TCurlShareResult): PAnsiChar;  cdecl; external;
+  function curl_share_strerror(code: TCurlShareResult): PAnsiChar;  cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
 
   /// initializes a new mime structure
-  function curl_mime_init(curl: TCurl): TCurlMime; cdecl; external;
+  function curl_mime_init(curl: TCurl): TCurlMime; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// used to clean up data previously built/appended with curl_mime_addpart and other mime-handling functions
-  procedure curl_mime_free(mime: TCurlMime); cdecl; external;
+  procedure curl_mime_free(mime: TCurlMime); cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// creates and appends a new empty part to the given mime structure
-  function curl_mime_addpart(mime: TCurlMime): TCurlMimePart; cdecl; external;
+  function curl_mime_addpart(mime: TCurlMime): TCurlMimePart; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// sets a mime part's body content from memory data
-  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: integer): TCurlResult; cdecl; external;
+  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: integer): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// sets a mime part's name
-  function curl_mime_name(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external;
+  function curl_mime_name(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// sets a mime part's content type
-  function curl_mime_type(part: TCurlMimePart; mimetype: PAnsiChar): TCurlResult; cdecl; external;
+  function curl_mime_type(part: TCurlMimePart; mimetype: PAnsiChar): TCurlResult; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
 
   {$ifdef LIBCURLMULTI}
   /// add an easy handle to a multi session
-  function curl_multi_add_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external;
+  function curl_multi_add_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// set data to associate with an internal socket
-  function curl_multi_assign(mcurl: TCurlMulti; socket: TCurlSocket; data: pointer): TCurlMultiCode; cdecl; external;
+  function curl_multi_assign(mcurl: TCurlMulti; socket: TCurlSocket; data: pointer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// close down a multi session
-  function curl_multi_cleanup(mcurl: TCurlMulti): TCurlMultiCode; cdecl; external;
+  function curl_multi_cleanup(mcurl: TCurlMulti): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// extracts file descriptor information from a multi handle
-  function curl_multi_fdset(mcurl: TCurlMulti; read, write, exec: pointer; out max: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_fdset(mcurl: TCurlMulti; read, write, exec: pointer; out max: integer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// read multi stack informationals
-  function curl_multi_info_read(mcurl: TCurlMulti; out msgsqueue: integer): PCurlMsgRec; cdecl; external;
+  function curl_multi_info_read(mcurl: TCurlMulti; out msgsqueue: integer): PCurlMsgRec; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// create a multi handle
-  function curl_multi_init: TCurlMulti; cdecl; external;
+  function curl_multi_init: TCurlMulti; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// reads/writes available data from each easy handle
-  function curl_multi_perform(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_perform(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// remove an easy handle from a multi session
-  function curl_multi_remove_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external;
+  function curl_multi_remove_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// set options for a curl multi handle
-  function curl_multi_setopt(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs; external;
+  function curl_multi_setopt(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// reads/writes available data given an action
-  function curl_multi_socket_action(mcurl: TCurlMulti; socket: TCurlSocket; mask: integer; out runningh: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_socket_action(mcurl: TCurlMulti; socket: TCurlSocket; mask: integer; out runningh: integer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// reads/writes available data - deprecated call
-  function curl_multi_socket_all(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_socket_all(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// return string describing error code
-  function curl_multi_strerror(code: TCurlMultiCode): PAnsiChar; cdecl; external;
+  function curl_multi_strerror(code: TCurlMultiCode): PAnsiChar; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// retrieve how long to wait for action before proceeding
-  function curl_multi_timeout(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_timeout(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   /// polls on all easy handles in a multi handle
-  function curl_multi_wait(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_wait(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl; external {$ifdef ISDELPHI} C_M_Libcurl {$endif};
   {$endif LIBCURLMULTI}
 
-{$endif FPC}
 
 {$endif LIBCURLSTATIC}
 

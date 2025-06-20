@@ -480,7 +480,8 @@ function dlclose(aLib: pointer): integer; inline; overload;
 function dlclose(aLib: NativeUInt): integer; inline; overload;
 function dlsym(aLib: Pointer; aProcName: Pointer): Pointer; inline; overload;
 function dlsym(aLib: NativeUInt; aProcName: Pointer): Pointer; inline; overload;
-function dlsym(aLib: NativeUInt; aProcName: string): Pointer; inline; overload;
+//function dlsym(aLib: NativeUInt; aProcName: string): Pointer; inline; overload;
+function dlsym(aLib: NativeUInt; aProcName: PAnsiChar): Pointer; inline; overload;
 function dlerror: string; inline;
 function dladdr(aAddress: Pointer; aDLInfo: Pdl_info): integer; inline;
 
@@ -781,11 +782,13 @@ const
   EPOLLERR = $08; { Error condition happened on the associated file descriptor. }
   EPOLLHUP = $10; { Hang up happened on the associated file descriptor. }
   EPOLLONESHOT = $40000000; { Sets the One-Shot behaviour for the associated file descriptor. }
-  EPOLLET  = $80000000; { Sets  the  Edge  Triggered  behaviour  for  the  associated file descriptor. }
+  EPOLLET  = $80000000; { Sets  the  Edge  Triggered  behaviour  for  the  associated file descriptor. }
+
   { Valid opcodes ( "op" parameter ) to issue to epoll_ctl }
   EPOLL_CTL_ADD = 1;
   EPOLL_CTL_DEL = 2;
-  EPOLL_CTL_MOD = 3;
+  EPOLL_CTL_MOD = 3;
+
 
 implementation
 
@@ -2321,7 +2324,13 @@ begin
   result:= posix.dlfcn.dlsym(aLIB, M.AsAnsi(string(aProcName), CP_UTF8).ToPointer);
 end;
 
-function dlsym(aLib: NativeUInt; aProcName: string): Pointer;
+//function dlsym(aLib: NativeUInt; aProcName: string): Pointer;
+//var M: TMarshaller;
+//begin
+//  result:= posix.dlfcn.dlsym(aLIB, M.AsAnsi(aProcName, CP_UTF8).ToPointer);
+//end;
+
+function dlsym(aLib: NativeUInt; aProcName: PAnsiChar): Pointer;
 var M: TMarshaller;
 begin
   result:= posix.dlfcn.dlsym(aLIB, M.AsAnsi(aProcName, CP_UTF8).ToPointer);

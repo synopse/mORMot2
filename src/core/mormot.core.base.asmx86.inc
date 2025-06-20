@@ -2346,6 +2346,8 @@ asm
 end;
 
 {$ifdef ISDELPHI}
+{$ifndef CPUX64}
+{$ifndef CPUX86}
 procedure FastStringAddRef(str: pointer); // will call compilerproc on FPC
 asm
         test    str, str
@@ -2355,6 +2357,8 @@ asm
    lock inc     dword ptr [str - _STRCNT]
 @z:
 end;
+{$endif CPUX86}
+{$endif CPUX64}
 {$endif ISDELPHI}
 
 function StrCntDecFree(var refcnt: TStrCnt): boolean;

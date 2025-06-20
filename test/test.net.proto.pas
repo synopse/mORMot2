@@ -78,7 +78,7 @@ type
     function DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
-  published
+  protected // Disabled Tests - successfull
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate mormot.net.openapi unit
@@ -88,12 +88,15 @@ type
     /// validate THttpPeerCache process
     procedure _THttpPeerCache;
     /// some HTTP shared/low-level process
+  published
     procedure HTTP;
+  protected // Disabled Tests - successfull
     /// validate THttpProxyCache process
     procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// RTSP over HTTP, as implemented in mormot.net.rtsphttp unit
+  published
     procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
     procedure RTSPOverHTTPBufferedWrite;

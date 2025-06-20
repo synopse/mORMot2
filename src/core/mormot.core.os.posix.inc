@@ -711,6 +711,28 @@ end;
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS/BSD pthreads API calls
 
+{$IFDEF ISDELPHI}
+function GetCurrentThreadId: TThreadID;
+begin
+  result := TThread.Current.ThreadID;
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  result := ord(cs.tryEnter);
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  cs.Enter;
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  cs.Leave;
+end;
+
+{$ELSE}
 function GetCurrentThreadId: TThreadID;
 begin
   result := system.GetCurrentThreadID();
@@ -730,7 +752,7 @@ procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
 begin
   system.LeaveCriticalSection(cs);
 end;
-
+{$ENDIF}
 {$endif NODIRECTTHREADMANAGER}
 
 const
@@ -5114,6 +5136,11 @@ begin
    {$ifndef ISDELPHI}
   // for inlined RTL calls (avoid one level of redirection)
   GetThreadManager(tm);
+  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
+  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
+  @EnterCriticalSection    := @tm.EnterCriticalSection;
+  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
+  {$else}
   @GetCurrentThreadId      := @tm.GetCurrentThreadId;
   @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
   @EnterCriticalSection    := @tm.EnterCriticalSection;

@@ -46,6 +46,7 @@ type
     procedure CatalogRunStore(Context: TObject);
     procedure RsaSlow(Context: TObject);
   published
+  protected // Disabled Tests - successfull
     /// MD5 (and MD4) hashing functions
     procedure _MD5;
     /// SHA-1 hashing functions
@@ -53,8 +54,10 @@ type
     /// SHA-256 hashing functions
     procedure _SHA256;
     /// SHA-512 hashing functions
+  published
     procedure _SHA512;
     /// SHA-3 / Keccak hashing functions
+  protected // Disabled Tests - successfull
     procedure _SHA3;
     /// AES encryption/decryption functions with proper test vectors and OpenSSL
     procedure _AES;
@@ -66,8 +69,10 @@ type
     procedure Hashes;
     /// pure pascal RSA tests
     procedure _RSA;
+published
     /// X509 Certificates
     procedure _X509;
+  protected // Disabled Tests - successfull
     /// stream-oriented cryptography
     procedure Streams;
     /// Base64/Base58/Base32 encoding/decoding functions
@@ -77,7 +82,9 @@ type
     procedure _CompressShaAes;
     {$endif PUREMORMOT2}
     /// AES-based (and OpenSSL) pseudorandom number generator
+published
     procedure _PRNG;
+  protected // Disabled Tests - successfull
     /// CryptDataForCurrentUser() function
     procedure _CryptDataForCurrentUser;
     {$ifdef OSWINDOWS}
@@ -87,12 +94,15 @@ type
     /// CryptDataWithSecret() function
     procedure _CryptDataWithSecret;
     /// JWT classes
+published
     procedure _JWT;
     /// validate TBinaryCookieGenerator object
+  protected // Disabled Tests - successfull
     procedure _TBinaryCookieGenerator;
     /// mormot.lib.pkcs11 unit validation
     procedure Pkcs11;
     /// validate client-server DIGEST access authentication
+published
     procedure Digest;
     /// High-Level Cryptography Catalog
     procedure Catalog;
