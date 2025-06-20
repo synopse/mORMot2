@@ -1048,7 +1048,7 @@ type
     fFamily: TSynLogFamily;
     fWriter: TJsonWriter;
     fThreadInfo: PSynLogThreadInfo;
-    fInitFlags: set of (logHeaderWritten, logInitDone);
+    fFlags: set of (logFileHeaderWritten, logInitDone, logAddThreadName);
     fPendingFlags: set of (pendingDisableRemoteLogLeave, pendingRotate);
     fExceptionIgnoredBackup: boolean; // with NOEXCEPTIONINTERCEPT conditional
     fISynLogOffset: integer;
@@ -4655,7 +4655,7 @@ begin
   nfo := @PerThreadInfo; // access the threadvar - inlined GetThreadInfo
   if PInteger(nfo)^ = 0 then // first access
     nfo^.ThreadNumber := InitThreadNumber;
-  if not (logInitDone in fInitFlags) then
+  if not (logInitDone in fFlags) then
     LogFileInit(nfo); // run once, to set start time and write headers
   FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
   GlobalThreadLock.Lock;
@@ -4760,8 +4760,8 @@ begin
     FreeAndNilSafe(fWriterEcho);
     FreeAndNilSafe(fWriter);
     FreeAndNilSafe(fWriterStream);
-    fInitFlags := [];
   finally
+    fFlags := [];
     exclude(fPendingFlags, pendingRotate); // reset it after FlushFinal
     GlobalThreadLock.UnLock;
   end;
@@ -4833,7 +4833,7 @@ var
   ms, rec: Int64;
 begin
   // prepare output file if not already done - and compute fStartTimestamp
-  if not (logInitDone in fInitFlags) then
+  if not (logInitDone in fFlags) then
     LogFileInit(nfo);
   // setup recursive timing with RefCnt=1 like with _AddRef outside lock
   if sllLeave in fFamily.Level then
@@ -5438,7 +5438,7 @@ begin
   GlobalThreadLock.Lock;
   try
     fThreadInfo := nfo;
-    if logInitDone in fInitFlags then // paranoid thread safety
+    if logInitDone in fFlags then // paranoid thread safety
       exit;
     // setup (once) proper timing for this log instance
     if fStartTimestamp = 0 then // don't reset after rotation
@@ -5451,11 +5451,17 @@ begin
       else
         fStartTimestampDateTime := NowUtc;
     end;
-    include(fInitFlags, logInitDone); // eventually
+    // check if we need to log the thread names in this new file
+    if (sllInfo in fFamily.Level) and
+       (fFamily.PerThreadLog = ptIdentifiedInOneFile) then
+      include(fFlags, logAddThreadName);
+    fThreadNameLogged := nil; // force re-notify
+    // eventually mark this instance as initialized (i.e. fStartTimestamp set)
+    include(fFlags, logInitDone);
     // initialize fWriter and its optional header - if needed
     if fWriter = nil then
       CreateLogWriter; // file creation should be thread-safe
-    if not (logHeaderWritten in fInitFlags) then
+    if not (logFileHeaderWritten in fFlags) then
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
     FillInfo(nfo, nil);
@@ -5486,7 +5492,7 @@ var
   L: integer;
   {$endif OSWINDOWS}
 begin
-  include(fInitFlags, logHeaderWritten);
+  include(fFlags, logFileHeaderWritten);
   w := fWriter;
   if w.WrittenBytes = 0 then // paranoid
   begin
@@ -5926,14 +5932,14 @@ begin
               DeleteFile(fFileName);
               fWriterStream := TFileStreamNoWriteError.Create(
                                  fFileName, fmCreate or fmShareRead);
-              exclude(fInitFlags, logHeaderWritten);
+              exclude(fFlags, logFileHeaderWritten); // header for new file
             end;
           acAppend:
             begin
               fWriterStream :=
                 TFileStreamNoWriteError.CreateAndRenameIfLocked(fFileName);
               if fWriterStream.Seek(0, soEnd) <> 0 then
-                include(fInitFlags, logHeaderWritten); // write headers once
+                include(fFlags, logFileHeaderWritten); // write headers once
             end;
         end;
       except
