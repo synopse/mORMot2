@@ -730,7 +730,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
     // - does not escape chars according to the JSON RFC
-    // - called by inlined AddNoJsonEscape() if Len >= fTempBufSize
+    // - called by inlined AddNoJsonEscape() if Len >= AvailableBytes
     procedure AddNoJsonEscapeBig(P: pointer; Len: PtrInt);
     /// append some UTF-8 chars to the buffer - inlined for small content
     // - does not escape chars according to the JSON RFC
@@ -776,9 +776,9 @@ type
     procedure AddStrings(const Values: array of RawUtf8); overload;
     /// append an UTF-8 string several times
     procedure AddStrings(const Text: RawUtf8; count: PtrInt); overload;
-    /// append a ShortString
+    /// append a ShortString - and ensure has space for 255 chars (including Text)
     procedure AddShort(const Text: ShortString); overload;
-    /// append a ShortString - or at least a small buffer < 256 chars
+    /// append a ShortString - or at least a small buffer typically < 256 chars
     procedure AddShort(Text: PUtf8Char; TextLen: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a TShort8 - Text should be not '', and up to 8 chars long
@@ -3961,7 +3961,7 @@ end;
 
 procedure Int18ToText(Value: cardinal; Text: PUtf8Char);
 begin
-  PCardinal(Text)^ := PtrUInt(((Value shr 12) and $3f) or
+  PCardinal(Text)^ := PtrUInt(((Value shr 12) and $3f) or // 6-bit per char
                               (((Value shr 6) and $3f) shl 8) or
                               ((Value and $3f) shl 16)) + $202020;
 end;
