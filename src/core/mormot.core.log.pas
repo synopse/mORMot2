@@ -226,7 +226,7 @@ const
   // information would be stored - therefore logged (TSynLog.Enter returns nil)
   // - typical value of recursive calls number is below a dozen: indentation in
   // the log file would make any bigger value clearly unreadable
-  // - this number has been defined to keep TSynLogThreadInfo < 512 bytes
+  // - this number has been also defined to keep TSynLogThreadInfo < 512 bytes
   MAX_SYNLOGRECURSION = 53;
   /// we handle up to 64K threads per TSynLog instance
   // - there is no technical reason to such limitation, but it would allow to
@@ -5349,7 +5349,7 @@ end;
 procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
 begin
   if (self = nil) or
-     (Text = '') or
+     (Text = nil) or
      not (Level in fFamily.fLevel) then
     exit;
   LockAndDisableExceptions;
