@@ -1100,6 +1100,7 @@ type
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
     procedure LogFileHeader; virtual;
+    procedure LogException(const Ctxt: TSynLogExceptionContext);
     procedure AddMemoryStats; virtual;
     procedure AddErrorMessage(Error: cardinal);
     procedure AddStackTrace(Stack: PPtrUInt);
@@ -5129,7 +5130,7 @@ end;
 procedure TSynLog.LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char;
   aInstance: TObject; const IgnoreWhenStartWith: PAnsiChar);
 
-  procedure DoLog(LinesToLog: PUtf8Char);
+  procedure DoLog(LinesToLog: PUtf8Char); // sub-procedure for local RawUtf8
   var
     s: RawUtf8;
   begin
@@ -5646,7 +5647,7 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
       dec(ms, fStartTimestamp);
       MicroSec := @ms;
     end;
-    p[0] := #16; // 64-bit microseconds = 584704 years
+    p[0] := #16; // 64-bit microseconds = 584704 years as 16 chars
     BinToHexDisplayLower(pointer(MicroSec), @p[1], SizeOf(ms));
   end
   else
@@ -5660,7 +5661,22 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   if fFamily.fPerThreadLog <> ptIdentifiedInOneFile then
     exit;
   Int18ToText(nfo^.ThreadNumber, @p[ord(p[0]) + 1]);
-  inc(p[0], 3);
+  inc(p[0], 3); // final length is 19-20 chars into string[21]
+end;
+
+procedure TSynLog.LogException(const Ctxt: TSynLogExceptionContext);
+var
+  nfo: PSynLogThreadInfo;
+begin // caller made GlobalThreadLock.Lock
+  if self = nil then
+    exit;
+  nfo := GetThreadInfo;
+  FillInfo(nfo, nil); // timestamp [+ threadnumber]
+  SetThreadInfo(self, nfo);
+  LogHeaderNoRecursion(Ctxt.ELevel);
+  DefaultSynLogExceptionToStr(fWriter, Ctxt, {addinfo=}false);
+  // stack trace only in the main thread
+  fWriterEcho.AddEndOfLine(Ctxt.ELevel);
 end;
 
 procedure TSynLog.PerformRotation;
@@ -6169,7 +6185,7 @@ var
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var
   fam: TSynLogFamily;
-  log, log2: TSynLog;
+  log: TSynLog;
   info: ^TSynLogExceptionInfo;
   thrdnam: PShortString;
   i: PtrInt;
@@ -6267,15 +6283,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
         if (fam <> HandleExceptionFamily) and // if not already logged above
            (Ctxt.ELevel in fam.Level) then
         try
-          log2 := fam.fGlobalLog;
-          if log2 = nil then
-            continue;
-          log2.fThreadInfo := log2.GetThreadInfo;
-          log2.FillInfo(log2.fThreadInfo, nil); // timestamp [+ threadnumber]
-          log2.LogHeader(Ctxt.ELevel, nil);
-          DefaultSynLogExceptionToStr(log2.fWriter, Ctxt, {addinfo=}false);
-          // stack trace only in the main thread
-          log2.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+          fam.fGlobalLog.LogException(Ctxt);
         except
           // paranoid: don't try this family again (without SetLevel)
           fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
