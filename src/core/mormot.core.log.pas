@@ -1058,6 +1058,7 @@ type
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
     fWriterEcho: TEchoWriter;
+    fThreadNameLogged: TIntegerDynArray; // bits for ptIdentifiedInOneFile
     fWriterStream: TStream;
     fFileName: TFileName;
     fFileRotationBytes: cardinal; // see OnFlushToStream
@@ -4600,6 +4601,15 @@ begin
       end;
     // mark thread number to be recycled by InitThreadNumber
     AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
+    // reset this thread naming flag in each TSynLog
+    dec(num);
+    for i := 0 to length(SynLogFamily) - 1 do
+      with SynLogFamily[i] do
+        if (sllInfo in Level) and
+           (PerThreadLog = ptIdentifiedInOneFile) and
+           (fGlobalLog <> nil) and
+           (num < PtrUInt(length(fGlobalLog.fThreadNameLogged)) shl 5) then
+          UnSetBitPtr(fGlobalLog.fThreadNameLogged, num);
   finally
     GlobalThreadLock.UnLock;
   end;
@@ -4652,8 +4662,12 @@ var
   ndx: PtrUInt;
   thd: PSynLogThreads;
 begin
+  // update fThreadNameLogged[] to ensure this method is called once per thread
   thd := @SynLogThreads;
   ndx := fThreadInfo.ThreadNumber - 1;
+  if ndx >= PtrUInt(length(fThreadNameLogged)) shl 5 then   // 32-bit array
+    SetLength(fThreadNameLogged, (thd^.Count shr 5)  + 64); // + 2K threads
+  SetBitPtr(fThreadNameLogged, ndx);
   // add the "SetThreadName" sllInfo line in the expected format
   if ndx >= PtrUInt(length(thd^.Ident)) then
     LogThreadName(''); // no explicit TSynLog.LogThreadName() -> set default
@@ -4682,6 +4696,15 @@ begin
   // very quickly verify if we need to log the "SetThreadName" line
   if not (logAddThreadName in log.fFlags) then // not ptIdentifiedInOneFile
     exit;
+  p := pointer(log.fThreadNameLogged);
+  if p <> nil then
+  begin
+    ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants
+    if ndx <= PtrUInt(PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1)) then
+      if p[ndx] and nfo^.ThreadBitLo <> 0 then // fast "if GetBitPtr() then"
+        exit; // already done (most common case)
+  end;
+  log.AddLogThreadName;
 end;
 
 procedure TSynLog.LockAndDisableExceptions;
@@ -5449,6 +5472,7 @@ begin
     if (sllInfo in fFamily.Level) and
        (fFamily.PerThreadLog = ptIdentifiedInOneFile) then
       include(fFlags, logAddThreadName);
+    fThreadNameLogged := nil; // force re-notify
     // eventually mark this instance as initialized (i.e. fStartTimestamp set)
     include(fFlags, logInitDone);
     // initialize fWriter and its optional header - if needed
