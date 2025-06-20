@@ -1074,10 +1074,8 @@ type
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
     procedure RaiseDoEnter;
-    procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo);
-      {$ifdef HASINLINE}inline;{$endif}
-    procedure LockAndDisableExceptions;
-      {$ifdef FPC}inline;{$endif} // Delphi can't access PerThreadInfo threadvar
+    procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo); // no profit inlining
+    procedure LockAndDisableExceptions; // no profit inlining
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
