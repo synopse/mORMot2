@@ -4938,7 +4938,7 @@ var
 begin
   fact := TInterfaceFactory.Get(aGuid);
   if fact = nil then
-    GuidToShort(aGuid, PGuidShortString(@result)^)
+    GuidToShort(aGuid, PShortGuid(@result)^)
   else
     result := fact.fInterfaceRtti.Info^.RawName;
 end;

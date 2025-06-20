@@ -2593,17 +2593,12 @@ function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ',';
 function GuidToString(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): string;
 
-type
-  /// stack-allocated ASCII string, used by GuidToShort() function
-  TGuidShortString = string[38];
-  PGuidShortString = ^TGuidShortString;
-
-  /// convert a TGuid into its standard uppercase text representation with the {}
-  // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
+/// convert a TGuid into its standard uppercase text representation with the {}
+// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
 function GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid: TGuid): TGuidShortString; overload;
+  guid: TGuid): TShortGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGuid into its standard uppercase text representation with the {}
@@ -2611,11 +2606,11 @@ function GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
 procedure GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid: TGuid; out dest: TGuidShortString); overload;
+  guid: TGuid; out dest: TShortGuid); overload;
 
 /// convert a TGuid into lowercase '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
 function UuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid: TGuid): TGuidShortString;
+  guid: TGuid): TShortGuid;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some text into its TGuid binary value
@@ -11068,13 +11063,13 @@ begin
 end;
 
 function GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid: TGuid): TGuidShortString;
+  guid: TGuid): TShortGuid;
 begin
   GuidToShort(Guid, result);
 end;
 
 procedure GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid: TGuid; out dest: TGuidShortString);
+  guid: TGuid; out dest: TShortGuid);
 begin
   dest[0] := #38;
   dest[1] := '{';
@@ -11082,7 +11077,7 @@ begin
 end;
 
 function UuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid: TGuid): TGuidShortString;
+  guid: TGuid): TShortGuid;
 begin
   result[0] := #36;
   GuidToText(@result[1], @guid, @TwoDigitsHexLower);
@@ -11092,7 +11087,7 @@ end;
 function GuidToString({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid: TGuid): string;
 var
-  tmp: TGuidShortString;
+  tmp: TShortGuid;
 begin
   GuidToShort(guid, tmp);
   Ansi7ToString(@tmp[1], 38, result);
