@@ -5258,6 +5258,43 @@ begin
     DoLog(LinesToLog);
 end;
 
+procedure CleanThreadName(var name: RawUtf8);
+var
+  i: PtrInt;
+begin
+  for i := 1 to length(name) do
+    if name[i] < ' ' then
+      name[i] := ' '; // ensure on same line
+  name := TrimU(StringReplaceAll(name, [
+    'TSqlRest',        '',
+    'TRest',           '',
+    'TSql',            '',
+    'TSQLRest',        '',
+    'TSQL',            '',
+    'TOrmRest',        '',
+    'TOrm',            '',
+    'TWebSocket',      'WS',
+    'TServiceFactory', 'SF',
+    'TSyn',            '',
+    'Thread',          '',
+    'Process',         '',
+    'Background',      'Bgd',
+    'WebSocket',       'WS',
+    'Asynch',          'A',
+    'Async',           'A',
+    'Parallel',        'Prl',
+    'Timer',           'Tmr',
+    'Thread',          'Thd',
+    'Database',        'DB',
+    'Backup',          'Bak',
+    'Server',          'Srv',
+    'Client',          'Cli',
+    'synopse',         'syn',
+    'memory',          'mem',
+    '  ',              ' '
+    ]));
+end;
+
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
   const Args: array of const);
 var
@@ -5268,61 +5305,28 @@ var
 begin
   if SynLogFileFreeing then
     exit; // inconsistent call at shutdown
-  // compute the full thread name
+  n[0] := #0;
   if Format <> '' then
   begin
+    // compute the full thread name
     FormatUtf8(Format, Args, name);
     if Format[1] = '=' then
       delete(name, 1, 1) // no need to clean this thread identifier
     else
-    begin
-      for i := 1 to length(name) do
-        if name[i] < ' ' then
-          name[i] := ' '; // ensure on same line
-      name := TrimU(StringReplaceAll(name, [
-        'TSqlRest',        '',
-        'TRest',           '',
-        'TSql',            '',
-        'TSQLRest',        '',
-        'TSQL',            '',
-        'TOrmRest',        '',
-        'TOrm',            '',
-        'TWebSocket',      'WS',
-        'TServiceFactory', 'SF',
-        'TSyn',            '',
-        'Thread',          '',
-        'Process',         '',
-        'Background',      'Bgd',
-        'WebSocket',       'WS',
-        'Asynch',          'A',
-        'Async',           'A',
-        'Parallel',        'Prl',
-        'Timer',           'Tmr',
-        'Thread',          'Thd',
-        'Database',        'DB',
-        'Backup',          'Bak',
-        'Server',          'Srv',
-        'Client',          'Cli',
-        'synopse',         'syn',
-        'memory',          'mem',
-        '  ',              ' '
-        ]));
-    end;
+      CleanThreadName(name); // clean e.g. class names or common identifiers
+    // compute the shortened thread name as plain ASCII-7 identifier
+    for i := 1 to length(name) do
+      if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.', ':'
+        {$ifdef OSWINDOWS}, ' ', '-'{$endif}] then
+      begin
+        AppendShortChar(name[i], @n);
+        if n[0] = #31 then
+          break; // TShort31
+      end;
   end;
-  // compute the shortened thread name
-  n[0] := #0;
-  for i := 1 to length(name) do
-    if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.', ':'
-      {$ifdef OSWINDOWS}, ' ', '-'{$endif}] then
-    begin
-      inc(n[0]);
-      n[ord(n[0])] := name[i];
-      if n[0] = #31 then
-        break; // TShort31
-    end;
   // set this process threadvar and notify the OS
   ps := nil;
-  if ThreadID = GetCurrentThreadId then
+  if ThreadID = GetCurrentThreadId then // from SetCurrentThreadName()
   begin
     ps := CurrentThreadNameShort;
     if ps^ = n then
