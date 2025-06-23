@@ -6861,16 +6861,12 @@ end;
 
 function TSynLogFile.ComputeProperTime(var procndx: PtrInt): cardinal;
 var
-  start, i: PtrInt;
-  tim: cardinal;
-  p: PSynLogFileProc;
+  p, start: PSynLogFileProc;
 begin
-  start := procndx;
-  with fLogProcNatural[procndx] do
-  begin
-    ProperTime := Time;
-    result := index;
-  end;
+  p := @fLogProcNatural[procndx];
+  start := p;
+  p^.ProperTime := p^.Time;
+  result := p^.index;
   repeat
     inc(result);
     if result >= cardinal(Count) then
@@ -6880,15 +6876,16 @@ begin
         begin
           inc(procndx);
           assert(fLogProcNatural[procndx].index = result);
-          result := ComputeProperTime(procndx);
+          result := ComputeProperTime(procndx); // may change procndx
         end;
       sllLeave:
         begin
-          p := @fLogProcNatural[start];
-          tim := p^.ProperTime;
-          for i := start + 1 to procndx do
-            dec(tim, fLogProcNatural[i].ProperTime);
-          p^.ProperTime := tim;
+          p := @fLogProcNatural[procndx];
+          while PtrUInt(p) > PtrUInt(start) do
+          begin
+            dec(start^.ProperTime, p^.ProperTime);
+            dec(p);
+          end;
           break;
         end;
     end;
