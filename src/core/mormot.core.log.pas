@@ -5331,6 +5331,29 @@ begin
     InternalSetCurrentThreadName(name);
 end;
 
+function _GetCurrentThreadName: RawUtf8;
+var
+  ndx: PtrInt;
+begin
+  result := '';
+  if not SynLogFileFreeing then
+  begin
+    ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
+    if ndx >= 0 then
+    begin
+      GlobalThreadLock.Lock;
+      try
+        if ndx < length(SynLogThreads.Ident) then
+          result := SynLogThreads.Ident[ndx].ThreadName; // full thread name
+      finally
+        GlobalThreadLock.UnLock;
+      end;
+    end;
+  end;
+  if result = '' then // fallback to mormot.core.os default TShort21 behavior
+    ShortStringToAnsi7String(CurrentThreadNameShort^, result);
+end;
+
 class procedure TSynLog.LogThreadName(const Name: RawUtf8);
 var
   n: RawUtf8;
@@ -8113,6 +8136,7 @@ begin
   _LogInfoCaption[sllNone] := '';
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
+  GetCurrentThreadName := _GetCurrentThreadName;
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs
