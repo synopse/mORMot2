@@ -470,11 +470,12 @@ function FromAppLogLevel(const Text: RawUtf8): TSynLogLevels;
 function RetrieveMemoryManagerInfo: RawUtf8;
 
 var
-  /// low-level variable used internally by this unit
+  /// low-level critical section used internally by this unit
   // - we use a process-wide giant lock to avoid proper multi-threading of logs
   // - most process (e.g. time retrieval) is done outside of the lock: only
-  // actual log file writing is blocking the threads
-  // - do not access this variable in your code: defined here to allow inlining
+  // actual log file writing is blocking the threads - slowest process like file
+  // rotation/archival or console output will be executed in a background thread
+  // - do not access this variable in your code: defined here for proper inlining
   GlobalThreadLock: TOSLock;
 
   /// is set to TRUE before ObjArrayClear(SynLogFile) in unit finalization
@@ -4572,6 +4573,7 @@ type
     IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
   end;
   PSynLogThreads = ^TSynLogThreads;
+
 var
   /// information shared by all TSynLog, protected by GlobalThreadLock
   SynLogThreads: TSynLogThreads;
@@ -4625,6 +4627,7 @@ var
   thd: PSynLogThreads;
   num: cardinal;
 begin
+  // compute the thread number - reusing any pre-existing closed thread number
   thd := @SynLogThreads;
   GlobalThreadLock.Lock;
   try
@@ -4638,16 +4641,17 @@ begin
       if thd^.Count >= MAX_SYNLOGTHREADS then
         ESynLogException.RaiseUtf8('Too many threads (%): ' +
           'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
-      inc(thd^.Count);
+      inc(thd^.Count); // new thread index
       num := thd^.Count;
     end;
   finally
     GlobalThreadLock.UnLock;
   end;
   nfo^.ThreadNumber := num;
-  dec(num); // pre-compute GetBitStr() constants for SetThreadInfo()
-  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] array
-  nfo^.ThreadBitHi := num shr 5;
+  // pre-compute GetBitStr() constants for SetThreadInfo()
+  dec(num);
+  nfo^.ThreadBitLo := 1 shl (num and 31); // in 32-bit fThreadNameLogged[] value
+  nfo^.ThreadBitHi := num shr 5; // index in fThreadNameLogged[]
 end;
 
 function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
@@ -4697,7 +4701,7 @@ begin
   // very quickly verify if we need to log the "SetThreadName" line
   if not (logAddThreadName in log.fFlags) then // not ptIdentifiedInOneFile
     exit;
-  p := pointer(log.fThreadNameLogged);
+  p := pointer(log.fThreadNameLogged); // bit-set of this TSynLog
   if p <> nil then
   begin
     ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants
