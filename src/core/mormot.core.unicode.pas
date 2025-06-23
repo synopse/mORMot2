@@ -7808,7 +7808,8 @@ end;
 
 function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt; Lookup: PNormTable): PtrInt;
 begin
-  if Lookup = nil then
+  if (Lookup = nil) or
+     (Lookup = @NormToNorm) then
     {$ifdef CPUX86}
     result := PosEx(SubStr, S, Offset)
     {$else}
