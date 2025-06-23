@@ -1017,9 +1017,9 @@ type
     /// the internal number of this thread, stored as text using Int18ToChars3()
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
     ThreadNumber: word;
-    /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value for SetThreadInfo()
+    /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value
     ThreadBitLo: cardinal;
-    /// pre-computed "(ThreadNumber - 1) shr 5" value for SetThreadInfo()
+    /// pre-computed "(ThreadNumber - 1) shr 5" value
     ThreadBitHi: word;
     /// ready-to-be-written text timestamp, filled outside GlobalThreadLock
     // - ptIdentifiedInOneFile appends the ThreadNumber in Int18ToText() format
@@ -1598,7 +1598,7 @@ type
     fThreads: TWordDynArray;
     fThreadInfo: array of record
       Rows: cardinal;
-      SetThreadName: TPUtf8CharDynArray;
+      SetThreadName: TPUtf8CharDynArray; // TSynLog.AddLogThreadName locations
     end;
     /// as extracted from the .log header
     fExeName, fExeVersion, fInstanceName: RawUtf8;
@@ -4573,7 +4573,7 @@ type
   TSynLogThreads = record
     Ident: array of record // follow Ident[TSynLogThreadInfo.ThreadNumber - 1]
       ThreadName: RawUtf8; // for ptIdentifiedInOneFile
-      ThreadID: PtrUInt;
+      ThreadID: PtrUInt;   // pthread pointer on POSIX, DWORD on Windows
     end;
     Count: integer; // as returned by TSynLog.ThreadCount
     IndexReleasedCount: integer;
@@ -4582,7 +4582,7 @@ type
   PSynLogThreads = ^TSynLogThreads;
 
 var
-  /// information shared by all TSynLog, protected by GlobalThreadLock
+  // threads information shared by all TSynLog, protected by GlobalThreadLock
   SynLogThreads: TSynLogThreads;
 
 class procedure TSynLog.NotifyThreadEnded;
@@ -4592,8 +4592,8 @@ var
   thd: PSynLogThreads;
   i: PtrInt;
 begin
-  CurrentThreadNameShort^[0] := #0; // reset threadvar for consistency
-  nfo := @PerThreadInfo;
+  CurrentThreadNameShort^[0] := #0; // reset TShort31 threadvar for consistency
+  nfo := @PerThreadInfo; // no automatic InitThreadNumber()
   num := nfo^.ThreadNumber;
   if num = 0 then // not touched yet by TSynLog, or called twice
     exit;
@@ -4708,9 +4708,9 @@ var
 begin
   log.fThreadInfo := nfo;
   // very quickly verify if we need to log the "SetThreadName" line
-  if not (logAddThreadName in log.fFlags) then // not ptIdentifiedInOneFile
+  if not (logAddThreadName in log.fFlags) then // sllInfo+ptIdentifiedInOneFile
     exit;
-  p := pointer(log.fThreadNameLogged); // bit-set of this TSynLog
+  p := pointer(log.fThreadNameLogged); // threads bit-set of this TSynLog
   if p <> nil then
   begin
     ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants
@@ -5712,9 +5712,9 @@ end;
 procedure TSynLog.LogException(const Ctxt: TSynLogExceptionContext);
 var
   nfo: PSynLogThreadInfo;
-begin // caller made GlobalThreadLock.Lock
+begin // called by SynLogException() within its GlobalThreadLock.Lock
   if self = nil then
-    exit;
+    exit; // this TSynLogFamily has no fGlobalLog (yet)
   nfo := GetThreadInfo;
   FillInfo(nfo, nil); // timestamp [+ threadnumber]
   SetThreadInfo(self, nfo); // call AddLogThreadName if needed
