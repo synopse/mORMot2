@@ -4716,10 +4716,14 @@ begin
     // see TSynLogFile.ProcessOneLine() for the expected format
     LogHeaderNoRecursion(fWriter, sllInfo, @fThreadInfo^.CurrentTimeAndThread);
     fWriter.AddShort('SetThreadName ');
-    fWriter.AddPointer(ThreadID);  // as hexadecimal
+    fWriter.AddU(ndx + 1);  // human-friendly LogViewer number for this process
     fWriter.AddDirect(' ');
-    fWriter.AddU(ThreadID);        // as decimal
-    fWriter.AddDirect('=');
+    fWriter.AddPointer(ThreadID);  // as hexadecimal (pthread pointer on POSIX)
+    {$ifdef OSWINDOWS}
+    fWriter.AddDirect(' ');
+    fWriter.AddU(ThreadID);        // as decimal DWORD on Windows
+    {$endif OSWINDOWS}
+    fWriter.AddDirect('=');        // as expected by TSynLogFile.ThreadName()
     fWriter.AddOnSameLine(pointer(ThreadName)); // as human-readable text
     fWriterEcho.AddEndOfLine(sllInfo);
   end;
