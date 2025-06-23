@@ -7473,6 +7473,7 @@ function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUtf8;
 var
   i: PtrInt;
   lineptr: PtrUInt;
+  names: TPUtf8CharDynArray;
   found: pointer;
 begin
   if ThreadID = 1 then
@@ -7481,25 +7482,27 @@ begin
   begin
     result := '';
     if cardinal(ThreadID) <= fThreadMax then
-      with fThreadInfo[ThreadID] do
-        if SetThreadName <> nil then // search the thread name at this position
+    begin
+      names := fThreadInfo[ThreadID].SetThreadName;
+      if names <> nil then // search the thread name at this position
+      begin
+        found := names[0];
+        if cardinal(CurrentLogIndex) < cardinal(fCount) then
         begin
-          found := SetThreadName[0];
-          if cardinal(CurrentLogIndex) < cardinal(fCount) then
-          begin
-            lineptr := PtrUInt(fLines[CurrentLogIndex]);
-            for i := length(SetThreadName) - 1 downto 1 do
-              if lineptr >= PtrUInt(SetThreadName[i]) then
-              begin
-                found := SetThreadName[i];
-                break;
-              end;
-          end;
-          FastSetString(result, found, GetLineSize(found, fMapEnd));
-          delete(result, 1, PosEx('=', result, 40));
+          lineptr := PtrUInt(fLines[CurrentLogIndex]);
+          for i := length(names) - 1 downto 1 do
+            if lineptr >= PtrUInt(names[i]) then
+            begin
+              found := names[i];
+              break;
+            end;
         end;
+        FastSetString(result, found, GetLineSize(found, fMapEnd));
+        delete(result, 1, PosEx('=', result, 40)); // raw thread name
+      end;
+    end;
     if result = '' then
-      result := 'Thread';
+      result := 'unnamed';
   end;
   if cardinal(ThreadID) <= fThreadMax then
     result := FormatUtf8('% % (% rows)',
