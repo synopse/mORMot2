@@ -5198,17 +5198,17 @@ var
   // should also call TSynLogFamily.OnThreadEnded/TSynLog.NotifyThreadEnded
   SetThreadName: procedure(ThreadID: TThreadID; const Format: RawUtf8;
     const Args: array of const);
+  /// retrieve the thread name, as set by SetThreadName()
+  // - if enough, direct CurrentThreadNameShort function is slightly faster
+  // - will return the CurrentThreadNameShort^ threadvar 31 chars value or
+  // the full thread name as set via mormot.core.log's SetThreadName()
+  GetCurrentThreadName: function: RawUtf8;
 
 /// low-level access to the thread name, as set by SetThreadName()
 // - since threadvar can't contain managed strings, it is defined as TShort31,
 // so is limited to 31 chars, which is enough since POSIX truncates to 16 chars
 // and SetThreadName does trim meaningless patterns
 function CurrentThreadNameShort: PShortString;
-
-/// retrieve the thread name, as set by SetThreadName()
-// - if possible, direct CurrentThreadNameShort function is slightly faster
-// - will return the CurrentThreadNameShort^ threadvar 31 chars value
-function GetCurrentThreadName: RawUtf8;
 
 /// returns the thread id and the thread name as a ShortString
 // - returns e.g. 'Thread 0001abcd [shortthreadname]'
@@ -11156,7 +11156,7 @@ end;
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
   const Args: array of const);
 begin
-  // do nothing - properly implemented in mormot.core.log
+  // do nothing - properly implemented in mormot.core.log using FormatUtf8()
 end;
 
 procedure SetCurrentThreadName(const Format: RawUtf8; const Args: array of const);
@@ -11179,7 +11179,7 @@ begin
     result := @NULCHAR; // paranoid range check
 end;
 
-function GetCurrentThreadName: RawUtf8;
+function _GetCurrentThreadName: RawUtf8;
 begin
   ShortStringToAnsi7String(_CurrentThreadName, result);
 end;
@@ -11482,6 +11482,7 @@ begin
   // minimal stubs which will be properly implemented in other mormot.core units
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
   SetThreadName         := _SetThreadName;
+  GetCurrentThreadName  := _GetCurrentThreadName;
   ShortToUuid           := _ShortToUuid;           // mormot.core.text
   AppendShortUuid       := _AppendShortUuid;
   GetEnumNameRtti       := _GetEnumNameRtti;       // mormot.core.rtti
