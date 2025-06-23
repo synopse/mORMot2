@@ -9295,7 +9295,7 @@ var
 begin
   if fMap.Buffer = nil then
     exit;
-  fLinesMax := fMap.FileSize div AverageLineLength + 8;
+  fLinesMax := fMap.FileSize div AverageLineLength + 8; // wild guess
   GetMem(fLines, fLinesMax * SizeOf(pointer));
   P := pointer(fMap.Buffer);
   fMapEnd := P + fMap.Size;

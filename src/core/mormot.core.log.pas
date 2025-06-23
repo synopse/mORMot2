@@ -1594,7 +1594,7 @@ type
     fThreadInfoMax: cardinal;
     fThreadsCount: integer;
     fThreadMax: cardinal;
-    fThreads: TWordDynArray;
+    fThreads: TWordDynArray; // = EventThread[] for each line
     fThreadInfo: array of record
       Rows: cardinal;
       SetThreadName: TPUtf8CharDynArray; // TSynLog.AddLogThreadName locations
@@ -1625,13 +1625,12 @@ type
     fLogProcCurrent: PSynLogFileProcArray;
     fLogProcNatural: TSynLogFileProcDynArray;
     fLogProcMerged: TSynLogFileProcDynArray;
-    fLogProcMergedCount: integer;
     fLogProcIsMerged: boolean;
     fLogProcStack: array of TIntegerDynArray;
     fLogProcStackCount: array of integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
     fLogProcSortInternalComp: function(A, B: PtrInt): PtrInt of object;
-    /// used by ProcessOneLine//GetLogLevelTextMap
+    /// used by ProcessOneLine/GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogLevel] of cardinal;
     fIntelCPU: TIntelCpuFeatures;
     fArm32CPU: TArm32HwCaps;
@@ -1643,7 +1642,8 @@ type
     /// retrieve headers + fLevels[] + fLogProcNatural[], and delete invalid fLines[]
     procedure LoadFromMap(AverageLineLength: integer = 32); override;
     procedure CleanLevels;
-    function ComputeProperTime(var procndx: PtrInt): cardinal; // returns leave
+    procedure RecomputeTime(p: PSynLogFileProc);
+    function ComputeProperTime(start: PSynLogFileProc): PSynLogFileProc;
     /// compute fLevels[] + fLogProcNatural[] for each .log line during initial reading
     procedure ProcessOneLine(LineBeg, LineEnd: PUtf8Char); override;
     /// called by LogProcSort method
@@ -6816,79 +6816,133 @@ end;
 
 procedure TSynLogFile.CleanLevels;
 var
-  i, aCount, pCount, dCount, dValue, dMax: PtrInt;
+  i, n, p, d, dValue, dMax: PtrInt;
+  sll: TSynLogLevel;
 begin
-  aCount := 0;
-  pCount := 0;
-  dCount := 0;
+  n := 0;
+  p := 0;
+  d := 0;
   dMax := Length(fDayChangeIndex);
   if dMax > 0 then
     dValue := fDayChangeIndex[0]
   else
     dValue := -1;
   for i := 0 to fCount - 1 do
-    if fLevels[i] <> sllNone then
+  begin
+    sll := fLevels[i];
+    if sll = sllNone then // just ignore any recognized line
+      continue;
+    fLevels[n] := sll;
+    fLines[n]  := fLines[i];
+    if fThreads <> nil then
+      fThreads[n] := fThreads[i];
+    if sll = sllEnter then
     begin
-      fLevels[aCount] := fLevels[i];
-      fLines[aCount]  := fLines[i];
-      if fThreads <> nil then
-        fThreads[aCount] := fThreads[i];
-      if fLevels[i] = sllEnter then
-      begin
-        fLogProcNatural[pCount].index := aCount;
-        inc(pCount);
-      end;
-      if dValue = i then
-      begin
-        fDayChangeIndex[dCount] := aCount;
-        inc(dCount);
-        if dCount < dMax then
-          dValue := fDayChangeIndex[dCount];
-      end;
-      inc(aCount);
+      fLogProcNatural[p].Index := n;
+      inc(p);
     end;
-  fCount := aCount;
-  assert(pCount = fLogProcNaturalCount);
+    if dValue = i then
+    begin
+      fDayChangeIndex[d] := n;
+      inc(d);
+      if d < dMax then
+        dValue := fDayChangeIndex[d];
+    end;
+    inc(n);
+  end;
+  fCount := n;
+  assert(p = fLogProcNaturalCount);
   if dMax > 0 then
   begin
     SetLength(fDayCount, dMax);
     dec(dMax);
     for i := 0 to dMax - 1 do
       fDayCount[i] := fDayChangeIndex[i + 1] - fDayChangeIndex[i];
-    fDayCount[dMax] := aCount - fDayChangeIndex[dMax];
+    fDayCount[dMax] := n - fDayChangeIndex[dMax];
   end;
 end;
 
-function TSynLogFile.ComputeProperTime(var procndx: PtrInt): cardinal;
+procedure TSynLogFile.RecomputeTime(p: PSynLogFileProc);
 var
-  p, start: PSynLogFileProc;
+  ndx, lev: PtrInt;
+  enter64, leave64: Int64;
+  thd: cardinal;
 begin
-  p := @fLogProcNatural[procndx];
-  start := p;
-  p^.ProperTime := p^.Time;
-  result := p^.index;
+  lev := 0;
+  ndx := p^.Index;
+  if fThreads <> nil then
+    thd := fThreads[ndx] // will only check sllEnter/sllLeave in this thread
+  else
+    thd := 0;
   repeat
-    inc(result);
-    if result >= cardinal(Count) then
+    inc(ndx);
+    if ndx = fCount then
       break;
-    case fLevels[result] of
-      sllEnter:
-        begin
-          inc(procndx);
-          assert(fLogProcNatural[procndx].index = result);
-          result := ComputeProperTime(procndx); // may change procndx
-        end;
-      sllLeave:
-        begin
-          p := @fLogProcNatural[procndx];
-          while PtrUInt(p) > PtrUInt(start) do
+    if (thd = 0) or
+       (fThreads[ndx] = thd) then
+      case fLevels[ndx] of
+        sllEnter:
+          inc(lev);
+        sllLeave:
+          if lev = 0 then // compute proper p^.Time from nested calls
           begin
-            dec(start^.ProperTime, p^.ProperTime);
-            dec(p);
+            if fFreq = 0 then
+              // adjust huge seconds timing from date/time column
+              p^.Time := Round(
+                (EventDateTime(ndx) -
+                 EventDateTime(p^.Index)) * 86400000000.0) +
+                p^.Time mod 1000000
+            else
+            begin
+              // use high resolution values
+              HexDisplayToBin(fLines[p^.Index], @enter64, SizeOf(enter64));
+              HexDisplayToBin(fLines[ndx],      @leave64, SizeOf(leave64));
+              p^.Time := ((leave64 - enter64) * (1000 * 1000)) div fFreq;
+            end;
+            break;
+          end
+          else
+            dec(lev);
+      end;
+  until false;
+end;
+
+function TSynLogFile.ComputeProperTime(start: PSynLogFileProc): PSynLogFileProc;
+var
+  ndx: PtrInt;
+  thd: cardinal;
+begin
+  result := start;
+  result^.ProperTime := result^.Time;
+  ndx := result^.Index;
+  if fThreads <> nil then
+    thd := fThreads[ndx] // will only check sllEnter/sllLeave in this thread
+  else
+    thd := 0;
+  repeat
+    inc(ndx);
+    if ndx = fCount then
+      break;
+    if (thd = 0) or
+       (fThreads[ndx] = thd) then
+      case fLevels[ndx] of
+        sllEnter:
+          begin
+            inc(result);
+            result := ComputeProperTime(result);
           end;
-          break;
-        end;
-    end;
+        sllLeave:
+          begin
+            while PtrUInt(result) > PtrUInt(start) do
+            begin
+              if (thd = 0) or
+                 (fThreads[result^.Index] = thd) then
+                dec(start^.ProperTime, result^.ProperTime);
+              dec(result);
+            end;
+            break;
+          end;
+      end;
   until false;
 end;
 
@@ -6930,8 +6984,6 @@ var
   aWow64, feat: RawUtf8;
   f: PAnsiChar;
   i: PtrInt;
-  j, Level, wow64: integer;
-  TSEnter, TSLeave: Int64;
   fp, fpe: PSynLogFileProc;
   OK: boolean;
 begin
@@ -7010,9 +7062,9 @@ begin
       else
         mormot.core.text.HexToBin(f, @fIntelCPU, SizeOf(fIntelCPU));
       end;
-    wow64 := GetInteger(pointer(aWow64)); // 0, 1, 2 or 3
-    fWow64 := (wow64 and 1) <> 0;
-    fWow64Emulated := (wow64 and 2) <> 0; // + ord(IsWow64Emulation) shl 1
+    i := GetInteger(pointer(aWow64)); // 0, 1, 2 or 3
+    fWow64 := (i and 1) <> 0;
+    fWow64Emulated := (i and 2) <> 0; // + ord(IsWow64Emulation) shl 1
     SetInt64(PBeg, fFreq);
     while (PBeg < PEnd) and
           (PBeg^ > ' ') do
@@ -7048,7 +7100,7 @@ begin
     i := LineSize(fHeaderLinesCount - 2) - 19; // length('2016-07-17T22:38:03')=19
     if i > 0 then
     begin
-      FastSetString(fFramework, PAnsiChar(P), i - 1);
+      FastSetString(fFramework, P, i - 1);
       Iso8601ToDateTimePUtf8CharVar(P + i, 19, fStartDateTime);
     end;
     if fStartDateTime = 0 then
@@ -7069,49 +7121,18 @@ begin
     SetLength(fLogProcNatural, fLogProcNaturalCount); // exact resize
     fp := pointer(fLogProcNatural);
     fpe := @fLogProcNatural[fLogProcNaturalCount];
-    while PAnsiChar(fp) < PAnsiChar(fpe) do
+    while PtrUInt(fp) < PtrUInt(fpe) do
     begin
       if fp^.Time >= 99000000 then
-      begin
-        // 99.xxx.xxx means over range -> compute from nested calls
-        Level := 0;
-        j := fp^.Index;
-        repeat
-          inc(j);
-          if j = fCount then
-            break;
-          case fLevels[j] of
-            sllEnter:
-              inc(Level);
-            sllLeave:
-              if Level = 0 then
-              begin
-                if fFreq = 0 then
-                  // adjust huge seconds timing from date/time column
-                  fp^.Time := Round(
-                    (EventDateTime(j) -
-                     EventDateTime(fp^.Index)) * 86400000000.0) +
-                    fp^.Time mod 1000000
-                else
-                begin
-                  HexDisplayToBin(fLines[fp^.Index], @TSEnter, SizeOf(TSEnter));
-                  HexDisplayToBin(fLines[j],         @TSLeave, SizeOf(TSLeave));
-                  fp^.Time := ((TSLeave - TSEnter) * (1000 * 1000)) div fFreq;
-                end;
-                break;
-              end
-              else
-                dec(Level);
-          end;
-        until false;
-      end;
+        // 99.xxx.xxx means over range -> compute fp^.Time from nested calls
+        RecomputeTime(fp);
       inc(fp);
     end;
-    i := 0;
-    while i < fLogProcNaturalCount do
+    fp := pointer(fLogProcNatural);
+    while PtrUInt(fp) < PtrUInt(fpe) do
     begin
-      ComputeProperTime(i);
-      inc(i);
+      fp := ComputeProperTime(fp);
+      inc(fp);
     end;
     LogProcMerged := false; // set LogProp[]
     OK := true;
@@ -7367,7 +7388,7 @@ begin
     else
       fLineLevelOffset := 18;
     if (LineBeg[fLineLevelOffset] = '!') or // ! = thread 1
-       (GetLogLevelFromText(LineBeg) = sllNone) then
+       (GetLogLevelFromText(LineBeg) = sllNone) then // may be thread > 1
     begin
       inc(fLineLevelOffset, 3);
       fThreadsCount := fLinesMax;
@@ -7424,7 +7445,7 @@ begin
     sllEnter:
       begin
         AddInteger(fLogProcStack[thread], fLogProcStackCount[thread], fLogProcNaturalCount);
-        if length(fLogProcNatural) <= fLogProcNaturalCount then
+        if fLogProcNaturalCount >= length(fLogProcNatural) then
           SetLength(fLogProcNatural, NextGrow(fLogProcNaturalCount));
         // fLogProcNatural[].### fields will be set later during parsing
         inc(fLogProcNaturalCount);
@@ -7568,8 +7589,8 @@ end;
 
 procedure TSynLogFile.SetLogProcMerged(const Value: boolean);
 var
-  i: PtrInt;
-  P: PSynLogFileProc;
+  i, n: PtrInt;
+  P, M: PSynLogFileProc;
   O: TLogProcSortOrder;
 begin
   fLogProcIsMerged := Value;
@@ -7582,28 +7603,26 @@ begin
       fLogProcCurrentCount := fLogProcNaturalCount;
       LogProcSort(soByName); // sort by name to identify unique
       SetLength(fLogProcMerged, fLogProcNaturalCount);
-      fLogProcMergedCount := 0;
+      n := 0;
       i := 0;
       P := pointer(fLogProcNatural);
       repeat
-        with fLogProcMerged[fLogProcMergedCount] do
-        begin
-          repeat
-            index := P^.Index;
-            inc(Time, P^.Time);
-            inc(ProperTime, P^.ProperTime);
-            inc(i);
-            inc(P);
-          until (i >= fLogProcNaturalCount) or
-            (StrICompLeftTrim(PUtf8Char(fLines[LogProc[i - 1].Index]) + 22,
-                              PUtf8Char(fLines[P^.Index]) + 22) <> 0);
-        end;
-        inc(fLogProcMergedCount);
+        M := @fLogProcMerged[n];
+        repeat
+          M^.Index := P^.Index;
+          inc(M^.Time, P^.Time);
+          inc(M^.ProperTime, P^.ProperTime);
+          inc(i);
+          inc(P);
+        until (i >= fLogProcNaturalCount) or
+              (StrICompLeftTrim(PUtf8Char(fLines[LogProc[i - 1].Index]) + 22,
+                                PUtf8Char(fLines[P^.Index]) + 22) <> 0);
+        inc(n);
       until i >= fLogProcNaturalCount;
-      SetLength(fLogProcMerged, fLogProcMergedCount);
+      SetLength(fLogProcMerged, n);
     end;
     fLogProcCurrent := pointer(fLogProcMerged);
-    fLogProcCurrentCount := fLogProcMergedCount;
+    fLogProcCurrentCount := n;
   end
   else
   begin
