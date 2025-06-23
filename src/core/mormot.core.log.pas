@@ -1311,9 +1311,8 @@ type
       const ContextFmt: RawUtf8; const ContextArgs: array of const; Data: pointer;
       DataLen: PtrInt; Instance: TObject; TruncateLen: PtrInt = 1024);
     /// allows to identify the current thread with a textual representation
+    // - redirect to SetThreadName/SetCurrentThreadName global function
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
-    // - entry would also be replicated at the begining of any rotated log file
-    // - is called automatically by SetThreadName() global function
     // - if Name='', will use CurrentThreadNameShort^ threadvar
     class procedure LogThreadName(const Name: RawUtf8);
       {$ifdef HASINLINE} static; {$endif}
@@ -4585,6 +4584,69 @@ var
   // threads information shared by all TSynLog, protected by GlobalThreadLock
   SynLogThreads: TSynLogThreads;
 
+procedure InitThreadNumber(nfo: PSynLogThreadInfo);
+var
+  thd: PSynLogThreads;
+  num: cardinal;
+begin
+  // compute the thread number - reusing any pre-existing closed thread number
+  thd := @SynLogThreads;
+  GlobalThreadLock.Lock;
+  try
+    if thd^.IndexReleasedCount <> 0 then // reuse NotifyThreadEnded() slot
+    begin
+      dec(thd^.IndexReleasedCount);
+      num := thd^.IndexReleased[SynLogThreads.IndexReleasedCount];
+    end
+    else
+    begin
+      if thd^.Count >= MAX_SYNLOGTHREADS then
+        ESynLogException.RaiseUtf8('Too many threads (%): ' +
+          'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
+      inc(thd^.Count); // new thread index
+      num := thd^.Count;
+    end;
+  finally
+    GlobalThreadLock.UnLock;
+  end;
+  nfo^.ThreadNumber := num;
+  // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
+  dec(num);
+  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] value
+  nfo^.ThreadBitHi := num shr 5; // index in fThreadNameLogged[]
+end;
+
+function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := @PerThreadInfo; // access the threadvar
+  if PInteger(result)^ = 0 then // first access
+    InitThreadNumber(result);
+end;
+
+procedure InternalSetCurrentThreadName(const Name: RawUtf8);
+var
+  ndx, tid: PtrUInt;
+  thd: PSynLogThreads;
+begin
+  if SynLogFileFreeing then
+    exit; // avoid GPF
+  ndx := GetThreadInfo^.ThreadNumber - 1; // may call InitThreadNumber()
+  tid := PtrUInt(GetCurrentThreadId);
+  thd := @SynLogThreads;
+  GlobalThreadLock.Lock;
+  try
+    if ndx >= PtrUInt(length(thd^.Ident)) then
+      SetLength(thd^.Ident, NextGrow(length(thd^.Ident) + 32));
+    with thd^.Ident[ndx] do // set identifiers of this TSynLog instance
+    begin
+      ThreadName := Name;
+      ThreadID := tid;
+    end;
+  finally
+    GlobalThreadLock.UnLock;
+  end;
+end;
+
 class procedure TSynLog.NotifyThreadEnded;
 var
   nfo: PSynLogThreadInfo;
@@ -4631,58 +4693,21 @@ begin
   result := SynLogThreads.Count; // global counter for the process
 end;
 
-procedure InitThreadNumber(nfo: PSynLogThreadInfo);
+procedure TSynLog.AddLogThreadName; // once from SetThreadInfoAndThreadName()
 var
-  thd: PSynLogThreads;
-  num: cardinal;
-begin
-  // compute the thread number - reusing any pre-existing closed thread number
-  thd := @SynLogThreads;
-  GlobalThreadLock.Lock;
-  try
-    if thd^.IndexReleasedCount <> 0 then // reuse NotifyThreadEnded() slot
-    begin
-      dec(thd^.IndexReleasedCount);
-      num := thd^.IndexReleased[SynLogThreads.IndexReleasedCount];
-    end
-    else
-    begin
-      if thd^.Count >= MAX_SYNLOGTHREADS then
-        ESynLogException.RaiseUtf8('Too many threads (%): ' +
-          'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
-      inc(thd^.Count); // new thread index
-      num := thd^.Count;
-    end;
-  finally
-    GlobalThreadLock.UnLock;
-  end;
-  nfo^.ThreadNumber := num;
-  // pre-compute GetBitStr() constants for SetThreadInfo()
-  dec(num);
-  nfo^.ThreadBitLo := 1 shl (num and 31); // in 32-bit fThreadNameLogged[] value
-  nfo^.ThreadBitHi := num shr 5; // index in fThreadNameLogged[]
-end;
-
-function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
-begin
-  result := @PerThreadInfo; // access the threadvar
-  if PInteger(result)^ = 0 then // first access
-    InitThreadNumber(result);
-end;
-
-procedure TSynLog.AddLogThreadName;
-var
-  ndx: PtrUInt;
+  ndx: PtrInt;
   thd: PSynLogThreads;
 begin
   // update fThreadNameLogged[] to ensure this method is called once per thread
   thd := @SynLogThreads;
   ndx := fThreadInfo.ThreadNumber - 1;
-  if ndx >= PtrUInt(length(fThreadNameLogged)) shl 5 then   // 32-bit array
-    SetLength(fThreadNameLogged, (thd^.Count shr 5)  + 64); // + 2K threads
+  if ndx < 0 then
+    exit; // paranoid
+  if ndx >= length(fThreadNameLogged) shl 5 then   // 32-bit array
+    SetLength(fThreadNameLogged, (thd^.Count shr 5)  + 32); // + 1K threads
   SetBitPtr(fThreadNameLogged, ndx);
   // add the "SetThreadName" sllInfo line in the expected format
-  if ndx >= PtrUInt(length(thd^.Ident)) then
+  if ndx >= length(thd^.Ident) then
     LogThreadName(''); // no explicit TSynLog.LogThreadName() -> set default
   with thd^.Ident[ndx] do
   begin
@@ -4700,7 +4725,7 @@ begin
   end;
 end;
 
-procedure SetThreadInfo(log: TSynLog; nfo: PSynLogThreadInfo);
+procedure SetThreadInfoAndThreadName(log: TSynLog; nfo: PSynLogThreadInfo);
   {$ifdef HASINLINE} inline; {$endif}
 var
   p: PIntegerArray;
@@ -4732,7 +4757,7 @@ begin
     LogFileInit(nfo); // run once, to set start time and write headers
   FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
   GlobalThreadLock.Lock;
-  SetThreadInfo(self, nfo); // call AddLogThreadName if needed
+  SetThreadInfoAndThreadName(self, nfo);
   {$ifndef NOEXCEPTIONINTERCEPT}
   // any exception within logging process will be ignored from now on
   fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
@@ -4930,7 +4955,7 @@ begin
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
   // prepare for the actual content logging
   GlobalThreadLock.Lock;
-  SetThreadInfo(self, nfo); // call AddLogThreadName if needed
+  SetThreadInfoAndThreadName(self, nfo);
 end;
 
 procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
@@ -5229,33 +5254,91 @@ begin
     DoLog(LinesToLog);
 end;
 
+procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
+  const Args: array of const);
+var
+  name: RawUtf8;
+  i: PtrInt;
+  n: TShort31;
+  ps: PShortString;
+begin
+  if SynLogFileFreeing then
+    exit; // inconsistent call at shutdown
+  // compute the full thread name
+  if Format <> '' then
+  begin
+    FormatUtf8(Format, Args, name);
+    if Format[1] = '=' then
+      delete(name, 1, 1) // no need to clean this thread identifier
+    else
+    begin
+      for i := 1 to length(name) do
+        if name[i] < ' ' then
+          name[i] := ' '; // ensure on same line
+      name := TrimU(StringReplaceAll(name, [
+        'TSqlRest',        '',
+        'TRest',           '',
+        'TSql',            '',
+        'TSQLRest',        '',
+        'TSQL',            '',
+        'TOrmRest',        '',
+        'TOrm',            '',
+        'TWebSocket',      'WS',
+        'TServiceFactory', 'SF',
+        'TSyn',            '',
+        'Thread',          '',
+        'Process',         '',
+        'Background',      'Bgd',
+        'WebSocket',       'WS',
+        'Asynch',          'A',
+        'Async',           'A',
+        'Parallel',        'Prl',
+        'Timer',           'Tmr',
+        'Thread',          'Thd',
+        'Database',        'DB',
+        'Backup',          'Bak',
+        'Server',          'Srv',
+        'Client',          'Cli',
+        'synopse',         'syn',
+        'memory',          'mem',
+        '  ',              ' '
+        ]));
+    end;
+  end;
+  // compute the shortened thread name
+  n[0] := #0;
+  for i := 1 to length(name) do
+    if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.', ':'
+      {$ifdef OSWINDOWS}, ' ', '-'{$endif}] then
+    begin
+      inc(n[0]);
+      n[ord(n[0])] := name[i];
+      if n[0] = #31 then
+        break; // TShort31
+    end;
+  // set this process threadvar and notify the OS
+  ps := nil;
+  if ThreadID = GetCurrentThreadId then
+  begin
+    ps := CurrentThreadNameShort;
+    if ps^ = n then
+      exit; // already set as such
+    ps^ := n;
+  end;
+  RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
+  // store full name in global SynLogThreads.Ident[] array
+  if ps <> nil then
+    InternalSetCurrentThreadName(name);
+end;
+
 class procedure TSynLog.LogThreadName(const Name: RawUtf8);
 var
   n: RawUtf8;
-  ndx, tid: PtrUInt;
-  thd: PSynLogThreads;
 begin
-  if SynLogFileFreeing then
-    exit; // avoid GPF
-  if Name = '' then
-    n := GetCurrentThreadName // from CurrentThreadNameShort^ threadvar
-  else
-    n := Name;
-  ndx := GetThreadInfo^.ThreadNumber - 1; // may call InitThreadNumber()
-  tid := PtrUInt(GetCurrentThreadId);
-  thd := @SynLogThreads;
-  GlobalThreadLock.Lock;
-  try
-    if ndx >= PtrUInt(length(thd^.Ident)) then
-      SetLength(thd^.Ident, NextGrow(ndx + 32));
-    with thd^.Ident[ndx] do // identifiers of this TSynLog instance
-    begin
-      ThreadName := n;
-      ThreadID := tid;
-    end;
-  finally
-    GlobalThreadLock.UnLock;
-  end;
+  n := Name;
+  if n = '' then
+    ShortStringToAnsi7String(CurrentThreadNameShort^, n);
+  SetCurrentThreadName(n); // redirect to _SetThreadName() above
 end;
 
 function TSynLog.LogClass: TSynLogClass;
@@ -5717,7 +5800,7 @@ begin // called by SynLogException() within its GlobalThreadLock.Lock
     exit; // this TSynLogFamily has no fGlobalLog (yet)
   nfo := GetThreadInfo;
   FillInfo(nfo, nil); // timestamp [+ threadnumber]
-  SetThreadInfo(self, nfo); // call AddLogThreadName if needed
+  SetThreadInfoAndThreadName(self, nfo);
   LogHeaderNoRecursion(fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
   DefaultSynLogExceptionToStr(fWriter, Ctxt, {addinfo=}false);
   // stack trace only in the main thread
@@ -6451,87 +6534,6 @@ begin
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}
-
-
-procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
-  const Args: array of const);
-var
-  name: RawUtf8;
-  i: PtrInt;
-  n: TShort31;
-  ps: PShortString;
-begin
-  if SynLogFileFreeing then
-    exit; // inconsistent call at shutdown
-  if Format <> '' then
-  begin
-    FormatUtf8(Format, Args, name);
-    if Format[1] = '=' then
-      delete(name, 1, 1) // no need to clean this thread identifier
-    else
-    begin
-      for i := 1 to length(name) do
-        if name[i] < ' ' then
-          name[i] := ' '; // ensure on same line
-      name := TrimU(StringReplaceAll(name, [
-        'TSqlRest',        '',
-        'TRest',           '',
-        'TSql',            '',
-        'TSQLRest',        '',
-        'TSQL',            '',
-        'TOrmRest',        '',
-        'TOrm',            '',
-        'TWebSocket',      'WS',
-        'TServiceFactory', 'SF',
-        'TSyn',            '',
-        'Thread',          '',
-        'Process',         '',
-        'Background',      'Bgd',
-        'WebSocket',       'WS',
-        'Asynch',          'A',
-        'Async',           'A',
-        'Parallel',        'Prl',
-        'Timer',           'Tmr',
-        'Thread',          'Thd',
-        'Database',        'DB',
-        'Backup',          'Bak',
-        'Server',          'Srv',
-        'Client',          'Cli',
-        'synopse',         'syn',
-        'memory',          'mem',
-        '  ',              ' '
-        ]));
-    end;
-  end;
-  n[0] := #0;
-  for i := 1 to length(name) do
-    if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.', ':'
-      {$ifdef OSWINDOWS}, ' ', '-'{$endif}] then
-    begin
-      inc(n[0]);
-      n[ord(n[0])] := name[i];
-      if n[0] = #31 then
-        break; // TShort31
-    end;
-  ps := CurrentThreadNameShort;
-  if ps^ = n then
-    exit; // already set as such
-  RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
-  GlobalThreadLock.Lock;
-  try
-    ps^[0] := #0; // for LogThreadName(name) to appear once
-    for i := 0 to length(SynLogFamily) - 1 do
-      with SynLogFamily[i] do
-        if (sllInfo in Level) and
-           (PerThreadLog = ptIdentifiedInOneFile) and
-           (fGlobalLog <> nil) then
-          fGlobalLog.LogThreadName(name); // try to put the full name in log
-  finally
-    GlobalThreadLock.UnLock;
-    ps^ := n; // low-level short name will be used from now
-  end;
-end;
-
 
 
 { TSynLogCallbacks }
