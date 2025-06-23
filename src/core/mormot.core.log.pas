@@ -1996,7 +1996,8 @@ var
 function GetInstanceDebugFile: TDebugFile;
 begin
   result := ExeInstanceDebugFile;
-  if result <> nil then
+  if (result <> nil) or
+     SynLogFileFreeing then // avoid GPF
     exit;
   GlobalThreadLock.Lock;
   try
@@ -3172,6 +3173,8 @@ begin
     @fSymbolsCount, true);
   fUnits.InitSpecific(TypeInfo(TDebugUnitDynArray), fUnit, ptRawUtf8,
     @fUnitsCount, true);
+  if SynLogFileFreeing then // avoid GPF
+    exit;
   // search for an external .map/.dbg file matching the running .exe/.dll name
   if aExeName = '' then
   begin
@@ -3914,6 +3917,9 @@ begin
       tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
       if lasttix10 = tix10 then
         continue; // checking once per second is enough
+      if Terminated or
+         SynLogFileFreeing then
+        break;
       GlobalThreadLock.Lock;
       try
         if Terminated or
@@ -4096,11 +4102,9 @@ end;
 
 function TSynLogFamily.CreateSynLog: TSynLog;
 begin
+  result := nil;
   if SynLogFileFreeing then
-  begin
-    result := nil;
-    exit;
-  end;
+    exit; // avoid GPF
   GlobalThreadLock.Lock;
   try
     result := fSynLogClass.Create(self);
@@ -4181,6 +4185,7 @@ begin
   EchoRemoteStop;
   ExceptionIgnore.Free;
   inherited Destroy;
+  fGlobalLog := nil; // paranoid
 end;
 
 procedure TSynLogFamily.ArchiveOldFiles(
@@ -4274,6 +4279,7 @@ var
   i: PtrInt;
 begin
   if (self = nil) or
+     SynLogFileFreeing or
      (SynLogFile = nil) or
      (not Assigned(aEvent)) then
     exit;
@@ -4344,7 +4350,8 @@ var
   P: PAnsiChar;
 begin
   result := '';
-  if SynLogFile = nil then
+  if (SynLogFile = nil) or
+     SynLogFileFreeing then
     exit;
   GlobalThreadLock.Lock;
   try
@@ -4591,6 +4598,8 @@ begin
   if num = 0 then // not touched yet by TSynLog, or called twice
     exit;
   PInteger(nfo)^ := 0; // force InitThreadNumber
+  if SynLogFileFreeing then
+    exit; // inconsistent call at shutdown
   thd := @SynLogThreads;
   GlobalThreadLock.Lock;
   try
@@ -5226,6 +5235,8 @@ var
   ndx, tid: PtrUInt;
   thd: PSynLogThreads;
 begin
+  if SynLogFileFreeing then
+    exit; // avoid GPF
   if Name = '' then
     n := GetCurrentThreadName // from CurrentThreadNameShort^ threadvar
   else
@@ -6034,7 +6045,8 @@ end;
 function TSynLog.GetFileSize: Int64;
 begin
   result := 0;
-  if fWriterStream = nil then
+  if SynLogFileFreeing or
+     (fWriterStream = nil) then
     exit;
   GlobalThreadLock.Lock;
   try
@@ -6228,6 +6240,7 @@ label
   adr, fin;
 begin
   if (HandleExceptionFamily = nil) or  // no TSynLogFamily.fHandleExceptions set
+     SynLogFileFreeing or              // inconsistent call at shutdown
      PerThreadInfo.ExceptionIgnore or  // disabled for this thread
      (Ctxt.EClass = ESynLogSilent) or
      HandleExceptionFamily.ExceptionIgnore.Exists(Ctxt.EClass) then
@@ -6337,8 +6350,9 @@ end;
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
 begin
   result := false;
-  if GlobalLastException.Index < 0 then
-    exit; // no exception intercepted yet
+  if SynLogFileFreeing or
+     (GlobalLastException.Index < 0) then
+    exit; // no exception intercepted yet (or any more)
   GlobalThreadLock.Lock;
   try
     if GlobalLastException.Index < 0 then
@@ -6360,8 +6374,9 @@ var
   index, last, n, i: PtrInt;
 begin
   // thread-safe retrieve last exceptions
-  if GlobalLastException.Index < 0 then
-    exit; // no exception intercepted yet
+  if SynLogFileFreeing or
+     (GlobalLastException.Index < 0) then
+    exit; // no exception intercepted yet (or any more)
   GlobalThreadLock.Lock;
   try
     infos := GlobalLastException.Infos;
@@ -6447,7 +6462,7 @@ var
   ps: PShortString;
 begin
   if SynLogFileFreeing then
-    exit;
+    exit; // inconsistent call at shutdown
   if Format <> '' then
   begin
     FormatUtf8(Format, Args, name);
@@ -8116,7 +8131,8 @@ begin
   SynLogFileFreeing := true;    // to avoid GPF at shutdown
   GlobalThreadLock.Lock;
   files := SynLogFile;
-  SynLogFile := nil; // would break any background process
+  SynLogFile := nil;    // would break any background process
+  SynLogFamily := nil;  // paranoid - freed as TRttiCustom.Private
   GlobalThreadLock.UnLock;
   if AutoFlushThread <> nil then
   begin
@@ -8125,7 +8141,7 @@ begin
     AutoFlushThread.WaitFor;
     FreeAndNilSafe(AutoFlushThread);
   end;
-  ObjArrayClear(files); // TSynLogFamily are freed as TRttiCustom.Private
+  ObjArrayClear(files, {safe=}true); // TRttiCustom.Private frees TSynLogFamily
   {$ifdef FPC}
   if @BacktraceStrFunc = @BacktraceStrFpc then
     BacktraceStrFunc := SysBacktraceStr; // avoid instability
