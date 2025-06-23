@@ -1314,7 +1314,8 @@ type
     // - entry would also be replicated at the begining of any rotated log file
     // - is called automatically by SetThreadName() global function
     // - if Name='', will use CurrentThreadNameShort^ threadvar
-    procedure LogThreadName(const Name: RawUtf8);
+    class procedure LogThreadName(const Name: RawUtf8);
+      {$ifdef HASINLINE} static; {$endif}
     /// call this method to add some multi-line information to the log at a
     // specified level
     // - LinesToLog content will be added, one line per one line, delimited by
@@ -5215,7 +5216,7 @@ begin
     DoLog(LinesToLog);
 end;
 
-procedure TSynLog.LogThreadName(const Name: RawUtf8);
+class procedure TSynLog.LogThreadName(const Name: RawUtf8);
 var
   n: RawUtf8;
   ndx, tid: PtrUInt;
