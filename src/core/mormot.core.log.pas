@@ -4570,10 +4570,8 @@ end;
 
 type
   TSynLogThreads = record
-    Ident: array of record // follow Ident[TSynLogThreadInfo.ThreadNumber - 1]
-      ThreadName: RawUtf8; // for ptIdentifiedInOneFile
-      ThreadID: PtrUInt;   // pthread pointer on POSIX, DWORD on Windows
-    end;
+    Safe: TLightLock; // topmost to ensure aarch64 alignment
+    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
     Count: integer; // as returned by TSynLog.ThreadCount
     IndexReleasedCount: integer;
     IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
@@ -4581,7 +4579,7 @@ type
   PSynLogThreads = ^TSynLogThreads;
 
 var
-  // threads information shared by all TSynLog, protected by GlobalThreadLock
+  // threads information shared by all TSynLog, protected by its own TLightLock
   SynLogThreads: TSynLogThreads;
 
 procedure InitThreadNumber(nfo: PSynLogThreadInfo);
@@ -4591,12 +4589,12 @@ var
 begin
   // compute the thread number - reusing any pre-existing closed thread number
   thd := @SynLogThreads;
-  GlobalThreadLock.Lock;
+  thd^.Safe.Lock;
   try
     if thd^.IndexReleasedCount <> 0 then // reuse NotifyThreadEnded() slot
     begin
       dec(thd^.IndexReleasedCount);
-      num := thd^.IndexReleased[SynLogThreads.IndexReleasedCount];
+      num := thd^.IndexReleased[thd^.IndexReleasedCount];
     end
     else
     begin
@@ -4607,7 +4605,7 @@ begin
       num := thd^.Count;
     end;
   finally
-    GlobalThreadLock.UnLock;
+    thd^.Safe.UnLock;
   end;
   nfo^.ThreadNumber := num;
   // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
@@ -4625,67 +4623,60 @@ end;
 
 procedure InternalSetCurrentThreadName(const Name: RawUtf8);
 var
-  ndx, tid: PtrUInt;
+  ndx: PtrInt;
   thd: PSynLogThreads;
 begin
   if SynLogFileFreeing then
     exit; // avoid GPF
   ndx := GetThreadInfo^.ThreadNumber - 1; // may call InitThreadNumber()
-  tid := PtrUInt(GetCurrentThreadId);
+  if ndx < 0 then
+    exit; // paranoid
   thd := @SynLogThreads;
-  GlobalThreadLock.Lock;
+  thd^.Safe.Lock;
   try
-    if ndx >= PtrUInt(length(thd^.Ident)) then
-      SetLength(thd^.Ident, NextGrow(length(thd^.Ident) + 32));
-    with thd^.Ident[ndx] do // set identifiers of this TSynLog instance
-    begin
-      ThreadName := Name;
-      ThreadID := tid;
-    end;
+    if ndx >= length(thd^.Name) then
+      SetLength(thd^.Name, NextGrow(ndx + 32));
+    thd^.Name[ndx] := Name;
   finally
-    GlobalThreadLock.UnLock;
+    thd^.Safe.UnLock;
   end;
 end;
 
 class procedure TSynLog.NotifyThreadEnded;
 var
   nfo: PSynLogThreadInfo;
-  num: PtrUInt;
   thd: PSynLogThreads;
-  i: PtrInt;
+  num, i: PtrInt;
 begin
   CurrentThreadNameShort^[0] := #0; // reset TShort31 threadvar for consistency
   nfo := @PerThreadInfo; // no automatic InitThreadNumber()
   num := nfo^.ThreadNumber;
   if num = 0 then // not touched yet by TSynLog, or called twice
     exit;
-  PInteger(nfo)^ := 0; // force InitThreadNumber
+  PInteger(nfo)^ := 0; // force InitThreadNumber on next thread access
+  // reset global thread information
   if SynLogFileFreeing then
     exit; // inconsistent call at shutdown
   thd := @SynLogThreads;
-  GlobalThreadLock.Lock;
+  thd^.Safe.Lock;
   try
     // reset this thread name for ptIdentifiedInOneFile
-    if num <= PtrUInt(length(thd^.Ident)) then
-      with thd^.Ident[num - 1] do
-      begin
-        ThreadName := '';
-        ThreadID := 0;
-      end;
+    if num <= length(thd^.Name) then
+      thd^.Name[num - 1] := '';
     // mark thread number to be recycled by InitThreadNumber
     AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
-    // reset this thread naming flag in each TSynLog
-    dec(num);
-    for i := 0 to length(SynLogFamily) - 1 do
-      with SynLogFamily[i] do
-        if (sllInfo in Level) and
-           (PerThreadLog = ptIdentifiedInOneFile) and
-           (fGlobalLog <> nil) and
-           (num < PtrUInt(length(fGlobalLog.fThreadNameLogged)) shl 5) then
-          UnSetBitPtr(fGlobalLog.fThreadNameLogged, num);
   finally
-    GlobalThreadLock.UnLock;
+    thd^.Safe.UnLock;
   end;
+  // reset this thread naming flag in each TSynLog
+  dec(num);
+  for i := 0 to length(SynLogFamily) - 1 do
+    with SynLogFamily[i] do
+      if (sllInfo in Level) and
+         (PerThreadLog = ptIdentifiedInOneFile) and
+         (fGlobalLog <> nil) and
+         (num < (length(fGlobalLog.fThreadNameLogged) shl 5)) then
+        UnSetBitPtr(fGlobalLog.fThreadNameLogged, num);
 end;
 
 function TSynLog.GetThreadCount: integer;
@@ -4695,38 +4686,30 @@ end;
 
 procedure TSynLog.AddLogThreadName; // once from SetThreadInfoAndThreadName()
 var
-  ndx: PtrInt;
-  thd: PSynLogThreads;
+  ndx, thdid: PtrInt;
 begin
   // update fThreadNameLogged[] to ensure this method is called once per thread
-  thd := @SynLogThreads;
   ndx := fThreadInfo.ThreadNumber - 1;
   if ndx < 0 then
     exit; // paranoid
   if ndx >= length(fThreadNameLogged) shl 5 then   // 32-bit array
-    SetLength(fThreadNameLogged, (thd^.Count shr 5)  + 32); // + 1K threads
+    SetLength(fThreadNameLogged, (ndx shr 5)  + 32); // + 1K threads
   SetBitPtr(fThreadNameLogged, ndx);
   // add the "SetThreadName" sllInfo line in the expected format
-  if ndx >= length(thd^.Ident) then
-    LogThreadName(''); // no explicit TSynLog.LogThreadName() -> set default
-  with thd^.Ident[ndx] do
-  begin
-    if ThreadID = 0 then
-      exit; // paranoid
-    // see TSynLogFile.ProcessOneLine() for the expected format
-    LogHeaderNoRecursion(fWriter, sllInfo, @fThreadInfo^.CurrentTimeAndThread);
-    fWriter.AddShort('SetThreadName ');
-    fWriter.AddU(ndx + 1);  // human-friendly LogViewer number for this process
-    fWriter.AddDirect(' ');
-    fWriter.AddPointer(ThreadID);  // as hexadecimal (pthread pointer on POSIX)
-    {$ifdef OSWINDOWS}
-    fWriter.AddDirect(' ');
-    fWriter.AddU(ThreadID);        // as decimal DWORD on Windows
-    {$endif OSWINDOWS}
-    fWriter.AddDirect('=');        // as expected by TSynLogFile.ThreadName()
-    fWriter.AddOnSameLine(pointer(ThreadName)); // as human-readable text
-    fWriterEcho.AddEndOfLine(sllInfo);
-  end;
+  // see TSynLogFile.ProcessOneLine() for the expected format
+  LogHeaderNoRecursion(fWriter, sllInfo, @fThreadInfo^.CurrentTimeAndThread);
+  fWriter.AddShort('SetThreadName ');
+  fWriter.AddU(ndx + 1);  // human-friendly LogViewer number for this process
+  fWriter.AddDirect(' ');
+  thdid := PtrUInt(GetCurrentThreadId);
+  fWriter.AddPointer(thdid);  // as hexadecimal (pthread pointer on POSIX)
+  {$ifdef OSWINDOWS}
+  fWriter.AddDirect(' ');
+  fWriter.AddU(thdid);        // as decimal DWORD on Windows
+  {$endif OSWINDOWS}
+  fWriter.AddDirect('=');        // as expected by TSynLogFile.ThreadName()
+  fWriter.AddOnSameLine(pointer(GetCurrentThreadName)); // human-readable text
+  fWriterEcho.AddEndOfLine(sllInfo);
 end;
 
 procedure SetThreadInfoAndThreadName(log: TSynLog; nfo: PSynLogThreadInfo);
@@ -5334,7 +5317,7 @@ begin
     ps^ := n;
   end;
   RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
-  // store full name in global SynLogThreads.Ident[] array
+  // store full name in global SynLogThreads.Name[]
   if ps <> nil then
     InternalSetCurrentThreadName(name);
 end;
@@ -5342,6 +5325,7 @@ end;
 function _GetCurrentThreadName: RawUtf8;
 var
   ndx: PtrInt;
+  thd: PSynLogThreads;
 begin
   result := '';
   if not SynLogFileFreeing then
@@ -5349,13 +5333,11 @@ begin
     ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
     if ndx >= 0 then
     begin
-      GlobalThreadLock.Lock;
-      try
-        if ndx < length(SynLogThreads.Ident) then
-          result := SynLogThreads.Ident[ndx].ThreadName; // full thread name
-      finally
-        GlobalThreadLock.UnLock;
-      end;
+      thd := @SynLogThreads;
+      thd^.Safe.Lock;
+      if ndx < length(thd^.Name) then
+        result := thd^.Name[ndx]; // full thread name
+      thd^.Safe.UnLock;
     end;
   end;
   if result = '' then // fallback to mormot.core.os default TShort21 behavior
@@ -6594,7 +6576,7 @@ begin
   if (Count = 0) or
      fCurrentlyEchoing then
     exit;
-  Safe.Lock; // not really concurrent, but faster
+  fSafe.Lock; // not really concurrent, but faster
   try
     fCurrentlyEchoing := true; // avoid stack overflow if exception below
     for i := Count - 1 downto 0 do
@@ -6607,7 +6589,7 @@ begin
       end;
   finally
     fCurrentlyEchoing := false;
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -6632,11 +6614,11 @@ begin
     end;
     reg.Levels := Levels;
     reg.Callback := Callback;
-    Safe.Lock;
+    fSafe.Lock;
     try
       Registrations.Add(reg);
     finally
-      Safe.UnLock;
+      fSafe.UnLock;
     end;
   finally
     if ReceiveExistingKB > 0 then
@@ -6649,13 +6631,13 @@ procedure TSynLogCallbacks.Unsubscribe(const Callback: ISynLogCallback);
 var
   i: PtrInt;
 begin
-  Safe.Lock;
+  fSafe.Lock;
   try
     for i := Count - 1 downto 0 do
       if Registration[i].Callback = Callback then
         Registrations.Delete(i);
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
