@@ -776,6 +776,12 @@ function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overlo
 /// return the error code number, and its regular constant on Windows (if known)
 procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
 
+/// return the error code number, and its regular constant on Linux (if known)
+procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
+
+/// return the error code number, and its regular constant on Bsd (if known)
+procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
+
 /// append the error as ' ERROR_*' constant and return TRUE if known
 // - append nothing and return FALSE if Code is not known
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
@@ -6538,6 +6544,65 @@ begin
   if Dest[ord(Dest[0])] = '_' then
     dec(Dest[0]); // 'EXCEPTION_STACK_OVERFLOW_' -> 'EXCEPTION_STACK_OVERFLOW'
   result := true;
+end;
+
+type
+  // the main errors returned on Linux, in their ordinal order
+  TLinuxError = (
+    lSUCCESS, lPERM, lNOENT, lSRCH, lINTR, lIO, lNXIO, l2BIG, lNOEXEC, lBADF, lCHILD, lAGAIN, lNOMEM, lACCES,
+    lFAULT, lNOTBLK, lBUSY, lEXIST, lXDEV, lNODEV, lNOTDIR, lISDIR, lINVAL, lNFILE, lMFILE, lNOTTY,
+    lTXTBSY, lFBIG, lNOSPC, lSPIPE, lROFS, lMLINK, lPIPE, lDOM, lRANGE, lDEADLK, lNAMETOOLONG, lNOLCK,
+    lNOSYS, lNOTEMPTY, lLOOP, lWOULDBLOCK, lNOMSG, lIDRM, lCHRNG, lL2NSYNC, lL3HLT, lL3RST, lLNRNG,
+    lUNATCH, lNOCSI, lL2HLT, lBADE, lBADR, lXFULL, lNOANO, lBADRQC, lBADSLT, lDEADLOCK, lBFONT, lNOSTR,
+    lNODATA, lTIME, lNOSR, lNONET, lNOPKG, lREMOTE, lNOLINK, lADV, lSRMNT, lCOMM, lPROTO, lMULTIHOP,
+    lDOTDOT, lBADMSG, lOVERFLOW, lNOTUNIQ, lBADFD, lREMCHG, lLIBACC, lLIBBAD, lLIBSCN, lLIBMAX, lLIBEXEC,
+    lILSEQ, lRESTART, lSTRPIPE, lUSERS, lNOTSOCK, lDESTADDRREQ, lMSGSIZE, lPROTOTYPE, lNOPROTOOPT,
+    lPROTONOSUPPORT, lSOCKTNOSUPPORT, lOPNOTSUPP, lPFNOSUPPORT, lAFNOSUPPORT, lADDRINUSE, lADDRNOTAVAIL,
+    lNETDOWN, lNETUNREACH, lNETRESET, lCONNABORTED, lCONNRESET, lNOBUFS, lISCONN, lNOTCONN, lSHUTDOWN,
+    lTOOMANYREFS, lTIMEDOUT, lCONNREFUSED, lHOSTDOWN, lHOSTUNREACH, lALREADY, lINPROGRESS, lSTALE,
+    lUCLEAN, lNOTNAM, lNAVAIL, lISNAM, lREMOTEIO, lDQUOT, lNOMEDIUM, lMEDIUMTYPE);
+
+  // the main errors returned on BSD (and Darwin), in their ordinal order
+  // - only the main common set of errors is defined, not higher divergent values
+  TBsdError = (
+    bSUCCESS, bPERM, bNOENT, bSRCH, bINTR, bIO, bNXIO, b2BIG, bNOEXEC, bBADF, bCHILD, bDEADLK, bNOMEM, bACCES,
+    bFAULT, bNOTBLK, bBUSY, bEXIST, bXDEV, bNODEV, bNOTDIR, bISDIR, bINVAL, bNFILE, bMFILE, bNOTTY,
+    bTXTBSY, bFBIG, bNOSPC, bSPIPE, bROFS, bMLINK, bPIPE, bDOM, bRANGE, bAGAIN, bINPROGRESS, bALREADY,
+    bNOTSOCK, bDESTADDRREQ, bMSGSIZE, bPROTOTYPE, bNOPROTOOPT, bPROTONOSUPPORT, bSOCKTNOSUPPORT,
+    bOPNOTSUPP, bPFNOSUPPORT, bAFNOSUPPORT, bADDRINUSE, bADDRNOTAVAIL, bNETDOWN, bNETUNREACH, bNETRESET,
+    bCONNABORTED, bCONNRESET, bNOBUFS, bISCONN, bNOTCONN, bSHUTDOWN, bTOOMANYREFS, bTIMEDOUT,
+    bCONNREFUSED, bLOOP, bNAMETOOLONG, bHOSTDOWN, bHOSTUNREACH, bNOTEMPTY, bPROCLIM, bUSERS, bDQUOT,
+    bSTALE, bREMOTE, bBADRPC, bRPCMISMATCH, bPROGUNAVAIL, bPROGMISMATCH, bPROCUNAVAIL, bNOLCK, bNOSYS,
+    bFTYPE, bAUTH, bNEEDAUTH);
+
+procedure PosixErrorShort(Code, Max: cardinal; Dest: PShortString;
+  Info: pointer; NoInt: boolean);
+var
+  ps: PShortString;
+  d: PAnsiChar;
+begin
+  Dest^[0] := #0;
+  if not NoInt then
+    AppendShortCardinal(Code, Dest^); // e.g. '1 EPERM'
+  if Code > Max then
+    exit;
+  if not NoInt then
+    AppendShortChar(' ', pointer(Dest));
+  ps := GetEnumNameRtti(Info, Code);
+  d := @Dest^[ord(Dest^[0]) + 1];
+  inc(Dest^[0], ord(ps^[0]));
+  d[0] := 'E'; // ignore 'l' or 'b' and write 'E' instead
+  MoveFast(ps^[2], d[1], ord(ps^[0]) - 1);
+end;
+
+procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+begin
+  PosixErrorShort(Code, ord(high(TLinuxError)), Dest, TypeInfo(TLinuxError), NoInt);
+end;
+
+procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+begin
+  PosixErrorShort(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
 end;
 
 const
