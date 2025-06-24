@@ -2463,8 +2463,10 @@ begin
     for i := 16 to 100 do
     begin
       orig := RandomAnsi7(i);
+      CheckEqual(length(orig), i);
       cts.iv := iv.b;
       crypted := cts.EncryptCts(orig);
+      CheckEqual(length(crypted), i);
       cts.iv := iv.b;
       s2 := cts.DecryptCts(crypted);
       CheckEqual(s2, orig);

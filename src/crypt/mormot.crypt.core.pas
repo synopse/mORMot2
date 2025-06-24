@@ -6007,31 +6007,6 @@ end;
 
 { TAesCbc }
 
-procedure TAesCbc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
-var
-  i: cardinal;
-  tmp: TAesBlock;
-begin
-  inherited; // set fIn,fOut
-  if integer(Count) >= SizeOf(TAesBlock) then
-  begin
-    if fAesInit <> initDecrypt then
-      DecryptInit;
-    for i := 1 to Count shr AesBlockShift do
-    begin
-      tmp := fIn^;
-      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^); // fOut=AES(fIn)
-      XorBlock16(pointer(fOut), pointer(@fIV));
-      fIV := tmp;
-      inc(fIn);
-      inc(fOut);
-    end;
-  end;
-  Count := Count and AesBlockMod;
-  if Count <> 0 then
-    TrailerBytes(Count);
-end;
-
 procedure TAesCbc.AfterCreate;
 begin
   inherited AfterCreate;
@@ -6052,6 +6027,31 @@ begin
     fIV := fOut^;
     inc(fIn);
     inc(fOut);
+  end;
+  Count := Count and AesBlockMod;
+  if Count <> 0 then
+    TrailerBytes(Count);
+end;
+
+procedure TAesCbc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+var
+  i: cardinal;
+  tmp: TAesBlock;
+begin
+  inherited; // set fIn,fOut
+  if integer(Count) >= SizeOf(TAesBlock) then
+  begin
+    if fAesInit <> initDecrypt then
+      DecryptInit;
+    for i := 1 to Count shr AesBlockShift do
+    begin
+      tmp := fIn^;
+      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^); // fOut=AES(fIn)
+      XorBlock16(pointer(fOut), pointer(@fIV));
+      fIV := tmp;
+      inc(fIn);
+      inc(fOut);
+    end;
   end;
   Count := Count and AesBlockMod;
   if Count <> 0 then
