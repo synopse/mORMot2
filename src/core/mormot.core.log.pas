@@ -4388,7 +4388,7 @@ begin
           if read <= 0 then
           begin
             if total <> len then
-              SetLength(result, total); // truncate on read error
+              FakeLength(result, total); // truncate on read error (paranoid)
             break;
           end;
           inc(P, read);
@@ -7595,7 +7595,7 @@ var
 begin
   fLogProcIsMerged := Value;
   O := fLogProcSortInternalOrder;
-  if Value then
+  if Value then // set TSynLogFile.LogProcMerged=true profiling merged info
   begin
     if fLogProcMerged = nil then
     begin
@@ -7622,9 +7622,9 @@ begin
       SetLength(fLogProcMerged, n);
     end;
     fLogProcCurrent := pointer(fLogProcMerged);
-    fLogProcCurrentCount := n;
+    fLogProcCurrentCount := length(fLogProcMerged);
   end
-  else
+  else // set TSynLogFile.LogProcMerged=true profiling natural/unmerged info
   begin
     fLogProcCurrent := pointer(fLogProcNatural);
     fLogProcCurrentCount := fLogProcNaturalCount;
