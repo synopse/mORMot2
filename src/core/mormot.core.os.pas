@@ -2914,8 +2914,8 @@ procedure SetLastError(error: integer);
 
 /// returns a given error code as plain text
 // - redirects to WinErrorText(error, nil) on Windows, or StrError() on POSIX
+// - e.g. GetErrorText(10) = 'ECHILD (No child processes)' on Linux
 function GetErrorText(error: integer): RawUtf8;
-  {$ifdef HASINLINE} inline; {$endif}
 
 {$ifdef OSWINDOWS}
 
