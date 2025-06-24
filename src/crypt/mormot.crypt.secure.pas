@@ -9934,7 +9934,7 @@ begin
       dec(x, y * 40);
       AppendShortCardinal(y, tmp);
     end;
-    AppendShortCharSafe('.', @tmp);
+    {%H-}AppendShortCharSafe('.', @tmp);
     AppendShortCardinal(x, tmp);
   end;
   FastSetString(result, @tmp[1], ord(tmp[0]));

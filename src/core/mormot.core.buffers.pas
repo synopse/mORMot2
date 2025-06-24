@@ -1871,7 +1871,7 @@ type
   TMemoryMapText = class(TSynPersistent)
   protected
     fLines: PPointerArray;
-    fLinesMax: integer;
+    fLinesMax: integer; // pre-guessed lines capacity
     fCount: integer;
     fMapEnd: PUtf8Char;
     fMap: TMemoryMap;
