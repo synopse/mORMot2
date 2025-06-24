@@ -767,12 +767,14 @@ function MatchOS(os: TOperatingSystem): boolean;
 // - as used by WinErrorText() and some low-level Windows API wrappers
 function WinErrorConstant(Code: cardinal): PShortString;
 
-/// return the error code number, and its regular constant (if known)
-function WinErrorShort(Code: cardinal): TShort47; overload;
+/// return the error code number, and its regular constant on Windows (if known)
+// - e.g. WinErrorShort(5) = '5 ERROR_ACCESS_DENIED' or
+// WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW'
+function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// return the error code number, and its regular constant (if known)
-procedure WinErrorShort(Code: cardinal; Dest: PShortString); overload;
+/// return the error code number, and its regular constant on Windows (if known)
+procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
 
 /// append the error as ' ERROR_*' constant and return TRUE if known
 // - append nothing and return FALSE if Code is not known
@@ -6484,19 +6486,24 @@ begin
   end;
 end;
 
-function WinErrorShort(Code: cardinal): TShort47;
+function WinErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
-  WinErrorShort(Code, @result);
+  WinErrorShort(Code, @result, NoInt);
 end;
 
-procedure WinErrorShort(Code: cardinal; Dest: PShortString);
+procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
 begin
   Dest^[0] := #0;
-  if integer(Code) < 0 then
-    AppendShortIntHex(Code, Dest^) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
+  if NoInt then
+    AppendWinErrorText(Code, Dest^, #0)
   else
-    AppendShortCardinal(Code, Dest^); // e.g. '5 ERROR_ACCESS_DENIED'
-  AppendWinErrorText(Code, Dest^, ' ');
+  begin
+    if integer(Code) < 0 then
+      AppendShortIntHex(Code, Dest^) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
+    else
+      AppendShortCardinal(Code, Dest^); // e.g. '5 ERROR_ACCESS_DENIED'
+    AppendWinErrorText(Code, Dest^, ' ');
+  end;
 end;
 
 const
