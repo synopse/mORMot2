@@ -3086,7 +3086,9 @@ begin
     exit;
   result := FileRead(h, dest, SizeOf(dest) - 1); // read up to 4KB
   if result >= 0 then
-    PAnsiChar(@dest)[result] := #0;
+    PAnsiChar(@dest)[result] := #0
+  else
+    result := 0; // don't return length = -1 on reading error
   FileClose(h);
 end;
 
