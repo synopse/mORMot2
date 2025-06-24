@@ -1101,7 +1101,6 @@ type
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
     procedure LogFileHeader; virtual;
-    procedure LogException(const Ctxt: TSynLogExceptionContext);
     procedure AddMemoryStats; virtual;
     procedure AddErrorMessage(Error: cardinal);
     procedure AddStackTrace(Stack: PPtrUInt);
@@ -5805,21 +5804,6 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   inc(p[0], 3); // final length is 19-20 chars into string[21]
 end;
 
-procedure TSynLog.LogException(const Ctxt: TSynLogExceptionContext);
-var
-  nfo: PSynLogThreadInfo;
-begin // called by SynLogException() within its GlobalThreadLock.Lock
-  if self = nil then
-    exit; // this TSynLogFamily has no fGlobalLog (yet)
-  nfo := GetThreadInfo;
-  FillInfo(nfo, nil); // timestamp [+ threadnumber]
-  SetThreadInfoAndThreadName(self, nfo);
-  LogHeaderNoRecursion(fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
-  DefaultSynLogExceptionToStr(fWriter, Ctxt, {addinfo=}false);
-  // stack trace only in the main thread
-  fWriterEcho.AddEndOfLine(Ctxt.ELevel);
-end;
-
 procedure TSynLog.PerformRotation;
 var
   currentMaxSynLZ: cardinal;
@@ -6306,6 +6290,21 @@ end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
+procedure DoLogException(Log: TSynLog; const Ctxt: TSynLogExceptionContext);
+var
+  nfo: PSynLogThreadInfo;
+begin // called by SynLogException() within its GlobalThreadLock.Lock
+  if Log = nil then
+    exit; // this TSynLogFamily has no fGlobalLog (yet)
+  nfo := GetThreadInfo;
+  Log.FillInfo(nfo, nil); // timestamp [+ threadnumber]
+  SetThreadInfoAndThreadName(Log, nfo);
+  LogHeaderNoRecursion(Log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
+  DefaultSynLogExceptionToStr(Log.fWriter, Ctxt, {addinfo=}false);
+  // stack trace only in the main thread
+  Log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+end;
+
 const
   MAX_EXCEPTHISTORY = 15;
 
@@ -6428,7 +6427,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
         if (fam <> HandleExceptionFamily) and // if not already logged above
            (Ctxt.ELevel in fam.Level) then
         try
-          fam.fGlobalLog.LogException(Ctxt);
+          DoLogException(fam.fGlobalLog, Ctxt);
         except
           // paranoid: don't try this family again (without SetLevel)
           fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
