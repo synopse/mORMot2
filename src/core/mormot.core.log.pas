@@ -1590,11 +1590,10 @@ type
     fLineLevelOffset: byte;
     fLineTextOffset: byte;
     fLineHeaderCountToIgnore: byte;
-    fThreadInfoMax: cardinal;
     fThreadsCount: integer;
     fThreadMax: cardinal;
     fThreads: TWordDynArray; // = EventThread[] for each line
-    fThreadInfo: array of record
+    fThreadInfo: array of record // by [thread]
       Rows: cardinal;
       SetThreadName: TPUtf8CharDynArray; // TSynLog.AddLogThreadName locations
     end;
@@ -1621,13 +1620,13 @@ type
     /// method profiling data
     fLogProcCurrentCount: integer;
     fLogProcNaturalCount: integer;
-    fLogProcCurrent: PSynLogFileProcArray;
-    fLogProcNatural: TSynLogFileProcDynArray;
-    fLogProcMerged: TSynLogFileProcDynArray;
+    fLogProcCurrent: PSynLogFileProcArray; // pointer(fLogProcNatural/fLogProcMerged)
+    fLogProcNatural: TSynLogFileProcDynArray; // one item per sllEnter/sllLeave
+    fLogProcMerged: TSynLogFileProcDynArray;  // merged by soByName
     fLogProcIsMerged: boolean;
-    fLogProcStack: array of TIntegerDynArray;
-    fLogProcStackCount: array of integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
+    fLogProcStack: array of TIntegerDynArray; // sllEnter stack by [thread]
+    fLogProcStackCount: array of integer; // count of each fLogProcStack[thread]
     fLogProcSortInternalComp: function(A, B: PtrInt): PtrInt of object;
     /// used by ProcessOneLine/GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogLevel] of cardinal;
@@ -1705,7 +1704,8 @@ type
     // the array will be void (EventThread=nil)
     property EventThread: TWordDynArray
       read fThreads;
-    /// the number of threads
+    /// the maximum recognized thread number
+    // - some of the threads may have no event/row in this actual .log file
     property ThreadsCount: cardinal
       read fThreadMax;
     /// profiled methods information
@@ -6748,6 +6748,10 @@ begin
   for L := low(TSynLogLevel) to high(TSynLogLevel) do
     // LOG_LEVEL_TEXT[L][3] -> case-sensitive lookup e.g. 'ust4' chars
     fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^;
+  // minimal good-enough size for thread info or per-thread profiling
+  SetLength(fThreadInfo, 256);
+  SetLength(fLogProcStack, 256);
+  SetLength(fLogProcStackCount, 256);
 end;
 
 function TSynLogFile.GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogLevel;
@@ -6815,7 +6819,7 @@ end;
 
 procedure TSynLogFile.CleanLevels;
 var
-  i, n, p, d, dValue, dMax: PtrInt;
+  i, n, p, d, dChange, dMax: PtrInt;
   sll: TSynLogLevel;
 begin
   n := 0;
@@ -6823,9 +6827,9 @@ begin
   d := 0;
   dMax := Length(fDayChangeIndex);
   if dMax > 0 then
-    dValue := fDayChangeIndex[0]
+    dChange := fDayChangeIndex[0]
   else
-    dValue := -1;
+    dChange := -1;
   for i := 0 to fCount - 1 do
   begin
     sll := fLevels[i];
@@ -6840,12 +6844,12 @@ begin
       fLogProcNatural[p].Index := n;
       inc(p);
     end;
-    if dValue = i then
+    if dChange = i then
     begin
       fDayChangeIndex[d] := n;
       inc(d);
       if d < dMax then
-        dValue := fDayChangeIndex[d];
+        dChange := fDayChangeIndex[d];
     end;
     inc(n);
   end;
@@ -6988,7 +6992,11 @@ var
 begin
   // 1. calculate fLines[] + fCount and fLevels[] + fLogProcNatural[] from .log content
   fLineHeaderCountToIgnore := 3;
+  // call ProcessOneLine() in one pass
   inherited LoadFromMap(100);
+  // cleanup transient working arrays memory
+  fLogProcStack := nil;
+  fLogProcStackCount := nil;
   // 2. fast retrieval of header
   OK := false;
   try
@@ -7394,8 +7402,6 @@ begin
       SetLength(fThreads, fLinesMax);
     end;
     fLineTextOffset := fLineLevelOffset + 4;
-    SetLength(fLogProcStack, fLinesMax);
-    SetLength(fLogProcStackCount, fLinesMax);
   end;
   L := GetLogLevelFromText(LineBeg);
   if L = sllNone then
@@ -7418,10 +7424,12 @@ begin
     if thread > fThreadMax then
     begin
       fThreadMax := thread;
-      if thread >= fThreadInfoMax then
+      if PtrInt(thread) >= length(fThreadInfo) then
+        SetLength(fThreadInfo, NextGrow(thread));
+      if PtrInt(thread) >= length(fLogProcStack) then
       begin
-        fThreadInfoMax := thread + 256;
-        SetLength(fThreadInfo, fThreadInfoMax);
+        SetLength(fLogProcStack, NextGrow(thread));
+        SetLength(fLogProcStackCount, length(fLogProcStack));
       end;
     end;
     inc(fThreadInfo[thread].Rows);
