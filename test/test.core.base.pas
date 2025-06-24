@@ -7579,6 +7579,7 @@ var
   k: TWellKnownSid;
   s: RawUtf8;
   s1, s2: RawSid;
+  ss: TShort47;
   {$ifdef OSWINDOWS}
   known: TWellKnownSids;
   sids: TRawUtf8DynArray;
@@ -7598,32 +7599,7 @@ begin
     CheckEqual(s, RawSidToText(s2));
     CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
   end;
-  // validate Windows specific SID function, especially about the current user
-  {$ifdef OSWINDOWS}
-  CurrentRawSid(s1, wttProcess);
-  CurrentRawSid(s2, wttThread);
-  Check(SidCompare(pointer(s1), pointer(s2)) = 0);
-  s := RawSidToText(s1);
-  CheckUtf8(IdemPChar(pointer(s), 'S-1-'), s);
-  // domain users are S-1-5-21-*, but LOCAL_SYSTEM S-1-5-18 and AD user S-1-12
-  sids := CurrentGroupsSid;
-  Check(sids <> nil);
-  known := CurrentKnownGroups;
-  Check(known <> []);
-  for k := low(k) to high(k) do
-  begin
-    Check(CurrentUserHasGroup(k) = (k in known));
-    s := RawSidToText(KnownRawSid(k));
-    if k in known then
-    begin
-      Check(FindRawUtf8(sids, s) >= 0);
-      CheckUtf8(CurrentUserHasGroup(s), s);
-    end
-    else
-      CheckUtf8(not CurrentUserHasGroup(s), s);
-  end;
-  {$endif OSWINDOWS}
-  // some cross-platform Windows error detection
+  // some cross-platform Windows/Linux/BSD error detection
   Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
   Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb');
   Check(WinErrorConstant(1450)^ = 'NO_SYSTEM_RESOURCES', 'wecB');
@@ -7651,6 +7627,59 @@ begin
   Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
   Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
   Check(WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
+  Check(WinErrorShort(244, {noint=}false) = '244', '244w');
+  Check(WinErrorShort(245, {noint=}true) = '', '245w');
+  BsdErrorShort(1, @ss);
+  Check(ss = '1 EPERM', '1bsd');
+  BsdErrorShort(5, @ss);
+  Check(ss = '5 EIO', '5bsd');
+  BsdErrorShort(40, @ss);
+  Check(ss = '40 EMSGSIZE', '40bsd');
+  BsdErrorShort(81, @ss);
+  Check(ss = '81 ENEEDAUTH', '81bsd');
+  BsdErrorShort(82, @ss);
+  Check(ss = '82', '82bsd');
+  LinuxErrorShort(1, @ss);
+  Check(ss = '1 EPERM', '1lin');
+  LinuxErrorShort(5, @ss);
+  Check(ss = '5 EIO', '5lin');
+  LinuxErrorShort(124, @ss);
+  Check(ss = '124 EMEDIUMTYPE', '124');
+  LinuxErrorShort(125, @ss);
+  Check(ss = '125', '125');
+  Check(OsErrorShort(244, {noint=}false) = '244', '244a');
+  Check(OsErrorShort(244, {noint=}true) = '', '244b');
+  // validate Windows specific SID function, especially about the current user
+  {$ifdef OSWINDOWS}
+  CurrentRawSid(s1, wttProcess);
+  CurrentRawSid(s2, wttThread);
+  Check(SidCompare(pointer(s1), pointer(s2)) = 0);
+  s := RawSidToText(s1);
+  CheckUtf8(IdemPChar(pointer(s), 'S-1-'), s);
+  // domain users are S-1-5-21-*, but LOCAL_SYSTEM S-1-5-18 and AD user S-1-12
+  sids := CurrentGroupsSid;
+  Check(sids <> nil);
+  known := CurrentKnownGroups;
+  Check(known <> []);
+  for k := low(k) to high(k) do
+  begin
+    Check(CurrentUserHasGroup(k) = (k in known));
+    s := RawSidToText(KnownRawSid(k));
+    if k in known then
+    begin
+      Check(FindRawUtf8(sids, s) >= 0);
+      CheckUtf8(CurrentUserHasGroup(s), s);
+    end
+    else
+      CheckUtf8(not CurrentUserHasGroup(s), s);
+  end;
+  Check(OSErrorShort(5) = '5 ERROR_ACCESS_DENIED', '5ead');
+  Check(OSErrorShort(5, true) = 'ERROR_ACCESS_DENIED', '5ead2');
+  {$else}
+  Check(OSErrorShort(1) = '1 EPERM', '1eperm');
+  Check(OSErrorShort(5) = '5 EIO', '5eio');
+  Check(OSErrorShort(5, true) = 'EIO', '5eio2');
+  {$endif OSWINDOWS}
 end;
 
 const
