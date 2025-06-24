@@ -782,6 +782,18 @@ procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = f
 /// return the error code number, and its regular constant on Bsd (if known)
 procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
 
+/// return the error code number, and its regular constant on the current OS
+// - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
+// - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
+procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// return the error code number, and its regular constant on the current OS
+// - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
+// - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
+function OsErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// append the error as ' ERROR_*' constant and return TRUE if known
 // - append nothing and return FALSE if Code is not known
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
@@ -6603,6 +6615,11 @@ end;
 procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
 begin
   PosixErrorShort(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
+end;
+
+function OsErrorShort(Code: cardinal; NoInt: boolean): TShort47;
+begin
+  OsErrorShort(Code, @result, NoInt); // redirect to Win/Linux/BsdErrorShort()
 end;
 
 const

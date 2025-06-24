@@ -585,6 +585,11 @@ begin
   result := WinErrorText(error);
 end;
 
+procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+begin
+  WinErrorShort(Code, Dest, NoInt);
+end;
+
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 var
   code: integer;

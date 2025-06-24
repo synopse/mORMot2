@@ -2625,6 +2625,11 @@ end;
 
 {$ifdef OSBSDDARWIN}
 
+procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+begin
+  BsdErrorShort(Code, Dest, NoInt);
+end;
+
 function IsValidPid(pid: cardinal): boolean;
 begin
   result := pid <> 0;
@@ -2945,6 +2950,11 @@ begin
 end;
 
 {$else} // Linux (and Android) specific code
+
+procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+begin
+  LinuxErrorShort(Code, Dest, NoInt);
+end;
 
 procedure FindNameValue(p: PUtf8Char; const up: ShortString; var res: RawUtf8);
 var
