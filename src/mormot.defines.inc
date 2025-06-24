@@ -225,20 +225,25 @@
       {$undef HASSAFEFPCINLINE} // synopse.info/forum/viewtopic.php?id=7259
     {$endif VER3_2_0}
     {$ifdef VER3_2_2}
-      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminatedSet
     {$endif VER3_2_2}
     {$ifdef VER3_2_3}
-      {$define HASTTHREADTERMINATESET}
+      {$define HASTTHREADTERMINATESET} // has TThread.TerminatedSet
       {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
       // https://gitlab.com/freepascal.org/fpc/source/-/commit/254c175b9f7627c92
     {$endif VER3_2_3}
+    {$ifdef VER3_2_4}
+      {$define HASTTHREADTERMINATESET} // has TThread.TerminatedSet
+      {$define HASDBFNEW}    // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+      {$define HASDBFSINGLE} // ftSingle
+    {$endif VER3_2_4}
   {$endif VER3_2}
   {$ifdef VER3_3} // trunk before 3.4
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
     {$define ISFPC33}
-    {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$define HASTTHREADTERMINATESET} // introduced TThread.TerminatedSet
     {$define HASEXTRECORDRTTI}       // latest trunk has extended record RTTI
     {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
     // https://gitlab.com/freepascal.org/fpc/source/-/commit/d68ce429ab6d94c8ffb
@@ -252,10 +257,10 @@
     {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
     {$define STRCNT32}               // 32-bit TAnsiRec.Ref even on 64-bit CPU
     // see https://gitlab.com/freepascal.org/fpc/source/-/issues/38018
-    {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$define HASTTHREADTERMINATESET} // introduced TThread.TerminatedSet
     {$define HASEXTRECORDRTTI}       // extended record RTTI
-    {$define HASDBFNEW} // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
-    {$define HASDBFSINGLE}  // ftSingle
+    {$define HASDBFNEW}    // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended
+    {$define HASDBFSINGLE} // ftSingle
     // https://gitlab.com/freepascal.org/fpc/source/-/commit/b907920ef392d6b3a2a
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
@@ -606,9 +611,9 @@
       {$define ISDELPHI20092010}  // to circumvent some specific bugs
     {$ifend}
     {$if CompilerVersion >= 21.0}
+      {$define ISDELPHI2010}
       {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
       {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
-      {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}     // Delphi 2010 extended RTTI for records
       {$define HASIMPLICITOPERATOR}  // Delphi 2010+ "implicit operator" is ok
@@ -634,7 +639,7 @@
       // e.g. {$ifdef NEEDVCLPREFIX}VCL.Graphics{$else}Graphics{$endif}
       {$define NEEDVCLPREFIX}
       {$define HASVARUSTRARG}
-      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminatedSet
     {$ifend}
     {$if CompilerVersion >= 24.0} // = Delphi XE3
       {$define ISDELPHIXE3}
