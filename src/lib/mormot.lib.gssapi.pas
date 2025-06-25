@@ -883,6 +883,9 @@ var
 begin
   result := nil;
   RequireGssApi;
+  if not Assigned(GssApi.gss_indicate_mechs) or
+     not Assigned(GssApi.gss_inquire_saslname_for_mech) then
+    exit;
   GssApi.gss_indicate_mechs(MinSt, Mechs);
   SetLength(result, Mechs^.count);
   if oid <> nil then
@@ -1323,11 +1326,14 @@ var
   MechType: gss_OID;
   OutBuf: gss_buffer_desc;
 begin
+  result := '';
   RequireGssApi;
   MajStatus := GssApi.gss_inquire_context(MinStatus, aSecContext.CtxHandle,
     nil, nil, nil, @MechType, nil, nil, nil);
   GssCheck(MajStatus, MinStatus,
     'Failed to inquire security context information (mech_type)');
+  if not Assigned(GssApi.gss_inquire_saslname_for_mech) then
+    exit; // returns '' if the needed API is missing
   OutBuf.length := 0;
   OutBuf.value := nil;
   MajStatus := GssApi.gss_inquire_saslname_for_mech(
