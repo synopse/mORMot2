@@ -430,11 +430,11 @@ function GssApiLoaded: boolean;
 procedure RequireGssApi;
 
 
-// some macros for GSSAPI functions process
-function GSS_CALLING_ERROR(x: cardinal): cardinal; inline;
-function GSS_ROUTINE_ERROR(x: cardinal): cardinal; inline;
-function GSS_SUPPLEMENTARY_INFO(x: cardinal): cardinal; inline;
-function GSS_ERROR(x: cardinal): cardinal; inline;
+// some macros for libgssapi functions process
+function GSS_CALLING_ERROR(x: cardinal): boolean; inline;
+function GSS_ROUTINE_ERROR(x: cardinal): boolean; inline;
+function GSS_SUPPLEMENTARY_INFO(x: cardinal): boolean; inline;
+function GSS_ERROR(x: cardinal): boolean; inline;
 
 function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 
@@ -484,7 +484,7 @@ function SecDecrypt(var aSecContext: TSecContext;
 
 /// Checks the return value of GSSAPI call and raises ESynGSSAPI exception
 // when it indicates failure
-procedure GccCheck(aMajorStatus, aMinorStatus: cardinal;
+procedure GssCheck(aMajorStatus, aMinorStatus: cardinal;
   const aPrefix: RawUtf8 = '');
 
 /// Lists supported security mechanisms in form
@@ -635,44 +635,39 @@ implementation
 
 function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 begin
-  if (oid1 <> nil) and
-     (oid2 <> nil) then
-  begin
-    result := (oid1^.length = oid2^.length) and
-              CompareMemSmall(oid1^.elements, oid2^.elements, oid1^.length);
-  end
-  else
-    result := false;
+  result := (oid1 <> nil) and
+            (oid2 <> nil) and
+            (oid1^.length = oid2^.length) and
+            CompareMemSmall(oid1^.elements, oid2^.elements, oid1^.length);
 end;
 
-function GSS_CALLING_ERROR(x: cardinal): cardinal;
+function GSS_CALLING_ERROR(x: cardinal): boolean;
 begin
-  result := x and
-            (GSS_C_CALLING_ERROR_MASK shl GSS_C_CALLING_ERROR_OFFSET);
+  result := (x and
+             (GSS_C_CALLING_ERROR_MASK shl GSS_C_CALLING_ERROR_OFFSET)) <> 0;
 end;
 
-function GSS_ROUTINE_ERROR(x: cardinal): cardinal;
+function GSS_ROUTINE_ERROR(x: cardinal): boolean;
 begin
-  result := x and
-            (GSS_C_ROUTINE_ERROR_MASK shl GSS_C_ROUTINE_ERROR_OFFSET);
+  result := (x and
+             (GSS_C_ROUTINE_ERROR_MASK shl GSS_C_ROUTINE_ERROR_OFFSET)) <> 0;
 end;
 
-function GSS_SUPPLEMENTARY_INFO(x: cardinal): cardinal;
+function GSS_SUPPLEMENTARY_INFO(x: cardinal): boolean;
 begin
-  result := x and
-            (GSS_C_SUPPLEMENTARY_MASK shl GSS_C_SUPPLEMENTARY_OFFSET);
+  result := (x and
+             (GSS_C_SUPPLEMENTARY_MASK shl GSS_C_SUPPLEMENTARY_OFFSET)) <> 0;
 end;
 
-function GSS_ERROR(x: cardinal): cardinal;
+function GSS_ERROR(x: cardinal): boolean;
 begin
-  result := x and
-            ((GSS_C_CALLING_ERROR_MASK shl GSS_C_CALLING_ERROR_OFFSET) or
-             (GSS_C_ROUTINE_ERROR_MASK shl GSS_C_ROUTINE_ERROR_OFFSET));
+  result := GSS_CALLING_ERROR(x) or
+            GSS_ROUTINE_ERROR(x);
 end;
 
-procedure GccCheck(AMajorStatus, AMinorStatus: cardinal; const APrefix: RawUtf8);
+procedure GssCheck(AMajorStatus, AMinorStatus: cardinal; const APrefix: RawUtf8);
 begin
-  if GSS_ERROR(AMajorStatus) <> 0 then
+  if GSS_ERROR(AMajorStatus) then
     raise EGssApi.Create(AMajorStatus, AMinorStatus, APrefix);
 end;
 
@@ -783,7 +778,7 @@ begin
       Msg := Msg + ' - ' + Str
     else
       Msg := Str;
-  until (GSS_ERROR(MajSt) <> 0) or
+  until GSS_ERROR(MajSt) or
         (MsgCtx = 0);
 end;
 
@@ -839,7 +834,7 @@ begin
   InBuf.value := pointer(aPlain);
   MajStatus := GssApi.gss_wrap(
     MinStatus, aSecContext.CtxHandle, 1, 0, @InBuf, nil, @OutBuf);
-  GccCheck(MajStatus, MinStatus, 'Failed to encrypt message');
+  GssCheck(MajStatus, MinStatus, 'Failed to encrypt message');
   FastSetRawByteString(result, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
@@ -855,7 +850,7 @@ begin
   InBuf.value := pointer(aEncrypted);
   MajStatus := GssApi.gss_unwrap(
     MinStatus, aSecContext.CtxHandle, @InBuf, @OutBuf, nil, nil);
-  GccCheck(MajStatus, MinStatus, 'Failed to decrypt message');
+  GssCheck(MajStatus, MinStatus, 'Failed to decrypt message');
   FastSetRawByteString(result, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
@@ -950,7 +945,7 @@ begin
     InBuf.value := pointer(aSecKerberosSpn);
     MajStatus := GssApi.gss_import_name(
       MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, TargetName);
-    GccCheck(MajStatus, MinStatus,
+    GssCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to import server SPN');
   end;
   try
@@ -964,7 +959,7 @@ begin
     MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
       aSecContext.CtxHandle, TargetName, aMech, CtxReqAttr, GSS_C_INDEFINITE,
         SetBind(aSecContext, Bind), @InBuf, nil, @OutBuf, @CtxAttr, nil);
-    GccCheck(MajStatus, MinStatus,
+    GssCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to initialize security context');
     result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
     FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
@@ -1007,7 +1002,7 @@ begin
     // first call: create the needed context for the current user
     MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE,
       m, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-    GccCheck(MajStatus, MinStatus,
+    GssCheck(maj, min,
       'ClientSspiAuth: Failed to acquire credentials for current user');
   end;
   if aSecKerberosSpn <> '' then
@@ -1049,7 +1044,7 @@ begin
     InBuf.value := pointer(u);
     MajStatus := GssApi.gss_import_name(
       MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, UserName);
-    GccCheck(MajStatus, MinStatus, 'Failed to import UserName');
+    GssCheck(MajStatus, MinStatus, 'Failed to import UserName');
     if aPassword = '' then
       // recover an existing session with the supplied UserName
       MajStatus := GssApi.gss_acquire_cred(MinStatus, UserName,
@@ -1068,7 +1063,7 @@ begin
     end;
     if UserName <> nil then
       GssApi.gss_release_name(MinStatus, UserName);
-    GccCheck(MajStatus, MinStatus,
+    GssCheck(MajStatus, MinStatus,
       'Failed to acquire credentials for specified user');
   end;
   result := ClientSspiAuthWorker(
@@ -1093,7 +1088,7 @@ begin
     MajStatus := GssApi.gss_acquire_cred(
       MinStatus, nil, GSS_C_INDEFINITE, nil, GSS_C_ACCEPT,
       aSecContext.CredHandle, nil, nil);
-    GccCheck(MajStatus, MinStatus, 'Failed to aquire credentials for service');
+    GssCheck(MajStatus, MinStatus, 'Failed to aquire credentials for service');
   end;
   InBuf.length := Length(aInData);
   InBuf.value := PByte(aInData);
@@ -1102,7 +1097,7 @@ begin
   MajStatus := GssApi.gss_accept_sec_context(MinStatus, aSecContext.CtxHandle,
     aSecContext.CredHandle, @InBuf, SetBind(aSecContext, Bind), nil, nil,
     @OutBuf, @CtxAttr, nil, nil);
-  GccCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
+  GssCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
   result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
   FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
@@ -1236,14 +1231,14 @@ begin
   RequireGssApi;
   MajStatus := GssApi.gss_inquire_context(MinStatus, aSecContext.CtxHandle,
     @SrcName, nil, nil, nil, nil, nil, nil);
-  GccCheck(MajStatus, MinStatus,
+  GssCheck(MajStatus, MinStatus,
     'Failed to inquire security context information (src_name)');
   try
     OutBuf.length := 0;
     OutBuf.value := nil;
     MajStatus := GssApi.gss_display_name(
       MinStatus, SrcName, @OutBuf, @NameType);
-    GccCheck(MajStatus, MinStatus,
+    GssCheck(MajStatus, MinStatus,
       'Failed to obtain name for authenticated user');
     if gss_compare_oid(NameType, GSS_KRB5_NT_PRINCIPAL_NAME) then
       ConvertUserName(PUtf8Char(OutBuf.value), OutBuf.length, aUserName);
@@ -1262,13 +1257,13 @@ begin
   RequireGssApi;
   MajStatus := GssApi.gss_inquire_context(MinStatus, aSecContext.CtxHandle,
     nil, nil, nil, @MechType, nil, nil, nil);
-  GccCheck(MajStatus, MinStatus,
+  GssCheck(MajStatus, MinStatus,
     'Failed to inquire security context information (mech_type)');
   OutBuf.length := 0;
   OutBuf.value := nil;
   MajStatus := GssApi.gss_inquire_saslname_for_mech(
     MinStatus, MechType, nil, @OutBuf, nil);
-  GccCheck(MajStatus, MinStatus, 'Failed to obtain name for mech');
+  GssCheck(MajStatus, MinStatus, 'Failed to obtain name for mech');
   FastSetString(result, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
