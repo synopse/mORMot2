@@ -33,7 +33,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.unicode;
+  mormot.core.unicode; // e.g. for Split/SplitRight/IdemPChar
 
 
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
@@ -214,21 +214,30 @@ const
 
 
 type
+  /// direct access to the libgssapi functions
   TGssApi = class(TSynLibrary)
   public
+    /// convert a contiguous string name to internal form
+    // - returned output_name must be freed by the application after use
+    // with a call to gss_release_name()
     gss_import_name: function (
       out minor_status: cardinal;
       input_name_buffer: gss_buffer_t;
       input_name_type: gss_OID;
       out output_name: gss_name_t): cardinal; cdecl;
+    /// convert an internal form name into its text string
+    // - output_name_buffer must be freed by the application after use
+    // with a call to gss_release_buffer()
     gss_display_name: function (
       out minor_status: cardinal;
       input_name: gss_name_t;
       output_name_buffer: gss_buffer_t;
       output_name_type: gss_OID_ptr): cardinal; cdecl;
+    /// free an an internal form name storage allocated by the API
     gss_release_name: function (
       out minor_status: cardinal;
       var name: gss_name_t): cardinal; cdecl;
+    /// obtain a credential handle for pre-existing credentials
     gss_acquire_cred: function (
       out minor_status: cardinal;
       desired_name: gss_name_t;
@@ -238,6 +247,7 @@ type
       out output_cred_handle: gss_cred_id_t;
       actual_mechs: gss_OID_set_ptr;
       time_rec: PCardinal): cardinal; cdecl;
+    /// obtain a credential handle for a given username and password pair
     gss_acquire_cred_with_password: function (
       out minor_status: cardinal;
       desired_name: gss_name_t;
@@ -248,9 +258,11 @@ type
       out output_cred_handle: gss_cred_id_t;
       actual_mechs: gss_OID_set_ptr;
       time_rec: PCardinal): cardinal; cdecl;
+    /// free a credential handle
     gss_release_cred: function (
       out minor_status: cardinal;
       var cred_handle: gss_cred_id_t): cardinal; cdecl;
+    /// initiate a client security context with a peer application
     gss_init_sec_context: function (
       out minor_status: cardinal;
       initiator_cred_handle: gss_cred_id_t;
@@ -265,6 +277,7 @@ type
       output_token: gss_buffer_t;
       ret_flags: PCardinal;
       time_rec: PCardinal): cardinal; cdecl;
+    /// accept a server security context initiated by a peer application
     gss_accept_sec_context: function (
       out minor_status: cardinal;
       var context_handle: pointer;
@@ -277,6 +290,7 @@ type
       ret_flags: PCardinal;
       time_rec: PCardinal;
       delegated_cred_handle: PPointer): cardinal; cdecl;
+    /// obtain information about a security context
     gss_inquire_context: function (
       out minor_status: cardinal;
       context_handle: gss_ctx_id_t;
@@ -287,19 +301,23 @@ type
       ctx_flags: PCardinal;
       locally_initiated: PInteger;
       open: PInteger): cardinal; cdecl;
+    /// free a security context
     gss_delete_sec_context: function (
       out minor_status: cardinal;
       var gss_context: gss_ctx_id_t;
       buffer: gss_buffer_t): cardinal; cdecl;
+    /// return the SASL name types supported by the specified mechanism
     gss_inquire_saslname_for_mech: function (
       out minor_status: cardinal;
       desired_mech: gss_OID;
       sasl_mech_name: gss_buffer_t;
       mech_name: gss_buffer_t;
       mech_description: gss_buffer_t): cardinal; cdecl;
+    /// free a libgssapi-allocated buffer
     gss_release_buffer: function (
       out minor_status: cardinal;
       var buffer: gss_buffer_desc): cardinal; cdecl;
+    /// identify and encrypt a message
     gss_wrap: function (
       out minor_status: cardinal;
       context_handle: gss_ctx_id_t;
@@ -308,6 +326,7 @@ type
       input_message_buffer: gss_buffer_t;
       conf_state: PInteger;
       output_message_buffer: gss_buffer_t): cardinal; cdecl;
+    /// verify and decrypt a message
     gss_unwrap: function (
       out minor_status: cardinal;
       context_handle: gss_ctx_id_t;
@@ -315,12 +334,16 @@ type
       output_message_buffer: gss_buffer_t;
       conf_state: PInteger;
       qop_state: PCardinal): cardinal; cdecl;
+    /// return available underlying authentication mechanisms
+    // - returned mech_set should be freed after use with gss_release_oid_set()
     gss_indicate_mechs: function (
       out minor_status: cardinal;
       out mech_set: gss_OID_set): cardinal; cdecl;
+    /// free a set of object identifiers
     gss_release_oid_set: function (
       out minor_status: cardinal;
       out mech_set: gss_OID_set): cardinal; cdecl;
+    /// convert a libgssapi integer status code to text
     gss_display_status: function (
       out minor_status: cardinal;
       status: cardinal;
@@ -328,17 +351,19 @@ type
       mech_type: gss_OID;
       out message_context: cardinal;
       out status_string: gss_buffer_desc): cardinal; cdecl;
+    /// thread-specific change of the Kerberos keytab file name to use
+    // - gss_krb5_import_cred() would be preferred on a multi-thread server
     krb5_gss_register_acceptor_identity: function (
       path: PAnsiChar): cardinal; cdecl;
   end;
 
-  /// Exception raised during gssapi library process
+  /// Exception raised during libgssapi process
   EGssApi = class(ExceptionWithProps)
   private
     fMajorStatus: cardinal;
     fMinorStatus: cardinal;
   public
-    /// initialize an gssapi library exception with the proper error message
+    /// initialize a libgssapi exception with the proper error message
     constructor Create(aMajor, aMinor: cardinal; const aPrefix: RawUtf8);
   published
     /// associated GSS_C_GSS_CODE state value
@@ -363,7 +388,7 @@ const
 
 
 var
-  /// access to the low-level libgssapi
+  /// direct access to the low-level libgssapi functions
   GssApi: TGssApi;
 
   /// custom library name for GSSAPI
@@ -537,10 +562,11 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
-/// Force loading server credentials from specified keytab file
+/// force loading server credentials from specified keytab file
 // - by default, clients may authenticate to any service principal
-// in the default keytab (/etc/krb5.keytab or the value of the KRB5_KTNAME
-// environment variable)
+// in the default keytab (/etc/krb5.keytab or the value of the global
+// KRB5_KTNAME environment variable)
+// - this function is thread-specific and should be done on all threads
 procedure ServerForceKeytab(const aKeytab: RawUtf8);
 
 const
