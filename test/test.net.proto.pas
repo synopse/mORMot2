@@ -231,7 +231,7 @@ procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  u, url, dto, client: RawUtf8;
+  key, prev, url, dto, client: RawUtf8;
   api: TRawUtf8DynArray;
   oa: TOpenApiParser;
   timer: TPrecisionTimer;
@@ -241,19 +241,18 @@ begin
   CheckEqual(FindCustomEnum(MYENUM2TXT, ''), 0);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and'), 0);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 3'), 0);
-  for i := 1 to high(RESERVED_KEYWORDS) do
-    CheckUtf8(StrComp(pointer(RESERVED_KEYWORDS[i - 1]),
-      pointer(RESERVED_KEYWORDS[i])) < 0, RESERVED_KEYWORDS[i]);
   for i := 0 to high(RESERVED_KEYWORDS) do
   begin
-    u := RESERVED_KEYWORDS[i];
-    Check(IsReservedKeyWord(u));
-    inc(u[1], 32); // lowercase
-    Check(IsReservedKeyWord(u));
-    LowerCaseSelf(u);
-    Check(IsReservedKeyWord(u));
-    u := u + 's';
-    Check(not IsReservedKeyWord(u));
+    key := RESERVED_KEYWORDS[i];
+    CheckUtf8(StrComp(pointer(prev), pointer(key)) < 0, key);
+    prev := key;
+    Check(IsReservedKeyWord(key));
+    inc(key[1], 32);    // lowercase first char
+    Check(IsReservedKeyWord(key));
+    LowerCaseSelf(key); // lowercase all chars
+    Check(IsReservedKeyWord(key));
+    key := key + 's';
+    Check(not IsReservedKeyWord(key));
     Check(not IsReservedKeyWord(UInt32ToUtf8(i)));
   end;
   SetLength(api, length(OpenApiRef));

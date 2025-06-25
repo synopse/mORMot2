@@ -2249,7 +2249,7 @@ procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 function SnakeCase(const text: RawUtf8): RawUtf8; overload;
 
 const
-  // published for unit testing (e.g. if properly sorted)
+  // published for unit testing in TNetworkProtocols.OpenAPI (e.g. if sorted)
   RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
     'ABSOLUTE', 'ABSTRACT', 'ALIAS', 'AND', 'ARRAY', 'AS', 'ASM', 'ASSEMBLER',
     'BEGIN', 'CASE', 'CLASS', 'CONST', 'CONSTREF', 'CONSTRUCTOR', 'DESTRUCTOR',
