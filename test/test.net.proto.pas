@@ -279,6 +279,11 @@ begin
         //oa.Options := oa.Options + [opoClientOnlySummary];
         //oa.Options := oa.Options + [opoDtoNoDescription, opoClientNoDescription];
         oa.ParseJson(api[i]);
+        // ensure there was something properly parsed
+        Check(oa.Version <> oavUnknown, 'version');
+        Check(oa.Title <> '', 'title');
+        Check(oa.Operations <> nil, 'operations');
+        // generate the dto/client units
         dto := oa.GenerateDtoUnit;
         client := oa.GenerateClientUnit;
         Check((opoGenerateSingleApiUnit in oa.Options) or (dto <> ''), 'dto');
