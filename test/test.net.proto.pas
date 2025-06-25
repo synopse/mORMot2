@@ -213,17 +213,15 @@ const
   MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('', 'one', 'and 2');
 
 const
-  // some reference from https://github.com/OAI/OpenAPI-Specification and others
-  OpenApiRef: array[0..4] of RawUtf8 = (
-    'v2.0/json/petstore-simple.json',
-    'v3.0/petstore.json',
+  // some reference OpenAPI/Swagger definitions
+  OpenApiRef: array[0 .. 3] of RawUtf8 = (
     'https://petstore.swagger.io/v2/swagger.json',
+    'https://petstore3.swagger.io/api/v3/openapi.json',
     'https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json',
     'https://platform-api-staging.vas.com/api/v1/swagger.json');
-  OpenApiName: array[0..high(OpenApiRef)] of RawUtf8 = (
+  OpenApiName: array[0 .. high(OpenApiRef)] of RawUtf8 = (
     'Pets2',
     'Pets3',
-    'PetStore',
     'Qdrant',
     'VAS');
 
@@ -262,14 +260,11 @@ begin
       fn := FormatString('%OpenApi%.json', [WorkDir, OpenApiName[i]]);
       api[i] := StringFromFile(fn);
       if api[i] <> '' then
-        continue;
+        continue; // already downloaded and formatted
       url := OpenApiRef[i];
-      if not IdemPChar(pointer(url), 'HTTP') then
-        url := Join(['https://raw.githubusercontent.com/OAI/' +
-                 'OpenAPI-Specification/main/examples/', url]);
       JsonBufferReformat(pointer(DownloadFile(url)), api[i]);
       if api[i] <> '' then
-        FileFromString(api[i], fn);
+        FileFromString(api[i], fn); // it is a valid JSON file
     end;
   for i := 0 to high(api) do
     if api[i] <> '' then
