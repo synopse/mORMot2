@@ -526,16 +526,13 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - aUserName is the domain and user name, in form of 'username' or
 // 'username@MYDOMAIN.TLD' if aSecKerberosSpn is not set or if
 // ClientForceSpn() has not been called ahead
-// - aPassword is the user clear text password - you may set '' if you have a
-// previous kinit for aUserName on the system, and want to recover this token
-// - aOutData contains data that must be sent to server
-// - you can specify an optional Mechanism OID - default is SPNEGO
-// - if function returns True, client must send aOutData to server
-// and call function again with data, returned from server
-// - warning: on MacOS, the system GSSAPI library seems to create a session-wide
-// token (as if a kinit was made), whereas it should only create a transient
-// token in memory, so it is pretty unsafe to use; a workaround is to provide
-// your own libgssapi_krb5.dylib in GssLib_Custom
+// - aPassword is the user clear text password - you may set '' if you did a
+// previous kinit for aUserName on the system and want to recover this token,
+// or force a local keytab file e.g. as aPassword = 'FILE:/full/path/to/my.keytab'
+// - aOutData contains data that must be sent back to the server
+// - you can specify an optional Mechanism OID - default is SPNEGO / Kerberos
+// - if the function returns True, client must send aOutData to server
+// and re-call this function again with the data returned from server
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
@@ -872,6 +869,7 @@ var
   Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
   Sasl, Name, Desc: RawUtf8;
 begin
+  result := nil;
   RequireGssApi;
   GssApi.gss_indicate_mechs(MinSt, Mechs);
   SetLength(result, Mechs^.count);
@@ -999,26 +997,91 @@ function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString; aMech: gss_OID): boolean;
 var
-  MajStatus, MinStatus: cardinal;
-  SecKerberosSpn: RawUtf8;
+  maj, min: cardinal;
+  spn: RawUtf8;
   m: gss_OID_set;
-  mechs: gss_OID_set_desc;
+  tmp: gss_OID_set_desc;
 begin
-  m := SetCredMech(aMech, mechs);
+  m := SetCredMech(aMech, tmp);
   if aSecContext.CredHandle = nil then
   begin
-    // first call: create the needed context for the current user
-    MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE,
+    // first call: create the needed context from a current system session
+    maj := GssApi.gss_acquire_cred(min, nil, GSS_C_INDEFINITE,
       m, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GssCheck(maj, min,
       'ClientSspiAuth: Failed to acquire credentials for current user');
   end;
-  if aSecKerberosSpn <> '' then
-    SecKerberosSpn := aSecKerberosSpn
+  spn := aSecKerberosSpn;
+  if spn = '' then
+    spn := ForceSecKerberosSpn;
+  // compute the first/next client-server roundtrip
+  result := ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
+end;
+
+procedure ClientSspiCreateCredHandle(var aSecContext: TSecContext;
+  const aUserName, aPassword, aSecKerberosSpn: RawUtf8; aMech: gss_OID_set);
+var
+  maj, min, min2: cardinal;
+  buf: gss_buffer_desc;
+  user: gss_name_t;
+  n , p, u: RawUtf8;
+  orig: PAnsiChar;
+begin
+  // 1) retrieve the user information in the proper gss_name_t format
+  user := nil;
+  u := aUserName;
+  Split(u, '@', n, p);
+  if p = '' then
+    p := SplitRight(aSecKerberosSpn, '@'); // try to extract the SPN
+  if p <> '' then
+    u := n + '@' + UpperCase(p); // force upcase to avoid enduser confusion
+  buf.length := Length(u);
+  buf.value := pointer(u);
+  maj := GssApi.gss_import_name(
+    min, @buf, GSS_KRB5_NT_PRINCIPAL_NAME, user);
+  GssCheck(maj, min, 'Failed to import UserName');
+  // 2) acquire this credential
+  orig := nil;
+  p := aPassword;
+  if StartWithExact(p, 'FILE:') and // e.g. 'FILE:/full/path/to/my.keytab'
+     FileExists(TFileName(copy(p, 6, 1023))) then // no file: keep as password
+  begin
+    if not Assigned(GssApi.gss_krb5_ccache_name) then
+      raise EGssApi.CreateFmt(
+        'ClientSspiAuthWithPassword(%s): missing gss_krb5_ccache_name', [p]);
+    // use the explicit 'FILE:/tmp/krb5cc_custom' param for this authentication
+    maj := GssApi.gss_krb5_ccache_name(min, pointer(p), @orig);
+    if GSS_ERROR(maj) then
+      orig := nil;
+    p := ''; // we now should use the plain gss_acquire_cred()
+  end;
+  if p = '' then
+    // recover an existing session with the supplied user
+    maj := GssApi.gss_acquire_cred(min, user,
+      GSS_C_INDEFINITE, aMech, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil)
   else
-    SecKerberosSpn := ForceSecKerberosSpn;
-  result := ClientSspiAuthWorker(
-    aSecContext, aInData, SecKerberosSpn, aOutData, aMech);
+  begin
+    if not Assigned(GssApi.gss_acquire_cred_with_password) then
+        raise EGssApi.CreateFmt(
+          'ClientSspiAuthWithPassword(%s): missing in GSSAPI', [aUserName]);
+    // actually authenticate with the supplied credentials
+    buf.length := Length(p);
+    buf.value := pointer(p);
+    maj := GssApi.gss_acquire_cred_with_password(
+      min, user, @buf, GSS_C_INDEFINITE, aMech,
+      GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+  end;
+  // release gss_name_t resource
+  if user <> nil then
+    GssApi.gss_release_name(min, user);
+  // restore the previous memCcache for this thread (before GssCheck)
+  if orig <> nil then // orig = e.g. 'FILE:/tmp/krb5cc_1000'
+    GssApi.gss_krb5_ccache_name(min2, orig, nil);  // ignore any error
+    // note: IBM doc states that krb5_free_string(orig) should be done
+    //       but Debian doc and mod_auth_gssapi.c don't: so we won't either
+  // eventually check the GssApi.gss_acquire_cred[_with_password]() result
+  GssCheck(maj, min,
+    'Failed to acquire credentials for specified user');
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
@@ -1026,56 +1089,19 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aSecKerberosSpn: RawUtf8; out aOutData: RawByteString;
   aMech: gss_OID): boolean;
 var
-  MajStatus, MinStatus: cardinal;
-  InBuf: gss_buffer_desc;
-  UserName: gss_name_t;
-  SecKerberosSpn, n , p, u: RawUtf8;
   m: gss_OID_set;
-  mechs: gss_OID_set_desc;
+  tmp: gss_OID_set_desc;
+  spn: RawUtf8;
 begin
-  m := SetCredMech(aMech, mechs);
-  if aSecKerberosSpn <> '' then
-    SecKerberosSpn := aSecKerberosSpn
-  else
-    SecKerberosSpn := ForceSecKerberosSpn;
+  m := SetCredMech(aMech, tmp);
+  spn := aSecKerberosSpn;
+  if spn = '' then
+    spn := ForceSecKerberosSpn;
   if aSecContext.CredHandle = nil then
-  begin
     // first call: create the needed context for those credentials
-    UserName := nil;
-    u := aUserName;
-    Split(u, '@', n, p);
-    if p = '' then
-      p := SplitRight(SecKerberosSpn, '@'); // try to extract the SPN
-    if p <> '' then
-      u := n + '@' + UpperCase(p); // force upcase to avoid enduser confusion
-    InBuf.length := Length(u);
-    InBuf.value := pointer(u);
-    MajStatus := GssApi.gss_import_name(
-      MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, UserName);
-    GssCheck(MajStatus, MinStatus, 'Failed to import UserName');
-    if aPassword = '' then
-      // recover an existing session with the supplied UserName
-      MajStatus := GssApi.gss_acquire_cred(MinStatus, UserName,
-        GSS_C_INDEFINITE, m, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil)
-    else
-    begin
-      // create a new transient in-memory token with the supplied credentials
-      // WARNING: on MacOS, the default system GSSAPI stack seems to create a
-      //  session-wide token (like kinit), not a transient token in memory - you
-      //  may prefer to load a proper libgssapi_krb5.dylib instead
-      InBuf.length := Length(aPassword);
-      InBuf.value := pointer(aPassword);
-      MajStatus := GssApi.gss_acquire_cred_with_password(
-        MinStatus, UserName, @InBuf, GSS_C_INDEFINITE, m,
-        GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-    end;
-    if UserName <> nil then
-      GssApi.gss_release_name(MinStatus, UserName);
-    GssCheck(MajStatus, MinStatus,
-      'Failed to acquire credentials for specified user');
-  end;
-  result := ClientSspiAuthWorker(
-    aSecContext, aInData, SecKerberosSpn, aOutData, aMech);
+    ClientSspiCreateCredHandle(aSecContext, aUserName, aPassword, spn, m);
+  // compute the first/next client-server roundtrip
+  result := ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;

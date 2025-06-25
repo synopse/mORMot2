@@ -1796,6 +1796,8 @@ type
     /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
+    // - as an alternative, on POSIX you can specify a keytab associated with
+    // UserName as 'FILE:/full/path/to/my.keytab' into this property
     property Password: SpiUtf8
       read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
@@ -8018,6 +8020,8 @@ var
   datain, dataout: RawByteString;
 begin
   result := false;
+  if StartWithExact(aPassword, 'FILE:') then
+    exit; // don't cheat with this server credentials :)
   InvalidateSecContext(client);
   InvalidateSecContext(server);
   try
