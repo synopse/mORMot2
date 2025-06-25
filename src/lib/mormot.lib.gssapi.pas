@@ -533,6 +533,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - you can specify an optional Mechanism OID - default is SPNEGO / Kerberos
 // - if the function returns True, client must send aOutData to server
 // and re-call this function again with the data returned from server
+// - see also ClientSspiAuthWithPasswordNoMemCcache global to disable the
+// default transient memory ccache used during the authentication
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
@@ -603,6 +605,16 @@ var
   // - forcing this flag to true will let ServerSspiAuthUser() return the realm,
   // i.e. 'MYDOMAIN.TLD\username'
   ServerDomainMapUseRealm: boolean = false;
+
+  /// ClientSspiAuthWithPassword() won't try gss_krb5_ccache_name('MEMORY:...')
+  // - by default, a transient memory ccache will be used to not mess with the
+  // current ccache environment when acquiring a token from the server: on Mac,
+  // we have seen the transient token been added to the main klist :(
+  // - you may set this global to true to disable this feature (as with the
+  // initial behavior of this unit) if it seems to trigger some problems
+  // - on any GSS_ERROR on this memory ccache, this unit will force this global
+  // flag to true to avoid any further issue
+  ClientSspiAuthWithPasswordNoMemCcache: boolean = false;
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
 // - to use the same value for TAuthUser.LogonName on all platforms, user name
@@ -1026,6 +1038,7 @@ var
   user: gss_name_t;
   n , p, u: RawUtf8;
   orig: PAnsiChar;
+  memCcache: TShort31;
 begin
   // 1) retrieve the user information in the proper gss_name_t format
   user := nil;
@@ -1064,6 +1077,28 @@ begin
     if not Assigned(GssApi.gss_acquire_cred_with_password) then
         raise EGssApi.CreateFmt(
           'ClientSspiAuthWithPassword(%s): missing in GSSAPI', [aUserName]);
+    if Assigned(GssApi.gss_krb5_ccache_name) and
+       not ClientSspiAuthWithPasswordNoMemCcache then
+    begin
+      // setup a thread-specific temporary memory ccache for this credential
+      // as done by mag_auth_basic() in NGINX's mod_auth_gssapi.c
+      memCcache := 'MEMORY:tmp_'; // threadid seems cleaner than random here
+      AppendShortIntHex(PtrUInt(GetCurrentThreadId), memCcache);
+      memCcache[ord(memCcache[0]) + 1] := #0; // make ASCIIZ
+      // note: this memCcache is released at final FreeSecContext(aSecContext)
+      maj := GssApi.gss_krb5_ccache_name(min, @memCcache[1], @orig);
+      // note: old Heimdal implementation may not properly return orig
+      //       see https://github.com/heimdal/heimdal/commit/fc9f9b322a88
+      if GSS_ERROR(maj) then
+      begin
+        // transient memCcache failed -> cross fingers, and continue
+        orig := nil; // nothing to release
+        ClientSspiAuthWithPasswordNoMemCcache := true; // won't try again
+        // Warning: in this case, MacOS system lib may create a session-wide
+        //          token (like kinit) - consider using a stand-alone MIT
+        //          libgssapi_krb5.dylib in GssLib_Custom
+      end;
+    end;
     // actually authenticate with the supplied credentials
     buf.length := Length(p);
     buf.value := pointer(p);
