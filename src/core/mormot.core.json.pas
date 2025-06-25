@@ -8175,8 +8175,9 @@ begin
     v := List^;
     if v <> nil then
     begin
-      if (PStrLen(v - _STRLEN)^ = ValueLen) and
-         CompareMemFixed(v, Value, ValueLen) then
+      if (PStrLen(v - _STRLEN)^ = ValueLen) and   // same length
+         (v^ = PUtf8Char(Value)^) and             // same first char
+         CompareMemFixed(v, Value, ValueLen) then // efficiently inlined on FPC
       exit;
     end else if ValueLen = 0 then
       exit;
