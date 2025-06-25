@@ -351,6 +351,13 @@ type
       mech_type: gss_OID;
       out message_context: cardinal;
       out status_string: gss_buffer_desc): cardinal; cdecl;
+    /// set the default credentials cache name for use by Kerberos
+    // - returned old_name must not be freed, but passed back upon a next call
+    // to this function
+    gss_krb5_ccache_name: function(
+      out minor_status: cardinal;
+      new_name: PUtf8Char;
+      old_name: PPUtf8Char): cardinal; cdecl;
     /// thread-specific change of the Kerberos keytab file name to use
     // - gss_krb5_import_cred() would be preferred on a multi-thread server
     krb5_gss_register_acceptor_identity: function (
@@ -672,7 +679,7 @@ begin
 end;
 
 const
-  GSS_ENTRIES: array[0 .. 18] of PAnsiChar = (
+  GSS_ENTRIES: array[0 .. 19] of PAnsiChar = (
     // GSSAPI entries
     'gss_import_name',
     'gss_display_name',
@@ -691,6 +698,7 @@ const
     'gss_indicate_mechs',
     'gss_release_oid_set',
     'gss_display_status',
+    'gss_krb5_ccache_name',
     // krb5_* entries - potentially with Heimdal alternative names
     'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
     nil);
