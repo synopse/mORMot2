@@ -8023,26 +8023,39 @@ begin
   if StartWithExact(aPassword, 'FILE:') then
     exit; // don't cheat with this server credentials :)
   InvalidateSecContext(client);
-  InvalidateSecContext(server);
   try
     try
-      while ClientSspiAuthWithPassword(
-              client, datain, aUser, aPassword, fKerberosSpn, dataout) and
-            ServerSspiAuth(server, dataout, datain) do ;
-      if aFullUserName <> nil then
-        ServerSspiAuthUser(server, aFullUserName^);
-      {$ifdef OSWINDOWS}
-      // on Windows, ensure this user is part of AllowGroupBySid()
-      if (fGroupSid = nil) or
-         ServerSspiAuthGroup(server, fGroupSid) then
-      {$endif OSWINDOWS}
-        result := true;
-    except
-      result := false;
+      if (aFullUserName = nil)
+         {$ifdef OSWINDOWS} and (fGroupSid = nil) {$endif} then
+        // simple aUser/aPassword credential check needs no server side
+        // - see as reference mag_auth_basic() in NGINX's mod_auth_gssapi.c
+        result := ClientSspiAuthWithPassword(client, datain,
+                    aUser, aPassword, fKerberosSpn, dataout)
+      else
+      begin
+        // more user information currently need a ServerSspiAuth() context
+        InvalidateSecContext(server);
+        try
+          while ClientSspiAuthWithPassword(client, datain,
+                  aUser, aPassword, fKerberosSpn, dataout) and
+                ServerSspiAuth(server, dataout, datain) do ;
+          if aFullUserName <> nil then
+            ServerSspiAuthUser(server, aFullUserName^);
+          {$ifdef OSWINDOWS}
+          // on Windows, ensure this user is part of AllowGroupBySid()
+          if (fGroupSid = nil) or
+             ServerSspiAuthGroup(server, fGroupSid) then
+          {$endif OSWINDOWS}
+            result := true;
+        finally
+          FreeSecContext(server);
+        end;
+      end;
+    finally
+      FreeSecContext(client);
     end;
-  finally
-    FreeSecContext(server);
-    FreeSecContext(client);
+  except
+    result := false;
   end;
 end;
 
