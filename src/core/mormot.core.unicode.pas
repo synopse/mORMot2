@@ -1418,14 +1418,14 @@ function IdemPCharW(p: PWideChar; up: PUtf8Char): boolean;
 // - returns true if the item matched
 // - ignore case - upTextStart must be already in upper case
 // - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
-// - see StartWithExact() from mormot.core.text for a case-sensitive version
+// - see StartWithExact() from this unit for a case-sensitive version
 function StartWith(const text, upTextStart: RawUtf8): boolean;
 
 /// check case-insensitive matching ending of text in upTextEnd
 // - returns true if the item matched
 // - ignore case - upTextEnd must be already in upper case
 // - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
-// - see EndWithExact() from mormot.core.text for a case-sensitive version
+// - see EndWithExact() from this unit for a case-sensitive version
 function EndWith(const text, upTextEnd: RawUtf8): boolean;
 
 /// returns the index of a case-insensitive matching ending of p^ in upArray[]
@@ -1852,13 +1852,13 @@ type
 
 /// check case-sensitive matching starting of text in start
 // - returns true if the item matched
-// - see StartWith() from mormot.core.unicode for a case-insensitive version
+// - see StartWith() from this unit for a case-insensitive version
 function StartWithExact(const text, textStart: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// check case-sensitive matching ending of text in ending
 // - returns true if the item matched
-// - see EndWith() from mormot.core.unicode for a case-insensitive version
+// - see EndWith() from this unit for a case-insensitive version
 function EndWithExact(const text, textEnd: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
