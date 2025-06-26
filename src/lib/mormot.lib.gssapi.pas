@@ -359,7 +359,8 @@ type
       new_name: PUtf8Char;
       old_name: PPUtf8Char): cardinal; cdecl;
     /// thread-specific change of the Kerberos keytab file name to use
-    // - gss_krb5_import_cred() would be preferred on a multi-thread server
+    // - gss_krb5_import_cred() could be preferred but it is more complex, and
+    // the usual spnego-http-auth-nginx-module
     krb5_gss_register_acceptor_identity: function (
       path: PAnsiChar): cardinal; cdecl;
   end;
@@ -568,12 +569,45 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
+type
+  /// allow to track keytab files and their changes at runtime
+  // - calling ServerForceKeytab() on each thread, only when needed
+  TServerSspiKeyTab = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;
+    fKeyTab: TFileName;
+    fKeyTabSize: Int64;
+    fKeyTabTime: TUnixMSTime;
+    fKeyTabSequence: integer; // stored in a threadvar
+    fLastRefresh: cardinal;
+    procedure _SetKeyTab(const aKeyTab: TFileName);
+  public
+    /// each thread should call this method before ServerSspiAuth()
+    // - will do nothing if the thread is already prepared for the keytab
+    procedure PrepareKeyTab;
+    /// propagate a keytab file to all server threads
+    // - returns true if the keytab was identified as changed
+    function SetKeyTab(const aKeyTab: TFileName): boolean;
+    /// can be called at Idle every few seconds to check if a keytab file changed
+    // - it will allow hot reload of the keytab, only if needed
+    // - returns true if the keytab was identified as changed
+    function TryRefresh(Tix64: Int64): boolean;
+  published
+    /// the keytab file name propagated to all server threads
+    property KeyTab: TFileName
+      read fKeyTab write _SetKeyTab;
+    /// the current number of assigned KeyTab since the start of this instance
+    property KeyTabSequence: integer
+      read fKeyTabSequence;
+  end;
+
 /// force loading server credentials from specified keytab file
 // - by default, clients may authenticate to any service principal
 // in the default keytab (/etc/krb5.keytab or the value of the global
 // KRB5_KTNAME environment variable)
-// - this function is thread-specific and should be done on all threads
-procedure ServerForceKeytab(const aKeytab: RawUtf8);
+// - this function is thread-specific and should be done on all threads, e.g.
+// via TServerSspiKeyTab.PrepareKeyTab
+function ServerForceKeytab(const aKeytab: TFileName): boolean;
 
 const
   /// the API available on this system to implement Kerberos
@@ -707,8 +741,8 @@ const
     'gss_indicate_mechs',
     'gss_release_oid_set',
     'gss_display_status',
+    // Kerberos specific entries - potentially with Heimdal alternative name
     'gss_krb5_ccache_name',
-    // krb5_* entries - potentially with Heimdal alternative names
     'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
     nil);
 
@@ -1349,11 +1383,74 @@ begin
   ForceSecKerberosSpn := aSecKerberosSpn;
 end;
 
-procedure ServerForceKeytab(const aKeytab: RawUtf8);
+function ServerForceKeytab(const aKeytab: TFileName): boolean;
 begin
-  if Assigned(GssApi.krb5_gss_register_acceptor_identity) then
-    GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab));
+  result := Assigned(GssApi.krb5_gss_register_acceptor_identity) and
+    not GSS_ERROR(GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab)));
+end;         // = gsskrb5_register_acceptor_identity()
+
+
+{ TServerSspiKeyTab }
+
+threadvar
+  ServerSspiKeyTabSequence: integer;
+
+procedure TServerSspiKeyTab.PrepareKeyTab;
+var
+  seq: PInteger;
+begin
+  if (self = nil) or
+     (fKeytabSequence = 0) then
+    exit; // no SetKeyTab() call yet
+  seq := @ServerSspiKeyTabSequence;
+  if seq^ = fKeytabSequence then
+    exit;
+  seq^ := fKeytabSequence;
+  ServerForceKeytab(fKeyTab);
 end;
+
+function TServerSspiKeyTab.SetKeyTab(const aKeyTab: TFileName): boolean;
+var
+  fs: Int64;
+  ft: TUnixMSTime;
+begin
+  result := false;
+  if (self <> nil) and
+     (aKeyTab <> '') and
+     Assigned(GssApi.krb5_gss_register_acceptor_identity) and
+     FileInfoByName(aKeyTab, fs, ft) and // aKeyTab exists
+     (fs > 0) then                       // not a folder
+    if (ft <> fKeyTabTime) or            // ensure don't reload if not changed
+       (fs <> fKeyTabSize) or
+       (fKeyTab <> aKeyTab) then
+      if ServerForceKeyTab(aKeyTab) then // ensure the new file is correct
+      begin
+        fSafe.Lock;
+        fKeyTab := aKeyTab;
+        fKeyTabSize := fs;
+        fKeyTabTime := ft;
+        inc(fKeytabSequence); // should be the last to notify PrepareKeyTab
+        fSafe.UnLock;
+        result := true;
+      end;
+end;
+
+procedure TServerSspiKeyTab._SetKeyTab(const aKeyTab: TFileName);
+begin
+  SetKeyTab(aKeyTab); // encapsulate the function to be used as a setter method
+end;
+
+function TServerSspiKeyTab.TryRefresh(Tix64: Int64): boolean;
+begin
+  result := false;
+  if (self = nil) or
+     (fKeyTab = '') or
+     (Tix64 shr 11 = fLastRefresh) then // try at most every two second
+    exit;
+  fLastRefresh := Tix64 shr 11;
+  result := SetKeyTab(fKeyTab);
+end;
+
 
 function InitializeDomainAuth: boolean;
 begin
