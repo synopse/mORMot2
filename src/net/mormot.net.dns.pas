@@ -508,7 +508,7 @@ procedure DnsParseData(RR: TDnsResourceRecord;
   const Answer: RawByteString; Pos, Len: PtrInt; var Text: RawUtf8);
 var
   p: PByteArray;
-  s1, s2: RawUtf8;
+  s2: RawUtf8;
 begin
   p := @PByteArray(Answer)[Pos];
   case RR of // see https://www.rfc-editor.org/rfc/rfc1035#section-3.3
@@ -539,16 +539,16 @@ begin
       begin
         // HINFO: CPU / OS
         // SOA: MName / RName / Serial:I / Refresh:I / Retry:I / Expire:I / TTL:I
-        Pos := DnsParseString(Answer, Pos, s1);
+        Pos := DnsParseString(Answer, Pos, Text);
         if (Pos <> 0) and
            (DnsParseString(Answer, Pos, s2) <> 0) then
-          Text := s1 + ' ' + s2;
+          Append(Text, ' ', s2);
       end;
     drrSRV: // see https://www.rfc-editor.org/rfc/rfc2782
       if Len > 6 then
         // Priority:W / Weight:W / Port:W / QName
         if DnsParseString(Answer, Pos + 6, Text) <> 0 then
-          Text := Text + ':' + UInt32ToUtf8(bswap16(PWordArray(p)[2])); // :port
+          Append(Text, [':', bswap16(PWordArray(p)[2])]); // QName:port
   end;
 end;
 
