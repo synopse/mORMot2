@@ -282,8 +282,8 @@ type
     procedure _TSynFilter;
     /// low-level TSynValidate classes
     procedure _TSynValidate;
-    /// low-level TSynLogFile class
-    procedure _TSynLogFile;
+    /// low-level TSynLogFile class and OS detection
+    procedure Debugging;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
     {$ifdef OSWINDOWS}
@@ -9066,7 +9066,7 @@ begin
   end;
 end;
 
-procedure TTestCoreBase._TSynLogFile;
+procedure TTestCoreBase.Debugging;
 
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
@@ -9086,11 +9086,9 @@ procedure TTestCoreBase._TSynLogFile;
       Check(L.LevelUsed = [sllEnter, sllLeave, sllDebug]);
       Check(L.RunningUser = 'MySelf');
       Check(L.CPU = '2*0-15-1027');
-      {$ifdef OSWINDOWS}
       Check(L.OS = wXP);
       Check(L.ServicePack = 3);
       Check(not L.Wow64);
-      {$endif OSWINDOWS}
       Check(L.Freq = 0);
       CheckSame(L.StartDateTime, 40640.502882, 1 / SecsPerDay);
       if CheckFailed(L.Count = 3) then
@@ -9113,10 +9111,13 @@ procedure TTestCoreBase._TSynLogFile;
 var
   tmp: array[0..512] of AnsiChar;
   msg, n, v: RawUtf8;
-  os: TOperatingSystem;
+  os, os2: TOperatingSystem;
+  ld: TLinuxDistribution;
+  islinux: boolean;
   osv: TOperatingSystemVersion;
   len: integer;
 begin
+  // validate UserAgentParse()
   Check(not UserAgentParse('toto (mozilla)', n, v, os));
   Check(UserAgentParse('myprogram/3.1.0.2W', n, v, os));
   Check(n = 'myprogram');
@@ -9130,6 +9131,7 @@ begin
   Check(n = 'myprogram');
   Check(v = '3.1.2');
   check(os = osWindows);
+  // validate TOperatingSystemVersion
   osv.os := osWindows;
   osv.win := wSeven;
   osv.winbuild := 0;
@@ -9156,6 +9158,22 @@ begin
   osv.win := wServer2022_64;
   osv.winbuild := 20349;
   CheckEqual(ToTextOS(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
+  // validate OS definitions logic
+  for os := low(os) to high(os) do
+  begin
+    islinux := false;
+    for ld := succ(low(ld)) to high(ld) do
+      if os in LINUX_DIST[ld] then
+        if not CheckFailed(not islinux, 'os twice') then
+          if not CheckFailed(LinuxDistribution(os) = ld, 'ld') then
+            islinux := true;
+    Check((os in OS_LINUX) = islinux, 'islinux');
+    Check(islinux = not (os in LINUX_DIST[ldNotLinux]));
+    Check(islinux = (LinuxDistribution(os) <> ldNotLinux));
+    for os2 := low(os) to high(os) do
+      Check((OS_INITIAL[os2] = OS_INITIAL[os]) = (os2 = os), 'OS_INITIAL');
+  end;
+  // validate SyslogMessage()
   FillcharFast(tmp, SizeOf(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences
@@ -9169,6 +9187,7 @@ begin
   Check(len < 300, 'truncated to avoid buffer overflow');
   Check(tmp[len - 1] = '+');
   Check(tmp[len] = #1);
+  // validate TSynLogFile
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +
