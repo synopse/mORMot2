@@ -8029,7 +8029,7 @@ begin
          {$ifdef OSWINDOWS} and (fGroupSid = nil) {$endif} then
         // simple aUser/aPassword credential check needs no server side
         // - see as reference mag_auth_basic() in NGINX's mod_auth_gssapi.c
-        result := ClientSspiAuthWithPassword(client, datain,
+        result := ClientSspiAuthWithPassword(client, 'onlypass',
                     aUser, aPassword, fKerberosSpn, dataout)
       else
       begin

@@ -39,10 +39,10 @@ uses
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
 
 type
-  gss_name_t = pointer;
+  gss_name_t     = pointer;
   gss_name_t_ptr = ^gss_name_t;
-  gss_cred_id_t = pointer;
-  gss_ctx_id_t = pointer;
+  gss_cred_id_t  = pointer;
+  gss_ctx_id_t   = pointer;
 
   // we need to circumvent non-standard definitions of MacOS
   {$ifdef OSDARWIN}
@@ -1117,7 +1117,7 @@ begin
     GssApi.gss_krb5_ccache_name(min2, orig, nil);  // ignore any error
     // note: IBM doc states that krb5_free_string(orig) should be done
     //       but Debian doc and mod_auth_gssapi.c don't: so we won't either
-  // eventually check the GssApi.gss_acquire_cred[_with_password]() result
+  // 3) eventually raise EGssApi on authentication error
   GssCheck(maj, min,
     'Failed to acquire credentials for specified user');
 end;
@@ -1139,7 +1139,8 @@ begin
     // first call: create the needed context for those credentials
     ClientSspiCreateCredHandle(aSecContext, aUserName, aPassword, spn, m);
   // compute the first/next client-server roundtrip
-  result := ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
+  result := (aInData = 'onlypass') or // magic from TBasicAuthServerKerberos
+            ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;
