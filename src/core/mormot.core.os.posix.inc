@@ -4847,6 +4847,7 @@ begin
         OS_KIND := osRpm; // seems RPM-based
   end;
   {$endif OSANDROID}
+  OS_DISTRI := LinuxDistribution(OS_KIND);
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
   CpuInfoLinux := StringFromFileNoSize('/proc/cpuinfo'); // too big for LoadProcFile

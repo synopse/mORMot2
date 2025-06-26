@@ -437,6 +437,16 @@ type
       utsrelease: array[0..2] of byte);
   end;
 
+  /// notable Linux distributions, organized by their package management system
+  TLinuxDistribution = (
+    ldNotLinux,
+    ldUndefined,
+    ldApt,
+    ldRpm,
+    ldPacman,
+    ldPortage,
+    ldAndroid);
+
 const
   /// the recognized MacOS versions, as plain text
   // - indexed from OSVersion32.utsrelease[2] kernel revision
@@ -598,6 +608,17 @@ const
   /// the operating systems items which actually have a Linux kernel
   OS_LINUX = [osLinux, osArch .. osSlackware, osSuse, osTrustix .. osRpm];
 
+  /// used to recognize the package management system used by a Linux OS
+  LINUX_DIST: array[TLinuxDistribution] of TOperatingSystems = (
+    [osUnknown, osWindows, osOSX, osBSD, osPOSIX, osSolaris, osSynology],  // ldNotLinux
+    [osLinux, osSlackware, osClear, osLFS, osXen, osAlpine],               // ldUndefined
+    [osDebian, osKnoppix, osMint, osUbuntu, osApt],                          // ldApt
+    [osAurox, osFedora, osMandrake, osMandriva, osNovell, osSuse, osTrustix, // ldRpm
+     osUnited, osRedHat, osOracle, osMageia, osCentOS, osCloud, osAmazon, osRpm],
+    [osArch],                                                              // ldPacman
+    [osGentoo, osCoreOs],                                                  // ldPortage
+    [osAndroid]);                                                          // ldAndroid
+
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
 
@@ -684,6 +705,9 @@ var
   // 'macOS 13 Ventura 22.3.0'
   OSVersionShort: RawUtf8;
 
+  /// the current Linux Distribution, depending on its package management system
+  OS_DISTRI: TLinuxDistribution;
+
   {$ifdef OSWINDOWS}
   /// on Windows, the Update Build Revision as shown with the "ver/winver" command
   // - to track the current update state of the system
@@ -766,6 +790,9 @@ function ToTextOS(osint32: integer): RawUtf8;
 // - will handle osPosix and osLinux as generic detection of those systems
 // - osUnknown will always return true
 function MatchOS(os: TOperatingSystem): boolean;
+
+/// recognize the Linux distribution for a given Operating System
+function LinuxDistribution(os: TOperatingSystem): TLinuxDistribution;
 
 /// return the best known ERROR_* system error message constant texts
 // - without the 'ERROR_' prefix, but in a cross-platform way
@@ -6330,6 +6357,14 @@ begin
     else
       result := false;
     end;
+end;
+
+function LinuxDistribution(os: TOperatingSystem): TLinuxDistribution;
+begin
+  for result := succ(low(result)) to high(result) do
+    if os in LINUX_DIST[result] then
+      exit;
+  result := ldNotLinux;
 end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8
