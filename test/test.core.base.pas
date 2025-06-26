@@ -3480,6 +3480,7 @@ begin
   Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
   Check(Random32(0) = 0);
+  Check(Random32(1) = 0);
   for i := 1 to 100000 do
     Check(Random32(i) < cardinal(i));
   for i := 0 to 100000 do

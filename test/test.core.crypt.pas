@@ -645,11 +645,12 @@ begin
   // same benchmarks as in Prng()
   timer.Start;
   Check(Random32(0) = 0);
+  Check(Random32(1) = 0);
   for i := 1 to 50000 do
     Check(Random32(i) < cardinal(i));
   for i := 0 to 50000 do
     Check(Random32(maxInt - i) < cardinal(maxInt - i));
-  NotifyTestSpeed('Lecuyer Random32', [], 50000 * 2, 50000 * 8, @timer);
+  NotifyTestSpeed('Lecuyer Random32', [], 100003, 100003 * 4, @timer);
   SetLength(big, 100000);
   timer.Start;
   RandomBytes(pointer(big), length(big));
@@ -703,6 +704,8 @@ begin
     Check(not CompareMem(@b1, @b2, SizeOf(b1)));
     CheckEqual(a1.FillRandom(0), '');
     CheckEqual(a1.FillRandomHex(0), '');
+    Check(a1.Random32(0) = 0);
+    Check(a1.Random32(1) = 0);
     for i := 1 to 2000 do
     begin
       s1 := '';
@@ -780,11 +783,12 @@ begin
   // some raw benchmark
   timer.Start;
   CheckEqual(p.Random32(0), 0);
+  CheckEqual(p.Random32(1), 0);
   for i := 1 to 50000 do
     Check(p.Random32(i) < cardinal(i));
   for i := 0 to 50000 do
     Check(p.Random32(maxInt - i) < cardinal(maxInt - i));
-  NotifyTestSpeed('% Random32', [name], 50000 * 2, 50000 * 8, @timer);
+  NotifyTestSpeed('% Random32', [name], 100003, 100003 * 4, @timer);
   SetLength(big, 100000);
   timer.Start;
   p.FillRandom(pointer(big), length(big));
