@@ -8315,7 +8315,7 @@ begin
   kt := TKerberosKeyTab.Create;
   kt2 := TKerberosKeyTab.Create;
   try
-    Check(kt.LoadFromString(bin), 'LoadFromString');
+    Check(kt.LoadFromBinary(bin), 'LoadFromString');
     if not CheckEqual(length(kt.Entry), 2, 'entry') then
       exit;
     with kt.Entry[0] do

@@ -1917,7 +1917,7 @@ type
     /// parse the raw binary buffer of a KeyTab file content
     function LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
     /// parse the string binary buffer of a KeyTab file content
-    function LoadFromString(const Binary: RawByteString): boolean;
+    function LoadFromBinary(const Binary: RawByteString): boolean;
     /// parse a KeyTab file from its name
     function LoadFromFile(const aFile: TFileName): boolean;
     /// search one entry content specified as a TKerberosKeyEntry record
@@ -5171,8 +5171,8 @@ var
   realm, u: RawUtf8;
   e: TKerberosKeyEntry;
 begin
+  Clear;
   n := 0;
-  fEntry := nil;
   result := false;
   if (P = nil) or
      not Read8(v) or
@@ -5240,10 +5240,11 @@ begin
   result := true;
 end;
 
-function TKerberosKeyTab.LoadFromString(const Binary: RawByteString): boolean;
+function TKerberosKeyTab.LoadFromBinary(const Binary: RawByteString): boolean;
 var
   p: PAnsiChar;
 begin
+  Clear;
   p := pointer(Binary);
   result := (p <> nil) and
             LoadFromBuffer(p, p + PStrLen(p - _STRLEN)^);
@@ -5252,7 +5253,7 @@ end;
 function TKerberosKeyTab.LoadFromFile(const aFile: TFileName): boolean;
 begin
   fFileName := aFile;
-  result := LoadFromString(StringFromFile(aFile));
+  result := LoadFromBinary(StringFromFile(aFile));
 end;
 
 function TKerberosKeyTab.Exists(const aEntry: TKerberosKeyEntry): boolean;
