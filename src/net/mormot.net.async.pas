@@ -5171,6 +5171,11 @@ begin
   if (fBlackListUriNextTix <> 0) and
      (fAsync.LastOperationSec >= fBlackListUriNextTix) then
     RefreshBlackListUri(fAsync.LastOperationSec);
+  {$ifdef OSPOSIX}
+  if Assigned(fSspiKeyTab) and
+     fSspiKeyTab.TryRefresh(fAsync.fLastOperationMS) then
+    fAsync.DoLog(sllDebug, 'IdleEverySecond: refreshed %', [fSspiKeyTab], self);
+  {$endif OSPOSIX}
 end;
 
 procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);

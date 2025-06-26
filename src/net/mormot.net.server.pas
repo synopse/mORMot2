@@ -1073,6 +1073,11 @@ type
     fBlackListUriNextTix, fBlackListUriCrc: cardinal;
     fBlackListUri: RawUtf8;
     fProgressiveRequests: THttpPartials;
+    {$ifdef OSPOSIX} // keytab files is a POSIX/GSSAPI specific feature
+    fSspiKeyTab: TServerSspiKeyTab;
+    procedure SetKeyTab(const aKeyTab: TFileName);
+    function GetKeyTab: TFileName;
+    {$endif OSPOSIX}
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean; // fRoute or Request()
     function DoProcessBody(var Ctxt: THttpRequestContext;
@@ -1121,6 +1126,8 @@ type
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; ProcessOptions: THttpServerOptions = [];
       aLog: TSynLogClass = nil); reintroduce; virtual;
+    /// finalize this server instance
+    destructor Destroy; override;
     /// defines the WebSockets protocols to be used for this Server
     // - this default implementation will raise an exception
     // - returns the associated PWebSocketProcessSettings reference on success
@@ -1291,6 +1298,11 @@ type
     // or from Banned.BlackList registered IPv4/CIDR
     property StatBanned: integer
       index grBanned read GetStat;
+    {$ifdef OSPOSIX}
+    /// the keytab file name propagated to all server threads (POSIX only)
+    property KeyTab: TFileName
+      read GetKeyTab write SetKeyTab;
+    {$endif OSPOSIX}
   end;
 
   /// meta-class of our THttpServerSocketGeneric classes
@@ -4140,6 +4152,14 @@ begin
   inherited Create(OnStart, OnStop, ProcessName, ProcessOptions, aLog);
 end;
 
+destructor THttpServerSocketGeneric.Destroy;
+begin
+  inherited Destroy;
+  {$ifdef OSPOSIX}
+  FreeAndNil(fSspiKeyTab);
+  {$endif OSPOSIX}
+end;
+
 function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
 begin
   result := SocketApiVersion;
@@ -4392,7 +4412,8 @@ begin
     exit;
   fSafe.Lock; // load certificates once from first connected thread
   try
-    fSock.DoTlsAfter(cstaBind);  // validate certificates now
+    if not fSock.TLS.Enabled then
+      fSock.DoTlsAfter(cstaBind);  // validate certificates now
   finally
     fSafe.UnLock;
   end;
@@ -4570,6 +4591,29 @@ begin
   end;
 end;
 
+{$ifdef OSPOSIX}
+procedure THttpServerSocketGeneric.SetKeyTab(const aKeyTab: TFileName);
+var
+  ok: boolean;
+begin
+  if not FileIsReadable(aKeyTab) then
+    exit;
+  fSafe.Lock;
+  if fSspiKeyTab = nil then
+    fSspiKeyTab := TServerSspiKeyTab.Create;
+  fSafe.UnLock;
+  ok := fSspiKeyTab.SetKeyTab(aKeyTab);
+  fLogClass.Add.Log(sllDebug, 'SetKeyTab(%)=%', [aKeyTab, BOOL_STR[ok]], self);
+end;
+
+function THttpServerSocketGeneric.GetKeyTab: TFileName;
+begin
+  result := '';
+  if fSspiKeyTab <> nil then
+    result := fSspiKeyTab.KeyTab;
+end;
+{$endif OSPOSIX}
+
 function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
   Opaque: Int64): TAuthServerResult;
 var
@@ -4620,6 +4664,10 @@ begin
              not Base64ToBin(PAnsiChar(auth), authend - auth, bin) or
              IdemPChar(pointer(bin), 'NTLM') then // two-way Kerberos only
             exit;
+          {$ifdef OSPOSIX}
+          if Assigned(fSspiKeyTab) then
+            fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
+          {$endif OSPOSIX}
           InvalidateSecContext(ctx);
           try
             if ServerSspiAuth(ctx, bin, bout) then
@@ -4789,7 +4837,7 @@ end;
 procedure THttpServer.DoCallbacks(tix64: Int64; sec32: integer);
 var
   i: integer;
-begin
+begin // is called at most every second, but maybe up to 5 seconds delay
   if Assigned(fOnAcceptIdle) then
     fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
   if Assigned(fLogger) then
@@ -4811,6 +4859,11 @@ begin
   if (fBlackListUriNextTix <> 0) and
      (cardinal(sec32) >= fBlackListUriNextTix) then
     RefreshBlackListUri(sec32);
+  {$ifdef OSPOSIX}
+  if Assigned(fSspiKeyTab) and
+     fSspiKeyTab.TryRefresh(tix64) then
+    fLogClass.Add.Log(sllDebug, 'DoCallbacks: refreshed %', [fSspiKeyTab], self);
+  {$endif OSPOSIX}
 end;
 
 procedure THttpServer.DoExecute;

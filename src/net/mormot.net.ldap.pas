@@ -689,7 +689,7 @@ type
     atServicePrincipalName,
     atUnicodePwd,
     atAccountNameHistory,
-    atTokenGroups);                // virtual/constructor attribute for self
+    atTokenGroups);                // virtual/constructed attribute for self
 
   /// set of common Attribute Types
   TLdapAttributeTypes = set of TLdapAttributeType;
