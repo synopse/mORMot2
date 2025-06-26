@@ -1620,6 +1620,7 @@ type
     /// returns a 32-bit unsigned random number, with a maximum value
     // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
     // is cryptographic secure
+    // - returns a value in range 0 <= Random32(max) < max
     function Random32(max: cardinal): cardinal; overload;
     /// returns a 64-bit unsigned random number
     function Random64: QWord;
