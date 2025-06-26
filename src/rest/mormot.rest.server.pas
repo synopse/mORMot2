@@ -5623,7 +5623,7 @@ var
   i: PtrInt;
 begin
   for i := 0 to fSspiAuthContextCount - 1 do
-    FreeSecContext(fSspiAuthContext[i]); // abort any pending auth (unlikely)
+    FreeSecContext(fSspiAuthContext[i]); // abort NTLM pending auths (unlikely)
   inherited Destroy;
 end;
 

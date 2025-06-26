@@ -474,37 +474,37 @@ const
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
   WINDOWS_NAME: array[TWindowsVersion] of RawUtf8 = (
-    '',
-    '2000',
-    'XP',
-    'XP 64bit',
-    'Server 2003',
-    'Server 2003 R2',
-    'Vista',
-    'Vista 64bit',
-    'Server 2008',
-    'Server 2008 64bit',
-    '7',
-    '7 64bit',
-    'Server 2008 R2',
-    'Server 2008 R2 64bit',
-    '8',
-    '8 64bit',
-    'Server 2012',
-    'Server 2012 64bit',
-    '8.1',
-    '8.1 64bit',
-    'Server 2012 R2',
-    'Server 2012 R2 64bit',
-    '10',
-    '10 64bit',
-    'Server 2016',
-    'Server 2016 64bit',
-    '11',
-    '11 64bit',
-    'Server 2019 64bit',
-    'Server 2022 64bit',
-    'Server 2025 64bit');
+    '',                     // wUnknown
+    '2000',                 // w2000
+    'XP',                   // wXP
+    'XP 64bit',             // wXP_64
+    'Server 2003',          // wServer2003
+    'Server 2003 R2',       // wServer2003_R2
+    'Vista',                // wVista
+    'Vista 64bit',          // wVista_64
+    'Server 2008',          // wServer2008
+    'Server 2008 64bit',    // wServer2008_64
+    '7',                    // wSeven
+    '7 64bit',              // wSeven_64
+    'Server 2008 R2',       // wServer2008_R2
+    'Server 2008 R2 64bit', // wServer2008_R2_64
+    '8',                    // wEight
+    '8 64bit',              // wEight_64
+    'Server 2012',          // wServer2012
+    'Server 2012 64bit',    // wServer2012_64
+    '8.1',                  // wEightOne
+    '8.1 64bit',            // wEightOne_64
+    'Server 2012 R2',       // wServer2012R2
+    'Server 2012 R2 64bit', // wServer2012R2_64
+    '10',                   // wTen
+    '10 64bit',             // wTen_64
+    'Server 2016',          // wServer2016
+    'Server 2016 64bit',    // wServer2016_64
+    '11',                   // wEleven
+    '11 64bit',             // wEleven_64
+    'Server 2019 64bit',    // wServer2019_64
+    'Server 2022 64bit',    // wServer2022_64
+    'Server 2025 64bit');   // wServer2025_64
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [
@@ -526,41 +526,43 @@ const
 
   /// translate one operating system (and distribution) into a its common name
   OS_NAME: array[TOperatingSystem] of RawUtf8 = (
-    'Unknown',
-    'Windows',
-    'Linux',
-    'OSX',
-    'BSD',
-    'POSIX',
-    'Arch',
-    'Aurox',
-    'Debian',
-    'Fedora',
-    'Gentoo',
-    'Knoppix',
-    'Mint',
-    'Mandrake',
-    'Mandriva',
-    'Novell',
-    'Ubuntu',
-    'Slackware',
-    'Solaris',
-    'Suse',
-    'Synology',
-    'Trustix',
-    'Clear',
-    'United',
-    'RedHat',
-    'LFS',
-    'Oracle',
-    'Mageia',
-    'CentOS',
-    'Cloud',
-    'Xen',
-    'Amazon',
-    'CoreOS',
-    'Alpine',
-    'Android');
+    'Unknown',      // osUnknown
+    'Windows',      // osWindows
+    'Linux',        // osLinux
+    'OSX',          // osOSX
+    'BSD',          // osBSD
+    'POSIX',        // osPOSIX
+    'Arch',         // osArch
+    'Aurox',        // osAurox
+    'Debian',       // osDebian
+    'Fedora',       // osFedora
+    'Gentoo',       // osGentoo
+    'Knoppix',      // osKnoppix
+    'Mint',         // osMint
+    'Mandrake',     // osMandrake
+    'Mandriva',     // osMandriva
+    'Novell',       // osNovell
+    'Ubuntu',       // osUbuntu
+    'Slackware',    // osSlackware
+    'Solaris',      // osSolaris
+    'Suse',         // osSuse
+    'Synology',     // osSynology
+    'Trustix',      // osTrustix
+    'Clear',        // osClear
+    'United',       // osUnited
+    'RedHat',       // osRedHat
+    'LFS',          // osLFS
+    'Oracle',       // osOracle
+    'Mageia',       // osMageia
+    'CentOS',       // osCentOS
+    'Cloud',        // osCloud
+    'Xen',          // osXen
+    'Amazon',       // osAmazon
+    'CoreOS',       // osCoreOS
+    'Alpine',       // osAlpine
+    'Android',      // osAndroid
+    'Debian-based', // osApt - use the most common text
+    'Rpm-based');   // osRpm
 
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
