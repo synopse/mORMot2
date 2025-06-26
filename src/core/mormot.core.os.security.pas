@@ -14,6 +14,7 @@ unit mormot.core.os.security;
   - Active Directory Definitions
   - Security Descriptor Definition Language (SDDL)
   - TSecurityDescriptor Wrapper Object
+  - Kerberos KeyTab File Support
   - Windows API Specific Security Types and Functions
 
   Even if most of those security definitions comes from the Windows/AD world,
@@ -1881,6 +1882,69 @@ function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 // - on Windows, see also the native CryptoApi.SecurityDescriptorToText()
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid = nil; uuid: TAppendShortUuid = nil): boolean;
+
+
+{ ****************** Kerberos KeyTab File Support }
+
+type
+  /// store one KeyTab entry in a TKerberosKeyTab storage
+  TKerberosKeyEntry = record
+    /// when the key was established for that principal
+    Timestamp: TUnixTime;
+    /// 16 bit value indicating the keytype, as indicated in RFC3962
+    // - e.g. 17 for aes128-cts-hmac-sha1-96 or 18 for aes256-cts-hmac-sha1-96
+    EncType: integer;
+    /// 32-bit version number of the key
+    KeyVersion: integer;
+    /// 32 bit name_type
+    // - almost certainly 1 meaning KRB5_NT_PRINCIPAL
+    NameType: integer;
+    /// the principal name of the keytab e.g. 'HTTP/www.foo.net@FOO.NET'
+    Principal: RawUtf8;
+    /// the associated binary key content
+    Key: RawByteString;
+  end;
+  TKerberosKeyEntries = array of TKerberosKeyEntry;
+
+  /// Kerberos KeyTab file support
+  TKerberosKeyTab = class(TSynPersistent)
+  protected
+    fEntry: TKerberosKeyEntries;
+    fFileName: TFileName;
+  public
+    /// remove all stored entries
+    procedure Clear;
+    /// parse the raw binary buffer of a KeyTab file content
+    function LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
+    /// parse the string binary buffer of a KeyTab file content
+    function LoadFromString(const Binary: RawByteString): boolean;
+    /// parse a KeyTab file from its name
+    function LoadFromFile(const aFile: TFileName): boolean;
+    /// search one entry content specified as a TKerberosKeyEntry record
+    // - will compare all fields, including the binary key
+    function Exists(const aEntry: TKerberosKeyEntry): boolean;
+    /// append one entry specified as a TKerberosKeyEntry record
+    // - returns true if was added, or false if it would have been duplicated
+    function Add(const aEntry: TKerberosKeyEntry): boolean;
+    /// append some entries from another TKerberosKeyTab instance
+    // - if Principals is not [], only those principal names will be added
+    // - returns the number of entries added to the main list
+    function AddFrom(Another: TKerberosKeyTab;
+      const Principals: array of RawUtf8): integer;
+    /// append some entries from another KeyTab file
+    // - if Principals is not [], only those principal names will be added
+    // - returns the number of entries added to the main list
+    function AddFromFile(const aFile: TFileName;
+      const Principals: array of RawUtf8): integer;
+    /// direct access to the KeyTab entries
+    property Entry: TKerberosKeyEntries
+      read fEntry;
+    /// the KeyTab file name, as supplied to LoadFromFile()
+    property FileName: TFileName
+      read fFileName;
+  end;
+
+function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -5036,6 +5100,234 @@ begin
   Apply(Modified, sdiGroup, result, SidReplaceAny(OldSid, NewSid, Group));
   Apply(Modified, sdiDacl,  result, AclReplaceAny(OldSid, NewSid, Dacl));
   Apply(Modified, sdiSacl,  result, AclReplaceAny(OldSid, NewSid, Sacl));
+end;
+
+
+{ ****************** Kerberos KeyTab File Support }
+
+function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
+begin
+  result := (A.Timestamp  = B.Timestamp) and
+            (A.KeyVersion = B.KeyVersion) and
+            (A.EncType    = B.EncType) and
+            (A.NameType   = B.NameType) and
+            (SortDynArrayRawByteString(A.Principal, B.Principal) = 0) and
+            (SortDynArrayRawByteString(A.Key, B.Key) = 0);
+end;
+
+
+{ TKerberosKeyTab }
+
+procedure TKerberosKeyTab.Clear;
+begin
+  fEntry := nil;
+end;
+
+function TKerberosKeyTab.LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
+var
+  bigendian: boolean;
+
+  function Read8(var v: integer): boolean;
+  begin
+    v := PByte(P)^;
+    inc(P);
+    result := PtrUInt(P) <= PtrUInt(PEnd);
+  end;
+
+  function Read16(var v: integer): boolean;
+  begin
+    v := PWord(P)^;
+    if bigendian then
+      v := bswap16(v);
+    inc(P, 2);
+    result := PtrUInt(P) <= PtrUInt(PEnd);
+  end;
+
+  function Read32(var v: integer): boolean;
+  begin
+    v := PCardinal(P)^;
+    if bigendian then
+      v := bswap32(v);
+    inc(P, 4);
+    result := PtrUInt(P) <= PtrUInt(PEnd);
+  end;
+
+  function ReadOctStr(var v): boolean;
+  var
+    len: integer;
+  begin
+    result := false;
+    if not Read16(len) or
+       (PtrUInt(P + len) > PtrUInt(PEnd)) then
+      exit;
+    FastSetString(RawUtf8(v), P, len);
+    inc(P, len);
+    result := true;
+  end;
+
+var
+  n, v, siz, ncomp: integer;
+  pendbak: PAnsiChar;
+  realm, u: RawUtf8;
+  e: TKerberosKeyEntry;
+begin
+  n := 0;
+  fEntry := nil;
+  result := false;
+  if (P = nil) or
+     not Read8(v) or
+     (v <> 5) or
+     not Read8(v) or
+     not (v in [1, 2]) then
+    exit;
+  bigendian := v = 2;
+  repeat
+    if not Read32(siz) then
+      exit;
+    if siz = 0 then
+      break; // end of file
+    if siz < 0 then // this entry has been deleted
+    begin
+      inc(P, -siz);
+      if PtrUInt(P) > PtrUInt(PEnd) then
+        exit;
+      continue;
+    end;
+    pendbak := PEnd;
+    PEnd := P + siz;
+    if PtrUInt(PEnd) > PtrUInt(pendbak) then
+      exit;
+    if not Read16(ncomp) or
+       (ncomp = 0) or
+       not ReadOctStr(realm) or
+       not ReadOctStr(e.Principal) then
+      exit;
+    repeat
+      dec(ncomp);
+      if ncomp = 0 then
+        break;
+      if not ReadOctStr(u) then
+        exit;
+      e.Principal := Join([e.Principal, '/', u]);
+    until false;
+    e.Principal := Join([e.Principal, '@', realm]);
+    e.NameType := 0;
+    if bigendian then
+      if not Read32(e.NameType) then
+        exit;
+    if not Read32(v) or
+       not Read8(e.KeyVersion) or
+       not Read16(e.EncType) or
+       not ReadOctStr(e.Key) then
+      exit;
+    e.Timestamp := PCardinal(@v)^; // Year 2038 ready
+    if (PtrUInt(P + 4) <= PtrUInt(PEnd)) and
+       (PCardinal(P)^ <> 0) then
+      if not Read32(e.KeyVersion) then // optional 32-bit key version
+        exit;
+    P := PEnd;
+    PEnd := pendbak;
+    if e.Principal <> '' then // we expect non void principals
+    begin
+      if n = length(fEntry) then
+        SetLength(fEntry, NextGrow(n));
+      fEntry[n] := e;
+      inc(n);
+    end;
+    Finalize(e);
+  until P = PEnd;
+  DynArrayFakeLength(fEntry, n);
+  result := true;
+end;
+
+function TKerberosKeyTab.LoadFromString(const Binary: RawByteString): boolean;
+var
+  p: PAnsiChar;
+begin
+  p := pointer(Binary);
+  result := (p <> nil) and
+            LoadFromBuffer(p, p + PStrLen(p - _STRLEN)^);
+end;
+
+function TKerberosKeyTab.LoadFromFile(const aFile: TFileName): boolean;
+begin
+  fFileName := aFile;
+  result := LoadFromString(StringFromFile(aFile));
+end;
+
+function TKerberosKeyTab.Exists(const aEntry: TKerberosKeyEntry): boolean;
+var
+  e: ^TKerberosKeyEntry;
+  n: integer;
+begin
+  result := false;
+  e := pointer(fEntry);
+  if (e = nil) or
+     (aEntry.Principal = '') or
+     (aEntry.Key = '') then
+    exit;
+  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+  repeat
+    result := CompareEntry(aEntry, e^);
+    if result then
+      exit;
+    inc(e);
+    dec(n);
+  until n = 0;
+end;
+
+function TKerberosKeyTab.Add(const aEntry: TKerberosKeyEntry): boolean;
+var
+  n: PtrInt;
+begin
+  result := false;
+  if (aEntry.Principal = '') or
+     (aEntry.Key = '') or
+     Exists(aEntry) then
+    exit;
+  n := length(fEntry);
+  SetLength(fEntry, n + 1);
+  fEntry[n] := aEntry;
+  result := true;
+end;
+
+function TKerberosKeyTab.AddFrom(Another: TKerberosKeyTab;
+  const Principals: array of RawUtf8): integer;
+var
+  e: ^TKerberosKeyEntry;
+  n: integer;
+begin
+  result := 0;
+  if Another = nil then
+    exit;
+  e := pointer(Another.fEntry);
+  if e = nil then
+    exit;
+  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+  repeat
+    if (high(Principals) < 0) or
+       (FindPropName(Principals, e^.Principal) >= 0) then
+      if Add(e^) then
+        inc(result);
+    inc(e);
+    dec(n);
+  until n = 0;
+end;
+
+function TKerberosKeyTab.AddFromFile(const aFile: TFileName;
+  const Principals: array of RawUtf8): integer;
+var
+  another: TKerberosKeyTab;
+begin
+  another := TKerberosKeyTab.Create;
+  try
+    if another.LoadFromFile(aFile) then
+      result := AddFrom(another, Principals)
+    else
+      result := 0;
+  finally
+    another.Free;
+  end;
 end;
 
 
