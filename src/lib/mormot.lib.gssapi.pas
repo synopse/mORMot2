@@ -609,6 +609,9 @@ type
 // via TServerSspiKeyTab.PrepareKeyTab
 function ServerForceKeytab(const aKeytab: TFileName): boolean;
 
+/// wild guess if a file is readable and has a SSPI keytab 16-bit header
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+
 const
   /// the API available on this system to implement Kerberos
   SECPKGNAMEAPI = 'GSSAPI';
@@ -1388,6 +1391,17 @@ begin
   result := Assigned(GssApi.krb5_gss_register_acceptor_identity) and
     not GSS_ERROR(GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab)));
 end;         // = gsskrb5_register_acceptor_identity()
+
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+var
+  buf: RawByteString;
+begin
+  // https://web.mit.edu/kerberos/krb5-latest/doc/formats/keytab_file_format.html
+  buf := StringFromFile(aKeyTab);
+  result := (length(buf) > 2) and
+            (buf[1] = #5) and
+            (buf[2] in [#1, #2]); // rough header detection
+end;
 
 
 { TServerSspiKeyTab }
