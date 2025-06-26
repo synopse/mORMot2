@@ -272,13 +272,15 @@ const
   // response from the other endpoint
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
+  BOTBUSTER_RESPONSE = 'Botbusters message: "I ain''t ''fraid of no bot"';
+
   /// HTTP body from RFC 2324 e.g. for banned IP or hsoRejectBotUserAgent
   HTTP_BANIP_RESPONSE: string[191] =
     'HTTP/1.0 418 I''m a teapot'#13#10 +
     'Content-Length: 111'#13#10 +
     'Content-Type: text/plain'#13#10#13#10 +
     'Server refuses to brew coffee because it is currently a teapot.'#13#10 +
-    'Botbusters message: "I ain''t ''fraid of no bot"';
+    BOTBUSTER_RESPONSE;
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a ShortString

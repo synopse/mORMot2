@@ -8407,7 +8407,7 @@ begin
                (ctxt.fUserAgent <> '') and
                IsHttpUserAgentBot(ctxt.fUserAgent) then
             begin
-              SendError(HTTP_TEAPOT, 'We don''t need no bot');
+              SendError(HTTP_TEAPOT, BOTBUSTER_RESPONSE);
               continue;
             end;
             if Assigned(OnBeforeBody) then
