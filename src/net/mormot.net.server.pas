@@ -4594,16 +4594,26 @@ end;
 {$ifdef OSPOSIX}
 procedure THttpServerSocketGeneric.SetKeyTab(const aKeyTab: TFileName);
 var
-  ok: boolean;
+  res: RawUtf8;
 begin
-  if not FileIsReadable(aKeyTab) then
-    exit;
-  fSafe.Lock;
-  if fSspiKeyTab = nil then
-    fSspiKeyTab := TServerSspiKeyTab.Create;
-  fSafe.UnLock;
-  ok := fSspiKeyTab.SetKeyTab(aKeyTab);
-  fLogClass.Add.Log(sllDebug, 'SetKeyTab(%)=%', [aKeyTab, BOOL_STR[ok]], self);
+  if FileIsKeyTab(aKeyTab) then
+    if InitializeDomainAuth then
+    begin
+      fSafe.Lock;
+      if fSspiKeyTab = nil then
+        fSspiKeyTab := TServerSspiKeyTab.Create;
+      fSafe.UnLock;
+      if fSspiKeyTab.SetKeyTab(aKeyTab) then
+        res := 'ok'
+      else
+        res := 'SetKeyTab failed';
+    end
+    else
+      res := 'GSSAPI not available'
+  else
+    res := 'invalid file';
+  fLogClass.Add.Log(LOG_DEBUGERROR[res <> 'ok'],
+    'SetKeyTab(%): %', [aKeyTab, res], self);
 end;
 
 function THttpServerSocketGeneric.GetKeyTab: TFileName;
