@@ -1936,6 +1936,10 @@ type
     // - returns the number of entries added to the main list
     function AddFromFile(const aFile: TFileName;
       const Principals: array of RawUtf8): integer;
+    /// persist this KeyTab list as a memory buffer
+    function SaveToBinary: RawByteString;
+    /// persist this KeyTab list as a local file
+    procedure SaveToFile(const aFile: TFileName);
     /// direct access to the KeyTab entries
     property Entry: TKerberosKeyEntries
       read fEntry;
@@ -5330,6 +5334,98 @@ begin
     another.Free;
   end;
 end;
+
+function TKerberosKeyTab.SaveToBinary: RawByteString;
+var
+  tmp: TSynTempAdder;
+  p: PUtf8Char;
+
+  procedure Add8(v: cardinal);
+  begin
+    tmp.Add(@v, 1);
+  end;
+
+  procedure Add16(v: cardinal);
+  begin
+    v := bswap16(v);
+    tmp.Add(@v, 2);
+  end;
+
+  procedure Add32(v: cardinal);
+  begin
+    v := bswap32(v);
+    tmp.Add(@v, 4);
+  end;
+
+  procedure AddOctStr(start, stop: integer);
+  begin
+    dec(stop, start); // = length
+    Add16(stop);
+    tmp.Add(p + start, stop);
+  end;
+
+var
+  e: ^TKerberosKeyEntry;
+  n, size, start, stop, realm, compn: integer;
+  compstart, compstop: array[0 .. 31] of integer; // 31 seems big enough
+begin
+  result := '';
+  e := pointer(fEntry);
+  if e = nil then
+    exit;
+  tmp.Init;
+  try
+    Add16($0502); // only new big-endian format
+    n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+    repeat
+      size := tmp.Size;
+      Add32(0); // entry size will be filled below
+      compn := 0;
+      realm := PosExChar('@', e^.Principal);
+      if realm = 0 then
+        exit;
+      p := pointer(e^.Principal); // parse into comp1/comp2@realm
+      start := 0;
+      stop  := 0;
+      repeat
+        if p[stop] in ['/', '@'] then
+        begin
+          if compn > high(compstart) then
+            exit;
+          compstart[compn] := start;
+          compstop[compn]  := stop;
+          inc(compn);
+          start := stop + 1;
+          if start = realm then
+            break;
+        end;
+        inc(stop);
+      until false;
+      Add16(compn);
+      AddOctStr(realm, length(e^.Principal));
+      for stop := 0 to compn - 1 do
+        AddOctStr(compstart[stop], compstop[stop]); // no memory allocation
+      Add32(e^.NameType);
+      Add32(e^.Timestamp);
+      Add8(e^.KeyVersion);
+      Add16(e^.EncType);
+      Add16(length(e^.Key));
+      tmp.Add(e^.Key);
+      Add32(e^.KeyVersion); // it is easier to always include it (as kutil)
+      PCardinal(PAnsiChar(tmp.Buffer) + size)^ := bswap32(tmp.Size - size - 4);
+      inc(e);
+      dec(n);
+    until n = 0;
+  finally
+    tmp.Done(RawUtf8(result), CP_RAWBYTESTRING);
+  end;
+end;
+
+procedure TKerberosKeyTab.SaveToFile(const aFile: TFileName);
+begin
+  FileFromString(SaveToBinary, aFile);
+end;
+
 
 
 { ****************** Windows API Specific Security Types and Functions }
