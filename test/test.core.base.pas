@@ -8354,6 +8354,18 @@ begin
     Check(kt2.Exists(kt.Entry[1]));
     Check(CompareEntry(kt.Entry[1], kt2.Entry[0]));
     Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
+    bin2 := kt.SaveToBinary;
+    CheckHash(bin2, $1849920F, 'same saved');
+    bin2 := kt2.SaveToBinary;
+    CheckHash(bin2, $67233E99, 'not the same order');
+    Check(kt.LoadFromBinary(bin2), 'LoadFromString2');
+    if CheckEqual(length(kt.Entry), 2, 'entry') then
+    begin
+      Check(CompareEntry(kt.Entry[0], kt2.Entry[0]));
+      Check(CompareEntry(kt.Entry[1], kt2.Entry[1]));
+      Check(not CompareEntry(kt.Entry[0], kt2.Entry[1]));
+      Check(not CompareEntry(kt.Entry[1], kt2.Entry[0]));
+    end;
   finally
     kt2.Free;
     kt.Free;
