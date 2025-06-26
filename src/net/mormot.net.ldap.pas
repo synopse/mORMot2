@@ -2728,13 +2728,13 @@ begin
       res := DnsServices(n, NameServer);
       if res <> nil then
       begin
-        result := res[0]; // found a matching site
+        result := res[Random32(length(res))]; // return a matching site
         exit;
       end;
     end;
   end;
-  if LdapServers <> nil then
-    result := LdapServers[0] // if no site is defined, use first server
+  if LdapServers <> nil then // if no site is defined, use one of the servers
+    result := LdapServers[Random32(length(LdapServers))]
   else
     result := '';
 end;
