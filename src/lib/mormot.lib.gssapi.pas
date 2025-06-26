@@ -1437,7 +1437,7 @@ begin
     if (ft <> fKeyTabTime) or            // ensure don't reload if not changed
        (fs <> fKeyTabSize) or
        (fKeyTab <> aKeyTab) then
-      if ServerForceKeyTab(aKeyTab) then // ensure the new file is correct
+      if FileIsKeyTab(aKeyTab) then // rough check if the new file seems correct
       begin
         fSafe.Lock;
         fKeyTab := aKeyTab;
