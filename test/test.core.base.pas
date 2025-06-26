@@ -274,6 +274,8 @@ type
     procedure _SID;
     /// test the SecurityDescriptor / SDDL process
     procedure _SDDL;
+    /// test the TKerberosKeyTab class
+    procedure _TKerberosKeyTab;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -8283,6 +8285,79 @@ begin
   CheckEqual(sd.ReplaceSid('S-1-5-21-1111-2222-3333-500',
     'S-1-5-21-111-222-333-512'), 0);
   Check(sd.Modified = []);
+end;
+
+const
+  // $ klist -kt test.keytab
+  // KVNO Timestamp           Principal
+  // ---- ------------------- ------------------------------------------------------
+  //    1 26/06/2025 16:23:40 toto@MY.LAN
+  //    1 26/06/2025 16:23:40 toto2@MY.LAN
+  KEYTAB_REF: array[0.. $8c] of byte = (
+    $05, $02, $00, $00, $00, $41, $00, $01, $00, $06, $4d, $59, $2e, $4c, $41,
+    $4e, $00, $04, $74, $6f, $74, $6f, $00, $00, $00, $01, $68, $5d, $57, $ec,
+    $01, $00, $12, $00, $20, $c4, $f2, $ec, $2e, $9b, $04, $8c, $7f, $db, $82,
+    $65, $e0, $15, $79, $f7, $fd, $4f, $33, $16, $4f, $b7, $29, $0a, $52, $86,
+    $72, $98, $bf, $a2, $b7, $94, $ab, $00, $00, $00, $01, $00, $00, $00, $42,
+    $00, $01, $00, $06, $4d, $59, $2e, $4c, $41, $4e, $00, $05, $74, $6f, $74,
+    $6f, $32, $00, $00, $00, $01, $68, $5d, $57, $ec, $01, $00, $12, $00, $20,
+    $18, $94, $1a, $0e, $92, $78, $d6, $d9, $78, $f3, $b5, $bb, $a7, $a1, $99,
+    $50, $c6, $c1, $2c, $78, $6e, $26, $ba, $ec, $ac, $d9, $4d, $0b, $cb, $6f,
+    $56, $87, $00, $00, $00, $01);
+
+procedure TTestCoreBase._TKerberosKeyTab;
+var
+  bin, bin2: RawByteString;
+  kt, kt2: TKerberosKeyTab;
+begin
+  FastSetRawByteString(bin, @KEYTAB_REF[0], length(KEYTAB_REF));
+  CheckHash(bin, $1849920F);
+  kt := TKerberosKeyTab.Create;
+  kt2 := TKerberosKeyTab.Create;
+  try
+    Check(kt.LoadFromString(bin), 'LoadFromString');
+    if not CheckEqual(length(kt.Entry), 2, 'entry') then
+      exit;
+    with kt.Entry[0] do
+    begin
+      CheckEqual(TimeStamp, 1750947820);
+      CheckEqual(KeyVersion, 1);
+      CheckEqual(NameType, 1);
+      CheckEqual(Principal, 'toto@MY.LAN');
+      CheckHash(Key, $1F577A7D);
+    end;
+    with kt.Entry[1] do
+    begin
+      CheckEqual(TimeStamp, 1750947820);
+      CheckEqual(KeyVersion, 1);
+      CheckEqual(NameType, 1);
+      CheckEqual(Principal, 'toto2@MY.LAN');
+      CheckHash(Key, $D101D374);
+    end;
+    Check(kt.Exists(kt.Entry[0]));
+    Check(kt.Exists(kt.Entry[1]));
+    CheckEqual(length(kt.Entry), 2, 'kt2');
+    CheckEqual(length(kt2.Entry), 0, 'kt20');
+    Check(not kt2.Exists(kt.Entry[0]));
+    Check(not kt2.Exists(kt.Entry[1]));
+    kt2.Add(kt.Entry[1]);
+    CheckEqual(length(kt2.Entry), 1, 'kt21');
+    Check(not kt2.Exists(kt.Entry[0]));
+    Check(kt2.Exists(kt.Entry[1]));
+    Check(kt2.Exists(kt2.Entry[0]));
+    Check(CompareEntry(kt.Entry[1], kt2.Entry[0]));
+    kt2.AddFrom(kt, ['toto']);
+    CheckEqual(length(kt2.Entry), 1, 'kt21 filter');
+    kt2.AddFrom(kt, []);
+    CheckEqual(length(kt2.Entry), 2, 'kt22 no dup');
+    Check(kt2.Exists(kt.Entry[0]));
+    Check(kt2.Exists(kt.Entry[1]));
+    Check(CompareEntry(kt.Entry[1], kt2.Entry[0]));
+    Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
+  finally
+    kt2.Free;
+    kt.Free;
+  end;
 end;
 
 function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
