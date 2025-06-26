@@ -385,7 +385,10 @@ type
     osAmazon,
     osCoreOS,
     osAlpine,
-    osAndroid);
+    osAndroid,
+    osApt,
+    osRpm);
+  TOperatingSystems = set of TOperatingSystem;
 
   /// the recognized Windows versions
   // - defined even outside OSWINDOWS to access e.g. from monitoring tools
@@ -580,20 +583,20 @@ const
     'R', // RedHat
     'l', // LFS
     'O', // Oracle
-    'G', // Mageia
+    'g', // Mageia
     'c', // CentOS
     'd', // Cloud
     'x', // Xen
     'Z', // Amazon
     'r', // CoreOS
     'p', // Alpine
-    'J'  // Android (J=JVM)
+    'J', // Android (J=JVM)
+    '1', // Apt-based
+    '2'  // Rpm-based
     );
 
   /// the operating systems items which actually have a Linux kernel
-  OS_LINUX = [
-    osLinux,
-    osArch .. osAndroid];
+  OS_LINUX = [osLinux, osArch .. osSlackware, osSuse, osTrustix .. osRpm];
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};

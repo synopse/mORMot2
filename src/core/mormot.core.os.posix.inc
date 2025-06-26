@@ -4836,10 +4836,15 @@ begin
       SetLinuxDistrib(dist);
       release := dist;
     end;
-    if (OS_KIND = osLinux) and
-       ((PosEx('RH', release) > 0) or
-        (PosEx('Red Hat', release) > 0)) then
-      OS_KIND := osRedHat;
+    if OS_KIND = osLinux then
+      if (PosEx('RH', release) > 0) or
+         (PosEx('Red Hat', release) > 0) then
+        OS_KIND := osRedHat
+      else if (FpAccess('/usr/bin/apt', F_OK) = 0) or
+              (FpAccess('/usr/bin/apt-get', F_OK) = 0) then
+        OS_KIND := osApt  // seems Debian-based
+      else if FpAccess('/usr/bin/rpm', F_OK) = 0 then
+        OS_KIND := osRpm; // seems RPM-based
   end;
   {$endif OSANDROID}
   cache := nil;
