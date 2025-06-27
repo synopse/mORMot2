@@ -3945,9 +3945,8 @@ end;
 
 function TSynAnsiConvert.Utf8ToAnsi(const u: RawUtf8): RawByteString;
 begin
-  if (u = '') or
-     {$ifdef HASCODEPAGE} (GetCodePage(u) = fCodePage) or {$endif HASCODEPAGE}
-     IsAnsiCompatible(PAnsiChar(pointer(u)), Length(u)) then
+  if (u = '')
+     {$ifdef HASCODEPAGE} or (GetCodePage(u) = fCodePage) {$endif HASCODEPAGE} then
     result := u
   else
     Utf8BufferToAnsi(pointer(u), length(u), result);
