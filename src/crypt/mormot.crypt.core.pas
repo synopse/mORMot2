@@ -2524,8 +2524,9 @@ type
   private
     sha: TSha256;
     step7data: THash512Rec;
+    digLen: integer; // support both SHA-256 and SHA-224 hash function
   public
-    /// prepare the SHA-256 HMAC authentication with the supplied key
+    /// prepare the SHA-256 or SHA-224 HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
     // key using Init, then copy this THmacSha256 instance to a local variable,
     // and use this local thread-safe copy for actual HMAC computing
@@ -2544,6 +2545,7 @@ type
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: RawByteString); overload;
     /// computes the HMAC of all supplied message according to the key
+    // - only 224-bit may be written to result after Init(asSha224=true)
     procedure Done(out result: TSha256Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
@@ -9537,9 +9539,15 @@ begin
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   if asSha224 then
-    SHA.Init224
+  begin
+    SHA.Init224;
+    digLen := SizeOf(THash224);
+  end
   else
+  begin
     SHA.Init;
+    digLen := SizeOf(THash256);
+  end;
   SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
   FillZero(k0.b);
   FillZero(k0xorIpad.b);
@@ -9566,11 +9574,18 @@ begin
 end;
 
 procedure THmacSha256.Done(out result: TSha256Digest; NoInit: boolean);
+var
+  d: TSha256Digest;
 begin
-  SHA.Final(result);
+  SHA.Final(d, {NoInit=}true);
+  if digLen = SizeOf(THash224) then
+    SHA.Init224
+  else
+    SHA.Init;
   SHA.Update(@step7data, SizeOf(step7data));
-  SHA.Update(@result, SizeOf(result));
-  SHA.Final(result, NoInit);
+  SHA.Update(@d, digLen); // may be truncated for HMAC-SHA-224
+  SHA.Final(d, NoInit);
+  MoveFast(d, result, digLen);
   if not NoInit then
     FillZero(step7data.b);
 end;
@@ -9580,7 +9595,7 @@ var
   res: THash256;
 begin
   Done(res, NoInit);
-  result := Sha256DigestToString(res);
+  BinToHexLower(@res, digLen, result);
   if not NoInit then
     FillZero(res);
 end;

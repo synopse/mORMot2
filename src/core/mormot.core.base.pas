@@ -2459,18 +2459,20 @@ type
       6: (
           b160: THash160);
       7: (
-          b384: THash384);
+          b224: THash224);
       8: (
-          w: array[0..31] of word);
+          b384: THash384);
       9: (
-          c: array[0..15] of cardinal);
+          w: array[0..31] of word);
       10: (
-           i: array[0..7] of Int64);
+          c: array[0..15] of cardinal);
       11: (
-           q: array[0..7] of QWord);
+           i: array[0..7] of Int64);
       12: (
-           r: array[0..3] of THash128Rec);
+           q: array[0..7] of QWord);
       13: (
+           r: array[0..3] of THash128Rec);
+      14: (
            l, h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
