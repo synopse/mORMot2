@@ -5368,36 +5368,19 @@ end;
 
 function TKerberosKeyTab.SaveToBinary: RawByteString;
 var
-  dest: TSynTempAdder;
+  e: ^TKerberosKeyEntry;
   principal: PUtf8Char;
-
-  procedure Add8(v: cardinal);
-  begin
-    dest.Add(@v, 1);
-  end;
-
-  procedure Add16(v: cardinal);
-  begin
-    v := bswap16(v);
-    dest.Add(@v, 2);
-  end;
-
-  procedure Add32(v: cardinal);
-  begin
-    v := bswap32(v);
-    dest.Add(@v, 4);
-  end;
+  n, pos, start, stop, realm, compn: integer;
+  dest: TSynTempAdder;
 
   procedure AddOctStr(start, stop: integer);
   begin
     dec(stop, start); // = length
-    Add16(stop);
+    dest.Add16BigEndian(stop);
     dest.Add(principal + start, stop);
   end;
 
 var
-  e: ^TKerberosKeyEntry;
-  n, pos, start, stop, realm, compn: integer;
   compstart, compstop: array[0 .. 31] of integer; // 31 seems big enough
 begin
   result := '';
@@ -5406,11 +5389,11 @@ begin
     exit; // kutil write_kt don't save anything for a void keytab
   dest.Init;
   try
-    Add16($0502); // only new big-endian format
+    dest.Add16BigEndian($0502); // only new big-endian format
     n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
     repeat
       pos := dest.Size;
-      Add32(0); // entry size will be filled below
+      dest.Add32BigEndian(0); // entry size will be filled below
       compn := 0;
       realm := PosExChar('@', e^.Principal);
       if realm = 0 then
@@ -5432,23 +5415,23 @@ begin
         end;
         inc(stop);
       until false;
-      Add16(compn);
+      dest.Add16BigEndian(compn);
       AddOctStr(realm, length(e^.Principal));
       for stop := 0 to compn - 1 do
         AddOctStr(compstart[stop], compstop[stop]); // no memory allocation
-      Add32(e^.NameType);
-      Add32(e^.Timestamp);
-      Add8(e^.KeyVersion);
-      Add16(e^.EncType);
-      Add16(length(e^.Key));
+      dest.Add32BigEndian(e^.NameType);
+      dest.Add32BigEndian(e^.Timestamp);
+      dest.Add(@e^.KeyVersion, 1); // 8-bit
+      dest.Add16BigEndian(e^.EncType);
+      dest.Add16BigEndian(length(e^.Key));
       dest.Add(e^.Key);
-      Add32(e^.KeyVersion); // it is easier to always include it (as kutil)
+      dest.Add32BigEndian(e^.KeyVersion); // easier to include it (as kutil)
       PCardinal(PAnsiChar(dest.Buffer) + pos)^ := bswap32(dest.Size - pos - 4);
       inc(e);
       dec(n);
     until n = 0;
   finally
-    dest.Done(RawUtf8(result), CP_RAWBYTESTRING);
+    dest.Done(result, CP_RAWBYTESTRING);
   end;
 end;
 
