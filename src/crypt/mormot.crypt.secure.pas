@@ -610,7 +610,8 @@ type
       aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec); overload;
+      aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec;
+      aPartNumber: integer = 1); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure Pbkdf2(const aParams: TSynSignerParams;
       out aDerivatedKey: THash512Rec); overload;
@@ -628,6 +629,11 @@ type
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
       aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
+    /// fill a buffer with the PBKDF2 deriviation, following RFC 2898 5.2
+    // - in respect to other Pbkdf2() methods, the length of the derived
+    // key is unbounded and could be bigger than the TSignAlgo digest size
+    function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString; overload;
     /// prepare a TAes object with the key derivated via a Pbkdf2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec;
@@ -4390,7 +4396,7 @@ begin
 end;
 
 procedure TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec);
+  aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec; aPartNumber: integer);
 var
   iter: TSynSigner;
   temp: THash512Rec;
@@ -4400,10 +4406,15 @@ begin
   iter := self;
   iter.Update(aSalt);
   if not (Algo in SIGNER_SHA3) then // padding + XoF are part of SHA-3
-    iter.Update(#0#0#0#1);
+  begin
+    // U1 = PRF(secret, salt + INT_32_BE(part))
+    aPartNumber := bswap32(aPartNumber); // is a 1-based index
+    iter.Update(@aPartNumber, 4);
+  end;
   iter.Final(aDerivatedKey, true);
   if aSecretPbkdf2Round < 2 then
     exit;
+  // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
   temp := aDerivatedKey;
   for i := 2 to aSecretPbkdf2Round do
   begin
@@ -4472,6 +4483,37 @@ procedure TSynSigner.Pbkdf2(const aParamsJson: RawUtf8;
 begin
   Pbkdf2(pointer(aParamsJson), length(aParamsJson),
     aDerivatedKey, aDefaultSalt, aDefaultAlgo);
+end;
+
+function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString;
+var
+  hlen, l, r, i: cardinal;
+  p: PHash512Rec;
+begin
+  // see https://www.rfc-editor.org/rfc/rfc2898#section-5.2
+  result := '';
+  if (aSecret = '') or
+     (aSecretPbkdf2Round = 0) or
+     (aSecretPbkdf2Round > 1 shl 20) or
+     (aDestLen = 0) or
+     (aDestLen > 1 shl 20) then
+    exit;
+  hlen := SIGN_SIZE[aAlgo];
+  l := aDestLen div hlen;
+  r := aDestLen - (l * hlen); // mod
+  if r <> 0 then
+    inc(l); // ceil()
+  // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, i)
+  p := FastNewString(l * hlen); // pre-allocate destination buffer
+  pointer(result) := p;
+  for i := 1 to l do
+  begin
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p^, i);
+    inc(PByte(p), hlen); // just concatenate each Ti
+  end;
+  if r <> 0 then
+    FakeLength(result, aDestLen); // truncate to the expected destination size
 end;
 
 procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
