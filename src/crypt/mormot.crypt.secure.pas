@@ -544,15 +544,17 @@ type
     saSha3384,
     saSha3512,
     saSha3S128,
-    saSha3S256);
+    saSha3S256,
+    saSha224);
 
 const
   /// the standard text of a TSignAlgo
   SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
-    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512',
-    'SHA3-224', 'SHA3-256', 'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256');
+    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512', 'SHA3-224', 'SHA3-256',
+    'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA-224');
   SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
   SIGNER_DEFAULT_ALGO = saSha3S128;
+  SIGNER_SHA3 = [saSha3224 .. saSha3S256];
 
 type
   /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
@@ -3946,7 +3948,6 @@ begin
 end;
 
 
-
 { TStreamRedirectSynHasher }
 
 constructor TStreamRedirectSynHasher.Create(aDestination: TStream; aRead: boolean);
@@ -4274,12 +4275,13 @@ end;
 
 { TSynSigner }
 
-procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
 const
   SIGN_SIZE: array[TSignAlgo] of byte = (
-    20, 32, 48, 64, 28, 32, 48, 64, 32, 64);
-  SHA3_ALGO: array[saSha3224..saSha3S256] of TSha3Algo = (
+    20, 32, 48, 64, 28, 32, 48, 64, 32, 64, 28);
+  SHA3_ALGO: array[saSha3224 .. saSha3S256] of TSha3Algo = (
     SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
 begin
   Algo := aAlgo;
   SignatureSize := SIGN_SIZE[Algo];
@@ -4288,11 +4290,13 @@ begin
       PHmacSha1(@ctxt)^.Init(aSecret, aSecretLen);
     saSha256:
       PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen);
+    saSha224:
+      PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen, {Sha224=}true);
     saSha384:
       PHmacSha384(@ctxt)^.Init(aSecret, aSecretLen);
     saSha512:
       PHmacSha512(@ctxt)^.Init(aSecret, aSecretLen);
-    saSha3224..saSha3S256:
+    saSha3224 .. saSha3S256:
       begin
         PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
         PSha3(@ctxt)^.Update(aSecret, aSecretLen);
@@ -4332,13 +4336,14 @@ begin
   case Algo of
     saSha1:
       PHmacSha1(@ctxt)^.Update(aBuffer, aLen);
-    saSha256:
+    saSha256,
+    saSha224:
       PHmacSha256(@ctxt)^.Update(aBuffer, aLen);
     saSha384:
       PHmacSha384(@ctxt)^.Update(aBuffer, aLen);
     saSha512:
       PHmacSha512(@ctxt)^.Update(aBuffer, aLen);
-    saSha3224..saSha3S256:
+    saSha3224 .. saSha3S256:
       PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
 end;
@@ -4348,7 +4353,8 @@ begin
   case Algo of
     saSha1:
       PHmacSha1(@ctxt)^.Done(aSignature.b160, aNoInit);
-    saSha256:
+    saSha256,
+    saSha224:
       PHmacSha256(@ctxt)^.Done(aSignature.Lo, aNoInit);
     saSha384:
       PHmacSha384(@ctxt)^.Done(aSignature.b384, aNoInit);
@@ -4393,8 +4399,8 @@ begin
   Init(aAlgo, aSecret);
   iter := self;
   iter.Update(aSalt);
-  if Algo < saSha3224 then
-    iter.Update(#0#0#0#1); // padding and XoF mode already part of SHA-3 process
+  if not (Algo in SIGNER_SHA3) then // padding + XoF are part of SHA-3
+    iter.Update(#0#0#0#1);
   iter.Final(aDerivatedKey, true);
   if aSecretPbkdf2Round < 2 then
     exit;
@@ -4480,22 +4486,22 @@ begin
       ks := 256;
   else
     case SignatureSize of
-      20:
+      SizeOf(THash160): // e.g. SHA-1
         begin
           ks := 128;
           aDerivatedKey.i0 := aDerivatedKey.i0 xor aDerivatedKey.i4;
         end;
-      28:
+      SizeOf(THash224):
         ks := 192;
-      32:
+      SizeOf(THash256):
         ks := 256;
-      48:
+      SizeOf(THash384):
         begin
           ks := 256;
           aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
           aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
         end;
-      64:
+      SizeOf(THash512):
         begin
           ks := 256;
           aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
