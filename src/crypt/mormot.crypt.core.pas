@@ -12,8 +12,8 @@ unit mormot.crypt.core;
     - AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
     - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
     - SHA-2 SHA-3 Secure Hashing
-    - HMAC Authentication over SHA and CRC32C
-    - PBKDF2 Key Derivation over SHA2 and SHA3
+    - HMAC Authentication over SHA-256 CRC32C and CRC256C
+    - PBKDF2 Key Derivation over SHA-256 and SHA-3
     - Digest/Hash to Hexadecimal Text Conversion
     - Deprecated MD4 MD5 RC4 SHA-1 Algorithms
     - Deprecated Weak AES/SHA Process
@@ -1721,8 +1721,8 @@ type
   // - use as a shared instance via TAesPrng.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
   // values of a counter with AES-256-CTR and a secret key
-  // - this internal secret key is generated from PBKDF2 derivation of
-  // OS-supplied entropy using HMAC over SHA-512
+  // - an internal secret key is generated from several PBKDF2-SHA-3 rounds
+  // of entropy supplied by the OS and available Hardware
   // - by design, such a PRNG is as good as the cypher used - for reference, see
   // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
   // - FillRandom() is thread-safe, and its AES process is not blocking: only
@@ -2449,65 +2449,12 @@ function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 /// direct MD4 hash calculation of some data
 function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
 
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-1
-// - this function expect the resulting key length to match SHA-1 digest size
-procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
-  count: integer; out result: TSha1Digest);
 
+{ ****************** HMAC Authentication over SHA-256 CRC32C and CRC256C }
 
-{ ****************** HMAC Authentication over SHA and CRC32C }
-
-{ ----------- HMAC over SHA-1 }
-
-type
-  /// compute the HMAC message authentication code using SHA-1 as hash function
-  // - you may use HmacSha1() overloaded functions for one-step process
-  // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  {$ifdef USERECORDWITHMETHODS}
-  THmacSha1 = record
-  {$else}
-  THmacSha1 = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    sha: TSha1;
-    step7data: THash512Rec;
-  public
-    /// prepare the HMAC authentication with the supplied key
-    // - content of this record is stateless, so you can prepare a HMAC for a
-    // key using Init, then copy this THmacSha1 instance to a local variable,
-    // and use this local thread-safe copy for actual HMAC computing
-    procedure Init(key: pointer; keylen: integer);
-    /// call this method for each continuous message block
-    // - iterate over all message blocks, then call Done to retrieve the HMAC
-    procedure Update(msg: pointer; msglen: integer);
-      {$ifdef HASINLINE} inline; {$endif}
-    /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSha1Digest; NoInit: boolean = false); overload;
-    /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
-    /// computes the HMAC of the supplied message according to the key
-    // - expects a previous call on Init() to setup the shared key
-    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
-    // - this method is thread-safe on any shared THmacSha1 instance
-    procedure Compute(msg: pointer; msglen: integer; out result: TSha1Digest);
-  end;
-
-  /// points to a HMAC message authentication context using SHA-1
-  PHmacSha1 = ^THmacSha1;
-
-/// compute the HMAC message authentication code using SHA-1 as hash function
-procedure HmacSha1(const key, msg: RawByteString;
-  out result: TSha1Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-1 as hash function
-procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
-  out result: TSha1Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-1 as hash function
-procedure HmacSha1(key, msg: pointer; keylen, msglen: integer;
-  out result: TSha1Digest); overload;
-
+// all HMAC is available via mormot.core.secure.pas TSynSigner: we define here
+// only HMAC-SHA-256 which is used internally by this unit, and HMAC-CRC-256C
+// HMAC-CRC-32C non-cryptographic
 
 { ----------- HMAC over SHA-256 }
 
@@ -2572,110 +2519,6 @@ procedure HmacSha256(const key: TSha256Digest; const msg: RawByteString;
 /// compute the HMAC message authentication code using SHA-256 as hash function
 procedure HmacSha256(key, msg: pointer; keylen, msglen: integer;
   out result: TSha256Digest); overload;
-
-
-{ ----------- HMAC over SHA-384 }
-
-type
-  /// compute the HMAC message authentication code using SHA-384 as hash function
-  // - you may use HmacSha384() overloaded functions for one-step process
-  // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  {$ifdef USERECORDWITHMETHODS}
-  THmacSha384 = record
-  {$else}
-  THmacSha384 = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    sha: TSha384;
-    step7data: TBlock1024;
-  public
-    /// prepare the HMAC authentication with the supplied key
-    // - content of this record is stateless, so you can prepare a HMAC for a
-    // key using Init, then copy this THmacSha384 instance to a local variable,
-    // and use this local thread-safe copy for actual HMAC computing
-    procedure Init(key: pointer; keylen: integer);
-    /// call this method for each continuous message block
-    // - iterate over all message blocks, then call Done to retrieve the HMAC
-    procedure Update(msg: pointer; msglen: integer);
-      {$ifdef HASINLINE} inline; {$endif}
-    /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSha384Digest; NoInit: boolean = false); overload;
-    /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
-    /// computes the HMAC of the supplied message according to the key
-    // - expects a previous call on Init() to setup the shared key
-    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
-    // - this method is thread-safe on any shared THmacSha384 instance
-    procedure Compute(msg: pointer; msglen: integer; out result: TSha384Digest);
-  end;
-
-  /// points to a HMAC message authentication context using SHA-384
-  PHmacSha384 = ^THmacSha384;
-
-/// compute the HMAC message authentication code using SHA-384 as hash function
-procedure HmacSha384(const key, msg: RawByteString;
-  out result: TSha384Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-384 as hash function
-procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
-  out result: TSha384Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-384 as hash function
-procedure HmacSha384(key, msg: pointer; keylen, msglen: integer;
-  out result: TSha384Digest); overload;
-
-
-{ ----------- HMAC over SHA-512 }
-
-type
-  /// compute the HMAC message authentication code using SHA-512 as hash function
-  // - you may use HmacSha512() overloaded functions for one-step process
-  // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  {$ifdef USERECORDWITHMETHODS}
-  THmacSha512 = record
-  {$else}
-  THmacSha512 = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    sha: TSha512;
-    step7data: TBlock1024;
-  public
-    /// prepare the HMAC authentication with the supplied key
-    // - content of this record is stateless, so you can prepare a HMAC for a
-    // key using Init, then copy this THmacSha512 instance to a local variable,
-    // and use this local thread-safe copy for actual HMAC computing
-    procedure Init(key: pointer; keylen: integer);
-    /// call this method for each continuous message block
-    // - iterate over all message blocks, then call Done to retrieve the HMAC
-    procedure Update(msg: pointer; msglen: integer);
-      {$ifdef HASINLINE} inline; {$endif}
-    /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSha512Digest; NoInit: boolean = false); overload;
-    /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
-    /// computes the HMAC of the supplied message according to the key
-    // - expects a previous call on Init() to setup the shared key
-    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
-    // - this method is thread-safe on any shared THmacSha512 instance
-    procedure Compute(msg: pointer; msglen: integer; out result: TSha512Digest);
-  end;
-
-  /// points to a HMAC message authentication context using SHA-512
-  PHmacSha512 = ^THmacSha512;
-
-/// compute the HMAC message authentication code using SHA-512 as hash function
-procedure HmacSha512(const key, msg: RawByteString;
-  out result: TSha512Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-512 as hash function
-procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
-  out result: TSha512Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-512 as hash function
-procedure HmacSha512(key, msg: pointer; keylen, msglen: integer;
-  out result: TSha512Digest); overload;
 
 
 { ----------- HMAC over CRC-256C }
@@ -2767,32 +2610,13 @@ function HmacCrc32c(const key: THash256; const msg: RawByteString): cardinal; ov
 function HmacCrc32c(const key, msg: RawByteString): cardinal; overload;
 
 
-{ ****************** PBKDF2 Key Derivation over SHA2 and SHA3 }
+{ ****************** PBKDF2 Key Derivation over SHA-256 and SHA-3 }
 
 /// compute the PBKDF2 derivation of a password using HMAC over SHA-256
 // - this function expect the resulting key length to match SHA-256 digest size
 procedure Pbkdf2HmacSha256(const password, salt: RawByteString;
   count: integer; out result: TSha256Digest;
-  const saltdefault: RawByteString = ''); overload;
-
-/// compute the PBKDF2 derivations of a password using HMAC over SHA-256, into
-// several 256-bit items, so can be used to return any size of output key
-// - this function expect the result array to have the expected output length
-// - allows resulting key length to be more than one SHA-256 digest size, e.g.
-// to be used for both Encryption and MAC
-procedure Pbkdf2HmacSha256(const password, salt: RawByteString;
-  count: integer; var result: THash256DynArray;
-  const saltdefault: RawByteString = ''); overload;
-
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-384
-// - this function expect the resulting key length to match SHA-384 digest size
-procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
-  count: integer; out result: TSha384Digest);
-
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-512
-// - this function expect the resulting key length to match SHA-512 digest size
-procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
-  count: integer; out result: TSha512Digest);
+  const saltdefault: RawByteString = '');
 
 /// safe key derivation using iterated SHA-3 hashing
 // - you can use SHA3_224, SHA3_256, SHA3_384, SHA3_512 algorithm to fill
@@ -2808,6 +2632,7 @@ procedure Pbkdf2Sha3(algo: TSha3Algo; const password, salt: RawByteString;
 // - expected the supplied data buffer to be small, because the whole buffer
 // will be hashed in XOF mode count time, so it would be slow - for big content,
 // consider using an AES Cypher after 256-bit Pbkdf2Sha3 key derivation
+// - as used e.g. by the CryptDataWithSecret() function
 procedure Pbkdf2Sha3Crypt(algo: TSha3Algo; const password, salt: RawByteString;
   count: integer; var data: RawByteString);
 
@@ -9444,87 +9269,7 @@ begin
 end;
 
 
-{ ****************** HMAC Authentication over SHA and CRC32C }
-
-{ THmacSha1 }
-
-procedure THmacSha1.Init(key: pointer; keylen: integer);
-var
-  i: PtrInt;
-  k0, k0xorIpad: THash512Rec;
-begin
-  FillZero(k0.b);
-  if keylen > SizeOf(k0) then
-    SHA.Full(key, keylen, k0.b160)
-  else
-    MoveFast(key^, k0, keylen);
-  for i := 0 to 15 do
-    k0xorIpad.c[i] := k0.c[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  SHA.Init;
-  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
-  FillZero(k0.b);
-  FillZero(k0xorIpad.b);
-end;
-
-procedure THmacSha1.Update(msg: pointer; msglen: integer);
-begin
-  SHA.Update(msg, msglen);
-end;
-
-procedure THmacSha1.Done(out result: TSha1Digest; NoInit: boolean);
-begin
-  SHA.Final(result);
-  SHA.Update(@step7data, SizeOf(step7data));
-  SHA.Update(@result, SizeOf(result));
-  SHA.Final(result, NoInit);
-  if not NoInit then
-    FillZero(step7data.b);
-end;
-
-procedure THmacSha1.Done(out result: RawUtf8; NoInit: boolean);
-var
-  res: TSha1Digest;
-begin
-  Done(res, NoInit);
-  result := Sha1DigestToString(res);
-  if not NoInit then
-    FillZero(res);
-end;
-
-procedure THmacSha1.Compute(msg: pointer; msglen: integer;
-  out result: TSha1Digest);
-var
-  temp: THmacSha1;
-begin
-  temp := self; // thread-safe copy
-  temp.Update(msg, msglen);
-  temp.Done(result);
-end;
-
-procedure HmacSha1(key, msg: pointer; keylen, msglen: integer;
-  out result: TSha1Digest);
-var
-  mac: THmacSha1;
-begin
-  mac.Init(key, keylen);
-  mac.Update(msg, msglen);
-  mac.Done(result);
-end;
-
-procedure HmacSha1(const key, msg: RawByteString;
-  out result: TSha1Digest);
-begin
-  HmacSha1(pointer(key), pointer(msg), length(key), length(msg), result);
-end;
-
-procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
-  out result: TSha1Digest);
-begin
-  HmacSha1(@key, pointer(msg), SizeOf(key), length(msg), result);
-end;
-
+{ ****************** HMAC Authentication over SHA-256 CRC32C and CRC256C }
 
 { THmacSha256 }
 
@@ -9634,166 +9379,6 @@ procedure HmacSha256(const key: TSha256Digest; const msg: RawByteString;
   out result: TSha256Digest);
 begin
   HmacSha256(@key, pointer(msg), SizeOf(key), length(msg), result);
-end;
-
-
-{ THmacSha384 }
-
-procedure THmacSha384.Init(key: pointer; keylen: integer);
-var
-  i: PtrInt;
-  k0, k0xorIpad: TBlock1024;
-begin
-  FillCharFast(k0, SizeOf(k0), 0);
-  if keylen > SizeOf(k0) then
-    SHA.Full(key, keylen, PSha384Digest(@k0)^)
-  else
-    MoveFast(key^, k0, keylen);
-  for i := 0 to 31 do
-    k0xorIpad[i] := k0[i] xor $36363636;
-  for i := 0 to 31 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
-  SHA.Init;
-  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
-  FillCharFast(k0, SizeOf(k0), 0);
-  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
-end;
-
-procedure THmacSha384.Update(msg: pointer; msglen: integer);
-begin
-  SHA.Update(msg, msglen);
-end;
-
-procedure THmacSha384.Done(out result: TSha384Digest; NoInit: boolean);
-begin
-  SHA.Final(result);
-  SHA.Update(@step7data, SizeOf(step7data));
-  SHA.Update(@result, SizeOf(result));
-  SHA.Final(result, NoInit);
-  if not NoInit then
-    FillCharFast(step7data, SizeOf(step7data), 0);
-end;
-
-procedure THmacSha384.Done(out result: RawUtf8; NoInit: boolean);
-var
-  res: THash384;
-begin
-  Done(res, NoInit);
-  result := Sha384DigestToString(res);
-  if not NoInit then
-    FillZero(res);
-end;
-
-procedure THmacSha384.Compute(msg: pointer; msglen: integer;
-  out result: TSha384Digest);
-var
-  temp: THmacSha384;
-begin
-  temp := self; // thread-safe copy
-  temp.Update(msg, msglen);
-  temp.Done(result);
-end;
-
-procedure HmacSha384(key, msg: pointer; keylen, msglen: integer;
-  out result: TSha384Digest);
-var
-  mac: THmacSha384;
-begin
-  mac.Init(key, keylen);
-  mac.Update(msg, msglen);
-  mac.Done(result);
-end;
-
-procedure HmacSha384(const key, msg: RawByteString;
-  out result: TSha384Digest);
-begin
-  HmacSha384(pointer(key), pointer(msg), length(key), length(msg), result);
-end;
-
-procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
-  out result: TSha384Digest);
-begin
-  HmacSha384(@key, pointer(msg), SizeOf(key), length(msg), result);
-end;
-
-
-{ THmacSha512 }
-
-procedure THmacSha512.Init(key: pointer; keylen: integer);
-var
-  i: PtrInt;
-  k0, k0xorIpad: TBlock1024;
-begin
-  FillCharFast(k0, SizeOf(k0), 0); // 128 bytes (1024 bits) of internal state
-  if keylen > SizeOf(k0) then
-    SHA.Full(key, keylen, PSha512Digest(@k0)^)
-  else
-    MoveFast(key^, k0, keylen);
-  for i := 0 to 31 do
-    k0xorIpad[i] := k0[i] xor $36363636;
-  for i := 0 to 31 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
-  SHA.Init;
-  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
-  FillCharFast(k0, SizeOf(k0), 0);
-  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
-end;
-
-procedure THmacSha512.Update(msg: pointer; msglen: integer);
-begin
-  SHA.Update(msg, msglen);
-end;
-
-procedure THmacSha512.Done(out result: TSha512Digest; NoInit: boolean);
-begin
-  SHA.Final(result);
-  SHA.Update(@step7data, SizeOf(step7data));
-  SHA.Update(@result, SizeOf(result));
-  SHA.Final(result, NoInit);
-  if not NoInit then
-    FillCharFast(step7data, SizeOf(step7data), 0);
-end;
-
-procedure THmacSha512.Done(out result: RawUtf8; NoInit: boolean);
-var
-  res: THash512;
-begin
-  Done(res, NoInit);
-  result := Sha512DigestToString(res);
-  if not NoInit then
-    FillZero(res);
-end;
-
-procedure THmacSha512.Compute(msg: pointer; msglen: integer;
-  out result: TSha512Digest);
-var
-  temp: THmacSha512;
-begin
-  temp := self; // thread-safe copy
-  temp.Update(msg, msglen);
-  temp.Done(result);
-end;
-
-procedure HmacSha512(key, msg: pointer; keylen, msglen: integer;
-  out result: TSha512Digest);
-var
-  mac: THmacSha512;
-begin
-  mac.Init(key, keylen);
-  mac.Update(msg, msglen);
-  mac.Done(result);
-end;
-
-procedure HmacSha512(const key, msg: RawByteString;
-  out result: TSha512Digest);
-begin
-  HmacSha512(pointer(key), pointer(msg), length(key), length(msg), result);
-end;
-
-procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
-  out result: TSha512Digest);
-begin
-  HmacSha512(@key, pointer(msg), SizeOf(key), length(msg), result);
 end;
 
 
@@ -9926,7 +9511,7 @@ begin
 end;
 
 
-{ ****************** PBKDF2 Key Derivation over SHA2 and SHA3 }
+{ ****************** PBKDF2 Key Derivation over SHA-256 and SHA-3 }
 
 procedure Pbkdf2HmacSha256(const password, salt: RawByteString; count: integer;
   out result: TSha256Digest; const saltdefault: RawByteString);
@@ -9959,7 +9544,7 @@ begin
   FillZero(tmp);
 end;
 
-procedure Pbkdf2HmacSha256(const password, salt: RawByteString; count: integer;
+procedure Pbkdf2HmacSha256Array(const password, salt: RawByteString; count: integer;
   var result: THash256DynArray; const saltdefault: RawByteString);
 var
   n, i: integer;
@@ -9990,62 +9575,6 @@ begin
   FillZero(tmp);
   FillcharFast(mac, SizeOf(mac), 0);
   FillcharFast(first, SizeOf(first), 0);
-end;
-
-procedure Pbkdf2HmacSha384(const password, salt: RawByteString; count: integer;
-  out result: TSha384Digest);
-var
-  i: integer;
-  tmp: TSha384Digest;
-  mac, first: THmacSha384; // re-use SHA context for best performance
-begin
-  first.Init(pointer(password), length(password));
-  mac := first;
-  mac.Update(pointer(salt), length(salt));
-  PInteger(@tmp)^ := $01000000;
-  mac.Update(@tmp, 4);
-  mac.Done(result); // HmacSha384(password, salt + #0#0#0#1, result);
-  if count < 2 then
-    exit;
-  tmp := result;
-  for i := 2 to count do
-  begin
-    mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, SizeOf(tmp));
-    mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
-  end;
-  FillcharFast(mac, SizeOf(mac), 0);
-  FillcharFast(first, SizeOf(first), 0);
-  FillZero(tmp);
-end;
-
-procedure Pbkdf2HmacSha512(const password, salt: RawByteString; count: integer;
-  out result: TSha512Digest);
-var
-  i: integer;
-  tmp: TSha512Digest;
-  mac, first: THmacSha512; // re-use SHA context for best performance
-begin
-  first.Init(pointer(password), length(password));
-  mac := first;
-  mac.Update(pointer(salt), length(salt));
-  PInteger(@tmp)^ := $01000000;
-  mac.Update(@tmp, 4);
-  mac.Done(result); // HmacSha512(password, salt + #0#0#0#1, result);
-  if count < 2 then
-    exit;
-  tmp := result;
-  for i := 2 to count do
-  begin
-    mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, SizeOf(tmp));
-    mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
-  end;
-  FillcharFast(mac, SizeOf(mac), 0);
-  FillcharFast(first, SizeOf(first), 0);
-  FillZero(tmp);
 end;
 
 procedure Pbkdf2Sha3(algo: TSha3Algo; const password, salt: RawByteString;
@@ -11045,36 +10574,6 @@ begin
   MD5Transform(TMd5Buf(Hash), PMd5In(Data)^);
 end;
 
-procedure Pbkdf2HmacSha1(const password, salt: RawByteString; count: integer;
-  out result: TSha1Digest);
-var
-  i: integer;
-  tmp: TSha1Digest;
-  mac: THmacSha1;
-  first: THmacSha1;
-begin
-  first.Init(pointer(password), length(password));
-  mac := first;
-  mac.Update(pointer(salt), length(salt));
-  PInteger(@tmp)^ := $01000000;
-  mac.Update(@tmp, 4);
-  mac.Done(result); // HmacSha1(password, salt + #0#0#0#1, result);
-  if count < 2 then
-    exit;
-  tmp := result;
-  for i := 2 to count do
-  begin
-    mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, SizeOf(tmp));
-    mac.Done(tmp, true);
-    XorMemory(@result, @tmp, SizeOf(result)); // XorMemoryPtrInt not usable here
-  end;
-  FillcharFast(mac, SizeOf(mac), 0);
-  FillcharFast(first, SizeOf(first), 0);
-  FillZero(tmp);
-end;
-
-
 
 { ****************** Digest/Hash to Hexadecimal Text Conversion }
 
@@ -11920,7 +11419,6 @@ begin
   assert(SizeOf(TSha256) = SizeOf(TSha1));
   assert(SizeOf(TSha512) > SizeOf(TSha256));
   assert(SizeOf(TSha3) > SizeOf(TSha512));
-  assert(SizeOf(TSha3) > SizeOf(THmacSha512));
 end;
 
 procedure FinalizeUnit;

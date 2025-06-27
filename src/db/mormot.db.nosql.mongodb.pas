@@ -40,6 +40,7 @@ uses
   mormot.core.rtti,
   mormot.lib.z,
   mormot.crypt.core,
+  mormot.crypt.secure, // for PKBDF2-HMAC-SHA1
   mormot.db.core,
   mormot.db.nosql.bson,
   mormot.net.sock;

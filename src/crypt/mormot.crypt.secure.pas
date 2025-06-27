@@ -1016,6 +1016,59 @@ const
     '.shake128',   // hfShake128
     '.shake256');  // hfShake256
 
+{ some HMAC/PBKDF2 wrappers defined here to redirect to TSynSigner }
+
+/// compute the HMAC message authentication code using SHA-1 as hash function
+procedure HmacSha1(const key, msg: RawByteString;
+  out result: TSha1Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-1 as hash function
+procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
+  out result: TSha1Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-1 as hash function
+procedure HmacSha1(key, msg: pointer; keylen, msglen: integer;
+  out result: TSha1Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-1
+// - this function expect the resulting key length to match SHA-1 digest size
+procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
+  count: integer; out result: TSha1Digest);
+
+/// compute the HMAC message authentication code using SHA-384 as hash function
+procedure HmacSha384(const key, msg: RawByteString;
+  out result: TSha384Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-384 as hash function
+procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
+  out result: TSha384Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-384 as hash function
+procedure HmacSha384(key, msg: pointer; keylen, msglen: integer;
+  out result: TSha384Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-384
+// - this function expect the resulting key length to match SHA-384 digest size
+procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
+  count: integer; out result: TSha384Digest);
+
+/// compute the HMAC message authentication code using SHA-512 as hash function
+procedure HmacSha512(const key, msg: RawByteString;
+  out result: TSha512Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-512 as hash function
+procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
+  out result: TSha512Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-512 as hash function
+procedure HmacSha512(key, msg: pointer; keylen, msglen: integer;
+  out result: TSha512Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-512
+// - this function expect the resulting key length to match SHA-512 digest size
+procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
+  count: integer; out result: TSha512Digest);
+
 
 { **************** Client and Server HTTP Access Authentication }
 
@@ -4793,6 +4846,96 @@ function HashDigestEqual(const a, b: THashDigest): boolean;
 begin
   result := (a.Algo <= high(THashAlgo)) and
             CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
+end;
+
+procedure HmacSha1(const key, msg: RawByteString;
+  out result: TSha1Digest);
+begin
+  HmacSha1(pointer(key), pointer(msg), length(key), length(msg), result);
+end;
+
+procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
+  out result: TSha1Digest);
+begin
+  HmacSha1(@key, pointer(msg), SizeOf(key), length(msg), result);
+end;
+
+procedure HmacSha1(key, msg: pointer; keylen, msglen: integer;
+  out result: TSha1Digest);
+var
+  signer: TSynSigner;
+begin
+  signer.Init(saSha1, key, keylen);
+  signer.Update(msg, msglen);
+  signer.Final(@result);
+end;
+
+procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
+  count: integer; out result: TSha1Digest);
+var
+  signer: TSynSigner;
+begin
+  signer.Pbkdf2(saSha1, password, salt, count, @result);
+end;
+
+procedure HmacSha384(const key, msg: RawByteString;
+  out result: TSha384Digest);
+begin
+  HmacSha384(pointer(key), pointer(msg), length(key), length(msg), result);
+end;
+
+procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
+  out result: TSha384Digest);
+begin
+  HmacSha384(@key, pointer(msg), SizeOf(key), length(msg), result);
+end;
+
+procedure HmacSha384(key, msg: pointer; keylen, msglen: integer;
+  out result: TSha384Digest);
+var
+  signer: TSynSigner;
+begin
+  signer.Init(saSha384, key, keylen);
+  signer.Update(msg, msglen);
+  signer.Final(@result);
+end;
+
+procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
+  count: integer; out result: TSha384Digest);
+var
+  signer: TSynSigner;
+begin
+  signer.Pbkdf2(saSha384, password, salt, count, @result);
+end;
+
+procedure HmacSha512(const key, msg: RawByteString;
+  out result: TSha512Digest);
+begin
+  HmacSha512(pointer(key), pointer(msg), length(key), length(msg), result);
+end;
+
+procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
+  out result: TSha512Digest);
+begin
+  HmacSha512(@key, pointer(msg), SizeOf(key), length(msg), result);
+end;
+
+procedure HmacSha512(key, msg: pointer; keylen, msglen: integer;
+  out result: TSha512Digest);
+var
+  signer: TSynSigner;
+begin
+  signer.Init(saSha512, key, keylen);
+  signer.Update(msg, msglen);
+  signer.Final(@result);
+end;
+
+procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
+  count: integer; out result: TSha512Digest);
+var
+  signer: TSynSigner;
+begin
+  signer.Pbkdf2(saSha512, password, salt, count, @result);
 end;
 
 
