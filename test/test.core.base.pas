@@ -8365,6 +8365,17 @@ begin
       Check(CompareEntry(kt.Entry[1], kt2.Entry[1]));
       Check(not CompareEntry(kt.Entry[0], kt2.Entry[1]));
       Check(not CompareEntry(kt.Entry[1], kt2.Entry[0]));
+      CheckHash(kt.SaveToBinary, $67233E99);
+      Check(not kt.Delete(10));
+      Check(kt.Delete(0), 'deleted');
+      Check(kt.Add(kt2.Entry[0]));
+      bin2 := kt.SaveToBinary;
+      CheckHash(bin2, $1849920F, 'delete saved');
+      Check(kt.Delete(1), 'delete1');
+      if CheckEqual(length(kt.Entry), 1, 'deleted1') then
+        Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
+      Check(kt.Delete(0), 'delete0');
+      CheckEqual(length(kt.Entry), 0, 'flushed');
     end;
   finally
     kt2.Free;
