@@ -4744,13 +4744,13 @@ begin
     FastAssignNew(result);
 end;
 
-function SanitizeAlgo(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
+function SanitizeAlgoName(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
   trimprefix: cardinal; onlyalphanum: boolean): boolean;
 begin
   tmp[0] := #0;
   result := false;
   if (L < 3) or
-     (L > 15) then
+     (L > 20) then
     exit;
   if PWord(P)^ = trimprefix then
     inc(P, 2); // recognize plain un-trimmed ToText() e.g. 'hfMD5'
@@ -4759,10 +4759,10 @@ begin
       #0:
         break;
       'A' .. 'Z', '0' .. '9', 'a' .. 'z':
-        AppendShortCharSafe(P^, @tmp, #15);
+        AppendShortChar(P^, @tmp);
       '_':
         if not onlyalphanum then
-          AppendShortCharSafe('_', @tmp, #15);
+          AppendShortChar('_', @tmp);
       '-', '/':
         if not onlyalphanum then
           if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
@@ -4771,7 +4771,7 @@ begin
              ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
               (PCardinal(@tmp[1])^ and $ffdfdfdf =
                 ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
-            AppendShortCharSafe('_', @tmp, #15);
+            AppendShortChar('_', @tmp);
     end;
     inc(P);
   until tmp[0] > #10;
@@ -4789,7 +4789,7 @@ var
   i: integer;
 begin
   result := false;
-  if not SanitizeAlgo(P, Len, tmp, ord('s') + ord('a') shl 8, true) then
+  if not SanitizeAlgoName(P, Len, tmp, ord('s') + ord('a') shl 8, true) then
     exit;
   i := GetEnumNameValueTrimmed(TypeInfo(TSignAlgo), @tmp[1], ord(tmp[0]));
   if i >= 0 then
@@ -4814,7 +4814,7 @@ var
   i: integer;
 begin
   result := false;
-  if not SanitizeAlgo(P, Len, tmp, ord('h') + ord('f') shl 8, false) then
+  if not SanitizeAlgoName(P, Len, tmp, ord('h') + ord('f') shl 8, false) then
     exit;
   i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), @tmp[1], ord(tmp[0]));
   if i < 0 then

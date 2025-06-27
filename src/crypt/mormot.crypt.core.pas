@@ -2855,7 +2855,7 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 {$endif PUREMORMOT2}
 
 
-/// SHA-256 hash calculation with padding if shorter than 255 bytes
+/// SHA-256 hash calculation with length padding if shorter than 255 bytes
 // - WARNING: this algorithm is DEPRECATED, and supplied only for backward
 // compatibility of existing code (CryptDataForCurrentUser or TProtocolAes)
 // - use TSynSigner or Pbkdf2HmacSha256() for safer password derivation
