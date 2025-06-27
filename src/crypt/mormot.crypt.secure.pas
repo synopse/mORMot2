@@ -706,7 +706,7 @@ type
     /// returns the resulting hash as lowercase hexadecimal string
     procedure Final(var aResult: RawUtf8); overload;
     /// set the resulting hash into a binary buffer, and the size as result
-    function Final(out aDigest: THash512Rec): integer; overload;
+    function Final(out aDigest: THash512Rec; aNoInit: boolean = false): integer; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
@@ -3839,6 +3839,10 @@ implementation
 
 { TSynHasher }
 
+const
+  HASH_SHA3: array[hfSHA3_256 .. hfShake256] of TSha3Algo = (
+    SHA3_256, SHA3_512, SHA3_256, SHA3_224, SHA3_384, SHAKE_128, SHAKE_256);
+
 function TSynHasher.Init(aAlgo: THashAlgo): boolean;
 begin
   fAlgo := aAlgo;
@@ -3858,10 +3862,9 @@ begin
       PSha512(@ctxt)^.Init;
     hfSHA512_256:
       PSha512_256(@ctxt)^.Init;
-    hfSHA3_256:
-      PSha3(@ctxt)^.Init(SHA3_256);
-    hfSHA3_512:
-      PSha3(@ctxt)^.Init(SHA3_512);
+    hfSHA3_256 .. hfSHA3_512,
+    hfSHA3_224 .. hfShake256:
+      PSha3(@ctxt)^.Init(HASH_SHA3[aAlgo]);
   else
     result := false;
   end;
@@ -3883,10 +3886,8 @@ begin
       PSha512(@ctxt)^.Update(aBuffer, aLen);
     hfSHA512_256:
       PSha512_256(@ctxt)^.Update(aBuffer, aLen);
-    hfSHA3_256:
-      PSha3(@ctxt)^.Update(aBuffer, aLen);
-    hfSHA3_512:
-      PSha3(@ctxt)^.Update(aBuffer, aLen);
+  else
+    PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
 end;
 
@@ -3916,26 +3917,29 @@ begin
   result := HASH_SIZE[fAlgo];
 end;
 
-function TSynHasher.Final(out aDigest: THash512Rec): integer;
+function TSynHasher.Final(out aDigest: THash512Rec; aNoInit: boolean): integer;
 begin
   case fAlgo of
     hfMD5:
-      PMd5(@ctxt)^.Final(aDigest.h0);
+      PMd5(@ctxt)^.Final(aDigest.h0, aNoInit);
     hfSHA1:
-      PSha1(@ctxt)^.Final(aDigest.b160);
-    hfSHA224, // SHA-224 is just a truncated SHA-256 result
+      PSha1(@ctxt)^.Final(aDigest.b160, aNoInit);
+    hfSHA224: // SHA-224 is just a truncated SHA-256 result
+      begin
+        PSha256(@ctxt)^.Final(aDigest.Lo, {aNoInit=}true);
+        if not aNoInit then
+          PSha256(@ctxt)^.Init224; // but needs its own initialization
+      end;
     hfSHA256:
-      PSha256(@ctxt)^.Final(aDigest.Lo);
+      PSha256(@ctxt)^.Final(aDigest.Lo, aNoInit);
     hfSHA384:
-      PSha384(@ctxt)^.Final(aDigest.b384);
+      PSha384(@ctxt)^.Final(aDigest.b384, aNoInit);
     hfSHA512:
-      PSha512(@ctxt)^.Final(aDigest.b);
+      PSha512(@ctxt)^.Final(aDigest.b, aNoInit);
     hfSHA512_256:
-      PSha512_256(@ctxt)^.Final(aDigest.Lo);
-    hfSHA3_256:
-      PSha3(@ctxt)^.Final(aDigest.Lo);
-    hfSHA3_512:
-      PSha3(@ctxt)^.Final(aDigest.b);
+      PSha512_256(@ctxt)^.Final(aDigest.Lo, aNoInit);
+  else
+    PSha3(@ctxt)^.Final(@aDigest, 0, aNoInit);
   end;
   result := HASH_SIZE[fAlgo];
 end;

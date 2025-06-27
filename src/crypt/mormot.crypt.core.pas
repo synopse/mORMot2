@@ -2341,7 +2341,7 @@ type
     procedure Finalize;
     /// finalize and compute the resulting MD5 hash Digest of all data
     // affected to Update() method
-    procedure Final(out result: TMd5Digest); overload;
+    procedure Final(out result: TMd5Digest; aNoInit: boolean = true); overload;
     /// finalize and compute the resulting MD5 hash Digest of all data
     // affected to Update() method
     function Final: TMd5Digest; overload;
@@ -10470,10 +10470,12 @@ begin
   result := TMd5Digest(buf);
 end;
 
-procedure TMd5.Final(out result: TMd5Digest);
+procedure TMd5.Final(out result: TMd5Digest; aNoInit: boolean);
 begin
   Finalize;
   result := TMd5Digest(buf);
+  if not aNoInit then
+    Init;
 end;
 
 procedure TMd5.Finalize;
