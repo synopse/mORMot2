@@ -601,6 +601,8 @@ type
   // - both FPC and Delphi uses PtrInt/NativeInt for dynamic array high/length
   TDALen = PtrInt;
   /// pointer to cross-compiler type used for dynamic array length
+  // - could be used inlined e.g. as
+  // ! PDALen(PAnsiChar(pointer(Values)) - _DALEN)^ + _DAOFF
   PDALen = ^TDALen;
 
   /// cross-compiler type used for string reference counter
@@ -713,8 +715,8 @@ const
   _DARECSIZE = SizeOf(TDynArrayRec);
 
   /// cross-compiler negative offset to TDynArrayRec.high/length field
-  // - to be used inlined e.g. as
-  // ! PDALen(PAnsiChar(Values) - _DALEN)^ + _DAOFF
+  // - could be used inlined e.g. as
+  // ! PDALen(PAnsiChar(pointer(Values)) - _DALEN)^ + _DAOFF
   // - both FPC and Delphi uses PtrInt/NativeInt for dynamic array high/length
   _DALEN = SizeOf(TDALen);
 
@@ -740,7 +742,7 @@ const
 procedure DynArrayFakeLength(arr: pointer; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// low-level deletion of one dynamic array item
+/// low-level deletion of one dynamic array item with refCnt = 1
 // - Last=high(Values) should be > 0 - caller should set Values := nil for Last<=0
 // - caller should have made Finalize(Values[Index]) before calling (if needed)
 // - used e.g. by TSecurityDescriptor.Delete() or TKerberosKeyTab.Delete()
@@ -7038,12 +7040,13 @@ procedure DynArrayFakeDelete(var Values; Index, Last, ValueSize: PtrUInt);
 var
   p: PAnsiChar;
 begin // ensured (Last > 0) and (Index <= Last) and made Finalize(Values[Index])
-  DynArrayFakeLength(pointer(Values), Last); // dec(length) in header no realloc
+  PDALen(PAnsiChar(Values) - _DALEN)^ := Last - _DAOFF; // dec(length) no realloc
   dec(Last, Index);
   if Last = 0 then
     exit; // nothing to move
   p := PAnsiChar(Values) + Index * ValueSize;
   MoveFast(p[ValueSize], p[0], Last * ValueSize);
+  //FillCharFast(p[Last * ValueSize], ValueSize, 0); // not needed: dec(length)
 end;
 
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
@@ -8329,7 +8332,7 @@ begin
   a[n] := nil; // better safe than sorry
   if aCount = nil then
     if (n and 127 <> 0) then // call ReallocMem() once every 128 deletions
-      DynArrayFakeLength(pointer(a), n)
+      PDALen(PAnsiChar(a) - _DALEN)^ := n - _DAOFF
     else
       SetLength(a, n) // ReallocMem() or finalize if n = 0
   else
@@ -8637,7 +8640,7 @@ begin
     SetLength(d, result);
   end
   else if DestCount = nil then
-    DynArrayFakeLength(pointer(d), result); // d[] capacity = count
+    PDALen(PAnsiChar(d) - _DALEN)^ := result - _DAOFF; // d[] capacity = count
 end;
 
 
