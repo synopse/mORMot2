@@ -2343,12 +2343,17 @@ type
   /// pointer to a 512-bit hash value
   PHash512 = ^THash512;
 
-  /// store a 128-bit buffer
+  /// store a 128-bit buffer, indexed as 32-bit items
   // - e.g. an AES block
   // - consumes 16 bytes of memory
   TBlock128 = array[0..3] of cardinal;
   /// pointer to a 128-bit buffer
   PBlock128 = ^TBlock128;
+
+  /// store a 1024-bit buffer, indexed as 32-bit items
+  TBlock1024 = array[0..31] of cardinal;
+  /// pointer to a 1024-bit buffer
+  PBlock1024 = ^TBlock1024;
 
   /// map an infinite array of 128-bit hash values
   // - each item consumes 16 bytes of memory

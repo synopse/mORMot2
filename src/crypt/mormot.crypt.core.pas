@@ -2588,7 +2588,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     sha: TSha384;
-    step7data: array[0..31] of cardinal;
+    step7data: TBlock1024;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -2640,7 +2640,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     sha: TSha512;
-    step7data: array[0..31] of cardinal;
+    step7data: TBlock1024;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -9642,7 +9642,7 @@ end;
 procedure THmacSha384.Init(key: pointer; keylen: integer);
 var
   i: PtrInt;
-  k0, k0xorIpad: array[0..31] of cardinal;
+  k0, k0xorIpad: TBlock1024;
 begin
   FillCharFast(k0, SizeOf(k0), 0);
   if keylen > SizeOf(k0) then
@@ -9722,7 +9722,7 @@ end;
 procedure THmacSha512.Init(key: pointer; keylen: integer);
 var
   i: PtrInt;
-  k0, k0xorIpad: array[0..31] of cardinal;
+  k0, k0xorIpad: TBlock1024;
 begin
   FillCharFast(k0, SizeOf(k0), 0); // 128 bytes (1024 bits) of internal state
   if keylen > SizeOf(k0) then

@@ -9260,7 +9260,7 @@ type
   PCAMELLIA_KEY = ^CAMELLIA_KEY;
 
   cast_key_st = record
-    data: array [0..31] of cardinal;
+    data: TBlock1024;
     short_key: integer;
   end;
 
@@ -10646,7 +10646,7 @@ type
   PRIPEMD160_CTX = ^RIPEMD160_CTX;
 
   seed_key_st = record
-    data: array [0..31] of cardinal;
+    data: TBlock1024;
   end;
 
   SEED_KEY_SCHEDULE = seed_key_st;
