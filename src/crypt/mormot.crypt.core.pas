@@ -12,7 +12,7 @@ unit mormot.crypt.core;
     - AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
     - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
     - SHA-2 SHA-3 Secure Hashing
-    - HMAC Authentication over SHA-256 CRC32C and CRC256C
+    - HMAC Authentication over SHA-256
     - PBKDF2 Key Derivation over SHA-256 and SHA-3
     - Digest/Hash to Hexadecimal Text Conversion
     - Deprecated MD4 MD5 RC4 SHA-1 Algorithms
@@ -2450,11 +2450,12 @@ function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
 
 
-{ ****************** HMAC Authentication over SHA-256 CRC32C and CRC256C }
+{ ****************** HMAC Authentication over SHA-256 }
 
-// all HMAC is available via mormot.core.secure.pas TSynSigner: we define here
-// only HMAC-SHA-256 which is used internally by this unit, and HMAC-CRC-256C
-// HMAC-CRC-32C non-cryptographic
+// other HMAC algorithms are available via mormot.core.secure.pas TSynSigner: we
+// kept here only [PBKDF2-]HMAC-SHA-256 which is used internally by this unit
+// - HMAC-CRC-256C and HMAC-CRC-32C non-cryptographic algorithms have been moved
+// to the mormot.crypt.ecc unit, which is the only one making use of those
 
 { ----------- HMAC over SHA-256 }
 
@@ -2519,95 +2520,6 @@ procedure HmacSha256(const key: TSha256Digest; const msg: RawByteString;
 /// compute the HMAC message authentication code using SHA-256 as hash function
 procedure HmacSha256(key, msg: pointer; keylen, msglen: integer;
   out result: TSha256Digest); overload;
-
-
-{ ----------- HMAC over CRC-256C }
-
-/// compute the HMAC message authentication code using crc256c as hash function
-// - HMAC over a non cryptographic hash function like crc256c is known to be
-// safe as MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
-procedure HmacCrc256c(key, msg: pointer; keylen, msglen: integer;
-  out result: THash256); overload;
-
-/// compute the HMAC message authentication code using crc256c as hash function
-// - HMAC over a non cryptographic hash function like crc256c is known to be
-// safe as MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
-procedure HmacCrc256c(const key: THash256; const msg: RawByteString; out result: THash256); overload;
-
-/// compute the HMAC message authentication code using crc256c as hash function
-// - HMAC over a non cryptographic hash function like crc256c is known to be
-// safe as MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
-procedure HmacCrc256c(const key, msg: RawByteString; out result: THash256); overload;
-
-
-{ ----------- HMAC over CRC-32C }
-
-type
-  {$A-}
-  /// compute the HMAC message authentication code using crc32c as hash function
-  // - HMAC over a non cryptographic hash function like crc32c is known to be a
-  // safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-  // - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
-  // - you may use HmacCrc32c() overloaded functions for one-step process
-  // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance via Compute()
-  {$ifdef USERECORDWITHMETHODS}
-  THmacCrc32c = record
-  {$else}
-  THmacCrc32c = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    seed: cardinal;
-    step7data: THash512Rec;
-  public
-    /// prepare the HMAC authentication with the supplied key
-    // - consider using Compute to re-use a prepared HMAC instance
-    procedure Init(key: pointer; keylen: integer); overload;
-    /// prepare the HMAC authentication with the supplied key
-    // - consider using Compute to re-use a prepared HMAC instance
-    procedure Init(const key: RawByteString); overload;
-    /// call this method for each continuous message block
-    // - iterate over all message blocks, then call Done to retrieve the HMAC
-    procedure Update(msg: pointer; msglen: integer); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// call this method for each continuous message block
-    // - iterate over all message blocks, then call Done to retrieve the HMAC
-    procedure Update(const msg: RawByteString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// computes the HMAC of all supplied message according to the key
-    function Done(NoInit: boolean = false): cardinal;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// computes the HMAC of the supplied message according to the key
-    // - expects a previous call on Init() to setup the shared key
-    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
-    // - this method is thread-safe
-    function Compute(msg: pointer; msglen: integer): cardinal;
-  end;
-  {$A+}
-
-  /// points to HMAC message authentication code using crc32c as hash function
-  PHmacCrc32c = ^THmacCrc32c;
-
-/// compute the HMAC message authentication code using crc32c as hash function
-// - HMAC over a non cryptographic hash function like crc32c is known to be a
-// safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
-function HmacCrc32c(key, msg: pointer; keylen, msglen: integer): cardinal; overload;
-
-/// compute the HMAC message authentication code using crc32c as hash function
-// - HMAC over a non cryptographic hash function like crc32c is known to be a
-// safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
-function HmacCrc32c(const key: THash256; const msg: RawByteString): cardinal; overload;
-
-/// compute the HMAC message authentication code using crc32c as hash function
-// - HMAC over a non cryptographic hash function like crc32c is known to be a
-// safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
-// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
-function HmacCrc32c(const key, msg: RawByteString): cardinal; overload;
 
 
 { ****************** PBKDF2 Key Derivation over SHA-256 and SHA-3 }
@@ -9269,7 +9181,7 @@ begin
 end;
 
 
-{ ****************** HMAC Authentication over SHA-256 CRC32C and CRC256C }
+{ ****************** HMAC Authentication over SHA-256  }
 
 { THmacSha256 }
 
@@ -9379,135 +9291,6 @@ procedure HmacSha256(const key: TSha256Digest; const msg: RawByteString;
   out result: TSha256Digest);
 begin
   HmacSha256(@key, pointer(msg), SizeOf(key), length(msg), result);
-end;
-
-
-{ HmacCrc256c }
-
-procedure crc256cmix(h1, h2: cardinal; h: PCardinalArray);
-begin
-  // see // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
-  h^[0] := h1;
-  inc(h1, h2);
-  h^[1] := h1;
-  inc(h1, h2);
-  h^[2] := h1;
-  inc(h1, h2);
-  h^[3] := h1;
-  inc(h1, h2);
-  h^[4] := h1;
-  inc(h1, h2);
-  h^[5] := h1;
-  inc(h1, h2);
-  h^[6] := h1;
-  inc(h1, h2);
-  h^[7] := h1;
-end;
-
-procedure HmacCrc256c(key, msg: pointer; keylen, msglen: integer;
-  out result: THash256);
-var
-  i: PtrInt;
-  h1, h2: cardinal;
-  k0, k0xorIpad, step7data: THash512Rec;
-begin
-  FillCharFast(k0, SizeOf(k0), 0);
-  if keylen > SizeOf(k0) then
-    crc256c(key, keylen, k0.Lo)
-  else
-    MoveFast(key^, k0, keylen);
-  for i := 0 to 15 do
-    k0xorIpad.c[i] := k0.c[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  h1 := crc32c(crc32c(0, @k0xorIpad, SizeOf(k0xorIpad)), msg, msglen);
-  h2 := crc32c(crc32c(h1, @k0xorIpad, SizeOf(k0xorIpad)), msg, msglen);
-  crc256cmix(h1, h2, @result);
-  h1 := crc32c(crc32c(0, @step7data, SizeOf(step7data)), @result, SizeOf(result));
-  h2 := crc32c(crc32c(h1, @step7data, SizeOf(step7data)), @result, SizeOf(result));
-  crc256cmix(h1, h2, @result);
-  FillCharFast(k0, SizeOf(k0), 0);
-  FillCharFast(k0xorIpad, SizeOf(k0), 0);
-  FillCharFast(step7data, SizeOf(k0), 0);
-end;
-
-procedure HmacCrc256c(const key: THash256; const msg: RawByteString;
-  out result: THash256);
-begin
-  HmacCrc256c(@key, pointer(msg), SizeOf(key), length(msg), result);
-end;
-
-procedure HmacCrc256c(const key, msg: RawByteString; out result: THash256);
-begin
-  HmacCrc256c(pointer(key), pointer(msg), length(key), length(msg), result);
-end;
-
-
-{ THmacCrc32c }
-
-procedure THmacCrc32c.Init(const key: RawByteString);
-begin
-  Init(pointer(key), length(key));
-end;
-
-procedure THmacCrc32c.Init(key: pointer; keylen: integer);
-var
-  i: PtrInt;
-  k0, k0xorIpad: THash512Rec;
-begin
-  FillCharFast(k0, SizeOf(k0), 0);
-  if keylen > SizeOf(k0) then
-    crc256c(key, keylen, k0.Lo)
-  else
-    MoveFast(key^, k0, keylen);
-  for i := 0 to 15 do
-    k0xorIpad.c[i] := k0.c[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  seed := crc32c(0, @k0xorIpad, SizeOf(k0xorIpad));
-  FillCharFast(k0, SizeOf(k0), 0);
-  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
-end;
-
-procedure THmacCrc32c.Update(msg: pointer; msglen: integer);
-begin
-  seed := crc32c(seed, msg, msglen);
-end;
-
-procedure THmacCrc32c.Update(const msg: RawByteString);
-begin
-  seed := crc32c(seed, pointer(msg), length(msg));
-end;
-
-function THmacCrc32c.Done(NoInit: boolean): cardinal;
-begin
-  result := crc32c(seed, @step7data, SizeOf(step7data));
-  if not NoInit then
-    FillcharFast(self, SizeOf(self), 0);
-end;
-
-function THmacCrc32c.Compute(msg: pointer; msglen: integer): cardinal;
-begin
-  result := crc32c(crc32c(seed, msg, msglen), @step7data, SizeOf(step7data));
-end;
-
-function HmacCrc32c(key, msg: pointer; keylen, msglen: integer): cardinal;
-var
-  mac: THmacCrc32c;
-begin
-  mac.Init(key, keylen);
-  mac.Update(msg, msglen);
-  result := mac.Done;
-end;
-
-function HmacCrc32c(const key: THash256; const msg: RawByteString): cardinal;
-begin
-  result := HmacCrc32c(@key, pointer(msg), SizeOf(key), length(msg));
-end;
-
-function HmacCrc32c(const key, msg: RawByteString): cardinal;
-begin
-  result := HmacCrc32c(pointer(key), pointer(msg), length(key), length(msg));
 end;
 
 

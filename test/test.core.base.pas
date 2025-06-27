@@ -24,6 +24,7 @@ uses
   mormot.core.datetime,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.ecc,
   mormot.core.perf,
   mormot.core.search,
   mormot.core.log,

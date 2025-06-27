@@ -266,11 +266,6 @@ procedure TTestCoreCrypto._SHA256;
     SetLength(Digests, 2);
     check(IsZero(Digests[0]));
     check(IsZero(Digests[1]));
-    Pbkdf2HmacSha256('password', 'salt', 2, Digests);
-    check(IsEqual(Digests[0], Digest.Lo));
-    check(not IsEqual(Digests[1], Digest.Lo));
-    check(Sha256DigestToString(Digests[1]) =
-      '830651afcb5c862f0b249bd031f7a67520d136470f5ec271ece91c07773253d9');
     Pbkdf2HmacSha256('password', 'salt', 4096, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) = DIG4096);
     FillZero(Digest.b);
@@ -310,18 +305,18 @@ begin
   end;
   {$endif ASMX64}
 // https://github.com/brycx/Test-Vector-Generation/blob/master/PBKDF2/pbkdf2-hmac-sha2-test-vectors.md
-  Rfc(saSha256, 'password', 'salt', 1, 20,
-      '120fb6cffcf8b32c43e7225256c4f837a86548c9', '1 round');
-  Rfc(saSha256, 'password', 'salt', 2, 20,
-      'ae4d0c95af6b46d32d0adff928f06dd02a303f8e', '2 rounds');
-  Rfc(saSha256, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
-    4096, 25, '348c89dbcbd32b2f32d814b8116e84cf2b17347ebc1800181c', 'bigger');
   Rfc(saSha224, 'password', 'salt', 1, 20,
       '3c198cbdb9464b7857966bd05b7bc92bc1cc4e6e', '1 round');
   Rfc(saSha224, 'password', 'salt', 2, 20,
       '93200ffa96c5776d38fa10abdf8f5bfc0054b971', '2 rounds');
   Rfc(saSha224, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
     4096, 25, '056c4ba438ded91fc14e0594e6f52b87e1f3690c0dc0fbc057', 'bigger');
+  Rfc(saSha256, 'password', 'salt', 1, 20,
+      '120fb6cffcf8b32c43e7225256c4f837a86548c9', '1 round');
+  Rfc(saSha256, 'password', 'salt', 2, 20,
+      'ae4d0c95af6b46d32d0adff928f06dd02a303f8e', '2 rounds');
+  Rfc(saSha256, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
+    4096, 25, '348c89dbcbd32b2f32d814b8116e84cf2b17347ebc1800181c', 'bigger');
 end;
 
 procedure TTestCoreCrypto._RC4;
@@ -404,7 +399,7 @@ procedure TTestCoreCrypto._SHA512;
       Pbkdf2HmacSha512(password, secret, rounds, dig.b);
       Check(Sha512DigestToString(dig.b) = expected);
       FillZero(dig.b);
-      sign.Pbkdf2(saSha512, password, secret, rounds, dig);
+      sign.Pbkdf2(saSha512, password, secret, rounds, @dig);
       Check(Sha512DigestToString(dig.b) = expected);
     end;
   end;
@@ -496,17 +491,17 @@ procedure TTestCoreCrypto._SHA512;
     CheckEqual(Sha256DigestToString(dig.Lo),
       '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
     HmacSha384('Jefe', 'what do ya want for nothing?', dig.b384);
-    Check(Sha384DigestToString(dig.b384) = 'af45d2e376484031617f78d2b58a6b1' +
+    CheckEqual(Sha384DigestToString(dig.b384), 'af45d2e376484031617f78d2b58a6b1' +
       'b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649');
     Pbkdf2HmacSha384('password', 'salt', 4096, dig.b384);
-    Check(Sha384DigestToString(dig.b384) = '559726be38db125bc85ed7895f6e3cf574c7a01c' +
+    CheckEqual(Sha384DigestToString(dig.b384), '559726be38db125bc85ed7895f6e3cf574c7a01c' +
       '080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626');
     Pbkdf2HmacSha512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig.b);
-    Check(Sha512DigestToString(dig.b) = 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
+    CheckEqual(Sha512DigestToString(dig.b), 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
       'f992c660a0b461ecb0dc2a79c2570941bea6a08d15d6887e79f32b132e1c134e9525eeddd744fa');
     Pbkdf2HmacSha384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK',
       'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG', 1, dig.b384);
-    Check(Sha384DigestToString(dig.b384) =
+    CheckEqual(Sha384DigestToString(dig.b384),
       '0644a3489b088ad85a0e42be3e7f82500ec189366' +
       '99151a2c90497151bac7bb69300386a5e798795be3cef0a3c803227');
     { // rounds=100000 is slow, so not tested by default
@@ -1163,7 +1158,7 @@ begin
       [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
     secret.Free;
   end;
-  for a := saSha256 to high(a) do
+  for a := low(a) to high(a) do
     Benchmark(JWT_CLASS[a].Create(
       'secret', 0, [jrcIssuer, jrcExpirationTime], []), 'mORMot');
   secret := TEccCertificateSecret.CreateNew(nil);
@@ -2179,7 +2174,6 @@ begin
   CheckEqual(SizeOf(TSha3), SHA3_CONTEXT_SIZE);
   Check(SizeOf(TSha512) > SizeOf(TSha256));
   Check(SizeOf(TSha3) > SizeOf(TSha512));
-  Check(SizeOf(TSha3) > SizeOf(THmacSha512));
   CheckEqual(SizeOf(TSha384), SizeOf(TSha384512));
   CheckEqual(SizeOf(TSha512), SizeOf(TSha384512));
   CheckEqual(SizeOf(TSha512_256), SizeOf(TSha384512));
