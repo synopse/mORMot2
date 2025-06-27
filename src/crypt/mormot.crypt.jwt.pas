@@ -447,6 +447,13 @@ type
 
 
 type
+  /// implements JSON Web Tokens using non-standard 'HS1' (HMAC SHA-1) algorithm
+  // - resulting signature size will be of 160 bits
+  TJwtHS1 = class(TJwtSynSignerAbstract)
+  protected
+    function GetAlgo: TSignAlgo; override;
+  end;
+
   /// implements JSON Web Tokens using 'HS224' (HMAC SHA-224) algorithm
   // - resulting signature size will be of 224 bits
   TJwtHS224 = class(TJwtSynSignerAbstract)
@@ -541,10 +548,11 @@ type
 
 const
   /// how TJwtSynSignerAbstract algorithms are identified in the JWT
-  // - SHA-1 will fallback to HS256 (since there will never be SHA-1 support)
+  // - SHA-1 is non-standard and may suffer from collisions so should not be used
+  // on production even if it is likely to be the fastest (especially with SHA-NI)
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   JWT_TEXT: array[TSignAlgo] of RawUtf8 = (
-    'HS256',
+    'HS1',
     'HS256',
     'HS384',
     'HS512',
@@ -557,12 +565,11 @@ const
     'HS224');
 
   /// able to instantiate any of the TJwtSynSignerAbstract instance expected
-  // - SHA-1 will fallback to TJwtHS256 (since SHA-1 will never be supported)
-  // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
+  // - SHA-1 and SHA-3 algorithms are non-standard so are for internal use only
   // - typical use is the following:
   // ! result := JWT_CLASS[algo].Create(master, round, claims, [], expirationMinutes);
   JWT_CLASS: array[TSignAlgo] of TJwtSynSignerAbstractClass = (
-    TJwtHS256,
+    TJwtHS1,
     TJwtHS256,
     TJwtHS384,
     TJwtHS512,
@@ -1476,6 +1483,12 @@ begin
   inherited Destroy;
 end;
 
+{ TJwtHSHA1}
+
+function TJwtHS1.GetAlgo: TSignAlgo;
+begin
+  result := saSha1;
+end;
 
 { TJwtHS224 }
 
