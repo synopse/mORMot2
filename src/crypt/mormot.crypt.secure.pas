@@ -767,14 +767,14 @@ const
   SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
     'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512', 'SHA3-224', 'SHA3-256',
     'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA-224');
+  SIGNER_SHA3 = [saSha3224 .. saSha3S256];
   SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
   SIGNER_DEFAULT_ALGO = saSha3S128;
-  SIGNER_SHA3 = [saSha3224 .. saSha3S256];
 
 type
   /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
-  // - default value for unspecified parameters will be SHAKE_128 with
-  // rounds=1000 and a fixed salt
+  // - default value for unspecified parameters will be SIGNER_DEFAULT_ALGO
+  // (SHAKE_128) with  rounds=1000 and a fixed salt
   // - a typical (extended) JSON to supply to TSynSigner.Pbkdf2() may be
   // ${algo:"sha-512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
   TSynSignerParams = packed record
@@ -814,8 +814,7 @@ type
     function Final: RawUtf8; overload;
     /// returns the raw computed digital signature
     // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
-    procedure Final(out aSignature: THash512Rec;
-      aNoInit: boolean = false); overload;
+    procedure Final(aSignature: PHash512Rec; aNoInit: boolean = false); overload;
     /// one-step digital signature of a buffer as lowercase hexadecimal string
     function Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
       aBuffer: pointer; aLen: integer): RawUtf8; overload;
@@ -824,7 +823,7 @@ type
       aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec;
+      aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec;
       aPartNumber: integer = 1); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure Pbkdf2(const aParams: TSynSignerParams;
@@ -4434,7 +4433,7 @@ begin
   if aSecretPbkdf2Round > 1 then
   begin
     FillZero(temp.b);
-    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, temp);
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, @temp);
     Init(aAlgo, @temp, fSignatureSize);
     if aPbkdf2Secret <> nil then
       aPbkdf2Secret^ := temp;
@@ -4454,14 +4453,14 @@ begin
   fHasher.Update(aBuffer, aLen);
 end;
 
-procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
+procedure TSynSigner.Final(aSignature: PHash512Rec; aNoInit: boolean);
 begin
-  fHasher.Final(aSignature);
+  fHasher.Final(aSignature^);
   if fBlockMax = 0 then
     exit; // SHA-3 needs no HMAC
   fHasher.Update(@fStep7data, fBlockSize);
-  fHasher.Update(@aSignature, fSignatureSize);
-  fHasher.Final(aSignature, aNoInit);
+  fHasher.Update(aSignature, fSignatureSize);
+  fHasher.Final(aSignature^, aNoInit);
   if not aNoInit then
     FillCharFast(fStep7data, fBlockSize, 0);
 end;
@@ -4470,7 +4469,7 @@ function TSynSigner.Final: RawUtf8;
 var
   sig: THash512Rec;
 begin
-  Final(sig);
+  Final(@sig);
   result := BinToHexLower(@sig, fSignatureSize);
 end;
 
@@ -4491,7 +4490,7 @@ begin
 end;
 
 procedure TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec; aPartNumber: integer);
+  aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec; aPartNumber: integer);
 var
   iter: TSynSigner;
   temp: THash512Rec;
@@ -4510,13 +4509,13 @@ begin
   if aSecretPbkdf2Round < 2 then
     exit;
   // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
-  temp := aDerivatedKey;
+  temp := aDerivatedKey^;
   for i := 2 to aSecretPbkdf2Round do
   begin
     iter := self;
     iter.Update(@temp, fSignatureSize);
-    iter.Final(temp, true);
-    XorMemory(@aDerivatedKey, @temp, fSignatureSize);
+    iter.Final(@temp, true);
+    XorMemory(pointer(aDerivatedKey), @temp, fSignatureSize);
   end;
   FillZero(temp.b);
   FillCharFast(iter.fHasher.ctxt, SizeOf(iter.fHasher.ctxt), 0);
@@ -4526,7 +4525,7 @@ end;
 procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
   out aDerivatedKey: THash512Rec);
 begin
-  Pbkdf2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, aDerivatedKey);
+  Pbkdf2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, @aDerivatedKey);
 end;
 
 procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
@@ -4568,7 +4567,7 @@ begin
       tmp.Done;
     end;
   end;
-  Pbkdf2(k.algo, k.secret, k.salt, k.rounds, aDerivatedKey);
+  Pbkdf2(k.algo, k.secret, k.salt, k.rounds, @aDerivatedKey);
   FillZero(k.secret);
 end;
 
@@ -4604,7 +4603,7 @@ begin
   pointer(result) := p;
   for i := 1 to l do
   begin
-    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p^, i);
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p, i);
     inc(PByte(p), hlen); // just concatenate each Ti
   end;
   if r <> 0 then
@@ -7193,7 +7192,7 @@ function TCryptSignerInternal.Pbkdf2(const secret, salt: RawUtf8;
 var
   s: TSynSigner;
 begin
-  s.Pbkdf2(fAlgo, secret, salt, rounds, key);
+  s.Pbkdf2(fAlgo, secret, salt, rounds, @key);
   result := s.SignatureSize;
 end;
 
@@ -7215,7 +7214,7 @@ end;
 
 function TCryptSignInternal.InternalFinal(out dig: THash512Rec): PtrInt;
 begin
-  fAlgo.Final(dig, {noinit=}false);
+  fAlgo.Final(@dig, {noinit=}false);
   result := fAlgo.SignatureSize;
 end;
 

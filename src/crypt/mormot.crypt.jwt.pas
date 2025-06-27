@@ -1457,7 +1457,7 @@ begin
     exit;
   signer := fSignPrepared; // thread-safe re-use of prepared TSynSigner
   signer.Update(pointer(headpayload), length(headpayload));
-  signer.Final(temp);
+  signer.Final(@temp);
 {  writeln('payload=',headpayload);
    writeln('sign=',bintohex(@temp,SignatureSize));
    writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
@@ -1473,7 +1473,7 @@ var
 begin
   signer := fSignPrepared;
   signer.Update(pointer(headpayload), length(headpayload));
-  signer.Final(temp);
+  signer.Final(@temp);
   result := BinToBase64Uri(@temp, fSignPrepared.SignatureSize);
 end;
 
