@@ -2481,6 +2481,7 @@ type
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSha1Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
@@ -2535,6 +2536,7 @@ type
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: THash128); overload;
@@ -2596,6 +2598,7 @@ type
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSha384Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
@@ -2647,6 +2650,7 @@ type
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSha512Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
