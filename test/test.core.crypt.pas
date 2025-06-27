@@ -45,6 +45,8 @@ type
     procedure CatalogRunCert(Context: TObject);
     procedure CatalogRunStore(Context: TObject);
     procedure RsaSlow(Context: TObject);
+    procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
+      const exp, msg: RawUtf8);
   published
     /// MD5 (and MD4) hashing functions
     procedure _MD5;
@@ -126,6 +128,18 @@ begin
   result := IsEqual(Digest, TDig);
 end;
 
+// https://github.com/brycx/Test-Vector-Generation/blob/master/PBKDF2/pbkdf2-hmac-sha2-test-vectors.md
+procedure TTestCoreCrypto.Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
+  const exp, msg: RawUtf8);
+var
+  sign: TSynSigner;
+  res: RawByteString;
+begin
+  res := sign.Pbkdf2(a, P, S, c, l);
+  CheckEqual(length(res), l);
+  CheckEqual(BinToHexLower(res), exp, msg);
+end;
+
 procedure TTestCoreCrypto._SHA1;
 
   procedure DoTest;
@@ -173,6 +187,15 @@ begin
     Include(CpuFeatures, cfSHA);
   end;
   {$endif ASMX64}
+  // see https://datatracker.ietf.org/doc/html/rfc6070
+  Rfc(saSha1, 'password', 'salt', 1, 20,
+      '0c60c80f961f0e71f3a9b524af6012062fe037a6', '1 round');
+  Rfc(saSha1, 'password', 'salt', 2, 20,
+      'ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957', '2 rounds');
+  Rfc(saSha1, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
+    4096, 25, '3d2eec4fe41c849b80c8d83662c0e44a8b291a964cf2f07038', 'bigger');
+  Rfc(saSha1, 'pass'#0'word', 'sa'#0'lt', 4096, 16,
+      '56fa6aa75548099dcc37d7f03425e0c3', 'truncated');
 end;
 
 procedure TTestCoreCrypto._SHA256;
@@ -286,6 +309,19 @@ begin
     Include(CpuFeatures, cfSHA);
   end;
   {$endif ASMX64}
+// https://github.com/brycx/Test-Vector-Generation/blob/master/PBKDF2/pbkdf2-hmac-sha2-test-vectors.md
+  Rfc(saSha256, 'password', 'salt', 1, 20,
+      '120fb6cffcf8b32c43e7225256c4f837a86548c9', '1 round');
+  Rfc(saSha256, 'password', 'salt', 2, 20,
+      'ae4d0c95af6b46d32d0adff928f06dd02a303f8e', '2 rounds');
+  Rfc(saSha256, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
+    4096, 25, '348c89dbcbd32b2f32d814b8116e84cf2b17347ebc1800181c', 'bigger');
+  Rfc(saSha224, 'password', 'salt', 1, 20,
+      '3c198cbdb9464b7857966bd05b7bc92bc1cc4e6e', '1 round');
+  Rfc(saSha224, 'password', 'salt', 2, 20,
+      '93200ffa96c5776d38fa10abdf8f5bfc0054b971', '2 rounds');
+  Rfc(saSha224, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
+    4096, 25, '056c4ba438ded91fc14e0594e6f52b87e1f3690c0dc0fbc057', 'bigger');
 end;
 
 procedure TTestCoreCrypto._RC4;
@@ -502,6 +538,19 @@ begin
     Include(CpuFeatures, cfSSE41);
   end;
   {$endif ASMX64}
+// https://github.com/brycx/Test-Vector-Generation/blob/master/PBKDF2/pbkdf2-hmac-sha2-test-vectors.md
+  Rfc(saSha384, 'password', 'salt', 1, 20,
+      'c0e14f06e49e32d73f9f52ddf1d0c5c719160923', '1 round');
+  Rfc(saSha384, 'password', 'salt', 2, 20,
+      '54f775c6d790f21930459162fc535dbf04a93918', '2 rounds');
+  Rfc(saSha384, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
+    4096, 25, '819143ad66df9a552559b9e131c52ae6c5c1b0eed18f4d283b', 'bigger');
+  Rfc(saSha512, 'password', 'salt', 1, 20,
+      '867f70cf1ade02cff3752599a3a53dc4af34c7a6', '1 round');
+  Rfc(saSha512, 'password', 'salt', 2, 20,
+      'e1d9c16aa681708a45f5c7c4e215ceb66e011a2e', '2 rounds');
+  Rfc(saSha512, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
+    4096, 25, '8c0511f4c6e597c6ac6315d8f0362e225f3c501495ba23b868', 'bigger');
 end;
 
 procedure TTestCoreCrypto._SHA3;
