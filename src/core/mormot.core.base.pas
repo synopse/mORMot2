@@ -742,8 +742,8 @@ procedure DynArrayFakeLength(arr: pointer; len: TDALen);
 
 /// low-level deletion of one dynamic array item
 // - Last=high(Values) should be > 0 - caller should set Values := nil for Last<=0
-// - caller should have made Finalize(Values[Index]) before calling
-// - used e.g. by TSecurityDescriptor.Delete()
+// - caller should have made Finalize(Values[Index]) before calling (if needed)
+// - used e.g. by TSecurityDescriptor.Delete() or TKerberosKeyTab.Delete()
 procedure DynArrayFakeDelete(var Values; Index, Last, ValueSize: PtrUInt);
 
 {$ifndef CPUARM}

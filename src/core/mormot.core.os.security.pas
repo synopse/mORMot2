@@ -1936,6 +1936,8 @@ type
     // - returns the number of entries added to the main list
     function AddFromFile(const aFile: TFileName;
       const Principals: array of RawUtf8): integer;
+    /// remove an entry in the internal KeyTab list
+    function Delete(aIndex: PtrUInt): boolean;
     /// persist this KeyTab list as a memory buffer
     function SaveToBinary: RawByteString;
     /// persist this KeyTab list as a local file
@@ -5014,7 +5016,7 @@ begin
   n := length(dest^);
   if index >= n then
     exit;
-  Finalize(dest^[index]);
+  Finalize(dest^[index]); // avoid GPF
   dec(n);
   if n = 0 then
   begin
@@ -5333,6 +5335,23 @@ begin
   finally
     another.Free;
   end;
+end;
+
+function TKerberosKeyTab.Delete(aIndex: PtrUInt): boolean;
+var
+  n: PtrUInt;
+begin
+  result := false;
+  n := length(fEntry);
+  if aIndex >= n then
+    exit;
+  result := true;
+  Finalize(fEntry[aIndex]); // avoid GPF
+  dec(n);
+  if n = 0 then
+    Clear
+  else
+    DynArrayFakeDelete(fEntry, aIndex, n, SizeOf(fEntry[n]));
 end;
 
 function TKerberosKeyTab.SaveToBinary: RawByteString;
