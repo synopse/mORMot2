@@ -3563,8 +3563,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an unsigned number as text to the internal buffer
     procedure AddU(v: PtrUInt);
+    /// write a 16-bit value as network/BigEndian binary
+    procedure Add16BigEndian(v: cardinal);
+    /// write a 32-bit value as network/BigEndian binary
+    procedure Add32BigEndian(v: cardinal);
     /// finalize the Add() temporary storage into a new RawUtf8 (or AnsiString)
-    procedure Done(var Dest: RawUtf8; CodePage: cardinal = CP_UTF8);
+    procedure Done(var Dest; CodePage: cardinal = CP_UTF8);
     /// could be called if Size > 0 to remove the last char in the output buffer
     procedure CancelLastChar;
       {$ifdef HASINLINE}inline;{$endif}
@@ -11863,7 +11867,19 @@ begin
   Add(P, @t[23] - P);
 end;
 
-procedure TSynTempAdder.Done(var Dest: RawUtf8; CodePage: cardinal);
+procedure TSynTempAdder.Add16BigEndian(v: cardinal);
+begin
+  v := bswap16(v);
+  Add(@v, 2);
+end;
+
+procedure TSynTempAdder.Add32BigEndian(v: cardinal);
+begin
+  v := bswap32(v);
+  Add(@v, 4);
+end;
+
+procedure TSynTempAdder.Done(var Dest; CodePage: cardinal);
 begin
   FastSetStringCP(Dest, Store.buf, Store.added, CodePage);
   Store.Done;
