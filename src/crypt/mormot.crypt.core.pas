@@ -1751,7 +1751,7 @@ type
     constructor Create; overload; override;
     /// initialize the internal secret key, using Operating System entropy
     // - entropy is gathered from the OS, using GetEntropy() method
-    // - you can specify how many Pbkdf2HmacSha512 rounds are applied to the
+    // - you can specify how many PBKDF2-SHA-3 rounds are applied to the
     // OS-gathered entropy - the higher, the better, but also the slower
     // - internal private key would be re-seeded after ReseedAfterBytes
     // bytes (32MB by default) are generated, using GetEntropy()
@@ -1799,7 +1799,7 @@ type
     // - if set to 0 - e.g. for TSystemPrng - no seeding will occur
     property SeedAfterBytes: PtrUInt
       read fSeedAfterBytes;
-    /// how many Pbkdf2HmacSha512 count is applied by Seed to the entropy
+    /// how many PBKDF2-SHA-3 iterations are applied by Seed to the entropy
     // - default is 16 rounds, which is more than enough for entropy gathering,
     // since GetEntropy output comes from a SHAKE-256 generator in XOF mode
     property SeedPbkdf2Round: cardinal
@@ -7931,16 +7931,16 @@ begin
     entropy := GetEntropy(128, fSeedEntropySource);
     // combine the new state with the previous state
     FastSetRawByteString(previous, @fAes, SizeOf(fAes));
-    // derivate 512-bit of secret using PBKDF2-HMAC-512
-    Pbkdf2HmacSha512(entropy, previous, fSeedPbkdf2Round, key.b);
+    // derivate 512-bit of secret using PBKDF2-SHA3-512
+    Pbkdf2Sha3(SHA3_512, entropy, previous, fSeedPbkdf2Round, @key.b);
     // initialize the new thread-safe state
     fSafe.Lock;
     try
       // paranoid anti-forensic
       fAes.Done;
-      // AES-CTR key is derivated from low 128-256 bits of PBKDF2-HMAC-512 output
+      // AES-CTR key is derivated from low 128-256 bits of PBKDF2-SHA3-512 output
       fAes.EncryptInit(key.Lo, fAesKeySize);
-      // IV is weakly derivated from high 256-bit of PBKDF2-HMAC-512 output
+      // IV is weakly derivated from high 256-bit of PBKDF2-SHA3-512 output
       DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi, SizeOf(key.Hi));
       // reset seeding
       fBytesSinceSeed := 0;
