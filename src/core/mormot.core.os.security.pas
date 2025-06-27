@@ -5151,7 +5151,7 @@ var
 
   function Read32(var v: integer): boolean;
   begin
-    v := PCardinal(P)^;
+    v := PCardinal(P)^; // may read up to 4 bytes after end - fine with strings
     if bigendian then
       v := bswap32(v);
     inc(P, 4);
@@ -5188,7 +5188,7 @@ begin
     exit;
   bigendian := v = 2;
   repeat
-    if not Read32(siz) then
+    if not Read32(siz) then // entry size
       exit;
     if siz = 0 then
       break; // end of file
@@ -5200,11 +5200,13 @@ begin
       continue;
     end;
     pendbak := PEnd;
-    PEnd := P + siz;
-    if PtrUInt(PEnd) > PtrUInt(pendbak) then
+    PEnd := P + siz; // paranoid: avoid overflow above the entry size
+    if (PtrUInt(PEnd) > PtrUInt(pendbak)) or
+       not Read16(ncomp) then
       exit;
-    if not Read16(ncomp) or
-       (ncomp = 0) or
+    if not bigendian then
+      inc(ncomp); // minus 1 if version 0x501
+    if (ncomp = 0) or
        not ReadOctStr(realm) or
        not ReadOctStr(e.Principal) then
       exit;
@@ -5219,7 +5221,7 @@ begin
     e.Principal := Join([e.Principal, '@', realm]);
     e.NameType := 0;
     if bigendian then
-      if not Read32(e.NameType) then
+      if not Read32(e.NameType) then // not present if version 0x501
         exit;
     if not Read32(v) or
        not Read8(e.KeyVersion) or
