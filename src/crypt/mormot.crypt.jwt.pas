@@ -445,6 +445,13 @@ type
 
 
 type
+  /// implements JSON Web Tokens using 'HS224' (HMAC SHA-224) algorithm
+  // - resulting signature size will be of 224 bits
+  TJwtHS224 = class(TJwtSynSignerAbstract)
+  protected
+    function GetAlgo: TSignAlgo; override;
+  end;
+
   /// implements JSON Web Tokens using 'HS256' (HMAC SHA-256) algorithm
   // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.2
   // - our HMAC SHA-256 implementation used is thread safe, and very fast
@@ -544,7 +551,8 @@ const
     'S3384',
     'S3512',
     'S3S128',
-    'S3S256');
+    'S3S256',
+    'HS224');
 
   /// able to instantiate any of the TJwtSynSignerAbstract instance expected
   // - SHA-1 will fallback to TJwtHS256 (since SHA-1 will never be supported)
@@ -561,7 +569,8 @@ const
     TJwtS3384,
     TJwtS3512,
     TJwtS3S128,
-    TJwtS3S256);
+    TJwtS3S256,
+    TJwtHS224);
 
 
 { ************** JWT Implementation of ES256 Algorithm }
@@ -1455,6 +1464,13 @@ begin
   inherited Destroy;
 end;
 
+
+{ TJwtHS224 }
+
+function TJwtHS224.GetAlgo: TSignAlgo;
+begin
+  result := saSha224;
+end;
 
 { TJwtHS256 }
 
