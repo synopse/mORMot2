@@ -2746,7 +2746,7 @@ begin
   result := 0;
   if acl = nil then
     exit;
-  hdr := pointer(p);
+  hdr := pointer(p); // can be called with p=nil just to compute the length
   result := SizeOf(hdr^);
   if hdr <> nil then // need to write ACL header
     inc(p, result);
@@ -3913,7 +3913,7 @@ var
   f: cardinal;
   pf: PCardinal;
 begin
-  hdr := pointer(dest);
+  hdr := pointer(dest); // can be called with dest=nil to compute the length
   inc(dest, 8); // ACE header + Mask
   if AceType in satObject then
   begin
@@ -4744,7 +4744,7 @@ var
 begin
   p := FastNewRawByteString(RawByteString(result),
     SizeOf(hdr^) + length(Owner) + length(Group) +
-    SecAclToBin(nil, Sacl) + SecAclToBin(nil, Dacl));
+    SecAclToBin(nil, Sacl) + SecAclToBin(nil, Dacl)); // nil to compute length
   hdr := pointer(p);
   FillCharFast(hdr^, SizeOf(hdr^), 0);
   hdr^.Revision := 1;
@@ -5126,8 +5126,12 @@ end;
 
 procedure TKerberosKeyTab.Clear;
 begin
-  fEntry := nil;
+  if self <> nil then
+    fEntry := nil;
 end;
+
+// see https://vfssoft.com/en/blog/mit_kerberos_keytab_file_format and
+// https://web.mit.edu/kerberos/krb5-latest/doc/formats/keytab_file_format.html
 
 function TKerberosKeyTab.LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
 var
@@ -5166,7 +5170,8 @@ var
     if not Read16(len) or
        (PtrUInt(P + len) > PtrUInt(PEnd)) then
       exit;
-    FastSetString(RawUtf8(v), P, len);
+    if self <> nil then // no transient memory alloc from BufferIsKeyTab()
+      FastSetString(RawUtf8(v), P, len);
     inc(P, len);
     result := true;
   end;
@@ -5177,6 +5182,7 @@ var
   realm, u: RawUtf8;
   e: TKerberosKeyEntry;
 begin
+  // note: may be called with self = nil to implement BufferIsKeyTab()
   Clear;
   n := 0;
   result := false;
@@ -5191,7 +5197,7 @@ begin
     if not Read32(siz) then // entry size
       exit;
     if siz = 0 then
-      break; // end of file
+      break; // may happen to notify the end of file (but not from kutil)
     if siz < 0 then // this entry has been deleted
     begin
       inc(P, -siz);
@@ -5216,9 +5222,11 @@ begin
         break;
       if not ReadOctStr(u) then
         exit;
-      e.Principal := Join([e.Principal, '/', u]);
+      if self <> nil then
+        e.Principal := Join([e.Principal, '/', u]);
     until false;
-    e.Principal := Join([e.Principal, '@', realm]);
+    if self <> nil then
+      e.Principal := Join([e.Principal, '@', realm]);
     e.NameType := 0;
     if bigendian then
       if not Read32(e.NameType) then // not present if version 0x501
@@ -5235,16 +5243,18 @@ begin
         exit;
     P := PEnd;
     PEnd := pendbak;
-    if e.Principal <> '' then // we expect non void principals
+    if (self <> nil) and        // not from BufferIsKeyTab()
+       (e.Principal <> '') then // we expect non void principals
     begin
       if n = length(fEntry) then
         SetLength(fEntry, NextGrow(n));
       fEntry[n] := e;
       inc(n);
+      Finalize(e);
     end;
-    Finalize(e);
   until P = PEnd;
-  DynArrayFakeLength(fEntry, n);
+  if self <> nil then // not from BufferIsKeyTab()
+    DynArrayFakeLength(fEntry, n);
   result := true;
 end;
 
