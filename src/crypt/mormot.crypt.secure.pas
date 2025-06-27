@@ -657,7 +657,11 @@ type
     hfSHA512_256,
     hfSHA3_256,
     hfSHA3_512,
-    hfSHA224);
+    hfSHA224,
+    hfSHA3_224,
+    hfSHA3_384,
+    hfShake128,
+    hfShake256);
 
   /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgos = set of THashAlgo;
@@ -792,14 +796,38 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
+  /// TStreamRedirect with SHA-3-224 cryptographic hashing
+  TStreamRedirectSha3_224 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
   /// TStreamRedirect with SHA-3-256 cryptographic hashing
   TStreamRedirectSha3_256 = class(TStreamRedirectSynHasher)
   public
     class function GetAlgo: THashAlgo; override;
   end;
 
+  /// TStreamRedirect with SHA-3-384 cryptographic hashing
+  TStreamRedirectSha3_384 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
   /// TStreamRedirect with SHA-3-512 cryptographic hashing
   TStreamRedirectSha3_512 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-3 Shake128 cryptographic hashing
+  TStreamRedirectShake128 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-3 Shake256 cryptographic hashing
+  TStreamRedirectShake256 = class(TStreamRedirectSynHasher)
   public
     class function GetAlgo: THashAlgo; override;
   end;
@@ -832,15 +860,22 @@ const
     TStreamRedirectSha512_256, // hfSHA512_256
     TStreamRedirectSha3_256,   // hfSHA3_256
     TStreamRedirectSha3_512,   // hfSHA3_512
-    TStreamRedirectSha224);    // hfSHA224
+    TStreamRedirectSha224,     // hfSHA224
+    TStreamRedirectSha3_224,   // hfSHA3_224
+    TStreamRedirectSha3_384,   // hfSHA3_384
+    TStreamRedirectShake128,   // hfShake128
+    TStreamRedirectShake256);  // hfShake256)
+
   /// the standard text of a THashAlgo (in uppercase characters)
   HASH_TXT: array[THashAlgo] of RawUtf8 = (
     'MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-512/256',
-    'SHA3-256', 'SHA3-512', 'SHA-224');
+    'SHA3-256', 'SHA3-512', 'SHA-224', 'SHA3-224', 'SHA3-384',
+    'SHAKE128', 'SHAKE256');
   /// the standard text of a THashAlgo (in lowercase characters)
   HASH_TXT_LOWER: array[THashAlgo] of RawUtf8 = (
     'md5', 'sha-1', 'sha-256', 'sha-384', 'sha-512', 'sha-512/256',
-    'sha3-256', 'sha3-512', 'sha-224');
+    'sha3-256', 'sha3-512', 'sha-224', 'sha3-224', 'sha3-384',
+    'shake128', 'shake256');
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
@@ -936,7 +971,11 @@ const
     SizeOf(THash256),      // 32 bytes for hfSHA512_256
     SizeOf(THash256),      // 32 bytes for hfSHA3_256
     SizeOf(THash512),      // 64 bytes for hfSHA3_512
-    SizeOf(THash224));     // 28 bytes for hfSHA224
+    SizeOf(THash224),      // 28 bytes for hfSHA224
+    SizeOf(THash224),      // 28 bytes for hfSHA3_224
+    SizeOf(THash384),      // 48 bytes for hfSHA3_384
+    SizeOf(THash128),      // 16 bytes for hfShake128
+    SizeOf(THash256));     // 32 bytes for hfShake256
 
   /// map the file extension text of any THashAlgo digest
   // - TextToHashAlgo() is able to recognize those values
@@ -949,7 +988,11 @@ const
     '.sha512-256', // hfSHA512_256
     '.sha3-256',   // hfSHA3_256
     '.sha3-512',   // hfSHA3_512
-    '.sha224');    // hfSHA224
+    '.sha224',     // hfSHA224
+    '.sha3-224',   // hfSHA3_224
+    '.sha3-384',   // hfSHA3_384
+    '.shake128',   // hfShake128
+    '.shake256');  // hfShake256
 
 
 { **************** Client and Server HTTP Access Authentication }
@@ -3320,7 +3363,11 @@ const
     '2.16.840.1.101.3.4.2.6',   // hfSHA512_256
     '2.16.840.1.101.3.4.2.8',   // hfSHA3_256
     '2.16.840.1.101.3.4.2.10',  // hfSHA3_512
-    '2.16.840.1.101.3.4.2.4');  // hfSHA224
+    '2.16.840.1.101.3.4.2.4',   // hfSHA224
+    '2.16.840.1.101.3.4.2.7',   // hfSHA3_224
+    '2.16.840.1.101.3.4.2.9',   // hfSHA3_384
+    '2.16.840.1.101.3.4.2.11',  // hfShake128
+    '2.16.840.1.101.3.4.2.12'); // hfShake256
 
   /// the OID of all ECC public keys (X962)
   // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
@@ -4008,6 +4055,20 @@ begin
   result := mormot.core.text.HexToBin(pointer(HexaHash), @Digest.Bin, HASH_SIZE[Digest.Algo]);
 end;
 
+{ TStreamRedirectShake256 }
+
+class function TStreamRedirectShake256.GetAlgo: THashAlgo;
+begin
+  result := hfShake256;
+end;
+
+{ TStreamRedirectShake128 }
+
+class function TStreamRedirectShake128.GetAlgo: THashAlgo;
+begin
+  result := hfShake128;
+end;
+
 { TStreamRedirectSha3_512 }
 
 class function TStreamRedirectSha3_512.GetAlgo: THashAlgo;
@@ -4015,11 +4076,25 @@ begin
   result := hfSHA3_512;
 end;
 
+{ TStreamRedirectSha3_224 }
+
+class function TStreamRedirectSha3_224.GetAlgo: THashAlgo;
+begin
+  result := hfSHA3_224;
+end;
+
 { TStreamRedirectSha3_256 }
 
 class function TStreamRedirectSha3_256.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_256;
+end;
+
+{ TStreamRedirectSha3_384 }
+
+class function TStreamRedirectSha3_384.GetAlgo: THashAlgo;
+begin
+  result := hfSHA3_384;
 end;
 
 { TStreamRedirectSha512 }

@@ -1716,13 +1716,13 @@ begin
     P := pointer(buf);
     inc(P, unalign);
     FillIncreasing(pointer(P), $12345670, HASHESMAX shr 2);
-    Check(Hash32Test(P, @crc32cfast, exp321));
-    Check(Hash32Test(P, @crc32c, exp322));
-    Check(Hash32Test(P, @xxHash32, exp323));
+    Check(Hash32Test(P, @crc32cfast,    exp321));
+    Check(Hash32Test(P, @crc32c,        exp322));
+    Check(Hash32Test(P, @xxHash32,      exp323));
     if Assigned(AesNiHash32) then
       Check(Hash32Test(P, @AesNiHash32, exp324));
-    Check(Hash32Test(P, @crc32fast, exp325));
-    Check(Hash64Test(P, @crc32cTwice, exp641));
+    Check(Hash32Test(P, @crc32fast,     exp325));
+    Check(Hash64Test(P, @crc32cTwice,   exp641));
     if Assigned(AesNiHash64) then
       Check(Hash64Test(P, @AesNiHash64, exp642));
     Check(Hash128Test(P, @crc32c128, msg), msg{%H-});
