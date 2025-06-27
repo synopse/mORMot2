@@ -407,6 +407,10 @@ type
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8;
       const signature: RawByteString; var Jwt: TJwtContent); override;
+    function GetSignatureSize: integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetSignatureAlgo: TSignAlgo;
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize the JWT processing using SHA3 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -430,14 +434,12 @@ type
     /// low-level read access to the internal signature structure
     property SignPrepared: TSynSigner
       read fSignPrepared;
-    {$ifndef ISDELPHI2009} // avoid Delphi 2009 F2084 Internal Error: DT5830
-    /// the digital signature size, in byte
+    /// the digital signature size, in bytes
     property SignatureSize: integer
-      read fSignPrepared.SignatureSize;
+      read GetSignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
     property SignatureAlgo: TSignAlgo
-      read fSignPrepared.Algo;
-    {$endif ISDELPHI2009}
+      read GetSignatureAlgo;
   end;
 
   /// meta-class for TJwtSynSignerAbstract creations
@@ -1408,6 +1410,16 @@ end;
 { **************** JWT Implementation of HS* and S3* Algorithms }
 
 { TJwtSynSignerAbstract }
+
+function TJwtSynSignerAbstract.GetSignatureAlgo: TSignAlgo;
+begin
+  result := fSignPrepared.Algo
+end;
+
+function TJwtSynSignerAbstract.GetSignatureSize: integer;
+begin
+  result := fSignPrepared.SignatureSize;
+end;
 
 constructor TJwtSynSignerAbstract.Create(const aSecret: RawUtf8;
   aSecretPbkdf2Round: integer; aClaims: TJwtClaims;
