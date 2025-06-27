@@ -1950,7 +1950,15 @@ type
       read fFileName;
   end;
 
+/// internal comparison of two KeyTab entries as in a TKerberosKeyTab storage
 function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
+
+/// check if a file is readable and is a valid Kerberos keytab
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+
+/// check if a buffer contains a valid Kerberos keytab
+// - redirect to TKerberosKeyTab.LoadFromBuffer() from this unit
+function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -5119,6 +5127,16 @@ begin
             (A.NameType   = B.NameType) and
             (SortDynArrayRawByteString(A.Principal, B.Principal) = 0) and
             (SortDynArrayRawByteString(A.Key, B.Key) = 0);
+end;
+
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+begin
+  result := BufferIsKeyTab(StringFromFile(aKeyTab));
+end;
+
+function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
+begin
+  result := TKerberosKeyTab(nil).LoadFromBinary(aKeyTab); // fast with self=nil
 end;
 
 

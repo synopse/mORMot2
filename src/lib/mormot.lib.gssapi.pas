@@ -33,7 +33,8 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.unicode; // e.g. for Split/SplitRight/IdemPChar
+  mormot.core.os.security, // for FileIsKeyTab()
+  mormot.core.unicode;     // e.g. for Split/SplitRight/IdemPChar
 
 
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
@@ -608,9 +609,6 @@ type
 // - this function is thread-specific and should be done on all threads, e.g.
 // via TServerSspiKeyTab.PrepareKeyTab
 function ServerForceKeytab(const aKeytab: TFileName): boolean;
-
-/// wild guess if a file is readable and has a SSPI keytab 16-bit header
-function FileIsKeyTab(const aKeytab: TFileName): boolean;
 
 const
   /// the API available on this system to implement Kerberos
@@ -1392,21 +1390,10 @@ begin
     not GSS_ERROR(GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab)));
 end;         // = gsskrb5_register_acceptor_identity()
 
-function FileIsKeyTab(const aKeytab: TFileName): boolean;
-var
-  buf: RawByteString;
-begin
-  // https://web.mit.edu/kerberos/krb5-latest/doc/formats/keytab_file_format.html
-  buf := StringFromFile(aKeyTab);
-  result := (length(buf) > 2) and
-            (buf[1] = #5) and
-            (buf[2] in [#1, #2]); // rough header detection
-end;
-
 
 { TServerSspiKeyTab }
 
-threadvar
+threadvar // efficient API call once per thread, with proper hot reload
   ServerSspiKeyTabSequence: integer;
 
 procedure TServerSspiKeyTab.PrepareKeyTab;
@@ -1437,7 +1424,7 @@ begin
     if (ft <> fKeyTabTime) or            // ensure don't reload if not changed
        (fs <> fKeyTabSize) or
        (fKeyTab <> aKeyTab) then
-      if FileIsKeyTab(aKeyTab) then // rough check if the new file seems correct
+      if FileIsKeyTab(aKeyTab) then // ensure this new file is a valid keytab
       begin
         fSafe.Lock;
         fKeyTab := aKeyTab;
