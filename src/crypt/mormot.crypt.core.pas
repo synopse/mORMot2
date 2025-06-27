@@ -2452,19 +2452,17 @@ function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
 
 { ****************** HMAC Authentication over SHA-256 }
 
-// other HMAC algorithms are available via mormot.core.secure.pas TSynSigner: we
-// kept here only [PBKDF2-]HMAC-SHA-256 which is used internally by this unit
-// - HMAC-CRC-256C and HMAC-CRC-32C non-cryptographic algorithms have been moved
-// to the mormot.crypt.ecc unit, which is the only one making use of those
+// other HMAC algorithms are available via mormot.core.secure.pas TSynSigner:
+// we kept here only HMAC-SHA-256 which is used internally by this unit
 
-{ ----------- HMAC over SHA-256 }
+// HMAC-CRC-256C and HMAC-CRC-32C non-cryptographic algorithms have been moved
+// to the mormot.crypt.ecc unit, which is the only one making use of those
 
 type
   /// compute the HMAC message authentication code using SHA-256 as hash function
   // - you may use HmacSha256() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  // - can optionally return SHA-224 content instead of SHA-256
   {$ifdef USERECORDWITHMETHODS}
   THmacSha256 = record
   {$else}
@@ -2473,14 +2471,12 @@ type
   private
     sha: TSha256;
     step7data: THash512Rec;
-    digLen: integer; // support both SHA-256 and SHA-224 hash function
   public
-    /// prepare the SHA-256 or SHA-224 HMAC authentication with the supplied key
+    /// prepare the SHA-256 HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
     // key using Init, then copy this THmacSha256 instance to a local variable,
     // and use this local thread-safe copy for actual HMAC computing
-    // - SHA-224 is just a truncated SHA-256 with difference initial values
-    procedure Init(key: pointer; keylen: integer; asSha224: boolean = false);
+    procedure Init(key: pointer; keylen: integer);
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer); overload;
@@ -2488,14 +2484,16 @@ type
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: THash128); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: THash256); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: RawByteString); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// computes the HMAC of all supplied message according to the key
-    // - only 224-bit may be written to result after Init(asSha224=true)
     procedure Done(out result: TSha256Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
@@ -2523,6 +2521,9 @@ procedure HmacSha256(key, msg: pointer; keylen, msglen: integer;
 
 
 { ****************** PBKDF2 Key Derivation over SHA-256 and SHA-3 }
+
+// other PBKDF2 algorithms are available via mormot.core.secure.pas TSynSigner:
+// we kept here only SHA-256 and SHA-3  which is used internally by this unit
 
 /// compute the PBKDF2 derivation of a password using HMAC over SHA-256
 // - this function expect the resulting key length to match SHA-256 digest size
@@ -2857,7 +2858,7 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 /// SHA-256 hash calculation with padding if shorter than 255 bytes
 // - WARNING: this algorithm is DEPRECATED, and supplied only for backward
 // compatibility of existing code (CryptDataForCurrentUser or TProtocolAes)
-// - use Pbkdf2HmacSha256() or similar functions for safer password derivation
+// - use TSynSigner or Pbkdf2HmacSha256() for safer password derivation
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 
 
@@ -9185,7 +9186,7 @@ end;
 
 { THmacSha256 }
 
-procedure THmacSha256.Init(key: pointer; keylen: integer; asSha224: boolean);
+procedure THmacSha256.Init(key: pointer; keylen: integer);
 var
   i: PtrInt;
   k0, k0xorIpad: THash512Rec;
@@ -9199,16 +9200,7 @@ begin
     k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  if asSha224 then
-  begin
-    SHA.Init224;
-    digLen := SizeOf(THash224);
-  end
-  else
-  begin
-    SHA.Init;
-    digLen := SizeOf(THash256);
-  end;
+  SHA.Init;
   SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
   FillZero(k0.b);
   FillZero(k0xorIpad.b);
@@ -9235,18 +9227,12 @@ begin
 end;
 
 procedure THmacSha256.Done(out result: TSha256Digest; NoInit: boolean);
-var
-  d: TSha256Digest;
 begin
-  SHA.Final(d, {NoInit=}true);
-  if digLen = SizeOf(THash224) then
-    SHA.Init224
-  else
-    SHA.Init;
+  SHA.Final(result, {NoInit=}true);
+  SHA.Init;
   SHA.Update(@step7data, SizeOf(step7data));
-  SHA.Update(@d, digLen); // may be truncated for HMAC-SHA-224
-  SHA.Final(d, NoInit);
-  MoveFast(d, result, digLen);
+  SHA.Update(@result, SizeOf(result));
+  SHA.Final(result, NoInit);
   if not NoInit then
     FillZero(step7data.b);
 end;
@@ -9256,7 +9242,7 @@ var
   res: THash256;
 begin
   Done(res, NoInit);
-  BinToHexLower(@res, digLen, result);
+  BinToHexLower(@res, SizeOf(res), result);
   if not NoInit then
     FillZero(res);
 end;
@@ -9325,39 +9311,6 @@ begin
   FillcharFast(first, SizeOf(first), 0);
   FillcharFast(mac, SizeOf(mac), 0);
   FillZero(tmp);
-end;
-
-procedure Pbkdf2HmacSha256Array(const password, salt: RawByteString; count: integer;
-  var result: THash256DynArray; const saltdefault: RawByteString);
-var
-  n, i: integer;
-  tmp: TSha256Digest;
-  mac, first: THmacSha256; // re-use SHA context for best performance
-begin
-  first.Init(pointer(password), length(password));
-  for n := 0 to high(result) do
-  begin
-    // U1 = PRF(Password, Salt || INT_32_BE(i))
-    mac := first;
-    if salt = '' then
-      mac.Update(saltdefault)
-    else
-      mac.Update(salt);
-    PInteger(@tmp)^ := bswap32(n + 1);
-    mac.Update(@tmp, 4);
-    mac.Done(tmp);
-    result[n] := tmp;
-    for i := 2 to count do
-    begin
-      mac := first;
-      mac.sha.Update(@tmp, SizeOf(tmp));
-      mac.Done(tmp, true);
-      XorMemoryPtrInt(@result[n], @tmp, SizeOf(result[n]) shr POINTERSHR);
-    end;
-  end;
-  FillZero(tmp);
-  FillcharFast(mac, SizeOf(mac), 0);
-  FillcharFast(first, SizeOf(first), 0);
 end;
 
 procedure Pbkdf2Sha3(algo: TSha3Algo; const password, salt: RawByteString;
@@ -10542,8 +10495,6 @@ var
 begin
   result := instance.FullStr(Algo, Buffer, Len, DigestBits);
 end;
-
-
 
 
 { ****************** Deprecated Weak AES/SHA Process }

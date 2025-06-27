@@ -793,8 +793,8 @@ type
   private
     fAlgo: TSignAlgo;
     fSignatureSize, fBlockMax, fBlockSize: byte;
-    fHasher: TSynHasher; // to implement HMAC
-    fStep7data: TBlock1024;
+    fHasher: TSynHasher;    // raw hash algorithm for the HMAC process
+    fStep7data: TBlock1024; // pre-computed salt for Final() step
   public
     /// initialize the digital HMAC/SHA-3 signing context with some secret text
     procedure Init(aAlgo: TSignAlgo; const aSecret: RawUtf8); overload;
@@ -4003,7 +4003,7 @@ begin
       begin
         PSha256(@ctxt)^.Final(aDigest.Lo, {aNoInit=}true);
         if not aNoInit then
-          PSha256(@ctxt)^.Init224; // but needs its own initialization
+          PSha256(@ctxt)^.Init224; // but it needs its own re-initialization
       end;
     hfSHA256:
       PSha256(@ctxt)^.Final(aDigest.Lo, aNoInit);
@@ -4774,7 +4774,7 @@ begin
             AppendShortCharSafe('_', @tmp, #15);
     end;
     inc(P);
-  until false;
+  until tmp[0] > #10;
   result := tmp[0] in [#3 .. #10];
 end;
 
