@@ -531,121 +531,6 @@ type
   expects JSON support, which requires mormot.core.json }
 
 type
-  /// the HMAC/SHA-1 HMAC/SHA-2 and SHA-3 algorithms known by TSynSigner
-  // - HMAC/SHA-1 is considered unsafe, HMAC/SHA-2 are well proven, and
-  // SHA-3 is newer and strong, including HMAC, so a good candidate for safety
-  TSignAlgo = (
-    saSha1,
-    saSha256,
-    saSha384,
-    saSha512,
-    saSha3224,
-    saSha3256,
-    saSha3384,
-    saSha3512,
-    saSha3S128,
-    saSha3S256,
-    saSha224);
-
-const
-  /// the standard text of a TSignAlgo
-  SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
-    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512', 'SHA3-224', 'SHA3-256',
-    'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA-224');
-  SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
-  SIGNER_DEFAULT_ALGO = saSha3S128;
-  SIGNER_SHA3 = [saSha3224 .. saSha3S256];
-
-type
-  /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
-  // - default value for unspecified parameters will be SHAKE_128 with
-  // rounds=1000 and a fixed salt
-  // - a typical (extended) JSON to supply to TSynSigner.Pbkdf2() may be
-  // ${algo:"sha-512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
-  TSynSignerParams = packed record
-    algo: TSignAlgo;
-    secret, salt: RawUtf8;
-    rounds: integer;
-  end;
-
-  /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
-  // - used e.g. to implement TJwtSynSignerAbstract
-  {$ifdef USERECORDWITHMETHODS}
-  TSynSigner = record
-  {$else}
-  TSynSigner = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    ctxt: packed array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all
-  public
-    /// the size, in bytes, of the digital signature of this algorithm
-    // - potential values are 20 (for SHA-1), 28, 32, 48 and 64 (for SHA-512)
-    SignatureSize: integer;
-    /// the algorithm used for digitial signature
-    Algo: TSignAlgo;
-    /// initialize the digital HMAC/SHA-3 signing context with some secret text
-    procedure Init(aAlgo: TSignAlgo; const aSecret: RawUtf8); overload;
-    /// initialize the digital HMAC/SHA-3 signing context with some secret binary
-    procedure Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer); overload;
-    /// initialize the digital HMAC/SHA-3 signing context with PBKDF2 safe
-    // iterative key derivation of a secret salted text
-    procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round: integer; aPbkdf2Secret: PHash512Rec = nil); overload;
-    /// process some message content supplied as memory buffer
-    procedure Update(aBuffer: pointer; aLen: integer); overload;
-    /// process some message content supplied as string
-    procedure Update(const aBuffer: RawByteString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the computed digital signature as lowercase hexadecimal text
-    function Final: RawUtf8; overload;
-    /// returns the raw computed digital signature
-    // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
-    procedure Final(out aSignature: THash512Rec;
-      aNoInit: boolean = false); overload;
-    /// one-step digital signature of a buffer as lowercase hexadecimal string
-    function Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
-      aBuffer: pointer; aLen: integer): RawUtf8; overload;
-    /// one-step digital signature of a buffer with PBKDF2 derivation
-    function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
-    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec;
-      aPartNumber: integer = 1); overload;
-    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    procedure Pbkdf2(const aParams: TSynSignerParams;
-      out aDerivatedKey: THash512Rec); overload;
-    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    // - accept as input a TSynSignerParams serialized as JSON object e.g.
-    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
-    procedure Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
-      out aDerivatedKey: THash512Rec;
-      const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
-      aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
-    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    // - accept as input a TSynSignerParams serialized as JSON object e.g.
-    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
-    procedure Pbkdf2(const aParamsJson: RawUtf8;
-      out aDerivatedKey: THash512Rec;
-      const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
-      aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
-    /// fill a buffer with the PBKDF2 deriviation, following RFC 2898 5.2
-    // - in respect to other Pbkdf2() methods, the length of the derived
-    // key is unbounded and could be bigger than the TSignAlgo digest size
-    function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString; overload;
-    /// prepare a TAes object with the key derivated via a Pbkdf2() call
-    // - aDerivatedKey is defined as "var", since it will be zeroed after use
-    procedure AssignTo(var aDerivatedKey: THash512Rec;
-      out aAes: TAes; aEncrypt: boolean);
-    /// fill the internal context with zeros, for security
-    procedure Done;
-  end;
-
-  /// reference to a TSynSigner wrapper object
-  PSynSigner = ^TSynSigner;
-
-
   /// hash algorithms available for HashFile/HashFull functions
   // and TSynHasher object
   THashAlgo = (
@@ -832,23 +717,6 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
-  /// the known 32-bit crc algorithms as returned by CryptCrc32()
-  // - caAdler32 requires mormot.lib.z.pas to be included
-  // - caDefault may be AesNiHash32(), therefore not persistable between
-  // executions, since is randomly seeded at process startup
-  // - some cryptographic-level hashes are truncated to 32-bit - caSha1/caSha256
-  // could leverage Intel SHA HW opcodes to achieve good enough performance
-  TCrc32Algo = (
-    caCrc32c,
-    caCrc32,
-    caAdler32,
-    caxxHash32,
-    caFnv32,
-    caDefault,
-    caMd5,
-    caSha1,
-    caSha256);
-
 const
   /// convert a THashAlgo into a TStreamRedirectSynHasher class
   HASH_STREAMREDIRECT: array[THashAlgo] of TStreamRedirectClass = (
@@ -876,6 +744,161 @@ const
     'md5', 'sha-1', 'sha-256', 'sha-384', 'sha-512', 'sha-512/256',
     'sha3-256', 'sha3-512', 'sha-224', 'sha3-224', 'sha3-384',
     'shake128', 'shake256');
+
+type
+  /// the HMAC/SHA-1 HMAC/SHA-2 and SHA-3 algorithms known by TSynSigner
+  // - HMAC/SHA-1 is considered unsafe, HMAC/SHA-2 are well proven, and
+  // SHA-3 is newer and strong, including HMAC, so a good candidate for safety
+  TSignAlgo = (
+    saSha1,
+    saSha256,
+    saSha384,
+    saSha512,
+    saSha3224,
+    saSha3256,
+    saSha3384,
+    saSha3512,
+    saSha3S128,
+    saSha3S256,
+    saSha224);
+
+const
+  /// the standard text of a TSignAlgo
+  SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
+    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512', 'SHA3-224', 'SHA3-256',
+    'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA-224');
+  SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
+  SIGNER_DEFAULT_ALGO = saSha3S128;
+  SIGNER_SHA3 = [saSha3224 .. saSha3S256];
+
+type
+  /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
+  // - default value for unspecified parameters will be SHAKE_128 with
+  // rounds=1000 and a fixed salt
+  // - a typical (extended) JSON to supply to TSynSigner.Pbkdf2() may be
+  // ${algo:"sha-512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
+  TSynSignerParams = packed record
+    algo: TSignAlgo;
+    secret, salt: RawUtf8;
+    rounds: integer;
+  end;
+
+  /// a generic wrapper object to handle digital HMAC of any SHA algorithm
+  // - used e.g. to implement TJwtSynSignerAbstract
+  {$ifdef USERECORDWITHMETHODS}
+  TSynSigner = record
+  {$else}
+  TSynSigner = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fAlgo: TSignAlgo;
+    fSignatureSize, fBlockMax, fBlockSize: byte;
+    fHasher: TSynHasher; // to implement HMAC
+    fStep7data: TBlock1024;
+  public
+    /// initialize the digital HMAC/SHA-3 signing context with some secret text
+    procedure Init(aAlgo: TSignAlgo; const aSecret: RawUtf8); overload;
+    /// initialize the digital HMAC/SHA-3 signing context with some secret binary
+    procedure Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer); overload;
+    /// initialize the digital HMAC/SHA-3 signing context with PBKDF2 safe
+    // iterative key derivation of a secret salted text
+    procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPbkdf2Round: integer; aPbkdf2Secret: PHash512Rec = nil); overload;
+    /// process some message content supplied as memory buffer
+    procedure Update(aBuffer: pointer; aLen: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// process some message content supplied as string
+    procedure Update(const aBuffer: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the computed digital signature as lowercase hexadecimal text
+    function Final: RawUtf8; overload;
+    /// returns the raw computed digital signature
+    // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
+    procedure Final(out aSignature: THash512Rec;
+      aNoInit: boolean = false); overload;
+    /// one-step digital signature of a buffer as lowercase hexadecimal string
+    function Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
+      aBuffer: pointer; aLen: integer): RawUtf8; overload;
+    /// one-step digital signature of a buffer with PBKDF2 derivation
+    function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec;
+      aPartNumber: integer = 1); overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    procedure Pbkdf2(const aParams: TSynSignerParams;
+      out aDerivatedKey: THash512Rec); overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    // - accept as input a TSynSignerParams serialized as JSON object e.g.
+    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
+    procedure Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
+      out aDerivatedKey: THash512Rec;
+      const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
+      aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    // - accept as input a TSynSignerParams serialized as JSON object e.g.
+    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
+    procedure Pbkdf2(const aParamsJson: RawUtf8;
+      out aDerivatedKey: THash512Rec;
+      const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
+      aDefaultAlgo: TSignAlgo = SIGNER_DEFAULT_ALGO); overload;
+    /// fill a buffer with the PBKDF2 deriviation, following RFC 2898 5.2
+    // - in respect to other Pbkdf2() methods, the length of the derived
+    // key is unbounded and could be bigger than the TSignAlgo digest size
+    function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString; overload;
+    /// prepare a TAes object with the key derivated via a Pbkdf2() call
+    // - aDerivatedKey is defined as "var", since it will be zeroed after use
+    procedure AssignTo(var aDerivatedKey: THash512Rec;
+      out aAes: TAes; aEncrypt: boolean);
+    /// fill the internal context with zeros, for security
+    procedure Done;
+    /// the size, in bytes, of the digital signature of this algorithm
+    // - potential values are 20 (for SHA-1), 28, 32, 48 and 64 (for SHA-512)
+    property SignatureSize: byte
+      read fSignatureSize;
+    /// the algorithm used for digitial signature
+    property Algo: TSignAlgo
+      read fAlgo;
+  end;
+
+  /// reference to a TSynSigner wrapper object
+  PSynSigner = ^TSynSigner;
+
+
+const
+  /// convert a TSignAlgo / TSynSigner algorithm into a THashAlgo / TSynHasher
+  SIGN_HASH: array[TSignAlgo] of THashAlgo = (
+    hfSha1,     // saSha1
+    hfSha256,   // saSha256
+    hfSha384,   // saSha384
+    hfSha512,   // saSha512
+    hfSha3_224, // saSha3224
+    hfSha3_256, // saSha3256
+    hfSha3_384, // saSha3384
+    hfSha3_512, // saSha3512
+    hfShake128, // saSha3S128
+    hfShake256, // saSha3S256
+    hfSha224);  // saSha224
+
+type
+  /// the known 32-bit crc algorithms as returned by CryptCrc32()
+  // - caAdler32 requires mormot.lib.z.pas to be included
+  // - caDefault may be AesNiHash32(), therefore not persistable between
+  // executions, since is randomly seeded at process startup
+  // - some cryptographic-level hashes are truncated to 32-bit - caSha1/caSha256
+  // could leverage Intel SHA HW opcodes to achieve good enough performance
+  TCrc32Algo = (
+    caCrc32c,
+    caCrc32,
+    caAdler32,
+    caxxHash32,
+    caFnv32,
+    caDefault,
+    caMd5,
+    caSha1,
+    caSha256);
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
@@ -4363,30 +4386,39 @@ end;
 const
   SIGN_SIZE: array[TSignAlgo] of byte = (
     20, 32, 48, 64, 28, 32, 48, 64, 32, 64, 28);
-  SHA3_ALGO: array[saSha3224 .. saSha3S256] of TSha3Algo = (
-    SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+  BLOCK_SIZE: array[TSignAlgo] of byte = (
+    15, 15, 31, 31, 0, 0, 0, 0, 0, 0, 15);
 
 procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
+var
+  i: PtrInt;
+  k0, k0xorIpad: TBlock1024;
+  a: THashAlgo;
 begin
-  Algo := aAlgo;
-  SignatureSize := SIGN_SIZE[Algo];
-  case Algo of
-    saSha1:
-      PHmacSha1(@ctxt)^.Init(aSecret, aSecretLen);
-    saSha256:
-      PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen);
-    saSha224:
-      PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen, {Sha224=}true);
-    saSha384:
-      PHmacSha384(@ctxt)^.Init(aSecret, aSecretLen);
-    saSha512:
-      PHmacSha512(@ctxt)^.Init(aSecret, aSecretLen);
-    saSha3224 .. saSha3S256:
-      begin
-        PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
-        PSha3(@ctxt)^.Update(aSecret, aSecretLen);
-      end; // note: the HMAC pattern is included in SHA-3 sponge design
+  fAlgo := aAlgo;
+  a := SIGN_HASH[Algo];
+  fSignatureSize := SIGN_SIZE[Algo];
+  fBlockMax := BLOCK_SIZE[Algo];
+  fBlockSize := (fBlockMax + 1) shl 2;
+  if fBlockMax = 0 then
+  begin // we estimate that the HMAC pattern is part of the SHA-3 sponge design
+    fHasher.Init(a);
+    fHasher.Update(aSecret, aSecretLen);
+    exit;
   end;
+  FillCharFast(k0, fBlockSize, 0);
+  if aSecretLen > fBlockSize then
+    fHasher.Full(a, aSecret, aSecretLen, PHash512Rec(@k0)^)
+  else
+    MoveFast(aSecret^, k0, aSecretLen);
+  for i := 0 to fBlockMax do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to fBlockMax do
+    fStep7data[i] := k0[i] xor $5c5c5c5c;
+  fHasher.Init(a);
+  fHasher.Update(@k0xorIpad, fBlockSize);
+  FillCharFast(k0, fBlockSize, 0);
+  FillCharFast(k0xorIpad, fBlockSize, 0);
 end;
 
 procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUtf8);
@@ -4401,8 +4433,9 @@ var
 begin
   if aSecretPbkdf2Round > 1 then
   begin
+    FillZero(temp.b);
     Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, temp);
-    Init(aAlgo, @temp, SignatureSize);
+    Init(aAlgo, @temp, fSignatureSize);
     if aPbkdf2Secret <> nil then
       aPbkdf2Secret^ := temp;
     FillZero(temp.b);
@@ -4413,41 +4446,24 @@ end;
 
 procedure TSynSigner.Update(const aBuffer: RawByteString);
 begin
-  Update(pointer(aBuffer), length(aBuffer));
+  fHasher.Update(pointer(aBuffer), length(aBuffer));
 end;
 
 procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
 begin
-  case Algo of
-    saSha1:
-      PHmacSha1(@ctxt)^.Update(aBuffer, aLen);
-    saSha256,
-    saSha224:
-      PHmacSha256(@ctxt)^.Update(aBuffer, aLen);
-    saSha384:
-      PHmacSha384(@ctxt)^.Update(aBuffer, aLen);
-    saSha512:
-      PHmacSha512(@ctxt)^.Update(aBuffer, aLen);
-    saSha3224 .. saSha3S256:
-      PSha3(@ctxt)^.Update(aBuffer, aLen);
-  end;
+  fHasher.Update(aBuffer, aLen);
 end;
 
 procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
-  case Algo of
-    saSha1:
-      PHmacSha1(@ctxt)^.Done(aSignature.b160, aNoInit);
-    saSha256,
-    saSha224:
-      PHmacSha256(@ctxt)^.Done(aSignature.Lo, aNoInit);
-    saSha384:
-      PHmacSha384(@ctxt)^.Done(aSignature.b384, aNoInit);
-    saSha512:
-      PHmacSha512(@ctxt)^.Done(aSignature.b, aNoInit);
-    saSha3224..saSha3S256:
-      PSha3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
-  end;
+  fHasher.Final(aSignature);
+  if fBlockMax = 0 then
+    exit; // SHA-3 needs no HMAC
+  fHasher.Update(@fStep7data, fBlockSize);
+  fHasher.Update(@aSignature, fSignatureSize);
+  fHasher.Final(aSignature, aNoInit);
+  if not aNoInit then
+    FillCharFast(fStep7data, fBlockSize, 0);
 end;
 
 function TSynSigner.Final: RawUtf8;
@@ -4455,7 +4471,7 @@ var
   sig: THash512Rec;
 begin
   Final(sig);
-  result := BinToHexLower(@sig, SignatureSize);
+  result := BinToHexLower(@sig, fSignatureSize);
 end;
 
 function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
@@ -4498,13 +4514,13 @@ begin
   for i := 2 to aSecretPbkdf2Round do
   begin
     iter := self;
-    iter.Update(@temp, SignatureSize);
+    iter.Update(@temp, fSignatureSize);
     iter.Final(temp, true);
-    XorMemory(@aDerivatedKey, @temp, SignatureSize);
+    XorMemory(@aDerivatedKey, @temp, fSignatureSize);
   end;
   FillZero(temp.b);
-  FillCharFast(iter.ctxt, SizeOf(iter.ctxt), 0);
-  FillCharFast(ctxt, SizeOf(ctxt), 0);
+  FillCharFast(iter.fHasher.ctxt, SizeOf(iter.fHasher.ctxt), 0);
+  FillCharFast(fHasher.ctxt, SizeOf(fHasher.ctxt), 0);
 end;
 
 procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
