@@ -8289,10 +8289,10 @@ end;
 
 const
   // $ klist -kt test.keytab
-  // KVNO Timestamp           Principal
+  // KVNO Timestamp           Principal      Password
   // ---- ------------------- ------------------------------------------------------
-  //    1 26/06/2025 16:23:40 toto@MY.LAN
-  //    1 26/06/2025 16:23:40 toto2@MY.LAN
+  //    1 26/06/2025 16:23:40 toto@MY.LAN    titi
+  //    1 26/06/2025 16:23:40 toto2@MY.LAN   tutu
   KEYTAB_REF: array[0.. $8c] of byte = (
     $05, $02, $00, $00, $00, $41, $00, $01, $00, $06, $4d, $59, $2e, $4c, $41,
     $4e, $00, $04, $74, $6f, $74, $6f, $00, $00, $00, $01, $68, $5d, $57, $ec,
@@ -8324,6 +8324,7 @@ begin
       CheckEqual(TimeStamp, 1750947820);
       CheckEqual(KeyVersion, 1);
       CheckEqual(NameType, 1);
+      CheckEqual(EncType, ENCTYPE_AES256_CTS_HMAC_SHA1_96);
       CheckEqual(Principal, 'toto@MY.LAN');
       CheckHash(Key, $1F577A7D);
     end;
@@ -8332,6 +8333,7 @@ begin
       CheckEqual(TimeStamp, 1750947820);
       CheckEqual(KeyVersion, 1);
       CheckEqual(NameType, 1);
+      CheckEqual(EncType, ENCTYPE_AES256_CTS_HMAC_SHA1_96);
       CheckEqual(Principal, 'toto2@MY.LAN');
       CheckHash(Key, $D101D374);
     end;

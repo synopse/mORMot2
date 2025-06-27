@@ -1886,13 +1886,20 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
 
 { ****************** Kerberos KeyTab File Support }
 
+const
+  ENCTYPE_DES3_CBC_SHA1              = $10;
+  ENCTYPE_AES128_CTS_HMAC_SHA1_96    = $11; // RFC 3962
+  ENCTYPE_AES256_CTS_HMAC_SHA1_96    = $12;
+  ENCTYPE_AES128_CTS_HMAC_SHA256_128 = $13; // RFC 8009 - libktb5 1.15+
+  ENCTYPE_AES256_CTS_HMAC_SHA384_192 = $14;
+
 type
   /// store one KeyTab entry in a TKerberosKeyTab storage
   TKerberosKeyEntry = record
     /// when the key was established for that principal
     Timestamp: TUnixTime;
     /// 16 bit value indicating the keytype, as indicated in RFC3962
-    // - e.g. 17 for aes128-cts-hmac-sha1-96 or 18 for aes256-cts-hmac-sha1-96
+    // - e.g. ENCTYPE_AES128_CTS_HMAC_SHA1_96 or ENCTYPE_AES256_CTS_HMAC_SHA1_96
     EncType: integer;
     /// 32-bit version number of the key
     KeyVersion: integer;
@@ -5320,6 +5327,7 @@ begin
   result := false;
   if (aEntry.Principal = '') or
      (aEntry.Key = '') or
+     (aEntry.EncType = 0) or
      Exists(aEntry) then
     exit;
   n := length(fEntry);
