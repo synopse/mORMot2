@@ -8312,6 +8312,7 @@ var
 begin
   FastSetRawByteString(bin, @KEYTAB_REF[0], length(KEYTAB_REF));
   CheckHash(bin, $1849920F);
+  Check(BufferIsKeyTab(bin), 'bin1');
   kt := TKerberosKeyTab.Create;
   kt2 := TKerberosKeyTab.Create;
   try
@@ -8356,8 +8357,10 @@ begin
     Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
     bin2 := kt.SaveToBinary;
     CheckHash(bin2, $1849920F, 'same saved');
+    Check(BufferIsKeyTab(bin2), 'bin2');
     bin2 := kt2.SaveToBinary;
     CheckHash(bin2, $67233E99, 'not the same order');
+    Check(BufferIsKeyTab(bin2), 'bin3');
     Check(kt.LoadFromBinary(bin2), 'LoadFromString2');
     if CheckEqual(length(kt.Entry), 2, 'entry') then
     begin
@@ -8365,12 +8368,15 @@ begin
       Check(CompareEntry(kt.Entry[1], kt2.Entry[1]));
       Check(not CompareEntry(kt.Entry[0], kt2.Entry[1]));
       Check(not CompareEntry(kt.Entry[1], kt2.Entry[0]));
-      CheckHash(kt.SaveToBinary, $67233E99);
+      bin2 := kt.SaveToBinary;
+      CheckHash(bin2, $67233E99);
+      Check(BufferIsKeyTab(bin2), 'bin2');
       Check(not kt.Delete(10));
       Check(kt.Delete(0), 'deleted');
       Check(kt.Add(kt2.Entry[0]));
       bin2 := kt.SaveToBinary;
       CheckHash(bin2, $1849920F, 'delete saved');
+      Check(BufferIsKeyTab(bin2), 'bin2');
       Check(kt.Delete(1), 'delete1');
       if CheckEqual(length(kt.Entry), 1, 'deleted1') then
         Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
