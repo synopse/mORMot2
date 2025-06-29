@@ -1024,7 +1024,12 @@ procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
 
 /// compute the PBKDF2 derivation of a password using HMAC over any hash function
 procedure Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count: integer; result: PHash512Rec);
+  count: integer; result: PHash512Rec); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over any hash function
+// - this overloaded function will return any size of the derived password
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count, destlen: integer): RawByteString; overload;
 
 /// compute the HMAC message authentication code using SHA-1 as hash function
 procedure HmacSha1(const key, msg: RawByteString;
@@ -4860,6 +4865,14 @@ var
   signer: TSynSigner;
 begin
   signer.Pbkdf2(algo, password, salt, count, result);
+end;
+
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count, destlen: integer): RawByteString;
+var
+  signer: TSynSigner;
+begin
+  result := signer.Pbkdf2(algo, password, salt, count, destlen);
 end;
 
 procedure HmacSha1(const key, msg: RawByteString;
