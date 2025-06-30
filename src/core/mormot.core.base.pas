@@ -11127,13 +11127,12 @@ begin
   if size >= $8000 then
   begin
     // size in 32KB..2GB -> stored as integer
-    PWord(dst)^ := $8000 or (size and $7fff);
-    PWord(dst + 2)^ := size shr 15;
+    PCardinal(dst)^ := $8000 or (size and $7fff) or ((size shr 15) shl 16);
     inc(dst, 4);
   end
   else
   begin
-    PWord(dst)^ := size; // size<32768 -> stored as word
+    PCardinal(dst)^ := size; // size<32768 -> stored as word
     if size = 0 then
     begin
       result := 2;
