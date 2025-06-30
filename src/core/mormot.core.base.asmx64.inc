@@ -2546,9 +2546,8 @@ asm // rcx=src, edx=size, r8=dest
         {$endif WIN64ABI}
         push    rbx
         push    r12
-        push    r14
-        push    r15
-        mov     r15, r8            // r8=dest r15=dst_beg
+        push    r13
+        push    r8                 // save r8=dest
         mov     rbx, rcx           // rbx=src edx=size
         cmp     edx, 32768
         jc      @03
@@ -2563,17 +2562,16 @@ asm // rcx=src, edx=size, r8=dest
         add     r8, 4
         jmp     @05
 @03:    mov     dword ptr [r8], edx
-        mov     eax, 2
-        test    edx, edx
-        jz      @19
         add     r8, 2
+        test    edx, edx
+        jz      @18
 @05:    pxor    xmm0, xmm0
-        mov     eax, 32768
+        mov     eax, 4096 * 8
         lea     rcx, [off - 64]
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@06:    movaps  dqword ptr [rcx + rax - 48], xmm0 // stack is 16 bytes aligned
-        movaps  dqword ptr [rcx + rax - 32], xmm0
-        movaps  dqword ptr [rcx + rax - 16], xmm0
+@06:    movaps  dqword ptr [rcx + rax + 48], xmm0 // stack is 16 bytes aligned
+        movaps  dqword ptr [rcx + rax + 32], xmm0
+        movaps  dqword ptr [rcx + rax + 16], xmm0
         movaps  dqword ptr [rcx + rax], xmm0
         sub     eax, 64
         jnz     @06
@@ -2587,29 +2585,29 @@ asm // rcx=src, edx=size, r8=dest
         ja      @15
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @07:    mov     edx, dword ptr [rbx]
-        mov     rax, rdx
+        mov     eax, edx
+        shr     eax, 12
+        xor     eax, edx
+        and     eax, 4095              // rax=h
         mov     r12, rdx
-        shr     rax, 12
-        xor     rax, rdx
-        and     rax, 0FFFH              // rax=h
-        //lea     r13, []  // pre-compute is not faster: 2 AGUs since Nehalem
-        mov     r14, qword ptr [off + rax * 8]    // r14=o
+        //lea [off + rax * 8] pre-compute is not faster: 2 AGUs since Nehalem
+        mov     r13, qword ptr [off + rax * 8]    // r13=o
         mov     edx, dword ptr [cache + rax * 4]
         mov     qword ptr [off + rax * 8], rbx
         mov     dword ptr [cache + rax * 4], r12d
         xor     rdx, r12
-        test    r14, r14
-        lea     rdi, [r9-1]
+        test    r13, r13
+        lea     rdi, [r9 - 1]
         je      @12
-        and     rdx, 0FFFFFFH
+        and     rdx, $00ffffff
         jne     @12
         mov     rdx, rbx
-        sub     rdx, r14
+        sub     rdx, r13
         cmp     rdx, 2
         jbe     @12
         or      dword ptr [r11], ecx
         add     rbx, 2
-        add     r14, 2
+        add     r13, 2
         mov     esi, 1
         sub     rdi, rbx
         cmp     rdi, 271
@@ -2617,7 +2615,7 @@ asm // rcx=src, edx=size, r8=dest
         mov     edi, 271
         jmp     @09
 @08:    add     rsi, 1
-@09:    mov     edx, dword ptr [r14 + rsi]
+@09:    mov     edx, dword ptr [r13 + rsi]
         cmp     dl, byte ptr [rbx + rsi]
         jnz     @10
         cmp     rsi, rdi
@@ -2671,16 +2669,15 @@ asm // rcx=src, edx=size, r8=dest
         add     r8, 1
         add     ecx, ecx
         jnz     @17
-        mov     [r8], ecx
+        mov     dword ptr [r8], ecx
         add     r8, 4
         add     ecx, 1
 @17:    cmp     rbx, r9
         jc      @16
-@18:    sub     r8, r15
-        mov     r15, r8
-        mov     rax, r15
-@19:    pop     r15
-        pop     r14
+@18:    pop     rax
+        sub     r8, rax // result := dst - dstbeg
+        mov     rax, r8
+        pop     r13
         pop     r12
         pop     rbx
         {$ifdef WIN64ABI} // additional registers to preserve

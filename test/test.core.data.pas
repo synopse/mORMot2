@@ -7965,7 +7965,9 @@ procedure TTestCoreCompression._TAlgoCompress;
     begin
       t := RawUtf8OfChar(AnsiChar(i), i){%H-}+{%H-}t;
       s := RawUtf8OfChar(AnsiChar(i), i){%H-}+{%H-}s;
-      Check(algo.Decompress(algo.Compress(s)) = t);
+      s2 := algo.Compress(s);
+      Check(s2 <> '');
+      Check(algo.Decompress(s2) = t);
     end;
     plain := 0;
     comp := 0;
