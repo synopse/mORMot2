@@ -655,7 +655,7 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         cmp     val, 10
         jb      @1              // direct process of common val<10
         lea     r8, qword ptr [rip + TwoDigitLookup] // also for FPC_PIC
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     lea     P, [P - 2]
         cmp     rax, 100
         jb      @2
@@ -676,7 +676,7 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         mov     byte ptr [P - 1], al
         lea     rax, [P + r10 - 1]       // includes '-' if val<0
         ret
-        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @2:     movzx   eax, word ptr [r8 + rax * 2]
         mov     byte ptr [P - 1], '-'
         mov     word ptr [P], ax
@@ -709,6 +709,7 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     byte ptr [P], al
 @0:     mov     rax, P
         ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @2:     movzx   eax, word ptr [r8 + rax * 2]
         mov     word ptr [P], ax
         mov     rax, P
@@ -1102,7 +1103,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vmovdqa ymm5, ymm4
         jmp     @trail
         // validate UTF-8 extra bytes from main loop
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @check: vpsrlw  ymm9, ymm0, 4
         vpsrlw  ymm12, ymm1, 4
         vperm2i128 ymm3, ymm3, ymm0, 21H
@@ -1153,7 +1154,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         ja      @loop
         jmp     @trail
         // validate UTF-8 extra bytes from input ending
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @last:  vmovdqu ymm5, yword ptr [rip + @0f]
         vperm2i128 ymm3, ymm3, ymm1, 21H
         vmovdqu ymm9, yword ptr [rip + @_7]
@@ -2287,7 +2288,7 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           mov     r9d, $FFFF             // 16 bits mask = 16 bytes
           cmp     L, -16
           ja      @sml
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by16:    // loop comparing 16 bytes
           movups  xmm1, oword ptr [P1 + L]
           movups  xmm2, oword ptr [P2 + L]
@@ -2362,7 +2363,7 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
         xor     r9, r9  // r9=L rax=result
         test    R, R
         jl      @ko
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     lea     rax, [r9 + R]
         shr     rax, 1
         lea     r10, qword ptr [rax - 1] // branchless loop
@@ -2390,7 +2391,7 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
         test    R, R
         jl      @ko
         lea     rax, [r9 + R]
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     shr     rax, 1
         lea     r10, qword ptr [rax - 1]  // efficient branchless binary search
         lea     r11, qword ptr [rax + 1]
@@ -2411,7 +2412,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
         test    R, R
         jl      @ko
         lea     rax, [r9 + R]
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     shr     rax, 1
         lea     r10, qword ptr [rax - 1]  // efficient branchless binary search
         lea     r11, qword ptr [rax + 1]
