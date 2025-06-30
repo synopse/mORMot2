@@ -2533,8 +2533,8 @@ end;
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
-  off: TOffsets;
-  cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
+  off: TOffsets;                     // 32KB hash table
+  cache: array[0..4095] of cardinal; // 16KB = total 48KB on stack
 asm // rcx=src, edx=size, r8=dest
         {$ifdef WIN64ABI} // additional registers to preserve
         push    rdi
@@ -2546,52 +2546,54 @@ asm // rcx=src, edx=size, r8=dest
         {$endif WIN64ABI}
         push    rbx
         push    r12
-        push    r13
         push    r14
         push    r15
         mov     r15, r8            // r8=dest r15=dst_beg
-        mov     rbx, rcx           // rbx=src
+        mov     rbx, rcx           // rbx=src edx=size
         cmp     edx, 32768
         jc      @03
         mov     eax, edx
+        mov     ecx, edx
         and     eax, 7FFFH
+        shr     ecx, 15
         or      eax, 8000H
-        mov     word ptr [r8], ax
-        mov     eax, edx
-        shr     eax, 15
-        mov     word ptr [r8 + 2], ax
+        shl     ecx, 16
+        or      eax, ecx
+        mov     dword ptr [r8], eax
         add     r8, 4
         jmp     @05
-@03:    mov     word ptr [r8], dx
+@03:    mov     dword ptr [r8], edx
+        mov     eax, 2
         test    edx, edx
-        jnz     @04
-        mov     r15d, 2
-        jmp     @19
-        nop
-@04:    add     r8, 2
-@05:    lea     r9, [rdx + rbx]    // r9=src_end
-        lea     r10, [r9 - 11]     // r10=src_endmatch
-        mov     ecx, 1             // ecx=CWBits
-        mov     r11, r8            // r11=CWpoint
-        mov     dword ptr [r8], 0
-        add     r8, 4
-        pxor    xmm0, xmm0
-        mov     eax, 32768 - 64
-@06:    movaps  dqword ptr [off + rax - 48], xmm0 // stack is 16 bytes aligned
-        movaps  dqword ptr [off + rax - 32], xmm0
-        movaps  dqword ptr [off + rax - 16], xmm0
-        movaps  dqword ptr [off + rax], xmm0
+        jz      @19
+        add     r8, 2
+@05:    pxor    xmm0, xmm0
+        mov     eax, 32768
+        lea     rcx, [off - 64]
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@06:    movaps  dqword ptr [rcx + rax - 48], xmm0 // stack is 16 bytes aligned
+        movaps  dqword ptr [rcx + rax - 32], xmm0
+        movaps  dqword ptr [rcx + rax - 16], xmm0
+        movaps  dqword ptr [rcx + rax], xmm0
         sub     eax, 64
-        jae     @06
+        jnz     @06
+        lea     r9, [rdx + rbx]    // r9=src_end
+        lea     r10, [r9 - 11]     // r10=src_endmatch
+        mov     r11, r8            // r11=CWpoint
+        mov     ecx, 1             // ecx=CWBits
+        mov     dword ptr [r8], eax
+        add     r8, 4
         cmp     rbx, r10
         ja      @15
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @07:    mov     edx, dword ptr [rbx]
         mov     rax, rdx
         mov     r12, rdx
         shr     rax, 12
         xor     rax, rdx
-        and     rax, 0FFFH                     // rax=h
-        mov     r14, qword ptr [off + rax * 8] // r14=o
+        and     rax, 0FFFH              // rax=h
+        //lea     r13, []  // pre-compute is not faster: 2 AGUs since Nehalem
+        mov     r14, qword ptr [off + rax * 8]    // r14=o
         mov     edx, dword ptr [cache + rax * 4]
         mov     qword ptr [off + rax * 8], rbx
         mov     dword ptr [cache + rax * 4], r12d
@@ -2676,10 +2678,9 @@ asm // rcx=src, edx=size, r8=dest
         jc      @16
 @18:    sub     r8, r15
         mov     r15, r8
-@19:    mov     rax, r15
-        pop     r15
+        mov     rax, r15
+@19:    pop     r15
         pop     r14
-        pop     r13
         pop     r12
         pop     rbx
         {$ifdef WIN64ABI} // additional registers to preserve
