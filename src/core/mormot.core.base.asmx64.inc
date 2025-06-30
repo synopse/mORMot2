@@ -2704,117 +2704,103 @@ asm     // rcx=src, edx=size, r8=dest
         push    rbx
         push    r12
         push    r13
-        push    r14
-        push    r15
         movzx   eax, word ptr [rcx]    // rcx=src   eax=result
         lea     r9, [rcx + rdx]        // r9=src_end
         test    eax, eax
-        je      @35
+        je      @36
         add     rcx, 2
         mov     r10d, eax
-        and     r10d, 8000H
-        jz      @21
+        and     r10d, $8000
+        jz      @21                   // dest size < 32768
         movzx   ebx, word ptr [rcx]
         shl     ebx, 15
-        mov     r10d, eax
-        and     r10d, 7FFFH
-        or      r10d, ebx
-        mov     eax, r10d
+        and     eax, $7fff
+        or      eax, ebx
         add     rcx, 2
-@21:    lea     r10, [r8 - 1]          // r10=last_hashed  r8=dest
+@21:    push    rax                    // save result for function exit
+        lea     rax, [r8 - 1]          // rax=last_hashed  r8=dest
 @22:    mov     edi, dword ptr [rcx]   // edi=CW
         add     rcx, 4
-        mov     r13d, 1                // r13d=CWBit
+        mov     r10d, 1                // r10d=CWBit
         cmp     rcx, r9
         jnc     @35
-@23:    test    r13d, edi
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@23:    test    r10d, edi
         jnz     @25
-        mov     bl, byte ptr [rcx]
+        mov     bl, byte ptr [rcx]    // CWBit was not set: copy byte and hash
         mov     byte ptr [r8], bl
         add     rcx, 1
         lea     rbx, [r8 - 2]
         add     r8, 1
         cmp     rcx, r9
         jnc     @35
-        cmp     rbx, r10
+        cmp     rbx, rax
         jbe     @24
-        add     r10, 1
-        mov     esi, dword ptr [r10]
-        mov     rbx, rsi
+        add     rax, 1
+        mov     esi, dword ptr [rax]
+        mov     ebx, esi
         shr     esi, 12
         xor     ebx, esi
-        and     ebx, 0FFFH
-        mov     qword ptr [off + rbx * 8], r10
-@24:    shl     r13d, 1
+        and     ebx, 4095
+        mov     qword ptr [off + rbx * 8], rax
+@24:    shl     r10d, 1
         jnz     @23
         jmp     @22
-@25:    movzx   r11, word ptr [rcx]    // r11=t
+@25:    movzx   rbx, word ptr [rcx] // CWBit was set: copy bytes from offset
         add     rcx, 2
-        mov     ebx, r11d              // ebx=h
-        shr     ebx, 4
-        and     r11, 0FH
+        mov     r11, rbx
+        shr     ebx, 4                 // ebx=h
+        and     r11, 0FH               // r11=t
         lea     r11, [r11 + 2]
         jnz     @26
         movzx   r11, byte ptr [rcx]
         add     rcx, 1
         lea     r11, [r11 + 12H]
-@26:    mov     r14, qword ptr [off + rbx * 8] // r14=o
+@26:    mov     r13, qword ptr [off + rbx * 8] // r13=o
         mov     rbx, r8
         xor     rsi, rsi
-        sub     rbx, r14
+        sub     rbx, r13
         mov     r12, r11
-        mov     r15, r11
         cmp     rbx, r11
-        jc      @29
+        jc      @29       // PtrUInt(dst - o) < t overlap -> MoveByOne
+        mov     rbx, qword ptr [r13]
+        mov     qword ptr [r8], rbx
+        cmp     r11, 8
+        jbe     @31       // 1..8 bytes
         shr     r12, 3
-        jz      @30
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@27:    mov     rbx, qword ptr [r14 + rsi] // inline move by 8 bytes
+@27:    add     rsi, 8
+        mov     rbx, qword ptr [r13 + rsi] // inlined move by 8 bytes
         mov     qword ptr [r8 + rsi], rbx
-        add     rsi, 8
         sub     r12, 1
         jnz     @27
-        mov     rbx, qword ptr [r14 + rsi] // 1..7 remaining bytes
-        and     r15, 7
-        jz      @31
-@28:    mov     byte ptr [r8 + rsi], bl
-        shr     rbx, 8
-        add     rsi, 1
-        sub     r15, 1
-        jnz     @28
-        jmp     @31
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@29:    mov     bl, byte ptr [r14 + rsi] // overlaping move
+@31:    cmp     rcx, r9
+        jz      @35
+        cmp     rax, r8
+        jnc     @34
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@32:    add     rax, 1               // hash decompressed bytes
+        mov     ebx, dword ptr [rax]
+        mov     esi, ebx
+        shr     ebx, 12
+        xor     esi, ebx
+        and     esi, 4095
+        mov     qword ptr [off + rsi * 8], rax
+        cmp     rax, r8
+        jc      @32
+@34:    add     r8, r11
+        lea     rax, [r8 - 1]
+        shl     r10d, 1
+        jnz     @23
+        jmp     @22
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@29:    mov     bl, byte ptr [r13 + rsi] // overlaping move
         mov     byte ptr [r8 + rsi], bl
         add     rsi, 1
         sub     r12, 1
         jnz     @29
-        cmp     rcx, r9
-        jnz     @33
-        jmp     @35
-@30:    mov     rbx, qword ptr [r14]
-        mov     qword ptr [r8], rbx
-@31:    cmp     rcx, r9
-        jz      @35
-        cmp     r10, r8
-        jnc     @34
-@32:    add     r10, 1
-        mov     ebx, dword ptr [r10]
-        mov     rsi, rbx
-        shr     ebx, 12
-        xor     esi, ebx
-        and     esi, 0FFFH
-        mov     qword ptr [off + rsi * 8], r10
-@33:    cmp     r10, r8
-        jc      @32
-@34:    add     r8, r11
-        lea     r10, [r8 - 1]
-        shl     r13d, 1
-        jnz     @23
-        jmp     @22
-@35:    pop     r15
-        pop     r14
-        pop     r13
+        jmp     @31
+@35:    pop     rax     // returns stored dest length
+@36:    pop     r13
         pop     r12
         pop     rbx
         {$ifdef WIN64ABI} // additional registers to preserve
