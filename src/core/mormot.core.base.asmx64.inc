@@ -2762,8 +2762,12 @@ asm     // rcx=src, edx=size, r8=dest
         jc      @29       // PtrUInt(dst - o) < t overlap -> MoveByOne
         mov     rbx, qword ptr [r13]
         mov     qword ptr [r8], rbx
-        cmp     r11, 8
+        sub     r12, 8
         jbe     @31       // 1..8 bytes
+        mov     rbx, qword ptr [r13 + r12] // last 8 bytes (may overlap)
+        mov     qword ptr [r8 + r12], rbx
+        cmp     r12, 8
+        jbe     @31      // 9..16 bytes
         shr     r12, 3
 @27:    add     rsi, 8
         mov     rbx, qword ptr [r13 + rsi] // inlined move by 8 bytes
