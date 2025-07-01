@@ -1713,6 +1713,14 @@ function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
   {$ifndef CPUINTEL} inline; {$endif}
 
+// raw pascal (slow) functions defined here for redirection if HASNOSSE2 is set
+function ByteScanIndexPas(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+  {$ifdef FPC} inline; {$endif}
+function WordScanIndexPas(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+  {$ifdef FPC} inline; {$endif}
+function IntegerScanIndexPas(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+  {$ifdef FPC} inline; {$endif}
+
 /// sort an integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
 
@@ -7087,6 +7095,21 @@ begin
   res.M := Y {%H-}- Y100 * 100; // avoid div twice
 end;
 
+function ByteScanIndexPas(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+begin
+  result := IndexByte(P^, Count, Value); // use FPC RTL
+end;
+
+function WordScanIndexPas(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+begin
+  result := IndexWord(P^, Count, Value); // use FPC RTL
+end;
+
+function IntegerScanIndexPas(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+begin
+  result := IndexDWord(P^, Count, Value); // use FPC RTL
+end;
+
 {$else}
 
 {$ifndef CPUINTEL}
@@ -7108,6 +7131,48 @@ begin
   if (PStrRec(str)^.refCnt >= 0) and
      StrCntDecFree(PStrRec(str)^.refCnt) then
     Freemem(str); // works for both rkLString + rkUString
+end;
+
+function ByteScanIndexPas(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+begin
+  result := 0;
+  if P <> nil then
+    repeat
+      if result >= Count then
+        break;
+      if P^[result] = Value then
+        exit;
+      inc(result);
+    until false;
+  result := -1;
+end;
+
+function WordScanIndexPas(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+begin
+  result := 0;
+  if P <> nil then
+    repeat
+      if result >= Count then
+        break;
+      if P^[result] = Value then
+        exit;
+      inc(result);
+    until false;
+  result := -1;
+end;
+
+function IntegerScanIndexPas(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+begin
+  result := 0;
+  if P <> nil then
+    repeat
+      if result >= Count then
+        break;
+      if P^[result] = Value then
+        exit;
+      inc(result);
+    until false;
+  result := -1;
 end;
 
 {$endif FPC}
@@ -10132,7 +10197,6 @@ begin
             (a.Data = b.Data);
 end;
 
-
 type
   // 16KB/32KB hash table used by SynLZ - as used by the asm .inc files
   TOffsets = array[0..4095] of PAnsiChar;
@@ -10321,7 +10385,22 @@ end;
 
 {$else not CPUINTEL}
 
-// fallback to pure pascal version for non-Intel CPUs
+// fallback to pure pascal (or FPC RTL) for non-Intel CPUs
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+begin
+  result := ByteScanIndexPas(P, Count, Value);
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: Word): PtrInt;
+begin
+  result := WordScanIndexPas(P, Count, Value);
+end;
+
+function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+begin
+  result := IntegerScanIndexPas(P, Count, Value);
+end;
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 var
@@ -10655,22 +10734,6 @@ begin
             ((result and QWord($00ff00ff00ff00ff)) shl 8);
 end;
 
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
-begin
-  for result := 0 to Count - 1 do
-    if P[result] = Value then
-      exit;
-  result := -1;
-end;
-
-function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
-begin
-  for result := 0 to Count - 1 do
-    if P[result] = Value then
-      exit;
-  result := -1;
-end;
-
 function BSRdword(c: cardinal): cardinal;
 const
   _debruijn32: array[0..31] of byte = (
@@ -10755,15 +10818,6 @@ begin
   result := SwapEndian(a); // use fast platform-specific function
 end;
 
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
-begin
-  result := IndexByte(P^, Count, Value); // use FPC RTL
-end;
-
-function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
-begin
-  result := IndexWord(P^, Count, Value); // use FPC RTL
-end;
 {$endif ISDELPHI}
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
@@ -10831,18 +10885,6 @@ begin
     until false;
   end;
   result := false;
-end;
-
-function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
-begin
-  result := PtrUInt(IntegerScan(P, Count, Value));
-  if result = 0 then
-    dec(result)
-  else
-  begin
-    dec(result, PtrUInt(P));
-    result := result shr 2;
-  end;
 end;
 
 {$ifdef CPUARM3264} // ARM-specific code

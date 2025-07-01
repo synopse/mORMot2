@@ -934,30 +934,12 @@ end;
 
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 begin
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  result := -1;
+  result := ByteScanIndexPas(P, Count, Value); // may be the FPC RTL
 end;
 
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 begin
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  result := -1;
+  result := WordScanIndexPas(P, Count, Value);
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
