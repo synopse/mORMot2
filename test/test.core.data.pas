@@ -8007,7 +8007,7 @@ procedure TTestCoreCompression._TAlgoCompress;
 
 begin
   TestAlgo(AlgoSynLZ);
-  TestAlgo(AlgoRleLZ); // don't compress better, but validate the class
+  TestAlgo(AlgoRleLZ); // don't compress much better, but validate the class
   TestAlgo(AlgoRle);   // don't compress exe nor log, but validate the class
   Check(AlgoSynLZ.AlgoName = 'synlz');
   {$ifdef OSWINDOWS}

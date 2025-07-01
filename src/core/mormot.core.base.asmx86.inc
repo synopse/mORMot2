@@ -2202,6 +2202,7 @@ asm
         mov     [edi], eax
         lea     edi, [esp+24H] // reset 16KB offsets lookup table using ERMS
         mov     ecx, 4096
+        cld
         rep stosd
         mov     edi, [esp+18H]
         add     edi, 4
