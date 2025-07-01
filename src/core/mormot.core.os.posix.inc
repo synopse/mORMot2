@@ -1879,7 +1879,7 @@ end;
 
 {$endif OSLINUXANDROID}
 
-{$ifdef OSLINUX} { the systemd API is Linux-specific }
+{$ifdef OSLINUX} { the systemd, eventfd or getrandom APIs are Linux-specific }
 
 const
   SD_NAMES: array[0..5] of PAnsiChar = (
@@ -1900,10 +1900,6 @@ const
   syscall_nr_getrandom = 355;
   {$endif CPUX86}
   // other archs (like aarch64) are properly defined - see https://syscall.sh
-
-var
-  __LinuxGetRandomFailed, __LinuxEventFdFailed: boolean;
-
 
 { TSystemD }
 
@@ -1963,10 +1959,13 @@ begin
   end;
 end;
 
+{$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
+var
+  __LinuxGetRandomFailed: boolean;
+
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
-  {$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
   if (KernelRevision < $031100) or // introduced in Kernel 3.17
      __LinuxGetRandomFailed then
     exit;
@@ -1974,10 +1973,17 @@ begin
     result := true // "man getrandom" states to read up to 256 bytes in one call
   else
     __LinuxGetRandomFailed := true; // won't retry on syscall failure
-  {$endif HASGETRANDOM}
 end;
+{$else}
+function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
+begin
+  result := false;
+end;
+{$endif HASGETRANDOM}
 
 {$ifdef HASEVENTFD} // validated on Linux i386, x86_64 and aarch64
+var
+  __LinuxEventFdFailed: boolean;
 const
   EFD_SEMAPHORE = $00000001;
   EFD_NONBLOCK  = O_NONBLOCK;
@@ -2004,12 +2010,6 @@ begin
   __LinuxEventFdFailed := true; // don't retry next type
   result := 0;
 end;
-{$else}
-function LinuxEventFD(nonblocking, semaphore: boolean): integer;
-begin
-  result := 0; // non implemented (not validated by our tests) on this arch
-end;
-{$endif HASEVENTFD}
 
 function LinuxEventFDRead(fd: integer): Int64;
 var
@@ -2035,6 +2035,26 @@ function LinuxEventFDWait(fd: integer; ms: integer): boolean;
 begin
   result := WaitReadPending(fd, ms);
 end;
+{$else}
+function LinuxEventFD(nonblocking, semaphore: boolean): integer;
+begin
+  result := 0; // non implemented (not validated by our tests) on this arch
+end;
+
+function LinuxEventFDRead(fd: integer): Int64;
+begin
+  result := -1;
+end;
+
+procedure LinuxEventFDWrite(fd: integer; count: QWord);
+begin
+end;
+
+function LinuxEventFDWait(fd: integer; ms: integer): boolean;
+begin
+  result := false;
+end;
+{$endif HASEVENTFD}
 
 {$endif OSLINUX}
 
