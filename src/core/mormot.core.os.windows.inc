@@ -5291,14 +5291,10 @@ begin
   // late-binding of newest Windows APIs
   DoWin32PWideCharToUtf8 := @_DoWin32PWideCharToUtf8; // or mormot.core.unicode
   h := GetModuleHandle(kernel32);
-  GetTickCount64 := GetProcAddress(h, 'GetTickCount64'); // Vista+
-  if not Assigned(GetTickCount64) then
-    GetTickCount64 := @GetTickCount64ForXP;
   GetSystemTimePreciseAsFileTime :=
     GetProcAddress(h, 'GetSystemTimePreciseAsFileTime'); // Win8+
   if not Assigned(GetSystemTimePreciseAsFileTime) then
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
-  CreateSymbolicLinkW := GetProcAddress(h, 'CreateSymbolicLinkW'); // Vista+
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
@@ -5326,16 +5322,21 @@ begin
     ((machine = IMAGE_FILE_MACHINE_I386) or
      (machine = IMAGE_FILE_MACHINE_AMD64));
     {$endif CPUINTEL}
-  QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW'); // Vista+
+  // Vista+ kernel32.dll APIs
+  GetTickCount64 := GetProcAddress(h, 'GetTickCount64'); // Vista+
+  if not Assigned(GetTickCount64) then
+    GetTickCount64 := @GetTickCount64ForXP;
+  QueryFullProcessImageNameW     := GetProcAddress(h, 'QueryFullProcessImageNameW');
   GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
-  InitializeSRWLock       := GetProcAddress(h, 'InitializeSRWLock'); // Vista+
-  AcquireSRWLockExclusive := GetProcAddress(h, 'AcquireSRWLockExclusive');
-  ReleaseSRWLockExclusive := GetProcAddress(h, 'ReleaseSRWLockExclusive');
+  CreateSymbolicLinkW            := GetProcAddress(h, 'CreateSymbolicLinkW');
+  InitializeSRWLock              := GetProcAddress(h, 'InitializeSRWLock');
+  AcquireSRWLockExclusive        := GetProcAddress(h, 'AcquireSRWLockExclusive');
+  ReleaseSRWLockExclusive        := GetProcAddress(h, 'ReleaseSRWLockExclusive');
   if not Assigned(InitializeSRWLock) or
      not Assigned(AcquireSRWLockExclusive) or
      not Assigned(ReleaseSRWLockExclusive) then
   begin // SRW was introduced with Vista: on XP, fallback to our TLightLock
-    InitializeSRWLock := @InitializeSRWLockForXP;
+    InitializeSRWLock       := @InitializeSRWLockForXP;
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
   end;
