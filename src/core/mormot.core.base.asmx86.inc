@@ -2199,26 +2199,11 @@ asm
         sub     eax, 11
         mov     [esp+4], eax
         xor     eax, eax
-        lea     ebx, [esp+24H] // reset offsets lookup table
-        {$ifdef HASNOSSE2}
-        mov     ecx, 1024
-@@089I: mov     [ebx], eax
-        mov     [ebx + 4], eax
-        mov     [ebx + 8], eax
-        mov     [ebx + 12], eax
-        add     ebx, 16
-        {$else}
-        pxor    xmm0, xmm0
-        mov     ecx, 256
-@@089I: movups  dqword ptr [ebx], xmm0
-        movups  dqword ptr [ebx + 16], xmm0
-        movups  dqword ptr [ebx + 32], xmm0
-        movups  dqword ptr [ebx + 48], xmm0
-        add     ebx, 64
-        {$endif HASNOSSE2}
-        dec     ecx
-        jnz     @@089I
         mov     [edi], eax
+        lea     edi, [esp+24H] // reset 16KB offsets lookup table using ERMS
+        mov     ecx, 4096
+        rep stosd
+        mov     edi, [esp+18H]
         add     edi, 4
         mov     ebx, 1 // ebx=1 shl CWbit
         // main loop:

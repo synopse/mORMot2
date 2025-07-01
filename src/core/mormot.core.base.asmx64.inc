@@ -2547,9 +2547,9 @@ asm // rcx=src, edx=size, r8=dest
         push    rbx
         push    r12
         push    r13
-        push    r8                 // save r8=dest
-        mov     rbx, rcx           // rbx=src edx=size
-        cmp     edx, 32768
+        push    r8                 // save r8=dest to compute result
+        mov     rbx, rcx           // rbx=src
+        cmp     edx, 32768         // edx=size
         jc      @03
         mov     eax, edx
         mov     ecx, edx
@@ -2565,17 +2565,12 @@ asm // rcx=src, edx=size, r8=dest
         add     r8, 2
         test    edx, edx
         jz      @18
-@05:    pxor    xmm0, xmm0
-        mov     eax, 4096 * 8
-        lea     rcx, [off - 64]
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@06:    movaps  dqword ptr [rcx + rax + 48], xmm0 // stack is 16 bytes aligned
-        movaps  dqword ptr [rcx + rax + 32], xmm0
-        movaps  dqword ptr [rcx + rax + 16], xmm0
-        movaps  dqword ptr [rcx + rax], xmm0
-        sub     eax, 64
-        jnz     @06
-        lea     r9, [rdx + rbx]    // r9=src_end
+@05:    xor     eax, eax
+        lea     rdi, [off]
+        mov     rcx, 4096
+        cld
+        rep stosq                  // reset 32KB offsets lookup table using ERMS
+        lea     r9,  [rdx + rbx]   // r9=src_end
         lea     r10, [r9 - 11]     // r10=src_endmatch
         mov     r11, r8            // r11=CWpoint
         mov     ecx, 1             // ecx=CWBits
@@ -2688,7 +2683,7 @@ end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
-  off: TOffsets;
+  off: TOffsets; // pointers are faster and use only 32KB on stack
 asm     // rcx=src, edx=size, r8=dest
         {$ifdef WIN64ABI} // additional registers to preserve
         push    rsi
@@ -2752,7 +2747,7 @@ asm     // rcx=src, edx=size, r8=dest
         jnz     @26
         movzx   r11, byte ptr [rcx]
         add     rcx, 1
-        lea     r11, [r11 + 12H]
+        lea     r11, [r11 + (16 + 2)]
 @26:    mov     r13, qword ptr [off + rbx * 8] // r13=o
         mov     rbx, r8
         xor     rsi, rsi
