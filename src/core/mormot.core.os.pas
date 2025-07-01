@@ -451,7 +451,7 @@ const
   /// the recognized MacOS versions, as plain text
   // - indexed from OSVersion32.utsrelease[2] kernel revision
   // - see https://en.wikipedia.org/wiki/MacOS_version_history#Releases
-  MACOS_NAME: array[8 .. 25] of RawUtf8 = (
+  MACOS_NAME: array[8 .. 26] of RawUtf8 = (
     '10.4 Tiger',
     '10.5 Leopard',
     '10.6 Snow Leopard',
@@ -469,7 +469,8 @@ const
     '13 Ventura',
     '14 Sonoma',
     '15 Sequoia',
-    '16 Next');
+    '26 Tahoe',
+    '27 Next');
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
