@@ -6406,32 +6406,19 @@ end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8
 // on Delphi (aligned to 4 bytes), but not on FPC (aligned to 16 bytes), and
-// enumerates allow cross-platform error support outside of the Windows unit
+// enumerates allow cross-platform error support (e.g. in centralized servers)
 
 const
   NULL_STR: string[1] = '';
 
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  _GetEnumNameRttiTmp: string[127]; // output 'TEnumTypeName#value'
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
 function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
 begin
   // will properly be implemented in mormot.core.rtti.pas
-  if Value < 0 then
-  begin
-    result := @NULL_STR;
-    exit;
-  end;
-  // minimal version with no Kind, EnumBaseType nor Value min/max check
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  result := @NULL_STR;
   // no arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
-  result := @_GetEnumNameRttiTmp;
-  result^ := PShortString(@PByteArray(Info)[1])^;
-  AppendShortChar('#', pointer(result));
-  AppendShortCardinal(Value, result^);
-  {$else}
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  if Value < 0 then
+    exit;
   // quickly jump over Kind + NameLen + Name +  OrdType + Min + Max + EnumBaseType
   result := @PAnsiChar(Info)[PByteArray(Info)[1] + (1 + 1 + 1 + 4 + 4 +
     SizeOf(pointer) {$ifdef FPC_PROVIDE_ATTR_TABLE} + SizeOf(pointer) {$endif})];
