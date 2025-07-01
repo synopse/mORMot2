@@ -4944,7 +4944,7 @@ end;
 
 function TAuthSession.GetRemoteOS: RawUtf8;
 begin
-  result := ToTextOS(integer(fRemoteOsVersion));
+  ShortStringToAnsi7String(ToTextOS(integer(fRemoteOsVersion)), result);
 end;
 
 const

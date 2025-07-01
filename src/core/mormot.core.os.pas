@@ -451,7 +451,7 @@ const
   /// the recognized MacOS versions, as plain text
   // - indexed from OSVersion32.utsrelease[2] kernel revision
   // - see https://en.wikipedia.org/wiki/MacOS_version_history#Releases
-  MACOS_NAME: array[8 .. 26] of RawUtf8 = (
+  MACOS_NAME: array[8 .. 26] of TShort23 = (
     '10.4 Tiger',
     '10.5 Leopard',
     '10.6 Snow Leopard',
@@ -474,7 +474,7 @@ const
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
-  WINDOWS_NAME: array[TWindowsVersion] of RawUtf8 = (
+  WINDOWS_NAME: array[TWindowsVersion] of TShort23 = (
     '',                     // wUnknown
     '2000',                 // w2000
     'XP',                   // wXP
@@ -526,7 +526,7 @@ const
      wEleven];
 
   /// translate one operating system (and distribution) into a its common name
-  OS_NAME: array[TOperatingSystem] of RawUtf8 = (
+  OS_NAME: array[TOperatingSystem] of TShort15 = (
     'Unknown',      // osUnknown
     'Windows',      // osWindows
     'Linux',        // osLinux
@@ -562,8 +562,8 @@ const
     'CoreOS',       // osCoreOS
     'Alpine',       // osAlpine
     'Android',      // osAndroid
-    'Debian-based', // osApt - use the most common text
-    'Rpm-based');   // osRpm
+    'Debian-based', // osApt - any Debian-based flavor
+    'Rpm-based');   // osRpm - any RedHat-based flavor
 
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
@@ -703,7 +703,7 @@ var
   // - use if PosEx('Wine', OSVersionInfoEx) > 0 then to check for Wine presence
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
-  // and computed by ToTextOS(OSVersionInt32)
+  // and computed by ToTextOSU(OSVersionInt32)
   // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or
   // 'macOS 13 Ventura 22.3.0'
   OSVersionShort: RawUtf8;
@@ -769,25 +769,32 @@ var
 /// convert an Operating System type into its human-friendly text representation
 // - returns e.g. 'Windows Vista' or 'Windows 10 22H2' or 'Ubuntu' or
 // 'macOS 13 Ventura'
-function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
+function ToText(const osv: TOperatingSystemVersion): TShort31; overload;
+
+/// convert an Operating System type into its human-friendly text representation
+function ToTextU(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
 /// low-level function used internally by ToText(osv) to detect Windows versions
-function WinOsBuild(const osv: TOperatingSystemVersion;
-  firstchar: AnsiChar = #0): TShort8;
+// - append e.g. ' 25H2' with sep = ' ' - see also WindowsDisplayVersion
+procedure AppendOsBuild(const osv: TOperatingSystemVersion; dest: PAnsiChar;
+  sep: AnsiChar = #0);
+
+/// returns '' or the detected Windows Version, e.g. ' 25H2' with sep=' '
+function WinOsBuild(const osv: TOperatingSystemVersion; sep: AnsiChar): TShort7;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an Operating System type into its one-word text representation
 // - returns e.g. 'Vista' or 'Ubuntu' or 'OSX'
-function OsvToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// internal function called when inlining ToTextShort()
-function OsvToTextShorter(const osv: TOperatingSystemVersion): PRawUtf8;
+function OsvToShort(const osv: TOperatingSystemVersion): PShortString;
 
 /// convert a 32-bit Operating System type into its full text representation
 // - including the kernel revision (not the distribution version) on POSIX systems
 // - returns e.g. 'Windows Vista', 'Windows 11 64-bit 21H2 22000' or
 // 'Ubuntu Linux 5.4.0'
-function ToTextOS(osint32: integer): RawUtf8;
+function ToTextOS(osint32: integer): TShort31;
+
+/// convert a 32-bit Operating System type into its full RawUtf8 representation
+function ToTextOSU(osint32: integer): RawUtf8;
 
 /// check if the current OS (i.e. OS_KIND value) match a description
 // - will handle osPosix and osLinux as generic detection of those systems
@@ -6227,7 +6234,7 @@ const // cf https://preview.changewindows.org/platforms/pc
   DESKTOP_INT: array[0 .. 19] of cardinal = (
      10240,  10586,  14393,  15063,  16299,  17134,  17763,  18362,  18363,
      19041,  19042,  19043,  19044,  19045,  22000,  22621,  22631,  26100,
-     26200, 27881); // detect 26H2 Canary builds since 19/6/2025
+     26200,  27881); // detect 26H2 Canary builds since 19/6/2025
   DESKTOP_TXT: array[0 .. high(DESKTOP_INT), 0 .. 3] of AnsiChar = (
     '1507', '1511', '1607', '1703', '1709', '1803', '1809', '1903', '1909',
     '2004', '20H2', '21H1', '21H2', '22H2', '21H2', '22H2', '23H2', '24H2',
@@ -6252,52 +6259,73 @@ begin
   result := 0;
 end;
 
-function WinOsBuild(const osv: TOperatingSystemVersion; firstchar: AnsiChar): TShort8;
+procedure AppendOsBuild(const osv: TOperatingSystemVersion; dest: PAnsiChar;
+  sep: AnsiChar);
 var
-  c: cardinal;
+  txt4: cardinal; // = array[0..3] of AnsiChar
 begin
-  result[0] := #0;
   if osv.os <> osWindows then
     exit;
-  c := osv.winbuild;
+  txt4 := osv.winbuild;
   case  osv.win of
     wTen, wTen_64, wEleven, wEleven_64: // desktop versions
-      c := FindOsBuild(c, high(DESKTOP_INT), @DESKTOP_INT, @DESKTOP_TXT);
+      txt4 := FindOsBuild(txt4, high(DESKTOP_INT), @DESKTOP_INT, @DESKTOP_TXT);
     wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64:
-      c := FindOsBuild(c, high(SERVER_INT), @SERVER_INT, @SERVER_TXT);
+      txt4 := FindOsBuild(txt4, high(SERVER_INT), @SERVER_INT, @SERVER_TXT);
   else
     exit;
   end;
-  if c <> 0 then
-    if firstchar = #0 then
-    begin
-      result[0] := #4; // e.g. '21H2' for firstchar=#0
-      PCardinal(@result[1])^ := c;
-    end
-    else
-    begin
-      result[0] := #5; // e.g. ' 21H2' for firstchar=' '
-      result[1] := firstchar;
-      PCardinal(@result[2])^ := c;
-    end;
+  if txt4 = 0 then
+    exit;
+  if sep <> #0 then
+    AppendShortChar(sep, dest); // e.g. ' 21H2' for sep=' '
+  PCardinal(@dest[ord(dest[0]) + 1])^ := txt4;
+  inc(dest[0], 4);
 end;
 
-function ToText(const osv: TOperatingSystemVersion): RawUtf8;
+function WinOsBuild(const osv: TOperatingSystemVersion; sep: AnsiChar): TShort7;
 begin
-  result := OS_NAME[osv.os];
+  result[0] := #0;
+  AppendOsBuild(osv, @result, sep);
+end;
+
+procedure AppendOsv(const osv: TOperatingSystemVersion; var dest: Shortstring);
+begin
   case osv.os of
     osWindows:
       begin
-        Join(['Windows ', WINDOWS_NAME[osv.win]], result);
-        AppendShortToUtf8(WinOsBuild(osv, ' '), result);
+        AppendShort('Windows ', dest);
+        AppendShort(WINDOWS_NAME[osv.win], dest);
+        AppendOsBuild(osv, @dest, ' ');
+        exit;
       end;
-    osOSX:
+    osOSX: // guess end-user MacOS Name from Darwin version number
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
-        Join(['macOS ', MACOS_NAME[osv.utsrelease[2]]], result);
+      begin
+        AppendShort('macOS ', dest);
+        AppendShort(MACOS_NAME[osv.utsrelease[2]], dest);
+        exit;
+      end;
   end;
+  AppendShort(OS_NAME[osv.os], dest);
 end;
 
-function OsvToTextShorter(const osv: TOperatingSystemVersion): PRawUtf8;
+function ToText(const osv: TOperatingSystemVersion): TShort31;
+begin
+  result[0] := #0;
+  AppendOsv(osv, result);
+end;
+
+function ToTextU(const osv: TOperatingSystemVersion): RawUtf8;
+var
+  tmp: TShort31;
+begin
+  tmp[0] := #0;
+  AppendOsv(osv, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function OsvToShort(const osv: TOperatingSystemVersion): PShortString;
 begin
   result := nil;
   case osv.os of
@@ -6312,34 +6340,40 @@ begin
     result := @OS_NAME[osv.os];
 end;
 
-function OsvToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
-begin
-  result := OsvToTextShorter(osv)^;
-end;
-
-const
-  LINUX_TEXT: array[boolean] of string[7] = (
-    '', 'Linux ');
-
-function ToTextOS(osint32: integer): RawUtf8;
+function ToTextOS(osint32: integer): TShort31;
 var
   osv: TOperatingSystemVersion absolute osint32;
 begin
+  result[0] := #0;
   if osint32 = 0 then
-  begin
-    result := '';
     exit;
-  end;
-  result := ToText(osv);
+  AppendOsv(osv, result);
   if (osv.os = osWindows) and
      (osv.winbuild <> 0) then
+  begin
     // include the Windows build number, e.g. 'Windows 11 64bit 21H2 22000'
-    result := _fmt('%s %d', [result, osv.winbuild]);
+    AppendShortChar(' ', @result);
+    AppendShortCardinal(osv.winbuild, result);
+  end;
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
-    // include kernel number to the distribution name, e.g. 'Ubuntu Linux 5.4.0'
-    result := _fmt('%s %s%d.%d.%d', [result, LINUX_TEXT[osv.os in OS_LINUX],
-      osv.utsrelease[2], osv.utsrelease[1], osv.utsrelease[0]]);
+  begin
+    // include kernel number to the distribution name
+    if osv.os in (OS_LINUX - [osAndroid]) then
+      AppendShort(' Linux ', result) // e.g. 'Ubuntu Linux 5.4.0'
+    else
+      AppendShortChar(' ', @result);
+    AppendShortCardinal(osv.utsrelease[2], result);
+    AppendShortChar('.', @result);
+    AppendShortCardinal(osv.utsrelease[1], result);
+    AppendShortChar('.', @result);
+    AppendShortCardinal(osv.utsrelease[0], result);
+  end;
+end;
+
+function ToTextOSU(osint32: integer): RawUtf8;
+begin
+  ShortStringToAnsi7String(ToTextOS(osint32), result);
 end;
 
 function MatchOS(os: TOperatingSystem): boolean;
@@ -11604,7 +11638,7 @@ begin
   TrimDualSpaces(OSVersionInfoEx);
   {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
   TrimDualSpaces(CpuInfoText);
-  OSVersionShort := ToTextOS(OSVersionInt32);
+  OSVersionShort := ToTextOSU(OSVersionInt32);
   InitializeExecutableInformation;
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;

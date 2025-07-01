@@ -7808,7 +7808,7 @@ begin
   with msg do
     FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
       [ToText(Kind)^, CardinalToHexShort(Seq), OS_INITIAL[Os.os],
-       OsvToTextShorter(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
+       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
        IP4ToShort(@IP4), IP4ToShort(@DestIP4),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),

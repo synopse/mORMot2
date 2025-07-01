@@ -5457,12 +5457,14 @@ begin
     _fmt('Windows %s (%d.%d.%d)', [WINDOWS_NAME[Vers],
       dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText);
     if wServicePackMajor <> 0 then
-      insert(_fmt('SP%d ', [wServicePackMajor]), OSVersionText, PosExChar('(', OSVersionText));
+      insert(_fmt('SP%d ', [wServicePackMajor]), OSVersionText,
+        PosExChar('(', OSVersionText));
   end;
   if WindowsUbr <> 0 then
     insert(_fmt('.%d', [WindowsUbr]), OSVersionText, length(OSVersionText));
-  if WindowsDisplayVersion <> '' then
-    insert(WindowsDisplayVersion + ' ', OSVersionText, PosExChar('(', OSVersionText));
+  if WindowsDisplayVersion <> '' then // append e.g. '25H2'
+    insert(WindowsDisplayVersion + ' ', OSVersionText,
+      PosExChar('(', OSVersionText));
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
   if reg.ReadOpen(wrLocalMachine,
