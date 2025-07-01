@@ -9243,29 +9243,31 @@ begin
   osv.os := osWindows;
   osv.win := wSeven;
   osv.winbuild := 0;
-  CheckEqual(ToText(osv), 'Windows 7');
+  CheckEqualShort(ToText(osv), 'Windows 7');
   osv.win := wTen_64;
-  CheckEqual(ToText(osv), 'Windows 10 64bit');
+  CheckEqualShort(ToText(osv), 'Windows 10 64bit');
   osv.winbuild := 10240;
-  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  CheckEqualShort(ToText(osv), 'Windows 10 64bit 1507');
   osv.winbuild := 10241;
-  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  CheckEqualShort(ToText(osv), 'Windows 10 64bit 1507');
   osv.win := wTen;
   osv.winbuild := 19045;
-  CheckEqual(ToText(osv), 'Windows 10 22H2');
+  CheckEqualShort(ToText(osv), 'Windows 10 22H2');
   osv.win := wEleven;
   osv.winbuild := 22000;
-  CheckEqual(ToText(osv), 'Windows 11 21H2');
+  CheckEqualShort(ToText(osv), 'Windows 11 21H2');
   osv.winbuild := 22621;
-  CheckEqual(ToText(osv), 'Windows 11 22H2');
+  CheckEqualShort(ToText(osv), 'Windows 11 22H2');
   osv.win := wEleven_64;
   osv.winbuild := 26100;
-  CheckEqual(ToText(osv), 'Windows 11 64bit 24H2');
+  CheckEqualShort(ToText(osv), 'Windows 11 64bit 24H2');
   osv.winbuild := 26100;
-  CheckEqual(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
+  CheckEqualShort(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
+  osv.winbuild := 26210;
+  CheckEqualShort(ToTextOS(cardinal(osv)), 'Windows 11 64bit 25H2 26210');
   osv.win := wServer2022_64;
   osv.winbuild := 20349;
-  CheckEqual(ToTextOS(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
+  CheckEqual(ToTextOSU(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
   // validate OS definitions logic
   for os := low(os) to high(os) do
   begin
