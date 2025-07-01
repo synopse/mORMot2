@@ -156,7 +156,7 @@ end;
 
 {$ifndef FPC_X86} // FPC RTL has fastmove.inc -> our SSE2/ERMS asm is slower
 
-// fast SSE2 version - force define HASNOSSE2 when run any very old CPU
+// fast SSE2 version - force define HASNOSSE2 when run any very old CPU via FPUS
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -930,7 +930,7 @@ asm
         and     eax, $3f
 end;
 
-{$ifdef HASNOSSE2} // fallback to simple pascal code if no SSE2 available
+{$ifdef HASNOSSE2} // fallback to simple pascal/i386 code if no SSE2 available
 
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 begin
@@ -944,7 +944,7 @@ end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 begin
-  result := PtrUInt(IntegerScan(P, Count, Value));
+  result := PtrUInt(IntegerScan(P, Count, Value)); // call pure i386 asm below
   if result = 0 then
     dec(result)
   else

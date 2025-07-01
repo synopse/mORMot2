@@ -10355,15 +10355,15 @@ begin
   {$ifdef ASMX86} 
   {$ifndef HASNOSSE2}
   {$ifdef WITH_ERMS}
-  if not (cfSSE2 in CpuFeatures) then
+  if not (cfSSE2 in CpuFeatures) then // introduced in year 2000 with Pentium 4
   begin
     ERMSB_MIN_SIZE_FWD := 0; // FillCharFast fallbacks to rep stosb on older CPU
     {$ifndef FPC_X86}
     ERMSB_MIN_SIZE_BWD := 0; // in both directions to bypass the SSE2 code
     {$endif FPC_X86}
+    // mormot.core.os.pas will call RedirectCode() to use SSE2 compatible code
+    // but without mormot.core.os, our MoveFast/SynLz ASM is likely to abort
   end
-  // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
-  // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
   else if cfERMS in CpuFeatures then
     ERMSB_MIN_SIZE_FWD := 4096; // "on 32-bit strings have to be at least 4KB"
     // backward rep movsd has no ERMS optimization so degrades performance
@@ -10925,7 +10925,7 @@ end;
 
 {$else}
 procedure TestCpuFeatures;
-begin
+begin // preliminary Delphi compatibility - let it compile first
 end;
 {$endif FPC}
 
@@ -10967,7 +10967,7 @@ end;
 {$else}  // non Intel nor ARM CPUs
 
 procedure TestCpuFeatures;
-begin
+begin // generic CPU with no specific support (yet)
 end;
 
 function HasHWAes: boolean;

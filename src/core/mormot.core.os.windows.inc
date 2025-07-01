@@ -5273,17 +5273,18 @@ var
 begin
   {$ifdef ASMX86}
   {$ifndef HASNOSSE2}
-  if not (cfSSE2 in CpuFeatures) then
+  if not (cfSSE2 in CpuFeatures) then // introduced in year 2000 with Pentium 4
   begin
+    ConsoleWrite('WARNING: too old CPU - recompile with HASNOSSE2', ccLightRed);
     // avoid illegal opcode in MoveFast() and SynLZ functions
     {$ifdef ISDELPHI} // FPC_X86 already redirect to FastCode RTL Move()
     RedirectCode(@MoveFast, @System.Move);
     {$endif ISDELPHI}
-    RedirectCode(@SynLZcompress1, @SynLZcompress1Pas);
-    RedirectCode(@SynLZdecompress1, @SynLZdecompress1Pas);
-    ConsoleWrite('WARNING: too old CPU - recompile with HASNOSSE2', ccLightRed);
+    RedirectCode(@SynLZdecompress1, @SynLZdecompress1Pas); // bypass SSE2 code
+    RedirectCode(@ByteScanIndex,    @ByteScanIndexPas);
+    RedirectCode(@IntegerScanIndex, @IntegerScanIndexPas);
+    RedirectCode(@WordScanIndex,    @WordScanIndexPas);
     // note: FillCharFast is handled by mormot.core.base via ERMSB
-    // and Byte/Word/IntegerScanIndex() are likely to GPF at runtime
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86}
