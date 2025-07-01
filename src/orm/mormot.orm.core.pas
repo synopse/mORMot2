@@ -11384,7 +11384,7 @@ begin // '{"Table":[...,"PUT",{object},...]}'
 end;
 
 const
-  BATCH_VERB: array[TRestBatchEncoding] of TShort8 = (
+  BATCH_VERB: array[TRestBatchEncoding] of TShort7 = (
     '"POST',    // encPost
     '"SIMPLE',  // encSimple
     '"',        // encPostHex

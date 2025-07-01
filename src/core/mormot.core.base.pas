@@ -583,6 +583,8 @@ type
   TShort8 = string[8];
   PShort8 = ^TShort8;
 
+  TShort7 = string[7];
+
   /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
   // - such result type would avoid a string allocation on heap
   TShort4 = string[4];

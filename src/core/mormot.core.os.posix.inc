@@ -2059,7 +2059,7 @@ begin
   result :=  __StdOutIsTTY;
 end;
 
-procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
+procedure TextColorCmd(Color: TConsoleColor; var s: TShort7);
 const
   TERM_CTRL: PUtf8Char = '04261537';
 begin
@@ -2077,7 +2077,7 @@ end;
 procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 var
-  c: TShort8;
+  c: TShort7;
 begin
   TextColorCmd(Color, c);
   AppendShortToUtf8(c, s);
@@ -2085,7 +2085,7 @@ end;
 
 procedure TextColor(Color: TConsoleColor);
 var
-  c: TShort8;
+  c: TShort7;
 begin
   TextColorCmd(Color, c);
   if c[0] = #0 then
