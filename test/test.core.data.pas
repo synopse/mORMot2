@@ -7924,15 +7924,15 @@ begin
     SetLength(comp1, AlgoSynLZ.Compressdestlen(length(s)));
     complen1 := SynLZCompress1(Pointer(s), length(s), pointer(comp1));
     Check(complen1 < length(comp1));
-    Check(complen1 = complen2);
+    CheckEqual(complen1, complen2);
     Check(CompareMem(pointer(comp1), pointer(comp2), complen1));
-    Check(SynLZDecompressdestlen(pointer(comp1)) = length(s));
-    Check(SynLZDecompressdestlen(pointer(comp2)) = length(s));
+    CheckEqual(SynLZDecompressdestlen(pointer(comp1)), length(s));
+    CheckEqual(SynLZDecompressdestlen(pointer(comp2)), length(s));
     SetLength(dec1, Length(s));
-    Check(SynLZDecompress1pas(Pointer(comp1), complen1, pointer(dec1)) = length(s));
+    CheckEqual(SynLZDecompress1pas(Pointer(comp1), complen1, pointer(dec1)), length(s));
     Check(CompareMem(pointer(dec1), pointer(s), length(s)));
     SetLength(dec2, Length(s));
-    Check(SynLZDecompress1(Pointer(comp2), complen2, pointer(dec2)) = length(s));
+    CheckEqual(SynLZDecompress1(Pointer(comp2), complen2, pointer(dec2)), length(s));
     Check(CompareMem(pointer(dec1), pointer(s), length(s)));
     {$endif CPUINTEL}
   end;
