@@ -768,8 +768,8 @@ var
 
 /// convert an Operating System type into its human-friendly text representation
 // - returns e.g. 'Windows Vista' or 'Windows 10 22H2' or 'Ubuntu' or
-// 'macOS 13 Ventura'
-function ToText(const osv: TOperatingSystemVersion): TShort31; overload;
+// 'macOS 13 Ventura' or 'Windows Server 2022 64bit 21H2'
+function ToText(const osv: TOperatingSystemVersion): TShort47; overload;
 
 /// convert an Operating System type into its human-friendly text representation
 function ToTextU(const osv: TOperatingSystemVersion): RawUtf8; overload;
@@ -791,9 +791,10 @@ function OsvToShort(const osv: TOperatingSystemVersion): PShortString;
 // - including the kernel revision (not the distribution version) on POSIX systems
 // - returns e.g. 'Windows Vista', 'Windows 11 64-bit 21H2 22000' or
 // 'Ubuntu Linux 5.4.0'
-function ToTextOS(osint32: integer): TShort31;
+function ToTextOS(osint32: integer): TShort47;
 
 /// convert a 32-bit Operating System type into its full RawUtf8 representation
+// - returns e.g. 'Windows Server 2022 64bit 21H2 20349'
 function ToTextOSU(osint32: integer): RawUtf8;
 
 /// check if the current OS (i.e. OS_KIND value) match a description
@@ -6312,7 +6313,7 @@ begin
   AppendShort(OS_NAME[osv.os], dest);
 end;
 
-function ToText(const osv: TOperatingSystemVersion): TShort31;
+function ToText(const osv: TOperatingSystemVersion): TShort47;
 begin
   result[0] := #0;
   AppendOsv(osv, result);
@@ -6320,7 +6321,7 @@ end;
 
 function ToTextU(const osv: TOperatingSystemVersion): RawUtf8;
 var
-  tmp: TShort31;
+  tmp: TShort47;
 begin
   tmp[0] := #0;
   AppendOsv(osv, tmp);
@@ -6342,7 +6343,7 @@ begin
     result := @OS_NAME[osv.os];
 end;
 
-function ToTextOS(osint32: integer): TShort31;
+function ToTextOS(osint32: integer): TShort47;
 var
   osv: TOperatingSystemVersion absolute osint32;
 begin

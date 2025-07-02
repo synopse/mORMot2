@@ -9267,6 +9267,7 @@ begin
   CheckEqualShort(ToTextOS(cardinal(osv)), 'Windows 11 64bit 25H2 26210');
   osv.win := wServer2022_64;
   osv.winbuild := 20349;
+  CheckEqualShort(ToText(osv), 'Windows Server 2022 64bit 21H2');
   CheckEqual(ToTextOSU(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
   // validate OS definitions logic
   for os := low(os) to high(os) do
