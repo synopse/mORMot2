@@ -148,6 +148,8 @@ var
   sec1, sec2: TEccSecretKey;
   c1, c2: TEccPublicKey;
 begin
+  if pub = nil then
+    ReferenceVectors; // need to compute some keys to work on
   Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
   Check(Ecc256r1MatchKeys(priv[0], pub[0]), 'match0');
   timer.Start;
