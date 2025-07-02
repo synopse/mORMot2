@@ -8311,6 +8311,23 @@ var
   bin, bin2: RawByteString;
   kt, kt2: TKerberosKeyTab;
 begin
+  // validate low-level Kerberos cryptography
+  // cf https://datatracker.ietf.org/doc/html/rfc3962#appendix-B
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 1);
+  CheckEqual(BinToHexLower(bin), 'cdedb5281bb2f801565a1122b2563515');
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96, 1);
+  CheckEqual(BinToHexLower(bin),
+    'cdedb5281bb2f801565a1122b25635150ad1f7a04bb9f3a333ecc0e2e1f70837');
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 2);
+  CheckEqual(BinToHexLower(bin), '01dbee7f4a9e243e988b62c73cda935d');
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96, 2);
+  CheckEqual(BinToHexLower(bin),
+    '01dbee7f4a9e243e988b62c73cda935da05378b93244ec8f48a99e61ad799d86');
+  // validate high-level TKerberosKeyTab wrapper
   FastSetRawByteString(bin, @KEYTAB_REF[0], length(KEYTAB_REF));
   CheckHash(bin, $1849920F);
   Check(BufferIsKeyTab(bin), 'bin1');

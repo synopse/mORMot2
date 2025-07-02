@@ -764,6 +764,7 @@ type
     saSha3S128,
     saSha3S256,
     saSha224);
+  PSignAlgo = ^TSignAlgo;
 
 const
   /// the standard text of a TSignAlgo
@@ -3553,6 +3554,19 @@ function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
 // into account SHA-224 substitution to SHA-256 as it should
 function HashForChannelBinding(const CertRaw: TCertDer;
   const SignatureHashAlgo: RawUtf8; out Hash: THash512Rec): integer;
+
+/// compute a Kerberos raw Intermediate Key according to RFC 3962
+// - to be used for testing purpose only, with official test vectors
+function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
+  EncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
+  Iterations: integer = 4096; Hmac: PSignAlgo = nil): RawByteString;
+
+type
+  TKerberosKeys = record
+    Encryption: RawByteString;
+    Integrity: RawByteString;
+    Checksum: RawByteString;
+  end;
 
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
@@ -9474,6 +9488,48 @@ begin // see https://datatracker.ietf.org/doc/html/rfc5929#section-4.1
   if h in [hfMD5, hfSHA1] then
     h := hfSHA256; // avoid weak algorithm (as per RFC - but keep hfSHA224)
   result := hasher.Full(h, pointer(CertRaw), length(CertRaw), Hash);
+end;
+
+// see https://www.rfc-editor.org/rfc/rfc3962
+function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
+  EncType, Iterations: integer; Hmac: PSignAlgo): RawByteString;
+var
+  keysize: integer; // in bytes
+  algo: TSignAlgo;
+begin
+  result := '';
+  if (PassPhrase = '') or
+     (Salt = '') or
+     (Iterations <= 0) or
+     (Iterations > 50000) then
+    exit;
+  case EncType of
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96:
+      begin
+        algo := saSha1;
+        keysize := SizeOf(THash128);
+      end;
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96:
+      begin
+        algo := saSha1;
+        keysize := SizeOf(THash256);
+      end;
+    ENCTYPE_AES128_CTS_HMAC_SHA256_128:
+      begin
+        algo := saSha256;
+        keysize := SizeOf(THash128);
+      end;
+    ENCTYPE_AES256_CTS_HMAC_SHA384_192:
+      begin
+        algo := saSha384;
+        keysize := SizeOf(THash256);
+      end;
+  else
+    exit; // unsupported EncType (yet)
+  end;
+  if Hmac <> nil then
+    Hmac^ := algo;
+  result := Pbkdf2(algo, PassPhrase, Salt, Iterations, keysize);
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
