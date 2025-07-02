@@ -1106,6 +1106,7 @@ begin
   _modMultP(Y2, Y2, X2);       // t4 = (y2 - y1)*(B - x3)
   _modSubP(Y2, Y2, Y1);        // t4 = y3
   _mv(X2, t5);
+  // now (X2, Y2) is P + Q
 end;
 
 // Input P = (x1, y1, Z), Q = (x2, y2, Z)
@@ -2085,11 +2086,11 @@ initialization
   assert(SizeOf(TEccCertificateContentV1) = 173); // on all platforms/compilers
   assert(SizeOf(TEccSignatureCertifiedContent) = 100);
   // register our branchless pascal code by default
-  @Ecc256r1MakeKey := @ecc_make_key_pas;
+  @Ecc256r1MakeKey      := @ecc_make_key_pas;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_pas;
-  @Ecc256r1Sign := @ecdsa_sign_pas;
-  @Ecc256r1Verify := @ecdsa_verify_pas;
-  @Ecc256r1Uncompress := @ecc_uncompress_key_pas;
+  @Ecc256r1Sign         := @ecdsa_sign_pas;
+  @Ecc256r1Verify       := @ecdsa_verify_pas;
+  @Ecc256r1Uncompress   := @ecc_uncompress_key_pas;
   @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_pas;
 
 end.
