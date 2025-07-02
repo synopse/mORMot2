@@ -8327,6 +8327,21 @@ begin
     ENCTYPE_AES256_CTS_HMAC_SHA1_96, 2);
   CheckEqual(BinToHexLower(bin),
     '01dbee7f4a9e243e988b62c73cda935da05378b93244ec8f48a99e61ad799d86');
+  // cf https://datatracker.ietf.org/doc/html/rfc3961#appendix-A.1
+  CheckEqual(BinToHexLower(Rfc3961Nfold('012345', 64 shr 3)),
+    'be072631276b1955');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('password', 56 shr 3)),
+    '78a07b6caf85fa');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('password', 168 shr 3)),
+    '59e4a8ca7c0385c3c37b3f6d2000247cb6e6bd5b3e');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 64 shr 3)),
+    '6b65726265726f73');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 128 shr 3)),
+    '6b65726265726f737b9b5b2b93132b93');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 168 shr 3)),
+    '8372c236344e5f1550cd0747e15d62ca7a5a3bcea4');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 256 shr 3)),
+    '6b65726265726f737b9b5b2b93132b935c9bdcdad95c9899c4cae4dee6d6cae4');
   // validate high-level TKerberosKeyTab wrapper
   FastSetRawByteString(bin, @KEYTAB_REF[0], length(KEYTAB_REF));
   CheckHash(bin, $1849920F);

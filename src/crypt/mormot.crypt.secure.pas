@@ -3561,6 +3561,9 @@ function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
   EncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
   Iterations: integer = 4096; Hmac: PSignAlgo = nil): RawByteString;
 
+/// internal RFC 3961 derivation function - published only for testing
+function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString;
+
 type
   TKerberosKeys = record
     Encryption: RawByteString;
@@ -9488,6 +9491,57 @@ begin // see https://datatracker.ietf.org/doc/html/rfc5929#section-4.1
   if h in [hfMD5, hfSHA1] then
     h := hfSHA256; // avoid weak algorithm (as per RFC - but keep hfSHA224)
   result := hasher.Full(h, pointer(CertRaw), length(CertRaw), Hash);
+end;
+
+function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString;
+var
+  ilen, lcm, ibits, msbit, divi, c: cardinal;
+  i: PtrUInt;
+  res: PByteArray;
+  p: PByte;
+begin
+  // prepare the result string for 13-bit right rotation as in RFC 3161
+  res := FastNewRawByteString(result, olen);
+  FillCharFast(res^, olen, 0);
+  ilen := length(input);
+  ibits := ilen shl 3;
+  lcm := (ilen * olen) div gcd(ilen, olen);
+  c := 0;
+  for i := lcm - 1 downto 0 do
+  begin
+    // compute the msbit in k which gets added into this byte
+    divi := i div ilen;
+    msbit := (
+       // first, start with the msbit in the first, unrotated byte
+       (ibits - 1)
+       // then, for each byte, shift to the right for each repetition
+       + ((ibits + 13) * divi)
+       // last, pick out the correct byte within that shifted repetition
+       + ((ilen - (i - (divi * ilen))) shl 3) ) mod ibits;
+    // pull out the byte value itself
+    inc(c, (
+       ((PByteArray(input)[((ilen - 1) - (msbit shr 3)) mod ilen] shl 8) or
+         PByteArray(input)[(ilen - (msbit shr 3)) mod ilen])
+       shr ((msbit and 7) + 1) ) and 255);
+    // do the addition and truncate to 255-bit
+    p := @res[i mod olen];
+    inc(c, p^);
+    p^ := c;
+    // keep around the carry bit, if any
+    c := c shr 8;
+  end;
+  // if there's a carry bit left over, add it back in
+  if c <> 0 then
+    for i := olen - 1 downto 0 do
+    begin
+      // do the addition and truncate to 255-bit
+      inc(c, res[i]);
+      res[i] := c;
+      // keep around the carry bit, if any
+      c := c shr 8;
+      if c = 0 then
+        break;
+    end;
 end;
 
 // see https://www.rfc-editor.org/rfc/rfc3962
