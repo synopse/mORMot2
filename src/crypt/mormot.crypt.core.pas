@@ -423,7 +423,8 @@ type
   // - implements standard AEAD (authenticated-encryption with associated-data)
   // algorithm, as defined by NIST Special Publication 800-38D
   // - will use AES-NI and CLMUL Intel/AMD opcodes if available on x86_64/i386
-  // - do not use this raw data structure, but TAesFast[mGCM] with proper padding
+  // - do not use this raw data structure, but TAesFast[mGCM] with proper padding,
+  // unless you work on small messages (a few bytes) and require
   {$ifdef USERECORDWITHMETHODS}
   TAesGcmEngine = record
   {$else}

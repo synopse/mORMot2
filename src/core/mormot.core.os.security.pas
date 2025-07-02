@@ -5261,7 +5261,7 @@ begin
        not Read16(e.EncType) or
        not ReadOctStr(e.Key) then
       exit;
-    e.Timestamp := PCardinal(@v)^; // Year 2038 ready
+    e.Timestamp := PCardinal(@v)^; // cardinal is Year 2038 ready (up to 2106)
     if (PtrUInt(P + 4) <= PtrUInt(PEnd)) and
        (PCardinal(P)^ <> 0) then
       if not Read32(e.KeyVersion) then // optional 32-bit key version

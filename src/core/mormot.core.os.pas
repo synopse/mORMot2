@@ -3098,7 +3098,9 @@ function NowUtc: TDateTime;
 // - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
 // - use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
 // or GetSystemTimeAsFileTime under Windows
-// - returns a 64-bit unsigned value, so is "Year2038bug" free
+// - returns a 64-bit unsigned value, so is "Year2038bug" free - internal
+// 32-bit storage may use either proper unsigned cardinal (so overflow in
+// 2106) or most likely the TUnixTimeMinimal epoch (valid up to 2152)
 function UnixTimeUtc: TUnixTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time

@@ -326,7 +326,9 @@ type
   // - bits 0..14 map a 15-bit increasing counter (collision-free)
   // - bits 15..22 map a 8-bit process identifier (0..255)
   // - bits 23..53 map a 31-bit UTC time, encoded as seconds since 1/1/2025,
-  // therefore valid until 2093
+  // therefore valid until 2093 (when I hope we will be done with JavaScript)
+  // or until 2171 if we use the [-2^53+1 .. 0] range of negative numbers -
+  // but BigInt would be usable at that time for sure for TSynUniqueIdentifier
   TSynUnique53 = type Int53;
 
   /// map 64-bit integer unique identifier internal memory structure
@@ -357,7 +359,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// extract the UTC generation timestamp as seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
-    // - it uses in fact a 33-bit resolution, so is "Year 2038" bug-free
+    // - it uses in fact an unsigned 33-bit resolution, so is "Year 2038"
+    // bug-free and would overflow only in year 2242
     function CreateTimeUnix: TUnixTime;
       {$ifdef HASINLINE}inline;{$endif}
     /// extract the UTC generation timestamp as TDateTime

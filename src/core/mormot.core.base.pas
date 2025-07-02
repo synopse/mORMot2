@@ -4586,6 +4586,7 @@ type
   // - is stored as 64-bit value, so that it won't be affected by the
   // "Year 2038" overflow issue
   // - see TUnixMSTime for a millisecond resolution Unix Timestamp
+  // - consider TUnixTimeMinimal if you need a 32-bit safe storage (up to 2152)
   // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
   // a regular TDateTime
   // - use UnixTimeUtc to return the current timestamp, using fast OS API call
@@ -4597,6 +4598,8 @@ type
   TUnixTimeDynArray = array of TUnixTime;
 
   /// 32-bit seconds, as returnd by mormot.core.datetime. UnixTimeMinimalUtc
+  // - epoch is UNIXTIME_MINIMAL (2016) instead of 1970 and it is stored as
+  // proper unsigned 32-bit, so would overflow only in 2152
   TUnixTimeMinimal = type cardinal;
   /// pointer to a timestamp stored as 32-bit seconds
   PUnixTimeMinimal = ^TUnixTimeMinimal;
