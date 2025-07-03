@@ -1914,7 +1914,7 @@ type
   TKerberosKeyEntries = array of TKerberosKeyEntry;
 
   /// Kerberos KeyTab file basic read/write support
-  // - use TKerberosKeyTabGenerator from mormot.crypt.secure to compute a new key
+  // - TKerberosKeyTabGenerator from mormot.crypt.secure can compute a new key
   TKerberosKeyTab = class(TSynPersistent)
   protected
     fEntry: TKerberosKeyEntries;

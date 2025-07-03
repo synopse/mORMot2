@@ -3572,7 +3572,8 @@ function MakeKerberosKey(const PassPhrase, Salt: RawUtf8;
 function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString;
 
 /// internal RFC 3962 derivation function - published only for testing
-function Rfc3962SeedtoKey(const Seed, Dk: RawByteString; EncType: integer): RawByteString;
+function Rfc3962SeedtoKey(const Seed: RawByteString; EncType: integer;
+  DK: pointer = nil): RawByteString;
 
 /// internal KeyTab derivation function - published only for testing
 function MakeKerberosKeyEntry(var aEntry: TKerberosKeyEntry;
@@ -3584,8 +3585,9 @@ type
   // - the AddNew() method is able to generate a new key from credentials
   TKerberosKeyTabGenerator = class(TKerberosKeyTab)
   public
-    /// generate and and append a new key to the KeyTab entries
+    /// generate and append a new key to the KeyTab entries
     // - returns true if was added, or false if it would have been duplicated
+    // - aPrincipal is in the form 'user@my.lan' and will be normalized
     function AddNew(const aPrincipal: RawUtf8; const aPassword: SpiUtf8;
       aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
       aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
@@ -9588,11 +9590,15 @@ begin
   result := Pbkdf2(algo, PassPhrase, Salt, Iterations, keysize);
 end;
 
-function Rfc3962SeedtoKey(const Seed, Dk: RawByteString; EncType: integer): RawByteString;
+const // = pre-computed Rfc3961Nfold('kerberos', 32)
+  KERBEROS_NFOLD: array[0 .. 7] of cardinal = ($6272656b, $736f7265,
+   $2b5b9b7b, $932b1393, $dadc9b5c, $99985cd9, $dee4cac4, $e4cad6e6);
+
+function Rfc3962SeedtoKey(const Seed: RawByteString; EncType: integer;
+  DK: pointer): RawByteString;
 var
   keysize: integer;
   aes: TAesCbc;
-  constant: RawByteString;
   p: PHash256Rec;
   h0, h1: THash256Rec;
 begin
@@ -9607,13 +9613,12 @@ begin
   end;
   if length(Seed) <> keysize then
     exit;
-  constant := Rfc3961Nfold(Dk, keysize);
-  if length(constant) <> keysize then
-    exit;
+  if DK = nil then
+    DK := @KERBEROS_NFOLD; // e.g. from MakeKerberosKey()
   p := FastNewRawByteString(result, keysize);
   aes := TAesCbc.Create(pointer(Seed)^, keysize shl 3);
-  try
-    aes.Encrypt(pointer(constant), @h0, keysize); // no AES-CTS here! :(
+  try // DK(seed, 'kerberos') with AES-128 or AES-256 as in RFC 3962 section 4
+    aes.Encrypt(DK, @h0, keysize); // no AES-CTS here! :(
     p^.Lo := h0.Lo;
     if keysize = SizeOf(THash256) then
     begin
@@ -9637,7 +9642,7 @@ begin
   base := MakeKerberosKeySeed(PassPhrase, Salt, EncType, Iterations);
   if base = '' then
     exit;
-  result := Rfc3962SeedtoKey(base, 'kerberos', EncType);
+  result := Rfc3962SeedtoKey(base, EncType);
   FillZero(base);
 end;
 
@@ -9677,8 +9682,7 @@ begin
   result := MakeKerberosKeyEntry(e, aPrincipal, aSalt, aPassword,
               aIsComputer, aEncType, aIterations) and
             Add(e);
-  if not result then
-    FillZero(e.Key); // anti-forensic
+  FillZero(e.Key); // anti-forensic
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;

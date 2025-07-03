@@ -8374,9 +8374,9 @@ begin
   end;
   Check(p = @PByteArray(password)[length(password)]);
   bin := MakeKerberosKeySeed(password, 'DOMAIN.COMhostclient.domain.com',
-    ENCTYPE_AES128_CTS_HMAC_SHA1_96, $3e8);
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 1000);
   CheckEqual(BinToHexLower(bin), 'c7730daa23521bc16ab83cbee3b37f41');
-  bin := Rfc3962SeedtoKey(bin, 'kerberos', ENCTYPE_AES128_CTS_HMAC_SHA1_96);
+  bin := Rfc3962SeedtoKey(bin, ENCTYPE_AES128_CTS_HMAC_SHA1_96);
   CheckEqual(BinToHexLower(bin), 'b82ee122531c2d94821ac755bccb5879');
   // validate high-level TKerberosKeyTab wrapper
   FastSetRawByteString(bin, @KEYTAB_REF[0], length(KEYTAB_REF));

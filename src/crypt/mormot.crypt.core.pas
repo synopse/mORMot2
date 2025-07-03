@@ -5777,8 +5777,8 @@ begin
   piv := @fIV;
   for i := 1 to Count shr AesBlockShift do
   begin
-    XorBlock16(pointer(fIn), pointer(fOut), piv);
-    TAesContext(fAes).DoBlock(fAes, fOut^, fOut^);  // fOut=AES(fOut)
+    XorBlock16(pointer(fIn), pointer(fOut), piv);   // fOut = fIn xor iv
+    TAesContext(fAes).DoBlock(fAes, fOut^, fOut^);  // fOut = AES(fOut)
     piv := fOut;
     inc(fIn);
     inc(fOut);
@@ -5802,8 +5802,8 @@ begin
     for i := 1 to Count shr AesBlockShift do
     begin
       tmp := fIn^;
-      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^); // fOut=AES(fIn)
-      XorBlock16(pointer(fOut), pointer(@fIV));
+      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^); // fOut = AES(fIn)
+      XorBlock16(pointer(fOut), pointer(@fIV));     // fOut = fOut xor iv
       fIV := tmp;
       inc(fIn);
       inc(fOut);
