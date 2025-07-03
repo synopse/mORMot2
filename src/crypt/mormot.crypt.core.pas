@@ -679,6 +679,8 @@ type
     function DecryptPkcs7Var(Input: pointer; InputLen: PtrInt;
       IVAtBeginning: boolean; var Plain: RawByteString): boolean;
 
+    /// just fill the IV with zeros
+    procedure IVFillZero;
     /// initialize AEAD (authenticated-encryption with associated-data) nonce
     // - i.e. setup 256-bit MAC computation before next Encrypt/Decrypt call
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes
@@ -5418,6 +5420,11 @@ begin
       result := nil
   else
     SetLength(result, len - padding); // fast in-place resize
+end;
+
+procedure TAesAbstract.IVFillZero;
+begin
+  FillZero(fIV);
 end;
 
 function TAesAbstract.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
