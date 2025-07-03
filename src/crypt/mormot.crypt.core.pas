@@ -5769,18 +5769,21 @@ end;
 procedure TAesCbc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: cardinal;
+  piv: pointer;
 begin
   inherited; // set fIn,fOut
   if fAesInit <> initEncrypt then
     EncryptInit;
+  piv := @fIV;
   for i := 1 to Count shr AesBlockShift do
   begin
-    XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
+    XorBlock16(pointer(fIn), pointer(fOut), piv);
     TAesContext(fAes).DoBlock(fAes, fOut^, fOut^);  // fOut=AES(fOut)
-    fIV := fOut^;
+    piv := fOut;
     inc(fIn);
     inc(fOut);
   end;
+  fIV := PAesBlock(piv)^;
   Count := Count and AesBlockMod;
   if Count <> 0 then
     TrailerBytes(Count);
@@ -6126,8 +6129,8 @@ begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      tmp := fIn^;
-      crcblock(@fMac.encrypted, pointer(fIn)); // fIn may be = fOut
+      tmp := fIn^; // fIn may be = fOut -> make copy
+      crcblock(@fMac.encrypted, pointer(fIn));
       TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       fIV := tmp;
@@ -6428,11 +6431,10 @@ begin
     end;
     fIV := iv;
     Count := Count and AesBlockMod;
-    if Count <> 0 then
-    begin
-      TAesContext(fAes).DoBlock(fAes, fIV, tmp);
-      XorMemory(pointer(fOut), pointer(fIn), @tmp, Count);
-    end;
+    if Count = 0 then
+      exit;
+    TAesContext(fAes).DoBlock(fAes, fIV, tmp);
+    XorMemory(pointer(fOut), pointer(fIn), @tmp, Count);
   end;
 end;
 
