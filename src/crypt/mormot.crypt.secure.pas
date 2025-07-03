@@ -3574,6 +3574,24 @@ function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString
 /// internal RFC 3962 derivation function - published only for testing
 function Rfc3962SeedtoKey(const Seed, Dk: RawByteString; EncType: integer): RawByteString;
 
+/// internal KeyTab derivation function - published only for testing
+function MakeKerberosKeyEntry(var aEntry: TKerberosKeyEntry;
+  const aPrincipal, aSalt: RawUtf8; const aPassword: SpiUtf8;
+  aIsComputer: boolean; aEncType, aIterations: integer): boolean;
+
+type
+  /// Kerberos KeyTab file full read/write support
+  // - the AddNew() method is able to generate a new key from credentials
+  TKerberosKeyTabGenerator = class(TKerberosKeyTab)
+  public
+    /// generate and and append a new key to the KeyTab entries
+    // - returns true if was added, or false if it would have been duplicated
+    function AddNew(const aPrincipal: RawUtf8; const aPassword: SpiUtf8;
+      aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
+      aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
+      aIterations: integer = 4096): boolean;
+  end;
+
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
 
@@ -9621,6 +9639,46 @@ begin
     exit;
   result := Rfc3962SeedtoKey(base, 'kerberos', EncType);
   FillZero(base);
+end;
+
+function MakeKerberosKeyEntry(var aEntry: TKerberosKeyEntry;
+  const aPrincipal, aSalt: RawUtf8; const aPassword: SpiUtf8;
+  aIsComputer: boolean; aEncType, aIterations: integer): boolean;
+var
+  realm, name, salt: RawUtf8;
+begin
+  result := false;
+  if not Split(aPrincipal, '@', name, realm) then
+    exit;
+  UpperCaseSelf(realm);
+  aEntry.Timestamp := UnixTimeUtc;
+  aEntry.EncType := aEncType;
+  aEntry.KeyVersion := 1;
+  aEntry.NameType := 1;
+  aEntry.Principal := Join([name, '@', realm]); // normalize
+  if aSalt <> '' then
+    salt := aSalt
+  else if aIsComputer then // see [MS-KILE] 3.1.1.2 Cryptographic Material
+    salt := Join([realm, 'host', name, '.', LowerCaseU(realm)])
+  else
+    salt := Join([realm, name]);
+  aEntry.Key := MakeKerberosKey(aPassword, salt, aEncType, aIterations);
+  result := aEntry.Key <> '';
+end;
+
+{ TKerberosKeyTabGenerator }
+
+function TKerberosKeyTabGenerator.AddNew(const aPrincipal: RawUtf8;
+  const aPassword: SpiUtf8; aIsComputer: boolean; const aSalt: RawUtf8;
+  aEncType, aIterations: integer): boolean;
+var
+  e: TKerberosKeyEntry;
+begin
+  result := MakeKerberosKeyEntry(e, aPrincipal, aSalt, aPassword,
+              aIsComputer, aEncType, aIterations) and
+            Add(e);
+  if not result then
+    FillZero(e.Key); // anti-forensic
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;

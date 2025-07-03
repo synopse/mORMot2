@@ -1913,7 +1913,8 @@ type
   end;
   TKerberosKeyEntries = array of TKerberosKeyEntry;
 
-  /// Kerberos KeyTab file support
+  /// Kerberos KeyTab file basic read/write support
+  // - use TKerberosKeyTabGenerator from mormot.crypt.secure to compute a new key
   TKerberosKeyTab = class(TSynPersistent)
   protected
     fEntry: TKerberosKeyEntries;
@@ -5390,7 +5391,7 @@ var
 begin
   result := false;
   n := length(fEntry);
-  if aIndex >= n then
+  if aIndex >= n then // index out of range
     exit;
   result := true;
   FillZero(fEntry[aIndex].Key); // anti-forensic
