@@ -11,6 +11,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
@@ -96,6 +97,8 @@ type
     procedure Pkcs11;
     /// validate client-server DIGEST access authentication
     procedure Digest;
+    /// test the TKerberosKeyTab class
+    procedure _TKerberosKeyTab;
     /// High-Level Cryptography Catalog
     procedure Catalog;
     /// compute some performance numbers, mostly against regression
@@ -3026,6 +3029,203 @@ begin
     finally
       dig.Free;
     end;
+  end;
+end;
+
+const
+  // $ klist -kt test.keytab
+  // KVNO Timestamp           Principal      Password
+  // ---- ------------------- ------------------------------------------------------
+  //    1 26/06/2025 16:23:40 toto@MY.LAN    titi
+  //    1 26/06/2025 16:23:40 toto2@MY.LAN   tutu
+  KEYTAB_REF: array[0.. $8c] of byte = (
+    $05, $02, $00, $00, $00, $41, $00, $01, $00, $06, $4d, $59, $2e, $4c, $41,
+    $4e, $00, $04, $74, $6f, $74, $6f, $00, $00, $00, $01, $68, $5d, $57, $ec,
+    $01, $00, $12, $00, $20, $c4, $f2, $ec, $2e, $9b, $04, $8c, $7f, $db, $82,
+    $65, $e0, $15, $79, $f7, $fd, $4f, $33, $16, $4f, $b7, $29, $0a, $52, $86,
+    $72, $98, $bf, $a2, $b7, $94, $ab, $00, $00, $00, $01, $00, $00, $00, $42,
+    $00, $01, $00, $06, $4d, $59, $2e, $4c, $41, $4e, $00, $05, $74, $6f, $74,
+    $6f, $32, $00, $00, $00, $01, $68, $5d, $57, $ec, $01, $00, $12, $00, $20,
+    $18, $94, $1a, $0e, $92, $78, $d6, $d9, $78, $f3, $b5, $bb, $a7, $a1, $99,
+    $50, $c6, $c1, $2c, $78, $6e, $26, $ba, $ec, $ac, $d9, $4d, $0b, $cb, $6f,
+    $56, $87, $00, $00, $00, $01);
+
+procedure TTestCoreCrypto._TKerberosKeyTab;
+var
+  bin, bin2, password: RawByteString;
+  hex: RawUtf8;
+  kt, kt2: TKerberosKeyTab;
+  ktg: TKerberosKeyTabGenerator;
+  a: TSignAlgo;
+  p: PByteArray;
+  i: PtrInt;
+begin
+  // validate low-level Kerberos cryptography
+  // https://datatracker.ietf.org/doc/html/rfc3962#appendix-B
+  a := saSha3S256;
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 1, @a);
+  Check(a = saSha1);
+  CheckEqual(BinToHexLower(bin), 'cdedb5281bb2f801565a1122b2563515');
+  a := saSha3S256;
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96, 1, @a);
+  Check(a = saSha1);
+  CheckEqual(BinToHexLower(bin),
+    'cdedb5281bb2f801565a1122b25635150ad1f7a04bb9f3a333ecc0e2e1f70837');
+  a := saSha3S256;
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 2, @a);
+  Check(a = saSha1);
+  CheckEqual(BinToHexLower(bin), '01dbee7f4a9e243e988b62c73cda935d');
+  a := saSha3S256;
+  bin := MakeKerberosKeySeed('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96, 2, @a);
+  Check(a = saSha1);
+  CheckEqual(BinToHexLower(bin),
+    '01dbee7f4a9e243e988b62c73cda935da05378b93244ec8f48a99e61ad799d86');
+  // https://datatracker.ietf.org/doc/html/rfc3961#appendix-A.1
+  CheckEqual(BinToHexLower(Rfc3961Nfold('012345', 64 shr 3)),
+    'be072631276b1955');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('password', 56 shr 3)),
+    '78a07b6caf85fa');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('password', 168 shr 3)),
+    '59e4a8ca7c0385c3c37b3f6d2000247cb6e6bd5b3e');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 64 shr 3)),
+    '6b65726265726f73');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 128 shr 3)),
+    '6b65726265726f737b9b5b2b93132b93');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 168 shr 3)),
+    '8372c236344e5f1550cd0747e15d62ca7a5a3bcea4');
+  CheckEqual(BinToHexLower(Rfc3961Nfold('kerberos', 256 shr 3)),
+    '6b65726265726f737b9b5b2b93132b935c9bdcdad95c9899c4cae4dee6d6cae4');
+  // https://datatracker.ietf.org/doc/html/rfc3962#appendix-B
+  bin := MakeKerberosKey('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 1);
+  CheckEqual(BinToHexLower(bin), '42263c6e89f4fc28b8df68ee09799f15');
+  bin := MakeKerberosKey('password', 'ATHENA.MIT.EDUraeburn',
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96, 1);
+  CheckEqual(BinToHexLower(bin),
+    'fe697b52bc0d3ce14432ba036a92e65bbb52280990a2fa27883998d72af30161');
+  // [MS-KILE] "4.4 AES 128 Key Creation"
+  p := FastNewRawByteString(password, 120 * 3);
+  for i := 1 to 120 do
+  begin
+    p[0] := $ef;
+    p[1] := $bf;
+    p[2] := $bf;
+    p := @p[3];
+  end;
+  Check(p = @PByteArray(password)[length(password)]);
+  bin := MakeKerberosKeySeed(password, 'DOMAIN.COMhostclient.domain.com',
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96, 1000);
+  CheckEqual(BinToHexLower(bin), 'c7730daa23521bc16ab83cbee3b37f41');
+  bin := Rfc3962SeedtoKey(bin, ENCTYPE_AES128_CTS_HMAC_SHA1_96);
+  CheckEqual(BinToHexLower(bin), 'b82ee122531c2d94821ac755bccb5879');
+  // validate high-level TKerberosKeyTab wrapper
+  FastSetRawByteString(bin, @KEYTAB_REF[0], length(KEYTAB_REF));
+  CheckHash(bin, $1849920F);
+  Check(BufferIsKeyTab(bin), 'bin1');
+  kt := TKerberosKeyTab.Create;
+  kt2 := TKerberosKeyTab.Create;
+  try
+    Check(kt.LoadFromBinary(bin), 'LoadFromString');
+    if not CheckEqual(length(kt.Entry), 2, 'entry') then
+      exit;
+    with kt.Entry[0] do
+    begin
+      CheckEqual(TimeStamp, 1750947820);
+      CheckEqual(KeyVersion, 1);
+      CheckEqual(NameType, 1);
+      CheckEqual(EncType, ENCTYPE_AES256_CTS_HMAC_SHA1_96);
+      CheckEqual(Principal, 'toto@MY.LAN');
+      CheckEqual(length(Key), SizeOf(THash256));
+      hex := BinToHexLower(Key);
+      CheckEqual(hex, 'c4f2ec2e9b048c7fdb8265e01579f7fd4f33164fb7290a52867298bfa2b794ab');
+      bin := MakeKerberosKey('titi', 'MY.LANtoto', EncType);
+      CheckEqual(BinToHexLower(bin), hex);
+    end;
+    with kt.Entry[1] do
+    begin
+      CheckEqual(TimeStamp, 1750947820);
+      CheckEqual(KeyVersion, 1);
+      CheckEqual(NameType, 1);
+      CheckEqual(EncType, ENCTYPE_AES256_CTS_HMAC_SHA1_96);
+      CheckEqual(Principal, 'toto2@MY.LAN');
+      CheckHash(Key, $D101D374);
+      Check(MakeKerberosKey('tutu', 'MY.LANtoto2', EncType) = Key);
+    end;
+    Check(kt.Exists(kt.Entry[0]));
+    Check(kt.Exists(kt.Entry[1]));
+    CheckEqual(length(kt.Entry), 2, 'kt2');
+    CheckEqual(length(kt2.Entry), 0, 'kt20');
+    Check(not kt2.Exists(kt.Entry[0]));
+    Check(not kt2.Exists(kt.Entry[1]));
+    kt2.Add(kt.Entry[1]);
+    CheckEqual(length(kt2.Entry), 1, 'kt21');
+    Check(not kt2.Exists(kt.Entry[0]));
+    Check(kt2.Exists(kt.Entry[1]));
+    Check(kt2.Exists(kt2.Entry[0]));
+    Check(CompareEntry(kt.Entry[1], kt2.Entry[0]));
+    kt2.AddFrom(kt, ['toto']);
+    CheckEqual(length(kt2.Entry), 1, 'kt21 filter');
+    kt2.AddFrom(kt, []);
+    CheckEqual(length(kt2.Entry), 2, 'kt22 no dup');
+    Check(kt2.Exists(kt.Entry[0]));
+    Check(kt2.Exists(kt.Entry[1]));
+    Check(CompareEntry(kt.Entry[1], kt2.Entry[0]));
+    Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
+    bin2 := kt.SaveToBinary;
+    CheckHash(bin2, $1849920F, 'same saved');
+    Check(BufferIsKeyTab(bin2), 'bin2');
+    bin2 := kt2.SaveToBinary;
+    CheckHash(bin2, $67233E99, 'not the same order');
+    Check(BufferIsKeyTab(bin2), 'bin3');
+    Check(kt.LoadFromBinary(bin2), 'LoadFromString2');
+    if CheckEqual(length(kt.Entry), 2, 'entry') then
+    begin
+      Check(CompareEntry(kt.Entry[0], kt2.Entry[0]));
+      Check(CompareEntry(kt.Entry[1], kt2.Entry[1]));
+      Check(not CompareEntry(kt.Entry[0], kt2.Entry[1]));
+      Check(not CompareEntry(kt.Entry[1], kt2.Entry[0]));
+      bin2 := kt.SaveToBinary;
+      CheckHash(bin2, $67233E99);
+      Check(BufferIsKeyTab(bin2), 'bin2');
+      Check(not kt.Delete(10));
+      Check(kt.Delete(0), 'deleted');
+      Check(kt.Add(kt2.Entry[0]));
+      bin2 := kt.SaveToBinary;
+      CheckHash(bin2, $1849920F, 'delete saved');
+      Check(BufferIsKeyTab(bin2), 'bin2');
+      Check(kt.Delete(1), 'delete1');
+      if CheckEqual(length(kt.Entry), 1, 'deleted1') then
+        Check(CompareEntry(kt.Entry[0], kt2.Entry[1]));
+      Check(kt.Delete(0), 'delete0');
+      CheckEqual(length(kt.Entry), 0, 'flushed');
+    end;
+  finally
+    kt2.Free;
+    kt.Free;
+  end;
+  // TKerberosKeyTabGenerator should recreate the same exact KEYTAB_REF content
+  ktg := TKerberosKeyTabGenerator.Create;
+  try
+    Check(ktg.AddNew('toto@MY.LAN',  'titi'), 'toto@MY.LAN');
+    Check(ktg.AddNew('toto2@my.lan', 'tutu'), 'toto2@MY.LAN');
+    if CheckEqual(length(ktg.Entry), 2) then
+    begin
+      CheckHash(ktg.Entry[1].Key, $D101D374);
+      Check(ktg.Entry[1].Timestamp > 1750947820);
+      Check(ktg.Entry[1].Timestamp > 1750947820);
+      Check(UnixTimeUtc - ktg.Entry[0].Timestamp < 2, 'UnixTimeUtc');
+      ktg.Entry[0].Timestamp := 1750947820; // as in KEYTAB_REF
+      ktg.Entry[1].Timestamp := 1750947820;
+      bin := ktg.SaveToBinary;
+      CheckHash(bin, $1849920F);
+      Check(bin = bin2);
+    end;
+  finally
+    ktg.Free;
   end;
 end;
 
