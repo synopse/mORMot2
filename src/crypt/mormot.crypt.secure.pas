@@ -591,6 +591,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// hash the supplied strings content
     procedure Update(const aBuffer: array of RawByteString); overload;
+    /// hash 32-bit encoded integer as big endian
+    procedure UpdateBigEndian(aValue: cardinal);
     /// returns the resulting hash as lowercase hexadecimal string
     procedure Final(var aResult: RawUtf8); overload;
     /// set the resulting hash into a binary buffer, and the size as result
@@ -813,6 +815,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// process some message content supplied as string
     procedure Update(const aBuffer: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// hash 32-bit encoded integer as big endian
+    procedure UpdateBigEndian(aValue: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the computed digital signature as lowercase hexadecimal text
     function Final: RawUtf8; overload;
@@ -4023,6 +4028,12 @@ begin
     Update(pointer(aBuffer[i]), length(aBuffer[i]));
 end;
 
+procedure TSynHasher.UpdateBigEndian(aValue: cardinal);
+begin
+  aValue := bswap32(aValue);
+  Update(@aValue, 4);
+end;
+
 procedure TSynHasher.Final(var aResult: RawUtf8);
 var
   dig: THash512Rec;
@@ -4114,9 +4125,7 @@ begin
   repeat
     Init(aAlgo);
     Update(aSeed, aSeedLen);
-    counter := bswap32(counter);
-    Update(@counter, SizeOf(counter));
-    counter := bswap32(counter);
+    UpdateBigEndian(counter);
     inc(PByte(dig), Final(dig^));
     inc(counter);
   until PtrUInt(dig) - PtrUInt(result) >= aDestLen;
@@ -4550,6 +4559,11 @@ begin
   fHasher.Update(aBuffer, aLen);
 end;
 
+procedure TSynSigner.UpdateBigEndian(aValue: cardinal);
+begin
+  fHasher.UpdateBigEndian(aValue);
+end;
+
 procedure TSynSigner.Final(aSignature: PHash512Rec; aNoInit: boolean);
 begin
   fHasher.Final(aSignature^);
@@ -4597,11 +4611,8 @@ begin
   iter := self;
   iter.Update(aSalt);
   if not (Algo in SIGNER_SHA3) then // padding + XoF are part of SHA-3
-  begin
     // U1 = PRF(secret, salt + INT_32_BE(part))
-    aPartNumber := bswap32(aPartNumber); // is a 1-based index
-    iter.Update(@aPartNumber, 4);
-  end;
+    iter.UpdateBigEndian(aPartNumber);  // is a 1-based index
   iter.Final(aDerivatedKey, true);
   if aSecretPbkdf2Round < 2 then
     exit;
