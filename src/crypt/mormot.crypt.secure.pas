@@ -3564,12 +3564,8 @@ function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
 /// internal RFC 3961 derivation function - published only for testing
 function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString;
 
-type
-  TKerberosKeys = record
-    Encryption: RawByteString;
-    Integrity: RawByteString;
-    Checksum: RawByteString;
-  end;
+/// internal RFC 3962 derivation function - published only for testing
+function Rfc3962SeedtoKey(const Seed, Dk: RawByteString; EncType: integer): RawByteString;
 
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
@@ -9584,6 +9580,46 @@ begin
   if Hmac <> nil then
     Hmac^ := algo;
   result := Pbkdf2(algo, PassPhrase, Salt, Iterations, keysize);
+end;
+
+function Rfc3962SeedtoKey(const Seed, Dk: RawByteString; EncType: integer): RawByteString;
+var
+  keysize: integer;
+  aes: TAesCbc;
+  constant: RawByteString;
+  p: PHash256Rec;
+  h0, h1: THash256Rec;
+begin
+  result := '';
+  case EncType of
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96:
+      keysize := SizeOf(THash128);
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96:
+      keysize := SizeOf(THash256);
+  else
+    exit;
+  end;
+  if length(Seed) <> keysize then
+    exit;
+  constant := Rfc3961Nfold(Dk, keysize);
+  if length(constant) <> keysize then
+    exit;
+  p := FastNewRawByteString(result, keysize);
+  aes := TAesCbc.Create(pointer(Seed)^, keysize shl 3);
+  try
+    aes.Encrypt(pointer(constant), @h0, keysize); // no AES-CTS here! :(
+    p^.Lo := h0.Lo;
+    if keysize = SizeOf(THash256) then
+    begin
+      aes.IVFillZero;
+      aes.Encrypt(@h0, @h1, keysize);
+      p^.Hi := h1.Lo;
+    end;
+  finally
+    aes.Free;
+    FillZero(h0.b);
+    FillZero(h1.b)
+  end;
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
