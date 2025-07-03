@@ -730,8 +730,8 @@ const
   /// a contemporary, but elapsed, TUnixTime second-based value
   // - corresponds to Thu, 08 Dec 2016 08:50:20 GMT
   // - may be used to check for a valid just-generated Unix timestamp value
-  // - or to store a timestamp without any 32-bit "Year 2038" overflow issue
-  // and is valid until year 2152 - as a proper unsigned 32-bit starting in 2016
+  // - or to store a timestamp without any 32-bit "Year 2038" overflow issue,
+  // valid until year 2152 as cardinal (whereas POSIX Epoch up to 2106)
   UNIXTIME_MINIMAL = 1481187020;
   /// a contemporary, but elapsed, TUnixTimeMS millisecond-based value
   UNIXTIMEMS_MINIMAL = QWord(UNIXTIME_MINIMAL) * MSecsPerSec;

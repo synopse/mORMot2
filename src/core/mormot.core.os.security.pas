@@ -1893,6 +1893,11 @@ const
   ENCTYPE_AES128_CTS_HMAC_SHA256_128 = $13; // RFC 8009 - libktb5 1.15+
   ENCTYPE_AES256_CTS_HMAC_SHA384_192 = $14;
 
+  /// the standard KeyTab encoding names - do not change
+  ENCTYPE_NAME: array[$11 .. $14] of RawUtf8 = (
+    'aes128-cts-hmac-sha1-96',    'aes256-cts-hmac-sha1-96',
+    'aes128-cts-hmac-sha256-128', 'aes256-cts-hmac-sha384-192');
+
 type
   /// store one KeyTab entry in a TKerberosKeyTab storage
   TKerberosKeyEntry = record
@@ -5262,12 +5267,12 @@ begin
     if bigendian then
       if not Read32(e.NameType) then // not present if version 0x501
         exit;
-    if not Read32(v) or
+    if not Read32(v) or // e.Timestamp is 64-bit -> use temp 32-bit v
        not Read8(e.KeyVersion) or
        not Read16(e.EncType) or
        not ReadOctStr(e.Key) then
       exit;
-    e.Timestamp := PCardinal(@v)^; // cardinal is Year 2038 ready (up to 2106)
+    e.Timestamp := PCardinal(@v)^; // cardinal is Year-2038-ready (up to 2106)
     if (PtrUInt(P + 4) <= PtrUInt(PEnd)) and
        (PCardinal(P)^ <> 0) then
       if not Read32(e.KeyVersion) then // optional 32-bit key version

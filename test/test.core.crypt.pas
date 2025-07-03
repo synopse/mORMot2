@@ -3221,6 +3221,7 @@ begin
       ktg.Entry[0].Timestamp := 1750947820; // as in KEYTAB_REF
       ktg.Entry[1].Timestamp := 1750947820;
       bin := ktg.SaveToBinary;
+      Check(BufferIsKeyTab(bin), 'ktg');
       CheckHash(bin, $1849920F);
       Check(bin = bin2);
     end;

@@ -3559,14 +3559,14 @@ function HashForChannelBinding(const CertRaw: TCertDer;
 // - to be used for testing purpose only, with official test vectors
 function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
   EncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
-  Iterations: integer = 4096; Hmac: PSignAlgo = nil): RawByteString;
+  Iterations: integer = 0; Hmac: PSignAlgo = nil): RawByteString;
 
 /// compute a Kerberos raw Derived Key according to RFC 3962
 // - EncType could be either ENCTYPE_AES256_CTS_HMAC_SHA1_96 or
 // ENCTYPE_AES256_CTS_HMAC_SHA1_96
 function MakeKerberosKey(const PassPhrase, Salt: RawUtf8;
   EncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
-  Iterations: integer = 4096): RawByteString;
+  Iterations: integer = 0): RawByteString;
 
 /// internal RFC 3961 derivation function - published only for testing
 function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString;
@@ -3591,7 +3591,7 @@ type
     function AddNew(const aPrincipal: RawUtf8; const aPassword: SpiUtf8;
       aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
       aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
-      aIterations: integer = 4096): boolean;
+      aIterations: integer = 0): boolean;
   end;
 
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
@@ -9548,17 +9548,19 @@ begin
     end;
 end;
 
-// see https://www.rfc-editor.org/rfc/rfc3962
+// see https://www.rfc-editor.org/rfc/rfc3962 and
+//     https://www.rfc-editor.org/rfc/rfc8009#section-4
 function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
   EncType, Iterations: integer; Hmac: PSignAlgo): RawByteString;
 var
   keysize: integer; // in bytes
   algo: TSignAlgo;
+  finalSalt: RawByteString;
 begin
   result := '';
   if (PassPhrase = '') or
      (Salt = '') or
-     (Iterations <= 0) or
+     (Iterations < 0) or
      (Iterations > 50000) then
     exit;
   case EncType of
@@ -9587,7 +9589,16 @@ begin
   end;
   if Hmac <> nil then
     Hmac^ := algo;
-  result := Pbkdf2(algo, PassPhrase, Salt, Iterations, keysize);
+  if Iterations = 0 then // use the RFC default
+    if algo = saSha1 then
+      Iterations := 4096
+    else
+      Iterations := 32768;
+  if algo = saSha1 then
+    finalSalt := Salt
+  else
+    finalSalt := Join([ENCTYPE_NAME[EncType], #0, Salt]);
+  result := Pbkdf2(algo, PassPhrase, finalSalt, Iterations, keysize);
 end;
 
 const // = pre-computed Rfc3961Nfold('kerberos', 32)
