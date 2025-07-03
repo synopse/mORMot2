@@ -5150,9 +5150,14 @@ end;
 { TKerberosKeyTab }
 
 procedure TKerberosKeyTab.Clear;
+var
+  i: PtrInt;
 begin
-  if self <> nil then
-    fEntry := nil;
+  if self = nil then
+    exit;
+  for i := 0 to length(fEntry) - 1 do
+    FillZero(fEntry[i].Key); // anti-forensic
+  fEntry := nil;
 end;
 
 // see https://vfssoft.com/en/blog/mit_kerberos_keytab_file_format and
@@ -5294,9 +5299,13 @@ begin
 end;
 
 function TKerberosKeyTab.LoadFromFile(const aFile: TFileName): boolean;
+var
+  bin: RawByteString;
 begin
   fFileName := aFile;
-  result := LoadFromBinary(StringFromFile(aFile));
+  bin := StringFromFile(aFile);
+  result := LoadFromBinary(bin);
+  FillZero(bin); // anti-forensic
 end;
 
 function TKerberosKeyTab.Exists(const aEntry: TKerberosKeyEntry): boolean;
@@ -5384,7 +5393,8 @@ begin
   if aIndex >= n then
     exit;
   result := true;
-  Finalize(fEntry[aIndex]); // avoid GPF
+  FillZero(fEntry[aIndex].Key); // anti-forensic
+  Finalize(fEntry[aIndex]);     // avoid GPF
   dec(n);
   if n = 0 then
     Clear
@@ -5456,14 +5466,21 @@ begin
       inc(e);
       dec(n);
     until n = 0;
+    FastSetRawByteString(result, dest.Buffer, dest.Size);
   finally
-    dest.Done(result, CP_RAWBYTESTRING);
+    FillCharFast(dest.Buffer^, dest.Size, 0); // anti-forensic
+    dest.Store.Done;
+    FillCharFast(dest, SizeOf(dest), 0); // dest.Buffer may have been on heap
   end;
 end;
 
 procedure TKerberosKeyTab.SaveToFile(const aFile: TFileName);
+var
+  bin: RawByteString;
 begin
-  FileFromString(SaveToBinary, aFile);
+  bin := SaveToBinary;
+  FileFromString(bin, aFile);
+  FillZero(bin); // anti-forensic
 end;
 
 
