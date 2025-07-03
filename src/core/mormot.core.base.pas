@@ -3121,6 +3121,13 @@ procedure MoveAndZero(Source, Dest: pointer; Count: PtrUInt);
 procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
+// - will write the memory buffer directly, if this string instance is not shared
+// (i.e. has refcount = 1), to avoid zeroing still-used values
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(secret); end;
+procedure FillZero(var secret: RawByteString); overload;
+
 /// fill first bytes of a memory buffer with zero
 // - Length is expected to be not 0, typically in 1..8 range
 // - when inlined, is slightly more efficient than regular FillZero/FillCharFast
@@ -9861,6 +9868,16 @@ end;
 procedure FillZero(var dest; count: PtrInt);
 begin
   FillCharFast(dest, count, 0);
+end;
+
+procedure FillZero(var secret: RawByteString);
+begin
+  if secret = '' then
+    exit;
+  with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
+    if refCnt = 1 then // avoid GPF if const
+      FillCharFast(pointer(secret)^, length, 0);
+  FastAssignNew(secret); // dec refCnt
 end;
 
 procedure MoveAndZero(Source, Dest: pointer; Count: PtrUInt);

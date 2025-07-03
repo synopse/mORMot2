@@ -1958,13 +1958,6 @@ function SplitRights(const Str, SepChar: RawUtf8): RawUtf8;
 // - i.e. a faster alternative to  if TrimU(text)='' then
 function IsVoid(const text: RawUtf8): boolean;
 
-/// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
-// - will write the memory buffer directly, if this string instance is not shared
-// (i.e. has refcount = 1), to avoid zeroing still-used values
-// - may be used to cleanup stack-allocated content
-// ! ... finally FillZero(secret); end;
-procedure FillZero(var secret: RawByteString); overload;
-
 /// fill all bytes of this UTF-8 string with zeros, i.e. 'toto' -> #0#0#0#0
 // - will write the memory buffer directly, if this string instance is not shared
 // (i.e. has refcount = 1), to avoid zeroing still-used values
@@ -8256,16 +8249,6 @@ begin
       inc(p);
     until p^ = #0;
   result := true;
-end;
-
-procedure FillZero(var secret: RawByteString);
-begin
-  if secret = '' then
-    exit;
-  with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
-    if refCnt = 1 then // avoid GPF if const
-      FillCharFast(pointer(secret)^, length, 0);
-  FastAssignNew(secret); // dec refCnt
 end;
 
 procedure FillZero(var secret: RawUtf8);
