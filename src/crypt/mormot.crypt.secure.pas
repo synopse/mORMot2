@@ -3561,6 +3561,13 @@ function MakeKerberosKeySeed(const PassPhrase, Salt: RawUtf8;
   EncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
   Iterations: integer = 4096; Hmac: PSignAlgo = nil): RawByteString;
 
+/// compute a Kerberos raw Derived Key according to RFC 3962
+// - EncType could be either ENCTYPE_AES256_CTS_HMAC_SHA1_96 or
+// ENCTYPE_AES256_CTS_HMAC_SHA1_96
+function MakeKerberosKey(const PassPhrase, Salt: RawUtf8;
+  EncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
+  Iterations: integer = 4096): RawByteString;
+
 /// internal RFC 3961 derivation function - published only for testing
 function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString;
 
@@ -6552,25 +6559,6 @@ end;
 
 
 { ******* TBinaryCookieGenerator Simple Cookie Generator }
-
-procedure XorMemoryCtr(data: PCardinal; size: PtrUInt; ctr: cardinal;
-  key256bytes: PCardinalArray);
-begin
-  while size >= SizeOf(cardinal) do
-  begin
-    dec(size, SizeOf(cardinal));
-    data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
-    inc(data);
-    ctr := xxHash32Mixup(ctr); // simple ctr diffusion for the next 4 bytes
-  end;
-  while size <> 0 do
-  begin
-    dec(size);
-    PByteArray(data)[size] := PByteArray(data)[size] xor ctr;
-    ctr := ctr shr 8; // 1..3 pending iterations
-  end;
-end;
-
 
 { TBinaryCookieGenerator }
 
@@ -9620,6 +9608,19 @@ begin
     FillZero(h0.b);
     FillZero(h1.b)
   end;
+end;
+
+function MakeKerberosKey(const PassPhrase, Salt: RawUtf8;
+  EncType, Iterations: integer): RawByteString;
+var
+  base: RawByteString;
+begin
+  result := '';
+  base := MakeKerberosKeySeed(PassPhrase, Salt, EncType, Iterations);
+  if base = '' then
+    exit;
+  result := Rfc3962SeedtoKey(base, 'kerberos', EncType);
+  FillZero(base);
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
