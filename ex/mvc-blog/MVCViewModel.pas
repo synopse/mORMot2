@@ -258,7 +258,7 @@ begin
     end;
     info.About := info.About + #13#10'Website powered by mORMot MVC ' +
       SYNOPSE_FRAMEWORK_VERSION + ', compiled with ' + COMPILER_VERSION +
-      ', running on ' + ToText(OSVersion32) + '.';
+      ', running on ' + OSVersionShort + '.';
     info.Copyright := '&copy;' + ToUTF8(CurrentYear) +
       '<a href=https://synopse.info>Synopse Informatique</a>';
     RestModel.Orm.Add(info, true);

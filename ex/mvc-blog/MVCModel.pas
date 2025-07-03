@@ -451,7 +451,7 @@ var
   f, r: integer;
 begin
   fName := GetNextItem(Text, ' ');
-  CSVToRawUtf8DynArray(Pointer(GetNextItem(Text, ']')), fFields);
+  CsvToRawUtf8DynArray(Pointer(GetNextItem(Text, ']')), fFields);
   fFieldCount := length(fFields);
   Text := GotoNextLine(Text);
   P := pointer(Text);
