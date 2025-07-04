@@ -584,6 +584,7 @@ type
     fProcessName: RawUtf8;
     fRedirected: RawUtf8;
     fProxyAuthHeader: RawUtf8;
+    fRequestContext: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fAuthDigestAlgo: TDigestAlgo;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
@@ -806,6 +807,11 @@ type
     /// contain the body type retrieved from the server
     property ContentType: RawUtf8
       read Http.ContentType;
+    /// human-readable text information filled during the last HTTP request
+    // - typically one or several lines of 'DoRetry ...' context and/or
+    // some redirection / exception information
+    property RequestContext: RawUtf8
+      read fRequestContext;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
@@ -2819,9 +2825,10 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
   procedure DoRetry(const Fmt: RawUtf8; const Args: array of const;
     FatalErrorCode: integer = HTTP_CLIENTERROR);
   var
-    msg: RawUtf8;
+    msg: ShortString;
   begin
-    FormatUtf8(Fmt, Args, msg);
+    FormatShort(Fmt, Args, msg);
+    AppendLine(fRequestContext, ['DoRetry ',  msg]);
     //writeln('DoRetry ',byte(ctxt.Retry), ' ', FatalErrorCode, ' / ', msg);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
@@ -2840,14 +2847,18 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
         include(ctxt.Retry, rMain);
         RequestInternal(ctxt); // retry once
       except
-        on Exception do
+        on E: Exception do
+        begin
+          AppendLine(fRequestContext, [E, ':', E.Message]);
           ctxt.Status := FatalErrorCode;
+        end;
       end;
   end;
 
 var
   cmd: PUtf8Char;
   pending: TCrtSocketPending;
+  res: TNetResult;
   bodystream: TStream;
   loerr, buflen: integer;
   dat: RawByteString;
@@ -2899,8 +2910,10 @@ begin
       begin
         // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
         ctxt.InStream.Seek(0, soBeginning);
-        if SockSendStream(ctxt.InStream, 1 shl 20,
-             {noraise=}false, {checkrecv=}true) = nrRetry then
+        res := SockSendStream(ctxt.InStream, 1 shl 20,
+             {noraise=}false, {checkrecv=}true);
+        AppendLine(fRequestContext, [ctxt.InStream, ' = ', ToText(res)^]);
+        if res = nrRetry then
         begin
           // the server interrupted the upload by sending something (e.g. 413)
           if Assigned(OnLog) then
@@ -2922,6 +2935,7 @@ begin
             // timeout may happen not because the server took its time, but
             // because the network is down: sadly, the socket is still reported
             // as OK by the OS (on both Windows and POSIX)
+            AppendLine(fRequestContext, ['NoData ms=', Timeout]);
             // -> no need to retry
             ctxt.Status := HTTP_TIMEOUT;
             // -> close the socket, since this HTTP request is clearly aborted
@@ -2951,7 +2965,10 @@ begin
         ctxt.Status := GetCardinal(cmd + 9);
         if (ctxt.Status < 200) or
            (ctxt.Status > 599) then // the HTTP standard requires three digits
+        begin
+          AppendLine(fRequestContext, ['Invalid ', Http.CommandResp]);
           exit; // abort but returns the received number (may be 0)
+        end;
       end
       else
       begin
@@ -2989,6 +3006,8 @@ begin
           end
           else
             bodystream := nil; // don't append any HTML server error message
+        if bodystream <> nil then
+          AppendLine(fRequestContext, [ctxt.Status, ' over ', bodystream]);
         // retrieve whole response body
         GetBody(bodystream);
       end;
@@ -3003,8 +3022,11 @@ begin
           DoRetry('% raised after % [%]',
             [E, ToText(ENetSock(E).LastError)^, E.Message])
         else
+        begin
           // propagate custom exceptions to the caller (e.g. from progression)
+          AppendLine(fRequestContext, [E, ':', E.Message]);
           raise;
+        end;
     end;
   finally
     if Assigned(OnLog) then
@@ -3079,6 +3101,7 @@ var
   newuri: TUri;
 begin
   // prepare the execution
+  fRequestContext := '';
   ctxt.Url := url;
   if (url = '') or
      (url[1] <> '/') then
@@ -3136,6 +3159,7 @@ begin
       begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
+        AppendLine(fRequestContext, [ctxt.Status]);
         if rAuth in ctxt.Retry then
           break; // avoid infinite recursion
         include(ctxt.Retry, rAuth);
@@ -3147,6 +3171,7 @@ begin
       begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
+        AppendLine(fRequestContext, [ctxt.Status]);
         if rAuthProxy in ctxt.Retry then
           break;
         include(ctxt.Retry, rAuthProxy);
@@ -3164,6 +3189,7 @@ begin
       else
         ctxt.Retry := [];
       ctxt.Url := Http.HeaderGetValue('LOCATION');
+      AppendLine(fRequestContext, [ctxt.Status, ' into ', ctxt.Url]);
       case ctxt.Status of
         // https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections
         HTTP_MOVEDPERMANENTLY,
@@ -3195,9 +3221,14 @@ begin
         begin
           Close; // relocated to another server -> reset the TCP connection
           try
+            AppendLine(fRequestContext, ['ReOpen ', newuri.URI]);
             OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
           except
-            ctxt.Status := HTTP_CLIENTERROR; // more explicit than 404 or 501
+            on E: Exception do
+            begin
+              AppendLine(fRequestContext, [E, ': ', E.Message]);
+              ctxt.Status := HTTP_CLIENTERROR; // more explicit than 404 or 501
+            end;
           end;
           HttpStateReset;
           ctxt.Url := newuri.Address;
