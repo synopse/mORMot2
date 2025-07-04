@@ -3584,6 +3584,10 @@ function Rfc3961Nfold(const input: RawByteString; olen: cardinal): RawByteString
 function Rfc3962SeedtoKey(const Seed: RawByteString; EncType: integer;
   DK: pointer = nil): RawByteString;
 
+/// internal RFC 8009 derivation function - published only for testing
+function Rfc8009SeedtoKey(const Seed: RawByteString; EncType: integer;
+  const KdfLabel: RawByteString = 'kerberos'): RawByteString;
+
 /// internal KeyTab derivation function - published only for testing
 function MakeKerberosKeyEntry(var aEntry: TKerberosKeyEntry;
   const aPrincipal, aSalt: RawUtf8; const aPassword: SpiUtf8;
@@ -9687,17 +9691,49 @@ begin
   end;
 end;
 
+function Rfc8009SeedtoKey(const Seed: RawByteString; EncType: integer;
+  const KdfLabel: RawByteString): RawByteString;
+var
+  hmac: TSynSigner;
+  algo: TSignAlgo;
+  keysize: cardinal;
+begin
+  result := '';
+  case EncType of
+    ENCTYPE_AES128_CTS_HMAC_SHA256_128:
+      begin
+        keysize := SizeOf(THash128);
+        algo := saSha256;
+      end;
+    ENCTYPE_AES256_CTS_HMAC_SHA384_192:
+      begin
+        keysize := SizeOf(THash256);
+        algo := saSha384;
+      end
+  else
+    exit;
+  end;
+  result := hmac.KdfSP800(algo, keysize, Seed, KdfLabel);
+end;
+
 function MakeKerberosKey(const PassPhrase, Salt: RawUtf8;
   EncType, Iterations: integer): RawByteString;
 var
-  base: RawByteString;
+  tkey: RawByteString;
 begin
   result := '';
-  base := MakeKerberosKeySeed(PassPhrase, Salt, EncType, Iterations);
-  if base = '' then
+  tkey := MakeKerberosKeySeed(PassPhrase, Salt, EncType, Iterations);
+  if tkey = '' then
     exit;
-  result := Rfc3962SeedtoKey(base, EncType);
-  FillZero(base);
+  case EncType of
+    ENCTYPE_AES128_CTS_HMAC_SHA1_96,
+    ENCTYPE_AES256_CTS_HMAC_SHA1_96:
+      result := Rfc3962SeedtoKey(tkey, EncType);
+    ENCTYPE_AES128_CTS_HMAC_SHA256_128,
+    ENCTYPE_AES256_CTS_HMAC_SHA384_192:
+      result := Rfc8009SeedtoKey(tkey, EncType);
+  end;
+  FillZero(tkey);
 end;
 
 function MakeKerberosKeyEntry(var aEntry: TKerberosKeyEntry;
