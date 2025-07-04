@@ -48,6 +48,8 @@ type
     procedure RsaSlow(Context: TObject);
     procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
       const exp, msg: RawUtf8);
+    procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
+      const lab: RawUtf8 = 'kerberos'; const ctx: RawUtf8 = '');
   published
     /// MD5 (and MD4) hashing functions
     procedure _MD5;
@@ -140,6 +142,17 @@ var
 begin
   res := sign.Pbkdf2(a, P, S, c, l);
   CheckEqual(length(res), l);
+  CheckEqualHex(res, exp, msg);
+end;
+
+procedure TTestCoreCrypto.Kdf(a: TSignAlgo; const key, exp, msg, lab, ctx: RawUtf8);
+var
+  sign: TSynSigner;
+  bin, res: RawByteString;
+begin
+  Check(HexToBin(pointer(key), length(key), bin));
+  res := sign.KdfSP800(a, length(exp) shr 1, bin, lab, ctx);
+  CheckEqual(length(res), length(exp) shr 1);
   CheckEqualHex(res, exp, msg);
 end;
 
@@ -320,6 +333,16 @@ begin
       'ae4d0c95af6b46d32d0adff928f06dd02a303f8e', '2 rounds');
   Rfc(saSha256, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
     4096, 25, '348c89dbcbd32b2f32d814b8116e84cf2b17347ebc1800181c', 'bigger');
+  // https://www.rfc-editor.org/rfc/rfc8009#page-13
+  Kdf(saSha256, '3705D96080C17728A0E800EAB6E0D23C',
+   'B31A018A48F54776F403E9A396325DC3',
+   'Kc128', HexToBin('0000000299'));
+  Kdf(saSha256, '3705D96080C17728A0E800EAB6E0D23C',
+   '9B197DD1E8C5609D6E67C3E37C62C72E',
+   'Ke128', HexToBin('00000002AA'));
+  Kdf(saSha256, '3705D96080C17728A0E800EAB6E0D23C',
+   '9FDA0E56AB2D85E1569A688696C26A6C',
+   'Kc128', HexToBin('0000000255'));
 end;
 
 procedure TTestCoreCrypto._RC4;
@@ -549,6 +572,16 @@ begin
       'e1d9c16aa681708a45f5c7c4e215ceb66e011a2e', '2 rounds');
   Rfc(saSha512, 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt',
     4096, 25, '8c0511f4c6e597c6ac6315d8f0362e225f3c501495ba23b868', 'bigger');
+  // https://www.rfc-editor.org/rfc/rfc8009#page-13
+  Kdf(saSha384, '6D404D37FAF79F9DF0D33568D320669800EB4836472EA8A026D16B7182460C52',
+   'EF5718BE86CC84963D8BBB5031E9F5C4BA41F28FAF69E73D',
+   'Kc256', HexToBin('0000000299'));
+  Kdf(saSha384, '6D404D37FAF79F9DF0D33568D320669800EB4836472EA8A026D16B7182460C52',
+   '56AB22BEE63D82D7BC5227F6773F8EA7A5EB1C825160C38312980C442E5C7E49',
+   'Ke256', HexToBin('00000002AA'));
+  Kdf(saSha384, '6D404D37FAF79F9DF0D33568D320669800EB4836472EA8A026D16B7182460C52',
+   '69B16514E3CD8E56B82010D5C73012B622C4D00FFC23ED1F',
+   'Ki256', HexToBin('0000000255'));
 end;
 
 procedure TTestCoreCrypto._SHA3;
