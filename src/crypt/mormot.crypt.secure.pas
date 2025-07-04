@@ -856,6 +856,10 @@ type
     // key is unbounded and could be bigger than the TSignAlgo digest size
     function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString; overload;
+    /// compute NIST SP800-108 KDF in counter mode (section 5.1)
+    // - as used e.g. by RFC 8009 for Kerberos AES-CTS HMAC-SHA2 modes
+    function KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
+      const aKey, aLabel: RawByteString; const aContext: RawByteString = ''): RawByteString;
     /// prepare a TAes object with the key derivated via a Pbkdf2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec;
@@ -4716,6 +4720,34 @@ begin
   end;
   if r <> 0 then
     FakeLength(result, aDestLen); // truncate to the expected destination size
+end;
+
+function TSynSigner.KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
+  const aKey, aLabel, aContext: RawByteString): RawByteString;
+var
+  dig: PHash512Rec;
+  diglen, counter: cardinal;
+begin
+  result := '';
+  if (aKey = '') or
+     (aLabel = '') or
+     (aDestLen = 0) then
+    exit;
+  diglen := SIGN_SIZE[aAlgo];
+  dig := FastNewRawByteString(result, ((aDestLen div diglen) + 1) * diglen);
+  counter := 1;
+  repeat
+    Init(aAlgo, aKey);
+    // Ki = HMAC-SHA-###(key, i | label | 0 | context | bits)
+    UpdateBigEndian(counter);
+    Update(pointer(aLabel), length(aLabel) + 1); // include ending #0
+    Update(aContext);
+    UpdateBigEndian(aDestLen shl 3); // bits
+    Final(dig);
+    inc(PByte(dig), diglen);
+    inc(counter);
+  until PtrUInt(dig) - PtrUInt(result) >= aDestLen;
+  FakeLength(result, aDestLen); // k-truncate
 end;
 
 procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
