@@ -575,7 +575,8 @@ type
   // - on any error (timeout, connection closed) will retry once to get the value
   // - note that this client is not thread-safe: either use a critical section
   // (as we do in TRestClientUri), or create one instance per thread
-  // - don't forget to use Free procedure when you are finished
+  // - don't forget to use the Free method when you are finished, or consider
+  // using IJsonClient/TJsonClient for a higher level REST client
   THttpClientSocket = class(THttpSocket)
   protected
     fExtendedOptions: THttpRequestExtendedOptions;
