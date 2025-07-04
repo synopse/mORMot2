@@ -569,6 +569,8 @@ type
     /// compute all fields so that they are in their natural range
     // - set e.g. Second := 60 to force the next minute, or Hour := 24 so that
     // it will be normalized to the next day
+    // - use a naive simple O(n) implementation: not very fast, but correct and
+    // fast enough in its typical THttpAnalyzer.ComputeConsolidateTime usage
     procedure Normalize;
     /// change the system date/time with the value stored in this instance
     // - i.e. call SetSystemTime/fpsettimeofday API with the stored date/time
