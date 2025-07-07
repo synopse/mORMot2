@@ -34,7 +34,8 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security, // for FileIsKeyTab()
-  mormot.core.unicode;     // e.g. for Split/SplitRight/IdemPChar
+  mormot.core.unicode,     // e.g. for Split/SplitRight/IdemPChar
+  mormot.core.buffers;     // for base-64 encoding
 
 
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
@@ -593,6 +594,15 @@ type
     // - it will allow hot reload of the keytab, only if needed
     // - returns true if the keytab was identified as changed
     function TryRefresh(Tix64: Int64): boolean;
+    /// parse HTTP input headers and perform Negotiate/Kerberos authentication
+    // - will identify 'Authorization: Negotiate <base64 encoding>' HTTP header
+    // - returns '' on error, or the 'WWW-Authenticate:' header on success
+    // - can optionally return the authenticated user name
+    // - will automatically call TryRefresh to check the file every 2 seconds
+    // - is a cut-down version of THttpServerSocketGeneric.Authorization(),
+    // assuming a simple two-way Negotiate/Kerberos handshake
+    function ComputeServerHeader(const InputHeaders: RawUtf8;
+      AuthUser: PRawUtf8 = nil): RawUtf8;
   published
     /// the keytab file name propagated to all server threads
     property KeyTab: TFileName
@@ -1405,7 +1415,7 @@ begin
     exit; // no SetKeyTab() call yet
   seq := @ServerSspiKeyTabSequence;
   if seq^ = fKeytabSequence then
-    exit;
+    exit; // we can reuse existing keytab already set for this particular thread
   seq^ := fKeytabSequence;
   ServerForceKeytab(fKeyTab);
 end;
@@ -1446,10 +1456,47 @@ begin
   result := false;
   if (self = nil) or
      (fKeyTab = '') or
-     (Tix64 shr 11 = fLastRefresh) then // try at most every two second
+     (Tix64 shr 11 = fLastRefresh) then // try at most every two seconds
     exit;
   fLastRefresh := Tix64 shr 11;
   result := SetKeyTab(fKeyTab);
+end;
+
+function TServerSspiKeyTab.ComputeServerHeader(const InputHeaders: RawUtf8;
+  AuthUser: PRawUtf8): RawUtf8;
+var
+  auth, authend: PUtf8Char;
+  bin, bout: RawByteString;
+  ctx: TSecContext;
+begin
+  result := '';
+  if AuthUser <> nil then
+    AuthUser^ := '';
+  auth := FindNameValue(pointer(InputHeaders), 'AUTHORIZATION: NEGOTIATE ');
+  if (auth = nil) or
+     not InitializeDomainAuth then // late initialization of the GSS library
+    exit;
+  authend := PosChar(auth, #13); // parse 'Authorization: Negotiate <base64 encoding>'
+  if (authend = nil) or
+     not Base64ToBin(PAnsiChar(auth), authend - auth, bin) or
+     IdemPChar(pointer(bin), 'NTLM') then // two-way Kerberos only
+    exit;
+  if (self <> nil) and
+     (fKeyTab <> '') then
+  begin
+    TryRefresh(GetTickCount64); // check the local keytab file every two seconds
+    PrepareKeyTab;              // thread specific setup for ServerSspiAuth()
+  end;
+  InvalidateSecContext(ctx);
+  try
+    if not ServerSspiAuth(ctx, bin, bout) then
+      exit;
+    if AuthUser <> nil then
+      ServerSspiAuthUser(ctx, AuthUser^);
+    result := BinToBase64(bout, 'WWW-Authenticate: Negotiate ', '', false);
+  finally
+    FreeSecContext(ctx);
+  end;
 end;
 
 
