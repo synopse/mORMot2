@@ -1925,7 +1925,7 @@ begin
     if lib = 0 then
       lib := Windows.LoadLibrary(libname);
     if lib >= 32 then
-      proc := Windows.GetProcAddress(lib, procname)
+      proc := LibraryResolve(lib, procname)
     else
       lib := 1; // try to load the library once
     if proc = nil then
@@ -3074,21 +3074,36 @@ var
     AllocationType: ULONG; Protect: ULONG): NTSTATUS; stdcall;
   NtUnmapViewOfSection: function (ProcessHandle: THandle;
     BaseAddress: PVOID): NTSTATUS; stdcall;
+  NtDllChecked: TLibraryState;
 
 function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
   memfile: UNICODE_STRING;
   att: OBJECT_ATTRIBUTES;
-  mem: THandle;
+  mem, ntdll: THandle;
   add: TLargeInteger;
   virt: pointer;
 begin
+  if NtDllChecked = lsUnTested then
+  begin // late-binding until really needed to circumvent antivirus heuristic
+    NtDllChecked := lsNotAvailable;
+    ntdll := GetModuleHandle('NTDLL.DLL');
+    if ntdll > 0 then
+    begin
+      RtlInitUnicodeString := LibraryResolve(ntdll, 'RtlInitUnicodeString');
+      NtOpenSection        := LibraryResolve(ntdll, 'NtOpenSection');
+      NtMapViewOfSection   := LibraryResolve(ntdll, 'NtMapViewOfSection');
+      NtUnmapViewOfSection := LibraryResolve(ntdll, 'NtUnmapViewOfSection');
+      if Assigned(RtlInitUnicodeString) and
+         Assigned(NtOpenSection) and
+         Assigned(NtMapViewOfSection) and
+         Assigned(NtUnmapViewOfSection) then
+        NtDllChecked := lsAvailable;
+    end;
+  end;
   result := '';
   if (size <= 4 shl 20) and // map up to 4MB
-     Assigned(RtlInitUnicodeString) and
-     Assigned(NtOpenSection) and
-     Assigned(NtMapViewOfSection) and
-     Assigned(NtUnmapViewOfSection) then
+     (NtDllChecked = lsAvailable) then
   begin
     RtlInitUnicodeString(memfile, '\device\physicalmemory');
     FillCharFast(att, SizeOf(att), 0);
@@ -3206,7 +3221,7 @@ var
   get: function(sig, id: DWord; buf: pointer; siz: DWord): PtrUInt; stdcall;
 begin
   // first try to use Vista+ API which supports EFI (even on aarch64-win64!)
-  get := GetProcAddress(GetModuleHandle(kernel32), 'GetSystemFirmwareTable');
+  get := LibraryResolve(GetModuleHandle(kernel32), 'GetSystemFirmwareTable');
   if Assigned(get) then
   begin
     siz := get(_RSMB_, 0, nil, 0); // first call to retrieve the full size
@@ -4677,25 +4692,25 @@ begin
   DoWin32PWideCharToUtf8 := @_DoWin32PWideCharToUtf8; // or mormot.core.unicode
   h := GetModuleHandle(kernel32);
   GetSystemTimePreciseAsFileTime :=
-    GetProcAddress(h, 'GetSystemTimePreciseAsFileTime'); // Win8+
+    LibraryResolve(h, 'GetSystemTimePreciseAsFileTime'); // Win8+
   if not Assigned(GetSystemTimePreciseAsFileTime) then
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
   _QueryPerformanceFrequencyPer10 := _QueryPerformanceFrequency = 10000000;
-  IsWow64Process := GetProcAddress(h, 'IsWow64Process');
+  IsWow64Process := LibraryResolve(h, 'IsWow64Process');
   res := false;
   IsWow64 := Assigned(IsWow64Process) and
              IsWow64Process(GetCurrentProcess, res) and
              res;
   if IsWow64 then
     // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
-    GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
+    GetNativeSystemInfo := LibraryResolve(h, 'GetNativeSystemInfo')
   else
     @GetNativeSystemInfo := nil;
   // see https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation
-  IsWow64Process2 := GetProcAddress(h, 'IsWow64Process2'); // Windows 10+
+  IsWow64Process2 := LibraryResolve(h, 'IsWow64Process2'); // Windows 10+
   process := 0; // = IMAGE_FILE_MACHINE_UNKNOWN if not under WOW64
   machine := 0;
   IsWow64Emulation := Assigned(IsWow64Process2) and
@@ -4708,15 +4723,15 @@ begin
      (machine = IMAGE_FILE_MACHINE_AMD64));
     {$endif CPUINTEL}
   // Vista+ kernel32.dll APIs
-  GetTickCount64 := GetProcAddress(h, 'GetTickCount64'); // Vista+
+  GetTickCount64 := LibraryResolve(h, 'GetTickCount64'); // Vista+
   if not Assigned(GetTickCount64) then
     GetTickCount64 := @GetTickCount64ForXP;
-  QueryFullProcessImageNameW     := GetProcAddress(h, 'QueryFullProcessImageNameW');
-  GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
-  CreateSymbolicLinkW            := GetProcAddress(h, 'CreateSymbolicLinkW');
-  InitializeSRWLock              := GetProcAddress(h, 'InitializeSRWLock');
-  AcquireSRWLockExclusive        := GetProcAddress(h, 'AcquireSRWLockExclusive');
-  ReleaseSRWLockExclusive        := GetProcAddress(h, 'ReleaseSRWLockExclusive');
+  QueryFullProcessImageNameW     := LibraryResolve(h, 'QueryFullProcessImageNameW');
+  GetLogicalProcessorInformation := LibraryResolve(h, 'GetLogicalProcessorInformation');
+  CreateSymbolicLinkW            := LibraryResolve(h, 'CreateSymbolicLinkW');
+  InitializeSRWLock              := LibraryResolve(h, 'InitializeSRWLock');
+  AcquireSRWLockExclusive        := LibraryResolve(h, 'AcquireSRWLockExclusive');
+  ReleaseSRWLockExclusive        := LibraryResolve(h, 'ReleaseSRWLockExclusive');
   if not Assigned(InitializeSRWLock) or
      not Assigned(AcquireSRWLockExclusive) or
      not Assigned(ReleaseSRWLockExclusive) then
@@ -4818,16 +4833,12 @@ begin
   h := GetModuleHandle('NTDLL.DLL'); // late binding over unstable / altered API
   if h > 0 then
   begin
-    wine_get_version := GetProcAddress(h, 'wine_get_version');
+    wine_get_version := LibraryResolve(h, 'wine_get_version');
     if Assigned(wine_get_version) then
     begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
     end;
-    RtlInitUnicodeString      := GetProcAddress(h, 'RtlInitUnicodeString');
-    NtOpenSection             := GetProcAddress(h, 'NtOpenSection');
-    NtMapViewOfSection        := GetProcAddress(h, 'NtMapViewOfSection');
-    NtUnmapViewOfSection      := GetProcAddress(h, 'NtUnmapViewOfSection');
   end;
   // retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then

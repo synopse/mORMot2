@@ -1033,7 +1033,7 @@ begin
            'Gdip', @GDIP_ENTRIES, @@Startup, nil, @error) then
     exit;
   // EMF conversion API is available only on GDI+ 1.1
-  ConvertToEmfPlus11 := GetProcAddress(fHandle, 'GdipConvertToEmfPlus');
+  ConvertToEmfPlus11 := LibraryResolve(fHandle, 'GdipConvertToEmfPlus');
   // setup the libray
   FillcharFast(Input, SizeOf(Input), 0);
   Input.Version := 1;

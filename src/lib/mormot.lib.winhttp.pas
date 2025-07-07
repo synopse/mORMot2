@@ -1186,7 +1186,7 @@ type
 
 const
   hHttpApi2First = hCancelHttpRequest;
-  HttpNames: array[THttpApis] of PChar = (
+  HttpNames: array[THttpApis] of PAnsiChar = (
     'HttpInitialize',
     'HttpTerminate',
     'HttpCreateHttpHandle',
@@ -1592,7 +1592,7 @@ const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
 const
-  WinHttpNames: array[TWinHttpApis] of PChar = (
+  WinHttpNames: array[TWinHttpApis] of PAnsiChar = (
     'WinHttpOpen',
     'WinHttpSetStatusCallback',
     'WinHttpConnect',
@@ -1804,7 +1804,7 @@ type
 
 const
   WEBSOCKET_DLL = 'websocket.dll';
-  WebSocketNames: array[TWebSocketApis] of PChar = (
+  WebSocketNames: array[TWebSocketApis] of PAnsiChar = (
     'WebSocketAbortHandle',
     'WebSocketBeginClientHandshake',
     'WebSocketBeginServerHandshake',
@@ -2065,7 +2065,7 @@ begin
       P := @@Http.Initialize;
       for api := low(api) to high(api) do
       begin
-        P^ := GetProcAddress(Http.Module, HttpNames[api]);
+        P^ := LibraryResolve(Http.Module, HttpNames[api]);
         if P^ = nil then
           if api < hHttpApi2First then
             raise EHttpApiServer.CreateFmt('Unable to find %s() in %s',
@@ -2430,7 +2430,7 @@ begin
     P := @@WinHttpApi.Open;
     for api := low(api) to high(api) do
     begin
-      P^ := GetProcAddress(WinHttpApi.LibraryHandle, WinHttpNames[api]);
+      P^ := LibraryResolve(WinHttpApi.LibraryHandle, WinHttpNames[api]);
       if P^ = nil then
         if api < hWebSocketApiFirst then
         begin
@@ -2472,7 +2472,7 @@ begin
   P := @@WebSocketApi.AbortHandle;
   for api := low(api) to high(api) do
   begin
-    P^ := GetProcAddress(WebSocketApi.LibraryHandle, WebSocketNames[api]);
+    P^ := LibraryResolve(WebSocketApi.LibraryHandle, WebSocketNames[api]);
     if P^ = nil then
     begin
       FreeLibrary(WebSocketApi.LibraryHandle);

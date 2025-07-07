@@ -6893,7 +6893,7 @@ var
   ok: BOOL;
   err: integer;
 begin
-  SetDynamicTimeZoneInformation := GetProcAddress(
+  SetDynamicTimeZoneInformation := LibraryResolve(
     GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
   privileges.Init;
   try
@@ -7252,11 +7252,9 @@ var
   NtQueryInformationProcess: function(ProcessHandle: THandle;
     ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
     ProcessInformationLength: ULONG; ReturnLength: PULONG): integer; stdcall;
+  ReadProcessMemory: function (hProcess: THandle; lpBaseAddress, lpBuffer: pointer;
+    nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL; stdcall;
   NtQueryInformationProcessChecked: boolean;
-
-function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: pointer;
-  lpBuffer: pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
-    stdcall; external kernel32;
 
 function InternalGetProcessInfo(aPID: DWord; out aInfo: TWinProcessInfo): boolean;
 var
@@ -7272,7 +7270,9 @@ begin
     NtQueryInformationProcessChecked := true;
     ntdll := GetModuleHandle('NTDLL.DLL');
     if ntdll > 0 then
-      NtQueryInformationProcess := GetProcAddress(ntdll, 'NtQueryInformationProcess');
+      NtQueryInformationProcess := LibraryResolve(ntdll, 'NtQueryInformationProcess');
+    ReadProcessMemory := // late-binding is safer for anti-virus heuristics
+      LibraryResolve(GetModuleHandle(kernel32), 'ReadProcessMemory');
   end;
   result := false;
   Finalize(aInfo);
