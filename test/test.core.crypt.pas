@@ -145,6 +145,7 @@ begin
   CheckEqualHex(res, exp, msg);
 end;
 
+// https://www.rfc-editor.org/rfc/rfc8009#page-13
 procedure TTestCoreCrypto.Kdf(a: TSignAlgo; const key, exp, msg, lab, ctx: RawUtf8);
 var
   sign: TSynSigner;
@@ -724,8 +725,8 @@ begin
   {$endif USE_OPENSSL}
   // same benchmarks as in Prng()
   timer.Start;
-  Check(Random32(0) = 0);
-  Check(Random32(1) = 0);
+  CheckEqual(Random32(0), 0);
+  CheckEqual(Random32(1), 0);
   for i := 1 to 50000 do
     Check(Random32(i) < cardinal(i));
   for i := 0 to 50000 do
