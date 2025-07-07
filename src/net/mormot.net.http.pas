@@ -939,6 +939,9 @@ type
   end;
   {$M-}
 
+function ToText(a: THttpServerRequestAuthentication): PShortString; overload;
+
+type
   THttpAcceptBan = class;
 
   /// callback event when THttpAcceptBan BanIP() or IsBanned() methods are called
@@ -4445,6 +4448,12 @@ end;
 
 
 { ******************** Abstract Server-Side Types e.g. for Client-Server Protocol }
+
+function ToText(a: THttpServerRequestAuthentication): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpServerRequestAuthentication), ord(a));
+end;
+
 
 { THttpServerRequestAbstract }
 
