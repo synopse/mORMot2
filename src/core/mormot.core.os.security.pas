@@ -37,6 +37,7 @@ interface
 uses
   {$ifdef OSWINDOWS}
   Windows, // for Windows API Specific Security Types and Functions below
+  Messages,
   {$endif OSWINDOWS}
   sysutils,
   classes,
@@ -2215,6 +2216,208 @@ procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 {$ifdef OSWINDOWS}
 
 type
+  /// TSynWindowsPrivileges enumeration synchronized with WinAPI
+  // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
+  TWinSystemPrivilege = (
+    wspCreateToken,
+    wspAssignPrimaryToken,
+    wspLockMemory,
+    wspIncreaseQuota,
+    wspUnsolicitedInput,
+    wspMachineAccount,
+    wspTCB,
+    wspSecurity,
+    wspTakeOwnership,
+    wspLoadDriver,
+    wspSystemProfile,
+    wspSystemTime,
+    wspProfSingleProcess,
+    wspIncBasePriority,
+    wspCreatePageFile,
+    wspCreatePermanent,
+    wspBackup,
+    wspRestore,
+    wspShutdown,
+    wspDebug,
+    wspAudit,
+    wspSystemEnvironment,
+    wspChangeNotify,
+    wspRemoteShutdown,
+    wspUndock,
+    wspSyncAgent,
+    wspEnableDelegation,
+    wspManageVolume,
+    wspImpersonate,
+    wspCreateGlobal,
+    wspTrustedCredmanAccess,
+    wspRelabel,
+    wspIncWorkingSet,
+    wspTimeZone,
+    wspCreateSymbolicLink);
+
+  /// TSynWindowsPrivileges set synchronized with WinAPI
+  TWinSystemPrivileges = set of TWinSystemPrivilege;
+
+  /// define which WinAPI token is to be retrieved
+  // - define the execution context, i.e. if the token is used for the current
+  // process or the current thread
+  // - used e.g. by TSynWindowsPrivileges or mormot.core.os.security
+  TWinTokenType = (
+    wttProcess,
+    wttThread);
+
+  /// manage available privileges on Windows platform
+  // - not all available privileges are active for all process
+  // - for usage of more advanced WinAPI, explicit enabling of privilege is
+  // sometimes needed
+  {$ifdef USERECORDWITHMETHODS}
+  TSynWindowsPrivileges = record
+  {$else}
+  TSynWindowsPrivileges = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fAvailable: TWinSystemPrivileges;
+    fEnabled: TWinSystemPrivileges;
+    fDefEnabled: TWinSystemPrivileges;
+    fToken: THandle;
+    function SetPrivilege(wsp: TWinSystemPrivilege; on: boolean): boolean;
+    procedure LoadPrivileges;
+  public
+    /// initialize the object dedicated to management of available privileges
+    // - aTokenPrivilege can be used for current process or current thread
+    procedure Init(aTokenPrivilege: TWinTokenType = wttProcess;
+      aLoadPrivileges: boolean = true);
+    /// finalize the object and relese Token handle
+    // - aRestoreInitiallyEnabled parameter can be used to restore initially
+    // state of enabled privileges
+    procedure Done(aRestoreInitiallyEnabled: boolean = true);
+    /// enable privilege
+    // - if aPrivilege is already enabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Enable(aPrivilege: TWinSystemPrivilege): boolean; overload;
+    /// enable one or several privilege(s) from a set
+    // - if aPrivilege is already enabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Enable(aPrivilege: TWinSystemPrivileges): boolean; overload;
+    /// disable privilege
+    // - if aPrivilege is already disabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Disable(aPrivilege: TWinSystemPrivilege): boolean;
+    /// set of available privileges for current process/thread
+    property Available: TWinSystemPrivileges
+      read fAvailable;
+    /// set of enabled privileges for current process/thread
+    property Enabled: TWinSystemPrivileges
+      read fEnabled;
+    /// low-level access to the privileges token handle
+    property Token: THandle
+      read fToken;
+  end;
+
+  /// which information was returned by GetProcessInfo() overloaded functions
+  // - wpaiPID is set when PID was retrieved
+  // - wpaiBasic with ParentPID/BasePriority/ExitStatus/PEBBaseAddress/AffinityMask
+  // - wpaiPEB with SessionID/BeingDebugged
+  // - wpaiCommandLine and wpaiImagePath when CommandLine and ImagePath are set
+  TWinProcessAvailableInfos = set of (
+    wpaiPID,
+    wpaiBasic,
+    wpaiPEB,
+    wpaiCommandLine,
+    wpaiImagePath);
+
+  /// information returned by GetProcessInfo() overloaded functions
+  TWinProcessInfo = record
+    /// which information was returned within this structure
+    AvailableInfo: TWinProcessAvailableInfos;
+    /// the Process ID
+    PID: cardinal;
+    /// the Parent Process ID
+    ParentPID: cardinal;
+    /// Terminal Services session identifier associated with this process
+    SessionID: cardinal;
+    /// points to the low-level internal PEB structure
+    // - you can not directly access this memory, unless ReadProcessMemory()
+    // with proper wspDebug priviledge API is called
+    PEBBaseAddress: pointer;
+    /// GetProcessAffinityMask-like value
+    AffinityMask: cardinal;
+    /// process priority
+    BasePriority: integer;
+    /// GetExitCodeProcess-like value
+    ExitStatus: integer;
+    /// indicates whether the specified process is currently being debugged
+    BeingDebugged: byte;
+    /// command-line string passed to the process
+    CommandLine: SynUnicode;
+    /// path of the image file for the process
+    ImagePath: SynUnicode;
+  end;
+
+  PWinProcessInfo = ^TWinProcessInfo;
+  TWinProcessInfoDynArray = array of TWinProcessInfo;
+
+
+function ToText(p: TWinSystemPrivilege): PShortString; overload;
+
+/// calls OpenProcessToken() or OpenThreadToken() to get the current token
+// - caller should then run CloseHandle() once done with the Token handle
+function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
+
+/// low-level retrieveal of raw binary information for a given token
+// - returns the number of bytes retrieved into buf.buf
+// - caller should then run buf.Done to release the buf result memory
+function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
+  var buf: TSynTempBuffer): cardinal;
+
+/// retrieve low-level process information, from the Windows API
+// - will set the needed wspDebug / SE_DEBUG_NAME priviledge during the call
+procedure GetProcessInfo(aPid: cardinal; out aInfo: TWinProcessInfo); overload;
+
+/// retrieve low-level process(es) information, from the Windows API
+// - will set the needed wspDebug / SE_DEBUG_NAME priviledge during the call
+procedure GetProcessInfo(const aPidList: TCardinalDynArray;
+  out aInfo: TWinProcessInfoDynArray); overload;
+
+/// set the current system time as UTC timestamp
+// - we define two functions with diverse signature to circumvent the FPC RTL
+// TSystemTime field order inconsistency - POSIX version is in momrot.core.os
+// - warning: do not call this function directly, but rather mormot.core.datetime
+// TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
+function SetSystemTime(const utctime: TSystemTime): boolean;
+
+{ some Windows API redefined here for Delphi and FPC consistency }
+
+type
+  TTimeZoneName = array[0..31] of WideChar;
+  TTimeZoneInformation = record
+    Bias: integer;
+    StandardName: TTimeZoneName;
+    StandardDate: TSystemTime;
+    StandardBias: integer;
+    DaylightName: TTimeZoneName;
+    DaylightDate: TSystemTime;
+    DaylightBias: integer;
+  end;
+
+  TDynamicTimeZoneInformation = record
+    TimeZone: TTimeZoneInformation; // XP information
+    TimeZoneKeyName: array[0..127] of WideChar;
+    DynamicDaylightTimeDisabled: boolean;
+  end;
+
+function GetTimeZoneInformation(var info: TTimeZoneInformation): DWORD;
+  stdcall; external kernel32;
+
+/// allow to change the current system time zone on Windows
+// - don't use this low-level function but the high-level mormot.core.search
+// TSynTimeZone.ChangeOperatingSystemTimeZone method
+// - will set the needed wspSystemTime / SE_SYSTEMTIME_NAME priviledge
+// - will select the proper API before and after Vista, if needed
+// - raise EOSException on failure
+procedure SetSystemTimeZone(const info: TDynamicTimeZoneInformation);
+
+type
   /// the SID types, as recognized by LookupSid()
   TSidType = (
     stUndefined,
@@ -2311,7 +2514,6 @@ function LookupToken(tok: THandle; out name, domain: RawUtf8;
 
 /// retrieve the 'domain\name' combined value of a given Token
 function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
-
 
 type
   /// define the kind of resource access by GetFileSecurityDescriptor()
@@ -6271,10 +6473,517 @@ end;
 
 {$ifdef OSWINDOWS}
 
+function SetSystemTime(const utctime: TSystemTime): boolean;
+var
+  privileges: TSynWindowsPrivileges;
+begin
+  try
+    privileges.Init;
+    try
+      privileges.Enable(wspSystemTime); // ensure has SE_SYSTEMTIME_NAME
+      result := Windows.SetSystemTime(PSystemTime(@utctime)^);
+    finally
+      privileges.Done;
+    end;
+    if result then
+      PostMessage(HWND_BROADCAST, WM_TIMECHANGE, 0, 0); // notify the apps
+  except
+    result := false;
+  end;
+end;
+
+function SetTimeZoneInformation(const info: TTimeZoneInformation): BOOL;
+  stdcall; external kernel32; // make it consistent on Delphi and FPC
+
+procedure SetSystemTimeZone(const info: TDynamicTimeZoneInformation);
+var
+  SetDynamicTimeZoneInformation: function(
+    const lpTimeZoneInformation: TDynamicTimeZoneInformation): BOOL; stdcall;
+  privileges: TSynWindowsPrivileges;
+  ok: BOOL;
+  err: integer;
+begin
+  SetDynamicTimeZoneInformation := GetProcAddress(
+    GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
+  privileges.Init;
+  try
+    privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
+    if Assigned(SetDynamicTimeZoneInformation) then
+      ok := SetDynamicTimeZoneInformation(info)    // Vista+
+    else
+      ok := SetTimeZoneInformation(info.TimeZone); // XP
+    err := GetLastError;
+  finally
+    privileges.Done;
+  end;
+  if not ok then
+    RaiseLastError('SetSystemTimeZone', EOSException, err);
+  PostMessage(HWND_BROADCAST, WM_TIMECHANGE, 0, 0); // notify the apps
+end;
+
+
+const
+  _WSP: array[TWinSystemPrivilege] of string[32] = (
+    // note: string[32] to ensure there is a #0 terminator for all items
+    'SeCreateTokenPrivilege',          // wspCreateToken
+    'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
+    'SeLockMemoryPrivilege',           // wspLockMemory
+    'SeIncreaseQuotaPrivilege',        // wspIncreaseQuota
+    'SeUnsolicitedInputPrivilege',     // wspUnsolicitedInput
+    'SeMachineAccountPrivilege',       // wspMachineAccount
+    'SeTcbPrivilege',                  // wspTCB
+    'SeSecurityPrivilege',             // wspSecurity
+    'SeTakeOwnershipPrivilege',        // wspTakeOwnership
+    'SeLoadDriverPrivilege',           // wspLoadDriver
+    'SeSystemProfilePrivilege',        // wspSystemProfile
+    'SeSystemtimePrivilege',           // wspSystemTime
+    'SeProfileSingleProcessPrivilege', // wspProfSingleProcess
+    'SeIncreaseBasePriorityPrivilege', // wspIncBasePriority
+    'SeCreatePagefilePrivilege',       // wspCreatePageFile
+    'SeCreatePermanentPrivilege',      // wspCreatePermanent
+    'SeBackupPrivilege',               // wspBackup
+    'SeRestorePrivilege',              // wspRestore
+    'SeShutdownPrivilege',             // wspShutdown
+    'SeDebugPrivilege',                // wspDebug
+    'SeAuditPrivilege',                // wspAudit
+    'SeSystemEnvironmentPrivilege',    // wspSystemEnvironment
+    'SeChangeNotifyPrivilege',         // wspChangeNotify
+    'SeRemoteShutdownPrivilege',       // wspRemoteShutdown
+    'SeUndockPrivilege',               // wspUndock
+    'SeSyncAgentPrivilege',            // wspSyncAgent
+    'SeEnableDelegationPrivilege',     // wspEnableDelegation
+    'SeManageVolumePrivilege',         // wspManageVolume
+    'SeImpersonatePrivilege',          // wspImpersonate
+    'SeCreateGlobalPrivilege',         // wspCreateGlobal
+    'SeTrustedCredManAccessPrivilege', // wspTrustedCredmanAccess
+    'SeRelabelPrivilege',              // wspRelabel
+    'SeIncreaseWorkingSetPrivilege',   // wspIncWorkingSet
+    'SeTimeZonePrivilege',             // wspTimeZone
+    'SeCreateSymbolicLinkPrivilege');  // wspCreateSymbolicLink
+
+
+type
+  TOKEN_PRIVILEGES = packed record
+    PrivilegeCount : DWord;
+    Privileges : array[0..0] of LUID_AND_ATTRIBUTES;
+  end;
+  PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
+
+  TOKEN_GROUPS = record
+    GroupCount: DWord;
+    Groups: array [0..0] of SID_AND_ATTRIBUTES;
+  end;
+  PTOKEN_GROUPS = ^TOKEN_GROUPS;
+
+function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWord;
+  var TokenHandle: THandle): BOOL;
+    stdcall; external advapi32;
+
+function LookupPrivilegeValueA(lpSystemName, lpName: PAnsiChar;
+  var lpLuid: TLargeInteger): BOOL;
+    stdcall; external advapi32;
+
+function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger;
+  lpName: PAnsiChar; var cbName: DWord): BOOL;
+    stdcall; external advapi32;
+
+function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
+  const NewState: TOKEN_PRIVILEGES; BufferLength: DWord;
+  PreviousState: PTokenPrivileges; ReturnLength: PDWord): BOOL;
+    stdcall; external advapi32;
+
 function LookupAccountSidW(lpSystemName: PWideChar; Sid: PSID; Name: PWideChar;
   var cchName: DWord; ReferencedDomainName: PAnsiChar;
   var cchReferencedDomainName: DWord; var peUse: DWord): BOOL;
     stdcall; external advapi32;
+
+function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
+begin
+  if wtt = wttProcess then
+  begin
+    if not OpenProcessToken(GetCurrentProcess, access, result) then
+      RaiseLastError('OpenToken: OpenProcessToken');
+  end
+  else if not OpenThreadToken(GetCurrentThread, access, false, result) then
+    if GetLastError = ERROR_NO_TOKEN then
+    begin
+      // try to impersonate the thread
+      if not ImpersonateSelf(SecurityImpersonation) or
+         not OpenThreadToken(GetCurrentThread, access, false, result) then
+        RaiseLastError('OpenToken: ImpersonateSelf');
+    end
+    else
+      RaiseLastError('OpenToken: OpenThreadToken');
+end;
+
+function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
+  var buf: TSynTempBuffer): cardinal;
+begin
+  buf.Init; // stack-allocated buffer (enough in most cases)
+  result := 0; // error
+  if (tok = INVALID_HANDLE_VALUE) or
+     (tok = 0) or
+     GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+    exit; // we directly store the output buffer on buf stack
+  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+  begin
+    result := 0;
+    exit;
+  end;
+  buf.Done;
+  buf.Init(result); // we need a bigger buffer (unlikely)
+  if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+    result := 0;
+end;
+
+
+{ TSynWindowsPrivileges }
+
+function ToText(p: TWinSystemPrivilege): PShortString;
+begin
+  result := @_WSP[p];
+end;
+
+procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType;
+  aLoadPrivileges: boolean);
+begin
+  fAvailable := [];
+  fEnabled := [];
+  fDefEnabled := [];
+  fToken := RawTokenOpen(aTokenPrivilege, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
+  if aLoadPrivileges then
+    LoadPrivileges;
+end;
+
+procedure TSynWindowsPrivileges.Done(aRestoreInitiallyEnabled: boolean);
+var
+  p: TWinSystemPrivilege;
+  new: TWinSystemPrivileges;
+begin
+  if aRestoreInitiallyEnabled then
+  begin
+    new := fEnabled - fDefEnabled;
+    if new <> [] then
+      for p := low(p) to high(p) do
+        if p in new then
+        begin
+          Disable(p);
+          exclude(new, p);
+          if new = [] then
+            break; // all done
+        end;
+  end;
+  CloseHandle(fToken);
+  fToken := 0;
+end;
+
+function TSynWindowsPrivileges.Enable(aPrivilege: TWinSystemPrivilege): boolean;
+begin
+  result := aPrivilege in fEnabled;
+  if result or
+     not (aPrivilege in fAvailable) or
+     not SetPrivilege(aPrivilege, true) then
+    exit;
+  Include(fEnabled, aPrivilege);
+  result := true;
+end;
+
+function TSynWindowsPrivileges.Enable(aPrivilege: TWinSystemPrivileges): boolean;
+var
+  p: TWinSystemPrivilege;
+begin
+  result := true;
+  for p := low(p) to high(p) do
+    if p in aPrivilege then
+      if not Enable(p) then
+        result := false; // notify an error at some point
+end;
+
+function TSynWindowsPrivileges.Disable(
+  aPrivilege: TWinSystemPrivilege): boolean;
+begin
+  result := not (aPrivilege in fEnabled);
+  if result or
+     not (aPrivilege in fAvailable) or
+     not SetPrivilege(aPrivilege, false) then
+    exit;
+  Exclude(fEnabled, aPrivilege);
+  result := true;
+end;
+
+procedure TSynWindowsPrivileges.LoadPrivileges;
+var
+  buf: TSynTempBuffer;
+  name: string[127];
+  tp: PTOKEN_PRIVILEGES;
+  i: PtrInt;
+  len: cardinal;
+  p: TWinSystemPrivilege;
+  priv: PLUIDANDATTRIBUTES;
+begin
+  if Token = 0 then
+    raise EOSException.Create('LoadPriviledges: no token');
+  fAvailable := [];
+  fEnabled := [];
+  fDefEnabled := [];
+  try
+    if RawTokenGetInfo(Token, TokenPrivileges, buf) = 0 then
+      RaiseLastError('LoadPriviledges: GetTokenInformation');
+    tp := buf.buf;
+    priv := @tp.Privileges;
+    for i := 1 to tp.PrivilegeCount do
+    begin
+      len := high(name);
+      if not LookupPrivilegeNameA(nil, priv.Luid, @name[1], len) or
+         (len = 0) then
+         RaiseLastError('LoadPriviledges: LookupPrivilegeNameA');
+      name[0] := AnsiChar(len);
+      for p := low(p) to high(p) do
+        if not (p in fAvailable) and
+           PropNameEquals(PShortString(@name), PShortString(@_WSP[p])) then
+        begin
+          include(fAvailable, p);
+          if priv.Attributes and SE_PRIVILEGE_ENABLED <> 0 then
+            include(fDefEnabled, p);
+          break;
+        end;
+      inc(priv);
+    end;
+    fEnabled := fDefEnabled;
+  finally
+    buf.Done;
+  end;
+end;
+
+function TSynWindowsPrivileges.SetPrivilege(
+  wsp: TWinSystemPrivilege; on: boolean): boolean;
+var
+  tp: TOKEN_PRIVILEGES;
+  id: TLargeInteger;
+  tpprev: TOKEN_PRIVILEGES;
+  cbprev: DWord;
+begin
+  result := false;
+  if not LookupPrivilegeValueA(nil, @_WSP[wsp][1], id) then
+    exit;
+  tp.PrivilegeCount := 1;
+  tp.Privileges[0].Luid := PInt64(@id)^;
+  tp.Privileges[0].Attributes := 0;
+  cbprev := SizeOf(TOKEN_PRIVILEGES);
+  AdjustTokenPrivileges(
+    Token, false, tp, SizeOf(TOKEN_PRIVILEGES), @tpprev, @cbprev);
+  if GetLastError <> ERROR_SUCCESS then
+    exit;
+  tpprev.PrivilegeCount := 1;
+  tpprev.Privileges[0].Luid := PInt64(@id)^;
+  with tpprev.Privileges[0] do
+    if on then
+      Attributes := Attributes or SE_PRIVILEGE_ENABLED
+    else
+      Attributes := Attributes xor (SE_PRIVILEGE_ENABLED and Attributes);
+  AdjustTokenPrivileges(
+    Token, false, tpprev, cbprev, nil, nil);
+  if GetLastError <> ERROR_SUCCESS then
+    exit;
+  result := true;
+end;
+
+type
+  _PPS_POST_PROCESS_INIT_ROUTINE = ULONG;
+
+  PMS_PEB_LDR_DATA = ^MS_PEB_LDR_DATA;
+  MS_PEB_LDR_DATA = packed record
+    Reserved1: array[0..7] of byte;
+    Reserved2: array[0..2] of pointer;
+    InMemoryOrderModuleList: LIST_ENTRY;
+  end;
+
+  PMS_RTL_USER_PROCESS_PARAMETERS = ^MS_RTL_USER_PROCESS_PARAMETERS;
+  MS_RTL_USER_PROCESS_PARAMETERS = packed record
+    Reserved1: array[0..15] of byte;
+    Reserved2: array[0..9] of pointer;
+    ImagePathName: UNICODE_STRING;
+    CommandLine: UNICODE_STRING ;
+  end;
+
+  PMS_PEB = ^MS_PEB;
+  MS_PEB = packed record
+    Reserved1: array[0..1] of byte;
+    BeingDebugged: BYTE;
+    Reserved2: array[0..0] of byte;
+    {$ifdef CPUX64}
+    _align1: array[0..3] of byte;
+    {$endif CPUX64}
+    Reserved3: array[0..1] of pointer;
+    Ldr: PMS_PEB_LDR_DATA;
+    ProcessParameters: PMS_RTL_USER_PROCESS_PARAMETERS;
+    Reserved4: array[0..103] of byte;
+    Reserved5: array[0..51] of pointer;
+    PostProcessInitRoutine: _PPS_POST_PROCESS_INIT_ROUTINE;
+    Reserved6: array[0..127] of byte;
+    {$ifdef CPUX64}
+    _align2: array[0..3] of byte;
+    {$endif CPUX64}
+    Reserved7: array[0..0] of pointer;
+    SessionId: ULONG;
+    {$ifdef CPUX64}
+    _align3: array[0..3] of byte;
+    {$endif CPUX64}
+  end;
+
+  PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
+  MS_PROCESS_BASIC_INFORMATION = packed record
+    ExitStatus: integer;
+    {$ifdef CPUX64}
+    _align1: array[0..3] of byte;
+    {$endif CPUX64}
+    PebBaseAddress: PMS_PEB;
+    AffinityMask: PtrUInt;
+    BasePriority: integer;
+    {$ifdef CPUX64}
+    _align2: array[0..3] of byte;
+    {$endif CPUX64}
+    UniqueProcessId: PtrUInt;
+    InheritedFromUniqueProcessId: PtrUInt;
+  end;
+
+  {$Z4}
+  PROCESSINFOCLASS = (
+    ProcessBasicInformation = 0,
+    ProcessDebugPort = 7,
+    ProcessWow64Information = 26,
+    ProcessImageFileName = 27,
+    ProcessBreakOnTermination = 29,
+    ProcessSubsystemInformation = 75);
+  {$Z1}
+
+var
+  // low-level (undocumented) ntdll.dll functions - accessed via late-binding
+  NtQueryInformationProcess: function(ProcessHandle: THandle;
+    ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
+    ProcessInformationLength: ULONG; ReturnLength: PULONG): integer; stdcall;
+  NtQueryInformationProcessChecked: boolean;
+
+function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: pointer;
+  lpBuffer: pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
+    stdcall; external kernel32;
+
+function InternalGetProcessInfo(aPID: DWord; out aInfo: TWinProcessInfo): boolean;
+var
+  bytesread: PtrUInt;
+  sizeneeded: DWord;
+  pbi: MS_PROCESS_BASIC_INFORMATION;
+  peb: MS_PEB;
+  peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
+  prochandle, ntdll: THandle;
+begin
+  if not NtQueryInformationProcessChecked then
+  begin
+    NtQueryInformationProcessChecked := true;
+    ntdll := GetModuleHandle('NTDLL.DLL');
+    if ntdll > 0 then
+      NtQueryInformationProcess := GetProcAddress(ntdll, 'NtQueryInformationProcess');
+  end;
+  result := false;
+  Finalize(aInfo);
+  FillCharFast(aInfo, SizeOf(aInfo), 0);
+  if (aPID = 0) or
+     not Assigned(NtQueryInformationProcess) then
+    exit;
+  prochandle := OpenProcess(
+    PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, FALSE, aPid);
+  if prochandle = INVALID_HANDLE_VALUE then
+    exit;
+  Include(aInfo.AvailableInfo, wpaiPID);
+  aInfo.PID := aPid;
+  try
+    // read PBI (Process Basic Information)
+    sizeneeded := 0;
+    FillCharFast(pbi, SizeOf(pbi), 0);
+    if NtQueryInformationProcess(prochandle, ProcessBasicInformation,
+         @pbi, Sizeof(pbi), @sizeneeded) < 0 then
+      exit;
+    with aInfo do
+    begin
+      Include(AvailableInfo, wpaiBasic);
+      PID := pbi.UniqueProcessId;
+      ParentPID := pbi.InheritedFromUniqueProcessId;
+      BasePriority := pbi.BasePriority;
+      ExitStatus := pbi.ExitStatus;
+      PEBBaseAddress := pbi.PebBaseAddress;
+      AffinityMask := pbi.AffinityMask;
+    end;
+    // read PEB (Process Environment Block)
+    if not Assigned(pbi.PebBaseAddress) then
+      exit;
+    bytesread := 0;
+    FillCharFast(peb, SizeOf(peb), 0);
+    if not ReadProcessMemory(prochandle, pbi.PebBaseAddress,
+             @peb, SizeOf(peb), bytesread) then
+      exit;
+    Include(aInfo.AvailableInfo, wpaiPEB);
+    aInfo.SessionID := peb.SessionId;
+    aInfo.BeingDebugged := peb.BeingDebugged;
+    FillCharFast(peb_upp, SizeOf(MS_RTL_USER_PROCESS_PARAMETERS), 0);
+    bytesread := 0;
+    if not ReadProcessMemory(prochandle, peb.ProcessParameters,
+         @peb_upp, SizeOf(MS_RTL_USER_PROCESS_PARAMETERS), bytesread) then
+      exit;
+    // command line info
+    if peb_upp.CommandLine.Length > 0 then
+    begin
+      SetLength(aInfo.CommandLine, peb_upp.CommandLine.Length shr 1);
+      bytesread := 0;
+      if not ReadProcessMemory(prochandle, peb_upp.CommandLine.Buffer,
+           pointer(aInfo.CommandLine), peb_upp.CommandLine.Length, bytesread) then
+        exit;
+      Include(aInfo.AvailableInfo, wpaiCommandLine);
+    end;
+    // image info
+    if peb_upp.ImagePathName.Length > 0 then
+    begin
+      SetLength(aInfo.ImagePath, peb_upp.ImagePathName.Length shr 1);
+      bytesread := 0;
+      if not ReadProcessMemory(prochandle, peb_upp.ImagePathName.Buffer,
+           pointer(aInfo.ImagePath), peb_upp.ImagePathName.Length, bytesread) then
+        exit;
+      Include(aInfo.AvailableInfo, wpaiImagePath);
+    end;
+    result := true;
+  finally
+    CloseHandle(prochandle);
+  end;
+end;
+
+procedure GetProcessInfo(aPid: cardinal; out aInfo: TWinProcessInfo);
+var
+  privileges: TSynWindowsPrivileges;
+begin
+  privileges.Init(wttThread);
+  try
+    privileges.Enable(wspDebug);
+    InternalGetProcessInfo(aPid, aInfo);
+  finally
+    privileges.Done;
+  end;
+end;
+
+procedure GetProcessInfo(const aPidList: TCardinalDynArray;
+  out aInfo: TWinProcessInfoDynArray);
+var
+  privileges: TSynWindowsPrivileges;
+  i: PtrInt;
+begin
+  SetLength(aInfo, Length(aPidList));
+  privileges.Init(wttThread);
+  try
+    privileges.Enable(wspDebug);
+    for i := 0 to High(aPidList) do
+      InternalGetProcessInfo(aPidList[i], aInfo[i]);
+  finally
+    privileges.Done;
+  end;
+end;
 
 type
   TOKEN_USER = record

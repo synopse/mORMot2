@@ -29,6 +29,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security, // for TTimeZoneInformation on Windows
   mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text,

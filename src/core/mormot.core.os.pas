@@ -1837,169 +1837,6 @@ type
     function ReadEnumEntries: TRawUtf8DynArray;
   end;
 
-  /// TSynWindowsPrivileges enumeration synchronized with WinAPI
-  // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
-  TWinSystemPrivilege = (
-    wspCreateToken,
-    wspAssignPrimaryToken,
-    wspLockMemory,
-    wspIncreaseQuota,
-    wspUnsolicitedInput,
-    wspMachineAccount,
-    wspTCB,
-    wspSecurity,
-    wspTakeOwnership,
-    wspLoadDriver,
-    wspSystemProfile,
-    wspSystemTime,
-    wspProfSingleProcess,
-    wspIncBasePriority,
-    wspCreatePageFile,
-    wspCreatePermanent,
-    wspBackup,
-    wspRestore,
-    wspShutdown,
-    wspDebug,
-    wspAudit,
-    wspSystemEnvironment,
-    wspChangeNotify,
-    wspRemoteShutdown,
-    wspUndock,
-    wspSyncAgent,
-    wspEnableDelegation,
-    wspManageVolume,
-    wspImpersonate,
-    wspCreateGlobal,
-    wspTrustedCredmanAccess,
-    wspRelabel,
-    wspIncWorkingSet,
-    wspTimeZone,
-    wspCreateSymbolicLink);
-
-  /// TSynWindowsPrivileges set synchronized with WinAPI
-  TWinSystemPrivileges = set of TWinSystemPrivilege;
-
-  /// define which WinAPI token is to be retrieved
-  // - define the execution context, i.e. if the token is used for the current
-  // process or the current thread
-  // - used e.g. by TSynWindowsPrivileges or mormot.core.os.security
-  TWinTokenType = (
-    wttProcess,
-    wttThread);
-
-  /// manage available privileges on Windows platform
-  // - not all available privileges are active for all process
-  // - for usage of more advanced WinAPI, explicit enabling of privilege is
-  // sometimes needed
-  {$ifdef USERECORDWITHMETHODS}
-  TSynWindowsPrivileges = record
-  {$else}
-  TSynWindowsPrivileges = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    fAvailable: TWinSystemPrivileges;
-    fEnabled: TWinSystemPrivileges;
-    fDefEnabled: TWinSystemPrivileges;
-    fToken: THandle;
-    function SetPrivilege(wsp: TWinSystemPrivilege; on: boolean): boolean;
-    procedure LoadPrivileges;
-  public
-    /// initialize the object dedicated to management of available privileges
-    // - aTokenPrivilege can be used for current process or current thread
-    procedure Init(aTokenPrivilege: TWinTokenType = wttProcess;
-      aLoadPrivileges: boolean = true);
-    /// finalize the object and relese Token handle
-    // - aRestoreInitiallyEnabled parameter can be used to restore initially
-    // state of enabled privileges
-    procedure Done(aRestoreInitiallyEnabled: boolean = true);
-    /// enable privilege
-    // - if aPrivilege is already enabled return true, if operation is not
-    // possible (required privilege doesn't exist or API error) return false
-    function Enable(aPrivilege: TWinSystemPrivilege): boolean; overload;
-    /// enable one or several privilege(s) from a set
-    // - if aPrivilege is already enabled return true, if operation is not
-    // possible (required privilege doesn't exist or API error) return false
-    function Enable(aPrivilege: TWinSystemPrivileges): boolean; overload;
-    /// disable privilege
-    // - if aPrivilege is already disabled return true, if operation is not
-    // possible (required privilege doesn't exist or API error) return false
-    function Disable(aPrivilege: TWinSystemPrivilege): boolean;
-    /// set of available privileges for current process/thread
-    property Available: TWinSystemPrivileges
-      read fAvailable;
-    /// set of enabled privileges for current process/thread
-    property Enabled: TWinSystemPrivileges
-      read fEnabled;
-    /// low-level access to the privileges token handle
-    property Token: THandle
-      read fToken;
-  end;
-
-  /// which information was returned by GetProcessInfo() overloaded functions
-  // - wpaiPID is set when PID was retrieved
-  // - wpaiBasic with ParentPID/BasePriority/ExitStatus/PEBBaseAddress/AffinityMask
-  // - wpaiPEB with SessionID/BeingDebugged
-  // - wpaiCommandLine and wpaiImagePath when CommandLine and ImagePath are set
-  TWinProcessAvailableInfos = set of (
-    wpaiPID,
-    wpaiBasic,
-    wpaiPEB,
-    wpaiCommandLine,
-    wpaiImagePath);
-
-  /// information returned by GetProcessInfo() overloaded functions
-  TWinProcessInfo = record
-    /// which information was returned within this structure
-    AvailableInfo: TWinProcessAvailableInfos;
-    /// the Process ID
-    PID: cardinal;
-    /// the Parent Process ID
-    ParentPID: cardinal;
-    /// Terminal Services session identifier associated with this process
-    SessionID: cardinal;
-    /// points to the low-level internal PEB structure
-    // - you can not directly access this memory, unless ReadProcessMemory()
-    // with proper wspDebug priviledge API is called
-    PEBBaseAddress: pointer;
-    /// GetProcessAffinityMask-like value
-    AffinityMask: cardinal;
-    /// process priority
-    BasePriority: integer;
-    /// GetExitCodeProcess-like value
-    ExitStatus: integer;
-    /// indicates whether the specified process is currently being debugged
-    BeingDebugged: byte;
-    /// command-line string passed to the process
-    CommandLine: SynUnicode;
-    /// path of the image file for the process
-    ImagePath: SynUnicode;
-  end;
-
-  PWinProcessInfo = ^TWinProcessInfo;
-  TWinProcessInfoDynArray = array of TWinProcessInfo;
-
-
-function ToText(p: TWinSystemPrivilege): PShortString; overload;
-
-/// calls OpenProcessToken() or OpenThreadToken() to get the current token
-// - caller should then run CloseHandle() once done with the Token handle
-function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
-
-/// low-level retrieveal of raw binary information for a given token
-// - returns the number of bytes retrieved into buf.buf
-// - caller should then run buf.Done to release the buf result memory
-function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
-  var buf: TSynTempBuffer): cardinal;
-
-/// retrieve low-level process information, from the Windows API
-// - will set the needed wspDebug / SE_DEBUG_NAME priviledge during the call
-procedure GetProcessInfo(aPid: cardinal; out aInfo: TWinProcessInfo); overload;
-
-/// retrieve low-level process(es) information, from the Windows API
-// - will set the needed wspDebug / SE_DEBUG_NAME priviledge during the call
-procedure GetProcessInfo(const aPidList: TCardinalDynArray;
-  out aInfo: TWinProcessInfoDynArray); overload;
-
 /// rough detection of 'c:\windows' and 'c:\program files' folders
 function IsSystemFolder(const Folder: TFileName): boolean;
 
@@ -2025,37 +1862,6 @@ function ReadRegString(Key: THandle; const Path, Value: string): string;
 // - thread-safe wrapper around LoadLibray + GetProcAddress once over a pointer
 function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
-
-{ some Windows API redefined here for Delphi and FPC consistency }
-
-type
-  TTimeZoneName = array[0..31] of WideChar;
-  TTimeZoneInformation = record
-    Bias: integer;
-    StandardName: TTimeZoneName;
-    StandardDate: TSystemTime;
-    StandardBias: integer;
-    DaylightName: TTimeZoneName;
-    DaylightDate: TSystemTime;
-    DaylightBias: integer;
-  end;
-
-  TDynamicTimeZoneInformation = record
-    TimeZone: TTimeZoneInformation; // XP information
-    TimeZoneKeyName: array[0..127] of WideChar;
-    DynamicDaylightTimeDisabled: boolean;
-  end;
-
-function GetTimeZoneInformation(var info: TTimeZoneInformation): DWORD;
-  stdcall; external kernel32;
-
-/// allow to change the current system time zone on Windows
-// - don't use this low-level function but the high-level mormot.core.search
-// TSynTimeZone.ChangeOperatingSystemTimeZone method
-// - will set the needed wspSystemTime / SE_SYSTEMTIME_NAME priviledge
-// - will select the proper API before and after Vista, if needed
-// - raise EOSException on failure
-procedure SetSystemTimeZone(const info: TDynamicTimeZoneInformation);
 
 const
   /// Windows file APIs have hardcoded MAX_PATH = 260 :(
@@ -2912,17 +2718,6 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 procedure GetSystemTime(out result: TSystemTime);
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
-/// set the current system time as UTC timestamp
-// - we define two functions with diverse signature to circumvent the FPC RTL
-// TSystemTime field order inconsistency
-// - warning: do not call this function directly, but rather mormot.core.datetime
-// TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
-{$ifdef OSWINDOWS}
-function SetSystemTime(const utctime: TSystemTime): boolean;
-{$else}
-function SetSystemTime(utctime: TUnixTime): boolean;
-{$endif OSWINDOWS}
-
 /// returns the current Local time as TSystemTime from the OS
 // - under Delphi/Windows, directly call the homonymous Win32 API
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
@@ -2986,6 +2781,14 @@ procedure WinCheck(const Context: ShortString; Code: integer;
 
 /// raise an Exception from the last module error using WinErrorText()
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+
+{$else}
+/// set the current system time as UTC timestamp
+// - we define two functions with diverse signature to circumvent the FPC RTL
+// TSystemTime field issue - Windows version is in mormot.core.os.security
+// - warning: do not call this function directly, but rather mormot.core.datetime
+// TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
+function SetSystemTime(utctime: TUnixTime): boolean;
 
 {$endif OSWINDOWS}
 
