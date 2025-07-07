@@ -2222,27 +2222,6 @@ begin
   e.i[7] := e.i[7] xor u.Lo;     // e.h3 XORed with raw timestamps
 end;
 
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
-var
-  prov: HCRYPTPROV;
-begin
-  result := false;
-  if Len <= 0 then
-    exit;
-  // warning: on some Windows versions, this could take up to 30 ms!
-  if CryptoApi.Available then
-    if CryptoApi.AcquireContextA(prov, nil, nil,
-      PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
-    begin
-      result := CryptoApi.GenRandom(prov, Len, Buffer);
-      CryptoApi.ReleaseContext(prov, 0);
-    end;
-  if not result then
-    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
-    SharedRandom.Fill(pointer(Buffer), Len);
-end;
-
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self, SizeOf(self), 0);
@@ -3063,6 +3042,16 @@ type
   PVOID = pointer;
   PPVOID = ^PVOID;
 
+  PUNICODE_STRING = ^UNICODE_STRING;
+  UNICODE_STRING = packed record
+    Length: word;
+    MaximumLength: word;
+    {$ifdef CPUX64}
+    _align: array[0..3] of byte;
+    {$endif CPUX64}
+    Buffer: PWideChar;
+  end;
+
   OBJECT_ATTRIBUTES = record
     Length: ULONG;
     RootDirectory: THandle;
@@ -3072,9 +3061,6 @@ type
     SecurityQualityOfService: pointer; // Points to type SECURITY_QUALITY_OF_SERVICE
   end;
   POBJECT_ATTRIBUTES = ^OBJECT_ATTRIBUTES;
-
-const
-  ntdll = 'NTDLL.DLL';
 
 var
   // low-level (undocumented) ntdll.dll functions - accessed via late-binding
@@ -3139,130 +3125,23 @@ begin
   RegCloseKey(k);
 end;
 
-
-{ TWinCryptoApi }
-
-function TWinCryptoApi.Available: boolean;
-begin
-  if not Tested then
-    Resolve;
-  result := Assigned(AcquireContextA);
-end;
-
-procedure TWinCryptoApi.Resolve;
-const
-  NAMES: array[0..8] of PAnsiChar = (
-    'CryptAcquireContextA',
-    'CryptReleaseContext',
-    'CryptImportKey',
-    'CryptSetKeyParam',
-    'CryptDestroyKey',
-    'CryptEncrypt',
-    'CryptDecrypt',
-    'CryptGenRandom',
-    'ConvertSecurityDescriptorToStringSecurityDescriptorA');
-var
-  p: PPointer;
-  i: PtrInt;
-begin
-  Tested := true;
-  Handle := GetModuleHandle('advapi32.dll');
-  if Handle <> 0 then
-  begin
-    p := @@AcquireContextA;
-    for i := 0 to high(NAMES) do
-    begin
-      p^ := LibraryResolve(Handle, NAMES[i]);
-      if p^ = nil then
-      begin
-        PPointer(@@AcquireContextA)^ := nil;
-        break;
-      end;
-      inc(p);
-    end;
-  end;
-end;
-
-const
-  SDDL_REVISION_1 = 1;
-  ALL_INFO = OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or
-             DACL_SECURITY_INFORMATION  or SACL_SECURITY_INFORMATION;
-
-function TWinCryptoApi.SecurityDescriptorToText(sd: pointer; out text: RawUtf8): boolean;
-var
-  txt: PAnsiChar;
-begin
-  result := false;
-  txt := nil;
-  if (sd = nil) or
-     not Available or
-     not ConvertSecurityDescriptorToStringSecurityDescriptorA(
-       sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
-    exit;
-  FastSetString(text, txt, StrLen(txt));
-  LocalFree(HLOCAL(txt));
-  result := true;
-end;
-
-type
-  {$ifdef FPC}
-  {$packrecords C} // mandatory under Win64
-  {$endif FPC}
-  DATA_BLOB = record
-    cbData: DWord;
-    pbData: PAnsiChar;
-  end;
-  PDATA_BLOB = ^DATA_BLOB;
-  {$ifdef FPC}
-  {$packrecords DEFAULT}
-  {$endif FPC}
-
 const
   crypt32 = 'Crypt32.dll';
-  CRYPTPROTECT_UI_FORBIDDEN = 1;
   CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
 
-function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
-  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
-  var DataOut: DATA_BLOB): BOOL;
-    stdcall; external crypt32;
+type
+  HCRYPTPROV = pointer;
+  HCERTSTORE = pointer;
+  PCERT_INFO = pointer;
 
-function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
-  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
-  var DataOut: DATA_BLOB): BOOL;
-    stdcall; external crypt32;
-
-function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
-  Encrypt: boolean): RawByteString;
-var
-  src, dst, ent: DATA_BLOB;
-  e: PDATA_BLOB;
-  ok: boolean;
-begin
-  src.pbData := pointer(Data);
-  src.cbData := length(Data);
-  if AppSecret <> '' then
-  begin
-    ent.pbData := pointer(AppSecret);
-    ent.cbData := length(AppSecret);
-    e := @ent;
-  end
-  else
-    e := nil;
-  if Encrypt then
-    ok := CryptProtectData(
-      src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst)
-  else
-    ok := CryptUnprotectData(
-      src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst);
-  if ok then
-  begin
-    FastSetRawByteString(result, dst.pbData, dst.cbData);
-    LocalFree(HLOCAL(dst.pbData));
-  end
-  else
-    result := '';
-end;
+  CERT_CONTEXT = record
+    dwCertEncodingType: DWORD;
+    pbCertEncoded: PByte;
+    cbCertEncoded: DWORD;
+    pCertInfo: PCERT_INFO;
+    hCertStore: HCERTSTORE;
+  end;
+  PCCERT_CONTEXT = ^CERT_CONTEXT;
 
 function CertOpenSystemStoreW(hProv: HCRYPTPROV;
   szSubsystemProtocol: PWideChar): HCERTSTORE ;
@@ -4936,7 +4815,7 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
-  h := GetModuleHandle(ntdll);
+  h := GetModuleHandle('NTDLL.DLL'); // late binding over unstable / altered API
   if h > 0 then
   begin
     wine_get_version := GetProcAddress(h, 'wine_get_version');
@@ -5060,8 +4939,6 @@ end;
 
 procedure FinalizeSpecificUnit;
 begin
-  if CryptoApi.Handle <> 0 then
-    Windows.FreeLibrary(CryptoApi.Handle);
   if CoInitCounter <> 0 then
     ConsoleWrite('Missing CoUninit (e.g. TOleDBConnection.Destroy call)');
 end;

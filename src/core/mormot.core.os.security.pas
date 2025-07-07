@@ -2215,6 +2215,252 @@ procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 
 {$ifdef OSWINDOWS}
 
+/// low-level function returning some random binary from the Operating System
+// - POSIX version (using /dev/urandom or /dev/random) is located in mormot.core.os
+// - will call CryptGenRandom API on Windows then return TRUE, or fallback to
+// mormot.core.base gsl_rng_taus2's generator and return FALSE if the API failed
+// - you should not have to call this low-level procedure, but faster and safer
+// TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
+
+/// protect some data for the current user, using Windows DPAPI
+// - the application can specify a secret salt text, which should reflect the
+// current execution context, to ensure nobody could decrypt the data without
+// knowing this application-specific AppSecret value
+// - will use CryptProtectData DPAPI function call under Windows
+// - see https://msdn.microsoft.com/en-us/library/ms995355
+// - this function is Windows-only, could be slow, and you don't know which
+// algorithm is really used on your system, so using our mormot.crypt.core.pas
+// CryptDataForCurrentUser() is probably a safer (and cross-platform) alternative
+// - also note that DPAPI has been closely reverse engineered - see e.g.
+// https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
+function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
+  Encrypt: boolean): RawByteString;
+
+type
+  HCRYPTPROV = pointer;
+  HCRYPTKEY = pointer;
+  HCRYPTHASH = pointer;
+  HCERTSTORE = pointer;
+
+  CRYPTOAPI_BLOB = record
+    cbData: DWORD;
+    pbData: PByteArray;
+  end;
+  CRYPT_INTEGER_BLOB = CRYPTOAPI_BLOB;
+  CERT_NAME_BLOB     = CRYPTOAPI_BLOB;
+  CRYPT_OBJID_BLOB   = CRYPTOAPI_BLOB;
+
+  CRYPT_BIT_BLOB = record
+    cbData: DWORD;
+    pbData: PByteArray;
+    cUnusedBits: DWORD;
+  end;
+
+  CRYPT_ALGORITHM_IDENTIFIER = record
+    pszObjId: PAnsiChar;
+    Parameters: CRYPT_OBJID_BLOB;
+  end;
+
+  CERT_PUBLIC_KEY_INFO = record
+    Algorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    PublicKey: CRYPT_BIT_BLOB;
+  end;
+
+  CERT_EXTENSION = record
+    pszObjId: PAnsiChar;
+    fCritical: BOOL;
+    Blob: CRYPT_OBJID_BLOB;
+  end;
+  PCERT_EXTENSION = ^CERT_EXTENSION;
+  CERT_EXTENSIONS = array[word] of CERT_EXTENSION;
+  PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
+
+  CERT_INFO = record
+    dwVersion: DWORD;
+    SerialNumber: CRYPT_INTEGER_BLOB;
+    SignatureAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    Issuer: CERT_NAME_BLOB;
+    NotBefore: TFileTime;
+    NotAfter: TFileTime;
+    Subject: CERT_NAME_BLOB;
+    SubjectPublicKeyInfo: CERT_PUBLIC_KEY_INFO;
+    IssuerUniqueId: CRYPT_BIT_BLOB;
+    SubjectUniqueId: CRYPT_BIT_BLOB;
+    cExtension: DWORD;
+    rgExtension: PCERT_EXTENSIONS;
+  end;
+  PCERT_INFO = ^CERT_INFO;
+
+  CERT_CONTEXT = record
+    dwCertEncodingType: DWORD;
+    pbCertEncoded: PByte;
+    cbCertEncoded: DWORD;
+    pCertInfo: PCERT_INFO;
+    hCertStore: HCERTSTORE;
+  end;
+  PCCERT_CONTEXT = ^CERT_CONTEXT;
+  PPCCERT_CONTEXT = ^PCCERT_CONTEXT;
+
+  CRYPT_KEY_PROV_PARAM = record
+    dwParam: DWORD;
+    pbData: PByte;
+    cbData: DWORD;
+    dwFlags: DWORD;
+  end;
+  PCRYPT_KEY_PROV_PARAM = ^CRYPT_KEY_PROV_PARAM;
+
+  CRYPT_KEY_PROV_INFO = record
+    pwszContainerName: PWideChar;
+    pwszProvName: PWideChar;
+    dwProvType: DWORD;
+    dwFlags: DWORD;
+    cProvParam: DWORD;
+    rgProvParam: PCRYPT_KEY_PROV_PARAM;
+    dwKeySpec: DWORD;
+  end;
+  PCRYPT_KEY_PROV_INFO = ^CRYPT_KEY_PROV_INFO;
+
+  CRYPT_OID_INFO = record
+    cbSize: DWORD;
+    pszOID: PAnsiChar;
+    pwszName: PWideChar;
+    dwGroupId: DWORD;
+    Union: record
+      case integer of
+        0: (dwValue: DWORD);
+        1: (Algid: DWORD);
+        2: (dwLength: DWORD);
+    end;
+    ExtraInfo: CRYPTOAPI_BLOB;
+  end;
+  PCRYPT_OID_INFO = ^CRYPT_OID_INFO;
+
+  PCCRL_CONTEXT = pointer;
+  PPCCRL_CONTEXT = ^PCCRL_CONTEXT;
+  PCRYPT_ATTRIBUTE = pointer;
+
+  CRYPT_SIGN_MESSAGE_PARA = record
+    cbSize: DWORD;
+    dwMsgEncodingType: DWORD;
+    pSigningCert: PCCERT_CONTEXT;
+    HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    pvHashAuxInfo: pointer;
+    cMsgCert: DWORD;
+    rgpMsgCert: PPCCERT_CONTEXT;
+    cMsgCrl: DWORD;
+    rgpMsgCrl: PPCCRL_CONTEXT;
+    cAuthAttr: DWORD;
+    rgAuthAttr: PCRYPT_ATTRIBUTE;
+    cUnauthAttr: DWORD;
+    rgUnauthAttr: PCRYPT_ATTRIBUTE;
+    dwFlags: DWORD;
+    dwInnerContentType: DWORD;
+    HashEncryptionAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    pvHashEncryptionAuxInfo: pointer;
+  end;
+
+  PFN_CRYPT_GET_SIGNER_CERTIFICATE = function(pvGetArg: pointer;
+    dwCertEncodingType: DWORD; pSignerId: PCERT_INFO;
+    hMsgCertStore: HCERTSTORE): PCCERT_CONTEXT; stdcall;
+  CRYPT_VERIFY_MESSAGE_PARA = record
+    cbSize: DWORD;
+    dwMsgAndCertEncodingType: DWORD;
+    hCryptProv: HCRYPTPROV;
+    pfnGetSignerCertificate: PFN_CRYPT_GET_SIGNER_CERTIFICATE;
+    pvGetArg: pointer;
+  end;
+
+  PUNICODE_STRING = ^UNICODE_STRING;
+  UNICODE_STRING = packed record
+    Length: word;
+    MaximumLength: word;
+    {$ifdef CPUX64}
+    _align: array[0..3] of byte;
+    {$endif CPUX64}
+    Buffer: PWideChar;
+  end;
+
+  /// direct access to the Windows CryptoApi - use the global CryptoAPI variable
+  {$ifdef USERECORDWITHMETHODS}
+  TWinCryptoApi = record
+  {$else}
+  TWinCryptoApi = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    /// if the presence of this API has been tested
+    Tested: boolean;
+    /// if this API has been loaded
+    Handle: THandle;
+    /// used when inlining Available method
+    procedure Resolve;
+  public
+    /// acquire a handle to a particular key container within a
+    // particular cryptographic service provider (CSP)
+    AcquireContextA: function(var phProv: HCRYPTPROV; pszContainer: PAnsiChar;
+      pszProvider: PAnsiChar; dwProvType: DWORD; dwFlags: DWORD): BOOL; stdcall;
+    /// releases the handle of a cryptographic service provider (CSP) and a
+    // key container
+    ReleaseContext: function(hProv: HCRYPTPROV; dwFlags: PtrUInt): BOOL; stdcall;
+    /// transfers a cryptographic key from a key BLOB into a cryptographic
+    // service provider (CSP)
+    ImportKey: function(hProv: HCRYPTPROV; pbData: pointer; dwDataLen: DWORD;
+      hPubKey: HCRYPTKEY; dwFlags: DWORD; var phKey: HCRYPTKEY): BOOL; stdcall;
+    /// customizes various aspects of a session key's operations
+    SetKeyParam: function(hKey: HCRYPTKEY; dwParam: DWORD; pbData: pointer;
+      dwFlags: DWORD): BOOL; stdcall;
+    /// releases the handle referenced by the hKey parameter
+    DestroyKey: function(hKey: HCRYPTKEY): BOOL; stdcall;
+    /// encrypt the data designated by the key held by the CSP module
+    // referenced by the hKey parameter
+    Encrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
+      dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD; dwBufLen: DWORD): BOOL; stdcall;
+    /// decrypts data previously encrypted by using the CryptEncrypt function
+    Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
+      dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD): BOOL; stdcall;
+    /// fills a buffer with cryptographically random bytes
+    // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
+    // based PRNG specified in NIST Special Publication 800-90 is used
+    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: pointer): BOOL; stdcall;
+    /// converts a security descriptor to a string format
+    ConvertSecurityDescriptorToStringSecurityDescriptorA: function(
+      SecurityDescriptor: PSECURITY_DESCRIPTOR; RequestedStringSDRevision: DWORD;
+      SecurityInformation: DWORD; var StringSecurityDescriptor: PAnsiChar;
+      StringSecurityDescriptorLen: LPDWORD): BOOL; stdcall;
+
+    /// try to load the CryptoApi on this system
+    function Available: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// wrapper around ConvertSecurityDescriptorToStringSecurityDescriptorA()
+    // - see also SecurityDescriptorToText() function in mormot.core.os.security
+    function SecurityDescriptorToText(sd: pointer; out text: RawUtf8): boolean;
+  end;
+
+const
+  PROV_RSA_FULL        = 1;
+  PROV_RSA_AES         = 24;
+  CRYPT_NEWKEYSET      = 8;
+  CRYPT_VERIFYCONTEXT  = DWORD($F0000000);
+  PLAINTEXTKEYBLOB     = 8;
+  CUR_BLOB_VERSION     = 2;
+  KP_IV                = 1;
+  KP_MODE              = 4;
+  CALG_AES_128         = $660E;
+  CALG_AES_192         = $660F;
+  CALG_AES_256         = $6610;
+  CRYPT_MODE_CBC       = 1;
+  CRYPT_MODE_ECB       = 2;
+  CRYPT_MODE_OFB       = 3;
+  CRYPT_MODE_CFB       = 4;
+  CRYPT_MODE_CTS       = 5;
+  HCRYPTPROV_NOTTESTED = HCRYPTPROV(-1);
+  NTE_BAD_KEYSET       = HRESULT($80090016);
+
+var
+  /// direct access to the Windows CryptoApi - with late binding
+  CryptoApi: TWinCryptoApi;
+
 type
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
   // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
@@ -6472,6 +6718,150 @@ end;
 { ****************** Windows API Specific Security Types and Functions }
 
 {$ifdef OSWINDOWS}
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
+var
+  prov: HCRYPTPROV;
+begin
+  result := false;
+  if Len <= 0 then
+    exit;
+  // warning: on some Windows versions, this could take up to 30 ms!
+  if CryptoApi.Available then
+    if CryptoApi.AcquireContextA(prov, nil, nil,
+      PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
+    begin
+      result := CryptoApi.GenRandom(prov, Len, Buffer);
+      CryptoApi.ReleaseContext(prov, 0);
+    end;
+  if not result then
+    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
+    SharedRandom.Fill(pointer(Buffer), Len);
+end;
+
+{ TWinCryptoApi }
+
+function TWinCryptoApi.Available: boolean;
+begin
+  if not Tested then
+    Resolve;
+  result := Assigned(AcquireContextA);
+end;
+
+procedure TWinCryptoApi.Resolve;
+const
+  NAMES: array[0..8] of PAnsiChar = (
+    'CryptAcquireContextA',
+    'CryptReleaseContext',
+    'CryptImportKey',
+    'CryptSetKeyParam',
+    'CryptDestroyKey',
+    'CryptEncrypt',
+    'CryptDecrypt',
+    'CryptGenRandom',
+    'ConvertSecurityDescriptorToStringSecurityDescriptorA');
+var
+  p: PPointer;
+  i: PtrInt;
+begin
+  Tested := true;
+  Handle := GetModuleHandle(advapi32);
+  if Handle <> 0 then
+  begin
+    p := @@AcquireContextA;
+    for i := 0 to high(NAMES) do
+    begin
+      p^ := LibraryResolve(Handle, NAMES[i]);
+      if p^ = nil then
+      begin
+        PPointer(@@AcquireContextA)^ := nil;
+        break;
+      end;
+      inc(p);
+    end;
+  end;
+end;
+
+const
+  SDDL_REVISION_1 = 1;
+  ALL_INFO = OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or
+             DACL_SECURITY_INFORMATION  or SACL_SECURITY_INFORMATION;
+
+function TWinCryptoApi.SecurityDescriptorToText(sd: pointer; out text: RawUtf8): boolean;
+var
+  txt: PAnsiChar;
+begin
+  result := false;
+  txt := nil;
+  if (sd = nil) or
+     not Available or
+     not ConvertSecurityDescriptorToStringSecurityDescriptorA(
+       sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
+    exit;
+  FastSetString(text, txt, StrLen(txt));
+  LocalFree(HLOCAL(txt));
+  result := true;
+end;
+
+type
+  {$ifdef FPC}
+  {$packrecords C} // mandatory under Win64
+  {$endif FPC}
+  DATA_BLOB = record
+    cbData: DWord;
+    pbData: PAnsiChar;
+  end;
+  PDATA_BLOB = ^DATA_BLOB;
+  {$ifdef FPC}
+  {$packrecords DEFAULT}
+  {$endif FPC}
+
+const
+  crypt32 = 'Crypt32.dll';
+  CRYPTPROTECT_UI_FORBIDDEN = 1;
+
+function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
+  var DataOut: DATA_BLOB): BOOL;
+    stdcall; external crypt32;
+
+function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
+  var DataOut: DATA_BLOB): BOOL;
+    stdcall; external crypt32;
+
+function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
+  Encrypt: boolean): RawByteString;
+var
+  src, dst, ent: DATA_BLOB;
+  e: PDATA_BLOB;
+  ok: boolean;
+begin
+  src.pbData := pointer(Data);
+  src.cbData := length(Data);
+  if AppSecret <> '' then
+  begin
+    ent.pbData := pointer(AppSecret);
+    ent.cbData := length(AppSecret);
+    e := @ent;
+  end
+  else
+    e := nil;
+  if Encrypt then
+    ok := CryptProtectData(
+      src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst)
+  else
+    ok := CryptUnprotectData(
+      src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst);
+  if ok then
+  begin
+    FastSetRawByteString(result, dst.pbData, dst.cbData);
+    LocalFree(HLOCAL(dst.pbData));
+  end
+  else
+    result := '';
+end;
 
 function SetSystemTime(const utctime: TSystemTime): boolean;
 var

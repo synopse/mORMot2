@@ -45,6 +45,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security, // low-level Windows Security API
   mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text;

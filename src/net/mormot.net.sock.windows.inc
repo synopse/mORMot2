@@ -1992,7 +1992,7 @@ type
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
-    fAcceptCert: mormot.core.os.PCCERT_CONTEXT;
+    fAcceptCert: mormot.core.os.security.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
