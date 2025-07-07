@@ -25,6 +25,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.crypt.ecc256r1,

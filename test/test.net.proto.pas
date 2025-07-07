@@ -11,6 +11,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
