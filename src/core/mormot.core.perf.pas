@@ -3129,7 +3129,7 @@ begin
   else
     instanceName := Name;
   if instanceName = '' then
-    ClassToText(Instance.ClassType, instanceName);
+    ClassToText(PClass(Instance)^, instanceName);
   fSafe.Lock;
   try
     n := length(fTracked);

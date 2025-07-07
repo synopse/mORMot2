@@ -1079,7 +1079,7 @@ begin
                RenameFile(fn, fn + '.invalid'); // don't try it again
                if Assigned(log) then
                  log.Log(sllWarning, 'LoadFromKeyStoreFolder: renamed as ' +
-                   '%.invalid after %', [fn, E.ClassType], self);
+                   '%.invalid after %', [fn, PClass(E)^], self);
              end;
            end;
       until FindNext(f) <> 0;

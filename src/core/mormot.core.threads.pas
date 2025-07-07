@@ -3568,7 +3568,7 @@ begin
     except
       on E: Exception do
         if Assigned(log) then
-          log.Log(sllDebug, 'RunDone: intercepted %', [E.ClassType], self);
+          log.Log(sllDebug, 'RunDone: intercepted %', [PClass(E)^], self);
     end;
   until false; // consume all pending tasks
 end;

@@ -4937,7 +4937,7 @@ begin
     begin
       fServer.fOnAfterResponse := nil; // won't try again
       fOwner.DoLog(sllWarning,
-        'AfterWrite: OnAfterResponse raised % -> disabled', [E], self);
+        'AfterWrite: OnAfterResponse raised % -> disabled', [PClass(E)^], self);
     end;
   end;
 end;

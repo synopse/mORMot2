@@ -7167,7 +7167,7 @@ var
       except
         on E: Exception do
           InternalLog('Delete % session: opaque connection raised %',
-            [Ctxt, ClassNameShort(E)^], sllWarning);
+            [Ctxt, PClass(E)^], sllWarning);
       end;
   end;
 

@@ -235,7 +235,7 @@ begin
     // don't disable Peer: we would try on next Execute()
     on E: Exception do
       Log.Add.Log(sllDebug,
-        'StartPeerCache raised %: will retry next time', [E]);
+        'StartPeerCache raised %: will retry next time', [PClass(E)^]);
   end;
 end;
 

@@ -1541,7 +1541,7 @@ begin
           // on fatal DB error don't go any further and notify the callbacks
           if Assigned(log) then
             log.Log(sllWarning, 'Execute: % during %',
-              [E.ClassType, task.Statement.Sql], self);
+              [PClass(E)^, task.Statement.Sql], self);
           if Assigned(task.OnFinished) then
             fOwner.fTasks.Push(task); // task.OnFinished() was never called
           fOwner.DoExecuteAsyncError;
@@ -1550,8 +1550,8 @@ begin
     until Terminated;
   except
     on E: Exception do
-      SynDBLog.Add.Log(sllWarning, 'Execute raised a % -> terminate thread %',
-          [E.ClassType, fName], self);
+      SynDBLog.Add.Log(sllWarning, 'Execute raised % -> terminate thread %',
+        [PClass(E)^, fName], self);
   end;
   fProcessing := false;
   log := nil;
