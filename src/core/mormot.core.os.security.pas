@@ -15,6 +15,7 @@ unit mormot.core.os.security;
   - Security Descriptor Definition Language (SDDL)
   - TSecurityDescriptor Wrapper Object
   - Kerberos KeyTab File Support
+  - Basic ASN.1 Support
   - Windows API Specific Security Types and Functions
 
   Even if most of those security definitions comes from the Windows/AD world,
@@ -1972,6 +1973,241 @@ function FileIsKeyTab(const aKeytab: TFileName): boolean;
 /// check if a buffer contains a valid Kerberos keytab
 // - redirect to TKerberosKeyTab.LoadFromBuffer() from this unit
 function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
+
+
+{ **************** Basic ASN.1 Support }
+
+type
+  /// we defined our own type to hold an ASN object binary
+  TAsnObject = RawByteString;
+  PAsnObject = ^TAsnObject;
+
+const
+  /// constructed class type bitmask
+  ASN1_CL_CTR   = $20;
+  /// application-specific class type bitmask
+  ASN1_CL_APP   = $40;
+  /// context-specific class type bitmask
+  ASN1_CL_CTX   = $80;
+  /// private class type bitmask
+  ASN1_CL_PRI   = $c0;
+
+  // base ASN.1 types
+  ASN1_BOOL        = $01;
+  ASN1_INT         = $02;
+  ASN1_BITSTR      = $03;
+  ASN1_OCTSTR      = $04;
+  ASN1_NULL        = $05;
+  ASN1_OBJID       = $06;
+  ASN1_ENUM        = $0a;
+  ASN1_UTF8STRING  = $0c;
+  ASN1_PRINTSTRING = $13;
+  ASN1_IA5STRING   = $16;
+  ASN1_UTCTIME     = $17;
+  ASN1_GENTIME     = $18;
+
+  // base ASN1_CL_CTR types
+  ASN1_SEQ         = $30;
+  ASN1_SETOF       = $31;
+
+  ASN1_TEXT = [
+    ASN1_UTF8STRING,
+    ASN1_PRINTSTRING,
+    ASN1_IA5STRING];
+
+  ASN1_NUMBERS = [
+    ASN1_INT,
+    ASN1_ENUM,
+    ASN1_BOOL];
+
+  //  context-specific class, tag #n
+  ASN1_CTX0  = $80;
+  ASN1_CTX1  = $81;
+  ASN1_CTX2  = $82;
+  ASN1_CTX3  = $83;
+  ASN1_CTX4  = $84;
+  ASN1_CTX5  = $85;
+  ASN1_CTX6  = $86;
+  ASN1_CTX7  = $87;
+  ASN1_CTX8  = $88;
+  ASN1_CTX9  = $89;
+  ASN1_CTX10 = $8a;
+  ASN1_CTX11 = $8b;
+  ASN1_CTX12 = $8c;
+  ASN1_CTX13 = $8d;
+  ASN1_CTX14 = $8e;
+  ASN1_CTX15 = $8f;
+
+  //  context-specific class, constructed, tag #n
+  ASN1_CTC0  = $a0;
+  ASN1_CTC1  = $a1;
+  ASN1_CTC2  = $a2;
+  ASN1_CTC3  = $a3;
+  ASN1_CTC4  = $a4;
+  ASN1_CTC5  = $a5;
+  ASN1_CTC6  = $a6;
+  ASN1_CTC7  = $a7;
+  ASN1_CTC8  = $a8;
+  ASN1_CTC9  = $a9;
+  ASN1_CTC10 = $aa;
+  ASN1_CTC11 = $ab;
+  ASN1_CTC12 = $ac;
+  ASN1_CTC13 = $ad;
+  ASN1_CTC14 = $ae;
+  ASN1_CTC15 = $af;
+
+  /// encode a boolean value into ASN.1 binary
+  ASN1_BOOLEAN_VALUE: array[boolean] of TAsnObject = (
+    RawByteString(#$01#$01#$00),
+    RawByteString(#$01#$01#$ff));
+
+  /// encode a boolean value into nothing or true as ASN.1 binary
+  // - as used e.g. in X.509 v3 extensions optional fields
+  ASN1_BOOLEAN_NONE: array[boolean] of TAsnObject = (
+    '',
+    RawByteString(#$01#$01#$ff));
+
+  /// encode a 0 value into ASN.1 binary
+  ASN1_ZERO_VALUE: TAsnObject = RawByteString(#$00);
+
+  /// encode a null value into ASN.1 binary
+  ASN1_NULL_VALUE: TAsnObject = RawByteString(#$05#$00);
+
+/// encode a 64-bit signed integer value into ASN.1 binary
+function AsnEncInt(Value: Int64): TAsnObject; overload;
+
+/// encode a raw binary-encoded integer value into ASN.1 binary
+function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject; overload;
+
+/// encode a 64-bit unsigned OID integer value into ASN.1 binary
+// - append the encoded value into the Result shortstring existing content
+procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
+
+/// create an ASN.1 ObjectID from '1.x.x.x.x' text
+function AsnEncOid(OidText: PUtf8Char): TAsnObject;
+
+/// encode the len of a ASN.1 binary item
+function AsnEncLen(Len: cardinal; dest: PHash128): PtrInt;
+
+/// create an ASN.1 binary from the aggregation of several binaries
+function Asn(AsnType: integer;
+  const Content: array of TAsnObject): TAsnObject; overload;
+
+/// create an ASN.1 binary from some raw data
+function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
+
+/// create an ASN.1 binary from several raw data - as OCTSTR by default
+function AsnArr(const Data: array of RawUtf8;
+  AsnType: integer = ASN1_OCTSTR): TAsnObject;
+
+/// create an ASN.1 binary from 64-bit signed integer, calling AsnEncInt()
+function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
+
+/// create an ASN.1 binary from an unsigned Big Integer raw buffer
+// - the raw buffer is likely to come from mormot.crypt.rsa TBigInt.Save result
+// - will trim unneeded leading zeros, and ensure will be stored as unsigned
+// even if starts with a $80 byte
+// - any temporary string will be zeroed during the process for anti-forensic,
+// since a BigInt may be sensitive information (e.g. a RSA secret prime)
+function AsnBigInt(const BigInt: RawByteString;
+  AsnType: integer = ASN1_INT): TAsnObject;
+
+/// create an ASN.1 SEQuence from some raw data
+function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 OCTetSTRing from some raw data
+function AsnOctStr(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 SEQuence from the aggregation of several binaries
+function AsnSeq(const Content: array of TAsnObject): TAsnObject; overload;
+  {$ifdef FPC} inline; {$endif}
+
+/// create an ASN.1 ObjectID from some raw binary data
+function AsnObjId(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 SETOF from some raw binary data
+function AsnSetOf(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 BITSTRing from some raw binary data
+function AsnBitStr(const Data: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 ENUMerate from some raw integer
+function AsnEnum(Data: PtrInt): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 ObjectID from 'x.x.x.x.x' text
+function AsnOid(OidText: PUtf8Char): TAsnObject;
+
+/// create an ASN.1 PrintableString or UTF8String from some UTF-8 text
+// - will prefer ASN1_PRINTSTRING if the charset of the supplied text do suffice
+function AsnText(const Text: RawUtf8): TAsnObject;
+
+/// internal function used to wipe any temporary string for anti-forensic
+// - warning: all Content[] will be filled with zeroes even if marked as  "const"
+function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
+
+/// raw append some binary to an ASN.1 object buffer
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
+  overload; {$ifdef HASINLINE} inline; {$endif}
+
+/// encode and append some raw data as ASN.1
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
+  AsnType: integer); overload;
+
+/// decode the len of a ASN.1 binary item
+function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// decode the header of a ASN.1 binary item
+function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
+  out AsnType, AsnSize: integer): boolean;
+
+/// check if a DER memory buffer is a full block, e.g. a full ASN1_SEQ
+function AsnDecChunk(const der: RawByteString; exptyp: integer = ASN1_SEQ): boolean;
+
+/// decode an ASN1_INT ASN1_ENUM ASN1_BOOL value
+function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
+  AsnSize: integer): Int64;
+
+/// decode an OID ASN.1 value into human-readable text
+function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
+
+/// decode an OCTSTR ASN.1 value into its raw bynary buffer
+// - returns plain input value if was not a valid ASN1_OCTSTR
+function AsnDecOctStr(const input: RawByteString): RawByteString;
+
+/// parse the next ASN.1 value as text
+// - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
+function AsnNext(var Pos: integer; const Buffer: TAsnObject;
+  Value: PRawByteString = nil; CtrEndPos: PInteger = nil): integer;
+
+/// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as 64-bit integer
+function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
+  out ValueType: integer): Int64;
+
+/// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as 32-bit integer
+// - warning: parameters do NOT match AsnNextInteger() signature
+// - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
+function AsnNextInt32(var Pos: integer; const Buffer: TAsnObject;
+  out Value: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// parse the next ASN.1 value as raw buffer
+// - returns the ASN.1 value type, and the ASN.1 raw value blob itself
+function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
+  out Value: RawByteString; IncludeHeader: boolean = false): integer;
+
+/// parse the next ASN1_INT value as raw Big Integer binary
+function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
+  out Value: RawByteString): boolean;
+
+/// initialize a set of AsnNext() Pos[] with its 1 default position
+procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -5489,6 +5725,546 @@ begin
   FillZero(bin); // anti-forensic
 end;
 
+
+{ **************** Basic ASN.1 Support }
+
+// the longest OID described in the OID repository has 171 chars and 34 arcs
+// the greatest number for an OID arc has 39 digits, but we limit to 32-bit
+// see https://oid-base.com/faq.htm#size-limitations
+
+procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
+var
+  tmp: THash128; // written in reverse order (big endian)
+  vl, rl: PtrInt;
+  r: PByte;
+begin
+  r := @tmp[14];
+  r^ := byte(Value) and $7f;
+  Value := Value shr 7;
+  while Value <> 0 do
+  begin
+    dec(r);
+    r^ := byte(Value) or $80;
+    Value := Value shr 7;
+  end;
+  rl := ord(Result[0]);
+  vl := PAnsiChar(@tmp[15]) - pointer(r);
+  inc(Result[0], vl);
+  MoveFast(r^, Result[rl + 1], vl);
+end;
+
+function AsnEncOid(OidText: PUtf8Char): TAsnObject;
+var
+  x, y: PtrUInt;
+  tmp: ShortString; // no temporary memory allocation
+begin
+  tmp[0] := #0;
+  if OidText <> nil then
+  begin
+    // first byte = two first numbers modulo 40
+    x := GetNextUInt32(OidText) * 40;
+    y := 0;
+    while OidText^ <> #0 do
+    begin
+      y := GetNextUInt32(OidText); // warning: y=0 is a valid value
+      inc(x, y);
+      AsnEncOidItem(x, tmp);
+      x := 0;
+    end;
+    if (y = 0) or   // y=0 is not a valid last item
+       (tmp[0] < #3) then
+      tmp[0] := #0; // clearly invalid input
+  end;
+  FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function AsnEncLen(Len: cardinal; dest: PHash128): PtrInt;
+begin
+  if Len <= $7f then
+  begin
+    dest^[0] := Len; // most simple case
+    result := 1;
+    exit;
+  end;
+  result := 0;
+  repeat
+    dest^[high(dest^) - result] := byte(Len); // prepare big endian storage
+    inc(result);
+    Len := Len shr 8;
+  until Len = 0;
+  dest^[0] := byte(result) or $80; // first byte is following bytes count + $80
+  inc(PByte(dest));
+  MoveFast(dest^[high(dest^) - result], dest^[0], result);
+  inc(result);
+end;
+
+function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
+var
+  n: byte;
+begin
+  result := cardinal(Buffer[Start]);
+  inc(Start);
+  if result <= $7f then
+    exit;
+  n := result and $7f; // first byte is number of following bytes + $80
+  result := 0;
+  repeat
+    result := result shl 8;
+    inc(result, cardinal(Buffer[Start]));
+    if integer(result) < 0 then
+      exit; // 31-bit overflow: clearly invalid input
+    inc(Start);
+    dec(n);
+  until n = 0;
+end;
+
+function AsnEncInt(Value: Int64): TAsnObject;
+var
+  y: byte;
+  neg: boolean;
+  n: PtrInt;
+  p: PByte;
+  tmp: THash128;
+begin
+  result := '';
+  neg := Value < 0;
+  Value := Abs(Value);
+  if neg then
+    dec(Value);
+  n := 0;
+  repeat
+    y := byte(Value);
+    if neg then
+      y := not y;
+    tmp[n] := y;
+    inc(n);
+    Value := Value shr 8;
+  until Value = 0;
+  if neg then
+  begin
+    if y <= $7f then
+    begin
+      tmp[n] := $ff; // negative numbers start with ff or 8x
+      inc(n);
+    end;
+  end
+  else if y > $7F then
+  begin
+    tmp[n] := 0; // positive numbers start with a 0 or 0x..7x
+    inc(n);
+  end;
+  p := FastNewString(n);
+  pointer(result) := p;
+  repeat
+    dec(n);
+    p^ := tmp[n]; // stored as big endian
+    inc(p);
+  until n = 0;
+end;
+
+function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject;
+begin // same logic as DerAppend() but for any value size
+  while (ValueLen > 0) and
+        (PByte(Value)^ = 0) do
+  begin
+    inc(PByte(Value)); // ignore leading zeros
+    dec(ValueLen);
+  end;
+  FastSetRawByteString(result, Value, ValueLen);
+  if (result <> '') and
+     (PByte(result)^ and $80 <> 0) then
+    insert(#0, result, 1); // prevent storage as negative number (not)
+  result := Asn(ASN1_INT, [result]);
+end;
+
+function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
+  AsnSize: integer): Int64;
+var
+  x: byte;
+  neg: boolean;
+begin
+  result := 0;
+  if (AsnSize <= 0) or
+     (Start - 1 + AsnSize > length(Buffer)) then
+    exit;
+  neg := ord(Buffer[Start]) > $7f;
+  while AsnSize > 0 do
+  begin
+    x := ord(Buffer[Start]);
+    if neg then
+      x := not x;
+    result := result shl 8;
+    inc(result, x);
+    inc(Start);
+    dec(AsnSize);
+  end;
+  if neg then
+    result := -(result + 1);
+end;
+
+function Asn(AsnType: integer; const Content: array of TAsnObject): TAsnObject;
+var
+  tmp: THash128;
+  i, len, al: PtrInt;
+  p: PByte;
+begin
+  len := ord(AsnType = ASN1_BITSTR);
+  for i := 0 to high(Content) do
+    inc(len, length(Content[i]));
+  al := AsnEncLen(len, @tmp);
+  p := FastNewRawByteString(result, al + len + 1);
+  p^ := AsnType;         // type
+  inc(p);
+  MoveFast(tmp, p^, al); // encoded length
+  inc(p, al);
+  if AsnType = ASN1_BITSTR then
+  begin
+    p^ := 0; // leading unused bit length
+    inc(p);
+  end;
+  for i := 0 to high(Content) do
+  begin
+    len := length(Content[i]);
+    MoveFast(pointer(Content[i])^, p^, len); // content
+    inc(p, len);
+  end;
+end;
+
+function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
+var
+  tmp: THash128;
+  len, al: PtrInt;
+  p: PByte;
+begin
+  len := ord(AsnType = ASN1_BITSTR) + length(Data);
+  al := AsnEncLen(len, @tmp);
+  p := FastNewRawByteString(result, al + len + 1);
+  p^ := AsnType;         // type
+  inc(p);
+  MoveFast(tmp, p^, al); // encoded length
+  inc(p, al);
+  if AsnType = ASN1_BITSTR then
+  begin
+    p^ := 0; // leading unused bit length
+    inc(p);
+  end;
+  MoveFast(pointer(Data)^, p^, length(Data)); // content
+end;
+
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
+var
+  d, b: PtrInt;
+begin
+  if Buffer = '' then
+    exit;
+  d := length(Data);
+  b := length(Buffer);
+  SetLength(Data, d + b);
+  MoveFast(pointer(Buffer)^, PByteArray(Data)[d], b);
+end;
+
+function AsnArr(const Data: array of RawUtf8; AsnType: integer): TAsnObject;
+var
+  i: PtrInt;
+begin
+  result := '';
+  for i := 0 to high(Data) do
+    AsnAdd(result, AsnTyped(Data[i], AsnType));
+end;
+
+function Asn(Value: Int64; AsnType: integer): TAsnObject;
+begin
+  result := AsnTyped(AsnEncInt(Value), AsnType);
+end;
+
+function AsnBigInt(const BigInt: RawByteString; AsnType: integer): TAsnObject;
+var
+  i, l: PtrInt;
+  v: RawByteString;
+begin
+  l := length(BigInt);
+  i := 1;
+  while (i < l) and
+        (BigInt[i] = #0) do
+    inc(i); // trim leading zeros
+  if i = l then
+    v := ASN1_ZERO_VALUE
+  else
+  begin
+    v := copy(BigInt, i, l); // always make a new string for FillZero() below
+    if (v <> '') and
+       (ord(v[1]) and $80 <> 0) then
+      insert(#0, v, 1); // prepend 0 to ensure not parsed as negative number
+  end;
+  result := AsnTyped(v, AsnType);
+  FillZero(v); // anti-forensic
+end;
+
+function AsnSeq(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_SEQ);
+end;
+
+function AsnOctStr(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_OCTSTR);
+end;
+
+function AsnSeq(const Content: array of TAsnObject): TAsnObject;
+begin
+  result := Asn(ASN1_SEQ, Content);
+end;
+
+function AsnObjId(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_OBJID);
+end;
+
+function AsnSetOf(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_SETOF);
+end;
+
+function AsnBitStr(const Data: TAsnObject): TAsnObject;
+begin
+  result := AsnTyped(Data, ASN1_BITSTR);
+end;
+
+function AsnEnum(Data: PtrInt): TAsnObject;
+begin
+  result := Asn(Data, ASN1_ENUM);
+end;
+
+function AsnOid(OidText: PUtf8Char): TAsnObject;
+begin
+  result := AsnTyped(AsnEncOid(OidText), ASN1_OBJID);
+end;
+
+function AsnTypeText(p: PUtf8Char): integer;
+begin
+  // allow A..Z, a..z, 0..9, ' = ( ) + , - . / : ? but excluding @ & _
+  result := ASN1_PRINTSTRING;
+  if p = nil then
+    exit;
+  while true do
+    case p^ of
+      #0:
+        exit; // whole string was printable
+      'A'..'Z',
+      'a'..'z',
+      '0'..'9',
+      '''', '=', '(', ')', '+', ',', '-', '.', '/', ':', '?':
+        inc(p);
+    else
+      break;
+    end;
+  result := ASN1_UTF8STRING; // need UTF-8 encoding
+end;
+
+function AsnText(const Text: RawUtf8): TAsnObject;
+begin
+  result := AsnTyped(Text, AsnTypeText(pointer(Text)));
+end;
+
+function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
+var
+  i: PtrInt;
+  seq: RawByteString;
+begin
+  seq := AsnSeq(Content);
+  result := AsnOctStr(seq);
+  FillZero(seq);
+  for i := 0 to high(Content) do // wipe temporary "const" memory buffers
+    FillCharFast(pointer(Content[i])^, length(Content[i]), 0);
+end;
+
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject; AsnType: integer);
+begin
+  AsnAdd(Data, AsnTyped(Buffer, AsnType));
+end;
+
+function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
+var
+  b: byte;
+  x, y: cardinal;
+  tmp: ShortString; // the longest OID described in the repository has 171 chars
+begin
+  tmp[0] := #0;
+  y := 0;
+  while Pos < EndPos do
+  begin
+    x := 0;
+    repeat
+      x := x shl 7;
+      b := ord(Buffer[Pos]);
+      inc(Pos);
+      inc(x, cardinal(b) and $7F);
+    until (b and $80) = 0;
+    if y = 0 then
+    begin
+      y := x div 40; // first byte = two first numbers modulo 40
+      dec(x, y * 40);
+      AppendShortCardinal(y, tmp);
+    end;
+    {%H-}AppendShortCharSafe('.', @tmp);
+    AppendShortCardinal(x, tmp);
+  end;
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function AsnDecOctStr(const input: RawByteString): RawByteString;
+var
+  pos: integer;
+begin
+  pos := 1;
+  if AsnNextRaw(pos, input, result) <> ASN1_OCTSTR then
+    result := input;
+end;
+
+function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
+  out AsnType, AsnSize: integer): boolean;
+var
+  vtype, len: integer;
+begin
+  result := false;
+  len := length(Buffer);
+  if Pos > len then
+    exit;
+  vtype := ord(Buffer[Pos]);
+  inc(Pos);
+  AsnSize := AsnDecLen(Pos, Buffer);
+  if (Pos + AsnSize - 1) > len then
+    exit; // avoid overflow
+  AsnType := vtype;
+  result := true;
+end;
+
+function AsnDecChunk(const der: RawByteString; exptyp: integer): boolean;
+var
+  pos, typ, siz: integer;
+begin
+  pos := 1;
+  result := (der <> '') and
+            AsnDecHeader(pos, der, typ, siz) and
+            (typ = exptyp) and
+            (pos + siz = length(der) + 1);
+end;
+
+function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
+  out ValueType: integer): Int64;
+var
+  asnsize: integer;
+begin
+  if AsnDecHeader(Pos, Buffer, ValueType, asnsize) and
+     (ValueType in [ASN1_INT, ASN1_ENUM, ASN1_BOOL]) then
+    result := AsnDecInt(Pos, Buffer, asnsize)
+  else
+  begin
+    ValueType := ASN1_NULL;
+    result := -1;
+  end;
+end;
+
+function AsnNextInt32(var Pos: integer; const Buffer: TAsnObject;
+  out Value: integer): integer;
+begin
+  Value := AsnNextInteger(Pos, Buffer, result);
+end;
+
+function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
+  out Value: RawByteString; IncludeHeader: boolean): integer;
+var
+  headpos, asnsize: integer;
+begin
+  result := ASN1_NULL;
+  headpos := Pos;
+  if AsnDecHeader(Pos, Buffer, result, asnsize) then
+  begin
+    if result = ASN1_BITSTR then
+    begin
+      inc(Pos); // ignore bit length
+      dec(asnsize);
+    end;
+    if IncludeHeader then
+      Value := copy(Buffer, headpos, asnsize + Pos - headpos)
+    else
+      Value := copy(Buffer, Pos, asnsize);
+    inc(Pos, asnsize);
+  end;
+end;
+
+function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
+  out Value: RawByteString): boolean;
+begin
+  result := AsnNextRaw(Pos, Buffer, Value) = ASN1_INT;
+  if result then
+    while (Value <> '') and
+          (Value[1] = #0) do
+      delete(Value, 1, 1);
+end;
+
+function AsnNext(var Pos: integer; const Buffer: TAsnObject;
+  Value: PRawByteString; CtrEndPos: PInteger): integer;
+var
+  asnsize: integer;
+  tmp: array[0..23] of AnsiChar;
+  p: PAnsiChar;
+begin
+  if Value <> nil then
+    Value^ := '';
+  result := ASN1_NULL;
+  if not AsnDecHeader(Pos, Buffer, result, asnsize) then
+    exit;
+  if CtrEndPos <> nil then
+    CtrEndPos^ := Pos + asnsize;
+  if Value = nil then
+  begin
+    // no need to allocate and return the whole Value^: just compute position
+    if (result and ASN1_CL_CTR) = 0 then
+      // constructed (e.g. SEQ/SETOF): keep Pos after header
+      inc(Pos, asnsize);
+    exit;
+  end;
+  // we need to decode and return the Value^
+  if (result and ASN1_CL_CTR) <> 0 then
+    // constructed (e.g. SEQ/SETOF): return whole data, but keep Pos after header
+    Value^ := copy(Buffer, Pos, asnsize)
+  else
+    // decode Value^ as text - use AsnNextRaw() to avoid the decoding
+    case result of
+      ASN1_INT,
+      ASN1_ENUM,
+      ASN1_BOOL:
+        begin
+          p := StrInt64(@tmp[23], AsnDecInt(Pos, Buffer, asnsize));
+          FastSetString(PRawUtf8(Value)^, p, @tmp[23] - p);
+        end;
+      ASN1_OBJID:
+        begin
+          Value^ := AsnDecOid(Pos, Pos + asnsize, Buffer);
+          inc(Pos, asnsize);
+        end;
+      ASN1_NULL:
+        inc(Pos, asnsize);
+    else
+      // ASN1_UTF8STRING, ASN1_OCTSTR or unknown - return as CP_UTF8 for FPC
+      if asnsize > 0 then
+      begin
+        Value^ := copy(Buffer, Pos, asnsize);
+        FakeCodePage(Value^, CP_UTF8);
+        inc(Pos, asnsize);
+      end;
+    end;
+end;
+
+procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
+var
+  i: PtrInt;
+begin
+  SetLength(Pos, Count);
+  for i := 0 to Count - 1 do
+    Pos[i] := 1;
+end;
 
 
 { ****************** Windows API Specific Security Types and Functions }
