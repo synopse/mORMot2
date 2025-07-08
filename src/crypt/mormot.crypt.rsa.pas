@@ -363,6 +363,7 @@ var
   /// runtime-computed 4KB table of all known 2, 3, 5, 7, ... 17989 prime numbers
   // - as used by TBigInt.MatchKnownPrime
   // - published in interface section for TTestCoreCrypto._RSA validation
+  // - computed when needed at runtime from 1KB of nibble-encoded deltas
   BIGINT_PRIMES: array[0 .. 2063] of word;
 
 /// compute the base-10 decimal text from a Big Integer binary buffer

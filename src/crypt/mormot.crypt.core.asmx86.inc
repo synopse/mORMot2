@@ -204,7 +204,7 @@ asm
         push    ebp
         add     esp, - 20
         mov     [esp], ecx
-        movzx   ecx, byte ptr [eax].taescontext.rounds
+        movzx   ecx, byte ptr [eax].TAesContext.Rounds
         lea     esi, [4 * ecx]
         lea     ecx, [ecx - 1]
         lea     eax, [eax + 4 * esi] // eax=@ctx.rk[ctx.rounds]=pk

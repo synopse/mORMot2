@@ -1366,7 +1366,7 @@ type
       aesMode: TAesMode = mCtr; IV: PAesBlock = nil;
       bufferSize: integer = 128 shl 10); overload; virtual;
     /// initialize AES encryption/decryption stream for a given stream and password
-    // - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
+    // - will derivate the password using PBKDF2 over HMAC-SHA-256, using lower
     // 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
     // - you can customize the parameters if needed
     constructor Create(aStream: TStream; const password: RawUtf8;
@@ -1429,7 +1429,7 @@ function AesPkcs7(const src: RawByteString; encrypt: boolean; const key;
   keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil): RawByteString; overload;
 
 /// cypher/decypher any buffer using AES and PKCS7 padding, from a key buffer
-// - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
+// - will derivate the password using PBKDF2 over HMAC-SHA-256, using lower
 // 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
 function AesPkcs7(const src: RawByteString; encrypt: boolean;
   const password: RawUtf8; const salt: RawByteString = '';
@@ -1446,7 +1446,7 @@ function AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
 
 /// cypher/decypher any file using AES and PKCS7 padding, from a password
 // - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStreamEx
-// - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
+// - will derivate the password using PBKDF2 over HMAC-SHA-256, using lower
 // 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
 // - returns the number of bytes written to dst file
 function AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
@@ -2121,7 +2121,7 @@ type
   // RorQWord intrinsic compiler function) - we also included a SSE4 asm version
   // which outperforms other cryptographic hashes to more than 380MB/s
   // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance, e.g. for THmacSha512
+  // thread-safe reuse of one initialized instance, e.g. for HMAC process
   // - see TSynHasher if you expect to support more than one algorithm at runtime
   {$ifdef USERECORDWITHMETHODS}
   TSha512 = record
@@ -2409,7 +2409,7 @@ type
   // - this algorithm has known weaknesses, so should not be considered as
   // cryptographic secure, but is available for other purposes
   // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance, e.g. for THmacSha1
+  // thread-safe reuse of one initialized instance, e.g. for HMAC process
   // - see TSynHasher if you expect to support more than one algorithm at runtime
   {$ifdef USERECORDWITHMETHODS}
   TSha1 = record
@@ -2466,7 +2466,7 @@ type
   /// compute the HMAC message authentication code using SHA-256 as hash function
   // - you may use HmacSha256() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
+  // thread-safe reuse of a given instance via Compute(), e.g. for fast PBKDF2
   {$ifdef USERECORDWITHMETHODS}
   THmacSha256 = record
   {$else}
@@ -5945,7 +5945,7 @@ var
   tmp: TAesBlock;
 begin
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(fAes.Context).AesNi32) then
+  if Assigned(TAesContext(fAes).AesNi32) then
     AesNiCfbDecrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
