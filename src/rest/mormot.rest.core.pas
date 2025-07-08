@@ -2107,7 +2107,7 @@ begin // caller checked that (self <> nil) and (Level in fLogLevel)
       Level, '%', [aContext], aContent, aContentLen, self, max)
   else
     // direct huge UTF-8 or escaped content output - without aContext
-    fLogFamily.Add.Log(Level, aContent, self, max);
+    fLogFamily.Add.LogText(Level, aContent, aContentLen, self, max);
 end;
 
 function TRest.Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
