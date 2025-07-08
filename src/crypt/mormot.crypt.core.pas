@@ -7698,19 +7698,21 @@ begin
   end;
 end;
 
+procedure DoRndBlock(var ctx: TAesContext; out dest); // random from AES-CTR
+begin
+  ctx.DoBlock(ctx, ctx.iv, dest); // dest := AES(iv)
+  inc(ctx.iv.b[15]);              // big-endian inc(iv)
+  if ctx.iv.b[15] = 0 then
+    CtrNistCarryBigEndian(ctx.iv.b);
+end;
+
 procedure TAesPrng.FillRandom(out Block: TAesBlock);
 begin
   if (fSeedAfterBytes <> 0) and
      (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
   fSafe.Lock;
-  with TAesContext(fAes.Context) do
-  begin
-    DoBlock(rk, iv, Block{%H-}); // block=AES(iv)
-    inc(iv.b[15]);
-    if iv.b[15] = 0 then
-      CtrNistCarryBigEndian(iv.b);
-  end;
+  DoRndBlock(TAesContext(fAes), Block);
   inc(fBytesSinceSeed, 16);
   inc(fTotalBytes, 16);
   fSafe.UnLock;
@@ -7722,29 +7724,46 @@ begin
      (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
   fSafe.Lock;
-  with TAesContext(fAes.Context) do
-  begin
-    DoBlock(rk, iv, THash256Rec({%H-}Buffer).Lo);
-    inc(iv.b[15]);
-    if iv.b[15] = 0 then
-      CtrNistCarryBigEndian(iv.b);
-    DoBlock(rk, iv, THash256Rec(Buffer).Hi);
-    inc(iv.b[15]);
-    if iv.b[15] = 0 then
-      CtrNistCarryBigEndian(iv.b);
-  end;
+  DoRndBlock(TAesContext(fAes), THash256Rec({%H-}Buffer).Lo);
+  DoRndBlock(TAesContext(fAes), THash256Rec({%H-}Buffer).Hi);
   inc(fBytesSinceSeed, 32);
   inc(fTotalBytes, 32);
   fSafe.UnLock;
 end;
 
+procedure DoRnd(var ctx: TAesContext; dest: PByte; main, remain: PtrUInt);
+begin
+  if main <> 0 then
+    {$ifdef USEAESNI64}
+    if (aesNiSse41 in ctx.Flags) and
+       (main > 8) then
+    begin
+      // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
+      main := main shl AesBlockShift;
+      FillCharFast(dest^, main, 0); // dst := 0 xor ctx(iv) -> PRNG
+      AesNiEncryptCtrNist(dest, dest, main, @ctx, @ctx.iv);
+      inc(PByte(dest), main);
+    end
+    else
+    {$endif USEAESNI64}
+    repeat
+      DoRndBlock(ctx, dest^);
+      inc(PAesBlock(dest));
+      dec(main)
+    until main = 0;
+  if remain = 0 then
+    exit;
+  DoRndBlock(ctx, ctx.buf);         // ctx.buf as temporary buffer
+  MoveFast(ctx.buf, dest^, remain); // 1..15 trailing bytes from ctx.buf
+end;
+
 procedure TAesPrng.FillRandom(Buffer: pointer; Len: PtrInt);
 var
   main, remain: cardinal;
-  aes: TAesContext; // local copy if Seed is called in another thread
-  H: QWord;
+  local: TAesContext; // local copy if Seed is called in another thread
+  h: QWord;
 begin
-  // prepare the AES rounds in a thread-safe way
+  // prepare the local rounds in a thread-safe way
   if Len <= 0 then
     exit;
   main := Len shr AesBlockShift;
@@ -7758,66 +7777,21 @@ begin
   fSafe.Lock;
   inc(fBytesSinceSeed, Len);
   inc(fTotalBytes, Len);
-  if main < 8 then
+  if main <= 16 then
   begin
     // small buffers can be set within the lock
-    while main <> 0 do
-    begin
-      TAesContext(fAes.Context).DoBlock(
-        TAesContext(fAes.Context).rk, TAesContext(fAes.Context).iv, Buffer^);
-      inc(TAesContext(fAes.Context).iv.b[15]);
-      if TAesContext(fAes.Context).iv.b[15] = 0 then
-        CtrNistCarryBigEndian(TAesContext(fAes.Context).iv.b);
-      inc(PAesBlock(Buffer));
-      dec(main);
-    end;
-    if remain <> 0 then // trailing bytes from one TAesBlock
-    begin
-      TAesContext(fAes.Context).DoBlock(
-        TAesContext(fAes.Context).rk, TAesContext(fAes.Context).iv, {%H-}aes.iv);
-      MoveFast(aes.iv, Buffer^, remain);
-      inc(TAesContext(fAes.Context).iv.b[15]);
-      if TAesContext(fAes.Context).iv.b[15] = 0 then
-        CtrNistCarryBigEndian(TAesContext(fAes.Context).iv.b);
-    end;
+    DoRnd(TAesContext(fAes), Buffer, main, remain);
     fSafe.UnLock;
     exit;
   end;
   // big buffers will update the CTR IV and release the lock before processing
-  MoveFast(fAes, aes, SizeOf(aes));
-  H := bswap64(aes.iv.H);
-  inc(H, main);
-  if remain <> 0 then
-    inc(H);
-  if H < bswap64(aes.iv.H) then // propagate big-endian 64-bit CTR overflow
-    TAesContext(fAes.Context).iv.L := bswap64(bswap64(aes.iv.L) + 1);
-  TAesContext(fAes.Context).iv.H := bswap64(H);
+  MoveFast(fAes, local, SizeOf(local));
+  h := bswap64(local.iv.H); // start at 0, seed after 21-bit: never overflows
+  TAesContext(fAes).iv.H := bswap64(h + (main + ord(remain <> 0)));
   fSafe.UnLock;
-  // unlocked AES-CTR computation
-  if main <> 0 then
-    {$ifdef USEAESNI64}
-    if aesNiSse41 in aes.Flags then
-    begin
-      // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
-      main := main shl AesBlockShift;
-      FillCharFast(Buffer^, main, 0); // dst := 0 xor AES(iv) -> PRNG
-      AesNiEncryptCtrNist(Buffer, Buffer, main, @aes, @aes.iv);
-    end
-    else
-    {$endif USEAESNI64}
-    repeat
-      aes.DoBlock(aes, aes.iv, Buffer^);
-      inc(aes.iv.b[15]);
-      if aes.iv.b[15] = 0 then
-        CtrNistCarryBigEndian(aes.iv.b);
-      inc(PAesBlock(Buffer));
-      dec(main)
-    until main = 0;
-  if remain <> 0 then // trailing bytes from one last TAesBlock
-  begin
-    aes.DoBlock(aes, aes.iv, aes.iv);
-    MoveFast(aes.iv, Buffer^, remain);
-  end;
+  // unlocked local AES-CTR computation
+  DoRnd(local, Buffer, main, remain);
+  FillCharFast(local, SizeOf(local), 0); // anti-forensic
 end;
 
 
