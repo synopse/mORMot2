@@ -5509,7 +5509,6 @@ procedure TSynLog.LogEscape(Level: TSynLogLevel; const ContextFmt: RawUtf8;
 var
   tmp: array[0 .. MAX_LOGESCAPE + 256] of AnsiChar; // pre-render on local buffer
   tmps: ShortString absolute tmp;
-  L: PtrInt;
 begin
   if (self = nil) or
      not (Level in fFamily.fLevel) then
@@ -5520,9 +5519,8 @@ begin
   AppendShort(' len=', tmps);
   AppendShortCardinal(DataLen, tmps);
   AppendShortChar(' ', @tmps);
-  L := ord(tmps[0]);
-  ContentAppend(Data, DataLen, L, MinPtrInt(high(tmp) - L, TruncateLen), @tmp[L]);
-  LogText(Level, @tmp[1], Instance); // #0 ended
+  ContentAppend(Data, DataLen, ord(tmp[0]), MinPtrInt(high(tmp), TruncateLen), @tmp[1]);
+  LogText(Level, @tmp[1], Instance); // this method with ending #0 is the fastest
 end;
 
 {$STACKFRAMES OFF}
