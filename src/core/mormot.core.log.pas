@@ -529,7 +529,7 @@ type
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogLevel; const Text: RawUtf8;
-      Instance: TObject = nil; TextTruncateAtLength: integer = 0); overload;
+      Instance: TObject = nil; TextTruncateAtLength: PtrInt = 0); overload;
     {$ifdef UNICODE}
     /// call this method to add some RTL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
@@ -1090,8 +1090,8 @@ type
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
       Values: PVarRec; ValuesCount: integer; Instance: TObject);
-    procedure LogInternalText(Level: TSynLogLevel; const Text: RawUtf8;
-      Instance: TObject; TextTruncateAtLength: integer);
+    procedure LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
+      TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
@@ -1269,7 +1269,7 @@ type
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogLevel; const Text: RawUtf8; aInstance: TObject = nil;
-      TextTruncateAtLength: integer = 0); overload;
+      TextTruncateAtLength: PtrInt = 0); overload;
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef UNICODE}
     /// call this method to add some RTL string to the log at a specified level
@@ -5196,11 +5196,12 @@ begin
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
-  aInstance: TObject; TextTruncateAtLength: integer);
+  aInstance: TObject; TextTruncateAtLength: PtrInt);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternalText(Level, Text, aInstance, TextTruncateAtLength);
+    LogInternalText(Level, pointer(Text), length(Text), aInstance,
+                    TextTruncateAtLength);
 end;
 
 {$ifdef UNICODE}
@@ -5229,7 +5230,7 @@ procedure TSynLog.LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char;
       if s <> '' then
         if (IgnoreWhenStartWith = nil) or
            not IdemPChar(pointer(s), IgnoreWhenStartWith) then
-          LogInternalText(Level, s, aInstance, maxInt);
+          LogText(Level, pointer(s), aInstance);
     until LinesToLog = nil;
   end;
 
@@ -5422,7 +5423,7 @@ begin
   if (self <> nil) and
      (Level in fFamily.fLevel) and
      (aInstance <> nil) then
-    LogInternalText(Level, '', aInstance, maxInt);
+    LogInternalText(Level, nil, 0, aInstance, 0);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const aName: RawUtf8;
@@ -5537,7 +5538,7 @@ class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8)
 begin
   if Text = '' then
     exit;
-  Add.LogInternalText(Level, Text, nil, maxInt);
+  Add.LogInternalText(Level, pointer(Text), length(Text), nil, 16384);
   {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
   {$ifdef OSWINDOWS}
   if IsDebuggerPresent then
@@ -5889,10 +5890,10 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalText(Level: TSynLogLevel; const Text: RawUtf8;
-  Instance: TObject; TextTruncateAtLength: integer);
+procedure TSynLog.LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
+  TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
 var
-  lasterror, textlen, trunclen: integer;
+  lasterror, trunclen: PtrInt;
 begin
   if Level = sllLastError then
     lasterror := GetLastError
@@ -5901,7 +5902,7 @@ begin
   LockAndDisableExceptions;
   try
     LogHeader(Level, Instance);
-    if Text = '' then
+    if Text = nil then
     begin
       if Instance <> nil then
         // by definition, a JSON object is serialized on the same line
@@ -5909,22 +5910,21 @@ begin
     end
     else
     begin
-      textlen := PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^;
-      trunclen := textlen;
+      trunclen := TextLen;
       if (TextTruncateAtLength <> 0) and
-         (textlen > TextTruncateAtLength) then
-        trunclen := Utf8TruncatedLength(pointer(Text), textlen, TextTruncateAtLength);
-      if IsValidUtf8Buffer(pointer(Text), trunclen) then // may use AVX2
-        if trunclen <> textlen then
+         (TextLen > TextTruncateAtLength) then
+        trunclen := Utf8TruncatedLength(pointer(Text), TextLen, TextTruncateAtLength);
+      if IsValidUtf8Buffer(Text, trunclen) then // may use AVX2
+        if trunclen <> TextLen then
         begin
-          fWriter.AddOnSameLine(pointer(Text), trunclen);
+          fWriter.AddOnSameLine(Text, trunclen);
           fWriter.AddShort('... (truncated) length=');
-          fWriter.AddU(textlen);
+          fWriter.AddU(TextLen);
         end
         else
-          fWriter.AddOnSameLine(pointer(Text)) // faster without textlen
+          fWriter.AddOnSameLine(Text, TextLen) // TextLen may be < length(Text)
       else // binary is written as escaped text and $xx binary
-        fWriter.AddEscapeBuffer(pointer(Text), trunclen, TextTruncateAtLength);
+        fWriter.AddEscapeBuffer(Text, trunclen, TextTruncateAtLength);
     end;
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
