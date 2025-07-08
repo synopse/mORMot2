@@ -1725,8 +1725,8 @@ type
   // - use as a shared instance via TAesPrng.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
   // values of a counter with AES-256-CTR and a secret key
-  // - an internal secret key is generated from several PBKDF2-SHA-3 rounds
-  // of entropy supplied by the OS and available Hardware
+  // - an internal secret key is generated from several PBKDF2-SHA-256 rounds
+  // on 128 bytes of entropy supplied by the OS and available Hardware
   // - by design, such a PRNG is as good as the cypher used - for reference, see
   // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
   // - FillRandom() is thread-safe, and its AES process is not blocking: only
@@ -1755,7 +1755,7 @@ type
     constructor Create; overload; override;
     /// initialize the internal secret key, using Operating System entropy
     // - entropy is gathered from the OS, using GetEntropy() method
-    // - you can specify how many PBKDF2-SHA-3 rounds are applied to the
+    // - you can specify how many PBKDF2-SHA-256 rounds are applied to the
     // OS-gathered entropy - the higher, the better, but also the slower
     // - internal private key would be re-seeded after ReseedAfterBytes
     // bytes (32MB by default) are generated, using GetEntropy()
@@ -1803,7 +1803,7 @@ type
     // - if set to 0 - e.g. for TSystemPrng - no seeding will occur
     property SeedAfterBytes: PtrUInt
       read fSeedAfterBytes;
-    /// how many PBKDF2-SHA-3 iterations are applied by Seed to the entropy
+    /// how many PBKDF2-SHA-256 iterations are applied by Seed to the entropy
     // - default is 16 rounds, which is more than enough for entropy gathering,
     // since GetEntropy output comes from a SHAKE-256 generator in XOF mode
     property SeedPbkdf2Round: cardinal
@@ -7664,41 +7664,35 @@ end;
 procedure TAesPrng.Seed;
 var
   alreadyseeding: boolean;
-  key: THash512Rec;
+  key: THash256;
   entropy, previous: RawByteString;
 begin
   if fSeedAfterBytes = 0 then
     exit;
   fSafe.Lock;
-  alreadyseeding := fSeeding;
+  alreadyseeding := fSeeding; // atomic flag
   fSeeding := true;
   fSafe.UnLock;
-  if alreadyseeding then
-    exit; // only a single (first) thread would do the entropy seeding
+  if not alreadyseeding then // a single thread should do the entropy seeding
   try
-    // gather 128 bytes (=HmacSha512 block size) from several sources of entropy
+    // gather 128 bytes (> Sha256 block size) from several sources of entropy
     entropy := GetEntropy(128, fSeedEntropySource);
     // combine the new state with the previous state
     FastSetRawByteString(previous, @fAes, SizeOf(fAes));
-    // derivate 512-bit of secret using PBKDF2-SHA3-512
-    Pbkdf2Sha3(SHA3_512, entropy, previous, fSeedPbkdf2Round, @key.b);
-    // initialize the new thread-safe state
+    // derivate up to 256-bit of secret using PBKDF2-SHA-256
+    Pbkdf2HmacSha256(entropy, previous, fSeedPbkdf2Round, key);
+    // initialize the new thread-safe state as its AES-CTR key
     fSafe.Lock;
     try
-      // paranoid anti-forensic
-      fAes.Done;
-      // AES-CTR key is derivated from low 128-256 bits of PBKDF2-SHA3-512 output
-      fAes.EncryptInit(key.Lo, fAesKeySize);
-      // IV is weakly derivated from high 256-bit of PBKDF2-SHA3-512 output
-      DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi, SizeOf(key.Hi));
-      // reset seeding
-      fBytesSinceSeed := 0;
+      fAes.Done;                          // anti-forensic + set IV = 0
+      fAes.EncryptInit(key, fAesKeySize); // from PBKDF2-SHA-256 output
+      TAesContext(fAes).iv.L := PQWord(entropy)^; // keep CTR = zero
       fSeeding := false;
     finally
       fSafe.UnLock;
     end;
   finally
-    FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
+    FillZero(key); // avoid the ephemeral key to appear in clear on stack
     FillZero(entropy);
     FillZero(previous);
   end;
