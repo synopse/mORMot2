@@ -7759,9 +7759,9 @@ end;
 
 procedure TAesPrng.FillRandom(Buffer: pointer; Len: PtrInt);
 var
-  main, remain: cardinal;
+  main, remain: PtrInt;
   local: TAesContext; // local copy if Seed is called in another thread
-  h: QWord;
+  h: Int64;
 begin
   // prepare the local rounds in a thread-safe way
   if Len <= 0 then
@@ -7786,8 +7786,8 @@ begin
   end;
   // big buffers will update the CTR IV and release the lock before processing
   MoveFast(fAes, local, SizeOf(local));
-  h := bswap64(local.iv.H); // start at 0, seed after 21-bit: never overflows
-  TAesContext(fAes).iv.H := bswap64(h + (main + ord(remain <> 0)));
+  h := bswap64(local.iv.Hi); // start at 0, seed after 21-bit: never overflows
+  TAesContext(fAes).iv.Hi := bswap64(h + (main + ord(remain <> 0)));
   fSafe.UnLock;
   // unlocked local AES-CTR computation
   DoRnd(local, Buffer, main, remain);
