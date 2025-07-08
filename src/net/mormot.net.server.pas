@@ -4313,13 +4313,13 @@ begin
     result := true; // success
   except
     on E: Exception do
-      begin
-        // intercept and return Internal Server Error 500 on any fatal exception
-        Ctxt.RespStatus := HTTP_SERVERERROR;
-        Ctxt.SetErrorMessage('%: %', [E, E.Message]);
-        IncStat(grException);
-        // will keep soClose as result to shutdown the connection
-      end;
+    begin
+      // intercept and return Internal Server Error 500 on any fatal exception
+      Ctxt.RespStatus := HTTP_SERVERERROR;
+      Ctxt.SetErrorMessage('%: %', [E, E.Message]);
+      IncStat(grException);
+      // will keep soClose as result to shutdown the connection
+    end;
   end;
 end;
 
