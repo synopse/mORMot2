@@ -2238,9 +2238,14 @@ function FillSystemRandom(Buffer: PByteArray; Len: integer;
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
+{$ifdef CPU64}
+{$A8}
+{$else}
+{$A4}
+{$endif CPU64}
 type
   HCRYPTPROV = pointer;
-  HCRYPTKEY = pointer;
+  HCRYPTKEY  = pointer;
   HCRYPTHASH = pointer;
   HCERTSTORE = pointer;
 
@@ -2381,6 +2386,7 @@ type
     {$endif CPUX64}
     Buffer: PWideChar;
   end;
+{$A+}
 
   /// direct access to the Windows CryptoApi - use the global CryptoAPI variable
   {$ifdef USERECORDWITHMETHODS}
