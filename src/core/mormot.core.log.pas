@@ -551,6 +551,12 @@ type
     // - if the debugging info is available from TDebugFile, will log the
     // unit name, associated symbol and source code line
     procedure Log(Level: TSynLogLevel = sllTrace); overload;
+    /// call this method to add the content of a PUtf8Char buffer
+    // - is slightly more optimized than Log(RawUtf8) or LogText(Text,TextLen)
+    procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject); overload;
+    /// call this method to add the content of a PUtf8Char buffer and length
+    procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; TextLen: PtrInt;
+      Instance: TObject; TextTruncateAtLength: PtrInt = 0); overload;
     /// call this method to add some multi-line information to the log at a
     // specified level
     // - LinesToLog content will be added, one line per one line, delimited
@@ -1301,8 +1307,11 @@ type
     // unit name, associated symbol and source code line
     procedure Log(Level: TSynLogLevel); overload;
     /// call this method to add the content of a PUtf8Char buffer
-    // - is slightly more optimized than Log(RawUtf8)
-    procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
+    // - is slightly more optimized than Log(RawUtf8) or LogText(Text,TextLen)
+    procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject); overload;
+    /// call this method to add the content of a PUtf8Char buffer and length
+    procedure LogText(Level: TSynLogLevel; Text: PUtf8Char; TextLen: PtrInt;
+      Instance: TObject; TextTruncateAtLength: PtrInt = 0); overload;
     /// call this method to add the content of a binary buffer with ASCII escape
     // - precompute up to TruncateLen (1024) bytes of output before writing with a
     // hardcoded limit of MAX_LOGESCAPE = 4KB text output for pre-rendering on stack
@@ -5502,6 +5511,14 @@ begin
     fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
     GlobalThreadLock.UnLock;
   end;
+end;
+
+procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; TextLen: PtrInt;
+  Instance: TObject; TextTruncateAtLength: PtrInt);
+begin
+  if (self <> nil) and
+     (Level in fFamily.fLevel) then
+    LogInternalText(Level, Text, TextLen, Instance, TextTruncateAtLength);
 end;
 
 procedure TSynLog.LogEscape(Level: TSynLogLevel; const ContextFmt: RawUtf8;
