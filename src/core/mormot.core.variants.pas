@@ -1389,6 +1389,9 @@ type
     /// check if the Document is an array - i.e. Kind = dvArray
     function IsArray: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// check if the Document is of the expected kind
+    function IsKind(k: TDocVariantKind): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// check if names lookups are case sensitive in this object Document
     function IsCaseSensitive: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -3704,6 +3707,18 @@ end;
 function TDocVariantData.IsArray: boolean;
 begin
   result := Has(dvoIsArray);
+end;
+
+function TDocVariantData.IsKind(k: TDocVariantKind): boolean;
+begin
+  case k of
+    dvArray:
+      result := not Has(dvoIsObject);
+    dvObject:
+      result := not Has(dvoIsArray);
+  else
+    result := false;
+  end;
 end;
 
 function TDocVariantData.IsCaseSensitive: boolean;
