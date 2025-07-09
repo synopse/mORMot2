@@ -4733,6 +4733,7 @@ end;
 
 {$endif CPUARM3264}
 
+{$undef ARMV8STATIC}
 {$ifdef CPUAARCH64}
 {$ifdef OSLINUXANDROID}
 // AARCH64 armv8.o is only validated on Linux
@@ -4780,6 +4781,31 @@ var
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
 begin
+  // some ARM/AARCH64 specific initialization
+  {$ifdef CPUARM3264}
+  StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
+  MoveFast := @MoveFastLibC;
+  FillCharFast := @FillCharLibC;
+  {$ifdef ARMV8STATIC}
+  if ahcCrc32 in CpuFeatures then
+    try
+      if (crc32cby4arm64(0, 1) = 3712330424) and
+         (crc32carm64(0, @tp, SizeOf(tp)) = crc32cfast(0, @tp, SizeOf(tp))) then
+      begin
+        crc32c          := @crc32carm64;
+        DefaultHasher   := @crc32carm64;
+        InterningHasher := @crc32carm64;
+        crc32cby4       := @crc32cby4arm64;
+        crcblock        := @crc32blockarm64;
+        crcblocks       := @crc32blocksarm64;
+      end;
+      if crc32arm64(0, @tp, SizeOf(tp)) = crc32fast(0, @tp, SizeOf(tp)) then
+        crc32 := @crc32arm64;
+    except
+      exclude(CpuFeatures, ahcCrc32); // crc32 was actually not supported
+    end;
+  {$endif ARMV8STATIC}
+  {$endif CPUARM3264}
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
   modname := nil;
@@ -5059,33 +5085,6 @@ begin
     @pthread_mutex_unlock  := dlsym(pthread, 'pthread_mutex_unlock');
   end;
   {$endif OSPTHREADSLIB}
-  // some ARM/AARCH64 specific initialization
-  {$ifdef CPUARM3264}
-  StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
-  MoveFast := @MoveFastLibC;
-  FillCharFast := @FillCharLibC;
-  {$ifdef ARMV8STATIC}
-  if ahcCrc32 in CpuFeatures then
-    try
-      if (crc32cby4arm64(0, 1) = 3712330424) and
-         (crc32carm64(0, @SystemInfo, SizeOf(SystemInfo)) =
-           crc32cfast(0, @SystemInfo, SizeOf(SystemInfo))) then
-      begin
-        crc32c          := @crc32carm64;
-        DefaultHasher   := @crc32carm64;
-        InterningHasher := @crc32carm64;
-        crc32cby4       := @crc32cby4arm64;
-        crcblock        := @crc32blockarm64;
-        crcblocks       := @crc32blocksarm64;
-      end;
-      if crc32arm64(0, @SystemInfo, SizeOf(SystemInfo)) =
-          crc32fast(0, @SystemInfo, SizeOf(SystemInfo)) then
-        crc32 := @crc32arm64;
-    except
-      exclude(CpuFeatures, ahcCrc32); // crc32 was actually not supported
-    end;
-  {$endif ARMV8STATIC}
-  {$endif CPUARM3264}
   {$ifdef CPUX64}
   {$ifdef OSLINUX}
   {$ifndef NOPATCHRTL}
