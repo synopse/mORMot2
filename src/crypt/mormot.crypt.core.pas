@@ -8147,7 +8147,7 @@ end;
 procedure TSha256.Update(Buffer: pointer; Len: integer);
 var
   Data: TShaContext absolute Context;
-  aLen: integer;
+  bytes: integer;
 begin
   if (Buffer = nil) or
      (Len <= 0) then
@@ -8155,34 +8155,33 @@ begin
   inc(Data.MLen, QWord(cardinal(Len)) shl 3);
   while Len > 0 do
   begin
-    aLen := 64 - Data.Index;
-    if aLen <= Len then
+    bytes := 64 - Data.Index;
+    if bytes <= Len then
     begin
       if Data.Index <> 0 then
       begin
-        MoveFast(Buffer^, Data.Buffer[Data.Index], aLen);
+        MoveFast(Buffer^, Data.Buffer[Data.Index], bytes);
         RawSha256Compress(Data.Hash, @Data.Buffer);
         Data.Index := 0;
       end
       else
-        {$ifdef ASMX64}
+        {$ifdef ASMX64} // try optimized Intel x86_64 asm over whole blocks
         if (K256Aligned <> nil) and
            (Len >= 64) then
         begin
-          // use optimized Intel x86_64 asm over whole blocks
           if cfSHA in CpuFeatures then
             Sha256ni(Buffer^, Data.Hash, Len shr 6)     // Intel SHA HW opcodes
           else
             Sha256Sse4(Buffer^, Data.Hash, Len shr 6);  // Intel SSE4.2 asm
-          aLen := Len and (not 63);
+          bytes := Len and (not 63); // all whole blocks have been added
         end
         else
-          Sha256CompressPas(Data.Hash, Buffer);
+          Sha256CompressPas(Data.Hash, Buffer); // process one block
         {$else}
         RawSha256Compress(Data.Hash, Buffer); // may be AARCH64 version
         {$endif ASMX64}
-      dec(Len, aLen);
-      inc(PtrInt(Buffer), aLen);
+      dec(Len, bytes);
+      inc(PByte(Buffer), bytes);
     end
     else
     begin
