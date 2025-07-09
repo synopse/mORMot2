@@ -5086,7 +5086,10 @@ begin
   end;
   ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
   if ndx < 0 then
-    ndx := dv.InternalAddBuf(pointer(Name), NameLen);
+    if dv.IsArray then
+      exit // avoid EDocVariant in dv.InternalAddBuf()
+    else
+      ndx := dv.InternalAddBuf(pointer(Name), NameLen);
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
@@ -7331,11 +7334,9 @@ function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
 var
   v: PVariant;
 begin
+  result := -1;
   if aName = '' then
-  begin
-    result := -1;
     exit;
-  end;
   if Has(dvoCheckForDuplicatedNames) then
     if GetValueIndex(aName) >= 0 then
       EDocVariant.RaiseUtf8('AddValue: Duplicated [%] name', [aName]);
@@ -7354,6 +7355,9 @@ function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
 var
   tmp: RawUtf8;
 begin
+  result := -1;
+  if aNameLen <= 0 then
+    exit;
   FastSetString(tmp, aName, aNameLen);
   result := AddValue(tmp, aValue, aValueOwned, aIndex);
 end;
@@ -9228,7 +9232,8 @@ begin
     if csv[namelen] = #0 then
       break; // reached the last item of the path, which is the value to set
     if ndx < 0 then
-      if aCreateIfNotExisting then
+      if aCreateIfNotExisting and
+         not v^.IsArray then // avoid EDocVariant in v^.InternalAddBuf()
       begin
         ndx := v^.InternalAddBuf(csv, namelen); // in two steps for FPC
         v := @v^.VValue[ndx];
@@ -9241,7 +9246,10 @@ begin
     inc(csv, namelen + 1); // next
   until false;
   if ndx < 0 then
-    ndx := v^.InternalAddBuf(csv, namelen);
+    if v^.IsArray then
+      exit // avoid EDocVariant in v^.InternalAddBuf()
+    else
+      ndx := v^.InternalAddBuf(csv, namelen);
   if aMergeExisting and
      (ndx >= 0) then
   begin
