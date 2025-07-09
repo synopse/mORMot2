@@ -763,7 +763,8 @@ var
 
 /// some textual information about the current computer hardware, from BIOS
 // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
-// - is a function on Linux to avoid some syscalls at startup
+// - on Windows, will check the registry; on BSD, will read HW_MACHINE and
+// HW_MODEL; on Linux/Android will use a function to avoid some syscalls
 {$ifdef OSLINUXANDROID} function {$endif} BiosInfoText: RawUtf8;
 
 /// convert an Operating System type into its human-friendly text representation
@@ -1102,7 +1103,7 @@ var
   // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
   SystemMemorySize: PtrUInt;
 
-  /// 128-bit of entropy as retrieved during unit initialization
+  /// 128-bit of entropy quickly gathered during unit initialization
   StartupRandom: THash128Rec;
 
 type

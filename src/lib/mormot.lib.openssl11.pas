@@ -1477,6 +1477,7 @@ type
   /// convenient wrapper to a PASN1_TIME instance
   ASN1_TIME = object
   public
+    /// may return 0 if ASN1_TIME_to_tm() is not supported on oldest OpenSSL
     function ToDateTime: TDateTime;
   end;
   PASN1_TIME = ^ASN1_TIME;
@@ -2006,7 +2007,7 @@ type
 
   // minimal C-like definitions to mimic unixtype FPC unit on Windows
   clong = PtrInt;
-  time_t = PtrInt;
+  time_t = PtrInt; // may suffer Year2038 issue on CPU32 - not used in practice
   ptime_t = ^time_t;
 
   timeval = record
@@ -8010,7 +8011,7 @@ begin
   if @self = nil then
     result := 0
   else
-    result := X509_REVOKED_get0_revocationDate(@self).ToDateTime;
+    result := X509_REVOKED_get0_revocationDate(@self).ToDateTime; // may be 0
 end;
 
 function X509_REVOKED.Reason: integer;
@@ -8075,7 +8076,7 @@ begin
   if @self = nil then
     result := 0
   else
-    result := X509_CRL_get_lastUpdate(@self).ToDateTime;
+    result := X509_CRL_get_lastUpdate(@self).ToDateTime; // may return 0
 end;
 
 function X509_CRL.NextUpdate: TDateTime;
@@ -8951,7 +8952,7 @@ begin
      (ASN1_TIME_to_tm(@self, @t) = OPENSSLSUCCESS) then
     result := TmToDateTime(t)
   else
-    result := 0; // deprecated
+    result := 0; // e.g. on deprecated OpenSSL without ASN1_TIME_to_tm()
 end;
 
 
@@ -9318,7 +9319,7 @@ begin
   if @self = nil then
     result := 0
   else
-    result := X509_getm_notBefore(@self).ToDateTime;
+    result := X509_getm_notBefore(@self).ToDateTime; // 0 if no ASN1_TIME_to_tm()
 end;
 
 function X509.NotAfter: TDateTime;

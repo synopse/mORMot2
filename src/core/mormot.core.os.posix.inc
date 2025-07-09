@@ -3544,7 +3544,7 @@ procedure _XorEntropyFromOs256(var e: THash256Rec);
 var
   si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Mac/BSD
 begin
-  // no /dev/random call for XorEntropy() to avoid endless recursive calls
+  // no /dev/random needed for XorEntropy() to avoid endless recursive calls
   QueryPerformanceMicroSeconds(e.d0);
   e.d1 := e.d1 xor GetTickCount64;
   DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom));
@@ -3582,9 +3582,8 @@ begin
   if not result then
   {$endif OSLINUX}
   begin
-    if __NoURandom then
-      dev := -1
-    else
+    dev := -1;
+    if not __NoURandom then
       // /dev/urandom non blocking on Linux, but may block at boot time on BSD
       dev := FileOpenSequentialRead('/dev/urandom');
     if dev <= 0 then
@@ -3595,14 +3594,14 @@ begin
       begin
         if rd > 16 then
           rd := 16; // better to get only 128-bit from raw blocking /dev/random
-        dev := fpOpen('/dev/random', O_RDONLY); // may block until entropy
+        dev := fpOpen('/dev/random', O_RDONLY);
         if dev <= 0 then
           __NoRandom := true; // not worth trying any more
       end;
     end;
     if dev > 0 then // we can read some bytes from /dev/urandom or /dev/random
     begin
-      result := (FileRead(dev, Buffer[0], rd) = rd);
+      result := (fpRead(dev, Buffer^, rd) = rd); // may block until entropy
       FileClose(dev);
     end;
   end;
@@ -4416,7 +4415,7 @@ var
     begin
       n := fpread(fd, tmp, SizeOf(tmp));
       if n < 0 then
-        exit; // pipe closed = execution finished
+        exit; // pipe closed or EINTR = execution finished
       if setresult and
          (n <> 0) then
       begin
@@ -4637,8 +4636,8 @@ var
 {$endif OSLINUX}
 begin
   {$ifdef OSLINUX}
-  txt := TrimU(Join([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'),
-                  ' ', LoadProcFileTrim('/sys/class/dmi/id/product_name')]));
+  txt := TrimU(Join([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'), ' ',
+                     LoadProcFileTrim('/sys/class/dmi/id/product_name')]));
   if txt <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
     LoadProcFileTrimed('/sys/class/dmi/id/product_version', prod);
@@ -4648,10 +4647,10 @@ begin
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     LoadProcFileTrimed('/proc/device-tree/model', txt);
-  {$else}
+  {$else} // get this information the Android way
   txt := TrimU(Join([GetSystemProperty('ro.product.brand'), ' ',
-                       GetSystemProperty('ro.product.name'), ' ',
-                       GetSystemProperty('ro.product.device')]));
+                     GetSystemProperty('ro.product.name'), ' ',
+                     GetSystemProperty('ro.product.device')]));
   {$endif OSLINUX}
   if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
