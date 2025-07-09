@@ -3539,9 +3539,20 @@ begin
   result := true;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
-procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
+procedure _XorEntropyFromOs256(var e: THash256Rec);
+var
+  si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Mac/BSD
 begin
-  FillSystemRandom(@e, SizeOf(e), {allowblocking=}false); // 256-bit
+  // no /dev/random call for XorEntropy() to avoid endless recursive calls
+  QueryPerformanceMicroSeconds(e.d0);
+  e.d1 := e.d1 xor GetTickCount64;
+  DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom));
+  {$ifdef OSLINUX}
+  if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit of random from 1 syscall
+    exit;
+  {$endif OSLINUX}
+  RetrieveSysInfo(si);
+  DefaultHasher128(@e.h, @si, SizeOf(si)); // simple diffusion
 end;
 
 const
