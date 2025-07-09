@@ -7622,7 +7622,7 @@ begin
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from XorEntropyGetOsRandom256 + RdRand + Rdtsc + Lecuyer + thread
+    // 512-bit from XorEntropyFromOs256 + RdRand + Rdtsc + Lecuyer + thread
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
@@ -7630,7 +7630,7 @@ begin
       OpenSslRandBytes(@data, SizeOf(data));
     sha3.Update(@data, SizeOf(data));
     // 512-bit from /dev/urandom or CryptGenRandom system entropy source
-    if IsZero(_OSEntropySeed.bits.b) then
+    if _OSEntropySeed.bits.d0 = 0 then
     begin
       // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
       FillSystemRandom(@data, SizeOf(data), {block=}false);

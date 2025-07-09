@@ -3371,7 +3371,7 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
-// - will call XorEntropyGetOsRandom256() once at process startup for Intel/AMD,
+// - will call XorEntropyFromOs256() once at process startup for Intel/AMD,
 // or each time on other CPUs with no RdRand32/Rdtsc opcodes (e.g. on ARM)
 // - the resulting output is to be hashed - e.g. with DefaultHasher128
 // - execution is fast and safe, but not secure enough for a cryptographic PRNG:
@@ -3382,9 +3382,8 @@ procedure XorEntropy(var e: THash512Rec);
 var
   /// stub used at startup by XorEntropy() to retrieve 256-bit random from OS
   // - this default unit with call sysutils.CreateGuid() twice
-  // - mormot.core.os.posix.inc will implement a proper POSIX function here
-  // and try to read 32 bytes from /dev/urandom or getrandom Linux syscall
-  XorEntropyGetOsRandom256: procedure(var e: THash256Rec);
+  // - mormot.core.os.posix.inc will override it to properly call OS API
+  XorEntropyFromOs256: procedure(var e: THash256Rec);
 
 /// convert the endianness of a given unsigned 16-bit integer into BigEndian
 function bswap16(a: cardinal): cardinal;
@@ -9913,11 +9912,11 @@ begin
   result := @_Lecuyer;
 end;
 
-procedure _XorEntropyGetOsRandom256(var e: THash256Rec);
+procedure _XorEntropyFromOs256(var e: THash256Rec);
 begin
-  sysutils.CreateGUID(e.l.guid); // e.g. Windows CoCreateGuid()
+  sysutils.CreateGUID(e.l.guid); // = direct CoCreateGuid() on Windows
   sysutils.CreateGUID(e.h.guid);
-end; // overriden in mormot.core.os.posix.inc to use /dev/urandom or getrandom
+end; // overriden in mormot.core.os.posix.inc to use OS API - but not /dev/urandom
 
 var
   // 256-bit of random state for forward security - shared by all threads
@@ -9929,25 +9928,23 @@ var
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
   {$ifdef CPUINTEL}
-  if _EntropyGlobal.i0 = 0 then // call OS API each only once at startup
-  {$endif CPUINTEL}
-    XorEntropyGetOsRandom256(_EntropyGlobal); // 256-bit randomness from OS
-  XorMemory(e.r[0], _EntropyGlobal.h);
-  lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
-  e.r[1].L := e.r[1].L xor PtrUInt(@e)  xor lec^.L;
-  e.r[1].H := e.r[1].H xor PtrUInt(lec) xor lec^.H;
-  XorMemory(e.r[2], _EntropyGlobal.l);
-  {$ifdef CPUINTEL} // Intel/AMD opcodes are safe enough between calls
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
+  if _EntropyGlobal.i0 = 0 then // call OS API only once at startup
+  {$endif CPUINTEL}
+    XorEntropyFromOs256(_EntropyGlobal); // 256-bit randomness from OS
+  XorMemory(e.r[0], _EntropyGlobal.h);
+  XorMemory(e.r[1], _EntropyGlobal.l);
+  lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
+  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L;
+  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H;
+  {$ifdef CPUINTEL} // Intel/AMD opcodes are safe enough between calls
   RdRand32(@e.r[0].c, length(e.r[0].c)); // no-op if cfSSE42 is not available
-  crcblocks(@_EntropyGlobal.l, @e, 4);   // simple diffusion to move forward
-  crcblocks(@_EntropyGlobal.h, @e, 4);
   e.r[3].Hi := e.r[3].Hi xor Rdtsc;      // has slightly changed in-between
   {$else}
-  FillCharFast(_EntropyGlobal, SizeOf(_EntropyGlobal), 0); // anti-forensic
-  e.r[3].Hi := e.r[3].Hi xor
-    {$ifdef ISDELPHI}TThread.{$endif}GetTickCount64; // defined in FPC RTL
+  crcblocks(@e.r[3], @_EntropyGlobal, 2);
   {$endif CPUINTEL}
+  crcblocks(@_EntropyGlobal.l, @e, 4); // simple diffusion to move forward
+  crcblocks(@_EntropyGlobal.h, @e, 4);
 end;
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
@@ -9981,7 +9978,7 @@ begin
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
-    XorEntropy(e); // 512-bit from XorEntropyGetOsRandom256 + RdRand32 + Rdtsc
+    XorEntropy(e); // 512-bit from XorEntropyFromOs256 + RdRand32 + Rdtsc
     DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
     rs1 := rs1 xor h.c0;
     rs2 := rs2 xor h.c1;
@@ -13516,7 +13513,7 @@ begin
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
-  XorEntropyGetOsRandom256 := @_XorEntropyGetOsRandom256;
+  XorEntropyFromOs256 := @_XorEntropyFromOs256;
   ClassUnit := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
