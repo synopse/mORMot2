@@ -1853,6 +1853,10 @@ type
     // - overloaded function accepting a UTF-8 encoded buffer for the name
     function AddValue(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
       aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
+    /// add a pre-parsed JSON value in this document
+    // - accepts a UTF-8 encoded buffer for the name and parsed value
+    function AddValue(aName: PUtf8Char; aNameLen: integer;
+      var aValue: TGetJsonField): integer; overload;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -7352,6 +7356,18 @@ var
 begin
   FastSetString(tmp, aName, aNameLen);
   result := AddValue(tmp, aValue, aValueOwned, aIndex);
+end;
+
+function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
+  var aValue: TGetJsonField): integer;
+begin
+  result := -1;
+  if IsArray or
+     (aNameLen <= 0) then
+    exit;
+  result := InternalAddBuf(aName, aNameLen);
+  GetVariantFromJsonField(aValue.Value, aValue.WasString, VValue[result],
+    @VOptions, Has(dvoAllowDoubleValue), aValue.ValueLen);
 end;
 
 procedure TDocVariantData.AddValueArray(const aName: RawUtf8; const aValue: variant);
