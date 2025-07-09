@@ -2915,8 +2915,8 @@ type
     // 64-bit msg length
     MLen: QWord;
     // 512-bit block buffer
-    Buffer: array[0..63] of byte;
-    // current position in buffer
+    Buffer: THash512;
+    // current position in Buffer[0..63]
     Index: integer;
   end;
 
@@ -11021,7 +11021,7 @@ procedure InitializeUnit;
 var
   rk: TKeyArray;
   bi, bo: TAesBlock;
-  shablock: array[0..63] of byte;
+  shablock: THash512;
   i: PtrInt;
 {$endif USEARMCRYPTO}
 {$ifdef ASMX64}

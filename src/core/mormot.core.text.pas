@@ -1619,7 +1619,6 @@ function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
 /// wrap VariantToDouble(Value, V) and _Iso8601ToDateTime(VariantToText(Value))
 function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 
-
 /// fill a text buffer from a 18-bit integer value (0..262143) as 3 chars
 // - this encoding is faster than Base64, and has spaces on the left side
 // - use function Chars3ToInt18() to decode the textual content

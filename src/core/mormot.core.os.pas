@@ -7962,23 +7962,23 @@ end;
 
 procedure RetrieveSysInfoText(out text: ShortString);
 var
-  si: TSysInfo;  // Linuxism
+  si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Mac/BSD
 begin
   text[0] := #0;
   AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text);
   if not RetrieveSysInfo(si) then // single syscall on Linux/Android
     exit;
-  AppendShortChar(' ', @text);
+  AppendShortChar(' ', @text); // si.loads[0/1] = user kern on Windows
   AppendShortCurr64((Int64(si.loads[0]) * CURR_RES + 5000) shr 16, text, 2);
   AppendShortChar(' ', @text);
   AppendShortCurr64((Int64(si.loads[1]) * CURR_RES + 5000) shr 16, text, 2);
   AppendShortChar(' ', @text);
-  {$ifdef OSPOSIX}
+  {$ifdef OSPOSIX} // si.loads[0/1/2] = avg1 avg5 avg15 on POSIX
   AppendShortCurr64((Int64(si.loads[2]) * CURR_RES + 5000) shr 16, text, 2);
   AppendShortChar(' ', @text);
   inc(si.freeram, si.bufferram);
   {$endif OSPOSIX}
-  if si.uptime > SecsPerDay then
+  if si.uptime > SecsPerDay then // optional [ndays]
   begin
     AppendShortCardinal(cardinal(si.uptime) div SecsPerDay, text);
     AppendShortChar(' ', @text);
@@ -7988,7 +7988,7 @@ begin
   if si.freeswap < si.totalswap shr 2 then // include swap if free below 25%
     AppendFreeTotalKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
                       QWord(si.totalswap) * si.mem_unit, text);
-  AppendShortIntHex(OSVersionInt32, text); // identify OS version
+  AppendShortIntHex(OSVersionInt32, text); // identify and OS version
 end;
 
 

@@ -60,6 +60,8 @@ function VarStringOrNull(const v: RawUtf8): variant;
 
 type
   /// a set of simple TVarData.VType values, as specified to VarIs()
+  // - supports non complex types like varEmpty, varInteger or var varQWord but
+  // not varString or varByRef which value is clearly > 31
   TVarDataTypes = set of 0..31;
 
 /// allow to check for a specific set of TVarData.VType
@@ -3529,7 +3531,7 @@ type
     // - if PathDelim is e.g. set to '.', then dict.U['child2.name'] matches
     // dict.D['child2'].U['name']
     // - note that if the sub object does not exist, setting a value will force
-    // its creation (and all needed hierarchy)
+    // its creation (and all its nested hierarchy)
     property PathDelim: AnsiChar
       read GetPathDelim write SetPathDelim;
     /// access one element in the dictionary from its key, as variant

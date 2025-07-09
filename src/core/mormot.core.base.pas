@@ -3311,7 +3311,7 @@ type
   TLecuyer = object
   {$endif USERECORDWITHMETHODS}
   public
-    rs1, rs2, rs3, seedcount: cardinal;
+    rs1, rs2, rs3, seedcount: cardinal; // stored as 128-bit buffer
     /// force a random seed of the generator from current system state
     // - as executed by the Next method at thread startup, and after 2^32 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
@@ -9920,7 +9920,7 @@ begin
 end; // overriden in mormot.core.os.posix.inc to use /dev/urandom or getrandom
 
 var
-  // cascaded 256-bit random to avoid replay attacks - shared by all threads
+  // 256-bit of random state for forward security - shared by all threads
   _EntropyGlobal: THash256Rec;
 
 procedure XorEntropy(var e: THash512Rec);
@@ -13481,7 +13481,7 @@ var
 begin // 256 bytes of code to generate 2 x 8KB lookup tables
   i := 0;
   repeat // unrolled branchless root lookup table generation
-    crc := cardinal(-(i and 1) and polynom) xor (i shr 1);
+    crc := cardinal(-(i   and 1) and polynom) xor (i   shr 1);
     crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
     crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
     crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);

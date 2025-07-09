@@ -920,7 +920,6 @@ var
 begin
   tp.tv_sec := 0;
   clock_gettime(CLOCK_UPTIME, @tp);
-  // convert from nanoseconds into milliseconds
   result := tp.tv_sec;
 end;
 
@@ -2482,7 +2481,7 @@ begin
   PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
   info.Data := StringFromFile(SMB_CACHE); // cache is better than PosixInject
   if (info.Data <> '') and
-     (CompressSynLZ(info.Data, false) = '') then
+     (CompressSynLZ(info.Data, {compress=}false) = '') then
     info.Data := ''; // tampered file
   if info.Data = '' then
     if Assigned(PosixInject.GetSmbiosData) then
@@ -3544,7 +3543,7 @@ end;
 const
   // FillSystemRandom() retrieves 256 bytes max (2048-bit) from the OS API
   // - "man urandom" Usage states that 256-bit makes sense for /dev/urandom - as
-  // it is usually called in our framework, e.g. from _XorEntropyGetOsRandom256
+  // it is usually called in our framework, e.g. from TAesPrng.GetEntropy
   // - but we pushed the limit up since it may be called by TBigInt.FillPrime to
   // generate e.g. 4096-bit RSA keys which requires one 2048-bit random number
   // - "man getrandom" states that the Linux syscall can always return 256 bytes
@@ -4483,7 +4482,7 @@ begin
             break; // gracefully ended
         end;
       end;
-      // force process termination
+      // force process termination alla Roberspierre
       fpkill(pid, SIGKILL);
       pid := 0;
       break;
@@ -4962,9 +4961,9 @@ begin
   if fpuname(uts) < 0 then
     FillChar(uts, SizeOf(uts), 0);
   crc32c128(@StartupRandom, @uts, SizeOf(uts));
-  SystemInfo.uts.release := uts.Release;
-  SystemInfo.uts.sysname := uts.SysName;
-  SystemInfo.uts.version := uts.Version;
+  SystemInfo.uts.release  := uts.Release;
+  SystemInfo.uts.sysname  := uts.SysName;
+  SystemInfo.uts.version  := uts.Version;
   SystemInfo.uts.nodename := uts.NodeName;
   OSVersionText := Join([SystemInfo.uts.sysname, ' ', SystemInfo.uts.release]);
   if SystemInfo.release <> '' then
