@@ -1565,17 +1565,19 @@ end;
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 begin
   // SysUtils.FileOpen = fpOpen + fpFlock
-  result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
+  repeat
+    result := fpOpen(pointer(FileName), O_RDONLY);  // no fpFlock() call
+  until (result >= 0) or (fpgeterrno <> ESysEINTR); // see FPC FileOpen()
 end;
 
 function FileIsReadable(const aFileName: TFileName): boolean;
 var
   fd: integer;
 begin
-  fd := fpOpen(pointer(aFileName), O_RDONLY); // no fpFlock() call
+  fd := FileOpenSequentialRead(aFileName); // no fpFlock() call
   result := ValidHandle(fd);
   if result then
-    FpClose(fd);
+    FileClose(fd);
 end;
 
 procedure SetEndOfFile(F: THandle);
@@ -1725,7 +1727,7 @@ begin
   if fFD <> 0 then
   begin
     LinuxEventFDWrite(fFD, 1); // release the lock or do nothing
-    fpClose(fFD);
+    FileClose(fFD);
   end
   else
   {$endif HASEVENTFD}
@@ -3076,7 +3078,7 @@ begin
   result := '';
   if FileName = '' then
     exit;
-  h := FpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
+  h := FileOpenSequentialRead(FileName); // no fpFlock() call
   if PtrInt(h) <= 0 then
     exit;
   pos := 0;
@@ -3100,7 +3102,9 @@ var
   h: THandle;
 begin
   result := 0;
-  h := FpOpen(fn, O_RDONLY); // no fpFlock() call
+  repeat
+    h := FpOpen(fn, O_RDONLY); // no fpFlock() call
+  until (PtrInt(h) >= 0) or (fpgeterrno <> ESysEINTR); // as FileOpen()
   if PtrInt(h) <= 0 then
     exit;
   result := FileRead(h, dest, SizeOf(dest) - 1); // read up to 4KB
@@ -3467,7 +3471,7 @@ begin
   result := '';
   if size > 4 shl 20 then
     exit; // read up to 4MB
-  mem := FpOpen(PAnsiChar('/dev/mem'), O_RDONLY, 0);
+  mem := FileOpenSequentialRead('/dev/mem');
   if mem <= 0 then
     exit;
   // Fpmmap() is more complex but works around problems using plain read() calls
@@ -3478,7 +3482,7 @@ begin
     FastSetRawByteString(result, map + off, size);
     Fpmunmap(map, off + size);
   end;
-  FpClose(mem);
+  FileClose(mem);
 end;
 {$endif OSDARWIN}
 

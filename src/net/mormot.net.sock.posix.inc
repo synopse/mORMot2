@@ -213,7 +213,7 @@ end;
 
 function closesocket(s: integer): integer; inline;
 begin
-  result := fpclose(s);
+  result := FileClose(s);
 end;
 
 function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
@@ -1426,7 +1426,7 @@ procedure TPollSocketEpoll.Terminate;
 begin
   if fEPFD <= 0 then
     exit;
-  fpClose(fEPFD);
+  FileClose(fEPFD);
   fEPFD := -1;
 end;
 
