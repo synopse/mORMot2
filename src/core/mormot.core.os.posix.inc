@@ -2069,7 +2069,8 @@ end;
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup
-  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY: boolean;
+  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY,
+  __NoURandom, __NoRandom: boolean;
 
 procedure TestOnceDebuggerTty; forward;
 
@@ -3567,8 +3568,7 @@ const
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean): boolean;
 var
-  rd, dev, i: integer;
-  tmp: TGuid;
+  rd, dev: integer;
 begin
   result := false;
   if Len <= 0 then
@@ -3579,23 +3579,28 @@ begin
     rd := Len;
   {$ifdef OSLINUX} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);
-  if result then
-  begin
-    if rd = Len then // most obvious case (e.g. from _XorEntropyGetOsRandom256)
-      exit;
-  end
-  else
+  if not result then
   {$endif OSLINUX}
   begin
-    dev := FpOpen('/dev/urandom', O_RDONLY);  // non blocking on Linux + BSD
-    if (dev <= 0) and
-       AllowBlocking then // paranoid: any decent POSIX system has /dev/urandom
+    if __NoURandom then
+      dev := -1
+    else
+      // /dev/urandom non blocking on Linux, but may block at boot time on BSD
+      dev := FileOpenSequentialRead('/dev/urandom');
+    if dev <= 0 then
     begin
-      if rd > 16 then
-        rd := 16; // better to get only 128-bit from old blocking /dev/random
-      dev := FpOpen('/dev/random', O_RDONLY); // may block until got entropy
+      __NoURandom := true; // don't try any more (may be a chroot system)
+      if AllowBlocking and // paranoid: any decent POSIX system has /dev/urandom
+         not __NoRandom then
+      begin
+        if rd > 16 then
+          rd := 16; // better to get only 128-bit from raw blocking /dev/random
+        dev := fpOpen('/dev/random', O_RDONLY); // may block until entropy
+        if dev <= 0 then
+          __NoRandom := true; // not worth trying any more
+      end;
     end;
-    if dev > 0 then
+    if dev > 0 then // we can read some bytes from /dev/urandom or /dev/random
     begin
       result := (FileRead(dev, Buffer[0], rd) = rd);
       FileClose(dev);
@@ -3607,22 +3612,10 @@ begin
     if Len = 0 then
       exit;
     Buffer := @Buffer[rd];
-  end
-  else // OS API call failure (paranoid)
-    for i := 1 to MAXFROMOS div SizeOf(tmp) do // 128-bit per loop
-    begin
-      sysutils.CreateGUID(tmp); // use FPC RTL as fallback
-      rd := SizeOf(tmp);
-      if Len < SizeOf(tmp) then
-        rd := Len;
-      MoveFast(tmp, Buffer[0], rd);
-      dec(Len, rd);
-      if Len = 0 then
-        exit;
-      Buffer := @Buffer[rd];
-    end;
-  // use Lecuyer's gsl_rng_taus2 for the remaining bytes > MAXFROMOS (unlikely)
+  end; // on OS API call failure (paranoid): fallback to Lecuyer (if allowed)
   if Len > 0 then
+    // use Lecuyer's gsl_rng_taus2 for the remaining bytes > MAXFROMOS (unlikely)
+    // - but keep result=false if the Buffer^ was not really filled from OS
     SharedRandom.Fill(Buffer, Len);
 end;
 
@@ -5007,7 +5000,7 @@ begin
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
-  XorEntropyGetOsRandom256 := @_XorEntropyGetOsRandom256;
+  XorEntropyFromOs256 := @_XorEntropyFromOs256;
   {$ifndef NODIRECTTHREADMANAGER}
   // for inlined RTL calls (avoid one level of redirection)
   GetThreadManager(tm);
@@ -5022,6 +5015,8 @@ begin
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
+  PInt64(@uts)^ := mach_absolute_time;
+  crc32c128(@StartupRandom, @uts, 16); // nanoseconds timestamp
   {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   tpfail := 0;
