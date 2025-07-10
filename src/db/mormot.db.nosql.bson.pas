@@ -2223,7 +2223,7 @@ begin
   else
   begin
     if (b^.VType = DocVariantVType) and
-       PDocVariantData(b)^.IsObject then
+       not PDocVariantData(b)^.IsArray then
     begin
       // use the existing TDocVariant object content
       PDocVariantData(b)^.AddNameValuesToObject(NameValuePairs);
