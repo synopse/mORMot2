@@ -190,6 +190,7 @@ type
     fCacheResults: TJwtResults;
     fCache: TSynDictionary; // TRawUtf8DynArray/TJwtContentDynArray
     procedure SetCacheTimeoutSeconds(value: integer); virtual;
+    procedure SetCacheResults(res: TJwtResults);
     function PayloadToJson(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
       ExpirationMinutes: cardinal): RawUtf8; virtual;
@@ -326,7 +327,7 @@ type
     // if signature checking uses a lot of resources
     // - only used if CacheTimeoutSeconds>0
     property CacheResults: TJwtResults
-      read fCacheResults write fCacheResults;
+      read fCacheResults write SetCacheResults;
     /// access to the low-level generator associated with jrcJwtID "jti" claim
     property IDGen: TSynUniqueIdentifierGenerator
       read fIDGen;
@@ -1010,6 +1011,14 @@ begin
      (fCacheResults <> []) then
     fCache := TSynDictionary.Create(
       TypeInfo(TRawUtf8DynArray), TypeInfo(TJwtContentDynArray), false, value);
+end;
+
+procedure TJwtAbstract.SetCacheResults(res: TJwtResults);
+begin
+  if res = fCacheResults then
+    exit;
+  fCacheResults := res;
+  SetCacheTimeoutSeconds(fCacheTimeoutSeconds);
 end;
 
 procedure TJwtAbstract.Verify(const Token: RawUtf8; out Jwt: TJwtContent;
