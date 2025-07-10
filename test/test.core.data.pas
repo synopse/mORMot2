@@ -6148,7 +6148,7 @@ begin
   check(Doc.A['test'].ToJson = 'null');
   Doc.A_['test']^.AddItems([1, 2]);
   j := Doc.ToJson;
-  check(j = '{"test":[1,2]}');
+  checkEqual(j, '{"test":[1,2]}');
   check(Doc.A['test'].ToJson = '[1,2]');
   Doc.A_['test']^.AddItems([3, 4]);
   CheckEqual(Doc.ToJson, '{"test":[1,2,3,4]}');

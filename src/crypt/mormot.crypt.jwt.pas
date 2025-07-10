@@ -856,8 +856,7 @@ begin
   begin
     jwt := TJwtAbstract.Create(algo, [], [], 0);
     try
-      jwt.Options := aOptions + [joHeaderParse, joNoJwtIDCheck,
-        joAllowUnexpectedClaims, joAllowUnexpectedAudience];
+      jwt.Options := aOptions + [joHeaderParse, joAllowUnexpectedClaims];
       jwt.Parse(aToken, aInfo, nil, nil, []);
     finally
       jwt.Free;
@@ -897,7 +896,7 @@ begin
   if fHeader = '' then
     FormatUtf8('{"alg":"%","typ":"JWT"}', [aAlgorithm], fHeader);
   fHeaderB64 := BinToBase64Uri(fHeader) + '.';
-  fCacheResults := [jwtValid];
+  fCacheResults := [jwtValid, jwtNotBeforeFailed];
   fVerifyTimeToleranceSeconds := 30; // default grace delay
 end;
 
@@ -1029,14 +1028,13 @@ var
   fromcache: boolean;
 begin
   Jwt.result := jwtNoToken;
-  if Token = '' then
-    exit;
   if (self = nil) or
-     (fCache = nil) then
-    fromcache := false
-  else
+     (Token = '') then
+    exit;
+  fromcache := false;
+  if fCache <> nil then
   begin
-    fromcache := fCache.FindAndCopy(Token, Jwt);
+    fromcache := fCache.FindAndCopy(Token, Jwt); // may have jwtNotBeforeFailed
     fCache.DeleteDeprecated;
   end;
   if not fromcache then
@@ -1050,7 +1048,7 @@ begin
      (self <> nil) and
      (fCache <> nil) and
      (Jwt.result in fCacheResults) then
-    fCache.Add(Token, Jwt); // may include jwtNotBeforeFailed
+    fCache.Add(Token, Jwt);
 end;
 
 function TJwtAbstract.Verify(const Token: RawUtf8): TJwtResult;
@@ -1242,6 +1240,9 @@ begin
                     else if not (joAllowUnexpectedAudience in fOptions) then
                       exit;
                   until aud.EndOfObject = ']';
+                  if joAllClaimsInData in fOptions then
+                    // aud.GetJsonField did invalidate info.Value -> restore
+                    MoveFast(pointer(Jwt.reg[jrcAudience])^, info.Value^, info.ValueLen);
                 end
                 else
                 begin // "aud": "https://example.com"
