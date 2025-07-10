@@ -1123,11 +1123,11 @@ begin
   if fSas.StateFile = '' then
     // if no StateFile supplied, set something
     if fsoDisableSaveIfNeeded in fSas.SettingsOptions then
-      // this random file name will be persisted in the settings
-      fSas.StateFile := TemporaryFileName
-    else
       // if no name can be persisted, use something consistent between calls
       fSas.StateFile := FormatString('%%-state', [fWorkFolderName, fSas.ServiceName])
+    else
+      // this random file name will be persisted in the settings
+      fSas.StateFile := TemporaryFileName
   else
     fSas.StateFile := ExpandFileName(FileNameExpand(fSas.StateFile)); // with %agl.xx%
   // validate command file name used e.g. for /reload
