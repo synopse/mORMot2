@@ -191,9 +191,6 @@ type
     function PayloadToJson(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
       ExpirationMinutes: cardinal): RawUtf8; virtual;
-    procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
-      out headpayload: RawUtf8; out signature: RawByteString;
-      excluded: TJwtClaims); virtual;
     function CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
     // abstract methods which should be overriden by inherited classes
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8;
@@ -265,6 +262,12 @@ type
     // - this method is thread-safe
     function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUtf8;
       out Jwt: TJwtContent): boolean; overload;
+    /// internal method to parse a token according to this JWT expectations
+    // - without any cache, digital signature nor time consistency check
+    // - as called internally by Verify(), which is the prefered method to call
+    procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
+      headpayload: PRawUtf8 = nil; signature: PRawByteString = nil;
+      excluded: TJwtClaims = []); virtual;
     /// in-place decoding and quick check of the JWT header and paylod
     // - it won't check the signature, only the header and payload
     // - the header's algorithm is checked against ExpectedAlgo (if not '')
@@ -374,7 +377,6 @@ const
     'iat',    // jrcIssuedAt
     'jti',    // jrcJwtID
     'data');  // jrcData
-
 
 function ToText(res: TJwtResult): PShortString; overload;
 function ToCaption(res: TJwtResult): string; overload;
@@ -999,7 +1001,7 @@ begin
     fCache.DeleteDeprecated;
   end;
   if not fromcache then
-    Parse(Token, Jwt, headpayload, signature, ExcludedClaims);
+    Parse(Token, Jwt, @headpayload, @signature, ExcludedClaims);
   if Jwt.result in [jwtValid, jwtNotBeforeFailed] then
     if CheckAgainstActualTimestamp(Jwt) and
        not fromcache then
@@ -1059,29 +1061,25 @@ const
   JWT_HEAD: array[0..1] of PUtf8Char = (
     'alg',  // 0
     'typ'); // 1
+var
+  JWT_CLAIMS_TEXT4: array[TJwtClaim] of cardinal;
 
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var Jwt: TJwtContent;
-  out headpayload: RawUtf8; out signature: RawByteString; excluded: TJwtClaims);
+  headpayload: PRawUtf8; signature: PRawByteString; excluded: TJwtClaims);
 var
-  payloadend, j, toklen, c, cap, headerlen, Nlen, a: integer;
+  payloadend, toklen, c, cap, headerlen, Nlen, a: integer;
   P: PUtf8Char;
   N: PUtf8Char;
-  info: TGetJsonField;
-  claim: TJwtClaim;
+  info, aud: TGetJsonField;
+  claim: TJwtClaim absolute c;
   requiredclaims: TJwtClaims;
-  value: variant;
   head: array[0..high(JWT_HEAD)] of TValuePUtf8Char;
-  aud: TDocVariantData;
   tok: PAnsiChar absolute Token;
   temp: TSynTempBuffer;
 begin
   // 0. initialize parsing
+  RecordZero(@Jwt, TypeInfo(TJwtContent));
   Jwt.result := jwtNoToken;
-  byte(Jwt.claims) := 0;
-  word(Jwt.audience) := 0;
-  Finalize(Jwt.reg);
-  Jwt.data.InitFast; // custom claims
-  Jwt.id.Value := 0;
   toklen := length(Token);
   if (toklen = 0) or
      (self = nil) then
@@ -1121,10 +1119,13 @@ begin
   if (payloadend = 0) or
      (payloadend - headerlen > 2700) then
     exit;
-  Base64UriToBin(tok + payloadend, toklen - payloadend, signature);
-  if (signature = '') and
-     (payloadend <> toklen) then
-    exit;
+  if signature <> nil then
+  begin
+    Base64UriToBin(tok + payloadend, toklen - payloadend, signature^);
+    if (signature^ = '') and
+       (payloadend <> toklen) then
+      exit;
+  end;
   Jwt.result := jwtInvalidPayload;
   try
     if not Base64UriToBin(tok + headerlen, payloadend - headerlen - 1, temp) then
@@ -1146,97 +1147,91 @@ begin
     info.Json := P;
     if cap > 0 then
       repeat
+        Jwt.result := jwtInvalidPayload;
         N := GetJsonPropName(info.Json, @Nlen);
         if N = nil then
           exit;
         info.GetJsonFieldOrObjectOrArray;
-        if info.Json = nil then
+        if (info.Json = nil) or
+           not (info.EndOfObject in [',', '}']) then
           exit; // error in parsed input
         if (Nlen = 3) and
            (info.Value <> nil) then
         begin
           // check for the standard Jwt claims
-          c := PInteger(N)^;
-          for claim := low(Jwt.reg) to high(Jwt.reg) do
-            if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then
+          c := IntegerScanIndex(@JWT_CLAIMS_TEXT4, length(Jwt.reg), PInteger(N)^);
+          if c >= 0 then // claim = c
+          begin
+            if info.ValueLen = 0 then
+              exit;
+            include(Jwt.claims, claim);
+            if not (claim in fClaims) and
+               not (joAllowUnexpectedClaims in fOptions) then
             begin
-              if info.Value^ = #0 then
-                exit;
-              include(Jwt.claims, claim);
-              if not (claim in fClaims) and
-                 not (joAllowUnexpectedClaims in fOptions) then
-              begin
-                Jwt.result := jwtUnexpectedClaim;
-                exit;
-              end;
-              FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
-              if claim in requiredclaims then
-                case claim of
-                  jrcJwtID:
-                    if not (joNoJwtIDCheck in fOptions) then
-                      if not fIDGen.FromObfuscated(Jwt.reg[jrcJwtID], Jwt.id.Value) or
-                         (Jwt.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
-                      begin
-                        Jwt.result := jwtInvalidID;
-                        exit;
-                      end;
-                  jrcAudience:
-                    if not (joNoAudienceCheck in fOptions) then
-                      if Jwt.reg[jrcAudience][1] = '[' then
-                      begin
-                        aud.InitJsonInPlace(info.Value, JSON_FAST);
-                        if aud.Count = 0 then
-                          exit;
-                        for j := 0 to aud.Count - 1 do
-                        begin
-                          a := FindRawUtf8(fAudience, VariantToUtf8(aud.Values[j]));
-                          if a < 0 then
-                          begin
-                            Jwt.result := jwtUnknownAudience;
-                            if not (joAllowUnexpectedAudience in fOptions) then
-                              exit;
-                          end
-                          else
-                            include(Jwt.audience, a);
-                        end;
-                        aud.Clear;
-                      end
-                      else
-                      begin
-                        a := FindRawUtf8(fAudience, Jwt.reg[jrcAudience]);
-                        if a < 0 then
-                        begin
-                          Jwt.result := jwtUnknownAudience;
-                          if not (joAllowUnexpectedAudience in fOptions) then
-                            exit;
-                        end
-                        else
-                          include(Jwt.audience, a);
-                      end;
-                end;
-              Nlen := 0; // don't add to Jwt.data
-              dec(cap);
-              break;
+              Jwt.result := jwtUnexpectedClaim;
+              exit;
             end;
-          if Nlen = 0 then
-            continue;
+            FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
+            if claim in requiredclaims then
+              case claim of
+                jrcJwtID:
+                  if not (joNoJwtIDCheck in fOptions) then
+                    if not fIDGen.FromObfuscated(Jwt.reg[jrcJwtID], Jwt.id.Value) or
+                       (Jwt.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
+                    begin
+                      Jwt.result := jwtInvalidID;
+                      exit;
+                    end;
+                jrcAudience:
+                  if not (joNoAudienceCheck in fOptions) then
+                  begin
+                    Jwt.result := jwtUnknownAudience;
+                    if info.Value^ = '[' then
+                    begin // "aud": ["https://example.com", "https://another.com"]
+                      aud.Json := info.Value + 1;
+                      repeat
+                        aud.GetJsonField;
+                        if aud.Json = nil then
+                          break;
+                        a := -1;
+                        if aud.WasString then
+                          a := FindNonVoidRawUtf8(pointer(fAudience),
+                            aud.Value, aud.ValueLen, length(fAudience));
+                        if a >= 0 then
+                          include(Jwt.audience, a)
+                        else if not (joAllowUnexpectedAudience in fOptions) then
+                          exit;
+                      until false;
+                    end
+                    else
+                    begin // "aud": "https://example.com"
+                      a := FindRawUtf8(fAudience, Jwt.reg[jrcAudience]);
+                      if a >= 0 then
+                        include(Jwt.audience, a)
+                      else if not (joAllowUnexpectedAudience in fOptions) then
+                        exit;
+                    end;
+                  end;
+                end;
+              continue; // don't add to Jwt.data
+            end;
         end;
         if jrcData in excluded then
-          continue; // caller didn't want to fill Jwt.data
+          continue; // caller didn't want to fill Jwt.data with unknown fields
         include(Jwt.claims, jrcData);
-        GetVariantFromJsonField(info.Value, info.WasString, value,
-          @JSON_[mFast], joDoubleInData in fOptions, info.ValueLen);
         if Jwt.data.Count = 0 then
-          Jwt.data.Capacity := cap;
-        Jwt.data.AddValue(N, Nlen, value)
+          if joDoubleInData in fOptions then
+            TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFastFloat]
+          else
+            TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFast];
+        Jwt.data.AddValue(N, Nlen, info);
       until info.EndOfObject = '}';
+    Jwt.result := jwtMissingClaim;
     if requiredclaims - Jwt.claims <> [] then
-      Jwt.result := jwtMissingClaim
-    else
-    begin
-      FastSetString(headpayload, tok, payloadend - 1);
-      Jwt.result := jwtValid;
-    end;
+      exit;
+    if headpayload <> nil then
+      FastSetString(headpayload^, tok, payloadend - 1);
+    Jwt.result := jwtValid;
   finally
     temp.Done;
   end;
@@ -1256,7 +1251,7 @@ end;
 class function TJwtAbstract.ExtractAlgo(const Token: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
-  V: TValuePUtf8Char;
+  V: TValuePUtf8Char; // only JWT_HEAD[0] = 'alg'
   temp: TSynTempBuffer;
 begin
   result := '';
@@ -1829,9 +1824,13 @@ end;
 
 
 procedure InitializeUnit;
+var
+  c: TJwtClaim;
 begin
   GetEnumNames(TypeInfo(TJwtResult), @_TJwtResult);
   GetEnumNames(TypeInfo(TJwtClaim), @_TJwtClaim);
+  for c := low(c) to high(c) do
+    JWT_CLAIMS_TEXT4[c] := PInteger(JWT_CLAIMS_TEXT[c])^;
 end;
 
 
