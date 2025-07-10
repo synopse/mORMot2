@@ -193,10 +193,9 @@ type
       ExpirationMinutes: cardinal): RawUtf8; virtual;
     function CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
     // abstract methods which should be overriden by inherited classes
-    function ComputeSignature(const headpayload: RawUtf8): RawUtf8;
-     virtual; abstract;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; virtual;
     procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var jwt: TJwtContent); virtual; abstract;
+      const signature: RawByteString; var jwt: TJwtContent); virtual;
   public
     /// initialize the JWT processing instance
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -206,7 +205,7 @@ type
     // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
       const aAudience: array of RawUtf8; aExpirationMinutes: integer;
-      aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+      aIDIdentifier: TSynUniqueIdentifierProcess = 0; aIDObfuscationKey: RawUtf8 = '';
       aIDObfuscationKeyNewKdf: integer = 0); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
@@ -346,7 +345,6 @@ type
   // communication is already secured by other means, and use JWT as cookies
   TJwtNone = class(TJwtAbstract)
   protected
-    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8;
       const signature: RawByteString; var Jwt: TJwtContent); override;
   public
@@ -391,6 +389,9 @@ function ToText(claims: TJwtClaims): ShortString; overload;
 // there is a chance the supplied text contains a JWT, and extract it
 function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean = false): RawUtf8;
 
+/// raw parsing of a JWT into its basic fields (without timestamp check)
+function ParseJwt(const aToken: RawUtf8; var aInfo: TJwtContent;
+  aOptions: TJwtOptions = []): TJwtResult;
 
 
 { **************** JWT Implementation of HS and S3 Algorithms }
@@ -785,7 +786,7 @@ implementation
 
 var
   _TJwtResult: array[TJwtResult] of PShortString;
-  _TJwtClaim: array[TJwtClaim] of PShortString;
+  _TJwtClaim:  array[TJwtClaim]  of PShortString;
 
 function ToText(res: TJwtResult): PShortString;
 begin
@@ -833,6 +834,31 @@ begin
        (txtlen <= 10) then
       exit;
   result := copy(aText, beg, txtlen); // trim base64 encoded part
+end;
+
+function ParseJwt(const aToken: RawUtf8; var aInfo: TJwtContent;
+  aOptions: TJwtOptions): TJwtResult;
+var
+  algo: RawUtf8;
+  jwt: TJwtAbstract;
+begin
+  algo := TJwtAbstract.ExtractAlgo(aToken);
+  if algo = '' then
+  begin
+    RecordZero(@aInfo, TypeInfo(TJwtContent));
+    aInfo.result := jwtInvalidAlgorithm;
+    result := jwtInvalidAlgorithm;
+    exit;
+  end;
+  jwt := TJwtAbstract.Create(algo, [], [], 0);
+  try
+    jwt.Options := aOptions + [joHeaderParse,
+      joAllowUnexpectedClaims, joAllowUnexpectedAudience];
+    jwt.Parse(aToken, aInfo, nil, nil, []);
+  finally
+    jwt.Free;
+  end;
+  result := aInfo.result;
 end;
 
 
@@ -1020,6 +1046,17 @@ var
 begin
   Verify(Token, jwt, [jrcData]); // we won't use jwt.data for sure
   result := jwt.result;
+end;
+
+procedure TJwtAbstract.CheckSignature(const headpayload: RawUtf8;
+  const signature: RawByteString; var Jwt: TJwtContent);
+begin
+  Jwt.result := jwtValid;
+end;
+
+function TJwtAbstract.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
+begin
+  result := '';
 end;
 
 function TJwtAbstract.CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
@@ -1400,11 +1437,6 @@ begin
     Jwt.result := jwtValid
   else
     Jwt.result := jwtInvalidSignature;
-end;
-
-function TJwtNone.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
-begin
-  result := '';
 end;
 
 
