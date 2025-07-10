@@ -3978,15 +3978,12 @@ end;
 
 procedure _VariantClearSeveral(V: PVarData; n: integer);
 var
-  vt, docv: cardinal;
+  vt: cardinal;
   handler: TCustomVariantType;
-  clearproc: procedure(V: PVarData);
 label
   clr, hdr;
 begin
   handler := nil;
-  docv := DocVariantVType;
-  clearproc := @VarClearProc;
   repeat
     vt := V^.VType;
     if vt <= varWord64 then
@@ -4005,14 +4002,15 @@ begin
       RawUtf8(V^.VAny) := ''
       {$endif FPC}
     else if vt < varByRef then // varByRef has no refcount -> nothing to clear
-      if vt = docv then
-        PDocVariantData(V)^.ClearFast // faster than Clear
       {$ifdef HASVARUSTRING}
-      else if vt = varUString then
+      if vt = varUString then
         UnicodeString(V^.VAny) := ''
+      else
       {$endif HASVARUSTRING}
+      if vt = DocVariantVType then
+        PDocVariantData(V)^.ClearFast // inlined method, faster than Clear
       else if vt >= varArray then // custom types are below varArray
-clr:    clearproc(V)
+clr:    VarClearProc(V^)
       else if handler = nil then
         if FindCustomVariantType(vt, handler) then
 hdr:      handler.Clear(V^)
