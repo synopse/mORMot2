@@ -46,6 +46,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.lib.openssl11,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
@@ -502,8 +503,8 @@ type
     fPrivKey, fPubKey: PEVP_PKEY;
     fAsymAlgo: TCryptAsymAlgo;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing instance using any supported OpenSSL algorithm
     constructor Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
@@ -1735,19 +1736,19 @@ begin
   result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
-procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtOpenSsl.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   der: RawByteString;
 begin
   if fPubKey = nil then
     fPubKey := LoadPublicKey(fPublicKey, fPublicKeyPassword);
   der := SetSignatureSecurityRaw(fAsymAlgo, signature);
-  if fPubKey^.Verify(fAlgoMd, pointer(der), pointer(headpayload),
-      length(der), length(headpayload)) then
-    jwt.result := jwtValid
+  if fPubKey^.Verify(fAlgoMd, pointer(der), headpayload^.Text,
+      length(der), headpayload^.Len) then
+    result := jwtValid
   else
-    jwt.result := jwtInvalidSignature;
+    result := jwtInvalidSignature;
 end;
 
 

@@ -196,8 +196,8 @@ type
     function CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
     // abstract methods which should be overriden by inherited classes
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; virtual;
-    procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var jwt: TJwtContent); virtual;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; virtual;
   public
     /// initialize the JWT processing instance
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -268,7 +268,7 @@ type
     // - as called internally by Verify(), which is the prefered method to call
     // - see also the associated ParseJwt() function
     procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
-      headpayload: PRawUtf8 = nil; signature: PRawByteString = nil;
+      headpayload: PValuePUtf8Char = nil; signature: PRawByteString = nil;
       excluded: TJwtClaims = []); virtual;
     /// in-place decoding and quick check of the JWT header and paylod
     // - it won't check the signature, only the header and payload
@@ -348,8 +348,8 @@ type
   // communication is already secured by other means, and use JWT as cookies
   TJwtNone = class(TJwtAbstract)
   protected
-    procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var Jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing using the 'none' algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -411,8 +411,8 @@ type
     fSignPrepared: TSynSigner;
     function GetAlgo: TSignAlgo; virtual; abstract;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var Jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
     function GetSignatureSize: integer;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSignatureAlgo: TSignAlgo;
@@ -608,8 +608,8 @@ type
     fVerify: TEcc256r1VerifyAbstract; // includes pre-computed public key
     fOwnCertificate: boolean;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing instance using ECDSA P-256 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -651,8 +651,8 @@ type
     fRsa: TRsa;
     fHash: THashAlgo;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing instance calling SetAlgorithm abstract method
     // - should supply one RSA key, eigher private or public, in PEM or raw DER
@@ -736,8 +736,8 @@ type
     fPublicKey: ICryptPublicKey;
     fPrivateKey: ICryptPrivateKey;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// check if a given algorithm is supported by this class
     // - just a wrapper to check that CryptPublicKey[aAlgo] factory do exist
@@ -1015,7 +1015,7 @@ end;
 procedure TJwtAbstract.Verify(const Token: RawUtf8; out Jwt: TJwtContent;
   ExcludedClaims: TJwtClaims);
 var
-  headpayload: RawUtf8;
+  headpayload: TValuePUtf8Char; // no allocation: points within Token[]
   signature: RawByteString;
   fromcache: boolean;
 begin
@@ -1036,12 +1036,12 @@ begin
     if CheckAgainstActualTimestamp(Jwt) and
        not fromcache then
       // depending on the algorithm used
-      CheckSignature(headpayload{%H-}, signature{%H-}, Jwt);
+      Jwt.result := CheckSignature(@headpayload, signature{%H-});
   if not fromcache and
      (self <> nil) and
      (fCache <> nil) and
      (Jwt.result in fCacheResults) then
-    fCache.Add(Token, Jwt);
+    fCache.Add(Token, Jwt); // may include jwtNotBeforeFailed
 end;
 
 function TJwtAbstract.Verify(const Token: RawUtf8): TJwtResult;
@@ -1052,10 +1052,10 @@ begin
   result := jwt.result;
 end;
 
-procedure TJwtAbstract.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var Jwt: TJwtContent);
+function TJwtAbstract.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 begin
-  Jwt.result := jwtValid;
+  result := jwtValid;
 end;
 
 function TJwtAbstract.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
@@ -1106,7 +1106,7 @@ var
   JWT_CLAIMS_TEXT4: array[TJwtClaim] of cardinal;
 
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var Jwt: TJwtContent;
-  headpayload: PRawUtf8; signature: PRawByteString; excluded: TJwtClaims);
+  headpayload: PValuePUtf8Char; signature: PRawByteString; excluded: TJwtClaims);
 var
   payloadend, toklen, c, headerlen, Nlen, a: integer;
   P: PUtf8Char;
@@ -1203,7 +1203,7 @@ begin
            not (joAllowUnexpectedClaims in fOptions) then
           exit;
         FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
-        //if claim in requiredclaims then
+        if claim in requiredclaims then
           case claim of
             jrcJwtID:
               if not (joNoJwtIDCheck in fOptions) then
@@ -1261,7 +1261,10 @@ begin
     if requiredclaims - Jwt.claims <> [] then
       exit;
     if headpayload <> nil then
-      FastSetString(headpayload^, tok, payloadend - 1);
+    begin
+      headpayload^.Text := tok; // no memory allocation: returns Token[] buffer
+      headpayload^.Len :=  payloadend - 1;
+    end;
     Jwt.result := jwtValid;
   finally
     temp.Done;
@@ -1424,13 +1427,13 @@ begin
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-procedure TJwtNone.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var Jwt: TJwtContent);
+function TJwtNone.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 begin
   if signature = '' then // JWA defined empty string for "none" JWS
-    Jwt.result := jwtValid
+    result := jwtValid
   else
-    Jwt.result := jwtInvalidSignature;
+    result := jwtInvalidSignature;
 end;
 
 
@@ -1467,23 +1470,21 @@ begin
     fSignPrepared.Init(algo, aSecret);
 end;
 
-procedure TJwtSynSignerAbstract.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var Jwt: TJwtContent);
+function TJwtSynSignerAbstract.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   signer: TSynSigner;
   temp: THash512Rec;
 begin
-  Jwt.result := jwtInvalidSignature;
-  if length(signature) <> fSignPrepared.SignatureSize then
+  result := jwtInvalidSignature;
+  if (headpayload = nil) or
+     (length(signature) <> fSignPrepared.SignatureSize) then
     exit;
   signer := fSignPrepared; // thread-safe re-use of prepared TSynSigner
-  signer.Update(pointer(headpayload), length(headpayload));
+  signer.Update(headpayload^.Text, headpayload^.Len);
   signer.Final(@temp);
-{  writeln('payload=',headpayload);
-   writeln('sign=',bintohex(@temp,SignatureSize));
-   writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
   if CompareMem(@temp, pointer(signature), fSignPrepared.SignatureSize) then
-    Jwt.result := jwtValid;
+    result := jwtValid;
 end;
 
 function TJwtSynSignerAbstract.ComputeSignature(
@@ -1608,18 +1609,19 @@ begin
   inherited;
 end;
 
-procedure TJwtEs256.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtEs256.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   sha: TSha256;
   hash: TSha256Digest;
 begin
-  jwt.result := jwtInvalidSignature;
-  if length(signature) <> SizeOf(TEccSignature) then
+  result := jwtInvalidSignature;
+  if (headpayload = nil) or
+     (length(signature) <> SizeOf(TEccSignature)) then
     exit;
-  sha.Full(pointer(headpayload), length(headpayload), hash);
+  sha.Full(headpayload^.Text, headpayload^.Len, hash);
   if fVerify.Verify(hash, PEccSignature(signature)^) then
-    jwt.result := jwtValid;
+    result := jwtValid;
 end;
 
 class function TJwtEs256.GetAsymAlgo: TCryptAsymAlgo;
@@ -1713,8 +1715,8 @@ begin
   result := BinToBase64Uri(pointer(sig), length(sig));
 end;
 
-procedure TJwtRsa.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtRsa.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   h: TSynHasher;
   dig: THash512Rec;
@@ -1722,12 +1724,13 @@ begin
   if fRsa = nil then
     ERsaException.RaiseUtf8(
       '%.CheckSignature requires a public key', [self]);
-  jwt.result := jwtInvalidSignature;
-  if length(signature) <> fRsa.ModulusLen then
+  result := jwtInvalidSignature;
+  if (headpayload = nil) or
+     (length(signature) <> fRsa.ModulusLen) then
     exit;
-  h.Full(fHash, pointer(headpayload), length(headpayload), dig);
+  h.Full(fHash, headpayload^.Text, headpayload^.Len, dig);
   if fRsa.Verify(@dig, fHash, signature) then // = decrypt with public key
-    jwt.result := jwtValid;
+    result := jwtValid;
 end;
 
 
@@ -1832,18 +1835,19 @@ begin
   result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
-procedure TJwtCrypt.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtCrypt.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   der: RawByteString;
 begin
   if not Assigned(fPublicKey) then
     EJwtException.RaiseUtf8('%.CheckSignature requires a public key', [self]);
   der := SetSignatureSecurityRaw(fAsymAlgo, signature);
-  if fPublicKey.Verify(fAsymAlgo, headpayload, der) then // = decrypt
-    jwt.result := jwtValid
+  if fPublicKey.Verify(fAsymAlgo, headpayload^.Text, pointer(der),
+                       headpayload^.Len, length(der)) then // = decrypt
+    result := jwtValid
   else
-    jwt.result := jwtInvalidSignature;
+    result := jwtInvalidSignature;
 end;
 
 

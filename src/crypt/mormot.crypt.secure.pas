@@ -3551,7 +3551,7 @@ function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
 /// encode a raw digital signature into ASN.1/DER
 // - incoming comes e.g. from base-64 decoded JSON Web Token/Signature (JWT/JWS)
 // - output is compatible e.g. with ICryptCert.Verify or ICryptPublicKey.Verify
-// - ECC are encoded from their raw xy coordinates concatenation into ASN1_SEQ
+// - ECC are encoded from their raw x/y coordinates concatenation into ASN1_SEQ
 function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
   const rawsignature: RawUtf8): RawByteString;
 
