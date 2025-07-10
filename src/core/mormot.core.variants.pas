@@ -6985,7 +6985,7 @@ procedure TDocVariantData.Void;
 begin
   VCount := 0;
   if VName <> nil then
-    FastDynArrayClear(@VName, TypeInfo(RawUtf8));
+    FastDynArrayClear(@VName, TypeInfo(RawUtf8)); // use length(), not VCount
   if VValue <> nil then
     FastDynArrayClear(@VValue, TypeInfo(variant));
 end;
@@ -7210,7 +7210,7 @@ begin
   len := length(VValue);
   if VCount >= len then
   begin
-    len := NextGrow(VCount);
+    len := NextGrow(VCount); // 4, 8, 12, 28, 40, ...
     SetLength(VValue, len);
   end
   else
@@ -10787,7 +10787,6 @@ type
     fValueOwned: TVarData;
   public
     constructor CreateOwned;
-    constructor CreateNew(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
     constructor CreateCopy(const dv: TDocVariantData); reintroduce;
     constructor CreateByRef(dv: PDocVariantData); reintroduce;
     destructor Destroy; override;
@@ -11213,7 +11212,10 @@ var
 begin
   v := nil;
   if dv.IsArray then
-    v := TDocList.CreateNew(dv, model);
+  begin
+    v := TDocList.CreateCopy(dv);
+    v.fValue^.VOptions := JSON_[model];
+  end;
   result := v;
 end;
 
@@ -11341,7 +11343,10 @@ var
 begin
   d := nil;
   if dv.IsObject then
-    d := TDocDict.CreateNew(dv, model);
+  begin
+    d := TDocDict.CreateCopy(dv);
+    d.fValue^.VOptions := JSON_[model];
+  end;
   result := d;
 end;
 
@@ -11389,21 +11394,16 @@ begin
     cardinal(PWord(opt)^ + 1 shl ord(added)) shl 16; // VType+VOptions
 end;
 
-constructor TDocAny.CreateNew(const dv: TDocVariantData; m: TDocVariantModel);
-begin
-  fValue := @fValueOwned;
-  TDocVariantData(fValueOwned).Init(m, dv.Kind); // new arrays, but byref values
-  if dv.Count = 0 then
-    exit;
-  DynArrayCopy(@fValue^.VName, @dv.VName, TypeInfo(TRawUtf8DynArray), @dv.Count);
-  DynArrayCopy(@fValue^.VValue, @dv.VValue, TypeInfo(TVariantDynArray), @dv.Count);
-  TDocVariantData(fValueOwned).VCount := dv.Count;
-end;
-
 constructor TDocAny.CreateCopy(const dv: TDocVariantData);
 begin
-  fValue := @fValueOwned;
-  TDocVariantData(fValueOwned).InitFrom(dv, true, true); // new arrays, but byref values
+  fValue := @fValueOwned; // new arrays, but byref values
+  TSynVarData(fValueOwned).VType := TSynVarData(dv).VType; // VType+VOptions
+  if dv.Count = 0 then
+    exit;
+  if dv.VName <> nil then
+    DynArrayCopy(@fValue^.VName, @dv.VName, TypeInfo(TRawUtf8DynArray), @dv.Count);
+  DynArrayCopy(@fValue^.VValue, @dv.VValue, TypeInfo(TVariantDynArray), @dv.Count);
+  TDocVariantData(fValueOwned).VCount := dv.Count;
 end;
 
 constructor TDocAny.CreateByRef(dv: PDocVariantData);
@@ -11415,7 +11415,7 @@ destructor TDocAny.Destroy;
 begin
   inherited Destroy;
   if fValue = @fValueOwned then
-    TDocVariantData(fValueOwned).Void;
+    TDocVariantData(fValueOwned).Void; // no byref
 end;
 
 function TDocAny.Kind: TDocVariantKind;
