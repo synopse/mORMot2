@@ -4897,7 +4897,7 @@ function NextGrow(capacity: integer): integer;
 begin
   // algorithm similar to TFPList.Expand for the increasing ranges
   result := capacity;
-  if result < 8 then
+  if result <= 8 then
     inc(result, 4) // faster for smaller capacity (called often)
   else if result <= 128 then
     inc(result, 16)           // increase by 16 bytes up to 128 bytes
