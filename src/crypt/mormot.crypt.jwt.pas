@@ -1271,7 +1271,7 @@ begin
       exit;
     if headpayload <> nil then
     begin
-      headpayload^.Text := tok; // no memory allocation: returns Token[] buffer
+      headpayload^.Text := pointer(Token); // no memory allocation
       headpayload^.Len :=  payloadend - 1;
     end;
     Jwt.result := jwtValid;
