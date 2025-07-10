@@ -6790,15 +6790,12 @@ begin
           VCount := n;
         end;
       end;
-    'n',
-    'N':
+    'n':
       begin
-        if IdemPChar(Json + 1, 'ULL') then
-        begin
-          Include(dvoIsObject);
-          result := GotoNextNotSpace(Json + 4);
-        end;
-        exit;
+        if PCardinal(Json)^ <> NULL_LOW then
+          exit; // only expects [..] {..} or null
+        Include(dvoIsObject);
+        inc(Json, 4); // case sensitive null = success as void object
       end;
   else
     exit;
@@ -11169,7 +11166,7 @@ var
   v: TDocList;
 begin
   v := TDocList.CreateOwned;
-  TDocVariantData(v.fValueOwned).Init(model, dvArray);
+  TSynVarData(v.fValueOwned).VType := JSON_VTYPE[dvArray, model];
   result := v;
 end;
 
@@ -11258,7 +11255,7 @@ var
   v: TDocDict;
 begin
   v := TDocDict.CreateOwned;
-  TDocVariantData(v.fValueOwned).Init(model, dvObject);
+  TSynVarData(v.fValueOwned).VType := JSON_VTYPE[dvObject, model];
   result := v;
 end;
 
@@ -11373,14 +11370,14 @@ function DocDictFromKeys(const keys: array of RawUtf8; const value: variant;
   model: TDocVariantModel): IDocDict;
 var
   i: PtrInt;
-  dv: PDocVariantData;
+  d: TDocDict;
 begin
-  result := TDocDict.CreateOwned;
-  dv := result.Value;
-  dv^.Init(model, dvObject);
-  dv^.SetCapacity(length(keys));
+  d := TDocDict.CreateOwned;
+  PSynVarData(d.fValue)^.VType := JSON_VTYPE[dvObject, model];
+  d.fValue^.SetCapacity(length(keys));
   for i := 0 to high(keys) do
-    dv^.AddOrUpdateValue(keys[i], value);
+    d.fValue^.AddOrUpdateValue(keys[i], value);
+  result := d;
 end;
 
 
