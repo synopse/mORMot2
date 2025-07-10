@@ -580,7 +580,7 @@ type
   /// exception class associated to TDocVariant JSON/BSON document
   EDocVariant = class(ESynException)
   protected
-    class procedure RaiseSafe(Kind: TDocVariantKind);
+    class procedure RaiseSafe(Kind: TDocVariantKind); // inlined from _Safe()
   end;
 
   /// a custom variant type used to store any JSON/BSON document-based content
@@ -5605,15 +5605,17 @@ end;
 
 function _Safe(const DocVariant: variant;
   ExpectedKind: TDocVariantKind): PDocVariantData;
+var
+  k: TDocVariantKind;
 begin
-  if ExpectedKind = dvArray then
+  if (ExpectedKind <> dvUndefined) and
+     _Safe(DocVariant, result) then
   begin
-    if _SafeArray(DocVariant, result) then
+    k := result^.GetKind;
+    if (k = dvUndefined) or
+       (k = ExpectedKind) then
       exit;
-  end
-  else if (ExpectedKind = dvObject) and
-          _SafeObject(DocVariant, result) then
-    exit;
+  end;
   EDocVariant.RaiseSafe(ExpectedKind);
 end;
 
