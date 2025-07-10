@@ -412,6 +412,14 @@ type
     mNameValueIntern,
     mNameValueInternExtended);
 
+  /// define the TDocVariant storage layout
+  // - if it has no name property, it is a dvArray
+  // - if it has one or more named properties, it is a dvObject
+  TDocVariantKind = (
+    dvUndefined,
+    dvArray,
+    dvObject);
+
 var
   /// some convenient TDocVariant options, e.g. as JSON_[fDefault]
   JSON_: array[TDocVariantModel] of TDocVariantOptions = (
@@ -530,11 +538,16 @@ var
   // - JSON_NAMEVALUEINTERN[true] equals JSON_[mNameValueInternExtended]
   JSON_NAMEVALUEINTERN: TDocVariantOptionsBool;
 
+  /// TDocVariant options to be used with or without "fast"
   // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
   // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
   // - handle only currency for floating point values: use JSON_FAST_FLOAT/JSON_[mFastFloat]
   // if you want to support double values, with potential precision loss
   JSON_OPTIONS: TDocVariantOptionsBool;
+
+  /// TSynVarData(DV).VType pre-computed constant of a new object
+  // - could be assigned to a TDocVariantData when known to be filled with zeros
+  JSON_VTYPE: array[TDocVariantKind, TDocVariantModel] of cardinal;
 
 // some slightly more verbose backward compatible options
 {$ifndef PUREMORMOT2}
@@ -568,14 +581,6 @@ type
 
   /// pointer to a dynamic array of TDocVariant storage
   PDocVariantDataDynArray = array of PDocVariantData;
-
-  /// define the TDocVariant storage layout
-  // - if it has no name property, it is a dvArray
-  // - if it has one or more named properties, it is a dvObject
-  TDocVariantKind = (
-    dvUndefined,
-    dvArray,
-    dvObject);
 
   /// exception class associated to TDocVariant JSON/BSON document
   EDocVariant = class(ESynException)
@@ -12554,6 +12559,22 @@ direct:         if Dest <> nil then
   end;
 end;
 
+procedure SetJsonVTypes(opt: PWordArray; vt: cardinal; dest: PCardinal);
+var
+  k: TDocVariantKind;
+  m: PtrUInt;
+begin
+  for k := low(k) to high(k) do
+  begin
+    for m := 0 to ord(high(TDocVariantModel)) do
+    begin
+      dest^ := vt + cardinal(opt^[m]) shl 16;
+      inc(dest);
+    end;
+    inc(vt, 1 shl 16); // next k
+  end;
+end;
+
 const
   // _CMP2SORT[] comparison of simple types - as copied to _VARDATACMP[]
   _VARDATACMPNUM1: array[varEmpty..varDate] of byte = (
@@ -12575,6 +12596,7 @@ begin
   DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   vt := DocVariantType.VarType;
   DocVariantVType := vt;
+  SetJsonVTypes(@JSON_, vt, @JSON_VTYPE);
   PCardinal(@DV_FAST[dvUndefined])^ := vt;
   PCardinal(@DV_FAST[dvArray])^ := vt;
   PCardinal(@DV_FAST[dvObject])^ := vt;
