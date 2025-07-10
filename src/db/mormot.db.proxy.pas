@@ -894,10 +894,9 @@ var
 begin
   // follow TSqlDBRemoteConnectionPropertiesAbstract.Process binary layout
   if self = nil then
-    raise ESqlDBRemote.CreateU('RemoteProcessMessage: unexpected self=nil');
+    ESqlDBRemote.RaiseU('RemoteProcessMessage: unexpected self=nil');
   if Connection = nil then
-    ESqlDBRemote.RaiseUtf8(
-      '%.RemoteProcessMessage(connection=nil)', [self]);
+    ESqlDBRemote.RaiseUtf8('%.RemoteProcessMessage(connection=nil)', [self]);
   msgin := HandleInput(Input);
   header := pointer(msgin);
   if (header = nil) or
@@ -908,7 +907,7 @@ begin
      (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDbms]) then
     if not Authenticate.SessionExists(header.SessionID) then
-      raise ESqlDBRemote.Create('You do not have the right to be here');
+      ESqlDBRemote.RaiseU('You do not have the right to be here');
   P := pointer(msgin);
   inc(P, SizeOf(header^));
   try

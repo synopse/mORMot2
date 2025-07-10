@@ -4791,7 +4791,7 @@ var
 begin
   // 8x interleaved aesni + pclmulqdq x86_64 asm
   if Count and AesBlockMod <> 0 then
-    raise ESynCrypto.Create('TAesGcm.Encrypt/Decrypt should use PKCS7');
+    ESynCrypto.RaiseU('TAesGcm.Encrypt/Decrypt should use PKCS7');
   inc(state.atx_cnt.V, Count);
   repeat
     // regroup GMAC + AES-CTR per 1MB chunks to fit in L2/L3 CPU cache
@@ -6683,7 +6683,7 @@ var
 procedure EnsureCryptoApiAesProviderAvailable;
 begin
   if CryptoApiAesProvider = nil then
-    raise ESynCrypto.Create('PROV_RSA_AES provider not installed')
+    ESynCrypto.RaiseU('PROV_RSA_AES provider not installed')
   else if CryptoApiAesProvider = HCRYPTPROV_NOTTESTED then
   begin
     CryptoApiAesProvider := nil;
@@ -8852,9 +8852,9 @@ var
   p: PByte;
 begin
   if BitsInQueue and 7 <> 0 then
-    raise ESynCrypto.Create('TSha3Context.Absorb: only last can be partial');
+    ESynCrypto.RaiseU('TSha3Context.Absorb: only last can be partial');
   if Squeezing then
-    raise ESynCrypto.Create('TSha3Context.Absorb: already squeezed');
+    ESynCrypto.RaiseU('TSha3Context.Absorb: already squeezed');
   written := 0;
   while written < databitlen do
   begin
@@ -9107,7 +9107,7 @@ begin
   if DataLen <= 0 then
     exit;
   if Source = Dest then
-    raise ESynCrypto.Create('Unexpected TSha3.Cypher(Source=Dest)');
+    ESynCrypto.RaiseU('Unexpected TSha3.Cypher(Source=Dest)');
   Full(Algo, Key, KeyLen, Dest, DataLen shl 3);
   XorMemory(Dest, Source, DataLen); // just as simple as that!
 end;

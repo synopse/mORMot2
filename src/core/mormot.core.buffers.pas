@@ -3539,7 +3539,7 @@ begin
   if Assigned(OnErrorOverflow) then
     OnErrorOverflow
   else
-    raise EFastReader.Create('Reached End of Input');
+    EFastReader.RaiseU('Reached End of Input');
 end;
 
 procedure TFastReader.ErrorData(const fmt: RawUtf8; const args: array of const);
@@ -3547,7 +3547,7 @@ begin
   if Assigned(OnErrorData) then
     OnErrorData(fmt, args)
   else
-    raise EFastReader.CreateUtf8('Incorrect Data: ' + fmt, args);
+    EFastReader.RaiseUtf8('Incorrect Data: ' + fmt, args);
 end;
 
 procedure TFastReader.ErrorData(const msg: ShortString);

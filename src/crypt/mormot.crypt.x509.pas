@@ -2286,7 +2286,7 @@ procedure TX509.ComputeCachedDer;
 begin
   if (SignatureAlgorithm = xsaNone) or
      (SignatureValue = '') then
-    raise EX509.Create('TX509.ToDer with no previous Sign() call');
+    EX509.RaiseU('TX509.ToDer with no previous Sign() call');
   fSafe.Lock;
   try
     if fCachedDer = '' then

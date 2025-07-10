@@ -11787,7 +11787,7 @@ var
   ctxt: TJsonParserContext;
 begin
   if pointer(ObjectInstance) = nil then
-    raise ERttiException.Create('JsonToObject(nil)');
+    ERttiException.RaiseU('JsonToObject(nil)');
   ctxt.InitParser(From, Rtti.RegisterClass(TObject(ObjectInstance)), Options,
     nil, TObjectListItemClass, Interning);
   TRttiJsonLoad(Ctxt.Info.JsonLoad)(@ObjectInstance, ctxt);

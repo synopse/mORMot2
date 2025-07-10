@@ -1535,7 +1535,7 @@ var
   sqladd: RawUtf8;
 begin
   if DB.TransactionActive then
-    raise ERestStorage.Create('CreateMissingTables in transaction');
+    ERestStorage.RaiseU('CreateMissingTables in transaction');
   fDB.GetTableNames(tablesatcreation);
   nt := length(tablesatcreation);
   QuickSortRawUtf8(tablesatcreation, nt, nil, @StrIComp);

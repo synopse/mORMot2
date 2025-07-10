@@ -389,7 +389,7 @@ begin
           pointer(fUserID), length(fUserID), pointer(fPassWord), length(fPassWord)),
         SQL_HANDLE_DBC, fDbc)
       else if fDatabaseName = '' then
-        raise EOdbcException.CreateU(
+        EOdbcException.RaiseU(
           'Missing ServerName=DataSourceName or DataBaseName=FullConnectString')
       else
       begin

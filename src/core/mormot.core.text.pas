@@ -8336,14 +8336,14 @@ end;
 procedure __VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
   var result: RawUtf8);
 begin
-  raise ESynException.Create('VariantSaveJson() unsupported:' +
+  ESynException.RaiseU('VariantSaveJson() unsupported:' +
     ' please include mormot.core.variants to your uses clause');
 end;
 
 procedure __VariantToUtf8DateTimeToIso8601(DT: TDateTime; FirstChar: AnsiChar;
   var result: RawUtf8; WithMS: boolean);
 begin
-  raise ESynException.Create('VariantToUtf8(varDate) unsupported:' +
+  ESynException.RaiseU('VariantToUtf8(varDate) unsupported:' +
     ' please include mormot.core.datetime to your uses clause');
 end;
 
@@ -9112,7 +9112,7 @@ type
 
 procedure TFormatUtf8.TooManyArgs;
 begin
-  raise ESynException.Create('TFormatUtf8: too many arguments');
+  ESynException.RaiseU('TFormatUtf8: too many arguments');
 end;
 
 procedure TFormatUtf8.Parse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
@@ -10301,7 +10301,7 @@ begin
          (value = '') then
         break;
       if count >= COOKIE_MAXCOUNT_DOSATTACK then
-        raise ESynException.CreateU('RetrieveCookies overflow: DOS attempt?');
+        ESynException.RaiseU('RetrieveCookies overflow: DOS attempt?');
       if count = length(fCookies) then
         SetLength(fCookies, NextGrow(count));
       new := @fCookies[count];

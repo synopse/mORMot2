@@ -627,7 +627,7 @@ begin
             Executable.ProgramName, ' killed successfully']);
       end
       else
-        raise EDaemon.Create('No forked process found to be killed');
+        EDaemon.RaiseU('No forked process found to be killed');
     cState:
       ShowState(RunUntilSigTerminatedState);
     else

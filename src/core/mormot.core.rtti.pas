@@ -10242,7 +10242,7 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (DynArrayItem[i * 2].VType <> vtPointer) or
          (DynArrayItem[i * 2 + 1].VType <> vtClass) then
-        raise ERttiException.Create('Rtti.RegisterObjArrays([?])')
+        ERttiException.RaiseU('Rtti.RegisterObjArrays([?])')
       else
         RegisterObjArray(DynArrayItem[i * 2].VPointer,
           DynArrayItem[i * 2 + 1].VClass);
@@ -10257,7 +10257,7 @@ var
 begin
   if (DynArrayOrRecord = nil) or
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
-    raise ERttiException.Create('Rtti.RegisterFromText(DynArrayOrRecord?)');
+    ERttiException.RaiseU('Rtti.RegisterFromText(DynArrayOrRecord?)');
   RegisterSafe.Lock;
   try
     result := RegisterType(DynArrayOrRecord);
@@ -10342,9 +10342,9 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (TypeInfoTextDefinitionPairs[i * 2].VType <> vtPointer) or
          not VarRecToUtf8IsString(TypeInfoTextDefinitionPairs[i * 2 + 1], d) then
-        raise ERttiException.Create('Rtti.RegisterFromText[?]')
+        ERttiException.RaiseU('Rtti.RegisterFromText[?]')
       else
-         RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
+        RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
 end;
 
 

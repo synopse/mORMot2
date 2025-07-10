@@ -6635,7 +6635,8 @@ begin
       hapCurrent,
       hapYear,
       hapAll: // paranoid
-        raise EHttpMetrics.Create('Unexpected period');
+        EHttpMetrics.RaiseUtf8('Unexpected %.CreatePeriodIndex(%)',
+          [self, ToText(p^.Period)^]);
     else // hapHour .. hapMonth
       with fPeriod[p^.Period] do
       begin

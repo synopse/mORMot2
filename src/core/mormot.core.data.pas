@@ -7714,7 +7714,7 @@ procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8InterningAbstract);
 begin
-  raise ERttiException.Create('GetDataFromJson() not implemented - ' +
+  ERttiException.RaiseU('GetDataFromJson() not implemented - ' +
     'please include mormot.core.json in your uses clause');
 end;
 
@@ -9467,7 +9467,7 @@ end;
 procedure TDynArrayHasher.SetEventCompare(const Value: TOnDynArraySortCompare);
 begin
   if fDynArray^.GetCount <> 0 then
-    raise EDynArray.Create('TDynArrayHasher: late SetEventCompare');
+    EDynArray.RaiseU('TDynArrayHasher: late SetEventCompare');
   fEventCompare := Value;
   HashTableInit(fHasher);
 end;
@@ -9475,7 +9475,7 @@ end;
 procedure TDynArrayHasher.SetEventHash(const Value: TOnDynArrayHashOne);
 begin
   if fDynArray^.GetCount <> 0 then
-    raise EDynArray.Create('TDynArrayHasher: late SetEventHash');
+    EDynArray.RaiseU('TDynArrayHasher: late SetEventHash');
   fEventHash := Value;
   HashTableInit(fHasher);
 end;

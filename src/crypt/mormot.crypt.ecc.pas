@@ -3257,7 +3257,7 @@ begin
     pub := @dst.PublicKey;
   end
   else
-    raise EEccException.CreateUtf8(
+    raise EEccException.CreateUtf8( // no RaiseUtf8() for Delphi
       '%.SignCertificate: self-sign with no secret', [self]);
   // compute the digital signature of Dest.fContent
   Dest.fContent.ComputeHash(hash);
@@ -4377,7 +4377,8 @@ begin
       // store first the certificates
       n := length(fItems);
       if n > 65535 then
-        raise EEccException.Create('Too many items in Chain');
+        EEccException.RaiseUtf8(
+          '%.SaveToBinary: Too many certificates (%) in Chain', [self, n]);
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
       begin
@@ -4389,7 +4390,8 @@ begin
       // then the revocation serials
       n := length(fCrl);
       if n > 65535 then
-        raise EEccException.Create('Too many CRLs in Chain');
+        EEccException.RaiseUtf8(
+          '%.SaveToBinary: Too many CRLs (%) in Chain', [self, n]);
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
         fCrl[i].SaveToStream(st);

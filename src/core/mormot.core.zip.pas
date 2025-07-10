@@ -1525,11 +1525,11 @@ end;
 procedure TLocalFileHeader.Load(Source: TStream; LocalOffset: Int64);
 begin
   if Source = nil then
-    raise ESynZip.Create('Zip: LoadAndDataSeek with Source=nil');
+    ESynZip.RaiseU('Zip: LoadAndDataSeek with Source=nil');
   // we read the real local header content before calling Size for its offset
   Source.Seek(LocalOffset, soBeginning);
   if Source.Read(self, SizeOf(self)) <> SizeOf(self) then
-    raise ESynZip.Create('Zip: LoadAndDataSeek reading error');
+    ESynZip.RaiseU('Zip: LoadAndDataSeek reading error');
 end;
 
 procedure TLocalFileHeader.LoadAndDataSeek(Source: TStream; LocalOffset: Int64);
@@ -1588,7 +1588,7 @@ begin
   // (i.e. tolerate a time change through a network)
   if (zzipSize = 0) or
      (aInfo.zzipSize = 0) then
-    raise ESynZip.Create('SameAs() with crc+sizes in FLAG_DATADESCRIPTOR');
+    ESynZip.RaiseU('SameAs() with crc+sizes in FLAG_DATADESCRIPTOR');
   result := (zzipMethod = aInfo.zzipMethod) and
             (flags = aInfo.flags) and
             (zzipSize = aInfo.zzipSize) and    // =cardinal(-1) if zip64
@@ -2320,7 +2320,7 @@ procedure TZipWrite.Append(const Content: RawByteString);
 begin
   if (self = nil) or
      (Count <> 0) then
-    raise ESynZip.Create('TZipWrite.Append: invalid call');
+    ESynZip.RaiseU('TZipWrite.Append: invalid call');
   inc(fAppendOffset, length(Content));
   fDest.WriteBuffer(pointer(Content)^, length(Content));
 end;

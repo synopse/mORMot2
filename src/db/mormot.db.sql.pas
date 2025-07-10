@@ -3148,7 +3148,7 @@ begin
           if c[1] = 'Z' then
           begin
             if c[2] = 'Z' then
-              raise ESqlDBException.CreateU(
+              ESqlDBException.RaiseU(
                 'Only up to 656 parameters are possible in :AA to :ZZ range');
             c[1] := 'A';
             inc(c[2]);
@@ -7296,7 +7296,7 @@ end;
 procedure TSqlDBConnection.CheckConnection;
 begin
   if self = nil then
-    raise ESqlDBException.CreateU('TSqlDBConnection(nil).CheckConnection');
+    ESqlDBException.RaiseU('TSqlDBConnection(nil).CheckConnection');
   if not Connected then
     ESqlDBException.RaiseUtf8('% on %/% should be connected',
       [self, Properties.ServerName, Properties.DataBaseName]);
@@ -7663,7 +7663,7 @@ begin
             (fErrorException <> nil) then
       // propagate error not related to connection (e.g. SQL syntax error)
       if fErrorException.InheritsFrom(ESynException) then
-        raise ECoreDBException.CreateU(fErrorMessage)
+        ECoreDBException.RaiseU(fErrorMessage)
       else
         raise fErrorException.Create(Utf8ToString(fErrorMessage));
   end
@@ -7998,7 +7998,7 @@ function TSqlDBStatementWithParams.CheckParam(Param: integer;
   NewType: TSqlDBFieldType; IO: TSqlDBParamInOutType): PSqlDBParam;
 begin
   if self = nil then
-    raise ESqlDBException.CreateU('TSqlDBStatementWithParams(nil).Bind');
+    ESqlDBException.RaiseU('TSqlDBStatementWithParams(nil).Bind');
   if Param > fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
   result := @fParams[Param - 1];

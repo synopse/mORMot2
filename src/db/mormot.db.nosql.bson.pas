@@ -3115,10 +3115,10 @@ begin
               PBoolean(Element)^ := false;
           betInt32:
             if not VariantToInteger(aValue, PInteger(Element)^) then
-              raise EBsonException.Create('TBsonElement.FromVariant(betInt32)');
+              EBsonException.RaiseU('TBsonElement.FromVariant(betInt32)');
           betInt64:
             if not VariantToInt64(aValue, PInt64(Element)^) then
-              raise EBsonException.Create('TBsonElement.FromVariant(betInt64)')
+              EBsonException.RaiseU('TBsonElement.FromVariant(betInt64)')
             else if PInt64Rec(Element)^.Hi = 0 then
               Kind := betInt32; // 32-bit is enough
         end;
@@ -3366,7 +3366,7 @@ procedure TBsonWriter.WriteCollectionName(Flags: integer; const CollectionName: 
 begin
   Write4(Flags);
   if CollectionName = '' then
-    raise EBsonException.Create('Missing collection name');
+    EBsonException.RaiseU('Missing collection name');
   Write(pointer(CollectionName), length(CollectionName) + 1); // +1 for #0
 end;
 
@@ -3541,7 +3541,7 @@ begin
   else if doc.IsArray then
     BsonWrite(name, betArray)
   else
-    raise EBsonException.Create('Undefined nested document');
+    EBsonException.RaiseU('Undefined nested document');
   BsonWriteDoc(doc);
 end;
 
@@ -3565,7 +3565,7 @@ end;
 procedure TBsonWriter.BsonDocumentBegin(const name: RawUtf8; kind: TBsonElementType);
 begin
   if not (kind in [betDoc, betArray]) then
-    raise EBsonException.Create('BsonDocumentBegin(?)');
+    EBsonException.RaiseU('BsonDocumentBegin(?)');
   BsonWrite(name, kind);
   BsonDocumentBegin;
 end;
@@ -4101,7 +4101,7 @@ begin
   if (BSON = nil) or
      ((ExpectedBSONLen <> 0) and
       (PInteger(BSON)^ <> ExpectedBSONLen)) then
-    raise EBsonException.Create('Incorrect supplied BSON document content');
+    EBsonException.RaiseU('Incorrect supplied BSON document content');
   result := PInteger(BSON)^;
   inc(PInteger(BSON));
 end;
@@ -4110,7 +4110,7 @@ function BsonParseLength(var BSON: PByte): integer;
 begin
   if (BSON = nil) or
      (PInteger(BSON)^ < SizeOf(integer)) then
-    raise EBsonException.Create('Incorrect supplied BSON document content');
+    EBsonException.RaiseU('Incorrect supplied BSON document content');
   result := PInteger(BSON)^;
   inc(PInteger(BSON));
 end;
@@ -4207,7 +4207,7 @@ procedure BsonToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: integer;
   Option: TBsonDocArrayConversion);
 begin
   if Option = asBsonVariant then
-    raise EBsonException.Create('BsonToDoc: Option not allowed');
+    EBsonException.RaiseU('BsonToDoc: Option not allowed');
   VarClear(Result);
   BsonParseLength(BSON, ExpectedBSONLen);
   BsonItemsToDocVariant(betDoc, BSON, TDocVariantData(Result), Option);
@@ -4358,7 +4358,7 @@ end;
 function BsonObjectID(const aObjectID: variant): TBsonObjectID;
 begin
   if not result.FromVariant(aObjectID) then
-    raise EBsonException.Create('BsonObjectID() over not ObjectID variant');
+    EBsonException.RaiseU('BsonObjectID() over not ObjectID variant');
 end;
 
 function JavaScript(const JS: RawUtf8): variant;

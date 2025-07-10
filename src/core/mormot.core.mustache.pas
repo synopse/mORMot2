@@ -1599,7 +1599,7 @@ begin
         begin
           if (fScanEnd - fScanStart <> 6) or
              (fScanEnd[-1] <> '=') then
-            raise ESynMustache.Create('mtSetDelimiter syntax is e.g. {{=<% %>=}}');
+            ESynMustache.RaiseU('mtSetDelimiter syntax is e.g. {{=<% %>=}}');
           fTagStartChars := PWord(fScanStart)^;
           fTagStopChars := PWord(fScanStart + 3)^;
           continue; // do not call AddTag(k=mtSetDelimiter)

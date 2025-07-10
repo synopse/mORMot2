@@ -1737,7 +1737,7 @@ var
   restrict: TRawUtf8DynArray;
 begin
   if self = TSynTests then
-    raise ESynException.Create('You should inherit from TSynTests');
+    ESynException.RaiseU('RunAsConsole: you should inherit from TSynTests');
   // properly parse command line switches
   {$ifndef OSPOSIX}
   Executable.Command.Option('noenter', 'do not wait for ENTER key on exit');

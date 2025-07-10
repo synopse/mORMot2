@@ -5983,7 +5983,7 @@ begin
     ioGreaterThanOrEqualTo:
       ok := aComputed >= aCount;
   else
-    raise EInterfaceStub.CreateUtf8(
+    raise EInterfaceStub.CreateUtf8( // no RaiseUtf8() for Delphi
       '%.IntCheckCount(): Unexpected % operator', [self, Ord(aOperator)]);
   end;
   InternalCheck(ok, true, 'ExpectsCount(''%'',%,%) failed: count=%',
@@ -7267,7 +7267,7 @@ begin
         if Assigned(BackgroundExecutionThread) then
           BackgroundExecuteCallMethod(@call, BackgroundExecutionThread)
         else
-          raise EInterfaceFactory.Create('optExecInPerInterfaceThread' +
+          EInterfaceFactory.RaiseU('optExecInPerInterfaceThread' +
             ' with BackgroundExecutionThread=nil')
       else
         CallMethod(call); // actual asm stub
@@ -7776,7 +7776,7 @@ var
   rc: TRttiCustom;
 begin
   {$ifdef NOPATCHVMT}
-  raise EInterfaceFactory.Create('Unsupported SetWeakZero() on this context');
+  EInterfaceFactory.RaiseU('Unsupported SetWeakZero() on this context');
   {$endif NOPATCHVMT}
   rc := Rtti.RegisterClass(aClass);
   result := rc.GetPrivateSlot(TSetWeakZero);

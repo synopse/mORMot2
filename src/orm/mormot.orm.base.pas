@@ -3453,7 +3453,7 @@ begin
       ooUpdate:
         begin
           if Decoder.FieldCount = 0 then
-            raise EJsonObjectDecoder.Create('Invalid EncodeAsSqlPrepared(0)');
+            EJsonObjectDecoder.RaiseU('Invalid EncodeAsSqlPrepared(0)');
           W.AddShorter('update ');
           W.AddString(TableName);
           if Decoder.DecodedFieldTypesToUnnest <> nil then

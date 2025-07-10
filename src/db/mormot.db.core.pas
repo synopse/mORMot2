@@ -3804,7 +3804,7 @@ begin
         end;
       F := FieldCount;
       if F = MAX_SQLFIELDS then
-        raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
+        EJsonObjectDecoder.RaiseU('Too many inlines in TJsonObjectDecoder');
       FieldNames[F]  := info.Value;
       FieldNamesL[F] := info.Valuelen;
       ParseSqlValue(info, Params, FieldTypeApproximation[F], FieldValues[F]);
@@ -3819,9 +3819,9 @@ begin
     if info.Json = nil then
       exit;
     if RowID > 0 then
-      raise EJsonObjectDecoder.Create('TJsonObjectDecoder(expanded) won''t handle RowID');
+      EJsonObjectDecoder.RaiseU('TJsonObjectDecoder(expanded) won''t handle RowID');
     if length(Fields) > MAX_SQLFIELDS then
-      raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
+      EJsonObjectDecoder.RaiseU('Too many inlines in TJsonObjectDecoder');
     DecodedFieldNames := pointer(Fields);
     FieldCount := length(Fields);
     for F := 0 to FieldCount - 1 do

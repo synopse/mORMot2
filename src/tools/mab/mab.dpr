@@ -81,7 +81,7 @@ begin
         with TDebugFile.Create(FN, {MabCreate=}false) do
         try
           if Count <> length(Symbols) then
-            raise ESynLogException.Create('Invalid .mab content');
+            ESynLogException.RaiseU('Invalid .mab content');
           ConsoleWrite('Found % symbols in %', [Count, SR.Name]);
         finally
           Free;

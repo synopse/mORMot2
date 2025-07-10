@@ -2637,7 +2637,7 @@ begin
     inc(result);
   end;
   if result <> length(Dest) then
-    raise EMongoException.CreateU('Invalid opReply Documents');
+    EMongoException.RaiseU('Invalid opReply Documents');
 end;
 
 procedure TMongoReplyCursor.AppendAllToBson(Dest: TBsonWriter);
@@ -2672,7 +2672,7 @@ begin
   while Next(item) do
     Dest.AddItem(item{%H-});
   if Dest.Count <> result then
-    raise EMongoException.CreateU('Invalid opReply Documents');
+    EMongoException.RaiseU('Invalid opReply Documents');
 end;
 
 procedure TMongoReplyCursor.AppendAllAsDocVariant(var Dest: variant);
@@ -2796,7 +2796,7 @@ end;
 procedure TMongoConnection.Open;
 begin
   if self = nil then
-    raise EMongoException.CreateU('TMongoConnection(nil).Open');
+    EMongoException.RaiseU('TMongoConnection(nil).Open');
   if fSocket <> nil then
     raise EMongoConnectionException.Create('Duplicate Open', self);
   try
@@ -4091,7 +4091,7 @@ var
 begin
   // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber < 2020000 then
-    raise EMongoException.CreateU('Aggregation needs MongoDB 2.2 or later');
+    EMongoException.RaiseU('Aggregation needs MongoDB 2.2 or later');
   if fDatabase.Client.ServerBuildInfoNumber >= 3060000 then
   begin
     // since 3.6, the cursor:{} parameter is mandatory, even if void

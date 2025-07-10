@@ -6696,7 +6696,7 @@ var
   folder, dest, ext: TFileName;
   fsize: Int64;
   ftime: TUnixMSTime;
-  i: integer;
+  n: integer;
 begin
   result := false;
   if (aOldLogFileName = '') or // last call is always with ''
@@ -6713,15 +6713,15 @@ begin
     folder := EnsureDirectoryExists(aDestinationPath);
     if aAlgo <> nil then
       ext := aAlgo.AlgoFileExt;
-    i := 100;
+    n := 100;
     repeat
       dest := FormatString('%%.log%', [folder, UnixMSTimeToFileShort(ftime), ext]);
       if not FileExists(dest) then
         break;
       inc(ftime, MilliSecsPerSec); // ensure unique
-      dec(i);
-      if i = 0 then // paranoid
-        raise ESynLogException.Create('LogCompressAlgoArchive infinite loop');
+      dec(n);
+      if n = 0 then // paranoid
+        ESynLogException.RaiseU('LogCompressAlgoArchive infinite loop');
     until false;
     // compress or copy the old file, then delete it
     if (aAlgo = nil) or // no compression

@@ -4191,7 +4191,7 @@ begin
     {$endif USELIBCURL}
     {$endif USEWININET}
     if _MainHttpClass = nil then
-      raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!');
+      EHttpSocket.RaiseU('MainHttpClass: No THttpRequest class known!');
   end;
   result := _MainHttpClass;
 end;
@@ -4474,7 +4474,7 @@ begin
         wraNegotiate,
         wraNegotiateChannelBinding:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
-      else // no RaiseUtf8 to avoid "winAUth not initialized" error on Delphi
+      else // no RaiseUtf8 to avoid "winAuth not initialized" error on Delphi
         raise EWinHttp.CreateUtf8('%: unsupported AuthScheme=% on % %:%',
           [self, ToText(AuthScheme)^, aMethod, fServer, fPort]);
       end;

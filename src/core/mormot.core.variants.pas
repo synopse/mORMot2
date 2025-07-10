@@ -9450,7 +9450,7 @@ begin
       fieldCount := VCount;
     end;
   if fieldCount = 0 then
-    raise EDocVariant.Create('ToNonExpandedJson: Value[0] is not an object');
+    EDocVariant.RaiseU('ToNonExpandedJson: Value[0] is not an object');
   wr := TJsonWriter.CreateOwnedStream(temp);
   try
     wr.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldCount, VCount]);
@@ -9497,7 +9497,7 @@ begin
   if cardinal(VType) <> DocVariantVType then
     exit;
   if IsObject then
-    raise EDocVariant.Create('ToRawUtf8DynArray expects a dvArray');
+    EDocVariant.RaiseU('ToRawUtf8DynArray expects a dvArray');
   if not IsArray then
     exit; // undefined
   SetLength(Result, VCount);
@@ -9526,7 +9526,7 @@ var
 begin
   if (cardinal(VType) <> DocVariantVType) or
      IsArray then
-    raise EDocVariant.Create('ToTextPairs expects a dvObject');
+    EDocVariant.RaiseU('ToTextPairs expects a dvObject');
   if (VCount > 0) and
      IsObject then
     with TJsonWriter.CreateOwnedStream(temp) do
@@ -9560,7 +9560,7 @@ begin
   {$endif FPC}
   if (cardinal(VType) <> DocVariantVType) or
      IsObject then
-    raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
+    EDocVariant.RaiseU('ToArrayOfConst expects a dvArray');
   if IsArray then
     VariantsToArrayOfConst(VValue, VCount, Result);
 end;
@@ -11957,7 +11957,7 @@ function TDocList.Objects(const key: RawUtf8; const value: variant;
   match: TCompareOperator; compare: TVariantCompare): TDocObjectEnumerator;
 begin
   if key = '' then
-    raise EDocList.Create('Invalid expression on Objects()');
+    EDocList.RaiseU('Invalid expression on Objects()');
   result := Objects;
   result.CompKey := key;
   result.CompValue := value;

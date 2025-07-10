@@ -9281,7 +9281,7 @@ label
 begin
   inherited Create;
   if aTable = nil then
-    raise EModelException.CreateU('TOrmProperties.Create(nil)');
+    EModelException.RaiseU('TOrmProperties.Create(nil)');
   // register for JsonToObject() and for TOrmPropInfoRttiTID.Create()
   // (should have been done before in TOrmModel.Create/AddTable)
   fTableRtti := Rtti.RegisterClass(aTable) as TRttiJson;
@@ -9599,7 +9599,7 @@ var
 begin
   if (cardinal(aIndex) > cardinal(fTablesMax)) or
      (fTableProps[aIndex] <> nil) then
-    raise EModelException.CreateU('TOrmModel.SetTableProps');
+    EModelException.RaiseU('TOrmModel.SetTableProps');
   Table := fTables[aIndex];
   if Table.InheritsFrom(TOrmFts5) then
     Kind := ovkFts5
@@ -9984,7 +9984,7 @@ end;
 function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
 begin
   if self = nil then
-    raise EModelException.CreateU('nil.GetTableIndexExisting');
+    EModelException.RaiseU('nil.GetTableIndexExisting');
   result := GetTableIndex(aTable);
   if result < 0 then
     EModelException.RaiseUtf8('% is not part of % root=%',

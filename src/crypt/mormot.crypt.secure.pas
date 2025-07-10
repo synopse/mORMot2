@@ -6448,7 +6448,7 @@ begin
         inc(tmp.len, 16 - pad);
       if tmp.len > SizeOf(cc.data) then
         // all cookies storage should be < 4K so a single 2K cookie seems huge
-        raise ECrypt.Create('TBinaryCookieGenerator: Too Big Too Fat');
+        ECrypt.RaiseU('TBinaryCookieGenerator: Too Big Too Fat');
       MoveFast(tmp.buf^, cc.data, tmp.len);
     end;
     cc.head.issued := UnixTimeMinimalUtc;
@@ -7703,7 +7703,7 @@ end;
 
 procedure TCryptCert.RaiseError(const Msg: ShortString);
 begin
-  ECryptCert.RaiseUtf8('%.%', [self, Msg]);
+  raise ECryptCert.CreateUtf8('%.%', [self, Msg]);
 end;
 
 procedure TCryptCert.RaiseError(const Fmt: RawUtf8;
@@ -8597,8 +8597,8 @@ begin
   if result = [] then
     exit;
   n := length(List);
-  if n = 255 then
-    raise ECryptCert.Create('TCryptCertPerUsage.Add overflow'); // paranoid
+  if n >= 255 then
+    ECryptCert.RaiseU('TCryptCertPerUsage.Add overflow'); // paranoid
   SetLength(List, n + 1);
   List[n] := cert;
   inc(n); // CertPerUsage[u] stores index + 1, i.e. in 1..255 range

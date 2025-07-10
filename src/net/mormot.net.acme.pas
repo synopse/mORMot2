@@ -472,7 +472,7 @@ begin
   begin
     // no key identifier, need to provide JSON Web Key
     if not fCert.HasPrivateSecret then
-      raise EJwsHttp.Create('No private key');
+      EJwsHttp.RaiseUtf8('%.Post: No private key', [self]);
     // compute JWK JSON object - e.g. '{"e":..,"kty":"RSA","n":..}' for RSA
     jwk := fCert.JwkCompute;
     // the thumbprint of a JWK is computed with no whitespace or line breaks
@@ -560,12 +560,13 @@ begin
   fDirectoryUrl := aDirectoryUrl;
   fContact := aContact;
   if aSubjects = '' then
-    raise EAcmeClient.Create('Create with aSubjects=nil');
+    EAcmeClient.RaiseUtf8('%.Create with aSubjects=nil', [self]);
   fSubjects := aSubjects;
   fSubject := CsvToRawUtf8DynArray(fSubjects);
   for i := 0 to high(fSubject) do
     if fSubject[i] = '' then // not allowed by FindPropName()
-      raise EAcmeClient.Create('Create with a void entry in aSubjects CSV');
+      EAcmeClient.RaiseUtf8('%.Create with a void entry in aSubjects=%',
+        [self, aSubjects]);
   fHttpClient := TJwsHttpClient.Create(fLog, aCert);
 end;
 
