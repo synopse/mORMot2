@@ -420,7 +420,7 @@ type
     dvArray,
     dvObject);
 
-var
+const
   /// some convenient TDocVariant options, e.g. as JSON_[fDefault]
   JSON_: array[TDocVariantModel] of TDocVariantOptions = (
     // mVoid
@@ -3708,6 +3708,12 @@ begin
   TSynVarData(self).VType := TSynVarData(self).VType or cardinal(1 shl (ord(dvo) + 16));
 end;
 
+procedure EnsureDocVariantVType(p: PCardinal; dvo: TDocVariantOption);
+  {$ifdef HASINLINE} inline; {$endif}
+begin // VType := DocVariantVType + Include(dvo)
+  p^ := (p^ and $ffff0000) or DocVariantVType or cardinal(1 shl (ord(dvo) + 16));
+end;
+
 function TDocVariantData.IsObject: boolean;
 begin
   result := Has(dvoIsObject);
@@ -3738,7 +3744,7 @@ end;
 procedure TDocVariantData.ClearFast;
 begin
   TSynVarData(self).VType := 0; // clear VType and VOptions
-  Void;
+  Void; // set VCount=0 + finalize VName[] and VValue[]
 end;
 
 function TDocVariantData.InternalSetValue(
@@ -6001,7 +6007,10 @@ end;
 
 procedure TDocVariantData.Init(aModel: TDocVariantModel; aKind: TDocVariantKind);
 begin
-  Init(JSON_[aModel], aKind);
+  TSynVarData(self).VType := JSON_VTYPE[aKind, aModel];
+  VCount := 0;
+  pointer(VName)  := nil; // to avoid GPF
+  pointer(VValue) := nil;
 end;
 
 procedure TDocVariantData.InitFast(aKind: TDocVariantKind);
@@ -6054,15 +6063,19 @@ var
 begin
   n := length(NameValuePairs);
   if (n = 0) or
-     (n and 1 = 1) or
-     IsArray then
+     (n and 1 = 1) then
     exit; // nothing to add
-  Include(dvoIsObject);
+  case GetKind of
+    dvUndefined:
+      EnsureDocVariantVType(@self, dvoIsObject);
+    dvArray:
+      exit;
+  end;
   n := n shr 1;
   len := n + VCount;
   if length(VValue) < len then
   begin
-    SetLength(VValue, len);
+    SetLength(VValue, len); // grow up the internal arrays
     SetLength(VName, len);
   end
   else
@@ -6628,7 +6641,7 @@ function TDocVariantData.InitJsonInPlace(Json: PUtf8Char;
 var
   info: TGetJsonField;
   Name: PUtf8Char;
-  NameLen: integer;
+  NameLen: integer; // not PtrInt
   n, cap: PtrInt;
   Val: PVariant;
   intnames, intvalues: TRawUtf8Interning;
@@ -7180,32 +7193,27 @@ end;
 
 function TDocVariantData.InternalAdd(const aName: RawUtf8; aIndex: integer): integer;
 var
+  dk: TDocVariantKind;
   len: integer;
   v: PVariantArray;
   k: PRawUtf8Array;
 begin
   // validate consistent add/insert
+  dk := GetKind;
   if aName <> '' then
   begin
-    if IsArray then
-      EDocVariant.RaiseUtf8(
-        'Add: Unexpected [%] object property in an array', [aName]);
-    if not IsObject then
-    begin
-      VType := DocVariantVType; // may not be set yet
-      Include(dvoIsObject);
-    end;
+    if dk <> dvObject then
+      if dk = dvUndefined then
+        EnsureDocVariantVType(@self, dvoIsObject)
+      else
+        EDocVariant.RaiseUtf8(
+          'Add: Unexpected [%] object property in an array', [aName]);
   end
-  else
-  begin
-    if IsObject then
-      raise EDocVariant.Create('Add: Unexpected array item in an object');
-    if not IsArray then
-    begin
-      VType := DocVariantVType; // may not be set yet
-      Include(dvoIsArray);
-    end;
-  end;
+  else if dk <> dvArray then
+    if dk = dvUndefined then
+      EnsureDocVariantVType(@self, dvoIsArray)
+    else
+      EDocVariant.RaiseU('Add: Unexpected array item in an object');
   // grow up memory if needed
   len := length(VValue);
   if VCount >= len then
@@ -12568,7 +12576,7 @@ begin
   begin
     for m := 0 to ord(high(TDocVariantModel)) do
     begin
-      dest^ := vt + cardinal(opt^[m]) shl 16;
+      dest^ := vt + cardinal(opt^[m]) shl 16; // very efficient initialization
       inc(dest);
     end;
     inc(vt, 1 shl 16); // next k
