@@ -5967,12 +5967,12 @@ begin
   TSynVarData(self).VType := TSynVarData(CloneFrom).VType; // VType+VOptions
   VCount := CloneFrom.VCount;
   if MakeUnique then             // new array, but byref names
-    DynArrayCopy(@VName, @CloneFrom.VName, TypeInfo(TRawUtf8DynArray))
+    DynArrayCopy(@VName, @CloneFrom.VName, TypeInfo(TRawUtf8DynArray), @VCount)
   else
     VName := CloneFrom.VName;    // byref copy of the whole array
   if CloneValues then
     if MakeUnique then           // new array, but byref values
-      DynArrayCopy(@VValue, @CloneFrom.VValue, TypeInfo(TVariantDynArray))
+      DynArrayCopy(@VValue, @CloneFrom.VValue, TypeInfo(TVariantDynArray), @VCount)
     else
       VValue := CloneFrom.VValue // byref copy of the whole array
   else
