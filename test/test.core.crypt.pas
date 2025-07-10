@@ -1011,8 +1011,14 @@ procedure TTestCoreCrypto._JWT;
     checkEqual(iss, 'joe');
     if one.Algorithm = 'none' then
       checkEqual(hp + '.', t);
+    check(ParseJwt(t, jwt) = jwtValid);
+    CheckEqual(jwt.reg[jrcIssuer], 'joe');
     check(TJwtAbstract.VerifyPayload(
       t, '', '', 'joe', '', nil, nil, nil, nil, nil, @v) = jwtValid);
+    Finalize(jwt);
+    CheckEqual(jwt.reg[jrcIssuer], '');
+    check(ParseJwt(t, jwt) = jwtValid);
+    CheckEqual(jwt.reg[jrcIssuer], 'joe');
     // {"http://example.com/is_root":true,"iss":"joe","exp":1658258457}
     check(_Safe(v)^.Count >= 3);
     with _Safe(v)^ do
@@ -1027,6 +1033,13 @@ procedure TTestCoreCrypto._JWT;
     end;
     check(one.VerifyPayload(
       t, one.Algorithm, '', 'joe', '', @exp, nil, @sub, @iss, nil) = jwtValid);
+    Finalize(jwt);
+    CheckEqual(jwt.reg[jrcIssuer], '');
+    check(ParseJwt(t, jwt) = jwtValid);
+    check(jwt.data.B['http://example.com/is_root']);
+    check((jwt.reg[jrcIssuedAt] <> '') = (jrcIssuedAt in one.Claims));
+    check(jwt.result = jwtValid);
+    CheckEqual(jwt.reg[jrcIssuer], 'joe');
     checkEqual(one.ExtractAlgo(t), one.Algorithm);
     checkEqual(one.ExtractAlgo(copy(t, 2, 1000)), '');
     checkEqual(one.CacheTimeoutSeconds, 0);
@@ -1063,6 +1076,14 @@ procedure TTestCoreCrypto._JWT;
       one.Verify(t, jwt);
       check(jwt.result <> jwtValid, 'invalid sig');
     end;
+    t := one.Compute([], 'john', '', '["one","two"]');
+    check(t <> '');
+    check(ParseJwt(t, jwt) = jwtValid);
+    CheckEqual(jwt.reg[jrcIssuer], 'john');
+    if jrcAudience in one.Claims then
+      CheckEqual(jwt.reg[jrcAudience], '["one","two"]')
+    else
+      CheckEqual(jwt.reg[jrcAudience], '');
     if not nofree then
       one.Free;
   end;
