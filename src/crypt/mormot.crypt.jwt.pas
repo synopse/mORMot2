@@ -149,6 +149,7 @@ type
   // - joNoJwtIDCheck won't decode/deobfuscate the "jti" item
   // - joNoAudienceCheck won't decode and check the "aud" - so is faster
   // - joDoubleInData will allow double floting point values in TJwtContent.data
+  // - joAllClaimsInData will append all claims into TJwtContent.data
   TJwtOption = (
     joHeaderParse,
     joAllowUnexpectedClaims,
@@ -156,7 +157,8 @@ type
     joNoJwtIDGenerate,
     joNoJwtIDCheck,
     joNoAudienceCheck,
-    joDoubleInData);
+    joDoubleInData,
+    joAllClaimsInData);
 
   /// store options for TJwtAbstract process
   TJwtOptions = set of TJwtOption;
@@ -264,6 +266,7 @@ type
     /// internal method to parse a token according to this JWT expectations
     // - without any cache, digital signature nor time consistency check
     // - as called internally by Verify(), which is the prefered method to call
+    // - see also the associated ParseJwt() function
     procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
       headpayload: PRawUtf8 = nil; signature: PRawByteString = nil;
       excluded: TJwtClaims = []); virtual;
@@ -389,7 +392,7 @@ function ToText(claims: TJwtClaims): ShortString; overload;
 // there is a chance the supplied text contains a JWT, and extract it
 function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean = false): RawUtf8;
 
-/// raw parsing of a JWT into its basic fields (without timestamp check)
+/// raw parsing of a JWT into its main fields (without signature or timestamp check)
 function ParseJwt(const aToken: RawUtf8; var aInfo: TJwtContent;
   aOptions: TJwtOptions = []): TJwtResult;
 
@@ -847,16 +850,17 @@ begin
   begin
     RecordZero(@aInfo, TypeInfo(TJwtContent));
     aInfo.result := jwtInvalidAlgorithm;
-    result := jwtInvalidAlgorithm;
-    exit;
-  end;
-  jwt := TJwtAbstract.Create(algo, [], [], 0);
-  try
-    jwt.Options := aOptions + [joHeaderParse,
-      joAllowUnexpectedClaims, joAllowUnexpectedAudience];
-    jwt.Parse(aToken, aInfo, nil, nil, []);
-  finally
-    jwt.Free;
+  end
+  else
+  begin
+    jwt := TJwtAbstract.Create(algo, [], [], 0);
+    try
+      jwt.Options := aOptions + [joHeaderParse, joNoJwtIDCheck,
+        joAllowUnexpectedClaims, joAllowUnexpectedAudience];
+      jwt.Parse(aToken, aInfo, nil, nil, []);
+    finally
+      jwt.Free;
+    end;
   end;
   result := aInfo.result;
 end;
@@ -1104,7 +1108,7 @@ var
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var Jwt: TJwtContent;
   headpayload: PRawUtf8; signature: PRawByteString; excluded: TJwtClaims);
 var
-  payloadend, toklen, c, cap, headerlen, Nlen, a: integer;
+  payloadend, toklen, c, headerlen, Nlen, a: integer;
   P: PUtf8Char;
   N: PUtf8Char;
   info, aud: TGetJsonField;
@@ -1168,101 +1172,91 @@ begin
     if not Base64UriToBin(tok + headerlen, payloadend - headerlen - 1, temp) then
       exit;
     // 3. decode payload into Jwt.reg[]/Jwt.claims (known) and Jwt.data (custom)
+    requiredclaims := fClaims - excluded;
     P := GotoNextNotSpace(temp.buf);
     if P^ <> '{' then
       exit;
     P := GotoNextNotSpace(P + 1);
-    if P^ = '}' then
-      cap := 0
-    else
-    begin
-      cap := JsonObjectPropCount(P); // fast pre-parsing
-      if cap = 0 then
-        exit; // invalid input
-    end;
-    requiredclaims := fClaims - excluded;
     info.Json := P;
-    if cap > 0 then
-      repeat
-        Jwt.result := jwtInvalidPayload;
-        N := GetJsonPropName(info.Json, @Nlen);
-        if N = nil then
+    if P^ <> '}' then
+    repeat
+      Jwt.result := jwtInvalidPayload;
+      N := GetJsonPropName(info.Json, @Nlen);
+      if N = nil then
+        exit;
+      info.GetJsonFieldOrObjectOrArray;
+      if (info.Json = nil) or
+         not (info.EndOfObject in [',', '}']) then
+        exit; // error in parsed input
+      c := -1;
+      if (Nlen = 3) and
+         (info.Value <> nil) then
+        // check for the standard non-null JWT claims
+        c := IntegerScanIndex(@JWT_CLAIMS_TEXT4, length(Jwt.reg), PInteger(N)^);
+      if c >= 0 then // found claim = c
+      begin
+        if info.ValueLen = 0 then
           exit;
-        info.GetJsonFieldOrObjectOrArray;
-        if (info.Json = nil) or
-           not (info.EndOfObject in [',', '}']) then
-          exit; // error in parsed input
-        if (Nlen = 3) and
-           (info.Value <> nil) then
-        begin
-          // check for the standard Jwt claims
-          c := IntegerScanIndex(@JWT_CLAIMS_TEXT4, length(Jwt.reg), PInteger(N)^);
-          if c >= 0 then // claim = c
-          begin
-            if info.ValueLen = 0 then
-              exit;
-            include(Jwt.claims, claim);
-            if not (claim in fClaims) and
-               not (joAllowUnexpectedClaims in fOptions) then
-            begin
-              Jwt.result := jwtUnexpectedClaim;
-              exit;
-            end;
-            FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
-            if claim in requiredclaims then
-              case claim of
-                jrcJwtID:
-                  if not (joNoJwtIDCheck in fOptions) then
-                    if not fIDGen.FromObfuscated(Jwt.reg[jrcJwtID], Jwt.id.Value) or
-                       (Jwt.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
-                    begin
-                      Jwt.result := jwtInvalidID;
-                      exit;
-                    end;
-                jrcAudience:
-                  if not (joNoAudienceCheck in fOptions) then
-                  begin
-                    Jwt.result := jwtUnknownAudience;
-                    if info.Value^ = '[' then
-                    begin // "aud": ["https://example.com", "https://another.com"]
-                      aud.Json := info.Value + 1;
-                      repeat
-                        aud.GetJsonField;
-                        if aud.Json = nil then
-                          break;
-                        a := -1;
-                        if aud.WasString then
-                          a := FindNonVoidRawUtf8(pointer(fAudience),
-                            aud.Value, aud.ValueLen, length(fAudience));
-                        if a >= 0 then
-                          include(Jwt.audience, a)
-                        else if not (joAllowUnexpectedAudience in fOptions) then
-                          exit;
-                      until false;
-                    end
-                    else
-                    begin // "aud": "https://example.com"
-                      a := FindRawUtf8(fAudience, Jwt.reg[jrcAudience]);
-                      if a >= 0 then
-                        include(Jwt.audience, a)
-                      else if not (joAllowUnexpectedAudience in fOptions) then
-                        exit;
-                    end;
-                  end;
+        include(Jwt.claims, claim);
+        Jwt.result := jwtUnexpectedClaim;
+        if not (claim in fClaims) and
+           not (joAllowUnexpectedClaims in fOptions) then
+          exit;
+        FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
+        //if claim in requiredclaims then
+          case claim of
+            jrcJwtID:
+              if not (joNoJwtIDCheck in fOptions) then
+                if not fIDGen.FromObfuscated(Jwt.reg[jrcJwtID], Jwt.id.Value) or
+                   (Jwt.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
+                begin
+                  Jwt.result := jwtInvalidID;
+                  exit;
                 end;
-              continue; // don't add to Jwt.data
+            jrcAudience:
+              if not (joNoAudienceCheck in fOptions) then
+              begin
+                Jwt.result := jwtUnknownAudience;
+                if info.Value^ = '[' then
+                begin // "aud": ["https://example.com", "https://another.com"]
+                  aud.Json := info.Value + 1;
+                  repeat
+                    aud.GetJsonField;
+                    if aud.Json = nil then
+                      break;
+                    a := -1;
+                    if aud.WasString then
+                      a := FindNonVoidRawUtf8(pointer(fAudience),
+                        aud.Value, aud.ValueLen, length(fAudience));
+                    if a >= 0 then
+                      include(Jwt.audience, a)
+                    else if not (joAllowUnexpectedAudience in fOptions) then
+                      exit;
+                  until aud.EndOfObject = ']';
+                end
+                else
+                begin // "aud": "https://example.com"
+                  a := FindRawUtf8(fAudience, Jwt.reg[jrcAudience]);
+                  if a >= 0 then
+                    include(Jwt.audience, a)
+                  else if not (joAllowUnexpectedAudience in fOptions) then
+                    exit;
+                end;
+              end;
             end;
-        end;
-        if jrcData in excluded then
-          continue; // caller didn't want to fill Jwt.data with unknown fields
-        include(Jwt.claims, jrcData);
-        if Jwt.data.Count = 0 then
-          if joDoubleInData in fOptions then
-            TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFastFloat]
-          else
-            TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFast];
-        Jwt.data.AddValue(N, Nlen, info);
-      until info.EndOfObject = '}';
+        if not (joAllClaimsInData in fOptions) then
+          continue; // don't add this known claim into Jwt.data
+      end
+      else if jrcData in excluded then
+        continue; // caller didn't want to fill Jwt.data with unknown claims
+      include(Jwt.claims, jrcData);
+      if Jwt.data.Count = 0 then
+        if joDoubleInData in fOptions then
+          TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFastFloat]
+        else
+          TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFast];
+      Jwt.data.AddValue(N, Nlen, info);
+    until info.EndOfObject = '}';
     Jwt.result := jwtMissingClaim;
     if requiredclaims - Jwt.claims <> [] then
       exit;
