@@ -522,7 +522,7 @@ type
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
-    procedure RaiseUnimplemented(const Method: ShortString);
+    class procedure RaiseUnimplemented(const Method: ShortString);
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -2105,7 +2105,9 @@ type
       const Args: array of const; const Trailer: ShortString = 'OSError');
     /// a wrapper function around raise CreateUtf8()
     // - generated executable code could be slightly shorter
-    class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const); overload;
+    class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const);
+    /// a wrapper function around raise CreateU()
+    class procedure RaiseU(const Msg: RawUtf8);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the TSynLogExceptionToStrCustom
@@ -4141,7 +4143,7 @@ begin
   inc(B, 2); // with proper constant propagation above when inlined
 end;
 
-procedure TTextWriter.RaiseUnimplemented(const Method: ShortString);
+class procedure TTextWriter.RaiseUnimplemented(const Method: ShortString);
 begin
   raise ESynException.CreateUtf8(
     '%.% unimplemented: use TJsonWriter', [self, Method]);
@@ -9994,6 +9996,11 @@ class procedure ESynException.RaiseUtf8(const Format: RawUtf8;
   const Args: array of const);
 begin
   raise CreateUtf8(Format, Args);
+end;
+
+class procedure ESynException.RaiseU(const Msg: RawUtf8);
+begin
+  raise CreateU(Msg);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
