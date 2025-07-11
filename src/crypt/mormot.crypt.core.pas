@@ -7643,7 +7643,6 @@ begin
     else
     begin
       // 512-bit of perfect forward security using AES-CTR diffusion
-      _OSEntropySeed.safe.Lock;
       _OSEntropySeed.aes.DoBlocksCtr({iv=}@data, @_OSEntropySeed.bits,
         @_OSEntropySeed.bits, SizeOf(_OSEntropySeed.bits) shr AesBlockShift);
       data := _OSEntropySeed.bits;
