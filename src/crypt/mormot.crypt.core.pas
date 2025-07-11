@@ -46,9 +46,9 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security, // low-level Windows Security API
-  mormot.core.rtti,
   mormot.core.unicode,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.rtti;
 
 
 type
@@ -2891,7 +2891,7 @@ type
     iv: THash128Rec;
     // work buffer used e.g. by CTR/GCM or AesNiTrailer()
     buf: TAesBlock;
-    // main AES function to process one 16-bytes block
+    // main AES function to process one 16-bytes block - set at runtime from HW
     DoBlock: TAesContextDoBlock;
     {$ifdef WIN64ABI}
     xmm7bak: THash128; // used to preserve the xmm7 register in Win64 asm
@@ -4194,20 +4194,6 @@ begin
   MoveFast(Key, ctx.RK, 4 * Nk);
   {$ifdef ASMINTEL}
   ctx.DoBlock := @AesEncryptAsm;
-  {$else}
-  ctx.DoBlock := @aesencryptpas;
-  {$ifdef USEARMCRYPTO}
-  if AesArmAvailable then
-    case KeySize of
-      128:
-        ctx.DoBlock := @aesencryptarm128;
-      192:
-        ctx.DoBlock := @aesencryptarm192;
-      256:
-        ctx.DoBlock := @aesencryptarm256;
-    end;
-  {$endif USEARMCRYPTO}
-  {$endif ASMINTEL}
   {$ifdef USEAESNI}
   if cfAESNI in CpuFeatures then
   begin
@@ -4235,6 +4221,20 @@ begin
     {$endif USEAESNI32}
   end;
   {$endif USEAESNI}
+  {$else}
+  ctx.DoBlock := @aesencryptpas;
+  {$ifdef USEARMCRYPTO}
+  if AesArmAvailable then
+    case KeySize of
+      128:
+        ctx.DoBlock := @aesencryptarm128;
+      192:
+        ctx.DoBlock := @aesencryptarm192;
+      256:
+        ctx.DoBlock := @aesencryptarm256;
+    end;
+  {$endif USEARMCRYPTO}
+  {$endif ASMINTEL}
   ctx.Rounds := 6 + Nk;
   ctx.KeyBits := KeySize;
   // Calculate encryption round keys
@@ -7836,7 +7836,7 @@ var
 // don't use BinToBase64uri() to avoid linking mormot.core.buffers.pas
 
 const
-  _b64: array[0..63] of AnsiChar =
+  _b64: TChar64 =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 procedure RawBase64Uri(rp, sp: PAnsiChar; lendiv, lenmod: integer);
