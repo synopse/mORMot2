@@ -291,11 +291,11 @@ type
     // (code page 1252) content
     class function RandomUnicode(CharCount: integer): SynUnicode;
     /// create a temporary string random content, using ASCII 7-bit content
-    class function RandomAnsi7(CharCount: integer): RawByteString;
+    class function RandomAnsi7(CharCount: integer; CodePage: integer = CP_UTF8): RawByteString;
     /// create a temporary string random content, using A..Z,_,0..9 chars only
-    class function RandomIdentifier(CharCount: integer): RawByteString;
+    class function RandomIdentifier(CharCount: integer): RawUtf8;
     /// create a temporary string random content, using uri-compatible chars only
-    class function RandomUri(CharCount: integer): RawByteString;
+    class function RandomUri(CharCount: integer): RawUtf8;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
       const RandomInclude: RawUtf8 = ''): RawUtf8;
@@ -949,13 +949,10 @@ class function TSynTestCase.RandomWinAnsi(CharCount: integer): WinAnsiString;
 var
   i: PtrInt;
   R: PByteArray;
-  tmp: TSynTempBuffer;
 begin
-  R := tmp.InitRandom(CharCount);
-  FastSetStringCP(result, nil, CharCount, CP_WINANSI);
+  R := RandomByteString(CharCount, result, CP_WINANSI);
   for i := 0 to CharCount - 1 do
-    PByteArray(result)[i] := 32 + R[i] and 127;
-  tmp.Done;
+    R[i] := (R[i] and 127) + 32; // may include some WinAnsi accentuated chars
 end;
 
 {$ifndef PUREMORMOT2}
@@ -965,44 +962,38 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-class function TSynTestCase.RandomAnsi7(CharCount: integer): RawByteString;
+class function TSynTestCase.RandomAnsi7(CharCount, CodePage: integer): RawByteString;
 var
   i: PtrInt;
-  R, D: PByteArray;
-  tmp: TSynTempBuffer;
+  R: PByteArray;
 begin
-  R := tmp.InitRandom(CharCount);
-  D := FastSetString(RawUtf8(result), CharCount);
+  R := RandomByteString(CharCount, result, CodePage);
   for i := 0 to CharCount - 1 do
-    D[i] := 32 + R[i] mod 95; // may include tilde #$7e char
-  tmp.Done;
+    R[i] := (R[i] mod 95) + 32; // may include tilde #$7e (#126) char
 end;
 
-procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawByteString);
+procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawUtf8);
 var
   i: PtrInt;
-  R, D: PByteArray;
-  tmp: TSynTempBuffer;
+  R: PAnsiChar;
 begin
-  R := tmp.InitRandom(count);
-  D := FastSetString(RawUtf8(result), count);
+  R := RandomByteString(count, result, CP_UTF8);
   for i := 0 to count - 1 do
-    D[i] := ord(chars64[PtrInt(R[i]) and 63]);
-  tmp.Done;
+    R[i] := chars64[PtrUInt(R[i]) and 63];
 end;
 
-class function TSynTestCase.RandomIdentifier(CharCount: integer): RawByteString;
 const
-  IDENT_CHARS: array[0..63] of AnsiChar =
+  IDENT_CHARS: TChar64 =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+  URL_CHARS: TChar64 =
+    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
+
+class function TSynTestCase.RandomIdentifier(CharCount: integer): RawUtf8;
 begin
   InitRandom64(@IDENT_CHARS, CharCount, result);
 end;
 
-class function TSynTestCase.RandomUri(CharCount: integer): RawByteString;
-const
-  URL_CHARS: array[0..63] of AnsiChar =
-    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
+class function TSynTestCase.RandomUri(CharCount: integer): RawUtf8;
 begin
   InitRandom64(@URL_CHARS, CharCount, result);
 end;
