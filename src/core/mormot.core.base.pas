@@ -3522,9 +3522,6 @@ type
     // temp.Init(expectedsize) if the API returns an insufficient buffer error
     function Init: integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// initialize a new temporary buffer of a given number of random bytes
-    // - will fill the buffer via RandomBytes() call
-    function InitRandom(RandomLen: integer): pointer;
     /// initialize a new temporary buffer filled with 32-bit integer increasing values
     function InitIncreasing(Count: PtrInt; Start: PtrInt = 0): PIntegerArray;
     /// initialize a new temporary buffer of a given number of zero bytes
@@ -11806,12 +11803,6 @@ begin
   buf := @tmp;
   result := SizeOf(tmp) - SYNTEMPTRAIL; // set to 4080 bytes = maximum safe size
   len := result;
-end;
-
-function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
-begin
-  _Lecuyer.Fill(Init(RandomLen), RandomLen);
-  result := buf;
 end;
 
 function TSynTempBuffer.InitIncreasing(Count, Start: PtrInt): PIntegerArray;
