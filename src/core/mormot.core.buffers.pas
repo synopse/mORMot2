@@ -6374,34 +6374,33 @@ end;
 
 { ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
-type
-  TBase64Enc = array[0..63] of AnsiChar;
-  PBase64Enc = ^TBase64Enc;
-  TBase64Dec = array[AnsiChar] of shortint;
-  PBase64Dec = ^TBase64Dec;
-
 const
-  b64enc: TBase64Enc =
+  b64enc: TChar64 =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  b64Urienc: TBase64Enc =
+  b64Urienc: TChar64 =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+type
+  // generic lookup table type used for efficient Base64 Base58 Base32 decoding
+  TAnsiCharDec = array[AnsiChar] of shortint; // store -1 for incorrect chars
+  PAnsiCharDec = ^TAnsiCharDec;
 
 var
   /// a conversion table from Base64 text into binary data
   // - used by Base64ToBin/IsBase64 functions
   // - has -1 (255) for invalid char, -2 (254) for '=', 0..63 for valid char
-  ConvertBase64ToBin, ConvertBase64UriToBin: TBase64Dec;
+  ConvertBase64ToBin, ConvertBase64UriToBin: TAnsiCharDec;
 
 
 { --------- Base64 encoding/decoding }
 
-function Base64AnyDecode(const decode: TBase64Dec; sp, rp: PAnsiChar; len: PtrInt): boolean;
+function Base64AnyDecode(decode: PAnsiCharDec; sp, rp: PAnsiChar; len: PtrInt): boolean;
 var
   c, ch: PtrInt;
 begin // FPC emits suboptimal asm but Base64DecodeMainAvx2() will run on server
   result := false;
-  while len >= 4 do
-  begin
+  if len >= 4 then
+  repeat
     c := decode[sp[0]];
     if c < 0 then
       exit;
@@ -6426,7 +6425,7 @@ begin // FPC emits suboptimal asm but Base64DecodeMainAvx2() will run on server
     dec(len, 4);
     inc(rp, 3);
     inc(sp, 4);
-  end;
+  until len < 4;
   if len >= 2 then
   begin
     c := decode[sp[0]];
@@ -6454,13 +6453,13 @@ end;
 
 function Base64DecodeMainPas(sp, rp: PAnsiChar; len: PtrInt): boolean;
 begin
-  result := Base64AnyDecode(ConvertBase64ToBin, sp, rp, len);
+  result := Base64AnyDecode(@ConvertBase64ToBin, sp, rp, len);
 end;
 
 function Base64Decode(sp, rp: PAnsiChar; len: PtrInt): boolean;
   {$ifdef FPC} inline;{$endif}
 var
-  tab: PBase64Dec; // use local register
+  tab: PAnsiCharDec; // use local register
 begin
   tab := @ConvertBase64ToBin;
   len := len shl 2; // len was the number of 4 chars chunks in sp
@@ -6475,11 +6474,11 @@ begin
   {$ifdef ASMX64AVXNOCONST}
   result := Base64DecodeMain(sp, rp, len); // may be Base64DecodeMainAvx2
   {$else}
-  result := Base64AnyDecode(tab^, sp, rp, len);
+  result := Base64AnyDecode(tab, sp, rp, len);
   {$endif ASMX64AVXNOCONST}
 end;
 
-procedure Base64EncodeLoop(rp, sp: PAnsiChar; len: cardinal; enc: PBase64Enc);
+procedure Base64EncodeLoop(rp, sp: PAnsiChar; len: cardinal; enc: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 var
   c: cardinal;
@@ -6513,13 +6512,13 @@ function Base64DecodeMainAvx2(sp, rp: PAnsiChar; len: PtrInt): boolean;
 begin
   Base64DecodeAvx2(sp, len, rp);
   // on error, AVX2 code let sp point to the faulty input so result=false
-  result := Base64AnyDecode(ConvertBase64ToBin, sp, rp, len);
+  result := Base64AnyDecode(@ConvertBase64ToBin, sp, rp, len);
 end;
 {$endif ASMX64AVXNOCONST}
 
 function Base64EncodeMainPas(rp, sp: PAnsiChar; len: cardinal): integer;
 var
-  enc: PBase64Enc; // use local register
+  enc: PAnsiChar; // use local register
 begin
   enc := @b64enc;
   result := len div 3;
@@ -6530,7 +6529,7 @@ end;
 procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
 var
   c: cardinal;
-  enc: PBase64Enc; // use local register
+  enc: PAnsiChar; // use local register
 begin
   enc := @b64enc;
   case len of
@@ -6696,7 +6695,7 @@ begin
   Base64Encode(PAnsiChar(pointer(Result)) + 3, Data, DataLen);
 end;
 
-function IsBase64Internal(sp: PAnsiChar; len: PtrInt; dec: PBase64Dec): boolean;
+function IsBase64Internal(sp: PAnsiChar; len: PtrInt; dec: PAnsiCharDec): boolean;
 var
   i: PtrInt;
 begin
@@ -6726,7 +6725,7 @@ begin
   result := IsBase64Internal(pointer(s), length(s), @ConvertBase64ToBin);
 end;
 
-function Base64Length(sp: PAnsiChar; len: PtrInt; dec: PBase64Dec): PtrInt;
+function Base64Length(sp: PAnsiChar; len: PtrInt; dec: PAnsiCharDec): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 begin
   result := 0;
@@ -6745,7 +6744,7 @@ end;
 
 function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 var
-  dec: PBase64Dec;
+  dec: PAnsiCharDec;
 begin
   dec := @ConvertBase64ToBin;
   if IsBase64Internal(sp, len, dec) then
@@ -6790,7 +6789,7 @@ end;
 function Base64LengthAdjust(sp: PAnsiChar; var len: PtrInt): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 var
-  tab: PBase64Dec;
+  tab: PAnsiCharDec;
 begin
   result := len; // for better code generation
   if (result = 0) or
@@ -6871,7 +6870,7 @@ end;
 procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 var
   main, c: cardinal;
-  enc: PBase64Enc; // faster especially on x86_64 and PIC
+  enc: PAnsiChar; // faster especially on x86_64 and PIC
 begin
   enc := @b64Urienc;
   main := len div 3;
@@ -6968,7 +6967,7 @@ end;
 
 function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 begin
-  result := Base64AnyDecode(ConvertBase64UriToBin, sp, rp, len);
+  result := Base64AnyDecode(@ConvertBase64UriToBin, sp, rp, len);
 end;
 
 function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -6988,7 +6987,7 @@ begin
   result := false;
   resultLen := Base64uriToBinLength(len);
   if resultLen <> 0 then
-    result := Base64AnyDecode(ConvertBase64UriToBin, sp,
+    result := Base64AnyDecode(@ConvertBase64UriToBin, sp,
       FastNewRawByteString(bin, resultLen), len);
   if not result then
     bin := '';
@@ -6998,7 +6997,7 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): b
 begin
   temp.Init(Base64uriToBinLength(len));
   result := (temp.len > 0) and
-            Base64AnyDecode(ConvertBase64UriToBin, sp, temp.buf, len);
+            Base64AnyDecode(@ConvertBase64UriToBin, sp, temp.buf, len);
 end;
 
 function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean;
@@ -7012,7 +7011,7 @@ var
 begin
   resultLen := Base64uriToBinLength(base64len);
   result := (resultLen = binlen) and
-            Base64AnyDecode(ConvertBase64UriToBin, base64, bin, base64len);
+            Base64AnyDecode(@ConvertBase64UriToBin, base64, bin, base64len);
 end;
 
 procedure Base64ToUri(var base64: RawUtf8);
@@ -7121,18 +7120,12 @@ end;
 
 { --------- Base58 encoding/decoding }
 
-type
-  TBase58Enc = array[0..57] of AnsiChar;
-  PBase58Enc = ^TBase58Enc;
-  TBase58Dec = array[AnsiChar] of shortint;
-  PBase58Dec = ^TBase58Dec;
-
 const
-  b58enc: TBase58Enc =
+  b58enc: array[0..57] of AnsiChar =
     '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 var
   /// a conversion table from Base58 text into binary data
-  ConvertBase58ToBin: TBase58Dec;
+  ConvertBase58ToBin: TAnsiCharDec;
 
 function BinToBase58(Bin: PAnsiChar; BinLen: integer; var Dest: TSynTempBuffer): integer;
 var
@@ -7362,7 +7355,7 @@ end;
 const
   b32enc: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 var
-  ConvertBase32ToBin: TBase64Dec;
+  ConvertBase32ToBin: TAnsiCharDec;
 
 function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8;
 begin
@@ -7376,7 +7369,7 @@ begin
   result := BinToBase32(pointer(Bin), length(Bin));
 end;
 
-function Base32Decode(decode: PBase64Dec; sp: PAnsiChar; rp: PByteArray;
+function Base32Decode(decode: PAnsiCharDec; sp: PAnsiChar; rp: PByteArray;
   len: PtrInt): pointer;
 var
   c, d, e: integer;
@@ -7869,7 +7862,7 @@ end;
 
 const
   // see https://en.wikipedia.org/wiki/Baudot_code
-  Baudot2Char: array[0..63] of AnsiChar =
+  Baudot2Char: TChar64 =
    #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
    #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
 var
@@ -11641,30 +11634,42 @@ begin
 end;
 
 
+procedure SetBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+begin
+  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
+  repeat
+    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
+    dec(i);
+  until i = 0;
+  d[s[0]] := 0;
+end;
+
 procedure InitializeUnit;
 var
   i: PtrInt;
   e: TEmoji;
 begin
   // initialize Base64/Base64Uri/Base58/Base32/Baudot encoding/decoding tables
-  FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
-  FillcharFast(ConvertBase64uriToBin, SizeOf(ConvertBase64uriToBin), 255);
-  FillcharFast(ConvertBase58ToBin, SizeOf(ConvertBase58ToBin), 255);
-  FillcharFast(ConvertBase32ToBin, SizeOf(ConvertBase32ToBin), 255);
-  for i := 0 to high(b64enc) do
-    ConvertBase64ToBin[b64enc[i]] := i;
-  ConvertBase64ToBin['='] := -2; // special value for '='
-  for i := 0 to high(b64urienc) do
-    ConvertBase64uriToBin[b64urienc[i]] := i;
-  for i := 0 to high(b58enc) do
-    ConvertBase58ToBin[b58enc[i]] := i;
-  for i := 0 to high(b32enc) do
-    ConvertBase32ToBin[b32enc[i]] := i;
+  SetBaseDecoder(@b64enc,    @ConvertBase64ToBin,    high(b64enc));
+  SetBaseDecoder(@b64urienc, @ConvertBase64uriToBin, high(b64urienc));
+  SetBaseDecoder(@b58enc,    @ConvertBase58ToBin,    high(b58enc));
+  SetBaseDecoder(@b32enc,    @ConvertBase32ToBin,    high(b32enc));
+  ConvertBase64ToBin['='] := -2; // special value for ending '='
   for i := high(Baudot2Char) downto 0 do
-    if Baudot2Char[i]<#128 then
+    if Baudot2Char[i] < #128 then
       Char2Baudot[Baudot2Char[i]] := i;
   for i := ord('a') to ord('z') do
     Char2Baudot[AnsiChar(i - 32)] := Char2Baudot[AnsiChar(i)]; // A-Z -> a-z
+  Base64EncodeMain     := @Base64EncodeMainPas;
+  Base64DecodeMain     := @Base64DecodeMainPas;
+  Base64MagicRawDecode := @_Base64MagicRawDecode;
+  {$ifdef ASMX64AVXNOCONST} // focus on x86_64 server performance
+  if cfAVX2 in CpuFeatures then
+  begin // our AVX2 asm code is almost 10x faster than the pascal version
+    Base64EncodeMain := @Base64EncodeMainAvx2; // 11.5 GB/s vs 1.3 GB/s
+    Base64DecodeMain := @Base64DecodeMainAvx2; //  8.7 GB/s vs 0.9 GB/s
+  end;
+  {$endif ASMX64AVXNOCONST}
   // HTML/Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
@@ -11688,20 +11693,10 @@ begin
   EMOJI_AFTERDOTS['P'] := eYum;
   EMOJI_AFTERDOTS['s'] := eScream;
   EMOJI_AFTERDOTS['S'] := eScream;
-  // setup internal lists and function wrappers
+  // setup internal compression algorithms
   AlgoSynLZ := TAlgoSynLZ.Create;
   AlgoRleLZ := TAlgoRleLZ.Create;
-  AlgoRle := TAlgoRle.Create;
-  Base64EncodeMain := @Base64EncodeMainPas;
-  Base64DecodeMain := @Base64DecodeMainPas;
-  Base64MagicRawDecode := @_Base64MagicRawDecode;
-  {$ifdef ASMX64AVXNOCONST} // focus on x86_64 server performance
-  if cfAVX2 in CpuFeatures then
-  begin // our AVX2 asm code is almost 10x faster than the pascal version
-    Base64EncodeMain := @Base64EncodeMainAvx2; // 11.5 GB/s vs 1.3 GB/s
-    Base64DecodeMain := @Base64DecodeMainAvx2; //  8.7 GB/s vs 0.9 GB/s
-  end;
-  {$endif ASMX64AVXNOCONST}
+  AlgoRle   := TAlgoRle.Create;
 end;
 
 
