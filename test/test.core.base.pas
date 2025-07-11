@@ -5893,7 +5893,7 @@ begin
   for i := 0 to 1000 do
   begin
     len := i * 5;
-    W := RandomAnsi7(len);
+    W := RandomAnsi7(len, CP_WINANSI);
     CheckEqual(length(W), len);
     lenup100 := len;
     if lenup100 > 100 then

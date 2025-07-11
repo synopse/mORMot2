@@ -368,6 +368,8 @@ var
 
 var
   rmax, r, i: PtrInt;
+  res: TNetResult;
+  raw: integer;
   text: RawUtf8;
   log: ISynLog;
 begin
@@ -378,7 +380,7 @@ begin
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
-    if SystemInfo.dwNumberOfProcessors = 1 then
+    if SystemInfo.dwNumberOfProcessors < 8 then
       Sleep(50); // seems mandatory from LUTI regression tests
     rmax := clientcount - 1;
     streamer := TCrtSocket.Bind(proxy.RtspPort);
@@ -409,6 +411,8 @@ begin
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);
+      if SystemInfo.dwNumberOfProcessors < 8 then
+        Sleep(50); // seems mandatory from LUTI regression tests
       for r := 0 to rmax do
         with req[r] do
         begin
@@ -450,13 +454,17 @@ begin
               'NTAwMDAwDQpBY2NlcHQtTGFuZ3VhZ2U6IGVuLVVTDQpVc2VyLUFnZW50OiBRVFMg'#13#10 +
               'KHF0dmVyPTQuMTtjcHU9UFBDO29zPU1hYyA4LjYpDQoNCg=='); 
           for r := 0 to rmax do
-            test.check(req[r].stream.SockReceiveString =
+          begin
+            text := req[r].stream.SockReceiveString(@res, @raw);
+            test.CheckUtf8(text =
               'DESCRIBE rtsp://tuckru.apple.com/sw.mov RTSP/1.0'#13#10 +
               'CSeq: 1'#13#10 +
               'Accept: application/sdp'#13#10 +
               'Bandwidth: 1500000'#13#10 +
               'Accept-Language: en-US'#13#10 +
-              'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10#13#10);
+              'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10#13#10,
+              'describe res=% raw=%', [ToText(res)^, raw]);
+          end;
         end;
         // stream output should be redirected to the GET request
         for r := 0 to rmax do
@@ -467,11 +475,11 @@ begin
         for r := 0 to rmax do
           with req[r] do
           begin
-            text := get.SockReceiveString;
+            text := get.SockReceiveString(@res, @raw);
             //if log <> nil then
             //  log.Log(sllCustom1, 'RegressionTests % #%/% received %',
             //    [clientcount, r, rmax, text], proxy);
-            test.CheckEqual(text, session);
+            test.CheckUtf8(text = session, 'session res=% raw=%', [ToText(res)^, raw]);
           end;
       end;
       if log <> nil then
