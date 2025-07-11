@@ -3300,8 +3300,9 @@ type
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
-  // - used by thread-safe Random32/RandomBytes, storing 16 bytes per thread - a
-  // stronger algorithm like Mersenne Twister (as used by FPC RTL) requires 5KB
+  // - used by Random32/RandomBytes/Random* function from mormot.core.os
+  // - consumes only 16 bytes per instance - a stronger algorithm like Mersenne
+  // Twister (as used by FPC RTL) requires 5KB
   // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy to initialize the internal state
@@ -3312,8 +3313,33 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     rs1, rs2, rs3, seedcount: cardinal; // stored as 128-bit buffer
-    /// force a random seed of the generator from current system state
-    // - as executed by the Next method at thread startup, and after 2^32 values
+    /// compute the next 32-bit pseudo-random value
+    // - will automatically reseed after around 2^32 generated values, which is
+    // huge but conservative since this generator has a known period of 2^88
+    function Next: cardinal; overload;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// compute the next 32-bit pseudo-random value, in range [0..max-1]
+    function Next(max: cardinal): cardinal; overload;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// compute a 64-bit integer pseudo-random value
+    function NextQWord: QWord;
+    /// compute a 64-bit floating point pseudo-random value in range [0..1)
+    function NextDouble: double;
+    /// XOR some memory buffer with pseudo-random bytes
+    // - when used as sequence generator after SeedGenerator(), dest buffer
+    // should be filled with zeros before the call if you want to use it as
+    // generator, but could be applied on any memory buffer for encryption
+    procedure Fill(dest: pointer; bytes: integer);
+    /// fill some string[0..size] with 7-bit ASCII pseudo-random text
+    procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
+    /// fill some string[0..31] with 7-bit ASCII pseudo-random text
+    procedure FillShort31(var dest: TShort31);
+    /// force a pseudo-random seed of the generator from current system state
+    // - as executed by the Next method at startup, and after 2^32 values, which
+    // is very conservative against Pierre L'Ecuyer's algorithm period of 2^88
+    // - you can specify some additional entropy buffer; note that calling this
+    // function with the same entropy again WON'T seed the generator with the same
+    // sequence (as with RTL's RandomSeed function), but initiate a new one
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray = nil; entropylen: PtrInt = 0);
     /// force a well-defined seed of the generator from a fixed initial point
@@ -3323,48 +3349,17 @@ type
     /// force a well-defined seed of the generator from a buffer initial point
     // - apply crc32c() over the fixedseed buffer to initialize the generator
     procedure SeedGenerator(fixedseed: pointer; fixedseedbytes: integer); overload;
-    /// compute the next 32-bit generated value with no Seed - internal call
+    /// compute the next 32-bit pseudo-random value with no Seed - internal call
     function RawNext: cardinal;
-    /// compute the next 32-bit generated value
-    // - will automatically reseed after around 2^32 generated values, which is
-    // huge but conservative since this generator has a known period of 2^88
-    function Next: cardinal; overload;
-      {$ifdef HASSAFEINLINE}inline;{$endif}
-    /// compute the next 32-bit generated value, in range [0..max-1]
-    function Next(max: cardinal): cardinal; overload;
-      {$ifdef HASSAFEINLINE}inline;{$endif}
-    /// compute a 64-bit integer value
-    function NextQWord: QWord;
-    /// compute a 64-bit floating point value
-    function NextDouble: double;
-    /// XOR some memory buffer with random bytes
-    // - when used as sequence generator after SeedGenerator(), dest buffer
-    // should be filled with zeros before the call if you want to use it as
-    // generator, but could be applied on any memory buffer for encryption
-    procedure Fill(dest: pointer; bytes: integer);
-    /// fill some string[0..size] with 7-bit ASCII random text
-    procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
-    /// fill some string[0..31] with 7-bit ASCII random text
-    procedure FillShort31(var dest: TShort31);
   end;
   PLecuyer = ^TLecuyer;
 
 /// return the 32-bit Pierre L'Ecuyer software generator for the current thread
-// - can be used as an alternative to several Random32 function calls
+// - can be used as an alternative to SharedRandom/Random32 function calls
 function Lecuyer: PLecuyer;
 
 /// internal function used e.g. by TLecuyer.FillShort/FillShort31
 procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
-
-/// seed the thread-specific gsl_rng_taus2 Random32 generator
-// - by default, gsl_rng_taus2 generator is re-seeded every 2^32 values, which
-// is very conservative against the Pierre L'Ecuyer's algorithm period of 2^88
-// - you can specify some additional entropy buffer; note that calling this
-// function with the same entropy again WON'T seed the generator with the same
-// sequence (as with RTL's RandomSeed function), but initiate a new one
-// - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
-// - thread-safe and non-blocking function using a per-thread TLecuyer engine
-procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
 /// cipher/uncipher some memory buffer using a 64-bit seed and Pierre L'Ecuyer's
 // algorithm, and its gsl_rng_taus2 generator
@@ -3373,7 +3368,8 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
 // - will call XorEntropyFromOs256() once at process startup for Intel/AMD,
 // or each time on other CPUs with no RdRand32/Rdtsc opcodes (e.g. on ARM)
-// - the resulting output is to be hashed - e.g. with DefaultHasher128
+// - the resulting output is expected to contain at least 128-bit of true
+// entropy, and is to be hashed - e.g. with DefaultHasher128() by TLecuyer.Seed
 // - execution is fast and safe, but not secure enough for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
 // to the more complete mormot.core.os.pas' XorOSEntropy() function
@@ -10123,11 +10119,6 @@ procedure TLecuyer.FillShort31(var dest: TShort31);
 begin
   Fill(@dest, 32);
   FillAnsiStringFromRandom(@dest, 32);
-end;
-
-procedure Random32Seed(entropy: pointer; entropylen: PtrInt);
-begin
-  _Lecuyer.Seed(entropy, entropylen);
 end;
 
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);

@@ -4605,15 +4605,17 @@ function NewSynLocker: PSynLocker;
 
 type
   /// a thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
-  // - just wrap TLecuyer with a TLighLock
-  // - should not be used, unless may be slightly faster than a threadvar
+  // - just wrap a TLecuyer generator with a TLighLock in a 20-24 bytes structure
+  // - as used by SharedRandom to implement Random32/RandomBytes/... functions
   {$ifdef USERECORDWITHMETHODS}
   TLecuyerThreadSafe = record
   {$else}
   TLecuyerThreadSafe = object
   {$endif USERECORDWITHMETHODS}
   public
+    /// protect the Generator process
     Safe: TLightLock;
+    /// all methods just redirect to this instance, with TLightLock wrapping
     Generator: TLecuyer;
     /// compute the next 32-bit generated value
     function Next: cardinal;
@@ -4625,6 +4627,8 @@ type
     procedure Fill(dest: pointer; count: integer);
     /// fill some string[31] with 7-bit ASCII random text
     procedure FillShort31(var dest: TShort31);
+    /// seed this gsl_rng_taus2 Random32 generator
+    procedure Seed(entropy: pointer; entropylen: PtrInt);
   end;
 
   TThreadIDDynArray = array of TThreadID;
@@ -4698,6 +4702,10 @@ procedure RandomGuid(out result: TGuid); overload;
 /// compute a random UUid value from the RandomBytes() generator and RFC 4122
 function RandomGuid: TGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// seed the global gsl_rng_taus2 Random32/RandomBytes generator
+// - use XorEntropy() and optional entropy/entropylen as derivation source
+procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
 {$ifdef OSPOSIX}
 var
@@ -10638,6 +10646,13 @@ begin
   FillAnsiStringFromRandom(@dest, 32);
 end;
 
+procedure TLecuyerThreadSafe.Seed(entropy: pointer; entropylen: PtrInt);
+begin
+  Safe.Lock;
+  Generator.Seed(entropy, entropylen);
+  Safe.UnLock;
+end;
+
 function Random32: cardinal;
 begin
   result := SharedRandom.Next;
@@ -10707,6 +10722,11 @@ begin
     SharedRandom.Fill(pointer(Dest), CardinalCount shl 2);
 end;
 {$endif PUREMORMOT2}
+
+procedure Random32Seed(entropy: pointer; entropylen: PtrInt);
+begin
+  SharedRandom.Seed(entropy, entropylen);
+end;
 
 
 procedure GlobalLock;
