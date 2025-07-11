@@ -4686,6 +4686,9 @@ function RandomDouble: double;
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 procedure RandomBytes(Dest: PByte; Count: integer);
 
+/// fill a RawByteString with random bytes from the gsl_rng_taus2 generator
+function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
+
 /// fill some string[31] with 7-bit ASCII random text
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 procedure RandomShort31(var dest: TShort31);
@@ -10696,6 +10699,13 @@ procedure RandomBytes(Dest: PByte; Count: integer);
 begin
   if Count > 0 then
     SharedRandom.Fill(pointer(Dest), Count);
+end;
+
+function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
+begin
+  FastSetStringCP(Dest, nil, Count, CodePage);
+  RandomBytes(pointer(Dest), Count);
+  result := pointer(Dest);
 end;
 
 procedure RandomShort31(var dest: TShort31);
