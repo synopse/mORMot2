@@ -3546,13 +3546,13 @@ var
 begin
   // no /dev/random needed for XorEntropy() to avoid endless recursive calls
   QueryPerformanceMicroSeconds(e.d0);
-  e.d1 := e.d1 xor GetTickCount64;
+  e.d1 := e.d1 xor GetTickCount64; // on next runs, AesNiHash128(time) is enough
   DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom));
   {$ifdef OSLINUX}
-  if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit of random from 1 syscall
+  if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
   {$endif OSLINUX}
-  RetrieveSysInfo(si);
+  RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // simple diffusion
 end;
 

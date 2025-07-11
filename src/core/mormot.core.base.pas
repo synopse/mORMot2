@@ -9918,6 +9918,7 @@ begin
   sysutils.CreateGUID(e.h.guid);
 end; // overriden in mormot.core.os.posix.inc to use OS API - but not /dev/urandom
 
+{$ifdef CPUINTEL}
 var
   // 256-bit of random state for forward security - shared by all threads
   _EntropyGlobal: THash256Rec;
@@ -9927,25 +9928,31 @@ var
   lec: PHash128Rec;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
-  {$ifdef CPUINTEL}
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   if _EntropyGlobal.i0 = 0 then // call OS API only once at startup
-  {$endif CPUINTEL}
     XorEntropyFromOs256(_EntropyGlobal); // 256-bit randomness from OS
   XorMemory(e.r[0], _EntropyGlobal.h);
   XorMemory(e.r[1], _EntropyGlobal.l);
-  lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
-  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L;
-  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H;
-  {$ifdef CPUINTEL} // Intel/AMD opcodes are safe enough between calls
-  RdRand32(@e.r[0].c, length(e.r[0].c)); // no-op if cfSSE42 is not available
+  lec := @_Lecuyer;                      // PtrUInt(lec) is genuine per thread
+  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor e.r[1].H;
+  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor e.r[1].L;
+  RdRand32(@e.r[3].c, length(e.r[3].c)); // 128-bit: no-op if no cfSSE42
+  crcblock(@_EntropyGlobal.l, @e.r[3]);  // simple diffusion to move forward
+  crcblock(@_EntropyGlobal.h, @e.r[2]);
   e.r[3].Hi := e.r[3].Hi xor Rdtsc;      // has slightly changed in-between
-  {$else}
-  crcblocks(@e.r[3], @_EntropyGlobal, 2);
-  {$endif CPUINTEL}
-  crcblocks(@_EntropyGlobal.l, @e, 4); // simple diffusion to move forward
-  crcblocks(@_EntropyGlobal.h, @e, 4);
 end;
+{$else}
+procedure XorEntropy(var e: THash512Rec);
+var
+  lec: PHash128Rec;
+begin
+  XorEntropyFromOs256(e.l); // 256-bit randomness from OS
+  lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
+  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor e.r[1].H;
+  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor e.r[1].L;
+  crcblock(@e.r[3], @e.l);
+end;
+{$endif CPUINTEL}
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
 begin

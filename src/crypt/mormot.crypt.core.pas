@@ -7622,22 +7622,23 @@ begin
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from XorEntropyFromOs256 + RdRand + Rdtsc + Lecuyer + thread
+    // 512-bit from XorEntropyFromOs256 + RdRand/Rdtsc + Lecuyer + thread
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
     if Assigned(OpenSslRandBytes) then
+    begin
       OpenSslRandBytes(@data, SizeOf(data));
-    sha3.Update(@data, SizeOf(data));
-    // 512-bit from /dev/urandom or CryptGenRandom system entropy source
+      sha3.Update(@data, SizeOf(data));
+    end;
+    // 512-bit from /dev/urandom or CryptGenRandom operating system PRNG
+    _OSEntropySeed.safe.Lock;
     if _OSEntropySeed.bits.d0 = 0 then
     begin
       // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
       FillSystemRandom(@data, SizeOf(data), {block=}false);
-      _OSEntropySeed.safe.Lock;
       _OSEntropySeed.aes.EncryptInit(data, 128); // for in-place diffusion
       _OSEntropySeed.bits := data;
-      _OSEntropySeed.safe.UnLock;
     end
     else
     begin
@@ -7646,8 +7647,8 @@ begin
       _OSEntropySeed.aes.DoBlocksCtr({iv=}@data, @_OSEntropySeed.bits,
         @_OSEntropySeed.bits, SizeOf(_OSEntropySeed.bits) shr AesBlockShift);
       data := _OSEntropySeed.bits;
-      _OSEntropySeed.safe.UnLock;
     end;
+    _OSEntropySeed.safe.UnLock;
     sha3.Update(@data, SizeOf(data));
     // 512-bit of low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
