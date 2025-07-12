@@ -1103,7 +1103,7 @@ var
   // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
   SystemMemorySize: PtrUInt;
 
-  /// 128-bit of entropy quickly gathered during unit initialization
+  /// 128-bit of entropy quickly gathered during unit/process initialization
   StartupRandom: THash128Rec;
 
 type

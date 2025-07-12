@@ -3540,14 +3540,14 @@ begin
   result := true;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
-procedure _XorEntropyFromOs256(var e: THash256Rec);
+procedure _XorEntropyFromOs256(out e: THash256Rec);
 var
   si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Mac/BSD
 begin
   // no /dev/random needed for XorEntropy() to avoid endless recursive calls
   QueryPerformanceMicroSeconds(e.d0);
-  e.d1 := e.d1 xor GetTickCount64; // on next runs, AesNiHash128(time) is enough
-  DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom));
+  e.d1 := (e.d0 shl 13) xor GetTickCount64;
+  DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom)); // AesNiHash128
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;

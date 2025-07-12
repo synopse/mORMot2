@@ -3312,7 +3312,7 @@ type
   TLecuyer = object
   {$endif USERECORDWITHMETHODS}
   public
-    rs1, rs2, rs3, seedcount: cardinal; // stored as 128-bit buffer
+    rs1, rs2, rs3, seedcount: cardinal; // stored as 128-bit / 16 bytes buffer
     /// compute the next 32-bit pseudo-random value
     // - will automatically reseed after around 2^32 generated values, which is
     // huge but conservative since this generator has a known period of 2^88
@@ -3376,10 +3376,11 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 procedure XorEntropy(var e: THash512Rec);
 
 var
-  /// stub used at startup by XorEntropy() to retrieve 256-bit random from OS
+  /// stub used at startup by XorEntropy() to fill 256-bit from OS random
   // - this default unit with call sysutils.CreateGuid() twice
-  // - mormot.core.os.posix.inc will override it to properly call OS API
-  XorEntropyFromOs256: procedure(var e: THash256Rec);
+  // - mormot.core.os.posix.inc will override it to properly call light OS APIs
+  // - consider rather XorEntropy() XorOSEntropy() or TAesPrng.GetEntropy()
+  XorEntropyFromOs256: procedure(out e: THash256Rec);
 
 /// convert the endianness of a given unsigned 16-bit integer into BigEndian
 function bswap16(a: cardinal): cardinal;
@@ -9905,7 +9906,9 @@ begin
   result := @_Lecuyer;
 end;
 
-procedure _XorEntropyFromOs256(var e: THash256Rec);
+// note: we don't use RTL Random() below because it is not thread-safe
+
+procedure _XorEntropyFromOs256(out e: THash256Rec);
 begin
   sysutils.CreateGUID(e.l.guid); // = direct CoCreateGuid() on Windows
   sysutils.CreateGUID(e.h.guid);
@@ -9920,7 +9923,6 @@ procedure XorEntropy(var e: THash512Rec);
 var
   lec: PHash128Rec;
 begin
-  // note: we don't use RTL Random() here because it is not thread-safe
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   if _EntropyGlobal.i0 = 0 then // call OS API only once at startup
     XorEntropyFromOs256(_EntropyGlobal); // 256-bit randomness from OS
@@ -9938,11 +9940,14 @@ end;
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PHash128Rec;
+  os: THash256Rec; // keep existing (custom) entropy in e
 begin
-  XorEntropyFromOs256(e.l); // 256-bit randomness from OS
-  lec := @_Lecuyer; // PtrUInt(lec) identifies this thread
-  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor e.r[1].H;
-  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor e.r[1].L;
+  XorEntropyFromOs256(os); // 256-bit randomness from OS
+  XorMemory(e.r[0], os.l);
+  XorMemory(e.r[1], os.h);
+  lec := @_Lecuyer;        // PtrUInt(lec) is genuine per thread
+  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor os.d3;
+  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor os.d2;
   crcblock(@e.r[3], @e.l);
 end;
 {$endif CPUINTEL}
