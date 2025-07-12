@@ -3540,20 +3540,20 @@ begin
   result := true;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
-procedure _XorEntropyFromOs256(out e: THash256Rec);
+procedure __Fill256FromOs(out e: THash256Rec);
 var
-  si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Mac/BSD
+  si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
 begin
   // no /dev/random needed for XorEntropy() to avoid endless recursive calls
-  QueryPerformanceMicroSeconds(e.d0);
+  QueryPerformanceMicroSeconds(e.d0);        // fast VDSO calls
   e.d1 := (e.d0 shl 13) xor GetTickCount64;
-  DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom)); // AesNiHash128
+  DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom)); // diffusion
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
   {$endif OSLINUX}
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
-  DefaultHasher128(@e.h, @si, SizeOf(si)); // simple diffusion
+  DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
 end;
 
 const
@@ -5025,7 +5025,7 @@ begin
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
-  XorEntropyFromOs256 := @_XorEntropyFromOs256;
+  _Fill256FromOs    := @__Fill256FromOs;
   {$ifndef NODIRECTTHREADMANAGER}
   // for inlined RTL calls (avoid one level of redirection)
   GetThreadManager(tm);

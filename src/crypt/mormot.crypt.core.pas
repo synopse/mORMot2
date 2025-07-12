@@ -7622,7 +7622,7 @@ begin
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from XorEntropyFromOs256 + RdRand/Rdtsc + Lecuyer + thread
+    // 512-bit from _Fill256FromOs + RdRand/Rdtsc + Lecuyer + thread
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)

@@ -1719,7 +1719,7 @@ type
     function Get32: cardinal; overload; virtual;
     /// retrieve a random 32-bit value
     function Get32(max: cardinal): cardinal; overload;
-    /// retrieve a random floating point value in the [0..1) range
+    /// retrieve a random floating point value in the [0..1) range calling Get32
     function GetDouble: double;
   end;
 

@@ -3366,7 +3366,7 @@ procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
-// - will call XorEntropyFromOs256() once at process startup for Intel/AMD,
+// - will call _Fill256FromOs() once at process startup for Intel/AMD,
 // or each time on other CPUs with no RdRand32/Rdtsc opcodes (e.g. on ARM)
 // - the resulting output is expected to contain at least 128-bit of true
 // entropy, and is to be hashed - e.g. with DefaultHasher128() by TLecuyer.Seed
@@ -3376,11 +3376,11 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 procedure XorEntropy(var e: THash512Rec);
 
 var
-  /// stub used at startup by XorEntropy() to fill 256-bit from OS random
-  // - this default unit with call sysutils.CreateGuid() twice
-  // - mormot.core.os.posix.inc will override it to properly call light OS APIs
+  /// internal stub used by XorEntropy() to quickly get 256-bit of OS entropy
+  // - this default unit with call sysutils.CreateGuid() twice - fine on Windows
+  // - mormot.core.os.posix.inc will override it to properly call fast OS APIs
   // - consider rather XorEntropy() XorOSEntropy() or TAesPrng.GetEntropy()
-  XorEntropyFromOs256: procedure(out e: THash256Rec);
+  _Fill256FromOs: procedure(out e: THash256Rec);
 
 /// convert the endianness of a given unsigned 16-bit integer into BigEndian
 function bswap16(a: cardinal): cardinal;
@@ -9910,7 +9910,7 @@ end;
 
 // note: we don't use RTL Random() below because it is not thread-safe
 
-procedure _XorEntropyFromOs256(out e: THash256Rec);
+procedure __Fill256FromOs(out e: THash256Rec);
 begin
   sysutils.CreateGUID(e.l.guid); // = direct CoCreateGuid() on Windows
   sysutils.CreateGUID(e.h.guid);
@@ -9927,13 +9927,13 @@ var
 begin
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   if _EntropyGlobal.i0 = 0 then // call OS API only once at startup
-    XorEntropyFromOs256(_EntropyGlobal); // 256-bit randomness from OS
+    _Fill256FromOs(_EntropyGlobal); // 256-bit random from OS
   XorMemory(e.r[0], _EntropyGlobal.h);
   XorMemory(e.r[1], _EntropyGlobal.l);
   lec := @_Lecuyer;                      // PtrUInt(lec) is genuine per thread
   e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor e.r[1].H;
   e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor e.r[1].L;
-  RdRand32(@e.r[3].c, length(e.r[3].c)); // 128-bit: no-op if no cfSSE42
+  RdRand32(@e.r[3].c, length(e.r[3].c)); // 128-bit XOR: no-op if no cfSSE42
   crcblock(@_EntropyGlobal.l, @e.r[3]);  // simple diffusion to move forward
   crcblock(@_EntropyGlobal.h, @e.r[2]);
   e.r[3].Hi := e.r[3].Hi xor Rdtsc;      // has slightly changed in-between
@@ -9942,15 +9942,15 @@ end;
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PHash128Rec;
-  os: THash256Rec; // keep existing (custom) entropy in e
+  os: THash256Rec;  // keep existing (custom) entropy in e
 begin
-  XorEntropyFromOs256(os); // 256-bit randomness from OS
+  _Fill256FromOs(os); // 256-bit random from OS
   XorMemory(e.r[0], os.l);
   XorMemory(e.r[1], os.h);
-  lec := @_Lecuyer;        // PtrUInt(lec) is genuine per thread
+  lec := @_Lecuyer; // PtrUInt(lec) is genuine per thread
   e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor os.d3;
   e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor os.d2;
-  crcblock(@e.r[3], @e.l);
+  crcblock(@e.r[3], os.h);
 end;
 {$endif CPUINTEL}
 
@@ -9985,7 +9985,7 @@ begin
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
-    XorEntropy(e); // 512-bit from XorEntropyFromOs256 + RdRand32 + Rdtsc
+    XorEntropy(e); // 512-bit from _Fill256FromOs + RdRand32 + Rdtsc
     DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
     rs1 := rs1 xor h.c0;
     rs2 := rs2 xor h.c1;
@@ -13507,10 +13507,10 @@ begin
   crc32tabInit($82f63b78, crc32ctab); // Castagnoli/iSCSI RFC3720 tables
   crc32tabInit($edb88320, crc32tab);  // zlib/IEEE-802 tables
   // setup minimalistic global functions - overriden by other core units
-  VariantClearSeveral     := @_VariantClearSeveral;
-  SortDynArrayVariantComp := @_SortDynArrayVariantComp;
-  XorEntropyFromOs256     := @_XorEntropyFromOs256;
-  ClassUnit               := @_ClassUnit;
+  VariantClearSeveral      := @_VariantClearSeveral;
+  SortDynArrayVariantComp  := @_SortDynArrayVariantComp;
+  _Fill256FromOs := @__Fill256FromOs;
+  ClassUnit      := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
   {$ifndef ASMINTEL}
