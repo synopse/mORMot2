@@ -3666,25 +3666,26 @@ type
 
 var
   /// 8KB tables used by crc32cfast() function
-  // - created with a polynom diverse from zlib's crc32() algorithm, but
-  // compatible with SSE 4.2 crc32 instruction
+  // - created with the Castagnoli/iSCSI polynom, diverse from zlib/IEEE-802
+  // crc32() algorithm, but compatible with SSE 4.2 and ARMv8 HW instructions,
+  // with better error detection - https://datatracker.ietf.org/doc/html/rfc3385
   // - tables content is created from code in initialization section below
   // - will also be used internally by SymmetricEncrypt and
   // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
   crc32ctab: TCrc32tab;
-  /// 8KB tables used by crc32fast() function
+  /// 8KB tables used by crc32fast() function - i.e. zlib/IEEE-802 polynom
   crc32tab: TCrc32tab;
 
 /// compute CRC32C checksum on the supplied buffer on processor-neutral code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
 // - will use fast x86/x64 asm or efficient pure pascal implementation on ARM
-// - result is not compatible with zlib's crc32() - not the same polynom
+// - result is not compatible with zlib/IEEE-802 crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 4.3 GB/s
 // - you should use crc32c() function instead of crc32cfast() or crc32csse42()
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 /// compute CRC32 checksum on the supplied buffer on processor-neutral code
-// - result is compatible with zlib's crc32() but not with crc32c/crc32cfast()
+// - compatible with zlib/IEEE-802 crc32() but not with crc32c/crc32cfast()
 function crc32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 /// compute CRC32C checksum on the supplied buffer using inlined code
@@ -3745,14 +3746,15 @@ procedure crcblockfast(crc128, data128: PBlock128);
 procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
-  /// compute CRC32C checksum on the supplied buffer
-  // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C has not
-  // same polynom - but will use the fastest mean available, e.g. SSE 4.2 or ARMv8,
-  // achieve up to 16GB/s with the optimized implementation from mormot.crypt.core
+  /// compute CRC32C (Castagnoli/iSCSI) checksum on the supplied buffer
+  // - result is not compatible with zlib/IEEE-802 crc32() - Intel/SCSI crc32c()
+  // has not same polynom - but is reported to have less collisions by RFC3385,
+  // and will use the fastest mean available, e.g. SSE 4.2 or ARMv8, achieving
+  // up to 16GB/s with the optimized implementation from mormot.crypt.core
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher = crc32cfast;
 
-  /// compute CRC32C checksum on one 32-bit unsigned integer
+  /// compute CRC32C (Castagnoli/iSCSI) checksum on one 32-bit unsigned integer
   // - can be used instead of crc32c() for inlined process during data acquisition
   // - doesn't make "crc := not crc" before and after the computation: caller has
   // to start with "crc := cardinal(not 0)" and make "crc := not crc" at the end,
@@ -3776,7 +3778,7 @@ var
   // for macCrc128c or TAesAbstractAead.MacCheckError
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
-  /// compute CRC32 checksum on the supplied buffer
+  /// compute CRC32 (zlib/IEEE-802) checksum on the supplied buffer
   // -  mormot.lib.z.pas will replace with its official (may be faster) version
   crc32: THasher = crc32fast;
 
@@ -13501,14 +13503,14 @@ procedure InitializeUnit;
 begin
   Assert(ord(high(TSynLogLevel)) = 31);
   Assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
-  // initialize internal constants
-  crc32tabInit(2197175160, crc32ctab); // crc32c() reversed polynom
-  crc32tabInit(3988292384, crc32tab);  // crc32() = zlib's reversed polynom
+  // initialize internal constants from crc32 reversed polynom
+  crc32tabInit($82f63b78, crc32ctab); // Castagnoli/iSCSI RFC3720 tables
+  crc32tabInit($edb88320, crc32tab);  // zlib/IEEE-802 tables
   // setup minimalistic global functions - overriden by other core units
-  VariantClearSeveral := @_VariantClearSeveral;
+  VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
-  XorEntropyFromOs256 := @_XorEntropyFromOs256;
-  ClassUnit := @_ClassUnit;
+  XorEntropyFromOs256     := @_XorEntropyFromOs256;
+  ClassUnit               := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
   {$ifndef ASMINTEL}
