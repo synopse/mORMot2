@@ -7606,18 +7606,15 @@ begin
     // XOR with some userland entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
-    sha3.Update(@StartupRandom, SizeOf(StartupRandom));
+    sha3.Update(@StartupEntropy, SizeOf(StartupEntropy));
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
-    sha3.Update(@Executable.Hash.b, SizeOf(Executable.Hash.b));
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     sha3.Update(RawSmbios.Data); // may be '' if has not been retrieved yet
-    sha3.Update(@CpuCache, SizeOf(CpuCache));
-    // 256 random bytes salt, set at startup to avoid hash flooding of AesNiHash
     {$ifdef USEAESNIHASH}
-    sha3.Update(AESNIHASHKEYSCHED_);
+    sha3.Update(AESNIHASHKEYSCHED_); // AesNiHash 128-bit salt
     {$endif USEAESNIHASH}
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
@@ -7632,22 +7629,21 @@ begin
       sha3.Update(@data, SizeOf(data));
     end;
     // 512-bit from /dev/urandom or CryptGenRandom operating system PRNG
-    _OSEntropySeed.safe.Lock;
-    if _OSEntropySeed.bits.d0 = 0 then
+    with _OSEntropySeed do
     begin
-      // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
-      FillSystemRandom(@data, SizeOf(data), {block=}false);
-      _OSEntropySeed.aes.EncryptInit(data, 128); // for in-place diffusion
-      _OSEntropySeed.bits := data;
-    end
-    else
-    begin
-      // 512-bit of perfect forward security using AES-CTR diffusion
-      _OSEntropySeed.aes.DoBlocksCtr({iv=}@data, @_OSEntropySeed.bits,
-        @_OSEntropySeed.bits, SizeOf(_OSEntropySeed.bits) shr AesBlockShift);
-      data := _OSEntropySeed.bits;
+      safe.Lock;
+      if bits.d0 = 0 then
+      begin
+        // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
+        FillSystemRandom(@bits, SizeOf(bits), {block=}false);
+        aes.EncryptInit(bits, 128); // for in-place diffusion
+      end
+      else
+        // 512-bit of perfect forward security using AES-CTR diffusion
+        aes.DoBlocksCtr({iv=}@data, @bits, @bits, length(bits.r));
+      data := bits;
+      safe.UnLock;
     end;
-    _OSEntropySeed.safe.UnLock;
     sha3.Update(@data, SizeOf(data));
     // 512-bit of low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
@@ -11070,7 +11066,7 @@ begin
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
-    XorBlock16(AESNIHASHKEYSCHED, @StartupRandom); // some mormot.core.os salt
+    XorBlock16(AESNIHASHKEYSCHED, @StartupEntropy); // some mormot.core.os salt
     RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // genuine to avoid hash flooding
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
