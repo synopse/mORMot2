@@ -3547,7 +3547,7 @@ begin
   // no /dev/random needed for XorEntropy() to avoid endless recursive calls
   QueryPerformanceMicroSeconds(e.d0);        // fast VDSO calls
   e.d1 := (e.d0 shl 13) xor GetTickCount64;
-  DefaultHasher128(@e.l, @StartupRandom, SizeOf(StartupRandom)); // diffusion
+  DefaultHasher128(@e.l, @StartupEntropy, SizeOf(StartupEntropy)); // diffusion
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
@@ -4829,7 +4829,6 @@ begin
   CpuCache[2].Size     := fpsysctlhwint(HW_L2CACHESIZE);
   CpuCache[3].LineSize := fpsysctlhwint(HW_CACHELINE);
   CpuCache[3].Size     := fpsysctlhwint(HW_L3CACHESIZE);
-  crc32c128(@StartupRandom, @CpuCache, SizeOf(CpuCache));
   CpuCacheSize := CpuCache[3].Size;
   if CpuCacheSize = 0 then
     CpuCacheSize := CpuCache[2].Size;
@@ -4851,7 +4850,7 @@ begin
   GetSystemMacAddress := _GetSystemMacAddress;
   if Sysinfo(@si) = 0 then
     SystemMemorySize := si.totalram * si.mem_unit;
-  crc32c128(@StartupRandom, @si, SizeOf(si));
+  crc32c128(@StartupEntropy, @si, SizeOf(si));
   // https://www.freedesktop.org/software/systemd/man/latest/os-release.html
   FindFileValue('/etc/os-release', 'PRETTY_NAME=', release); // new "standard"
   if release = '' then // oldest Linux Standard Base location
@@ -4903,7 +4902,7 @@ begin
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
   CpuInfoLinux := StringFromFileNoSize('/proc/cpuinfo'); // too big for LoadProcFile
-  crc32c128(@StartupRandom, pointer(CpuInfoLinux), length(CpuInfoLinux));
+  crc32c128(@StartupEntropy, pointer(CpuInfoLinux), length(CpuInfoLinux));
   procid := -1;
   cpuinfo := pointer(CpuInfoLinux);
   while cpuinfo <> nil do
@@ -4993,7 +4992,7 @@ begin
     CpuSockets := 1;
   if fpuname(uts) < 0 then
     FillChar(uts, SizeOf(uts), 0);
-  crc32c128(@StartupRandom, @uts, SizeOf(uts));
+  crc32c128(@StartupEntropy, @uts, SizeOf(uts));
   SystemInfo.uts.release  := uts.Release;
   SystemInfo.uts.sysname  := uts.SysName;
   SystemInfo.uts.version  := uts.Version;
@@ -5041,7 +5040,7 @@ begin
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
   PInt64(@uts)^ := mach_absolute_time;
-  crc32c128(@StartupRandom, @uts, 16); // nanoseconds timestamp
+  crc32c128(@StartupEntropy, @uts, 16); // nanoseconds timestamp
   {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   tpfail := 0;
@@ -5059,10 +5058,10 @@ begin
   else if clock_gettime(CLOCK_MONOTONIC_HIRES, @tp[2]) <> 0 then
     tpfail := 3;
   {$endif OSLINUX}
+  crc32c128(@StartupEntropy, @tp, SizeOf(tp)); // tp[0..2] in nanoseconds
   if tpfail <> 0 then
     raise EOSException.CreateFmt('clock_gettime(%d) failed on %s - errno=%d',
       [tpfail, OSVersionText, fpgeterrno]);
-  crc32c128(@StartupRandom, @tp, SizeOf(tp)); // 3 nanoseconds timestamps
   // direct access to the pthread library if possible (Linux only)
   {$ifdef OSPTHREADSLIB}
   // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both

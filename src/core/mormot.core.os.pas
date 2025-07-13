@@ -8465,6 +8465,11 @@ begin
     Command.Parse;
   end;
   AfterExecutableInfoChanged;
+  crc32c128(@StartupEntropy, @CpuCache, SizeOf(CpuCache)); // some more entropy
+  crc32c128(@StartupEntropy, @Executable.Hash, SizeOf(Executable.Hash));
+  {$ifdef CPUINTELARM}
+  crc32c128(@StartupEntropy, @CpuFeatures, SizeOf(CpuFeatures));
+  {$endif CPUINTELARM}
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
@@ -11222,9 +11227,6 @@ begin
   {$endif ISFPC27}
   GlobalCriticalSection.Init;
   ConsoleCriticalSection.Init;
-  {$ifdef CPUINTELARM}
-  crc32c128(@StartupRandom, @CpuFeatures, SizeOf(CpuFeatures));
-  {$endif CPUINTELARM}
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   InitializeProcessInfo;  // cross-platform info - e.g. User/Host + Executable
   // setup some constants

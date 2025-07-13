@@ -4671,6 +4671,7 @@ var
   i: integer;
   siz: DWord;
 begin
+  // 1. minimal fallback to support of very old 32-bit CPU without SSE2
   {$ifdef ASMX86}
   {$ifndef HASNOSSE2}
   if not (cfSSE2 in CpuFeatures) then // introduced in year 2000 with Pentium 4
@@ -4688,7 +4689,7 @@ begin
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86}
-  // late-binding of newest Windows APIs
+  // 2. late-binding of newest Windows APIs
   DoWin32PWideCharToUtf8 := @_DoWin32PWideCharToUtf8; // or mormot.core.unicode
   h := GetModuleHandle(kernel32);
   GetSystemTimePreciseAsFileTime :=
@@ -4740,14 +4741,13 @@ begin
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
   end;
-  // retrieve system information
+  // 3. retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
   if Assigned(GetNativeSystemInfo) then
     GetNativeSystemInfo(SystemInfo)
   else
     Windows.GetSystemInfo(SystemInfo);
-  crc32c128(@StartupRandom, @SystemInfo, SizeOf(SystemInfo));
   GetMem(P, 10); // ensure that using MIN_PTR_VALUE won't break anything
   if (PtrUInt(P) > MIN_PTR_VALUE) and
      (PtrUInt(SystemInfo.lpMinimumApplicationAddress) <= MIN_PTR_VALUE) then
@@ -4757,10 +4757,8 @@ begin
   mem.dwLength := SizeOf(mem);
   if GlobalMemoryStatusEx(mem) then
     SystemMemorySize := mem.ullTotalPhys;
-  crc32c128(@StartupRandom, @mem, SizeOf(mem));
   OSVersionInfo.dwOSVersionInfoSize := SizeOf(OSVersionInfo);
   GetVersionEx(OSVersionInfo);
-  crc32c128(@StartupRandom, @OSVersionInfo, SizeOf(OSVersionInfo));
   Vers := wUnknown;
   with OSVersionInfo do
     // see https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833
@@ -4840,7 +4838,7 @@ begin
       OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
     end;
   end;
-  // retrieve Software/Hardware information from Registry
+  // 4. retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then
   begin
     WindowsUbr := reg.ReadDword('UBR');
@@ -4902,7 +4900,6 @@ begin
     siz := SizeOf(proc[0]) * length(proc);
     if GetLogicalProcessorInformation(proc[0], @siz) then
     begin
-      crc32c128(@StartupRandom, pointer(proc), siz);
       for i := 0 to (siz div SizeOf(proc[0])) - 1 do
         with proc[i] do
           case Relationship of
@@ -4946,6 +4943,16 @@ begin
     CpuSockets := 1; // e.g. on XP prior to SP3
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
+  // 5. compute some minimal entropy from the just retrieved info
+  {$ifdef CPUINTEL}
+  StartupEntropy.Lo := Rdtsc;      // fast and unpredictable
+  RdRand32(@StartupEntropy.c2, 2); // do nothing if no SSE4.2
+  {$else}
+  QueryPerformanceCounter(StartupEntropy.Lo); // fast entropy via Windows API
+  {$endif CPUINTEL}
+  crc32c128(@StartupEntropy, @SystemInfo, SizeOf(SystemInfo));
+  crc32c128(@StartupEntropy, @mem, SizeOf(mem));
+  crc32c128(@StartupEntropy, @OSVersionInfo, SizeOf(OSVersionInfo));
 end;
 
 procedure FinalizeSpecificUnit;
