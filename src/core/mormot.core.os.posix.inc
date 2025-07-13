@@ -5051,17 +5051,17 @@ begin
   if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp[1]) = 0 then
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE
   else if clock_gettime(CLOCK_MONOTONIC_FAST,  @tp[1]) <> 0 then
-    tpfail := 2;
+    tpfail := tpfail or 2;
   {$ifdef OSLINUX}
   if clock_gettime(CLOCK_MONOTONIC_RAW, @tp[2]) = 0 then
     CLOCK_MONOTONIC_HIRES := CLOCK_MONOTONIC_RAW
   else if clock_gettime(CLOCK_MONOTONIC_HIRES, @tp[2]) <> 0 then
-    tpfail := 3;
+    tpfail := tpfail or 4;
   {$endif OSLINUX}
   crc32c128(@StartupEntropy, @tp, SizeOf(tp)); // tp[0..2] in nanoseconds
   if tpfail <> 0 then
-    raise EOSException.CreateFmt('clock_gettime(%d) failed on %s - errno=%d',
-      [tpfail, OSVersionText, fpgeterrno]);
+    ConsoleErrorWrite(_fmt('clock_gettime(%d) failed on %s - errno=%d',
+      [tpfail, OSVersionText, fpgeterrno])); // process is likely to fail anyway
   // direct access to the pthread library if possible (Linux only)
   {$ifdef OSPTHREADSLIB}
   // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both
