@@ -1212,7 +1212,7 @@ var
   priv: THash256Rec;
   pub: TEccPoint;
   tries: integer;
-  sha: TSha256;
+  kdf: THmacSha256;
 begin
   result := false;
   tries := MAX_TRIES;
@@ -1220,14 +1220,14 @@ begin
     dec(tries);
     if tries = 0 then
       exit;
-    // generate a 256-bit secret key using TAesPrng + OS and SHA-256 diffusion
-    sha.Init;
-    sha.Update(@tries, SizeOf(tries));
-    TAesPrng.Fill(@pub, SizeOf(pub));  // 512-bit from our AES-PRNG
-    sha.Update(@pub, SizeOf(pub));
-    XorOSEntropy(THash512Rec(pub));    // 512-bit from OS entropy sources
-    sha.Update(@pub, SizeOf(pub));
-    sha.Final(priv.b);                 // diffused with three SHA-256 rounds
+    // generate a 256-bit secret key with HMAC-SHA-256 over random sources
+    kdf.Init(@StartupEntropy, SizeOf(StartupEntropy));
+    kdf.Update(@tries, SizeOf(tries)); // salt
+    TAesPrng.Fill(priv.b);   // 256-bit from our AES-PRNG (max key size)
+    kdf.Update(@priv, SizeOf(priv));
+    _Fill256FromOs(priv);    // 256-bit from fast OS entropy sources
+    kdf.Update(@priv, SizeOf(priv));
+    kdf.Done(priv.b);        // apply the HMAC key derivation function
     if _isZero(priv) or
        _equals(priv, _1) or
        _equals(priv, _11) then
