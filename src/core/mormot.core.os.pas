@@ -1104,7 +1104,7 @@ var
   SystemMemorySize: PtrUInt;
 
   /// 128-bit of entropy quickly gathered during unit/process initialization
-  StartupRandom: THash128Rec;
+  StartupEntropy: THash128Rec;
 
 type
   /// used to retrieve version information from any EXE
@@ -8380,7 +8380,7 @@ begin
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
-procedure ComputeExecutableHash;
+procedure AfterExecutableInfoChanged;
 begin
   with Executable do
   begin
@@ -8406,20 +8406,39 @@ end;
 procedure GetExecutableVersion;
 begin
   if Executable.Version.RetrieveInformationFromFileName then
-    ComputeExecutableHash;
+    AfterExecutableInfoChanged;
 end;
 
-procedure InitializeExecutableInformation; // called once at startup
+procedure TrimDualSpaces(var s: RawUtf8);
+var
+  i: PtrInt;
+begin
+  i := 1;
+  repeat
+    i := PosEx('  ', s, i);
+    if i = 0 then
+      break;
+    delete(s, i, 1); // dual spaces -> single space
+  until false;
+  TrimSelf(s);
+end;
+
+procedure InitializeProcessInfo; // called once at startup
 var
   dt: TDateTime;
 begin
-  with Executable do
+  TrimDualSpaces(OSVersionText); // clean InitializeSpecificUnit info
+  TrimDualSpaces(OSVersionInfoEx);
+  {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
+  TrimDualSpaces(CpuInfoText);
+  OSVersionShort := ToTextOSU(OSVersionInt32);
+  with Executable do            // retrieve Executable + Host/User info
   begin
     {$ifdef OSWINDOWS}
     ProgramFileName := ParamStr(0); // RTL seems just fine here
     dt := FileAgeToDateTime(ProgramFileName);
     {$else}
-    ProgramFileName := GetExecutableName(@InitializeExecutableInformation);
+    ProgramFileName := GetExecutableName(@InitializeProcessInfo);
     if ProgramFileName <> '' then
     begin
       dt := FileAgeToDateTime(ProgramFileName);
@@ -8445,13 +8464,13 @@ begin
     Command.ExeDescription := ProgramName;
     Command.Parse;
   end;
-  ComputeExecutableHash;
+  AfterExecutableInfoChanged;
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
 begin
   if Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild) then
-    ComputeExecutableHash; // re-compute if changed
+    AfterExecutableInfoChanged; // re-compute if changed
 end;
 
 
@@ -11193,20 +11212,6 @@ begin
   until false;
 end;
 
-procedure TrimDualSpaces(var s: RawUtf8);
-var
-  i: PtrInt;
-begin
-  i := 1;
-  repeat
-    i := PosEx('  ', s, i);
-    if i = 0 then
-      break;
-    delete(s, i, 1); // dual spaces -> single space
-  until false;
-  TrimSelf(s);
-end;
-
 
 procedure InitializeUnit;
 begin
@@ -11221,12 +11226,8 @@ begin
   crc32c128(@StartupRandom, @CpuFeatures, SizeOf(CpuFeatures));
   {$endif CPUINTELARM}
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
-  TrimDualSpaces(OSVersionText);
-  TrimDualSpaces(OSVersionInfoEx);
-  {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
-  TrimDualSpaces(CpuInfoText);
-  OSVersionShort := ToTextOSU(OSVersionInt32);
-  InitializeExecutableInformation;
+  InitializeProcessInfo;  // cross-platform info - e.g. User/Host + Executable
+  // setup some constants
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';

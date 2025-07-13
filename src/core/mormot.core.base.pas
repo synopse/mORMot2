@@ -13495,15 +13495,17 @@ begin // 256 bytes of code to generate 2 x 8KB lookup tables
       crc := (crc shr 8) xor tab[0, ToByte(crc)];
       tab[n, i] := crc;
     end;
+    if i = 255 then
+      break;
     inc(i);
-  until i > 256;
+  until false;
 end;
 
 procedure InitializeUnit;
 begin
   Assert(ord(high(TSynLogLevel)) = 31);
   Assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
-  // initialize internal constants from crc32 reversed polynom
+  // initialize internal constants from crc32 reversed polynoms
   crc32tabInit($82f63b78, crc32ctab); // Castagnoli/iSCSI RFC3720 tables
   crc32tabInit($edb88320, crc32tab);  // zlib/IEEE-802 tables
   // setup minimalistic global functions - overriden by other core units
