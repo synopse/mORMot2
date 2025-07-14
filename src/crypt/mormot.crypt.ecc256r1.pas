@@ -1221,6 +1221,7 @@ begin
     if tries = 0 then
       exit;
     // generate a 256-bit secret key with HMAC-SHA-256 over random sources
+    // - keys may be ephemeral (in ECDHE) so entropy sources should be fast
     kdf.Init(@StartupEntropy, SizeOf(StartupEntropy));
     kdf.Update(@tries, SizeOf(tries)); // salt
     TAesPrng.Fill(priv.b);   // 256-bit from our AES-PRNG (max key size)

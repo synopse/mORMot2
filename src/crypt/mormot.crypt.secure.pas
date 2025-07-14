@@ -6809,7 +6809,7 @@ type
 
 procedure TCryptRandomSysPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
-  FillSystemRandom(dst, dstlen, length(fName) > 10); // may be blocking
+  FillSystemRandom(dst, dstlen, {allowblocking=}length(fName) > 10);
 end;
 
 

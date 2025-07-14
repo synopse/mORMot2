@@ -7614,7 +7614,7 @@ begin
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     sha3.Update(RawSmbios.Data); // may be '' if has not been retrieved yet
     {$ifdef USEAESNIHASH}
-    sha3.Update(AESNIHASHKEYSCHED_); // AesNiHash 128-bit salt
+    sha3.Update(AESNIHASHKEYSCHED_); // 256 bytes of AesNiHash random state
     {$endif USEAESNIHASH}
     // 512-bit randomness and entropy from mormot.core.base
     SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
