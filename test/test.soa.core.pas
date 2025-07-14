@@ -2138,6 +2138,7 @@ var
   end;
 
 begin
+  CheckEqual(SizeOf(TMvcAction), SizeOf(TServiceCustomAnswer));
   Init(direct);
   Parent := nil;
   Check(ParentDestroyed = false);

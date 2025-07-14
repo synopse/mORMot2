@@ -25,7 +25,6 @@ uses
   mormot.core.log,
   mormot.core.perf,
   mormot.core.search,
-  mormot.core.mustache,
   mormot.core.test,
   mormot.core.interfaces,
   mormot.crypt.secure,
