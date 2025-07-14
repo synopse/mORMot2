@@ -4943,12 +4943,11 @@ begin
     CpuSockets := 1; // e.g. on XP prior to SP3
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
-  // 5. compute some minimal entropy from the just retrieved info
+  // 5. compute some minimal entropy using the just retrieved info
+  CoCreateGuid(StartupEntropy); // very fast, and won't hurt
   {$ifdef CPUINTEL}
-  StartupEntropy.Lo := Rdtsc;      // fast and unpredictable
-  RdRand32(@StartupEntropy.c2, 2); // do nothing if no SSE4.2
-  {$else}
-  QueryPerformanceCounter(StartupEntropy.Lo); // fast entropy via Windows API
+  StartupEntropy.Lo := StartupEntropy.Lo xor Rdtsc; // fast and unpredictable
+  RdRand32(@StartupEntropy.c2, 2);                  // no-op on older CPUs
   {$endif CPUINTEL}
   crc32c128(@StartupEntropy, @SystemInfo, SizeOf(SystemInfo));
   crc32c128(@StartupEntropy, @mem, SizeOf(mem));
