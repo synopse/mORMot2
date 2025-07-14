@@ -3301,7 +3301,7 @@ begin
     Check(pub <> '');
     Check(priv <> '');
     asy.GeneratePem(pub2, priv2, '');
-    NotifyTestSpeed('%.Generate', [asy], 2, 0, @timer, {onlylog=}true);
+    NotifyTestSpeed('%.Generate %', [asy, asy.AlgoName], 2, 0, @timer, {onlylog=}true);
     Check(pub2 <> '');
     Check(priv2 <> '');
     Check(pub <> pub2);
@@ -3764,11 +3764,12 @@ procedure TTestCoreCrypto.Catalog;
 var
   m: TAesMode;
   k, k2: integer;
-  a, i: PtrInt;
+  a, i, rounds, bytes: PtrInt;
   c32, cprev: cardinal;
   d, dprev: double;
   n, h, nprev, aead: RawUtf8;
   r, s: RawByteString;
+  timer: TPrecisionTimer;
   aes: TAesAbstract;
   key: THash256;
   rnd: TCryptRandom;
@@ -3803,15 +3804,21 @@ begin
       CheckUtf8(AesAlgoNameDecode(n, k2) = nil, n);
     end;
   // validate Rnd() High-Level Algorithms Factory
+  TAesPrng.Main.Random32; // warmup and entropy gathering outside timer
   alg := TCryptRandom.Instances;
   for a := 0 to high(alg) do
   begin
     rnd := alg[a] as TCryptRandom;
     NotifyProgress([rnd.AlgoName]);
     Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
+    timer.Start;
     cprev := 0;
     dprev := 0;
-    for i := 1 to 10 do // some system random generators may be slow/blocking
+    bytes := 0;
+    rounds := 100;
+    if PosEx('blocking', rnd.AlgoName) > 0 then
+      rounds := 10; // some system random generators may be slow/blocking
+    for i := 1 to rounds do
     begin
       c32 := rnd.Get32;
       CheckUtf8(c32 <> cprev, rnd.AlgoName);
@@ -3823,7 +3830,9 @@ begin
       dprev := d;
       n := rnd.Get(i); // up to 10 bytes is fine on slow/blocking OS random API
       CheckEqual(length(n), i);
+      inc(bytes, 12 + i);
     end;
+    NotifyTestSpeed('%', [rnd.AlgoName], 0, bytes, @timer, {onlylog=}true);
   end;
   // validate Hash() High-Level Algorithms Factory
   alg := TCryptHasher.Instances;
