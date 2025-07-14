@@ -93,6 +93,7 @@ type
     fFactoryErrorIndex: integer;
     fViewFlags: TMvcViewFlags;
     fViewGenerationTimeTag: RawUtf8;
+    procedure NotifyContentChanged; virtual;
     procedure SetViewTemplateFolder(const aFolder: TFileName);
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: integer; const Context: variant;
@@ -193,6 +194,7 @@ type
       FileAgeCheckTick: Int64;
       Flags: TMvcViewFlags;
     end;
+    procedure NotifyContentChanged; override;
     function GetRenderer(methodIndex: integer; var view: TMvcView): TSynMustache;
     /// search for template files in ViewTemplateFolder
     function FindTemplates(const Mask: TFileName): TFileNameDynArray; virtual;
@@ -575,6 +577,8 @@ type
     /// link this runner class to a specified MVC application
     constructor Create(aApplication: TMvcApplication;
       aViews: TMvcViewsAbstract = nil); reintroduce;
+    /// method called to flush the caching mechanism for all MVC commands
+    procedure NotifyContentChanged; override;
     /// method called to flush the caching mechanism for a MVC command
     procedure NotifyContentChangedForMethod(aMethodIndex: integer); override;
     /// defines the caching policy for a given MVC command
@@ -922,6 +926,11 @@ begin
   result := StringFromFile(fViewStaticFolder + aFileName);
 end;
 
+procedure TMvcViewsAbstract.NotifyContentChanged;
+begin
+  // TMvcViewsMustache.NotifyContentChanged will reload all partials
+end;
+
 
 { Customization of HTML CSS tables }
 
@@ -1174,10 +1183,8 @@ constructor TMvcViewsMustache.Create(aInterface: PRttiInfo;
   const aParameters: TMvcViewsMustacheParameters; aLogClass: TSynLogClass);
 var
   m, i: PtrInt;
-  folder, LowerExt: TFileName;
+  folder, ext: TFileName;
   files: TFileNameDynArray;
-  partial: TSynMustache;
-  partialName: RawUtf8;
   info: variant;
 begin
   inherited Create(aInterface, aLogClass);
@@ -1196,9 +1203,9 @@ begin
      not DirectoryExists(folder) then
     ForceDirectories(folder);
   if aParameters.CsvExtensions = '' then
-    LowerExt := ',html,json,css,'
+    ext := ',html,json,css,'
   else
-    LowerExt := ',' + SysUtils.LowerCase(aParameters.CsvExtensions) + ',';
+    ext := ',' + SysUtils.LowerCase(aParameters.CsvExtensions) + ',';
   SetLength(fViews, fFactory.MethodsCount);
   for m := 0 to fFactory.MethodsCount - 1 do
     if MethodHasView(fFactory.Methods[m]) then
@@ -1215,10 +1222,11 @@ begin
             ShortFileName := files[i];
             FileExt := SysUtils.LowerCase(
               copy(ExtractFileExt(ShortFileName), 2, 100));
-            if Pos(',' + FileExt + ',', LowerExt) > 0 then
+            if Pos(',' + FileExt + ',', ext) > 0 then
               // found a template with the right extension
               break;
           end;
+          // if no exact extension match, return last matching 'MethodName.*'
           FileName := ViewTemplateFolder + ShortFileName;
           ContentType := GetMimeContentType('', ShortFileName);
         end
@@ -1228,6 +1236,7 @@ begin
             '%.Create: Missing View file in %', [self, SearchPattern]);
           if aParameters.ExtensionForNotExistingTemplate <> '' then
           begin
+            // create void template content with methods information as comment
             ShortFileName :=
               MethodName + aParameters.ExtensionForNotExistingTemplate;
             FileName := ViewTemplateFolder + ShortFileName;
@@ -1243,6 +1252,17 @@ begin
   fViewHelpers := aParameters.Helpers;
   // get partials
   fViewPartials := TSynMustachePartials.Create;
+  NotifyContentChanged;
+end;
+
+procedure TMvcViewsMustache.NotifyContentChanged;
+var
+  i: PtrInt;
+  files: TFileNameDynArray;
+  partial: TSynMustache;
+  partialName: RawUtf8;
+begin
+  fViewPartials.List.Clear;
   files := FindTemplates('*.partial');
   for i := 0 to length(files) - 1 do
   begin
@@ -1905,9 +1925,16 @@ begin
   inherited;
 end;
 
+procedure TMvcRunWithViews.NotifyContentChanged;
+begin
+  inherited NotifyContentChanged; // call all NotifyContentChangedForMethod()
+  if Assigned(fViews) then
+    fViews.NotifyContentChanged;
+end;
+
 procedure TMvcRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
 begin
-  inherited;
+  inherited NotifyContentChangedForMethod(aMethodIndex); // do nothing
   with fCacheLocker.ProtectMethod do
     if cardinal(aMethodIndex) < cardinal(Length(fCache)) then
       with fCache[aMethodIndex] do
