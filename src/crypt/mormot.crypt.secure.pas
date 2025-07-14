@@ -6832,6 +6832,44 @@ begin
   result := SharedRandom.Next;
 end;
 
+{$ifdef CPUINTEL}
+
+{ TCryptRandomRdRand }
+
+type
+  TCryptRandomRdRand = class(TCryptRandom) // 'rnd-rdrand'
+  public
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+    function Get32: cardinal; override;
+  end;
+
+procedure TCryptRandomRdRand.Get(dst: pointer; dstlen: PtrInt);
+var
+  c: cardinal;
+begin
+  c := dstlen shr 2;
+  RdRand32(dst, c);
+  dstlen := dstlen and 3;
+  if dstlen = 0 then
+    exit;
+  inc(PCardinal(dst), c);
+  c := RdRand32; // last 1..3 bytes
+  repeat
+    PByte(dst)^ := PByte(dst)^ xor c;
+    dec(dstlen);
+    if dstlen = 0 then
+      exit;
+    c := c shr 8;
+    inc(PByte(dst));
+  until false;
+end;
+
+function TCryptRandomRdRand.Get32: cardinal;
+begin
+  result := RdRand32;
+end;
+
+{$endif CPUINTEL}
 
 { TCryptHash }
 
@@ -8789,6 +8827,10 @@ begin
     // register mormot.crypt.core engines into our factories
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
     TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
+    {$ifdef CPUINTEL}
+    if cfRAND in CpuFeatures then
+      TCryptRandomRdRand.Implements('rnd-rdrand');
+    {$endif CPUINTEL}
     TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomSysPrng.Implements('rnd-system,rnd-systemblocking');
     TCryptHasherInternal.Implements(HashAlgosText);
