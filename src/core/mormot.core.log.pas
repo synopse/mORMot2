@@ -4861,7 +4861,7 @@ begin
     FreeAndNilSafe(fWriterStream);
   finally
     fFlags := [];
-    exclude(fPendingFlags, pendingRotate); // reset it after FlushFinal
+    exclude(fPendingFlags, pendingRotate); // reset it (after FlushFinal)
     GlobalThreadLock.UnLock;
   end;
 end;
@@ -5972,7 +5972,7 @@ end;
 
 procedure TSynLog.ComputeFileName;
 var
-  timeNow, hourRotate, timeBeforeRotate: TDateTime;
+  hourRotate, beforeRotate: TDateTime;
   fn: TFileName;
   i, j: PtrInt;
   dup: boolean;
@@ -5992,7 +5992,7 @@ begin
         Utf8ToFileName(ProgramName, fn);
   // prepare for any file rotation
   fFileRotationBytes := 0;
-  fNextFileRotateDailyTix10 := 0;
+  fNextFileRotateDailyTix10 := 0; // checked in OnFlushToStrem
   if fFamily.fRotateFileCount > 0 then
   begin
     if fFamily.fRotateFileSizeKB > 0 then
@@ -6000,12 +6000,11 @@ begin
     if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
       hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
-      timeNow := Time; // local time hour
-      if hourRotate < timeNow then
-        hourRotate := hourRotate + 1; // will happen tomorrow
-      timeBeforeRotate := hourRotate - timeNow;
+      beforeRotate := hourRotate - Time; // use local time hour
+      if beforeRotate <= 1 / MinsPerDay then // hour passed, or within 1 minute
+        beforeRotate := beforeRotate + 1; // trigger tomorrow
       fNextFileRotateDailyTix10 := (GetTickCount64 +
-        trunc(timeBeforeRotate * MilliSecsPerDay)) shr MilliSecsPerSecShl;
+        trunc(beforeRotate * MilliSecsPerDay)) shr MilliSecsPerSecShl;
     end;
   end;
   // file name should include current timestamp if no rotation is involved
@@ -6122,12 +6121,12 @@ begin
     tix10 := GetTickCount64 shr MilliSecsPerSecShl; // about 1 second resolution
     fNextFlushTix10 := tix10 + flushsec;
   end;
-  // check for any PerformRotation (delayed in TSynLog.LogEnterFmt)
+  // check for any PerformRotation - delayed in TSynLog.LogEnterFmt
   if not (pendingRotate in fPendingFlags) then
-    if (fFileRotationBytes > 0) and
+    if (fFileRotationBytes > 0) and // size to rotate?
        (fWriter.WrittenBytes + PtrUInt(Len) > PtrUInt(fFileRotationBytes)) then
       include(fPendingFlags, pendingRotate)
-    else if fNextFileRotateDailyTix10 <> 0 then
+    else if fNextFileRotateDailyTix10 <> 0 then // time to rotate?
     begin
       if tix10 = 0 then
         tix10 := GetTickCount64 shr MilliSecsPerSecShl;
