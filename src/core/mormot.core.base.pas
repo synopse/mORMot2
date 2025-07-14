@@ -9927,7 +9927,7 @@ var
 begin
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   if _EntropyGlobal.i0 = 0 then // call OS API only once at startup
-    _Fill256FromOs(_EntropyGlobal); // 256-bit random from OS
+    _Fill256FromOs(_EntropyGlobal); // fast 256-bit random from OS
   XorMemory(e.r[0], _EntropyGlobal.h);
   XorMemory(e.r[1], _EntropyGlobal.l);
   lec := @_Lecuyer;                      // PtrUInt(lec) is genuine per thread
@@ -9944,13 +9944,13 @@ var
   lec: PHash128Rec;
   os: THash256Rec;  // keep existing (custom) entropy in e
 begin
-  _Fill256FromOs(os); // 256-bit random from OS
+  _Fill256FromOs(os); // fast 256-bit random from OS
   XorMemory(e.r[0], os.l);
   XorMemory(e.r[1], os.h);
   lec := @_Lecuyer; // PtrUInt(lec) is genuine per thread
   e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor os.d3;
   e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor os.d2;
-  crcblock(@e.r[3], os.h);
+  crcblock(@e.r[3], @os.h);
 end;
 {$endif CPUINTEL}
 

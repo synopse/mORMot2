@@ -3545,9 +3545,14 @@ var
   si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
 begin
   // no /dev/random needed for XorEntropy() to avoid endless recursive calls
-  QueryPerformanceMicroSeconds(e.d0);        // fast VDSO calls
-  e.d1 := (e.d0 shl 13) xor GetTickCount64;
-  DefaultHasher128(@e.l, @StartupEntropy, SizeOf(StartupEntropy)); // diffusion
+  {$ifdef OSDARWIN} // OSX has no clock_gettime() API
+  e.d0 := mach_absolute_time;
+  e.d1 := mach_continuous_time;
+  {$else}
+  if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
+    clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
+  {$endif OSDARWIN}
+  crcblock(@e.l, @StartupEntropy); // 128-bit entropy from nanosecond timestamp
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
