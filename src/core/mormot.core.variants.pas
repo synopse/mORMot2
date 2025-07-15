@@ -833,7 +833,7 @@ type
   private
     Curr, After: PVariant;
   public
-    procedure Init(Values: PVariantArray; Count: PtrUInt); inline;
+    procedure Init(Values: PVariantArray; Count: PtrUInt);
     procedure Void; inline;
     function MoveNext: boolean; inline;
   end;
@@ -5825,26 +5825,27 @@ end;
 
 procedure TDocVariantEnumeratorState.Void;
 begin
-  After := nil;
-  Curr := nil;
+  Curr := @self; // faster than := nil
+  After := @self;
 end;
 
 procedure TDocVariantEnumeratorState.Init(Values: PVariantArray; Count: PtrUInt);
 begin
-  if Count = 0 then
-    Void
-  else
+  if Count <> 0 then
   begin
     Curr := pointer(Values);
     After := @Values[Count];
     dec(Curr);
+    exit;
   end;
+  Curr := @self;
+  After := @self;
 end;
 
 function TDocVariantEnumeratorState.MoveNext: boolean;
 begin
    inc(Curr);
-   result := PtrUInt(Curr) < PtrUInt(After); // Void = nil+1<nil = false
+   result := PtrUInt(Curr) < PtrUInt(After); // Void = self+1<self = false
 end;
 
 { TDocVariantFieldsEnumerator }
@@ -7282,18 +7283,12 @@ end;
 
 function TDocVariantData.Items: TDocVariantItemsEnumerator;
 begin
-  if VCount = 0 then
-    result{%H-}.State.Void
-  else
-    result.State.Init(pointer(Values), VCount); // arrays or objects
+  result.State.Init(pointer(Values), VCount); // arrays or objects
 end;
 
 function TDocVariantData.Objects: TDocVariantObjectsEnumerator;
 begin
-  if VCount = 0 then
-    result{%H-}.State.Void
-  else
-    result.State.Init(pointer(Values), VCount); // arrays or objects
+  result.State.Init(pointer(Values), VCount); // arrays or objects
 end;
 
 function TDocVariantData.Fields: TDocVariantFieldsEnumerator;
@@ -7309,8 +7304,8 @@ begin
   if IsArray or
      (VCount = 0) then
   begin
-    result.Curr := nil;
-    result.After := nil;
+    result.Curr := @self;
+    result.After := @self;
   end
   else
   begin
