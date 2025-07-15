@@ -1440,11 +1440,12 @@ var
   r, a, w: PBigInt;
   s, n, attempt, bak: integer;
   v: PtrUInt;
-  gen: PLecuyer; // a generator with a period of 2^88 is strong enough
 begin
-  result := false;
   // first check if not a factor of a well-known small prime
-  if IsZero or
+  result := (Size = (32 div HALF_BITS)) and
+            (PCardinal(Value)^ = 65537); // common Exponent from FIPS 5.4 (e)
+  if result or // result = true for common 65537 prime > BIGINT_PRIMES[]
+     IsZero or
      (Iterations <= 0) or
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
@@ -1458,7 +1459,6 @@ begin
     // compute s = lsb(w) and r = w shr s
     s := r.FindMinBit;
     r.ShrBits(s);
-    gen := Lecuyer;
     while Iterations > 0 do
     begin
       dec(Iterations);
@@ -1471,9 +1471,9 @@ begin
         if Size > 2 then
         begin
           repeat
-            n := gen^.Next(Size);
+            n := Random32(Size);
           until n > 1;
-          gen^.Fill(@a^.Value[0], n * HALF_BYTES);
+          SharedRandom.Fill(@a^.Value[0], n * HALF_BYTES); // Lecuyer generator
           a^.Value[0] := a^.Value[0] or 1; // odd
           a^.Size := n;
           a^.Trim;
@@ -1481,9 +1481,9 @@ begin
         else
         begin
           if Size = 1 then
-            v := gen^.Next(Value[0]) // ensure a<w
+            v := Random32(Value[0]) // ensure a<w
           else
-            v := gen^.Next; // only lower HalfUInt is enough for a<w
+            v := Random32; // only lower HalfUInt is enough for a<w
           a^.Value[0] := v or 1; // odd
           a^.Size := 1;
         end;
