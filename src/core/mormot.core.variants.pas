@@ -9721,7 +9721,7 @@ end;
 function TDocVariantData.GetObjectExistingByName(
   const aName: RawUtf8): PDocVariantData;
 begin
-  result := GetDocVariantExistingByName(aName, dvArray);
+  result := GetDocVariantExistingByName(aName, {notmatching=}dvArray);
 end;
 
 function TDocVariantData.GetObjectOrAddByName(
@@ -9733,7 +9733,7 @@ end;
 function TDocVariantData.GetArrayExistingByName(
   const aName: RawUtf8): PDocVariantData;
 begin
-  result := GetDocVariantExistingByName(aName, dvObject);
+  result := GetDocVariantExistingByName(aName, {notmatching=}dvObject);
 end;
 
 function TDocVariantData.GetArrayOrAddByName(

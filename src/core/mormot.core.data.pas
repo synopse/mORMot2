@@ -6403,7 +6403,7 @@ begin
     Dest.WriteVar(Data^.vAny, length(UnicodeString(Data^.vAny)) * 2)
   {$endif HASVARUSTRING}
   else
-    _BS_VariantComplex(pointer(Data), Dest);
+    _BS_VariantComplex(pointer(Data), Dest); // redirect to _VariantSaveJson()
   result := SizeOf(Data^);
 end;
 

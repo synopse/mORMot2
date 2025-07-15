@@ -8150,7 +8150,7 @@ begin
   len := Utf8TruncatedLength(P, len, destsize - (destbuffer - start) - 3);
   if not IsAnsiCompatible(P, len) then
   begin
-    PInteger(destbuffer)^ := BOM_UTF8;
+    PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior on POSIX :(
     inc(destbuffer, 3);
   end;
   MoveFast(P^, destbuffer^, len);

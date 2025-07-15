@@ -676,7 +676,7 @@ end;
 {$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
 function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 begin
-  result := SysUtils.AnsiCompareFileName(S1,S2);
+  result := SysUtils.AnsiCompareFileName(S1, S2);
 end;
 {$endif ISDELPHI20062007}
 

@@ -8631,7 +8631,7 @@ begin
     Res.Text := Res.TempRawUtf8;
   end
   else
-    Res.Text := @Res.Temp; // use stack buffer
+    Res.Text := @Res.Temp; // we can use the 24 bytes stack buffer
   Res.Len := Len;
 end;
 
