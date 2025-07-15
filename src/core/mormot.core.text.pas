@@ -1976,7 +1976,7 @@ function RandomWinAnsi(CharCount: integer): WinAnsiString;
 
 /// create a temporary UTF-8 string random content, using WinAnsi
 // (code page 1252) content
-// - CharCount is the number of random WinAnsi chars, so it is possible that
+// - CharCount is the number of random WinAnsi chars, so it is very likely that
 // length(result) > CharCount once encoded into UTF-8
 function RandomUtf8(CharCount: integer): RawUtf8;
 
@@ -9866,8 +9866,16 @@ begin
 end;
 
 function RandomUtf8(CharCount: integer): RawUtf8;
+var
+  win: TSynTempBuffer;
+  i: PtrInt;
+  R: PByteArray;
 begin
-  result := WinAnsiToUtf8(RandomWinAnsi(CharCount));
+  R := win.Init(CharCount);
+  for i := 0 to CharCount - 1 do
+    R[i] := (R[i] and 127) + 32; // may include some WinAnsi accentuated chars
+  WinAnsiConvert.AnsiBufferToRawUtf8(win.buf, CharCount, result);
+  win.Done;
 end;
 
 function RandomUnicode(CharCount: integer): SynUnicode;
