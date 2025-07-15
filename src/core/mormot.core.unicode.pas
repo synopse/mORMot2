@@ -3081,8 +3081,15 @@ begin
   begd := dest;
   endSource := source + sourceBytes;
   endSourceBy4 := endSource - 4;
-  if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
-     (source <= endSourceBy4) then
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  if (PtrUInt(source) and 3 = 0) and
+  {$else}
+  {$ifdef OSWINDOWS}
+  if (source <= endSourceBy4) and
+     (PCardinal(source)^ and $00ffffff = BOM_UTF8) then
+    inc(source, 3); // ignore any UTF-8 BOM (may appear on Windows)
+  {$endif OSWINDOWS}
+  if {$endif} (source <= endSourceBy4) then
     repeat // handle 7-bit ASCII chars, by quad
       c := PCardinal(source)^;
       if c and $80808080 <> 0 then
@@ -4448,8 +4455,15 @@ begin
   // first handle trailing 7-bit ASCII chars, by quad (Sha optimization)
   srcEnd := Source + SourceChars;
   srcEndBy4 := srcEnd - 4;
-  if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-     (Source <= srcEndBy4) then
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  if (PtrUInt(Source) and 3 = 0) and
+  {$else}
+  {$ifdef OSWINDOWS}
+  if (Source <= srcEndBy4) and
+     (PCardinal(Source)^ and $00ffffff = BOM_UTF8) then
+    inc(Source, 3); // ignore any UTF-8 BOM (may appear on Windows)
+  {$endif OSWINDOWS}
+  if {$endif} (Source <= srcEndBy4) then
     repeat
       c := PCardinal(Source)^;
       if c and $80808080 <> 0 then
