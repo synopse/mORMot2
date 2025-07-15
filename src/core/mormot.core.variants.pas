@@ -1502,7 +1502,7 @@ type
     // ! // output  1  2  3  4
     function Items: TDocVariantItemsEnumerator; overload; inline;
     /// a "for .. dv.Items() do" enumerator for an array sub-property
-    // - document should be an object, with aName property as array of objects
+    // - document should be an object, with aName property as array
     function Items(const aName: RawUtf8): TDocVariantItemsEnumerator; overload;
     /// an enumerator able to compile "for .. dv.Objects do" for array of objects
     // - returns all Values[] of a document array which are a TDocVariantData
@@ -1516,7 +1516,7 @@ type
     // ! // output {"a":1,"b":1} and {"a":2,"b":2} only
     // ! // (ignoring 1 and "no object" items)
     function Objects: TDocVariantObjectsEnumerator; overload; inline;
-    /// a "for .. dv.Objects() do" enumerator for an array of objects property
+    /// a "for .. dv.Objects() do" enumerator for an array of objects sub-property
     // - document should be an object, with aName property as array of objects
     function Objects(const aName: RawUtf8): TDocVariantObjectsEnumerator; overload;
     {$endif HASITERATORS}
@@ -3079,7 +3079,7 @@ type
 
   /// low-level Enumerator as returned by IDocList.Objects
   // - warning: weak reference to the main IDocList/IDocDict, so you need to
-  // explicitly call IDocDict.Copy to use outside of the loop
+  // explicitly call IDocDict.Copy to use any returned value outside of the loop
   TDocObjectEnumerator = record
   private
     CurrDict: IDocDict; // a single instance reused during whole iteration
@@ -5832,7 +5832,7 @@ end;
 
 procedure TDocVariantEnumeratorState.Void;
 begin
-  Curr := @self; // faster than := nil
+  Curr := @self; // faster than := nil so that MoveNext = false
   After := @self;
 end;
 
@@ -5845,7 +5845,7 @@ begin
     dec(Curr);
     exit;
   end;
-  Curr := @self;
+  Curr := @self; // so that MoveNext = false
   After := @self;
 end;
 
@@ -7321,7 +7321,7 @@ begin
   if IsArray or
      (VCount = 0) then
   begin
-    result.Curr := @self;
+    result.Curr := @self; // so that MoveNext = false
     result.After := @self;
   end
   else

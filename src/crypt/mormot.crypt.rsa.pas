@@ -1422,7 +1422,7 @@ var
   i: PtrInt;
 begin
   if BIGINT_PRIMES[high(BIGINT_PRIMES)] = 0 then // should equal 17989
-    ComputeAllPrimes; // delayed initialization
+    ComputeAllPrimes; // delayed initialization - thread safe by design
   if not IsZero then
   begin
     result := true;
