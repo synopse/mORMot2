@@ -958,8 +958,9 @@ type
   TKind = (
     space, comma, dot, question, paragraph);
 const
-  bla: array[0..7] of TShort3 = (
-    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
+  bla: array[0 .. 15] of TShort3 = (
+    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo',
+    'cha', 'che', 'chi', 'cho', 'chu', 'cha', 'chi', 'cho');
   endKind = [dot, paragraph, question];
 var
   n: integer;
@@ -970,13 +971,12 @@ begin
   last := paragraph;
   while WordCount > 0 do
   begin
-    rnd := Random32; // get 32 bits of randomness for up to 4 words per loop
-    for n := 0 to rnd and 3 do
-    begin
-      // consume up to 4*5 = 20 bits from rnd
-      rnd := rnd shr 2;
-      PCardinal(@s)^ := PCardinal(@bla[rnd and 7])^;
-      rnd := rnd shr 3;
+    rnd := Random32;  // get 32 bits of randomness for up to 5 words per loop
+    n := (rnd and 3) + 2;  // n = 2..5
+    rnd := rnd shr 2;      // consume 2 bits
+    repeat
+      PCardinal(@s)^ := PCardinal(@bla[rnd and 15])^;
+      rnd := rnd shr 4;    // consume up to 5*4 = 20 bits from rnd
       if last in endKind then
       begin
         last := space;
@@ -985,10 +985,13 @@ begin
       WR.AddShorter(s);
       WR.AddDirect(' ');
       dec(WordCount);
-    end;
+      if WordCount = 0 then
+        break;
+      dec(n);
+    until n = 0;
     WR.CancelLastChar(' ');
-    case rnd and 127 of // consume 7 bits
-      0..4:
+    case rnd and 127 of // consume 7 bits from rnd (total up to 29 bits)
+      0 .. 4:
         begin
           if RandomInclude <> '' then
           begin
@@ -997,15 +1000,15 @@ begin
           end;
           last := space;
         end;
-      5..65:
+      5 .. 50:
         last := space;
-      66..90:
+      51 .. 90:
         last := comma;
-      91..105:
+      91 .. 105:
         last := dot;
-      106..115:
+      106 .. 115:
         last := question;
-      116..127:
+      116 .. 127:
         if NoLineFeed then
           last := dot
         else
@@ -1026,10 +1029,7 @@ begin
   end;
   if (LastPunctuation <> ' ') and
      not (last in endKind) then
-  begin
-    WR.AddDirect('b', 'l', 'a');
-    WR.AddDirect(LastPunctuation);
-  end;
+    WR.AddDirect('b', 'l', 'a', LastPunctuation);
 end;
 
 function TSynTestCase.DownloadFile(const uri: RawUtf8;
