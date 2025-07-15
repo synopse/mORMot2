@@ -12641,25 +12641,24 @@ end;
 
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;
 begin
-  with VarDataFromVariant(PVariant(VarData)^)^ do
-    result := (cardinal(VType) and cardinal(not varByRef)) <= varNull;
+  result := (cardinal(VarDataFromVariant(PVariant(VarData)^)^.VType) and
+             cardinal(not varByRef)) <= varNull;
 end;
 
 function VarIsEmptyOrNull(const V: Variant): boolean;
 begin
-  with VarDataFromVariant(V)^ do
-    result := (cardinal(VType) and cardinal(not varByRef)) <= varNull;
+  result := (cardinal(VarDataFromVariant(V)^.VType) and
+             cardinal(not varByRef)) <= varNull;
 end;
 
 function VarIsString(const V: Variant): boolean;
 begin
-  with VarDataFromVariant(V)^ do
-    case cardinal(VType) and cardinal(not varByRef) of
-      {$ifdef HASVARUSTRING} varUString, {$endif} varString, varOleStr:
-     result := true;
-    else
-      result := false;
-    end;
+  case cardinal(VarDataFromVariant(V)^.VType) and cardinal(not varByRef) of
+    {$ifdef HASVARUSTRING} varUString, {$endif} varString, varOleStr:
+   result := true;
+  else
+    result := false;
+  end;
 end;
 
 function SetVariantUnRefSimpleValue(const Source: variant;
@@ -12781,8 +12780,8 @@ var
   vd: PVarData;
   i64: Int64;
 begin
-  vd := VarDataFromVariant(V);
   result := true;
+  vd := VarDataFromVariant(V);
   case cardinal(vd^.VType) of
     varEmpty,
     varNull:
@@ -12821,8 +12820,8 @@ var
   vd: PVarData;
   tmp: TVarData;
 begin
-  vd := VarDataFromVariant(V);
   result := true;
+  vd := VarDataFromVariant(V);
   case cardinal(vd^.VType) of
     varDouble,
     varDate:
@@ -12976,12 +12975,14 @@ begin
 end;
 
 procedure VariantStringToUtf8(const V: Variant; var result: RawUtf8);
+var
+  vd: PVarData;
 begin
-  with VarDataFromVariant(V)^ do
-    if cardinal(VType) = varString then
-      result := RawUtf8(VString)
-    else
-      result := '';
+  vd := VarDataFromVariant(V);
+  if cardinal(vd^.VType) = varString then
+    result := RawUtf8(vd^.VString)
+  else
+    result := '';
 end;
 
 function VariantStringToUtf8(const V: Variant): RawUtf8;
