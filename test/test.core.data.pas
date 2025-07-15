@@ -2583,6 +2583,7 @@ begin
     a := Random32(maxInt);
     r := RandomDouble;
     U := RandomUtf8(i);
+    Check(length(U) >= i);
     J := JsonEncode(['a', a, 'r', r, 'u', U]);
     check(IsValidJson(J));
     P := nil;
@@ -6967,6 +6968,7 @@ begin
   begin
     j := i * 5; // circumvent weird FPC code generation bug in -O2 mode
     s := RandomUtf8(j);
+    Check(length(s) >= j);
     CheckEqual(UrlDecode(UrlEncode(s)), s, s);
   end;
   utf := BinToBase64Uri(@Guid, SizeOf(Guid));
@@ -7037,6 +7039,7 @@ begin
     CheckEqual(UrlDecodeName(t), s);
     CheckEqual(t, s, 'plainname');
     s := RandomUtf8(i);
+    Check(length(s) >= i);
     Check(not NeedsHtmlEscape(pointer(s), hfNone));
     t := UrlEncode(s);
     Check(t <> '');

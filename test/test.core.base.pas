@@ -3912,6 +3912,7 @@ begin
     begin
       j := i shr 3 + 1; // circumvent weird FPC code generation bug in -O2 mode
       S := RandomWinAnsi(j);
+      Check(length(S) = j);
       crc := crc32creference(0, pointer(S), length(S));
       inc(totallen, length(S));
       c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
@@ -5935,7 +5936,9 @@ begin
     if L and 1 <> 0 then
       SetLength(W, L - 1); // force exact UTF-16 buffer length
     W := RandomWinAnsi(len);
+    Check(length(W) = len);
     U := WinAnsiToUtf8(W);
+    Check(length(U) >= len);
     check(IsValidUtf8(U), 'IsValidUtf8U');
     P := UniqueRawUtf8(U);
     check(IsValidUtf8(P), 'IsValidUtf8');

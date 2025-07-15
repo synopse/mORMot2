@@ -383,6 +383,7 @@ begin
   rc4.Encrypt(OutDat, dat, SizeOf(InDat));
   Check(CompareMem(@dat, @InDat, SizeOf(OutDat)));
   key := RandomWinAnsi(100);
+  Check(length(key) = 100);
   for ks := 1 to 10 do
   begin
     ref.InitSha3(pointer(key)^, ks * 10);
@@ -669,6 +670,7 @@ procedure TTestCoreCrypto._SHA3;
       for i := 1 to 1000 do
       begin
         data := RandomWinAnsi(i);
+        Check(length(data) = i);
         {$ifdef FPC}
         SetCodePage(data, CP_RAWBYTESTRING, {convert=}false);
         {$endif FPC}
@@ -1360,6 +1362,7 @@ begin
   for s := 0 to high(SIZ) do
   begin
     data := RandomWinAnsi(SIZ[s]);
+    Check(length(data) = SIZ[s]);
     SetLength(encrypted, SIZ[s]);
     for b := low(b) to high(b) do
     if (b < low(AES)) or
@@ -2034,6 +2037,7 @@ begin
   enc.Init;
   dec.Init;
   tmp := RandomWinAnsi(1 shl 20);
+  Check(length(tmp) = 1 shl 20);
   b32 := BinToBase32(tmp);
   tmp2 := Base32ToBin(b32);
   CheckEqual(length(tmp2), length(tmp));
@@ -2236,6 +2240,7 @@ begin
   SetLength(crypted, MAX + 256);
   st := '1234essai';
   orig := RandomWinAnsi(8000);
+  Check(length(orig) = 8000);
   PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random32;
   for noaesni := false to true do
   begin
