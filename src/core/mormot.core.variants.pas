@@ -978,6 +978,7 @@ type
     procedure SetDoubleByName(const aName: RawUtf8; const aValue: Double);
     function GetDocVariantExistingByName(const aName: RawUtf8;
       aNotMatchingKind: TDocVariantKind): PDocVariantData;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetObjectExistingByName(const aName: RawUtf8): PDocVariantData;
     function GetDocVariantOrAddByName(const aName: RawUtf8;
       aKind: TDocVariantKind): PDocVariantData;
@@ -1499,7 +1500,10 @@ type
     // !    for v in dv.Items do
     // !      writeln(v^);
     // ! // output  1  2  3  4
-    function Items: TDocVariantItemsEnumerator;
+    function Items: TDocVariantItemsEnumerator; overload; inline;
+    /// a "for .. dv.Items() do" enumerator for an array sub-property
+    // - document should be an object, with aName property as array of objects
+    function Items(const aName: RawUtf8): TDocVariantItemsEnumerator; overload;
     /// an enumerator able to compile "for .. dv.Objects do" for array of objects
     // - returns all Values[] of a document array which are a TDocVariantData
     // - would work also with a document object, to return its object properties
@@ -1511,7 +1515,10 @@ type
     // !      writeln(d^.ToJson);
     // ! // output {"a":1,"b":1} and {"a":2,"b":2} only
     // ! // (ignoring 1 and "no object" items)
-    function Objects: TDocVariantObjectsEnumerator;
+    function Objects: TDocVariantObjectsEnumerator; overload; inline;
+    /// a "for .. dv.Objects() do" enumerator for an array of objects property
+    // - document should be an object, with aName property as array of objects
+    function Objects(const aName: RawUtf8): TDocVariantObjectsEnumerator; overload;
     {$endif HASITERATORS}
 
     /// save a document as UTF-8 encoded JSON
@@ -7286,9 +7293,19 @@ begin
   result.State.Init(pointer(Values), VCount); // arrays or objects
 end;
 
+function TDocVariantData.Items(const aName: RawUtf8): TDocVariantItemsEnumerator;
+begin
+  result := GetDocVariantExistingByName(aName, {notmatching=}dvObject)^.Items;
+end;
+
 function TDocVariantData.Objects: TDocVariantObjectsEnumerator;
 begin
   result.State.Init(pointer(Values), VCount); // arrays or objects
+end;
+
+function TDocVariantData.Objects(const aName: RawUtf8): TDocVariantObjectsEnumerator;
+begin
+  result := GetDocVariantExistingByName(aName, {notmatching=}dvObject)^.Objects;
 end;
 
 function TDocVariantData.Fields: TDocVariantFieldsEnumerator;
