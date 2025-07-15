@@ -1376,6 +1376,10 @@ function GetBoolean(P: PUtf8Char): boolean; overload;
 function GetBoolean(const value: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// recognize a boolean true value stored as 'true' UTF-16 text in P^
+function GetBooleanW(P: PWideChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// get the 64-bit integer value stored in P^
 function GetInt64(P: PUtf8Char): Int64; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -5976,6 +5980,14 @@ end;
 function GetBoolean(const value: RawUtf8): boolean;
 begin
   result := GetBoolean(pointer(value));
+end;
+
+function GetBooleanW(P: PWideChar): boolean;
+begin
+  result := (P <> nil) and
+            ((PIntegerArray(P)[0] and $ffdfffdf = ord('T') + ord('R') shl 16) and
+             (PIntegerArray(P)[1] and $ffdfffdf = ord('U') + ord('E') shl 16) and
+             (P[4] = #0));
 end;
 
 function GetTrue(P: PUtf8Char): integer;
