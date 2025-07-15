@@ -9293,7 +9293,7 @@ begin
   P := pointer(fMap.Buffer);
   fMapEnd := P + fMap.Size;
   if PCardinal(P)^ and $00ffffff = BOM_UTF8 then
-    inc(P, 3); // ignore any UTF-8 BOM
+    inc(P, 3); // ignore any UTF-8 BOM (still appears on Windows)
   ParseLines(P, fMapEnd, self);
   if fLinesMax > fCount + 16384 then
     Reallocmem(fLines, fCount * SizeOf(pointer)); // size down only if worth it

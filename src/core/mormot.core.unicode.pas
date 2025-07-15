@@ -675,10 +675,10 @@ var
 
 type
   /// text file layout, as returned by BomFile() and StringFromBomFile()
-  // - bomNone means there was no BOM recognized
+  // - bomNone means there was no BOM recognized (most common case, e.g. on POSIX)
   // - bomUtf16LE stands for UTF-16 Little-Endian encoding (as in Windows)
-  // - bomUtf16BE stands for UTF-16 Big-Endian encoding
-  // - bomUtf8 stands for a UTF-8 BOM (as on Windows products)
+  // - bomUtf16BE stands for UTF-16 Big-Endian encoding (legacy/niche systems)
+  // - bomUtf8 stands for a UTF-8 BOM (as on some Windows products)
   TBomFile = (
     bomNone,
     bomUtf16LE,
@@ -686,11 +686,11 @@ type
     bomUtf8);
 
 const
-  /// UTF-8 BOM marker three bytes value (in little-endian)
+  /// UTF-8 BOM marker three bytes value, still common on Windows or CSV
   BOM_UTF8 = $bfbbef;
-  /// UTF-16LE BOM WideChar marker, as existing e.g. in some UTF-16 Windows files
+  /// UTF-16LE BOM WideChar marker, may appearing e.g. in some Windows files
   BOM_UTF16LE = #$feff;
-  /// UTF-16BE BOM WideChar marker, which is not supported
+  /// UTF-16BE BOM WideChar marker, seen only in legacy/niche systems
   BOM_UTF16BE = #$fffe;
 
 /// check the file BOM at the beginning of a file buffer
@@ -701,9 +701,9 @@ const
 function BomFile(var Buffer: pointer; var BufferSize: PtrInt): TBomFile;
 
 /// read a file into a temporary variable, check the BOM, and adjust the buffer
-// - for bomUtf16LE and bomUtf16BE, returns BufferSize as WideChar count (not bytes)
+// - bomUtf16LE and bomUtf16BE return BufferChars as WideChar count (not bytes)
 function StringFromBomFile(const FileName: TFileName; var FileContent: RawByteString;
-  out Buffer: pointer; out BufferSize: PtrInt): TBomFile;
+  out Buffer: pointer; out BufferChars: PtrInt): TBomFile;
 
 /// read a File content into a RawUtf8, detecting any leading BOM
 // - will assume text file with no BOM is already UTF-8 encoded
@@ -4712,16 +4712,16 @@ begin
 end;
 
 function StringFromBomFile(const FileName: TFileName; var FileContent: RawByteString;
-  out Buffer: pointer; out BufferSize: PtrInt): TBomFile;
+  out Buffer: pointer; out BufferChars: PtrInt): TBomFile;
 begin
   FileContent := StringFromFile(FileName);
   Buffer := pointer(FileContent);
-  BufferSize := length(FileContent);
-  result := BomFile(Buffer, BufferSize); // recognize most BOMs
-  if BufferSize = 0 then
+  BufferChars := length(FileContent);
+  result := BomFile(Buffer, BufferChars); // recognize most BOMs and adjust
+  if BufferChars = 0 then
     result := bomNone
   else if result in [bomUtf16LE, bomUtf16BE] then
-    BufferSize := BufferSize shr 1; // UTF-16 BOMs return size in WideChar
+    BufferChars := BufferChars shr 1; // UTF-16 BOMs return size in WideChar
 end;
 
 function RawUtf8FromFile(const FileName: TFileName): RawUtf8;
@@ -4742,28 +4742,28 @@ function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: bool
 var
   tmp: RawByteString;
   buf: pointer;
-  len: PtrInt;
+  chars: PtrInt;
 begin
-  case StringFromBomFile(FileName, tmp, buf, len) of
-    bomNone:
-      if len = 0 then
+  case StringFromBomFile(FileName, tmp, buf, chars) of
+    bomNone: // most common case, especially on POSIX
+      if chars = 0 then
         FastAssignNew(result)
       else if AssumeUtf8IfNoBom or
-              IsValidUtf8Buffer(buf, len) then
-        FastAssignUtf8(result, tmp) // force CP_UTF8
+              IsValidUtf8Buffer(buf, chars) then // may use AVX2 on Haswell
+        FastAssignUtf8(result, tmp) // forced or detected CP_UTF8
       else
-        CurrentAnsiConvert.AnsiBufferToRawUtf8(buf, len, result);
-    bomUtf16LE:
-      RawUnicodeToUtf8(PWideChar(buf), len, result);
-    bomUtf16BE:
+        CurrentAnsiConvert.AnsiBufferToRawUtf8(buf, chars, result);
+    bomUtf16LE: // here chars = WideChar length
+      RawUnicodeToUtf8(PWideChar(buf), chars, result);
+    bomUtf16BE: // here chars = WideChar length
       begin
-        RawUnicodeSwapEndian(buf, len); // in-place conversion from Big-Endian
-        RawUnicodeToUtf8(PWideChar(buf), len, result);
+        RawUnicodeSwapEndian(buf, chars); // in-place conversion from Big-Endian
+        RawUnicodeToUtf8(PWideChar(buf), chars, result);
       end;
-    bomUtf8:
+    bomUtf8: // may appear on Windows
       begin
-        MoveFast(buf^, pointer(tmp)^, len); // fast in-place delete(bom)
-        FakeLength(tmp, len);
+        MoveFast(buf^, pointer(tmp)^, chars); // fast in-place delete(bom)
+        FakeLength(tmp, chars);
         FastAssignUtf8(result, tmp); // force CP_UTF8
       end;
   end;
@@ -4773,25 +4773,25 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean):
 var
   tmp: RawByteString;
   buf: pointer;
-  len: PtrInt;
+  chars: PtrInt;
 begin
-  case StringFromBomFile(FileName, tmp, buf, len) of
-    bomNone:
-      if (len = 0) or
+  case StringFromBomFile(FileName, tmp, buf, chars) of
+    bomNone: // most common case, especially on POSIX
+      if (chars = 0) or
          ForceUtf8 or
-         IsValidUtf8Buffer(buf, len) then
-        Utf8ToSynUnicode(buf, len, result)
+         IsValidUtf8Buffer(buf, chars) then  // may use AVX2 on Haswell
+        Utf8ToSynUnicode(buf, chars, result) // forced or detected CP_UTF8
       else
-        CurrentAnsiConvert.AnsiToUnicodeStringVar(buf, len, result);
-    bomUtf16LE:
-      FastSynUnicode(result, buf, len);
-    bomUtf16BE:
+        CurrentAnsiConvert.AnsiToUnicodeStringVar(buf, chars, result);
+    bomUtf16LE: // here chars = WideChar length
+      FastSynUnicode(result, buf, chars);
+    bomUtf16BE: // here chars = WideChar length
       begin
-        RawUnicodeSwapEndian(buf, len); // in-place conversion from Big-Endian
-        FastSynUnicode(result, buf, len);
+        RawUnicodeSwapEndian(buf, chars); // in-place conversion from Big-Endian
+        FastSynUnicode(result, buf, chars);
       end;
-    bomUtf8:
-      Utf8ToSynUnicode(buf, len, result);
+    bomUtf8: // may appear on Windows
+      Utf8ToSynUnicode(buf, chars, result);
   end;
 end;
 
@@ -4805,29 +4805,29 @@ function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): str
 var
   tmp: RawByteString;
   buf: pointer;
-  len: PtrInt;
+  chars: PtrInt;
 begin
-  case StringFromBomFile(FileName, tmp, buf, len) of
-    bomNone:
-      if len = 0 then
+  case StringFromBomFile(FileName, tmp, buf, chars) of
+    bomNone: // most common case, especially on POSIX
+      if chars = 0 then
         result := ''
-      else if IsAnsiCompatible(buf, len) or
-              not (ForceUtf8 or IsValidUtf8Buffer(buf, len)) then
+      else if IsAnsiCompatible(buf, chars) or
+              not (ForceUtf8 or IsValidUtf8Buffer(buf, chars)) then // AVX2
       begin
         FakeCodePage(tmp, Unicode_CodePage); // StringFromFile() forced CP_UTF8
         result := tmp; // no need to convert anything
       end
       else // need a full charset conversion
-        CurrentAnsiConvert.Utf8BufferToAnsi(buf, len, RawByteString(result));
-    bomUtf16LE:
-      CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, len, RawByteString(result));
-    bomUtf16BE:
+        CurrentAnsiConvert.Utf8BufferToAnsi(buf, chars, RawByteString(result));
+    bomUtf16LE: // here chars = WideChar length
+      CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, chars, RawByteString(result));
+    bomUtf16BE: // here chars = WideChar length
       begin
-        RawUnicodeSwapEndian(buf, len); // in-place conversion from Big-Endian
-        CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, len, RawByteString(result));
+        RawUnicodeSwapEndian(buf, chars); // in-place conversion from Big-Endian
+        CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, chars, RawByteString(result));
       end;
-    bomUtf8:
-      CurrentAnsiConvert.Utf8BufferToAnsi(buf, len, RawByteString(result));
+    bomUtf8: // may appear on Windows
+      CurrentAnsiConvert.Utf8BufferToAnsi(buf, chars, RawByteString(result));
   end;
 end;
 {$endif UNICODE}
