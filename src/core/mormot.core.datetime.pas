@@ -266,11 +266,11 @@ function ParseTimeZone(const s: RawUtf8; var Zone: integer): boolean; overload;
 
 const
   /// three-chars abbreviation of all week days, starting at Sunday = index 1
-  HTML_WEEK_DAYS: array[1..7] of string[3] = (
+  HTML_WEEK_DAYS: array[1..7] of TShort3 = (
     'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
 
   /// three-chars abbreviation of all month names, starting at January = index 1
-  HTML_MONTH_NAMES: array[1..12] of string[3] = (
+  HTML_MONTH_NAMES: array[1..12] of TShort3 = (
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
 

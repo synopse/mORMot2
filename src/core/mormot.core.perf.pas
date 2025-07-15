@@ -4378,8 +4378,8 @@ begin
 end;
 
 const
-  _ROMSIZ: array[0..3] of string[2] = ('MB', 'GB', '??', '??');
-  _VOLT:   array[0..3] of string[3] = ('5', '3.3', '2.9', '?');
+  _ROMSIZ: array[0..3] of TShort3 = ('MB', 'GB', '??', '??');
+  _VOLT:   array[0..3] of TShort3 = ('5', '3.3', '2.9', '?');
 
 procedure CacheSize8(b: PtrUInt; var res: RawUtf8);
 var

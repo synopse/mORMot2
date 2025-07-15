@@ -1740,7 +1740,7 @@ begin
 end;
 
 const
-  ENDI: array[boolean] of string[3] = ('en', 'dis');
+  ENDI: array[boolean] of TShort3 = ('en', 'dis');
 
 procedure TSynAngelize.ServiceChangeState(disable: boolean);
 var

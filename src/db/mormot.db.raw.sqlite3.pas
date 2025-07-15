@@ -6012,7 +6012,7 @@ end;
 
 function TSqlite3Library.GetVersion: RawUtf8;
 const
-  mm: array[boolean] of string[2] = ('ex', 'in');
+  mm: array[boolean] of TShort3 = ('ex', 'in');
 begin
   if self = nil then
     result := 'No TSqlite3Library available'

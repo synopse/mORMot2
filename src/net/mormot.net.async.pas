@@ -2024,7 +2024,7 @@ var
   pse: TPollSocketEvents;
   res: TNetResult;
   start: Int64;
-  wf: string[3];
+  wf: TShort3;
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
   result := true; // if closed or properly read: don't retry

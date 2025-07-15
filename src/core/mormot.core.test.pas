@@ -958,12 +958,12 @@ type
   TKind = (
     space, comma, dot, question, paragraph);
 const
-  bla: array[0..7] of string[3] = (
+  bla: array[0..7] of TShort3 = (
     'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
   endKind = [dot, paragraph, question];
 var
   n: integer;
-  s: string[3];
+  s: TShort3;
   last: TKind;
   rnd: cardinal;
   lec: PLecuyer;
@@ -977,7 +977,7 @@ begin
     begin
       // consume up to 4*5 = 20 bits from rnd
       rnd := rnd shr 2;
-      s := bla[rnd and 7];
+      PCardinal(@s)^ := PCardinal(@bla[rnd and 7])^;
       rnd := rnd shr 3;
       if last in endKind then
       begin

@@ -7856,12 +7856,12 @@ procedure TOrm.EnginePrepareMany(const aClient: IRestOrm;
   out ObjectsClass: TOrmClassDynArray; out SQL, Json: RawUtf8);
 var
   aSqlFields, aSqlFrom, aSqlWhere, aSqlJoin: RawUtf8;
-  aField: string[3];
+  aField: TShort3;
   aMany: RawUtf8;
   f, n, i, SqlFieldsCount: integer;
   Props: TOrmProperties;
   SqlFields: array of record
-    SQL: string[3];
+    SQL: TShort3;
     prop: TOrmPropInfo;
     Instance: TOrm;
   end;
@@ -7877,7 +7877,7 @@ var
     else
       with SqlFields[SqlFieldsCount] do
       begin
-        SQL := aField;
+        PCardinal(@SQL)^ := PCardinal(@aField)^;
         prop := aProp;
         Instance := Objects[f];
         inc(SqlFieldsCount);

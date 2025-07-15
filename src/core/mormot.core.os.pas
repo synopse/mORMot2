@@ -73,7 +73,7 @@ const
   /// system-independent CR+LF two chars, as 16-bit constant
   CRLFW = $0a0d;
   /// convert a TLineFeed value into its UTF-8 text representation
-  LINE_FEED: array[TLineFeed] of string[3] = (CRLF, #10, #13#10);
+  LINE_FEED: array[TLineFeed] of TShort3 = (CRLF, #10, #13#10);
 
   /// human-friendly alias to open a file for exclusive writing ($20)
   fmShareRead      = fmShareDenyWrite;

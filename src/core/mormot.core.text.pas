@@ -1456,8 +1456,8 @@ function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
 {$ifdef DOUBLETOSHORT_USEGRISU}
 const
   // special text returned if the double is not a number
-  C_STR_INF:  string[3] = 'Inf';
-  C_STR_QNAN: string[3] = 'Nan';
+  C_STR_INF:  TShort3 = 'Inf';
+  C_STR_QNAN: TShort3 = 'Nan';
 
   // min_width parameter special value, as used internally by FPC for str(d,s)
   // - DoubleToAscii() only accept C_NO_MIN_WIDTH or 0 for min_width: space
@@ -1649,25 +1649,22 @@ function UInt3DigitsToUtf8(Value: cardinal): RawUtf8;
 // e.g. when used as FormatUtf8() parameter
 function UInt4DigitsToUtf8(Value: cardinal): RawUtf8;
 
-  /// creates a 4 digits short string from a 0..9999 value
-// - using TShort4 as returned string would avoid a string allocation on heap
-// - could be used e.g. as parameter to FormatUtf8()
+/// creates a 4 digits short string from a 0..9999 value
+// - could be used e.g. as parameter to FormatUtf8() with no memory allocation
 function UInt4DigitsToShort(Value: cardinal): TShort4;
 
 /// creates a 3 digits short string from a 0..999 value
-// - using TShort4 as returned string would avoid a string allocation on heap
-// - could be used e.g. as parameter to FormatUtf8()
-function UInt3DigitsToShort(Value: cardinal): TShort4;
+// - could be used e.g. as parameter to FormatUtf8() with no memory allocation
+function UInt3DigitsToShort(Value: cardinal): TShort3;
 
 /// creates a 2 digits short string from a 0..99 value
-// - using TShort4 as returned string would avoid a string allocation on heap
-// - could be used e.g. as parameter to FormatUtf8()
-function UInt2DigitsToShort(Value: byte): TShort4;
+// - could be used e.g. as parameter to FormatUtf8() with no memory allocation
+function UInt2DigitsToShort(Value: byte): TShort3;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 2 digits short string from a 0..99 value
 // - won't test Value>99 as UInt2DigitsToShort()
-function UInt2DigitsToShortFast(Value: byte): TShort4;
+function UInt2DigitsToShortFast(Value: byte): TShort3;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
@@ -2069,7 +2066,7 @@ procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
 // - ThousandSep is the character used to separate thousands in numbers with
 // more than three digits to the left of the decimal separator
 function IntToThousandString(Value: integer;
-  const ThousandSep: TShort4 = ','): ShortString;
+  const ThousandSep: ShortString = ','): ShortString;
 
 
 { ************ ESynException class }
@@ -8460,7 +8457,7 @@ begin
   YearToPChar(Value, @result[1]);
 end;
 
-function UInt3DigitsToShort(Value: cardinal): TShort4;
+function UInt3DigitsToShort(Value: cardinal): TShort3;
 begin
   if Value > 999 then
     Value := 999;
@@ -8468,18 +8465,18 @@ begin
   result[0] := #3; // override first digit
 end;
 
-function UInt2DigitsToShort(Value: byte): TShort4;
+function UInt2DigitsToShort(Value: byte): TShort3;
 begin
   result[0] := #2;
   if Value > 99 then
     Value := 99;
-  PCardinal(@result[1])^ := TwoDigitLookupW[Value];
+  PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
-function UInt2DigitsToShortFast(Value: byte): TShort4;
+function UInt2DigitsToShortFast(Value: byte): TShort3;
 begin
   result[0] := #2;
-  PCardinal(@result[1])^ := TwoDigitLookupW[Value];
+  PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
 function IPToCardinal(aIP: PUtf8Char; out aValue: cardinal): boolean;
@@ -9916,7 +9913,7 @@ begin
 end;
 
 function IntToThousandString(Value: integer;
-  const ThousandSep: TShort4): ShortString;
+  const ThousandSep: ShortString): ShortString;
 var
   i, L, Len: cardinal;
 begin

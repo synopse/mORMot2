@@ -2236,7 +2236,7 @@ begin
 end;
 
 const
-  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of string[3] = (
+  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of TShort3 = (
     '=?',      // soEqualTo
     '<>?',     // soNotEqualTo
     '<?',      // soLessThan

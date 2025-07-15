@@ -1114,7 +1114,7 @@ end;
 class procedure TExpressionHtmlTableStyle.AddLabel(WR: TTextWriter;
   const text: string; kind: THtmlTableStyleLabel);
 const
-  SETLABEL: array[THtmlTableStyleLabel] of string[3] = (
+  SETLABEL: array[THtmlTableStyleLabel] of TShort3 = (
     '', '', '- ', '+ ', '');
 begin
   WR.AddShorter(SETLABEL[kind]);

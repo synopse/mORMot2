@@ -583,11 +583,15 @@ type
   TShort8 = string[8];
   PShort8 = ^TShort8;
 
+  /// used e.g; for WinOsBuild() to avoid heap allocation
   TShort7 = string[7];
 
-  /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
-  // - such result type would avoid a string allocation on heap
+  /// used e.g. by UInt4DigitsToShort to avoid heap allocation
   TShort4 = string[4];
+
+  /// used e.g. by UInt3DigitsToShort/UInt2DigitsToShort functions
+  // - when used as an array value type, will generate efficient 32-bit lookup
+  TShort3 = string[3];
 
   /// stack-allocated ASCII string, for mormot.core.text GuidToShort() function
   TShortGuid = string[38];
