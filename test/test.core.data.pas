@@ -5750,6 +5750,26 @@ var
   lRefreshed: boolean;
   uu: TRawUtf8DynArray;
 begin
+  Check(GetBoolean('true'));
+  Check(GetBoolean('TRue'));
+  Check(GetBoolean('yes'));
+  Check(GetBoolean('YeS'));
+  Check(not GetBoolean(nil));
+  Check(not GetBoolean('false'));
+  Check(GetBooleanW('true'));
+  Check(GetBooleanW('TRue'));
+  Check(not GetBooleanW('yes'));
+  Check(not GetBooleanW('tru'));
+  Check(not GetBooleanW('trues'));
+  Check(not GetBooleanW(nil));
+  Check(not GetBooleanW('false'));
+  Check(GetTrue('true') = 1);
+  Check(GetTrue('TRue') = 1);
+  Check(GetTrue('yes') = 1);
+  Check(GetTrue('Yes') = 1);
+  Check(GetTrue('tru') = 0);
+  Check(GetTrue('trues') = 1);
+  Check(GetTrue('false') = 0);
   Check(pointer(uu) = nil);
   a.InitArrayFrom(uu, JSON_FAST); // ensure no GPF
   CheckEqual(a.Count, 0);
