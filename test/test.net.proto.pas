@@ -391,7 +391,7 @@ begin
       for r := 0 to rmax do
         with req[r] do
         begin
-          session := TSynTestCase.RandomIdentifier(20 + r and 15);
+          session := RandomIdentifier(20 + r and 15);
           get := THttpSocket.Open('localhost', proxy.Server.Port, nlTcp, 1000);
           get.SndLow('GET /sw.mov HTTP/1.0'#13#10 +
                      'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +

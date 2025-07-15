@@ -1200,7 +1200,6 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
   {$ifdef UNICODE}inline;{$endif}
 
 
-
 { **************** Text Case-(in)sensitive Conversion and Comparison }
 
 type

@@ -4687,6 +4687,7 @@ function RandomDouble: double;
 procedure RandomBytes(Dest: PByte; Count: integer);
 
 /// fill a RawByteString with random bytes from the gsl_rng_taus2 generator
+// - see also e.g. RandomAnsi7() or RandomIdentifier() in mormot.core.text.pas
 function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
 
 /// fill some string[31] with 7-bit ASCII random text

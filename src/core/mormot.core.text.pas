@@ -1974,6 +1974,28 @@ procedure ConsoleWriteRaw(const Args: array of const; NoLineFeed: boolean = fals
 // !end.
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean = true);
 
+/// create a temporary string random content, WinAnsi (code page 1252) content
+function RandomWinAnsi(CharCount: integer): WinAnsiString;
+
+/// create a temporary UTF-8 string random content, using WinAnsi
+// (code page 1252) content
+// - CharCount is the number of random WinAnsi chars, so it is possible that
+// length(result) > CharCount once encoded into UTF-8
+function RandomUtf8(CharCount: integer): RawUtf8;
+
+/// create a temporary UTF-16 string random content, using WinAnsi
+// (code page 1252) content
+function RandomUnicode(CharCount: integer): SynUnicode;
+
+/// create a temporary string random content, using ASCII 7-bit content
+function RandomAnsi7(CharCount: integer; CodePage: integer = CP_UTF8): RawByteString;
+
+/// create a temporary string random content, using A..Z,_,0..9 chars only
+function RandomIdentifier(CharCount: integer): RawUtf8;
+
+/// create a temporary string random content, using uri-compatible chars only
+function RandomUri(CharCount: integer): RawUtf8;
+
 
 { ************ Resource and Time Functions }
 
@@ -9798,6 +9820,62 @@ begin
   ConsoleWriteRaw('Press [Enter] to quit');
   ConsoleWaitForEnterKey;
   {$endif OSPOSIX}
+end;
+
+function RandomWinAnsi(CharCount: integer): WinAnsiString;
+var
+  i: PtrInt;
+  R: PByteArray;
+begin
+  R := RandomByteString(CharCount, result, CP_WINANSI);
+  for i := 0 to CharCount - 1 do
+    R[i] := (R[i] and 127) + 32; // may include some WinAnsi accentuated chars
+end;
+
+function RandomAnsi7(CharCount, CodePage: integer): RawByteString;
+var
+  i: PtrInt;
+  R: PByteArray;
+begin
+  R := RandomByteString(CharCount, result, CodePage);
+  for i := 0 to CharCount - 1 do
+    R[i] := (R[i] mod 95) + 32; // may include tilde #$7e (#126) char
+end;
+
+procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawUtf8);
+var
+  i: PtrInt;
+  R: PAnsiChar;
+begin
+  R := RandomByteString(count, result, CP_UTF8);
+  for i := 0 to count - 1 do
+    R[i] := chars64[PtrUInt(R[i]) and 63];
+end;
+
+const
+  IDENT_CHARS: TChar64 =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+  URL_CHARS: TChar64 =
+    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
+
+function RandomIdentifier(CharCount: integer): RawUtf8;
+begin
+  InitRandom64(@IDENT_CHARS, CharCount, result);
+end;
+
+function RandomUri(CharCount: integer): RawUtf8;
+begin
+  InitRandom64(@URL_CHARS, CharCount, result);
+end;
+
+function RandomUtf8(CharCount: integer): RawUtf8;
+begin
+  result := WinAnsiToUtf8(RandomWinAnsi(CharCount));
+end;
+
+function RandomUnicode(CharCount: integer): SynUnicode;
+begin
+  result := WinAnsiConvert.AnsiToUnicodeString(RandomWinAnsi(CharCount));
 end;
 
 
