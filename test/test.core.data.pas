@@ -5634,6 +5634,9 @@ var
     n: integer;
   begin
     vd.InitArray([1, 2, 3, 4]);
+    Check(vd.IsArray);
+    Check(not vd.IsObject);
+    CheckEqual(vd.Count, 4);
     for f in vd do
     begin
       Check(f.Name = nil);
@@ -5646,7 +5649,28 @@ var
       Check(f.Name = pointer(1)); // should not iterate
     for v in vd.Items do
       Check(v = nil); // should not iterate
-    vd.InitJson('[{a:1,b:1}, 1, "no object", {a:2,b:2}]');
+    Check(vd.InitJson('{a:[{a:1,b:1}, 1, "no object", {a:2,b:2}]}'));
+    Check(not vd.IsArray);
+    Check(vd.IsObject);
+    CheckEqual(vd.Count, 1);
+    for f in vd do
+      CheckEqual(f.Name^, 'a');
+    for v in vd.Items('a') do
+      Check(not VarIsEmptyOrNull(v^));
+    n := 0;
+    for d in vd.Objects('a') do
+    begin
+      Check(not VarDataIsEmptyOrNull(d));
+      Check(DocVariantType.IsOfType(variant(d^)));
+      Check(d^.Exists('a'), 'a');
+      Check(d^.Exists('b'), 'a');
+      inc(n);
+      CheckEqual(d^.I['a'], n);
+      CheckEqual(d^.I['b'], n);
+    end;
+    CheckEqual(n, 2);
+    vd.Clear;
+    Check(vd.InitJson('[{a:1,b:1}, 1, "no object", {a:2,b:2}]'));
     v2.InitFast;
     for f in vd do
     begin
