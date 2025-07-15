@@ -12850,15 +12850,13 @@ var
   vd: PVarData;
   tmp: TVarData;
 begin
+  result := false;
   vd := VarDataFromVariant(V);
   repeat
     case cardinal(vd^.VType) of
       varEmpty,
       varNull:
-        begin
-          result := false;
-          exit;
-        end;
+        exit;
       varBoolean: // 16-bit WordBool to 8-bit boolean
         if vd^.VBoolean then
           Value := true // normalize
@@ -12869,17 +12867,16 @@ begin
       varString:
         Value := GetBoolean(vd^.VAny);
       varOleStr:
-        Value := WideString(vd^.VAny) = 'true';
+        Value := GetBooleanW(vd^.VAny);
     {$ifdef HASVARUSTRING}
       varUString:
-        Value := UnicodeString(vd^.VAny) = 'true';
+        Value := GetBooleanW(vd^.VAny);
     {$endif HASVARUSTRING}
     else
       begin
         vd := SetVarDataUnRefSimpleValue(vd, tmp{%H-});
         if vd <> nil then
           continue;
-        result := false;
         exit;
       end;
     end;
