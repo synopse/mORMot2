@@ -5971,11 +5971,26 @@ begin
 end;
 
 procedure TSynLog.ComputeFileName;
+
+  function SetName(Args: array of const): boolean;
+  var
+    i: PtrInt;
+  begin
+    fFileName := MakeString([fFamily.fDestinationPath, MakeString(Args),
+                             fFamily.fDefaultExtension]);
+    result := false;
+    for i := 0 to high(SynLogFile) do
+      if (SynLogFile[i] <> self) and
+         (AnsiCompareFileName(SynLogFile[i].fFileName, fFileName) = 0) then
+        exit; // happens with multiple TSynLog classes
+    result := true;
+  end;
+
 var
   hourRotate, beforeRotate: TDateTime;
+  dup: integer;
   fn: TFileName;
-  i, j: PtrInt;
-  dup: boolean;
+  classn: RawUtf8;
 begin
   fn := fFamily.fCustomFileName;
   if fn = '' then
@@ -6025,24 +6040,24 @@ begin
   if fFamily.fPerThreadLog = ptOneFilePerThread then
     fn := FormatString('% %',
       [fn, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
-  fFileName := FormatString('%%%',
-    [fFamily.fDestinationPath, fn, fFamily.fDefaultExtension]);
-  // ensure this file name is unique among all opened files
-  for j := 2 to 10 do
+  // include inherited TSynLog class name as suffix
+  if PClass(self)^ <> TSynLog then
   begin
-    dup := false;
-    for i := 0 to high(SynLogFile) do
-      if (SynLogFile[i] <> self) and
-         (SynLogFile[i].fFileName = fFileName) then
-      begin
-        dup := true; // happens with multiple TSynLog classes
-        break;
-      end;
-    if not dup then
-      exit;
-    fFileName := FormatString('%%-%%',
-      [fFamily.fDestinationPath, fn, j, fFamily.fDefaultExtension]);
+    classn := ToText(PClass(self)^);
+    if IdemPChar(pointer(classn), 'TSYNLOG') then
+      delete(classn, 1, 7)  // TSynLogSecondary -> 'secondary'
+    else if classn[1] = 'T' then
+      delete(classn, 1, 1); // TCustomLog -> 'customlog'
+    LowerCaseSelf(classn);
+    if SetName([fn, '-', classn]) then
+      exit; // exename-secondary.log is not yet active
   end;
+  // ensure this file name is unique among all opened files
+  if SetName([fn]) then
+    exit; // exename.log is not already used
+  for dup := 2 to MAX_SYNLOGFAMILY + 3 do // absolute max = MAX_SYNLOGFAMILY = 7
+    if SetName([fn, '-', dup]) then
+      exit; // exename-#.log does not exist
   ESynLogException.RaiseUtf8('Duplicated %.FileName=%', [self, fFileName]);
 end;
 
