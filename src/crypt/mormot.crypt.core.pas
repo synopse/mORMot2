@@ -2584,7 +2584,7 @@ function AesBlockToString(const block: TAesBlock): RawUtf8;
 function Md5(const s: RawByteString): RawUtf8;
 
 /// compute the lowercase hexadecimal representation of a MD5 digest
-function Md5DigestToString(const D: TMd5Digest): RawUtf8;
+function Md5DigestToString(const dig: TMd5Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the MD5 digest from its hexadecimal representation
@@ -2601,7 +2601,7 @@ function Md4(const s: RawByteString): RawUtf8;
 function Sha1(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-1 digest
-function Sha1DigestToString(const D: TSha1Digest): RawUtf8;
+function Sha1DigestToString(const dig: TSha1Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-1 digest from its hexadecimal representation
@@ -2619,7 +2619,7 @@ function Sha224(const s: RawByteString): RawUtf8; overload;
 function Sha224(Data: pointer; Len: integer): RawUtf8; overload;
 
 /// compute the hexadecimal representation of a SHA-224 digest
-function Sha224DigestToString(const D: TSha224Digest): RawUtf8;
+function Sha224DigestToString(const dig: TSha224Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-224 digest from its hexadecimal representation
@@ -2641,7 +2641,7 @@ function Sha256(Data: pointer; Len: integer): RawUtf8; overload;
 function Sha256U(const s: array of RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-256 digest
-function Sha256DigestToString(const D: TSha256Digest): RawUtf8;
+function Sha256DigestToString(const dig: TSha256Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-256 digest from its hexadecimal representation
@@ -2655,7 +2655,7 @@ function Sha256StringToDigest(const Source: RawUtf8; out Dest: TSha256Digest): b
 function Sha384(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-384 digest
-function Sha384DigestToString(const D: TSha384Digest): RawUtf8;
+function Sha384DigestToString(const dig: TSha384Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct SHA-512/256 hash calculation of some data (string-encoded)
@@ -2667,7 +2667,7 @@ function Sha512_256(const s: RawByteString): RawUtf8;
 function Sha512(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-512 digest
-function Sha512DigestToString(const D: TSha512Digest): RawUtf8;
+function Sha512DigestToString(const dig: TSha512Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct SHA-3 hash calculation of some data (string-encoded)
@@ -6873,7 +6873,7 @@ begin
   SetLength(fBuf, fBufAvailable + SizeOf(TAesBlock)); // space for padding
   if IV = nil then
   begin
-    TAesPrng.Fill(fAes.fIV);
+    RandomBytes(fAes.fIV); // Lecuyer is enough for a public IV
     fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // include IV as trailer
   end
   else
@@ -10302,16 +10302,16 @@ end;
 function Md5(const s: RawByteString): RawUtf8;
 var
   md: TMd5;
-  D: TMd5Digest;
+  dig: TMd5Digest;
 begin
-  md.Full(pointer(s), Length(s), D);
-  result := Md5DigestToString(D);
-  FillZero(D);
+  md.Full(pointer(s), Length(s), dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
-function Md5DigestToString(const D: TMd5Digest): RawUtf8;
+function Md5DigestToString(const dig: TMd5Digest): RawUtf8;
 begin
-  BinToHexLower(@D, SizeOf(D), result);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 function Md5StringToDigest(const Source: RawUtf8; out Dest: TMd5Digest): boolean;
@@ -10322,27 +10322,26 @@ end;
 function Md4(const s: RawByteString): RawUtf8;
 var
   md: TMd5;
-  D: TMd5Digest;
+  dig: TMd5Digest;
 begin
-  md.Full(pointer(s), Length(s), D, {forcemd4=}true);
-  result := Md5DigestToString(D);
-  FillZero(D);
+  md.Full(pointer(s), Length(s), dig, {forcemd4=}true);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
-
 
 function Sha1(const s: RawByteString): RawUtf8;
 var
-  SHA: TSha1;
-  Digest: TSha1Digest;
+  sha: TSha1;
+  dig: TSha1Digest;
 begin
-  SHA.Full(pointer(s), length(s), Digest);
-  result := Sha1DigestToString(Digest);
-  FillZero(Digest);
+  sha.Full(pointer(s), length(s), dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
-function Sha1DigestToString(const D: TSha1Digest): RawUtf8;
+function Sha1DigestToString(const dig: TSha1Digest): RawUtf8;
 begin
-  BinToHexLower(@D, SizeOf(D), result);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 function Sha1StringToDigest(const Source: RawUtf8; out Dest: TSha1Digest): boolean;
@@ -10357,17 +10356,17 @@ end;
 
 function Sha224(Data: pointer; Len: integer): RawUtf8;
 var
-  SHA: TSha256;
-  Digest: TSha224Digest;
+  sha: TSha256;
+  dig: TSha224Digest;
 begin
-  SHA.Full224(Data, Len, Digest);
-  result := Sha224DigestToString(Digest);
-  FillZero(Digest);
+  sha.Full224(Data, Len, dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
-function Sha224DigestToString(const D: TSha224Digest): RawUtf8;
+function Sha224DigestToString(const dig: TSha224Digest): RawUtf8;
 begin
-  BinToHexLower(@D, SizeOf(D), result);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 function Sha224StringToDigest(const Source: RawUtf8; out Dest: TSha224Digest): boolean;
@@ -10382,31 +10381,31 @@ end;
 
 function Sha256(Data: pointer; Len: integer): RawUtf8;
 var
-  SHA: TSha256;
-  Digest: TSha256Digest;
+  sha: TSha256;
+  dig: TSha256Digest;
 begin
-  SHA.Full(Data, Len, Digest);
-  result := Sha256DigestToString(Digest);
-  FillZero(Digest);
+  sha.Full(Data, Len, dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
 function Sha256U(const s: array of RawByteString): RawUtf8;
 var
   i: PtrInt;
-  SHA: TSha256;
-  Digest: TSha256Digest;
+  sha: TSha256;
+  dig: TSha256Digest;
 begin
-  SHA.Init;
+  sha.Init;
   for i := 0 to high(s) do
-    SHA.Update(s[i]);
-  SHA.Final(Digest);
-  result := Sha256DigestToString(Digest);
-  FillZero(Digest);
+    sha.Update(s[i]);
+  sha.Final(dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
-function Sha256DigestToString(const D: TSha256Digest): RawUtf8;
+function Sha256DigestToString(const dig: TSha256Digest): RawUtf8;
 begin
-  BinToHexLower(@D, SizeOf(D), result);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 function Sha256StringToDigest(const Source: RawUtf8; out Dest: TSha256Digest): boolean;
@@ -10414,44 +10413,44 @@ begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
-function Sha384DigestToString(const D: TSha384Digest): RawUtf8;
+function Sha384DigestToString(const dig: TSha384Digest): RawUtf8;
 begin
-  BinToHexLower(@D, SizeOf(D), result);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 function Sha384(const s: RawByteString): RawUtf8;
 var
-  SHA: TSha384;
-  Digest: TSha384Digest;
+  sha: TSha384;
+  dig: TSha384Digest;
 begin
-  SHA.Full(pointer(s), length(s), Digest);
-  result := Sha384DigestToString(Digest);
-  FillZero(Digest);
+  sha.Full(pointer(s), length(s), dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
 function Sha512_256(const s: RawByteString): RawUtf8;
 var
-  SHA: TSha512_256;
-  Digest: TSha256Digest;
+  sha: TSha512_256;
+  dig: TSha256Digest;
 begin
-  SHA.Full(pointer(s), length(s), Digest);
-  result := Sha256DigestToString(Digest);
-  FillZero(Digest);
+  sha.Full(pointer(s), length(s), dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
-function Sha512DigestToString(const D: TSha512Digest): RawUtf8;
+function Sha512DigestToString(const dig: TSha512Digest): RawUtf8;
 begin
-  BinToHexLower(@D, SizeOf(D), result);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 function Sha512(const s: RawByteString): RawUtf8;
 var
-  SHA: TSha512;
-  Digest: TSha512Digest;
+  sha: TSha512;
+  dig: TSha512Digest;
 begin
-  SHA.Full(pointer(s), length(s), Digest);
-  result := Sha512DigestToString(Digest);
-  FillZero(Digest);
+  sha.Full(pointer(s), length(s), dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
+  FillZero(dig);
 end;
 
 function Sha3(Algo: TSha3Algo; const s: RawByteString; DigestBits: integer): RawUtf8;
@@ -10461,9 +10460,9 @@ end;
 
 function Sha3(Algo: TSha3Algo; Buffer: pointer; Len, DigestBits: integer): RawUtf8;
 var
-  instance: TSha3;
+  sha: TSha3;
 begin
-  result := instance.FullStr(Algo, Buffer, Len, DigestBits);
+  result := sha.FullStr(Algo, Buffer, Len, DigestBits);
 end;
 
 
