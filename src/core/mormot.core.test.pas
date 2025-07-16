@@ -964,7 +964,7 @@ const
   endKind = [dot, paragraph, question];
 var
   n: integer;
-  s: TShort3;
+  s: TShort4;
   last: TKind;
   rnd: cardinal;
 begin
@@ -977,13 +977,14 @@ begin
     repeat
       PCardinal(@s)^ := PCardinal(@bla[rnd and 15])^;
       rnd := rnd shr 4;    // consume up to 5*4 = 20 bits from rnd
+      s[0] := #4;
+      s[4] := ' ';
       if last in endKind then
       begin
         last := space;
-        s[1] := NormToUpper[s[1]];
+        s[1] := 'P';
       end;
       WR.AddShorter(s);
-      WR.AddDirect(' ');
       dec(WordCount);
       if WordCount = 0 then
         break;
