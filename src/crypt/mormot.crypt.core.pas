@@ -1616,7 +1616,7 @@ type
     function FillRandomHex(Len: integer): RawUtf8;
     /// xor a binary buffer with some pseudorandom data
     // - call FillRandom then xor the supplied buffer content
-    procedure XorRandom(Buffer: pointer; Len: integer);
+    procedure XorRandom(Buffer: pointer; Len: PtrInt);
     /// returns a 32-bit unsigned random number
     // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
     // is cryptographic secure
@@ -7350,19 +7350,15 @@ begin
   BinToHexLower(bin, pointer(result), Len);
 end;
 
-procedure TAesPrngAbstract.XorRandom(Buffer: pointer; Len: integer);
+procedure TAesPrngAbstract.XorRandom(Buffer: pointer; Len: PtrInt);
 var
   tmp: array[0 .. 8191] of byte;
-  n, wipe: integer;
+  n, wipe: PtrInt;
 begin
-  wipe := SizeOf(tmp);
-  if wipe > Len then
-    wipe := Len;
+  wipe := MinPtrInt(SizeOf(tmp), Len);
   while Len > 0 do
   begin
-    n := SizeOf(tmp);
-    if n > Len then
-      n := Len;
+    n := MinPtrInt(SizeOf(tmp), Len);
     FillRandom(@tmp, n);
     XorMemory(Buffer, @tmp, n);
     dec(Len, n);
