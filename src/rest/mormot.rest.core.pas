@@ -1370,6 +1370,9 @@ type
     // - cookie name are case-sensitive
     property InCookie[const CookieName: RawUtf8]: RawUtf8
       read GetInCookie write SetInCookie;
+    /// quickly check if an incoming HTTP cookie value has been transmitted
+    function InCookieExists(const CookieName: RawUtf8): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
@@ -3917,6 +3920,12 @@ begin
     result := ''
   else
     InputCookies^.RetrieveCookie(CookieName, result);
+end;
+
+function TRestUriContext.InCookieExists(const CookieName: RawUtf8): boolean;
+begin
+  result := (self <> nil) and
+            (InputCookies^.FindCookie(CookieName) <> nil);
 end;
 
 procedure TRestUriContext.SetInCookie(const CookieName, CookieValue: RawUtf8);
