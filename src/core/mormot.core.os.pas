@@ -9347,6 +9347,8 @@ begin
            {$ifdef OSPOSIX}
            _AfterDecodeSmbios(RawSmbios); // persist in SMB_CACHE for non-root
            {$endif OSPOSIX}
+           DefaultHasher128(@StartupEntropy,
+             pointer(RawSmbios.Data), length(RawSmbios.Data)); // won't hurt
            exit;
          end;
       // if not root on POSIX, SMBIOS is not available

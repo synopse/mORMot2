@@ -6874,7 +6874,7 @@ begin
   if IV = nil then
   begin
     RandomBytes(fAes.fIV); // Lecuyer is enough for a public IV
-    fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // include IV as trailer
+    fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // stream starts with IV
   end
   else
     fAes.fIV := IV^; // IV is supplied by caller
@@ -6952,7 +6952,7 @@ begin
     fAes.IV := IV^ // IV is supplied by caller
   else
   begin
-    inStream.ReadBuffer(fAes.fIV, SizeOf(fAes.IV));
+    inStream.ReadBuffer(fAes.fIV, SizeOf(fAes.IV)); // stream starts with IV
     dec(fStreamSize, SizeOf(fAes.IV));
     if fStreamSize < SizeOf(TAesBlock) then
       RaiseStreamError(self, 'Create: invalid size after IV');
@@ -6990,7 +6990,7 @@ begin
       fAes.Decrypt(pointer(fBuf), pointer(fBuf), fBufAvailable);
       if fBufAvailable >= fStreamSize then
       begin
-        // last 16 bytes includes padding -> decode
+        // last 16 bytes includes PKCS7 padding -> decode
         padding := PByteArray(fBuf)[fBufAvailable - 1];
         if (padding = 0) or
            (padding > SizeOf(TAesBlock)) then
@@ -7547,7 +7547,7 @@ begin
   fSeedPbkdf2Round := Pbkdf2Round;
   fSeedAfterBytes := ReseedAfterBytes;
   fAesKeySize := AesKeyBits;
-  Seed;
+  Seed; // make this instance ready
 end;
 
 constructor TAesPrng.Create;
@@ -7608,7 +7608,6 @@ begin
     sha3.Update(Executable.ProgramFullSpec);
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    sha3.Update(RawSmbios.Data); // may be '' if has not been retrieved yet
     {$ifdef USEAESNIHASH}
     sha3.Update(AESNIHASHKEYSCHED_); // 256 bytes of AesNiHash random state
     {$endif USEAESNIHASH}
