@@ -562,6 +562,14 @@ type
       read fApplication write fApplication;
   end;
 
+  TMvcRunWithViewCache = record
+    Policy: TMvcRendererCachePolicy;
+    TimeOutSeconds: cardinal;
+    RootValue: RawUtf8;
+    RootValueExpirationTime: cardinal;
+    InputValues: TSynNameValue;
+  end;
+
   /// abstract class used by TMvcApplication to run TMvcViews-based process
   // - this inherited class will host a MVC Views instance, and handle
   // an optional simple in-memory cache
@@ -569,13 +577,7 @@ type
   protected
     fViews: TMvcViewsAbstract;
     fCacheLocker: IAutoLocker;
-    fCache: array of record
-      Policy: TMvcRendererCachePolicy;
-      TimeOutSeconds: cardinal;
-      RootValue: RawUtf8;
-      RootValueExpirationTime: cardinal;
-      InputValues: TSynNameValue;
-    end;
+    fCache: array of TMvcRunWithViewCache; // follows fFactory.Methods[]
   public
     /// link this runner class to a specified MVC application
     constructor Create(aApplication: TMvcApplication;
@@ -1915,22 +1917,20 @@ function TMvcRunWithViews.SetCache(const aMethodName: RawUtf8;
 const
   MAX_CACHE_TIMEOUT = 60 * 15; // 15 minutes
 var
-  aMethodIndex: PtrInt;
+  ndx: PtrInt;
+  c: ^TMvcRunWithViewCache;
 begin
   with fCacheLocker.ProtectMethod do
   begin
-    aMethodIndex := fApplication.fFactory.CheckMethodIndex(aMethodName);
+    ndx := fApplication.fFactory.CheckMethodIndex(aMethodName);
     if fCache = nil then
       SetLength(fCache, fApplication.fFactory.MethodsCount);
-    with fCache[aMethodIndex] do
-    begin
-      Policy := aPolicy;
-      if aTimeOutSeconds - 1 >= MAX_CACHE_TIMEOUT then
-        TimeOutSeconds := MAX_CACHE_TIMEOUT
-      else
-        TimeOutSeconds := aTimeOutSeconds;
-      NotifyContentChangedForMethod(aMethodIndex);
-    end;
+    c := @fCache[ndx];
+    c^.Policy := aPolicy;
+    if aTimeOutSeconds - 1 >= MAX_CACHE_TIMEOUT then
+      aTimeOutSeconds := MAX_CACHE_TIMEOUT;
+    c^.TimeOutSeconds := aTimeOutSeconds;
+    NotifyContentChangedForMethod(ndx);
   end;
   result := self;
 end;
@@ -2238,92 +2238,92 @@ procedure TMvcRendererReturningData.ExecuteCommand(aMethodIndex: integer);
 
 var
   sessionID: integer;
+  c: ^TMvcRunWithViewCache;
 label
   doRoot, doInput;
 begin
   // first check if content can be retrieved from cache
   if not fCacheEnabled then
   begin
-    inherited ExecuteCommand(aMethodIndex);
+    inherited ExecuteCommand(aMethodIndex); // raw command
     exit;
   end;
+  // return any cached content
   fCacheCurrent := noCache;
   fCacheCurrentSec := GetTickCount64 div MilliSecsPerSec;
   fRun.fCacheLocker.Enter;
   try
     if cardinal(aMethodIndex) < cardinal(Length(fRun.fCache)) then
-      with fRun.fCache[aMethodIndex] do
-      begin
-        case Policy of
-          cacheRootIgnoringSession:
-            if fInput = '' then
-doRoot:       if (RootValue <> '') and
-                 (fCacheCurrentSec < RootValueExpirationTime) then
-              begin
-                SetOutputValue(RootValue);
-                exit;
-              end
-              else
-                fCacheCurrent := rootCache;
-          cacheRootIfSession:
-            if (fInput = '') and
-               fApplication.CurrentSession.Exists then
-              goto doRoot;
-          cacheRootIfNoSession:
-            if (fInput = '') and
-               not fApplication.CurrentSession.Exists then
-              goto doRoot;
-          cacheRootWithSession:
-            if fInput = '' then
+    begin
+      c := @fRun.fCache[aMethodIndex];
+      case c^.Policy of
+        cacheRootIgnoringSession:
+          if fInput = '' then
+doRoot:     if (c^.RootValue <> '') and
+               (fCacheCurrentSec < c^.RootValueExpirationTime) then
             begin
-              sessionID := fApplication.CurrentSession.CheckAndRetrieve;
-              if sessionID = 0 then
-                goto doRoot
-              else if RetrievedFromInputValues(
-                        UInt32ToUtf8(sessionID), InputValues) then
-                exit;
-            end;
-          cacheWithParametersIgnoringSession:
-doInput:    if fInput = '' then
-              goto doRoot
-            else if RetrievedFromInputValues(fInput, InputValues) then
+              SetOutputValue(c^.RootValue);
               exit;
-          cacheWithParametersIfSession:
-            if fApplication.CurrentSession.Exists then
-              goto doInput;
-          cacheWithParametersIfNoSession:
-            if not fApplication.CurrentSession.Exists then
-              goto doInput;
-        end;
+            end
+            else
+              fCacheCurrent := rootCache;
+        cacheRootIfSession:
+          if (fInput = '') and
+             fApplication.CurrentSession.Exists then
+            goto doRoot;
+        cacheRootIfNoSession:
+          if (fInput = '') and
+             not fApplication.CurrentSession.Exists then
+            goto doRoot;
+        cacheRootWithSession:
+          if fInput = '' then
+          begin
+            sessionID := fApplication.CurrentSession.CheckAndRetrieve;
+            if sessionID = 0 then
+              goto doRoot
+            else if RetrievedSessionFromInputValues(sessionID, c^.InputValues) then
+              exit;
+          end;
+        cacheWithParametersIgnoringSession:
+doInput:  if fInput = '' then
+            goto doRoot
+          else if RetrievedFromInputValues(fInput, c^.InputValues) then
+            exit;
+        cacheWithParametersIfSession:
+          if fApplication.CurrentSession.Exists then
+            goto doInput;
+        cacheWithParametersIfNoSession:
+          if not fApplication.CurrentSession.Exists then
+            goto doInput;
       end;
+    end;
   finally
     fRun.fCacheLocker.Leave; // ExecuteCommand() process should not be locked
   end;
   // compute the context and render the page using the corresponding View
   inherited ExecuteCommand(aMethodIndex);
+  if fCacheCurrent = noCache then
+    exit;
   // update cache
-  if fCacheCurrent <> noCache then
+  fRun.fCacheLocker.Enter;
   try
-    fRun.fCacheLocker.Enter;
-    with fRun.fCache[aMethodIndex] do
-    begin
-      inc(fCacheCurrentSec, TimeOutSeconds);
-      case fCacheCurrent of
-        rootCache:
-          if fOutput.Status = HTTP_SUCCESS then
-          begin
-            Join([fOutput.Header, #0, fOutput.Content], RootValue);
-            RootValueExpirationTime := fCacheCurrentSec;
-          end
-          else
-            RootValue := '';
-        inputCache:
-          if fOutput.Status = HTTP_SUCCESS then
-            InputValues.Add(fCacheCurrentInputValueKey,
-              Join([fOutput.Header, #0, fOutput.Content]), fCacheCurrentSec)
-          else
-            InputValues.Add(fCacheCurrentInputValueKey, '');
-      end;
+    c := @fRun.fCache[aMethodIndex];
+    inc(fCacheCurrentSec, c^.TimeOutSeconds);
+    case fCacheCurrent of
+      rootCache:
+        if fOutput.Status = HTTP_SUCCESS then
+        begin
+          Join([fOutput.Header, #0, fOutput.Content], c^.RootValue);
+          c^.RootValueExpirationTime := fCacheCurrentSec;
+        end
+        else
+          c^.RootValue := '';
+      inputCache:
+        if fOutput.Status = HTTP_SUCCESS then
+          c^.InputValues.AddJoined(fCacheCurrentInputValueKey,
+            [fOutput.Header, #0, fOutput.Content], fCacheCurrentSec)
+        else
+          c^.InputValues.Add(fCacheCurrentInputValueKey, '');
     end;
   finally
     fRun.fCacheLocker.Leave;
