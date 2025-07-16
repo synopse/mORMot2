@@ -174,26 +174,28 @@ type
       kind: THtmlTableStyleLabel); override;
   end;
 
+  TMvcViewMustache = record
+    Mustache: TSynMustache;
+    Template: RawUtf8;
+    MethodName: TFileName;
+    SearchPattern: TFileName;
+    FileName: TFileName;
+    ShortFileName: TFileName;
+    FileExt: TFileName;
+    ContentType: RawUtf8;
+    Locker: IAutoLocker;
+    FileAgeLast: TUnixTime;
+    FileAgeCheckTick: Int64;
+    Flags: TMvcViewFlags;
+  end;
+
   /// a class able to implement Views using Mustache templates
   TMvcViewsMustache = class(TMvcViewsAbstract)
   protected
     fViewTemplateFileTimestampMonitor: cardinal;
     fViewPartials: TSynMustachePartials;
     fViewHelpers: TSynMustacheHelpers;
-    fViews: array of record // follows fFactory.Methods[]
-      Mustache: TSynMustache;
-      Template: RawUtf8;
-      MethodName: TFileName;
-      SearchPattern: TFileName;
-      FileName: TFileName;
-      ShortFileName: TFileName;
-      FileExt: TFileName;
-      ContentType: RawUtf8;
-      Locker: IAutoLocker;
-      FileAgeLast: TUnixTime;
-      FileAgeCheckTick: Int64;
-      Flags: TMvcViewFlags;
-    end;
+    fViews: array of TMvcViewMustache; // follows fFactory.Methods[]
     procedure NotifyContentChanged; override;
     function GetRenderer(methodIndex: integer; var view: TMvcView): TSynMustache;
     /// search for template files in ViewTemplateFolder
@@ -1187,6 +1189,7 @@ var
   folder, ext: TFileName;
   files: TFileNameDynArray;
   info: variant;
+  v: ^TMvcViewMustache;
 begin
   inherited Create(aInterface, aLogClass);
   // get views
@@ -1208,48 +1211,51 @@ begin
   else
     ext := ',' + SysUtils.LowerCase(aParameters.CsvExtensions) + ',';
   SetLength(fViews, fFactory.MethodsCount);
+  v := pointer(fViews);
   for m := 0 to fFactory.MethodsCount - 1 do
+  begin
     if MethodHasView(fFactory.Methods[m]) then
-      with fViews[m] do
+    begin
+      v^.Locker := TAutoLocker.Create;
+      Utf8ToFileName(fFactory.Methods[m].Uri, v^.MethodName);
+      v^.SearchPattern := v^.MethodName + '.*';
+      files := FindTemplates(v^.SearchPattern);
+      if length(files) > 0 then
       begin
-        Locker := TAutoLocker.Create;
-        Utf8ToFileName(fFactory.Methods[m].Uri, MethodName);
-        SearchPattern := MethodName + '.*';
-        files := FindTemplates(SearchPattern);
-        if length(files) > 0 then
+        for i := 0 to length(files) - 1 do
         begin
-          for i := 0 to length(files) - 1 do
-          begin
-            ShortFileName := files[i];
-            FileExt := SysUtils.LowerCase(
-              copy(ExtractFileExt(ShortFileName), 2, 100));
-            if Pos(',' + FileExt + ',', ext) > 0 then
-              // found a template with the right extension
-              break;
-          end;
-          // if no exact extension match, return last matching 'MethodName.*'
-          FileName := ViewTemplateFolder + ShortFileName;
-          ContentType := GetMimeContentType('', ShortFileName);
-        end
-        else
+          v^.ShortFileName := files[i];
+          v^.FileExt := SysUtils.LowerCase(
+            copy(ExtractFileExt(v^.ShortFileName), 2, 100));
+          if Pos(',' + v^.FileExt + ',', ext) > 0 then
+            // found a template with the right extension
+            break;
+        end;
+        // if no exact extension match, return last matching 'MethodName.*'
+        v^.FileName := ViewTemplateFolder + v^.ShortFileName;
+        v^.ContentType := GetMimeContentType('', v^.ShortFileName);
+      end
+      else
+      begin
+        fLogClass.Add.Log(sllWarning,
+          '%.Create: Missing View file in %', [self, v^.SearchPattern]);
+        if aParameters.ExtensionForNotExistingTemplate <> '' then
         begin
-          fLogClass.Add.Log(sllWarning,
-            '%.Create: Missing View file in %', [self, SearchPattern]);
-          if aParameters.ExtensionForNotExistingTemplate <> '' then
-          begin
-            // create void template content with methods information as comment
-            ShortFileName :=
-              MethodName + aParameters.ExtensionForNotExistingTemplate;
-            FileName := ViewTemplateFolder + ShortFileName;
-            info := ContextFromMethod(fFactory.Methods[m]);
-            _ObjAddProp(
-              'interfaceName', fFactory.InterfaceRtti.Name, info);
-            FileFromString(StringReplaceChars(StringReplaceChars(
-              TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),
-              '<', '{'), '>', '}'), FileName);
-          end;
+          // create void template content with methods information as comment
+          v^.ShortFileName :=
+            v^.MethodName + aParameters.ExtensionForNotExistingTemplate;
+          v^.FileName := ViewTemplateFolder + v^.ShortFileName;
+          info := ContextFromMethod(fFactory.Methods[m]);
+          _ObjAddProp(
+            'interfaceName', fFactory.InterfaceRtti.Name, info);
+          FileFromString(StringReplaceChars(StringReplaceChars(
+            TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),
+            '<', '{'), '>', '}'), v^.FileName);
         end;
       end;
+    end;
+    inc(v);
+  end;
   fViewHelpers := aParameters.Helpers;
   // get partials
   fViewPartials := TSynMustachePartials.Create;
@@ -1372,50 +1378,58 @@ function TMvcViewsMustache.GetRenderer(methodIndex: integer;
   var view: TMvcView): TSynMustache;
 var
   age: TUnixTime;
+  v: ^TMvcViewMustache;
+
+  procedure UpdateView;
+  begin
+    v^.Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
+    v^.FileAgeLast := age;
+    v^.Template := GetTemplate(v^.ShortFileName);
+    if v^.Template <> '' then
+    try
+      v^.Mustache := TSynMustache.Parse(v^.Template);
+      if v^.Mustache.FoundInTemplate(fViewGenerationTimeTag) then
+        include(v^.Flags, viewHasGenerationTimeTag);
+    except
+      on E: Exception do
+        EMvcException.RaiseUtf8('%.Render(''%''): Invalid Template: % - %',
+          [self, v^.ShortFileName, E, E.Message]);
+    end
+    else
+      EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
+        [self, v^.ShortFileName, v^.SearchPattern]);
+    if fViewTemplateFileTimestampMonitor <> 0 then
+      v^.FileAgeCheckTick := GetTickCount64 +
+        Int64(fViewTemplateFileTimestampMonitor) * Int64(1000);
+  end;
+
 begin
   if cardinal(methodIndex) >= cardinal(fFactory.MethodsCount) then
     EMvcException.RaiseUtf8('%.Render(methodIndex=%)', [self, methodIndex]);
-  with fViews[methodIndex],
-       Locker.ProtectMethod do
-  begin
-    if MethodName = '' then
-      EMvcException.RaiseUtf8('%.Render(''%''): not a View', [self, MethodName]);
-    if (Mustache = nil) and
-       (FileName = '') then
+  v := @fViews[methodIndex];
+  v^.Locker.Enter;
+  try
+    if v^.MethodName = '' then
+      EMvcException.RaiseUtf8('%.Render(%): not a View',
+        [self, fFactory.Methods[methodIndex].Uri]);
+    if (v^.Mustache = nil) and
+       (v^.FileName = '') then
       EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
-        [self, MethodName, SearchPattern]);
-    if (Mustache = nil) or
+        [self, v^.MethodName, v^.SearchPattern]);
+    if (v^.Mustache = nil) or
        ((fViewTemplateFileTimestampMonitor <> 0) and
-        (FileAgeCheckTick < GetTickCount64)) then
+        (v^.FileAgeCheckTick < GetTickCount64)) then
     begin
-      age := GetTemplateAge(ShortFileName);
-      if (Mustache = nil) or
-         (age <> FileAgeLast) then
-      begin
-        Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
-        FileAgeLast := age;
-        Template := GetTemplate(ShortFileName);
-        if Template <> '' then
-        try
-          Mustache := TSynMustache.Parse(Template);
-          if Mustache.FoundInTemplate(fViewGenerationTimeTag) then
-            include(Flags, viewHasGenerationTimeTag);
-        except
-          on E: Exception do
-            EMvcException.RaiseUtf8('%.Render(''%''): Invalid Template: % - %',
-              [self, ShortFileName, E, E.Message]);
-        end
-        else
-          EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
-            [self, ShortFileName, SearchPattern]);
-        if fViewTemplateFileTimestampMonitor <> 0 then
-          FileAgeCheckTick := GetTickCount64 +
-            Int64(fViewTemplateFileTimestampMonitor) * Int64(1000);
-      end;
+      age := GetTemplateAge(v^.ShortFileName);
+      if (v^.Mustache = nil) or
+         (age <> v^.FileAgeLast) then
+        UpdateView;
     end;
-    view.ContentType := ContentType;
-    view.Flags := view.Flags + Flags;
-    result := Mustache;
+    view.ContentType := v^.ContentType;
+    view.Flags := view.Flags + v^.Flags;
+    result := v^.Mustache;
+  finally
+    v^.Locker.Leave;
   end;
 end;
 
@@ -1438,23 +1452,24 @@ end;
 
 procedure TMvcViewsMustache.Render(methodIndex: integer; const Context: variant;
   var View: TMvcView);
+var
+  v: ^TMvcViewMustache;
 begin
   View.Content := GetRenderer(methodIndex, View).
                   Render(Context, fViewPartials, fViewHelpers);
-  if IsVoid(View.Content) then
-    // rendering failure
-    with fViews[methodIndex] do
-    begin
-      Locker.Enter;
-      try
-        Mustache := nil; // force reload view ASAP
-      finally
-        Locker.Leave;
-      end;
-      EMvcException.RaiseUtf8(
-        '%.Render(''%''): Void [%] Template - please customize this file!',
-        [self, ShortFileName, FileName]);
-    end;
+  if not IsVoid(View.Content) then
+    exit;
+  // rendering failure
+  v := @fViews[methodIndex];
+  v^.Locker.Enter;
+  try
+    v^.Mustache := nil; // force reload view ASAP
+  finally
+    v^.Locker.Leave;
+  end;
+  EMvcException.RaiseUtf8(
+    '%.Render(''%''): Void [%] Template - please customize this file!',
+    [self, v^.ShortFileName, v^.FileName]);
 end;
 
 
@@ -2487,7 +2502,7 @@ end;
 
 initialization
   assert(SizeOf(TMvcAction) = SizeOf(TServiceCustomAnswer));
-  TSynLog.Family.ExceptionIgnore.Add(EMvcApplication);
+  TSynLog.Family.ExceptionIgnore.Add(EMvcApplication); // redirection, not error
 
 end.
 
