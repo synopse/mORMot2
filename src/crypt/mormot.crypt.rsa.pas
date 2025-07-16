@@ -244,8 +244,8 @@ type
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 10): boolean;
     /// guess a random prime number of the exact current size
-    // - a secret is generated from several audited sources (OS, cpu RdRand),
-    // then looped over TAesPrng.Fill and IsPrime method within a timeout period
+    // - a secret is generated from audited sources (OS, cpu RdRand), then
+    // looped over TAesPrng.Fill and IsPrime method within a timeout period
     // - if Iterations is too low, FIPS 4.48 recommendation will be forced
     function FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
       EndTix: Int64): boolean;

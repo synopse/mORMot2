@@ -11226,7 +11226,7 @@ begin
   cwpoint := pointer(dst);
   PCardinal(dst)^ := 0;
   inc(dst, SizeOf(cwpoint^));
-  FillCharFast(offset, SizeOf(offset), 0); // fast 16KB reset to 0
+  FillCharFast(offset, SizeOf(offset), 0); // fast 16KB/32KB reset to 0
   // 1. main loop to search using hash[]
   if src <= srcendmatch then
     repeat

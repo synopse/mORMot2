@@ -2248,7 +2248,7 @@ function LinuxEventFDWait(fd: integer; ms: integer): boolean; inline;
 
 /// a wrapper to the Linux getrandom() syscall
 // - returns false if the kernel is unsupported (before 3.17) or if the
-// platform is not validated yet (only Linux x86_64 by now)
+// platform is not validated yet (only Linux i386, x86_64 and aarch64 by now)
 // - used e.g. by function FillSystemRandom() if available, since it makes a
 // single syscall, and /dev/urandom may be not available from some chroot
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;

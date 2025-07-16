@@ -1691,9 +1691,9 @@ begin
 end;
 
 
-// eventfd + getrandom syscalls are validated on Linux i386, x86_64 and aarch64
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
+// eventfd + getrandom syscalls are validated on Linux i386, x86_64 and aarch64
 {$ifdef OSLINUX}
   {$ifdef CPUX64}
     {$define HASEVENTFD}
@@ -3349,7 +3349,7 @@ begin
   DefaultHasher128(@e.h0, @tmp, LoadProcFile('/proc/self/stat', tmp));
   DefaultHasher128(@e.h1, @tmp, LoadProcFile('/proc/stat', tmp));
   clock_gettime(CLOCK_UPTIME, @rt);
-  DefaultHasher128(@e.h2, @rt, SizeOf(rt)); // maybe AesNiHash128
+  DefaultHasher128(@e.h2, @rt, SizeOf(rt));
   // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/uuid', tmp));
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
@@ -5008,7 +5008,7 @@ begin
   P := @uts.release[0];
   KernelRevision := _GetNextCardinal(P) shl 16 +
                     _GetNextCardinal(P) shl 8 +
-                    _GetNextCardinal(P); // stored in big endian for easy compare
+                    _GetNextCardinal(P); // 24-bit big endian for easy compare
   OSVersion32.os := OS_KIND;
   MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
   {$ifdef OSANDROID}
