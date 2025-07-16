@@ -6249,7 +6249,7 @@ begin
   ps := GetEnumNameRtti(Info, Code);
   d := @Dest^[ord(Dest^[0]) + 1];
   inc(Dest^[0], ord(ps^[0]));
-  d[0] := 'E'; // ignore 'l' or 'b' and write 'E' instead
+  d[0] := 'E'; // ignore 'l' or 'b' prefix and write 'E' instead
   MoveFast(ps^[2], d[1], ord(ps^[0]) - 1);
 end;
 
@@ -6698,7 +6698,7 @@ begin
   else if FileName[len] <> PathDelim then
     result := FileExists(FileName, FollowLink, {checkasdir=}true)
   else
-    result := FileExists(copy(FileName, 1, len - 1), FollowLink, true);
+    result := FileExists(copy(FileName, 1, len - 1), FollowLink, {asdir=}true);
 end;
 
 function SafePathName(const Path: TFileName): boolean;
@@ -7393,7 +7393,7 @@ begin
       result := ''
   else
   begin
-    if NoExpand then
+    if NoExpand then // caller won't store the result, so no full path needed
       result := Directory
     else
       result := ExpandFileName(Directory);

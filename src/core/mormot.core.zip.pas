@@ -3188,26 +3188,26 @@ begin
     if not SafeFileName(LocalZipName) then
       ESynZip.RaiseUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
-    Dest := EnsureDirectoryExists(DestDir);
+    Dest := EnsureDirectoryExists(DestDir, nil, {noexpand=}true);
     if Dest = '' then
       exit;
     LocalPath := ExtractFilePath(LocalZipName);
     if LocalPath <> '' then
     begin
       LocalZipName := ExtractFileName(LocalZipName);
-      Dest := EnsureDirectoryExists([Dest, LocalPath]);
+      Dest := EnsureDirectoryExists([Dest, LocalPath], nil, {noexpand=}true);
     end;
     if not FileIsWritable(Dest) then
       exit; // impossible to write in this folder
     Dest := Dest + LocalZipName;
   end;
   if IsFolder(Entry[aIndex].zipName) then
-    result := EnsureDirectoryExists(Dest) <> ''
+    result := EnsureDirectoryExists(Dest, nil, {noexpand=}true) <> ''
   else
   begin
     FS := TFileStreamEx.Create(Dest, fmCreate);
     try
-      result := UnZipStream(aIndex, info, FS);
+      result := UnZipStream(aIndex, info, FS); // use libdeflate if possible
     finally
       FS.Free;
     end;
@@ -3217,7 +3217,7 @@ end;
 
 function TZipRead.UnZipAll(DestDir: TFileName): integer;
 begin
-  DestDir := EnsureDirectoryExists(DestDir, ESynZip);
+  DestDir := EnsureDirectoryExists(DestDir, ESynZip, {noexpand=}true);
   for result := 0 to Count - 1 do
     if not UnZip(result, DestDir) then
       exit;
