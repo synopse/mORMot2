@@ -1281,21 +1281,26 @@ var
   partial: TSynMustache;
   partialName: RawUtf8;
 begin
-  fViewPartials.List.Clear;
   files := FindTemplates('*.partial');
-  for i := 0 to length(files) - 1 do
-  begin
-    StringToUtf8(GetFileNameWithoutExt(files[i]), partialName);
-    try
-      partial := fViewPartials.Add(partialName, GetTemplate(files[i]));
-      if not (viewHasGenerationTimeTag in fViewFlags) and
-         partial.FoundInTemplate(fViewGenerationTimeTag) then
-        include(fViewFlags, viewHasGenerationTimeTag);
-    except
-      on E: Exception do
-        fLogClass.Add.Log(sllError, '%.Create: Invalid Partial file % - %',
-          [self, files[i], E]);
+  fViewPartials.List.Safe.Lock;
+  try
+    fViewPartials.List.Clear;
+    for i := 0 to length(files) - 1 do
+    begin
+      StringToUtf8(GetFileNameWithoutExt(files[i]), partialName);
+      try
+        partial := fViewPartials.Add(partialName, GetTemplate(files[i]));
+        if not (viewHasGenerationTimeTag in fViewFlags) and
+           partial.FoundInTemplate(fViewGenerationTimeTag) then
+          include(fViewFlags, viewHasGenerationTimeTag);
+      except
+        on E: Exception do
+          fLogClass.Add.Log(sllError, '%.Create: Invalid Partial file % - %',
+            [self, files[i], E]);
+      end;
     end;
+  finally
+    fViewPartials.List.Safe.UnLock;
   end;
 end;
 
