@@ -11673,14 +11673,13 @@ begin
   // HTML/Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
-  GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT);
+  GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, false, {lower=}true);
   EMOJI_TEXT[eNone] := '';
   for e := succ(low(e)) to high(e) do
   begin
-    LowerCaseSelf(EMOJI_TEXT[e]);
     Join([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
-    SetLength(EMOJI_UTF8[e], 4); // order matches U+1F600 to U+1F64F codepoints
-    Ucs4ToUtf8(ord(e) + $1f5ff, pointer(EMOJI_UTF8[e]));
+    // order matches U+1F600 to U+1F64F codepoints
+    Ucs4ToUtf8(ord(e) + $1f5ff, FastSetString(EMOJI_UTF8[e], 4));
   end;
   EMOJI_AFTERDOTS[')'] := eSmiley;
   EMOJI_AFTERDOTS['('] := eFrowning;
