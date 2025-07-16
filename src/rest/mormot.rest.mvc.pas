@@ -476,7 +476,13 @@ type
       read fApplication;
   end;
 
-  /// how TMvcRendererReturningData should cache its content
+  /// how TMvcRunWithViews.SetCache should cache the content of a given method
+  // - cacheRoot* consider no query-string; whereas cacheWithParameters* will
+  // maintain a cache also according to the query-string values
+  // - use *IgnoringSession flavour if the output is identical for every visitor
+  // - use *IfSession / *IfNoSession variant to save memory when the page differs
+  // only between logged-in / guest users
+  // - use *WithSession or disable caching if the page is unique per user
   // - see https://gist.github.com/flydev-fr/e0f0a24dc0ab9b39ef1f7bc2ac78f2bc
   TMvcRendererCachePolicy = (
     cacheNone,
@@ -594,7 +600,8 @@ type
     // MVC command - leaving default 0 will set to 5 minutes expiration delay
     // - function calls can be chained to create some fluent definition interface
     // like in TAnyBLogapplication.Create:
-    // ! fMainRunner := TMvcRunWithViews.Create(self).SetCache('default',cacheRoot);
+    // ! fMainRunner := TMvcRunWithViews.Create(self).
+    // !   SetCache('default', cacheRoot);
     function SetCache(const aMethodName: RawUtf8;
       aPolicy: TMvcRendererCachePolicy;
       aTimeOutSeconds: cardinal = 0): TMvcRunWithViews; virtual;
