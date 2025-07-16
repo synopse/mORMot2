@@ -2181,6 +2181,10 @@ function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: int
 // - return an RawUtf8 string: enumeration names are pure 7-bit ANSI with Delphi
 // up to 2007, and UTF-8 encoded with Delphi 2009+
 function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert in-place a CamelCase string into a space separated one
+procedure UnCamelCaseSelf(var S: RawUtf8);
 
 /// convert a CamelCase string into a space separated one
 // - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
@@ -9084,17 +9088,20 @@ begin
 end;
 
 function UnCamelCase(const S: RawUtf8): RawUtf8;
+begin
+  result := S;
+  UnCamelCaseSelf(result);
+end;
+
+procedure UnCamelCaseSelf(var S: RawUtf8);
 var
   tmp: TSynTempBuffer;
   destlen: PtrInt;
 begin
   if S = '' then
-    result := ''
-  else
-  begin
-    destlen := UnCamelCase(tmp.Init(length(S) * 2), pointer(S));
-    tmp.Done(PAnsiChar(tmp.buf) + destlen, result);
-  end;
+    exit;
+  destlen := UnCamelCase(tmp.Init(length(S) * 2), pointer(S));
+  tmp.Done(PAnsiChar(tmp.buf) + destlen, S);
 end;
 
 function UnCamelCase(D, P: PUtf8Char): integer;
