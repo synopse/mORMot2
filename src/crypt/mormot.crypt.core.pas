@@ -476,7 +476,7 @@ type
     /// start AES-GCM encryption with a given Initialization Vector
     // - IV_len is in bytes use 12 for exact IV setting, otherwise the
     // supplied buffer will be hashed using gf_mul_h()
-    function Reset(pIV: pointer; IV_len: PtrInt): boolean;
+    function Reset(pIV: PHash128Rec; IV_len: PtrInt): boolean;
     /// copy this AES-GCM engine key and state into another instance
     procedure Clone(another: PAesGcmEngine);
     /// encrypt a buffer with AES-GCM, updating the associated authentication data
@@ -4861,7 +4861,7 @@ end;
 const
   CTR_POS = 12; // "perfect" size of IV in AES-GCM mode
 
-function TAesGcmEngine.Reset(pIV: pointer; IV_len: PtrInt): boolean;
+function TAesGcmEngine.Reset(pIV: PHash128Rec; IV_len: PtrInt): boolean;
 var
   i, n_pos: PtrInt;
   iv: PHash128Rec;
@@ -4874,7 +4874,8 @@ begin
   if IV_len = CTR_POS then
   begin
     // IV has perfect size of 12 bytes - as forced by TAesGcm.AesGcmReset
-    MoveFast(pIV^, iv^, CTR_POS);
+    iv^.L := pIV^.L;
+    iv^.c2 := pIV^.c2; // = MoveFast(pIV^, iv^, CTR_POS)
     iv^.c3 := $01000000;
   end
   else
@@ -4884,15 +4885,15 @@ begin
     FillZero(iv^.b);
     while n_pos >= SizeOf(TAesBlock) do
     begin
-      XorBlock16(pointer(iv), pIV);
-      inc(PAesBlock(pIV));
+      XorBlock16(pointer(iv), pointer(pIV));
+      inc(pIV);
       dec(n_pos, SizeOf(TAesBlock));
       gf_mul_h(self, iv^.b); // maybe CLMUL
     end;
     if n_pos > 0 then
     begin
       for i := 0 to n_pos - 1 do
-        iv^.b[i] := iv^.b[i] xor PAesBlock(pIV)^[i];
+        iv^.b[i] := iv^.b[i] xor pIV^.b[i];
       gf_mul_h(self, iv^.b); // maybe CLMUL
     end;
     n_pos := IV_len shl 3;
