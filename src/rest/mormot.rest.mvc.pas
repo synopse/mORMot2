@@ -1743,80 +1743,79 @@ var
   WR: TJsonWriter;
   m: PInterfaceMethod;
   methodOutput: RawUtf8;
-  renderContext, info: variant;
+  renderContext: TDocVariantData;
+  info: variant;
   err: ShortString;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
   fMethodIndex := aMethodIndex;
   try
     if fMethodIndex >= 0 then
-    begin
-      repeat
+    repeat
+      try
+        // execute the method and generate the JSON output
+        m := @fApplication.fFactory.Methods[fMethodIndex];
+        isAction := imfResultIsServiceCustomAnswer in m^.Flags;
+        fExecuteCached[fMethodIndex].Acquire([], exec, WR);
         try
-          m := @fApplication.fFactory.Methods[fMethodIndex];
-          isAction := imfResultIsServiceCustomAnswer in m^.Flags;
-          fExecuteCached[fMethodIndex].Acquire([], exec, WR);
-          try
-            WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
-            WR.AddDirect('{');
-            exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
-            err := '';
-            if not exec.ExecuteJson([fApplication.fFactoryEntry],
-                pointer(fInput), WR, @err, true) then
-            begin
-              if err = '' then
-                err := 'execution error';
-              EMvcException.RaiseUtf8('%.CommandRunMethod(I%): %',
-                [self, m^.InterfaceDotMethodName, err])
-            end;
-            action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
-            action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
-            if not isAction then
-              WR.AddDirect('}');
-            WR.SetText(methodOutput);
-          finally
-            fExecuteCached[fMethodIndex].Release(exec);
-          end;
-          if isAction then
-            // was a TMvcAction mapped in a TServiceCustomAnswer record
-            action.RedirectToMethodParameters := methodOutput
-          else
+          WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
+          WR.AddDirect('{');
+          exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
+          err := '';
+          if not exec.ExecuteJson([fApplication.fFactoryEntry],
+              pointer(fInput), WR, @err, true) then
           begin
-            // rendering, e.g. with fast Mustache {{template}}
-            VarClear(renderContext);
-            TDocVariantData(renderContext).InitJsonInPlace(
-              pointer(methodOutput), JSON_MVC);
-            fApplication.GetViewInfo(fMethodIndex, info);
-            _Safe(renderContext)^.AddValue('main', info);
-            if fMethodIndex = fApplication.fFactoryErrorIndex then
-              AddErrorContext(renderContext, action.ReturnedStatus);
-            Renders(renderContext, action.ReturnedStatus, false);
-            exit; // success
+            if err = '' then
+              err := 'execution error';
+            EMvcException.RaiseUtf8('%.CommandRunMethod(I%): %',
+              [self, m^.InterfaceDotMethodName, err])
           end;
-        except
-          // handle EMvcApplication.GotoView/GotoError/Default redirections
-          on E: EMvcApplication do
-            // lower level exceptions will be handled below
-            action := E.fAction;
+          action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
+          action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
+          if not isAction then
+            WR.AddDirect('}');
+          WR.SetText(methodOutput);
+        finally
+          fExecuteCached[fMethodIndex].Release(exec);
         end;
-        // handle TMvcAction redirection
-        fInput := action.RedirectToMethodParameters;
-        fMethodIndex := fApplication.fFactory.
-          FindMethodIndex(action.RedirectToMethodName);
-        if action.ReturnedStatus = 0 then
-          action.ReturnedStatus := HTTP_SUCCESS
-        else if (action.ReturnedStatus = HTTP_TEMPORARYREDIRECT) or
-                (action.ReturnedStatus = HTTP_FOUND) or
-                (action.ReturnedStatus = HTTP_SEEOTHER) or
-                (action.ReturnedStatus = HTTP_MOVEDPERMANENTLY) then
-          if Redirects(action) then
-            // if redirection is implemented
-            exit
-          else
-            // fallback is to stay here
-            action.ReturnedStatus := HTTP_SUCCESS;
-      until fMethodIndex < 0; // loop to handle redirection
-    end;
+        if isAction then
+          // was a TMvcAction mapped in a TServiceCustomAnswer record
+          action.RedirectToMethodParameters := methodOutput
+        else
+        begin
+          // rendering, e.g. with fast Mustache {{template}} over TDocVariant
+          renderContext.Void;
+          renderContext.InitJsonInPlace(pointer(methodOutput), JSON_MVC);
+          fApplication.GetViewInfo(fMethodIndex, info);
+          renderContext.AddValue('main', info);
+          if fMethodIndex = fApplication.fFactoryErrorIndex then
+            AddErrorContext(variant(renderContext), action.ReturnedStatus);
+          Renders(variant(renderContext), action.ReturnedStatus, false);
+          exit; // success
+        end;
+      except
+        // handle EMvcApplication.GotoView/GotoError/Default redirections
+        on E: EMvcApplication do
+          // lower level exceptions will be handled below
+          action := E.fAction;
+      end;
+      // handle TMvcAction redirection
+      fInput := action.RedirectToMethodParameters;
+      fMethodIndex := fApplication.fFactory.
+        FindMethodIndex(action.RedirectToMethodName);
+      if action.ReturnedStatus = 0 then
+        action.ReturnedStatus := HTTP_SUCCESS
+      else if (action.ReturnedStatus = HTTP_TEMPORARYREDIRECT) or
+              (action.ReturnedStatus = HTTP_FOUND) or
+              (action.ReturnedStatus = HTTP_SEEOTHER) or
+              (action.ReturnedStatus = HTTP_MOVEDPERMANENTLY) then
+        if Redirects(action) then
+          // if redirection is implemented
+          exit
+        else
+          // fallback is to stay here
+          action.ReturnedStatus := HTTP_SUCCESS;
+    until fMethodIndex < 0; // loop to handle redirection
     // if we reached here, there was a wrong URI -> render the 404 error page
     CommandError('notfound', true, HTTP_NOTFOUND);
   except
@@ -1844,8 +1843,8 @@ end;
 procedure TMvcRendererFromViews.Renders(var outContext: variant;
   status: cardinal; forcesError: boolean);
 var
-  view: TMvcView;
-  head: RawUtf8;
+  view: TMvcView; // stack allocated rendering context
+  head: PVarData;
 begin
   view.Flags := fRun.fViews.fViewFlags;
   if forcesError or
@@ -1871,9 +1870,9 @@ begin
     fRun.fViews.Render(fMethodIndex, outContext, view);
   fOutput.Content := view.Content;
   Join([HEADER_CONTENT_TYPE, view.ContentType], fOutput.Header);
-  if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) and
-     (head <> '') then
-    AppendLine(fOutput.Header, [head]);
+  head := _Safe(outContext)^.GetVarData('CustomOutHttpHeader');
+  if head <> nil then
+    AppendLine(fOutput.Header, [PVariant(head)^]);
   fOutput.Status := status;
   fOutputFlags := view.Flags;
 end;
@@ -1965,7 +1964,7 @@ procedure TMvcRunWithViews.NotifyContentChanged;
 begin
   inherited NotifyContentChanged; // call all NotifyContentChangedForMethod()
   if Assigned(fViews) then
-    fViews.NotifyContentChanged;
+    fViews.NotifyContentChanged; // TMvcViewsMustache will reload all partials
 end;
 
 procedure TMvcRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
@@ -2256,6 +2255,12 @@ procedure TMvcRendererReturningData.ExecuteCommand(aMethodIndex: integer);
     end;
   end;
 
+  function RetrievedSessionFromInputValues(aSession: integer;
+    const aInputValues: TSynNameValue): boolean;
+  begin
+    RetrievedFromInputValues(UInt32ToUtf8(aSession), aInputValues);
+  end;
+
 var
   sessionID: integer;
   c: ^TMvcRunWithViewCache;
@@ -2418,6 +2423,7 @@ end;
 procedure TMvcApplication.Start(aRestModel: TRest; aInterface: PRttiInfo);
 var
   m: PtrInt;
+  met: PInterfaceMethod;
   entry: PInterfaceEntry;
 begin
   fLocker := TAutoLocker.Create;
@@ -2432,16 +2438,19 @@ begin
     EMvcException.RaiseUtf8('%.Start(%): this class should implement %',
       [self, aRestModel, aInterface.RawName]);
   fFactoryEntry := PAnsiChar(self) + entry^.IOffset;
-  for m := 0 to fFactory.MethodsCount - 1 do
-    if not MethodHasView(fFactory.Methods[m]) then
-      with fFactory.Methods[m] do
-        if ArgsOutFirst <> ArgsResultIndex then
-          EMvcException.RaiseUtf8(
-            '%.Start(%): %.% var/out param not allowed with TMvcAction result',
-            [self, aRestModel, aInterface.RawName, URI])
-        else
-          // maps TMvcAction in TMvcApplication.RunOnRestServer
-          include(Flags, imfResultIsServiceCustomAnswer);
+  met := pointer(fFactory.Methods);
+  for m := 1 to fFactory.MethodsCount do
+  begin
+    if not MethodHasView(met^) then
+      if met^.ArgsOutFirst <> met^.ArgsResultIndex then
+        EMvcException.RaiseUtf8(
+          '%.Start(%): % var/out param not allowed with TMvcAction result',
+          [self, aRestModel, met^.InterfaceDotMethodName])
+      else
+        // maps TMvcAction in TMvcApplication.RunOnRestServer
+        include(met^.Flags, imfResultIsServiceCustomAnswer);
+    inc(met);
+  end;
   FlushAnyCache;
 end;
 
