@@ -400,6 +400,9 @@ type
   protected
     function GetCookie: RawUtf8; override;
     procedure SetCookie(const cookie: RawUtf8); override;
+  public
+    /// fast check if there is a cookie session associated to the current context
+    function Exists: boolean; override;
   end;
 
   /// implement a single ViewModel/Controller in-memory session
@@ -1636,6 +1639,11 @@ end;
 function TMvcSessionWithRestServer.GetCookie: RawUtf8;
 begin
   result := ServiceRunningContext.Request.InCookie[fContext.CookieName];
+end;
+
+function TMvcSessionWithRestServer.Exists: boolean;
+begin
+  result := ServiceRunningContext.Request.InCookieExists(fContext.CookieName);
 end;
 
 procedure TMvcSessionWithRestServer.SetCookie(const cookie: RawUtf8);
