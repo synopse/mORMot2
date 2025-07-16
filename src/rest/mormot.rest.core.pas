@@ -3965,10 +3965,12 @@ begin
 end;
 
 function TRestUriContext.ContentTypeIsJson: boolean;
+var
+  p: PUtf8Char;
 begin
-  result := (fInputContentType = '') or
-            IsContentTypeJson(pointer(fInputContentType),
-              PStrLen(PAnsiChar(pointer(fInputContentType)) - _STRLEN)^);
+  p := pointer(fInputContentType);
+  result := (p = nil) or
+            IsContentTypeJson(p, PStrLen(p - _STRLEN)^);
 end;
 
 function TRestUriContext.InputAsMultiPart(
