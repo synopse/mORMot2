@@ -472,6 +472,7 @@ type
   end;
 
   /// how TMvcRendererReturningData should cache its content
+  // - see https://gist.github.com/flydev-fr/e0f0a24dc0ab9b39ef1f7bc2ac78f2bc
   TMvcRendererCachePolicy = (
     cacheNone,
     cacheRootIgnoringSession,
