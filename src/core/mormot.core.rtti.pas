@@ -1657,7 +1657,8 @@ procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
 // ! ...
 // !   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
-  aUnCamelCase: boolean = false); overload;
+  aUnCamelCase: boolean = false; aLowerCase: boolean = false;
+  aLowerCaseFirst: boolean = false); overload;
 
 /// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
 function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray; overload;
@@ -6071,7 +6072,8 @@ end;
 
 function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 begin
-  result := UnCamelCase(GetEnumNameTrimed(aTypeInfo, aIndex));
+  result := GetEnumNameTrimed(aTypeInfo, aIndex);
+  UnCamelCaseSelf(result);
 end;
 
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
@@ -6094,7 +6096,7 @@ begin
 end;
 
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
-  aUnCamelCase: boolean);
+  aUnCamelCase, aLowerCase, aLowerCaseFirst: boolean);
 var
   info: PRttiEnumType;
   p: PShortString;
@@ -6108,7 +6110,11 @@ begin
     begin
       TrimLeftLowerCaseShort(p, aDest^);
       if aUnCamelCase then
-        aDest^ := UnCamelCase(aDest^);
+        UnCamelCaseSelf(aDest^)
+      else if aLowerCase then
+        CaseNew(aDest^, @NormToLower)
+      else if aLowerCaseFirst then
+        PByte(aDest^)^ := NormToLowerByte[PByte(aDest^)^];
       p := @PByteArray(p)^[ord(p^[0]) + 1];
       inc(aDest);
     end;
