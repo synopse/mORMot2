@@ -4684,11 +4684,15 @@ function RandomDouble: double;
 // - will actually XOR the Dest buffer with Lecuyer numbers
 // - consider also the cryptographic-level TAesPrng.Main.FillRandom() method
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
-procedure RandomBytes(Dest: PByte; Count: integer);
+procedure RandomBytes(Dest: PByte; Count: integer); overload;
+
+/// fill 128-bit buffer with random bytes from the gsl_rng_taus2 generator
+procedure RandomBytes(out Dest: THash128); overload;
 
 /// fill a RawByteString with random bytes from the gsl_rng_taus2 generator
 // - see also e.g. RandomAnsi7() or RandomIdentifier() in mormot.core.text.pas
-function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
+function RandomByteString(Count: integer; var Dest;
+  CodePage: cardinal = CP_RAWBYTESTRING): pointer;
 
 /// fill some string[31] with 7-bit ASCII random text
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
@@ -10724,6 +10728,11 @@ procedure RandomBytes(Dest: PByte; Count: integer);
 begin
   if Count > 0 then
     SharedRandom.Fill(pointer(Dest), Count);
+end;
+
+procedure RandomBytes(out Dest: THash128);
+begin
+  SharedRandom.Fill(@Dest, SizeOf(dest));
 end;
 
 function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
