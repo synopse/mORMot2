@@ -229,7 +229,7 @@ procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  key, prev, url, dto, client: RawUtf8;
+  key, prev, dto, client: RawUtf8;
   ref: RawByteString;
   api: TRawUtf8DynArray;
   oa: TOpenApiParser;
@@ -263,8 +263,8 @@ begin
       if api[i] <> '' then
         continue; // already downloaded
       ref := DownloadFile('https://synopse.info/files/openapi-ref.zip');
-      if UnZipMemAll(ref, WorkDir) then
-        api[i] := StringFromFile(fn); // try now
+      if UnZipMemAll(ref, WorkDir) then // one url to rule them all
+        api[i] := StringFromFile(fn);  // try now
     end;
   for i := 0 to high(api) do
     if api[i] <> '' then
