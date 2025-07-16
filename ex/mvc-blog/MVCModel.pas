@@ -635,7 +635,7 @@ var
               GetUrl(P + 8);
               FN := PublicFolder +
                 UTF8ToString(StringReplaceChars(url, '/', PathDelim));
-              EnsureDirectoryExists(ExtractFilePath(FN));
+              EnsureDirectoryExists(ExtractFilePath(FN), nil, {noexpand=}true);
               if not FileExists(FN) then
                 FileFromString(HttpGet(aDotClearRoot + '/public/' + url, nil,
                   {forceNotSocket=}true), FN);

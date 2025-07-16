@@ -428,7 +428,7 @@ end;
 
 procedure TTestDatabaseAbstract.Setup;
 begin
-  EnsureDirectoryExists(Executable.ProgramFilePath + 'db');
+  EnsureDirectoryExists(Executable.ProgramFilePath + 'db', nil, {noexpand=}true);
   Main := Owner as TTestDatabaseBenchmark;
   Value := TOrmSample.Create;
   Namee := 'Name/ ';
