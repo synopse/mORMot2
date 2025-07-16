@@ -1150,7 +1150,7 @@ type
     /// will try to handle the Auth RESTful method with mORMot authentication
     // - to be called in a two pass "challenging" algorithm:
     // $ GET ModelRoot/auth?UserName=...
-    // $  -> returns an hexadecimal nonce contents (valid for 5 minutes)
+    // $  -> returns an hexadecimal nonce contents (valid for 4.3 minutes)
     // $ GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=...
     // $ -> if password is OK, will open the corresponding session
     // $    and return 'SessionID+HexaSessionPrivateKey'
@@ -2561,7 +2561,7 @@ function ServiceRunningRequest: TRestServerUriContext;
 function CurrentServiceContext: TServiceRunningContext;
 {$endif PUREMORMOT2}
 
-/// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
+/// returns a safe HMAC-SHA-256 hexadecimal nonce, changing every 4.3 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, caching a cryptographically-level SHA-256 hash
 // - Ctxt may be nil (only used for faster GetTickCount64)
@@ -2569,20 +2569,20 @@ function CurrentNonce(Ctxt: TRestServerUriContext;
   Previous: boolean = false): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns a safe 256-bit nonce, changing every 5 minutes
+/// returns a safe HMAC-SHA-256 nonce, changing every 4.3 minutes
 // - can return the (may be cached) value as hexadecimal text or THash256 binary
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
   Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64 = 0); overload;
 
-/// returns a safe 256-bit nonce as binary, changing every 5 minutes
+/// returns a safe HMAC-SHA-256 nonce as binary, changing every 4.3 minutes
 function CurrentNonce256(Previous: boolean): THash256;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// validate a 256-bit binary nonce against current or previous nonce
+/// validate a HMAC-SHA-256 binary nonce against current or previous nonce
 function IsCurrentNonce(Ctxt: TRestServerUriContext;
   const Nonce256: THash256): boolean; overload;
 
-/// validate a 256-bit hexadecimal nonce against current or previous nonce
+/// validate a HMAC-SHA-256 hexadecimal nonce against current or previous nonce
 function IsCurrentNonce(Ctxt: TRestServerUriContext;
   const Nonce: RawUtf8): boolean; overload;
 
@@ -4847,7 +4847,7 @@ begin
       // compute the next Session ID
       fID := InterlockedIncrement(aCtxt.Server.fSessionCounter);
       // set session parameters
-      TAesPrng.Main.Fill(@rnd, SizeOf(rnd));
+      RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for a published key
       fPrivateKey := BinToHex(@rnd, SizeOf(rnd));
       if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
       begin
@@ -5239,7 +5239,7 @@ begin
 end;
 
 var
-  ServerNonceHasher: TSha256;
+  ServerNonceKdf: THmacSha256; // thread-safe HMAC-SHA-256 transient secret
   ServerNonceCache: array[{previous=}boolean] of record
     safe: TLightLock;
     tix: cardinal;
@@ -5251,26 +5251,24 @@ procedure CurrentServerNonceCompute(ticks: cardinal; previous: boolean;
   nonce: PRawUtf8; nonce256: PHash256);
 var
   hex: RawUtf8;
-  sha: TSha256;
-  tmp: TSha256Digest;
+  tmp: THash256;
 begin
-  if PInteger(@ServerNonceHasher)^ = 0 then
+  if PInteger(@ServerNonceKdf)^ = 0 then
   begin
-    // first time used: initialize the private secret
-    repeat
-      sha.Init;
-      TAesPrng.Fill(tmp); // random seed for this process lifetime
-      sha.Update(@tmp, SizeOf(tmp));
-    until PInteger(@sha)^ <> 0; // paranoid
+    // first time used: initialize the HMAC-SHA-256 secret for this process
+    TAesPrng.Main.Fill(tmp);
     ServerNonceCache[false].safe.Lock;
-    if PInteger(@ServerNonceHasher)^ = 0 then // atomic set
-      ServerNonceHasher := sha;
+    if PInteger(@ServerNonceKdf)^ = 0 then // ensure thread-safe
+    begin
+      ServerNonceKdf.Init(@StartupEntropy, SizeOf(StartupEntropy)); // salt
+      ServerNonceKdf.Update(tmp); // 256-bit CSPRNG random seed
+    end;
     ServerNonceCache[false].safe.UnLock;
+    if PInteger(@ServerNonceKdf)^ = 0 then // paranoid
+      ESecurityException.RaiseU('CurrentServerNonceCompute: hmac?');
   end;
-  // compute and cache the new nonce for this timestamp
-  sha := ServerNonceHasher; // thread-safe SHA-256 state reuse
-  sha.Update(@ticks, SizeOf(ticks));
-  sha.Final(tmp, {noinit=}true); // single RawSha256Compress() call
+  // cache the new nonce for this timestamp (called at most every 4.3 minutes)
+  ServerNonceKdf.Compute(@ticks, SizeOf(ticks), tmp); // thread-safe
   BinToHexLower(@tmp, SizeOf(tmp), hex);
   if nonce <> nil then
     nonce^ := hex;
@@ -5302,7 +5300,7 @@ begin
     if (tix32 = tix) and
        (res <> '') then  // check for res='' since tix32 may be 0 at startup
     begin
-      // fast retrieval from cache as binary or hexadecimal
+      // fast retrieval from cache as binary and/or hexadecimal
       if Nonce256 <> nil then
         Nonce256^ := hash;
       if Nonce <> nil then
@@ -5408,7 +5406,7 @@ begin
     // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
     DoAuthWithNonce
   else if aUserName <> '' then
-    // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
+    // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
     DoAuthReturnNonce
   else
     // parameters does not match any expected layout -> try next authentication
@@ -5425,7 +5423,7 @@ begin
   result := IsHex(aPassWord, SizeOf(THash256)) and
     (PropNameEquals(aPassWord,
       Sha256U([fServer.Model.Root, CurrentNonce(Ctxt, {prev=}false), salt])) or
-     // if current nonce failed, tries with previous 5 minutes' nonce
+     // if current nonce failed, tries with previous nonce
      PropNameEquals(aPassWord,
        Sha256U([fServer.Model.Root, CurrentNonce(Ctxt, {prev=}true), salt])));
 end;
