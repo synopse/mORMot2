@@ -1735,6 +1735,9 @@ procedure CaseCopy(Text: PUtf8Char; Len: PtrInt; Table: PNormTable;
 /// low-level function called when inlining UpperCaseSelf and LowerCaseSelf
 procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
 
+/// low-level function which could be called when S has RefCnt = 1
+procedure CaseNew(var S: RawUtf8; Table: PNormTable);
+
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
 // will therefore be correct with true UTF-8 content, but only for 7-bit
@@ -7663,6 +7666,11 @@ end;
 procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
 begin
   CaseConvert(UniqueRawUtf8(S), length(S), Table);
+end;
+
+procedure CaseNew(var S: RawUtf8; Table: PNormTable);
+begin
+  CaseConvert(pointer(S), length(S), Table);
 end;
 
 function UpperCase(const S: RawUtf8): RawUtf8;
