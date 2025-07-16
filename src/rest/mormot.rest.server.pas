@@ -5459,7 +5459,7 @@ var
   rnd: THash128;
 begin
   inherited Create(aServer);
-  RandomBytes(@rnd, SizeOf(rnd)); // transient secret which cannot be persisted
+  RandomBytes(rnd); // transient secret which cannot be persisted
   fAes.EncryptInit(rnd, 128); // AES-128-CTR for safe 96-bit digital signature
   fAesMask := Random32;
   FillZero(rnd);

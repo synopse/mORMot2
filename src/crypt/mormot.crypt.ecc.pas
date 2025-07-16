@@ -2819,13 +2819,13 @@ begin
         ValidityStart := EccDate(StartDate);
       ValidityEnd := ValidityStart + ExpirationDays;
     end;
-    TAesPrng.Fill(TAesBlock(Serial));
+    TAesPrng.Main.Fill(TAesBlock(Serial));
     fContent.SetUsage(word(Usage), MaxVers);
     if IssuerText = '' then
       if Subjects <> '' then
         fContent.SetSubject(Subjects, MaxVers)
       else
-        TAesPrng.Fill(TAesBlock(Issuer))
+        TAesPrng.Main.Fill(TAesBlock(Issuer))
     else
       EccIssuer(IssuerText, Issuer);
     if not ecc_make_key_pas(PublicKey, fPrivateKey) then
@@ -2948,7 +2948,7 @@ begin
     plain := SaveToBinary;
     if plain <> '' then
       try
-        salt := TAesPrng.Fill(PRIVKEY_SALTSIZE);
+        RandomByteString(PRIVKEY_SALTSIZE, salt); // public: Lecuyer is enough
         Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
         a := Aes.Create(aeskey);
         try
