@@ -1031,17 +1031,18 @@ begin
   Check(not ParseDn('dc=ad, dc=company, dc', dn, {noraise=}true));
   // validate LDAP error recognition
   Check(RawLdapError(-1) = leUnknown);
-  Check(RawLdapError(LDAP_RES_TOO_LATE) = leUnknown);
+  Check(RawLdapError(LDAP_RES_TOO_LATE) = leTooLate);
   Check(RawLdapError(10000) = leUnknown);
   Check(RawLdapError(LDAP_RES_AUTHORIZATION_DENIED) = leAuthorizationDenied);
+  Check(RawLdapError(LDAP_RES_ESYNC_REFRESH_REQUIRED) = leEsyncRefreshRequired);
+  Check(RawLdapError(LDAP_RES_NO_OPERATION) = leNoOperation);
   for le := low(le) to high(le) do
-  begin
     Check(LDAP_ERROR_TEXT[le] <> '');
-    if le <> leUnknown then
-      CheckUtf8(RawLdapError(LDAP_RES_CODE[le]) = le, LDAP_ERROR_TEXT[le]);
-  end;
-  CheckEqual(LDAP_ERROR_TEXT[leUnknown], 'Unknown');
-  CheckEqual(LDAP_ERROR_TEXT[leCompareTrue], 'Compare true');
+  for le := low(LDAP_RES_CODE) to high(LDAP_RES_CODE) do
+    CheckUtf8(RawLdapError(LDAP_RES_CODE[le]) = le, LDAP_ERROR_TEXT[le]);
+  CheckEqual(LDAP_ERROR_TEXT[leUnknown], 'unknown');
+  CheckEqual(LDAP_ERROR_TEXT[leCompareTrue], 'compareTrue');
+  CheckEqual(LDAP_ERROR_TEXT[leEsyncRefreshRequired], 'e-syncRefreshRequired');
   // validate LDAP escape/unescape
   for c := 0 to 200 do
   begin

@@ -1336,9 +1336,7 @@ var
   AES: array[bAES128CFB..bAESLAST] of TAesAbstract;
   TXT: array[TBenchmark] of RawUtf8;
 begin
-  GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
-  for b := low(b) to high(b) do
-    TXT[b] := LowerCase(TXT[b]);
+  GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT, false, {lower=}true);
   for b := low(AES) to high(AES) do
     if AESCLASS[b].IsAvailable then
     begin
