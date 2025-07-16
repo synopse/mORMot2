@@ -842,14 +842,10 @@ type
     Status: PtrInt;
     Length: PtrUInt; // ignored for alignment
     case integer of
-      0:
-        (Int64: Int64);
-      1:
-        (Double: double);
-      2:
-        (ValueInlined: byte); // for TSqlDBColumnProperty.ColumnValueInlined
-      3:
-        (ByRef: pointer); // DBTYPE_BYREF PWideChar/PAnsiChar
+      0: (Int64: Int64);
+      1: (Double: double);
+      2: (ValueInlined: byte); // for TSqlDBColumnProperty.ColumnValueInlined
+      3: (ByRef: pointer); // DBTYPE_BYREF PWideChar/PAnsiChar
   end;
 
   PColumnValue = ^TColumnValue;

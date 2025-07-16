@@ -6577,10 +6577,8 @@ type
   TObjectFromInterfaceStub = packed record
     Stub: cardinal;
     case integer of
-      0:
-        (ShortJmp: shortint);
-      1:
-        (LongJmp:  integer)
+      0: (ShortJmp: shortint);
+      1: (LongJmp:  integer)
   end;
   PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
 

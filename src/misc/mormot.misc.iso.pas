@@ -309,14 +309,10 @@ type
 
   TCatalogEntry = packed record
   case integer of
-    0: (
-      Initial: TInitialEntry );
-    1: (
-      Header: TSectionHeaderEntry );
-    2: (
-      Entry: TSectionEntry );
-    3: (
-      Extension: TSectionEntryExtension );
+    0: (Initial: TInitialEntry );
+    1: (Header: TSectionHeaderEntry );
+    2: (Entry: TSectionEntry );
+    3: (Extension: TSectionEntryExtension );
   end;
   PCatalogEntry = ^TCatalogEntry;
 
@@ -446,10 +442,8 @@ type
     VolumeDescriptorSequenceNumber: cardinal;
     ImplementationIdentifier: TEntityID;
     case integer of
-      0: (
-        reserved: array[0..459] of byte);
-      1: (
-        Use: TImplementationUse);
+      0: (reserved: array[0..459] of byte);
+      1: (Use: TImplementationUse);
   end;
 
   TPrimaryVolumeDescriptor_UDF = packed record
@@ -634,10 +628,8 @@ type
     LengthOfExtendedAttributes: cardinal;
     LengthOfAllocationDescriptors: cardinal;
     case integer of
-      0: (
-        ExtendedAttributes: array[0..0] of byte);
-      1: (
-        AllocationDescriptor: array[0..0] of byte);
+      0: (ExtendedAttributes: array[0..0] of byte);
+      1: (AllocationDescriptor: array[0..0] of byte);
   end;
 
   /// ECMA 167 4/14.4
@@ -649,10 +641,8 @@ type
     ICB: TLongAd;
     LengthOfImplementationUse: word;
     case integer of
-      0: (
-        ImplementationUse: array[0..0] of byte);
-      1: (
-        FileIdentifier: array[0..0] of AnsiChar);
+      0: (ImplementationUse: array[0..0] of byte);
+      1: (FileIdentifier: array[0..0] of AnsiChar);
   end;
 
   TFileSetDescriptorEx = packed record

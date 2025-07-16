@@ -849,30 +849,18 @@ type
 
   JSCFunctionType = record
     case integer of
-      0:
-        (generic: JSCFunction);
-      1:
-        (generic_magic: JSCFunctionMagic);
-      2:
-        (constructor_: JSCFunction);
-      3:
-        (constructor_magic: constructor_magic_func);
-      4:
-        (constructor_or_func: JSCFunction);
-      5:
-        (f_f: f_f_func);
-      6:
-        (f_f_f: f_f_f_func);
-      7:
-        (getter: Getter_func);
-      8:
-        (setter: Setter_func);
-      9:
-        (getter_magic: getter_magic_func);
-      10:
-        (setter_magic: setter_magic_func);
-      11:
-        (iterator_next: iterator_next_func);
+      0:  (generic: JSCFunction);
+      1:  (generic_magic: JSCFunctionMagic);
+      2:  (constructor_: JSCFunction);
+      3:  (constructor_magic: constructor_magic_func);
+      4:  (constructor_or_func: JSCFunction);
+      5:  (f_f: f_f_func);
+      6:  (f_f_f: f_f_f_func);
+      7:  (getter: Getter_func);
+      8:  (setter: Setter_func);
+      9:  (getter_magic: getter_magic_func);
+      10: (setter_magic: setter_magic_func);
+      11: (iterator_next: iterator_next_func);
   end;
   PJSCFunctionType = ^JSCFunctionType;
 

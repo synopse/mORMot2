@@ -1484,16 +1484,16 @@ type
 
   _anonymous_type_1 = record
     case integer of
-      0: (ptr: PUtf8Char);
-      1: (boolean: ASN1_BOOLEAN);
-      2: (asn1_string: PASN1_STRING);
-      3: (_object: PASN1_OBJECT);
-      4: (_integer: PASN1_INTEGER);
-      5: (enumerated: PASN1_ENUMERATED);
-      6: (bit_string: PASN1_BIT_STRING);
-      7: (octet_string: PASN1_OCTET_STRING);
-      8: (printablestring: PASN1_PRINTABLESTRING);
-      9: (t61string: PASN1_T61STRING);
+      0:  (ptr: PUtf8Char);
+      1:  (boolean: ASN1_BOOLEAN);
+      2:  (asn1_string: PASN1_STRING);
+      3:  (_object: PASN1_OBJECT);
+      4:  (_integer: PASN1_INTEGER);
+      5:  (enumerated: PASN1_ENUMERATED);
+      6:  (bit_string: PASN1_BIT_STRING);
+      7:  (octet_string: PASN1_OCTET_STRING);
+      8:  (printablestring: PASN1_PRINTABLESTRING);
+      9:  (t61string: PASN1_T61STRING);
       10: (ia5string: PASN1_IA5STRING);
       11: (generalstring: PASN1_GENERALSTRING);
       12: (bmpstring: PASN1_BMPSTRING);

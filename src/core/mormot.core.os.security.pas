@@ -530,7 +530,7 @@ type
     // ACE body
     Mask: TSecAccessMask;
     case integer of
-      0: (CommonSid: cardinal);
+      0: (CommonSid:   cardinal);
       1: (ObjectFlags: cardinal;
           ObjectStart: cardinal);
   end;
@@ -2334,8 +2334,8 @@ type
     dwGroupId: DWORD;
     Union: record
       case integer of
-        0: (dwValue: DWORD);
-        1: (Algid: DWORD);
+        0: (dwValue:  DWORD);
+        1: (Algid:    DWORD);
         2: (dwLength: DWORD);
     end;
     ExtraInfo: CRYPTOAPI_BLOB;

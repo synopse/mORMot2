@@ -119,12 +119,9 @@ type
     h_addrtype: integer;
     h_length: socklen_t;
     case integer of
-       0: (
-          h_addr_list: PPAnsiChar);
-       1: (
-          h_addr: ^pin_addr);
-       2: (
-          h_addr6: ^pin6_addr);
+       0: (h_addr_list: PPAnsiChar);
+       1: (h_addr:      ^pin_addr);
+       2: (h_addr6:     ^pin6_addr);
   end;
   PHostEnt = ^THostEnt;
 

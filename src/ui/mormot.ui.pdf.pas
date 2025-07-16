@@ -144,15 +144,9 @@ type
   PPoint = PPOINTL;
   TRect = packed record
     case integer of
-      0: (
-        Left, Top, Right, Bottom: integer
-      );
-      1: (
-        TopLeft, BottomRight: TPoint
-      );
-      2: (
-        Rect: Types.TRect
-      );
+      0: (Left, Top, Right, Bottom: integer);
+      1: (TopLeft, BottomRight: TPoint);
+      2: (Rect: Types.TRect);
   end;
   PRect = ^TRect;
 

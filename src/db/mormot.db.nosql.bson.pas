@@ -48,14 +48,10 @@ type
   // BSON Decimal128 format, and processed by the TDecimal128 object
   TDecimal128Bits = record
     case integer of
-      0:
-        (lo, hi: QWord);
-      1:
-        (l, h: Int64);
-      2:
-        (b: THash128);
-      3:
-        (c: array[0..3] of cardinal);
+      0: (lo, hi: QWord);
+      1: (l, h: Int64);
+      2: (b: THash128);
+      3: (c: array[0..3] of cardinal);
   end;
 
   /// points to a 128-bit decimal binary
