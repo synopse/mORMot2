@@ -769,6 +769,12 @@ type
   TZipWriteToStream = TZipWrite;
 {$endif PUREMORMOT2}
 
+/// wrap TZipRead.Create + UnZipAll + Free over a memory buffer containing a .zip
+function UnZipMemAll(const ZipMem: RawByteString; const DestFolder: TFileName): boolean;
+
+/// wrap TZipRead.Create + UnZipAll + Free over a .zip file
+function UnZipAll(const ZipFile: TFileName; const DestFolder: TFileName): boolean;
+
 var
   /// the default compression level to be applied to EventArchiveZip()
   // - you may set Z_BEST_SPEED (1) for faster process (and lower compression)
@@ -3265,6 +3271,42 @@ begin
     result := UnZip(aIndex);
 end;
 
+
+function UnZipMemAll(const ZipMem: RawByteString; const DestFolder: TFileName): boolean;
+var
+  z: TZipRead;
+begin
+  result := false;
+  if ZipMem <> '' then
+  try
+    z := TZipRead.Create(pointer(ZipMem), length(ZipMem));
+    try
+      result := z.UnZipAll(Destfolder) < 0; // -1 = success
+    finally
+      z.Free;
+    end;
+  except
+    result := false; // indicates error
+  end;
+end;
+
+function UnZipAll(const ZipFile: TFileName; const DestFolder: TFileName): boolean;
+var
+  z: TZipRead;
+begin
+  result := false;
+  if ZipFile <> '' then
+  try
+    z := TZipRead.Create(ZipFile);
+    try
+      result := z.UnZipAll(Destfolder) < 0; // -1 = success
+    finally
+      z.Free;
+    end;
+  except
+    result := false; // indicates error
+  end;
+end;
 
 var
   EventArchiveZipSafe: TLightLock; // paranoid but better safe than sorry
