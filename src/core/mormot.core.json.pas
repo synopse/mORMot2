@@ -1021,6 +1021,10 @@ type
     /// add an element to the array
     // - if aName already exists, its associated Value will be updated
     procedure Add(const aName, aValue: RawUtf8; aTag: PtrInt = 0);
+    /// add an element from Join(aValue) to the array
+    // - if aName already exists, its associated Value will be updated
+    procedure AddJoined(const aName: RawUtf8;
+      const aValue: array of RawByteString; aTag: PtrInt = 0);
     /// reset content, then add all name=value pairs from a supplied .ini file
     // section content
     // - will first call Init(false) to initialize the internal array
@@ -9129,6 +9133,12 @@ begin
   end;
   if Assigned(fOnAdd) then
     fOnAdd(List[i], i);
+end;
+
+procedure TSynNameValue.AddJoined(const aName: RawUtf8;
+  const aValue: array of RawByteString; aTag: PtrInt);
+begin
+  Add(aName, Join(aValue));
 end;
 
 procedure TSynNameValue.InitFromIniSection(Section: PUtf8Char;
