@@ -551,8 +551,8 @@ type
     /// get the index of a file inside the .zip archive
     function NameToIndex(const aName: TFileName): integer;
     /// uncompress a file stored inside the .zip archive into memory
-    // - will refuse to uncompress more than aMaxSize - i.e. 128 MB of content
-    function UnZip(aIndex: integer; aMaxSize: Int64 = 128 shl 20): RawByteString; overload;
+    // - will refuse to uncompress more than aMaxSize - i.e. 256 MB of content
+    function UnZip(aIndex: integer; aMaxSize: Int64 = 256 shl 20): RawByteString; overload;
     /// uncompress a file stored inside the .zip archive into a stream
     function UnZip(aIndex: integer; aDest: TStream): boolean; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
@@ -2986,8 +2986,9 @@ begin
   result := '';
   if not RetrieveFileInfo(aIndex, info) or
      (info.f64.zfullSize = 0) or
-     (info.f64.zzipSize > aMaxSize) or
-     (info.f64.zfullSize > aMaxSize) then
+     ((aMaxSize > 0) and
+      ((info.f64.zzipSize > aMaxSize) or
+       (info.f64.zfullSize > aMaxSize))) then
     exit;
   // call libdeflate_crc32 / libdeflate_deflate_decompress if available
   FastSetString(RawUtf8(result), info.f64.zfullSize); // assume CP_UTF8 for FPC
@@ -3142,7 +3143,7 @@ begin
         begin
           pointer(tmp) := FastNewString(len);
           if UnCompressMem(data, pointer(tmp), zzipsize, len) <> len then
-             exit;
+            exit;
           crc := mormot.lib.z.crc32(0, pointer(tmp), len);
           aDest.WriteBuffer(pointer(tmp)^, len);
         end
