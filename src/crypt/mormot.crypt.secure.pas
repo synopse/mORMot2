@@ -6746,13 +6746,13 @@ begin
   result := Get32 * COEFF32; // 32-bit resolution is enough for our purpose
 end;
 
-
 { TCryptRandomAesPrng }
 
 type
   TCryptRandomAesPrng = class(TCryptRandom) // 'rnd-default,rnd-aes'
   public
     procedure Get(dst: pointer; dstlen: PtrInt); override;
+    function Get32: cardinal; override;
   end;
 
 procedure TCryptRandomAesPrng.Get(dst: pointer; dstlen: PtrInt);
@@ -6760,6 +6760,10 @@ begin
   TAesPrng.Main.FillRandom(dst, dstlen);
 end;
 
+function TCryptRandomAesPrng.Get32: cardinal;
+begin
+  result := TAesPrng.Main.Random32;
+end;
 
 { TCryptRandomEntropy }
 
@@ -6798,7 +6802,6 @@ begin
   FillZero(tmp);
 end;
 
-
 { TCryptRandomSysPrng }
 
 type
@@ -6811,7 +6814,6 @@ procedure TCryptRandomSysPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
   FillSystemRandom(dst, dstlen, {allowblocking=}length(fName) > 10);
 end;
-
 
 { TCryptRandomLecuyerPrng }
 
