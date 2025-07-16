@@ -6741,7 +6741,7 @@ begin
     // similar to git - aFileName[1..2] is the algorithm, so hash starts at [3]
     result := MakePath([fPermFilesPath, aFileName[3]]);
     if lfnEnsureDirectoryExists in aFlags then
-      result := EnsureDirectoryExists(result);
+      result := EnsureDirectoryExists(result, nil, {noexpand=}true);
     result := result + aFileName;
   end
   else

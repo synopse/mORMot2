@@ -25,6 +25,7 @@ uses
   mormot.core.perf,
   mormot.core.threads,
   mormot.core.search,
+  mormot.core.zip,
   mormot.crypt.core,
   mormot.crypt.secure,
   {$ifdef OSPOSIX}
@@ -215,22 +216,21 @@ const
 
 const
   // some reference OpenAPI/Swagger definitions
-  OpenApiRef: array[0 .. 3] of RawUtf8 = (
-    'https://petstore.swagger.io/v2/swagger.json',
-    'https://petstore3.swagger.io/api/v3/openapi.json',
-    'https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json',
-    'https://platform-api-staging.vas.com/api/v1/swagger.json');
-  OpenApiName: array[0 .. high(OpenApiRef)] of RawUtf8 = (
-    'Pets2',
-    'Pets3',
-    'Qdrant',
-    'VAS');
+  // - downloaded as openapi-ref.zip since some of those endpoints are unstable
+  OpenApiName: array[0 .. 5] of RawUtf8 = (
+    'FinTrack',
+    'Nakama',  // https://github.com/heroiclabs/nakama
+    'Pets2',   // https://petstore.swagger.io/v2/swagger.json
+    'Pets3',   // https://petstore3.swagger.io/api/v3/openapi.json
+    'Qdrant',  // https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json
+    'VAS');    // https://platform-api-staging.vas.com/api/v1/swagger.json
 
 procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
   key, prev, url, dto, client: RawUtf8;
+  ref: RawByteString;
   api: TRawUtf8DynArray;
   oa: TOpenApiParser;
   timer: TPrecisionTimer;
@@ -254,18 +254,17 @@ begin
     Check(not IsReservedKeyWord(key));
     Check(not IsReservedKeyWord(UInt32ToUtf8(i)));
   end;
-  SetLength(api, length(OpenApiRef));
-  for i := 0 to high(OpenApiRef) do
-    if OpenApiRef[i] <> '' then
+  SetLength(api, length(OpenApiName));
+  for i := 0 to high(OpenApiName) do
+    if OpenApiName[i] <> '' then
     begin
       fn := FormatString('%OpenApi%.json', [WorkDir, OpenApiName[i]]);
       api[i] := StringFromFile(fn);
       if api[i] <> '' then
-        continue; // already downloaded and formatted
-      url := OpenApiRef[i];
-      JsonBufferReformat(pointer(DownloadFile(url)), api[i]);
-      if api[i] <> '' then
-        FileFromString(api[i], fn); // it is a valid JSON file
+        continue; // already downloaded
+      ref := DownloadFile('https://synopse.info/files/openapi-ref.zip');
+      if UnZipMemAll(ref, WorkDir) then
+        api[i] := StringFromFile(fn); // try now
     end;
   for i := 0 to high(api) do
     if api[i] <> '' then
