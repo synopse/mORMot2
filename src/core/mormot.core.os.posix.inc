@@ -1967,13 +1967,11 @@ var
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
-  if (KernelRevision < $031100) or // introduced in Kernel 3.17
-     __LinuxGetRandomFailed then
-    exit;
-  if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
-    result := true // "man getrandom" states to read up to 256 bytes in one call
-  else
-    __LinuxGetRandomFailed := true; // won't retry on syscall failure
+  if not __LinuxGetRandomFailed then // KernelRevision was checked at startup
+    if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
+      result := true // "man getrandom" states to read up to 256 bytes per call
+    else
+      __LinuxGetRandomFailed := true; // won't retry on syscall failure
 end;
 {$else}
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
@@ -1994,10 +1992,7 @@ function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 var
   flags: cardinal;
 begin
-  result := 0;
-  if __LinuxEventFdFailed then
-    exit;
-  if KernelRevision >= $02061b then // not available prior to Kernel 2.6.27
+  if not __LinuxEventFdFailed then // KernelRevision was checked at startup
   begin
     flags := 0;
     if nonblocking then
@@ -2007,8 +2002,8 @@ begin
     result := do_syscall(syscall_nr_eventfd2, 0, flags);
     if ValidHandle(result) then
       exit;
+    __LinuxEventFdFailed := true; // don't retry next time
   end;
-  __LinuxEventFdFailed := true; // don't retry next type
   result := 0;
 end;
 
@@ -5030,8 +5025,14 @@ begin
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
   _Fill256FromOs    := @__Fill256FromOs;
-  {$ifndef NODIRECTTHREADMANAGER}
+  {$ifdef HASGETRANDOM}
+  __LinuxGetRandomFailed := KernelRevision < $031100; // since Kernel 3.17
+  {$endif HASGETRANDOM}
+  {$ifdef HASEVENTFD}
+  __LinuxEventFdFailed := KernelRevision < $02061b; // since Kernel 2.6.27
+  {$endif HASEVENTFD}
   // for inlined RTL calls (avoid one level of redirection)
+  {$ifndef NODIRECTTHREADMANAGER}
   GetThreadManager(tm);
   @GetCurrentThreadId      := @tm.GetCurrentThreadId;
   @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
