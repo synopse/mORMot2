@@ -2162,7 +2162,10 @@ type
     // - return FALSE if the TDocVariant did not change
     // - return TRUE if the TDocVariant has been flattened
     function FlattenAsNestedObject(const aObjectPropName: RawUtf8;
-      aSepChar: AnsiChar = '.'): boolean;
+      aSepChar: AnsiChar = '.'): boolean; overload;
+    /// map in-place {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
+    function FlattenAsNestedObject(aName: PUtf8Char; aNameLen: PtrInt;
+      aSepChar: AnsiChar = '.'): boolean; overload;
     /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     // - any name collision will append a counter to make it unique
     // - if aSepChar is #0, no separation dot/character will be appended
@@ -8388,29 +8391,35 @@ end;
 
 function TDocVariantData.FlattenAsNestedObject(
   const aObjectPropName: RawUtf8; aSepChar: AnsiChar): boolean;
+begin
+  result := FlattenAsNestedObject(
+    pointer(aObjectPropName), length(aObjectPropName), aSepChar);
+end;
+
+function TDocVariantData.FlattenAsNestedObject(aName: PUtf8Char;
+  aNameLen: PtrInt; aSepChar: AnsiChar): boolean;
 var
-  ndx, len: PtrInt;
+  ndx: PtrInt;
   Up: TByteToAnsiChar;
   nested: TDocVariantData;
 begin
   // {"p.a1":5,"p.a2":"dfasdfa"} into {"p":{"a1":5,"a2":"dfasdfa"}}
   result := false;
   if (VCount = 0) or
-     (aObjectPropName = '') or
+     (aName = nil) or
      (not IsObject) then
     exit;
-  PWord(UpperCopy255(Up{%H-}, aObjectPropName))^ := ord(aSepChar); // e.g. 'P.'
-  for ndx := 0 to Count - 1 do
+  PWord(UpperCopy255Buf(Up{%H-}, aName, aNameLen))^ := ord(aSepChar); // e.g. 'P.'
+  for ndx := 0 to VCount - 1 do
     if not IdemPChar(pointer(VName[ndx]), Up) then
       exit; // all fields should match "p.####"
-  len := length(aObjectPropName);
   if aSepChar <> #0 then
-    inc(len); // #0 would match {"pa1":5,"pa2":"dfasdfa"}
-  for ndx := 0 to Count - 1 do
-    system.delete(VName[ndx], 1, len);
+    inc(aNameLen); // #0 would match {"pa1":5,"pa2":"dfasdfa"}
+  for ndx := 0 to VCount - 1 do
+    system.delete(VName[ndx], 1, aNameLen);
   nested := self;
-  ClearFast;
-  InitObject([aObjectPropName, variant(nested)], nested.Options);
+  Void; // same options (and dvObject)
+  AddValue(aName, aNameLen, variant(nested));
   result := true;
 end;
 
