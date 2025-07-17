@@ -328,8 +328,8 @@ type
     // - returns the parsed template
     function Add(const aName: RawUtf8;
       aTemplateStart, aTemplateEnd: PUtf8Char): TSynMustache; overload;
-    /// search some text withing the {{mustache}} partial
-    function FoundInTemplate(const text: RawUtf8): PtrInt;
+    /// search some text within the {{>partialName}} template text
+    function FoundInTemplate(const aName, aSearchText: RawUtf8): boolean;
     /// delete the partials
     destructor Destroy; override;
     /// low-level access to the internal partials list
@@ -440,8 +440,9 @@ type
     // - to call e.g. result.RenderArray() or result.RenderRtti() several times
     function NewMustacheContextData(
       aBufSize: integer = 16384): TSynMustacheContextData;
-    /// search some text within the {{mustache}} template text
-    function FoundInTemplate(const text: RawUtf8): boolean;
+    /// search some text within the {{mustache}} template text and its partials
+    function FoundInTemplate(const aSearchText: RawUtf8;
+      aPartials: TSynMustachePartials): boolean;
     /// register one Expression Helper callback for a given list of helpers
     // - i.e. to let aEvent process {{aName value}} tags
     // - the supplied name will be checked against the current list, and replace
@@ -1283,12 +1284,10 @@ begin
   result := Add(aName, aTemplate);
 end;
 
-function TSynMustachePartials.FoundInTemplate(const text: RawUtf8): PtrInt;
-begin
-  if self <> nil then
-    result := fList.Contains(text)
-  else
-    result := -1;
+function TSynMustachePartials.FoundInTemplate(
+  const aName, aSearchText: RawUtf8): boolean;
+begin // recursive search
+  result := GetPartial(aName).FoundInTemplate(aSearchText, self);
 end;
 
 class function TSynMustachePartials.CreateOwned(
@@ -1970,12 +1969,25 @@ begin
   fCachedContextData.Free;
 end;
 
-function TSynMustache.FoundInTemplate(const text: RawUtf8): boolean;
+function TSynMustache.FoundInTemplate(const aSearchText: RawUtf8;
+  aPartials: TSynMustachePartials): boolean;
+var
+  i: PtrInt;
 begin
-  // internal partials are part of fTemplate
-  result := (self <> nil) and
-            (text <> '') and
-            (PosEx(text, fTemplate) > 0);
+  result := false;
+  if (self = nil) or
+     (aSearchText = '') then
+    exit;
+  result := true;
+  if PosEx(aSearchText, fTemplate) > 0 then
+    exit; // found in main template text
+  if aPartials <> nil then
+    for i := 0 to length(fTags) - 1 do
+      with fTags[i] do
+        if (Kind = mtPartial) and
+           aPartials.FoundInTemplate(Value, aSearchText) then
+          exit; // found in (nested) partials
+  result := false;
 end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
