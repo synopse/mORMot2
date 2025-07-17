@@ -34,32 +34,27 @@ uses
   mormot.core.datetime,
   mormot.core.variants,
   mormot.core.data,
-  mormot.core.perf,
   mormot.core.rtti,
   mormot.crypt.core,
   mormot.core.json,
-  mormot.core.search, // for FindTemplates()
-  mormot.crypt.secure,
+  mormot.core.search,  // for FileNames()
+  mormot.crypt.secure, // for TBinaryCookieGenerator
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.mustache,
+  mormot.soa.codegen, // for mvcinfo or default template generation
   mormot.orm.base,
   mormot.orm.core,
-  mormot.orm.rest,
-  mormot.orm.server,
-  mormot.soa.core,
-  mormot.soa.server,
-  mormot.soa.codegen,
   mormot.rest.core,
   mormot.rest.server;
 
 
 { ************ Web Views Implementation using Mustache }
 
-const
+var
   /// TDocVariantOptions for efficient MVC data context rendering
   // - maps JSON_FAST_EXTENDED with field names interning
-  JSON_MVC =
+  JSON_MVC: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson,
@@ -68,7 +63,7 @@ const
 type
   /// TMvcView.Flags rendering context
   // - viewHasGenerationTimeTag is set if TMvcViewsAbstract.ViewGenerationTimeTag
-  // text appears in the template, for this time value not to affect the cache
+  // text appears in the template (or its partials), to scan only if needed
   TMvcViewFlags = set of (
     viewHasGenerationTimeTag);
 
@@ -80,8 +75,6 @@ type
     Content: RawByteString;
     /// the MIME content type of this View
     ContentType: RawUtf8;
-    /// some additional rendering information about this View
-    Flags: TMvcViewFlags;
   end;
 
   /// an abstract class able to implement Views
@@ -91,16 +84,19 @@ type
     fLogClass: TSynLogClass;
     fViewTemplateFolder, fViewStaticFolder: TFileName;
     fFactoryErrorIndex: integer;
-    fViewFlags: TMvcViewFlags;
     fViewGenerationTimeTag: RawUtf8;
     procedure NotifyContentChanged; virtual;
     procedure SetViewTemplateFolder(const aFolder: TFileName);
     /// overriden implementations should return the rendered content
-    procedure Render(methodIndex: integer; const Context: variant;
-      var View: TMvcView); virtual; abstract;
+    function Render(methodIndex: integer; const Context: variant;
+      var View: TMvcView): TMvcViewFlags; virtual; abstract;
+    function RenderFlags(methodIndex: PtrInt): TMvcViewFlags; virtual; abstract;
+    /// return the static file name - from fViewStaticFolder by default
+    // - called if cacheStatic has been defined or not
+    function GetStaticFileName(const aFileName: TFileName): TFileName; virtual;
     /// return the static file contents - from fViewStaticFolder by default
-    // - called if cacheStatic has been defined
-    function GetStaticFile(const aFileName: TFileName): RawByteString; virtual;
+    // - called only if cacheStatic has been defined
+    function GetStaticFileContent(const aFileName: TFileName): RawByteString; virtual;
   public
     /// initialize the class
     constructor Create(aInterface: PRttiInfo; aLogClass: TSynLogClass);
@@ -174,7 +170,9 @@ type
       kind: THtmlTableStyleLabel); override;
   end;
 
+  // mustache view status for one fFactory.Methods[]
   TMvcViewMustache = record
+    Safe: TOSLightLock;
     Mustache: TSynMustache;
     Template: RawUtf8;
     MethodName: TFileName;
@@ -183,9 +181,8 @@ type
     ShortFileName: TFileName;
     FileExt: TFileName;
     ContentType: RawUtf8;
-    Locker: IAutoLocker;
     FileAgeLast: TUnixTime;
-    FileAgeCheckTick: Int64;
+    FileAgeTix32: cardinal;
     Flags: TMvcViewFlags;
   end;
 
@@ -197,16 +194,16 @@ type
     fViewHelpers: TSynMustacheHelpers;
     fViews: array of TMvcViewMustache; // follows fFactory.Methods[]
     procedure NotifyContentChanged; override;
-    function GetRenderer(methodIndex: integer; var view: TMvcView): TSynMustache;
     /// search for template files in ViewTemplateFolder
-    function FindTemplates(const Mask: TFileName): TFileNameDynArray; virtual;
-    /// return the template file contents
-    function GetTemplate(const aFileName: TFileName): RawUtf8; virtual;
-    /// return the template file date and time
-    function GetTemplateAge(const aFileName: TFileName): TUnixTime; virtual;
+    function FindTemplateFileNames(const Mask: TFileName): TFileNameDynArray; virtual;
+    function GetTemplateFileAge(const View: TMvcViewMustache): TUnixTime; virtual;
+    procedure SetTemplateContent(var View: TMvcViewMustache); virtual;
+    /// search for template partials files in ViewTemplateFolder
+    function FindPartialFileNames: TFileNameDynArray; virtual;
     /// overriden implementations should return the rendered content
-    procedure Render(methodIndex: integer; const Context: variant;
-      var View: TMvcView); override;
+    function Render(methodIndex: integer; const Context: variant;
+      var View: TMvcView): TMvcViewFlags; override;
+    function RenderFlags(methodIndex: PtrInt): TMvcViewFlags; override;
     // some helpers defined here to avoid mormot.crypt.core link
     class procedure md5(const Value: variant; out Result: variant);
     class procedure sha1(const Value: variant; out Result: variant);
@@ -220,6 +217,8 @@ type
     constructor Create(aInterface: PRttiInfo;
       const aParameters: TMvcViewsMustacheParameters;
       aLogClass: TSynLogClass = nil); reintroduce; overload; virtual;
+    /// finalize the instance
+    destructor Destroy; override;
     /// create an instance of this ViewModel implementation class
     // - this overloaded version will use default parameters (i.e. search for
     // html+json+css in the "Views" sub-folder under the executable)
@@ -258,9 +257,6 @@ type
     // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForCrypto: TMvcViewsMustache;
-
-    /// finalize the instance
-    destructor Destroy; override;
   end;
 
 
@@ -450,6 +446,8 @@ type
   protected
     fApplication: TMvcApplication;
     fMethodIndex: integer;
+    fTix32: cardinal;
+    fMethod: PInterfaceMethod;
     fInput, fRemoteIP, fRemoteUserAgent: RawUtf8;
     fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure Renders(var outContext: variant; status: cardinal;
@@ -466,7 +464,7 @@ type
     destructor Destroy; override;
     /// main execution method of the rendering process
     // - Input should have been set with the incoming execution context
-    procedure ExecuteCommand(aMethodIndex: integer); virtual;
+    procedure ExecuteCommand; virtual;
     /// incoming execution context, to be processed via ExecuteCommand() method
     // - should be specified as a raw JSON object
     property Input: RawUtf8
@@ -474,6 +472,15 @@ type
     /// access to the owner MVC Application
     property Application: TMvcApplication
       read fApplication;
+    /// the associated client IP address
+    property RemoteIP: RawUtf8
+      read fRemoteIP;
+    /// the associated client User Agent
+    property RemoteUserAgent: RawUtf8
+      read fRemoteUserAgent;
+    /// the associated execution method
+    property Method: PInterfaceMethod
+      read fMethod;
   end;
 
   /// how TMvcRunWithViews.SetCache should cache the content of a given method
@@ -505,22 +512,29 @@ type
     fRun: TMvcRunWithViews;
     fOutput: TServiceCustomAnswer;
     fOutputFlags: TMvcViewFlags;
-    fCacheEnabled: boolean;
-    fCacheCurrent: (noCache, rootCache, inputCache);
-    fCacheCurrentSec: cardinal;
+    fCacheDisabled: boolean;
     fCacheCurrentInputValueKey: RawUtf8;
+    fInputContext: PVariant;
     function Redirects(const action: TMvcAction): boolean; override;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMvcViewsMustache instance
-    constructor Create(aRun: TMvcRunWithViews); reintroduce; virtual;
+    constructor Create(aRun: TMvcRunWithViews; const aIP, aUserAgent: RawUtf8;
+      aTix32: cardinal; aContext: PVariant; aMethod: PInterfaceMethod); reintroduce; virtual;
     /// main execution method of the rendering process
-    // - this overriden method would handle proper caching as defined by
-    // TMvcRunWithViews.SetCache()
-    procedure ExecuteCommand(aMethodIndex: integer); override;
+    // - this overriden method would serialize InputContext^ into Input JSON,
+    // and handle proper caching as defined by TMvcRunWithViews.SetCache()
+    procedure ExecuteCommand; override;
     /// caller should retrieve this value after ExecuteCommand method execution
     property Output: TServiceCustomAnswer
       read fOutput;
+    /// set by ExecuteCommand e.g. during TMvcRendererFromViews.Renders
+    property OutputFlags: TMvcViewFlags
+      read fOutputFlags;
+    /// low-level access to the associated TDocVariantData context (or varEmpty)
+    // - TMvcApplication.OnBeforeRender can customize it before ExecuteCommand
+    property InputContext: PVariant
+      read fInputContext;
   end;
 
   TMvcRendererReturningDataClass = class of TMvcRendererReturningData;
@@ -532,10 +546,6 @@ type
     // Renders() will fill Output using the corresponding View, to be sent back
     procedure Renders(var outContext: variant; status: cardinal;
       forcesError: boolean); override;
-  public
-    /// initialize a rendering process for a given MVC Application/ViewModel
-    // - this overriden constructor will ensure that cache is enabled
-    constructor Create(aRun: TMvcRunWithViews); override;
   end;
 
   /// MVC rendering execution context, returning some un-rendered JSON content
@@ -571,46 +581,24 @@ type
       read fApplication write fApplication;
   end;
 
-  TMvcRunWithViewCache = record
+  // cache status for one fFactory.Methods[]
+  TMvcRunCacheMethod = record
+    Safe: TLightLock;
     Policy: TMvcRendererCachePolicy;
-    TimeOutSeconds: cardinal;
-    RootValue: RawUtf8;
+    TimeOutSeconds: word;
     RootValueExpirationTime: cardinal;
-    InputValues: TSynNameValue;
+    RootValue: RawUtf8;
+    ParamsValue: TSynNameValue; // Name=input, Value=cached, Tag=timeout
   end;
-
-  /// abstract class used by TMvcApplication to run TMvcViews-based process
-  // - this inherited class will host a MVC Views instance, and handle
-  // an optional simple in-memory cache
-  TMvcRunWithViews = class(TMvcRun)
-  protected
-    fViews: TMvcViewsAbstract;
-    fCacheLocker: IAutoLocker;
-    fCache: array of TMvcRunWithViewCache; // follows fFactory.Methods[]
-  public
-    /// link this runner class to a specified MVC application
-    constructor Create(aApplication: TMvcApplication;
-      aViews: TMvcViewsAbstract = nil); reintroduce;
-    /// method called to flush the caching mechanism for all MVC commands
-    procedure NotifyContentChanged; override;
-    /// method called to flush the caching mechanism for a MVC command
-    procedure NotifyContentChangedForMethod(aMethodIndex: integer); override;
-    /// defines the caching policy for a given MVC command
-    // - a time expiration period (up to 5 minutes) can also be defined per
-    // MVC command - leaving default 0 will set to 5 minutes expiration delay
-    // - function calls can be chained to create some fluent definition interface
-    // like in TAnyBLogapplication.Create:
-    // ! fMainRunner := TMvcRunWithViews.Create(self).
-    // !   SetCache('default', cacheRoot);
-    function SetCache(const aMethodName: RawUtf8;
-      aPolicy: TMvcRendererCachePolicy;
-      aTimeOutSeconds: cardinal = 0): TMvcRunWithViews; virtual;
-    /// finalize this instance
-    destructor Destroy; override;
-    /// read-write access to the associated MVC Views instance
-    property Views: TMvcViewsAbstract
-      read fViews;
+  // cache status for one static resource
+  TMvcRunCacheStatic = record
+    FileName: TFileName;
+    Body: RawByteString;
+    ContentHeader: RawUtf8;
+    Etag: RawUtf8;
   end;
+  PMvcRunCacheStatic = ^TMvcRunCacheStatic;
+  TMvcRunCacheStatics = array of TMvcRunCacheStatic;
 
   /// the kinds of optional content which may be published
   // - publishMvcInfo will define a /root/[aSubURI/]mvc-info HTML page,
@@ -641,17 +629,69 @@ type
   /// which kind of optional content should be publish
   TMvcPublishOptions = set of TMvcPublishOption;
 
+  /// abstract class used by TMvcApplication to run TMvcViews-based process
+  // - this inherited class will host a MVC Views instance, and handle
+  // an optional simple in-memory cache
+  TMvcRunWithViews = class(TMvcRun)
+  protected
+    fViews: TMvcViewsAbstract;
+    fMvcInfoCache: RawUtf8;
+    fMethodCache: array of TMvcRunCacheMethod; // follows fFactory.Methods[]
+    fStaticCache: TSynDictionary;              // RawUtf8/TMvcRunCacheStatic
+    fStaticCacheControlMaxAge: integer;
+    fPublishOptions: TMvcPublishOptions;
+    fAllowedMethods: TUriMethods;
+    procedure ComputeMvcInfoCache;
+    procedure ProcessStatic(const name: RawUtf8; var cached: TMvcRunCacheStatic);
+  public
+    /// link this runner class to a specified MVC application
+    constructor Create(aApplication: TMvcApplication;
+      aViews: TMvcViewsAbstract = nil); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// method called to flush the caching mechanism for all MVC commands
+    procedure NotifyContentChanged; override;
+    /// method called to flush the caching mechanism for a MVC command
+    procedure NotifyContentChangedForMethod(aMethodIndex: integer); override;
+    /// defines the caching policy for a given MVC command
+    // - a time expiration period (up to 5 minutes) can also be defined per
+    // MVC command - leaving default 0 will set to 5 minutes expiration delay
+    // - function calls can be chained to create some fluent definition interface
+    // like in TAnyBLogapplication.Create:
+    // ! fMainRunner := TMvcRunWithViews.Create(self).
+    // !   SetCache('default', cacheRoot);
+    function SetCache(const aMethodName: RawUtf8;
+      aPolicy: TMvcRendererCachePolicy;
+      aTimeOutSeconds: cardinal = 0): TMvcRunWithViews; virtual;
+    /// define some custom content for a static file
+    // - only used if cacheStatic has been defined
+    // - this method is thread safe
+    procedure AddStaticCache(const aFileName: TFileName; const aUri: RawUtf8;
+      const aBody: RawByteString; const aContentType: RawUtf8 = '';
+      aCache: PMvcRunCacheStatic = nil);
+    /// read-write access to the associated MVC Views instance
+    property Views: TMvcViewsAbstract
+      read fViews;
+    /// current publishing options, as specified to the constructor
+    // - all options are included by default
+    property PublishOptions: TMvcPublishOptions
+      read fPublishOptions write fPublishOptions;
+    /// current HTTP methods recognized, as specified to the constructor
+    // - equals [mGET, mPOST] by default, as expected by HTML applications
+    // with standard www-form
+    property AllowedMethods: TUriMethods
+      read fAllowedMethods;
+    /// optional "Cache-Control: max-age=###" header seconds value for static content
+    property StaticCacheControlMaxAge: integer
+      read fStaticCacheControlMaxAge write fStaticCacheControlMaxAge;
+  end;
+
   /// run TMvcApplication directly within a TRestServer method-based service
   // - this is the easiest way to host and publish a MVC Application, optionally
   // in conjunction with REST/AJAX client access
   TMvcRunOnRestServer = class(TMvcRunWithViews)
   protected
     fRestServer: TRestServer;
-    fPublishOptions: TMvcPublishOptions;
-    fAllowedMethods: TUriMethods;
-    fMvcInfoCache: RawUtf8;
-    fStaticCache: TSynNameValue;
-    fStaticCacheControlMaxAge: integer;
     /// callback used for the rendering on the TRestServer
     procedure RunOnRestServerRoot(Ctxt: TRestServerUriContext);
     procedure RunOnRestServerSub(Ctxt: TRestServerUriContext);
@@ -675,22 +715,6 @@ type
       aPublishOptions: TMvcPublishOptions=
         [low(TMvcPublishOption) .. high(TMvcPublishOption)];
       aAllowedMethods: TUriMethods = [mGET, mPOST]); reintroduce;
-    /// define some content for a static file
-    // - only used if cacheStatic has been defined
-    function AddStaticCache(const aFileName: TFileName;
-      const aFileContent: RawByteString): RawByteString;
-    /// current publishing options, as specified to the constructor
-    // - all options are included by default
-    property PublishOptions: TMvcPublishOptions
-      read fPublishOptions write fPublishOptions;
-    /// current HTTP methods recognized, as specified to the constructor
-    // - equals [mGET, mPOST] by default, as expected by HTML applications
-    // with standard www-form
-    property AllowedMethods: TUriMethods
-      read fAllowedMethods;
-    /// optional "Cache-Control: max-age=###" header seconds value for static content
-    property StaticCacheControlMaxAge: integer
-      read fStaticCacheControlMaxAge write fStaticCacheControlMaxAge;
   end;
 
 
@@ -747,10 +771,8 @@ type
   end;
 
   /// event as called by TMvcApplication.OnBeforeRender/OnAfterRender
-  // - should return TRUE to continue the process, FALSE if Ctxt has been filled
-  // as expected and no further process should be done
-  TOnMvcRender = function(Ctxt: TRestServerUriContext; Method: PInterfaceMethod;
-    var Input: variant; Renderer: TMvcRendererReturningData): boolean of object;
+  // - should return TRUE to continue the process, or FALSE to abort
+  TOnMvcRender = function(Sender: TMvcRendererReturningData): boolean of object;
 
   /// event called by TMvcApplication.OnSessionCreate/OnSessionFinalized
   TOnMvcSession = procedure(Sender: TMvcSessionAbstract; SessionID: integer;
@@ -825,11 +847,13 @@ type
       read fSession write SetSession;
 
     /// this event is called before a page is rendered
-    // - you can override the supplied Input TDocVariantData if needed
+    // - you can override the supplied Sender.InputContext^ if needed
+    // - note that Sender.Input JSON is not yet computed
     property OnBeforeRender: TOnMvcRender
       read fOnBeforeRender write fOnBeforeRender;
     /// this event is called after the page has been rendered
-    // - Renderer.Output.Content contains the result of Renderer.ExecuteCommand
+    // - Sender.Output contains the result of Renderer.ExecuteCommand
+    // - note that Sender.Input has been unserialized so is no valid JSON anymore
     property OnAfterRender: TOnMvcRender
       read fOnAfterRender write fOnAfterRender;
     /// this event is called when a session/cookie has been initiated
@@ -882,7 +906,7 @@ const
 
   MUSTACHE_MVCINFO = MUSTACHE_METHODPARTIAL +
   '{{<url}}/{{root}}/{{methodName}}{{#hasInParams}}?' +
-  '{{#args}}{{#dirInput}}{{argName}}=</b>..[{{typePascal}}]..<b>' +
+  '{{#args}}{{#dirInput}}{{lowerName}}=</b>..[{{typePascal}}]..<b>' +
   '{{#commaInSingle}}&{{/commaInSingle}}{{/dirInput}}{{/args}}{{/hasInParams}}{{/url}}' +
   '{{<mustache}}<b>&#123;{Main&#125;}</b>: variant{{#args}}{{#dirOutput}}<br><b>{&#123;' +
   '{{argName}}&#125;}</b>: {{typePascal}}{{/dirOutput}}{{/args}}{{/mustache}}' +
@@ -935,10 +959,16 @@ begin
   fViewStaticFolder := MakePath([fViewTemplateFolder,  STATIC_URI], true);
 end;
 
-function TMvcViewsAbstract.GetStaticFile(
+function TMvcViewsAbstract.GetStaticFileName(
+  const aFileName: TFileName): TFileName;
+begin
+  result := fViewStaticFolder + aFileName;
+end;
+
+function TMvcViewsAbstract.GetStaticFileContent(
   const aFileName: TFileName): RawByteString;
 begin
-  result := StringFromFile(fViewStaticFolder + aFileName);
+  result := StringFromFile(GetStaticFileName(aFileName));
 end;
 
 procedure TMvcViewsAbstract.NotifyContentChanged;
@@ -1197,16 +1227,16 @@ end;
 constructor TMvcViewsMustache.Create(aInterface: PRttiInfo;
   const aParameters: TMvcViewsMustacheParameters; aLogClass: TSynLogClass);
 var
-  m, i: PtrInt;
+  i, n: PtrInt;
   folder, ext: TFileName;
   files: TFileNameDynArray;
   info: variant;
   v: ^TMvcViewMustache;
+  m: PInterfaceMethod;
 begin
   inherited Create(aInterface, aLogClass);
   // get views
-  fViewTemplateFileTimestampMonitor :=
-    aParameters.FileTimestampMonitorAfterSeconds;
+  fViewTemplateFileTimestampMonitor := aParameters.FileTimestampMonitorAfterSeconds;
   folder := aParameters.Folder;
   if folder = '' then
   begin
@@ -1224,27 +1254,27 @@ begin
     ext := ',' + SysUtils.LowerCase(aParameters.CsvExtensions) + ',';
   SetLength(fViews, fFactory.MethodsCount);
   v := pointer(fViews);
-  for m := 0 to fFactory.MethodsCount - 1 do
-  begin
-    if MethodHasView(fFactory.Methods[m]) then
+  m := pointer(fFactory.Methods);
+  n := fFactory.MethodsCount;
+  repeat
+    v^.Safe.Init;
+    if MethodHasView(m^) then
     begin
-      v^.Locker := TAutoLocker.Create;
-      Utf8ToFileName(fFactory.Methods[m].Uri, v^.MethodName);
+      Utf8ToFileName(m^.Uri, v^.MethodName);
       v^.SearchPattern := v^.MethodName + '.*';
-      files := FindTemplates(v^.SearchPattern);
-      if length(files) > 0 then
+      files := FindTemplateFileNames(v^.SearchPattern);
+      if files <> nil then
       begin
         for i := 0 to length(files) - 1 do
         begin
-          v^.ShortFileName := files[i];
-          v^.FileExt := SysUtils.LowerCase(
-            copy(ExtractFileExt(v^.ShortFileName), 2, 100));
+          v^.FileName := files[i];
+          v^.ShortFileName := ExtractFileName(v^.FileName);
+          v^.FileExt := SysUtils.LowerCase(ExtractExt(v^.ShortFileName, true));
           if Pos(',' + v^.FileExt + ',', ext) > 0 then
             // found a template with the right extension
             break;
         end;
         // if no exact extension match, return last matching 'MethodName.*'
-        v^.FileName := ViewTemplateFolder + v^.ShortFileName;
         v^.ContentType := GetMimeContentType('', v^.ShortFileName);
       end
       else
@@ -1254,20 +1284,24 @@ begin
         if aParameters.ExtensionForNotExistingTemplate <> '' then
         begin
           // create void template content with methods information as comment
-          v^.ShortFileName :=
-            v^.MethodName + aParameters.ExtensionForNotExistingTemplate;
-          v^.FileName := ViewTemplateFolder + v^.ShortFileName;
-          info := ContextFromMethod(fFactory.Methods[m]);
+          v^.FileExt := aParameters.ExtensionForNotExistingTemplate;
+          v^.ShortFileName := v^.MethodName + v^.FileExt;
+          delete(v^.FileExt, 1, 1); // remove initial '.'
+          v^.FileName := fViewTemplateFolder + v^.ShortFileName; // default place
+          info := ContextFromMethod(m^);
           _ObjAddProp(
             'interfaceName', fFactory.InterfaceRtti.Name, info);
           FileFromString(StringReplaceChars(StringReplaceChars(
             TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),
             '<', '{'), '>', '}'), v^.FileName);
+          v^.ContentType := GetMimeContentType('', v^.ShortFileName);
         end;
       end;
     end;
     inc(v);
-  end;
+    inc(m);
+    dec(n);
+  until n = 0;
   fViewHelpers := aParameters.Helpers;
   // get partials
   fViewPartials := TSynMustachePartials.Create;
@@ -1278,21 +1312,18 @@ procedure TMvcViewsMustache.NotifyContentChanged;
 var
   i: PtrInt;
   files: TFileNameDynArray;
-  partial: TSynMustache;
-  partialName: RawUtf8;
+  content: RawUtf8;
 begin
-  files := FindTemplates('*.partial');
+  files := FindPartialFileNames;
   fViewPartials.List.Safe.WriteLock;
   try
     fViewPartials.List.Clear;
     for i := 0 to length(files) - 1 do
     begin
-      StringToUtf8(GetFileNameWithoutExt(files[i]), partialName);
+      content := StringFromFile(files[i]);
+      if not IsVoid(content) then
       try
-        partial := fViewPartials.Add(partialName, GetTemplate(files[i]));
-        if not (viewHasGenerationTimeTag in fViewFlags) and
-           partial.FoundInTemplate(fViewGenerationTimeTag) then
-          include(fViewFlags, viewHasGenerationTimeTag);
+        fViewPartials.Add(GetFileNameWithoutExtOrPath(files[i]), content);
       except
         on E: Exception do
           fLogClass.Add.Log(sllError, '%.Create: Invalid Partial file % - %',
@@ -1319,9 +1350,13 @@ begin
 end;
 
 destructor TMvcViewsMustache.Destroy;
+var
+  i: PtrInt;
 begin
   inherited;
   fViewPartials.Free;
+  for i := 0 to length(fViews) - 1 do
+    fViews[i].Safe.Done;
 end;
 
 function TMvcViewsMustache.RegisterExpressionHelpers(
@@ -1391,102 +1426,107 @@ begin
   RawUtf8ToVariant(mormot.crypt.core.Sha512(ToUtf8(Value)), Result);
 end;
 
-function TMvcViewsMustache.GetRenderer(methodIndex: integer;
-  var view: TMvcView): TSynMustache;
+function TMvcViewsMustache.FindTemplateFileNames(
+  const Mask: TFileName): TFileNameDynArray;
+begin
+  result := FileNames(fViewTemplateFolder, Mask);
+end;
+
+function TMvcViewsMustache.GetTemplateFileAge(const View: TMvcViewMustache): TUnixTime;
+begin
+  result := FileAgeToUnixTimeUtc(View.FileName);
+end;
+
+procedure TMvcViewsMustache.SetTemplateContent(var View: TMvcViewMustache);
+begin
+  View.Template := StringFromFile(View.FileName);
+end;
+
+function TMvcViewsMustache.FindPartialFileNames: TFileNameDynArray;
+begin
+  result := FileNames(fViewTemplateFolder, '*.partial');
+end;
+
+function TMvcViewsMustache.Render(methodIndex: integer; const Context: variant;
+  var View: TMvcView): TMvcViewFlags;
 var
   age: TUnixTime;
+  m: TSynMustache;
   v: ^TMvcViewMustache;
+  tix32: cardinal;
 
-  procedure UpdateView;
-  begin
-    v^.Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
-    v^.FileAgeLast := age;
-    v^.Template := GetTemplate(v^.ShortFileName);
-    if v^.Template <> '' then
-    try
-      v^.Mustache := TSynMustache.Parse(v^.Template);
-      if v^.Mustache.FoundInTemplate(fViewGenerationTimeTag) then
-        include(v^.Flags, viewHasGenerationTimeTag);
-    except
-      on E: Exception do
-        EMvcException.RaiseUtf8('%.Render(''%''): Invalid Template: % - %',
-          [self, v^.ShortFileName, E, E.Message]);
-    end
-    else
-      EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
-        [self, v^.ShortFileName, v^.SearchPattern]);
-    if fViewTemplateFileTimestampMonitor <> 0 then
-      v^.FileAgeCheckTick := GetTickCount64 +
-        Int64(fViewTemplateFileTimestampMonitor) * Int64(1000);
-  end;
+    procedure UpdateView;
+    begin
+      v^.Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
+      if v^.MethodName = '' then
+        EMvcException.RaiseUtf8('%.Render(%): not a View',
+          [self, fFactory.Methods[methodIndex].Uri]);
+      if v^.FileName = '' then
+        EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
+          [self, v^.MethodName, v^.SearchPattern]);
+      v^.FileAgeLast := age;
+      SetTemplateContent(v^);
+      if v^.Template <> '' then
+      try
+        v^.Mustache := TSynMustache.Parse(v^.Template);
+        if v^.Mustache.FoundInTemplate(fViewGenerationTimeTag, fViewPartials) then
+          include(v^.Flags, viewHasGenerationTimeTag);
+      except
+        on E: Exception do
+          EMvcException.RaiseUtf8('%.Render(''%''): Invalid Template: % - %',
+            [self, v^.ShortFileName, E, E.Message]);
+      end
+      else
+        EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
+          [self, v^.ShortFileName, v^.SearchPattern]);
+      if tix32 <> 0 then
+        v^.FileAgeTix32 := tix32 + fViewTemplateFileTimestampMonitor;
+    end;
 
 begin
-  if cardinal(methodIndex) >= cardinal(fFactory.MethodsCount) then
+  // retrieve (and update if needed) the TSynMustache instance of this view
+  if cardinal(methodIndex) >= cardinal(length(fViews)) then
     EMvcException.RaiseUtf8('%.Render(methodIndex=%)', [self, methodIndex]);
+  tix32 := 0;
+  if fViewTemplateFileTimestampMonitor <> 0 then
+    tix32 := GetTickCount64 shr MilliSecsPerSecShl;
   v := @fViews[methodIndex];
-  v^.Locker.Enter;
+  v^.Safe.Lock;
   try
-    if v^.MethodName = '' then
-      EMvcException.RaiseUtf8('%.Render(%): not a View',
-        [self, fFactory.Methods[methodIndex].Uri]);
-    if (v^.Mustache = nil) and
-       (v^.FileName = '') then
-      EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
-        [self, v^.MethodName, v^.SearchPattern]);
     if (v^.Mustache = nil) or
-       ((fViewTemplateFileTimestampMonitor <> 0) and
-        (v^.FileAgeCheckTick < GetTickCount64)) then
+       ((tix32 <> 0) and
+        (tix32 >= v^.FileAgeTix32)) then
     begin
-      age := GetTemplateAge(v^.ShortFileName);
+      age := GetTemplateFileAge(v^);
       if (v^.Mustache = nil) or
          (age <> v^.FileAgeLast) then
         UpdateView;
     end;
-    view.ContentType := v^.ContentType;
-    view.Flags := view.Flags + v^.Flags;
-    result := v^.Mustache;
+    m := v^.Mustache;
+    result := v^.Flags;
+    View.ContentType := v^.ContentType;
   finally
-    v^.Locker.Leave;
+    v^.Safe.UnLock;
   end;
-end;
-
-function TMvcViewsMustache.FindTemplates(
-  const Mask: TFileName): TFileNameDynArray;
-begin
-  result := FileNames(ViewTemplateFolder, Mask, [ffoExcludesDir, ffoSortByName]);
-end;
-
-function TMvcViewsMustache.GetTemplate(const aFileName: TFileName): RawUtf8;
-begin
-  result := RawUtf8FromFile(ViewTemplateFolder + aFileName);
-end;
-
-function TMvcViewsMustache.GetTemplateAge(const aFileName: TFileName): TUnixTime;
-begin
-  // we don't need TDateTime, just values to compare
-  result := FileAgeToUnixTimeUtc(ViewTemplateFolder + aFileName);
-end;
-
-procedure TMvcViewsMustache.Render(methodIndex: integer; const Context: variant;
-  var View: TMvcView);
-var
-  v: ^TMvcViewMustache;
-begin
-  View.Content := GetRenderer(methodIndex, View).
-                  Render(Context, fViewPartials, fViewHelpers);
+  // render the TSynMustache template
+  View.Content := m.Render(Context, fViewPartials, fViewHelpers);
   if not IsVoid(View.Content) then
     exit;
   // rendering failure
-  v := @fViews[methodIndex];
-  v^.Locker.Enter;
-  try
-    v^.Mustache := nil; // force reload view ASAP
-  finally
-    v^.Locker.Leave;
-  end;
+  v^.Safe.Lock;
+  v^.Mustache := nil; // force reload view ASAP
+  v^.Safe.UnLock;
   EMvcException.RaiseUtf8(
-    '%.Render(''%''): Void [%] Template - please customize this file!',
+    '%.Render(''%''): Void or invalid template: please fix %',
     [self, v^.ShortFileName, v^.FileName]);
+end;
+
+function TMvcViewsMustache.RenderFlags(methodIndex: PtrInt): TMvcViewFlags;
+begin
+  if PtrUInt(methodIndex) >= PtrUInt(length(fViews)) then
+    result := []
+  else
+    result := fViews[methodIndex].Flags;
 end;
 
 
@@ -1735,27 +1775,24 @@ begin
   _ObjAddPropU('originalErrorContext', details, context);
 end;
 
-procedure TMvcRendererAbstract.ExecuteCommand(aMethodIndex: integer);
+procedure TMvcRendererAbstract.ExecuteCommand;
 var
   action: TMvcAction;
   exec: TInterfaceMethodExecuteCached;
   isAction: boolean;
   WR: TJsonWriter;
-  m: PInterfaceMethod;
   methodOutput: RawUtf8;
   renderContext: TDocVariantData;
   info: variant;
   err: ShortString;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
-  fMethodIndex := aMethodIndex;
   try
-    if fMethodIndex >= 0 then
+    if fMethod <> nil then
     repeat
       try
         // execute the method and generate the JSON output
-        m := @fApplication.fFactory.Methods[fMethodIndex];
-        isAction := imfResultIsServiceCustomAnswer in m^.Flags;
+        isAction := imfResultIsServiceCustomAnswer in fMethod^.Flags;
         fExecuteCached[fMethodIndex].Acquire([], exec, WR);
         try
           WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
@@ -1768,7 +1805,7 @@ begin
             if err = '' then
               err := 'execution error';
             EMvcException.RaiseUtf8('%.CommandRunMethod(I%): %',
-              [self, m^.InterfaceDotMethodName, err])
+              [self, fMethod^.InterfaceDotMethodName, err])
           end;
           action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
           action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
@@ -1815,7 +1852,10 @@ begin
         else
           // fallback is to stay here
           action.ReturnedStatus := HTTP_SUCCESS;
-    until fMethodIndex < 0; // loop to handle redirection
+      if fMethodIndex < 0 then
+        exit; // no loop to handle redirection
+      fMethod := @fApplication.fFactory.Methods[fMethodIndex];
+    until false;
     // if we reached here, there was a wrong URI -> render the 404 error page
     CommandError('notfound', true, HTTP_NOTFOUND);
   except
@@ -1834,24 +1874,17 @@ end; // indicates redirection did not happen -> caller should do it manually
 
 { TMvcRendererFromViews }
 
-constructor TMvcRendererFromViews.Create(aRun: TMvcRunWithViews);
-begin
-  inherited Create(aRun);
-  fCacheEnabled := true;
-end;
-
 procedure TMvcRendererFromViews.Renders(var outContext: variant;
   status: cardinal; forcesError: boolean);
 var
   view: TMvcView; // stack allocated rendering context
   head: PVarData;
 begin
-  view.Flags := fRun.fViews.fViewFlags;
   if forcesError or
      (fMethodIndex = fRun.fViews.fFactoryErrorIndex) then
   try
     // current rendering of the error page
-    fRun.fViews.Render(fRun.fViews.fFactoryErrorIndex, outContext, view);
+    fOutputFlags := fRun.fViews.Render(fRun.fViews.fFactoryErrorIndex, outContext, view);
   except
     // fallback to our default HTML error template, if custom one is buggy
     on E: Exception do
@@ -1861,20 +1894,19 @@ begin
         'exceptionMessage', E.Message,
         'className',        ClassNameShort(self)^], outContext);
       view.Content := TSynMustache.Parse(MUSTACHE_DEFAULTERROR).
-        Render(outContext);
+                      Render(outContext);
       view.ContentType := HTML_CONTENT_TYPE;
     end;
   end
   else
     // regular view page rendering
-    fRun.fViews.Render(fMethodIndex, outContext, view);
+    fOutputFlags := fRun.fViews.Render(fMethodIndex, outContext, view);
   fOutput.Content := view.Content;
   Join([HEADER_CONTENT_TYPE, view.ContentType], fOutput.Header);
   head := _Safe(outContext)^.GetVarData('CustomOutHttpHeader');
   if head <> nil then
     AppendLine(fOutput.Header, [PVariant(head)^]);
   fOutput.Status := status;
-  fOutputFlags := view.Flags;
 end;
 
 
@@ -1927,37 +1959,37 @@ constructor TMvcRunWithViews.Create(aApplication: TMvcApplication;
 begin
   inherited Create(aApplication);
   fViews := aViews;
-  fCacheLocker := TAutoLocker.Create;
+  SetLength(fMethodCache, fApplication.fFactory.MethodsCount);
+  fStaticCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+    TypeInfo(TMvcRunCacheStatics), {caseinsens=}false);
+end;
+
+destructor TMvcRunWithViews.Destroy;
+begin
+  inherited Destroy;
+  fViews.Free; // the TMvcViewsAbstract was owned by this TMvcRun instance
+  fStaticCache.Free;
 end;
 
 function TMvcRunWithViews.SetCache(const aMethodName: RawUtf8;
   aPolicy: TMvcRendererCachePolicy;
   aTimeOutSeconds: cardinal): TMvcRunWithViews;
 const
-  MAX_CACHE_TIMEOUT = 60 * 15; // 15 minutes
+  MAX_CACHE_TIMEOUT = 60 * 15; // 900 seconds = 15 minutes
 var
   ndx: PtrInt;
-  c: ^TMvcRunWithViewCache;
+  c: ^TMvcRunCacheMethod;
 begin
-  with fCacheLocker.ProtectMethod do
-  begin
-    ndx := fApplication.fFactory.CheckMethodIndex(aMethodName);
-    if fCache = nil then
-      SetLength(fCache, fApplication.fFactory.MethodsCount);
-    c := @fCache[ndx];
-    c^.Policy := aPolicy;
-    if aTimeOutSeconds - 1 >= MAX_CACHE_TIMEOUT then
-      aTimeOutSeconds := MAX_CACHE_TIMEOUT;
-    c^.TimeOutSeconds := aTimeOutSeconds;
-    NotifyContentChangedForMethod(ndx);
-  end;
+  ndx := fApplication.fFactory.CheckMethodIndex(aMethodName);
+  if aTimeOutSeconds - 1 >= MAX_CACHE_TIMEOUT then
+    aTimeOutSeconds := MAX_CACHE_TIMEOUT; // c^.TimeOutSeconds is 16-bit
+  c := @fMethodCache[ndx];
+  c^.Safe.Lock;
+  c^.Policy := aPolicy;
+  c^.TimeOutSeconds := aTimeOutSeconds;
+  c^.Safe.UnLock;
+  NotifyContentChangedForMethod(ndx);
   result := self;
-end;
-
-destructor TMvcRunWithViews.Destroy;
-begin
-  fViews.Free;
-  inherited;
 end;
 
 procedure TMvcRunWithViews.NotifyContentChanged;
@@ -1968,22 +2000,78 @@ begin
 end;
 
 procedure TMvcRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
+var
+  c: ^TMvcRunCacheMethod;
 begin
-  inherited NotifyContentChangedForMethod(aMethodIndex); // do nothing
-  with fCacheLocker.ProtectMethod do
-    if cardinal(aMethodIndex) < cardinal(Length(fCache)) then
-      with fCache[aMethodIndex] do
-        case Policy of
-          cacheRootIgnoringSession,
-          cacheRootIfSession,
-          cacheRootIfNoSession:
-            RootValue := '';
-          cacheRootWithSession,
-          cacheWithParametersIgnoringSession,
-          cacheWithParametersIfSession,
-          cacheWithParametersIfNoSession:
-            InputValues.Init(false);
-        end;
+  if cardinal(aMethodIndex) >= cardinal(Length(fMethodCache)) then
+    exit; // paranoid
+  c := @fMethodCache[aMethodIndex];
+  if c^.Policy = cacheNone then
+    exit;
+  c^.Safe.Lock;
+  case c^.Policy of
+    cacheRootIgnoringSession,
+    cacheRootIfSession,
+    cacheRootIfNoSession:
+      c^.RootValue := '';
+    cacheRootWithSession,
+    cacheWithParametersIgnoringSession,
+    cacheWithParametersIfSession,
+    cacheWithParametersIfNoSession:
+      c^.ParamsValue.Init(false); // reset
+  end;
+  c^.Safe.UnLock;
+end;
+
+procedure TMvcRunWithViews.AddStaticCache(const aFileName: TFileName;
+  const aUri: RawUtf8; const aBody: RawByteString; const aContentType: RawUtf8;
+  aCache: PMvcRunCacheStatic);
+var
+  cache: TMvcRunCacheStatic;
+  etag: Int64Rec;
+begin
+  if (aFileName = '') or
+     (aBody = '') or
+     not (cacheStatic in fPublishOptions) then
+    exit;
+  cache.FileName := aFileName;
+  cache.Body := aBody;
+  if aContentType <> '' then
+    Join([HEADER_CONTENT_TYPE, aContentType], cache.ContentHeader)
+  else
+    cache.ContentHeader := GetMimeContentTypeHeader(aBody, aFileName);
+  etag.Lo := crc32cHash(aBody);
+  etag.Hi := crc32cHash(aUri);
+  BinToHexLower(@etag, SizeOf(etag), cache.Etag);
+  if aCache <> nil then
+    aCache^ := cache;
+  fStaticCache.Add(aUri, cache);
+end;
+
+procedure TMvcRunWithViews.ComputeMvcInfoCache;
+var
+  mvcinfo: variant;
+begin
+  fApplication.GetMvcInfo(mvcinfo);
+  mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
+  fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
+end;
+
+procedure TMvcRunWithViews.ProcessStatic(const name: RawUtf8;
+  var cached: TMvcRunCacheStatic);
+begin
+  if cacheStatic in fPublishOptions then
+    if fStaticCache.FindAndCopy(name, cached, {updatetimeout=}false) then
+      exit; // found in cache
+  if not SafeFileNameU(name) then // avoid injection
+    exit;
+  cached.FileName := NormalizeFileName(Utf8ToString(name));
+  Utf8ToFileName(StringReplaceChars(name, '/', PathDelim), cached.FileName);
+  if cacheStatic in fPublishOptions then
+    AddStaticCache(cached.FileName, name,
+      fViews.GetStaticFileContent(cached.FileName), '', @cached)
+  else
+    cached.FileName := fViews.GetStaticFileName(cached.FileName);
 end;
 
 
@@ -2043,35 +2131,22 @@ begin
   if (registerOrmTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMvcViewsMustache) then
     TMvcViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
-  fStaticCache.Init({casesensitive=}true);
   fApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
   // no remote ORM access via REST, and route method_name as method/name too
   fRestServer.Options := fRestServer.Options +
     [rsoNoTableURI, rsoNoInternalState, rsoMethodUnderscoreAsSlashUri];
 end;
 
-function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
-  const aFileContent: RawByteString): RawByteString;
-begin
-  if aFileContent <> '' then
-    result := Join([GetMimeContentType(aFileContent, aFileName),
-      #10, aFileContent]) // also cache content-type
-  else
-    result := '';
-  fStaticCache.Add(StringToUtf8(aFileName), result);
-end;
-
 procedure TMvcRunOnRestServer.InternalRunOnRestServer(
   Ctxt: TRestServerUriContext; const MethodName: RawUtf8);
 var
   p: PUtf8Char;
-  mvcinfo, inputContext: variant;
-  mainMethod, subMethod, cached, body, content: RawUtf8;
-  staticFileName: TFileName;
-  rendererClass: TMvcRendererReturningDataClass;
-  renderer: TMvcRendererReturningData;
-  methodIndex: integer;
-  method: PInterfaceMethod;
+  inputContext: variant;
+  mainMethod, subMethod, body: RawUtf8;
+  cache: TMvcRunCacheStatic;
+  meth: PInterfaceMethod;
+  c: TMvcRendererReturningDataClass;
+  r: TMvcRendererReturningData;
   start: Int64;
 begin
   // 1. parse URI
@@ -2083,124 +2158,75 @@ begin
      PropNameEquals(mainMethod, MVCINFO_URI) then
   begin
     if fMvcInfoCache = '' then
-    begin
-      fApplication.GetMvcInfo(mvcinfo);
-      mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
-      fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
-    end;
+      ComputeMvcInfoCache;
     Ctxt.Returns(fMvcInfoCache, HTTP_SUCCESS, HTML_CONTENT_TYPE_HEADER, true);
-  end
-  else
+    exit;
+  end;
   // 3. serve static resources, with proper caching
   if (publishStatic in fPublishOptions) and
      PropNameEquals(mainMethod, STATIC_URI) then
   begin
-    // code below will use a local in-memory cache, but would do the same as:
+    // this method uses a local in-memory cache, but would do the same as:
     // Ctxt.ReturnFileFromFolder(fViews.ViewStaticFolder);
-    fCacheLocker.Enter;
-    try
-      if cacheStatic in fPublishOptions then
-        cached := fStaticCache.Value(subMethod, #0)
-      else
-        cached := #0;
-      if cached = #0 then
-        if not SafeFileNameU(subMethod) then // avoid injection
-          // cached='' means HTTP_NOTFOUND
-          cached := ''
-        else
-        begin
-          Utf8ToFileName(StringReplaceChars(subMethod, '/', PathDelim), staticFileName);
-          if cacheStatic in fPublishOptions then
-          begin
-            // retrieve and cache
-            cached := fViews.GetStaticFile(staticFileName);
-            cached := AddStaticCache(staticFileName, cached);
-          end
-          else
-          begin
-            // no cache
-            staticFileName := fViews.ViewStaticFolder + staticFileName;
-            Ctxt.ReturnFile(staticFileName, {handle304=}true, '', '', '',
-              fStaticCacheControlMaxAge);
-            exit;
-          end;
-        end;
-    finally
-      fCacheLocker.Leave;
-    end;
-    if cached = '' then
+    ProcessStatic(subMethod, cache);
+    if cache.FileName <> '' then
+      Ctxt.ReturnFile(cache.FileName, {304=}true, '', '', '', fStaticCacheControlMaxAge)
+    else if cache.Body = '' then
       Ctxt.Error('', HTTP_NOTFOUND, fStaticCacheControlMaxAge)
     else
-    begin
-      Split(cached, #10, content, cached);
-      Ctxt.Returns(cached, HTTP_SUCCESS, HEADER_CONTENT_TYPE + content,
-        {handle304=}true, false, fStaticCacheControlMaxAge);
-    end;
-  end
-  else
+      Ctxt.Returns(cache.Body, HTTP_SUCCESS, cache.ContentHeader,
+        {handle304=}true, false, fStaticCacheControlMaxAge, cache.Etag);
+    exit;
+  end;
+  // 4. check basic context: HTTP method, URI and input parameters
+  if not (Ctxt.Method in fAllowedMethods) then
   begin
-    // 4. render regular page using proper viewer
-    QueryPerformanceMicroSeconds(start);
-    if subMethod <> '' then
-      if (allowJsonFormat in fPublishOptions) and
-         PropNameEquals(subMethod, 'json') then
-        rendererClass := TMvcRendererJson
-      else
-      begin
-        Ctxt.Error('', HTTP_NOTFOUND);
-        exit;
-      end
+    Ctxt.Error('', HTTP_NOTALLOWED); // we have an HTTP status code for that
+    exit;
+  end;
+  meth := fApplication.fFactory.FindMethod(mainMethod);
+  if meth = nil then
+  begin
+    Ctxt.Error('', HTTP_NOTFOUND);
+    exit;
+  end;
+  // 5. render regular page using proper viewer
+  QueryPerformanceMicroSeconds(start);
+  inputContext := Ctxt.GetInputAsTDocVariant(JSON_MVC, meth);
+  if subMethod <> '' then
+    if (allowJsonFormat in fPublishOptions) and
+       PropNameEquals(subMethod, 'json') then
+      c := TMvcRendererJson
     else
-      rendererClass := TMvcRendererFromViews;
-    renderer := rendererClass.Create(self);
-    try
-      renderer.fRemoteIP := Ctxt.Call^.LowLevelRemoteIP;
-      renderer.fRemoteUserAgent := Ctxt.Call^.LowLevelUserAgent;
-      if Ctxt.Method in fAllowedMethods then
-      begin
-        methodIndex := fApplication.fFactory.FindMethodIndex(mainMethod);
-        if methodIndex >= 0 then
-        begin
-          method := @fApplication.fFactory.Methods[methodIndex];
-          inputContext := Ctxt.GetInputAsTDocVariant(JSON_MVC, method);
-          if Assigned(fApplication.OnBeforeRender) then
-            if not fApplication.OnBeforeRender(
-                     Ctxt, method, inputContext, renderer) then
-              // aborted by this event handler
-              exit;
-          if not VarIsEmpty(inputContext) then
-            with _Safe(inputContext)^ do
-            begin
-              if IsObject and
-                 (Count > 0) then
-                // try {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
-                if method^.ArgsInputValuesCount = 1 then
-                  FlattenAsNestedObject(ShortStringToUtf8(
-                    method^.Args[method^.ArgsInFirst].ParamName^));
-              renderer.fInput := ToJson;
-            end;
-        end
-        else
-          method := nil;
-        renderer.ExecuteCommand(methodIndex);
-        if Assigned(fApplication.OnAfterRender) then
-          if not fApplication.OnAfterRender(
-                   Ctxt, method, inputContext, renderer) then
-            // processed by this event handler
-            exit;
-      end
-      else
-        renderer.CommandError('invalid method', true, HTTP_NOTFOUND);
-      body := renderer.Output.Content;
-      if viewHasGenerationTimeTag in renderer.fOutputFlags then
-        body := StringReplaceAll(body, fViews.ViewGenerationTimeTag,
-          ShortStringToAnsi7String(MicroSecFrom(start)));
-      Ctxt.Returns(body, renderer.Output.Status, renderer.Output.Header,
-        {handle304=}true, {noerrorprocess=}true, {cachecontrol=}0,
-        {hashwithouttime=}crc32cUtf8ToHex(renderer.Output.Content));
-    finally
-      renderer.Free;
-    end;
+    begin
+      Ctxt.Error('', HTTP_NOTFOUND);
+      exit;
+    end
+  else
+    c := TMvcRendererFromViews;
+  r := c.Create(self, Ctxt.Call^.LowLevelRemoteIP, Ctxt.Call^.LowLevelUserAgent,
+    Ctxt.TickCount64 div MilliSecsPerSec, @inputContext, meth);
+  try
+    // handle OnBeforeRender custom callback
+    if Assigned(fApplication.OnBeforeRender) then
+      if not fApplication.OnBeforeRender(r) then
+        exit; // aborted by this event handler
+    // serialize r.InputContext^ into r.Input and execute into r.Output
+    r.ExecuteCommand; // with proper caching
+    // handle OnAfterRender custom callback
+    if Assigned(fApplication.OnAfterRender) then
+      if not fApplication.OnAfterRender(r) then
+        exit; // processed by this event handler
+    // return the response with proper ViewGenerationTimeTag replacement
+    body := r.Output.Content;
+    if viewHasGenerationTimeTag in r.OutputFlags then
+      body := StringReplaceAll(body, fViews.ViewGenerationTimeTag,
+        ShortStringToAnsi7String(MicroSecFrom(start)));
+    Ctxt.Returns(body, r.Output.Status, r.Output.Header,
+      {handle304=}true, {noerrorprocess=}true, {cachecontrol=}0,
+      {hashwithouttime=}crc32cUtf8ToHex(r.Output.Content));
+  finally
+    r.Free;
   end;
 end;
 
@@ -2220,78 +2246,101 @@ end;
 
 { TMvcRendererReturningData }
 
-constructor TMvcRendererReturningData.Create(aRun: TMvcRunWithViews);
+constructor TMvcRendererReturningData.Create(aRun: TMvcRunWithViews;
+  const aIP, aUserAgent: RawUtf8; aTix32: cardinal; aContext: PVariant;
+  aMethod: PInterfaceMethod);
 begin
   fRun := aRun;
   inherited Create(fRun.Application);
+  fRemoteIP := aIP;
+  fRemoteUserAgent := aUserAgent;
+  fTix32 := aTix32;
+  fInputContext := aContext;
+  fMethod := aMethod;
+  if fMethod <> nil then
+    fMethodIndex := aMethod^.ExecutionMethodIndex;
+  dec(fMethodIndex, RESERVED_VTABLE_SLOTS);
 end;
 
-procedure TMvcRendererReturningData.ExecuteCommand(aMethodIndex: integer);
+procedure TMvcRendererReturningData.ExecuteCommand;
 
-  procedure SetOutputValue(const aValue: RawUtf8);
+  procedure ExecuteFromCache(const value: RawUtf8);
   begin
     fOutput.Status := HTTP_SUCCESS;
-    Split(aValue, #0, fOutput.Header, RawUtf8(fOutput.Content));
+    Split(value, #0, fOutput.Header, RawUtf8(fOutput.Content));
+    fOutputFlags := fRun.fViews.RenderFlags(fMethodIndex);
   end;
 
-  function RetrievedFromInputValues(const aKey: RawUtf8;
-    const aInputValues: TSynNameValue): boolean;
+  function RetrievedFrom(const key: RawUtf8;
+    const params: TSynNameValue): boolean;
   var
-    i: PtrInt;
+    v: PSynNameValueItem;
   begin
-    i := aInputValues.Find(aKey);
-    if (i >= 0) and
-       (aInputValues.List[i].Value <> '') and
-       (fCacheCurrentSec < cardinal(aInputValues.List[i].Tag)) then
+    v := params.FindItem(key);
+    if (v <> nil) and
+       (v^.Value <> '') and
+       (fTix32 < cardinal(v^.Tag)) then
     begin
-      SetOutputValue(aInputValues.List[i].Value);
+      ExecuteFromCache(v^.Value);
       result := true;
     end
     else
     begin
-      fCacheCurrent := inputCache;
-      fCacheCurrentInputValueKey := aKey;
+      fCacheCurrentInputValueKey := key;
       result := false;
     end;
   end;
 
-  function RetrievedSessionFromInputValues(aSession: integer;
-    const aInputValues: TSynNameValue): boolean;
+  function RetrievedSessionFrom(aSession: cardinal;
+    const params: TSynNameValue): boolean;
   begin
-    RetrievedFromInputValues(UInt32ToUtf8(aSession), aInputValues);
+    result := RetrievedFrom(UInt32ToUtf8(aSession), params);
   end;
 
 var
-  sessionID: integer;
-  c: ^TMvcRunWithViewCache;
+  sessionID, exp32: cardinal;
+  c: ^TMvcRunCacheMethod;
+  dv: PDocVariantData;
 label
   doRoot, doInput;
 begin
-  // first check if content can be retrieved from cache
-  if not fCacheEnabled then
+  // finalize the input JSON needed for ExecuteCommand
+  if _SafeObject(fInputContext^, dv) and
+     (dv^.Count > 0) then
   begin
-    inherited ExecuteCommand(aMethodIndex); // raw command
-    exit;
+    // try ?p.a1=5,p.a2=dfasdfa -> {"p":{"a1":5,"a2":"dfasdfa"}}
+    if (fMethod^.ArgsInputValuesCount = 1) and
+       (dv^.Count > 1) then
+      with fMethod^.Args[fMethod^.ArgsInFirst] do
+        dv^.FlattenAsNestedObject(@ParamName^[1], ord(ParamName^[0]));
+    // compute JSON data context as expected by inherited ExecuteCommand
+    DocVariantType.ToJson(PVarData(dv), fInput);
   end;
   // return any cached content
-  fCacheCurrent := noCache;
-  fCacheCurrentSec := GetTickCount64 div MilliSecsPerSec;
-  fRun.fCacheLocker.Enter;
-  try
-    if cardinal(aMethodIndex) < cardinal(Length(fRun.fCache)) then
-    begin
-      c := @fRun.fCache[aMethodIndex];
+  c := nil;
+  if (cardinal(fMethodIndex) < cardinal(Length(fRun.fMethodCache))) and
+     not fCacheDisabled then
+  begin
+    c := @fRun.fMethodCache[fMethodIndex];
+    if c^.Policy = cacheNone then
+      c := nil;
+  end;
+  if c <> nil then
+  begin
+    FastAssignNew(fCacheCurrentInputValueKey);
+    if fTix32 = 0 then
+      fTix32 := GetTickCount64 div MilliSecsPerSec;
+    c^.Safe.Lock;
+    try
       case c^.Policy of
         cacheRootIgnoringSession:
           if fInput = '' then
 doRoot:     if (c^.RootValue <> '') and
-               (fCacheCurrentSec < c^.RootValueExpirationTime) then
+               (fTix32 < c^.RootValueExpirationTime) then
             begin
-              SetOutputValue(c^.RootValue);
+              ExecuteFromCache(c^.RootValue);
               exit;
-            end
-            else
-              fCacheCurrent := rootCache;
+            end;
         cacheRootIfSession:
           if (fInput = '') and
              fApplication.CurrentSession.Exists then
@@ -2306,13 +2355,13 @@ doRoot:     if (c^.RootValue <> '') and
             sessionID := fApplication.CurrentSession.CheckAndRetrieve;
             if sessionID = 0 then
               goto doRoot
-            else if RetrievedSessionFromInputValues(sessionID, c^.InputValues) then
+            else if RetrievedSessionFrom(sessionID, c^.ParamsValue) then
               exit;
           end;
         cacheWithParametersIgnoringSession:
 doInput:  if fInput = '' then
             goto doRoot
-          else if RetrievedFromInputValues(fInput, c^.InputValues) then
+          else if RetrievedFrom(fInput, c^.ParamsValue) then
             exit;
         cacheWithParametersIfSession:
           if fApplication.CurrentSession.Exists then
@@ -2321,37 +2370,34 @@ doInput:  if fInput = '' then
           if not fApplication.CurrentSession.Exists then
             goto doInput;
       end;
+    finally
+      c^.Safe.UnLock;
     end;
-  finally
-    fRun.fCacheLocker.Leave; // ExecuteCommand() process should not be locked
   end;
   // compute the context and render the page using the corresponding View
-  inherited ExecuteCommand(aMethodIndex);
-  if fCacheCurrent = noCache then
+  inherited ExecuteCommand;
+  if c = nil then
     exit;
-  // update cache
-  fRun.fCacheLocker.Enter;
+  // update cache for this method
+  c^.Safe.Lock;
   try
-    c := @fRun.fCache[aMethodIndex];
-    inc(fCacheCurrentSec, c^.TimeOutSeconds);
-    case fCacheCurrent of
-      rootCache:
-        if fOutput.Status = HTTP_SUCCESS then
-        begin
-          Join([fOutput.Header, #0, fOutput.Content], c^.RootValue);
-          c^.RootValueExpirationTime := fCacheCurrentSec;
-        end
-        else
-          c^.RootValue := '';
-      inputCache:
-        if fOutput.Status = HTTP_SUCCESS then
-          c^.InputValues.AddJoined(fCacheCurrentInputValueKey,
-            [fOutput.Header, #0, fOutput.Content], fCacheCurrentSec)
-        else
-          c^.InputValues.Add(fCacheCurrentInputValueKey, '');
-    end;
+    exp32 := fTix32 + c^.TimeOutSeconds;
+    if fCacheCurrentInputValueKey = '' then
+      if fOutput.Status = HTTP_SUCCESS then
+      begin
+        Join([fOutput.Header, #0, fOutput.Content], c^.RootValue);
+        c^.RootValueExpirationTime := exp32;
+      end
+      else
+        c^.RootValue := ''
+    else
+      if fOutput.Status = HTTP_SUCCESS then
+        c^.ParamsValue.AddJoined(fCacheCurrentInputValueKey,
+          [fOutput.Header, #0, fOutput.Content], exp32)
+      else
+        c^.ParamsValue.Add(fCacheCurrentInputValueKey, ''); // cache the error
   finally
-    fRun.fCacheLocker.Leave;
+    c^.Safe.UnLock;
   end;
 end;
 
