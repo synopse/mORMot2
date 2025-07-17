@@ -4410,7 +4410,7 @@ end;
 function TRestServerUriContext.GetInputAsTDocVariant(
   const Options: TDocVariantOptions; InterfaceMethod: PInterfaceMethod): variant;
 var
-  ndx, a: PtrInt;
+  n, ndx, a: PtrInt;
   forcestring: boolean;
   v: variant;
   multipart: TMultiPartDynArray;
@@ -4419,10 +4419,12 @@ var
 begin
   VarClear(result{%H-});
   FillInput;
-  if fInput <> nil then
+  n := length(fInput) shr 1; // fInput[] = name/value pairs
+  if n <> 0 then
   begin
     res.Init(Options, dvObject);
-    for ndx := 0 to (length(fInput) shr 1) - 1 do
+    res.Capacity := n;
+    for ndx := 0 to n - 1 do
     begin
       name := fInput[ndx * 2];
       if InterfaceMethod <> nil then
