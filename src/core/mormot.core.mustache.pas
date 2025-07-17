@@ -323,7 +323,7 @@ type
       const Partials: variant): TSynMustachePartials; overload;
     /// register a {{>partialName}} template
     // - returns the parsed template
-    function Add(const aName,aTemplate: RawUtf8): TSynMustache; overload;
+    function Add(const aName, aTemplate: RawUtf8): TSynMustache; overload;
     /// register a {{>partialName}} template
     // - returns the parsed template
     function Add(const aName: RawUtf8;
@@ -1286,7 +1286,7 @@ end;
 
 function TSynMustachePartials.FoundInTemplate(
   const aName, aSearchText: RawUtf8): boolean;
-begin // recursive search
+begin // allow recursive search within nested partials
   result := GetPartial(aName).FoundInTemplate(aSearchText, self);
 end;
 
@@ -1972,7 +1972,8 @@ end;
 function TSynMustache.FoundInTemplate(const aSearchText: RawUtf8;
   aPartials: TSynMustachePartials): boolean;
 var
-  i: PtrInt;
+  i: integer;
+  t: PSynMustacheTag;
 begin
   result := false;
   if (self = nil) or
@@ -1981,12 +1982,14 @@ begin
   result := true;
   if PosEx(aSearchText, fTemplate) > 0 then
     exit; // found in main template text
+  t := pointer(fTags);
   if aPartials <> nil then
-    for i := 0 to length(fTags) - 1 do
-      with fTags[i] do
-        if (Kind = mtPartial) and
-           aPartials.FoundInTemplate(Value, aSearchText) then
-          exit; // found in (nested) partials
+    for i := 1 to length(fTags) do
+      if (t^.Kind = mtPartial) and
+         aPartials.FoundInTemplate(t^.Value, aSearchText) then
+        exit // found in (nested) partials
+      else
+        inc(t);
   result := false;
 end;
 
