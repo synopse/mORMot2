@@ -1887,7 +1887,7 @@ type
     fState: TDynArrayHasherState;
     fCompare: TDynArraySortCompare;        // function
     fEventCompare: TOnDynArraySortCompare; // function of object
-    fHasher: THasher;
+    fHasher: THasher;                      // function
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;

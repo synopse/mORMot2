@@ -274,7 +274,7 @@ type
     /// method index in the original (non emulated) interface
     // - our custom methods start at index 3 (RESERVED_VTABLE_SLOTS), since
     // QueryInterface, _AddRef, and _Release are always defined by default
-    // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
+    // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex - 3]
     ExecutionMethodIndex: byte;
     /// how this method is defined and should be processed
     Flags: TInterfaceMethodFlags;
@@ -544,12 +544,12 @@ type
     fMethods: TInterfaceMethodDynArray;
     fInterfaceName: RawUtf8;
     fInterfaceUri: RawUtf8;
-    fDocVariantOptions: TDocVariantOptions; // (16-bit)
-    fJsonParserOptions: TJsonParserOptions; // (16-bit)
-    fMethodsCount: byte;
-    fAddMethodsLevel: byte;
-    fMethodIndexCallbackReleased: ShortInt; // (8-bit)
-    fMethodIndexCurrentFrameCallback: ShortInt;
+    fDocVariantOptions: TDocVariantOptions;     // (16-bit)
+    fJsonParserOptions: TJsonParserOptions;     // (16-bit)
+    fMethodsCount: byte;                        // (8-bit)
+    fAddMethodsLevel: byte;                     // (8-bit)
+    fMethodIndexCallbackReleased: ShortInt;     // (8-bit)
+    fMethodIndexCurrentFrameCallback: ShortInt; // (8-bit)
     fArgUsed: TInterfaceFactoryPerArgumentDynArray;
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUtf8;

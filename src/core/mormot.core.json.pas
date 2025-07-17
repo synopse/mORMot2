@@ -978,6 +978,7 @@ type
     /// any associated pointer or numerical value
     Tag: PtrInt;
   end;
+  PSynNameValueItem = ^TSynNameValueItem;
 
   /// Name/Value pairs storage, as used by TSynNameValue class
   TSynNameValueItemDynArray = array of TSynNameValueItem;
@@ -1048,9 +1049,11 @@ type
     /// reset content, then add all name, value pairs
     // - will first call Init(false) to initialize the internal array
     procedure InitFromNamesValues(const Names, Values: array of RawUtf8);
-    /// search for a Name, return the index in List
+    /// search for a Name, return the index in List[]
     // - using fast O(1) hash algoritm
     function Find(const aName: RawUtf8): PtrInt;
+    /// search for a Name, return the raw PSynNameValueItem in List[]
+    function FindItem(const aName: RawUtf8): PSynNameValueItem;
     /// search for the first chars of a Name, return the index in List
     // - using O(n) calls of IdemPChar() function
     // - here aUpperName should be already uppercase, as expected by IdemPChar()
@@ -9254,9 +9257,9 @@ end;
 
 procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
-  // release dynamic arrays memory before FillcharFast()
+  // release dynamic arrays memory before FillCharFast()
   List := nil;
-  Finalize(PDynArrayHasher(@DynArray.Hasher)^);
+  Finalize(PDynArrayHasher(@DynArray.Hasher)^); // fHashTableStore := nil
   // initialize hashed storage
   FillCharFast(self, SizeOf(self), 0);
   DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray), List,
@@ -9266,6 +9269,17 @@ end;
 function TSynNameValue.Find(const aName: RawUtf8): PtrInt;
 begin
   result := DynArray.FindHashed(aName);
+end;
+
+function TSynNameValue.FindItem(const aName: RawUtf8): PSynNameValueItem;
+var
+  ndx: PtrInt;
+begin
+  ndx := DynArray.FindHashed(aName);
+  if ndx >= 0 then
+    result := @List[ndx]
+  else
+    result := nil;
 end;
 
 function TSynNameValue.FindStart(const aUpperName: RawUtf8): PtrInt;
