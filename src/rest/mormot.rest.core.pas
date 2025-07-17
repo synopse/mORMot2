@@ -3969,8 +3969,10 @@ var
   p: PUtf8Char;
 begin
   p := pointer(fInputContentType);
-  result := (p = nil) or
-            IsContentTypeJson(p, PStrLen(p - _STRLEN)^);
+  if p = nil then
+    result := true
+  else
+    result := IsContentTypeJson(p, PStrLen(p - _STRLEN)^);
 end;
 
 function TRestUriContext.InputAsMultiPart(

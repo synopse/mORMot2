@@ -72,7 +72,7 @@ type
   TMvcViewFlags = set of (
     viewHasGenerationTimeTag);
 
-  /// define a particular rendered View
+  /// define the thread-safe context of a particular rendered View
   // - is initialized by TMvcRendererFromViews.Renders(), then rendered by the
   // TMvcViewsAbstract.Render() method
   TMvcView = record
@@ -1282,7 +1282,7 @@ var
   partialName: RawUtf8;
 begin
   files := FindTemplates('*.partial');
-  fViewPartials.List.Safe.Lock;
+  fViewPartials.List.Safe.WriteLock;
   try
     fViewPartials.List.Clear;
     for i := 0 to length(files) - 1 do
@@ -1300,7 +1300,7 @@ begin
       end;
     end;
   finally
-    fViewPartials.List.Safe.UnLock;
+    fViewPartials.List.Safe.WriteUnLock;
   end;
 end;
 
