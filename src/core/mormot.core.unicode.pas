@@ -9966,8 +9966,8 @@ var
   c, n: PtrInt;
 begin
   c := length(Values);
-  if c = 0 then
-    exit;
+  if c <= 1 then
+    exit; // nothing to search
   QuickSortRawUtf8(Values, c);
   n := DeduplicateRawUtf8Sorted(pointer(Values), c - 1) + 1;
   if n <> c then
