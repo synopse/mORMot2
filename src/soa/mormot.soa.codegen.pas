@@ -1095,6 +1095,7 @@ begin
     ShortStringToAnsi7String(ma^.ParamName^, n);
     _ObjAddProps([
       'argName',   n,
+      'lowerName', LowerCase(n),
       'camelName', LowerCamelCase(n),
       'snakeName', SnakeCase(n),
       'argType',   ma^.ArgTypeName^,
@@ -1107,25 +1108,25 @@ begin
       _ObjAddProp('dirOutput', true, arg);
     if ma^.ValueDirection = imdResult then
       _ObjAddProp('dirResult', true, arg);
+    if a < meth.ArgsNotResultLast then
+      _ObjAddPropU('commaArg', '; ', arg);
+    if a = high(meth.Args) then
+      _ObjAddProp('isArgLast', true, arg);
+    if (ma^.ValueDirection in [imdConst, imdVar]) and
+       (a < meth.ArgsInLast) then
+      _ObjAddPropU('commaInSingle', ',', arg);
+    if (ma^.ValueDirection in [imdVar, imdOut]) and
+       (a < meth.ArgsOutNotResultLast) then
+      _ObjAddPropU('commaOut', '; ', arg);
+    if ma^.ValueDirection <> imdConst then
+    begin
+      _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
+      inc(r);
+      if a < meth.ArgsOutLast then
+        _ObjAddPropU('commaOutResult', '; ', arg);
+    end;
+    TDocVariantData(result).AddItem(arg);
   end;
-  if a < meth.ArgsNotResultLast then
-    _ObjAddPropU('commaArg', '; ', arg);
-  if a = high(meth.Args) then
-    _ObjAddProp('isArgLast', true, arg);
-  if (ma^.ValueDirection in [imdConst, imdVar]) and
-     (a < meth.ArgsInLast) then
-    _ObjAddPropU('commaInSingle', ',', arg);
-  if (ma^.ValueDirection in [imdVar, imdOut]) and
-     (a < meth.ArgsOutNotResultLast) then
-    _ObjAddPropU('commaOut', '; ', arg);
-  if ma^.ValueDirection <> imdConst then
-  begin
-    _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
-    inc(r);
-    if a < meth.ArgsOutLast then
-      _ObjAddPropU('commaOutResult', '; ', arg);
-  end;
-  TDocVariantData(result).AddItem(arg);
 end;
 
 function TWrapperContext.ContextFromMethod(
