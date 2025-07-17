@@ -792,7 +792,7 @@ begin
   if typName = '' then
     if rtti <> nil then
       if rcfWithoutRtti in rtti.Flags then // undefined nested fields
-        FormatUtf8('T%%', [parentName, InterlockedIncrement(fNestedId)], typName)
+        Make(['T', parentName, InterlockedIncrement(fNestedId)], typName)
       else
         typName := rtti.Name
     else
@@ -1081,52 +1081,51 @@ const
     'const', 'var', 'var', 'result');
 var
   a, r: PtrInt;
+  ma: PInterfaceMethodArgument;
   arg: variant;
   n: RawUtf8;
 begin
   TDocVariant.NewFast(result);
   r := 0;
+  ma := pointer(meth.Args);
   for a := 1 to high(meth.Args) do
   begin
-    with meth.Args[a] do
-    begin
-      arg := ContextFromRtti(TYPES_SOA[ValueType], ArgRtti);
-      ShortStringToAnsi7String(ParamName^, n);
-      _ObjAddProps([
-        'argName',   n,
-        'camelName', LowerCamelCase(n),
-        'snakeName', SnakeCase(n),
-        'argType',   ArgTypeName^,
-        'dir',       ord(ValueDirection),
-        'dirName',   DIRTODELPHI[ValueDirection],
-        'dirNoOut',  DIRTOSMS[ValueDirection]], arg);
-      if ValueDirection in [imdConst, imdVar] then
-        _ObjAddProp('dirInput', true, arg);
-      if ValueDirection <> imdConst then
-        _ObjAddProp('dirOutput', true, arg);
-      if ValueDirection = imdResult then
-        _ObjAddProp('dirResult', true, arg);
-    end;
-    if a < meth.ArgsNotResultLast then
-      _ObjAddPropU('commaArg', '; ', arg);
-    if a = high(meth.Args) then
-      _ObjAddProp('isArgLast', true, arg);
-    if (meth.args[a].ValueDirection in [imdConst, imdVar]) and
-       (a < meth.ArgsInLast) then
-      _ObjAddPropU('commaInSingle', ',', arg);
-    if (meth.args[a].ValueDirection in [imdVar, imdOut]) and
-       (a < meth.ArgsOutNotResultLast)
-      then
-      _ObjAddPropU('commaOut', '; ', arg);
-    if meth.args[a].ValueDirection <> imdConst then
-    begin
-      _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
-      inc(r);
-      if a < meth.ArgsOutLast then
-        _ObjAddPropU('commaOutResult', '; ', arg);
-    end;
-    TDocVariantData(result).AddItem(arg);
+    inc(ma);
+    arg := ContextFromRtti(TYPES_SOA[ma^.ValueType], ma^.ArgRtti);
+    ShortStringToAnsi7String(ma^.ParamName^, n);
+    _ObjAddProps([
+      'argName',   n,
+      'camelName', LowerCamelCase(n),
+      'snakeName', SnakeCase(n),
+      'argType',   ma^.ArgTypeName^,
+      'dir',       ord(ma^.ValueDirection),
+      'dirName',   DIRTODELPHI[ma^.ValueDirection],
+      'dirNoOut',  DIRTOSMS[ma^.ValueDirection]], arg);
+    if ma^.ValueDirection in [imdConst, imdVar] then
+      _ObjAddProp('dirInput', true, arg);
+    if ma^.ValueDirection <> imdConst then
+      _ObjAddProp('dirOutput', true, arg);
+    if ma^.ValueDirection = imdResult then
+      _ObjAddProp('dirResult', true, arg);
   end;
+  if a < meth.ArgsNotResultLast then
+    _ObjAddPropU('commaArg', '; ', arg);
+  if a = high(meth.Args) then
+    _ObjAddProp('isArgLast', true, arg);
+  if (ma^.ValueDirection in [imdConst, imdVar]) and
+     (a < meth.ArgsInLast) then
+    _ObjAddPropU('commaInSingle', ',', arg);
+  if (ma^.ValueDirection in [imdVar, imdOut]) and
+     (a < meth.ArgsOutNotResultLast) then
+    _ObjAddPropU('commaOut', '; ', arg);
+  if ma^.ValueDirection <> imdConst then
+  begin
+    _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
+    inc(r);
+    if a < meth.ArgsOutLast then
+      _ObjAddPropU('commaOutResult', '; ', arg);
+  end;
+  TDocVariantData(result).AddItem(arg);
 end;
 
 function TWrapperContext.ContextFromMethod(
@@ -1137,37 +1136,34 @@ const
 var
   d: variant;
 begin
-  with meth do
+  result := _ObjFast([
+    'methodName',      meth.Uri,
+    'camelName',       LowerCamelCase(meth.Uri),
+    'snakeName',       SnakeCase(meth.Uri),
+    'methodIndex',     meth.ExecutionMethodIndex,
+    'verb',            VERB_DELPHI[meth.ArgsResultIndex >= 0],
+    'args',            ContextArgsFromMethod(meth),
+    'argsOutputCount', meth.ArgsOutputValuesCount]);
+  if self <> nil then
   begin
-    result := _ObjFast([
-      'methodName',      uri,
-      'camelName',       LowerCamelCase(uri),
-      'snakeName',       SnakeCase(uri),
-      'methodIndex',     ExecutionMethodIndex,
-      'verb',            VERB_DELPHI[ArgsResultIndex >= 0],
-      'args',            ContextArgsFromMethod(meth),
-      'argsOutputCount', ArgsOutputValuesCount]);
-    if self <> nil then
-    begin
-      // can be called as TWraperContext(nil).ContextFromMethod
-      d := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
-      if VarIsEmptyOrNull(d) then
-        RawUtf8ToVariant(InterfaceDotMethodName, d);
-      _ObjAddProp('methodDescription', d, result);
-    end;
-    if ArgsInFirst >= 0 then
-      _ObjAddProp('hasInParams', true, result);
-    if ArgsOutFirst >= 0 then
-    begin
-      _ObjAddProp('hasOutParams', true, result);
-      if ArgsOutNotResultLast > 0 then
-        _ObjAddProp('hasOutNotResultParams', true, result);
-    end;
-    if imfResultIsServiceCustomAnswer in Flags then
-      _ObjAddProp('resultIsServiceCustomAnswer', true, result);
-    if imfIsInherited in Flags then
-      _ObjAddProp('isInherited', true, result);
+    // can be called as TWraperContext(nil).ContextFromMethod
+    d := fDescriptions.GetValueOrNull(meth.InterfaceDotMethodName);
+    if VarIsEmptyOrNull(d) then
+      RawUtf8ToVariant(meth.InterfaceDotMethodName, d);
+    _ObjAddProp('methodDescription', d, result);
   end;
+  if meth.ArgsInFirst >= 0 then
+    _ObjAddProp('hasInParams', true, result);
+  if meth.ArgsOutFirst >= 0 then
+  begin
+    _ObjAddProp('hasOutParams', true, result);
+    if meth.ArgsOutNotResultLast > 0 then
+      _ObjAddProp('hasOutNotResultParams', true, result);
+  end;
+  if imfResultIsServiceCustomAnswer in meth.Flags then
+    _ObjAddProp('resultIsServiceCustomAnswer', true, result);
+  if imfIsInherited in meth.Flags then
+    _ObjAddProp('isInherited', true, result);
 end;
 
 procedure TWrapperContext.AddUnit(
@@ -1218,7 +1214,7 @@ begin
     fullName := prop.Name
   else
   begin
-    FormatUtf8('%.%', [parentName, prop.Name], fullName);
+    Join([parentName, '.', prop.Name], fullName);
     for l := 1 to length(fullName) do
       if fullName[l] = '.' then
         inc(level);
@@ -2055,8 +2051,9 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
         begin
           typ := TYPES_LANG[lngCS, TYPES_SOA[ValueType]];
           if typ = '' then
-            ShortStringToAnsi7String(ArgTypeName^, typ);
-          line := FormatUtf8('%"%":%, ', [line, ParamName^, typ]);
+            Append(line, ['"', ArgTypeName^, '":', typ])
+          else
+            Append(line, ['"', ParamName^, '":', typ]);
         end;
       until false;
       i := length(line);
@@ -2092,7 +2089,7 @@ begin
   else
   begin
     for i := firstparam to ParamCount do
-      params := FormatUtf8('% %', [{%H-}params, ParamStr(i)]);
+      Append(params, [' ', ParamStr(i)]);
     //writeln(params); // for debugging
     call.InBody := method^.ArgsCommandLineToObject(
       pointer(params), {input=}true, {raiseexcep=}true);
@@ -2114,7 +2111,7 @@ begin
      (call.OutBody[1] = '[') then
     call.OutBody := method^.ArgsArrayToObject(pointer(call.OutBody), false);
   if cloNoBody in fOptions then
-    FormatUtf8('% bytes received', [length(call.OutBody)], result)
+    Make([length(call.OutBody), ' bytes received'], result)
   else if (cloNoExpand in fOptions) or
           not call.OutBodyTypeIsJson then
     result := call.OutBody
