@@ -1694,7 +1694,7 @@ begin
   cookie := ServiceRunningContext.Request.InCookieSearch(fContext.CookieName);
   if cookie <> nil then
   begin
-    Value := cookie^.Value;
+    Value := cookie^.ValueStart;
     result := cookie^.ValueLen;
   end
   else

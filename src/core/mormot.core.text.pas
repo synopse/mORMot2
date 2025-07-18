@@ -2206,11 +2206,11 @@ type
     /// start of the cookie name in the headers
     // - e.g. 'sessionId' for
     // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
-    Name: PUtf8Char;
+    NameStart: PUtf8Char;
     /// start of the cookie value in the headers, excluding its attributes
     // - e.g. 'e8bb43229de9' for
     // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
-    Value: PUtf8Char;
+    ValueStart: PUtf8Char;
     /// the number of UTF-8 chars stored in Name - which is not #0 ended
     NameLen: integer;
     /// the number of UTF-8 chars stored in Value - which is not #0 ended
@@ -2258,9 +2258,9 @@ type
     /// direct access to the internal name/value pairs list
     property Cookies: THttpCookieDynArray
       read fCookies;
-    /// low-level access to the Cookie[ndx].Name/NameLen content - for testing
+    /// low-level access to the Cookie[ndx] name content - for testing
     function Name(ndx: PtrInt): RawUtf8;
-    /// low-level access to the Cookie[ndx].Value/ValueLen content - for testing
+    /// low-level access to the Cookie[ndx] value content - for testing
     function Value(ndx: PtrInt): RawUtf8;
   end;
   PHttpCookies = ^THttpCookies;
@@ -10407,8 +10407,8 @@ begin
     repeat
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
-      GetNextItemTrimedLineBuffer(p, '=', new.Name, new.NameLen);
-      GetNextItemTrimedLineBuffer(p, ';', new.Value, new.ValueLen);
+      GetNextItemTrimedLineBuffer(p, '=', new.NameStart, new.NameLen);
+      GetNextItemTrimedLineBuffer(p, ';', new.ValueStart, new.ValueLen);
       if (new.NameLen = 0) or
          (new.ValueLen = 0) then
         continue;
@@ -10440,7 +10440,7 @@ begin
       n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
       repeat
         if (result^.NameLen = l) and
-           CompareMemFixed(result^.Name, pointer(CookieName), l) then
+           CompareMemFixed(result^.NameStart, pointer(CookieName), l) then
           exit // cookies are case-sensitive
         else
           inc(result);
@@ -10463,14 +10463,14 @@ var
 begin
   c := FindCookie(CookieName);
   if c <> nil then
-    FastSetString(Value, c^.Value, c^.ValueLen);
+    FastSetString(Value, c^.ValueStart, c^.ValueLen);
 end;
 
 function THttpCookies.Name(ndx: PtrInt): RawUtf8;
 begin
   if PtrUInt(ndx) < PtrUInt(length(fCookies)) then
     with fCookies[ndx] do
-      FastSetString(result, Name, NameLen)
+      FastSetString(result, NameStart, NameLen)
   else
     FastAssignNew(result);
 end;
@@ -10479,7 +10479,7 @@ function THttpCookies.Value(ndx: PtrInt): RawUtf8;
 begin
   if PtrUInt(ndx) < PtrUInt(length(fCookies)) then
     with fCookies[ndx] do
-      FastSetString(result, Value, ValueLen)
+      FastSetString(result, ValueStart, ValueLen)
   else
     FastAssignNew(result);
 end;
