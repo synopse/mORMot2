@@ -1604,14 +1604,19 @@ type
     function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 0;
       PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil): TBinaryCookieGeneratorSessionID;
-    ///  decode a base64uri cookie and optionally fill an associated record
+    /// decode a base64uri cookie and optionally fill an associated record
     // - return the associated session/sequence number, 0 on error
     // - Invalidate=true would force this cookie to be rejected in the future,
     // adding it into an internal in-memory list, and avoid cookie replay attacks
     function Validate(const Cookie: RawUtf8; PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
       PIssued: PUnixTime = nil; Invalidate: boolean = false;
-      Now32: TUnixTimeMinimal = 0): TBinaryCookieGeneratorSessionID;
+      Now32: TUnixTimeMinimal = 0): TBinaryCookieGeneratorSessionID; overload;
+    /// decode a base64uri cookie buffer and optionally fill an associated record
+    function Validate(Cookie: PUtf8Char; CookieLen: PtrInt; PRecordData: pointer;
+      PRecordTypeInfo: PRttiInfo; PExpires: PUnixTime = nil;
+      PIssued: PUnixTime = nil; Invalidate: boolean = false;
+      Now32: TUnixTimeMinimal = 0): TBinaryCookieGeneratorSessionID; overload;
     /// allow currently available cookies to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
@@ -6481,18 +6486,25 @@ end;
 function TBinaryCookieGenerator.Validate(const Cookie: RawUtf8;
   PRecordData: pointer; PRecordTypeInfo: PRttiInfo; PExpires, PIssued: PUnixTime;
   Invalidate: boolean; Now32: TUnixTimeMinimal): TBinaryCookieGeneratorSessionID;
+begin
+  result := Validate(pointer(Cookie), length(Cookie), PRecordData,
+    PRecordTypeInfo, PExpires, PIssued, Invalidate, Now32)
+end;
+
+function TBinaryCookieGenerator.Validate(Cookie: PUtf8Char; CookieLen: PtrInt;
+  PRecordData: pointer; PRecordTypeInfo: PRttiInfo; PExpires, PIssued: PUnixTime;
+  Invalidate: boolean; Now32: TUnixTimeMinimal): TBinaryCookieGeneratorSessionID;
 var
-  clen, len: integer;
+  len: integer;
   ccend: PAnsiChar;
   cc: TCookieContent; // local working buffer on stack (no memory allocation)
 begin
   result := 0; // parsing/crc/timeout error
-  clen := length(Cookie);
-  len := Base64uriToBinLength(clen);
+  len := Base64uriToBinLength(CookieLen);
   if (self = nil) or
      (len < SizeOf(cc.head)) or
      (len > SizeOf(cc)) or
-     (not Base64uriDecode(pointer(Cookie), @cc, clen)) or
+     (not Base64uriDecode(pointer(Cookie), @cc, CookieLen)) or
      (cc.head.session < cardinal(fContext.SessionSequenceStart)) or
      (cc.head.session > cardinal(fContext.SessionSequence)) or
      (cc.head.issued = 0) or
