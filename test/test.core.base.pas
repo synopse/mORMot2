@@ -7680,12 +7680,12 @@ begin
     else
       CheckUtf8(not CurrentUserHasGroup(s), s);
   end;
-  Check(OSErrorShort(5) = '5 ERROR_ACCESS_DENIED', '5ead');
-  Check(OSErrorShort(5, true) = 'ERROR_ACCESS_DENIED', '5ead2');
+  CheckEqualShort(OSErrorShort(5), '5 ERROR_ACCESS_DENIED', '5ead');
+  CheckEqualShort(OSErrorShort(5, true), 'ERROR_ACCESS_DENIED', '5ead2');
   {$else}
-  Check(OSErrorShort(1) = '1 EPERM', '1eperm');
-  Check(OSErrorShort(5) = '5 EIO', '5eio');
-  Check(OSErrorShort(5, true) = 'EIO', '5eio2');
+  CheckEqualShort(OSErrorShort(1), '1 EPERM', '1eperm');
+  CheckEqualShort(OSErrorShort(5), '5 EIO', '5eio');
+  CheckEqualShort(OSErrorShort(5, true), 'EIO', '5eio2');
   {$endif OSWINDOWS}
 end;
 
@@ -10267,8 +10267,10 @@ var
   nfo: TWinProcessInfo;
 begin
   // validate Windows API error code recognition
-  CheckEqual(WinErrorText(1246), 'ERROR__CONTINUE');
-  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER), 'ERROR_INSUFFICIENT_BUFFER');
+  CheckEqualShort(WinApiErrorShort(122), 'ERROR_INSUFFICIENT_BUFFER');
+  CheckEqualShort(WinApiErrorShort(1246), 'ERROR__CONTINUE');
+  Check(WinApiErrorString(122) = 'ERROR_INSUFFICIENT_BUFFER');
+  Check(WinApiErrorString(1246) = 'ERROR__CONTINUE');
   // validate DotNet exceptions error code recognition
   Win32DotNetException(0, '');
   Win32DotNetException(9234, '');

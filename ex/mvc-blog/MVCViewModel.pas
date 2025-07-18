@@ -163,9 +163,9 @@ begin
   fTagsLookup.Init(RestModel.Orm);
   // publish IBlogApplication using Mustache Views (TMvcRunOnRestServer default)
   fMainRunner := TMvcRunOnRestServer.Create(self, aTemplatesFolder).
-    SetCache('Default', cacheRootIfNoSession, 15).
+    SetCache('Default',     cacheRootIfNoSession, 15).
     SetCache('ArticleView', cacheWithParametersIfNoSession, 60).
-    SetCache('AuthorView', cacheWithParametersIgnoringSession, 60);
+    SetCache('AuthorView',  cacheWithParametersIgnoringSession, 60);
   with TMvcRunOnRestServer(fMainRunner) do
   begin
     PublishOptions := PublishOptions - [cacheStatic];
