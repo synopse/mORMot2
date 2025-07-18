@@ -3828,6 +3828,7 @@ type
     property LibraryPath: TFileName
       read fLibraryPath;
     /// if set, and no path is specified, will try from Executable.ProgramFilePath
+    // - see also the even more unsafe LibraryGlobalPath variable
     property TryFromExecutableFolder: boolean
       read fTryFromExecutableFolder write fTryFromExecutableFolder;
   end;
@@ -3837,6 +3838,17 @@ type
     lsUnTested,
     lsAvailable,
     lsNotAvailable);
+
+var
+  /// TSynLibrary.TryLoadLibrary() check for an existing library in this folder
+  // - similar to LD_LIBRARY_PATH environment on POSIX, but for this process
+  // - ensure any value defined here ends with the proper \ or / delimiter
+  // - some (set of) applications tend to supply their preferred libraries in
+  // their own shared folder, which could be specified here at startup
+  // - warning: use with caution, because this could lead to unexpected behavior
+  // or - even worse - some unattended exploits: the safest is to always
+  // specify the expected full path of a library, if possible
+  LibraryGlobalPath: TFileName;
 
 /// call once Init if State is in its default lsUntested (0) value
 function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
@@ -8214,49 +8226,52 @@ end;
 function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
   aRaiseExceptionOnFailure: ExceptionClass; aSilentError: PString): boolean;
 var
-  i, j: PtrInt;
-  {$ifdef OSWINDOWS}
-  cwd: TFileName;
-  {$endif OSWINDOWS}
-  lib, libs, nwd: TFileName;
+  i: PtrInt;
+  libs, nwd: TFileName;
   err: string;
-begin
-  for i := 0 to high(aLibrary) do
+
+  function LoadOne(lib: TFileName; current: PtrInt): boolean;
+  var
+    j: PtrInt;
+    {$ifdef OSWINDOWS}
+    cwd: TFileName;
+    {$endif OSWINDOWS}
   begin
     // check library name
-    lib := aLibrary[i];
+    result := false;
     if lib = '' then
-      continue;
-    result := true;
-    for j := 0 to i - 1 do
+      exit;
+    for j := 0 to current - 1 do
       if aLibrary[j] = lib then
-      begin
-        result := false;
-        break;
-      end;
-    if not result then
-      continue; // don't try twice the same library name
-    // open the library
+        exit; // don't try twice the same library name
+    // try to open this library
     nwd := ExtractFilePath(lib);
-    if fTryFromExecutableFolder  and
-       (nwd = '') and
-       FileExists(Executable.ProgramFilePath + lib) then
-    begin
-      lib := Executable.ProgramFilePath + lib;
-      nwd := Executable.ProgramFilePath;
-    end;
+    if nwd = '' then // has no specific path -> try exe folder or global path
+      if fTryFromExecutableFolder and
+         FileExists(Executable.ProgramFilePath + lib) then
+      begin
+        nwd := Executable.ProgramFilePath;
+        lib := nwd + lib;
+      end
+      else if (LibraryGlobalPath <> '') and
+              FileExists(LibraryGlobalPath + lib) then
+      begin
+        nwd := LibraryGlobalPath;
+        lib := nwd + lib;
+      end;
     if {%H-}libs = '' then
       libs := lib
     else
       libs := libs + ', ' + lib; // include path
+    // change the current folder at loading on Windows
     {$ifdef OSWINDOWS}
     if nwd <> '' then
     begin
       cwd := GetCurrentDir;
-      SetCurrentDir(nwd); // change the current folder at loading on Windows
+      SetCurrentDir(nwd);
       lib := ExtractFileName(lib); // seems more stable that way
     end;
-    fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box 
+    fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box
     if nwd <> '' then
       SetCurrentDir(cwd{%H-});
     {$else}
@@ -8269,6 +8284,7 @@ begin
       if length(fLibraryPath) < length(lib) then
       {$endif OSWINDOWS}
         fLibraryPath := lib;
+      result := true;
       exit;
     end;
     // handle any error
@@ -8276,6 +8292,12 @@ begin
     if err <> '' then
       libs := libs + ' [' + err + ']';
   end;
+
+begin
+  result := true;
+  for i := 0 to high(aLibrary) do
+    if LoadOne(aLibrary[i], i) then
+      exit;
   libs := Format('%s.TryLoadLibray failed - searched in %s',
     [ClassNameShort(self)^, libs]);
   if aRaiseExceptionOnFailure <> nil then
