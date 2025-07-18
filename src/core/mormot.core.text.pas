@@ -2258,9 +2258,9 @@ type
     /// direct access to the internal name/value pairs list
     property Cookies: THttpCookieDynArray
       read fCookies;
-    /// low-level access to the Cookie[ndx].Name/NameLen content
+    /// low-level access to the Cookie[ndx].Name/NameLen content - for testing
     function Name(ndx: PtrInt): RawUtf8;
-    /// low-level access to the Cookie[ndx].Value/ValueLen content
+    /// low-level access to the Cookie[ndx].Value/ValueLen content - for testing
     function Value(ndx: PtrInt): RawUtf8;
   end;
   PHttpCookies = ^THttpCookies;

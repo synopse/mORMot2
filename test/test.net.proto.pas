@@ -2223,14 +2223,18 @@ var
 
   procedure Check4;
   begin
-    CheckEqual(hc.Cookies[0].Name, 'name');
-    CheckEqual(hc.Cookies[0].Value, 'value');
-    CheckEqual(hc.Cookies[1].Name, 'name 1');
-    CheckEqual(hc.Cookies[1].Value, 'value1');
-    CheckEqual(hc.Cookies[2].Name, 'name 2');
-    CheckEqual(hc.Cookies[2].Value, 'value 2');
-    CheckEqual(hc.Cookies[3].Name, 'name3');
-    CheckEqual(hc.Cookies[3].Value, 'value3');
+    CheckEqual(hc.Name(0), 'name');
+    CheckEqual(hc.Value(0), 'value');
+    CheckEqual(hc.Name(1), 'name 1');
+    CheckEqual(hc.Value(1), 'value1');
+    CheckEqual(hc.Name(2), 'name 2');
+    CheckEqual(hc.Value(2), 'value 2');
+    CheckEqual(hc.Name(3), 'name3');
+    CheckEqual(hc.Value(3), 'value3');
+    CheckEqual(hc.Cookie['name'], 'value');
+    CheckEqual(hc.Cookie['name 1'], 'value1');
+    CheckEqual(hc.Cookie['name 2'], 'value 2');
+    CheckEqual(hc.Cookie['name3'], 'value3');
   end;
 
 begin
@@ -2312,15 +2316,23 @@ begin
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
   hc.ParseServer('one: value'#13#10'cookie: name=value');
+  CheckEqual(hc.Name(0), 'name');
+  CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
-  CheckEqual(hc.Cookies[0].Name, 'name');
-  CheckEqual(hc.Cookies[0].Value, 'value');
+  CheckEqual(hc.Cookie['name'], 'value');
+  CheckEqual(hc.Cookies[0].NameLen, 4);
+  CheckEqual(hc.Cookies[0].ValueLen, 5);
+  Check(hc.Cookie['name2'] <> 'value');
   hc.Clear;
   CheckEqual(length(hc.Cookies), 0);
   hc.ParseServer('one: value'#13#10'cookie: name = value ');
+  CheckEqual(hc.Name(0), 'name');
+  CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
-  CheckEqual(hc.Cookies[0].Name, 'name');
-  CheckEqual(hc.Cookies[0].Value, 'value');
+  CheckEqual(hc.Cookie['name'], 'value');
+  CheckEqual(hc.Cookies[0].NameLen, 4);
+  CheckEqual(hc.Cookies[0].ValueLen, 5);
+  Check(hc.Cookie['name2'] <> 'value');
   hc.ParseServer('cookie: name=value'#13#10 +
     'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
     'cookone: value'#13#10);
