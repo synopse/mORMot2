@@ -482,7 +482,7 @@ var
     else
     begin
       error := GetLastError;
-      FormatUtf8('Error % [%] occurred with', [error, GetErrorText(error)], msg);
+      FormatUtf8('Error % [%] occurred with', [error, GetErrorShort(error)], msg);
       cc := ccLightRed;
       ExitCode := 1; // notify error to caller batch
     end;

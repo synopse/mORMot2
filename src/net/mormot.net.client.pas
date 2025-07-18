@@ -4584,7 +4584,7 @@ var
 begin
   err := GetLastError;
   EWinHttp.RaiseUtf8('%: % error [%] (%) on %:%',
-    [self, ctxt, WinErrorText(err, winhttpdll), err, fServer, fPort]);
+    [self, ctxt, WinApiErrorShort(err, winhttpdll), err, fServer, fPort]);
 end;
 
 

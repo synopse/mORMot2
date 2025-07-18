@@ -1903,7 +1903,7 @@ procedure LogToTextFile(Msg: RawUtf8);
 begin
   if Msg = '' then
   begin
-    Msg := GetErrorText(GetLastError);
+    Msg := GetErrorText;
     if Msg = '' then
       exit;
   end;

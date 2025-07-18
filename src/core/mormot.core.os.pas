@@ -808,7 +808,7 @@ function LinuxDistribution(os: TOperatingSystem): TLinuxDistribution;
 
 /// return the best known ERROR_* system error message constant texts
 // - without the 'ERROR_' prefix, but in a cross-platform way
-// - as used by WinErrorText() and some low-level Windows API wrappers
+// - as used by WinApiErrorString() and some low-level Windows API wrappers
 function WinErrorConstant(Code: cardinal): PShortString;
 
 /// return the error code number, and its regular constant on Windows (if known)
@@ -2521,7 +2521,7 @@ procedure SetLastError(error: integer);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns a given error code as plain text
-// - redirects to WinErrorText(error, nil) on Windows, or StrError() on POSIX
+// - redirects to WinApiErrorShort(error, nil) on Windows, or StrError() on POSIX
 // - e.g. GetErrorText(10) = 'ECHILD (No child processes)' on Linux
 function GetErrorText(error: integer = 0): RawUtf8;
 
@@ -2533,20 +2533,24 @@ procedure GetErrorShortVar(error: integer; var dest: ShortString);
 
 {$ifdef OSWINDOWS}
 
-/// return the error message of a given Module
-// - first try WinErrorConstant() for system error constants (if ModuleName=nil),
-// then call FormatMessage() and override the RTL function to force the
-// ENGLISH_LANGID flag first
-// - if ModuleName does support this Code, will try it as system error
+/// return the error message of a given Module as generic string
+// - may be used e.g. in conjunction with Exception.CreateFmt()
+// - if ModuleName does not support this Code, will also try it as system error
+// - first try WinErrorConstant() for system error constants, then call
+// FormatMessage() ensuring the ENGLISH_LANGID flag is used first
 // - replace SysErrorMessagePerModule() and SysErrorMessage() from mORMot 1
-function WinErrorText(Code: cardinal; ModuleName: PChar = nil): RawUtf8;
+function WinApiErrorString(Code: cardinal; ModuleName: PChar = nil): string;
 
-/// raise an EOSException from the last system error using WinErrorText()
+/// return the error message of a given Module as UTF-8 ShortString
+// - may be used e.g. in conjunction with Exception.CreateUtf8()
+function WinApiErrorShort(Code: cardinal; ModuleName: PChar = nil): shortstring;
+
+/// raise an EOSException from the last system error using WinApiErrorString()
 // - if Code is kept to its default 0, GetLastError is called
 procedure RaiseLastError(const Context: ShortString;
   RaisedException: ExceptClass = nil; Code: integer = 0);
 
-/// return a RaiseLastError-like error message using WinErrorText()
+/// return a RaiseLastError-like error message using WinApiErrorString()
 // - if Code is kept to its default 0, GetLastError is called
 function WinLastError(const Context: ShortString; Code: integer = 0): string;
 
@@ -2555,7 +2559,7 @@ procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass = nil);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// raise an Exception from the last module error using WinErrorText()
+/// raise an Exception from the last module error using WinApiErrorString()
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 
 {$else}

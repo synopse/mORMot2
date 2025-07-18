@@ -1857,9 +1857,7 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
     if not Succeeded(aResult) or
            (fOleDBErrorMessage <> '') then
     begin
-      s := string(GetErrorText(aResult));
-      if s = '' then
-        s := 'OLEDB Error ' + IntToHex(aResult, 8);
+      s := WinLastError('OleDB', aResult);
       if s <> fOleDBErrorMessage then
         fOleDBErrorMessage := s + ' - ' + fOleDBErrorMessage;
     end;

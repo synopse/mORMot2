@@ -1636,7 +1636,7 @@ type
     /// if the Proxy settings were auto-detected by Internet Explorer
     AutoDetected: Boolean;
     /// detailed error message, if GetProxyInfo() returned a non 0 error code
-    ErrorMessage: RawUtf8;
+    ErrorMessage: string;
   end;
 
 /// use WinHttp to retrieve the proxy information needed to access a given URI
@@ -2105,7 +2105,7 @@ begin
   fLastApiError := Error;
   fLastApi := api;
   inherited CreateUtf8('% failed: % (%)',
-    [HttpNames[api], WinErrorText(Error, HTTPAPI_DLL), Error])
+    [HttpNames[api], WinApiErrorShort(Error, HTTPAPI_DLL), Error])
 end;
 
 
@@ -2406,7 +2406,7 @@ begin
       result := GetLastError;
   end;
   if result <> 0 then
-    ProxyInfo.ErrorMessage := WinErrorText(result, winhttpdll);
+    ProxyInfo.ErrorMessage := WinApiErrorString(result, winhttpdll);
 end;
 
 procedure WinHttpApiInitialize(RaiseOnError: boolean);
@@ -2580,7 +2580,7 @@ begin
   fLastError := Error;
   fLastApi := api;
   inherited CreateUtf8('% failed: % (%)', [WebSocketNames[api],
-    WinErrorText(Error, WEBSOCKET_DLL), Error])
+    WinApiErrorShort(Error, WEBSOCKET_DLL), Error])
 end;
 
 const
