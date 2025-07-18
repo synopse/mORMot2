@@ -546,13 +546,17 @@ function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
   var
     pending: TOrmServiceNotifications;
     input: TDocVariantData;
-    json: RawUtf8;
+    json: TSynTempAdder;
   begin
     pending := fSendNotificationsLogClass.Create;
     try
       pending.Method := aMethod.Uri;
-      json := '[' + aParams + ']';
-      input.InitJsonInPlace(pointer(json), JSON_FAST_EXTENDED);
+      json.Init(length(aParams) + 10);
+      json.AddDirect('[');
+      json.Add(aParams);
+      json.AddDirect(']', #0);
+      pending.SetInput(json.Buffer, aMethod.ArgsInputValuesCount);
+      json.Store.Done;
       pending.Input := variant(input);
       if (aFakeID <> nil) and
          (aFakeID^ <> 0) then
