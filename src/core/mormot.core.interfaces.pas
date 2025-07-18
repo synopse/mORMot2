@@ -10,7 +10,7 @@ unit mormot.core.interfaces;
     - IInvokable Interface Methods and Parameters RTTI Extraction
     - TInterfaceFactory Generating Runtime Implementation Class
     - TInterfaceResolver TInjectableObject for IoC / Dependency Injection
-    - TInterfaceStub TInterfaceMock for Dependency Mocking
+    - TInterfaceStub for Dependency Stubbing/Mocking
     - TInterfacedObjectFake with JITted Methods Execution
     - TInterfaceMethodExecute for Method Execution from JSON
     - SetWeak and SetWeakZero Weak Interface Reference
@@ -38,7 +38,6 @@ uses
   mormot.core.data,
   mormot.core.json,
   mormot.core.threads,
-  mormot.core.test, // for TInterfaceMock
   mormot.core.log;
 
 
@@ -1093,7 +1092,9 @@ var
   GlobalInterfaceResolver: TInterfaceResolverList;
 
 
-{ ************ TInterfaceStub TInterfaceMock for Dependency Mocking }
+{ ************ TInterfaceStub for Dependency Stubbing/Mocking }
+
+// note: TInterfaceMock is defined in mormot.core.test.pas - as expected
 
 type
   TInterfaceStub = class;
@@ -1107,7 +1108,6 @@ type
       const Format: RawUtf8; const Args: array of const); overload;
   end;
 
-
   /// abstract parameters used by TInterfaceStub.Executes() events callbacks
   TOnInterfaceStubExecuteParamsAbstract = class
   protected
@@ -1117,7 +1117,6 @@ type
     fEventParams: RawUtf8;
     fResult: RawUtf8;
     fFailed: boolean;
-    function GetSenderAsMockTestCase: TSynTestCase;
   public
     /// constructor of one parameters marshalling instance
     constructor Create(aSender: TInterfaceStub; aMethod: PInterfaceMethod;
@@ -1127,13 +1126,9 @@ type
     /// call this method if the callback implementation failed
     procedure Error(const Format: RawUtf8; const Args: array of const); overload;
     /// the stubbing / mocking generator
+    // - use e.g. (Sender as TInterfaceMock).TestCase to retrieve the test case
     property Sender: TInterfaceStub
       read fSender;
-    /// the mocking generator associated test case
-    // - will raise an exception if the associated Sender generator is not
-    // a TInterfaceMock
-    property TestCase: TSynTestCase
-      read GetSenderAsMockTestCase;
     /// pointer to the method which is to be executed
     property Method: PInterfaceMethod
       read fMethod;
@@ -1380,6 +1375,12 @@ type
   end;
   PInterfaceStubRules = ^TInterfaceStubRules;
 
+  /// how TInterfacedObjectFake identify each instance
+  // - match the ID used in sicClientDriven mode of a service
+  // - match the TInterfacedObjectFakeServer 32-bit identifier of a callback
+  TInterfacedObjectFakeID = type cardinal;
+  PInterfacedObjectFakeID = ^TInterfacedObjectFakeID;
+
   /// diverse options available to TInterfaceStub
   // - by default, method execution stack is not recorded - include
   // imoLogMethodCallsAndResults in the options to track all method calls
@@ -1449,12 +1450,6 @@ type
 
   /// used to keep track of all stubbed methods calls
   TInterfaceStubLogDynArray = array of TInterfaceStubLog;
-
-  /// how TInterfacedObjectFake identify each instance
-  // - match the ID used in sicClientDriven mode of a service
-  // - match the TInterfacedObjectFakeServer 32-bit identifier of a callback
-  TInterfacedObjectFakeID = type cardinal;
-  PInterfacedObjectFakeID = ^TInterfacedObjectFakeID;
 
   /// used to stub an interface implementation
   // - define the expected workflow in a fluent interface using Executes /
@@ -1796,127 +1791,6 @@ type
       read GetLogHash;
   end;
 
-  /// used to mock an interface implementation via expect-run-verify pattern
-  // - TInterfaceStub will raise an exception on Fails(), ExpectsCount() or
-  // ExpectsTrace() rule activation, but TInterfaceMock will call
-  // TSynTestCase.Check() with no exception with such rules, as expected by
-  // a mocked interface
-  // - this class will follow the expect-run-verify pattern, i.e. expectations
-  // are defined before running the test, and verification is performed
-  // when the instance is released - use TInterfaceMockSpy if you prefer the
-  // more explicit run-verify pattern
-  TInterfaceMock = class(TInterfaceStub)
-  protected
-    fTestCase: TSynTestCase;
-    function InternalCheck(aValid, aExpectationFailed: boolean;
-      const aErrorMsgFmt: RawUtf8;
-      const aErrorMsgArgs: array of const): boolean; override;
-  public
-    /// initialize an interface mock from TypeInfo(IMyInterface)
-    // - aTestCase.Check() will be called in case of mocking failure
-    // ! procedure TMyTestCase.OneTestCaseMethod;
-    // ! var Persist: IPersistence;
-    // ! ...
-    // !   TInterfaceMock.Create(TypeInfo(IPersistence),Persist,self).
-    // !     ExpectsCount('SaveItem',qoEqualTo,1)]);
-    constructor Create(aInterface: PRttiInfo; out aMockedInterface;
-      aTestCase: TSynTestCase); reintroduce; overload;
-    /// initialize an interface mock from an interface TGuid
-    // - aTestCase.Check() will be called during validation of all Expects*()
-    // - you shall have registered the interface by a previous call to
-    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IPersistence),...])
-    // - once registered, create and use the fake class instance as such:
-    // !procedure TMyTestCase.OneTestCaseMethod;
-    // !var
-    // !  Persist: IPersistence;
-    // ! ...
-    // !   TInterfaceMock.Create(IPersistence,Persist,self).
-    // !     ExpectsCount('SaveItem',qoEqualTo,1)]);
-    // - if the supplied TGuid has not been previously registered, raise an Exception
-    constructor Create(const aGuid: TGuid; out aMockedInterface;
-      aTestCase: TSynTestCase); reintroduce; overload;
-    /// initialize an interface mock from an interface name (e.g. 'IMyInterface')
-    // - aTestCase.Check() will be called in case of mocking failure
-    // - you shall have registered the interface by a previous call to
-    // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
-    // - if the supplied name has not been previously registered, raise an Exception
-    constructor Create(const aInterfaceName: RawUtf8; out aMockedInterface;
-      aTestCase: TSynTestCase); reintroduce; overload;
-    /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
-    // - aTestCase.Check() will be called in case of mocking failure
-    constructor Create(aInterface: PRttiInfo; aTestCase: TSynTestCase);
-      reintroduce; overload;
-    /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
-    // - aTestCase.Check() will be called in case of mocking failure
-    constructor Create(const aGuid: TGuid; aTestCase: TSynTestCase);
-      reintroduce; overload;
-    /// the associated test case
-    property TestCase: TSynTestCase
-      read fTestCase;
-  end;
-
-  /// how TInterfaceMockSpy.Verify() shall generate the calls trace
-  TInterfaceMockSpyCheck = (
-    chkName,
-    chkNameParams,
-    chkNameParamsResults);
-
-  /// used to mock an interface implementation via run-verify pattern
-  // - this class will implement a so called "test-spy" mocking pattern, i.e.
-  // no expectation is to be declared at first, but all calls are internally
-  // logged (i.e. it force imoLogMethodCallsAndResults option to be defined),
-  // and can afterwards been check via Verify() calls
-  TInterfaceMockSpy = class(TInterfaceMock)
-  protected
-    procedure IntSetOptions(Options: TInterfaceStubOptions); override;
-  public
-    /// this will set and force imoLogMethodCallsAndResults option as needed
-    // - you should not call this method, but the overloaded alternatives
-    constructor Create(aFactory: TInterfaceFactory;
-      const aInterfaceName: RawUtf8); override;
-    /// check that a method has been called a specify number of times
-    procedure Verify(const aMethodName: RawUtf8;
-      aOperator: TInterfaceStubRuleOperator = ioGreaterThan;
-      aCount: cardinal = 0); overload;
-    /// check a method calls count with a set of parameters
-    // - parameters shall be defined as a JSON array of values
-    procedure Verify(const aMethodName, aParams: RawUtf8;
-      aOperator: TInterfaceStubRuleOperator = ioGreaterThan;
-      aCount: cardinal = 0); overload;
-    /// check a method calls count with a set of parameters
-    // - parameters shall be defined as a JSON array of values
-    procedure Verify(const aMethodName: RawUtf8; const aParams: array of const;
-      aOperator: TInterfaceStubRuleOperator = ioGreaterThan;
-      aCount: cardinal = 0); overload;
-    /// check an execution trace for the global interface
-    // - text trace format shall follow method calls, e.g.
-    // ! Verify('Multiply,Add',chkName);
-    // or may include parameters:
-    // ! Verify('Multiply(10,30),Add(2,35)',chkNameParams);
-    // or include parameters and function results:
-    // ! Verify('Multiply(10,30)=[300],Add(2,35)=[37]',chkNameParamsResults);
-    procedure Verify(const aTrace: RawUtf8;
-      aScope: TInterfaceMockSpyCheck); overload;
-    /// check an execution trace for a specified method
-    // - text trace format will follow specified scope, e.g.
-    // ! Verify('Add','(10,30),(2,35)',chkNameParams);
-    // or include parameters and function results:
-    // ! Verify('Add','(10,30)=[300],(2,35)=[37]',chkNameParamsResults);
-    // - if aMethodName does not exists or aScope=chkName, will raise an exception
-    procedure Verify(const aMethodName, aTrace: RawUtf8;
-      aScope: TInterfaceMockSpyCheck); overload;
-    /// check an execution trace for a specified method and parameters
-    // - text trace format shall contain only results, e.g.
-    // ! Verify('Add','2,35','[37]');
-    procedure Verify(const aMethodName, aParams, aTrace: RawUtf8); overload;
-    /// check an execution trace for a specified method and parameters
-    // - text trace format shall contain only results, e.g.
-    // ! Verify('Add',[2,35],'[37]');
-    procedure Verify(const aMethodName: RawUtf8; const aParams: array of const;
-      const aTrace: RawUtf8); overload;
-  end;
-
-function ToText(c: TInterfaceMockSpyCheck): PShortString; overload;
 function ToText(op: TInterfaceStubRuleOperator): PShortString; overload;
 
 
@@ -5549,7 +5423,9 @@ begin
 end;
 
 
-{ ************ TInterfaceStub TInterfaceMock for Dependency Mocking }
+{ ************ TInterfaceStub for Dependency Stubbing/Mocking }
+
+// note: TInterfaceMock is defined in mormot.core.test.pas
 
 { EInterfaceStub }
 
@@ -5697,10 +5573,6 @@ begin
   fResult := aErrorMessage;
 end;
 
-function TOnInterfaceStubExecuteParamsAbstract.GetSenderAsMockTestCase: TSynTestCase;
-begin
-  result := (fSender as TInterfaceMock).TestCase;
-end;
 
 { TOnInterfaceStubExecuteParamsJson }
 
@@ -5713,6 +5585,7 @@ procedure TOnInterfaceStubExecuteParamsJson.Returns(const ValuesJsonArray: RawUt
 begin
   fResult := ValuesJsonArray;
 end;
+
 
 { TOnInterfaceStubExecuteParamsVariant }
 
@@ -6466,158 +6339,6 @@ begin
   result := fInterface.fInterfaceRtti.Info = aInterface;
 end;
 
-
-{ TInterfaceMock }
-
-constructor TInterfaceMock.Create(aInterface: PRttiInfo; out aMockedInterface;
-  aTestCase: TSynTestCase);
-begin
-  inherited Create(aInterface, aMockedInterface);
-  fTestCase := aTestCase;
-end;
-
-constructor TInterfaceMock.Create(const aGuid: TGuid; out aMockedInterface;
-  aTestCase: TSynTestCase);
-begin
-  inherited Create(aGuid, aMockedInterface);
-  fTestCase := aTestCase;
-end;
-
-constructor TInterfaceMock.Create(const aInterfaceName: RawUtf8;
-  out aMockedInterface; aTestCase: TSynTestCase);
-begin
-  inherited Create(aInterfaceName, aMockedInterface);
-  fTestCase := aTestCase;
-end;
-
-constructor TInterfaceMock.Create(aInterface: PRttiInfo; aTestCase: TSynTestCase);
-begin
-  inherited Create(aInterface);
-  fTestCase := aTestCase;
-end;
-
-constructor TInterfaceMock.Create(const aGuid: TGuid; aTestCase: TSynTestCase);
-begin
-  inherited Create(aGuid);
-  fTestCase := aTestCase;
-end;
-
-function TInterfaceMock.InternalCheck(aValid, aExpectationFailed: boolean;
-  const aErrorMsgFmt: RawUtf8; const aErrorMsgArgs: array of const): boolean;
-begin
-  if fTestCase = nil then
-    result := inherited InternalCheck(
-      aValid, aExpectationFailed, aErrorMsgFmt, aErrorMsgArgs)
-  else
-  begin
-    result := true; // do not raise any exception at this stage for TInterfaceMock
-    if aValid xor (imoMockFailsWillPassTestCase in Options) then
-      fTestCase.Check(true)
-    else
-      fTestCase.Check(false, Utf8ToString(FormatUtf8(aErrorMsgFmt, aErrorMsgArgs)));
-  end;
-end;
-
-
-{ TInterfaceMockSpy }
-
-constructor TInterfaceMockSpy.Create(aFactory: TInterfaceFactory;
-  const aInterfaceName: RawUtf8);
-begin
-  inherited Create(aFactory, aInterfaceName);
-  include(fOptions, imoLogMethodCallsAndResults);
-end;
-
-procedure TInterfaceMockSpy.IntSetOptions(Options: TInterfaceStubOptions);
-begin
-  include(Options, imoLogMethodCallsAndResults);
-  inherited IntSetOptions(Options);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
-  const aParams: array of const; aOperator: TInterfaceStubRuleOperator;
-  aCount: cardinal);
-begin
-  Verify(aMethodName, JsonEncodeArray(aParams, true), aOperator, aCount);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
-  const aParams: array of const; const aTrace: RawUtf8);
-begin
-  Verify(aMethodName, JsonEncodeArray(aParams, true), aTrace);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
-  aOperator: TInterfaceStubRuleOperator; aCount: cardinal);
-var
-  m: integer;
-begin
-  m := fInterface.CheckMethodIndex(aMethodName);
-  IntCheckCount(m, fRules[m].MethodPassCount, aOperator, aCount);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aMethodName, aParams: RawUtf8;
-  aOperator: TInterfaceStubRuleOperator; aCount: cardinal);
-var
-  asmndx, i: PtrInt;
-  c: cardinal;
-begin
-  asmndx := fInterface.CheckMethodIndex(aMethodName) + RESERVED_VTABLE_SLOTS;
-  if aParams = '' then
-    c := fRules[asmndx - RESERVED_VTABLE_SLOTS].MethodPassCount
-  else
-  begin
-    c := 0;
-    for i := 0 to fLogCount - 1 do
-      with fLogs[i] do
-        if (method.ExecutionMethodIndex = asmndx) and
-           (Params = aParams) then
-          inc(c);
-  end;
-  IntCheckCount(asmndx - RESERVED_VTABLE_SLOTS, c, aOperator, aCount);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aTrace: RawUtf8; aScope: TInterfaceMockSpyCheck);
-const
-  VERIFY_SCOPE: array[TInterfaceMockSpyCheck] of TInterfaceStubLogLayouts = (
-    [wName], [wName, wParams], [wName, wParams, wResults]);
-begin
-  InternalCheck(IntGetLogAsText(0, '', VERIFY_SCOPE[aScope], ',') = aTrace,
-    true, 'Verify(''%'',%) failed', [aTrace, ToText(aScope)^]);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aMethodName, aParams, aTrace: RawUtf8);
-var
-  m: integer;
-begin
-  m := fInterface.CheckMethodIndex(aMethodName);
-  InternalCheck(
-    IntGetLogAsText(m + RESERVED_VTABLE_SLOTS, aParams, [wResults], ',') = aTrace,
-    true, 'Verify(''%'',''%'',''%'') failed', [aMethodName, aParams, aTrace]);
-end;
-
-procedure TInterfaceMockSpy.Verify(const aMethodName, aTrace: RawUtf8;
-  aScope: TInterfaceMockSpyCheck);
-const
-  VERIFY_SCOPE: array[TInterfaceMockSpyCheck] of TInterfaceStubLogLayouts = (
-    [], [wParams], [wParams, wResults]);
-var
-  m: integer;
-begin
-  m := fInterface.CheckMethodIndex(aMethodName);
-  if aScope = chkName then
-    raise EInterfaceStub.Create(self, fInterface.Methods[m],
-      'Invalid scope for Verify()');
-  InternalCheck(
-    IntGetLogAsText(m + RESERVED_VTABLE_SLOTS, '', VERIFY_SCOPE[aScope], ',') = aTrace,
-    true, 'Verify(''%'',''%'',%) failed', [aMethodName, aTrace, ToText(aScope)^]);
-end;
-
-
-function ToText(c: TInterfaceMockSpyCheck): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TInterfaceMockSpyCheck), ord(c));
-end;
 
 function ToText(op: TInterfaceStubRuleOperator): PShortString;
 begin

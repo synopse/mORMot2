@@ -251,7 +251,7 @@ Implements SOLID Process via Interface types
 - `IInvokable` Interface Methods and Parameters RTTI Extraction
 - `TInterfaceFactory` Generating Runtime Implementation Class
 - `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
-- `TInterfaceStub` `TInterfaceMock` for Dependency Mocking
+- `TInterfaceStub` for Dependency Stubbing/Mocking
 - `TInterfacedObjectFake` with JITted Methods Execution
 - `TInterfaceMethodExecute` for Method Execution from JSON
 - `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
@@ -260,6 +260,7 @@ Implements SOLID Process via Interface types
 
 Testing functions shared by all framework units
 - Unit-Testing classes and functions
+- `TInterfaceMock` for Dependency Mocking
 
 ### mormot.core.fpcx64mm
 
