@@ -3201,6 +3201,10 @@ function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil;
   NoExpand: boolean = false): TFileName; overload;
 
+/// just a wrapper around EnsureDirectoryExists({noexpand=}true) for Delphi 7
+function EnsureDirectoryExistsNoExpand(const Directory: TFileName): TFileName;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// just a wrapper around EnsureDirectoryExists(NormalizeFileName(Directory))
 function NormalizeDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
@@ -7411,6 +7415,11 @@ begin
         else
           result := '';
   end;
+end;
+
+function EnsureDirectoryExistsNoExpand(const Directory: TFileName): TFileName;
+begin // circumvent a weird Delphi 7 compiler issue
+  result := EnsureDirectoryExists(Directory, ExceptionClass(nil), {noexpand=}true);
 end;
 
 function NormalizeDirectoryExists(const Directory: TFileName;

@@ -3195,21 +3195,21 @@ begin
     if not SafeFileName(LocalZipName) then
       ESynZip.RaiseUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
-    Dest := EnsureDirectoryExists(DestDir, nil, {noexpand=}true);
+    Dest := EnsureDirectoryExistsNoExpand(DestDir);
     if Dest = '' then
       exit;
     LocalPath := ExtractFilePath(LocalZipName);
     if LocalPath <> '' then
     begin
       LocalZipName := ExtractFileName(LocalZipName);
-      Dest := EnsureDirectoryExists([Dest, LocalPath], nil, {noexpand=}true);
-    end;
+      Dest := EnsureDirectoryExistsNoExpand(MakePath([Dest, LocalPath]));
+    end; // expliclit MakePath() for Delphi 7
     if not FileIsWritable(Dest) then
       exit; // impossible to write in this folder
     Dest := Dest + LocalZipName;
   end;
   if IsFolder(Entry[aIndex].zipName) then
-    result := EnsureDirectoryExists(Dest, nil, {noexpand=}true) <> ''
+    result := EnsureDirectoryExistsNoExpand(Dest) <> ''
   else
   begin
     FS := TFileStreamEx.Create(Dest, fmCreate);
