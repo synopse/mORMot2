@@ -5760,19 +5760,12 @@ begin
 end;
 
 procedure TSynLog.AddErrorMessage(Error: cardinal);
-{$ifdef OSWINDOWS}
 var
   msg: ShortString;
-{$endif OSWINDOWS}
 begin
   fWriter.AddDirect(' ', '"');
-  {$ifdef OSWINDOWS}
-  msg[0] := #0;
-  if AppendWinErrorText(Error, msg, {sep=}#0) then
-    fWriter.AddShort(msg)
-  else
-  {$endif OSWINDOWS}
-    fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
+  GetErrorShortVar(Error, msg);
+  fWriter.AddOnSameLine(@msg[0], ord(msg[0]));
   fWriter.AddDirect('"', ' ', '(');
   fWriter.AddU(Error);
   fWriter.AddDirect(')', ' ');
