@@ -2029,8 +2029,8 @@ var
   msg: string;
 begin
   sys := GetLastError;
-  msg := format('<%s>: %s returned %x [%s], System Error %d [%s]',
-    [fServerAddressW, ctx, res, SspiResToText(res), sys, GetErrorText(sys)]);
+  msg := format('<%s>: %s returned %s, System Error %d [%s]',
+    [fServerAddressW, ctx, OsErrorShort(res), sys, GetErrorText(sys)]);
   //writeln(fSocket.Socket,' ',msg);
   raise ESChannel.Create(msg);
 end;

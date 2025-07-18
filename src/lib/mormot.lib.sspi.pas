@@ -364,9 +364,6 @@ const
   SCH_SEND_ROOT_CERT                           = $00040000;
   SCH_USE_STRONG_CRYPTO                        = $00400000;
 
-function SspiResToText(res: cardinal): TShort31;
-
-
 // secur32.dll API calls
 
 function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
@@ -1119,50 +1116,6 @@ implementation
 
 
 { ****************** Low-Level SSPI/SChannel Functions }
-
-function SspiResToText(res: cardinal): TShort31;
-begin
-  case res of
-    SEC_E_OK:
-      result := 'E_OK';
-    SEC_I_CONTINUE_NEEDED:
-      result := 'I_CONTINUE_NEEDED';
-    SEC_I_CONTEXT_EXPIRED:
-      result := 'I_CONTEXT_EXPIRED';
-    SEC_I_INCOMPLETE_CREDENTIALS:
-      result := 'I_INCOMPLETE_CREDENTIALS';
-    SEC_I_RENEGOTIATE:
-      result := 'I_RENEGOTIATE';
-    SEC_E_UNSUPPORTED_FUNCTION:
-      result := 'E_UNSUPPORTED_FUNCTION';
-    SEC_E_INCOMPLETE_MESSAGE:
-      result := 'E_INCOMPLETE_MESSAGE';
-    SEC_E_BUFFER_TOO_SMALL:
-      result := 'E_BUFFER_TOO_SMALL';
-    SEC_E_MESSAGE_ALTERED:
-      result := 'E_MESSAGE_ALTERED';
-    SEC_E_INVALID_TOKEN:
-      result := 'E_INVALID_TOKEN';
-    SEC_E_ILLEGAL_MESSAGE:
-      result := 'E_ILLEGAL_MESSAGE';
-    SEC_E_CERT_UNKNOWN:
-      result := 'E_CERT_UNKNOWN';
-    SEC_E_CERT_EXPIRED:
-      result := 'E_CERT_EXPIRED';
-    SEC_E_CONTEXT_EXPIRED:
-      result := 'E_CONTEXT_EXPIRED';
-    SEC_E_ENCRYPT_FAILURE:
-      result := 'E_ENCRYPT_FAILURE';
-    SEC_E_DECRYPT_FAILURE:
-      result := 'E_DECRYPT_FAILURE';
-    SEC_E_ALGORITHM_MISMATCH:
-      result := 'E_ALGORITHM_MISMATCH';
-  else
-    str(res, result);
-  end;
-  result := 'SEC_' + result;
-end;
-
 
 const
   secur32 = 'secur32.dll';

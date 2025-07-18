@@ -7632,6 +7632,8 @@ begin
   Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
   Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
   Check(WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
+  Check(WinErrorShort($80090330) = '80090330 SEC_E_DECRYPT_FAILURE', 'w7');
+  Check(WinErrorShort($00090321) = '590625 SEC_I_RENEGOTIATE', 'w8');
   Check(WinErrorShort(244, {noint=}false) = '244', '244w');
   Check(WinErrorShort(245, {noint=}true) = '', '245w');
   BsdErrorShort(1, @ss);

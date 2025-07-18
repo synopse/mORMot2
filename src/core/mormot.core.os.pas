@@ -6093,6 +6093,11 @@ type
   TWinErrorSorted = (
     // some EXCEPTION_* in range $80000000 .. $800000ff
     DATATYPE_MISALIGNMENT, BREAKPOINT, SINGLE_STEP,
+    // some SEC_E_* errors as returned by SSPI
+    E_UNSUPPORTED_FUNCTION, E_INVALID_TOKEN, E_MESSAGE_ALTERED,
+    E_CONTEXT_EXPIRED, E_INCOMPLETE_MESSAGE, E_BUFFER_TOO_SMALL,
+    E_ILLEGAL_MESSAGE, E_CERT_UNKNOWN, E_CERT_EXPIRED, E_ENCRYPT_FAILURE,
+    E_DECRYPT_FAILURE, E_ALGORITHM_MISMATCH,
     // some security-related HRESULT errors (negative 32-bit values first)
     CRYPT_E_BAD_ENCODE, CRYPT_E_SELF_SIGNED, CRYPT_E_BAD_MSG, CRYPT_E_REVOKED,
     CRYPT_E_NO_REVOCATION_CHECK, CRYPT_E_REVOCATION_OFFLINE, TRUST_E_BAD_DIGEST,
@@ -6113,11 +6118,18 @@ type
     ETIMEDOUT, ECONNREFUSED, TRY_AGAIN,
     // most common WinHttp API errors (in range 12000...12152)
     TIMEOUT, OPERATION_CANCELLED, CANNOT_CONNECT,
-    CLIENT_AUTH_CERT_NEEDED, INVALID_SERVER_RESPONSE);
+    CLIENT_AUTH_CERT_NEEDED, INVALID_SERVER_RESPONSE,
+    // some SEC_I_* status as returned by SSPI
+    I_CONTINUE_NEEDED, I_COMPLETE_NEEDED, I_COMPLETE_AND_CONTINUE,
+    I_CONTEXT_EXPIRED, I_INCOMPLETE_CREDENTIALS, I_RENEGOTIATE);
+
 const
   WINERR_SORTED: array[TWinErrorSorted] of cardinal = (
     // some EXCEPTION_* in range $80000000 .. $800000ff
     $80000002, $80000003, $80000004,
+    // some SEC_E_* errors as returned by SSPI
+    $80090302, $80090308, $8009030F, $80090317, $80090318, $80090321,
+    $80090326, $80090327, $80090328, $80090329, $80090330, $80090331,
     // some security-related HRESULT errors (negative 32-bit values first)
     $80092002, $80092007, $8009200d, $80092010, $80092012, $80092013, $80096010,
     $800b0100, $800b0101, $800b010a, $800b010c,
@@ -6131,7 +6143,9 @@ const
     10014, 10022, 10024, 10035, 10038, 10050, 10051, 10052, 10053, 10054, 10055,
     10060, 10061, 11002,
     // most common WinHttp API errors (in range 12000...12152)
-    12002, 12017, 12029, 12044, 12152);
+    12002, 12017, 12029, 12044, 12152,
+    // some SEC_I_* status as returned by SSPI
+    $00090312, $00090313, $00090314, $00090317, $00090320, $00090321);
 
 function WinErrorConstant(Code: cardinal): PShortString;
 begin
@@ -6179,8 +6193,8 @@ begin
 end;
 
 const
-  _PREFIX: array[0..4] of string[15] = (
-    'WSA', 'ERROR_WINHTTP_', '', 'EXCEPTION_', 'ERROR_');
+  _PREFIX: array[0..5] of string[15] = (
+    'WSA', 'ERROR_WINHTTP_', '', 'EXCEPTION_', 'SEC_', 'ERROR_');
 
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
   Sep: AnsiChar): boolean;
@@ -6202,8 +6216,11 @@ begin
       Code := 2;  // no prefix for security-related HRESULT errors
     $80000000 .. $800000ff, $c0000000 .. $c00000ff:
       Code := 3;  // EXCEPTION_* constants
+    $00090312 .. $00090321,
+    $80090302 .. $80090331:
+      Code := 4; // SEC_* SSPI constants
   else
-    Code := 4;    // regular Windows ERROR_* constant
+    Code := 5;   // regular Windows ERROR_* constant
   end;
   AppendShort(_PREFIX[Code], Dest);
   AppendShort(txt^, Dest);
