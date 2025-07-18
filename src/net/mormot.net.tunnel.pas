@@ -596,7 +596,7 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after WaitPop1 len=', [length(remote)], self);
     if not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
-       not CompareMem(pointer(remote), @header,
+       not mormot.core.base.CompareMem(pointer(remote), @header,
              SizeOf(header) - SizeOf(header.port)) then
       ETunnel.RaiseUtf8('Open handshake failed on port %', [result]);
     RemotePort := PTunnelLocalHeader(remote)^.port;

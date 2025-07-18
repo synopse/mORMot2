@@ -7851,7 +7851,7 @@ var
 begin
   l := length(textStart);
   result := (length(text) >= l) and
-            CompareMem(pointer(text), pointer(textStart), l);
+    mormot.core.base.CompareMem(pointer(text), pointer(textStart), l);
 end;
 
 function EndWithExact(const text, textEnd: RawUtf8): boolean;
@@ -7861,7 +7861,7 @@ begin
   l := length(textEnd);
   o := length(text) - l;
   result := (o >= 0) and
-            CompareMem(PUtf8Char(pointer(text)) + o, pointer(textEnd), l);
+    mormot.core.base.CompareMem(PUtf8Char(pointer(text)) + o, pointer(textEnd), l);
 end;
 
 function GetNextLine(source: PUtf8Char; out next: PUtf8Char; andtrim: boolean): RawUtf8;

@@ -4177,7 +4177,7 @@ begin
         inc(PBeg, UpperNameLength);
         i := (PBeg - pointer(Content)) + 1;
         if (i = length(NewValue)) and
-           CompareMem(PBeg, pointer(NewValue), i) then
+           mormot.core.base.CompareMem(PBeg, pointer(NewValue), i) then
           exit; // new Value is identical to the old one -> no change
         if P = nil then // avoid last line (P-PBeg) calculation error
           SetLength(Content, i - 1)

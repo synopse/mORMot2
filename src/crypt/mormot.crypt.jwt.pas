@@ -1155,7 +1155,7 @@ begin
     // fast direct compare of fHeaderB64 (including "alg")
     headerlen := length(fHeaderB64);
     if (toklen <= headerlen) or
-       not CompareMem(pointer(fHeaderB64), tok, headerlen) then
+       not mormot.core.base.CompareMem(pointer(fHeaderB64), tok, headerlen) then
       exit;
   end;
   // 2. extract the payload and signature

@@ -10401,7 +10401,7 @@ begin
         break;
       end;
     until (r1 <> r2) or
-          not CompareMem(@b1, @b2, r1);
+          not mormot.core.base.CompareMem(@b1, @b2, r1);
   if ValidHandle(f2) then
     FileClose(f2);
   if ValidHandle(f1) then

@@ -8895,7 +8895,7 @@ begin
   n1 := Len;
   n2 := PASN1_STRING(another).Len;
   result := (n1 = n2) and
-            CompareMem(Data, PASN1_STRING(another).Data, n1);
+    mormot.core.base.CompareMem(Data, PASN1_STRING(another).Data, n1);
 end;
 
 

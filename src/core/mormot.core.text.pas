@@ -10440,7 +10440,7 @@ begin
       n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
       repeat
         if (result^.NameLen = l) and
-           CompareMemFixed(result^.NameStart, pointer(CookieName), l) then
+           mormot.core.base.CompareMem(result^.NameStart, pointer(CookieName), l) then
           exit // cookies are case-sensitive
         else
           inc(result);

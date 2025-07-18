@@ -4705,7 +4705,7 @@ end;
 function HashDigestEqual(const a, b: THashDigest): boolean;
 begin
   result := (a.Algo <= high(THashAlgo)) and
-            CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
+            mormot.core.base.CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
 end;
 
 procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
@@ -5274,7 +5274,7 @@ begin
   if result <> asrMatch then
     exit;
   if (DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) = fAlgoSize) and
-     CompareMem(@dig, @stored, fAlgoSize) then
+     mormot.core.base.CompareMem(@dig, @stored, fAlgoSize) then
     if AfterAuth(self, aUser) then
       result := asrMatch
     else
