@@ -53,12 +53,12 @@ uses
 
 var
   /// TDocVariantOptions for efficient MVC data context rendering
-  // - maps JSON_FAST_EXTENDED with field names interning
+  // - all instances are transient, so interning is of no benefit here
   JSON_MVC: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson,
-     dvoInternNames];
+     dvoAllowDoubleValue];
 
 type
   /// TMvcView.Flags rendering context
