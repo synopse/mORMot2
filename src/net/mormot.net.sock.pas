@@ -2258,8 +2258,8 @@ begin
     {$ifdef OSWINDOWS}
     WSAETIMEDOUT,
     WSAEWOULDBLOCK,
-    WSAIOPENDING,
     {$endif OSWINDOWS}
+    WSAIOPENDING,
     WSAEINPROGRESS,
     WSATRY_AGAIN:
       result := nrRetry;
@@ -2774,12 +2774,16 @@ begin
   result := socket.MakeAsync;
   if result <> nrOK then
     exit;
-  connect(socket.Socket, @Addr, Size); // non-blocking connect() once
+  if connect(socket.Socket, @Addr, Size) = 0 then // non-blocking connect() once
+    exit; // immediate success (unlikely)
   if ms < 0 then
     exit; // don't wait now
+  result := NetLastError;
+  if result <> nrRetry then
+    exit; // abort on fatal error (e.g. invalid address)
   socket.MakeBlocking;
   repeat
-    result := NetEventsToNetResult(socket.WaitFor(20, [neWrite, neError]));
+    result := NetEventsToNetResult(socket.WaitFor(100, [neWrite, neError]));
     if result <> nrRetry then
       exit;
     // typically, status = [] for TRY_AGAIN result
