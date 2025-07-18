@@ -85,8 +85,6 @@ type
   published
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
-    /// validate mormot.net.openapi unit
-    procedure OpenAPI;
     /// validate DNS and LDAP clients (and NTP/SNTP)
     procedure DNSAndLDAP;
     /// validate THttpPeerCache process
@@ -105,6 +103,8 @@ type
     procedure _TTunnelLocal;
     /// validate IP processing functions
     procedure IPAddresses;
+    /// validate mormot.net.openapi unit
+    procedure OpenAPI;
     {$ifdef OSPOSIX}
     /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
     procedure TFTPServer;

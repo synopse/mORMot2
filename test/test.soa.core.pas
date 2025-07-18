@@ -2291,7 +2291,7 @@ var
   P: PUtf8Char;
 begin
   if Ctxt.Sender is TInterfaceMock then
-    Ctxt.TestCase.Check(Ctxt.EventParams = 'toto');
+    TInterfaceMock(Ctxt.Sender).TestCase.Check(Ctxt.EventParams = 'toto');
   P := pointer(Ctxt.Params);
   Ctxt.Returns([GetNextItemDouble(P) - GetNextItemDouble(P)]);
   // Ctxt.Result := '['+DoubleToStr(GetNextItemDouble(P)-GetNextItemDouble(P))+']';
@@ -2301,7 +2301,7 @@ procedure TTestServiceOrientedArchitecture.IntSubtractVariant(
   Ctxt: TOnInterfaceStubExecuteParamsVariant);
 begin
   if Ctxt.Sender is TInterfaceMock then
-    Ctxt.TestCase.Check(Ctxt.EventParams = 'toto');
+    TInterfaceMock(Ctxt.Sender).TestCase.Check(Ctxt.EventParams = 'toto');
   Ctxt['result'] := Ctxt['n1'] - Ctxt['n2'];
   // with Ctxt do Output[0] := Input[0]-Input[1];
 end;
