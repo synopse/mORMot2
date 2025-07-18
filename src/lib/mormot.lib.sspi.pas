@@ -1265,16 +1265,13 @@ end;
 
 class procedure ESynSspi.RaiseLastOSError(const aContext: TSecContext);
 var
-  error: integer;
   text: string;
 begin
-  error := GetLastError;
-  text := string(WinErrorText(error));
+  text := WinLastError('SSPI API');
   if aContext.ID = 0 then
-    raise CreateFmt('SSPI API Error %d [%s]', [error, text])
+    raise Create(text)
   else
-    raise CreateFmt('SSPI API Error %d [%s] for ConnectionID=%d',
-      [error, text, aContext.ID]);
+    raise CreateFmt('%s for ConnectionID=%d', [text, aContext.ID]);
 end;
 
 

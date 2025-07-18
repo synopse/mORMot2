@@ -78,9 +78,22 @@ begin
   result := @Temp;
 end;
 
-procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
+procedure Win32PWideCharToString(P: PWideChar; l: PtrInt; var s: string); inline;
 begin
-  SetString(fn, P, StrLenW(P)); // TFileName is UnicodeString
+  SetString(s, P, l); // TFileName is UnicodeString
+end;
+
+procedure SetStringFromAnsi7Buffer(var d: string; s: PByteArray; l: PtrInt);
+var
+  dst: PWordArray;
+begin
+  SetString(d, nil, l);
+  dst := pointer(d);
+  if dst <> nil then
+    repeat
+      dec(l);
+      dst[l] := s[l]; // fast direct conversion using 7-bit WideChar -> AnsiChar
+    until l = 0;
 end;
 
 {$else}
@@ -113,34 +126,45 @@ begin
   result := @Temp;
 end;
 
-procedure Win32PWideCharToFileNameConv(P: PWideChar; L: PtrInt; var fn: TFileName);
+procedure Win32PWideCharToString(P: PWideChar; l: PtrInt; var s: string);
 var
-  u: SynUnicode;
-begin
-  SetString(u, P, l);
-  fn := TFileName(u); // let the RTL do the conversion
-end;
+  i: PtrInt;
 
-procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
-var
-  l, i: PtrInt;
+  procedure DoSynUnicodeConv;
+  var
+    u: SynUnicode; // transient UTF-16 variable
+  begin
+    SetString(u, P, l);
+    s := string(u); // let the RTL do the conversion
+  end;
+
 begin
-  l := StrLenW(P);
   if IsAnsiCompatibleW(P, l) then // most common case
   begin
-    SetString(fn, nil, l);
+    SetString(s, nil, l);
     for i := 0 to l - 1 do
-      PByteArray(fn)[i] := PWordArray(P)[i]; // fast direct conversion
+      PByteArray(s)[i] := PWordArray(P)[i]; // fast direct conversion
   end
   {$ifdef FPC}
   else if DefaultRTLFileSystemCodePage = CP_UTF8 then // happens with Lazarus
-    DoWin32PWideCharToUtf8(P, l, RawUtf8(fn)) // use RTL or mormot.core.unicode
+    DoWin32PWideCharToUtf8(P, l, RawUtf8(s)) // use RTL or mormot.core.unicode
   {$endif FPC}
   else
-    Win32PWideCharToFileNameConv(P, l, fn);
+    DoSynUnicodeConv;
+end;
+
+procedure SetStringFromAnsi7Buffer(var d: string; s: PAnsiChar; l: PtrInt);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  SetString(d, s, l);
 end;
 
 {$endif UNICODE}
+
+procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
+begin
+  Win32PWideCharToString(P, StrLenW(P), string(fn));
+end;
 
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
@@ -514,56 +538,60 @@ begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
 end;
 
-function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
+function WinError(err: cardinal; src: pointer; ss: PShortString; s: PString): boolean;
 var
-  bak: integer;
-  flags, len: PtrUInt;
-  src: pointer;
+  errbak, flags, len: PtrUInt;
   tmp: array[0..511] of WideChar;
-  tmps: ShortString absolute tmp;
 begin
-  tmps[0] := #0;
-  if (ModuleName = nil) and
-     AppendWinErrorText(Code, tmps, #0) then
-  begin
-    // return directly the known standard system error code constant
-    FastSetString(result, @tmps[1], ord(tmps[0]));
-    exit;
-  end;
-  bak := GetLastError;
-  src := nil;
+  errbak := GetLastError;
   flags := FORMAT_MESSAGE_FROM_SYSTEM;
-  if ModuleName <> nil then
-  begin
-    // module specific error codes
-    src := pointer(GetModuleHandle(ModuleName));
-    if src <> nil then
-      flags := FORMAT_MESSAGE_FROM_HMODULE;
-  end;
-  // first try if there is an English message version of this error code
-  len := FormatMessageW(flags, src, Code, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
-  if len <= 0 then
+  if src <> nil then // Module specific error codes - no fallback to system
+    flags := FORMAT_MESSAGE_FROM_HMODULE;
+  // first try if there is an English message version of this error err
+  len := FormatMessageW(flags, src, err, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
+  if len = 0 then
     // typically ERROR_RESOURCE_LANG_NOT_FOUND or ERROR_MUI_FILE_NOT_FOUND
-    len := FormatMessageW(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
-  if (len <= 0) and
-     (src <> nil) then
-  begin
-    // fallback to the system error message if this module as no such code
-    result := WinErrorText(Code);
-    SetLastError(bak);
-    exit;
-  end;
-  // return the formatted error message as trimmed UTF-8
-  while (len > 0) and
+    len := FormatMessageW(flags, src, err, 0, @tmp, SizeOf(tmp), nil);
+  SetLastError(errbak);
+  while (len <> 0) and
         (ord(tmp[len - 1]) in [0..32, ord('.')]) do
     dec(len); // trim right
-  Win32PWideCharToUtf8(@tmp, len, result);
-  SetLastError(bak);
+  if s <> nil then
+    Win32PWideCharToString(@tmp, len, s^)
+  else if len <> 0 then
+    ss^[0] := AnsiChar(UnicodeToUtf8(@ss^[1], 255, @tmp, len)); // RTL
+  result := len <> 0;
 end;
 
-function GetErrorText(error: integer): RawUtf8;
+function WinApiErrorString(Code: cardinal; ModuleName: PChar): string;
+var
+  tmp: TShort47;
 begin
-  result := WinErrorText(error);
+  if ModuleName <> nil then // first try from the supplied library name
+    if WinError(Code, pointer(GetModuleHandle(ModuleName)), nil, @result) then
+      exit;
+  tmp[0] := #0;
+  if AppendWinErrorText(Code, tmp, #0) then // try known system constants
+    SetStringFromAnsi7Buffer(result, @tmp[1], ord(tmp[0]))
+  else
+    WinError(Code, nil, nil, @result); // fallback to FormatMessageW()
+end;
+
+function WinApiErrorShort(Code: cardinal; ModuleName: PChar): shortstring;
+begin
+  if ModuleName <> nil then // first try from the supplied library name
+    if WinError(Code, pointer(GetModuleHandle(ModuleName)), @result, nil) then
+      exit;
+  result[0] := #0;
+  if not AppendWinErrorText(Code, result, #0) then // try known system constants
+    WinError(Code, nil, @result, nil); // fallback to FormatMessageW()
+end;
+
+procedure GetErrorShortVar(error: integer; var dest: ShortString);
+begin
+  dest[0] := #0;
+  if not AppendWinErrorText(error, dest, #0) then // try known system constants
+    WinError(error, nil, @dest, nil);          // fallback to FormatMessageW
 end;
 
 procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
@@ -577,7 +605,7 @@ var
 begin
   code := GetLastError;
   raise ModuleException.CreateFmt('%s error [%s] (0x%x)',
-    [ModuleName, string(WinErrorText(code, ModuleName)), code]);
+    [ModuleName, WinApiErrorString(code, ModuleName), code]);
 end;
 
 function WinLastError(const Context: ShortString; Code: integer): string;
@@ -585,7 +613,7 @@ begin
   if Code = 0 then
     Code := GetLastError;
   result := Format('%s error [%s] (0x%x)',
-    [Context, string(WinErrorText(Code)), code]);
+    [Context, WinApiErrorString(Code), code]);
 end;
 
 procedure RaiseLastError(const Context: ShortString;

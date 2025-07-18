@@ -863,8 +863,7 @@ end;
 class procedure E7Zip.RaiseAfterCheck(Caller: TObject;
   const Context: ShortString; Res: HResult);
 begin
-  raise CreateFmt('%s.%s error %x (%s)',
-    [ClassNameShort(Caller)^, Context, Res, string(WinErrorText(Res))])
+  raise CreateFmt('%s.%s', [ClassNameShort(Caller)^, WinLastError(context, Res)])
 end;
 
 class procedure E7Zip.Check(Caller: TObject; const Context: ShortString;

@@ -2263,20 +2263,22 @@ end;
 
 function SysErrorMessageWinInet(error: integer): RawUtf8;
 var
-  dwError, tmpLen: DWORD;
+  dwError, extendedLen: DWORD;
   tmp: array[0..511] of WideChar;
 begin
-  result := WinErrorText(error, 'wininet.dll');
-  if error <> ERROR_INTERNET_EXTENDED_ERROR then
-    exit;
-  InternetGetLastResponseInfoW(dwError, nil, tmpLen);
-  if (tmpLen = 0) or
-     (tmplen > SizeOf(tmp)) then
-    exit;
-  InternetGetLastResponseInfoW(dwError, @tmp, tmpLen);
-  result := FormatUtf8('% [%]', [result, PWideChar(@tmp)]);
+  extendedLen := 0;
+  if error = ERROR_INTERNET_EXTENDED_ERROR then
+  begin
+    InternetGetLastResponseInfoW(dwError, nil, extendedLen);
+    if extendedLen > SizeOf(tmp) then
+      extendedLen := 0
+    else
+      InternetGetLastResponseInfoW(dwError, @tmp, extendedLen);
+  end;
+  ShortStringToAnsi7String(WinApiErrorShort(error, 'wininet.dll'), result);
+  if extendedLen <> 0 then
+    Append(result, [' [', PWideChar(@tmp), ']']);
 end;
-
 
 
 { ******************** winhttp.dll Windows API Definitions }
