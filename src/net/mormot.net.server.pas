@@ -8190,7 +8190,7 @@ var
   incontlen: Qword;
   incontlenchunk, incontlenread: cardinal;
   incontenc, inaccept, host, range, referer: RawUtf8;
-  outstat: RawUtf8;
+  outstat, outmsg: RawUtf8;
   outstatcode, afterstatcode: cardinal;
   respsent: boolean;
   urirouter: TUriRouter;
@@ -8205,7 +8205,6 @@ var
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
   logdata: PHTTP_LOG_FIELDS_DATA;
   started, elapsed: Int64;
-  contrange: ShortString;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
     E: Exception = nil);
@@ -8288,7 +8287,7 @@ var
       filehandle := FileOpen(Utf8ToString(ctxt.OutContent), fmOpenReadShared);
       if not ValidHandle(filehandle)  then
       begin
-        SendError(HTTP_NOTFOUND, WinErrorText(GetLastError));
+        SendError(HTTP_NOTFOUND, GetErrorText);
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel
@@ -8323,10 +8322,10 @@ var
                   // "bytes=0-499" -> start=0, len=500
                   datachunkfile.ByteRange.Length.QuadPart := rangelen;
               end; // "bytes=1000-" -> start=1000, to eof
-              FormatShort('Content-range: bytes %-%/%'#0, [rangestart,
+              FormatUtf8('Content-range: bytes %-%/%', [rangestart,
                 rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
-                outcontlen.QuadPart], contrange);
-              resp^.AddCustomHeader(@contrange[1], heads, false);
+                outcontlen.QuadPart], outmsg);
+              resp^.AddCustomHeader(pointer(outmsg), heads, false);
               resp^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
@@ -8530,7 +8529,8 @@ begin
                 until incontlenread = incontlen;
                 if err <> NO_ERROR then
                 begin
-                  SendError(HTTP_NOTACCEPTABLE, WinErrorText(err, HTTPAPI_DLL));
+                  StringToUtf8(WinApiErrorString(err, HTTPAPI_DLL), outmsg);
+                  SendError(HTTP_NOTACCEPTABLE, outmsg);
                   continue;
                 end;
                 // optionally uncompress input body
