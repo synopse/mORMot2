@@ -956,8 +956,8 @@ type
     /// this class implementation will raise an exception
     // - use overriden TJsonWriter version instead!
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
-    procedure AddTypedJson(Value: pointer; TypeInfo: pointer;
-      WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
+    function AddTypedJson(Value: pointer; TypeInfo: pointer;
+      WriteOptions: TTextWriterWriteObjectOptions = []): pointer; virtual;
     /// write some #0 ended UTF-8 text, according to the specified format
     // - use overriden TJsonWriter version instead!
     procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload; virtual;
@@ -4210,10 +4210,11 @@ begin
     AddVariant(PVariant(Value)^, twNone); // fast TJsonWriter.AddVariant
 end;
 
-procedure TTextWriter.AddTypedJson(Value, TypeInfo: pointer;
-  WriteOptions: TTextWriterWriteObjectOptions);
+function TTextWriter.AddTypedJson(Value, TypeInfo: pointer;
+  WriteOptions: TTextWriterWriteObjectOptions): pointer;
 begin
   RaiseUnimplemented('AddTypedJson');
+  result := nil;
 end;
 
 function TTextWriter.{%H-}AddJsonReformat(Json: PUtf8Char;

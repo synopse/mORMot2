@@ -806,8 +806,9 @@ type
     // - handle rkClass as WriteObject, rkEnumeration/rkSet with proper options,
     // rkRecord, rkDynArray or rkVariant using proper JSON serialization
     // - other types will append 'null'
-    procedure AddTypedJson(Value, TypeInfo: pointer;
-      WriteOptions: TTextWriterWriteObjectOptions = []); override;
+    // - returns the TRttiCustom corresponding to TypeInfo
+    function AddTypedJson(Value, TypeInfo: pointer;
+      WriteOptions: TTextWriterWriteObjectOptions = []): pointer; override;
     /// serialize as JSON the given object
     procedure WriteObject(Value: TObject;
       WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); override;
@@ -2133,9 +2134,9 @@ var
 // - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
 // tkVariant kind of content - other kinds would return 'null'
 // - you can override serialization options if needed
-procedure SaveJson(const Value; TypeInfo: PRttiInfo;
-  Options: TTextWriterOptions; var result: RawUtf8;
-  ObjectOptions: TTextWriterWriteObjectOptions = []); overload;
+function SaveJson(const Value; TypeInfo: PRttiInfo;
+  Options: TTextWriterOptions; var Json: RawUtf8;
+  ObjectOptions: TTextWriterWriteObjectOptions = []): TRttiCustom; overload;
 
 /// serialize most kind of content as JSON, using its RTTI
 // - is just a wrapper around TJsonWriter.AddTypedJson()
@@ -6689,29 +6690,27 @@ begin
   end;
 end;
 
-procedure TJsonWriter.AddTypedJson(Value, TypeInfo: pointer;
-  WriteOptions: TTextWriterWriteObjectOptions);
+function TJsonWriter.AddTypedJson(Value, TypeInfo: pointer;
+  WriteOptions: TTextWriterWriteObjectOptions): pointer;
 var
   ctxt: TJsonSaveContext;
-  rc: TRttiCustom;
 begin
   ctxt.W := self; // inlined ctxt.Init()
-  rc := fLastRttiType;
+  result := fLastRttiType;
   repeat
-    if (rc = nil) or
-       (rc.Info <> TypeInfo) then
+    if (result = nil) or
+       (TRttiCustom(result).Info <> TypeInfo) then
     begin
-      rc := Rtti.RegisterType(TypeInfo);
-      if rc = nil then
+      result := Rtti.RegisterType(TypeInfo);
+      if result = nil then
         break;
-      fLastRttiType := rc; // naive but efficient cache
+      fLastRttiType := result; // naive but efficient cache
     end;
-    ctxt.Options := WriteOptions + TRttiJson(rc).fIncludeWriteOptions;
-    ctxt.Info := rc;
+    ctxt.Options := WriteOptions + TRttiJson(result).fIncludeWriteOptions;
+    ctxt.Info := result;
     ctxt.Prop := nil;
-    rc := rc.JsonSave;
-    if Assigned(rc) then
-      TRttiJsonSave(rc)(Value, ctxt)
+    if Assigned(TRttiCustom(result).JsonSave) then
+      TRttiJsonSave(TRttiCustom(result).JsonSave)(Value, ctxt)
     else
       BinarySaveBase64(Value, TypeInfo, rkRecordTypes, {withMagic=}true);
     exit;
@@ -11530,16 +11529,16 @@ begin
     Join(['{"', Name, '":', SQLValue, '}'], result);
 end;
 
-procedure SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions;
-  var result: RawUtf8; ObjectOptions: TTextWriterWriteObjectOptions);
+function SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions;
+  var Json: RawUtf8; ObjectOptions: TTextWriterWriteObjectOptions): TRttiCustom;
 var
   temp: TTextWriterStackBuffer;
 begin
   with TJsonWriter.CreateOwnedStream(temp, twoNoSharedStream in Options) do
   try
     CustomOptions := CustomOptions + Options;
-    AddTypedJson(@Value, TypeInfo, ObjectOptions);
-    SetText(result);
+    result := AddTypedJson(@Value, TypeInfo, ObjectOptions);
+    SetText(Json);
   finally
     Free;
   end;
