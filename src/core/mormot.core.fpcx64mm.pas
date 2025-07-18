@@ -3018,7 +3018,7 @@ begin
     result := maxcount;
 end;
 
-var
+var // use a pre-allocated buffer to avoid any heap usage during status output
   WrStrBuf: array[0 .. 1023] of AnsiChar; // typically less than 600 bytes
   WrStrPos: PtrInt;
   WrStrOnSameLine: boolean;

@@ -4641,7 +4641,7 @@ end;
 
 function TPdfWrite.Add(Value: integer): TPdfWrite;
 var
-  t: array[0..23] of AnsiChar;
+  t: TTemp24;
   P: PAnsiChar;
 begin
   if BEnd - B <= 24 then

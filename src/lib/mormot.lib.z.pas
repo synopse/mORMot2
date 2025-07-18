@@ -37,7 +37,7 @@ interface
       {$endif CPUINTEL}
     {$else}
       {$ifdef CPUARM}
-        {$define ZLIBPAS}  // issues were reported on some Raspbery PI
+        {$define ZLIBPAS}  // issues were reported on some Raspberry PI
       {$else}
         {$ifdef OSANDROID}
           {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)

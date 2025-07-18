@@ -6662,7 +6662,7 @@ function AsnNext(var Pos: integer; const Buffer: TAsnObject;
   Value: PRawByteString; CtrEndPos: PInteger): integer;
 var
   asnsize: integer;
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   p: PAnsiChar;
 begin
   if Value <> nil then

@@ -1034,7 +1034,7 @@ end;
 
 procedure TOracleDate.ToIso8601(var aIso8601: RawUtf8);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   if (PInteger(@self)^ = 0) and
      (PInteger(PtrUInt(@self) + 3)^ = 0) then

@@ -1699,7 +1699,7 @@ type
     Len: PtrInt;
     Text: PUtf8Char;
     TempRawUtf8: pointer;
-    Temp: array[0..23] of AnsiChar;
+    Temp: TTemp24;
   end;
   PTempUtf8 = ^TTempUtf8;
 
@@ -4544,7 +4544,7 @@ end;
 
 procedure TTextWriter.Add(Value: PtrInt);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
   Len: PtrInt;
 begin
@@ -4570,7 +4570,7 @@ end;
 {$ifdef CPU32} // Add(Value: PtrInt) already implements it for CPU64
 procedure TTextWriter.Add(Value: Int64);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
   Len: integer;
 begin
@@ -4634,7 +4634,7 @@ end;
 
 procedure TTextWriter.AddU(Value: PtrUInt);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
   Len: PtrInt;
 begin
@@ -4675,7 +4675,7 @@ end;
 
 procedure TTextWriter.AddQ(Value: QWord);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
   Len: PtrInt;
 begin
@@ -5497,7 +5497,7 @@ end;
 
 procedure TTextWriter.AddSpaced(Value: QWord; Width: PtrInt; SepChar: AnsiChar);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   alt: TShort16;
   p: PAnsiChar;
   len: PtrInt;
@@ -6402,7 +6402,7 @@ end;
 
 procedure Int32ToUtf8(Value: PtrInt; var result: RawUtf8);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   if PtrUInt(Value) <= high(SmallUInt32Utf8) then
@@ -6421,7 +6421,7 @@ end;
 
 procedure Int64ToUtf8(Value: Int64; var result: RawUtf8);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   {$ifdef CPU64}
@@ -6444,7 +6444,7 @@ end;
 
 procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   {$ifdef CPU64}
@@ -6484,7 +6484,7 @@ end;
 
 procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUtf8);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   if Value <= high(SmallUInt32Utf8) then
@@ -6668,7 +6668,7 @@ end;
 
 function IntToString(Value: integer): string;
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   P := StrInt32(@tmp[23], Value);
@@ -6677,7 +6677,7 @@ end;
 
 function IntToString(Value: cardinal): string;
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   P := StrUInt32(@tmp[23], Value);
@@ -6714,7 +6714,7 @@ end;
 
 function IntToString(Value: integer): string;
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   if cardinal(Value) <= high(SmallUInt32Utf8) then
@@ -6728,7 +6728,7 @@ end;
 
 function IntToString(Value: cardinal): string;
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   if Value <= high(SmallUInt32Utf8) then

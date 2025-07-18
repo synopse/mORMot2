@@ -593,6 +593,9 @@ type
   // - when used as an array value type, will generate efficient 32-bit lookup
   TShort3 = string[3];
 
+  /// could be used e.g. by StrInt32() or StrInt64()
+  TTemp24 = array[0..23] of AnsiChar;
+
   /// stack-allocated ASCII string, for mormot.core.text GuidToShort() function
   TShortGuid = string[38];
   PShortGuid = ^TShortGuid;
@@ -1497,7 +1500,7 @@ function ToDouble(const text: RawUtf8; out value: double): boolean;
 // - typical use:
 //  !function Int32ToUtf8(Value: PtrInt): RawUtf8;
 //  !var
-//  !  tmp: array[0..23] of AnsiChar;
+//  !  tmp: TTemp24;
 //  !  P: PAnsiChar;
 //  !begin
 //  !  P := StrInt32(@tmp[23],Value);
@@ -5330,7 +5333,7 @@ end;
 
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 var
-  tmp: array[0..23] of AnsiChar; // output in display/reversed order
+  tmp: TTemp24; // output in display/reversed order
   i: PtrInt;
   tab: PAnsiChar;
 begin
@@ -5350,21 +5353,21 @@ end;
 
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   AppendShortTemp(StrUInt32(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest);
 end;
@@ -6535,7 +6538,7 @@ end;
 
 function ToShort(const val: Int64): TShort23;
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   p: PAnsiChar;
 begin
   p := {%H-}StrInt64(@tmp[23], val);
@@ -11890,7 +11893,7 @@ end;
 
 procedure TSynTempAdder.AddU(v: PtrUint);
 var
-  t: array[0..23] of AnsiChar;
+  t: TTemp24;
   P: PAnsiChar;
 begin
   P := StrUInt32(@t[23], v);

@@ -9389,7 +9389,7 @@ function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
   L: PtrInt;
   P: PAnsiChar;
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
   if Value <= high(SmallUInt32Utf8) then
@@ -11494,7 +11494,7 @@ end;
 
 procedure TRawByteStringBuffer.Append(Value: QWord);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
   P: PAnsiChar;
 begin
   {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution

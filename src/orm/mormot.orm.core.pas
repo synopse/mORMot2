@@ -5613,7 +5613,7 @@ var
   EnumValues: set of 0..63;
   Soundex: TSynSoundEx;
   M: TOrmModel;
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   result := 0;
   if (self = nil) or
