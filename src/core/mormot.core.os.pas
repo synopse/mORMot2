@@ -838,6 +838,10 @@ procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = fals
 function OsErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// append the error code number, and its regular constant on the current OS
+procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
+  Sep: AnsiChar = #0; NoInt: boolean = false);
+
 /// append the error as ' ERROR_*' constant and return TRUE if known
 // - append nothing and return FALSE if Code is not known
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
@@ -5996,16 +6000,17 @@ end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8
 // on Delphi (aligned to 4 bytes), but not on FPC (aligned to 16 bytes), and
-// enumerates allow cross-platform error support (e.g. in centralized servers)
+// enumerates let compiler generate the smallest code
+// - all errors are cross-platform, e.g. when used in centralized servers
 
 const
   NULL_STR: string[1] = '';
 
 function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
 begin
-  // will properly be implemented in mormot.core.rtti.pas
+  // naive version - will properly be implemented in mormot.core.rtti.pas anyway
   result := @NULL_STR;
-  // no arm32 support yet - see fpc_shortstr_enum_intern() in sstrings.inc
+  // arm32 is overcomplex and would rather use typinfo and mormot.core.rtti
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   if Value < 0 then
     exit;
@@ -6258,7 +6263,7 @@ type
     bSTALE, bREMOTE, bBADRPC, bRPCMISMATCH, bPROGUNAVAIL, bPROGMISMATCH, bPROCUNAVAIL, bNOLCK, bNOSYS,
     bFTYPE, bAUTH, bNEEDAUTH);
 
-procedure PosixErrorShort(Code, Max: cardinal; Dest: PShortString;
+procedure _PosixError(Code, Max: cardinal; Dest: PShortString;
   Info: pointer; NoInt: boolean);
 var
   ps: PShortString;
@@ -6280,17 +6285,28 @@ end;
 
 procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
 begin
-  PosixErrorShort(Code, ord(high(TLinuxError)), Dest, TypeInfo(TLinuxError), NoInt);
+  _PosixError(Code, ord(high(TLinuxError)), Dest, TypeInfo(TLinuxError), NoInt);
 end;
 
 procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
 begin
-  PosixErrorShort(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
+  _PosixError(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
 end;
 
 function OsErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
   OsErrorShort(Code, @result, NoInt); // redirect to Win/Linux/BsdErrorShort()
+end;
+
+procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
+  Sep: AnsiChar; NoInt: boolean);
+var
+  os: TShort47;
+begin
+  OsErrorShort(Code, @os, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  if Sep <> #0 then
+    AppendShortChar(Sep, @Dest);
+  AppendShort(os, Dest);
 end;
 
 const
