@@ -1512,7 +1512,7 @@ var
   nfo: PSynTestMethodInfo;
   dir: TFileName;
   err: string;
-  started: boolean;
+  started, titledone: boolean;
   c: TSynTestCase;
   log: IUnknown;
 begin
@@ -1551,113 +1551,121 @@ begin
   fAssertions := 0;
   fAssertionsFailed := 0;
   dir := GetCurrentDir;
-  for m := 0 to Count - 1 do
-  try
-    DoColor(ccWhite);
-    DoTextLn([CRLF + CRLF, m + 1, '. ', fTests[m].TestName]);
-    DoColor(ccLightGray);
-    fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
+  repeat
+    for m := 0 to Count - 1 do
     try
-      for i := 0 to high(fTestCaseClass) do
-      begin
-        started := false;
-        c := fTestCaseClass[i].Create(self); // add all published methods
-        try
-          nfo := nil;
-          for t := 0 to c.Count - 1 do
+      titledone := false;
+      fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
+      try
+        for i := 0 to high(fTestCaseClass) do
+        begin
+          started := false;
+          c := fTestCaseClass[i].Create(self); // add all published methods
           try
-            nfo := @c.fTests[t];
-            _CurrentMethodInfo := nfo;
-            // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
-            if IsRestricted(ToText(c.ClassType)) and
-               IsRestricted(FormatUtf8('%.%', [c, nfo^.MethodName])) then
-              continue;
-            if not started then
-            begin
-              c.fAssertions := 0; // reset assertions count
-              c.fAssertionsFailed := 0;
-              c.fWorkDir := fWorkDir;
-              SetCurrentDir(fWorkDir);
-              TotalTimer.Start;
-              c.Setup;
-              DoColor(ccWhite);
-              DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', c.Ident, ': ']);
-              DoColor(ccLightGray);
-              started := true;
-            end;
-            c.fAssertionsBeforeRun := c.fAssertions;
-            c.fAssertionsFailedBeforeRun := c.fAssertionsFailed;
-            c.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
-            log := BeforeRun;
-            TestTimer.Start;
-            c.MethodSetup;
+            nfo := nil;
+            for t := 0 to c.Count - 1 do
             try
-              nfo^.Method(); // run tests + Check()
-              AfterOneRun;
-            finally
-              c.MethodCleanUp;
-              log := nil; // will trigger logging leave method e.g.
+              nfo := @c.fTests[t];
+              _CurrentMethodInfo := nfo;
+              // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
+              if IsRestricted(ToText(c.ClassType)) and
+                 IsRestricted(FormatUtf8('%.%', [c, nfo^.MethodName])) then
+                continue;
+              if not titledone then
+              begin
+                titledone := true;
+                DoColor(ccWhite);
+                DoTextLn([CRLF + CRLF, m + 1, '. ', fTests[m].TestName]);
+                DoColor(ccLightGray);
+              end;
+              if not started then
+              begin
+                c.fAssertions := 0; // reset assertions count
+                c.fAssertionsFailed := 0;
+                c.fWorkDir := fWorkDir;
+                SetCurrentDir(fWorkDir);
+                TotalTimer.Start;
+                c.Setup;
+                DoColor(ccWhite);
+                DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', c.Ident, ': ']);
+                DoColor(ccLightGray);
+                started := true;
+              end;
+              c.fAssertionsBeforeRun := c.fAssertions;
+              c.fAssertionsFailedBeforeRun := c.fAssertionsFailed;
+              c.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
+              log := BeforeRun;
+              TestTimer.Start;
+              c.MethodSetup;
+              try
+                nfo^.Method(); // run tests + Check()
+                AfterOneRun;
+              finally
+                c.MethodCleanUp;
+                log := nil; // will trigger logging leave method e.g.
+              end;
+            except
+              on E: Exception do
+              begin
+                DoColor(ccLightRed);
+                AddFailed(E.ClassName + ': ' + E.Message);
+                if nfo <> nil then
+                  DoTextLn(['! ', nfo^.IdentTestName]);
+                if E.InheritsFrom(EControlC) then
+                  raise; // Control-C should just abort whole test
+                {$ifndef NOEXCEPTIONINTERCEPT}
+                DoTextLn(['! ', GetLastExceptionText]); // with extended info
+                {$endif NOEXCEPTIONINTERCEPT}
+                DoColor(ccLightGray);
+              end;
             end;
-          except
-            on E: Exception do
-            begin
+            _CurrentMethodInfo := nil;
+            if not started then
+              continue;
+            if c.fBackgroundRun.Waiting then
+              c.RunWait({notify=}false, {timeout=}120, {synchronize=}true);
+            c.CleanUp; // to be done before Destroy call and after RunWait()
+            if c.AssertionsFailed = 0 then
+              DoColor(ccLightGreen)
+            else
               DoColor(ccLightRed);
-              AddFailed(E.ClassName + ': ' + E.Message);
-              if nfo <> nil then
-                DoTextLn(['! ', nfo^.IdentTestName]);
-              if E.InheritsFrom(EControlC) then
-                raise; // Control-C should just abort whole test
-              {$ifndef NOEXCEPTIONINTERCEPT}
-              DoTextLn(['! ', GetLastExceptionText]); // with extended info
-              {$endif NOEXCEPTIONINTERCEPT}
-              DoColor(ccLightGray);
+            s := '';
+            if c.fRunConsole <> '' then
+            begin
+              Make(['   ', c.fRunConsole, CRLF], s);
+              c.fRunConsole := '';
             end;
+            Append(s, ['  Total failed: ', IntToThousandString(c.AssertionsFailed),
+              ' / ', IntToThousandString(c.Assertions), ' - ', c.Ident]);
+            if c.AssertionsFailed = 0 then
+              AppendShortToUtf8(' PASSED', s)
+            else
+              AppendShortToUtf8(' FAILED', s);
+            Append(s, ['  ', TotalTimer.Stop, CRLF]);
+            DoText(s); // write at once to the console output
+            DoColor(ccLightGray);
+            inc(fAssertions, c.fAssertions); // compute global assertions count
+            inc(fAssertionsFailed, c.fAssertionsFailed);
+          finally
+            FreeAndNil(c);
           end;
-          _CurrentMethodInfo := nil;
-          if not started then
-            continue;
-          if c.fBackgroundRun.Waiting then
-            c.RunWait({notify=}false, {timeout=}120, {synchronize=}true);
-          c.CleanUp; // to be done before Destroy call and after RunWait()
-          if c.AssertionsFailed = 0 then
-            DoColor(ccLightGreen)
-          else
-            DoColor(ccLightRed);
-          s := '';
-          if c.fRunConsole <> '' then
-          begin
-            Make(['   ', c.fRunConsole, CRLF], s);
-            c.fRunConsole := '';
-          end;
-          Append(s, ['  Total failed: ', IntToThousandString(c.AssertionsFailed),
-            ' / ', IntToThousandString(c.Assertions), ' - ', c.Ident]);
-          if c.AssertionsFailed = 0 then
-            AppendShortToUtf8(' PASSED', s)
-          else
-            AppendShortToUtf8(' FAILED', s);
-          Append(s, ['  ', TotalTimer.Stop, CRLF]);
-          DoText(s); // write at once to the console output
-          DoColor(ccLightGray);
-          inc(fAssertions, c.fAssertions); // compute global assertions count
-          inc(fAssertionsFailed, c.fAssertionsFailed);
-        finally
-          FreeAndNil(c);
         end;
+      finally
+        _CurrentMethodInfo := nil;
+        fTestCaseClass := nil; // unregister the test classes once run
       end;
-    finally
-      _CurrentMethodInfo := nil;
-      fTestCaseClass := nil; // unregister the test classes once run
+    except
+      on E: Exception do
+      begin
+        // assume any exception not intercepted above is a failure
+        DoColor(ccLightRed);
+        err := E.ClassName + ': ' + E.Message;
+        AddFailed(err);
+        DoText(['! ', err]);
+      end;
     end;
-  except
-    on E: Exception do
-    begin
-      // assume any exception not intercepted above is a failure
-      DoColor(ccLightRed);
-      err := E.ClassName + ': ' + E.Message;
-      AddFailed(err);
-      DoText(['! ', err]);
-    end;
-  end;
+  until (fAssertionsFailed <> 0) or
+        not Executable.Command.Option('loop');
   SetCurrentDir(dir);
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
@@ -1803,6 +1811,8 @@ begin
        'run logs in verbose mode: enabled only with --test') and
      (restrict <> nil) then
     withLogs := LOG_VERBOSE;
+  Executable.Command.Option('loop',
+    'loop the tests until some assertion failed');
   if options = [] then
     SetValueFromExecutableCommandLine(options, TypeInfo(TSynTestOptions),
       '&options', 'refine logs output content');
