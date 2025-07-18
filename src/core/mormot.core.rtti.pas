@@ -2786,6 +2786,9 @@ type
     // - only set for rkClass and rkRecord/rkObject
     property Props: TRttiCustomProps
       read fProps;
+    /// return Props.Count or 0 if instance is nil or not rkClass/rkRecord
+    function PropsCount: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// shortcut to the TRttiCustom of the item of a (dynamic) array
     // - only set for rkArray and rkDynArray
     // - may be set also for unmanaged types - use Cache.ItemInfo if you want
@@ -9691,6 +9694,14 @@ begin
   r.fCache.ObjArrayClass := aItemClass; // overwrite
   r.fArrayRtti := Rtti.RegisterClass(aItemClass);
 end; // no need to set other fields like Name
+
+function TRttiCustom.PropsCount: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := fProps.Count;
+end;
 
 
 { TRttiCustomList }
