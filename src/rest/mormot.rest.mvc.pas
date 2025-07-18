@@ -329,7 +329,7 @@ type
   // store any (simple) record content in the cookie, on the browser client side
   // - those cookies have the same feature set than JWT, but with a lower
   // payload (thanks to binary serialization), and cookie safety (not accessible
-  // from JavaScript): they are digitally signed (with HMAC-CRC32C and a
+  // from JavaScript): they are digitally signed (with AES-GCM-128 and a
   // temporary secret key), they include an unique session identifier (like
   // "jti" claim), issue and expiration dates (like "iat" and "exp" claims),
   // and they are encrypted with a temporary key - this secret keys is tied to
@@ -342,7 +342,7 @@ type
     function GetCookieName: RawUtf8;
     procedure SetCookieName(const Value: RawUtf8);
     // overriden e.g. in TMvcSessionWithRestServer using ServiceContext threadvar
-    function GetCookie: RawUtf8; virtual; abstract;
+    function GetCookie(out Value: PUtf8Char): integer; virtual; abstract;
     procedure SetCookie(const cookie: RawUtf8); virtual; abstract;
   public
     /// create an instance of this ViewModel implementation class
@@ -357,8 +357,6 @@ type
     function Initialize(PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil;
       SessionTimeOutMinutes: cardinal = 60): integer; override;
-    /// fast check if there is a cookie session associated to the current context
-    function Exists: boolean; override;
     /// retrieve the session ID from the current cookie
     // - can optionally retrieve the record Data parameter stored in the cookie
     // - Invalidate=true would force this cookie to be rejected in the future
@@ -394,7 +392,7 @@ type
   // - will use ServiceContext.Request threadvar to access the client cookies
   TMvcSessionWithRestServer = class(TMvcSessionWithCookies)
   protected
-    function GetCookie: RawUtf8; override;
+    function GetCookie(out Value: PUtf8Char): integer; override;
     procedure SetCookie(const cookie: RawUtf8); override;
   public
     /// fast check if there is a cookie session associated to the current context
@@ -407,8 +405,11 @@ type
   TMvcSessionSingle = class(TMvcSessionWithCookies)
   protected
     fSingleCookie: RawUtf8;
-    function GetCookie: RawUtf8; override;
+    function GetCookie(out Value: PUtf8Char): integer; override;
     procedure SetCookie(const cookie: RawUtf8); override;
+  public
+    /// fast check if there is a cookie session associated to the current context
+    function Exists: boolean; override;
   end;
 
 
@@ -1620,22 +1621,16 @@ begin
   fContext.CookieName := Value;
 end;
 
-function TMvcSessionWithCookies.Exists: boolean;
-begin
-  result := GetCookie <> '';
-end;
-
 function TMvcSessionWithCookies.CheckAndRetrieve(PRecordData: pointer;
   PRecordTypeInfo: PRttiInfo; PExpires: PUnixTime; Invalidate: boolean): integer;
 var
-  cookie: RawUtf8;
+  cookie: PUtf8Char;
 begin
-  result := 0;
-  cookie := GetCookie;
-  if cookie = '' then
+  result := GetCookie(cookie);
+  if result = 0 then
     exit; // no cookie -> no session
   result := fContext.Validate(
-    cookie, PRecordData, PRecordTypeInfo, PExpires, nil, Invalidate);
+    cookie, result, PRecordData, PRecordTypeInfo, PExpires, nil, Invalidate);
   if (result <= 0) and
      not Invalidate then
     // delete any invalid/expired cookie on server side
@@ -1692,9 +1687,18 @@ end;
 
 { TMvcSessionWithRestServer }
 
-function TMvcSessionWithRestServer.GetCookie: RawUtf8;
+function TMvcSessionWithRestServer.GetCookie(out Value: PUtf8Char): integer;
+var
+  cookie: PHttpCookie;
 begin
-  result := ServiceRunningContext.Request.InCookie[fContext.CookieName];
+  cookie := ServiceRunningContext.Request.InCookieSearch(fContext.CookieName);
+  if cookie <> nil then
+  begin
+    Value := cookie^.Value;
+    result := cookie^.ValueLen;
+  end
+  else
+    result := 0;
 end;
 
 function TMvcSessionWithRestServer.Exists: boolean;
@@ -1703,20 +1707,17 @@ begin
 end;
 
 procedure TMvcSessionWithRestServer.SetCookie(const cookie: RawUtf8);
-var
-  ctxt: TRestServerUriContext;
 begin
-  ctxt := ServiceRunningContext.Request;
-  ctxt.OutCookie[fContext.CookieName] := cookie;
-  ctxt.InCookie[fContext.CookieName] := cookie;
+  ServiceRunningContext.Request.OutCookie[fContext.CookieName] := cookie;
 end;
 
 
 { TMvcSessionSingle }
 
-function TMvcSessionSingle.GetCookie: RawUtf8;
+function TMvcSessionSingle.GetCookie(out Value: PUtf8Char): integer;
 begin
-  result := fSingleCookie;
+  Value := pointer(fSingleCookie);
+  result := length(fSingleCookie);
 end;
 
 procedure TMvcSessionSingle.SetCookie(const cookie: RawUtf8);
@@ -1724,10 +1725,14 @@ begin
   fSingleCookie := cookie;
 end;
 
+function TMvcSessionSingle.Exists: boolean;
+begin
+  result := (fSingleCookie <> '');
+end;
+
 
 
 { ************ Web Renderer Returning Mustache Views or Json }
-
 
 { TMvcRendererAbstract }
 
