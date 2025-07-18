@@ -2248,7 +2248,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
-    procedure RetrieveCookie(const CookieName: RawUtf8; out Value: RawUtf8);
+    procedure RetrieveCookie(const CookieName: RawUtf8; out DestValue: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
@@ -10457,13 +10457,13 @@ begin
 end;
 
 procedure THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
-  out Value: RawUtf8);
+  out DestValue: RawUtf8);
 var
   c: PHttpCookie;
 begin
   c := FindCookie(CookieName);
   if c <> nil then
-    FastSetString(Value, c^.ValueStart, c^.ValueLen);
+    FastSetString(DestValue, c^.ValueStart, c^.ValueLen);
 end;
 
 function THttpCookies.Name(ndx: PtrInt): RawUtf8;
