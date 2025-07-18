@@ -3373,7 +3373,7 @@ constructor EMongoRequestOSException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   fSystemLastError := GetLastError;
-  CreateUtf8('%: % (%)', [aMsg, GetErrorText(fSystemLastError),
+  CreateUtf8('%: % (%)', [aMsg, GetErrorShort(fSystemLastError),
     fSystemLastError], aConnection, aRequest);
 end;
 

@@ -1544,10 +1544,12 @@ procedure CookieRecordToVariant(rec: pointer; recrtti: PRttiInfo;
   var result: variant);
 var
   json: RawUtf8;
+  rc: TRttiCustom;
 begin
   // create a TDocVariant from the binary record content
-  SaveJson(rec^, recrtti, TEXTWRITEROPTIONS_MUSTACHE, json);
-  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_MVC);
+  rc := SaveJson(rec^, recrtti, TEXTWRITEROPTIONS_MUSTACHE, json);
+  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_MVC, nil,
+    {capacity=}rc.PropsCount + 1);
 end;
 
 function TMvcSessionAbstract.CheckAndRetrieveInfo(PRecordDataTypeInfo: PRttiInfo;
@@ -1581,7 +1583,9 @@ begin
       if recsize > 0 then
         CookieRecordToVariant(@rec, PRecordDataTypeInfo, result);
       _ObjAddProps(['id', sessionID], result);
-    end;
+    end
+    else
+      recsize := 0; // rec is still filled with zeros
   finally
     if recsize > 0 then
       // manual finalization of managed fields
@@ -1822,7 +1826,8 @@ begin
         begin
           // rendering, e.g. with fast Mustache {{template}} over TDocVariant
           renderContext.Void;
-          renderContext.InitJsonInPlace(pointer(methodOutput), JSON_MVC);
+          renderContext.InitJsonInPlace(pointer(methodOutput), JSON_MVC,
+            nil, {capacity=}fMethod^.ArgsOutputValuesCount + 1);
           fApplication.GetViewInfo(fMethodIndex, info);
           renderContext.AddValue('main', info);
           if fMethodIndex = fApplication.fFactoryErrorIndex then

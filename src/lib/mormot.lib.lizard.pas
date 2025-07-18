@@ -400,7 +400,7 @@ begin
   else if not aRaiseNoException then
     EAlgoCompress.RaiseUtf8('%.Create: Unable to load % - %/'#13#10 +
       'Please download from https://synopse.info/files/SynLizardLibs.7z',
-      [self, aLibraryFile, GetErrorText(GetLastError)]);
+      [self, aLibraryFile, GetErrorShort]);
 end;
 
 destructor TSynLizardDynamic.Destroy;

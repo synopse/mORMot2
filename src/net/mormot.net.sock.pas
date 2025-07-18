@@ -2343,7 +2343,7 @@ begin
     if (errnumber <> nil) and
        (error <> nrTimeout) and
        (errnumber^ <> NO_ERROR) then
-      msg := format('%s sys=%d (%s)', [msg, errnumber^, GetErrorText(errnumber^)]);
+      msg := format('%s sys=%d (%s)', [msg, errnumber^, GetErrorShort(errnumber^)]);
   end
   else
     fLastError := nrUnknownError;

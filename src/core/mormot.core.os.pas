@@ -2523,7 +2523,13 @@ procedure SetLastError(error: integer);
 /// returns a given error code as plain text
 // - redirects to WinErrorText(error, nil) on Windows, or StrError() on POSIX
 // - e.g. GetErrorText(10) = 'ECHILD (No child processes)' on Linux
-function GetErrorText(error: integer): RawUtf8;
+function GetErrorText(error: integer = 0): RawUtf8;
+
+/// returns a given error code as plain text ShortString
+function GetErrorShort(error: integer = 0): ShortString;
+
+/// returns a given error code as plain text ShortString
+procedure GetErrorShortVar(error: integer; var dest: ShortString); 
 
 {$ifdef OSWINDOWS}
 
@@ -6309,6 +6315,23 @@ begin
   AppendShort(os, Dest);
 end;
 
+function GetErrorShort(error: integer): ShortString;
+begin
+  if error = 0 then
+    error := GetLastError;
+  GetErrorShortVar(error, result);
+end;
+
+function GetErrorText(error: integer): RawUtf8;
+var
+  txt: shortstring;
+begin
+  if error = 0 then
+    error := GetLastError;
+  GetErrorShortVar(error, txt);
+  FastSetString(result, @txt[1], ord(txt[0]));
+end;
+
 const
   // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
   ARMCPU_ID: array[TArmCpuType] of word = (
@@ -6921,7 +6944,7 @@ constructor TFileStreamEx.CreateFromHandle(aHandle: THandle;
 begin
   if not ValidHandle(aHandle) then
     raise EOSException.CreateFmt('%s.Create(%s) failed as %s',
-      [ClassNameShort(self)^, aFileName, GetErrorText(GetLastError)]);
+      [ClassNameShort(self)^, aFileName, GetErrorShort]);
   inherited Create(aHandle); // TFileStreamFromHandle constructor which own it 
   fFileName := aFileName;
   fDontReleaseHandle := aDontReleaseHandle;
@@ -7443,8 +7466,7 @@ begin
       if not ForceDirectories(result) then
         if RaiseExceptionOnCreationFailure <> nil then
           raise RaiseExceptionOnCreationFailure.CreateFmt(
-            'EnsureDirectoryExists(%s) failed as %s',
-            [result, GetErrorText(GetLastError)])
+            'EnsureDirectoryExists(%s) failed as %s', [result, GetErrorShort])
         else
           result := '';
   end;

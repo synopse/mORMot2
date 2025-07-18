@@ -1607,21 +1607,17 @@ begin
   fpseterrno(error);
 end;
 
-function GetErrorText(error: integer): RawUtf8;
-var
-  s, err: shortstring;
+procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
-  s := StrError(error); // from FPC RTL: using a OS-specific array of const
-  OsErrorShort(error, @err, {noint=}true); // 'E###' from this unit
-  if err[0] <> #0 then
-  begin
-    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @err);
-    AppendShort(s, err);
-    AppendShortChar(')', @err);
-    FastSetString(result, @err[1], ord(err[0]));
-  end
+  OsErrorShort(error, @dest, {noint=}true); // known 'E###' on Linux + BSD
+  if dest[0] = #0 then
+    dest := StrError(error) // FPC RTL returns its plain text as shortstring
   else
-    FastSetString(result, @s[1], ord(s[0]));
+  begin
+    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
+    AppendShort(StrError(error), dest); // e.g. 'ECHILD (No child processes)'
+    AppendShortChar(')', @dest);
+  end;
 end;
 
 function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
