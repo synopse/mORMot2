@@ -62,6 +62,8 @@ type
     /// overriden method creating an index on the Method/MicroSec columns
     class procedure InitializeTable(const Server: IRestOrmServer;
       const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
+    /// fill Input as TDocVariantData
+    procedure SetInput(Json: PUtf8Char; Capacity: PtrInt);
   published
     /// the 'interface.method' identifier of this call
     // - this column will be indexed, for fast SQL queries, with the MicroSec
@@ -982,6 +984,11 @@ begin
   inherited;
   if FieldName = '' then
     Server.CreateSqlMultiIndex(self, ['Method', 'MicroSec'], false);
+end;
+
+procedure TOrmServiceLog.SetInput(Json: PUtf8Char; Capacity: PtrInt);
+begin
+  PDocVariantData(@fInput)^.InitJsonInPlace(Json, JSON_FAST_EXTENDED, nil, Capacity);
 end;
 
 
