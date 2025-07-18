@@ -69,9 +69,15 @@ procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 
 /// return trimmed next CSV string from P, ending value at #0 .. #13
+// - typically usage is to parse HTTP headers
 // - P=nil after call when P^ = #0 end of text is reached, or return P^ = #10
 procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
+
+/// return trimmed next CSV string from P, ending value at #0 .. #13
+// - as used internally by GetNextItemTrimedLine()
+procedure GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
+  out Item: PUtf8Char; out Len: integer);
 
 /// return trimmed next CSV string from P, ignoring any Escaped char
 // - P=nil after call when end of text is reached
@@ -2839,11 +2845,24 @@ end;
 procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 var
+  item: PUtf8Char;
+  len: integer;
+begin
+  GetNextItemTrimedLineBuffer(P, Sep, item, len);
+  FastSetString(result, item, len);
+end;
+
+procedure GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
+  out Item: PUtf8Char; out Len: integer);
+var
   S, E: PUtf8Char;
 begin
   if (P = nil) or
      (Sep <= ' ') then
-    result := ''
+  begin
+    Item := nil;
+    Len := 0;
+  end
   else
   begin
     while P^ in [#14 .. ' '] do
@@ -2856,7 +2875,8 @@ begin
     while (E > P) and
           (E[-1] in [#14 .. ' ']) do
       dec(E); // trim right
-    FastSetString(result, P, E - P);
+    Item := P;
+    Len := E - P;
     if (PWord(S)^ = CRLFW) or
        (S^ = Sep) then
       P := S + 1
