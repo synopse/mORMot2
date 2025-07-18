@@ -5713,9 +5713,11 @@ var
   json: RawUtf8;
 begin
   VarClear(result{%H-});
-  json := ObjectToJson(Value, Options);
-  if PDocVariantData(@result)^.InitJsonInPlace(
-      pointer(json), JSON_FAST) = nil then
+  if Value = nil then
+    exit;
+  ObjectToJson(Value, json, Options);
+  if PDocVariantData(@result)^.InitJsonInPlace(pointer(json), JSON_FAST, nil,
+       {capacity=}Rtti.FindClass(PClass(Value)^).PropsCount) = nil then
     VarClear(result);
 end;
 
@@ -5821,7 +5823,7 @@ begin
   VarClear(result);
   tempvoid := Rtti.RegisterClass(aClass).ClassNewInstance;
   try
-    json := ObjectToJson(tempvoid, [woDontStoreDefault]);
+    ObjectToJson(tempvoid, json, [woDontStoreDefault]);
     PDocVariantData(@result)^.InitJsonInPlace(pointer(json), aOptions);
   finally
     tempvoid.Free;
