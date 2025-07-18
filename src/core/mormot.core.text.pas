@@ -2258,6 +2258,10 @@ type
     /// direct access to the internal name/value pairs list
     property Cookies: THttpCookieDynArray
       read fCookies;
+    /// low-level access to the Cookie[ndx].Name/NameLen content
+    function Name(ndx: PtrInt): RawUtf8;
+    /// low-level access to the Cookie[ndx].Value/ValueLen content
+    function Value(ndx: PtrInt): RawUtf8;
   end;
   PHttpCookies = ^THttpCookies;
 
@@ -10460,6 +10464,24 @@ begin
   c := FindCookie(CookieName);
   if c <> nil then
     FastSetString(Value, c^.Value, c^.ValueLen);
+end;
+
+function THttpCookies.Name(ndx: PtrInt): RawUtf8;
+begin
+  if PtrUInt(ndx) < PtrUInt(length(fCookies)) then
+    with fCookies[ndx] do
+      FastSetString(result, Name, NameLen)
+  else
+    FastAssignNew(result);
+end;
+
+function THttpCookies.Value(ndx: PtrInt): RawUtf8;
+begin
+  if PtrUInt(ndx) < PtrUInt(length(fCookies)) then
+    with fCookies[ndx] do
+      FastSetString(result, Value, ValueLen)
+  else
+    FastAssignNew(result);
 end;
 
 
