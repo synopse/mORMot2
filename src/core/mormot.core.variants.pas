@@ -4287,7 +4287,7 @@ const
     'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',
     'String', 'UString', 'Any', 'Array', 'DocVariant');
 var
-  _VariantTypeNameAsInt: ShortString; // not thread-safe, but hardly called
+  _VariantTypeNameHex: TShort7 = '#0000'; // not thread-safe, but hardly called
 
 function VariantTypeName(V: PVarData): PShortString;
 var
@@ -4335,8 +4335,9 @@ begin
         ct := FindSynVariantType(vt);
         if ct = nil then
         begin
-          str(vt, _VariantTypeNameAsInt);
-          result := @_VariantTypeNameAsInt; // return VType as number
+          PCardinal(@tmp)^ := vt;
+          BinToHexDisplayLower(@tmp, @_VariantTypeNameHex[2], 2);
+          result := @_VariantTypeNameHex; // return VType as #hexa number
         end
         else
           result := PPointer(PPtrInt(ct)^ + vmtClassName)^;
