@@ -2201,15 +2201,20 @@ function ToText(m: TUriMethod): PUtf8Char; overload;
 
 type
   /// store one HTTP input cookie name/value pair
+  /// - cookies are still stored untouched in the headers raw buffer
   THttpCookie = record
-    /// the cookie name
+    /// start of the cookie name in the headers
     // - e.g. 'sessionId' for
     // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
-    Name: RawUtf8;
-    /// the actual cookie value, excluding its attributes
+    Name: PUtf8Char;
+    /// start of the cookie value in the headers, excluding its attributes
     // - e.g. 'e8bb43229de9' for
     // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
-    Value: RawUtf8;
+    Value: PUtf8Char;
+    /// the number of UTF-8 chars stored in Name - which is not #0 ended
+    NameLen: integer;
+    /// the number of UTF-8 chars stored in Value - which is not #0 ended
+    ValueLen: integer;
   end;
   /// referes to one HTTP input cookie
   PHttpCookie = ^THttpCookie;
@@ -2218,6 +2223,7 @@ type
 
   /// parse and store HTTP cookies received on server side
   // - shared by framework server classes, both at HTTP or REST levels
+  // - Cookie[] items do point to the ParseServer() headers buffer
   {$ifdef USERECORDWITHMETHODS}
   THttpCookies = record
   {$else}
@@ -2230,7 +2236,9 @@ type
     procedure Clear;
     /// parse the cookies from request HTTP headers on server side
     // - e.g. 'Cookie: name=value; name2=value2; name3=value3'
-    // - will first clear all existing cookies, then decode from headers
+    // - first clear all existing cookies, then decode from the supplied headers
+    // - note that the Head buffer should remain available and untouched during
+    // all the process of this instance, since Cookies[] points to this memory
     procedure ParseServer(Head: PUtf8Char);
     /// retrieve a cookie name/value pair in the internal storage
     function FindCookie(const CookieName: RawUtf8): PHttpCookie;
@@ -2242,14 +2250,11 @@ type
     // - should always previously check "if not ###Parsed then Parse()"
     procedure RetrieveCookie(const CookieName: RawUtf8; out Value: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
-    /// set or change a cookie value from its name
-    // - should always previously check "if not ###Parsed then Parse()"
-    procedure SetCookie(const CookieName, CookieValue: RawUtf8);
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
     // - should always previously check "if not ###Parsed then Parse()"
     property Cookie[const CookieName: RawUtf8]: RawUtf8
-      read GetCookie write SetCookie; default;
+      read GetCookie; default;
     /// direct access to the internal name/value pairs list
     property Cookies: THttpCookieDynArray
       read fCookies;
@@ -10378,8 +10383,7 @@ procedure THttpCookies.ParseServer(Head: PUtf8Char);
 var
   count, plen, total: PtrInt;
   p: PUtf8Char;
-  name, value: RawUtf8;
-  new: PHttpCookie;
+  new: THttpCookie;
 begin
   fCookies := nil; // first Clear any previous cookie
   count := 0;
@@ -10399,20 +10403,19 @@ begin
     repeat
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
-      GetNextItemTrimedLine(p, '=', name);
-      GetNextItemTrimedLine(p, ';', value);
-      if (name = '') and
-         (value = '') then
-        break;
+      GetNextItemTrimedLineBuffer(p, '=', new.Name, new.NameLen);
+      GetNextItemTrimedLineBuffer(p, ';', new.Value, new.ValueLen);
+      if (new.NameLen = 0) or
+         (new.ValueLen = 0) then
+        continue;
       if count >= COOKIE_MAXCOUNT_DOSATTACK then
         ESynException.RaiseU('RetrieveCookies overflow: DOS attempt?');
       if count = length(fCookies) then
         SetLength(fCookies, NextGrow(count));
-      new := @fCookies[count];
-      new^.Name := name;
-      new^.Value := value;
+      fCookies[count] := new;
       inc(count);
-    until p = nil; // next 'name2=value2; ...' pair
+    until (p = nil) or
+          (p^ < ' '); // next 'name2=value2; ...' pair
   end;
   if count <> 0 then
     DynArrayFakeLength(fCookies, count);
@@ -10420,38 +10423,28 @@ end;
 
 function THttpCookies.FindCookie(const CookieName: RawUtf8): PHttpCookie;
 var
-  i: integer;
+  n, l: integer;
 begin
-  result := nil;
-  if CookieName = '' then
-    exit;
-  result := pointer(fCookies);
-  if result = nil then
-    exit;
-  for i := 1 to length(fCookies) do
-    if result^.Name = CookieName then // cookies are case-sensitive
-      exit
-    else
-      inc(result);
-  result := nil;
-end;
-
-procedure THttpCookies.SetCookie(const CookieName, CookieValue: RawUtf8);
-var
-  n: PtrInt;
-  c: PHttpCookie;
-begin
-  c := FindCookie(CookieName);
-  if CookieName = '' then
-    exit;
-  if c = nil then // add a new cookie
+  if @self <> nil then
   begin
-    n := length(fCookies);
-    SetLength(fCookies, n + 1);
-    c := @fCookies[n];
-    c^.Name := CookieName;
+    result := pointer(fCookies);
+    if result = nil then
+      exit;
+    l := length(CookieName);
+    if l <> 0 then
+    begin
+      n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+      repeat
+        if (result^.NameLen = l) and
+           CompareMemFixed(result^.Name, pointer(CookieName), l) then
+          exit // cookies are case-sensitive
+        else
+          inc(result);
+        dec(n);
+      until n = 0;
+    end;
   end;
-  c^.Value := CookieValue; // may just replace an existing value
+  result := nil;
 end;
 
 function THttpCookies.GetCookie(const CookieName: RawUtf8): RawUtf8;
@@ -10464,11 +10457,9 @@ procedure THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
 var
   c: PHttpCookie;
 begin
-  if @self = nil then
-    exit;
   c := FindCookie(CookieName);
   if c <> nil then
-    Value := c^.Value;
+    FastSetString(Value, c^.Value, c^.ValueLen);
 end;
 
 
