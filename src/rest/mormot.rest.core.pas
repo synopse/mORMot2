@@ -1315,8 +1315,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetInCookie(const CookieName: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure SetInCookie(const CookieName, CookieValue: RawUtf8);
-      {$ifdef HASINLINE} inline; {$endif}
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
     procedure SetOutCookie(const aName, aValue: RawUtf8);
     function StatusCodeToText(Code: cardinal): PRawUtf8; virtual;
@@ -1369,10 +1367,14 @@ type
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
     property InCookie[const CookieName: RawUtf8]: RawUtf8
-      read GetInCookie write SetInCookie;
+      read GetInCookie;
     /// quickly check if an incoming HTTP cookie value has been transmitted
     function InCookieExists(const CookieName: RawUtf8): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// retrieve a cookie name/value pair in the internal storage
+    function InCookieSearch(const CookieName: RawUtf8): PHttpCookie;
+    /// low-level method called by InCookie[] and InCookieExists()
+    // - will parse once for any coookie in the headers, if needed
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
@@ -3905,33 +3907,33 @@ function TRestUriContext.InputCookies: PHttpCookies;
 var
   p: PUtf8Char;
 begin
-  result := @fInputCookies;
-  if fInputCookiesParsed then
-    exit;
-  fInputCookiesParsed := true;
-  p := FindNameValue(pointer(fCall^.InHead), 'COOKIE: ');
-  if p <> nil then
-    result^.ParseServer(p - 8);
+  if self <> nil then
+  begin
+    result := @fInputCookies;
+    if fInputCookiesParsed then
+      exit;
+    fInputCookiesParsed := true;
+    p := FindNameValue(pointer(fCall^.InHead), 'COOKIE: ');
+    if p <> nil then
+      result^.ParseServer(p - 8);
+  end
+  else
+    result := nil;
 end;
 
 function TRestUriContext.GetInCookie(const CookieName: RawUtf8): RawUtf8;
 begin
-  if self = nil then
-    result := ''
-  else
-    InputCookies^.RetrieveCookie(CookieName, result);
+  InputCookies^.RetrieveCookie(CookieName, result);
 end;
 
 function TRestUriContext.InCookieExists(const CookieName: RawUtf8): boolean;
 begin
-  result := (self <> nil) and
-            (InputCookies^.FindCookie(CookieName) <> nil);
+  result := InputCookies^.FindCookie(CookieName) <> nil;
 end;
 
-procedure TRestUriContext.SetInCookie(const CookieName, CookieValue: RawUtf8);
+function TRestUriContext.InCookieSearch(const CookieName: RawUtf8): PHttpCookie;
 begin
-  if self <> nil then
-    InputCookies^.SetCookie(CookieName, CookieValue);
+  result := InputCookies^.FindCookie(CookieName);
 end;
 
 procedure TRestUriContext.SetOutSetCookie(const aOutSetCookie: RawUtf8);
