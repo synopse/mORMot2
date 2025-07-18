@@ -2669,10 +2669,10 @@ var
   var
     str: pointer;
     sz: DWord;
-    u: SynUnicode;
+    u: TSynTempBuffer;
   begin
-    u := Utf8Decode(lngnfo + From);
-    if VerQueryValueW(pt, pointer(u), str, sz) and
+    sz := 0;
+    if VerQueryValueW(pt, Utf8ToWin32PWideChar(lngnfo + From, u), str, sz) and
        (sz > 0) then
       Win32PWideCharToUtf8(str, Res);
   end;
@@ -2711,15 +2711,15 @@ begin
            (siz2 >= 4) then
         begin
           _fmt('\StringFileInfo\%4.4x%4.4x\', [trans^[0], trans^[1]], lngnfo);
-          ReadResourceByName('CompanyName', CompanyName);
-          ReadResourceByName('FileDescription', FileDescription);
-          ReadResourceByName('FileVersion', FileVersion);
-          ReadResourceByName('InternalName', InternalName);
-          ReadResourceByName('LegalCopyright', LegalCopyright);
-          ReadResourceByName('OriginalFilename',OriginalFilename);
-          ReadResourceByName('ProductName', ProductName);
-          ReadResourceByName('ProductVersion', ProductVersion);
-          ReadResourceByName('Comments', Comments);
+          ReadResourceByName('CompanyName',      CompanyName);
+          ReadResourceByName('FileDescription',  FileDescription);
+          ReadResourceByName('FileVersion',      FileVersion);
+          ReadResourceByName('InternalName',     InternalName);
+          ReadResourceByName('LegalCopyright',   LegalCopyright);
+          ReadResourceByName('OriginalFilename', OriginalFilename);
+          ReadResourceByName('ProductName',      ProductName);
+          ReadResourceByName('ProductVersion',   ProductVersion);
+          ReadResourceByName('Comments',         Comments);
         end;
         result := true;
       end;
