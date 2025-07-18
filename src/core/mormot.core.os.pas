@@ -2529,11 +2529,11 @@ function GetErrorText(error: integer = 0): RawUtf8;
 function GetErrorShort(error: integer = 0): ShortString;
 
 /// returns a given error code as plain text ShortString
-procedure GetErrorShortVar(error: integer; var dest: ShortString); 
+procedure GetErrorShortVar(error: integer; var dest: ShortString);
 
 {$ifdef OSWINDOWS}
 
-/// return the error message of a given Module as generic string
+/// return the error message - maybe of a given Module - as generic string
 // - may be used e.g. in conjunction with Exception.CreateFmt()
 // - if ModuleName does not support this Code, will also try it as system error
 // - first try WinErrorConstant() for system error constants, then call

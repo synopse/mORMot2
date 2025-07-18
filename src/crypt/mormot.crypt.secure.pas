@@ -6533,7 +6533,8 @@ begin
       if Now32 >= fNextUnixTimeMinimalInvalidateCheck then
       begin // cleanup of deprecated invalid sessions once per minute
         fNextUnixTimeMinimalInvalidateCheck := Now32 + SecsPerMin;
-        RemoveSortedInt64SmallerThan(fContext.Invalid, fInvalidCount, Int64(Now32) shl 32);
+        RemoveSortedInt64SmallerThan(fContext.Invalid, fInvalidCount,
+          Int64(Now32) shl 32);
       end;
       if FastFindInt64Sorted(pointer(fContext.Invalid), fInvalidCount - 1,
            PInt64(@cc.head.session)^) >= 0 then // branchless O(log(n)) search

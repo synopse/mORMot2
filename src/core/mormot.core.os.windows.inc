@@ -582,16 +582,14 @@ begin
   if ModuleName <> nil then // first try from the supplied library name
     if WinError(Code, pointer(GetModuleHandle(ModuleName)), @result, nil) then
       exit;
-  result[0] := #0;
-  if not AppendWinErrorText(Code, result, #0) then // try known system constants
-    WinError(Code, nil, @result, nil); // fallback to FormatMessageW()
+  GetErrorShortVar(Code, result); // regular system information
 end;
 
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
   dest[0] := #0;
   if not AppendWinErrorText(error, dest, #0) then // try known system constants
-    WinError(error, nil, @dest, nil);          // fallback to FormatMessageW
+    WinError(error, nil, @dest, nil); // fallback to FormatMessageW
 end;
 
 procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
