@@ -379,7 +379,7 @@ type
     fTestCaseClass: array of TSynTestCaseClass;
     fAssertions: integer;
     fAssertionsFailed: integer;
-    fSafe: TSynLocker;
+    fSafe: TOSLock;
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
     fMultiThread: boolean;
@@ -1353,8 +1353,8 @@ end;
 
 constructor TSynTests.Create(const Ident: string);
 begin
+  fSafe.Init;
   inherited Create(Ident);
-  fSafe.InitFromClass;
 end;
 
 procedure TSynTests.EndSaveToFileExternal;

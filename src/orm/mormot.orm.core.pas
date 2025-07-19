@@ -4675,9 +4675,9 @@ type
   /// thread-safe class to store a BATCH sequence of writing operations
   TRestBatchLocked = class(TRestBatch)
   protected
+    fSafe: TOSLock;
     fResetTix: Int64;
     fThreshold: integer;
-    fSafe: TSynLocker;
   public
     /// initialize the BATCH instance
     constructor CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
@@ -4691,7 +4691,7 @@ type
       Options: TRestBatchOptions = [boExtendedJson]); override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker
+    property Safe: TOSLock
       read fSafe;
     /// property set to the current GetTickCount64 value when Reset was called
     property ResetTix: Int64
@@ -11702,15 +11702,15 @@ constructor TRestBatchLocked.CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
   InternalBufferSize: cardinal);
 begin
-  fSafe.InitFromClass;
+  fSafe.Init;
   inherited CreateNoRest(
     aModel, aTable, AutomaticTransactionPerRow, Options, InternalBufferSize);
 end;
 
 destructor TRestBatchLocked.Destroy;
 begin
-  fSafe.Done;
   inherited Destroy;
+  fSafe.Done;
 end;
 
 procedure TRestBatchLocked.Reset(aTable: TOrmClass;

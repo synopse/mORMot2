@@ -191,11 +191,11 @@ type
   // - do not use this class, but plain TSynAuthentication
   TSynAuthenticationAbstract = class
   protected
+    fSafe: TOSLock;
     fSessions: TIntegerDynArray;
     fSessionsCount: integer;
     fSessionGenerator: integer;
     fTokenSeed: Int64;
-    fSafe: TSynLocker;
     function ComputeCredential(previous: boolean;
       const UserName, PassWord: RawUtf8): cardinal; virtual;
     function GetPassword(const UserName: RawUtf8;
@@ -5727,7 +5727,7 @@ end;
 
 constructor TSynAuthenticationAbstract.Create;
 begin
-  fSafe.InitFromClass;
+  fSafe.Init;
   fTokenSeed := Random32Not0;
   fSessionGenerator := abs(fTokenSeed * PPtrInt(self)^);
   fTokenSeed := fTokenSeed * Random31Not0;
@@ -5735,8 +5735,8 @@ end;
 
 destructor TSynAuthenticationAbstract.Destroy;
 begin
-  fSafe.Done;
   inherited;
+  fSafe.Done;
 end;
 
 class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;

@@ -322,6 +322,7 @@ type
   protected
     fClient: TServiceFactoryClient;
     fRemote: TRest;
+    fAtomicPending: integer;
     fRetryPeriodSeconds: integer;
     procedure InternalExecute; override;
     procedure ProcessPendingNotification;
@@ -374,7 +375,7 @@ begin
     if pending.IDValue = 0 then
     begin
       pendings := GetPendingCountFromDB;
-      fSafe.LockedInt64[0] := pendings;
+      fAtomicPending := pendings;
       if pendings = 0 then
         exit
       else
@@ -382,7 +383,7 @@ begin
           '%.ProcessPendingNotification pending=% with no DB row',
           [self, pendings]);
     end;
-    pendings := fSafe.LockedInt64[0];
+    pendings := fAtomicPending;
     timer.Start;
     _VariantSaveJson(pending.Input, twJsonEscape, params);
     if (params <> '') and
@@ -415,7 +416,7 @@ begin
     pending.Sent := TimeLogNowUtc;
     pending.MicroSec := timer.LastTimeInMicroSec;
     fClient.fSendNotificationsRest.ORM.Update(pending, 'MicroSec,Sent', true);
-    fSafe.LockedInt64Increment(0, -1);
+    LockedDec32(@fAtomicPending);
   finally
     pending.Free;
   end;
@@ -425,11 +426,11 @@ procedure TServiceFactoryClientNotificationThread.InternalExecute;
 var
   delay: integer;
 begin
-  fSafe.LockedInt64[0] := GetPendingCountFromDB;
+  fAtomicPending := GetPendingCountFromDB;
   delay := 50;
   while not Terminated do
   begin
-    while fSafe.LockedInt64[0] > 0 do
+    while fAtomicPending > 0 do
     try
       ProcessPendingNotification;
       delay := 0;
@@ -577,8 +578,8 @@ begin
   begin
     SendNotificationsLog;
     if fSendNotificationsThread <> nil then
-      TServiceFactoryClientNotificationThread(fSendNotificationsThread).
-        Safe.LockedInt64Increment(0, 1);
+      LockedInc32(@TServiceFactoryClientNotificationThread(
+        fSendNotificationsThread).fAtomicPending);
     result := true;
   end
   else

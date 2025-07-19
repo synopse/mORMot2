@@ -1555,11 +1555,11 @@ type
   // - inherited classes should override InternalExecute abstract method
   TRestThread = class(TThreadAbstract)
   protected
+    fSafe: TOSLock;
     fRest: TRest;
     fOwnRest: boolean;
     fExecuting: boolean;
     fLog: TSynLog;
-    fSafe: TSynLocker;
     fEvent: TSynEvent;
     /// allows customization in overriden Create (before Execute)
     fThreadName: RawUtf8;
@@ -1592,7 +1592,7 @@ type
       read fOwnRest;
     /// a critical section is associated to this thread
     // - could be used to protect shared resources within the internal process
-    property Safe: TSynLocker
+    property Safe: TOSLock
       read fSafe;
     /// read-only access to the REST TSynLog instance matching this thread
     // - can be used safely within InternalExecute code
@@ -4291,9 +4291,9 @@ end;
 
 constructor TRestThread.Create(aRest: TRest; aOwnRest, aCreateSuspended: boolean);
 begin
+  fSafe.Init;
   if aRest = nil then
     EOrmException.RaiseUtf8('%.Create(aRest=nil)', [self]);
-  fSafe.InitFromClass;
   fRest := aRest;
   fOwnRest := aOwnRest;
   if fThreadName = '' then

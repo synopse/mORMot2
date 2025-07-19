@@ -504,6 +504,7 @@ type
   // TSqlDBServerSockets - this abstract class won't set any HTTP server
   TSqlDBServerAbstract = class
   protected
+    fSafe: TOSLightLock;
     fServer: THttpServerGeneric;
     fThreadPoolCount: integer;
     fPort, fDatabaseName: RawUtf8;
@@ -511,7 +512,6 @@ type
     fProcessLocked: boolean;
     fProperties: TSqlDBConnectionProperties;
     fProtocol: TSqlDBProxyConnectionProtocol;
-    fSafe: TSynLocker;
     // this is where the process would take place
     function Process(Ctxt: THttpServerRequestAbstract): cardinal;
   public
@@ -1889,6 +1889,7 @@ constructor TSqlDBServerAbstract.Create(aProperties: TSqlDBConnectionProperties;
   aThreadMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
   aAuthenticate: TSynAuthenticationAbstract);
 begin
+  fSafe.Init;
   fProperties := aProperties;
   if fProperties.InheritsFrom(TSqlDBConnectionPropertiesThreadSafe) then
   begin
@@ -1898,7 +1899,6 @@ begin
       fProcessLocked := true;
   end;
   fDatabaseName := aDatabaseName;
-  fSafe.InitFromClass;
   fPort := aPort;
   fHttps := aHttps;
   fThreadPoolCount := aThreadPoolCount;
