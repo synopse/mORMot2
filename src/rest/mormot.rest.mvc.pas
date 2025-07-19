@@ -515,13 +515,15 @@ type
     fOutputFlags: TMvcViewFlags;
     fCacheDisabled: boolean;
     fCacheCurrentInputValueKey: RawUtf8;
+    fHeaders: PUtf8Char;
     fInputContext: PVariant;
     function Redirects(const action: TMvcAction): boolean; override;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMvcViewsMustache instance
     constructor Create(aRun: TMvcRunWithViews; const aIP, aUserAgent: RawUtf8;
-      aTix32: cardinal; aContext: PVariant; aMethod: PInterfaceMethod); reintroduce; virtual;
+      aTix32: cardinal; aContext: PVariant; aHeaders: PUtf8Char;
+      aMethod: PInterfaceMethod); reintroduce; virtual;
     /// main execution method of the rendering process
     // - this overriden method would serialize InputContext^ into Input JSON,
     // and handle proper caching as defined by TMvcRunWithViews.SetCache()
@@ -2215,7 +2217,8 @@ begin
   else
     c := TMvcRendererFromViews;
   r := c.Create(self, Ctxt.Call^.LowLevelRemoteIP, Ctxt.Call^.LowLevelUserAgent,
-    Ctxt.TickCount64 div MilliSecsPerSec, @inputContext, meth);
+    Ctxt.TickCount64 div MilliSecsPerSec, @inputContext,
+    pointer(Ctxt.Call^.InHead), meth);
   try
     // handle OnBeforeRender custom callback
     if Assigned(fApplication.OnBeforeRender) then
@@ -2258,12 +2261,13 @@ end;
 
 constructor TMvcRendererReturningData.Create(aRun: TMvcRunWithViews;
   const aIP, aUserAgent: RawUtf8; aTix32: cardinal; aContext: PVariant;
-  aMethod: PInterfaceMethod);
+  aHeaders: PUtf8Char; aMethod: PInterfaceMethod);
 begin
   fRun := aRun;
   inherited Create(fRun.Application);
   fRemoteIP := aIP;
   fRemoteUserAgent := aUserAgent;
+  fHeaders := aHeaders;
   fTix32 := aTix32;
   fInputContext := aContext;
   fMethod := aMethod;
