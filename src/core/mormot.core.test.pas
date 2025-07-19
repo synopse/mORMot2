@@ -88,10 +88,12 @@ type
   // the "Sample\07 - SynTest" folder
   TSynTest = class(TSynPersistent)
   protected
-    fTests: array of TSynTestMethodInfo;
-    fIdent: string;
+    fAssertions: integer; // defined here for padding - used by TSynTestCase
+    fAssertionsFailed: integer;
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
+    fTests: array of TSynTestMethodInfo;
+    fIdent: string;
     fWorkDir: TFileName;
     function GetCount: integer;
     function GetIdent: string;
@@ -149,8 +151,6 @@ type
   TSynTestCase = class(TSynTest)
   protected
     fOwner: TSynTests;
-    fAssertions: integer;
-    fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
     fBackgroundRun: TLoggedWorker;
@@ -376,10 +376,9 @@ type
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
   protected
-    fTestCaseClass: array of TSynTestCaseClass;
-    fAssertions: integer;
     fAssertionsFailed: integer;
     fSafe: TOSLock;
+    fTestCaseClass: array of TSynTestCaseClass;
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
     fMultiThread: boolean;
@@ -1338,12 +1337,12 @@ var
   i: PtrInt;
 begin
   for i := 0 to high(TestCase) do
-    PtrArrayAdd(fTestCaseClass, TestCase[i]);
+    PtrArrayAddOnce(fTestCaseClass, TestCase[i]);
 end;
 
 procedure TSynTests.AddCase(TestCase: TSynTestCaseClass);
 begin
-  PtrArrayAdd(fTestCaseClass, TestCase);
+  PtrArrayAddOnce(fTestCaseClass, TestCase);
 end;
 
 function TSynTests.BeforeRun: IUnknown;
