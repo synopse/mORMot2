@@ -2857,43 +2857,40 @@ var
   item: PUtf8Char;
   len: integer;
 begin
-  GetNextItemTrimedLineBuffer(P, Sep, item, len);
-  FastSetString(result, item, len);
+  if (P <> nil) and
+     (Sep > ' ') then
+  begin
+    GetNextItemTrimedLineBuffer(P, Sep, item, len);
+    FastSetString(result, item, len);
+  end
+  else
+    FastAssignNew(result);
 end;
 
 procedure GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
   out Item: PUtf8Char; out Len: integer);
 var
   S, E: PUtf8Char;
-begin
-  if (P = nil) or
-     (Sep <= ' ') then
-  begin
-    Item := nil;
-    Len := 0;
-  end
+begin // caller should ensure that (P <> nil) and (Sep > ' ')
+  while P^ in [#14 .. ' '] do
+    inc(P); // trim left
+  S := P;
+  while (S^ > #13) and
+        (S^ <> Sep) do
+    inc(S); // go to end of value
+  E := S;
+  while (E > P) and
+        (E[-1] in [#14 .. ' ']) do
+    dec(E); // trim right
+  Item := P;
+  Len := E - P;
+  if (PWord(S)^ = CRLFW) or
+     (S^ = Sep) then
+    P := S + 1
+  else if S^ = #10 then
+    P := S
   else
-  begin
-    while P^ in [#14 .. ' '] do
-      inc(P); // trim left
-    S := P;
-    while (S^ > #13) and
-          (S^ <> Sep) do
-      inc(S); // go to end of value
-    E := S;
-    while (E > P) and
-          (E[-1] in [#14 .. ' ']) do
-      dec(E); // trim right
-    Item := P;
-    Len := E - P;
-    if (PWord(S)^ = CRLFW) or
-       (S^ = Sep) then
-      P := S + 1
-    else if S^ = #10 then
-      P := S
-    else
-      P := nil; // end of text or malformatted
-  end;
+    P := nil; // end of text or malformatted
 end;
 
 procedure GetNextItemTrimedEscaped(var P: PUtf8Char; Sep, Esc: AnsiChar;
@@ -10384,7 +10381,7 @@ begin
 end;
 
 procedure THttpCookies.ParseServer(Head: PUtf8Char);
-var
+var // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cookie
   count, plen, total: PtrInt;
   p: PUtf8Char;
   new: THttpCookie;
@@ -10407,7 +10404,7 @@ begin
     repeat
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
-      GetNextItemTrimedLineBuffer(p, '=', new.NameStart, new.NameLen);
+      GetNextItemTrimedLineBuffer(p, '=', new.NameStart,  new.NameLen);
       GetNextItemTrimedLineBuffer(p, ';', new.ValueStart, new.ValueLen);
       if (new.NameLen = 0) or
          (new.ValueLen = 0) then
