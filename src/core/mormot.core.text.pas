@@ -2265,6 +2265,15 @@ type
   end;
   PHttpCookies = ^THttpCookies;
 
+/// quickly parse a 'Cookie: Name=Value' from within HTTP headers
+// - returns the length of the found Value, or 0 if Name did not match
+// - could be directly applied e.g. to TBinaryCookieGenerator.Validate()
+function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
+  out Value: PUtf8Char): integer; overload;
+
+/// quickly return Value from 'Cookie: Name=Value' within HTTP headers
+function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8): RawUtf8; overload;
+
 const
   /// server can use this cookie value to delete a cookie on the browser side
   COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
@@ -10479,6 +10488,44 @@ begin
       FastSetString(result, ValueStart, ValueLen)
   else
     FastAssignNew(result);
+end;
+
+function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
+  out Value: PUtf8Char): integer;
+var
+  p, n: PUtf8Char;
+  plen: PtrInt;
+  l: integer;
+begin // same logic than THttpCookies.ParseServer above
+  if Name <> '' then
+    while Headers <> nil do
+    begin
+      p := FindNameValuePointer(Headers, 'COOKIE:', plen);
+      if p = nil then
+        break;
+      Headers := GotoNextLine(p + plen);
+      repeat
+        if IdemPChar(p, '__SECURE-') then
+          inc(p, 9);
+        GetNextItemTrimedLineBuffer(p, '=', n, l);
+        GetNextItemTrimedLineBuffer(p, ';', Value, result);
+        if (l = length(Name)) and
+           (result <> 0) and
+           mormot.core.base.CompareMem(n, pointer(Name), l) then
+          exit; // found the cookie and return its value
+      until (p = nil) or
+            (p^ < ' ');
+    end;
+  result := 0;
+end;
+
+function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8): RawUtf8;
+var
+  l: integer;
+  v: PUtf8Char;
+begin
+  l := CookieFromHeaders(Headers, Name, v);
+  FastSetString(result, v, l);
 end;
 
 

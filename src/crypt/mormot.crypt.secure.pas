@@ -1613,6 +1613,8 @@ type
       PIssued: PUnixTime = nil; Invalidate: boolean = false;
       Now32: TUnixTimeMinimal = 0): TBinaryCookieGeneratorSessionID; overload;
     /// decode a base64uri cookie buffer and optionally fill an associated record
+    // - input Cookie/CookieLen could be obtained via CookieFromHeaders() or
+    // via THttpCookies from mormot.core.text
     function Validate(Cookie: PUtf8Char; CookieLen: PtrInt; PRecordData: pointer;
       PRecordTypeInfo: PRttiInfo; PExpires: PUnixTime = nil;
       PIssued: PUnixTime = nil; Invalidate: boolean = false;
@@ -6580,7 +6582,6 @@ begin
   if result then
     fAes.Init(fContext.CryptKey, 128, {avx=}false);
 end;
-
 
 
 { ************* Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories }
