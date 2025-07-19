@@ -1694,7 +1694,7 @@ begin
   cookie := ServiceRunningContext.Request.InCookieSearch(fContext.CookieName);
   if cookie <> nil then
   begin
-    Value := cookie^.ValueStart;
+    Value  := cookie^.ValueStart;
     result := cookie^.ValueLen;
   end
   else
@@ -1703,7 +1703,7 @@ end;
 
 function TMvcSessionWithRestServer.Exists: boolean;
 begin
-  result := ServiceRunningContext.Request.InCookieExists(fContext.CookieName);
+  result := ServiceRunningContext.Request.InCookieSearch(fContext.CookieName) <> nil;
 end;
 
 procedure TMvcSessionWithRestServer.SetCookie(const cookie: RawUtf8);
