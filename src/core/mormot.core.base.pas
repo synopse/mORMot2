@@ -862,7 +862,7 @@ procedure FastAssignNew(var d; s: pointer = nil);
 
 /// internal function to assign any constant or ref-counted AnsiString/RawUtf8
 // - caller should have tested that pointer(d) <> nil
-procedure FastAssignNewNotVoid(var d; s: pointer); overload;
+procedure FastAssignNewNotVoid(var d; s: pointer = nil); overload;
   {$ifndef FPC_CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// internal function used by FastSetString/FastSetStringCP

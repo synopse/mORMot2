@@ -3109,7 +3109,7 @@ function StreamReadAll(S: TStream; Buffer: pointer; Size: PtrInt): boolean;
 /// read a File content into a string, using FileSize() to guess its length
 // - content can be binary or text
 // - returns '' if file was not found or any read error occurred
-// - uses RawByteString for byte storage, whatever the codepage is
+// - uses RawByteString for byte storage, forcing CP_UTF8 for FPC consistency
 function StringFromFile(const FileName: TFileName): RawByteString;
 
 /// read a File content from a list of potential files

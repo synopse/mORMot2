@@ -1927,6 +1927,11 @@ function EnsureDirectoryExists(const Part: array of const;
 function NormalizeDirectoryExists(const Part: array of const;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
 
+/// ensure all \ / path delimiters are normalized into the current OS expectation
+// - if SafeFileNameU() succeeded, convert from UTF-8 into FileName
+function NormalizeUriToFileName(const Uri: RawUtf8; var FileName: TFileName;
+  const FolderName: TFileName = ''): boolean;
+
 /// a wrapper around FileExists(MakePath(Part))
 // - can optionally set the file name into a variable if it did exist
 function FileExistsMake(const Part: array of const;
@@ -9743,6 +9748,20 @@ function NormalizeDirectoryExists(const Part: array of const;
 begin
   result := EnsureDirectoryExists(NormalizeFileName(MakePath(Part)),
     RaiseExceptionOnCreationFailure);
+end;
+
+function NormalizeUriToFileName(const Uri: RawUtf8; var FileName: TFileName;
+  const FolderName: TFileName): boolean;
+var
+  fn: RawUtf8;
+begin
+  fn := StringReplaceChars(Uri, '/', PathDelim);
+  result := SafeFileNameU(fn);
+  if result then
+    if FolderName = '' then
+      Utf8ToFileName(fn, FileName)
+    else
+      FileName := MakePath([FolderName, fn]);
 end;
 
 function FileExistsMake(const Part: array of const;
