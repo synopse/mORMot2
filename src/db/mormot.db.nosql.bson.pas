@@ -3649,8 +3649,7 @@ begin
       begin
         VarRecToTempUtf8(@value, tmp);
         BsonWriteText(name, tmp.Text, tmp.Len);
-        if tmp.TempRawUtf8 <> nil then
-          RawUtf8(tmp.TempRawUtf8) := '';
+        TempUtf8Done(tmp);
       end;
   else
     EBsonException.RaiseUtf8(

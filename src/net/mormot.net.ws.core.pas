@@ -2254,7 +2254,7 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  item: array[0..5] of TTempUtf8; // no memory allocation
+  item: array[0..5] of TTempUtf8; // no TempRawUtf8 memory allocation
   it: PTempUtf8;
   len, i: PtrInt;
   P: PUtf8Char;

@@ -5086,8 +5086,7 @@ begin
               AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
             else
               AddShort(tmp.Text, tmp.Len); // numbers
-            if tmp.TempRawUtf8 <> nil then
-              RawUtf8(tmp.TempRawUtf8) := '';  // release temp memory
+            TempUtf8Done(tmp);
             AddDirect(')', ':');
           end;
           inc(P);

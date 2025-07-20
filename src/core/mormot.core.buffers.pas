@@ -4617,12 +4617,7 @@ end;
 procedure TBufferWriter.WriteVar(var Item: TTempUtf8);
 begin
   WriteVar(Item.Text, Item.Len);
-  if Item.TempRawUtf8 <> nil then
-    {$ifdef FPC}
-    FastAssignNew(Item.TempRawUtf8);
-    {$else}
-    RawUtf8(Item.TempRawUtf8) := '';
-    {$endif FPC}
+  TempUtf8Done(Item);
 end;
 
 procedure TBufferWriter.Write(const Text: RawByteString);

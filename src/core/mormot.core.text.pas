@@ -1698,9 +1698,19 @@ function IPToCardinal(const aIP: RawUtf8): cardinal; overload;
 
 { ************ Text Formatting functions }
 
+const
+  /// which TVarRec.VType are numbers, e.g. don't need to be quoted as JSON
+  // - vtVariant may be a string or a complex type
+  vtNotString = [vtBoolean, vtInteger, vtInt64, {$ifdef FPC} vtQWord, {$endif}
+                 vtCurrency, vtExtended];
+
 type
-  /// a memory structure which avoids a temporary RawUtf8 allocation
+  /// a memory structure which avoids smallest temporary RawUtf8 allocations
   // - used by VarRecToTempUtf8/VariantToTempUtf8 and FormatUtf8/FormatShort
+  // - would allocate a RawUtf8 in TempRawUtf8 only if needed, but use the
+  // Temp[0..23] buffer for numbers or small text conversion - caller should
+  // ensure to call TempUtf8Done(Res) once finished with it
+  // - you should eventually release TempRawUtf8 by calling TempUtf8Done()
   TTempUtf8 = record
     Len: PtrInt;
     Text: PUtf8Char;
@@ -1709,10 +1719,12 @@ type
   end;
   PTempUtf8 = ^TTempUtf8;
 
-/// convert any Variant into a JSON-compatible UTF-8 encoded temporary buffer
-// - this function would allocate a RawUtf8 in Res.TempRawUtf8 only if needed,
-// but use the supplied Res.Temp[] buffer for numbers to text conversion -
-// caller should ensure to make RawUtf8(Res.TempRawUtf8) := '' once done with it
+/// release Res.TempRawUtf8 after VariantToTempUtf8/VarRecToTempUtf8
+// - is faster than FastAssignNew() since we know that its RefCnt = 1
+procedure TempUtf8Done(var Res: TTempUtf8);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any Variant into a TTempUtf8 transient instance
 // - wasString is set if the V value was a text
 // - empty and null variants will be stored as 'null' text - as expected by JSON
 // - booleans will be stored as 'true' or 'false' - as expected by JSON
@@ -1720,25 +1732,15 @@ type
 procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
   var wasString: boolean);
 
-const
-  /// which TVarRec.VType are numbers, e.g. don't need to be quoted as JSON
-  // - vtVariant may be a string or a complex type
-  vtNotString = [vtBoolean, vtInteger, vtInt64, {$ifdef FPC} vtQWord, {$endif}
-                 vtCurrency, vtExtended];
-
-/// convert an open array (const Args: array of const) argument to an UTF-8
-// encoded text
+/// convert an open array (const Args: array of const) argument into a TTempUtf8
+// - it would return true if Res.Len > 0, so Res could be added or processed
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToUtf8(V: PVarRec; var result: RawUtf8;
   wasString: PBoolean = nil);
 
-/// convert an open array (const Args: array of const) argument to an UTF-8
-// encoded text, using a specified temporary buffer
-// - this function would allocate a RawUtf8 in Res.TempRawUtf8 only if needed,
-// but use the supplied Res.Temp[] buffer for numbers to text conversion -
-// caller should ensure to make RawUtf8(Res.TempRawUtf8) := '' once done with it
+/// convert an open array (const Args: array of const) argument into a TTempUtf8
 // - it would return the number of UTF-8 bytes, i.e. Res.Len
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
@@ -4028,6 +4030,17 @@ begin
                               ((Value and $3f) shl 16)) + $202020;
 end;
 
+procedure TempUtf8Done(var Res: TTempUtf8);
+var
+  sr: PStrRec;
+begin
+  sr := Res.TempRawUtf8;
+  if sr = nil then
+    exit; // no temporary memory allocation to release
+  dec(sr);
+  FreeMem(sr); // we know that sr^.refCnt = 1
+end;
+
 
 { TTextWriter }
 
@@ -4243,8 +4256,7 @@ begin
   begin // avoid UTF-8 conversion for plain numbers or if no HTML escaping
     VariantToTempUtf8(PVariant(Value)^, tmp, wasString);
     AddHtmlEscape(tmp.Text, tmp.Len);
-    if tmp.TempRawUtf8 <> nil then
-      FastAssignNew(tmp.TempRawUtf8);
+    TempUtf8Done(tmp);
   end
   else
     AddVariant(PVariant(Value)^, twNone); // fast TJsonWriter.AddVariant
@@ -5093,7 +5105,7 @@ begin
         tmp := FastNewString(max); // allocate temporary (big) buffer
         P := pointer(engine.AnsiBufferToUtf8(tmp, P, Len, {notrail0=}true));
         AddNoJsonEscape(tmp, P - tmp);
-        FastAssignNew(tmp);
+        FastAssignNewNotVoid(tmp);
       end;
     end;
   end;
@@ -9007,9 +9019,9 @@ begin
   else
     Res.Len := 0;
   end;
-  result := Res.Len;
   if wasString <> nil then
     wasString^ := isString;
+  result := Res.Len <> 0;
 end;
 
 procedure VarRecToUtf8(V: PVarRec; var result: RawUtf8; wasString: PBoolean);
@@ -9365,12 +9377,7 @@ begin
   repeat
     MoveFast(d^.Text^, Dest^, d^.Len); // no MoveByOne() - may be huge result
     inc(Dest, d^.Len);
-    if d^.TempRawUtf8 <> nil then
-      {$ifdef FPC}
-      FastAssignNew(d^.TempRawUtf8);
-      {$else}
-      RawUtf8(d^.TempRawUtf8) := '';
-      {$endif FPC}
+    TempUtf8Done(d^);
     inc(d);
   until d = last;
 end;
@@ -9391,12 +9398,7 @@ begin
         // avoid buffer overflow
         MoveFast(d^.Text^, Dest^, Max - PtrUInt(Dest));
         repeat
-          if d^.TempRawUtf8 <> nil then
-            {$ifdef FPC}
-            FastAssignNew(d^.TempRawUtf8); // release temp RawUtf8
-            {$else}
-            RawUtf8(d^.TempRawUtf8) := '';
-            {$endif FPC}
+          TempUtf8Done(d^);
           inc(d);
         until d = last; // avoid memory leak
         result := PUtf8Char(Max);
@@ -9404,12 +9406,7 @@ begin
       end;
       MoveFast(d^.Text^, Dest^, d^.Len);
       inc(Dest, d^.Len);
-      if d^.TempRawUtf8 <> nil then
-        {$ifdef FPC}
-        FastAssignNew(d^.TempRawUtf8);
-        {$else}
-        RawUtf8(d^.TempRawUtf8) := '';
-        {$endif FPC}
+      TempUtf8Done(d^);
       inc(d);
     until d = last;
   end;
