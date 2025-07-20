@@ -1128,11 +1128,9 @@ function Utf8ToString(const Text: RawUtf8): string;
 
 /// convert any UTF-8 encoded String into a RTL string
 procedure Utf8ToStringVar(const Text: RawUtf8; var result: string);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded String into a generic RTL file name string
 procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded buffer into a RTL string
 // - it's prefered to use TLanguageFile.Utf8ToString() in mORMoti18n,
@@ -1160,6 +1158,7 @@ procedure Utf8ToWideString(Text: PUtf8Char; Len: PtrInt; var result: WideString)
 
 /// convert any UTF-8 encoded String into a generic SynUnicode Text
 function Utf8ToSynUnicode(const Text: RawUtf8): SynUnicode; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded String into a generic SynUnicode Text
 procedure Utf8ToSynUnicode(const Text: RawUtf8; var result: SynUnicode); overload;
