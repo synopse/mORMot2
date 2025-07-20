@@ -36,15 +36,11 @@ interface
         {$define ZLIBPAS}    // aarch64-win64: no static yet
       {$endif CPUINTEL}
     {$else}
-      {$ifdef CPUARM}
-        {$define ZLIBPAS}  // issues were reported on some Raspberry PI
+      {$ifdef OSANDROID}
+        {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)
       {$else}
-        {$ifdef OSANDROID}
-          {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)
-        {$else}
-          {$define ZLIBEXT}  // FPC other POSIX: system's libz.so
-        {$endif OSANDROID}
-      {$endif CPUARM32}
+        {$define ZLIBEXT}  // FPC other POSIX: system's libz.so
+      {$endif OSANDROID}
     {$endif OSWINDOWS}
   {$else not FPC}
     {$ifdef WIN32}
