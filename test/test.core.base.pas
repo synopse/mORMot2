@@ -5723,14 +5723,14 @@ begin
   CsvToRawUtf8DynArray('item1   item2    item3', arr, {sep=}' ',
     {TrimItems=}true , {AddVoidItems=}false);
   CheckEqual(length(arr), 3);
-  Check(arr[0] = 'item1');
-  Check(arr[1] = 'item2');
-  Check(arr[2] = 'item3');
-  Check(AddPrefixToCsv('One,Two,Three', 'Pre') = 'PreOne,PreTwo,PreThree');
-  Check(CsvOfValue('?', 3) = '?,?,?');
-  Check(GetUnQuoteCsvItem('"""one,""","two "', 1, ',', '"') = 'two ');
-  Check(GetUnQuoteCsvItem('''''''one,''''''', 0) = '''one,''');
-  Check(GetUnQuoteCsvItem('"""one,', 0, ',', '"') = '');
+  CheckEqual(arr[0], 'item1');
+  CheckEqual(arr[1], 'item2');
+  CheckEqual(arr[2], 'item3');
+  CheckEqual(AddPrefixToCsv('One,Two,Three', 'Pre'), 'PreOne,PreTwo,PreThree');
+  CheckEqual(CsvOfValue('?', 3), '?,?,?');
+  CheckEqual(GetUnQuoteCsvItem('"""one,""","two "', 1, ',', '"'), 'two ');
+  CheckEqual(GetUnQuoteCsvItem('''''''one,''''''', 0), '''one,''');
+  CheckEqual(GetUnQuoteCsvItem('"""one,', 0, ',', '"'), '');
   Check(not CsvContains('', 'b'));
   Check(not CsvContains('a', ''));
   Check(CsvContains('a', 'a'));
@@ -5861,6 +5861,7 @@ begin
   AppendLine(U, ['bcdef']);
   CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef');
   Append(U, #13#10);
+  CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef'#13#10);
   AppendLine(U, ['ghij']);
   CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef'#13#10'ghij');
   U := QuotedStr('', '"');
