@@ -401,13 +401,13 @@ var
 
   procedure WaitUntilNotified;
   var
-    timeout: Int64;
+    timeout: cardinal;
   begin
-    timeout := GetTickCount64 + 5000;
+    timeout := GetTickSec + 5; // never wait forever
     while (subscribed.value <> 6) and
-          (GetTickCount64 < timeout) do
+          (GetTickSec < timeout) do
       sleep(1);
-    check(subscribed.value = 6);
+    CheckEqual(subscribed.value, 6, 'timeout');
   end;
 
 begin

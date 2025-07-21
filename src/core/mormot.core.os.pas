@@ -2666,8 +2666,9 @@ var
 function GetTickCount64: Int64;
 {$endif OSWINDOWS}
 
-/// returns a system-wide current monotonic timestamp as seconds
-// - returns GetTickCount64 div 1000 as a 32-bit unsigned integer value
+/// returns a system-wide current monotonic timestamp as 32-bit seconds
+// - simply wrap GetTickCount64 div 1000 on Windows, or call clock_gettime()
+// and return directly its timespec.tv_sec part on POSIX
 function GetTickSec: cardinal;
   {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 

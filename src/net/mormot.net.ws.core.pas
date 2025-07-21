@@ -88,7 +88,7 @@ type
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
-    /// equals GetTickCount64 shr 10, as used for TWebSocketFrameList timeout
+    /// equals GetTickSec, as used for TWebSocketFrameList timeout
     tix: cardinal;
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
@@ -1802,7 +1802,7 @@ begin
       if fTimeoutSec = 0 then
         continue;
       if currentSec = 0 then
-        currentSec := GetTickCount64 shr MilliSecsPerSecShl;
+        currentSec := GetTickSec;
       if currentSec > item^.tix then
         Delete(i);
     end;
@@ -1821,7 +1821,7 @@ begin
   if fTimeoutSec <= 0 then
     currentSec := 0
   else if currentSec = 0 then
-    currentSec := GetTickCount64 shr MilliSecsPerSecShl;
+    currentSec := GetTickSec;
   Safe.Lock;
   try
     n := Count;
@@ -2957,7 +2957,7 @@ end;
 
 destructor TWebSocketProcess.Destroy;
 var
-  timeout: Int64;
+  endtix: cardinal;
   log: ISynLog;
 begin
   if fState = wpsCreate then
@@ -2979,11 +2979,11 @@ begin
     if log <> nil then
       log.Log(sllDebug, 'Destroy: wait for fProcessCount=% fProcessEnded=%',
         [fProcessCount, fProcessEnded], self);
-    timeout := GetTickCount64 + 5000;
+    endtix := GetTickSec + 5;
     repeat
       SleepHiRes(1);
     until ((fProcessCount = 0) and fProcessEnded) or
-          (GetTickCount64 > timeout);
+          (GetTickSec > endtix);
     if log <> nil then
       log.Log(sllDebug,
         'Destroy: waited fProcessCount=%', [fProcessCount], self);
@@ -3209,14 +3209,14 @@ end;
 
 procedure TWebSocketProcess.WaitThreadStarted;
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin
-  endtix := GetTickCount64 + 5000;
+  endtix := GetTickSec + 5;
   repeat
     SleepHiRes(0);
   until fProcessEnded or
         (fState <> wpsCreate) or
-        (GetTickCount64 > endtix);
+        (GetTickSec > endtix);
 end;
 
 function TWebSocketProcess.HiResDelay(var start: Int64): Int64;
@@ -3281,7 +3281,7 @@ begin
         WebSocketLog.Add.Log(sllDebug,
           'NotifyCallback: Waiting for AnswerToIgnore=%',
           [fIncoming.AnswerToIgnore], self);
-        start := GetTickCount64;
+        start := GetTickCount64; // HiResDelay() requires ms resolution
         max := start + 30000; // never wait forever
         repeat
           tix := HiResDelay(start); // 0/1/5/50/120-250 ms steps

@@ -5229,8 +5229,9 @@ type
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
     // should better rely on OnProgress() callback for any GUI application
-    // - by default, it will wait forever so that process is finished, but you
-    // can set a time out (in seconds) after which the process will be aborted
+    // - by default, it will wait forever (up to 5 minutes to be precise), so
+    // that process is finished, but you can set a time out (in seconds) after
+    // which the process will be aborted
     // - could be used with BackupBackground() and StepPageNumber=-1 to perform
     // a whole copy of a database in one shot:
     // ! if aDB.BackupBackground('backup.db3',-1,0,nil) then
@@ -7406,22 +7407,22 @@ procedure TSqlDataBase.BackupBackgroundWaitUntilFinished(
   end;
 
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin
   if fBackupBackgroundInProcess = nil then
     exit;
   if TimeOutSeconds < 0 then
-    // TimeOutSeconds=-1 for infinite wait (unsafe!) -> 1 minute seems enough
-    TimeOutSeconds := 60;
+    // TimeOutSeconds=-1 for infinite wait (unsafe!) -> 5 minutes seems enough
+    TimeOutSeconds := 5 * SecsPerMin;
   fLog.Add.Log(sllDB,'BackupBackgroundWaitUntilFinished(%) wait on % - %',
     [TimeOutSeconds, FileNameWithoutPath, StepAsText], self);
-  endtix := GetTickCount64 + TimeOutSeconds shl MilliSecsPerSecShl;
+  endtix := GetTickSec + cardinal(TimeOutSeconds);
   repeat
     // wait for "natural" process ending
     SleepHiRes(10);
     if fBackupBackgroundInProcess = nil then
       exit;
-  until GetTickCount64 > endtix;
+  until GetTickSec > endtix;
   fLog.Add.Log(sllDB,'BackupBackgroundWaitUntilFinished force abort on % - %',
     [FileNameWithoutPath, StepAsText], self);
   Lock;
@@ -7429,12 +7430,12 @@ begin
     // notify Execute to force loop abortion
     fBackupBackgroundInProcess.Terminate;
   UnLock;
-  endtix := GetTickCount64 + TimeOutSeconds shl MilliSecsPerSecShl;
+  endtix := GetTickSec + cardinal(TimeOutSeconds);
   repeat
     // wait for the background process to be actually aborted
     SleepHiRes(10);
   until (fBackupBackgroundInProcess = nil) or
-        (GetTickCount64 > endtix);
+        (GetTickSec > endtix);
   fLog.Add.Log(sllError,'BackupBackgroundWaitUntilFinished(%) ended on % - %',
     [TimeOutSeconds, FileNameWithoutPath, StepAsText],self);
 end;

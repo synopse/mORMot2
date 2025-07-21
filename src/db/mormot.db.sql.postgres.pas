@@ -1599,7 +1599,7 @@ end;
 function TSqlDBPostgresAsync.Prepare(const Sql: RawUtf8; ExpectResults: boolean;
   Options: TSqlDBPostgresAsyncStatementOptions): TSqlDBPostgresAsyncStatement;
 var
-  tix, endtix: Int64;
+  tix32, endtix: cardinal;
   i: PtrInt;
 begin
   // initialize the background thread and connection if needed
@@ -1635,10 +1635,10 @@ begin
       Unlock; // there may be some tasks pending in the background thread
     end;
     SleepHiRes(1);
-    tix := GetTickCount64;
+    tix32 := GetTickSec;
     if endtix = 0 then
-      endtix := tix + 5000 // never wait forever
-    else if tix > endtix then
+      endtix := tix32 + 5 // never wait forever
+    else if tix32 > endtix then
       ESqlDBPostgresAsync.RaiseUtf8('%.NewStatement timeout', [self]);
   until false;
   // initialize the new statement within the acquired lock

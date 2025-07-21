@@ -3304,7 +3304,7 @@ end;
 function TRestBackgroundTimer.AsyncBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
-  start, tix, timeout: Int64;
+  start, tix, timeout: Int64; // SleepStep() uses ms resolution
   {%H-}log: ISynLog;
 begin
   result := false;

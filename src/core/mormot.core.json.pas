@@ -1236,7 +1236,7 @@ const
   DIC_VALUE      = 3;   // Values.Value pointer
   DIC_COMPALGO   = 4;   // CompressAlgo pointer
   DIC_TIMESEC    = 5;   // Timeouts Seconds integer
-  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
+  DIC_TIMETIX    = 6;   // last GetTickSec of DeleteDeprecated process
 
 type
   /// exception raised during TSynDictionary process
@@ -1552,7 +1552,7 @@ type
     // likely to be up to twice faster than letting the table grow by chunks
     property Capacity: integer
       read GetCapacity write SetCapacity;
-    /// direct low-level access to the internal access tick (GetTickCount64 shr 10)
+    /// direct low-level access to the internal access tick (GetTickSec)
     // - may be nil if TimeOutSeconds=0
     property TimeOut: TCardinalDynArray
       read fTimeOut;
@@ -9600,7 +9600,7 @@ begin
     Reset;
   if fTimeoutSeconds = 0 then
     exit;
-  tix := GetTickCount64 shr MilliSecsPerSecShl;
+  tix := GetTickSec;
   if fTimeoutTix > tix then
     Reset;
   fTimeoutTix := tix + fTimeoutSeconds;
@@ -9694,7 +9694,7 @@ begin
   fSafe.Padding[DIC_KEYCOUNT].VType   := varInteger;  // Keys.Count
   fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count
   fSafe.Padding[DIC_TIMESEC].VType    := varInteger;  // Timeouts Seconds
-  fSafe.Padding[DIC_TIMETIX].VType    := varInteger;  // GetTickCount64 shr 10
+  fSafe.Padding[DIC_TIMETIX].VType    := varInteger;  // GetTickSec
   fSafe.PaddingUsedCount := DIC_TIMETIX + 1;          // manual registration
   fKeys.InitSpecific(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, aKeySpecific,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive, aHasher);
@@ -9739,7 +9739,7 @@ function TSynDictionary.ComputeNextTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result <> 0 then
-    result := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + result;
+    inc(result, GetTickSec);
 end;
 
 function TSynDictionary.GetCapacity: integer;
@@ -9815,7 +9815,7 @@ end;
 function TSynDictionary.DeleteDeprecated(tix64: Int64): integer;
 var
   i, tomove: PtrInt;
-  now: cardinal;
+  tix32: cardinal;
 begin
   result := 0;
   if (self = nil) or
@@ -9823,15 +9823,16 @@ begin
      (fSafe.Padding[DIC_TIMESEC].VInteger = 0) then // nothing in fTimeOut[]
     exit;
   if tix64 = 0 then
-    tix64 := GetTickCount64;
-  now := tix64 shr MilliSecsPerSecShl;
-  if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
+    tix32 := GetTickSec
+  else
+    tix32 := tix64 div MilliSecsPerSec;
+  if fSafe.Padding[DIC_TIMETIX].VInteger = integer(tix32) then
     exit; // no need to search more often than every second
   fSafe.ReadWriteLock; // would upgrade to cWrite only if needed
   try
-    fSafe.Padding[DIC_TIMETIX].VInteger := now;
+    fSafe.Padding[DIC_TIMETIX].VInteger := tix32;
     for i := fSafe.Padding[DIC_KEYCOUNT].VInteger - 1 downto 0 do
-      if (now > fTimeOut[i]) and
+      if (tix32 > fTimeOut[i]) and
          (fTimeOut[i] <> 0) and
          (not Assigned(fOnCanDelete) or
           fOnCanDelete(fKeys.ItemPtr(i)^, fValues.ItemPtr(i)^, i)) then
@@ -10083,8 +10084,8 @@ begin
     else if aUpdateTimeOut then
     begin
       tim := fSafe.Padding[DIC_TIMESEC].VInteger;
-      if tim > 0 then // inlined fTimeout[result] := GetTimeout
-        fTimeout[result] := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
+      if tim <> 0 then // inlined fTimeout[result] := GetTimeout
+        fTimeout[result] := GetTickSec + tim;
     end;
   end
   else
@@ -10113,7 +10114,7 @@ var
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
   if tim <> 0 then
-    tim := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
+    inc(tim, GetTickSec);
   ndx := fKeys.FindHashedForAdding(aKey, added);
   if added then
   begin
@@ -10362,7 +10363,7 @@ begin
     exit;
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then
-    fTimeOut[aIndex] := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
+    fTimeOut[aIndex] := GetTickSec + tim;
 end;
 
 procedure TSynDictionary.SaveToJson(W: TJsonWriter; EnumSetsAsText: boolean);

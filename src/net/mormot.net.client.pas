@@ -2373,7 +2373,7 @@ begin
      not (rfProgressiveStatic in Ctxt.ResponseFlags) then
     exit;
   // prepare to wait for the data to be available
-  tix := GetTickCount64 shr MilliSecsPerSecShl;
+  tix := GetTickSec;
   if Ctxt.ProgressiveTix = 0 then
     Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first seen
   // retrieve the file name to be processed

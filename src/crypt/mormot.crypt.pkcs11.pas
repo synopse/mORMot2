@@ -573,14 +573,14 @@ end;
 
 procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin // caller did "if not fConfigRetrieved then EnsureRetrieveConfig"
-  endtix := GetTickCount64 + MilliSecsPerMin; // never wait forever
+  endtix := GetTickSec + SecsPerMin; // never wait forever
   repeat
-    SleepHiRes(100);
+    SleepHiRes(50);
     if fConfigRetrieved then
       exit;
-  until GetTickCount64 > endtix;
+  until GetTickSec > endtix;
   ECryptCertPkcs11.RaiseUtf8('%.EnsureRetrieveConfig timeout', [self]);
 end;
 

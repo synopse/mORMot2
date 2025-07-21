@@ -783,7 +783,7 @@ end;
 function TSqlDBProxyConnectionProtocol.TransactionStarted(
   connection: TSqlDBConnection; sessionID: integer): boolean;
 var
-  tixend, tix: Int64;
+  tixend, tix: Int64; // retry resolution is in ms
 begin
   if sessionID = 0 then
     ESqlDBRemote.RaiseUtf8(
@@ -797,7 +797,7 @@ begin
       'commit/execute/rollback should be in the same thread/connection',
       [self, connection.Properties]);
   tix := GetTickCount64;
-  tixend := tix + fTransactionRetryTimeout;
+  tixend := tix + fTransactionRetryTimeout; // typical 100ms retry timeout
   repeat
     fSafe.Lock;
     try
@@ -1304,7 +1304,7 @@ end;
 procedure TSqlDBProxyConnection.StartTransaction;
 var
   started: boolean;
-  endtix: Int64;
+  endtix: Int64; // timeout is in ms resolution
 begin
   inherited StartTransaction;
   started := false;

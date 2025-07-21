@@ -448,7 +448,7 @@ type
     // - equals 0 if disabled or aborted
     // - several THttpRequestContext could share the same ID
     ProgressiveID: THttpPartialID;
-    /// internal per-second ticks set by THttpServerSocketGeneric.DoProgressive
+    /// internal GetTickSec set by THttpServerSocketGeneric.DoProgressive
     ProgressiveTix: cardinal;
     /// reset this request context to be used prior to any ProcessInit/Read/Write
     procedure Reset;
@@ -1720,11 +1720,11 @@ type
     FileName: TFileName;
     Trigger: THttpRotaterTrigger;
     Files: integer;
-    NextTix10: cardinal;
+    NextTix32: cardinal;  // = GetTickSec
     TriggerDate: integer; // = next Trunc(NowUtc)
     OnRotate: procedure(Event: THttpRotaterEvent) of object; // owner access
     procedure Setup(aTrigger: THttpRotaterTrigger; aFiles: integer);
-    procedure TryRotate(Tix10: cardinal; Size: QWord);
+    procedure TryRotate(Tix32: cardinal; Size: QWord);
     procedure PrepareNextRotateDate(dt: TDateTime);
     procedure DoRotate;
   end;
@@ -1735,8 +1735,8 @@ type
     fHost: RawUtf8;
     fOwner: THttpLogger;
     fRotate: THttpRotater;
-    fLastWriteToStreamTix10: cardinal;
-    procedure TryRotate(Tix10: cardinal);
+    fLastWriteToStreamTix32: cardinal; // = GetTickSec
+    procedure TryRotate(Tix32: cardinal);
       {$ifdef HASINLINE} inline; {$endif}
     procedure OnRotate(Event: THttpRotaterEvent);
     procedure WriteToStream(data: pointer; len: PtrUInt); override;
@@ -1839,13 +1839,13 @@ type
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
     fFlags: set of (ffHadDefineHost, ffOwnWriterSingle);
     fVariables: THttpLogVariables;
-    fTimeTix10: cardinal;
+    fTimeTix32: cardinal; // = GetTickSec
     fTimeText: array[hlvTime_Iso8601 .. hlvTime_Http] of THttpDateNowUtc;
-    procedure SetTimeText(Tix64: Int64);
+    procedure SetTimeText(Tix32: cardinal; Tix64: Int64);
     procedure SetSettings(aSettings: THttpLoggerSettings);
     function GetWriterFileName(const aHost: RawUtf8; aError: boolean): TFileName; virtual;
     procedure CreateMainWriters;
-    function GetWriter(Tix10: cardinal; const Host: RawUtf8;
+    function GetWriter(Tix32: cardinal; const Host: RawUtf8;
       Error: boolean): TTextDateWriter;
   public
     /// initialize this multi-host logging instance
@@ -4994,7 +4994,7 @@ begin
   end;
 end;
 
-procedure THttpRotater.TryRotate(Tix10: cardinal; Size: QWord);
+procedure THttpRotater.TryRotate(Tix32: cardinal; Size: QWord);
 var
   needrotate: boolean;
   dt: TDateTime;
@@ -5009,9 +5009,9 @@ begin
     hrtWeekly:
       begin
         needrotate := Size >= 100 shl 20; // always rotate above 100MB
-        if NextTix10 >= Tix10 then
+        if NextTix32 >= Tix32 then
         begin
-          NextTix10 := Tix10 + 60 * 60; // check TriggerDate every hour
+          NextTix32 := Tix32 + 60 * 60; // check TriggerDate every hour
           dt := NowUtc;
           if Trunc(dt) >= TriggerDate then
           begin
@@ -5104,17 +5104,17 @@ end;
 
 { THttpLoggerWriter }
 
-procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
+procedure THttpLoggerWriter.TryRotate(Tix32: cardinal);
 begin
   if (fStream <> nil) and
      (fRotate.Trigger > hrtDisabled) then
-    fRotate.TryRotate(Tix10, fTotalFileSize + PendingBytes);
+    fRotate.TryRotate(Tix32, fTotalFileSize + PendingBytes);
 end;
 
 procedure THttpLoggerWriter.WriteToStream(data: pointer; len: PtrUInt);
 begin
   // no need of THttpLogger.OnIdle to flush this log file within this second
-  fLastWriteToStreamTix10 := GetTickCount64 shr MilliSecsPerSecShl;
+  fLastWriteToStreamTix32 := GetTickSec;
   // perform the actual flush to disk
   inherited WriteToStream(data, len);
 end;
@@ -5223,7 +5223,7 @@ end;
 procedure THttpLogger.OnIdle(tix64: Int64);
 var
   i: PtrInt;
-  tix10: cardinal;
+  tix32: cardinal;
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
@@ -5236,15 +5236,15 @@ begin
   try
     // force write to disk at least every second
     if fWriterSingle <> nil then
-      fWriterSingle.FlushFinal // plain TTextDateWriter with no tix10
+      fWriterSingle.FlushFinal // plain TTextDateWriter with no tix32
     else if (fWriterHost <> nil) and
             fWriterHostSafe.TryLock then
       try
-        tix10 := tix64 shr MilliSecsPerSecShl;
+        tix32 := tix64 div MilliSecsPerSec;
         for i := 0 to length(fWriterHost) - 1 do
           with fWriterHost[i] do
-            if fLastWriteToStreamTix10 <> tix10 then
-              FlushFinal; // no TryRotate(tix10) since may be slow
+            if fLastWriteToStreamTix32 <> tix32 then
+              FlushFinal; // no TryRotate(tix32) since may be slow
       finally
         fWriterHostSafe.UnLock;
       end;
@@ -5279,7 +5279,7 @@ begin
   ObjArrayAdd(fWriterHost, fWriterHostError);
 end;
 
-function THttpLogger.GetWriter(Tix10: cardinal;
+function THttpLogger.GetWriter(Tix32: cardinal;
   const Host: RawUtf8; Error: boolean): TTextDateWriter;
 var
   n: integer;
@@ -5354,7 +5354,7 @@ begin
       end;
   end;
   // try rotation before appending any new information - and outside of the lock
-  THttpLoggerWriter(result).TryRotate(Tix10);
+  THttpLoggerWriter(result).TryRotate(Tix32);
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
@@ -5491,11 +5491,11 @@ begin
     DynArrayFakeLength(fUnknownPosLen, un);
 end;
 
-procedure THttpLogger.SetTimeText(Tix64: Int64);
+procedure THttpLogger.SetTimeText(Tix32: cardinal; Tix64: Int64);
 var
   now: TSynSystemTime;
 begin
-  fTimeTix10 := Tix64 shr MilliSecsPerSecShl; // acquire it asap
+  fTimeTix32 := Tix32; // acquire it asap
   // dates are all in UTC/GMT as it should on any serious server design
   FromGlobalTime(now, {local=}false, Tix64); // call OS outside of the lock
   fSafe.Lock; // update all cached text in an atomic way
@@ -5509,7 +5509,7 @@ end;
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   n, urllen: integer;
-  tix10, crc, reqcrc, uricrc: cardinal;
+  tix32, crc, reqcrc, uricrc: cardinal;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
@@ -5524,9 +5524,9 @@ begin
     exit;
   // retrieve the output stream for the expected .log file
   if Context.Tix64 = 0 then
-    Context.Tix64 := GetTickCount64;
-  tix10 := Context.Tix64 shr MilliSecsPerSecShl;
-  wr := GetWriter(tix10, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
+    Context.Tix64 := GetTickCount64; // retrieve from OS and cache for below
+  tix32 := Context.Tix64 div MilliSecsPerSec;
+  wr := GetWriter(tix32, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
   if (wr = nil) or
      (wr.Stream = nil) then
     exit;
@@ -5539,8 +5539,8 @@ begin
     if urllen < 0 then
       urllen := length(RawUtf8(Context.Url));
   end;
-  if fTimeTix10 <> tix10 then
-    SetTimeText(Context.Tix64); // update cached time texts every second
+  if fTimeTix32 <> tix32 then
+    SetTimeText(tix32, Context.Tix64); // update cached time texts every second
   reqcrc := 0;
   uricrc := 0;
   if (hlvRequest_Hash in fVariables) or
@@ -5687,7 +5687,7 @@ begin
     until n = 0;
     wr.AddShorter(LINE_FEED[fSettings.LineFeed]);
     if (fWriterSingle = nil) and
-       (THttpLoggerWriter(wr).fLastWriteToStreamTix10 <> tix10) then
+       (THttpLoggerWriter(wr).fLastWriteToStreamTix32 <> tix32) then
       wr.FlushFinal; // force write to disk at least every second
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -5804,7 +5804,7 @@ begin
     else
       FillcharFast(fState, SizeOf(fState), 0);
   ComputeConsolidateTime(hapAll, fromgz);
-  tix := GetTickCount64 div 1000;
+  tix := GetTickSec;
   if fromgz <> 0 then
     Consolidate(tix); // consolidate old data
   if fSuspendFileAutoSaveMinutes <> 0 then
@@ -6416,7 +6416,7 @@ begin
   try
     // try rotation before appending any new information - and outside Safe.lock
     if fRotate.Trigger > hrtDisabled then
-      fRotate.TryRotate(GetTickCount64 shr 10, FileSize(FileName));
+      fRotate.TryRotate(GetTickSec, FileSize(FileName));
     // append the new information using DoSave() overriden method
     fSafe.Lock;
     try

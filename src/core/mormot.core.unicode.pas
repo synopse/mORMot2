@@ -2465,7 +2465,7 @@ type
     fSafe: TRWLightLock;
     fFiles: TRawUtf8DynArray;
     fFolder: TFileName;
-    fNextTix, fFlushSeconds: integer;
+    fNextTix, fFlushSeconds: cardinal;
     fSubFolders: boolean;
     procedure SetFolder(const aFolder: TFileName);
     procedure SetSubFolders(aSubFolders: boolean);
@@ -2495,7 +2495,7 @@ type
     /// after how many seconds OnIdle() should flush the internal cache
     // - default is 60, i.e. 1 minute
     // - you can set 0 to disable any auto-flush from OnIdle()
-    property FlushSeconds: integer
+    property FlushSeconds: cardinal
       read fFlushSeconds write fFlushSeconds;
   end;
 {$endif OSPOSIX}
@@ -10064,14 +10064,18 @@ begin
 end;
 
 procedure TPosixFileCaseInsensitive.OnIdle(tix64: Int64);
+var
+  tix32: cardinal;
 begin
   if (self = nil) or
      (fFiles = nil) or
      (fFlushSeconds = 0) then
     exit;
   if tix64 = 0 then
-    tix64 := GetTickCount64;
-  if tix64 shr MilliSecsPerSecShl < fNextTix then
+    tix32 := GetTickSec
+  else
+    tix32 := tix64 div MilliSecsPerSec;
+  if tix32 < fNextTix then
     exit;
   fSafe.WriteLock;
   try
@@ -10116,7 +10120,7 @@ begin
           aReadMs^ := stop - start;
         end;
         if fFlushSeconds <> 0 then
-          fNextTix := (GetTickCount64 shr MilliSecsPerSecShl) + fFlushSeconds;
+          fNextTix := GetTickSec + fFlushSeconds;
       end;
     finally
       fSafe.WriteUnLock;

@@ -2788,8 +2788,8 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fSafe: TRWLock; // thread-safe and not blocking concurrent IsLocked()
-    fID: TIDDynArray;       // array [0..Count-1] of locked TID
-    fTix: TIntegerDynArray; // GetTickCount64 shr 10 values at the Lock() time
+    fID: TIDDynArray;        // array [0..Count-1] of locked TID
+    fTix: TCardinalDynArray; // GetTickSec values at the Lock() time
     fCount: PtrInt;
     fLastPurge: integer;
   public
@@ -10568,7 +10568,7 @@ begin
         n := fCount;
       end;
       fID[n] := aID;
-      fTix[n] := GetTickCount64 shr MilliSecsPerSecShl;
+      fTix[n] := GetTickSec;
       inc(fCount);
     finally
       fSafe.WriteUnLock;
@@ -10653,22 +10653,22 @@ begin
      (fCount = 0) or
      (MinutesFromNow = 0) then
     exit; // nothing to purge
-  old := GetTickCount64 shr MilliSecsPerSecShl; // as seconds
+  old := GetTickSec;
   if old - fLastPurge < 60 then
     exit; // no need to purge more than once per minute
   fLastPurge := old;
-  dec(old, MinutesFromNow * 60);
+  dec(old, cardinal(MinutesFromNow) * 60);
   if old <= 0 then
     exit; // this computer just started
   fSafe.WriteLock;
   try
     n := 0;
     for i := 0 to fCount - 1 do // brute force is fast enough every minute
-      if fTix[i] >= old then
+      if fTix[i] >= cardinal(old) then
       begin
         if n <> i then
         begin
-          fID[n] := fID[i];
+          fID[n]  := fID[i]; // in-place purge
           fTix[n] := fTix[i];
         end;
         inc(n);

@@ -928,7 +928,7 @@ var
   tp: timespec;
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
-  result := QWord(tp.tv_sec);
+  result := tp.tv_sec; // no division needed
 end;
 
 function GetUptimeSec: cardinal;
@@ -4185,7 +4185,7 @@ begin
     result := true // TERM sent and no wait needed
   else
   begin
-    tix := GetTickCount64 + waitseconds * MilliSecsPerSec;
+    tix := GetTickCount64 + waitseconds * MilliSecsPerSec; // need ms resolution
     repeat
       // RunUntilSigTerminated() below should eventually delete the .pid file
       SleepHiRes(10);

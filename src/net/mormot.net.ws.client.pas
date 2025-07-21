@@ -414,7 +414,7 @@ end;
 destructor TWebSocketProcessClient.Destroy;
 var
   t: TWebSocketProcessClientThread;
-  tix: Int64;
+  tix: cardinal;
   {%H-}log: ISynLog;
 begin
   t := fOwnerThread as TWebSocketProcessClientThread;
@@ -422,9 +422,9 @@ begin
   try
     // focConnectionClose would be handled in this thread -> close client thread
     t.Terminate;
-    tix := GetTickCount64 + 7000; // never wait forever
+    tix := GetTickSec + 7; // never wait forever
     while (t.fThreadState = sRun) and
-          (GetTickCount64 < tix) do
+          (GetTickSec < tix) do
       SleepHiRes(1);
     t.fProcess := nil;
   finally

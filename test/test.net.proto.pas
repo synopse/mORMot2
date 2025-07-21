@@ -830,7 +830,7 @@ end;
 procedure TNetworkProtocols.RunLdapClient(Sender: TObject);
 var
   rev: RawUtf8;
-  endtix: Int64;
+  endtix: cardinal;
   one: TLdapClient;
   dv: variant;
 begin
@@ -869,14 +869,14 @@ begin
   // retry reverse lookup DNS after some time
   if synopsednsip <> '' then
   begin
-    endtix := GetTickCount64 + 2000; // never wait forever
+    endtix := GetTickSec + 5; // never wait forever
     repeat
       inc(fAssertions);
       rev := DnsReverseLookup(synopsednsip);
       if rev <> '' then
         break; // success
       Sleep(100); // wait a little and retry up to 2 seconds
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     CheckSynopseReverse(self, rev);
   end;
 end;
@@ -908,7 +908,7 @@ var
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   dn: TNameValueDNs;
-  endtix: Int64;
+  endtix: cardinal;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
@@ -968,14 +968,14 @@ begin
   CheckEqual(DnsLookup('1.2.3.4'), '1.2.3.4');
   if hasinternet then
   begin
-    endtix := GetTickCount64 + 2000; // never wait forever
+    endtix := GetTickSec + 5; // never wait forever
     repeat
       inc(fAssertions);
       ip := DnsLookup('synopse.info');
       if ip <> '' then
         break;
       Sleep(100); // some DNS servers may fail at first: wait a little
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     rev := '62.210.254.173';
     CheckEqual(ip, rev, 'dns1');
     repeat
@@ -984,7 +984,7 @@ begin
       if ip <> '' then
         break;
       Sleep(100); // some DNS servers may fail at first: wait a little
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     CheckEqual(ip, rev, 'dns2');
     inc(fAssertions);
     rev := DnsReverseLookup(ip);
@@ -1892,7 +1892,7 @@ var
 
   procedure WaitNotProcessing(const Context: string);
   var
-    endtix: Int64;
+    endtix: Int64; // ms resolution
   begin
     if not (gasProcessing in hpc.State) then
     begin

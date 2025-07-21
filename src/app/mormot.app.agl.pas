@@ -132,8 +132,8 @@ type
     fStarted: RawUtf8;
     fRunner: TSynAngelizeRunner;
     fRunnerExitCode: integer;
+    fNextWatch: cardinal; // GetTickSec
     fAbortExitCodes: TIntegerDynArray;
-    fNextWatch: Int64;
     fLastNotify: TDoNotify;
     fLastNotifyMsg: RawUtf8;
     procedure SetState(NewState: TServiceState; const Fmt: RawUtf8;
@@ -874,7 +874,7 @@ begin
       // any exception on DoOne() should break the starting
       fOwner.DoOne(log, self, acDoStart, fStart[a]);
   if fWatch <> nil then
-    fNextWatch := GetTickCount64 + fWatchDelaySec * MilliSecsPerSec;
+    fNextWatch := GetTickSec + cardinal(fWatchDelaySec);
 end;
 
 function TSynAngelizeService.DoStop(log: TSynLog): boolean;
@@ -1969,7 +1969,7 @@ end;
 procedure TSynAngelize.WatchEverySecond(Sender: TSynBackgroundThreadProcess);
 var
   i, a: PtrInt;
-  tix: Int64;
+  tix32: cardinal;
   s: TSynAngelizeService;
   cmd: RawUtf8;
   log: ISynLog;
@@ -1988,7 +1988,7 @@ begin
   // note that a process monitored from a "Start": [ "start:/path/to/file" ]
   // previous command is watched in its monitoring thread, not here
   one := nil;
-  tix := GetTickCount64;
+  tix32 := GetTickSec;
   // check all pending watch steps
   for i := 0 to high(fSet.Service) do // ordered by s.Level
   begin
@@ -1996,7 +1996,7 @@ begin
     s := fSet.Service[i];
     if s.Disabled or
        (s.fNextWatch = 0) or
-       (tix < s.fNextWatch) then
+       (tix32 < s.fNextWatch) then
       continue;
     EnsureLogExists;
     // execute all "Watch":[...,...,...] actions
@@ -2008,8 +2008,8 @@ begin
           one.Log(sllWarning, 'WatchEverySecond: DoWatch(%,%) raised %',
             [s.Name, s.fWatch[a], PClass(E)^], self);
       end;
-    tix := GetTickCount64; // may have changed during DoWatch() progress
-    s.fNextWatch := tix + s.WatchDelaySec * MilliSecsPerSec;
+    tix32 := GetTickSec; // may have changed during DoWatch() progress
+    s.fNextWatch := tix32 + cardinal(s.WatchDelaySec);
   end;
   // command line support
   if FileExists(fSas.CommandFile) then

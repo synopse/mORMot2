@@ -227,7 +227,7 @@ end;
 type
   TProxySocket = class(THttpServerSocket)
   protected
-    fExpires: cardinal; // shr MilliSecsPerSecShl
+    fExpires: cardinal; // GetTickSec
   published
     property Method;
     property URL;
@@ -280,10 +280,10 @@ begin
         cookie := sock.HeaderGetValue('X-SESSIONCOOKIE');
         if cookie = '' then
           exit;
+        now := GetTickSec;
         fPendingGet.Safe.WriteLock;
         try
           found := -1;
-          now := GetTickCount64 shr MilliSecsPerSecShl;
           for i := fPendingGet.Count - 1 downto 0 do
           begin
             old := fPendingGet.ObjectPtr[i];

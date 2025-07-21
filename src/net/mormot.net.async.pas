@@ -701,7 +701,7 @@ type
     procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
       const identargs: array of const; const data: TRawByteStringBuffer);
     /// the current monotonic time elapsed, evaluated in seconds
-    // - IdleEverySecond will set GetTickCount64 div 1000
+    // - IdleEverySecond will set GetTickCount64 div 1000 = GetTickSec
     property LastOperationSec: TAsyncConnectionSec
       read fLastOperationSec;
     /// allow idle connection to release its internal Connection.rd/wr buffers
@@ -2634,7 +2634,7 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
-  tix: Int64;
+  tix32: cardinal;
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
 begin
@@ -2712,12 +2712,12 @@ begin
   end;
   {$endif USE_WINIOCP}
   // wait for all threads to be started
-  tix := mormot.core.os.GetTickCount64 + 7000;
+  tix32 := GetTickSec + 7;
   repeat
      if AllThreadsStarted then
        break;
      SleepHiRes(1);
-  until mormot.core.os.GetTickCount64 > tix;
+  until GetTickSec > tix32;
   // setup custom threads affinity
   if acoThreadCpuAffinity in aOptions then
     SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
@@ -5173,7 +5173,7 @@ begin
     RefreshBlackListUri(fAsync.LastOperationSec);
   {$ifdef OSPOSIX}
   if Assigned(fSspiKeyTab) and
-     fSspiKeyTab.TryRefresh(fAsync.fLastOperationMS) then
+     fSspiKeyTab.TryRefresh(fAsync.fLastOperationSec) then
     fAsync.DoLog(sllDebug, 'IdleEverySecond: refreshed %', [fSspiKeyTab], self);
   {$endif OSPOSIX}
 end;

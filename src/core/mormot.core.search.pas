@@ -798,7 +798,7 @@ type
     fRevision: Int64;
     fSnapShotAfterMinutes: cardinal;
     fSnapshotAfterInsertCount: cardinal;
-    fSnapshotTimestamp: Int64;
+    fSnapshotTimestamp: cardinal; // GetTickSec
     fSnapshotInsertCount: cardinal;
     fKnownRevision: Int64;
     fKnownStore: RawByteString;
@@ -4744,7 +4744,7 @@ begin
     if fSnapShotAfterMinutes = 0 then
       fSnapshotTimestamp := 0
     else
-      fSnapshotTimestamp := GetTickCount64 + fSnapShotAfterMinutes * MilliSecsPerMin;
+      fSnapshotTimestamp := GetTickSec + fSnapShotAfterMinutes * SecsPerMin;
   finally
     fSafe.WriteUnLock;
   end;
@@ -4764,7 +4764,7 @@ begin
             (fSnapshotInsertCount > fSnapshotAfterInsertCount) or
             ((fSnapshotInsertCount > 0) and
              (fSnapshotTimestamp <> 0) and
-             (GetTickCount64 > fSnapshotTimestamp)) then
+             (GetTickSec > fSnapshotTimestamp)) then
     begin
       DiffSnapshot;
       head.kind := bdFull;

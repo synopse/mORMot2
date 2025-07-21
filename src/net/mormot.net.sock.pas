@@ -4375,16 +4375,16 @@ end;
 destructor TPollSockets.Destroy;
 var
   i: PtrInt;
-  endtix: Int64; // never wait forever
+  endtix: cardinal; // never wait forever
 begin
   Terminate;
   if fGettingOne > 0 then
   begin
     if Assigned(fOnLog) then
       fOnLog(sllTrace, 'Destroy: wait for fGettingOne=%', [fGettingOne], self);
-    endtix := mormot.core.os.GetTickCount64 + 5000;
+    endtix := GetTickSec + 5;
     while (fGettingOne > 0) and
-          (mormot.core.os.GetTickCount64 < endtix) do
+          (GetTickSec < endtix) do
       SleepHiRes(1);
     if Assigned(fOnLog) then
       fOnLog(sllTrace, 'Destroy: ended as fGettingOne=%', [fGettingOne], self);

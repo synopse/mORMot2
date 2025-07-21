@@ -1543,7 +1543,7 @@ begin
         fOnLog(sllDebug, 'Destroy waiting=%', [fWaiting], self);
       IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify again (paranoid)
       SleepHiRes(10);
-      tix := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
+      tix := GetTickSec;
       if endtix = 0 then
         endtix := tix + 5
       else if tix > endtix then

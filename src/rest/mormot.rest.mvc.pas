@@ -1492,7 +1492,7 @@ begin
     EMvcException.RaiseUtf8('%.Render(methodIndex=%)', [self, methodIndex]);
   tix32 := 0;
   if fViewTemplateFileTimestampMonitor <> 0 then
-    tix32 := GetTickCount64 shr MilliSecsPerSecShl;
+    tix32 := GetTickSec;
   v := @fViews[methodIndex];
   v^.Safe.Lock;
   try
@@ -2343,7 +2343,7 @@ begin
   begin
     FastAssignNew(fCacheCurrentInputValueKey);
     if fTix32 = 0 then
-      fTix32 := GetTickCount64 div MilliSecsPerSec;
+      fTix32 := GetTickSec;
     c^.Safe.Lock;
     try
       case c^.Policy of

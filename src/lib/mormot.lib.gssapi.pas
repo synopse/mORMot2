@@ -593,7 +593,7 @@ type
     /// can be called at Idle every few seconds to check if a keytab file changed
     // - it will allow hot reload of the keytab, only if needed
     // - returns true if the keytab was identified as changed
-    function TryRefresh(Tix64: Int64): boolean;
+    function TryRefresh(Tix32: cardinal): boolean;
     /// parse HTTP input headers and perform Negotiate/Kerberos authentication
     // - will identify 'Authorization: Negotiate <base64 encoding>' HTTP header
     // - returns '' on error, or the 'WWW-Authenticate:' header on success
@@ -1451,14 +1451,15 @@ begin
   SetKeyTab(aKeyTab); // encapsulate the function to be used as a setter method
 end;
 
-function TServerSspiKeyTab.TryRefresh(Tix64: Int64): boolean;
+function TServerSspiKeyTab.TryRefresh(Tix32: cardinal): boolean;
 begin
   result := false;
+  Tix32 := Tix32 shr 1;
   if (self = nil) or
      (fKeyTab = '') or
-     (Tix64 shr 11 = fLastRefresh) then // try at most every two seconds
+     (Tix32 = fLastRefresh) then // try at most every two seconds
     exit;
-  fLastRefresh := Tix64 shr 11;
+  fLastRefresh := Tix32;
   result := SetKeyTab(fKeyTab);
 end;
 
@@ -1484,8 +1485,8 @@ begin
   if (self <> nil) and
      (fKeyTab <> '') then
   begin
-    TryRefresh(GetTickCount64); // check the local keytab file every two seconds
-    PrepareKeyTab;              // thread specific setup for ServerSspiAuth()
+    TryRefresh(GetTickSec); // check the local keytab file every two seconds
+    PrepareKeyTab;          // thread specific setup for ServerSspiAuth()
   end;
   InvalidateSecContext(ctx);
   try

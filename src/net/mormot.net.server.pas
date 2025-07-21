@@ -4200,9 +4200,9 @@ end;
 procedure THttpServerSocketGeneric.WaitStarted(
   Seconds: integer; TLS: PNetTlsContext);
 var
-  endtix: Int64;
+  tix32: cardinal;
 begin
-  endtix := mormot.core.os.GetTickCount64 + Seconds shl MilliSecsPerSecShl;
+  tix32 := GetTickSec + cardinal(Seconds);
   repeat
     if Terminated then
       exit;
@@ -4214,7 +4214,7 @@ begin
           [self, fExecuteMessage]);
     end;
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > endtix then
+    if GetTickSec > tix32 then
       EHttpServer.RaiseUtf8('%.WaitStarted timeout % after % seconds [%]',
         [self, ToText(GetExecuteState)^, Seconds, fExecuteMessage]);
   until false;
@@ -4469,7 +4469,7 @@ begin
   if list = '' then
   begin
     log.Log(sllTrace, 'RefreshBlackListUriExecute will retry soon enough', self);
-    tix32 := mormot.core.os.GetTickCount64 div 1000 + SecsPerMin * 30;
+    tix32 := GetTickSec + SecsPerMin * 30;
     if tix32 < fBlackListUriNextTix then
       fBlackListUriNextTix := tix32; // retry at least twice an hour
     exit;
@@ -4877,7 +4877,7 @@ begin // is called at most every second, but maybe up to 5 seconds delay
     RefreshBlackListUri(sec32);
   {$ifdef OSPOSIX}
   if Assigned(fSspiKeyTab) and
-     fSspiKeyTab.TryRefresh(tix64) then
+     fSspiKeyTab.TryRefresh(sec32) then
     fLogClass.Add.Log(sllDebug, 'DoCallbacks: refreshed %', [fSspiKeyTab], self);
   {$endif OSPOSIX}
 end;
@@ -6096,7 +6096,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  tix := GetTickCount64 shr MilliSecsPerSecShl; // call OS API every second
+  tix := GetTickSec;
   if tix = fLastNetworkTix then
     exit;
   fLastNetworkTix := tix;
@@ -7017,7 +7017,7 @@ begin
   if (pcoBroadcastNotAlone in fSettings.Options) or
      (waoBroadcastNotAlone in Params.AlternateOptions) then
   begin
-    tix := (GetTickCount64 shr MilliSecsPerSecShl) + 1; // 1024 ms resolution
+    tix := GetTickSec + 1;
     if fBroadcastTix = tix then  // disable broadcasting within up to 1s delay
       exit;
   end;

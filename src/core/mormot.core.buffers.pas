@@ -2149,7 +2149,7 @@ type
     /// percentage of CurrentSize versus ExpectedSize
     // - equals 0 if ExpectedSize is 0
     Percent: integer;
-    /// number of milliseconds elasped since process beginning
+    /// number of milliseconds elapsed since process beginning
     Elapsed: Int64;
     /// number of milliseconds remaining for full process, as estimated
     // - equals 0 if ExpectedSize is 0
@@ -2293,7 +2293,7 @@ type
     // - equals 0 if ExpectedSize is 0
     property Percent: integer
       read fInfo.Percent;
-    /// number of milliseconds elasped since beginning, as set by Read/Write
+    /// number of milliseconds elapsed since beginning, as set by Read/Write
     property Elapsed: Int64
       read fInfo.Elapsed;
     /// number of milliseconds remaining for full process, as set by Read/Write

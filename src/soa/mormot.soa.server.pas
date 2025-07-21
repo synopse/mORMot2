@@ -743,17 +743,17 @@ end;
 
 destructor TServiceFactoryServer.Destroy;
 var
-  endtix: Int64;
+  endtix: cardinal;
   i: PtrInt;
 begin
   // clean up any pending implementation instances
-  endtix := GetTickCount64 + 5000; // paranoid wait for refcnt=1 from services
+  endtix := GetTickSec + 5; // paranoid wait for refcnt=1 from services
   repeat
     DoInstanceGC({force=}false);
     if fInstanceGC.Count = 0 then
       break;
     SleepHiRes(1);
-    if GetTickCount64 > endtix then
+    if GetTickSec > endtix then
     begin
       fRestServer.InternalLog('%.Destroy: I% InstanceGC.Count=% timeout  - ' +
         'you should fix your implementation to release its dependencies',
@@ -2470,17 +2470,17 @@ end;
 
 destructor TServiceRecordVersionCallback.Destroy;
 var
-  timeOut: Int64;
+  timeOut: cardinal;
 begin
   try
     if fBatch <> nil then
     begin
-      timeOut := GetTickCount64 + 2000;
+      timeOut := GetTickSec + 3;
       repeat
-        SleepHiRes(1); // allow 2 seconds to process all pending frames
+        SleepHiRes(10); // allow 2-3 seconds to process all pending frames
         if fBatch = nil then
           exit;
-      until GetTickCount64 > timeOut;
+      until GetTickSec > timeOut;
       fSlave.InternalLog('%.Destroy on %: active BATCH', [self, fTable], sllError);
       fSlave.Orm.BatchSend(fBatch);
       fBatch.Free;

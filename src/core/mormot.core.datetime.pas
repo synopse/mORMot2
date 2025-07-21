@@ -2940,25 +2940,26 @@ end;
 var
   _HttpDateNowUtc: record
     Safe: TLightLock;
-    Tix: cardinal; // = GetTickCount64 div 1024 (every second)
+    Tix: cardinal; // = GetTickSec
     Value: THttpDateNowUtc;
   end;
 
 function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
-  c: cardinal;
+  tix32: cardinal;
   T: TSynSystemTime;
   now: ShortString; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   if Tix64 = 0 then
-    Tix64 := GetTickCount64;
-  c := Tix64 shr MilliSecsPerSecShl;
+    tix32 := GetTickSec
+  else
+    tix32 := Tix64 div MilliSecsPerSec;
   with _HttpDateNowUtc do
   begin
     Safe.Lock;
-    if c <> Tix then
+    if tix32 <> Tix then
     begin
-      Tix := c; // let this single thread update the Value
+      Tix := tix32; // let this single thread update the Value
       Safe.UnLock;
       T.FromNowUtc;
       T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');

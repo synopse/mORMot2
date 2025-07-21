@@ -2170,7 +2170,7 @@ end;
 
 function TRestClientUri.IsOpen: boolean;
 var
-  started, elapsed, max: Int64;
+  started, elapsed, max: Int64; // we need ms resolution below
   wait, retry: integer;
   exc: ExceptionClass;
 begin
