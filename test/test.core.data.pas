@@ -6881,12 +6881,17 @@ const
 
   procedure DoOne(const value, expected: RawUtf8);
   var
-    res: RawUtf8;
+    p: PUtf8Char;
   begin
     w.CancelAll;
     w.AddUrlNameNormalize(pointer(value), length(value));
-    w.SetText(res);
-    CheckEqual(res, expected);
+    CheckEqual(w.TextLength, length(expected), 'before');
+    p := w.GetTextAsBuffer; // validate this method insteas of SetText()
+    Check(p <> nil);
+    Check(p[length(expected)] = #0, 'end with #0');
+    if expected <> '' then
+      Check(CompareMem(p, pointer(expected), length(expected)));
+    CheckEqual(w.TextLength, length(expected), 'after');
   end;
 
   procedure Test(decoded, encoded: RawUtf8);

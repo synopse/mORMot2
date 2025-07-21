@@ -592,6 +592,14 @@ type
     /// write pending data, then retrieve the whole text as a UTF-8 string
     // - call CancelAll to reuse this instance after this method (or FlushFinal)
     procedure SetText(var result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
+    /// write pending data, then return a UTF-8 #0 ended buffer of the whole text
+    // - may return the internal buffer directly if nothing was written to Stream
+    // - flush the TRawByteStringStream/TCustomMemoryStream, and return its memory
+    // - but return nil if there is no memory involved, e.g. with a TFileStream
+    // - by definition, the returned buffer <> nil has a size of TextLength bytes
+    // - you may use immediately the returned buffer <> nil, then call CancelAll
+    // to reuse this instance after this method - but don't access result any more
+    function GetTextAsBuffer: PUtf8Char;
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
     /// write pending data to the Stream, with automatic buffer resizal
@@ -4505,6 +4513,29 @@ begin
       temp.Free;
     end;
   end;
+end;
+
+function TTextWriter.GetTextAsBuffer: PUtf8Char;
+begin
+  if fTotalFileSize = 0 then // just return the internal buffer
+  begin
+    B[1] := #0; // include an ending #0 for proper PUtf8Char support
+    result := fTempBuf;
+    exit;
+  end;
+  result := nil; // if the TStream has no proper memory buffer to return
+  if fInitialStreamPosition = 0 then
+    if twoStreamIsRawByteString in fCustomOptions then
+    begin
+      FlushFinal;
+      result := pointer(TRawByteStringStream(fStream).DataString);
+    end
+    else if fStream.InheritsFrom(TCustomMemoryStream) then
+    begin
+      AddDirect(#0); // TCustomMemoryStream needs this ending #0
+      FlushFinal;
+      result := TCustomMemoryStream(fStream).Memory;
+    end;
 end;
 
 function TTextWriter.Text: RawUtf8;
