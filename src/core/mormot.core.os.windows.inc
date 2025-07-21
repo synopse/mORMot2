@@ -4977,8 +4977,9 @@ begin
   // 5. compute some minimal entropy using the just retrieved info
   CoCreateGuid(StartupEntropy); // very fast, and won't hurt
   {$ifdef CPUINTEL}
-  StartupEntropy.Lo := StartupEntropy.Lo xor Rdtsc; // fast and unpredictable
-  RdRand32(@StartupEntropy.c2, 2);                  // no-op on older CPUs
+  if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
+    StartupEntropy.Lo := StartupEntropy.Lo xor Rdtsc; // fast and unpredictable
+  RdRand32(@StartupEntropy.c2, 2); // no-op on older CPUs
   {$endif CPUINTEL}
   crc32c128(@StartupEntropy, @SystemInfo, SizeOf(SystemInfo));
   crc32c128(@StartupEntropy, @mem, SizeOf(mem));

@@ -86,7 +86,8 @@ unit mormot.core.fpcx64mm;
 
 // let FPCMM_DEBUG include SleepCycles information from rdtsc
 // and FPCMM_PAUSE call rdtsc for its spinnning loop
-// - since rdtsc is emulated so unrealiable on VM, it is disabled by default
+// - since rdtsc is emulated so unrealiable on VM, and it may even trigger a
+// GPF if CR4.TSD bit is set on hardened systems, it is disabled by default
 {.$define FPCMM_SLEEPTSC}
 
 // checks leaks and write them to the console at process shutdown

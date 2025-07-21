@@ -2886,9 +2886,12 @@ function RdRand32: cardinal; overload;
 // - will do nothing if cfSSE42 is not available on this CPU
 procedure RdRand32(buffer: PCardinal; n: integer); overload;
 
-/// returns the 64-bit Intel Time Stamp Counter (TSC)
+/// returns the 64-bit Intel Time Stamp Counter (TSC) number of CPU cycles
 // - could be used as entropy source for randomness - use TPrecisionTimer if
 // you expect a cross-platform and cross-CPU high resolution performance counter
+// - caller should ensure that cfTSC is included in CpuFeatures flags since
+// this opcode may trigger a GPF if CR4.TSD bit is set on hardened systems -
+// see https://tizee.github.io/x86_ref_book_web/instruction/rdtsc.html
 function Rdtsc: Int64;
 
 /// compatibility function, to be implemented according to the running CPU
@@ -9895,9 +9898,10 @@ procedure XorEntropy(var e: THash512Rec);
 var
   lec: PHash128Rec;
 begin
-  e.r[3].Lo := e.r[3].Lo xor Rdtsc;
-  if _EntropyGlobal.i0 = 0 then // call OS API only once at startup
-    _Fill256FromOs(_EntropyGlobal); // fast 256-bit random from OS
+  if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
+    e.r[3].Lo := e.r[3].Lo xor Rdtsc;    // 64-bit CPU cycles
+  if _EntropyGlobal.i0 = 0 then          // call OS API only once at startup
+    _Fill256FromOs(_EntropyGlobal);      // fast 256-bit random from OS
   XorMemory(e.r[0], _EntropyGlobal.h);
   XorMemory(e.r[1], _EntropyGlobal.l);
   lec := @_Lecuyer;                      // PtrUInt(lec) is genuine per thread
@@ -9906,7 +9910,8 @@ begin
   RdRand32(@e.r[3].c, length(e.r[3].c)); // 128-bit XOR: no-op if no cfSSE42
   crcblock(@_EntropyGlobal.l, @e.r[3]);  // simple diffusion to move forward
   crcblock(@_EntropyGlobal.h, @e.r[2]);
-  e.r[3].Hi := e.r[3].Hi xor Rdtsc;      // has slightly changed in-between
+  if cfTSC in CpuFeatures then
+    e.r[3].Hi := e.r[3].Hi xor Rdtsc;    // has slightly changed in-between
 end;
 {$else}
 procedure XorEntropy(var e: THash512Rec);
@@ -10296,7 +10301,7 @@ begin
       PByte(@CpuAvx10.Vector)^ := (regs.ebx shr 16) and 7;
     end;
   end;
-  // validate accuracy of most used HW opcodes
+  // validate accuracy of most used HW opcodes against flags reported by CPUID
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
@@ -10307,6 +10312,12 @@ begin
     // AVX is available on the CPU, but not supported at OS context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfAVX10, cfFMA];
   {$endif DISABLE_SSE42}
+  if cfTSC in CpuFeatures then
+    try
+      Rdtsc;
+    except // may trigger a GPF if CR4.TSD bit is set on hardened systems
+      exclude(CpuFeatures, cfTSC);
+    end;
   if cfRAND in CpuFeatures then
     try
       c := RdRand32;
