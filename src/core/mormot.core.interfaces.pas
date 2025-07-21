@@ -2665,7 +2665,7 @@ begin
   if Dest.IsArray then
     Dest.AddItem(tmp)
   else
-    Dest.AddValue(ShortStringToAnsi7String(ParamName^), tmp);
+    Dest.AddValueNameLen(@ParamName^[1], ord(ParamName^[0]), tmp);
 end;
 
 procedure TInterfaceMethodArgument.FixValueAndAddToObject(const Value: variant;
@@ -2675,7 +2675,7 @@ var
 begin
   tempCopy := Value;
   FixValue(tempCopy);
-  DestDoc.AddValue(ShortStringToAnsi7String(ParamName^), tempCopy);
+  DestDoc.AddValueNameLen(@ParamName^[1], ord(ParamName^[0]), tempCopy);
 end;
 
 procedure TInterfaceMethodArgument.FixValue(var Value: variant);
@@ -2944,20 +2944,29 @@ procedure TInterfaceMethod.ArgsStackAsDocVariant(Values: PPointerArray;
   out Dest: TDocVariantData; Input: boolean);
 var
   a: PtrInt;
+  arg: PInterfaceMethodArgument;
 begin
   if Input then
   begin
     Dest.InitFast(ArgsInputValuesCount, dvObject);
+    arg := @Args[ArgsInFirst];
     for a := ArgsInFirst to ArgsInLast do
-      if Args[a].ValueDirection in [imdConst, imdVar] then
-        Args[a].AddAsVariant(Dest, Values[a]);
+    begin
+      if arg^.ValueDirection in [imdConst, imdVar] then
+        arg^.AddAsVariant(Dest, Values[a]);
+      inc(arg);
+    end;
   end
   else
   begin
     Dest.InitFast(ArgsOutputValuesCount, dvObject);
+    arg := @Args[ArgsOutFirst];
     for a := ArgsOutFirst to ArgsOutLast do
-      if Args[a].ValueDirection <> imdConst then
-        Args[a].AddAsVariant(Dest, Values[a]);
+    begin
+      if arg^.ValueDirection <> imdConst then
+        arg^.AddAsVariant(Dest, Values[a]);
+      inc(arg);
+    end;
   end;
 end;
 
@@ -2985,6 +2994,7 @@ procedure TInterfaceMethod.ArgsAsDocVariantObject(
   Input: boolean);
 var
   a, n: PtrInt;
+  arg: PInterfaceMethodArgument;
 begin
   if (ArgsParams.Count = 0) or
      (ArgsParams.Kind <> dvArray) then
@@ -2996,26 +3006,36 @@ begin
   if Input then
   begin
     if ArgsParams.Count = integer(ArgsInputValuesCount) then
+    begin
+      arg := @Args[ArgsInFirst];
       for a := ArgsInFirst to ArgsInLast do
-        if Args[a].ValueDirection in [imdConst, imdVar] then
+      begin
+        if arg^.ValueDirection in [imdConst, imdVar] then
         begin
-          ArgsObject.AddValue(
-            ShortStringToAnsi7String(Args[a].ParamName^),
-            ArgsParams.Values[n]);
+          ArgsObject.AddValueNameLen(@arg^.ParamName^[1],
+            ord(arg^.ParamName^[0]), ArgsParams.Values[n]);
           inc(n);
         end;
+        inc(arg);
+      end;
+    end;
   end
   else
   begin
     if ArgsParams.Count = integer(ArgsOutputValuesCount) then
+    begin
+      arg := @Args[ArgsOutFirst];
       for a := ArgsOutFirst to ArgsOutLast do
-        if Args[a].ValueDirection <> imdConst then
+      begin
+        if arg^.ValueDirection <> imdConst then
         begin
-          ArgsObject.AddValue(
-            ShortStringToAnsi7String(Args[a].ParamName^),
-            ArgsParams.Values[n]);
+          ArgsObject.AddValueNameLen(@arg^.ParamName^[1],
+            ord(arg^.ParamName^[0]), ArgsParams.Values[n]);
           inc(n);
         end;
+        inc(arg)
+      end;
+    end;
   end;
 end;
 
