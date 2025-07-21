@@ -100,7 +100,7 @@ type
     fCache: TOrmCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TOrmClass;
-    fTempJsonWriter: TJsonWriter;
+    fTempJsonWriter: TJsonWriter; // shared with a 64KB internal buffer
     /// compute SELECT ... FROM TABLE WHERE ...
     function SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
       const FieldNames, WhereClause: RawUtf8): RawUtf8;
@@ -266,6 +266,9 @@ type
       var Json: RawUtf8); overload;
       {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // avoid URW1111 on Delphi 2010
     /// access to a thread-safe internal cached TJsonWriter instance
+    // - with a TRawByteStringStream and 128KB of non-resizable working buffer
+    // - sharing an instance make sense because it is likely to be needed
+    // within a TSqlDatabase global Lock on SQLite3
     function AcquireJsonWriter(var tmp: TTextWriterStackBuffer): TJsonWriter;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the thread-safe cached TJsonWriter returned by AcquireJsonWriter
@@ -602,7 +605,10 @@ implementation
 constructor TRestOrm.Create(aRest: TRest);
 begin
   inherited Create;
-  fTempJsonWriter := TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true);
+  fTempJsonWriter := // generous 128KB buffer with no resize
+    TJsonWriter.CreateOwnedStream(128 shl 10, {nosharedstream=}true);
+  fTempJsonWriter.CustomOptions :=
+    fTempJsonWriter.CustomOptions + [twoFlushToStreamNoAutoResize];
   if aRest = nil then
     exit;
   fRest := aRest;
