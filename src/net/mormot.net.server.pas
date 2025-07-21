@@ -5781,7 +5781,7 @@ begin
   server := THttpServerEphemeral.Create(
     aPort, aResponse, @aParams, aLogClass, aMethods, aOptions);
   try
-    result := server.fReceived.WaitForSafe(aTimeOutSecs shl MilliSecsPerSecShl);
+    result := server.fReceived.WaitForSafe(aTimeOutSecs * MilliSecsPerSec);
     if aLogClass <> nil then
       aLogClass.Add.Log(sllDebug, 'EphemeralHttpServer(%)=% %',
         [aPort, BOOL_STR[result], variant(aParams)], server);
@@ -9908,7 +9908,7 @@ begin
         proto.fSafe.UnLock;
       end;
     end;
-    inc(tix, fServer.PingTimeout shl MilliSecsPerSecShl);
+    inc(tix, fServer.PingTimeout * MilliSecsPerSec);
     while not Terminated and
           (mormot.core.os.GetTickCount64 < tix) do
       SleepHiRes(100);

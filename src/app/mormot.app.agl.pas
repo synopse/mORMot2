@@ -617,7 +617,7 @@ var
 
 begin
   log := fLog.Add;
-  timeout := fService.RetryStableSec shl MilliSecsPerSecShl;
+  timeout := fService.RetryStableSec * MilliSecsPerSec; // need ms resolution for 1s
   sn := fService.Name;
   se := fService.AbortExitCodes;
   notifytix := false;
@@ -1565,7 +1565,7 @@ begin
             else
               sec := sec * 3; // wait up to 3 gracefull ending phases
             Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [p, sec], Sender);
-            endtix := GetTickCount64 + sec shl MilliSecsPerSecShl;
+            endtix := GetTickCount64 + sec * MilliSecsPerSec; // need ms resolution for sec=1
             repeat
               SleepHiRes(10);
               if Service.fRunner = nil then
@@ -1897,7 +1897,7 @@ begin
   begin
     log.Log(sllTrace, 'StartServices: wait % sec for level #% start',
       [sec, level], self);
-    endtix := GetTickCount64 + sec shl MilliSecsPerSecShl;
+    endtix := GetTickCount64 + sec * MilliSecsPerSec; // need ms resolution for sec=1
     for i := 0 to high(fStarted) do
     begin
       s := fStarted[i];

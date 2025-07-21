@@ -948,7 +948,7 @@ begin
   if SendNotificationsPending <> 0 then
     with fClient.LogClass.Enter do
     begin
-      timeOut := GetTickCount64 + aTimeOutSeconds shl MilliSecsPerSecShl;
+      timeOut := GetTickCount64 + aTimeOutSeconds * MilliSecsPerSec;
       repeat
         SleepHiRes(5);
         if SendNotificationsPending = 0 then

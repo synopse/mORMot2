@@ -274,11 +274,11 @@ function TWebSocketAsyncConnection.OnLastOperationIdle(
 var
   delaysec: TAsyncConnectionSec; // HeartbeatDelay may be changed on the fly
 begin
-  // this code is not blocking and very quick most of the time
+  // this code is run at most every second, very quick most of the time
   result := false;
-  delaysec := TWebSocketAsyncServer(fServer).
-    fSettings.HeartbeatDelay shr MilliSecsPerSecShl;
-  if nowsec < delaysec + fLastOperation then
+  delaysec := TWebSocketAsyncServer(fServer).fSettings.HeartbeatDelay;
+  if (delaysec = 0) or
+     (nowsec - fLastOperation < delaysec div MilliSecsPerSec) then
     exit; // nothing to send (most common case)
   // it is time to notify the other end that we are still alive
   fProcess.SendPing; // Write will change fWasActive, then fLastOperation

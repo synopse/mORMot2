@@ -3326,7 +3326,7 @@ begin
       // 2 seconds minimal wait
       max := 2000;
     inc(max, start);
-    while not fIncoming.Pop(fProtocol, head, answer, tix shr MilliSecsPerSecShl) do
+    while not fIncoming.Pop(fProtocol, head, answer, tix div MilliSecsPerSec) do
       if fState in [wpsDestroy, wpsClose] then
       begin
         WebSocketLog.Add.Log(sllError,

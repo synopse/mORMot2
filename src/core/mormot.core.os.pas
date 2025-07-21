@@ -325,7 +325,6 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   SecsPerYear  = 12 * SecsPerMonth;
 
   MilliSecsPerSec      = 1000;
-  MilliSecsPerSecShl   = 10; // 1 shl 10 = 1024 = rough approximation of 1000
   MilliSecsPerMin      = MilliSecsPerSec  * SecsPerMin;
   MilliSecsPerHour     = MilliSecsPerMin  * MinsPerHour;
   MilliSecsPerDay      = MilliSecsPerHour * HoursPerDay;

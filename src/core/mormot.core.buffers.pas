@@ -9886,7 +9886,7 @@ begin
     if StartedMs <> 0 then
     begin
       tmp.fInfo.Elapsed := stop - StartedMs;
-      dec(tmp.fInfo.StartTix, tmp.fInfo.Elapsed shr MilliSecsPerSecShl); // fake time
+      dec(tmp.fInfo.StartTix, tmp.fInfo.Elapsed div MilliSecsPerSec); // fake time
     end;
     tmp.Ended;
   finally
