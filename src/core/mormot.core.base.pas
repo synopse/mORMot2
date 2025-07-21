@@ -9887,47 +9887,26 @@ procedure __Fill256FromOs(out e: THash256Rec);
 begin
   sysutils.CreateGUID(e.l.guid); // = direct CoCreateGuid() on Windows
   sysutils.CreateGUID(e.h.guid);
-end; // overriden in mormot.core.os.posix.inc to use OS API - but not /dev/urandom
-
-{$ifdef CPUINTEL}
-var
-  // 256-bit of random state for forward security - shared by all threads
-  _EntropyGlobal: THash256Rec;
+end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
 
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PHash128Rec;
+  tmp: THash256Rec;  // keep existing (custom) entropy in e
 begin
-  if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
-    e.r[3].Lo := e.r[3].Lo xor Rdtsc;    // 64-bit CPU cycles
-  if _EntropyGlobal.i0 = 0 then          // call OS API only once at startup
-    _Fill256FromOs(_EntropyGlobal);      // fast 256-bit random from OS
-  XorMemory(e.r[0], _EntropyGlobal.h);
-  XorMemory(e.r[1], _EntropyGlobal.l);
-  lec := @_Lecuyer;                      // PtrUInt(lec) is genuine per thread
-  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor e.r[1].H;
-  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor e.r[1].L;
-  RdRand32(@e.r[3].c, length(e.r[3].c)); // 128-bit XOR: no-op if no cfSSE42
-  crcblock(@_EntropyGlobal.l, @e.r[3]);  // simple diffusion to move forward
-  crcblock(@_EntropyGlobal.h, @e.r[2]);
-  if cfTSC in CpuFeatures then
-    e.r[3].Hi := e.r[3].Hi xor Rdtsc;    // has slightly changed in-between
+  _Fill256FromOs(tmp);           // fast 256-bit random from OS APIs
+  XorMemory(e.r[0], tmp.l);
+  XorMemory(e.r[1], tmp.h);
+  lec := @_Lecuyer;              // PtrUInt(lec) is genuine per thread
+  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor tmp.d3;
+  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor tmp.d2;
+  {$ifdef CPUINTEL}
+  if cfTSC in CpuFeatures then   // may trigger GPF if CR4.TSD bit is set
+    tmp.d0 := Rdtsc;             // 64-bit CPU cycles
+  RdRand32(@tmp.l, 4);           // 128-bit XOR: no-op if no cfSSE42
+  {$endif CPUINTEL}
+  crcblock(@e.r[3], @tmp.l);
 end;
-{$else}
-procedure XorEntropy(var e: THash512Rec);
-var
-  lec: PHash128Rec;
-  os: THash256Rec;  // keep existing (custom) entropy in e
-begin
-  _Fill256FromOs(os); // fast 256-bit random from OS
-  XorMemory(e.r[0], os.l);
-  XorMemory(e.r[1], os.h);
-  lec := @_Lecuyer; // PtrUInt(lec) is genuine per thread
-  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor os.d3;
-  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor os.d2;
-  crcblock(@e.r[3], @os.h);
-end;
-{$endif CPUINTEL}
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
 begin
