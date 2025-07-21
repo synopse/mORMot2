@@ -450,7 +450,6 @@ type
     fTix32: cardinal;
     fMethod: PInterfaceMethod;
     fInput, fRemoteIP, fRemoteUserAgent: RawUtf8;
-    fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure Renders(var outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
     function Redirects(const action: TMvcAction): boolean; virtual;
@@ -804,6 +803,7 @@ type
     fMainRunner: TMvcRun;
     fOnBeforeRender, fOnAfterRender: TOnMvcRender;
     fOnSessionCreate, fOnSessionFinalized: TOnMvcSession;
+    fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure SetSession(Value: TMvcSessionAbstract);
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
@@ -1791,7 +1791,6 @@ var
   action: TMvcAction;
   exec: TInterfaceMethodExecuteCached;
   isAction: boolean;
-  WR: TJsonWriter;
   methodOutput: RawUtf8;
   renderContext: TDocVariantData;
   info: variant;
@@ -1804,14 +1803,14 @@ begin
       try
         // execute the method and generate the JSON output
         isAction := imfResultIsServiceCustomAnswer in fMethod^.Flags;
-        fExecuteCached[fMethodIndex].Acquire([], exec, WR);
+        exec := fApplication.fExecuteCached[fMethodIndex].Acquire(
+                  [], [twoForceJsonExtended]);
         try
-          WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
-          WR.AddDirect('{');
+          exec.WR.AddDirect('{');
           exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
           err := '';
           if not exec.ExecuteJson([fApplication.fFactoryEntry],
-              pointer(fInput), WR, @err, true) then
+              pointer(fInput), exec.WR, @err, true) then
           begin
             if err = '' then
               err := 'execution error';
@@ -1821,8 +1820,8 @@ begin
           action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
           action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
           if not isAction then
-            WR.AddDirect('}');
-          WR.SetText(methodOutput);
+            exec.WR.AddDirect('}');
+          exec.WR.SetText(methodOutput);
         finally
           fExecuteCached[fMethodIndex].Release(exec);
         end;
