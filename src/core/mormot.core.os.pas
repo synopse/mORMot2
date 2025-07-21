@@ -1467,7 +1467,7 @@ type
     User: RawUtf8;
     /// some hash representation of this information
     // - the very same executable on the very same computer run by the very
-    // same user will always have the same Hash value
+    // same user on the same OS should always have the same Hash value
     // - is computed from the crc32c of this TExecutable fields: c0 from
     // Version32, CpuFeatures and Host, c1 from User, c2 from ProgramFullSpec
     // and c3 from InstanceFileName
@@ -8480,7 +8480,7 @@ begin
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
-procedure AfterExecutableInfoChanged;
+procedure AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
 begin
   with Executable do
   begin
@@ -8564,7 +8564,7 @@ begin
     Command.ExeDescription := ProgramName;
     Command.Parse;
   end;
-  AfterExecutableInfoChanged;
+  AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
   crc32c128(@StartupEntropy, @CpuCache, SizeOf(CpuCache)); // some more entropy
   crc32c128(@StartupEntropy, @Executable.Hash, SizeOf(Executable.Hash));
   {$ifdef CPUINTELARM}

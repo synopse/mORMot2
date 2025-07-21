@@ -3560,7 +3560,7 @@ begin
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
   {$endif OSDARWIN}
-  crcblock(@e.l, @StartupEntropy); // 128-bit entropy from nanosecond timestamp
+  crcblock(@e.l, @StartupEntropy); // 128-bit entropy over nanosecond timestamp
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
@@ -4861,7 +4861,7 @@ begin
   {$else}
   // pure LINUX branch
   GetSystemMacAddress := _GetSystemMacAddress;
-  if Sysinfo(@si) = 0 then
+  if Sysinfo(@si) = 0 then // uptime + loadavg + meminfo + numprocess
     SystemMemorySize := si.totalram * si.mem_unit;
   crc32c128(@StartupEntropy, @si, SizeOf(si));
   // https://www.freedesktop.org/software/systemd/man/latest/os-release.html
@@ -5058,8 +5058,9 @@ begin
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
-  PInt64(@uts)^ := mach_absolute_time;
-  crc32c128(@StartupEntropy, @uts, 16); // nanoseconds timestamp
+  PInt64Array(@uts)[0] := mach_absolute_time;
+  PInt64Array(@uts)[1] := PInt64(@mach_timecoeff)^;
+  crc32c128(@StartupEntropy, @uts, 16); // nanoseconds timestamp + coeff
   {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   tpfail := 0;
@@ -5078,6 +5079,7 @@ begin
     tpfail := tpfail or 4;
   {$endif OSLINUX}
   crc32c128(@StartupEntropy, @tp, SizeOf(tp)); // tp[0..2] in nanoseconds
+  // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
   if tpfail <> 0 then
     ConsoleErrorWrite(_fmt('clock_gettime(%d) failed on %s - errno=%d',
       [tpfail, OSVersionText, fpgeterrno])); // process is likely to fail anyway

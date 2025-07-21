@@ -4983,6 +4983,7 @@ begin
   crc32c128(@StartupEntropy, @SystemInfo, SizeOf(SystemInfo));
   crc32c128(@StartupEntropy, @mem, SizeOf(mem));
   crc32c128(@StartupEntropy, @OSVersionInfo, SizeOf(OSVersionInfo));
+  // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
 end;
 
 procedure FinalizeSpecificUnit;
