@@ -259,7 +259,7 @@ type
     /// internal TOrm value serialization to a JSON object
     // - will use shared AcquireJsonWriter instance if available
     procedure GetJsonValue(Value: TOrm; withID: boolean;
-      const Fields: TFieldBits; out Json: RawUtf8); overload;
+      const Fields: TFieldBits; var Json: RawUtf8); overload;
     /// internal TOrm value serialization to a JSON object
     // - will use shared AcquireJsonWriter instance if available
     procedure GetJsonValue(Value: TOrm; withID: boolean; Occasion: TOrmOccasion;
@@ -678,7 +678,7 @@ begin
 end;
 
 procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
-  const Fields: TFieldBits; out Json: RawUtf8);
+  const Fields: TFieldBits; var Json: RawUtf8);
 var
   WR: TJsonWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack

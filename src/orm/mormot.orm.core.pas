@@ -511,7 +511,7 @@ type
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
     procedure GetJsonValue(Value: TOrm; withID: boolean;
-      const Fields: TFieldBits; out Json: RawUtf8); overload;
+      const Fields: TFieldBits; var Json: RawUtf8); overload;
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
     procedure GetJsonValue(Value: TOrm; withID: boolean;
