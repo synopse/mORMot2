@@ -4719,7 +4719,7 @@ function RandomDouble: double;
 // - will actually XOR the Dest buffer with Lecuyer numbers
 // - consider also the cryptographic-level TAesPrng.Main.FillRandom() method
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
-procedure RandomBytes(Dest: PByte; Count: integer); overload;
+procedure RandomBytes(Dest: pointer; Count: integer); overload;
 
 /// fill 128-bit buffer with random bytes from the gsl_rng_taus2 generator
 procedure RandomBytes(out Dest: THash128); overload;
@@ -10821,10 +10821,10 @@ begin
   result := SharedRandom.NextDouble;
 end;
 
-procedure RandomBytes(Dest: PByte; Count: integer);
+procedure RandomBytes(Dest: pointer; Count: integer);
 begin
   if Count > 0 then
-    SharedRandom.Fill(pointer(Dest), Count);
+    SharedRandom.Fill(Dest, Count);
 end;
 
 procedure RandomBytes(out Dest: THash128);
