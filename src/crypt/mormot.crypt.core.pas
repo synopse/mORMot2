@@ -190,7 +190,7 @@ var
   // - only defined if AES-NI and SSE 4.1 are available on this CPU
   // - faster than our SSE4.2+pclmulqdq crc32c() function, with less collision
   // - warning: the hashes will be consistent only during a process: at startup,
-  // a random AES key is computed to prevent attacks on forged input
+  // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
   // - DefaultHasher() is assigned to this function, when available on the CPU
   AesNiHash32: THasher;
 
@@ -200,7 +200,7 @@ var
   // - only defined if AES-NI and SSE 4.1 are available on this CPU, so you
   // should always check if Assigned(AesNiHash64) then ...
   // - warning: the hashes will be consistent only during a process: at startup,
-  // a random AES key is computed to prevent attacks on forged input
+  // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
   // - DefaultHasher64() is assigned to this function, when available on the CPU
   AesNiHash64: function(seed: QWord; data: pointer; len: PtrUInt): QWord;
 
@@ -208,9 +208,13 @@ var
   // - access to the raw function implementing both AesNiHash64 and AesNiHash32
   // - only defined if AES-NI and SSE 4.1 are available on this CPU
   // - warning: the hashes will be consistent only during a process: at startup,
-  // a random AES key is computed to prevent attacks on forged input
+  // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
   // - DefaultHasher128() is assigned to this function, when available on the CPU
   AesNiHash128: procedure(hash: PHash128; data: pointer; len: PtrUInt);
+
+  /// if AesNiHash128() is available, points to the internal 256 bytes
+  // anti-fuzzing random table - published for low-level testing
+  AesNiHashAntiFuzzTable: PBlock2048;
 
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
   HasOpenSsl: boolean;
@@ -11026,7 +11030,7 @@ begin
      (cfAesNi in CpuFeatures) and
      (cfCLMUL in CpuFeatures) then
   begin
-    // use SSE4.2+pclmulqdq instructions
+    // we can use SSE4.2+pclmulqdq instructions
     crc32c := @crc32c_sse42_aesni;
     // on old compilers, USEAESNIHASH is not set -> crc32c is a good fallback
     DefaultHasher   := @crc32c_sse42_aesni;
@@ -11069,6 +11073,7 @@ begin
     InterningHasher  := @_AesNiHash32;
     DefaultHasher64  := @_AesNiHash64;
     DefaultHasher128 := @_AesNiHash128;
+    AesNiHashAntiFuzzTable := AESNIHASHKEYSCHED;
   end;
   {$endif USEAESNIHASH}
   {$ifdef USEARMCRYPTO}

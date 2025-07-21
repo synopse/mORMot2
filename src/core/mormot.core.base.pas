@@ -2358,8 +2358,12 @@ type
 
   /// store a 1024-bit buffer of 128 bytes, indexed as 32-bit items
   TBlock1024 = array[0..31] of cardinal;
-  /// pointer to a 1024-bit buffer
+  /// pointer to a 1024-bit buffer, i.e. 128 bytes
   PBlock1024 = ^TBlock1024;
+  /// store a 2048-bit buffer of 256 bytes, indexed as 32-bit items
+  TBlock2048 = array[0..63] of cardinal;
+  /// pointer to a 2048-bit buffer, i.e. 256 bytes
+  PBlock2048 = ^TBlock2048;
 
   /// map an infinite array of 128-bit hash values
   // - each item consumes 16 bytes of memory
