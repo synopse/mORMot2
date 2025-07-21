@@ -1265,7 +1265,7 @@ begin
         TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFastFloat]
       else
         TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFast];
-    Jwt.data.AddValue(N, Nlen, info);
+    Jwt.data.AddValueJson(N, Nlen, info);
   until info.EndOfObject = '}';
   Jwt.result := jwtMissingClaim;
   if requiredclaims - Jwt.claims <> [] then

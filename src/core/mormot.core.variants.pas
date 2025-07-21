@@ -1860,15 +1860,15 @@ type
     // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added value
     function AddValue(const aName: RawUtf8; const aValue: variant;
-      aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
+      aValueOwned: boolean = false; aIndex: integer = -1): integer;
     /// add a value in this document
     // - overloaded function accepting a UTF-8 encoded buffer for the name
-    function AddValue(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
-      aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
+    function AddValueNameLen(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
+      aValueOwned: boolean = false; aIndex: integer = -1): integer;
     /// add a pre-parsed JSON value in this document
     // - accepts a UTF-8 encoded buffer for the name and parsed value
-    function AddValue(aName: PUtf8Char; aNameLen: integer;
-      var aValue: TGetJsonField): integer; overload;
+    function AddValueJson(aName: PUtf8Char; aNameLen: integer;
+      var aValue: TGetJsonField): integer;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -6490,7 +6490,7 @@ begin
       info.GetJsonField;
       if not info.WasString then
         exit; // should start with field names
-      proto.AddValue(info.Value, info.ValueLen, null); // set proper field name
+      proto.AddValueNameLen(info.Value, info.ValueLen, null); // set field name
     end;
     // 3. fill all nested objects from incoming values
     SetLength(VValue, rowcount);
@@ -7380,7 +7380,7 @@ begin
     InternalUniqueValue(v);
 end;
 
-function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
+function TDocVariantData.AddValueNameLen(aName: PUtf8Char; aNameLen: integer;
   const aValue: variant; aValueOwned: boolean; aIndex: integer): integer;
 var
   tmp: RawUtf8;
@@ -7392,7 +7392,7 @@ begin
   result := AddValue(tmp, aValue, aValueOwned, aIndex);
 end;
 
-function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
+function TDocVariantData.AddValueJson(aName: PUtf8Char; aNameLen: integer;
   var aValue: TGetJsonField): integer;
 begin
   result := -1;
@@ -8424,7 +8424,7 @@ begin
     system.delete(VName[ndx], 1, aNameLen);
   nested := self;
   Void; // same options (and dvObject)
-  AddValue(aName, aNameLen, variant(nested));
+  AddValueNameLen(aName, aNameLen, PVariant(@nested)^);
   result := true;
 end;
 

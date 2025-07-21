@@ -339,7 +339,7 @@ procedure TRestServerDB.InternalInfo(Ctxt: TRestServerUriContext;
   var Info: TDocVariantData);
 begin
   inherited InternalInfo(Ctxt, Info);
-  Info.AddValue(
+  Info.AddValueFromText(
     'db', FormatUtf8('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 
