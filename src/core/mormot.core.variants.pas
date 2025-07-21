@@ -1862,13 +1862,16 @@ type
     function AddValue(const aName: RawUtf8; const aValue: variant;
       aValueOwned: boolean = false; aIndex: integer = -1): integer;
     /// add a value in this document
-    // - overloaded function accepting a UTF-8 encoded buffer for the name
+    // - accepts a UTF-8 encoded buffer for the name
     function AddValueNameLen(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
       aValueOwned: boolean = false; aIndex: integer = -1): integer;
     /// add a pre-parsed JSON value in this document
     // - accepts a UTF-8 encoded buffer for the name and parsed value
     function AddValueJson(aName: PUtf8Char; aNameLen: integer;
       var aValue: TGetJsonField): integer;
+    /// add a value in this document from a real value and its associated RTTI
+    function AddValueRtti(const aName: RawUtf8;
+      aValue: pointer; aRtti: TRttiCustom): integer;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -7402,6 +7405,19 @@ begin
   result := InternalAddBuf(aName, aNameLen);
   GetVariantFromJsonField(aValue.Value, aValue.WasString, VValue[result],
     @VOptions, Has(dvoAllowDoubleValue), aValue.ValueLen);
+end;
+
+function TDocVariantData.AddValueRtti(const aName: RawUtf8;
+  aValue: pointer; aRtti: TRttiCustom): integer;
+begin
+  result := -1;
+  if IsArray or
+     (aName = '') then
+    exit;
+  result := InternalAdd(aName);
+  if (aValue <> nil) and
+     (aRtti <> nil) then
+    aRtti.ValueToVariant(aValue, PVarData(@VValue[result])^, @VOptions);
 end;
 
 procedure TDocVariantData.AddValueArray(const aName: RawUtf8; const aValue: variant);
