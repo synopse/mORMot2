@@ -2666,6 +2666,11 @@ var
 function GetTickCount64: Int64;
 {$endif OSWINDOWS}
 
+/// returns a system-wide current monotonic timestamp as seconds
+// - returns GetTickCount64 div 1000 as a 32-bit unsigned integer value
+function GetTickSec: cardinal;
+  {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
+
 /// returns how many seconds the system was up, accouting for time when
 // the computer is asleep
 // - on Windows, computes GetTickCount64 div 1000

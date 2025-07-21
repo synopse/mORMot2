@@ -1335,6 +1335,11 @@ begin
   TLightLock(P).UnLock;
 end;
 
+function GetTickSec: cardinal;
+begin
+  result := GetTickCount64 div MilliSecsPerSec;
+end;
+
 function GetUptimeSec: cardinal;
 begin
   result := GetTickCount64 div MilliSecsPerSec; // good enough

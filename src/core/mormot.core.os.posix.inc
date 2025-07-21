@@ -742,6 +742,15 @@ begin
   result := result div NanoSecsPerMilliSec; // ns to ms
 end;
 
+function GetTickSec: cardinal;
+var
+  v: Int64;
+begin
+  v := mach_absolute_time;
+  machtimetonanosec(v);
+  result := v div NanoSecsPerSec; // ns to s
+end;
+
 function GetUptimeSec: cardinal;
 var
   v: Int64;
@@ -912,6 +921,14 @@ begin
   // convert from nanoseconds into milliseconds
   result := QWord(PtrUInt(tp.tv_nsec) div PtrUInt(NanoSecsPerMilliSec)) +
             QWord(tp.tv_sec) * MilliSecsPerSec;
+end;
+
+function GetTickSec: cardinal;
+var
+  tp: timespec;
+begin
+  clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
+  result := QWord(tp.tv_sec);
 end;
 
 function GetUptimeSec: cardinal;
