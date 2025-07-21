@@ -1708,7 +1708,7 @@ var
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
   h128, ref128: THash128;
-  bak: TBlock2048;
+  bak: THash512;
 begin
   // validate THashAlgo and TSignAlgo recognition
   for h := low(h) to high(h) do

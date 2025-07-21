@@ -212,9 +212,10 @@ var
   // - DefaultHasher128() is assigned to this function, when available on the CPU
   AesNiHash128: procedure(hash: PHash128; data: pointer; len: PtrUInt);
 
-  /// if AesNiHash128() is available, points to the internal 256 bytes
+  /// if AesNiHash128() is available, points to the internal 64 bytes
   // anti-fuzzing random table - published for low-level testing
-  AesNiHashAntiFuzzTable: PBlock2048;
+  // - never change it at runtime, because it would break e.g. all hash tables
+  AesNiHashAntiFuzzTable: PHash512;
 
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
   HasOpenSsl: boolean;
@@ -11063,9 +11064,9 @@ begin
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
-    GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
+    GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 4, AESNIHASHKEYSCHED);
     PHash128Rec(AESNIHASHKEYSCHED)^ := StartupEntropy; // some salt
-    RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // filled using Lecuyer's
+    RandomBytes(AESNIHASHKEYSCHED, 16 * 4); // filled using Lecuyer's
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;
