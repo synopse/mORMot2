@@ -67,15 +67,15 @@ type
   TMvcViewFlags = set of (
     viewHasGenerationTimeTag);
 
-  /// define the thread-safe context of a particular rendered View
-  // - is initialized by TMvcRendererFromViews.Renders(), then rendered by the
-  // TMvcViewsAbstract.Render() method
-  TMvcView = record
-    /// the low-level content of this View
-    Content: RawByteString;
-    /// the MIME content type of this View
-    ContentType: RawUtf8;
+  // cache status for one static resource
+  TMvcRunCacheStatic = record
+    FileName: TFileName;
+    Body: RawByteString;
+    Header: RawUtf8;
+    Etag: RawUtf8;
   end;
+  PMvcRunCacheStatic = ^TMvcRunCacheStatic;
+  TMvcRunCacheStatics = array of TMvcRunCacheStatic;
 
   /// an abstract class able to implement Views
   TMvcViewsAbstract = class
@@ -91,12 +91,12 @@ type
     function Render(methodIndex: integer; const Context: variant;
       var View: TMvcView): TMvcViewFlags; virtual; abstract;
     function RenderFlags(methodIndex: PtrInt): TMvcViewFlags; virtual; abstract;
-    /// return the static file name - from fViewStaticFolder by default
+    /// compute the static file name - from fViewStaticFolder by default
     // - called if cacheStatic has been defined or not
-    function GetStaticFileName(const aFileName: TFileName): TFileName; virtual;
-    /// return the static file contents - from fViewStaticFolder by default
+    procedure FillStaticFileName(var aFile: TMvcRunCacheStatic); virtual;
+    /// compute the static file contents - from fViewStaticFolder by default
     // - called only if cacheStatic has been defined
-    function GetStaticFileContent(const aFileName: TFileName): RawByteString; virtual;
+    procedure FillStaticFileContent(var aFile: TMvcRunCacheStatic); virtual;
   public
     /// initialize the class
     constructor Create(aInterface: PRttiInfo; aLogClass: TSynLogClass);
@@ -592,16 +592,6 @@ type
     RootValue: RawUtf8;
     ParamsValue: TSynNameValue; // Name=input, Value=cached, Tag=timeout
   end;
-  // cache status for one static resource
-  TMvcRunCacheStatic = record
-    FileName: TFileName;
-    Body: RawByteString;
-    ContentHeader: RawUtf8;
-    Etag: RawUtf8;
-  end;
-  PMvcRunCacheStatic = ^TMvcRunCacheStatic;
-  TMvcRunCacheStatics = array of TMvcRunCacheStatic;
-
   /// the kinds of optional content which may be published
   // - publishMvcInfo will define a /root/[aSubURI/]mvc-info HTML page,
   // which is pretty convenient when working with views
@@ -644,6 +634,9 @@ type
     fPublishOptions: TMvcPublishOptions;
     fAllowedMethods: TUriMethods;
     procedure ComputeMvcInfoCache;
+    procedure ComputeStaticCache(var aCache: TMvcRunCacheStatic;
+      const aUri, aContentType: RawUtf8);
+    // return cache.FileName or cache.Body+ContentHeader+Etag
     procedure ProcessStatic(const name: RawUtf8; var cached: TMvcRunCacheStatic);
   public
     /// link this runner class to a specified MVC application
@@ -669,8 +662,7 @@ type
     // - only used if cacheStatic has been defined
     // - this method is thread safe
     procedure AddStaticCache(const aFileName: TFileName; const aUri: RawUtf8;
-      const aBody: RawByteString; const aContentType: RawUtf8 = '';
-      aCache: PMvcRunCacheStatic = nil);
+      const aBody: RawByteString; const aContentType: RawUtf8 = '');
     /// read-write access to the associated MVC Views instance
     property Views: TMvcViewsAbstract
       read fViews;
@@ -962,16 +954,14 @@ begin
   fViewStaticFolder := MakePath([fViewTemplateFolder,  STATIC_URI], true);
 end;
 
-function TMvcViewsAbstract.GetStaticFileName(
-  const aFileName: TFileName): TFileName;
+procedure TMvcViewsAbstract.FillStaticFileName(var aFile: TMvcRunCacheStatic);
 begin
-  result := fViewStaticFolder + aFileName;
+  aFile.FileName := fViewStaticFolder + aFile.FileName;
 end;
 
-function TMvcViewsAbstract.GetStaticFileContent(
-  const aFileName: TFileName): RawByteString;
+procedure TMvcViewsAbstract.FillStaticFileContent(var aFile: TMvcRunCacheStatic);
 begin
-  result := StringFromFile(GetStaticFileName(aFileName));
+  aFile.Body := StringFromFile(aFile.FileName);
 end;
 
 procedure TMvcViewsAbstract.NotifyContentChanged;
@@ -2034,12 +2024,23 @@ begin
   c^.Safe.UnLock;
 end;
 
+procedure TMvcRunWithViews.ComputeStaticCache(var aCache: TMvcRunCacheStatic;
+  const aUri, aContentType: RawUtf8);
+var
+  etag: cardinal;
+begin // caller should have set aCache.FileName+Body
+  if aContentType <> '' then
+    Join([HEADER_CONTENT_TYPE, aContentType], aCache.Header)
+  else
+    aCache.Header := GetMimeContentTypeHeader(aCache.Body, aCache.FileName);
+  etag := crc32cHash(aCache.Body, crc32cHash(aUri));
+  BinToHexLower(@etag, SizeOf(etag), aCache.Etag);
+end;
+
 procedure TMvcRunWithViews.AddStaticCache(const aFileName: TFileName;
-  const aUri: RawUtf8; const aBody: RawByteString; const aContentType: RawUtf8;
-  aCache: PMvcRunCacheStatic);
+  const aUri: RawUtf8; const aBody: RawByteString; const aContentType: RawUtf8);
 var
   cache: TMvcRunCacheStatic;
-  etag: Int64Rec;
 begin
   if (aFileName = '') or
      (aBody = '') or
@@ -2047,15 +2048,7 @@ begin
     exit;
   cache.FileName := aFileName;
   cache.Body := aBody;
-  if aContentType <> '' then
-    Join([HEADER_CONTENT_TYPE, aContentType], cache.ContentHeader)
-  else
-    cache.ContentHeader := GetMimeContentTypeHeader(aBody, aFileName);
-  etag.Lo := crc32cHash(aBody);
-  etag.Hi := crc32cHash(aUri);
-  BinToHexLower(@etag, SizeOf(etag), cache.Etag);
-  if aCache <> nil then
-    aCache^ := cache;
+  ComputeStaticCache(cache, aUri, aContentType);
   fStaticCache.Add(aUri, cache);
 end;
 
@@ -2071,18 +2064,19 @@ end;
 procedure TMvcRunWithViews.ProcessStatic(const name: RawUtf8;
   var cached: TMvcRunCacheStatic);
 begin
-  if cacheStatic in fPublishOptions then
-    if fStaticCache.FindAndCopy(name, cached, {updatetimeout=}false) then
-      exit; // found in cache
-  if not SafeFileNameU(name) then // avoid injection
-    exit;
-  cached.FileName := NormalizeFileName(Utf8ToString(name));
-  Utf8ToFileName(StringReplaceChars(name, '/', PathDelim), cached.FileName);
-  if cacheStatic in fPublishOptions then
-    AddStaticCache(cached.FileName, name,
-      fViews.GetStaticFileContent(cached.FileName), '', @cached)
-  else
-    cached.FileName := fViews.GetStaticFileName(cached.FileName);
+  if (cacheStatic in fPublishOptions) and
+     fStaticCache.FindAndCopy(name, cached, {updatetimeout=}false) then
+    exit; // found in cache
+  if not NormalizeUriToFileName(name, cached.FileName) then
+    exit; // avoid injection
+  fViews.FillStaticFileName(cached);
+  if not (cacheStatic in fPublishOptions) then
+    exit; // caller will serve back cached.FileName
+  fViews.FillStaticFileContent(cached);
+  if cached.Body = '' then
+    exit; // nothing to cache
+  ComputeStaticCache(cached, name, '');
+  fStaticCache.Add(name, cached);
 end;
 
 
@@ -2503,7 +2497,7 @@ begin
     if not MethodHasView(met^) then
       if met^.ArgsOutFirst <> met^.ArgsResultIndex then
         EMvcException.RaiseUtf8(
-          '%.Start(%): % var/out param not allowed with TMvcAction result',
+          '%.Start(%): I% var/out param not allowed with TMvcAction result',
           [self, aRestModel, met^.InterfaceDotMethodName])
       else
         // maps TMvcAction in TMvcApplication.RunOnRestServer
