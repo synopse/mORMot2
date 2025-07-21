@@ -11055,14 +11055,13 @@ begin
   end;
   {$endif ASMX64}
   {$ifdef USEAESNIHASH}
-  if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
-     (cfSSE3  in CpuFeatures) and   // PSHUFB
-     (cfAesNi in CpuFeatures) then  // AESENC
+  if (cfAesNi in CpuFeatures) and   // AES-NI
+     (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
-    XorBlock16(AESNIHASHKEYSCHED, @StartupEntropy); // some mormot.core.os salt
-    RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // genuine to avoid hash flooding
+    PHash128Rec(AESNIHASHKEYSCHED)^ := StartupEntropy; // some salt
+    RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // filled using Lecuyer's
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;

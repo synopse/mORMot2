@@ -3117,7 +3117,7 @@ end;
 var
   // 256 random bytes set at startup to avoid hash flooding
   // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
-  AESNIHASHKEYSCHED: pointer;
+  AESNIHASHKEYSCHED: pointer; // = AesNiHashAntiFuzzTable
   AESNIHASHKEYSCHED_: RawByteString;
 
 procedure _AesNiHashXmm0; forward;
@@ -3162,51 +3162,54 @@ asm
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
 end;
 
-// 128-bit aeshash as implemented in GoLang runtime, using aesni/sse4.1 opcodes
+// 128-bit aeshash as implemented in GoLang runtime, using aesni + sse3 opcodes
+// - simplified and rewritten to use a 128-bit seed and no sse4.2, and share the
+// same algorithm with mormot.crypt.asmx64.inc
 procedure _AesNiHashXmm0;
   {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         // xmm0=seed, edx=data, ecx=len - returns in xmm0 and eax
         test    ecx, ecx
-        jz      @0 // _AesNiHash32 left eax=seed
-        pinsrw  xmm0, ecx, 4
+        jz      @0                      // _AesNiHash32 left eax=seed
         mov     eax, dword ptr [AESNIHASHKEYSCHED]
-        pshufhw xmm0, xmm0, 00H
-        movdqa  xmm1, xmm0
-        pxor    xmm0, dqword ptr [eax]
-        aesenc  xmm0, xmm0
-        cmp     ecx, 16 // 1..16 bytes have no branch
+        movdqa  xmm1, xmm0              // save seed for @17up
+        pxor    xmm0, dqword ptr [eax]  // xor with seed
+        aesenc  xmm0, xmm0              // scramble
+        // 1..16 bytes have no branch
+        cmp     ecx, 16
         ja      @17up
         movups  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
         je      @16
-        shl     ecx, 4          // (and heap has header so no read before EOP)
+        shl     ecx, 4      // (and heap has header so no read before EOP)
         movups  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
-        pshufb  xmm1, xmm2
-@16:    aesenc  xmm1, xmm0
+        pshufb  xmm1, xmm2  // shuffle data bits to lower xmm1
+@16:    aesenc  xmm1, xmm0  // scramble 3 times
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
         movdqa  xmm0, xmm1
-        movd    eax, xmm0 // when jumped from _AesNiHash32
+        movd    eax,  xmm1   // truncate to 32-bit for _AesNiHash32
 @0:     ret
 @17up:  cmp     ecx, 32
         ja      @33up
-        pxor    xmm1, dqword ptr [eax + 16] // 17..32 bytes
+        // 17..32 bytes
+        pxor    xmm1, dqword ptr [eax + 16]
         aesenc  xmm1, xmm1
         movups  xmm2, dqword ptr [edx]
         movups  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
-        aesenc  xmm2, xmm0
+        aesenc  xmm2, xmm0 // scramble 3 times
         aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        pxor    xmm2, xmm3
+        pxor    xmm2, xmm3 // combine result
         movdqa  xmm0, xmm2
-        movd    eax, xmm2
+        movd    eax,  xmm2  // truncate to 32-bit for _AesNiHash32
         ret
 @33up:  cmp     ecx, 64
         ja      @65up
-        movdqa  xmm2, xmm1 // 33..64 bytes
+        // 33..64 bytes
+        movdqa  xmm2, xmm1
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]
@@ -3218,7 +3221,7 @@ asm
         movups  xmm5, dqword ptr [edx + 10H]
         movups  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
         movups  xmm7, dqword ptr [edx + ecx - 10H]
-        aesenc  xmm4, xmm0
+@done:  aesenc  xmm4, xmm0 // scramble 3 times
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
         aesenc  xmm7, xmm3
@@ -3230,11 +3233,11 @@ asm
         aesenc  xmm5, xmm5
         aesenc  xmm6, xmm6
         aesenc  xmm7, xmm7
-        pxor    xmm4, xmm6
+        pxor    xmm4, xmm6 // combine result
         pxor    xmm5, xmm7
         pxor    xmm4, xmm5
         movdqa  xmm0, xmm4
-        movd    eax, xmm4
+        movd    eax,  xmm4  // truncate to 32-bit for _AesNiHash32
         ret
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
         // pshufb arguments to move edx down from the high bytes of the register
@@ -3280,7 +3283,7 @@ asm
         movups  xmm1, dqword ptr [edx + 10H]
         movups  xmm2, dqword ptr [edx + 20H]
         movups  xmm3, dqword ptr [edx + 30H]
-        aesenc  xmm4, xmm0
+        aesenc  xmm4, xmm0 // scramble 2 times
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
         aesenc  xmm7, xmm3
@@ -3291,19 +3294,7 @@ asm
         add     edx, 64
         dec     ecx
         jne     @loop
-        aesenc  xmm4, xmm4
-        aesenc  xmm5, xmm5
-        aesenc  xmm6, xmm6
-        aesenc  xmm7, xmm7
-        aesenc  xmm4, xmm4
-        aesenc  xmm5, xmm5
-        aesenc  xmm6, xmm6
-        aesenc  xmm7, xmm7
-        pxor    xmm4, xmm6
-        pxor    xmm5, xmm7
-        pxor    xmm4, xmm5
-        movdqa  xmm0, xmm4
-        movd    eax, xmm4
+        jmp     @done
 end;
 
 {$endif USEAESNIHASH}
