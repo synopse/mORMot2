@@ -52,8 +52,8 @@ type
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
       const lab: RawUtf8 = 'kerberos'; const ctx: RawUtf8 = '');
   published
-    /// MD5 (and MD4) hashing functions
-    procedure _MD5;
+    /// 32-bit to 128-bit hashing functions: crc32c, AesNiHash, MD5, MD4...
+    procedure Hashes;
     /// SHA-1 hashing functions
     procedure _SHA1;
     /// SHA-256 hashing functions
@@ -1700,15 +1700,13 @@ const
 var
   buf: RawByteString;
   u: RawUtf8;
-  P, ref: PAnsiChar;
+  P: PAnsiChar;
   i, unalign, bytes: PtrInt;
   exp, exp321, exp322, exp323, exp324, exp325: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
-  h128, ref128: THash128;
-  bak: THash512;
 begin
   // validate THashAlgo and TSignAlgo recognition
   for h := low(h) to high(h) do
@@ -1790,37 +1788,6 @@ begin
     Hash128Test(P, @crc32c128);
     if Assigned(AesNiHash128) then
       Hash128Test(P, @AesNiHash128);
-  end;
-  // validate AesNiHash128() against reference vectors
-  if Assigned(AesNiHash128) then
-  begin
-    Check(Assigned(AesNiHashAntiFuzzTable));
-    bak := AesNiHashAntiFuzzTable^;
-    for i := 0 to 255 do
-      PByteArray(AesNiHashAntiFuzzTable)^[i] := i; // replace with fixed data
-    //i := 0; ConsoleWriteLn;
-    ref := AESNIHASH_REF;
-    bytes := 0;
-    repeat
-      exp := AesNiHash32(bytes, pointer(AesNiHashAntiFuzzTable), bytes);
-      FillZero(h128);
-      AesNiHash128(@h128, AesNiHashAntiFuzzTable, bytes);
-      Check(mormot.core.text.HexToBin(ref, @ref128, SizeOf(ref128)));
-      inc(ref, SizeOf(ref128) * 2);
-      CheckUtf8(IsEqual(h128, ref128), 'aesni(%)', [bytes]);
-      CheckUtf8(AesNiHash32(0, pointer(AesNiHashAntiFuzzTable), bytes) =
-        PCardinal(@ref128)^, 'aesni32(%)', [bytes]);
-      CheckUtf8(AesNiHash32(bytes, pointer(AesNiHashAntiFuzzTable), bytes) =
-        exp, 'aesni32b(%)', [bytes]);
-      //ConsoleWrite(Md5DigestToString(h128), ccLightGray, true);
-      //if i and 1 = 0 then ConsoleWrite(''' + '); inc(i);
-      if bytes < 20 then
-        inc(bytes) // specific verification of pshufb process for 1..16 bytes
-      else
-        inc(bytes, 7);
-    until bytes > 250;
-    CheckEqual(bytes, 251);
-    AesNiHashAntiFuzzTable^ := bak; // needed to preserve existing hash tables
   end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
@@ -2239,6 +2206,7 @@ var
   s, b, p: TAesBlock;
   iv: THash128Rec;
   i, j, k, ks, m, len: integer;
+  c: cardinal;
   tag1, tag2: TAesBlock;
   mac: TAesMac256;
   mac1, mac2: THash256;
@@ -2500,11 +2468,11 @@ begin
           try
             gcm := one.InheritsFrom(TAesGcmAbstract);
             aead := one.InheritsFrom(TAesAbstractAead);
+            Check(k in [0..2]);
             if m <= 9 then
               SetLength(h32[k, m], 257);
             if aead then
             begin
-              Check(k in [0..2]);
               Check(m in [7..9]);
               SetLength(Tags[k, m], 257);
             end;
@@ -2525,9 +2493,13 @@ begin
               s3 := one.EncryptPkcs7(s2);
               if m <= 9 then
                 if noaesni then
-                  CheckEqual(h32[k, m, i], cardinal(DefaultHasher(0, pointer(s3), length(s3))))
+                begin
+                  c := DefaultHasher(0, pointer(s3), length(s3));
+                  CheckUtf8(h32[k, m, i] = c, '%=% len=%',
+                    [h32[k, m, i], c, length(s3)]);
+                end
                 else
-                  h32[k, m, i] := cardinal(DefaultHasher(0, pointer(s3), length(s3)));
+                  h32[k, m, i] := DefaultHasher(0, pointer(s3), length(s3));
               if aead then
                 if not noaesni then
                   Check(one.MacEncryptGetTag(Tags[k, m, i]))
@@ -2879,14 +2851,53 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-procedure TTestCoreCrypto._MD5;
+procedure TTestCoreCrypto.Hashes;
 var
-  i, n: integer;
+  i, n, bytes: integer;
+  exp: cardinal;
   md: TMd5;
   dig, dig2: TMd5Digest;
   tmp: TByteDynArray;
   ismd4: boolean;
+  ref: PAnsiChar;
+  h128, ref128: THash128;
+  bak: THash512;
 begin
+  SetLength(tmp, 256);
+  for i := 0 to high(tmp) do
+    tmp[i] := i;
+  // validate AesNiHash128() against reference vectors
+  // - should be done FIRST with no process in the background
+  if Assigned(AesNiHash128) and
+     not CheckFailed(not fBackgroundRun.Waiting, 'no background run') and
+     not CheckFailed(Assigned(AesNiHashAntiFuzzTable)) then
+  begin
+    bak := AesNiHashAntiFuzzTable^;
+    AesNiHashAntiFuzzTable^ := PHash512(tmp)^; // replace to get AESNIHASH_REF
+    //i := 0; ConsoleWriteLn;
+    ref := AESNIHASH_REF;
+    bytes := 0;
+    repeat
+      exp := AesNiHash32(bytes, pointer(tmp), bytes);
+      FillZero(h128);
+      AesNiHash128(@h128, pointer(tmp), bytes);
+      Check(mormot.core.text.HexToBin(ref, @ref128, SizeOf(ref128)));
+      inc(ref, SizeOf(ref128) * 2);
+      CheckUtf8(IsEqual(h128, ref128), 'aesni(%)', [bytes]);
+      CheckUtf8(AesNiHash32(0, pointer(pointer(tmp)), bytes) =
+        PCardinal(@ref128)^, 'aesni32(%)', [bytes]);
+      CheckUtf8(AesNiHash32(bytes, pointer(pointer(tmp)), bytes) =
+        exp, 'aesni32b(%)', [bytes]);
+      //ConsoleWrite(Md5DigestToString(h128), ccLightGray, true);
+      //if i and 1 = 0 then ConsoleWrite(''' + '); inc(i);
+      if bytes < 20 then
+        inc(bytes) // specific verification of pshufb process for 1..16 bytes
+      else
+        inc(bytes, 7);
+    until bytes > 250;
+    CheckEqual(bytes, 251);
+    AesNiHashAntiFuzzTable^ := bak; // needed to preserve existing hash tables
+  end;
   // validate 32-bit, 64-bit and 128-bit hash functions in the background
   Run(HashesSlow, nil, 'hashes', {threaded=}true, {notify=}false);
   // MD5 validation
@@ -2909,7 +2920,6 @@ begin
     '3b69f5d2a3bb3719dc69891e9f95e809fd7e8b23ba6318edc45e51fe39708bf9427e9c3e8b9')),
     '4d7e6a1defa93d2dde05b45d864c429b', 'colllisionB');
   // MD Context Hashing validation
-  SetLength(tmp, 256);
   for ismd4 := false to true do
     for n := 256 - 80 to 256 do
     begin
@@ -2917,8 +2927,8 @@ begin
         md.InitMD4
       else
         md.Init;
-      for i := 1 to n do
-        md.Update(tmp[0], 1);
+      for i := 0 to n - 1 do
+        md.Update(tmp[i], 1);
       md.Final(dig);
       md.Full(pointer(tmp), n, dig2, ismd4);
       check(IsEqual(dig, dig2), 'MDrefA');
