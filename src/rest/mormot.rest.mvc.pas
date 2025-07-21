@@ -128,9 +128,9 @@ type
     // - if not set, will search for 'html,json,css'
     CsvExtensions: TFileName;
     /// defines if the view files should be checked for modification
-    // - any value would automatically update the rendering template, if the file
-    // changed after a given number of seconds - default is 5 seconds
-    // - setting 0 would be slightly faster, since content would never be checked
+    // - any value would automatically update the rendering template, if the
+    // file changed on disk after a given number of seconds - default is 5
+    // - setting 0 would disable this feature
     FileTimestampMonitorAfterSeconds: cardinal;
     /// file extension (e.g. '.html') to be used to create void templates
     // - default '' will create no void template file in the given Folder
@@ -343,12 +343,14 @@ type
     procedure SetCookieName(const Value: RawUtf8);
     // overriden e.g. in TMvcSessionWithRestServer using ServiceContext threadvar
     function GetCookie(out Value: PUtf8Char): integer; virtual; abstract;
-    procedure SetCookie(const cookie: RawUtf8); virtual; abstract;
+    procedure SetCookie(const Value: RawUtf8); virtual; abstract;
   public
     /// create an instance of this ViewModel implementation class
     constructor Create(Owner: TMvcApplication); override;
     /// finalize this instance
     destructor Destroy; override;
+    /// fast check if there is a cookie session associated to the current context
+    function Exists: boolean; override;
     /// will initialize the session cookie
     // - setting an optional record data, which will be stored Base64-encoded
     // - will return the 32-bit internal session ID
@@ -388,15 +390,12 @@ type
       read GetCookieName write SetCookieName;
   end;
 
-  /// implement a ViewModel/Controller sessions in a TRestServer instance
-  // - will use ServiceContext.Request threadvar to access the client cookies
-  TMvcSessionWithRestServer = class(TMvcSessionWithCookies)
+  /// implement a ViewModel/Controller sessions using TMvcRendererReturningData
+  // - will use threadvar to access TMvcRendererReturningData.Headers
+  TMvcSessionWithRenderer = class(TMvcSessionWithCookies)
   protected
     function GetCookie(out Value: PUtf8Char): integer; override;
-    procedure SetCookie(const cookie: RawUtf8); override;
-  public
-    /// fast check if there is a cookie session associated to the current context
-    function Exists: boolean; override;
+    procedure SetCookie(const Value: RawUtf8); override;
   end;
 
   /// implement a single ViewModel/Controller in-memory session
@@ -406,10 +405,7 @@ type
   protected
     fSingleCookie: RawUtf8;
     function GetCookie(out Value: PUtf8Char): integer; override;
-    procedure SetCookie(const cookie: RawUtf8); override;
-  public
-    /// fast check if there is a cookie session associated to the current context
-    function Exists: boolean; override;
+    procedure SetCookie(const Value: RawUtf8); override;
   end;
 
 
@@ -507,12 +503,18 @@ type
   protected
     fRun: TMvcRunWithViews;
     fOutput: TServiceCustomAnswer;
+    fInputCookieStart: PUtf8Char;
     fOutputFlags: TMvcViewFlags;
     fCacheDisabled: boolean;
-    fCacheCurrentInputValueKey: RawUtf8;
-    fHeaders: PUtf8Char;
+    fInputCookieLen: integer;
+    fInputHeaders: PUtf8Char;
     fInputContext: PVariant;
+    fCacheCurrentInputValueKey: RawUtf8;
+    fOutputCookieName, fOutputCookieValue: RawUtf8;
     function Redirects(const action: TMvcAction): boolean; override;
+    function GetCookie(const CookieName: RawUtf8;
+      out Value: PUtf8Char): integer; virtual;
+    procedure SetCookie(const CookieName, CookieValue: RawUtf8); virtual;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMvcViewsMustache instance
@@ -1595,6 +1597,13 @@ begin
   fContext.Free;
 end;
 
+function TMvcSessionWithCookies.Exists: boolean;
+var
+  dummy: PUtf8Char;
+begin
+  result := GetCookie(dummy) <> 0;
+end;
+
 function TMvcSessionWithCookies.GetCookieName: RawUtf8;
 begin
   result := fContext.CookieName;
@@ -1671,30 +1680,25 @@ begin
 end;
 
 
-{ TMvcSessionWithRestServer }
+{ TMvcSessionWithRenderer }
 
-function TMvcSessionWithRestServer.GetCookie(out Value: PUtf8Char): integer;
-var
-  cookie: PHttpCookie;
+threadvar
+  _CurrentRenderer: TMvcRendererAbstract;
+
+function CurrentRenderer: TMvcRendererReturningData;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  cookie := ServiceRunningContext.Request.InCookieSearch(fContext.CookieName);
-  if cookie <> nil then
-  begin
-    Value  := cookie^.ValueStart;
-    result := cookie^.ValueLen;
-  end
-  else
-    result := 0;
+  result := _CurrentRenderer as TMvcRendererReturningData;
 end;
 
-function TMvcSessionWithRestServer.Exists: boolean;
+function TMvcSessionWithRenderer.GetCookie(out Value: PUtf8Char): integer;
 begin
-  result := ServiceRunningContext.Request.InCookieSearch(fContext.CookieName) <> nil;
+  result := CurrentRenderer.GetCookie(fContext.CookieName, Value);
 end;
 
-procedure TMvcSessionWithRestServer.SetCookie(const cookie: RawUtf8);
+procedure TMvcSessionWithRenderer.SetCookie(const Value: RawUtf8);
 begin
-  ServiceRunningContext.Request.OutCookie[fContext.CookieName] := cookie;
+  CurrentRenderer.SetCookie(fContext.CookieName, Value);
 end;
 
 
@@ -1706,14 +1710,9 @@ begin
   result := length(fSingleCookie);
 end;
 
-procedure TMvcSessionSingle.SetCookie(const cookie: RawUtf8);
+procedure TMvcSessionSingle.SetCookie(const Value: RawUtf8);
 begin
-  fSingleCookie := cookie;
-end;
-
-function TMvcSessionSingle.Exists: boolean;
-begin
-  result := (fSingleCookie <> '');
+  fSingleCookie := Value;
 end;
 
 
@@ -1761,6 +1760,7 @@ end;
 procedure TMvcRendererAbstract.ExecuteCommand;
 var
   exec: TInterfaceMethodExecuteCached;
+  context: PPointer;
   isAction: boolean;
   renderContext: TDocVariantData;
   info: variant;
@@ -1768,11 +1768,13 @@ var
   err: ShortString;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
+  context := @_CurrentRenderer;
   try
     if fMethod <> nil then
     repeat
       try
         // execute the method and generate the JSON output
+        context^ := self;
         isAction := imfResultIsServiceCustomAnswer in fMethod^.Flags;
         exec := fApplication.fExecuteCached[fMethodIndex].Acquire(
                   [], [twoForceJsonExtended]);
@@ -1804,6 +1806,7 @@ begin
           end;
         finally
           fApplication.fExecuteCached[fMethodIndex].Release(exec);
+          context^ := nil;
         end;
         if not isAction then
         begin
@@ -2220,6 +2223,8 @@ begin
     Ctxt.Returns(body, r.Output.Status, r.Output.Header,
       {handle304=}true, {noerrorprocess=}true, {cachecontrol=}0,
       {hashwithouttime=}crc32cUtf8ToHex(r.Output.Content));
+    if r.fOutputCookieName <> '' then
+      Ctxt.OutCookie[r.fOutputCookieName] := r.fOutputCookieValue;
   finally
     r.Free;
   end;
@@ -2256,6 +2261,26 @@ begin
   if fMethod <> nil then
     fMethodIndex := aMethod^.ExecutionMethodIndex;
   dec(fMethodIndex, RESERVED_VTABLE_SLOTS);
+end;
+
+function TMvcRendererReturningData.GetCookie(const CookieName: RawUtf8;
+  out Value: PUtf8Char): integer;
+begin
+  if fInputCookieStart = nil then
+  begin
+    fInputCookieLen := CookieFromHeaders(
+                         fInputHeaders, CookieName, fInputCookieStart);
+    if fInputCookieLen = 0 then
+      fInputCookieStart := pointer(CookieName); // not void to check once
+  end;
+  Value := fInputCookieStart;
+  result := fInputCookieLen;
+end;
+
+procedure TMvcRendererReturningData.SetCookie(const CookieName, CookieValue: RawUtf8);
+begin
+  fOutputCookieName  := CookieName;
+  fOutputCookieValue := CookieValue;
 end;
 
 procedure TMvcRendererReturningData.ExecuteCommand;
