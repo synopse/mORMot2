@@ -2396,27 +2396,29 @@ type
   TInterfaceMethodExecuteCachedDynArray = array of TInterfaceMethodExecuteCached;
 
   /// reusable interface method execution from/to JSON
-  // - used e.g. by TServiceFactoryServer.ExecuteJson or
-  // TMvcRendererAbstract.ExecuteCommand
+  // - used e.g. by TServiceFactoryServer.ExecuteJson
   TInterfaceMethodExecuteCached = class(TInterfaceMethodExecute)
   protected
     fCached: TLightLock; // thread-safe acquisition of fCachedWR
-    fCachedWR: TJsonWriter;
+    fWR: TJsonWriter;
   public
     /// initialize a TInterfaceMethodExecuteCachedDynArray of per-method caches
     class procedure Prepare(aFactory: TInterfaceFactory;
       out Cached: TInterfaceMethodExecuteCachedDynArray);
     /// initialize the execution instance
     constructor Create(aFactory: TInterfaceFactory; aMethod: PInterfaceMethod;
-      const aOptions: TInterfaceMethodOptions); override;
+      const aOptions: TInterfaceMethodOptions; aShared: boolean = false); reintroduce;
     /// finalize this execution context
     destructor Destroy; override;
     /// will use this instance if possible, or create a temporary one
-    procedure Acquire(opt: TInterfaceMethodOptions;
-      out exec: TInterfaceMethodExecuteCached; out WR: TJsonWriter);
-    // will release this instance if was acquired, or free a temporary one
+    function Acquire(ExecuteOptions: TInterfaceMethodOptions = [];
+      WROptions: TTextWriterOptions = []): TInterfaceMethodExecuteCached;
+    /// will release this instance if was acquired, or free a temporary one
     procedure Release(exec: TInterfaceMethodExecuteCached);
       {$ifdef HASINLINE} inline; {$endif}
+    /// each instance will own their own TJsonWriter associated serializer
+    property WR: TJsonWriter
+      read fWR;
   end;
 
 
@@ -7372,39 +7374,48 @@ begin
   // prepare some reusable execution context (avoid most memory allocations)
   SetLength(Cached, aFactory.MethodsCount);
   for i := 0 to aFactory.MethodsCount - 1 do
-    Cached[i] := Create(aFactory, @aFactory.Methods[i], []);
+    // use a 32KB generous non-resizable work buffer memory
+    Cached[i] := Create(aFactory, @aFactory.Methods[i], [], {shared=}true);
 end;
 
 constructor TInterfaceMethodExecuteCached.Create(aFactory: TInterfaceFactory;
-  aMethod: PInterfaceMethod; const aOptions: TInterfaceMethodOptions);
+  aMethod: PInterfaceMethod; const aOptions: TInterfaceMethodOptions; aShared: boolean);
 begin
   inherited Create(aFactory, aMethod, aOptions);
-  fCachedWR := TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true);
+  if aShared then
+  begin
+    // the shared instance has a generous 32KB non resizable work buffer
+    fWR := TJsonWriter.CreateOwnedStream(32768, {nosharedstream=}true);
+    fWR.CustomOptions := fWR.CustomOptions + [twoFlushToStreamNoAutoResize];
+  end
+  else
+    // start with a resizable 2KB buffer (medium blocks are > 2600 bytes in MM)
+    fWR := TJsonWriter.CreateOwnedStream(2048, {nosharedstream=}true);
 end;
 
 destructor TInterfaceMethodExecuteCached.Destroy;
 begin
   inherited Destroy;
-  fCachedWR.Free;
+  fWR.Free;
 end;
 
-procedure TInterfaceMethodExecuteCached.Acquire(opt: TInterfaceMethodOptions;
-  out exec: TInterfaceMethodExecuteCached; out WR: TJsonWriter);
+function TInterfaceMethodExecuteCached.Acquire(
+  ExecuteOptions: TInterfaceMethodOptions;
+  WROptions: TTextWriterOptions): TInterfaceMethodExecuteCached;
 begin
   if fCached.TryLock then
   begin
     // reuse this shared instance between calls
-    SetOptions(opt);
-    exec := self;
-    fCachedWR.CancelAllAsNew;
-    WR := fCachedWR;
+    result := self;
+    SetOptions(ExecuteOptions);
+    fWR.CancelAllAsNew;
   end
   else
-  begin
     // on thread contention, will use a transient temporary instance
-    exec := TInterfaceMethodExecuteCached.Create(fFactory, fMethod, opt);
-    WR := exec.fCachedWR;
-  end;
+    result := TInterfaceMethodExecuteCached.Create(
+      fFactory, fMethod, ExecuteOptions);
+  if WROptions <> [] then
+    fWR.CustomOptions := fWR.CustomOptions + WROptions;
 end;
 
 procedure TInterfaceMethodExecuteCached.Release(exec: TInterfaceMethodExecuteCached);

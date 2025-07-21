@@ -1362,11 +1362,11 @@ end;
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TRestServerUriContext);
 var
   Inst: TServiceFactoryServerInstance;
-  WR: TJsonWriter;
   entry: PInterfaceEntry;
   instancePtr: pointer; // weak IInvokable reference
   execres: boolean;
   opt: TInterfaceMethodOptions;
+  wropt: TTextWriterOptions;
   exec: TInterfaceMethodExecuteCached;
   timeEnd: Int64;
   m: PtrInt;
@@ -1445,8 +1445,8 @@ begin
   end;
   err := '';
   exec := nil;
-  WR := nil;
   try
+    // resolve the raw TObject execution method for this interface
     if fImplementationClassKind = ickFake then
       if Inst.Instance <> fSharedInstance then
         exit
@@ -1464,25 +1464,26 @@ begin
       end;
       instancePtr := PAnsiChar(Inst.Instance) + entry^.IOffset;
     end;
+    Ctxt.ThreadServer^.Factory := self;
+    // prepare the execution options
     opt := Ctxt.ServiceExecution^.Options;
     if optExecInPerInterfaceThread in opt then
       if fBackgroundThread = nil then
         fBackgroundThread := fRestServer.Run.NewBackgroundThreadMethod(
           '% %', [self, fInterface.InterfaceName]);
-    fExecuteCached[m].Acquire(opt, exec, WR);
-    Ctxt.ThreadServer^.Factory := self;
+    wropt := [];
     if not (optForceStandardJson in opt) and
        ((Ctxt.Call.InHead = '') or
         (Ctxt.ClientKind = ckFramework)) then
-      // return extended/optimized pseudo-JSON, as recognized by mORMot
-      WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended]
+      include(wropt, twoForceJsonExtended) // extended/optimized pseudo-JSON
     else
-      // return standard JSON, as expected e.g. by a regular AJAX client
-      WR.CustomOptions := WR.CustomOptions + [twoForceJsonStandard];
+      include(wropt, twoForceJsonStandard); // standard/AJAX JSON
     if optDontStoreVoidJson in opt then
-      WR.CustomOptions := WR.CustomOptions + [twoIgnoreDefaultInRecord];
+      include(wropt, twoIgnoreDefaultInRecord);
+    // retrieve a local TInterfaceMethodExecute
+    exec := fExecuteCached[m].Acquire(opt, wropt);
     // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
-    Ctxt.ServiceResultStart(WR);
+    Ctxt.ServiceResultStart(exec.WR);
     if optExecLockedPerInterface in opt then
       fExecuteLock.Lock
     else if optExecGlobalLocked in opt then
@@ -1505,7 +1506,7 @@ begin
       else
         // regular execution
         execres := exec.ExecuteJson([instancePtr], Ctxt.ServiceParameters,
-          WR, @err, Ctxt.ForceServiceResultAsJsonObject);
+          exec.WR, @err, Ctxt.ForceServiceResultAsJsonObject);
       if not execres then
       begin
         // wrong request returns HTTP error 406
@@ -1528,12 +1529,12 @@ begin
     if Ctxt.Call.OutHead = '' then
     begin
       // <>'' for TServiceCustomAnswer, where body has already been written
-      Ctxt.ServiceResultEnd(WR, Inst.InstanceID);
+      Ctxt.ServiceResultEnd(exec.WR, Inst.InstanceID);
       Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
       if exec.ServiceCustomAnswerStatus = 0 then // if none has been set
         Ctxt.Call.OutStatus := HTTP_SUCCESS;
     end;
-    WR.SetText(Ctxt.Call.OutBody);
+    exec.WR.SetText(Ctxt.Call.OutBody);
   finally
     try
       Ctxt.ThreadServer^.Factory := nil;
