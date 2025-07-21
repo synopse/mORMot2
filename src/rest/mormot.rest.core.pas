@@ -1490,7 +1490,8 @@ type
     procedure ReturnFileFromFolder(const FolderName: TFileName;
       Handle304NotModified: boolean = true;
       const DefaultFileName: TFileName = 'index.html';
-      const Error404Redirect: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0); virtual;
+      const Error404Redirect: RawUtf8 = '';
+      CacheControlMaxAgeSec: integer = 0); virtual; abstract;
     /// use this method notify the caller that the resource URI has changed
     // - returns a HTTP_TEMPORARYREDIRECT status with the specified location,
     // or HTTP_MOVEDPERMANENTLY if PermanentChange is TRUE
@@ -4128,19 +4129,6 @@ begin
       AppendLine(fCall^.OutHead,
         ['Content-Disposition: attachment; filename="', AttachmentFileName, '"']);
   end;
-end;
-
-procedure TRestUriContext.ReturnFileFromFolder(
-  const FolderName: TFileName; Handle304NotModified: boolean;
-  const DefaultFileName: TFileName; const Error404Redirect: RawUtf8;
-  CacheControlMaxAgeSec: integer);
-var
-  fileName: TFileName;
-begin
-  if DefaultFileName <> '' then
-    fileName := MakePath([FolderName, DefaultFileName]);
-  ReturnFile(fileName,
-    Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.Redirect(const NewLocation: RawUtf8;

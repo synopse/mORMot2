@@ -4538,19 +4538,14 @@ procedure TRestServerUriContext.ReturnFileFromFolder(
   const DefaultFileName: TFileName; const Error404Redirect: RawUtf8;
   CacheControlMaxAgeSec: integer);
 var
-  fn: RawUtf8;
   fileName: TFileName;
 begin
   if fUriMethodPath = '' then
-    fileName := DefaultFileName
+    fileName := MakePath([FolderName, DefaultFileName])
   else
-  begin
-    fn := StringReplaceChars(fUriMethodPath, '/', PathDelim);
-    if SafeFileNameU(fn) then
-      Utf8ToFileName(fn, filename);
-  end;
-  inherited ReturnFileFromFolder(FolderName, Handle304NotModified,
-    fileName, Error404Redirect, CacheControlMaxAgeSec);
+    NormalizeUriToFileName(fUriMethodPath, filename, FolderName);
+  ReturnFile(fileName,
+    Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;
 
 procedure TRestServerUriContext.Error(const ErrorMessage: RawUtf8;
