@@ -1005,6 +1005,7 @@ begin
       Check(length(Args) = ExpectedParCount[i]);
       Check(ArgsUsed = ExpectedArgs[i]);
       Check(Args[0].ParamName^ = 'Self');
+      CheckEqual(ArgsName[0], 'Self');
       Check(Args[0].ValueDirection = imdConst);
       Check(Args[0].ValueType = imvSelf);
       Check(Args[0].ArgTypeName^ = 'ICalculator');
@@ -1015,8 +1016,10 @@ begin
         // 1 function Multiply(n1,n2: Int64): Int64;
         // 2 function Subtract(n1,n2: double): double;
         Check(Args[1].ParamName^ = 'n1');
+        CheckEqual(ArgsName[1], 'n1');
         Check(Args[1].ValueDirection = imdConst);
         Check(Args[2].ParamName^ = 'n2');
+        CheckEqual(ArgsName[2], 'n2');
         Check(Args[2].ValueDirection = imdConst);
         Check(Args[2].ValueType = ExpectedType[i]);
         Check(IdemPropName(Args[3].ArgTypeName^, ExpectedTypes[i]),
@@ -1029,8 +1032,10 @@ begin
         // 3 procedure ToText(Value: Currency; var Result: RawUtf8);
         // 4 function ToTextFunc(Value: double): string;
         Check(Args[1].ParamName^ = 'Value');
+        CheckEqual(ArgsName[1], 'Value');
         Check(Args[1].ValueDirection = imdConst);
         Check(Args[2].ParamName^ = 'Result');
+        CheckEqual(ArgsName[2], 'Result');
         if i < 4 then
           Check(Args[2].ValueDirection = imdVar)
         else
@@ -1044,8 +1049,10 @@ begin
       begin
         // 5 procedure Swap(var n1,n2: double);
         Check(Args[1].ParamName^ = 'n1');
+        CheckEqual(ArgsName[1], 'n1');
         Check(Args[1].ValueDirection = imdVar);
         Check(Args[2].ParamName^ = 'n2');
+        CheckEqual(ArgsName[2], 'n2');
         Check(Args[2].ValueDirection = imdVar);
       end;
     end;

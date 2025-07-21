@@ -1092,7 +1092,7 @@ begin
   begin
     inc(ma);
     arg := ContextFromRtti(TYPES_SOA[ma^.ValueType], ma^.ArgRtti);
-    ShortStringToAnsi7String(ma^.ParamName^, n);
+    n := meth.ArgsName[a];
     _ObjAddProps([
       'argName',   n,
       'lowerName', LowerCase(n),
