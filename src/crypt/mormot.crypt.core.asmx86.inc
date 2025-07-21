@@ -3239,23 +3239,24 @@ asm
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
         // pshufb arguments to move edx down from the high bytes of the register
         // to the low bytes of the register - index is how many bytes to move
-@shifts:dd $00000000,$00000000, $00000000,$00000000
-        dd $ffffffff,$ffffff0f, $ffffffff,$ffffffff
-        dd $ffffffff,$ffff0f0e, $ffffffff,$ffffffff
-        dd $ffffffff,$ff0f0e0d, $ffffffff,$ffffffff
-        dd $ffffffff,$0f0e0d0c, $ffffffff,$ffffffff
-        dd $ffffff0f,$0e0d0c0b, $ffffffff,$ffffffff
-        dd $ffff0f0e,$0d0c0b0a, $ffffffff,$ffffffff
-        dd $ff0f0e0d,$0c0b0a09, $ffffffff,$ffffffff
-        dd $0f0e0d0c,$0b0a0908, $ffffffff,$ffffffff
-        dd $0e0d0c0b,$0a090807, $ffffffff,$ffffff0f
-        dd $0d0c0b0a,$09080706, $ffffffff,$ffff0f0e
-        dd $0c0b0a09,$08070605, $ffffffff,$ff0f0e0d
-        dd $0b0a0908,$07060504, $ffffffff,$0f0e0d0c
-        dd $0a090807,$06050403, $ffffff0f,$0e0d0c0b
-        dd $09080706,$05040302, $ffff0f0e,$0d0c0b0a
-        dd $08070605,$04030201, $ff0f0e0d,$0c0b0a09
-@65up:  movdqa  xmm2, xmm1 // 65 bytes and up
+@shifts:dd $00000000, $00000000, $00000000, $00000000
+        dd $ffffff0f, $ffffffff, $ffffffff, $ffffffff
+        dd $ffff0f0e, $ffffffff, $ffffffff, $ffffffff
+        dd $ff0f0e0d, $ffffffff, $ffffffff, $ffffffff
+        dd $0f0e0d0c, $ffffffff, $ffffffff, $ffffffff
+        dd $0e0d0c0b, $ffffff0f, $ffffffff, $ffffffff
+        dd $0d0c0b0a, $ffff0f0e, $ffffffff, $ffffffff
+        dd $0c0b0a09, $ff0f0e0d, $ffffffff, $ffffffff
+        dd $0b0a0908, $0f0e0d0c, $ffffffff, $ffffffff
+        dd $0a090807, $0e0d0c0b, $ffffff0f, $ffffffff
+        dd $09080706, $0d0c0b0a, $ffff0f0e, $ffffffff
+        dd $08070605, $0c0b0a09, $ff0f0e0d, $ffffffff
+        dd $07060504, $0b0a0908, $0f0e0d0c, $ffffffff
+        dd $06050403, $0a090807, $0e0d0c0b, $ffffff0f
+        dd $05040302, $09080706, $0d0c0b0a, $ffff0f0e
+        dd $04030201, $08070605, $0c0b0a09, $ff0f0e0d
+@65up:  // 65 bytes and up
+        movdqa  xmm2, xmm1
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]
