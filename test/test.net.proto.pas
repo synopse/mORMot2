@@ -2211,13 +2211,23 @@ begin
   end;
 end;
 
+const
+  HDR1: PUtf8Char = 'one: value'#13#10'cookie: name=value';
+  HDR2: PUtf8Char = 'one: value'#13#10'cookie: name = value ';
+  HDR3: PUtf8Char = 'cookie: name=value'#13#10 +
+    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
+    'cookone: value'#13#10;
+  HDR4: PUtf8Char = 'cookie: name=value'#10'toto: titi'#10#10 +
+    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
+    'cookone: value'#13#10#13#10;
+
 procedure TNetworkProtocols.HTTP;
 var
   met: TUriMethod;
   s: RawUtf8;
   hc: THttpCookies;
   U: TUri;
-  h: PUtf8Char;
+  h, v: PUtf8Char;
   l: PtrInt;
   dig: THashDigest;
 
@@ -2312,10 +2322,10 @@ begin
   CheckEqual(U.Scheme, 'file');
   CheckEqual(U.Server, '');
   CheckEqual(U.Address, 'path/to%20image.jpg');
-  // validate THttpCookies
+  // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
-  hc.ParseServer('one: value'#13#10'cookie: name=value');
+  hc.ParseServer(HDR1);
   CheckEqual(hc.Name(0), 'name');
   CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
@@ -2325,7 +2335,7 @@ begin
   Check(hc.Cookie['name2'] <> 'value');
   hc.Clear;
   CheckEqual(length(hc.Cookies), 0);
-  hc.ParseServer('one: value'#13#10'cookie: name = value ');
+  hc.ParseServer(HDR2);
   CheckEqual(hc.Name(0), 'name');
   CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
@@ -2333,16 +2343,32 @@ begin
   CheckEqual(hc.Cookies[0].NameLen, 4);
   CheckEqual(hc.Cookies[0].ValueLen, 5);
   Check(hc.Cookie['name2'] <> 'value');
-  hc.ParseServer('cookie: name=value'#13#10 +
-    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
-    'cookone: value'#13#10);
+  hc.ParseServer(HDR3);
   CheckEqual(length(hc.Cookies), 4);
   Check4;
-  hc.ParseServer('cookie: name=value'#10'toto: titi'#10#10 +
-    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
-    'cookone: value'#13#10#13#10);
+  hc.ParseServer(HDR4);
   CheckEqual(length(hc.Cookies), 4, 'malformatted CRLF');
   Check4;
+  v := nil;
+  CheckEqual(CookieFromHeaders(HDR1, 'name', v), 5);
+  Check((v <> nil) and (v^ = 'v'));
+  CheckEqual(CookieFromHeaders(HDR1, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR1, 'name2', v), 0);
+  CheckEqual(CookieFromHeaders(HDR1, 'name3'), '');
+  v := nil;
+  CheckEqual(CookieFromHeaders(HDR2, 'name', v), 5);
+  Check((v <> nil) and (v^ = 'v'));
+  CheckEqual(CookieFromHeaders(HDR2, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR2, 'name3'), '');
+  CheckEqual(CookieFromHeaders(HDR3, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR3, 'name 1'), 'value1');
+  CheckEqual(CookieFromHeaders(HDR3, 'name 2'), 'value 2');
+  CheckEqual(CookieFromHeaders(HDR3, 'name3'), 'value3');
+  CheckEqual(CookieFromHeaders(HDR4, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR4, 'name 1'), 'value1');
+  CheckEqual(CookieFromHeaders(HDR4, 'name 2'), 'value 2');
+  CheckEqual(CookieFromHeaders(HDR4, 'name3'), 'value3');
+  // validate HttpRequestLength() and HttpRequestHash()
   h := HttpRequestLength(
     'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, l);
   check(h <> nil);
