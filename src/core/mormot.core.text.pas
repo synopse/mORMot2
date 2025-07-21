@@ -10277,8 +10277,10 @@ begin
 end;
 
 const
+  // last item is fake HTTP status 513 = 'Invalid Request'
+  INDEX_HTTP_INVALID = 46;
   // sorted by actual usage order for WordScanIndex() in matching HTTP_CODE[]
-  HTTP_REASON: array[0 .. 46] of RawUtf8 = (
+  HTTP_REASON: array[0 .. INDEX_HTTP_INVALID] of RawUtf8 = (
    'OK',                                // HTTP_SUCCESS - should be first
    'No Content',                        // HTTP_NOCONTENT
    'Temporary Redirect',                // HTTP_TEMPORARYREDIRECT
@@ -10326,7 +10328,6 @@ const
    'Network Authentication Required',   // 511
    'Client Side Connection Error',      // HTTP_CLIENTERROR = 666
    'Invalid Request');                  // 513 should be last INDEX_HTTP_INVALID
-  INDEX_HTTP_INVALID = high(HTTP_REASON);
   HTTP_CODE: array[0 .. INDEX_HTTP_INVALID] of word = ( // match HTTP_REASON[]
     HTTP_SUCCESS,
     HTTP_NOCONTENT,
@@ -10374,7 +10375,7 @@ const
     HTTP_HTTPVERSIONNONSUPPORTED,
     511,
     HTTP_CLIENTERROR,
-    513); // INDEX_HTTP_INVALID = 'Invalid Request' - should be last
+    513); // last INDEX_HTTP_INVALID = fake 'Invalid Request' fallback code
 
 function StatusCodeToText(Code: cardinal): PRawUtf8;
 var
