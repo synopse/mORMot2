@@ -2519,6 +2519,9 @@ begin
     inc(met);
   end;
   FlushAnyCache;
+  // (re)prepare some reusable execution context (avoid most memory allocations)
+  ObjArrayClear(fExecuteCached);
+  TInterfaceMethodExecuteCached.Prepare(fFactory, fExecuteCached);
 end;
 
 destructor TMvcApplication.Destroy;
@@ -2526,6 +2529,7 @@ begin
   inherited;
   fMainRunner.Free;
   fSession.Free;
+  ObjArrayClear(fExecuteCached);
 end;
 
 procedure TMvcApplication.Error(var Msg: RawUtf8; var Scope: variant);
