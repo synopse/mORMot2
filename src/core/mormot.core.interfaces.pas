@@ -135,6 +135,7 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// the argument name, as declared in object pascal
+    // - see also TInterfaceMethod.ArgsName[] array if you need a RawUtf8
     ParamName: PShortString;
     /// the type name, as declared in object pascal
     ArgTypeName: PShortString;
@@ -193,9 +194,6 @@ type
     /// append the default JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddDefaultJson(WR: TJsonWriter);
-    /// add a value into a TDocVariant object or array
-    // - Dest should already have set its Kind to either dvObject or dvArray
-    procedure AddAsVariant(var Dest: TDocVariantData; V: pointer);
     /// normalize a value containing one input or output argument
     // - sets and enumerates will be translated into text (also in embedded
     // objects and T*ObjArray), and record/class/arrays into TDocVariantData
@@ -320,6 +318,12 @@ type
     /// 64-bit aligned cumulative size for all arguments values
     // - follow Args[].OffsetAsValue distribution
     ArgsSizeAsValue: cardinal;
+    /// the RawUtf8 names of all arguments, as declared in object pascal
+    ArgsName: TRawUtf8DynArray;
+    /// the RawUtf8 names of all input arguments, as declared in object pascal
+    ArgsInputName: TRawUtf8DynArray;
+    /// the RawUtf8 names of all output arguments, as declared in object pascal
+    ArgsOutputName: TRawUtf8DynArray;
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
     /// retrieve an argument index in Args[] from its name
@@ -349,10 +353,6 @@ type
     // - if Input is FALSE, will handle var / out / result arguments
     function ArgsCommandLineToObject(P: PUtf8Char; Input: boolean;
       RaiseExceptionOnUnknownParam: boolean = false): RawUtf8;
-    /// returns a dynamic array list of all parameter names
-    // - if Input is TRUE, will handle const / var arguments
-    // - if Input is FALSE, will handle var / out / result arguments
-    function ArgsNames(Input: boolean): TRawUtf8DynArray;
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should contain the input/output raw values as variant
     // - Kind will specify the expected returned document layout
@@ -2656,18 +2656,6 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddAsVariant(
-  var Dest: TDocVariantData; V: pointer);
-var
-  tmp: variant;
-begin
-  ArgRtti.ValueToVariant(V, TVarData(tmp), @Dest.Options);
-  if Dest.IsArray then
-    Dest.AddItem(tmp)
-  else
-    Dest.AddValueNameLen(@ParamName^[1], ord(ParamName^[0]), tmp);
-end;
-
 procedure TInterfaceMethodArgument.FixValueAndAddToObject(const Value: variant;
   var DestDoc: TDocVariantData);
 var
@@ -2911,35 +2899,6 @@ begin
   end;
 end;
 
-function TInterfaceMethod.ArgsNames(Input: boolean): TRawUtf8DynArray;
-var
-  a, n: PtrInt;
-begin
-  result := nil;
-  if Input then
-  begin
-    SetLength(result, ArgsInputValuesCount);
-    n := 0;
-    for a := ArgsInFirst to ArgsInLast do
-      if Args[a].ValueDirection in [imdConst, imdVar] then
-      begin
-        ShortStringToAnsi7String(Args[a].ParamName^, result[n]);
-        inc(n);
-      end;
-  end
-  else
-  begin
-    SetLength(result, ArgsOutputValuesCount);
-    n := 0;
-    for a := ArgsOutFirst to ArgsOutLast do
-      if Args[a].ValueDirection <> imdConst then
-      begin
-        ShortStringToAnsi7String(Args[a].ParamName^, result[n]);
-        inc(n);
-      end;
-  end;
-end;
-
 procedure TInterfaceMethod.ArgsStackAsDocVariant(Values: PPointerArray;
   out Dest: TDocVariantData; Input: boolean);
 var
@@ -2953,7 +2912,7 @@ begin
     for a := ArgsInFirst to ArgsInLast do
     begin
       if arg^.ValueDirection in [imdConst, imdVar] then
-        arg^.AddAsVariant(Dest, Values[a]);
+        Dest.AddValueRtti(ArgsName[a], Values[a], arg^.ArgRtti);
       inc(arg);
     end;
   end
@@ -2964,7 +2923,7 @@ begin
     for a := ArgsOutFirst to ArgsOutLast do
     begin
       if arg^.ValueDirection <> imdConst then
-        arg^.AddAsVariant(Dest, Values[a]);
+        Dest.AddValueRtti(ArgsName[a], Values[a], arg^.ArgRtti);
       inc(arg);
     end;
   end;
@@ -2978,7 +2937,7 @@ begin
     pdvObject,
     pdvObjectFixed:
       begin
-        Dest.InitObjectFromVariants(ArgsNames(Input), Values, Options);
+        Dest.InitObjectFromVariants(ArgsInputName, Values, Options);
         if Kind = pdvObjectFixed then
           ArgsAsDocVariantFix(Dest, Input);
       end;
@@ -3012,8 +2971,7 @@ begin
       begin
         if arg^.ValueDirection in [imdConst, imdVar] then
         begin
-          ArgsObject.AddValueNameLen(@arg^.ParamName^[1],
-            ord(arg^.ParamName^[0]), ArgsParams.Values[n]);
+          ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
           inc(n);
         end;
         inc(arg);
@@ -3029,8 +2987,7 @@ begin
       begin
         if arg^.ValueDirection <> imdConst then
         begin
-          ArgsObject.AddValueNameLen(@arg^.ParamName^[1],
-            ord(arg^.ParamName^[0]), ArgsParams.Values[n]);
+          ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
           inc(n);
         end;
         inc(arg)
@@ -3726,6 +3683,7 @@ var
   WR: TJsonWriter;
   vt: TInterfaceMethodValueType;
   used: array[TInterfaceMethodValueType] of word;
+  u: PRawUtf8;
   ErrorMsg: RawUtf8;
   {$ifdef HAS_FPREG}
   ValueIsInFPR: boolean;
@@ -3916,6 +3874,25 @@ begin
   for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
   begin
+    // setup parameter names
+    SetLength(ArgsName, length(Args));
+    SetLength(ArgsInputName, ArgsInputValuesCount);
+    SetLength(ArgsOutputName, ArgsOutputValuesCount);
+    u := pointer(ArgsInputName);
+    for a := ArgsInFirst to ArgsInLast do
+      if Args[a].ValueDirection in [imdConst, imdVar] then
+      begin
+        ShortStringToAnsi7String(Args[a].ParamName^, u^);
+        inc(u);
+      end;
+    u := pointer(ArgsOutputName);
+    for a := ArgsOutFirst to ArgsOutLast do
+      if Args[a].ValueDirection <> imdConst then
+      begin
+        ShortStringToAnsi7String(Args[a].ParamName^, u^);
+        inc(u);
+      end;
+    u := pointer(ArgsName);
     // prepare stack and register layout
     reg := PARAMREG_FIRST;
     {$ifdef HAS_FPREG}
@@ -3926,6 +3903,8 @@ begin
     for a := 0 to high(Args) do
     with Args[a] do
     begin
+      ShortStringToAnsi7String(Args[a].ParamName^, u^);
+      inc(u);
       if a <> 0 then
       begin
         with fArgUsed[ValueType, used[ValueType]] do
