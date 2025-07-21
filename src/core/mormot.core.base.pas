@@ -3845,24 +3845,24 @@ var
 
 /// compute a 32-bit hash of any string using DefaultHasher()
 // - so the hash value may change on another computer or after program restart
-function DefaultHash(const s: RawByteString): cardinal; overload;
+function DefaultHash(const s: RawByteString; crc: cardinal = 0): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute a 32-bit hash of any array of bytes using DefaultHasher()
 // - so the hash value may change on another computer or after program restart
-function DefaultHash(const b: TBytes): cardinal; overload;
+function DefaultHash(const b: TBytes; crc: cardinal = 0): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute a 32-bit hash of any string using the CRC32C checksum
 // - the returned hash value will be stable on all platforms, and use HW opcodes
 // if available on the current CPU
-function crc32cHash(const s: RawByteString): cardinal; overload;
+function crc32cHash(const s: RawByteString; crc: cardinal = 0): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute a 32-bit hash of any array of bytes using the CRC32C checksum
 // - the returned hash value will be stable on all platforms, and use HW opcodes
 // if available on the current CPU
-function crc32cHash(const b: TBytes): cardinal; overload;
+function crc32cHash(const b: TBytes; crc: cardinal = 0): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// combine/reduce a 128-bit hash into a 64-bit hash
@@ -12196,24 +12196,24 @@ begin
   result := Hash32(pointer(Text), Length(Text));
 end;
 
-function DefaultHash(const s: RawByteString): cardinal;
+function DefaultHash(const s: RawByteString; crc: cardinal): cardinal;
 begin
-  result := DefaultHasher(0, pointer(s), length(s));
+  result := DefaultHasher(crc, pointer(s), length(s));
 end;
 
-function DefaultHash(const b: TBytes): cardinal;
+function DefaultHash(const b: TBytes; crc: cardinal): cardinal;
 begin
-  result := DefaultHasher(0, pointer(b), length(b));
+  result := DefaultHasher(crc, pointer(b), length(b));
 end;
 
-function crc32cHash(const s: RawByteString): cardinal;
+function crc32cHash(const s: RawByteString; crc: cardinal): cardinal;
 begin
-  result := crc32c(0, pointer(s), length(s));
+  result := crc32c(crc, pointer(s), length(s));
 end;
 
-function crc32cHash(const b: TBytes): cardinal;
+function crc32cHash(const b: TBytes; crc: cardinal): cardinal;
 begin
-  result := crc32c(0, pointer(b), length(b));
+  result := crc32c(crc, pointer(b), length(b));
 end;
 
 function Hash128To64({$ifdef FPC}constref{$else}const{$endif} b: THash128): QWord;
