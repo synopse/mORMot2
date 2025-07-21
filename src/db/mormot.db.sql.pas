@@ -5280,7 +5280,7 @@ var
   var
     f, r, p, len: PtrInt;
     W: TTextWriter;
-    tmp: TTextWriterStackBuffer;
+    tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   begin
     if (fDbms <> dFireBird) and
        (rowcount = prevrowcount) then
@@ -6386,7 +6386,7 @@ end;
 function TSqlDBStatement.StepAsJson(SeekFirst: boolean): RawUtf8;
 var
   w: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   w := TJsonWriter.CreateOwnedStream(tmp);
   try
@@ -6431,7 +6431,7 @@ var
   W: TResultsWriter;
   col: integer;
   maxmem: PtrUInt;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := 0;
   W := TResultsWriter.Create(Json, Expanded, false, nil, 0, @tmp);
@@ -6661,7 +6661,7 @@ var
   ft: TSqlDBFieldType;
   coltypes: TSqlDBFieldTypeDynArray;
   nullbits: TByteDynArray;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := 0;
   maxmem := Connection.Properties.StatementMaxMemory;

@@ -3309,7 +3309,7 @@ end;
 procedure TRestServerUriContext.ServiceResult(const Name, JsonValue: RawUtf8);
 var
   wr: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   wr := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -3511,7 +3511,7 @@ var
   W: TOrmWriter;
   bits: TFieldBits;
   withid: boolean;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   // force plain standard JSON output for AJAX clients
   if (FieldsCsv = '') or
@@ -4652,7 +4652,7 @@ var
   argdone: boolean;
   m: PInterfaceMethod;
   a: PInterfaceMethodArgument;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   WR := TJsonWriter.CreateOwnedStream(temp);
   try // convert URI parameters into the expected ordered json array
@@ -7854,7 +7854,7 @@ procedure TRestServer.Stat(Ctxt: TRestServerUriContext);
 var
   W: TJsonWriter;
   json, xml, name: RawUtf8;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try

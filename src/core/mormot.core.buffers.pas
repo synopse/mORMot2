@@ -7744,7 +7744,7 @@ var
   boundaries: TRawUtf8DynArray;
   bound: RawUtf8;
   W: TTextWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := false;
   len := length(MultiPart);
@@ -10865,7 +10865,7 @@ end;
 
 function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   W: TTextWriter;
 begin
   W := TTextWriter.CreateOwnedStream(temp);

@@ -6000,7 +6000,7 @@ end;
 procedure ObjectToJson(Value: TObject; var Result: RawUtf8;
   Options: TTextWriterWriteObjectOptions);
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Value = nil then
     Result := NULL_STR_VAR

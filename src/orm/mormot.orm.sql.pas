@@ -1420,7 +1420,7 @@ function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
 var
   stmt: ISqlDBStatement;
   w: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   // TableModelIndex is not useful here
   result := '';

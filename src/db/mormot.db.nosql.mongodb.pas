@@ -2035,7 +2035,7 @@ end;
 function TMongoRequest.ToJson(Mode: TMongoJsonMode): RawUtf8;
 var
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
@@ -2742,7 +2742,7 @@ function TMongoReplyCursor.ToJson(Mode: TMongoJsonMode; WithHeader: boolean;
   MaxSize: PtrUInt): RawUtf8;
 var
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (fReply = '') or
      (fDocumentCount <= 0) then
@@ -2869,7 +2869,7 @@ end;
 function TMongoConnection.GetBsonAndFree(Query: TMongoRequest): TBsonDocument;
 var
   W: TBsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TBsonWriter.Create(tmp{%H-});
   try
@@ -2887,7 +2887,7 @@ function TMongoConnection.GetJsonAndFree(Query: TMongoRequest;
 var
   W: TJsonWriter;
   ReturnAsJsonArray: boolean;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   ReturnAsJsonArray := Query.NumberToReturn > 1; // set 1 to return an object
   W := TJsonWriter.CreateOwnedStream(tmp);

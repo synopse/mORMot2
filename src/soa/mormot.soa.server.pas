@@ -1480,7 +1480,7 @@ begin
       include(wropt, twoForceJsonStandard); // standard/AJAX JSON
     if optDontStoreVoidJson in opt then
       include(wropt, twoIgnoreDefaultInRecord);
-    // retrieve a local TInterfaceMethodExecute
+    // retrieve a local TInterfaceMethodExecute instance for the processing
     exec := fExecuteCached[m].Acquire(opt, wropt);
     // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
     Ctxt.ServiceResultStart(exec.WR);

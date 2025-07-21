@@ -1710,7 +1710,7 @@ function TServiceContainer.AsJson: RawJson;
 var
   WR: TTextWriter;
   i: PtrInt;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := '';
   if (self = nil) or

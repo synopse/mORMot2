@@ -5144,7 +5144,7 @@ procedure EncodeMultiInsertSQLite3(Props: TOrmProperties;
 var
   f: PtrInt;
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -7099,7 +7099,7 @@ end;
 function TOrm.GetBinary(WithID, SimpleFields: boolean): RawByteString;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TBufferWriter.Create(temp{%H-});
   try
@@ -7307,7 +7307,7 @@ procedure TOrm.GetJsonValues(Json: TStream; Expand, withID: boolean;
   Occasion: TOrmOccasion; OrmOptions: TOrmWriterOptions);
 var
   serializer: TOrmWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if self = nil then
     exit;
@@ -10725,7 +10725,7 @@ type
 
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try // Sql.TableSimpleFields[withID: boolean; withTableName: boolean]

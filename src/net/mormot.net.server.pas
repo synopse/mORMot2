@@ -3386,7 +3386,7 @@ end;
 
 function THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo): cardinal;
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   TempJsonWriter(temp).AddTypedJson(Value, TypeInfo, []);
   fTempWriter.SetText(RawUtf8(fOutContent));

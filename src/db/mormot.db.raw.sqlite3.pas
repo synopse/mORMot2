@@ -8203,7 +8203,7 @@ function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
 var
   i: PtrInt;
   W: TResultsWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := 0;
   W := TResultsWriter.Create(Json, Expand, false, nil, 0, @tmp);

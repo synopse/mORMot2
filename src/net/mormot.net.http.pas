@@ -6310,7 +6310,7 @@ var
   s: THttpAnalyzerScope;
   d: THttpAnalyzerStatePerScope;
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   Get(Period, d);
   w := TTextWriter.CreateOwnedStream(tmp);
@@ -6786,7 +6786,7 @@ end;
 procedure THttpMetrics.SaveToFile(const Dest: TFileName; Algo: TAlgoCompress);
 var
   w: TBufferWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Algo = nil then
     w := TBufferWriter.Create(Dest) // direct-to-fly persistence
@@ -7269,7 +7269,7 @@ var
   d: PHttpAnalyzerToSave;
   w: TTextWriter;
   date: TShort16;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Metrics = nil then
     exit;

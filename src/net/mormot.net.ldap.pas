@@ -3073,7 +3073,7 @@ end;
 function DNsToCN(const dc, ou, cn: TRawUtf8DynArray): RawUtf8;
 var
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
@@ -5246,7 +5246,7 @@ end;
 function TLdapResultList.ExportToLdifContent(aHumanFriendly: boolean;
   aMaxLineLen: PtrInt): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TTextWriter;
   i: PtrInt;
 begin

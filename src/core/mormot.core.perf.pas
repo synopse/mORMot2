@@ -2855,7 +2855,7 @@ end;
 function TSynMonitor.ComputeDetailsJson: RawUtf8;
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try

@@ -555,7 +555,7 @@ end;
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal): RawByteString;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TBufferWriter;
   h: TDnsHeader;
   n: PUtf8Char;

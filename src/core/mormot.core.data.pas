@@ -4402,7 +4402,7 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
   Options: TTextWriterWriteObjectOptions; Level: integer): RawUtf8;
 var
   W: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   nested: TRawUtf8DynArray;
   i, nestedcount: integer;
   r: TRttiCustom;
@@ -6674,7 +6674,7 @@ function BinarySave(Data: pointer; Info: PRttiInfo;
   Kinds: TRttiKinds; WithCrc: boolean): RawByteString;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
@@ -6702,7 +6702,7 @@ function BinarySaveBytes(Data: pointer; Info: PRttiInfo;
   Kinds: TRttiKinds): TBytes;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer;
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
@@ -6758,7 +6758,7 @@ function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean
   Kinds: TRttiKinds; WithCrc: boolean): RawUtf8;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer;
   tmp: RawByteString;
   P: PAnsiChar;
   len: integer;
@@ -7579,7 +7579,7 @@ end;
 procedure TDynArray.SaveToStream(Stream: TStream);
 var
   W: TBufferWriter;
-  tmp: TTextWriterStackBuffer; // 8KB buffer
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (fValue = nil) or
      (Stream = nil) then
@@ -7670,7 +7670,7 @@ procedure TDynArray.SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
   ObjectOptions: TTextWriterWriteObjectOptions; reformat: TTextWriterJsonFormat);
 var
   W: TTextWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if GetCount = 0 then
     result := '[]'

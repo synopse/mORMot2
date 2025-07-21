@@ -4842,7 +4842,7 @@ procedure TSynInvokeableVariantType.ToJson(Value: PVarData;
   var Json: RawUtf8; const Prefix, Suffix: RawUtf8; Format: TTextWriterJsonFormat);
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -4982,7 +4982,7 @@ end;
 procedure __VariantSaveJsonEscape(const Value: variant; var Json: RawUtf8;
   Escape: TTextWriterKind);
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   with TJsonWriter.CreateOwnedStream(temp) do
     try
@@ -9175,7 +9175,7 @@ end;
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUtf8): RawUtf8;
 var
   Up: TByteToAnsiChar;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   n: integer;
   checkExtendedPropName: boolean;
   nam: PPUtf8Char;
@@ -9434,7 +9434,7 @@ procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
 var
   f: TStream;
   wr: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if cardinal(VType) <> DocVariantVType then
     exit;
@@ -9458,7 +9458,7 @@ var
   fieldCount, r, f: PtrInt;
   wr: TJsonWriter;
   row: PDocVariantData;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (cardinal(VType) <> DocVariantVType) or
      not IsArray then
@@ -9551,7 +9551,7 @@ procedure TDocVariantData.ToTextPairsVar(out Result: RawUtf8;
   const NameValueSep, ItemSep: RawUtf8; escape: TTextWriterKind);
 var
   ndx: PtrInt;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (cardinal(VType) <> DocVariantVType) or
      IsArray then

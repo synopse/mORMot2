@@ -4166,7 +4166,7 @@ procedure TRestUriContext.Results(const Values: array of const;
 var
   i, h: PtrInt;
   json: RawUtf8;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   h := high(Values);
   if h < 0 then
@@ -4244,7 +4244,7 @@ procedure TRestUriContext.Error(const ErrorMessage: RawUtf8;
   Status, CacheControlMaxAgeSec: integer);
 var
   msg: PRawUtf8;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   fCall^.OutStatus := Status;
   if StatusCodeIsSuccess(Status) then

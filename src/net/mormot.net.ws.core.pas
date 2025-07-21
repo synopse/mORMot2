@@ -2030,7 +2030,7 @@ procedure TWebSocketProtocolJson.FrameCompress(const Head: RawUtf8;
   var frame: TWebSocketFrame);
 var
   WR: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   i: PtrInt;
 begin
   frame.opcode := focText;

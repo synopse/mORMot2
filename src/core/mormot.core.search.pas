@@ -2141,7 +2141,7 @@ const
   _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
 var
   w: TTextDateWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   files: TFindFilesDynArray;
   f: PFindFiles;
   i: PtrInt;

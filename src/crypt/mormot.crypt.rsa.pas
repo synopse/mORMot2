@@ -1646,7 +1646,7 @@ end;
 function TBigInt.ToText(noclone: boolean): RawUtf8;
 var
   v: PBigInt;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   p: PByte;
 begin
   if @self = nil then

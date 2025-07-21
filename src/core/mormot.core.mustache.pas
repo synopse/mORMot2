@@ -1855,7 +1855,7 @@ function TSynMustache.Render(const Context: variant;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
   ctx: TSynMustacheContextVariant;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   ctx := fCachedContextVariant; // thread-safe reuse of shared rendering context
   if ctx.fReuse.TryLock then
@@ -1931,7 +1931,7 @@ function TSynMustache.RenderDataRtti(Value: pointer; ValueRtti: TRttiCustom;
   EscapeInvert: boolean): RawUtf8;
 var
   ctx: TSynMustacheContextData;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if ValueRtti = nil then
     ESynMustache.RaiseUtf8('%.RenderData: invalid TypeInfo', [self]);

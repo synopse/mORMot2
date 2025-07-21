@@ -2815,7 +2815,7 @@ end;
 
 procedure JsonDoUniEscape(const s: RawUtf8; var result: RawUtf8; esc: boolean);
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   with TJsonWriter.CreateOwnedStream(tmp) do
     try
@@ -4401,7 +4401,7 @@ var
   itemName, objName, propNameFound, objPath: RawUtf8;
   start, ending, obj: PUtf8Char;
   WR: TTextWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 
   procedure AddFromStart(const name: RawUtf8);
   begin
@@ -4778,7 +4778,7 @@ end;
 procedure QuotedStrJson(P: PUtf8Char; PLen: PtrInt; var result: RawUtf8;
   const aPrefix, aSuffix: RawUtf8);
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   Lp, Ls: PtrInt;
   D: PUtf8Char;
 begin
@@ -5023,7 +5023,7 @@ var
   tmp: TTempUtf8;
   wasString: boolean;
   pa: PVarRec;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (Format = '') or
      ((high(Args) < 0) and
@@ -9418,7 +9418,7 @@ end;
 function TSynNameValue.AsCsv(const KeySeparator, ValueSeparator, IgnoreKey: RawUtf8): RawUtf8;
 var
   i: PtrInt;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   with TTextWriter.CreateOwnedStream(temp) do
   try
@@ -10387,7 +10387,7 @@ end;
 function TSynDictionary.SaveToJson(EnumSetsAsText: boolean): RawUtf8;
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp) as TJsonWriter;
   try
@@ -10505,7 +10505,7 @@ end;
 function TSynDictionary.SaveToBinary(
   NoCompression: boolean; Algo: TAlgoCompress): RawByteString;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   W: TBufferWriter;
 begin
   result := '';
@@ -11399,7 +11399,7 @@ end;
 
 function JsonEncode(const NameValuePairs: array of const): RawUtf8;
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if high(NameValuePairs) < 1 then // void JSON object if not enough parameters
     result := '{}'
@@ -11638,7 +11638,7 @@ function DynArrayBlobSaveJson(TypeInfo: PRttiInfo;
 var
   DynArray: TDynArray;
   Value: pointer; // decode BlobValue into a temporary dynamic array
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   Value := nil;
   DynArray.Init(TypeInfo, Value);
@@ -12231,7 +12231,7 @@ function TInterfacedSerializable.ToJson(format: TTextWriterJsonFormat;
   options: TTextWriterWriteObjectOptions): RawUtf8;
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try

@@ -4155,7 +4155,7 @@ var
   name: RawUtf8;
   a, len, vallen: PtrInt;
   P: PAnsiChar;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (high(NameValuePairs) = 1) and
      (NameValuePairs[1].VType = vtAnsiString) then
@@ -4273,7 +4273,7 @@ function BsonToJson(BSON: PByte; Kind: TBsonElementType;
   ExpectedBSONLen: integer; Mode: TMongoJsonMode): RawUtf8;
 var
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   BsonParseLength(BSON, ExpectedBSONLen);
   W := TJsonWriter.CreateOwnedStream(tmp);
@@ -4308,7 +4308,7 @@ end;
 function VariantSaveMongoJson(const Value: variant; Mode: TMongoJsonMode): RawUtf8;
 var
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
@@ -4582,7 +4582,7 @@ var
   EndOfObject: AnsiChar;
   Kind: TBsonElementType;
   n: integer;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := false;
   if Json = nil then

@@ -1067,7 +1067,7 @@ end;
 class function TSynTestCase.RandomTextParagraph(WordCount: integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUtf8): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   WR: TTextWriter;
 begin
   WR := TTextWriter.CreateOwnedStream(tmp);

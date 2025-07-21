@@ -681,7 +681,7 @@ procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
   const Fields: TFieldBits; out Json: RawUtf8);
 var
   WR: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   // faster than Json := Value.GetJsonValues(true, withID, Fields);
   WR := AcquireJsonWriter(tmp);

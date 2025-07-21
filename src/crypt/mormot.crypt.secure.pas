@@ -5465,7 +5465,7 @@ procedure TDigestAuthServerFile.SaveToFile;
 var
   i: PtrInt;
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   middle, txt1, txt2: RawUtf8;
   u: PRawUtf8;
   d: ^TDigestAuthHash;
@@ -8727,7 +8727,7 @@ end;
 function TCryptCertPerUsage.AsBinary: RawByteString;
 var
   i: PtrInt;
-  tmp: TTextWriterStackBuffer; // no allocation for a few certificates
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   s: TBufferWriter;
 begin
   s := TBufferWriter.Create(tmp{%H-});

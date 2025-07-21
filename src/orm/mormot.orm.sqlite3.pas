@@ -1945,7 +1945,7 @@ function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
   WR: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   msg: ShortString absolute tmp;
 begin
   // faster direct access with no ID inlining

@@ -2796,7 +2796,7 @@ var
   W: TJsonWriter;
   Value: PUtf8Char;
   a: PInterfaceMethodArgument;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -5702,7 +5702,7 @@ var
   a, ndx: integer;
   W: TJsonWriter;
   arg: PInterfaceMethodArgument;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   fResult := '';
   if fOutput = nil then
@@ -6287,7 +6287,7 @@ function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUtf8;
 var
   i: integer;
   WR: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   log: ^TInterfaceStubLog;
 begin
   if fLogCount = 0 then
@@ -7374,7 +7374,7 @@ begin
   // prepare some reusable execution context (avoid most memory allocations)
   SetLength(Cached, aFactory.MethodsCount);
   for i := 0 to aFactory.MethodsCount - 1 do
-    // use a 32KB generous non-resizable work buffer memory
+    // pre-allocate with a 32KB generous non-resizable work buffer memory
     Cached[i] := Create(aFactory, @aFactory.Methods[i], [], {shared=}true);
 end;
 

@@ -1492,7 +1492,7 @@ end;
 
 procedure TXName.ComputeText;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   a: TXAttr;
   first: boolean;
   p: PUtf8Char;
@@ -4201,7 +4201,7 @@ end;
 
 function TCryptStoreX509.Save: RawByteString;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TTextWriter;
 begin
   w := TTextWriter.CreateOwnedStream(tmp);

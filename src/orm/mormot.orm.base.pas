@@ -3445,7 +3445,7 @@ function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
 var
   f: PtrInt;
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -6400,7 +6400,7 @@ procedure TOrmPropInfoRttiDynArray.Serialize(Instance: TObject;
   var data: RawByteString; ExtendedJson: boolean);
 var
   da: TDynArray;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   GetDynArray(Instance, da);
   if da.Count = 0 then
@@ -7212,7 +7212,7 @@ procedure TOrmPropInfoCustomJson.GetValueVar(Instance: TObject; ToSql: boolean;
   var result: RawUtf8; wasSqlString: PBoolean);
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -7779,7 +7779,7 @@ procedure TOrmPropInfoList.ToCsvText(const Prefix: array of const;
 var
   f: PtrInt;
   W: TJsonWriter; // TJsonWriter.Add(Prefix) so TTextWriter is not enough
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -9072,7 +9072,7 @@ procedure TOrmTableAbstract.GetJsonValues(Json: TStream; Expand: boolean;
   RowFirst, RowLast: PtrInt; IDBinarySize: integer);
 var
   W: TResultsWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TResultsWriter.Create(Json, Expand, false, nil, 0, @tmp);
   try
@@ -9420,7 +9420,7 @@ end;
 function TOrmTableAbstract.GetHtmlTable(const Header: RawUtf8): RawUtf8;
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -11218,7 +11218,7 @@ var
   W: TTextWriter;
   Start: PUtf8Char;
   info: TGetJsonField;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   info.Json := P;
   if info.Json = nil then

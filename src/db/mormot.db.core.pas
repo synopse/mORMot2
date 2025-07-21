@@ -3871,7 +3871,7 @@ function TJsonObjectDecoder.EncodeAsSql(const Prefix1, Prefix2: RawUtf8;
 var
   f: PtrInt;
   W: TTextWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 
   procedure AddValue;
   begin
@@ -3933,7 +3933,7 @@ procedure TJsonObjectDecoder.EncodeAsJson(out result: RawUtf8);
 var
   f: PtrInt;
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if FieldCount = 0 then
     exit;

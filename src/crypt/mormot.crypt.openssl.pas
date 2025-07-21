@@ -2974,7 +2974,7 @@ begin
   // since DER has no simple binary array format, use PEM serialization
   with TTextWriter.CreateOwnedStream(tmp) do
   try
-    // first write any X.509 certificates
+    // first write any X.509 certificates as PEM text
     x := fStore.CertificatesLocked;
     for i := 0 to length(x) - 1 do
     begin
@@ -2982,7 +2982,7 @@ begin
       AddDirectNewLine; // = #13#10 on Windows, #10 on POSIX
     end;
     fStore.UnLock;
-    // followed by X.509 CRLs
+    // followed by X.509 CRLs as PEM text
     c := fStore.CrlsLocked;
     for i := 0 to length(c) - 1 do
     begin

@@ -3686,7 +3686,7 @@ var
   i: integer;
   V: PShortString;
   uncamel: ShortString;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if @self <> nil then
     with TTextWriter.CreateOwnedStream(temp) do
@@ -8009,7 +8009,7 @@ end;
 procedure TRttiCustomProp.GetValueJson(Data: pointer; out Result: RawUtf8);
 var
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   w := DefaultJsonWriter.CreateOwnedStream(tmp);
   try
@@ -8550,7 +8550,7 @@ end;
 procedure TRttiCustomProps.AsText(out Result: RawUtf8; IncludePropType: boolean;
   const Prefix, Suffix: RawUtf8);
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   i: PtrInt;
 begin
   if Count > 0 then
@@ -9226,7 +9226,7 @@ end;
 
 procedure TRttiCustom.ValueGetText(Data: pointer; out Text: RawUtf8; HtmlEscape: boolean);
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TTextWriter;
 begin
   if (self <> nil) and
