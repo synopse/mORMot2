@@ -903,7 +903,7 @@ procedure FakeSetLength(var s: RawByteString; len: PtrInt); overload;
 /// internal function which could be used instead of SetCodePage() if RefCnt = 1
 // - do nothing if HASCODEPAGE is not defined, e.g. on Delphi 7-2007
 // - warning: s should NOT be read-only (i.e. assigned from a constant), but
-// a just-allocated string with RefCnt <> -1
+// a just-allocated string with RefCnt = 1
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -4396,11 +4396,13 @@ type
     /// reset the internal DataString content and the current position
     procedure Clear;
       {$ifdef HASINLINE}inline;{$endif}
+    {$ifdef HASCODEPAGE}
     /// will ensure that the DataString storage is a RawUtf8 with CP_UTF8
     // - is called e.g. from TTextWriter.FlushFinal
-    procedure EnsureDataStringIsUtf8;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure EnsureDataStringIsUtf8; inline;
+    {$endif HASCODEPAGE}
     /// direct low-level access to the internal RawByteString storage
+    // - if no RawByteString was supplied in Create(), result will be CP_UTF8
     property DataString: RawByteString
       read fDataString write fDataString;
   end;
@@ -13363,13 +13365,13 @@ begin
     exit;
   if fDataString = '' then // we know that fPosition=0 in this case
   begin
-    FastSetString(RawUtf8(fDataString), @Buffer, result);
+    FastSetString(RawUtf8(fDataString), @Buffer, result); // force CP_UTF8
     fPosition := result;
     exit;
   end;
   needed := fPosition + result;
   if needed > PStrLen(PAnsiChar(pointer(fDataString)) - _STRLEN)^ then
-    SetLength(fDataString, needed); // resize
+    SetLength(fDataString, needed); // resize - keeping existing codepage
   MoveFast(Buffer, PByteArray(fDataString)[fPosition], result);
   fPosition := needed;
 end;
@@ -13398,8 +13400,15 @@ begin
 end;
 
 procedure TRawByteStringStream.EnsureDataStringIsUtf8;
-begin
-  EnsureRawUtf8(fDataString);
+var
+  p: PStrRec;
+begin // faster than EnsureRawUtf8() since in most cases it is already CP_UTF8
+  p := pointer(fDataString);
+  if p = nil then
+    exit;
+  dec(p);
+  if p^.refCnt = 1 then
+    p^.CodePage := CP_UTF8; // just replace in-place (paranoid anyway)
 end;
 
 procedure TRawByteStringStream.Clear;
