@@ -329,14 +329,9 @@ type
     twJsonEscape,
     twOnSameLine);
 
-  /// available global options for a TTextWriter / TTextWriter instance
+  /// available global options for a TTextWriter / TJsonWriter instance
   // - TTextWriter.WriteObject() method behavior would be set via their own
   // TTextWriterWriteObjectOptions, and work in conjunction with those settings
-  // - twoStreamIsOwned would be set if the associated TStream is owned by the
-  // TTextWriter instance  - as a TRawByteStringStream if twoStreamIsRawByteString
-  // - twoFlushToStreamNoAutoResize would forbid FlushToStream to resize the
-  // internal memory buffer when it appears undersized - FlushFinal will set it
-  // before calling a last FlushToStream
   // - by default, custom serializers set via TRttiJson.RegisterCustomSerializer()
   // would let AddRecordJson() and AddDynArrayJson() write enumerates and sets
   // as integer numbers, unless twoEnumSetsAsTextInRecord or
@@ -351,8 +346,6 @@ type
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
   // may default to the deprecated global TTextWriter.SetDefaultEnumTrim setting
   // - twoEndOfLineCRLF would reflect the TEchoWriter.EndOfLineCRLF property
-  // - twoBufferIsExternal would be set if the temporary buffer is not handled
-  // by the instance, but specified at constructor, maybe from the stack
   // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
   // writing the fields with default values, i.e. enable soWriteIgnoreDefault
   // when published properties are serialized
@@ -363,9 +356,6 @@ type
   // - twoNoSharedStream will force to create a new stream for each instance
   // - twoNoWriteToStreamException let TTextWriter.WriteToStream silently fail
   TTextWriterOption = (
-    twoStreamIsOwned,
-    twoStreamIsRawByteString,
-    twoFlushToStreamNoAutoResize,
     twoEnumSetsAsTextInRecord,
     twoEnumSetsAsBooleanInRecord,
     twoFullSetsAsStar,
@@ -373,17 +363,34 @@ type
     twoForceJsonExtended,
     twoForceJsonStandard,
     twoEndOfLineCRLF,
-    twoBufferIsExternal,
     twoIgnoreDefaultInRecord,
     twoDateTimeWithZ,
     twoNonExpandedArrays,
     twoNoSharedStream,
     twoNoWriteToStreamException);
 
-  /// options set for a TTextWriter / TTextWriter instance
+  /// available internal flags for a TTextWriter / TJsonWriter instance
+  // - twfStreamIsOwned is set if the associated TStream is owned by the
+  // TTextWriter instance - as a TRawByteStringStream with twfStreamIsRawByteString
+  // - twfFlushToStreamNoAutoResize would forbid FlushToStream to resize the
+  // internal memory buffer when it appears undersized - FlushFinal will set it
+  // before calling a last FlushToStream - use TTextWriter.FlushToStreamNoAutoResize
+  // to specify this option
+  // - twfBufferIsOnStack would be set if the temporary buffer is external to
+  // this instance, but specified at constructor, maybe from the stack
+  TTextWriterFlag = (
+    twfStreamIsOwned,
+    twfFlushToStreamNoAutoResize,
+    twfStreamIsRawByteString,
+    twfBufferIsOnStack);
+
+  /// options set for a TTextWriter / TJsonWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
   // or set global process customization for a TTextWriter
   TTextWriterOptions = set of TTextWriterOption;
+
+  /// internal flags used by a TTextWriter / TJsonWriter instance
+  TTextWriterFlags = set of TTextWriterFlag;
 
   /// may be used to allocate on stack a 8KB work buffer for a TTextWriter
   // - via the TTextWriter.CreateOwnedStream overloaded constructor
@@ -522,6 +529,7 @@ type
     fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
     fCustomOptions: TTextWriterOptions;
+    fFlags: TTextWriterFlags;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -529,6 +537,8 @@ type
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
     class procedure RaiseUnimplemented(const Method: ShortString);
+    function GetFlushToStreamNoAutoResize: boolean;
+    procedure SetFlushToStreamNoAutoResize(Value: boolean);
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -1037,15 +1047,16 @@ type
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastComma(aReplaceChar: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// rewind the Stream to the position when Create() was called
+    /// rewind the Stream to the position when Create() was called to reuse it
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
     // - mandatory call after FlushFinal or Text/SetText() to reuse this instance
     procedure CancelAll;
-    /// same as CancelAll, and also reset the CustomOptions
+    /// same as CancelAll, and also reset the CustomOptions before reusing it
     procedure CancelAllAsNew;
       {$ifdef HASINLINE}inline;{$endif}
-    /// same as CancelAll, and also use a new local TTextWriterStackBuffer
+    /// same as CancelAll, and also set a new local TTextWriterStackBuffer
+    // to reuse this instance constructed via CreateOwnedStream(temp)
     procedure CancelAllWith(var temp: TTextWriterStackBuffer);
 
     /// count of added bytes to the stream
@@ -1065,10 +1076,18 @@ type
     // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior
     property CustomOptions: TTextWriterOptions
       read fCustomOptions write fCustomOptions;
+    /// the internal flags used by this TTextWriter instance
+    // - should not be modified by the end-user code
+    // - use the FlushToStreamNoAutoResize property to set the corresponding flag
+    property Flags: TTextWriterFlags
+      read fFlags;
     /// optional event called before FlushToStream method process
     // - used e.g. by TEchoWriter to perform proper content echoing
     property OnFlushToStream: TOnTextWriterFlush
       read fOnFlushToStream write fOnFlushToStream;
+    /// set twfFlushToStreamNoAutoResize in the internal Flags of this instance
+    property FlushToStreamNoAutoResize: boolean
+      read GetFlushToStreamNoAutoResize write SetFlushToStreamNoAutoResize;
   end;
 
   /// class of our simple TEXT format writer to a Stream
@@ -1202,11 +1221,6 @@ const
   TEXTWRITEROBJECTOPTIONS_ENUMASTEXT: array[boolean] of TTextWriterWriteObjectOptions = (
     [],
     [woEnumSetsAsText]);
-
-  /// TTextWriter JSON serialization options which should be preserved
-  // - used e.g. by TTextWriter.CancelAllAsNew to reset its CustomOptions
-  TEXTWRITEROPTIONS_RESET =
-    [twoStreamIsOwned, twoStreamIsRawByteString, twoBufferIsExternal];
 
   /// TTextWriter JSON serialization options with debugging/logging information
   TEXTWRITEROPTIONS_DEBUG =
@@ -4099,7 +4113,7 @@ begin
     fStream := TextWriterSharedStream
   else
     fStream := TRawByteStringStream.Create; // inlined SetStream()
-  fCustomOptions := [twoStreamIsOwned, twoStreamIsRawByteString];
+  fFlags := [twfStreamIsOwned, twfStreamIsRawByteString];
   SetBuffer(aBuf, aBufSize); // aBuf may be nil
 end;
 
@@ -4124,7 +4138,7 @@ begin
     fStream := TextWriterSharedStream
   else
     fStream := TRawByteStringStream.Create; // inlined SetStream()
-  fCustomOptions := [twoStreamIsOwned, twoStreamIsRawByteString, twoBufferIsExternal];
+  fFlags := [twfStreamIsOwned, twfStreamIsRawByteString, twfBufferIsOnStack];
   InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
 end;
 
@@ -4133,13 +4147,13 @@ constructor TTextWriter.CreateOwnedFileStream(
 begin
   DeleteFile(aFileName);
   fStream := TFileStreamEx.Create(aFileName, fmCreate or fmShareRead);
-  fCustomOptions := [twoStreamIsOwned];
+  fFlags := [twfStreamIsOwned];
   SetBuffer(nil, aBufSize);
 end;
 
 destructor TTextWriter.Destroy;
 begin
-  if twoStreamIsOwned in fCustomOptions then
+  if twfStreamIsOwned in fFlags then
     if fStream = TextWriterSharedStream then
     begin
       TRawByteStringStream(fStream).Clear; // for proper reuse
@@ -4147,7 +4161,7 @@ begin
     end
     else
       fStream.Free;
-  if not (twoBufferIsExternal in fCustomOptions) then
+  if not (twfBufferIsOnStack in fFlags) then
     FreeMem(fTempBuf);
   inherited Destroy;
 end;
@@ -4276,6 +4290,21 @@ begin
   result := nil;
 end;
 
+function TTextWriter.GetFlushToStreamNoAutoResize: boolean;
+begin
+  result := (self <> nil) and
+            (twfFlushToStreamNoAutoResize in fFlags);
+end;
+
+procedure TTextWriter.SetFlushToStreamNoAutoResize(Value: boolean);
+begin
+  if self <> nil then
+    if Value then
+      include(fFlags, twfFlushToStreamNoAutoResize)
+    else
+      exclude(fFlags, twfFlushToStreamNoAutoResize);
+end;
+
 function TTextWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
   Format: TTextWriterJsonFormat; EndOfObject: PUtf8Char): PUtf8Char;
 begin
@@ -4393,15 +4422,15 @@ begin
   if aBuf = nil then
     GetMem(aBuf, aBufSize)
   else
-    Include(fCustomOptions, twoBufferIsExternal);
+    Include(fFlags, twfBufferIsOnStack);
   InternalSetBuffer(aBuf, aBufSize);
 end;
 
 procedure TTextWriter.SetStream(aStream: TStream);
 begin
-  exclude(fCustomOptions, twoStreamIsRawByteString);
+  exclude(fFlags, twfStreamIsRawByteString);
   if fStream <> nil then
-    if twoStreamIsOwned in fCustomOptions then
+    if twfStreamIsOwned in fFlags then
     begin
       if fStream = TextWriterSharedStream then
       begin
@@ -4411,7 +4440,7 @@ begin
       end
       else
         FreeAndNilSafe(fStream);
-      exclude(fCustomOptions, twoStreamIsOwned);
+      exclude(fFlags, twfStreamIsOwned);
     end;
   if aStream = nil then
     exit;
@@ -4419,19 +4448,19 @@ begin
   fInitialStreamPosition := fStream.Position;
   fTotalFileSize := fInitialStreamPosition;
   if aStream.InheritsFrom(TRawByteStringStream) then
-    include(fCustomOptions, twoStreamIsRawByteString);
+    include(fFlags, twfStreamIsRawByteString);
 end;
 
 procedure TTextWriter.FlushFinal;
 var
   len: PtrInt;
-begin // don't mess with twoFlushToStreamNoAutoResize: it may not be final
+begin // don't mess with twfFlushToStreamNoAutoResize: it may not be final
   len := B - fTempBuf + 1;
   if len > 0 then
     WriteToStream(fTempBuf, len);
   B := fTempBuf - 1;
   {$ifdef HASCODEPAGE}
-  if twoStreamIsRawByteString in fCustomOptions then
+  if twfStreamIsRawByteString in fFlags then
     TRawByteStringStream(fStream).EnsureDataStringIsUtf8;
   {$endif HASCODEPAGE}
 end;
@@ -4441,7 +4470,7 @@ var
   tmp, written: PtrUInt;
 begin
   FlushFinal;
-  if twoFlushToStreamNoAutoResize in fCustomOptions then
+  if twfFlushToStreamNoAutoResize in fFlags then
     exit;
   written := fTotalFileSize - fInitialStreamPosition;
   tmp := fTempBufSize;
@@ -4451,17 +4480,13 @@ begin
     fTempBufSize := fTempBufSize * 2
   else if (written > 40 shl 20) and
           (tmp < 1 shl 20) then
-    // total > 40MB -> grow internal buffer to 1MB
-    fTempBufSize := 1 shl 20
+    fTempBufSize := 1 shl 20 // total > 40MB -> grow internal buffer to 1MB
   else
-    // nothing to change about internal buffer size
-    exit;
-  if twoBufferIsExternal in fCustomOptions then
-    // use heap, not stack from now on
-    exclude(fCustomOptions, twoBufferIsExternal)
+    exit; // nothing to change about internal buffer size
+  if twfBufferIsOnStack in fFlags then
+    exclude(fFlags, twfBufferIsOnStack) // use heap, not stack from now on
   else
-    // from big content comes bigger buffer - but no need to realloc/move
-    FreeMem(fTempBuf);
+    FreeMem(fTempBuf); // no need to realloc/move the previous (written) buffer
   GetMem(fTempBuf, fTempBufSize);
   BEnd := fTempBuf + (fTempBufSize - 16); // as in SetBuffer()
   B := fTempBuf - 1;
@@ -4471,7 +4496,7 @@ procedure TTextWriter.ForceContent(const text: RawUtf8);
 begin
   CancelAll;
   if (fInitialStreamPosition = 0) and
-     (twoStreamIsRawByteString in fCustomOptions) then
+     (twfStreamIsRawByteString in fFlags) then
     TRawByteStringStream(fStream).DataString := text
   else
     fStream.WriteBuffer(pointer(text)^, length(text));
@@ -4490,7 +4515,7 @@ begin
     result := '';
     exit;
   end;
-  if twoStreamIsRawByteString in fCustomOptions then
+  if twfStreamIsRawByteString in fFlags then
     TRawByteStringStream(fStream).GetAsText(fInitialStreamPosition, Len, result)
   else if fStream.InheritsFrom(TCustomMemoryStream) then
     FastSetString(result, PAnsiChar(TCustomMemoryStream(fStream).Memory) +
@@ -4525,7 +4550,7 @@ begin
   end;
   result := nil; // if the TStream has no proper memory buffer to return
   if fInitialStreamPosition = 0 then
-    if twoStreamIsRawByteString in fCustomOptions then
+    if twfStreamIsRawByteString in fFlags then
     begin
       FlushFinal;
       result := pointer(TRawByteStringStream(fStream).DataString);
@@ -4555,14 +4580,17 @@ end;
 procedure TTextWriter.CancelAllAsNew;
 begin
   CancelAll;
-  fCustomOptions := fCustomOptions * TEXTWRITEROPTIONS_RESET;
+  fCustomOptions := [];
 end;
 
 procedure TTextWriter.CancelAllWith(var temp: TTextWriterStackBuffer);
 begin
   if fTotalFileSize <> 0 then
     fTotalFileSize := fStream.Seek(fInitialStreamPosition, soBeginning);
-  InternalSetBuffer(@temp, SizeOf(temp));
+  if twfBufferIsOnStack in fFlags then
+    InternalSetBuffer(@temp, SizeOf(temp))
+  else
+    B := fTempBuf - 1; // we can continue to use our own buffer > 8KB
 end;
 
 procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);

@@ -7385,7 +7385,7 @@ begin
   begin
     // the shared instance has a generous 32KB non resizable work buffer
     fWR := TJsonWriter.CreateOwnedStream(32768, {nosharedstream=}true);
-    fWR.CustomOptions := fWR.CustomOptions + [twoFlushToStreamNoAutoResize];
+    fWR.FlushToStreamNoAutoResize := true; // stick to BufferSize
   end
   else
     // start with a resizable 2KB buffer (medium blocks are > 2600 bytes in MM)

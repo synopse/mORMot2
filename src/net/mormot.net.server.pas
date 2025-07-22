@@ -3378,9 +3378,12 @@ function THttpServerRequest.TempJsonWriter(
   var temp: TTextWriterStackBuffer): TJsonWriter;
 begin
   if fTempWriter = nil then
-    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true)
+  begin
+    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true);
+    fTempWriter.FlushToStreamNoAutoResize := true;
+  end
   else
-    fTempWriter.CancelAllWith(temp);
+    fTempWriter.CancelAllWith(temp); // reuse during THttpServerRequest lifetime
   result := fTempWriter;
 end;
 

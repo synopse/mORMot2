@@ -6091,8 +6091,8 @@ begin
       + [twoEnumSetsAsTextInRecord, // debug-friendly text output
          twoFullSetsAsStar,
          twoForceJsonExtended,
-         twoNoWriteToStreamException,   // if TFileStreamNoWriteError is not set
-         twoFlushToStreamNoAutoResize]; // stick to BufferSize
+         twoNoWriteToStreamException];   // if TFileStreamNoWriteError is not set
+    fWriter.FlushToStreamNoAutoResize := true; // stick to BufferSize
   end;
   // create fWriterEcho instance
   if fWriterEcho = nil then

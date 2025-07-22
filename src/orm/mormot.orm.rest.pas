@@ -607,8 +607,7 @@ begin
   inherited Create;
   fTempJsonWriter := // generous 128KB buffer with no resize
     TJsonWriter.CreateOwnedStream(128 shl 10, {nosharedstream=}true);
-  fTempJsonWriter.CustomOptions :=
-    fTempJsonWriter.CustomOptions + [twoFlushToStreamNoAutoResize];
+  fTempJsonWriter.FlushToStreamNoAutoResize := true; // stick to BufferSize
   if aRest = nil then
     exit;
   fRest := aRest;
