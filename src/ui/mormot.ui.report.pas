@@ -1499,24 +1499,6 @@ begin
       dec(PWordArray(result)[i], 32);
 end;
 
-function Max(a, b: integer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if a > b then
-    result := a
-  else
-    result := b;
-end;
-
-function Min(a, b: integer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if a < b then
-    result := a
-  else
-    result := b;
-end;
-
 procedure UseDefaultPrinter;
 begin
   Printers.Printer.PrinterIndex := -1;
@@ -2073,8 +2055,8 @@ begin
   begin
     siz.X := PrinterPxToScreenPxX(siz.X) + GRAY_MARGIN * 2;
     siz.Y := PrinterPxToScreenPxY(siz.Y) + GRAY_MARGIN * 2;
-    l := Max((self.ClientWidth - siz.X) div 2, 0) - HorzScrollbar.Position;
-    t := Max((self.ClientHeight - siz.Y) div 2, 0) - VertScrollbar.Position;
+    l := MaxPtrInt((self.ClientWidth - siz.X) div 2, 0) - HorzScrollbar.Position;
+    t := MaxPtrInt((self.ClientHeight - siz.Y) div 2, 0) - VertScrollbar.Position;
     SetBounds(l, t, siz.X, siz.Y);
   end;
   // resize any hot link
@@ -2446,7 +2428,7 @@ end;
 
 function TGdiPages.TextFormatsToFlags: integer;
 begin
-  result := min(max(font.size, 4), FORMAT_SIZE_MASK); // size between 4 and 255 
+  result := MinPtrInt(MaxPtrInt(font.size, 4), FORMAT_SIZE_MASK); // size between 4 and 255
   case fAlign of
     taRight:
       result := result or FORMAT_RIGHT;
@@ -2683,7 +2665,7 @@ begin
     zoomH := trunc((clientHeight - GRAY_MARGIN * 2) * fPrinterPxPerInch.y * 100 /
       siz.y / Screen.PixelsPerInch);
     // choose the smallest of width% and height% to fit on page (but min 10%)
-    fZoom := Max(Min(zoomW, zoomH), 10);
+    fZoom := MaxPtrInt(MinPtrInt(zoomW, zoomH), 10);
   end
   else if Zoom = PAGE_WIDTH then
     fZoom := trunc((clientWidth - GRAY_MARGIN * 2) * fPrinterPxPerInch.x * 100 /
@@ -2751,10 +2733,10 @@ begin
     // work out click pos relative to page (as x & y percentages)
     pt.x := ((X - fPreviewSurface.left - GRAY_MARGIN) * 100) div
       PrinterPxToScreenPxX(siz.x);
-    pt.x := min(max(pt.x, 0), 100);
+    pt.x := MinPtrInt(MaxPtrInt(pt.x, 0), 100);
     pt.y := ((Y - fPreviewSurface.top - GRAY_MARGIN) * 100) div
       PrinterPxToScreenPxY(siz.y);
-    pt.y := min(max(pt.y, 0), 100);
+    pt.y := MinPtrInt(MaxPtrInt(pt.y, 0), 100);
     // finally, adjust scrollbar positions based on click pos ...
     with HorzScrollbar do
       position := (pt.x * (range - clientwidth)) div 100;
@@ -3322,10 +3304,10 @@ begin
       end;
     VK_RIGHT:
       with HorzScrollbar do
-        position := position + max(lh, 0);
+        position := position + MaxPtrInt(lh, 0);
     VK_LEFT:
       with HorzScrollbar do
-        position := position - min(lh, range);
+        position := position - MinPtrInt(lh, range);
     VK_NEXT:
       with VertScrollbar do
         if (Shift = [ssCtrl]) and
@@ -3334,7 +3316,7 @@ begin
         else
         begin
           OldPosition := Position;
-          position := position + max(clientheight - lh, 0);
+          position := position + MaxPtrInt(clientheight - lh, 0);
           if (Position = OldPosition) and
              (Page < PageCount) then
             SetPageAndPosition(Page + 1, 0);
@@ -3347,7 +3329,7 @@ begin
         else
         begin
           OldPosition := Position;
-          position := position - max(clientheight - lh, 0);
+          position := position - MaxPtrInt(clientheight - lh, 0);
           if (Position = OldPosition) and
              (Page > 1) then
             SetPageAndPosition(Page - 1, range);
@@ -3888,7 +3870,7 @@ begin
   Point1.Y := MmToPrinterPxY(Point1.Y);
   Point2.X := MmToPrinterPxX(Point2.X);
   Point2.Y := MmToPrinterPxY(Point2.Y);
-  HeadSize := MmToPrinterPxX(max(HeadSize, 0));
+  HeadSize := MmToPrinterPxX(MaxPtrInt(HeadSize, 0));
   fCanvas.Pen.Width := MulDiv(fDefaultLineWidth, self.Font.Size, 8);
   DrawArrowInternal(fCanvas, Point1, Point2, HeadSize, SolidHead);
 end;
@@ -4196,11 +4178,11 @@ begin
   end
   else
     UseStretchDraw := false;
-  PrintFrom := max(PrintFrom - 1, 0);
+  PrintFrom := MaxPtrInt(PrintFrom - 1, 0);
   if PrintTo = 0 then
     PrintTo := high(fPages)
   else
-    PrintTo := min(PrintTo - 1, high(fPages));
+    PrintTo := MinPtrInt(PrintTo - 1, high(fPages));
   with Printer do
   begin
     if Caption = '' then
@@ -4273,7 +4255,7 @@ begin
   if self = nil then
     exit; // avoid GPF
   FillCharFast(fTab[0], MAXTABS * SizeOf(fTab[0]), 0);
-  fTabCount := min(high(tabs) + 1, MAXTABS);
+  fTabCount := MinPtrInt(high(tabs) + 1, MAXTABS);
   // ignore trailing 0 tabs in array ...
   while (fTabCount > 0) and
         (tabs[fTabCount - 1] = 0) do

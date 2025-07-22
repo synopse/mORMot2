@@ -727,24 +727,6 @@ implementation
 
 { **************** RSA Oriented Big-Integer Computation }
 
-function Min(a, b: integer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if a < b then
-    result := a
-  else
-    result := b;
-end;
-
-function Max(a, b: integer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if a > b then
-    result := a
-  else
-    result := b;
-end;
-
 function CompareBI(A, B: HalfUInt): integer;
 begin
   result := ord(A > B) - ord(A < B);
@@ -1040,7 +1022,7 @@ begin
     ERsaException.RaiseU('Unexpected TBigInt.GreatestCommonDivisor(0)');
   ta := Clone;
   tb := b.Clone;
-  z := Min(ta.FindMinBit, tb.FindMinBit);
+  z := MinPtrInt(ta.FindMinBit, tb.FindMinBit);
   while not ta.IsZero do
   begin
     // divisions by 2 preserve the invariant
@@ -1106,7 +1088,7 @@ var
 begin
   if not b^.IsZero then
   begin
-    n := Max(Size, b^.Size);
+    n := MaxPtrInt(Size, b^.Size);
     Resize(n + 1);
     b^.Resize(n);
     pa := pointer(Value);
@@ -2031,8 +2013,8 @@ begin
   begin
     if raExactSize in opt then
       result^.Capacity := n // e.g. from LoadPermanent()
-    else
-      result^.Capacity := NextGrow(Max(RSA_DEFAULT_ALLOCATE, n)); // over-alloc
+    else // with some over-alloc
+      result^.Capacity := NextGrow(MaxPtrInt(RSA_DEFAULT_ALLOCATE, n));
     GetMem(result^.Value, result^.Capacity * HALF_BYTES);
   end;
   result^.RefCnt := 1;

@@ -525,15 +525,6 @@ begin
   end;
 end;
 
-function Min(a, b: PtrInt): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  if a < b then
-    result := a
-  else
-    result := b;
-end;
-
 procedure TSqlDBIbxStatement.ExecutePrepared;
 var
   con: TSqlDBIbxConnection;
@@ -710,7 +701,7 @@ var
     try
       while iStart < fParamsArrayCount do
       begin
-        iEnd := Min(iStart + iStmCount - 1, fParamsArrayCount - 1);
+        iEnd := MinPtrInt(iStart + iStmCount - 1, fParamsArrayCount - 1);
         if (iStart = 0) or
            (iEnd - iStart + 1 <> iStmCount) then
         begin

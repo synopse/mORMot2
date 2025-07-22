@@ -5000,22 +5000,6 @@ end;
 
 { ****************** Binary Buffers Delta Compression }
 
-function Max(a, b: PtrInt): PtrInt; {$ifdef HASINLINE}inline;{$endif}
-begin
-  if a > b then
-    result := a
-  else
-    result := b;
-end;
-
-function Min(a, b: PtrInt): PtrInt; {$ifdef HASINLINE}inline;{$endif}
-begin
-  if a < b then
-    result := a
-  else
-    result := b;
-end;
-
 {$ifdef HASINLINE}
 function Comp(a, b: PAnsiChar; len: PtrInt): PtrInt; inline;
 var
@@ -5177,7 +5161,7 @@ begin
   pOut := OutBuf + 7;
   sp := WorkBuf;
   // 3. handle identical leading bytes
-  match := Comp(OldBuf, NewBuf, Min(OldBufSize, NewBufSize));
+  match := Comp(OldBuf, NewBuf, MinPtrInt(OldBufSize, NewBufSize));
   if match > 2 then
   begin
     sp := WriteCurOfs(0, match, curofssize, sp);
@@ -5208,7 +5192,7 @@ begin
             begin
               // test remaining bytes
               match := Comp(@PHash128Rec(NewBuf)^.c2, @c2,
-                         Min(PtrUInt(OldBufSize) - ofs, NewBufSize) - 8);
+                         MinPtrInt(PtrUInt(OldBufSize) - ofs, NewBufSize) - 8);
               if match > curlen then
               begin
                 // found a longer sequence
@@ -5399,7 +5383,7 @@ begin
   Getmem(workbuf, BufSize); // compression temporary buffers
   Getmem(HList, BufSize * SizeOf({%H-}HList[0]));
   Getmem(HTab, SizeOf({%H-}HTab^));
-  Getmem(Delta, Max(NewSize, OldSize) + 4096); // Delta size max evalulation
+  Getmem(Delta, MaxPtrInt(NewSize, OldSize) + 4096); // Delta size max evalulation
   try
     d := Delta;
     db := ToVarUInt32(NewSize, db); // Destination Size
@@ -5407,7 +5391,7 @@ begin
     if bigfile then
     begin
       // test initial same chars
-      BufRead := Comp(New, Old, Min(NewSize, OldSize));
+      BufRead := Comp(New, Old, MinPtrInt(NewSize, OldSize));
       if BufRead > 9 then
       begin
         // it happens very often: modification is usually in the middle/end
@@ -5421,7 +5405,7 @@ begin
       end;
       // test trailing same chars
       BufRead := CompReverse(New + NewSize - 1, Old + OldSize - 1,
-        Min(NewSize, OldSize));
+        MinPtrInt(NewSize, OldSize));
       if BufRead > 5 then
       begin
         if NewSize = BufRead then
@@ -5433,7 +5417,7 @@ begin
     end;
     // 4. main loop
     repeat
-      BufRead := Min(BufSize, NewSize);
+      BufRead := MinPtrInt(BufSize, NewSize);
       dec(NewSize, BufRead);
       if (BufRead = 0) and
          (Trailing > 0) then
@@ -5443,7 +5427,7 @@ begin
         WriteInt(d, crc32c(0, New, Trailing));
         break;
       end;
-      OldRead := Min(BufSize, OldSize);
+      OldRead := MinPtrInt(BufSize, OldSize);
       dec(OldSize, OldRead);
       db := ToVarUInt32(OldRead, db);
       if (BufRead < 4) or
