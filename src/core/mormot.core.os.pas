@@ -3241,9 +3241,11 @@ function DirectorySize(const Path: TFileName; Recursive: boolean = false;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
-// is processed by this function (for safety) - see DirectoryDeleteAll()
+// is processed by this function (for safety) - see instead DirectoryDeleteAll()
 // - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
 // but just the files found in it
+// - use TDirectoryBrowser to circumvent MAX_PATH issue on Windows
+// - return false if any DeleteFile() or RemoveDir() did fail during the process
 // - warning: DeletedCount^ should be a 32-bit "integer" variable, not a PtrInt
 function DirectoryDelete(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; DeleteOnlyFilesNotDirectory: boolean = false;
@@ -3251,6 +3253,7 @@ function DirectoryDelete(const Directory: TFileName;
 
 /// delete the content of a specified directory and all its nested sub-folders
 // - just a wrapper to recursive DirectoryDeleteOlderFiles() with TimePeriod=0
+// - use TDirectoryBrowser to circumvent MAX_PATH issue on Windows
 function DirectoryDeleteAll(const Directory: TFileName): boolean;
 
 /// delete the files older than a given age in a specified directory
@@ -7623,42 +7626,6 @@ begin
     RaiseExceptionOnCreationFailure);
 end;
 
-function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
-  DeleteOnlyFilesNotDirectory: boolean; DeletedCount: PInteger): boolean;
-var
-  f: TSearchRec;
-  n: integer;
-  dir: TFileName;
-begin
-  n := 0;
-  result := true;
-  if DirectoryExists(Directory) then
-  begin
-    dir := IncludeTrailingPathDelimiter(Directory);
-    if FindFirst(dir + Mask, faAnyFile - faDirectory, f) = 0 then
-    begin
-      repeat
-        if SearchRecValidFile(f) then
-          if DeleteFile(dir + f.Name) then
-            inc(n)
-          else
-            result := false;
-      until FindNext(f) <> 0;
-      FindClose(f);
-    end;
-    if not DeleteOnlyFilesNotDirectory and
-       not RemoveDir(dir) then
-      result := false;
-  end;
-  if DeletedCount <> nil then
-    DeletedCount^ := n;
-end;
-
-function DirectoryDeleteAll(const Directory: TFileName): boolean;
-begin
-  result := DirectoryDeleteOlderFiles(Directory, 0, FILES_ALL, true, nil, true);
-end;
-
 type // state machine for DirectoryDeleteOlderFiles() / DirectoryDeleteAll()
   TDirectoryDelete = class(TDirectoryBrowser)
   protected
@@ -7691,6 +7658,28 @@ begin
     if not RemoveDir(FullFolderName) then
       fDeleteError := true;
   result := true; // continue
+end;
+
+function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
+  DeleteOnlyFilesNotDirectory: boolean; DeletedCount: PInteger): boolean;
+var
+  browse: TDirectoryDelete;
+begin
+  browse := TDirectoryDelete.Create(Directory, [Mask], {recursive=}false);
+  try
+    browse.fDeleteFolders := not DeleteOnlyFilesNotDirectory;
+    browse.Run;
+    if DeletedCount <> nil then
+      DeletedCount^ := browse.fDeletedCount;
+    result := not browse.fDeleteError;
+  finally
+    browse.Free;
+  end;
+end;
+
+function DirectoryDeleteAll(const Directory: TFileName): boolean;
+begin
+  result := DirectoryDeleteOlderFiles(Directory, 0, FILES_ALL, true, nil, true);
 end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
