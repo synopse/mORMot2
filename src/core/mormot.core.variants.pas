@@ -8664,7 +8664,7 @@ function TDocVariantData.DeleteByPath(const aPath: RawUtf8;
 var
   csv: PUtf8Char;
   dv: PDocVariantData;
-  ndx, namelen: PtrInt;
+  ndx, len: PtrInt;
 begin
   result := false;
   csv := pointer(aPath);
@@ -8673,10 +8673,10 @@ begin
     exit;
   dv := @self;
   repeat
-    ndx := dv^.InternalNextPath(csv, aPathDelim, namelen);
+    ndx := dv^.InternalNextPath(csv, aPathDelim, len);
     if ndx < 0 then
       exit;
-    inc(csv, namelen);
+    inc(csv, len);
     if csv^ = #0 then
     begin
       // we reached the last item of the path, which is to be deleted
@@ -9047,7 +9047,7 @@ end;
 function TDocVariantData.GetPVariantByPath(const aPath: RawUtf8;
   aPathDelim: AnsiChar): PVariant;
 var
-  ndx, namelen: PtrInt;
+  ndx, len: PtrInt;
   vt: cardinal;
   csv: PUtf8Char;
 begin
@@ -9064,10 +9064,10 @@ begin
       until false;
       if vt <> DocVariantVType then
         break;
-      ndx := PDocVariantData(result)^.InternalNextPath(csv, aPathDelim, namelen);
+      ndx := PDocVariantData(result)^.InternalNextPath(csv, aPathDelim, len);
       if ndx < 0 then
         break; // this nested level in path does not exist
-      inc(csv, namelen);
+      inc(csv, len);
       result := @PDocVariantData(result)^.VValue[ndx];
       if csv^ = #0 then
         exit; // exhausted whole path, so result is the found item
@@ -9277,7 +9277,7 @@ function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
 var
   csv: PUtf8Char;
   v, v2: PDocVariantData;
-  ndx, namelen: PtrInt;
+  ndx, len: PtrInt;
 begin
   result := nil;
   if IsArray then
@@ -9286,14 +9286,14 @@ begin
   v := @self;
   // work with aPathDelim = #0 e.g. from Merge()
   repeat
-    ndx := v^.InternalNextPath(csv, aPathDelim, namelen);
-    if csv[namelen] = #0 then
+    ndx := v^.InternalNextPath(csv, aPathDelim, len);
+    if csv[len] = #0 then
       break; // reached the last item of the path, which is the value to set
     if ndx < 0 then
       if aCreateIfNotExisting and
          not v^.IsArray then // avoid EDocVariant in v^.InternalAddBuf()
       begin
-        ndx := v^.InternalAddBuf(csv, namelen); // in two steps for FPC
+        ndx := v^.InternalAddBuf(csv, len); // in two steps for FPC
         v := @v^.VValue[ndx];
         v^.InitClone(self); // same Options than root but with no Kind
       end
@@ -9301,13 +9301,13 @@ begin
         exit
     else if not _Safe(v^.VValue[ndx], v) then
       exit; // incorrect path
-    inc(csv, namelen + 1); // next
+    inc(csv, len + 1); // next
   until false;
   if ndx < 0 then
     if v^.IsArray then
       exit // avoid EDocVariant in v^.InternalAddBuf()
     else
-      ndx := v^.InternalAddBuf(csv, namelen);
+      ndx := v^.InternalAddBuf(csv, len);
   if aMergeExisting and
      (ndx >= 0) then
   begin
