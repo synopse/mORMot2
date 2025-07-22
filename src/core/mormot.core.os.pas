@@ -3248,6 +3248,10 @@ function DirectoryDelete(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; DeleteOnlyFilesNotDirectory: boolean = false;
   DeletedCount: PInteger = nil): boolean;
 
+/// delete the content of a specified directory and all its nested sub-folders
+// - just a wrapper to DirectoryDeleteOlderFiles() with TimePeriod=0
+function DirectoryDeleteAll(const Directory: TFileName): boolean;
+
 /// delete the files older than a given age in a specified directory
 // - for instance, to delete all files older than one day:
 // ! DirectoryDeleteOlderFiles(FolderName, 1);
@@ -7546,6 +7550,11 @@ begin
   end;
   if DeletedCount <> nil then
     DeletedCount^ := n;
+end;
+
+function DirectoryDeleteAll(const Directory: TFileName): boolean;
+begin
+  result := DirectoryDeleteOlderFiles(Directory, 0, FILES_ALL, true, nil, true);
 end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
