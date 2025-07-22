@@ -3251,13 +3251,15 @@ function DirectoryDelete(const Directory: TFileName;
 /// delete the files older than a given age in a specified directory
 // - for instance, to delete all files older than one day:
 // ! DirectoryDeleteOlderFiles(FolderName, 1);
-// - only one level of file is deleted within the folder: no recursive deletion
-// is processed by this function, unless Recursive is TRUE
-// - if Recursive=true, caller should set TotalSize^=0 to have an accurate value
-// - return false if any deprecated DeleteFile() did fail during the process
+// - TimePeriod = 0 will delete all files found, whatever timestamp they are
+// - Recursive = true will delete all nested folders
+// - in respect to DirectoryDelete(), this function will detect and circumvent
+// any MAX_PATH limitation on Windows
+// - return false if any DeleteFile() or RemoveDir() did fail during the process
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
-  Recursive: boolean = false; TotalSize: PInt64 = nil): boolean;
+  Recursive: boolean = false; TotalSize: PInt64 = nil;
+  DeleteNestedFolders: boolean = false): boolean;
 
 type
   /// defines how IsDirectoryWritable() verifies a folder
@@ -7548,39 +7550,81 @@ end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
-  TotalSize: PInt64): boolean;
+  TotalSize: PInt64; DeleteNestedFolders: boolean): boolean;
 var
-  f: TSearchRec;
-  dir: TFileName;
-  old: TDateTime;
+  dir: TFileName; // current full path name, including ending path delimiter
+{$ifdef OSWINDOWS}
+  // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+  extendedpath: boolean; // RTL FindFirst() is limited to MAX_PATH
+
+  function Make(const fn: TFileName): TFileName;
+  begin
+    if not extendedpath and
+       (length(dir) + length(fn) >= MAX_PATH - 5) then
+    begin
+      extendedpath := true;
+      dir := '\\?\' + dir;  // always use the long path prefix from now on
+    end;
+    result := dir + fn;
+  end;
+{$else}
+  function Make(const fn: TFileName): TFileName; inline;
+  begin
+    result := dir + fn; // MAX_PATH is usually not a concern on POSIX
+  end;
+{$endif OSWINDOWS}
+
+  procedure ProcessDir;
+  var
+    f: TSearchRec;
+    prev: TFileName;
+  begin
+    if Recursive then
+      if FindFirst(Make(FILES_ALL), faDirectory, f) = 0 then
+      begin
+        repeat
+          if SearchRecValidFolder(f) then
+          begin
+            prev := dir;
+            dir := Make(f.Name) + PathDelim; // nested folder
+            ProcessDir;
+            dir := prev;
+          end;
+        until FindNext(f) <> 0;
+        FindClose(f);
+      end;
+    if FindFirst(Make(Mask), faAnyfile - faDirectory, f) = 0 then
+    begin
+      repeat
+        if SearchRecValidFile(f) and
+           ((TimePeriod = 0) or
+            (SearchRecToDateTimeUtc(f) < TimePeriod)) then
+          if not DeleteFile(Make(f.Name)) then
+            result := false // mark something wrong
+          else if TotalSize <> nil then
+            inc(TotalSize^, f.Size);
+      until FindNext(f) <> 0;
+      FindClose(f);
+    end;
+    if DeleteNestedFolders then
+      if not RemoveDir(dir) then
+        result := false; // mark something wrong
+  end;
+
 begin
-  if not Recursive and
-     (TotalSize <> nil) then
+  if TotalSize <> nil then
     TotalSize^ := 0;
   result := true;
   if (Directory = '') or
      not DirectoryExists(Directory) then
     exit;
+  if TimePeriod > 0 then
+    TimePeriod := NowUtc - TimePeriod;
+  {$ifdef OSWINDOWS}
+  extendedpath := IsExtendedPathName(Directory); // already in '\\?\...' format
+  {$endif OSWINDOWS}
   dir := IncludeTrailingPathDelimiter(Directory);
-  if FindFirst(dir + Mask, faAnyFile, f) = 0 then
-  begin
-    old := NowUtc - TimePeriod;
-    repeat
-      if SearchRecValidFolder(f) then
-      begin
-        if Recursive then
-          DirectoryDeleteOlderFiles(
-            dir + f.Name, TimePeriod, Mask, true, TotalSize);
-      end
-      else if SearchRecValidFile(f) and
-              (SearchRecToDateTimeUtc(f) < old) then
-        if not DeleteFile(dir + f.Name) then
-          result := false
-        else if TotalSize <> nil then
-          inc(TotalSize^, f.Size);
-    until FindNext(f) <> 0;
-    FindClose(f);
-  end;
+  ProcessDir;
 end;
 
 function IsDirectoryWritable(const Directory: TFileName;
