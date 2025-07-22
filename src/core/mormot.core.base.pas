@@ -13399,6 +13399,7 @@ begin
   end;
 end;
 
+{$ifdef HASCODEPAGE}
 procedure TRawByteStringStream.EnsureDataStringIsUtf8;
 var
   p: PStrRec;
@@ -13410,6 +13411,7 @@ begin // faster than EnsureRawUtf8() since in most cases it is already CP_UTF8
   if p^.refCnt = 1 then
     p^.CodePage := CP_UTF8; // just replace in-place (paranoid anyway)
 end;
+{$endif HASCODEPAGE}
 
 procedure TRawByteStringStream.Clear;
 begin
