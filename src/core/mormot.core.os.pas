@@ -3240,7 +3240,7 @@ function NormalizeDirectoryExists(const Directory: TFileName;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
-// is processed by this function (for safety)
+// is processed by this function (for safety) - see DirectoryDeleteAll()
 // - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
 // but just the files found in it
 // - warning: DeletedCount^ should be a 32-bit "integer" variable, not a PtrInt
@@ -3249,7 +3249,7 @@ function DirectoryDelete(const Directory: TFileName;
   DeletedCount: PInteger = nil): boolean;
 
 /// delete the content of a specified directory and all its nested sub-folders
-// - just a wrapper to DirectoryDeleteOlderFiles() with TimePeriod=0
+// - just a wrapper to recursive DirectoryDeleteOlderFiles() with TimePeriod=0
 function DirectoryDeleteAll(const Directory: TFileName): boolean;
 
 /// delete the files older than a given age in a specified directory
@@ -3263,7 +3263,28 @@ function DirectoryDeleteAll(const Directory: TFileName): boolean;
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
   Recursive: boolean = false; TotalSize: PInt64 = nil;
-  DeleteNestedFolders: boolean = false): boolean;
+  DeleteFolders: boolean = false): boolean;
+
+type
+  /// event handler triggerred by DirectoryBrowse() for each file
+  // - should return true to continue the search, or false to abort
+  TOnDirectoryBrowseFile = function(Sender: TObject; const FileInfo: TSearchRec;
+    const FullFileName: TFileName): boolean of object;
+  /// event handler triggerred by DirectoryBrowse() for each folder
+  // - should return true to continue the search, or false to abort
+  // - is called once all TOnDirectoryBrowseFile events have been called for
+  // this folder (e.g. to eventually delete the folder after the files)
+  TOnDirectoryBrowseFolder = function(Sender: TObject;
+    const FullFolderName: TFileName): boolean of object;
+
+/// recursively search a folder and its nested sub-folders via callbacks
+// - will properly override the MAX_PATH limitation on Windows
+// - as used e.g. by DirectoryDeleteAll() and DirectoryDeleteOlderFiles()
+// - typical FileMasks value is [FILES_ALL] but you can use e.g. ['*.pas','*.pp']
+// - returns false if has been aborted by a OnFile() or OnFolder() callback
+function DirectoryBrowse(Sender: TObject; const Directory: TFileName;
+  const OnFile: TOnDirectoryBrowseFile; const OnFolder: TOnDirectoryBrowseFolder;
+  const FileMasks: array of TFileName; Recursive: boolean = true): boolean; overload;
 
 type
   /// defines how IsDirectoryWritable() verifies a folder
@@ -7557,11 +7578,64 @@ begin
   result := DirectoryDeleteOlderFiles(Directory, 0, FILES_ALL, true, nil, true);
 end;
 
+type // state machine for DirectoryDeleteOlderFiles() / DirectoryDeleteAll()
+  TDirectoryDelete = class
+    TimePeriod: TDateTime;
+    TotalSize: Int64;
+    DeleteFolders, DeleteError: boolean;
+    function OnFile(Sender: TObject; const FileInfo: TSearchRec;
+      const FullFileName: TFileName): boolean;
+    function OnFolder(Sender: TObject; const FullFolderName: TFileName): boolean;
+  end;
+
+function TDirectoryDelete.OnFile(Sender: TObject;
+  const FileInfo: TSearchRec; const FullFileName: TFileName): boolean;
+begin
+  if (TimePeriod = 0) or
+     (SearchRecToDateTimeUtc(FileInfo) < TimePeriod) then
+    if DeleteFile(FullFileName) then
+      inc(TotalSize, FileInfo.Size)
+    else
+      DeleteError := true;
+  result := true; // continue
+end;
+
+function TDirectoryDelete.OnFolder(Sender: TObject;
+  const FullFolderName: TFileName): boolean;
+begin
+  if DeleteFolders then
+    if not RemoveDir(FullFolderName) then
+      DeleteError := true;
+  result := true; // continue
+end;
+
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
-  TotalSize: PInt64; DeleteNestedFolders: boolean): boolean;
+  TotalSize: PInt64; DeleteFolders: boolean): boolean;
+var
+  context: TDirectoryDelete;
+begin
+  context := TDirectoryDelete.Create;
+  try
+    if TimePeriod > 0 then
+      context.TimePeriod := NowUtc - TimePeriod;
+    context.DeleteFolders := DeleteFolders;
+    DirectoryBrowse(context, Directory, context.OnFile, context.OnFolder,
+      [Mask], Recursive);
+    if TotalSize <> nil then
+      TotalSize^ := context.TotalSize;
+    result := not context.DeleteError;
+  finally
+    context.Free;
+  end;
+end;
+
+function DirectoryBrowse(Sender: TObject; const Directory: TFileName;
+  const OnFile: TOnDirectoryBrowseFile; const OnFolder: TOnDirectoryBrowseFolder;
+  const FileMasks: array of TFileName; Recursive: boolean): boolean;
 var
   dir: TFileName; // current full path name, including ending path delimiter
+
 {$ifdef OSWINDOWS}
   // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
   extendedpath: boolean; // RTL FindFirst() is limited to MAX_PATH
@@ -7587,7 +7661,9 @@ var
   var
     f: TSearchRec;
     prev: TFileName;
+    i: PtrInt;
   begin
+    dir := dir + PathDelim;
     if Recursive then
       if FindFirst(Make(FILES_ALL), faDirectory, f) = 0 then
       begin
@@ -7595,44 +7671,43 @@ var
           if SearchRecValidFolder(f) then
           begin
             prev := dir;
-            dir := Make(f.Name) + PathDelim; // nested folder
+            dir := Make(f.Name); // nested folder
             ProcessDir;
-            dir := prev;
+            if not result then
+              exit; // aborted
+            dir := prev; // back to the parent folder
           end;
         until FindNext(f) <> 0;
         FindClose(f);
       end;
-    if FindFirst(Make(Mask), faAnyfile - faDirectory, f) = 0 then
-    begin
-      repeat
-        if SearchRecValidFile(f) and
-           ((TimePeriod = 0) or
-            (SearchRecToDateTimeUtc(f) < TimePeriod)) then
-          if not DeleteFile(Make(f.Name)) then
-            result := false // mark something wrong
-          else if TotalSize <> nil then
-            inc(TotalSize^, f.Size);
-      until FindNext(f) <> 0;
-      FindClose(f);
-    end;
-    if DeleteNestedFolders then
-      if not RemoveDir(dir) then
-        result := false; // mark something wrong
+    if Assigned(OnFile) then
+      for i := 0 to high(FileMasks) do
+        if FindFirst(Make(FileMasks[i]), faAnyfile - faDirectory, f) = 0 then
+        begin
+          repeat
+            if SearchRecValidFile(f) then
+              if not OnFile(Sender, f, Make(f.Name)) then
+              begin
+                result := false; // aborted
+                exit;
+              end;
+          until FindNext(f) <> 0;
+          FindClose(f);
+        end;
+    if Assigned(OnFolder) then
+      result := OnFolder(Sender, dir); // always called last
   end;
 
 begin
-  if TotalSize <> nil then
-    TotalSize^ := 0;
-  result := true;
-  if (Directory = '') or
-     not DirectoryExists(Directory) then
+  dir := ExcludeTrailingPathDelimiter(Directory);
+  result := (dir <> '') and
+            FileExists(dir, {link=}true, {asdir=}true);
+  if not result then
     exit;
-  if TimePeriod > 0 then
-    TimePeriod := NowUtc - TimePeriod;
   {$ifdef OSWINDOWS}
-  extendedpath := IsExtendedPathName(Directory); // already in '\\?\...' format
+  extendedpath := IsExtendedPathName(dir); // already in '\\?\...' format ?
   {$endif OSWINDOWS}
-  dir := IncludeTrailingPathDelimiter(Directory);
+  result := true;
   ProcessDir;
 end;
 
