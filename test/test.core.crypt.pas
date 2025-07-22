@@ -46,7 +46,7 @@ type
     procedure CatalogRunCert(Context: TObject);
     procedure CatalogRunStore(Context: TObject);
     procedure RsaSlow(Context: TObject);
-    procedure HashesSlow(Context: TObject); // 32-bit, 64-bit and 128-bit hash
+    procedure CrcSlow(Context: TObject); // 32-bit, 64-bit and 128-bit hash
     procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
       const exp, msg: RawUtf8);
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
@@ -1613,7 +1613,7 @@ On i386 (Linux/FPC):
    https://github.com/tkaitchuck/aHash (same algorithm) passes all tests
 }
 
-procedure TTestCoreCrypto.HashesSlow(Context: TObject);
+procedure TTestCoreCrypto.CrcSlow(Context: TObject);
 
 const
   HASHESMAX = 512;
@@ -2853,7 +2853,7 @@ end;
 
 procedure TTestCoreCrypto.Hashes;
 var
-  i, n, bytes: integer;
+  i, n: PtrInt;
   exp: cardinal;
   md: TMd5;
   dig, dig2: TMd5Digest;
@@ -2874,32 +2874,29 @@ begin
   begin
     bak := AesNiHashAntiFuzzTable^;
     AesNiHashAntiFuzzTable^ := PHash512(tmp)^; // replace to get AESNIHASH_REF
-    //i := 0; ConsoleWriteLn;
     ref := AESNIHASH_REF;
-    bytes := 0;
+    n := 0;
     repeat
-      exp := AesNiHash32(bytes, pointer(tmp), bytes);
+      exp := AesNiHash32(n, pointer(tmp), n);
       FillZero(h128);
-      AesNiHash128(@h128, pointer(tmp), bytes);
+      AesNiHash128(@h128, pointer(tmp), n);
       Check(mormot.core.text.HexToBin(ref, @ref128, SizeOf(ref128)));
       inc(ref, SizeOf(ref128) * 2);
-      CheckUtf8(IsEqual(h128, ref128), 'aesni(%)', [bytes]);
-      CheckUtf8(AesNiHash32(0, pointer(pointer(tmp)), bytes) =
-        PCardinal(@ref128)^, 'aesni32(%)', [bytes]);
-      CheckUtf8(AesNiHash32(bytes, pointer(pointer(tmp)), bytes) =
-        exp, 'aesni32b(%)', [bytes]);
-      //ConsoleWrite(Md5DigestToString(h128), ccLightGray, true);
-      //if i and 1 = 0 then ConsoleWrite(''' + '); inc(i);
-      if bytes < 20 then
-        inc(bytes) // specific verification of pshufb process for 1..16 bytes
+      CheckUtf8(IsEqual(h128, ref128), 'aesni(%)', [n]);
+      CheckUtf8(AesNiHash32(0, pointer(pointer(tmp)), n) =
+        PCardinal(@ref128)^, 'aesni32(%)', [n]);
+      CheckUtf8(AesNiHash32(n, pointer(pointer(tmp)), n) =
+        exp, 'aesni32b(%)', [n]);
+      if n < 20 then
+        inc(n) // specific verification of pshufb process for 1..16 bytes
       else
-        inc(bytes, 7);
-    until bytes > 250;
-    CheckEqual(bytes, 251);
+        inc(n, 7);
+    until n > 250;
+    CheckEqual(n, 251);
     AesNiHashAntiFuzzTable^ := bak; // needed to preserve existing hash tables
   end;
-  // validate 32-bit, 64-bit and 128-bit hash functions in the background
-  Run(HashesSlow, nil, 'hashes', {threaded=}true, {notify=}false);
+  // validate 32-bit, 64-bit and 128-bit crc functions in the background
+  Run(CrcSlow, nil, 'crc', {threaded=}true, {notify=}false);
   // MD5 validation
   CheckEqual(htdigest('agent007', 'download area', 'secret'),
     'agent007:download area:8364d0044ef57b3defcfa141e8f77b65', 'htdigest');
