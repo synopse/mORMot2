@@ -74,8 +74,9 @@ begin
   result := pointer(FileName);
   len := length(FileName);
   if (len = 0) or
-     ((len < MAX_PATH) and
-      not DoCopy) then
+     ((not DoCopy) and // temp copy is forced e.g. for GetFileVersionInfoSizeW()
+      ((len < MAX_PATH) or
+       IsExtendedPathName(FileName))) then
     exit; // most common case could direclty use FileName[] UTF-16 content
   ExtendedPathName(pointer(FileName), len, Temp);
   result := @Temp;
@@ -124,7 +125,9 @@ begin
   if FileName = '' then
     exit;
   len := length(FileName);
-  if (len < MAX_PATH) and
+  if ((len < MAX_PATH) or
+      ((len < W32_MAX) and
+       IsExtendedPathName(FileName))) and
      IsAnsiCompatible(pointer(FileName), len) then
     // most common cases do not need any Unicode conversion
     for i := 0 to len do // includes #0 terminator
