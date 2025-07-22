@@ -1311,6 +1311,12 @@ begin
             (FpUnlink(pointer(aFileName)) >= 0);
 end;
 
+function RemoveDir(const aDirName: TFileName): boolean;
+begin
+  result := (aDirName <> '') and
+            (FpRmdir(pointer(aDirName)) >= 0);
+end;
+
 procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 begin
   if FileName <> '' then

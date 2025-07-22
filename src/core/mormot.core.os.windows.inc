@@ -1062,6 +1062,14 @@ begin
             DeleteFileW(W32(aFileName, tmp));
 end;
 
+function RemoveDir(const aDirName: TFileName): boolean;
+var
+  tmp: TW32Temp;
+begin
+  result := (aDirName <> '') and
+            RemoveDirectoryW(W32(aDirName, tmp));
+end;
+
 function FileShare(aMode: integer): DWord;
 begin
   case (aMode and $f0) of

@@ -2895,6 +2895,10 @@ function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function DeleteFile(const aFileName: TFileName): boolean;
 
+/// redefined here to avoid warning to include "Windows" in uses clause
+// and support FileName longer than MAX_PATH
+function RemoveDir(const aDirName: TFileName): boolean;
+
 /// check if a file (or folder) exists and can be written
 // - on POSIX, call fpaccess() and check for the W_OK attribute
 // - on Windows, check faReadOnly and supports aFileName longer than MAX_PATH
