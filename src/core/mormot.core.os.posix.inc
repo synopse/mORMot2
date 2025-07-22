@@ -112,6 +112,11 @@ begin // file extension, then file name case-sensitive comparison on POSIX
     result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(pointer(A), pointer(B));
 end;
 
+function TDirectoryBrowser.Make(const fn: TFileName): TFileName;
+begin
+  result := fCurrentDir + fn; // MAX_PATH is usually not a concern on POSIX
+end;
+
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 begin
   result := TLibHandle(dlopen(pointer(LibraryName), RTLD_LAZY));

@@ -297,6 +297,18 @@ begin // case-insensitive extension, then filename using plain string/PChar
     result := AnsiCompareFileName(string(A), string(B)); // as user-expected
 end;
 
+// https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+function TDirectoryBrowser.Make(const fn: TFileName): TFileName;
+begin
+  if not fExtendedPath and
+     (length(fCurrentDir) + length(fn) >= MAX_PATH - 5) then
+  begin
+    fExtendedPath := true;
+    fCurrentDir := '\\?\' + fCurrentDir;  // use long path prefix from now on
+  end;
+  result := fCurrentDir + fn;
+end;
+
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 var
   tmp: TW32Temp;

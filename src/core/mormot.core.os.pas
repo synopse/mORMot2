@@ -2970,12 +2970,6 @@ function FileIsExecutable(const FileName: TFileName): boolean;
 /// check if a given file is a symbolic link
 function FileIsSymLink(const FileName: TFileName): boolean;
 
-/// compute the size of a directory's files, optionally with nested folders
-// - basic implementation using FindFirst/FindNext so won't be the fastest
-// available, nor fully accurate when files are actually (hard) links
-function DirectorySize(const FileName: TFileName; Recursive: boolean = false;
-  const Mask: TFileName = FILES_ALL): Int64;
-
 /// copy one file to another, using the Windows API if possible
 // - on POSIX, will call StreamCopyUntilEnd() between two TFileStreamEx
 // - will delete the Target file on any copying issue (e.g. process abort)
@@ -3238,6 +3232,13 @@ function EnsureDirectoryExistsNoExpand(const Directory: TFileName): TFileName;
 function NormalizeDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
 
+/// compute the size of all directory's files, optionally with nested folders
+// - basic implementation using FindFirst/FindNext so won't be the fastest
+// available, nor fully accurate when files are actually (hard) links
+// - use TDirectoryBrowser to circumvent MAX_PATH issue on Windows
+function DirectorySize(const Path: TFileName; Recursive: boolean = false;
+  const FileMask: TFileName = FILES_ALL): Int64;
+
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function (for safety) - see DirectoryDeleteAll()
@@ -3257,8 +3258,7 @@ function DirectoryDeleteAll(const Directory: TFileName): boolean;
 // ! DirectoryDeleteOlderFiles(FolderName, 1);
 // - TimePeriod = 0 will delete all files found, whatever timestamp they are
 // - Recursive = true will delete all nested folders
-// - in respect to DirectoryDelete(), this function will detect and circumvent
-// any MAX_PATH limitation on Windows
+// - use TDirectoryBrowser to circumvent MAX_PATH issue on Windows
 // - return false if any DeleteFile() or RemoveDir() did fail during the process
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
@@ -3266,27 +3266,36 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
   DeleteFolders: boolean = false): boolean;
 
 type
-  /// event handler triggerred by DirectoryBrowse() for each file
-  // - should return true to continue the search, or false to abort
-  TOnDirectoryBrowseFile = function(Sender: TObject; const FileInfo: TSearchRec;
-    const FullFileName: TFileName): boolean of object;
-  /// event handler triggerred by DirectoryBrowse() for each folder
-  // - should return true to continue the search, or false to abort
-  // - is called once all TOnDirectoryBrowseFile events have been called for
-  // this folder (e.g. to eventually delete the folder after the files)
-  TOnDirectoryBrowseFolder = function(Sender: TObject;
-    const FullFolderName: TFileName): boolean of object;
+  /// recursively search a folder and its nested sub-folders via methods
+  // - as used e.g. by DirectorySize() or DirectoryDeleteOlderFiles()
+  // - you should inherit from this class, supply some private parameters,
+  // then override OnFile and OnFolder to match your expected process
+  // - this class will detect and circumvent any MAX_PATH limitation on Windows
+  TDirectoryBrowser = class
+  protected
+    fCurrentDir: TFileName;
+    fFileMask: TFileNameDynArray;
+    fRecursive, fExtendedPath, fAborted: boolean;
+    fTotalSize: Int64;
+    function Make(const fn: TFileName): TFileName; // handle MAX_PATH on Windows
+    procedure ProcessDir; virtual; // main recursive method
+    /// virtual method executed for each file
+    // - by default, returns true to continue - returning false would abort
+    function OnFile(const FileInfo: TSearchRec; const FullFileName: TFileName): boolean; virtual;
+    /// virtual method executed for each folder, after OnFile() have been called
+    // - by default, returns true to continue - returning false would abort
+    function OnFolder(const FullFolderName: TFileName): boolean; virtual;
+  public
+    /// prepare the process for a given folder
+    // - typical FileMasks value is [FILES_ALL] but also e.g. ['*.pas','*.pp']
+    // - FileMasks = [] will trigger only OnFolder but not OnFile
+    constructor Create(const Directory: TFileName;
+      const FileMasks: array of TFileName; Recursive: boolean = true);
+    /// this method is the main processing function
+    // - returns false if has been aborted by a OnFile() or OnFolder() method
+    function Run: boolean;
+  end;
 
-/// recursively search a folder and its nested sub-folders via callbacks
-// - will properly override the MAX_PATH limitation on Windows
-// - as used e.g. by DirectoryDeleteAll() and DirectoryDeleteOlderFiles()
-// - typical FileMasks value is [FILES_ALL] but you can use e.g. ['*.pas','*.pp']
-// - returns false if has been aborted by a OnFile() or OnFolder() callback
-function DirectoryBrowse(Sender: TObject; const Directory: TFileName;
-  const OnFile: TOnDirectoryBrowseFile; const OnFolder: TOnDirectoryBrowseFolder;
-  const FileMasks: array of TFileName; Recursive: boolean = true): boolean; overload;
-
-type
   /// defines how IsDirectoryWritable() verifies a folder
   // - on Win32 Vista+, idwExcludeWinUac will check IsUacVirtualFolder()
   // - on Windows, idwExcludeWinSys will check IsSystemFolder()
@@ -6787,24 +6796,97 @@ begin
   FileClose(h);
 end;
 
-function DirectorySize(const FileName: TFileName; Recursive: boolean;
-  const Mask: TFileName): Int64;
+
+{ TDirectoryBrowser }
+
+constructor TDirectoryBrowser.Create(const Directory: TFileName;
+  const FileMasks: array of TFileName; Recursive: boolean);
 var
-  sr: TSearchRec;
-  dir: TFileName;
+  i: PtrInt;
 begin
-  result := 0;
-  dir := IncludeTrailingPathDelimiter(FileName);
-  if FindFirst(dir + Mask, faAnyFile, sr) <> 0 then
+  fCurrentDir := ExcludeTrailingPathDelimiter(Directory);
+  fRecursive := Recursive;
+  SetLength(fFileMask, length(FileMasks));
+  for i := 0 to high(FileMasks) do
+    fFileMask[i] := FileMasks[i];
+end;
+
+function TDirectoryBrowser.OnFile(const FileInfo: TSearchRec;
+  const FullFileName: TFileName): boolean;
+begin
+  inc(fTotalSize, FileInfo.Size); // default behavior for DirectorySize()
+  result := true; // continue
+end;
+
+function TDirectoryBrowser.OnFolder(const FullFolderName: TFileName): boolean;
+begin
+  result := true; // continue
+end;
+
+function TDirectoryBrowser.Run: boolean;
+begin
+  result := (fCurrentDir <> '') and
+            FileExists(fCurrentDir, {link=}true, {asdir=}true);
+  if not result then
     exit;
-  repeat
-   if SearchRecValidFile(sr, {includehidden=}true) then
-     inc(result, sr.Size)
-   else if Recursive and
-           SearchRecValidFolder(sr, {includehidden=}true) then
-     inc(result, DirectorySize(dir + sr.Name, true));
-  until FindNext(sr) <> 0;
-  FindClose(sr);
+  {$ifdef OSWINDOWS} // check if already in '\\?\...' format ?
+  fExtendedPath := IsExtendedPathName(fCurrentDir);
+  {$endif OSWINDOWS}
+  ProcessDir;
+  result := not fAborted;
+end;
+
+procedure TDirectoryBrowser.ProcessDir;
+var
+  f: TSearchRec;
+  prev: TFileName;
+  i: PtrInt;
+begin
+  fCurrentDir := fCurrentDir + PathDelim;
+  if fRecursive then
+    if FindFirst(Make(FILES_ALL), faDirectory, f) = 0 then
+    begin
+      repeat
+        if SearchRecValidFolder(f) then
+        begin
+          prev := fCurrentDir;
+          fCurrentDir := Make(f.Name); // nested folder
+          ProcessDir;                  // recursive call
+          if fAborted then
+            exit;
+          fCurrentDir := prev; // back to the parent folder
+        end;
+      until FindNext(f) <> 0;
+      FindClose(f);
+    end;
+  for i := 0 to length(fFileMask) - 1 do
+    if FindFirst(Make(fFileMask[i]), faAnyfile - faDirectory, f) = 0 then
+    begin
+      repeat
+        if SearchRecValidFile(f) then
+          if not OnFile(f, Make(f.Name)) then
+          begin
+            fAborted := true;
+            exit;
+          end;
+      until FindNext(f) <> 0;
+      FindClose(f);
+    end;
+  fAborted := OnFolder(fCurrentDir); // always called last
+end;
+
+function DirectorySize(const Path: TFileName; Recursive: boolean;
+  const FileMask: TFileName): Int64;
+var
+  browse: TDirectoryBrowser;
+begin
+  browse := TDirectoryBrowser.Create(Path, [FileMask], Recursive);
+  try
+    browse.Run;
+    result := browse.fTotalSize; // as computed by the default OnFile() method
+  finally
+    browse.Free;
+  end;
 end;
 
 function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
@@ -7087,7 +7169,6 @@ begin
   FileWriteAll(Handle, @Buffer, Count); // and ignore any I/O error
   result := Count; // optimistic view: emulate all data was properly written
 end;
-
 
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 var
@@ -7579,33 +7660,36 @@ begin
 end;
 
 type // state machine for DirectoryDeleteOlderFiles() / DirectoryDeleteAll()
-  TDirectoryDelete = class
-    TimePeriod: TDateTime;
-    TotalSize: Int64;
-    DeleteFolders, DeleteError: boolean;
-    function OnFile(Sender: TObject; const FileInfo: TSearchRec;
-      const FullFileName: TFileName): boolean;
-    function OnFolder(Sender: TObject; const FullFolderName: TFileName): boolean;
+  TDirectoryDelete = class(TDirectoryBrowser)
+  protected
+    fDeleteBefore: TDateTime;
+    fDeleteFolders, fDeleteError: boolean;
+    fDeletedCount: integer;
+    function OnFile(const FileInfo: TSearchRec;
+      const FullFileName: TFileName): boolean; override;
+    function OnFolder(const FullFolderName: TFileName): boolean; override;
   end;
 
-function TDirectoryDelete.OnFile(Sender: TObject;
-  const FileInfo: TSearchRec; const FullFileName: TFileName): boolean;
+function TDirectoryDelete.OnFile(const FileInfo: TSearchRec;
+  const FullFileName: TFileName): boolean;
 begin
-  if (TimePeriod = 0) or
-     (SearchRecToDateTimeUtc(FileInfo) < TimePeriod) then
+  if (fDeleteBefore = 0) or
+     (SearchRecToDateTimeUtc(FileInfo) < fDeleteBefore) then
     if DeleteFile(FullFileName) then
-      inc(TotalSize, FileInfo.Size)
+    begin
+      inc(fTotalSize, FileInfo.Size);
+      inc(fDeletedCount);
+    end
     else
-      DeleteError := true;
+      fDeleteError := true;
   result := true; // continue
 end;
 
-function TDirectoryDelete.OnFolder(Sender: TObject;
-  const FullFolderName: TFileName): boolean;
+function TDirectoryDelete.OnFolder(const FullFolderName: TFileName): boolean;
 begin
-  if DeleteFolders then
+  if fDeleteFolders then
     if not RemoveDir(FullFolderName) then
-      DeleteError := true;
+      fDeleteError := true;
   result := true; // continue
 end;
 
@@ -7613,102 +7697,20 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
   TotalSize: PInt64; DeleteFolders: boolean): boolean;
 var
-  context: TDirectoryDelete;
+  browse: TDirectoryDelete;
 begin
-  context := TDirectoryDelete.Create;
+  browse := TDirectoryDelete.Create(Directory, [Mask], Recursive);
   try
     if TimePeriod > 0 then
-      context.TimePeriod := NowUtc - TimePeriod;
-    context.DeleteFolders := DeleteFolders;
-    DirectoryBrowse(context, Directory, context.OnFile, context.OnFolder,
-      [Mask], Recursive);
+      browse.fDeleteBefore := NowUtc - TimePeriod;
+    browse.fDeleteFolders := DeleteFolders;
+    browse.Run;
     if TotalSize <> nil then
-      TotalSize^ := context.TotalSize;
-    result := not context.DeleteError;
+      TotalSize^ := browse.fTotalSize;
+    result := not browse.fDeleteError;
   finally
-    context.Free;
+    browse.Free;
   end;
-end;
-
-function DirectoryBrowse(Sender: TObject; const Directory: TFileName;
-  const OnFile: TOnDirectoryBrowseFile; const OnFolder: TOnDirectoryBrowseFolder;
-  const FileMasks: array of TFileName; Recursive: boolean): boolean;
-var
-  dir: TFileName; // current full path name, including ending path delimiter
-
-{$ifdef OSWINDOWS}
-  // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
-  extendedpath: boolean; // RTL FindFirst() is limited to MAX_PATH
-
-  function Make(const fn: TFileName): TFileName;
-  begin
-    if not extendedpath and
-       (length(dir) + length(fn) >= MAX_PATH - 5) then
-    begin
-      extendedpath := true;
-      dir := '\\?\' + dir;  // always use the long path prefix from now on
-    end;
-    result := dir + fn;
-  end;
-{$else}
-  function Make(const fn: TFileName): TFileName; inline;
-  begin
-    result := dir + fn; // MAX_PATH is usually not a concern on POSIX
-  end;
-{$endif OSWINDOWS}
-
-  procedure ProcessDir;
-  var
-    f: TSearchRec;
-    prev: TFileName;
-    i: PtrInt;
-  begin
-    dir := dir + PathDelim;
-    if Recursive then
-      if FindFirst(Make(FILES_ALL), faDirectory, f) = 0 then
-      begin
-        repeat
-          if SearchRecValidFolder(f) then
-          begin
-            prev := dir;
-            dir := Make(f.Name); // nested folder
-            ProcessDir;
-            if not result then
-              exit; // aborted
-            dir := prev; // back to the parent folder
-          end;
-        until FindNext(f) <> 0;
-        FindClose(f);
-      end;
-    if Assigned(OnFile) then
-      for i := 0 to high(FileMasks) do
-        if FindFirst(Make(FileMasks[i]), faAnyfile - faDirectory, f) = 0 then
-        begin
-          repeat
-            if SearchRecValidFile(f) then
-              if not OnFile(Sender, f, Make(f.Name)) then
-              begin
-                result := false; // aborted
-                exit;
-              end;
-          until FindNext(f) <> 0;
-          FindClose(f);
-        end;
-    if Assigned(OnFolder) then
-      result := OnFolder(Sender, dir); // always called last
-  end;
-
-begin
-  dir := ExcludeTrailingPathDelimiter(Directory);
-  result := (dir <> '') and
-            FileExists(dir, {link=}true, {asdir=}true);
-  if not result then
-    exit;
-  {$ifdef OSWINDOWS}
-  extendedpath := IsExtendedPathName(dir); // already in '\\?\...' format ?
-  {$endif OSWINDOWS}
-  result := true;
-  ProcessDir;
 end;
 
 function IsDirectoryWritable(const Directory: TFileName;
