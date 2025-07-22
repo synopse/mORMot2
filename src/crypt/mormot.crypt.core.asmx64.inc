@@ -6859,13 +6859,13 @@ end;
 {$ifdef USEAESNIHASH}
 
 var
-  /// filled with random at startup so collisions will be harder to engineer
+  // random 16*4=64 bytes filled at startup to make collisions harder to engineer
   // - to avoid hash flooding http://ocert.org/advisories/ocert-2012-001.html
   // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
   AESNIHASHKEYSCHED: pointer;
   AESNIHASHKEYSCHED_: RawByteString;
 
-procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt); forward;
+procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt); forward;
 
 function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
@@ -6890,53 +6890,50 @@ function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
 end;
 
-// 128-bit aeshash as implemented in Go runtime, using aesni/sse4.1 opcodes
-// adapted from https://tip.golang.org/src/runtime/asm_amd64.s original code
-procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
 {$ifdef WIN64ABI}
-var
-  bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
-asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
-{$else}
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+procedure _AesNiHashXmm033up(seed: PtrUInt; data: pointer; len: PtrUInt); forward;
 {$endif WIN64ABI}
+
+// 128-bit aeshash as implemented in GoLang runtime, using aesni + sse3 opcodes
+// - simplified and rewritten to use a 128-bit seed and no sse4.2, and share the
+// same algorithm with mormot.crypt.asmx86.inc - our initial translation of
+// go-master/src/runtime/asm_amd64.s returned high 64-bit = 0 for len > 128
+// with no actual performance benefit, and more complex code on the Win64 ABI
+procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // xmm0=seed, rdx/rsi=data, r8/rdx=len, returns in xmm0 and eax
-        mov     r10, len
         test    len, len
         jz      @0
-        pinsrw  xmm0, r10d, 4
-        mov     rax, qword ptr [rip + AESNIHASHKEYSCHED]
-        pshufhw xmm0, xmm0, 00H
-        shl     r10, 4
-        pxor    xmm0, dqword ptr [rax]
-        movups  xmm1, dqword ptr [data + len - 16] // no read after end of page
+        mov     rax,  qword ptr [rip + AESNIHASHKEYSCHED]
+        movdqa  xmm1, xmm0              // save seed for @17up
+        pxor    xmm0, dqword ptr [rax]  // xor with seed
+        aesenc  xmm0, xmm0              // scramble
+        // 1..16 bytes have no branch
         lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
-        aesenc  xmm0, xmm0
-        cmp     len, 16 // 1..16 bytes have no branch
+        cmp     len, 16
         ja      @17up
+        movups  xmm1, dqword ptr [data + len - 16] // no read after end of page
         je      @16
-        pshufb  xmm1, dqword ptr [r11 + r10]  // shuffle data bits to lower xmm1
-@16:    aesenc  xmm1, xmm0
+        shl     len, 4
+        pshufb  xmm1, dqword ptr [r11 + len]  // shuffle data bits to lower xmm1
+@16:    aesenc  xmm1, xmm0 // scramble 3 times
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
         movdqa  xmm0, xmm1
-        movd    eax, xmm0 // when jumped from _AesNiHash32
-        {$ifdef WIN64ABI}
-        jmp     @exit
-@0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
-        jmp     @exit
-        {$else}
+@0:     movd    eax,  xmm0 // truncate to 32-bit for _AesNiHash32
         ret
-@0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
-        ret
-        {$endif WIN64ABI}
 @17up:  cmp     len, 32
+        {$ifdef WIN64ABI}
+        ja      _AesNiHashXmm033up
+        {$else}
         ja      @33up
-        pxor    xmm1, dqword ptr [rax + 16] // 17..32 bytes
+        {$endif WIN64ABI}
+        // 17..32 bytes
+        pxor    xmm1, dqword ptr [rax + 16]
         aesenc  xmm1, xmm1
         movups  xmm2, dqword ptr [data]
         movups  xmm3, dqword ptr [data + len - 16] // may overlap
-        aesenc  xmm2, xmm0
+        aesenc  xmm2, xmm0 // scramble 3 times
         aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
@@ -6944,135 +6941,25 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenc  xmm3, xmm3
         pxor    xmm2, xmm3
         movdqa  xmm0, xmm2
-        movd    eax, xmm2
-        {$ifdef WIN64ABI}
-        jmp     @exit
-        {$else}
+        movd    eax,  xmm2  // truncate to 32-bit for _AesNiHash32
         ret
-        {$endif WIN64ABI}
+        {$ifndef WIN64ABI}
 @33up:  cmp     len, 64
         ja      @65up
-        movdqa  xmm2, xmm1  // 33..64 bytes
+        // 33..64 bytes
+        movdqa  xmm2, xmm1
         movdqa  xmm3, xmm1
-        pxor    xmm1, dqword ptr [rax + 16] // from AESNIHASHKEYSCHED
+        pxor    xmm1, dqword ptr [rax + 16]
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
         movups  xmm4, dqword ptr [data]
-        movups  xmm5, dqword ptr [data + 16]
-        aesenc  xmm1, xmm1
-        aesenc  xmm2, xmm2
-        aesenc  xmm3, xmm3
-        aesenc  xmm4, xmm0
-        aesenc  xmm5, xmm1
-        movups  xmm0, dqword ptr [data + len - 32] // may overlap
-        movups  xmm1, dqword ptr [data + len - 16]
-        aesenc  xmm4, xmm4
-        aesenc  xmm5, xmm5
-        aesenc  xmm0, xmm2
-        aesenc  xmm1, xmm3
-        aesenc  xmm4, xmm4
-        aesenc  xmm5, xmm5
-        aesenc  xmm0, xmm0
-        aesenc  xmm1, xmm1
-        aesenc  xmm0, xmm0
-        aesenc  xmm1, xmm1
-        pxor    xmm4, xmm0
-        pxor    xmm5, xmm1
-        pxor    xmm4, xmm5
-        movdqa  xmm0, xmm4
-        movd    eax, xmm4
-        {$ifdef WIN64ABI}
-        jmp     @exit
-        {$else}
-        ret
-        {$endif WIN64ABI}
-@65up:  {$ifdef WIN64ABI}
-        movups  dqword ptr [bak6], xmm6
-        movups  dqword ptr [bak7], xmm7
-        movups  dqword ptr [bak8], xmm8
-        movups  dqword ptr [bak9], xmm9
-        movups  dqword ptr [bak10], xmm10
-        movups  dqword ptr [bak11], xmm11
-        movups  dqword ptr [bak12], xmm12
-        movups  dqword ptr [bak13], xmm13
-        movups  dqword ptr [bak14], xmm14
-        movups  dqword ptr [bak15], xmm15
-        {$endif WIN64ABI}
-        cmp     len, 128
-        ja     @129up
-        movdqa  xmm2, xmm1 // 65..128 bytes
-        movdqa  xmm3, xmm1
-        movdqa  xmm4, xmm1
-        movdqa  xmm5, xmm1
-        movdqa  xmm6, xmm1
-        movdqa  xmm7, xmm1
-        pxor    xmm1, dqword ptr [rax + 16] // from AESNIHASHKEYSCHED
-        pxor    xmm2, dqword ptr [rax + 32]
-        pxor    xmm3, dqword ptr [rax + 48]
-        pxor    xmm4, dqword ptr [rax + 64]
-        pxor    xmm5, dqword ptr [rax + 80]
-        pxor    xmm6, dqword ptr [rax + 96]
-        pxor    xmm7, dqword ptr [rax + 112]
-        aesenc  xmm1, xmm1
-        aesenc  xmm2, xmm2
-        aesenc  xmm3, xmm3
-        aesenc  xmm4, xmm4
-        aesenc  xmm5, xmm5
-        aesenc  xmm6, xmm6
-        aesenc  xmm7, xmm7
-        movups  xmm8, dqword ptr [data]
-        movups  xmm9, dqword ptr [data + 16]
-        movups  xmm10, dqword ptr [data + 32]
-        movups  xmm11, dqword ptr [data + 48]
-        movups  xmm12, dqword ptr [data + len - 64] // may overlap
-        movups  xmm13, dqword ptr [data + len - 48]
-        movups  xmm14, dqword ptr [data + len - 32]
-        movups  xmm15, dqword ptr [data + len - 16]
-        pxor    xmm8, xmm0
-        pxor    xmm9, xmm1
-        pxor    xmm10, xmm2
-        pxor    xmm11, xmm3
-        pxor    xmm12, xmm4
-        pxor    xmm13, xmm5
-        pxor    xmm14, xmm6
-        pxor    xmm15, xmm7
-        aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        pxor    xmm8, xmm12
-        pxor    xmm9, xmm13
-        pxor    xmm10, xmm14
-        pxor    xmm11, xmm15
-        pxor    xmm8, xmm10
-        pxor    xmm9, xmm11
-        pxor    xmm8, xmm9
-        movdqa  xmm0, xmm8
-        movd    eax, xmm8
-        {$ifdef WIN64ABI}
-        jmp     @exit2
-        {$else}
-        ret
+        movups  xmm5, dqword ptr [data + 10H]
+        movups  xmm6, dqword ptr [data + len - 20H] // may overlap
+        movups  xmm7, dqword ptr [data + len - 10H]
+        jmp     @done
         {$endif WIN64ABI}
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
         // pshufb arguments to move data down from the high bytes of the register
@@ -7093,118 +6980,89 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         dq $0a09080706050403, $ffffff0f0e0d0c0b
         dq $0908070605040302, $ffff0f0e0d0c0b0a
         dq $0807060504030201, $ff0f0e0d0c0b0a09
-@129up: movdqa  xmm2, xmm1 // 129 bytes and up
+{$ifdef WIN64ABI}
+end;
+
+procedure _AesNiHashXmm033up(seed: PtrUInt; data: pointer; len: PtrUInt);
+var
+  bak6, bak7: THash128;
+asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
+        movups  dqword ptr [bak6], xmm6
+        movups  dqword ptr [bak7], xmm7
+        cmp     len, 64
+        ja      @65up
+        // 33..64 bytes
+        movdqa  xmm2, xmm1
         movdqa  xmm3, xmm1
-        movdqa  xmm4, xmm1
-        movdqa  xmm5, xmm1
-        movdqa  xmm6, xmm1
-        movdqa  xmm7, xmm1
-        pxor    xmm1, dqword ptr [rax + 16] // from AESNIHASHKEYSCHED
+        pxor    xmm1, dqword ptr [rax + 16]
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
-        pxor    xmm4, dqword ptr [rax + 64]
-        pxor    xmm5, dqword ptr [rax + 80]
-        pxor    xmm6, dqword ptr [rax + 96]
-        pxor    xmm7, dqword ptr [rax + 112]
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
+        movups  xmm4, dqword ptr [data]
+        movups  xmm5, dqword ptr [data + 10H]
+        movups  xmm6, dqword ptr [data + len - 20H] // may overlap
+        movups  xmm7, dqword ptr [data + len - 10H]
+        jmp     @done
+{$endif WIN64ABI}
+@65up:  // 65 bytes and up
+        movdqa  xmm2, xmm1
+        movdqa  xmm3, xmm1
+        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm2, dqword ptr [rax + 32]
+        pxor    xmm3, dqword ptr [rax + 48]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        movups  xmm4, dqword ptr [data + len - 40H] // may overlap
+        movups  xmm5, dqword ptr [data + len - 30H]
+        movups  xmm6, dqword ptr [data + len - 20H]
+        movups  xmm7, dqword ptr [data + len - 10H]
+        aesenc  xmm4, xmm0
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
+        dec     len
+        shr     len, 6
+        // process 64 bytes per iteration
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop:  movups  xmm0, dqword ptr [data]
+        movups  xmm1, dqword ptr [data + 10H]
+        movups  xmm2, dqword ptr [data + 20H]
+        movups  xmm3, dqword ptr [data + 30H]
+        aesenc  xmm4, xmm0 // scramble 2 times
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
         aesenc  xmm4, xmm4
         aesenc  xmm5, xmm5
         aesenc  xmm6, xmm6
         aesenc  xmm7, xmm7
-        movups  xmm8, dqword ptr [data + len - 128] // may overlap
-        movups  xmm9, dqword ptr [data + len - 112]
-        movups  xmm10, dqword ptr [data + len - 96]
-        movups  xmm11, dqword ptr [data + len - 80]
-        movups  xmm12, dqword ptr [data + len - 64]
-        movups  xmm13, dqword ptr [data + len - 48]
-        movups  xmm14, dqword ptr [data + len - 32]
-        movups  xmm15, dqword ptr [data + len - 16]
-        pxor    xmm8, xmm0
-        pxor    xmm9, xmm1
-        pxor    xmm10, xmm2
-        pxor    xmm11, xmm3
-        pxor    xmm12, xmm4
-        pxor    xmm13, xmm5
-        pxor    xmm14, xmm6
-        pxor    xmm15, xmm7
-        sub     len, 1
-        shr     len, 7
-        // process 128 bytes per iteration
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@loop:  aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        movups  xmm0, dqword ptr [data]
-        movups  xmm1, dqword ptr [data + 16]
-        movups  xmm2, dqword ptr [data + 32]
-        movups  xmm3, dqword ptr [data + 48]
-        aesenc  xmm8, xmm0
-        aesenc  xmm9, xmm1
-        aesenc  xmm10, xmm2
-        aesenc  xmm11, xmm3
-        movups  xmm4, dqword ptr [data + 64]
-        movups  xmm5, dqword ptr [data + 80]
-        movups  xmm6, dqword ptr [data + 96]
-        movups  xmm7, dqword ptr [data + 112]
-        aesenc  xmm12, xmm4
-        aesenc  xmm13, xmm5
-        aesenc  xmm14, xmm6
-        aesenc  xmm15, xmm7
-        add     data, 128
-        sub     len, 1
+        add     data, 64
+        dec     len
         jne     @loop
-        aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        aesenc  xmm8, xmm8
-        aesenc  xmm9, xmm9
-        aesenc  xmm10, xmm10
-        aesenc  xmm11, xmm11
-        aesenc  xmm12, xmm12
-        aesenc  xmm13, xmm13
-        aesenc  xmm14, xmm14
-        aesenc  xmm15, xmm15
-        pxor    xmm8, xmm12
-        pxor    xmm9, xmm13
-        pxor    xmm10, xmm14
-        pxor    xmm11, xmm15
-        pxor    xmm8, xmm10
-        pxor    xmm9, xmm11
-        pxor    xmm8, xmm9
-        movq    xmm0, xmm8
-        movd    eax, xmm8
+@done:  aesenc  xmm4, xmm0  // scramble 3 times
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        pxor    xmm4, xmm6  // combine result
+        pxor    xmm5, xmm7
         {$ifdef WIN64ABI}
-@exit2: movups  xmm6, dqword ptr [bak6]
+        movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
-        movups  xmm8, dqword ptr [bak8]
-        movups  xmm9, dqword ptr [bak9]
-        movups  xmm10, dqword ptr [bak10]
-        movups  xmm11, dqword ptr [bak11]
-        movups  xmm12, dqword ptr [bak12]
-        movups  xmm13, dqword ptr [bak13]
-        movups  xmm14, dqword ptr [bak14]
-        movups  xmm15, dqword ptr [bak15]
-@exit:  {$endif WIN64ABI}
+        {$endif WIN64ABI}
+        pxor    xmm4, xmm5
+        movdqa  xmm0, xmm4
+        movd    eax,  xmm4   // truncate to 32-bit for _AesNiHash32
 end;
 
 {$endif USEAESNIHASH}
