@@ -2768,10 +2768,6 @@ function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
 var
   tix: Int64;
 begin
-  if ms < 20 then
-    tix := 0
-  else
-    tix := mormot.core.os.GetTickCount64 + ms;
   result := socket.MakeAsync;
   if result <> nrOK then
     exit;
@@ -2782,13 +2778,22 @@ begin
   result := NetLastError;
   if result <> nrRetry then
     exit; // abort on fatal error (e.g. invalid address)
-  socket.MakeBlocking;
+  result := socket.MakeBlocking;
+  if result <> nrOK then
+    exit;
+  if ms < 50 then
+    tix := 0
+  else
+  begin
+    tix := mormot.core.os.GetTickCount64 + ms;
+    ms := 50;
+  end;
   repeat
-    result := NetEventsToNetResult(socket.WaitFor(100, [neWrite, neError]));
+    result := NetEventsToNetResult(socket.WaitFor(ms, [neWrite, neError]));
     if result <> nrRetry then
       exit;
     // typically, status = [] for TRY_AGAIN result
-    SleepHiRes(1);
+    SleepHiRes(1); // paranoid to avoid buring CPU if WaitFor() doesn't wait
   until (tix = 0) or
         (mormot.core.os.GetTickCount64 > tix);
   result := nrTimeout;
