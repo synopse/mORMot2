@@ -3280,13 +3280,13 @@ type
     fFileMask: TFileNameDynArray;
     fRecursive, fExtendedPath, fAborted: boolean;
     fTotalSize: Int64;
+    fLevelCounter: PInteger; // a ProcessDir recursive counter
     function Make(const fn: TFileName): TFileName; // handle MAX_PATH on Windows
-    procedure ProcessDir; virtual; // main recursive method
-    /// virtual method executed for each file
-    // - by default, returns true to continue - returning false would abort
+    procedure ProcessDir; virtual;   // main recursive method
+    procedure OnProcessDir; virtual; // executed before each folder
+    // virtual method executed for each file - true = continue, false = abort
     function OnFile(const FileInfo: TSearchRec; const FullFileName: TFileName): boolean; virtual;
-    /// virtual method executed for each folder, after OnFile() have been called
-    // - by default, returns true to continue - returning false would abort
+    // virtual method executed for each folder, after OnFile() have been called
     function OnFolder(const FullFolderName: TFileName): boolean; virtual;
   public
     /// prepare the process for a given folder
@@ -6839,12 +6839,19 @@ begin
   result := not fAborted;
 end;
 
+procedure TDirectoryBrowser.OnProcessDir;
+begin
+end;
+
 procedure TDirectoryBrowser.ProcessDir;
 var
   f: TSearchRec;
   prev: TFileName;
-  i: PtrInt;
+  i, level: integer;
 begin
+  level := 0;
+  fLevelCounter := @level;
+  OnProcessDir;
   fCurrentDir := fCurrentDir + PathDelim;
   if fRecursive then
     if FindFirst(Make(FILES_ALL), faDirectory, f) = 0 then
