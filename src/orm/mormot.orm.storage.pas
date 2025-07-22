@@ -3274,9 +3274,11 @@ begin
   result := '';
   ResCount := 0;
   if PropNameEquals(fBasicSqlCount, SQL) then
+    // SELECT COUNT(*) FROM tablename
     SetCount(TableRowCount(fStoredClass))
   else if PropNameEquals(fBasicSqlHasRows[false], SQL) or
           PropNameEquals(fBasicSqlHasRows[true], SQL) then
+    // SELECT ID FROM tablename LIMIT 1
     if TableHasRows(fStoredClass) then
     begin
       // return one expanded row with fake ID=1 - enough for the ORM usecase

@@ -2219,6 +2219,9 @@ begin
   // caller now makes TZipWriteCompressor.Write then TZipWriteCompressor.Free
 end;
 
+// note: TDirectoryBrowser is not easy to use here due to IncludeVoidFolders
+// and the nested zip names generation
+
 function TZipWrite.AddFolder(const FolderName: TFileName;
   const Mask: TFileName; Recursive: boolean; CompressLevel: integer;
   const OnAdd: TOnZipWriteAdd; IncludeVoidFolders: boolean;
