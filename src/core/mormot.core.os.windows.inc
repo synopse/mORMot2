@@ -62,7 +62,7 @@ end;
 
 {$ifdef UNICODE}
 
-function IsExtendedPathName(const Name: TFileName): boolean; inline;
+function IsExtendedPathName(const Name: TFileName): boolean;
 begin
   result := IsExtendedPathNameW(pointer(Name)); // string=PWideChar
 end;
