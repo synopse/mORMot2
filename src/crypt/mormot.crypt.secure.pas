@@ -8191,39 +8191,39 @@ begin
     result := nil;
 end;
 
+type
+  TDirectoryCryptStore = class(TDirectoryBrowser) // support MAX_PATH on Windows
+  protected
+    fStore: TCryptStore;
+    fSerials: TRawUtf8DynArray;
+    fCount: integer;
+    function OnFile(const FileInfo: TSearchRec;
+      const FullFileName: TFileName): boolean; override;
+  end;
+
+function TDirectoryCryptStore.OnFile(const FileInfo: TSearchRec;
+  const FullFileName: TFileName): boolean;
+begin
+  if FileInfo.Size < 65535 then // certificate files are expected to be < 64KB
+     AddRawUtf8(fSerials, fCount, fStore.AddFromFile(FullFileName));
+  result := true; // continue;
+end;
+
 function TCryptStore.AddFromFolder(const Folder, Mask: TFileName;
   Recursive: boolean): TRawUtf8DynArray;
 var
-  n: integer;
-
-  procedure SearchFolder(const DirName: TFileName);
-  var
-    F: TSearchRec;
-  begin
-    if FindFirst(MakePath([DirName, Mask]), faAnyfile - faDirectory, F) = 0 then
-    begin
-      repeat
-        if SearchRecValidFile(F, {includehidden=}true) and
-           (F.Size < 65535) then // certificate files are expected to be < 64KB
-          AddRawUtf8(result, n, AddFromFile(MakePath([DirName, F.Name])));
-      until FindNext(F) <> 0;
-      FindClose(F);
-    end;
-    if Recursive and
-       (FindFirstDirectory(DirName + '*', {includehidden=}true, F) = 0) then
-    begin
-      repeat
-        if SearchRecValidFolder(F, {includehidden=}true) then
-          SearchFolder(MakePath([DirName, F.Name]));
-      until FindNext(F) <> 0;
-      FindClose(F);
-    end;
-  end;
-
+  browser: TDirectoryCryptStore;
 begin
-  n := 0;
-  SearchFolder(Folder);
-  SetLength(result, n);
+  browser := TDirectoryCryptStore.Create(Folder, [Mask], Recursive);
+  try
+    browser.fStore := self;
+    browser.Run;
+    if browser.fCount <> 0 then
+      DynArrayFakeLength(browser.fSerials, browser.fCount);
+    result := browser.fSerials;
+  finally
+    browser.Free;
+  end;
 end;
 
 function TCryptStore.IsValidChain(const chain: ICryptCertChain;
