@@ -2785,6 +2785,8 @@ function ValidHandle(Handle: THandle): boolean;
 /// faster cross-platform alternative to sysutils homonymous function
 // - on Windows, will support FileName longer than MAX_PATH
 // - FPC on Windows is not consistent with Delphi and the expected low-level API
+// - warning: on both Windows and POSIX, this function would change the current
+// default folder for the whole process, not just the current thread
 function SetCurrentDir(const NewDir: TFileName): boolean;
 
 /// faster cross-platform alternative to sysutils homonymous function
@@ -8274,15 +8276,22 @@ var
       libs := libs + ', ' + lib; // include path
     // change the current folder at loading on Windows
     {$ifdef OSWINDOWS}
-    if nwd <> '' then
-    begin
-      cwd := GetCurrentDir;
-      SetCurrentDir(nwd);
-      lib := ExtractFileName(lib); // seems more stable that way
+    try
+      if nwd <> '' then
+      begin
+        GlobalLock; // SetCurrentDir() is for the whole process not the thread
+        cwd := GetCurrentDir;
+        SetCurrentDir(nwd);
+        lib := ExtractFileName(lib); // seems more stable that way
+      end;
+      fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box
+    finally
+      if nwd <> '' then
+      begin
+        SetCurrentDir(cwd{%H-});
+        GlobalUnLock;
+      end;
     end;
-    fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box
-    if nwd <> '' then
-      SetCurrentDir(cwd{%H-});
     {$else}
     fHandle := LibraryOpen(lib); // use regular .so loading behavior
     {$endif OSWINDOWS}
