@@ -2019,26 +2019,28 @@ type
     // object, and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
     // - will call VariantEquals() for value comparison
+    // - you could make several searches, using the StartIndex optional parameter
     function SearchItemByProp(const aPropName, aPropValue: RawUtf8;
-      aPropValueCaseSensitive: boolean): integer; overload;
+      aPropValueCaseSensitive: boolean; aStartIndex: PtrInt = 0): integer; overload;
     /// search a property match in this document, handled as array or object
     // - {aPropName:aPropValue} will be searched within the stored array or
     // object, and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
     // - will call VariantEquals() for value comparison
+    // - you could make several searches, using the StartIndex optional parameter
     function SearchItemByProp(const aPropNameFmt: RawUtf8;
       const aPropNameArgs: array of const; const aPropValue: RawUtf8;
-      aPropValueCaseSensitive: boolean): integer; overload;
+      aPropValueCaseSensitive: boolean; aStartIndex: PtrInt = 0): integer; overload;
     /// search a value in this document, handled as array
     // - aValue will be searched within the stored array
     // and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
     // - you could make several searches, using the StartIndex optional parameter
     function SearchItemByValue(const aValue: Variant;
-      CaseInsensitive: boolean = false; StartIndex: PtrInt = 0): PtrInt;
+      aCaseInsensitive: boolean = false; aStartIndex: PtrInt = 0): PtrInt;
     /// search and count occurences of one value in this document, handled as array
     function CountItemByValue(const aValue: Variant;
-      CaseInsensitive: boolean = false; StartIndex: integer = 0): integer;
+      aCaseInsensitive: boolean = false; aStartIndex: integer = 0): integer;
     /// sort the document object values by name
     // - do nothing if the document is not a dvObject
     // - will follow case-insensitive order (@StrIComp) by default, but you
@@ -7671,49 +7673,53 @@ begin
 end;
 
 function TDocVariantData.SearchItemByProp(const aPropName, aPropValue: RawUtf8;
-  aPropValueCaseSensitive: boolean): integer;
+  aPropValueCaseSensitive: boolean; aStartIndex: PtrInt): integer;
 var
-  v: PVariant;
+  v, prop: PVariant;
   prev: integer;
 begin
   if IsObject then
   begin
     result := GetValueIndex(aPropName);
-    if (result >= 0) and
+    if (result >= aStartIndex) and
        VariantEquals(VValue[result], aPropValue, aPropValueCaseSensitive) then
       exit;
   end
   else if IsArray then
   begin
     prev := -1; // optimistic search aPropName at the previous field position
-    for result := 0 to VCount - 1 do
-      if _Safe(VValue[result])^.GetObjectProp(aPropName, v, @prev) and
-         VariantEquals({%H-}v^, aPropValue, aPropValueCaseSensitive) then
-        exit;
+    v := @VValue[aStartIndex];
+    for result := aStartIndex to VCount - 1 do
+      if _Safe(v^)^.GetObjectProp(aPropName, prop, @prev) and
+         VariantEquals({%H-}prop^, aPropValue, aPropValueCaseSensitive) then
+        exit
+      else
+        inc(v);
   end;
   result := -1;
 end;
 
 function TDocVariantData.SearchItemByProp(const aPropNameFmt: RawUtf8;
   const aPropNameArgs: array of const; const aPropValue: RawUtf8;
-  aPropValueCaseSensitive: boolean): integer;
+  aPropValueCaseSensitive: boolean; aStartIndex: PtrInt): integer;
 var
   name: RawUtf8;
 begin
   FormatUtf8(aPropNameFmt, aPropNameArgs, name);
-  result := SearchItemByProp(name, aPropValue, aPropValueCaseSensitive);
+  result := SearchItemByProp(name, aPropValue,
+    aPropValueCaseSensitive, aStartIndex);
 end;
 
 function TDocVariantData.SearchItemByValue(const aValue: Variant;
-  CaseInsensitive: boolean; StartIndex: PtrInt): PtrInt;
+  aCaseInsensitive: boolean; aStartIndex: PtrInt): PtrInt;
 var
   v: PVarData;
   tmp: variant;
 begin
   SetVariantByValue(aValue, tmp, {noforceutf8=}false); // ensure text is RawUtf8
-  v := @VValue[StartIndex];
-  for result := StartIndex to VCount - 1 do
-    if FastVarDataComp(v, @tmp, CaseInsensitive) = 0 then
+  v := @VValue[aStartIndex];
+  for result := aStartIndex to VCount - 1 do
+    if FastVarDataComp(v, @tmp, aCaseInsensitive) = 0 then
       exit
     else
       inc(v);
@@ -7721,7 +7727,7 @@ begin
 end;
 
 function TDocVariantData.CountItemByValue(const aValue: Variant;
-  CaseInsensitive: boolean; StartIndex: integer): integer;
+  aCaseInsensitive: boolean; aStartIndex: integer): integer;
 var
   v: PVarData;
   ndx: integer;
@@ -7729,10 +7735,10 @@ var
 begin
   result := 0; // returns the number of occurences of this value
   SetVariantByValue(aValue, tmp, {noforceutf8=}false); // ensure text is RawUtf8
-  v := @VValue[StartIndex];
-  for ndx := StartIndex to VCount - 1 do
+  v := @VValue[aStartIndex];
+  for ndx := aStartIndex to VCount - 1 do
   begin
-    if FastVarDataComp(v, @tmp, CaseInsensitive) = 0 then
+    if FastVarDataComp(v, @tmp, aCaseInsensitive) = 0 then
       inc(result);
     inc(v);
   end;
