@@ -24,9 +24,10 @@ uses
   mormot.core.perf,
   mormot.core.test,
   mormot.core.variants,
+  mormot.core.threads, // for TLoggedWorker inlining
   mormot.lib.pkcs11,
   mormot.lib.openssl11,
-  mormot.net.sock, // for NetBinToBase64()
+  mormot.net.sock,     // for NetBinToBase64()
   mormot.crypt.jwt,
   mormot.crypt.ecc,
   mormot.crypt.rsa,
@@ -1701,8 +1702,8 @@ var
   buf: RawByteString;
   u: RawUtf8;
   P: PAnsiChar;
-  i, unalign, bytes: PtrInt;
-  exp, exp321, exp322, exp323, exp324, exp325: cardinal;
+  unalign: PtrInt;
+  exp321, exp322, exp323, exp324, exp325: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
   h, h2: THashAlgo;
