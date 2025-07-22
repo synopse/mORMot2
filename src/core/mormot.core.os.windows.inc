@@ -26,13 +26,11 @@ begin
   tmp.Done;
 end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL doesn't handle surrogates
 
-function IsExtendedPathName(Name: PWideChar): boolean; // in '\\?\...' format
+function IsExtendedPathNameW(Name: PWideChar): boolean; // in '\\?\...' format
 begin
   result := (Name <> nil) and
-            (Name[0] = '\') and
-            (Name[1] = '\') and
-            (Name[2] = '?') and
-            (Name[3] = '\');
+            (PCardinalArray(Name)[0] = ord('\') + ord('\') shl 16) and
+            (PCardinalArray(Name)[1] = ord('?') + ord('\') shl 16);
 end;
 
 procedure ExtendedPathName(Name: PWideChar; Len: PtrInt; var Temp: TW32Temp);
@@ -42,7 +40,7 @@ begin
   Len := Len * 2 + 2; // in bytes, +2 to include ending #0
   if (Len <= MAX_PATH * 2) or
      ((Len <= SizeOf(Temp) - 8) and
-      IsExtendedPathName(Name)) then // in '\\?\...' format
+      IsExtendedPathNameW(Name)) then // in '\\?\...' format
   begin
     MoveFast(Name^, Temp[0], Len); // we can use the supplied UTF-16 file name
     exit;
@@ -63,6 +61,11 @@ begin
 end;
 
 {$ifdef UNICODE}
+
+function IsExtendedPathName(const Name: TFileName): boolean; inline;
+begin
+  result := IsExtendedPathNameW(pointer(Name)); // string=PWideChar
+end;
 
 function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean): PWideChar;
 var
@@ -97,6 +100,13 @@ begin
 end;
 
 {$else}
+
+function IsExtendedPathName(const Name: TFileName): boolean; // string=PAnsiChar
+begin
+  result := (Name <> '') and
+            (PCardinal(Name)^ = ord('\') + ord('\') shl 8 +
+                                ord('?') shl 16 + ord('\') shl 24);
+end;
 
 procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
 var
@@ -1229,7 +1239,7 @@ begin
   w := W32(FileName, t1);
   if w = nil then
     exit;
-  if not IsExtendedPathName(w) then // W32() may have converted to extended-length
+  if not IsExtendedPathNameW(w) then // W32() may have converted to extended-length
     if GetFullPathNameW(w, high(t2), @t2, fp) = 0 then
       exit
     else

@@ -2324,6 +2324,10 @@ function FileTimeToDateTime(const FT: TFileTime): TDateTime;
 function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
   {$ifdef FPC} inline; {$endif}
 
+/// detect if a file name starts with the long path '\\?\' prefix
+// - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+function IsExtendedPathName(const Name: TFileName): boolean;
+
 var
   // Slim Reader/Writer (SRW) API exclusive mode - fallback to TLightLock on XP
   InitializeSRWLock,
