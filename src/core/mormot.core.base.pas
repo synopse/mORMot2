@@ -3281,7 +3281,8 @@ type
   TLecuyer = object
   {$endif USERECORDWITHMETHODS}
   public
-    rs1, rs2, rs3, seedcount: cardinal; // stored as 128-bit / 16 bytes buffer
+    // 2^88 bits of internal state, seed after 2^32 RawNext calls (16 GB)
+    rs1, rs2, rs3, seedcount: cardinal;
     /// compute the next 32-bit pseudo-random value
     // - will automatically reseed after around 2^32 generated values, which is
     // huge but conservative since this generator has a known period of 2^88
@@ -9950,10 +9951,10 @@ begin
     rs1 := rs1 xor h.c0;
     rs2 := rs2 xor h.c1;
     rs3 := rs3 xor h.c2;
-  until (rs1 > 1) and
+  until (rs1 > 1) and  // ensure not too weak for RawNext scramble
         (rs2 > 7) and
-        (rs3 > 15);
-  seedcount := h.c3 shr 24; // may seed slightly before 2^32 of output data
+        (rs3 > 15);    // reducing the resolution by 8 bits from 2^96 to 2^88
+  seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
   for i := 1 to h.i3 and 7 do
     RawNext; // warm up
 end;
@@ -9974,11 +9975,11 @@ begin
     rs2 := 8;
   if rs3 < 16 then
     rs3 := 16;
-  seedcount := 1; // will reseed after 16 GB, i.e. 2^32 of output data
+  seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls
 end;
 
 function TLecuyer.RawNext: cardinal;
-begin // not inlined for better code generation
+begin // shuffle the internal state - not inlined for better code generation
   result := rs1;
   rs1 := ((result and -2) shl 12) xor (((result shl 13) xor result) shr 19);
   result := rs2;
@@ -9991,7 +9992,7 @@ end;
 function TLecuyer.Next: cardinal;
 begin
   if seedcount = 0 then
-    Seed // seed at startup, and after 2^32 of output data = 16 GB
+    Seed // seed at startup, and after 2^32 RawNext calls = 16 GB
   else
     inc(seedcount);
   result := RawNext;
@@ -10005,7 +10006,7 @@ end;
 function TLecuyer.NextQWord: QWord;
 begin
   PQWordRec(@result)^.L := Next;
-  PQWordRec(@result)^.H := RawNext; // no need to check the Seed twice
+  PQWordRec(@result)^.H := Next;
 end;
 
 function TLecuyer.NextDouble: double;
@@ -10022,7 +10023,7 @@ begin
   if bytes <= 0 then
     exit;
   c := seedcount;
-  inc(seedcount, cardinal(bytes) shr 2);
+  inc(seedcount, cardinal(bytes + 3) shr 2); // number of upcoming RawNext calls
   if (c = 0) or           // first use = seed at startup
      (c > seedcount) then // check for 32-bit overflow, i.e. after 16 GB
     Seed;
