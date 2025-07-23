@@ -1960,7 +1960,7 @@ procedure TLockedDocVariant.ReplaceAndUnlock(
 begin
   // caller made fLock.Enter
   try
-    SetValue(Name, Value);
+    fValue.AddOrUpdateValue(Name, Value); // = locked SetValue()
     LocalValue := Value;
   finally
     fLock.Leave;
@@ -1977,7 +1977,7 @@ begin
   try
     i := fValue.GetValueIndex(Name);
     if i < 0 then
-      result := false
+      result := false // Name is not yet existing
     else
       _ObjAddProps([Name, fValue.Values[i]], Obj);
   finally
@@ -1991,7 +1991,7 @@ procedure TLockedDocVariant.AddNewPropAndUnlock(const Name: RawUtf8;
 begin
   // caller made fLock.Enter
   try
-    SetValue(Name, Value);
+    fValue.AddOrUpdateValue(Name, Value); // = locked SetValue()
     _ObjAddProps([Name, Value], Obj);
   finally
     fLock.Leave;
@@ -2021,7 +2021,7 @@ procedure TLockedDocVariant.AddNewProp(const Name: RawUtf8;
 begin
   fLock.Enter;
   try
-    SetValue(Name, Value);
+    fValue.AddOrUpdateValue(Name, Value); // = locked SetValue()
     _ObjAddProps([Name, Value], Obj);
   finally
     fLock.Leave;
