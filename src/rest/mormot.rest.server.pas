@@ -845,34 +845,29 @@ type
 
 { ************ TAuthSession for In-Memory User Sessions }
 
-  /// used for efficient TAuthSession.IDCardinal comparison
-  TAuthSessionParent = class(TSynPersistent)
-  protected
-    fID: cardinal;
-  end;
-
   /// class used to maintain in-memory sessions
   // - this is not a TOrm table so won't be remotely accessible, for
   // performance and security reasons
   // - the User field is a true instance, copy of the corresponding database
   // content (for better speed)
   // - you can inherit from this class, to add custom session process
-  TAuthSession = class(TAuthSessionParent)
+  TAuthSession = class(TSynPersistent)
   protected
-    fUser: TAuthUser;
+    fID: cardinal; // should be the first field for LockedSessionFind()
     fTimeOutTix: cardinal;
     fTimeOutShr10: cardinal;
+    fLastTimestamp: cardinal;   // client-side generated timestamp
+    fPrivateSaltHash: cardinal; // pre-computed 32-bit seed for signature
+    fRemoteOsVersion: TOperatingSystemVersion; // stored as 32-bit
+    fUser: TAuthUser;
     fPrivateKey: RawUtf8;
     fPrivateSalt: RawUtf8; // 'SessionID+PrivateKey'
     fSentHeaders: RawUtf8;
     fRemoteIP: RawUtf8;
     fConnectionID: TRestConnectionID;
-    fPrivateSaltHash: cardinal;
-    fLastTimestamp: cardinal; // client-side generated timestamp
     fAccessRights: TOrmAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
-    fRemoteOsVersion: TOperatingSystemVersion;
     fConnectionOpaque: PRestServerConnectionOpaque;
     function GetUserName: RawUtf8;
     function GetUserID: TID;
@@ -909,13 +904,13 @@ type
     // - extracted from User.TAuthGroup.OrmAccessRights
     property AccessRights: TOrmAccessRights
       read fAccessRights;
-    /// the hexadecimal private key
+    /// the 128-bit hexadecimal private key
     // - once connected, returned to connected client as 'SessionID+PrivateKey'
     // for digital signature of the URIs
     // - pre-computed in fPrivateSalt / fPrivateSaltHash protected fields
     property PrivateKey: RawUtf8
       read fPrivateKey;
-    /// the transmitted HTTP headers, if any
+    /// the transmitted HTTP headers, if any, when the session was created
     // - can contain e.g. 'RemoteIp: 127.0.0.1' or 'User-Agent: Mozilla/4.0'
     property SentHeaders: RawUtf8
       read fSentHeaders;
@@ -2905,7 +2900,7 @@ end;
 procedure TRestServerUriContext.SessionAssign(AuthSession: TAuthSession);
 begin
   // touch the TAuthSession deprecation timestamp
-  AuthSession.fTimeOutTix := (TickCount64 shr 10) + AuthSession.TimeoutShr10;
+  AuthSession.fTimeOutTix := (TickCount64 shr 10) + AuthSession.fTimeoutShr10;
   // make local copy of TAuthSession information
   fSession := AuthSession.ID;
   fSessionOS := AuthSession.fRemoteOsVersion;
@@ -4805,6 +4800,9 @@ end;
 
 { ************ TAuthSession for In-Memory User Sessions }
 
+var
+  ServerProcessKdf: THmacSha256; // thread-safe HMAC-SHA-256 transient secret
+
 { TAuthSession }
 
 /// TSynObjectListSorted-TOnObjectCompare compatible callback method
@@ -4821,65 +4819,65 @@ begin
   fAccessRights := User.GroupRights.OrmAccessRights;
   Make([fID, '+', fPrivateKey], fPrivateSalt);
   fPrivateSaltHash := crc32(crc32(0, pointer(fPrivateSalt), length(fPrivateSalt)),
-    pointer(User.PasswordHashHexa), length(User.PasswordHashHexa));
+    pointer(fUser.PasswordHashHexa), length(fUser.PasswordHashHexa));
 end;
 
 constructor TAuthSession.Create(aCtxt: TRestServerUriContext; aUser: TAuthUser);
 var
-  GID: TAuthGroup;
-  rnd: THash256;
-  blob: RawBlob;
+  gid: TID;
+  rnd: THash256Rec;
 begin
   // inherited Create; // not mandatory - should not be overriden
-  fUser := aUser;
-  if (aCtxt <> nil) and
-     (User <> nil) and
-     (User.IDValue <> 0) then
+  if (aCtxt = nil) or
+     (aUser = nil) or
+     (aUser.IDValue = 0) then
+     ESecurityException.RaiseUtf8('Invalid %.Create(%,%)', [self, aCtxt, aUser]);
+  // allocate and retrieve the associated User.GroupRights instance
+  gid := TID(aUser.GroupRights); // retrieve pseudo TAuthGroup = ID
+  aUser.GroupRights := aCtxt.Server.fAuthGroupClass.Create(aCtxt.Server.ORM, gid);
+  if aUser.GroupRights.IDValue = 0 then
   begin
-    GID := User.GroupRights; // save pseudo TAuthGroup = ID
-    User.GroupRights :=
-      aCtxt.Server.fAuthGroupClass.Create(aCtxt.Server.ORM, GID);
-    if User.GroupRights.IDValue <> 0 then
-    begin
-      // compute the next Session ID
-      fID := InterlockedIncrement(aCtxt.Server.fSessionCounter);
-      // set session parameters
-      RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for a published key
-      fPrivateKey := BinToHex(@rnd, SizeOf(rnd));
-      if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
-      begin
-        aCtxt.Server.OrmInstance.RetrieveBlob(aCtxt.Server.fAuthUserClass,
-          User.IDValue, 'Data', blob);
-        User.Data := blob;
-      end;
-      if (aCtxt.fCall <> nil) and
-         (aCtxt.fCall^.InHead <> '') then
-        fSentHeaders := aCtxt.fCall^.InHead;
-      ComputeProtectedValues(aCtxt.TickCount64);
-      fConnectionID := aCtxt.Call^.LowLevelConnectionID;
-      aCtxt.SetRemoteIP(fRemoteIP);
-      fRemoteOsVersion := aCtxt.SessionOS;
-      if Assigned(aCtxt.fLog) and
-         (sllUserAuth in aCtxt.Server.fLogLevel) then
-        aCtxt.fLog.Log(sllUserAuth,
-          'New [%] session %/% created at %/% running % {%}',
-          [User.GroupRights.Ident, User.LogonName, fID, fRemoteIP,
-           aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent,
-           ToTextOS(integer(fRemoteOsVersion))], self);
-      exit; // create successful
-    end;
-    // on error: set GroupRights back to a pseudo TAuthGroup = ID
-    User.GroupRights.Free;
-    User.GroupRights := GID;
+    // on error: set GroupRights back to the pseudo TAuthGroup = ID
+    aUser.GroupRights.Free;
+    aUser.GroupRights := pointer(gid);
+    ESecurityException.RaiseUtf8('Invalid %.Create(%,%): no %.ID=%',
+      [self, aCtxt, aUser, aCtxt.Server.fAuthGroupClass, gid]);
   end;
-  ESecurityException.RaiseUtf8('Invalid %.Create(%,%)', [self, aCtxt, aUser]);
+  fUser := aUser;
+  // store the REST/HTTP execution context
+  fConnectionID := aCtxt.Call^.LowLevelConnectionID;
+  if (aCtxt.fCall <> nil) and
+     (aCtxt.fCall^.InHead <> '') then
+    fSentHeaders := aCtxt.fCall^.InHead;
+  aCtxt.SetRemoteIP(fRemoteIP);
+  fRemoteOsVersion := aCtxt.SessionOS;
+  if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
+    aCtxt.Server.RetrieveBlobFields(fUser);
+  // compute the next Session ID and the associated private key
+  fID := InterlockedIncrement(aCtxt.Server.fSessionCounter); // 20-bit number
+  if PInteger(@ServerProcessKdf)^ <> 0 then
+    ServerProcessKdf.Compute(@fID, 8, rnd.b) // reuse our thread-safe CSPRNG
+  else
+    RandomBytes(rnd.Lo); // Lecuyer as fallback (paranoid)
+  XorMemory(rnd.l, StartupEntropy); // always obfuscate
+  XorMemory(rnd.l, rnd.h);
+  BinToHexLower(@rnd, SizeOf(rnd.l), fPrivateKey); // 128-bit is enough
+  ComputeProtectedValues(aCtxt.TickCount64);
+  // this session has been successfully created
+  if Assigned(aCtxt.fLog) and
+     (sllUserAuth in aCtxt.Server.fLogLevel) then
+    aCtxt.fLog.Log(sllUserAuth,
+      'New [%] session %/% created at %/% running % {%}',
+      [fUser.GroupRights.Ident, fUser.LogonName, fID, fRemoteIP,
+       aCtxt.Call^.LowLevelConnectionID, aCtxt.Call^.LowLevelUserAgent,
+       ToTextOS(integer(fRemoteOsVersion))], self);
 end;
 
 destructor TAuthSession.Destroy;
 begin
-  if User <> nil then
+  if fUser <> nil then
   begin
-    User.GroupRights.Free;
+    fUser.GroupRights.Free;
     fUser.Free;
   end;
   ObjArrayClear(fMethods);
@@ -5235,8 +5233,7 @@ begin
   result := nil; // indicates invalid signature
 end;
 
-var
-  ServerNonceKdf: THmacSha256; // thread-safe HMAC-SHA-256 transient secret
+var // the HMAC-SHA-256 ServerProcessKdf() of the last two 4.3 minutes ticks
   ServerNonceCache: array[{previous=}boolean] of record
     safe: TLightLock;
     tix: cardinal;
@@ -5250,22 +5247,22 @@ var
   hex: RawUtf8;
   tmp: THash256;
 begin
-  if PInteger(@ServerNonceKdf)^ = 0 then
+  if PInteger(@ServerProcessKdf)^ = 0 then
   begin
     // first time used: initialize the HMAC-SHA-256 secret for this process
-    TAesPrng.Main.Fill(tmp);
+    TAesPrng.Main.Fill(tmp); // use strong CSPRNG seed
     ServerNonceCache[false].safe.Lock;
-    if PInteger(@ServerNonceKdf)^ = 0 then // ensure thread-safe
+    if PInteger(@ServerProcessKdf)^ = 0 then // ensure thread-safe
     begin
-      ServerNonceKdf.Init(@StartupEntropy, SizeOf(StartupEntropy)); // salt
-      ServerNonceKdf.Update(tmp); // 256-bit CSPRNG random seed
+      ServerProcessKdf.Init(@StartupEntropy, SizeOf(StartupEntropy)); // salt
+      ServerProcessKdf.Update(tmp);
     end;
     ServerNonceCache[false].safe.UnLock;
-    if PInteger(@ServerNonceKdf)^ = 0 then // paranoid
+    if PInteger(@ServerProcessKdf)^ = 0 then // paranoid
       ESecurityException.RaiseU('CurrentServerNonceCompute: hmac?');
   end;
   // cache the new nonce for this timestamp (called at most every 4.3 minutes)
-  ServerNonceKdf.Compute(@ticks, SizeOf(ticks), tmp); // thread-safe
+  ServerProcessKdf.Compute(@ticks, 4, tmp); // thread-safe
   BinToHexLower(@tmp, SizeOf(tmp), hex);
   if nonce <> nil then
     nonce^ := hex;
@@ -7128,14 +7125,14 @@ end;
 function TRestServer.LockedSessionFind(
   aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
 var
-  tmp: array[0..3] of PtrInt; // store a fake TAuthSessionParent instance
+  tmp: array[0..3] of PtrInt; // store a fake TAuthSession instance
   i: PtrInt;
 begin
   result := nil;
   if (aSessionID <= fSessionCounterMin) or
      (aSessionID > cardinal(fSessionCounter)) then
     exit;
-  TAuthSessionParent(@tmp).fID := aSessionID;
+  TAuthSession(@tmp).fID := aSessionID;
   i := fSessions.IndexOf(@tmp); // use fast O(log(n)) binary search
   if aIndex <> nil then
     aIndex^ := i;

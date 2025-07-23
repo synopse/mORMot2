@@ -3599,9 +3599,9 @@ begin
   Safe.WriteLock;
   try
     if Locate(item, result) then // O(log(n)) binary search
-      result := -(result + 1)
+      result := -(result + 1)    // < 0 if already there
     else
-      Insert(item, result);
+      Insert(item, result);      // insert at the expected sorted position
   finally
     Safe.WriteUnLock;
   end;

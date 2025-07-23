@@ -334,7 +334,7 @@ type
   {$endif HASINLINE}
     // for internal use
     Authentication: TRestClientAuthenticationClass;
-    IDHexa8: RawUtf8;
+    IDHexa8: RawUtf8; // fSession.ID in hexadecimal
     PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
@@ -1314,7 +1314,7 @@ begin
         // compute with SHA-256, Pbkdf2HmacSha256() or DIGEST-HA0 hash
         U.SetPassword(aPassword, aHashSalt, aHashRound);
       end;
-      key := ClientComputeSessionKey(Sender, U);
+      key := ClientComputeSessionKey(Sender, U); // overriden with algo
       result := Sender.SessionCreate(self, U, key);
     finally
       U.Free;

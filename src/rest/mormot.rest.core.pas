@@ -1093,8 +1093,9 @@ type
       read fGroupRights write fGroupRights;
     /// some custom data, associated to the User
     // - Server application may store here custom data
-    // - its content is not used by the framework but 'may' be used by your
-    // application
+    // - TAuthSession.Create will retrieved this field from the database,
+    // unless rsoGetUserRetrieveNoBlobData option is defined
+    // - its content is not used by the framework but 'may' be used by yours
     property Data: RawBlob
       read fData write fData;
   end;
