@@ -8,6 +8,7 @@
 {$ifdef FPC}
   // disabled some FPC paranoid warnings
   {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here }
+  {$WARN 7105 off : Use of -offset(%esp), access may cause a crash or value may be lost}
   {$WARN 7121 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits]" }
   {$WARN 7122 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits + $4 byte offset]" }
   {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte" }
@@ -6888,10 +6889,6 @@ function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
         movd    xmm0, seed     // explicitly zeroing high bits for consistency
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
 end;
-
-{$ifdef WIN64ABI}
-procedure _AesNiHashXmm033up(seed: PtrUInt; data: pointer; len: PtrUInt); forward;
-{$endif WIN64ABI}
 
 // 128-bit aeshash as implemented in GoLang runtime, using aesni + sse3 opcodes
 // - simplified and rewritten to use a 128-bit seed and no sse4.2, and share the

@@ -3164,14 +3164,14 @@ end;
 
 // 128-bit aeshash as implemented in GoLang runtime, using aesni + sse3 opcodes
 // - simplified and rewritten to use a 128-bit seed and no sse4.2, and share the
-// same algorithm with mormot.crypt.asmx64.inc
+// very same algorithm with mormot.crypt.asmx64.inc
 procedure _AesNiHashXmm0;
   {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         // xmm0=seed, edx=data, ecx=len - returns in xmm0 and eax
         test    ecx, ecx
         jz      @0                      // _AesNiHash32 left eax=seed
-        mov     eax, dword ptr [AESNIHASHKEYSCHED]
+        mov     eax, dword ptr [AesNiHashKey]
         movdqa  xmm1, xmm0              // save seed for @17up
         pxor    xmm0, dqword ptr [eax]  // xor with seed
         aesenc  xmm0, xmm0              // scramble
@@ -3195,7 +3195,7 @@ asm
         pxor    xmm1, dqword ptr [eax + 16]
         aesenc  xmm1, xmm1
         movups  xmm2, dqword ptr [edx]
-        movups  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
+        movups  xmm3, dqword ptr [edx + ecx - 16] // may overlap
         aesenc  xmm2, xmm0 // scramble 3 times
         aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
@@ -3218,9 +3218,9 @@ asm
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
         movups  xmm4, dqword ptr [edx]
-        movups  xmm5, dqword ptr [edx + 10H]
-        movups  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
-        movups  xmm7, dqword ptr [edx + ecx - 10H]
+        movups  xmm5, dqword ptr [edx + 16]
+        movups  xmm6, dqword ptr [edx + ecx - 32] // may overlap
+        movups  xmm7, dqword ptr [edx + ecx - 16]
 @done:  aesenc  xmm4, xmm0 // scramble 3 times
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -3267,10 +3267,10 @@ asm
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        movups  xmm4, dqword ptr [edx + ecx - 40H] // may overlap
-        movups  xmm5, dqword ptr [edx + ecx - 30H]
-        movups  xmm6, dqword ptr [edx + ecx - 20H]
-        movups  xmm7, dqword ptr [edx + ecx - 10H]
+        movups  xmm4, dqword ptr [edx + ecx - 64] // may overlap
+        movups  xmm5, dqword ptr [edx + ecx - 48]
+        movups  xmm6, dqword ptr [edx + ecx - 32]
+        movups  xmm7, dqword ptr [edx + ecx - 16]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -3280,9 +3280,9 @@ asm
         // process 64 bytes per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop:  movups  xmm0, dqword ptr [edx]
-        movups  xmm1, dqword ptr [edx + 10H]
-        movups  xmm2, dqword ptr [edx + 20H]
-        movups  xmm3, dqword ptr [edx + 30H]
+        movups  xmm1, dqword ptr [edx + 16]
+        movups  xmm2, dqword ptr [edx + 32]
+        movups  xmm3, dqword ptr [edx + 48]
         aesenc  xmm4, xmm0 // scramble 2 times
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
