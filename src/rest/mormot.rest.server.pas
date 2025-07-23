@@ -4852,15 +4852,17 @@ begin
   aCtxt.SetRemoteIP(fRemoteIP);
   fRemoteOsVersion := aCtxt.SessionOS;
   if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
-    aCtxt.Server.RetrieveBlobFields(fUser);
+    if not aCtxt.Server.Orm.RetrieveBlobFields(fUser) then
+      aCtxt.fLog.Log(sllError, 'Create: RetrieveBlobFields(%.ID=%) failed',
+        [fUser, fUser.IDValue], self);
   // compute the next Session ID and the associated private key
   fID := InterlockedIncrement(aCtxt.Server.fSessionCounter); // 20-bit number
-  if PInteger(@ServerProcessKdf)^ <> 0 then
-    ServerProcessKdf.Compute(@fID, 8, rnd.b) // reuse our thread-safe CSPRNG
+  if PInteger(@ServerProcessKdf)^ <> 0 then  // use our thread-safe CSPRNG
+    ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 bytes to be <> nonce
   else
     RandomBytes(rnd.Lo); // Lecuyer as fallback (paranoid)
   XorMemory(rnd.l, StartupEntropy); // always obfuscate
-  XorMemory(rnd.l, rnd.h);
+  XorMemory(rnd.l, rnd.h);          // don't leak state
   BinToHexLower(@rnd, SizeOf(rnd.l), fPrivateKey); // 128-bit is enough
   ComputeProtectedValues(aCtxt.TickCount64);
   // this session has been successfully created
