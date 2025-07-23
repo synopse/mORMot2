@@ -3160,6 +3160,7 @@ asm
         // eax=seed, edx=data, ecx=len
         movd    xmm0, seed     // explicitly zeroing high bits for consistency
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
+        // _AesNiHashXmm0 makes 3 AES permutations -> 32/64-bit trunc is good
 end;
 
 // 128-bit aeshash as implemented in GoLang runtime, using aesni + sse3 opcodes
