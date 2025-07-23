@@ -11619,9 +11619,9 @@ begin
 end; // keep fLen since may be not final - see e.g. TPostConnection.OnRead
 
 
-procedure SetBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+procedure SetBaseDecoder(s: PAnsiChar; var d: TAnsiCharDec; i: PtrUInt);
 begin
-  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
+  FillcharFast(d, SizeOf(d), 255); // fill with -1 = invalid by default
   repeat
     d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
     dec(i);
@@ -11635,10 +11635,10 @@ var
   e: TEmoji;
 begin
   // initialize Base64/Base64Uri/Base58/Base32/Baudot encoding/decoding tables
-  SetBaseDecoder(@b64enc,    @ConvertBase64ToBin,    high(b64enc));
-  SetBaseDecoder(@b64urienc, @ConvertBase64uriToBin, high(b64urienc));
-  SetBaseDecoder(@b58enc,    @ConvertBase58ToBin,    high(b58enc));
-  SetBaseDecoder(@b32enc,    @ConvertBase32ToBin,    high(b32enc));
+  SetBaseDecoder(@b64enc,    ConvertBase64ToBin,    high(b64enc));
+  SetBaseDecoder(@b64urienc, ConvertBase64uriToBin, high(b64urienc));
+  SetBaseDecoder(@b58enc,    ConvertBase58ToBin,    high(b58enc));
+  SetBaseDecoder(@b32enc,    ConvertBase32ToBin,    high(b32enc));
   ConvertBase64ToBin['='] := -2; // special value for ending '='
   for i := high(Baudot2Char) downto 0 do
     if Baudot2Char[i] < #128 then
